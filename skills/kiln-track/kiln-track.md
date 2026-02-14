@@ -270,23 +270,74 @@ Trigger conditions:
 - Every phase listed in `.kiln/ROADMAP.md` is marked `complete` in `.kiln/STATE.md`.
 - No phase is in `failed` or `in_progress` state.
 
-Required coverage:
-- Cross-cutting user journeys spanning multiple phases.
-- Full regression suite across all phase-level capabilities.
+### Cross-Cutting Test Generation Protocol
+Generate integration coverage before running the terminal suite.
 
-Correction loop:
-- Maximum 3 correction cycles.
-- Each failed cycle routes corrections through execute + verification before re-running the final suite.
+1. Read every phase plan file at `.kiln/tracks/phase-*/PLAN.md`.
+2. Extract acceptance criteria from all phases into a combined checklist.
+3. Identify cross-cutting user journeys that span two or more phases:
+   - Data flows: data created in an earlier phase is visible and usable in later-phase features.
+   - Auth flows: authenticated users can traverse capabilities introduced across multiple phases.
+   - Integration flows: components/services delivered in different phases interoperate correctly.
+4. Prioritize highest-risk journeys (critical paths, shared state, auth boundaries, multi-service dependencies).
+5. Generate 3-5 critical cross-cutting E2E tests (not exhaustive full matrix coverage).
+6. Write generated cross-cutting tests to `tests/e2e/integration/`.
+7. Keep generated tests deterministic and runnable in the same E2E harness used by phase suites.
 
-Terminal outcomes:
-- On `PASS`:
-  - Generate `.kiln/FINAL_REPORT.md`.
-  - Final report must include delivered scope, open risks, test coverage summary, and living-doc status.
-  - Mark project state as complete with completion timestamp.
-- On `FAIL` after 3 cycles:
-  - `HALT` with full context.
-  - Record failure artifacts, attempted fixes, and blocking defects.
-  - Wait for operator direction.
+Minimum output contract:
+- `tests/e2e/integration/` contains 3-5 executable tests.
+- Each test maps to at least one cross-phase journey and references impacted phase AC IDs in comments or test metadata.
+
+### Full Regression Execution Protocol
+Run the complete regression surface for the project, not only newly generated tests.
+
+Execution order:
+1. Run all per-phase E2E suites from `tests/e2e/phase-*/`.
+2. Run all cross-cutting integration suites from `tests/e2e/integration/`.
+3. Aggregate results into a single terminal integration verdict.
+
+Regression handling contract:
+- Any failure in `tests/e2e/phase-*/` is a CRITICAL regression bug because previously validated behavior has broken.
+- Regression failures receive highest correction priority ahead of non-regression defects.
+- The gate cannot pass while any regression test remains failing.
+
+### Correction Protocol
+Apply bounded correction cycles with full-suite revalidation.
+
+Cycle rules:
+- Maximum 3 correction cycles for Final Integration E2E.
+- Each cycle must follow the same correction pipeline used elsewhere:
+  1. Sharpen correction packet(s).
+  2. Implement fixes.
+  3. Run mini-verify on impacted task criteria.
+  4. Re-run Final Integration E2E.
+- After each correction cycle, re-run the FULL integration suite:
+  - `tests/e2e/phase-*/`
+  - `tests/e2e/integration/`
+- Do not run only previously failed tests as the terminal gate decision.
+
+Cycle exhaustion behavior:
+- On failure after cycle 3, `HALT` with full context.
+- Persist failure evidence using the error-escalation contract from `skills/kiln-core/kiln-core.md`:
+  - commands run, logs, repro steps, attempt history, ranked hypotheses, and gate status sentinel.
+- Report blocking regressions and unresolved integration defects to operator with actionable next decision.
+
+### Success Criteria
+Final Integration E2E passes only when all of the following are true:
+- All per-phase regression tests pass (`tests/e2e/phase-*/`).
+- All cross-cutting integration tests pass (`tests/e2e/integration/`).
+- No new critical issues are discovered in the terminal suite.
+
+### Terminal Outcomes
+On `PASS`:
+- Generate `.kiln/FINAL_REPORT.md` from `templates/FINAL_REPORT.md.tmpl`.
+- Populate report fields from `.kiln/STATE.md`, `.kiln/ROADMAP.md`, phase artifacts, and final E2E/review outputs.
+- Mark project state as complete with completion timestamp.
+
+On `FAIL` after 3 cycles:
+- `HALT` with full context.
+- Record failure artifacts, attempted fixes, and blocking defects.
+- Wait for operator direction.
 
 ## State Tracking
 `/kiln:track` relies on `.kiln/STATE.md` as the single source of truth for loop progress.

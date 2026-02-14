@@ -1,0 +1,51 @@
+# Final Project Report
+
+## Project Summary
+- Project: {{projectName}}
+- Phases completed: {{phaseCount}}
+- Generated: {{timestamp}}
+
+## Scope Delivered
+{{#each phases}}
+### Phase {{number}}: {{title}}
+- Status: {{status}}
+- Acceptance criteria: {{acMet}}/{{acTotal}} met
+- Key deliverables: {{deliverables}}
+{{/each}}
+
+## Scope Deferred
+{{#each deferredItems}}
+- {{description}} — Reason: {{reason}}
+{{/each}}
+
+## Test Coverage
+- Per-phase E2E tests: {{phaseTestCount}} ({{phaseTestPassed}} passed)
+- Cross-cutting integration tests: {{integrationTestCount}} ({{integrationTestPassed}} passed)
+- Regression suite total: {{totalTests}}
+
+## Open Risks
+{{#each risks}}
+- **{{severity}}**: {{description}} — Mitigation: {{mitigation}}
+{{/each}}
+
+## Known Deviations
+{{#each deviations}}
+- {{description}} — Rationale: {{rationale}}
+{{/each}}
+
+## Living Documentation Status
+- TECH_STACK.md: {{techStackWords}} words (budget: ~3000)
+- PATTERNS.md: {{patternsWords}} words
+- DECISIONS.md: {{decisionsWords}} words ({{decisionCount}} records)
+- PITFALLS.md: {{pitfallsWords}} words ({{pitfallCount}} entries)
+
+## Correction Cycle Summary
+- Mini-verify retries: {{miniVerifyRetries}}
+- E2E correction cycles: {{e2eCycles}}
+- Review correction cycles: {{reviewCycles}}
+- Halts encountered: {{haltCount}}
+
+## Next Steps
+{{#each nextSteps}}
+- {{description}}
+{{/each}}
