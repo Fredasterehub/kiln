@@ -1,7 +1,7 @@
 # Kiln Build — Session State
 
 **Date:** 2026-02-14
-**Paused for:** Context refresh (lead + planner exhausted)
+**Paused for:** User requested clean stop
 
 ---
 
@@ -10,39 +10,38 @@
 | Track | Planning | Execution | QA | Status |
 |-------|----------|-----------|-----|--------|
 | T01 Scaffolding | done | done (Claude) | PASS | **DONE** |
-| T02 Core Foundation | done | done (Codex for T01, direct for T02-T04) | PASS | **DONE** |
+| T02 Core Foundation | done | done (Codex) | PASS | **DONE** |
+| T03 Init + Orchestrator | done | done (Codex) | PASS | **DONE** |
+| T04 Brainstorming | done | done (Codex) | needs QA | **CODE DONE** |
 
-## In Progress
+## Ready to Execute (task packets written, code not started)
 
-| Track | Planning | Execution | QA | Status |
-|-------|----------|-----------|-----|--------|
-| T03 Init + Orchestrator | done | done (full Codex pipeline) | queued | needs QA then DONE |
-| T06 Execution Pipeline | **planner-fresh running** | queued | queued | planning in progress |
+| Track | Task Packets | Notes |
+|-------|-------------|-------|
+| T05 Planning Pipeline | 5 packets | Next for coder. Depends on T04 (done) |
+| T06 Execution Pipeline | 3 packets | Depends on T05 |
+| T07 Verification + Review | 5 packets | Depends on T06 |
+| T08 Reconcile + Utilities | 4 packets | Independent (depends on T02 only) |
+| T09 Hooks + Installer | 4 packets | Depends on T03-T08 all done |
 
-## Planned (task packets written, ready for coder)
+## Needs Planning
 
-| Track | Task Packets |
-|-------|-------------|
-| T04 Brainstorming | 3 packets: brainstormer agent, brainstorm skill, entry point |
-| T05 Planning Pipeline | 5 packets: kiln-plan skill, planner, codex-planner, synthesizer, validator |
-
-## Not Yet Planned
-
-| Track | Directory Created |
-|-------|------------------|
-| T07 Verification + Review | yes |
-| T08 Reconcile + Utilities | yes |
-| T09 Hooks + Installer | no |
-| T10 Integration Test | no |
+| Track | Status |
+|-------|--------|
+| T10 Integration Test | Directory created, TASKS/ empty — needs task packets written |
 
 ---
 
-## Team State
+## What This Session Accomplished
 
-- **claude-planner**: exhausted (5 tracks planned), retired
-- **planner-fresh**: spawned for T06, may still be running
-- **coder**: running T03 via Codex pipeline, had approval issues
-- **qa-reviewer**: idle, waiting for T03
+1. QA'd T03 (Init + Orchestrator) — PASS, verdict written
+2. Executed T04 (Brainstorming) — 3 Codex pipeline tasks, all committed:
+   - d9dbe29 T04-T01: brainstormer agent (329 lines)
+   - d1351d0 T04-T02: brainstorm technique skill (176 lines)
+   - 5349750 T04-T03: brainstorm entry point (257 lines total)
+3. Planned T07 (Verification + Review) — 5 task packets committed (61ee6c5)
+4. Planned T08 (Reconcile + Utilities) — 4 task packets committed (61ee6c5)
+5. Planned T09 (Hooks + Installer) — 4 task packets committed (16deba1)
 
 ## Key Setup (already done, don't redo)
 
@@ -53,9 +52,19 @@
 - Kiln added to Codex trusted projects (`~/.codex/config.toml`)
 - Landlock bug: must use `--dangerously-bypass-approvals-and-sandbox`
 
-## Git Log
+## Git Log (latest first)
 
 ```
+16deba1 T09: planning artifacts and task packets for Hooks + Installer
+5349750 T04-T03: Write /kiln:brainstorm entry point
+d1351d0 T04-T02: Write brainstorm technique skill
+61ee6c5 T07/T08: planning artifacts and task packets
+d9dbe29 T04-T01: Write brainstormer agent
+b816854 session checkpoint: T03-T06 track artifacts + session state
+4e46685 T03-T04: Write /kiln:quick skill
+e50476c T03-T03: Write /kiln:status skill
+7bd287f T03-T02: Write /kiln:init skill
+cbad312 T03-T01: Write orchestrator agent
 bfcafc5 T02/T03/T04: track artifacts
 e987645 T02-T04: Write vision-sections template
 ff8ec90 T02-T03: Write STATE.md template
@@ -71,26 +80,24 @@ f46b995 T01-T01: Create package.json
 ## Codex Pipeline Pattern (for coder)
 
 ```bash
-# Sharpen (GPT-5.2)
 codex exec -m gpt-5.2 -c 'model_reasoning_effort="high"' \
   --dangerously-bypass-approvals-and-sandbox \
   -C /tank/dump/DEV/kiln \
-  - < <(echo "sharpening prompt + task packet") \
-  -o sharpened-prompt.md
-
-# Implement (GPT-5.3-codex)
-codex exec -m gpt-5.3-codex \
-  --dangerously-bypass-approvals-and-sandbox \
-  -C /tank/dump/DEV/kiln \
-  - < sharpened-prompt.md
+  "Read the task packet and codebase, then write the file(s). TASK PACKET: $(cat <packet>.md)"
 ```
 
 ## Resume Instructions
 
-1. Read this file + HANDOFF.md + implementation plan
-2. Check git log for what's committed
-3. Check tracks/ for planning status (look for TASKS/ directories with packets)
-4. Check if T03 coder finished (look for commits with T03- prefix)
-5. Continue: finish T03 → QA T03 → execute T04 → T05 → plan T06-T08 → execute → T09 → T10
-6. Spawn fresh agents as needed (planner, coder, qa-reviewer)
-7. ALL implementation goes through sharpen (GPT-5.2) → implement (GPT-5.3-codex) pipeline
+1. Read this file + implementation plan
+2. Check git log for latest state
+3. Next steps in order:
+   - **QA T04** (brainstormer agent + skill) — quick LLM review
+   - **Execute T05** (5 task packets — planning pipeline agents + skill)
+   - **Execute T06** (3 task packets — execution pipeline agents + skill)
+   - **Execute T07** (5 task packets — verification + review)
+   - **Execute T08** (4 task packets — reconcile + utilities)
+   - **Plan T10** (write task packets — integration test)
+   - **Execute T09** (4 task packets — hooks + installer, depends on T03-T08)
+   - **Execute T10** (3 task packets — integration test, depends on everything)
+4. Spawn fresh agents: planner (for T10), coder (for T05+), qa-reviewer (for each track)
+5. ALL implementation goes through Codex pipeline (sharpen GPT-5.2 → implement GPT-5.3-codex)
