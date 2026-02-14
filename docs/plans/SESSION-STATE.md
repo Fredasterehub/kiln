@@ -18,7 +18,7 @@
 
 | Track | Task Packets | Notes |
 |-------|-------------|-------|
-| T05 Planning Pipeline | 5 packets | Next for coder. Depends on T04 (done) |
+| T05 Planning Pipeline | 5 packets | **T05-T01 done (e09de86), resume from T05-T02** |
 | T06 Execution Pipeline | 3 packets | Depends on T05 |
 | T07 Verification + Review | 5 packets | Depends on T06 |
 | T08 Reconcile + Utilities | 4 packets | Independent (depends on T02 only) |
@@ -41,7 +41,8 @@ None — all tracks planned.
 3. Planned T07 (Verification + Review) — 5 task packets committed (61ee6c5)
 4. Planned T08 (Reconcile + Utilities) — 4 task packets committed (61ee6c5)
 5. Planned T09 (Hooks + Installer) — 4 task packets committed (16deba1)
-6. Planned T10 (Integration Test) — 2 task packets (committed in session checkpoint)
+6. Planned T10 (Integration Test) — 3 task packets (committed in session checkpoint)
+7. Executed T05-T01 (kiln-plan skill, 212 lines) — committed e09de86
 
 ## Key Setup (already done, don't redo)
 
@@ -92,7 +93,7 @@ codex exec -m gpt-5.2 -c 'model_reasoning_effort="high"' \
 2. Check git log for latest state
 3. Next steps in order:
    - **QA T04** (brainstormer agent + skill) — quick LLM review
-   - **Execute T05** (5 task packets — planning pipeline agents + skill)
+   - **Execute T05** (4 remaining: T05-T02 through T05-T05 — T05-T01 already done)
    - **Execute T06** (3 task packets — execution pipeline agents + skill)
    - **Execute T07** (5 task packets — verification + review)
    - **Execute T08** (4 task packets — reconcile + utilities)
