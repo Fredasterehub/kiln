@@ -1,0 +1,47 @@
+# Project State
+
+- **Project:** {{project_name}}
+- **Model Mode:** {{model_mode}}
+- **Initialized:** {{init_timestamp}}
+
+## Phase Progress
+
+<!-- Populated when roadmap is generated. Example row:
+| 1 | Authentication System | complete |
+-->
+
+| Phase | Title | Status |
+| --- | --- | --- |
+<!-- phases will be appended here -->
+
+## Current Track
+
+- **Phase:** {{current_phase_number}} — {{current_phase_title}}
+- **Current Step:** {{current_step}}
+  <!-- one of: plan | validate | execute | e2e | review | reconcile -->
+- **Step Status:** {{step_status}}
+  <!-- one of: pending | in-progress | complete | failed -->
+- **Started:** {{step_started_timestamp}}
+
+## Correction Cycles
+
+- **Mini-verify retries (current task):** {{mini_verify_retries}} / 2
+  <!-- Resets to 0 at the start of each task -->
+- **E2E correction cycles (current track):** {{e2e_cycles}} / 3
+  <!-- Resets to 0 at the start of each track -->
+- **Code review correction cycles (current track):** {{review_cycles}} / 3
+  <!-- Resets to 0 at the start of each track -->
+
+## Regression Suite
+
+{{regression_test_count}} tests from {{completed_phases_count}} completed phases
+
+<!-- Example: "47 tests from 3 completed phases" -->
+
+## Session Recovery
+
+- **Last Activity:** {{last_activity_timestamp}}
+- **Last Completed Action:** {{last_completed_action}}
+  <!-- Example: "phase-2/task-03: add webhook retry logic — committed as abc1234" -->
+- **Next Expected Action:** {{next_expected_action}}
+  <!-- Example: "Run E2E verification for phase-2" -->
