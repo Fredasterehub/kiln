@@ -8,8 +8,10 @@
 
 ### *raw ideas in. verified code out.*
 
-**Multi-model AI orchestration baked directly into Claude Code.**<br/>
-No wrapper. No server. No daemon. Just markdown that rewires how Claude thinks.
+<br/>
+
+> *"You wouldn't fire porcelain at earthenware temperatures.*
+> *Why would you use one model for every task?"*
 
 <br/>
 
@@ -17,8 +19,8 @@ No wrapper. No server. No daemon. Just markdown that rewires how Claude thinks.
 [![Node](https://img.shields.io/badge/Node.js-18+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Native-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white)](https://claude.ai/claude-code)
 [![Dependencies](https://img.shields.io/badge/Deps-Zero-2ea44f?style=for-the-badge)]()
-[![Agents](https://img.shields.io/badge/Agents-12-E8590C?style=for-the-badge)]()
-[![Skills](https://img.shields.io/badge/Skills-13-2563EB?style=for-the-badge)]()
+[![Agents](https://img.shields.io/badge/🤖_Agents-12-E8590C?style=for-the-badge)]()
+[![Skills](https://img.shields.io/badge/📜_Skills-13-2563EB?style=for-the-badge)]()
 
 <br/>
 
@@ -26,37 +28,31 @@ No wrapper. No server. No daemon. Just markdown that rewires how Claude thinks.
 
 <br/>
 
-*Clay enters. Ceramic exits.* 🏺
-
 </div>
-
-<br/>
 
 ---
 
 <br/>
 
-## 😤 The Problem
+## 🏺 The Philosophy
 
-You have an idea. You open Claude Code. You start typing.
+We want **elegant, efficient, robust, state-of-the-art code**. Not "good enough." Not "it compiles." Code you'd be proud to show another engineer.
 
-Three hours later you're **47 messages deep**. The AI forgot what you said in message 12. It's repeating itself. It contradicts a decision from an hour ago. The code *kind of* works but nobody verified it end-to-end. Your "living documentation" is a chat log you'll never read again.
+So we went looking. We found [BMAD](https://github.com/bmadcode/BMAD-METHOD) and its wild, structured brainstorming that surfaces ideas you'd never reach alone. We found [Google's Conductor](https://research.google/blog/automated-unit-test-improvement-using-large-language-models-at-google/) and its just-in-time dynamic execution that never plans too far ahead. We found [GSD](https://github.com/cyanheads/claude-code-gsd) and its ruthless efficiency — fresh context per task, goal-backward verification, no wasted tokens. And we looked at Claude Code itself — agents, skills, hooks — native primitives sitting right there, waiting to be orchestrated.
 
-> **💀 This is context rot.** And it kills ambitious projects.
+**We took the best parts of all of them and cooked them into one thing.**
 
-<br/>
+Then we added the part nobody else was doing: **multi-model orchestration**. Because here's what we learned after months of building with AI:
 
-## 💡 The Idea
+- 🟣 **Opus** is the king. If we had one model, it'd be Opus. Deep reasoning, architectural vision, the full picture. No contest.
+- 🟢 **GPT-5.2** won't forget that one small detail in your requirements that Opus might gloss over when planning. On plan creation, it's *surgical*.
+- ⚡ **Codex** (GPT-5.3) on extremely small, atomic tasks? An absolute **beast**. Months of evidence. Give it a tight, well-scoped implementation prompt and it just *nails* it.
+- 💎 **Sonnet** is the workhorse — fast, cheap, reliable for mechanical tasks like validation and verification.
+- 🌀 **Gemini 3 Pro** — we see the potential, we want it in the mix, but controlling that model adequately is... a work in progress. *Stay tuned.* 😏
 
-What if every task got a *fresh* **200k-token context** — not the dregs of a long conversation?
+Each model has a temperature it fires best at. **Kiln applies the right heat at the right moment.**
 
-What if two competing AI models **debated** your architecture before a single line was written?
-
-What if every feature was verified by *actually running your application*, not just checking syntax?
-
-**Kiln** is a structured orchestration workflow that turns Claude Code from a chatbot into a **build system**. It fuses ideas from [BMAD](#-the-lineage), [Google Conductor](#-the-lineage), and [GSD](#-the-lineage) — then cooks them directly into Claude Code's native agent, skill, and hook primitives.
-
-> 🧱 **No wrapper. No server. No daemon.** Just markdown files that make Claude Code think differently.
+> 🧱 No wrapper. No server. No daemon. Just markdown files baked directly into Claude Code's native agent and skill system. *Clay enters. Ceramic exits.*
 
 <br/>
 
@@ -80,7 +76,7 @@ Then in Claude Code:
 🔥  /kiln:track          ←  Execute. Plan → Build → Verify → Review → Reconcile.
 ```
 
-**Three commands.** Idea to verified application.
+**Three commands.** Idea to verified application. ✨
 
 <p align="right"><a href="#readme-top">⬆️ back to top</a></p>
 
@@ -112,14 +108,14 @@ Kiln fires your project through **six stages**. The first is interactive. The re
      │                    │           │
      │      📐 ┌──────────▼───────────┤
      │         │  3. PLAN             │   ◀── Two models plan independently
-     │         │     Claude ──┐       │       Optional: ⚔️ debate rounds
-     │         │     GPT ─────┤       │       Then synthesize the best of both
-     │         │     Merge ◀──┘       │
+     │         │     Opus ───┐        │       Optional: ⚔️ debate rounds
+     │         │     GPT ────┤        │       Then synthesize the best of both
+     │         │     Merge ◀─┘        │
      │         └──────────┬───────────┤
      │                    │           │
      │      ⚡ ┌──────────▼───────────┤
      │         │  4. EXECUTE          │   ◀── Prompts sharpened per task
-     │         │     Sharpen → Build  │       Fresh context every time
+     │         │     Sharpen → Build  │       Fresh 200k context every time
      │         │     → Mini-verify    │       Atomic commits
      │         └──────────┬───────────┤
      │                    │           │
@@ -139,7 +135,7 @@ Kiln fires your project through **six stages**. The first is interactive. The re
      │ ◀───────────────────────────── │
 ```
 
-Each phase repeats steps 3–6. The docs written after phase 1 inform the planning of phase 2. No stale context. No plan rot. **The 20th task executes with the same quality as the first.**
+Each phase repeats steps 3–6. The docs written after phase 1 inform the planning of phase 2. **The 20th task fires with the same precision as the first.** No stale context. No plan rot. No degradation.
 
 <p align="right"><a href="#readme-top">⬆️ back to top</a></p>
 
@@ -149,9 +145,9 @@ Each phase repeats steps 3–6. The docs written after phase 1 inform the planni
 
 <br/>
 
-## 🍳 The Secret Sauce
+## 🍳 Multi-Model Orchestration
 
-Kiln's signature move: **two AI models independently plan your architecture, then a synthesizer takes the best of both.**
+This is the core bet. **Two AI models independently plan your architecture, then a synthesizer takes the best of both.**
 
 ```
                     ┌─────────────────┐
@@ -164,10 +160,11 @@ Kiln's signature move: **two AI models independently plan your architecture, the
         ┌───────▼───────┐        ┌───────▼───────┐
         │ 🟣 Claude Opus │       │ 🟢 GPT-5.2    │
         │                │        │               │
-        │  Thorough      │        │  Pragmatic    │
-        │  Security-first│        │  Conventional │
-        │  Edge-case     │        │  Simple       │
-        │  aware         │        │  Fast         │
+        │  The King.     │        │  The Detail   │
+        │  Big picture,  │        │  Catcher.     │
+        │  security,     │        │  Pragmatic,   │
+        │  edge cases.   │        │  nothing      │
+        │                │        │  slips by.    │
         └───────┬───────┘        └───────┬───────┘
                 │                         │
                 └────────────┬────────────┘
@@ -175,18 +172,18 @@ Kiln's signature move: **two AI models independently plan your architecture, the
                     ┌────────▼────────┐
                     │  🔀 Synthesizer │
                     │                 │
-                    │  Takes cleaner  │
-                    │  architecture   │
+                    │  Picks the      │
+                    │  cleaner arch   │
                     │  from one,      │
-                    │  better error   │
-                    │  handling from  │
-                    │  the other.     │
+                    │  the tighter    │
+                    │  error handling │
+                    │  from the other.│
                     └────────┬────────┘
                              │
                     ┌────────▼────────┐
                     │  ✅ Master Plan │
                     │  Better than    │
-                    │  either alone   │
+                    │  either alone.  │
                     └─────────────────┘
 ```
 
@@ -202,11 +199,11 @@ Kiln's signature move: **two AI models independently plan your architecture, the
 
 ## ⚔️ Debate Mode
 
-> 🆕 **New feature**
+> 🆕 *New in latest release*
 
 The synthesize strategy is *polite*. Each model plans in isolation, then a mediator merges. It works. But sometimes you want the models to actually **argue**.
 
-**Debate mode** introduces structured adversarial rounds before synthesis:
+**Debate mode** introduces structured adversarial rounds before synthesis. The models critique each other, defend their choices, concede when they're wrong, and *only then* does the synthesizer merge — with the full argument trail as context.
 
 ```
         ┌──────────┐           ┌──────────┐
@@ -233,28 +230,31 @@ The synthesize strategy is *polite*. Each model plans in isolation, then a media
               │                     │
               └──────────┬──────────┘
                    ┌─────▼─────┐
-                   │🔀Synthesize│  ← with full debate context
+                   │🔀Synthesize│  ← with full debate trail
                    │  PLAN.md   │
                    └───────────┘
 ```
 
-The rules are adversarial by design: *challenge assumptions, demand evidence, find gaps — but acknowledge genuine strength.* 🚫 Models can't just agree to be polite. They have to **defend** their choices or **concede** with reasoning.
+The rules are adversarial by design: *challenge assumptions, demand evidence, find gaps — but acknowledge genuine strength.* 🚫 No polite agreements. Defend your choices or concede with reasoning.
 
-The same protocol applies to **code review**. Enable `reviewStrategy: "debate"` and an independent GPT reviewer challenges the Opus reviewer's findings. 🤝 Agreement = high-confidence signal. ⚡ Disagreement = deeper analysis.
+Same protocol applies to **code review** — enable `reviewStrategy: "debate"` and an independent GPT reviewer (running GPT-5.3-codex-sparks, a reasoning-capable review model) challenges the Opus reviewer's findings:
+
+- 🤝 **Agreement** between both reviewers = high-confidence signal
+- ⚡ **Disagreement** = deeper analysis, the truth gets pressure-tested
 
 Toggle it in `.kiln/config.json`:
 
 ```json
 {
   "preferences": {
-    "planStrategy": "debate",      // 💬 "synthesize" (default) | "debate"
-    "reviewStrategy": "debate",    // 🔍 "single" (default) | "debate"
-    "debateRounds": 2              // 🔄 max rounds: 1-3
+    "planStrategy": "debate",
+    "reviewStrategy": "debate",
+    "debateRounds": 2
   }
 }
 ```
 
-> 🧠 Rounds auto-terminate on **convergence**. Every critique and revision is preserved as an **audit artifact**. The synthesizer reads the full debate trail and documents which points won and why.
+> 🧠 Rounds auto-terminate on **convergence**. Every critique and revision is preserved as an **audit artifact**. The synthesizer documents which points won and why. Full transparency.
 
 <p align="right"><a href="#readme-top">⬆️ back to top</a></p>
 
@@ -269,12 +269,12 @@ Toggle it in `.kiln/config.json`:
 |  | 😐 Typical AI Coding | 🔥 Kiln |
 |---|---|---|
 | 🧠 **Context** | Degrades over conversation | Fresh 200k tokens per task |
-| 📐 **Planning** | One model, one perspective | Two models, optionally debating ⚔️ |
-| ✅ **Verification** | "Looks right to me" | Actually runs your app |
-| 📚 **Documentation** | Chat logs | Living docs that evolve per phase |
-| ⚡ **Execution** | One long session | Atomic tasks, wave parallelism |
-| 🛡️ **Quality gate** | Hope 🤞 | 7-dimension code review |
-| 🔍 **Review** | Single reviewer | Optional dual-model debate |
+| 📐 **Planning** | One model, one shot | Two models, optionally debating ⚔️ |
+| ✅ **Verification** | "Looks right to me" 🤞 | Actually runs your app |
+| 📚 **Documentation** | Chat logs you'll never read | Living docs that evolve per phase |
+| ⚡ **Execution** | One long degrading session | Atomic chirurgical tasks, wave parallelism |
+| 🛡️ **Quality gate** | Hope | 7-dimension code review |
+| 🤖 **Models** | One model does everything | Right model, right task, right temperature |
 
 <br/>
 
@@ -289,11 +289,11 @@ Toggle it in `.kiln/config.json`:
 
 <br/>
 
-An interactive session between you and the AI. Not "tell me what to build" — a **structured exploration**:
+An interactive session between you and the AI. Not "tell me what to build" — a **structured exploration** borrowed from BMAD's playbook:
 
 - 🌀 **Anti-clustering** surfaces ideas you wouldn't think of alone
-- ⚔️ **Dual-model challenge passes** (Claude critiques, GPT challenges) stress-test your vision
-- 📄 **Output:** `VISION.md` — a locked, operator-approved project specification with success criteria
+- ⚔️ **Dual-model challenge passes** — Claude critiques, GPT challenges, your vision gets stress-tested from every angle
+- 📄 **Output:** `VISION.md` — a locked, operator-approved project specification with measurable success criteria
 
 > 👤 This is the **only stage** that requires your sustained attention. Everything after is automated.
 
@@ -304,7 +304,7 @@ An interactive session between you and the AI. Not "tell me what to build" — a
 
 <br/>
 
-The AI reads your vision and proposes delivery phases:
+The AI reads your vision and proposes delivery phases — just-in-time planning, Conductor-style. No planning six phases ahead with stale assumptions:
 
 ```
 📦 Phase 1: Authentication Foundation
@@ -321,16 +321,16 @@ You review, reorder, add, remove. Then approve. ✅
 
 <br/>
 
-Two planners work independently:
+Two planners work independently on the same phase:
 
-- 🟣 **Claude Planner** (Opus) — thorough, security-first, edge-case-aware
-- 🟢 **Codex Planner** (GPT-5.2) — pragmatic, conventional, simple
+- 🟣 **Claude Planner** (Opus) — the architectural heavyweight. Thorough, security-first, sees edge cases others miss
+- 🟢 **Codex Planner** (GPT-5.2) — the detail catcher. Pragmatic, conventional, won't forget that one config flag you need
 
 In **synthesize mode** (default): a Synthesizer merges them directly into the master plan.
 
-In **⚔️ debate mode**: the planners critique each other's work, revise, and iterate for up to 3 rounds before synthesis. The synthesizer reads the full debate trail.
+In **⚔️ debate mode**: the planners critique each other's work, revise, defend — up to 3 adversarial rounds before synthesis.
 
-A **Validator** runs a 7-dimension quality check before any code is written. 🛡️
+A **Validator** then runs a 7-dimension quality check before any code is written. 🛡️
 
 </details>
 
@@ -339,14 +339,14 @@ A **Validator** runs a 7-dimension quality check before any code is written. �
 
 <br/>
 
-For each task in the plan:
+This is where Codex earns its keep. For each task in the plan:
 
-1. 🔧 **Sharpen** — A prompt engineer reads the task packet *and the current codebase*, produces a self-contained implementation prompt with real file paths and function signatures
-2. 🏗️ **Implement** — GPT-5.3-codex (or Sonnet in Claude-only mode) writes the code
-3. ✅ **Mini-verify** — Run the project's test suite immediately. Catch failures fast.
-4. 📦 **Commit** — One atomic commit per task
+1. 🔧 **Sharpen** — A prompt engineer reads the task packet *and the current codebase*, produces a chirurgical implementation prompt with real file paths and function signatures
+2. 🏗️ **Implement** — GPT-5.3-codex executes the tight, atomic task. Fresh 200k context. No baggage from previous tasks.
+3. ✅ **Mini-verify** — Run the project's test suite immediately. Catch failures before they compound.
+4. 📦 **Commit** — One atomic commit per task. Revertible. Auditable.
 
-Tasks in the same wave run **in parallel**. Later waves wait.
+Tasks in the same wave run **in parallel**. Later waves wait. GSD-style efficiency.
 
 </details>
 
@@ -355,14 +355,14 @@ Tasks in the same wave run **in parallel**. Later waves wait.
 
 <br/>
 
-Two quality gates:
+Two quality gates, no shortcuts:
 
 - 🧪 **E2E Verifier** — Generates user journey tests, starts your app, and runs them. Not unit tests — **real user flows**.
-- 🛡️ **Reviewer** — 7-dimension code review: correctness, completeness, security, integration, stub detection, quality, regressions.
+- 🛡️ **Reviewer** (Opus) — 7-dimension code review: correctness, completeness, security, integration, stub detection, quality, regressions.
 
-In **⚔️ review debate mode**: an independent GPT reviewer (GPT-5.3-codex-sparks) produces a competing review. Both reviewers critique each other's findings. 🤝 Agreement = high confidence. ⚡ Disagreement = deeper analysis.
+In **⚔️ review debate mode**: an independent GPT reviewer produces a competing assessment. Both reviewers critique each other. Agreement = real issue. Disagreement = dig deeper.
 
-Rejections generate correction tasks that flow **back through the pipeline**. 🔄
+Rejections generate correction tasks that flow **back through the pipeline**. 🔄 Up to 3 correction cycles before hard halt.
 
 </details>
 
@@ -371,7 +371,7 @@ Rejections generate correction tasks that flow **back through the pipeline**. �
 
 <br/>
 
-Living documentation updated with what **actually happened**:
+Living documentation updated with what **actually happened** — Conductor-style knowledge transfer:
 
 - 🔧 `TECH_STACK.md` — what's in use now
 - 🏛️ `PATTERNS.md` — conventions established
@@ -416,13 +416,13 @@ Budget-enforced (~3000 words each). Outdated entries are **replaced, not appende
 │       │      └────┬─────┘       │             │             │
 │       │           │             │             │             │
 │  ┌────▼───┐ ┌─────▼────┐ ┌─────▼─────┐ ┌────▼────┐        │
-│  │🔧Sharp.│ │🏗️Execute│ │🧪E2E Veri.│ │🔍Review │        │
-│  │(Sonnet)│ │ (Sonnet) │ │ (Sonnet)  │ │ (Opus)  │        │
+│  │🔧Sharp.│ │⚡Execute │ │🧪E2E Veri.│ │🔍Review │        │
+│  │(Sonnet)│ │ (Codex)  │ │ (Sonnet)  │ │ (Opus)  │        │
 │  └────────┘ └──────────┘ └───────────┘ └─────────┘        │
 │                                                              │
 │  ┌────────────┐  ┌────────────┐  ┌──────────────┐          │
 │  │🔎Researcher│  │🧠Brainstorm│  │⚔️Codex Revwr│  Utility  │
-│  │  (Haiku)   │  │  (Opus)    │  │   (Sonnet)   │  agents   │
+│  │  (Haiku)   │  │  (Opus)    │  │  (Codex)     │  agents   │
 │  └────────────┘  └────────────┘  └──────────────┘          │
 └──────────────────────────────────────────────────────────────┘
                            │
@@ -437,19 +437,19 @@ Budget-enforced (~3000 words each). Outdated entries are **replaced, not appende
 ```
 
 <details>
-<summary>📊 <b>Model Routing Table</b></summary>
+<summary>📊 <b>Model Routing Table</b> — <i>right temperature, right moment</i></summary>
 
 <br/>
 
 | Role | Model | Why |
 |---|---|---|
-| 🎯 Orchestrator | Opus 4.6 | Deep reasoning for routing |
-| 📐 Planner | Opus 4.6 | Thorough architecture |
-| 🟢 Codex Planner | GPT-5.2 | Alternative perspective |
+| 🎯 Orchestrator | Opus 4.6 | Deep reasoning for routing decisions |
+| 📐 Planner | Opus 4.6 | Architectural heavyweight |
+| 🟢 Codex Planner | GPT-5.2 | Catches details Opus glosses over |
 | 🔀 Synthesizer | Opus 4.6 | Complex merging judgment |
-| 🛡️ Validator | Sonnet | Mechanical checking |
+| 🛡️ Validator | Sonnet | Fast mechanical checking |
 | 🔧 Sharpener | Sonnet + GPT-5.2 | Prompt engineering |
-| 🏗️ Executor | GPT-5.3-codex | Code generation |
+| ⚡ Executor | GPT-5.3-codex | Atomic task beast mode |
 | 🧪 E2E Verifier | Sonnet | Test generation |
 | 🔍 Reviewer | Opus 4.6 | Deep code review |
 | ⚔️ Codex Reviewer | GPT-5.3-codex-sparks | Independent review (debate) |
@@ -473,21 +473,21 @@ kiln/
 ├── 🤖 agents/                  # 12 AI agent definitions
 │   ├── kiln-orchestrator       #   🎯 Traffic cop
 │   ├── kiln-brainstormer       #   🧠 Vision exploration
-│   ├── kiln-planner            #   📐 Claude-side planning (+ critique/revise)
-│   ├── kiln-codex-planner      #   🟢 GPT-side planning (+ critique/revise)
+│   ├── kiln-planner            #   📐 Claude-side planning (+ debate)
+│   ├── kiln-codex-planner      #   🟢 GPT-side planning (+ debate)
 │   ├── kiln-synthesizer        #   🔀 Plan merging (debate-aware)
 │   ├── kiln-validator          #   🛡️ Plan quality gate
 │   ├── kiln-sharpener          #   🔧 Prompt engineering
-│   ├── kiln-executor           #   🏗️ Code generation
+│   ├── kiln-executor           #   ⚡ Code generation
 │   ├── kiln-e2e-verifier       #   🧪 Runtime testing
-│   ├── kiln-reviewer           #   🔍 Code review (+ debate mode)
-│   ├── kiln-codex-reviewer     #   ⚔️ Independent GPT review (debate)
+│   ├── kiln-reviewer           #   🔍 Code review (+ debate)
+│   ├── kiln-codex-reviewer     #   ⚔️ Independent GPT review
 │   └── kiln-researcher         #   🔎 On-demand lookup
 │
 ├── 📜 skills/                  # 13 skill definitions
-│   ├── kiln-core/              #   🏛️ Universal contracts & config schema
+│   ├── kiln-core/              #   🏛️ Universal contracts
 │   ├── kiln-init/              #   🚀 Project setup
-│   ├── kiln-brainstorm/        #   🧠 Brainstorm protocol
+│   ├── kiln-brainstorm/        #   🧠 BMAD-style brainstorm
 │   ├── kiln-plan/              #   📐 Planning format
 │   ├── kiln-execute/           #   ⚡ Execution protocol
 │   ├── kiln-e2e/               #   🧪 Test patterns
@@ -520,16 +520,16 @@ kiln/
 
 ## 🧬 The Lineage
 
-Kiln didn't come from nowhere. It's what happens when you take four systems that each solved *part* of the problem and fire them all in the same kiln. 🔥
+Kiln didn't come from nowhere. We went looking for the best ideas in AI-assisted development, took what worked, left what didn't, and fired them all together into something new. 🔥
 
 | System | 🎁 What We Took | 🗑️ What We Left Behind |
 |---|---|---|
-| 🧠 **[BMAD Method](https://github.com/bmadcode/BMAD-METHOD)** | Deep interactive brainstorming, anti-clustering, facilitation personas, challenge passes | The full persona framework — Kiln uses Claude Code's native agent system instead |
-| 🎵 **[Google Conductor](https://research.google/blog/automated-unit-test-improvement-using-large-language-models-at-google/)** | Just-in-time planning, living documentation, workflow-as-data, reconciliation loops | The infrastructure overhead — Kiln is pure markdown, no servers |
+| 🧠 **[BMAD Method](https://github.com/bmadcode/BMAD-METHOD)** | Crazy structured brainstorming, anti-clustering, facilitation personas, challenge passes that break your assumptions | The full persona framework — Kiln uses Claude Code's native agent system instead |
+| 🎛️ **[Google Conductor](https://research.google/blog/automated-unit-test-improvement-using-large-language-models-at-google/)** | Dynamic just-in-time execution, living documentation, workflow-as-data, reconciliation loops | The infrastructure overhead — Kiln is pure markdown, no servers, no infra |
 | ⚡ **[GSD Framework](https://github.com/cyanheads/claude-code-gsd)** | Fresh context per task, goal-backward verification, plan validation gates, phase-based execution | The external tracking layer — Kiln uses `.kiln/STATE.md` as the single source of truth |
-| 🔀 **Dual-model patterns** | Multi-model perspective fusion, competing plans, adversarial debate, synthesis | Nothing — we went **further** with structured debate rounds ⚔️ |
+| 🔀 **Multi-model patterns** | Perspective fusion, competing plans, adversarial debate, synthesis | Nothing — we went **further** with structured debate rounds ⚔️ |
 
-> 🏺 The result: a workflow that feels native to Claude Code because it ***is*** native. Agents, skills, and hooks — the same primitives Claude Code already understands. No wrapper framework. No middleware. No runtime. Just structured markdown that teaches Claude Code to think in phases.
+> 🏺 The result is a workflow that feels native to Claude Code because it ***is*** native. Agents, skills, and hooks — the same primitives Claude Code already understands. No wrapper framework. No middleware. No runtime. Just structured markdown that teaches Claude Code to think in phases, fire each task at the right temperature, and produce ceramic instead of clay.
 
 <p align="right"><a href="#readme-top">⬆️ back to top</a></p>
 
@@ -574,7 +574,7 @@ npx kiln-dev --global
 |---|---|---|
 | ✅ | **Claude Code** | The CLI this workflow runs inside |
 | ✅ | **Node.js 18+** | For the installer |
-| 💎 | **Codex CLI** *(optional)* | Enables multi-model mode with GPT-5.2/5.3 |
+| 💎 | **Codex CLI** *(optional)* | Enables multi-model mode — the premium path |
 
 <br/>
 
@@ -602,7 +602,11 @@ npx kiln-dev --global
 
 <br/>
 
-**MIT License** · Built with 🔥 and Claude Code
+*Every model has a strength. The trick is knowing which flame to apply.* 🔥
+
+<br/>
+
+**MIT License** · Built with Claude Code
 
 <br/>
 
