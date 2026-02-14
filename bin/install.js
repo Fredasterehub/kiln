@@ -2,7 +2,10 @@
 
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
+const readline = require('readline');
+const { spawnSync } = require('child_process');
 
 const USAGE = `
 kiln-dev — Multi-model orchestration workflow for Claude Code
@@ -13,24 +16,584 @@ Usage:
 Options:
   --help                Show this help message and exit
   --repo-root <path>    Target repository root (default: current directory)
+  --yes, -y             Non-interactive mode (accept defaults)
+  --global              Install Claude assets into ~/.claude/
 
 Examples:
   npx kiln-dev
   npx kiln-dev --repo-root /path/to/project
+  npx kiln-dev --repo-root /path/to/project --yes
 `.trim();
 
-const args = process.argv.slice(2);
-
-if (args.includes('--help')) {
-  console.log(USAGE);
-  process.exit(0);
+function fatal(message, code) {
+  console.error(message);
+  process.exit(code);
 }
 
-let repoRoot = process.cwd();
-const rootIdx = args.indexOf('--repo-root');
-if (rootIdx !== -1 && args[rootIdx + 1]) {
-  repoRoot = path.resolve(args[rootIdx + 1]);
+function parseArgs(argv) {
+  const args = argv.slice(2);
+  const out = {
+    help: false,
+    yes: false,
+    global: false,
+    repoRoot: process.cwd()
+  };
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === '--help') {
+      out.help = true;
+      continue;
+    }
+    if (arg === '--yes' || arg === '-y') {
+      out.yes = true;
+      continue;
+    }
+    if (arg === '--global') {
+      out.global = true;
+      continue;
+    }
+    if (arg === '--repo-root') {
+      if (!args[i + 1]) {
+        fatal('Missing value for --repo-root\n\n' + USAGE, 1);
+      }
+      out.repoRoot = path.resolve(args[i + 1]);
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith('--repo-root=')) {
+      out.repoRoot = path.resolve(arg.slice('--repo-root='.length));
+      continue;
+    }
+    fatal(`Unknown option: ${arg}\n\n${USAGE}`, 1);
+  }
+
+  return out;
 }
 
-console.log('kiln-dev installer — not yet implemented');
-process.exit(0);
+function ensureNodeVersion() {
+  const major = Number(String(process.versions.node || '').split('.')[0] || 0);
+  if (Number.isNaN(major) || major < 18) {
+    fatal(
+      `kiln-dev requires Node.js 18 or newer (found ${process.versions.node || 'unknown'})`,
+      1
+    );
+  }
+}
+
+function detectCodexCli() {
+  const cmd = process.platform === 'win32' ? 'where' : 'which';
+  try {
+    const result = spawnSync(cmd, ['codex'], { stdio: 'ignore' });
+    return result.status === 0;
+  } catch (_err) {
+    return false;
+  }
+}
+
+function createPrompter() {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  function prompt(question) {
+    return new Promise((resolve) => {
+      rl.question(question, (answer) => resolve(answer));
+    });
+  }
+
+  async function yesNo(question, defaultYes) {
+    const defaultHint = defaultYes ? 'Y/n' : 'y/N';
+    const answer = String(await prompt(`${question} (${defaultHint}) `)).trim().toLowerCase();
+    if (!answer) {
+      return defaultYes;
+    }
+    if (answer === 'y' || answer === 'yes') {
+      return true;
+    }
+    if (answer === 'n' || answer === 'no') {
+      return false;
+    }
+    return defaultYes;
+  }
+
+  function close() {
+    rl.close();
+  }
+
+  return { prompt, yesNo, close };
+}
+
+function readJson(filePath, fallbackValue) {
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    return JSON.parse(raw);
+  } catch (_err) {
+    return fallbackValue;
+  }
+}
+
+function isFileIdentical(src, dest) {
+  try {
+    const a = fs.readFileSync(src);
+    const b = fs.readFileSync(dest);
+    return a.equals(b);
+  } catch (_err) {
+    return false;
+  }
+}
+
+function copyFileManaged(srcFile, destFile, stats, warnings) {
+  fs.mkdirSync(path.dirname(destFile), { recursive: true });
+  if (!fs.existsSync(destFile)) {
+    fs.copyFileSync(srcFile, destFile);
+    stats.copied += 1;
+    return;
+  }
+
+  if (isFileIdentical(srcFile, destFile)) {
+    stats.skipped += 1;
+    return;
+  }
+
+  stats.conflicts += 1;
+  warnings.push(`Conflict at ${destFile} (existing file differs, left unchanged)`);
+}
+
+function copyDir(srcDir, destDir, stats, warnings) {
+  if (!fs.existsSync(srcDir)) {
+    warnings.push(`Missing source directory: ${srcDir}`);
+    return;
+  }
+
+  fs.mkdirSync(destDir, { recursive: true });
+  const entries = fs.readdirSync(srcDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = path.join(srcDir, entry.name);
+    const destPath = path.join(destDir, entry.name);
+    if (entry.isDirectory()) {
+      copyDir(srcPath, destPath, stats, warnings);
+      continue;
+    }
+    if (entry.isFile()) {
+      copyFileManaged(srcPath, destPath, stats, warnings);
+    }
+  }
+}
+
+function hookKey(hook) {
+  const event = hook && hook.event ? String(hook.event) : '';
+  const command = hook && hook.command ? String(hook.command) : '';
+  return `${event}::${command}`;
+}
+
+function mergeHooksJson(existingHooksObj, kilnHooksObj) {
+  const existingHooks = Array.isArray(existingHooksObj && existingHooksObj.hooks)
+    ? existingHooksObj.hooks
+    : [];
+  const kilnHooks = Array.isArray(kilnHooksObj && kilnHooksObj.hooks) ? kilnHooksObj.hooks : [];
+
+  const out = [];
+  const seen = new Set();
+  for (const hook of existingHooks.concat(kilnHooks)) {
+    if (!hook || typeof hook !== 'object') {
+      continue;
+    }
+    const key = hookKey(hook);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    out.push(hook);
+  }
+  return { hooks: out };
+}
+
+function detectProjectType(repoRoot) {
+  const checks = [
+    ['package.json', 'node'],
+    ['Cargo.toml', 'rust'],
+    ['go.mod', 'go'],
+    ['pyproject.toml', 'python'],
+    ['requirements.txt', 'python'],
+    ['Gemfile', 'ruby'],
+    ['pom.xml', 'java'],
+    ['build.gradle', 'java'],
+    ['Makefile', 'c-cpp']
+  ];
+  for (const [file, kind] of checks) {
+    if (fs.existsSync(path.join(repoRoot, file))) {
+      return kind;
+    }
+  }
+  return 'greenfield';
+}
+
+function scriptOrNull(scripts, name) {
+  if (!scripts || typeof scripts !== 'object') {
+    return null;
+  }
+  const value = scripts[name];
+  if (typeof value === 'string' && value.trim()) {
+    return value.trim();
+  }
+  return null;
+}
+
+function detectTooling(repoRoot) {
+  const packageJsonPath = path.join(repoRoot, 'package.json');
+  if (!fs.existsSync(packageJsonPath)) {
+    return {
+      testRunner: null,
+      linter: null,
+      typeChecker: null,
+      buildSystem: null,
+      startCommand: null
+    };
+  }
+
+  const packageJson = readJson(packageJsonPath, {});
+  const scripts = packageJson && packageJson.scripts ? packageJson.scripts : {};
+
+  return {
+    testRunner: scriptOrNull(scripts, 'test'),
+    linter: scriptOrNull(scripts, 'lint'),
+    typeChecker: scriptOrNull(scripts, 'typecheck') || scriptOrNull(scripts, 'check'),
+    buildSystem: scriptOrNull(scripts, 'build'),
+    startCommand: scriptOrNull(scripts, 'start') || scriptOrNull(scripts, 'dev')
+  };
+}
+
+function renderStateTemplate(templateText, values) {
+  let out = templateText;
+  for (const [key, value] of Object.entries(values)) {
+    const token = `{{${key}}}`;
+    out = out.split(token).join(String(value));
+  }
+  return out;
+}
+
+function ensureGitignoreKiln(repoRoot) {
+  const gitignorePath = path.join(repoRoot, '.gitignore');
+  let current = '';
+  if (fs.existsSync(gitignorePath)) {
+    current = fs.readFileSync(gitignorePath, 'utf8');
+  }
+
+  const lines = current.split(/\r?\n/);
+  if (lines.some((line) => line.trim() === '.kiln/' || line.trim() === '.kiln')) {
+    return false;
+  }
+
+  const next = current && !current.endsWith('\n') ? `${current}\n` : current;
+  fs.writeFileSync(gitignorePath, `${next}.kiln/\n`, 'utf8');
+  return true;
+}
+
+function resolveInstallRoots(repoRoot, useGlobal) {
+  const home = process.env.HOME || process.env.USERPROFILE;
+  if (!useGlobal) {
+    return {
+      claudeRoot: path.join(repoRoot, '.claude'),
+      kilnRoot: path.join(repoRoot, '.kiln')
+    };
+  }
+  if (!home) {
+    fatal('Cannot resolve home directory for --global install (missing HOME/USERPROFILE)', 1);
+  }
+  return {
+    claudeRoot: path.join(home, '.claude'),
+    kilnRoot: path.join(repoRoot, '.kiln')
+  };
+}
+
+function installAgents(sourceRoot, claudeRoot, warnings) {
+  const srcAgentsDir = path.join(sourceRoot, 'agents');
+  const destAgentsDir = path.join(claudeRoot, 'agents');
+  const stats = { copied: 0, skipped: 0, conflicts: 0, scanned: 0 };
+
+  if (!fs.existsSync(srcAgentsDir)) {
+    warnings.push(`Missing source agents directory: ${srcAgentsDir}`);
+    return stats;
+  }
+
+  fs.mkdirSync(destAgentsDir, { recursive: true });
+  const entries = fs.readdirSync(srcAgentsDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.md')) {
+      continue;
+    }
+    stats.scanned += 1;
+    const srcFile = path.join(srcAgentsDir, entry.name);
+    const destFile = path.join(destAgentsDir, entry.name);
+    copyFileManaged(srcFile, destFile, stats, warnings);
+  }
+  return stats;
+}
+
+function installSkills(sourceRoot, claudeRoot, warnings) {
+  const srcSkillsDir = path.join(sourceRoot, 'skills');
+  const destSkillsDir = path.join(claudeRoot, 'skills');
+  const stats = { copied: 0, skipped: 0, conflicts: 0, directories: 0 };
+
+  if (!fs.existsSync(srcSkillsDir)) {
+    warnings.push(`Missing source skills directory: ${srcSkillsDir}`);
+    return stats;
+  }
+
+  fs.mkdirSync(destSkillsDir, { recursive: true });
+  const entries = fs.readdirSync(srcSkillsDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+    stats.directories += 1;
+    const srcDir = path.join(srcSkillsDir, entry.name);
+    const destDir = path.join(destSkillsDir, entry.name);
+    copyDir(srcDir, destDir, stats, warnings);
+  }
+
+  return stats;
+}
+
+function installHooks(sourceRoot, claudeRoot, warnings) {
+  const srcHooksDir = path.join(sourceRoot, 'hooks');
+  const srcScriptsDir = path.join(srcHooksDir, 'scripts');
+  const srcHooksJson = path.join(srcHooksDir, 'hooks.json');
+
+  const destHooksDir = path.join(claudeRoot, 'hooks');
+  const destScriptsDir = path.join(destHooksDir, 'scripts');
+  const destHooksJson = path.join(destHooksDir, 'hooks.json');
+
+  const stats = {
+    scriptsCopied: 0,
+    scriptsSkipped: 0,
+    scriptsConflicts: 0,
+    hookJsonStatus: 'skipped'
+  };
+  const scriptStats = { copied: 0, skipped: 0, conflicts: 0 };
+
+  fs.mkdirSync(destScriptsDir, { recursive: true });
+
+  if (fs.existsSync(srcScriptsDir)) {
+    const entries = fs.readdirSync(srcScriptsDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith('.sh')) {
+        continue;
+      }
+      const srcFile = path.join(srcScriptsDir, entry.name);
+      const destFile = path.join(destScriptsDir, entry.name);
+      copyFileManaged(srcFile, destFile, scriptStats, warnings);
+    }
+  } else {
+    warnings.push(`Missing source hook scripts directory: ${srcScriptsDir}`);
+  }
+  stats.scriptsCopied = scriptStats.copied;
+  stats.scriptsSkipped = scriptStats.skipped;
+  stats.scriptsConflicts = scriptStats.conflicts;
+
+  if (!fs.existsSync(srcHooksJson)) {
+    warnings.push(`Missing source hooks.json: ${srcHooksJson}`);
+    return stats;
+  }
+
+  let kilnHooks = { hooks: [] };
+  try {
+    kilnHooks = JSON.parse(fs.readFileSync(srcHooksJson, 'utf8'));
+  } catch (_err) {
+    warnings.push(`Could not parse source hooks.json: ${srcHooksJson}`);
+  }
+  if (!fs.existsSync(destHooksJson)) {
+    fs.writeFileSync(destHooksJson, JSON.stringify(kilnHooks, null, 2) + '\n', 'utf8');
+    stats.hookJsonStatus = 'created';
+    return stats;
+  }
+
+  let existingHooks = { hooks: [] };
+  try {
+    existingHooks = JSON.parse(fs.readFileSync(destHooksJson, 'utf8'));
+  } catch (_err) {
+    warnings.push(`Could not parse existing hooks.json, replacing with merged kiln hooks: ${destHooksJson}`);
+  }
+  const mergedHooks = mergeHooksJson(existingHooks, kilnHooks);
+  fs.writeFileSync(destHooksJson, JSON.stringify(mergedHooks, null, 2) + '\n', 'utf8');
+  stats.hookJsonStatus = 'merged';
+  return stats;
+}
+
+function initializeKiln(sourceRoot, repoRoot, kilnRoot, projectType, modelMode, tooling, warnings) {
+  fs.mkdirSync(kilnRoot, { recursive: true });
+  fs.mkdirSync(path.join(kilnRoot, 'docs'), { recursive: true });
+  fs.mkdirSync(path.join(kilnRoot, 'tracks'), { recursive: true });
+
+  const configTemplatePath = path.join(sourceRoot, 'templates', 'config.json.tmpl');
+  const stateTemplatePath = path.join(sourceRoot, 'templates', 'STATE.md.tmpl');
+
+  const configPath = path.join(kilnRoot, 'config.json');
+  const statePath = path.join(kilnRoot, 'STATE.md');
+
+  if (!fs.existsSync(configPath)) {
+    const configTemplate = readJson(configTemplatePath, {});
+    configTemplate.projectType = projectType;
+    configTemplate.modelMode = modelMode;
+    configTemplate.tooling = tooling;
+    fs.writeFileSync(configPath, JSON.stringify(configTemplate, null, 2) + '\n', 'utf8');
+  } else {
+    warnings.push(`Existing file preserved: ${configPath}`);
+  }
+
+  if (!fs.existsSync(statePath)) {
+    const now = new Date().toISOString();
+    const stateTemplate = fs.readFileSync(stateTemplatePath, 'utf8');
+    const rendered = renderStateTemplate(stateTemplate, {
+      project_name: path.basename(repoRoot),
+      model_mode: modelMode,
+      init_timestamp: now,
+      current_phase_number: 1,
+      current_phase_title: 'Initialization',
+      current_step: 'plan',
+      step_status: 'pending',
+      step_started_timestamp: now,
+      mini_verify_retries: 0,
+      e2e_cycles: 0,
+      review_cycles: 0,
+      regression_test_count: 0,
+      completed_phases_count: 0,
+      last_activity_timestamp: now,
+      last_completed_action: 'none',
+      next_expected_action: 'Run /kiln:brainstorm'
+    });
+    fs.writeFileSync(statePath, rendered, 'utf8');
+  } else {
+    warnings.push(`Existing file preserved: ${statePath}`);
+  }
+}
+
+function printSummary(summary) {
+  console.log('');
+  console.log('kiln-dev installation complete');
+  console.log(`- Repository root: ${summary.repoRoot}`);
+  console.log(`- Claude config root: ${summary.claudeRoot}`);
+  console.log(`- .kiln root: ${summary.kilnRoot}`);
+  console.log(`- Project type: ${summary.projectType}`);
+  console.log(`- Model mode: ${summary.modelMode}`);
+  console.log(
+    `- Tooling: test=${summary.tooling.testRunner || 'none'}, lint=${summary.tooling.linter || 'none'}, typecheck=${summary.tooling.typeChecker || 'none'}, build=${summary.tooling.buildSystem || 'none'}, start=${summary.tooling.startCommand || 'none'}`
+  );
+  console.log(
+    `- Agents: copied ${summary.agents.copied}, skipped ${summary.agents.skipped}, conflicts ${summary.agents.conflicts}`
+  );
+  console.log(
+    `- Skills: directories ${summary.skills.directories}, copied ${summary.skills.copied}, skipped ${summary.skills.skipped}, conflicts ${summary.skills.conflicts}`
+  );
+  console.log(
+    `- Hooks: scripts copied ${summary.hooks.scriptsCopied}, skipped ${summary.hooks.scriptsSkipped}, conflicts ${summary.hooks.scriptsConflicts}, hooks.json ${summary.hooks.hookJsonStatus}`
+  );
+  console.log(`- .gitignore updated: ${summary.gitignoreUpdated ? 'yes' : 'no'}`);
+
+  if (summary.warnings.length > 0) {
+    console.log('');
+    console.log('Warnings:');
+    for (const warning of summary.warnings) {
+      console.log(`- ${warning}`);
+    }
+  }
+
+  console.log('');
+  console.log('Next steps:');
+  console.log('- Run /kiln:brainstorm to start building');
+  console.log('- Or run /kiln:quick for single-pass mode');
+}
+
+async function main() {
+  ensureNodeVersion();
+
+  const options = parseArgs(process.argv);
+  if (options.help) {
+    console.log(USAGE);
+    process.exit(0);
+  }
+
+  const sourceRoot = path.resolve(__dirname, '..');
+  const repoRoot = path.resolve(options.repoRoot);
+  const { claudeRoot, kilnRoot } = resolveInstallRoots(repoRoot, options.global);
+
+  const existingClaude = fs.existsSync(claudeRoot);
+  const existingKiln = fs.existsSync(kilnRoot);
+  const codexDetected = detectCodexCli();
+  const modelMode = codexDetected ? 'multi-model' : 'claude-only';
+
+  if (!options.yes) {
+    const prompter = createPrompter();
+    try {
+      const installConfirmed = await prompter.yesNo(`Install kiln to ${repoRoot}?`, true);
+      if (!installConfirmed) {
+        console.log('Installation cancelled.');
+        process.exit(0);
+      }
+
+      if (existingClaude) {
+        const mergeConfirmed = await prompter.yesNo(
+          'Existing Claude Code config found. Merge kiln files alongside existing?',
+          true
+        );
+        if (!mergeConfirmed) {
+          console.log('Installation cancelled.');
+          process.exit(0);
+        }
+      }
+    } finally {
+      prompter.close();
+    }
+  }
+
+  console.log(
+    codexDetected
+      ? 'Codex CLI detected — multi-model mode available'
+      : 'Codex CLI not found — kiln will run in Claude-only mode'
+  );
+
+  if (existingKiln) {
+    console.log(`Existing .kiln directory detected at ${kilnRoot}; preserving existing files.`);
+  }
+
+  const warnings = [];
+
+  try {
+    fs.mkdirSync(claudeRoot, { recursive: true });
+    const agents = installAgents(sourceRoot, claudeRoot, warnings);
+    const skills = installSkills(sourceRoot, claudeRoot, warnings);
+    const hooks = installHooks(sourceRoot, claudeRoot, warnings);
+    const projectType = detectProjectType(repoRoot);
+    const tooling = detectTooling(repoRoot);
+    initializeKiln(sourceRoot, repoRoot, kilnRoot, projectType, modelMode, tooling, warnings);
+    const gitignoreUpdated = ensureGitignoreKiln(repoRoot);
+
+    printSummary({
+      repoRoot,
+      claudeRoot,
+      kilnRoot,
+      projectType,
+      modelMode,
+      tooling,
+      agents,
+      skills,
+      hooks,
+      gitignoreUpdated,
+      warnings
+    });
+  } catch (err) {
+    if (err && (err.code === 'EACCES' || err.code === 'EPERM')) {
+      fatal(`Permission denied: ${err.message}`, 1);
+    }
+    if (err && err.code === 'ENOENT') {
+      fatal(`File or directory not found: ${err.path || err.message}`, 1);
+    }
+    fatal(`Installation failed: ${err && err.message ? err.message : String(err)}`, 1);
+  }
+}
+
+main().catch((err) => {
+  fatal(`Installation failed: ${err && err.message ? err.message : String(err)}`, 1);
+});
