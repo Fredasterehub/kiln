@@ -174,3 +174,84 @@ See `templates/vision-sections.md` for detailed guidance on each section's conte
 | Want to stop too early | Convergence Resistance | 'We have N ideas but haven't explored [gap].' |
 | Need user perspective | Stakeholder Perspective | 'You're a first-time user. What's confusing?' |
 | Want to stress-test | Reverse Brainstorming | 'How could we make this experience terrible?' |
+
+---
+
+## /kiln:brainstorm — Entry Point
+
+When the user invokes `/kiln:brainstorm`, execute this flow:
+
+### Prerequisites
+
+1. Check if kiln is initialized:
+   - If `.kiln/` does not exist: print 'Kiln is not initialized. Run /kiln:init first.' and stop.
+   - If `.kiln/config.json` does not exist: print 'Kiln config missing. Run /kiln:init first.' and stop.
+
+2. Check if brainstorming is already complete:
+   - Read `.kiln/STATE.md`. If brainstorm phase shows `complete` and `.kiln/VISION.md` exists: print 'Brainstorming already completed. VISION.md is locked. To re-brainstorm, delete .kiln/VISION.md and update STATE.md.' and stop.
+
+3. Check if a previous brainstorm was interrupted:
+   - If `.kiln/VISION.md` exists but STATE.md doesn't show brainstorm as `complete`: this is a resume scenario. Print 'Found draft VISION.md from a previous session. Resuming at Phase C (vision review).' Jump to the approval gate.
+
+### Flow
+
+```
+1. Read .kiln/config.json for modelMode
+2. Start Phase A: Divergent Exploration
+   - Apply techniques from the Technique Library (above)
+   - Follow anti-clustering protocol
+   - Apply convergence resistance
+   - Continue until operator decides to move on
+3. Start Phase B: Convergent Structuring
+   - Group, prioritize, define personas, success criteria, non-goals
+   - Interactive with operator throughout
+4. Start Phase C: Vision Crystallization
+   - Draft VISION.md from templates/vision-sections.md
+   - If modelMode == 'multi-model':
+     - Run challenge pass via Codex CLI (GPT-5.2)
+     - Synthesize original + critique
+   - If modelMode == 'claude-only':
+     - Skip challenge pass
+     - Draft goes directly to approval
+5. HARD GATE: Operator Approval
+   - Present final VISION.md
+   - APPROVE → lock VISION.md, update STATE.md, suggest /kiln:roadmap
+   - REVISE → iterate on specified sections
+```
+
+### Claude-Only Mode
+
+When `.kiln/config.json` has `modelMode: 'claude-only'`:
+- Phase A and Phase B run identically (they don't use external models)
+- Phase C skips the challenge pass (Step C.2) and synthesis (Step C.3)
+- The draft VISION.md from Step C.1 goes directly to the approval gate
+- Print a note: 'Running in Claude-only mode. Skipping external challenge pass. The vision is based on our brainstorming session alone.'
+- All other quality gates (operator approval, immutability) still apply
+
+### Post-Approval
+
+After the operator approves VISION.md:
+1. Ensure `.kiln/VISION.md` is written with final content
+2. Update `.kiln/STATE.md`:
+   - Set brainstorm step to `complete`
+   - Set next expected action to 'Run /kiln:roadmap'
+3. Print:
+   ```
+   VISION.md approved and locked.
+
+   Summary:
+   - Problem: [1-line summary of Problem Statement]
+   - Solution: [1-line summary of Solution Overview]
+   - Success criteria: N criteria defined
+   - Non-goals: M items explicitly excluded
+
+   Next: Run /kiln:roadmap to generate the implementation roadmap.
+   ```
+
+### Re-Brainstorming
+
+If the operator needs to change the vision after approval:
+1. They must manually delete `.kiln/VISION.md`
+2. They must update `.kiln/STATE.md` to reset the brainstorm step
+3. Then re-run `/kiln:brainstorm`
+4. This is intentionally manual — vision changes should be deliberate, not accidental
