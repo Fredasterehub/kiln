@@ -3,11 +3,11 @@
 ## Project Overview
 
 Kiln is a multi-model orchestration workflow for Claude Code, distributed as an NPM package (`kiln-dev`).
-We are building kiln using the avatarme v2 workflow with Agent Teams.
+We are building kiln using the deafish-teams workflow with Agent Teams.
 
 ## Separation of Concerns
 
-- `.claude/agents/` — avatarme v2 build-process agents. DO NOT modify these as part of kiln product work.
+- `.claude/agents/` — v2 build-process agents. DO NOT modify these as part of kiln product work.
 - `agents/` — kiln PRODUCT agents (the NPM package source). This is what we are building.
 - `skills/` — kiln PRODUCT skills (the NPM package source).
 - `hooks/` — kiln PRODUCT hooks (the NPM package source).
