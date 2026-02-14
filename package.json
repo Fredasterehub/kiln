@@ -1,0 +1,17 @@
+{
+  "name": "kiln-dev",
+  "version": "0.1.0",
+  "description": "Multi-model orchestration workflow for Claude Code",
+  "main": "bin/install.js",
+  "bin": {
+    "kiln-dev": "bin/install.js"
+  },
+  "files": [
+    "agents/",
+    "skills/",
+    "hooks/",
+    "bin/",
+    "templates/"
+  ],
+  "license": "MIT"
+}
