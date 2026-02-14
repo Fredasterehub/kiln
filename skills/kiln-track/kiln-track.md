@@ -81,16 +81,58 @@ Convert phase intent from `ROADMAP.md` into executable task packets for this spe
 #### Subagents to spawn
 - Always spawn `kiln-planner` (Opus lane).
 - In `multi-model` mode, also spawn `kiln-codex-planner` (Codex lane).
-- In `multi-model` mode, spawn `kiln-synthesizer` after both planners complete.
+- In `multi-model` mode with `planStrategy: "synthesize"` (default), spawn `kiln-synthesizer` after both planners complete.
+- In `multi-model` mode with `planStrategy: "debate"`, run debate rounds before synthesis (see Debate Flow below).
 
 #### Mode behavior
-- `multi-model`:
+- `multi-model` with `planStrategy: "synthesize"` (default):
   - Outputs expected: `.kiln/tracks/phase-N/plan_claude.md`, `.kiln/tracks/phase-N/plan_codex.md`, and synthesized `.kiln/tracks/phase-N/PLAN.md`.
+  - `PLAN.md` is authoritative for downstream stages.
+- `multi-model` with `planStrategy: "debate"`:
+  - Both planners produce initial plans (parallel, as above).
+  - Debate rounds run per the `kiln-debate` protocol.
+  - Synthesizer merges final revisions with debate context.
   - `PLAN.md` is authoritative for downstream stages.
 - `claude-only`:
   - Only `kiln-planner` runs.
   - Planner output is promoted/copied as `.kiln/tracks/phase-N/PLAN.md`.
-  - No codex planner and no synthesizer pass.
+  - No codex planner, no debate, and no synthesizer pass.
+  - Debate preferences in config.json are ignored.
+
+#### Plan Debate Flow
+When `planStrategy: "debate"` and `modelMode: "multi-model"`:
+
+```
+1. Spawn kiln-planner and kiln-codex-planner in parallel
+   -> plan_claude.md, plan_codex.md
+
+2. For round = 1 to debateRounds:
+   a. Critique phase (parallel):
+      - Spawn kiln-planner in critique mode (reads plan_codex latest, writes critique_of_codex_r<round>.md)
+      - Spawn kiln-codex-planner in critique mode (reads plan_claude latest, writes critique_of_claude_r<round>.md)
+
+   b. Revise phase (parallel):
+      - Spawn kiln-planner in revise mode (reads critique_of_claude_r<round>.md, writes plan_claude_v<round+1>.md)
+      - Spawn kiln-codex-planner in revise mode (reads critique_of_codex_r<round>.md, writes plan_codex_v<round+1>.md)
+
+   c. Convergence check:
+      - Read both critiques from this round.
+      - If convergence criteria met (per kiln-debate protocol), break early.
+      - Record round result in debate_log.md.
+
+3. Write debate_log.md with full audit trail.
+
+4. Spawn kiln-synthesizer with debate context:
+   - Final revised plans as primary inputs
+   - All critique artifacts for context
+   - debate_log.md for convergence info
+   -> PLAN.md
+```
+
+State tracking for debate:
+- Track `debateRound` counter in `.kiln/STATE.md` phase metadata.
+- Record convergence status after each round.
+- On debate failure (both participants fail in same round), proceed to synthesis with best available versions.
 
 #### Required output
 `PLAN.md` must contain task packets with goals, ACs, files, dependencies, waves, and rollback context as defined by `skills/kiln-plan/kiln-plan.md`.
@@ -201,22 +243,70 @@ Validate that the full phase behavior works end-to-end and does not regress prio
 Apply comprehensive quality review after implementation and E2E validation.
 
 #### Subagent to spawn
-- Spawn `kiln-reviewer` on E2E pass.
+- Always spawn `kiln-reviewer` (Opus) on E2E pass.
+- When `reviewStrategy: "debate"` and `modelMode: "multi-model"`, also spawn `kiln-codex-reviewer` (GPT-5.3-codex-sparks).
+
+#### Mode behavior
+- `reviewStrategy: "single"` (default):
+  - Only `kiln-reviewer` runs. Standard single-perspective review.
+- `reviewStrategy: "debate"`:
+  - Both reviewers produce independent reviews.
+  - Debate rounds run per the `kiln-debate` protocol.
+  - Final verdict incorporates both perspectives.
+- `claude-only`:
+  - Only `kiln-reviewer` runs regardless of `reviewStrategy` setting.
+
+#### Review Debate Flow
+When `reviewStrategy: "debate"` and `modelMode: "multi-model"`:
+
+```
+1. Spawn kiln-reviewer and kiln-codex-reviewer in parallel
+   -> review.md, review_codex.md
+
+2. For round = 1 to debateRounds:
+   a. Critique phase (parallel):
+      - Spawn kiln-reviewer in critique mode (reads review_codex latest, writes critique_of_review_codex_r<round>.md)
+      - Spawn kiln-codex-reviewer in critique mode (reads review latest, writes critique_of_review_opus_r<round>.md)
+
+   b. Revise phase (parallel):
+      - Spawn kiln-reviewer in revise mode (reads critique_of_review_opus_r<round>.md, writes review_v<round+1>.md)
+      - Spawn kiln-codex-reviewer in revise mode (reads critique_of_review_codex_r<round>.md, writes review_codex_v<round+1>.md)
+
+   c. Convergence check:
+      - Read both critiques from this round.
+      - If convergence criteria met (per kiln-debate protocol), break early.
+      - Append round result to debate_log.md.
+
+3. Update debate_log.md with review debate audit trail.
+
+4. Final verdict determination:
+   - Read both final revised reviews.
+   - Agreement on findings = high-confidence issues (always include).
+   - Single-reviewer findings = evaluate on individual merit.
+   - The Opus reviewer's final revision is the authoritative verdict.
+   - If verdicts disagree: the stricter verdict wins (REJECTED beats APPROVED).
+```
+
+State tracking for review debate:
+- Track `reviewDebateRound` counter in `.kiln/STATE.md` phase metadata.
+- Record convergence status after each round.
+- On debate failure, fall back to Opus reviewer's latest verdict.
 
 #### Verdict handling
 - `APPROVED`:
   - Advance directly to `RECONCILE`.
 - `REJECTED`:
-  - Use reviewer correction packets.
+  - Use reviewer correction packets (from the authoritative final review).
   - Route corrections through `EXECUTE` then `E2E` then `REVIEW`.
   - Maintain strict cycle counting.
 
 #### Correction budget
 - Maximum review correction cycles: 3 per phase.
 - If review remains rejected after 3 cycles, `HALT`.
+- Debate rounds do NOT count toward correction cycles. Debate is part of a single review pass.
 
 #### Exit conditions
-- `PASS`: reviewer verdict approved.
+- `PASS`: reviewer verdict approved (post-debate if debate is active).
 - `FAIL`: correction budget exhausted.
 
 #### State updates

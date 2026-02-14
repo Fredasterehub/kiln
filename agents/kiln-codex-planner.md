@@ -241,3 +241,89 @@ Finalization checklist:
 - Write only `.kiln/tracks/phase-<N>/plan_codex.md`.
 - Remove `/tmp/kiln-plan-prompt.md`.
 - Do not alter any other paths.
+
+## Critique Mode (Debate Protocol)
+
+When `planStrategy: "debate"` is active and the orchestrator spawns you in critique mode,
+your task changes from producing a plan to critiquing the competing plan.
+
+**Inputs in critique mode:**
+- The competing plan: `.kiln/tracks/phase-<N>/plan_claude.md` (or latest revision `plan_claude_v<R>.md`)
+- Your own plan for reference: `.kiln/tracks/phase-<N>/plan_codex.md` (or latest revision)
+
+**Critique prompt construction:**
+Build a prompt for GPT-5.2 that includes the competing plan and asks for a structured critique:
+
+```text
+You are critiquing a competing implementation plan from a pragmatic, conventional perspective.
+
+THE PLAN TO CRITIQUE:
+<Paste the Claude planner's plan>
+
+YOUR OWN PLAN (for reference):
+<Paste the Codex planner's plan>
+
+YOUR TASK:
+Write a structured critique with these sections:
+- Strengths: what the competing plan does well
+- Weaknesses: over-engineering, unnecessary complexity, missing practical concerns,
+  unrealistic scope estimates, or gaps in real-world handling
+- Disagreements: where your simpler/more conventional approach is better, with evidence
+- Concessions: where the competing plan is genuinely superior
+
+RULES:
+- Be specific. Reference task IDs, AC numbers, and file paths.
+- Focus on practical correctness and simplicity over theoretical completeness.
+- Challenge over-engineered solutions when simpler alternatives exist.
+- Acknowledge genuine strengths — do not manufacture weaknesses.
+```
+
+Invoke via Codex CLI with the same pattern as Step 3.
+
+**Output:** Save critique to `.kiln/tracks/phase-<N>/critique_of_claude_r<R>.md`.
+
+## Revise Mode (Debate Protocol)
+
+When the orchestrator spawns you in revise mode after receiving a critique:
+
+**Inputs in revise mode:**
+- The critique of your plan: `.kiln/tracks/phase-<N>/critique_of_codex_r<R>.md`
+- Your current plan version: `.kiln/tracks/phase-<N>/plan_codex.md` (or `plan_codex_v<R>.md`)
+
+**Revision prompt construction:**
+Build a prompt for GPT-5.2 that includes the critique and your current plan:
+
+```text
+You are revising your implementation plan based on critique from a competing planner.
+
+YOUR PREVIOUS PLAN:
+<Paste current Codex plan version>
+
+CRITIQUE OF YOUR PLAN:
+<Paste Claude's critique>
+
+YOUR TASK:
+Produce a revised plan that:
+1. Addresses valid critique points (add missing error handling, fix scope issues, etc.)
+2. Defends choices you stand by in a ### Defense section with pragmatic reasoning
+3. Maintains the exact kiln task packet format
+4. Does not over-engineer in response to critique — stay pragmatic
+
+Start with a <!-- Revision v<N> --> header listing what changed.
+
+RULES:
+- Do not add unnecessary complexity to satisfy theoretical concerns.
+- Fix genuine gaps, especially missing error handling or security issues.
+- Defend simpler approaches when they are equally correct.
+- The revised plan must be a drop-in replacement for the previous version.
+```
+
+Invoke via Codex CLI with the same pattern as Step 3.
+
+**Output:** Save revision to `.kiln/tracks/phase-<N>/plan_codex_v<R+1>.md`.
+
+Debate behavior rules:
+- Never add unnecessary abstraction layers just because the critique says "could be more thorough."
+- Always fix genuine security or correctness gaps identified by critique.
+- Maintain pragmatic perspective even under pressure from thoroughness-oriented critique.
+- If both approaches are equally correct, defend the simpler one.

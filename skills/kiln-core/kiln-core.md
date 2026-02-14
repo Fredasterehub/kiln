@@ -22,8 +22,18 @@ description: "Universal invariants and coordination contracts for the kiln workf
       plan_claude.md        # Claude planner output
       plan_codex.md         # Codex planner output
       PLAN.md               # Synthesized plan with task packets
+      critique_of_codex_r1.md   # (debate) Claude critiques Codex plan, round 1
+      critique_of_claude_r1.md  # (debate) Codex critiques Claude plan, round 1
+      plan_claude_v2.md     # (debate) Claude revised plan after round 1
+      plan_codex_v2.md      # (debate) Codex revised plan after round 1
+      debate_log.md         # (debate) Full audit trail of debate rounds
       e2e-results.md        # E2E verification output
       review.md             # Code review output
+      review_codex.md       # (debate) GPT reviewer output
+      critique_of_review_codex_r1.md  # (debate) Opus critiques GPT review
+      critique_of_review_opus_r1.md   # (debate) GPT critiques Opus review
+      review_v2.md          # (debate) Opus revised review after round 1
+      review_codex_v2.md    # (debate) GPT revised review after round 1
       reconcile.md          # Documentation reconciliation log
       artifacts/            # Phase-specific generated assets
 ```
@@ -31,7 +41,10 @@ description: "Universal invariants and coordination contracts for the kiln workf
 ### Path-by-Path Purpose
 
 - `.kiln/`: Root workspace for durable orchestration state and machine-readable workflow artifacts. It is created during `init` and updated throughout every stage.
-- `.kiln/config.json`: Canonical runtime configuration (model routing mode, safety defaults, tooling toggles, retry policy). It is written at project initialization and only changed through explicit operator or orchestrator configuration updates.
+- `.kiln/config.json`: Canonical runtime configuration (model routing mode, safety defaults, tooling toggles, retry policy). It is written at project initialization and only changed through explicit operator or orchestrator configuration updates. Preferences include:
+  - `planStrategy`: `"synthesize"` (default) or `"debate"` — controls whether planners debate before synthesis.
+  - `reviewStrategy`: `"single"` (default) or `"debate"` — controls whether a GPT reviewer joins Opus for review debate.
+  - `debateRounds`: integer 1-3 (default 2) — maximum critique-revise rounds when debate is active.
 - `.kiln/VISION.md`: Locked product vision and non-goal boundary agreed after brainstorm. It is written after brainstorm approval and read by roadmap/planning to prevent scope drift.
 - `.kiln/ROADMAP.md`: Phase decomposition that turns vision into sequenced delivery chunks. It is written once roadmap is accepted and may be amended only when the orchestrator re-baselines phases.
 - `.kiln/STATE.md`: Continuous progress ledger for current stage, active phase, task states, blockers, and halt reasons. It is updated at each transition boundary and after every task completion/failure.
@@ -69,15 +82,19 @@ description: "Universal invariants and coordination contracts for the kiln workf
 | Implementer | GPT-5.3-codex-high (Codex CLI) | Sonnet |
 | E2E Verifier | Sonnet | Sonnet |
 | Reviewer | Opus 4.6 | Opus 4.6 |
+| Codex Reviewer | GPT-5.3-codex-sparks (Codex CLI) | skipped |
 | Researcher | Haiku | Haiku |
 
 ## Claude-Only Fallback Rules
 
 - Skip challenge pass (single-perspective brainstorm)
 - Skip Planner B and synthesis (single Opus plan)
+- Skip plan debate (no competing plan to debate)
+- Skip review debate (no Codex Reviewer available)
 - Opus sharpens for Sonnet instead of GPT-5.2 for Codex
 - Sonnet implements instead of GPT-5.3-codex
 - Pipeline shape stays the same; only model assignments change
+- Debate preferences in config.json are ignored in claude-only mode
 
 ### What "Shape Stays the Same" Means
 
@@ -107,6 +124,7 @@ description: "Universal invariants and coordination contracts for the kiln workf
 | Executor | `.kiln/tracks/phase-N/PLAN.md`, codebase, tests, patterns and decision docs | Executor writes: source code + atomic git commit |
 | E2E Verifier | `.kiln/tracks/phase-N/PLAN.md`, changed code paths, environment setup docs | E2E Verifier writes: .kiln/tracks/phase-N/e2e-results.md, tests/e2e/ |
 | Reviewer | PR diff or working tree diff, `.kiln/tracks/phase-N/e2e-results.md`, acceptance criteria | Reviewer writes: .kiln/tracks/phase-N/review.md |
+| Codex Reviewer | PR diff or working tree diff, `.kiln/tracks/phase-N/e2e-results.md`, acceptance criteria | Codex Reviewer writes: .kiln/tracks/phase-N/review_codex.md |
 | Reconciler | `.kiln/tracks/phase-N/review.md`, merged changes, existing `.kiln/docs/*` docs | Reconciler writes: .kiln/docs/* updates, .kiln/tracks/phase-N/reconcile.md |
 
 ### Atomic Git Commit Definition
@@ -181,6 +199,12 @@ details: ...
 - Required keys: `sentinel`, `phase`, `task_id`, `status`, `owner`, `timestamp`.
 - Recommended keys: `started_at`, `completed_at`, `dependencies`, `blocked_by`, `evidence_paths`.
 - `status` should track lifecycle transitions (`queued`, `in_progress`, `done`, `blocked`, `halted`).
+
+#### `debate-round`
+
+- Required keys: `sentinel`, `phase`, `stage` (`plan` or `review`), `round`, `status` (`complete`, `converged`, `failed`).
+- Recommended keys: `claude_critique_path`, `codex_critique_path`, `claude_revision_path`, `codex_revision_path`, `convergence_reason`, `timestamp`.
+- Used to track debate round completion and convergence detection.
 
 ## Context Budget Rules
 

@@ -49,6 +49,25 @@ The phase number `<N>` will be specified in your spawn prompt from the orchestra
 
 **If plan_codex.md is missing or contains an error:** Fall back to using plan_claude.md as the master plan with a note that synthesis was skipped due to missing GPT perspective.
 
+### Debate-Aware Inputs
+When `planStrategy: "debate"` is active, additional artifacts exist from the debate rounds. Read these in addition to the base plans:
+
+1. **Final revised plans** — Use the highest-versioned revisions as primary synthesis inputs:
+   - `.kiln/tracks/phase-<N>/plan_claude_v<R>.md` (latest Claude revision)
+   - `.kiln/tracks/phase-<N>/plan_codex_v<R>.md` (latest Codex revision)
+   - If revisions exist, use them instead of the initial `plan_claude.md` / `plan_codex.md`.
+
+2. **Critique artifacts** — Read all critiques to understand what was contested:
+   - `.kiln/tracks/phase-<N>/critique_of_codex_r*.md` (Claude's critiques of Codex)
+   - `.kiln/tracks/phase-<N>/critique_of_claude_r*.md` (Codex's critiques of Claude)
+
+3. **Debate log** — Read `.kiln/tracks/phase-<N>/debate_log.md` for:
+   - Round count and convergence status
+   - Which points were contested vs. agreed upon
+   - Whether early termination occurred and why
+
+Use Glob to discover debate artifacts: `glob .kiln/tracks/phase-<N>/critique_*.md` and `glob .kiln/tracks/phase-<N>/plan_*_v*.md`.
+
 Input handling rules:
 - Treat `plan_claude.md` and `plan_codex.md` as immutable audit artifacts.
 - Verify both plan files are parseable markdown before synthesis.
@@ -213,7 +232,33 @@ The file must follow the exact format from kiln-plan skill:
 
 Include a `## Synthesis Notes` section at the end documenting key merge decisions. This helps the operator understand why specific approaches were chosen.
 
+### Debate-Aware Synthesis Notes
+When debate artifacts exist, the Synthesis Notes section must additionally document:
+
+- **Debate points adopted:** Which critique points from either side were incorporated into the final plan, with the critique artifact and round number as citation.
+- **Debate points overruled:** Which critique points were rejected during synthesis, with reasoning for why the overruled approach was not taken.
+- **Convergence summary:** Whether the debate converged (both sides agreed) or diverged (persistent disagreement requiring tiebreak).
+- **Tiebreak rationale:** For any persistent disagreements, explain which approach was chosen and why, using the standard conflict resolution hierarchy (living docs > security > VISION alignment > Claude default).
+
+Example debate synthesis notes:
+```markdown
+## Synthesis Notes
+
+### Standard Merge Decisions
+- Architecture from Claude (more thorough error handling)
+- File organization from GPT (matches existing patterns)
+
+### Debate Resolution
+- **Adopted from debate:** Claude's critique of GPT task P2-T03 identified missing
+  input validation (critique_of_codex_r1.md). GPT conceded and added it in v2. Included.
+- **Overruled:** GPT's critique that Claude's auth middleware placement was over-engineered
+  (critique_of_claude_r1.md). Claude defended with security rationale. Kept Claude's approach.
+- **Convergence:** Both sides agreed on task decomposition by round 2. Persistent disagreement
+  on error taxonomy resolved in favor of Claude (more specific error types).
+```
+
 **Do NOT modify plan_claude.md or plan_codex.md.** They are preserved as audit artifacts.
+**Do NOT modify debate artifacts (critique files, revised plans, debate log).** They are preserved as audit evidence.
 
 Required output guarantees:
 - PLAN.md is complete and immediately executable by downstream validator/executor agents.

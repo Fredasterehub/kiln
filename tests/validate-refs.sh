@@ -54,10 +54,24 @@ echo "Validation 1: Agent-to-skill references"
 while IFS= read -r agent_path; do
   rel_agent="${agent_path#$REPO_ROOT/}"
   token_tmp="$(mktemp)"
+
+  # Direct references to known skills anywhere in the agent file.
+  for skill_name in "${SKILL_NAMES[@]}"; do
+    if grep -Eq "(^|[^a-zA-Z0-9-])${skill_name}([^a-zA-Z0-9-]|$)" "$agent_path"; then
+      printf '%s\n' "$skill_name" >>"$token_tmp"
+    fi
+  done
+
+  # Unknown kiln-* tokens in "skill" context are likely typos and should fail.
   awk 'tolower($0) ~ /skill/ {print}' "$agent_path" \
     | grep -Eo 'kiln-[a-z0-9-]+' \
-    | sort -u >"$token_tmp" || true
+    | while IFS= read -r token; do
+      if ! contains "$token" "${SKILL_NAMES[@]}" && ! contains "$token" "${AGENT_NAMES[@]}"; then
+        printf '%s\n' "$token"
+      fi
+    done >>"$token_tmp" || true
 
+  # Explicit skills/<name>/<name>.md paths.
   grep -Eo 'skills/kiln-[a-z0-9-]+/kiln-[a-z0-9-]+\.md' "$agent_path" \
     | sed -E 's#skills/(kiln-[a-z0-9-]+)/.*#\1#' \
     | sort -u >>"$token_tmp" || true
@@ -71,8 +85,6 @@ while IFS= read -r agent_path; do
   while IFS= read -r token; do
     if contains "$token" "${SKILL_NAMES[@]}"; then
       pass "$rel_agent references existing skill '$token'"
-    elif contains "$token" "${AGENT_NAMES[@]}"; then
-      :
     else
       fail "$rel_agent references unknown skill token '$token'"
     fi
@@ -85,6 +97,7 @@ echo "Validation 2: Skill-to-template references"
 while IFS= read -r skill_path; do
   rel_skill="${skill_path#$REPO_ROOT/}"
   ref_tmp="$(mktemp)"
+  normalized_tmp="$(mktemp)"
 
   grep -Eo 'templates/[A-Za-z0-9._/-]+' "$skill_path" >"$ref_tmp" || true
   grep -Eo '[A-Za-z0-9._-]+\.tmpl(\.md)?' "$skill_path" >>"$ref_tmp" || true
@@ -92,12 +105,17 @@ while IFS= read -r skill_path; do
   if [ ! -s "$ref_tmp" ]; then
     warn "$rel_skill has no template references"
     rm -f "$ref_tmp"
+    rm -f "$normalized_tmp"
     continue
   fi
 
   while IFS= read -r raw_ref; do
     ref="$(trim_ref "$raw_ref")"
-    [ -z "$ref" ] && continue
+    [ -n "$ref" ] && printf '%s\n' "$ref" >>"$normalized_tmp"
+  done <"$ref_tmp"
+
+  while IFS= read -r raw_ref; do
+    ref="$raw_ref"
 
     if [[ "$ref" == templates/* ]]; then
       target="$REPO_ROOT/$ref"
@@ -119,8 +137,9 @@ while IFS= read -r skill_path; do
         fail "$rel_skill missing template file: $ref"
       fi
     fi
-  done < <(sort -u "$ref_tmp")
+  done < <(sort -u "$normalized_tmp")
   rm -f "$ref_tmp"
+  rm -f "$normalized_tmp"
 done < <(find "$REPO_ROOT/skills" -mindepth 2 -maxdepth 2 -type f -name '*.md' | sort)
 
 echo ""
@@ -136,6 +155,7 @@ declare -A EXPECTED_MODELS=(
   ["kiln-executor"]="sonnet"
   ["kiln-e2e-verifier"]="sonnet"
   ["kiln-reviewer"]="opus"
+  ["kiln-codex-reviewer"]="sonnet"
   ["kiln-researcher"]="haiku"
 )
 
@@ -207,8 +227,8 @@ agent_count="$(find "$REPO_ROOT/agents" -maxdepth 1 -type f -name '*.md' | wc -l
 skill_count="$(find "$REPO_ROOT/skills" -mindepth 2 -maxdepth 2 -type f -name '*.md' | wc -l | awk '{print $1}')"
 hook_script_count="$(find "$REPO_ROOT/hooks/scripts" -maxdepth 1 -type f -name '*.sh' | wc -l | awk '{print $1}')"
 
-[ "$agent_count" -eq 11 ] && pass "agents/*.md count is 11" || fail "agents/*.md count expected 11, got $agent_count"
-[ "$skill_count" -eq 12 ] && pass "skills/*/*.md count is 12" || fail "skills/*/*.md count expected 12, got $skill_count"
+[ "$agent_count" -eq 12 ] && pass "agents/*.md count is 12" || fail "agents/*.md count expected 12, got $agent_count"
+[ "$skill_count" -eq 13 ] && pass "skills/*/*.md count is 13" || fail "skills/*/*.md count expected 13, got $skill_count"
 [ "$hook_script_count" -eq 2 ] && pass "hooks/scripts/*.sh count is 2" || fail "hooks/scripts/*.sh count expected 2, got $hook_script_count"
 
 REQUIRED_TEMPLATES=(

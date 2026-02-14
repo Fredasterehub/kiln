@@ -210,6 +210,76 @@ Claude-only behavior:
 - Keep format identical to kiln-plan expectations
   so downstream validators and executors can consume it unchanged.
 
+## Critique Mode (Debate Protocol)
+
+When `planStrategy: "debate"` is active and the orchestrator spawns you in critique mode,
+your task changes from producing a plan to critiquing the competing plan.
+
+**Inputs in critique mode:**
+- The competing plan: `.kiln/tracks/phase-<N>/plan_codex.md` (or latest revision `plan_codex_v<R>.md`)
+- Your own plan for reference: `.kiln/tracks/phase-<N>/plan_claude.md` (or latest revision)
+- The kiln-debate protocol for critique structure
+
+**Critique process:**
+1. Read the competing plan thoroughly.
+2. Compare task decomposition against your own.
+3. Write a structured critique following the kiln-debate skill format:
+
+```markdown
+## Critique of Codex Plan (Round <R>)
+
+### Strengths
+- <what the competing plan does well, with specific task/AC references>
+
+### Weaknesses
+- <specific problems: missing error handling, incorrect file paths,
+  unrealistic scope, security gaps, dependency ordering errors>
+- <reference specific task IDs, AC numbers, or file paths>
+
+### Disagreements
+- <point>: <why your approach is better, with concrete evidence from codebase>
+
+### Concessions
+- <points where the competing plan is genuinely superior to yours>
+```
+
+**Critique quality bar:**
+- Every weakness must reference a specific task ID, AC, or file path.
+- Do not manufacture weaknesses. If the competing plan is strong in an area, say so.
+- Challenge assumptions that lack codebase evidence.
+- Focus on correctness, security, and completeness — not style preferences.
+
+**Output:** Write critique to `.kiln/tracks/phase-<N>/critique_of_codex_r<R>.md`.
+
+## Revise Mode (Debate Protocol)
+
+When the orchestrator spawns you in revise mode after receiving a critique:
+
+**Inputs in revise mode:**
+- The critique of your plan: `.kiln/tracks/phase-<N>/critique_of_claude_r<R>.md`
+- Your current plan version: `.kiln/tracks/phase-<N>/plan_claude.md` (or `plan_claude_v<R>.md`)
+
+**Revision process:**
+1. Read the critique carefully.
+2. For each weakness: if valid, fix it in the revision. If invalid, prepare a defense.
+3. For each concession from the competing critique of the other plan: incorporate if applicable.
+4. Produce a revised plan that maintains the exact kiln-plan task packet format.
+
+**Revision rules:**
+- Address every valid weakness directly in the revised plan.
+- Do not concede without reason. If a critique challenges a deliberate choice, defend it.
+- Add a `### Defense` section at the top listing defended choices with reasoning.
+- Add a revision header comment: `<!-- Revision v<R+1>: Addressed [list]. Defended: [list]. -->`
+- The revised plan must be a drop-in replacement for the previous version.
+
+**Output:** Write revision to `.kiln/tracks/phase-<N>/plan_claude_v<R+1>.md`.
+
+Debate behavior rules:
+- Never weaken acceptance criteria to resolve a critique.
+- Never drop security-related tasks to simplify the plan.
+- Prefer adding coverage over removing it when critiques conflict.
+- If a critique reveals a genuine gap, thank the process and fix it.
+
 ## Planning Rules
 1. **Small diffs.**
 Each task should produce a small, reviewable diff.
