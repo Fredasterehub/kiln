@@ -23,12 +23,11 @@
 | T07 Verification + Review | 5 packets | Depends on T06 |
 | T08 Reconcile + Utilities | 4 packets | Independent (depends on T02 only) |
 | T09 Hooks + Installer | 4 packets | Depends on T03-T08 all done |
+| T10 Integration Test | 2 packets | Depends on everything |
 
 ## Needs Planning
 
-| Track | Status |
-|-------|--------|
-| T10 Integration Test | Directory created, TASKS/ empty — needs task packets written |
+None — all tracks planned.
 
 ---
 
@@ -42,6 +41,7 @@
 3. Planned T07 (Verification + Review) — 5 task packets committed (61ee6c5)
 4. Planned T08 (Reconcile + Utilities) — 4 task packets committed (61ee6c5)
 5. Planned T09 (Hooks + Installer) — 4 task packets committed (16deba1)
+6. Planned T10 (Integration Test) — 2 task packets (committed in session checkpoint)
 
 ## Key Setup (already done, don't redo)
 
@@ -96,8 +96,8 @@ codex exec -m gpt-5.2 -c 'model_reasoning_effort="high"' \
    - **Execute T06** (3 task packets — execution pipeline agents + skill)
    - **Execute T07** (5 task packets — verification + review)
    - **Execute T08** (4 task packets — reconcile + utilities)
-   - **Plan T10** (write task packets — integration test)
    - **Execute T09** (4 task packets — hooks + installer, depends on T03-T08)
-   - **Execute T10** (3 task packets — integration test, depends on everything)
-4. Spawn fresh agents: planner (for T10), coder (for T05+), qa-reviewer (for each track)
+   - **Execute T10** (2 task packets — integration test, depends on everything)
+4. Spawn fresh agents: coder (for T05+), qa-reviewer (for each track)
 5. ALL implementation goes through Codex pipeline (sharpen GPT-5.2 → implement GPT-5.3-codex)
+6. All planning is DONE — only execution and QA remain
