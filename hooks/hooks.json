@@ -12,7 +12,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": ".*",
+        "matcher": "Write|Edit",
         "hooks": [
           {
             "type": "command",

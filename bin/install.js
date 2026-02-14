@@ -468,6 +468,20 @@ function installHooks(sourceRoot, claudeRoot, warnings) {
   return stats;
 }
 
+function installTemplates(sourceRoot, claudeRoot, warnings) {
+  const srcTemplatesDir = path.join(sourceRoot, 'templates');
+  const destTemplatesDir = path.join(claudeRoot, 'templates');
+  const stats = { copied: 0, skipped: 0, conflicts: 0 };
+
+  if (!fs.existsSync(srcTemplatesDir)) {
+    warnings.push(`Missing source templates directory: ${srcTemplatesDir}`);
+    return stats;
+  }
+
+  copyDir(srcTemplatesDir, destTemplatesDir, stats, warnings);
+  return stats;
+}
+
 function initializeKiln(sourceRoot, repoRoot, kilnRoot, projectType, modelMode, tooling, warnings) {
   fs.mkdirSync(kilnRoot, { recursive: true });
   fs.mkdirSync(path.join(kilnRoot, 'docs'), { recursive: true });
@@ -535,6 +549,9 @@ function printSummary(summary) {
   );
   console.log(
     `- Hooks: scripts copied ${summary.hooks.scriptsCopied}, skipped ${summary.hooks.scriptsSkipped}, conflicts ${summary.hooks.scriptsConflicts}, hooks.json ${summary.hooks.hookJsonStatus}`
+  );
+  console.log(
+    `- Templates: copied ${summary.templates.copied}, skipped ${summary.templates.skipped}, conflicts ${summary.templates.conflicts}`
   );
   console.log(`- .gitignore contains .kiln ignore rule: ${summary.gitignoreHasKilnIgnore ? 'yes' : 'no'}`);
 
@@ -611,6 +628,7 @@ async function main() {
     const agents = installAgents(sourceRoot, claudeRoot, warnings);
     const skills = installSkills(sourceRoot, claudeRoot, warnings);
     const hooks = installHooks(sourceRoot, claudeRoot, warnings);
+    const templates = installTemplates(sourceRoot, claudeRoot, warnings);
     const projectType = detectProjectType(repoRoot);
     const tooling = detectTooling(repoRoot);
     initializeKiln(sourceRoot, repoRoot, kilnRoot, projectType, modelMode, tooling, warnings);
@@ -626,6 +644,7 @@ async function main() {
       agents,
       skills,
       hooks,
+      templates,
       gitignoreHasKilnIgnore,
       warnings
     });

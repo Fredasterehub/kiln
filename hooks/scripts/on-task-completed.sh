@@ -11,6 +11,10 @@ if [ -z "$test_cmd" ]; then
   exit 0
 fi
 cmd_name=$(printf '%s\n' "$test_cmd" | awk '{print $1}')
+case "$cmd_name" in
+  npm|npx|node|jest|vitest|pytest|cargo|go|make|bun|deno|pnpm|yarn) ;;
+  *) echo "[kiln] Warning: unrecognized test runner '$cmd_name', skipping mini-verify"; exit 0 ;;
+esac
 if [ -z "$cmd_name" ] || ! command -v "$cmd_name" >/dev/null 2>&1; then
   echo "[kiln] Warning: test command '$cmd_name' not found"
   exit 0

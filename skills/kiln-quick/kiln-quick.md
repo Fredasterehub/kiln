@@ -10,7 +10,7 @@ user_invocable: true
 
 Quick mode is for small, well-understood changes where the full kiln pipeline is overkill. The user provides a natural language description of the change and kiln handles it in a single pass.
 
-**Usage:** `/kiln:quick \"add a health check endpoint at /api/health\"`
+**Usage:** `/kiln:quick "add a health check endpoint at /api/health"`
 
 **What quick mode SKIPS:**
 - Brainstorming session (no VISION.md needed)
@@ -164,14 +164,14 @@ However, if living docs exist, the quick mode change should still respect them. 
 ## Examples
 
 Good candidates for /kiln:quick:
-- `/kiln:quick \"fix the null reference error in UserService.getById\"`
-- `/kiln:quick \"add CORS headers to the Express middleware\"`
-- `/kiln:quick \"update the README with the new API endpoint\"`
-- `/kiln:quick \"change the default timeout from 5s to 30s in config\"`
-- `/kiln:quick \"fix the typo in the error message on line 42 of auth.ts\"`
+- `/kiln:quick "fix the null reference error in UserService.getById"`
+- `/kiln:quick "add CORS headers to the Express middleware"`
+- `/kiln:quick "update the README with the new API endpoint"`
+- `/kiln:quick "change the default timeout from 5s to 30s in config"`
+- `/kiln:quick "fix the typo in the error message on line 42 of auth.ts"`
 
 Bad candidates (redirect to full pipeline):
-- `/kiln:quick \"add user authentication\"` → Too big (architectural, multi-file, new deps)
-- `/kiln:quick \"build a dashboard\"` → New feature (needs brainstorming)
-- `/kiln:quick \"refactor the database layer\"` → Architectural change (needs planning)
-- `/kiln:quick \"add real-time notifications\"` → New dependency + multi-file
+- `/kiln:quick "add user authentication"` → Too big (architectural, multi-file, new deps)
+- `/kiln:quick "build a dashboard"` → New feature (needs brainstorming)
+- `/kiln:quick "refactor the database layer"` → Architectural change (needs planning)
+- `/kiln:quick "add real-time notifications"` → New dependency + multi-file

@@ -54,7 +54,7 @@ This command is state-driven and safe: it uses explicit filesystem and state che
 ## State reading
 
 Read `.kiln/STATE.md` using the canonical schema defined by `templates/STATE.md.tmpl` and parse by section heading:
-- `Project`
+- `Project State`
 - `Phase Progress`
 - `Current Track`
 - `Correction Cycles`

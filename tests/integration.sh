@@ -120,6 +120,7 @@ SKILLS=(
   kiln-roadmap
   kiln-fire
   kiln-cool
+  kiln-debate
 )
 
 for skill in "${SKILLS[@]}"; do
@@ -128,7 +129,7 @@ for skill in "${SKILLS[@]}"; do
   check "skill has markdown: $skill" bash -c 'find "$1" -maxdepth 1 -type f -name "*.md" | grep -q "."' _ "$local_dir"
 done
 
-check "at least 7 skill directories installed" bash -c '[ "$(find "$1" -mindepth 1 -maxdepth 1 -type d | wc -l)" -ge 7 ]' _ "$SKILL_ROOT"
+check "at least 15 skill directories installed" bash -c '[ "$(find "$1" -mindepth 1 -maxdepth 1 -type d | wc -l)" -ge 15 ]' _ "$SKILL_ROOT"
 
 echo ""
 echo "Group 4: Hooks"
@@ -193,7 +194,17 @@ check "docs directory exists" test -d "$KILN_DIR/docs"
 check "tracks directory exists" test -d "$KILN_DIR/tracks"
 
 echo ""
-echo "Group 6: config.json content"
+echo "Group 6: Templates"
+TEMPLATES_DIR="$TMPDIR/.claude/templates"
+check "templates directory exists" test -d "$TEMPLATES_DIR"
+check "STATE.md.tmpl exists" test -f "$TEMPLATES_DIR/STATE.md.tmpl"
+check "config.json.tmpl exists" test -f "$TEMPLATES_DIR/config.json.tmpl"
+check "vision-sections.md exists" test -f "$TEMPLATES_DIR/vision-sections.md"
+check "FINAL_REPORT.md.tmpl exists" test -f "$TEMPLATES_DIR/FINAL_REPORT.md.tmpl"
+check "teams templates exist" test -d "$TEMPLATES_DIR/teams"
+
+echo ""
+echo "Group 7: config.json content"
 check "config has projectType" check_config_key "$KILN_DIR/config.json" "projectType"
 check "config has modelMode" check_config_key "$KILN_DIR/config.json" "modelMode"
 check "config has tooling" check_config_key "$KILN_DIR/config.json" "tooling"

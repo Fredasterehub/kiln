@@ -347,7 +347,7 @@ Status enum: `pending | in-progress | complete | failed`
 
 ### Current Track
 
-- **Phase:** `N -- Title`
+- **Phase:** `N — Title`
 - **Current Step:** `plan | validate | execute | e2e | review | reconcile`
 - **Step Status:** `pending | in-progress | complete | failed`
 - **Started:** `<ISO 8601 timestamp>`

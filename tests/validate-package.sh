@@ -92,6 +92,11 @@ if [ "$FAIL" -eq 0 ]; then
     "templates/config.json.tmpl"
     "templates/STATE.md.tmpl"
     "templates/vision-sections.md"
+    "templates/FINAL_REPORT.md.tmpl"
+    "templates/teams/verify/verdict.tmpl.md"
+    "templates/teams/track/index.tmpl.md"
+    "templates/teams/track/task-packet.tmpl.md"
+    "templates/teams/brainstorm/brainstorm-session.tmpl.md"
   )
 
   missing_required=0

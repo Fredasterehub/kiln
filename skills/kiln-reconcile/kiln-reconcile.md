@@ -35,6 +35,15 @@ Reconcile is also a deliberate pause point.
 The operator must confirm proposed doc updates before they are applied.
 Do not auto-apply living doc changes without explicit approval.
 
+## Prerequisites
+
+Before running reconciliation, verify kiln state:
+1. Check if `.kiln/` directory exists. If not: print 'Kiln is not initialized. Run /kiln:init first.' and stop.
+2. Check if `.kiln/STATE.md` exists. If not: print 'Kiln state file missing. Run /kiln:init to reinitialize.' and stop.
+3. Check if `.kiln/config.json` exists and is readable. If not: print 'Kiln configuration missing. Run /kiln:init to reinitialize.' and stop.
+
+Run these checks from the project root. Treat missing required files as blocking. Never crash on missing prerequisites.
+
 ## Reconcile Steps
 Run these steps in order for the completed phase.
 

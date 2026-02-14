@@ -224,10 +224,8 @@ Read `.kiln/config.json` to check `modelMode`.
 Invoke GPT-5.2 via Codex CLI to critique the draft VISION.md:
 
 ```bash
-codex exec \
-  -m gpt-5.2 \
-  -c 'model_reasoning_effort=\"high\"' \
-  \"Read the following VISION.md and provide a thorough critique. Focus on:
+cat > /tmp/kiln-critique-prompt.txt <<'PROMPT'
+Read the following VISION.md and provide a thorough critique. Focus on:
 1. What important aspects are MISSING that should be addressed?
 2. What ASSUMPTIONS are being made that haven't been examined?
 3. What RISKS aren't surfaced or are underestimated?
@@ -237,9 +235,18 @@ codex exec \
 7. What USER PERSONAS are missing or underspecified?
 
 Be specific and constructive. For each issue, explain why it matters and suggest how to address it.
+PROMPT
 
-VISION.md content:
-$(cat .kiln/VISION.md)\"
+echo "" >> /tmp/kiln-critique-prompt.txt
+echo "VISION.md content:" >> /tmp/kiln-critique-prompt.txt
+cat .kiln/VISION.md >> /tmp/kiln-critique-prompt.txt
+
+codex exec \
+  -m gpt-5.2 \
+  -c 'model_reasoning_effort="high"' \
+  "$(cat /tmp/kiln-critique-prompt.txt)"
+
+rm -f /tmp/kiln-critique-prompt.txt
 ```
 
 Save the output to `.kiln/tracks/phase-0/vision_critique.md` (create the directory if needed: `mkdir -p .kiln/tracks/phase-0`).

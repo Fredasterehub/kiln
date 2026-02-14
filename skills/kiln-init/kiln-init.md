@@ -220,19 +220,19 @@ Create the kiln state directory structure. Use the templates from the kiln packa
    - If the template can't be found, create the JSON directly with the detected values:
    ```json
    {
-     \"projectType\": \"<detected>\",
-     \"modelMode\": \"<detected>\",
-     \"tooling\": {
-       \"testRunner\": <detected or null>,
-       \"linter\": <detected or null>,
-       \"typeChecker\": <detected or null>,
-       \"buildSystem\": <detected or null>,
-       \"startCommand\": <detected or null>
+     "projectType": "<detected>",
+     "modelMode": "<detected>",
+     "tooling": {
+       "testRunner": "<detected or null>",
+       "linter": "<detected or null>",
+       "typeChecker": "<detected or null>",
+       "buildSystem": "<detected or null>",
+       "startCommand": "<detected or null>"
      },
-     \"preferences\": {
-       \"maxRetries\": 2,
-       \"waveParallelism\": 3,
-       \"e2eTimeout\": 30000
+     "preferences": {
+       "maxRetries": 2,
+       "waveParallelism": 3,
+       "e2eTimeout": 30000
      }
    }
    ```

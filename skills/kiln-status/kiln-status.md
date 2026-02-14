@@ -28,8 +28,8 @@ Prerequisite execution order:
 
 Read these files using the Read tool:
 1. `.kiln/STATE.md` — parse the following fields:
-   - Project name (from Project section)
-   - Model mode (from Project section)
+   - Project name (from Project State section)
+   - Model mode (from Project State section)
    - Phase Progress table (list of phases with statuses)
    - Current Track section (phase number, step, step status)
    - Correction Cycles section (mini-verify retries, E2E corrections, review corrections)

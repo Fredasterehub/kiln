@@ -1,7 +1,7 @@
 ---
 name: kiln-sharpener
 description: Prompt engineer — transforms task packets into Codex-optimized implementation prompts by exploring the real codebase and applying Prompting Guide principles
-model: sonnet
+model: opus
 tools:
   - Read
   - Write

@@ -52,7 +52,7 @@ Run /kiln:roadmap first, then rerun /kiln:track.
 ## Track Loop
 Run the loop exactly in this sequence:
 
-1. Read `.kiln/STATE.md` to determine `currentPhase`, `currentStep`, counters, and gate status.
+1. Read `.kiln/STATE.md` to determine the active phase, active step, counters, and gate status.
 2. If no current phase is active, read `.kiln/ROADMAP.md` and select the first incomplete phase.
 3. Execute the current step for the current phase:
    a. `PLAN` — spawn `kiln-planner` (Opus) plus `kiln-codex-planner` when `modelMode=multi-model`, then run `kiln-synthesizer` when `multi-model` to produce canonical `PLAN.md`.
@@ -439,32 +439,7 @@ Required fields:
 - Phase progress table with status for each roadmap phase
 - Transition timestamps for every step and phase change
 
-Recommended state structure:
-
-```yaml
-currentPhase: phase-2
-currentStep: execute
-correctionCycles:
-  miniVerify: 1
-  e2e: 0
-  review: 0
-phaseProgress:
-  - phase: phase-1
-    title: Authentication Baseline
-    status: complete
-    startedAt: 2026-02-14T08:00:00Z
-    completedAt: 2026-02-14T10:00:00Z
-  - phase: phase-2
-    title: Billing and Entitlements
-    status: in_progress
-    startedAt: 2026-02-14T10:05:00Z
-    completedAt: null
-transitionLog:
-  - at: 2026-02-14T10:05:00Z
-    from: phase-1/reconcile
-    to: phase-2/plan
-    result: pass
-```
+STATE.md follows the canonical Markdown schema defined in kiln-core. See `skills/kiln-core/kiln-core.md` section "STATE.md Canonical Schema" and `templates/STATE.md.tmpl` for the authoritative format. Do not use YAML or any alternative state representation.
 
 Phase progress requirements:
 - Include every roadmap phase, even those not started yet.

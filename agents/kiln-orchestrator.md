@@ -147,16 +147,16 @@ Spawn each subagent using the Task tool. Every subagent gets a fresh context —
 | Plan (Codex) | kiln-codex-planner | sonnet | general-purpose |
 | Synthesize | kiln-synthesizer | opus | general-purpose |
 | Validate | kiln-validator | sonnet | general-purpose |
-| Sharpen | kiln-sharpener | sonnet | general-purpose |
+| Sharpen | kiln-sharpener | opus | general-purpose |
 | Execute | kiln-executor | sonnet | general-purpose |
 | E2E Verify | kiln-e2e-verifier | sonnet | general-purpose |
 | Review | kiln-reviewer | opus | general-purpose |
-| Reconcile | (orchestrator handles directly) | — | — |
+| Reconcile | (subagent with kiln-reconcile) | sonnet | general-purpose |
 | Research | kiln-researcher | haiku | general-purpose |
 
 **Multi-model vs Claude-only:** Read `modelMode` from `.kiln/config.json`:
 - `multi-model`: Spawn all agents including Vision Challenger, Planner B, and GPT-based Sharpener/Executor (via Codex CLI within their agent definitions).
-- `claude-only`: Skip Vision Challenger, skip Planner B, skip plan synthesis. Sharpener and Executor use Claude models (defined in their agent files)."
+- `claude-only`: Skip Vision Challenger, skip Planner B, skip plan synthesis. Sharpener and Executor use Claude models (defined in their agent files).
 
 Spawning rules:
 - Always pass only the minimum required context for the assigned stage.
@@ -226,11 +226,11 @@ Constraints:
 ```
 
 Reconcile handling (coordination-only):
+- Orchestrator spawns a subagent loaded with the kiln-reconcile skill to produce doc update proposals.
 - Reconcile does not grant implementation authority to orchestrator.
-- Orchestrator compiles proposed living-doc updates from subagent outputs.
-- Orchestrator asks operator for confirmation before applying reconcile state transition.
+- Orchestrator presents proposed living-doc updates to operator for confirmation.
 - Orchestrator updates `.kiln/STATE.md` and phase status after confirmation.
-- If living-doc proposals are missing or unclear, spawn the appropriate subagent to regenerate them.
+- If living-doc proposals are missing or unclear, re-spawn the reconcile subagent with corrective instructions.
 
 ## Context Budget
 Stay lean. Your job is coordination, not computation.
@@ -316,4 +316,4 @@ Completion behavior:
 - Provide a concise completion summary to operator with artifact paths.
 - Wait for explicit new command before any further action.
 
-"This agent definition is loaded by Claude Code when the orchestrator is spawned. Follow these rules exactly. When in doubt, reference the kiln-core skill for the canonical contracts."
+This agent definition is loaded by Claude Code when the orchestrator is spawned. Follow these rules exactly. When in doubt, reference the kiln-core skill for the canonical contracts.
