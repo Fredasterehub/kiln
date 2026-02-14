@@ -182,32 +182,78 @@ function copyDir(srcDir, destDir, stats, warnings) {
   }
 }
 
-function hookKey(hook) {
-  const event = hook && hook.event ? String(hook.event) : '';
-  const command = hook && hook.command ? String(hook.command) : '';
-  return `${event}::${command}`;
+function stableStringify(value) {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+  }
+  const keys = Object.keys(value).sort();
+  const parts = keys.map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`);
+  return `{${parts.join(',')}}`;
+}
+
+function hooksByEvent(hooksObj) {
+  const out = {};
+  const hooks = hooksObj && hooksObj.hooks;
+
+  if (Array.isArray(hooks)) {
+    for (const hook of hooks) {
+      if (!hook || typeof hook !== 'object' || Array.isArray(hook)) {
+        continue;
+      }
+      const event = typeof hook.event === 'string' ? hook.event : '';
+      if (!event) {
+        continue;
+      }
+      if (!Array.isArray(out[event])) {
+        out[event] = [];
+      }
+      const { event: _event, ...entry } = hook;
+      out[event].push(entry);
+    }
+    return out;
+  }
+
+  if (!hooks || typeof hooks !== 'object') {
+    return out;
+  }
+
+  for (const [event, entries] of Object.entries(hooks)) {
+    if (!Array.isArray(entries)) {
+      continue;
+    }
+    out[event] = entries.filter(
+      (entry) => entry && typeof entry === 'object' && !Array.isArray(entry)
+    );
+  }
+  return out;
 }
 
 function mergeHooksJson(existingHooksObj, kilnHooksObj) {
-  const existingHooks = Array.isArray(existingHooksObj && existingHooksObj.hooks)
-    ? existingHooksObj.hooks
-    : [];
-  const kilnHooks = Array.isArray(kilnHooksObj && kilnHooksObj.hooks) ? kilnHooksObj.hooks : [];
+  const existingByEvent = hooksByEvent(existingHooksObj);
+  const kilnByEvent = hooksByEvent(kilnHooksObj);
 
-  const out = [];
-  const seen = new Set();
-  for (const hook of existingHooks.concat(kilnHooks)) {
-    if (!hook || typeof hook !== 'object') {
-      continue;
+  const allEvents = new Set([...Object.keys(existingByEvent), ...Object.keys(kilnByEvent)]);
+  const merged = {};
+
+  for (const event of allEvents) {
+    const mergedEntries = [];
+    const seen = new Set();
+    const combined = (existingByEvent[event] || []).concat(kilnByEvent[event] || []);
+    for (const entry of combined) {
+      const key = stableStringify(entry);
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      mergedEntries.push(entry);
     }
-    const key = hookKey(hook);
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    out.push(hook);
+    merged[event] = mergedEntries;
   }
-  return { hooks: out };
+
+  return { hooks: merged };
 }
 
 function detectProjectType(repoRoot) {
@@ -274,21 +320,21 @@ function renderStateTemplate(templateText, values) {
   return out;
 }
 
-function ensureGitignoreKiln(repoRoot) {
+function ensureGitignoreKiln(repoRoot, warnings) {
   const gitignorePath = path.join(repoRoot, '.gitignore');
-  let current = '';
-  if (fs.existsSync(gitignorePath)) {
-    current = fs.readFileSync(gitignorePath, 'utf8');
-  }
-
-  const lines = current.split(/\r?\n/);
-  if (lines.some((line) => line.trim() === '.kiln/' || line.trim() === '.kiln')) {
+  if (!fs.existsSync(gitignorePath)) {
     return false;
   }
 
-  const next = current && !current.endsWith('\n') ? `${current}\n` : current;
-  fs.writeFileSync(gitignorePath, `${next}.kiln/\n`, 'utf8');
-  return true;
+  const current = fs.readFileSync(gitignorePath, 'utf8');
+  const lines = current.split(/\r?\n/);
+  const hasKilnIgnore = lines.some((line) => line.trim() === '.kiln/' || line.trim() === '.kiln');
+  if (hasKilnIgnore) {
+    warnings.push(
+      `${gitignorePath} ignores .kiln; remove this rule because .kiln/ should be committed`
+    );
+  }
+  return hasKilnIgnore;
 }
 
 function resolveInstallRoots(repoRoot, useGlobal) {
@@ -398,7 +444,7 @@ function installHooks(sourceRoot, claudeRoot, warnings) {
     return stats;
   }
 
-  let kilnHooks = { hooks: [] };
+  let kilnHooks = { hooks: {} };
   try {
     kilnHooks = JSON.parse(fs.readFileSync(srcHooksJson, 'utf8'));
   } catch (_err) {
@@ -410,7 +456,7 @@ function installHooks(sourceRoot, claudeRoot, warnings) {
     return stats;
   }
 
-  let existingHooks = { hooks: [] };
+  let existingHooks = { hooks: {} };
   try {
     existingHooks = JSON.parse(fs.readFileSync(destHooksJson, 'utf8'));
   } catch (_err) {
@@ -490,7 +536,7 @@ function printSummary(summary) {
   console.log(
     `- Hooks: scripts copied ${summary.hooks.scriptsCopied}, skipped ${summary.hooks.scriptsSkipped}, conflicts ${summary.hooks.scriptsConflicts}, hooks.json ${summary.hooks.hookJsonStatus}`
   );
-  console.log(`- .gitignore updated: ${summary.gitignoreUpdated ? 'yes' : 'no'}`);
+  console.log(`- .gitignore contains .kiln ignore rule: ${summary.gitignoreHasKilnIgnore ? 'yes' : 'no'}`);
 
   if (summary.warnings.length > 0) {
     console.log('');
@@ -502,8 +548,8 @@ function printSummary(summary) {
 
   console.log('');
   console.log('Next steps:');
-  console.log('- Run /kiln:brainstorm to start building');
-  console.log('- Or run /kiln:quick for single-pass mode');
+  console.log('- Run /kiln:fire to start building');
+  console.log('- Or run /kiln:cool to save progress and pause');
 }
 
 async function main() {
@@ -568,7 +614,7 @@ async function main() {
     const projectType = detectProjectType(repoRoot);
     const tooling = detectTooling(repoRoot);
     initializeKiln(sourceRoot, repoRoot, kilnRoot, projectType, modelMode, tooling, warnings);
-    const gitignoreUpdated = ensureGitignoreKiln(repoRoot);
+    const gitignoreHasKilnIgnore = ensureGitignoreKiln(repoRoot, warnings);
 
     printSummary({
       repoRoot,
@@ -580,7 +626,7 @@ async function main() {
       agents,
       skills,
       hooks,
-      gitignoreUpdated,
+      gitignoreHasKilnIgnore,
       warnings
     });
   } catch (err) {

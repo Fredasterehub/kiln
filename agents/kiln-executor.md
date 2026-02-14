@@ -53,6 +53,13 @@ Input handling rules:
 - Treat missing or unreadable prompt files as hard failures.
 - Use the exact phase and task identifiers in logs, commits, and reports.
 
+## Scope Precedence
+Apply the following precedence rules when execution inputs conflict:
+
+1. Sharpened prompt wins for implementation details (exact file paths, function signatures, and approach).
+2. Task packet wins for acceptance criteria (contractual quality gate).
+3. If the sharpened prompt contradicts an acceptance criterion: treat it as a sharpening error, report to orchestrator, and request re-sharpening (do not follow the wrong instruction).
+
 ## Codex CLI Execution (Multi-Model)
 In multi-model mode (`modelMode: 'multi-model'` in `.kiln/config.json`), invoke GPT-5.3-codex via Codex CLI:
 

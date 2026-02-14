@@ -228,7 +228,7 @@ skill_count="$(find "$REPO_ROOT/skills" -mindepth 2 -maxdepth 2 -type f -name '*
 hook_script_count="$(find "$REPO_ROOT/hooks/scripts" -maxdepth 1 -type f -name '*.sh' | wc -l | awk '{print $1}')"
 
 [ "$agent_count" -eq 12 ] && pass "agents/*.md count is 12" || fail "agents/*.md count expected 12, got $agent_count"
-[ "$skill_count" -eq 13 ] && pass "skills/*/*.md count is 13" || fail "skills/*/*.md count expected 13, got $skill_count"
+[ "$skill_count" -eq 15 ] && pass "skills/*/*.md count is 15" || fail "skills/*/*.md count expected 15, got $skill_count"
 [ "$hook_script_count" -eq 2 ] && pass "hooks/scripts/*.sh count is 2" || fail "hooks/scripts/*.sh count expected 2, got $hook_script_count"
 
 REQUIRED_TEMPLATES=(

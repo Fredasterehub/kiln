@@ -20,7 +20,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Native-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white)](https://claude.ai/claude-code)
 [![Dependencies](https://img.shields.io/badge/Deps-Zero-2ea44f?style=for-the-badge)]()
 [![Agents](https://img.shields.io/badge/🤖_Agents-12-E8590C?style=for-the-badge)]()
-[![Skills](https://img.shields.io/badge/📜_Skills-13-2563EB?style=for-the-badge)]()
+[![Skills](https://img.shields.io/badge/📜_Skills-15-2563EB?style=for-the-badge)]()
 
 <br/>
 
@@ -71,12 +71,13 @@ That's it. The installer detects your project, copies agents and skills into `.c
 Then in Claude Code:
 
 ```
-🧠  /kiln:brainstorm     ←  Start here. Deep conversation about what you're building.
-🗺️  /kiln:roadmap        ←  Break your vision into delivery phases.
-🔥  /kiln:track          ←  Execute. Plan → Build → Verify → Review → Reconcile.
+🔥  /kiln:fire           ←  Start a new project or resume exactly where you left off.
+🧊  /kiln:cool           ←  Pause safely and save a clean resume pointer.
+💨  /kiln:quick          ←  Single-pass mode for small, well-understood changes.
+📊  /kiln:status         ←  Show progress and the next recommended action.
 ```
 
-**Three commands.** Idea to verified application. ✨
+**Four primary commands.** Day-to-day control with one entrypoint and safe resume. ✨
 
 <p align="right"><a href="#readme-top">⬆️ back to top</a></p>
 
@@ -395,8 +396,8 @@ Budget-enforced (~3000 words each). Outdated entries are **replaced, not appende
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │ ⌨️                   SLASH COMMANDS                          │
-│  /kiln:init  /kiln:brainstorm  /kiln:roadmap                │
-│  /kiln:track  /kiln:status  /kiln:quick                     │
+│  /kiln:fire  /kiln:cool  /kiln:quick  /kiln:status          │
+│  /kiln:init  /kiln:brainstorm  /kiln:roadmap  /kiln:track   │
 └──────────────────────────┬───────────────────────────────────┘
                            │
 ┌──────────────────────────▼───────────────────────────────────┐
@@ -484,7 +485,7 @@ kiln/
 │   ├── kiln-codex-reviewer     #   ⚔️ Independent GPT review
 │   └── kiln-researcher         #   🔎 On-demand lookup
 │
-├── 📜 skills/                  # 13 skill definitions
+├── 📜 skills/                  # 15 skill definitions
 │   ├── kiln-core/              #   🏛️ Universal contracts
 │   ├── kiln-init/              #   🚀 Project setup
 │   ├── kiln-brainstorm/        #   🧠 BMAD-style brainstorm
@@ -497,6 +498,8 @@ kiln/
 │   ├── kiln-roadmap/           #   🗺️ Phase generation
 │   ├── kiln-status/            #   📊 Progress display
 │   ├── kiln-quick/             #   💨 Single-pass mode
+│   ├── kiln-fire/              #   🔥 Start/resume router
+│   ├── kiln-cool/              #   🧊 Pause and save recovery pointer
 │   └── kiln-debate/            #   ⚔️ Adversarial debate protocol
 │
 ├── 🪝 hooks/                   # Claude Code lifecycle hooks
@@ -543,12 +546,24 @@ Kiln didn't come from nowhere. We went looking for the best ideas in AI-assisted
 
 | Command | Description |
 |---|---|
+| 🔥 `/kiln:fire` | Primary entrypoint: start new work or resume from `.kiln/STATE.md` |
+| 🧊 `/kiln:cool` | Pause gracefully and save session recovery metadata for reliable resume |
+| 💨 `/kiln:quick` | Lightweight single-pass mode for small, well-understood changes |
+| 📊 `/kiln:status` | Display project progress and route to the next recommended action |
+
+<details>
+<summary>Power User Commands</summary>
+
+<br/>
+
+| Command | Description |
+|---|---|
 | 🚀 `/kiln:init` | Detect project tooling, create `.kiln/` workspace, configure model mode |
 | 🧠 `/kiln:brainstorm` | Interactive vision exploration with challenge passes |
 | 🗺️ `/kiln:roadmap` | Generate delivery phases from approved vision |
 | 🔥 `/kiln:track` | Execute the full loop: plan → validate → execute → E2E → review → reconcile |
-| 📊 `/kiln:status` | Display current phase, step, and project progress |
-| 💨 `/kiln:quick` | Single-pass mode for smaller tasks (skip brainstorm/roadmap) |
+
+</details>
 
 <br/>
 

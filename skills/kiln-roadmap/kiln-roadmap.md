@@ -27,21 +27,22 @@ Final output location: `.kiln/ROADMAP.md`.
 
 Before generating a roadmap, validate these prerequisites in order:
 
-1. `.kiln/config.json` must exist.
-2. `.kiln/VISION.md` must exist.
-3. Brainstorm stage in `.kiln/STATE.md` should be marked `complete`.
-
-If `.kiln/VISION.md` is missing:
-- Stop and instruct the operator to run `/kiln:brainstorm` first.
-- Do not generate a provisional roadmap.
-
-If `.kiln/VISION.md` exists but brainstorm is not marked complete in `.kiln/STATE.md`:
-- Warn that the vision appears unapproved or not locked.
-- Ask the operator whether to return to `/kiln:brainstorm` for approval before continuing.
-- Continue only with explicit operator confirmation.
-
-If `.kiln/config.json` is missing:
-- Stop and instruct the operator to run `/kiln:init` to initialize kiln.
+1. `.kiln/` directory must exist.
+   - If missing: stop immediately.
+   - Remediation: instruct the operator to run `/kiln:init` first.
+   - Halt rule: do not evaluate later prerequisites or generate a roadmap.
+2. `.kiln/config.json` must exist.
+   - If missing: stop immediately.
+   - Remediation: instruct the operator to run `/kiln:init` to initialize kiln.
+   - Halt rule: do not generate `.kiln/ROADMAP.md`.
+3. `.kiln/VISION.md` must exist.
+   - If missing: stop immediately.
+   - Remediation: instruct the operator to run `/kiln:brainstorm` first.
+   - Halt rule: do not generate a provisional roadmap.
+4. Brainstorm stage in `.kiln/STATE.md` should be marked `complete`.
+   - If state clearly indicates brainstorm is unapproved/incomplete: treat as a confirmation gate, not an automatic pass.
+   - Confirmation gate text: `Brainstorm in .kiln/STATE.md is not marked complete. Return to /kiln:brainstorm for approval before continuing? (recommended)`
+   - Continue only with explicit operator confirmation to proceed despite the risk.
 
 Prerequisite rule:
 - Never generate `.kiln/ROADMAP.md` from an absent or clearly unapproved vision unless the operator explicitly accepts that risk.

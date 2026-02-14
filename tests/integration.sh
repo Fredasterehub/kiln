@@ -91,6 +91,7 @@ AGENTS=(
   kiln-executor.md
   kiln-e2e-verifier.md
   kiln-reviewer.md
+  kiln-codex-reviewer.md
   kiln-researcher.md
 )
 
@@ -117,6 +118,8 @@ SKILLS=(
   kiln-track
   kiln-reconcile
   kiln-roadmap
+  kiln-fire
+  kiln-cool
 )
 
 for skill in "${SKILLS[@]}"; do

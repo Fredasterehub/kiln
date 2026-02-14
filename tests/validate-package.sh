@@ -86,6 +86,9 @@ if [ "$FAIL" -eq 0 ]; then
     "skills/kiln-track/kiln-track.md"
     "skills/kiln-reconcile/kiln-reconcile.md"
     "skills/kiln-roadmap/kiln-roadmap.md"
+    "skills/kiln-fire/kiln-fire.md"
+    "skills/kiln-cool/kiln-cool.md"
+    "skills/kiln-debate/kiln-debate.md"
     "templates/config.json.tmpl"
     "templates/STATE.md.tmpl"
     "templates/vision-sections.md"
@@ -105,10 +108,10 @@ if [ "$FAIL" -eq 0 ]; then
   fi
 
   agent_count="$(printf '%s\n' "$PACK_FILES" | grep -E '^agents/[^/]+\.md$' | wc -l | tr -d '[:space:]')"
-  if [ "${agent_count:-0}" -ge 11 ]; then
-    pass "package includes at least 11 agent markdown files (${agent_count})"
+  if [ "${agent_count:-0}" -ge 12 ]; then
+    pass "package includes at least 12 agent markdown files (${agent_count})"
   else
-    fail "expected at least 11 agent markdown files, found ${agent_count:-0}"
+    fail "expected at least 12 agent markdown files, found ${agent_count:-0}"
   fi
 
   template_count="$(printf '%s\n' "$PACK_FILES" | grep -E '^templates/.+\.(tmpl|md)(\.md)?$' | wc -l | tr -d '[:space:]')"

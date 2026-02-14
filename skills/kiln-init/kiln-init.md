@@ -251,12 +251,6 @@ Create the kiln state directory structure. Use the templates from the kiln packa
    touch .kiln/docs/PITFALLS.md
    ```
 
-5. Add `.kiln/` to `.gitignore` if not already present:
-   - Check: `grep -q '.kiln/' .gitignore 2>/dev/null`
-   - If not present: append `.kiln/` to `.gitignore`
-
-   Actually, `.kiln/` should be committed to git (full auditability per kiln-core contracts). Do NOT add it to .gitignore."
-
 Authoritative rule:
 
 1. `.kiln/` MUST NOT be added to `.gitignore`.

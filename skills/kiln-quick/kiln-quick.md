@@ -30,6 +30,21 @@ Quick mode is for small, well-understood changes where the full kiln pipeline is
 
 **Same quality gates on the code itself, less ceremony around it.**
 
+## Prerequisites
+
+Before starting quick mode, verify kiln is initialized:
+1. Check if `.kiln/` directory exists. If not: print 'Kiln is not initialized for this project. Run /kiln:init first.' and stop.
+2. Check if `.kiln/config.json` exists and is readable. If not: print 'Kiln configuration missing or unreadable. Run /kiln:init to reinitialize.' and stop.
+
+Run these checks from the project root.
+Treat missing required files as blocking.
+Never crash on missing prerequisites.
+
+Prerequisite execution order:
+1. Validate `.kiln/` exists.
+2. Validate `.kiln/config.json` exists and is readable.
+3. Continue to scope guard.
+
 ## Scope Guard
 
 Before starting quick mode, evaluate whether the requested change is appropriate. Quick mode is designed for small changes. If the change is too big, redirect the user to the full pipeline.

@@ -2,345 +2,234 @@
 name: kiln-e2e
 description: "End-to-end test generation patterns, user journey format, and regression suite protocol"
 ---
-
 # Kiln E2E Testing
-
-Use this skill to generate behavior-first E2E journeys mapped to phase acceptance criteria.
-It defines journey conventions, project-type templates, startup detection, artifact capture, and regression growth rules.
-
+Use this skill to generate behavior-first end-to-end tests tied to plan acceptance criteria.
+It defines journey format, per-project test templates, startup detection, artifacts, and regression growth.
 ## User Journey Tests
-
-E2E tests in kiln are user journeys, not unit tests and not implementation-level integration probes.
-A journey simulates a real user workflow from start to finish, then verifies user-visible outcomes.
-Each journey should map to one or more acceptance criteria in `.kiln/tracks/phase-N/PLAN.md`.
-
-### Behavior-first policy
-- Test behavior, not internals.
-- Validate user-observable state transitions.
-- Keep assertions at meaningful checkpoints in the flow.
-- Prefer full journeys over isolated assertions.
-
-### Contrast examples
-- BAD (unit test): `expect(validateEmail('a@b.com')).toBe(true)`
-- BAD (integration test): `expect(db.users.count()).toBe(1)`
-- GOOD (journey): `User opens signup page, enters email and password, submits form, sees dashboard with welcome message`
-
-### Journey format
-Each journey should contain:
-1. Preconditions (app/process reachable, deterministic test data)
+E2E tests in kiln are USER JOURNEYS, not unit tests or isolated integration probes.
+A journey simulates a real user workflow from start to finish and verifies user-visible outcomes.
+Each journey maps to one or more acceptance criteria from `.kiln/tracks/phase-N/PLAN.md`.
+### Journey principles
+- Test behavior, not implementation details.
+- Keep checkpoints user-observable (screen text, URL, API contract, CLI outputs, public library API).
+- Prefer end-to-end flow assertions over helper-level assertions.
+- Keep setup deterministic and cleanup explicit.
+### Contrast
+- BAD (unit): `expect(validateEmail('a@b.com')).toBe(true)`
+- BAD (integration): `expect(db.users.count()).toBe(1)`
+- GOOD (journey): `User opens signup page, enters email/password, submits, sees dashboard welcome message`
+### Journey structure
+1. Preconditions (service reachable, fixtures ready)
 2. User actions (realistic sequence)
-3. Checkpoints (UI/API/CLI/library outcomes)
-4. Cleanup (remove created data or temp state)
-5. Failure evidence capture (artifacts)
-
-### Naming convention
+3. Behavior checks (expected outcome)
+4. Cleanup (remove created state)
+5. Failure evidence capture
+### Naming
 Use: `journey-NN-descriptive-slug.test.{js,ts,sh}`
 Examples:
 - `journey-01-signup-happy-path.test.ts`
 - `journey-02-auth-token-refresh.test.js`
 - `journey-03-init-build-output.test.sh`
-
-### Traceability header
-Add a short header in each test file:
-```ts
-// Covers: AC-01, AC-03
-// Phase: phase-2
-// Journey: signup happy path
-```
-
 ## Web UI: Playwright Patterns
-
-Use Playwright for `web-ui` projects. Prefer stable selectors (`getByRole`, `getByLabel`, `getByTestId`) and explicit waits.
-
-### Base template
+Use Playwright for `web-ui` projects. Prefer stable selectors (`getByRole`, `getByLabel`, `getByTestId`).
+### Template
 ```ts
 import { test, expect } from '@playwright/test';
-
-test('journey-01-descriptive-slug', async ({ page }) => {
+test.beforeEach(async ({ page }) => {
   await page.goto('http://localhost:3000');
+});
+test.afterEach(async ({ page }) => {
+  await page.close();
+});
+test('journey-01-descriptive-slug', async ({ page }) => {
   await page.click('text=Start');
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
 });
 ```
-
 ### Complete signup journey example
 ```ts
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs/promises';
-
-const ARTIFACT_DIR = '.kiln/tracks/phase-2/artifacts';
-
 test('journey-01-signup-happy-path', async ({ page }) => {
+  const outDir = '.kiln/tracks/phase-2/artifacts';
   try {
     await page.goto('http://localhost:3000/signup');
     await page.waitForLoadState('domcontentloaded');
-
     await page.fill('[name="email"]', 'journey.user@example.com');
     await page.fill('[name="password"]', 'StrongPass!123');
     await page.click('button[type="submit"]');
-
     await page.waitForURL('**/dashboard');
     await page.waitForSelector('[data-testid="dashboard-root"]');
-
     await expect(page).toHaveURL(/\/dashboard$/);
     await expect(page.getByTestId('dashboard-root')).toBeVisible();
     await expect(page.getByTestId('welcome-message')).toContainText('Welcome');
-  } catch (error) {
-    await fs.mkdir(ARTIFACT_DIR, { recursive: true });
+  } catch (err) {
+    await fs.mkdir(outDir, { recursive: true });
     await page.screenshot({ path: 'artifacts/failure-01.png', fullPage: true });
-    await page.screenshot({ path: `${ARTIFACT_DIR}/failure-01-signup.png`, fullPage: true });
-    throw error;
+    await page.screenshot({ path: `${outDir}/failure-01-signup.png`, fullPage: true });
+    throw err;
   }
 });
 ```
-
-### Navigation patterns
-- `await page.goto(url)`
-- `await page.click(selector)`
-- `await page.fill(selector, value)`
-
-### Assertion patterns
-- `await expect(locator).toBeVisible()`
-- `await expect(locator).toContainText(text)`
-- `await expect(page).toHaveURL(pattern)`
-
-### Wait strategies
-- `await page.waitForSelector(selector)`
-- `await page.waitForURL(pattern)`
-- `await page.waitForLoadState('networkidle')` only when required
-
+### Core navigation and assertion patterns
+- Navigation: `page.goto()`, `page.click()`, `page.fill()`
+- Assertions: `toBeVisible()`, `toContainText()`, `toHaveURL()`
+- Waits: `page.waitForSelector()`, `page.waitForURL()`, `page.waitForLoadState()`
 ### Anti-patterns
-- Avoid `page.waitForTimeout(...)` as synchronization (flaky)
-- Avoid CSS-style assertions for behavior checks (brittle)
-- Avoid selectors tied to generated framework class names
-
+- Avoid `page.waitForTimeout()` for synchronization (flaky).
+- Avoid CSS-style assertions for behavioral journeys (brittle).
+- Avoid selectors tied to generated class names.
 ## API Server: HTTP Patterns
-
-Use native `fetch` for `api-server` journey tests.
-A complete journey validates status codes, response shapes, and headers across meaningful user flows.
-
-### Base HTTP template
+Use native `fetch` for `api-server` journeys and verify full contract behavior.
+### Template
 ```ts
 import assert from 'node:assert/strict';
-
-const baseUrl = process.env.E2E_BASE_URL ?? 'http://localhost:4000';
-
+const base = process.env.E2E_BASE_URL ?? 'http://localhost:4000';
 (async () => {
-  const res = await fetch(`${baseUrl}/health`);
+  const res = await fetch(`${base}/health`);
   assert.equal(res.status, 200);
 })();
 ```
-
 ### Complete CRUD journey example
 ```ts
 import assert from 'node:assert/strict';
-
-const baseUrl = process.env.E2E_BASE_URL ?? 'http://localhost:4000';
-
-async function runJourney() {
-  const createRes = await fetch(`${baseUrl}/api/items`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
+const base = process.env.E2E_BASE_URL ?? 'http://localhost:4000';
+async function run() {
+  const create = await fetch(`${base}/api/items`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ name: 'alpha-item' }),
   });
-  assert.equal(createRes.status, 201);
-  assert.equal(createRes.headers.get('content-type')?.includes('application/json'), true);
-  const created = await createRes.json();
-  assert.equal(typeof created.id, 'string');
-
-  const readRes1 = await fetch(`${baseUrl}/api/items/${created.id}`);
-  assert.equal(readRes1.status, 200);
-  assert.equal((await readRes1.json()).name, 'alpha-item');
-
-  const updateRes = await fetch(`${baseUrl}/api/items/${created.id}`, {
-    method: 'PATCH',
-    headers: { 'content-type': 'application/json' },
+  assert.equal(create.status, 201);
+  assert.equal(create.headers.get('content-type')?.includes('application/json'), true);
+  const { id } = await create.json();
+  const read1 = await fetch(`${base}/api/items/${id}`);
+  assert.equal(read1.status, 200);
+  assert.equal((await read1.json()).name, 'alpha-item');
+  const update = await fetch(`${base}/api/items/${id}`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ name: 'beta-item' }),
   });
-  assert.equal(updateRes.status, 200);
-
-  const readRes2 = await fetch(`${baseUrl}/api/items/${created.id}`);
-  assert.equal(readRes2.status, 200);
-  assert.equal((await readRes2.json()).name, 'beta-item');
-
-  const deleteRes = await fetch(`${baseUrl}/api/items/${created.id}`, { method: 'DELETE' });
-  assert.equal(deleteRes.status, 204);
-
-  const readRes3 = await fetch(`${baseUrl}/api/items/${created.id}`);
-  assert.equal(readRes3.status, 404);
+  assert.equal(update.status, 200);
+  const read2 = await fetch(`${base}/api/items/${id}`);
+  assert.equal(read2.status, 200);
+  assert.equal((await read2.json()).name, 'beta-item');
+  const del = await fetch(`${base}/api/items/${id}`, { method: 'DELETE' });
+  assert.equal(del.status, 204);
+  const gone = await fetch(`${base}/api/items/${id}`);
+  assert.equal(gone.status, 404);
 }
-
-runJourney().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+run().catch((e) => { console.error(e); process.exit(1); });
 ```
-
-### CRUD journey sequence
-Use: `create -> read -> update -> read -> delete -> verify-gone`.
-
-### Auth flow sequence
-Use: `register -> login -> use-token -> access-protected -> logout`.
-Example token use:
+### CRUD and auth journey patterns
+- CRUD: `create -> read -> update -> read -> delete -> verify-gone`
+- Auth: `register -> login -> use-token -> access-protected -> logout`
+Auth snippet:
 ```ts
-const protectedRes = await fetch(`${baseUrl}/api/me`, {
-  headers: { authorization: `Bearer ${token}` },
-});
+const login = await fetch(`${base}/auth/login`, { method: 'POST', headers, body });
+const { token } = await login.json();
+const me = await fetch(`${base}/api/me`, { headers: { authorization: `Bearer ${token}` } });
 ```
-
 ### Error journey patterns
-- Invalid input returns `400` with structured error body
-- Unauthorized access returns `401` without sensitive data
-Example:
+- Invalid input returns `400`
+- Unauthorized request returns `401`
 ```ts
-const bad = await fetch(`${baseUrl}/api/items`, {
-  method: 'POST',
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ name: '' }),
+const bad = await fetch(`${base}/api/items`, {
+  method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: '' }),
 });
 if (bad.status !== 400) throw new Error(`Expected 400, got ${bad.status}`);
 ```
-
 ### Response validation checklist
-Validate at each step:
 - Status code
 - Body structure and key fields
 - Required headers
-- Stable error envelope in failure paths
-
+- Error envelope consistency
 ## CLI Tool: Subprocess Patterns
-
-Use subprocess-driven journeys for `cli-tool` projects.
-Invoke commands like a user would and verify stateful outputs in an isolated workspace.
-
-### Base subprocess template
+Use subprocess journeys for `cli-tool` projects. Run commands in isolated temp directories.
+### Template
 ```ts
 import { spawn } from 'node:child_process';
-
 function run(cmd: string, args: string[], cwd: string) {
   return new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
-    const child = spawn(cmd, args, { cwd, env: process.env });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (d) => (stdout += String(d)));
-    child.stderr.on('data', (d) => (stderr += String(d)));
-    child.on('close', (code) => resolve({ code: code ?? 1, stdout, stderr }));
+    const p = spawn(cmd, args, { cwd, env: process.env });
+    let stdout = '', stderr = '';
+    p.stdout.on('data', (d) => (stdout += String(d)));
+    p.stderr.on('data', (d) => (stderr += String(d)));
+    p.on('close', (code) => resolve({ code: code ?? 1, stdout, stderr }));
   });
 }
 ```
-
-### Complete init/build/verify example
+### Complete init/build/verify journey example
 ```ts
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-
 function run(cmd: string, args: string[], cwd: string) {
   return new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
-    const child = spawn(cmd, args, { cwd, env: process.env });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (d) => (stdout += String(d)));
-    child.stderr.on('data', (d) => (stderr += String(d)));
-    child.on('close', (code) => resolve({ code: code ?? 1, stdout, stderr }));
+    const p = spawn(cmd, args, { cwd, env: process.env });
+    let stdout = '', stderr = '';
+    p.stdout.on('data', (d) => (stdout += String(d)));
+    p.stderr.on('data', (d) => (stderr += String(d)));
+    p.on('close', (code) => resolve({ code: code ?? 1, stdout, stderr }));
   });
 }
-
-async function journeyInitBuildVerify() {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'kiln-cli-journey-'));
-  const init = await run('mycli', ['init', 'demo-app'], tempRoot);
+async function runJourney() {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kiln-cli-journey-'));
+  const init = await run('mycli', ['init', 'demo-app'], root);
   assert.equal(init.code, 0, `init failed: ${init.stderr}`);
-
-  const projectDir = path.join(tempRoot, 'demo-app');
-  const build = await run('mycli', ['build'], projectDir);
+  const dir = path.join(root, 'demo-app');
+  const build = await run('mycli', ['build'], dir);
   assert.equal(build.code, 0, `build failed: ${build.stderr}`);
-
-  const output = path.join(projectDir, 'dist', 'index.js');
-  const stat = await fs.stat(output);
-  assert.equal(stat.isFile(), true);
+  const out = await fs.stat(path.join(dir, 'dist', 'index.js'));
+  assert.equal(out.isFile(), true);
 }
-
-journeyInitBuildVerify().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+runJourney().catch((e) => { console.error(e); process.exit(1); });
 ```
-
-### Journey sequence
-Use: `init -> configure -> build -> verify output`.
-
-### Exit code and error validation
-- Happy path requires exit code `0`
-- Error journeys require non-zero exit code and asserted stderr content
-- Save stdout/stderr on failed commands
-
-### Working directory policy
-- Use a unique temp dir per journey
-- Do not mutate repository root as runtime state
-- Recreate workspace between journeys to prevent leakage
-
+### CLI journey rules
+- Sequence: `init -> configure -> build -> verify output`
+- Validate exit code (`0` success, non-zero for expected error journeys)
+- Capture stderr for error journeys and assert expected message fragments
+- Use unique working directories for every journey run
 ## Library: Import Patterns
-
-Use import-based journeys for `library` projects and validate the public API sequence.
-
-### Base import template
+Use import-based journeys for `library` projects and test the public API lifecycle.
+### Template
 ```ts
 import assert from 'node:assert/strict';
 import { Client } from '../src/index.js';
-
 async function runJourney() {
   const client = new Client();
   const result = await client.process({ input: 'hello' });
   assert.equal(result.output, 'HELLO');
 }
-
-runJourney().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+runJourney().catch((e) => { console.error(e); process.exit(1); });
 ```
-
-### Journey lifecycle
-Use: `create -> configure -> process -> validate -> cleanup`.
-
-### Error handling journeys
-- Invalid input should throw with stable error semantics
-- Edge inputs should be handled gracefully
-Example:
+### Journey patterns
+- `create -> configure -> process -> validate -> cleanup`
+- Include error journeys for invalid input and boundary values
+Error snippet:
 ```ts
 let threw = false;
-try {
-  await client.process({ input: '' });
-} catch {
-  threw = true;
-}
+try { await client.process({ input: '' }); } catch { threw = true; }
 if (!threw) throw new Error('Expected invalid input to throw');
 ```
-
-### Async patterns
-- Use `async/await` consistently for promise APIs
+### Async guidance
+- Use `async/await` for promise APIs
 - Await cleanup hooks to avoid dangling handles
-- Avoid mixing callbacks and promises in one journey
-
+- Avoid mixed callback/promise patterns in one test
 ## Startup Detection
-
-Startup detection gates E2E runs for project types with long-running processes.
-
+Startup detection gates E2E execution when a long-running service must be ready first.
 ### Defaults
-- Default timeout: `30` seconds (from `config.json` at `preferences.e2eTimeout`)
+- Timeout: `30` seconds from `config.json` `preferences.e2eTimeout`
 - Polling interval: `500ms`
 - Timeout classification: `config-issue`
-
 ### Detection methods by project type
-- Web UI: poll HTTP GET to localhost until `200`
-- API server: poll HTTP GET to health endpoint until `200`
+- Web UI: HTTP GET localhost until `200`
+- API server: HTTP GET health endpoint until `200`
 - CLI tool: not applicable (no long-running process)
 - Library: not applicable (no long-running process)
-
 ### Configurable health endpoint
-If provided, use custom endpoint from `config.json`.
+Custom health endpoint is configurable in `config.json`:
 ```json
 {
   "preferences": {
@@ -349,7 +238,6 @@ If provided, use custom endpoint from `config.json`.
   }
 }
 ```
-
 ### Polling template
 ```ts
 async function waitForHealthy(url: string, timeoutMs = 30000, intervalMs = 500) {
@@ -358,96 +246,61 @@ async function waitForHealthy(url: string, timeoutMs = 30000, intervalMs = 500) 
     try {
       const res = await fetch(url);
       if (res.status === 200) return;
-    } catch {
-      // service still starting
-    }
+    } catch {}
     await new Promise((r) => setTimeout(r, intervalMs));
   }
   throw new Error('config-issue: startup timeout exceeded; include startup logs in failure report');
 }
 ```
-
 ### Timeout behavior
-On timeout:
-- Categorize as `config-issue`
-- Include startup logs in failure report
-- Record attempted endpoint and timeout in `e2e-results.md`
-- Stop the run; do not execute journeys against an unhealthy target
-
+On timeout, categorize as `config-issue`, include startup logs, and stop the run before executing journeys.
 ## Artifact Capture
-
-Capture reproducible evidence for every failed journey.
-
-### Canonical storage path
-Store artifacts in `.kiln/tracks/phase-N/artifacts/`.
-
+Capture reproducible evidence for all failed journeys.
+### Storage path
+Save artifacts under `.kiln/tracks/phase-N/artifacts/`.
 ### Required capture by project type
 - Web UI: screenshot on every failure
-- API: response body and headers for failed assertions
+- API: failed response bodies (and relevant headers)
 - CLI: full stdout/stderr for failed commands
-- Library: serialized inputs and thrown error details for failed journeys
-
-### Global required capture
-For all project types:
+- Library: serialized inputs and thrown errors
+### Required capture for all types
 - Test execution log
-- Failing journey identifier and mapped acceptance criteria
+- Journey ID and mapped acceptance criteria
 - Timestamp and environment metadata
-
-### Naming conventions
-Use stable names:
+### Naming
 - `failure-<journey-id>.png`
 - `failure-<journey-id>-response.json`
 - `failure-<journey-id>-stderr.log`
 - `e2e-run.log`
-
 ## Regression Suite Protocol
-
-The E2E suite is cumulative and phase-scoped.
-
-### Directory organization
-Organize tests by phase under `tests/e2e/phase-N/`.
-Examples:
-- `tests/e2e/phase-1/journey-01-first-run.test.ts`
-- `tests/e2e/phase-2/journey-03-auth-refresh.test.ts`
-
-### Growth rules
-- Each new phase adds new journey tests
-- Preserve prior journey files unless explicitly deprecated
-- New tests must follow the same journey naming and traceability conventions
-
-### Regression execution rules
-- Every E2E cycle runs all current-phase journeys
-- Every E2E cycle also runs all prior-phase journeys
-- A phase is not E2E-pass unless the full regression set passes
-
-### Failure category
-If previously passing journeys fail after new changes, classify as `regression-bug`.
-Record this classification in `e2e-results.md` with failing journey IDs and suspected area.
-
+E2E suites are cumulative and phase-organized.
+### Test organization
+Store tests in `tests/e2e/phase-N/`.
+Each new phase adds new journey tests while preserving prior phase journeys.
+### Regression execution
+Every E2E cycle runs:
+- current phase journeys
+- all prior phase journeys
+If previously passing journeys fail after new code, classify as `regression-bug` and record details in `e2e-results.md`.
 ### Commit protocol
-After a successful full E2E pass:
-- Commit new journey tests with the corresponding code changes
-- Keep E2E tests in git as permanent regression assets
-- Ensure default E2E runs include all prior phase journeys
-
+After successful E2E:
+- Commit new/updated journey tests to git with related code
+- Keep prior journeys in the default regression set
 ### Pruning protocol
 Regression pruning is operator-controlled between phases.
 If pruning is approved:
-1. Mark the test deprecated in header or commit notes
+1. Mark test deprecated
 2. Document replacement coverage
-3. Remove only after equivalent/better journey coverage exists
-
+3. Remove only after equivalent or broader coverage exists
 ### Minimal run order
-1. Read phase acceptance criteria from PLAN
+1. Read PLAN acceptance criteria
 2. Select current-phase journeys
-3. Load all prior-phase journeys
+3. Load prior-phase journeys
 4. Run startup detection (if applicable)
 5. Execute full suite
-6. Capture artifacts for all failures
-7. Publish `e2e-results.md` with pass/fail or `regression-bug`
-
+6. Capture failure artifacts
+7. Write `e2e-results.md` with pass/fail or `regression-bug`
 ### Guardrails
-- Keep test data deterministic
-- Avoid non-reproducible randomness unless seeded and recorded
-- Fix flaky journeys instead of muting them
-- Favor resilient selectors, stable fixtures, and explicit readiness checks
+- Keep data deterministic
+- Use stable selectors/endpoints/fixtures
+- Treat flakes as bugs to fix, not tests to mute

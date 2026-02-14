@@ -187,6 +187,16 @@ Budget accounting:
 - Round 3 = third critique + third revision (maximum).
 - Convergence checks happen after each complete round.
 
+## Max Rounds Without Convergence
+
+If all configured debate rounds complete and convergence was not detected:
+1. The most recent revisions become the final debate inputs to synthesis.
+2. The debate log records: "Max rounds reached without convergence. Proceeding to synthesis with final revisions."
+3. The synthesizer must note in its output which disagreements remain unresolved.
+4. This is NOT an error condition -- it is expected for genuinely complex decisions.
+
+The orchestrator is responsible for enforcing the round budget. Individual debate participants (planners, reviewers) do not track or enforce round counts.
+
 ## Integration with Synthesis
 
 After debate rounds complete, synthesis proceeds with enriched context:

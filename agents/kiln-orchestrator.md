@@ -142,7 +142,7 @@ Spawn each subagent using the Task tool. Every subagent gets a fresh context —
 | Stage | Agent | Model | Subagent Type |
 |-------|-------|-------|---------------|
 | Brainstorm | kiln-brainstormer | opus | general-purpose |
-| Vision Challenge | kiln-brainstormer (codex pass) | sonnet | general-purpose |
+| Vision Challenge | kiln-brainstormer (codex pass) | GPT-5.2 (Codex CLI) | general-purpose |
 | Plan (Claude) | kiln-planner | opus | general-purpose |
 | Plan (Codex) | kiln-codex-planner | sonnet | general-purpose |
 | Synthesize | kiln-synthesizer | opus | general-purpose |
@@ -164,6 +164,35 @@ Spawning rules:
 - Always include sentinel/format requirements from `kiln-core`.
 - Never chain implementation details in orchestrator context.
 - If a subagent returns malformed output, re-spawn with stricter format instructions.
+
+## Debate Mode Handling
+Read debate preferences from `.kiln/config.json` under `preferences`:
+- `planStrategy`
+- `reviewStrategy`
+- `debateRounds`
+
+Mode gate:
+- If `modelMode` is `claude-only`, skip all debate logic entirely and ignore debate preferences.
+
+Round budget enforcement:
+- Compute max rounds from `preferences.debateRounds`.
+- If missing or invalid, default to `2`.
+- Clamp to `1-3` before any debate spawning.
+- Treat this value as a hard ceiling for critique+revision rounds.
+
+Plan debate flow (`planStrategy: debate`, multi-model only):
+1. Spawn Planner A and Planner B initial outputs.
+2. For each round (1..max rounds): spawn critiques, then spawn revisions, then run convergence check.
+3. If convergence is detected early, stop remaining rounds and proceed to synthesis.
+4. If max rounds are reached without convergence, proceed to synthesis using the final revisions.
+
+Review debate flow (`reviewStrategy: debate`, multi-model only):
+1. Spawn Opus reviewer and Codex reviewer initial outputs.
+2. For each round (1..max rounds): critiques, revisions, convergence check.
+3. After rounds complete (or early convergence), produce the final verdict output.
+
+Convergence + artifacts source of truth:
+- Use the `kiln-debate` skill for convergence criteria and debate artifact naming conventions.
 
 Reusable Task spawn template:
 ```text
