@@ -8,7 +8,7 @@ const readline = require('readline');
 const { spawnSync } = require('child_process');
 
 const USAGE = `
-kiln-dev — Multi-model orchestration workflow for Claude Code
+kiln-dev \u2014 Multi-model orchestration workflow for Claude Code
 
 Usage:
   npx kiln-dev [options]
@@ -24,6 +24,14 @@ Examples:
   npx kiln-dev --repo-root /path/to/project
   npx kiln-dev --repo-root /path/to/project --yes
 `.trim();
+
+const IGNITION_QUOTES = [
+  { text: 'The creation of a thousand forests is in one acorn.', by: 'Ralph Waldo Emerson' },
+  { text: 'Every new beginning comes from some other beginning\'s end.', by: 'Seneca' },
+  { text: 'A journey of a thousand miles begins with a single step.', by: 'Lao Tzu' },
+  { text: 'Imagination is more important than knowledge. For knowledge is limited, whereas imagination embraces the entire world.', by: 'Albert Einstein' },
+  { text: 'In every curving beach, in every grain of sand there is the story of the earth.', by: 'Rachel Carson' }
+];
 
 function fatal(message, code) {
   console.error(message);
@@ -565,42 +573,47 @@ function initializeKiln(sourceRoot, repoRoot, kilnRoot, projectType, modelMode, 
   }
 }
 
+function printBanner() {
+  const quote = IGNITION_QUOTES[Math.floor(Math.random() * IGNITION_QUOTES.length)];
+  console.log('');
+  console.log('  \u2501\u2501\u2501 Ignition \u2501\u2501\u2501');
+  console.log(`  \u201c${quote.text}\u201d`);
+  console.log(`    -- ${quote.by}`);
+  console.log('');
+}
+
 function printSummary(summary) {
   const agentCount = summary.agents.copied + summary.agents.skipped;
   const skillCount = summary.skills.directories;
   const commandCount = summary.commands.copied + summary.commands.skipped;
 
+  const modelLabel = summary.modelMode === 'multi-model'
+    ? 'multi-model (Codex CLI found)'
+    : 'claude-only';
+  const teamsLabel = summary.useTeams ? 'teams' : 'solo';
+  const scopeLabel = summary.useGlobal ? 'global' : 'project';
+
   console.log('');
-  console.log('  kiln is ready.');
+  console.log('  \u2501\u2501\u2501 The kiln is lit \u2501\u2501\u2501');
   console.log('');
-  console.log('  Kiln turns Claude Code into a self-running software factory.');
-  console.log('  You describe what to build. It handles the rest \u2014 brainstorm,');
-  console.log('  plan, execute, verify, review \u2014 across multiple AI models.');
+  console.log(`  ${summary.repoRoot}`);
+  console.log(`  ${modelLabel}  \u00b7  ${teamsLabel}  \u00b7  ${scopeLabel}`);
+  console.log(`  ${agentCount} agents  \u00b7  ${skillCount} skills  \u00b7  ${commandCount} commands`);
   console.log('');
-  console.log('  Four commands:');
-  console.log('    /kiln:fire    Light the kiln \u2014 start or resume the pipeline');
-  console.log('    /kiln:cool    Pause safely with a clean resume pointer');
-  console.log('    /kiln:quick   Single-pass mode for small changes');
-  console.log('    /kiln:status  Show progress and next action');
+  console.log('  /kiln:fire     Light the kiln');
+  console.log('  /kiln:cool     Pause safely');
+  console.log('  /kiln:quick    One-shot mode');
+  console.log('  /kiln:status   Where am I?');
   console.log('');
-  console.log('  What happened:');
-  console.log(`    Installed to ${summary.repoRoot}`);
-  console.log(`    Model mode: ${summary.modelMode}  |  Teams: ${summary.useTeams ? 'yes' : 'no'}  |  Scope: ${summary.useGlobal ? 'global' : 'project'}`);
-  console.log(`    ${agentCount} agents, ${skillCount} skills, ${commandCount} commands installed`);
+  console.log('  brainstorm \u2192 roadmap \u2192 plan \u2192 execute \u2192 verify \u2192 reconcile');
   console.log('');
-  console.log('  The pipeline: brainstorm \u2192 roadmap \u2192 plan \u2192 execute \u2192 verify \u2192 reconcile');
-  console.log('  First two stages are interactive. The rest run autonomously.');
-  console.log('');
-  console.log('  For the best experience, run Claude Code with:');
-  console.log('    claude --dangerously-bypass-permissions');
-  console.log('');
-  console.log('  Next step: type /kiln:fire');
+  console.log('  Tip: claude --dangerously-bypass-permissions');
+  console.log('  Next: /kiln:fire');
 
   if (summary.warnings.length > 0) {
     console.log('');
-    console.log('  Warnings:');
     for (const warning of summary.warnings) {
-      console.log(`    ${warning}`);
+      console.log(`  ! ${warning}`);
     }
   }
 }
@@ -619,6 +632,8 @@ async function main() {
   const codexDetected = detectCodexCli();
   const modelMode = codexDetected ? 'multi-model' : 'claude-only';
 
+  printBanner();
+
   let useGlobal = options.global;
   let useTeams = true;
   if (!options.yes) {
@@ -632,7 +647,7 @@ async function main() {
 
       if (!options.global) {
         useGlobal = await prompter.yesNo(
-          'Install kiln globally (~/.claude/) for all projects?',
+          'Install globally to ~/.claude/?',
           false
         );
       }
@@ -640,7 +655,7 @@ async function main() {
       const { claudeRoot: checkRoot } = resolveInstallRoots(repoRoot, useGlobal);
       if (fs.existsSync(checkRoot)) {
         const mergeConfirmed = await prompter.yesNo(
-          'Existing Claude Code config found. Merge kiln files alongside existing?',
+          'Existing .claude/ found. Merge kiln alongside?',
           true
         );
         if (!mergeConfirmed) {
@@ -649,24 +664,13 @@ async function main() {
         }
       }
 
-      useTeams = await prompter.yesNo('Enable Teams mode for parallel execution?', true);
+      useTeams = await prompter.yesNo('Enable Teams mode?', true);
     } finally {
       prompter.close();
     }
   }
 
   const { claudeRoot, kilnRoot } = resolveInstallRoots(repoRoot, useGlobal);
-  const existingKiln = fs.existsSync(kilnRoot);
-
-  console.log(
-    codexDetected
-      ? 'Codex CLI detected — multi-model mode available'
-      : 'Codex CLI not found — kiln will run in Claude-only mode'
-  );
-
-  if (existingKiln) {
-    console.log(`Existing .kiln directory detected at ${kilnRoot}; preserving existing files.`);
-  }
 
   const warnings = [];
 
