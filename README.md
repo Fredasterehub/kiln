@@ -13,25 +13,27 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Native-7C3AED?style=flat-square&logo=anthropic&logoColor=white)](https://claude.ai/claude-code)&nbsp;
 [![Zero Deps](https://img.shields.io/badge/Dependencies-Zero-2ea44f?style=flat-square)]()
 
-<br/>
-
-Multi-model orchestration for Claude Code.<br/>
-Two AI models plan independently. A synthesizer takes the best of both.<br/>
-Atomic tasks execute with fresh 200k context every time.
+</div>
 
 <br/>
+
+## The problem
+
+AI coding tools degrade over long conversations. Context fills up, plans drift, and by task #15 you're working with an AI that forgot what it decided at task #3.
+
+**Kiln fixes this.** Every task gets fresh 200k context. Two models plan independently, then a synthesizer takes the best of both. Your code gets reviewed across 7 quality dimensions before it ships. And everything is documented — living docs that evolve with each phase, not chat logs that disappear.
+
+It runs inside Claude Code. No wrappers, no servers, no dependencies. Just markdown files that teach your AI how to build properly.
+
+<br/>
+
+## Get started
 
 ```
 npx kiln-dev
 ```
 
-<br/>
-
-<img src="assets/pipeline.svg" alt="Pipeline: Brainstorm → Roadmap → Plan → Execute → Verify → Reconcile" width="100%">
-
-</div>
-
-<br/>
+Then use four commands:
 
 <table>
 <tr>
@@ -74,10 +76,11 @@ Show progress and next recommended action
 
 <br/>
 
-<details>
-<summary>&nbsp;<b>How it works</b>&nbsp;&mdash;&nbsp;<i>six stages, one interactive</i></summary>
+## How it works
 
-<br/>
+Your project flows through six stages. The first two are interactive — you shape the vision. The rest run autonomously, repeating per phase until everything ships.
+
+<img src="assets/pipeline.svg" alt="Pipeline: Brainstorm → Roadmap → Plan → Execute → Verify → Reconcile" width="100%">
 
 <table>
 <tr>
@@ -89,7 +92,7 @@ Show progress and next recommended action
 <tr>
 <td align="center">1</td>
 <td><b>Brainstorm</b></td>
-<td>You and the AI explore the problem space. Anti-clustering, challenge passes, structured divergence.</td>
+<td>You and the AI explore the problem space together. Anti-clustering, challenge passes, structured divergence.</td>
 <td><code>VISION.md</code></td>
 </tr>
 <tr>
@@ -127,7 +130,6 @@ Show progress and next recommended action
 > Stages 3-6 repeat per phase. The 20th task fires with the same precision as the first.
 
 <br/>
-</details>
 
 <details>
 <summary>&nbsp;<b>Multi-model orchestration</b>&nbsp;&mdash;&nbsp;<i>right model, right task</i></summary>
