@@ -2,28 +2,37 @@
 
 # kiln
 
-**A multi-model orchestration workflow for Claude Code**
+**Autonomous software delivery for Claude Code**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-D4A574?style=flat-square)](LICENSE)&nbsp;
 [![Node](https://img.shields.io/badge/Node-18+-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)&nbsp;
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Native-7C3AED?style=flat-square&logo=anthropic&logoColor=white)](https://claude.ai/claude-code)&nbsp;
 [![Zero Deps](https://img.shields.io/badge/Dependencies-Zero-2ea44f?style=flat-square)]()
 
+> *"What is to give light must endure burning."*
+> — Viktor Frankl
+
 </div>
+
+<br/>
+
+> **Honest status:** Kiln is not finished. The architecture is solid, the skills and agents are written, but end-to-end testing hasn't happened yet. We're building in the open because that's how you build things that work. If you try it today, expect rough edges. If you want to help smooth them, even better.
 
 <br/>
 
 ## What is this
 
-Kiln is the result of months spent trying to build real apps efficiently with AI coding tools. Along the way, a few projects stood out — each brilliant at one thing, but none doing the whole job.
+Kiln is a workflow that turns Claude Code into a self-running software factory. You describe what you want to build, and it handles everything else — brainstorming, planning, implementation, testing, review, documentation — across multiple AI models, with no human intervention required between stages.
 
-[BMAD Method](https://github.com/bmadcode/BMAD-METHOD) has an incredible brainstorming process — structured divergence, anti-clustering, challenge passes — that produces visions you actually want to build. [GSD](https://github.com/cyanheads/claude-code-gsd) nails the execution loop — fresh context per task, goal-backward verification, no context rot. [Google Conductor](https://research.google/blog/automated-unit-test-improvement-using-large-language-models-at-google/) brought the insight that you shouldn't plan 76 tasks upfront — you write each task precisely at the moment of execution, with real codebase context, not stale assumptions.
+It's not a wrapper around Claude Code. It's not a server. It's a collection of markdown files — agents, skills, and hooks — that get installed into your project and teach Claude Code how to orchestrate a full delivery pipeline. When you type `/kiln:fire`, it creates a team of AI agents, each with a specific role, and runs them through a structured sequence until your project is built.
 
-Kiln combines the best of all three into a single workflow. And we're lucky: almost everything it needs is now native to Claude Code — agents, skills, hooks, teams. No wrappers, no servers. Just markdown files that teach your AI how to deliver.
+The ideas come from real projects that each solved a piece of the puzzle: [BMAD Method](https://github.com/bmadcode/BMAD-METHOD) for structured brainstorming, [GSD](https://github.com/cyanheads/claude-code-gsd) for fresh-context execution, and [Google's Conductor research](https://research.google/blog/automated-unit-test-improvement-using-large-language-models-at-google/) for just-in-time task writing. Kiln combines them into one pipeline that actually runs.
 
 ```
 npx kiln-dev
 ```
+
+> **Not published to npm yet.** This will work once we ship. For now, clone the repo and install manually.
 
 <br/>
 
@@ -38,7 +47,7 @@ Install, then use four commands:
 ```
 /kiln:fire
 ```
-Start a new project or resume where you left off
+Light the kiln — start or resume the full automated pipeline
 
 </td>
 <td width="50%">
@@ -74,7 +83,7 @@ Show progress and next recommended action
 
 ## How it works
 
-Your project flows through six stages. The first two are interactive — you shape the vision together. The rest run autonomously, repeating per phase until everything ships.
+Your project flows through six stages. The first two are interactive — you and the AI shape the vision together. The rest run autonomously, repeating per phase until everything ships. At each transition, the kiln displays a curated quote — a small moment of reflection between stages of the fire.
 
 <table>
 <tr>
@@ -181,29 +190,33 @@ Works for both **planning** and **code review**. Toggle in `.kiln/config.json`:
 </details>
 
 <details>
-<summary>&nbsp;<b>Teams mode</b>&nbsp;&mdash;&nbsp;<i>parallel execution with isolated worktrees</i></summary>
+<summary>&nbsp;<b>Teams-first orchestration</b>&nbsp;&mdash;&nbsp;<i>the Athanor pattern</i></summary>
 
 <br/>
 
-Teams mode uses Claude Code's native Teams API to run wave workers in parallel. Each task gets its own git worktree with a symlinked control plane, executes independently, and reports back for deterministic copy-back to main.
+When you type `/kiln:fire`, Kiln creates a Claude Code Team. Your session becomes the team lead — a thin orchestrator that spawns teammates, watches them work, and advances the pipeline automatically.
 
-Three stages gain Teams coordination:
+The name comes from alchemy: an *athanor* is a self-feeding furnace. Once lit, it maintains its own heat. That's what happens here — after you approve the vision and roadmap (the only two human gates), the kiln runs itself through planning, execution, verification, review, and reconciliation. Each transition emits a curated quote from the lore system — 90 quotes drawn from philosophy, science, and world traditions.
 
-- **PLAN** &mdash; Claude and Codex plan simultaneously, debate optionally, then synthesize
-- **EXECUTE** &mdash; Wave workers run in parallel (configurable via `waveParallelism`), each in an isolated worktree with explicit mini-verify
-- **REVIEW** &mdash; Opus and Codex review independently, then debate findings
+Three hard gates require your attention:
+1. **Vision approval** — you shape the brainstorm, you approve what gets built
+2. **Roadmap approval** — you review the delivery phases before execution begins
+3. **Reconcile confirmation** — you confirm documentation updates between phases
+
+Everything else auto-advances. Teammates report completion via SendMessage, the orchestrator updates state, emits a transition message, and spawns the next stage.
+
+Under the hood, wave workers run in parallel git worktrees with deterministic copy-back. Each task is sharpened into a surgical prompt, executed with fresh context, mini-verified, and committed atomically. Collision detection is mandatory. Failed workers trigger fail-fast cancellation across the wave.
 
 ```json
 {
   "preferences": {
     "useTeams": true,
-    "waveParallelism": 3,
-    "executeConcurrency": "worktree"
+    "waveParallelism": 3
   }
 }
 ```
 
-> **No Teams API?** Kiln runs everything sequentially. Teams is the fast path, not a requirement.
+> **No Teams API?** Kiln falls back to sequential execution. Teams is the fast path, not a requirement.
 
 <br/>
 </details>
@@ -215,7 +228,7 @@ Three stages gain Teams coordination:
 
 | Command | Description |
 |---------|-------------|
-| `/kiln:fire` | Start new work or resume from STATE.md |
+| `/kiln:fire` | Light the kiln — start or resume the full automated pipeline |
 | `/kiln:cool` | Pause and save session recovery metadata |
 | `/kiln:quick` | Single-pass mode for small changes |
 | `/kiln:status` | Progress display and next action routing |
@@ -271,7 +284,7 @@ The combination turns out to be more than the sum of its parts. BMAD gives you a
 ```
 kiln/
 ├── agents/           13 AI agent definitions
-├── skills/           16 skill definitions
+├── skills/           17 skill definitions
 ├── commands/         8 slash command definitions
 ├── hooks/            Claude Code lifecycle hooks
 │   ├── hooks.json
