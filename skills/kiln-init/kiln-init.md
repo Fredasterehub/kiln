@@ -61,8 +61,8 @@ Operational rules:
 Use a per-command 5-second timeout pattern:
 
 ```bash
-timeout 5s bash -lc 'test -d .kiln'
-timeout 5s bash -lc 'test -f .kiln/STATE.md'
+test -d .kiln
+test -f .kiln/STATE.md
 ```
 
 If `timeout` is unavailable, use an equivalent wrapper that enforces ~5 seconds before failing.
@@ -73,8 +73,8 @@ Concrete probe sequence:
 has_kiln_dir=false
 has_state=false
 
-timeout 5s bash -lc 'test -d .kiln' >/dev/null 2>&1 && has_kiln_dir=true
-timeout 5s bash -lc 'test -f .kiln/STATE.md' >/dev/null 2>&1 && has_state=true
+test -d .kiln >/dev/null 2>&1 && has_kiln_dir=true
+test -f .kiln/STATE.md >/dev/null 2>&1 && has_state=true
 ```
 
 Safe `STATE.md` read pattern:
@@ -336,7 +336,7 @@ Preferences (defaults):
 
 Ask: 'Does this configuration look correct? You can edit .kiln/config.json manually at any time to adjust these values.'
 
-If the operator confirms: Print 'Initialization complete. Run /kiln:brainstorm to start.' (or 'Run /kiln:status to see where you left off.' for returning projects).
+If the operator confirms: Print 'Initialization complete. Run /kiln:fire to start.' (or 'Run /kiln:status to see where you left off.' for returning projects).
 
 If the operator wants changes: Let them specify corrections. Update config.json accordingly. Re-display and re-confirm.
 

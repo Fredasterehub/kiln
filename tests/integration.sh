@@ -93,6 +93,7 @@ AGENTS=(
   kiln-reviewer.md
   kiln-codex-reviewer.md
   kiln-researcher.md
+  kiln-wave-worker.md
 )
 
 for agent in "${AGENTS[@]}"; do
@@ -192,6 +193,10 @@ check "config.json valid JSON" validate_json_file "$KILN_DIR/config.json"
 check "STATE.md exists" test -f "$KILN_DIR/STATE.md"
 check "docs directory exists" test -d "$KILN_DIR/docs"
 check "tracks directory exists" test -d "$KILN_DIR/tracks"
+check "living doc: TECH_STACK.md exists" test -f "$KILN_DIR/docs/TECH_STACK.md"
+check "living doc: PATTERNS.md exists" test -f "$KILN_DIR/docs/PATTERNS.md"
+check "living doc: DECISIONS.md exists" test -f "$KILN_DIR/docs/DECISIONS.md"
+check "living doc: PITFALLS.md exists" test -f "$KILN_DIR/docs/PITFALLS.md"
 
 echo ""
 echo "Group 6: Templates"
@@ -201,13 +206,15 @@ check "STATE.md.tmpl exists" test -f "$TEMPLATES_DIR/STATE.md.tmpl"
 check "config.json.tmpl exists" test -f "$TEMPLATES_DIR/config.json.tmpl"
 check "vision-sections.md exists" test -f "$TEMPLATES_DIR/vision-sections.md"
 check "FINAL_REPORT.md.tmpl exists" test -f "$TEMPLATES_DIR/FINAL_REPORT.md.tmpl"
-check "teams templates exist" test -d "$TEMPLATES_DIR/teams"
-
 echo ""
 echo "Group 7: config.json content"
 check "config has projectType" check_config_key "$KILN_DIR/config.json" "projectType"
 check "config has modelMode" check_config_key "$KILN_DIR/config.json" "modelMode"
 check "config has tooling" check_config_key "$KILN_DIR/config.json" "tooling"
+check "config has preferences.useTeams" node -e "
+const d = JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));
+if (!d.preferences || typeof d.preferences.useTeams !== 'boolean') process.exit(1);
+" "$KILN_DIR/config.json"
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"

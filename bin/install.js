@@ -507,10 +507,18 @@ function installTemplates(sourceRoot, claudeRoot, warnings) {
   return stats;
 }
 
-function initializeKiln(sourceRoot, repoRoot, kilnRoot, projectType, modelMode, tooling, warnings) {
+function initializeKiln(sourceRoot, repoRoot, kilnRoot, projectType, modelMode, tooling, useTeams, warnings) {
   fs.mkdirSync(kilnRoot, { recursive: true });
   fs.mkdirSync(path.join(kilnRoot, 'docs'), { recursive: true });
   fs.mkdirSync(path.join(kilnRoot, 'tracks'), { recursive: true });
+
+  const livingDocs = ['TECH_STACK.md', 'PATTERNS.md', 'DECISIONS.md', 'PITFALLS.md'];
+  for (const doc of livingDocs) {
+    const docPath = path.join(kilnRoot, 'docs', doc);
+    if (!fs.existsSync(docPath)) {
+      fs.writeFileSync(docPath, '', 'utf8');
+    }
+  }
 
   const configTemplatePath = path.join(sourceRoot, 'templates', 'config.json.tmpl');
   const stateTemplatePath = path.join(sourceRoot, 'templates', 'STATE.md.tmpl');
@@ -523,6 +531,8 @@ function initializeKiln(sourceRoot, repoRoot, kilnRoot, projectType, modelMode, 
     configTemplate.projectType = projectType;
     configTemplate.modelMode = modelMode;
     configTemplate.tooling = tooling;
+    configTemplate.preferences = configTemplate.preferences || {};
+    configTemplate.preferences.useTeams = useTeams;
     fs.writeFileSync(configPath, JSON.stringify(configTemplate, null, 2) + '\n', 'utf8');
   } else {
     warnings.push(`Existing file preserved: ${configPath}`);
@@ -547,7 +557,7 @@ function initializeKiln(sourceRoot, repoRoot, kilnRoot, projectType, modelMode, 
       completed_phases_count: 0,
       last_activity_timestamp: now,
       last_completed_action: 'none',
-      next_expected_action: 'Run /kiln:brainstorm'
+      next_expected_action: 'Run /kiln:fire'
     });
     fs.writeFileSync(statePath, rendered, 'utf8');
   } else {
@@ -556,45 +566,43 @@ function initializeKiln(sourceRoot, repoRoot, kilnRoot, projectType, modelMode, 
 }
 
 function printSummary(summary) {
+  const agentCount = summary.agents.copied + summary.agents.skipped;
+  const skillCount = summary.skills.directories;
+  const commandCount = summary.commands.copied + summary.commands.skipped;
+
   console.log('');
-  console.log('kiln-dev installation complete');
-  console.log(`- Repository root: ${summary.repoRoot}`);
-  console.log(`- Claude config root: ${summary.claudeRoot}`);
-  console.log(`- .kiln root: ${summary.kilnRoot}`);
-  console.log(`- Project type: ${summary.projectType}`);
-  console.log(`- Model mode: ${summary.modelMode}`);
-  console.log(
-    `- Tooling: test=${summary.tooling.testRunner || 'none'}, lint=${summary.tooling.linter || 'none'}, typecheck=${summary.tooling.typeChecker || 'none'}, build=${summary.tooling.buildSystem || 'none'}, start=${summary.tooling.startCommand || 'none'}`
-  );
-  console.log(
-    `- Agents: copied ${summary.agents.copied}, skipped ${summary.agents.skipped}, conflicts ${summary.agents.conflicts}`
-  );
-  console.log(
-    `- Skills: directories ${summary.skills.directories}, copied ${summary.skills.copied}, skipped ${summary.skills.skipped}, conflicts ${summary.skills.conflicts}`
-  );
-  console.log(
-    `- Commands: copied ${summary.commands.copied}, skipped ${summary.commands.skipped}, conflicts ${summary.commands.conflicts}`
-  );
-  console.log(
-    `- Hooks: scripts copied ${summary.hooks.scriptsCopied}, skipped ${summary.hooks.scriptsSkipped}, conflicts ${summary.hooks.scriptsConflicts}, hooks.json ${summary.hooks.hookJsonStatus}`
-  );
-  console.log(
-    `- Templates: copied ${summary.templates.copied}, skipped ${summary.templates.skipped}, conflicts ${summary.templates.conflicts}`
-  );
-  console.log(`- .gitignore contains .kiln ignore rule: ${summary.gitignoreHasKilnIgnore ? 'yes' : 'no'}`);
+  console.log('  kiln is ready.');
+  console.log('');
+  console.log('  Kiln turns Claude Code into a self-running software factory.');
+  console.log('  You describe what to build. It handles the rest \u2014 brainstorm,');
+  console.log('  plan, execute, verify, review \u2014 across multiple AI models.');
+  console.log('');
+  console.log('  Four commands:');
+  console.log('    /kiln:fire    Light the kiln \u2014 start or resume the pipeline');
+  console.log('    /kiln:cool    Pause safely with a clean resume pointer');
+  console.log('    /kiln:quick   Single-pass mode for small changes');
+  console.log('    /kiln:status  Show progress and next action');
+  console.log('');
+  console.log('  What happened:');
+  console.log(`    Installed to ${summary.repoRoot}`);
+  console.log(`    Model mode: ${summary.modelMode}  |  Teams: ${summary.useTeams ? 'yes' : 'no'}`);
+  console.log(`    ${agentCount} agents, ${skillCount} skills, ${commandCount} commands installed`);
+  console.log('');
+  console.log('  The pipeline: brainstorm \u2192 roadmap \u2192 plan \u2192 execute \u2192 verify \u2192 reconcile');
+  console.log('  First two stages are interactive. The rest run autonomously.');
+  console.log('');
+  console.log('  For the best experience, run Claude Code with:');
+  console.log('    claude --dangerously-bypass-permissions');
+  console.log('');
+  console.log('  Next step: type /kiln:fire');
 
   if (summary.warnings.length > 0) {
     console.log('');
-    console.log('Warnings:');
+    console.log('  Warnings:');
     for (const warning of summary.warnings) {
-      console.log(`- ${warning}`);
+      console.log(`    ${warning}`);
     }
   }
-
-  console.log('');
-  console.log('Next steps:');
-  console.log('- Run /kiln:fire to start building');
-  console.log('- Or run /kiln:cool to save progress and pause');
 }
 
 async function main() {
@@ -615,6 +623,7 @@ async function main() {
   const codexDetected = detectCodexCli();
   const modelMode = codexDetected ? 'multi-model' : 'claude-only';
 
+  let useTeams = true;
   if (!options.yes) {
     const prompter = createPrompter();
     try {
@@ -634,6 +643,8 @@ async function main() {
           process.exit(0);
         }
       }
+
+      useTeams = await prompter.yesNo('Enable Teams mode for parallel execution?', true);
     } finally {
       prompter.close();
     }
@@ -660,7 +671,7 @@ async function main() {
     const templates = installTemplates(sourceRoot, claudeRoot, warnings);
     const projectType = detectProjectType(repoRoot);
     const tooling = detectTooling(repoRoot);
-    initializeKiln(sourceRoot, repoRoot, kilnRoot, projectType, modelMode, tooling, warnings);
+    initializeKiln(sourceRoot, repoRoot, kilnRoot, projectType, modelMode, tooling, useTeams, warnings);
     const gitignoreHasKilnIgnore = ensureGitignoreKiln(repoRoot, warnings);
 
     printSummary({
@@ -669,6 +680,7 @@ async function main() {
       kilnRoot,
       projectType,
       modelMode,
+      useTeams,
       tooling,
       agents,
       skills,

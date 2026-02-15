@@ -57,7 +57,7 @@ if [ "$step_status_lc" = "in-progress" ]; then
     ts_epoch=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$ts" +%s 2>/dev/null)
   fi
   case "$now_epoch:$ts_epoch" in
-    ''*|*':') ;;
+    :*|*:) ;;
     *[!0-9:]* ) ;;
     *)
       if [ $((now_epoch - ts_epoch)) -gt 1800 ]; then
@@ -79,6 +79,12 @@ if [ "$interrupted" -eq 1 ]; then
   echo "Warning: Previous session was interrupted during phase ${current_phase:-unknown} at ${current_step:-unknown} step."
   echo "Run /kiln:track to resume from the current step."
 fi
+
+# First-run hint: show bypass-permissions tip on fresh installs
+first_run=0
+if [ "$next_expected" = "Run /kiln:fire" ] && [ "$step_status_lc" = "pending" ]; then
+  first_run=1
+fi
 if [ -n "$mini_retries$e2e_cycles$review_cycles" ]; then
   echo "Correction cycles: mini-verify ${mini_retries:-unknown}; e2e ${e2e_cycles:-unknown}; review ${review_cycles:-unknown}"
 fi
@@ -90,6 +96,11 @@ case "$overall_status" in
       echo "Next action: $next_expected"
     else
       echo "Next action: Resume with /kiln:track"
+    fi
+    if [ "$first_run" -eq 1 ]; then
+      echo ""
+      echo "Tip: For the best experience, run Claude Code with:"
+      echo "  claude --dangerously-bypass-permissions"
     fi
     ;;
 esac

@@ -58,13 +58,11 @@ Multi-model mode is where Kiln shines. Codex CLI gives you access to GPT-5.2 (pl
 npm install -g @openai/codex
 ```
 
-Configure in `.kiln/config.json` after init:
+If Codex CLI was not detected during install, enable multi-model mode later in `.kiln/config.json`:
 
 ```json
 {
-  "preferences": {
-    "modelMode": "multi-model"
-  }
+  "modelMode": "multi-model"
 }
 ```
 

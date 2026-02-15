@@ -27,7 +27,23 @@ if [ -z "$test_cmd" ]; then
   echo "[kiln] No test runner configured, skipping mini-verify"
   exit 0
 fi
-cmd_name=$(printf '%s\n' "$test_cmd" | awk '{print $1}')
+# Unwrap known command prefixes to find the real test runner
+unwrapped="$test_cmd"
+_unwrap_iter=0
+while [ $_unwrap_iter -lt 3 ]; do
+  _first=$(printf '%s\n' "$unwrapped" | awk '{print $1}')
+  case "$_first" in
+    cross-env|env)
+      unwrapped=$(printf '%s\n' "$unwrapped" | awk '{for(i=2;i<=NF;i++){if($i !~ /=/){for(j=i;j<=NF;j++) printf "%s%s",$j,(j<NF?" ":""); print ""; exit}}}')
+      ;;
+    npx)
+      unwrapped=$(printf '%s\n' "$unwrapped" | awk '{$1=""; sub(/^[[:space:]]+/,""); print}')
+      ;;
+    *) break ;;
+  esac
+  _unwrap_iter=$((_unwrap_iter + 1))
+done
+cmd_name=$(printf '%s\n' "$unwrapped" | awk '{print $1}')
 case "$cmd_name" in
   npm|npx|node|jest|vitest|pytest|cargo|go|make|bun|deno|pnpm|yarn) ;;
   *) echo "[kiln] Warning: unrecognized test runner '$cmd_name', skipping mini-verify"; exit 0 ;;
@@ -49,6 +65,7 @@ stdout_log="$tmp_dir/stdout.log"
 stderr_log="$tmp_dir/stderr.log"
 timeout_flag="$tmp_dir/timeout.flag"
 mkdir -p "$tmp_dir" 2>/dev/null || exit 0
+# shellcheck disable=SC2317
 cleanup() { rm -rf "$tmp_dir" >/dev/null 2>&1; }
 trap cleanup EXIT INT TERM
 run_code=0
