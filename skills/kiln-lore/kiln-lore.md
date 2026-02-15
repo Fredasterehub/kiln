@@ -26,7 +26,7 @@ Max 4 lines, no emoji. Whitespace is intentional (ma — negative space).
 
 ## ignition
 
-- "The way up and the way down are one and the same." -- Heraclitus
+- "The creation of a thousand forests is in one acorn." -- Ralph Waldo Emerson
 - "Every new beginning comes from some other beginning's end." -- Seneca
 - "Imagination is more important than knowledge. For knowledge is limited, whereas imagination embraces the entire world." -- Albert Einstein
 - "A journey of a thousand miles begins with a single step." -- Lao Tzu
@@ -34,7 +34,7 @@ Max 4 lines, no emoji. Whitespace is intentional (ma — negative space).
 
 ## brainstorm-start
 
-- "The important thing is not to stop questioning. Curiosity has its own reason for existing." -- Albert Einstein
+- "The mind is not a vessel to be filled, but a fire to be kindled." -- Plutarch
 - "Every child is an artist. The problem is how to remain an artist once we grow up." -- Pablo Picasso
 - "Wisdom is like a baobab tree; no one individual can embrace it." -- African proverb
 - "In the beginner's mind there are many possibilities, but in the expert's there are few." -- Shunryu Suzuki
@@ -43,9 +43,9 @@ Max 4 lines, no emoji. Whitespace is intentional (ma — negative space).
 ## vision-approved
 
 - "The only thing worse than being blind is having sight but no vision." -- Helen Keller
-- "If you want to build a ship, don't drum up the men to gather wood, divide the work, and give orders. Instead, teach them to yearn for the vast and endless sea." -- Antoine de Saint-Exupéry
-- "Vision without action is merely a dream. Action without vision just passes the time. Vision with action can change the world." -- Nelson Mandela
-- "When there is no vision, the people perish." -- ancient proverb
+- "If you want to build a ship, don't drum up the men to gather wood, divide the work, and give orders. Instead, teach them to yearn for the vast and endless sea." -- Antoine de Saint-Exupery
+- "Vision is the art of seeing what is invisible to others." -- Jonathan Swift
+- "The real voyage of discovery consists not in seeking new landscapes, but in having new eyes." -- Marcel Proust
 - "The best way to predict the future is to invent it." -- Alan Kay
 
 ## roadmap-start
@@ -58,18 +58,18 @@ Max 4 lines, no emoji. Whitespace is intentional (ma — negative space).
 
 ## roadmap-approved
 
-- "All men can see these tactics whereby I conquer, but what none can see is the strategy out of which victory is evolved." -- Sun Tzu
-- "Luck is what happens when preparation meets opportunity." -- Seneca
+- "Give me six hours to chop down a tree and I will spend the first four sharpening the axe." -- attributed to Abraham Lincoln
+- "The essence of strategy is choosing what not to do." -- Michael Porter
 - "Strategy is a commodity, execution is an art." -- Peter Drucker
-- "In preparing for battle I have always found that plans are useless, but planning is indispensable." -- Dwight D. Eisenhower
-- "The general who wins the battle makes many calculations in his temple before the battle is fought." -- Sun Tzu
+- "The time to repair the roof is when the sun is shining." -- John F. Kennedy
+- "Forewarned, forearmed; to be prepared is half the victory." -- Miguel de Cervantes
 
 ## phase-start
 
 - "We are what we repeatedly do. Excellence, then, is not an act, but a habit." -- Aristotle
-- "Wabi-sabi: beauty in imperfection, acceptance of the natural cycle of growth and decay." -- Japanese aesthetic principle
+- "Start where you are. Use what you have. Do what you can." -- Arthur Ashe
 - "The master has failed more times than the beginner has even tried." -- Stephen McCranie
-- "A journey of a thousand miles begins beneath one's feet." -- Lao Tzu
+- "Discipline is the bridge between goals and accomplishment." -- Jim Rohn
 - "Fall seven times, stand up eight." -- Japanese proverb
 
 ## plan
@@ -78,27 +78,27 @@ Max 4 lines, no emoji. Whitespace is intentional (ma — negative space).
 - "Simplicity is the ultimate sophistication." -- Leonardo da Vinci
 - "Form follows function." -- Louis Sullivan
 - "You can't connect the dots looking forward; you can only connect them looking backwards." -- Steve Jobs
-- "Design is not just what it looks like and feels like. Design is how it works." -- Steve Jobs
+- "A good plan violently executed now is better than a perfect plan executed next week." -- George S. Patton
 
 ## validate
 
 - "The first principle is that you must not fool yourself — and you are the easiest person to fool." -- Richard Feynman
 - "Nothing in life is to be feared, it is only to be understood. Now is the time to understand more, so that we may fear less." -- Marie Curie
-- "Everything we hear is an opinion, not a fact. Everything we see is a perspective, not the truth." -- Marcus Aurelius
+- "Everything we hear is an opinion, not a fact. Everything we see is a perspective, not the truth." -- attributed to Marcus Aurelius
 - "Science is a way of thinking much more than it is a body of knowledge." -- Carl Sagan
-- "If you thought that science was certain — well, that is just an error on your part." -- Richard Feynman
+- "Trust, but verify." -- Russian proverb
 
 ## execute
 
 - "Whatever you can do, or dream you can do, begin it. Boldness has genius, power, and magic in it." -- Johann Wolfgang von Goethe
-- "Action is the foundational key to all success." -- Pablo Picasso
+- "We don't rise to the level of our expectations, we fall to the level of our training." -- Archilochus
 - "The craftsman is proud of what he has made, and cherishes it, while the consumer discards things that are perfectly serviceable in his restless pursuit of the new." -- Richard Sennett
 - "The way to get started is to quit talking and begin doing." -- Walt Disney
 - "Do or do not. There is no try." -- Yoda
 
 ## e2e
 
-- "It doesn't matter how beautiful your theory is, it doesn't matter how smart you are. If it doesn't agree with experiment, it's wrong." -- Richard Feynman
+- "Doubt is not a pleasant condition, but certainty is absurd." -- Voltaire
 - "In God we trust. All others must bring data." -- W. Edwards Deming
 - "The proof of the pudding is in the eating." -- English proverb
 - "One experiment is worth a thousand expert opinions." -- attributed to Bill Nye
@@ -107,54 +107,54 @@ Max 4 lines, no emoji. Whitespace is intentional (ma — negative space).
 ## review
 
 - "I saw the angel in the marble and carved until I set him free." -- Michelangelo
-- "Art is never finished, only abandoned." -- Leonardo da Vinci
+- "Have no fear of perfection — you'll never reach it." -- Salvador Dali
 - "Kaizen: continuous improvement in small increments." -- Japanese philosophy
-- "Details matter, it's worth waiting to get it right." -- Steve Jobs
-- "Quality is not an act, it is a habit." -- Aristotle
+- "Criticism may not be agreeable, but it is necessary." -- Winston Churchill
+- "Creativity requires the courage to let go of certainties." -- Erich Fromm
 
 ## reconcile
 
 - "The unlike is joined together, and from differences results the most beautiful harmony." -- Heraclitus
-- "If you want to go fast, go alone. If you want to go far, go together." -- African proverb
-- "The whole is greater than the sum of its parts." -- Aristotle
+- "No man is an island, entire of itself; every man is a piece of the continent." -- John Donne
+- "The meeting of two personalities is like the contact of two chemical substances: if there is any reaction, both are transformed." -- Carl Jung
 - "In the confrontation between the stream and the rock, the stream always wins — not through strength but by perseverance." -- H. Jackson Brown Jr.
 - "Unity is strength, division is weakness." -- Swahili proverb
 
 ## phase-complete
 
 - "It does not matter how slowly you go as long as you do not stop." -- Confucius
-- "Do not judge me by my successes, judge me by how many times I fell down and got back up again." -- Nelson Mandela
+- "Progress is impossible without change, and those who cannot change their minds cannot change anything." -- George Bernard Shaw
 - "The most effective way to do it, is to do it." -- Amelia Earhart
-- "A little progress each day adds up to big results." -- Satya Nani
+- "Perseverance is not a long race; it is many short races one after the other." -- Walter Elliot
 - "Success is the sum of small efforts, repeated day in and day out." -- Robert Collier
 
 ## all-phases-complete
 
-- "Perfection is achieved not when there is nothing more to add, but when there is nothing left to take away." -- Antoine de Saint-Exupéry
-- "After climbing a great hill, one only finds that there are many more hills to climb." -- Nelson Mandela
+- "The end of all our exploring will be to arrive where we started and know the place for the first time." -- T.S. Eliot
+- "I fear not the man who has practiced 10,000 kicks once, but I fear the man who has practiced one kick 10,000 times." -- Bruce Lee
 - "The work praises the man." -- Irish proverb
-- "Shokunin: the craftsman's spirit of excellence." -- Japanese philosophy
+- "It is not the mountain we conquer, but ourselves." -- Edmund Hillary
 - "Quality means doing it right when no one is looking." -- Henry Ford
 
 ## project-done
 
-- "Waste no more time arguing about what a good man should be. Be one." -- Marcus Aurelius
-- "Be less curious about people and more curious about ideas." -- Marie Curie
-- "What counts in life is not the mere fact that we have lived. It is what difference we have made to the lives of others." -- Nelson Mandela
+- "What you leave behind is not what is engraved in stone monuments, but what is woven into the lives of others." -- Pericles
+- "No legacy is so rich as honesty." -- William Shakespeare
+- "The two most important days in your life are the day you are born and the day you find out why." -- attributed to Mark Twain
 - "The legacy we leave is not just in our buildings, but in the lives we touch." -- attributed to Maya Angelou
 - "Well done is better than well said." -- Benjamin Franklin
 
 ## halt
 
 - "I have not failed. I've just found 10,000 ways that won't work." -- Thomas Edison
-- "In the middle of difficulty lies opportunity." -- Albert Einstein
-- "The greatest glory in living lies not in never falling, but in rising every time we fall." -- Nelson Mandela
+- "Ever tried. Ever failed. No matter. Try again. Fail again. Fail better." -- Samuel Beckett
+- "The brick walls are there for a reason. They're not there to keep us out. The brick walls are there to give us a chance to show how badly we want something." -- Randy Pausch
 - "It is impossible for a man to learn what he thinks he already knows." -- Epictetus
 - "Failure is the condiment that gives success its flavor." -- Truman Capote
 
 ## pause-cool
 
-- "Nature does not hurry, yet everything is accomplished." -- Lao Tzu
+- "Almost everything will work again if you unplug it for a few minutes, including you." -- Anne Lamott
 - "Ma: the space between, as important as form itself." -- Japanese aesthetic principle
 - "You should sit in meditation for twenty minutes every day — unless you're too busy. Then you should sit for an hour." -- old wisdom
 - "Patience is not the ability to wait, but the ability to keep a good attitude while waiting." -- attributed to Joyce Meyer
@@ -162,8 +162,8 @@ Max 4 lines, no emoji. Whitespace is intentional (ma — negative space).
 
 ## resume
 
-- "This world is nothing but a continuous state of flux, like a river flowing endlessly." -- Heraclitus
-- "Fall down seven times, get up eight." -- Japanese proverb
-- "Energy and persistence conquer all things." -- Benjamin Franklin
+- "Not all those who wander are lost." -- J.R.R. Tolkien
+- "Life can only be understood backwards; but it must be lived forwards." -- Soren Kierkegaard
+- "Though no one can go back and make a brand new start, anyone can start from now and make a brand new ending." -- Carl Bard
 - "The phoenix must burn to emerge." -- Janet Fitch
-- "There is nothing permanent except change." -- Heraclitus
+- "The only way to make sense out of change is to plunge into it, move with it, and join the dance." -- Alan Watts
