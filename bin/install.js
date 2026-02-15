@@ -585,7 +585,7 @@ function printSummary(summary) {
   console.log('');
   console.log('  What happened:');
   console.log(`    Installed to ${summary.repoRoot}`);
-  console.log(`    Model mode: ${summary.modelMode}  |  Teams: ${summary.useTeams ? 'yes' : 'no'}`);
+  console.log(`    Model mode: ${summary.modelMode}  |  Teams: ${summary.useTeams ? 'yes' : 'no'}  |  Scope: ${summary.useGlobal ? 'global' : 'project'}`);
   console.log(`    ${agentCount} agents, ${skillCount} skills, ${commandCount} commands installed`);
   console.log('');
   console.log('  The pipeline: brainstorm \u2192 roadmap \u2192 plan \u2192 execute \u2192 verify \u2192 reconcile');
@@ -616,13 +616,10 @@ async function main() {
 
   const sourceRoot = path.resolve(__dirname, '..');
   const repoRoot = path.resolve(options.repoRoot);
-  const { claudeRoot, kilnRoot } = resolveInstallRoots(repoRoot, options.global);
-
-  const existingClaude = fs.existsSync(claudeRoot);
-  const existingKiln = fs.existsSync(kilnRoot);
   const codexDetected = detectCodexCli();
   const modelMode = codexDetected ? 'multi-model' : 'claude-only';
 
+  let useGlobal = options.global;
   let useTeams = true;
   if (!options.yes) {
     const prompter = createPrompter();
@@ -633,7 +630,15 @@ async function main() {
         process.exit(0);
       }
 
-      if (existingClaude) {
+      if (!options.global) {
+        useGlobal = await prompter.yesNo(
+          'Install kiln globally (~/.claude/) for all projects?',
+          false
+        );
+      }
+
+      const { claudeRoot: checkRoot } = resolveInstallRoots(repoRoot, useGlobal);
+      if (fs.existsSync(checkRoot)) {
         const mergeConfirmed = await prompter.yesNo(
           'Existing Claude Code config found. Merge kiln files alongside existing?',
           true
@@ -649,6 +654,9 @@ async function main() {
       prompter.close();
     }
   }
+
+  const { claudeRoot, kilnRoot } = resolveInstallRoots(repoRoot, useGlobal);
+  const existingKiln = fs.existsSync(kilnRoot);
 
   console.log(
     codexDetected
@@ -681,6 +689,7 @@ async function main() {
       projectType,
       modelMode,
       useTeams,
+      useGlobal,
       tooling,
       agents,
       skills,
