@@ -52,7 +52,7 @@ claude --dangerously-bypass-permissions
 
 **2. Install Codex CLI (strongly recommended)**
 
-Multi-model mode is where Kiln shines. Codex CLI gives you access to GPT-5.2 (sharpening) and GPT-5.3-codex (execution) — models that complement Claude's strengths with different reasoning styles. Without it, Kiln falls back to Claude-only mode, which works but misses the dual-perspective advantage.
+Multi-model mode is where Kiln shines. Codex CLI gives you access to GPT-5.2 (planning and sharpening) and GPT-5.3-codex (execution) — models that complement Claude's strengths with different reasoning styles. Without it, Kiln falls back to Claude-only mode, which works but misses the dual-perspective advantage.
 
 ```bash
 npm install -g @openai/codex
