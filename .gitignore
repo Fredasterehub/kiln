@@ -1,1 +1,12 @@
+# Runtime state
 .teams/
+.kiln/
+.kiln-snapshot/
+.kiln-artifacts/
+
+# Build artifacts
+tracks/
+.planning/
+
+# OS
+.DS_Store

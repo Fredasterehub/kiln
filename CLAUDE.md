@@ -12,13 +12,7 @@ We are building kiln using the deafish-teams workflow with Agent Teams.
 - `skills/` — kiln PRODUCT skills (the NPM package source).
 - `hooks/` — kiln PRODUCT hooks (the NPM package source).
 - `bin/` — kiln PRODUCT installer.
-- `templates/` — contains both `teams/` (build workflow templates) and kiln product templates at root level.
-
-## Reference Documents
-
-- **Design spec:** `docs/plans/2026-02-14-kiln-architecture-design.md` — the approved architecture
-- **Implementation plan:** `docs/plans/2026-02-14-kiln-implementation-plan.md` — track-level plan with 10 tracks
-- **Handoff:** `docs/plans/HANDOFF.md` — session context and decisions summary
+- `templates/` — kiln PRODUCT templates (STATE.md.tmpl, config.json.tmpl, etc.).
 
 ## What We're Building
 
