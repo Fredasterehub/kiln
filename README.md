@@ -1,12 +1,8 @@
 <div align="center">
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/header.svg">
-  <source media="(prefers-color-scheme: light)" srcset="assets/header-light.svg">
-  <img alt="kiln" src="assets/header.svg" width="100%">
-</picture>
+# kiln
 
-<br/>
+**A multi-model orchestration workflow for Claude Code**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-D4A574?style=flat-square)](LICENSE)&nbsp;
 [![Node](https://img.shields.io/badge/Node-18+-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)&nbsp;
@@ -17,23 +13,23 @@
 
 <br/>
 
-## The problem
+## What is this
 
-AI coding tools degrade over long conversations. Context fills up, plans drift, and by task #15 you're working with an AI that forgot what it decided at task #3.
+Kiln is the result of months spent trying to build real apps efficiently with AI coding tools. Along the way, a few projects stood out — each brilliant at one thing, but none doing the whole job.
 
-**Kiln fixes this.** Every task gets fresh 200k context. Two models plan independently, then a synthesizer takes the best of both. Your code gets reviewed across 7 quality dimensions before it ships. And everything is documented — living docs that evolve with each phase, not chat logs that disappear.
+[BMAD Method](https://github.com/bmadcode/BMAD-METHOD) has an incredible brainstorming process — structured divergence, anti-clustering, challenge passes — that produces visions you actually want to build. [GSD](https://github.com/cyanheads/claude-code-gsd) nails the execution loop — fresh context per task, goal-backward verification, no context rot. [Google Conductor](https://research.google/blog/automated-unit-test-improvement-using-large-language-models-at-google/) brought the insight that you shouldn't plan 76 tasks upfront — you write each task precisely at the moment of execution, with real codebase context, not stale assumptions.
 
-It runs inside Claude Code. No wrappers, no servers, no dependencies. Just markdown files that teach your AI how to build properly.
-
-<br/>
-
-## Get started
+Kiln combines the best of all three into a single workflow. And we're lucky: almost everything it needs is now native to Claude Code — agents, skills, hooks, teams. No wrappers, no servers. Just markdown files that teach your AI how to deliver.
 
 ```
 npx kiln-dev
 ```
 
-Then use four commands:
+<br/>
+
+## Get started
+
+Install, then use four commands:
 
 <table>
 <tr>
@@ -78,9 +74,7 @@ Show progress and next recommended action
 
 ## How it works
 
-Your project flows through six stages. The first two are interactive — you shape the vision. The rest run autonomously, repeating per phase until everything ships.
-
-<img src="assets/pipeline.svg" alt="Pipeline: Brainstorm → Roadmap → Plan → Execute → Verify → Reconcile" width="100%">
+Your project flows through six stages. The first two are interactive — you shape the vision together. The rest run autonomously, repeating per phase until everything ships.
 
 <table>
 <tr>
@@ -92,38 +86,38 @@ Your project flows through six stages. The first two are interactive — you sha
 <tr>
 <td align="center">1</td>
 <td><b>Brainstorm</b></td>
-<td>You and the AI explore the problem space together. Anti-clustering, challenge passes, structured divergence.</td>
+<td>You and the AI explore the problem space together. Anti-clustering, challenge passes, structured divergence &mdash; borrowed from BMAD.</td>
 <td><code>VISION.md</code></td>
 </tr>
 <tr>
 <td align="center">2</td>
 <td><b>Roadmap</b></td>
-<td>AI breaks the vision into delivery phases. You review and approve.</td>
+<td>The vision gets broken into delivery phases. You review and approve before anything moves.</td>
 <td><code>ROADMAP.md</code></td>
 </tr>
 <tr>
 <td align="center">3</td>
 <td><b>Plan</b></td>
-<td>Two models plan independently. Optional debate rounds. Synthesizer merges. Validator runs 7-dimension check.</td>
+<td>Two models plan independently. Optional debate rounds. A synthesizer merges the best of both. Tasks are written just-in-time with real codebase context &mdash; the Conductor insight.</td>
 <td><code>PLAN.md</code></td>
 </tr>
 <tr>
 <td align="center">4</td>
 <td><b>Execute</b></td>
-<td>Each task sharpened into a surgical prompt, executed with fresh 200k context, mini-verified, committed atomically. Teams mode runs wave workers in parallel via git worktrees.</td>
+<td>Each task is sharpened into a surgical prompt and executed with fresh 200k context. Mini-verified, committed atomically. In Teams mode, wave workers run in parallel via git worktrees.</td>
 <td>Code + commits</td>
 </tr>
 <tr>
 <td align="center">5</td>
 <td><b>Verify</b></td>
-<td>E2E user journey tests run your app. Opus reviews across 7 quality dimensions. Up to 3 correction cycles.</td>
+<td>E2E tests run your actual app. Opus reviews across 7 quality dimensions. Up to 3 correction cycles before it ships.</td>
 <td><code>e2e-results.md</code></td>
 </tr>
 <tr>
 <td align="center">6</td>
 <td><b>Reconcile</b></td>
-<td>Living docs updated with what actually happened. Next phase inherits real context, not stale assumptions.</td>
-<td><code>TECH_STACK</code> <code>PATTERNS</code> <code>DECISIONS</code> <code>PITFALLS</code></td>
+<td>Living docs get updated with what actually happened. The next phase inherits real context, not stale assumptions.</td>
+<td><code>PATTERNS</code> <code>DECISIONS</code> <code>PITFALLS</code></td>
 </tr>
 </table>
 
@@ -215,25 +209,6 @@ Three stages gain Teams coordination:
 </details>
 
 <details>
-<summary>&nbsp;<b>What makes it different</b></summary>
-
-<br/>
-
-<table>
-<tr><td></td><td><b>Typical AI coding</b></td><td><b>Kiln</b></td></tr>
-<tr><td><b>Context</b></td><td>Degrades over conversation</td><td>Fresh 200k tokens per task</td></tr>
-<tr><td><b>Planning</b></td><td>One model, one shot</td><td>Two models, optionally debating</td></tr>
-<tr><td><b>Verification</b></td><td>"Looks right to me"</td><td>Actually runs your app</td></tr>
-<tr><td><b>Documentation</b></td><td>Chat logs</td><td>Living docs that evolve per phase</td></tr>
-<tr><td><b>Execution</b></td><td>One long degrading session</td><td>Atomic tasks, parallel wave workers via Teams</td></tr>
-<tr><td><b>Quality</b></td><td>Hope</td><td>7-dimension code review</td></tr>
-<tr><td><b>Models</b></td><td>One does everything</td><td>Right model for each task</td></tr>
-</table>
-
-<br/>
-</details>
-
-<details>
 <summary>&nbsp;<b>All commands</b></summary>
 
 <br/>
@@ -275,11 +250,15 @@ npx kiln-dev --global                     # global (~/.claude/)
 
 <br/>
 
+Kiln doesn't start from scratch. It stands on the shoulders of three projects that each solved a piece of the puzzle:
+
 | Source | What we took | What we left |
 |--------|-------------|-------------|
 | [BMAD Method](https://github.com/bmadcode/BMAD-METHOD) | Structured brainstorming, anti-clustering, challenge passes | Full persona framework |
-| [Google Conductor](https://research.google/blog/automated-unit-test-improvement-using-large-language-models-at-google/) | Just-in-time execution, living docs, reconciliation loops | Infrastructure overhead |
-| [GSD Framework](https://github.com/cyanheads/claude-code-gsd) | Fresh context per task, goal-backward verification | External tracking layer |
+| [GSD Framework](https://github.com/cyanheads/claude-code-gsd) | Fresh context per task, goal-backward verification, execution efficiency | External tracking layer |
+| [Google Conductor](https://research.google/blog/automated-unit-test-improvement-using-large-language-models-at-google/) | Just-in-time task writing, living docs, reconciliation loops | Infrastructure overhead |
+
+The combination turns out to be more than the sum of its parts. BMAD gives you a vision worth building. GSD keeps each task sharp and isolated. Conductor makes sure you're never planning with stale context.
 
 <br/>
 </details>
