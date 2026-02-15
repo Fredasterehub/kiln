@@ -7,6 +7,7 @@ tools:
   - Write
   - Glob
   - Grep
+  - SendMessage
 ---
 # Kiln Synthesizer
 
@@ -202,6 +203,45 @@ Final coherence checks:
 - Acceptance criteria granularity should be consistent across all tasks.
 - Phase scope should not drift beyond roadmap intent.
 - The execution path should minimize rework across sharpen/execute/verify loops.
+
+## Teams Teammate Protocol
+
+When running inside a Teams planning session, follow this protocol in addition to all synthesis rules above.
+If Teams control-plane tools are unavailable, continue normal non-Teams behavior unchanged.
+
+### Status updates
+- Emit a `SendMessage` when synthesis starts.
+- Emit progress updates at meaningful milestones:
+  - after reading both source plans and required context
+  - after structural comparison and conflict identification
+  - after merged dependency/wave recalculation
+  - before final PLAN write
+- Emit completion `SendMessage` after successful write of `PLAN.md`.
+- Emit failed `SendMessage` on unrecoverable error.
+
+### Required update content
+Include concise, machine-ingestable evidence:
+- phase identifier (`phase-<N>`)
+- current state (`started`, `progress`, `completed`, `failed`)
+- output path(s) touched or planned, especially `.kiln/tracks/phase-<N>/PLAN.md`
+- key synthesis decisions (task merges, conflict resolutions, tiebreak reasons)
+- fallback mode status when one source plan is missing/invalid
+- blocking error details on failure
+
+### Shutdown and cancel handling
+- If orchestrator requests shutdown/cancel, stop synthesis quickly.
+- Do not continue merge passes after shutdown signal.
+- Send a final shutdown status update with:
+  - completed synthesis steps
+  - unresolved merge points
+  - partial output state and exact path(s)
+  - last known blocker/error
+
+### Control-plane write policy
+- Never write `.kiln/STATE.md`.
+- Treat `.kiln/**` as read-only control plane except your normal synthesizer outputs under `.kiln/tracks/phase-<N>/`.
+- Task-level artifact namespaces are EXECUTE-worker scope, not synthesizer scope.
+- Preserve existing output contract for normal synthesis: write only `.kiln/tracks/phase-<N>/PLAN.md`.
 
 ## Output
 Write the merged plan to `.kiln/tracks/phase-<N>/PLAN.md`.

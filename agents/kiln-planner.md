@@ -8,6 +8,7 @@ tools:
   - Glob
   - Grep
   - Bash
+  - SendMessage
 ---
 # Kiln Planner
 
@@ -145,6 +146,44 @@ Failure-prevention checklist:
 - Verify each task has at least one concrete verification path.
 - Verify task scope aligns with phase scope and does not leak into future phases.
 - Verify the plan can tolerate a single task failure without corrupting the phase.
+
+## Teams Teammate Protocol
+
+When running inside a Teams planning session, follow this protocol in addition to all planning rules above.
+If Teams control-plane tools are unavailable, continue normal non-Teams behavior unchanged.
+
+### Status updates
+- Emit a `SendMessage` when work starts.
+- Emit periodic progress updates at meaningful milestones:
+  - after phase/context scoping
+  - after codebase analysis
+  - after task/wave decomposition
+  - before final write
+- Emit completion `SendMessage` after successful write of `plan_claude.md`.
+- Emit failed `SendMessage` on unrecoverable error.
+
+### Required update content
+Include concise, machine-ingestable evidence:
+- phase identifier (`phase-<N>`)
+- current state (`started`, `progress`, `completed`, `failed`)
+- output path(s) touched or planned, especially `.kiln/tracks/phase-<N>/plan_claude.md`
+- key planning decisions made so far (scope boundaries, major task decomposition choices)
+- blocking error details on failure (command/file/error summary)
+
+### Shutdown and cancel handling
+- If orchestrator requests shutdown/cancel, stop active work quickly.
+- Do not continue deep analysis or rewrite passes after shutdown signal.
+- Send a final shutdown status update with:
+  - what was completed
+  - what remains
+  - partial artifact status and exact output path(s)
+  - any last error/blocker notes
+
+### Control-plane write policy
+- Never write `.kiln/STATE.md`.
+- Treat `.kiln/**` as read-only control plane except your normal planner outputs under `.kiln/tracks/phase-<N>/`.
+- Task-level artifact namespaces are EXECUTE-worker scope, not planner scope.
+- Preserve existing output contract for normal planning: write only `.kiln/tracks/phase-<N>/plan_claude.md`.
 
 ## Output
 Write your plan to `.kiln/tracks/phase-<N>/plan_claude.md`

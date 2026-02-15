@@ -2,6 +2,16 @@
 # kiln on-task-completed hook
 # Runs mini-verify gate: executes project test suite after each task
 
+# Skip mini-verify during Teams execution and in Teams worktrees.
+if [ -n "${KILN_TEAMS_ACTIVE:-}" ]; then
+  exit 0
+fi
+worktree_root="${KILN_WORKTREE_ROOT:-/tmp}"
+cwd="${PWD:-$(pwd)}"
+case "$cwd" in
+  "${worktree_root%/}/kiln-"*) exit 0 ;;
+esac
+
 if [ ! -d ".kiln" ] || [ ! -f ".kiln/config.json" ]; then
   exit 0
 fi

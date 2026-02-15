@@ -27,7 +27,9 @@ from `.kiln/tracks/phase-N/PLAN.md`.
    - Specific patterns from `.kiln/docs/PATTERNS.md` (if it exists).
    - Known pitfalls from `.kiln/docs/PITFALLS.md` (if it exists).
 4. Apply the 6 Codex Prompting Guide principles (see next section).
-5. Output the sharpened prompt to `.kiln/tracks/phase-N/sharpened/<task-id>.md`.
+5. Output the sharpened prompt:
+   - `preferences.useTeams: false` -> `.kiln/tracks/phase-N/sharpened/<plan-task-id>.md`
+   - `preferences.useTeams: true` -> `.kiln/tracks/phase-N/artifacts/<plan-task-id>/sharpened.md` (worker write policy restricts `.kiln` writes to `artifacts/<plan-task-id>/`)
 
 **Sharpened prompt structure:**
 
@@ -50,7 +52,9 @@ You are GPT-5.3-codex operating inside the repo at <project-root> (assume zero p
 <specific guidance: patterns to follow, imports to use, edge cases to handle>
 
 ## Constraints
-- One atomic commit per task
+- Commit handling is mode-dependent:
+  - `preferences.useTeams: false` -> executor creates one atomic commit per task
+  - `preferences.useTeams: true` -> wave worker does not commit; orchestrator commits after copy-back on main
 - No stubs, no TODOs, no placeholder implementations
 - No unrelated changes outside the listed files
 - If anything is ambiguous, make a reasonable assumption and proceed
@@ -127,10 +131,12 @@ Include verification commands the model should run after implementation.
 
 These constraints apply to ALL task implementations:
 
-1. **Atomic commits.**
-   One task = one commit.
-   Format: `<phase>/<task-id>: <description>`
+1. **Atomic task boundary with mode-specific commit authority.**
+   One task maps to one atomic integration commit.
+   Commit format: `<phase>/<task-id>: <description>`
    (e.g., `phase-3/P3-T02: add JWT auth middleware`).
+   - `preferences.useTeams: false` -> executor creates the task commit directly.
+   - `preferences.useTeams: true` -> worker MUST NOT commit in worktree; orchestrator performs copy-back to main and creates the task commit.
 2. **No stubs or TODOs.**
    Every function must be fully implemented.
    Banned:
@@ -171,6 +177,10 @@ For each acceptance criterion in the task packet:
 - (DET) criteria: run the verification command and check for pass.
 - (LLM) criteria: inspect the relevant code to verify the criterion is met.
 
+**Execution mode notes:**
+- `preferences.useTeams: false` -> mini-verify runs in the primary workspace under the executor flow.
+- `preferences.useTeams: true` -> mini-verify runs explicitly inside each worker worktree (not via hooks). Worker captures command stdout/stderr under `.kiln/tracks/phase-N/artifacts/<plan-task-id>/...` and reports evidence paths in `TaskUpdate`.
+
 **Result determination:**
 - ALL steps pass → PASS → proceed to next task (or next wave).
 - ANY step fails → FAIL → trigger retry.
@@ -198,9 +208,66 @@ Later waves wait for earlier waves to complete.
 
 **Parallelism:**
 Read `.kiln/config.json` field `preferences.waveParallelism` (default: 3).
+If a wave has more tasks than this limit, orchestrator must queue excess tasks and run them in deterministic FIFO batches within the same wave. The next wave cannot start until the full current-wave queue is drained.
+
+**Execution mode selector:**
+Read `.kiln/config.json` key `preferences.useTeams`:
+- `false` (default sequential executor path)
+- `true` (Teams wave path with worktrees and orchestrated copy-back)
+
+### Non-Teams Wave Execution (`preferences.useTeams: false`)
+
+This is the existing sequential/non-Teams protocol.
 
 **Per-task cycle:**
-Sharpen → Implement → Mini-verify → Commit (if pass).
+Sharpen -> Implement -> Mini-verify -> Commit (if pass).
+
+**Commit responsibility:**
+Executor commits each passing task with message format `<phase>/<task-id>: <description>`.
+
+### Teams Wave Execution (`preferences.useTeams: true`)
+
+Teams execution uses one execution team per wave and one worker teammate per task
+in that wave.
+
+**Per-task cycle (worker-side):**
+Sharpen -> Implement -> Mini-verify -> Emit TaskUpdate.
+
+**Worker assignment and runtime:**
+1. Orchestrator creates the wave team (`wave-1`, `wave-2`, ...).
+2. Orchestrator spawns one per-task `kiln-wave-worker` teammate.
+3. Each worker runs in an isolated worktree at:
+   `${KILN_WORKTREE_ROOT:-/tmp}/kiln-<project-hash>/<task-id>/`
+4. Worker worktree must include `.kiln` symlink to canonical repo `.kiln`.
+5. Worker treats `.kiln/**` as read-only except:
+   `.kiln/tracks/phase-N/artifacts/<plan-task-id>/...`
+
+**Commit responsibility (explicit):**
+- Workers do NOT commit in worktrees.
+- Orchestrator copies back worker outputs into the main workspace, then creates
+  the atomic task commit on main.
+
+**Copy-back correctness contract (orchestrator):**
+Use both discovery commands from worker root:
+```bash
+git diff --name-status -z
+git ls-files -o --exclude-standard -z
+```
+Copy-back must preserve rename/delete/add/modify/untracked semantics and exclude
+`.kiln/**` except already-written task artifacts under
+`.kiln/tracks/phase-N/artifacts/<plan-task-id>/...`.
+
+**Post-wave integration verify (main worktree):**
+After recombining all successful worker outputs for the wave, orchestrator runs
+integration verify in the main worktree before starting the next wave.
+This verifies recombination correctness and cross-task interactions that are not
+visible in isolated worktrees.
+
+If post-wave integration verify fails:
+- Halt before starting the next wave.
+- Generate correction tasks and apply fix-forward correction commits on main (no revert-based rollback of successful task commits).
+- Preserve relevant worktrees and evidence artifacts for forensics.
+- Re-run integration verify after corrections; do not proceed until it passes.
 
 **Wave failure:**
 If ANY task in a wave fails after retries,

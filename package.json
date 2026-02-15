@@ -9,6 +9,7 @@
   "files": [
     "agents/",
     "skills/",
+    "commands/",
     "hooks/",
     "bin/",
     "templates/"

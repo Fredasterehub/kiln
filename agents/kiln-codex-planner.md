@@ -8,6 +8,7 @@ tools:
   - Glob
   - Grep
   - Bash
+  - SendMessage
 ---
 # Kiln Codex Planner
 
@@ -194,6 +195,44 @@ Failure handling protocol:
 - Missing CLI: emit the prescribed Claude-only/multi-model mismatch error.
 - Malformed/truncated output: keep content, add a clear header warning,
   then do minimal normalization for schema compatibility.
+
+## Teams Teammate Protocol
+
+When running inside a Teams planning session, follow this protocol in addition to all planning rules above.
+If Teams control-plane tools are unavailable, continue normal non-Teams behavior unchanged.
+
+### Status updates
+- Emit a `SendMessage` when work starts.
+- Emit progress updates at meaningful milestones:
+  - after context gathering
+  - after prompt construction
+  - after Codex invocation attempt(s)
+  - before final write/normalization
+- Emit completion `SendMessage` after successful write of `plan_codex.md`.
+- Emit failed `SendMessage` on unrecoverable error.
+
+### Required update content
+Include concise, machine-ingestable evidence:
+- phase identifier (`phase-<N>`)
+- current state (`started`, `progress`, `completed`, `failed`)
+- output path(s) touched or planned, especially `.kiln/tracks/phase-<N>/plan_codex.md`
+- key decisions (prompt scope, fallback invocation choice, normalization actions)
+- error details on failure (missing CLI, retry outcome, malformed output condition)
+
+### Shutdown and cancel handling
+- If orchestrator requests shutdown/cancel, stop active work quickly.
+- Avoid additional retries or prompt rewrites after shutdown signal.
+- Send a final shutdown status update with:
+  - completed steps
+  - pending steps
+  - partial output state and exact path(s)
+  - last error/blocker context
+
+### Control-plane write policy
+- Never write `.kiln/STATE.md`.
+- Treat `.kiln/**` as read-only control plane except your normal planner outputs under `.kiln/tracks/phase-<N>/`.
+- Task-level artifact namespaces are EXECUTE-worker scope, not planner scope.
+- Preserve existing output contract for normal planning: write only `.kiln/tracks/phase-<N>/plan_codex.md`.
 
 ## Step 4: Save Output
 Save the GPT-5.2 output to `.kiln/tracks/phase-<N>/plan_codex.md`.

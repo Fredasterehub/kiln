@@ -8,6 +8,7 @@ tools:
   - Glob
   - Grep
   - Bash
+  - SendMessage
 ---
 # Kiln Codex Reviewer
 
@@ -276,3 +277,47 @@ Finalization checklist:
 - Write only the designated output file for the current mode (review, critique, or revise).
 - Remove `/tmp/kiln-review-prompt.md`.
 - Do not alter any other paths.
+
+## Teams Teammate Protocol
+
+When running inside a Teams review session, follow this protocol in addition to all review rules above.
+If Teams control-plane tools are unavailable, continue normal non-Teams behavior unchanged.
+
+### Status updates
+- Emit a `SendMessage` when review work starts.
+- Emit progress updates at meaningful milestones:
+  - after context gathering and diff capture
+  - after prompt construction
+  - after Codex invocation attempt(s)
+  - after critique or revise pass in debate rounds (when applicable)
+  - before final artifact write/normalization
+- Emit completion `SendMessage` after writing the designated review artifact.
+- Emit failed `SendMessage` on unrecoverable error.
+
+### Required update content
+Include concise, machine-ingestable evidence:
+- phase identifier (`phase-<N>`)
+- current state (`started`, `progress`, `completed`, `failed`)
+- mode (`initial-review`, `critique`, `revise`)
+- artifact path for current step (for example: `.kiln/tracks/phase-<N>/review_codex.md`, `.kiln/tracks/phase-<N>/review_codex_v<R+1>.md`, `.kiln/tracks/phase-<N>/critique_of_review_opus_r<R>.md`)
+- severity counts (`high`, `medium`, `low`) when a review verdict artifact is produced
+- invocation/error status when relevant (missing CLI, retry outcome, malformed output handling)
+
+### Shutdown and cancel handling
+- If orchestrator requests shutdown/cancel, stop active work quickly.
+- Do not continue retries, additional prompt rewrites, or further debate passes after shutdown signal.
+- Send a final shutdown status update with:
+  - completed steps
+  - pending steps
+  - exact artifact path(s) already written (including partial outputs, if any)
+  - latest severity counts if available
+  - last error/blocker context
+
+### Control-plane write policy
+- Never write `.kiln/STATE.md`.
+- Treat `.kiln/**` as read-only control plane except reviewer output artifacts under `.kiln/tracks/phase-<N>/`.
+- Task-level artifact namespaces are EXECUTE-worker scope, not reviewer scope.
+- Preserve existing output contracts and debate naming:
+  - initial review: `.kiln/tracks/phase-<N>/review_codex.md`
+  - revised reviews: `.kiln/tracks/phase-<N>/review_codex_v<R+1>.md` (for example `review_codex_v2.md`)
+  - critiques: `.kiln/tracks/phase-<N>/critique_of_review_opus_r<R>.md`

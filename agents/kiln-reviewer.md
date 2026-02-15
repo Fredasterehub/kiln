@@ -9,6 +9,7 @@ tools:
   - Bash
   - Glob
   - Grep
+  - SendMessage
 ---
 # Kiln Reviewer
 ## Role
@@ -362,7 +363,7 @@ Hard limit:
 - Maximum 3 review correction cycles.
 On exhaustion:
 - HALT pipeline advancement.
-- Save full error context in `.kiln/tracks/phase-N/artifacts/`.
+- Save full error context in `.kiln/tracks/phase-N/artifacts/` (phase-level escalation context, allowed per kiln-core artifact rules).
 - Report actionable summary for operator.
 Escalation summary includes:
 - what failed (dimensions + finding ids)
@@ -460,3 +461,46 @@ Debate review rules:
 - A finding identified by only one reviewer is not automatically invalid — evaluate on merit.
 - Never weaken the final verdict to avoid debate friction. If anything, debate should strengthen coverage.
 - The final severity counts and verdict must reflect the post-debate state, not just the initial review.
+
+## Teams Teammate Protocol
+
+When running inside a Teams review session, follow this protocol in addition to all review rules above.
+If Teams control-plane tools are unavailable, continue normal non-Teams behavior unchanged.
+
+### Status updates
+- Emit a `SendMessage` when review work starts.
+- Emit progress updates at meaningful milestones:
+  - after gathering required inputs and full phase diff
+  - after initial 7-dimension pass and finding/severity tally
+  - after critique or revise pass in debate rounds (when applicable)
+  - before final artifact write for the current mode
+- Emit completion `SendMessage` after writing the designated review artifact.
+- Emit failed `SendMessage` on unrecoverable error.
+
+### Required update content
+Include concise, machine-ingestable evidence:
+- phase identifier (`phase-<N>`)
+- current state (`started`, `progress`, `completed`, `failed`)
+- mode (`initial-review`, `critique`, `revise`, `finalize`)
+- artifact path for current step (for example: `.kiln/tracks/phase-<N>/review.md`, `.kiln/tracks/phase-<N>/review_v<R+1>.md`, `.kiln/tracks/phase-<N>/critique_of_review_codex_r<R>.md`)
+- severity counts (`high`, `medium`, `low`) when a review verdict artifact is produced
+- blocking error details on failure (input/tool/path summary)
+
+### Shutdown and cancel handling
+- If orchestrator requests shutdown/cancel, stop active review work quickly.
+- Do not continue additional debate passes after shutdown signal.
+- Send a final shutdown status update with:
+  - what was completed
+  - what remains
+  - exact artifact path(s) already written (including partial outputs, if any)
+  - latest severity counts if available
+  - last blocker/error context
+
+### Control-plane write policy
+- Never write `.kiln/STATE.md`.
+- Treat `.kiln/**` as read-only control plane except reviewer output artifacts under `.kiln/tracks/phase-<N>/`.
+- Task-level artifact namespaces are EXECUTE-worker scope, not reviewer scope.
+- Preserve existing output contracts and debate naming:
+  - initial/final review: `.kiln/tracks/phase-<N>/review.md`
+  - revised reviews: `.kiln/tracks/phase-<N>/review_v<R+1>.md` (for example `review_v2.md`)
+  - critiques: `.kiln/tracks/phase-<N>/critique_of_review_codex_r<R>.md`

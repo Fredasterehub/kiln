@@ -468,6 +468,31 @@ function installHooks(sourceRoot, claudeRoot, warnings) {
   return stats;
 }
 
+function installCommands(sourceRoot, claudeRoot, warnings) {
+  const srcCommandsDir = path.join(sourceRoot, 'commands');
+  const destCommandsDir = path.join(claudeRoot, 'commands');
+  const stats = { copied: 0, skipped: 0, conflicts: 0, directories: 0 };
+
+  if (!fs.existsSync(srcCommandsDir)) {
+    warnings.push(`Missing source commands directory: ${srcCommandsDir}`);
+    return stats;
+  }
+
+  fs.mkdirSync(destCommandsDir, { recursive: true });
+  const entries = fs.readdirSync(srcCommandsDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+    stats.directories += 1;
+    const srcDir = path.join(srcCommandsDir, entry.name);
+    const destDir = path.join(destCommandsDir, entry.name);
+    copyDir(srcDir, destDir, stats, warnings);
+  }
+
+  return stats;
+}
+
 function installTemplates(sourceRoot, claudeRoot, warnings) {
   const srcTemplatesDir = path.join(sourceRoot, 'templates');
   const destTemplatesDir = path.join(claudeRoot, 'templates');
@@ -546,6 +571,9 @@ function printSummary(summary) {
   );
   console.log(
     `- Skills: directories ${summary.skills.directories}, copied ${summary.skills.copied}, skipped ${summary.skills.skipped}, conflicts ${summary.skills.conflicts}`
+  );
+  console.log(
+    `- Commands: copied ${summary.commands.copied}, skipped ${summary.commands.skipped}, conflicts ${summary.commands.conflicts}`
   );
   console.log(
     `- Hooks: scripts copied ${summary.hooks.scriptsCopied}, skipped ${summary.hooks.scriptsSkipped}, conflicts ${summary.hooks.scriptsConflicts}, hooks.json ${summary.hooks.hookJsonStatus}`
@@ -627,6 +655,7 @@ async function main() {
     fs.mkdirSync(claudeRoot, { recursive: true });
     const agents = installAgents(sourceRoot, claudeRoot, warnings);
     const skills = installSkills(sourceRoot, claudeRoot, warnings);
+    const commands = installCommands(sourceRoot, claudeRoot, warnings);
     const hooks = installHooks(sourceRoot, claudeRoot, warnings);
     const templates = installTemplates(sourceRoot, claudeRoot, warnings);
     const projectType = detectProjectType(repoRoot);
@@ -643,6 +672,7 @@ async function main() {
       tooling,
       agents,
       skills,
+      commands,
       hooks,
       templates,
       gitignoreHasKilnIgnore,
