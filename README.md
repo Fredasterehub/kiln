@@ -16,7 +16,7 @@
 
 <br/>
 
-> **Honest status:** Kiln works and produces real code. We've been using it to build itself — the agents, skills, and orchestration you see here were largely written by kiln's own pipeline. It's not polished yet and the installer hasn't shipped to npm, but the core workflow runs and delivers. Expect rough edges. Help us smooth them.
+> **Honest status:** Kiln works and produces real code. We've been using it to build itself — the agents, skills, and orchestration you see here were written by kiln's own multi-model pipeline. Two QA rounds complete, all path references verified, security hardened, snapshot isolation landed. The installer hasn't shipped to npm yet, but the core workflow runs and delivers. Expect rough edges. Help us smooth them.
 
 <br/>
 
@@ -33,6 +33,42 @@ npx kiln-dev
 ```
 
 > **Not published to npm yet.** This will work once we ship. For now, clone the repo and install manually.
+
+<br/>
+
+## Recommended setup
+
+Kiln works best when Claude Code can operate with minimal friction. Two things make a real difference:
+
+**1. Run Claude Code with `--dangerously-bypass-permissions`**
+
+Kiln orchestrates agents, spawns teams, reads and writes files, and runs verification commands constantly. Permission prompts at every step break the flow and defeat the purpose of autonomous delivery. For the best experience:
+
+```bash
+claude --dangerously-bypass-permissions
+```
+
+> This grants full tool access. Only use this in projects where you trust the pipeline. Kiln never runs destructive commands, but you're giving it the keys.
+
+**2. Install Codex CLI (strongly recommended)**
+
+Multi-model mode is where Kiln shines. Codex CLI gives you access to GPT-5.2 (sharpening) and GPT-5.3-codex (execution) — models that complement Claude's strengths with different reasoning styles. Without it, Kiln falls back to Claude-only mode, which works but misses the dual-perspective advantage.
+
+```bash
+npm install -g @openai/codex
+```
+
+Configure in `.kiln/config.json` after init:
+
+```json
+{
+  "preferences": {
+    "modelMode": "multi-model"
+  }
+}
+```
+
+> **Claude-only mode** still runs the full pipeline. Multi-model is the premium path — it catches things a single model family misses.
 
 <br/>
 
@@ -205,7 +241,7 @@ Three hard gates require your attention:
 
 Everything else auto-advances. Teammates report completion via SendMessage, the orchestrator updates state, emits a transition message, and spawns the next stage.
 
-Under the hood, wave workers run in parallel git worktrees with deterministic copy-back. Each task is sharpened into a surgical prompt, executed with fresh context, mini-verified, and committed atomically. Collision detection is mandatory. Failed workers trigger fail-fast cancellation across the wave.
+Under the hood, wave workers run in parallel git worktrees with **read-only snapshot isolation** — each worker receives a `.kiln-snapshot/` directory with copies of the control-plane files it needs, and writes artifacts to `.kiln-artifacts/`. Workers never touch the real `.kiln/` directory. This eliminates any mutation blast radius: a misbehaving worker cannot corrupt the orchestrator's state.
 
 ```json
 {
@@ -217,6 +253,29 @@ Under the hood, wave workers run in parallel git worktrees with deterministic co
 ```
 
 > **No Teams API?** Kiln falls back to sequential execution. Teams is the fast path, not a requirement.
+
+<br/>
+</details>
+
+<details>
+<summary>&nbsp;<b>Safety and verification</b>&nbsp;&mdash;&nbsp;<i>trust but verify, automatically</i></summary>
+
+<br/>
+
+Kiln includes several layers of protection that run without configuration:
+
+**Mini-verify** hooks into Claude Code's PostToolUse lifecycle. After every code change, it runs your project's test command (if configured) and writes a durable JSON result to `.kiln/mini-verify-result.json`. The orchestrator can read this to decide whether to continue or correct.
+
+**Scope guard** prevents mini-verify from firing when only `.kiln/` control files changed — no wasted test runs on state updates.
+
+**Command injection protection** rejects test commands containing shell metacharacters (`;`, `|`, `&`, `>`, `<`, backticks, `$(`) before they reach `sh -c`. If someone puts `npm test; rm -rf /` in config, it gets caught and skipped.
+
+**Filesystem-safe task IDs** replace colons with dashes when constructing directory paths, so `phase-1:exec:wave-1:task-1` becomes `phase-1-exec-wave-1-task-1` on disk. This prevents path issues on Windows and macOS.
+
+**Conductor role clarity** defines exactly who manages state in each mode:
+- *Teams mode:* your Claude Code session (the team lead) is the conductor
+- *Non-Teams mode:* the orchestrator agent running `/kiln:track` is the conductor
+- In both cases, a single writer owns `.kiln/STATE.md` — no concurrent mutation.
 
 <br/>
 </details>
@@ -253,7 +312,29 @@ npx kiln-dev --global                     # global (~/.claude/)
 ```
 
 **Requires:** Claude Code, Node.js 18+<br/>
-**Optional:** Codex CLI (enables multi-model mode)
+**Strongly recommended:** Codex CLI (enables multi-model mode), `--dangerously-bypass-permissions` flag
+
+<br/>
+</details>
+
+<details>
+<summary>&nbsp;<b>Tips for best results</b></summary>
+
+<br/>
+
+- **Start small.** Your first kiln run should be a well-scoped feature, not "rewrite the whole app." The pipeline learns from reconciliation — each phase builds context for the next.
+
+- **Write a good initial description.** The brainstorm stage amplifies what you give it. "Build a CLI tool that converts markdown to PDF" gives better results than "make a tool."
+
+- **Trust the gates.** Vision and roadmap approvals exist so you can course-correct early. Read them carefully. Rejecting a bad roadmap saves hours of misdirected execution.
+
+- **Use multi-model mode.** Claude and GPT reason differently. When both plan the same feature, the synthesizer catches blind spots neither would find alone. This is where Kiln's real edge lives.
+
+- **Let it fail.** Mini-verify and correction cycles exist for a reason. The pipeline self-corrects up to 3 times per task. If something still fails, the orchestrator halts cleanly and tells you what went wrong.
+
+- **Check `.kiln/STATE.md`.** This is your live dashboard. It shows the current stage, phase, and any errors. If you're wondering what happened, start here.
+
+- **Don't fight the structure.** Kiln creates `.kiln/` for state, writes to `tracks/` for plans, and commits atomically. Working with these conventions instead of around them keeps everything clean.
 
 <br/>
 </details>
@@ -287,11 +368,20 @@ kiln/
 ├── skills/           17 skill definitions
 ├── commands/         8 slash command definitions
 ├── hooks/            Claude Code lifecycle hooks
-│   ├── hooks.json
-│   └── scripts/
-├── templates/        Workspace templates
-├── bin/install.js    Interactive installer
+│   ├── hooks.json    Session start + mini-verify triggers
+│   └── scripts/      on-session-start.sh, on-task-completed.sh
+├── templates/        Workspace and state templates
+├── bin/install.js    Interactive installer (zero deps)
 └── package.json      Zero runtime dependencies
+```
+
+After install, your project gets:
+```
+your-project/
+├── .claude/          Agents, skills, commands, hooks, templates
+├── .kiln/            Runtime state (STATE.md, config.json, tracks/)
+├── .kiln-snapshot/   (Teams mode) Read-only control-plane copy for workers
+└── .kiln-artifacts/  (Teams mode) Worker-local output before copy-back
 ```
 
 <br/>
@@ -301,6 +391,6 @@ kiln/
 
 <div align="center">
 
-<sub>MIT License &middot; Built with Claude Code &middot; No wrappers, no servers, just markdown.</sub>
+<sub>MIT License &middot; Built with Claude Code + Codex CLI &middot; No wrappers, no servers, just markdown.</sub>
 
 </div>
