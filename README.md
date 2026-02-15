@@ -147,7 +147,7 @@ Each model has a temperature it fires best at. Kiln applies the right heat at th
 <tr><td>Planner</td><td>Opus 4.6</td><td>Architectural vision, edge cases</td></tr>
 <tr><td>Codex Planner</td><td>GPT-5.2</td><td>Catches details Opus glosses over</td></tr>
 <tr><td>Synthesizer</td><td>Opus 4.6</td><td>Judgment calls on merging</td></tr>
-<tr><td>Sharpener</td><td>Opus 4.6</td><td>Prompt engineering for downstream execution</td></tr>
+<tr><td>Sharpener</td><td>GPT-5.2-high</td><td>Prompt engineering for downstream execution</td></tr>
 <tr><td>Executor</td><td>GPT-5.3-codex</td><td>Atomic task beast mode</td></tr>
 <tr><td>Reviewer</td><td>Opus 4.6</td><td>7-dimension code review</td></tr>
 <tr><td>Codex Reviewer</td><td>GPT-5.3-codex-sparks</td><td>Independent review for debate mode</td></tr>
