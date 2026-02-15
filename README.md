@@ -16,7 +16,7 @@
 
 <br/>
 
-> **Honest status:** Kiln is not finished. The architecture is solid, the skills and agents are written, but end-to-end testing hasn't happened yet. We're building in the open because that's how you build things that work. If you try it today, expect rough edges. If you want to help smooth them, even better.
+> **Honest status:** Kiln works and produces real code. We've been using it to build itself — the agents, skills, and orchestration you see here were largely written by kiln's own pipeline. It's not polished yet and the installer hasn't shipped to npm, but the core workflow runs and delivers. Expect rough edges. Help us smooth them.
 
 <br/>
 
