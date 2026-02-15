@@ -607,7 +607,7 @@ function printSummary(summary) {
   console.log('');
   console.log('  brainstorm \u2192 roadmap \u2192 plan \u2192 execute \u2192 verify \u2192 reconcile');
   console.log('');
-  console.log('  Tip: claude --dangerously-bypass-permissions');
+  console.log('  Tip: claude --dangerously-skip-permissions');
   console.log('  Next: /kiln:fire');
 
   if (summary.warnings.length > 0) {

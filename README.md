@@ -40,12 +40,12 @@ npx kiln-dev
 
 Kiln works best when Claude Code can operate with minimal friction. Two things make a real difference:
 
-**1. Run Claude Code with `--dangerously-bypass-permissions`**
+**1. Run Claude Code with `--dangerously-skip-permissions`**
 
 Kiln orchestrates agents, spawns teams, reads and writes files, and runs verification commands constantly. Permission prompts at every step break the flow and defeat the purpose of autonomous delivery. For the best experience:
 
 ```bash
-claude --dangerously-bypass-permissions
+claude --dangerously-skip-permissions
 ```
 
 > This grants full tool access. Only use this in projects where you trust the pipeline. Kiln never runs destructive commands, but you're giving it the keys.
@@ -310,7 +310,7 @@ npx kiln-dev --global                     # global (~/.claude/)
 ```
 
 **Requires:** Claude Code, Node.js 18+<br/>
-**Strongly recommended:** Codex CLI (enables multi-model mode), `--dangerously-bypass-permissions` flag
+**Strongly recommended:** Codex CLI (enables multi-model mode), `--dangerously-skip-permissions` flag
 
 <br/>
 </details>

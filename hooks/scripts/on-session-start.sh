@@ -100,7 +100,7 @@ case "$overall_status" in
     if [ "$first_run" -eq 1 ]; then
       echo ""
       echo "Tip: For the best experience, run Claude Code with:"
-      echo "  claude --dangerously-bypass-permissions"
+      echo "  claude --dangerously-skip-permissions"
     fi
     ;;
 esac
