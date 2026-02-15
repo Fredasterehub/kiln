@@ -110,7 +110,7 @@ Your project flows through six stages. The first two are interactive — you sha
 <tr>
 <td align="center">4</td>
 <td><b>Execute</b></td>
-<td>Each task sharpened into a surgical prompt, executed with fresh 200k context, mini-verified, committed atomically.</td>
+<td>Each task sharpened into a surgical prompt, executed with fresh 200k context, mini-verified, committed atomically. Teams mode runs wave workers in parallel via git worktrees.</td>
 <td>Code + commits</td>
 </tr>
 <tr>
@@ -148,6 +148,7 @@ Each model has a temperature it fires best at. Kiln applies the right heat at th
 <tr><td>Executor</td><td>GPT-5.3-codex</td><td>Atomic task beast mode</td></tr>
 <tr><td>Reviewer</td><td>Opus 4.6</td><td>7-dimension code review</td></tr>
 <tr><td>Codex Reviewer</td><td>GPT-5.3-codex-sparks</td><td>Independent review for debate mode</td></tr>
+<tr><td>Wave Worker</td><td>Sonnet 4.5</td><td>Parallel task execution in Teams mode</td></tr>
 <tr><td>Validator</td><td>Sonnet 4.5</td><td>Fast mechanical checking</td></tr>
 <tr><td>E2E Verifier</td><td>Sonnet 4.5</td><td>Test generation and execution</td></tr>
 <tr><td>Researcher</td><td>Haiku 4.5</td><td>Fast, cheap retrieval</td></tr>
@@ -186,6 +187,34 @@ Works for both **planning** and **code review**. Toggle in `.kiln/config.json`:
 </details>
 
 <details>
+<summary>&nbsp;<b>Teams mode</b>&nbsp;&mdash;&nbsp;<i>parallel execution with isolated worktrees</i></summary>
+
+<br/>
+
+Teams mode uses Claude Code's native Teams API to run wave workers in parallel. Each task gets its own git worktree with a symlinked control plane, executes independently, and reports back for deterministic copy-back to main.
+
+Three stages gain Teams coordination:
+
+- **PLAN** &mdash; Claude and Codex plan simultaneously, debate optionally, then synthesize
+- **EXECUTE** &mdash; Wave workers run in parallel (configurable via `waveParallelism`), each in an isolated worktree with explicit mini-verify
+- **REVIEW** &mdash; Opus and Codex review independently, then debate findings
+
+```json
+{
+  "preferences": {
+    "useTeams": true,
+    "waveParallelism": 3,
+    "executeConcurrency": "worktree"
+  }
+}
+```
+
+> **No Teams API?** Kiln runs everything sequentially. Teams is the fast path, not a requirement.
+
+<br/>
+</details>
+
+<details>
 <summary>&nbsp;<b>What makes it different</b></summary>
 
 <br/>
@@ -196,7 +225,7 @@ Works for both **planning** and **code review**. Toggle in `.kiln/config.json`:
 <tr><td><b>Planning</b></td><td>One model, one shot</td><td>Two models, optionally debating</td></tr>
 <tr><td><b>Verification</b></td><td>"Looks right to me"</td><td>Actually runs your app</td></tr>
 <tr><td><b>Documentation</b></td><td>Chat logs</td><td>Living docs that evolve per phase</td></tr>
-<tr><td><b>Execution</b></td><td>One long degrading session</td><td>Atomic tasks, wave parallelism</td></tr>
+<tr><td><b>Execution</b></td><td>One long degrading session</td><td>Atomic tasks, parallel wave workers via Teams</td></tr>
 <tr><td><b>Quality</b></td><td>Hope</td><td>7-dimension code review</td></tr>
 <tr><td><b>Models</b></td><td>One does everything</td><td>Right model for each task</td></tr>
 </table>
@@ -262,8 +291,9 @@ npx kiln-dev --global                     # global (~/.claude/)
 
 ```
 kiln/
-├── agents/           12 AI agent definitions
-├── skills/           15 skill definitions
+├── agents/           13 AI agent definitions
+├── skills/           16 skill definitions
+├── commands/         8 slash command definitions
 ├── hooks/            Claude Code lifecycle hooks
 │   ├── hooks.json
 │   └── scripts/
