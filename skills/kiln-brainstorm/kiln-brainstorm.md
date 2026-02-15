@@ -5,6 +5,10 @@ user_invocable: true
 ---
 # Kiln Brainstorm — Technique Library & Facilitation Guide
 
+**Note:** This skill can run in two modes:
+- **Teams-first mode**: spawned as a teammate by `/kiln:fire`, reports completion via SendMessage to team lead
+- **Standalone mode**: invoked directly via `/kiln:brainstorm`, prints next-step instructions to the operator
+
 ## Technique Library
 
 Apply these techniques during Phase A (Divergent Exploration) to generate ideas from multiple angles. Each technique has a specific purpose — choose based on where the brainstorm is stuck or which domain you're exploring. Rotate techniques to prevent clustering.
@@ -235,18 +239,36 @@ After the operator approves VISION.md:
 2. Update `.kiln/STATE.md`:
    - Set brainstorm step to `complete`
    - Set next expected action to 'Run /kiln:roadmap'
-3. Print:
-   ```
-   VISION.md approved and locked.
+3. Complete in the appropriate mode:
 
-   Summary:
-   - Problem: [1-line summary of Problem Statement]
-   - Solution: [1-line summary of Solution Overview]
-   - Success criteria: N criteria defined
-   - Non-goals: M items explicitly excluded
+#### Teams-First Mode (Running as Teammate)
 
-   Next: Run /kiln:roadmap to generate the implementation roadmap.
-   ```
+If spawned by `/kiln:fire` as a teammate in a Claude Code Team:
+- Send completion message to team lead using SendMessage:
+  ```
+  SendMessage to team lead:
+  - type: "message"
+  - recipient: "team-lead"
+  - content: { stage: "brainstorm", status: "completed", evidence_paths: [".kiln/VISION.md"] }
+  - summary: "Brainstorm complete, VISION.md approved"
+  ```
+- Do NOT print "Next: Run /kiln:roadmap" — the team lead orchestrator handles stage advancement
+
+#### Standalone Mode (Direct Invocation)
+
+If invoked directly via `/kiln:brainstorm`:
+- Print:
+  ```
+  VISION.md approved and locked.
+
+  Summary:
+  - Problem: [1-line summary of Problem Statement]
+  - Solution: [1-line summary of Solution Overview]
+  - Success criteria: N criteria defined
+  - Non-goals: M items explicitly excluded
+
+  Next: Run /kiln:roadmap to generate the implementation roadmap.
+  ```
 
 ### Re-Brainstorming
 

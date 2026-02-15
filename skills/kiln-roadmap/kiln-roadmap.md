@@ -7,6 +7,10 @@ user_invocable: true
 
 ## Overview
 
+**Note:** This skill can run in two modes:
+- **Teams-first mode**: spawned as a teammate by `/kiln:fire`, reports completion via SendMessage to team lead
+- **Standalone mode**: invoked directly via `/kiln:roadmap`, prints next-step instructions to the operator
+
 `/kiln:roadmap` reads the approved vision at `.kiln/VISION.md` and produces a sequenced delivery roadmap at `.kiln/ROADMAP.md`.
 
 The roadmap converts the vision into incremental phases that can be executed one at a time through `/kiln:track`.
@@ -211,8 +215,26 @@ On approval, complete these outputs:
 2. Update `.kiln/STATE.md`:
    - Set roadmap stage to `complete`.
    - Set first phase status to `pending`.
-3. Print this completion message:
-   - `Roadmap approved with N phases. Run /kiln:track to begin phase execution.`
+3. Complete in the appropriate mode:
+
+### Teams-First Mode (Running as Teammate)
+
+If spawned by `/kiln:fire` as a teammate in a Claude Code Team:
+- Send completion message to team lead using SendMessage:
+  ```
+  SendMessage to team lead:
+  - type: "message"
+  - recipient: "team-lead"
+  - content: { stage: "roadmap", status: "completed", evidence_paths: [".kiln/ROADMAP.md"] }
+  - summary: "Roadmap complete, N phases approved"
+  ```
+- Do NOT print "Run /kiln:track" — the team lead orchestrator handles stage advancement
+
+### Standalone Mode (Direct Invocation)
+
+If invoked directly via `/kiln:roadmap`:
+- Print this completion message:
+  - `Roadmap approved with N phases. Run /kiln:track to begin phase execution.`
 
 Output constraints:
 
