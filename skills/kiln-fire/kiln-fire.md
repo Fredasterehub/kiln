@@ -63,7 +63,7 @@ Read `.kiln/STATE.md` and evaluate these branches in order. The first matching b
 
 ## State Reading
 
-Read `.kiln/STATE.md` using the canonical schema defined by `templates/STATE.md.tmpl` and parse by section heading:
+Read `.kiln/STATE.md` using the canonical schema defined by `.claude/templates/STATE.md.tmpl` and parse by section heading:
 - `Project State`
 - `Phase Progress`
 - `Current Track`
@@ -95,7 +95,7 @@ On first invocation in a fresh project:
 1. Create a Claude Code Team using TeamCreate with a name derived from the project (e.g., `kiln-<project-name>`).
 2. The user's session becomes the team lead.
 3. Write the team name and orchestration metadata to `STATE.md` Orchestration Session section.
-4. Emit the `ignition` transition message using `skills/kiln-lore/kiln-lore.md`.
+4. Emit the `ignition` transition message using `.claude/skills/kiln-lore/kiln-lore.md`.
 5. Enter the stage machine loop.
 
 ### Stage Machine Loop
@@ -138,22 +138,22 @@ Each stage spawns a single teammate with specific configuration:
 
 ### Brainstorm Stage
 
-- **Skill:** `skills/kiln-brainstorm/kiln-brainstorm.md`
+- **Skill:** `.claude/skills/kiln-brainstorm/kiln-brainstorm.md`
 - **Model:** Opus (interactive, deep exploration needs high capability)
 - **Mode:** Interactive -- the teammate engages directly with the operator
 - **Completion signal:** SendMessage to team lead with `{ stage: "brainstorm", status: "completed" }`
 
 ### Roadmap Stage
 
-- **Skill:** `skills/kiln-roadmap/kiln-roadmap.md`
+- **Skill:** `.claude/skills/kiln-roadmap/kiln-roadmap.md`
 - **Model:** Opus (interactive, requires operator collaboration on phase design)
 - **Mode:** Interactive -- the teammate presents phases and iterates with the operator
 - **Completion signal:** SendMessage to team lead with `{ stage: "roadmap", status: "completed" }`
 
 ### Track Stages (plan, validate, execute, e2e, review, reconcile)
 
-- **Skill:** `skills/kiln-track/kiln-track.md`
-- **Model:** Per `skills/kiln-core/kiln-core.md` model routing (varies by step type)
+- **Skill:** `.claude/skills/kiln-track/kiln-track.md`
+- **Model:** Per `.claude/skills/kiln-core/kiln-core.md` model routing (varies by step type)
 - **Mode:** Automated for most steps; interactive for reconcile (hard gate)
 - **Completion signal:** SendMessage to team lead with `{ stage: "track:<phase>:<step>", status: "completed" }`
 
@@ -199,7 +199,7 @@ On receiving a completion signal:
 
 1. **Verify artifacts:** Confirm referenced files exist (e.g., `.kiln/VISION.md`, `.kiln/ROADMAP.md`).
 2. **Update STATE.md:** Write new Active Stage, clear Active Task IDs, update Session Recovery fields.
-3. **Emit transition message:** Read the appropriate section from `skills/kiln-lore/kiln-lore.md`, select a contextually fitting quote, and display it using the transition message format.
+3. **Emit transition message:** Read the appropriate section from `.claude/skills/kiln-lore/kiln-lore.md`, select a contextually fitting quote, and display it using the transition message format.
 4. **Spawn next teammate:** Determine the next stage from the Decision Tree and spawn the corresponding teammate.
 
 ### Stage Transitions
@@ -245,12 +245,12 @@ The Orchestration Session in STATE.md is the single source of truth for resume. 
 
 ## Lore Integration
 
-At every stage transition, display a lore message using quotes from `skills/kiln-lore/kiln-lore.md`.
+At every stage transition, display a lore message using quotes from `.claude/skills/kiln-lore/kiln-lore.md`.
 
 ### Reading Protocol
 
 1. Identify the transition key from the Stage Transitions table.
-2. Read the corresponding section from `skills/kiln-lore/kiln-lore.md` (e.g., `## ignition`, `## vision-approved`).
+2. Read the corresponding section from `.claude/skills/kiln-lore/kiln-lore.md` (e.g., `## ignition`, `## vision-approved`).
 3. Select one quote contextually from the 4-5 available. The AI is the selection mechanism -- choose the quote that best fits the current project moment.
 4. Display using the transition message format.
 
@@ -302,10 +302,10 @@ Operational constraint:
 ## References
 
 Routes and contracts used by this skill:
-- `skills/kiln-core/kiln-core.md`
-- `skills/kiln-init/kiln-init.md`
-- `skills/kiln-brainstorm/kiln-brainstorm.md`
-- `skills/kiln-roadmap/kiln-roadmap.md`
-- `skills/kiln-track/kiln-track.md`
-- `skills/kiln-status/kiln-status.md`
-- `skills/kiln-lore/kiln-lore.md`
+- `.claude/skills/kiln-core/kiln-core.md`
+- `.claude/skills/kiln-init/kiln-init.md`
+- `.claude/skills/kiln-brainstorm/kiln-brainstorm.md`
+- `.claude/skills/kiln-roadmap/kiln-roadmap.md`
+- `.claude/skills/kiln-track/kiln-track.md`
+- `.claude/skills/kiln-status/kiln-status.md`
+- `.claude/skills/kiln-lore/kiln-lore.md`

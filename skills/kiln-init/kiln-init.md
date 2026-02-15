@@ -216,7 +216,7 @@ Create the kiln state directory structure. Use the templates from the kiln packa
    ```
 
 2. Create `config.json` from template:
-   - Read the template from `templates/config.json.tmpl` (relative to the kiln package install location, which is `.claude/skills/kiln-init/../../templates/` or find it via glob)
+   - Read the template from `.claude/templates/config.json.tmpl` (relative to the kiln package install location, which is `.claude/templates/` or find it via glob)
    - If the template can't be found, create the JSON directly with the detected values:
    ```json
    {
@@ -239,7 +239,7 @@ Create the kiln state directory structure. Use the templates from the kiln packa
    - Fill in detected values from Steps 1-3.
 
 3. Create `STATE.md` from template:
-   - Read from `templates/STATE.md.tmpl`
+   - Read from `.claude/templates/STATE.md.tmpl`
    - Fill in: project name (from directory name or package.json `name` field), model mode, initialization timestamp (ISO 8601)
    - Set all other fields to initial values (no phases yet, no current track, zero correction cycles, zero regression tests)
 
@@ -259,8 +259,8 @@ Authoritative rule:
 
 Template lookup guidance:
 
-1. First try `.claude/skills/kiln-init/../../templates/`.
-2. Then try project `templates/`.
+1. First try `.claude/templates/`.
+2. Then try project `./templates`.
 3. Then use a bounded search under `.claude/` and project root.
 
 Example search:
@@ -269,7 +269,7 @@ Example search:
 find .claude . -maxdepth 5 -type f \( -name 'config.json.tmpl' -o -name 'STATE.md.tmpl' \) 2>/dev/null
 ```
 
-If multiple templates are found, select the closest kiln package path first; otherwise prefer project `templates/`.
+If multiple templates are found, select the closest kiln package path first; otherwise prefer project `./templates`.
 
 Overwrite behavior:
 

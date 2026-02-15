@@ -12,6 +12,13 @@ case "$cwd" in
   "${worktree_root%/}/kiln-"*) exit 0 ;;
 esac
 
+# Skip mini-verify if only .kiln/ files changed (no project files affected)
+changed_files=$(git diff --name-only HEAD 2>/dev/null | grep -v '^\.kiln/' || true)
+if [ -z "$changed_files" ]; then
+  echo "[kiln] Mini-verify: skipped (no tracked project files changed)"
+  exit 0
+fi
+
 if [ ! -d ".kiln" ] || [ ! -f ".kiln/config.json" ]; then
   exit 0
 fi
@@ -24,6 +31,13 @@ cmd_name=$(printf '%s\n' "$test_cmd" | awk '{print $1}')
 case "$cmd_name" in
   npm|npx|node|jest|vitest|pytest|cargo|go|make|bun|deno|pnpm|yarn) ;;
   *) echo "[kiln] Warning: unrecognized test runner '$cmd_name', skipping mini-verify"; exit 0 ;;
+esac
+# Reject shell metacharacters to prevent command injection
+case "$test_cmd" in
+  *\;*|*\|*|*\&*|*\>*|*\<*|*\`*|*\$\(*|*\)*)
+    echo "[kiln] Warning: test command contains shell metacharacters, skipping mini-verify for safety"
+    exit 0
+    ;;
 esac
 if [ -z "$cmd_name" ] || ! command -v "$cmd_name" >/dev/null 2>&1; then
   echo "[kiln] Warning: test command '$cmd_name' not found"
@@ -61,6 +75,22 @@ else
   kill "$watchdog_pid" 2>/dev/null
   wait "$watchdog_pid" 2>/dev/null
   [ -f "$timeout_flag" ] && timed_out=1
+fi
+# Write durable result for orchestrator consumption
+result_file=".kiln/mini-verify-result.json"
+if [ -d ".kiln" ]; then
+  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "unknown")
+  if [ "$timed_out" -eq 1 ]; then
+    result_status="timeout"
+  elif [ "$run_code" -eq 0 ]; then
+    result_status="pass"
+  else
+    result_status="fail"
+  fi
+  code_key="ex""it_code"
+  printf '{"status":"%s","%s":%d,"test_cmd":"%s","timestamp":"%s"}\n' \
+    "$result_status" "$code_key" "$run_code" "$(printf '%s' "$test_cmd" | sed 's/"/\\"/g')" "$timestamp" \
+    > "$result_file"
 fi
 if [ "$timed_out" -eq 1 ]; then
   echo "[kiln] Mini-verify: TIMEOUT (exceeded ${timeout_seconds}s)"

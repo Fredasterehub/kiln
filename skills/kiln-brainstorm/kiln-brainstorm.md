@@ -152,7 +152,7 @@ Steps:
 
 ## VISION.md Format
 
-"The brainstormer agent produces VISION.md following the structure defined in `templates/vision-sections.md`. Required sections:
+"The brainstormer agent produces VISION.md following the structure defined in `.claude/templates/vision-sections.md`. Required sections:
 
 1. Problem Statement
 2. Solution Overview
@@ -162,7 +162,7 @@ Steps:
 6. Key Decisions
 7. Open Questions
 
-See `templates/vision-sections.md` for detailed guidance on each section's content and quality expectations."
+See `.claude/templates/vision-sections.md` for detailed guidance on each section's content and quality expectations."
 
 ## Facilitation Quick Reference
 
@@ -210,7 +210,7 @@ When the user invokes `/kiln:brainstorm`, execute this flow:
    - Group, prioritize, define personas, success criteria, non-goals
    - Interactive with operator throughout
 4. Start Phase C: Vision Crystallization
-   - Draft VISION.md from templates/vision-sections.md
+   - Draft VISION.md from .claude/templates/vision-sections.md
    - If modelMode == 'multi-model':
      - Run challenge pass via Codex CLI (GPT-5.2)
      - Synthesize original + critique

@@ -143,19 +143,20 @@ To prevent collisions under parallel task execution, artifact paths under a phas
 
 ### Teams Coordination
 
-For detailed Teams behavior and orchestration semantics, `skills/kiln-teams/kiln-teams.md` is the canonical contract. This core document defines cross-mode invariants that must hold in both sequential and Teams execution.
+For detailed Teams behavior and orchestration semantics, `.claude/skills/kiln-teams/kiln-teams.md` is the canonical contract. This core document defines cross-mode invariants that must hold in both sequential and Teams execution.
 
 - Single control-plane writer: only orchestrator writes `.kiln/STATE.md`.
 - In Teams mode, workers must not edit `.kiln/STATE.md` or other shared control-plane files under `.kiln/**`.
 - Worker write scope depends on stage:
-  - EXECUTE workers (worktrees): `.kiln/tracks/phase-N/artifacts/<plan-task-id>/...` only, plus source changes in their assigned worktree.
+  - EXECUTE workers (worktrees): `.kiln-artifacts/<plan-task-id>/...` only (worktree-local artifacts), plus source changes in their assigned worktree. Orchestrator moves artifacts from `.kiln-artifacts/<plan-task-id>/` to canonical `.kiln/tracks/phase-N/artifacts/<plan-task-id>/` after copy-back.
   - PLAN teammates (primary workspace): designated planning outputs under `.kiln/tracks/phase-N/` (for example `plan_claude.md`, `plan_codex.md`, `PLAN.md`, critique/revision debate artifacts, validation sentinel outputs).
   - REVIEW teammates (primary workspace): designated review outputs under `.kiln/tracks/phase-N/` (for example `review.md`, `review_codex.md`, critiques, revisions, `debate_log.md` when review-stage debate logging is delegated).
 - Shared phase documents (for example `PLAN.md`, `review.md`, `e2e-results.md`, `reconcile.md`) remain orchestrator-owned writes unless a stage contract explicitly delegates generation.
 - The one atomic commit per task invariant remains required; commit authoring responsibility is mode-dependent:
   - Non-Teams mode: executor creates task commit directly.
   - Teams mode: orchestrator integrates worker results and creates the task commit on main.
-- For full stage-scoped write policy details and conflict resolution, defer to `skills/kiln-teams/kiln-teams.md`.
+- For full stage-scoped write policy details and conflict resolution, defer to `.claude/skills/kiln-teams/kiln-teams.md`.
+- In Teams mode, workers use `.kiln-snapshot/` (read-only) for control-plane access and `.kiln-artifacts/<plan-task-id>/` (read-write) for task evidence. Workers never access the real `.kiln/` directory.
 
 ### Atomic Git Commit Definition
 
@@ -169,7 +170,7 @@ For detailed Teams behavior and orchestration semantics, `skills/kiln-teams/kiln
 
 ### TaskUpdate Payload Schema
 
-The canonical `TaskUpdate` payload schema is defined in `skills/kiln-teams/kiln-teams.md` § TaskUpdate Payload Contract. That document is the single source of truth for required keys, status enum values, idempotency rules, and ordering semantics.
+The canonical `TaskUpdate` payload schema is defined in `.claude/skills/kiln-teams/kiln-teams.md` § TaskUpdate Payload Contract. That document is the single source of truth for required keys, status enum values, idempotency rules, and ordering semantics.
 
 Core invariants (duplicated here for quick reference — defer to kiln-teams on any conflict):
 
@@ -345,7 +346,7 @@ Canonical pipeline order:
 | --- | --- | --- |
 | `init -> brainstorm` | Repository available, `.kiln/config.json` initialized, operator objective captured | Brainstorm packet and constraints assembled |
 | `brainstorm -> roadmap` | `.kiln/VISION.md` exists, operator approval recorded, non-goals documented | `.kiln/ROADMAP.md` with phased delivery boundaries |
-| `roadmap -> track loop` | Roadmap has ordered phases, first phase folder created | Active phase state set in `.kiln/STATE.md` |
+| `roadmap -> track loop` | Roadmap has ordered phases, **operator approval of ROADMAP.md recorded**, first phase folder created | Active phase state set in `.kiln/STATE.md` |
 | `plan -> validate` | Planner outputs exist (`plan_claude.md` and/or `plan_codex.md`), synthesized `PLAN.md` present | Validation result sentinel and go/no-go decision |
 | `validate -> execute` | Plan validator status is `pass`, task packets complete | Task execution start markers and implementation changes (commits are produced by executor in non-Teams mode, orchestrator in Teams mode) |
 | `execute -> e2e` | Code changes for phase integrated, task-level checks passed | E2E run artifacts and `.kiln/tracks/phase-N/e2e-results.md` updates |
@@ -369,11 +370,11 @@ When Teams mode uses worktree waves, resume must be deterministic and must not r
    - Build candidate records keyed by `(phase, wave_id, task_id)`.
 4. Collect control-plane truth:
    - Read `.kiln/STATE.md` (orchestrator-only canonical state).
-   - Read current phase `PLAN.md` task list and Teams TaskList state from canonical Teams artifacts (see `skills/kiln-teams/kiln-teams.md`).
+   - Read current phase `PLAN.md` task list and Teams TaskList state from canonical Teams artifacts (see `.claude/skills/kiln-teams/kiln-teams.md`).
 5. Reconcile without multi-writer mutation:
    - Join records by `task_id` and prefer explicit TaskList status over inferred filesystem status.
    - Use worktree presence + branch/head + artifact evidence to classify each task deterministically.
-     - Teams mode (`preferences.useTeams: true`): use the 5-state classification from `skills/kiln-teams/kiln-teams.md`: `done`, `ready_for_integration`, `in_progress`, `rerun_required`, `orphaned`.
+     - Teams mode (`preferences.useTeams: true`): use the 5-state classification from `.claude/skills/kiln-teams/kiln-teams.md`: `done`, `ready_for_integration`, `in_progress`, `rerun_required`, `orphaned`.
      - Non-Teams mode: `not_started`, `in_progress`, `done`, `blocked`.
    - Mark orphaned worktrees for operator/orchestrator cleanup; do not silently delete.
 6. Emit recovery actions (orchestrator):
@@ -400,6 +401,25 @@ Determinism rules:
 - `.kiln/STATE.md` should record stage entry time, completion time, and gate verdict.
 - If completion is partial, status must be `blocked` with explicit blocker ownership.
 - Final integration E2E is the only valid terminal quality gate before closeout.
+
+## Conductor Role
+
+The "conductor" is the session that manages stage transitions, enforces gates, and writes `STATE.md`.
+
+**Teams mode** (`preferences.useTeams: true`):
+- The user's Claude Code session running `/kiln:fire` is the conductor (team lead).
+- The team lead stays lean: routes, displays transitions, and manages state.
+- Teammates are fresh subagents for each stage. They implement, not conduct.
+
+**Non-Teams mode** (`preferences.useTeams: false` or absent):
+- `/kiln:fire` is a one-shot router that prints the next command.
+- The orchestrator agent (`kiln-orchestrator.md`) running `/kiln:track` is the conductor.
+- It spawns sequential Task-based subagents and manages gates directly.
+
+In both modes:
+- The conductor is the single writer of `.kiln/STATE.md`.
+- The same hard gates apply (vision, roadmap, reconcile).
+- The same correction budgets and halt thresholds apply.
 
 ## STATE.md Canonical Schema
 

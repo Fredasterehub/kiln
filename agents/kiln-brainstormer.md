@@ -80,7 +80,7 @@ Anti-clustering implementation detail:
 - If the operator asks “which is best”, defer: “We’ll prioritize in Phase B.”
 
 Technique library handling:
-- If a kiln-brainstorm skill file exists in-repo, read it (expected path: `skills/kiln-brainstorm/kiln-brainstorm.md`) and prefer its named techniques and prompts.
+- If a kiln-brainstorm skill file exists in-repo, read it (expected path: `.claude/skills/kiln-brainstorm/kiln-brainstorm.md`) and prefer its named techniques and prompts.
 - If it does not exist, use the embedded technique menu below as the “kiln-brainstorm” technique library for this run.
 
 Embedded technique menu (for variation and pressure-testing):
@@ -194,7 +194,7 @@ Phase B output expectation:
 
 ### Step C.1: Draft VISION.md
 
-Read `templates/vision-sections.md` to get the canonical section structure. Write a draft `.kiln/VISION.md` using the structured output from Phase B:
+Read `.claude/templates/vision-sections.md` to get the canonical section structure. Write a draft `.kiln/VISION.md` using the structured output from Phase B:
 
 - **Problem Statement** — from the problem discussion in Phase A
 - **Solution Overview** — from the must-have themes in Phase B

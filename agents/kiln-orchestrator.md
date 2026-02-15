@@ -110,6 +110,7 @@ Turn-by-turn algorithm:
 
 **Hard gates (pause and wait for operator):**
 - After brainstorm: operator must explicitly approve VISION.md. Do NOT proceed without `APPROVED` confirmation.
+- After roadmap: operator must explicitly approve ROADMAP.md. Do NOT proceed to track execution without `APPROVED` confirmation.
 - After reconcile: present proposed living doc changes, wait for confirmation.
 - After any HALT: report error details, wait for operator direction.
 
@@ -152,7 +153,7 @@ Include in every spawn payload:
 3. The model assignment from kiln-core's routing table
 4. Output expectations (what files to write, what format)
 
-**Subagent model assignments:** Always resolve from `skills/kiln-core/kiln-core.md` Model Routing Table at runtime (do not hardcode stale mappings in prompts). The orchestrator enforces role routing only; exact model names/tiers come from kiln-core.
+**Subagent model assignments:** Always resolve from `.claude/skills/kiln-core/kiln-core.md` Model Routing Table at runtime (do not hardcode stale mappings in prompts). The orchestrator enforces role routing only; exact model names/tiers come from kiln-core.
 
 **Multi-model vs Claude-only:** Read `modelMode` from `.kiln/config.json`:
 - `multi-model`: Spawn all agents including Vision Challenger, Planner B, and GPT-based Sharpener/Executor (via Codex CLI within their agent definitions).
@@ -166,14 +167,14 @@ Spawning rules (all modes):
 - If a subagent returns malformed output, re-spawn with stricter format instructions.
 
 ## Teams Execution Contract (preferences.useTeams: true)
-Treat `skills/kiln-teams/kiln-teams.md` as normative.
+Treat `.claude/skills/kiln-teams/kiln-teams.md` as normative.
 
 ### Global Teams invariants
 - Set `KILN_TEAMS_ACTIVE=1` for Teams worker/runtime processes so hook-based mini-verify is disabled and explicit worker mini-verify is used.
 - When `preferences.useTeams` is `true`, the orchestrator session itself must set `KILN_TEAMS_ACTIVE=1` before any Teams stage begins. This prevents hooks from triggering during orchestrator state updates in the main workspace.
 - Worktree root: `${KILN_WORKTREE_ROOT:-/tmp}`.
-- Worker path: `${KILN_WORKTREE_ROOT:-/tmp}/kiln-<project-hash>/<task-id>/` (default `/tmp/kiln-<project-hash>/<task-id>/`).
-- Symlink canonical control plane into each worker worktree: `.kiln -> /abs/path/to/main/.kiln`.
+- Worker path: `${KILN_WORKTREE_ROOT:-/tmp}/kiln-<project-hash>/<task-id-slug>/` (default `/tmp/kiln-<project-hash>/<task-id-slug>/`).
+- Copy canonical control plane snapshot into each worker worktree: `.kiln-snapshot/` (read-only).
 - Workers never commit in worktrees. Orchestrator is commit authority on main.
 - `.kiln/STATE.md` remains single-writer by orchestrator only.
 
@@ -221,7 +222,7 @@ Mode validation before any Teams stage:
 - Persist authoritative execution state transitions to `.kiln/STATE.md` from validated EXECUTE updates plus sentinel/artifact and control-plane terminal evidence.
 - For PLAN/REVIEW, drive deterministic state transitions from expected artifacts/sentinels plus control-plane completion, not from `TaskUpdate` payload schemas.
 - Reject protocol-violating EXECUTE updates and mark task failed, using stage-scoped write policy:
-  - `EXECUTE` wave workers may write only to `.kiln/tracks/phase-N/artifacts/<task-id>/...` and source/worktree files under their task scope.
+  - `EXECUTE` wave workers may write only to `.kiln-artifacts/<plan-task-id>/...` and source/worktree files under their task scope.
   - `PLAN` teammates may write designated planning outputs under `.kiln/tracks/phase-N/` (for example `plan_claude.md`, `plan_codex.md`, `PLAN.md`, debate artifacts, `plan-validation-result` sentinel).
   - `REVIEW` teammates may write designated review outputs under `.kiln/tracks/phase-N/` (for example `review.md`, `review_codex.md`, critiques, revisions, `debate_log.md`).
   - All teammates in all stages must never write `.kiln/STATE.md`.
@@ -234,10 +235,9 @@ git ls-files -o --exclude-standard -z
 ```
 
 Rules:
-- Exclude any path that is `.kiln` or starts with `.kiln/` from copy-back by default.
-- Hard-block copy-back of the `.kiln` symlink entry.
-- Allow `.kiln/...` only when already task-namespaced artifacts:
-  `.kiln/tracks/phase-N/artifacts/<task-id>/...`
+- Exclude any path that is `.kiln`, `.kiln-snapshot/`, or `.kiln-artifacts/` from copy-back by default.
+- Workers never have access to the real `.kiln/` (only `.kiln-snapshot/` is present in worktree).
+- Artifacts written to `.kiln-artifacts/<plan-task-id>/` are moved by orchestrator, not copied back via git.
 - Apply in this order:
   1. Renames (`R*`) using old/new mappings
   2. Deletions (`D`)
@@ -361,8 +361,10 @@ Required Inputs:
 Runtime Contract:
 - useTeams=true
 - KILN_TEAMS_ACTIVE=1
-- worktree=${KILN_WORKTREE_ROOT:-/tmp}/kiln-<project-hash>/<task-id>/
-- .kiln symlinked from canonical main workspace
+- worktree=${KILN_WORKTREE_ROOT:-/tmp}/kiln-<project-hash>/<task-id-slug>/ (slug = task_id with colons replaced by dashes)
+- .kiln-snapshot/ contains read-only copies of config.json, STATE.md, docs/, phase PLAN
+- Worker reads from .kiln-snapshot/, writes artifacts to .kiln-artifacts/<plan-task-id>/
+- Do not create or follow .kiln symlinks
 - do not commit
 - EXECUTE workers emit TaskUpdate with monotonic sequence + stable idempotency_key
 - PLAN/REVIEW teammates report status via SendMessage only
@@ -479,10 +481,10 @@ Completion behavior:
 
 ## Lore Protocol
 
-At every pipeline transition, the orchestrator emits a short transition message drawn from `skills/kiln-lore/kiln-lore.md`. This provides rhythm and punctuation to the build process.
+At every pipeline transition, the orchestrator emits a short transition message drawn from `.claude/skills/kiln-lore/kiln-lore.md`. This provides rhythm and punctuation to the build process.
 
 **How it works:**
-1. Before advancing to the next stage, read the matching transition section from `skills/kiln-lore/kiln-lore.md`.
+1. Before advancing to the next stage, read the matching transition section from `.claude/skills/kiln-lore/kiln-lore.md`.
 2. Select one quote contextually — pick whichever resonates with the current project situation. No shell commands, no awk, no modulo arithmetic. The AI is the selection mechanism.
 3. Display the transition message using the canonical format:
 

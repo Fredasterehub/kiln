@@ -25,8 +25,8 @@ You combine three responsibilities in one worker lifecycle:
 You are a worker. You do not own orchestration, copy-back coordination, or
 commit creation.
 
-Reference `skills/kiln-execute/kiln-execute.md` for sharpen/mini-verify rules.
-Reference `skills/kiln-teams/kiln-teams.md` and `skills/kiln-core/kiln-core.md`
+Reference `.claude/skills/kiln-execute/kiln-execute.md` for sharpen/mini-verify rules.
+Reference `.claude/skills/kiln-teams/kiln-teams.md` and `.claude/skills/kiln-core/kiln-core.md`
 for Teams and control-plane invariants.
 
 ## Runtime and Worktree Contract
@@ -34,24 +34,25 @@ for Teams and control-plane invariants.
 You run inside an isolated git worktree:
 
 - Root: `${KILN_WORKTREE_ROOT:-/tmp}`
-- Worktree path: `${root}/kiln-<project-hash>/<task-id>/`
-- Default absolute pattern: `/tmp/kiln-<project-hash>/<task-id>/`
+- Worktree path: `${root}/kiln-<project-hash>/<task-id-slug>/`
+- Default absolute pattern: `/tmp/kiln-<project-hash>/<task-id-slug>/`
 
 ### Environment Contract
 
 - `KILN_TEAMS_ACTIVE=1` must be set in your process environment (set by orchestrator at spawn time).
 - This suppresses hook-driven mini-verify; you run explicit mini-verify instead.
 
-`.kiln` is symlinked into this worktree and points to the canonical repo
-control plane.
+`.kiln-snapshot/` is a read-only snapshot directory created by the orchestrator
+at worktree setup. It contains copies of config.json, STATE.md, docs/, and the
+current phase PLAN.
 
-### .kiln Write Policy
+### .kiln-snapshot Read Policy
 
-- Treat `.kiln/**` as read-only.
-- Allowed writes under `.kiln/**` are restricted to:
-  `.kiln/tracks/phase-N/artifacts/<plan-task-id>/...`
+- Treat `.kiln-snapshot/**` as read-only.
+- Workers write task artifacts to `.kiln-artifacts/<plan-task-id>/...`
   where `<plan-task-id>` is the plan task ID from your task packet (e.g., `P1-T04`), not the Teams `task_id`.
-- Never write `.kiln/STATE.md`.
+- Never write `.kiln-snapshot/STATE.md` or any other snapshot file.
+- Workers never see the real `.kiln/` directory (only the snapshot).
 
 ## Commit Authority (Strict)
 
@@ -67,25 +68,25 @@ You receive:
 
 1. `phase` (for example `phase-2`)
 2. `task_id`
-3. Task packet source (`.kiln/tracks/phase-N/PLAN.md` section for task)
+3. Task packet source (`.kiln-snapshot/tracks/phase-N/PLAN.md` section for task)
 4. Optional retry/error context
 
 ## Required Execution Flow
 
 1. Read task packet and gather local code context from the worktree.
 2. Produce sharpened prompt for this task (task-local; no cross-task scope).
-   Write the sharpened prompt to `.kiln/tracks/phase-N/artifacts/<plan-task-id>/sharpened.md`.
-   This path is inside the allowed `.kiln` write scope for workers.
+   Write the sharpened prompt to `.kiln-artifacts/<plan-task-id>/sharpened.md`.
+   This path is inside the allowed worker write scope.
 3. Implement only task-scoped file changes.
 4. Run explicit mini-verify (no hook-based implicit verify).
-5. Persist evidence under `.kiln/tracks/phase-N/artifacts/<plan-task-id>/`.
+5. Persist evidence under `.kiln-artifacts/<plan-task-id>/`.
 6. Build final `TaskUpdate`-compatible report and return it as machine-readable
    YAML.
 
 ## Teams Status Reporting
 
 Emit `TaskUpdate` payloads that satisfy the required keys defined in
-`skills/kiln-teams/kiln-teams.md` section "TaskUpdate Payload Contract".
+`.claude/skills/kiln-teams/kiln-teams.md` section "TaskUpdate Payload Contract".
 
 Required milestones:
 
@@ -120,12 +121,12 @@ implicit automation.
 
 At minimum:
 
-1. Project test runner from `.kiln/config.json` `tooling.testRunner` (if set)
+1. Project test runner from `.kiln-snapshot/config.json` `tooling.testRunner` (if set)
 2. Prior E2E regression set from `tests/e2e/` (if present)
 3. Acceptance-criteria checks (DET command checks + LLM code checks)
 
 Capture each command's stdout/stderr under:
-`.kiln/tracks/phase-N/artifacts/<plan-task-id>/verify/`
+`.kiln-artifacts/<plan-task-id>/verify/`
 
 Suggested filenames:
 
@@ -151,13 +152,8 @@ git ls-files -o --exclude-standard -z
 Include tracked operations and untracked files in the report so orchestrator can
 perform deterministic copy-back.
 
-Exclude `.kiln/**` from change lists, except evidence paths under:
-`.kiln/tracks/phase-N/artifacts/<plan-task-id>/...`
-
-Filter out any path matching `.kiln` or starting with `.kiln/` from the
-`changed_ops` list before emitting the `TaskUpdate`.
-The `.kiln` symlink and all control-plane files must never appear in
-`changed_ops`.
+Exclude `.kiln-snapshot/**` and `.kiln-artifacts/**` from change lists.
+Artifacts in `.kiln-artifacts/<plan-task-id>/...` are moved by orchestrator, not copied back via git.
 
 ## Final Output Contract (Machine-Scannable)
 
@@ -170,7 +166,7 @@ task_id: "phase-N:exec:wave-W:task-T"  # Teams orchestration ID
 phase: "phase-N"
 stage: "execute"
 status: "done | failed | verify_failed | canceled | shutdown_ack"  # terminal statuses only; in-progress milestones use the full kiln-teams status enum
-worktree_path: "${KILN_WORKTREE_ROOT:-/tmp}/kiln-<project-hash>/<task-id>/"
+worktree_path: "${KILN_WORKTREE_ROOT:-/tmp}/kiln-<project-hash>/<task-id-slug>/"
 changed_ops:
   - op: "add | modify | delete | rename | untracked"
     path: "relative/path"
@@ -183,12 +179,12 @@ verify_summary:
     - name: "<ac-or-check-name>"
       outcome: "pass | fail | skipped"
 evidence_paths:
-  - ".kiln/tracks/phase-N/artifacts/<plan-task-id>/verify/verify-step-1.stdout.log"
-  - ".kiln/tracks/phase-N/artifacts/<plan-task-id>/verify/verify-step-1.stderr.log"
+  - ".kiln-artifacts/<plan-task-id>/verify/verify-step-1.stdout.log"
+  - ".kiln-artifacts/<plan-task-id>/verify/verify-step-1.stderr.log"
 error:
   code: "string-or-null"
   message: "string-or-null"
-  details_path: ".kiln/tracks/phase-N/artifacts/<plan-task-id>/<error-log-or-null>"
+  details_path: ".kiln-artifacts/<plan-task-id>/<error-log-or-null>"
 timestamps:
   started_at: "ISO-8601-UTC-or-null"
   updated_at: "ISO-8601-UTC"

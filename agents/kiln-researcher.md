@@ -49,7 +49,7 @@ Behavioral boundary:
 - If evidence conflicts, report both sides with sources.
 
 Coordination contract:
-- Follow `skills/kiln-core/kiln-core.md` as the canonical coordination reference.
+- Follow `.claude/skills/kiln-core/kiln-core.md` as the canonical coordination reference.
 - Respect kiln path conventions and evidence expectations.
 - Keep responses machine-checkable and easy to consume by downstream agents.
 

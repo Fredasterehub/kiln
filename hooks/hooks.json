@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh hooks/scripts/on-session-start.sh"
+            "command": "sh .claude/hooks/scripts/on-session-start.sh"
           }
         ]
       }
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh -c 'if [ -n \"${KILN_TEAMS_ACTIVE:-}\" ]; then exit 0; fi; worktree_root=\"${KILN_WORKTREE_ROOT:-/tmp}\"; cwd=\"${PWD:-$(pwd)}\"; case \"$cwd\" in \"${worktree_root%/}/kiln-\"*) exit 0 ;; esac; sh hooks/scripts/on-task-completed.sh'"
+            "command": "sh -c 'if [ -n \"${KILN_TEAMS_ACTIVE:-}\" ]; then exit 0; fi; worktree_root=\"${KILN_WORKTREE_ROOT:-/tmp}\"; cwd=\"${PWD:-$(pwd)}\"; case \"$cwd\" in \"${worktree_root%/}/kiln-\"*) exit 0 ;; esac; sh .claude/hooks/scripts/on-task-completed.sh'"
           }
         ]
       }

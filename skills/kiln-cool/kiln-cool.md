@@ -52,7 +52,7 @@ Then stop.
 
 ## Transition Message on Pause
 
-After writing the state snapshot (step 7), display a transition message using the `pause-cool` section from `skills/kiln-lore/kiln-lore.md`.
+After writing the state snapshot (step 7), display a transition message using the `pause-cool` section from `.claude/skills/kiln-lore/kiln-lore.md`.
 
 Read the `pause-cool` section and select one quote contextually. Display using this format:
 

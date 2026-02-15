@@ -101,8 +101,8 @@ Worktrees are created outside the repository tree.
 - Default base root: `/tmp`
 - Override: `KILN_WORKTREE_ROOT`
 - Effective root: `${KILN_WORKTREE_ROOT:-/tmp}`
-- Worktree directory: `${root}/kiln-<project-hash>/<task-id>/`
-- Default absolute placement (when not overridden): `/tmp/kiln-<project-hash>/<task-id>/`
+- Worktree directory: `${root}/kiln-<project-hash>/<task-id-slug>/`
+- Default absolute placement (when not overridden): `/tmp/kiln-<project-hash>/<task-id-slug>/`
 
 `<project-hash>` is a stable hash of the absolute repo path (or equivalent stable project identity).
 
@@ -110,26 +110,59 @@ Example:
 
 ```bash
 root="${KILN_WORKTREE_ROOT:-/tmp}"
-wt="${root}/kiln-${project_hash}/${task_id}"
+slug=$(printf '%s' "$task_id" | tr ':' '-')
+wt="${root}/kiln-${project_hash}/${slug}"
 ```
 
-### .kiln sharing
+### Filesystem-safe task ID slug
 
-Each worker worktree must receive a symlink to the orchestrator control plane:
+Canonical task IDs use colons as separators (e.g., `phase-1:exec:wave-1:task-1`).
+Colons are invalid in Windows paths and problematic with some macOS tools.
+
+When constructing filesystem paths (worktree directories, artifact namespaces),
+replace colons with dashes to produce a filesystem-safe slug:
+
+- Canonical task ID: `phase-1:exec:wave-1:task-1`
+- Filesystem slug: `phase-1-exec-wave-1-task-1`
+- Worktree path: `${root}/kiln-${project_hash}/phase-1-exec-wave-1-task-1/`
+
+Rules:
+- The canonical task ID (with colons) remains authoritative for Teams metadata,
+  TaskUpdate payloads, STATE.md references, and all non-filesystem contexts.
+- The filesystem slug (with dashes) is used ONLY for directory names.
+- Slug derivation: replace every `:` with `-`.
+- On resume, reconstruct canonical task ID from the known format
+  (`phase-N:stage:...`), which is unambiguous.
+
+### .kiln context sharing (read-only snapshot)
+
+Workers need read access to control-plane files but must never mutate canonical `.kiln/`.
+
+Instead of symlinking (which grants write access to the real `.kiln/`), the orchestrator
+copies a minimal read-only snapshot into each worktree:
 
 ```bash
-ln -s /abs/path/.kiln "${wt}/.kiln"
+# Orchestrator creates a snapshot directory in the worktree
+mkdir -p "${wt}/.kiln-snapshot"
+
+# Copy only what workers need to read:
+cp "${canonical_kiln}/config.json" "${wt}/.kiln-snapshot/"
+cp "${canonical_kiln}/STATE.md" "${wt}/.kiln-snapshot/"
+cp -r "${canonical_kiln}/docs/" "${wt}/.kiln-snapshot/docs/" 2>/dev/null || true
+cp -r "${canonical_kiln}/tracks/phase-${N}/" "${wt}/.kiln-snapshot/tracks/phase-${N}/" 2>/dev/null || true
 ```
 
-Contract:
+Rules:
+- The snapshot is created once at worktree setup time. It is NOT updated during execution.
+- Workers read from `.kiln-snapshot/` instead of `.kiln/`.
+- Workers write task artifacts to a local path: `.kiln-artifacts/<plan-task-id>/`
+- After copy-back, orchestrator moves artifacts from the worker's `.kiln-artifacts/<plan-task-id>/`
+  into canonical `.kiln/tracks/phase-N/artifacts/<plan-task-id>/`.
+- Workers never see or write to the real `.kiln/` directory.
+- `.kiln-snapshot/` and `.kiln-artifacts/` are both excluded from git and from copy-back.
 
-- The symlink target must be the canonical absolute `.kiln` path in the primary repo.
-- `EXECUTE`-stage wave workers treat `.kiln/**` as read-only, except task-namespaced artifacts:
-  `.kiln/tracks/phase-N/artifacts/<plan-task-id>/`.
-
-  `<plan-task-id>` is the PLAN.md task identifier (e.g., `P1-T04`), not the Teams
-  `task_id`. The orchestrator maps between Teams task IDs and plan task IDs when
-  coordinating artifact paths.
+This eliminates the mutation blast radius entirely: a worker cannot corrupt the control plane
+even by accident, because it has no path to the real `.kiln/`.
 
 ### Commit authority
 
@@ -162,10 +195,8 @@ Interpretation contract:
 
 ### Exclusions and read-only paths
 
-- Exclude any path matching `.kiln` or starting with `.kiln/` from copy-back.
-- The `.kiln` symlink entry itself must never be copied back.
-- Never copy back `.kiln/**` except artifacts that are already written in-place to:
-  `.kiln/tracks/phase-N/artifacts/<plan-task-id>/`.
+- Exclude any path that is `.kiln`, starts with `.kiln/`, is `.kiln-snapshot/`, or starts with `.kiln-snapshot/` from copy-back.
+- Also exclude `.kiln-artifacts/` (snapshot is read-only; artifacts are moved by orchestrator, not copied back via git).
 
 ### Deterministic application order
 
@@ -217,7 +248,7 @@ task_id: "phase-N:exec:*"
 phase: "phase-N"
 stage: "execute"
 status: "queued | in_progress | verify_passed | verify_failed | done | failed | canceled | shutdown_requested | shutdown_ack"
-worktree_path: "${KILN_WORKTREE_ROOT:-/tmp}/kiln-<project-hash>/<task-id>/"
+worktree_path: "${KILN_WORKTREE_ROOT:-/tmp}/kiln-<project-hash>/<task-id-slug>/"
 changed_ops:
   - op: "add | modify | delete | rename | untracked"
     path: "relative/path"
@@ -230,11 +261,11 @@ verify_summary:
     - name: "<ac-or-check-name>"
       outcome: "pass | fail | skipped"
 evidence_paths:
-  - ".kiln/tracks/phase-N/<stage-output-or-artifact-path>"
+  - ".kiln-artifacts/<plan-task-id>/<artifact-path>"
 error:
   code: "string-or-null"
   message: "string-or-null"
-  details_path: ".kiln/tracks/phase-N/<stage-error-log-or-null>"
+  details_path: ".kiln-artifacts/<plan-task-id>/<stage-error-log-or-null>"
 timestamps:
   started_at: "ISO-8601-UTC-or-null"
   updated_at: "ISO-8601-UTC"
@@ -250,7 +281,7 @@ idempotency_key: "stable-key-for-logical-update"
 - Orchestrator must treat duplicate `idempotency_key` as no-op.
 - `sequence` must be monotonic per `task_id`.
 - If out-of-order updates arrive, orchestrator keeps highest applied `sequence` and ignores lower ones.
-- Workers must filter `.kiln` and `.kiln/*` from `changed_ops` in `TaskUpdate`.
+- Workers must filter `.kiln`, `.kiln/*`, `.kiln-snapshot/*`, and `.kiln-artifacts/*` from `changed_ops` in `TaskUpdate`.
 
 ## PLAN/REVIEW Progress Contract (SendMessage)
 
@@ -279,8 +310,8 @@ Control-plane writes are single-writer to prevent state corruption.
 - Only orchestrator writes `.kiln/STATE.md`.
 - PLAN stage teammates (primary workspace) may write designated planning outputs under `.kiln/tracks/phase-N/` (for example `plan_claude.md`, `plan_codex.md`, `PLAN.md`, debate artifacts).
 - REVIEW stage teammates (primary workspace) may write designated review outputs under `.kiln/tracks/phase-N/` (for example `review.md`, `review_codex.md`, critique/revision artifacts, `debate_log.md`).
-- EXECUTE stage wave workers (worktrees) may write under `.kiln/**` only at:
-  `.kiln/tracks/phase-N/artifacts/<plan-task-id>/`.
+- EXECUTE stage wave workers (worktrees) read control-plane context only from `.kiln-snapshot/**` and may write only to:
+  `.kiln-artifacts/<plan-task-id>/`.
 - All teammates must never write `.kiln/STATE.md`.
 - Any attempted write outside stage-allowed locations is a protocol violation and must fail the task.
 
@@ -348,7 +379,7 @@ Reconcile all four sources:
    - `done`: terminal successful update exists and copy-back integrated.
    - `ready_for_integration`: terminal successful worker update exists, but copy-back and/or main commit is not yet applied.
    - `in_progress`: worker active or worktree has active mutation and no terminal status.
-   - `orphaned`: discovered worktree/task artifact cannot be reconciled to an active canonical `task_id`, active phase, or expected `${KILN_WORKTREE_ROOT:-/tmp}/kiln-<project-hash>/<task-id>/` structure.
+   - `orphaned`: discovered worktree/task artifact cannot be reconciled to an active canonical `task_id`, active phase, or expected `${KILN_WORKTREE_ROOT:-/tmp}/kiln-<project-hash>/<task-id-slug>/` structure.
    - `rerun_required`: missing terminal update, inconsistent sources, or partial/corrupt copy-back.
 5. Deterministic priority order: `orphaned` -> `ready_for_integration` -> `done` -> `in_progress` -> `rerun_required`.
 6. For tasks marked `in_progress` with no active worker heartbeat beyond timeout, transition to `rerun_required`.
@@ -363,7 +394,7 @@ Retries must reuse existing worktrees when possible (lossless, faster recovery),
 - Reuse flow:
   1. `git -C <worktree> reset --hard <wave-base-ref>`
   2. `git -C <worktree> clean -fd`
-  3. Ensure `.kiln` symlink exists and points to canonical absolute `.kiln` path (repair if needed)
+  3. Refresh `.kiln-snapshot/` directory with current control-plane state (re-copy `config.json`, `STATE.md`, `docs/`, phase `PLAN`)
   4. Re-run worker task with same `task_id`
 - If reuse preconditions fail (missing/corrupt worktree), fallback to fresh create and mark prior path `orphaned`.
 
@@ -380,19 +411,19 @@ A Teams-enabled stage is compliant only if all are true:
 
 - Team scope matches v0 stage rules.
 - Task IDs match required patterns exactly.
-- Worktrees are under `${KILN_WORKTREE_ROOT:-/tmp}/kiln-<project-hash>/<task-id>/`.
-- `.kiln` symlink is present and points to canonical absolute control-plane path.
+- Worktrees are under `${KILN_WORKTREE_ROOT:-/tmp}/kiln-<project-hash>/<task-id-slug>/`.
+- `.kiln-snapshot/` directory is present with read-only copies of config.json, STATE.md, docs/, phase PLAN.
 - Worker made no commits in worktree.
 - Copy-back used both `git diff --name-status -z` and `git ls-files -o --exclude-standard -z`.
 - Collision detection ran across wave `changed_ops` (including rename `from_path`) before any main mutation.
 - Overlap prep did not mutate main/index/commits before wave completion + collision pass + stable order selection.
 - In-wave commits were applied in stable PLAN.md order, not completion order.
-- Copy-back excluded any path matching `.kiln` or starting with `.kiln/`; `.kiln` symlink entry itself was not copied back.
+- Copy-back excluded `.kiln`, `.kiln-snapshot/`, and `.kiln-artifacts/`; artifacts were moved by orchestrator, not copied back via git.
 - EXECUTE workers emitted schema-compliant, idempotent `TaskUpdate` payloads.
 - PLAN/REVIEW teammates emitted SendMessage progress events with `phase`, `task_id`, `state`, and `evidence_paths`.
 - Only orchestrator wrote `.kiln/STATE.md`.
 - On failure, orchestrator issued wave shutdown and preserved failed worktree.
 - On post-wave integration verify failure, orchestrator halted next-wave start and used fix-forward correction commits only.
-- Retries reused worktrees via reset+clean+symlink-resync when possible.
+- Retries reused worktrees via reset+clean+snapshot-refresh when possible.
 - Resume logic reconciles worktree + filesystem + state + Teams task list before requeue.
 - Orchestrator and workers set `KILN_TEAMS_ACTIVE=1` (or equivalent) and used explicit mini-verify.
