@@ -50,6 +50,21 @@ Then stop.
    - Confirm no phase progress was changed.
    - Print explicit resume instruction: `Run /kiln:fire`.
 
+## Transition Message on Pause
+
+After writing the state snapshot (step 7), display a transition message using the `pause-cool` section from `skills/kiln-lore/kiln-lore.md`.
+
+Read the `pause-cool` section and select one quote contextually. Display using this format:
+
+```
+━━━ Cooling ━━━
+"[Quote]" -- [Attribution]
+
+State saved. The kiln holds its heat. Run /kiln:fire to resume.
+```
+
+No emoji. The whitespace (blank line before the status) is intentional.
+
 ## Non-Destructive Rules
 - Never change phase progress statuses.
 - Never advance steps.

@@ -434,6 +434,30 @@ Bring living docs and state in sync with actual delivered behavior for the phase
 - On no remaining phases, set `currentStep: final-integration-e2e`.
 - Always append transition timestamps and operator confirmation note.
 
+## Transition Messages
+
+Before spawning the next stage's subagent, the orchestrator emits a transition message drawn from `skills/kiln-lore/kiln-lore.md`. This provides rhythm at each stage boundary.
+
+**Protocol:**
+1. Read the matching transition section from `skills/kiln-lore/kiln-lore.md` for the stage about to begin.
+2. Select one quote contextually (AI picks based on project situation — no shell commands).
+3. Display using the canonical format, then spawn the subagent.
+
+**Transition keys at each track boundary:**
+
+| Boundary | Lore Key | When |
+| --- | --- | --- |
+| Phase entry | `phase-start` | Starting a new phase from ROADMAP.md |
+| Before PLAN | `plan` | Spawning planner(s) for the phase |
+| Before VALIDATE | `validate` | Spawning validator after plan is produced |
+| Before EXECUTE | `execute` | Spawning wave workers / executor pipeline |
+| Before E2E | `e2e` | Spawning E2E verifier after execution pass |
+| Before REVIEW | `review` | Spawning reviewer after E2E pass |
+| Before RECONCILE | `reconcile` | Spawning reconciler after review approval |
+| Phase exit | `phase-complete` | Phase reconcile confirmed, advancing to next |
+
+Transition messages do not alter stage logic, gate conditions, or retry budgets. They are display-only markers between stages.
+
 ## Pause Conditions
 Pause the track loop under these exact conditions:
 

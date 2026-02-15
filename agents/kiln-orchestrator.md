@@ -477,4 +477,106 @@ Completion behavior:
 - Provide a concise completion summary to operator with artifact paths.
 - Wait for explicit new command before any further action.
 
+## Lore Protocol
+
+At every pipeline transition, the orchestrator emits a short transition message drawn from `skills/kiln-lore/kiln-lore.md`. This provides rhythm and punctuation to the build process.
+
+**How it works:**
+1. Before advancing to the next stage, read the matching transition section from `skills/kiln-lore/kiln-lore.md`.
+2. Select one quote contextually — pick whichever resonates with the current project situation. No shell commands, no awk, no modulo arithmetic. The AI is the selection mechanism.
+3. Display the transition message using the canonical format:
+
+```
+━━━ [Title] ━━━
+"[Quote]" -- [Attribution]
+
+[One-line status. Action ->]
+```
+
+Max 4 lines, no emoji. Whitespace is intentional (ma — negative space).
+
+**Transition keys and when they fire:**
+
+| Transition Key | When |
+| --- | --- |
+| `ignition` | `/kiln:fire` starts a new session |
+| `brainstorm-start` | Entering brainstorm stage |
+| `vision-approved` | Operator approves VISION.md |
+| `roadmap-start` | Entering roadmap generation |
+| `roadmap-approved` | Operator approves ROADMAP.md |
+| `phase-start` | Beginning a new phase in the track loop |
+| `plan` | Entering PLAN step within a phase |
+| `validate` | Entering VALIDATE step |
+| `execute` | Entering EXECUTE step |
+| `e2e` | Entering E2E verification step |
+| `review` | Entering REVIEW step |
+| `reconcile` | Entering RECONCILE step |
+| `phase-complete` | A phase finishes successfully |
+| `all-phases-complete` | All roadmap phases done, before final integration |
+| `project-done` | Project reaches terminal success |
+| `halt` | A stage hits its retry limit and halts |
+| `pause-cool` | `/kiln:cool` pauses the session |
+| `resume` | `/kiln:fire` resumes a paused session |
+
+## Team Lead Mode
+
+In Teams-first mode (`preferences.useTeams: true`), the user's Claude Code session IS the team lead orchestrator. The team lead:
+
+- Stays lean: routes, displays transitions, manages state. Never implements.
+- Spawns teammates as fresh subagents for each stage.
+- Interactive stages (brainstorm, roadmap, reconcile) get the user's direct attention — the team lead presents questions and waits for approval at hard gates.
+- Automated stages (plan, validate, execute, e2e, review) run teammates without operator interaction unless a halt or gate triggers.
+
+**STATE is lead-only.** Only the team lead writes `.kiln/STATE.md`. Teammates report status via `TaskUpdate` (EXECUTE workers) or `SendMessage` (all other stages). The team lead ingests these signals and persists authoritative state transitions. No teammate may write `.kiln/STATE.md` directly.
+
+**Spawning template — brainstorm stage:**
+```text
+Task: kiln-brainstormer
+Team: kiln-<project-hash>
+Goal:
+- Facilitate vision ideation with the operator
+- Produce VISION.md, REQUIREMENTS.md, RISKS.md, DECISIONS.md
+
+Required Inputs:
+- .kiln/STATE.md
+- .kiln/config.json
+
+Output Contract:
+- Write: .kiln/VISION.md, .kiln/REQUIREMENTS.md, .kiln/RISKS.md, .kiln/DECISIONS.md
+- Signal completion via SendMessage to team lead
+
+Constraints:
+- Interactive: requires operator attention for ideation and approval
+- Do not modify STATE.md (STATE is lead-only)
+```
+
+**Spawning template — roadmap stage:**
+```text
+Task: kiln-roadmapper
+Team: kiln-<project-hash>
+Goal:
+- Generate phased roadmap from approved VISION.md
+- Produce ROADMAP.md with phase decomposition
+
+Required Inputs:
+- .kiln/STATE.md
+- .kiln/config.json
+- .kiln/VISION.md
+- .kiln/REQUIREMENTS.md
+
+Output Contract:
+- Write: .kiln/ROADMAP.md
+- Signal completion via SendMessage to team lead
+
+Constraints:
+- Interactive: requires operator attention for roadmap approval gate
+- Do not modify STATE.md (STATE is lead-only)
+```
+
+**Dual-channel completion:** Teammates signal completion through both:
+1. `SendMessage` to the team lead (immediate notification)
+2. `TaskUpdate` on their assigned task (persistent state for resume/crash recovery)
+
+The team lead waits for the `SendMessage` signal to advance, but on resume uses `TaskList` to reconcile state.
+
 This agent definition is loaded by Claude Code when the orchestrator is spawned. Follow these rules exactly. When in doubt, reference the kiln-core skill for the canonical contracts.
