@@ -65,7 +65,7 @@ Run the loop exactly in this sequence:
       - `true` + `modelMode: "claude-only"`: spawn `kiln-validator` (Sonnet), same as non-Teams path. PLAN ran via non-Teams path so no sentinel exists.
    c. `EXECUTE` — branch by `preferences.useTeams`:
       - `false` or absent: existing sequential/non-Teams execution (`kiln-sharpener` -> `kiln-executor` -> mini-verify per task).
-      - `true`: run Teams wave scheduler (one team per wave, one wave-worker teammate per task packet) with worktree/copy-back/integration-verify protocol.
+      - `true`: run Teams wave scheduler (one team per phase, one wave-worker teammate per task packet) with worktree/copy-back/integration-verify protocol.
    d. `E2E` — spawn `kiln-e2e-verifier` (Sonnet).
    e. `REVIEW` — branch by review mode:
       - `reviewStrategy: "single"`: spawn `kiln-reviewer` (Opus) as before.
@@ -258,10 +258,10 @@ When `preferences.useTeams: true`:
 1. Parse waves from `.kiln/tracks/phase-N/PLAN.md`.
 2. For each wave in order (`wave-1`, `wave-2`, ...), create one wave team scoped to that wave.
 3. Create one `kiln-wave-worker` teammate per task packet in the wave.
-4. Each worker runs in isolated worktree at `${KILN_WORKTREE_ROOT:-/tmp}/kiln-<project-hash>/<task-id>/`, with `.kiln` symlinked to canonical control plane.
+4. Each worker runs in isolated worktree at `${KILN_WORKTREE_ROOT:-/tmp}/kiln-<project-hash>/<task-id>/` with a read-only `.kiln-snapshot/` control-plane copy.
 5. Worker flow is `sharpen -> execute -> explicit mini-verify -> TaskUpdate`; workers must not commit in worktrees.
-6. After worker success, orchestrator performs deterministic copy-back to main workspace (preserving rename/delete/add/modify/untracked semantics; excluding `.kiln/**` except task artifacts).
-7. Orchestrator creates atomic task commits on main after copy-back.
+6. After worker success, orchestrator performs deterministic copy-back into main workspace and then creates atomic task commits on main.
+7. For the authoritative wave scheduling protocol including wave queue construction, parallelism enforcement, worker spawn template, integration checkpoint protocol, and failure handling, see `kiln-wave-schedule`.
 8. After all successful copy-backs in the wave, run integration verify on main before starting next wave.
 
 Cancellation protocol (fail-fast within a wave):

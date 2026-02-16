@@ -227,8 +227,8 @@ Executor commits each passing task with message format `<phase>/<task-id>: <desc
 
 ### Teams Wave Execution (`preferences.useTeams: true`)
 
-Teams execution uses one execution team per wave and one worker teammate per task
-in that wave.
+Teams execution uses one execution team per phase and one worker teammate per task
+in each wave.
 
 **Per-task cycle (worker-side):**
 Sharpen -> Implement -> Mini-verify -> Emit TaskUpdate.
@@ -238,24 +238,15 @@ Sharpen -> Implement -> Mini-verify -> Emit TaskUpdate.
 2. Orchestrator spawns one per-task `kiln-wave-worker` teammate.
 3. Each worker runs in an isolated worktree at:
    `${KILN_WORKTREE_ROOT:-/tmp}/kiln-<project-hash>/<task-id>/`
-4. Worker worktree must include `.kiln` symlink to canonical repo `.kiln`.
-5. Worker treats `.kiln/**` as read-only except:
-   `.kiln/tracks/phase-N/artifacts/<plan-task-id>/...`
+4. Worker worktree includes `.kiln-snapshot/` (read-only control-plane copy).
+5. Worker writes artifacts to `.kiln-artifacts/<plan-task-id>/`.
 
 **Commit responsibility (explicit):**
 - Workers do NOT commit in worktrees.
 - Orchestrator copies back worker outputs into the main workspace, then creates
   the atomic task commit on main.
 
-**Copy-back correctness contract (orchestrator):**
-Use both discovery commands from worker root:
-```bash
-git diff --name-status -z
-git ls-files -o --exclude-standard -z
-```
-Copy-back must preserve rename/delete/add/modify/untracked semantics and exclude
-`.kiln/**` except already-written task artifacts under
-`.kiln/tracks/phase-N/artifacts/<plan-task-id>/...`.
+For the complete copy-back protocol including change discovery, exclusion rules, application order, collision detection, and stable commit ordering, see `kiln-copyback`.
 
 **Post-wave integration verify (main worktree):**
 After recombining all successful worker outputs for the wave, orchestrator runs

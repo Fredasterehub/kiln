@@ -170,15 +170,15 @@ For detailed Teams behavior and orchestration semantics, `.claude/skills/kiln-te
 
 ### TaskUpdate Payload Schema
 
-The canonical `TaskUpdate` payload schema is defined in `.claude/skills/kiln-teams/kiln-teams.md` § TaskUpdate Payload Contract. That document is the single source of truth for required keys, status enum values, idempotency rules, and ordering semantics.
+The canonical task metadata contract is defined in `.claude/skills/kiln-teams/kiln-teams.md` § Platform Task Metadata Contract. That document is the single source of truth for the 7 `kiln_*` metadata keys, lifecycle stages, and terminal reporting protocol.
 
-Core invariants (duplicated here for quick reference — defer to kiln-teams on any conflict):
+Core invariants (defer to kiln-teams on any conflict):
 
-- Every update must include `task_id`, `phase`, `status`, and `emitted_at`.
-- `evidence_paths` must be inside the plan-task namespace: `.kiln/tracks/phase-N/artifacts/<plan-task-id>/`.
-- `idempotency_key` must be stable for logically identical updates; orchestrator treats duplicates as no-ops.
-- `sequence` must be monotonic per `task_id`; out-of-order updates are discarded.
-- Status transitions follow the enum in kiln-teams; non-Teams (sequential) mode uses the subset: `queued | in_progress | done | failed`.
+- Workers report via platform `TaskUpdate` metadata: `kiln_stage` and `kiln_last_heartbeat` at each milestone.
+- File artifacts (`changed_ops.json`, `verify_summary.json`) written to `.kiln-artifacts/<plan-task-id>/`.
+- Terminal reporting order: write artifacts → TaskUpdate → SendMessage.
+- Retry count tracked in STATE.md Task Retry Ledger (not in task metadata).
+- Non-Teams (sequential) mode uses simplified status subset: `queued | in_progress | done | failed`.
 
 ### Acceptable `tests/e2e/` Artifacts
 
@@ -355,38 +355,11 @@ Canonical pipeline order:
 | `reconcile -> next phase` | `.kiln/tracks/phase-N/reconcile.md` complete, docs updated, residual risks logged | Next phase activation in `.kiln/STATE.md` |
 | `track loop complete -> final integration E2E` | All planned phases completed or deferred with approval, integration branch consistent | Final end-to-end verification across full system |
 
-### Teams Resume/Recovery Algorithm
+### Teams Resume/Recovery
 
-When Teams mode uses worktree waves, resume must be deterministic and must not require worker edits to control-plane state.
+For the authoritative resume and crash recovery protocol in Teams mode, see `kiln-resume`. It covers resume input reconciliation (TaskList + STATE.md + worktrees + filesystem), 5-state task classification, recovery priority order, retry policy, and cleanup semantics.
 
-1. Determine worktree root:
-   - Use `KILN_WORKTREE_ROOT` if set.
-   - Otherwise default to `/tmp`.
-2. Collect git worktree truth:
-   - Run `git worktree list --porcelain`.
-   - Parse each entry into `(path, branch, head, locked, prunable)`.
-3. Collect filesystem truth:
-   - Scan the worktree root for kiln wave/task directories and marker artifacts.
-   - Build candidate records keyed by `(phase, wave_id, task_id)`.
-4. Collect control-plane truth:
-   - Read `.kiln/STATE.md` (orchestrator-only canonical state).
-   - Read current phase `PLAN.md` task list and Teams TaskList state from canonical Teams artifacts (see `.claude/skills/kiln-teams/kiln-teams.md`).
-5. Reconcile without multi-writer mutation:
-   - Join records by `task_id` and prefer explicit TaskList status over inferred filesystem status.
-   - Use worktree presence + branch/head + artifact evidence to classify each task deterministically.
-     - Teams mode (`preferences.useTeams: true`): use the 5-state classification from `.claude/skills/kiln-teams/kiln-teams.md`: `done`, `ready_for_integration`, `in_progress`, `rerun_required`, `orphaned`.
-     - Non-Teams mode: `not_started`, `in_progress`, `done`, `blocked`.
-   - Mark orphaned worktrees for operator/orchestrator cleanup; do not silently delete.
-6. Emit recovery actions (orchestrator):
-   - Update TaskList entries first.
-   - Update `.kiln/STATE.md` to reflect next deterministic action and blockers.
-   - Queue integrate/continue/retry decisions per task in stable order (`phase`, then task order in `PLAN.md`).
-
-Determinism rules:
-
-- Given the same `git worktree list` output, filesystem snapshot, TaskList, and `.kiln/STATE.md`, recovery must produce the same action set.
-- If signals conflict, precedence is `orchestrator override > TaskList terminal status > verified evidence paths > worktree existence`.
-- Schema stability is preserved: existing `.kiln/STATE.md` and sentinel schemas are unchanged; Teams additions are additive and external to those schemas.
+Non-Teams mode classification: `not_started`, `in_progress`, `done`, `blocked`.
 
 ### Gate Discipline
 

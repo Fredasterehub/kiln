@@ -16,7 +16,7 @@
 
 <br/>
 
-> **Honest status:** Kiln works and produces real code. We've been using it to build itself — the agents, skills, and orchestration you see here were written by kiln's own multi-model pipeline. Two QA rounds complete, all path references verified, security hardened, snapshot isolation landed. The installer hasn't shipped to npm yet, but the core workflow runs and delivers. Expect rough edges. Help us smooth them.
+> **Honest status:** Kiln works and produces real code. We've been using it to build itself — the agents, skills, and orchestration you see here were written by kiln's own multi-model pipeline. Two QA rounds complete, Teams architecture redesign landed (platform-native task coordination, skill extraction, dead worker detection), all path references verified, security hardened, snapshot isolation landed. The installer hasn't shipped to npm yet, but the core workflow runs and delivers. Expect rough edges. Help us smooth them.
 
 <br/>
 
@@ -384,6 +384,22 @@ your-project/
 
 <br/>
 </details>
+
+<br/>
+
+## Recent changes
+
+**Teams Architecture Redesign** (2026-02-16)
+
+Replaced custom YAML state management with Claude Code's native platform primitives. This is the biggest structural update since initial release.
+
+- **3 new skills extracted** from the orchestrator: `kiln-wave-schedule` (wave task graph, parallelism, integration checkpoints), `kiln-copyback` (deterministic change discovery, collision detection, stable commit order), `kiln-resume` (crash recovery, 5-state task classification, worktree reuse)
+- **Orchestrator slimmed 46%** (584 to 317 lines) — delegates protocol details to skills, keeps only routing logic
+- **Platform-native task coordination** — 7 metadata keys via `TaskUpdate` API replace custom 16-key YAML payloads. Wave ordering via `addBlockedBy` sentinel tasks instead of custom sequencing
+- **Dead worker detection** — stage-aware heartbeat thresholds with configurable override (`deadWorkerTimeoutMinutes`)
+- **Zero symlinks** — all worker isolation via read-only `.kiln-snapshot/` copies
+- **Task Retry Ledger** in STATE.md for orchestrator-owned retry tracking (single-writer principle)
+- All stale references cleaned: no `idempotency_key`, no `.kiln symlink`, no `one team per wave`, no `events.jsonl`
 
 <br/>
 
