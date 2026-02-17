@@ -34,8 +34,8 @@ run_hook() {
 
   run run_hook
   [ "$status" -eq 0 ]
-  [[ "$output" == *"phase 1 of 3"* ]]
-  [[ "$output" == *"Next action: Run /kiln:fire"* ]]
+  [[ "$output" == *"Phase 1 of 3"* ]]
+  [[ "$output" == *"Next: Run /kiln:fire"* ]]
 }
 
 @test "reports halted status from state.json" {

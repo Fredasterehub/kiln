@@ -606,3 +606,70 @@ Agents that previously started with Glob/Read/Grep discovery should:
 1. Check if `.kiln/docs/REPO_INDEX.md` exists and is from the current phase.
 2. If yes: read it first, then do targeted Glob/Read/Grep only for details not in the index.
 3. If no: proceed with normal discovery and note the missing index.
+
+## Visual Language
+
+This section defines the canonical design tokens for kiln's terminal output.
+Hook scripts and the status line script must use these tokens. Agents reference this section
+when outputting formatted terminal text.
+
+### Status Symbols
+
+| State    | Symbol | Name                  |
+|----------|--------|-----------------------|
+| Complete | ✓      | Check mark            |
+| Active   | ►      | Right-pointing triangle |
+| Failed   | ✗      | Ballot X              |
+| Pending  | ○      | Hollow circle         |
+| Paused   | ⏸      | Pause                 |
+
+### ANSI Color Codes
+
+These codes apply to hook scripts and the status line script only.
+Agents must not embed raw ANSI codes in markdown prose — use Bash printf for terminal output.
+
+| Purpose         | Code       | Visual          |
+|-----------------|------------|-----------------|
+| Brand ([kiln])  | 38;5;173   | Warm terracotta |
+| Quote text      | 38;5;222   | Warm gold       |
+| Dividers        | 38;5;179   | Muted gold      |
+| Pass / success  | 32         | Green           |
+| Fail / error    | 31         | Red             |
+| Warning         | 33         | Yellow          |
+| Dim / skip      | 90         | Gray            |
+| Dim text        | 2          | Faint           |
+| Reset           | 0          | Reset all       |
+
+Usage pattern in shell scripts:
+
+```sh
+C_RESET='\033[0m'
+C_BRAND='\033[38;5;173m'
+C_GREEN='\033[32m'
+C_RED='\033[31m'
+C_YELLOW='\033[33m'
+C_DIM='\033[90m'
+printf "${C_BRAND}[kiln]${C_RESET} Mini-verify ${C_GREEN}✓ PASS${C_RESET}\n"
+```
+
+### Spinner Verbs
+
+When configuring the Claude Code spinner for kiln sessions, add the following to the project
+`.claude/settings.json`:
+
+```json
+"spinnerVerbs": {
+  "mode": "replace",
+  "verbs": [
+    "Conjuring", "Transmuting", "Distilling", "Crystallizing",
+    "Weaving", "Kindling", "Tempering", "Invoking",
+    "Refining", "Infusing", "Channeling", "Etching"
+  ]
+}
+```
+
+### Quote Rendering
+
+All lore transition quotes must be rendered via Bash printf with ANSI colors per the
+Rendering Protocol defined in kiln-lore § Rendering Protocol. Never output quotes as
+plain markdown text in terminal output contexts.

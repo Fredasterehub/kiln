@@ -1,4 +1,13 @@
 #!/bin/sh
+# shellcheck disable=SC2059
+# ANSI color codes
+C_RESET='\033[0m'
+C_BRAND='\033[38;5;173m'   # warm terracotta — kiln prefix
+C_GREEN='\033[32m'          # pass/success
+C_RED='\033[31m'            # fail/error
+C_YELLOW='\033[33m'         # warning
+C_DIM='\033[90m'            # skip/debounce (gray)
+
 # kiln on-task-completed hook
 # Runs mini-verify gate: executes project test suite after each task
 
@@ -15,7 +24,7 @@ esac
 # Skip mini-verify if only .kiln/ files changed (no project files affected)
 changed_files=$(git diff --name-only HEAD 2>/dev/null | grep -v '^\.kiln/' || true)
 if [ -z "$changed_files" ]; then
-  echo "[kiln] Mini-verify: skipped (no tracked project files changed)"
+  printf "${C_BRAND}[kiln]${C_RESET} Mini-verify ${C_DIM}○ skipped (no project files changed)${C_RESET}\n"
   exit 0
 fi
 
@@ -27,7 +36,7 @@ if [ -f "$cache_file" ] && command -v node >/dev/null 2>&1; then
   if [ "$last_epoch" -gt 0 ] && [ "$now_epoch" -gt 0 ]; then
     elapsed=$((now_epoch - last_epoch))
     if [ "$elapsed" -lt 10 ]; then
-      echo "[kiln] Mini-verify: debounced (last run ${elapsed}s ago)"
+      printf "${C_BRAND}[kiln]${C_RESET} Mini-verify ${C_DIM}○ debounced (%ss ago)${C_RESET}\n" "$elapsed"
       exit 0
     fi
   fi
@@ -38,7 +47,7 @@ if [ ! -d ".kiln" ] || [ ! -f ".kiln/config.json" ]; then
 fi
 test_cmd=$(node -e 'try{const c=JSON.parse(require("fs").readFileSync(".kiln/config.json","utf8"));const r=c.tooling&&c.tooling["testRunner"];if(r&&typeof r==="string")process.stdout.write(r)}catch(e){}' 2>/dev/null)
 if [ -z "$test_cmd" ]; then
-  echo "[kiln] No test runner configured, skipping mini-verify"
+  printf "${C_BRAND}[kiln]${C_RESET} ${C_DIM}○ No test runner configured, skipping mini-verify${C_RESET}\n"
   exit 0
 fi
 # Unwrap known command prefixes to find the real test runner
@@ -68,17 +77,17 @@ process.stdout.write(parts[i]||'');
 fi
 case "$cmd_name" in
   npm|npx|node|jest|vitest|pytest|cargo|go|make|bun|deno|pnpm|yarn) ;;
-  *) echo "[kiln] Warning: unrecognized test runner '$cmd_name', skipping mini-verify"; exit 0 ;;
+  *) printf "${C_BRAND}[kiln]${C_RESET} ${C_YELLOW}⚠ Unrecognized test runner '%s', skipping mini-verify${C_RESET}\n" "$cmd_name"; exit 0 ;;
 esac
 # Reject shell metacharacters to prevent command injection
 case "$test_cmd" in
   *\;*|*\|*|*\&*|*\>*|*\<*|*\`*|*\$\(*|*\)*)
-    echo "[kiln] Warning: test command contains shell metacharacters, skipping mini-verify for safety"
+    printf "${C_BRAND}[kiln]${C_RESET} ${C_YELLOW}⚠ Test command contains shell metacharacters, skipping mini-verify for safety${C_RESET}\n"
     exit 0
     ;;
 esac
 if [ -z "$cmd_name" ] || ! command -v "$cmd_name" >/dev/null 2>&1; then
-  echo "[kiln] Warning: test command '$cmd_name' not found"
+  printf "${C_BRAND}[kiln]${C_RESET} ${C_YELLOW}⚠ Test command '%s' not found${C_RESET}\n" "$cmd_name"
   exit 0
 fi
 timeout_seconds="${KILN_MINI_VERIFY_TIMEOUT:-120}"
@@ -137,21 +146,19 @@ if [ -d ".kiln" ] && command -v node >/dev/null 2>&1; then
   printf '{"last_run_epoch":%s,"last_diff_hash":""}\n' "$run_epoch" > "$cache_file" 2>/dev/null || true
 fi
 if [ "$timed_out" -eq 1 ]; then
-  echo "[kiln] Mini-verify: TIMEOUT (exceeded ${timeout_seconds}s)"
-  echo "Test command: $test_cmd"
-  echo "Consider increasing timeout or checking for hanging tests."
+  printf "${C_BRAND}[kiln]${C_RESET} Mini-verify ${C_YELLOW}⚠ TIMEOUT (exceeded %ss)${C_RESET}\n" "$timeout_seconds"
+  printf "  Test command: %s\n" "$test_cmd"
+  printf "  ${C_DIM}Consider increasing timeout or checking for hanging tests.${C_RESET}\n"
   exit 0
 fi
 if [ "$run_code" -eq 0 ]; then
-  echo "[kiln] Mini-verify: PASS"
+  printf "${C_BRAND}[kiln]${C_RESET} Mini-verify ${C_GREEN}✓ PASS${C_RESET}\n"
   exit 0
 fi
-echo "[kiln] Mini-verify: FAIL"
-echo "Test command: $test_cmd"
-echo "Exit code: $run_code"
-echo "Last output:"
+printf "${C_BRAND}[kiln]${C_RESET} Mini-verify ${C_RED}✗ FAIL │ exit %d${C_RESET}\n" "$run_code"
+printf "  Test command: %s\n" "$test_cmd"
+printf "  ${C_DIM}Last output:${C_RESET}\n"
  [ -s "$stdout_log" ] && tail -n 50 "$stdout_log"
  [ -s "$stderr_log" ] && tail -n 20 "$stderr_log"
-echo ""
-echo "Fix the failing tests before proceeding."
+printf "\n  ${C_YELLOW}Fix the failing tests before proceeding.${C_RESET}\n"
 exit 0

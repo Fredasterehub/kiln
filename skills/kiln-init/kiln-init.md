@@ -316,6 +316,107 @@ Regression Tests Run: 0
 
 Ensure all created files are UTF-8 text and end with a trailing newline.
 
+## Step 4b: Configure Terminal Experience
+
+This step installs kiln's status line and spinner verbs into the project's Claude Code settings.
+Run after Step 4's file creation is complete.
+
+### 4b.1 Detect Existing Status Line
+
+Check the project root for Claude Code settings files:
+
+```bash
+test -f .claude/settings.json && grep -q '"statusLine"' .claude/settings.json 2>/dev/null
+test -f .claude/settings.local.json && grep -q '"statusLine"' .claude/settings.local.json 2>/dev/null
+```
+
+Set `has_existing_statusline=true` if either check passes, otherwise `false`.
+
+### 4b.2 Install or Offer Status Line
+
+**If `has_existing_statusline=false`:** Install automatically.
+
+Create or update `.claude/settings.json` in the project root.
+If the file already exists, merge the new keys rather than overwriting existing content.
+Add:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": ".claude/hooks/scripts/kiln-statusline.sh"
+  }
+}
+```
+
+Print: `Terminal: kiln status line installed (.claude/settings.json)`
+
+**If `has_existing_statusline=true`:** Ask the user via AskUserQuestion:
+
+Question: "Kiln includes a custom status line showing phase progress, context usage, and transition quotes. Replace your current status line with kiln's? You can switch back anytime by editing .claude/settings.json."
+
+Options:
+- "Yes, use kiln's status line"
+- "No, keep my current status line"
+
+If the user chooses "Yes": update `.claude/settings.json` (same merge as automatic path above).
+If the user chooses "No": skip. Print: `Terminal: keeping existing status line.`
+
+### 4b.3 Configure Spinner Verbs
+
+Always apply spinner verbs (no existing-check needed — this key is kiln-specific).
+Merge into `.claude/settings.json`:
+
+```json
+{
+  "spinnerVerbs": {
+    "mode": "replace",
+    "verbs": [
+      "Conjuring", "Transmuting", "Distilling", "Crystallizing",
+      "Weaving", "Kindling", "Tempering", "Invoking",
+      "Refining", "Infusing", "Channeling", "Etching"
+    ]
+  }
+}
+```
+
+Print: `Terminal: spinner verbs configured.`
+
+### 4b.4 Detect tmux and Set teammateMode
+
+Check if the `$TMUX` environment variable is set:
+
+```bash
+if [ -n "${TMUX:-}" ]; then
+  teammate_mode="tmux"
+else
+  teammate_mode="in-process"
+fi
+```
+
+Merge into `.claude/settings.json`:
+
+```json
+{
+  "kiln": {
+    "teammateMode": "<teammate_mode>"
+  }
+}
+```
+
+Print: `Terminal: teammateMode set to "<teammate_mode>" (detected from environment).`
+
+### Settings Merge Contract
+
+When merging into `.claude/settings.json`:
+1. Read existing file if it exists; parse as JSON.
+2. Set only the specific keys listed above — do not remove or overwrite unrelated keys.
+3. Write back with 2-space indentation.
+4. If the file does not exist, create it with just the new keys.
+5. If `.claude/` directory does not exist, create it first with `mkdir -p .claude`.
+
+This step is non-blocking: if any write fails, print a warning and continue to Step 5.
+
 ## Step 5: Confirm Configuration
 
 Display the detected configuration to the operator and ask for confirmation:

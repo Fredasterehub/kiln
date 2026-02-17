@@ -1,4 +1,13 @@
 #!/bin/sh
+# shellcheck disable=SC2059
+# ANSI color codes
+C_RESET='\033[0m'
+C_BRAND='\033[38;5;173m'   # warm terracotta — kiln prefix
+C_GREEN='\033[32m'          # pass/success
+C_RED='\033[31m'            # fail/error
+C_YELLOW='\033[33m'         # warning
+C_DIM='\033[90m'            # skip/debounce (gray)
+
 # kiln on-session-start hook
 # Rehydrates state from .kiln/state.json (canonical) or .kiln/STATE.md (fallback)
 
@@ -93,45 +102,61 @@ if [ "$step_status_lc" = "in-progress" ]; then
   fi
 fi
 
-echo "[kiln] Session state rehydrated"
+printf "${C_BRAND}[kiln]${C_RESET} Session rehydrated\n"
 if [ -n "$current_phase" ] && [ "${total_phases:-0}" -gt 0 ]; then
-  echo "Project: phase $current_phase of $total_phases"
+  printf "  ${C_BRAND}►${C_RESET} Phase %s of %s │ %s\n" "$current_phase" "$total_phases" "${current_step:-unknown}"
 else
-  echo "Project: phase unknown"
-fi
-echo "Current step: ${current_step:-unknown}"
-echo "Status: $overall_status"
-
-if [ "$interrupted" -eq 1 ]; then
-  echo "Warning: Previous session was interrupted during phase ${current_phase:-unknown} at ${current_step:-unknown} step."
-  echo "Run /kiln:track to resume from the current step."
-fi
-
-if [ -n "$mini_retries$e2e_cycles$review_cycles" ]; then
-  echo "Correction cycles: mini-verify ${mini_retries:-unknown}; e2e ${e2e_cycles:-unknown}; review ${review_cycles:-unknown}"
+  printf "  ${C_DIM}► Phase unknown │ %s${C_RESET}\n" "${current_step:-unknown}"
 fi
 
 case "$overall_status" in
-  complete) echo "Next action: Project complete. See .kiln/FINAL_REPORT.md" ;;
-  halted) echo "Next action: Project halted at ${current_step:-unknown}. See .kiln/tracks/phase-${current_phase:-N}/ for details. Operator action needed." ;;
+  complete)
+    printf "  ${C_GREEN}✓ Status: complete${C_RESET}\n"
+    ;;
+  halted)
+    printf "  ${C_RED}✗ Status: halted${C_RESET}\n"
+    ;;
+  *)
+    printf "  ${C_DIM}○ Status: %s${C_RESET}\n" "$overall_status"
+    ;;
+esac
+
+if [ "$interrupted" -eq 1 ]; then
+  printf "  ${C_YELLOW}⚠ Previous session interrupted at phase %s / %s.${C_RESET}\n" \
+    "${current_phase:-unknown}" "${current_step:-unknown}"
+  printf "  ${C_YELLOW}  Run /kiln:track to resume.${C_RESET}\n"
+fi
+
+if [ -n "$mini_retries$e2e_cycles$review_cycles" ]; then
+  printf "  ${C_DIM}Correction cycles: mini-verify %s │ e2e %s │ review %s${C_RESET}\n" \
+    "${mini_retries:-?}" "${e2e_cycles:-?}" "${review_cycles:-?}"
+fi
+
+case "$overall_status" in
+  complete)
+    printf "  Next: Project complete. See .kiln/FINAL_REPORT.md\n"
+    ;;
+  halted)
+    printf "  ${C_RED}Next: Operator action needed.${C_RESET} See .kiln/tracks/phase-%s/ for details.\n" \
+      "${current_phase:-N}"
+    ;;
   *)
     if [ -n "$next_expected" ]; then
-      echo "Next action: $next_expected"
+      printf "  Next: %s\n" "$next_expected"
     else
-      echo "Next action: Resume with /kiln:track"
+      printf "  Next: Resume with /kiln:track\n"
     fi
     first_run=0
     [ "$next_expected" = "Run /kiln:fire" ] && [ "$step_status_lc" = "pending" ] && first_run=1
     if [ "$first_run" -eq 1 ]; then
-      echo ""
-      echo "Tip: For the best experience, run Claude Code with:"
-      echo "  claude --dangerously-skip-permissions"
+      printf "\n  Tip: For the best experience, run Claude Code with:\n"
+      printf "    claude --dangerously-skip-permissions\n"
     fi
     ;;
 esac
 
 if [ "$malformed" -eq 1 ]; then
-  echo "Warning: State may be corrupted. Check .kiln/state.json or .kiln/STATE.md manually."
+  printf "  ${C_YELLOW}⚠ State may be corrupted. Check .kiln/state.json or .kiln/STATE.md manually.${C_RESET}\n"
 fi
 
 exit 0

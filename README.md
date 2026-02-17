@@ -53,6 +53,19 @@ Fair warning — things will be clunky. I push commits constantly, features brea
 ## Recent changes
 
 > [!NOTE]
+> **Terminal UX Overhaul** (2026-02-17)
+>
+> ANSI-colored output across all hooks and transition quotes, custom status line with context tracking, and mystical spinner verbs. The terminal now feels alive.
+
+- Custom status line: context bar with compaction countdown, kiln phase/step state, latest lore quote
+- Hook scripts (`on-session-start`, `on-task-completed`) colorized with warm terracotta brand palette
+- Lore Rendering Protocol: all transition quotes use Bash printf with warm gold (38;5;222) ANSI escapes
+- Visual Language design tokens codified in kiln-core: status symbols, ANSI codes, spinner verbs
+- Status symbols unified: `✓` complete, `►` active, `✗` failed, `○` pending, `⏸` paused
+- `/kiln:init` Step 4b: auto-installs status line, spinner verbs, and detects tmux for teammateMode
+- Spinner verbs: Conjuring, Transmuting, Distilling, Crystallizing, Weaving, Kindling, Tempering...
+
+> [!NOTE]
 > **Realignment Overhaul** (2026-02-17)
 >
 > Killed brittle shell parsing, extracted shared contracts across 35 files, and added machine-readable state. The hook layer now has real tests.

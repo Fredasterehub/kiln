@@ -12,7 +12,7 @@ This skill provides curated philosophical quotes for all pipeline transition poi
 
 The orchestrator reads ONLY the relevant transition section when displaying a transition message. The AI selects one quote contextually based on the current situation — no shell commands, no awk, no modulo arithmetic. The AI is the selection mechanism.
 
-**Transition Message Format:**
+**Transition Message Format** (see § Rendering Protocol below for colored output):
 ```
 ━━━ [Title] ━━━
 "[Quote]" -- [Attribution]
@@ -21,6 +21,43 @@ The orchestrator reads ONLY the relevant transition section when displaying a tr
 ```
 
 Max 4 lines, no emoji. Whitespace is intentional (ma — negative space).
+
+## Rendering Protocol
+
+The orchestrator and agent skills **must not** output transition quotes as plain markdown text.
+Use Bash printf with ANSI escapes so the colors survive Claude Code's output stream.
+
+### Step 1: Display the quote
+
+```bash
+printf '\033[38;5;179m━━━ %s ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m-- %s\033[0m\n\n\033[2m%s\033[0m\n' \
+  "$title" "$quote" "$attribution" "$status_line"
+```
+
+Color legend:
+- `38;5;179` — muted gold (divider bars and title)
+- `38;5;222` — warm gold (the quote text — key visual pop)
+- `2m` — dim (attribution and status line)
+
+Variable values are caller-supplied:
+- `$title` — transition label (e.g., "Cooling", "Phase 2 Complete")
+- `$quote` — quote text without surrounding quotes
+- `$attribution` — author / source
+- `$status_line` — one-line status + action hint (e.g., "State saved. The kiln holds its heat. Run /kiln:fire to resume.")
+
+### Step 2: Write last-quote.json
+
+After displaying, persist the selected quote so the status line script can show it:
+
+```bash
+printf '{"quote":"%s","by":"%s","section":"%s","at":"%s"}\n' \
+  "$quote" "$attribution" "$section" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  > .kiln/last-quote.json
+```
+
+Where `$section` is the lore section name (e.g., `pause-cool`, `phase-complete`).
+
+Only write this file when `.kiln/` exists (`test -d .kiln` first).
 
 ---
 

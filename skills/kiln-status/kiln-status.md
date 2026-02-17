@@ -70,13 +70,13 @@ Format and display the status report. Use this exact format:
 
   <For each phase in roadmap/STATE.md:>
   Phase <N>: <title>          [<status>]
-  <where status is one of: completed ✓, in-progress ►, failed ✗, pending ·>
+  <where status is one of: completed ✓, in-progress ►, failed ✗, pending ○>
 
   Example:
   Phase 1: Project scaffolding     [completed ✓]
   Phase 2: Core data model         [completed ✓]
   Phase 3: Authentication          [in-progress ►] (review)
-  Phase 4: API endpoints           [pending ·]
+  Phase 4: API endpoints           [pending ○]
 
   ── Current Track ───────────────────
 
@@ -108,8 +108,8 @@ If no phases exist yet (pre-brainstorm), show only Project/Mode and the next act
 
 Display rules:
 1. Keep column alignment readable in monospace output.
-2. Use exact status symbols: `✓`, `►`, `✗`, `·`.
-3. Do not introduce additional icons, colors, or emoji.
+2. Use exact status symbols: `✓`, `►`, `✗`, `○` (see kiln-core § Visual Language).
+3. Do not introduce additional icons, colors, or emoji beyond the symbol set above.
 4. If a field is unavailable, render `'none'` or `'unknown'` as applicable.
 5. When current track exists, include step status text exactly.
 

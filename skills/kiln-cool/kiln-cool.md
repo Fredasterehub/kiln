@@ -123,18 +123,37 @@ Display the pause-cool lore transition message using the existing format from "T
 
 ## Transition Message on Pause
 
-After writing the state snapshot (step 7) and the state.json co-update per kiln-core § state.json Canonical Schema, display a transition message using the `pause-cool` section from `.claude/skills/kiln-lore/kiln-lore.md`.
+After writing the state snapshot and the state.json co-update per kiln-core § state.json
+Canonical Schema, display a transition message.
 
-Read the `pause-cool` section and select one quote contextually. Display using this format:
+Read the `pause-cool` section from `.claude/skills/kiln-lore/kiln-lore.md` and select one
+quote contextually.
 
+Display using the **Rendering Protocol** defined in kiln-lore § Rendering Protocol.
+Use these values:
+- `$title` = "Cooling"
+- `$status_line` = "State saved. The kiln holds its heat. Run /kiln:fire to resume."
+
+Set variables then call:
+
+```bash
+title="Cooling"
+# (quote and attribution set from selected lore entry)
+status_line="State saved. The kiln holds its heat. Run /kiln:fire to resume."
+section="pause-cool"
+
+printf '\033[38;5;179m━━━ %s ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m-- %s\033[0m\n\n\033[2m%s\033[0m\n' \
+  "$title" "$quote" "$attribution" "$status_line"
+
+# Write last-quote.json for status line display
+if test -d .kiln; then
+  printf '{"quote":"%s","by":"%s","section":"%s","at":"%s"}\n' \
+    "$quote" "$attribution" "$section" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    > .kiln/last-quote.json
+fi
 ```
-━━━ Cooling ━━━
-"[Quote]" -- [Attribution]
 
-State saved. The kiln holds its heat. Run /kiln:fire to resume.
-```
-
-No emoji. The whitespace (blank line before the status) is intentional.
+No emoji. The whitespace (blank line before the status line) is intentional (ma -- negative space).
 
 ## Non-Destructive Rules
 - Never change phase progress statuses.
