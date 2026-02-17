@@ -39,30 +39,7 @@ npx kiln-one
 
 ## Why I built this
 
-I build projects solo. I want them to be good.
-
-Kiln is my daily driver. I spend real time on the brainstorm — going deep, challenging my own assumptions, shaping something concrete — and then I let the oven cook. Check back on the working prototype, tweak it in Claude Code, done. That's my whole involvement.
-
-The brainstorm session is where your time goes. It's also where your ROI comes from. You can rush through or really sit with it. The choice is yours, but the deeper you go, the better everything downstream gets.
-
-| Your work | Kiln's work |
-|-----------|-------------|
-| Brainstorm your vision deeply | Plan, split into tasks, sharpen prompts |
-| Approve the roadmap | Execute, test, commit atomically |
-| Tweak the result in Claude Code | Self-correct up to 3 times per task |
-
-Once the brainstorm is done, kiln handles the rest.
-
-It builds a plan — not a detailed PRD that'll drift from reality, but a direction. From there it splits each phase into atomic tasks, sharpens each one into a focused prompt, and hands it to GPT-5.3-codex to implement. Every task gets tested automatically after execution.
-
-When the whole phase is done, Opus 4.6 runs a QA review with end-to-end tests. If it finds problems, the fix doesn't go straight back to the executor. It loops through GPT-5.2 first to re-sharpen the prompt, then GPT-5.3-codex implements the fix, then Opus reviews again. Those correction cycles are capped at 3. If after 3 rounds three state-of-the-art models can't solve it, there's a bigger issue behind.
-
-I won't lie — there are a lot of steps, a lot of verifications, and even debates between models. It takes time. But the results have been worth it, and I'll keep optimizing for speed wherever it's lossless. The beautiful part: it runs fully automated in a tmux window. Go to bed, go to work, come back to a quality project running.
-
-I hope you cook something amazing. Let us know how it goes.
-
-> [!IMPORTANT]
-> **Where things stand:** Kiln works and produces real code. We've been using it to build itself — the agents, skills, and orchestration you see here were written by kiln's own pipeline. Not shipped to npm yet, but the core workflow runs and delivers. Expect rough edges. Help us smooth them.
+Just trying to automate and optimize the workflow I developed over the months. Opus (Opus 4.6) helps brainstorm. GPT (gpt5.2-high) makes the plan without forgetting any detail! Codex (gpt5.3-codex-high) implements highly optimized and surgical prompts resulting in really high quality code. Opus then QA reviews, and if needs be sends back to GPT and Codex and rinse and repeat until morale improves! Now I'm trying to glue all this together efficiently via native features and Claude Code. It works. But there will be growing pains!
 
 ---
 
