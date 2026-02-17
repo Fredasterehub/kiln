@@ -31,7 +31,7 @@ npx kiln-dev
 
 <br>
 
-[Why I Built This](#why-i-built-this) · [How It Works](#how-it-works) · [Get Started](#get-started) · [Setup](#recommended-setup) · [Deep Dives](#deep-dives) · [Commands](#all-commands)
+[Why I Built This](#why-i-built-this) · [What's New](#recent-changes) · [What's Next](#coming-soon) · [How It Works](#how-it-works) · [Get Started](#get-started) · [Setup](#recommended-setup) · [Deep Dives](#deep-dives)
 
 </div>
 
@@ -63,6 +63,34 @@ I hope you cook something amazing. Let us know how it goes.
 
 > [!IMPORTANT]
 > **Where things stand:** Kiln works and produces real code. We've been using it to build itself — the agents, skills, and orchestration you see here were written by kiln's own pipeline. Not shipped to npm yet, but the core workflow runs and delivers. Expect rough edges. Help us smooth them.
+
+---
+
+## Recent changes
+
+> [!NOTE]
+> **Teams Architecture Redesign** (2026-02-16)
+>
+> Replaced custom YAML state management with Claude Code's native platform primitives. Biggest structural change since the beginning.
+
+- 3 new skills extracted from the orchestrator: `kiln-wave-schedule`, `kiln-copyback`, `kiln-resume`
+- Orchestrator went from 584 to 317 lines — delegates details to skills, keeps only routing
+- 7 metadata keys via `TaskUpdate` replace 16-key YAML payloads. Wave ordering through `addBlockedBy` sentinels
+- Dead worker detection with stage-aware heartbeat thresholds
+- Task Retry Ledger in STATE.md — single-writer principle, no concurrent state mutation
+
+---
+
+## Coming soon
+
+> [!TIP]
+> **Full customization is on the way.** We're building an onboarding flow that lets you choose your models, tools, planning strategy, review depth, and how deep you want to go in the rabbit hole. Your kiln, your rules.
+
+**Workflow debugger.** Watches how the agent team performs, saves anonymized results, optionally pushes to a branch so we can see where things get stuck. No AI calls from your machine. Completely opt-in.
+
+Terminal UX needs love. The CLI experience should feel refined, not raw. If you're good at making terminals beautiful, come help — you know the target.
+
+**Specialist agents** — a UI agent that understands design systems, a test agent that knows your framework. Deeper skills for specific domains.
 
 ---
 
@@ -166,23 +194,12 @@ Show progress and next recommended action
 
 | Tool | What it adds | Required? |
 |------|-------------|-----------|
-| [Claude Code](https://claude.ai/claude-code) | The engine | Yes |
-| [Codex CLI](https://github.com/openai/codex) | GPT-5.2 planning + GPT-5.3-codex execution | Strongly recommended |
+| [Codex CLI](https://github.com/openai/codex) | GPT-5.2 planning + GPT-5.3-codex execution — this is where kiln's real edge lives | Strongly recommended |
+| [Claude Code](https://claude.ai/claude-code) | The engine that runs everything | Yes |
 | [Context7](https://github.com/upstash/context7) | Up-to-date library docs via MCP | Optional |
 | [Playwright MCP](https://github.com/anthropics/anthropic-quickstarts/tree/main/mcp-playwright) | End-to-end browser testing | Optional |
 
-**1. Run Claude Code with `--dangerously-skip-permissions`**
-
-Kiln spawns agents, reads and writes files, and runs tests constantly. Permission prompts at every step break the flow.
-
-```bash
-claude --dangerously-skip-permissions
-```
-
-> [!CAUTION]
-> Only use this in projects where you trust the pipeline. Kiln never runs destructive commands, but you're giving it the keys.
-
-**2. Install Codex CLI (strongly recommended)**
+**1. Install Codex CLI**
 
 Multi-model mode is where kiln shines. Codex CLI gives you GPT-5.2 for planning and GPT-5.3-codex for execution — they think differently than Claude, and that's the whole point.
 
@@ -192,6 +209,17 @@ npm install -g @openai/codex
 
 > [!TIP]
 > **Claude-only mode** still runs the full pipeline. Multi-model just catches things a single model family misses.
+
+**2. Run Claude Code with `--dangerously-skip-permissions`**
+
+Kiln spawns agents, reads and writes files, and runs tests constantly. Permission prompts at every step break the flow.
+
+```bash
+claude --dangerously-skip-permissions
+```
+
+> [!CAUTION]
+> Only use this in projects where you trust the pipeline. Kiln never runs destructive commands, but you're giving it the keys.
 
 ---
 
@@ -397,32 +425,6 @@ your-project/
 
 <br>
 </details>
-
----
-
-## Coming soon
-
-**Workflow debugger.** Watches how the agent team performs, saves anonymized results, optionally pushes to a branch so we can see where things get stuck. No AI calls from your machine. Completely opt-in.
-
-Terminal UX needs love. The CLI experience should feel refined, not raw. If you're good at making terminals beautiful, come help — you know the target.
-
-**Specialist agents** — a UI agent that understands design systems, a test agent that knows your framework. Deeper skills for specific domains.
-
-> The installer should be smarter. Detect your stack, set up MCP servers, walk you through everything. It's coming.
-
----
-
-## Recent changes
-
-**Teams Architecture Redesign** (2026-02-16)
-
-Replaced custom YAML state management with Claude Code's native platform primitives. Biggest structural change since the beginning.
-
-- 3 new skills extracted from the orchestrator: `kiln-wave-schedule`, `kiln-copyback`, `kiln-resume`
-- Orchestrator went from 584 to 317 lines — delegates details to skills, keeps only routing
-- 7 metadata keys via `TaskUpdate` replace 16-key YAML payloads. Wave ordering through `addBlockedBy` sentinels
-- Dead worker detection with stage-aware heartbeat thresholds
-- Task Retry Ledger in STATE.md — single-writer principle, no concurrent state mutation
 
 ---
 
