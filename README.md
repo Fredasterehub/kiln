@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/License-MIT-D4A574?style=for-the-badge)](LICENSE)
 [![Node](https://img.shields.io/badge/Node-18+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Native-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white)](https://claude.ai/claude-code)
-[![Dependencies](https://img.shields.io/badge/Dependencies-Zero-2ea44f?style=for-the-badge)]()
+[![Dependencies](https://img.shields.io/badge/Dependencies-Zero-4A403A?style=for-the-badge)]()
 
 <br>
 
@@ -38,6 +38,12 @@ I build projects solo. I want them to be good.
 Kiln is my daily driver. I spend real time on the brainstorm — going deep, challenging my own assumptions, shaping something concrete — and then I let the oven cook. Check back on the working prototype, tweak it in Claude Code, done. That's my whole involvement.
 
 The brainstorm session is where your time goes. It's also where your ROI comes from. You can rush through or really sit with it. The choice is yours, but the deeper you go, the better everything downstream gets.
+
+| Your work | Kiln's work |
+|-----------|-------------|
+| Brainstorm your vision deeply | Plan, split into tasks, sharpen prompts |
+| Approve the roadmap | Execute, test, commit atomically |
+| Tweak the result in Claude Code | Self-correct up to 3 times per task |
 
 Once the brainstorm is done, kiln handles the rest.
 
@@ -150,7 +156,12 @@ Show progress and next recommended action
 
 ## Recommended setup
 
-**Optimal stack:** Claude Code + Codex CLI + [Context7](https://github.com/upstash/context7) + [Playwright MCP](https://github.com/anthropics/anthropic-quickstarts/tree/main/mcp-playwright) for end-to-end validations. Context7 and Playwright integration into the installer is coming soon.
+| Tool | What it adds | Required? |
+|------|-------------|-----------|
+| [Claude Code](https://claude.ai/claude-code) | The engine | Yes |
+| [Codex CLI](https://github.com/openai/codex) | GPT-5.2 planning + GPT-5.3-codex execution | Strongly recommended |
+| [Context7](https://github.com/upstash/context7) | Up-to-date library docs via MCP | Optional |
+| [Playwright MCP](https://github.com/anthropics/anthropic-quickstarts/tree/main/mcp-playwright) | End-to-end browser testing | Optional |
 
 **1. Run Claude Code with `--dangerously-skip-permissions`**
 
@@ -381,11 +392,11 @@ your-project/
 
 **Workflow debugger.** Watches how the agent team performs, saves anonymized results, optionally pushes to a branch so we can see where things get stuck. No AI calls from your machine. Completely opt-in.
 
-**Terminal UX polish.** The CLI experience needs love. If you're good at making terminals feel refined, come help — you know the target.
+Terminal UX needs love. The CLI experience should feel refined, not raw. If you're good at making terminals beautiful, come help — you know the target.
 
-**Specialist agents.** A UI agent that understands design systems. A test agent that knows your framework. Deeper skills for specific domains.
+**Specialist agents** — a UI agent that understands design systems, a test agent that knows your framework. Deeper skills for specific domains.
 
-**Smarter installer.** Detects your stack, sets up MCP servers, walks you through everything.
+> The installer should be smarter. Detect your stack, set up MCP servers, walk you through everything. It's coming.
 
 ---
 
