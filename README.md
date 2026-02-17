@@ -4,71 +4,98 @@
 
 **Autonomous software delivery for Claude Code**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-D4A574?style=flat-square)](LICENSE)&nbsp;
-[![Node](https://img.shields.io/badge/Node-18+-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)&nbsp;
-[![Claude Code](https://img.shields.io/badge/Claude_Code-Native-7C3AED?style=flat-square&logo=anthropic&logoColor=white)](https://claude.ai/claude-code)&nbsp;
-[![Zero Deps](https://img.shields.io/badge/Dependencies-Zero-2ea44f?style=flat-square)]()
+[![License](https://img.shields.io/badge/License-MIT-D4A574?style=for-the-badge)](LICENSE)
+[![Node](https://img.shields.io/badge/Node-18+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
+[![Claude Code](https://img.shields.io/badge/Claude_Code-Native-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white)](https://claude.ai/claude-code)
+[![Dependencies](https://img.shields.io/badge/Dependencies-Zero-2ea44f?style=for-the-badge)]()
 
-> *"What is to give light must endure burning."*
-> — Viktor Frankl
-
-</div>
-
-<br/>
-
-> **Honest status:** Kiln works and produces real code. We've been using it to build itself — the agents, skills, and orchestration you see here were written by kiln's own multi-model pipeline. Two QA rounds complete, Teams architecture redesign landed (platform-native task coordination, skill extraction, dead worker detection), all path references verified, security hardened, snapshot isolation landed. The installer hasn't shipped to npm yet, but the core workflow runs and delivers. Expect rough edges. Help us smooth them.
-
-<br/>
-
-## What is this
-
-Kiln is a workflow that turns Claude Code into a self-running software factory. You describe what you want to build, and it handles everything else — brainstorming, planning, implementation, testing, review, documentation — across multiple AI models, with no human intervention required between stages.
-
-It's not a wrapper around Claude Code. It's not a server. It's a collection of markdown files — agents, skills, and hooks — that get installed into your project and teach Claude Code how to orchestrate a full delivery pipeline. When you type `/kiln:fire`, it creates a team of AI agents, each with a specific role, and runs them through a structured sequence until your project is built.
-
-The ideas come from real projects that each solved a piece of the puzzle: [BMAD Method](https://github.com/bmadcode/BMAD-METHOD) for structured brainstorming, [GSD](https://github.com/cyanheads/claude-code-gsd) for fresh-context execution, and [Google's Conductor research](https://research.google/blog/automated-unit-test-improvement-using-large-language-models-at-google/) for just-in-time task writing. Kiln combines them into one pipeline that actually runs.
+<br>
 
 ```
 npx kiln-dev
 ```
 
-> **Not published to npm yet.** This will work once we ship. For now, clone the repo and install manually.
+> Not published to npm yet. Clone and install manually for now.
 
-<br/>
+<br>
 
-## Recommended setup
+*"What is to give light must endure burning."* — Viktor Frankl
 
-Kiln works best when Claude Code can operate with minimal friction. Two things make a real difference:
+<br>
 
-**1. Run Claude Code with `--dangerously-skip-permissions`**
+[Why I Built This](#why-i-built-this) · [How It Works](#how-it-works) · [Get Started](#get-started) · [Setup](#recommended-setup) · [Deep Dives](#deep-dives) · [Commands](#all-commands)
 
-Kiln orchestrates agents, spawns teams, reads and writes files, and runs verification commands constantly. Permission prompts at every step break the flow and defeat the purpose of autonomous delivery. For the best experience:
+</div>
 
-```bash
-claude --dangerously-skip-permissions
-```
+---
 
-> This grants full tool access. Only use this in projects where you trust the pipeline. Kiln never runs destructive commands, but you're giving it the keys.
+## Why I built this
 
-**2. Install Codex CLI (strongly recommended)**
+This is for people who want to kick off projects solo and still deliver high-quality MVPs or full builds.
 
-Multi-model mode is where Kiln shines. Codex CLI gives you access to GPT-5.2 (planning and sharpening) and GPT-5.3-codex (execution) — models that complement Claude's strengths with different reasoning styles. Without it, Kiln falls back to Claude-only mode, which works but misses the dual-perspective advantage.
+Kiln is now my daily driver for project development. I spend some good time brainstorming the idea, then I let the oven cook. Check back on the working prototype and finish tweaking, usually directly in Claude Code. That's the whole loop from my side.
 
-```bash
-npm install -g @openai/codex
-```
+You will spend real time during the brainstorm session — back and forth, deeply defining, articulating, and organizing your vision. This is your investment, and where most of your ROI will come from. You can zoom through or really take the time to go deep. The choice is yours.
 
-If Codex CLI was not detected during install, enable multi-model mode later in `.kiln/config.json`:
+Once the brainstorm is done — where all your input has been challenged, verified, and shaped into a concrete vision — kiln takes care of the rest. It creates a global plan that's more of a direction than a detailed PRD (those suffer from implementation drift eventually). From that plan, it iterates each phase rigorously: atomically splitting them into optimal task sizes and sharpened prompts so that GPT-5.3-codex can really shine. Deterministic verifications run after each task. Once the whole phase is done, Opus 4.6 runs a QA review with end-to-end tests — and if it finds issues, the correction loops all the way back through GPT-5.2 for re-sharpening before GPT-5.3-codex implements the fix. Opus reviews again. Those cycles are capped at 3. If after 3 rounds three state-of-the-art models can't fix the problem, there's a bigger issue at play.
 
-```json
-{
-  "modelMode": "multi-model"
-}
-```
+I won't lie — there are a lot of steps, verifications, and even debates, so it can take a while to run. But the results have really been worth it. I'll optimize for speed everywhere we can, as long as it's lossless. And the beautiful part is that it's fully automated in a tmux window: you can literally go to bed or to work and come back to a quality project running.
 
-> **Claude-only mode** still runs the full pipeline. Multi-model is the premium path — it catches things a single model family misses.
+There's a lot we can expand and improve throughout the whole loop, and I'll tackle it with method, slowly but surely. I hope you have a good experience and manage to cook amazing projects. Let us know.
 
-<br/>
+> **Honest status:** Kiln works and produces real code. We've been using it to build itself — the agents, skills, and orchestration you see here were written by kiln's own multi-model pipeline. The installer hasn't shipped to npm yet, but the core workflow runs and delivers. Expect rough edges. Help us smooth them.
+
+---
+
+## How it works
+
+It's not a wrapper. It's not a server. It's a collection of markdown files — agents, skills, and hooks — that get installed into your project and teach Claude Code how to orchestrate a full delivery pipeline.
+
+Two stages are interactive. The rest run autonomously, repeating per phase until everything ships.
+
+<table>
+<tr>
+<td align="center" width="40"><b>1</b></td>
+<td width="120"><b>Brainstorm</b></td>
+<td>You and the AI explore the problem space together. Anti-clustering, challenge passes, structured divergence.</td>
+<td width="120"><code>VISION.md</code></td>
+</tr>
+<tr>
+<td align="center"><b>2</b></td>
+<td><b>Roadmap</b></td>
+<td>The vision gets broken into delivery phases. You review and approve before anything moves.</td>
+<td><code>ROADMAP.md</code></td>
+</tr>
+<tr><td colspan="4"></td></tr>
+<tr>
+<td align="center"><b>3</b></td>
+<td><b>Plan</b></td>
+<td>Two models plan independently. Optional debate rounds. A synthesizer merges the best of both.</td>
+<td><code>PLAN.md</code></td>
+</tr>
+<tr>
+<td align="center"><b>4</b></td>
+<td><b>Execute</b></td>
+<td>Each task is sharpened into a surgical prompt and executed with fresh 200k context. Mini-verified, committed atomically.</td>
+<td>Code + commits</td>
+</tr>
+<tr>
+<td align="center"><b>5</b></td>
+<td><b>Verify</b></td>
+<td>E2E tests run your actual app. Opus reviews across 7 quality dimensions. Up to 3 correction cycles.</td>
+<td><code>e2e-results.md</code></td>
+</tr>
+<tr>
+<td align="center"><b>6</b></td>
+<td><b>Reconcile</b></td>
+<td>Living docs get updated with what actually happened. The next phase inherits real context, not stale assumptions.</td>
+<td><code>PATTERNS</code> <code>DECISIONS</code></td>
+</tr>
+</table>
+
+> Stages 3-6 repeat per phase. The 20th task fires with the same precision as the first.
+
+---
 
 ## Get started
 
@@ -81,7 +108,7 @@ Install, then use four commands:
 ```
 /kiln:fire
 ```
-Light the kiln — start or resume the full automated pipeline
+Light the kiln — start or resume the full pipeline
 
 </td>
 <td width="50%">
@@ -113,100 +140,74 @@ Show progress and next recommended action
 </tr>
 </table>
 
-<br/>
+---
 
-## How it works
+## Recommended setup
 
-Your project flows through six stages. The first two are interactive — you and the AI shape the vision together. The rest run autonomously, repeating per phase until everything ships. At each transition, the kiln displays a curated quote — a small moment of reflection between stages of the fire.
+**Optimal stack:** Claude Code + Codex CLI + [Context7](https://github.com/upstash/context7) + [Playwright MCP](https://github.com/anthropics/anthropic-quickstarts/tree/main/mcp-playwright) for end-to-end validations. Context7 and Playwright MCP integration into the installer is coming soon.
 
-<table>
-<tr>
-<td align="center" width="33"><b>#</b></td>
-<td><b>Stage</b></td>
-<td><b>What happens</b></td>
-<td><b>Output</b></td>
-</tr>
-<tr>
-<td align="center">1</td>
-<td><b>Brainstorm</b></td>
-<td>You and the AI explore the problem space together. Anti-clustering, challenge passes, structured divergence &mdash; borrowed from BMAD.</td>
-<td><code>VISION.md</code></td>
-</tr>
-<tr>
-<td align="center">2</td>
-<td><b>Roadmap</b></td>
-<td>The vision gets broken into delivery phases. You review and approve before anything moves.</td>
-<td><code>ROADMAP.md</code></td>
-</tr>
-<tr>
-<td align="center">3</td>
-<td><b>Plan</b></td>
-<td>Two models plan independently. Optional debate rounds. A synthesizer merges the best of both. Tasks are written just-in-time with real codebase context &mdash; the Conductor insight.</td>
-<td><code>PLAN.md</code></td>
-</tr>
-<tr>
-<td align="center">4</td>
-<td><b>Execute</b></td>
-<td>Each task is sharpened into a surgical prompt and executed with fresh 200k context. Mini-verified, committed atomically. In Teams mode, wave workers run in parallel via git worktrees.</td>
-<td>Code + commits</td>
-</tr>
-<tr>
-<td align="center">5</td>
-<td><b>Verify</b></td>
-<td>E2E tests run your actual app. Opus reviews across 7 quality dimensions. Up to 3 correction cycles before it ships.</td>
-<td><code>e2e-results.md</code></td>
-</tr>
-<tr>
-<td align="center">6</td>
-<td><b>Reconcile</b></td>
-<td>Living docs get updated with what actually happened. The next phase inherits real context, not stale assumptions.</td>
-<td><code>PATTERNS</code> <code>DECISIONS</code> <code>PITFALLS</code></td>
-</tr>
-</table>
+**1. Run Claude Code with `--dangerously-skip-permissions`**
 
-> Stages 3-6 repeat per phase. The 20th task fires with the same precision as the first.
+Kiln orchestrates agents, spawns teams, reads and writes files, and runs verification commands constantly. Permission prompts at every step break the flow.
 
-<br/>
+```bash
+claude --dangerously-skip-permissions
+```
+
+> Only use this in projects where you trust the pipeline. Kiln never runs destructive commands, but you're giving it the keys.
+
+**2. Install Codex CLI (strongly recommended)**
+
+Multi-model mode is where Kiln shines. Codex CLI gives you access to GPT-5.2 (planning and sharpening) and GPT-5.3-codex (execution) — models that complement Claude's strengths with different reasoning styles.
+
+```bash
+npm install -g @openai/codex
+```
+
+> **Claude-only mode** still runs the full pipeline. Multi-model is the premium path — it catches things a single model family misses.
+
+---
+
+## Deep dives
 
 <details>
-<summary>&nbsp;<b>Multi-model orchestration</b>&nbsp;&mdash;&nbsp;<i>right model, right task</i></summary>
+<summary><b>Multi-model orchestration</b> — right model, right task</summary>
 
-<br/>
+<br>
 
 Each model has a temperature it fires best at. Kiln applies the right heat at the right moment.
 
-<table>
-<tr><td><b>Role</b></td><td><b>Model</b></td><td><b>Why</b></td></tr>
-<tr><td>Orchestrator</td><td>Opus 4.6</td><td>Deep reasoning for routing</td></tr>
-<tr><td>Planner</td><td>Opus 4.6</td><td>Architectural vision, edge cases</td></tr>
-<tr><td>Codex Planner</td><td>GPT-5.2</td><td>Catches details Opus glosses over</td></tr>
-<tr><td>Synthesizer</td><td>Opus 4.6</td><td>Judgment calls on merging</td></tr>
-<tr><td>Sharpener</td><td>GPT-5.2-high</td><td>Prompt engineering for downstream execution</td></tr>
-<tr><td>Executor</td><td>GPT-5.3-codex</td><td>Atomic task beast mode</td></tr>
-<tr><td>Reviewer</td><td>Opus 4.6</td><td>7-dimension code review</td></tr>
-<tr><td>Codex Reviewer</td><td>GPT-5.3-codex-sparks</td><td>Independent review for debate mode</td></tr>
-<tr><td>Wave Worker</td><td>Sonnet 4.5</td><td>Parallel task execution in Teams mode</td></tr>
-<tr><td>Validator</td><td>Sonnet 4.5</td><td>Fast mechanical checking</td></tr>
-<tr><td>E2E Verifier</td><td>Sonnet 4.5</td><td>Test generation and execution</td></tr>
-<tr><td>Researcher</td><td>Haiku 4.5</td><td>Fast, cheap retrieval</td></tr>
-<tr><td>Brainstormer</td><td>Opus 4.6</td><td>Creative exploration</td></tr>
-</table>
+| Role | Model | Why |
+|------|-------|-----|
+| Orchestrator | Opus 4.6 | Deep reasoning for routing |
+| Planner | Opus 4.6 | Architectural vision, edge cases |
+| Codex Planner | GPT-5.2 | Catches details Opus glosses over |
+| Synthesizer | Opus 4.6 | Judgment calls on merging |
+| Sharpener | GPT-5.2-high | Prompt engineering for execution |
+| Executor | GPT-5.3-codex | Atomic task beast mode |
+| Reviewer | Opus 4.6 | 7-dimension code review |
+| Codex Reviewer | GPT-5.3-codex-sparks | Independent review for debate mode |
+| Wave Worker | Sonnet 4.5 | Parallel execution in Teams mode |
+| Validator | Sonnet 4.5 | Fast mechanical checking |
+| E2E Verifier | Sonnet 4.5 | Test generation and execution |
+| Researcher | Haiku 4.5 | Fast, cheap retrieval |
+| Brainstormer | Opus 4.6 | Creative exploration |
 
-> **No Codex CLI?** Kiln falls back to Claude-only mode. The full pipeline still runs. Multi-model is the premium path, not a requirement.
+> **No Codex CLI?** Kiln falls back to Claude-only mode. The full pipeline still runs.
 
-<br/>
+<br>
 </details>
 
 <details>
-<summary>&nbsp;<b>Debate mode</b>&nbsp;&mdash;&nbsp;<i>models argue before they agree</i></summary>
+<summary><b>Debate mode</b> — models argue before they agree</summary>
 
-<br/>
+<br>
 
 Default synthesis is polite: each model plans in isolation, then a mediator merges. Debate mode makes them **argue**.
 
 The models critique each other, defend their choices, concede when wrong, and only then does the synthesizer merge — with the full argument trail as context.
 
-Works for both **planning** and **code review**. Toggle in `.kiln/config.json`:
+Works for both **planning** and **code review**:
 
 ```json
 {
@@ -220,26 +221,24 @@ Works for both **planning** and **code review**. Toggle in `.kiln/config.json`:
 
 > Rounds auto-terminate on convergence. Every critique is preserved as an audit artifact.
 
-<br/>
+<br>
 </details>
 
 <details>
-<summary>&nbsp;<b>Teams-first orchestration</b>&nbsp;&mdash;&nbsp;<i>the Athanor pattern</i></summary>
+<summary><b>Teams-first orchestration</b> — the Athanor pattern</summary>
 
-<br/>
+<br>
 
 When you type `/kiln:fire`, Kiln creates a Claude Code Team. Your session becomes the team lead — a thin orchestrator that spawns teammates, watches them work, and advances the pipeline automatically.
 
-The name comes from alchemy: an *athanor* is a self-feeding furnace. Once lit, it maintains its own heat. That's what happens here — after you approve the vision and roadmap (the only two human gates), the kiln runs itself through planning, execution, verification, review, and reconciliation. Each transition emits a curated quote from the lore system — 90 quotes drawn from philosophy, science, and world traditions.
+The name comes from alchemy: an *athanor* is a self-feeding furnace. Once lit, it maintains its own heat. After you approve the vision and roadmap (the only two human gates), the kiln runs itself through planning, execution, verification, review, and reconciliation. Each transition emits a curated quote from the lore system — 90 quotes drawn from philosophy, science, and world traditions.
 
 Three hard gates require your attention:
 1. **Vision approval** — you shape the brainstorm, you approve what gets built
 2. **Roadmap approval** — you review the delivery phases before execution begins
 3. **Reconcile confirmation** — you confirm documentation updates between phases
 
-Everything else auto-advances. Teammates report completion via SendMessage, the orchestrator updates state, emits a transition message, and spawns the next stage.
-
-Under the hood, wave workers run in parallel git worktrees with **read-only snapshot isolation** — each worker receives a `.kiln-snapshot/` directory with copies of the control-plane files it needs, and writes artifacts to `.kiln-artifacts/`. Workers never touch the real `.kiln/` directory. This eliminates any mutation blast radius: a misbehaving worker cannot corrupt the orchestrator's state.
+Everything else auto-advances. Under the hood, wave workers run in parallel git worktrees with **read-only snapshot isolation** — each worker receives a `.kiln-snapshot/` directory with copies of the control-plane files it needs, and writes artifacts to `.kiln-artifacts/`. Workers never touch the real `.kiln/` directory.
 
 ```json
 {
@@ -252,73 +251,31 @@ Under the hood, wave workers run in parallel git worktrees with **read-only snap
 
 > **No Teams API?** Kiln falls back to sequential execution. Teams is the fast path, not a requirement.
 
-<br/>
+<br>
 </details>
 
 <details>
-<summary>&nbsp;<b>Safety and verification</b>&nbsp;&mdash;&nbsp;<i>trust but verify, automatically</i></summary>
+<summary><b>Safety and verification</b> — trust but verify, automatically</summary>
 
-<br/>
+<br>
 
-Kiln includes several layers of protection that run without configuration:
-
-**Mini-verify** hooks into Claude Code's PostToolUse lifecycle. After every code change, it runs your project's test command (if configured) and writes a durable JSON result to `.kiln/mini-verify-result.json`. The orchestrator can read this to decide whether to continue or correct.
+**Mini-verify** hooks into Claude Code's PostToolUse lifecycle. After every code change, it runs your project's test command and writes a durable JSON result to `.kiln/mini-verify-result.json`.
 
 **Scope guard** prevents mini-verify from firing when only `.kiln/` control files changed — no wasted test runs on state updates.
 
-**Command injection protection** rejects test commands containing shell metacharacters (`;`, `|`, `&`, `>`, `<`, backticks, `$(`) before they reach `sh -c`. If someone puts `npm test; rm -rf /` in config, it gets caught and skipped.
+**Command injection protection** rejects test commands containing shell metacharacters (`;`, `|`, `&`, `>`, `<`, backticks, `$(`) before they reach `sh -c`.
 
-**Filesystem-safe task IDs** replace colons with dashes when constructing directory paths, so `phase-1:exec:wave-1:task-1` becomes `phase-1-exec-wave-1-task-1` on disk. This prevents path issues on Windows and macOS.
+**Filesystem-safe task IDs** replace colons with dashes when constructing directory paths, so `phase-1:exec:wave-1:task-1` becomes `phase-1-exec-wave-1-task-1` on disk.
 
-**Conductor role clarity** defines exactly who manages state in each mode:
-- *Teams mode:* your Claude Code session (the team lead) is the conductor
-- *Non-Teams mode:* the orchestrator agent running `/kiln:track` is the conductor
-- In both cases, a single writer owns `.kiln/STATE.md` — no concurrent mutation.
+**Single-writer state** — one conductor owns `.kiln/STATE.md` at all times. No concurrent mutation, whether you're in Teams mode or not.
 
-<br/>
+<br>
 </details>
 
 <details>
-<summary>&nbsp;<b>All commands</b></summary>
+<summary><b>Tips for best results</b></summary>
 
-<br/>
-
-| Command | Description |
-|---------|-------------|
-| `/kiln:fire` | Light the kiln — start or resume the full automated pipeline |
-| `/kiln:cool` | Pause and save session recovery metadata |
-| `/kiln:quick` | Single-pass mode for small changes |
-| `/kiln:status` | Progress display and next action routing |
-| `/kiln:init` | Project detection, workspace setup, model mode config |
-| `/kiln:brainstorm` | Interactive vision exploration with challenge passes |
-| `/kiln:roadmap` | Generate delivery phases from approved vision |
-| `/kiln:track` | Full loop: plan &rarr; validate &rarr; execute &rarr; E2E &rarr; review &rarr; reconcile |
-
-<br/>
-</details>
-
-<details>
-<summary>&nbsp;<b>Install options</b></summary>
-
-<br/>
-
-```bash
-npx kiln-dev                              # current project
-npx kiln-dev --repo-root /path/to/project # specific repo
-npx kiln-dev --yes                        # non-interactive
-npx kiln-dev --global                     # global (~/.claude/)
-```
-
-**Requires:** Claude Code, Node.js 18+<br/>
-**Strongly recommended:** Codex CLI (enables multi-model mode), `--dangerously-skip-permissions` flag
-
-<br/>
-</details>
-
-<details>
-<summary>&nbsp;<b>Tips for best results</b></summary>
-
-<br/>
+<br>
 
 - **Start small.** Your first kiln run should be a well-scoped feature, not "rewrite the whole app." The pipeline learns from reconciliation — each phase builds context for the next.
 
@@ -332,33 +289,62 @@ npx kiln-dev --global                     # global (~/.claude/)
 
 - **Check `.kiln/STATE.md`.** This is your live dashboard. It shows the current stage, phase, and any errors. If you're wondering what happened, start here.
 
-- **Don't fight the structure.** Kiln creates `.kiln/` for state, writes to `tracks/` for plans, and commits atomically. Working with these conventions instead of around them keeps everything clean.
-
-<br/>
+<br>
 </details>
 
 <details>
-<summary>&nbsp;<b>Lineage</b>&nbsp;&mdash;&nbsp;<i>where the ideas came from</i></summary>
+<summary><b>Lineage</b> — where the ideas came from</summary>
 
-<br/>
-
-Kiln doesn't start from scratch. It stands on the shoulders of three projects that each solved a piece of the puzzle:
+<br>
 
 | Source | What we took | What we left |
 |--------|-------------|-------------|
 | [BMAD Method](https://github.com/bmadcode/BMAD-METHOD) | Structured brainstorming, anti-clustering, challenge passes | Full persona framework |
-| [GSD Framework](https://github.com/cyanheads/claude-code-gsd) | Fresh context per task, goal-backward verification, execution efficiency | External tracking layer |
-| [Google Conductor](https://research.google/blog/automated-unit-test-improvement-using-large-language-models-at-google/) | Just-in-time task writing, living docs, reconciliation loops | Infrastructure overhead |
+| [GSD Framework](https://github.com/cyanheads/claude-code-gsd) | Fresh context per task, goal-backward verification | External tracking layer |
+| [Google Conductor](https://research.google/blog/automated-unit-test-improvement-using-large-language-models-at-google/) | Just-in-time task writing, living docs, reconciliation | Infrastructure overhead |
 
-The combination turns out to be more than the sum of its parts. BMAD gives you a vision worth building. GSD keeps each task sharp and isolated. Conductor makes sure you're never planning with stale context.
+The combination turns out to be more than the sum of its parts.
 
-<br/>
+<br>
+</details>
+
+---
+
+## All commands
+
+| Command | Description |
+|---------|-------------|
+| `/kiln:fire` | Light the kiln — start or resume the full automated pipeline |
+| `/kiln:cool` | Pause and save session recovery metadata |
+| `/kiln:quick` | Single-pass mode for small changes |
+| `/kiln:status` | Progress display and next action routing |
+| `/kiln:init` | Project detection, workspace setup, model mode config |
+| `/kiln:brainstorm` | Interactive vision exploration with challenge passes |
+| `/kiln:roadmap` | Generate delivery phases from approved vision |
+| `/kiln:track` | Full loop: plan &rarr; validate &rarr; execute &rarr; E2E &rarr; review &rarr; reconcile |
+
+<details>
+<summary><b>Install options</b></summary>
+
+<br>
+
+```bash
+npx kiln-dev                              # current project
+npx kiln-dev --repo-root /path/to/project # specific repo
+npx kiln-dev --yes                        # non-interactive
+npx kiln-dev --global                     # global (~/.claude/)
+```
+
+**Requires:** Claude Code, Node.js 18+<br>
+**Strongly recommended:** Codex CLI, `--dangerously-skip-permissions`
+
+<br>
 </details>
 
 <details>
-<summary>&nbsp;<b>Project structure</b></summary>
+<summary><b>Project structure</b></summary>
 
-<br/>
+<br>
 
 ```
 kiln/
@@ -373,64 +359,45 @@ kiln/
 └── package.json      Zero runtime dependencies
 ```
 
-After install, your project gets:
+After install:
 ```
 your-project/
-├── .claude/          Agents, skills, commands, hooks, templates
+├── .claude/          Agents, skills, commands, hooks
 ├── .kiln/            Runtime state (STATE.md, config.json, tracks/)
-├── .kiln-snapshot/   (Teams mode) Read-only control-plane copy for workers
+├── .kiln-snapshot/   (Teams mode) Read-only control-plane for workers
 └── .kiln-artifacts/  (Teams mode) Worker-local output before copy-back
 ```
 
-<br/>
+<br>
 </details>
 
-<br/>
+---
 
-## A word from the author
+## Coming soon
 
-This is for people who want to kick off projects solo and still deliver high-quality MVPs or full builds. Optimally you have both Codex CLI and Claude Code, as well as Context7 and Playwright MCP for end-to-end validations. I'll integrate those into the installation soon, or at minimum surface them via a setup message.
+- **Integrated debugger** — saves anonymized workflow results and optionally pushes to a branch for analysis. Completely optional, no AI models called from your machine.
+- **UI/UX refinements** — if you have experience harnessing the terminal and Claude Code to achieve polished interfaces, help is welcome.
+- **Specialized agents** — dedicated models and skills for specific task types like UI/UX implementation.
+- **Full installer** with better onboarding and MCP server integration.
 
-You will spend real time during the brainstorm session — back and forth, deeply defining, articulating, and organizing your vision. This is your investment, and where most of your ROI will come from. You can zoom through or really take the time to go deep. The choice is yours.
-
-Kiln is now my daily driver for project development. I spend some good time brainstorming the idea, then I let the oven cook. Check back on the working prototype and finish tweaking, usually directly in Claude Code.
-
-Once the brainstorm is done — where all your input has been challenged, verified, and shaped into a concrete vision — kiln takes care of the rest. It creates a global plan that's more of a direction than a detailed PRD (those suffer from implementation drift eventually). From that plan, it iterates each phase rigorously: atomically splitting them into optimal task sizes and sharpened prompts so that GPT-5.3-codex can really shine. Deterministic verifications run after each task. Once the whole phase is done, Opus 4.6 runs a QA review with end-to-end tests — and if it finds issues, the correction loops all the way back through GPT-5.2 for re-sharpening before GPT-5.3-codex implements the fix. Opus reviews again. Those cycles are capped at 3. If after 3 rounds three state-of-the-art models can't fix the problem, there's a bigger issue at play.
-
-Eventually it goes through all phases and delivers some pretty impressive quality of code and solutions.
-
-I won't lie — there are a lot of steps, verifications, and even debates, so it can take a while to run. But the results have really been worth it. I'll optimize for speed everywhere we can, as long as it's lossless. And the beautiful part is that it's fully automated in a tmux window: you can literally go to bed or to work and come back to a quality project running.
-
-There's a lot we can expand and improve throughout the whole loop, and I'll tackle it with method, slowly but surely.
-
-I hope you have a good experience and manage to cook amazing projects. Let us know.
-
-**Coming soon:**
-- Integrated debugger tool — saves anonymized workflow results and optionally pushes to a branch, so we can analyze how the team behaves and where to tighten the screws. Completely optional; no AI models are called from your machine.
-- UI/UX refinements — if you have experience harnessing the terminal and Claude Code to achieve polished interfaces, help is welcome.
-- Specialized agents and skills for specific tasks — for example, a dedicated model and skill for all UI/UX implementation.
-- Full installer with better onboarding.
-
-<br/>
+---
 
 ## Recent changes
 
 **Teams Architecture Redesign** (2026-02-16)
 
-Replaced custom YAML state management with Claude Code's native platform primitives. This is the biggest structural update since initial release.
+Replaced custom YAML state management with Claude Code's native platform primitives. Biggest structural update since initial release.
 
-- **3 new skills extracted** from the orchestrator: `kiln-wave-schedule` (wave task graph, parallelism, integration checkpoints), `kiln-copyback` (deterministic change discovery, collision detection, stable commit order), `kiln-resume` (crash recovery, 5-state task classification, worktree reuse)
+- **3 new skills extracted** from the orchestrator: `kiln-wave-schedule`, `kiln-copyback`, `kiln-resume`
 - **Orchestrator slimmed 46%** (584 to 317 lines) — delegates protocol details to skills, keeps only routing logic
-- **Platform-native task coordination** — 7 metadata keys via `TaskUpdate` API replace custom 16-key YAML payloads. Wave ordering via `addBlockedBy` sentinel tasks instead of custom sequencing
-- **Dead worker detection** — stage-aware heartbeat thresholds with configurable override (`deadWorkerTimeoutMinutes`)
-- **Zero symlinks** — all worker isolation via read-only `.kiln-snapshot/` copies
-- **Task Retry Ledger** in STATE.md for orchestrator-owned retry tracking (single-writer principle)
-- All stale references cleaned: no `idempotency_key`, no `.kiln symlink`, no `one team per wave`, no `events.jsonl`
+- **Platform-native task coordination** — 7 metadata keys via `TaskUpdate` replace 16-key YAML payloads. Wave ordering via `addBlockedBy` sentinel tasks
+- **Dead worker detection** — stage-aware heartbeat thresholds with configurable override
+- **Task Retry Ledger** in STATE.md for single-writer retry tracking
 
-<br/>
+---
 
 <div align="center">
 
-<sub>MIT License &middot; Built with Claude Code + Codex CLI &middot; No wrappers, no servers, just markdown.</sub>
+<sub>MIT License · Built with Claude Code + Codex CLI · No wrappers, no servers, just markdown.</sub>
 
 </div>
