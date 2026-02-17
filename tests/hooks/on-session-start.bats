@@ -72,7 +72,7 @@ run_hook() {
 
   run run_hook
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Session state rehydrated"* ]]
+  [[ "$output" == *"Session rehydrated"* ]]
 }
 
 @test "tip shown on fresh install pending state" {
