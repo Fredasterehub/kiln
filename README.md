@@ -387,6 +387,32 @@ your-project/
 
 <br/>
 
+## A word from the author
+
+This is for people who want to kick off projects solo and still deliver high-quality MVPs or full builds. Optimally you have both Codex CLI and Claude Code, as well as Context7 and Playwright MCP for end-to-end validations. I'll integrate those into the installation soon, or at minimum surface them via a setup message.
+
+You will spend real time during the brainstorm session — back and forth, deeply defining, articulating, and organizing your vision. This is your investment, and where most of your ROI will come from. You can zoom through or really take the time to go deep. The choice is yours.
+
+Kiln is now my daily driver for project development. I spend some good time brainstorming the idea, then I let the oven cook. Check back on the working prototype and finish tweaking, usually directly in Claude Code.
+
+Once the brainstorm is done — where all your input has been challenged, verified, and shaped into a concrete vision — kiln takes care of the rest. It creates a global plan that's more of a direction than a detailed PRD (those suffer from implementation drift eventually). From that plan, it iterates each phase rigorously: atomically splitting them into optimal task sizes and sharpened prompts so that GPT-5.3-codex can really shine. Deterministic verifications run after each task. Once the whole phase is done, Opus 4.6 runs a QA review with end-to-end tests — and if it finds issues, the correction loops all the way back through GPT-5.2 for re-sharpening before GPT-5.3-codex implements the fix. Opus reviews again. Those cycles are capped at 3. If after 3 rounds three state-of-the-art models can't fix the problem, there's a bigger issue at play.
+
+Eventually it goes through all phases and delivers some pretty impressive quality of code and solutions.
+
+I won't lie — there are a lot of steps, verifications, and even debates, so it can take a while to run. But the results have really been worth it. I'll optimize for speed everywhere we can, as long as it's lossless. And the beautiful part is that it's fully automated in a tmux window: you can literally go to bed or to work and come back to a quality project running.
+
+There's a lot we can expand and improve throughout the whole loop, and I'll tackle it with method, slowly but surely.
+
+I hope you have a good experience and manage to cook amazing projects. Let us know.
+
+**Coming soon:**
+- Integrated debugger tool — saves anonymized workflow results and optionally pushes to a branch, so we can analyze how the team behaves and where to tighten the screws. Completely optional; no AI models are called from your machine.
+- UI/UX refinements — if you have experience harnessing the terminal and Claude Code to achieve polished interfaces, help is welcome.
+- Specialized agents and skills for specific tasks — for example, a dedicated model and skill for all UI/UX implementation.
+- Full installer with better onboarding.
+
+<br/>
+
 ## Recent changes
 
 **Teams Architecture Redesign** (2026-02-16)
