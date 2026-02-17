@@ -46,6 +46,8 @@ I spent months refining a multi-model workflow by hand. Now I'm turning it into 
 
 > Once the brainstorm is done, the rest is fully automated — plan, execute, test, correct, commit. Hands off. 🔥
 
+Performance isn't fully optimized yet — right now the focus is on getting the workflow rock solid. Once that's stabilized, speed comes next. Soon™ ⏳
+
 ---
 
 ## Recent changes
