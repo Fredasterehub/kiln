@@ -31,7 +31,7 @@ npx kiln-one
 
 <br>
 
-[What's New](#recent-changes) · [What's Next](#coming-soon) · [How It Works](#how-it-works) · [Get Started](#get-started) · [Setup](#recommended-setup) · [Deep Dives](#deep-dives)
+[What's New](#recent-changes) · [How It Works](#how-it-works) · [Get Started](#get-started) · [Deep Dives](#deep-dives) · [What's Next](#whats-next)
 
 </div>
 
@@ -53,20 +53,31 @@ Fair warning — things will be clunky. I push commits constantly, features brea
 ## Recent changes
 
 > [!NOTE]
+> **Realignment Overhaul** (2026-02-17)
+>
+> Killed brittle shell parsing, extracted shared contracts across 35 files, and added machine-readable state. The hook layer now has real tests.
+
+- Mini-verify debounce: 10-second cooldown prevents duplicate test runs on rapid edits
+- Hook JSON parsing rewritten with `node -e` — no more `grep`/`sed`/`awk` fragility
+- `state.json` dual-written alongside `STATE.md` for machine-readable state
+- Three shared contracts extracted to `kiln-core`: Tracker, Universal Invariants, Disk Input
+- `kiln-codex-invoke` skill consolidates all Codex CLI invocation patterns
+- `REPO_INDEX.md` context bundle pre-built per phase for planners and reviewers
+- Installer SHA-256 ledger detects user modifications vs kiln-managed files on re-install
+- 20 bats tests across both hook scripts
+
+> [!NOTE]
 > **Tracker Skill Split + Cool Shutdown Race Fix** (2026-02-17)
 >
 > Decomposed the 671-line kiln-track monolith into 6 step-scoped skills and made /kiln:cool
 > Teams-aware with an ordered shutdown protocol and checkpoint-commit gate.
 
-- `kiln-track.md` (671 lines) replaced by 6 step-specific skills: `kiln-tracker-plan`,
-  `kiln-tracker-validate`, `kiln-tracker-execute`, `kiln-tracker-e2e`,
-  `kiln-tracker-review`, `kiln-tracker-reconcile`
-- Each tracker loads only the logic relevant to its step -- no cross-contamination
-- `/kiln:cool` now detects active Teams sessions and runs an Ordered Shutdown Protocol
-- Teams shutdown: tracker first (5 min timeout), then workers in parallel (60s), with ack tracking
-- Three-part git audit: `git status` + `git worktree list --porcelain` + worktree artifact scan
-- Operator gate: AskUserQuestion for checkpoint commit before setting Paused: true
-- `kiln-fire` Stage Machine Loop now checks `Paused: true` before each spawn
+- `kiln-track.md` (671 lines) replaced by 6 step-specific tracker skills
+- Each tracker loads only the logic relevant to its step — no cross-contamination
+- `/kiln:cool` detects active Teams sessions and runs an Ordered Shutdown Protocol
+- Teams shutdown: tracker first (5 min timeout), then workers in parallel (60s)
+- Three-part git audit before pause: workspace status, worktree list, artifact scan
+- Operator gate for checkpoint commit before setting Paused: true
 - Pause-resume distinguished from crash-recovery in kiln-fire Resume logic
 
 > [!NOTE]
@@ -74,36 +85,13 @@ Fair warning — things will be clunky. I push commits constantly, features brea
 >
 > Propagated the wave worker's proven pattern — spawn fresh, read disk, one job, write disk, die — across every agent tier. Context compaction is no longer a failure mode.
 
-- Four-step ephemeral invariant codified in `kiln-core` as the cross-cutting Context Freshness Contract
+- Four-step ephemeral invariant codified in `kiln-core` as the Context Freshness Contract
 - Track skill restructured: Single-Step Dispatcher spawns one step, reports, shuts down
-- Fire skill now spawns per-step trackers (`tracker-p<N>-<step>`) instead of one tracker per phase
+- Fire skill spawns per-step trackers (`tracker-p<N>-<step>`) instead of one tracker per phase
 - 5 debate agents get Disk Input Contracts and mandatory shutdown-after-write
-- Orchestrator updated with Context Freshness Discipline + 6 deterministic verification checks
 - Three compliance tiers: wave workers (gold standard), track-step agents, debate subtask agents
 
-> [!NOTE]
-> **Teams Architecture Redesign** (2026-02-16)
->
-> Replaced custom YAML state management with Claude Code's native platform primitives. Biggest structural change since the beginning.
-
-- 3 new skills extracted from the orchestrator: `kiln-wave-schedule`, `kiln-copyback`, `kiln-resume`
-- Orchestrator went from 584 to 317 lines — delegates details to skills, keeps only routing
-- 7 metadata keys via `TaskUpdate` replace 16-key YAML payloads. Wave ordering through `addBlockedBy` sentinels
-- Dead worker detection with stage-aware heartbeat thresholds
-- Task Retry Ledger in STATE.md — single-writer principle, no concurrent state mutation
-
----
-
-## Coming soon
-
-> [!TIP]
-> **Full customization is on the way.** We're building an onboarding flow that lets you choose your models, tools, planning strategy, review depth, and how deep you want to go in the rabbit hole. Your kiln, your rules.
-
-**Workflow debugger.** Watches how the agent team performs, saves anonymized results, optionally pushes to a branch so we can see where things get stuck. No AI calls from your machine. Completely opt-in.
-
-Terminal UX needs love. The CLI experience should feel refined, not raw. If you're good at making terminals beautiful, come help — you know the target.
-
-**Specialist agents** — a UI agent that understands design systems, a test agent that knows your framework. Deeper skills for specific domains.
+**Earlier:** [Teams Architecture Redesign](tracks/arch/) (2026-02-16) — Replaced YAML state with Claude Code platform primitives. Orchestrator shrank 46%.
 
 ---
 
@@ -160,7 +148,11 @@ Two stages are yours. The rest run autonomously, repeating per phase until every
 
 ## Get started
 
-Install, then use four commands:
+```bash
+npx kiln-one
+```
+
+Then use four commands:
 
 <table>
 <tr>
@@ -201,46 +193,67 @@ Show progress and next recommended action
 </tr>
 </table>
 
----
+<br>
 
-## Recommended setup
+<details>
+<summary><b>Prerequisites</b></summary>
+
+<br>
 
 | Tool | What it adds | Required? |
 |------|-------------|-----------|
-| [Codex CLI](https://github.com/openai/codex) | GPT-5.2 planning + GPT-5.3-codex execution — this is where kiln's real edge lives | Strongly recommended |
 | [Claude Code](https://claude.ai/claude-code) | The engine that runs everything | Yes |
+| [Codex CLI](https://github.com/openai/codex) | GPT-5.2 planning + GPT-5.3-codex execution | Strongly recommended |
 | [Context7](https://github.com/upstash/context7) | Up-to-date library docs via MCP | Optional |
-| [Playwright MCP](https://github.com/anthropics/anthropic-quickstarts/tree/main/mcp-playwright) | End-to-end browser testing | Optional |
+| [Playwright MCP](https://github.com/anthropics/anthropic-quickstarts/tree/main/mcp-playwright) | E2E browser testing | Optional |
 
-**1. Install Codex CLI**
-
-Multi-model mode is where kiln shines. Codex CLI gives you GPT-5.2 for planning and GPT-5.3-codex for execution — they think differently than Claude, and that's the whole point.
+**Install Codex CLI** — multi-model is where kiln's edge lives. GPT reasons differently than Claude, and that tension is the whole point.
 
 ```bash
 npm install -g @openai/codex
 ```
 
-> [!TIP]
-> **Claude-only mode** still runs the full pipeline. Multi-model just catches things a single model family misses.
-
-**2. Run Claude Code with `--dangerously-skip-permissions`**
-
-Kiln spawns agents, reads and writes files, and runs tests constantly. Permission prompts at every step break the flow.
+**Run with `--dangerously-skip-permissions`** — kiln spawns agents, writes files, and runs tests constantly. Permission prompts break the flow.
 
 ```bash
 claude --dangerously-skip-permissions
 ```
 
 > [!CAUTION]
-> Only use this in projects where you trust the pipeline. Kiln never runs destructive commands, but you're giving it the keys.
+> Only use this in projects you trust. Kiln never runs destructive commands, but you're giving it the keys.
+
+> [!TIP]
+> **No Codex CLI?** Claude-only mode still runs the full pipeline. Multi-model catches things a single model family misses.
+
+<br>
+</details>
+
+<details>
+<summary><b>Install options</b></summary>
+
+<br>
+
+```bash
+npx kiln-one                              # current project
+npx kiln-one --repo-root /path/to/project # specific repo
+npx kiln-one --yes                        # non-interactive
+npx kiln-one --global                     # global (~/.claude/)
+```
+
+**Requires:** Claude Code, Node.js 18+<br>
+**Strongly recommended:** Codex CLI, `--dangerously-skip-permissions`
+
+<br>
+</details>
 
 ---
 
 ## Deep dives
 
 <details>
-<summary><b>Multi-model orchestration</b> — right model, right task</summary>
+<summary><b>Multi-model orchestration</b> — 13 agents, each with a job</summary>
 
+<br>
 
 Each model fires best at a different temperature. Kiln puts the right heat on the right moment.
 
@@ -269,6 +282,7 @@ Each model fires best at a different temperature. Kiln puts the right heat on th
 <details>
 <summary><b>Debate mode</b> — models argue before they agree</summary>
 
+<br>
 
 Default synthesis is polite: each model plans in isolation, a mediator merges. Debate mode makes them **argue**.
 
@@ -294,6 +308,7 @@ Works for both **planning** and **code review**:
 <details>
 <summary><b>Teams mode</b> — the Athanor pattern</summary>
 
+<br>
 
 When you type `/kiln:fire`, kiln creates a Claude Code Team. Your session becomes the team lead — a thin orchestrator that spawns teammates, watches them work, and advances the pipeline on its own.
 
@@ -304,7 +319,7 @@ Three hard gates need your attention:
 2. **Roadmap approval** — you review the phases before execution begins
 3. **Reconcile confirmation** — you confirm doc updates between phases
 
-Everything else auto-advances. Wave workers run in parallel git worktrees, each with a read-only `.kiln-snapshot/` of the control plane. They write artifacts to `.kiln-artifacts/`. They never touch the real `.kiln/` directory — a misbehaving worker can't corrupt the orchestrator's state.
+Everything else auto-advances. Wave workers run in parallel git worktrees, each with a read-only `.kiln-snapshot/` of the control plane. They never touch the real `.kiln/` directory — a misbehaving worker can't corrupt the orchestrator's state.
 
 ```json
 {
@@ -324,14 +339,19 @@ Everything else auto-advances. Wave workers run in parallel git worktrees, each 
 <details>
 <summary><b>Safety</b> — trust but verify, automatically</summary>
 
+<br>
 
-**Mini-verify** runs your test command after every code change and writes the result to `.kiln/mini-verify-result.json`. The orchestrator reads this to decide: continue or correct.
+**Mini-verify** runs your test command after every code change and writes the result to `.kiln/mini-verify-result.json`. A 10-second debounce prevents duplicate runs on rapid edits. The orchestrator reads the result to decide: continue or correct.
 
 **Scope guard** skips verification when only `.kiln/` control files changed — no wasted test runs on state updates.
+
+**Machine-readable state.** `state.json` is dual-written alongside `STATE.md` on every state change. Hooks and tools read JSON directly — no more parsing markdown with sed.
 
 **Injection protection** rejects test commands with shell metacharacters (`;`, `|`, `&`, `>`, `<`, backticks, `$(`) before they reach `sh -c`.
 
 **Single-writer state** — one conductor owns `.kiln/STATE.md` at all times. No concurrent mutation, no matter the mode.
+
+**Installer integrity.** A SHA-256 hash ledger tracks every installed file. Re-installs detect user modifications and warn before overwriting.
 
 <br>
 </details>
@@ -339,6 +359,7 @@ Everything else auto-advances. Wave workers run in parallel git worktrees, each 
 <details>
 <summary><b>Tips</b></summary>
 
+<br>
 
 **Start small.** Your first run should be a well-scoped feature, not "rewrite the whole app." Each phase builds context for the next.
 
@@ -358,6 +379,7 @@ Everything else auto-advances. Wave workers run in parallel git worktrees, each 
 <details>
 <summary><b>Lineage</b> — where the ideas came from</summary>
 
+<br>
 
 | Source | What we took | What we left |
 |--------|-------------|-------------|
@@ -372,6 +394,19 @@ BMAD gives you a vision worth building. GSD keeps each task sharp and isolated. 
 
 ---
 
+## What's next
+
+> [!TIP]
+> **Full customization is on the way.** An onboarding flow that lets you choose your models, tools, planning strategy, review depth, and how deep you want to go. Your kiln, your rules.
+
+**Workflow debugger.** Watches how the agent team performs, saves anonymized results, optionally pushes to a branch so you can see where things get stuck. No AI calls from your machine. Completely opt-in.
+
+**Specialist agents** — a UI agent that understands design systems, a test agent that knows your framework. Deeper skills for specific domains.
+
+Terminal UX needs love. If you're good at making terminals beautiful, come help.
+
+---
+
 ## All commands
 
 | Command | Description |
@@ -383,38 +418,23 @@ BMAD gives you a vision worth building. GSD keeps each task sharp and isolated. 
 | `/kiln:init` | Project detection, workspace setup, model mode config |
 | `/kiln:brainstorm` | Interactive vision exploration with challenge passes |
 | `/kiln:roadmap` | Generate delivery phases from approved vision |
-| `/kiln:track` | Full loop: plan &rarr; validate &rarr; execute &rarr; E2E &rarr; review &rarr; reconcile |
-
-<details>
-<summary><b>Install options</b></summary>
-
-
-```bash
-npx kiln-one                              # current project
-npx kiln-one --repo-root /path/to/project # specific repo
-npx kiln-one --yes                        # non-interactive
-npx kiln-one --global                     # global (~/.claude/)
-```
-
-**Requires:** Claude Code, Node.js 18+<br>
-**Strongly recommended:** Codex CLI, `--dangerously-skip-permissions`
-
-<br>
-</details>
+| `/kiln:track` | Full loop: plan → validate → execute → E2E → review → reconcile |
 
 <details>
 <summary><b>Project structure</b></summary>
 
+<br>
 
 ```
 kiln/
 ├── agents/           13 AI agent definitions
-├── skills/           25 skill definitions
+├── skills/           26 skill definitions
 ├── commands/         8 slash command definitions
 ├── hooks/            Claude Code lifecycle hooks
 │   ├── hooks.json    Session start + mini-verify triggers
 │   └── scripts/      on-session-start.sh, on-task-completed.sh
-├── templates/        Workspace and state templates
+├── templates/        Workspace, state, and config templates
+├── tests/            Bats hook tests + fixtures
 ├── bin/install.js    Interactive installer (zero deps)
 └── package.json      Zero runtime dependencies
 ```
@@ -423,7 +443,7 @@ After install:
 ```
 your-project/
 ├── .claude/          Agents, skills, commands, hooks
-├── .kiln/            Runtime state (STATE.md, config.json, tracks/)
+├── .kiln/            Runtime state (STATE.md, state.json, config.json, tracks/)
 ├── .kiln-snapshot/   (Teams mode) Read-only control-plane for workers
 └── .kiln-artifacts/  (Teams mode) Worker-local output before copy-back
 ```
