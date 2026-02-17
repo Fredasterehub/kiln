@@ -665,12 +665,12 @@ async function main() {
       }
 
       const { claudeRoot: checkRoot } = resolveInstallRoots(repoRoot, useGlobal);
-      if (fs.existsSync(checkRoot)) {
-        const mergeConfirmed = await prompter.yesNo(
-          'Existing .claude/ found. Merge kiln alongside?',
+      if (fs.existsSync(checkRoot) && !options.force) {
+        const updateConfirmed = await prompter.yesNo(
+          'Existing kiln installation found. Update?',
           true
         );
-        if (!mergeConfirmed) {
+        if (!updateConfirmed) {
           console.log('Installation cancelled.');
           process.exit(0);
         }
