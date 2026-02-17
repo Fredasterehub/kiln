@@ -2,9 +2,9 @@
 
 # kiln
 
-**Autonomous software delivery for Claude Code**
+**Simple, elegant yet powerful software factory for Claude Code**
 
-*You describe what to build. It handles the rest.*
+*"What is to give light must endure burning."* — Viktor Frankl
 
 <br>
 
@@ -28,10 +28,6 @@ npx kiln-dev
 
 > [!NOTE]
 > Not published to npm yet. Clone and install manually for now.
-
-<br>
-
-*"What is to give light must endure burning."* — Viktor Frankl
 
 <br>
 
