@@ -6,18 +6,21 @@
 
 *"What is to give light must endure burning."* — Viktor Frankl
 
+<br>
 
 [![Multi-Model](https://img.shields.io/badge/Multi--Model-Opus_·_GPT--5-D4A574?style=flat)]()
 [![Debate](https://img.shields.io/badge/Debate-Models_Argue-C1666B?style=flat)]()
 [![Teams](https://img.shields.io/badge/Teams-Parallel_Workers-4A403A?style=flat)]()
 [![Auto Correct](https://img.shields.io/badge/Auto_Correct-3_Cycles-2d4a3e?style=flat)]()
 
+<br>
 
 [![License](https://img.shields.io/badge/License-MIT-D4A574?style=for-the-badge)](LICENSE)
 [![Node](https://img.shields.io/badge/Node-18+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Native-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white)](https://claude.ai/claude-code)
 [![Dependencies](https://img.shields.io/badge/Dependencies-Zero-4A403A?style=for-the-badge)]()
 
+<br>
 
 ```
 npx kiln-one
@@ -26,6 +29,7 @@ npx kiln-one
 > [!NOTE]
 > Not published to npm yet. Clone and install manually for now.
 
+<br>
 
 [What's New](#recent-changes) · [What's Next](#coming-soon) · [How It Works](#how-it-works) · [Get Started](#get-started) · [Setup](#recommended-setup) · [Deep Dives](#deep-dives)
 
@@ -35,12 +39,14 @@ npx kiln-one
 
 Just trying to automate and optimize the workflow I developed over the months.
 
-🧠 **Opus** (Opus 4.6) helps brainstorm.
-📋 **GPT** (gpt5.2-high) makes the plan without forgetting any detail!
-⚡ **Codex** (gpt5.3-codex-high) implements highly optimized and surgical prompts resulting in really high quality code.
+🧠 **Opus** (Opus 4.6) helps brainstorm.<br>
+📋 **GPT** (gpt5.2-high) makes the plan without forgetting any detail!<br>
+⚡ **Codex** (gpt5.3-codex-high) implements highly optimized and surgical prompts resulting in really high quality code.<br>
 🔍 **Opus** then QA reviews, and if needs be sends back to GPT and Codex — rinse and repeat until morale improves!
 
-Now I'm trying to glue all this together efficiently via native features and Claude Code. **It works.** But there will be growing pains! 🔥
+Now I'm trying to glue all this together efficiently via native features and Claude Code.
+
+**It works.** But there will be growing pains! 🔥
 
 ---
 
