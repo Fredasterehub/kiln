@@ -6,21 +6,18 @@
 
 *"What is to give light must endure burning."* — Viktor Frankl
 
-<br>
 
 [![Multi-Model](https://img.shields.io/badge/Multi--Model-Opus_·_GPT--5-D4A574?style=flat)]()
 [![Debate](https://img.shields.io/badge/Debate-Models_Argue-C1666B?style=flat)]()
 [![Teams](https://img.shields.io/badge/Teams-Parallel_Workers-4A403A?style=flat)]()
 [![Auto Correct](https://img.shields.io/badge/Auto_Correct-3_Cycles-2d4a3e?style=flat)]()
 
-<br>
 
 [![License](https://img.shields.io/badge/License-MIT-D4A574?style=for-the-badge)](LICENSE)
 [![Node](https://img.shields.io/badge/Node-18+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Native-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white)](https://claude.ai/claude-code)
 [![Dependencies](https://img.shields.io/badge/Dependencies-Zero-4A403A?style=for-the-badge)]()
 
-<br>
 
 ```
 npx kiln-one
@@ -29,15 +26,12 @@ npx kiln-one
 > [!NOTE]
 > Not published to npm yet. Clone and install manually for now.
 
-<br>
 
-[Why I Built This](#why-i-built-this) · [What's New](#recent-changes) · [What's Next](#coming-soon) · [How It Works](#how-it-works) · [Get Started](#get-started) · [Setup](#recommended-setup) · [Deep Dives](#deep-dives)
+[What's New](#recent-changes) · [What's Next](#coming-soon) · [How It Works](#how-it-works) · [Get Started](#get-started) · [Setup](#recommended-setup) · [Deep Dives](#deep-dives)
 
 </div>
 
 ---
-
-## Why I built this
 
 Just trying to automate and optimize the workflow I developed over the months.
 
@@ -241,7 +235,6 @@ claude --dangerously-skip-permissions
 <details>
 <summary><b>Multi-model orchestration</b> — right model, right task</summary>
 
-<br>
 
 Each model fires best at a different temperature. Kiln puts the right heat on the right moment.
 
@@ -270,7 +263,6 @@ Each model fires best at a different temperature. Kiln puts the right heat on th
 <details>
 <summary><b>Debate mode</b> — models argue before they agree</summary>
 
-<br>
 
 Default synthesis is polite: each model plans in isolation, a mediator merges. Debate mode makes them **argue**.
 
@@ -296,7 +288,6 @@ Works for both **planning** and **code review**:
 <details>
 <summary><b>Teams mode</b> — the Athanor pattern</summary>
 
-<br>
 
 When you type `/kiln:fire`, kiln creates a Claude Code Team. Your session becomes the team lead — a thin orchestrator that spawns teammates, watches them work, and advances the pipeline on its own.
 
@@ -327,7 +318,6 @@ Everything else auto-advances. Wave workers run in parallel git worktrees, each 
 <details>
 <summary><b>Safety</b> — trust but verify, automatically</summary>
 
-<br>
 
 **Mini-verify** runs your test command after every code change and writes the result to `.kiln/mini-verify-result.json`. The orchestrator reads this to decide: continue or correct.
 
@@ -343,7 +333,6 @@ Everything else auto-advances. Wave workers run in parallel git worktrees, each 
 <details>
 <summary><b>Tips</b></summary>
 
-<br>
 
 **Start small.** Your first run should be a well-scoped feature, not "rewrite the whole app." Each phase builds context for the next.
 
@@ -363,7 +352,6 @@ Everything else auto-advances. Wave workers run in parallel git worktrees, each 
 <details>
 <summary><b>Lineage</b> — where the ideas came from</summary>
 
-<br>
 
 | Source | What we took | What we left |
 |--------|-------------|-------------|
@@ -394,7 +382,6 @@ BMAD gives you a vision worth building. GSD keeps each task sharp and isolated. 
 <details>
 <summary><b>Install options</b></summary>
 
-<br>
 
 ```bash
 npx kiln-one                              # current project
@@ -412,7 +399,6 @@ npx kiln-one --global                     # global (~/.claude/)
 <details>
 <summary><b>Project structure</b></summary>
 
-<br>
 
 ```
 kiln/
