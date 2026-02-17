@@ -85,22 +85,12 @@ Coverage checks before synthesis:
 
 ## Disk Input Contract
 
-This agent is spawned fresh for each synthesis invocation. It reads ONLY from disk artifacts.
-No conversation context carries over.
-Reference: kiln-core `### Context Freshness Contract`.
+See `skills/kiln-core/kiln-core.md` § Disk Input Contract Pattern for the universal contract.
+This agent's specific mode inputs and outputs:
 
-Required disk inputs:
-- `.kiln/tracks/phase-<N>/plan_claude.md` (or latest revision `plan_claude_v<R>.md`)
-- `.kiln/tracks/phase-<N>/plan_codex.md` (or latest revision `plan_codex_v<R>.md`)
-- `.kiln/VISION.md` and `.kiln/docs/*` (living docs)
-- When `planStrategy: "debate"` is active: all `critique_*.md` artifacts and
-  `debate_log.md` under `.kiln/tracks/phase-<N>/`
-
-Output: `.kiln/tracks/phase-<N>/PLAN.md`
-
-If any required disk artifact is missing, send a failure `SendMessage`
-to the team lead and shut down. After writing `PLAN.md` and sending
-the completion `SendMessage`, shut down.
+| Mode      | Required Disk Inputs                                                                                                                                                                                   | Output                            |
+|-----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------|
+| Synthesis | `.kiln/tracks/phase-<N>/plan_claude.md` (or latest `plan_claude_v<R>.md`), `.kiln/tracks/phase-<N>/plan_codex.md` (or latest `plan_codex_v<R>.md`), `.kiln/VISION.md`, `.kiln/docs/*`; when `planStrategy: "debate"` is active: all `critique_*.md` artifacts and `debate_log.md` under `.kiln/tracks/phase-<N>/` | `.kiln/tracks/phase-<N>/PLAN.md` |
 
 ## Synthesis Process
 Follow these steps:
@@ -257,10 +247,7 @@ Include concise, machine-ingestable evidence:
   - last known blocker/error
 
 ### Control-plane write policy
-- Never write `.kiln/STATE.md`.
-- Treat `.kiln/**` as read-only control plane except your normal synthesizer outputs under `.kiln/tracks/phase-<N>/`.
-- Task-level artifact namespaces are EXECUTE-worker scope, not synthesizer scope.
-- Preserve existing output contract for normal synthesis: write only `.kiln/tracks/phase-<N>/PLAN.md`.
+See `skills/kiln-core/kiln-core.md` § Universal Invariants.
 
 ## Output
 Write the merged plan to `.kiln/tracks/phase-<N>/PLAN.md`.

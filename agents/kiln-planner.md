@@ -48,6 +48,11 @@ You will be spawned by the orchestrator with a prompt that specifies
 which phase to plan.
 Read these files in order:
 
+**0. REPO_INDEX** (`.kiln/docs/REPO_INDEX.md`):
+- Read first if present (check file exists and header phase matches current phase).
+- Use it as the starting point for file structure and entry point knowledge.
+- Only run Glob/Read/Grep for details NOT already covered by the index.
+
 **1. Phase context (from orchestrator prompt):**
 - Which phase number and title to plan
 - The ROADMAP.md entry for this phase (what the phase is supposed to accomplish)
@@ -91,18 +96,14 @@ Input discipline:
 
 ## Disk Input Contract
 
-Each spawn of this agent reads ONLY from disk. No conversation context carries over between spawns.
-Reference: kiln-core `### Context Freshness Contract`.
+See `skills/kiln-core/kiln-core.md` § Disk Input Contract Pattern for the universal contract.
+This agent's specific mode inputs and outputs:
 
 | Mode    | Required Disk Inputs                                                                | Output                      |
 |---------|-------------------------------------------------------------------------------------|-----------------------------|
 | Initial | `.kiln/VISION.md`, `.kiln/ROADMAP.md`, `.kiln/docs/*`, codebase (Glob/Read/Grep)  | `plan_claude.md`            |
 | Critique| `.kiln/tracks/phase-<N>/plan_codex.md` (or latest `plan_codex_v<R>.md`), own plan | `critique_of_codex_r<R>.md` |
 | Revise  | `.kiln/tracks/phase-<N>/critique_of_claude_r<R>.md`, own plan latest version       | `plan_claude_v<R+1>.md`     |
-
-This agent is spawned fresh for each mode invocation. It must not
-assume any non-disk context exists. If a required disk artifact is
-missing, send a failure `SendMessage` to the team lead and shut down.
 
 ## Planning Process
 Follow these steps to produce the plan:
@@ -195,10 +196,7 @@ Include concise, machine-ingestable evidence:
   - any last error/blocker notes
 
 ### Control-plane write policy
-- Never write `.kiln/STATE.md`.
-- Treat `.kiln/**` as read-only control plane except your normal planner outputs under `.kiln/tracks/phase-<N>/`.
-- Task-level artifact namespaces are EXECUTE-worker scope, not planner scope.
-- Preserve existing output contract for normal planning: write only `.kiln/tracks/phase-<N>/plan_claude.md`.
+See `skills/kiln-core/kiln-core.md` § Universal Invariants.
 
 ## Output
 Write your plan to `.kiln/tracks/phase-<N>/plan_claude.md`

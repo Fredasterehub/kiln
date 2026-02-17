@@ -1,0 +1,12 @@
+{
+  "stepStatus": "pending",
+  "nextExpectedAction": "Run /kiln:fire",
+  "currentStep": "plan",
+  "currentPhase": 1,
+  "totalPhases": 3,
+  "completePhases": 0,
+  "miniVerifyRetries": 0,
+  "e2eCycles": 0,
+  "reviewCycles": 0,
+  "paused": false
+}

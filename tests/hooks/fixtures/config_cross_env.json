@@ -1,0 +1,6 @@
+{
+  "projectType": "greenfield",
+  "tooling": {
+    "testRunner": "cross-env NODE_ENV=test jest"
+  }
+}

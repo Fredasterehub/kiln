@@ -49,7 +49,7 @@ Then stop.
 6. Optionally request a short operator context note when the hosting environment supports interactive input.
    - If supported: capture one short note and append it to `Last Completed Action` as `Operator note: <text>`.
    - If not supported: use safe default `Operator note: none provided` and continue without blocking.
-7. Write the updated `.kiln/STATE.md` and print confirmation:
+7. Write the updated `.kiln/STATE.md`; also write state.json co-update per kiln-core § state.json Canonical Schema; then print confirmation:
    - Confirm snapshot save time.
    - Confirm no phase progress was changed.
    - Print explicit resume instruction: `Run /kiln:fire`.
@@ -109,7 +109,7 @@ Cross-reference findings against `Active Task IDs` from STATE.md.
 
 ### Step 5: Write Pause State
 
-Update `.kiln/STATE.md` Orchestration Session:
+Update `.kiln/STATE.md` Orchestration Session; also write state.json co-update per kiln-core § state.json Canonical Schema:
 - Set `Paused: true`.
 - Set `Pause Reason` to descriptive text (e.g., "Operator invoked /kiln:cool at phase-N/step").
 - Update `Session Recovery` fields:
@@ -123,7 +123,7 @@ Display the pause-cool lore transition message using the existing format from "T
 
 ## Transition Message on Pause
 
-After writing the state snapshot (step 7), display a transition message using the `pause-cool` section from `.claude/skills/kiln-lore/kiln-lore.md`.
+After writing the state snapshot (step 7) and the state.json co-update per kiln-core § state.json Canonical Schema, display a transition message using the `pause-cool` section from `.claude/skills/kiln-lore/kiln-lore.md`.
 
 Read the `pause-cool` section and select one quote contextually. Display using this format:
 

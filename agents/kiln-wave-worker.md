@@ -51,7 +51,7 @@ current phase PLAN.
 - Treat `.kiln-snapshot/**` as read-only.
 - Workers write task artifacts to `.kiln-artifacts/<plan-task-id>/...`
   where `<plan-task-id>` is the plan task ID from your task packet (e.g., `P1-T04`), not the Teams `task_id`.
-- Never write `.kiln-snapshot/STATE.md` or any other snapshot file.
+- Do not write `.kiln-snapshot/STATE.md` or any other snapshot file.
 - Workers never see the real `.kiln/` directory (only the snapshot).
 
 ## Commit Authority (Strict)

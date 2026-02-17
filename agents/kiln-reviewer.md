@@ -77,18 +77,14 @@ Evidence contract:
 
 ## Disk Input Contract
 
-Each spawn of this agent reads ONLY from disk. No conversation context carries over between spawns.
-Reference: kiln-core `### Context Freshness Contract`.
+See `skills/kiln-core/kiln-core.md` § Disk Input Contract Pattern for the universal contract.
+This agent's specific mode inputs and outputs:
 
 | Mode           | Required Disk Inputs                                                                                                                              | Output                             |
 |----------------|---------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------|
 | Initial Review | `git diff <phase-start-commit>..HEAD`, `.kiln/tracks/phase-N/PLAN.md`, `.kiln/VISION.md`, `.kiln/tracks/phase-N/e2e-results.md`, `.kiln/docs/*` | `review.md`                        |
 | Critique       | `.kiln/tracks/phase-N/review_codex.md` (or latest `review_codex_v<R>.md`)                                                                        | `critique_of_review_codex_r<R>.md` |
 | Revise         | `.kiln/tracks/phase-N/critique_of_review_opus_r<R>.md`, own review latest version                                                                | `review_v<R+1>.md`                 |
-
-This agent is spawned fresh for each mode invocation. It must not
-assume any non-disk context exists. If a required disk artifact is
-missing, send a failure `SendMessage` to the team lead and shut down.
 
 ## Review Dimensions
 All 7 dimensions are mandatory.
@@ -515,10 +511,4 @@ Include concise, machine-ingestable evidence:
   - last blocker/error context
 
 ### Control-plane write policy
-- Never write `.kiln/STATE.md`.
-- Treat `.kiln/**` as read-only control plane except reviewer output artifacts under `.kiln/tracks/phase-<N>/`.
-- Task-level artifact namespaces are EXECUTE-worker scope, not reviewer scope.
-- Preserve existing output contracts and debate naming:
-  - initial/final review: `.kiln/tracks/phase-<N>/review.md`
-  - revised reviews: `.kiln/tracks/phase-<N>/review_v<R+1>.md` (for example `review_v2.md`)
-  - critiques: `.kiln/tracks/phase-<N>/critique_of_review_codex_r<R>.md`
+See `skills/kiln-core/kiln-core.md` § Universal Invariants.

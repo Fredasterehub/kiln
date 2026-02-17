@@ -243,7 +243,14 @@ Create the kiln state directory structure. Use the templates from the kiln packa
    - Fill in: project name (from directory name or package.json `name` field), model mode, initialization timestamp (ISO 8601)
    - Set all other fields to initial values (no phases yet, no current track, zero correction cycles, zero regression tests)
 
-4. Create empty living doc placeholders:
+4. Create `state.json` from template:
+   - Read from `.claude/templates/state.json.tmpl` (or `./templates/state.json.tmpl` if project-local templates are used)
+   - Fill with the same initialized values used for `STATE.md` (project/model/timestamps/current step/status/counters/session fields)
+   - Keep numeric values as JSON numbers and `paused` as a JSON boolean
+
+5. **Generate initial REPO_INDEX:** Generate `.kiln/docs/REPO_INDEX.md` for Phase 0 baseline using the same generation block defined in `skills/kiln-fire/kiln-fire.md` § REPO_INDEX Refresh. This provides planners with an immediate repo snapshot without requiring a separate discovery pass.
+
+6. Create empty living doc placeholders:
    ```
    touch .kiln/docs/TECH_STACK.md
    touch .kiln/docs/PATTERNS.md
@@ -266,7 +273,7 @@ Template lookup guidance:
 Example search:
 
 ```bash
-find .claude . -maxdepth 5 -type f \( -name 'config.json.tmpl' -o -name 'STATE.md.tmpl' \) 2>/dev/null
+find .claude . -maxdepth 5 -type f \( -name 'config.json.tmpl' -o -name 'STATE.md.tmpl' -o -name 'state.json.tmpl' \) 2>/dev/null
 ```
 
 If multiple templates are found, select the closest kiln package path first; otherwise prefer project `./templates`.
@@ -275,7 +282,7 @@ Overwrite behavior:
 
 1. Returning project with valid `STATE.md`: do not overwrite existing `.kiln/`.
 2. `.kiln/` exists but incomplete: ask before overwriting.
-3. Default overwrite scope for reinitialize: `.kiln/config.json` and `.kiln/STATE.md`.
+3. Default overwrite scope for reinitialize: `.kiln/config.json`, `.kiln/STATE.md`, and `.kiln/state.json`.
 4. Preserve `.kiln/docs/*` and `.kiln/tracks/*` unless operator requests broader reset.
 
 Fallback `STATE.md` minimum required fields (if template missing):

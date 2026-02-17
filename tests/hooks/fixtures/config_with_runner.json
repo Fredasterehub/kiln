@@ -1,0 +1,6 @@
+{
+  "projectType": "greenfield",
+  "tooling": {
+    "testRunner": "npm test"
+  }
+}

@@ -11,12 +11,14 @@ description: "Universal invariants and coordination contracts for the kiln workf
   VISION.md                # Locked brainstorm output (operator-approved)
   ROADMAP.md               # Phase breakdown from planner
   STATE.md                 # Persistent progress tracker
+  state.json               # Machine-readable state mirror (written alongside STATE.md)
   FINAL_REPORT.md          # End-of-project summary
   docs/
     TECH_STACK.md           # Detected/chosen technology stack
     PATTERNS.md             # Codebase patterns and conventions
     DECISIONS.md            # ADR-format decision records
     PITFALLS.md             # Known gotchas and workarounds
+    REPO_INDEX.md           # Pre-built repo snapshot, regenerated each phase start
   tracks/
     phase-N/
       plan_claude.md        # Claude planner output
@@ -50,6 +52,7 @@ description: "Universal invariants and coordination contracts for the kiln workf
 - `.kiln/VISION.md`: Locked product vision and non-goal boundary agreed after brainstorm. It is written after brainstorm approval and read by roadmap/planning to prevent scope drift.
 - `.kiln/ROADMAP.md`: Phase decomposition that turns vision into sequenced delivery chunks. It is written once roadmap is accepted and may be amended only when the orchestrator re-baselines phases.
 - `.kiln/STATE.md`: Continuous progress ledger for current stage, active phase, task states, blockers, and halt reasons. It is updated at each transition boundary and after every task completion/failure.
+- `.kiln/state.json`: Machine-readable mirror of STATE.md used by hooks and tooling that require deterministic parsing. It is co-written whenever STATE.md changes.
 - `.kiln/FINAL_REPORT.md`: Final synthesis of delivered scope, open risks, known deviations, and evidence references. It is written at closeout after final integration E2E and is read by operators as the completion handoff.
 
 - `.kiln/docs/`: Cross-phase knowledge base containing stable technical reference docs used by implementers and reviewers. It is initialized early and updated during reconcile or when major discoveries require codification.
@@ -487,3 +490,119 @@ Status enum: `pending | in-progress | complete | failed`
 - **Last Activity:** `<ISO 8601 timestamp>`
 - **Last Completed Action:** `<string>`
 - **Next Expected Action:** `<string>`
+
+## state.json Canonical Schema
+
+`.kiln/state.json` is the machine-readable mirror of `STATE.md`. It is written by `kiln-fire` every time `STATE.md` is updated. The session-start hook reads this file with `node` as its primary path; it falls back to `STATE.md` sed/awk parsing only when `node` is unavailable or `state.json` is missing.
+
+Fields mirror `STATE.md` schema. All timestamps are ISO 8601 UTC. Numeric fields use JSON numbers (not strings). Boolean `paused` is a JSON boolean.
+
+Writers: `kiln-fire` only (same single-writer rule as STATE.md).
+Readers: `on-session-start.sh`, any tooling that needs machine-parseable state without markdown parsing.
+
+## Tracker Contract
+
+All step-specific tracker skills (`kiln-tracker-plan`, `kiln-tracker-validate`, `kiln-tracker-execute`, `kiln-tracker-e2e`, `kiln-tracker-review`, `kiln-tracker-reconcile`) share this invariant contract.
+
+### Single-Step Dispatcher
+
+When spawned by `kiln-fire`, a tracker executes exactly ONE pipeline step:
+
+1. Read `.kiln/STATE.md` from disk to determine the active phase and step.
+2. Execute exactly that step (defined in the tracker's own Stage Details section).
+3. Write artifacts to `.kiln/tracks/phase-N/`.
+4. SendMessage `{ stage: "track:<phase>:<step>", status: "completed", evidence_paths: [...] }` to team lead.
+5. Shut down.
+
+Hard rules:
+- **Do not write or edit `.kiln/STATE.md`.** Only `kiln-fire` writes STATE.md.
+- **Do not advance `currentStep` or `currentPhase`.** That is `kiln-fire`'s responsibility.
+- **Do not loop to the next step.** Execute one step, report, shut down.
+
+Context freshness: every tracker spawn is fresh — spawn fresh → read from disk → do one job → write to disk → die. See § Context Freshness Contract.
+
+## Universal Invariants
+
+These rules apply to every agent and skill in the kiln workflow without exception.
+Agents must not repeat these rules inline — they reference this section instead.
+
+### Control-Plane Write Policy
+- Never write `.kiln/STATE.md`. Only `kiln-fire` (the team lead / conductor) writes STATE.md.
+- Never write `.kiln/state.json`. Same single-writer rule as STATE.md.
+- Treat `.kiln/**` as read-only except for designated output paths defined in the Read/Write Matrix (§ Output Format Contracts).
+- Do not create or delete `.kiln/` top-level files unless your role explicitly owns them.
+
+### Phase Boundary Rules
+- Do not advance `currentStep` or `currentPhase`. Only the conductor advances pipeline stages.
+- Do not read the output of a stage you did not produce. Use only your designated input artifacts.
+- Do not perform work outside your role's defined scope.
+
+### Quality Floor
+- Write complete, functional code. No TODO comments, no placeholder implementations, no stub functions.
+- Every acceptance criterion must be verifiable — either by running a command (DET) or targeted inspection (LLM).
+- Do not weaken acceptance criteria to force a pass.
+
+### Freshness
+- See § Context Freshness Contract. No in-memory state crosses agent boundaries.
+
+## Disk Input Contract Pattern
+
+Every agent that operates in debate mode (planner, reviewer) follows the same spawn-and-die read contract:
+
+**Each spawn of this agent reads ONLY from disk. No conversation context carries over between spawns.**
+If a required disk artifact is missing, send a failure `SendMessage` to the team lead and shut down.
+
+### Planner Disk Inputs (per mode)
+
+| Mode    | Required Disk Inputs                                                               | Output                      |
+|---------|------------------------------------------------------------------------------------|-----------------------------|
+| Initial | `.kiln/VISION.md`, `.kiln/ROADMAP.md`, `.kiln/docs/*`, codebase (Glob/Read/Grep) | `plan_claude.md` or `plan_codex.md` |
+| Critique| Competing plan file (latest version), own plan (latest version)                   | `critique_of_<other>_r<R>.md` |
+| Revise  | Critique of own plan (`critique_of_<self>_r<R>.md`), own plan (latest version)   | `plan_<self>_v<R+1>.md`     |
+
+### Reviewer Disk Inputs (per mode)
+
+| Mode           | Required Disk Inputs                                                                                    | Output                            |
+|----------------|---------------------------------------------------------------------------------------------------------|-----------------------------------|
+| Initial Review | `git diff <phase-start>..HEAD`, `.kiln/tracks/phase-N/PLAN.md`, `.kiln/VISION.md`, `e2e-results.md`, `.kiln/docs/*` | `review.md` or `review_codex.md` |
+| Critique       | Competing review file (latest version)                                                                  | `critique_of_review_<other>_r<R>.md` |
+| Revise         | Critique of own review, own review (latest version)                                                     | `review_<self>_v<R+1>.md`         |
+
+## REPO_INDEX Contract
+
+`.kiln/docs/REPO_INDEX.md` is a pre-built repository snapshot generated once per phase start.
+It is the preferred first read for any agent that needs repo structure before doing Glob/Grep discovery.
+
+### Required Sections
+
+```markdown
+# REPO_INDEX — Phase <N>
+Generated: <ISO 8601 timestamp>
+Phase: <N>
+
+## File Tree
+<output of: find . -not -path './.git/*' -not -path './.kiln/*' -not -path './node_modules/*' | sort | head -200>
+
+## Entry Points
+<detected main/index/app files with language and purpose>
+
+## Test Commands
+<testRunner from .kiln/config.json, plus any detected test scripts>
+
+## Key Patterns
+<detected: framework, export style, naming conventions — 10-20 lines max>
+
+## Change Scope (current phase)
+<files changed since phase start commit, from git diff --name-only HEAD>
+```
+
+### When Generated
+- On phase start by `kiln-fire` (before spawning the plan tracker).
+- On `kiln:init` for initial project baseline.
+- Regenerated at start of each new phase (not each step).
+
+### Reader Protocol
+Agents that previously started with Glob/Read/Grep discovery should:
+1. Check if `.kiln/docs/REPO_INDEX.md` exists and is from the current phase.
+2. If yes: read it first, then do targeted Glob/Read/Grep only for details not in the index.
+3. If no: proceed with normal discovery and note the missing index.

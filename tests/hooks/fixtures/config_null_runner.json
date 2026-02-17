@@ -1,0 +1,6 @@
+{
+  "projectType": "greenfield",
+  "tooling": {
+    "testRunner": null
+  }
+}

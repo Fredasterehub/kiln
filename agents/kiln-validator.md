@@ -300,3 +300,6 @@ Output discipline:
 - Keep failure reasons concrete and tied to a dimension.
 - Do not append extra sections beyond the verdict and sentinel.
 - Do not include debugging notes, scratch work, or hidden reasoning.
+
+### Control-plane write policy
+See `skills/kiln-core/kiln-core.md` § Universal Invariants.

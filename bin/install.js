@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 const { spawnSync } = require('child_process');
+const crypto = require('crypto');
 
 const USAGE = `
 kiln-one \u2014 Multi-model orchestration workflow for Claude Code
@@ -18,6 +19,8 @@ Options:
   --repo-root <path>    Target repository root (default: current directory)
   --yes, -y             Non-interactive mode (accept defaults)
   --force               Overwrite existing files that differ (update mode)
+  Hash tracking: kiln tracks installed file hashes in .claude/.kiln-hashes.json
+                 to distinguish kiln-managed files from user-modified files.
   --global              Install Claude assets into ~/.claude/
 
 Examples:
@@ -158,30 +161,62 @@ function isFileIdentical(src, dest) {
   }
 }
 
-function copyFileManaged(srcFile, destFile, stats, warnings, force) {
+function fileHash(filePath) {
+  try {
+    const content = fs.readFileSync(filePath);
+    return crypto.createHash('sha256').update(content).digest('hex');
+  } catch (_err) {
+    return null;
+  }
+}
+
+function readHashLedger(hashesFile) {
+  try {
+    return JSON.parse(fs.readFileSync(hashesFile, 'utf8'));
+  } catch (_err) {
+    return {};
+  }
+}
+
+function writeHashLedger(hashesFile, ledger) {
+  try {
+    fs.writeFileSync(hashesFile, JSON.stringify(ledger, null, 2) + '\n', 'utf8');
+  } catch (_err) {
+    // Non-fatal: hash tracking is best-effort.
+  }
+}
+
+function copyFileManaged(srcFile, destFile, stats, warnings, force, ledger) {
   fs.mkdirSync(path.dirname(destFile), { recursive: true });
   if (!fs.existsSync(destFile)) {
     fs.copyFileSync(srcFile, destFile);
     stats.copied += 1;
+    ledger[destFile] = fileHash(srcFile);
     return;
   }
 
   if (isFileIdentical(srcFile, destFile)) {
     stats.skipped += 1;
+    ledger[destFile] = fileHash(srcFile);
     return;
   }
 
-  if (force) {
+  const recordedHash = ledger[destFile];
+  const currentDestHash = fileHash(destFile);
+  const kilnManaged = recordedHash && recordedHash === currentDestHash;
+
+  if (force || kilnManaged) {
     fs.copyFileSync(srcFile, destFile);
     stats.copied += 1;
+    ledger[destFile] = fileHash(srcFile);
     return;
   }
 
   stats.conflicts += 1;
-  warnings.push(`Conflict at ${destFile} (existing file differs, left unchanged)`);
+  warnings.push(`Conflict at ${destFile} (user-modified, left unchanged; use --force to overwrite)`);
 }
 
-function copyDir(srcDir, destDir, stats, warnings, force) {
+function copyDir(srcDir, destDir, stats, warnings, force, ledger) {
   if (!fs.existsSync(srcDir)) {
     warnings.push(`Missing source directory: ${srcDir}`);
     return;
@@ -193,11 +228,11 @@ function copyDir(srcDir, destDir, stats, warnings, force) {
     const srcPath = path.join(srcDir, entry.name);
     const destPath = path.join(destDir, entry.name);
     if (entry.isDirectory()) {
-      copyDir(srcPath, destPath, stats, warnings, force);
+      copyDir(srcPath, destPath, stats, warnings, force, ledger);
       continue;
     }
     if (entry.isFile()) {
-      copyFileManaged(srcPath, destPath, stats, warnings, force);
+      copyFileManaged(srcPath, destPath, stats, warnings, force, ledger);
     }
   }
 }
@@ -374,7 +409,7 @@ function resolveInstallRoots(repoRoot, useGlobal) {
   };
 }
 
-function installAgents(sourceRoot, claudeRoot, warnings, force) {
+function installAgents(sourceRoot, claudeRoot, warnings, force, ledger) {
   const srcAgentsDir = path.join(sourceRoot, 'agents');
   const destAgentsDir = path.join(claudeRoot, 'agents');
   const stats = { copied: 0, skipped: 0, conflicts: 0, scanned: 0 };
@@ -393,12 +428,12 @@ function installAgents(sourceRoot, claudeRoot, warnings, force) {
     stats.scanned += 1;
     const srcFile = path.join(srcAgentsDir, entry.name);
     const destFile = path.join(destAgentsDir, entry.name);
-    copyFileManaged(srcFile, destFile, stats, warnings, force);
+    copyFileManaged(srcFile, destFile, stats, warnings, force, ledger);
   }
   return stats;
 }
 
-function installSkills(sourceRoot, claudeRoot, warnings, force) {
+function installSkills(sourceRoot, claudeRoot, warnings, force, ledger) {
   const srcSkillsDir = path.join(sourceRoot, 'skills');
   const destSkillsDir = path.join(claudeRoot, 'skills');
   const stats = { copied: 0, skipped: 0, conflicts: 0, directories: 0 };
@@ -417,13 +452,13 @@ function installSkills(sourceRoot, claudeRoot, warnings, force) {
     stats.directories += 1;
     const srcDir = path.join(srcSkillsDir, entry.name);
     const destDir = path.join(destSkillsDir, entry.name);
-    copyDir(srcDir, destDir, stats, warnings, force);
+    copyDir(srcDir, destDir, stats, warnings, force, ledger);
   }
 
   return stats;
 }
 
-function installHooks(sourceRoot, claudeRoot, warnings, force) {
+function installHooks(sourceRoot, claudeRoot, warnings, force, ledger) {
   const srcHooksDir = path.join(sourceRoot, 'hooks');
   const srcScriptsDir = path.join(srcHooksDir, 'scripts');
   const srcHooksJson = path.join(srcHooksDir, 'hooks.json');
@@ -450,7 +485,7 @@ function installHooks(sourceRoot, claudeRoot, warnings, force) {
       }
       const srcFile = path.join(srcScriptsDir, entry.name);
       const destFile = path.join(destScriptsDir, entry.name);
-      copyFileManaged(srcFile, destFile, scriptStats, warnings, force);
+      copyFileManaged(srcFile, destFile, scriptStats, warnings, force, ledger);
     }
   } else {
     warnings.push(`Missing source hook scripts directory: ${srcScriptsDir}`);
@@ -488,7 +523,7 @@ function installHooks(sourceRoot, claudeRoot, warnings, force) {
   return stats;
 }
 
-function installCommands(sourceRoot, claudeRoot, warnings, force) {
+function installCommands(sourceRoot, claudeRoot, warnings, force, ledger) {
   const srcCommandsDir = path.join(sourceRoot, 'commands');
   const destCommandsDir = path.join(claudeRoot, 'commands');
   const stats = { copied: 0, skipped: 0, conflicts: 0, directories: 0 };
@@ -507,13 +542,13 @@ function installCommands(sourceRoot, claudeRoot, warnings, force) {
     stats.directories += 1;
     const srcDir = path.join(srcCommandsDir, entry.name);
     const destDir = path.join(destCommandsDir, entry.name);
-    copyDir(srcDir, destDir, stats, warnings, force);
+    copyDir(srcDir, destDir, stats, warnings, force, ledger);
   }
 
   return stats;
 }
 
-function installTemplates(sourceRoot, claudeRoot, warnings, force) {
+function installTemplates(sourceRoot, claudeRoot, warnings, force, ledger) {
   const srcTemplatesDir = path.join(sourceRoot, 'templates');
   const destTemplatesDir = path.join(claudeRoot, 'templates');
   const stats = { copied: 0, skipped: 0, conflicts: 0 };
@@ -523,7 +558,7 @@ function installTemplates(sourceRoot, claudeRoot, warnings, force) {
     return stats;
   }
 
-  copyDir(srcTemplatesDir, destTemplatesDir, stats, warnings, force);
+  copyDir(srcTemplatesDir, destTemplatesDir, stats, warnings, force, ledger);
   return stats;
 }
 
@@ -683,16 +718,19 @@ async function main() {
   }
 
   const { claudeRoot, kilnRoot } = resolveInstallRoots(repoRoot, useGlobal);
+  const hashesFile = path.join(claudeRoot, '.kiln-hashes.json');
+  const hashLedger = readHashLedger(hashesFile);
 
   const warnings = [];
 
   try {
     fs.mkdirSync(claudeRoot, { recursive: true });
-    const agents = installAgents(sourceRoot, claudeRoot, warnings, options.force);
-    const skills = installSkills(sourceRoot, claudeRoot, warnings, options.force);
-    const commands = installCommands(sourceRoot, claudeRoot, warnings, options.force);
-    const hooks = installHooks(sourceRoot, claudeRoot, warnings, options.force);
-    const templates = installTemplates(sourceRoot, claudeRoot, warnings, options.force);
+    const agents = installAgents(sourceRoot, claudeRoot, warnings, options.force, hashLedger);
+    const skills = installSkills(sourceRoot, claudeRoot, warnings, options.force, hashLedger);
+    const commands = installCommands(sourceRoot, claudeRoot, warnings, options.force, hashLedger);
+    const hooks = installHooks(sourceRoot, claudeRoot, warnings, options.force, hashLedger);
+    const templates = installTemplates(sourceRoot, claudeRoot, warnings, options.force, hashLedger);
+    writeHashLedger(hashesFile, hashLedger);
     const projectType = detectProjectType(repoRoot);
     const tooling = detectTooling(repoRoot);
     initializeKiln(sourceRoot, repoRoot, kilnRoot, projectType, modelMode, tooling, useTeams, warnings);

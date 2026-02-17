@@ -8,22 +8,7 @@ This skill executes exactly one pipeline step: `REVIEW`. It is spawned by `kiln-
 
 ## Single-Step Dispatcher Contract
 
-When spawned by `kiln-fire`, this skill executes exactly ONE step:
-
-1. Read `.kiln/STATE.md` from disk to determine the active phase and step.
-2. Execute exactly that step (see Stage Details below).
-3. Write artifacts to `.kiln/tracks/phase-N/`.
-4. SendMessage `{ stage: "track:<phase>:<step>", status: "completed", evidence_paths: [...] }` to team lead.
-5. Shut down.
-
-Hard rules:
-- **Do not write or edit `.kiln/STATE.md`.** Only `kiln-fire` writes STATE.md.
-- **Do not advance `currentStep` or `currentPhase`.** That is `kiln-fire`'s responsibility.
-- **Do not loop to the next step.** Execute one step, report, shut down.
-
-Context Freshness: This skill follows the four-step ephemeral invariant defined in
-`skills/kiln-core/kiln-core.md` § Context Freshness Contract:
-spawn fresh → read from disk → do one job → write to disk → die.
+See `skills/kiln-core/kiln-core.md` § Tracker Contract. This skill follows that contract exactly.
 
 ## Stage Details
 
@@ -133,5 +118,5 @@ Sequential Task spawning remains fresh by construction; each Task receives a cle
 - Timestamp verdict transitions.
 
 ## References
-- `skills/kiln-core/kiln-core.md` — shared contracts, state schema, model routing, Context Freshness Contract
+- `skills/kiln-core/kiln-core.md` — Tracker Contract, Context Freshness Contract, state schema, model routing
 - `skills/kiln-debate/kiln-debate.md` — debate activation and round protocol referenced by REVIEW debate mode

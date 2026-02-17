@@ -116,6 +116,31 @@ For each phase in .kiln/ROADMAP.md:
     if step == reconcile and operator approves: mark phase complete, advance to next phase
 ```
 
+### REPO_INDEX Refresh (Phase Start)
+
+When transitioning to a new phase (the current step is `plan` and it is the first time this phase runs), generate `.kiln/docs/REPO_INDEX.md` before spawning the plan tracker:
+
+```bash
+mkdir -p .kiln/docs
+{
+  echo "# REPO_INDEX — Phase $phase_num"
+  echo "Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  echo "Phase: $phase_num"
+  echo ""
+  echo "## File Tree"
+  find . -not -path './.git/*' -not -path './.kiln/*' -not -path './node_modules/*' \
+    -not -path './.claude/*' | sort | head -200
+  echo ""
+  echo "## Test Commands"
+  node -e "try{const c=JSON.parse(require('fs').readFileSync('.kiln/config.json','utf8'));const r=c.tooling&&c.tooling.testRunner;console.log(r||'(none configured)')}catch(e){console.log('(config not readable)')}" 2>/dev/null || echo "(node unavailable)"
+  echo ""
+  echo "## Change Scope (current phase)"
+  git diff --name-only HEAD 2>/dev/null || echo "(git not available)"
+} > .kiln/docs/REPO_INDEX.md
+```
+
+If shell execution is not available (non-bash environment), write a best-effort REPO_INDEX using available tools (Read/Glob/Grep outputs formatted into the template).
+
 ### Three Hard Gates
 
 The loop auto-advances through all stages except these three, which require explicit operator approval:
@@ -158,6 +183,10 @@ re-creating teams or losing TaskList history.
 2. Clear `Active Task IDs` from the completed stage.
 3. Set `Last Transition ID` to the transition key (e.g., `vision-approved`).
 4. Update `Session Recovery` fields (Last Activity, Last Completed Action, Next Expected Action).
+
+### state.json Co-write
+
+Every STATE.md write must also update `.kiln/state.json` with the same field values in the schema defined in `skills/kiln-core/kiln-core.md § state.json Canonical Schema`. This ensures the session-start hook can read state without markdown parsing. The write is atomic: write STATE.md first, then write state.json.
 
 ## Teammate Spawning Protocol
 

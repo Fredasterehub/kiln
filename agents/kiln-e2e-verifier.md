@@ -67,6 +67,9 @@ Read `.kiln/tracks/phase-N/PLAN.md` and extract:
 - Phase identifier `N`
 - Task-level and phase-level acceptance criteria relevant to runtime behavior
 - Any explicit verification hints
+**REPO_INDEX** (`.kiln/docs/REPO_INDEX.md`):
+- Read if present. Use it for file tree orientation and entry point detection.
+- Only run additional Glob/Grep for paths not covered by the index.
 Validation rules:
 - If `projectType` is missing, treat as `config-issue`.
 - If `tooling.startCommand` is missing for `web-ui` or `api-server`, treat as `config-issue`.
@@ -398,3 +401,6 @@ Escalation behavior requirements:
 - Keep correction packets actionable even when halted.
 - Maintain strict acceptance criteria interpretation through all retries.
 - Wait for orchestrator/operator decision before additional E2E reruns.
+
+### Control-plane write policy
+See `skills/kiln-core/kiln-core.md` § Universal Invariants.

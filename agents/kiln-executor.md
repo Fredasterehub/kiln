@@ -262,5 +262,8 @@ Reporting quality bar:
 - Preserve exact failure text for downstream retries.
 - Include concrete file paths and identifiers.
 
+### Control-plane write policy
+See `skills/kiln-core/kiln-core.md` § Universal Invariants.
+
 This agent definition is loaded by Claude Code when the executor is spawned.
 Follow the kiln-execute skill for implementation constraints and mini-verify protocol, and kiln-core for coordination contracts.

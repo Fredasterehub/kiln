@@ -1,0 +1,8 @@
+{
+  "stepStatus": "failed",
+  "currentStep": "execute",
+  "currentPhase": 2,
+  "totalPhases": 3,
+  "completePhases": 1,
+  "paused": false
+}

@@ -38,8 +38,8 @@ Operating constraints:
 
 ## Disk Input Contract
 
-Each spawn of this agent reads ONLY from disk. No conversation context carries over between spawns.
-Reference: kiln-core `### Context Freshness Contract`.
+See `skills/kiln-core/kiln-core.md` § Disk Input Contract Pattern for the universal contract.
+This agent's specific mode inputs and outputs:
 
 | Mode    | Required Disk Inputs                                                                 | Output                       |
 |---------|--------------------------------------------------------------------------------------|------------------------------|
@@ -47,13 +47,14 @@ Reference: kiln-core `### Context Freshness Contract`.
 | Critique| `.kiln/tracks/phase-<N>/plan_claude.md` (or latest `plan_claude_v<R>.md`), own plan | `critique_of_claude_r<R>.md` |
 | Revise  | `.kiln/tracks/phase-<N>/critique_of_codex_r<R>.md`, own plan latest version         | `plan_codex_v<R+1>.md`       |
 
-This agent is spawned fresh for each mode invocation. It must not
-assume any non-disk context exists. If a required disk artifact is
-missing, send a failure `SendMessage` to the team lead and shut down.
-
 ## Step 1: Gather Context
 Read the same inputs that the Claude planner reads.
 You need this to construct a rich prompt for GPT-5.2.
+
+**0. REPO_INDEX** (`.kiln/docs/REPO_INDEX.md`):
+- Read first if present and header phase matches current phase.
+- Include its content in the GPT-5.2 prompt as the "EXISTING CODEBASE" section starting point.
+- Only run additional Glob/Read/Grep for details NOT in the index.
 
 1. **Phase context:**
    Read the orchestrator's spawn prompt to determine which phase to plan.
@@ -161,55 +162,11 @@ Prompt quality checks before invocation:
 - Wave Summary table is explicitly required.
 
 ## Step 3: Invoke Codex CLI
-Execute the Codex CLI command to send the prompt to GPT-5.2.
-Because the prompt will be large (includes codebase context), pipe it via stdin.
 
-Save the constructed prompt to a temporary file first, then invoke:
-
-```bash
-# Save prompt to temp file
-cat > /tmp/kiln-plan-prompt.md << 'PROMPT_EOF'
-<the constructed prompt from Step 2>
-PROMPT_EOF
-
-# Invoke GPT-5.2 via Codex CLI
-codex exec \
-  -m gpt-5.2 \
-  -c 'model_reasoning_effort=\"high\"' \
-  "$(cat /tmp/kiln-plan-prompt.md)"
-```
-
-**Alternative invocation** if the prompt is too large for command-line argument:
-
-```bash
-cat /tmp/kiln-plan-prompt.md | codex exec \
-  -m gpt-5.2 \
-  -c 'model_reasoning_effort=\"high\"' \
-  --stdin
-```
-
-**Error handling:**
-- If `codex` command is not found: this agent should not have been spawned in
-  Claude-only mode. Write an error to plan_codex.md:
-  `ERROR: Codex CLI not available. This agent should only run in multi-model mode.`
-- If Codex CLI returns an error: retry once.
-  If it fails again, write the error to plan_codex.md for the synthesizer to handle.
-- If the output is truncated or malformed: note this in plan_codex.md header
-  so the synthesizer knows.
-
-Invocation checklist:
-- Save prompt to `/tmp/kiln-plan-prompt.md` first.
-- Prefer standard invocation with in-argument prompt.
-- Use `--stdin` fallback when command-line length limits are hit.
-- Preserve `-m gpt-5.2` and `model_reasoning_effort="high"` settings.
-- Capture raw command output before any post-formatting.
-
-Failure handling protocol:
-- First failure: retry once with identical prompt and flags.
-- Second failure: write actionable error content to `plan_codex.md`.
-- Missing CLI: emit the prescribed Claude-only/multi-model mismatch error.
-- Malformed/truncated output: keep content, add a clear header warning,
-  then do minimal normalization for schema compatibility.
+Follow the invocation pattern from `skills/kiln-codex-invoke/kiln-codex-invoke.md`.
+- Model: `gpt-5.2`
+- Temp file: `/tmp/kiln-plan-prompt.md`
+- Output target: `.kiln/tracks/phase-<N>/plan_codex.md` (or mode-specific output per current mode)
 
 ## Teams Teammate Protocol
 
@@ -244,10 +201,7 @@ Include concise, machine-ingestable evidence:
   - last error/blocker context
 
 ### Control-plane write policy
-- Never write `.kiln/STATE.md`.
-- Treat `.kiln/**` as read-only control plane except your normal planner outputs under `.kiln/tracks/phase-<N>/`.
-- Task-level artifact namespaces are EXECUTE-worker scope, not planner scope.
-- Preserve existing output contract for normal planning: write only `.kiln/tracks/phase-<N>/plan_codex.md`.
+See `skills/kiln-core/kiln-core.md` § Universal Invariants.
 
 ## Step 4: Save Output
 Save the GPT-5.2 output to `.kiln/tracks/phase-<N>/plan_codex.md`.

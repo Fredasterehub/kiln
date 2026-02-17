@@ -19,31 +19,53 @@ if [ -z "$changed_files" ]; then
   exit 0
 fi
 
+# Debounce: skip if last run was < 10 seconds ago
+cache_file=".kiln/mini-verify-cache.json"
+if [ -f "$cache_file" ] && command -v node >/dev/null 2>&1; then
+  last_epoch=$(node -e "try{const c=JSON.parse(require('fs').readFileSync('$cache_file','utf8'));process.stdout.write(String(c.last_run_epoch||0))}catch(e){process.stdout.write('0')}" 2>/dev/null || echo 0)
+  now_epoch=$(date +%s 2>/dev/null || echo 0)
+  if [ "$last_epoch" -gt 0 ] && [ "$now_epoch" -gt 0 ]; then
+    elapsed=$((now_epoch - last_epoch))
+    if [ "$elapsed" -lt 10 ]; then
+      echo "[kiln] Mini-verify: debounced (last run ${elapsed}s ago)"
+      exit 0
+    fi
+  fi
+fi
+
 if [ ! -d ".kiln" ] || [ ! -f ".kiln/config.json" ]; then
   exit 0
 fi
-test_cmd=$(grep '"testRunner"[[:space:]]*:' ".kiln/config.json" | head -n 1 | sed -n 's/.*"testRunner"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+test_cmd=$(node -e 'try{const c=JSON.parse(require("fs").readFileSync(".kiln/config.json","utf8"));const r=c.tooling&&c.tooling["testRunner"];if(r&&typeof r==="string")process.stdout.write(r)}catch(e){}' 2>/dev/null)
 if [ -z "$test_cmd" ]; then
   echo "[kiln] No test runner configured, skipping mini-verify"
   exit 0
 fi
 # Unwrap known command prefixes to find the real test runner
-unwrapped="$test_cmd"
-_unwrap_iter=0
-while [ $_unwrap_iter -lt 3 ]; do
-  _first=$(printf '%s\n' "$unwrapped" | awk '{print $1}')
-  case "$_first" in
-    cross-env|env)
-      unwrapped=$(printf '%s\n' "$unwrapped" | awk '{for(i=2;i<=NF;i++){if($i !~ /=/){for(j=i;j<=NF;j++) printf "%s%s",$j,(j<NF?" ":""); print ""; exit}}}')
+if ! command -v node >/dev/null 2>&1; then
+  cmd_name=$(printf '%s\n' "$test_cmd" | awk '{print $1}')
+else
+  case "$test_cmd" in
+    *\'*)
+      cmd_name=""
+      echo "[kiln] Warning: test command contains single quotes, skipping unwrap"
       ;;
-    npx)
-      unwrapped=$(printf '%s\n' "$unwrapped" | awk '{$1=""; sub(/^[[:space:]]+/,""); print}')
+    *)
+      cmd_name=$(node -e "
+const cmd='$test_cmd';
+const parts=cmd.trim().split(/\s+/);
+let i=0;
+while(i<parts.length){
+  const p=parts[i];
+  if(p==='cross-env'||p==='env'){i++;while(i<parts.length&&parts[i].includes('='))i++;}
+  else if(p==='npx'){i++;}
+  else break;
+}
+process.stdout.write(parts[i]||'');
+" 2>/dev/null)
       ;;
-    *) break ;;
   esac
-  _unwrap_iter=$((_unwrap_iter + 1))
-done
-cmd_name=$(printf '%s\n' "$unwrapped" | awk '{print $1}')
+fi
 case "$cmd_name" in
   npm|npx|node|jest|vitest|pytest|cargo|go|make|bun|deno|pnpm|yarn) ;;
   *) echo "[kiln] Warning: unrecognized test runner '$cmd_name', skipping mini-verify"; exit 0 ;;
@@ -108,6 +130,11 @@ if [ -d ".kiln" ]; then
   printf '{"status":"%s","%s":%d,"test_cmd":"%s","timestamp":"%s"}\n' \
     "$result_status" "$code_key" "$run_code" "$(printf '%s' "$test_cmd" | sed 's/"/\\"/g')" "$timestamp" \
     > "$result_file"
+fi
+# Update debounce cache
+if [ -d ".kiln" ] && command -v node >/dev/null 2>&1; then
+  run_epoch=$(date +%s 2>/dev/null || echo 0)
+  printf '{"last_run_epoch":%s,"last_diff_hash":""}\n' "$run_epoch" > "$cache_file" 2>/dev/null || true
 fi
 if [ "$timed_out" -eq 1 ]; then
   echo "[kiln] Mini-verify: TIMEOUT (exceeded ${timeout_seconds}s)"
