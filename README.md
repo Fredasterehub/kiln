@@ -6,6 +6,15 @@
 
 *You describe what to build. It handles the rest.*
 
+<br>
+
+[![Multi-Model](https://img.shields.io/badge/Multi--Model-Opus_·_GPT--5-D4A574?style=flat)]()
+[![Debate](https://img.shields.io/badge/Debate-Models_Argue-C1666B?style=flat)]()
+[![Teams](https://img.shields.io/badge/Teams-Parallel_Workers-4A403A?style=flat)]()
+[![Auto Correct](https://img.shields.io/badge/Auto_Correct-3_Cycles-2d4a3e?style=flat)]()
+
+<br>
+
 [![License](https://img.shields.io/badge/License-MIT-D4A574?style=for-the-badge)](LICENSE)
 [![Node](https://img.shields.io/badge/Node-18+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Native-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white)](https://claude.ai/claude-code)
@@ -17,6 +26,7 @@
 npx kiln-dev
 ```
 
+> [!NOTE]
 > Not published to npm yet. Clone and install manually for now.
 
 <br>
@@ -55,6 +65,7 @@ I won't lie — there are a lot of steps, a lot of verifications, and even debat
 
 I hope you cook something amazing. Let us know how it goes.
 
+> [!IMPORTANT]
 > **Where things stand:** Kiln works and produces real code. We've been using it to build itself — the agents, skills, and orchestration you see here were written by kiln's own pipeline. Not shipped to npm yet, but the core workflow runs and delivers. Expect rough edges. Help us smooth them.
 
 ---
@@ -105,6 +116,7 @@ Two stages are yours. The rest run autonomously, repeating per phase until every
 </tr>
 </table>
 
+> [!TIP]
 > Stages 3-6 repeat per phase. The 20th task fires with the same precision as the first.
 
 ---
@@ -171,6 +183,7 @@ Kiln spawns agents, reads and writes files, and runs tests constantly. Permissio
 claude --dangerously-skip-permissions
 ```
 
+> [!CAUTION]
 > Only use this in projects where you trust the pipeline. Kiln never runs destructive commands, but you're giving it the keys.
 
 **2. Install Codex CLI (strongly recommended)**
@@ -181,6 +194,7 @@ Multi-model mode is where kiln shines. Codex CLI gives you GPT-5.2 for planning 
 npm install -g @openai/codex
 ```
 
+> [!TIP]
 > **Claude-only mode** still runs the full pipeline. Multi-model just catches things a single model family misses.
 
 ---
@@ -210,6 +224,7 @@ Each model fires best at a different temperature. Kiln puts the right heat on th
 | Researcher | Haiku 4.5 | Fast, cheap retrieval |
 | Brainstormer | Opus 4.6 | Creative exploration |
 
+> [!NOTE]
 > **No Codex CLI?** Kiln falls back to Claude-only. The full pipeline still runs.
 
 <br>
@@ -266,6 +281,7 @@ Everything else auto-advances. Wave workers run in parallel git worktrees, each 
 }
 ```
 
+> [!NOTE]
 > **No Teams API?** Kiln falls back to sequential execution. Teams is the fast path, not a requirement.
 
 <br>
