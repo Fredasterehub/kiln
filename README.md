@@ -39,7 +39,14 @@ npx kiln-one
 
 ## Why I built this
 
-Just trying to automate and optimize the workflow I developed over the months. Opus (Opus 4.6) helps brainstorm. GPT (gpt5.2-high) makes the plan without forgetting any detail! Codex (gpt5.3-codex-high) implements highly optimized and surgical prompts resulting in really high quality code. Opus then QA reviews, and if needs be sends back to GPT and Codex and rinse and repeat until morale improves! Now I'm trying to glue all this together efficiently via native features and Claude Code. It works. But there will be growing pains!
+Just trying to automate and optimize the workflow I developed over the months.
+
+🧠 **Opus** (Opus 4.6) helps brainstorm.
+📋 **GPT** (gpt5.2-high) makes the plan without forgetting any detail!
+⚡ **Codex** (gpt5.3-codex-high) implements highly optimized and surgical prompts resulting in really high quality code.
+🔍 **Opus** then QA reviews, and if needs be sends back to GPT and Codex — rinse and repeat until morale improves!
+
+Now I'm trying to glue all this together efficiently via native features and Claude Code. **It works.** But there will be growing pains! 🔥
 
 ---
 
