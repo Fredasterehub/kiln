@@ -39,19 +39,12 @@ npx kiln-one
 
 I spent months refining a multi-model workflow by hand. Now I'm turning it into something that runs itself.
 
-<table>
-<tr><td>🧠</td><td><b>Opus</b> <sub>Opus 4.6</sub></td><td>Brainstorms with you — deep, challenging, no shortcuts.</td></tr>
-<tr><td>📋</td><td><b>GPT</b> <sub>gpt5.2-high</sub></td><td>Plans every detail so nothing slips through.</td></tr>
-<tr><td>⚡</td><td><b>Codex</b> <sub>gpt5.3-codex-high</sub></td><td>Implements surgical prompts that produce clean, precise code.</td></tr>
-<tr><td>🔍</td><td><b>Opus</b> <sub>QA</sub></td><td>Reviews everything — not right? Back to GPT, back to Codex, rinse and repeat until morale improves!</td></tr>
-</table>
+🧠 **Opus** (Opus 4.6) brainstorms with you — deep, challenging, no shortcuts.<br>
+📋 **GPT** (gpt5.2-high) plans every detail so nothing slips through.<br>
+⚡ **Codex** (gpt5.3-codex-high) implements surgical prompts that produce clean, precise code.<br>
+🔍 **Opus** QA reviews everything — not right? Back to GPT, back to Codex, rinse and repeat until morale improves!
 
-> **The goal:** once you finish the brainstorm, the rest is fully automated.<br>
-> Plan, execute, test, correct, commit — hands off.
-
-Eventually kiln will run real integration and deployment tests too — Playwright, whatever the project needs — end to end, no human in the loop.
-
-**It works.** Growing pains included. 🔥
+> Once the brainstorm is done, the rest is fully automated — plan, execute, test, correct, commit. Hands off. 🔥
 
 ---
 
