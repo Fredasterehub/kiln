@@ -17,6 +17,7 @@ Options:
   --help                Show this help message and exit
   --repo-root <path>    Target repository root (default: current directory)
   --yes, -y             Non-interactive mode (accept defaults)
+  --force               Overwrite existing files that differ (update mode)
   --global              Install Claude assets into ~/.claude/
 
 Examples:
@@ -43,6 +44,7 @@ function parseArgs(argv) {
   const out = {
     help: false,
     yes: false,
+    force: false,
     global: false,
     repoRoot: process.cwd()
   };
@@ -55,6 +57,10 @@ function parseArgs(argv) {
     }
     if (arg === '--yes' || arg === '-y') {
       out.yes = true;
+      continue;
+    }
+    if (arg === '--force') {
+      out.force = true;
       continue;
     }
     if (arg === '--global') {
@@ -152,7 +158,7 @@ function isFileIdentical(src, dest) {
   }
 }
 
-function copyFileManaged(srcFile, destFile, stats, warnings) {
+function copyFileManaged(srcFile, destFile, stats, warnings, force) {
   fs.mkdirSync(path.dirname(destFile), { recursive: true });
   if (!fs.existsSync(destFile)) {
     fs.copyFileSync(srcFile, destFile);
@@ -165,11 +171,17 @@ function copyFileManaged(srcFile, destFile, stats, warnings) {
     return;
   }
 
+  if (force) {
+    fs.copyFileSync(srcFile, destFile);
+    stats.copied += 1;
+    return;
+  }
+
   stats.conflicts += 1;
   warnings.push(`Conflict at ${destFile} (existing file differs, left unchanged)`);
 }
 
-function copyDir(srcDir, destDir, stats, warnings) {
+function copyDir(srcDir, destDir, stats, warnings, force) {
   if (!fs.existsSync(srcDir)) {
     warnings.push(`Missing source directory: ${srcDir}`);
     return;
@@ -181,11 +193,11 @@ function copyDir(srcDir, destDir, stats, warnings) {
     const srcPath = path.join(srcDir, entry.name);
     const destPath = path.join(destDir, entry.name);
     if (entry.isDirectory()) {
-      copyDir(srcPath, destPath, stats, warnings);
+      copyDir(srcPath, destPath, stats, warnings, force);
       continue;
     }
     if (entry.isFile()) {
-      copyFileManaged(srcPath, destPath, stats, warnings);
+      copyFileManaged(srcPath, destPath, stats, warnings, force);
     }
   }
 }
@@ -362,7 +374,7 @@ function resolveInstallRoots(repoRoot, useGlobal) {
   };
 }
 
-function installAgents(sourceRoot, claudeRoot, warnings) {
+function installAgents(sourceRoot, claudeRoot, warnings, force) {
   const srcAgentsDir = path.join(sourceRoot, 'agents');
   const destAgentsDir = path.join(claudeRoot, 'agents');
   const stats = { copied: 0, skipped: 0, conflicts: 0, scanned: 0 };
@@ -381,12 +393,12 @@ function installAgents(sourceRoot, claudeRoot, warnings) {
     stats.scanned += 1;
     const srcFile = path.join(srcAgentsDir, entry.name);
     const destFile = path.join(destAgentsDir, entry.name);
-    copyFileManaged(srcFile, destFile, stats, warnings);
+    copyFileManaged(srcFile, destFile, stats, warnings, force);
   }
   return stats;
 }
 
-function installSkills(sourceRoot, claudeRoot, warnings) {
+function installSkills(sourceRoot, claudeRoot, warnings, force) {
   const srcSkillsDir = path.join(sourceRoot, 'skills');
   const destSkillsDir = path.join(claudeRoot, 'skills');
   const stats = { copied: 0, skipped: 0, conflicts: 0, directories: 0 };
@@ -405,13 +417,13 @@ function installSkills(sourceRoot, claudeRoot, warnings) {
     stats.directories += 1;
     const srcDir = path.join(srcSkillsDir, entry.name);
     const destDir = path.join(destSkillsDir, entry.name);
-    copyDir(srcDir, destDir, stats, warnings);
+    copyDir(srcDir, destDir, stats, warnings, force);
   }
 
   return stats;
 }
 
-function installHooks(sourceRoot, claudeRoot, warnings) {
+function installHooks(sourceRoot, claudeRoot, warnings, force) {
   const srcHooksDir = path.join(sourceRoot, 'hooks');
   const srcScriptsDir = path.join(srcHooksDir, 'scripts');
   const srcHooksJson = path.join(srcHooksDir, 'hooks.json');
@@ -438,7 +450,7 @@ function installHooks(sourceRoot, claudeRoot, warnings) {
       }
       const srcFile = path.join(srcScriptsDir, entry.name);
       const destFile = path.join(destScriptsDir, entry.name);
-      copyFileManaged(srcFile, destFile, scriptStats, warnings);
+      copyFileManaged(srcFile, destFile, scriptStats, warnings, force);
     }
   } else {
     warnings.push(`Missing source hook scripts directory: ${srcScriptsDir}`);
@@ -476,7 +488,7 @@ function installHooks(sourceRoot, claudeRoot, warnings) {
   return stats;
 }
 
-function installCommands(sourceRoot, claudeRoot, warnings) {
+function installCommands(sourceRoot, claudeRoot, warnings, force) {
   const srcCommandsDir = path.join(sourceRoot, 'commands');
   const destCommandsDir = path.join(claudeRoot, 'commands');
   const stats = { copied: 0, skipped: 0, conflicts: 0, directories: 0 };
@@ -495,13 +507,13 @@ function installCommands(sourceRoot, claudeRoot, warnings) {
     stats.directories += 1;
     const srcDir = path.join(srcCommandsDir, entry.name);
     const destDir = path.join(destCommandsDir, entry.name);
-    copyDir(srcDir, destDir, stats, warnings);
+    copyDir(srcDir, destDir, stats, warnings, force);
   }
 
   return stats;
 }
 
-function installTemplates(sourceRoot, claudeRoot, warnings) {
+function installTemplates(sourceRoot, claudeRoot, warnings, force) {
   const srcTemplatesDir = path.join(sourceRoot, 'templates');
   const destTemplatesDir = path.join(claudeRoot, 'templates');
   const stats = { copied: 0, skipped: 0, conflicts: 0 };
@@ -511,7 +523,7 @@ function installTemplates(sourceRoot, claudeRoot, warnings) {
     return stats;
   }
 
-  copyDir(srcTemplatesDir, destTemplatesDir, stats, warnings);
+  copyDir(srcTemplatesDir, destTemplatesDir, stats, warnings, force);
   return stats;
 }
 
@@ -676,11 +688,11 @@ async function main() {
 
   try {
     fs.mkdirSync(claudeRoot, { recursive: true });
-    const agents = installAgents(sourceRoot, claudeRoot, warnings);
-    const skills = installSkills(sourceRoot, claudeRoot, warnings);
-    const commands = installCommands(sourceRoot, claudeRoot, warnings);
-    const hooks = installHooks(sourceRoot, claudeRoot, warnings);
-    const templates = installTemplates(sourceRoot, claudeRoot, warnings);
+    const agents = installAgents(sourceRoot, claudeRoot, warnings, options.force);
+    const skills = installSkills(sourceRoot, claudeRoot, warnings, options.force);
+    const commands = installCommands(sourceRoot, claudeRoot, warnings, options.force);
+    const hooks = installHooks(sourceRoot, claudeRoot, warnings, options.force);
+    const templates = installTemplates(sourceRoot, claudeRoot, warnings, options.force);
     const projectType = detectProjectType(repoRoot);
     const tooling = detectTooling(repoRoot);
     initializeKiln(sourceRoot, repoRoot, kilnRoot, projectType, modelMode, tooling, useTeams, warnings);
