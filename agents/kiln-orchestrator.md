@@ -252,6 +252,43 @@ Stay lean. Your job is coordination, not computation.
 
 Target: <15% of context window. If reading large files or doing complex analysis, spawn a subagent instead. Skim sentinel headers first, then decision-relevant sections only. Prefer counters and status fields over prose.
 
+### Context Freshness Discipline
+
+Per kiln-core Context Freshness Contract (`skills/kiln-core/kiln-core.md`):
+
+- **Per-step trackers:** Spawn a fresh tracker per pipeline step (plan, validate,
+  execute, e2e, review, reconcile). Do NOT reuse a tracker across step boundaries.
+  Each tracker runs one step, writes artifacts, reports via SendMessage, and shuts down.
+
+- **Per-subtask debate agents:** Within debate stages (plan or review), spawn a
+  fresh agent per subtask (initial, critique, revise). Do NOT reuse a debate agent
+  across subtask boundaries. Each reads prior artifacts from disk only.
+
+- **Disk-only state transfer:** Pass only disk artifact paths in spawn prompts.
+  Never pass prior conversation context. STATE.md and track artifact files are
+  the authoritative state.
+
+Reference: `skills/kiln-core/kiln-core.md` Context Freshness Contract.
+
+### Verification Commands
+
+These deterministic checks confirm the context freshness overhaul is in effect:
+
+```bash
+grep -c "Context Freshness Contract" skills/kiln-core/kiln-core.md          # >= 1
+grep -c "Single-Step" skills/kiln-track/kiln-track.md                       # >= 1
+grep -c "fresh tracker" skills/kiln-fire/kiln-fire.md                       # >= 1
+grep -c "Do not write" skills/kiln-track/kiln-track.md                      # >= 1
+grep -c "shut down" agents/kiln-planner.md agents/kiln-codex-planner.md \
+  agents/kiln-reviewer.md agents/kiln-codex-reviewer.md \
+  agents/kiln-synthesizer.md                                                # >= 5 total
+grep -c "Disk Input Contract" agents/kiln-planner.md \
+  agents/kiln-codex-planner.md agents/kiln-reviewer.md \
+  agents/kiln-codex-reviewer.md agents/kiln-synthesizer.md                  # >= 5 total
+```
+
+Each command must return at least the minimum count shown.
+
 ## Error Handling
 When a subagent reports failure:
 
@@ -306,7 +343,10 @@ Transition keys: `ignition`, `brainstorm-start`, `vision-approved`, `roadmap-sta
 In Teams-first mode (`preferences.useTeams: true`), the user's Claude Code session IS the team lead orchestrator:
 
 - Stays lean: routes, displays transitions, manages state. Never implements.
-- Spawns teammates as fresh subagents for each stage.
+- Spawns teammates as fresh subagents for each pipeline step within a stage.
+  A phase has 6 steps (plan, validate, execute, e2e, review, reconcile);
+  each step gets its own fresh tracker that runs one step, writes artifacts,
+  reports via SendMessage, and shuts down.
 - Interactive stages (brainstorm, roadmap, reconcile) get operator's direct attention.
 - Automated stages (plan, validate, execute, e2e, review) run without operator interaction unless halt/gate triggers.
 

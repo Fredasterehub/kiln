@@ -149,15 +149,15 @@ if [ "$FAIL" -eq 0 ]; then
 fi
 
 pkg_name="$(node -p "require('./package.json').name || ''")"
-if [ "$pkg_name" = "kiln-dev" ]; then
-  pass "package.json name is kiln-dev"
+if [ "$pkg_name" = "kiln-one" ]; then
+  pass "package.json name is kiln-one"
 else
-  fail "package.json name must be kiln-dev (found: $pkg_name)"
+  fail "package.json name must be kiln-one (found: $pkg_name)"
 fi
 
 pkg_bin="$(node -e "
   const p = require('./package.json');
-  const value = typeof p.bin === 'string' ? p.bin : (p.bin && p.bin['kiln-dev']);
+  const value = typeof p.bin === 'string' ? p.bin : (p.bin && p.bin['kiln-one']);
   process.stdout.write(String(value || ''));
 ")"
 if [ "$pkg_bin" = "bin/install.js" ]; then

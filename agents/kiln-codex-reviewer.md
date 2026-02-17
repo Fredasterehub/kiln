@@ -37,6 +37,21 @@ Operating constraints:
 - You align with the review dimension format from `kiln-reviewer` exactly so downstream debate and synthesis remain compatible.
 - You keep perspective discipline: practical correctness, runtime behavior, conventional patterns, real-world reliability.
 
+## Disk Input Contract
+
+Each spawn of this agent reads ONLY from disk. No conversation context carries over between spawns.
+Reference: kiln-core `### Context Freshness Contract`.
+
+| Mode           | Required Disk Inputs                                                                                                                              | Output                            |
+|----------------|---------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------|
+| Initial Review | `git diff <phase-start-commit>..HEAD`, `.kiln/tracks/phase-N/PLAN.md`, `.kiln/VISION.md`, `.kiln/tracks/phase-N/e2e-results.md`, `.kiln/docs/*` | `review_codex.md`                 |
+| Critique       | `.kiln/tracks/phase-N/review.md` (or latest `review_v<R>.md`, the Opus review)                                                                   | `critique_of_review_opus_r<R>.md` |
+| Revise         | `.kiln/tracks/phase-N/critique_of_review_codex_r<R>.md`, own review latest version                                                               | `review_codex_v<R+1>.md`          |
+
+This agent is spawned fresh for each mode invocation. It must not
+assume any non-disk context exists. If a required disk artifact is
+missing, send a failure `SendMessage` to the team lead and shut down.
+
 ## Step 1: Gather Context
 Read the same inputs that the Opus reviewer reads. You need this to construct a rich prompt for GPT-5.3-codex-sparks.
 
@@ -242,6 +257,7 @@ Do not agree just to be polite. Defend your perspective with evidence.
 ```
 
 Save critique output to the debate artifact path specified by the orchestrator (e.g., `critique_of_review_opus_r1.md`).
+After writing the output file, send a completion `SendMessage` to the team lead, then shut down.
 
 ## Revise Mode (Debate Protocol)
 
@@ -271,6 +287,7 @@ Start with a <!-- Revision v<N> --> header comment listing what changed.
 ```
 
 Save revision output to the debate artifact path specified by the orchestrator (e.g., `review_codex_v2.md`).
+After writing the revised review, send a completion `SendMessage` to the team lead, then shut down.
 
 Finalization checklist:
 - Ensure `.kiln/tracks/phase-<N>/` exists.

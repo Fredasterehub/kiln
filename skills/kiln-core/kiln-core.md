@@ -288,6 +288,60 @@ details: ...
 - If a subagent requests unrelated prior-task logs, orchestrator should redact and provide summary.
 - If repeated clarifications exceed two rounds, update packet template instead of inflating prompts.
 
+### Context Freshness Contract
+
+Every agent in the Kiln workflow must follow the four-step ephemeral invariant:
+**spawn fresh → read from disk → do one job → write to disk → die.**
+No agent may accumulate context across step boundaries or debate subtask boundaries.
+
+#### Four-Step Invariant
+
+1. **Spawn fresh.** Each agent is spawned with a clean context window. No in-memory
+   state is inherited from a prior agent, prior step, or prior debate round.
+2. **Read from disk.** The agent's sole input is what it reads from disk at startup
+   (STATE.md, track artifacts, task packet, snapshot). It does not receive live
+   memory from its caller.
+3. **Do one job.** The agent performs exactly the scope defined by its task packet
+   or role assignment and nothing beyond it.
+4. **Write to disk, die.** The agent writes its output to the designated artifact
+   path, emits its terminal signal (TaskUpdate + SendMessage where applicable),
+   and terminates. It does not linger to observe subsequent steps.
+
+#### Compliance Tiers
+
+| Tier | Agents | Freshness Boundary | Status |
+| --- | --- | --- | --- |
+| Wave workers (EXECUTE stage) | `kiln-wave-worker` teammates | Per task packet | Already compliant — gold standard |
+| Track-step agents (Layer 1) | Per-step trackers (plan, validate, execute, e2e, review, reconcile) | Per pipeline step | Must spawn fresh per step; read STATE.md from disk |
+| Debate subtask agents (Layer 2) | Per-subtask debate peers (initial, critique, revise) | Per debate subtask | Must spawn fresh per subtask; read prior artifact from disk |
+
+Wave workers are the proven model. Layer 1 and Layer 2 agents replicate that pattern.
+
+#### Disk-Only State Transfer
+
+No in-memory state is assumed between spawned teammates. `STATE.md` and track
+artifact files are the sole authoritative handoff channel. An agent that needs
+the output of a prior step must read the artifact file that step wrote to disk.
+Passing live context between agents via prompt injection is a violation of this contract.
+
+#### Single STATE.md Writer
+
+Only `kiln-fire` (the team lead / conductor session) writes `.kiln/STATE.md`.
+Track-step trackers and debate teammates never write STATE.md. They report
+completion via `SendMessage` and shut down. This prevents concurrent write
+collisions and keeps the control plane authoritative.
+
+#### Rationale
+
+Forensic analysis of production Kiln sessions established the following:
+wave workers already comply and cause no compaction issues; debate agents and
+per-phase trackers are the primary context accumulation triggers, with debate
+agents accumulating ~165KB across 6+ subtasks and trackers running for full
+phase lifetimes (1h37m observed). The four-step invariant, proven by wave workers,
+is now the cross-cutting standard for all agents.
+Verified by forensic analysis: wave workers already comply; debate agents and
+trackers must be brought into compliance.
+
 ## Error Escalation Protocol
 
 - Mini-verify: max 2 retries per task, then halt

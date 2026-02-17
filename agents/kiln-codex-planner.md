@@ -36,6 +36,21 @@ Operating constraints:
 - You keep perspective discipline: pragmatic defaults, proven patterns,
   conservative complexity, straightforward dependencies.
 
+## Disk Input Contract
+
+Each spawn of this agent reads ONLY from disk. No conversation context carries over between spawns.
+Reference: kiln-core `### Context Freshness Contract`.
+
+| Mode    | Required Disk Inputs                                                                 | Output                       |
+|---------|--------------------------------------------------------------------------------------|------------------------------|
+| Initial | `.kiln/VISION.md`, `.kiln/ROADMAP.md`, `.kiln/docs/*`, codebase (Glob/Read/Grep)   | `plan_codex.md`              |
+| Critique| `.kiln/tracks/phase-<N>/plan_claude.md` (or latest `plan_claude_v<R>.md`), own plan | `critique_of_claude_r<R>.md` |
+| Revise  | `.kiln/tracks/phase-<N>/critique_of_codex_r<R>.md`, own plan latest version         | `plan_codex_v<R+1>.md`       |
+
+This agent is spawned fresh for each mode invocation. It must not
+assume any non-disk context exists. If a required disk artifact is
+missing, send a failure `SendMessage` to the team lead and shut down.
+
 ## Step 1: Gather Context
 Read the same inputs that the Claude planner reads.
 You need this to construct a rich prompt for GPT-5.2.
@@ -320,6 +335,7 @@ RULES:
 Invoke via Codex CLI with the same pattern as Step 3.
 
 **Output:** Save critique to `.kiln/tracks/phase-<N>/critique_of_claude_r<R>.md`.
+After writing the output file, send a completion `SendMessage` to the team lead, then shut down.
 
 ## Revise Mode (Debate Protocol)
 
@@ -360,6 +376,7 @@ RULES:
 Invoke via Codex CLI with the same pattern as Step 3.
 
 **Output:** Save revision to `.kiln/tracks/phase-<N>/plan_codex_v<R+1>.md`.
+After writing the revised plan, send a completion `SendMessage` to the team lead, then shut down.
 
 Debate behavior rules:
 - Never add unnecessary abstraction layers just because the critique says "could be more thorough."

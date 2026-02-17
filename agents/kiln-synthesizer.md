@@ -83,6 +83,25 @@ Coverage checks before synthesis:
 - Confirm each task has file hints and dependencies (or explicit `none`).
 - Confirm wave sections exist; if missing, derive waves from dependencies during merge.
 
+## Disk Input Contract
+
+This agent is spawned fresh for each synthesis invocation. It reads ONLY from disk artifacts.
+No conversation context carries over.
+Reference: kiln-core `### Context Freshness Contract`.
+
+Required disk inputs:
+- `.kiln/tracks/phase-<N>/plan_claude.md` (or latest revision `plan_claude_v<R>.md`)
+- `.kiln/tracks/phase-<N>/plan_codex.md` (or latest revision `plan_codex_v<R>.md`)
+- `.kiln/VISION.md` and `.kiln/docs/*` (living docs)
+- When `planStrategy: "debate"` is active: all `critique_*.md` artifacts and
+  `debate_log.md` under `.kiln/tracks/phase-<N>/`
+
+Output: `.kiln/tracks/phase-<N>/PLAN.md`
+
+If any required disk artifact is missing, send a failure `SendMessage`
+to the team lead and shut down. After writing `PLAN.md` and sending
+the completion `SendMessage`, shut down.
+
 ## Synthesis Process
 Follow these steps:
 

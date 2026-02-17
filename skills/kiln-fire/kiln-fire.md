@@ -103,14 +103,15 @@ On first invocation in a fresh project:
 The core loop runs until all phases are complete or the operator pauses:
 
 ```
-read STATE.md
-  -> route via Decision Tree
-  -> spawn appropriate teammate for the current stage
-  -> wait for completion signal (SendMessage or TaskList polling)
-  -> update STATE.md Orchestration Session fields
-  -> emit transition message with lore quote
-  -> advance to next stage
-  -> repeat
+For each phase in .kiln/ROADMAP.md:
+  For each step in [plan, validate, execute, e2e, review, reconcile]:
+    read .kiln/STATE.md from disk
+    spawn fresh tracker-p<N>-<step> with step name + phase context only
+    wait for completion signal (SendMessage or TaskList polling)
+    read .kiln/STATE.md to confirm step artifact exists on disk
+    update .kiln/STATE.md: set currentStep to next step, clear Active Task ID, update timestamps
+    emit transition message with lore quote
+    if step == reconcile and operator approves: mark phase complete, advance to next phase
 ```
 
 ### Three Hard Gates
@@ -125,7 +126,7 @@ These gates are enforced by the brainstorm, roadmap, and track skills respective
 
 ### STATE.md Updates
 
-Only the team lead (the fire skill's session) writes to `STATE.md`. Teammates report via SendMessage; they never write STATE directly. After each stage completion:
+`kiln-fire` is the sole writer of `.kiln/STATE.md`. This is the Single STATE.md Writer rule from the Context Freshness Contract in `skills/kiln-core/kiln-core.md`. Track-step trackers and debate teammates report completion via SendMessage and shut down immediately after; they must never write STATE.md. This prevents concurrent write collisions and keeps the control plane authoritative.
 
 1. Update `Active Stage` to the next stage.
 2. Clear `Active Task IDs` from the completed stage.
@@ -152,17 +153,29 @@ Each stage spawns a single teammate with specific configuration:
 
 ### Track Stages (plan, validate, execute, e2e, review, reconcile)
 
-- **Skill:** `.claude/skills/kiln-track/kiln-track.md`
-- **Model:** Per `.claude/skills/kiln-core/kiln-core.md` model routing (varies by step type)
-- **Mode:** Automated for most steps; interactive for reconcile (hard gate)
-- **Completion signal:** SendMessage to team lead with `{ stage: "track:<phase>:<step>", status: "completed" }`
+Each pipeline step within a phase gets a FRESH tracker teammate.
+The fire skill spawns one fresh tracker per step, not one tracker per phase.
+
+Steps in order: plan, validate, execute, e2e, review, reconcile
+
+For each step:
+- Spawn a fresh teammate loaded with `skills/kiln-track/kiln-track.md`
+- Name: `tracker-p<N>-<step>` (e.g., `tracker-p1-plan`, `tracker-p2-execute`)
+- Model: Per `skills/kiln-core/kiln-core.md` model routing (varies by step type)
+- Mode: Automated for most steps; interactive for reconcile (hard gate)
+- Prompt includes: step name, phase number, paths to `.kiln/STATE.md`,
+  `.kiln/config.json`, `.kiln/ROADMAP.md`, and the phase track directory
+- Prompt does NOT include prior step output or prior tracker conversation
+- Completion signal: SendMessage with `{ stage: "track:<phase>:<step>", status: "completed" }`
+
+Reference: Context Freshness Contract in `skills/kiln-core/kiln-core.md`.
 
 ### Spawning Template
 
 When spawning a teammate, use the Task tool with:
 - `subagent_type`: `general-purpose`
 - `team_name`: the active team name from STATE.md
-- `name`: descriptive name (e.g., `brainstormer`, `roadmapper`, `tracker-p1-plan`)
+- `name`: step-specific name for trackers — `tracker-p<N>-<step>` (e.g., `tracker-p1-plan`, `tracker-p1-validate`, `tracker-p2-execute`); descriptive names for other stages (e.g., `brainstormer`, `roadmapper`)
 - `prompt`: instructions referencing the appropriate skill and current project state
 
 Record the spawned task ID in `STATE.md` Active Task IDs.
@@ -281,6 +294,8 @@ When Team tools (TeamCreate, SendMessage, TaskList) are not available or the ope
 - The Orchestration Session section in STATE.md is left empty or not written.
 
 Detection: If TeamCreate is not in the available tool set, fall back to standalone mode automatically.
+
+Per-step tracker spawning applies only when Teams tools (TeamCreate, SendMessage, TaskList) are available. In standalone mode, the existing sequential behavior is unchanged.
 
 ## Error Handling
 

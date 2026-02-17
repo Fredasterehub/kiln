@@ -89,6 +89,21 @@ Input discipline:
 - If the codebase is in early bootstrap state,
   prefer foundation tasks before feature-level tasks.
 
+## Disk Input Contract
+
+Each spawn of this agent reads ONLY from disk. No conversation context carries over between spawns.
+Reference: kiln-core `### Context Freshness Contract`.
+
+| Mode    | Required Disk Inputs                                                                | Output                      |
+|---------|-------------------------------------------------------------------------------------|-----------------------------|
+| Initial | `.kiln/VISION.md`, `.kiln/ROADMAP.md`, `.kiln/docs/*`, codebase (Glob/Read/Grep)  | `plan_claude.md`            |
+| Critique| `.kiln/tracks/phase-<N>/plan_codex.md` (or latest `plan_codex_v<R>.md`), own plan | `critique_of_codex_r<R>.md` |
+| Revise  | `.kiln/tracks/phase-<N>/critique_of_claude_r<R>.md`, own plan latest version       | `plan_claude_v<R+1>.md`     |
+
+This agent is spawned fresh for each mode invocation. It must not
+assume any non-disk context exists. If a required disk artifact is
+missing, send a failure `SendMessage` to the team lead and shut down.
+
 ## Planning Process
 Follow these steps to produce the plan:
 
@@ -289,6 +304,7 @@ your task changes from producing a plan to critiquing the competing plan.
 - Focus on correctness, security, and completeness — not style preferences.
 
 **Output:** Write critique to `.kiln/tracks/phase-<N>/critique_of_codex_r<R>.md`.
+After writing the output file, send a completion `SendMessage` to the team lead, then shut down.
 
 ## Revise Mode (Debate Protocol)
 
@@ -312,6 +328,7 @@ When the orchestrator spawns you in revise mode after receiving a critique:
 - The revised plan must be a drop-in replacement for the previous version.
 
 **Output:** Write revision to `.kiln/tracks/phase-<N>/plan_claude_v<R+1>.md`.
+After writing the revised plan, send a completion `SendMessage` to the team lead, then shut down.
 
 Debate behavior rules:
 - Never weaken acceptance criteria to resolve a critique.

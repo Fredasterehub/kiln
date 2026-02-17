@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Kiln is a multi-model orchestration workflow for Claude Code, distributed as an NPM package (`kiln-dev`).
+Kiln is a multi-model orchestration workflow for Claude Code, distributed as an NPM package (`kiln-one`).
 We are building kiln using the deafish-teams workflow with Agent Teams.
 
 ## Separation of Concerns
@@ -16,7 +16,7 @@ We are building kiln using the deafish-teams workflow with Agent Teams.
 
 ## What We're Building
 
-Kiln is an NPM package. End users install it with `npx kiln-dev`.
+Kiln is an NPM package. End users install it with `npx kiln-one`.
 The package source lives at the repo root: `agents/`, `skills/`, `hooks/`, `bin/`, `templates/`.
 The `.claude/` directory is OUR build tooling, not the product.
 
@@ -34,6 +34,26 @@ The `.claude/` directory is OUR build tooling, not the product.
 - Shell scripts must pass shellcheck
 - Markdown agents/skills should be thorough but not bloated (~200-400 lines each)
 - All file paths in agents/skills must be relative (no hardcoded absolute paths)
+
+## Engineering Standards
+
+### Documentation-Driven Development
+Before proposing implementations involving external libraries, perform an internet search and consult official documentation. Solutions must adhere to documented best practices and data structures. Never assume API shapes — verify them.
+
+### Production-Ready Code
+All proposed code (wiring, logic, edits) must be complete and functional. No mocks, no placeholders, no TODOs. Use proper variable and function names. Every change must be shippable.
+
+### Modularity and Scalability
+Solutions must be modular, designed to allow the project scope to expand efficiently. Prefer composition over monoliths. Design interfaces that future phases can extend without rewriting.
+
+### Clarity and Inquiry
+If you are unsure about any aspect of the project or direction, ask direct questions immediately. Ambiguity is more expensive than a question.
+
+### Guiding Principles
+
+- **Elegant Robustness:** State-of-the-art, resilient solutions that are elegant in their simplicity. Avoid over-engineering. Engineering art is artful in its simplicity.
+- **Unyielding Quality:** No compromise on quality (aucun nivellement vers le bas). Commit the necessary effort to achieve the best solution.
+- **Strategic Open Source Adoption:** Leverage open-source solutions for robustness and efficiency only when they represent the best path forward, utilizing them fully.
 
 ---
 

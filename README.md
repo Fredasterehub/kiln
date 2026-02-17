@@ -23,7 +23,7 @@
 <br>
 
 ```
-npx kiln-dev
+npx kiln-one
 ```
 
 > [!NOTE]
@@ -67,6 +67,18 @@ I hope you cook something amazing. Let us know how it goes.
 ---
 
 ## Recent changes
+
+> [!NOTE]
+> **Context Freshness Overhaul** (2026-02-17)
+>
+> Propagated the wave worker's proven pattern — spawn fresh, read disk, one job, write disk, die — across every agent tier. Context compaction is no longer a failure mode.
+
+- Four-step ephemeral invariant codified in `kiln-core` as the cross-cutting Context Freshness Contract
+- Track skill restructured: Single-Step Dispatcher spawns one step, reports, shuts down
+- Fire skill now spawns per-step trackers (`tracker-p<N>-<step>`) instead of one tracker per phase
+- 5 debate agents get Disk Input Contracts and mandatory shutdown-after-write
+- Orchestrator updated with Context Freshness Discipline + 6 deterministic verification checks
+- Three compliance tiers: wave workers (gold standard), track-step agents, debate subtask agents
 
 > [!NOTE]
 > **Teams Architecture Redesign** (2026-02-16)
@@ -384,10 +396,10 @@ BMAD gives you a vision worth building. GSD keeps each task sharp and isolated. 
 <br>
 
 ```bash
-npx kiln-dev                              # current project
-npx kiln-dev --repo-root /path/to/project # specific repo
-npx kiln-dev --yes                        # non-interactive
-npx kiln-dev --global                     # global (~/.claude/)
+npx kiln-one                              # current project
+npx kiln-one --repo-root /path/to/project # specific repo
+npx kiln-one --yes                        # non-interactive
+npx kiln-one --global                     # global (~/.claude/)
 ```
 
 **Requires:** Claude Code, Node.js 18+<br>

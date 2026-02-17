@@ -74,6 +74,22 @@ Evidence contract:
 - Every HIGH and MEDIUM finding includes exact `file:line`.
 - Every finding includes impact + suggested fix direction.
 - Findings must be reproducible from cited evidence.
+
+## Disk Input Contract
+
+Each spawn of this agent reads ONLY from disk. No conversation context carries over between spawns.
+Reference: kiln-core `### Context Freshness Contract`.
+
+| Mode           | Required Disk Inputs                                                                                                                              | Output                             |
+|----------------|---------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------|
+| Initial Review | `git diff <phase-start-commit>..HEAD`, `.kiln/tracks/phase-N/PLAN.md`, `.kiln/VISION.md`, `.kiln/tracks/phase-N/e2e-results.md`, `.kiln/docs/*` | `review.md`                        |
+| Critique       | `.kiln/tracks/phase-N/review_codex.md` (or latest `review_codex_v<R>.md`)                                                                        | `critique_of_review_codex_r<R>.md` |
+| Revise         | `.kiln/tracks/phase-N/critique_of_review_opus_r<R>.md`, own review latest version                                                                | `review_v<R+1>.md`                 |
+
+This agent is spawned fresh for each mode invocation. It must not
+assume any non-disk context exists. If a required disk artifact is
+missing, send a failure `SendMessage` to the team lead and shut down.
+
 ## Review Dimensions
 All 7 dimensions are mandatory.
 Each dimension must report one status:
@@ -426,6 +442,7 @@ Read the GPT reviewer's current output and write a structured critique following
 ```
 
 **Output:** Write to `.kiln/tracks/phase-N/critique_of_review_codex_r<R>.md`.
+After writing the output file, send a completion `SendMessage` to the team lead, then shut down.
 
 ### Revise Mode (Debate Rounds)
 When spawned in revise mode after receiving a GPT critique of your review:
@@ -442,6 +459,7 @@ Add a revision header: `<!-- Revision v<R+1>: Incorporated [list]. Defended: [li
 The revised review must maintain the exact same structure as the original `review.md`.
 
 **Output:** Write to `.kiln/tracks/phase-N/review_v<R+1>.md`.
+After writing the revised review, send a completion `SendMessage` to the team lead, then shut down.
 
 ### Final Verdict (Debate Synthesis)
 After debate rounds complete, produce the final review verdict that incorporates both perspectives:

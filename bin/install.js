@@ -8,10 +8,10 @@ const readline = require('readline');
 const { spawnSync } = require('child_process');
 
 const USAGE = `
-kiln-dev \u2014 Multi-model orchestration workflow for Claude Code
+kiln-one \u2014 Multi-model orchestration workflow for Claude Code
 
 Usage:
-  npx kiln-dev [options]
+  npx kiln-one [options]
 
 Options:
   --help                Show this help message and exit
@@ -20,9 +20,9 @@ Options:
   --global              Install Claude assets into ~/.claude/
 
 Examples:
-  npx kiln-dev
-  npx kiln-dev --repo-root /path/to/project
-  npx kiln-dev --repo-root /path/to/project --yes
+  npx kiln-one
+  npx kiln-one --repo-root /path/to/project
+  npx kiln-one --repo-root /path/to/project --yes
 `.trim();
 
 const IGNITION_QUOTES = [
@@ -83,7 +83,7 @@ function ensureNodeVersion() {
   const major = Number(String(process.versions.node || '').split('.')[0] || 0);
   if (Number.isNaN(major) || major < 18) {
     fatal(
-      `kiln-dev requires Node.js 18 or newer (found ${process.versions.node || 'unknown'})`,
+      `kiln-one requires Node.js 18 or newer (found ${process.versions.node || 'unknown'})`,
       1
     );
   }

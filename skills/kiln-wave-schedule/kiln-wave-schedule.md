@@ -110,6 +110,14 @@ Create one `kiln-wave-worker` teammate per task packet in the active wave.
 4. Run explicit mini-verify and set `kiln_stage=verified` or `failed`.
 5. Emit terminal `TaskUpdate` (`done` or `failed`) and terminal `SendMessage` with artifact pointers.
 
+### Context Freshness Compliance
+
+Wave workers already follow the kiln-core Context Freshness Contract:
+each worker is spawned fresh per task, reads from `.kiln-snapshot/` (disk),
+performs one task, writes artifacts to disk, and terminates. No context
+accumulates across tasks. This pattern is the gold standard that per-step
+trackers (Layer 1) and per-subtask debate agents (Layer 2) now replicate.
+
 ## Integration Checkpoint Protocol
 
 After all successful tasks in a wave are integrated on main, run integration verify before starting the next wave.

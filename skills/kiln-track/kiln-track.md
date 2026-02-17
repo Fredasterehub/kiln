@@ -50,6 +50,9 @@ Run /kiln:roadmap first, then rerun /kiln:track.
 ```
 
 ## Track Loop
+
+### Non-Teams Sequential Flow (unchanged)
+
 Run the loop exactly in this sequence:
 
 1. Read `.kiln/STATE.md` to determine the active phase, active step, counters, and gate status.
@@ -76,6 +79,21 @@ Run the loop exactly in this sequence:
 4. After each step completes: if `PASS`, advance to the next step and update `.kiln/STATE.md`; if `FAIL`, check correction budget, run correction flow when budget remains, otherwise `HALT`.
 5. After `RECONCILE` completes for a phase: mark phase complete in `.kiln/STATE.md`, move to next incomplete phase; if none remain, trigger Final Integration E2E.
 6. After Final Integration E2E passes: generate `.kiln/FINAL_REPORT.md`, mark project complete, and set state to terminal success.
+
+### Teams Mode: Single-Step Dispatcher
+
+When spawned as a teammate by `kiln-fire`, this tracker executes exactly ONE step:
+
+1. Read `STATE.md` from disk to determine the active phase and step.
+2. Execute exactly that step (see Stage Details below).
+3. Write artifacts to `.kiln/tracks/phase-N/`.
+4. SendMessage `{ stage: "track:<phase>:<step>", status: "completed", evidence_paths: [...] }` to team lead.
+5. Shut down.
+
+Hard rules:
+- **Do not write or edit `.kiln/STATE.md`.** The team lead (`kiln-fire`) is the sole STATE.md writer.
+- **Do not advance `currentStep` or `currentPhase`.** That is the team lead's responsibility.
+- **Do not loop to the next step.** Execute one step, report, shut down.
 
 Transition invariants:
 - Only one active phase and one active step at a time.
@@ -135,31 +153,52 @@ Required PLAN-team outputs:
 #### Plan Debate Flow
 When `planStrategy: "debate"` and `modelMode: "multi-model"`:
 
+> **Context Freshness:** Per the Context Freshness Contract in
+> `skills/kiln-core/kiln-core.md`, each debate subtask MUST receive a fresh
+> agent. The tracker manages round progression by reading disk artifacts between
+> spawns — it never passes conversation context from one subtask agent to the
+> next. Disk artifact paths are the sole handoff channel.
+
 ```
-1. Spawn kiln-planner and kiln-codex-planner in parallel
-   -> plan_claude.md, plan_codex.md
+1. Spawn FRESH kiln-planner and FRESH kiln-codex-planner in parallel.
+   Input:  .kiln/VISION.md, .kiln/ROADMAP.md, .kiln/docs/*, codebase
+   Output: .kiln/tracks/phase-N/plan_claude.md
+           .kiln/tracks/phase-N/plan_codex.md
 
 2. For round = 1 to debateRounds:
-   a. Critique phase (parallel):
-      - Spawn kiln-planner in critique mode (reads plan_codex latest, writes critique_of_codex_r<round>.md)
-      - Spawn kiln-codex-planner in critique mode (reads plan_claude latest, writes critique_of_claude_r<round>.md)
+   a. Critique phase — spawn FRESH agents in parallel:
+      - Spawn FRESH kiln-planner in critique mode.
+        Input:  .kiln/tracks/phase-N/plan_codex.md (or plan_codex_v<round>.md for round > 1)
+        Output: .kiln/tracks/phase-N/critique_of_codex_r<round>.md
+      - Spawn FRESH kiln-codex-planner in critique mode.
+        Input:  .kiln/tracks/phase-N/plan_claude.md (or plan_claude_v<round>.md for round > 1)
+        Output: .kiln/tracks/phase-N/critique_of_claude_r<round>.md
 
-   b. Revise phase (parallel):
-      - Spawn kiln-planner in revise mode (reads critique_of_claude_r<round>.md, writes plan_claude_v<round+1>.md)
-      - Spawn kiln-codex-planner in revise mode (reads critique_of_codex_r<round>.md, writes plan_codex_v<round+1>.md)
+   b. Read both critique artifacts from disk. Check convergence criteria
+      (per kiln-debate protocol). Record round result in debate_log.md.
+      Break early if convergence met.
 
-   c. Convergence check:
-      - Read both critiques from this round.
-      - If convergence criteria met (per kiln-debate protocol), break early.
-      - Record round result in debate_log.md.
+   c. Revise phase — spawn FRESH agents in parallel:
+      - Spawn FRESH kiln-planner in revise mode.
+        Input:  .kiln/tracks/phase-N/plan_claude.md (latest version),
+                .kiln/tracks/phase-N/critique_of_claude_r<round>.md
+        Output: .kiln/tracks/phase-N/plan_claude_v<round+1>.md
+      - Spawn FRESH kiln-codex-planner in revise mode.
+        Input:  .kiln/tracks/phase-N/plan_codex.md (latest version),
+                .kiln/tracks/phase-N/critique_of_codex_r<round>.md
+        Output: .kiln/tracks/phase-N/plan_codex_v<round+1>.md
 
-3. Write debate_log.md with full audit trail.
+   d. Read both revised plans from disk. Append round summary to
+      .kiln/tracks/phase-N/debate_log.md.
 
-4. Spawn kiln-synthesizer with debate context:
-   - Final revised plans as primary inputs
-   - All critique artifacts for context
-   - debate_log.md for convergence info
-   -> PLAN.md
+3. Write final debate_log.md with full audit trail.
+
+4. Spawn FRESH kiln-synthesizer with disk inputs only.
+   Input:  .kiln/tracks/phase-N/plan_claude_v<final>.md,
+           .kiln/tracks/phase-N/plan_codex_v<final>.md,
+           all critique artifacts (.kiln/tracks/phase-N/critique_of_*),
+           .kiln/tracks/phase-N/debate_log.md
+   Output: .kiln/tracks/phase-N/PLAN.md
 ```
 
 State tracking for debate:
@@ -344,44 +383,85 @@ Apply comprehensive quality review after implementation and E2E validation.
 #### Review Debate Flow
 When `reviewStrategy: "debate"` and `modelMode: "multi-model"`:
 
+> **Context Freshness:** Per the Context Freshness Contract in
+> `skills/kiln-core/kiln-core.md`, each debate subtask MUST receive a fresh
+> agent. The tracker reads the latest disk artifacts between spawns to determine
+> round state and convergence — it never carries in-memory state from one
+> subtask agent into the next.
+
 Teams scheduler for debate mode (`preferences.useTeams: true`):
 - Create one review team for phase `phase-N`.
-- Spawn both reviewers as parallel teammates:
-  - `phase-N:review:opus-initial` -> `.kiln/tracks/phase-N/review.md`
-  - `phase-N:review:codex-initial` -> `.kiln/tracks/phase-N/review_codex.md`
+- Spawn FRESH reviewers in parallel as initial teammates:
+  - Spawn FRESH kiln-reviewer (Opus).
+    Input:  working tree diff, .kiln/tracks/phase-N/e2e-results.md, acceptance criteria
+    Output: .kiln/tracks/phase-N/review.md  (`phase-N:review:opus-initial`)
+  - Spawn FRESH kiln-codex-reviewer (GPT-5.3-codex-sparks).
+    Input:  working tree diff, .kiln/tracks/phase-N/e2e-results.md, acceptance criteria
+    Output: .kiln/tracks/phase-N/review_codex.md  (`phase-N:review:codex-initial`)
 - For each round `r` from `1..debateRounds`:
-  - Critique tasks in parallel:
-    - Opus critique -> `.kiln/tracks/phase-N/critique_of_review_codex_r<r>.md`
-    - Codex critique -> `.kiln/tracks/phase-N/critique_of_review_opus_r<r>.md`
-  - Revise tasks in parallel:
-    - Opus revision -> `.kiln/tracks/phase-N/review_v<r+1>.md`
-    - Codex revision -> `.kiln/tracks/phase-N/review_codex_v<r+1>.md`
-  - Append round result to `.kiln/tracks/phase-N/debate_log.md`; allow early stop on convergence.
-- Final verdict rule is unchanged: stricter verdict wins (`REJECTED` over `APPROVED`), with Opus reviewer final artifact authoritative where required by contract.
+  - Read both initial/latest review artifacts from disk.
+  - Critique tasks — spawn FRESH agents in parallel:
+    - Spawn FRESH kiln-reviewer in critique mode.
+      Input:  .kiln/tracks/phase-N/review_codex.md (latest version)
+      Output: .kiln/tracks/phase-N/critique_of_review_codex_r<r>.md
+    - Spawn FRESH kiln-codex-reviewer in critique mode.
+      Input:  .kiln/tracks/phase-N/review.md (latest version)
+      Output: .kiln/tracks/phase-N/critique_of_review_opus_r<r>.md
+  - Read both critique artifacts from disk. Check convergence.
+  - Revise tasks — spawn FRESH agents in parallel:
+    - Spawn FRESH kiln-reviewer in revise mode.
+      Input:  .kiln/tracks/phase-N/review.md (latest version),
+              .kiln/tracks/phase-N/critique_of_review_opus_r<r>.md
+      Output: .kiln/tracks/phase-N/review_v<r+1>.md
+    - Spawn FRESH kiln-codex-reviewer in revise mode.
+      Input:  .kiln/tracks/phase-N/review_codex.md (latest version),
+              .kiln/tracks/phase-N/critique_of_review_codex_r<r>.md
+      Output: .kiln/tracks/phase-N/review_codex_v<r+1>.md
+  - Read both revised artifacts from disk. Append round result to
+    `.kiln/tracks/phase-N/debate_log.md`; allow early stop on convergence.
+- Final verdict rule is unchanged: stricter verdict wins (`REJECTED` over `APPROVED`),
+  with the Opus reviewer's final revision artifact authoritative where required by contract.
 
 Sequential fallback (`preferences.useTeams: false|absent`):
+
+> **Context Freshness:** Sequential Task spawns are inherently fresh (each Task
+> gets a clean context window). Disk artifact paths are the sole input to each
+> spawn; no in-memory state is passed between Tasks.
+
 ```
-1. Spawn kiln-reviewer and kiln-codex-reviewer in parallel
-   -> review.md, review_codex.md
+1. Spawn FRESH kiln-reviewer and FRESH kiln-codex-reviewer in parallel.
+   Input:  working tree diff, .kiln/tracks/phase-N/e2e-results.md, acceptance criteria
+   Output: .kiln/tracks/phase-N/review.md
+           .kiln/tracks/phase-N/review_codex.md
 
 2. For round = 1 to debateRounds:
-   a. Critique phase (parallel):
-      - Spawn kiln-reviewer in critique mode (reads review_codex latest, writes critique_of_review_codex_r<round>.md)
-      - Spawn kiln-codex-reviewer in critique mode (reads review latest, writes critique_of_review_opus_r<round>.md)
+   a. Critique phase — spawn FRESH agents in parallel:
+      - Spawn FRESH kiln-reviewer in critique mode.
+        Input (disk):  .kiln/tracks/phase-N/review_codex.md (latest version)
+        Output: .kiln/tracks/phase-N/critique_of_review_codex_r<round>.md
+      - Spawn FRESH kiln-codex-reviewer in critique mode.
+        Input (disk):  .kiln/tracks/phase-N/review.md (latest version)
+        Output: .kiln/tracks/phase-N/critique_of_review_opus_r<round>.md
 
-   b. Revise phase (parallel):
-      - Spawn kiln-reviewer in revise mode (reads critique_of_review_opus_r<round>.md, writes review_v<round+1>.md)
-      - Spawn kiln-codex-reviewer in revise mode (reads critique_of_review_codex_r<round>.md, writes review_codex_v<round+1>.md)
+   b. Revise phase — spawn FRESH agents in parallel:
+      - Spawn FRESH kiln-reviewer in revise mode.
+        Input (disk):  .kiln/tracks/phase-N/review.md (latest),
+                       .kiln/tracks/phase-N/critique_of_review_opus_r<round>.md
+        Output: .kiln/tracks/phase-N/review_v<round+1>.md
+      - Spawn FRESH kiln-codex-reviewer in revise mode.
+        Input (disk):  .kiln/tracks/phase-N/review_codex.md (latest),
+                       .kiln/tracks/phase-N/critique_of_review_codex_r<round>.md
+        Output: .kiln/tracks/phase-N/review_codex_v<round+1>.md
 
    c. Convergence check:
-      - Read both critiques from this round.
+      - Read both critique artifacts from disk for this round.
       - If convergence criteria met (per kiln-debate protocol), break early.
-      - Append round result to debate_log.md.
+      - Append round result to .kiln/tracks/phase-N/debate_log.md.
 
-3. Update debate_log.md with review debate audit trail.
+3. Update .kiln/tracks/phase-N/debate_log.md with full review debate audit trail.
 
 4. Final verdict determination:
-   - Read both final revised reviews.
+   - Read both final revised reviews from disk.
    - Agreement on findings = high-confidence issues (always include).
    - Single-reviewer findings = evaluate on individual merit.
    - The Opus reviewer's final revision is the authoritative verdict.
