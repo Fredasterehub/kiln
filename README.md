@@ -37,16 +37,21 @@ npx kiln-one
 
 ---
 
-Just trying to automate and optimize the workflow I developed over the months.
+I spent months refining a multi-model workflow by hand. Now I'm turning it into something that runs itself.
 
-🧠 **Opus** (Opus 4.6) helps brainstorm.<br>
-📋 **GPT** (gpt5.2-high) makes the plan without forgetting any detail!<br>
-⚡ **Codex** (gpt5.3-codex-high) implements highly optimized and surgical prompts resulting in really high quality code.<br>
-🔍 **Opus** then QA reviews, and if needs be sends back to GPT and Codex — rinse and repeat until morale improves!
+<table>
+<tr><td>🧠</td><td><b>Opus</b> <sub>Opus 4.6</sub></td><td>Brainstorms with you — deep, challenging, no shortcuts.</td></tr>
+<tr><td>📋</td><td><b>GPT</b> <sub>gpt5.2-high</sub></td><td>Plans every detail so nothing slips through.</td></tr>
+<tr><td>⚡</td><td><b>Codex</b> <sub>gpt5.3-codex-high</sub></td><td>Implements surgical prompts that produce clean, precise code.</td></tr>
+<tr><td>🔍</td><td><b>Opus</b> <sub>QA</sub></td><td>Reviews everything — not right? Back to GPT, back to Codex, rinse and repeat until morale improves!</td></tr>
+</table>
 
-Now I'm trying to glue all this together efficiently via native features and Claude Code.
+> **The goal:** once you finish the brainstorm, the rest is fully automated.<br>
+> Plan, execute, test, correct, commit — hands off.
 
-**It works.** But there will be growing pains! 🔥
+Eventually kiln will run real integration and deployment tests too — Playwright, whatever the project needs — end to end, no human in the loop.
+
+**It works.** Growing pains included. 🔥
 
 ---
 
