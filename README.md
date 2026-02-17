@@ -69,6 +69,23 @@ I hope you cook something amazing. Let us know how it goes.
 ## Recent changes
 
 > [!NOTE]
+> **Tracker Skill Split + Cool Shutdown Race Fix** (2026-02-17)
+>
+> Decomposed the 671-line kiln-track monolith into 6 step-scoped skills and made /kiln:cool
+> Teams-aware with an ordered shutdown protocol and checkpoint-commit gate.
+
+- `kiln-track.md` (671 lines) replaced by 6 step-specific skills: `kiln-tracker-plan`,
+  `kiln-tracker-validate`, `kiln-tracker-execute`, `kiln-tracker-e2e`,
+  `kiln-tracker-review`, `kiln-tracker-reconcile`
+- Each tracker loads only the logic relevant to its step -- no cross-contamination
+- `/kiln:cool` now detects active Teams sessions and runs an Ordered Shutdown Protocol
+- Teams shutdown: tracker first (5 min timeout), then workers in parallel (60s), with ack tracking
+- Three-part git audit: `git status` + `git worktree list --porcelain` + worktree artifact scan
+- Operator gate: AskUserQuestion for checkpoint commit before setting Paused: true
+- `kiln-fire` Stage Machine Loop now checks `Paused: true` before each spawn
+- Pause-resume distinguished from crash-recovery in kiln-fire Resume logic
+
+> [!NOTE]
 > **Context Freshness Overhaul** (2026-02-17)
 >
 > Propagated the wave worker's proven pattern — spawn fresh, read disk, one job, write disk, die — across every agent tier. Context compaction is no longer a failure mode.
@@ -416,7 +433,7 @@ npx kiln-one --global                     # global (~/.claude/)
 ```
 kiln/
 ├── agents/           13 AI agent definitions
-├── skills/           17 skill definitions
+├── skills/           25 skill definitions
 ├── commands/         8 slash command definitions
 ├── hooks/            Claude Code lifecycle hooks
 │   ├── hooks.json    Session start + mini-verify triggers

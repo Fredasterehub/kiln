@@ -116,7 +116,12 @@ SKILLS=(
   kiln-execute
   kiln-e2e
   kiln-verify
-  kiln-track
+  kiln-tracker-plan
+  kiln-tracker-validate
+  kiln-tracker-execute
+  kiln-tracker-e2e
+  kiln-tracker-review
+  kiln-tracker-reconcile
   kiln-reconcile
   kiln-roadmap
   kiln-fire
@@ -130,7 +135,7 @@ for skill in "${SKILLS[@]}"; do
   check "skill has markdown: $skill" bash -c 'find "$1" -maxdepth 1 -type f -name "*.md" | grep -q "."' _ "$local_dir"
 done
 
-check "at least 15 skill directories installed" bash -c '[ "$(find "$1" -mindepth 1 -maxdepth 1 -type d | wc -l)" -ge 15 ]' _ "$SKILL_ROOT"
+check "at least 20 skill directories installed" bash -c '[ "$(find "$1" -mindepth 1 -maxdepth 1 -type d | wc -l)" -ge 20 ]' _ "$SKILL_ROOT"
 
 echo ""
 echo "Group 4: Hooks"

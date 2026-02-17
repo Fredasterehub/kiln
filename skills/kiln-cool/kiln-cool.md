@@ -22,7 +22,11 @@ If `.kiln/STATE.md` is missing or unreadable, print:
 `Kiln state file missing or unreadable. Run /kiln:init to reinitialize.`
 Then stop.
 
-## Process
+## Process -- Non-Teams Mode
+
+> If `.kiln/STATE.md` Orchestration Session shows an active Teams session
+> (`Team Name` is set and `Paused` is not `true`), skip to
+> "Process -- Teams Mode" below instead of running these steps.
 
 1. Read current `.kiln/STATE.md`.
 2. Parse at least these sections before writing anything:
@@ -50,6 +54,73 @@ Then stop.
    - Confirm no phase progress was changed.
    - Print explicit resume instruction: `Run /kiln:fire`.
 
+## Process -- Teams Mode
+
+### Step 1: Detect Active Session
+
+- Read `Orchestration Session` from `.kiln/STATE.md`.
+- If `Team Name` is absent or empty: Teams is not active. Fall through to Non-Teams Mode.
+- If `Paused` is already `true`: report current pause state and reason. Stop (do not double-pause).
+- Read `Active Stage` and `Active Task IDs`.
+
+### Step 2: Ordered Shutdown Protocol
+
+Branch by `Active Stage`:
+
+**EXECUTE stage** (trackers spawning workers):
+1. Identify the active tracker task ID (name pattern: `tracker-p<N>-execute`).
+2. Send `shutdown_request` via SendMessage to the tracker.
+3. Wait for `shutdown_ack` with stage-aware timeout: 3-5 minutes (respect `deadWorkerTimeoutMinutes` from `.kiln/config.json` if set).
+4. On ack or timeout: proceed to Step 2b.
+5. **Step 2b:** Send `shutdown_request` to ALL remaining active teammates (non-tracker task IDs in `Active Task IDs`).
+6. Wait for all acks or 60-second timeout.
+7. Record which teammates acknowledged and which timed out.
+
+**INTERACTIVE stages** (BRAINSTORM, ROADMAP):
+1. Send `shutdown_request` to the active teammate (from `Active Task IDs`).
+2. Wait for `shutdown_ack` with 60-second timeout.
+3. Note: interactive teammates may have unsaved operator context. The checkpoint commit in Step 4 preserves any written artifacts.
+
+**AUTOMATED stages** (PLAN, VALIDATE, E2E, REVIEW):
+1. Send `shutdown_request` to the active teammate(s) (from `Active Task IDs`).
+2. For PLAN/REVIEW with active debate: send to all debate teammates.
+3. Wait for all acks or 60-second timeout.
+
+### Step 3: Audit Uncommitted Work
+
+Three-part audit (run all three, collect findings):
+
+1. `git status --short` -- uncommitted changes in main workspace.
+2. `git worktree list --porcelain` -- active worktrees and their status.
+3. Scan `${KILN_WORKTREE_ROOT:-/tmp}/kiln-<project-hash>/` for artifact directories. Check for `.kiln-artifacts/` content that has not been copy-backed.
+
+Cross-reference findings against `Active Task IDs` from STATE.md.
+
+### Step 4: Report and Checkpoint Gate
+
+- Display summary to operator:
+  - Teammates that acknowledged vs. timed out.
+  - Three-part audit output.
+  - List of any uncommitted changes or pending copy-back artifacts.
+- If uncommitted work found: offer checkpoint commit via AskUserQuestion.
+  - Question: "Found uncommitted work (summarized above). Create a checkpoint commit? [yes/no]"
+  - If yes: create checkpoint commit with message `kiln: pause checkpoint at phase-<N>/<step> (<timestamp>)`.
+  - If no: continue without committing.
+
+### Step 5: Write Pause State
+
+Update `.kiln/STATE.md` Orchestration Session:
+- Set `Paused: true`.
+- Set `Pause Reason` to descriptive text (e.g., "Operator invoked /kiln:cool at phase-N/step").
+- Update `Session Recovery` fields:
+  - `Last Activity`: current ISO 8601 timestamp.
+  - `Last Completed Action`: `Paused via /kiln:cool at phase-<N>/<step> (Teams mode)`.
+  - `Next Expected Action`: `Run /kiln:fire to resume from phase-<N>/<step>`.
+
+### Step 6: Transition Message
+
+Display the pause-cool lore transition message using the existing format from "Transition Message on Pause" section.
+
 ## Transition Message on Pause
 
 After writing the state snapshot (step 7), display a transition message using the `pause-cool` section from `.claude/skills/kiln-lore/kiln-lore.md`.
@@ -70,3 +141,5 @@ No emoji. The whitespace (blank line before the status) is intentional.
 - Never advance steps.
 - Never edit sections outside `## Session Recovery`.
 - Never infer completion that is not already recorded.
+- Never delete Teams or cancel tasks that completed successfully during shutdown.
+- Never force-kill teammates -- always use SendMessage shutdown_request with timeout.

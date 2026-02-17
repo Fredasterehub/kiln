@@ -106,8 +106,10 @@ The core loop runs until all phases are complete or the operator pauses:
 For each phase in .kiln/ROADMAP.md:
   For each step in [plan, validate, execute, e2e, review, reconcile]:
     read .kiln/STATE.md from disk
-    spawn fresh tracker-p<N>-<step> with step name + phase context only
+    if STATE.md Orchestration Session shows Paused: true -> break loop, report to operator
+    spawn fresh tracker-p<N>-<step> with step-specific tracker skill + phase context only
     wait for completion signal (SendMessage or TaskList polling)
+    on wait: periodically re-read STATE.md; if Paused: true -> break loop, report to operator
     read .kiln/STATE.md to confirm step artifact exists on disk
     update .kiln/STATE.md: set currentStep to next step, clear Active Task ID, update timestamps
     emit transition message with lore quote
@@ -123,6 +125,30 @@ The loop auto-advances through all stages except these three, which require expl
 3. **Reconcile gate** (after each phase review): Operator must approve reconciliation before advancing to the next phase.
 
 These gates are enforced by the brainstorm, roadmap, and track skills respectively. The fire skill does not bypass them.
+
+### Pause / Cool-Down Contract
+
+When `/kiln:cool` is invoked on an active Teams session, `kiln-cool` takes ownership
+of the shutdown sequence and writes `Paused: true` to STATE.md. `kiln-fire` must
+honor this contract in two places:
+
+**Stage Machine Loop -- pause check:**
+Before each teammate spawn, read STATE.md from disk and check `Paused` in the
+Orchestration Session section. If `Paused: true`:
+- Break the stage machine loop immediately.
+- Do NOT spawn the next teammate.
+- Do NOT write STATE.md (kiln-cool owns it during the pause window).
+- Preserve the team and all active task IDs.
+- Return control to the operator with message: "Session paused by /kiln:cool. Run /kiln:fire to resume."
+
+**Dead-teammate detection during pause:**
+If an Active Task ID vanishes from TaskList with no completion SendMessage (i.e., shutdown_ack
+was the last signal), treat this as an expected pause event, not a crash. Do not trigger
+crash recovery. Do not requeue the task.
+
+**Team preservation:**
+NEVER delete the team on pause. The team persists so resume can reattach to it without
+re-creating teams or losing TaskList history.
 
 ### STATE.md Updates
 
@@ -158,8 +184,17 @@ The fire skill spawns one fresh tracker per step, not one tracker per phase.
 
 Steps in order: plan, validate, execute, e2e, review, reconcile
 
-For each step:
-- Spawn a fresh teammate loaded with `skills/kiln-track/kiln-track.md`
+For each step, spawn a fresh teammate loaded with the step-specific tracker skill:
+
+| Step | Tracker Skill |
+|------|---------------|
+| plan | `skills/kiln-tracker-plan/kiln-tracker-plan.md` |
+| validate | `skills/kiln-tracker-validate/kiln-tracker-validate.md` |
+| execute | `skills/kiln-tracker-execute/kiln-tracker-execute.md` |
+| e2e | `skills/kiln-tracker-e2e/kiln-tracker-e2e.md` |
+| review | `skills/kiln-tracker-review/kiln-tracker-review.md` |
+| reconcile | `skills/kiln-tracker-reconcile/kiln-tracker-reconcile.md` |
+
 - Name: `tracker-p<N>-<step>` (e.g., `tracker-p1-plan`, `tracker-p2-execute`)
 - Model: Per `skills/kiln-core/kiln-core.md` model routing (varies by step type)
 - Mode: Automated for most steps; interactive for reconcile (hard gate)
@@ -176,7 +211,7 @@ When spawning a teammate, use the Task tool with:
 - `subagent_type`: `general-purpose`
 - `team_name`: the active team name from STATE.md
 - `name`: step-specific name for trackers — `tracker-p<N>-<step>` (e.g., `tracker-p1-plan`, `tracker-p1-validate`, `tracker-p2-execute`); descriptive names for other stages (e.g., `brainstormer`, `roadmapper`)
-- `prompt`: instructions referencing the appropriate skill and current project state
+- `prompt`: instructions referencing the step-specific tracker skill from the Tracker Skill Map above and current project state
 
 Record the spawned task ID in `STATE.md` Active Task IDs.
 
@@ -250,7 +285,20 @@ When `/kiln:fire` is invoked on a project with an existing Orchestration Session
 
 2. **No active tasks:** The pipeline was interrupted between stages. Emit a `resume` transition message and spawn the teammate for the Active Stage.
 
-3. **Paused state:** If `Paused` is `true`, display the pause reason and ask the operator whether to resume or remain paused. On resume, clear the paused flag and continue from Active Stage.
+3. **Pause-resume:** If `Paused` is `true`, this is a deliberate pause by /kiln:cool (not a crash).
+   - Display the pause reason from STATE.md.
+   - If audit findings were recorded, display the three-part audit summary.
+   - Ask the operator whether to resume or remain paused.
+   - On resume:
+     a. Clear `Paused` flag (set to false or remove the field).
+     b. Clear `Pause Reason`.
+     c. Reattach to the active team (do NOT create a new team).
+     d. Resume from Active Stage as in a normal resume.
+   - On remain paused: exit without changes.
+
+4. **Crash recovery:** If `Paused` is false or absent AND Active Task IDs are missing,
+   this is a crash-recovery scenario (not a deliberate pause). Apply the crash-recovery
+   path from kiln-resume.
 
 ### Crash Safety
 
@@ -321,6 +369,11 @@ Routes and contracts used by this skill:
 - `.claude/skills/kiln-init/kiln-init.md`
 - `.claude/skills/kiln-brainstorm/kiln-brainstorm.md`
 - `.claude/skills/kiln-roadmap/kiln-roadmap.md`
-- `.claude/skills/kiln-track/kiln-track.md`
+- `.claude/skills/kiln-tracker-plan/kiln-tracker-plan.md`
+- `.claude/skills/kiln-tracker-validate/kiln-tracker-validate.md`
+- `.claude/skills/kiln-tracker-execute/kiln-tracker-execute.md`
+- `.claude/skills/kiln-tracker-e2e/kiln-tracker-e2e.md`
+- `.claude/skills/kiln-tracker-review/kiln-tracker-review.md`
+- `.claude/skills/kiln-tracker-reconcile/kiln-tracker-reconcile.md`
 - `.claude/skills/kiln-status/kiln-status.md`
 - `.claude/skills/kiln-lore/kiln-lore.md`

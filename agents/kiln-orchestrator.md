@@ -276,9 +276,11 @@ These deterministic checks confirm the context freshness overhaul is in effect:
 
 ```bash
 grep -c "Context Freshness Contract" skills/kiln-core/kiln-core.md          # >= 1
-grep -c "Single-Step" skills/kiln-track/kiln-track.md                       # >= 1
+grep -rl "Single-Step" skills/kiln-tracker-*/kiln-tracker-*.md | wc -l      # >= 6
 grep -c "fresh tracker" skills/kiln-fire/kiln-fire.md                       # >= 1
-grep -c "Do not write" skills/kiln-track/kiln-track.md                      # >= 1
+grep -rl "Do not write" skills/kiln-tracker-*/kiln-tracker-*.md | wc -l     # >= 6
+grep -c "kiln-tracker-plan" skills/kiln-fire/kiln-fire.md                   # >= 1
+grep -c "kiln-tracker-execute" skills/kiln-fire/kiln-fire.md                # >= 1
 grep -c "shut down" agents/kiln-planner.md agents/kiln-codex-planner.md \
   agents/kiln-reviewer.md agents/kiln-codex-reviewer.md \
   agents/kiln-synthesizer.md                                                # >= 5 total
