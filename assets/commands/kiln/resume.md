@@ -97,11 +97,28 @@ For `planning`:
 - Invite the user to continue planning.
 
 For `execution`:
-- Set `N = phase_number` and look for `<PROJECT_PATH>/.kiln/phase_<N>.md`.
-- If the phase file exists, read it and summarize: "Resuming execution — Phase [N]/[total]: [phase_name]. Last recorded state: [brief summary from phase file]."
-- If the phase file does not exist, fall back to `master-plan.md` and tell the user: "Resuming execution — Phase [N]/[total]: [phase_name]. No phase state file found; reading master plan for context."
-- Print the relevant section of the master plan.
-- Ask: "Shall I continue from where we left off?"
+- Read `MEMORY.md` and build an inventory of phases: for each phase in `master-plan.md`, record `{phase_number, name, status}` where status is one of `completed | in_progress | failed | pending` (derive **from `MEMORY.md`**, not from assumptions).
+- Determine `N` (the next action) automatically:
+  - If `MEMORY.md` indicates a phase `N` is `in_progress` (or the `handoff_note` says work was mid-phase), **resume phase `N`**.
+  - Else if a phase `N` is `failed`, **retry phase `N`** (trust `handoff_note` for what was happening / what to fix).
+  - Else pick the **lowest-numbered `pending`** phase as `N`.
+  - Else (no pending/in_progress/failed phases remain), **set stage to `validation` and route to validation**.
+- Load phase context for `N`:
+  - If `<PROJECT_PATH>/.kiln/phase_<N>.md` exists, read it and treat it as the authoritative running log; **trust `handoff_note` for current state**.
+  - Otherwise, extract the full Phase `N` section from `master-plan.md` as the authoritative plan for this phase.
+- Print a one-line status: `"Resuming phase [N]/[phase_total]: [phase_name] — spawning Maestro."`
+- Spawn the next phase executor **immediately** (no permission prompt):
+  - Spawn `kiln-phase-executor` via the **Task** tool.
+  - `name: Maestro`
+  - `subagent_type: kiln-phase-executor`
+  - `description: (next quote from names.json; cycle quotes sequentially each phase spawn)`
+  - Task prompt must include:
+    - Full Phase `N` section from `master-plan.md`
+    - Full `MEMORY.md`
+    - Full `vision.md`
+    - `PROJECT_PATH`
+    - `MEMORY_DIR`
+- After Maestro returns, update `MEMORY.md` with the new phase status and an updated `handoff_note`, then **re-enter this execution routing** to either resume/transition/retry or advance to `validation` automatically.
 
 For `validation`:
 - Re-read `master-plan.md` and `decisions.md`.
