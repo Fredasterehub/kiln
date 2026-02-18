@@ -118,7 +118,7 @@ function doctor({ home, strict } = {}) {
 
       for (const file of files) {
         try {
-          const actual = computeChecksum(file.path);
+          const actual = computeChecksum(path.join(paths.claudeDir, file.path));
           if (actual !== file.checksum) mismatches += 1;
         } catch {
           mismatches += 1;
