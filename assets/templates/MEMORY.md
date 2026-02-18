@@ -1,4 +1,4 @@
-# KilnTwo Project Memory
+# Kiln Project Memory
 
 ## Project
 - **Name**: {{PROJECT_NAME}}
@@ -15,4 +15,4 @@
 _No handoff yet — fresh session._
 
 ## Session Log
-- {{DATE}}: Project initialized via /kw:start
+- {{DATE}}: Project initialized via /kiln:start

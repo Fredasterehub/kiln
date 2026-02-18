@@ -1,5 +1,5 @@
 ---
-name: kw:reset
+name: kiln:reset
 description: Save session state to memory and prepare for context reset (/clear)
 allowed-tools:
   - Read
@@ -10,7 +10,7 @@ allowed-tools:
 ---
 
 <objective>
-Save all session state to persistent memory files before a context reset so no critical work is lost. Capture a complete warm handoff in MEMORY.md, because that handoff note is what /kw:resume uses to restore context in the next session. Ensure decisions and pitfalls are conditionally updated when new information exists. After this command finishes, the operator must run /clear manually because Claude Code cannot execute /clear programmatically.
+Save all session state to persistent memory files before a context reset so no critical work is lost. Capture a complete warm handoff in MEMORY.md, because that handoff note is what /kiln:resume uses to restore context in the next session. Ensure decisions and pitfalls are conditionally updated when new information exists. After this command finishes, the operator must run /clear manually because Claude Code cannot execute /clear programmatically.
 </objective>
 
 <process>
@@ -22,7 +22,7 @@ Use `Bash` to compute the encoded project path exactly as:
 ```bash
 echo "$PROJECT_PATH" | sed 's|/|-|g'
 ```
-Store that output as `ENCODED`, then construct `MEMORY_DIR="$HOME/.claude/projects/$ENCODED/memory"` to match the KilnTwo memory convention.
+Store that output as `ENCODED`, then construct `MEMORY_DIR="$HOME/.claude/projects/$ENCODED/memory"` to match the Kiln memory convention.
 
 Check whether the memory directory exists with `[ -d "$MEMORY_DIR" ]`. If it does not exist, create it with `mkdir -p "$MEMORY_DIR"`.
 
@@ -37,7 +37,7 @@ date -u +"%Y-%m-%dT%H:%M:%SZ"
 Store the result and write a complete memory snapshot to `"$MEMORY_DIR/MEMORY.md"` using the `Write` tool with this exact structure:
 
 ```markdown
-# KilnTwo Project Memory
+# Kiln Project Memory
 
 ## Status
 
@@ -77,7 +77,7 @@ Populate all fields using current session context. Do not use stub text; if a va
 </step>
 
 <step name="shutdown-agents">
-Determine whether any KilnTwo sub-agents are active by using the `Task` tool to list running tasks and by checking recently spawned agent context in the current session.
+Determine whether any Kiln sub-agents are active by using the `Task` tool to list running tasks and by checking recently spawned agent context in the current session.
 
 If active agents are found, use `SendMessage` to send each one a `shutdown_request` with this exact message:
 ```text
@@ -152,7 +152,7 @@ If no new pitfalls were discovered this session, do not modify an existing file 
 After state persistence and optional updates are complete, display this block with actual values substituted:
 
 ```text
-=== KilnTwo Reset ===
+=== Kiln Reset ===
 State saved to memory.
 
 Memory directory: <$MEMORY_DIR>
@@ -176,7 +176,7 @@ What will be lost after /clear:
 
 Next steps:
   1. Type /clear to reset context
-  2. Type /kw:resume to continue from where you left off
+  2. Type /kiln:resume to continue from where you left off
 ====================
 ```
 

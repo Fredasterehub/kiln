@@ -1,5 +1,5 @@
-# /kw:start — KilnTwo Protocol Entry Point
-Execute the KilnTwo protocol autonomously from the current working directory using filesystem tools, bash commands, and the Task tool. Initialize project state, build memory, run collaborative planning with dual planners and optional debate, then execute the approved plan phase by phase with validation. Treat this file as authoritative runtime instructions. Do not ask for permission between steps unless a step explicitly requires user input.
+# /kiln:start — Kiln Protocol Entry Point
+Execute the Kiln protocol autonomously from the current working directory using filesystem tools, bash commands, and the Task tool. Initialize project state, build memory, run collaborative planning with dual planners and optional debate, then execute the approved plan phase by phase with validation. Treat this file as authoritative runtime instructions. Do not ask for permission between steps unless a step explicitly requires user input.
 
 ---
 
@@ -13,10 +13,10 @@ Execute the KilnTwo protocol autonomously from the current working directory usi
    If that command exits non-zero, run `git init` in `PROJECT_PATH`.
    Confirm git is now initialized before continuing.
 
-2. Create `.kw/` directory and `.gitignore`.
-   Ensure `<PROJECT_PATH>/.kw/` exists.
+2. Create `.kiln/` directory and `.gitignore`.
+   Ensure `<PROJECT_PATH>/.kiln/` exists.
    Create it if missing.
-   Write or overwrite `<PROJECT_PATH>/.kw/.gitignore`.
+   Write or overwrite `<PROJECT_PATH>/.kiln/.gitignore`.
    The file must contain exactly these four lines and nothing else:
    `plans/`
    `prompts/`
@@ -24,7 +24,7 @@ Execute the KilnTwo protocol autonomously from the current working directory usi
    `outputs/`
    Do not add extra entries.
    Do not add trailing spaces.
-   After writing this file, update `MEMORY_DIR/MEMORY.md` status later in Step 4 or as soon as `MEMORY_DIR` exists, reflecting that `.kw` initialization completed.
+   After writing this file, update `MEMORY_DIR/MEMORY.md` status later in Step 4 or as soon as `MEMORY_DIR` exists, reflecting that `.kiln` initialization completed.
 
 3. Resolve memory paths.
    Compute `HOME` as the user's home directory.
@@ -117,7 +117,7 @@ Execute the KilnTwo protocol autonomously from the current working directory usi
    Verify each requirement before Stage 2:
    `vision.md` is non-empty and includes at least a problem statement.
    `DEBATE_MODE` is one of `1`, `2`, or `3`.
-   `.kw/` exists in `PROJECT_PATH`.
+   `.kiln/` exists in `PROJECT_PATH`.
    A git repository is initialized in `PROJECT_PATH`.
    `MEMORY_DIR` exists and contains all five files:
    `MEMORY.md`
@@ -147,20 +147,20 @@ Execute the KilnTwo protocol autonomously from the current working directory usi
    Use the Task tool by name.
    Spawn both planner tasks in parallel.
    First task name:
-   `kw-planner-claude`
+   `kiln-planner-claude`
    Task description:
-   `"KilnTwo Claude Planner"`
-   Prompt content for `kw-planner-claude` must include:
+   `"Kiln Claude Planner"`
+   Prompt content for `kiln-planner-claude` must include:
    Full contents of `MEMORY_DIR/vision.md`.
    Full contents of `MEMORY_DIR/MEMORY.md`.
    Instruction text:
    "Create a detailed, phased implementation plan. Output it as markdown with sections: Overview, Phases (each with a name, goal, tasks, and acceptance criteria), Risks, and Open Questions. This is the Claude perspective plan."
    Include `PROJECT_PATH` and `MEMORY_DIR`.
    Second task name:
-   `kw-planner-codex`
+   `kiln-planner-codex`
    Task description:
-   `"KilnTwo Codex Planner"`
-   Prompt content for `kw-planner-codex` must include:
+   `"Kiln Codex Planner"`
+   Prompt content for `kiln-planner-codex` must include:
    The same full vision and memory contents.
    Instruction text:
    "Create a detailed, phased implementation plan. Output it as markdown with sections: Overview, Phases (each with a name, goal, tasks, and acceptance criteria), Risks, and Open Questions. This is the Codex perspective plan."
@@ -171,9 +171,9 @@ Execute the KilnTwo protocol autonomously from the current working directory usi
    `PLAN_CODEX`
 
 9. Run conditional debate.
-   If `DEBATE_MODE >= 2`, spawn `kw-debater` using the Task tool.
+   If `DEBATE_MODE >= 2`, spawn `kiln-debater` using the Task tool.
    Task description:
-   `"KilnTwo Plan Debater"`
+   `"Kiln Plan Debater"`
    Prompt must include:
    Full `PLAN_CLAUDE`.
    Full `PLAN_CODEX`.
@@ -185,13 +185,13 @@ Execute the KilnTwo protocol autonomously from the current working directory usi
    "Perform iterative debate rounds between the two plans until you reach consensus on the strongest approach. Run at least 2 rounds, up to 4. Each round: critique weaknesses, propose improvements, refine. Output each round as a markdown section, then a final consensus summary."
    Wait for completion.
    Store output as `DEBATE_OUTPUT`.
-   If `DEBATE_MODE == 1`, skip spawning `kw-debater`.
+   If `DEBATE_MODE == 1`, skip spawning `kiln-debater`.
    In that case set `DEBATE_OUTPUT` to an empty string.
 
 10. Synthesize the master plan.
-    Spawn `kw-synthesizer` with the Task tool.
+    Spawn `kiln-synthesizer` with the Task tool.
     Task description:
-    `"KilnTwo Plan Synthesizer"`
+    `"Kiln Plan Synthesizer"`
     Prompt must include:
     Full `PLAN_CLAUDE`.
     Full `PLAN_CODEX`.
@@ -215,14 +215,14 @@ Execute the KilnTwo protocol autonomously from the current working directory usi
     Collect user corrections.
     Revise `MASTER_PLAN`.
     For minor edits, revise inline.
-    For major edits, re-run `kw-synthesizer` with updated guidance.
+    For major edits, re-run `kiln-synthesizer` with updated guidance.
     Show revised `MASTER_PLAN` in full.
     Ask for approval again.
     Repeat until user provides `yes`, Enter, or `abort`.
     If response is `abort`:
     Write current `MASTER_PLAN` to `MEMORY_DIR/master-plan.md`.
     Update `MEMORY_DIR/MEMORY.md` status to `"planning complete — awaiting execution"`.
-    Tell the user to run `/kw:resume` when ready.
+    Tell the user to run `/kiln:resume` when ready.
     Stop execution immediately.
 
 12. Update memory after planning approval.
@@ -241,9 +241,9 @@ Execute the KilnTwo protocol autonomously from the current working directory usi
     Parse every section whose heading begins with `### Phase`.
     Keep original order.
     For each phase:
-    Spawn `kw-phase-executor` via the Task tool.
+    Spawn `kiln-phase-executor` via the Task tool.
     Task description format:
-    `"KilnTwo Phase Executor — <phase name>"`
+    `"Kiln Phase Executor — <phase name>"`
     Task prompt must include:
     Full phase section from the master plan, including name, goal, tasks, and acceptance criteria.
     Full `MEMORY_DIR/MEMORY.md`.
@@ -266,9 +266,9 @@ Execute the KilnTwo protocol autonomously from the current working directory usi
     Do not continue to the next phase until corrected.
 
 14. Run final validation.
-    After all phases complete, spawn `kw-validator` via the Task tool.
+    After all phases complete, spawn `kiln-validator` via the Task tool.
     Task description:
-    `"KilnTwo Final Validator"`
+    `"Kiln Final Validator"`
     Prompt must include:
     Full `MEMORY_DIR/master-plan.md`.
     All `MEMORY_DIR/phase-*-results.md` files in full.
@@ -287,13 +287,13 @@ Execute the KilnTwo protocol autonomously from the current working directory usi
     Count completed phases as `N`.
     Print exactly:
     ```text
-    KilnTwo protocol complete.
+    Kiln protocol complete.
       Project: <PROJECT_PATH>
       Phases completed: <N>
       Validation report: <MEMORY_DIR>/validation-report.md
 
     Run `kilntwo doctor` to verify your installation health.
-    To resume a paused run, use /kw:resume.
+    To resume a paused run, use /kiln:resume.
     ```
     End execution.
 
@@ -303,8 +303,8 @@ Execute the KilnTwo protocol autonomously from the current working directory usi
 
 1. **All paths are dynamic.** Never hardcode paths. Derive every path from `PROJECT_PATH`, `HOME`, and `ENCODED_PATH` from Step 3. The command must work in any project directory.
 2. **Memory is the source of truth.** Before every stage transition, re-read `MEMORY_DIR/MEMORY.md` to confirm current state. If status already equals `"planning complete"` when entering Stage 2, skip to Step 11 using existing `master-plan.md`. If status equals `"executing — phase N complete"`, resume from phase `N+1`.
-3. **Never skip stages.** Execute Stage 1 before Stage 2 and Stage 2 before Stage 3. The only exception is resumption as described in Rule 2. Use `/kw:resume` for resumption; do not implement separate resume logic outside these state checks.
-4. **Use the Task tool for all sub-agents.** Never invoke `kw-planner-claude`, `kw-planner-codex`, `kw-debater`, `kw-synthesizer`, `kw-phase-executor`, or `kw-validator` as slash commands. Spawn each exclusively with the Task tool and complete, self-contained prompts.
+3. **Never skip stages.** Execute Stage 1 before Stage 2 and Stage 2 before Stage 3. The only exception is resumption as described in Rule 2. Use `/kiln:resume` for resumption; do not implement separate resume logic outside these state checks.
+4. **Use the Task tool for all sub-agents.** Never invoke `kiln-planner-claude`, `kiln-planner-codex`, `kiln-debater`, `kiln-synthesizer`, `kiln-phase-executor`, or `kiln-validator` as slash commands. Spawn each exclusively with the Task tool and complete, self-contained prompts.
 5. **Parallel where safe, sequential where required.** Run Step 8 planners in parallel. Run all other Task spawns sequentially, waiting for each to finish before starting the next.
 6. **Write working outputs only.** Phase executors must create real files with real content and working code. Placeholders, TODO stubs, and non-functional scaffolds are failures that must be reported before continuing.
 7. **Checkpoint memory after every significant action.** Update `MEMORY_DIR/MEMORY.md` status after Step 2, after Step 4, after Step 5, at every brainstorm checkpoint, after Step 7, after Step 10, after Step 12, after each phase in Step 13, after Step 14, and after Step 15.

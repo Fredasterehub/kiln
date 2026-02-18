@@ -9,7 +9,7 @@ describe('resolvePaths', () => {
     const result = resolvePaths('/tmp/testhome');
     assert.strictEqual(result.claudeDir, '/tmp/testhome/.claude');
     assert.strictEqual(result.agentsDir, '/tmp/testhome/.claude/agents');
-    assert.strictEqual(result.commandsDir, '/tmp/testhome/.claude/commands/kw');
+    assert.strictEqual(result.commandsDir, '/tmp/testhome/.claude/commands/kiln');
     assert.strictEqual(result.kilntwoDir, '/tmp/testhome/.claude/kilntwo');
     assert.strictEqual(result.templatesDir, '/tmp/testhome/.claude/kilntwo/templates');
     assert.strictEqual(result.manifestPath, '/tmp/testhome/.claude/kilntwo/manifest.json');

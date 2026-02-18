@@ -13,7 +13,7 @@ async function update({ home, force } = {}) {
     return { error: 'not-installed', hint: 'Run kilntwo install first' };
   }
 
-  const oldVersion = manifest.kwVersion;
+  const oldVersion = manifest.kilnVersion;
 
   if (oldVersion === currentVersion && !force) {
     return { status: 'up-to-date', version: currentVersion };

@@ -16,8 +16,8 @@ describe('doctor', () => {
   let tmpProject;
 
   beforeEach(() => {
-    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-doctor-test-'));
-    tmpProject = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-doctor-proj-'));
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'kiln-doctor-test-'));
+    tmpProject = fs.mkdtempSync(path.join(os.tmpdir(), 'kiln-doctor-proj-'));
     install({ home: tmpHome, projectPath: tmpProject });
   });
 

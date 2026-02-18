@@ -29,10 +29,10 @@ function safeRm(dirPath) {
 function writeUninstallManifest(tmpHome, fileEntries) {
   const data = {
     manifestVersion: 1,
-    kwVersion: '0.1.0',
+    kilnVersion: '0.1.0',
     installedAt: new Date().toISOString(),
     files: fileEntries,
-    protocolMarkers: { begin: 'kilntwo:protocol:begin', end: 'kilntwo:protocol:end' },
+    protocolMarkers: { begin: 'kiln:protocol:begin', end: 'kiln:protocol:end' },
   };
   writeManifest(data, tmpHome);
 }
@@ -44,8 +44,8 @@ describe('uninstall E2E', { concurrency: false }, () => {
   let originalCwd;
 
   beforeEach(() => {
-    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-test-'));
-    tmpProject = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-test-'));
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'kiln-test-'));
+    tmpProject = fs.mkdtempSync(path.join(os.tmpdir(), 'kiln-test-'));
 
     // uninstall() calls removeProtocol(path.join(process.cwd(), 'CLAUDE.md')).
     // Redirect cwd to a temp project dir so it operates on a temp file.
@@ -72,10 +72,10 @@ describe('uninstall E2E', { concurrency: false }, () => {
     assert.strictEqual(fs.existsSync(paths.manifestPath), false);
   });
 
-  it('removes all installed kw-* agent files', () => {
+  it('removes all installed kiln-* agent files', () => {
     const agentNames = fs
       .readdirSync(ASSETS_AGENTS_DIR)
-      .filter((name) => name.endsWith('.md') && name.startsWith('kw-'))
+      .filter((name) => name.endsWith('.md') && name.startsWith('kiln-'))
       .sort();
 
     fs.mkdirSync(paths.agentsDir, { recursive: true });
@@ -119,11 +119,11 @@ describe('uninstall E2E', { concurrency: false }, () => {
     fs.mkdirSync(paths.agentsDir, { recursive: true });
     fs.mkdirSync(paths.kilntwoDir, { recursive: true });
 
-    const filePath = path.join(paths.agentsDir, 'kw-debater.md');
+    const filePath = path.join(paths.agentsDir, 'kiln-debater.md');
     fs.writeFileSync(filePath, 'managed\n', 'utf8');
 
     writeUninstallManifest(tmpHome, [
-      { path: 'agents/kw-debater.md', checksum: computeChecksum(filePath) },
+      { path: 'agents/kiln-debater.md', checksum: computeChecksum(filePath) },
     ]);
 
     assert.strictEqual(
@@ -145,14 +145,14 @@ describe('uninstall E2E', { concurrency: false }, () => {
     fs.mkdirSync(paths.agentsDir, { recursive: true });
     fs.mkdirSync(paths.kilntwoDir, { recursive: true });
 
-    const managedPath = path.join(paths.agentsDir, 'kw-debater.md');
+    const managedPath = path.join(paths.agentsDir, 'kiln-debater.md');
     fs.writeFileSync(managedPath, 'managed\n', 'utf8');
 
     const customPath = path.join(paths.agentsDir, 'user-custom-agent.md');
     fs.writeFileSync(customPath, 'keep me', 'utf8');
 
     writeUninstallManifest(tmpHome, [
-      { path: 'agents/kw-debater.md', checksum: computeChecksum(managedPath) },
+      { path: 'agents/kiln-debater.md', checksum: computeChecksum(managedPath) },
     ]);
 
     uninstall({ home: tmpHome });
@@ -185,7 +185,7 @@ describe('uninstall E2E', { concurrency: false }, () => {
     fs.writeFileSync(customPath, 'keep me', 'utf8');
 
     writeUninstallManifest(tmpHome, [
-      { path: 'commands/kw/start.md', checksum: computeChecksum(managedPath) },
+      { path: 'commands/kiln/start.md', checksum: computeChecksum(managedPath) },
     ]);
 
     uninstall({ home: tmpHome });
@@ -221,7 +221,7 @@ describe('uninstall E2E', { concurrency: false }, () => {
   it('handles notFound files gracefully', () => {
     fs.mkdirSync(paths.kilntwoDir, { recursive: true });
 
-    const missingRel = ['agents/kw-missing-a.md', 'commands/kw/missing-b.md'];
+    const missingRel = ['agents/kiln-missing-a.md', 'commands/kiln/missing-b.md'];
     writeUninstallManifest(
       tmpHome,
       missingRel.map((rel) => ({ path: rel, checksum: 'sha256:missing' }))
@@ -245,11 +245,11 @@ describe('uninstall E2E', { concurrency: false }, () => {
     fs.mkdirSync(paths.agentsDir, { recursive: true });
     fs.mkdirSync(paths.kilntwoDir, { recursive: true });
 
-    const managedPath = path.join(paths.agentsDir, 'kw-debater.md');
+    const managedPath = path.join(paths.agentsDir, 'kiln-debater.md');
     fs.writeFileSync(managedPath, 'managed\n', 'utf8');
 
     writeUninstallManifest(tmpHome, [
-      { path: 'agents/kw-debater.md', checksum: computeChecksum(managedPath) },
+      { path: 'agents/kiln-debater.md', checksum: computeChecksum(managedPath) },
     ]);
 
     const result = uninstall({ home: tmpHome });

@@ -1,3 +1,4 @@
+<!-- kiln:protocol:begin v0.1.0 -->
 # Kiln Orchestration Protocol
 
 This protocol is active when Kiln is installed in the project. The Claude Code orchestrator must follow these rules exactly. Rules are enforced across all five pipeline stages.
@@ -125,3 +126,4 @@ Kiln uses a `.kiln/` directory at the project root to store all pipeline artifac
 5. **Handle errors explicitly** — Never swallow errors silently. Every error path must either propagate the error to the caller, log it with context, or return a structured error value. Code that catches errors and does nothing is not acceptable.
 
 6. **When in doubt, ask the operator** — If a Codex agent produces output that is ambiguous, incomplete, or contradicts the phase plan, the orchestrator must pause and ask the operator before proceeding. Automated execution must not make architectural decisions that were not covered in the master plan.
+<!-- kiln:protocol:end -->

@@ -212,7 +212,7 @@ async function main() {
 
   if (flags.version) {
     const version = require('../package.json').version;
-    console.log(`kilntwo v${version}`);
+    console.log(`kiln v${version}`);
     process.exit(0);
     return;
   }

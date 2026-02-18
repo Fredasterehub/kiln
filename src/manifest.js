@@ -74,8 +74,8 @@ function validateManifest(data) {
     errors.push('manifestVersion must be the number 1');
   }
 
-  if (typeof data.kwVersion !== 'string' || data.kwVersion.length === 0) {
-    errors.push('kwVersion must be a non-empty string');
+  if (typeof data.kilnVersion !== 'string' || data.kilnVersion.length === 0) {
+    errors.push('kilnVersion must be a non-empty string');
   }
 
   if (typeof data.installedAt !== 'string' || Number.isNaN(new Date(data.installedAt).getTime())) {

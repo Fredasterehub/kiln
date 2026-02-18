@@ -3,12 +3,12 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const BEGIN_RE = /<!-- kilntwo:protocol:begin v([\d.]+) -->/;
-const END_RE = /<!-- kilntwo:protocol:end -->/;
+const BEGIN_RE = /<!-- kiln:protocol:begin v([\d.]+) -->/;
+const END_RE = /<!-- kiln:protocol:end -->/;
 
 function buildBlock(content, version) {
   const inner = content.endsWith('\n') ? content : `${content}\n`;
-  return `<!-- kilntwo:protocol:begin v${version} -->\n${inner}<!-- kilntwo:protocol:end -->\n`;
+  return `<!-- kiln:protocol:begin v${version} -->\n${inner}<!-- kiln:protocol:end -->\n`;
 }
 
 function findBlock(text) {
@@ -41,7 +41,7 @@ function replaceProtocol(filePath, content, version) {
   const block = findBlock(text);
 
   if (!block) {
-    throw new Error(`kilntwo: no protocol block found in ${filePath}`);
+    throw new Error(`kiln: no protocol block found in ${filePath}`);
   }
 
   const lines = text.split('\n');

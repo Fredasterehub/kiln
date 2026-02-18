@@ -17,7 +17,7 @@ describe('insertProtocol', () => {
   beforeEach(() => {
     tmpFile = path.join(
       os.tmpdir(),
-      `kw-markers-test-${Math.random().toString(36).slice(2)}.md`
+      `kiln-markers-test-${Math.random().toString(36).slice(2)}.md`
     );
   });
 
@@ -30,9 +30,9 @@ describe('insertProtocol', () => {
     insertProtocol(tmpFile, 'hello world', '1.0.0');
     const content = fs.readFileSync(tmpFile, 'utf8');
 
-    assert.ok(content.includes('<!-- kilntwo:protocol:begin v1.0.0 -->'));
+    assert.ok(content.includes('<!-- kiln:protocol:begin v1.0.0 -->'));
     assert.ok(content.includes('hello world'));
-    assert.ok(content.includes('<!-- kilntwo:protocol:end -->'));
+    assert.ok(content.includes('<!-- kiln:protocol:end -->'));
   });
 
   it('appends a protocol block to an existing file with no block', () => {
@@ -41,10 +41,10 @@ describe('insertProtocol', () => {
     const content = fs.readFileSync(tmpFile, 'utf8');
 
     assert.ok(content.includes('# Existing Content'));
-    assert.ok(content.includes('<!-- kilntwo:protocol:begin v2.0.0 -->'));
+    assert.ok(content.includes('<!-- kiln:protocol:begin v2.0.0 -->'));
     assert.ok(
       content.indexOf('# Existing Content') <
-        content.indexOf('<!-- kilntwo:protocol:begin')
+        content.indexOf('<!-- kiln:protocol:begin')
     );
   });
 
@@ -56,7 +56,7 @@ describe('insertProtocol', () => {
     assert.ok(content.includes('second content'));
     assert.ok(content.includes('v1.1.0'));
     assert.ok(!content.includes('first content'));
-    assert.strictEqual((content.match(/kilntwo:protocol:begin/g) || []).length, 1);
+    assert.strictEqual((content.match(/kiln:protocol:begin/g) || []).length, 1);
   });
 });
 
@@ -66,7 +66,7 @@ describe('replaceProtocol', () => {
   beforeEach(() => {
     tmpFile = path.join(
       os.tmpdir(),
-      `kw-markers-test-${Math.random().toString(36).slice(2)}.md`
+      `kiln-markers-test-${Math.random().toString(36).slice(2)}.md`
     );
   });
 
@@ -91,7 +91,7 @@ describe('removeProtocol', () => {
   beforeEach(() => {
     tmpFile = path.join(
       os.tmpdir(),
-      `kw-markers-test-${Math.random().toString(36).slice(2)}.md`
+      `kiln-markers-test-${Math.random().toString(36).slice(2)}.md`
     );
   });
 
@@ -109,7 +109,7 @@ describe('removeProtocol', () => {
 
     assert.ok(content.includes('# Before'));
     assert.ok(content.includes('# After'));
-    assert.ok(!content.includes('kilntwo:protocol'));
+    assert.ok(!content.includes('kiln:protocol'));
   });
 
   it('deletes the file if only the protocol block remained', () => {
@@ -125,7 +125,7 @@ describe('hasProtocol', () => {
   beforeEach(() => {
     tmpFile = path.join(
       os.tmpdir(),
-      `kw-markers-test-${Math.random().toString(36).slice(2)}.md`
+      `kiln-markers-test-${Math.random().toString(36).slice(2)}.md`
     );
   });
 
@@ -154,7 +154,7 @@ describe('extractVersion', () => {
   beforeEach(() => {
     tmpFile = path.join(
       os.tmpdir(),
-      `kw-markers-test-${Math.random().toString(36).slice(2)}.md`
+      `kiln-markers-test-${Math.random().toString(36).slice(2)}.md`
     );
   });
 

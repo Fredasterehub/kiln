@@ -9,7 +9,7 @@ function resolvePaths(homeOverride) {
   return {
     claudeDir,
     agentsDir: path.join(claudeDir, 'agents'),
-    commandsDir: path.join(claudeDir, 'commands', 'kw'),
+    commandsDir: path.join(claudeDir, 'commands', 'kiln'),
     kilntwoDir,
     templatesDir: path.join(kilntwoDir, 'templates'),
     manifestPath: path.join(kilntwoDir, 'manifest.json'),

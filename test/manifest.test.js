@@ -12,12 +12,12 @@ const {
 
 const VALID_MANIFEST = {
   manifestVersion: 1,
-  kwVersion: '0.1.0',
+  kilnVersion: '0.1.0',
   installedAt: new Date().toISOString(),
   files: [{ path: '/some/file.txt', checksum: 'sha256:abc123' }],
   protocolMarkers: {
-    begin: '<!-- kilntwo:protocol:begin v0.1.0 -->',
-    end: '<!-- kilntwo:protocol:end -->',
+    begin: '<!-- kiln:protocol:begin v0.1.0 -->',
+    end: '<!-- kiln:protocol:end -->',
   },
 };
 
@@ -25,7 +25,7 @@ describe('readManifest', () => {
   let tmpHome;
 
   beforeEach(() => {
-    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-manifest-test-'));
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'kiln-manifest-test-'));
   });
 
   afterEach(() => {
@@ -42,7 +42,7 @@ describe('readManifest', () => {
     const result = readManifest(tmpHome);
 
     assert.strictEqual(result.manifestVersion, 1);
-    assert.strictEqual(result.kwVersion, '0.1.0');
+    assert.strictEqual(result.kilnVersion, '0.1.0');
   });
 
   it('accepts an object with manifestPath property', () => {
@@ -58,7 +58,7 @@ describe('writeManifest', () => {
   let tmpHome;
 
   beforeEach(() => {
-    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-manifest-test-'));
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'kiln-manifest-test-'));
   });
 
   afterEach(() => {
@@ -72,7 +72,7 @@ describe('writeManifest', () => {
     assert.ok(fs.existsSync(manifestPath));
 
     const parsed = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-    assert.strictEqual(parsed.kwVersion, '0.1.0');
+    assert.strictEqual(parsed.kilnVersion, '0.1.0');
   });
 
   it('serializes with 2-space indentation', () => {
@@ -88,7 +88,7 @@ describe('computeChecksum', () => {
   let tmpHome;
 
   beforeEach(() => {
-    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-manifest-test-'));
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'kiln-manifest-test-'));
   });
 
   afterEach(() => {
@@ -135,8 +135,8 @@ describe('validateManifest', () => {
     assert.strictEqual(validateManifest(m).valid, false);
   });
 
-  it('reports error for missing kwVersion', () => {
-    const m = { ...VALID_MANIFEST, kwVersion: '' };
+  it('reports error for missing kilnVersion', () => {
+    const m = { ...VALID_MANIFEST, kilnVersion: '' };
     assert.strictEqual(validateManifest(m).valid, false);
   });
 
@@ -165,7 +165,7 @@ describe('validateManifest', () => {
   it('reports error when protocolMarkers.begin is empty string', () => {
     const m = {
       ...VALID_MANIFEST,
-      protocolMarkers: { begin: '', end: '<!-- kilntwo:protocol:end -->' },
+      protocolMarkers: { begin: '', end: '<!-- kiln:protocol:end -->' },
     };
     assert.strictEqual(validateManifest(m).valid, false);
   });

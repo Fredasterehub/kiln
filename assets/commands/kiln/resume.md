@@ -1,4 +1,4 @@
-# /kw:resume
+# /kiln:resume
 
 Restore project context from memory and continue exactly where the last session stopped.
 
@@ -26,8 +26,8 @@ Read `<memory-dir>/MEMORY.md`.
 If the file does not exist, or is empty, halt immediately and output exactly this warning block and nothing else:
 
 ```
-[kw:resume] No memory found at <resolved memory dir path>.
-Memory may not have been initialized. Run /kw:start to begin a new project session.
+[kiln:resume] No memory found at <resolved memory dir path>.
+Memory may not have been initialized. Run /kiln:start to begin a new project session.
 ```
 
 If the file exists, extract and store these fields:
@@ -44,8 +44,8 @@ Also read `planning_sub_stage` if present for planning routing.
 If `stage` or `status` are missing, or contain unrecognized values, treat MEMORY.md as corrupted, halt immediately, and output exactly:
 
 ```
-[kw:resume] MEMORY.md is corrupted or incomplete (missing required fields: <list>).
-Run /kw:start to reinitialize, or manually repair ~/.claude/projects/<encoded>/memory/MEMORY.md.
+[kiln:resume] MEMORY.md is corrupted or incomplete (missing required fields: <list>).
+Run /kiln:start to reinitialize, or manually repair ~/.claude/projects/<encoded>/memory/MEMORY.md.
 ```
 
 ## Step 4: Read Supporting Memory Files
@@ -63,7 +63,7 @@ For each file: if it exists, store the full content. If it does not exist, recor
 Display the continuity banner to the user as a code block, substituting values from loaded memory:
 
 ```
-=== KilnTwo Resume ===
+=== Kiln Resume ===
 Project: [PROJECT_PATH]
 Stage:   [stage]
 Phase:   [phase_number]/[phase_total] [phase_name]   (omit this line if not in execution stage)
@@ -97,7 +97,7 @@ For `planning`:
 - Invite the user to continue planning.
 
 For `execution`:
-- Set `N = phase_number` and look for `<PROJECT_PATH>/.kw/phase_<N>.md`.
+- Set `N = phase_number` and look for `<PROJECT_PATH>/.kiln/phase_<N>.md`.
 - If the phase file exists, read it and summarize: "Resuming execution — Phase [N]/[total]: [phase_name]. Last recorded state: [brief summary from phase file]."
 - If the phase file does not exist, fall back to `master-plan.md` and tell the user: "Resuming execution — Phase [N]/[total]: [phase_name]. No phase state file found; reading master plan for context."
 - Print the relevant section of the master plan.
@@ -116,7 +116,7 @@ For `complete`:
 This project is marked complete.
 
 What would you like to do next?
-  1. Start a new project in this directory (/kw:start)
+  1. Start a new project in this directory (/kiln:start)
   2. Review the decisions log
   3. Review the pitfalls log
   4. Archive this project's memory
@@ -136,7 +136,7 @@ Perform this update atomically: read the full current MEMORY.md content, apply b
 ## Key Rules
 
 - Treat memory as the sole source of truth. Never infer stage, phase, or status from source files, directory structure, or conversation history; read only from `~/.claude/projects/<encoded>/memory/`.
-- If MEMORY.md is missing or corrupted, warn the user and suggest `/kw:start`. Do not attempt to reconstruct state.
+- If MEMORY.md is missing or corrupted, warn the user and suggest `/kiln:start`. Do not attempt to reconstruct state.
 - Preserve all previous context. Do not re-ask questions that memory already answers.
 - Do not modify any project source files during resume. Keep this command read-only except for the Step 7 MEMORY.md status update.
 - Treat the handoff note as authoritative about what was happening. Trust it over inferences from other context.

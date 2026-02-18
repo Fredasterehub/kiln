@@ -12,7 +12,7 @@ const { computeChecksum } = require('../src/manifest');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const ASSETS_AGENTS_DIR = path.join(REPO_ROOT, 'assets', 'agents');
-const ASSETS_COMMANDS_DIR = path.join(REPO_ROOT, 'assets', 'commands', 'kw');
+const ASSETS_COMMANDS_DIR = path.join(REPO_ROOT, 'assets', 'commands', 'kiln');
 const ASSETS_TEMPLATES_DIR = path.join(REPO_ROOT, 'assets', 'templates');
 
 function safeRm(dirPath) {
@@ -58,8 +58,8 @@ describe('install E2E', { concurrency: false }, () => {
   let manifestPath;
 
   before(() => {
-    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-test-'));
-    tmpProject = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-test-'));
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'kiln-test-'));
+    tmpProject = fs.mkdtempSync(path.join(os.tmpdir(), 'kiln-test-'));
     paths = resolvePaths(tmpHome);
     manifestPath = paths.manifestPath;
   });
@@ -114,7 +114,7 @@ describe('install E2E', { concurrency: false }, () => {
     assert.strictEqual(fs.existsSync(claudeMdPath), true, 'CLAUDE.md should exist');
     const content = fs.readFileSync(claudeMdPath, 'utf8');
     assert.ok(
-      content.includes('<!-- kilntwo:protocol:begin'),
+      content.includes('<!-- kiln:protocol:begin'),
       'CLAUDE.md should contain protocol begin marker'
     );
   });
@@ -169,12 +169,12 @@ describe('install E2E', { concurrency: false }, () => {
 
     const parsed = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 
-    // install() writes a proper manifest: { manifestVersion, kwVersion, installedAt, files, protocolMarkers }
+    // install() writes a proper manifest: { manifestVersion, kilnVersion, installedAt, files, protocolMarkers }
     assert.strictEqual(typeof parsed, 'object');
     assert.ok(parsed !== null);
     assert.strictEqual(parsed.manifestVersion, 1);
-    assert.strictEqual(typeof parsed.kwVersion, 'string');
-    assert.ok(parsed.kwVersion.length > 0);
+    assert.strictEqual(typeof parsed.kilnVersion, 'string');
+    assert.ok(parsed.kilnVersion.length > 0);
     assert.strictEqual(Array.isArray(parsed.files), true);
 
     for (const entry of parsed.files) {

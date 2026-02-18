@@ -32,7 +32,7 @@ function install({ home, force = false, projectPath } = {}) {
 
   const copyJobs = [
     { srcDir: path.join(ASSETS_DIR, 'agents'), destDir: agentsDir },
-    { srcDir: path.join(ASSETS_DIR, 'commands', 'kw'), destDir: commandsDir },
+    { srcDir: path.join(ASSETS_DIR, 'commands', 'kiln'), destDir: commandsDir },
     { srcDir: path.join(ASSETS_DIR, 'templates'), destDir: templatesDir },
   ];
 
@@ -66,7 +66,7 @@ function install({ home, force = false, projectPath } = {}) {
       if (destChecksum === srcChecksum) {
         installed.push(destPath);
       } else {
-        console.error(`[kilntwo] skipping ${destPath} (user-edited; use --force to overwrite)`);
+        console.error(`[kiln] skipping ${destPath} (user-edited; use --force to overwrite)`);
         skipped.push(destPath);
       }
     }
@@ -85,12 +85,12 @@ function install({ home, force = false, projectPath } = {}) {
   }));
   writeManifest({
     manifestVersion: 1,
-    kwVersion: VERSION,
+    kilnVersion: VERSION,
     installedAt: new Date().toISOString(),
     files,
     protocolMarkers: {
-      begin: 'kilntwo:protocol:begin',
-      end: 'kilntwo:protocol:end',
+      begin: 'kiln:protocol:begin',
+      end: 'kiln:protocol:end',
     },
   }, home);
 
