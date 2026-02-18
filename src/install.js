@@ -17,15 +17,15 @@ const ASSETS_DIR = path.join(__dirname, '..', 'assets');
  * @returns {{ installed: string[], skipped: string[], version: string }}
  */
 function install({ home, force = false, projectPath } = {}) {
-  const { agentsDir, commandsDir, kilntwoDir, templatesDir, manifestPath } = resolvePaths(home);
+  const { agentsDir, commandsDir, kilntwoDir, templatesDir } = resolvePaths(home);
 
   fs.mkdirSync(agentsDir, { recursive: true });
   fs.mkdirSync(commandsDir, { recursive: true });
   fs.mkdirSync(kilntwoDir, { recursive: true });
   fs.mkdirSync(templatesDir, { recursive: true });
 
-  const priorManifest = readManifest(manifestPath) || { files: {} };
-  if (!priorManifest.files) priorManifest.files = {};
+  const priorManifest = readManifest(home) || { files: [] };
+  if (!Array.isArray(priorManifest.files)) priorManifest.files = [];
 
   const installed = [];
   const skipped = [];
@@ -76,13 +76,23 @@ function install({ home, force = false, projectPath } = {}) {
   const claudeMdPath = path.join(resolvedProject, 'CLAUDE.md');
   const protocolSrc = path.join(ASSETS_DIR, 'protocol.md');
   const protocolContent = fs.readFileSync(protocolSrc, 'utf8');
-  insertProtocol(claudeMdPath, protocolContent);
+  insertProtocol(claudeMdPath, protocolContent, VERSION);
 
-  const files = {};
-  for (const destPath of installed) {
-    files[destPath] = computeChecksum(destPath);
-  }
-  writeManifest(manifestPath, { version: VERSION, files });
+  const paths = resolvePaths(home);
+  const files = installed.map((destPath) => ({
+    path: path.relative(paths.claudeDir, destPath),
+    checksum: computeChecksum(destPath),
+  }));
+  writeManifest({
+    manifestVersion: 1,
+    kwVersion: VERSION,
+    installedAt: new Date().toISOString(),
+    files,
+    protocolMarkers: {
+      begin: 'kilntwo:protocol:begin',
+      end: 'kilntwo:protocol:end',
+    },
+  }, home);
 
   return { installed, skipped, version: VERSION };
 }

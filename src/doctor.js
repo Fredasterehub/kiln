@@ -91,7 +91,7 @@ function doctor({ home, strict } = {}) {
 
   // f. manifest
   const manifestPath = paths.manifestPath;
-  const manifest = readManifest(manifestPath);
+  const manifest = readManifest({ manifestPath });
   if (manifest) {
     checks.push({ name: 'manifest', status: 'pass', message: 'manifest found and valid' });
   } else {
@@ -104,7 +104,7 @@ function doctor({ home, strict } = {}) {
 
   // g. checksums (strict only)
   if (strict) {
-    const strictManifest = readManifest(manifestPath);
+    const strictManifest = readManifest({ manifestPath });
     if (!strictManifest) {
       checks.push({
         name: 'checksums',

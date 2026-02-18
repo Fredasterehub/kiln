@@ -238,7 +238,6 @@ async function main() {
     if (command === 'install') {
       const modulePath = path.resolve(__dirname, '../src/install.js');
       if (!fs.existsSync(modulePath)) {
-        // TODO: src/install.js does not exist yet.
         throw new Error('Command module not available: install');
       }
       const mod = require('../src/install.js');
@@ -250,7 +249,6 @@ async function main() {
     } else if (command === 'uninstall') {
       const modulePath = path.resolve(__dirname, '../src/uninstall.js');
       if (!fs.existsSync(modulePath)) {
-        // TODO: src/uninstall.js does not exist yet.
         throw new Error('Command module not available: uninstall');
       }
       const mod = require('../src/uninstall.js');
@@ -262,7 +260,6 @@ async function main() {
     } else if (command === 'update') {
       const modulePath = path.resolve(__dirname, '../src/update.js');
       if (!fs.existsSync(modulePath)) {
-        // TODO: src/update.js does not exist yet.
         throw new Error('Command module not available: update');
       }
       const mod = require('../src/update.js');
@@ -274,7 +271,6 @@ async function main() {
     } else if (command === 'doctor') {
       const modulePath = path.resolve(__dirname, '../src/doctor.js');
       if (!fs.existsSync(modulePath)) {
-        // TODO: src/doctor.js does not exist yet.
         throw new Error('Command module not available: doctor');
       }
       const mod = require('../src/doctor.js');

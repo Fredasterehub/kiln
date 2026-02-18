@@ -7,13 +7,13 @@ const { uninstall }    = require('./uninstall.js');
 const currentVersion   = require('../package.json').version;
 
 async function update({ home, force } = {}) {
-  const manifest = await readManifest({ home });
+  const manifest = await readManifest(home);
 
   if (!manifest) {
     return { error: 'not-installed', hint: 'Run kilntwo install first' };
   }
 
-  const oldVersion = manifest.version;
+  const oldVersion = manifest.kwVersion;
 
   if (oldVersion === currentVersion && !force) {
     return { status: 'up-to-date', version: currentVersion };
