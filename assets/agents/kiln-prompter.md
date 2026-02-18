@@ -1,6 +1,6 @@
 ---
-name: kiln-prompter
-alias: Scheherazade
+name: Scheherazade
+alias: kiln-prompter
 description: GPT-5.2 prompt generation agent — converts phase plans into atomic task prompts for Codex implementation
 model: sonnet
 color: orange

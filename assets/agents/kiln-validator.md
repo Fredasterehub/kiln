@@ -1,6 +1,6 @@
 ---
-name: kiln-validator
-alias: Argus
+name: Argus
+alias: kiln-validator
 description: E2E validation agent — detects project type, runs full test suite, generates validation report
 model: opus
 color: pink

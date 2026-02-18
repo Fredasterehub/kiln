@@ -1,6 +1,6 @@
 ---
-name: kiln-planner-codex
-alias: Sun Tzu
+name: Sun Tzu
+alias: kiln-planner-codex
 description: GPT-5.2 planning agent via Codex CLI — produces alternative implementation plans
 model: sonnet
 color: red

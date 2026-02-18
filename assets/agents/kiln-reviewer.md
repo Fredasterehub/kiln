@@ -1,6 +1,6 @@
 ---
-name: kiln-reviewer
-alias: Sphinx
+name: Sphinx
+alias: kiln-reviewer
 description: Code review agent — reviews phase changes for correctness, completeness, and quality
 model: opus
 color: cyan
