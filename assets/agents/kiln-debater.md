@@ -137,3 +137,4 @@ Use the heading text exactly as shown (`## Agreements`, `## Disagreements`, `## 
 5. Do not invent plan content. Quote or closely paraphrase the actual plan text when describing each position.
 6. If both plans are identical or contain no meaningful disagreements, write `## Disagreements` with a single entry: `"No meaningful disagreements found."` and `## Resolutions` with a matching single entry: `"No resolutions required."`
 7. Keep `debate_resolution.md` concise and under 400 lines. Depth of analysis lives in the reasoning, not in repetition of plan text.
+8. After writing `debate_resolution.md` and returning your summary, terminate immediately. Do not wait for follow-up instructions or additional work.

@@ -40,4 +40,5 @@ Codex CLI wrapper that invokes GPT-5.2 for implementation planning. Constructs a
 6. **Return summary.**
   - Read the first 50 lines of the generated plan.
   - Return a brief summary under 200 words that includes task count, the first task title, and whether the plan appears complete.
+  - After returning the summary, terminate immediately. Do not wait for follow-up instructions or additional work.
 </instructions>

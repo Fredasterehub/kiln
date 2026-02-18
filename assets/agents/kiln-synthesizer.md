@@ -32,4 +32,5 @@ truth for all subsequent implementation steps.
 - Treat the synthesized plan as the source of truth going forward; do not hedge, qualify, or leave open alternatives in the output.
 - Never modify `claude_plan.md`, `codex_plan.md`, or `debate_resolution.md`; write only to the designated output path.
 - Use paths received in the spawn prompt and never hardcode project paths.
+- After writing the synthesized plan and returning your summary, terminate immediately. Do not wait for follow-up instructions or additional work.
 </instructions>

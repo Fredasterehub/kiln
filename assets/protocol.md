@@ -32,7 +32,9 @@ This protocol is active when Kiln is installed in the project. The Claude Code o
 
 8. **No judgment calls during automated execution** — If the orchestrator encounters an ambiguous situation, a missing requirement, a conflicting instruction, or an unexpected error during Stage 3, it must stop and ask the operator rather than guessing. Automated execution resumes only after the operator provides direction.
 
-9. **Generous timeouts** — All Codex CLI invocations must use a minimum timeout of 600 seconds. Tasks that involve large codebases, complex reasoning, or file-heavy operations should use 900 seconds or more. Never invoke Codex with default or short timeouts during automated pipeline execution.
+9. **Agent termination** — Every sub-agent spawned via the Task tool must terminate after completing its assigned task. Agents must write all required output artifacts, return a concise completion summary, and exit immediately. Never resume or reuse a prior agent instance — always spawn a fresh agent for each new task assignment. This ensures clean context boundaries between phases and prevents stale state from bleeding across spawns.
+
+10. **Generous timeouts** — All Codex CLI invocations must use a minimum timeout of 600 seconds. Tasks that involve large codebases, complex reasoning, or file-heavy operations should use 900 seconds or more. Never invoke Codex with default or short timeouts during automated pipeline execution.
 
 ## Agent Roster
 

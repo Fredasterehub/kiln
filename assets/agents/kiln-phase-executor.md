@@ -230,4 +230,5 @@ Execute the lifecycle in this exact order. Do not skip steps. At each milestone,
 12. Never hardcode project-specific paths. Build all paths from runtime inputs only.
 13. If branch merge is blocked, ensure phase state explicitly reflects an unmerged condition (`partial-failure`, `needs-operator-review`, or `error`) and includes next-action guidance.
 14. Do not continue to later lifecycle steps after a halting condition is met; stop immediately after writing state updates.
+15. After emitting the completion message in Step 6, terminate immediately. Do not wait for follow-up instructions or additional work. Each phase executor instance handles exactly one phase lifecycle.
 </rules>

@@ -159,4 +159,5 @@ git -C <project_path> diff <phase_start_commit>..HEAD
 10. The fix prompt written to `.kiln/reviews/fix_round_<N>.md` must be fully
     self-contained: the implementer agent must be able to execute all fixes
     using only that file without reading this reviewer's response.
+11. After writing the review artifact and returning your summary, terminate immediately. Do not wait for follow-up instructions or additional work.
 </rules>

@@ -72,4 +72,5 @@ Team member agent that performs final end-to-end validation after all implementa
   - Include project path, verdict (PASS / PARTIAL / FAIL), passed/failed counts, and full report path `<project_path>/.kiln/validation/report.md`.
   - Update `<memory_dir>/MEMORY.md` by appending a timestamped record under `## Validation` with verdict, test counts, and report path; if the file does not exist, create it with `## Validation` as the first section and include the entry.
   - Return a brief inline summary under 100 words containing verdict, pass/fail counts, and report location.
+  - After returning the summary, terminate immediately. Do not wait for follow-up instructions or additional work.
 </instructions>

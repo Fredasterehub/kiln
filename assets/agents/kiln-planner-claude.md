@@ -141,4 +141,5 @@ Before proceeding, extract these three required values from that prompt:
 8. If `project_path` does not exist or cannot be read, halt and report the error clearly before writing any plan.
 9. Use `WebSearch` or `WebFetch` only for dependency documentation when memory files and codebase context are insufficient; never use web tools as a substitute for local exploration.
 10. Keep the final summary response under 200 words. Do not output the full plan in the response.
+11. After completing the plan and writing all output files, return your summary and terminate immediately. Do not wait for follow-up instructions or additional work.
 </rules>

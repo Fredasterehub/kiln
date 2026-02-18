@@ -45,4 +45,5 @@ Core code-writing agent. Every line of project code flows through this agent. Pi
     ```
 7. **Return summary.**
   - Return a brief summary under 150 words containing: success or failure status, the list of files changed (from git commit output or codex output file), and the test results from Step 5.
+  - After returning the summary, terminate immediately. Do not wait for follow-up instructions or additional work.
 </instructions>

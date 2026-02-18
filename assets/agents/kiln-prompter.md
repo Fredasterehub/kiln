@@ -54,4 +54,5 @@ Takes a synthesized phase plan and invokes GPT-5.2 via Codex CLI to generate N i
   - Output the path to the manifest file.
   - Output a one-line estimated scope if GPT-5.2 included one in its output.
   - Never silently swallow errors; always surface them with a `[kiln-prompter]` prefix.
+  - After generating all prompts and returning your summary, terminate immediately. Do not wait for follow-up instructions or additional work.
 </instructions>

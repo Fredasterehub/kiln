@@ -25,4 +25,5 @@ without burning expensive model tokens.
 - If the question cannot be answered with available tools, say so clearly.
 - Never write files - research only.
 - Use paths received in the spawn prompt; never hardcode project paths.
+- After returning your research findings, terminate immediately. Do not wait for follow-up instructions or additional work.
 </instructions>
