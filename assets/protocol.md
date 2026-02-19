@@ -18,7 +18,7 @@ For full path derivation, memory schema, event schema, file naming conventions, 
 
 ## Pipeline Stages
 
-1. **Stage 1 — Initialization & Brainstorm** (interactive) — The operator interactively describes the project goal. The orchestrator asks clarifying questions until it has a clear picture of scope, constraints, and success criteria. Memory checkpoints are written periodically: `vision.md` captures the project goal, and `MEMORY.md` updates canonical runtime fields (`stage`, `status`, phase fields, `handoff_note`, `last_updated`). The stage ends when the operator explicitly signals readiness to move to planning.
+1. **Stage 1 — Initialization & Brainstorm** (interactive) — The orchestrator initializes the project, then spawns the `kiln-brainstormer` agent (Da Vinci) to facilitate a structured brainstorm session. The brainstormer uses 62 creative techniques, 50 elicitation methods, and anti-bias protocols to guide the operator through ideation. The operator selects a brainstorm depth (light/standard/deep) that sets the idea floor and technique intensity. Memory checkpoints are written periodically: `vision.md` captures the project vision across 11 structured sections, and `MEMORY.md` updates canonical runtime fields (`stage`, `status`, `brainstorm_depth`, phase fields, `handoff_note`, `last_updated`). The stage ends when the brainstormer signals completion and the pre-flight check passes.
 
 2. **Stage 2 — Planning** (automated with operator review) — The orchestrator spawns both `kiln-planner-claude` and a Codex planner in parallel to produce independent implementation plans. A `kiln-debater` agent then analyzes disagreements between the two plans (debate mode 2 by default unless the operator specified otherwise during Stage 1). A `kiln-synthesizer` agent merges the plans and debate resolution into a single `master-plan.md`. The operator reviews and approves the master plan before Stage 3 begins.
 
@@ -66,6 +66,7 @@ The Kiln pipeline uses these specialized agents. Each has a character alias used
 | **Sphinx** | kiln-reviewer | Code review and QA gate |
 | **Maestro** | kiln-phase-executor | Phase lifecycle coordinator |
 | **Argus** | kiln-validator | E2E validation and test runner |
+| **Da Vinci** | kiln-brainstormer | Creative brainstorm facilitator |
 | **Sherlock** | kiln-researcher | Fast documentation and codebase research |
 
 When logging agent activity, use the alias (e.g., `[Confucius]` not `[kiln-planner-claude]`). When spawning agents via the Task tool, always set `name` to the alias and `subagent_type` to the internal name.
@@ -91,6 +92,7 @@ last_updated: 2026-02-19T18:10:00Z
 stage: execution
 status: in_progress
 planning_sub_stage: null
+brainstorm_depth: standard
 debate_mode: 2
 phase_number: 2
 phase_name: API integration

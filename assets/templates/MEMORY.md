@@ -10,6 +10,7 @@ last_updated: {{DATE_ISO}}
 stage: brainstorm
 status: in_progress
 planning_sub_stage: null
+brainstorm_depth: standard
 debate_mode: {{DEBATE_MODE}}
 phase_number: null
 phase_name: null
