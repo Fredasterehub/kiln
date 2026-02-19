@@ -96,6 +96,10 @@ function validateManifest(data) {
       if (!validEntry) {
         errors.push(`files[${i}] must have string path and checksum`);
       }
+
+      if (validEntry && entry.path.includes('..')) {
+        errors.push(`files[${i}].path contains path traversal segment: ${entry.path}`);
+      }
     }
   }
 

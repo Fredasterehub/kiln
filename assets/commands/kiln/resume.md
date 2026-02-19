@@ -96,6 +96,12 @@ Handoff: [handoff_note, or "(none)" if empty]
 Include the `Phase` line only when `stage === 'execution'` and `phase_number` is non-null.
 If `phase_total` is absent, render phase as `[phase_number]/? [phase_name]`.
 
+After displaying the banner, check whether MEMORY.md contains a `## Reset Notes` section. If it does, parse the `next_action` field from that section. If `next_action` is present and non-empty, display it to the operator immediately after the banner as:
+
+```
+Recommended next step (from last reset): [next_action]
+```
+
 ## Step 6: Route to Stage
 
 Branch strictly on `stage` and run the matching behavior:
@@ -125,7 +131,7 @@ For `execution`:
   - Else pick the **lowest-numbered `pending`** phase as `N`.
   - Else (no pending/in_progress/failed phases remain), **set stage to `validation` and route to validation**.
 - Load phase context for `N`:
-  - If `$KILN_DIR/phase_<N>.md` exists, read it and treat it as the authoritative running log; **trust `handoff_note` for current state**.
+  - If `$KILN_DIR/phase_<N>_state.md` exists, read it and treat it as the authoritative running log (state file tracks branch name, task success/failure status — not the full plan); **trust `handoff_note` for current state**.
   - Otherwise, extract the full Phase `N` section from `master-plan.md` as the authoritative plan for this phase.
 - Print a one-line status: `"Resuming phase [N]/[phase_total]: [phase_name] — spawning Maestro."`
 - Spawn the next phase executor **immediately** (no permission prompt):

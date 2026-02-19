@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { resolvePaths } = require('./paths.js');
-const { readManifest, computeChecksum } = require('./manifest.js');
+const { readManifest, computeChecksum, validateManifest } = require('./manifest.js');
 const { install }      = require('./install.js');
 const currentVersion   = require('../package.json').version;
 
@@ -50,7 +50,13 @@ function buildPreviousChecksumMap(manifest, home) {
     if (!file || typeof file.path !== 'string' || typeof file.checksum !== 'string') {
       continue;
     }
-    const absolutePath = path.join(claudeDir, file.path);
+    if (file.path.includes('..')) {
+      throw new Error(`Manifest entry contains path traversal: ${file.path}`);
+    }
+    const absolutePath = path.resolve(claudeDir, file.path);
+    if (!absolutePath.startsWith(claudeDir + path.sep)) {
+      throw new Error(`Refusing to operate outside claude directory: ${file.path}`);
+    }
     previousState.set(absolutePath, {
       checksum: file.checksum,
       existed: fs.existsSync(absolutePath),
@@ -65,6 +71,11 @@ async function update({ home, force } = {}) {
 
   if (!manifest) {
     return { error: 'not-installed', hint: 'Run kilntwo install first' };
+  }
+
+  const validation = validateManifest(manifest);
+  if (!validation.valid) {
+    throw new Error(`Invalid manifest: ${validation.errors.join('; ')}`);
   }
 
   const previousState = buildPreviousChecksumMap(manifest, home);

@@ -55,11 +55,13 @@ fix prompt so the implementer can correct issues without manual intervention.
    (e.g. `$KILN_DIR/plans/phase_plan.md`).
    This describes what was supposed to be built.
 3. `memory_dir` — absolute path to the memory directory
-   (e.g. `$KILN_DIR/memory`).
+   (e.g. `$CLAUDE_HOME/projects/$ENCODED_PATH/memory`).
    Used to read `pitfalls.md`.
 4. `review_round` — integer indicating the current review attempt
    (default: `1`). Used to name the fix prompt file.
    Maximum value is `3`.
+5. `phase_start_commit` — the git SHA captured at branch creation.
+   Used in Step 3 to scope the diff to only phase changes.
 </inputs>
 
 <instructions>
@@ -69,7 +71,7 @@ fix prompt so the implementer can correct issues without manual intervention.
     `"Review aborted: phase plan not found at <phase_plan_path>."`
   - Do not proceed if the phase plan is missing.
 2. Read pitfalls from memory.
-  - Read `$MEMORY_DIR/pitfalls.md` if it exists.
+  - Read `$memory_dir/pitfalls.md` if it exists.
   - If `pitfalls.md` is missing, skip silently and continue.
   - Extract known issues, anti-patterns, and failure modes noted there.
   - Keep those pitfalls in mind during the review.

@@ -24,3 +24,18 @@ handoff_note: No handoff yet - fresh session.
 
 ## Resume Log
 - {{DATE_ISO}} Initialized via /kiln:start
+
+# Optional sections — uncomment when the pipeline reaches the relevant stage:
+# ## Phase Results
+# - Phase 1 (phase name): complete — one-sentence summary
+#
+# ## Validation
+# verdict: pass|fail
+# test_count: 0
+# report_path: $KILN_DIR/validation/report.md
+#
+# ## Reset Notes
+# what_was_being_worked_on: (filled by /kiln:reset)
+# agent_context: No active agents
+# operator_note: (filled by /kiln:reset)
+# next_action: (filled by /kiln:reset)

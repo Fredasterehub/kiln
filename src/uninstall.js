@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { resolvePaths } = require('./paths');
-const { readManifest } = require('./manifest');
+const { readManifest, validateManifest } = require('./manifest');
 const { removeProtocol } = require('./markers');
 
 function resolveManifestClaudeMdPath(manifest) {
@@ -46,11 +46,22 @@ function uninstall({ home } = {}) {
     return { error: 'not-installed' };
   }
 
+  const validation = validateManifest(manifest);
+  if (!validation.valid) {
+    throw new Error(`Invalid manifest: ${validation.errors.join('; ')}`);
+  }
+
   const removed = [];
   const notFound = [];
 
   for (const file of manifest.files) {
-    const absolutePath = path.join(paths.claudeDir, file.path);
+    if (file.path.includes('..')) {
+      throw new Error(`Manifest entry contains path traversal: ${file.path}`);
+    }
+    const absolutePath = path.resolve(paths.claudeDir, file.path);
+    if (!absolutePath.startsWith(paths.claudeDir + path.sep)) {
+      throw new Error(`Refusing to operate outside claude directory: ${file.path}`);
+    }
     try {
       fs.unlinkSync(absolutePath);
       removed.push(absolutePath);

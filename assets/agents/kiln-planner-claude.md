@@ -46,7 +46,7 @@ You are invoked with a natural-language prompt from the orchestrator.
 Before proceeding, extract these three required values from that prompt:
 1. `phase_description` — plain-text description of this phase's goal, scope, and constraints.
 2. `project_path` — absolute filesystem path to the target project (for example, `/DEV/myproject`).
-3. `memory_dir` — absolute path to the project's persistent memory directory (for example, `$KILN_DIR/memory`).
+3. `memory_dir` — absolute path to the project's persistent memory directory (for example, `$CLAUDE_HOME/projects/$ENCODED_PATH/memory`).
 4. Derive `KILN_DIR="$project_path/.kiln"` and use it for all Kiln artifact paths in this file.
 </inputs>
 

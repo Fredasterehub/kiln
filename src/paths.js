@@ -16,6 +16,9 @@ function resolvePaths(homeOverride) {
   };
 }
 
+// WARNING: This encoding is lossy — different absolute paths can produce the
+// same encoded result (e.g. '/a/b-c' and '/a-b/c' both become '-a-b-c').
+// A collision-resistant encoding is deferred to v0.2.0.
 function encodeProjectPath(absolutePath) {
   return String(absolutePath)
     .replace(/[\\/]+/g, '-')

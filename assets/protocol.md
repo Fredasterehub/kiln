@@ -129,6 +129,15 @@ Required fields:
 - `phase_total`
 - `handoff_note`
 
+Optional fields (written at specific stage boundaries):
+- `plan_approved_at` — ISO-8601 timestamp, written at the end of Stage 2 when the operator approves the master plan.
+- `completed_at` — ISO-8601 timestamp, written at the end of Stage 5 when the protocol run finishes.
+
+Optional sections:
+- `## Phase Results` — Running log of phase completion summaries, appended after each phase completes in Stage 3.
+- `## Validation` — Validator verdict, test counts, and report path, written during Stage 4.
+- `## Reset Notes` — Written by `/kiln:reset` to preserve operator context across context resets.
+
 Schema example:
 
 ```markdown
@@ -174,6 +183,7 @@ Kiln uses `$KILN_DIR/` to store all pipeline artifacts. This directory is manage
 
 ```
 $KILN_DIR/
+  phase_<N>_state.md       — Per-phase state file (branch, commit SHA, events)
   plans/
     claude_plan.md         — Claude planner output
     codex_plan.md          — Codex planner output
@@ -182,9 +192,10 @@ $KILN_DIR/
   prompts/
     task_01.md             — Per-task Codex prompt (one file per task)
     task_NN.md             — (numbered sequentially, zero-padded to 2 digits)
+    tasks_raw.md           — Intermediate prompter output (pre-split)
     manifest.md            — Ordered list of all task prompts with summaries
   reviews/
-    fix_round_1.md         — QA review output, round 1
+    fix_round_1.md         — QA fix prompt, round 1
     fix_round_N.md         — (numbered sequentially)
   outputs/
     task_01_output.md      — Captured Codex output for task 01

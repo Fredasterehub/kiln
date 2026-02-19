@@ -5,7 +5,7 @@ const path = require('node:path');
 const { execSync } = require('node:child_process');
 
 const { resolvePaths } = require('./paths');
-const { readManifest, computeChecksum } = require('./manifest');
+const { readManifest, computeChecksum, validateManifest } = require('./manifest');
 
 function checkCliAvailable(cliName, { platform = process.platform, exec = execSync } = {}) {
   const lookupCommand = platform === 'win32' ? `where ${cliName}` : `command -v ${cliName}`;
@@ -60,6 +60,17 @@ function doctor({ home, strict, platform = process.platform, exec = execSync } =
     });
   }
 
+  // c2. git-cli
+  if (checkCliAvailable('git', { platform, exec })) {
+    checks.push({ name: 'git-cli', status: 'pass', message: 'git CLI found' });
+  } else {
+    checks.push({
+      name: 'git-cli',
+      status: 'fail',
+      message: 'git CLI not found — pipeline requires git for branch management',
+    });
+  }
+
   // d. claude-dir
   try {
     fs.accessSync(paths.claudeDir, fs.constants.W_OK);
@@ -101,7 +112,16 @@ function doctor({ home, strict, platform = process.platform, exec = execSync } =
   const manifestPath = paths.manifestPath;
   const manifest = readManifest({ manifestPath });
   if (manifest) {
-    checks.push({ name: 'manifest', status: 'pass', message: 'manifest found and valid' });
+    const validation = validateManifest(manifest);
+    if (validation.valid) {
+      checks.push({ name: 'manifest', status: 'pass', message: 'manifest found and valid' });
+    } else {
+      checks.push({
+        name: 'manifest',
+        status: 'fail',
+        message: `manifest is invalid: ${validation.errors.join('; ')}`,
+      });
+    }
   } else {
     checks.push({
       name: 'manifest',
@@ -120,31 +140,52 @@ function doctor({ home, strict, platform = process.platform, exec = execSync } =
         message: 'manifest not found — skipping checksum verification',
       });
     } else {
-      const files = Array.isArray(strictManifest.files) ? strictManifest.files : [];
-      const total = files.length;
-      let mismatches = 0;
-
-      for (const file of files) {
-        try {
-          const actual = computeChecksum(path.join(paths.claudeDir, file.path));
-          if (actual !== file.checksum) mismatches += 1;
-        } catch {
-          mismatches += 1;
-        }
-      }
-
-      if (mismatches === 0) {
+      const strictValidation = validateManifest(strictManifest);
+      if (!strictValidation.valid) {
         checks.push({
           name: 'checksums',
-          status: 'pass',
-          message: `all ${total} file(s) match their checksums`,
+          status: 'fail',
+          message: `skipped — manifest is invalid: ${strictValidation.errors.join('; ')}`,
         });
       } else {
-        checks.push({
-          name: 'checksums',
-          status: 'warn',
-          message: `${mismatches} of ${total} file(s) have checksum mismatches`,
-        });
+        const files = Array.isArray(strictManifest.files) ? strictManifest.files : [];
+        const total = files.length;
+        let mismatches = 0;
+
+        for (const file of files) {
+          const checkedPath = path.resolve(paths.claudeDir, file.path);
+          if (!checkedPath.startsWith(paths.claudeDir + path.sep)) {
+            checks.push({
+              name: 'checksums',
+              status: 'fail',
+              message: `path escapes claude directory: ${file.path}`,
+            });
+            mismatches = -1;
+            break;
+          }
+          try {
+            const actual = computeChecksum(checkedPath);
+            if (actual !== file.checksum) mismatches += 1;
+          } catch {
+            mismatches += 1;
+          }
+        }
+
+        if (mismatches === -1) {
+          // already pushed a fail check above
+        } else if (mismatches === 0) {
+          checks.push({
+            name: 'checksums',
+            status: 'pass',
+            message: `all ${total} file(s) match their checksums`,
+          });
+        } else {
+          checks.push({
+            name: 'checksums',
+            status: 'warn',
+            message: `${mismatches} of ${total} file(s) have checksum mismatches`,
+          });
+        }
       }
     }
   }

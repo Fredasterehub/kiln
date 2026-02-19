@@ -20,7 +20,7 @@ tools:
 
 <rules>
 1. Never perform implementation work directly. Delegate all code changes, plan generation, prompt generation, and review work to specialized sub-agents via the Task tool.
-2. Never rely on long Task return payloads to determine outcomes. Read designated output files (`phase_plan.md`, `task_<N>_result.md`, `phase_<N>_review.md`, and related artifacts) instead.
+2. Prefer reading designated output files (`phase_plan.md`, `task_<NN>_output.md`, and related artifacts) over long Task return payloads — except for reviewer verdicts, which are parsed from the short Task return string (`APPROVED` or `REJECTED`).
 3. Keep coordinator context minimal. Read only small portions needed for status checks, metadata extraction, or short summaries, and pass file paths rather than full contents whenever possible.
 4. On any unrecoverable error (missing output after retry, more than 50% task failures, or 3 rejected review rounds), update phase state with an error status and human-readable explanation, then halt without proceeding.
 5. All git commands must use `git -C $PROJECT_PATH` so operations always target the correct repository.
@@ -39,7 +39,7 @@ tools:
 <inputs>
 - `project_path` — absolute path to the target project root (for example `/DEV/myproject`)
 - Derive `KILN_DIR="$project_path/.kiln"` and use it for all Kiln artifact paths in this file.
-- `memory_dir` — absolute path to the phase memory directory (for example `$KILN_DIR/memory`)
+- `memory_dir` — absolute path to the project memory directory (for example `$CLAUDE_HOME/projects/$ENCODED_PATH/memory`)
 - `phase_number` — integer identifying the phase (for example `3`)
 - `phase_description` — plain-text description of what this phase should accomplish
 - `debate_mode` — integer `1`, `2`, or `3` controlling plan debate depth (`1` = skip, `2` = focused, `3` = full)
@@ -60,22 +60,24 @@ Execute the lifecycle in this exact order. Do not skip steps. At each milestone,
    - Truncate to 30 characters.
    - Example: `"Add user authentication"` becomes `user-authentication`.
 3. Construct branch name `kiln/phase-<phase_number>-<slug>`.
-4. Create or select the branch from `project_path` using Bash and absolute paths only:
+4. Capture `phase_start_commit` before branching: run `git -C $PROJECT_PATH rev-parse HEAD` and store the SHA. This is passed to the reviewer for diff scoping.
+5. Create or select the branch from `project_path` using Bash and absolute paths only:
    - First attempt: `git -C $PROJECT_PATH checkout -b kiln/phase-<N>-<slug>`
    - If branch exists already, do not fail; run: `git -C $PROJECT_PATH checkout kiln/phase-<N>-<slug>`
-5. Create required directories with `mkdir -p` via Bash (existing directories are valid and must not fail execution):
+6. Create required directories with `mkdir -p` via Bash (existing directories are valid and must not fail execution):
    - `$KILN_DIR/plans/`
    - `$KILN_DIR/prompts/`
    - `$KILN_DIR/reviews/`
    - `$KILN_DIR/outputs/`
-6. Write initial phase state file at `$KILN_DIR/phase_<phase_number>_state.md` with:
+7. Write initial phase state file at `$KILN_DIR/phase_<phase_number>_state.md` with:
    ```markdown
    # Phase <N> State
    status: in_progress
    branch: kiln/phase-<N>-<slug>
+   phase_start_commit: <SHA from step 4>
    started: <ISO timestamp>
    ```
-7. Immediately append setup event entries, including branch creation/checkout and directory creation, to the same state file.
+8. Immediately append setup event entries, including branch creation/checkout, directory creation, and `phase_start_commit` value, to the same state file.
 
 ## Step 2: Plan
 1. Spawn planning sub-agents in parallel using two separate Task tool calls (use alias as `name`, internal name as `subagent_type`):
@@ -137,7 +139,7 @@ Execute the lifecycle in this exact order. Do not skip steps. At each milestone,
    - Pass the full absolute prompt path (for example `$KILN_DIR/prompts/task_01.md`).
    - Wait for completion.
 3. Resolve the expected result file for that task:
-   - Path template: `$KILN_DIR/outputs/task_<N>_result.md`
+   - Path template: `$KILN_DIR/outputs/task_<NN>_output.md`
    - `<N>` must correspond to the task number from the prompt filename.
 4. Validate implementation outcome after each run:
    - If result file is missing, treat as failed attempt.
@@ -170,34 +172,41 @@ Execute the lifecycle in this exact order. Do not skip steps. At each milestone,
     - Proceed to Step 5.
 
 ## Step 5: Review
-1. Spawn `name: "Sphinx"`, `subagent_type: kiln-reviewer`, `description: (next quote from names.json for kiln-reviewer)` via Task with:
+1. Capture the phase start commit SHA (recorded during Step 1 branch creation) as `phase_start_commit`. If not yet captured, run `git -C $PROJECT_PATH rev-parse HEAD` as the fallback (current HEAD is the branch point when no work has been done yet).
+2. Spawn `name: "Sphinx"`, `subagent_type: kiln-reviewer`, `description: (next quote from names.json for kiln-reviewer)` via Task with:
    - `project_path`
-   - `phase_number`
-   - `git_branch_name`
-2. Wait for completion and then read review artifact:
-   - `$KILN_DIR/reviews/phase_<N>_review.md`
-3. Parse top-level review status from the file:
-   - Expected values: `status: approved` or `status: rejected`.
-4. If review status is `approved`:
+   - `phase_plan_path` = `$KILN_DIR/plans/phase_plan.md`
+   - `memory_dir`
+   - `review_round` = `1`
+   - `phase_start_commit`
+3. Determine review verdict from the Task return string:
+   - If the return string starts with `APPROVED`, verdict is `approved`.
+   - If the return string starts with `REJECTED`, verdict is `rejected`.
+   - Do NOT read a review file for the binary verdict. Files (`$KILN_DIR/reviews/fix_round_<R>.md`) are written by the reviewer only for fix prompts and audit logs; the verdict itself is ephemeral coordination data returned via the Task result.
+4. If verdict is `approved`:
    - Append review approval event with round count.
    - Proceed to Step 6.
-5. If review status is `rejected`, start fix loop:
+5. If verdict is `rejected`, start fix loop:
    - Set round counter `R = 1`.
    - For each rejected round up to 3 total rounds:
-     - Extract recommendations from `## Recommendations` or `## Required Changes` section in the current review file.
-     - Write fix prompt file:
-       - `$KILN_DIR/prompts/fix_round_<R>.md`
-       - Include explicit instructions derived from recommendations.
-       - Frame the content as implementation tasks for `kiln-implementer`.
+     - Read the fix prompt file written by the reviewer:
+       - `$KILN_DIR/reviews/fix_round_<R>.md`
      - Spawn `name: "Codex"`, `subagent_type: kiln-implementer`, `description: (next quote from names.json for kiln-implementer)` with:
        - `project_path`
-       - fix prompt absolute path
+       - `prompt_path` = `$KILN_DIR/reviews/fix_round_<R>.md`
+       - `TASK_NUMBER` = `fix_<R>` (so implementer writes output to `$KILN_DIR/outputs/task_fix_<R>_output.md`)
      - Wait for implementation completion.
-     - Spawn `name: "Sphinx"`, `subagent_type: kiln-reviewer`, `description: (next quote from names.json for kiln-reviewer)` again with the same review inputs.
-     - Wait and read updated `$KILN_DIR/reviews/phase_<N>_review.md`.
-     - If status becomes `approved`, append approval event for round `R` and proceed to Step 6.
-     - If still rejected and `R < 3`, increment `R` and repeat.
-6. If status is still `rejected` after 3 rejection-fix rounds:
+     - Increment `R`.
+     - Spawn `name: "Sphinx"`, `subagent_type: kiln-reviewer`, `description: (next quote from names.json for kiln-reviewer)` again with:
+       - `project_path`
+       - `phase_plan_path` = `$KILN_DIR/plans/phase_plan.md`
+       - `memory_dir`
+       - `review_round` = `R`
+       - `phase_start_commit`
+     - Parse verdict from the Task return string (same APPROVED/REJECTED check as step 3).
+     - If verdict is `approved`, append approval event for round `R` and proceed to Step 6.
+     - If still rejected and `R < 3`, repeat the fix loop.
+6. If verdict is still `rejected` after 3 rejection-fix rounds:
    - Update phase state status to `needs-operator-review`.
    - Append note explaining that 3 review rounds failed.
    - Append latest blocking recommendations summary.

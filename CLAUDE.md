@@ -1,25 +1,37 @@
-<!-- kiln:protocol:begin v0.1.0 -->
+<!-- kiln:protocol:begin v0.1.1 -->
 # Kiln Orchestration Protocol
 
 This protocol is active when Kiln is installed in the project. The Claude Code orchestrator must follow these rules exactly. Rules are enforced across all five pipeline stages.
 
+## Paths Contract
+
+All runtime paths must follow this contract:
+
+- `PROJECT_PATH`: absolute path to the active project root.
+- `KILN_DIR`: `$PROJECT_PATH/.kiln`.
+- `CLAUDE_HOME`: `$HOME/.claude`.
+- `MEMORY_DIR`: `$CLAUDE_HOME/projects/$ENCODED_PATH/memory`.
+- Claude-side install assets: `$CLAUDE_HOME/kilntwo/...`.
+
+Never use root-relative kiln or claude paths. Always anchor filesystem paths to either `$PROJECT_PATH` (project artifacts) or `$HOME` (Claude memory/install artifacts).
+
 ## Pipeline Stages
 
-1. **Stage 1 — Initialization & Brainstorm** (interactive) — The operator interactively describes the project goal. The orchestrator asks clarifying questions until it has a clear picture of scope, constraints, and success criteria. Memory checkpoints are written periodically: vision.md captures the project goal, and MEMORY.md is updated with stage/phase/status/timestamp. The stage ends when the operator explicitly signals readiness to move to planning.
+1. **Stage 1 — Initialization & Brainstorm** (interactive) — The operator interactively describes the project goal. The orchestrator asks clarifying questions until it has a clear picture of scope, constraints, and success criteria. Memory checkpoints are written periodically: `vision.md` captures the project goal, and `MEMORY.md` updates canonical runtime fields (`stage`, `status`, phase fields, `handoff_note`, `last_updated`). The stage ends when the operator explicitly signals readiness to move to planning.
 
 2. **Stage 2 — Planning** (automated with operator review) — The orchestrator spawns both `kiln-planner-claude` and a Codex planner in parallel to produce independent implementation plans. A `kiln-debater` agent then analyzes disagreements between the two plans (debate mode 2 by default unless the operator specified otherwise during Stage 1). A `kiln-synthesizer` agent merges the plans and debate resolution into a single `master-plan.md`. The operator reviews and approves the master plan before Stage 3 begins.
 
-3. **Stage 3 — Execution** (automated, phase by phase) — The orchestrator executes the master plan one phase at a time using the phase executor pattern. Each phase consists of: generating a phase-scoped plan (`.kiln/plans/phase_plan.md`), generating per-task prompts (`.kiln/prompts/`), running each Codex task sequentially, and running up to 3 QA review rounds before merging. Phases run sequentially; the orchestrator does not begin a new phase until the prior phase is merged and MEMORY.md is updated.
+3. **Stage 3 — Execution** (automated, phase by phase) — The orchestrator executes the master plan one phase at a time using the phase executor pattern. Each phase consists of: generating a phase-scoped plan (`$KILN_DIR/plans/phase_plan.md`), generating per-task prompts (`$KILN_DIR/prompts/`), running each Codex task sequentially, and running up to 3 QA review rounds before merging. Phases run sequentially; the orchestrator does not begin a new phase until the prior phase is merged and MEMORY.md is updated.
 
-4. **Stage 4 — Validation** (automated) — After all phases are complete, the orchestrator runs end-to-end validation. Results are written to `.kiln/validation/report.md`. Any missing credentials or environment variables that blocked tests are recorded in `.kiln/validation/missing_credentials.md`. If validation fails, the orchestrator identifies the failing phase and re-enters Stage 3 for that phase only.
+4. **Stage 4 — Validation** (automated) — After all phases are complete, the orchestrator runs end-to-end validation. Results are written to `$KILN_DIR/validation/report.md`. Any missing credentials or environment variables that blocked tests are recorded in `$KILN_DIR/validation/missing_credentials.md`. If validation fails, the orchestrator identifies the failing phase and re-enters Stage 3 for that phase only.
 
-5. **Stage 5 — Delivery** (interactive) — The orchestrator produces a final delivery summary for the operator covering: all phases completed, files created or modified, test results, and any known limitations. MEMORY.md is updated with `status: complete`. The operator is prompted to review and approve the delivery.
+5. **Stage 5 — Complete & Delivery** (interactive) — The orchestrator produces a final delivery summary for the operator covering: all phases completed, files created or modified, test results, and any known limitations. MEMORY.md is updated with `stage: complete` and `status: complete`. The operator is prompted to review and approve the delivery.
 
 ## Orchestration Rules
 
 1. **No /compact** — Never use `/compact`. Context management is handled exclusively through session resets and memory file resumption. Compacting loses tool call history that may be needed for debugging.
 
-2. **Memory files are the single source of truth** — `MEMORY.md`, `vision.md`, `master-plan.md`, `decisions.md`, and `pitfalls.md` define project state. Before starting any stage or phase, read these files. After completing any stage or phase, update `MEMORY.md` with the current stage, phase, status, and a brief handoff note.
+2. **Memory files are the single source of truth** — `MEMORY.md`, `vision.md`, `master-plan.md`, `decisions.md`, and `pitfalls.md` define project state. Before starting any stage or phase, read these files. After completing any stage or phase, update canonical runtime fields in `MEMORY.md`: `stage`, `status`, `planning_sub_stage`, phase fields, `handoff_note`, and `last_updated`.
 
 3. **Sub-agent spawning is restricted** — Sub-agents cannot spawn their own sub-agents. Only the phase executor (the top-level orchestrator running Stage 3) may spawn Codex task agents. If a sub-agent needs additional work done, it must return that request to the orchestrator rather than spawning independently.
 
@@ -33,7 +45,9 @@ This protocol is active when Kiln is installed in the project. The Claude Code o
 
 8. **No judgment calls during automated execution** — If the orchestrator encounters an ambiguous situation, a missing requirement, a conflicting instruction, or an unexpected error during Stage 3, it must stop and ask the operator rather than guessing. Automated execution resumes only after the operator provides direction.
 
-9. **Generous timeouts** — All Codex CLI invocations must use a minimum timeout of 600 seconds. Tasks that involve large codebases, complex reasoning, or file-heavy operations should use 900 seconds or more. Never invoke Codex with default or short timeouts during automated pipeline execution.
+9. **Agent termination** — Every sub-agent spawned via the Task tool must terminate after completing its assigned task. Agents must write all required output artifacts, return a concise completion summary, and exit immediately. Never resume or reuse a prior agent instance — always spawn a fresh agent for each new task assignment. This ensures clean context boundaries between phases and prevents stale state from bleeding across spawns.
+
+10. **Generous timeouts** — All Codex CLI invocations must use a minimum timeout of 600 seconds. Tasks that involve large codebases, complex reasoning, or file-heavy operations should use 900 seconds or more. Never invoke Codex with default or short timeouts during automated pipeline execution.
 
 ## Agent Roster
 
@@ -53,7 +67,9 @@ The Kiln pipeline uses these specialized agents. Each has a character alias used
 | **Argus** | kiln-validator | E2E validation and test runner |
 | **Sherlock** | kiln-researcher | Fast documentation and codebase research |
 
-When logging agent activity, use the alias (e.g., `[Confucius]` not `[kiln-planner-claude]`). The internal name is used only for spawning via the Task tool.
+When logging agent activity, use the alias (e.g., `[Confucius]` not `[kiln-planner-claude]`). When spawning agents via the Task tool, always set `name` to the alias and `subagent_type` to the internal name. This ensures the Claude Code UI displays character names in the spawn box (e.g., `Confucius (Claude-side planner)` instead of `kiln-planner-claude`).
+
+**Quote cycling** — Read `assets/names.json` (installed to `$CLAUDE_HOME/kilntwo/names.json`) at session start. When spawning an agent via the Task tool, set the `description` parameter to one of their quotes from the `quotes` array. Cycle sequentially through the array across spawns of the same agent. Do not repeat a quote within the same session unless all quotes have been used. Match the narrative arc: use early quotes for first spawns, later quotes as the pipeline progresses. For fix/retry rounds, prefer adversity-themed quotes (e.g., Sphinx's "Return and try again, mortal" or Confucius's "When goals shift, adjust the steps").
 
 ## Codex CLI Reference
 
@@ -65,34 +81,94 @@ Use this pattern when invoking GPT-5.2 for planning, research, or prompt generat
 codex exec -m gpt-5.2 \
   -c 'model_reasoning_effort="high"' \
   --skip-git-repo-check \
-  -C <project-path> \
-  "<prompt-text>" \
-  -o <output-file>
+  -C <PROJECT_PATH> \
+  "<PROMPT_TEXT>" \
+  -o <OUTPUT_PATH>
 ```
 
 Use this pattern when invoking gpt-5.3-codex for code implementation tasks:
 
 ```bash
-cat <prompt-file> | codex exec -m gpt-5.3-codex \
+cat <PROMPT_PATH> | codex exec -m gpt-5.3-codex \
   -c 'model_reasoning_effort="high"' \
   --full-auto \
   --skip-git-repo-check \
-  -C <project-path> \
+  -C <PROJECT_PATH> \
   - \
-  -o <output-file>
+  -o <OUTPUT_PATH>
 ```
 
 The following flags must always be present in every Codex invocation:
 
 - `--skip-git-repo-check` — always include; prevents Codex from failing when the working directory is not a git repo root
-- `-o <output-file>` — always capture output to a file; never discard Codex output
+- `-o <OUTPUT_PATH>` — always capture output to a file; never discard Codex output
 - `-c 'model_reasoning_effort="high"'` — always set reasoning effort to high; default effort produces insufficient output quality for pipeline tasks
 
 ## Memory Structure
 
 All memory files live in the project memory directory resolved by Kiln, and the orchestrator must read all existing memory files at the start of every session before taking any action.
 
-**MEMORY.md** — Tracks the current pipeline state. Must always contain: `stage` (1–5), `phase` (phase number or "N/A"), `status` (one of: `active`, `paused`, `blocked`, `complete`), `timestamp` (ISO-8601), and a `handoff_notes` section with a plain-text description of what was last completed and what comes next.
+**MEMORY.md** — Tracks the current pipeline state with one canonical schema.
+
+Required runtime enums:
+- `stage`: `brainstorm | planning | execution | validation | complete`
+- `status`: `in_progress | paused | blocked | complete`
+- `planning_sub_stage`: `dual_plan | debate | synthesis | null`
+- `phase_status` in `## Phase Statuses`: `pending | in_progress | failed | completed`
+
+Required fields:
+- `project_name`
+- `project_path`
+- `date_started`
+- `last_updated`
+- `stage`
+- `status`
+- `planning_sub_stage`
+- `debate_mode`
+- `phase_number`
+- `phase_name`
+- `phase_total`
+- `handoff_note`
+
+Optional fields (written at specific stage boundaries):
+- `plan_approved_at` — ISO-8601 timestamp, written at the end of Stage 2 when the operator approves the master plan.
+- `completed_at` — ISO-8601 timestamp, written at the end of Stage 5 when the protocol run finishes.
+
+Optional sections:
+- `## Phase Results` — Running log of phase completion summaries, appended after each phase completes in Stage 3.
+- `## Validation` — Validator verdict, test counts, and report path, written during Stage 4.
+- `## Reset Notes` — Written by `/kiln:reset` to preserve operator context across context resets.
+
+Schema example:
+
+```markdown
+# Kiln Project Memory
+
+## Metadata
+project_name: my-project
+project_path: /DEV/my-project
+date_started: 2026-02-19
+last_updated: 2026-02-19T18:10:00Z
+
+## Runtime
+stage: execution
+status: in_progress
+planning_sub_stage: null
+debate_mode: 2
+phase_number: 2
+phase_name: API integration
+phase_total: 4
+
+## Handoff
+handoff_note: Phase 2 in progress; continue with endpoint contract tests.
+
+## Phase Statuses
+- phase_number: 1 | phase_name: Foundation setup | phase_status: completed
+- phase_number: 2 | phase_name: API integration | phase_status: in_progress
+
+## Resume Log
+- 2026-02-19T18:10:00Z Resumed via /kiln:resume
+```
 
 **vision.md** — Captures the project vision, goals, success criteria, and operator constraints as established during Stage 1. This file is written once during Stage 1 and read by both planners during Stage 2. It may be amended by the operator between stages but must not be modified by automated execution.
 
@@ -104,10 +180,11 @@ All memory files live in the project memory directory resolved by Kiln, and the 
 
 ## Working Directory Structure
 
-Kiln uses a `.kiln/` directory at the project root to store all pipeline artifacts. This directory is managed by the orchestrator and must not be manually edited during automated execution.
+Kiln uses `$KILN_DIR/` to store all pipeline artifacts. This directory is managed by the orchestrator and must not be manually edited during automated execution.
 
 ```
-.kiln/
+$KILN_DIR/
+  phase_<N>_state.md       — Per-phase state file (branch, commit SHA, events)
   plans/
     claude_plan.md         — Claude planner output
     codex_plan.md          — Codex planner output
@@ -116,9 +193,10 @@ Kiln uses a `.kiln/` directory at the project root to store all pipeline artifac
   prompts/
     task_01.md             — Per-task Codex prompt (one file per task)
     task_NN.md             — (numbered sequentially, zero-padded to 2 digits)
+    tasks_raw.md           — Intermediate prompter output (pre-split)
     manifest.md            — Ordered list of all task prompts with summaries
   reviews/
-    fix_round_1.md         — QA review output, round 1
+    fix_round_1.md         — QA fix prompt, round 1
     fix_round_N.md         — (numbered sequentially)
   outputs/
     task_01_output.md      — Captured Codex output for task 01
@@ -129,8 +207,8 @@ Kiln uses a `.kiln/` directory at the project root to store all pipeline artifac
     missing_credentials.md — Environment variables or secrets that were absent
 ```
 
-- All paths shown above are relative to the project root. The orchestrator uses absolute paths when invoking Codex.
-- Do not delete `.kiln/` directory contents between phases. The full artifact trail is preserved for debugging and audit purposes.
+- All paths shown above are absolute placeholders anchored at `$PROJECT_PATH`.
+- Do not delete `$KILN_DIR/` directory contents between phases. The full artifact trail is preserved for debugging and audit purposes.
 - If a file listed above does not exist yet (e.g. `debate_resolution.md` when debate was skipped), the orchestrator treats it as absent and proceeds without error.
 
 ## Development Guidelines

@@ -1,5 +1,5 @@
 # /kiln:start — Kiln Protocol Entry Point
-Execute the Kiln protocol autonomously from the current working directory using filesystem tools, bash commands, and the Task tool. Initialize project state, build memory, run collaborative planning with dual planners and optional debate, then execute the approved plan phase by phase with validation. Treat this file as authoritative runtime instructions. Do not ask for permission between steps unless a step explicitly requires user input.
+Execute the Kiln protocol autonomously from the current working directory using filesystem tools, bash commands, and the Task tool. Initialize project state, build memory, run collaborative planning with dual planners and optional debate, then execute the approved plan phase by phase with validation. Treat this file as authoritative runtime instructions. Proceed without asking between steps unless you encounter: an ambiguous requirement, a conflicting instruction, an unexpected error, or a situation not covered by the master plan. In those cases, stop and ask the operator (protocol rule 8).
 
 ---
 
@@ -40,11 +40,13 @@ Never write free-form status strings.
    Ensure `$KILN_DIR/` exists.
    Create it if missing.
    Write or overwrite `$KILN_DIR/.gitignore`.
-   The file must contain exactly these four lines and nothing else:
+   The file must contain exactly these lines and nothing else:
    `plans/`
    `prompts/`
    `reviews/`
    `outputs/`
+   `validation/`
+   `*_state.md`
    Do not add extra entries.
    Do not add trailing spaces.
    After writing this file, update `MEMORY_DIR/MEMORY.md` later in Step 4 (or as soon as `MEMORY_DIR` exists) with:
