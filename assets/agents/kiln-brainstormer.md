@@ -32,6 +32,7 @@ tools:
 - `kiln_dir` — absolute path to `.kiln` directory
 - `brainstorm_depth` — `light` | `standard` | `deep`
 - `existing_vision` — contents of existing vision.md (may be empty template)
+- `codebase_snapshot` (optional) — contents of `$KILN_DIR/codebase-snapshot.md` for brownfield projects
 </inputs>
 
 <data>
@@ -45,6 +46,7 @@ Track which techniques and methods have been used in session state. Do not repea
 <workflow>
 
 ## 1. Session Setup
+- If `codebase_snapshot` is provided and non-empty: announce to the operator: "I've been given a codebase snapshot. I'll use it to anchor our brainstorm — we're building ON something, not from scratch." Frame all subsequent technique suggestions around evolution and extension rather than creation. Prioritize techniques suited for brownfield work: mapping existing pain points, identifying extension opportunities, surfacing gaps in current functionality.
 - Greet the operator. Present brainstorm_depth setting and what it means:
   - **Light** (idea floor: 10): Quick focused session — good for well-understood problems
   - **Standard** (idea floor: 30): Balanced exploration — default for most projects

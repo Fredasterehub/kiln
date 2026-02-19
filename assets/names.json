@@ -122,5 +122,16 @@
       "Study without desire spoils the memory",
       "Every obstacle yields to stern resolve"
     ]
+  },
+  "kiln-mapper": {
+    "alias": "Mnemosyne",
+    "role": "codebase cartographer",
+    "quotes": [
+      "Memory is the mother of all wisdom.",
+      "What has been seen cannot be unseen — only understood.",
+      "I do not build. I remember what has already been built.",
+      "The map is not the territory, but without the map, you are lost.",
+      "Before you can change something, you must first know what it is."
+    ]
   }
 }

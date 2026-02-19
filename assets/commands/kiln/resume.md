@@ -57,6 +57,7 @@ If the file exists, extract and store these fields:
 - `handoff_context` (multi-line narrative block; may be empty or absent)
 - `debate_mode` (integer `1|2|3`; default `2` if absent)
 - `planning_sub_stage` (`dual_plan`, `debate`, `synthesis`, or `null`)
+- `project_mode` (`greenfield` or `brownfield`; may be absent)
 - `last_updated` (ISO-8601 string; optional but recommended)
 
 Also parse the `## Phase Statuses` section.
@@ -87,6 +88,7 @@ Display the continuity banner to the user as a code block, substituting values f
 ```
 === Kiln Resume ===
 Project: [PROJECT_PATH]
+Mode:    [project_mode]   (omit this line if project_mode is absent)
 Stage:   [stage]
 Phase:   [phase_number]/[phase_total] [phase_name]   (omit this line if not in execution stage)
 Status:  [status]

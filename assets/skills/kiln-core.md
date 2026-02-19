@@ -18,7 +18,7 @@ All git operations MUST use `git -C $PROJECT_PATH`. Never use root-relative path
 ## Memory Schema
 
 **Required fields** in `MEMORY.md`:
-- `project_name`, `project_path`, `date_started`, `last_updated`
+- `project_name`, `project_path`, `project_mode: greenfield | brownfield`, `date_started`, `last_updated`
 - `stage`: `brainstorm | planning | execution | validation | complete`
 - `status`: `in_progress | paused | blocked | complete`
 - `planning_sub_stage`: `dual_plan | debate | synthesis | null`
@@ -91,6 +91,7 @@ cat <PROMPT_PATH> | codex exec -m gpt-5.3-codex \
 ```
 $KILN_DIR/
   phase_<N>_state.md       — Per-phase state file (branch, commit SHA, structured events)
+  codebase-snapshot.md     — Brownfield codebase map (brownfield only, gitignored)
   plans/
     claude_plan.md         — Claude planner output
     codex_plan.md          — Codex planner output

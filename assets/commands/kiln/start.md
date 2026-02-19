@@ -48,6 +48,7 @@ Never write free-form status strings.
    `archive/`
    `validation/`
    `*_state.md`
+   `codebase-snapshot.md`
    Do not add extra entries.
    Do not add trailing spaces.
    After writing this file, update `MEMORY_DIR/MEMORY.md` later in Step 4 (or as soon as `MEMORY_DIR` exists) with:
@@ -113,6 +114,51 @@ Never write free-form status strings.
    `handoff_context` = `All five memory files instantiated from templates. Project is ready for brainstorming.`
    `last_updated` = current ISO-8601 UTC timestamp.
 
+4.5. Detect project mode.
+   Check for brownfield indicators in `PROJECT_PATH`:
+   - Dependency manifests: `package.json`, `go.mod`, `Cargo.toml`, `requirements.txt`, `pyproject.toml`, `pom.xml`, `build.gradle`
+   - Source directories with source files: `src/`, `lib/`, `app/`, `cmd/`
+   - Existing git history: run `git -C $PROJECT_PATH log --oneline -1` (non-empty output means commits exist)
+
+   If NO indicators found:
+   - Set `PROJECT_MODE = greenfield`
+   - Write `project_mode: greenfield` to the `## Metadata` section of `MEMORY_DIR/MEMORY.md`
+   - Update `handoff_note` = `Project mode: greenfield; brainstorm depth selection next.`
+   - Update `handoff_context` = `No brownfield indicators found. Project treated as greenfield.`
+   - Update `last_updated`.
+   - Proceed to Step 5.
+
+   If indicators found: display the detected files/directories to the operator. Ask exactly:
+   "I found an existing codebase ([list detected indicators]). Should I run Mnemosyne to map it before brainstorming?
+     [Y] Map the codebase first (recommended)  [N] Skip mapping, start fresh"
+
+   If operator responds Y (or any affirmative):
+   - Set `PROJECT_MODE = brownfield`
+   - Write `project_mode: brownfield` to the `## Metadata` section of `MEMORY_DIR/MEMORY.md`
+   - Spawn `kiln-mapper` via the Task tool:
+     `name`: `"Mnemosyne"` (the alias)
+     `subagent_type`: `kiln-mapper`
+     `description`: (next quote from names.json quotes array for kiln-mapper)
+     Task prompt must include:
+     `project_path` = `$PROJECT_PATH`
+     `memory_dir` = `$MEMORY_DIR`
+     `kiln_dir` = `$KILN_DIR`
+     Instruction: "Map the existing codebase and pre-seed memory files. Write codebase-snapshot.md and seed decisions.md and pitfalls.md. Signal completion when done."
+   - Wait for Mnemosyne to return.
+   - Confirm to operator: "Mnemosyne complete. Codebase snapshot ready at `$KILN_DIR/codebase-snapshot.md`."
+   - Update `handoff_note` = `Project mode: brownfield; Mnemosyne complete; brainstorm depth next.`
+   - Update `handoff_context` = `Brownfield project. Mnemosyne mapped the codebase. Snapshot at $KILN_DIR/codebase-snapshot.md. Decisions and pitfalls pre-seeded.`
+   - Update `last_updated`.
+   - Proceed to Step 5.
+
+   If operator responds N:
+   - Set `PROJECT_MODE = brownfield`
+   - Write `project_mode: brownfield` to the `## Metadata` section of `MEMORY_DIR/MEMORY.md`
+   - Update `handoff_note` = `Project mode: brownfield (mapping skipped); brainstorm depth next.`
+   - Update `handoff_context` = `Brownfield indicators found. Operator chose to skip Mnemosyne mapping. Codebase snapshot will not be available; planners will work from vision.md only.`
+   - Update `last_updated`.
+   - Proceed to Step 5.
+
 5. Ask for brainstorm depth.
    Ask the user exactly this prompt:
    "What brainstorm depth would you like?
@@ -136,6 +182,8 @@ Never write free-form status strings.
 
 6. Spawn brainstormer agent.
    Read the current contents of `MEMORY_DIR/vision.md` into `EXISTING_VISION`.
+   If `PROJECT_MODE = brownfield` and `$KILN_DIR/codebase-snapshot.md` exists, read its contents into `CODEBASE_SNAPSHOT`.
+   Otherwise set `CODEBASE_SNAPSHOT` to an empty string.
    Spawn `kiln-brainstormer` via the Task tool:
    `name`: `"Da Vinci"` (the alias)
    `subagent_type`: `kiln-brainstormer`
@@ -146,6 +194,7 @@ Never write free-form status strings.
    `kiln_dir` = `$KILN_DIR`
    `brainstorm_depth` = `$BRAINSTORM_DEPTH`
    `existing_vision` = full contents of `$EXISTING_VISION`
+   If `CODEBASE_SNAPSHOT` is non-empty, include it under an `<codebase_snapshot>` XML tag.
    Instruction: "Run a complete brainstorm session. Facilitate idea generation using techniques and elicitation methods. Write vision.md with all 11 required sections. Update MEMORY.md checkpoints. Signal completion when the quality gate passes."
    Wait for completion.
    After Da Vinci returns, read the updated `MEMORY_DIR/vision.md` to confirm it was written.
@@ -215,6 +264,7 @@ Never write free-form status strings.
 ## Stage 2: Planning
 
 8. Spawn dual planners in parallel with the Task tool.
+   If `PROJECT_MODE = brownfield` and `$KILN_DIR/codebase-snapshot.md` exists, read its contents into `CODEBASE_SNAPSHOT` (may already be loaded from Step 6).
    Use the Task tool by name.
    Spawn both planner tasks in parallel.
    First task:
@@ -224,6 +274,7 @@ Never write free-form status strings.
    Prompt content for `kiln-planner-claude` must include:
    Full contents of `MEMORY_DIR/vision.md`.
    Full contents of `MEMORY_DIR/MEMORY.md`.
+   If `CODEBASE_SNAPSHOT` is non-empty, include it as a `## Codebase Context` section preceded by: "This is a brownfield project. The following codebase snapshot was generated by Mnemosyne:"
    Instruction text:
    "Create a detailed, phased implementation plan. Output it as markdown with sections: Overview, Phases (each with a name, goal, tasks, and acceptance criteria), Risks, and Open Questions. This is the Claude perspective plan."
    Include `PROJECT_PATH` and `MEMORY_DIR`.
@@ -233,6 +284,7 @@ Never write free-form status strings.
    `description`: (next quote from names.json quotes array for kiln-planner-codex)
    Prompt content for `kiln-planner-codex` must include:
    The same full vision and memory contents.
+   If `CODEBASE_SNAPSHOT` is non-empty, include it as a `## Codebase Context` section preceded by: "This is a brownfield project. The following codebase snapshot was generated by Mnemosyne:"
    Instruction text:
    "Create a detailed, phased implementation plan. Output it as markdown with sections: Overview, Phases (each with a name, goal, tasks, and acceptance criteria), Risks, and Open Questions. This is the Codex perspective plan."
    Include `PROJECT_PATH` and `MEMORY_DIR`.

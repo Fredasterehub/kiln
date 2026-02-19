@@ -3,6 +3,7 @@
 ## Metadata
 project_name: {{PROJECT_NAME}}
 project_path: {{PROJECT_PATH}}
+project_mode: {{PROJECT_MODE}}
 date_started: {{DATE}}
 last_updated: {{DATE_ISO}}
 
