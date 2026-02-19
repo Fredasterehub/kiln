@@ -377,6 +377,48 @@ describe('regression tests', () => {
     }
   });
 
+  it('protocol agent roster includes all agents from names.json', () => {
+    const protocol = readAsset('protocol.md');
+    const names = JSON.parse(fs.readFileSync(path.join(ASSETS_DIR, 'names.json'), 'utf8'));
+
+    const failures = [];
+    for (const [internal, entry] of Object.entries(names)) {
+      if (internal === 'kiln') continue; // orchestrator is listed differently
+      if (!protocol.includes(entry.alias)) {
+        failures.push(`alias "${entry.alias}" (${internal}) missing from protocol agent roster`);
+      }
+      if (!protocol.includes(internal)) {
+        failures.push(`internal name "${internal}" missing from protocol agent roster`);
+      }
+    }
+
+    assert.deepStrictEqual(
+      failures,
+      [],
+      `Protocol agent roster gaps: ${JSON.stringify(failures)}`,
+    );
+  });
+
+  it('vision.md template has all required sections for pre-flight check', () => {
+    const vision = readAsset('templates/vision.md');
+    const requiredSections = [
+      '## Problem Statement',
+      '## Target Users',
+      '## Goals',
+      '## Constraints',
+      '## Tech Stack',
+      '## Open Questions',
+      '## Elicitation Log',
+    ];
+
+    const missing = requiredSections.filter((s) => !vision.includes(s));
+    assert.deepStrictEqual(
+      missing,
+      [],
+      `vision.md template missing sections: ${JSON.stringify(missing)}`,
+    );
+  });
+
   it('slug example in executor matches the described transform', () => {
     const executor = readAsset('agents/kiln-phase-executor.md');
 

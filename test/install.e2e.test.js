@@ -13,6 +13,7 @@ const { computeChecksum } = require('../src/manifest');
 const REPO_ROOT = path.resolve(__dirname, '..');
 const ASSETS_AGENTS_DIR = path.join(REPO_ROOT, 'assets', 'agents');
 const ASSETS_COMMANDS_DIR = path.join(REPO_ROOT, 'assets', 'commands', 'kiln');
+const ASSETS_DATA_DIR = path.join(REPO_ROOT, 'assets', 'data');
 const ASSETS_SKILLS_DIR = path.join(REPO_ROOT, 'assets', 'skills');
 const ASSETS_TEMPLATES_DIR = path.join(REPO_ROOT, 'assets', 'templates');
 
@@ -28,6 +29,13 @@ function listMarkdownFiles(dirPath) {
   return fs
     .readdirSync(dirPath)
     .filter((name) => name.endsWith('.md'))
+    .sort();
+}
+
+function listJsonFiles(dirPath) {
+  return fs
+    .readdirSync(dirPath)
+    .filter((name) => name.endsWith('.json'))
     .sort();
 }
 
@@ -75,15 +83,38 @@ describe('install E2E', { concurrency: false }, () => {
 
     assertDirectoryExists(paths.agentsDir);
     assertDirectoryExists(paths.commandsDir);
+    assertDirectoryExists(paths.dataDir);
     assertDirectoryExists(paths.kilntwoDir);
     assertDirectoryExists(paths.templatesDir);
+  });
+
+  it('copies all data files', () => {
+    install({ home: tmpHome, projectPath: tmpProject });
+
+    const dataNames = listJsonFiles(ASSETS_DATA_DIR);
+    assert.strictEqual(dataNames.length, 2, 'assets/data should contain 2 JSON files');
+
+    for (const name of dataNames) {
+      assertNonEmptyFile(path.join(paths.dataDir, name));
+    }
+
+    // Verify they are valid JSON
+    const techniques = JSON.parse(
+      fs.readFileSync(path.join(paths.dataDir, 'brainstorming-techniques.json'), 'utf8')
+    );
+    assert.ok(Array.isArray(techniques.techniques), 'techniques must have techniques array');
+
+    const methods = JSON.parse(
+      fs.readFileSync(path.join(paths.dataDir, 'elicitation-methods.json'), 'utf8')
+    );
+    assert.ok(Array.isArray(methods.methods), 'methods must have methods array');
   });
 
   it('copies all agent files', () => {
     install({ home: tmpHome, projectPath: tmpProject });
 
     const agentNames = listMarkdownFiles(ASSETS_AGENTS_DIR);
-    assert.strictEqual(agentNames.length, 10, 'assets/agents should contain 10 files');
+    assert.strictEqual(agentNames.length, 11, 'assets/agents should contain 11 files');
 
     for (const name of agentNames) {
       assertNonEmptyFile(path.join(paths.agentsDir, name));
@@ -147,6 +178,7 @@ describe('install E2E', { concurrency: false }, () => {
     const expectedCount =
       listMarkdownFiles(ASSETS_AGENTS_DIR).length +
       listMarkdownFiles(ASSETS_COMMANDS_DIR).length +
+      listJsonFiles(ASSETS_DATA_DIR).length +
       listMarkdownFiles(ASSETS_SKILLS_DIR).length +
       listMarkdownFiles(ASSETS_TEMPLATES_DIR).length +
       1; // names.json

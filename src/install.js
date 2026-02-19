@@ -25,10 +25,11 @@ function resolveInstallTarget(projectPath) {
  * @returns {{ installed: string[], skipped: string[], version: string }}
  */
 function install({ home, force = false, projectPath } = {}) {
-  const { agentsDir, commandsDir, kilntwoDir, skillsDir, templatesDir } = resolvePaths(home);
+  const { agentsDir, commandsDir, dataDir, kilntwoDir, skillsDir, templatesDir } = resolvePaths(home);
 
   fs.mkdirSync(agentsDir, { recursive: true });
   fs.mkdirSync(commandsDir, { recursive: true });
+  fs.mkdirSync(dataDir, { recursive: true });
   fs.mkdirSync(kilntwoDir, { recursive: true });
   fs.mkdirSync(skillsDir, { recursive: true });
   fs.mkdirSync(templatesDir, { recursive: true });
@@ -37,16 +38,17 @@ function install({ home, force = false, projectPath } = {}) {
   const skipped = [];
 
   const copyJobs = [
-    { srcDir: path.join(ASSETS_DIR, 'agents'), destDir: agentsDir },
-    { srcDir: path.join(ASSETS_DIR, 'commands', 'kiln'), destDir: commandsDir },
-    { srcDir: path.join(ASSETS_DIR, 'skills'), destDir: skillsDir },
-    { srcDir: path.join(ASSETS_DIR, 'templates'), destDir: templatesDir },
+    { srcDir: path.join(ASSETS_DIR, 'agents'), destDir: agentsDir, ext: '.md' },
+    { srcDir: path.join(ASSETS_DIR, 'commands', 'kiln'), destDir: commandsDir, ext: '.md' },
+    { srcDir: path.join(ASSETS_DIR, 'data'), destDir: dataDir, ext: '.json' },
+    { srcDir: path.join(ASSETS_DIR, 'skills'), destDir: skillsDir, ext: '.md' },
+    { srcDir: path.join(ASSETS_DIR, 'templates'), destDir: templatesDir, ext: '.md' },
   ];
 
-  for (const { srcDir, destDir } of copyJobs) {
+  for (const { srcDir, destDir, ext } of copyJobs) {
     let filenames;
     try {
-      filenames = fs.readdirSync(srcDir).filter((entry) => entry.endsWith('.md')).sort();
+      filenames = fs.readdirSync(srcDir).filter((entry) => entry.endsWith(ext)).sort();
     } catch {
       continue;
     }

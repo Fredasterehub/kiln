@@ -1,0 +1,493 @@
+{
+  "version": "1.0",
+  "techniques": [
+    {
+      "id": 1,
+      "category": "collaborative",
+      "name": "Yes And Building",
+      "description": "Build momentum through positive additions where each idea becomes a launching pad - use prompts like 'Yes and we could also...' or 'Building on that idea...' to create energetic collaborative flow that builds upon previous contributions",
+      "phase": "diverge",
+      "energy": "high"
+    },
+    {
+      "id": 2,
+      "category": "collaborative",
+      "name": "Brain Writing Round Robin",
+      "description": "Silent idea generation followed by building on others' written concepts - gives quieter voices equal contribution while maintaining documentation through the sequence of writing silently, passing ideas, and building on received concepts",
+      "phase": "diverge",
+      "energy": "low"
+    },
+    {
+      "id": 3,
+      "category": "collaborative",
+      "name": "Random Stimulation",
+      "description": "Use random words/images as creative catalysts to force unexpected connections - breaks through mental blocks with serendipitous inspiration by asking how random elements relate, what connections exist, and forcing relationships",
+      "phase": "reframe",
+      "energy": "medium"
+    },
+    {
+      "id": 4,
+      "category": "collaborative",
+      "name": "Role Playing",
+      "description": "Generate solutions from multiple stakeholder perspectives to build empathy while ensuring comprehensive consideration - embody different roles by asking what they want, how they'd approach problems, and what matters most to them",
+      "phase": "frame",
+      "energy": "medium"
+    },
+    {
+      "id": 5,
+      "category": "collaborative",
+      "name": "Ideation Relay Race",
+      "description": "Rapid-fire idea building under time pressure creates urgency and breakthroughs - structure with 30-second additions, quick building on ideas, and fast passing to maintain creative momentum and prevent overthinking",
+      "phase": "diverge",
+      "energy": "high"
+    },
+    {
+      "id": 6,
+      "category": "creative",
+      "name": "What If Scenarios",
+      "description": "Explore radical possibilities by questioning all constraints and assumptions - perfect for breaking through stuck thinking using prompts like 'What if we had unlimited resources?' 'What if the opposite were true?' or 'What if this problem didn't exist?'",
+      "phase": "reframe",
+      "energy": "medium"
+    },
+    {
+      "id": 7,
+      "category": "creative",
+      "name": "Analogical Thinking",
+      "description": "Find creative solutions by drawing parallels to other domains - transfer successful patterns by asking 'This is like what?' 'How is this similar to...' and 'What other examples come to mind?' to connect to existing solutions",
+      "phase": "reframe",
+      "energy": "medium"
+    },
+    {
+      "id": 8,
+      "category": "creative",
+      "name": "Reversal Inversion",
+      "description": "Deliberately flip problems upside down to reveal hidden assumptions and fresh angles - great when conventional approaches fail by asking 'What if we did the opposite?' 'How could we make this worse?' and 'What's the reverse approach?'",
+      "phase": "reframe",
+      "energy": "medium"
+    },
+    {
+      "id": 9,
+      "category": "creative",
+      "name": "First Principles Thinking",
+      "description": "Strip away assumptions to rebuild from fundamental truths - essential for breakthrough innovation by asking 'What do we know for certain?' 'What are the fundamental truths?' and 'If we started from scratch?'",
+      "phase": "frame",
+      "energy": "low"
+    },
+    {
+      "id": 10,
+      "category": "creative",
+      "name": "Forced Relationships",
+      "description": "Connect unrelated concepts to spark innovative bridges through creative collision - take two unrelated things, find connections between them, identify bridges, and explore how they could work together to generate unexpected solutions",
+      "phase": "diverge",
+      "energy": "medium"
+    },
+    {
+      "id": 11,
+      "category": "creative",
+      "name": "Time Shifting",
+      "description": "Explore solutions across different time periods to reveal constraints and opportunities by asking 'How would this work in the past?' 'What about 100 years from now?' 'Different era constraints?' and 'What time-based solutions apply?'",
+      "phase": "reframe",
+      "energy": "medium"
+    },
+    {
+      "id": 12,
+      "category": "creative",
+      "name": "Metaphor Mapping",
+      "description": "Use extended metaphors as thinking tools to explore problems from new angles - transforms abstract challenges into tangible narratives by asking 'This problem is like a metaphor,' extending the metaphor, and mapping elements to discover insights",
+      "phase": "reframe",
+      "energy": "medium"
+    },
+    {
+      "id": 13,
+      "category": "creative",
+      "name": "Cross-Pollination",
+      "description": "Transfer solutions from completely different industries or domains to spark breakthrough innovations by asking how industry X would solve this, what patterns work in field Y, and how to adapt solutions from domain Z",
+      "phase": "diverge",
+      "energy": "medium"
+    },
+    {
+      "id": 14,
+      "category": "creative",
+      "name": "Concept Blending",
+      "description": "Merge two or more existing concepts to create entirely new categories - goes beyond simple combination to genuine innovation by asking what emerges when concepts merge, what new category is created, and how the blend transcends original ideas",
+      "phase": "converge",
+      "energy": "medium"
+    },
+    {
+      "id": 15,
+      "category": "creative",
+      "name": "Reverse Brainstorming",
+      "description": "Generate problems instead of solutions to identify hidden opportunities and unexpected pathways by asking 'What could go wrong?' 'How could we make this fail?' and 'What problems could we create?' to reveal solution insights",
+      "phase": "stress",
+      "energy": "medium"
+    },
+    {
+      "id": 16,
+      "category": "creative",
+      "name": "Sensory Exploration",
+      "description": "Engage all five senses to discover multi-dimensional solution spaces beyond purely analytical thinking by asking what ideas feel, smell, taste, or sound like, and how different senses engage with the problem space",
+      "phase": "diverge",
+      "energy": "high"
+    },
+    {
+      "id": 17,
+      "category": "deep",
+      "name": "Five Whys",
+      "description": "Drill down through layers of causation to uncover root causes - essential for solving problems at source rather than symptoms by asking 'Why did this happen?' repeatedly until reaching fundamental drivers and ultimate causes",
+      "phase": "frame",
+      "energy": "low"
+    },
+    {
+      "id": 18,
+      "category": "deep",
+      "name": "Morphological Analysis",
+      "description": "Systematically explore all possible parameter combinations for complex systems requiring comprehensive solution mapping - identify key parameters, list options for each, try different combinations, and identify emerging patterns",
+      "phase": "converge",
+      "energy": "low"
+    },
+    {
+      "id": 19,
+      "category": "deep",
+      "name": "Provocation Technique",
+      "description": "Use deliberately provocative statements to extract useful ideas from seemingly absurd starting points - catalyzes breakthrough thinking by asking 'What if provocative statement?' 'How could this be useful?' 'What idea triggers?' and 'Extract the principle'",
+      "phase": "reframe",
+      "energy": "high"
+    },
+    {
+      "id": 20,
+      "category": "deep",
+      "name": "Assumption Reversal",
+      "description": "Challenge and flip core assumptions to rebuild from new foundations - essential for paradigm shifts by asking 'What assumptions are we making?' 'What if the opposite were true?' 'Challenge each assumption' and 'Rebuild from new assumptions'",
+      "phase": "reframe",
+      "energy": "medium"
+    },
+    {
+      "id": 21,
+      "category": "deep",
+      "name": "Question Storming",
+      "description": "Generate questions before seeking answers to properly define problem space - ensures solving the right problem by asking only questions, no answers yet, focusing on what we don't know, and identifying what we should be asking",
+      "phase": "frame",
+      "energy": "medium"
+    },
+    {
+      "id": 22,
+      "category": "deep",
+      "name": "Constraint Mapping",
+      "description": "Identify and visualize all constraints to find promising pathways around or through limitations - ask what all constraints exist, which are real vs imagined, and how to work around or eliminate barriers to solution space",
+      "phase": "frame",
+      "energy": "low"
+    },
+    {
+      "id": 23,
+      "category": "deep",
+      "name": "Failure Analysis",
+      "description": "Study successful failures to extract valuable insights and avoid common pitfalls - learns from what didn't work by asking what went wrong, why it failed, what lessons emerged, and how to apply failure wisdom to current challenges",
+      "phase": "stress",
+      "energy": "low"
+    },
+    {
+      "id": 24,
+      "category": "deep",
+      "name": "Emergent Thinking",
+      "description": "Allow solutions to emerge organically without forcing linear progression - embraces complexity and natural development by asking what patterns emerge, what wants to happen naturally, and what's trying to emerge from the system",
+      "phase": "converge",
+      "energy": "low"
+    },
+    {
+      "id": 25,
+      "category": "introspective_delight",
+      "name": "Inner Child Conference",
+      "description": "Channel pure childhood curiosity and wonder to rekindle playful exploration - ask what 7-year-old you would ask, use 'why why why' questioning, make it fun again, and forbid boring thinking to access innocent questioning that cuts through adult complications",
+      "phase": "reframe",
+      "energy": "high"
+    },
+    {
+      "id": 26,
+      "category": "introspective_delight",
+      "name": "Shadow Work Mining",
+      "description": "Explore what you're actively avoiding or resisting to uncover hidden insights - examine unconscious blocks and resistance patterns by asking what you're avoiding, where's resistance, what scares you, and mining the shadows for buried wisdom",
+      "phase": "frame",
+      "energy": "low"
+    },
+    {
+      "id": 27,
+      "category": "introspective_delight",
+      "name": "Values Archaeology",
+      "description": "Excavate deep personal values driving decisions to clarify authentic priorities - dig to bedrock motivations by asking what really matters, why you care, what's non-negotiable, and what core values guide your choices",
+      "phase": "frame",
+      "energy": "low"
+    },
+    {
+      "id": 28,
+      "category": "introspective_delight",
+      "name": "Future Self Interview",
+      "description": "Seek wisdom from wiser future self for long-term perspective - gain temporal self-mentoring by asking your 80-year-old self what they'd tell younger you, how future wisdom speaks, and what long-term perspective reveals",
+      "phase": "reframe",
+      "energy": "medium"
+    },
+    {
+      "id": 29,
+      "category": "introspective_delight",
+      "name": "Body Wisdom Dialogue",
+      "description": "Let physical sensations and gut feelings guide ideation - tap somatic intelligence often ignored by mental approaches by asking what your body says, where you feel it, trusting tension, and following physical cues for embodied wisdom",
+      "phase": "diverge",
+      "energy": "low"
+    },
+    {
+      "id": 30,
+      "category": "introspective_delight",
+      "name": "Permission Giving",
+      "description": "Grant explicit permission to think impossible thoughts and break self-imposed creative barriers - give yourself permission to explore, try, experiment, and break free from limitations that constrain authentic creative expression",
+      "phase": "diverge",
+      "energy": "medium"
+    },
+    {
+      "id": 31,
+      "category": "structured",
+      "name": "SCAMPER Method",
+      "description": "Systematic creativity through seven lenses for methodical product improvement and innovation - Substitute, Combine, Adapt, Modify, Put to other uses, Eliminate, Reverse",
+      "phase": "converge",
+      "energy": "medium"
+    },
+    {
+      "id": 32,
+      "category": "structured",
+      "name": "Six Thinking Hats",
+      "description": "Explore problems through six distinct perspectives without conflict - White Hat (facts), Red Hat (emotions), Yellow Hat (benefits), Black Hat (risks), Green Hat (creativity), Blue Hat (process) to ensure comprehensive analysis from all angles",
+      "phase": "frame",
+      "energy": "medium"
+    },
+    {
+      "id": 33,
+      "category": "structured",
+      "name": "Mind Mapping",
+      "description": "Visually branch ideas from central concept to discover connections and expand thinking - perfect for organizing complex thoughts and seeing big picture by putting main idea in center, branching concepts, and identifying sub-branches",
+      "phase": "diverge",
+      "energy": "low"
+    },
+    {
+      "id": 34,
+      "category": "structured",
+      "name": "Resource Constraints",
+      "description": "Generate innovative solutions by imposing extreme limitations - forces essential priorities and creative efficiency under pressure by asking what if you had only $1, no technology, one hour to solve, or minimal resources only",
+      "phase": "stress",
+      "energy": "medium"
+    },
+    {
+      "id": 35,
+      "category": "structured",
+      "name": "Decision Tree Mapping",
+      "description": "Map out all possible decision paths and outcomes to reveal hidden opportunities and risks - visualizes complex choice architectures by identifying possible paths, decision points, and where different choices lead",
+      "phase": "converge",
+      "energy": "low"
+    },
+    {
+      "id": 36,
+      "category": "structured",
+      "name": "Solution Matrix",
+      "description": "Create systematic grid of problem variables and solution approaches to find optimal combinations and discover gaps - identify key variables, solution approaches, test combinations, and identify most effective pairings",
+      "phase": "converge",
+      "energy": "low"
+    },
+    {
+      "id": 37,
+      "category": "structured",
+      "name": "Trait Transfer",
+      "description": "Borrow attributes from successful solutions in unrelated domains to enhance approach - systematically adapts winning characteristics by asking what traits make success X work, how to transfer these traits, and what they'd look like here",
+      "phase": "reframe",
+      "energy": "medium"
+    },
+    {
+      "id": 38,
+      "category": "theatrical",
+      "name": "Time Travel Talk Show",
+      "description": "Interview past/present/future selves for temporal wisdom - playful method for gaining perspective across different life stages by interviewing past self, asking what future you'd say, and exploring different timeline perspectives",
+      "phase": "reframe",
+      "energy": "high"
+    },
+    {
+      "id": 39,
+      "category": "theatrical",
+      "name": "Alien Anthropologist",
+      "description": "Examine familiar problems through completely foreign eyes - reveals hidden assumptions by adopting outsider's bewildered perspective by becoming alien observer, asking what seems strange, and getting outside perspective insights",
+      "phase": "reframe",
+      "energy": "high"
+    },
+    {
+      "id": 40,
+      "category": "theatrical",
+      "name": "Dream Fusion Laboratory",
+      "description": "Start with impossible fantasy solutions then reverse-engineer practical steps - makes ambitious thinking actionable through backwards design by dreaming impossible solutions, working backwards to reality, and identifying bridging steps",
+      "phase": "diverge",
+      "energy": "high"
+    },
+    {
+      "id": 41,
+      "category": "theatrical",
+      "name": "Emotion Orchestra",
+      "description": "Let different emotions lead separate brainstorming sessions then harmonize - uses emotional intelligence for comprehensive perspective by exploring angry perspectives, joyful approaches, fearful considerations, hopeful solutions, then harmonizing all voices",
+      "phase": "diverge",
+      "energy": "high"
+    },
+    {
+      "id": 42,
+      "category": "theatrical",
+      "name": "Parallel Universe Cafe",
+      "description": "Explore solutions under alternative reality rules - breaks conventional thinking by changing fundamental assumptions about how things work by exploring different physics universes, alternative social norms, changed historical events, and reality rule variations",
+      "phase": "reframe",
+      "energy": "high"
+    },
+    {
+      "id": 43,
+      "category": "theatrical",
+      "name": "Persona Journey",
+      "description": "Embody different archetypes or personas to access diverse wisdom through character exploration - become the archetype, ask how persona would solve this, and explore what character sees that normal thinking misses",
+      "phase": "frame",
+      "energy": "medium"
+    },
+    {
+      "id": 44,
+      "category": "wild",
+      "name": "Chaos Engineering",
+      "description": "Deliberately break things to discover robust solutions - builds anti-fragility by stress-testing ideas against worst-case scenarios by asking what if everything went wrong, breaking on purpose, how it fails gracefully, and building from rubble",
+      "phase": "stress",
+      "energy": "high"
+    },
+    {
+      "id": 45,
+      "category": "wild",
+      "name": "Guerrilla Gardening Ideas",
+      "description": "Plant unexpected solutions in unlikely places - uses surprise and unconventional placement for stealth innovation by asking where's the least expected place, planting ideas secretly, growing solutions underground, and implementing with surprise",
+      "phase": "diverge",
+      "energy": "medium"
+    },
+    {
+      "id": 46,
+      "category": "wild",
+      "name": "Pirate Code Brainstorm",
+      "description": "Take what works from anywhere and remix without permission - encourages rule-bending rapid prototyping and maverick thinking by asking what pirates would steal, remixing without asking, taking best and running, and needing no permission",
+      "phase": "diverge",
+      "energy": "high"
+    },
+    {
+      "id": 47,
+      "category": "wild",
+      "name": "Zombie Apocalypse Planning",
+      "description": "Design solutions for extreme survival scenarios - strips away all but essential functions to find core value by asking what happens when society collapses, what basics work, building from nothing, and thinking in survival mode",
+      "phase": "stress",
+      "energy": "high"
+    },
+    {
+      "id": 48,
+      "category": "wild",
+      "name": "Drunk History Retelling",
+      "description": "Explain complex ideas with uninhibited simplicity - removes overthinking barriers to find raw truth through simplified expression by explaining like you're tipsy, using no filter, sharing raw thoughts, and simplifying to absurdity",
+      "phase": "reframe",
+      "energy": "high"
+    },
+    {
+      "id": 49,
+      "category": "wild",
+      "name": "Anti-Solution",
+      "description": "Generate ways to make the problem worse or more interesting - reveals hidden assumptions through destructive creativity by asking how to sabotage this, what would make it fail spectacularly, and how to create more problems to find solution insights",
+      "phase": "stress",
+      "energy": "medium"
+    },
+    {
+      "id": 50,
+      "category": "wild",
+      "name": "Quantum Superposition",
+      "description": "Hold multiple contradictory solutions simultaneously until best emerges through observation and testing - explores how all solutions could be true simultaneously, how contradictions coexist, and what happens when outcomes are observed",
+      "phase": "converge",
+      "energy": "low"
+    },
+    {
+      "id": 51,
+      "category": "wild",
+      "name": "Elemental Forces",
+      "description": "Imagine solutions being sculpted by natural elements to tap into primal creative energies - explore how earth would sculpt this, what fire would forge, how water flows through this, and what air reveals to access elemental wisdom",
+      "phase": "diverge",
+      "energy": "medium"
+    },
+    {
+      "id": 52,
+      "category": "biomimetic",
+      "name": "Nature's Solutions",
+      "description": "Study how nature solves similar problems and adapt biological strategies to challenge - ask how nature would solve this, what ecosystems provide parallels, and what biological strategies apply to access 3.8 billion years of evolutionary wisdom",
+      "phase": "reframe",
+      "energy": "medium"
+    },
+    {
+      "id": 53,
+      "category": "biomimetic",
+      "name": "Ecosystem Thinking",
+      "description": "Analyze problem as ecosystem to identify symbiotic relationships, natural succession, and ecological principles - explore symbiotic relationships, natural succession application, and ecological principles for systems thinking",
+      "phase": "frame",
+      "energy": "low"
+    },
+    {
+      "id": 54,
+      "category": "biomimetic",
+      "name": "Evolutionary Pressure",
+      "description": "Apply evolutionary principles to gradually improve solutions through selective pressure and adaptation - ask how evolution would optimize this, what selective pressures apply, and how this adapts over time to harness natural selection wisdom",
+      "phase": "converge",
+      "energy": "medium"
+    },
+    {
+      "id": 55,
+      "category": "quantum",
+      "name": "Observer Effect",
+      "description": "Recognize how observing and measuring solutions changes their behavior - uses quantum principles for innovation by asking how observing changes this, what measurement effects matter, and how to use observer effect advantageously",
+      "phase": "reframe",
+      "energy": "low"
+    },
+    {
+      "id": 56,
+      "category": "quantum",
+      "name": "Entanglement Thinking",
+      "description": "Explore how different solution elements might be connected regardless of distance - reveals hidden relationships by asking what elements are entangled, how distant parts affect each other, and what hidden connections exist between solution components",
+      "phase": "converge",
+      "energy": "low"
+    },
+    {
+      "id": 57,
+      "category": "quantum",
+      "name": "Superposition Collapse",
+      "description": "Hold multiple potential solutions simultaneously until constraints force single optimal outcome - leverages quantum decision theory by asking what if all options were possible, what constraints force collapse, and which solution emerges when observed",
+      "phase": "converge",
+      "energy": "medium"
+    },
+    {
+      "id": 58,
+      "category": "cultural",
+      "name": "Indigenous Wisdom",
+      "description": "Draw upon traditional knowledge systems and indigenous approaches overlooked by modern thinking - ask how specific cultures would approach this, what traditional knowledge applies, and what ancestral wisdom guides us to access overlooked problem-solving methods",
+      "phase": "reframe",
+      "energy": "low"
+    },
+    {
+      "id": 59,
+      "category": "cultural",
+      "name": "Fusion Cuisine",
+      "description": "Mix cultural approaches and perspectives like fusion cuisine - creates innovation through cultural cross-pollination by asking what happens when mixing culture A with culture B, what cultural hybrids emerge, and what fusion creates",
+      "phase": "diverge",
+      "energy": "medium"
+    },
+    {
+      "id": 60,
+      "category": "cultural",
+      "name": "Ritual Innovation",
+      "description": "Apply ritual design principles to create transformative experiences and solutions - uses anthropological insights for human-centered design by asking what ritual would transform this, how to make it ceremonial, and what transformation this needs",
+      "phase": "frame",
+      "energy": "medium"
+    },
+    {
+      "id": 61,
+      "category": "cultural",
+      "name": "Mythic Frameworks",
+      "description": "Use myths and archetypal stories as frameworks for understanding and solving problems - taps into collective unconscious by asking what myth parallels this, what archetypes are involved, and how mythic structure informs solution",
+      "phase": "frame",
+      "energy": "medium"
+    }
+  ]
+}

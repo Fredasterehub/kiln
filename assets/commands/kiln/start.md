@@ -113,7 +113,44 @@ Never write free-form status strings.
    `handoff_context` = `All five memory files instantiated from templates. Project is ready for brainstorming.`
    `last_updated` = current ISO-8601 UTC timestamp.
 
-5. Ask for debate mode.
+5. Ask for brainstorm depth.
+   Ask the user exactly this prompt:
+   "What brainstorm depth would you like?
+     1 = Light (quick, focused — idea floor: 10)
+     2 = Standard (balanced exploration — idea floor: 30) [default]
+     3 = Deep (comprehensive — idea floor: 100)
+
+   Press Enter to accept the default (2)."
+   Store the response as `BRAINSTORM_DEPTH`.
+   If the user presses Enter or returns an empty response, set `BRAINSTORM_DEPTH = standard`.
+   Map: `1` = `light`, `2` = `standard`, `3` = `deep`.
+   If the response is not `1`, `2`, or `3`, re-prompt once.
+   If the second response is still invalid, set `BRAINSTORM_DEPTH = standard`.
+   Record `brainstorm_depth` in `MEMORY_DIR/MEMORY.md`.
+   After recording it, keep:
+   `stage` = `brainstorm`
+   `status` = `in_progress`
+   `handoff_note` = `Brainstorm depth set to <BRAINSTORM_DEPTH>; spawning brainstormer.`
+   `handoff_context` = `Brainstorm depth <BRAINSTORM_DEPTH> selected by operator. About to spawn Da Vinci for structured brainstorm session.`
+   Update `last_updated`.
+
+6. Spawn brainstormer agent.
+   Read the current contents of `MEMORY_DIR/vision.md` into `EXISTING_VISION`.
+   Spawn `kiln-brainstormer` via the Task tool:
+   `name`: `"Da Vinci"` (the alias)
+   `subagent_type`: `kiln-brainstormer`
+   `description`: (next quote from names.json quotes array for kiln-brainstormer)
+   Task prompt must include:
+   `project_path` = `$PROJECT_PATH`
+   `memory_dir` = `$MEMORY_DIR`
+   `kiln_dir` = `$KILN_DIR`
+   `brainstorm_depth` = `$BRAINSTORM_DEPTH`
+   `existing_vision` = full contents of `$EXISTING_VISION`
+   Instruction: "Run a complete brainstorm session. Facilitate idea generation using techniques and elicitation methods. Write vision.md with all 11 required sections. Update MEMORY.md checkpoints. Signal completion when the quality gate passes."
+   Wait for completion.
+   After Da Vinci returns, read the updated `MEMORY_DIR/vision.md` to confirm it was written.
+
+6.5. Ask for debate mode.
    Ask the user exactly this prompt:
    "What debate mode would you like for planning?
      1 = Skip (no debate — synthesize immediately)
@@ -129,46 +166,21 @@ Never write free-form status strings.
    After recording it, keep:
    `stage` = `brainstorm`
    `status` = `in_progress`
-   `handoff_note` = `Debate mode set to <DEBATE_MODE>; continuing brainstorming.`
-   `handoff_context` = `Debate mode <DEBATE_MODE> selected by operator. Brainstorming conversation not yet started.`
+   `handoff_note` = `Debate mode set to <DEBATE_MODE>; brainstorm complete, pre-flight next.`
+   `handoff_context` = `Debate mode <DEBATE_MODE> selected by operator. Brainstorm session complete. Vision captured. Pre-flight check next.`
    Update `last_updated`.
-
-6. Run brainstorming conversation.
-   Start with this opening question:
-   "Let's define the project vision. Tell me: what are you building, who is it for, and what problem does it solve?"
-   Continue interactively.
-   Ask follow-up questions to capture:
-   Goals and success criteria.
-   Constraints such as time, budget, team size, and technology restrictions.
-   Tech stack preferences or hard requirements.
-   Known risks and unknowns.
-   Every approximately 5 exchanges, perform a silent checkpoint.
-   At each checkpoint:
-   Update `MEMORY_DIR/vision.md` with key points captured so far.
-   Keep `stage` = `brainstorm` and `status` = `in_progress`.
-   Update `handoff_note` to `Brainstorm checkpoint <N> captured.`
-   Update `handoff_context` with a 2-4 sentence summary of key points discussed so far, including any decisions made, constraints identified, and open questions remaining.
-   Update `last_updated`.
-   Increment `N` each time.
-   Do not interrupt conversational flow to announce the checkpoint unless necessary.
-   Continue until the user indicates completion.
-   Completion cues include phrases like:
-   "done"
-   "that's it"
-   "let's move on"
-   "ready to plan"
-   When complete, write final `MEMORY_DIR/vision.md` with a complete structure including:
-   Problem statement.
-   Goals.
-   Target users and stakeholders.
-   Constraints.
-   Tech stack decisions.
-   Open questions.
-   Ensure the vision content is concrete and non-empty.
 
 7. Run pre-flight checklist.
    Verify each requirement before Stage 2:
-   `vision.md` is non-empty and includes at least a problem statement.
+   `vision.md` is non-empty and contains all required sections:
+   `## Problem Statement`
+   `## Target Users`
+   `## Goals`
+   `## Constraints`
+   `## Tech Stack`
+   `## Open Questions`
+   `## Elicitation Log` (must have at least one method entry)
+   No section contains placeholder text (`_To be filled_`, `_TBD_`, `_To be filled during brainstorm._`).
    `DEBATE_MODE` is one of `1`, `2`, or `3`.
    `$KILN_DIR/` exists.
    A git repository is initialized in `PROJECT_PATH`.

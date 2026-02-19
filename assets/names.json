@@ -111,5 +111,16 @@
       "Elementaire mon cher Watson",
       "The world is full of things no one observes"
     ]
+  },
+  "kiln-brainstormer": {
+    "alias": "Da Vinci",
+    "role": "brainstorm facilitator",
+    "quotes": [
+      "Learning never exhausts the mind",
+      "Simplicity is the ultimate sophistication",
+      "The noblest pleasure is the joy of understanding",
+      "Study without desire spoils the memory",
+      "Every obstacle yields to stern resolve"
+    ]
   }
 }
