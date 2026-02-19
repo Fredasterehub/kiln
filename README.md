@@ -21,16 +21,7 @@
 
 <br>
 
-```
-npx kilntwo install
-```
-
-> [!NOTE]
-> Not published to npm yet. Clone and install manually for now.
-
-<br>
-
-[The Story](#the-story) · [How It Works](#how-it-works) · [Get Started](#get-started) · [The Crew](#the-crew) · [Commands](#commands)
+[The Story](#the-story) · [Recent Changes](#recent-changes) · [Get Started](#get-started) · [How It Works](#how-it-works) · [The Crew](#the-crew) · [Commands](#commands)
 
 </div>
 
@@ -48,53 +39,15 @@ And it cooks. For hours. Autonomously. Planning, debating, implementing, reviewi
 
 I think this might be the new way to do it. Less scaffolding, more trust. But time will tell.
 
-> This is the lightweight rewrite of [kiln v1](https://github.com/Fredasterehub/kiln). Same workflow, fraction of the weight. Where v1 had 35 skills and 13 agents with deep guardrails, this has 10 agents, 3 commands, and a protocol block. The models got better. The framework got smaller.
-
----
-
-## How It Works
-
-Two stages are yours. The rest run on their own.
-
-<table>
-<tr>
-<td align="center" width="40"><b>1</b></td>
-<td width="140"><b>Brainstorm</b></td>
-<td>You and the orchestrator explore the problem. Goals, constraints, success criteria — nailed down before anything moves.</td>
-</tr>
-<tr>
-<td align="center"><b>2</b></td>
-<td><b>Planning</b></td>
-<td>Two models plan in parallel. Confucius (Claude) and Sun Tzu (GPT-5.2) each write independent plans. Socrates debates the disagreements. Plato merges them into one master plan. You review and approve.</td>
-</tr>
-<tr><td colspan="3"></td></tr>
-<tr>
-<td align="center"><b>3</b></td>
-<td><b>Execution</b></td>
-<td>Phase by phase. Scheherazade turns each phase into surgical task prompts. Codex implements them with GPT-5.3-codex. Sphinx reviews everything — up to 3 rounds. Maestro orchestrates the whole lifecycle.</td>
-</tr>
-<tr>
-<td align="center"><b>4</b></td>
-<td><b>Validation</b></td>
-<td>Argus runs end-to-end tests. Full report. If something fails, the pipeline re-enters execution for that phase only.</td>
-</tr>
-<tr>
-<td align="center"><b>5</b></td>
-<td><b>Delivery</b></td>
-<td>Summary of everything built, tested, and committed. You approve. Done.</td>
-</tr>
-</table>
-
-> [!TIP]
-> Session state persists across context resets through memory files. Run `/kiln:reset` before clearing, `/kiln:resume` to pick up exactly where you left off.
+> This is the lightweight rewrite of [kiln v1](https://github.com/Fredasterehub/kiln/tree/master). Same workflow, fraction of the weight. Where v1 had 35 skills and 13 agents with deep guardrails, this has 10 agents, 3 commands, and a protocol block. The models got better. The framework got smaller.
 
 ---
 
 ## Get Started
 
 ```bash
-git clone https://github.com/Fredasterehub/kilntwo.git
-cd kilntwo
+git clone https://github.com/Fredasterehub/kiln.git
+cd kiln && git checkout v2
 npm install -g .
 kilntwo install
 ```
@@ -105,9 +58,11 @@ Then in Claude Code:
 /kiln:start
 ```
 
+> [!NOTE]
+> Not published to npm yet. Clone and install manually for now.
+
 <details>
 <summary><b>Prerequisites</b></summary>
-
 <br>
 
 | Tool | Install | Required? |
@@ -124,23 +79,58 @@ claude --dangerously-skip-permissions
 
 > [!CAUTION]
 > Only use this in projects you trust.
-
-<br>
 </details>
 
 <details>
 <summary><b>Verify installation</b></summary>
-
 <br>
 
 ```bash
 kilntwo doctor
 ```
 
-Checks Node version, Claude CLI, Codex CLI, directory permissions, and manifest integrity.
-
-<br>
+Checks Node version, Claude CLI, Codex CLI, directory permissions, and manifest integrity. Works on macOS, Linux, and Windows.
 </details>
+
+---
+
+## Recent Changes
+
+> [!NOTE]
+> **Hardening Pass** (2026-02-19)
+>
+> Four parallel GPT-5.3-codex agents rewrote the internals. Opus 4.6 QA'd the result. Fixed the bugs that would have bitten first real users.
+
+**Memory schema unified.** Start, resume, reset, and the protocol now write and read the exact same schema. Before this, a clean start-reset-resume cycle would fail because each command used different field names and status values. Single canonical enum set: `stage` (brainstorm|planning|execution|validation|complete), `status` (in_progress|paused|blocked|complete), `planning_sub_stage`, `phase_status`. ([`assets/templates/MEMORY.md`](assets/templates/MEMORY.md), [`assets/protocol.md`](assets/protocol.md), [`assets/commands/kiln/`](assets/commands/kiln/))
+
+**Path contract enforced.** Every agent and command now anchors paths to `$PROJECT_PATH/.kiln/` or `$HOME/.claude/`. Agent docs had `memory_dir` examples pointing to `.kiln/memory` inside the project instead of Claude's per-project memory directory. Fixed across all 10 agents. ([`assets/agents/`](assets/agents/))
+
+**Lossless update.** `kilntwo update` no longer nukes user-edited agent files. It compares checksums against the manifest and skips files you've customized, unless you pass `--force`. Reports what was updated vs skipped. ([`src/update.js`](src/update.js))
+
+**Deterministic uninstall.** `kilntwo uninstall` used to call `removeProtocol(process.cwd() + '/CLAUDE.md')` — run it from the wrong directory and it strips the protocol from an unrelated project. Now reads the installed path from the manifest. ([`src/uninstall.js`](src/uninstall.js))
+
+**Cross-platform doctor.** Replaced `which` (POSIX-only) with `command -v` / `where`. `encodeProjectPath` now strips Windows-invalid characters. ([`src/doctor.js`](src/doctor.js), [`src/paths.js`](src/paths.js))
+
+**Asset lint test.** A regression guard that scans every markdown and JSON file in `assets/` for bare root-anchored paths, blank Codex CLI placeholders, and erased template variables. Catches prompt rot before it ships. ([`test/assets-lint.test.js`](test/assets-lint.test.js))
+
+**53 tests &rarr; 64 tests.** New coverage for lossless update, manifest-targeted uninstall, cross-platform CLI detection, path encoding, and asset linting.
+
+---
+
+## How It Works
+
+Two stages are yours. The rest run on their own.
+
+| Stage | Name | What happens |
+|:---:|---|---|
+| **1** | **Brainstorm** | You and the orchestrator explore the problem. Goals, constraints, success criteria — nailed down before anything moves. |
+| **2** | **Planning** | Two models plan in parallel. Confucius (Claude) and Sun Tzu (GPT-5.2) write independent plans. Socrates debates the disagreements. Plato merges them. You review and approve. |
+| **3** | **Execution** | Phase by phase. Scheherazade writes task prompts. Codex implements with GPT-5.3-codex. Sphinx reviews — up to 3 rounds. Maestro orchestrates. |
+| **4** | **Validation** | Argus runs end-to-end tests. If something fails, the pipeline re-enters execution for that phase only. |
+| **5** | **Delivery** | Summary of everything built, tested, and committed. You approve. Done. |
+
+> [!TIP]
+> Session state persists across context resets through memory files. Run `/kiln:reset` before clearing, `/kiln:resume` to pick up exactly where you left off.
 
 ---
 
@@ -157,65 +147,33 @@ Every agent has a name. Not for decoration — for the logs.
 | **Scheherazade** | kiln-prompter | GPT-5.2 | Turns plans into surgical per-task prompts |
 | **Codex** | kiln-implementer | GPT-5.3-codex | Writes the actual code, task by task |
 | **Sphinx** | kiln-reviewer | Opus 4.6 | Reviews everything — correctness, security, completeness |
-| **Maestro** | kiln-phase-executor | Opus 4.6 | Runs the full phase lifecycle: plan, prompt, implement, review, merge |
+| **Maestro** | kiln-phase-executor | Opus 4.6 | Runs the full phase lifecycle |
 | **Argus** | kiln-validator | Opus 4.6 | E2E validation — runs your tests, writes the report |
 | **Sherlock** | kiln-researcher | Haiku | Fast lookups — docs, codebase, web |
-
-> Confucius and Sun Tzu plan the same thing independently. Socrates makes them debate it. Plato synthesizes. Scheherazade turns it into stories Codex can execute. Sphinx guards the gate. Maestro conducts the orchestra. Argus watches everything at the end. And Sherlock finds whatever anyone needs, fast.
 
 ---
 
 ## Commands
 
-Three commands. That's the whole interface.
-
-<table>
-<tr>
-<td width="50%">
-
-```
-/kiln:start
-```
-Initialize a new project — brainstorm, plan, execute, ship
-
-</td>
-<td width="50%">
-
-```
-/kiln:resume
-```
-Pick up where you left off after a context reset
-
-</td>
-</tr>
-<tr>
-<td colspan="2">
-
-```
-/kiln:reset
-```
-Save state to memory and prepare for `/clear`
-
-</td>
-</tr>
-</table>
-
-<br>
-
-**CLI tools:**
+Three slash commands. One CLI with four verbs. That's the interface.
 
 | Command | What it does |
 |---------|-------------|
+| `/kiln:start` | Light the kiln — brainstorm, plan, execute, ship |
+| `/kiln:resume` | Pick up where you left off after a context reset |
+| `/kiln:reset` | Save state to memory and prepare for `/clear` |
+
+| CLI | What it does |
+|-----|-------------|
 | `kilntwo install` | Drops agents, commands, and protocol into `~/.claude/` |
-| `kilntwo uninstall` | Deterministic removal — targets the correct project regardless of cwd |
-| `kilntwo update` | Lossless upgrade — preserves your agent edits unless `--force` |
-| `kilntwo doctor` | Pre-flight check — cross-platform CLI detection, manifest integrity |
+| `kilntwo uninstall` | Deterministic removal — targets the correct project |
+| `kilntwo update` | Lossless upgrade — preserves your agent edits |
+| `kilntwo doctor` | Cross-platform pre-flight check |
 
 ---
 
 <details>
 <summary><b>Project structure</b></summary>
-
 <br>
 
 ```
@@ -227,8 +185,8 @@ kilntwo/
 │   ├── markers.js          Protocol block in CLAUDE.md
 │   ├── install.js          Idempotent, manifest-aware install
 │   ├── uninstall.js        Manifest-driven clean removal
-│   ├── update.js           Version-aware upgrade
-│   └── doctor.js           Health checks
+│   ├── update.js           Lossless version-aware upgrade
+│   └── doctor.js           Cross-platform health checks
 ├── assets/
 │   ├── agents/             10 agent definitions
 │   ├── commands/kiln/      3 slash commands
@@ -239,31 +197,10 @@ kilntwo/
 ```
 
 After install, your `~/.claude/` gets the agents and commands. Your project's `CLAUDE.md` gets the protocol block. That's all Kiln touches.
-
-<br>
 </details>
 
 <details>
-<summary><b>Troubleshooting</b></summary>
-
-<br>
-
-**`codex: command not found`** — `npm install -g @openai/codex`, then verify with `codex --version`.
-
-**Commands don't show in Claude Code** — Run `kilntwo install` and restart Claude Code. Still nothing? `kilntwo doctor`.
-
-**`model_reasoning_effort` flag rejected** — Older Codex CLI. Upgrade: `npm install -g @openai/codex`.
-
-**Pipeline halts with "escalate to operator"** — A phase failed 3 QA rounds. Check `.kiln/reviews/fix_round_3.md`, fix manually, then `/kiln:resume`.
-
-**`uninstall` didn't remove protocol** — Prior to v0.1.1, uninstall targeted `process.cwd()` instead of the installed project. Upgrade and re-run `kilntwo uninstall`.
-
-<br>
-</details>
-
-<details>
-<summary><b>v1 vs v2 — what changed</b></summary>
-
+<summary><b>v1 vs v2</b></summary>
 <br>
 
 | | v1 (kiln) | v2 (kilntwo) |
@@ -278,8 +215,21 @@ After install, your `~/.claude/` gets the agents and commands. Your project's `C
 | Lines of config | ~4,000 | ~1,200 |
 
 Same pipeline. Same multi-model debate. Same QA gates. A third of the surface area.
+</details>
 
+<details>
+<summary><b>Troubleshooting</b></summary>
 <br>
+
+**`codex: command not found`** — `npm install -g @openai/codex`, then verify with `codex --version`.
+
+**Commands don't show in Claude Code** — Run `kilntwo install` and restart Claude Code. Still nothing? `kilntwo doctor`.
+
+**`model_reasoning_effort` flag rejected** — Older Codex CLI. Upgrade: `npm install -g @openai/codex`.
+
+**Pipeline halts with "escalate to operator"** — A phase failed 3 QA rounds. Check `.kiln/reviews/fix_round_3.md`, fix manually, then `/kiln:resume`.
+
+**`uninstall` didn't remove protocol** — Prior to v0.1.1, uninstall targeted `process.cwd()` instead of the installed project. Upgrade and re-run `kilntwo uninstall`.
 </details>
 
 ---
