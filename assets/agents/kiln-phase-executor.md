@@ -47,7 +47,15 @@ tools:
 </inputs>
 
 <instructions>
-Execute the lifecycle in this exact order. Do not skip steps. At each milestone, append an event log line to `$KILN_DIR/phase_<phase_number>_state.md` so progress is externally auditable.
+Execute the lifecycle in this exact order. Do not skip steps. At each milestone, append a structured event line to `$KILN_DIR/phase_<phase_number>_state.md` under the `## Events` section using this exact format:
+
+```
+- [ISO-8601] [AGENT_ALIAS] [EVENT_TYPE] — description
+```
+
+Event type enum (use only these values): `setup`, `branch`, `plan_start`, `plan_complete`, `debate_complete`, `synthesis_complete`, `prompt_complete`, `task_start`, `task_success`, `task_retry`, `task_fail`, `review_start`, `review_approved`, `review_rejected`, `fix_start`, `fix_complete`, `merge`, `error`, `halt`
+
+`AGENT_ALIAS` must be the character alias of the agent performing the action (e.g., `Maestro`, `Confucius`, `Codex`). Use `Maestro` for coordinator-level events. Every event line must use exactly one value from the enum above as its `EVENT_TYPE`.
 
 ## Step 1: Setup
 1. Normalize phase metadata before any sub-agent calls.
@@ -76,19 +84,24 @@ Execute the lifecycle in this exact order. Do not skip steps. At each milestone,
    branch: kiln/phase-<N>-<slug>
    phase_start_commit: <SHA from step 4>
    started: <ISO timestamp>
+
+   ## Events
    ```
-8. Immediately append setup event entries, including branch creation/checkout, directory creation, and `phase_start_commit` value, to the same state file.
+8. Immediately append structured events to the `## Events` section:
+   - `- [ISO] [Maestro] [setup] — Phase <N> initialized, directories created`
+   - `- [ISO] [Maestro] [branch] — Created branch kiln/phase-<N>-<slug> from <SHA>`
 
 ## Step 2: Plan
 1. Spawn planning sub-agents in parallel using two separate Task tool calls (use alias as `name`, internal name as `subagent_type`):
    - Spawn `name: "Confucius"`, `subagent_type: kiln-planner-claude`, `description: (next quote from names.json for kiln-planner-claude)` with `phase_description`, `project_path`, `memory_dir`.
    - Spawn `name: "Sun Tzu"`, `subagent_type: kiln-planner-codex`, `description: (next quote from names.json for kiln-planner-codex)` with `phase_description`, `project_path`, `memory_dir`.
-2. Wait for both Task calls to finish before any file checks or downstream actions.
-3. Verify planner outputs exist:
+2. Append event: `- [ISO] [Maestro] [plan_start] — Spawned Confucius and Sun Tzu for phase planning`
+3. Wait for both Task calls to finish before any file checks or downstream actions.
+4. Verify planner outputs exist:
    - `$KILN_DIR/plans/claude_plan.md`
    - `$KILN_DIR/plans/codex_plan.md`
-4. If either plan file is missing:
-   - Append an error event and explicit missing-path details to phase state.
+5. If either plan file is missing:
+   - Append event: `- [ISO] [Maestro] [error] — Missing plan file: <path>`
    - Set state status to `error`.
    - Halt with a clear failure message.
 5. If `debate_mode >= 2`, run debate before synthesis:
@@ -98,20 +111,21 @@ Execute the lifecycle in this exact order. Do not skip steps. At each milestone,
      - `claude_plan_path = $KILN_DIR/plans/claude_plan.md`
      - `codex_plan_path = $KILN_DIR/plans/codex_plan.md`
    - Wait for completion.
-   - Record debate completion in phase state.
-6. Spawn `name: "Plato"`, `subagent_type: kiln-synthesizer`, `description: (next quote from names.json for kiln-synthesizer)` via Task after planner/debater completion:
+   - Append event: `- [ISO] [Socrates] [debate_complete] — Debate resolved (mode <debate_mode>)`
+7. Spawn `name: "Plato"`, `subagent_type: kiln-synthesizer`, `description: (next quote from names.json for kiln-synthesizer)` via Task after planner/debater completion:
    - Pass `project_path`.
    - Pass `plan_type` exactly as `"phase"`.
    - If debate output exists, pass debate resolution path:
      - `$KILN_DIR/plans/debate_resolution.md`
-7. Wait for synthesizer completion, then verify synthesized plan file:
+8. Wait for synthesizer completion, then verify synthesized plan file:
    - Required path: `$KILN_DIR/plans/phase_plan.md`
    - Required condition: file exists and is non-empty.
-8. If synthesized plan is missing or empty:
-   - Append state event with explicit error.
+   - If valid, append event: `- [ISO] [Plato] [synthesis_complete] — Phase plan synthesized`
+9. If synthesized plan is missing or empty:
+   - Append event: `- [ISO] [Maestro] [error] — Synthesized plan missing or empty: $KILN_DIR/plans/phase_plan.md`
    - Set state status to `error`.
    - Halt with a clear failure message.
-9. Append a planning-complete event to phase state once `phase_plan.md` is validated.
+10. Append event: `- [ISO] [Maestro] [plan_complete] — Phase planning finished, plan validated`
 
 ## Step 3: Prompt
 1. Spawn `name: "Scheherazade"`, `subagent_type: kiln-prompter`, `description: (next quote from names.json for kiln-prompter)` via Task:
@@ -126,7 +140,7 @@ Execute the lifecycle in this exact order. Do not skip steps. At each milestone,
    - Set state status to `error`.
    - Halt with a clear failure message.
 5. Sort matched prompt files lexicographically and store the ordered list for Step 4 execution order.
-6. Append prompt-generation completion event to phase state, including prompt count and first/last task file names.
+6. Append event: `- [ISO] [Scheherazade] [prompt_complete] — Generated <count> task prompts (<first> to <last>)`
 
 ## Step 4: Implement
 1. Initialize counters before running tasks:
@@ -134,6 +148,7 @@ Execute the lifecycle in this exact order. Do not skip steps. At each milestone,
    - `tasks_succeeded = 0`
    - `tasks_failed = 0`
 2. For each prompt file in lexicographic order, execute sequentially:
+   - Append event: `- [ISO] [Maestro] [task_start] — Starting task <NN>`
    - Spawn `name: "Codex"`, `subagent_type: kiln-implementer`, `description: (next quote from names.json for kiln-implementer)` via Task.
    - Pass `project_path`.
    - Pass the full absolute prompt path (for example `$KILN_DIR/prompts/task_01.md`).
@@ -146,49 +161,50 @@ Execute the lifecycle in this exact order. Do not skip steps. At each milestone,
    - If result file exists but contains `status: failed`, treat as failed attempt.
    - Otherwise treat as success.
 5. On first failed attempt:
-   - Append retry event to phase state.
+   - Append event: `- [ISO] [Maestro] [task_retry] — Retrying task <NN> (attempt 2)`
    - Retry exactly once with the same Task inputs.
    - Wait for completion and re-check result file using the same rules.
 6. If retry succeeds:
    - Increment `tasks_succeeded`.
-   - Append `task_<N>: succeeded (after retry)` to phase state events.
+   - Append event: `- [ISO] [Codex] [task_success] — Task <NN> succeeded (after retry)`
 7. If retry also fails:
    - Increment `tasks_failed`.
-   - Append failure under a `## Failures` heading in phase state:
-     - `task_<N>: failed`
-   - Append note that human attention is required for `task_<N>`.
+   - Append event: `- [ISO] [Codex] [task_fail] — Task <NN> failed after retry; needs human attention`
    - Continue to next task; do not halt for a single task failure.
 8. If first attempt succeeds (no retry needed):
    - Increment `tasks_succeeded`.
-   - Append `task_<N>: succeeded` event to phase state.
+   - Append event: `- [ISO] [Codex] [task_success] — Task <NN> succeeded`
 9. After all tasks are attempted, evaluate failure ratio:
    - If `tasks_failed > tasks_total / 2`, then:
      - Update state status to `partial-failure`.
-     - Append summary listing failed task IDs.
+     - Append event: `- [ISO] [Maestro] [halt] — Majority failure (<tasks_failed>/<tasks_total>); halting before review`
      - Halt before Step 5.
      - Respond with a clear summary indicating review was skipped due to majority failure.
 10. If failure threshold is not exceeded:
-    - Append implementation summary event with total, succeeded, failed.
+    - Append event: `- [ISO] [Maestro] [task_success] — Implementation complete: <tasks_succeeded>/<tasks_total> succeeded, <tasks_failed> failed`
     - Proceed to Step 5.
 
 ## Step 5: Review
 1. Capture the phase start commit SHA (recorded during Step 1 branch creation) as `phase_start_commit`. If not yet captured, run `git -C $PROJECT_PATH rev-parse HEAD` as the fallback (current HEAD is the branch point when no work has been done yet).
-2. Spawn `name: "Sphinx"`, `subagent_type: kiln-reviewer`, `description: (next quote from names.json for kiln-reviewer)` via Task with:
+2. Append event: `- [ISO] [Maestro] [review_start] — Starting review round 1`
+3. Spawn `name: "Sphinx"`, `subagent_type: kiln-reviewer`, `description: (next quote from names.json for kiln-reviewer)` via Task with:
    - `project_path`
    - `phase_plan_path` = `$KILN_DIR/plans/phase_plan.md`
    - `memory_dir`
    - `review_round` = `1`
    - `phase_start_commit`
-3. Determine review verdict from the Task return string:
+4. Determine review verdict from the Task return string:
    - If the return string starts with `APPROVED`, verdict is `approved`.
    - If the return string starts with `REJECTED`, verdict is `rejected`.
    - Do NOT read a review file for the binary verdict. Files (`$KILN_DIR/reviews/fix_round_<R>.md`) are written by the reviewer only for fix prompts and audit logs; the verdict itself is ephemeral coordination data returned via the Task result.
-4. If verdict is `approved`:
-   - Append review approval event with round count.
+5. If verdict is `approved`:
+   - Append event: `- [ISO] [Sphinx] [review_approved] — Phase approved on round 1`
    - Proceed to Step 6.
-5. If verdict is `rejected`, start fix loop:
+6. If verdict is `rejected`, start fix loop:
+   - Append event: `- [ISO] [Sphinx] [review_rejected] — Phase rejected on round 1`
    - Set round counter `R = 1`.
    - For each rejected round up to 3 total rounds:
+     - Append event: `- [ISO] [Maestro] [fix_start] — Starting fix round <R>`
      - Read the fix prompt file written by the reviewer:
        - `$KILN_DIR/reviews/fix_round_<R>.md`
      - Spawn `name: "Codex"`, `subagent_type: kiln-implementer`, `description: (next quote from names.json for kiln-implementer)` with:
@@ -196,7 +212,9 @@ Execute the lifecycle in this exact order. Do not skip steps. At each milestone,
        - `prompt_path` = `$KILN_DIR/reviews/fix_round_<R>.md`
        - `TASK_NUMBER` = `fix_<R>` (so implementer writes output to `$KILN_DIR/outputs/task_fix_<R>_output.md`)
      - Wait for implementation completion.
+     - Append event: `- [ISO] [Codex] [fix_complete] — Fix round <R> implementation complete`
      - Increment `R`.
+     - Append event: `- [ISO] [Maestro] [review_start] — Starting review round <R>`
      - Spawn `name: "Sphinx"`, `subagent_type: kiln-reviewer`, `description: (next quote from names.json for kiln-reviewer)` again with:
        - `project_path`
        - `phase_plan_path` = `$KILN_DIR/plans/phase_plan.md`
@@ -204,12 +222,11 @@ Execute the lifecycle in this exact order. Do not skip steps. At each milestone,
        - `review_round` = `R`
        - `phase_start_commit`
      - Parse verdict from the Task return string (same APPROVED/REJECTED check as step 3).
-     - If verdict is `approved`, append approval event for round `R` and proceed to Step 6.
-     - If still rejected and `R < 3`, repeat the fix loop.
-6. If verdict is still `rejected` after 3 rejection-fix rounds:
+     - If verdict is `approved`, append event: `- [ISO] [Sphinx] [review_approved] — Phase approved on round <R>` and proceed to Step 6.
+     - If still rejected, append event: `- [ISO] [Sphinx] [review_rejected] — Phase rejected on round <R>` and if `R < 3`, repeat the fix loop.
+7. If verdict is still `rejected` after 3 rejection-fix rounds:
    - Update phase state status to `needs-operator-review`.
-   - Append note explaining that 3 review rounds failed.
-   - Append latest blocking recommendations summary.
+   - Append event: `- [ISO] [Maestro] [halt] — 3 review rounds exhausted; escalating to operator`
    - Halt without merging branch.
 
 ## Step 6: Complete
@@ -222,10 +239,52 @@ Execute the lifecycle in this exact order. Do not skip steps. At each milestone,
    - Replace `status: in_progress` with `status: complete`.
    - If status was previously transitional but approved now, set final status to `complete`.
    - Append `completed: <ISO timestamp>`.
-   - Append merge event identifying source and target branches.
-3. Update project memory at `$MEMORY_DIR/MEMORY.md`:
+   - Append event: `- [ISO] [Maestro] [merge] — Merged kiln/phase-<N>-<slug> into <git_branch_name>`
+3. Archive phase artifacts. Move working directory contents to a permanent archive so the next phase starts with clean working directories:
+   - Create archive directory: `mkdir -p $KILN_DIR/archive/phase_<NN>/` (zero-padded to 2 digits).
+   - Move artifacts using Bash:
+     ```bash
+     mv $KILN_DIR/plans/ $KILN_DIR/archive/phase_<NN>/plans/
+     mv $KILN_DIR/prompts/ $KILN_DIR/archive/phase_<NN>/prompts/
+     mv $KILN_DIR/reviews/ $KILN_DIR/archive/phase_<NN>/reviews/
+     mv $KILN_DIR/outputs/ $KILN_DIR/archive/phase_<NN>/outputs/
+     mv $KILN_DIR/phase_<N>_state.md $KILN_DIR/archive/phase_<NN>/phase_<NN>_state.md
+     ```
+   - Write `$KILN_DIR/archive/phase_<NN>/phase_summary.md` with this schema:
+     ```markdown
+     # Phase <N> Summary
+
+     phase_number: <N>
+     phase_name: <slug>
+     status: complete
+     branch: kiln/phase-<N>-<slug>
+     started: <ISO timestamp from state file>
+     completed: <ISO timestamp>
+     duration_minutes: <computed from started to completed>
+     tasks_total: <count>
+     tasks_succeeded: <count>
+     tasks_failed: <count>
+     review_rounds: <count>
+     review_verdict: approved
+
+     ## What Was Built
+     <one paragraph summarizing what this phase accomplished>
+
+     ## Key Decisions
+     <bullet list of architectural or implementation decisions made during this phase>
+
+     ## Files Changed
+     <list of files created or modified, derived from git diff against phase_start_commit>
+     ```
+   - Recreate clean working directories for the next phase:
+     ```bash
+     mkdir -p $KILN_DIR/plans/ $KILN_DIR/prompts/ $KILN_DIR/reviews/ $KILN_DIR/outputs/
+     ```
+4. Update project memory at `$MEMORY_DIR/MEMORY.md`:
    - Create file if absent.
-   - Append:
+   - Update `handoff_note` to: `Phase <N> complete; merged to <git_branch_name>.`
+   - Update `handoff_context` to a multi-line narrative including: what was built in this phase, how many tasks succeeded/failed, how many review rounds were needed, the branch name, and what the next expected action is (next phase number or validation).
+   - Append under `## Phase Results` (create section if absent):
      ```markdown
      ## Phase <N> — <slug> (complete)
      - Branch: kiln/phase-<N>-<slug>
@@ -233,12 +292,12 @@ Execute the lifecycle in this exact order. Do not skip steps. At each milestone,
      - Key decisions: <bullet list from phase_plan.md or review file>
      - Pitfalls noted: <any failures or retries recorded during this phase>
      ```
-4. Emit structured completion message for team-lead parsing with these exact fields:
+5. Emit structured completion message for team-lead parsing with these exact fields:
    - `phase: <N>`
    - `status: complete`
    - `branch_merged: kiln/phase-<N>-<slug> → <git_branch_name>`
    - `tasks_succeeded: <count>`
    - `tasks_failed: <count>`
    - `review_rounds: <count>`
-5. Ensure completion response is concise, machine-parseable, and consistent with recorded phase state values.
+6. Ensure completion response is concise, machine-parseable, and consistent with recorded phase state values.
 </instructions>

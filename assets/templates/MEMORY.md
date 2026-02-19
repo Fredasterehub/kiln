@@ -17,6 +17,8 @@ phase_total: null
 
 ## Handoff
 handoff_note: No handoff yet - fresh session.
+handoff_context: |
+  Fresh session initialized. No work has been done yet.
 
 ## Phase Statuses
 # Add one line per phase during execution:

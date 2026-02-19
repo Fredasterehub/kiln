@@ -30,7 +30,7 @@ Never use root-relative kiln or claude paths. Always anchor filesystem paths to 
 
 1. **No /compact** — Never use `/compact`. Context management is handled exclusively through session resets and memory file resumption. Compacting loses tool call history that may be needed for debugging.
 
-2. **Memory files are the single source of truth** — `MEMORY.md`, `vision.md`, `master-plan.md`, `decisions.md`, and `pitfalls.md` define project state. Before starting any stage or phase, read these files. After completing any stage or phase, update canonical runtime fields in `MEMORY.md`: `stage`, `status`, `planning_sub_stage`, phase fields, `handoff_note`, and `last_updated`.
+2. **Memory files are the single source of truth** — `MEMORY.md`, `vision.md`, `master-plan.md`, `decisions.md`, and `pitfalls.md` define project state. Before starting any stage or phase, read these files. After completing any stage or phase, update canonical runtime fields in `MEMORY.md`: `stage`, `status`, `planning_sub_stage`, phase fields, `handoff_note`, `handoff_context`, and `last_updated`.
 
 3. **Sub-agent spawning is restricted** — Sub-agents cannot spawn their own sub-agents. Only the phase executor (the top-level orchestrator running Stage 3) may spawn Codex task agents. If a sub-agent needs additional work done, it must return that request to the orchestrator rather than spawning independently.
 
@@ -127,7 +127,8 @@ Required fields:
 - `phase_number`
 - `phase_name`
 - `phase_total`
-- `handoff_note`
+- `handoff_note` — single-line routing hint (< 120 chars) for machine-readable resume routing
+- `handoff_context` — multi-line narrative block providing human-readable detail about current state, progress, and next steps
 
 Optional fields (written at specific stage boundaries):
 - `plan_approved_at` — ISO-8601 timestamp, written at the end of Stage 2 when the operator approves the master plan.
@@ -159,7 +160,12 @@ phase_name: API integration
 phase_total: 4
 
 ## Handoff
-handoff_note: Phase 2 in progress; continue with endpoint contract tests.
+handoff_note: Phase 2 task 3/6 complete; next: implement rate limiter.
+handoff_context: |
+  Phase 2 (API integration) is mid-execution. Tasks 1-3 committed on branch
+  kiln/phase-02-api-integration. Task 3 added auth middleware, passed verification.
+  Task 4 (rate limiter) not started. Phase plan specifies Redis-backed sliding window.
+  No pitfalls. Codex succeeded first attempt on all completed tasks.
 
 ## Phase Statuses
 - phase_number: 1 | phase_name: Foundation setup | phase_status: completed
@@ -183,7 +189,7 @@ Kiln uses `$KILN_DIR/` to store all pipeline artifacts. This directory is manage
 
 ```
 $KILN_DIR/
-  phase_<N>_state.md       — Per-phase state file (branch, commit SHA, events)
+  phase_<N>_state.md       — Per-phase state file (branch, commit SHA, structured events)
   plans/
     claude_plan.md         — Claude planner output
     codex_plan.md          — Codex planner output
@@ -201,6 +207,15 @@ $KILN_DIR/
     task_01_output.md      — Captured Codex output for task 01
     task_01_error.md       — Captured Codex error output for task 01 (if any)
     task_NN_output.md      — (numbered matching task prompts)
+  archive/
+    phase_01/              — Archived artifacts from completed phase 01
+      plans/               — (moved from $KILN_DIR/plans/)
+      prompts/             — (moved from $KILN_DIR/prompts/)
+      reviews/             — (moved from $KILN_DIR/reviews/)
+      outputs/             — (moved from $KILN_DIR/outputs/)
+      phase_01_state.md    — (moved from $KILN_DIR/)
+      phase_summary.md     — Phase completion digest (metrics + outcome)
+    phase_NN/              — (one subdirectory per completed phase)
   validation/
     report.md              — End-to-end validation results
     missing_credentials.md — Environment variables or secrets that were absent
@@ -209,6 +224,14 @@ $KILN_DIR/
 - All paths shown above are absolute placeholders anchored at `$PROJECT_PATH`.
 - Do not delete `$KILN_DIR/` directory contents between phases. The full artifact trail is preserved for debugging and audit purposes.
 - If a file listed above does not exist yet (e.g. `debate_resolution.md` when debate was skipped), the orchestrator treats it as absent and proceeds without error.
+
+**Phase state event schema** — Each `phase_<N>_state.md` contains a `## Events` section with structured log entries in this format:
+
+```
+- [ISO-8601] [AGENT_ALIAS] [EVENT_TYPE] — description
+```
+
+Event type enum: `setup`, `branch`, `plan_start`, `plan_complete`, `debate_complete`, `synthesis_complete`, `prompt_complete`, `task_start`, `task_success`, `task_retry`, `task_fail`, `review_start`, `review_approved`, `review_rejected`, `fix_start`, `fix_complete`, `merge`, `error`, `halt`
 
 ## Development Guidelines
 

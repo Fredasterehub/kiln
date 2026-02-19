@@ -45,6 +45,7 @@ Never write free-form status strings.
    `prompts/`
    `reviews/`
    `outputs/`
+   `archive/`
    `validation/`
    `*_state.md`
    Do not add extra entries.
@@ -52,7 +53,8 @@ Never write free-form status strings.
    After writing this file, update `MEMORY_DIR/MEMORY.md` later in Step 4 (or as soon as `MEMORY_DIR` exists) with:
    `stage` = `brainstorm`
    `status` = `in_progress`
-   `handoff_note` describing that `.kiln` initialization completed.
+   `handoff_note` = `.kiln directory initialized.`
+   `handoff_context` = `Project directory structure created at $KILN_DIR with .gitignore. Memory not yet initialized.`
    Also update `last_updated`.
 
 3. Resolve memory paths.
@@ -91,6 +93,7 @@ Never write free-form status strings.
    `phase_name` = `null`.
    `phase_total` = `null`.
    `handoff_note` = `Memory initialized; ready for brainstorming.`
+   `handoff_context` = `All five memory files instantiated from templates. Project is ready for Stage 1 brainstorming.`
    `last_updated` = current ISO-8601 UTC timestamp.
    Keep `## Phase Statuses` present; leave it empty at initialization.
    If the template uses blank fields instead of placeholders, initialize those fields to empty strings.
@@ -107,6 +110,7 @@ Never write free-form status strings.
    `stage` = `brainstorm`
    `status` = `in_progress`
    `handoff_note` = `Memory initialization complete.`
+   `handoff_context` = `All five memory files instantiated from templates. Project is ready for brainstorming.`
    `last_updated` = current ISO-8601 UTC timestamp.
 
 5. Ask for debate mode.
@@ -126,6 +130,7 @@ Never write free-form status strings.
    `stage` = `brainstorm`
    `status` = `in_progress`
    `handoff_note` = `Debate mode set to <DEBATE_MODE>; continuing brainstorming.`
+   `handoff_context` = `Debate mode <DEBATE_MODE> selected by operator. Brainstorming conversation not yet started.`
    Update `last_updated`.
 
 6. Run brainstorming conversation.
@@ -142,6 +147,7 @@ Never write free-form status strings.
    Update `MEMORY_DIR/vision.md` with key points captured so far.
    Keep `stage` = `brainstorm` and `status` = `in_progress`.
    Update `handoff_note` to `Brainstorm checkpoint <N> captured.`
+   Update `handoff_context` with a 2-4 sentence summary of key points discussed so far, including any decisions made, constraints identified, and open questions remaining.
    Update `last_updated`.
    Increment `N` each time.
    Do not interrupt conversational flow to announce the checkpoint unless necessary.
@@ -189,6 +195,7 @@ Never write free-form status strings.
    `status` = `in_progress`
    `planning_sub_stage` = `dual_plan`
    `handoff_note` = `Pre-flight passed; planning started.`
+   `handoff_context` = `Brainstorming complete. Vision captured in vision.md. Pre-flight checks passed. Dual planners (Confucius + Sun Tzu) about to be spawned with debate mode <DEBATE_MODE>.`
    `last_updated` = current ISO-8601 UTC timestamp.
 
 ---
@@ -261,6 +268,7 @@ Never write free-form status strings.
     `status` = `paused`
     `planning_sub_stage` = `synthesis`
     `handoff_note` = `Master plan synthesized; awaiting user approval.`
+    `handoff_context` = `Both planners produced plans. Debate (mode <DEBATE_MODE>) complete. Plato synthesized a master plan. The operator needs to review and approve before execution begins.`
     `last_updated` = current ISO-8601 UTC timestamp.
 
 11. Present master plan for review.
@@ -285,6 +293,7 @@ Never write free-form status strings.
     `status` = `paused`
     `planning_sub_stage` = `synthesis`
     `handoff_note` = `Planning complete; awaiting execution.`
+    `handoff_context` = `Master plan saved but operator chose to abort before execution. Plan is ready for review at master-plan.md. Resume with /kiln:resume to continue.`
     `last_updated` = current ISO-8601 UTC timestamp.
     Tell the user to run `/kiln:resume` when ready.
     Stop execution immediately.
@@ -299,6 +308,7 @@ Never write free-form status strings.
     `phase_name` -> `null`.
     `phase_total` -> `<total number of phases parsed from master-plan.md>`.
     `handoff_note` -> `Plan approved; execution starting.`
+    `handoff_context` -> `Operator approved the master plan with <phase_total> phases. Execution loop about to begin with phase 1.`
     `plan_approved_at` -> current ISO-8601 timestamp.
     `last_updated` -> current ISO-8601 UTC timestamp.
     Confirm both writes succeeded before moving to execution.
@@ -320,6 +330,7 @@ Never write free-form status strings.
     `phase_name` = `<phase name>`
     `phase_total` = `<total phases>`
     `handoff_note` = `Executing phase <N>: <phase name>.`
+    `handoff_context` = `Phase <N>/<phase_total> (<phase name>) starting. Previous phases: <summary of completed/failed phases from Phase Statuses>. Maestro is about to be spawned to execute this phase.`
     In `## Phase Statuses`, upsert this entry for phase `N` with `phase_status = in_progress`.
     Update `last_updated`.
     Spawn `kiln-phase-executor` via the Task tool.
@@ -348,12 +359,14 @@ Never write free-form status strings.
     `phase_name` = `<phase name>`
     In `## Phase Statuses`, set phase `N` to `phase_status = completed`.
     `handoff_note` = `Phase <N> complete; ready for next phase.`
+    `handoff_context` = `Phase <N> (<phase name>) completed successfully. <one-sentence summary from results>. Next: phase <N+1> or validation if all phases done.`
     `last_updated` = current ISO-8601 UTC timestamp.
     If executor output is placeholder-only, TODO-only, or stub-only:
     Fail that phase.
     Update phase `N` in `## Phase Statuses` to `phase_status = failed`.
     Set `status` = `blocked`.
     Update `handoff_note` with the failure reason and required fix.
+    Update `handoff_context` with detailed failure description: what phase failed, which tasks produced stubs/placeholders, what files were affected, and what the operator needs to fix before retrying.
     Update `last_updated`.
     Report the failure to the user.
     Do not continue to the next phase until corrected.
@@ -376,6 +389,7 @@ Never write free-form status strings.
     `stage` = `validation`
     `status` = `in_progress`
     `handoff_note` = `Validation report generated; finalization pending.`
+    `handoff_context` = `All phases executed. Argus ran E2E validation. Report written to $KILN_DIR/validation/report.md. Finalization step (Stage 5) is next.`
     `last_updated` = current ISO-8601 UTC timestamp.
 
 15. Finalize protocol run.
@@ -387,6 +401,7 @@ Never write free-form status strings.
     `phase_name` -> `null`.
     `completed_at` -> current ISO-8601 timestamp.
     `handoff_note` -> `Protocol run completed successfully.`
+    `handoff_context` -> `All <N> phases completed and validated. Validation report at $KILN_DIR/validation/report.md. Protocol run is finished.`
     `last_updated` -> current ISO-8601 UTC timestamp.
     Count completed phases as `N`.
     Print exactly:
@@ -411,4 +426,4 @@ Never write free-form status strings.
 4. **Use the Task tool for all sub-agents.** Never invoke `kiln-planner-claude`, `kiln-planner-codex`, `kiln-debater`, `kiln-synthesizer`, `kiln-phase-executor`, or `kiln-validator` as slash commands. Spawn each exclusively with the Task tool and complete, self-contained prompts. Always set `name` to the agent's character alias (e.g., `"Confucius"`, `"Maestro"`) and `subagent_type` to the internal name (e.g., `kiln-planner-claude`). This ensures the Claude Code UI shows aliases in the spawn box.
 5. **Parallel where safe, sequential where required.** Run Step 8 planners in parallel. Run all other Task spawns sequentially, waiting for each to finish before starting the next.
 6. **Write working outputs only.** Phase executors must create real files with real content and working code. Placeholders, TODO stubs, and non-functional scaffolds are failures that must be reported before continuing.
-7. **Checkpoint memory after every significant action.** Update canonical runtime fields (`stage`, `status`, `planning_sub_stage`, phase fields, `handoff_note`, `last_updated`, and phase-status entries when applicable) after Step 2, after Step 4, after Step 5, at every brainstorm checkpoint, after Step 7, after Step 10, after Step 12, after each phase in Step 13, after Step 14, and after Step 15.
+7. **Checkpoint memory after every significant action.** Update canonical runtime fields (`stage`, `status`, `planning_sub_stage`, phase fields, `handoff_note`, `handoff_context`, `last_updated`, and phase-status entries when applicable) after Step 2, after Step 4, after Step 5, at every brainstorm checkpoint, after Step 7, after Step 10, after Step 12, after each phase in Step 13, after Step 14, and after Step 15.

@@ -63,6 +63,11 @@ phase_total: <integer or null>
 
 ## Handoff
 handoff_note: <non-empty warm handoff summary that includes what was in progress and the concrete next action>
+handoff_context: |
+  <2-4 sentence narrative describing current session state in detail: what phase/stage
+  is active, what tasks have been completed, what branch is checked out, what the operator
+  was working on, and what specific action should happen next. Include file paths and
+  function names where relevant.>
 
 ## Phase Statuses
 <Preserve existing phase status lines in this exact format when present:>

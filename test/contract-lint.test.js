@@ -52,6 +52,30 @@ function extractPhaseStatePatterns(content) {
   return [...new Set(patterns)];
 }
 
+// Extract the event type enum declared in the executor preamble.
+function extractEventTypeEnum(content) {
+  const enumLine = content.split('\n').find((l) => l.includes('Event type enum'));
+  if (!enumLine) return [];
+  const types = [];
+  const regex = /`([a-z_]+)`/g;
+  let match;
+  while ((match = regex.exec(enumLine)) !== null) {
+    types.push(match[1]);
+  }
+  return types;
+}
+
+// Extract all EVENT_TYPE values used in structured event lines (pattern: [TYPE] —).
+function extractUsedEventTypes(content) {
+  const types = [];
+  const regex = /\[([a-z_]+)\] —/g;
+  let match;
+  while ((match = regex.exec(content)) !== null) {
+    types.push(match[1]);
+  }
+  return [...new Set(types)];
+}
+
 describe('contract lint', () => {
   // Known gaps: spawn-input completeness not checked, padding normalization is approximate.
 
@@ -131,6 +155,71 @@ describe('contract lint', () => {
     assert.ok(
       overlap.length > 0,
       `Phase state filename must match between executor (${JSON.stringify(executorNorm)}) and resume (${JSON.stringify(resumeNorm)})`,
+    );
+  });
+
+  it('event type enum in executor covers all event types used in event lines', () => {
+    const executor = readAsset('agents/kiln-phase-executor.md');
+
+    const enumTypes = extractEventTypeEnum(executor);
+    const usedTypes = extractUsedEventTypes(executor);
+
+    // Enum must be non-empty
+    assert.ok(enumTypes.length > 0, 'Executor must declare an event type enum');
+    assert.ok(usedTypes.length > 0, 'Executor must use at least one structured event type');
+
+    // Every used type must be in the enum
+    const undeclared = usedTypes.filter((t) => !enumTypes.includes(t));
+    assert.deepStrictEqual(
+      undeclared,
+      [],
+      `Event types used in executor but not in enum: ${JSON.stringify(undeclared)}`,
+    );
+
+    // Every enum type should be used at least once (no dead entries)
+    const unused = enumTypes.filter((t) => !usedTypes.includes(t));
+    assert.deepStrictEqual(
+      unused,
+      [],
+      `Event types declared in enum but never used in executor: ${JSON.stringify(unused)}`,
+    );
+  });
+
+  it('event type enum in executor matches enum in protocol', () => {
+    const executor = readAsset('agents/kiln-phase-executor.md');
+    const protocol = readAsset('protocol.md');
+
+    const executorEnum = extractEventTypeEnum(executor);
+    const protocolEnum = extractEventTypeEnum(protocol);
+
+    assert.ok(protocolEnum.length > 0, 'Protocol must declare an event type enum');
+    assert.deepStrictEqual(
+      executorEnum.sort(),
+      protocolEnum.sort(),
+      'Event type enum must match between executor and protocol',
+    );
+  });
+
+  it('archive/ directory exists in protocol tree and start.md gitignore', () => {
+    const protocol = readAsset('protocol.md');
+    const start = readAsset('commands/kiln/start.md');
+
+    // Check protocol tree contains archive/
+    const treeSection = protocol.match(/\$KILN_DIR\/\n([\s\S]*?)```/);
+    assert.ok(treeSection, 'Protocol must contain a $KILN_DIR/ directory tree');
+    assert.ok(
+      /^\s{2}archive\//m.test(treeSection[1]),
+      'Protocol directory tree must include archive/ as a top-level $KILN_DIR subdirectory',
+    );
+
+    // Check gitignore in start.md contains archive/
+    const gitignoreSection = start.substring(
+      start.indexOf('.gitignore'),
+      start.indexOf('Do not add extra entries'),
+    );
+    assert.ok(
+      gitignoreSection.includes('`archive/`'),
+      'start.md gitignore must include archive/',
     );
   });
 

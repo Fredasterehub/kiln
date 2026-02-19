@@ -53,7 +53,8 @@ If the file exists, extract and store these fields:
 - `phase_name` (string; only during `execution`, otherwise absent or `null`)
 - `phase_total` (integer; only during `execution`)
 - `status` (`in_progress`, `paused`, `blocked`, `complete`)
-- `handoff_note` (free text; may be empty)
+- `handoff_note` (single-line routing hint; may be empty)
+- `handoff_context` (multi-line narrative block; may be empty or absent)
 - `debate_mode` (integer `1|2|3`; default `2` if absent)
 - `planning_sub_stage` (`dual_plan`, `debate`, `synthesis`, or `null`)
 - `last_updated` (ISO-8601 string; optional but recommended)
@@ -96,6 +97,13 @@ Handoff: [handoff_note, or "(none)" if empty]
 Include the `Phase` line only when `stage === 'execution'` and `phase_number` is non-null.
 If `phase_total` is absent, render phase as `[phase_number]/? [phase_name]`.
 
+If `handoff_context` is present and non-empty, display it immediately after the banner as a quoted block:
+
+```
+Context:
+  [handoff_context content, indented 2 spaces per line]
+```
+
 After displaying the banner, check whether MEMORY.md contains a `## Reset Notes` section. If it does, parse the `next_action` field from that section. If `next_action` is present and non-empty, display it to the operator immediately after the banner as:
 
 ```
@@ -125,13 +133,23 @@ For `planning`:
 
 For `execution`:
 - Read `MEMORY.md` and build an inventory of phases: for each phase in `master-plan.md`, record `{phase_number, name, status}` where status is one of `completed | in_progress | failed | pending` (derive **from `MEMORY.md`**, not from assumptions).
+- Cross-check against archive: if `$KILN_DIR/archive/phase_<NN>/phase_summary.md` exists for a phase, treat that phase as definitively completed regardless of `MEMORY.md` status (the archive is created only after successful merge).
 - Determine `N` (the next action) automatically:
   - If `MEMORY.md` indicates a phase `N` is `in_progress` (or the `handoff_note` says work was mid-phase), **resume phase `N`**.
   - Else if a phase `N` is `failed`, **retry phase `N`** (trust `handoff_note` for what was happening / what to fix).
   - Else pick the **lowest-numbered `pending`** phase as `N`.
   - Else (no pending/in_progress/failed phases remain), **set stage to `validation` and route to validation**.
 - Load phase context for `N`:
-  - If `$KILN_DIR/phase_<N>_state.md` exists, read it and treat it as the authoritative running log (state file tracks branch name, task success/failure status — not the full plan); **trust `handoff_note` for current state**.
+  - If `$KILN_DIR/phase_<N>_state.md` exists, read it and treat it as the authoritative running log. Parse the `## Events` section to determine the last completed lifecycle step:
+    - Last event type `setup` or `branch` → phase stopped during setup; restart from Step 2 (plan).
+    - Last event type `plan_start`, `plan_complete`, `debate_complete`, or `synthesis_complete` → phase stopped during planning; restart from the next sub-step.
+    - Last event type `prompt_complete` → prompts generated; restart from Step 4 (implement).
+    - Last event type `task_start`, `task_success`, `task_retry`, or `task_fail` → phase stopped mid-implementation; restart from the next incomplete task.
+    - Last event type `review_start`, `review_rejected`, `fix_start`, or `fix_complete` → phase stopped during review; restart from the next review round.
+    - Last event type `review_approved` → review passed; restart from Step 6 (complete/merge).
+    - Last event type `merge` → phase complete; should not be `in_progress`.
+    - Last event type `error` or `halt` → phase stopped on error; trust `handoff_note` for what to fix.
+    Trust `handoff_note` for additional context beyond what structured events convey.
   - Otherwise, extract the full Phase `N` section from `master-plan.md` as the authoritative plan for this phase.
 - Print a one-line status: `"Resuming phase [N]/[phase_total]: [phase_name] — spawning Maestro."`
 - Spawn the next phase executor **immediately** (no permission prompt):
@@ -143,9 +161,10 @@ For `execution`:
     - Full Phase `N` section from `master-plan.md`
     - Full `MEMORY.md`
     - Full `vision.md`
+    - `handoff_context` (if present, for deeper phase context)
     - `PROJECT_PATH`
     - `MEMORY_DIR`
-- After Maestro returns, update `MEMORY.md` with the new phase status and an updated `handoff_note`, then **re-enter this execution routing** to either resume/transition/retry or advance to `validation` automatically.
+- After Maestro returns, update `MEMORY.md` with the new phase status, an updated `handoff_note`, and an updated `handoff_context`, then **re-enter this execution routing** to either resume/transition/retry or advance to `validation` automatically.
 
 For `validation`:
 - Re-read `master-plan.md` and `decisions.md`.
