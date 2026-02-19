@@ -142,7 +142,7 @@ Every agent has a name. Not for decoration — for the logs.
 |---|---|---|---|
 | **Confucius** | kiln-planner-claude | Opus 4.6 | Plans from the Claude side — architecture, edge cases, big picture |
 | **Sun Tzu** | kiln-planner-codex | GPT-5.2 | Plans from the GPT side — catches what Opus misses |
-| **Socrates** | kiln-debater | Opus 4.5 | Makes the two plans argue until they agree |
+| **Socrates** | kiln-debater | Opus 4.6 | Makes the two plans argue until they agree |
 | **Plato** | kiln-synthesizer | Opus 4.6 | Merges plans into one coherent master plan |
 | **Scheherazade** | kiln-prompter | GPT-5.2 | Turns plans into surgical per-task prompts |
 | **Codex** | kiln-implementer | GPT-5.3-codex | Writes the actual code, task by task |
