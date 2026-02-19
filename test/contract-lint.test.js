@@ -52,9 +52,9 @@ function extractPhaseStatePatterns(content) {
   return [...new Set(patterns)];
 }
 
-// Extract the event type enum declared in the executor preamble.
+// Extract the event type enum declared in a file (looks for backtick-quoted enum on a line with "Event type enum" or "event type enum").
 function extractEventTypeEnum(content) {
-  const enumLine = content.split('\n').find((l) => l.includes('Event type enum'));
+  const enumLine = content.split('\n').find((l) => /[Ee]vent type enum/i.test(l));
   if (!enumLine) return [];
   const types = [];
   const regex = /`([a-z_]+)`/g;
@@ -69,6 +69,19 @@ function extractEventTypeEnum(content) {
 function extractUsedEventTypes(content) {
   const types = [];
   const regex = /\[([a-z_]+)\] —/g;
+  let match;
+  while ((match = regex.exec(content)) !== null) {
+    types.push(match[1]);
+  }
+  return [...new Set(types)];
+}
+
+// Extract EVENT_TYPE values from bracketed references like [setup], [branch] in workflow text.
+function extractBracketedEventTypes(content) {
+  const types = [];
+  // Match patterns like: `[event_type]` where event_type is a known-format value
+  // Look for `[word]` patterns that appear alongside event-related context
+  const regex = /`\[([a-z_]+)\]`/g;
   let match;
   while ((match = regex.exec(content)) !== null) {
     types.push(match[1]);
@@ -136,7 +149,7 @@ describe('contract lint', () => {
     const executorState = extractPhaseStatePatterns(executor);
     const resumeState = extractPhaseStatePatterns(resume);
 
-    // Both should reference phase_<N>_state.md
+    // Both should reference phase state file
     assert.ok(
       executorState.some((p) => p.includes('state')),
       `Executor must reference phase state file, found: ${JSON.stringify(executorState)}`,
@@ -158,58 +171,56 @@ describe('contract lint', () => {
     );
   });
 
-  it('event type enum in executor covers all event types used in event lines', () => {
+  it('event type enum in skill covers all event types used in executor', () => {
     const executor = readAsset('agents/kiln-phase-executor.md');
+    const skill = readAsset('skills/kiln-core.md');
 
-    const enumTypes = extractEventTypeEnum(executor);
+    const skillEnum = extractEventTypeEnum(skill);
     const usedTypes = extractUsedEventTypes(executor);
+    const bracketedTypes = extractBracketedEventTypes(executor);
+    const allUsed = [...new Set([...usedTypes, ...bracketedTypes])];
 
-    // Enum must be non-empty
-    assert.ok(enumTypes.length > 0, 'Executor must declare an event type enum');
-    assert.ok(usedTypes.length > 0, 'Executor must use at least one structured event type');
+    // Skill enum must be non-empty
+    assert.ok(skillEnum.length > 0, 'Skill must declare an event type enum');
+    assert.ok(allUsed.length > 0, 'Executor must use at least one event type');
 
     // Every used type must be in the enum
-    const undeclared = usedTypes.filter((t) => !enumTypes.includes(t));
+    const undeclared = allUsed.filter((t) => !skillEnum.includes(t));
     assert.deepStrictEqual(
       undeclared,
       [],
-      `Event types used in executor but not in enum: ${JSON.stringify(undeclared)}`,
+      `Event types used in executor but not in skill enum: ${JSON.stringify(undeclared)}`,
     );
+  });
+
+  it('event type enum in skill is fully covered by executor usage', () => {
+    const executor = readAsset('agents/kiln-phase-executor.md');
+    const skill = readAsset('skills/kiln-core.md');
+
+    const skillEnum = extractEventTypeEnum(skill);
+    const usedTypes = extractUsedEventTypes(executor);
+    const bracketedTypes = extractBracketedEventTypes(executor);
+    const allUsed = [...new Set([...usedTypes, ...bracketedTypes])];
 
     // Every enum type should be used at least once (no dead entries)
-    const unused = enumTypes.filter((t) => !usedTypes.includes(t));
+    const unused = skillEnum.filter((t) => !allUsed.includes(t));
     assert.deepStrictEqual(
       unused,
       [],
-      `Event types declared in enum but never used in executor: ${JSON.stringify(unused)}`,
+      `Event types declared in skill enum but never used in executor: ${JSON.stringify(unused)}`,
     );
   });
 
-  it('event type enum in executor matches enum in protocol', () => {
-    const executor = readAsset('agents/kiln-phase-executor.md');
-    const protocol = readAsset('protocol.md');
-
-    const executorEnum = extractEventTypeEnum(executor);
-    const protocolEnum = extractEventTypeEnum(protocol);
-
-    assert.ok(protocolEnum.length > 0, 'Protocol must declare an event type enum');
-    assert.deepStrictEqual(
-      executorEnum.sort(),
-      protocolEnum.sort(),
-      'Event type enum must match between executor and protocol',
-    );
-  });
-
-  it('archive/ directory exists in protocol tree and start.md gitignore', () => {
-    const protocol = readAsset('protocol.md');
+  it('archive/ directory exists in skill tree and start.md gitignore', () => {
+    const skill = readAsset('skills/kiln-core.md');
     const start = readAsset('commands/kiln/start.md');
 
-    // Check protocol tree contains archive/
-    const treeSection = protocol.match(/\$KILN_DIR\/\n([\s\S]*?)```/);
-    assert.ok(treeSection, 'Protocol must contain a $KILN_DIR/ directory tree');
+    // Check skill tree contains archive/
+    const treeSection = skill.match(/\$KILN_DIR\/\n([\s\S]*?)```/);
+    assert.ok(treeSection, 'Skill must contain a $KILN_DIR/ directory tree');
     assert.ok(
       /^\s{2}archive\//m.test(treeSection[1]),
-      'Protocol directory tree must include archive/ as a top-level $KILN_DIR subdirectory',
+      'Skill directory tree must include archive/ as a top-level $KILN_DIR subdirectory',
     );
 
     // Check gitignore in start.md contains archive/
@@ -223,13 +234,13 @@ describe('contract lint', () => {
     );
   });
 
-  it('gitignore template in start.md covers all $KILN_DIR subdirectories from protocol', () => {
-    const protocol = readAsset('protocol.md');
+  it('gitignore template in start.md covers all $KILN_DIR subdirectories from skill', () => {
+    const skill = readAsset('skills/kiln-core.md');
     const start = readAsset('commands/kiln/start.md');
 
-    // Extract subdirs from the protocol Working Directory Structure tree
-    const treeSection = protocol.match(/\$KILN_DIR\/\n([\s\S]*?)```/);
-    assert.ok(treeSection, 'Protocol must contain a $KILN_DIR/ directory tree');
+    // Extract subdirs from the skill Working Directory Structure tree
+    const treeSection = skill.match(/\$KILN_DIR\/\n([\s\S]*?)```/);
+    assert.ok(treeSection, 'Skill must contain a $KILN_DIR/ directory tree');
 
     const protocolDirs = [];
     const dirRegex = /^\s{2}([a-z]+)\//gm;
@@ -239,10 +250,8 @@ describe('contract lint', () => {
     }
 
     // Extract gitignore entries from start.md
-    // Look for backtick-quoted directory entries after the gitignore write instruction
     const gitignoreEntries = [];
     const entryRegex = /`([a-z]+\/)`/g;
-    // Search in the gitignore section of start.md
     const gitignoreSection = start.substring(
       start.indexOf('.gitignore'),
       start.indexOf('Do not add extra entries'),
@@ -254,8 +263,150 @@ describe('contract lint', () => {
     for (const dir of protocolDirs) {
       assert.ok(
         gitignoreEntries.includes(dir),
-        `Protocol directory '${dir}' must be covered in start.md gitignore, found: ${JSON.stringify(gitignoreEntries)}`,
+        `Skill directory '${dir}' must be covered in start.md gitignore, found: ${JSON.stringify(gitignoreEntries)}`,
       );
     }
+  });
+});
+
+describe('regression tests', () => {
+  it('executor uses lowercase $memory_dir, never $MEMORY_DIR', () => {
+    const executor = readAsset('agents/kiln-phase-executor.md');
+    const lines = executor.split('\n');
+    const violations = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      // Skip the frontmatter and any comments about the convention itself
+      if (/\$MEMORY_DIR/.test(lines[i]) && !/^\s*#/.test(lines[i]) && !lines[i].includes('kiln-core')) {
+        violations.push(`line ${i + 1}: ${lines[i].trim()}`);
+      }
+    }
+
+    assert.deepStrictEqual(
+      violations,
+      [],
+      `Executor must use $memory_dir (lowercase), not $MEMORY_DIR: ${JSON.stringify(violations)}`,
+    );
+  });
+
+  it('no duplicate step numbers in numbered lists across agent files', () => {
+    const agentDir = path.join(ASSETS_DIR, 'agents');
+    const agentFiles = fs.readdirSync(agentDir).filter((f) => f.endsWith('.md'));
+    const failures = [];
+
+    for (const filename of agentFiles) {
+      const content = fs.readFileSync(path.join(agentDir, filename), 'utf8');
+      const lines = content.split('\n');
+
+      // Track numbered items within each section (reset on heading)
+      let currentSection = '';
+      const seenNumbers = new Map(); // section -> Set of numbers
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+
+        // Detect section headers (## or ### level)
+        if (/^#{1,3}\s/.test(line)) {
+          currentSection = line.trim();
+          seenNumbers.set(currentSection, new Set());
+          continue;
+        }
+
+        // Detect numbered list items at the start of a line (e.g., "1.", "5.", "10.")
+        const numMatch = line.match(/^(\d+)\.\s/);
+        if (numMatch) {
+          const num = parseInt(numMatch[1], 10);
+          const sectionNums = seenNumbers.get(currentSection);
+          if (sectionNums) {
+            if (sectionNums.has(num)) {
+              failures.push(`${filename}:${i + 1}: duplicate step number ${num} in section "${currentSection}"`);
+            }
+            sectionNums.add(num);
+          }
+        }
+      }
+    }
+
+    assert.deepStrictEqual(
+      failures,
+      [],
+      `Duplicate step numbers found: ${JSON.stringify(failures)}`,
+    );
+  });
+
+  it('handoff_context appears in protocol required fields, template, reset, and start checkpoints', () => {
+    const protocol = readAsset('protocol.md');
+    const start = readAsset('commands/kiln/start.md');
+    const reset = readAsset('commands/kiln/reset.md');
+
+    const failures = [];
+
+    if (!protocol.includes('handoff_context')) {
+      failures.push('protocol.md does not mention handoff_context');
+    }
+    if (!start.includes('handoff_context')) {
+      failures.push('start.md does not mention handoff_context');
+    }
+    if (!reset.includes('handoff_context')) {
+      failures.push('reset.md does not mention handoff_context');
+    }
+
+    assert.deepStrictEqual(
+      failures,
+      [],
+      `handoff_context missing from: ${JSON.stringify(failures)}`,
+    );
+  });
+
+  it('skill and protocol path contracts are consistent', () => {
+    const skill = readAsset('skills/kiln-core.md');
+    const protocol = readAsset('protocol.md');
+
+    // Both must define the same core path variables
+    const pathVars = ['PROJECT_PATH', 'KILN_DIR', 'CLAUDE_HOME', 'MEMORY_DIR'];
+
+    for (const v of pathVars) {
+      assert.ok(
+        skill.includes(v),
+        `Skill must define path variable ${v}`,
+      );
+      assert.ok(
+        protocol.includes(v),
+        `Protocol must reference path variable ${v}`,
+      );
+    }
+  });
+
+  it('slug example in executor matches the described transform', () => {
+    const executor = readAsset('agents/kiln-phase-executor.md');
+
+    // Find the example line
+    const exampleLine = executor.split('\n').find((l) => l.includes('Example:') && l.includes('authentication'));
+    assert.ok(exampleLine, 'Executor must have a slug example with "authentication"');
+
+    // Extract the input and output from the example
+    const inputMatch = exampleLine.match(/"([^"]+)"/);
+    const outputMatch = exampleLine.match(/`([a-z-]+)`\s*\.?\s*$/);
+
+    assert.ok(inputMatch, 'Example must show input in quotes');
+    assert.ok(outputMatch, 'Example must show output in backticks');
+
+    const input = inputMatch[1];
+    const expectedOutput = outputMatch[1];
+
+    // Apply the documented transform
+    const actual = input
+      .toLowerCase()
+      .replace(/ /g, '-')
+      .replace(/[^a-z0-9-]/g, '')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .substring(0, 30);
+
+    assert.strictEqual(
+      actual,
+      expectedOutput,
+      `Slug example: "${input}" should produce "${actual}" but example shows "${expectedOutput}"`,
+    );
   });
 });

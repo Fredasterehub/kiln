@@ -39,7 +39,7 @@ function resolveManifestClaudeMdPath(manifest) {
 
 function uninstall({ home } = {}) {
   const paths = resolvePaths(home ? home : undefined);
-  const { commandsDir, kilntwoDir, templatesDir, manifestPath } = paths;
+  const { commandsDir, kilntwoDir, skillsDir, templatesDir, manifestPath } = paths;
 
   const manifest = readManifest({ manifestPath });
   if (manifest === null) {
@@ -79,7 +79,7 @@ function uninstall({ home } = {}) {
     removeProtocol(claudeMdPath);
   }
 
-  for (const dirPath of [templatesDir, kilntwoDir, commandsDir]) {
+  for (const dirPath of [templatesDir, skillsDir, kilntwoDir, commandsDir]) {
     try {
       fs.rmdirSync(dirPath);
     } catch (error) {

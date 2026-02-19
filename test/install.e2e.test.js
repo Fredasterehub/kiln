@@ -13,6 +13,7 @@ const { computeChecksum } = require('../src/manifest');
 const REPO_ROOT = path.resolve(__dirname, '..');
 const ASSETS_AGENTS_DIR = path.join(REPO_ROOT, 'assets', 'agents');
 const ASSETS_COMMANDS_DIR = path.join(REPO_ROOT, 'assets', 'commands', 'kiln');
+const ASSETS_SKILLS_DIR = path.join(REPO_ROOT, 'assets', 'skills');
 const ASSETS_TEMPLATES_DIR = path.join(REPO_ROOT, 'assets', 'templates');
 
 function safeRm(dirPath) {
@@ -146,6 +147,7 @@ describe('install E2E', { concurrency: false }, () => {
     const expectedCount =
       listMarkdownFiles(ASSETS_AGENTS_DIR).length +
       listMarkdownFiles(ASSETS_COMMANDS_DIR).length +
+      listMarkdownFiles(ASSETS_SKILLS_DIR).length +
       listMarkdownFiles(ASSETS_TEMPLATES_DIR).length +
       1; // names.json
 

@@ -25,11 +25,12 @@ function resolveInstallTarget(projectPath) {
  * @returns {{ installed: string[], skipped: string[], version: string }}
  */
 function install({ home, force = false, projectPath } = {}) {
-  const { agentsDir, commandsDir, kilntwoDir, templatesDir } = resolvePaths(home);
+  const { agentsDir, commandsDir, kilntwoDir, skillsDir, templatesDir } = resolvePaths(home);
 
   fs.mkdirSync(agentsDir, { recursive: true });
   fs.mkdirSync(commandsDir, { recursive: true });
   fs.mkdirSync(kilntwoDir, { recursive: true });
+  fs.mkdirSync(skillsDir, { recursive: true });
   fs.mkdirSync(templatesDir, { recursive: true });
 
   const installed = [];
@@ -38,6 +39,7 @@ function install({ home, force = false, projectPath } = {}) {
   const copyJobs = [
     { srcDir: path.join(ASSETS_DIR, 'agents'), destDir: agentsDir },
     { srcDir: path.join(ASSETS_DIR, 'commands', 'kiln'), destDir: commandsDir },
+    { srcDir: path.join(ASSETS_DIR, 'skills'), destDir: skillsDir },
     { srcDir: path.join(ASSETS_DIR, 'templates'), destDir: templatesDir },
   ];
 

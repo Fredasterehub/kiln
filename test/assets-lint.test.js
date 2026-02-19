@@ -26,10 +26,10 @@ function listTextAssets(dirPath) {
   return files;
 }
 
-// Extract the $KILN_DIR/ subdirectory names from the protocol Working Directory Structure.
-function extractProtocolDirs() {
-  const protocol = fs.readFileSync(path.join(ASSETS_DIR, 'protocol.md'), 'utf8');
-  const treeMatch = protocol.match(/\$KILN_DIR\/\n([\s\S]*?)```/);
+// Extract the $KILN_DIR/ subdirectory names from the skill Working Directory Structure.
+function extractSkillDirs() {
+  const skill = fs.readFileSync(path.join(ASSETS_DIR, 'skills', 'kiln-core.md'), 'utf8');
+  const treeMatch = skill.match(/\$KILN_DIR\/\n([\s\S]*?)```/);
   if (!treeMatch) return [];
   const dirs = [];
   const dirRegex = /^\s{2}([a-z]+)\//gm;
@@ -76,9 +76,9 @@ describe('asset lint', () => {
     assert.deepStrictEqual(failures, []);
   });
 
-  it('agent $KILN_DIR/<subdir>/ references exist in protocol directory tree', () => {
-    const protocolDirs = extractProtocolDirs();
-    assert.ok(protocolDirs.length > 0, 'Protocol must define at least one $KILN_DIR subdirectory');
+  it('agent $KILN_DIR/<subdir>/ references exist in skill directory tree', () => {
+    const skillDirs = extractSkillDirs();
+    assert.ok(skillDirs.length > 0, 'Skill must define at least one $KILN_DIR subdirectory');
 
     // Scan only agent files for $KILN_DIR/<subdir>/ references
     const agentDir = path.join(ASSETS_DIR, 'agents');
@@ -92,12 +92,24 @@ describe('asset lint', () => {
       let match;
       while ((match = subdirRegex.exec(content)) !== null) {
         const subdir = match[1];
-        if (!protocolDirs.includes(subdir)) {
-          failures.push(`${rel}: references $KILN_DIR/${subdir}/ which is not in protocol directory tree`);
+        if (!skillDirs.includes(subdir)) {
+          failures.push(`${rel}: references $KILN_DIR/${subdir}/ which is not in skill directory tree`);
         }
       }
     }
 
     assert.deepStrictEqual(failures, []);
+  });
+
+  it('skills directory exists and contains kiln-core.md', () => {
+    const skillsDir = path.join(ASSETS_DIR, 'skills');
+    assert.ok(
+      fs.existsSync(skillsDir),
+      'assets/skills/ directory must exist',
+    );
+    assert.ok(
+      fs.existsSync(path.join(skillsDir, 'kiln-core.md')),
+      'assets/skills/kiln-core.md must exist',
+    );
   });
 });
