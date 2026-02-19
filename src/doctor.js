@@ -7,7 +7,17 @@ const { execSync } = require('node:child_process');
 const { resolvePaths } = require('./paths');
 const { readManifest, computeChecksum } = require('./manifest');
 
-function doctor({ home, strict } = {}) {
+function checkCliAvailable(cliName, { platform = process.platform, exec = execSync } = {}) {
+  const lookupCommand = platform === 'win32' ? `where ${cliName}` : `command -v ${cliName}`;
+  try {
+    exec(lookupCommand, { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function doctor({ home, strict, platform = process.platform, exec = execSync } = {}) {
   const checks = [];
   const paths = resolvePaths(home);
 
@@ -29,10 +39,9 @@ function doctor({ home, strict } = {}) {
   }
 
   // b. claude-cli
-  try {
-    execSync('which claude', { stdio: 'ignore' });
+  if (checkCliAvailable('claude', { platform, exec })) {
     checks.push({ name: 'claude-cli', status: 'pass', message: 'claude CLI found' });
-  } catch {
+  } else {
     checks.push({
       name: 'claude-cli',
       status: 'fail',
@@ -41,10 +50,9 @@ function doctor({ home, strict } = {}) {
   }
 
   // c. codex-cli
-  try {
-    execSync('which codex', { stdio: 'ignore' });
+  if (checkCliAvailable('codex', { platform, exec })) {
     checks.push({ name: 'codex-cli', status: 'pass', message: 'codex CLI found' });
-  } catch {
+  } else {
     checks.push({
       name: 'codex-cli',
       status: 'fail',

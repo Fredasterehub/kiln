@@ -31,6 +31,13 @@ describe('encodeProjectPath', () => {
   it('converts /home/user/proj to -home-user-proj', () => {
     assert.strictEqual(encodeProjectPath('/home/user/proj'), '-home-user-proj');
   });
+
+  it('replaces Windows separators and invalid characters', () => {
+    assert.strictEqual(
+      encodeProjectPath('C:\\Users\\dev:team\\my*proj'),
+      'C-Users-dev-team-my-proj'
+    );
+  });
 });
 
 describe('projectMemoryDir', () => {

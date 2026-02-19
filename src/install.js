@@ -3,10 +3,18 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { resolvePaths } = require('./paths');
-const { writeManifest, computeChecksum, readManifest } = require('./manifest');
+const { writeManifest, computeChecksum } = require('./manifest');
 const { insertProtocol } = require('./markers');
 const VERSION = require('../package.json').version;
 const ASSETS_DIR = path.join(__dirname, '..', 'assets');
+
+function resolveInstallTarget(projectPath) {
+  const resolvedProjectPath = path.resolve(projectPath || process.cwd());
+  return {
+    projectPath: resolvedProjectPath,
+    claudeMdPath: path.join(resolvedProjectPath, 'CLAUDE.md'),
+  };
+}
 
 /**
  * @param {object}  [opts={}]
@@ -23,9 +31,6 @@ function install({ home, force = false, projectPath } = {}) {
   fs.mkdirSync(commandsDir, { recursive: true });
   fs.mkdirSync(kilntwoDir, { recursive: true });
   fs.mkdirSync(templatesDir, { recursive: true });
-
-  const priorManifest = readManifest(home) || { files: [] };
-  if (!Array.isArray(priorManifest.files)) priorManifest.files = [];
 
   const installed = [];
   const skipped = [];
@@ -89,11 +94,10 @@ function install({ home, force = false, projectPath } = {}) {
     }
   }
 
-  const resolvedProject = projectPath || process.cwd();
-  const claudeMdPath = path.join(resolvedProject, 'CLAUDE.md');
+  const installTarget = resolveInstallTarget(projectPath);
   const protocolSrc = path.join(ASSETS_DIR, 'protocol.md');
   const protocolContent = fs.readFileSync(protocolSrc, 'utf8');
-  insertProtocol(claudeMdPath, protocolContent, VERSION);
+  insertProtocol(installTarget.claudeMdPath, protocolContent, VERSION);
 
   const paths = resolvePaths(home);
   const files = installed.map((destPath) => ({
@@ -109,6 +113,8 @@ function install({ home, force = false, projectPath } = {}) {
       begin: 'kiln:protocol:begin',
       end: 'kiln:protocol:end',
     },
+    projectPath: installTarget.projectPath,
+    claudeMdPath: installTarget.claudeMdPath,
   }, home);
 
   return { installed, skipped, version: VERSION };

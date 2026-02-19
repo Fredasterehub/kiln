@@ -204,6 +204,15 @@ describe('install E2E', { concurrency: false }, () => {
     }
   });
 
+  it('manifest stores the install target project and CLAUDE.md path', () => {
+    install({ home: tmpHome, projectPath: tmpProject });
+
+    const parsed = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+
+    assert.strictEqual(parsed.projectPath, path.resolve(tmpProject));
+    assert.strictEqual(parsed.claudeMdPath, path.join(path.resolve(tmpProject), 'CLAUDE.md'));
+  });
+
   it('is idempotent — second install produces same file count and checksums', () => {
     const first = install({ home: tmpHome, projectPath: tmpProject });
 

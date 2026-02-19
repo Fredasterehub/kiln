@@ -120,6 +120,20 @@ function validateManifest(data) {
     }
   }
 
+  if (
+    Object.prototype.hasOwnProperty.call(data, 'projectPath') &&
+    (typeof data.projectPath !== 'string' || data.projectPath.length === 0)
+  ) {
+    errors.push('projectPath must be a non-empty string when present');
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(data, 'claudeMdPath') &&
+    (typeof data.claudeMdPath !== 'string' || data.claudeMdPath.length === 0)
+  ) {
+    errors.push('claudeMdPath must be a non-empty string when present');
+  }
+
   return { valid: errors.length === 0, errors };
 }
 

@@ -3,6 +3,29 @@ Execute the Kiln protocol autonomously from the current working directory using 
 
 ---
 
+## Canonical MEMORY.md Schema (Use Everywhere)
+
+`MEMORY.md` must use these exact runtime fields and enum values:
+- `stage`: `brainstorm | planning | execution | validation | complete`
+- `status`: `in_progress | paused | blocked | complete`
+- `planning_sub_stage`: `dual_plan | debate | synthesis | null`
+- `phase_status` (in `## Phase Statuses` entries): `pending | in_progress | failed | completed`
+
+Always update `last_updated` (ISO-8601 UTC) when runtime fields change.
+Never write free-form status strings.
+
+---
+
+## Paths Contract
+
+- `PROJECT_PATH`: absolute project root path for the active run.
+- `KILN_DIR = $PROJECT_PATH/.kiln`.
+- `CLAUDE_HOME = $HOME/.claude`.
+- `MEMORY_DIR = $CLAUDE_HOME/projects/$ENCODED_PATH/memory`.
+- Never use root-relative kiln or claude paths.
+
+---
+
 ## Stage 1: Initialization & Brainstorm
 
 1. Detect project path and initialize git.
@@ -13,10 +36,10 @@ Execute the Kiln protocol autonomously from the current working directory using 
    If that command exits non-zero, run `git init` in `PROJECT_PATH`.
    Confirm git is now initialized before continuing.
 
-2. Create `.kiln/` directory and `.gitignore`.
-   Ensure `<PROJECT_PATH>/.kiln/` exists.
+2. Create `$KILN_DIR/` directory and `.gitignore`.
+   Ensure `$KILN_DIR/` exists.
    Create it if missing.
-   Write or overwrite `<PROJECT_PATH>/.kiln/.gitignore`.
+   Write or overwrite `$KILN_DIR/.gitignore`.
    The file must contain exactly these four lines and nothing else:
    `plans/`
    `prompts/`
@@ -24,7 +47,11 @@ Execute the Kiln protocol autonomously from the current working directory using 
    `outputs/`
    Do not add extra entries.
    Do not add trailing spaces.
-   After writing this file, update `MEMORY_DIR/MEMORY.md` status later in Step 4 or as soon as `MEMORY_DIR` exists, reflecting that `.kiln` initialization completed.
+   After writing this file, update `MEMORY_DIR/MEMORY.md` later in Step 4 (or as soon as `MEMORY_DIR` exists) with:
+   `stage` = `brainstorm`
+   `status` = `in_progress`
+   `handoff_note` describing that `.kiln` initialization completed.
+   Also update `last_updated`.
 
 3. Resolve memory paths.
    Compute `HOME` as the user's home directory.
@@ -35,12 +62,12 @@ Execute the Kiln protocol autonomously from the current working directory using 
    Example:
    `/DEV/myapp` becomes `-DEV-myapp`.
    Compute:
-   `MEMORY_DIR = <HOME>/.claude/projects/<ENCODED_PATH>/memory`.
+   `MEMORY_DIR = $CLAUDE_HOME/projects/<ENCODED_PATH>/memory`.
    Create `MEMORY_DIR` with `mkdir -p` if it does not exist.
    Confirm the directory exists before continuing.
 
 4. Instantiate memory templates.
-   Read templates from `<HOME>/.claude/kilntwo/templates/`.
+   Read templates from `$CLAUDE_HOME/kilntwo/templates/`.
    Process these files:
    `MEMORY.md`
    `vision.md`
@@ -50,12 +77,20 @@ Execute the Kiln protocol autonomously from the current working directory using 
    For each target memory file, first check whether it already exists and contains non-empty content beyond a header.
    If it already has substantial content, do not overwrite it.
    If it is missing or effectively empty, initialize it from the matching template when available.
-   For `MEMORY.md`, fill these fields:
+   For `MEMORY.md`, enforce the canonical schema and fill/update these fields:
    `project_name` = basename of `PROJECT_PATH`.
    `project_path` = full `PROJECT_PATH`.
    `date_started` = today in `YYYY-MM-DD`.
-   `status` = `"brainstorming"`.
-   Preserve other placeholders as-is if present.
+   `stage` = `brainstorm`.
+   `status` = `in_progress`.
+   `planning_sub_stage` = `null`.
+   `debate_mode` = `2` (default until Step 5 finalizes user input).
+   `phase_number` = `null`.
+   `phase_name` = `null`.
+   `phase_total` = `null`.
+   `handoff_note` = `Memory initialized; ready for brainstorming.`
+   `last_updated` = current ISO-8601 UTC timestamp.
+   Keep `## Phase Statuses` present; leave it empty at initialization.
    If the template uses blank fields instead of placeholders, initialize those fields to empty strings.
    For `vision.md`, write template content and leave the body section empty.
    For `master-plan.md`, write template content and leave the body empty.
@@ -66,7 +101,11 @@ Execute the Kiln protocol autonomously from the current working directory using 
    H1 heading of the filename stem.
    One blank line.
    Nothing else.
-   After completing this step, update `MEMORY_DIR/MEMORY.md` status to indicate memory initialization is complete.
+   After completing this step, update `MEMORY_DIR/MEMORY.md`:
+   `stage` = `brainstorm`
+   `status` = `in_progress`
+   `handoff_note` = `Memory initialization complete.`
+   `last_updated` = current ISO-8601 UTC timestamp.
 
 5. Ask for debate mode.
    Ask the user exactly this prompt:
@@ -81,7 +120,11 @@ Execute the Kiln protocol autonomously from the current working directory using 
    If the response is not `1`, `2`, or `3`, re-prompt once.
    If the second response is still invalid, set `DEBATE_MODE = 2`.
    Record `debate_mode` in `MEMORY_DIR/MEMORY.md`.
-   After recording it, update `MEMORY_DIR/MEMORY.md` status accordingly.
+   After recording it, keep:
+   `stage` = `brainstorm`
+   `status` = `in_progress`
+   `handoff_note` = `Debate mode set to <DEBATE_MODE>; continuing brainstorming.`
+   Update `last_updated`.
 
 6. Run brainstorming conversation.
    Start with this opening question:
@@ -95,7 +138,9 @@ Execute the Kiln protocol autonomously from the current working directory using 
    Every approximately 5 exchanges, perform a silent checkpoint.
    At each checkpoint:
    Update `MEMORY_DIR/vision.md` with key points captured so far.
-   Update `MEMORY_DIR/MEMORY.md` status to `"brainstorming — checkpoint N"`.
+   Keep `stage` = `brainstorm` and `status` = `in_progress`.
+   Update `handoff_note` to `Brainstorm checkpoint <N> captured.`
+   Update `last_updated`.
    Increment `N` each time.
    Do not interrupt conversational flow to announce the checkpoint unless necessary.
    Continue until the user indicates completion.
@@ -117,7 +162,7 @@ Execute the Kiln protocol autonomously from the current working directory using 
    Verify each requirement before Stage 2:
    `vision.md` is non-empty and includes at least a problem statement.
    `DEBATE_MODE` is one of `1`, `2`, or `3`.
-   `.kiln/` exists in `PROJECT_PATH`.
+   `$KILN_DIR/` exists.
    A git repository is initialized in `PROJECT_PATH`.
    `MEMORY_DIR` exists and contains all five files:
    `MEMORY.md`
@@ -131,13 +176,18 @@ Execute the Kiln protocol autonomously from the current working directory using 
    If all checks pass, print exactly:
    ```text
    Pre-flight check complete.
-     Project: <PROJECT_PATH>
-     Memory:  <MEMORY_DIR>
-     Debate mode: <DEBATE_MODE>
+     Project: $PROJECT_PATH
+     Memory:  $MEMORY_DIR
+     Debate mode: $DEBATE_MODE
      Vision: ready
    Proceeding to Stage 2: Planning.
    ```
-   After this printout, update `MEMORY_DIR/MEMORY.md` status to reflect that pre-flight passed and planning begins.
+   After this printout, update `MEMORY_DIR/MEMORY.md`:
+   `stage` = `planning`
+   `status` = `in_progress`
+   `planning_sub_stage` = `dual_plan`
+   `handoff_note` = `Pre-flight passed; planning started.`
+   `last_updated` = current ISO-8601 UTC timestamp.
 
 ---
 
@@ -204,7 +254,12 @@ Execute the Kiln protocol autonomously from the current working directory using 
     "Synthesize these inputs into a single authoritative master plan. The master plan must be structured as markdown with these top-level sections: ## Overview, ## Phases (each phase as ### Phase N: Name with Goal, Tasks as a numbered list, and Acceptance Criteria as a checklist), ## Risks, ## Open Questions. Be concrete and actionable — no vague tasks."
     Wait for completion.
     Store output as `MASTER_PLAN`.
-    After storing output, update `MEMORY_DIR/MEMORY.md` status to indicate synthesis complete and awaiting user approval.
+    After storing output, update `MEMORY_DIR/MEMORY.md`:
+    `stage` = `planning`
+    `status` = `paused`
+    `planning_sub_stage` = `synthesis`
+    `handoff_note` = `Master plan synthesized; awaiting user approval.`
+    `last_updated` = current ISO-8601 UTC timestamp.
 
 11. Present master plan for review.
     Display `MASTER_PLAN` to the user in full.
@@ -223,15 +278,27 @@ Execute the Kiln protocol autonomously from the current working directory using 
     Repeat until user provides `yes`, Enter, or `abort`.
     If response is `abort`:
     Write current `MASTER_PLAN` to `MEMORY_DIR/master-plan.md`.
-    Update `MEMORY_DIR/MEMORY.md` status to `"planning complete — awaiting execution"`.
+    Update `MEMORY_DIR/MEMORY.md`:
+    `stage` = `planning`
+    `status` = `paused`
+    `planning_sub_stage` = `synthesis`
+    `handoff_note` = `Planning complete; awaiting execution.`
+    `last_updated` = current ISO-8601 UTC timestamp.
     Tell the user to run `/kiln:resume` when ready.
     Stop execution immediately.
 
 12. Update memory after planning approval.
     Write approved `MASTER_PLAN` to `MEMORY_DIR/master-plan.md`.
     Update `MEMORY_DIR/MEMORY.md` fields:
-    `status` -> `"planning complete"`.
+    `stage` -> `execution`.
+    `status` -> `in_progress`.
+    `planning_sub_stage` -> `null`.
+    `phase_number` -> `null`.
+    `phase_name` -> `null`.
+    `phase_total` -> `<total number of phases parsed from master-plan.md>`.
+    `handoff_note` -> `Plan approved; execution starting.`
     `plan_approved_at` -> current ISO-8601 timestamp.
+    `last_updated` -> current ISO-8601 UTC timestamp.
     Confirm both writes succeeded before moving to execution.
 
 ---
@@ -242,7 +309,17 @@ Execute the Kiln protocol autonomously from the current working directory using 
     Read `MEMORY_DIR/master-plan.md`.
     Parse every section whose heading begins with `### Phase`.
     Keep original order.
+    Set `phase_total` in `MEMORY.md` to the parsed phase count before the loop starts.
     For each phase:
+    Before spawning the executor, update `MEMORY_DIR/MEMORY.md`:
+    `stage` = `execution`
+    `status` = `in_progress`
+    `phase_number` = `N`
+    `phase_name` = `<phase name>`
+    `phase_total` = `<total phases>`
+    `handoff_note` = `Executing phase <N>: <phase name>.`
+    In `## Phase Statuses`, upsert this entry for phase `N` with `phase_status = in_progress`.
+    Update `last_updated`.
     Spawn `kiln-phase-executor` via the Task tool.
     `name`: `"Maestro"` (the alias)
     `subagent_type`: `kiln-phase-executor`
@@ -254,7 +331,7 @@ Execute the Kiln protocol autonomously from the current working directory using 
     `PROJECT_PATH`.
     `MEMORY_DIR`.
     Include this instruction text:
-    "Implement this phase completely. Write working code, create real files, run tests. When done, write a phase summary to `<MEMORY_DIR>/phase-<N>-results.md` with sections: Completed Tasks, Files Created or Modified, Tests Run and Results, Blockers or Issues. Do not proceed to the next phase — stop after this phase is complete."
+    "Implement this phase completely. Write working code, create real files, run tests. When done, write a phase summary to `$MEMORY_DIR/phase-<N>-results.md` with sections: Completed Tasks, Files Created or Modified, Tests Run and Results, Blockers or Issues. Do not proceed to the next phase — stop after this phase is complete."
     Wait for completion before spawning the next phase executor.
     After each phase:
     Read `MEMORY_DIR/phase-<N>-results.md`.
@@ -262,9 +339,20 @@ Execute the Kiln protocol autonomously from the current working directory using 
     Ensure `MEMORY_DIR/MEMORY.md` has a `## Phase Results` section.
     Append a line:
     `- Phase N (<phase name>): complete — <one-sentence summary from results file>`
-    Update `MEMORY_DIR/MEMORY.md` status to `"executing — phase N complete"`.
+    Update `MEMORY_DIR/MEMORY.md`:
+    `stage` = `execution`
+    `status` = `in_progress`
+    `phase_number` = `N`
+    `phase_name` = `<phase name>`
+    In `## Phase Statuses`, set phase `N` to `phase_status = completed`.
+    `handoff_note` = `Phase <N> complete; ready for next phase.`
+    `last_updated` = current ISO-8601 UTC timestamp.
     If executor output is placeholder-only, TODO-only, or stub-only:
     Fail that phase.
+    Update phase `N` in `## Phase Statuses` to `phase_status = failed`.
+    Set `status` = `blocked`.
+    Update `handoff_note` with the failure reason and required fix.
+    Update `last_updated`.
     Report the failure to the user.
     Do not continue to the next phase until corrected.
 
@@ -279,22 +367,32 @@ Execute the Kiln protocol autonomously from the current working directory using 
     `PROJECT_PATH`.
     `MEMORY_DIR`.
     Include this instruction:
-    "Validate that all phases of the master plan have been implemented. For each phase, check that every acceptance criterion is met. Run any test commands referenced in the plan. Output a validation report as markdown with sections: ## Summary (pass/fail), ## Phase Checklist (one row per phase with pass/fail per criterion), ## Issues Found (empty if none), ## Recommendations. Write this report to `<MEMORY_DIR>/validation-report.md`."
+    "Validate that all phases of the master plan have been implemented. For each phase, check that every acceptance criterion is met. Run any test commands referenced in the plan. Output a validation report as markdown with sections: ## Summary (pass/fail), ## Phase Checklist (one row per phase with pass/fail per criterion), ## Issues Found (empty if none), ## Recommendations. Write this report to `$PROJECT_PATH/.kiln/validation/report.md`."
     Wait for completion.
-    Confirm `MEMORY_DIR/validation-report.md` exists and is readable.
-    Update `MEMORY_DIR/MEMORY.md` status to indicate validation complete.
+    Confirm `$PROJECT_PATH/.kiln/validation/report.md` exists and is readable.
+    Update `MEMORY_DIR/MEMORY.md`:
+    `stage` = `validation`
+    `status` = `in_progress`
+    `handoff_note` = `Validation report generated; finalization pending.`
+    `last_updated` = current ISO-8601 UTC timestamp.
 
 15. Finalize protocol run.
     Update `MEMORY_DIR/MEMORY.md` fields:
-    `status` -> `"complete"`.
+    `stage` -> `complete`.
+    `status` -> `complete`.
+    `planning_sub_stage` -> `null`.
+    `phase_number` -> `null`.
+    `phase_name` -> `null`.
     `completed_at` -> current ISO-8601 timestamp.
+    `handoff_note` -> `Protocol run completed successfully.`
+    `last_updated` -> current ISO-8601 UTC timestamp.
     Count completed phases as `N`.
     Print exactly:
     ```text
     Kiln protocol complete.
-      Project: <PROJECT_PATH>
+      Project: $PROJECT_PATH
       Phases completed: <N>
-      Validation report: <MEMORY_DIR>/validation-report.md
+      Validation report: $PROJECT_PATH/.kiln/validation/report.md
 
     Run `kilntwo doctor` to verify your installation health.
     To resume a paused run, use /kiln:resume.
@@ -306,9 +404,9 @@ Execute the Kiln protocol autonomously from the current working directory using 
 ## Key Rules
 
 1. **All paths are dynamic.** Never hardcode paths. Derive every path from `PROJECT_PATH`, `HOME`, and `ENCODED_PATH` from Step 3. The command must work in any project directory.
-2. **Memory is the source of truth.** Before every stage transition, re-read `MEMORY_DIR/MEMORY.md` to confirm current state. If status already equals `"planning complete"` when entering Stage 2, skip to Step 11 using existing `master-plan.md`. If status equals `"executing — phase N complete"`, resume from phase `N+1`.
+2. **Memory is the source of truth.** Before every stage transition, re-read `MEMORY_DIR/MEMORY.md` and trust canonical fields (`stage`, `status`, `planning_sub_stage`, `phase_number`, `phase_total`, and `## Phase Statuses`). If `stage=planning` and `status=paused`, resume planning review at Step 11. If `stage=execution` and `phase_number` is set, resume execution from that phase using `phase_status` values.
 3. **Never skip stages.** Execute Stage 1 before Stage 2 and Stage 2 before Stage 3. The only exception is resumption as described in Rule 2. Use `/kiln:resume` for resumption; do not implement separate resume logic outside these state checks.
 4. **Use the Task tool for all sub-agents.** Never invoke `kiln-planner-claude`, `kiln-planner-codex`, `kiln-debater`, `kiln-synthesizer`, `kiln-phase-executor`, or `kiln-validator` as slash commands. Spawn each exclusively with the Task tool and complete, self-contained prompts. Always set `name` to the agent's character alias (e.g., `"Confucius"`, `"Maestro"`) and `subagent_type` to the internal name (e.g., `kiln-planner-claude`). This ensures the Claude Code UI shows aliases in the spawn box.
 5. **Parallel where safe, sequential where required.** Run Step 8 planners in parallel. Run all other Task spawns sequentially, waiting for each to finish before starting the next.
 6. **Write working outputs only.** Phase executors must create real files with real content and working code. Placeholders, TODO stubs, and non-functional scaffolds are failures that must be reported before continuing.
-7. **Checkpoint memory after every significant action.** Update `MEMORY_DIR/MEMORY.md` status after Step 2, after Step 4, after Step 5, at every brainstorm checkpoint, after Step 7, after Step 10, after Step 12, after each phase in Step 13, after Step 14, and after Step 15.
+7. **Checkpoint memory after every significant action.** Update canonical runtime fields (`stage`, `status`, `planning_sub_stage`, phase fields, `handoff_note`, `last_updated`, and phase-status entries when applicable) after Step 2, after Step 4, after Step 5, at every brainstorm checkpoint, after Step 7, after Step 10, after Step 12, after each phase in Step 13, after Step 14, and after Step 15.

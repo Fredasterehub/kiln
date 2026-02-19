@@ -17,7 +17,10 @@ function resolvePaths(homeOverride) {
 }
 
 function encodeProjectPath(absolutePath) {
-  return absolutePath.split(path.sep).join('-');
+  return String(absolutePath)
+    .replace(/[\\/]+/g, '-')
+    .replace(/[:*?"<>|]/g, '-')
+    .replace(/-+/g, '-');
 }
 
 function projectMemoryDir(homeOverride, projectPath) {

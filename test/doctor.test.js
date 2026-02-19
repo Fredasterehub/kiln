@@ -65,4 +65,34 @@ describe('doctor', () => {
       'checksums check should not be present in non-strict mode'
     );
   });
+
+  it('uses POSIX CLI detection with command -v', () => {
+    const commands = [];
+    const fakeExec = (cmd) => {
+      commands.push(cmd);
+      return '';
+    };
+
+    const result = doctor({ home: tmpHome, strict: false, platform: 'linux', exec: fakeExec });
+
+    assert.ok(commands.includes('command -v claude'));
+    assert.ok(commands.includes('command -v codex'));
+    assert.strictEqual(result.checks.find((c) => c.name === 'claude-cli').status, 'pass');
+    assert.strictEqual(result.checks.find((c) => c.name === 'codex-cli').status, 'pass');
+  });
+
+  it('uses Windows CLI detection with where', () => {
+    const commands = [];
+    const fakeExec = (cmd) => {
+      commands.push(cmd);
+      return '';
+    };
+
+    const result = doctor({ home: tmpHome, strict: false, platform: 'win32', exec: fakeExec });
+
+    assert.ok(commands.includes('where claude'));
+    assert.ok(commands.includes('where codex'));
+    assert.strictEqual(result.checks.find((c) => c.name === 'claude-cli').status, 'pass');
+    assert.strictEqual(result.checks.find((c) => c.name === 'codex-cli').status, 'pass');
+  });
 });

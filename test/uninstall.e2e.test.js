@@ -26,13 +26,15 @@ function safeRm(dirPath) {
 // a `files` array of { path, checksum } entries. writeManifest(data, homeOverride)
 // resolves the target from homeOverride (a string), writing to
 // homeOverride/.claude/kilntwo/manifest.json.
-function writeUninstallManifest(tmpHome, fileEntries) {
+function writeUninstallManifest(tmpHome, fileEntries, options = {}) {
   const data = {
     manifestVersion: 1,
     kilnVersion: '0.1.0',
     installedAt: new Date().toISOString(),
     files: fileEntries,
     protocolMarkers: { begin: 'kiln:protocol:begin', end: 'kiln:protocol:end' },
+    projectPath: options.projectPath || undefined,
+    claudeMdPath: options.claudeMdPath || undefined,
   };
   writeManifest(data, tmpHome);
 }
@@ -40,17 +42,18 @@ function writeUninstallManifest(tmpHome, fileEntries) {
 describe('uninstall E2E', { concurrency: false }, () => {
   let tmpHome;
   let tmpProject;
+  let tmpRandomCwd;
   let paths;
   let originalCwd;
 
   beforeEach(() => {
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'kiln-test-'));
     tmpProject = fs.mkdtempSync(path.join(os.tmpdir(), 'kiln-test-'));
+    tmpRandomCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'kiln-test-'));
 
-    // uninstall() calls removeProtocol(path.join(process.cwd(), 'CLAUDE.md')).
-    // Redirect cwd to a temp project dir so it operates on a temp file.
+    // Ensure uninstall does not rely on process.cwd() for protocol removal.
     originalCwd = process.cwd();
-    process.chdir(tmpProject);
+    process.chdir(tmpRandomCwd);
 
     paths = resolvePaths(tmpHome);
   });
@@ -63,6 +66,7 @@ describe('uninstall E2E', { concurrency: false }, () => {
     }
     safeRm(tmpHome);
     safeRm(tmpProject);
+    safeRm(tmpRandomCwd);
   });
 
   it('returns { error: "not-installed" } when no manifest exists', () => {
@@ -259,5 +263,55 @@ describe('uninstall E2E', { concurrency: false }, () => {
     assert.strictEqual('error' in result, false, 'result should not have an error property');
     assert.strictEqual(result.removed.length, 1);
     assert.strictEqual(result.notFound.length, 0);
+  });
+
+  it('removes protocol from manifest target, not from process.cwd()', () => {
+    const targetClaudePath = path.join(tmpProject, 'CLAUDE.md');
+    const cwdClaudePath = path.join(tmpRandomCwd, 'CLAUDE.md');
+
+    fs.writeFileSync(
+      targetClaudePath,
+      [
+        '# Target Project',
+        '<!-- kiln:protocol:begin v0.1.0 -->',
+        'protocol',
+        '<!-- kiln:protocol:end -->',
+        '',
+      ].join('\n'),
+      'utf8'
+    );
+    fs.writeFileSync(
+      cwdClaudePath,
+      [
+        '# Current Working Directory Project',
+        '<!-- kiln:protocol:begin v0.1.0 -->',
+        'protocol',
+        '<!-- kiln:protocol:end -->',
+        '',
+      ].join('\n'),
+      'utf8'
+    );
+
+    fs.mkdirSync(paths.kilntwoDir, { recursive: true });
+    writeUninstallManifest(tmpHome, [], {
+      projectPath: tmpProject,
+      claudeMdPath: targetClaudePath,
+    });
+
+    uninstall({ home: tmpHome });
+
+    const targetContent = fs.readFileSync(targetClaudePath, 'utf8');
+    const cwdContent = fs.readFileSync(cwdClaudePath, 'utf8');
+
+    assert.strictEqual(
+      targetContent.includes('<!-- kiln:protocol:begin'),
+      false,
+      'protocol block should be removed from the recorded target project CLAUDE.md'
+    );
+    assert.strictEqual(
+      cwdContent.includes('<!-- kiln:protocol:begin'),
+      true,
+      'CLAUDE.md in process.cwd() should be untouched'
+    );
   });
 });

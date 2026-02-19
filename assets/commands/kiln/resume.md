@@ -2,6 +2,22 @@
 
 Restore project context from memory and continue exactly where the last session stopped.
 
+## Canonical MEMORY.md Schema (Expected by Resume)
+
+Runtime fields must use these exact enums:
+- `stage`: `brainstorm | planning | execution | validation | complete`
+- `status`: `in_progress | paused | blocked | complete`
+- `planning_sub_stage`: `dual_plan | debate | synthesis | null`
+- `phase_status` entries under `## Phase Statuses`: `pending | in_progress | failed | completed`
+
+## Paths Contract
+
+- `PROJECT_PATH`: absolute project root path for the active run.
+- `KILN_DIR = $PROJECT_PATH/.kiln`.
+- `CLAUDE_HOME = $HOME/.claude`.
+- `MEMORY_DIR = $CLAUDE_HOME/projects/$ENCODED_PATH/memory`.
+- Never use root-relative kiln or claude paths.
+
 ## Step 1: Detect Project Path
 
 Determine the project path from the current working directory (`process.cwd()`, `$PWD`, or equivalent) and store it as `PROJECT_PATH`.
@@ -13,16 +29,17 @@ If you cannot determine `PROJECT_PATH`, halt immediately and tell the user exact
 Compute the encoded project path using POSIX slash splitting exactly as `absolutePath.split('/').join('-')`:
 1. Split `PROJECT_PATH` on `/`.
 2. Join the parts with `-`.
-3. Use the result to form the memory directory path: `~/.claude/projects/<encoded-path>/memory/`.
+3. Use the result to form `ENCODED_PATH`.
+4. Set `MEMORY_DIR = $CLAUDE_HOME/projects/$ENCODED_PATH/memory/`.
 
 Use this worked example to verify your result:
 `PROJECT_PATH = /DEV/myproject`
 `encoded      = -DEV-myproject`
-`memory dir   = ~/.claude/projects/-DEV-myproject/memory/`
+`MEMORY_DIR   = $CLAUDE_HOME/projects/-DEV-myproject/memory/`
 
 ## Step 3: Read MEMORY.md
 
-Read `<memory-dir>/MEMORY.md`.
+Read `$MEMORY_DIR/MEMORY.md`.
 If the file does not exist, or is empty, halt immediately and output exactly this warning block and nothing else:
 
 ```
@@ -35,26 +52,30 @@ If the file exists, extract and store these fields:
 - `phase_number` (integer; only during `execution`, otherwise absent or `null`)
 - `phase_name` (string; only during `execution`, otherwise absent or `null`)
 - `phase_total` (integer; only during `execution`)
-- `status` (`in-progress`, `paused`, `blocked`)
+- `status` (`in_progress`, `paused`, `blocked`, `complete`)
 - `handoff_note` (free text; may be empty)
-- `debate_mode` (boolean `true`/`false`; default `false` if absent)
+- `debate_mode` (integer `1|2|3`; default `2` if absent)
+- `planning_sub_stage` (`dual_plan`, `debate`, `synthesis`, or `null`)
+- `last_updated` (ISO-8601 string; optional but recommended)
 
-Also read `planning_sub_stage` if present for planning routing.
+Also parse the `## Phase Statuses` section.
+Each entry must be formatted as:
+`- phase_number: <int> | phase_name: <string> | phase_status: <pending|in_progress|failed|completed>`
 
 If `stage` or `status` are missing, or contain unrecognized values, treat MEMORY.md as corrupted, halt immediately, and output exactly:
 
 ```
 [kiln:resume] MEMORY.md is corrupted or incomplete (missing required fields: <list>).
-Run /kiln:start to reinitialize, or manually repair ~/.claude/projects/<encoded>/memory/MEMORY.md.
+Run /kiln:start to reinitialize, or manually repair $CLAUDE_HOME/projects/<encoded>/memory/MEMORY.md.
 ```
 
 ## Step 4: Read Supporting Memory Files
 
 Read these files in parallel (batch reads):
-- `<memory-dir>/vision.md`
-- `<memory-dir>/master-plan.md`
-- `<memory-dir>/decisions.md`
-- `<memory-dir>/pitfalls.md`
+- `$MEMORY_DIR/vision.md`
+- `$MEMORY_DIR/master-plan.md`
+- `$MEMORY_DIR/decisions.md`
+- `$MEMORY_DIR/pitfalls.md`
 
 For each file: if it exists, store the full content. If it does not exist, record it as absent and continue without halting.
 
@@ -88,10 +109,10 @@ For `brainstorm`:
 For `planning`:
 - Re-read `master-plan.md` in full.
 - Read `planning_sub_stage` from MEMORY.md and normalize as follows:
-  - `dual-plan`: two competing plans are being drafted.
+  - `dual_plan`: two competing plans are being drafted.
   - `debate`: plans are being debated; check `debate_mode`.
   - `synthesis`: plans are being merged into the final master plan.
-  - absent or unknown: treat as `dual-plan`.
+  - absent or `null`/unknown: treat as `dual_plan`.
 - Tell the user: "Resuming planning stage ([planning_sub_stage])."
 - Print the current master plan, or state that `master-plan.md` is absent.
 - Invite the user to continue planning.
@@ -104,7 +125,7 @@ For `execution`:
   - Else pick the **lowest-numbered `pending`** phase as `N`.
   - Else (no pending/in_progress/failed phases remain), **set stage to `validation` and route to validation**.
 - Load phase context for `N`:
-  - If `<PROJECT_PATH>/.kiln/phase_<N>.md` exists, read it and treat it as the authoritative running log; **trust `handoff_note` for current state**.
+  - If `$KILN_DIR/phase_<N>.md` exists, read it and treat it as the authoritative running log; **trust `handoff_note` for current state**.
   - Otherwise, extract the full Phase `N` section from `master-plan.md` as the authoritative plan for this phase.
 - Print a one-line status: `"Resuming phase [N]/[phase_total]: [phase_name] — spawning Maestro."`
 - Spawn the next phase executor **immediately** (no permission prompt):
@@ -143,8 +164,9 @@ What would you like to do next?
 
 ## Step 7: Update MEMORY.md
 
-If `stage` is not `complete`, update `<memory-dir>/MEMORY.md`:
-- Set `status` to `in-progress`.
+If `stage` is not `complete`, update `$MEMORY_DIR/MEMORY.md`:
+- Set `status` to `in_progress`.
+- Set `last_updated` to the current ISO-8601 UTC timestamp.
 - Append this line under `## Resume Log` (create the section if it does not exist):
   `- Resumed: <ISO-8601 timestamp>`
 
@@ -152,7 +174,7 @@ Perform this update atomically: read the full current MEMORY.md content, apply b
 
 ## Key Rules
 
-- Treat memory as the sole source of truth. Never infer stage, phase, or status from source files, directory structure, or conversation history; read only from `~/.claude/projects/<encoded>/memory/`.
+- Treat memory as the sole source of truth. Never infer stage, phase, or status from source files, directory structure, or conversation history; read only from `$CLAUDE_HOME/projects/<encoded>/memory/`.
 - If MEMORY.md is missing or corrupted, warn the user and suggest `/kiln:start`. Do not attempt to reconstruct state.
 - Preserve all previous context. Do not re-ask questions that memory already answers.
 - Do not modify any project source files during resume. Keep this command read-only except for the Step 7 MEMORY.md status update.

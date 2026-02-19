@@ -22,11 +22,18 @@ Use `Bash` to compute the encoded project path exactly as:
 ```bash
 echo "$PROJECT_PATH" | sed 's|/|-|g'
 ```
-Store that output as `ENCODED`, then construct `MEMORY_DIR="$HOME/.claude/projects/$ENCODED/memory"` to match the Kiln memory convention.
+Set `CLAUDE_HOME="$HOME/.claude"`. Store the encoded output as `ENCODED`, then construct `MEMORY_DIR="$CLAUDE_HOME/projects/$ENCODED/memory"` to match the Kiln memory convention.
 
 Check whether the memory directory exists with `[ -d "$MEMORY_DIR" ]`. If it does not exist, create it with `mkdir -p "$MEMORY_DIR"`.
 
-If `"$MEMORY_DIR/MEMORY.md"` exists, use the `Read` tool to load it and extract current state details such as stage, phase, active tasks, and recent handoff context. If it does not exist, continue with sensible defaults such as `stage: unknown` and `phase: unknown`.
+If `"$MEMORY_DIR/MEMORY.md"` exists, use the `Read` tool to load it and extract current canonical fields (`project_name`, `date_started`, `stage`, `status`, `planning_sub_stage`, `debate_mode`, `phase_number`, `phase_name`, `phase_total`, `handoff_note`, and `## Phase Statuses` entries). If it does not exist, continue with canonical defaults:
+- `stage: brainstorm`
+- `status: paused`
+- `planning_sub_stage: null`
+- `debate_mode: 2`
+- `phase_number: null`
+- `phase_name: null`
+- `phase_total: null`
 </step>
 
 <step name="save-state">
@@ -34,46 +41,45 @@ Use `Bash` to generate a UTC reset timestamp:
 ```bash
 date -u +"%Y-%m-%dT%H:%M:%SZ"
 ```
-Store the result and write a complete memory snapshot to `"$MEMORY_DIR/MEMORY.md"` using the `Write` tool with this exact structure:
+Store the result and write a complete memory snapshot to `"$MEMORY_DIR/MEMORY.md"` using the `Write` tool with this exact canonical structure:
 
 ```markdown
 # Kiln Project Memory
 
-## Status
+## Metadata
+project_name: <existing value, or basename of $PROJECT_PATH>
+project_path: <$PROJECT_PATH>
+date_started: <existing value, or today's date YYYY-MM-DD>
+last_updated: <ISO-8601 timestamp from `date -u +"%Y-%m-%dT%H:%M:%SZ"`>
 
+## Runtime
+stage: <current stage using only: brainstorm|planning|execution|validation|complete; default brainstorm>
 status: paused
-reset_at: <ISO-8601 timestamp from `date -u +"%Y-%m-%dT%H:%M:%SZ"`>
-project: <$PROJECT_PATH>
+planning_sub_stage: <dual_plan|debate|synthesis|null>
+debate_mode: <1|2|3; default 2>
+phase_number: <integer or null>
+phase_name: <string or null>
+phase_total: <integer or null>
 
-## Current Position
+## Handoff
+handoff_note: <non-empty warm handoff summary that includes what was in progress and the concrete next action>
 
-stage: <current stage, e.g. "planning", "implementation", "review" - infer from context>
-phase: <current phase name or number if known, otherwise "unknown">
+## Phase Statuses
+<Preserve existing phase status lines in this exact format when present:>
+- phase_number: <int> | phase_name: <string> | phase_status: <pending|in_progress|failed|completed>
 
-## Warm Handoff
+## Resume Log
+<Preserve existing lines if present, then append:>
+- Reset: <ISO-8601 timestamp from `date -u +"%Y-%m-%dT%H:%M:%SZ"`>
 
-### What Was Being Worked On
-
-<1-3 sentences describing the specific task or step in progress at time of reset. Be concrete: name the file, function, or feature being implemented or discussed.>
-
-### Agent Context
-
-<List any active sub-agents by name/role that were running or recently used. List any pending tasks that were queued but not yet started. If no agents were active, write "No active agents at time of reset.">
-
-### Operator Note
-
-<A plain-language message for the human operator. Summarize what happened this session in 2-4 sentences. What was accomplished? What is the current state of the work? What should they be aware of before resuming?>
-
-### Next Action
-
-<The single most important next action to take when resuming. Be specific: name the exact command, file, or function to start with. This must be concrete enough that a fresh Claude Code session with no other context can act on it.>
-
-## Notes
-
-<Any other relevant context that does not fit above. Can be left empty.>
+## Reset Notes
+what_was_being_worked_on: <1-3 concrete sentences naming file/function/feature in progress>
+agent_context: <active agents and pending work, or "No active agents">
+operator_note: <2-4 sentence plain-language summary for the operator>
+next_action: <single concrete next action to run on resume>
 ```
 
-Populate all fields using current session context. Do not use stub text; if a value cannot be determined, write an honest `unknown` value where appropriate.
+Populate all fields using current session context. Do not use stub text. For enum fields, never invent values outside the canonical sets above.
 </step>
 
 <step name="shutdown-agents">
@@ -157,17 +163,17 @@ State saved to memory.
 
 Memory directory: <$MEMORY_DIR>
 Files written:
-  - MEMORY.md        (status: paused, handoff note recorded)
+  - MEMORY.md        (canonical schema, status: paused, handoff note recorded)
   - decisions.md     (<N new decisions recorded> | not modified)
   - pitfalls.md      (<N new pitfalls recorded> | not modified)
 
 Active agents: <"shut down" with agent names | "N still running (no acknowledgment)" | "none">
 
 What was preserved:
-  - Current stage and phase
-  - Warm handoff note (what was being worked on)
+  - Current stage and phase fields (canonical schema)
+  - Warm handoff note (current work + next action)
   - Agent context and pending tasks
-  - Operator note and next action
+  - Operator note and explicit next action
 
 What will be lost after /clear:
   - Full conversation history
@@ -188,8 +194,10 @@ After displaying the block, add exactly one reminder sentence: Claude Code canno
 <success_criteria>
 - [ ] `$MEMORY_DIR` exists on disk
 - [ ] MEMORY.md has been written with `status: paused`
-- [ ] MEMORY.md contains a non-empty "What Was Being Worked On" section
-- [ ] MEMORY.md contains a non-empty "Next Action" section
+- [ ] MEMORY.md uses canonical `stage` values: `brainstorm|planning|execution|validation|complete`
+- [ ] MEMORY.md uses canonical `status` values: `in_progress|paused|blocked|complete`
+- [ ] MEMORY.md contains a non-empty `handoff_note`
+- [ ] MEMORY.md contains a non-empty `next_action` in `## Reset Notes`
 - [ ] decisions.md updated if new decisions were made this session
 - [ ] pitfalls.md updated if new pitfalls were discovered this session
 - [ ] Active agents received shutdown_request (or "none" confirmed)

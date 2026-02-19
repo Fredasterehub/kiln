@@ -207,9 +207,9 @@ Save state to memory and prepare for `/clear`
 | Command | What it does |
 |---------|-------------|
 | `kilntwo install` | Drops agents, commands, and protocol into `~/.claude/` |
-| `kilntwo uninstall` | Clean removal — only touches what it installed |
-| `kilntwo update` | Version-aware upgrade with user-edit detection |
-| `kilntwo doctor` | Pre-flight check for everything Kiln needs |
+| `kilntwo uninstall` | Deterministic removal — targets the correct project regardless of cwd |
+| `kilntwo update` | Lossless upgrade — preserves your agent edits unless `--force` |
+| `kilntwo doctor` | Pre-flight check — cross-platform CLI detection, manifest integrity |
 
 ---
 
@@ -235,7 +235,7 @@ kilntwo/
 │   ├── templates/          Memory file templates
 │   ├── protocol.md         Behavioral rules for CLAUDE.md
 │   └── names.json          Agent alias registry
-└── test/                   53 tests, zero deps
+└── test/                   64 tests, zero deps
 ```
 
 After install, your `~/.claude/` gets the agents and commands. Your project's `CLAUDE.md` gets the protocol block. That's all Kiln touches.
@@ -255,6 +255,8 @@ After install, your `~/.claude/` gets the agents and commands. Your project's `C
 **`model_reasoning_effort` flag rejected** — Older Codex CLI. Upgrade: `npm install -g @openai/codex`.
 
 **Pipeline halts with "escalate to operator"** — A phase failed 3 QA rounds. Check `.kiln/reviews/fix_round_3.md`, fix manually, then `/kiln:resume`.
+
+**`uninstall` didn't remove protocol** — Prior to v0.1.1, uninstall targeted `process.cwd()` instead of the installed project. Upgrade and re-run `kilntwo uninstall`.
 
 <br>
 </details>

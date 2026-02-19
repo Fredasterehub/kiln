@@ -169,4 +169,22 @@ describe('validateManifest', () => {
     };
     assert.strictEqual(validateManifest(m).valid, false);
   });
+
+  it('accepts manifest with projectPath and claudeMdPath', () => {
+    const m = {
+      ...VALID_MANIFEST,
+      projectPath: '/tmp/project',
+      claudeMdPath: '/tmp/project/CLAUDE.md',
+    };
+    assert.strictEqual(validateManifest(m).valid, true);
+  });
+
+  it('rejects manifest when optional target fields are non-strings', () => {
+    const m = {
+      ...VALID_MANIFEST,
+      projectPath: 123,
+      claudeMdPath: null,
+    };
+    assert.strictEqual(validateManifest(m).valid, false);
+  });
 });
