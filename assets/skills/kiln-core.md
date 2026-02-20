@@ -26,12 +26,11 @@ All git operations MUST use `git -C $PROJECT_PATH`. Never use root-relative path
 - `phase_number`, `phase_name`, `phase_total`
 - `handoff_note` — single-line routing hint, < 120 chars
 - `handoff_context` — multi-line narrative block (YAML `|` block scalar)
-
 **Phase status entries** under `## Phase Statuses`:
 `- phase_number: <int> | phase_name: <string> | phase_status: <pending|in_progress|failed|completed>`
 
-**Optional fields**: `plan_approved_at`, `completed_at`
-**Optional sections**: `## Phase Results`, `## Validation`, `## Reset Notes`
+**Optional fields**: `plan_approved_at`, `completed_at`, `correction_cycle` (integer 0-3; absent is treated as 0)
+**Optional sections**: `## Phase Results`, `## Validation`, `## Reset Notes`, `## Correction Log`
 
 ## Event Schema
 
@@ -43,7 +42,9 @@ Phase state files (`$KILN_DIR/phase_<N>_state.md`) contain a `## Events` section
 
 `AGENT_ALIAS` = character alias (e.g. `Maestro`, `Confucius`, `Codex`), not internal name.
 
-**Event type enum** (19 values, closed set): `setup`, `branch`, `plan_start`, `plan_complete`, `debate_complete`, `synthesis_complete`, `prompt_complete`, `task_start`, `task_success`, `task_retry`, `task_fail`, `review_start`, `review_approved`, `review_rejected`, `fix_start`, `fix_complete`, `merge`, `error`, `halt`
+**Event type enum** (25 values, closed set): `setup`, `branch`, `plan_start`, `plan_complete`, `debate_complete`, `synthesis_complete`, `sharpen_start`, `sharpen_complete`, `task_start`, `task_success`, `task_retry`, `task_fail`, `review_start`, `review_approved`, `review_rejected`, `fix_start`, `fix_complete`, `merge`, `reconcile_complete`, `deploy_start`, `deploy_complete`, `correction_start`, `correction_complete`, `error`, `halt`
+
+Note: `deploy_start`, `deploy_complete` are logged in the validation report timeline (not phase state files). `correction_start`, `correction_complete` are logged in the `## Correction Log` section of `MEMORY.md` (not phase state files). All other events are logged in phase state files.
 
 ## File Naming Conventions
 
@@ -55,6 +56,7 @@ Phase state files (`$KILN_DIR/phase_<N>_state.md`) contain a `## Events` section
 - Phase state (working): `phase_<N>_state.md` (unpadded)
 - Phase archive: `archive/phase_<NN>/` (zero-padded to 2 digits)
 - Phase summary: `archive/phase_<NN>/phase_summary.md`
+- Codebase index: `codebase-snapshot.md` (refreshed per phase)
 
 ## Codex CLI Patterns
 
@@ -91,7 +93,7 @@ cat <PROMPT_PATH> | codex exec -m gpt-5.3-codex \
 ```
 $KILN_DIR/
   phase_<N>_state.md       — Per-phase state file (branch, commit SHA, structured events)
-  codebase-snapshot.md     — Brownfield codebase map (brownfield only, gitignored)
+  codebase-snapshot.md     — Codebase index (refreshed per phase, gitignored)
   plans/
     claude_plan.md         — Claude planner output
     codex_plan.md          — Codex planner output

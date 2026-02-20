@@ -133,7 +133,7 @@ describe('install E2E', { concurrency: false }, () => {
   it('copies all template files', () => {
     install({ home: tmpHome, projectPath: tmpProject });
 
-    const expected = ['MEMORY.md', 'decisions.md', 'master-plan.md', 'pitfalls.md', 'vision.md'];
+    const expected = ['MEMORY.md', 'PATTERNS.md', 'decisions.md', 'master-plan.md', 'pitfalls.md', 'vision.md'];
     for (const name of expected) {
       assertNonEmptyFile(path.join(paths.templatesDir, name));
     }

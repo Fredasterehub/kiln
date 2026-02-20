@@ -193,21 +193,30 @@ describe('contract lint', () => {
     );
   });
 
-  it('event type enum in skill is fully covered by executor usage', () => {
-    const executor = readAsset('agents/kiln-phase-executor.md');
+  it('event type enum in skill is fully covered across agent and command files', () => {
     const skill = readAsset('skills/kiln-core.md');
-
     const skillEnum = extractEventTypeEnum(skill);
-    const usedTypes = extractUsedEventTypes(executor);
-    const bracketedTypes = extractBracketedEventTypes(executor);
-    const allUsed = [...new Set([...usedTypes, ...bracketedTypes])];
 
-    // Every enum type should be used at least once (no dead entries)
-    const unused = skillEnum.filter((t) => !allUsed.includes(t));
+    // Event types are used across multiple files: executor, validator, start.md, protocol
+    const sources = [
+      readAsset('agents/kiln-phase-executor.md'),
+      readAsset('agents/kiln-validator.md'),
+      readAsset('commands/kiln/start.md'),
+      readAsset('protocol.md'),
+    ];
+
+    const allUsed = new Set();
+    for (const source of sources) {
+      for (const t of extractUsedEventTypes(source)) allUsed.add(t);
+      for (const t of extractBracketedEventTypes(source)) allUsed.add(t);
+    }
+
+    // Every enum type should be referenced at least once (no dead entries)
+    const unused = skillEnum.filter((t) => !allUsed.has(t));
     assert.deepStrictEqual(
       unused,
       [],
-      `Event types declared in skill enum but never used in executor: ${JSON.stringify(unused)}`,
+      `Event types declared in skill enum but never referenced: ${JSON.stringify(unused)}`,
     );
   });
 
@@ -266,6 +275,215 @@ describe('contract lint', () => {
         `Skill directory '${dir}' must be covered in start.md gitignore, found: ${JSON.stringify(gitignoreEntries)}`,
       );
     }
+  });
+});
+
+describe('v0.3.0 contracts', () => {
+  it('Scheherazade spec has codebase exploration and Codex Prompting Guide principles', () => {
+    const prompter = readAsset('agents/kiln-prompter.md');
+
+    // Must reference codebase exploration
+    assert.ok(
+      prompter.includes('Codebase Exploration') || prompter.includes('codebase exploration'),
+      'kiln-prompter must include codebase exploration step',
+    );
+
+    // Must reference the 6 Codex Prompting Guide principles
+    const principles = ['Autonomy', 'Bias to Action', 'Batch Operations', 'Specificity', 'Context', 'Acceptance Criteria'];
+    for (const p of principles) {
+      assert.ok(
+        prompter.includes(p),
+        `kiln-prompter must reference Codex Prompting Guide principle: ${p}`,
+      );
+    }
+
+    // Must have required XML sections
+    for (const tag of ['<role>', '<rules>', '<inputs>', '<workflow>']) {
+      assert.ok(prompter.includes(tag), `kiln-prompter must contain ${tag}`);
+    }
+  });
+
+  it('Maestro workflow includes sharpening step with sharpen events', () => {
+    const executor = readAsset('agents/kiln-phase-executor.md');
+
+    assert.ok(
+      executor.includes('## Sharpen') || executor.includes('## JIT') || executor.includes('Scheherazade'),
+      'Executor must include a sharpening step',
+    );
+    assert.ok(
+      executor.includes('`[sharpen_start]`'),
+      'Executor must emit sharpen_start event',
+    );
+    assert.ok(
+      executor.includes('`[sharpen_complete]`'),
+      'Executor must emit sharpen_complete event',
+    );
+  });
+
+  it('Maestro workflow includes reconciliation step after merge', () => {
+    const executor = readAsset('agents/kiln-phase-executor.md');
+
+    assert.ok(
+      executor.includes('## Reconcile') || executor.includes('reconcil'),
+      'Executor must include a reconciliation step',
+    );
+    assert.ok(
+      executor.includes('`[reconcile_complete]`'),
+      'Executor must emit reconcile_complete event',
+    );
+    // Reconciliation must come after merge
+    const mergeIdx = executor.indexOf('## Complete');
+    const reconcileIdx = executor.indexOf('## Reconcile');
+    assert.ok(
+      reconcileIdx > mergeIdx,
+      'Reconciliation must come after the Complete (merge) step',
+    );
+  });
+
+  it('Argus spec includes deployment and correction task output', () => {
+    const validator = readAsset('agents/kiln-validator.md');
+
+    assert.ok(
+      validator.includes('## Deploy') || validator.includes('deploy'),
+      'Validator must include deployment step',
+    );
+    assert.ok(
+      validator.includes('## Correction Tasks') || validator.includes('Correction Task'),
+      'Validator must output correction task descriptions',
+    );
+    assert.ok(
+      validator.includes('`[deploy_start]`'),
+      'Validator must reference deploy_start event',
+    );
+    assert.ok(
+      validator.includes('`[deploy_complete]`'),
+      'Validator must reference deploy_complete event',
+    );
+  });
+
+  it('Plato spec mentions parallel_group annotation', () => {
+    const synthesizer = readAsset('agents/kiln-synthesizer.md');
+
+    assert.ok(
+      synthesizer.includes('parallel_group'),
+      'Synthesizer must mention parallel_group annotation',
+    );
+  });
+
+  it('start.md has correction loop in Stage 4', () => {
+    const start = readAsset('commands/kiln/start.md');
+
+    assert.ok(
+      start.includes('correction_cycle'),
+      'start.md must reference correction_cycle',
+    );
+    assert.ok(
+      start.includes('`[correction_start]`'),
+      'start.md must reference correction_start event',
+    );
+    assert.ok(
+      start.includes('`[correction_complete]`'),
+      'start.md must reference correction_complete event',
+    );
+  });
+
+  it('resume.md handles mid-correction resume', () => {
+    const resume = readAsset('commands/kiln/resume.md');
+
+    assert.ok(
+      resume.includes('correction_cycle'),
+      'resume.md must extract correction_cycle from MEMORY.md',
+    );
+  });
+
+  it('event enum has 25 types including v0.3.0 additions', () => {
+    const skill = readAsset('skills/kiln-core.md');
+    const skillEnum = extractEventTypeEnum(skill);
+
+    assert.strictEqual(skillEnum.length, 25, `Expected 25 event types, got ${skillEnum.length}`);
+
+    const newTypes = [
+      'sharpen_start', 'sharpen_complete',
+      'reconcile_complete',
+      'deploy_start', 'deploy_complete',
+      'correction_start', 'correction_complete',
+    ];
+    for (const t of newTypes) {
+      assert.ok(
+        skillEnum.includes(t),
+        `Event enum must include v0.3.0 type: ${t}`,
+      );
+    }
+
+    // prompt_complete should be removed
+    assert.ok(
+      !skillEnum.includes('prompt_complete'),
+      'Event enum should not include removed prompt_complete type',
+    );
+  });
+
+  it('names.json has Scheherazade with JIT role', () => {
+    const names = JSON.parse(fs.readFileSync(path.join(ASSETS_DIR, 'names.json'), 'utf8'));
+    const entry = names['kiln-prompter'];
+
+    assert.ok(entry, 'names.json must have kiln-prompter entry');
+    assert.strictEqual(entry.alias, 'Scheherazade');
+    assert.ok(
+      entry.role.toLowerCase().includes('jit') || entry.role.toLowerCase().includes('sharpener'),
+      `Scheherazade role must reflect JIT sharpening, got: "${entry.role}"`,
+    );
+  });
+
+  it('PATTERNS.md template exists with required format section', () => {
+    const patternsPath = path.join(ASSETS_DIR, 'templates', 'PATTERNS.md');
+    assert.ok(fs.existsSync(patternsPath), 'templates/PATTERNS.md must exist');
+
+    const content = fs.readFileSync(patternsPath, 'utf8');
+    assert.ok(content.includes('# Coding Patterns'), 'PATTERNS.md must have Coding Patterns heading');
+    assert.ok(content.includes('## Format'), 'PATTERNS.md must have Format section');
+    assert.ok(content.includes('Pattern'), 'PATTERNS.md format must include Pattern field');
+    assert.ok(content.includes('Example'), 'PATTERNS.md format must include Example field');
+  });
+
+  it('protocol mentions PATTERNS.md in memory structure', () => {
+    const protocol = readAsset('protocol.md');
+
+    assert.ok(
+      protocol.includes('PATTERNS.md'),
+      'Protocol must mention PATTERNS.md in memory structure',
+    );
+  });
+
+  it('Sherlock spec includes reconciliation and codebase index modes', () => {
+    const researcher = readAsset('agents/kiln-researcher.md');
+
+    assert.ok(
+      researcher.includes('Reconciliation Mode') || researcher.includes('## Reconcil'),
+      'Sherlock must have reconciliation mode',
+    );
+    assert.ok(
+      researcher.includes('Codebase Index Mode') || researcher.includes('## Codebase Index'),
+      'Sherlock must have codebase index mode',
+    );
+    // Sherlock must be able to write files for reconciliation
+    const fm = researcher.substring(0, researcher.indexOf('---', 3));
+    assert.ok(
+      fm.includes('Write'),
+      'Sherlock must have Write tool for reconciliation',
+    );
+  });
+
+  it('executor includes Codebase Index step before Plan', () => {
+    const executor = readAsset('agents/kiln-phase-executor.md');
+
+    const indexIdx = executor.indexOf('## Codebase Index');
+    const planIdx = executor.indexOf('## Plan');
+    assert.ok(indexIdx > 0, 'Executor must have Codebase Index section');
+    assert.ok(planIdx > 0, 'Executor must have Plan section');
+    assert.ok(
+      indexIdx < planIdx,
+      'Codebase Index must come before Plan',
+    );
   });
 });
 

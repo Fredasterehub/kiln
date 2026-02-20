@@ -49,7 +49,7 @@
   },
   "kiln-prompter": {
     "alias": "Scheherazade",
-    "role": "prompter",
+    "role": "JIT prompt sharpener",
     "quotes": [
       "A tale for every task",
       "And so she began another story before dawn",

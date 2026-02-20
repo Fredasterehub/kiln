@@ -59,6 +59,7 @@ If the file exists, extract and store these fields:
 - `planning_sub_stage` (`dual_plan`, `debate`, `synthesis`, or `null`)
 - `project_mode` (`greenfield` or `brownfield`; may be absent)
 - `last_updated` (ISO-8601 string; optional but recommended)
+- `correction_cycle` (integer 0-3; 0 or absent when not in correction)
 
 Also parse the `## Phase Statuses` section.
 Each entry must be formatted as:
@@ -78,6 +79,7 @@ Read these files in parallel (batch reads):
 - `$MEMORY_DIR/master-plan.md`
 - `$MEMORY_DIR/decisions.md`
 - `$MEMORY_DIR/pitfalls.md`
+- `$MEMORY_DIR/PATTERNS.md`
 
 For each file: if it exists, store the full content. If it does not exist, record it as absent and continue without halting.
 
@@ -91,6 +93,7 @@ Project: [PROJECT_PATH]
 Mode:    [project_mode]   (omit this line if project_mode is absent)
 Stage:   [stage]
 Phase:   [phase_number]/[phase_total] [phase_name]   (omit this line if not in execution stage)
+Correction: cycle [correction_cycle]/3   (omit this line if correction_cycle is 0 or absent)
 Status:  [status]
 Handoff: [handoff_note, or "(none)" if empty]
 =====================
@@ -145,7 +148,9 @@ For `execution`:
   - If `$KILN_DIR/phase_<N>_state.md` exists, read it and treat it as the authoritative running log. Parse the `## Events` section to determine the last completed lifecycle step:
     - Last event type `setup` or `branch` → phase stopped during setup; restart from Step 2 (plan).
     - Last event type `plan_start`, `plan_complete`, `debate_complete`, or `synthesis_complete` → phase stopped during planning; restart from the next sub-step.
-    - Last event type `prompt_complete` → prompts generated; restart from Step 4 (implement).
+    - Last event type `sharpen_start` → sharpening began but did not complete; restart from Step 3 (sharpen).
+    - Last event type `sharpen_complete` → prompts generated; restart from Step 4 (implement).
+    - Last event type `reconcile_complete` → reconciliation done; restart from Step 7 (archive).
     - Last event type `task_start`, `task_success`, `task_retry`, or `task_fail` → phase stopped mid-implementation; restart from the next incomplete task.
     - Last event type `review_start`, `review_rejected`, `fix_start`, or `fix_complete` → phase stopped during review; restart from the next review round.
     - Last event type `review_approved` → review passed; restart from Step 6 (complete/merge).
@@ -170,9 +175,18 @@ For `execution`:
 
 For `validation`:
 - Re-read `master-plan.md` and `decisions.md`.
-- Tell the user: "Resuming validation stage."
-- Summarize what was built from `master-plan.md` and what decisions were made from `decisions.md`.
-- Invite the user to continue validation.
+- Check `correction_cycle` from MEMORY.md.
+- If `correction_cycle > 0` and `status == 'blocked'`:
+  - Tell the user: "Validation failed after [correction_cycle] correction cycles. Here is the validation report:"
+  - Read and display `$KILN_DIR/validation/report.md`.
+  - Ask: "How would you like to proceed? Options: retry validation, fix manually, or mark complete."
+- If `correction_cycle > 0` and `status == 'in_progress'`:
+  - Tell the user: "Resuming validation — correction cycle [correction_cycle]/3 in progress."
+  - Continue the validation-correction loop from Step 14 in start.md.
+- Otherwise:
+  - Tell the user: "Resuming validation stage."
+  - Summarize what was built from `master-plan.md` and what decisions were made from `decisions.md`.
+  - Spawn Argus to run validation (Step 14 in start.md).
 
 For `complete`:
 - Tell the user exactly:

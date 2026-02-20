@@ -79,6 +79,7 @@ Never write free-form status strings.
    `master-plan.md`
    `decisions.md`
    `pitfalls.md`
+   `PATTERNS.md`
    For each target memory file, first check whether it already exists and contains non-empty content beyond a header.
    If it already has substantial content, do not overwrite it.
    If it is missing or effectively empty, initialize it from the matching template when available.
@@ -435,8 +436,11 @@ Never write free-form status strings.
     Report the failure to the user.
     Do not continue to the next phase until corrected.
 
-14. Run final validation.
-    After all phases complete, spawn `kiln-validator` via the Task tool.
+14. Run final validation with correction loop.
+    After all phases complete, set `correction_cycle = 0` in `MEMORY_DIR/MEMORY.md`.
+    Enter the validation-correction loop (max 3 cycles):
+
+    14a. Spawn `kiln-validator` via the Task tool.
     `name`: `"Argus"` (the alias)
     `subagent_type`: `kiln-validator`
     `description`: (next quote from names.json quotes array for kiln-validator)
@@ -446,15 +450,49 @@ Never write free-form status strings.
     `PROJECT_PATH`.
     `MEMORY_DIR`.
     Include this instruction:
-    "Validate that all phases of the master plan have been implemented. For each phase, check that every acceptance criterion is met. Run any test commands referenced in the plan. Output a validation report as markdown with sections: ## Summary (pass/fail), ## Phase Checklist (one row per phase with pass/fail per criterion), ## Issues Found (empty if none), ## Recommendations. Write this report to `$PROJECT_PATH/.kiln/validation/report.md`."
+    "Build, deploy, and validate the project end-to-end. Test the actual running product against the master plan's acceptance criteria. For each failure, generate a correction task description with: what failed, evidence, affected files, suggested fix, and verification command. Write the validation report to `$PROJECT_PATH/.kiln/validation/report.md`."
     Wait for completion.
     Confirm `$PROJECT_PATH/.kiln/validation/report.md` exists and is readable.
+
+    14b. Check the validation verdict.
+    Read the report and extract the verdict (PASS, PARTIAL, or FAIL).
+    If verdict is PASS:
     Update `MEMORY_DIR/MEMORY.md`:
     `stage` = `validation`
     `status` = `in_progress`
-    `handoff_note` = `Validation report generated; finalization pending.`
-    `handoff_context` = `All phases executed. Argus ran E2E validation. Report written to $KILN_DIR/validation/report.md. Finalization step (Stage 5) is next.`
+    `correction_cycle` = `0`
+    `handoff_note` = `Validation passed; finalization pending.`
+    `handoff_context` = `All phases executed and validated. Argus deployed and tested the product. All acceptance criteria met. Report at $KILN_DIR/validation/report.md. Finalization (Stage 5) is next.`
     `last_updated` = current ISO-8601 UTC timestamp.
+    Proceed to Step 15.
+
+    14c. If verdict is PARTIAL or FAIL and `correction_cycle < 3`:
+    Increment `correction_cycle`.
+    Append `[correction_start]` event to the `## Correction Log` section of `$MEMORY_DIR/MEMORY.md`.
+    Read the `## Correction Tasks` section from the validation report.
+    For each correction task, create a correction phase that re-enters Stage 3:
+    Update `MEMORY_DIR/MEMORY.md`:
+    `stage` = `execution`
+    `status` = `in_progress`
+    `handoff_note` = `Correction cycle <correction_cycle>/3: fixing validation failures.`
+    `handoff_context` = `Validation verdict: <verdict>. <N> correction tasks identified. Running correction phase through full Scheherazade→Codex→Sphinx cycle. Cycle <correction_cycle> of max 3.`
+    Append to `## Correction Log`: `- Cycle <correction_cycle>: <verdict>, <N> correction tasks`
+    `last_updated` = current ISO-8601 UTC timestamp.
+    Spawn `kiln-phase-executor` (Maestro) with the correction tasks as the phase description.
+    `name`: `"Maestro"` (the alias)
+    `subagent_type`: `kiln-phase-executor`
+    `description`: (next quote from names.json quotes array for kiln-phase-executor)
+    After Maestro completes the correction phase, append `[correction_complete]` event to the `## Correction Log` section of `$MEMORY_DIR/MEMORY.md`. Loop back to Step 14a.
+
+    14d. If verdict is PARTIAL or FAIL and `correction_cycle >= 3`:
+    Update `MEMORY_DIR/MEMORY.md`:
+    `stage` = `validation`
+    `status` = `blocked`
+    `handoff_note` = `Validation failed after 3 correction cycles; operator intervention needed.`
+    `handoff_context` = `Validation still failing after 3 correction cycles. Verdict: <verdict>. Report at $KILN_DIR/validation/report.md. Operator must review failures and decide how to proceed.`
+    `last_updated` = current ISO-8601 UTC timestamp.
+    Display the validation report to the operator.
+    Halt and wait for operator direction. Do not proceed to Step 15.
 
 15. Finalize protocol run.
     Update `MEMORY_DIR/MEMORY.md` fields:
