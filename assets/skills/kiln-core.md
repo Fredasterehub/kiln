@@ -134,7 +134,7 @@ Stage mapping: `brainstorm` → brainstorm verbs, `planning` → planning verbs,
 
 Kiln uses Claude Code's native Teams API for agent coordination. No manual tmux management.
 
-- **Session team**: `kiln-session` — created by Kiln after onboarding. Coordinators (Aristotle, Maestro, Mnemosyne) are spawned WITH `team_name: "kiln-session"` so Kiln can send mid-work nudges via `SendMessage`. Coordinators also create their own sub-teams for workers.
+- **Session team**: `kiln-session` — created by Kiln after onboarding. Coordinators are NOT spawned into this team (Claude Code enforces one team per agent, and coordinators need to create their own sub-teams). Kiln nudges coordinators via a "CRITICAL FIRST STEP" prefix in the Task prompt.
 - **Sub-teams**: Coordinators create ephemeral sub-teams for their workers:
   - `aristotle-planning` — Confucius, Sun Tzu, Socrates, Plato, Athena
   - `maestro-phase-<N>` — Sherlock, Scheherazade, Codex, Sphinx, Confucius, Sun Tzu, Socrates, Plato

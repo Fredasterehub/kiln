@@ -60,7 +60,7 @@ For full path derivation, memory schema, event schema, file naming conventions, 
 
 15. **Plans must pass validation before execution** — After Plato's synthesis, the orchestrator spawns Athena (`kiln-plan-validator`) and emits `[plan_validate_start]` / `[plan_validate_complete]` events for the gate. If validation fails, loop back to planners with Athena's feedback. Only proceed to Stage 3 after plan validation passes.
 
-16. **Team lifecycle** — Kiln creates the `kiln-session` team for orchestrator-level tracking. Coordinators (Aristotle, Maestro, Mnemosyne) are spawned WITH `team_name: "kiln-session"` so Kiln can send mid-work nudges via `SendMessage`. Coordinators also create their own ephemeral sub-teams (`aristotle-planning`, `maestro-phase-<N>`, `mnemosyne-mapping`) at setup after a defensive `TeamDelete` cleanup. Workers join the coordinator's sub-team. Coordinators call `TeamDelete` on their sub-team before returning.
+16. **Team lifecycle** — Kiln creates the `kiln-session` team for orchestrator-level tracking. Coordinators (Aristotle, Maestro, Mnemosyne) are spawned WITHOUT `team_name` — Claude Code enforces one team per agent, so coordinators must be free to create their own ephemeral sub-teams (`aristotle-planning`, `maestro-phase-<N>`, `mnemosyne-mapping`) at setup after a defensive `TeamDelete` cleanup. Kiln nudges coordinators via a "CRITICAL FIRST STEP" prefix in the Task prompt instead of SendMessage. Workers join the coordinator's sub-team. Coordinators call `TeamDelete` before returning.
 
 ## Agent Roster
 

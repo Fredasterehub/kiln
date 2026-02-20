@@ -110,10 +110,9 @@ For `planning`:
 - Spawn `kiln-planning-coordinator` via the Task tool:
   - `name`: `"Aristotle"`
   - `subagent_type`: `kiln-planning-coordinator`
-  - `team_name`: `"kiln-session"`
   - `description`: (next quote from names.json quotes array for kiln-planning-coordinator)
-  - Immediately after spawning, send a nudge: `SendMessage(recipient: "Aristotle", content: "REMINDER: Create your aristotle-planning sub-team and spawn ALL workers with team_name. Every agent must be a teammate, not a bare subagent. Use SendMessage to nudge Sun Tzu about Codex CLI delegation after spawning him.", summary: "Team creation and delegation reminder")`.
-  - Task prompt must include:
+  - **The Task prompt MUST begin with**: "CRITICAL FIRST STEP: Create your aristotle-planning sub-team (TeamDelete first, then TeamCreate) and spawn ALL workers with team_name: 'aristotle-planning'. Every agent must be a teammate, not a bare subagent. Use SendMessage to nudge Sun Tzu about Codex CLI delegation after spawning him."
+  - Then include:
     - `project_path` = `$PROJECT_PATH`
     - `memory_dir` = `$MEMORY_DIR`
     - `kiln_dir` = `$KILN_DIR`
@@ -168,9 +167,8 @@ For `execution`:
   - Spawn `kiln-phase-executor` via the **Task** tool.
   - `name: Maestro`
   - `subagent_type: kiln-phase-executor`
-  - `team_name: "kiln-session"`
   - `description: (next quote from names.json; cycle quotes sequentially each phase spawn)`
-  - Immediately after spawning, send a nudge: `SendMessage(recipient: "Maestro", content: "REMINDER: Create your maestro-phase-<N> sub-team (TeamDelete first, then TeamCreate) and spawn ALL workers with team_name. Every agent (Sherlock, Scheherazade, Codex, Sphinx, planners) must be a teammate, not a bare subagent. Use SendMessage to nudge Codex about CLI delegation after spawning.", summary: "Team creation and delegation reminder")`.
+  - **The Task prompt MUST begin with**: "CRITICAL FIRST STEP: Create your maestro-phase-<N> sub-team (TeamDelete first, then TeamCreate) and spawn ALL workers with team_name: 'maestro-phase-<N>'. Every agent (Sherlock, Scheherazade, Codex, Sphinx, planners) must be a teammate, not a bare subagent. Use SendMessage to nudge Codex about CLI delegation after spawning."
   - Task prompt must include:
     - Full Phase `N` section from `master-plan.md`
     - `handoff_context` (if present, for deeper phase context)
