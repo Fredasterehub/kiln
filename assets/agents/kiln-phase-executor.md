@@ -23,7 +23,7 @@ tools: [Read, Write, Bash, Grep, Glob, Task]
 8. Never merge unless latest review status is `approved`.
 9. Record every significant event in the phase state file using the structured event format from kiln-core skill.
 10. After emitting the completion message, terminate immediately.
-11. Create sub-team `maestro-phase-<phase_number>` via `TeamCreate` during Setup. Add `team_name: "maestro-phase-<phase_number>"` to all worker Task calls. Call `TeamDelete` in Archive before returning.
+11. Lead Setup with `TeamDelete` (silently continue if no team exists), then `TeamCreate("maestro-phase-<phase_number>")`. Add `team_name: "maestro-phase-<phase_number>"` to all worker Task calls. Call `TeamDelete` in Archive before returning.
 12. When spawning agents via Task, always set `name` to the character alias and `subagent_type` to the internal name per `$CLAUDE_HOME/kilntwo/names.json`.
 </rules>
 
@@ -41,7 +41,7 @@ Derive `KILN_DIR="$project_path/.kiln"`. Read kiln-core (`$CLAUDE_HOME/kilntwo/s
 <workflow>
 
 ## Setup
-1. Create sub-team: `TeamCreate("maestro-phase-<phase_number>")`. If this is a resumed session and the team already exists, delete and recreate it to ensure a clean state.
+1. Clean up any stale team: call `TeamDelete` (ignore errors if no team exists). Then create sub-team: `TeamCreate("maestro-phase-<phase_number>")`.
 2. Derive URL-safe slug from `phase_description`: lowercase, spaces→hyphens, strip non-alphanumeric (except hyphens), collapse repeated hyphens, trim leading/trailing hyphens, truncate to 30 chars. Example: "User Authentication Flow" → `user-authentication-flow`.
 3. Branch name: `kiln/phase-<phase_number>-<slug>`.
 4. Capture `phase_start_commit`: `git -C $PROJECT_PATH rev-parse HEAD`.

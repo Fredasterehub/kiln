@@ -71,19 +71,19 @@ describe('v0.8.0 — native teams', () => {
     );
   });
 
-  it('all top-level agent spawns in start.md include team_name', () => {
+  it('coordinator spawns in start.md do NOT include team_name: kiln-session', () => {
     const start = readAsset('commands/kiln/start.md');
 
-    // Check that team_name appears near each agent spawn
-    const agents = ['Da Vinci', 'Aristotle', 'Maestro', 'Argus'];
-    for (const agent of agents) {
+    // Coordinators create their own sub-teams — they must NOT be in kiln-session
+    const coordinators = ['Aristotle', 'Maestro', 'Argus'];
+    for (const agent of coordinators) {
       const idx = start.indexOf(`"${agent}"`);
       assert.ok(idx >= 0, `start.md must spawn ${agent}`);
-      // Look for team_name within 500 chars after the agent name
+      // Verify team_name: "kiln-session" does NOT appear within 500 chars after spawn
       const nearby = start.substring(idx, idx + 500);
       assert.ok(
-        nearby.includes('team_name') && nearby.includes('kiln-session'),
-        `${agent} spawn in start.md must include team_name: "kiln-session"`
+        !(nearby.includes('team_name') && nearby.includes('kiln-session')),
+        `${agent} spawn in start.md must NOT include team_name: "kiln-session"`
       );
     }
   });

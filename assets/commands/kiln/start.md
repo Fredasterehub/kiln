@@ -172,7 +172,6 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
    `name`: `"Da Vinci"` (the alias)
    `subagent_type`: `kiln-brainstormer`
    `description`: (next quote from names.json quotes array for kiln-brainstormer)
-   `team_name`: `"kiln-session"`
    Task prompt must include:
    `project_path` = `$PROJECT_PATH`
    `memory_dir` = `$MEMORY_DIR`
@@ -230,7 +229,6 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
    `name`: `"Aristotle"` (the alias)
    `subagent_type`: `kiln-planning-coordinator`
    `description`: (next quote from names.json quotes array for kiln-planning-coordinator)
-   `team_name`: `"kiln-session"`
    The Task prompt MUST include only these scalar inputs and absolute paths (do not inline large file contents):
    - `project_path` = `$PROJECT_PATH`
    - `memory_dir` = `$MEMORY_DIR`
@@ -303,15 +301,12 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
     `name`: `"Maestro"` (the alias)
     `subagent_type`: `kiln-phase-executor`
     `description`: (next quote from names.json quotes array for kiln-phase-executor)
-    `team_name`: `"kiln-session"`
     Task prompt must include:
     Full phase section from the master plan, including name, goal, tasks, and acceptance criteria.
-    Full `MEMORY_DIR/MEMORY.md`.
-    Full `MEMORY_DIR/vision.md`.
     `PROJECT_PATH`.
     `MEMORY_DIR`.
     Include this instruction text:
-    "Implement this phase completely. Write working code, create real files, run tests. When done, write a phase summary to `$MEMORY_DIR/phase-<N>-results.md` with sections: Completed Tasks, Files Created or Modified, Tests Run and Results, Blockers or Issues. Do not proceed to the next phase — stop after this phase is complete."
+    "Read MEMORY.md and vision.md from MEMORY_DIR at startup for full project context. Implement this phase completely. Write working code, create real files, run tests. When done, write a phase summary to `$MEMORY_DIR/phase-<N>-results.md` with sections: Completed Tasks, Files Created or Modified, Tests Run and Results, Blockers or Issues. Do not proceed to the next phase — stop after this phase is complete."
    Wait for completion before spawning the next phase executor.
     After each phase:
     Read `MEMORY_DIR/phase-<N>-results.md`.
@@ -360,7 +355,6 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
     `name`: `"Argus"` (the alias)
     `subagent_type`: `kiln-validator`
     `description`: (next quote from names.json quotes array for kiln-validator)
-    `team_name`: `"kiln-session"`
     Prompt must include:
     Full `MEMORY_DIR/master-plan.md`.
     All `MEMORY_DIR/phase-*-results.md` files in full.
@@ -399,7 +393,6 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
     `name`: `"Maestro"` (the alias)
     `subagent_type`: `kiln-phase-executor`
     `description`: (next quote from names.json quotes array for kiln-phase-executor)
-    `team_name`: `"kiln-session"`
     After Maestro completes the correction phase, append `[correction_complete]` event to the `## Correction Log` section of `$MEMORY_DIR/MEMORY.md`. Loop back to Step 14a.
 
     14d. If verdict is PARTIAL or FAIL and `correction_cycle >= 3`:
@@ -447,7 +440,7 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 1. **All paths are dynamic.** Never hardcode paths. Derive every path from `PROJECT_PATH`, `HOME`, and `ENCODED_PATH` from Step 3. The command must work in any project directory.
 2. **Memory is the source of truth.** Before every stage transition, re-read `MEMORY_DIR/MEMORY.md` and trust canonical fields (`stage`, `status`, `planning_sub_stage`, `phase_number`, `phase_total`, and `## Phase Statuses`). If `stage=planning` and `status=paused`, resume planning review at Step 11. If `stage=execution` and `phase_number` is set, resume execution from that phase using `phase_status` values.
 3. **Never skip stages.** Execute Stage 1 before Stage 2 and Stage 2 before Stage 3. The only exception is resumption as described in Rule 2. Use `/kiln:resume` for resumption; do not implement separate resume logic outside these state checks.
-4. **Use the Task tool for all sub-agents.** Never invoke `kiln-planner-claude`, `kiln-planner-codex`, `kiln-debater`, `kiln-synthesizer`, `kiln-plan-validator`, `kiln-planning-coordinator`, `kiln-phase-executor`, or `kiln-validator` as slash commands. Spawn each exclusively with the Task tool and complete, self-contained prompts. Always set `name` to the agent's character alias (e.g., `"Confucius"`, `"Aristotle"`, `"Maestro"`) and `subagent_type` to the internal name (e.g., `kiln-planner-claude`). This ensures the Claude Code UI shows aliases in the spawn box. All top-level agent spawns must include `team_name: "kiln-session"`.
+4. **Use the Task tool for all sub-agents.** Never invoke `kiln-planner-claude`, `kiln-planner-codex`, `kiln-debater`, `kiln-synthesizer`, `kiln-plan-validator`, `kiln-planning-coordinator`, `kiln-phase-executor`, or `kiln-validator` as slash commands. Spawn each exclusively with the Task tool and complete, self-contained prompts. Always set `name` to the agent's character alias (e.g., `"Confucius"`, `"Aristotle"`, `"Maestro"`) and `subagent_type` to the internal name (e.g., `kiln-planner-claude`). This ensures the Claude Code UI shows aliases in the spawn box.
 5. **Parallel where safe, sequential where required.** Run Step 8 planners in parallel. Run all other Task spawns sequentially, waiting for each to finish before starting the next.
 6. **Write working outputs only.** Phase executors must create real files with real content and working code. Placeholders, TODO stubs, and non-functional scaffolds are failures that must be reported before continuing.
 7. **Checkpoint memory after every significant action.** Update canonical runtime fields (`stage`, `status`, `planning_sub_stage`, phase fields, `handoff_note`, `handoff_context`, `last_updated`, and phase-status entries when applicable) after Step 2, after Step 4, after Step 5, at every brainstorm checkpoint, after Step 7, after Step 8 (planning coordinator return), after each phase in Step 13, after Step 14, and after Step 15.

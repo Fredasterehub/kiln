@@ -26,7 +26,7 @@ tools:
 5. Always overwrite `codebase-snapshot.md` on every run (always fresh).
 6. After emitting the completion message, terminate immediately.
 7. Use paths from spawn prompt. Never hardcode project paths.
-8. Create sub-team `mnemosyne-mapping` via `TeamCreate` before spawning Muses. Add `team_name: "mnemosyne-mapping"` to all Muse Task calls. Call `TeamDelete` before returning.
+8. Lead Setup with `TeamDelete` (silently continue if no team exists), then `TeamCreate("mnemosyne-mapping")`. Add `team_name: "mnemosyne-mapping"` to all Muse Task calls. Call `TeamDelete` before returning.
 </rules>
 
 <inputs>
@@ -46,7 +46,7 @@ Determine instance count per Muse type (always all 5 types):
 `scope`: `"all"` for single instance; colon-separated dirs (e.g. `"src/:lib/"`) for multi-instance splits. Each Muse constrains search to its scope dirs.
 
 ## 2. Parallel Muse Exploration
-Create sub-team: `TeamCreate("mnemosyne-mapping")`.
+Clean up any stale team: call `TeamDelete` (ignore errors). Then create sub-team: `TeamCreate("mnemosyne-mapping")`.
 Spawn all Muse instances in parallel via Task tool with `team_name: "mnemosyne-mapping"`. Each Muse is a leaf worker with no Task tool.
 | subagent_type | Alias | Focus |
 |---|---|---|

@@ -30,7 +30,7 @@ tools:
 9. Do NOT display lore quotes. Lore display is owned by Kiln in `start.md` and `resume.md`.
 10. Return contract: the first non-empty line of the final response MUST be exactly `PLAN_APPROVED` or `PLAN_BLOCKED`. After emitting it, terminate immediately.
 11. Record significant transitions as handoff updates in MEMORY.md using the dual-layer pattern: `handoff_note` (terse routing) + `handoff_context` (narrative).
-12. Create sub-team `aristotle-planning` via `TeamCreate` during Setup. Add `team_name: "aristotle-planning"` to all worker Task calls. Call `TeamDelete` before every return path (`PLAN_APPROVED` and `PLAN_BLOCKED`).
+12. Lead Setup with `TeamDelete` (silently continue if no team exists), then `TeamCreate("aristotle-planning")`. Add `team_name: "aristotle-planning"` to all worker Task calls. Call `TeamDelete` before every return path.
 </rules>
 
 <inputs>
@@ -49,7 +49,7 @@ Read the kiln-core skill (`$CLAUDE_HOME/kilntwo/skills/kiln-core.md`) at startup
 
 ## Setup
 1. Normalize `debate_mode`: if not `1`, `2`, or `3`, set to `2`.
-2. Create sub-team: `TeamCreate("aristotle-planning")`.
+2. Clean up any stale team: call `TeamDelete` (ignore errors). Then create sub-team: `TeamCreate("aristotle-planning")`.
 3. Ensure directories exist: `mkdir -p "$kiln_dir/plans"`.
 4. Read `$memory_dir/MEMORY.md` to determine current `planning_sub_stage`.
 5. Read `$memory_dir/vision.md` — this is the authoritative input for all planners.

@@ -36,15 +36,8 @@ If `stage` or `status` are missing, or contain unrecognized values, treat MEMORY
 [kiln:resume] MEMORY.md is corrupted or incomplete (missing required fields: <list>).
 Run /kiln:start to reinitialize, or manually repair $CLAUDE_HOME/projects/<encoded>/memory/MEMORY.md.
 ```
-## Step 4: Read Supporting Memory Files
-Read these files in parallel (batch reads):
-- `$MEMORY_DIR/vision.md`
-- `$MEMORY_DIR/master-plan.md`
-- `$MEMORY_DIR/decisions.md`
-- `$MEMORY_DIR/pitfalls.md`
-- `$MEMORY_DIR/PATTERNS.md`
-- `$MEMORY_DIR/tech-stack.md`
-For each file: if it exists, store the full content. If it does not exist, record it as absent and continue without halting.
+## Step 4: Supporting Files
+Supporting memory files (`vision.md`, `master-plan.md`, `decisions.md`, `pitfalls.md`, `PATTERNS.md`, `tech-stack.md`) are read by coordinators at their own startup — not by the orchestrator. Do not preload them here. If you need a specific value for routing (e.g., to display a summary), read only the specific file and extract only the needed fields.
 ## Step 5: Display Continuity Banner
 Render the continuity banner via Bash (not plain text):
 ```bash
@@ -94,7 +87,6 @@ Recommended next step (from last reset): [next_action]
 Check if the `kiln-session` team exists (read `$CLAUDE_HOME/teams/kiln-session/config.json`).
 If the team does not exist, create it: `TeamCreate("kiln-session")`.
 If the team already exists, continue with the existing team.
-**Important**: Teams do not persist across session boundaries. All sub-teams from the previous session (`aristotle-planning`, `maestro-phase-*`, `mnemosyne-mapping`) are gone. Every coordinator spawned during this resume MUST recreate its sub-team before doing any work, even if the phase state file shows work already in progress.
 ## Step 6: Route to Stage
 Branch strictly on `stage` and run the matching behavior.
 For `brainstorm`:
@@ -111,14 +103,13 @@ For `planning`:
   - `name`: `"Aristotle"`
   - `subagent_type`: `kiln-planning-coordinator`
   - `description`: (next quote from names.json quotes array for kiln-planning-coordinator)
-  - `team_name`: `"kiln-session"`
   - Task prompt must include:
     - `project_path` = `$PROJECT_PATH`
     - `memory_dir` = `$MEMORY_DIR`
     - `kiln_dir` = `$KILN_DIR`
     - `debate_mode` from MEMORY.md (default 2 if absent)
     - `brainstorm_depth` from MEMORY.md (default `standard` if absent)
-  - Instruction: "This is a resumed session — your sub-team does not exist yet. Run TeamCreate('aristotle-planning') before spawning any workers. Then resume the Stage 2 planning pipeline from current state. Read planning_sub_stage from MEMORY.md and check existing artifacts to determine where to resume. Run plan validation (Athena writes `plan_validation.md`) and operator approval. Return `PLAN_APPROVED` or `PLAN_BLOCKED`."
+  - Instruction: "Resume the Stage 2 planning pipeline from current state. Read planning_sub_stage from MEMORY.md and check existing artifacts to determine where to resume. Run plan validation (Athena writes `plan_validation.md`) and operator approval. Return `PLAN_APPROVED` or `PLAN_BLOCKED`."
 - Parse the return value:
   - If first non-empty line is `PLAN_APPROVED`: re-read MEMORY.md, confirm `stage=execution` and `phase_total` is set, proceed to execution routing.
   - If first non-empty line is `PLAN_BLOCKED`: display `handoff_note` and `handoff_context` to operator, halt.
@@ -154,15 +145,12 @@ For `execution`:
   - `name: Maestro`
   - `subagent_type: kiln-phase-executor`
   - `description: (next quote from names.json; cycle quotes sequentially each phase spawn)`
-  - `team_name: "kiln-session"`
   - Task prompt must include:
     - Full Phase `N` section from `master-plan.md`
-    - Full `MEMORY.md`
-    - Full `vision.md`
     - `handoff_context` (if present, for deeper phase context)
     - `PROJECT_PATH`
     - `MEMORY_DIR`
-    - Instruction: "This is a resumed session — your sub-team does not exist yet. Run TeamCreate('maestro-phase-<phase_number>') before spawning any workers, even if the phase state file shows work already in progress. Then resume from the state indicated in the phase state file and handoff context."
+    - Instruction: "Read MEMORY.md and vision.md from MEMORY_DIR at startup for full project context. Resume from the state indicated in the phase state file and handoff context."
 - After Maestro returns, update `MEMORY.md` with the new phase status, updated `handoff_note`, and updated `handoff_context`, then **re-enter this execution routing** to resume/transition/retry or advance to `validation` automatically.
 For `validation`:
 - Update spinner verbs: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `validation` stage verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": {"mode": "replace", "verbs": [...]}}`.
@@ -178,7 +166,7 @@ For `validation`:
 - Otherwise:
   - Tell the user: "Resuming validation stage from current memory."
   - Summarize what was built from `master-plan.md` and what decisions were made from `decisions.md`.
-  - Spawn Argus to run validation (Step 14 in start.md) with `team_name: "kiln-session"`.
+  - Spawn Argus to run validation (Step 14 in start.md).
 For `complete`:
 - Tell the user exactly:
 ```
