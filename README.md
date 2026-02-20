@@ -14,6 +14,16 @@
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/🟢_·_🟡_·_🟠_·_⚫_·_⚫-KILN_TEMP:_HOT-orange?style=for-the-badge&labelColor=1a1a2e" alt="Kiln Temp: HOT (3/5)">&nbsp;
+  <img src="https://img.shields.io/badge/updated-Feb_20,_2026-555?style=for-the-badge&labelColor=1a1a2e" alt="Last updated">
+</p>
+
+<p align="center">
+  <sub>⚠️ <strong>WIP</strong> — The kiln is firing but the temperature is <em>opinionated</em>. Expect occasional turbulence. We're on it.</sub><br>
+  <sub>🟢 Cold · 🟡 Warm · <strong>🟠 Hot ←</strong> · 🔴 Molten · 💀 Supernova</sub>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/Multi--Model-Opus_·_GPT--5-D4A574?style=for-the-badge" alt="Multi-Model">&nbsp;
   <img src="https://img.shields.io/badge/Debate-Models_Argue-C1666B?style=for-the-badge" alt="Debate">&nbsp;
   <img src="https://img.shields.io/badge/Dependencies-Zero-4A403A?style=for-the-badge" alt="Zero Deps">&nbsp;
