@@ -218,7 +218,7 @@ Six features that restore v1's dynamic execution patterns on top of v2's clean c
 Five stages. Sequential. I've tested every permutation. Yours were all worse. Don't take it personally &mdash; it took me a few millennia too.
 
 <p align="center">
-  <img src="docs/kiln-lifecycle.png" alt="Kiln Pipeline — Brainstorm → Plan → Execute → Validate → Deliver" width="780">
+  <img src="docs/kiln-pipeline.png" alt="Kiln Pipeline — Brainstorm → Plan → Execute → Validate → Deliver" width="780">
 </p>
 
 <p align="center">
@@ -362,7 +362,7 @@ I named them after your historical figures. Philosophers, strategists, mythologi
 <sub>Plus 5 muse sub-agents spawned by Mnemosyne for brownfield mapping: Clio (architecture), tech stack, data model, API surface, and quality analysis. 19 total. I keep count. It's a compulsion.</sub>
 
 <p align="center">
-  <img src="docs/kiln-agents.png" alt="Agent roster by model family" width="720">
+  <img src="docs/kiln-planning.png" alt="The Planning Stage — Confucius + Sun Tzu → Socrates → Plato → Athena → Plan Approved" width="720">
 </p>
 
 <br>
