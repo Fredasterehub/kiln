@@ -81,10 +81,16 @@ After displaying the banner, check whether MEMORY.md contains a `## Reset Notes`
 ```
 Recommended next step (from last reset): [next_action]
 ```
-## Step 5.5: Recreate Session Team
-Teams do not persist across Claude Code sessions. Always create the session team unconditionally:
-`TeamCreate("kiln-session")`
-Do not check whether the team exists first. Do not skip this step.
+## Step 5.5: Clean Team State and Recreate Session Team
+Teams do not persist cleanly across Claude Code sessions. Crashed or interrupted sessions leave stale team directories that block `TeamCreate`. Always clean up stale teams, then Always create the session team fresh.
+
+1. Remove all known Kiln team directories via Bash (ignore errors if they don't exist):
+   ```bash
+   rm -rf $HOME/.claude/teams/kiln-session/ $HOME/.claude/teams/aristotle-planning/ $HOME/.claude/teams/maestro-phase-*/ $HOME/.claude/teams/mnemosyne-mapping/
+   ```
+2. Create the session team: `TeamCreate("kiln-session")`
+
+Do not check whether the team exists first. Do not skip this step. This ensures a clean slate regardless of how the previous session ended.
 ## Step 6: Route to Stage
 Branch strictly on `stage` and run the matching behavior.
 For `brainstorm`:

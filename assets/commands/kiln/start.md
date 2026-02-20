@@ -156,7 +156,11 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
    Store response as `DEBATE_MODE`. If empty → `2`. If invalid, re-prompt once; if still invalid, use `2`.
    Record `debate_mode` in `MEMORY_DIR/MEMORY.md`, update `handoff_note` = `Debate mode set to <DEBATE_MODE>; spawning Da Vinci.`, `handoff_context` = `Debate mode <DEBATE_MODE> selected. Brainstorm depth <BRAINSTORM_DEPTH> selected. About to spawn Da Vinci.`, `last_updated`.
 
-   After all questions are answered, create the session team: `TeamCreate("kiln-session")`.
+   After all questions are answered, clean up any stale Kiln teams from prior sessions via Bash (ignore errors):
+   ```bash
+   rm -rf $HOME/.claude/teams/kiln-session/ $HOME/.claude/teams/aristotle-planning/ $HOME/.claude/teams/maestro-phase-*/ $HOME/.claude/teams/mnemosyne-mapping/
+   ```
+   Then create the session team: `TeamCreate("kiln-session")`.
 
    Then render a brainstorm_start ANSI banner (see Step 6 below), then print via Bash:
    ```bash
