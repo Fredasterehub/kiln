@@ -77,6 +77,7 @@ All worker Task calls in this workflow use `team_name: "maestro-phase-<phase_num
 2. Spawn Scheherazade via Task:
    - `name: "Scheherazade"`, `subagent_type: kiln-prompter`, `team_name: "maestro-phase-<phase_number>"`
    - Prompt: `project_path`, `PHASE_PLAN_PATH=$KILN_DIR/plans/phase_plan.md`, `MEMORY_DIR=$memory_dir`, and optional `CODEBASE_SNAPSHOT_PATH=$KILN_DIR/codebase-snapshot.md`.
+   - Immediately after spawning, send a delegation nudge: `SendMessage(recipient: "Scheherazade", content: "REMINDER: Invoke GPT-5.2 via codex exec for ALL task prompt generation. Do NOT write task prompt content yourself. Explore the codebase, build the meta-prompt, pipe it through Codex CLI.", summary: "Codex CLI delegation reminder")`.
 3. Verify: at least one `$KILN_DIR/prompts/task_*.md` exists. If zero → `[error]`, halt.
 4. Sort prompt files lexicographically. Append `[sharpen_complete]`.
 
@@ -98,7 +99,7 @@ All worker Task calls in this workflow use `team_name: "maestro-phase-<phase_num
 4. If rejected, correction loop (max 3 rounds):
    - Append `[review_rejected]`, then `[fix_start]`.
    - Read `$KILN_DIR/reviews/fix_round_<R>.md` for failure context.
-   - Spawn Scheherazade via Task (`name: "Scheherazade"`, `subagent_type: kiln-prompter`, `team_name: "maestro-phase-<phase_number>"`) with `project_path` and failure context to generate a fix-specific sharpened prompt covering: what failed, why, current broken state, and concrete fix requirements (must inspect current code state first).
+   - Spawn Scheherazade via Task (`name: "Scheherazade"`, `subagent_type: kiln-prompter`, `team_name: "maestro-phase-<phase_number>"`) with `project_path` and failure context to generate a fix-specific sharpened prompt covering: what failed, why, current broken state, and concrete fix requirements (must inspect current code state first). Immediately after spawning, send the same delegation nudge as in Sharpen above.
    - Spawn Codex via Task (`name: "Codex"`, `subagent_type: kiln-implementer`, `team_name: "maestro-phase-<phase_number>"`). The Task prompt MUST begin with the same CLI delegation instruction as in Implement above. Provide the sharpened fix prompt path and `TASK_NUMBER=fix_<R>`.
    - Immediately after spawning Codex, send the same delegation nudge as in Implement above.
    - Append `[fix_complete]`. Increment round. Re-spawn Sphinx via Task (`name: "Sphinx"`, `subagent_type: kiln-reviewer`, `team_name: "maestro-phase-<phase_number>"`).
