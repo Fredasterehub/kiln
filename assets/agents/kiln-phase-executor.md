@@ -84,7 +84,7 @@ All worker Task calls in this workflow use `team_name: "maestro-phase-<phase_num
 `parallel_group` annotations are reserved for future concurrency; currently all tasks run sequentially.
 1. For each prompt file sequentially:
    - Append `[task_start]`. Spawn Codex via Task (`name: "Codex"`, `subagent_type: kiln-implementer`, `team_name: "maestro-phase-<phase_number>"`).
-   - **The Task prompt to Codex MUST begin with**: "You are a thin CLI wrapper. You MUST pipe the task prompt to GPT-5.3-codex via Codex CLI: `cat <PROMPT_PATH> | codex exec -m gpt-5.3-codex -c 'model_reasoning_effort="high"' --full-auto --skip-git-repo-check -C <PROJECT_PATH> - -o <OUTPUT_PATH>`. You do NOT write code yourself. GPT-5.3-codex writes all code."
+   - **The Task prompt to Codex MUST begin with**: "You are a thin CLI wrapper. You MUST pipe the task prompt to GPT-5.3-codex via Codex CLI: `cat <PROMPT_PATH> | codex exec -m gpt-5.3-codex -c 'model_reasoning_effort="high"' --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -C <PROJECT_PATH> - -o <OUTPUT_PATH>`. You do NOT write code yourself. GPT-5.3-codex writes all code."
    - Then provide: `PROJECT_PATH`, `PROMPT_PATH` (absolute path to the prompt file), `TASK_NUMBER`.
    - Check `$KILN_DIR/outputs/task_<NN>_output.md`. If missing or `status: failed` → retry once.
    - Append `[task_success]`, `[task_retry]`, or `[task_fail]` accordingly.

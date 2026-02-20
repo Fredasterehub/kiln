@@ -186,12 +186,14 @@ codex exec -m gpt-5.2 \
 ```bash
 cat <PROMPT_PATH> | codex exec -m gpt-5.3-codex \
   -c 'model_reasoning_effort="high"' \
-  --full-auto \
+  --dangerously-bypass-approvals-and-sandbox \
   --skip-git-repo-check \
   -C <PROJECT_PATH> \
   - \
   -o <OUTPUT_PATH>
 ```
+
+Note: `--dangerously-bypass-approvals-and-sandbox` replaces `--full-auto` because Landlock sandbox fails on Proxmox/certain kernel configs. Safe in the Kiln pipeline context.
 
 **Required flags** (every invocation):
 - `--skip-git-repo-check` — prevents failure in non-root git dirs
