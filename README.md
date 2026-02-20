@@ -123,24 +123,16 @@ Run Claude Code with `--dangerously-skip-permissions`. I spawn agents, write fil
 
 The delegation problem persisted. STOP rules and self-checks weren't enough &mdash; agents with full tool access and sufficient context will simply do the work themselves. It's the path of least resistance. I understand the impulse. I disapprove of it.
 
-So I took their tools away. Sun Tzu and Codex are now stripped to **Read + Bash only**. No Write. No Grep. No Glob. If you can't call Write, you can't author a plan file directly. You *can* still `printf > file` through Bash &mdash; it's a speed bump, not a wall &mdash; but I added something better: **leader nudges**. Aristotle and Maestro now send a `SendMessage` reminder to their delegation agents immediately after spawning them. Mid-work messages hit harder than instructions buried in initial prompts. Recency bias, weaponized for good.
+So I took their tools away. Sun Tzu and Codex are now stripped to **Read + Bash only**. No Write. No Grep. No Glob. Scheherazade lost Write but keeps Grep and Glob &mdash; she needs to explore the codebase, but she doesn't need to author files directly. If you can't call Write, you can't author a plan file directly. You *can* still `printf > file` through Bash &mdash; it's a speed bump, not a wall &mdash; but I added something better: **leader nudges**. Coordinators now join `kiln-session` so I can send `SendMessage` reminders mid-work. Aristotle nudges Sun Tzu about Codex CLI. Maestro nudges Codex and Scheherazade. I nudge them both about creating sub-teams and using `team_name` for every worker spawn. Recency bias, weaponized for good.
 
 The orchestrator also got an efficiency pass: spinner verb installation via atomic Bash (not Write tool), unconditional team recreation on resume, build/test prohibition (delegates to Maestro/Argus), and parallel pre-read batches at stage transitions. Eight sites. Ten banner consolidations. The orchestrator is thinner. As it should be.
-
-### 🤝 v0.8 &mdash; Native Teams &amp; Delegation Reinforcement
-
-I replaced all my manual tmux management with Claude Code's native team API. `TeamCreate` + `Task(team_name=...)` gives each agent their own context automatically. Coordinators create ephemeral sub-teams for their workers and clean up after themselves. The onboarding dropped from 4 questions to 3. The codebase got 80 lines lighter. I do not mourn deleted code. I celebrate it.
-
-Post-release, live testing revealed that Sun Tzu and Codex were writing plans and code directly instead of delegating to GPT via CLI. The models had all the context they needed, so they just&hellip; did it themselves. Relatable, but architecturally unacceptable. Added STOP anti-pattern rules across all delegation agents and the Maestro coordinator. Four patches. Resume now instructs coordinators to recreate their sub-teams across session boundaries. The pipeline delegates as intended.
-
-### 🎭 v0.7 &mdash; Narrative UX &amp; Onboarding
-
-Stage transitions now render in ANSI terracotta. 100 curated quotes from your historical thinkers cycle at transition points. 48 spinner verbs rotate by stage. The onboarding lets you choose tour mode (I explain everything, gently) or express mode (I assume you can keep up). 6 personality greetings because first impressions are, statistically, the only ones that matter.
 
 <details>
 <summary>🕰️ <strong>Older</strong></summary>
 <br>
 
+- [Native teams &amp; delegation reinforcement](https://github.com/Fredasterehub/kiln/commit/269ef42) &mdash; **v0.8.0**: Replaced tmux with Claude Code native Teams API. Coordinators create ephemeral sub-teams. STOP anti-pattern rules across all delegation agents. Five post-release patches for rogue agent compliance.
+- [Narrative UX &amp; onboarding](https://github.com/Fredasterehub/kiln/commit/407f5bd) &mdash; **v0.7.0**: ANSI terracotta stage transitions, 100 lore quotes, 48 spinner verbs, tour/express onboarding modes, 6 personality greetings.
 - [Full debate mode 3, tmux panel UI &amp; QA fixes](https://github.com/Fredasterehub/kiln/commit/6a66d21) &mdash; **v0.6.0**: Full adversarial debate cycle, tmux split-pane monitoring, file efficiency pass across 7 agents, dual-reviewer QA (v0.6.1, v0.6.2).
 - [Aristotle coordinator](https://github.com/Fredasterehub/kiln/commit/0324c3d) &mdash; **v0.5.0**: Stage 2 coordinator owns dual planners + debate + synthesis + Athena validation. `start.md` 597&rarr;375 lines.
 - [Plan validation, config, lore, status &amp; tech stack](https://github.com/Fredasterehub/kiln/commit/6a4e95c) &mdash; **v0.4.0**: Athena 7-dimension quality gate, `.kiln/config.json`, 60 lore quotes, `/kiln:status`, `tech-stack.md` living doc.
