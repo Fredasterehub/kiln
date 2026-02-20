@@ -153,17 +153,22 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
    <full contents of CODEBASE_SNAPSHOT, or "(none)" if empty>
    ```
    Update right pane title: `tmux select-pane -t $AGENT_PANE -T "Da Vinci — Brainstorming"`
+   Use Bash to write the launcher script and set permissions:
+   ```bash
+   printf '#!/bin/bash\nclaude --agent kiln-brainstormer --append-system-prompt "$(cat %s)"\n' \
+     "$KILN_DIR/tmp/brainstorm_context.md" > "$KILN_DIR/tmp/launch_davinci.sh"
+   chmod +x "$KILN_DIR/tmp/launch_davinci.sh"
+   ```
    Launch Da Vinci in right pane:
    ```bash
-   tmux send-keys -t $AGENT_PANE \
-     "claude --agent kiln-brainstormer --context $KILN_DIR/tmp/brainstorm_context.md" Enter
+   tmux send-keys -t $AGENT_PANE "$KILN_DIR/tmp/launch_davinci.sh" Enter
    ```
    Poll for completion:
    ```bash
-   while [ ! -f "$KILN_DIR/davinci_complete" ]; do
+   while [ ! -f "$KILN_DIR/tmp/davinci_complete" ]; do
      sleep 2
    done
-   rm "$KILN_DIR/davinci_complete"
+   rm "$KILN_DIR/tmp/davinci_complete"
    ```
    After completion, clear right pane title: `tmux select-pane -t $AGENT_PANE -T "Ready"`
 
@@ -248,7 +253,7 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 9. Wait for the coordinator signal.
    Wait for Aristotle to complete.
    If `TMUX_LAYOUT=true`:
-   - Kill the tail: `tmux send-keys -t $AGENT_PANE "q" Enter`
+   - Kill the tail: `tmux send-keys -t $AGENT_PANE C-c`
    - Reset pane title: `tmux select-pane -t $AGENT_PANE -T "Ready"`
    Parse the coordinator return signal from the first non-empty line:
    - `PLAN_APPROVED`
@@ -313,10 +318,10 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
     `MEMORY_DIR`.
     Include this instruction text:
     "Implement this phase completely. Write working code, create real files, run tests. When done, write a phase summary to `$MEMORY_DIR/phase-<N>-results.md` with sections: Completed Tasks, Files Created or Modified, Tests Run and Results, Blockers or Issues. Do not proceed to the next phase — stop after this phase is complete."
-    Wait for completion before spawning the next phase executor.
-    If `TMUX_LAYOUT=true`:
-    - Kill the tail: `tmux send-keys -t $AGENT_PANE "q" Enter`
-    - Reset pane title: `tmux select-pane -t $AGENT_PANE -T "Ready"`
+   Wait for completion before spawning the next phase executor.
+   If `TMUX_LAYOUT=true`:
+   - Kill the tail: `tmux send-keys -t $AGENT_PANE C-c`
+   - Reset pane title: `tmux select-pane -t $AGENT_PANE -T "Ready"`
     After each phase:
     Read `MEMORY_DIR/phase-<N>-results.md`.
     Extract a one-sentence summary from the results.
@@ -365,10 +370,10 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
     `MEMORY_DIR`.
     Include this instruction:
     "Build, deploy, and validate the project end-to-end. Test the actual running product against the master plan's acceptance criteria. For each failure, generate a correction task description with: what failed, evidence, affected files, suggested fix, and verification command. Write the validation report to `$KILN_DIR/validation/report.md`."
-    Wait for completion.
-    If `TMUX_LAYOUT=true`:
-    - Kill the tail: `tmux send-keys -t $AGENT_PANE "q" Enter`
-    - Reset pane title: `tmux select-pane -t $AGENT_PANE -T "Ready"`
+   Wait for completion.
+   If `TMUX_LAYOUT=true`:
+   - Kill the tail: `tmux send-keys -t $AGENT_PANE C-c`
+   - Reset pane title: `tmux select-pane -t $AGENT_PANE -T "Ready"`
     Confirm `$KILN_DIR/validation/report.md` exists and is readable.
 
     14b. Check the validation verdict.

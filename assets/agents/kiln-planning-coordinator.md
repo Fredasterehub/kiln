@@ -107,7 +107,7 @@ Skip if `master-plan.md` already has non-template content.
      - `plan_type: "master"`
      - `KILN_DIR: $kiln_dir`
      - `MEMORY_DIR: $memory_dir`
-     - Instruction: read plans from `$kiln_dir/plans/claude_plan.md` and `$kiln_dir/plans/codex_plan.md`. If present, read debate resolution from `$kiln_dir/plans/debate_resolution.md`.
+     - Instruction: if `$kiln_dir/plans/debate_log.md` exists (Mode 3 debate), read the "Final Claude version" and "Final Codex version" paths from its `## Outcome` section and use those as the plan inputs. Otherwise read plans from `$kiln_dir/plans/claude_plan.md` and `$kiln_dir/plans/codex_plan.md`. If present, read debate resolution from `$kiln_dir/plans/debate_resolution.md`.
      - Instruction: write the synthesized authoritative plan to `$memory_dir/master-plan.md`.
      - Instruction: return only a short summary (no full master plan text).
 3. Wait for completion; verify `$memory_dir/master-plan.md` exists and is non-empty. If missing, return `PLAN_BLOCKED`.
@@ -134,7 +134,7 @@ Validation with retry loop (max 2 retries, 3 total Athena runs).
    f. If FAIL and `validation_attempt < 2`:
       - Increment `validation_attempt`; read `$kiln_dir/plans/plan_validation.md` for remediation guidance.
       - Update MEMORY.md: `status: in_progress`, `handoff_note: Plan failed validation; retrying (attempt <validation_attempt + 1>/3).`, `handoff_context`, `last_updated`.
-      - Delete existing plan artifacts (`claude_plan.md`, `codex_plan.md`, `debate_resolution.md`), then re-run Dual Plan (with Athena feedback), Debate (if `debate_mode >= 2`), and Synthesize; loop back to re-validate.
+      - Delete existing plan artifacts: `claude_plan.md`, `codex_plan.md`, `debate_resolution.md`, `debate_log.md`, and all round artifacts matching `critique_of_*_r*.md` and `plan_*_v*.md` in `$kiln_dir/plans/`. Then re-run Dual Plan (with Athena feedback), Debate (if `debate_mode >= 2`), and Synthesize; loop back to re-validate.
    g. If FAIL and `validation_attempt >= 2`:
       - Update MEMORY.md: `stage: planning`, `status: blocked`, `planning_sub_stage: synthesis`, handoff fields pointing to the validation report, `last_updated`.
       - Return `PLAN_BLOCKED`.

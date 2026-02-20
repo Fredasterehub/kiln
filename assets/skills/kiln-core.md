@@ -134,6 +134,7 @@ cat <PROMPT_PATH> | codex exec -m gpt-5.3-codex \
 $KILN_DIR/
   config.json              — Runtime config (model mode, preferences, tooling hints)
   phase_<N>_state.md       — Per-phase state file (branch, commit SHA, structured events)
+  planning_state.md        — Stage 2 planning coordinator state/event log
   codebase-snapshot.md     — Codebase index (refreshed per phase, gitignored)
   plans/
     claude_plan.md         — Claude planner output

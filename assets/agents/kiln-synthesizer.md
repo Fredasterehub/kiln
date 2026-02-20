@@ -24,7 +24,10 @@ tools: Read, Write, Grep, Glob
 </inputs>
 
 <workflow>
-1. Read `$KILN_DIR/plans/claude_plan.md` and `codex_plan.md` in parallel. Read debate resolution if provided.
+1. Check for Mode 3 debate: if `$KILN_DIR/plans/debate_log.md` exists, read it and extract the
+   "Final Claude version" and "Final Codex version" paths from the `## Outcome` section. Use those
+   as the primary plan inputs (they are the post-debate revised plans). Otherwise read
+   `$KILN_DIR/plans/claude_plan.md` and `codex_plan.md`. Read debate resolution if provided.
 2. Synthesis rules (in order):
    - Debate resolution recommendations take precedence over individual plans.
    - Without debate, prefer the more detailed/specific approach per step.

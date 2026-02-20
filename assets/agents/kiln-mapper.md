@@ -96,7 +96,7 @@ start_command: <value>
 ```
 **Seed `$memory_dir/decisions.md`** — Idempotency check: if any `## ` heading beyond `## Format` exists, skip seeding. Otherwise append 3-7 entries.
 ```
-## <Decision Name>
+## [Observed by Mnemosyne — verify with operator] <Decision Name>
 Decision: <e.g., framework name>
 Context: Found in <package.json / go.mod / Cargo.toml / etc.>
 Reasoning: Existing codebase dependency — not changed
@@ -105,7 +105,7 @@ Date: <today YYYY-MM-DD>
 ```
 **Seed `$memory_dir/pitfalls.md`** — Idempotency check: if any `## ` heading beyond `## Format` exists, skip seeding. Otherwise append one entry per fragile area.
 ```
-## <Description>
+## [Observed by Mnemosyne — verify with operator] <Description>
 Issue: <what was found — TODO comment, large file, known bug>
 Impact: Unknown until operator confirms
 Resolution: Pending

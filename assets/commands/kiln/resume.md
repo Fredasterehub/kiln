@@ -78,7 +78,12 @@ Check `$TMUX` environment variable.
 If set (already in a tmux session):
 - Check if a right pane already exists: `tmux list-panes | wc -l`
 - If only 1 pane: re-create the split layout same as start.md Step 0 (tmux layout active path). Store `$KILN_PANE` and `$AGENT_PANE`, set titles and border styles, set `TMUX_LAYOUT=true`.
-- If 2+ panes already exist: identify the right pane, set `TMUX_LAYOUT=true`, and use existing panes.
+- If 2+ panes already exist: recover pane IDs using tmux:
+  ```bash
+  KILN_PANE=$(tmux list-panes -F '#{pane_id} #{pane_left}' | sort -k2 -n | head -1 | awk '{print $1}')
+  AGENT_PANE=$(tmux list-panes -F '#{pane_id} #{pane_left}' | sort -k2 -n | tail -1 | awk '{print $1}')
+  ```
+  Set `TMUX_LAYOUT=true` and continue with existing panes.
 If not set: set `TMUX_LAYOUT=false` and continue.
 ## Step 6: Route to Stage
 Branch strictly on `stage` and run the matching behavior.
@@ -130,6 +135,9 @@ For `execution`:
   - Trust `handoff_note` for additional context beyond what structured events convey.
   - Otherwise, extract the full Phase `N` section from `master-plan.md` as the authoritative plan for this phase.
 - Print: `"Resuming phase [N]/[phase_total]: [phase_name] — spawning Maestro."`
+- If `TMUX_LAYOUT=true`:
+  - Update right pane title: `tmux select-pane -t $AGENT_PANE -T "Maestro — Phase N"`
+  - Tail phase state: `tmux send-keys -t $AGENT_PANE "tail -f $KILN_DIR/phase_<N>_state.md" Enter`
 - Spawn the next phase executor **immediately** (no permission prompt):
   - Spawn `kiln-phase-executor` via the **Task** tool.
   - `name: Maestro`
@@ -143,6 +151,7 @@ For `execution`:
     - `PROJECT_PATH`
     - `MEMORY_DIR`
 - After Maestro returns, update `MEMORY.md` with the new phase status, updated `handoff_note`, and updated `handoff_context`, then **re-enter this execution routing** to resume/transition/retry or advance to `validation` automatically.
+- If `TMUX_LAYOUT=true`: kill the tail (`tmux send-keys -t $AGENT_PANE C-c`) and reset pane title (`tmux select-pane -t $AGENT_PANE -T "Ready"`).
 For `validation`:
 - Re-read `master-plan.md` and `decisions.md`.
 - Check `correction_cycle` from MEMORY.md.
@@ -156,7 +165,11 @@ For `validation`:
 - Otherwise:
   - Tell the user: "Resuming validation stage from current memory."
   - Summarize what was built from `master-plan.md` and what decisions were made from `decisions.md`.
+  - If `TMUX_LAYOUT=true`:
+    - Update right pane title: `tmux select-pane -t $AGENT_PANE -T "Argus — Validation"`
+    - Tail the validation report: `tmux send-keys -t $AGENT_PANE "tail -f $KILN_DIR/validation/report.md 2>/dev/null || echo 'Waiting for report...'" Enter`
   - Spawn Argus to run validation (Step 14 in start.md).
+  - If `TMUX_LAYOUT=true`: kill the tail (`tmux send-keys -t $AGENT_PANE C-c`) and reset pane title (`tmux select-pane -t $AGENT_PANE -T "Ready"`).
 For `complete`:
 - Tell the user exactly:
 ```

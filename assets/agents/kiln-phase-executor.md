@@ -52,7 +52,7 @@ Derive `KILN_DIR="$project_path/.kiln"`. Read kiln-core (`$CLAUDE_HOME/kilntwo/s
 1. Spawn Confucius (`kiln-planner-claude`) and Sun Tzu (`kiln-planner-codex`) in parallel with `phase_description`, `project_path`, `memory_dir`.
 2. Append `[plan_start]` event.
 3. Verify: `$KILN_DIR/plans/claude_plan.md` and `$KILN_DIR/plans/codex_plan.md` exist. If missing → `[error]`, halt.
-4. If `debate_mode >= 2`: spawn Socrates (`kiln-debater`) with both plan paths and `debate_mode`. Append `[debate_complete]`.
+4. If `debate_mode >= 2`: read `$KILN_DIR/config.json` and extract `preferences.debate_rounds_max` (default 3 if absent or unreadable). Spawn Socrates (`kiln-debater`) with both plan paths, `debate_mode`, and `debate_rounds_max`. Append `[debate_complete]`.
 5. Spawn Plato (`kiln-synthesizer`) with `project_path`, `plan_type="phase"`, and debate resolution path if exists. Verify `$KILN_DIR/plans/phase_plan.md`. Append `[synthesis_complete]`.
 6. Append `[plan_complete]`.
 

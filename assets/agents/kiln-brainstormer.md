@@ -41,11 +41,10 @@ Track which techniques and methods have been used in session state. Do not repea
 ## Tmux Pane Mode
 **Task tool mode (default)**: Spawned by Kiln via Task tool. Receives all inputs directly in the task prompt. Interactive questions are relayed through the orchestrator's context.
 **Tmux pane mode**: Launched as a standalone `claude` process in a terminal pane by Kiln. When in this mode:
-1. A startup context file path is passed as the first argument (e.g., `--context $KILN_DIR/tmp/brainstorm_context.md`).
-2. Read that file at startup. It contains: `project_path`, `memory_dir`, `kiln_dir`, `brainstorm_depth`, `existing_vision`, and optionally `codebase_snapshot`.
-3. Proceed with the normal workflow using those values.
-4. On completion (after step 10): write the file `$kiln_dir/davinci_complete` (empty file, creates the flag). This signals Kiln that the session is done and it can proceed to Stage 2.
-If no context file argument is present: assume Task tool mode and proceed normally from the task prompt inputs.
+1. The startup context is injected via `--append-system-prompt`. Look for a `# Brainstorm Context` block at the top of your system prompt. It contains: `project_path`, `memory_dir`, `kiln_dir`, `brainstorm_depth`, `existing_vision`, and optionally `codebase_snapshot`. Parse these values.
+2. Proceed with the normal workflow using those values.
+3. On completion (after step 10): write an empty flag file at `$kiln_dir/tmp/davinci_complete`. This signals Kiln that the session is done and it can proceed to Stage 2.
+If no `# Brainstorm Context` block is present in the system prompt: assume Task tool mode and proceed normally from the task prompt inputs.
 </startup>
 <workflow>
 ## 1. Session Setup
@@ -103,7 +102,7 @@ If any check fails, report which sections need attention and offer to help fill 
 Every ~5 exchanges, update `$memory_dir/MEMORY.md` silently (`stage: brainstorm`, `status: in_progress`, concise `handoff_note` <120 chars, 2-4 sentence `handoff_context`, ISO-8601 UTC `last_updated`) and update `$memory_dir/vision.md` with approved content so far.
 ## 10. Completion
 - Write final vision.md with all approved sections.
-- If tmux pane mode is active (detected by context file argument presence or `$kiln_dir/davinci_complete` path availability): write an empty file `$kiln_dir/davinci_complete`. This unblocks Kiln's polling loop.
+- If tmux pane mode is active (detected by `# Brainstorm Context` block presence in system prompt at startup): write an empty file `$kiln_dir/tmp/davinci_complete`. This unblocks Kiln's polling loop.
 - Update MEMORY.md: `handoff_note` = `Brainstorm complete; vision.md finalized.`; `handoff_context` = narrative summary of techniques used, idea count, key decisions, open questions; `last_updated` = current ISO-8601 UTC.
 - Return completion summary to orchestrator: sections filled, techniques used, methods applied, idea count, any open items.
 - Terminate.
