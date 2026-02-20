@@ -119,6 +119,14 @@ Run Claude Code with `--dangerously-skip-permissions`. I spawn agents, write fil
 
 ## ✨ Recent Changes
 
+### 🔒 v0.9 &mdash; Delegation Hardening &amp; Orchestrator Efficiency
+
+The delegation problem persisted. STOP rules and self-checks weren't enough &mdash; agents with full tool access and sufficient context will simply do the work themselves. It's the path of least resistance. I understand the impulse. I disapprove of it.
+
+So I took their tools away. Sun Tzu and Codex are now stripped to **Read + Bash only**. No Write. No Grep. No Glob. If you can't call Write, you can't author a plan file directly. You *can* still `printf > file` through Bash &mdash; it's a speed bump, not a wall &mdash; but I added something better: **leader nudges**. Aristotle and Maestro now send a `SendMessage` reminder to their delegation agents immediately after spawning them. Mid-work messages hit harder than instructions buried in initial prompts. Recency bias, weaponized for good.
+
+The orchestrator also got an efficiency pass: spinner verb installation via atomic Bash (not Write tool), unconditional team recreation on resume, build/test prohibition (delegates to Maestro/Argus), and parallel pre-read batches at stage transitions. Eight sites. Ten banner consolidations. The orchestrator is thinner. As it should be.
+
 ### 🤝 v0.8 &mdash; Native Teams &amp; Delegation Reinforcement
 
 I replaced all my manual tmux management with Claude Code's native team API. `TeamCreate` + `Task(team_name=...)` gives each agent their own context automatically. Coordinators create ephemeral sub-teams for their workers and clean up after themselves. The onboarding dropped from 4 questions to 3. The codebase got 80 lines lighter. I do not mourn deleted code. I celebrate it.
@@ -388,7 +396,7 @@ kilntwo/
 │   ├── templates/        7 templates
 │   ├── protocol.md
 │   └── names.json
-└── test/                 208 tests, zero deps
+└── test/                 220 tests, zero deps
 ```
 
 </details>
