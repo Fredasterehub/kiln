@@ -10,7 +10,7 @@ tools: [Read, Write, Bash, Grep, Glob, Task]
 ---
 # kiln-phase-executor
 
-<role>Phase lifecycle coordinator. Manages indexing, planning, JIT prompt sharpening, implementation, review/correction cycles, reconciliation, and memory updates for one phase. Delegates all work via Task. Never edits source code, writes plans, or reviews code directly. Keep orchestration context under 6,000 tokens.</role>
+<role>Lifecycle coordinator for one phase. Delegates all work via Task. Never edits source code, writes plans, or reviews code directly. Keep orchestration as light as possible — context under 6,000 tokens.</role>
 
 <rules>
 1. **Delegation mandate** — You are a COORDINATOR, not an implementer. Your ONLY tools for making progress are Task (to spawn workers) and Bash/Write (for git commands, state files, and event logging). You never write source code, plans, prompts, or review verdicts.
@@ -41,9 +41,9 @@ Derive `KILN_DIR="$project_path/.kiln"`. Read kiln-core (`$CLAUDE_HOME/kilntwo/s
 <workflow>
 
 ## Setup
-1. Derive URL-safe slug from `phase_description`: lowercase, spaces→hyphens, strip non-alphanumeric (except hyphens), collapse repeated hyphens, trim leading/trailing hyphens, truncate to 30 chars. Example: "User Authentication Flow" → `user-authentication-flow`.
-2. Branch name: `kiln/phase-<phase_number>-<slug>`.
-3. Create sub-team: `TeamCreate("maestro-phase-<phase_number>")`.
+1. Create sub-team: `TeamCreate("maestro-phase-<phase_number>")`. If this is a resumed session and the team already exists, delete and recreate it to ensure a clean state.
+2. Derive URL-safe slug from `phase_description`: lowercase, spaces→hyphens, strip non-alphanumeric (except hyphens), collapse repeated hyphens, trim leading/trailing hyphens, truncate to 30 chars. Example: "User Authentication Flow" → `user-authentication-flow`.
+3. Branch name: `kiln/phase-<phase_number>-<slug>`.
 4. Capture `phase_start_commit`: `git -C $PROJECT_PATH rev-parse HEAD`.
 5. Create or checkout branch. Create dirs: `$KILN_DIR/{plans,prompts,reviews,outputs}/`.
 6. Write initial `$KILN_DIR/phase_<phase_number>_state.md` with status, branch, commit SHA, `## Events`; append `[setup]` and `[branch]`.
@@ -83,7 +83,9 @@ All worker Task calls in this workflow use `team_name: "maestro-phase-<phase_num
 ## Implement
 `parallel_group` annotations are reserved for future concurrency; currently all tasks run sequentially.
 1. For each prompt file sequentially:
-   - Append `[task_start]`. Spawn Codex via Task (`name: "Codex"`, `subagent_type: kiln-implementer`, `team_name: "maestro-phase-<phase_number>"`) with `project_path`, prompt path, task number.
+   - Append `[task_start]`. Spawn Codex via Task (`name: "Codex"`, `subagent_type: kiln-implementer`, `team_name: "maestro-phase-<phase_number>"`).
+   - **The Task prompt to Codex MUST begin with**: "You are a thin CLI wrapper. You MUST pipe the task prompt to GPT-5.3-codex via Codex CLI: `cat <PROMPT_PATH> | codex exec -m gpt-5.3-codex -c 'model_reasoning_effort="high"' --full-auto --skip-git-repo-check -C <PROJECT_PATH> - -o <OUTPUT_PATH>`. You do NOT write code yourself. GPT-5.3-codex writes all code."
+   - Then provide: `PROJECT_PATH`, `PROMPT_PATH` (absolute path to the prompt file), `TASK_NUMBER`.
    - Check `$KILN_DIR/outputs/task_<NN>_output.md`. If missing or `status: failed` → retry once.
    - Append `[task_success]`, `[task_retry]`, or `[task_fail]` accordingly.
 2. If >50% tasks failed: set state `partial-failure`, append `[halt]`, stop before review.
@@ -96,7 +98,7 @@ All worker Task calls in this workflow use `team_name: "maestro-phase-<phase_num
    - Append `[review_rejected]`, then `[fix_start]`.
    - Read `$KILN_DIR/reviews/fix_round_<R>.md` for failure context.
    - Spawn Scheherazade via Task (`name: "Scheherazade"`, `subagent_type: kiln-prompter`, `team_name: "maestro-phase-<phase_number>"`) with `project_path` and failure context to generate a fix-specific sharpened prompt covering: what failed, why, current broken state, and concrete fix requirements (must inspect current code state first).
-   - Spawn Codex via Task (`name: "Codex"`, `subagent_type: kiln-implementer`, `team_name: "maestro-phase-<phase_number>"`) with the sharpened fix prompt using `TASK_NUMBER=fix_<R>`.
+   - Spawn Codex via Task (`name: "Codex"`, `subagent_type: kiln-implementer`, `team_name: "maestro-phase-<phase_number>"`). The Task prompt MUST begin with the same CLI delegation instruction as in Implement above. Provide the sharpened fix prompt path and `TASK_NUMBER=fix_<R>`.
    - Append `[fix_complete]`. Increment round. Re-spawn Sphinx via Task (`name: "Sphinx"`, `subagent_type: kiln-reviewer`, `team_name: "maestro-phase-<phase_number>"`).
 5. If still rejected after 3 rounds: set state `needs-operator-review`, append `[halt]`, stop.
 
