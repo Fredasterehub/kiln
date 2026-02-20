@@ -83,7 +83,7 @@ Skip if `debate_resolution.md` already exists or if `debate_mode == 1`.
 2. If `debate_mode == 1`:
    - Append event: `- [<ISO-8601>] [Aristotle] [debate_complete] — Debate skipped (mode 1).`
    - Proceed to Synthesize.
-3. Read `$kiln_dir/config.json` to get `debate_rounds_max` (default 3 if key absent or config unreadable).
+3. Read `$kiln_dir/config.json` to get `preferences.debate_rounds_max` (default 3 if key absent or config unreadable).
 4. If `debate_mode >= 2`: spawn Socrates (`kiln-debater`) via Task:
    - `name: "Socrates"`, `subagent_type: kiln-debater`
    - Prompt includes:
