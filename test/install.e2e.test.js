@@ -114,7 +114,7 @@ describe('install E2E', { concurrency: false }, () => {
     install({ home: tmpHome, projectPath: tmpProject });
 
     const agentNames = listMarkdownFiles(ASSETS_AGENTS_DIR);
-    assert.strictEqual(agentNames.length, 18, 'assets/agents should contain 18 files');
+    assert.strictEqual(agentNames.length, 19, 'assets/agents should contain 19 files');
 
     for (const name of agentNames) {
       assertNonEmptyFile(path.join(paths.agentsDir, name));

@@ -3,26 +3,7 @@ Execute the Kiln protocol autonomously from the current working directory using 
 
 ---
 
-## Canonical MEMORY.md Schema (Use Everywhere)
-
-`MEMORY.md` must use these exact runtime fields and enum values:
-- `stage`: `brainstorm | planning | execution | validation | complete`
-- `status`: `in_progress | paused | blocked | complete`
-- `planning_sub_stage`: `dual_plan | debate | synthesis | null`
-- `phase_status` (in `## Phase Statuses` entries): `pending | in_progress | failed | completed`
-
-Always update `last_updated` (ISO-8601 UTC) when runtime fields change.
-Never write free-form status strings.
-
----
-
-## Paths Contract
-
-- `PROJECT_PATH`: absolute project root path for the active run.
-- `KILN_DIR = $PROJECT_PATH/.kiln`.
-- `CLAUDE_HOME = $HOME/.claude`.
-- `MEMORY_DIR = $CLAUDE_HOME/projects/$ENCODED_PATH/memory`.
-- Never use root-relative kiln or claude paths.
+Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEMORY.md schema, paths contract, config schema, event enum, and Codex CLI patterns. This file uses those definitions without repeating them.
 
 ---
 
@@ -81,57 +62,16 @@ Never write free-form status strings.
    Confirm the directory exists before continuing.
 
 4. Instantiate memory templates.
-   Read templates from `$CLAUDE_HOME/kilntwo/templates/`.
-   Process these files:
-   `MEMORY.md`
-   `vision.md`
-   `master-plan.md`
-   `decisions.md`
-   `pitfalls.md`
-   `PATTERNS.md`
-   `tech-stack.md`
-   For each target memory file, first check whether it already exists and contains non-empty content beyond a header.
-   If it already has substantial content, do not overwrite it.
-   If it is missing or effectively empty, initialize it from the matching template when available.
-   For `MEMORY.md`, enforce the canonical schema and fill/update these fields:
-   `project_name` = basename of `PROJECT_PATH`.
-   `project_path` = full `PROJECT_PATH`.
-   `date_started` = today in `YYYY-MM-DD`.
-   `stage` = `brainstorm`.
-   `status` = `in_progress`.
-   `planning_sub_stage` = `null`.
-   `debate_mode` = `2` (default until Step 5 finalizes user input).
-   `phase_number` = `null`.
-   `phase_name` = `null`.
-   `phase_total` = `null`.
-   `handoff_note` = `Memory initialized; ready for brainstorming.`
-   `handoff_context` = `All core memory files instantiated from templates. Project is ready for Stage 1 brainstorming.`
-   `last_updated` = current ISO-8601 UTC timestamp.
-   Keep `## Phase Statuses` present; leave it empty at initialization.
-   If the template uses blank fields instead of placeholders, initialize those fields to empty strings.
-   For `vision.md`, write template content and leave the body section empty.
-   For `master-plan.md`, write template content and leave the body empty.
-   For `decisions.md`, write template content and leave the decision log empty.
-   For `pitfalls.md`, write template content and leave the pitfalls list empty.
-   For `tech-stack.md`, write template content and leave section bodies empty.
-   If a template file does not exist, create the memory file from scratch.
-   The fallback file format is:
-   H1 heading of the filename stem.
-   One blank line.
-   Nothing else.
-   After completing this step, update `MEMORY_DIR/MEMORY.md`:
-   `stage` = `brainstorm`
-   `status` = `in_progress`
-   `handoff_note` = `Memory initialization complete.`
-   `handoff_context` = `All core memory files instantiated from templates. Project is ready for brainstorming.`
-   `last_updated` = current ISO-8601 UTC timestamp.
+   Process these template files from `$CLAUDE_HOME/kilntwo/templates/`: MEMORY.md, vision.md, master-plan.md, decisions.md, pitfalls.md, PATTERNS.md, tech-stack.md. For each: if memory file is missing or empty, copy from template (if available) or create with H1 heading only. Exception: for MEMORY.md, populate canonical schema fields (see kiln-core.md) rather than copying the template verbatim. Do not overwrite files that already contain non-empty content beyond a header.
+   For `MEMORY.md`, populate these fields: `project_name` = basename of `PROJECT_PATH`, `project_path` = full `PROJECT_PATH`, `date_started` = today in `YYYY-MM-DD`, `stage` = `brainstorm`, `status` = `in_progress`, `planning_sub_stage` = `null`, `debate_mode` = `2`, `phase_number` = `null`, `phase_name` = `null`, `phase_total` = `null`, `handoff_note` = `Memory initialized; ready for brainstorming.`, `handoff_context` = `All core memory files instantiated from templates. Project is ready for Stage 1 brainstorming.`, `last_updated` = current ISO-8601 UTC timestamp. Keep `## Phase Statuses` present and empty.
+   After completing this step, update `MEMORY_DIR/MEMORY.md`: `stage` = `brainstorm`, `status` = `in_progress`, `handoff_note` = `Memory initialization complete.`, `handoff_context` = `All core memory files instantiated from templates. Project is ready for brainstorming.`, `last_updated` = current ISO-8601 UTC timestamp.
 
 4.5. Detect project mode.
    Check for brownfield indicators in `PROJECT_PATH`:
    - Dependency manifests: `package.json`, `go.mod`, `Cargo.toml`, `requirements.txt`, `pyproject.toml`, `pom.xml`, `build.gradle`
    - Source directories with source files: `src/`, `lib/`, `app/`, `cmd/`
    - Existing git history: run `git -C $PROJECT_PATH log --oneline -1` (non-empty output means commits exist)
-   Also detect tooling hints and stage them for `$KILN_DIR/config.json`:
+   Also detect tooling hints for `$KILN_DIR/config.json`:
    - `package-lock.json` => `tooling.package_manager = npm`
    - `yarn.lock` => `tooling.package_manager = yarn`
    - `pnpm-lock.yaml` => `tooling.package_manager = pnpm`
@@ -140,67 +80,31 @@ Never write free-form status strings.
    - `.eslintrc*` or `eslint.config.*` => `tooling.linter = eslint`
    - `package.json` scripts containing `test` => infer `tooling.test_runner` from script (`jest`, `vitest`, `mocha`, or `npm test`)
 
-   If NO indicators found:
-   - Set `PROJECT_MODE = greenfield`
-   - Write `project_mode: greenfield` to the `## Metadata` section of `MEMORY_DIR/MEMORY.md`
-   - Update `handoff_note` = `Project mode: greenfield; brainstorm depth selection next.`
-   - Update `handoff_context` = `No brownfield indicators found. Project treated as greenfield.`
-   - Update `last_updated`.
-   - Proceed to Step 5.
+   If NO indicators found: set `PROJECT_MODE = greenfield`, write `project_mode: greenfield` to MEMORY.md `## Metadata`, update `handoff_note` = `Project mode: greenfield; brainstorm depth selection next.`, update `last_updated`. Proceed to Step 5.
 
-   If indicators found: display the detected files/directories to the operator. Ask exactly:
+   If indicators found: display detected files/directories to operator. Ask exactly:
    "I found an existing codebase ([list detected indicators]). Should I run Mnemosyne to map it before brainstorming?
      [Y] Map the codebase first (recommended)  [N] Skip mapping, start fresh"
 
-   If operator responds Y (or any affirmative):
-   - Set `PROJECT_MODE = brownfield`
-   - Write `project_mode: brownfield` to the `## Metadata` section of `MEMORY_DIR/MEMORY.md`
-   - If any tooling hints were detected, merge them into `$KILN_DIR/config.json` `tooling` fields (keep existing non-null values unless a more specific detected value exists).
-   - Spawn `kiln-mapper` via the Task tool:
-     `name`: `"Mnemosyne"` (the alias)
-     `subagent_type`: `kiln-mapper`
-     `description`: (next quote from names.json quotes array for kiln-mapper)
-     Task prompt must include:
-     `project_path` = `$PROJECT_PATH`
-     `memory_dir` = `$MEMORY_DIR`
-     `kiln_dir` = `$KILN_DIR`
-     Instruction: "Map the existing codebase and pre-seed memory files. Write codebase-snapshot.md and seed decisions.md and pitfalls.md. Signal completion when done."
-   - Wait for Mnemosyne to return.
-   - Confirm to operator: "Mnemosyne complete. Codebase snapshot ready at `$KILN_DIR/codebase-snapshot.md`."
-   - Update `handoff_note` = `Project mode: brownfield; Mnemosyne complete; brainstorm depth next.`
-   - Update `handoff_context` = `Brownfield project. Mnemosyne mapped the codebase. Snapshot at $KILN_DIR/codebase-snapshot.md. Decisions and pitfalls pre-seeded.`
-   - Update `last_updated`.
-   - Proceed to Step 5.
+   Set `PROJECT_MODE = brownfield`, write `project_mode: brownfield` to MEMORY.md `## Metadata`. If any tooling hints were detected, merge them into `$KILN_DIR/config.json` `tooling` fields (keep existing non-null values unless a more specific detected value exists).
 
-   If operator responds N:
-   - Set `PROJECT_MODE = brownfield`
-   - Write `project_mode: brownfield` to the `## Metadata` section of `MEMORY_DIR/MEMORY.md`
-   - If any tooling hints were detected, merge them into `$KILN_DIR/config.json` `tooling` fields (keep existing non-null values unless a more specific detected value exists).
-   - Update `handoff_note` = `Project mode: brownfield (mapping skipped); brainstorm depth next.`
-   - Update `handoff_context` = `Brownfield indicators found. Operator chose to skip Mnemosyne mapping. Codebase snapshot will not be available; planners will work from vision.md only.`
-   - Update `last_updated`.
-   - Proceed to Step 5.
+   If operator responds Y:
+   - Spawn `kiln-mapper` via the Task tool: `name: "Mnemosyne"`, `subagent_type: kiln-mapper`, `description`: (next quote from names.json). Task prompt must include `project_path`, `memory_dir`, `kiln_dir`, and instruction: "Map the existing codebase and pre-seed memory files. Write codebase-snapshot.md and seed decisions.md and pitfalls.md. Signal completion when done."
+   - Wait for Mnemosyne to return.
+   - Confirm: "Mnemosyne complete. Codebase snapshot ready at `$KILN_DIR/codebase-snapshot.md`."
+
+   In both brownfield cases (Y or N), update MEMORY.md: `project_mode`, `handoff_note` (Y: `Project mode: brownfield; Mnemosyne complete; brainstorm depth next.` / N: `Project mode: brownfield (mapping skipped); brainstorm depth next.`), `handoff_context` (Y: `Brownfield project. Mnemosyne mapped the codebase. Snapshot at $KILN_DIR/codebase-snapshot.md. Decisions and pitfalls pre-seeded.` / N: `Brownfield indicators found. Operator chose to skip Mnemosyne mapping. Planners will work from vision.md only.`), `last_updated`. Proceed to Step 5.
 
 5. Ask for brainstorm depth.
-   Ask the user exactly this prompt:
+   Ask the user:
    "What brainstorm depth would you like?
      1 = Light (quick, focused — idea floor: 10)
      2 = Standard (balanced exploration — idea floor: 30) [default]
      3 = Deep (comprehensive — idea floor: 100)
 
    Press Enter to accept the default (2)."
-   Store the response as `BRAINSTORM_DEPTH`.
-   If the user presses Enter or returns an empty response, set `BRAINSTORM_DEPTH = standard`.
-   Map: `1` = `light`, `2` = `standard`, `3` = `deep`.
-   If the response is not `1`, `2`, or `3`, re-prompt once.
-   If the second response is still invalid, set `BRAINSTORM_DEPTH = standard`.
-   Record `brainstorm_depth` in `MEMORY_DIR/MEMORY.md`.
-   After recording it, keep:
-   `stage` = `brainstorm`
-   `status` = `in_progress`
-   `handoff_note` = `Brainstorm depth set to <BRAINSTORM_DEPTH>; spawning brainstormer.`
-   `handoff_context` = `Brainstorm depth <BRAINSTORM_DEPTH> selected by operator. About to spawn Da Vinci for structured brainstorm session.`
-   Update `last_updated`.
+   Store response as `BRAINSTORM_DEPTH`. Map: `1` = `light`, `2` = `standard`, `3` = `deep`. Empty response or Enter → `standard`. If invalid, re-prompt once; if still invalid, use `standard`.
+   Record `brainstorm_depth` in `MEMORY_DIR/MEMORY.md`, update `handoff_note` = `Brainstorm depth set to <BRAINSTORM_DEPTH>; spawning brainstormer.`, `handoff_context` = `Brainstorm depth <BRAINSTORM_DEPTH> selected. About to spawn Da Vinci.`, `last_updated`.
 
 6. Spawn brainstormer agent.
    Before spawning in this step:
@@ -225,52 +129,26 @@ Never write free-form status strings.
    After Da Vinci returns, read the updated `MEMORY_DIR/vision.md` to confirm it was written.
 
 6.5. Ask for debate mode.
-   Ask the user exactly this prompt:
+   Ask the user:
    "What debate mode would you like for planning?
      1 = Skip (no debate — synthesize immediately)
      2 = Focused (one round of critique and rebuttal) [default]
      3 = Full rounds (iterative debate until consensus)
 
    Press Enter to accept the default (2)."
-   Store the response as `DEBATE_MODE`.
-   If the user presses Enter or returns an empty response, set `DEBATE_MODE = 2`.
-   If the response is not `1`, `2`, or `3`, re-prompt once.
-   If the second response is still invalid, set `DEBATE_MODE = 2`.
-   Record `debate_mode` in `MEMORY_DIR/MEMORY.md`.
-   After recording it, keep:
-   `stage` = `brainstorm`
-   `status` = `in_progress`
-   `handoff_note` = `Debate mode set to <DEBATE_MODE>; brainstorm complete, pre-flight next.`
-   `handoff_context` = `Debate mode <DEBATE_MODE> selected by operator. Brainstorm session complete. Vision captured. Pre-flight check next.`
-   Update `last_updated`.
+   Store response as `DEBATE_MODE`. If empty → `2`. If invalid, re-prompt once; if still invalid, use `2`.
+   Record `debate_mode` in `MEMORY_DIR/MEMORY.md`, update `handoff_note` = `Debate mode set to <DEBATE_MODE>; brainstorm complete, pre-flight next.`, `handoff_context` = `Debate mode <DEBATE_MODE> selected. Brainstorm session complete. Vision captured. Pre-flight check next.`, `last_updated`.
 
 7. Run pre-flight checklist.
-   Verify each requirement before Stage 2:
-   `vision.md` is non-empty and contains all required sections:
-   `## Problem Statement`
-   `## Target Users`
-   `## Goals`
-   `## Constraints`
-   `## Tech Stack`
-   `## Open Questions`
-   `## Elicitation Log` (must have at least one method entry)
-   No section contains placeholder text (`_To be filled_`, `_TBD_`, `_To be filled during brainstorm._`).
-   `DEBATE_MODE` is one of `1`, `2`, or `3`.
-   `$KILN_DIR/` exists.
-   A git repository is initialized in `PROJECT_PATH`.
-   `MEMORY_DIR` exists and contains all required memory files:
-   `MEMORY.md`
-   `vision.md`
-   `master-plan.md`
-   `decisions.md`
-   `pitfalls.md`
-   `PATTERNS.md`
-   `tech-stack.md`
-   If any check fails, halt immediately.
-   Tell the user exactly what is missing.
-   Do not continue until the missing requirement is fixed.
-   If all checks pass, print exactly:
-   Before printing, read `$CLAUDE_HOME/kilntwo/data/lore.json` and display a random quote from `transitions.brainstorm_complete.quotes` in italics.
+   Verify all before Stage 2:
+   - `vision.md` is non-empty with all required sections: Problem Statement, Target Users, Goals, Constraints, Tech Stack, Open Questions, Elicitation Log (at least one entry). No placeholder text (`_To be filled_`, `_TBD_`).
+   - `DEBATE_MODE` is `1`, `2`, or `3`.
+   - `$KILN_DIR/` exists and git is initialized in `PROJECT_PATH`.
+   - `MEMORY_DIR` contains: `MEMORY.md`, `vision.md`, `master-plan.md`, `decisions.md`, `pitfalls.md`, `PATTERNS.md`, `tech-stack.md`.
+   If any check fails, halt and tell the user exactly what is missing. Do not continue until fixed.
+   If all checks pass:
+   Read `$CLAUDE_HOME/kilntwo/data/lore.json` and display a random quote from `transitions.brainstorm_complete.quotes` in italics.
+   Print exactly:
    ```text
    Pre-flight check complete.
      Project: $PROJECT_PATH
@@ -279,161 +157,62 @@ Never write free-form status strings.
      Vision: ready
    Proceeding to Stage 2: Planning.
    ```
-   After this printout, update `MEMORY_DIR/MEMORY.md`:
-   `stage` = `planning`
-   `status` = `in_progress`
-   `planning_sub_stage` = `dual_plan`
-   `handoff_note` = `Pre-flight passed; planning started.`
-   `handoff_context` = `Brainstorming complete. Vision captured in vision.md. Pre-flight checks passed. Dual planners (Confucius + Sun Tzu) about to be spawned with debate mode <DEBATE_MODE>.`
-   `last_updated` = current ISO-8601 UTC timestamp.
+   Update `MEMORY_DIR/MEMORY.md`: `stage` = `planning`, `status` = `in_progress`, `planning_sub_stage` = `dual_plan`, `handoff_note` = `Pre-flight passed; planning started.`, `handoff_context` = `Brainstorming complete. Vision captured in vision.md. Pre-flight checks passed. Aristotle about to be spawned for Stage 2 planning.`, `last_updated` = current ISO-8601 UTC timestamp.
 
 ---
 
 ## Stage 2: Planning
 
-8. Spawn dual planners in parallel with the Task tool.
+8. Spawn the Stage 2 planning coordinator.
    Before spawning in this step:
    Read `$CLAUDE_HOME/kilntwo/data/lore.json`.
    Display a random quote from `transitions.planning_start.quotes` in italics, with source attribution.
-   If `PROJECT_MODE = brownfield` and `$KILN_DIR/codebase-snapshot.md` exists, read its contents into `CODEBASE_SNAPSHOT` (may already be loaded from Step 6).
-   Use the Task tool by name.
-   Spawn both planner tasks in parallel.
-   First task:
-   `name`: `"Confucius"` (the alias)
-   `subagent_type`: `kiln-planner-claude`
-   `description`: (next quote from names.json quotes array for kiln-planner-claude)
-   Prompt content for `kiln-planner-claude` must include:
-   Full contents of `MEMORY_DIR/vision.md`.
-   Full contents of `MEMORY_DIR/MEMORY.md`.
-   If `CODEBASE_SNAPSHOT` is non-empty, include it as a `## Codebase Context` section preceded by: "This is a brownfield project. The following codebase snapshot was generated by Mnemosyne:"
-   Instruction text:
-   "Create a detailed, phased implementation plan. Output it as markdown with sections: Overview, Phases (each with a name, goal, tasks, and acceptance criteria), Risks, and Open Questions. This is the Claude perspective plan."
-   Include `PROJECT_PATH` and `MEMORY_DIR`.
-   Second task:
-   `name`: `"Sun Tzu"` (the alias)
-   `subagent_type`: `kiln-planner-codex`
-   `description`: (next quote from names.json quotes array for kiln-planner-codex)
-   Prompt content for `kiln-planner-codex` must include:
-   The same full vision and memory contents.
-   If `CODEBASE_SNAPSHOT` is non-empty, include it as a `## Codebase Context` section preceded by: "This is a brownfield project. The following codebase snapshot was generated by Mnemosyne:"
-   Instruction text:
-   "Create a detailed, phased implementation plan. Output it as markdown with sections: Overview, Phases (each with a name, goal, tasks, and acceptance criteria), Risks, and Open Questions. This is the Codex perspective plan."
-   Include `PROJECT_PATH` and `MEMORY_DIR`.
-   Wait for both tasks to complete.
-   Store outputs as:
-   `PLAN_CLAUDE`
-   `PLAN_CODEX`
+   Update `MEMORY_DIR/MEMORY.md`:
+   `stage` = `planning`
+   `status` = `in_progress`
+   `planning_sub_stage` = `dual_plan`
+   `handoff_note` = `Stage 2 planning started; spawning Aristotle.`
+   `handoff_context` = `Kiln is delegating Stage 2 planning (dual planners, debate, synthesis, Athena validation, operator approval loop) to the planning coordinator.`
+   `last_updated` = current ISO-8601 UTC timestamp.
+   Spawn `kiln-planning-coordinator` via the Task tool:
+   `name`: `"Aristotle"` (the alias)
+   `subagent_type`: `kiln-planning-coordinator`
+   `description`: (next quote from names.json quotes array for kiln-planning-coordinator)
+   The Task prompt MUST include only these scalar inputs and absolute paths (do not inline large file contents):
+   - `project_path` = `$PROJECT_PATH`
+   - `memory_dir` = `$MEMORY_DIR`
+   - `kiln_dir` = `$KILN_DIR`
+   - `debate_mode` = `$DEBATE_MODE`
+   - `brainstorm_depth` = `$BRAINSTORM_DEPTH`
+   Instruction: "Own all of Stage 2 planning end-to-end: dual planners, conditional debate, synthesis, plan validation (Athena writes `plan_validation.md`), and operator approval. Return only `PLAN_APPROVED` or `PLAN_BLOCKED`."
 
-9. Run conditional debate.
-   If `DEBATE_MODE >= 2`, spawn `kiln-debater` using the Task tool.
-   `name`: `"Socrates"` (the alias)
-   `subagent_type`: `kiln-debater`
-   `description`: (next quote from names.json quotes array for kiln-debater)
-   Prompt must include:
-   Full `PLAN_CLAUDE`.
-   Full `PLAN_CODEX`.
-   `PROJECT_PATH`.
-   `MEMORY_DIR`.
-   If `DEBATE_MODE == 2`, include this instruction:
-   "Perform one focused round of critique: identify the top 3 strengths and top 3 weaknesses of each plan, then produce a rebuttal for each weakness. Output structured markdown."
-   If `DEBATE_MODE == 3`, include this instruction:
-   "Perform iterative debate rounds between the two plans until you reach consensus on the strongest approach. Run at least 2 rounds, up to 4. Each round: critique weaknesses, propose improvements, refine. Output each round as a markdown section, then a final consensus summary."
-   Wait for completion.
-   Store output as `DEBATE_OUTPUT`.
-   If `DEBATE_MODE == 1`, skip spawning `kiln-debater`.
-   In that case set `DEBATE_OUTPUT` to an empty string.
+9. Wait for the coordinator signal.
+   Wait for Aristotle to complete.
+   Parse the coordinator return signal from the first non-empty line:
+   - `PLAN_APPROVED`
+   - `PLAN_BLOCKED`
+   If the signal is missing or malformed, treat as `PLAN_BLOCKED`.
 
-10. Synthesize the master plan.
-    Spawn `kiln-synthesizer` with the Task tool.
-    `name`: `"Plato"` (the alias)
-    `subagent_type`: `kiln-synthesizer`
-    `description`: (next quote from names.json quotes array for kiln-synthesizer)
-    Prompt must include:
-    Full `PLAN_CLAUDE`.
-    Full `PLAN_CODEX`.
-    Full `DEBATE_OUTPUT`.
-    `PROJECT_PATH`.
-    `MEMORY_DIR`.
-    Include this instruction exactly:
-    "Synthesize these inputs into a single authoritative master plan. The master plan must be structured as markdown with these top-level sections: ## Overview, ## Phases (each phase as ### Phase N: Name with Goal, Tasks as a numbered list, and Acceptance Criteria as a checklist), ## Risks, ## Open Questions. Be concrete and actionable — no vague tasks."
-    Wait for completion.
-    Store output as `MASTER_PLAN`.
-    After storing output, update `MEMORY_DIR/MEMORY.md`:
-    `stage` = `planning`
-    `status` = `paused`
-    `planning_sub_stage` = `synthesis`
-    `handoff_note` = `Master plan synthesized; awaiting user approval.`
-    `handoff_context` = `Both planners produced plans. Debate (mode <DEBATE_MODE>) complete. Plato synthesized a master plan. The operator needs to review and approve before execution begins.`
-    `last_updated` = current ISO-8601 UTC timestamp.
-
-10.5. Validate the master plan.
-    Append `[plan_validate_start]` event to the planning log context.
-    Spawn `kiln-plan-validator` via the Task tool.
-    `name`: `"Athena"` (the alias)
-    `subagent_type`: `kiln-plan-validator`
-    `description`: (next quote from names.json quotes array for kiln-plan-validator)
-    Prompt must include:
-    Full `MASTER_PLAN`.
-    Full `MEMORY_DIR/vision.md`.
-    `PROJECT_PATH`.
-    `MEMORY_DIR`.
-    `KILN_DIR`.
-    Include this instruction exactly:
-    "Validate this master plan across 7 dimensions: requirement coverage, atomization quality, file action correctness, dependency graph integrity, phase sizing, scope adherence, and acceptance criteria quality. Write report to `$KILN_DIR/plans/plan_validation.md`. Return PASS or FAIL."
-    Wait for completion.
-    Append `[plan_validate_complete]` event with the returned verdict.
-    If verdict is FAIL:
-    Display `$KILN_DIR/plans/plan_validation.md` to the operator.
-    Re-run planners with Athena feedback appended, then re-synthesize and re-validate.
-    Maximum re-validation attempts: 2.
-    If still FAIL after 2 attempts, set `stage=planning`, `status=blocked`, update handoff fields, and stop for operator direction.
-    If verdict is PASS:
-    Continue to Step 11.
-
-11. Present master plan for review.
-    Display `MASTER_PLAN` to the user in full.
-    Ask exactly:
-    "Does this master plan look correct? You may:
-      - Type 'yes' or press Enter to proceed to execution
-      - Type 'edit' to provide corrections (I will revise and show you again)
-      - Type 'abort' to stop here and save the plan for later"
-    If response is `edit`:
-    Collect user corrections.
-    Revise `MASTER_PLAN`.
-    For minor edits, revise inline.
-    For major edits, re-run `kiln-synthesizer` with updated guidance.
-    Show revised `MASTER_PLAN` in full.
-    Ask for approval again.
-    Repeat until user provides `yes`, Enter, or `abort`.
-    If response is `abort`:
-    Write current `MASTER_PLAN` to `MEMORY_DIR/master-plan.md`.
-    Update `MEMORY_DIR/MEMORY.md`:
-    `stage` = `planning`
-    `status` = `paused`
-    `planning_sub_stage` = `synthesis`
-    `handoff_note` = `Planning complete; awaiting execution.`
-    `handoff_context` = `Master plan saved but operator chose to abort before execution. Plan is ready for review at master-plan.md. Resume with /kiln:resume to continue.`
-    `last_updated` = current ISO-8601 UTC timestamp.
-    Tell the user to run `/kiln:resume` when ready.
+10. If the signal is `PLAN_BLOCKED`, halt.
+    Read `MEMORY_DIR/MEMORY.md` and display `handoff_note` and `handoff_context` to the operator.
+    Tell the operator: "Planning is blocked or paused. Resolve the issue, then run `/kiln:resume`."
     Stop execution immediately.
 
-12. Update memory after planning approval.
-    Before writing approval state in this step:
+11. If the signal is `PLAN_APPROVED`, confirm memory and read `phase_total`.
+    Read `MEMORY_DIR/MEMORY.md`.
+    Confirm it contains:
+    `stage` = `execution`
+    `status` = `in_progress`
+    `planning_sub_stage` = `null`
+    Read the integer `phase_total` field from MEMORY.md and store it for Stage 3.
+    If `phase_total` is missing or non-integer, halt and tell the operator MEMORY.md is corrupted/incomplete.
+
+12. Display the plan-approved transition and proceed to Stage 3.
+    Before proceeding:
     Read `$CLAUDE_HOME/kilntwo/data/lore.json`.
     Display a random quote from `transitions.plan_approved.quotes` in italics, with source attribution.
-    Write approved `MASTER_PLAN` to `MEMORY_DIR/master-plan.md`.
-    Update `MEMORY_DIR/MEMORY.md` fields:
-    `stage` -> `execution`.
-    `status` -> `in_progress`.
-    `planning_sub_stage` -> `null`.
-    `phase_number` -> `null`.
-    `phase_name` -> `null`.
-    `phase_total` -> `<total number of phases parsed from master-plan.md>`.
-    `handoff_note` -> `Plan approved; execution starting.`
-    `handoff_context` -> `Operator approved the master plan with <phase_total> phases. Execution loop about to begin with phase 1.`
-    `plan_approved_at` -> current ISO-8601 timestamp.
-    `last_updated` -> current ISO-8601 UTC timestamp.
-    Confirm both writes succeeded before moving to execution.
+    Confirm `MEMORY_DIR/master-plan.md` exists and is non-empty.
+    Proceed immediately to Stage 3 (Execution).
 
 ---
 
@@ -590,7 +369,7 @@ Never write free-form status strings.
 1. **All paths are dynamic.** Never hardcode paths. Derive every path from `PROJECT_PATH`, `HOME`, and `ENCODED_PATH` from Step 3. The command must work in any project directory.
 2. **Memory is the source of truth.** Before every stage transition, re-read `MEMORY_DIR/MEMORY.md` and trust canonical fields (`stage`, `status`, `planning_sub_stage`, `phase_number`, `phase_total`, and `## Phase Statuses`). If `stage=planning` and `status=paused`, resume planning review at Step 11. If `stage=execution` and `phase_number` is set, resume execution from that phase using `phase_status` values.
 3. **Never skip stages.** Execute Stage 1 before Stage 2 and Stage 2 before Stage 3. The only exception is resumption as described in Rule 2. Use `/kiln:resume` for resumption; do not implement separate resume logic outside these state checks.
-4. **Use the Task tool for all sub-agents.** Never invoke `kiln-planner-claude`, `kiln-planner-codex`, `kiln-debater`, `kiln-synthesizer`, `kiln-plan-validator`, `kiln-phase-executor`, or `kiln-validator` as slash commands. Spawn each exclusively with the Task tool and complete, self-contained prompts. Always set `name` to the agent's character alias (e.g., `"Confucius"`, `"Athena"`, `"Maestro"`) and `subagent_type` to the internal name (e.g., `kiln-planner-claude`). This ensures the Claude Code UI shows aliases in the spawn box.
+4. **Use the Task tool for all sub-agents.** Never invoke `kiln-planner-claude`, `kiln-planner-codex`, `kiln-debater`, `kiln-synthesizer`, `kiln-plan-validator`, `kiln-planning-coordinator`, `kiln-phase-executor`, or `kiln-validator` as slash commands. Spawn each exclusively with the Task tool and complete, self-contained prompts. Always set `name` to the agent's character alias (e.g., `"Confucius"`, `"Aristotle"`, `"Maestro"`) and `subagent_type` to the internal name (e.g., `kiln-planner-claude`). This ensures the Claude Code UI shows aliases in the spawn box.
 5. **Parallel where safe, sequential where required.** Run Step 8 planners in parallel. Run all other Task spawns sequentially, waiting for each to finish before starting the next.
 6. **Write working outputs only.** Phase executors must create real files with real content and working code. Placeholders, TODO stubs, and non-functional scaffolds are failures that must be reported before continuing.
-7. **Checkpoint memory after every significant action.** Update canonical runtime fields (`stage`, `status`, `planning_sub_stage`, phase fields, `handoff_note`, `handoff_context`, `last_updated`, and phase-status entries when applicable) after Step 2, after Step 4, after Step 5, at every brainstorm checkpoint, after Step 7, after Step 10, after Step 12, after each phase in Step 13, after Step 14, and after Step 15.
+7. **Checkpoint memory after every significant action.** Update canonical runtime fields (`stage`, `status`, `planning_sub_stage`, phase fields, `handoff_note`, `handoff_context`, `last_updated`, and phase-status entries when applicable) after Step 2, after Step 4, after Step 5, at every brainstorm checkpoint, after Step 7, after Step 8 (planning coordinator return), after each phase in Step 13, after Step 14, and after Step 15.

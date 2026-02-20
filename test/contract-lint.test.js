@@ -200,6 +200,7 @@ describe('contract lint', () => {
     // Event types are used across multiple files: executor, validator, start.md, protocol
     const sources = [
       readAsset('agents/kiln-phase-executor.md'),
+      readAsset('agents/kiln-planning-coordinator.md'),
       readAsset('agents/kiln-validator.md'),
       readAsset('commands/kiln/start.md'),
       readAsset('protocol.md'),

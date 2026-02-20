@@ -20,7 +20,7 @@ For full path derivation, memory schema, event schema, file naming conventions, 
 
 1. **Stage 1 — Initialization & Brainstorm** (interactive) — The orchestrator initializes the project. For brownfield projects (auto-detected), `kiln-mapper` (Mnemosyne) maps the existing codebase and pre-seeds memory files before brainstorming begins. Then the orchestrator spawns the `kiln-brainstormer` agent (Da Vinci) to facilitate a structured brainstorm session. The brainstormer uses 62 creative techniques, 50 elicitation methods, and anti-bias protocols to guide the operator through ideation. The operator selects a brainstorm depth (light/standard/deep) that sets the idea floor and technique intensity. Memory checkpoints are written periodically: `vision.md` captures the project vision across 11 structured sections, and `MEMORY.md` updates canonical runtime fields (`stage`, `status`, `brainstorm_depth`, phase fields, `handoff_note`, `last_updated`). The stage ends when the brainstormer signals completion and the pre-flight check passes.
 
-2. **Stage 2 — Planning** (automated with operator review) — The orchestrator spawns both `kiln-planner-claude` and a Codex planner in parallel to produce independent implementation plans. A `kiln-debater` agent then analyzes disagreements between the two plans (debate mode 2 by default unless the operator specified otherwise during Stage 1). A `kiln-synthesizer` agent merges the plans and debate resolution into a single `master-plan.md`, annotating parallelizable steps with `parallel_group` tags. After synthesis, `kiln-plan-validator` (Athena) validates the plan before execution can begin. The operator reviews and approves the master plan before Stage 3 begins.
+2. **Stage 2 — Planning** (automated with operator review) — The orchestrator spawns `kiln-planning-coordinator` (Aristotle) to own the entire planning pipeline end-to-end. Aristotle runs `kiln-planner-claude` and `kiln-planner-codex` in parallel, runs `kiln-debater` when debate mode requires it (mode 2 by default), synthesizes with `kiln-synthesizer`, validates with `kiln-plan-validator` (Athena) with up to 2 retries, and runs the operator approval loop. Aristotle writes planning artifacts to disk, updates `MEMORY.md`, and returns a single gating signal to Kiln: `PLAN_APPROVED` or `PLAN_BLOCKED`.
 
 3. **Stage 3 — Execution** (automated, phase by phase) — The orchestrator executes the master plan one phase at a time using the phase executor pattern. Each phase consists of: refreshing the codebase index (Sherlock), generating a phase-scoped plan (`$KILN_DIR/plans/phase_plan.md`), JIT prompt sharpening (Scheherazade explores the codebase before generating context-rich prompts), running each Codex task sequentially, and running up to 3 QA review rounds with correction cycles before merging. After each phase merge, Sherlock reconciles living docs (`decisions.md`, `pitfalls.md`, `PATTERNS.md`, `tech-stack.md`). Phases run sequentially; the orchestrator does not begin a new phase until the prior phase is merged and MEMORY.md is updated.
 
@@ -34,7 +34,7 @@ For full path derivation, memory schema, event schema, file naming conventions, 
 
 2. **Memory files are the single source of truth** — `MEMORY.md`, `vision.md`, `master-plan.md`, `decisions.md`, `pitfalls.md`, `PATTERNS.md`, and `tech-stack.md` define project state. Before starting any stage or phase, read these files. After completing any stage or phase, update canonical runtime fields in `MEMORY.md`: `stage`, `status`, `planning_sub_stage`, phase fields, `handoff_note`, `handoff_context`, and `last_updated`.
 
-3. **Only Maestro and Mnemosyne have Task tool access** — Among spawned sub-agents, only `kiln-phase-executor` (Maestro, Stage 3) and `kiln-mapper` (Mnemosyne, Stage 1) have Task tool access. All other spawned agents are leaf workers that cannot spawn further sub-agents. The top-level orchestrator (Kiln, running `/kiln:start`) uses Task to spawn all top-level agents and is not subject to this restriction.
+3. **Only Aristotle, Maestro, and Mnemosyne have Task tool access** — Among spawned sub-agents, only `kiln-planning-coordinator` (Aristotle, Stage 2), `kiln-phase-executor` (Maestro, Stage 3), and `kiln-mapper` (Mnemosyne, Stage 1) have Task tool access. All other spawned agents are leaf workers that cannot spawn further sub-agents. The top-level orchestrator (Kiln, running `/kiln:start`) uses Task to spawn all top-level agents and is not subject to this restriction.
 
 4. **Phase sizing** — Each phase must represent 1-4 hours of implementation work. Phases that are too large must be split during the planning stage. Phases that are too small may be merged. The synthesizer is responsible for enforcing this during master plan creation.
 
@@ -62,7 +62,7 @@ For full path derivation, memory schema, event schema, file naming conventions, 
 
 ## Agent Roster
 
-The Kiln pipeline uses 14 specialized agents. Each has a character alias used in logs and status output.
+The Kiln pipeline uses 15 specialized agents. Each has a character alias used in logs and status output.
 
 | Alias | Internal Name | Role |
 |---|---|---|
@@ -80,6 +80,7 @@ The Kiln pipeline uses 14 specialized agents. Each has a character alias used in
 | **Sherlock** | kiln-researcher | Research, codebase indexing, and living docs reconciliation |
 | **Athena** | kiln-plan-validator | Pre-execution plan validation |
 | **Mnemosyne** | kiln-mapper | Brownfield codebase cartographer |
+| **Aristotle** | kiln-planning-coordinator | Stage 2 planning coordinator |
 
 When logging agent activity, use the alias (e.g., `[Confucius]` not `[kiln-planner-claude]`). When spawning agents via the Task tool, always set `name` to the alias and `subagent_type` to the internal name.
 

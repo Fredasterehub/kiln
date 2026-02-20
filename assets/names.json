@@ -134,6 +134,17 @@
       "Wisdom is the daughter of experience"
     ]
   },
+  "kiln-planning-coordinator": {
+    "alias": "Aristotle",
+    "role": "planning coordinator",
+    "quotes": [
+      "Well begun is half done",
+      "The whole is greater than the sum of its parts",
+      "It is the mark of an educated mind to entertain a thought without accepting it",
+      "Knowing yourself is the beginning of all wisdom",
+      "Quality is not an act, it is a habit"
+    ]
+  },
   "kiln-mapper": {
     "alias": "Mnemosyne",
     "role": "codebase cartographer",

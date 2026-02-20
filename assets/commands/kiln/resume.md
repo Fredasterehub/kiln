@@ -2,21 +2,7 @@
 
 Restore project context from memory and continue exactly where the last session stopped.
 
-## Canonical MEMORY.md Schema (Expected by Resume)
-
-Runtime fields must use these exact enums:
-- `stage`: `brainstorm | planning | execution | validation | complete`
-- `status`: `in_progress | paused | blocked | complete`
-- `planning_sub_stage`: `dual_plan | debate | synthesis | null`
-- `phase_status` entries under `## Phase Statuses`: `pending | in_progress | failed | completed`
-
-## Paths Contract
-
-- `PROJECT_PATH`: absolute project root path for the active run.
-- `KILN_DIR = $PROJECT_PATH/.kiln`.
-- `CLAUDE_HOME = $HOME/.claude`.
-- `MEMORY_DIR = $CLAUDE_HOME/projects/$ENCODED_PATH/memory`.
-- Never use root-relative kiln or claude paths.
+Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEMORY.md schema, paths contract, config schema, event enum, and Codex CLI patterns. This file uses those definitions without repeating them.
 
 ## Step 1: Detect Project Path
 
@@ -132,15 +118,23 @@ For `brainstorm`:
 - Ask: "What would you like to explore or refine next?"
 
 For `planning`:
-- Re-read `master-plan.md` in full.
-- Read `planning_sub_stage` from MEMORY.md and normalize as follows:
-  - `dual_plan`: two competing plans are being drafted.
-  - `debate`: plans are being debated; check `debate_mode`.
-  - `synthesis`: plans are being merged into the final master plan.
-  - absent or `null`/unknown: treat as `dual_plan`.
-- Tell the user: "Resuming planning stage ([planning_sub_stage])."
-- Print the current master plan, or state that `master-plan.md` is absent.
-- Invite the user to continue planning.
+- Read `planning_sub_stage` from MEMORY.md.
+- Tell the user: "Resuming planning stage (sub-stage: [planning_sub_stage])."
+- Spawn `kiln-planning-coordinator` via the Task tool:
+  - `name`: `"Aristotle"`
+  - `subagent_type`: `kiln-planning-coordinator`
+  - `description`: (next quote from names.json quotes array for kiln-planning-coordinator)
+  - Task prompt must include:
+    - `project_path` = `$PROJECT_PATH`
+    - `memory_dir` = `$MEMORY_DIR`
+    - `kiln_dir` = `$KILN_DIR`
+    - `debate_mode` from MEMORY.md (default 2 if absent)
+    - `brainstorm_depth` from MEMORY.md (default `standard` if absent)
+  - Instruction: "Resume the Stage 2 planning pipeline from current state. Read planning_sub_stage from MEMORY.md and check existing artifacts to determine where to resume. Run plan validation (Athena writes `plan_validation.md`) and operator approval. Return `PLAN_APPROVED` or `PLAN_BLOCKED`."
+- Parse the return value:
+  - If first non-empty line is `PLAN_APPROVED`: re-read MEMORY.md, confirm `stage=execution` and `phase_total` is set, proceed to execution routing.
+  - If first non-empty line is `PLAN_BLOCKED`: display `handoff_note` and `handoff_context` to operator, halt.
+  - If signal missing or malformed: treat as `PLAN_BLOCKED`.
 
 For `execution`:
 - Read `MEMORY.md` and build an inventory of phases: for each phase in `master-plan.md`, record `{phase_number, name, status}` where status is one of `completed | in_progress | failed | pending` (derive **from `MEMORY.md`**, not from assumptions).

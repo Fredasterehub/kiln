@@ -70,16 +70,18 @@ describe('v0.4.0 contracts', () => {
     );
   });
 
-  it('start.md includes plan validation step after synthesis', () => {
+  it('start.md includes plan validation via coordinator delegation', () => {
     const start = readAsset('commands/kiln/start.md');
 
+    // After refactor, start.md delegates to the planning coordinator.
+    // The coordinator spawn instruction must mention plan validation.
     assert.ok(
-      start.includes('kiln-plan-validator') || start.includes('Athena'),
-      'start.md must reference plan validator'
+      start.includes('kiln-planning-coordinator') || start.includes('Aristotle'),
+      'start.md must reference planning coordinator'
     );
     assert.ok(
       start.includes('plan_validation.md'),
-      'start.md must reference plan validation report path'
+      'start.md must reference plan_validation.md (in coordinator instruction text)'
     );
   });
 

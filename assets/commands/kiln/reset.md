@@ -103,60 +103,14 @@ Record each agent name and final status as one of: `acknowledged`, `timed out`, 
 If no active agents are found, skip shutdown messaging and record `No active agents`.
 </step>
 
-<step name="write-decisions">
-Use `Read` to check whether `"$MEMORY_DIR/decisions.md"` exists. If it exists, read it and compare existing entries against decisions made or referenced in this session.
-
-For each new decision not already recorded, append this block:
-```markdown
-
----
-
-## Decision: <title>
-
-**Date:** <today's date>
-**Context:** <brief description of the situation that prompted this decision>
-**Decision:** <what was decided>
-**Rationale:** <why>
-**Alternatives considered:** <other options that were weighed, or "none">
-```
-
-If `decisions.md` does not exist and at least one new decision was made this session, create it with:
-```markdown
-# Decisions
-
-Project decisions, rationale, and context for future reference.
-```
-Then append the new decision entries.
-
-If no new decisions were made this session, do not modify an existing file and do not create a new file.
-</step>
-
-<step name="write-pitfalls">
-Use `Read` to check whether `"$MEMORY_DIR/pitfalls.md"` exists. If it exists, read it and compare existing entries against pitfalls discovered in this session.
-
-For each newly discovered pitfall not already recorded, append this block:
-```markdown
-
----
-
-## Pitfall: <title>
-
-**Discovered:** <today's date>
-**Symptom:** <what the problem looked like when encountered>
-**Cause:** <root cause, if known>
-**Workaround / Fix:** <how to handle or avoid it>
-**Affects:** <which files, systems, or workflows are impacted>
-```
-
-If `pitfalls.md` does not exist and at least one new pitfall was discovered this session, create it with:
-```markdown
-# Pitfalls
-
-Known issues, gotchas, and things to avoid in this project.
-```
-Then append the new pitfall entries.
-
-If no new pitfalls were discovered this session, do not modify an existing file and do not create a new file.
+<step name="append-memory-entries">
+For each of `decisions.md` and `pitfalls.md`:
+- Use `Read` to check whether `"$MEMORY_DIR/<file>"` exists. If it exists, read it and compare existing entries against content from this session.
+- If no new relevant content was identified this session, do not modify the file and do not create it.
+- If new content exists, append a dated entry using the same format already in the file:
+  - For `decisions.md`: append a `## Decision: <title>` block with Date, Context, Decision, Rationale, and Alternatives considered.
+  - For `pitfalls.md`: append a `## Pitfall: <title>` block with Discovered, Symptom, Cause, Workaround/Fix, and Affects.
+- If the file does not exist but new content was found, create it first with a minimal H1 header (`# Decisions` or `# Pitfalls`) before appending.
 </step>
 
 <step name="confirm">
