@@ -116,6 +116,10 @@ Debate Mode 3 expanded from a stub to a full adversarial protocol. Tmux split-pa
 
 **🖥️ Tmux Panel UI** &mdash; `/kiln:start` optionally splits the terminal (30/70). Da Vinci runs in the left pane as a direct Claude process with file-based completion signaling. The right pane live-tails Aristotle, Maestro, and Argus output. `/kiln:resume` re-establishes the layout.
 
+<p align="center">
+  <img src="docs/tmux-panel-ui.svg" alt="Tmux split-pane terminal layout" width="700">
+</p>
+
 **🧹 QA Fixes (v0.6.1, v0.6.2)** &mdash; Dual-reviewer pass (Opus + Sonnet) caught 10 issues: `--context` flag replaced with `--append-system-prompt` launcher, `davinci_complete` path corrected to `tmp/`, tail teardown changed from `"q" Enter` to `C-c`, stale plan reads after Mode 3, config key nesting fixes, concrete pane recovery in resume, and Mnemosyne template prefix restoration.
 
 <details>
@@ -194,6 +198,10 @@ Six features that restore v1's dynamic execution patterns on top of v2's clean c
 ## 🔥 How It Works
 
 Five stages. Each one uses different models for different jobs.
+
+<p align="center">
+  <img src="docs/pipeline-stages.svg" alt="Kiln Pipeline — Brainstorm → Plan → Execute → Validate → Deliver" width="780">
+</p>
 
 <p align="center">
   <sub>💡 Brainstorm &rarr; 📐 Plan &rarr; ⚡ Execute &rarr; 🔍 Validate &rarr; ✅ Deliver</sub>
@@ -332,6 +340,10 @@ Every agent has a name. Not for decoration &mdash; for the logs.
 | 🔍 | **Sherlock** | Haiku 4.5 | Fast researcher &mdash; codebase indexing, living docs reconciliation |
 
 <sub>Plus 5 muse sub-agents spawned by Mnemosyne for brownfield mapping: Clio (architecture), tech stack, data model, API surface, and quality analysis. 19 agents total.</sub>
+
+<p align="center">
+  <img src="docs/agent-roster.svg" alt="Agent roster by model family" width="720">
+</p>
 
 <br>
 
