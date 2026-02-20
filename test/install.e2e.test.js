@@ -92,7 +92,7 @@ describe('install E2E', { concurrency: false }, () => {
     install({ home: tmpHome, projectPath: tmpProject });
 
     const dataNames = listJsonFiles(ASSETS_DATA_DIR);
-    assert.strictEqual(dataNames.length, 4, 'assets/data should contain 4 JSON files');
+    assert.strictEqual(dataNames.length, 5, 'assets/data should contain 5 JSON files');
 
     for (const name of dataNames) {
       assertNonEmptyFile(path.join(paths.dataDir, name));

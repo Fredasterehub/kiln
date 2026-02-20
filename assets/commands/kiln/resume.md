@@ -46,20 +46,41 @@ Read these files in parallel (batch reads):
 - `$MEMORY_DIR/tech-stack.md`
 For each file: if it exists, store the full content. If it does not exist, record it as absent and continue without halting.
 ## Step 5: Display Continuity Banner
-Display the continuity banner to the user as a code block, substituting values from loaded memory:
+Render the continuity banner via Bash (not plain text):
+```bash
+printf '\n\033[38;5;179m━━━ Resume ━━━\033[0m\n'
 ```
-=== Kiln Resume ===
-Project: [PROJECT_PATH]
-Mode:    [project_mode]   (omit this line if project_mode is absent)
-Stage:   [stage]
-Phase:   [phase_number]/[phase_total] [phase_name]   (omit this line if not in execution stage)
-Correction: cycle [correction_cycle]/3   (omit this line if correction_cycle is 0 or absent)
-Status:  [status]
-Handoff: [handoff_note, or "(none)" if empty]
-=====================
+Then read `$CLAUDE_HOME/kilntwo/data/lore.json`, pick a random quote from `transitions.resume.quotes`, and render:
+```bash
+printf '\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
 ```
-Include the `Phase` line only when `stage === 'execution'` and `phase_number` is non-null.
-If `phase_total` is absent, render phase as `[phase_number]/? [phase_name]`.
+Write `$KILN_DIR/tmp/last-quote.json`: `{"quote": "...", "by": "...", "section": "resume", "at": "ISO-8601"}`
+
+Then render the state summary via Bash:
+```bash
+printf '\033[2mSession rehydrated. Here'\''s where we left off:\033[0m\n'
+printf '  \033[38;5;173m►\033[0m Stage: %s\n' "$STAGE"
+```
+If `project_mode` is present (not absent), render:
+```bash
+printf '  \033[2mMode:\033[0m    %s\n' "$PROJECT_MODE"
+```
+If in execution stage with phase info:
+```bash
+printf '  \033[38;5;173m►\033[0m Phase %s of %s │ %s\n' "$PHASE_NUMBER" "$PHASE_TOTAL" "$PHASE_NAME"
+```
+If correction_cycle is non-zero, also render:
+```bash
+printf '  \033[38;5;173m►\033[0m Correction: cycle %s/3\n' "$CORRECTION_CYCLE"
+```
+If handoff_note is present:
+```bash
+printf '  \033[2mHandoff:\033[0m %s\n' "$HANDOFF_NOTE"
+```
+End with:
+```bash
+printf '\n\033[2mPicking up where we left off.\033[0m\n\n'
+```
 If `handoff_context` is present and non-empty, display it immediately after the banner as a quoted block:
 ```
 Context:
@@ -69,10 +90,6 @@ After displaying the banner, check whether MEMORY.md contains a `## Reset Notes`
 ```
 Recommended next step (from last reset): [next_action]
 ```
-In this same step, display one lore quote before routing:
-- Read `$CLAUDE_HOME/kilntwo/data/lore.json`.
-- Select a random quote from `transitions.resume.quotes`.
-- Print it in italics with source attribution.
 ## Step 5.5: Re-establish Tmux Layout (if applicable)
 Check `$TMUX` environment variable.
 If set (already in a tmux session):
@@ -88,11 +105,13 @@ If not set: set `TMUX_LAYOUT=false` and continue.
 ## Step 6: Route to Stage
 Branch strictly on `stage` and run the matching behavior.
 For `brainstorm`:
+- Update spinner verbs: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `brainstorm` stage verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": [...]}`.
 - Re-read `vision.md` in full.
 - Tell the user: "Resuming brainstorming session. Here is the current vision:"
 - Print the full content of `vision.md`.
 - Ask: "What would you like to explore or refine next?"
 For `planning`:
+- Update spinner verbs: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `planning` stage verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": [...]}`.
 - Read `planning_sub_stage` from MEMORY.md.
 - Tell the user: "Resuming planning stage (sub-stage: [planning_sub_stage])."
 - Spawn `kiln-planning-coordinator` via the Task tool:
@@ -111,6 +130,7 @@ For `planning`:
   - If first non-empty line is `PLAN_BLOCKED`: display `handoff_note` and `handoff_context` to operator, halt.
   - If signal missing or malformed: treat as `PLAN_BLOCKED`.
 For `execution`:
+- Update spinner verbs: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `execution` stage verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": [...]}`.
 - Read `MEMORY.md` and build an inventory of phases: for each phase in `master-plan.md`, record `{phase_number, name, status}` where status is one of `completed | in_progress | failed | pending` (derive **from `MEMORY.md`**, not from assumptions).
 - Cross-check against archive: if `$KILN_DIR/archive/phase_<NN>/phase_summary.md` exists for a phase, treat that phase as definitively completed regardless of `MEMORY.md` status (the archive is created only after successful merge).
 - Determine `N` automatically:
@@ -153,6 +173,7 @@ For `execution`:
 - After Maestro returns, update `MEMORY.md` with the new phase status, updated `handoff_note`, and updated `handoff_context`, then **re-enter this execution routing** to resume/transition/retry or advance to `validation` automatically.
 - If `TMUX_LAYOUT=true`: kill the tail (`tmux send-keys -t $AGENT_PANE C-c`) and reset pane title (`tmux select-pane -t $AGENT_PANE -T "Ready"`).
 For `validation`:
+- Update spinner verbs: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `validation` stage verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": [...]}`.
 - Re-read `master-plan.md` and `decisions.md`.
 - Check `correction_cycle` from MEMORY.md.
 - If `correction_cycle > 0` and `status == 'blocked'`:

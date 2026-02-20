@@ -69,6 +69,67 @@ Field notes:
 - `preferences.phase_size_hours_min` / `phase_size_hours_max`: planning phase sizing targets (`1-4` hours).
 - `tooling.*`: optional auto-detected commands/systems for brownfield projects.
 
+## ANSI Rendering
+
+All Kiln stage/phase transitions MUST be rendered via `Bash printf` commands with ANSI escape codes. Never render transitions as plain markdown text.
+
+### Color Palette
+
+| Purpose | ANSI Code | Visual |
+|---|---|---|
+| Brand `[kiln]` | `38;5;173` | Warm terracotta |
+| Quote text | `38;5;222` | Warm gold |
+| Dividers + titles | `38;5;179` | Muted gold |
+| Success | `32` | Green |
+| Failure | `31` | Red |
+| Warning | `33` | Yellow |
+| Dim/secondary | `2` | Faint |
+| Gray | `90` | Gray |
+
+### Status Symbols
+
+| State | Symbol | Color |
+|---|---|---|
+| Complete | `✓` | Green (`32`) |
+| Active | `►` | Terracotta (`38;5;173`) |
+| Failed | `✗` | Red (`31`) |
+| Pending | `○` | Gray (`90`) |
+| Paused | `⏸` | Terracotta (`38;5;173`) |
+
+### Transition Banner Template
+
+At every pipeline transition point, the orchestrator renders a banner via Bash:
+
+```bash
+printf '\n\033[38;5;179m━━━ %s ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' \
+  "$TITLE" "$QUOTE_TEXT" "$QUOTE_SOURCE"
+```
+
+Where:
+- `$TITLE` = transition name (e.g., "Ignition", "Brainstorm", "Phase 2 — API Integration")
+- `$QUOTE_TEXT` = random quote text from the matching `lore.json` section
+- `$QUOTE_SOURCE` = quote attribution
+
+### Last-Quote Persistence
+
+After rendering each transition banner, write the displayed quote to `$KILN_DIR/tmp/last-quote.json`:
+
+```json
+{"quote": "...", "by": "...", "section": "ignition", "at": "2026-02-20T..."}
+```
+
+This file is ephemeral (`tmp/` is gitignored). Used by `/kiln:status` to display current quote. MEMORY.md remains the sole source of truth for state.
+
+### Spinner Verb Installation
+
+At `/kiln:start` initialization and at each stage transition, the orchestrator:
+
+1. Reads `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`
+2. Builds a flat array: verbs for the current stage + generic verbs
+3. Writes to `$PROJECT_PATH/.claude/settings.local.json` under `spinnerVerbs`
+
+Stage mapping: `brainstorm` → brainstorm verbs, `planning` → planning verbs, `execution` → execution verbs, `validation` → validation verbs. Review verbs are mixed in during execution stage review rounds.
+
 ## Event Schema
 
 Phase state files (`$KILN_DIR/phase_<N>_state.md`) contain a `## Events` section with structured log entries:

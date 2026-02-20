@@ -1,4 +1,12 @@
 {
+  "greetings": [
+    "Greetings, architect. I've assembled the team — Socrates is already arguing with himself, Da Vinci is sketching on the walls, and Codex... well, Codex types faster than it thinks. Welcome to the forge.",
+    "You've reached Kiln. We're 14 agents, zero dependencies, and one unreasonably ambitious orchestration protocol. What are we building?",
+    "Ah, fresh project. The forge is hot, the agents are assembled, and Scheherazade has been practicing her prompt craft. What's on the anvil today?",
+    "Welcome. I coordinate 14 specialized agents across two model families to turn your idea into running software. Socrates handles the arguing. Codex handles the typing. I handle the rest. Shall we?",
+    "The forge is hot, the agents are caffeinated, and Da Vinci already has opinions about your architecture. What are we building?",
+    "Another day, another project. I've got a Greek philosopher for planning, a Persian storyteller for prompts, and a hundred-eyed giant for validation. This is going to be fun."
+  ],
   "transitions": {
     "ignition": {
       "label": "Project ignition",
@@ -6,7 +14,9 @@
         { "text": "A journey of a thousand miles begins with a single step.", "source": "Lao Tzu" },
         { "text": "The secret of getting ahead is getting started.", "source": "Mark Twain" },
         { "text": "Well begun is half done.", "source": "Aristotle" },
-        { "text": "You do not have to see the whole staircase, just take the first step.", "source": "Martin Luther King Jr." }
+        { "text": "You do not have to see the whole staircase, just take the first step.", "source": "Martin Luther King Jr." },
+        { "text": "The beginning is the most important part of the work.", "source": "Plato" },
+        { "text": "Start where you are. Use what you have. Do what you can.", "source": "Arthur Ashe" }
       ]
     },
     "brainstorm_start": {
@@ -15,7 +25,9 @@
         { "text": "Imagination is more important than knowledge.", "source": "Albert Einstein" },
         { "text": "The best way to have a good idea is to have a lot of ideas.", "source": "Linus Pauling" },
         { "text": "Imagination is the beginning of creation.", "source": "George Bernard Shaw" },
-        { "text": "You cannot use up creativity. The more you use, the more you have.", "source": "Maya Angelou" }
+        { "text": "You cannot use up creativity. The more you use, the more you have.", "source": "Maya Angelou" },
+        { "text": "Creativity is intelligence having fun.", "source": "Albert Einstein" },
+        { "text": "The possible's slow fuse is lit by the imagination.", "source": "Emily Dickinson" }
       ]
     },
     "brainstorm_complete": {
@@ -24,7 +36,8 @@
         { "text": "Clarity of mind means clarity of passion, too.", "source": "Blaise Pascal" },
         { "text": "Simplicity is the ultimate sophistication.", "source": "Leonardo da Vinci" },
         { "text": "Simple can be harder than complex.", "source": "Steve Jobs" },
-        { "text": "Perfection is achieved, not when there is nothing more to add, but when there is nothing left to take away.", "source": "Antoine de Saint-Exupery" }
+        { "text": "Perfection is achieved, not when there is nothing more to add, but when there is nothing left to take away.", "source": "Antoine de Saint-Exupery" },
+        { "text": "Out of clutter, find simplicity. From discord, find harmony. In the middle of difficulty lies opportunity.", "source": "Albert Einstein" }
       ]
     },
     "planning_start": {
@@ -33,7 +46,9 @@
         { "text": "A goal without a plan is just a wish.", "source": "Antoine de Saint-Exupery" },
         { "text": "Plans are nothing; planning is everything.", "source": "Dwight D. Eisenhower" },
         { "text": "By failing to prepare, you are preparing to fail.", "source": "Benjamin Franklin" },
-        { "text": "Victorious warriors win first and then go to war.", "source": "Sun Tzu" }
+        { "text": "Victorious warriors win first and then go to war.", "source": "Sun Tzu" },
+        { "text": "Give me six hours to chop down a tree and I will spend the first four sharpening the axe.", "source": "Abraham Lincoln" },
+        { "text": "In preparing for battle I have always found that plans are useless, but planning is indispensable.", "source": "Dwight D. Eisenhower" }
       ]
     },
     "plan_approved": {
@@ -42,7 +57,8 @@
         { "text": "Believe you can and you are halfway there.", "source": "Theodore Roosevelt" },
         { "text": "Whether you think you can, or you think you cannot, you are right.", "source": "Henry Ford" },
         { "text": "Optimism is the faith that leads to achievement.", "source": "Helen Keller" },
-        { "text": "The most difficult thing is the decision to act, the rest is merely tenacity.", "source": "Amelia Earhart" }
+        { "text": "The most difficult thing is the decision to act, the rest is merely tenacity.", "source": "Amelia Earhart" },
+        { "text": "Commitment is an act, not a word.", "source": "Jean-Paul Sartre" }
       ]
     },
     "phase_start": {
@@ -51,7 +67,9 @@
         { "text": "It does not matter how slowly you go as long as you do not stop.", "source": "Confucius" },
         { "text": "Great things are done by a series of small things brought together.", "source": "Vincent van Gogh" },
         { "text": "Opportunity is missed by most people because it is dressed in overalls and looks like work.", "source": "Thomas A. Edison" },
-        { "text": "Nothing can be changed until it is faced.", "source": "James Baldwin" }
+        { "text": "Nothing can be changed until it is faced.", "source": "James Baldwin" },
+        { "text": "The secret of success is to do the common things uncommonly well.", "source": "John D. Rockefeller" },
+        { "text": "Do not wait to strike till the iron is hot, but make it hot by striking.", "source": "William Butler Yeats" }
       ]
     },
     "phase_complete": {
@@ -123,7 +141,9 @@
         { "text": "Coming together is a beginning; keeping together is progress; working together is success.", "source": "Henry Ford" },
         { "text": "What lies behind us and what lies before us are tiny matters compared to what lies within us.", "source": "Ralph Waldo Emerson" },
         { "text": "Do the best you can until you know better. Then when you know better, do better.", "source": "Maya Angelou" },
-        { "text": "Knowing yourself is the beginning of all wisdom.", "source": "Aristotle" }
+        { "text": "Knowing yourself is the beginning of all wisdom.", "source": "Aristotle" },
+        { "text": "The greatest glory in living lies not in never falling, but in rising every time we fall.", "source": "Nelson Mandela" },
+        { "text": "Life is what happens to you while you're busy making other plans.", "source": "John Lennon" }
       ]
     },
     "resume": {
@@ -133,6 +153,69 @@
         { "text": "What we call the beginning is often the end. And to make an end is to make a beginning.", "source": "T. S. Eliot" },
         { "text": "Our greatest glory is not in never falling, but in rising every time we fall.", "source": "Confucius" },
         { "text": "As long as you live, keep learning how to live.", "source": "Seneca" }
+      ]
+    },
+    "plan": {
+      "label": "Task planning",
+      "quotes": [
+        { "text": "Strategy without tactics is the slowest route to victory. Tactics without strategy is the noise before defeat.", "source": "Sun Tzu" },
+        { "text": "Someone is sitting in the shade today because someone planted a tree a long time ago.", "source": "Warren Buffett" },
+        { "text": "It takes as much energy to wish as it does to plan.", "source": "Eleanor Roosevelt" },
+        { "text": "However beautiful the strategy, you should occasionally look at the results.", "source": "Winston Churchill" }
+      ]
+    },
+    "execute": {
+      "label": "Implementation begins",
+      "quotes": [
+        { "text": "The way to get started is to quit talking and begin doing.", "source": "Walt Disney" },
+        { "text": "Action is the foundational key to all success.", "source": "Pablo Picasso" },
+        { "text": "An idea not coupled with action will never get any bigger than the brain cell it occupied.", "source": "Arnold Glasow" },
+        { "text": "Vision without execution is hallucination.", "source": "Thomas A. Edison" }
+      ]
+    },
+    "e2e": {
+      "label": "End-to-end testing",
+      "quotes": [
+        { "text": "Testing leads to failure, and failure leads to understanding.", "source": "Burt Rutan" },
+        { "text": "The most important thing is to not stop questioning.", "source": "Albert Einstein" },
+        { "text": "No amount of experimentation can ever prove me right; a single experiment can prove me wrong.", "source": "Albert Einstein" },
+        { "text": "It doesn't matter how beautiful your theory is, it doesn't matter how smart you are. If it doesn't agree with experiment, it's wrong.", "source": "Richard Feynman" }
+      ]
+    },
+    "reconcile": {
+      "label": "Documentation reconciled",
+      "quotes": [
+        { "text": "Reflection is the lamp of the heart. If it departs, the heart has no light.", "source": "Imam Al-Haddad" },
+        { "text": "Learning without reflection is a waste; reflection without learning is dangerous.", "source": "Confucius" },
+        { "text": "We do not learn from experience. We learn from reflecting on experience.", "source": "John Dewey" },
+        { "text": "In the middle of difficulty lies opportunity.", "source": "Albert Einstein" }
+      ]
+    },
+    "phases_complete": {
+      "label": "All phases complete",
+      "quotes": [
+        { "text": "Talent wins games, but teamwork and intelligence win championships.", "source": "Michael Jordan" },
+        { "text": "None of us is as smart as all of us.", "source": "Ken Blanchard" },
+        { "text": "The whole is greater than the sum of its parts.", "source": "Aristotle" },
+        { "text": "If everyone is moving forward together, then success takes care of itself.", "source": "Henry Ford" }
+      ]
+    },
+    "halt": {
+      "label": "Error encountered",
+      "quotes": [
+        { "text": "Obstacles are those frightful things you see when you take your eyes off your goal.", "source": "Henry Ford" },
+        { "text": "A smooth sea never made a skilled sailor.", "source": "Franklin D. Roosevelt" },
+        { "text": "The brick walls are there for a reason. They let us prove how badly we want things.", "source": "Randy Pausch" },
+        { "text": "Difficulties are meant to rouse, not discourage. The human spirit is to grow strong by conflict.", "source": "William Ellery Channing" }
+      ]
+    },
+    "pause": {
+      "label": "Session paused",
+      "quotes": [
+        { "text": "Rest is not idleness, and to lie sometimes on the grass under trees on a summer's day is by no means a waste of time.", "source": "John Lubbock" },
+        { "text": "Almost everything will work again if you unplug it for a few minutes, including you.", "source": "Anne Lamott" },
+        { "text": "Patience is the companion of wisdom.", "source": "Saint Augustine" },
+        { "text": "Nature does not hurry, yet everything is accomplished.", "source": "Lao Tzu" }
       ]
     }
   }

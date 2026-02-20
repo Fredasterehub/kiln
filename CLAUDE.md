@@ -1,4 +1,4 @@
-<!-- kiln:protocol:begin v0.3.0 -->
+<!-- kiln:protocol:begin v0.7.0 -->
 # Kiln Orchestration Protocol
 
 This protocol is active when Kiln is installed in the project. The Claude Code orchestrator must follow these rules exactly. Rules are enforced across all five pipeline stages.
@@ -19,11 +19,11 @@ For full path derivation, memory schema, event schema, file naming conventions, 
 
 ## Pipeline Stages
 
-1. **Stage 1 — Initialization & Brainstorm** (interactive) — The orchestrator initializes the project. For brownfield projects (auto-detected), `kiln-mapper` (Mnemosyne) maps the existing codebase and pre-seeds memory files before brainstorming begins. Then the orchestrator spawns the `kiln-brainstormer` agent (Da Vinci) to facilitate a structured brainstorm session. The brainstormer uses 62 creative techniques, 50 elicitation methods, and anti-bias protocols to guide the operator through ideation. The operator selects a brainstorm depth (light/standard/deep) that sets the idea floor and technique intensity. Memory checkpoints are written periodically: `vision.md` captures the project vision across 11 structured sections, and `MEMORY.md` updates canonical runtime fields (`stage`, `status`, `brainstorm_depth`, phase fields, `handoff_note`, `last_updated`). The stage ends when the brainstormer signals completion and the pre-flight check passes.
+1. **Stage 1 — Initialization & Brainstorm** (interactive) — The orchestrator initializes the project. For brownfield projects (auto-detected), `kiln-mapper` (Mnemosyne) maps the existing codebase and pre-seeds memory files before brainstorming begins. Then the orchestrator spawns the `kiln-brainstormer` agent (Da Vinci) to facilitate a structured brainstorm session. The brainstormer uses 62 creative techniques, 50 elicitation methods, and anti-bias protocols to guide the operator through ideation. The operator selects a brainstorm depth (light/standard/deep) that sets the idea floor and technique intensity. The operator also selects a communication style (`operator_mode: tour | express`) that controls verbosity of onboarding prompts. Memory checkpoints are written periodically: `vision.md` captures the project vision across 11 structured sections, and `MEMORY.md` updates canonical runtime fields (`stage`, `status`, `brainstorm_depth`, phase fields, `handoff_note`, `last_updated`). The stage ends when the brainstormer signals completion and the pre-flight check passes.
 
-2. **Stage 2 — Planning** (automated with operator review) — The orchestrator spawns both `kiln-planner-claude` and a Codex planner in parallel to produce independent implementation plans. A `kiln-debater` agent then analyzes disagreements between the two plans (debate mode 2 by default unless the operator specified otherwise during Stage 1). A `kiln-synthesizer` agent merges the plans and debate resolution into a single `master-plan.md`, annotating parallelizable steps with `parallel_group` tags. The operator reviews and approves the master plan before Stage 3 begins.
+2. **Stage 2 — Planning** (automated with operator review) — The orchestrator spawns `kiln-planning-coordinator` (Aristotle) to own the entire planning pipeline end-to-end. Aristotle runs `kiln-planner-claude` and `kiln-planner-codex` in parallel, runs `kiln-debater` when debate mode requires it (mode 2 by default), synthesizes with `kiln-synthesizer`, validates with `kiln-plan-validator` (Athena) with up to 2 retries, and runs the operator approval loop. Aristotle writes planning artifacts to disk, updates `MEMORY.md`, and returns a single gating signal to Kiln: `PLAN_APPROVED` or `PLAN_BLOCKED`.
 
-3. **Stage 3 — Execution** (automated, phase by phase) — The orchestrator executes the master plan one phase at a time using the phase executor pattern. Each phase consists of: refreshing the codebase index (Sherlock), generating a phase-scoped plan (`$KILN_DIR/plans/phase_plan.md`), JIT prompt sharpening (Scheherazade explores the codebase before generating context-rich prompts), running each Codex task sequentially, and running up to 3 QA review rounds with correction cycles before merging. After each phase merge, Sherlock reconciles living docs (`decisions.md`, `pitfalls.md`, `PATTERNS.md`). Phases run sequentially; the orchestrator does not begin a new phase until the prior phase is merged and MEMORY.md is updated.
+3. **Stage 3 — Execution** (automated, phase by phase) — The orchestrator executes the master plan one phase at a time using the phase executor pattern. Each phase consists of: refreshing the codebase index (Sherlock), generating a phase-scoped plan (`$KILN_DIR/plans/phase_plan.md`), JIT prompt sharpening (Scheherazade explores the codebase before generating context-rich prompts), running each Codex task sequentially, and running up to 3 QA review rounds with correction cycles before merging. After each phase merge, Sherlock reconciles living docs (`decisions.md`, `pitfalls.md`, `PATTERNS.md`, `tech-stack.md`). Phases run sequentially; the orchestrator does not begin a new phase until the prior phase is merged and MEMORY.md is updated.
 
 4. **Stage 4 — Validation** (automated with correction loop) — After all phases are complete, the orchestrator runs end-to-end validation. Argus builds, deploys, and tests the actual running product against the master plan's acceptance criteria. Results are written to `$KILN_DIR/validation/report.md`. If validation fails, Argus generates correction task descriptions. The orchestrator creates correction phases that re-enter Stage 3 through the full Scheherazade→Codex→Sphinx cycle. This loop continues until validation passes or max 3 correction cycles are reached. Any missing credentials or environment variables are recorded in `$KILN_DIR/validation/missing_credentials.md`.
 
@@ -33,9 +33,9 @@ For full path derivation, memory schema, event schema, file naming conventions, 
 
 1. **No /compact** — Never use `/compact`. Context management is handled exclusively through session resets and memory file resumption. Compacting loses tool call history that may be needed for debugging.
 
-2. **Memory files are the single source of truth** — `MEMORY.md`, `vision.md`, `master-plan.md`, `decisions.md`, `pitfalls.md`, and `PATTERNS.md` define project state. Before starting any stage or phase, read these files. After completing any stage or phase, update canonical runtime fields in `MEMORY.md`: `stage`, `status`, `planning_sub_stage`, phase fields, `handoff_note`, `handoff_context`, and `last_updated`.
+2. **Memory files are the single source of truth** — `MEMORY.md`, `vision.md`, `master-plan.md`, `decisions.md`, `pitfalls.md`, `PATTERNS.md`, and `tech-stack.md` define project state. Before starting any stage or phase, read these files. After completing any stage or phase, update canonical runtime fields in `MEMORY.md`: `stage`, `status`, `planning_sub_stage`, phase fields, `handoff_note`, `handoff_context`, and `last_updated`. Pipeline transitions are rendered via ANSI-colored Bash printf commands (see kiln-core.md ANSI Rendering section).
 
-3. **Only Maestro and Mnemosyne have Task tool access** — Among spawned sub-agents, only `kiln-phase-executor` (Maestro, Stage 3) and `kiln-mapper` (Mnemosyne, Stage 1) have Task tool access. All other spawned agents are leaf workers that cannot spawn further sub-agents. The top-level orchestrator (Kiln, running `/kiln:start`) uses Task to spawn all top-level agents and is not subject to this restriction.
+3. **Only Aristotle, Maestro, and Mnemosyne have Task tool access** — Among spawned sub-agents, only `kiln-planning-coordinator` (Aristotle, Stage 2), `kiln-phase-executor` (Maestro, Stage 3), and `kiln-mapper` (Mnemosyne, Stage 1) have Task tool access. All other spawned agents are leaf workers that cannot spawn further sub-agents. The top-level orchestrator (Kiln, running `/kiln:start`) uses Task to spawn all top-level agents and is not subject to this restriction.
 
 4. **Phase sizing** — Each phase must represent 1-4 hours of implementation work. Phases that are too large must be split during the planning stage. Phases that are too small may be merged. The synthesizer is responsible for enforcing this during master plan creation.
 
@@ -53,15 +53,17 @@ For full path derivation, memory schema, event schema, file naming conventions, 
 
 11. **Scheherazade must explore the current codebase before generating any implementation prompt** — JIT sharpening is mandatory. Prompts generated without codebase exploration are rejected.
 
-12. **After each phase, reconcile living docs** — Sherlock updates `decisions.md`, `pitfalls.md`, and `PATTERNS.md` after every phase merge. Scheherazade reads these files before sharpening subsequent tasks, creating a cross-phase learning loop.
+12. **After each phase, reconcile living docs** — Sherlock updates `decisions.md`, `pitfalls.md`, `PATTERNS.md`, and `tech-stack.md` after every phase merge. Scheherazade reads these files before sharpening subsequent tasks, creating a cross-phase learning loop.
 
 13. **Stage 4 must deploy and test the actual running product** — Unit tests alone are insufficient. Argus must attempt to build, deploy, and test real user flows against acceptance criteria.
 
 14. **Validation failures generate correction phases that re-enter Stage 3** — Max 3 correction cycles. Each correction phase goes through the full Scheherazade→Codex→Sphinx cycle. If still failing after 3 cycles, halt and escalate to operator.
 
+15. **Plans must pass validation before execution** — After Plato's synthesis, the orchestrator spawns Athena (`kiln-plan-validator`) and emits `[plan_validate_start]` / `[plan_validate_complete]` events for the gate. If validation fails, loop back to planners with Athena's feedback. Only proceed to Stage 3 after plan validation passes.
+
 ## Agent Roster
 
-The Kiln pipeline uses these specialized agents. Each has a character alias used in logs and status output.
+The Kiln pipeline uses 15 specialized agents. Each has a character alias used in logs and status output.
 
 | Alias | Internal Name | Role |
 |---|---|---|
@@ -77,7 +79,9 @@ The Kiln pipeline uses these specialized agents. Each has a character alias used
 | **Argus** | kiln-validator | Deploy, validate, and generate corrections |
 | **Da Vinci** | kiln-brainstormer | Creative brainstorm facilitator |
 | **Sherlock** | kiln-researcher | Research, codebase indexing, and living docs reconciliation |
+| **Athena** | kiln-plan-validator | Pre-execution plan validation |
 | **Mnemosyne** | kiln-mapper | Brownfield codebase cartographer |
+| **Aristotle** | kiln-planning-coordinator | Stage 2 planning coordinator |
 
 When logging agent activity, use the alias (e.g., `[Confucius]` not `[kiln-planner-claude]`). When spawning agents via the Task tool, always set `name` to the alias and `subagent_type` to the internal name.
 
@@ -134,4 +138,6 @@ handoff_context: |
 **pitfalls.md** — Append-only log of problems, failed approaches, and lessons learned. Updated by Sherlock during reconciliation.
 
 **PATTERNS.md** — Append-only log of coding patterns discovered during execution. Updated by Sherlock during reconciliation. Read by Scheherazade for JIT sharpening.
+
+**tech-stack.md** — Living inventory of languages, frameworks, libraries, and build tools. Updated by Sherlock during reconciliation.
 <!-- kiln:protocol:end -->

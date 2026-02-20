@@ -97,6 +97,10 @@ describe('v0.4.0 contracts', () => {
     assert.strictEqual(config.preferences.review_rounds_max, 3);
     assert.strictEqual(config.preferences.correction_cycles_max, 3);
     assert.strictEqual(config.preferences.codex_timeout, 600);
+
+    // v0.7.0: operator_mode and ui_mode
+    assert.strictEqual(config.operator_mode, 'tour', 'Default operator_mode must be tour');
+    assert.strictEqual(config.ui_mode, 'standard', 'Default ui_mode must be standard');
   });
 
   it('start.md references config.json creation', () => {
@@ -129,7 +133,8 @@ describe('v0.4.0 contracts', () => {
       'planning_start', 'plan_approved', 'phase_start', 'phase_complete',
       'review_approved', 'review_rejected', 'validation_start',
       'validation_passed', 'validation_failed', 'correction_start',
-      'project_complete', 'resume'
+      'project_complete', 'resume',
+      'plan', 'execute', 'e2e', 'reconcile', 'phases_complete', 'halt', 'pause'
     ];
 
     for (const key of expectedKeys) {
@@ -142,6 +147,20 @@ describe('v0.4.0 contracts', () => {
         assert.ok(typeof q.source === 'string' && q.source.length > 0, `${key} quote must have source`);
       }
     }
+
+    // v0.7.0: greetings array
+    assert.ok(Array.isArray(lore.greetings), 'Must have greetings array');
+    assert.ok(lore.greetings.length >= 5, `Must have >= 5 greetings, got ${lore.greetings.length}`);
+    for (const g of lore.greetings) {
+      assert.ok(typeof g === 'string' && g.length > 0, 'Each greeting must be a non-empty string');
+    }
+
+    // v0.7.0: total quote count
+    let totalQuotes = 0;
+    for (const key of Object.keys(lore.transitions)) {
+      totalQuotes += lore.transitions[key].quotes.length;
+    }
+    assert.ok(totalQuotes >= 100, `Must have >= 100 total quotes, got ${totalQuotes}`);
   });
 
   it('start.md references lore display', () => {

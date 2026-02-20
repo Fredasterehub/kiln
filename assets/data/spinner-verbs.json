@@ -1,0 +1,62 @@
+{
+  "generic": [
+    "The kiln grows hotter",
+    "Stoking the furnace",
+    "Tempering the raw material",
+    "Patience — the clay is still wet",
+    "The fire knows what to burn",
+    "Another layer of glaze applied",
+    "Checking the kiln temperature",
+    "The forge never sleeps"
+  ],
+  "brainstorm": [
+    "Da Vinci is sketching something questionable",
+    "Exploring creative domain number... who's counting",
+    "The muse has entered the building",
+    "Ideas are cheap — Da Vinci wants more",
+    "Reversing the brainstorm, just to see",
+    "Da Vinci refuses to converge yet",
+    "Somewhere, an idea just got wings",
+    "Da Vinci says we're not done yet"
+  ],
+  "planning": [
+    "Confucius contemplates the path forward",
+    "Sun Tzu is flanking the requirements",
+    "Socrates found yet another disagreement",
+    "Plato weaves the threads together",
+    "Athena weighs the plan on her scales",
+    "Aristotle herds the philosophers",
+    "The committee of geniuses is arguing",
+    "Sun Tzu says every plan has a weakness"
+  ],
+  "execution": [
+    "Scheherazade begins tonight's tale",
+    "Codex is typing — don't interrupt",
+    "Maestro raises the baton",
+    "Codex just deleted everything and started over",
+    "Scheherazade sharpens the prompt, again",
+    "The orchestra plays as one",
+    "Maestro is not happy with the tempo",
+    "Codex says 'trust me' — famous last words"
+  ],
+  "review": [
+    "Sphinx inspects every single line",
+    "Sphinx found something. Sphinx always finds something",
+    "Sherlock follows the trail of evidence",
+    "The code stands trial",
+    "Sphinx is judging. Harshly.",
+    "Sherlock updates the living docs",
+    "Review round 2 — Sphinx is relentless",
+    "Mnemosyne remembers what you changed"
+  ],
+  "validation": [
+    "Argus watches with a hundred eyes",
+    "Argus deploys and waits. Patiently.",
+    "End-to-end — no shortcuts allowed",
+    "Argus sees what others miss",
+    "The final trial begins",
+    "Testing the real thing, not the dream",
+    "Argus found an edge case. Of course.",
+    "Validation is not optional"
+  ]
+}

@@ -10,13 +10,11 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 ## Stage 1: Initialization & Brainstorm
 
 0. (Optional) Set up tmux layout.
-   Skip this step entirely if the operator is not interested in a split-pane UI.
-   Check `$TMUX` environment variable:
+   This step runs AFTER the operator communication style question (Q1) in Step 5 below. The tmux question is asked there as Q2, conditional on `command -v tmux` succeeding. See Step 5 for the full onboarding flow.
+   The tmux layout setup logic (once the operator has answered yes) is:
 
    **If NOT in a tmux session:**
-   Ask the operator (plain text): "Would you like to launch a tmux session for a split-pane UI? (y/N)"
-   - If operator declines or doesn't respond: set `TMUX_LAYOUT=false` and continue.
-   - If operator agrees: run `tmux new-session -d -s kiln && tmux attach-session -t kiln`. The session will replace the current terminal. Once inside, re-run `/kiln:start`. Set `TMUX_LAYOUT=false` for this invocation (the new session will set it up on re-run).
+   Run `tmux new-session -d -s kiln && tmux attach-session -t kiln`. The session will replace the current terminal. Once inside, re-run `/kiln:start`. Set `TMUX_LAYOUT=false` for this invocation (the new session will set it up on re-run).
 
    **If already in a tmux session:**
    Store the current pane as `$KILN_PANE` using: `tmux display-message -p '#{pane_id}'`
@@ -34,8 +32,18 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
 1. Detect project path and initialize git.
    Before doing anything else in this step:
-   Read `$CLAUDE_HOME/kilntwo/data/lore.json`.
-   Display a random quote from `transitions.ignition.quotes` in italics, with source attribution.
+   Read `$CLAUDE_HOME/kilntwo/data/lore.json`. Pick a random quote from `transitions.ignition.quotes`. Render via Bash:
+   ```bash
+   printf '\n\033[38;5;179m━━━ Ignition ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
+   ```
+   Then write `$KILN_DIR/tmp/last-quote.json`: `{"quote": "...", "by": "...", "section": "ignition", "at": "ISO-8601"}` (create `$KILN_DIR/tmp/` if needed; this write may be deferred until `$KILN_DIR` is created in Step 2).
+
+   Then read `$CLAUDE_HOME/kilntwo/data/lore.json`. Pick a random entry from the `greetings` array. Display it via Bash printf with terracotta color:
+   ```bash
+   printf '\033[38;5;173m%s\033[0m\n\n' "$GREETING"
+   ```
+   Then print: `Before we fire up the forge, a few quick questions.`
+
    Capture the current working directory as `PROJECT_PATH`.
    Run `pwd` (or equivalent) and store the exact absolute path value.
    Derive all subsequent paths from `PROJECT_PATH`.
@@ -71,6 +79,9 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
    `handoff_note` = `.kiln directory initialized.`
    `handoff_context` = `Project directory structure created at $KILN_DIR with .gitignore and config.json. Memory not yet initialized.`
    Also update `last_updated`.
+
+   After creating `$KILN_DIR/`, install spinner verbs:
+   Read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`. Build a flat array from `generic` + `brainstorm` verbs. Write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": [...]}` (create `.claude/` dir if needed). This sets the spinner to brainstorm-themed messages for the upcoming Da Vinci session.
 
 3. Resolve memory paths.
    Compute `HOME` as the user's home directory.
@@ -119,21 +130,68 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
    In both brownfield cases (Y or N), update MEMORY.md: `project_mode`, `handoff_note` (Y: `Project mode: brownfield; Mnemosyne complete; brainstorm depth next.` / N: `Project mode: brownfield (mapping skipped); brainstorm depth next.`), `handoff_context` (Y: `Brownfield project. Mnemosyne mapped the codebase. Snapshot at $KILN_DIR/codebase-snapshot.md. Decisions and pitfalls pre-seeded.` / N: `Brownfield indicators found. Operator chose to skip Mnemosyne mapping. Planners will work from vision.md only.`), `last_updated`. Proceed to Step 5.
 
-5. Ask for brainstorm depth.
-   Ask the user:
-   "What brainstorm depth would you like?
-     1 = Light (quick, focused — idea floor: 10)
-     2 = Standard (balanced exploration — idea floor: 30) [default]
-     3 = Deep (comprehensive — idea floor: 100)
+5. Onboarding questions.
+   Ask the following questions in order. All questions support "tell me more" or "?" as input — this triggers a tour-mode explanation for that question regardless of current mode.
 
-   Press Enter to accept the default (2)."
+   **Q1 — Communication Style (ask first, plain text, NOT AskUserQuestion):**
+   "One thing before we fire up — how should I talk to you?
+
+     [1] Give me the full tour — Explain what each setting does, introduce the
+         agents, tell me why these choices matter.
+
+     [2] Just the controls — Show me my options. Skip the backstory.
+
+   Either way, you can always ask 'tell me more' on any question."
+
+   Store response as `OPERATOR_MODE`. Map: `1` = `tour`, `2` = `express`. Empty response or Enter → `tour`. If invalid, re-prompt once; if still invalid, use `tour`.
+   Write `operator_mode` to `$KILN_DIR/config.json` (merge into existing JSON).
+
+   **Q2 — Tmux (ask if `command -v tmux` succeeds; skip silently if tmux is not in PATH):**
+   Check: `command -v tmux`
+   If tmux is not available, set `TMUX_LAYOUT=false` and skip this question entirely.
+   If tmux is available, ask based on `OPERATOR_MODE`:
+   - Tour mode: "I see tmux is available. If I split your terminal, you get a live view of agent activity in a side panel — Codex typing, Sphinx reviewing, Argus validating, all visible in real-time. Without it, everything still works perfectly — you just won't see the agents working. Want the split? [y/N]"
+   - Express mode: "Tmux detected. Split terminal for agent activity panel? [y/N]"
+   If operator responds y/Y: proceed with tmux layout setup as described in Step 0.
+   If operator declines or presses Enter: set `TMUX_LAYOUT=false` and continue.
+
+   **Q3 — Brainstorm Depth:**
+   Ask based on `OPERATOR_MODE`:
+   - Tour mode: "Time to calibrate Da Vinci — he's our brainstorm facilitator. He'll explore your idea using creative techniques and build a structured vision document.
+
+     [1] Light — Quick sketch. 10+ ideas, fast convergence.
+     [2] Standard — Broad exploration. 30+ ideas, covers blind spots. [default]
+     [3] Deep — Full Da Vinci. 100+ ideas, every technique in the book."
+   - Express mode: "Brainstorm depth? [1=Light / 2=Standard (default) / 3=Deep]"
+
    Store response as `BRAINSTORM_DEPTH`. Map: `1` = `light`, `2` = `standard`, `3` = `deep`. Empty response or Enter → `standard`. If invalid, re-prompt once; if still invalid, use `standard`.
-   Record `brainstorm_depth` in `MEMORY_DIR/MEMORY.md`, update `handoff_note` = `Brainstorm depth set to <BRAINSTORM_DEPTH>; spawning brainstormer.`, `handoff_context` = `Brainstorm depth <BRAINSTORM_DEPTH> selected. About to spawn Da Vinci.`, `last_updated`.
+   Record `brainstorm_depth` in `MEMORY_DIR/MEMORY.md`, update `handoff_note` = `Brainstorm depth set to <BRAINSTORM_DEPTH>; debate mode selection next.`, `last_updated`.
+
+   **Q4 — Debate Mode:**
+   Ask based on `OPERATOR_MODE`:
+   - Tour mode: "After brainstorming, two AI planners independently design your implementation — one Claude, one GPT. Then Socrates compares their plans and resolves disagreements.
+
+     [1] Skip — One planner only, no debate.
+     [2] Focused — One debate round. The sweet spot for most projects. [default]
+     [3] Full — Iterative debate until plans converge."
+   - Express mode: "Debate mode? [1=Skip / 2=Focused (default) / 3=Full]"
+
+   Store response as `DEBATE_MODE`. If empty → `2`. If invalid, re-prompt once; if still invalid, use `2`.
+   Record `debate_mode` in `MEMORY_DIR/MEMORY.md`, update `handoff_note` = `Debate mode set to <DEBATE_MODE>; brainstorm complete, spawning Da Vinci.`, `handoff_context` = `Debate mode <DEBATE_MODE> selected. Brainstorm depth <BRAINSTORM_DEPTH> selected. About to spawn Da Vinci.`, `last_updated`.
+
+   After all questions are answered, render a brainstorm_start ANSI banner (see Step 6 below), then print via Bash:
+   ```bash
+   printf '\033[2mConfiguration locked. Spawning Da Vinci.\nDepth: %s. Debate: %s. Let'\''s see what you'\''ve got.\n\nDa Vinci, the floor is yours.\033[0m\n' "$BRAINSTORM_DEPTH" "$DEBATE_MODE"
+   ```
 
 6. Spawn brainstormer agent.
    Before spawning in this step:
-   Read `$CLAUDE_HOME/kilntwo/data/lore.json`.
-   Display a random quote from `transitions.brainstorm_start.quotes` in italics, with source attribution.
+   Read `$CLAUDE_HOME/kilntwo/data/lore.json`. Pick a random quote from `transitions.brainstorm_start.quotes`. Render via Bash:
+   ```bash
+   printf '\n\033[38;5;179m━━━ Brainstorm ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
+   ```
+   Then write `$KILN_DIR/tmp/last-quote.json`: `{"quote": "...", "by": "...", "section": "brainstorm_start", "at": "ISO-8601"}`.
+
    Read the current contents of `MEMORY_DIR/vision.md` into `EXISTING_VISION`.
    If `PROJECT_MODE = brownfield` and `$KILN_DIR/codebase-snapshot.md` exists, read its contents into `CODEBASE_SNAPSHOT`.
    Otherwise set `CODEBASE_SNAPSHOT` to an empty string.
@@ -188,17 +246,6 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
    Wait for completion.
    After Da Vinci returns, read the updated `MEMORY_DIR/vision.md` to confirm it was written.
 
-6.5. Ask for debate mode.
-   Ask the user:
-   "What debate mode would you like for planning?
-     1 = Skip (no debate — synthesize immediately)
-     2 = Focused (one round of critique and rebuttal) [default]
-     3 = Full rounds (iterative debate until consensus)
-
-   Press Enter to accept the default (2)."
-   Store response as `DEBATE_MODE`. If empty → `2`. If invalid, re-prompt once; if still invalid, use `2`.
-   Record `debate_mode` in `MEMORY_DIR/MEMORY.md`, update `handoff_note` = `Debate mode set to <DEBATE_MODE>; brainstorm complete, pre-flight next.`, `handoff_context` = `Debate mode <DEBATE_MODE> selected. Brainstorm session complete. Vision captured. Pre-flight check next.`, `last_updated`.
-
 7. Run pre-flight checklist.
    Verify all before Stage 2:
    - `vision.md` is non-empty with all required sections: Problem Statement, Target Users, Goals, Constraints, Tech Stack, Open Questions, Elicitation Log (at least one entry). No placeholder text (`_To be filled_`, `_TBD_`).
@@ -207,15 +254,15 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
    - `MEMORY_DIR` contains: `MEMORY.md`, `vision.md`, `master-plan.md`, `decisions.md`, `pitfalls.md`, `PATTERNS.md`, `tech-stack.md`.
    If any check fails, halt and tell the user exactly what is missing. Do not continue until fixed.
    If all checks pass:
-   Read `$CLAUDE_HOME/kilntwo/data/lore.json` and display a random quote from `transitions.brainstorm_complete.quotes` in italics.
-   Print exactly:
-   ```text
-   Pre-flight check complete.
-     Project: $PROJECT_PATH
-     Memory:  $MEMORY_DIR
-     Debate mode: $DEBATE_MODE
-     Vision: ready
-   Proceeding to Stage 2: Planning.
+   Read `$CLAUDE_HOME/kilntwo/data/lore.json`. Pick a random quote from `transitions.brainstorm_complete.quotes`. Render via Bash:
+   ```bash
+   printf '\n\033[38;5;179m━━━ Brainstorm Complete ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
+   ```
+   Then write `$KILN_DIR/tmp/last-quote.json`: `{"quote": "...", "by": "...", "section": "brainstorm_complete", "at": "ISO-8601"}`.
+   Then print via Bash:
+   ```bash
+   printf '\033[32m✓\033[0m Pre-flight check complete.\n  \033[2mProject:\033[0m %s\n  \033[2mMemory:\033[0m  %s\n  \033[2mDebate:\033[0m  mode %s\n  \033[2mVision:\033[0m  ready\n\n\033[38;5;179mProceeding to Stage 2: Planning.\033[0m\n' \
+     "$PROJECT_PATH" "$MEMORY_DIR" "$DEBATE_MODE"
    ```
    Update `MEMORY_DIR/MEMORY.md`: `stage` = `planning`, `status` = `in_progress`, `planning_sub_stage` = `dual_plan`, `handoff_note` = `Pre-flight passed; planning started.`, `handoff_context` = `Brainstorming complete. Vision captured in vision.md. Pre-flight checks passed. Aristotle about to be spawned for Stage 2 planning.`, `last_updated` = current ISO-8601 UTC timestamp.
 
@@ -225,8 +272,14 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
 8. Spawn the Stage 2 planning coordinator.
    Before spawning in this step:
-   Read `$CLAUDE_HOME/kilntwo/data/lore.json`.
-   Display a random quote from `transitions.planning_start.quotes` in italics, with source attribution.
+   Read `$CLAUDE_HOME/kilntwo/data/lore.json`. Pick a random quote from `transitions.planning_start.quotes`. Render via Bash:
+   ```bash
+   printf '\n\033[38;5;179m━━━ Planning ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
+   ```
+   Then write `$KILN_DIR/tmp/last-quote.json`: `{"quote": "...", "by": "...", "section": "planning_start", "at": "ISO-8601"}`.
+
+   Update spinner verbs: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `planning` verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": [...]}`.
+
    Update `MEMORY_DIR/MEMORY.md`:
    `stage` = `planning`
    `status` = `in_progress`
@@ -276,8 +329,11 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
 12. Display the plan-approved transition and proceed to Stage 3.
     Before proceeding:
-    Read `$CLAUDE_HOME/kilntwo/data/lore.json`.
-    Display a random quote from `transitions.plan_approved.quotes` in italics, with source attribution.
+    Read `$CLAUDE_HOME/kilntwo/data/lore.json`. Pick a random quote from `transitions.plan_approved.quotes`. Render via Bash:
+    ```bash
+    printf '\n\033[38;5;179m━━━ Plan Approved ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
+    ```
+    Then write `$KILN_DIR/tmp/last-quote.json`: `{"quote": "...", "by": "...", "section": "plan_approved", "at": "ISO-8601"}`.
     Confirm `MEMORY_DIR/master-plan.md` exists and is non-empty.
     Proceed immediately to Stage 3 (Execution).
 
@@ -290,8 +346,15 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
     Parse every section whose heading begins with `### Phase`.
     Keep original order.
     Set `phase_total` in `MEMORY.md` to the parsed phase count before the loop starts.
+
+    Update spinner verbs at the start of Stage 3: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `execution` verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": [...]}`.
+
     For each phase:
-    Before phase initialization, read `$CLAUDE_HOME/kilntwo/data/lore.json` and display a random quote from `transitions.phase_start.quotes` in italics.
+    Before phase initialization, read `$CLAUDE_HOME/kilntwo/data/lore.json`. Pick a random quote from `transitions.phase_start.quotes`. Render via Bash:
+    ```bash
+    printf '\n\033[38;5;179m━━━ Phase %s: %s ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$PHASE_NUMBER" "$PHASE_NAME" "$QUOTE_TEXT" "$QUOTE_SOURCE"
+    ```
+    Then write `$KILN_DIR/tmp/last-quote.json`: `{"quote": "...", "by": "...", "section": "phase_start", "at": "ISO-8601"}`.
     Before spawning the executor, update `MEMORY_DIR/MEMORY.md`:
     `stage` = `execution`
     `status` = `in_progress`
@@ -337,7 +400,11 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
     `handoff_note` = `Phase <N> complete; ready for next phase.`
     `handoff_context` = `Phase <N> (<phase name>) completed successfully. <one-sentence summary from results>. Next: phase <N+1> or validation if all phases done.`
     `last_updated` = current ISO-8601 UTC timestamp.
-    After phase completion update, read `$CLAUDE_HOME/kilntwo/data/lore.json` and display a random quote from `transitions.phase_complete.quotes` in italics.
+    After phase completion update, read `$CLAUDE_HOME/kilntwo/data/lore.json`. Pick a random quote from `transitions.phase_complete.quotes`. Render via Bash:
+    ```bash
+    printf '\n\033[38;5;179m━━━ Phase %s Complete ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$PHASE_NUMBER" "$QUOTE_TEXT" "$QUOTE_SOURCE"
+    ```
+    Then write `$KILN_DIR/tmp/last-quote.json`: `{"quote": "...", "by": "...", "section": "phase_complete", "at": "ISO-8601"}`.
     If executor output is placeholder-only, TODO-only, or stub-only:
     Fail that phase.
     Update phase `N` in `## Phase Statuses` to `phase_status = failed`.
@@ -350,8 +417,14 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
 14. Run final validation with correction loop.
     Before entering validation loop:
-    Read `$CLAUDE_HOME/kilntwo/data/lore.json`.
-    Display a random quote from `transitions.validation_start.quotes` in italics, with source attribution.
+    Read `$CLAUDE_HOME/kilntwo/data/lore.json`. Pick a random quote from `transitions.validation_start.quotes`. Render via Bash:
+    ```bash
+    printf '\n\033[38;5;179m━━━ Validation ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
+    ```
+    Then write `$KILN_DIR/tmp/last-quote.json`: `{"quote": "...", "by": "...", "section": "validation_start", "at": "ISO-8601"}`.
+
+    Update spinner verbs: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `validation` verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": [...]}`.
+
     After all phases complete, set `correction_cycle = 0` in `MEMORY_DIR/MEMORY.md`.
     Enter the validation-correction loop (max 3 cycles):
 
@@ -418,8 +491,11 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
 15. Finalize protocol run.
     Before final status output in this step:
-    Read `$CLAUDE_HOME/kilntwo/data/lore.json`.
-    Display a random quote from `transitions.project_complete.quotes` in italics, with source attribution.
+    Read `$CLAUDE_HOME/kilntwo/data/lore.json`. Pick a random quote from `transitions.project_complete.quotes`. Render via Bash:
+    ```bash
+    printf '\n\033[38;5;179m━━━ Project Complete ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
+    ```
+    Then write `$KILN_DIR/tmp/last-quote.json`: `{"quote": "...", "by": "...", "section": "project_complete", "at": "ISO-8601"}`.
     Update `MEMORY_DIR/MEMORY.md` fields:
     `stage` -> `complete`.
     `status` -> `complete`.
@@ -430,16 +506,11 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
     `handoff_note` -> `Protocol run completed successfully.`
     `handoff_context` -> `All <N> phases completed and validated. Validation report at $KILN_DIR/validation/report.md. Protocol run is finished.`
     `last_updated` -> current ISO-8601 UTC timestamp.
-    Count completed phases as `N`.
-    Print exactly:
-    ```text
-    Kiln protocol complete.
-      Project: $PROJECT_PATH
-      Phases completed: <N>
-      Validation report: $KILN_DIR/validation/report.md
-
-    Run `kilntwo doctor` to verify your installation health.
-    To resume a paused run, use /kiln:resume.
+    Count completed phases as `PHASE_COUNT`.
+    Print via Bash:
+    ```bash
+    printf '\n\033[38;5;173m[kiln]\033[0m Protocol complete.\n  \033[2mProject:\033[0m %s\n  \033[2mPhases:\033[0m  %s completed\n  \033[2mReport:\033[0m  %s\n\n\033[2mRun kilntwo doctor to verify installation health.\nTo resume a paused run, use /kiln:resume.\033[0m\n' \
+      "$PROJECT_PATH" "$PHASE_COUNT" "$KILN_DIR/validation/report.md"
     ```
     End execution.
 

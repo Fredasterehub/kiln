@@ -279,6 +279,142 @@ describe('contract lint', () => {
   });
 });
 
+describe('v0.7.0 contracts', () => {
+  it('spinner-verbs.json exists with valid structure', () => {
+    const verbsPath = path.join(ASSETS_DIR, 'data', 'spinner-verbs.json');
+    assert.ok(fs.existsSync(verbsPath), 'spinner-verbs.json must exist in data/');
+
+    const verbs = JSON.parse(fs.readFileSync(verbsPath, 'utf8'));
+    const expectedStages = ['generic', 'brainstorm', 'planning', 'execution', 'review', 'validation'];
+
+    for (const stage of expectedStages) {
+      assert.ok(Array.isArray(verbs[stage]), `Must have ${stage} array`);
+      assert.ok(verbs[stage].length >= 6, `${stage} must have >= 6 verbs, got ${verbs[stage].length}`);
+      for (const verb of verbs[stage]) {
+        assert.ok(typeof verb === 'string' && verb.length > 0, `${stage} verbs must be non-empty strings`);
+      }
+    }
+  });
+
+  it('start.md references ANSI transition banners', () => {
+    const start = readAsset('commands/kiln/start.md');
+
+    assert.ok(
+      start.includes('\\033[38;5;179m'),
+      'start.md must contain ANSI muted gold color code for banners'
+    );
+    assert.ok(
+      start.includes('\\033[38;5;222m'),
+      'start.md must contain ANSI warm gold color code for quotes'
+    );
+    assert.ok(
+      start.includes('\\033[38;5;173m'),
+      'start.md must contain ANSI terracotta color code'
+    );
+  });
+
+  it('start.md references spinner-verbs.json installation', () => {
+    const start = readAsset('commands/kiln/start.md');
+
+    assert.ok(
+      start.includes('spinner-verbs.json'),
+      'start.md must reference spinner-verbs.json'
+    );
+    assert.ok(
+      start.includes('spinnerVerbs'),
+      'start.md must reference spinnerVerbs setting'
+    );
+  });
+
+  it('start.md references greetings from lore.json', () => {
+    const start = readAsset('commands/kiln/start.md');
+
+    assert.ok(
+      start.includes('greetings'),
+      'start.md must reference greetings array from lore.json'
+    );
+  });
+
+  it('start.md has operator_mode onboarding question', () => {
+    const start = readAsset('commands/kiln/start.md');
+
+    assert.ok(
+      start.includes('OPERATOR_MODE') || start.includes('operator_mode'),
+      'start.md must reference operator_mode'
+    );
+    assert.ok(
+      start.includes('tour') && start.includes('express'),
+      'start.md must offer tour and express modes'
+    );
+  });
+
+  it('start.md references last-quote.json persistence', () => {
+    const start = readAsset('commands/kiln/start.md');
+
+    assert.ok(
+      start.includes('last-quote.json'),
+      'start.md must reference last-quote.json for quote persistence'
+    );
+  });
+
+  it('resume.md references ANSI transition banners', () => {
+    const resume = readAsset('commands/kiln/resume.md');
+
+    assert.ok(
+      resume.includes('\\033[38;5;179m'),
+      'resume.md must contain ANSI muted gold color code for banners'
+    );
+  });
+
+  it('resume.md references spinner-verbs.json', () => {
+    const resume = readAsset('commands/kiln/resume.md');
+
+    assert.ok(
+      resume.includes('spinner-verbs.json'),
+      'resume.md must reference spinner-verbs.json'
+    );
+  });
+
+  it('kiln-core.md has ANSI Rendering section', () => {
+    const skill = readAsset('skills/kiln-core.md');
+
+    assert.ok(
+      skill.includes('## ANSI Rendering'),
+      'kiln-core.md must have ANSI Rendering section'
+    );
+    assert.ok(
+      skill.includes('### Color Palette'),
+      'kiln-core.md must have Color Palette subsection'
+    );
+    assert.ok(
+      skill.includes('### Status Symbols'),
+      'kiln-core.md must have Status Symbols subsection'
+    );
+    assert.ok(
+      skill.includes('### Spinner Verb Installation'),
+      'kiln-core.md must have Spinner Verb Installation subsection'
+    );
+  });
+
+  it('protocol.md mentions ANSI rendering', () => {
+    const protocol = readAsset('protocol.md');
+
+    assert.ok(
+      protocol.includes('ANSI'),
+      'protocol.md must mention ANSI rendering'
+    );
+  });
+
+  it('protocol.md mentions operator_mode', () => {
+    const protocol = readAsset('protocol.md');
+
+    assert.ok(
+      protocol.includes('operator_mode'),
+      'protocol.md must mention operator_mode'
+    );
+  });
+});
+
 describe('v0.3.0 contracts', () => {
   it('Scheherazade spec has codebase exploration and Codex Prompting Guide principles', () => {
     const prompter = readAsset('agents/kiln-prompter.md');
