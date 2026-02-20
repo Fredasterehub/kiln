@@ -31,6 +31,41 @@ All git operations MUST use `git -C $PROJECT_PATH`. Never use root-relative path
 
 **Optional fields**: `plan_approved_at`, `completed_at`, `correction_cycle` (integer 0-3; absent is treated as 0)
 **Optional sections**: `## Phase Results`, `## Validation`, `## Reset Notes`, `## Correction Log`
+**Optional memory files**: `tech-stack.md` (living inventory updated during reconciliation)
+
+## Config Schema
+
+`$KILN_DIR/config.json` controls runtime tunables and tooling hints.
+
+```json
+{
+  "model_mode": "multi-model",
+  "preferences": {
+    "debate_mode": 2,
+    "review_rounds_max": 3,
+    "correction_cycles_max": 3,
+    "codex_timeout": 600,
+    "phase_size_hours_min": 1,
+    "phase_size_hours_max": 4
+  },
+  "tooling": {
+    "test_runner": null,
+    "linter": null,
+    "type_checker": null,
+    "build_system": null,
+    "package_manager": null
+  }
+}
+```
+
+Field notes:
+- `model_mode`: execution model selection (`multi-model` by default).
+- `preferences.debate_mode`: default planning debate mode (`2` focused).
+- `preferences.review_rounds_max`: max QA rounds per phase (`3`).
+- `preferences.correction_cycles_max`: max validation correction cycles (`3`).
+- `preferences.codex_timeout`: minimum Codex timeout in seconds (`600`).
+- `preferences.phase_size_hours_min` / `phase_size_hours_max`: planning phase sizing targets (`1-4` hours).
+- `tooling.*`: optional auto-detected commands/systems for brownfield projects.
 
 ## Event Schema
 
@@ -42,9 +77,9 @@ Phase state files (`$KILN_DIR/phase_<N>_state.md`) contain a `## Events` section
 
 `AGENT_ALIAS` = character alias (e.g. `Maestro`, `Confucius`, `Codex`), not internal name.
 
-**Event type enum** (25 values, closed set): `setup`, `branch`, `plan_start`, `plan_complete`, `debate_complete`, `synthesis_complete`, `sharpen_start`, `sharpen_complete`, `task_start`, `task_success`, `task_retry`, `task_fail`, `review_start`, `review_approved`, `review_rejected`, `fix_start`, `fix_complete`, `merge`, `reconcile_complete`, `deploy_start`, `deploy_complete`, `correction_start`, `correction_complete`, `error`, `halt`
+**Event type enum** (27 values, closed set): `setup`, `branch`, `plan_start`, `plan_complete`, `debate_complete`, `synthesis_complete`, `plan_validate_start`, `plan_validate_complete`, `sharpen_start`, `sharpen_complete`, `task_start`, `task_success`, `task_retry`, `task_fail`, `review_start`, `review_approved`, `review_rejected`, `fix_start`, `fix_complete`, `merge`, `reconcile_complete`, `deploy_start`, `deploy_complete`, `correction_start`, `correction_complete`, `error`, `halt`
 
-Note: `deploy_start`, `deploy_complete` are logged in the validation report timeline (not phase state files). `correction_start`, `correction_complete` are logged in the `## Correction Log` section of `MEMORY.md` (not phase state files). All other events are logged in phase state files.
+Note: `plan_validate_start`, `plan_validate_complete` are logged during Stage 2 plan gating. `deploy_start`, `deploy_complete` are logged in the validation report timeline (not phase state files). `correction_start`, `correction_complete` are logged in the `## Correction Log` section of `MEMORY.md` (not phase state files). All other events are logged in phase state files.
 
 ## File Naming Conventions
 
@@ -92,6 +127,7 @@ cat <PROMPT_PATH> | codex exec -m gpt-5.3-codex \
 
 ```
 $KILN_DIR/
+  config.json              — Runtime config (model mode, preferences, tooling hints)
   phase_<N>_state.md       — Per-phase state file (branch, commit SHA, structured events)
   codebase-snapshot.md     — Codebase index (refreshed per phase, gitignored)
   plans/

@@ -123,6 +123,17 @@
       "Every obstacle yields to stern resolve"
     ]
   },
+  "kiln-plan-validator": {
+    "alias": "Athena",
+    "role": "plan validator",
+    "quotes": [
+      "The unplanned battle is already lost",
+      "Strategy without tactics is the slowest route to victory",
+      "Measure twice, cut once",
+      "A plan is only as good as its weakest assumption",
+      "Wisdom is the daughter of experience"
+    ]
+  },
   "kiln-mapper": {
     "alias": "Mnemosyne",
     "role": "codebase cartographer",

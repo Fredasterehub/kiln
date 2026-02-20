@@ -1,0 +1,18 @@
+{
+  "model_mode": "multi-model",
+  "preferences": {
+    "debate_mode": 2,
+    "review_rounds_max": 3,
+    "correction_cycles_max": 3,
+    "codex_timeout": 600,
+    "phase_size_hours_min": 1,
+    "phase_size_hours_max": 4
+  },
+  "tooling": {
+    "test_runner": null,
+    "linter": null,
+    "type_checker": null,
+    "build_system": null,
+    "package_manager": null
+  }
+}

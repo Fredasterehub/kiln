@@ -51,5 +51,11 @@ When instructed to reconcile living docs after a phase merge:
    - Create file if it does not exist (use template from `$CLAUDE_HOME/kilntwo/templates/PATTERNS.md` if available, else create with `# Coding Patterns` heading).
    - Append entries for coding patterns discovered (naming conventions, error handling patterns, test patterns).
    - Use format: `## <Pattern Name>` with Pattern, Example, When to Use fields.
-6. Return summary: N decisions, M pitfalls, P patterns added.
+6. Update `$memory_dir/tech-stack.md`:
+   - Create file if it does not exist (use template from `$CLAUDE_HOME/kilntwo/templates/tech-stack.md` if available, else create with `# Tech Stack` heading).
+   - Parse the git diff and touched files to identify languages, frameworks, libraries, and build tools used.
+   - Append entries for newly discovered technologies only (no duplicates).
+   - Under `## Languages`, `## Frameworks`, `## Libraries`, and `## Build Tools`, add entries as:
+     `### <Technology Name>` with `Version`, `Purpose`, and `Added` fields.
+7. Return summary: N decisions, M pitfalls, P patterns, T tech stack entries added.
 </workflow>

@@ -396,22 +396,23 @@ describe('v0.3.0 contracts', () => {
     );
   });
 
-  it('event enum has 25 types including v0.3.0 additions', () => {
+  it('event enum has 27 types including v0.4.0 additions', () => {
     const skill = readAsset('skills/kiln-core.md');
     const skillEnum = extractEventTypeEnum(skill);
 
-    assert.strictEqual(skillEnum.length, 25, `Expected 25 event types, got ${skillEnum.length}`);
+    assert.strictEqual(skillEnum.length, 27, `Expected 27 event types, got ${skillEnum.length}`);
 
     const newTypes = [
       'sharpen_start', 'sharpen_complete',
       'reconcile_complete',
       'deploy_start', 'deploy_complete',
       'correction_start', 'correction_complete',
+      'plan_validate_start', 'plan_validate_complete',
     ];
     for (const t of newTypes) {
       assert.ok(
         skillEnum.includes(t),
-        `Event enum must include v0.3.0 type: ${t}`,
+        `Event enum must include v0.4.0 type: ${t}`,
       );
     }
 

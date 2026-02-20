@@ -29,6 +29,9 @@ Never write free-form status strings.
 ## Stage 1: Initialization & Brainstorm
 
 1. Detect project path and initialize git.
+   Before doing anything else in this step:
+   Read `$CLAUDE_HOME/kilntwo/data/lore.json`.
+   Display a random quote from `transitions.ignition.quotes` in italics, with source attribution.
    Capture the current working directory as `PROJECT_PATH`.
    Run `pwd` (or equivalent) and store the exact absolute path value.
    Derive all subsequent paths from `PROJECT_PATH`.
@@ -47,15 +50,21 @@ Never write free-form status strings.
    `outputs/`
    `archive/`
    `validation/`
+   `config.json`
    `*_state.md`
    `codebase-snapshot.md`
    Do not add extra entries.
    Do not add trailing spaces.
+   After writing `.gitignore`, create `$KILN_DIR/config.json`:
+   - Read template from `$CLAUDE_HOME/kilntwo/data/default-config.json`.
+   - If template is missing, write the default config object inline with `model_mode`, `preferences`, and `tooling` fields.
+   - If `$KILN_DIR/config.json` already exists and parses as JSON, preserve it.
+   - If it exists but is invalid JSON, overwrite with the default template.
    After writing this file, update `MEMORY_DIR/MEMORY.md` later in Step 4 (or as soon as `MEMORY_DIR` exists) with:
    `stage` = `brainstorm`
    `status` = `in_progress`
    `handoff_note` = `.kiln directory initialized.`
-   `handoff_context` = `Project directory structure created at $KILN_DIR with .gitignore. Memory not yet initialized.`
+   `handoff_context` = `Project directory structure created at $KILN_DIR with .gitignore and config.json. Memory not yet initialized.`
    Also update `last_updated`.
 
 3. Resolve memory paths.
@@ -80,6 +89,7 @@ Never write free-form status strings.
    `decisions.md`
    `pitfalls.md`
    `PATTERNS.md`
+   `tech-stack.md`
    For each target memory file, first check whether it already exists and contains non-empty content beyond a header.
    If it already has substantial content, do not overwrite it.
    If it is missing or effectively empty, initialize it from the matching template when available.
@@ -95,7 +105,7 @@ Never write free-form status strings.
    `phase_name` = `null`.
    `phase_total` = `null`.
    `handoff_note` = `Memory initialized; ready for brainstorming.`
-   `handoff_context` = `All five memory files instantiated from templates. Project is ready for Stage 1 brainstorming.`
+   `handoff_context` = `All core memory files instantiated from templates. Project is ready for Stage 1 brainstorming.`
    `last_updated` = current ISO-8601 UTC timestamp.
    Keep `## Phase Statuses` present; leave it empty at initialization.
    If the template uses blank fields instead of placeholders, initialize those fields to empty strings.
@@ -103,6 +113,7 @@ Never write free-form status strings.
    For `master-plan.md`, write template content and leave the body empty.
    For `decisions.md`, write template content and leave the decision log empty.
    For `pitfalls.md`, write template content and leave the pitfalls list empty.
+   For `tech-stack.md`, write template content and leave section bodies empty.
    If a template file does not exist, create the memory file from scratch.
    The fallback file format is:
    H1 heading of the filename stem.
@@ -112,7 +123,7 @@ Never write free-form status strings.
    `stage` = `brainstorm`
    `status` = `in_progress`
    `handoff_note` = `Memory initialization complete.`
-   `handoff_context` = `All five memory files instantiated from templates. Project is ready for brainstorming.`
+   `handoff_context` = `All core memory files instantiated from templates. Project is ready for brainstorming.`
    `last_updated` = current ISO-8601 UTC timestamp.
 
 4.5. Detect project mode.
@@ -120,6 +131,14 @@ Never write free-form status strings.
    - Dependency manifests: `package.json`, `go.mod`, `Cargo.toml`, `requirements.txt`, `pyproject.toml`, `pom.xml`, `build.gradle`
    - Source directories with source files: `src/`, `lib/`, `app/`, `cmd/`
    - Existing git history: run `git -C $PROJECT_PATH log --oneline -1` (non-empty output means commits exist)
+   Also detect tooling hints and stage them for `$KILN_DIR/config.json`:
+   - `package-lock.json` => `tooling.package_manager = npm`
+   - `yarn.lock` => `tooling.package_manager = yarn`
+   - `pnpm-lock.yaml` => `tooling.package_manager = pnpm`
+   - `Makefile` => `tooling.build_system = make`
+   - `tsconfig.json` => `tooling.type_checker = tsc`
+   - `.eslintrc*` or `eslint.config.*` => `tooling.linter = eslint`
+   - `package.json` scripts containing `test` => infer `tooling.test_runner` from script (`jest`, `vitest`, `mocha`, or `npm test`)
 
    If NO indicators found:
    - Set `PROJECT_MODE = greenfield`
@@ -136,6 +155,7 @@ Never write free-form status strings.
    If operator responds Y (or any affirmative):
    - Set `PROJECT_MODE = brownfield`
    - Write `project_mode: brownfield` to the `## Metadata` section of `MEMORY_DIR/MEMORY.md`
+   - If any tooling hints were detected, merge them into `$KILN_DIR/config.json` `tooling` fields (keep existing non-null values unless a more specific detected value exists).
    - Spawn `kiln-mapper` via the Task tool:
      `name`: `"Mnemosyne"` (the alias)
      `subagent_type`: `kiln-mapper`
@@ -155,6 +175,7 @@ Never write free-form status strings.
    If operator responds N:
    - Set `PROJECT_MODE = brownfield`
    - Write `project_mode: brownfield` to the `## Metadata` section of `MEMORY_DIR/MEMORY.md`
+   - If any tooling hints were detected, merge them into `$KILN_DIR/config.json` `tooling` fields (keep existing non-null values unless a more specific detected value exists).
    - Update `handoff_note` = `Project mode: brownfield (mapping skipped); brainstorm depth next.`
    - Update `handoff_context` = `Brownfield indicators found. Operator chose to skip Mnemosyne mapping. Codebase snapshot will not be available; planners will work from vision.md only.`
    - Update `last_updated`.
@@ -182,6 +203,9 @@ Never write free-form status strings.
    Update `last_updated`.
 
 6. Spawn brainstormer agent.
+   Before spawning in this step:
+   Read `$CLAUDE_HOME/kilntwo/data/lore.json`.
+   Display a random quote from `transitions.brainstorm_start.quotes` in italics, with source attribution.
    Read the current contents of `MEMORY_DIR/vision.md` into `EXISTING_VISION`.
    If `PROJECT_MODE = brownfield` and `$KILN_DIR/codebase-snapshot.md` exists, read its contents into `CODEBASE_SNAPSHOT`.
    Otherwise set `CODEBASE_SNAPSHOT` to an empty string.
@@ -234,16 +258,19 @@ Never write free-form status strings.
    `DEBATE_MODE` is one of `1`, `2`, or `3`.
    `$KILN_DIR/` exists.
    A git repository is initialized in `PROJECT_PATH`.
-   `MEMORY_DIR` exists and contains all five files:
+   `MEMORY_DIR` exists and contains all required memory files:
    `MEMORY.md`
    `vision.md`
    `master-plan.md`
    `decisions.md`
    `pitfalls.md`
+   `PATTERNS.md`
+   `tech-stack.md`
    If any check fails, halt immediately.
    Tell the user exactly what is missing.
    Do not continue until the missing requirement is fixed.
    If all checks pass, print exactly:
+   Before printing, read `$CLAUDE_HOME/kilntwo/data/lore.json` and display a random quote from `transitions.brainstorm_complete.quotes` in italics.
    ```text
    Pre-flight check complete.
      Project: $PROJECT_PATH
@@ -265,6 +292,9 @@ Never write free-form status strings.
 ## Stage 2: Planning
 
 8. Spawn dual planners in parallel with the Task tool.
+   Before spawning in this step:
+   Read `$CLAUDE_HOME/kilntwo/data/lore.json`.
+   Display a random quote from `transitions.planning_start.quotes` in italics, with source attribution.
    If `PROJECT_MODE = brownfield` and `$KILN_DIR/codebase-snapshot.md` exists, read its contents into `CODEBASE_SNAPSHOT` (may already be loaded from Step 6).
    Use the Task tool by name.
    Spawn both planner tasks in parallel.
@@ -336,6 +366,30 @@ Never write free-form status strings.
     `handoff_context` = `Both planners produced plans. Debate (mode <DEBATE_MODE>) complete. Plato synthesized a master plan. The operator needs to review and approve before execution begins.`
     `last_updated` = current ISO-8601 UTC timestamp.
 
+10.5. Validate the master plan.
+    Append `[plan_validate_start]` event to the planning log context.
+    Spawn `kiln-plan-validator` via the Task tool.
+    `name`: `"Athena"` (the alias)
+    `subagent_type`: `kiln-plan-validator`
+    `description`: (next quote from names.json quotes array for kiln-plan-validator)
+    Prompt must include:
+    Full `MASTER_PLAN`.
+    Full `MEMORY_DIR/vision.md`.
+    `PROJECT_PATH`.
+    `MEMORY_DIR`.
+    `KILN_DIR`.
+    Include this instruction exactly:
+    "Validate this master plan across 7 dimensions: requirement coverage, atomization quality, file action correctness, dependency graph integrity, phase sizing, scope adherence, and acceptance criteria quality. Write report to `$KILN_DIR/plans/plan_validation.md`. Return PASS or FAIL."
+    Wait for completion.
+    Append `[plan_validate_complete]` event with the returned verdict.
+    If verdict is FAIL:
+    Display `$KILN_DIR/plans/plan_validation.md` to the operator.
+    Re-run planners with Athena feedback appended, then re-synthesize and re-validate.
+    Maximum re-validation attempts: 2.
+    If still FAIL after 2 attempts, set `stage=planning`, `status=blocked`, update handoff fields, and stop for operator direction.
+    If verdict is PASS:
+    Continue to Step 11.
+
 11. Present master plan for review.
     Display `MASTER_PLAN` to the user in full.
     Ask exactly:
@@ -364,6 +418,9 @@ Never write free-form status strings.
     Stop execution immediately.
 
 12. Update memory after planning approval.
+    Before writing approval state in this step:
+    Read `$CLAUDE_HOME/kilntwo/data/lore.json`.
+    Display a random quote from `transitions.plan_approved.quotes` in italics, with source attribution.
     Write approved `MASTER_PLAN` to `MEMORY_DIR/master-plan.md`.
     Update `MEMORY_DIR/MEMORY.md` fields:
     `stage` -> `execution`.
@@ -388,6 +445,7 @@ Never write free-form status strings.
     Keep original order.
     Set `phase_total` in `MEMORY.md` to the parsed phase count before the loop starts.
     For each phase:
+    Before phase initialization, read `$CLAUDE_HOME/kilntwo/data/lore.json` and display a random quote from `transitions.phase_start.quotes` in italics.
     Before spawning the executor, update `MEMORY_DIR/MEMORY.md`:
     `stage` = `execution`
     `status` = `in_progress`
@@ -426,6 +484,7 @@ Never write free-form status strings.
     `handoff_note` = `Phase <N> complete; ready for next phase.`
     `handoff_context` = `Phase <N> (<phase name>) completed successfully. <one-sentence summary from results>. Next: phase <N+1> or validation if all phases done.`
     `last_updated` = current ISO-8601 UTC timestamp.
+    After phase completion update, read `$CLAUDE_HOME/kilntwo/data/lore.json` and display a random quote from `transitions.phase_complete.quotes` in italics.
     If executor output is placeholder-only, TODO-only, or stub-only:
     Fail that phase.
     Update phase `N` in `## Phase Statuses` to `phase_status = failed`.
@@ -437,6 +496,9 @@ Never write free-form status strings.
     Do not continue to the next phase until corrected.
 
 14. Run final validation with correction loop.
+    Before entering validation loop:
+    Read `$CLAUDE_HOME/kilntwo/data/lore.json`.
+    Display a random quote from `transitions.validation_start.quotes` in italics, with source attribution.
     After all phases complete, set `correction_cycle = 0` in `MEMORY_DIR/MEMORY.md`.
     Enter the validation-correction loop (max 3 cycles):
 
@@ -450,9 +512,9 @@ Never write free-form status strings.
     `PROJECT_PATH`.
     `MEMORY_DIR`.
     Include this instruction:
-    "Build, deploy, and validate the project end-to-end. Test the actual running product against the master plan's acceptance criteria. For each failure, generate a correction task description with: what failed, evidence, affected files, suggested fix, and verification command. Write the validation report to `$PROJECT_PATH/.kiln/validation/report.md`."
+    "Build, deploy, and validate the project end-to-end. Test the actual running product against the master plan's acceptance criteria. For each failure, generate a correction task description with: what failed, evidence, affected files, suggested fix, and verification command. Write the validation report to `$KILN_DIR/validation/report.md`."
     Wait for completion.
-    Confirm `$PROJECT_PATH/.kiln/validation/report.md` exists and is readable.
+    Confirm `$KILN_DIR/validation/report.md` exists and is readable.
 
     14b. Check the validation verdict.
     Read the report and extract the verdict (PASS, PARTIAL, or FAIL).
@@ -495,6 +557,9 @@ Never write free-form status strings.
     Halt and wait for operator direction. Do not proceed to Step 15.
 
 15. Finalize protocol run.
+    Before final status output in this step:
+    Read `$CLAUDE_HOME/kilntwo/data/lore.json`.
+    Display a random quote from `transitions.project_complete.quotes` in italics, with source attribution.
     Update `MEMORY_DIR/MEMORY.md` fields:
     `stage` -> `complete`.
     `status` -> `complete`.
@@ -511,7 +576,7 @@ Never write free-form status strings.
     Kiln protocol complete.
       Project: $PROJECT_PATH
       Phases completed: <N>
-      Validation report: $PROJECT_PATH/.kiln/validation/report.md
+      Validation report: $KILN_DIR/validation/report.md
 
     Run `kilntwo doctor` to verify your installation health.
     To resume a paused run, use /kiln:resume.
@@ -525,7 +590,7 @@ Never write free-form status strings.
 1. **All paths are dynamic.** Never hardcode paths. Derive every path from `PROJECT_PATH`, `HOME`, and `ENCODED_PATH` from Step 3. The command must work in any project directory.
 2. **Memory is the source of truth.** Before every stage transition, re-read `MEMORY_DIR/MEMORY.md` and trust canonical fields (`stage`, `status`, `planning_sub_stage`, `phase_number`, `phase_total`, and `## Phase Statuses`). If `stage=planning` and `status=paused`, resume planning review at Step 11. If `stage=execution` and `phase_number` is set, resume execution from that phase using `phase_status` values.
 3. **Never skip stages.** Execute Stage 1 before Stage 2 and Stage 2 before Stage 3. The only exception is resumption as described in Rule 2. Use `/kiln:resume` for resumption; do not implement separate resume logic outside these state checks.
-4. **Use the Task tool for all sub-agents.** Never invoke `kiln-planner-claude`, `kiln-planner-codex`, `kiln-debater`, `kiln-synthesizer`, `kiln-phase-executor`, or `kiln-validator` as slash commands. Spawn each exclusively with the Task tool and complete, self-contained prompts. Always set `name` to the agent's character alias (e.g., `"Confucius"`, `"Maestro"`) and `subagent_type` to the internal name (e.g., `kiln-planner-claude`). This ensures the Claude Code UI shows aliases in the spawn box.
+4. **Use the Task tool for all sub-agents.** Never invoke `kiln-planner-claude`, `kiln-planner-codex`, `kiln-debater`, `kiln-synthesizer`, `kiln-plan-validator`, `kiln-phase-executor`, or `kiln-validator` as slash commands. Spawn each exclusively with the Task tool and complete, self-contained prompts. Always set `name` to the agent's character alias (e.g., `"Confucius"`, `"Athena"`, `"Maestro"`) and `subagent_type` to the internal name (e.g., `kiln-planner-claude`). This ensures the Claude Code UI shows aliases in the spawn box.
 5. **Parallel where safe, sequential where required.** Run Step 8 planners in parallel. Run all other Task spawns sequentially, waiting for each to finish before starting the next.
 6. **Write working outputs only.** Phase executors must create real files with real content and working code. Placeholders, TODO stubs, and non-functional scaffolds are failures that must be reported before continuing.
 7. **Checkpoint memory after every significant action.** Update canonical runtime fields (`stage`, `status`, `planning_sub_stage`, phase fields, `handoff_note`, `handoff_context`, `last_updated`, and phase-status entries when applicable) after Step 2, after Step 4, after Step 5, at every brainstorm checkpoint, after Step 7, after Step 10, after Step 12, after each phase in Step 13, after Step 14, and after Step 15.

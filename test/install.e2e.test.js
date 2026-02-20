@@ -92,7 +92,7 @@ describe('install E2E', { concurrency: false }, () => {
     install({ home: tmpHome, projectPath: tmpProject });
 
     const dataNames = listJsonFiles(ASSETS_DATA_DIR);
-    assert.strictEqual(dataNames.length, 2, 'assets/data should contain 2 JSON files');
+    assert.strictEqual(dataNames.length, 4, 'assets/data should contain 4 JSON files');
 
     for (const name of dataNames) {
       assertNonEmptyFile(path.join(paths.dataDir, name));
@@ -114,7 +114,7 @@ describe('install E2E', { concurrency: false }, () => {
     install({ home: tmpHome, projectPath: tmpProject });
 
     const agentNames = listMarkdownFiles(ASSETS_AGENTS_DIR);
-    assert.strictEqual(agentNames.length, 17, 'assets/agents should contain 17 files');
+    assert.strictEqual(agentNames.length, 18, 'assets/agents should contain 18 files');
 
     for (const name of agentNames) {
       assertNonEmptyFile(path.join(paths.agentsDir, name));
@@ -124,7 +124,7 @@ describe('install E2E', { concurrency: false }, () => {
   it('copies all command files', () => {
     install({ home: tmpHome, projectPath: tmpProject });
 
-    const expected = ['reset.md', 'resume.md', 'start.md'];
+    const expected = ['reset.md', 'resume.md', 'start.md', 'status.md'];
     for (const name of expected) {
       assertNonEmptyFile(path.join(paths.commandsDir, name));
     }
@@ -133,7 +133,7 @@ describe('install E2E', { concurrency: false }, () => {
   it('copies all template files', () => {
     install({ home: tmpHome, projectPath: tmpProject });
 
-    const expected = ['MEMORY.md', 'PATTERNS.md', 'decisions.md', 'master-plan.md', 'pitfalls.md', 'vision.md'];
+    const expected = ['MEMORY.md', 'PATTERNS.md', 'decisions.md', 'master-plan.md', 'pitfalls.md', 'tech-stack.md', 'vision.md'];
     for (const name of expected) {
       assertNonEmptyFile(path.join(paths.templatesDir, name));
     }

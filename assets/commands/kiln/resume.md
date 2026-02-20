@@ -80,6 +80,7 @@ Read these files in parallel (batch reads):
 - `$MEMORY_DIR/decisions.md`
 - `$MEMORY_DIR/pitfalls.md`
 - `$MEMORY_DIR/PATTERNS.md`
+- `$MEMORY_DIR/tech-stack.md`
 
 For each file: if it exists, store the full content. If it does not exist, record it as absent and continue without halting.
 
@@ -114,6 +115,11 @@ After displaying the banner, check whether MEMORY.md contains a `## Reset Notes`
 ```
 Recommended next step (from last reset): [next_action]
 ```
+
+In this same step, display one lore quote before routing:
+- Read `$CLAUDE_HOME/kilntwo/data/lore.json`.
+- Select a random quote from `transitions.resume.quotes`.
+- Print it in italics with source attribution.
 
 ## Step 6: Route to Stage
 

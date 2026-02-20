@@ -1,0 +1,139 @@
+{
+  "transitions": {
+    "ignition": {
+      "label": "Project ignition",
+      "quotes": [
+        { "text": "A journey of a thousand miles begins with a single step.", "source": "Lao Tzu" },
+        { "text": "The secret of getting ahead is getting started.", "source": "Mark Twain" },
+        { "text": "Well begun is half done.", "source": "Aristotle" },
+        { "text": "You do not have to see the whole staircase, just take the first step.", "source": "Martin Luther King Jr." }
+      ]
+    },
+    "brainstorm_start": {
+      "label": "Brainstorm begins",
+      "quotes": [
+        { "text": "Imagination is more important than knowledge.", "source": "Albert Einstein" },
+        { "text": "The best way to have a good idea is to have a lot of ideas.", "source": "Linus Pauling" },
+        { "text": "Imagination is the beginning of creation.", "source": "George Bernard Shaw" },
+        { "text": "You cannot use up creativity. The more you use, the more you have.", "source": "Maya Angelou" }
+      ]
+    },
+    "brainstorm_complete": {
+      "label": "Brainstorm complete",
+      "quotes": [
+        { "text": "Clarity of mind means clarity of passion, too.", "source": "Blaise Pascal" },
+        { "text": "Simplicity is the ultimate sophistication.", "source": "Leonardo da Vinci" },
+        { "text": "Simple can be harder than complex.", "source": "Steve Jobs" },
+        { "text": "Perfection is achieved, not when there is nothing more to add, but when there is nothing left to take away.", "source": "Antoine de Saint-Exupery" }
+      ]
+    },
+    "planning_start": {
+      "label": "Planning starts",
+      "quotes": [
+        { "text": "A goal without a plan is just a wish.", "source": "Antoine de Saint-Exupery" },
+        { "text": "Plans are nothing; planning is everything.", "source": "Dwight D. Eisenhower" },
+        { "text": "By failing to prepare, you are preparing to fail.", "source": "Benjamin Franklin" },
+        { "text": "Victorious warriors win first and then go to war.", "source": "Sun Tzu" }
+      ]
+    },
+    "plan_approved": {
+      "label": "Plan approved",
+      "quotes": [
+        { "text": "Believe you can and you are halfway there.", "source": "Theodore Roosevelt" },
+        { "text": "Whether you think you can, or you think you cannot, you are right.", "source": "Henry Ford" },
+        { "text": "Optimism is the faith that leads to achievement.", "source": "Helen Keller" },
+        { "text": "The most difficult thing is the decision to act, the rest is merely tenacity.", "source": "Amelia Earhart" }
+      ]
+    },
+    "phase_start": {
+      "label": "Phase starts",
+      "quotes": [
+        { "text": "It does not matter how slowly you go as long as you do not stop.", "source": "Confucius" },
+        { "text": "Great things are done by a series of small things brought together.", "source": "Vincent van Gogh" },
+        { "text": "Opportunity is missed by most people because it is dressed in overalls and looks like work.", "source": "Thomas A. Edison" },
+        { "text": "Nothing can be changed until it is faced.", "source": "James Baldwin" }
+      ]
+    },
+    "phase_complete": {
+      "label": "Phase complete",
+      "quotes": [
+        { "text": "It always seems impossible until it is done.", "source": "Nelson Mandela" },
+        { "text": "Nothing will work unless you do.", "source": "Maya Angelou" },
+        { "text": "Success is to be measured not so much by the position that one has reached in life as by the obstacles which he has overcome.", "source": "Booker T. Washington" },
+        { "text": "Success is not final, failure is not fatal: it is the courage to continue that counts.", "source": "Winston Churchill" }
+      ]
+    },
+    "review_approved": {
+      "label": "Review approved",
+      "quotes": [
+        { "text": "Quality is never an accident. It is always the result of intelligent effort.", "source": "John Ruskin" },
+        { "text": "Take the best that exists and make it better.", "source": "Henry Royce" },
+        { "text": "Details make perfection, and perfection is not a detail.", "source": "Leonardo da Vinci" },
+        { "text": "Quality is everyone's responsibility.", "source": "W. Edwards Deming" }
+      ]
+    },
+    "review_rejected": {
+      "label": "Review rejected",
+      "quotes": [
+        { "text": "Ever tried. Ever failed. No matter. Try again. Fail again. Fail better.", "source": "Samuel Beckett" },
+        { "text": "I have not failed. I have just found 10,000 ways that will not work.", "source": "Thomas A. Edison" },
+        { "text": "I have failed over and over and over again in my life and that is why I succeed.", "source": "Michael Jordan" },
+        { "text": "Failures are finger posts on the road to achievement.", "source": "C. S. Lewis" }
+      ]
+    },
+    "validation_start": {
+      "label": "Validation starts",
+      "quotes": [
+        { "text": "The first principle is that you must not fool yourself, and you are the easiest person to fool.", "source": "Richard Feynman" },
+        { "text": "In God we trust; all others must bring data.", "source": "W. Edwards Deming" },
+        { "text": "Extraordinary claims require extraordinary evidence.", "source": "Carl Sagan" },
+        { "text": "All truths are easy to understand once they are discovered; the point is to discover them.", "source": "Galileo Galilei" }
+      ]
+    },
+    "validation_passed": {
+      "label": "Validation passed",
+      "quotes": [
+        { "text": "The reward of a thing well done is to have done it.", "source": "Ralph Waldo Emerson" },
+        { "text": "The only place success comes before work is in the dictionary.", "source": "Vince Lombardi" },
+        { "text": "The only way to do great work is to love what you do.", "source": "Steve Jobs" },
+        { "text": "Pleasure in the job puts perfection in the work.", "source": "Aristotle" }
+      ]
+    },
+    "validation_failed": {
+      "label": "Validation failed",
+      "quotes": [
+        { "text": "Fall seven times, stand up eight.", "source": "Japanese Proverb" },
+        { "text": "Success is stumbling from failure to failure with no loss of enthusiasm.", "source": "Winston Churchill" },
+        { "text": "Failure is simply the opportunity to begin again, this time more intelligently.", "source": "Henry Ford" },
+        { "text": "Our greatest glory is not in never falling, but in rising every time we fall.", "source": "Confucius" }
+      ]
+    },
+    "correction_start": {
+      "label": "Correction starts",
+      "quotes": [
+        { "text": "Perfect is the enemy of good.", "source": "Voltaire" },
+        { "text": "Perfection is achieved, not when there is nothing more to add, but when there is nothing left to take away.", "source": "Antoine de Saint-Exupery" },
+        { "text": "Art is never finished, only abandoned.", "source": "Leonardo da Vinci" },
+        { "text": "Try to be better than yourself.", "source": "William Faulkner" }
+      ]
+    },
+    "project_complete": {
+      "label": "Project complete",
+      "quotes": [
+        { "text": "Coming together is a beginning; keeping together is progress; working together is success.", "source": "Henry Ford" },
+        { "text": "What lies behind us and what lies before us are tiny matters compared to what lies within us.", "source": "Ralph Waldo Emerson" },
+        { "text": "Do the best you can until you know better. Then when you know better, do better.", "source": "Maya Angelou" },
+        { "text": "Knowing yourself is the beginning of all wisdom.", "source": "Aristotle" }
+      ]
+    },
+    "resume": {
+      "label": "Session resumed",
+      "quotes": [
+        { "text": "No man ever steps in the same river twice.", "source": "Heraclitus" },
+        { "text": "What we call the beginning is often the end. And to make an end is to make a beginning.", "source": "T. S. Eliot" },
+        { "text": "Our greatest glory is not in never falling, but in rising every time we fall.", "source": "Confucius" },
+        { "text": "As long as you live, keep learning how to live.", "source": "Seneca" }
+      ]
+    }
+  }
+}

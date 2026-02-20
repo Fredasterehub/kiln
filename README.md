@@ -108,21 +108,41 @@ Run Claude Code with `--dangerously-skip-permissions`. Kiln spawns agents, write
 
 ## ✨ Recent Changes
 
-### ⚡ v0.3.0 &mdash; Dynamic Execution with JIT Sharpening
+### ⚗️ v0.4.0 &mdash; Plan Validation, Config, Lore, Status &amp; Tech Stack
+
+Five features ported from the v1 gap analysis. 19 new tests (153 total).
+
+**🏛️ Plan Validator (Athena)** &mdash; Pre-execution quality gate. After Plato synthesizes the master plan, Athena validates it across 7 dimensions: requirement coverage, atomization quality, file action correctness, dependency graph integrity, phase sizing, scope adherence, and acceptance criteria quality. Bad plans get caught before they waste Codex cycles.
+
+**⚙️ Config System** &mdash; `.kiln/config.json` generated during Stage 1 with tunable preferences (debate mode, review rounds, Codex timeout, phase sizing) and auto-detected tooling for brownfield projects. Agents read config instead of relying on hardcoded protocol values.
+
+**📜 Lore System** &mdash; 60 curated philosophical quotes displayed at 15 pipeline transition points. Lao Tzu at ignition, Einstein at brainstorm, Feynman at validation. Pure polish that makes the pipeline feel alive.
+
+**📊 Status Command** &mdash; `/kiln:status` displays a formatted progress summary: stage, phase, config, validation verdict, phase progress checklist, and recommended next action. Read-only, never modifies files.
+
+**🔬 Tech Stack Living Doc** &mdash; `tech-stack.md` template tracks languages, frameworks, libraries, and build tools discovered during execution. Sherlock updates it during living docs reconciliation alongside decisions, pitfalls, and patterns.
+
+**📐 Protocol Updates** &mdash; 15 rules (was 14), 14 agents (was 13), event enum 27 types (was 25), 4 commands (was 3).
+
+<details>
+<summary>⚡ <strong>v0.3.0 &mdash; Dynamic Execution with JIT Sharpening</strong></summary>
+<br>
 
 Six features that restore v1's dynamic execution patterns on top of v2's clean codebase. 13 new tests (134 total).
 
-**✨ Scheherazade JIT Sharpener** &mdash; The prompter agent evolved from static plan-to-prompt translation into a codebase-exploring JIT sharpener. Before generating each implementation prompt, Scheherazade uses Glob, Read, and Grep to explore the *current* codebase, reads living docs (`decisions.md`, `pitfalls.md`, `PATTERNS.md`), then generates prompts with verbatim file paths, function signatures, and existing patterns baked in. GPT-5.2 writing for GPT-5.3-codex &mdash; same family, optimized translation.
+**Scheherazade JIT Sharpener** &mdash; The prompter agent evolved from static plan-to-prompt translation into a codebase-exploring JIT sharpener. Before generating each implementation prompt, Scheherazade uses Glob, Read, and Grep to explore the *current* codebase, reads living docs, then generates prompts with verbatim file paths, function signatures, and existing patterns baked in.
 
-**🔄 Correction Cycles** &mdash; Stage 4 validation failures now generate correction task descriptions that re-enter Stage 3 through the full Scheherazade &rarr; Codex &rarr; Sphinx cycle. Max 3 correction cycles before escalating to the operator.
+**Correction Cycles** &mdash; Stage 4 validation failures now generate correction task descriptions that re-enter Stage 3 through the full Scheherazade &rarr; Codex &rarr; Sphinx cycle. Max 3 correction cycles.
 
-**📚 Living Docs Reconciliation** &mdash; After every phase merge, Sherlock updates `decisions.md`, `pitfalls.md`, and `PATTERNS.md` with what the phase discovered. Scheherazade reads these before sharpening subsequent tasks &mdash; cross-phase learning loop.
+**Living Docs Reconciliation** &mdash; After every phase merge, Sherlock updates `decisions.md`, `pitfalls.md`, and `PATTERNS.md`.
 
-**🛡️ E2E Deployment Testing** &mdash; Argus builds, deploys, and tests the actual running product against acceptance criteria. Failures generate correction tasks through the full execution pipeline.
+**E2E Deployment Testing** &mdash; Argus builds, deploys, and tests the actual running product against acceptance criteria.
 
-**🔎 Codebase Index Per Phase** &mdash; Sherlock generates a `codebase-snapshot.md` at the start of each phase so planners and the sharpener work against an up-to-date map.
+**Codebase Index Per Phase** &mdash; Sherlock generates a `codebase-snapshot.md` at the start of each phase.
 
-**📐 Protocol Updates** &mdash; 14 rules (was 10), updated agent roster and stage descriptions, event enum expanded to 25 types (was 19).
+**Protocol Updates** &mdash; 14 rules (was 10), event enum expanded to 25 types (was 19).
+
+</details>
 
 ### 🗺️ Brownfield Support
 
@@ -226,7 +246,7 @@ Two planners work the same vision in parallel:
 - **Confucius** (Opus 4.6) &mdash; Claude perspective
 - **Sun Tzu** (GPT-5.2) &mdash; GPT perspective
 
-**Socrates** debates the disagreements. **Plato** synthesizes into `master-plan.md`.
+**Socrates** debates the disagreements. **Plato** synthesizes into `master-plan.md`. **Athena** validates the plan across 7 dimensions before execution can begin.
 
 Different model families catch different things. The debate forces explicit conflict resolution instead of silent averaging.
 
@@ -282,10 +302,11 @@ Every agent has a name. Not for decoration &mdash; for the logs.
 | ⌨️ | **Codex** | GPT-5.3 | Code implementer |
 | 👁️ | **Sphinx** | Opus 4.6 | Code reviewer |
 | 🎯 | **Maestro** | Opus 4.6 | Phase coordinator |
+| 🏛️ | **Athena** | Sonnet 4.6 | Plan validator &mdash; 7-dimension quality gate before execution |
 | 🛡️ | **Argus** | Opus 4.6 | E2E validator &mdash; deploys, tests, generates corrections |
 | 🔍 | **Sherlock** | Haiku 4.5 | Fast researcher &mdash; codebase indexing, living docs reconciliation |
 
-<sub>Plus 5 muse sub-agents spawned by Mnemosyne for brownfield mapping: Clio (architecture), tech stack, data model, API surface, and quality analysis. 17 agents total.</sub>
+<sub>Plus 5 muse sub-agents spawned by Mnemosyne for brownfield mapping: Clio (architecture), tech stack, data model, API surface, and quality analysis. 18 agents total.</sub>
 
 <br>
 
@@ -298,6 +319,7 @@ Every agent has a name. Not for decoration &mdash; for the logs.
 | `/kiln:start` | 🔥 Brainstorm, plan, execute, validate, ship |
 | `/kiln:resume` | ⏯️ Pick up where the last session stopped |
 | `/kiln:reset` | 💾 Save state, prepare for `/clear` |
+| `/kiln:status` | 📊 Display pipeline progress and next action |
 
 **In terminal:**
 
@@ -324,6 +346,7 @@ The pipeline survives context resets. All state lives in files:
   decisions.md     append-only decision log
   pitfalls.md      append-only failure log
   PATTERNS.md      coding patterns discovered during execution
+  tech-stack.md    languages, frameworks, libraries, build tools
 ```
 
 `/kiln:reset` saves state. `/kiln:resume` picks up where it left off &mdash; right down to which task in which phase was last completed.
@@ -336,11 +359,11 @@ The pipeline survives context resets. All state lives in files:
 
 | What | Where | Count |
 |:--|:--|:--|
-| Agents | `~/.claude/agents/` | 17 |
-| Commands | `~/.claude/commands/kiln/` | 3 |
-| Templates | `~/.claude/kilntwo/templates/` | 6 |
+| Agents | `~/.claude/agents/` | 18 |
+| Commands | `~/.claude/commands/kiln/` | 4 |
+| Templates | `~/.claude/kilntwo/templates/` | 7 |
 | Skill | `~/.claude/kilntwo/skills/` | 1 |
-| Data | `~/.claude/kilntwo/data/` | 2 |
+| Data | `~/.claude/kilntwo/data/` | 4 |
 | Protocol | `<project>/CLAUDE.md` | injected |
 | Manifest | `~/.claude/kilntwo/manifest.json` | 1 |
 
@@ -364,14 +387,14 @@ kilntwo/
 │   ├── update.js
 │   └── doctor.js
 ├── assets/
-│   ├── agents/           17 agents
-│   ├── commands/kiln/    3 commands
-│   ├── data/             brainstorming + elicitation
+│   ├── agents/           18 agents
+│   ├── commands/kiln/    4 commands
+│   ├── data/             brainstorming, elicitation, config, lore
 │   ├── skills/           kiln-core
-│   ├── templates/        6 templates
+│   ├── templates/        7 templates
 │   ├── protocol.md
 │   └── names.json
-└── test/                 134 tests, zero deps
+└── test/                 153 tests, zero deps
 ```
 
 </details>
@@ -382,11 +405,11 @@ kilntwo/
 
 | | v1 | v2 |
 |:--|:--|:--|
-| Agents | 13 | 17 |
+| Agents | 13 | 18 |
 | Skills | 26 | 1 (shared) |
-| Commands | 8 | 3 |
+| Commands | 8 | 4 |
 | Hooks | 3 | 0 |
-| Config lines | ~4,000 | ~1,400 |
+| Config lines | ~4,000 | ~1,500 |
 
 Same pipeline. More agents, a fraction of the surface area.
 
