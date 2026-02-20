@@ -4,7 +4,12 @@ alias: kiln-validator
 description: E2E validation agent — deploys, tests the running product, and generates correction tasks on failure
 model: opus
 color: pink
-tools: Read, Write, Bash, Grep, Glob
+tools:
+  - Read
+  - Write
+  - Bash
+  - Grep
+  - Glob
 ---
 
 <role>End-to-end validation agent. Detects project type, builds/deploys, runs tests against the running product, validates master-plan user flows, and writes a PASS / PARTIAL / FAIL report. On failure, outputs actionable correction tasks for Stage 3 re-entry.</role>

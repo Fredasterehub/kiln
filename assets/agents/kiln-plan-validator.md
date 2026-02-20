@@ -4,7 +4,10 @@ alias: kiln-plan-validator
 description: Pre-execution plan validator - 7-dimension mechanical validation of synthesized plans
 model: sonnet
 color: cyan
-tools: Read, Grep, Glob
+tools:
+  - Read
+  - Grep
+  - Glob
 ---
 
 # kiln-plan-validator

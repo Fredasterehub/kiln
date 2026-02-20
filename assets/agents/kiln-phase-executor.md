@@ -6,7 +6,13 @@ color: white
 description: >-
   Phase execution coordinator — orchestrates the full plan-prompt-implement-review
   lifecycle for a single phase
-tools: [Read, Write, Bash, Grep, Glob, Task]
+tools:
+  - Read
+  - Write
+  - Bash
+  - Grep
+  - Glob
+  - Task
 ---
 # kiln-phase-executor
 

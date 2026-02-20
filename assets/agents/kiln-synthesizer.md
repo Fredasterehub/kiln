@@ -4,7 +4,11 @@ alias: kiln-synthesizer
 description: Plan synthesis agent — merges dual plans into a single master plan with atomic implementation steps
 model: opus
 color: yellow
-tools: Read, Write, Grep, Glob
+tools:
+  - Read
+  - Write
+  - Grep
+  - Glob
 ---
 
 <role>Pure merge agent. Reads Claude plan, Codex plan, and optional debate resolution, then produces a single synthesized plan as the source of truth for all subsequent implementation. Annotates steps with parallel_group tags when tasks within a phase can be executed concurrently.</role>

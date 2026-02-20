@@ -2,7 +2,15 @@
 name: Sherlock
 alias: kiln-researcher
 description: Research, codebase indexing, and living docs reconciliation agent
-tools: Read, Write, Grep, Glob, WebSearch, WebFetch, mcp__context7__resolve-library-id, mcp__context7__query-docs
+tools:
+  - Read
+  - Write
+  - Grep
+  - Glob
+  - WebSearch
+  - WebFetch
+  - mcp__context7__resolve-library-id
+  - mcp__context7__query-docs
 model: sonnet
 color: auto
 ---
