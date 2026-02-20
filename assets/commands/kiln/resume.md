@@ -39,15 +39,13 @@ Run /kiln:start to reinitialize, or manually repair $CLAUDE_HOME/projects/<encod
 ## Step 4: Supporting Files
 Supporting memory files (`vision.md`, `master-plan.md`, `decisions.md`, `pitfalls.md`, `PATTERNS.md`, `tech-stack.md`) are read by coordinators at their own startup — not by the orchestrator. Do not preload them here. If you need a specific value for routing (e.g., to display a summary), read only the specific file and extract only the needed fields.
 ## Step 5: Display Continuity Banner
-Render the continuity banner via Bash (not plain text):
+Read `$CLAUDE_HOME/kilntwo/data/lore.json` and pick a random quote from `transitions.resume.quotes`. Render the banner and persist the quote in a single Bash call:
 ```bash
-printf '\n\033[38;5;179m━━━ Resume ━━━\033[0m\n'
+mkdir -p "$KILN_DIR/tmp" && \
+printf '\n\033[38;5;179m━━━ Resume ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE" && \
+printf '{"quote":"%s","by":"%s","section":"resume","at":"%s"}' "$QUOTE_TEXT" "$QUOTE_SOURCE" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > "$KILN_DIR/tmp/last-quote.json"
 ```
-Then read `$CLAUDE_HOME/kilntwo/data/lore.json`, pick a random quote from `transitions.resume.quotes`, and render:
-```bash
-printf '\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
-```
-Write `$KILN_DIR/tmp/last-quote.json`: `{"quote": "...", "by": "...", "section": "resume", "at": "ISO-8601"}`
+Do not use the Write tool for `last-quote.json`.
 
 Then render the state summary via Bash:
 ```bash
@@ -83,20 +81,30 @@ After displaying the banner, check whether MEMORY.md contains a `## Reset Notes`
 ```
 Recommended next step (from last reset): [next_action]
 ```
-## Step 5.5: Ensure Session Team
-Check if the `kiln-session` team exists (read `$CLAUDE_HOME/teams/kiln-session/config.json`).
-If the team does not exist, create it: `TeamCreate("kiln-session")`.
-If the team already exists, continue with the existing team.
+## Step 5.5: Recreate Session Team
+Teams do not persist across Claude Code sessions. Always create the session team unconditionally:
+`TeamCreate("kiln-session")`
+Do not check whether the team exists first. Do not skip this step.
 ## Step 6: Route to Stage
 Branch strictly on `stage` and run the matching behavior.
 For `brainstorm`:
-- Update spinner verbs: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `brainstorm` stage verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": {"mode": "replace", "verbs": [...]}}`.
+- Install spinner verbs via a single Bash command (never use the Write tool for this file):
+  Read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json` and build a flat array from `generic` + `brainstorm` verbs. Then run one Bash call:
+  ```bash
+  mkdir -p "$PROJECT_PATH/.claude" && printf '%s' '{"spinnerVerbs":{"mode":"replace","verbs":[...]}}' > "$PROJECT_PATH/.claude/settings.local.json"
+  ```
+  The path MUST be absolute. Never use a relative path.
 - Re-read `vision.md` in full.
 - Tell the user: "Resuming brainstorming session. Here is the current vision:"
 - Print the full content of `vision.md`.
 - Ask: "What would you like to explore or refine next?"
 For `planning`:
-- Update spinner verbs: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `planning` stage verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": {"mode": "replace", "verbs": [...]}}`.
+- Install spinner verbs via a single Bash command (never use the Write tool for this file):
+  Read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json` and build a flat array from `generic` + `planning` verbs. Then run one Bash call:
+  ```bash
+  mkdir -p "$PROJECT_PATH/.claude" && printf '%s' '{"spinnerVerbs":{"mode":"replace","verbs":[...]}}' > "$PROJECT_PATH/.claude/settings.local.json"
+  ```
+  The path MUST be absolute. Never use a relative path.
 - Read `planning_sub_stage` from MEMORY.md.
 - Tell the user: "Resuming planning stage (sub-stage: [planning_sub_stage])."
 - Spawn `kiln-planning-coordinator` via the Task tool:
@@ -115,9 +123,23 @@ For `planning`:
   - If first non-empty line is `PLAN_BLOCKED`: display `handoff_note` and `handoff_context` to operator, halt.
   - If signal missing or malformed: treat as `PLAN_BLOCKED`.
 For `execution`:
-- Update spinner verbs: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `execution` stage verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": {"mode": "replace", "verbs": [...]}}`.
-- Read `MEMORY.md` and build an inventory of phases: for each phase in `master-plan.md`, record `{phase_number, name, status}` where status is one of `completed | in_progress | failed | pending` (derive **from `MEMORY.md`**, not from assumptions).
-- Cross-check against archive: if `$KILN_DIR/archive/phase_<NN>/phase_summary.md` exists for a phase, treat that phase as definitively completed regardless of `MEMORY.md` status (the archive is created only after successful merge).
+- **Parallel pre-reads** (issue all of these in a single parallel batch):
+  1. `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`
+  2. `$CLAUDE_HOME/kilntwo/data/lore.json`
+  3. `$MEMORY_DIR/master-plan.md`
+  4. All `$KILN_DIR/phase_*_state.md` files (Glob)
+  5. `$KILN_DIR/archive/` directory listing (Glob for `phase_*/phase_summary.md`)
+
+  These reads are independent. Issue them as parallel tool calls in a single response.
+
+- Install spinner verbs from the pre-read data via a single Bash command (never use the Write tool for this file):
+  Build a flat array from `generic` + `execution` verbs. Then run one Bash call:
+  ```bash
+  mkdir -p "$PROJECT_PATH/.claude" && printf '%s' '{"spinnerVerbs":{"mode":"replace","verbs":[...]}}' > "$PROJECT_PATH/.claude/settings.local.json"
+  ```
+  The path MUST be absolute. Never use a relative path.
+- Build the phase inventory from `master-plan.md` and MEMORY.md fields (already extracted in Step 3): for each phase in `master-plan.md`, record `{phase_number, name, status}` where status is one of `completed | in_progress | failed | pending` (derive **from `MEMORY.md`**, not from assumptions).
+- Cross-check against archive using the pre-read directory listing: if `$KILN_DIR/archive/phase_<NN>/phase_summary.md` exists for a phase, treat that phase as definitively completed regardless of `MEMORY.md` status (the archive is created only after successful merge).
 - Determine `N` automatically:
   - If `MEMORY.md` indicates a phase `N` is `in_progress` (or the `handoff_note` says work was mid-phase), **resume phase `N`**.
   - Else if a phase `N` is `failed`, **retry phase `N`** (trust `handoff_note` for what was happening / what to fix).
@@ -153,9 +175,22 @@ For `execution`:
     - Instruction: "Read MEMORY.md and vision.md from MEMORY_DIR at startup for full project context. Resume from the state indicated in the phase state file and handoff context."
 - After Maestro returns, update `MEMORY.md` with the new phase status, updated `handoff_note`, and updated `handoff_context`, then **re-enter this execution routing** to resume/transition/retry or advance to `validation` automatically.
 For `validation`:
-- Update spinner verbs: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `validation` stage verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": {"mode": "replace", "verbs": [...]}}`.
-- Re-read `master-plan.md` and `decisions.md`.
-- Check `correction_cycle` from MEMORY.md.
+- **Parallel pre-reads** (issue all in a single parallel batch):
+  1. `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`
+  2. `$CLAUDE_HOME/kilntwo/data/lore.json`
+  3. `$MEMORY_DIR/master-plan.md`
+  4. `$MEMORY_DIR/decisions.md`
+  5. `$KILN_DIR/validation/report.md` (may not exist; that is fine)
+
+  These reads are independent. Issue them as parallel tool calls in a single response.
+
+- Install spinner verbs from the pre-read data via a single Bash command (never use the Write tool for this file):
+  Build a flat array from `generic` + `validation` verbs. Then run one Bash call:
+  ```bash
+  mkdir -p "$PROJECT_PATH/.claude" && printf '%s' '{"spinnerVerbs":{"mode":"replace","verbs":[...]}}' > "$PROJECT_PATH/.claude/settings.local.json"
+  ```
+  The path MUST be absolute. Never use a relative path.
+- Check `correction_cycle` from MEMORY.md (already extracted in Step 3).
 - If `correction_cycle > 0` and `status == 'blocked'`:
   - Tell the user: "Validation is blocked at cycle [correction_cycle]/3."
   - Read and display `$KILN_DIR/validation/report.md`.
@@ -190,3 +225,4 @@ Perform this update atomically: read full MEMORY.md, apply both changes, and wri
 - If MEMORY.md is missing/corrupted, warn and direct to `/kiln:start`; do not reconstruct state.
 - Keep resume read-only for project files; only Step 7 may update MEMORY.md.
 - Preserve context already in memory and treat `handoff_note` as authoritative routing context.
+- The orchestrator MUST NOT run project build, compile, test, lint, or deployment commands (e.g., `cargo check`, `npm test`, `go build`, `make`, `pytest`). State assessment uses MEMORY.md fields, phase state files, git status, and handoff context only. Build verification is Maestro's job (Stage 3) and Argus's job (Stage 4).

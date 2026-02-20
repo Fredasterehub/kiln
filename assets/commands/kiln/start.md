@@ -11,11 +11,13 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
 1. Detect project path and initialize git.
    Before doing anything else in this step:
-   Read `$CLAUDE_HOME/kilntwo/data/lore.json`. Pick a random quote from `transitions.ignition.quotes`. Render via Bash:
+   Read `$CLAUDE_HOME/kilntwo/data/lore.json` and pick a random quote from `transitions.ignition.quotes`. Render the banner and persist the quote in a single Bash call:
    ```bash
-   printf '\n\033[38;5;179m━━━ Ignition ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
+   mkdir -p "$KILN_DIR/tmp" && \
+   printf '\n\033[38;5;179m━━━ Ignition ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE" && \
+   printf '{"quote":"%s","by":"%s","section":"ignition","at":"%s"}' "$QUOTE_TEXT" "$QUOTE_SOURCE" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > "$KILN_DIR/tmp/last-quote.json"
    ```
-   Then write `$KILN_DIR/tmp/last-quote.json`: `{"quote": "...", "by": "...", "section": "ignition", "at": "ISO-8601"}` (create `$KILN_DIR/tmp/` if needed; this write may be deferred until `$KILN_DIR` is created in Step 2).
+   Do not use the Write tool for `last-quote.json`. Note: if `$KILN_DIR` does not exist yet, defer the mkdir+persist to after Step 2 creates `$KILN_DIR`.
 
    Then read `$CLAUDE_HOME/kilntwo/data/lore.json`. Pick a random entry from the `greetings` array. Display it via Bash printf with terracotta color:
    ```bash
@@ -60,7 +62,12 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
    Also update `last_updated`.
 
    After creating `$KILN_DIR/`, install spinner verbs:
-   Read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`. Build a flat array from `generic` + `brainstorm` verbs. Write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": {"mode": "replace", "verbs": [...]}}` (create `.claude/` dir if needed). This sets the spinner to brainstorm-themed messages for the upcoming Da Vinci session.
+   Install spinner verbs via a single Bash command (never use the Write tool for this file):
+   Read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json` and build a flat array from `generic` + `brainstorm` verbs. Then run one Bash call:
+   ```bash
+   mkdir -p "$PROJECT_PATH/.claude" && printf '%s' '{"spinnerVerbs":{"mode":"replace","verbs":[...]}}' > "$PROJECT_PATH/.claude/settings.local.json"
+   ```
+   The path MUST be absolute. Never use a relative path.
 
 3. Resolve memory paths.
    Compute `HOME` as the user's home directory.
@@ -158,11 +165,13 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
 6. Spawn brainstormer agent.
    Before spawning in this step:
-   Read `$CLAUDE_HOME/kilntwo/data/lore.json`. Pick a random quote from `transitions.brainstorm_start.quotes`. Render via Bash:
+   Read `$CLAUDE_HOME/kilntwo/data/lore.json` and pick a random quote from `transitions.brainstorm_start.quotes`. Render the banner and persist the quote in a single Bash call:
    ```bash
-   printf '\n\033[38;5;179m━━━ Brainstorm ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
+   mkdir -p "$KILN_DIR/tmp" && \
+   printf '\n\033[38;5;179m━━━ Brainstorm ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE" && \
+   printf '{"quote":"%s","by":"%s","section":"brainstorm_start","at":"%s"}' "$QUOTE_TEXT" "$QUOTE_SOURCE" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > "$KILN_DIR/tmp/last-quote.json"
    ```
-   Then write `$KILN_DIR/tmp/last-quote.json`: `{"quote": "...", "by": "...", "section": "brainstorm_start", "at": "ISO-8601"}`.
+   Do not use the Write tool for `last-quote.json`.
 
    Read the current contents of `MEMORY_DIR/vision.md` into `EXISTING_VISION`.
    If `PROJECT_MODE = brownfield` and `$KILN_DIR/codebase-snapshot.md` exists, read its contents into `CODEBASE_SNAPSHOT`.
@@ -191,11 +200,13 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
    - `MEMORY_DIR` contains: `MEMORY.md`, `vision.md`, `master-plan.md`, `decisions.md`, `pitfalls.md`, `PATTERNS.md`, `tech-stack.md`.
    If any check fails, halt and tell the user exactly what is missing. Do not continue until fixed.
    If all checks pass:
-   Read `$CLAUDE_HOME/kilntwo/data/lore.json`. Pick a random quote from `transitions.brainstorm_complete.quotes`. Render via Bash:
+   Read `$CLAUDE_HOME/kilntwo/data/lore.json` and pick a random quote from `transitions.brainstorm_complete.quotes`. Render the banner and persist the quote in a single Bash call:
    ```bash
-   printf '\n\033[38;5;179m━━━ Brainstorm Complete ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
+   mkdir -p "$KILN_DIR/tmp" && \
+   printf '\n\033[38;5;179m━━━ Brainstorm Complete ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE" && \
+   printf '{"quote":"%s","by":"%s","section":"brainstorm_complete","at":"%s"}' "$QUOTE_TEXT" "$QUOTE_SOURCE" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > "$KILN_DIR/tmp/last-quote.json"
    ```
-   Then write `$KILN_DIR/tmp/last-quote.json`: `{"quote": "...", "by": "...", "section": "brainstorm_complete", "at": "ISO-8601"}`.
+   Do not use the Write tool for `last-quote.json`.
    Then print via Bash:
    ```bash
    printf '\033[32m✓\033[0m Pre-flight check complete.\n  \033[2mProject:\033[0m %s\n  \033[2mMemory:\033[0m  %s\n  \033[2mDebate:\033[0m  mode %s\n  \033[2mVision:\033[0m  ready\n\n\033[38;5;179mProceeding to Stage 2: Planning.\033[0m\n' \
@@ -209,13 +220,20 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
 8. Spawn the Stage 2 planning coordinator.
    Before spawning in this step:
-   Read `$CLAUDE_HOME/kilntwo/data/lore.json`. Pick a random quote from `transitions.planning_start.quotes`. Render via Bash:
+   Read `$CLAUDE_HOME/kilntwo/data/lore.json` and pick a random quote from `transitions.planning_start.quotes`. Render the banner and persist the quote in a single Bash call:
    ```bash
-   printf '\n\033[38;5;179m━━━ Planning ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
+   mkdir -p "$KILN_DIR/tmp" && \
+   printf '\n\033[38;5;179m━━━ Planning ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE" && \
+   printf '{"quote":"%s","by":"%s","section":"planning_start","at":"%s"}' "$QUOTE_TEXT" "$QUOTE_SOURCE" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > "$KILN_DIR/tmp/last-quote.json"
    ```
-   Then write `$KILN_DIR/tmp/last-quote.json`: `{"quote": "...", "by": "...", "section": "planning_start", "at": "ISO-8601"}`.
+   Do not use the Write tool for `last-quote.json`.
 
-   Update spinner verbs: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `planning` verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": {"mode": "replace", "verbs": [...]}}`.
+   Install spinner verbs via a single Bash command (never use the Write tool for this file):
+   Read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json` and build a flat array from `generic` + `planning` verbs. Then run one Bash call:
+   ```bash
+   mkdir -p "$PROJECT_PATH/.claude" && printf '%s' '{"spinnerVerbs":{"mode":"replace","verbs":[...]}}' > "$PROJECT_PATH/.claude/settings.local.json"
+   ```
+   The path MUST be absolute. Never use a relative path.
 
    Update `MEMORY_DIR/MEMORY.md`:
    `stage` = `planning`
@@ -260,11 +278,13 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
 12. Display the plan-approved transition and proceed to Stage 3.
     Before proceeding:
-    Read `$CLAUDE_HOME/kilntwo/data/lore.json`. Pick a random quote from `transitions.plan_approved.quotes`. Render via Bash:
+    Read `$CLAUDE_HOME/kilntwo/data/lore.json` and pick a random quote from `transitions.plan_approved.quotes`. Render the banner and persist the quote in a single Bash call:
     ```bash
-    printf '\n\033[38;5;179m━━━ Plan Approved ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
+    mkdir -p "$KILN_DIR/tmp" && \
+    printf '\n\033[38;5;179m━━━ Plan Approved ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE" && \
+    printf '{"quote":"%s","by":"%s","section":"plan_approved","at":"%s"}' "$QUOTE_TEXT" "$QUOTE_SOURCE" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > "$KILN_DIR/tmp/last-quote.json"
     ```
-    Then write `$KILN_DIR/tmp/last-quote.json`: `{"quote": "...", "by": "...", "section": "plan_approved", "at": "ISO-8601"}`.
+    Do not use the Write tool for `last-quote.json`.
     Confirm `MEMORY_DIR/master-plan.md` exists and is non-empty.
     Proceed immediately to Stage 3 (Execution).
 
@@ -278,14 +298,28 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
     Keep original order.
     Set `phase_total` in `MEMORY.md` to the parsed phase count before the loop starts.
 
-    Update spinner verbs at the start of Stage 3: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `execution` verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": {"mode": "replace", "verbs": [...]}}`.
+    **Parallel pre-reads for Stage 3** (issue all in a single parallel batch):
+    1. `$MEMORY_DIR/master-plan.md`
+    2. `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`
+    3. `$CLAUDE_HOME/kilntwo/data/lore.json`
+
+    These are needed throughout the execution loop. Read once, reuse from memory.
+
+    Install spinner verbs via a single Bash command (never use the Write tool for this file):
+    Read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json` (from the pre-read above) and build a flat array from `generic` + `execution` verbs. Then run one Bash call:
+    ```bash
+    mkdir -p "$PROJECT_PATH/.claude" && printf '%s' '{"spinnerVerbs":{"mode":"replace","verbs":[...]}}' > "$PROJECT_PATH/.claude/settings.local.json"
+    ```
+    The path MUST be absolute. Never use a relative path.
 
     For each phase:
-    Before phase initialization, read `$CLAUDE_HOME/kilntwo/data/lore.json`. Pick a random quote from `transitions.phase_start.quotes`. Render via Bash:
+    Before phase initialization, use the lore.json data already read above (do not re-read) and pick a random quote from `transitions.phase_start.quotes`. Render the banner and persist the quote in a single Bash call:
     ```bash
-    printf '\n\033[38;5;179m━━━ Phase %s: %s ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$PHASE_NUMBER" "$PHASE_NAME" "$QUOTE_TEXT" "$QUOTE_SOURCE"
+    mkdir -p "$KILN_DIR/tmp" && \
+    printf '\n\033[38;5;179m━━━ Phase %s: %s ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$PHASE_NUMBER" "$PHASE_NAME" "$QUOTE_TEXT" "$QUOTE_SOURCE" && \
+    printf '{"quote":"%s","by":"%s","section":"phase_start","at":"%s"}' "$QUOTE_TEXT" "$QUOTE_SOURCE" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > "$KILN_DIR/tmp/last-quote.json"
     ```
-    Then write `$KILN_DIR/tmp/last-quote.json`: `{"quote": "...", "by": "...", "section": "phase_start", "at": "ISO-8601"}`.
+    Do not use the Write tool for `last-quote.json`.
     Before spawning the executor, update `MEMORY_DIR/MEMORY.md`:
     `stage` = `execution`
     `status` = `in_progress`
@@ -323,11 +357,13 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
     `handoff_note` = `Phase <N> complete; ready for next phase.`
     `handoff_context` = `Phase <N> (<phase name>) completed successfully. <one-sentence summary from results>. Next: phase <N+1> or validation if all phases done.`
     `last_updated` = current ISO-8601 UTC timestamp.
-    After phase completion update, read `$CLAUDE_HOME/kilntwo/data/lore.json`. Pick a random quote from `transitions.phase_complete.quotes`. Render via Bash:
+    After phase completion update, use the lore.json data already read above (do not re-read) and pick a random quote from `transitions.phase_complete.quotes`. Render the banner and persist the quote in a single Bash call:
     ```bash
-    printf '\n\033[38;5;179m━━━ Phase %s Complete ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$PHASE_NUMBER" "$QUOTE_TEXT" "$QUOTE_SOURCE"
+    mkdir -p "$KILN_DIR/tmp" && \
+    printf '\n\033[38;5;179m━━━ Phase %s Complete ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$PHASE_NUMBER" "$QUOTE_TEXT" "$QUOTE_SOURCE" && \
+    printf '{"quote":"%s","by":"%s","section":"phase_complete","at":"%s"}' "$QUOTE_TEXT" "$QUOTE_SOURCE" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > "$KILN_DIR/tmp/last-quote.json"
     ```
-    Then write `$KILN_DIR/tmp/last-quote.json`: `{"quote": "...", "by": "...", "section": "phase_complete", "at": "ISO-8601"}`.
+    Do not use the Write tool for `last-quote.json`.
     If executor output is placeholder-only, TODO-only, or stub-only:
     Fail that phase.
     Update phase `N` in `## Phase Statuses` to `phase_status = failed`.
@@ -340,13 +376,24 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
 14. Run final validation with correction loop.
     Before entering validation loop:
-    Read `$CLAUDE_HOME/kilntwo/data/lore.json`. Pick a random quote from `transitions.validation_start.quotes`. Render via Bash:
+    Use the lore.json data already read above (do not re-read) and pick a random quote from `transitions.validation_start.quotes`. Render the banner and persist the quote in a single Bash call:
     ```bash
-    printf '\n\033[38;5;179m━━━ Validation ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
+    mkdir -p "$KILN_DIR/tmp" && \
+    printf '\n\033[38;5;179m━━━ Validation ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE" && \
+    printf '{"quote":"%s","by":"%s","section":"validation_start","at":"%s"}' "$QUOTE_TEXT" "$QUOTE_SOURCE" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > "$KILN_DIR/tmp/last-quote.json"
     ```
-    Then write `$KILN_DIR/tmp/last-quote.json`: `{"quote": "...", "by": "...", "section": "validation_start", "at": "ISO-8601"}`.
+    Do not use the Write tool for `last-quote.json`.
 
-    Update spinner verbs: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `validation` verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": {"mode": "replace", "verbs": [...]}}`.
+    **Parallel pre-reads for Stage 4** (issue all in a single parallel batch):
+    1. `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`
+    2. `$CLAUDE_HOME/kilntwo/data/lore.json`
+
+    Install spinner verbs via a single Bash command (never use the Write tool for this file):
+    Read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json` (from the pre-read above) and build a flat array from `generic` + `validation` verbs. Then run one Bash call:
+    ```bash
+    mkdir -p "$PROJECT_PATH/.claude" && printf '%s' '{"spinnerVerbs":{"mode":"replace","verbs":[...]}}' > "$PROJECT_PATH/.claude/settings.local.json"
+    ```
+    The path MUST be absolute. Never use a relative path.
 
     After all phases complete, set `correction_cycle = 0` in `MEMORY_DIR/MEMORY.md`.
     Enter the validation-correction loop (max 3 cycles):
@@ -407,11 +454,13 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
 15. Finalize protocol run.
     Before final status output in this step:
-    Read `$CLAUDE_HOME/kilntwo/data/lore.json`. Pick a random quote from `transitions.project_complete.quotes`. Render via Bash:
+    Read `$CLAUDE_HOME/kilntwo/data/lore.json` and pick a random quote from `transitions.project_complete.quotes`. Render the banner and persist the quote in a single Bash call:
     ```bash
-    printf '\n\033[38;5;179m━━━ Project Complete ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
+    mkdir -p "$KILN_DIR/tmp" && \
+    printf '\n\033[38;5;179m━━━ Project Complete ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE" && \
+    printf '{"quote":"%s","by":"%s","section":"project_complete","at":"%s"}' "$QUOTE_TEXT" "$QUOTE_SOURCE" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > "$KILN_DIR/tmp/last-quote.json"
     ```
-    Then write `$KILN_DIR/tmp/last-quote.json`: `{"quote": "...", "by": "...", "section": "project_complete", "at": "ISO-8601"}`.
+    Do not use the Write tool for `last-quote.json`.
     Update `MEMORY_DIR/MEMORY.md` fields:
     `stage` -> `complete`.
     `status` -> `complete`.
@@ -444,3 +493,4 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 5. **Parallel where safe, sequential where required.** Run Step 8 planners in parallel. Run all other Task spawns sequentially, waiting for each to finish before starting the next.
 6. **Write working outputs only.** Phase executors must create real files with real content and working code. Placeholders, TODO stubs, and non-functional scaffolds are failures that must be reported before continuing.
 7. **Checkpoint memory after every significant action.** Update canonical runtime fields (`stage`, `status`, `planning_sub_stage`, phase fields, `handoff_note`, `handoff_context`, `last_updated`, and phase-status entries when applicable) after Step 2, after Step 4, after Step 5, at every brainstorm checkpoint, after Step 7, after Step 8 (planning coordinator return), after each phase in Step 13, after Step 14, and after Step 15.
+8. **No project build/test commands.** The orchestrator MUST NOT run `cargo check`, `npm test`, `go build`, `make`, `pytest`, or any project build/compile/test/lint commands. These are delegated to Maestro (Stage 3) and Argus (Stage 4).

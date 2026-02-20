@@ -61,7 +61,7 @@ For full path derivation, memory schema, event schema, file naming conventions, 
 
 15. **Plans must pass validation before execution** — After Plato's synthesis, the orchestrator spawns Athena (`kiln-plan-validator`) and emits `[plan_validate_start]` / `[plan_validate_complete]` events for the gate. If validation fails, loop back to planners with Athena's feedback. Only proceed to Stage 3 after plan validation passes.
 
-16. **Team lifecycle** — Kiln creates the `kiln-session` team after onboarding completes. All top-level agents are spawned with `team_name: "kiln-session"`. Coordinators (Aristotle, Maestro, Mnemosyne) create ephemeral sub-teams (`aristotle-planning`, `maestro-phase-<N>`, `mnemosyne-mapping`) for their workers and call `TeamDelete` before returning. The session team is deleted during finalization or reset.
+16. **Team lifecycle** — Kiln creates the `kiln-session` team for orchestrator-level tracking. Coordinators (Aristotle, Maestro, Mnemosyne) are spawned WITHOUT `team_name` — they create their own ephemeral sub-teams (`aristotle-planning`, `maestro-phase-<N>`, `mnemosyne-mapping`) at setup after a defensive `TeamDelete` cleanup. Workers join the coordinator's sub-team. Coordinators call `TeamDelete` before returning.
 
 ## Agent Roster
 
