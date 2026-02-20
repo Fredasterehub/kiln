@@ -86,6 +86,7 @@ All worker Task calls in this workflow use `team_name: "maestro-phase-<phase_num
    - Append `[task_start]`. Spawn Codex via Task (`name: "Codex"`, `subagent_type: kiln-implementer`, `team_name: "maestro-phase-<phase_number>"`).
    - **The Task prompt to Codex MUST begin with**: "You are a thin CLI wrapper. You MUST pipe the task prompt to GPT-5.3-codex via Codex CLI: `cat <PROMPT_PATH> | codex exec -m gpt-5.3-codex -c 'model_reasoning_effort="high"' --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -C <PROJECT_PATH> - -o <OUTPUT_PATH>`. You do NOT write code yourself. GPT-5.3-codex writes all code."
    - Then provide: `PROJECT_PATH`, `PROMPT_PATH` (absolute path to the prompt file), `TASK_NUMBER`.
+   - Immediately after spawning Codex, send a delegation nudge: `SendMessage(recipient: "Codex", content: "REMINDER: Pipe the prompt through codex exec -m gpt-5.3-codex. Do NOT write source code yourself via printf, heredoc, or any other method. GPT-5.3-codex writes all code.", summary: "Codex CLI delegation reminder")`.
    - Check `$KILN_DIR/outputs/task_<NN>_output.md`. If missing or `status: failed` → retry once.
    - Append `[task_success]`, `[task_retry]`, or `[task_fail]` accordingly.
 2. If >50% tasks failed: set state `partial-failure`, append `[halt]`, stop before review.
@@ -99,6 +100,7 @@ All worker Task calls in this workflow use `team_name: "maestro-phase-<phase_num
    - Read `$KILN_DIR/reviews/fix_round_<R>.md` for failure context.
    - Spawn Scheherazade via Task (`name: "Scheherazade"`, `subagent_type: kiln-prompter`, `team_name: "maestro-phase-<phase_number>"`) with `project_path` and failure context to generate a fix-specific sharpened prompt covering: what failed, why, current broken state, and concrete fix requirements (must inspect current code state first).
    - Spawn Codex via Task (`name: "Codex"`, `subagent_type: kiln-implementer`, `team_name: "maestro-phase-<phase_number>"`). The Task prompt MUST begin with the same CLI delegation instruction as in Implement above. Provide the sharpened fix prompt path and `TASK_NUMBER=fix_<R>`.
+   - Immediately after spawning Codex, send the same delegation nudge as in Implement above.
    - Append `[fix_complete]`. Increment round. Re-spawn Sphinx via Task (`name: "Sphinx"`, `subagent_type: kiln-reviewer`, `team_name: "maestro-phase-<phase_number>"`).
 5. If still rejected after 3 rounds: set state `needs-operator-review`, append `[halt]`, stop.
 

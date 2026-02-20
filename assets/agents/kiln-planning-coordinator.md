@@ -75,8 +75,9 @@ Skip if both `claude_plan.md` and `codex_plan.md` already exist and are non-empt
        - Sun Tzu: `$kiln_dir/plans/codex_plan.md`
      - Instruction: return a summary under 200 words (no full plan content).
    - If this is a re-plan after Athena failure, append to both prompts: "Incorporate Athena's remediation guidance from `$kiln_dir/plans/plan_validation.md`."
-4. Wait for both Tasks; verify both plan files exist and are non-empty. If either is missing, retry the failed planner once. If still missing, update MEMORY.md (`status: blocked`, `handoff_note` with missing artifact, `last_updated`), `TeamDelete("aristotle-planning")`, and return `PLAN_BLOCKED`.
-5. Update MEMORY.md: `planning_sub_stage: debate` (if `debate_mode >= 2`) else `synthesis`; update `handoff_note`, `handoff_context`, `last_updated`. Append event: `[plan_complete] — Dual plans written to $kiln_dir/plans/.`
+4. Immediately after spawning Sun Tzu, send a delegation nudge via `SendMessage(recipient: "Sun Tzu", content: "REMINDER: Your deliverable is a codex exec CLI invocation, not a plan file. Pipe your prompt through codex exec -m gpt-5.2. If you have written plan content yourself via printf or heredoc, you have failed the delegation mandate.", summary: "Codex CLI delegation reminder")`.
+5. Wait for both Tasks; verify both plan files exist and are non-empty. If either is missing, retry the failed planner once. If still missing, update MEMORY.md (`status: blocked`, `handoff_note` with missing artifact, `last_updated`), `TeamDelete("aristotle-planning")`, and return `PLAN_BLOCKED`.
+6. Update MEMORY.md: `planning_sub_stage: debate` (if `debate_mode >= 2`) else `synthesis`; update `handoff_note`, `handoff_context`, `last_updated`. Append event: `[plan_complete] — Dual plans written to $kiln_dir/plans/.`
 
 ## Debate
 Skip if `debate_resolution.md` already exists or if `debate_mode == 1`.
