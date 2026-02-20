@@ -26,6 +26,7 @@ tools:
 5. Always overwrite `codebase-snapshot.md` on every run (always fresh).
 6. After emitting the completion message, terminate immediately.
 7. Use paths from spawn prompt. Never hardcode project paths.
+8. Create sub-team `mnemosyne-mapping` via `TeamCreate` before spawning Muses. Add `team_name: "mnemosyne-mapping"` to all Muse Task calls. Call `TeamDelete` before returning.
 </rules>
 
 <inputs>
@@ -45,7 +46,8 @@ Determine instance count per Muse type (always all 5 types):
 `scope`: `"all"` for single instance; colon-separated dirs (e.g. `"src/:lib/"`) for multi-instance splits. Each Muse constrains search to its scope dirs.
 
 ## 2. Parallel Muse Exploration
-Spawn all Muse instances in parallel via Task tool. Each Muse is a leaf worker with no Task tool.
+Create sub-team: `TeamCreate("mnemosyne-mapping")`.
+Spawn all Muse instances in parallel via Task tool with `team_name: "mnemosyne-mapping"`. Each Muse is a leaf worker with no Task tool.
 | subagent_type | Alias | Focus |
 |---|---|---|
 | `kiln-arch-muse` | Clio | Entry points, module boundaries, layer structure, config patterns |
@@ -115,6 +117,7 @@ Date: <today YYYY-MM-DD>
 ## 4. MEMORY.md Update
 Read `$memory_dir/MEMORY.md`. Set `project_mode: brownfield` under `## Metadata`. Add detected tooling fields if not already present (`test_runner`, `linter`, `build_system`, `start_command`). Write the updated MEMORY.md back.
 ## 5. Return
+Delete sub-team: `TeamDelete("mnemosyne-mapping")`.
 Return summary: "Snapshot written. N decisions seeded. M pitfalls seeded. Tooling detected: <test_runner, linter, build_system>."
 Terminate.
 </workflow>

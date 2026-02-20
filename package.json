@@ -1,6 +1,6 @@
 {
   "name": "kilntwo",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Lightweight Claude Code development protocol — multi-model pipeline orchestrator (Claude Opus 4.6 + GPT-5.2/5.3 via Codex CLI)",
   "main": "src/index.js",
   "bin": {

@@ -90,34 +90,27 @@ After displaying the banner, check whether MEMORY.md contains a `## Reset Notes`
 ```
 Recommended next step (from last reset): [next_action]
 ```
-## Step 5.5: Re-establish Tmux Layout (if applicable)
-Check `$TMUX` environment variable.
-If set (already in a tmux session):
-- Check if a right pane already exists: `tmux list-panes | wc -l`
-- If only 1 pane: re-create the split layout same as start.md Step 0 (tmux layout active path). Store `$KILN_PANE` and `$AGENT_PANE`, set titles and border styles, set `TMUX_LAYOUT=true`.
-- If 2+ panes already exist: recover pane IDs using tmux:
-  ```bash
-  KILN_PANE=$(tmux list-panes -F '#{pane_id} #{pane_left}' | sort -k2 -n | head -1 | awk '{print $1}')
-  AGENT_PANE=$(tmux list-panes -F '#{pane_id} #{pane_left}' | sort -k2 -n | tail -1 | awk '{print $1}')
-  ```
-  Set `TMUX_LAYOUT=true` and continue with existing panes.
-If not set: set `TMUX_LAYOUT=false` and continue.
+## Step 5.5: Ensure Session Team
+Check if the `kiln-session` team exists (read `$CLAUDE_HOME/teams/kiln-session/config.json`).
+If the team does not exist, create it: `TeamCreate("kiln-session")`.
+If the team already exists, continue with the existing team.
 ## Step 6: Route to Stage
 Branch strictly on `stage` and run the matching behavior.
 For `brainstorm`:
-- Update spinner verbs: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `brainstorm` stage verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": [...]}`.
+- Update spinner verbs: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `brainstorm` stage verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": {"mode": "replace", "verbs": [...]}}`.
 - Re-read `vision.md` in full.
 - Tell the user: "Resuming brainstorming session. Here is the current vision:"
 - Print the full content of `vision.md`.
 - Ask: "What would you like to explore or refine next?"
 For `planning`:
-- Update spinner verbs: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `planning` stage verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": [...]}`.
+- Update spinner verbs: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `planning` stage verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": {"mode": "replace", "verbs": [...]}}`.
 - Read `planning_sub_stage` from MEMORY.md.
 - Tell the user: "Resuming planning stage (sub-stage: [planning_sub_stage])."
 - Spawn `kiln-planning-coordinator` via the Task tool:
   - `name`: `"Aristotle"`
   - `subagent_type`: `kiln-planning-coordinator`
   - `description`: (next quote from names.json quotes array for kiln-planning-coordinator)
+  - `team_name`: `"kiln-session"`
   - Task prompt must include:
     - `project_path` = `$PROJECT_PATH`
     - `memory_dir` = `$MEMORY_DIR`
@@ -130,7 +123,7 @@ For `planning`:
   - If first non-empty line is `PLAN_BLOCKED`: display `handoff_note` and `handoff_context` to operator, halt.
   - If signal missing or malformed: treat as `PLAN_BLOCKED`.
 For `execution`:
-- Update spinner verbs: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `execution` stage verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": [...]}`.
+- Update spinner verbs: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `execution` stage verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": {"mode": "replace", "verbs": [...]}}`.
 - Read `MEMORY.md` and build an inventory of phases: for each phase in `master-plan.md`, record `{phase_number, name, status}` where status is one of `completed | in_progress | failed | pending` (derive **from `MEMORY.md`**, not from assumptions).
 - Cross-check against archive: if `$KILN_DIR/archive/phase_<NN>/phase_summary.md` exists for a phase, treat that phase as definitively completed regardless of `MEMORY.md` status (the archive is created only after successful merge).
 - Determine `N` automatically:
@@ -155,14 +148,12 @@ For `execution`:
   - Trust `handoff_note` for additional context beyond what structured events convey.
   - Otherwise, extract the full Phase `N` section from `master-plan.md` as the authoritative plan for this phase.
 - Print: `"Resuming phase [N]/[phase_total]: [phase_name] — spawning Maestro."`
-- If `TMUX_LAYOUT=true`:
-  - Update right pane title: `tmux select-pane -t $AGENT_PANE -T "Maestro — Phase N"`
-  - Tail phase state: `tmux send-keys -t $AGENT_PANE "tail -f $KILN_DIR/phase_<N>_state.md" Enter`
 - Spawn the next phase executor **immediately** (no permission prompt):
   - Spawn `kiln-phase-executor` via the **Task** tool.
   - `name: Maestro`
   - `subagent_type: kiln-phase-executor`
   - `description: (next quote from names.json; cycle quotes sequentially each phase spawn)`
+  - `team_name: "kiln-session"`
   - Task prompt must include:
     - Full Phase `N` section from `master-plan.md`
     - Full `MEMORY.md`
@@ -171,9 +162,8 @@ For `execution`:
     - `PROJECT_PATH`
     - `MEMORY_DIR`
 - After Maestro returns, update `MEMORY.md` with the new phase status, updated `handoff_note`, and updated `handoff_context`, then **re-enter this execution routing** to resume/transition/retry or advance to `validation` automatically.
-- If `TMUX_LAYOUT=true`: kill the tail (`tmux send-keys -t $AGENT_PANE C-c`) and reset pane title (`tmux select-pane -t $AGENT_PANE -T "Ready"`).
 For `validation`:
-- Update spinner verbs: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `validation` stage verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": [...]}`.
+- Update spinner verbs: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `validation` stage verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": {"mode": "replace", "verbs": [...]}}`.
 - Re-read `master-plan.md` and `decisions.md`.
 - Check `correction_cycle` from MEMORY.md.
 - If `correction_cycle > 0` and `status == 'blocked'`:
@@ -186,11 +176,7 @@ For `validation`:
 - Otherwise:
   - Tell the user: "Resuming validation stage from current memory."
   - Summarize what was built from `master-plan.md` and what decisions were made from `decisions.md`.
-  - If `TMUX_LAYOUT=true`:
-    - Update right pane title: `tmux select-pane -t $AGENT_PANE -T "Argus — Validation"`
-    - Tail the validation report: `tmux send-keys -t $AGENT_PANE "tail -f $KILN_DIR/validation/report.md 2>/dev/null || echo 'Waiting for report...'" Enter`
-  - Spawn Argus to run validation (Step 14 in start.md).
-  - If `TMUX_LAYOUT=true`: kill the tail (`tmux send-keys -t $AGENT_PANE C-c`) and reset pane title (`tmux select-pane -t $AGENT_PANE -T "Ready"`).
+  - Spawn Argus to run validation (Step 14 in start.md) with `team_name: "kiln-session"`.
 For `complete`:
 - Tell the user exactly:
 ```

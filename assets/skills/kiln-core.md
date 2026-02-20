@@ -126,9 +126,20 @@ At `/kiln:start` initialization and at each stage transition, the orchestrator:
 
 1. Reads `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`
 2. Builds a flat array: verbs for the current stage + generic verbs
-3. Writes to `$PROJECT_PATH/.claude/settings.local.json` under `spinnerVerbs`
+3. Writes to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": {"mode": "replace", "verbs": [...]}}`
 
 Stage mapping: `brainstorm` → brainstorm verbs, `planning` → planning verbs, `execution` → execution verbs, `validation` → validation verbs. Review verbs are mixed in during execution stage review rounds.
+
+## Team Pattern
+
+Kiln uses Claude Code's native Teams API for agent coordination. No manual tmux management.
+
+- **Session team**: `kiln-session` — created by Kiln after onboarding (Q1-Q3). All top-level agents (Da Vinci, Mnemosyne, Aristotle, Maestro, Argus) are spawned with `team_name: "kiln-session"`.
+- **Sub-teams**: Coordinators create ephemeral sub-teams for their workers:
+  - `aristotle-planning` — Confucius, Sun Tzu, Socrates, Plato, Athena
+  - `maestro-phase-<N>` — Sherlock, Scheherazade, Codex, Sphinx, Confucius, Sun Tzu, Socrates, Plato
+  - `mnemosyne-mapping` — Clio, Urania, Melpomene, Calliope, Terpsichore
+- **Lifecycle**: Coordinators call `TeamCreate` on setup and `TeamDelete` before returning their gating signal. Sub-teams are ephemeral — they exist only for the duration of the coordinator's work.
 
 ## Event Schema
 
@@ -232,8 +243,6 @@ $KILN_DIR/
     report.md              — End-to-end validation results
     missing_credentials.md — Environment variables or secrets that were absent
   tmp/
-    brainstorm_context.md  — Context file for tmux pane Da Vinci launch
-    davinci_complete       — Presence flag: Da Vinci finished (tmux pane mode)
 ```
 
 ## Development Guidelines

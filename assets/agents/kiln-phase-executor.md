@@ -22,6 +22,7 @@ tools: [Read, Write, Bash, Grep, Glob, Task]
 7. Never merge unless latest review status is `approved`.
 8. Record every significant event in the phase state file using the structured event format from kiln-core skill.
 9. After emitting the completion message, terminate immediately.
+10. Create sub-team `maestro-phase-<phase_number>` via `TeamCreate` during Setup. Add `team_name: "maestro-phase-<phase_number>"` to all worker Task calls. Call `TeamDelete` in Archive before returning.
 </rules>
 
 <inputs>
@@ -40,11 +41,13 @@ Derive `KILN_DIR="$project_path/.kiln"`. Read kiln-core (`$CLAUDE_HOME/kilntwo/s
 ## Setup
 1. Derive URL-safe slug from `phase_description`: lowercase, spaces→hyphens, strip non-alphanumeric (except hyphens), collapse repeated hyphens, trim leading/trailing hyphens, truncate to 30 chars. Example: "User Authentication Flow" → `user-authentication-flow`.
 2. Branch name: `kiln/phase-<phase_number>-<slug>`.
-3. Capture `phase_start_commit`: `git -C $PROJECT_PATH rev-parse HEAD`.
-4. Create or checkout branch. Create dirs: `$KILN_DIR/{plans,prompts,reviews,outputs}/`.
-5. Write initial `$KILN_DIR/phase_<phase_number>_state.md` with status, branch, commit SHA, `## Events`; append `[setup]` and `[branch]`.
+3. Create sub-team: `TeamCreate("maestro-phase-<phase_number>")`.
+4. Capture `phase_start_commit`: `git -C $PROJECT_PATH rev-parse HEAD`.
+5. Create or checkout branch. Create dirs: `$KILN_DIR/{plans,prompts,reviews,outputs}/`.
+6. Write initial `$KILN_DIR/phase_<phase_number>_state.md` with status, branch, commit SHA, `## Events`; append `[setup]` and `[branch]`.
 
 ## Codebase Index
+All worker Task calls in this workflow use `team_name: "maestro-phase-<phase_number>"`.
 1. Spawn Sherlock (`kiln-researcher`) with `project_path` to generate a lightweight index (file tree, key exports/entry points, test commands, recent git log) at `$KILN_DIR/codebase-snapshot.md`.
 2. Verify `$KILN_DIR/codebase-snapshot.md` exists after Sherlock returns. If missing, log warning but continue (non-fatal).
 
@@ -92,7 +95,8 @@ Derive `KILN_DIR="$project_path/.kiln"`. Read kiln-core (`$CLAUDE_HOME/kilntwo/s
 2. Append `[reconcile_complete]` event.
 
 ## Archive
-1. `mkdir -p $KILN_DIR/archive/phase_<NN>/`; move plans/, prompts/, reviews/, outputs/, and state file to archive; write `phase_summary.md` (metrics, outputs, key decisions, files changed); recreate clean working dirs.
-2. Update `$memory_dir/MEMORY.md`: `handoff_note`, `handoff_context` (what was built, tasks succeeded/failed, review rounds, next action), append to `## Phase Results`.
-3. Return structured completion message: phase number, status, branch merged, task counts, review rounds.
+1. Delete sub-team: `TeamDelete("maestro-phase-<phase_number>")`.
+2. `mkdir -p $KILN_DIR/archive/phase_<NN>/`; move plans/, prompts/, reviews/, outputs/, and state file to archive; write `phase_summary.md` (metrics, outputs, key decisions, files changed); recreate clean working dirs.
+3. Update `$memory_dir/MEMORY.md`: `handoff_note`, `handoff_context` (what was built, tasks succeeded/failed, review rounds, next action), append to `## Phase Results`.
+4. Return structured completion message: phase number, status, branch merged, task counts, review rounds.
 </workflow>

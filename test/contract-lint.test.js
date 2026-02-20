@@ -279,6 +279,23 @@ describe('contract lint', () => {
   });
 });
 
+describe('v0.8.0 contracts', () => {
+  it('kiln-core directory tree has no tmux-era artifacts', () => {
+    const skill = readAsset('skills/kiln-core.md');
+    const treeSection = skill.match(/\$KILN_DIR\/\n([\s\S]*?)```/);
+    assert.ok(treeSection, 'Skill must contain a $KILN_DIR/ directory tree');
+
+    assert.ok(
+      !treeSection[1].includes('brainstorm_context'),
+      'Directory tree must not include brainstorm_context.md (removed in v0.8.0)'
+    );
+    assert.ok(
+      !treeSection[1].includes('davinci_complete'),
+      'Directory tree must not include davinci_complete (removed in v0.8.0)'
+    );
+  });
+});
+
 describe('v0.7.0 contracts', () => {
   it('spinner-verbs.json exists with valid structure', () => {
     const verbsPath = path.join(ASSETS_DIR, 'data', 'spinner-verbs.json');

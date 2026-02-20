@@ -1,4 +1,4 @@
-<!-- kiln:protocol:begin v0.7.0 -->
+<!-- kiln:protocol:begin v0.8.0 -->
 # Kiln Orchestration Protocol
 
 This protocol is active when Kiln is installed in the project. The Claude Code orchestrator must follow these rules exactly. Rules are enforced across all five pipeline stages.
@@ -19,7 +19,7 @@ For full path derivation, memory schema, event schema, file naming conventions, 
 
 ## Pipeline Stages
 
-1. **Stage 1 — Initialization & Brainstorm** (interactive) — The orchestrator initializes the project. For brownfield projects (auto-detected), `kiln-mapper` (Mnemosyne) maps the existing codebase and pre-seeds memory files before brainstorming begins. Then the orchestrator spawns the `kiln-brainstormer` agent (Da Vinci) to facilitate a structured brainstorm session. The brainstormer uses 62 creative techniques, 50 elicitation methods, and anti-bias protocols to guide the operator through ideation. The operator selects a brainstorm depth (light/standard/deep) that sets the idea floor and technique intensity. The operator also selects a communication style (`operator_mode: tour | express`) that controls verbosity of onboarding prompts. Memory checkpoints are written periodically: `vision.md` captures the project vision across 11 structured sections, and `MEMORY.md` updates canonical runtime fields (`stage`, `status`, `brainstorm_depth`, phase fields, `handoff_note`, `last_updated`). The stage ends when the brainstormer signals completion and the pre-flight check passes.
+1. **Stage 1 — Initialization & Brainstorm** (interactive) — The orchestrator initializes the project and creates the `kiln-session` team. For brownfield projects (auto-detected), `kiln-mapper` (Mnemosyne) maps the existing codebase and pre-seeds memory files before brainstorming begins. Then the orchestrator spawns the `kiln-brainstormer` agent (Da Vinci) as a teammate to facilitate a structured brainstorm session. The brainstormer uses 62 creative techniques, 50 elicitation methods, and anti-bias protocols to guide the operator through ideation. The operator selects a brainstorm depth (light/standard/deep) that sets the idea floor and technique intensity. The operator also selects a communication style (`operator_mode: tour | express`) that controls verbosity of onboarding prompts. Memory checkpoints are written periodically: `vision.md` captures the project vision across 11 structured sections, and `MEMORY.md` updates canonical runtime fields (`stage`, `status`, `brainstorm_depth`, phase fields, `handoff_note`, `last_updated`). The stage ends when the brainstormer signals completion and the pre-flight check passes.
 
 2. **Stage 2 — Planning** (automated with operator review) — The orchestrator spawns `kiln-planning-coordinator` (Aristotle) to own the entire planning pipeline end-to-end. Aristotle runs `kiln-planner-claude` and `kiln-planner-codex` in parallel, runs `kiln-debater` when debate mode requires it (mode 2 by default), synthesizes with `kiln-synthesizer`, validates with `kiln-plan-validator` (Athena) with up to 2 retries, and runs the operator approval loop. Aristotle writes planning artifacts to disk, updates `MEMORY.md`, and returns a single gating signal to Kiln: `PLAN_APPROVED` or `PLAN_BLOCKED`.
 
@@ -35,7 +35,7 @@ For full path derivation, memory schema, event schema, file naming conventions, 
 
 2. **Memory files are the single source of truth** — `MEMORY.md`, `vision.md`, `master-plan.md`, `decisions.md`, `pitfalls.md`, `PATTERNS.md`, and `tech-stack.md` define project state. Before starting any stage or phase, read these files. After completing any stage or phase, update canonical runtime fields in `MEMORY.md`: `stage`, `status`, `planning_sub_stage`, phase fields, `handoff_note`, `handoff_context`, and `last_updated`. Pipeline transitions are rendered via ANSI-colored Bash printf commands (see kiln-core.md ANSI Rendering section).
 
-3. **Only Aristotle, Maestro, and Mnemosyne have Task tool access** — Among spawned sub-agents, only `kiln-planning-coordinator` (Aristotle, Stage 2), `kiln-phase-executor` (Maestro, Stage 3), and `kiln-mapper` (Mnemosyne, Stage 1) have Task tool access. All other spawned agents are leaf workers that cannot spawn further sub-agents. The top-level orchestrator (Kiln, running `/kiln:start`) uses Task to spawn all top-level agents and is not subject to this restriction.
+3. **Only Aristotle, Maestro, and Mnemosyne have Task tool and team management access** — Among spawned sub-agents, only `kiln-planning-coordinator` (Aristotle, Stage 2), `kiln-phase-executor` (Maestro, Stage 3), and `kiln-mapper` (Mnemosyne, Stage 1) have Task tool access and may use `TeamCreate`/`TeamDelete` for sub-team lifecycle. All other spawned agents are leaf workers that cannot spawn further sub-agents. The top-level orchestrator (Kiln, running `/kiln:start`) uses Task to spawn all top-level agents and is not subject to this restriction.
 
 4. **Phase sizing** — Each phase must represent 1-4 hours of implementation work. Phases that are too large must be split during the planning stage. Phases that are too small may be merged. The synthesizer is responsible for enforcing this during master plan creation.
 
@@ -61,9 +61,11 @@ For full path derivation, memory schema, event schema, file naming conventions, 
 
 15. **Plans must pass validation before execution** — After Plato's synthesis, the orchestrator spawns Athena (`kiln-plan-validator`) and emits `[plan_validate_start]` / `[plan_validate_complete]` events for the gate. If validation fails, loop back to planners with Athena's feedback. Only proceed to Stage 3 after plan validation passes.
 
+16. **Team lifecycle** — Kiln creates the `kiln-session` team after onboarding completes. All top-level agents are spawned with `team_name: "kiln-session"`. Coordinators (Aristotle, Maestro, Mnemosyne) create ephemeral sub-teams (`aristotle-planning`, `maestro-phase-<N>`, `mnemosyne-mapping`) for their workers and call `TeamDelete` before returning. The session team is deleted during finalization or reset.
+
 ## Agent Roster
 
-The Kiln pipeline uses 15 specialized agents. Each has a character alias used in logs and status output.
+The Kiln pipeline uses 15 specialized agents. Rules are enforced by 16 orchestration rules above. Each has a character alias used in logs and status output.
 
 | Alias | Internal Name | Role |
 |---|---|---|
