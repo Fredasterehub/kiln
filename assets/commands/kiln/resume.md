@@ -94,6 +94,7 @@ Recommended next step (from last reset): [next_action]
 Check if the `kiln-session` team exists (read `$CLAUDE_HOME/teams/kiln-session/config.json`).
 If the team does not exist, create it: `TeamCreate("kiln-session")`.
 If the team already exists, continue with the existing team.
+**Important**: Teams do not persist across session boundaries. All sub-teams from the previous session (`aristotle-planning`, `maestro-phase-*`, `mnemosyne-mapping`) are gone. Every coordinator spawned during this resume MUST recreate its sub-team before doing any work, even if the phase state file shows work already in progress.
 ## Step 6: Route to Stage
 Branch strictly on `stage` and run the matching behavior.
 For `brainstorm`:
@@ -117,7 +118,7 @@ For `planning`:
     - `kiln_dir` = `$KILN_DIR`
     - `debate_mode` from MEMORY.md (default 2 if absent)
     - `brainstorm_depth` from MEMORY.md (default `standard` if absent)
-  - Instruction: "Resume the Stage 2 planning pipeline from current state. Read planning_sub_stage from MEMORY.md and check existing artifacts to determine where to resume. Run plan validation (Athena writes `plan_validation.md`) and operator approval. Return `PLAN_APPROVED` or `PLAN_BLOCKED`."
+  - Instruction: "This is a resumed session — your sub-team does not exist yet. Run TeamCreate('aristotle-planning') before spawning any workers. Then resume the Stage 2 planning pipeline from current state. Read planning_sub_stage from MEMORY.md and check existing artifacts to determine where to resume. Run plan validation (Athena writes `plan_validation.md`) and operator approval. Return `PLAN_APPROVED` or `PLAN_BLOCKED`."
 - Parse the return value:
   - If first non-empty line is `PLAN_APPROVED`: re-read MEMORY.md, confirm `stage=execution` and `phase_total` is set, proceed to execution routing.
   - If first non-empty line is `PLAN_BLOCKED`: display `handoff_note` and `handoff_context` to operator, halt.
@@ -161,6 +162,7 @@ For `execution`:
     - `handoff_context` (if present, for deeper phase context)
     - `PROJECT_PATH`
     - `MEMORY_DIR`
+    - Instruction: "This is a resumed session — your sub-team does not exist yet. Run TeamCreate('maestro-phase-<phase_number>') before spawning any workers, even if the phase state file shows work already in progress. Then resume from the state indicated in the phase state file and handoff context."
 - After Maestro returns, update `MEMORY.md` with the new phase status, updated `handoff_note`, and updated `handoff_context`, then **re-enter this execution routing** to resume/transition/retry or advance to `validation` automatically.
 For `validation`:
 - Update spinner verbs: read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, build flat array from `generic` + `validation` stage verbs, write to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": {"mode": "replace", "verbs": [...]}}`.
