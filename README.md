@@ -1,31 +1,266 @@
 <div align="center">
 
-# kiln
+<br>
 
-**The ultra-lightweight multi-model pipeline for Claude Code**
+```
+  ██╗  ██╗██╗██╗     ███╗   ██╗
+  ██║ ██╔╝██║██║     ████╗  ██║
+  █████╔╝ ██║██║     ██╔██╗ ██║
+  ██╔═██╗ ██║██║     ██║╚██╗██║
+  ██║  ██╗██║███████╗██║ ╚████║
+  ╚═╝  ╚═╝╚═╝╚══════╝╚═╝  ╚═══╝
+```
 
-*"Perfection is achieved, not when there is nothing more to add, but when there is nothing left to take away."* — Antoine de Saint-Exupery
+**Multi-model orchestration for Claude Code**
+
+*The models are ready. They just need a conductor.*
 
 <br>
 
-[![Multi-Model](https://img.shields.io/badge/Multi--Model-Opus_·_GPT--5-D4A574?style=flat)]()
-[![Debate](https://img.shields.io/badge/Debate-Models_Argue-C1666B?style=flat)]()
-[![Zero Deps](https://img.shields.io/badge/Dependencies-Zero-4A403A?style=flat)]()
-[![Native](https://img.shields.io/badge/Claude_Code-Native_Only-7C3AED?style=flat)]()
+[![npm](https://img.shields.io/badge/npm-kilntwo-D4A574?style=flat-square&logo=npm)](https://www.npmjs.com/package/kilntwo)
+[![Tests](https://img.shields.io/badge/tests-134_passing-4A403A?style=flat-square)]()
+[![Zero Deps](https://img.shields.io/badge/dependencies-0-4A403A?style=flat-square)]()
+[![License](https://img.shields.io/badge/license-MIT-4A403A?style=flat-square)](LICENSE)
 
 <br>
 
-[![License](https://img.shields.io/badge/License-MIT-D4A574?style=for-the-badge)](LICENSE)
-[![Node](https://img.shields.io/badge/Node-18+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
-[![Claude Code](https://img.shields.io/badge/Claude_Code-Native-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white)](https://claude.ai/claude-code)
-
-<br>
-
-[The Story](#the-story) · [The Forest](#the-forest) · [Recent Changes](#recent-changes) · [The Crew](#the-crew) · [Get Started](#get-started) · [Commands](#commands)
+[Quick Start](#quick-start) · [How It Works](#how-it-works) · [The Crew](#the-crew) · [Commands](#commands) · [The Story](#the-story)
 
 </div>
 
+<br>
+
 ---
+
+<br>
+
+## What Is This
+
+Kiln is an npm package that installs a multi-model development protocol into [Claude Code](https://claude.ai/claude-code). Instead of one model doing everything, it orchestrates **Claude Opus 4.6**, **GPT-5.2**, and **GPT-5.3-codex** — each doing what they're best at.
+
+```
+ You describe it ──→ Models brainstorm it ──→ Two models plan it ──→ They debate it
+                                                                          │
+ You review it ←── Models validate it ←── Models review it ←── Models build it
+```
+
+No runtime. No daemon. No server. You install some markdown files, and Claude Code's native agent infrastructure does the rest.
+
+<br>
+
+## Quick Start
+
+```bash
+git clone https://github.com/Fredasterehub/kiln.git
+cd kiln && git checkout v2
+npm install -g .
+```
+
+```bash
+# In your project directory:
+kilntwo install
+```
+
+```bash
+# In Claude Code:
+/kiln:start
+```
+
+> **Note** — Not published to npm yet. Clone and install manually for now.
+
+<details>
+<summary><b>Prerequisites</b></summary>
+<br>
+
+| Requirement | Install |
+|:---|:---|
+| **Node.js 18+** | [nodejs.org](https://nodejs.org) |
+| **Claude Code** | `npm i -g @anthropic-ai/claude-code` |
+| **Codex CLI** | `npm i -g @openai/codex` |
+
+Claude Code should run with `--dangerously-skip-permissions` — Kiln spawns agents, writes files, and runs tests constantly. Permission prompts break the flow.
+
+> **Caution** — Only use this in projects you trust.
+
+</details>
+
+<details>
+<summary><b>Verify installation</b></summary>
+<br>
+
+```bash
+kilntwo doctor
+```
+
+Checks Node version, Claude CLI, Codex CLI, directory permissions, and manifest integrity.
+
+</details>
+
+<br>
+
+## How It Works
+
+Kiln runs a 5-stage pipeline. Each stage uses different models for different jobs.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                                                                     │
+│   STAGE 1          STAGE 2          STAGE 3         STAGE 4         │
+│   Brainstorm       Plan             Execute         Validate        │
+│                                                                     │
+│   You + Da Vinci   Confucius ─┐     For each        Argus builds,  │
+│   61 techniques    Sun Tzu ───┤     phase:          deploys, and    │
+│   50 methods       Socrates ──┤     ┌─────────┐     tests the real  │
+│   Anti-bias        Plato ─────┘     │ Index   │     running app.    │
+│   protocols                         │ Plan    │                     │
+│                    Two models       │ Sharpen │     Failures →      │
+│   Produces:        plan. They       │ Build   │     correction      │
+│   vision.md        debate. One      │ Review  │     phases that     │
+│                    synthesizes.     │ Merge   │     re-enter        │
+│                                     │ Learn   │     Stage 3.        │
+│                    Produces:        └─────────┘     Max 3 cycles.   │
+│                    master-plan.md                                    │
+│                                     Produces:       Produces:       │
+│                                     working code    report.md       │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+<details>
+<summary><b>Stage 1 — Brainstorm</b> (interactive, you + Claude)</summary>
+<br>
+
+You describe what you want to build. **Da Vinci** facilitates a structured brainstorm session — 61 techniques across 10 categories, 50 elicitation methods, anti-bias protocols (domain pivot every 10 ideas, configurable idea floor). You pick a depth:
+
+| Depth | Idea Floor | Intensity |
+|:---|:---|:---|
+| Light | 10 ideas | Quick and focused |
+| Standard | 30 ideas | Balanced exploration |
+| Deep | 100 ideas | Comprehensive |
+
+Brownfield projects get auto-detected. **Mnemosyne** maps the existing codebase before brainstorming begins.
+
+Produces `vision.md` — 11 structured sections covering problem, users, goals, constraints, tech stack, and success criteria.
+
+</details>
+
+<details>
+<summary><b>Stage 2 — Plan</b> (automated, dual-model with debate)</summary>
+<br>
+
+Two planners work in parallel on the same vision:
+- **Confucius** (Opus 4.6) — plans from the Claude perspective
+- **Sun Tzu** (GPT-5.2) — plans independently from the GPT perspective
+
+Then **Socrates** (Opus) debates the disagreements. **Plato** (Opus) synthesizes both plans + debate resolution into one `master-plan.md` with phases, tasks, and acceptance criteria.
+
+The dual-plan approach exists because different model families catch different things. The debate forces explicit conflict resolution instead of silent averaging.
+
+Three debate modes: Skip (1), Focused (2, default), Full rounds (3).
+
+</details>
+
+<details>
+<summary><b>Stage 3 — Execute</b> (automated, phase by phase)</summary>
+<br>
+
+For each phase, **Maestro** runs a full lifecycle:
+
+| Step | Agent | What happens |
+|:---|:---|:---|
+| **Index** | Sherlock (Haiku) | Generates a fresh codebase snapshot — file tree, exports, test commands |
+| **Plan** | Confucius + Sun Tzu | Dual-plan the phase scope, debate, synthesize |
+| **Sharpen** | Scheherazade (GPT-5.2) | Explores the *current* codebase with Glob/Read/Grep, reads living docs, then generates context-rich prompts following 6 Codex Prompting Guide principles |
+| **Build** | Codex (GPT-5.3-codex) | Executes each sharpened prompt. One task, one commit. |
+| **Review** | Sphinx (Opus 4.6) | Reviews all changes. If rejected → Scheherazade re-sharpens a fix prompt → Codex fixes → Sphinx re-reviews. Up to 3 rounds. |
+| **Merge** | Maestro | Phase branch merges to main |
+| **Learn** | Sherlock (Haiku) | Reconciles living docs — appends decisions, pitfalls, and patterns discovered during the phase |
+
+The **Sharpen** step is what makes this work. Scheherazade doesn't just rephrase the plan — she explores the actual codebase to discover real file paths, function signatures, and existing patterns, then generates prompts with verbatim code context. GPT-5.2 writing prompts for GPT-5.3-codex — same family, optimized translation.
+
+The **Learn** step creates a cross-phase learning loop. Each phase's discoveries feed into the next phase's prompts.
+
+</details>
+
+<details>
+<summary><b>Stage 4 — Validate</b> (automated, with correction cycles)</summary>
+<br>
+
+**Argus** doesn't just run unit tests. He builds the project, deploys it (Docker, dev server, or CLI), and tests real user flows against the master plan's acceptance criteria.
+
+If validation fails, Argus generates correction task descriptions. The orchestrator creates correction phases that re-enter Stage 3 through the full **Scheherazade → Codex → Sphinx** cycle. This loops until validation passes or 3 correction cycles are exhausted — then it escalates to you.
+
+</details>
+
+<details>
+<summary><b>Stage 5 — Deliver</b> (interactive)</summary>
+<br>
+
+Summary back to you: phases completed, files changed, test results, known limitations. You review and approve.
+
+</details>
+
+<br>
+
+## The Crew
+
+Every agent has a name. Not for decoration — for the logs.
+
+| | Alias | Model | Role |
+|:---|:---|:---|:---|
+| | **Da Vinci** | Opus 4.6 | Brainstorm facilitator — 61 techniques, anti-bias protocols |
+| | **Mnemosyne** | Opus 4.6 | Brownfield codebase mapper — pre-seeds memory from existing code |
+| | **Confucius** | Opus 4.6 | Claude-side planner — architecture, edge cases, big picture |
+| | **Sun Tzu** | GPT-5.2 | GPT-side planner — catches what Opus misses |
+| | **Socrates** | Opus 4.6 | Debate moderator — forces the two plans to argue until they agree |
+| | **Plato** | Opus 4.6 | Plan synthesizer — merges competing plans into one truth |
+| | **Scheherazade** | GPT-5.2 | JIT prompt sharpener — explores codebase, generates context-rich prompts |
+| | **Codex** | GPT-5.3-codex | Code implementer — writes the actual code, task by task |
+| | **Sphinx** | Opus 4.6 | Code reviewer — correctness, security, completeness |
+| | **Maestro** | Opus 4.6 | Phase coordinator — orchestrates the full lifecycle per phase |
+| | **Argus** | Opus 4.6 | Validator — deploys, tests the running product, generates corrections |
+| | **Sherlock** | Haiku 4.5 | Fast researcher — codebase indexing, living docs reconciliation |
+
+<br>
+
+## Commands
+
+**In Claude Code:**
+
+| Command | What it does |
+|:---|:---|
+| `/kiln:start` | Light the kiln — brainstorm, plan, execute, validate, ship |
+| `/kiln:resume` | Pick up exactly where the last session stopped |
+| `/kiln:reset` | Save state to memory and prepare for `/clear` |
+
+**In terminal:**
+
+| Command | What it does |
+|:---|:---|
+| `kilntwo install` | Installs agents, commands, protocol, templates, and data files |
+| `kilntwo uninstall` | Manifest-driven removal — knows exactly what it installed |
+| `kilntwo update` | Lossless upgrade — preserves your agent edits via checksum diff |
+| `kilntwo doctor` | Cross-platform health check — Node, CLI tools, permissions, manifest |
+
+<br>
+
+## Memory & State
+
+The pipeline survives context resets. All state lives in files:
+
+```
+~/.claude/projects/<encoded-path>/memory/
+  MEMORY.md       ← canonical runtime state (stage, phase, status, handoff)
+  vision.md       ← project goals (written in Stage 1, never overwritten)
+  master-plan.md  ← the approved execution plan
+  decisions.md    ← append-only decision log (updated by Sherlock each phase)
+  pitfalls.md     ← append-only failure log (updated by Sherlock each phase)
+  PATTERNS.md     ← coding patterns discovered during execution
+```
+
+`/kiln:reset` saves state. `/kiln:resume` reads it and picks up where it left off — right down to which task in which phase was last completed.
+
+<br>
 
 ## The Story
 
@@ -42,198 +277,28 @@
 > And so here I am, trying to structure it a bit more efficiently to promote proper behavior and reproducibility...
 >
 > It's really weird... the *less* restriction I give him but the *better* definition I give him... the better he behaves...
->
-> *To be continued...*
->
-> > This is the lightweight rewrite of [kiln v1](https://github.com/Fredasterehub/kiln/tree/master). Same workflow, fraction of the weight. Where v1 had 35 skills and 13 agents with deep guardrails, this has 11 agents, 3 commands, and a protocol block. The models got better. The framework got smaller.
 
----
-
-## The Forest
-
-KilnTwo is an NPM package you install into a project that turns Claude Code into a multi-model development pipeline. Instead of one model doing everything, it orchestrates Claude Opus 4.6, GPT-5.2, and GPT-5.3-codex — each doing what they're best at: planning, debating, translating prompts, writing code, and reviewing.
-
-The core idea: the models are good enough now that the bottleneck isn't intelligence, it's coordination. KilnTwo provides the coordination layer.
-
-### The Tree — How It's Structured
-
-**Installation (`src/`)**
-
-When you run `kilntwo install` in a project:
-
-1. It copies **11 agent definitions** into `~/.claude/agents/` — markdown files with YAML frontmatter that Claude Code recognizes as spawnable sub-agents
-2. It copies **3 slash commands** (`/kiln:start`, `/kiln:resume`, `/kiln:reset`) into `~/.claude/commands/`
-3. It copies **5 memory templates** into `~/.claude/kilntwo/templates/`
-4. It copies **1 shared skill** into `~/.claude/kilntwo/skills/` — single source of truth for path contracts, memory schema, event schema, and conventions
-5. It copies **2 data files** (61 brainstorming techniques + 50 elicitation methods) into `~/.claude/kilntwo/data/`
-6. It injects a **protocol block** into the project's `CLAUDE.md` — behavioral rules that the orchestrator must follow
-7. It writes a **manifest** tracking every file it installed (with SHA-256 checksums) so it can cleanly uninstall, update, or health-check later
-
-Everything is manifest-driven. `update` diffs checksums to skip user-edited files. `uninstall` reads the manifest to know exactly what to remove. `doctor` verifies everything is intact.
-
-**The Pipeline (`assets/`)**
-
-When you run `/kiln:start` in Claude Code, it kicks off a 5-stage pipeline:
-
-**Stage 1 — Brainstorm** (you + Claude, interactive)
-You describe what you want to build. Da Vinci (the brainstormer) facilitates a structured session using 61 creative techniques across 10 categories, 50 elicitation methods, and anti-bias protocols. You pick a depth (light/standard/deep) that sets the idea floor. This produces `vision.md` — the project goal document with 11 structured sections.
-
-**Stage 2 — Planning** (automated, dual-model)
-Two planners work in parallel:
-- **Confucius** (Claude Opus 4.6) writes a plan from the Claude perspective
-- **Sun Tzu** (GPT-5.2 via Codex CLI) writes an independent plan
-
-Then **Socrates** (Opus) debates the disagreements between the two plans. Finally **Plato** (Opus) synthesizes both plans + the debate resolution into one `master-plan.md` broken into phases.
-
-The dual-plan approach exists because different model families catch different things. The debate step forces explicit resolution of conflicts rather than silent averaging.
-
-**Stage 3 — Execution** (automated, phase by phase)
-For each phase in the master plan, **Maestro** (the phase executor) runs a lifecycle:
-
-1. **Plan** — Confucius + Sun Tzu plan the phase (same dual pattern, smaller scope)
-2. **Prompt** — Scheherazade (GPT-5.2) converts the plan into task-level prompts optimized for GPT-5.3-codex. This is the "same-family translator" — GPT-5.2 knows how to write prompts that GPT-5.3 understands best.
-3. **Implement** — Codex (GPT-5.3-codex) executes each task prompt, writing actual code. Each task gets its own git commit.
-4. **Review** — Sphinx (Opus 4.6) reviews all changes against the phase plan. If rejected, it writes a fix prompt and the implementer tries again (up to 3 rounds).
-5. **Merge** — Phase branch merges to main.
-
-Maestro is deliberately thin — it coordinates but never writes code, plans, or reviews itself. Everything is delegated to specialists.
-
-**Stage 4 — Validation** (automated)
-Argus runs end-to-end tests and writes a validation report.
-
-**Stage 5 — Delivery** (interactive)
-Summary back to you for review.
-
-**Memory & State**
-
-The pipeline is designed to survive context resets (`/kiln:reset` + `/kiln:resume`). All state lives in files:
-
-- `MEMORY.md` — canonical runtime state (stage, phase, status)
-- `vision.md` — project goal (written once in Stage 1)
-- `master-plan.md` — the approved execution plan
-- `decisions.md` — append-only decision log
-- `pitfalls.md` — append-only failure log
-- `phase_<N>_state.md` — per-phase audit trail
-- `phase_summary.md` — phase digest written after each merge
-- `archive/` — completed phase artifacts, moved out of working dirs
-
-When you resume, the orchestrator reads these files and picks up where it left off.
-
-**The Key Insight**
-
-The whole thing is basically a coordination protocol that lives in markdown files. The agents are markdown documents. The slash commands are markdown documents. The protocol rules are a markdown block in CLAUDE.md. The pipeline state is markdown files.
-
-There's no runtime, no daemon, no server. You install some files, and Claude Code's existing agent/command infrastructure does the rest. The Node.js package is just the installer and health checker.
-
----
-
-## Recent Changes
-
-**Brainstorm Module** ([`b5391dd`](https://github.com/Fredasterehub/kiln/commit/b5391dd)) — Imported BMAD's creative brainstorming engine as the Da Vinci agent. 61 techniques across 10 categories, 50 elicitation methods, anti-bias protocols (domain pivot every 10 ideas, configurable idea floor). Updated `start.md` flow, `vision.md` template (now 11 sections), and install pipeline to copy data files. 22 new tests (106 total).
-
-**v0.2.1 Simplification** ([`c6f1acb`](https://github.com/Fredasterehub/kiln/commit/c6f1acb)) — Extracted shared schema to a single `kiln-core` skill. Compressed all agent specs by 52.6% (1,094 → 518 lines). Trimmed protocol by 51.4%. 4 bug fixes, 6 new tests.
-
-<details>
-<summary><b>Older</b></summary>
-
-- [`997e1a3`](https://github.com/Fredasterehub/kiln/commit/997e1a3) — v0.2.0: structured trajectory log, phase archive, dual-layer handoff
-- [`118e91f`](https://github.com/Fredasterehub/kiln/commit/118e91f) — v0.1.1: contract tightening, security hardening, QA fixes
-- [`ad9e4c4`](https://github.com/Fredasterehub/kiln/commit/ad9e4c4) — Hardening pass: unified memory schema, path contract, lossless update, cross-platform doctor
-- [`4e2cc00`](https://github.com/Fredasterehub/kiln/commit/4e2cc00) — Brand rename: kw → kiln across entire project
-- [`62620a3`](https://github.com/Fredasterehub/kiln/commit/62620a3) — Agent enforcement: auto-spawn execution loop, Codex CLI delegation rules
-- [`63df0ec`](https://github.com/Fredasterehub/kiln/commit/63df0ec) — README rewrite with humanized intro and agent crew
-
-</details>
-
----
-
-## The Crew
-
-Every agent has a name. Not for decoration — for the logs.
-
-| Alias | Agent | Model | Job |
-|---|---|---|---|
-| **Da Vinci** | kiln-brainstormer | Opus 4.6 | Guides structured brainstorm sessions with creative techniques |
-| **Confucius** | kiln-planner-claude | Opus 4.6 | Plans from the Claude side — architecture, edge cases, big picture |
-| **Sun Tzu** | kiln-planner-codex | GPT-5.2 | Plans from the GPT side — catches what Opus misses |
-| **Socrates** | kiln-debater | Opus 4.6 | Makes the two plans argue until they agree |
-| **Plato** | kiln-synthesizer | Opus 4.6 | Merges plans into one coherent master plan |
-| **Scheherazade** | kiln-prompter | GPT-5.2 | Turns plans into surgical per-task prompts |
-| **Codex** | kiln-implementer | GPT-5.3-codex | Writes the actual code, task by task |
-| **Sphinx** | kiln-reviewer | Opus 4.6 | Reviews everything — correctness, security, completeness |
-| **Maestro** | kiln-phase-executor | Opus 4.6 | Runs the full phase lifecycle |
-| **Argus** | kiln-validator | Opus 4.6 | E2E validation — runs your tests, writes the report |
-| **Sherlock** | kiln-researcher | Haiku | Fast lookups — docs, codebase, web |
-
----
-
-## Get Started
-
-```bash
-git clone https://github.com/Fredasterehub/kiln.git
-cd kiln && git checkout v2
-npm install -g .
-kilntwo install
-```
-
-Then in Claude Code:
-
-```
-/kiln:start
-```
-
-> [!NOTE]
-> Not published to npm yet. Clone and install manually for now.
-
-<details>
-<summary><b>Prerequisites</b></summary>
 <br>
 
-| Tool | Install | Required? |
-|------|---------|-----------|
-| [Claude Code](https://claude.ai/claude-code) | `npm i -g @anthropic-ai/claude-code` | Yes |
-| [Codex CLI](https://github.com/openai/codex) | `npm i -g @openai/codex` | Yes |
-| Node.js 18+ | [nodejs.org](https://nodejs.org) | Yes |
-
-Run with `--dangerously-skip-permissions` — Kiln spawns agents, writes files, and runs tests constantly. Permission prompts break the flow.
-
-```bash
-claude --dangerously-skip-permissions
-```
-
-> [!CAUTION]
-> Only use this in projects you trust.
-</details>
-
 <details>
-<summary><b>Verify installation</b></summary>
+<summary><b>What gets installed</b></summary>
 <br>
 
-```bash
-kilntwo doctor
-```
+When you run `kilntwo install`:
 
-Checks Node version, Claude CLI, Codex CLI, directory permissions, and manifest integrity. Works on macOS, Linux, and Windows.
+| What | Where | Count |
+|:---|:---|:---|
+| Agent definitions | `~/.claude/agents/` | 13 agents |
+| Slash commands | `~/.claude/commands/kiln/` | 3 commands |
+| Memory templates | `~/.claude/kilntwo/templates/` | 6 templates |
+| Shared skill | `~/.claude/kilntwo/skills/` | 1 skill |
+| Data files | `~/.claude/kilntwo/data/` | 2 JSON files |
+| Protocol block | `<project>/CLAUDE.md` | Injected |
+| Manifest | `~/.claude/kilntwo/manifest.json` | Tracks everything |
+
+Everything is manifest-driven with SHA-256 checksums. `update` diffs checksums to skip user-edited files. `uninstall` reads the manifest to remove exactly what it installed. `doctor` verifies integrity.
+
 </details>
-
----
-
-## Commands
-
-| Command | What it does |
-|---------|-------------|
-| `/kiln:start` | Light the kiln — brainstorm, plan, execute, ship |
-| `/kiln:resume` | Pick up where you left off after a context reset |
-| `/kiln:reset` | Save state to memory and prepare for `/clear` |
-
-| CLI | What it does |
-|-----|-------------|
-| `kilntwo install` | Drops agents, commands, and protocol into `~/.claude/` |
-| `kilntwo uninstall` | Deterministic removal — targets the correct project |
-| `kilntwo update` | Lossless upgrade — preserves your agent edits |
-| `kilntwo doctor` | Cross-platform pre-flight check |
-
----
 
 <details>
 <summary><b>Project structure</b></summary>
@@ -245,64 +310,69 @@ kilntwo/
 ├── src/
 │   ├── paths.js            Path resolution (~/.claude/*)
 │   ├── manifest.js         Install tracking with checksums
-│   ├── markers.js          Protocol block in CLAUDE.md
+│   ├── markers.js          Protocol block injection into CLAUDE.md
 │   ├── install.js          Idempotent, manifest-aware install
 │   ├── uninstall.js        Manifest-driven clean removal
 │   ├── update.js           Lossless version-aware upgrade
 │   └── doctor.js           Cross-platform health checks
 ├── assets/
-│   ├── agents/             11 agent definitions
-│   ├── commands/kiln/      3 slash commands
-│   ├── data/               Brainstorming techniques + elicitation methods
+│   ├── agents/             13 agent definitions (YAML frontmatter + markdown)
+│   ├── commands/kiln/      3 slash commands (start, resume, reset)
+│   ├── data/               61 brainstorming techniques + 50 elicitation methods
 │   ├── skills/             Shared schema skill (kiln-core)
-│   ├── templates/          Memory file templates
-│   ├── protocol.md         Behavioral rules for CLAUDE.md
-│   └── names.json          Agent alias registry
-└── test/                   106 tests, zero deps
+│   ├── templates/          6 memory file templates
+│   ├── protocol.md         14 behavioral rules for CLAUDE.md
+│   └── names.json          Agent alias registry with quotes
+└── test/                   134 tests, zero dependencies
 ```
 
-After install, your `~/.claude/` gets the agents and commands. Your project's `CLAUDE.md` gets the protocol block. That's all Kiln touches.
 </details>
 
 <details>
 <summary><b>v1 vs v2</b></summary>
 <br>
 
-| | v1 (kiln) | v2 (kilntwo) |
-|---|---|---|
-| Agents | 13 | 11 |
-| Skills | 26 | 1 (shared skill) |
+| | v1 | v2 |
+|:---|:---|:---|
+| Agents | 13 | 13 |
+| Skills | 26 | 1 (shared) |
 | Commands | 8 | 3 |
 | Hooks | 3 scripts | 0 |
 | State tracking | STATE.md + state.json | Memory files |
 | Install | Custom installer | npm package + CLI |
 | Dependencies | Zero | Zero |
-| Lines of config | ~4,000 | ~1,200 |
+| Lines of config | ~4,000 | ~1,400 |
 
 Same pipeline. Same multi-model debate. Same QA gates. A third of the surface area.
+
 </details>
 
 <details>
 <summary><b>Troubleshooting</b></summary>
 <br>
 
-**`codex: command not found`** — `npm install -g @openai/codex`, then verify with `codex --version`.
+**`codex: command not found`** — `npm install -g @openai/codex`, then `codex --version`.
 
-**Commands don't show in Claude Code** — Run `kilntwo install` and restart Claude Code. Still nothing? `kilntwo doctor`.
+**Commands don't appear in Claude Code** — Run `kilntwo install` and restart Claude Code. Still nothing? `kilntwo doctor`.
 
-**`model_reasoning_effort` flag rejected** — Older Codex CLI. Upgrade: `npm install -g @openai/codex`.
+**Pipeline halts with "escalate to operator"** — A phase failed 3 QA rounds or 3 correction cycles. Check `.kiln/reviews/` or `.kiln/validation/report.md`, fix manually, then `/kiln:resume`.
 
-**Pipeline halts with "escalate to operator"** — A phase failed 3 QA rounds. Check `.kiln/reviews/fix_round_3.md`, fix manually, then `/kiln:resume`.
+**`uninstall` didn't remove protocol** — Prior to v0.1.1, uninstall targeted the wrong project. Upgrade and re-run.
 
-**`uninstall` didn't remove protocol** — Prior to v0.1.1, uninstall targeted `process.cwd()` instead of the installed project. Upgrade and re-run `kilntwo uninstall`.
 </details>
+
+<br>
 
 ---
 
 <div align="center">
 
-<sub>MIT License · Zero dependencies · Built with Claude Code + Codex CLI</sub>
+<sub>MIT License · Zero dependencies · Node.js 18+ · Built with Claude Code + Codex CLI</sub>
 
-<sub>*Less framework. More trust. The models are ready.*</sub>
+<br>
+
+*"Perfection is achieved, not when there is nothing more to add,*
+*but when there is nothing left to take away."*
+— Antoine de Saint-Exupery
 
 </div>
