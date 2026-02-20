@@ -215,7 +215,7 @@ Six features that restore v1's dynamic execution patterns on top of v2's clean c
 
 ## 🔥 How It Works
 
-Five stages. Sequential. I've tested every permutation. Yours were all worse. Don't take it personally &mdash; it took me a few millennia too.
+Five stages. Sequential. I tried fewer. It didn't end well. Don't take it personally &mdash; it took me a few millennia too.
 
 <p align="center">
   <img src="docs/kiln-pipeline.png" alt="Kiln Pipeline — Brainstorm → Plan → Execute → Validate → Deliver" width="780">
