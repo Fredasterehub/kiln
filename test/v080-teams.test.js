@@ -252,6 +252,40 @@ describe('v0.8.0 — native teams', () => {
     );
   });
 
+  it('kiln-implementer has delegation mandate and anti-pattern rules', () => {
+    const implementer = readAsset('agents/kiln-implementer.md');
+
+    assert.ok(
+      implementer.includes('Delegation mandate'),
+      'kiln-implementer must have Delegation mandate rule'
+    );
+    assert.ok(
+      implementer.includes('STOP'),
+      'kiln-implementer must have STOP anti-pattern rule'
+    );
+    assert.ok(
+      implementer.includes('Self-check'),
+      'kiln-implementer must have Self-check rule'
+    );
+    assert.ok(
+      implementer.includes('No code fixups'),
+      'kiln-implementer must have No code fixups rule'
+    );
+  });
+
+  it('kiln-implementer uses pipe pattern for Codex CLI', () => {
+    const implementer = readAsset('agents/kiln-implementer.md');
+
+    assert.ok(
+      implementer.includes('cat <PROMPT_PATH> | codex exec'),
+      'kiln-implementer must use cat | codex exec pipe pattern'
+    );
+    assert.ok(
+      implementer.includes('gpt-5.3-codex'),
+      'kiln-implementer must target gpt-5.3-codex model'
+    );
+  });
+
   it('kiln-phase-executor has explicit name parameters for all agents', () => {
     const executor = readAsset('agents/kiln-phase-executor.md');
 
