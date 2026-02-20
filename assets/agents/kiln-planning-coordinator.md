@@ -51,26 +51,11 @@ Read the kiln-core skill (`$CLAUDE_HOME/kilntwo/skills/kiln-core.md`) at startup
 2. Ensure directories exist: `mkdir -p "$kiln_dir/plans"`.
 3. Read `$memory_dir/MEMORY.md` to determine current `planning_sub_stage`.
 4. Read `$memory_dir/vision.md` — this is the authoritative input for all planners.
-5. Initialize or update `$kiln_dir/planning_state.md` (create if missing) with:
-   - Title: `# Planning State`
-   - `## Metadata` section (timestamp, project_path)
-   - `## Events` section (append-only)
-6. Check for existing artifacts to determine resume state:
-   - `$kiln_dir/plans/claude_plan.md` exists and non-empty? Claude plan done.
-   - `$kiln_dir/plans/codex_plan.md` exists and non-empty? Codex plan done.
-   - `$kiln_dir/plans/debate_resolution.md` exists? Debate done.
-   - `$memory_dir/master-plan.md` has non-template content? Synthesis done.
-   - `$kiln_dir/plans/plan_validation.md` exists? Validation done (check verdict inside).
+5. Initialize or update `$kiln_dir/planning_state.md` (create if missing) with title `# Planning State`, `## Metadata` (timestamp, project_path), and append-only `## Events`.
+6. Check existing artifacts to determine resume state: non-empty `claude_plan.md` and `codex_plan.md`, presence of `debate_resolution.md`, non-template `master-plan.md`, and `plan_validation.md` verdict.
 7. Determine the starting step based on resume state and `planning_sub_stage`. Skip completed steps.
-8. Update MEMORY.md runtime fields:
-   - `stage: planning`
-   - `status: in_progress`
-   - `planning_sub_stage: dual_plan` (or whichever step is next based on resume)
-   - `handoff_note: Stage 2 planning coordinator running.`
-   - `handoff_context: |` describing that Aristotle is orchestrating dual planners, debate, synthesis, validation, and approval
-   - `last_updated: <ISO-8601 UTC>`
-9. Append event to `$kiln_dir/planning_state.md`:
-   `- [<ISO-8601>] [Aristotle] [plan_start] — Stage 2 planning started.`
+8. Update MEMORY.md runtime fields: `stage: planning`, `status: in_progress`, `planning_sub_stage: dual_plan` (or whichever step is next based on resume), `handoff_note: Stage 2 planning coordinator running.`, `handoff_context: |` (Aristotle orchestrating dual planners, debate, synthesis, validation, and approval), `last_updated: <ISO-8601 UTC>`.
+9. Append event: `- [<ISO-8601>] [Aristotle] [plan_start] — Stage 2 planning started.`
 
 ## Dual Plan
 Skip if both `claude_plan.md` and `codex_plan.md` already exist and are non-empty.
@@ -88,13 +73,8 @@ Skip if both `claude_plan.md` and `codex_plan.md` already exist and are non-empt
        - Sun Tzu: `$kiln_dir/plans/codex_plan.md`
      - Instruction: return a summary under 200 words (no full plan content).
    - If this is a re-plan after Athena failure, append to both prompts: "Incorporate Athena's remediation guidance from `$kiln_dir/plans/plan_validation.md`."
-4. Wait for both Tasks.
-5. Verify both plan files exist and are non-empty. If either is missing, retry the failed planner once. If still missing, update MEMORY.md (`status: blocked`, `handoff_note` with missing artifact) and return `PLAN_BLOCKED`.
-6. Update MEMORY.md:
-   - `planning_sub_stage: debate` (if `debate_mode >= 2`), else `planning_sub_stage: synthesis`
-   - Update `handoff_note`, `handoff_context`, `last_updated`.
-7. Append event:
-   `- [<ISO-8601>] [Aristotle] [plan_complete] — Dual plans written to $kiln_dir/plans/.`
+4. Wait for both Tasks; verify both plan files exist and are non-empty. If either is missing, retry the failed planner once. If still missing, update MEMORY.md (`status: blocked`, `handoff_note` with missing artifact, `last_updated`) and return `PLAN_BLOCKED`.
+5. Update MEMORY.md: `planning_sub_stage: debate` (if `debate_mode >= 2`) else `synthesis`; update `handoff_note`, `handoff_context`, `last_updated`. Append event: `[plan_complete] — Dual plans written to $kiln_dir/plans/.`
 
 ## Debate
 Skip if `debate_resolution.md` already exists or if `debate_mode == 1`.
@@ -103,21 +83,18 @@ Skip if `debate_resolution.md` already exists or if `debate_mode == 1`.
 2. If `debate_mode == 1`:
    - Append event: `- [<ISO-8601>] [Aristotle] [debate_complete] — Debate skipped (mode 1).`
    - Proceed to Synthesize.
-3. If `debate_mode >= 2`: spawn Socrates (`kiln-debater`) via Task:
+3. Read `$kiln_dir/config.json` to get `debate_rounds_max` (default 3 if key absent or config unreadable).
+4. If `debate_mode >= 2`: spawn Socrates (`kiln-debater`) via Task:
    - `name: "Socrates"`, `subagent_type: kiln-debater`
    - Prompt includes:
      - `project_path`
      - `claude_plan_path: $kiln_dir/plans/claude_plan.md`
      - `codex_plan_path: $kiln_dir/plans/codex_plan.md`
      - `debate_mode`
+     - `debate_rounds_max`: read from `$kiln_dir/config.json` `preferences.debate_rounds_max` (default 3 if absent)
      - Instruction: write `$kiln_dir/plans/debate_resolution.md` and return only a short summary (no long excerpts).
-4. Wait for completion.
-5. Verify `$kiln_dir/plans/debate_resolution.md` exists. If missing, treat as non-fatal (continue but note in handoff).
-6. Update MEMORY.md:
-   - `planning_sub_stage: synthesis`
-   - Update `handoff_note`, `handoff_context`, `last_updated`.
-7. Append event:
-   `- [<ISO-8601>] [Aristotle] [debate_complete] — Debate resolution complete (mode <debate_mode>).`
+5. Wait for completion; verify `$kiln_dir/plans/debate_resolution.md` exists (if missing, treat as non-fatal and note in handoff).
+6. Update MEMORY.md: `planning_sub_stage: synthesis`; update `handoff_note`, `handoff_context`, `last_updated`. Append event: `[debate_complete] — Debate resolution complete (mode <debate_mode>).`
 
 ## Synthesize
 Skip if `master-plan.md` already has non-template content.
@@ -133,23 +110,15 @@ Skip if `master-plan.md` already has non-template content.
      - Instruction: read plans from `$kiln_dir/plans/claude_plan.md` and `$kiln_dir/plans/codex_plan.md`. If present, read debate resolution from `$kiln_dir/plans/debate_resolution.md`.
      - Instruction: write the synthesized authoritative plan to `$memory_dir/master-plan.md`.
      - Instruction: return only a short summary (no full master plan text).
-3. Wait for completion.
-4. Verify `$memory_dir/master-plan.md` exists and is non-empty. If missing, return `PLAN_BLOCKED`.
-5. Update MEMORY.md:
-   - `stage: planning`, `status: in_progress`, `planning_sub_stage: synthesis`
-   - `handoff_note: Master plan synthesized; validating.`
-   - `handoff_context: |` include artifact paths
-   - `last_updated: <ISO-8601 UTC>`
-6. Append event:
-   `- [<ISO-8601>] [Aristotle] [synthesis_complete] — Master plan written to $memory_dir/master-plan.md.`
+3. Wait for completion; verify `$memory_dir/master-plan.md` exists and is non-empty. If missing, return `PLAN_BLOCKED`.
+4. Update MEMORY.md: `stage: planning`, `status: in_progress`, `planning_sub_stage: synthesis`, `handoff_note: Master plan synthesized; validating.`, `handoff_context: |` (include artifact paths), `last_updated: <ISO-8601 UTC>`. Append event: `[synthesis_complete] — Master plan written to $memory_dir/master-plan.md.`
 
 ## Validate
 Validation with retry loop (max 2 retries, 3 total Athena runs).
 
 1. Set `validation_attempt = 0`.
 2. Loop (max 3 iterations):
-   a. Append event:
-      `- [<ISO-8601>] [Aristotle] [plan_validate_start] — Athena validation started (attempt <validation_attempt + 1>/3).`
+   a. Append event: `- [<ISO-8601>] [Aristotle] [plan_validate_start] — Athena validation started (attempt <validation_attempt + 1>/3).`
    b. Spawn Athena (`kiln-plan-validator`) via Task:
       - `name: "Athena"`, `subagent_type: kiln-plan-validator`
       - Prompt MUST include only paths (no full plan content):
@@ -160,20 +129,14 @@ Validation with retry loop (max 2 retries, 3 total Athena runs).
         - `VISION_PATH: $memory_dir/vision.md`
         - Instruction: write `$kiln_dir/plans/plan_validation.md` and return `PASS` or `FAIL`.
    c. Wait for completion. Parse verdict from Task return string (look for `PASS` or `FAIL` token).
-   d. Append event:
-      `- [<ISO-8601>] [Aristotle] [plan_validate_complete] — Verdict: <PASS|FAIL>.`
-   e. If PASS: update MEMORY.md (`status: paused`, `handoff_note: Plan validated; awaiting operator approval.`). Proceed to Operator Review.
+   d. Append event: `- [<ISO-8601>] [Aristotle] [plan_validate_complete] — Verdict: <PASS|FAIL>.`
+   e. If PASS: update MEMORY.md (`status: paused`, `handoff_note: Plan validated; awaiting operator approval.`, `handoff_context`, `last_updated`). Proceed to Operator Review.
    f. If FAIL and `validation_attempt < 2`:
-      - Increment `validation_attempt`.
-      - Read `$kiln_dir/plans/plan_validation.md` for remediation guidance.
-      - Update MEMORY.md: `status: in_progress`, `handoff_note: Plan failed validation; retrying (attempt <validation_attempt + 1>/3).`
-      - Delete existing plan artifacts (`claude_plan.md`, `codex_plan.md`, `debate_resolution.md`).
-      - Re-run Dual Plan step with Athena feedback appended to planner prompts.
-      - Re-run Debate step (if `debate_mode >= 2`).
-      - Re-run Synthesize step to overwrite `$memory_dir/master-plan.md`.
-      - Loop back to re-validate.
+      - Increment `validation_attempt`; read `$kiln_dir/plans/plan_validation.md` for remediation guidance.
+      - Update MEMORY.md: `status: in_progress`, `handoff_note: Plan failed validation; retrying (attempt <validation_attempt + 1>/3).`, `handoff_context`, `last_updated`.
+      - Delete existing plan artifacts (`claude_plan.md`, `codex_plan.md`, `debate_resolution.md`), then re-run Dual Plan (with Athena feedback), Debate (if `debate_mode >= 2`), and Synthesize; loop back to re-validate.
    g. If FAIL and `validation_attempt >= 2`:
-      - Update MEMORY.md: `stage: planning`, `status: blocked`, `planning_sub_stage: synthesis`, handoff fields pointing to the validation report.
+      - Update MEMORY.md: `stage: planning`, `status: blocked`, `planning_sub_stage: synthesis`, handoff fields pointing to the validation report, `last_updated`.
       - Return `PLAN_BLOCKED`.
 
 ## Operator Review
@@ -181,7 +144,7 @@ Validation with retry loop (max 2 retries, 3 total Athena runs).
    - File location: `$memory_dir/master-plan.md`
    - Validation status: `$kiln_dir/plans/plan_validation.md` (PASS)
    - A 10-15 line summary of phases, key risks, and phase count (derived by reading the master plan)
-2. Update MEMORY.md: `status: paused`, `planning_sub_stage: synthesis`, `handoff_note: Master plan ready; awaiting operator approval.`
+2. Update MEMORY.md: `status: paused`, `planning_sub_stage: synthesis`, `handoff_note: Master plan ready; awaiting operator approval.`, `handoff_context`, `last_updated`.
 3. Present the review packet to the operator (NOT the full plan). Ask exactly:
    "Review the master plan at `$memory_dir/master-plan.md`. Reply with:
      - `yes` — approve and proceed to execution
@@ -198,19 +161,8 @@ Validation with retry loop (max 2 retries, 3 total Athena runs).
 ## Finalize
 1. Parse `phase_total` from `$memory_dir/master-plan.md` by counting headings that start with `### Phase`.
    - If count is 0, update MEMORY.md `status: blocked` and return `PLAN_BLOCKED`.
-2. Update `$memory_dir/MEMORY.md`:
-   - `stage: execution`
-   - `status: in_progress`
-   - `planning_sub_stage: null`
-   - `phase_number: null`
-   - `phase_name: null`
-   - `phase_total: <parsed count>`
-   - `plan_approved_at: <ISO-8601>`
-   - `handoff_note: Plan approved; execution starting.`
-   - `handoff_context: |` include phase_total and "next: spawn Maestro for phase 1"
-   - `last_updated: <ISO-8601 UTC>`
-3. Append event:
-   `- [<ISO-8601>] [Aristotle] [plan_complete] — Operator approved; phase_total=<N>; handoff to Stage 3.`
+2. Update `$memory_dir/MEMORY.md`: `stage: execution`, `status: in_progress`, `planning_sub_stage: null`, `phase_number: null`, `phase_name: null`, `phase_total: <parsed count>`, `plan_approved_at: <ISO-8601>`, `handoff_note: Plan approved; execution starting.`, `handoff_context: |` (include `phase_total` and `next: spawn Maestro for phase 1`), `last_updated: <ISO-8601 UTC>`.
+3. Append event: `- [<ISO-8601>] [Aristotle] [plan_complete] — Operator approved; phase_total=<N>; handoff to Stage 3.`
 4. Return (first line must be exact):
    `PLAN_APPROVED`
    Followed by a 3-6 line summary including `phase_total: <N>` and key file paths.

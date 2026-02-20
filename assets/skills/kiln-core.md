@@ -42,6 +42,7 @@ All git operations MUST use `git -C $PROJECT_PATH`. Never use root-relative path
   "model_mode": "multi-model",
   "preferences": {
     "debate_mode": 2,
+    "debate_rounds_max": 3,
     "review_rounds_max": 3,
     "correction_cycles_max": 3,
     "codex_timeout": 600,
@@ -61,6 +62,7 @@ All git operations MUST use `git -C $PROJECT_PATH`. Never use root-relative path
 Field notes:
 - `model_mode`: execution model selection (`multi-model` by default).
 - `preferences.debate_mode`: default planning debate mode (`2` focused).
+- `preferences.debate_rounds_max`: max critique/revise rounds for Mode 3 debate (`3`).
 - `preferences.review_rounds_max`: max QA rounds per phase (`3`).
 - `preferences.correction_cycles_max`: max validation correction cycles (`3`).
 - `preferences.codex_timeout`: minimum Codex timeout in seconds (`600`).
@@ -90,6 +92,9 @@ Note: `plan_validate_start`, `plan_validate_complete` are logged during Stage 2 
 - Fix prompts: `fix_round_<R>.md`
 - Phase state (working): `phase_<N>_state.md` (unpadded)
 - Phase archive: `archive/phase_<NN>/` (zero-padded to 2 digits)
+- Debate critiques: `plans/critique_of_<codex|claude>_r<N>.md` (round N)
+- Debate revisions: `plans/plan_<claude|codex>_v<N>.md` (version N, N >= 2)
+- Debate audit log: `plans/debate_log.md`
 - Phase summary: `archive/phase_<NN>/phase_summary.md`
 - Codebase index: `codebase-snapshot.md` (refreshed per phase)
 
@@ -134,6 +139,11 @@ $KILN_DIR/
     claude_plan.md         — Claude planner output
     codex_plan.md          — Codex planner output
     debate_resolution.md   — Debater agent output
+    debate_log.md          — Mode 3 debate audit trail (rounds, convergence, outcome)
+    critique_of_codex_r<N>.md  — Claude's critique of Codex plan, round N
+    critique_of_claude_r<N>.md — Codex's critique of Claude plan, round N
+    plan_claude_v<N>.md        — Claude revised plan, version N
+    plan_codex_v<N>.md         — Codex revised plan, version N
     phase_plan.md          — Phase-scoped synthesized plan
   prompts/
     task_01.md             — Per-task Codex prompt (one file per task)
@@ -159,6 +169,9 @@ $KILN_DIR/
   validation/
     report.md              — End-to-end validation results
     missing_credentials.md — Environment variables or secrets that were absent
+  tmp/
+    brainstorm_context.md  — Context file for tmux pane Da Vinci launch
+    davinci_complete       — Presence flag: Da Vinci finished (tmux pane mode)
 ```
 
 ## Development Guidelines

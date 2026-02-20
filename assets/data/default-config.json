@@ -2,6 +2,7 @@
   "model_mode": "multi-model",
   "preferences": {
     "debate_mode": 2,
+    "debate_rounds_max": 3,
     "review_rounds_max": 3,
     "correction_cycles_max": 3,
     "codex_timeout": 600,

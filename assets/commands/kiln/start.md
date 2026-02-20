@@ -9,6 +9,29 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
 ## Stage 1: Initialization & Brainstorm
 
+0. (Optional) Set up tmux layout.
+   Skip this step entirely if the operator is not interested in a split-pane UI.
+   Check `$TMUX` environment variable:
+
+   **If NOT in a tmux session:**
+   Ask the operator (plain text): "Would you like to launch a tmux session for a split-pane UI? (y/N)"
+   - If operator declines or doesn't respond: set `TMUX_LAYOUT=false` and continue.
+   - If operator agrees: run `tmux new-session -d -s kiln && tmux attach-session -t kiln`. The session will replace the current terminal. Once inside, re-run `/kiln:start`. Set `TMUX_LAYOUT=false` for this invocation (the new session will set it up on re-run).
+
+   **If already in a tmux session:**
+   Store the current pane as `$KILN_PANE` using: `tmux display-message -p '#{pane_id}'`
+   Create right pane: `tmux split-window -h -p 70`
+   Store new pane as `$AGENT_PANE` using: `tmux display-message -p '#{pane_id}'`
+   Return focus to left pane: `tmux select-pane -t $KILN_PANE`
+   Set pane titles:
+   - `tmux select-pane -t $KILN_PANE -T "Kiln"`
+   - `tmux select-pane -t $AGENT_PANE -T "Ready"`
+   Set border style:
+   - `tmux set-option pane-border-style "fg=colour238"`
+   - `tmux set-option pane-active-border-style "fg=colour75"`
+   Set `TMUX_LAYOUT=true`.
+   Print: `"Split-pane layout active. Kiln runs in the left pane; agents will appear on the right."`
+
 1. Detect project path and initialize git.
    Before doing anything else in this step:
    Read `$CLAUDE_HOME/kilntwo/data/lore.json`.
@@ -31,6 +54,7 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
    `outputs/`
    `archive/`
    `validation/`
+   `tmp/`
    `config.json`
    `*_state.md`
    `codebase-snapshot.md`
@@ -113,6 +137,37 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
    Read the current contents of `MEMORY_DIR/vision.md` into `EXISTING_VISION`.
    If `PROJECT_MODE = brownfield` and `$KILN_DIR/codebase-snapshot.md` exists, read its contents into `CODEBASE_SNAPSHOT`.
    Otherwise set `CODEBASE_SNAPSHOT` to an empty string.
+   **If `TMUX_LAYOUT=true`:**
+   Write startup context to `$KILN_DIR/tmp/brainstorm_context.md` (create `$KILN_DIR/tmp/` if needed):
+   ```markdown
+   # Brainstorm Context
+   project_path: <PROJECT_PATH>
+   memory_dir: <MEMORY_DIR>
+   kiln_dir: <KILN_DIR>
+   brainstorm_depth: <BRAINSTORM_DEPTH>
+
+   ## existing_vision
+   <full contents of EXISTING_VISION>
+
+   ## codebase_snapshot
+   <full contents of CODEBASE_SNAPSHOT, or "(none)" if empty>
+   ```
+   Update right pane title: `tmux select-pane -t $AGENT_PANE -T "Da Vinci — Brainstorming"`
+   Launch Da Vinci in right pane:
+   ```bash
+   tmux send-keys -t $AGENT_PANE \
+     "claude --agent kiln-brainstormer --context $KILN_DIR/tmp/brainstorm_context.md" Enter
+   ```
+   Poll for completion:
+   ```bash
+   while [ ! -f "$KILN_DIR/davinci_complete" ]; do
+     sleep 2
+   done
+   rm "$KILN_DIR/davinci_complete"
+   ```
+   After completion, clear right pane title: `tmux select-pane -t $AGENT_PANE -T "Ready"`
+
+   **If `TMUX_LAYOUT=false` (fallback):**
    Spawn `kiln-brainstormer` via the Task tool:
    `name`: `"Da Vinci"` (the alias)
    `subagent_type`: `kiln-brainstormer`
@@ -174,6 +229,10 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
    `handoff_note` = `Stage 2 planning started; spawning Aristotle.`
    `handoff_context` = `Kiln is delegating Stage 2 planning (dual planners, debate, synthesis, Athena validation, operator approval loop) to the planning coordinator.`
    `last_updated` = current ISO-8601 UTC timestamp.
+   If `TMUX_LAYOUT=true`:
+   - Update right pane title: `tmux select-pane -t $AGENT_PANE -T "Aristotle — Planning"`
+   - Tail the coordinator's state file in right pane:
+     - `tmux send-keys -t $AGENT_PANE "tail -f $KILN_DIR/planning_state.md" Enter`
    Spawn `kiln-planning-coordinator` via the Task tool:
    `name`: `"Aristotle"` (the alias)
    `subagent_type`: `kiln-planning-coordinator`
@@ -188,6 +247,9 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
 9. Wait for the coordinator signal.
    Wait for Aristotle to complete.
+   If `TMUX_LAYOUT=true`:
+   - Kill the tail: `tmux send-keys -t $AGENT_PANE "q" Enter`
+   - Reset pane title: `tmux select-pane -t $AGENT_PANE -T "Ready"`
    Parse the coordinator return signal from the first non-empty line:
    - `PLAN_APPROVED`
    - `PLAN_BLOCKED`
@@ -235,6 +297,10 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
     `handoff_context` = `Phase <N>/<phase_total> (<phase name>) starting. Previous phases: <summary of completed/failed phases from Phase Statuses>. Maestro is about to be spawned to execute this phase.`
     In `## Phase Statuses`, upsert this entry for phase `N` with `phase_status = in_progress`.
     Update `last_updated`.
+    If `TMUX_LAYOUT=true`:
+    - Update right pane title: `tmux select-pane -t $AGENT_PANE -T "Maestro — Phase N"`
+    - Tail the coordinator's state file in right pane:
+      - `tmux send-keys -t $AGENT_PANE "tail -f $KILN_DIR/phase_<N>_state.md" Enter`
     Spawn `kiln-phase-executor` via the Task tool.
     `name`: `"Maestro"` (the alias)
     `subagent_type`: `kiln-phase-executor`
@@ -248,6 +314,9 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
     Include this instruction text:
     "Implement this phase completely. Write working code, create real files, run tests. When done, write a phase summary to `$MEMORY_DIR/phase-<N>-results.md` with sections: Completed Tasks, Files Created or Modified, Tests Run and Results, Blockers or Issues. Do not proceed to the next phase — stop after this phase is complete."
     Wait for completion before spawning the next phase executor.
+    If `TMUX_LAYOUT=true`:
+    - Kill the tail: `tmux send-keys -t $AGENT_PANE "q" Enter`
+    - Reset pane title: `tmux select-pane -t $AGENT_PANE -T "Ready"`
     After each phase:
     Read `MEMORY_DIR/phase-<N>-results.md`.
     Extract a one-sentence summary from the results.
@@ -282,6 +351,10 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
     Enter the validation-correction loop (max 3 cycles):
 
     14a. Spawn `kiln-validator` via the Task tool.
+    If `TMUX_LAYOUT=true`:
+    - Update right pane title: `tmux select-pane -t $AGENT_PANE -T "Argus — Validation"`
+    - Tail the coordinator's state file in right pane:
+      - `tmux send-keys -t $AGENT_PANE "tail -f $KILN_DIR/validation/report.md 2>/dev/null || echo 'Waiting for report...'" Enter`
     `name`: `"Argus"` (the alias)
     `subagent_type`: `kiln-validator`
     `description`: (next quote from names.json quotes array for kiln-validator)
@@ -293,6 +366,9 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
     Include this instruction:
     "Build, deploy, and validate the project end-to-end. Test the actual running product against the master plan's acceptance criteria. For each failure, generate a correction task description with: what failed, evidence, affected files, suggested fix, and verification command. Write the validation report to `$KILN_DIR/validation/report.md`."
     Wait for completion.
+    If `TMUX_LAYOUT=true`:
+    - Kill the tail: `tmux send-keys -t $AGENT_PANE "q" Enter`
+    - Reset pane title: `tmux select-pane -t $AGENT_PANE -T "Ready"`
     Confirm `$KILN_DIR/validation/report.md` exists and is readable.
 
     14b. Check the validation verdict.

@@ -35,5 +35,16 @@ tools: Read, Write, Grep, Glob
    - Identify steps with no mutual dependencies and annotate them with `parallel_group: <group_id>` (e.g., `parallel_group: A`). Steps in the same group can be executed concurrently. Steps without a group annotation are sequential.
 3. Write output: `"phase"` → `$KILN_DIR/plans/phase_plan.md`. `"master"` → `master-plan.md` at project root.
    Format: `## Step N: [title]` with `### Goal`, `### Files`, `### Implementation`, `### Tests`, `### Verification`, and optional `### Parallel Group`.
+3.5. If `$KILN_DIR/plans/debate_log.md` exists (Mode 3 debate occurred), add a `## Synthesis Notes` section to the written plan, immediately after the plan header and before the first phase:
+   ```markdown
+   ## Synthesis Notes
+
+   ### Debate Resolution
+   - Adopted from debate: <list critique points that were incorporated — be specific>
+   - Overruled: <list points rejected, with brief rationale for each>
+   - Convergence: <converged early (reason) | exhausted N rounds>
+   - Unresolved disagreements: <none | list with tiebreak rationale>
+   ```
+   Read `$KILN_DIR/plans/debate_log.md` to determine convergence status and rounds completed. Read final critique artifacts (highest round number) to identify adopted and overruled points.
 4. Return summary: step count, plan type, estimated scope, number of parallel groups identified.
 </workflow>

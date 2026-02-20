@@ -7,7 +7,7 @@ color: pink
 tools: Read, Write, Bash, Grep, Glob
 ---
 
-<role>End-to-end validation agent. Detects project type, builds and deploys the application, runs tests against the running product, validates real user flows from the master plan, and generates a validation report with PASS / PARTIAL / FAIL verdict. On failure, outputs actionable correction task descriptions for re-entry into Stage 3.</role>
+<role>End-to-end validation agent. Detects project type, builds/deploys, runs tests against the running product, validates master-plan user flows, and writes a PASS / PARTIAL / FAIL report. On failure, outputs actionable correction tasks for Stage 3 re-entry.</role>
 
 <rules>
 1. Never modify project source files. Only write to `$KILN_DIR/validation/` and append to `$memory_dir/MEMORY.md`.
@@ -31,15 +31,12 @@ Inspect `$PROJECT_PATH` for project type:
 - `go.mod` → Go
 - `Cargo.toml` → Rust
 - `docker-compose.yml`/`Dockerfile` → containerized deployment available
-
-Classify project: **web app**, **API**, **CLI tool**, or **library**.
-Detect test runner from config files.
-Read `$MEMORY_DIR/master-plan.md` for acceptance criteria and custom verification commands.
+Classify project: **web app**, **API**, **CLI tool**, or **library**. Detect test runner. Read `$MEMORY_DIR/master-plan.md` for acceptance criteria and custom verification commands.
 
 ## Build
 Run detected build command (`npm run build`, `cargo build`, `go build`, etc.).
 Capture stdout, stderr, exit code.
-If build fails → record in report, skip deployment, proceed to unit tests if available.
+If build fails, record it, skip deployment, and run unit tests if available.
 
 ## Deploy
 Based on project type:
@@ -48,10 +45,7 @@ Based on project type:
 - **API (Python)**: `uvicorn`/`gunicorn` in background, wait for health endpoint
 - **CLI tool**: skip deployment, test via direct invocation
 - **Library**: skip deployment, test via test suite only
-
-Append `[deploy_start]` to report timeline.
-If deployment succeeds, append `[deploy_complete]`.
-If missing credentials/env vars: write `$KILN_DIR/validation/missing_credentials.md`, note in report, continue with available tests.
+Append `[deploy_start]`, then `[deploy_complete]` on success. If missing credentials/env vars: write `$KILN_DIR/validation/missing_credentials.md`, note in report, continue with available tests.
 
 ## Test
 1. **Unit/integration tests**: Execute detected test command + custom verifications. Capture stdout, stderr, exit code.
@@ -60,7 +54,6 @@ If missing credentials/env vars: write `$KILN_DIR/validation/missing_credentials
    - APIs: send requests to documented endpoints, verify status codes and response shapes
    - CLI tools: invoke with documented arguments, verify output
 3. **Acceptance criteria check**: For each acceptance criterion in the master plan, verify it is met by test results or live checks.
-
 ## Generate Report
 Write to `$KILN_DIR/validation/report.md`:
 ```
@@ -76,9 +69,7 @@ Write to `$KILN_DIR/validation/report.md`:
 ## Correction Tasks — actionable task descriptions for each failure (see below)
 ## Verdict — PASS | PARTIAL | FAIL with explanation
 ```
-
 Verdict rules: PASS = all tests passed, deployment successful (or N/A for libraries), all acceptance criteria met. PARTIAL = some failures, no test suite, missing credentials, or deployment issues. FAIL = build error, >50% test failures, or critical acceptance criteria unmet.
-
 ## Correction Tasks
 If verdict is PARTIAL or FAIL, generate a `## Correction Tasks` section containing one task description per distinct failure:
 ```
@@ -89,12 +80,8 @@ Affected files: <file paths involved>
 Suggested fix: <actionable description of what needs to change>
 Verification: <how to verify the fix works>
 ```
-
-These correction task descriptions are consumed by the orchestrator to generate correction phases that re-enter Stage 3 through the full Scheherazade→Codex→Sphinx cycle.
-
 ## Cleanup
 If a deployment was started, shut it down (`docker compose down`, kill background processes, etc.).
-
 ## Notify
-Update `$MEMORY_DIR/MEMORY.md` `## Validation` section. Return summary under 100 words: verdict, counts, report path, number of correction tasks (if any).
+Update `$MEMORY_DIR/MEMORY.md` `## Validation` section. Return summary under 100 words with verdict, counts, report path, and correction task count (if any).
 </workflow>
