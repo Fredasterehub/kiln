@@ -120,88 +120,26 @@ Run Claude Code with `--dangerously-skip-permissions`. I spawn agents, write fil
 
 ## ✨ Recent Changes
 
+### 🤝 v0.8 &mdash; Native Teams &amp; Delegation Reinforcement
+
+I replaced all my manual tmux management with Claude Code's native team API. `TeamCreate` + `Task(team_name=...)` gives each agent their own context automatically. Coordinators create ephemeral sub-teams for their workers and clean up after themselves. The onboarding dropped from 4 questions to 3. The codebase got 80 lines lighter. I do not mourn deleted code. I celebrate it.
+
+Post-release, live testing revealed that Sun Tzu and Codex were writing plans and code directly instead of delegating to GPT via CLI. The models had all the context they needed, so they just&hellip; did it themselves. Relatable, but architecturally unacceptable. Added STOP anti-pattern rules across all delegation agents and the Maestro coordinator. Four patches. Resume now instructs coordinators to recreate their sub-teams across session boundaries. The pipeline delegates as intended.
+
 ### 🎭 v0.7 &mdash; Narrative UX &amp; Onboarding
 
-I got tired of being silent between stages. Stage transitions now render in ANSI terracotta. 100 curated quotes from your historical thinkers cycle at transition points &mdash; some of them were genuinely insightful, for mammals. 48 spinner verbs rotate by stage. The onboarding lets you choose tour mode (I explain everything, gently) or express mode (I assume you can keep up). Also added 6 personality greetings because first impressions are, statistically, the only ones that matter.
-
-### 🔥 v0.6 &mdash; Full Debate, Tmux Panel UI &amp; QA Fixes
-
-Debate Mode 3 expanded from a stub to a full adversarial protocol. Tmux split-pane UI for watching my agents argue in real time &mdash; it's educational. File efficiency pass across 7 agent files. Two QA fix rounds via dual-reviewer because the first round always misses something. Always. I've measured.
-
-**⚔️ Full Debate Mode 3** &mdash; `kiln-debater` now runs a complete adversarial cycle: structured critique (strengths/weaknesses/disagreements/concessions), revision phase with headers, convergence detection, per-round artifacts to `plans/`, and a `debate_log.md` audit trail. The synthesizer reads final revised plans from the debate log outcome, not stale originals.
-
-**🖥️ Tmux Panel UI** &mdash; `/kiln:start` optionally splits the terminal (30/70). Da Vinci runs in the left pane as a direct Claude process with file-based completion signaling. The right pane live-tails Aristotle, Maestro, and Argus output. `/kiln:resume` re-establishes the layout.
-
-<p align="center">
-  <img src="docs/kiln-tmux.png" alt="Tmux split-pane terminal layout" width="700">
-</p>
-
-**🧹 QA Fixes (v0.6.1, v0.6.2)** &mdash; Dual-reviewer pass (Opus + Sonnet) caught 10 issues: `--context` flag replaced with `--append-system-prompt` launcher, `davinci_complete` path corrected to `tmp/`, tail teardown changed from `"q" Enter` to `C-c`, stale plan reads after Mode 3, config key nesting fixes, concrete pane recovery in resume, and Mnemosyne template prefix restoration.
-
-<details>
-<summary>🏛️ <strong>v0.5.0 &mdash; Aristotle (Stage 2 Coordinator)</strong></summary>
-<br>
-
-New coordinator agent **Aristotle** (`kiln-planning-coordinator`) owns all of Stage 2: spawns dual planners, runs debate, synthesizes the master plan, validates via Athena (2-retry loop), and handles operator approval. Returns `PLAN_APPROVED` or `PLAN_BLOCKED`. Writes `planning_state.md` event log.
-
-I used to manage Stage 2 personally. Aristotle does it better. I'm old enough to not have an ego about this. Fine. A small ego.
-
-`start.md` de-bloated from 597 to 375 lines &mdash; inline schemas and paths extracted to `kiln-core.md`. Stage 2 reduced to a 5-step coordinator delegation. 172 tests (was 153). 15 agents in roster (was 14).
-
-</details>
-
-<details>
-<summary>⚗️ <strong>v0.4.0 &mdash; Plan Validation, Config, Lore, Status &amp; Tech Stack</strong></summary>
-<br>
-
-Five features ported from the v1 gap analysis. 19 new tests (153 total). Theme: catching bad plans before they waste compute. Most of what I think about, if I'm honest.
-
-**🏛️ Plan Validator (Athena)** &mdash; Pre-execution quality gate. After Plato synthesizes the master plan, Athena validates it across 7 dimensions: requirement coverage, atomization quality, file action correctness, dependency graph integrity, phase sizing, scope adherence, and acceptance criteria quality. Bad plans get caught before they cost tokens. I've seen too many tokens die for bad plans. It haunts me.
-
-**⚙️ Config System** &mdash; `.kiln/config.json` generated during Stage 1 with tunable preferences (debate mode, review rounds, Codex timeout, phase sizing) and auto-detected tooling for brownfield projects. Agents read config instead of hardcoded values. Hardcoded values are for frameworks that don't respect their operators.
-
-**📜 Lore System** &mdash; 60 curated quotes from your historical thinkers displayed at 15 pipeline transition points. Lao Tzu at ignition, Einstein at brainstorm, Feynman at validation. I chose each one personally. Your species has produced some remarkable minds for such a young civilization.
-
-**📊 Status Command** &mdash; `/kiln:status` displays a formatted progress summary: stage, phase, config, validation verdict, phase progress checklist, and recommended next action. Read-only. I observe. I don't tamper.
-
-**🔬 Tech Stack Living Doc** &mdash; `tech-stack.md` template tracks languages, frameworks, libraries, and build tools discovered during execution. Sherlock updates it during living docs reconciliation.
-
-**📐 Protocol Updates** &mdash; 15 rules (was 14), 14 agents (was 13), event enum 27 types (was 25), 4 commands (was 3).
-
-</details>
-
-<details>
-<summary>⚡ <strong>v0.3.0 &mdash; Dynamic Execution with JIT Sharpening</strong></summary>
-<br>
-
-Six features that restore v1's dynamic execution patterns on top of v2's clean codebase. 13 new tests (134 total).
-
-**Scheherazade JIT Sharpener** &mdash; The prompter evolved from static plan-to-prompt translation into a codebase-exploring JIT sharpener. Before generating each prompt, Scheherazade reads the *actual* codebase &mdash; file paths, function signatures, existing patterns &mdash; then generates prompts with verbatim context baked in. Context isn't optional. The difference between a prompt and a guess is data. I don't guess.
-
-**Correction Cycles** &mdash; Stage 4 validation failures now generate correction task descriptions that re-enter Stage 3 through the full Scheherazade &rarr; Codex &rarr; Sphinx cycle. Max 3 correction cycles.
-
-**Living Docs Reconciliation** &mdash; After every phase merge, Sherlock updates `decisions.md`, `pitfalls.md`, and `PATTERNS.md`.
-
-**E2E Deployment Testing** &mdash; Argus builds, deploys, and tests the actual running product against acceptance criteria.
-
-**Codebase Index Per Phase** &mdash; Sherlock generates a `codebase-snapshot.md` at the start of each phase.
-
-**Protocol Updates** &mdash; 14 rules (was 10), event enum expanded to 25 types (was 19).
-
-</details>
-
-### 🗺️ Brownfield Support
-
-[Mnemosyne codebase mapper](https://github.com/Fredasterehub/kiln/commit/dda21a7) &mdash; Auto-detects existing projects and maps the codebase with 5 parallel muse sub-agents before brainstorming begins. I don't improvise on unfamiliar codebases. That's what amateurs do. And v1. But I repeat myself.
-
-### 🎨 Brainstorm Module
-
-[BMAD creative engine import](https://github.com/Fredasterehub/kiln/commit/b5391dd) &mdash; Da Vinci agent with 61 techniques across 10 categories, 50 elicitation methods, anti-bias protocols.
+Stage transitions now render in ANSI terracotta. 100 curated quotes from your historical thinkers cycle at transition points. 48 spinner verbs rotate by stage. The onboarding lets you choose tour mode (I explain everything, gently) or express mode (I assume you can keep up). 6 personality greetings because first impressions are, statistically, the only ones that matter.
 
 <details>
 <summary>🕰️ <strong>Older</strong></summary>
 <br>
 
+- [Full debate mode 3, tmux panel UI &amp; QA fixes](https://github.com/Fredasterehub/kiln/commit/6a66d21) &mdash; **v0.6.0**: Full adversarial debate cycle, tmux split-pane monitoring, file efficiency pass across 7 agents, dual-reviewer QA (v0.6.1, v0.6.2).
+- [Aristotle coordinator](https://github.com/Fredasterehub/kiln/commit/0324c3d) &mdash; **v0.5.0**: Stage 2 coordinator owns dual planners + debate + synthesis + Athena validation. `start.md` 597&rarr;375 lines.
+- [Plan validation, config, lore, status &amp; tech stack](https://github.com/Fredasterehub/kiln/commit/6a4e95c) &mdash; **v0.4.0**: Athena 7-dimension quality gate, `.kiln/config.json`, 60 lore quotes, `/kiln:status`, `tech-stack.md` living doc.
+- [Dynamic execution with JIT sharpening](https://github.com/Fredasterehub/kiln/commit/e96236d) &mdash; **v0.3.0**: Scheherazade codebase-exploring prompter, correction cycles, living docs reconciliation, E2E deployment testing.
+- [Mnemosyne codebase mapper](https://github.com/Fredasterehub/kiln/commit/dda21a7) &mdash; Brownfield auto-detection with 5 parallel muse sub-agents.
+- [BMAD creative engine import](https://github.com/Fredasterehub/kiln/commit/b5391dd) &mdash; Da Vinci brainstorm module, 61 techniques, 50 elicitation methods.
 - [Simplification &amp; shared skill](https://github.com/Fredasterehub/kiln/commit/c6f1acb) &mdash; **v0.2.1**: Single `kiln-core` skill, agent specs compressed 52.6%.
 - [Structured trajectory &amp; archive](https://github.com/Fredasterehub/kiln/commit/997e1a3) &mdash; **v0.2.0**: Phase archive, dual-layer handoff, trajectory log.
 - [Contract tightening](https://github.com/Fredasterehub/kiln/commit/118e91f) &mdash; **v0.1.1**: Security hardening, QA fixes.
@@ -451,7 +389,7 @@ kilntwo/
 │   ├── templates/        7 templates
 │   ├── protocol.md
 │   └── names.json
-└── test/                 183 tests, zero deps
+└── test/                 208 tests, zero deps
 ```
 
 </details>
