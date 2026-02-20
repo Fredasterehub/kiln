@@ -14,20 +14,26 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/kilntwo"><img src="https://img.shields.io/badge/npm-kilntwo-D4A574?style=flat-square&logo=npm" alt="npm"></a>&nbsp;
-  <img src="https://img.shields.io/badge/tests-134_passing-6B8E6B?style=flat-square" alt="tests">&nbsp;
-  <img src="https://img.shields.io/badge/agents-12-C1666B?style=flat-square" alt="agents">&nbsp;
-  <img src="https://img.shields.io/badge/models-3_families-E8A87C?style=flat-square" alt="models">&nbsp;
-  <img src="https://img.shields.io/badge/deps-0-4A403A?style=flat-square" alt="zero deps">&nbsp;
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-4A403A?style=flat-square" alt="MIT"></a>
+  <img src="https://img.shields.io/badge/Multi--Model-Opus_·_GPT--5-D4A574?style=flat-square" alt="Multi-Model">&nbsp;
+  <img src="https://img.shields.io/badge/Debate-Models_Argue-C1666B?style=flat-square" alt="Debate">&nbsp;
+  <img src="https://img.shields.io/badge/Dependencies-Zero-4A403A?style=flat-square" alt="Zero Deps">&nbsp;
+  <img src="https://img.shields.io/badge/Claude_Code-Native_Only-7C3AED?style=flat-square" alt="Native">
 </p>
 
 <p align="center">
-  <a href="#the-story"><strong>The Story</strong></a> &nbsp;&middot;&nbsp;
-  <a href="#get-started"><strong>Get Started</strong></a> &nbsp;&middot;&nbsp;
-  <a href="#recent-changes"><strong>Recent Changes</strong></a> &nbsp;&middot;&nbsp;
-  <a href="#how-it-works"><strong>How It Works</strong></a> &nbsp;&middot;&nbsp;
-  <a href="#the-crew"><strong>The Crew</strong></a>
+  <a href="https://www.npmjs.com/package/kilntwo"><img src="https://img.shields.io/badge/npm-kilntwo-D4A574?style=for-the-badge&logo=npm" alt="npm"></a>&nbsp;
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-D4A574?style=for-the-badge" alt="MIT"></a>&nbsp;
+  <img src="https://img.shields.io/badge/Node-18+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node">&nbsp;
+  <a href="https://docs.anthropic.com/en/docs/claude-code/overview"><img src="https://img.shields.io/badge/Claude_Code-Native-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code"></a>
+</p>
+
+<p align="center">
+  <a href="#-the-story"><strong>The Story</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#-get-started"><strong>Get Started</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#-recent-changes"><strong>Recent Changes</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#-how-it-works"><strong>How It Works</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#-the-crew"><strong>The Crew</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#-commands"><strong>Commands</strong></a>
 </p>
 
 <br>
@@ -36,7 +42,15 @@
 
 <br>
 
-## The Story
+You describe what you want to build. Kiln orchestrates three model families &mdash; **Opus 4.6** for planning and review, **GPT-5.2** for prompt sharpening, **GPT-5.3-codex** for implementation &mdash; through a structured pipeline that runs inside [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview).
+
+No runtime. No daemon. Markdown files and Claude Code's native agent system.
+
+> This is the lightweight rewrite of [kiln v1](https://github.com/Fredasterehub/kiln/tree/master). Same workflow, fraction of the weight. Where v1 had 35 skills and 13 agents with deep guardrails, v2 has 17 agents, 3 commands, and a protocol block. The models got better. The framework got smaller.
+
+<br>
+
+## 💬 The Story
 
 > I was working on Kiln, and started realizing that Claude was following the whole workflow *extremely* easily. Even with all the scaffolding and robustness and steering I was cooking in, sometimes it felt like Claude would behave best when I only said, in a prompt-style:
 >
@@ -52,15 +66,9 @@
 >
 > It's really weird... the *less* restriction I give him but the *better* definition I give him... the better he behaves...
 
-You describe what you want to build. Kiln orchestrates three model families &mdash; **Opus 4.6** for planning and review, **GPT-5.2** for prompt sharpening, **GPT-5.3-codex** for implementation &mdash; through a structured pipeline that runs inside [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview).
-
-No runtime. No daemon. Markdown files and Claude Code's native agent system.
-
-> This is the lightweight rewrite of [kiln v1](https://github.com/Fredasterehub/kiln/tree/master). Same workflow, fraction of the weight. Where v1 had 35 skills and 13 agents with deep guardrails, v2 has 12 agents, 3 commands, and a protocol block. The models got better. The framework got smaller.
-
 <br>
 
-## Get Started
+## 🚀 Get Started
 
 ```bash
 git clone https://github.com/Fredasterehub/kiln.git
@@ -98,56 +106,48 @@ Run Claude Code with `--dangerously-skip-permissions`. Kiln spawns agents, write
 
 <br>
 
-## Recent Changes
+## ✨ Recent Changes
 
 ### ⚡ v0.3.0 &mdash; Dynamic Execution with JIT Sharpening
 
-Six features that restore v1's dynamic execution patterns on top of v2's clean codebase. 13 new tests (134 total). [`e96236d`](https://github.com/Fredasterehub/kiln/commit/e96236d)
+Six features that restore v1's dynamic execution patterns on top of v2's clean codebase. 13 new tests (134 total).
 
-**✨ Scheherazade JIT Sharpener** &mdash; The prompter agent evolved from static plan-to-prompt translation into a codebase-exploring JIT sharpener. Before generating each implementation prompt, Scheherazade now uses Glob, Read, and Grep to explore the *current* codebase, reads living docs (`decisions.md`, `pitfalls.md`, `PATTERNS.md`), then generates prompts with verbatim file paths, function signatures, and existing patterns baked in. GPT-5.2 writing for GPT-5.3-codex &mdash; same family, optimized translation.
+**✨ Scheherazade JIT Sharpener** &mdash; The prompter agent evolved from static plan-to-prompt translation into a codebase-exploring JIT sharpener. Before generating each implementation prompt, Scheherazade uses Glob, Read, and Grep to explore the *current* codebase, reads living docs (`decisions.md`, `pitfalls.md`, `PATTERNS.md`), then generates prompts with verbatim file paths, function signatures, and existing patterns baked in. GPT-5.2 writing for GPT-5.3-codex &mdash; same family, optimized translation.
 
-**🔄 Correction Cycles** &mdash; Stage 4 validation failures now generate correction task descriptions that re-enter Stage 3 through the full Scheherazade &rarr; Codex &rarr; Sphinx cycle. Max 3 correction cycles before escalating to the operator. `correction_cycle` field added to the MEMORY.md schema.
+**🔄 Correction Cycles** &mdash; Stage 4 validation failures now generate correction task descriptions that re-enter Stage 3 through the full Scheherazade &rarr; Codex &rarr; Sphinx cycle. Max 3 correction cycles before escalating to the operator.
 
-**📚 Living Docs Reconciliation** &mdash; After every phase merge, Sherlock (Haiku) updates `decisions.md`, `pitfalls.md`, and `PATTERNS.md` with what the phase discovered. Scheherazade reads these before sharpening subsequent tasks &mdash; creating a cross-phase learning loop where each phase's lessons feed into the next.
+**📚 Living Docs Reconciliation** &mdash; After every phase merge, Sherlock updates `decisions.md`, `pitfalls.md`, and `PATTERNS.md` with what the phase discovered. Scheherazade reads these before sharpening subsequent tasks &mdash; cross-phase learning loop.
 
-**🛡️ E2E Deployment Testing** &mdash; Argus no longer just runs unit tests. It builds, deploys, and tests the actual running product against the master plan's acceptance criteria. Failures generate correction tasks through the full execution pipeline.
+**🛡️ E2E Deployment Testing** &mdash; Argus builds, deploys, and tests the actual running product against acceptance criteria. Failures generate correction tasks through the full execution pipeline.
 
 **🔎 Codebase Index Per Phase** &mdash; Sherlock generates a `codebase-snapshot.md` at the start of each phase so planners and the sharpener work against an up-to-date map.
 
-**📐 Protocol Updates** &mdash; 14 rules (was 10), updated agent roster and stage descriptions, event enum expanded to 25 types (was 19). `parallel_group` annotations in synthesized plans (Plato).
-
-<details>
-<summary>📦 <strong>Files touched</strong></summary>
-<br>
-
-5 agents (kiln-prompter, kiln-phase-executor, kiln-validator, kiln-researcher, kiln-synthesizer), protocol.md, kiln-core.md, start.md, resume.md, names.json, PATTERNS.md template, package.json, CLAUDE.md
-
-</details>
+**📐 Protocol Updates** &mdash; 14 rules (was 10), updated agent roster and stage descriptions, event enum expanded to 25 types (was 19).
 
 ### 🗺️ Brownfield Support
 
-[`dda21a7`](https://github.com/Fredasterehub/kiln/commit/dda21a7) &mdash; Added **Mnemosyne** (kiln-mapper), the brownfield codebase cartographer. Auto-detects existing projects and maps the codebase before brainstorming begins, pre-seeding memory files with architecture context.
+[Mnemosyne codebase mapper](https://github.com/Fredasterehub/kiln/commit/dda21a7) &mdash; Auto-detects existing projects and maps the codebase with 5 parallel muse sub-agents before brainstorming begins.
 
 ### 🎨 Brainstorm Module
 
-[`b5391dd`](https://github.com/Fredasterehub/kiln/commit/b5391dd) &mdash; Imported BMAD's creative brainstorming engine as the Da Vinci agent. 61 techniques across 10 categories, 50 elicitation methods, anti-bias protocols. 22 new tests.
+[BMAD creative engine import](https://github.com/Fredasterehub/kiln/commit/b5391dd) &mdash; Da Vinci agent with 61 techniques across 10 categories, 50 elicitation methods, anti-bias protocols.
 
 <details>
-<summary>🕰️ <strong>Older changes</strong></summary>
+<summary>🕰️ <strong>Older</strong></summary>
 <br>
 
-- [`c6f1acb`](https://github.com/Fredasterehub/kiln/commit/c6f1acb) &mdash; **v0.2.1**: Extracted shared schema to single `kiln-core` skill. Compressed agent specs 52.6%. 6 new tests.
-- [`997e1a3`](https://github.com/Fredasterehub/kiln/commit/997e1a3) &mdash; **v0.2.0**: Structured trajectory log, phase archive, dual-layer handoff.
-- [`118e91f`](https://github.com/Fredasterehub/kiln/commit/118e91f) &mdash; **v0.1.1**: Contract tightening, security hardening, QA fixes.
-- [`ad9e4c4`](https://github.com/Fredasterehub/kiln/commit/ad9e4c4) &mdash; **Hardening pass**: Unified memory schema, path contract, lossless update, cross-platform doctor.
-- [`4e2cc00`](https://github.com/Fredasterehub/kiln/commit/4e2cc00) &mdash; **Brand rename**: kw &rarr; kiln across entire project.
-- [`67356d4`](https://github.com/Fredasterehub/kiln/commit/67356d4) &mdash; **v0.1.0**: Initial implementation.
+- [Simplification &amp; shared skill](https://github.com/Fredasterehub/kiln/commit/c6f1acb) &mdash; **v0.2.1**: Single `kiln-core` skill, agent specs compressed 52.6%.
+- [Structured trajectory &amp; archive](https://github.com/Fredasterehub/kiln/commit/997e1a3) &mdash; **v0.2.0**: Phase archive, dual-layer handoff, trajectory log.
+- [Contract tightening](https://github.com/Fredasterehub/kiln/commit/118e91f) &mdash; **v0.1.1**: Security hardening, QA fixes.
+- [Hardening pass](https://github.com/Fredasterehub/kiln/commit/ad9e4c4) &mdash; Unified memory schema, lossless update, cross-platform doctor.
+- [Brand rename](https://github.com/Fredasterehub/kiln/commit/4e2cc00) &mdash; kw &rarr; kiln across entire project.
+- [Initial implementation](https://github.com/Fredasterehub/kiln/commit/67356d4) &mdash; **v0.1.0**.
 
 </details>
 
 <br>
 
-## How It Works
+## 🔥 How It Works
 
 Five stages. Each one uses different models for different jobs.
 
@@ -212,7 +212,7 @@ You describe what you want. **Da Vinci** facilitates &mdash; 61 techniques acros
 | 🌿 Standard | 30 | Balanced exploration |
 | 🌳 Deep | 100 | Thorough |
 
-Brownfield? **Mnemosyne** maps the existing codebase first.
+Brownfield? **Mnemosyne** maps the existing codebase first with 5 parallel muse sub-agents (architecture, tech stack, data model, API surface, quality).
 
 Produces `vision.md` &mdash; problem, users, goals, constraints, stack, success criteria.
 
@@ -266,14 +266,14 @@ Failures generate correction tasks through the full **Scheherazade &rarr; Codex 
 
 <br>
 
-## The Crew
+## 👥 The Crew
 
 Every agent has a name. Not for decoration &mdash; for the logs.
 
 | | Alias | Model | Role |
 |:--|:--|:--|:--|
 | 🎨 | **Da Vinci** | Opus 4.6 | Brainstorm facilitator &mdash; 61 techniques, anti-bias protocols |
-| 🗺️ | **Mnemosyne** | Opus 4.6 | Brownfield codebase mapper |
+| 🗺️ | **Mnemosyne** | Opus 4.6 | Brownfield codebase mapper &mdash; spawns 5 muse sub-agents |
 | 📜 | **Confucius** | Opus 4.6 | Claude-side planner |
 | ⚔️ | **Sun Tzu** | GPT-5.2 | GPT-side planner |
 | 💬 | **Socrates** | Opus 4.6 | Debate moderator |
@@ -285,9 +285,11 @@ Every agent has a name. Not for decoration &mdash; for the logs.
 | 🛡️ | **Argus** | Opus 4.6 | E2E validator &mdash; deploys, tests, generates corrections |
 | 🔍 | **Sherlock** | Haiku 4.5 | Fast researcher &mdash; codebase indexing, living docs reconciliation |
 
+<sub>Plus 5 muse sub-agents spawned by Mnemosyne for brownfield mapping: Clio (architecture), tech stack, data model, API surface, and quality analysis. 17 agents total.</sub>
+
 <br>
 
-## Commands
+## ⌨️ Commands
 
 **In Claude Code:**
 
@@ -334,7 +336,7 @@ The pipeline survives context resets. All state lives in files:
 
 | What | Where | Count |
 |:--|:--|:--|
-| Agents | `~/.claude/agents/` | 13 |
+| Agents | `~/.claude/agents/` | 17 |
 | Commands | `~/.claude/commands/kiln/` | 3 |
 | Templates | `~/.claude/kilntwo/templates/` | 6 |
 | Skill | `~/.claude/kilntwo/skills/` | 1 |
@@ -362,7 +364,7 @@ kilntwo/
 │   ├── update.js
 │   └── doctor.js
 ├── assets/
-│   ├── agents/           13 agents
+│   ├── agents/           17 agents
 │   ├── commands/kiln/    3 commands
 │   ├── data/             brainstorming + elicitation
 │   ├── skills/           kiln-core
@@ -380,12 +382,13 @@ kilntwo/
 
 | | v1 | v2 |
 |:--|:--|:--|
+| Agents | 13 | 17 |
 | Skills | 26 | 1 (shared) |
 | Commands | 8 | 3 |
 | Hooks | 3 | 0 |
 | Config lines | ~4,000 | ~1,400 |
 
-Same pipeline. A third of the surface area.
+Same pipeline. More agents, a fraction of the surface area.
 
 </details>
 
