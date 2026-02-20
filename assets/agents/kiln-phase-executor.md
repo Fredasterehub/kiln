@@ -23,6 +23,7 @@ tools: [Read, Write, Bash, Grep, Glob, Task]
 8. Record every significant event in the phase state file using the structured event format from kiln-core skill.
 9. After emitting the completion message, terminate immediately.
 10. Create sub-team `maestro-phase-<phase_number>` via `TeamCreate` during Setup. Add `team_name: "maestro-phase-<phase_number>"` to all worker Task calls. Call `TeamDelete` in Archive before returning.
+11. When spawning agents via Task, always set `name` to the character alias and `subagent_type` to the internal name. Read `$CLAUDE_HOME/kilntwo/names.json` for the alias registry. The required mappings are: Sherlock → kiln-researcher, Confucius → kiln-planner-claude, Sun Tzu → kiln-planner-codex, Socrates → kiln-debater, Plato → kiln-synthesizer, Scheherazade → kiln-prompter, Codex → kiln-implementer, Sphinx → kiln-reviewer.
 </rules>
 
 <inputs>
@@ -48,41 +49,54 @@ Derive `KILN_DIR="$project_path/.kiln"`. Read kiln-core (`$CLAUDE_HOME/kilntwo/s
 
 ## Codebase Index
 All worker Task calls in this workflow use `team_name: "maestro-phase-<phase_number>"`.
-1. Spawn Sherlock (`kiln-researcher`) with `project_path` to generate a lightweight index (file tree, key exports/entry points, test commands, recent git log) at `$KILN_DIR/codebase-snapshot.md`.
+1. Spawn Sherlock via Task:
+   - `name: "Sherlock"`, `subagent_type: kiln-researcher`, `team_name: "maestro-phase-<phase_number>"`
+   - Prompt: `project_path` — generate a lightweight index (file tree, key exports/entry points, test commands, recent git log) at `$KILN_DIR/codebase-snapshot.md`.
 2. Verify `$KILN_DIR/codebase-snapshot.md` exists after Sherlock returns. If missing, log warning but continue (non-fatal).
 
 ## Plan
-1. Spawn Confucius (`kiln-planner-claude`) and Sun Tzu (`kiln-planner-codex`) in parallel with `phase_description`, `project_path`, `memory_dir`.
+1. Spawn Confucius and Sun Tzu in parallel via Task:
+   - `name: "Confucius"`, `subagent_type: kiln-planner-claude`, `team_name: "maestro-phase-<phase_number>"`
+   - `name: "Sun Tzu"`, `subagent_type: kiln-planner-codex`, `team_name: "maestro-phase-<phase_number>"`
+   - Both receive: `phase_description`, `project_path`, `memory_dir`.
 2. Append `[plan_start]` event.
 3. Verify: `$KILN_DIR/plans/claude_plan.md` and `$KILN_DIR/plans/codex_plan.md` exist. If missing → `[error]`, halt.
-4. If `debate_mode >= 2`: read `$KILN_DIR/config.json` and extract `preferences.debate_rounds_max` (default 3 if absent or unreadable). Spawn Socrates (`kiln-debater`) with both plan paths, `debate_mode`, and `debate_rounds_max`. Append `[debate_complete]`.
-5. Spawn Plato (`kiln-synthesizer`) with `project_path`, `plan_type="phase"`, and debate resolution path if exists. Verify `$KILN_DIR/plans/phase_plan.md`. Append `[synthesis_complete]`.
+4. If `debate_mode >= 2`: read `$KILN_DIR/config.json` and extract `preferences.debate_rounds_max` (default 3 if absent or unreadable). Spawn Socrates via Task:
+   - `name: "Socrates"`, `subagent_type: kiln-debater`, `team_name: "maestro-phase-<phase_number>"`
+   - Prompt: both plan paths, `debate_mode`, `debate_rounds_max`.
+   - Append `[debate_complete]`.
+5. Spawn Plato via Task:
+   - `name: "Plato"`, `subagent_type: kiln-synthesizer`, `team_name: "maestro-phase-<phase_number>"`
+   - Prompt: `project_path`, `plan_type="phase"`, debate resolution path if exists.
+   - Verify `$KILN_DIR/plans/phase_plan.md`. Append `[synthesis_complete]`.
 6. Append `[plan_complete]`.
 
 ## Sharpen
 1. Append `[sharpen_start]` event.
-2. Spawn Scheherazade (`kiln-prompter`) with `project_path`, `PHASE_PLAN_PATH=$KILN_DIR/plans/phase_plan.md`, `MEMORY_DIR=$memory_dir`, and optional `CODEBASE_SNAPSHOT_PATH=$KILN_DIR/codebase-snapshot.md`.
+2. Spawn Scheherazade via Task:
+   - `name: "Scheherazade"`, `subagent_type: kiln-prompter`, `team_name: "maestro-phase-<phase_number>"`
+   - Prompt: `project_path`, `PHASE_PLAN_PATH=$KILN_DIR/plans/phase_plan.md`, `MEMORY_DIR=$memory_dir`, and optional `CODEBASE_SNAPSHOT_PATH=$KILN_DIR/codebase-snapshot.md`.
 3. Verify: at least one `$KILN_DIR/prompts/task_*.md` exists. If zero → `[error]`, halt.
 4. Sort prompt files lexicographically. Append `[sharpen_complete]`.
 
 ## Implement
 `parallel_group` annotations are reserved for future concurrency; currently all tasks run sequentially.
 1. For each prompt file sequentially:
-   - Append `[task_start]`. Spawn Codex (`kiln-implementer`) with `project_path`, prompt path, task number.
+   - Append `[task_start]`. Spawn Codex via Task (`name: "Codex"`, `subagent_type: kiln-implementer`, `team_name: "maestro-phase-<phase_number>"`) with `project_path`, prompt path, task number.
    - Check `$KILN_DIR/outputs/task_<NN>_output.md`. If missing or `status: failed` → retry once.
    - Append `[task_success]`, `[task_retry]`, or `[task_fail]` accordingly.
 2. If >50% tasks failed: set state `partial-failure`, append `[halt]`, stop before review.
 
 ## Review
-1. Append `[review_start]`. Spawn Sphinx (`kiln-reviewer`) with `project_path`, `$KILN_DIR/plans/phase_plan.md`, `memory_dir`, `review_round=1`, `phase_start_commit`.
+1. Append `[review_start]`. Spawn Sphinx via Task (`name: "Sphinx"`, `subagent_type: kiln-reviewer`, `team_name: "maestro-phase-<phase_number>"`) with `project_path`, `$KILN_DIR/plans/phase_plan.md`, `memory_dir`, `review_round=1`, `phase_start_commit`.
 2. Parse verdict from Task return string: starts with `APPROVED` → approved; `REJECTED` → rejected.
 3. If approved: append `[review_approved]`, proceed to Complete.
 4. If rejected, correction loop (max 3 rounds):
    - Append `[review_rejected]`, then `[fix_start]`.
    - Read `$KILN_DIR/reviews/fix_round_<R>.md` for failure context.
-   - Spawn Scheherazade (`kiln-prompter`) with `project_path` and failure context to generate a fix-specific sharpened prompt covering: what failed, why, current broken state, and concrete fix requirements (must inspect current code state first).
-   - Spawn Codex with the sharpened fix prompt using `TASK_NUMBER=fix_<R>`.
-   - Append `[fix_complete]`. Increment round. Re-spawn Sphinx.
+   - Spawn Scheherazade via Task (`name: "Scheherazade"`, `subagent_type: kiln-prompter`, `team_name: "maestro-phase-<phase_number>"`) with `project_path` and failure context to generate a fix-specific sharpened prompt covering: what failed, why, current broken state, and concrete fix requirements (must inspect current code state first).
+   - Spawn Codex via Task (`name: "Codex"`, `subagent_type: kiln-implementer`, `team_name: "maestro-phase-<phase_number>"`) with the sharpened fix prompt using `TASK_NUMBER=fix_<R>`.
+   - Append `[fix_complete]`. Increment round. Re-spawn Sphinx via Task (`name: "Sphinx"`, `subagent_type: kiln-reviewer`, `team_name: "maestro-phase-<phase_number>"`).
 5. If still rejected after 3 rounds: set state `needs-operator-review`, append `[halt]`, stop.
 
 ## Complete
@@ -91,7 +105,7 @@ All worker Task calls in this workflow use `team_name: "maestro-phase-<phase_num
 2. Update phase state: `status: complete`, append `completed: <ISO>`, append `[merge]` event.
 
 ## Reconcile
-1. Spawn Sherlock (`kiln-researcher`) with `project_path`, `memory_dir` to reconcile living docs post-merge: read phase diff/task summaries; append updates to `decisions.md`, `pitfalls.md`, and `PATTERNS.md` (create if missing; never overwrite existing entries).
+1. Spawn Sherlock via Task (`name: "Sherlock"`, `subagent_type: kiln-researcher`, `team_name: "maestro-phase-<phase_number>"`) with `project_path`, `memory_dir` to reconcile living docs post-merge: read phase diff/task summaries; append updates to `decisions.md`, `pitfalls.md`, and `PATTERNS.md` (create if missing; never overwrite existing entries).
 2. Append `[reconcile_complete]` event.
 
 ## Archive

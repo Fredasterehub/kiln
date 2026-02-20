@@ -279,6 +279,30 @@ describe('contract lint', () => {
   });
 });
 
+describe('v0.8.0 — codex planner contracts', () => {
+  it('kiln-planner-codex references codex_prompt.md artifact', () => {
+    const codexPlanner = readAsset('agents/kiln-planner-codex.md');
+
+    assert.ok(
+      codexPlanner.includes('codex_prompt.md'),
+      'kiln-planner-codex must reference codex_prompt.md prompt file artifact'
+    );
+  });
+
+  it('kiln-planner-codex has delegation mandate and self-check', () => {
+    const codexPlanner = readAsset('agents/kiln-planner-codex.md');
+
+    assert.ok(
+      codexPlanner.includes('Delegation mandate'),
+      'kiln-planner-codex must have Delegation mandate rule'
+    );
+    assert.ok(
+      codexPlanner.includes('Self-check'),
+      'kiln-planner-codex must have Self-check rule'
+    );
+  });
+});
+
 describe('v0.8.0 contracts', () => {
   it('kiln-core directory tree has no tmux-era artifacts', () => {
     const skill = readAsset('skills/kiln-core.md');

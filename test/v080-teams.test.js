@@ -216,4 +216,55 @@ describe('v0.8.0 — native teams', () => {
       'reset.md must delete kiln-session team during cleanup'
     );
   });
+
+  it('kiln-planner-codex has prompt file pattern', () => {
+    const codexPlanner = readAsset('agents/kiln-planner-codex.md');
+
+    assert.ok(
+      codexPlanner.includes('codex_prompt.md'),
+      'kiln-planner-codex must reference codex_prompt.md prompt file'
+    );
+    assert.ok(
+      codexPlanner.includes('$KILN_DIR/plans/codex_prompt.md'),
+      'kiln-planner-codex must write prompt to $KILN_DIR/plans/codex_prompt.md'
+    );
+  });
+
+  it('kiln-planner-codex has anti-pattern rules', () => {
+    const codexPlanner = readAsset('agents/kiln-planner-codex.md');
+
+    assert.ok(
+      codexPlanner.includes('STOP'),
+      'kiln-planner-codex must have STOP anti-pattern rule'
+    );
+    assert.ok(
+      codexPlanner.includes('plan content'),
+      'kiln-planner-codex must reference "plan content" in anti-pattern'
+    );
+  });
+
+  it('kiln-planner-codex uses pipe pattern for Codex CLI', () => {
+    const codexPlanner = readAsset('agents/kiln-planner-codex.md');
+
+    assert.ok(
+      codexPlanner.includes('cat $KILN_DIR/plans/codex_prompt.md | codex exec'),
+      'kiln-planner-codex must use cat | codex exec pipe pattern'
+    );
+  });
+
+  it('kiln-phase-executor has explicit name parameters for all agents', () => {
+    const executor = readAsset('agents/kiln-phase-executor.md');
+
+    const requiredAliases = [
+      'Sherlock', 'Confucius', 'Sun Tzu', 'Socrates',
+      'Plato', 'Scheherazade', 'Codex', 'Sphinx'
+    ];
+
+    for (const alias of requiredAliases) {
+      assert.ok(
+        executor.includes(`name: "${alias}"`),
+        `kiln-phase-executor must have explicit name: "${alias}" parameter`
+      );
+    }
+  });
 });
