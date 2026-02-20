@@ -14,17 +14,16 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Multi--Model-Opus_·_GPT--5-D4A574?style=flat-square" alt="Multi-Model">&nbsp;
-  <img src="https://img.shields.io/badge/Debate-Models_Argue-C1666B?style=flat-square" alt="Debate">&nbsp;
-  <img src="https://img.shields.io/badge/Dependencies-Zero-4A403A?style=flat-square" alt="Zero Deps">&nbsp;
-  <img src="https://img.shields.io/badge/Claude_Code-Native_Only-7C3AED?style=flat-square" alt="Native">
+  <img src="https://img.shields.io/badge/Multi--Model-Opus_·_GPT--5-D4A574?style=for-the-badge" alt="Multi-Model">&nbsp;
+  <img src="https://img.shields.io/badge/Debate-Models_Argue-C1666B?style=for-the-badge" alt="Debate">&nbsp;
+  <img src="https://img.shields.io/badge/Dependencies-Zero-4A403A?style=for-the-badge" alt="Zero Deps">&nbsp;
+  <a href="https://docs.anthropic.com/en/docs/claude-code/overview"><img src="https://img.shields.io/badge/Claude_Code-Native-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code"></a>
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/kilntwo"><img src="https://img.shields.io/badge/npm-kilntwo-D4A574?style=for-the-badge&logo=npm" alt="npm"></a>&nbsp;
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-D4A574?style=for-the-badge" alt="MIT"></a>&nbsp;
-  <img src="https://img.shields.io/badge/Node-18+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node">&nbsp;
-  <a href="https://docs.anthropic.com/en/docs/claude-code/overview"><img src="https://img.shields.io/badge/Claude_Code-Native-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code"></a>
+  <em>"Perfection is achieved, not when there is nothing more to add,<br>
+  but when there is nothing left to take away."</em><br>
+  <sub>&mdash; Antoine de Saint-Exup&eacute;ry</sub>
 </p>
 
 <p align="center">
