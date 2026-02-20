@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 500" width="760" height="500" font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
+  <style>
+    .title { font-size: 26px; font-weight: 700; fill: #1e1e1e; }
+    .subtitle { font-size: 14px; fill: #757575; }
+    .col-header { font-size: 17px; font-weight: 600; fill: #1e1e1e; }
+    .agent-name { font-size: 13px; fill: #333; }
+    .muse-note { font-size: 12px; fill: #999; }
+  </style>
+
+  <!-- Title -->
+  <text x="380" y="30" text-anchor="middle" class="title">The Crew</text>
+  <text x="380" y="50" text-anchor="middle" class="subtitle">14 named agents + 5 muses = 19 total</text>
+
+  <!-- Column 1: Opus 4.6 -->
+  <rect x="20" y="72" width="220" height="38" rx="8" fill="#a5d8ff" stroke="#4a9eed" stroke-width="1.5"/>
+  <text x="130" y="96" text-anchor="middle" class="col-header">Opus 4.6</text>
+
+  <rect x="30" y="120" width="200" height="30" rx="6" fill="#dbe4ff" stroke="none"/>
+  <text x="40" y="140" class="agent-name">Da Vinci — brainstorm</text>
+  <rect x="30" y="158" width="200" height="30" rx="6" fill="#dbe4ff" stroke="none"/>
+  <text x="40" y="178" class="agent-name">Mnemosyne — codebase mapping</text>
+  <rect x="30" y="196" width="200" height="30" rx="6" fill="#dbe4ff" stroke="none"/>
+  <text x="40" y="216" class="agent-name">Aristotle — Stage 2 coordinator</text>
+  <rect x="30" y="234" width="200" height="30" rx="6" fill="#dbe4ff" stroke="none"/>
+  <text x="40" y="254" class="agent-name">Confucius — Claude planner</text>
+  <rect x="30" y="272" width="200" height="30" rx="6" fill="#dbe4ff" stroke="none"/>
+  <text x="40" y="292" class="agent-name">Socrates — debate moderator</text>
+  <rect x="30" y="310" width="200" height="30" rx="6" fill="#dbe4ff" stroke="none"/>
+  <text x="40" y="330" class="agent-name">Plato — plan synthesizer</text>
+  <rect x="30" y="348" width="200" height="30" rx="6" fill="#dbe4ff" stroke="none"/>
+  <text x="40" y="368" class="agent-name">Sphinx — code reviewer</text>
+  <rect x="30" y="386" width="200" height="30" rx="6" fill="#dbe4ff" stroke="none"/>
+  <text x="40" y="406" class="agent-name">Maestro — phase coordinator</text>
+  <rect x="30" y="424" width="200" height="30" rx="6" fill="#dbe4ff" stroke="none"/>
+  <text x="40" y="444" class="agent-name">Argus — E2E validator</text>
+
+  <!-- Column 2: GPT Family -->
+  <rect x="270" y="72" width="220" height="38" rx="8" fill="#ffd8a8" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="380" y="96" text-anchor="middle" class="col-header">GPT Family</text>
+
+  <rect x="280" y="120" width="200" height="30" rx="6" fill="#fff3bf" stroke="none"/>
+  <text x="290" y="140" class="agent-name">Sun Tzu — planner (GPT-5.2)</text>
+  <rect x="280" y="158" width="200" height="30" rx="6" fill="#fff3bf" stroke="none"/>
+  <text x="290" y="178" class="agent-name">Scheherazade — JIT prompts (5.2)</text>
+  <rect x="280" y="196" width="200" height="30" rx="6" fill="#fff3bf" stroke="none"/>
+  <text x="290" y="216" class="agent-name">Codex — implementation (5.3)</text>
+
+  <!-- Column 3: Specialist -->
+  <rect x="520" y="72" width="220" height="38" rx="8" fill="#c3fae8" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="630" y="96" text-anchor="middle" class="col-header">Specialist</text>
+
+  <rect x="530" y="120" width="200" height="30" rx="6" fill="#d3f9d8" stroke="none"/>
+  <text x="540" y="140" class="agent-name">Athena — plan validator (Sonnet)</text>
+  <rect x="530" y="158" width="200" height="30" rx="6" fill="#d3f9d8" stroke="none"/>
+  <text x="540" y="178" class="agent-name">Sherlock — research (Haiku)</text>
+
+  <!-- Muses note -->
+  <text x="290" y="260" class="muse-note">+ 5 Muse sub-agents (Opus 4.6) spawned by Mnemosyne</text>
+  <text x="290" y="277" class="muse-note">for brownfield codebase mapping</text>
+</svg>

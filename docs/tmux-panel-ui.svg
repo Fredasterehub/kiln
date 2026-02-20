@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 740 440" width="740" height="440" font-family="'SF Mono', 'Fira Code', 'Cascadia Code', monospace">
+  <style>
+    .title { font-family: 'Segoe UI', system-ui, sans-serif; font-size: 24px; font-weight: 700; fill: #e5e5e5; }
+    .subtitle { font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; fill: #a0a0a0; }
+    .pane-header { font-size: 15px; font-weight: 600; }
+    .pane-sub { font-size: 11px; fill: #a0a0a0; }
+    .log { font-size: 11px; }
+    .brainstorm { font-size: 11px; fill: #bd93f9; }
+    .titlebar-text { font-size: 11px; fill: #a0a0a0; }
+    .coord { fill: #8be9fd; }
+    .gpt { fill: #ffb86c; }
+    .neutral { fill: #e5e5e5; }
+    .success { fill: #50fa7b; }
+  </style>
+
+  <!-- Background -->
+  <rect width="740" height="440" fill="#1e1e2e" rx="0"/>
+
+  <!-- Title -->
+  <text x="370" y="30" text-anchor="middle" class="title">Tmux Panel UI</text>
+  <text x="370" y="50" text-anchor="middle" class="subtitle">Split terminal for agent monitoring</text>
+
+  <!-- Terminal window -->
+  <rect x="30" y="68" width="680" height="350" rx="8" fill="#282a36" stroke="#44475a" stroke-width="2"/>
+
+  <!-- Title bar -->
+  <rect x="30" y="68" width="680" height="26" rx="8" fill="#383a4a"/>
+  <rect x="30" y="82" width="680" height="12" fill="#383a4a"/>
+  <circle cx="50" cy="81" r="5" fill="#ff5555"/>
+  <circle cx="68" cy="81" r="5" fill="#f1fa8c"/>
+  <circle cx="86" cy="81" r="5" fill="#50fa7b"/>
+  <text x="370" y="85" text-anchor="middle" class="titlebar-text">kiln — tmux</text>
+
+  <!-- Left pane (30%) -->
+  <rect x="35" y="99" width="195" height="314" fill="#1e1e2e" stroke="#44475a" stroke-width="1"/>
+  <text x="90" y="120" class="pane-header" fill="#f1fa8c">Da Vinci</text>
+  <text x="50" y="138" class="pane-sub">Brainstorm (30%)</text>
+
+  <text x="50" y="165" class="brainstorm">What if we used</text>
+  <text x="50" y="180" class="brainstorm">WebSockets for</text>
+  <text x="50" y="195" class="brainstorm">real-time sync?</text>
+  <text x="50" y="220" class="brainstorm">Technique: What-if</text>
+  <text x="50" y="235" class="brainstorm">analysis (#14)</text>
+  <text x="50" y="260" class="brainstorm">Idea floor: 30/30</text>
+  <text x="50" y="275" class="brainstorm">Depth: standard</text>
+
+  <!-- Divider -->
+  <line x1="232" y1="99" x2="232" y2="413" stroke="#44475a" stroke-width="2"/>
+
+  <!-- Right pane (70%) -->
+  <rect x="234" y="99" width="471" height="314" fill="#1e1e2e" stroke="#44475a" stroke-width="1"/>
+  <text x="430" y="120" class="pane-header" fill="#50fa7b">Kiln (70%)</text>
+
+  <!-- Stage 2: Planning events -->
+  <text x="248" y="148" class="log coord">[Aristotle] planning_start</text>
+  <text x="248" y="165" class="log neutral">[Confucius] dual plan: claude</text>
+  <text x="248" y="182" class="log gpt">[Sun Tzu] dual plan: codex</text>
+  <text x="248" y="199" class="log neutral">[Socrates] debate_complete</text>
+  <text x="248" y="216" class="log neutral">[Plato] synthesis_complete</text>
+  <text x="248" y="233" class="log success">[Athena] plan_validated PASS</text>
+
+  <!-- Separator -->
+  <line x1="248" y1="244" x2="690" y2="244" stroke="#44475a" stroke-width="1" stroke-dasharray="4,4"/>
+
+  <!-- Stage 3: Execution events -->
+  <text x="248" y="264" class="log coord">[Maestro] phase_start Phase 1</text>
+  <text x="248" y="281" class="log gpt">[Scheherazade] prompt_ready 1/4</text>
+  <text x="248" y="298" class="log gpt">[Codex] task_complete 1/4</text>
+  <text x="248" y="315" class="log success">[Sphinx] review_approved</text>
+
+  <!-- Separator -->
+  <line x1="248" y1="326" x2="690" y2="326" stroke="#44475a" stroke-width="1" stroke-dasharray="4,4"/>
+
+  <!-- Stage 4: Validation -->
+  <text x="248" y="346" class="log success">[Argus] validation_pass</text>
+  <text x="248" y="363" class="log coord">[Kiln] stage: complete</text>
+
+  <!-- Color legend -->
+  <circle cx="252" cy="395" r="4" fill="#8be9fd"/>
+  <text x="262" y="399" font-size="10" fill="#666">coordinators</text>
+  <circle cx="340" cy="395" r="4" fill="#ffb86c"/>
+  <text x="350" y="399" font-size="10" fill="#666">GPT agents</text>
+  <circle cx="418" cy="395" r="4" fill="#50fa7b"/>
+  <text x="428" y="399" font-size="10" fill="#666">success</text>
+</svg>
