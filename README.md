@@ -46,7 +46,7 @@ You describe what you want to build. Kiln orchestrates three model families &mda
 
 No runtime. No daemon. Markdown files and Claude Code's native agent system.
 
-> This is the lightweight rewrite of [kiln v1](https://github.com/Fredasterehub/kiln/tree/master). Same workflow, fraction of the weight. Where v1 had 35 skills and 13 agents with deep guardrails, v2 has 17 agents, 3 commands, and a protocol block. The models got better. The framework got smaller.
+> This is the lightweight rewrite of [kiln v1](https://github.com/Fredasterehub/kiln/tree/master). Same workflow, fraction of the weight. Where v1 had 35 skills and 13 agents with deep guardrails, v2 has 19 agents, 4 commands, and a protocol block. The models got better. The framework got smaller.
 
 <br>
 
@@ -108,7 +108,29 @@ Run Claude Code with `--dangerously-skip-permissions`. Kiln spawns agents, write
 
 ## ✨ Recent Changes
 
-### ⚗️ v0.4.0 &mdash; Plan Validation, Config, Lore, Status &amp; Tech Stack
+### 🔥 v0.6 &mdash; Full Debate, Tmux Panel UI &amp; QA Fixes
+
+Debate Mode 3 expanded from a stub to a full adversarial protocol. Tmux split-pane UI for monitoring agents in real time. File efficiency pass across 7 agent files. Two QA fix rounds via dual-reviewer.
+
+**⚔️ Full Debate Mode 3** &mdash; `kiln-debater` now runs a complete adversarial cycle: structured critique (strengths/weaknesses/disagreements/concessions), revision phase with headers, convergence detection, per-round artifacts to `plans/`, and a `debate_log.md` audit trail. The synthesizer reads final revised plans from the debate log outcome, not stale originals.
+
+**🖥️ Tmux Panel UI** &mdash; `/kiln:start` optionally splits the terminal (30/70). Da Vinci runs in the left pane as a direct Claude process with file-based completion signaling. The right pane live-tails Aristotle, Maestro, and Argus output. `/kiln:resume` re-establishes the layout.
+
+**🧹 QA Fixes (v0.6.1, v0.6.2)** &mdash; Dual-reviewer pass (Opus + Sonnet) caught 10 issues: `--context` flag replaced with `--append-system-prompt` launcher, `davinci_complete` path corrected to `tmp/`, tail teardown changed from `"q" Enter` to `C-c`, stale plan reads after Mode 3, config key nesting fixes, concrete pane recovery in resume, and Mnemosyne template prefix restoration.
+
+<details>
+<summary>🏛️ <strong>v0.5.0 &mdash; Aristotle (Stage 2 Coordinator)</strong></summary>
+<br>
+
+New coordinator agent **Aristotle** (`kiln-planning-coordinator`) owns all of Stage 2: spawns dual planners, runs debate, synthesizes the master plan, validates via Athena (2-retry loop), and handles operator approval. Returns `PLAN_APPROVED` or `PLAN_BLOCKED`. Writes `planning_state.md` event log.
+
+`start.md` de-bloated from 597 to 375 lines &mdash; inline schemas and paths extracted to `kiln-core.md`. Stage 2 reduced to a 5-step coordinator delegation. 172 tests (was 153). 15 agents in roster (was 14).
+
+</details>
+
+<details>
+<summary>⚗️ <strong>v0.4.0 &mdash; Plan Validation, Config, Lore, Status &amp; Tech Stack</strong></summary>
+<br>
 
 Five features ported from the v1 gap analysis. 19 new tests (153 total).
 
@@ -123,6 +145,8 @@ Five features ported from the v1 gap analysis. 19 new tests (153 total).
 **🔬 Tech Stack Living Doc** &mdash; `tech-stack.md` template tracks languages, frameworks, libraries, and build tools discovered during execution. Sherlock updates it during living docs reconciliation alongside decisions, pitfalls, and patterns.
 
 **📐 Protocol Updates** &mdash; 15 rules (was 14), 14 agents (was 13), event enum 27 types (was 25), 4 commands (was 3).
+
+</details>
 
 <details>
 <summary>⚡ <strong>v0.3.0 &mdash; Dynamic Execution with JIT Sharpening</strong></summary>
@@ -242,11 +266,11 @@ Produces `vision.md` &mdash; problem, users, goals, constraints, stack, success 
 <summary>📐 <strong>Stage 2 &mdash; Plan</strong> &nbsp; <sub>automated</sub></summary>
 <br>
 
-Two planners work the same vision in parallel:
+**Aristotle** coordinates the entire stage. Two planners work the same vision in parallel:
 - **Confucius** (Opus 4.6) &mdash; Claude perspective
 - **Sun Tzu** (GPT-5.2) &mdash; GPT perspective
 
-**Socrates** debates the disagreements. **Plato** synthesizes into `master-plan.md`. **Athena** validates the plan across 7 dimensions before execution can begin.
+**Socrates** debates the disagreements. **Plato** synthesizes into `master-plan.md`. **Athena** validates the plan across 7 dimensions. If validation fails, Aristotle loops the planners with feedback (up to 2 retries). You review and approve before execution begins.
 
 Different model families catch different things. The debate forces explicit conflict resolution instead of silent averaging.
 
@@ -294,6 +318,7 @@ Every agent has a name. Not for decoration &mdash; for the logs.
 |:--|:--|:--|:--|
 | 🎨 | **Da Vinci** | Opus 4.6 | Brainstorm facilitator &mdash; 61 techniques, anti-bias protocols |
 | 🗺️ | **Mnemosyne** | Opus 4.6 | Brownfield codebase mapper &mdash; spawns 5 muse sub-agents |
+| 📋 | **Aristotle** | Opus 4.6 | Stage 2 coordinator &mdash; planners, debate, synthesis, validation |
 | 📜 | **Confucius** | Opus 4.6 | Claude-side planner |
 | ⚔️ | **Sun Tzu** | GPT-5.2 | GPT-side planner |
 | 💬 | **Socrates** | Opus 4.6 | Debate moderator |
@@ -306,7 +331,7 @@ Every agent has a name. Not for decoration &mdash; for the logs.
 | 🛡️ | **Argus** | Opus 4.6 | E2E validator &mdash; deploys, tests, generates corrections |
 | 🔍 | **Sherlock** | Haiku 4.5 | Fast researcher &mdash; codebase indexing, living docs reconciliation |
 
-<sub>Plus 5 muse sub-agents spawned by Mnemosyne for brownfield mapping: Clio (architecture), tech stack, data model, API surface, and quality analysis. 18 agents total.</sub>
+<sub>Plus 5 muse sub-agents spawned by Mnemosyne for brownfield mapping: Clio (architecture), tech stack, data model, API surface, and quality analysis. 19 agents total.</sub>
 
 <br>
 
@@ -359,7 +384,7 @@ The pipeline survives context resets. All state lives in files:
 
 | What | Where | Count |
 |:--|:--|:--|
-| Agents | `~/.claude/agents/` | 18 |
+| Agents | `~/.claude/agents/` | 19 |
 | Commands | `~/.claude/commands/kiln/` | 4 |
 | Templates | `~/.claude/kilntwo/templates/` | 7 |
 | Skill | `~/.claude/kilntwo/skills/` | 1 |
@@ -387,14 +412,14 @@ kilntwo/
 │   ├── update.js
 │   └── doctor.js
 ├── assets/
-│   ├── agents/           18 agents
+│   ├── agents/           19 agents
 │   ├── commands/kiln/    4 commands
 │   ├── data/             brainstorming, elicitation, config, lore
 │   ├── skills/           kiln-core
 │   ├── templates/        7 templates
 │   ├── protocol.md
 │   └── names.json
-└── test/                 153 tests, zero deps
+└── test/                 172 tests, zero deps
 ```
 
 </details>
@@ -405,7 +430,7 @@ kilntwo/
 
 | | v1 | v2 |
 |:--|:--|:--|
-| Agents | 13 | 18 |
+| Agents | 13 | 19 |
 | Skills | 26 | 1 (shared) |
 | Commands | 8 | 4 |
 | Hooks | 3 | 0 |
