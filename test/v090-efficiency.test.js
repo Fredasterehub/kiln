@@ -209,4 +209,100 @@ describe('v0.9.0 — orchestrator efficiency & correctness', () => {
       );
     });
   });
+
+  describe('Codex CLI sandbox bypass flag', () => {
+
+    it('every codex exec invocation in assets/ includes --dangerously-bypass-approvals-and-sandbox', () => {
+      const agentsDir = path.join(ASSETS_DIR, 'agents');
+      const skillsDir = path.join(ASSETS_DIR, 'skills');
+      const dirs = [agentsDir, skillsDir];
+      const violations = [];
+
+      for (const dir of dirs) {
+        const files = fs.readdirSync(dir).filter(f => f.endsWith('.md'));
+        for (const file of files) {
+          const content = fs.readFileSync(path.join(dir, file), 'utf8');
+          const lines = content.split('\n');
+          for (let i = 0; i < lines.length; i++) {
+            if (lines[i].includes('codex exec') && !lines[i].includes('codex exec`') && !lines[i].includes('codex exec -')) {
+              // Skip lines that are just mentions, not invocations
+              continue;
+            }
+            if (lines[i].includes('codex exec -m')) {
+              // Look at this line and the next 5 lines for the flag
+              const block = lines.slice(i, i + 6).join('\n');
+              if (!block.includes('--dangerously-bypass-approvals-and-sandbox')) {
+                violations.push(`${file}:${i + 1}`);
+              }
+            }
+          }
+        }
+      }
+
+      assert.deepStrictEqual(
+        violations,
+        [],
+        `codex exec invocations missing --dangerously-bypass-approvals-and-sandbox:\n${violations.join('\n')}`
+      );
+    });
+
+    it('kiln-core.md GPT-5.2 template includes the sandbox bypass flag', () => {
+      const core = readAsset('skills/kiln-core.md');
+      const gpt52idx = core.indexOf('**GPT-5.2**');
+      assert.ok(gpt52idx >= 0, 'kiln-core.md must have GPT-5.2 template section');
+      const templateBlock = core.substring(gpt52idx, gpt52idx + 300);
+      assert.ok(
+        templateBlock.includes('--dangerously-bypass-approvals-and-sandbox'),
+        'kiln-core.md GPT-5.2 template must include --dangerously-bypass-approvals-and-sandbox'
+      );
+    });
+  });
+
+  describe('no legacy kw- agent files', () => {
+
+    it('no kw-* files exist in assets/agents/', () => {
+      const agentsDir = path.join(ASSETS_DIR, 'agents');
+      const kwFiles = fs.readdirSync(agentsDir).filter(f => f.startsWith('kw-'));
+      assert.deepStrictEqual(
+        kwFiles,
+        [],
+        `Legacy kw-* files found in assets/agents/: ${kwFiles.join(', ')}`
+      );
+    });
+  });
+
+  describe('install removes legacy kw-* agents', () => {
+
+    it('install function removes kw-*.md files from agentsDir', () => {
+      const os = require('node:os');
+      const { install } = require('../src/install');
+      const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'kiln-test-'));
+      const tmpProject = fs.mkdtempSync(path.join(os.tmpdir(), 'kiln-proj-'));
+
+      try {
+        // Run install once to create the directory structure
+        install({ home: tmpHome, force: true, projectPath: tmpProject });
+
+        // Seed fake kw-* files in the agents dir
+        const { resolvePaths } = require('../src/paths');
+        const { agentsDir } = resolvePaths(tmpHome);
+        fs.writeFileSync(path.join(agentsDir, 'kw-reviewer.md'), 'legacy');
+        fs.writeFileSync(path.join(agentsDir, 'kw-planner.md'), 'legacy');
+        fs.writeFileSync(path.join(agentsDir, 'kw-executor.md'), 'legacy');
+
+        // Run install again — should clean up the kw-* files
+        install({ home: tmpHome, force: true, projectPath: tmpProject });
+
+        const remaining = fs.readdirSync(agentsDir).filter(f => f.startsWith('kw-'));
+        assert.deepStrictEqual(
+          remaining,
+          [],
+          `kw-* files should be removed after install, found: ${remaining.join(', ')}`
+        );
+      } finally {
+        fs.rmSync(tmpHome, { recursive: true, force: true });
+        fs.rmSync(tmpProject, { recursive: true, force: true });
+      }
+    });
+  });
 });

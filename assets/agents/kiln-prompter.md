@@ -68,6 +68,7 @@ Build a meta-prompt that embeds:
 ```bash
 codex exec -m gpt-5.2 \
   -c 'model_reasoning_effort="high"' \
+  --dangerously-bypass-approvals-and-sandbox \
   --skip-git-repo-check \
   -C <PROJECT_PATH> \
   "<META_PROMPT>" \

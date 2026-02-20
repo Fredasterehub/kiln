@@ -83,7 +83,7 @@ All worker Task calls in this workflow use `team_name: "maestro-phase-<phase_num
 2. Spawn Scheherazade via Task:
    - `name: "Scheherazade"`, `subagent_type: kiln-prompter`, `team_name: "maestro-phase-<phase_number>"`
    - Prompt: `project_path`, `PHASE_PLAN_PATH=$KILN_DIR/plans/phase_plan.md`, `MEMORY_DIR=$memory_dir`, and optional `CODEBASE_SNAPSHOT_PATH=$KILN_DIR/codebase-snapshot.md`.
-   - Immediately after spawning, send a delegation nudge: `SendMessage(recipient: "Scheherazade", content: "REMINDER: Invoke GPT-5.2 via codex exec for ALL task prompt generation. Do NOT write task prompt content yourself. Explore the codebase, build the meta-prompt, pipe it through Codex CLI.", summary: "Codex CLI delegation reminder")`.
+   - Immediately after spawning, send a delegation nudge: `SendMessage(recipient: "Scheherazade", content: "REMINDER: Invoke GPT-5.2 via codex exec --dangerously-bypass-approvals-and-sandbox for ALL task prompt generation. Do NOT write task prompt content yourself. Explore the codebase, build the meta-prompt, pipe it through Codex CLI.", summary: "Codex CLI delegation reminder")`.
 3. Verify: at least one `$KILN_DIR/prompts/task_*.md` exists. If zero → `[error]`, halt.
 4. Sort prompt files lexicographically. Append `[sharpen_complete]`.
 
@@ -93,7 +93,7 @@ All worker Task calls in this workflow use `team_name: "maestro-phase-<phase_num
    - Append `[task_start]`. Spawn Codex via Task (`name: "Codex"`, `subagent_type: kiln-implementer`, `team_name: "maestro-phase-<phase_number>"`).
    - **The Task prompt to Codex MUST begin with**: "You are a thin CLI wrapper. You MUST pipe the task prompt to GPT-5.3-codex via Codex CLI: `cat <PROMPT_PATH> | codex exec -m gpt-5.3-codex -c 'model_reasoning_effort="high"' --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -C <PROJECT_PATH> - -o <OUTPUT_PATH>`. You do NOT write code yourself. GPT-5.3-codex writes all code."
    - Then provide: `PROJECT_PATH`, `PROMPT_PATH` (absolute path to the prompt file), `TASK_NUMBER`.
-   - Immediately after spawning Codex, send a delegation nudge: `SendMessage(recipient: "Codex", content: "REMINDER: Pipe the prompt through codex exec -m gpt-5.3-codex. Do NOT write source code yourself via printf, heredoc, or any other method. GPT-5.3-codex writes all code.", summary: "Codex CLI delegation reminder")`.
+   - Immediately after spawning Codex, send a delegation nudge: `SendMessage(recipient: "Codex", content: "REMINDER: Pipe the prompt through codex exec -m gpt-5.3-codex --dangerously-bypass-approvals-and-sandbox. Do NOT write source code yourself via printf, heredoc, or any other method. GPT-5.3-codex writes all code.", summary: "Codex CLI delegation reminder")`.
    - Check `$KILN_DIR/outputs/task_<NN>_output.md`. If missing or `status: failed` → retry once.
    - Append `[task_success]`, `[task_retry]`, or `[task_fail]` accordingly.
 2. If >50% tasks failed: set state `partial-failure`, append `[halt]`, stop before review.

@@ -55,6 +55,7 @@ This is the CORE step. Pipe the prompt file to Codex CLI:
 ```bash
 cat $KILN_DIR/plans/codex_prompt.md | codex exec -m gpt-5.2 \
   -c 'model_reasoning_effort="high"' \
+  --dangerously-bypass-approvals-and-sandbox \
   --skip-git-repo-check \
   -C $PROJECT_PATH \
   -o $KILN_DIR/plans/codex_plan.md

@@ -81,6 +81,24 @@ function install({ home, force = false, projectPath } = {}) {
     }
   }
 
+  // Remove legacy kw-* agent files from a prior naming era
+  try {
+    const agentFiles = fs.readdirSync(agentsDir);
+    for (const file of agentFiles) {
+      if (file.startsWith('kw-') && file.endsWith('.md')) {
+        const legacyPath = path.join(agentsDir, file);
+        try {
+          fs.unlinkSync(legacyPath);
+          console.error(`[kiln] removing legacy agent: ${file}`);
+        } catch {
+          // per-file deletion failure — not fatal, continue with remaining files
+        }
+      }
+    }
+  } catch {
+    // agentsDir read failed — not fatal
+  }
+
   // Copy names.json to kilntwoDir
   const namesSrc = path.join(ASSETS_DIR, 'names.json');
   const namesDest = path.join(kilntwoDir, 'names.json');

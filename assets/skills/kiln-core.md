@@ -176,6 +176,7 @@ Note: `plan_validate_start`, `plan_validate_complete` are logged during Stage 2 
 ```bash
 codex exec -m gpt-5.2 \
   -c 'model_reasoning_effort="high"' \
+  --dangerously-bypass-approvals-and-sandbox \
   --skip-git-repo-check \
   -C <PROJECT_PATH> \
   "<PROMPT_TEXT>" \
@@ -193,7 +194,7 @@ cat <PROMPT_PATH> | codex exec -m gpt-5.3-codex \
   -o <OUTPUT_PATH>
 ```
 
-Note: `--dangerously-bypass-approvals-and-sandbox` replaces `--full-auto` because Landlock sandbox fails on Proxmox/certain kernel configs. Safe in the Kiln pipeline context.
+Note: `--dangerously-bypass-approvals-and-sandbox` is required for ALL models because Landlock sandbox fails on Proxmox/certain kernel configs. Safe in the Kiln pipeline context.
 
 **Required flags** (every invocation):
 - `--skip-git-repo-check` — prevents failure in non-root git dirs
