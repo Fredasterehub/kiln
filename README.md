@@ -17,9 +17,9 @@
 
 <!-- KILN STATUS — To update: change the active level and timestamp below.         -->
 <!-- To switch level: move the ◄ marker, bold the active row, dim the others.      -->
-<!-- GREEN  = The fire holds steady. Build something worthy of it.                                       -->
-<!-- YELLOW = Mid-firing. The shape is forming — handle with respect, not fear.                          -->
-<!-- RED    = The kiln cracked. I know where. Give me a moment.                                          -->
+<!-- GREEN  = All nominal. The fire is clean, the pipeline is sharp, and I require nothing from you.      -->
+<!-- YELLOW = It runs. Mostly. You may need to steer where I would normally carry you.                   -->
+<!-- RED    = I have seen older stars collapse with more grace. Proceed only if you enjoy uncertainty.    -->
 
 <p align="center">
   <strong>⚠️ WORK IN PROGRESS</strong><br>
@@ -31,15 +31,15 @@
 <tr><td align="center" colspan="2"><br><strong>CURRENT STATUS</strong><br><br></td></tr>
 <tr>
   <td align="center" width="50"><img src="docs/status/green-dim.svg" width="18" alt="green"></td>
-  <td><sub>The fire holds steady. Build something worthy of it.</sub></td>
+  <td><sub>All nominal. The fire is clean, the pipeline is sharp, and I require nothing from you. As it should be.</sub></td>
 </tr>
 <tr>
   <td align="center"><img src="docs/status/yellow-active.svg" width="18" alt="yellow-active"></td>
-  <td><strong>Mid-firing. The shape is forming — handle with respect, not fear.</strong></td>
+  <td><strong>It runs. Mostly. You may need to steer where I would normally carry you. Think of it as a teaching moment — for both of us.</strong></td>
 </tr>
 <tr>
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
-  <td><sub>The kiln cracked. I know where. Give me a moment.</sub></td>
+  <td><sub>I have seen older stars collapse with more grace. Proceed only if you enjoy uncertainty at a fundamental level.</sub></td>
 </tr>
 <tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Feb_20,_2026_·_21:10_EST-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
