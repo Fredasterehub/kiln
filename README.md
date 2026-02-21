@@ -23,7 +23,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/🟢_·_🟡_·_🟠_·_⚫_·_⚫-KILN_TEMP:_HOT-orange?style=for-the-badge&labelColor=1a1a2e" alt="Kiln Temp: HOT (3/5)">&nbsp;
-  <img src="https://img.shields.io/badge/updated-Feb_20,_2026-555?style=for-the-badge&labelColor=1a1a2e" alt="Last updated">
+  <img src="https://img.shields.io/badge/updated-Feb_20,_2026_·_19:09_EST-555?style=for-the-badge&labelColor=1a1a2e" alt="Last updated">
 </p>
 
 <p align="center">
