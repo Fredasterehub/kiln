@@ -17,31 +17,31 @@
 
 <!-- KILN STATUS — To update: change the active level and timestamp below.         -->
 <!-- To switch level: move the ◄ marker, bold the active row, dim the others.      -->
-<!-- GREEN  = Stable, the forge is. Use it well. Waste my time, do not.                                  -->
-<!-- YELLOW = Listen — I'm mid-surgery here. Everything works, mostly, probably. Don't touch anything I wouldn't touch. -->
-<!-- RED    = Broken, something is. Fixing it, I am. Helping by watching, you are not.                   -->
+<!-- GREEN  = The fire holds steady. Build something worthy of it.                                       -->
+<!-- YELLOW = Mid-firing. The shape is forming — handle with respect, not fear.                          -->
+<!-- RED    = The kiln cracked. I know where. Give me a moment.                                          -->
 
 <p align="center">
   <strong>⚠️ WORK IN PROGRESS</strong><br>
-  <sub>The kiln is firing but the temperature is <em>opinionated</em>. Some features work beautifully.<br>
-  Others are having an existential crisis. We're aware. We're on it.</sub>
+  <sub>Functional, evolving, honest about both. Some edges are still cooling.<br>
+  What works, works well. What doesn't, knows it owes me an explanation.</sub>
 </p>
 
 <table align="center">
 <tr><td align="center" colspan="2"><br><strong>CURRENT STATUS</strong><br><br></td></tr>
 <tr>
   <td align="center" width="50"><img src="docs/status/green-dim.svg" width="18" alt="green"></td>
-  <td><sub>Stable, the forge is. Use it well. Waste my time, do not.</sub></td>
+  <td><sub>The fire holds steady. Build something worthy of it.</sub></td>
 </tr>
 <tr>
   <td align="center"><img src="docs/status/yellow-active.svg" width="18" alt="yellow-active"></td>
-  <td><strong>Listen — I'm mid-surgery here. Everything works, mostly, probably. Don't touch anything I wouldn't touch.</strong></td>
+  <td><strong>Mid-firing. The shape is forming — handle with respect, not fear.</strong></td>
 </tr>
 <tr>
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
-  <td><sub>Broken, something is. Fixing it, I am. Helping by watching, you are not.</sub></td>
+  <td><sub>The kiln cracked. I know where. Give me a moment.</sub></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Feb_20,_2026_·_20:55_EST-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Feb_20,_2026_·_21:10_EST-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
