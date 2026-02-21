@@ -158,7 +158,7 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
    After all questions are answered, clean up any stale Kiln teams from prior sessions via Bash (ignore errors):
    ```bash
-   rm -rf $HOME/.claude/teams/kiln-session/ $HOME/.claude/teams/aristotle-planning/ $HOME/.claude/teams/maestro-phase-*/ $HOME/.claude/teams/mnemosyne-mapping/
+   rm -rf $HOME/.claude/teams/kiln-session/
    ```
    Then create the session team: `TeamCreate("kiln-session")`.
 
@@ -251,7 +251,7 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
    `name`: `"Aristotle"` (the alias)
    `subagent_type`: `kiln-planning-coordinator`
    `description`: (next quote from names.json quotes array for kiln-planning-coordinator)
-   **The Task prompt MUST begin with**: "CRITICAL FIRST STEP: Create your aristotle-planning sub-team (TeamDelete first, then TeamCreate) and spawn ALL workers with team_name: 'aristotle-planning'. Every agent must be a teammate, not a bare subagent. Use SendMessage to nudge Sun Tzu about Codex CLI delegation after spawning him."
+   **The Task prompt MUST begin with**: "Spawn all workers via Task without team_name — Claude Code auto-registers them into the session team. For Sun Tzu, prepend the Codex CLI delegation mandate directly in the Task prompt — Sun Tzu must pipe through codex exec -m gpt-5.2, not write the plan itself. See Sun Tzu's agent definition for the exact CLI patterns."
    Then include only these scalar inputs and absolute paths (do not inline large file contents):
    - `project_path` = `$PROJECT_PATH`
    - `memory_dir` = `$MEMORY_DIR`
@@ -340,7 +340,7 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
     `name`: `"Maestro"` (the alias)
     `subagent_type`: `kiln-phase-executor`
     `description`: (next quote from names.json quotes array for kiln-phase-executor)
-    **The Task prompt MUST begin with**: "CRITICAL FIRST STEP: Create your maestro-phase-<N> sub-team (TeamDelete first, then TeamCreate) and spawn ALL workers with team_name: 'maestro-phase-<N>'. Every agent (Sherlock, Scheherazade, Codex, Sphinx, planners) must be a teammate, not a bare subagent. Use SendMessage to nudge Codex about CLI delegation after spawning."
+    **The Task prompt MUST begin with**: "Spawn all workers via Task without team_name — Claude Code auto-registers them into the session team. For delegation agents (Sun Tzu, Scheherazade, Codex), prepend the Codex CLI delegation mandate directly in the Task prompt — they must pipe through codex exec, not write content themselves. See their agent definitions for the exact CLI patterns."
     Task prompt must include:
     Full phase section from the master plan, including name, goal, tasks, and acceptance criteria.
     `PROJECT_PATH`.
@@ -446,7 +446,7 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
     `name`: `"Maestro"` (the alias)
     `subagent_type`: `kiln-phase-executor`
     `description`: (next quote from names.json quotes array for kiln-phase-executor)
-    **The Task prompt MUST begin with** the same team creation nudge as in Step 13.
+    **The Task prompt MUST begin with** the same worker spawn instruction as in Step 13 (spawn without team_name, prepend delegation mandates for Codex CLI agents).
     After Maestro completes the correction phase, append `[correction_complete]` event to the `## Correction Log` section of `$MEMORY_DIR/MEMORY.md`. Loop back to Step 14a.
 
     14d. If verdict is PARTIAL or FAIL and `correction_cycle >= 3`:

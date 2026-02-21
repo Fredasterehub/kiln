@@ -34,7 +34,7 @@ For full path derivation, memory schema, event schema, file naming conventions, 
 
 2. **Memory files are the single source of truth** — `MEMORY.md`, `vision.md`, `master-plan.md`, `decisions.md`, `pitfalls.md`, `PATTERNS.md`, and `tech-stack.md` define project state. Before starting any stage or phase, read these files. After completing any stage or phase, update canonical runtime fields in `MEMORY.md`: `stage`, `status`, `planning_sub_stage`, phase fields, `handoff_note`, `handoff_context`, and `last_updated`. Pipeline transitions are rendered via ANSI-colored Bash printf commands (see kiln-core.md ANSI Rendering section).
 
-3. **Only Aristotle, Maestro, and Mnemosyne have Task tool and team management access** — Among spawned sub-agents, only `kiln-planning-coordinator` (Aristotle, Stage 2), `kiln-phase-executor` (Maestro, Stage 3), and `kiln-mapper` (Mnemosyne, Stage 1) have Task tool access and may use `TeamCreate`/`TeamDelete` for sub-team lifecycle. All other spawned agents are leaf workers that cannot spawn further sub-agents. The top-level orchestrator (Kiln, running `/kiln:start`) uses Task to spawn all top-level agents and is not subject to this restriction.
+3. **Only Aristotle, Maestro, and Mnemosyne have Task tool access** — Among spawned sub-agents, only `kiln-planning-coordinator` (Aristotle, Stage 2), `kiln-phase-executor` (Maestro, Stage 3), and `kiln-mapper` (Mnemosyne, Stage 1) have Task tool access and may spawn worker agents. Coordinators spawn workers via Task without `team_name` — Claude Code auto-registers all agents into `kiln-session`. Only Kiln (the orchestrator) calls `TeamCreate`/`TeamDelete`. All other spawned agents are leaf workers that cannot spawn further sub-agents.
 
 4. **Phase sizing** — Each phase must represent 1-4 hours of implementation work. Phases that are too large must be split during the planning stage. Phases that are too small may be merged. The synthesizer is responsible for enforcing this during master plan creation.
 
@@ -60,7 +60,7 @@ For full path derivation, memory schema, event schema, file naming conventions, 
 
 15. **Plans must pass validation before execution** — After Plato's synthesis, the orchestrator spawns Athena (`kiln-plan-validator`) and emits `[plan_validate_start]` / `[plan_validate_complete]` events for the gate. If validation fails, loop back to planners with Athena's feedback. Only proceed to Stage 3 after plan validation passes.
 
-16. **Team lifecycle** — Kiln creates the `kiln-session` team for orchestrator-level tracking. Coordinators (Aristotle, Maestro, Mnemosyne) are spawned WITHOUT `team_name` — Claude Code enforces one team per agent, so coordinators must be free to create their own ephemeral sub-teams (`aristotle-planning`, `maestro-phase-<N>`, `mnemosyne-mapping`) at setup after a defensive `TeamDelete` cleanup. Kiln nudges coordinators via a "CRITICAL FIRST STEP" prefix in the Task prompt instead of SendMessage. Workers join the coordinator's sub-team. Coordinators call `TeamDelete` before returning.
+16. **Team lifecycle** — `kiln-session` is the only team. Kiln creates it after onboarding and deletes it at finalization or reset. Coordinators (Aristotle, Maestro, Mnemosyne) spawn workers via Task without `team_name`. Claude Code auto-registers all spawned agents — coordinators and workers alike — into `kiln-session` via team propagation. No sub-teams exist. Coordinators do not call `TeamCreate` or `TeamDelete`.
 
 ## Agent Roster
 

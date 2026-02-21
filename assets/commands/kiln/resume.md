@@ -86,7 +86,7 @@ Teams do not persist cleanly across Claude Code sessions. Crashed or interrupted
 
 1. Remove all known Kiln team directories via Bash (ignore errors if they don't exist):
    ```bash
-   rm -rf $HOME/.claude/teams/kiln-session/ $HOME/.claude/teams/aristotle-planning/ $HOME/.claude/teams/maestro-phase-*/ $HOME/.claude/teams/mnemosyne-mapping/
+   rm -rf $HOME/.claude/teams/kiln-session/
    ```
 2. Create the session team: `TeamCreate("kiln-session")`
 
@@ -117,7 +117,7 @@ For `planning`:
   - `name`: `"Aristotle"`
   - `subagent_type`: `kiln-planning-coordinator`
   - `description`: (next quote from names.json quotes array for kiln-planning-coordinator)
-  - **The Task prompt MUST begin with**: "CRITICAL FIRST STEP: Create your aristotle-planning sub-team (TeamDelete first, then TeamCreate) and spawn ALL workers with team_name: 'aristotle-planning'. Every agent must be a teammate, not a bare subagent. Use SendMessage to nudge Sun Tzu about Codex CLI delegation after spawning him."
+  - **The Task prompt MUST begin with**: "Spawn all workers via Task without team_name — Claude Code auto-registers them into the session team. For Sun Tzu, prepend the Codex CLI delegation mandate directly in the Task prompt — Sun Tzu must pipe through codex exec -m gpt-5.2, not write the plan itself. See Sun Tzu's agent definition for the exact CLI patterns."
   - Then include:
     - `project_path` = `$PROJECT_PATH`
     - `memory_dir` = `$MEMORY_DIR`
@@ -174,7 +174,7 @@ For `execution`:
   - `name: Maestro`
   - `subagent_type: kiln-phase-executor`
   - `description: (next quote from names.json; cycle quotes sequentially each phase spawn)`
-  - **The Task prompt MUST begin with**: "CRITICAL FIRST STEP: Create your maestro-phase-<N> sub-team (TeamDelete first, then TeamCreate) and spawn ALL workers with team_name: 'maestro-phase-<N>'. Every agent (Sherlock, Scheherazade, Codex, Sphinx, planners) must be a teammate, not a bare subagent. Use SendMessage to nudge Codex about CLI delegation after spawning."
+  - **The Task prompt MUST begin with**: "Spawn all workers via Task without team_name — Claude Code auto-registers them into the session team. For delegation agents (Sun Tzu, Scheherazade, Codex), prepend the Codex CLI delegation mandate directly in the Task prompt — they must pipe through codex exec, not write content themselves. See their agent definitions for the exact CLI patterns."
   - Task prompt must include:
     - Full Phase `N` section from `master-plan.md`
     - `handoff_context` (if present, for deeper phase context)

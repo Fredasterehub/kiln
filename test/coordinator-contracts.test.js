@@ -236,16 +236,16 @@ describe('planning coordinator contracts', () => {
     }
   });
 
-  it('coordinator has sub-team lifecycle (TeamCreate + TeamDelete)', () => {
+  it('coordinator does NOT use TeamCreate/TeamDelete (flat team model)', () => {
     const coord = readAsset('agents/kiln-planning-coordinator.md');
 
     assert.ok(
-      coord.includes('TeamCreate'),
-      'Coordinator must call TeamCreate for sub-team'
+      !coord.includes('TeamCreate('),
+      'Coordinator must NOT call TeamCreate — flat team model'
     );
     assert.ok(
-      coord.includes('TeamDelete'),
-      'Coordinator must call TeamDelete before returning'
+      !coord.includes('TeamDelete('),
+      'Coordinator must NOT call TeamDelete — flat team model'
     );
   });
 

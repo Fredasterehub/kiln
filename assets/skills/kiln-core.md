@@ -134,12 +134,9 @@ Stage mapping: `brainstorm` → brainstorm verbs, `planning` → planning verbs,
 
 Kiln uses Claude Code's native Teams API for agent coordination. No manual tmux management.
 
-- **Session team**: `kiln-session` — created by Kiln after onboarding. Coordinators are NOT spawned into this team (Claude Code enforces one team per agent, and coordinators need to create their own sub-teams). Kiln nudges coordinators via a "CRITICAL FIRST STEP" prefix in the Task prompt.
-- **Sub-teams**: Coordinators create ephemeral sub-teams for their workers:
-  - `aristotle-planning` — Confucius, Sun Tzu, Socrates, Plato, Athena
-  - `maestro-phase-<N>` — Sherlock, Scheherazade, Codex, Sphinx, Confucius, Sun Tzu, Socrates, Plato
-  - `mnemosyne-mapping` — Clio, Urania, Melpomene, Calliope, Terpsichore
-- **Lifecycle**: Coordinators lead Setup with `TeamDelete` (cleanup), then `TeamCreate`. Workers are spawned with the sub-team's `team_name`. Coordinators call `TeamDelete` before returning. The session team is deleted during finalization or reset.
+- **Single flat team**: `kiln-session` is the only team. Kiln creates it after onboarding and deletes it at finalization or reset.
+- **Auto-registration**: Claude Code automatically registers all agents spawned by the team leader (Kiln) — and all agents spawned by those agents — into `kiln-session` via team propagation. Coordinators and workers all appear as teammates.
+- **No sub-teams**: Coordinators (Aristotle, Maestro, Mnemosyne) spawn workers via Task without `team_name`. They do not call `TeamCreate` or `TeamDelete`. Only Kiln manages the team lifecycle.
 
 ## Event Schema
 

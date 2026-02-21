@@ -71,84 +71,68 @@ describe('v0.8.0 — native teams', () => {
     );
   });
 
-  it('coordinator spawns in start.md do NOT include team_name: kiln-session', () => {
-    const start = readAsset('commands/kiln/start.md');
+  it('no coordinator agent contains TeamCreate or TeamDelete', () => {
+    const coordinators = [
+      'agents/kiln-planning-coordinator.md',
+      'agents/kiln-phase-executor.md',
+      'agents/kiln-mapper.md'
+    ];
 
-    // Coordinators must NOT be in kiln-session — one team per agent, and they need their own sub-teams
-    const coordinators = ['Aristotle', 'Maestro'];
-    for (const agent of coordinators) {
-      const idx = start.indexOf(`"${agent}"`);
-      assert.ok(idx >= 0, `start.md must spawn ${agent}`);
-      // Verify team_name: "kiln-session" does NOT appear within 500 chars after spawn
-      const nearby = start.substring(idx, idx + 500);
+    for (const file of coordinators) {
+      const content = readAsset(file);
       assert.ok(
-        !(nearby.includes('team_name') && nearby.includes('kiln-session')),
-        `${agent} spawn in start.md must NOT include team_name: "kiln-session"`
+        !content.includes('TeamCreate('),
+        `${file} must NOT contain TeamCreate — flat team model`
+      );
+      assert.ok(
+        !content.includes('TeamDelete('),
+        `${file} must NOT contain TeamDelete — flat team model`
       );
     }
   });
 
-  it('planning coordinator has aristotle-planning sub-team + TeamDelete', () => {
-    const coord = readAsset('agents/kiln-planning-coordinator.md');
+  it('no coordinator agent passes team_name to worker spawns', () => {
+    const coordinators = [
+      'agents/kiln-planning-coordinator.md',
+      'agents/kiln-phase-executor.md',
+      'agents/kiln-mapper.md'
+    ];
 
-    assert.ok(
-      coord.includes('TeamCreate("aristotle-planning")'),
-      'Planning coordinator must create aristotle-planning sub-team'
-    );
-    assert.ok(
-      coord.includes('TeamDelete("aristotle-planning")'),
-      'Planning coordinator must delete aristotle-planning sub-team'
-    );
-    assert.ok(
-      coord.includes('team_name: "aristotle-planning"'),
-      'Planning coordinator must pass team_name to worker spawns'
-    );
+    for (const file of coordinators) {
+      const content = readAsset(file);
+      assert.ok(
+        !content.includes('team_name:'),
+        `${file} must NOT pass team_name to worker spawns — auto-registration handles this`
+      );
+    }
   });
 
-  it('phase executor has maestro-phase sub-team + TeamDelete', () => {
-    const executor = readAsset('agents/kiln-phase-executor.md');
+  it('no coordinator agent has post-spawn SendMessage nudge', () => {
+    const coordinators = [
+      'agents/kiln-planning-coordinator.md',
+      'agents/kiln-phase-executor.md',
+      'agents/kiln-mapper.md'
+    ];
 
-    assert.ok(
-      executor.includes('TeamCreate("maestro-phase-'),
-      'Phase executor must create maestro-phase-<N> sub-team'
-    );
-    assert.ok(
-      executor.includes('TeamDelete("maestro-phase-'),
-      'Phase executor must delete maestro-phase-<N> sub-team'
-    );
-    assert.ok(
-      executor.includes('team_name: "maestro-phase-'),
-      'Phase executor must pass team_name to worker spawns'
-    );
+    for (const file of coordinators) {
+      const content = readAsset(file);
+      assert.ok(
+        !content.includes('SendMessage('),
+        `${file} must NOT use SendMessage nudges — delegation mandates go in Task prompt`
+      );
+    }
   });
 
-  it('mapper has mnemosyne-mapping sub-team + TeamDelete', () => {
-    const mapper = readAsset('agents/kiln-mapper.md');
-
-    assert.ok(
-      mapper.includes('TeamCreate("mnemosyne-mapping")'),
-      'Mapper must create mnemosyne-mapping sub-team'
-    );
-    assert.ok(
-      mapper.includes('TeamDelete("mnemosyne-mapping")'),
-      'Mapper must delete mnemosyne-mapping sub-team'
-    );
-    assert.ok(
-      mapper.includes('team_name: "mnemosyne-mapping"'),
-      'Mapper must pass team_name to Muse spawns'
-    );
-  });
-
-  it('protocol mentions team management in rule 3', () => {
+  it('protocol rule 3 says only Kiln calls TeamCreate/TeamDelete', () => {
     const protocol = readAsset('protocol.md');
 
     assert.ok(
-      protocol.includes('TeamCreate') && protocol.includes('TeamDelete'),
-      'Protocol rule 3 must mention TeamCreate/TeamDelete'
+      protocol.includes('Only Kiln') && protocol.includes('TeamCreate') && protocol.includes('TeamDelete'),
+      'Protocol rule 3 must say only Kiln calls TeamCreate/TeamDelete'
     );
   });
 
-  it('protocol has kiln-session reference in rule 16', () => {
+  it('protocol rule 16 documents flat team model', () => {
     const protocol = readAsset('protocol.md');
 
     assert.ok(
@@ -159,9 +143,13 @@ describe('v0.8.0 — native teams', () => {
       protocol.includes('16.'),
       'Protocol must have rule 16'
     );
+    assert.ok(
+      protocol.includes('No sub-teams'),
+      'Protocol rule 16 must state no sub-teams'
+    );
   });
 
-  it('kiln-core.md has Team Pattern section with all team names', () => {
+  it('kiln-core.md has flat Team Pattern section', () => {
     const skill = readAsset('skills/kiln-core.md');
 
     assert.ok(
@@ -173,16 +161,12 @@ describe('v0.8.0 — native teams', () => {
       'kiln-core.md Team Pattern must document kiln-session'
     );
     assert.ok(
-      skill.includes('aristotle-planning'),
-      'kiln-core.md Team Pattern must document aristotle-planning'
+      skill.includes('Single flat team') || skill.includes('only team'),
+      'kiln-core.md Team Pattern must document flat model'
     );
     assert.ok(
-      skill.includes('maestro-phase-'),
-      'kiln-core.md Team Pattern must document maestro-phase-<N>'
-    );
-    assert.ok(
-      skill.includes('mnemosyne-mapping'),
-      'kiln-core.md Team Pattern must document mnemosyne-mapping'
+      skill.includes('No sub-teams'),
+      'kiln-core.md Team Pattern must state no sub-teams'
     );
   });
 
@@ -300,5 +284,20 @@ describe('v0.8.0 — native teams', () => {
         `kiln-phase-executor must have explicit name: "${alias}" parameter`
       );
     }
+  });
+
+  it('delegation mandates are in Task prompt, not SendMessage', () => {
+    const executor = readAsset('agents/kiln-phase-executor.md');
+
+    // Scheherazade delegation is in Task prompt
+    assert.ok(
+      executor.includes('Task prompt to Scheherazade MUST include the delegation mandate'),
+      'Scheherazade delegation mandate must be in Task prompt'
+    );
+    // Codex delegation is in Task prompt
+    assert.ok(
+      executor.includes('Task prompt to Codex MUST begin with'),
+      'Codex delegation mandate must be in Task prompt'
+    );
   });
 });
