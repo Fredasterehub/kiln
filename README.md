@@ -47,7 +47,7 @@
 > [!CAUTION]
 > **tmux required** — Kiln spawns parallel agent sessions. Run Claude Code inside a [tmux](https://github.com/tmux/tmux/wiki) session. Kiln handles the rest.
 >
-> If you notice the pipeline stalling between stages, nudge Kiln to relay the completion signal from the orchestrator to Maestro. This is a known coordination edge we're tightening.
+> If you notice the pipeline not behaving, simply nudge either Kiln or the active coordinator (Maestro or Aristotle) to correct course — it should self-correct for the rest of the session. This is a known coordination edge we're tightening.
 
 <p align="center">
   <em>"Perfection is achieved, not when there is nothing more to add,<br>
