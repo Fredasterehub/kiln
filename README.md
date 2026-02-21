@@ -29,11 +29,8 @@
 </p>
 
 <p align="center">
-  <sub>🟢 Cold · 🟡 Warm · <strong>🟠 Hot ←</strong> · 🔴 Molten · 💀 Supernova</sub>
-</p>
-
-<p align="center">
-  <sub>🟠 <strong>HOT</strong> — Degraded. Your mileage may vary. Significantly.</sub>
+  <sub>🟢 Cold · 🟡 Warm · <strong>🟠 Hot ←</strong> · 🔴 Molten · 💀 Supernova</sub><br>
+  <sub>📡 <strong>Current:</strong> Degraded. Your mileage may vary. Significantly.</sub>
 </p>
 
 <p align="center">
