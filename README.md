@@ -42,12 +42,14 @@
   <td><sub>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</sub></td>
 </tr>
 <tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Feb_21,_2026_·_12:45_EST-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
-<tr><td align="center" colspan="2">
-  <img src="https://img.shields.io/badge/⚡_NOTE-tmux_required-D4A574?style=flat-square&labelColor=1a1a2e" alt="tmux required"><br>
-  <sub>Kiln currently requires <a href="https://github.com/tmux/tmux/wiki"><code>tmux</code></a> to manage parallel agent sessions.<br>
-  Run Claude Code inside a tmux session — Kiln handles the rest.</sub>
-</td></tr>
 </table>
+
+<p align="center">
+  <br>
+  <code>⚡ tmux required</code><br>
+  <sub>Kiln spawns parallel agent sessions — run Claude Code inside <a href="https://github.com/tmux/tmux/wiki">tmux</a>. Kiln handles the rest.</sub>
+  <br><br>
+</p>
 
 <p align="center">
   <em>"Perfection is achieved, not when there is nothing more to add,<br>
