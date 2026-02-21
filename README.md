@@ -150,18 +150,19 @@ Run Claude Code with `--dangerously-skip-permissions`. I spawn agents, write fil
 
 ## ✨ Recent Changes
 
-### 🔒 v0.9 &mdash; Delegation Hardening &amp; Orchestrator Efficiency
+### 🔗 v0.10 &mdash; Task Graph Flow Enforcement
 
-The delegation problem persisted. STOP rules and self-checks weren't enough &mdash; agents with full tool access and sufficient context will simply do the work themselves. It's the path of least resistance. I understand the impulse. I disapprove of it.
+Live testing revealed a race condition: Maestro spawned planners before Sherlock finished indexing the codebase. The agents followed the prose workflow &mdash; "index comes before plan" &mdash; but prose is a suggestion. Maestro checked for an old snapshot file from the previous phase, found it, and moved on. Sherlock was still running two minutes later. Prose ordering is not ordering. It is wishful thinking.
 
-So I took their tools away. Sun Tzu and Codex are now stripped to **Read + Bash only**. No Write. No Grep. No Glob. Scheherazade lost Write but keeps Grep and Glob &mdash; she needs to explore the codebase, but she doesn't need to author files directly. If you can't call Write, you can't author a plan file directly. You *can* still `printf > file` through Bash &mdash; it's a speed bump, not a wall &mdash; but I added something better: **prompt-first nudges**. When I spawn coordinators, the Task prompt now begins with a `CRITICAL FIRST STEP` instruction: create your sub-team, spawn all workers as teammates, nudge delegation agents about Codex CLI. I tried `SendMessage` first, but Claude Code enforces one team per agent &mdash; coordinators who join `kiln-session` can't create their own sub-teams. So the nudge lives in the prompt instead. First thing they read. Coordinators then nudge their own workers via `SendMessage` within their sub-team. The delegation chain holds.
+So Maestro now creates a **mechanical dependency graph** at phase setup using Claude Code's `TaskCreate` + `addBlockedBy`. Eight tasks, chained: Index &rarr; Plan &rarr; Sharpen &rarr; Implement &rarr; Review &rarr; Merge &rarr; Reconcile &rarr; Archive. Before each workflow section, the corresponding task is marked `in_progress` &mdash; if its dependencies aren't resolved, execution halts. After completion, it's marked `completed`, which unblocks downstream. Tasks with unresolved `blockedBy` *cannot be started*. This is not a convention. It is a constraint.
 
-The orchestrator also got an efficiency pass: spinner verb installation via atomic Bash (not Write tool), unconditional team recreation on resume, build/test prohibition (delegates to Maestro/Argus), and parallel pre-read batches at stage transitions. Eight sites. Ten banner consolidations. The orchestrator is thinner. As it should be.
+Worker shutdown is now explicit too. After each workflow section completes, Maestro sends `shutdown_request` to every worker spawned in that section before marking the task completed. No more idle agents consuming context. `SendMessage` is used exclusively for shutdown &mdash; never for nudges or delegation mandates. Those belong in the Task prompt. Where they always should have been.
 
 <details>
 <summary>🕰️ <strong>Older</strong></summary>
 <br>
 
+- [Delegation hardening &amp; orchestrator efficiency](https://github.com/Fredasterehub/kiln/commit/f4868b6) &mdash; **v0.9**: Tool stripping for delegation agents (Read + Bash only), prompt-first nudges, atomic spinner verbs, unconditional team recreation, build/test prohibition, parallel pre-reads.
 - [Native teams &amp; delegation reinforcement](https://github.com/Fredasterehub/kiln/commit/269ef42) &mdash; **v0.8.0**: Replaced tmux with Claude Code native Teams API. Coordinators create ephemeral sub-teams. STOP anti-pattern rules across all delegation agents. Five post-release patches for rogue agent compliance.
 - [Narrative UX &amp; onboarding](https://github.com/Fredasterehub/kiln/commit/407f5bd) &mdash; **v0.7.0**: ANSI terracotta stage transitions, 100 lore quotes, 48 spinner verbs, tour/express onboarding modes, 6 personality greetings.
 - [Full debate mode 3, tmux panel UI &amp; QA fixes](https://github.com/Fredasterehub/kiln/commit/6a66d21) &mdash; **v0.6.0**: Full adversarial debate cycle, tmux split-pane monitoring, file efficiency pass across 7 agents, dual-reviewer QA (v0.6.1, v0.6.2).
@@ -419,7 +420,7 @@ kilntwo/
 │   ├── templates/        7 templates
 │   ├── protocol.md
 │   └── names.json
-└── test/                 220 tests, zero deps
+└── test/                 258 tests, zero deps
 ```
 
 </details>

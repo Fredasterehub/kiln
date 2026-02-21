@@ -107,7 +107,7 @@ describe('v0.8.0 — native teams', () => {
     }
   });
 
-  it('no coordinator agent has post-spawn SendMessage nudge', () => {
+  it('no coordinator agent has post-spawn SendMessage nudge (shutdown_request allowed)', () => {
     const coordinators = [
       'agents/kiln-planning-coordinator.md',
       'agents/kiln-phase-executor.md',
@@ -116,10 +116,16 @@ describe('v0.8.0 — native teams', () => {
 
     for (const file of coordinators) {
       const content = readAsset(file);
-      assert.ok(
-        !content.includes('SendMessage('),
-        `${file} must NOT use SendMessage nudges — delegation mandates go in Task prompt`
-      );
+      const lines = content.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].includes('SendMessage(') && !lines[i].includes('shutdown_request')) {
+          // Allow rule definition lines that describe the policy
+          if (lines[i].includes('exclusively for shutdown_request') || lines[i].includes('Worker shutdown')) continue;
+          assert.fail(
+            `${file}:${i + 1} has SendMessage nudge (not shutdown_request): ${lines[i].trim()}`
+          );
+        }
+      }
     }
   });
 

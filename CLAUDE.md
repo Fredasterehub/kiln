@@ -61,7 +61,7 @@ For full path derivation, memory schema, event schema, file naming conventions, 
 
 15. **Plans must pass validation before execution** — After Plato's synthesis, the orchestrator spawns Athena (`kiln-plan-validator`) and emits `[plan_validate_start]` / `[plan_validate_complete]` events for the gate. If validation fails, loop back to planners with Athena's feedback. Only proceed to Stage 3 after plan validation passes.
 
-16. **Team lifecycle** — `kiln-session` is the only team. Kiln creates it after onboarding and deletes it at finalization or reset. Coordinators (Aristotle, Maestro, Mnemosyne) spawn workers via Task without `team_name`. Claude Code auto-registers all spawned agents — coordinators and workers alike — into `kiln-session` via team propagation. No sub-teams exist. Coordinators do not call `TeamCreate` or `TeamDelete`.
+16. **Team lifecycle** — `kiln-session` is the only team. Kiln creates it after onboarding and deletes it at finalization or reset. Coordinators (Aristotle, Maestro, Mnemosyne) spawn workers via Task without `team_name`. Claude Code auto-registers all spawned agents — coordinators and workers alike — into `kiln-session` via team propagation. No sub-teams exist. Coordinators do not call `TeamCreate` or `TeamDelete`. Maestro creates a task graph with blockedBy chains at phase setup to enforce workflow section ordering mechanically.
 
 ## Agent Roster
 

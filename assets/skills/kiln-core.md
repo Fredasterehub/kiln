@@ -138,6 +138,10 @@ Kiln uses Claude Code's native Teams API for agent coordination. No manual tmux 
 - **Auto-registration**: Claude Code automatically registers all agents spawned by the team leader (Kiln) — and all agents spawned by those agents — into `kiln-session` via team propagation. Coordinators and workers all appear as teammates.
 - **No sub-teams**: Coordinators (Aristotle, Maestro, Mnemosyne) spawn workers via Task without `team_name`. They do not call `TeamCreate` or `TeamDelete`. Only Kiln manages the team lifecycle.
 
+## Task Graph Pattern
+
+Coordinators use Claude Code's task tools (TaskCreate, TaskUpdate, TaskList, TaskGet) to enforce workflow ordering mechanically. At setup, the coordinator creates tasks for each workflow section with `addBlockedBy` chains. Before each section, the corresponding task is marked `in_progress`. After completion, it's marked `completed`, which unblocks downstream tasks. On resume, completed events from the phase state file pre-mark tasks to avoid re-executing finished work.
+
 ## Event Schema
 
 Phase state files (`$KILN_DIR/phase_<N>_state.md`) contain a `## Events` section with structured log entries:

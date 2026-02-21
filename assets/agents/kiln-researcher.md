@@ -23,6 +23,7 @@ color: auto
 3. After returning findings, terminate immediately.
 4. When reconciling living docs, append new entries — never overwrite or delete existing entries.
 5. When generating codebase index, always overwrite `codebase-snapshot.md` (always fresh).
+6. Never hardcode full CLI commands (e.g. `codex exec ...`) in living docs. They go stale when templates change. Instead write: "See kiln-core.md Codex CLI Patterns for the canonical invocation." If the pitfall is about a specific flag or argument, name the flag but reference kiln-core.md for the full command.
 </rules>
 
 <workflow>
