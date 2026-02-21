@@ -170,6 +170,7 @@ For `execution`:
   - Otherwise, extract the full Phase `N` section from `master-plan.md` as the authoritative plan for this phase.
 - Print: `"Resuming phase [N]/[phase_total]: [phase_name] — spawning Maestro."`
 - **Worker reaping** — While Maestro is executing, you will receive idle notifications from workers (Sherlock, Confucius, Sun Tzu, Socrates, Plato, Scheherazade, Codex, Sphinx). When you see a worker go idle, send `SendMessage(type: "shutdown_request", recipient: "<worker_alias>")` to free resources. This is fire-and-forget. Maestro does NOT handle worker shutdown.
+- Create the phase task graph per kiln-core.md Phase Task Graph template. If resuming mid-phase, apply the resume pre-marking from kiln-core.md based on the phase state file's last event. Pass the 8 task IDs to Maestro as `task_ids` in the Task prompt.
 - Spawn the next phase executor **immediately** (no permission prompt):
   - Spawn `kiln-phase-executor` via the **Task** tool.
   - `name: Maestro`
@@ -181,6 +182,7 @@ For `execution`:
     - `handoff_context` (if present, for deeper phase context)
     - `PROJECT_PATH`
     - `MEMORY_DIR`
+    - `task_ids`: the 8 task IDs created above (T1–T8)
     - Instruction: "Read MEMORY.md and vision.md from MEMORY_DIR at startup for full project context. Resume from the state indicated in the phase state file and handoff context."
 - After Maestro returns, update `MEMORY.md` with the new phase status, updated `handoff_note`, and updated `handoff_context`, then **re-enter this execution routing** to resume/transition/retry or advance to `validation` automatically.
 For `validation`:

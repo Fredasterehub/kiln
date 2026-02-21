@@ -17,10 +17,11 @@ describe('task graph flow enforcement', () => {
 
   describe('Maestro tools', () => {
 
-    it('has TaskCreate in tools', () => {
+    it('does NOT have TaskCreate in tools (Kiln creates task graph)', () => {
+      const frontmatter = maestro.substring(0, maestro.indexOf('---', 4));
       assert.ok(
-        maestro.includes('- TaskCreate'),
-        'kiln-phase-executor.md must list TaskCreate in tools'
+        !frontmatter.includes('- TaskCreate'),
+        'kiln-phase-executor.md must NOT list TaskCreate in tools (Kiln creates the task graph)'
       );
     });
 
@@ -31,10 +32,11 @@ describe('task graph flow enforcement', () => {
       );
     });
 
-    it('has TaskList in tools', () => {
+    it('does NOT have TaskList in tools (Kiln creates task graph)', () => {
+      const frontmatter = maestro.substring(0, maestro.indexOf('---', 4));
       assert.ok(
-        maestro.includes('- TaskList'),
-        'kiln-phase-executor.md must list TaskList in tools'
+        !frontmatter.includes('- TaskList'),
+        'kiln-phase-executor.md must NOT list TaskList in tools (Kiln creates the task graph)'
       );
     });
 
@@ -56,10 +58,10 @@ describe('task graph flow enforcement', () => {
 
   describe('Maestro rules', () => {
 
-    it('has Task graph enforcement rule', () => {
+    it('has Task graph gates rule', () => {
       assert.ok(
-        maestro.includes('Task graph enforcement'),
-        'kiln-phase-executor.md rules must mention "Task graph enforcement"'
+        maestro.includes('Task graph gates'),
+        'kiln-phase-executor.md rules must mention "Task graph gates"'
       );
     });
 
@@ -77,34 +79,34 @@ describe('task graph flow enforcement', () => {
 
   describe('Maestro Setup task graph creation', () => {
 
-    it('Setup section mentions TaskCreate', () => {
+    it('Setup section references task_ids input', () => {
       const setupIdx = maestro.indexOf('## Setup');
       const codebaseIdx = maestro.indexOf('## Codebase Index');
       assert.ok(setupIdx >= 0 && codebaseIdx > setupIdx, 'must have Setup and Codebase Index sections');
       const setupSection = maestro.substring(setupIdx, codebaseIdx);
       assert.ok(
-        setupSection.includes('TaskCreate'),
-        'Setup section must mention TaskCreate for task graph creation'
+        setupSection.includes('task_ids'),
+        'Setup section must reference task_ids from Kiln'
       );
     });
 
-    it('Setup section mentions addBlockedBy', () => {
+    it('Setup section references kiln-core.md resume mapping', () => {
       const setupIdx = maestro.indexOf('## Setup');
       const codebaseIdx = maestro.indexOf('## Codebase Index');
       const setupSection = maestro.substring(setupIdx, codebaseIdx);
       assert.ok(
-        setupSection.includes('addBlockedBy'),
-        'Setup section must mention addBlockedBy for dependency chains'
+        setupSection.includes('kiln-core.md') && setupSection.includes('resume'),
+        'Setup section must reference kiln-core.md resume mapping'
       );
     });
 
-    it('Setup section has resume mapping', () => {
-      const setupIdx = maestro.indexOf('## Setup');
-      const codebaseIdx = maestro.indexOf('## Codebase Index');
-      const setupSection = maestro.substring(setupIdx, codebaseIdx);
+    it('inputs section includes task_ids', () => {
+      const inputsIdx = maestro.indexOf('<inputs>');
+      const inputsEnd = maestro.indexOf('</inputs>');
+      const inputsSection = maestro.substring(inputsIdx, inputsEnd);
       assert.ok(
-        setupSection.includes('Resume') && setupSection.includes('plan_complete') && setupSection.includes('review_approved'),
-        'Setup section must have resume mapping with event-to-task mapping'
+        inputsSection.includes('task_ids'),
+        'inputs must include task_ids parameter'
       );
     });
   });
@@ -219,35 +221,35 @@ describe('task graph flow enforcement', () => {
 
   describe('kiln-core.md has Task Graph Pattern section', () => {
 
-    it('kiln-core.md contains Task Graph Pattern heading', () => {
+    it('kiln-core.md contains Phase Task Graph heading', () => {
       const core = readAsset('skills/kiln-core.md');
       assert.ok(
-        core.includes('## Task Graph Pattern'),
-        'kiln-core.md must have "## Task Graph Pattern" section'
+        core.includes('## Phase Task Graph'),
+        'kiln-core.md must have "## Phase Task Graph" section'
       );
     });
 
-    it('kiln-core.md Task Graph Pattern mentions addBlockedBy', () => {
+    it('kiln-core.md Phase Task Graph has template and resume mapping', () => {
       const core = readAsset('skills/kiln-core.md');
-      const idx = core.indexOf('## Task Graph Pattern');
-      const section = core.substring(idx, idx + 500);
+      const idx = core.indexOf('## Phase Task Graph');
+      const section = core.substring(idx, idx + 1500);
       assert.ok(
-        section.includes('addBlockedBy'),
-        'Task Graph Pattern section must mention addBlockedBy'
+        section.includes('blockedBy') && section.includes('Resume pre-marking') && section.includes('task_ids'),
+        'Phase Task Graph section must have template with blockedBy, resume pre-marking, and task_ids passing'
       );
     });
   });
 
   describe('protocol.md rule 16 — team lifecycle & worker reaping (v0.11.0)', () => {
 
-    it('protocol.md rule 16 mentions task graph', () => {
+    it('protocol.md rule 16 mentions dependency graph', () => {
       const protocol = readAsset('protocol.md');
       const rule16Idx = protocol.indexOf('16. **Team lifecycle');
       assert.ok(rule16Idx >= 0, 'protocol.md must have rule 16');
       const rule16 = protocol.substring(rule16Idx, rule16Idx + 800);
       assert.ok(
-        rule16.includes('task graph') && rule16.includes('blockedBy'),
-        'protocol.md rule 16 must mention task graph with blockedBy'
+        rule16.includes('dependency graph') && rule16.includes('blockedBy'),
+        'protocol.md rule 16 must mention dependency graph with blockedBy'
       );
     });
 

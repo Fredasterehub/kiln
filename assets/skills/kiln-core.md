@@ -138,9 +138,32 @@ Kiln uses Claude Code's native Teams API for agent coordination. No manual tmux 
 - **Auto-registration**: Claude Code automatically registers all agents spawned by the team leader (Kiln) — and all agents spawned by those agents — into `kiln-session` via team propagation. Coordinators and workers all appear as teammates.
 - **No sub-teams**: Coordinators (Aristotle, Maestro, Mnemosyne) spawn workers via Task without `team_name`. They do not call `TeamCreate` or `TeamDelete`. Only Kiln manages the team lifecycle.
 
-## Task Graph Pattern
+## Phase Task Graph
 
-Coordinators use Claude Code's task tools (TaskCreate, TaskUpdate, TaskList, TaskGet) to enforce workflow ordering mechanically. At setup, the coordinator creates tasks for each workflow section with `addBlockedBy` chains. Before each section, the corresponding task is marked `in_progress`. After completion, it's marked `completed`, which unblocks downstream tasks. On resume, completed events from the phase state file pre-mark tasks to avoid re-executing finished work.
+Kiln creates an 8-task dependency chain before spawning Maestro for each phase. Tasks are session-scoped — recreated on every resume.
+
+### Template (replace N with phase number)
+- T1: subject="Phase N: Index codebase", activeForm="Indexing codebase"
+- T2: subject="Phase N: Generate plan", activeForm="Generating phase plan", blockedBy=[T1]
+- T3: subject="Phase N: Sharpen prompts", activeForm="Sharpening prompts", blockedBy=[T2]
+- T4: subject="Phase N: Implement tasks", activeForm="Implementing tasks", blockedBy=[T3]
+- T5: subject="Phase N: Review & QA", activeForm="Reviewing code", blockedBy=[T4]
+- T6: subject="Phase N: Merge", activeForm="Merging phase branch", blockedBy=[T5]
+- T7: subject="Phase N: Reconcile docs", activeForm="Reconciling living docs", blockedBy=[T6]
+- T8: subject="Phase N: Archive", activeForm="Archiving phase artifacts", blockedBy=[T7]
+
+### Resume pre-marking
+When resuming mid-phase, pre-mark tasks as completed based on the last event in the phase state file:
+- `setup`, `branch` → none completed
+- `plan_complete` → T1, T2 completed
+- `sharpen_complete` → T1–T3 completed
+- All `task_*` done or `halt` → T1–T4 completed
+- `review_approved` → T1–T5 completed
+- `merge` → T1–T6 completed
+- `reconcile_complete` → T1–T7 completed
+
+### Passing to Maestro
+Pass all 8 task IDs in the Task prompt as: `task_ids: {T1: "<id>", T2: "<id>", ..., T8: "<id>"}`.
 
 ## Event Schema
 

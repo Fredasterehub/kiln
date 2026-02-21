@@ -338,6 +338,8 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
     **Worker reaping** — While Maestro is executing, you will receive idle notifications from workers (Sherlock, Confucius, Sun Tzu, Socrates, Plato, Scheherazade, Codex, Sphinx). When you see a worker go idle, send `SendMessage(type: "shutdown_request", recipient: "<worker_alias>")` to free resources. This is fire-and-forget. Maestro does NOT handle worker shutdown.
 
+    Create the phase task graph per kiln-core.md Phase Task Graph template (8 tasks with blockedBy chains). Pass the 8 task IDs to Maestro as `task_ids` in the Task prompt.
+
     Spawn `kiln-phase-executor` via the Task tool.
     `name`: `"Maestro"` (the alias)
     `subagent_type`: `kiln-phase-executor`
@@ -347,6 +349,7 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
     Full phase section from the master plan, including name, goal, tasks, and acceptance criteria.
     `PROJECT_PATH`.
     `MEMORY_DIR`.
+    `task_ids`: the 8 task IDs created above (T1–T8).
     Include this instruction text:
     "Read MEMORY.md and vision.md from MEMORY_DIR at startup for full project context. Implement this phase completely. Write working code, create real files, run tests. When done, write a phase summary to `$MEMORY_DIR/phase-<N>-results.md` with sections: Completed Tasks, Files Created or Modified, Tests Run and Results, Blockers or Issues. Do not proceed to the next phase — stop after this phase is complete."
    Wait for completion before spawning the next phase executor.
@@ -444,6 +447,8 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
     `handoff_context` = `Validation verdict: <verdict>. <N> correction tasks identified. Running correction phase through full Scheherazade→Codex→Sphinx cycle. Cycle <correction_cycle> of max 3.`
     Append to `## Correction Log`: `- Cycle <correction_cycle>: <verdict>, <N> correction tasks`
     `last_updated` = current ISO-8601 UTC timestamp.
+    Create the phase task graph per kiln-core.md Phase Task Graph template (8 tasks with blockedBy chains). Pass the 8 task IDs to Maestro as `task_ids` in the Task prompt.
+
     Spawn `kiln-phase-executor` (Maestro) with the correction tasks as the phase description.
     `name`: `"Maestro"` (the alias)
     `subagent_type`: `kiln-phase-executor`
