@@ -47,7 +47,7 @@
 > [!CAUTION]
 > **tmux required** — Kiln spawns parallel agent sessions. Run Claude Code inside a [tmux](https://github.com/tmux/tmux/wiki) session. Kiln handles the rest.
 >
-> **Relay gap** — When workers (planners, investigators) finish their tasks, they sometimes report back to the orchestrator instead of directly to Maestro. When that happens, Maestro doesn't know the work is done and will sit idle waiting. If you notice the pipeline stalling between stages, nudge Kiln to relay the completion signal from the orchestrator to Maestro. This is a known coordination edge we're tightening.
+> If you notice the pipeline stalling between stages, nudge Kiln to relay the completion signal from the orchestrator to Maestro. This is a known coordination edge we're tightening.
 
 <p align="center">
   <em>"Perfection is achieved, not when there is nothing more to add,<br>
