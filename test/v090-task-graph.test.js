@@ -54,6 +54,22 @@ describe('task graph flow enforcement', () => {
         'kiln-phase-executor.md must NOT list SendMessage in tools (worker shutdown is Kiln responsibility)'
       );
     });
+
+    it('does NOT have Grep in tools (codebase exploration is worker work)', () => {
+      const frontmatter = maestro.substring(0, maestro.indexOf('---', 4));
+      assert.ok(
+        !frontmatter.includes('- Grep'),
+        'kiln-phase-executor.md must NOT list Grep in tools (codebase exploration is delegated to workers)'
+      );
+    });
+
+    it('does NOT have Glob in tools (codebase exploration is worker work)', () => {
+      const frontmatter = maestro.substring(0, maestro.indexOf('---', 4));
+      assert.ok(
+        !frontmatter.includes('- Glob'),
+        'kiln-phase-executor.md must NOT list Glob in tools (codebase exploration is delegated to workers)'
+      );
+    });
   });
 
   describe('Maestro rules', () => {
