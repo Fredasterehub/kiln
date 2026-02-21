@@ -235,6 +235,82 @@ describe('task graph flow enforcement', () => {
     });
   });
 
+  describe('Maestro Task-first rule and WHO-framed workflow (v0.12.0)', () => {
+
+    it('has Task-first rule', () => {
+      assert.ok(
+        maestro.includes('**Task-first**'),
+        'kiln-phase-executor.md rules must have a "Task-first" rule'
+      );
+      assert.ok(
+        maestro.includes('first significant action MUST be a Task call'),
+        'Task-first rule must require Task call as first action'
+      );
+    });
+
+    it('Task-first rule says workers gather their own context', () => {
+      assert.ok(
+        maestro.includes('workers have their own exploration tools') || maestro.includes('workers gather their own context'),
+        'Task-first rule must state that workers gather their own context'
+      );
+    });
+
+    it('worker sections name the worker in the heading', () => {
+      const workerSections = [
+        { heading: 'Codebase Index', worker: 'Sherlock' },
+        { heading: 'Plan', worker: 'Confucius' },
+        { heading: 'Sharpen', worker: 'Scheherazade' },
+        { heading: 'Implement', worker: 'Codex' },
+        { heading: 'Review', worker: 'Sphinx' },
+        { heading: 'Reconcile', worker: 'Sherlock' },
+      ];
+      for (const { heading, worker } of workerSections) {
+        const pattern = `## ${heading} —`;
+        const idx = maestro.indexOf(pattern);
+        assert.ok(idx >= 0, `section heading must include "## ${heading} —" with worker context`);
+        const headingLine = maestro.substring(idx, maestro.indexOf('\n', idx));
+        assert.ok(
+          headingLine.includes(worker),
+          `## ${heading} heading must name ${worker}: got "${headingLine}"`
+        );
+      }
+    });
+
+    it('worker sections lead with WHO does the work', () => {
+      const delegationSections = [
+        { heading: 'Codebase Index', phrase: 'Sherlock does this work' },
+        { heading: 'Plan', phrase: 'Four workers produce the phase plan' },
+        { heading: 'Sharpen', phrase: 'Scheherazade explores the codebase' },
+        { heading: 'Implement', phrase: 'Codex implements each task' },
+        { heading: 'Review', phrase: 'Sphinx reviews' },
+        { heading: 'Reconcile', phrase: 'Sherlock reconciles living docs' },
+      ];
+      for (const { heading, phrase } of delegationSections) {
+        const idx = maestro.indexOf(`## ${heading}`);
+        const nextSection = maestro.substring(idx + 5).match(/\n## /);
+        const endIdx = nextSection ? idx + 5 + nextSection.index : maestro.length;
+        const section = maestro.substring(idx, endIdx);
+        assert.ok(
+          section.includes(phrase),
+          `## ${heading} section must include WHO-framing phrase: "${phrase}"`
+        );
+      }
+    });
+
+    it('non-worker sections (Setup, Complete, Archive) do NOT name workers in heading', () => {
+      // These are Maestro's own work — no delegation heading
+      for (const heading of ['Setup', 'Complete', 'Archive']) {
+        const idx = maestro.indexOf(`## ${heading}`);
+        assert.ok(idx >= 0, `must have ## ${heading} section`);
+        const headingLine = maestro.substring(idx, maestro.indexOf('\n', idx));
+        assert.ok(
+          !headingLine.includes('—'),
+          `## ${heading} should not have worker attribution: got "${headingLine}"`
+        );
+      }
+    });
+  });
+
   describe('kiln-core.md has Task Graph Pattern section', () => {
 
     it('kiln-core.md contains Phase Task Graph heading', () => {
