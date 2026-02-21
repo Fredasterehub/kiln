@@ -15,12 +15,11 @@
 
 <br>
 
-<!-- KILN STATUS — To update: change level (1-5), current description, and timestamp -->
-<!-- Level 1: COLD    | All systems nominal. Operating within acceptable parameters for your dimension. -->
-<!-- Level 2: WARM    | Minor turbulence. Some subsystems are expressing opinions.                      -->
-<!-- Level 3: HOT     | Degraded. Your mileage may vary. Significantly.                                -->
-<!-- Level 4: MOLTEN  | Major issues. Abandon ship. I repeat, abandon ship.                             -->
-<!-- Level 5: SUPERNOVA | I have seen the void and it looked back. Do not clone this repo. Pray.        -->
+<!-- KILN STATUS — To update: change the active level and timestamp below.         -->
+<!-- To switch level: move the ◄ marker, bold the active row, dim the others.      -->
+<!-- GREEN  = All systems nominal. Proceed with confidence.                         -->
+<!-- YELLOW = Degraded. Your mileage may vary. Significantly.                       -->
+<!-- RED    = Abandon ship. I repeat, abandon ship.                                 -->
 
 <p align="center">
   <strong>⚠️ WORK IN PROGRESS</strong><br>
@@ -28,15 +27,23 @@
   Others are having an existential crisis. We're aware. We're on it.</sub>
 </p>
 
-<p align="center">
-  <sub>🟢 Cold · 🟡 Warm · <strong>🟠 Hot ←</strong> · 🔴 Molten · 💀 Supernova</sub><br>
-  <sub>📡 <strong>Current:</strong> Degraded. Your mileage may vary. Significantly.</sub>
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/🟢_·_🟡_·_🟠_·_⚫_·_⚫-KILN_TEMP:_HOT-orange?style=for-the-badge&labelColor=1a1a2e" alt="Kiln Temp: HOT (3/5)">&nbsp;
-  <img src="https://img.shields.io/badge/updated-Feb_20,_2026_·_19:09_EST-555?style=for-the-badge&labelColor=1a1a2e" alt="Last updated">
-</p>
+<table align="center">
+<tr><td align="center"><strong>CURRENT STATUS</strong></td></tr>
+<tr><td align="center">
+<br>
+<sub><em>All systems nominal. Proceed with confidence.</em></sub><br>
+🟢<br>
+<sub>│</sub><br>
+<strong>🟡 ◄</strong><br>
+<sub><strong>Degraded. Your mileage may vary. Significantly.</strong></sub><br>
+<sub>│</sub><br>
+🔴<br>
+<sub><em>Abandon ship. I repeat, abandon ship.</em></sub><br>
+<br>
+<img src="https://img.shields.io/badge/updated-Feb_20,_2026_·_19:09_EST-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br>
+<br>
+</td></tr>
+</table>
 
 <p align="center">
   <em>"Perfection is achieved, not when there is nothing more to add,<br>
