@@ -30,18 +30,18 @@
 <table align="center">
 <tr><td align="center" colspan="2"><br><strong>CURRENT STATUS</strong><br><br></td></tr>
 <tr>
-  <td align="center" width="50"><img src="https://img.shields.io/badge/%E2%80%8B-2b3a2b?style=flat-square&labelColor=2b3a2b&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMiIgaGVpZ2h0PSIxMiI+PGNpcmNsZSBjeD0iNiIgY3k9IjYiIHI9IjYiIGZpbGw9IiMzYTVhM2EiLz48L3N2Zz4=" height="20" alt="green-dim"></td>
-  <td><sub><font color="#555">Clear skies. The pipeline is stable and I am insufferably smug about it.</font></sub></td>
+  <td align="center" width="50"><img src="docs/status/green-dim.svg" width="18" alt="green"></td>
+  <td><sub>Clear skies. The pipeline is stable and I am insufferably smug about it.</sub></td>
 </tr>
 <tr>
-  <td align="center"><img src="https://img.shields.io/badge/%E2%80%8B-1a1a2e?style=flat-square&labelColor=1a1a2e&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMiIgaGVpZ2h0PSIxMiI+PGNpcmNsZSBjeD0iNiIgY3k9IjYiIHI9IjYiIGZpbGw9IiNmZmNjMDAiLz48L3N2Zz4=" height="20" alt="yellow-active"></td>
+  <td align="center"><img src="docs/status/yellow-active.svg" width="18" alt="yellow-active"></td>
   <td><strong>Under active work. Things mostly function but may occasionally express creative differences.</strong></td>
 </tr>
 <tr>
-  <td align="center"><img src="https://img.shields.io/badge/%E2%80%8B-2e1a1a?style=flat-square&labelColor=2e1a1a&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMiIgaGVpZ2h0PSIxMiI+PGNpcmNsZSBjeD0iNiIgY3k9IjYiIHI9IjYiIGZpbGw9IiM1YTJhMmEiLz48L3N2Zz4=" height="20" alt="red-dim"></td>
-  <td><sub><font color="#555">Critical issues. I recommend not being here right now. Come back with snacks and patience.</font></sub></td>
+  <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
+  <td><sub>Critical issues. I recommend not being here right now. Come back with snacks and patience.</sub></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Feb_20,_2026_·_20:50_EST-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Feb_20,_2026_·_20:55_EST-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
