@@ -23,18 +23,18 @@
 
 <p align="center">
   <strong>⚠️ WORK IN PROGRESS</strong><br>
-  <sub>Functional, evolving, honest about both. Small quirks remain — we're already testing fixes.</sub>
+  <sub>The shape is there. The last few edges are being smoothed as you read this.</sub>
 </p>
 
 <table align="center">
 <tr><td align="center" colspan="2"><br><strong>CURRENT STATUS</strong><br><br></td></tr>
 <tr>
-  <td align="center" width="50"><img src="docs/status/green-active.svg" width="18" alt="green-active"></td>
-  <td><strong>All nominal. Pipeline is stable, agents are sharp, autonomy is full.</strong></td>
+  <td align="center" width="50"><img src="docs/status/green-dim.svg" width="18" alt="green"></td>
+  <td><sub>All nominal. Pipeline is stable, agents are sharp, autonomy is full.</sub></td>
 </tr>
 <tr>
-  <td align="center"><img src="docs/status/yellow-dim.svg" width="18" alt="yellow"></td>
-  <td><sub>Functional but evolving. Some rough edges — you may need to steer where it would normally carry you.</sub></td>
+  <td align="center"><img src="docs/status/yellow-active.svg" width="18" alt="yellow-active"></td>
+  <td><strong>Close to what stable feels like. A few sequencing quirks remain — already testing fixes.</strong></td>
 </tr>
 <tr>
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
