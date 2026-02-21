@@ -15,6 +15,13 @@
 
 <br>
 
+<!-- KILN STATUS — To update: change level (1-5), current description, and timestamp -->
+<!-- Level 1: COLD    | All systems nominal. Operating within acceptable parameters for your dimension. -->
+<!-- Level 2: WARM    | Minor turbulence. Some subsystems are expressing opinions.                      -->
+<!-- Level 3: HOT     | Degraded. Your mileage may vary. Significantly.                                -->
+<!-- Level 4: MOLTEN  | Major issues. Abandon ship. I repeat, abandon ship.                             -->
+<!-- Level 5: SUPERNOVA | I have seen the void and it looked back. Do not clone this repo. Pray.        -->
+
 <p align="center">
   <strong>⚠️ WORK IN PROGRESS</strong><br>
   <sub>The kiln is firing but the temperature is <em>opinionated</em>. Some features work beautifully.<br>
@@ -22,12 +29,16 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/🟢_·_🟡_·_🟠_·_⚫_·_⚫-KILN_TEMP:_HOT-orange?style=for-the-badge&labelColor=1a1a2e" alt="Kiln Temp: HOT (3/5)">&nbsp;
-  <img src="https://img.shields.io/badge/updated-Feb_20,_2026_·_19:09_EST-555?style=for-the-badge&labelColor=1a1a2e" alt="Last updated">
+  <sub>🟢 Cold · 🟡 Warm · <strong>🟠 Hot ←</strong> · 🔴 Molten · 💀 Supernova</sub>
 </p>
 
 <p align="center">
-  <sub>🟢 Cold · 🟡 Warm · <strong>🟠 Hot ←</strong> · 🔴 Molten · 💀 Supernova</sub>
+  <sub>🟠 <strong>HOT</strong> — Degraded. Your mileage may vary. Significantly.</sub>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/🟢_·_🟡_·_🟠_·_⚫_·_⚫-KILN_TEMP:_HOT-orange?style=for-the-badge&labelColor=1a1a2e" alt="Kiln Temp: HOT (3/5)">&nbsp;
+  <img src="https://img.shields.io/badge/updated-Feb_20,_2026_·_19:09_EST-555?style=for-the-badge&labelColor=1a1a2e" alt="Last updated">
 </p>
 
 <p align="center">
