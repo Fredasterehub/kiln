@@ -23,18 +23,19 @@
 
 <p align="center">
   <strong>⚠️ WORK IN PROGRESS</strong><br>
-  <sub>The shape is there. The last few edges are being smoothed as you read this.</sub>
+  <sub>Functional, evolving, honest about both. Some edges are still cooling.<br>
+  What works, works well. What doesn't is being dealt with.</sub>
 </p>
 
 <table align="center">
 <tr><td align="center" colspan="2"><br><strong>CURRENT STATUS</strong><br><br></td></tr>
 <tr>
-  <td align="center" width="50"><img src="docs/status/green-dim.svg" width="18" alt="green"></td>
-  <td><sub>All nominal. Pipeline is stable, agents are sharp, autonomy is full.</sub></td>
+  <td align="center" width="50"><img src="docs/status/green-active.svg" width="18" alt="green-active"></td>
+  <td><strong>Nominal. The experience is solid — a few early quirks exist but the pipeline delivers.</strong></td>
 </tr>
 <tr>
-  <td align="center"><img src="docs/status/yellow-active.svg" width="18" alt="yellow-active"></td>
-  <td><strong>Close to what stable feels like. A few sequencing quirks remain — already testing fixes.</strong></td>
+  <td align="center"><img src="docs/status/yellow-dim.svg" width="18" alt="yellow"></td>
+  <td><sub>Functional but evolving. Some rough edges — you may need to steer where it would normally carry you.</sub></td>
 </tr>
 <tr>
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
