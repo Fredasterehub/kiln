@@ -28,21 +28,23 @@
 </p>
 
 <table align="center">
-<tr><td align="center"><strong>CURRENT STATUS</strong></td></tr>
-<tr><td align="center">
-<br>
-<sub><em>All systems nominal. Proceed with confidence.</em></sub><br>
-🟢<br>
-<sub>│</sub><br>
-<strong>🟡 ◄</strong><br>
-<sub><strong>Degraded. Your mileage may vary. Significantly.</strong></sub><br>
-<sub>│</sub><br>
-🔴<br>
-<sub><em>Abandon ship. I repeat, abandon ship.</em></sub><br>
-<br>
-<img src="https://img.shields.io/badge/updated-Feb_20,_2026_·_19:09_EST-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br>
-<br>
-</td></tr>
+<tr><td align="center" colspan="3"><br><strong>CURRENT STATUS</strong><br><br></td></tr>
+<tr>
+  <td align="center" width="60"><sub>⚪</sub></td>
+  <td align="center" width="40"><img src="https://img.shields.io/badge/%E2%80%8B-brightgreen?style=for-the-badge&labelColor=brightgreen" height="12" alt="green"></td>
+  <td><sub><em>Clear skies. The pipeline is stable and I am insufferably smug about it.</em></sub></td>
+</tr>
+<tr>
+  <td align="center"><strong>◄</strong></td>
+  <td align="center"><img src="https://img.shields.io/badge/%E2%80%8B-yellow?style=for-the-badge&labelColor=yellow" height="12" alt="yellow"></td>
+  <td><strong>Under active work. Things mostly function but may occasionally express creative differences.</strong></td>
+</tr>
+<tr>
+  <td align="center"><sub>⚪</sub></td>
+  <td align="center"><img src="https://img.shields.io/badge/%E2%80%8B-red?style=for-the-badge&labelColor=red" height="12" alt="red"></td>
+  <td><sub><em>Critical issues. I recommend not being here right now. Come back with snacks and patience.</em></sub></td>
+</tr>
+<tr><td align="center" colspan="3"><br><img src="https://img.shields.io/badge/updated-Feb_20,_2026_·_20:35_EST-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
