@@ -30,18 +30,18 @@
 <table align="center">
 <tr><td align="center" colspan="2"><br><strong>CURRENT STATUS</strong><br><br></td></tr>
 <tr>
-  <td align="center" width="50"><img src="docs/status/green-active.svg" width="18" alt="green-active"></td>
-  <td><strong>All nominal. Pipeline is stable, agents are sharp, autonomy is full.</strong></td>
+  <td align="center" width="50"><img src="docs/status/green-dim.svg" width="18" alt="green"></td>
+  <td><sub>All nominal. Pipeline is stable, agents are sharp, autonomy is full.</sub></td>
 </tr>
 <tr>
-  <td align="center"><img src="docs/status/yellow-dim.svg" width="18" alt="yellow"></td>
-  <td><sub>Functional but evolving. Some rough edges — you may need to steer where it would normally carry you.</sub></td>
+  <td align="center"><img src="docs/status/yellow-active.svg" width="18" alt="yellow-active"></td>
+  <td><strong>Functional but evolving. Some rough edges — you may need to steer where it would normally carry you.</strong></td>
 </tr>
 <tr>
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
   <td><sub>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</sub></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Feb_21,_2026_·_17:23_EST-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Feb_21,_2026_·_17:36_EST-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 > [!CAUTION]
