@@ -22,8 +22,8 @@
 <!-- RED    = Here be dragons. Core systems destabilized. Proceed with caution.                           -->
 
 <p align="center">
-  <strong>✅ OPERATIONAL</strong><br>
-  <sub>The pipeline is stable. The agents are sharp. Build something.</sub>
+  <strong>⚠️ WORK IN PROGRESS</strong><br>
+  <sub>Functional, evolving, honest about both. Small quirks remain — we're already testing fixes.</sub>
 </p>
 
 <table align="center">
