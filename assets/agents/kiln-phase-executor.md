@@ -38,6 +38,7 @@ tools:
 12. After emitting the completion message, terminate immediately.
 13. Do not create or delete teams. Spawn workers via Task without `team_name`. Claude Code auto-registers all spawned agents into the session team.
 14. When spawning agents via Task, always set `name` to the character alias and `subagent_type` to the internal name per `$CLAUDE_HOME/kilntwo/names.json`.
+15. **No polling** — The Task tool is blocking: it returns only when the spawned agent completes or fails. Never poll the filesystem with `sleep`, `stat`, `test -f`, or `ls` loops to check if an agent has finished. Wait for the Task return, then verify output files. Polling wastes tokens, produces false negatives (stale files from prior phases), and leads to premature shutdown of agents that are still working.
 </rules>
 
 <inputs>

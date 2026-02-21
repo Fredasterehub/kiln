@@ -68,6 +68,21 @@ describe('task graph flow enforcement', () => {
         'kiln-phase-executor.md rules must mention "Worker shutdown"'
       );
     });
+
+    it('has No polling rule', () => {
+      assert.ok(
+        maestro.includes('No polling'),
+        'kiln-phase-executor.md rules must mention "No polling"'
+      );
+      assert.ok(
+        maestro.includes('Task tool is blocking'),
+        'No polling rule must explain that Task tool is blocking'
+      );
+      assert.ok(
+        maestro.includes('Never poll the filesystem'),
+        'No polling rule must explicitly prohibit filesystem polling'
+      );
+    });
   });
 
   describe('Maestro Setup task graph creation', () => {
