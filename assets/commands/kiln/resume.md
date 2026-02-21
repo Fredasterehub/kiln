@@ -169,6 +169,7 @@ For `execution`:
   - Trust `handoff_note` for additional context beyond what structured events convey.
   - Otherwise, extract the full Phase `N` section from `master-plan.md` as the authoritative plan for this phase.
 - Print: `"Resuming phase [N]/[phase_total]: [phase_name] — spawning Maestro."`
+- **Worker reaping** — While Maestro is executing, you will receive idle notifications from workers (Sherlock, Confucius, Sun Tzu, Socrates, Plato, Scheherazade, Codex, Sphinx). When you see a worker go idle, send `SendMessage(type: "shutdown_request", recipient: "<worker_alias>")` to free resources. This is fire-and-forget. Maestro does NOT handle worker shutdown.
 - Spawn the next phase executor **immediately** (no permission prompt):
   - Spawn `kiln-phase-executor` via the **Task** tool.
   - `name: Maestro`

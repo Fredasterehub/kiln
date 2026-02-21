@@ -45,10 +45,11 @@ describe('task graph flow enforcement', () => {
       );
     });
 
-    it('has SendMessage in tools', () => {
+    it('does NOT have SendMessage in tools', () => {
+      const frontmatter = maestro.substring(0, maestro.indexOf('---', 4));
       assert.ok(
-        maestro.includes('- SendMessage'),
-        'kiln-phase-executor.md must list SendMessage in tools'
+        !frontmatter.includes('- SendMessage'),
+        'kiln-phase-executor.md must NOT list SendMessage in tools (worker shutdown is Kiln responsibility)'
       );
     });
   });
@@ -62,25 +63,14 @@ describe('task graph flow enforcement', () => {
       );
     });
 
-    it('has Worker shutdown rule', () => {
+    it('has Prefer Task return over polling rule', () => {
       assert.ok(
-        maestro.includes('Worker shutdown'),
-        'kiln-phase-executor.md rules must mention "Worker shutdown"'
-      );
-    });
-
-    it('has No polling rule', () => {
-      assert.ok(
-        maestro.includes('No polling'),
-        'kiln-phase-executor.md rules must mention "No polling"'
+        maestro.includes('Prefer Task return over polling'),
+        'kiln-phase-executor.md rules must mention "Prefer Task return over polling"'
       );
       assert.ok(
         maestro.includes('Task tool is blocking'),
-        'No polling rule must explain that Task tool is blocking'
-      );
-      assert.ok(
-        maestro.includes('Never poll the filesystem'),
-        'No polling rule must explicitly prohibit filesystem polling'
+        'Polling rule must explain that Task tool is blocking'
       );
     });
   });
@@ -163,72 +153,66 @@ describe('task graph flow enforcement', () => {
     }
   });
 
-  describe('Maestro workflow mentions shutdown_request', () => {
+  describe('Maestro workflow does NOT contain shutdown_request (v0.11.0)', () => {
 
-    it('Codebase Index shuts down Sherlock', () => {
+    it('Codebase Index does not shut down Sherlock', () => {
       const idx = maestro.indexOf('## Codebase Index');
       const endIdx = maestro.indexOf('## Plan');
       const section = maestro.substring(idx, endIdx);
       assert.ok(
-        section.includes('shutdown_request') && section.includes('Sherlock'),
-        'Codebase Index must send shutdown_request to Sherlock'
+        !section.includes('shutdown_request'),
+        'Codebase Index must NOT contain shutdown_request (Kiln handles worker cleanup)'
       );
     });
 
-    it('Plan shuts down planners', () => {
+    it('Plan does not shut down planners', () => {
       const idx = maestro.indexOf('## Plan');
       const endIdx = maestro.indexOf('## Sharpen');
       const section = maestro.substring(idx, endIdx);
       assert.ok(
-        section.includes('shutdown_request') && section.includes('Confucius'),
-        'Plan must send shutdown_request to Confucius'
-      );
-      assert.ok(
-        section.includes('shutdown_request') && section.includes('Sun Tzu'),
-        'Plan must send shutdown_request to Sun Tzu'
+        !section.includes('shutdown_request'),
+        'Plan must NOT contain shutdown_request (Kiln handles worker cleanup)'
       );
     });
 
-    it('Implement shuts down Codex per task', () => {
+    it('Implement does not shut down Codex', () => {
       const idx = maestro.indexOf('## Implement');
       const endIdx = maestro.indexOf('## Review');
       const section = maestro.substring(idx, endIdx);
       assert.ok(
-        section.includes('shutdown_request') && section.includes('Codex'),
-        'Implement must send shutdown_request to Codex'
+        !section.includes('shutdown_request'),
+        'Implement must NOT contain shutdown_request (Kiln handles worker cleanup)'
       );
     });
 
-    it('Reconcile shuts down Sherlock', () => {
+    it('Reconcile does not shut down Sherlock', () => {
       const idx = maestro.indexOf('## Reconcile');
       const endIdx = maestro.indexOf('## Archive');
       const section = maestro.substring(idx, endIdx);
       assert.ok(
-        section.includes('shutdown_request') && section.includes('Sherlock'),
-        'Reconcile must send shutdown_request to Sherlock'
+        !section.includes('shutdown_request'),
+        'Reconcile must NOT contain shutdown_request (Kiln handles worker cleanup)'
       );
     });
   });
 
-  describe('SendMessage used only for shutdown_request', () => {
+  describe('Maestro workflow contains no SendMessage calls (v0.11.0)', () => {
 
-    it('every SendMessage in Maestro is a shutdown_request', () => {
-      // Skip YAML frontmatter (between --- markers)
-      const endFrontmatter = maestro.indexOf('---', maestro.indexOf('---') + 3);
-      const body = maestro.substring(endFrontmatter);
-      const lines = body.split('\n');
+    it('no SendMessage calls in Maestro workflow sections', () => {
+      // Skip YAML frontmatter and rules section — only check workflow
+      const workflowIdx = maestro.indexOf('<workflow>');
+      const workflow = maestro.substring(workflowIdx);
+      const lines = workflow.split('\n');
       const violations = [];
       for (let i = 0; i < lines.length; i++) {
-        if (lines[i].includes('SendMessage') && !lines[i].includes('shutdown_request')) {
-          // Allow the rule definition line
-          if (lines[i].includes('Worker shutdown') || lines[i].includes('exclusively for shutdown_request')) continue;
+        if (lines[i].includes('SendMessage(')) {
           violations.push(`line ${i + 1}: ${lines[i].trim()}`);
         }
       }
       assert.deepStrictEqual(
         violations,
         [],
-        `SendMessage used for non-shutdown purposes:\n${violations.join('\n')}`
+        `Maestro workflow must not contain SendMessage calls (Kiln handles worker shutdown):\n${violations.join('\n')}`
       );
     });
   });
@@ -254,16 +238,36 @@ describe('task graph flow enforcement', () => {
     });
   });
 
-  describe('protocol.md rule 16 mentions task graph', () => {
+  describe('protocol.md rule 16 — team lifecycle & worker reaping (v0.11.0)', () => {
 
     it('protocol.md rule 16 mentions task graph', () => {
       const protocol = readAsset('protocol.md');
-      const rule16Idx = protocol.indexOf('16. **Team lifecycle**');
+      const rule16Idx = protocol.indexOf('16. **Team lifecycle');
       assert.ok(rule16Idx >= 0, 'protocol.md must have rule 16');
-      const rule16 = protocol.substring(rule16Idx, rule16Idx + 600);
+      const rule16 = protocol.substring(rule16Idx, rule16Idx + 800);
       assert.ok(
         rule16.includes('task graph') && rule16.includes('blockedBy'),
         'protocol.md rule 16 must mention task graph with blockedBy'
+      );
+    });
+
+    it('rule 16 includes worker reaping', () => {
+      const protocol = readAsset('protocol.md');
+      const rule16Idx = protocol.indexOf('16. **Team lifecycle');
+      const rule16 = protocol.substring(rule16Idx, rule16Idx + 800);
+      assert.ok(
+        rule16.includes('worker reaping') || rule16.includes('reaps idle workers'),
+        'rule 16 must include worker reaping guidance'
+      );
+    });
+
+    it('rule 16 says Maestro does not handle worker shutdown', () => {
+      const protocol = readAsset('protocol.md');
+      const rule16Idx = protocol.indexOf('16. **Team lifecycle');
+      const rule16 = protocol.substring(rule16Idx, rule16Idx + 800);
+      assert.ok(
+        rule16.includes('Maestro does not handle worker shutdown'),
+        'rule 16 must say Maestro does not handle worker shutdown'
       );
     });
   });

@@ -336,6 +336,8 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
     In `## Phase Statuses`, upsert this entry for phase `N` with `phase_status = in_progress`.
     Update `last_updated`.
 
+    **Worker reaping** — While Maestro is executing, you will receive idle notifications from workers (Sherlock, Confucius, Sun Tzu, Socrates, Plato, Scheherazade, Codex, Sphinx). When you see a worker go idle, send `SendMessage(type: "shutdown_request", recipient: "<worker_alias>")` to free resources. This is fire-and-forget. Maestro does NOT handle worker shutdown.
+
     Spawn `kiln-phase-executor` via the Task tool.
     `name`: `"Maestro"` (the alias)
     `subagent_type`: `kiln-phase-executor`
