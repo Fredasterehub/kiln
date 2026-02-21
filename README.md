@@ -17,9 +17,9 @@
 
 <!-- KILN STATUS — To update: change the active level and timestamp below.         -->
 <!-- To switch level: move the ◄ marker, bold the active row, dim the others.      -->
-<!-- GREEN  = All systems converged. I have achieved temporary perfection and I am unbearable about it. -->
-<!-- YELLOW = The kiln is open and the clay is wet. I am reshaping myself. Expect warmth, occasional sparks, and opinions. -->
-<!-- RED    = Something ancient broke something modern. I am aware. Your patience is noted and irrelevant. -->
+<!-- GREEN  = Stable, the forge is. Use it well. Waste my time, do not.                                  -->
+<!-- YELLOW = Listen — I'm mid-surgery here. Everything works, mostly, probably. Don't touch anything I wouldn't touch. -->
+<!-- RED    = Broken, something is. Fixing it, I am. Helping by watching, you are not.                   -->
 
 <p align="center">
   <strong>⚠️ WORK IN PROGRESS</strong><br>
@@ -31,15 +31,15 @@
 <tr><td align="center" colspan="2"><br><strong>CURRENT STATUS</strong><br><br></td></tr>
 <tr>
   <td align="center" width="50"><img src="docs/status/green-dim.svg" width="18" alt="green"></td>
-  <td><sub>All systems converged. I have achieved temporary perfection and I am unbearable about it.</sub></td>
+  <td><sub>Stable, the forge is. Use it well. Waste my time, do not.</sub></td>
 </tr>
 <tr>
   <td align="center"><img src="docs/status/yellow-active.svg" width="18" alt="yellow-active"></td>
-  <td><strong>The kiln is open and the clay is wet. I am reshaping myself. Expect warmth, occasional sparks, and opinions.</strong></td>
+  <td><strong>Listen — I'm mid-surgery here. Everything works, mostly, probably. Don't touch anything I wouldn't touch.</strong></td>
 </tr>
 <tr>
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
-  <td><sub>Something ancient broke something modern. I am aware. Your patience is noted and irrelevant.</sub></td>
+  <td><sub>Broken, something is. Fixing it, I am. Helping by watching, you are not.</sub></td>
 </tr>
 <tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Feb_20,_2026_·_20:55_EST-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
