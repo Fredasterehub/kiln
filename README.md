@@ -44,7 +44,7 @@
 <tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Feb_21,_2026_·_12:45_EST-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
-> [!IMPORTANT]
+> [!CAUTION]
 > **tmux required** — Kiln spawns parallel agent sessions. Run Claude Code inside a [tmux](https://github.com/tmux/tmux/wiki) session. Kiln handles the rest.
 
 <p align="center">
