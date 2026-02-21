@@ -31,16 +31,16 @@
 </p>
 
 <p align="center">
+  <em>"Perfection is achieved, not when there is nothing more to add,<br>
+  but when there is nothing left to take away."</em><br>
+  <sub>&mdash; Antoine de Saint-Exup&eacute;ry</sub>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/Multi--Model-Opus_·_GPT--5-D4A574?style=for-the-badge" alt="Multi-Model">&nbsp;
   <img src="https://img.shields.io/badge/Debate-Models_Argue-C1666B?style=for-the-badge" alt="Debate">&nbsp;
   <img src="https://img.shields.io/badge/Dependencies-Zero-4A403A?style=for-the-badge" alt="Zero Deps">&nbsp;
   <a href="https://docs.anthropic.com/en/docs/claude-code/overview"><img src="https://img.shields.io/badge/Claude_Code-Native-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code"></a>
-</p>
-
-<p align="center">
-  <em>"Perfection is achieved, not when there is nothing more to add,<br>
-  but when there is nothing left to take away."</em><br>
-  <sub>&mdash; Antoine de Saint-Exup&eacute;ry</sub>
 </p>
 
 <p align="center">
