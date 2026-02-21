@@ -52,6 +52,9 @@ function parseArgs(argv) {
       continue;
     }
     if (arg === '--home') {
+      if (i + 1 >= argv.length) {
+        throw new Error('--home requires a directory path');
+      }
       flags.home = argv[i + 1];
       i += 1;
       continue;
