@@ -13,9 +13,9 @@ function readAsset(relativePath) {
 
 describe('v0.8.0 — native teams', () => {
 
-  it('start.md has no tmux/TMUX_LAYOUT/AGENT_PANE/KILN_PANE/davinci_complete refs', () => {
+  it('start.md has no legacy tmux pane artifacts (tmux requirement allowed)', () => {
     const start = readAsset('commands/kiln/start.md');
-    const forbidden = ['tmux', 'TMUX_LAYOUT', 'AGENT_PANE', 'KILN_PANE', 'davinci_complete'];
+    const forbidden = ['TMUX_LAYOUT', 'AGENT_PANE', 'KILN_PANE', 'davinci_complete'];
 
     for (const term of forbidden) {
       assert.ok(
@@ -25,9 +25,9 @@ describe('v0.8.0 — native teams', () => {
     }
   });
 
-  it('resume.md has no tmux/TMUX_LAYOUT/AGENT_PANE/KILN_PANE refs', () => {
+  it('resume.md has no legacy tmux pane artifacts (tmux requirement allowed)', () => {
     const resume = readAsset('commands/kiln/resume.md');
-    const forbidden = ['tmux', 'TMUX_LAYOUT', 'AGENT_PANE', 'KILN_PANE'];
+    const forbidden = ['TMUX_LAYOUT', 'AGENT_PANE', 'KILN_PANE'];
 
     for (const term of forbidden) {
       assert.ok(

@@ -123,7 +123,14 @@ describe('v0.9.0 — orchestrator efficiency & correctness', () => {
       const resume = readAsset('commands/kiln/resume.md');
       const execIdx = resume.indexOf('For `execution`:');
       assert.ok(execIdx >= 0, 'resume.md must have execution routing section');
-      const execSection = resume.substring(execIdx, execIdx + 1000);
+      const nextStageIdx = resume.indexOf('For `validation`:', execIdx);
+      const execSection = resume.substring(execIdx, nextStageIdx > execIdx ? nextStageIdx : execIdx + 2000);
+      const execPreReadIdx = execSection.indexOf('Parallel pre-reads');
+      const execInstallIdx = execSection.indexOf('Install spinner verbs');
+      const execPreReadBlock = execSection.substring(
+        execPreReadIdx,
+        execInstallIdx > execPreReadIdx ? execInstallIdx : execSection.length
+      );
       assert.ok(
         execSection.includes('Parallel pre-reads'),
         'resume.md execution routing must instruct parallel pre-reads'
@@ -133,8 +140,13 @@ describe('v0.9.0 — orchestrator efficiency & correctness', () => {
         'resume.md execution routing must mention parallel tool calls'
       );
       assert.ok(
-        execSection.includes('spinner-verbs.json') && execSection.includes('lore.json') && execSection.includes('master-plan.md'),
-        'resume.md execution pre-reads must include spinner-verbs, lore, and master-plan'
+        execPreReadBlock.includes('master-plan.md'),
+        'resume.md execution pre-reads must include master-plan'
+      );
+      assert.ok(
+        !execPreReadBlock.includes('$CLAUDE_HOME/kilntwo/data/spinner-verbs.json') &&
+        !execPreReadBlock.includes('$CLAUDE_HOME/kilntwo/data/lore.json'),
+        'resume.md execution pre-reads must not list spinner-verbs/lore files as pre-reads'
       );
     });
 
@@ -142,7 +154,14 @@ describe('v0.9.0 — orchestrator efficiency & correctness', () => {
       const resume = readAsset('commands/kiln/resume.md');
       const valIdx = resume.indexOf('For `validation`:');
       assert.ok(valIdx >= 0, 'resume.md must have validation routing section');
-      const valSection = resume.substring(valIdx, valIdx + 1000);
+      const completeIdx = resume.indexOf('For `complete`:', valIdx);
+      const valSection = resume.substring(valIdx, completeIdx > valIdx ? completeIdx : valIdx + 2000);
+      const valPreReadIdx = valSection.indexOf('Parallel pre-reads');
+      const valInstallIdx = valSection.indexOf('Install spinner verbs');
+      const valPreReadBlock = valSection.substring(
+        valPreReadIdx,
+        valInstallIdx > valPreReadIdx ? valInstallIdx : valSection.length
+      );
       assert.ok(
         valSection.includes('Parallel pre-reads'),
         'resume.md validation routing must instruct parallel pre-reads'
@@ -152,8 +171,13 @@ describe('v0.9.0 — orchestrator efficiency & correctness', () => {
         'resume.md validation routing must mention parallel tool calls'
       );
       assert.ok(
-        valSection.includes('decisions.md') && valSection.includes('validation/report.md'),
+        valPreReadBlock.includes('decisions.md') && valPreReadBlock.includes('validation/report.md'),
         'resume.md validation pre-reads must include decisions.md and validation report'
+      );
+      assert.ok(
+        !valPreReadBlock.includes('$CLAUDE_HOME/kilntwo/data/spinner-verbs.json') &&
+        !valPreReadBlock.includes('$CLAUDE_HOME/kilntwo/data/lore.json'),
+        'resume.md validation pre-reads must not list spinner-verbs/lore files as pre-reads'
       );
     });
   });
@@ -182,11 +206,11 @@ describe('v0.9.0 — orchestrator efficiency & correctness', () => {
       );
     });
 
-    it('start.md execution loop reuses pre-read lore.json', () => {
+    it('start.md execution loop avoids lore pre-read context bloat', () => {
       const start = readAsset('commands/kiln/start.md');
       assert.ok(
-        start.includes('lore.json data already read above'),
-        'start.md phase banners must reference pre-read lore.json data'
+        start.includes('without loading lore JSON into model context'),
+        'start.md phase banners must avoid loading lore JSON into model context'
       );
     });
   });

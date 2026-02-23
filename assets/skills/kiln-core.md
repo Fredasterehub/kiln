@@ -126,9 +126,38 @@ At `/kiln:start` initialization and at each stage transition, the orchestrator:
 
 1. Reads `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`
 2. Builds a flat array: verbs for the current stage + generic verbs
-3. Writes to `$PROJECT_PATH/.claude/settings.local.json` as `{"spinnerVerbs": {"mode": "replace", "verbs": [...]}}`
+3. Writes valid JSON to `$PROJECT_PATH/.claude` (`settings.local.json`) via programmatic serialization (never by hand-built string interpolation)
 
 Stage mapping: `brainstorm` → brainstorm verbs, `planning` → planning verbs, `execution` → execution verbs, `validation` → validation verbs. Review verbs are mixed in during execution stage review rounds.
+
+Recommended single-call pattern:
+
+```bash
+PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
+CLAUDE_HOME="$HOME/.claude"
+mkdir -p "$PROJECT_PATH/.claude" && \
+PROJECT_PATH="$PROJECT_PATH" CLAUDE_HOME="$CLAUDE_HOME" STAGE="planning" node <<'NODE'
+const fs = require('fs');
+const spinnerPath = `${process.env.CLAUDE_HOME}/kilntwo/data/spinner-verbs.json`;
+const data = JSON.parse(fs.readFileSync(spinnerPath, 'utf8'));
+const verbs = [...(data.generic ?? []), ...(data[process.env.STAGE] ?? [])];
+const out = { spinnerVerbs: { mode: 'replace', verbs } };
+const outPath = [process.env.PROJECT_PATH, ".claude", "settings.local.json"].join("/");
+fs.writeFileSync(outPath, JSON.stringify(out));
+NODE
+```
+
+## Tool Calling 2.0 Patterns
+
+Keep orchestration deterministic and context-lean:
+
+- **Programmatic extraction first**: for large JSON assets (`lore.json`, `spinner-verbs.json`), use Bash+Node extraction and pass only derived values (`quote`, `by`, `verbs`) to prompts/output.
+- **Dynamic filtering**: read full files in code, then emit only the minimal fields required for the current step.
+- **Deferred heavy tool loading**: if a stage does not need a dataset in model context, do not preload it.
+
+Tiny examples:
+- Team lifecycle: `TeamDelete("kiln-session")` (ignore not-found) → `TeamCreate("kiln-session")`.
+- Worker routing: spawn via Task without `team_name`; rely on team propagation.
 
 ## Team Pattern
 

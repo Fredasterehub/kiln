@@ -1,18 +1,22 @@
 # /kiln:resume
 Restore project context from memory and continue exactly where the last session stopped.
 Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEMORY.md schema, paths contract, config schema, event enum, and Codex CLI patterns. This file uses those definitions without repeating them.
+## Preflight: tmux Required
+Before any memory reads or team operations, verify tmux is active.
+If `$TMUX` is empty, halt immediately and print exactly:
+`[kiln] tmux is required for reliable multi-agent spawning right now. Start tmux, then rerun /kiln:resume.`
 ## Step 1: Detect Project Path
 Determine the project path from the current working directory (`process.cwd()`, `$PWD`, or equivalent) and store it as `PROJECT_PATH`.
 If you cannot determine `PROJECT_PATH`, halt immediately and tell the user exactly:
 "Cannot determine project path. Please run this command from the project root."
 ## Step 2: Compute Memory Directory Path
-Compute the encoded project path using POSIX slash splitting exactly as `absolutePath.split('/').join('-')`, then set `MEMORY_DIR = $CLAUDE_HOME/projects/$ENCODED_PATH/memory/`.
-Worked example: `PROJECT_PATH=/DEV/myproject`, `encoded=-DEV-myproject`, `MEMORY_DIR=$CLAUDE_HOME/projects/-DEV-myproject/memory/`.
+Compute the encoded project path using POSIX slash splitting exactly as `absolutePath.split('/').join('-')`, then set `MEMORY_DIR = $CLAUDE_HOME/projects/$ENCODED_PATH/memory`.
+Worked example: `PROJECT_PATH=/DEV/myproject`, `encoded=-DEV-myproject`, `MEMORY_DIR=$CLAUDE_HOME/projects/-DEV-myproject/memory`.
 ## Step 3: Read MEMORY.md
 Read `$MEMORY_DIR/MEMORY.md`.
 If the file does not exist, or is empty, halt immediately and output exactly this warning block and nothing else:
 ```
-[kiln:resume] No memory found at <resolved memory dir path>.
+[kiln:resume] No memory found at $MEMORY_DIR/MEMORY.md.
 Memory may not have been initialized. Run /kiln:start to begin a new project session.
 ```
 If the file exists, extract and store these fields:
@@ -39,11 +43,32 @@ Run /kiln:start to reinitialize, or manually repair $MEMORY_DIR/MEMORY.md.
 ## Step 4: Supporting Files
 Supporting memory files (`vision.md`, `master-plan.md`, `decisions.md`, `pitfalls.md`, `PATTERNS.md`, `tech-stack.md`) are read by coordinators at their own startup — not by the orchestrator. Do not preload them here. If you need a specific value for routing (e.g., to display a summary), read only the specific file and extract only the needed fields.
 ## Step 5: Display Continuity Banner
-Read `$CLAUDE_HOME/kilntwo/data/lore.json` and pick a random quote from `transitions.resume.quotes`. Render the banner and persist the quote in a single Bash call:
+Render the banner and persist the quote in a single Bash call by programmatically selecting from `transitions.resume.quotes`:
 ```bash
-mkdir -p "$KILN_DIR/tmp" && \
-printf '\n\033[38;5;179m━━━ Resume ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE" && \
-printf '{"quote":"%s","by":"%s","section":"resume","at":"%s"}' "$QUOTE_TEXT" "$QUOTE_SOURCE" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > "$KILN_DIR/tmp/last-quote.json"
+PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
+KILN_DIR="${KILN_DIR:-$PROJECT_PATH/.kiln}"
+CLAUDE_HOME="$HOME/.claude"
+mkdir -p "$KILN_DIR/tmp"
+QUOTE_JSON="$(
+  CLAUDE_HOME="$CLAUDE_HOME" SECTION="resume" node <<'NODE'
+const fs = require('fs');
+const lorePath = `${process.env.CLAUDE_HOME}/kilntwo/data/lore.json`;
+const lore = JSON.parse(fs.readFileSync(lorePath, 'utf8'));
+const section = process.env.SECTION;
+const quotes = lore?.transitions?.[section]?.quotes ?? [];
+const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', by: 'Unknown' };
+process.stdout.write(JSON.stringify({
+  quote: selected.text ?? '',
+  by: selected.by ?? 'Unknown',
+  section,
+  at: new Date().toISOString(),
+}));
+NODE
+)"
+QUOTE_TEXT="$(printf '%s' "$QUOTE_JSON" | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d);process.stdin.on(\"end\",()=>process.stdout.write(String(JSON.parse(s).quote ?? \"\")));')"
+QUOTE_SOURCE="$(printf '%s' "$QUOTE_JSON" | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d);process.stdin.on(\"end\",()=>process.stdout.write(String(JSON.parse(s).by ?? \"Unknown\")));')"
+printf '\n\033[38;5;179m━━━ Resume ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
+printf '%s' "$QUOTE_JSON" > "$KILN_DIR/tmp/last-quote.json"
 ```
 Do not use the Write tool for `last-quote.json`.
 
@@ -98,9 +123,20 @@ Do not check whether the team exists first. Do not skip this step. Do not delete
 Branch strictly on `stage` and run the matching behavior.
 For `brainstorm`:
 - Install spinner verbs via a single Bash command (never use the Write tool for this file):
-  Read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json` and build a flat array from `generic` + `brainstorm` verbs. Then run one Bash call:
+  Programmatically read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, merge `generic` + `brainstorm`, and write valid JSON:
   ```bash
-  mkdir -p "$PROJECT_PATH/.claude" && printf '%s' '{"spinnerVerbs":{"mode":"replace","verbs":[...]}}' > "$PROJECT_PATH/.claude/settings.local.json"
+  PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
+  CLAUDE_HOME="$HOME/.claude"
+  mkdir -p "$PROJECT_PATH/.claude" && \
+  PROJECT_PATH="$PROJECT_PATH" CLAUDE_HOME="$CLAUDE_HOME" STAGE="brainstorm" node <<'NODE'
+const fs = require('fs');
+const spinnerPath = `${process.env.CLAUDE_HOME}/kilntwo/data/spinner-verbs.json`;
+const data = JSON.parse(fs.readFileSync(spinnerPath, 'utf8'));
+const verbs = [...(data.generic ?? []), ...(data[process.env.STAGE] ?? [])];
+const out = { spinnerVerbs: { mode: 'replace', verbs } };
+const outPath = [process.env.PROJECT_PATH, ".claude", "settings.local.json"].join("/");
+fs.writeFileSync(outPath, JSON.stringify(out));
+NODE
   ```
   The path MUST be absolute. Never use a relative path.
 - Re-read `vision.md` in full.
@@ -109,9 +145,20 @@ For `brainstorm`:
 - Ask: "What would you like to explore or refine next?"
 For `planning`:
 - Install spinner verbs via a single Bash command (never use the Write tool for this file):
-  Read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json` and build a flat array from `generic` + `planning` verbs. Then run one Bash call:
+  Programmatically read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, merge `generic` + `planning`, and write valid JSON:
   ```bash
-  mkdir -p "$PROJECT_PATH/.claude" && printf '%s' '{"spinnerVerbs":{"mode":"replace","verbs":[...]}}' > "$PROJECT_PATH/.claude/settings.local.json"
+  PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
+  CLAUDE_HOME="$HOME/.claude"
+  mkdir -p "$PROJECT_PATH/.claude" && \
+  PROJECT_PATH="$PROJECT_PATH" CLAUDE_HOME="$CLAUDE_HOME" STAGE="planning" node <<'NODE'
+const fs = require('fs');
+const spinnerPath = `${process.env.CLAUDE_HOME}/kilntwo/data/spinner-verbs.json`;
+const data = JSON.parse(fs.readFileSync(spinnerPath, 'utf8'));
+const verbs = [...(data.generic ?? []), ...(data[process.env.STAGE] ?? [])];
+const out = { spinnerVerbs: { mode: 'replace', verbs } };
+const outPath = [process.env.PROJECT_PATH, ".claude", "settings.local.json"].join("/");
+fs.writeFileSync(outPath, JSON.stringify(out));
+NODE
   ```
   The path MUST be absolute. Never use a relative path.
 - Read `planning_sub_stage` from MEMORY.md.
@@ -134,18 +181,27 @@ For `planning`:
   - If signal missing or malformed: treat as `PLAN_BLOCKED`.
 For `execution`:
 - **Parallel pre-reads** (issue all of these in a single parallel batch):
-  1. `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`
-  2. `$CLAUDE_HOME/kilntwo/data/lore.json`
-  3. `$MEMORY_DIR/master-plan.md`
-  4. All `$KILN_DIR/phase_*_state.md` files (Glob)
-  5. `$KILN_DIR/archive/` directory listing (Glob for `phase_*/phase_summary.md`)
+  1. `$MEMORY_DIR/master-plan.md`
+  2. All `$KILN_DIR/phase_*_state.md` files (Glob)
+  3. `$KILN_DIR/archive/` directory listing (Glob for `phase_*/phase_summary.md`)
 
-  These reads are independent. Issue them as parallel tool calls in a single response.
+  These reads are independent. Issue them as parallel tool calls in a single response. Keep large JSON assets (`lore.json`, `spinner-verbs.json`) out of model context and extract them programmatically in Bash calls when needed.
 
 - Install spinner verbs from the pre-read data via a single Bash command (never use the Write tool for this file):
-  Build a flat array from `generic` + `execution` verbs. Then run one Bash call:
+  Programmatically merge `generic` + `execution` verbs and write valid JSON:
   ```bash
-  mkdir -p "$PROJECT_PATH/.claude" && printf '%s' '{"spinnerVerbs":{"mode":"replace","verbs":[...]}}' > "$PROJECT_PATH/.claude/settings.local.json"
+  PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
+  CLAUDE_HOME="$HOME/.claude"
+  mkdir -p "$PROJECT_PATH/.claude" && \
+  PROJECT_PATH="$PROJECT_PATH" CLAUDE_HOME="$CLAUDE_HOME" STAGE="execution" node <<'NODE'
+const fs = require('fs');
+const spinnerPath = `${process.env.CLAUDE_HOME}/kilntwo/data/spinner-verbs.json`;
+const data = JSON.parse(fs.readFileSync(spinnerPath, 'utf8'));
+const verbs = [...(data.generic ?? []), ...(data[process.env.STAGE] ?? [])];
+const out = { spinnerVerbs: { mode: 'replace', verbs } };
+const outPath = [process.env.PROJECT_PATH, ".claude", "settings.local.json"].join("/");
+fs.writeFileSync(outPath, JSON.stringify(out));
+NODE
   ```
   The path MUST be absolute. Never use a relative path.
 - Build the phase inventory from `master-plan.md` and MEMORY.md fields (already extracted in Step 3): for each phase in `master-plan.md`, record `{phase_number, name, status}` where status is one of `completed | in_progress | failed | pending` (derive **from `MEMORY.md`**, not from assumptions).
@@ -190,18 +246,27 @@ For `execution`:
 - After Maestro returns, update `MEMORY.md` with the new phase status, updated `handoff_note`, and updated `handoff_context`, then **re-enter this execution routing** to resume/transition/retry or advance to `validation` automatically.
 For `validation`:
 - **Parallel pre-reads** (issue all in a single parallel batch):
-  1. `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`
-  2. `$CLAUDE_HOME/kilntwo/data/lore.json`
-  3. `$MEMORY_DIR/master-plan.md`
-  4. `$MEMORY_DIR/decisions.md`
-  5. `$KILN_DIR/validation/report.md` (may not exist; that is fine)
+  1. `$MEMORY_DIR/master-plan.md`
+  2. `$MEMORY_DIR/decisions.md`
+  3. `$KILN_DIR/validation/report.md` (may not exist; that is fine)
 
-  These reads are independent. Issue them as parallel tool calls in a single response.
+  These reads are independent. Issue them as parallel tool calls in a single response. Keep large JSON assets (`lore.json`, `spinner-verbs.json`) out of model context and extract them programmatically in Bash calls when needed.
 
 - Install spinner verbs from the pre-read data via a single Bash command (never use the Write tool for this file):
-  Build a flat array from `generic` + `validation` verbs. Then run one Bash call:
+  Programmatically merge `generic` + `validation` verbs and write valid JSON:
   ```bash
-  mkdir -p "$PROJECT_PATH/.claude" && printf '%s' '{"spinnerVerbs":{"mode":"replace","verbs":[...]}}' > "$PROJECT_PATH/.claude/settings.local.json"
+  PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
+  CLAUDE_HOME="$HOME/.claude"
+  mkdir -p "$PROJECT_PATH/.claude" && \
+  PROJECT_PATH="$PROJECT_PATH" CLAUDE_HOME="$CLAUDE_HOME" STAGE="validation" node <<'NODE'
+const fs = require('fs');
+const spinnerPath = `${process.env.CLAUDE_HOME}/kilntwo/data/spinner-verbs.json`;
+const data = JSON.parse(fs.readFileSync(spinnerPath, 'utf8'));
+const verbs = [...(data.generic ?? []), ...(data[process.env.STAGE] ?? [])];
+const out = { spinnerVerbs: { mode: 'replace', verbs } };
+const outPath = [process.env.PROJECT_PATH, ".claude", "settings.local.json"].join("/");
+fs.writeFileSync(outPath, JSON.stringify(out));
+NODE
   ```
   The path MUST be absolute. Never use a relative path.
 - Check `correction_cycle` from MEMORY.md (already extracted in Step 3).

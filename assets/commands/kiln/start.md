@@ -7,23 +7,57 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
 ---
 
+## Preflight: tmux Required
+
+Before any initialization, memory writes, or team operations, verify tmux is active.
+If `$TMUX` is empty, halt immediately and print exactly:
+`[kiln] tmux is required for reliable multi-agent spawning right now. Start tmux, then rerun /kiln:start.`
+
+---
+
 ## Stage 1: Initialization & Brainstorm
 
 1. Detect project path and initialize git.
-   Before doing anything else in this step:
-   Read `$CLAUDE_HOME/kilntwo/data/lore.json` and pick a random quote from `transitions.ignition.quotes`. Render the banner and persist the quote in a single Bash call:
+   Before doing anything else in this step, render ignition banner + greeting in a single Bash call by programmatically selecting from lore:
    ```bash
-   mkdir -p "$KILN_DIR/tmp" && \
-   printf '\n\033[38;5;179m━━━ Ignition ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE" && \
-   printf '{"quote":"%s","by":"%s","section":"ignition","at":"%s"}' "$QUOTE_TEXT" "$QUOTE_SOURCE" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > "$KILN_DIR/tmp/last-quote.json"
-   ```
-   Do not use the Write tool for `last-quote.json`. Note: if `$KILN_DIR` does not exist yet, defer the mkdir+persist to after Step 2 creates `$KILN_DIR`.
-
-   Then read `$CLAUDE_HOME/kilntwo/data/lore.json`. Pick a random entry from the `greetings` array. Display it via Bash printf with terracotta color:
-   ```bash
+   PROJECT_PATH="$(pwd)"
+   KILN_DIR="$PROJECT_PATH/.kiln"
+   CLAUDE_HOME="$HOME/.claude"
+   mkdir -p "$KILN_DIR/tmp"
+   QUOTE_JSON="$(
+     CLAUDE_HOME="$CLAUDE_HOME" SECTION="ignition" node <<'NODE'
+const fs = require('fs');
+const lorePath = `${process.env.CLAUDE_HOME}/kilntwo/data/lore.json`;
+const lore = JSON.parse(fs.readFileSync(lorePath, 'utf8'));
+const section = process.env.SECTION;
+const quotes = lore?.transitions?.[section]?.quotes ?? [];
+const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', by: 'Unknown' };
+process.stdout.write(JSON.stringify({
+  quote: selected.text ?? '',
+  by: selected.by ?? 'Unknown',
+  section,
+  at: new Date().toISOString(),
+}));
+NODE
+   )"
+   GREETING="$(
+     CLAUDE_HOME="$CLAUDE_HOME" node <<'NODE'
+const fs = require('fs');
+const lorePath = `${process.env.CLAUDE_HOME}/kilntwo/data/lore.json`;
+const lore = JSON.parse(fs.readFileSync(lorePath, 'utf8'));
+const greetings = lore?.greetings ?? [];
+const selected = greetings.length ? greetings[Math.floor(Math.random() * greetings.length)] : '';
+process.stdout.write(String(selected));
+NODE
+   )"
+   QUOTE_TEXT="$(printf '%s' "$QUOTE_JSON" | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d);process.stdin.on(\"end\",()=>process.stdout.write(String(JSON.parse(s).quote ?? \"\")));')"
+   QUOTE_SOURCE="$(printf '%s' "$QUOTE_JSON" | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d);process.stdin.on(\"end\",()=>process.stdout.write(String(JSON.parse(s).by ?? \"Unknown\")));')"
+   printf '\n\033[38;5;179m━━━ Ignition ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
+   printf '%s' "$QUOTE_JSON" > "$KILN_DIR/tmp/last-quote.json"
    printf '\033[38;5;173m%s\033[0m\n\n' "$GREETING"
+   printf '%s\n' 'Before we fire up the forge, a few quick questions.'
    ```
-   Then print: `Before we fire up the forge, a few quick questions.`
+   Do not use the Write tool for `last-quote.json`.
 
    Capture the current working directory as `PROJECT_PATH`.
    Run `pwd` (or equivalent) and store the exact absolute path value.
@@ -63,9 +97,20 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
    After creating `$KILN_DIR/`, install spinner verbs:
    Install spinner verbs via a single Bash command (never use the Write tool for this file):
-   Read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json` and build a flat array from `generic` + `brainstorm` verbs. Then run one Bash call:
+   Programmatically read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, merge `generic` + `brainstorm`, and write valid JSON:
    ```bash
-   mkdir -p "$PROJECT_PATH/.claude" && printf '%s' '{"spinnerVerbs":{"mode":"replace","verbs":[...]}}' > "$PROJECT_PATH/.claude/settings.local.json"
+   PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
+   CLAUDE_HOME="$HOME/.claude"
+   mkdir -p "$PROJECT_PATH/.claude" && \
+   PROJECT_PATH="$PROJECT_PATH" CLAUDE_HOME="$CLAUDE_HOME" STAGE="brainstorm" node <<'NODE'
+const fs = require('fs');
+const spinnerPath = `${process.env.CLAUDE_HOME}/kilntwo/data/spinner-verbs.json`;
+const data = JSON.parse(fs.readFileSync(spinnerPath, 'utf8'));
+const verbs = [...(data.generic ?? []), ...(data[process.env.STAGE] ?? [])];
+const out = { spinnerVerbs: { mode: 'replace', verbs } };
+const outPath = [process.env.PROJECT_PATH, ".claude", "settings.local.json"].join("/");
+fs.writeFileSync(outPath, JSON.stringify(out));
+NODE
    ```
    The path MUST be absolute. Never use a relative path.
 
@@ -142,7 +187,7 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
    - Express mode: "Brainstorm depth? [1=Light / 2=Standard (default) / 3=Deep]"
 
    Store response as `BRAINSTORM_DEPTH`. Map: `1` = `light`, `2` = `standard`, `3` = `deep`. Empty response or Enter → `standard`. If invalid, re-prompt once; if still invalid, use `standard`.
-   Record `brainstorm_depth` in `MEMORY_DIR/MEMORY.md`, update `handoff_note` = `Brainstorm depth set to <BRAINSTORM_DEPTH>; debate mode selection next.`, `last_updated`.
+   Record `brainstorm_depth` in `MEMORY_DIR/MEMORY.md`, update `handoff_note` = `Brainstorm depth set to $BRAINSTORM_DEPTH; debate mode selection next.`, `last_updated`.
 
    **Q3 — Debate Mode:**
    Ask based on `OPERATOR_MODE`:
@@ -154,7 +199,7 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
    - Express mode: "Debate mode? [1=Skip / 2=Focused (default) / 3=Full]"
 
    Store response as `DEBATE_MODE`. If empty → `2`. If invalid, re-prompt once; if still invalid, use `2`.
-   Record `debate_mode` in `MEMORY_DIR/MEMORY.md`, update `handoff_note` = `Debate mode set to <DEBATE_MODE>; spawning Da Vinci.`, `handoff_context` = `Debate mode <DEBATE_MODE> selected. Brainstorm depth <BRAINSTORM_DEPTH> selected. About to spawn Da Vinci.`, `last_updated`.
+   Record `debate_mode` in `MEMORY_DIR/MEMORY.md`, update `handoff_note` = `Debate mode set to $DEBATE_MODE; spawning Da Vinci.`, `handoff_context` = `Debate mode $DEBATE_MODE selected. Brainstorm depth $BRAINSTORM_DEPTH selected. About to spawn Da Vinci.`, `last_updated`.
 
    After all questions are answered, recreate the session team using Claude Code Teams API:
    1. Attempt `TeamDelete("kiln-session")` unconditionally.
@@ -174,11 +219,32 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
 6. Spawn brainstormer agent.
    Before spawning in this step:
-   Read `$CLAUDE_HOME/kilntwo/data/lore.json` and pick a random quote from `transitions.brainstorm_start.quotes`. Render the banner and persist the quote in a single Bash call:
+   Render the banner and persist the quote in a single Bash call by programmatically selecting from `transitions.brainstorm_start.quotes`:
    ```bash
-   mkdir -p "$KILN_DIR/tmp" && \
-   printf '\n\033[38;5;179m━━━ Brainstorm ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE" && \
-   printf '{"quote":"%s","by":"%s","section":"brainstorm_start","at":"%s"}' "$QUOTE_TEXT" "$QUOTE_SOURCE" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > "$KILN_DIR/tmp/last-quote.json"
+   PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
+   KILN_DIR="${KILN_DIR:-$PROJECT_PATH/.kiln}"
+   CLAUDE_HOME="$HOME/.claude"
+   mkdir -p "$KILN_DIR/tmp"
+   QUOTE_JSON="$(
+     CLAUDE_HOME="$CLAUDE_HOME" SECTION="brainstorm_start" node <<'NODE'
+const fs = require('fs');
+const lorePath = `${process.env.CLAUDE_HOME}/kilntwo/data/lore.json`;
+const lore = JSON.parse(fs.readFileSync(lorePath, 'utf8'));
+const section = process.env.SECTION;
+const quotes = lore?.transitions?.[section]?.quotes ?? [];
+const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', by: 'Unknown' };
+process.stdout.write(JSON.stringify({
+  quote: selected.text ?? '',
+  by: selected.by ?? 'Unknown',
+  section,
+  at: new Date().toISOString(),
+}));
+NODE
+   )"
+   QUOTE_TEXT="$(printf '%s' "$QUOTE_JSON" | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d);process.stdin.on(\"end\",()=>process.stdout.write(String(JSON.parse(s).quote ?? \"\")));')"
+   QUOTE_SOURCE="$(printf '%s' "$QUOTE_JSON" | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d);process.stdin.on(\"end\",()=>process.stdout.write(String(JSON.parse(s).by ?? \"Unknown\")));')"
+   printf '\n\033[38;5;179m━━━ Brainstorm ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
+   printf '%s' "$QUOTE_JSON" > "$KILN_DIR/tmp/last-quote.json"
    ```
    Do not use the Write tool for `last-quote.json`.
 
@@ -209,11 +275,32 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
    - `MEMORY_DIR` contains: `MEMORY.md`, `vision.md`, `master-plan.md`, `decisions.md`, `pitfalls.md`, `PATTERNS.md`, `tech-stack.md`.
    If any check fails, halt and tell the user exactly what is missing. Do not continue until fixed.
    If all checks pass:
-   Read `$CLAUDE_HOME/kilntwo/data/lore.json` and pick a random quote from `transitions.brainstorm_complete.quotes`. Render the banner and persist the quote in a single Bash call:
+   Render the banner and persist the quote in a single Bash call by programmatically selecting from `transitions.brainstorm_complete.quotes`:
    ```bash
-   mkdir -p "$KILN_DIR/tmp" && \
-   printf '\n\033[38;5;179m━━━ Brainstorm Complete ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE" && \
-   printf '{"quote":"%s","by":"%s","section":"brainstorm_complete","at":"%s"}' "$QUOTE_TEXT" "$QUOTE_SOURCE" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > "$KILN_DIR/tmp/last-quote.json"
+   PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
+   KILN_DIR="${KILN_DIR:-$PROJECT_PATH/.kiln}"
+   CLAUDE_HOME="$HOME/.claude"
+   mkdir -p "$KILN_DIR/tmp"
+   QUOTE_JSON="$(
+     CLAUDE_HOME="$CLAUDE_HOME" SECTION="brainstorm_complete" node <<'NODE'
+const fs = require('fs');
+const lorePath = `${process.env.CLAUDE_HOME}/kilntwo/data/lore.json`;
+const lore = JSON.parse(fs.readFileSync(lorePath, 'utf8'));
+const section = process.env.SECTION;
+const quotes = lore?.transitions?.[section]?.quotes ?? [];
+const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', by: 'Unknown' };
+process.stdout.write(JSON.stringify({
+  quote: selected.text ?? '',
+  by: selected.by ?? 'Unknown',
+  section,
+  at: new Date().toISOString(),
+}));
+NODE
+   )"
+   QUOTE_TEXT="$(printf '%s' "$QUOTE_JSON" | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d);process.stdin.on(\"end\",()=>process.stdout.write(String(JSON.parse(s).quote ?? \"\")));')"
+   QUOTE_SOURCE="$(printf '%s' "$QUOTE_JSON" | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d);process.stdin.on(\"end\",()=>process.stdout.write(String(JSON.parse(s).by ?? \"Unknown\")));')"
+   printf '\n\033[38;5;179m━━━ Brainstorm Complete ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
+   printf '%s' "$QUOTE_JSON" > "$KILN_DIR/tmp/last-quote.json"
    ```
    Do not use the Write tool for `last-quote.json`.
    Then print via Bash:
@@ -229,18 +316,50 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
 8. Spawn the Stage 2 planning coordinator.
    Before spawning in this step:
-   Read `$CLAUDE_HOME/kilntwo/data/lore.json` and pick a random quote from `transitions.planning_start.quotes`. Render the banner and persist the quote in a single Bash call:
+   Render the banner and persist the quote in a single Bash call by programmatically selecting from `transitions.planning_start.quotes`:
    ```bash
-   mkdir -p "$KILN_DIR/tmp" && \
-   printf '\n\033[38;5;179m━━━ Planning ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE" && \
-   printf '{"quote":"%s","by":"%s","section":"planning_start","at":"%s"}' "$QUOTE_TEXT" "$QUOTE_SOURCE" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > "$KILN_DIR/tmp/last-quote.json"
+   PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
+   KILN_DIR="${KILN_DIR:-$PROJECT_PATH/.kiln}"
+   CLAUDE_HOME="$HOME/.claude"
+   mkdir -p "$KILN_DIR/tmp"
+   QUOTE_JSON="$(
+     CLAUDE_HOME="$CLAUDE_HOME" SECTION="planning_start" node <<'NODE'
+const fs = require('fs');
+const lorePath = `${process.env.CLAUDE_HOME}/kilntwo/data/lore.json`;
+const lore = JSON.parse(fs.readFileSync(lorePath, 'utf8'));
+const section = process.env.SECTION;
+const quotes = lore?.transitions?.[section]?.quotes ?? [];
+const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', by: 'Unknown' };
+process.stdout.write(JSON.stringify({
+  quote: selected.text ?? '',
+  by: selected.by ?? 'Unknown',
+  section,
+  at: new Date().toISOString(),
+}));
+NODE
+   )"
+   QUOTE_TEXT="$(printf '%s' "$QUOTE_JSON" | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d);process.stdin.on(\"end\",()=>process.stdout.write(String(JSON.parse(s).quote ?? \"\")));')"
+   QUOTE_SOURCE="$(printf '%s' "$QUOTE_JSON" | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d);process.stdin.on(\"end\",()=>process.stdout.write(String(JSON.parse(s).by ?? \"Unknown\")));')"
+   printf '\n\033[38;5;179m━━━ Planning ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
+   printf '%s' "$QUOTE_JSON" > "$KILN_DIR/tmp/last-quote.json"
    ```
    Do not use the Write tool for `last-quote.json`.
 
    Install spinner verbs via a single Bash command (never use the Write tool for this file):
-   Read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json` and build a flat array from `generic` + `planning` verbs. Then run one Bash call:
+   Programmatically read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, merge `generic` + `planning`, and write valid JSON:
    ```bash
-   mkdir -p "$PROJECT_PATH/.claude" && printf '%s' '{"spinnerVerbs":{"mode":"replace","verbs":[...]}}' > "$PROJECT_PATH/.claude/settings.local.json"
+   PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
+   CLAUDE_HOME="$HOME/.claude"
+   mkdir -p "$PROJECT_PATH/.claude" && \
+   PROJECT_PATH="$PROJECT_PATH" CLAUDE_HOME="$CLAUDE_HOME" STAGE="planning" node <<'NODE'
+const fs = require('fs');
+const spinnerPath = `${process.env.CLAUDE_HOME}/kilntwo/data/spinner-verbs.json`;
+const data = JSON.parse(fs.readFileSync(spinnerPath, 'utf8'));
+const verbs = [...(data.generic ?? []), ...(data[process.env.STAGE] ?? [])];
+const out = { spinnerVerbs: { mode: 'replace', verbs } };
+const outPath = [process.env.PROJECT_PATH, ".claude", "settings.local.json"].join("/");
+fs.writeFileSync(outPath, JSON.stringify(out));
+NODE
    ```
    The path MUST be absolute. Never use a relative path.
 
@@ -287,12 +406,33 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
     If `phase_total` is missing or non-integer, halt and tell the operator MEMORY.md is corrupted/incomplete.
 
 12. Display the plan-approved transition and proceed to Stage 3.
-    Before proceeding:
-    Read `$CLAUDE_HOME/kilntwo/data/lore.json` and pick a random quote from `transitions.plan_approved.quotes`. Render the banner and persist the quote in a single Bash call:
+   Before proceeding:
+    Render the banner and persist the quote in a single Bash call by programmatically selecting from `transitions.plan_approved.quotes`:
     ```bash
-    mkdir -p "$KILN_DIR/tmp" && \
-    printf '\n\033[38;5;179m━━━ Plan Approved ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE" && \
-    printf '{"quote":"%s","by":"%s","section":"plan_approved","at":"%s"}' "$QUOTE_TEXT" "$QUOTE_SOURCE" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > "$KILN_DIR/tmp/last-quote.json"
+    PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
+    KILN_DIR="${KILN_DIR:-$PROJECT_PATH/.kiln}"
+    CLAUDE_HOME="$HOME/.claude"
+    mkdir -p "$KILN_DIR/tmp"
+    QUOTE_JSON="$(
+      CLAUDE_HOME="$CLAUDE_HOME" SECTION="plan_approved" node <<'NODE'
+const fs = require('fs');
+const lorePath = `${process.env.CLAUDE_HOME}/kilntwo/data/lore.json`;
+const lore = JSON.parse(fs.readFileSync(lorePath, 'utf8'));
+const section = process.env.SECTION;
+const quotes = lore?.transitions?.[section]?.quotes ?? [];
+const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', by: 'Unknown' };
+process.stdout.write(JSON.stringify({
+  quote: selected.text ?? '',
+  by: selected.by ?? 'Unknown',
+  section,
+  at: new Date().toISOString(),
+}));
+NODE
+    )"
+    QUOTE_TEXT="$(printf '%s' "$QUOTE_JSON" | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d);process.stdin.on(\"end\",()=>process.stdout.write(String(JSON.parse(s).quote ?? \"\")));')"
+    QUOTE_SOURCE="$(printf '%s' "$QUOTE_JSON" | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d);process.stdin.on(\"end\",()=>process.stdout.write(String(JSON.parse(s).by ?? \"Unknown\")));')"
+    printf '\n\033[38;5;179m━━━ Plan Approved ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
+    printf '%s' "$QUOTE_JSON" > "$KILN_DIR/tmp/last-quote.json"
     ```
     Do not use the Write tool for `last-quote.json`.
     Confirm `MEMORY_DIR/master-plan.md` exists and is non-empty.
@@ -310,24 +450,54 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
     **Parallel pre-reads for Stage 3** (issue all in a single parallel batch):
     1. `$MEMORY_DIR/master-plan.md`
-    2. `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`
-    3. `$CLAUDE_HOME/kilntwo/data/lore.json`
 
-    These are needed throughout the execution loop. Read once, reuse from memory.
+    Keep large JSON assets (`lore.json`, `spinner-verbs.json`) out of model context. Extract them programmatically inside Bash calls when needed.
 
     Install spinner verbs via a single Bash command (never use the Write tool for this file):
-    Read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json` (from the pre-read above) and build a flat array from `generic` + `execution` verbs. Then run one Bash call:
+    Programmatically read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, merge `generic` + `execution`, and write valid JSON:
     ```bash
-    mkdir -p "$PROJECT_PATH/.claude" && printf '%s' '{"spinnerVerbs":{"mode":"replace","verbs":[...]}}' > "$PROJECT_PATH/.claude/settings.local.json"
+    PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
+    CLAUDE_HOME="$HOME/.claude"
+    mkdir -p "$PROJECT_PATH/.claude" && \
+    PROJECT_PATH="$PROJECT_PATH" CLAUDE_HOME="$CLAUDE_HOME" STAGE="execution" node <<'NODE'
+const fs = require('fs');
+const spinnerPath = `${process.env.CLAUDE_HOME}/kilntwo/data/spinner-verbs.json`;
+const data = JSON.parse(fs.readFileSync(spinnerPath, 'utf8'));
+const verbs = [...(data.generic ?? []), ...(data[process.env.STAGE] ?? [])];
+const out = { spinnerVerbs: { mode: 'replace', verbs } };
+const outPath = [process.env.PROJECT_PATH, ".claude", "settings.local.json"].join("/");
+fs.writeFileSync(outPath, JSON.stringify(out));
+NODE
     ```
     The path MUST be absolute. Never use a relative path.
 
     For each phase:
-    Before phase initialization, use the lore.json data already read above (do not re-read) and pick a random quote from `transitions.phase_start.quotes`. Render the banner and persist the quote in a single Bash call:
+    Before phase initialization, render the banner + persistence in a single Bash call with programmatic quote selection (without loading lore JSON into model context):
     ```bash
-    mkdir -p "$KILN_DIR/tmp" && \
-    printf '\n\033[38;5;179m━━━ Phase %s: %s ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$PHASE_NUMBER" "$PHASE_NAME" "$QUOTE_TEXT" "$QUOTE_SOURCE" && \
-    printf '{"quote":"%s","by":"%s","section":"phase_start","at":"%s"}' "$QUOTE_TEXT" "$QUOTE_SOURCE" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > "$KILN_DIR/tmp/last-quote.json"
+    PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
+    KILN_DIR="${KILN_DIR:-$PROJECT_PATH/.kiln}"
+    CLAUDE_HOME="$HOME/.claude"
+    mkdir -p "$KILN_DIR/tmp"
+    QUOTE_JSON="$(
+      CLAUDE_HOME="$CLAUDE_HOME" SECTION="phase_start" node <<'NODE'
+const fs = require('fs');
+const lorePath = `${process.env.CLAUDE_HOME}/kilntwo/data/lore.json`;
+const lore = JSON.parse(fs.readFileSync(lorePath, 'utf8'));
+const section = process.env.SECTION;
+const quotes = lore?.transitions?.[section]?.quotes ?? [];
+const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', by: 'Unknown' };
+process.stdout.write(JSON.stringify({
+  quote: selected.text ?? '',
+  by: selected.by ?? 'Unknown',
+  section,
+  at: new Date().toISOString(),
+}));
+NODE
+    )"
+    QUOTE_TEXT="$(printf '%s' "$QUOTE_JSON" | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d);process.stdin.on(\"end\",()=>process.stdout.write(String(JSON.parse(s).quote ?? \"\")));')"
+    QUOTE_SOURCE="$(printf '%s' "$QUOTE_JSON" | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d);process.stdin.on(\"end\",()=>process.stdout.write(String(JSON.parse(s).by ?? \"Unknown\")));')"
+    printf '\n\033[38;5;179m━━━ Phase %s: %s ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$PHASE_NUMBER" "$PHASE_NAME" "$QUOTE_TEXT" "$QUOTE_SOURCE"
+    printf '%s' "$QUOTE_JSON" > "$KILN_DIR/tmp/last-quote.json"
     ```
     Do not use the Write tool for `last-quote.json`.
     Before spawning the executor, update `MEMORY_DIR/MEMORY.md`:
@@ -373,11 +543,32 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
     `handoff_note` = `Phase <N> complete; ready for next phase.`
     `handoff_context` = `Phase <N> (<phase name>) completed successfully. <one-sentence summary from results>. Next: phase <N+1> or validation if all phases done.`
     `last_updated` = current ISO-8601 UTC timestamp.
-    After phase completion update, use the lore.json data already read above (do not re-read) and pick a random quote from `transitions.phase_complete.quotes`. Render the banner and persist the quote in a single Bash call:
+    After phase completion update, render the banner + persistence in a single Bash call with programmatic quote selection (without loading lore JSON into model context):
     ```bash
-    mkdir -p "$KILN_DIR/tmp" && \
-    printf '\n\033[38;5;179m━━━ Phase %s Complete ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$PHASE_NUMBER" "$QUOTE_TEXT" "$QUOTE_SOURCE" && \
-    printf '{"quote":"%s","by":"%s","section":"phase_complete","at":"%s"}' "$QUOTE_TEXT" "$QUOTE_SOURCE" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > "$KILN_DIR/tmp/last-quote.json"
+    PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
+    KILN_DIR="${KILN_DIR:-$PROJECT_PATH/.kiln}"
+    CLAUDE_HOME="$HOME/.claude"
+    mkdir -p "$KILN_DIR/tmp"
+    QUOTE_JSON="$(
+      CLAUDE_HOME="$CLAUDE_HOME" SECTION="phase_complete" node <<'NODE'
+const fs = require('fs');
+const lorePath = `${process.env.CLAUDE_HOME}/kilntwo/data/lore.json`;
+const lore = JSON.parse(fs.readFileSync(lorePath, 'utf8'));
+const section = process.env.SECTION;
+const quotes = lore?.transitions?.[section]?.quotes ?? [];
+const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', by: 'Unknown' };
+process.stdout.write(JSON.stringify({
+  quote: selected.text ?? '',
+  by: selected.by ?? 'Unknown',
+  section,
+  at: new Date().toISOString(),
+}));
+NODE
+    )"
+    QUOTE_TEXT="$(printf '%s' "$QUOTE_JSON" | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d);process.stdin.on(\"end\",()=>process.stdout.write(String(JSON.parse(s).quote ?? \"\")));')"
+    QUOTE_SOURCE="$(printf '%s' "$QUOTE_JSON" | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d);process.stdin.on(\"end\",()=>process.stdout.write(String(JSON.parse(s).by ?? \"Unknown\")));')"
+    printf '\n\033[38;5;179m━━━ Phase %s Complete ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$PHASE_NUMBER" "$QUOTE_TEXT" "$QUOTE_SOURCE"
+    printf '%s' "$QUOTE_JSON" > "$KILN_DIR/tmp/last-quote.json"
     ```
     Do not use the Write tool for `last-quote.json`.
     If executor output is placeholder-only, TODO-only, or stub-only:
@@ -392,22 +583,55 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
 14. Run final validation with correction loop.
     Before entering validation loop:
-    Use the lore.json data already read above (do not re-read) and pick a random quote from `transitions.validation_start.quotes`. Render the banner and persist the quote in a single Bash call:
+    Render the banner + persistence in a single Bash call with programmatic quote selection (without loading lore JSON into model context):
     ```bash
-    mkdir -p "$KILN_DIR/tmp" && \
-    printf '\n\033[38;5;179m━━━ Validation ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE" && \
-    printf '{"quote":"%s","by":"%s","section":"validation_start","at":"%s"}' "$QUOTE_TEXT" "$QUOTE_SOURCE" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > "$KILN_DIR/tmp/last-quote.json"
+    PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
+    KILN_DIR="${KILN_DIR:-$PROJECT_PATH/.kiln}"
+    CLAUDE_HOME="$HOME/.claude"
+    mkdir -p "$KILN_DIR/tmp"
+    QUOTE_JSON="$(
+      CLAUDE_HOME="$CLAUDE_HOME" SECTION="validation_start" node <<'NODE'
+const fs = require('fs');
+const lorePath = `${process.env.CLAUDE_HOME}/kilntwo/data/lore.json`;
+const lore = JSON.parse(fs.readFileSync(lorePath, 'utf8'));
+const section = process.env.SECTION;
+const quotes = lore?.transitions?.[section]?.quotes ?? [];
+const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', by: 'Unknown' };
+process.stdout.write(JSON.stringify({
+  quote: selected.text ?? '',
+  by: selected.by ?? 'Unknown',
+  section,
+  at: new Date().toISOString(),
+}));
+NODE
+    )"
+    QUOTE_TEXT="$(printf '%s' "$QUOTE_JSON" | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d);process.stdin.on(\"end\",()=>process.stdout.write(String(JSON.parse(s).quote ?? \"\")));')"
+    QUOTE_SOURCE="$(printf '%s' "$QUOTE_JSON" | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d);process.stdin.on(\"end\",()=>process.stdout.write(String(JSON.parse(s).by ?? \"Unknown\")));')"
+    printf '\n\033[38;5;179m━━━ Validation ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
+    printf '%s' "$QUOTE_JSON" > "$KILN_DIR/tmp/last-quote.json"
     ```
     Do not use the Write tool for `last-quote.json`.
 
     **Parallel pre-reads for Stage 4** (issue all in a single parallel batch):
-    1. `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`
-    2. `$CLAUDE_HOME/kilntwo/data/lore.json`
+    1. `$MEMORY_DIR/master-plan.md`
+
+    Keep large JSON assets (`lore.json`, `spinner-verbs.json`) out of model context. Extract them programmatically inside Bash calls when needed.
 
     Install spinner verbs via a single Bash command (never use the Write tool for this file):
-    Read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json` (from the pre-read above) and build a flat array from `generic` + `validation` verbs. Then run one Bash call:
+    Programmatically read `$CLAUDE_HOME/kilntwo/data/spinner-verbs.json`, merge `generic` + `validation`, and write valid JSON:
     ```bash
-    mkdir -p "$PROJECT_PATH/.claude" && printf '%s' '{"spinnerVerbs":{"mode":"replace","verbs":[...]}}' > "$PROJECT_PATH/.claude/settings.local.json"
+    PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
+    CLAUDE_HOME="$HOME/.claude"
+    mkdir -p "$PROJECT_PATH/.claude" && \
+    PROJECT_PATH="$PROJECT_PATH" CLAUDE_HOME="$CLAUDE_HOME" STAGE="validation" node <<'NODE'
+const fs = require('fs');
+const spinnerPath = `${process.env.CLAUDE_HOME}/kilntwo/data/spinner-verbs.json`;
+const data = JSON.parse(fs.readFileSync(spinnerPath, 'utf8'));
+const verbs = [...(data.generic ?? []), ...(data[process.env.STAGE] ?? [])];
+const out = { spinnerVerbs: { mode: 'replace', verbs } };
+const outPath = [process.env.PROJECT_PATH, ".claude", "settings.local.json"].join("/");
+fs.writeFileSync(outPath, JSON.stringify(out));
+NODE
     ```
     The path MUST be absolute. Never use a relative path.
 
@@ -473,11 +697,32 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
 15. Finalize protocol run.
     Before final status output in this step:
-    Read `$CLAUDE_HOME/kilntwo/data/lore.json` and pick a random quote from `transitions.project_complete.quotes`. Render the banner and persist the quote in a single Bash call:
+    Render the banner and persist the quote in a single Bash call by programmatically selecting from `transitions.project_complete.quotes`:
     ```bash
-    mkdir -p "$KILN_DIR/tmp" && \
-    printf '\n\033[38;5;179m━━━ Project Complete ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE" && \
-    printf '{"quote":"%s","by":"%s","section":"project_complete","at":"%s"}' "$QUOTE_TEXT" "$QUOTE_SOURCE" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" > "$KILN_DIR/tmp/last-quote.json"
+    PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
+    KILN_DIR="${KILN_DIR:-$PROJECT_PATH/.kiln}"
+    CLAUDE_HOME="$HOME/.claude"
+    mkdir -p "$KILN_DIR/tmp"
+    QUOTE_JSON="$(
+      CLAUDE_HOME="$CLAUDE_HOME" SECTION="project_complete" node <<'NODE'
+const fs = require('fs');
+const lorePath = `${process.env.CLAUDE_HOME}/kilntwo/data/lore.json`;
+const lore = JSON.parse(fs.readFileSync(lorePath, 'utf8'));
+const section = process.env.SECTION;
+const quotes = lore?.transitions?.[section]?.quotes ?? [];
+const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', by: 'Unknown' };
+process.stdout.write(JSON.stringify({
+  quote: selected.text ?? '',
+  by: selected.by ?? 'Unknown',
+  section,
+  at: new Date().toISOString(),
+}));
+NODE
+    )"
+    QUOTE_TEXT="$(printf '%s' "$QUOTE_JSON" | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d);process.stdin.on(\"end\",()=>process.stdout.write(String(JSON.parse(s).quote ?? \"\")));')"
+    QUOTE_SOURCE="$(printf '%s' "$QUOTE_JSON" | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d);process.stdin.on(\"end\",()=>process.stdout.write(String(JSON.parse(s).by ?? \"Unknown\")));')"
+    printf '\n\033[38;5;179m━━━ Project Complete ━━━\033[0m\n\033[38;5;222m"%s"\033[0m \033[2m— %s\033[0m\n\n' "$QUOTE_TEXT" "$QUOTE_SOURCE"
+    printf '%s' "$QUOTE_JSON" > "$KILN_DIR/tmp/last-quote.json"
     ```
     Do not use the Write tool for `last-quote.json`.
     Update `MEMORY_DIR/MEMORY.md` fields:

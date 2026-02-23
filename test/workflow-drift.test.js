@@ -10,6 +10,22 @@ function read(filePath) {
 }
 
 describe('workflow drift guardrails', () => {
+  it('start.md requires tmux preflight', () => {
+    const start = read('assets/commands/kiln/start.md');
+    assert.ok(
+      start.includes('tmux is required for reliable multi-agent spawning right now'),
+      'start.md must enforce tmux preflight'
+    );
+  });
+
+  it('resume.md requires tmux preflight', () => {
+    const resume = read('assets/commands/kiln/resume.md');
+    assert.ok(
+      resume.includes('tmux is required for reliable multi-agent spawning right now'),
+      'resume.md must enforce tmux preflight'
+    );
+  });
+
   it('start.md uses canonical MEMORY_DIR path contract', () => {
     const start = read('assets/commands/kiln/start.md');
     assert.ok(
@@ -43,6 +59,26 @@ describe('workflow drift guardrails', () => {
     );
   });
 
+  it('resume.md defines MEMORY_DIR without trailing slash', () => {
+    const resume = read('assets/commands/kiln/resume.md');
+    assert.ok(
+      resume.includes('MEMORY_DIR = $CLAUDE_HOME/projects/$ENCODED_PATH/memory'),
+      'resume.md must define MEMORY_DIR without trailing slash'
+    );
+    assert.ok(
+      !resume.includes('MEMORY_DIR = $CLAUDE_HOME/projects/$ENCODED_PATH/memory/'),
+      'resume.md must not define MEMORY_DIR with trailing slash'
+    );
+  });
+
+  it('resume.md missing-memory warning includes canonical MEMORY.md path', () => {
+    const resume = read('assets/commands/kiln/resume.md');
+    assert.ok(
+      resume.includes('[kiln:resume] No memory found at $MEMORY_DIR/MEMORY.md.'),
+      'resume.md warning must include $MEMORY_DIR/MEMORY.md'
+    );
+  });
+
   it('resume.md uses TeamDelete-first cleanup and fallback', () => {
     const resume = read('assets/commands/kiln/resume.md');
     assert.ok(
@@ -55,11 +91,11 @@ describe('workflow drift guardrails', () => {
     );
   });
 
-  it('README does not claim tmux is required', () => {
+  it('README explicitly states tmux is required', () => {
     const readme = read('README.md');
     assert.ok(
-      !readme.includes('tmux required'),
-      'README must not claim tmux is required'
+      readme.includes('tmux required') || readme.includes('tmux is required'),
+      'README must state tmux is required right now'
     );
   });
 
@@ -69,5 +105,16 @@ describe('workflow drift guardrails', () => {
       !readme.includes('Maestro sends `shutdown_request`'),
       'README must not claim Maestro sends shutdown_request'
     );
+  });
+
+  it('start.md has no unresolved handoff placeholders', () => {
+    const start = read('assets/commands/kiln/start.md');
+    const forbidden = ['set to ;', 'Debate mode  selected', 'Brainstorm depth  selected', '<BRAINSTORM_DEPTH>', '<DEBATE_MODE>'];
+    for (const value of forbidden) {
+      assert.ok(
+        !start.includes(value),
+        `start.md must not contain unresolved placeholder: ${value}`
+      );
+    }
   });
 });
