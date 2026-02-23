@@ -31,10 +31,10 @@ const lorePath = `${process.env.CLAUDE_HOME}/kilntwo/data/lore.json`;
 const lore = JSON.parse(fs.readFileSync(lorePath, 'utf8'));
 const section = process.env.SECTION;
 const quotes = lore?.transitions?.[section]?.quotes ?? [];
-const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', by: 'Unknown' };
+const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', source: 'Unknown' };
 process.stdout.write(JSON.stringify({
   quote: selected.text ?? '',
-  by: selected.by ?? 'Unknown',
+  by: selected.source ?? 'Unknown',
   section,
   at: new Date().toISOString(),
 }));
@@ -232,10 +232,10 @@ const lorePath = `${process.env.CLAUDE_HOME}/kilntwo/data/lore.json`;
 const lore = JSON.parse(fs.readFileSync(lorePath, 'utf8'));
 const section = process.env.SECTION;
 const quotes = lore?.transitions?.[section]?.quotes ?? [];
-const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', by: 'Unknown' };
+const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', source: 'Unknown' };
 process.stdout.write(JSON.stringify({
   quote: selected.text ?? '',
-  by: selected.by ?? 'Unknown',
+  by: selected.source ?? 'Unknown',
   section,
   at: new Date().toISOString(),
 }));
@@ -288,10 +288,10 @@ const lorePath = `${process.env.CLAUDE_HOME}/kilntwo/data/lore.json`;
 const lore = JSON.parse(fs.readFileSync(lorePath, 'utf8'));
 const section = process.env.SECTION;
 const quotes = lore?.transitions?.[section]?.quotes ?? [];
-const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', by: 'Unknown' };
+const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', source: 'Unknown' };
 process.stdout.write(JSON.stringify({
   quote: selected.text ?? '',
-  by: selected.by ?? 'Unknown',
+  by: selected.source ?? 'Unknown',
   section,
   at: new Date().toISOString(),
 }));
@@ -329,10 +329,10 @@ const lorePath = `${process.env.CLAUDE_HOME}/kilntwo/data/lore.json`;
 const lore = JSON.parse(fs.readFileSync(lorePath, 'utf8'));
 const section = process.env.SECTION;
 const quotes = lore?.transitions?.[section]?.quotes ?? [];
-const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', by: 'Unknown' };
+const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', source: 'Unknown' };
 process.stdout.write(JSON.stringify({
   quote: selected.text ?? '',
-  by: selected.by ?? 'Unknown',
+  by: selected.source ?? 'Unknown',
   section,
   at: new Date().toISOString(),
 }));
@@ -406,7 +406,7 @@ NODE
     If `phase_total` is missing or non-integer, halt and tell the operator MEMORY.md is corrupted/incomplete.
 
 12. Display the plan-approved transition and proceed to Stage 3.
-   Before proceeding:
+    Before proceeding:
     Render the banner and persist the quote in a single Bash call by programmatically selecting from `transitions.plan_approved.quotes`:
     ```bash
     PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
@@ -420,10 +420,10 @@ const lorePath = `${process.env.CLAUDE_HOME}/kilntwo/data/lore.json`;
 const lore = JSON.parse(fs.readFileSync(lorePath, 'utf8'));
 const section = process.env.SECTION;
 const quotes = lore?.transitions?.[section]?.quotes ?? [];
-const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', by: 'Unknown' };
+const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', source: 'Unknown' };
 process.stdout.write(JSON.stringify({
   quote: selected.text ?? '',
-  by: selected.by ?? 'Unknown',
+  by: selected.source ?? 'Unknown',
   section,
   at: new Date().toISOString(),
 }));
@@ -485,10 +485,10 @@ const lorePath = `${process.env.CLAUDE_HOME}/kilntwo/data/lore.json`;
 const lore = JSON.parse(fs.readFileSync(lorePath, 'utf8'));
 const section = process.env.SECTION;
 const quotes = lore?.transitions?.[section]?.quotes ?? [];
-const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', by: 'Unknown' };
+const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', source: 'Unknown' };
 process.stdout.write(JSON.stringify({
   quote: selected.text ?? '',
-  by: selected.by ?? 'Unknown',
+  by: selected.source ?? 'Unknown',
   section,
   at: new Date().toISOString(),
 }));
@@ -556,10 +556,10 @@ const lorePath = `${process.env.CLAUDE_HOME}/kilntwo/data/lore.json`;
 const lore = JSON.parse(fs.readFileSync(lorePath, 'utf8'));
 const section = process.env.SECTION;
 const quotes = lore?.transitions?.[section]?.quotes ?? [];
-const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', by: 'Unknown' };
+const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', source: 'Unknown' };
 process.stdout.write(JSON.stringify({
   quote: selected.text ?? '',
-  by: selected.by ?? 'Unknown',
+  by: selected.source ?? 'Unknown',
   section,
   at: new Date().toISOString(),
 }));
@@ -596,10 +596,10 @@ const lorePath = `${process.env.CLAUDE_HOME}/kilntwo/data/lore.json`;
 const lore = JSON.parse(fs.readFileSync(lorePath, 'utf8'));
 const section = process.env.SECTION;
 const quotes = lore?.transitions?.[section]?.quotes ?? [];
-const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', by: 'Unknown' };
+const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', source: 'Unknown' };
 process.stdout.write(JSON.stringify({
   quote: selected.text ?? '',
-  by: selected.by ?? 'Unknown',
+  by: selected.source ?? 'Unknown',
   section,
   at: new Date().toISOString(),
 }));
@@ -710,10 +710,10 @@ const lorePath = `${process.env.CLAUDE_HOME}/kilntwo/data/lore.json`;
 const lore = JSON.parse(fs.readFileSync(lorePath, 'utf8'));
 const section = process.env.SECTION;
 const quotes = lore?.transitions?.[section]?.quotes ?? [];
-const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', by: 'Unknown' };
+const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', source: 'Unknown' };
 process.stdout.write(JSON.stringify({
   quote: selected.text ?? '',
-  by: selected.by ?? 'Unknown',
+  by: selected.source ?? 'Unknown',
   section,
   at: new Date().toISOString(),
 }));

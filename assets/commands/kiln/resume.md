@@ -56,10 +56,10 @@ const lorePath = `${process.env.CLAUDE_HOME}/kilntwo/data/lore.json`;
 const lore = JSON.parse(fs.readFileSync(lorePath, 'utf8'));
 const section = process.env.SECTION;
 const quotes = lore?.transitions?.[section]?.quotes ?? [];
-const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', by: 'Unknown' };
+const selected = quotes.length ? quotes[Math.floor(Math.random() * quotes.length)] : { text: '', source: 'Unknown' };
 process.stdout.write(JSON.stringify({
   quote: selected.text ?? '',
-  by: selected.by ?? 'Unknown',
+  by: selected.source ?? 'Unknown',
   section,
   at: new Date().toISOString(),
 }));
