@@ -488,6 +488,14 @@
       "description": "Use myths and archetypal stories as frameworks for understanding and solving problems - taps into collective unconscious by asking what myth parallels this, what archetypes are involved, and how mythic structure informs solution",
       "phase": "frame",
       "energy": "medium"
+    },
+    {
+      "id": 62,
+      "category": "cultural",
+      "name": "Ceremony Prototyping",
+      "description": "Prototype the solution as a repeatable ritual to surface friction, motivation, and social meaning - asks what repeated ceremony would make this stick, who participates, what signals commitment, and where adoption fails",
+      "phase": "converge",
+      "energy": "medium"
     }
   ]
 }

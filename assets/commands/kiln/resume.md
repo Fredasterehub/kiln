@@ -34,7 +34,7 @@ Each entry must be formatted as:
 If `stage` or `status` are missing, or contain unrecognized values, treat MEMORY.md as corrupted, halt immediately, and output exactly:
 ```
 [kiln:resume] MEMORY.md is corrupted or incomplete (missing required fields: <list>).
-Run /kiln:start to reinitialize, or manually repair $CLAUDE_HOME/projects/<encoded>/memory/MEMORY.md.
+Run /kiln:start to reinitialize, or manually repair $MEMORY_DIR/MEMORY.md.
 ```
 ## Step 4: Supporting Files
 Supporting memory files (`vision.md`, `master-plan.md`, `decisions.md`, `pitfalls.md`, `PATTERNS.md`, `tech-stack.md`) are read by coordinators at their own startup — not by the orchestrator. Do not preload them here. If you need a specific value for routing (e.g., to display a summary), read only the specific file and extract only the needed fields.
@@ -84,13 +84,16 @@ Recommended next step (from last reset): [next_action]
 ## Step 5.5: Clean Team State and Recreate Session Team
 Teams do not persist cleanly across Claude Code sessions. Crashed or interrupted sessions leave stale team directories that block `TeamCreate`. Always clean up stale teams, then Always create the session team fresh.
 
-1. Remove all known Kiln team directories via Bash (ignore errors if they don't exist):
+1. Attempt `TeamDelete("kiln-session")` unconditionally.
+   - If it errors because the team does not exist, ignore and continue.
+2. Attempt `TeamCreate("kiln-session")`.
+3. If `TeamCreate("kiln-session")` fails due to stale directory state, run this last-resort cleanup and retry once:
    ```bash
-   rm -rf $HOME/.claude/teams/kiln-session/
+   rm -rf "$CLAUDE_HOME/teams/kiln-session/"
    ```
-2. Create the session team: `TeamCreate("kiln-session")`
+   Then call `TeamCreate("kiln-session")` again.
 
-Do not check whether the team exists first. Do not skip this step. This ensures a clean slate regardless of how the previous session ended.
+Do not check whether the team exists first. Do not skip this step. Do not delete any other team directories. This ensures a clean slate regardless of how the previous session ended.
 ## Step 6: Route to Stage
 Branch strictly on `stage` and run the matching behavior.
 For `brainstorm`:
@@ -232,7 +235,7 @@ If `stage` is not `complete`, update `$MEMORY_DIR/MEMORY.md`:
   `- Resumed: <ISO-8601 timestamp>`
 Perform this update atomically: read full MEMORY.md, apply both changes, and write the full updated content back without losing existing content.
 ## Key Rules
-- Read stage and status only from `$CLAUDE_HOME/projects/<encoded>/memory/`; do not infer from repo shape or conversation history.
+- Read stage and status only from `MEMORY_DIR`; do not infer from repo shape or conversation history.
 - If MEMORY.md is missing/corrupted, warn and direct to `/kiln:start`; do not reconstruct state.
 - Keep resume read-only for project files; only Step 7 may update MEMORY.md.
 - Preserve context already in memory and treat `handoff_note` as authoritative routing context.

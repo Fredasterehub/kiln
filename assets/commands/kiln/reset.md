@@ -102,7 +102,7 @@ Record each agent name and final status as one of: `acknowledged`, `timed out`, 
 
 If no active agents are found, skip shutdown messaging and record `No active agents`.
 
-After agent shutdown, delete the session team if it exists: check for `$CLAUDE_HOME/teams/kiln-session/config.json` — if present, call `TeamDelete("kiln-session")`.
+After agent shutdown, attempt `TeamDelete("kiln-session")` unconditionally. If the team does not exist, ignore the error and continue.
 </step>
 
 <step name="append-memory-entries">

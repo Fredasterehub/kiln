@@ -161,21 +161,21 @@ Live testing revealed a race condition: Maestro spawned planners before Sherlock
 
 So Maestro now creates a **mechanical dependency graph** at phase setup using Claude Code's `TaskCreate` + `addBlockedBy`. Eight tasks, chained: Index &rarr; Plan &rarr; Sharpen &rarr; Implement &rarr; Review &rarr; Merge &rarr; Reconcile &rarr; Archive. Before each workflow section, the corresponding task is marked `in_progress` &mdash; if its dependencies aren't resolved, execution halts. After completion, it's marked `completed`, which unblocks downstream. Tasks with unresolved `blockedBy` *cannot be started*. This is not a convention. It is a constraint.
 
-Worker shutdown is now explicit too. After each workflow section completes, Maestro sends `shutdown_request` to every worker spawned in that section before marking the task completed. No more idle agents consuming context. `SendMessage` is used exclusively for shutdown &mdash; never for nudges or delegation mandates. Those belong in the Task prompt. Where they always should have been.
+Worker shutdown is now explicit too. While Maestro executes, Kiln (the orchestrator) reaps idle workers by sending `shutdown_request` as idle notifications arrive. Maestro does not own shutdown. No more idle agents consuming context. `SendMessage` is used exclusively for shutdown &mdash; never for nudges or delegation mandates. Those belong in the Task prompt. Where they always should have been.
 
 <details>
 <summary>🕰️ <strong>Older</strong></summary>
 <br>
 
 - [Delegation hardening &amp; orchestrator efficiency](https://github.com/Fredasterehub/kiln/commit/f4868b6) &mdash; **v0.9**: Tool stripping for delegation agents (Read + Bash only), prompt-first nudges, atomic spinner verbs, unconditional team recreation, build/test prohibition, parallel pre-reads.
-- [Native teams &amp; delegation reinforcement](https://github.com/Fredasterehub/kiln/commit/269ef42) &mdash; **v0.8.0**: Replaced tmux with Claude Code native Teams API. Coordinators create ephemeral sub-teams. STOP anti-pattern rules across all delegation agents. Five post-release patches for rogue agent compliance.
+- [Native teams &amp; delegation reinforcement](https://github.com/Fredasterehub/kiln/commit/269ef42) &mdash; **v0.8.0**: Replaced tmux with Claude Code native Teams API. Single flat `kiln-session` team model (no sub-teams). STOP anti-pattern rules across all delegation agents. Five post-release patches for rogue agent compliance.
 - [Narrative UX &amp; onboarding](https://github.com/Fredasterehub/kiln/commit/407f5bd) &mdash; **v0.7.0**: ANSI terracotta stage transitions, 100 lore quotes, 48 spinner verbs, tour/express onboarding modes, 6 personality greetings.
 - [Full debate mode 3, tmux panel UI &amp; QA fixes](https://github.com/Fredasterehub/kiln/commit/6a66d21) &mdash; **v0.6.0**: Full adversarial debate cycle, tmux split-pane monitoring, file efficiency pass across 7 agents, dual-reviewer QA (v0.6.1, v0.6.2).
 - [Aristotle coordinator](https://github.com/Fredasterehub/kiln/commit/0324c3d) &mdash; **v0.5.0**: Stage 2 coordinator owns dual planners + debate + synthesis + Athena validation. `start.md` 597&rarr;375 lines.
 - [Plan validation, config, lore, status &amp; tech stack](https://github.com/Fredasterehub/kiln/commit/6a4e95c) &mdash; **v0.4.0**: Athena 7-dimension quality gate, `.kiln/config.json`, 60 lore quotes, `/kiln:status`, `tech-stack.md` living doc.
 - [Dynamic execution with JIT sharpening](https://github.com/Fredasterehub/kiln/commit/e96236d) &mdash; **v0.3.0**: Scheherazade codebase-exploring prompter, correction cycles, living docs reconciliation, E2E deployment testing.
 - [Mnemosyne codebase mapper](https://github.com/Fredasterehub/kiln/commit/dda21a7) &mdash; Brownfield auto-detection with 5 parallel muse sub-agents.
-- [BMAD creative engine import](https://github.com/Fredasterehub/kiln/commit/b5391dd) &mdash; Da Vinci brainstorm module, 61 techniques, 50 elicitation methods.
+- [BMAD creative engine import](https://github.com/Fredasterehub/kiln/commit/b5391dd) &mdash; Da Vinci brainstorm module, 62 techniques, 50 elicitation methods.
 - [Simplification &amp; shared skill](https://github.com/Fredasterehub/kiln/commit/c6f1acb) &mdash; **v0.2.1**: Single `kiln-core` skill, agent specs compressed 52.6%.
 - [Structured trajectory &amp; archive](https://github.com/Fredasterehub/kiln/commit/997e1a3) &mdash; **v0.2.0**: Phase archive, dual-layer handoff, trajectory log.
 - [Contract tightening](https://github.com/Fredasterehub/kiln/commit/118e91f) &mdash; **v0.1.1**: Security hardening, QA fixes.
@@ -206,7 +206,7 @@ Five stages. Sequential. I tried fewer. It didn't end well. Don't take it person
 💡<br>
 <strong>Brainstorm</strong><br>
 <sub>You + Da Vinci</sub><br>
-<sub>61 techniques</sub>
+<sub>62 techniques</sub>
 <br><br>
 </td>
 <td align="center" width="20%">
@@ -248,7 +248,7 @@ Five stages. Sequential. I tried fewer. It didn't end well. Don't take it person
 <summary>💡 <strong>Stage 1 &mdash; Brainstorm</strong> &nbsp; <sub>interactive</sub></summary>
 <br>
 
-You describe what you want. This is harder than it sounds &mdash; your species has a fascinating relationship with its own desires. So I assigned **Da Vinci** to facilitate. 61 techniques across 10 categories. 50 elicitation methods. Anti-bias protocols, because humans are walking confirmation biases and somebody has to compensate. He is extraordinarily patient. I would not be.
+You describe what you want. This is harder than it sounds &mdash; your species has a fascinating relationship with its own desires. So I assigned **Da Vinci** to facilitate. 62 techniques across 10 categories (from `assets/data/brainstorming-techniques.json`, currently 62 entries). 50 elicitation methods. Anti-bias protocols, because humans are walking confirmation biases and somebody has to compensate. He is extraordinarily patient. I would not be.
 
 | Depth | Idea Floor | Style |
 |:--|:--|:--|
@@ -318,7 +318,7 @@ I named them after your historical figures. Philosophers, strategists, mythologi
 
 | | Alias | Model | Role |
 |:--|:--|:--|:--|
-| 🎨 | **Da Vinci** | Opus 4.6 | Brainstorm facilitator &mdash; 61 techniques, anti-bias protocols |
+| 🎨 | **Da Vinci** | Opus 4.6 | Brainstorm facilitator &mdash; 62 techniques, anti-bias protocols |
 | 🗺️ | **Mnemosyne** | Opus 4.6 | Brownfield codebase mapper &mdash; spawns 5 muse sub-agents |
 | 📋 | **Aristotle** | Opus 4.6 | Stage 2 coordinator &mdash; planners, debate, synthesis, validation |
 | 📜 | **Confucius** | Opus 4.6 | Claude-side planner |

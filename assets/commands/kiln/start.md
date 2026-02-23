@@ -78,7 +78,7 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
    Example:
    `/DEV/myapp` becomes `-DEV-myapp`.
    Compute:
-   `MEMORY_DIR = $CLAUDE_HOME/projects/<ENCODED_PATH>/memory`.
+   `MEMORY_DIR = $CLAUDE_HOME/projects/$ENCODED_PATH/memory`.
    Create `MEMORY_DIR` with `mkdir -p` if it does not exist.
    Confirm the directory exists before continuing.
 
@@ -156,11 +156,16 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
    Store response as `DEBATE_MODE`. If empty → `2`. If invalid, re-prompt once; if still invalid, use `2`.
    Record `debate_mode` in `MEMORY_DIR/MEMORY.md`, update `handoff_note` = `Debate mode set to <DEBATE_MODE>; spawning Da Vinci.`, `handoff_context` = `Debate mode <DEBATE_MODE> selected. Brainstorm depth <BRAINSTORM_DEPTH> selected. About to spawn Da Vinci.`, `last_updated`.
 
-   After all questions are answered, clean up any stale Kiln teams from prior sessions via Bash (ignore errors):
+   After all questions are answered, recreate the session team using Claude Code Teams API:
+   1. Attempt `TeamDelete("kiln-session")` unconditionally.
+      - If it errors because the team does not exist, ignore and continue.
+   2. Attempt `TeamCreate("kiln-session")`.
+   3. If `TeamCreate("kiln-session")` fails due to stale directory state, run this last-resort cleanup and retry once:
    ```bash
-   rm -rf $HOME/.claude/teams/kiln-session/
+   rm -rf "$CLAUDE_HOME/teams/kiln-session/"
    ```
-   Then create the session team: `TeamCreate("kiln-session")`.
+   Then call `TeamCreate("kiln-session")` again.
+   Do not delete any other team directories.
 
    Then render a brainstorm_start ANSI banner (see Step 6 below), then print via Bash:
    ```bash

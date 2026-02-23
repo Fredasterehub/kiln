@@ -21,10 +21,10 @@ describe('brainstorming-techniques.json', () => {
     assert.strictEqual(data.version, '1.0');
   });
 
-  it('contains exactly 61 techniques', () => {
+  it('contains exactly 62 techniques', () => {
     const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
     assert.ok(Array.isArray(data.techniques), 'techniques must be an array');
-    assert.strictEqual(data.techniques.length, 61, `expected 61 techniques, got ${data.techniques.length}`);
+    assert.strictEqual(data.techniques.length, 62, `expected 62 techniques, got ${data.techniques.length}`);
   });
 
   it('every technique has required fields with correct types', () => {
