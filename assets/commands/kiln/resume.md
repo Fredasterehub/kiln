@@ -1,17 +1,30 @@
 # /kiln:resume
 Restore project context from memory and continue exactly where the last session stopped.
 Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEMORY.md schema, paths contract, config schema, event enum, and Codex CLI patterns. This file uses those definitions without repeating them.
-## Preflight: tmux Required
-Before any memory reads or team operations, verify tmux is active.
-If `$TMUX` is empty, halt immediately and print exactly:
-`[kiln] tmux is required for reliable multi-agent spawning right now. Start tmux, then rerun /kiln:resume.`
+## Preflight: Memory-First (No tmux Gate)
+Before any team operations, read project-local memory first.
+Do NOT block on tmux preflight for this Windows sequential setup.
+If tmux is unavailable, proceed with sequential orchestration.
+## Rule 0: MEMORY.md First (Hard Gate)
+
+Before any team operations, worker spawns, or stage routing:
+
+1. Detect `PROJECT_PATH`.
+2. Set `MEMORY_DIR = $PROJECT_PATH/.kiln/memory`.
+3. Read `MEMORY_DIR/MEMORY.md`.
+
+Fail-closed behavior:
+- If `MEMORY.md` is missing or empty: halt and instruct operator to run `/kiln:start`.
+- If `MEMORY.md` is unreadable/corrupted: halt and report corruption.
+- Do not continue with orchestration until memory is successfully read.
 ## Step 1: Detect Project Path
 Determine the project path from the current working directory (`process.cwd()`, `$PWD`, or equivalent) and store it as `PROJECT_PATH`.
 If you cannot determine `PROJECT_PATH`, halt immediately and tell the user exactly:
 "Cannot determine project path. Please run this command from the project root."
 ## Step 2: Compute Memory Directory Path
-Compute the encoded project path using POSIX slash splitting exactly as `absolutePath.split('/').join('-')`, then set `MEMORY_DIR = $CLAUDE_HOME/projects/$ENCODED_PATH/memory`.
-Worked example: `PROJECT_PATH=/DEV/myproject`, `encoded=-DEV-myproject`, `MEMORY_DIR=$CLAUDE_HOME/projects/-DEV-myproject/memory`.
+Set project-local memory path directly:
+`MEMORY_DIR = $PROJECT_PATH/.kiln/memory`
+Create it if missing before reading MEMORY.md.
 ## Step 3: Read MEMORY.md
 Read `$MEMORY_DIR/MEMORY.md`.
 If the file does not exist, or is empty, halt immediately and output exactly this warning block and nothing else:
@@ -300,8 +313,12 @@ If `stage` is not `complete`, update `$MEMORY_DIR/MEMORY.md`:
   `- Resumed: <ISO-8601 timestamp>`
 Perform this update atomically: read full MEMORY.md, apply both changes, and write the full updated content back without losing existing content.
 ## Key Rules
+
+0. **Read MEMORY.md before any orchestration decisions.** /kiln:resume is fail-closed on missing/corrupt memory and must not proceed until memory is parsed.
 - Read stage and status only from `MEMORY_DIR`; do not infer from repo shape or conversation history.
 - If MEMORY.md is missing/corrupted, warn and direct to `/kiln:start`; do not reconstruct state.
 - Keep resume read-only for project files; only Step 7 may update MEMORY.md.
 - Preserve context already in memory and treat `handoff_note` as authoritative routing context.
 - The orchestrator MUST NOT run project build, compile, test, lint, or deployment commands (e.g., `cargo check`, `npm test`, `go build`, `make`, `pytest`). State assessment uses MEMORY.md fields, phase state files, git status, and handoff context only. Build verification is Maestro's job (Stage 3) and Argus's job (Stage 4).
+
+

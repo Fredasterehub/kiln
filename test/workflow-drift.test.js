@@ -10,27 +10,35 @@ function read(filePath) {
 }
 
 describe('workflow drift guardrails', () => {
-  it('start.md requires tmux preflight', () => {
+  it('start.md must be memory-first and not tmux-gated', () => {
     const start = read('assets/commands/kiln/start.md');
     assert.ok(
-      start.includes('tmux is required for reliable multi-agent spawning right now'),
-      'start.md must enforce tmux preflight'
+      start.includes('Rule 0: MEMORY.md First (Hard Gate)'),
+      'start.md must enforce memory-first hard gate'
+    );
+    assert.ok(
+      !start.includes('tmux is required for reliable multi-agent spawning right now'),
+      'start.md must not enforce tmux preflight'
     );
   });
 
-  it('resume.md requires tmux preflight', () => {
+  it('resume.md must be memory-first and not tmux-gated', () => {
     const resume = read('assets/commands/kiln/resume.md');
     assert.ok(
-      resume.includes('tmux is required for reliable multi-agent spawning right now'),
-      'resume.md must enforce tmux preflight'
+      resume.includes('Rule 0: MEMORY.md First (Hard Gate)'),
+      'resume.md must enforce memory-first hard gate'
+    );
+    assert.ok(
+      !resume.includes('tmux is required for reliable multi-agent spawning right now'),
+      'resume.md must not enforce tmux preflight'
     );
   });
 
-  it('start.md uses canonical MEMORY_DIR path contract', () => {
+  it('start.md uses project-local MEMORY_DIR path contract', () => {
     const start = read('assets/commands/kiln/start.md');
     assert.ok(
-      start.includes('$CLAUDE_HOME/projects/$ENCODED_PATH/memory'),
-      'start.md must derive MEMORY_DIR as $CLAUDE_HOME/projects/$ENCODED_PATH/memory'
+      start.includes('MEMORY_DIR = $PROJECT_PATH/.kiln/memory'),
+      'start.md must derive MEMORY_DIR as $PROJECT_PATH/.kiln/memory'
     );
   });
 
@@ -59,14 +67,14 @@ describe('workflow drift guardrails', () => {
     );
   });
 
-  it('resume.md defines MEMORY_DIR without trailing slash', () => {
+  it('resume.md defines project-local MEMORY_DIR without trailing slash', () => {
     const resume = read('assets/commands/kiln/resume.md');
     assert.ok(
-      resume.includes('MEMORY_DIR = $CLAUDE_HOME/projects/$ENCODED_PATH/memory'),
-      'resume.md must define MEMORY_DIR without trailing slash'
+      resume.includes('MEMORY_DIR = $PROJECT_PATH/.kiln/memory'),
+      'resume.md must define project-local MEMORY_DIR without trailing slash'
     );
     assert.ok(
-      !resume.includes('MEMORY_DIR = $CLAUDE_HOME/projects/$ENCODED_PATH/memory/'),
+      !resume.includes('MEMORY_DIR = $PROJECT_PATH/.kiln/memory/'),
       'resume.md must not define MEMORY_DIR with trailing slash'
     );
   });
@@ -91,11 +99,11 @@ describe('workflow drift guardrails', () => {
     );
   });
 
-  it('README explicitly states tmux is required', () => {
+  it('README explicitly states tmux is not required for sequential mode', () => {
     const readme = read('README.md');
     assert.ok(
-      readme.includes('tmux required') || readme.includes('tmux is required'),
-      'README must state tmux is required right now'
+      readme.includes('No tmux') || readme.includes('tmux is optional'),
+      'README must state tmux is not required for sequential mode'
     );
   });
 

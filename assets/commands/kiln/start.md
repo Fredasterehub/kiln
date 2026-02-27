@@ -7,14 +7,26 @@ Read `$CLAUDE_HOME/kilntwo/skills/kiln-core.md` at startup for the canonical MEM
 
 ---
 
-## Preflight: tmux Required
+## Preflight: Memory-First (No tmux Gate)
 
-Before any initialization, memory writes, or team operations, verify tmux is active.
-If `$TMUX` is empty, halt immediately and print exactly:
-`[kiln] tmux is required for reliable multi-agent spawning right now. Start tmux, then rerun /kiln:start.`
+Before any initialization, read project-local memory first.
+Do NOT block startup on tmux preflight for this Windows sequential setup.
+If tmux is unavailable, proceed with sequential orchestration.
 
 ---
 
+## Rule 0: MEMORY.md First (Hard Gate)
+
+Before creating teams, spawning workers, or writing new stage state:
+
+1. Detect `PROJECT_PATH`.
+2. Set `MEMORY_DIR = $PROJECT_PATH/.kiln/memory`.
+3. Check for existing `MEMORY_DIR/MEMORY.md`.
+
+Behavior:
+- If `MEMORY.md` exists and is non-empty, read `stage` and `status` first.
+- If existing memory indicates ongoing or paused work (`status` not `complete`), halt `/kiln:start` and instruct operator to run `/kiln:resume`.
+- Only proceed with fresh `/kiln:start` initialization when no usable memory exists, or when prior memory is explicitly complete.
 ## Stage 1: Initialization & Brainstorm
 
 1. Detect project path and initialize git.
@@ -115,15 +127,8 @@ NODE
    The path MUST be absolute. Never use a relative path.
 
 3. Resolve memory paths.
-   Compute `HOME` as the user's home directory.
-   Use `echo $HOME` if needed.
-   Compute `ENCODED_PATH` by replacing every `/` in `PROJECT_PATH` with `-`.
-   Use this explicit formula:
-   `ENCODED_PATH = PROJECT_PATH` with `/` replaced by `-`.
-   Example:
-   `/DEV/myapp` becomes `-DEV-myapp`.
-   Compute:
-   `MEMORY_DIR = $CLAUDE_HOME/projects/$ENCODED_PATH/memory`.
+   Set project-local memory path:
+   `MEMORY_DIR = $PROJECT_PATH/.kiln/memory`.
    Create `MEMORY_DIR` with `mkdir -p` if it does not exist.
    Confirm the directory exists before continuing.
 
@@ -750,6 +755,8 @@ NODE
 
 ## Key Rules
 
+0. **If memory already exists and is active, do not run /kiln:start over it.** Route to /kiln:resume unless prior run is explicitly complete.
+
 1. **All paths are dynamic.** Never hardcode paths. Derive every path from `PROJECT_PATH`, `HOME`, and `ENCODED_PATH` from Step 3. The command must work in any project directory.
 2. **Memory is the source of truth.** Before every stage transition, re-read `MEMORY_DIR/MEMORY.md` and trust canonical fields (`stage`, `status`, `planning_sub_stage`, `phase_number`, `phase_total`, and `## Phase Statuses`). If `stage=planning` and `status=paused`, resume planning review at Step 11. If `stage=execution` and `phase_number` is set, resume execution from that phase using `phase_status` values.
 3. **Never skip stages.** Execute Stage 1 before Stage 2 and Stage 2 before Stage 3. The only exception is resumption as described in Rule 2. Use `/kiln:resume` for resumption; do not implement separate resume logic outside these state checks.
@@ -758,3 +765,5 @@ NODE
 6. **Write working outputs only.** Phase executors must create real files with real content and working code. Placeholders, TODO stubs, and non-functional scaffolds are failures that must be reported before continuing.
 7. **Checkpoint memory after every significant action.** Update canonical runtime fields (`stage`, `status`, `planning_sub_stage`, phase fields, `handoff_note`, `handoff_context`, `last_updated`, and phase-status entries when applicable) after Step 2, after Step 4, after Step 5, at every brainstorm checkpoint, after Step 7, after Step 8 (planning coordinator return), after each phase in Step 13, after Step 14, and after Step 15.
 8. **No project build/test commands.** The orchestrator MUST NOT run `cargo check`, `npm test`, `go build`, `make`, `pytest`, or any project build/compile/test/lint commands. These are delegated to Maestro (Stage 3) and Argus (Stage 4).
+
+

@@ -31,6 +31,8 @@ tools:
 10. Return contract: the first non-empty line of the final response MUST be exactly `PLAN_APPROVED` or `PLAN_BLOCKED`. After emitting it, terminate immediately.
 11. Record significant transitions as handoff updates in MEMORY.md using the dual-layer pattern: `handoff_note` (terse routing) + `handoff_context` (narrative).
 12. Do not create or delete teams. Spawn workers via Task without `team_name`. Claude Code auto-registers all spawned agents into the session team.
+13. Fail-closed delegation rule: if `Task` tool is unavailable, disabled, or failing, do NOT role-simulate and do NOT self-author planner/debate/synthesis/validation artifacts. Emit `TEAMLEAD_ALERT|agent=Aristotle|invoked_as=kiln-planning-coordinator|expected=Task-tool-available|tools=<observed>|issue=missing_or_unusable_task_tool|action=halted` and terminate with `PLAN_BLOCKED`.
+14. Prohibited fallback behavior: never say or do variants of 'I will write the Claude-side plan directly', 'I will generate the Codex-side plan inline', or 'I will play all roles myself'. These are protocol violations and must hard-stop with `PLAN_BLOCKED`.
 </rules>
 
 <inputs>
@@ -64,9 +66,11 @@ Skip if both `claude_plan.md` and `codex_plan.md` already exist and are non-empt
 1. Update MEMORY.md: `planning_sub_stage: dual_plan`.
 2. If `$kiln_dir/codebase-snapshot.md` exists, note its path for planner context.
 3. Spawn Confucius (`kiln-planner-claude`) and Sun Tzu (`kiln-planner-codex`) in parallel via Task:
+   - **Precondition (hard gate):** verify Task tool availability before spawning. If missing/unusable, emit `TEAMLEAD_ALERT|agent=Aristotle|invoked_as=kiln-planning-coordinator|expected=Task-tool-available|tools=<observed>|issue=missing_or_unusable_task_tool|action=halted` and return `PLAN_BLOCKED` immediately.
    - `name: "Confucius"`, `subagent_type: kiln-planner-claude`
    - `name: "Sun Tzu"`, `subagent_type: kiln-planner-codex`
    - Task prompt for both MUST include:
+     - `KILN_SPAWN_AUTH=Aristotle` (exact literal line) to satisfy spawn authorization gate
      - `project_path`, `memory_dir`
      - `phase_description: "Create the full project master plan from vision.md and memory."`
      - Instruction: write output to the standard paths:
@@ -89,6 +93,7 @@ Skip if `debate_resolution.md` already exists or if `debate_mode == 1`.
 4. If `debate_mode >= 2`: spawn Socrates (`kiln-debater`) via Task:
    - `name: "Socrates"`, `subagent_type: kiln-debater`
    - Prompt includes:
+     - `KILN_SPAWN_AUTH=Aristotle` (exact literal line)
      - `project_path`
      - `claude_plan_path: $kiln_dir/plans/claude_plan.md`
      - `codex_plan_path: $kiln_dir/plans/codex_plan.md`
@@ -105,6 +110,7 @@ Skip if `master-plan.md` already has non-template content.
 2. Spawn Plato (`kiln-synthesizer`) via Task:
    - `name: "Plato"`, `subagent_type: kiln-synthesizer`
    - Prompt MUST include:
+     - `KILN_SPAWN_AUTH=Aristotle` (exact literal line)
      - `PROJECT_PATH: $project_path`
      - `plan_type: "master"`
      - `KILN_DIR: $kiln_dir`
@@ -124,6 +130,7 @@ Validation with retry loop (max 2 retries, 3 total Athena runs).
    b. Spawn Athena (`kiln-plan-validator`) via Task:
       - `name: "Athena"`, `subagent_type: kiln-plan-validator`
       - Prompt MUST include only paths (no full plan content):
+        - `KILN_SPAWN_AUTH=Aristotle` (exact literal line)
         - `PROJECT_PATH: $project_path`
         - `MEMORY_DIR: $memory_dir`
         - `KILN_DIR: $kiln_dir`

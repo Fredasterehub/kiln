@@ -14,6 +14,7 @@ const REPO_ROOT = path.resolve(__dirname, '..');
 const ASSETS_AGENTS_DIR = path.join(REPO_ROOT, 'assets', 'agents');
 const ASSETS_COMMANDS_DIR = path.join(REPO_ROOT, 'assets', 'commands', 'kiln');
 const ASSETS_DATA_DIR = path.join(REPO_ROOT, 'assets', 'data');
+const ASSETS_HOOKS_DIR = path.join(REPO_ROOT, 'assets', 'hooks', 'pre-tool-use');
 const ASSETS_SKILLS_DIR = path.join(REPO_ROOT, 'assets', 'skills');
 const ASSETS_TEMPLATES_DIR = path.join(REPO_ROOT, 'assets', 'templates');
 
@@ -36,6 +37,13 @@ function listJsonFiles(dirPath) {
   return fs
     .readdirSync(dirPath)
     .filter((name) => name.endsWith('.json'))
+    .sort();
+}
+
+function listJsFiles(dirPath) {
+  return fs
+    .readdirSync(dirPath)
+    .filter((name) => name.endsWith('.js'))
     .sort();
 }
 
@@ -84,6 +92,7 @@ describe('install E2E', { concurrency: false }, () => {
     assertDirectoryExists(paths.agentsDir);
     assertDirectoryExists(paths.commandsDir);
     assertDirectoryExists(paths.dataDir);
+    assertDirectoryExists(paths.preToolUseHooksDir);
     assertDirectoryExists(paths.kilntwoDir);
     assertDirectoryExists(paths.templatesDir);
   });
@@ -127,6 +136,19 @@ describe('install E2E', { concurrency: false }, () => {
     const expected = ['reset.md', 'resume.md', 'start.md', 'status.md'];
     for (const name of expected) {
       assertNonEmptyFile(path.join(paths.commandsDir, name));
+    }
+  });
+
+  it('copies all pre-tool-use hook files', () => {
+    install({ home: tmpHome, projectPath: tmpProject });
+
+    const expected = [
+      'enforce-kiln-coordinator-discipline.js',
+      'enforce-kiln-maestro-discipline.js',
+      'enforce-kiln-spawn-map.js',
+    ];
+    for (const name of expected) {
+      assertNonEmptyFile(path.join(paths.preToolUseHooksDir, name));
     }
   });
 
@@ -179,6 +201,7 @@ describe('install E2E', { concurrency: false }, () => {
       listMarkdownFiles(ASSETS_AGENTS_DIR).length +
       listMarkdownFiles(ASSETS_COMMANDS_DIR).length +
       listJsonFiles(ASSETS_DATA_DIR).length +
+      listJsFiles(ASSETS_HOOKS_DIR).length +
       listMarkdownFiles(ASSETS_SKILLS_DIR).length +
       listMarkdownFiles(ASSETS_TEMPLATES_DIR).length +
       1; // names.json

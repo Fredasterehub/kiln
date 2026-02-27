@@ -12,6 +12,8 @@ function resolvePaths(homeOverride) {
     commandsDir: path.join(claudeDir, 'commands', 'kiln'),
     kilntwoDir,
     dataDir: path.join(kilntwoDir, 'data'),
+    hooksDir: path.join(kilntwoDir, 'hooks'),
+    preToolUseHooksDir: path.join(kilntwoDir, 'hooks', 'pre-tool-use'),
     skillsDir: path.join(kilntwoDir, 'skills'),
     templatesDir: path.join(kilntwoDir, 'templates'),
     manifestPath: path.join(kilntwoDir, 'manifest.json'),
@@ -29,14 +31,7 @@ function encodeProjectPath(absolutePath) {
 }
 
 function projectMemoryDir(homeOverride, projectPath) {
-  const home = homeOverride || os.homedir();
-  return path.join(
-    home,
-    '.claude',
-    'projects',
-    encodeProjectPath(projectPath),
-    'memory'
-  );
+  return path.join(projectPath, '.kiln', 'memory');
 }
 
 function projectClaudeMd(projectPath) {

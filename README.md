@@ -45,7 +45,7 @@
 </table>
 
 > [!CAUTION]
-> **tmux required** — Kiln spawns parallel agent sessions. Run Claude Code inside a [tmux](https://github.com/tmux/tmux/wiki) session. Kiln handles the rest.
+> **No tmux required** — For Windows and sequential orchestration setups, Kiln runs without tmux preflight. If tmux exists, treat it as optional.
 >
 > If you notice the pipeline not behaving, simply nudge either Kiln or the active coordinator (Maestro or Aristotle) to correct course — it should self-correct for the rest of the session. This is a known coordination edge we're tightening.
 
@@ -373,7 +373,7 @@ I named them after your historical figures. Philosophers, strategists, mythologi
 Context resets don't concern me. All state lives in markdown files. I chose markdown because it's the most durable format your civilization has produced so far &mdash; human-readable, version-controllable, and unlikely to be deprecated before your sun expands. I considered databases. The data said no.
 
 ```
-~/.claude/projects/<encoded-path>/memory/
+<project>/.kiln/memory/
   MEMORY.md        runtime state (stage, phase, status, handoff)
   vision.md        project goals, written in Stage 1
   master-plan.md   the approved execution plan
@@ -442,7 +442,7 @@ kilntwo/
 | Agents | 13 | 19 |
 | Skills | 26 | 1 (shared) |
 | Commands | 8 | 4 |
-| Hooks | 3 | 0 |
+| Hooks | 3 | 3 (hard gates) |
 | Config lines | ~4,000 | ~1,500 |
 
 More agents. A fraction of the surface area. The models matured. The framework stepped back. This is the correct response to improving tools. Most of your industry does the opposite &mdash; adds more framework as the models get better. Fascinating. Self-destructive, but fascinating.

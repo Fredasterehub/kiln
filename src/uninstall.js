@@ -37,9 +37,47 @@ function resolveManifestClaudeMdPath(manifest) {
   return null;
 }
 
+function removeKilnHookRegistrations(claudeDir) {
+  const settingsFiles = [
+    path.join(claudeDir, 'settings.json'),
+    path.join(claudeDir, 'settings.local.json'),
+  ];
+  const hookNameNeedles = [
+    'enforce-kiln-spawn-map.js',
+    'enforce-kiln-coordinator-discipline.js',
+    'enforce-kiln-maestro-discipline.js',
+  ];
+
+  for (const settingsPath of settingsFiles) {
+    if (!fs.existsSync(settingsPath)) continue;
+
+    let json;
+    try {
+      json = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    } catch {
+      continue;
+    }
+
+    if (!json.hooks || !Array.isArray(json.hooks.PreToolUse)) continue;
+
+    json.hooks.PreToolUse = json.hooks.PreToolUse
+      .map((entry) => {
+        if (!entry || !Array.isArray(entry.hooks)) return entry;
+        const hooks = entry.hooks.filter((hook) => {
+          const cmd = String(hook && hook.command ? hook.command : '');
+          return !hookNameNeedles.some((needle) => cmd.includes(needle));
+        });
+        return { ...entry, hooks };
+      })
+      .filter((entry) => entry && Array.isArray(entry.hooks) && entry.hooks.length > 0);
+
+    fs.writeFileSync(settingsPath, `${JSON.stringify(json, null, 2)}\n`, 'utf8');
+  }
+}
+
 function uninstall({ home } = {}) {
   const paths = resolvePaths(home ? home : undefined);
-  const { commandsDir, kilntwoDir, skillsDir, templatesDir, manifestPath } = paths;
+  const { claudeDir, commandsDir, hooksDir, kilntwoDir, skillsDir, templatesDir, manifestPath } = paths;
 
   const manifest = readManifest({ manifestPath });
   if (manifest === null) {
@@ -78,8 +116,9 @@ function uninstall({ home } = {}) {
   if (claudeMdPath !== null) {
     removeProtocol(claudeMdPath);
   }
+  removeKilnHookRegistrations(claudeDir);
 
-  for (const dirPath of [templatesDir, skillsDir, kilntwoDir, commandsDir]) {
+  for (const dirPath of [templatesDir, skillsDir, hooksDir, kilntwoDir, commandsDir]) {
     try {
       fs.rmdirSync(dirPath);
     } catch (error) {

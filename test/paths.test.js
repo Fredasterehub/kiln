@@ -7,12 +7,14 @@ const { resolvePaths, encodeProjectPath, projectMemoryDir, projectClaudeMd } =
 describe('resolvePaths', () => {
   it('with homeOverride returns correct paths', () => {
     const result = resolvePaths('/tmp/testhome');
-    assert.strictEqual(result.claudeDir, '/tmp/testhome/.claude');
-    assert.strictEqual(result.agentsDir, '/tmp/testhome/.claude/agents');
-    assert.strictEqual(result.commandsDir, '/tmp/testhome/.claude/commands/kiln');
-    assert.strictEqual(result.kilntwoDir, '/tmp/testhome/.claude/kilntwo');
-    assert.strictEqual(result.templatesDir, '/tmp/testhome/.claude/kilntwo/templates');
-    assert.strictEqual(result.manifestPath, '/tmp/testhome/.claude/kilntwo/manifest.json');
+    assert.strictEqual(result.claudeDir, path.join('/tmp/testhome', '.claude'));
+    assert.strictEqual(result.agentsDir, path.join('/tmp/testhome', '.claude', 'agents'));
+    assert.strictEqual(result.commandsDir, path.join('/tmp/testhome', '.claude', 'commands', 'kiln'));
+    assert.strictEqual(result.kilntwoDir, path.join('/tmp/testhome', '.claude', 'kilntwo'));
+    assert.strictEqual(result.hooksDir, path.join('/tmp/testhome', '.claude', 'kilntwo', 'hooks'));
+    assert.strictEqual(result.preToolUseHooksDir, path.join('/tmp/testhome', '.claude', 'kilntwo', 'hooks', 'pre-tool-use'));
+    assert.strictEqual(result.templatesDir, path.join('/tmp/testhome', '.claude', 'kilntwo', 'templates'));
+    assert.strictEqual(result.manifestPath, path.join('/tmp/testhome', '.claude', 'kilntwo', 'manifest.json'));
   });
 
   it('without override does not throw', () => {
@@ -41,17 +43,17 @@ describe('encodeProjectPath', () => {
 });
 
 describe('projectMemoryDir', () => {
-  it('returns correct compound path', () => {
+  it('returns project-local .kiln memory path', () => {
     assert.strictEqual(
       projectMemoryDir('/tmp/testhome', '/DEV/foo'),
-      '/tmp/testhome/.claude/projects/-DEV-foo/memory'
+      path.join('/DEV/foo', '.kiln', 'memory')
     );
   });
 });
 
 describe('projectClaudeMd', () => {
   it('returns projectPath joined with CLAUDE.md', () => {
-    assert.strictEqual(projectClaudeMd('/DEV/foo'), '/DEV/foo/CLAUDE.md');
-    assert.strictEqual(projectClaudeMd('/home/user/proj'), '/home/user/proj/CLAUDE.md');
+    assert.strictEqual(projectClaudeMd('/DEV/foo'), path.join('/DEV/foo', 'CLAUDE.md'));
+    assert.strictEqual(projectClaudeMd('/home/user/proj'), path.join('/home/user/proj', 'CLAUDE.md'));
   });
 });

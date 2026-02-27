@@ -16,6 +16,64 @@ function resolveInstallTarget(projectPath) {
   };
 }
 
+function ensurePreToolUseHook(settingsPath, matcher, command, timeout = 5) {
+  let settings;
+  if (fs.existsSync(settingsPath)) {
+    try {
+      settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    } catch {
+      settings = {};
+    }
+  } else {
+    settings = {};
+  }
+
+  if (!settings.hooks || typeof settings.hooks !== 'object') {
+    settings.hooks = {};
+  }
+  if (!Array.isArray(settings.hooks.PreToolUse)) {
+    settings.hooks.PreToolUse = [];
+  }
+
+  let entry = settings.hooks.PreToolUse.find((item) => item && item.matcher === matcher);
+  if (!entry) {
+    entry = { matcher, hooks: [] };
+    settings.hooks.PreToolUse.push(entry);
+  }
+  if (!Array.isArray(entry.hooks)) {
+    entry.hooks = [];
+  }
+
+  const exists = entry.hooks.some((hook) => hook && hook.command === command);
+  if (!exists) {
+    entry.hooks.push({
+      type: 'command',
+      command,
+      timeout,
+    });
+  }
+
+  fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+}
+
+function registerKilnHooks(home, preToolUseHooksDir) {
+  const claudeDir = path.join(home || require('node:os').homedir(), '.claude');
+  const settingsFiles = [
+    path.join(claudeDir, 'settings.json'),
+    path.join(claudeDir, 'settings.local.json'),
+  ];
+
+  const spawnMapCommand = `node "${path.join(preToolUseHooksDir, 'enforce-kiln-spawn-map.js').replace(/\\/g, '/')}"`;
+  const coordinatorCommand = `node "${path.join(preToolUseHooksDir, 'enforce-kiln-coordinator-discipline.js').replace(/\\/g, '/')}"`;
+  const maestroCommand = `node "${path.join(preToolUseHooksDir, 'enforce-kiln-maestro-discipline.js').replace(/\\/g, '/')}"`;
+
+  for (const settingsPath of settingsFiles) {
+    ensurePreToolUseHook(settingsPath, 'Task', spawnMapCommand, 5);
+    ensurePreToolUseHook(settingsPath, 'Bash|Edit|Write|MultiEdit', coordinatorCommand, 5);
+    ensurePreToolUseHook(settingsPath, 'Bash|Edit|Write|MultiEdit', maestroCommand, 5);
+  }
+}
+
 /**
  * @param {object}  [opts={}]
  * @param {string}  [opts.home]        - override home directory (default: os.homedir() via resolvePaths)
@@ -25,11 +83,22 @@ function resolveInstallTarget(projectPath) {
  * @returns {{ installed: string[], skipped: string[], version: string }}
  */
 function install({ home, force = false, projectPath } = {}) {
-  const { agentsDir, commandsDir, dataDir, kilntwoDir, skillsDir, templatesDir } = resolvePaths(home);
+  const {
+    agentsDir,
+    commandsDir,
+    dataDir,
+    hooksDir,
+    preToolUseHooksDir,
+    kilntwoDir,
+    skillsDir,
+    templatesDir,
+  } = resolvePaths(home);
 
   fs.mkdirSync(agentsDir, { recursive: true });
   fs.mkdirSync(commandsDir, { recursive: true });
   fs.mkdirSync(dataDir, { recursive: true });
+  fs.mkdirSync(hooksDir, { recursive: true });
+  fs.mkdirSync(preToolUseHooksDir, { recursive: true });
   fs.mkdirSync(kilntwoDir, { recursive: true });
   fs.mkdirSync(skillsDir, { recursive: true });
   fs.mkdirSync(templatesDir, { recursive: true });
@@ -41,6 +110,7 @@ function install({ home, force = false, projectPath } = {}) {
     { srcDir: path.join(ASSETS_DIR, 'agents'), destDir: agentsDir, ext: '.md' },
     { srcDir: path.join(ASSETS_DIR, 'commands', 'kiln'), destDir: commandsDir, ext: '.md' },
     { srcDir: path.join(ASSETS_DIR, 'data'), destDir: dataDir, ext: '.json' },
+    { srcDir: path.join(ASSETS_DIR, 'hooks', 'pre-tool-use'), destDir: preToolUseHooksDir, ext: '.js' },
     { srcDir: path.join(ASSETS_DIR, 'skills'), destDir: skillsDir, ext: '.md' },
     { srcDir: path.join(ASSETS_DIR, 'templates'), destDir: templatesDir, ext: '.md' },
   ];
@@ -120,6 +190,7 @@ function install({ home, force = false, projectPath } = {}) {
   const protocolSrc = path.join(ASSETS_DIR, 'protocol.md');
   const protocolContent = fs.readFileSync(protocolSrc, 'utf8');
   insertProtocol(installTarget.claudeMdPath, protocolContent, VERSION);
+  registerKilnHooks(home, preToolUseHooksDir);
 
   const paths = resolvePaths(home);
   const files = installed.map((destPath) => ({
