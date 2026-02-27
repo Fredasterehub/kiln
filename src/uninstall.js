@@ -46,6 +46,7 @@ function removeKilnHookRegistrations(claudeDir) {
     'enforce-kiln-spawn-map.js',
     'enforce-kiln-coordinator-discipline.js',
     'enforce-kiln-maestro-discipline.js',
+    'enforce-kiln-git-root.js',
   ];
 
   for (const settingsPath of settingsFiles) {

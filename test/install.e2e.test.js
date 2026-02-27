@@ -143,6 +143,7 @@ describe('install E2E', { concurrency: false }, () => {
     install({ home: tmpHome, projectPath: tmpProject });
 
     const expected = [
+      'enforce-kiln-git-root.js',
       'enforce-kiln-coordinator-discipline.js',
       'enforce-kiln-maestro-discipline.js',
       'enforce-kiln-spawn-map.js',

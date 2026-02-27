@@ -66,9 +66,11 @@ function registerKilnHooks(home, preToolUseHooksDir) {
   const spawnMapCommand = `node "${path.join(preToolUseHooksDir, 'enforce-kiln-spawn-map.js').replace(/\\/g, '/')}"`;
   const coordinatorCommand = `node "${path.join(preToolUseHooksDir, 'enforce-kiln-coordinator-discipline.js').replace(/\\/g, '/')}"`;
   const maestroCommand = `node "${path.join(preToolUseHooksDir, 'enforce-kiln-maestro-discipline.js').replace(/\\/g, '/')}"`;
+  const gitRootCommand = `node "${path.join(preToolUseHooksDir, 'enforce-kiln-git-root.js').replace(/\\/g, '/')}"`;
 
   for (const settingsPath of settingsFiles) {
     ensurePreToolUseHook(settingsPath, 'Task', spawnMapCommand, 5);
+    ensurePreToolUseHook(settingsPath, 'Bash', gitRootCommand, 5);
     ensurePreToolUseHook(settingsPath, 'Bash|Edit|Write|MultiEdit', coordinatorCommand, 5);
     ensurePreToolUseHook(settingsPath, 'Bash|Edit|Write|MultiEdit', maestroCommand, 5);
   }
