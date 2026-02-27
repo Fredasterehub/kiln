@@ -67,10 +67,12 @@ function registerKilnHooks(home, preToolUseHooksDir) {
   const coordinatorCommand = `node "${path.join(preToolUseHooksDir, 'enforce-kiln-coordinator-discipline.js').replace(/\\/g, '/')}"`;
   const maestroCommand = `node "${path.join(preToolUseHooksDir, 'enforce-kiln-maestro-discipline.js').replace(/\\/g, '/')}"`;
   const gitRootCommand = `node "${path.join(preToolUseHooksDir, 'enforce-kiln-git-root.js').replace(/\\/g, '/')}"`;
+  const sourceOwnershipCommand = `node "${path.join(preToolUseHooksDir, 'enforce-kiln-source-edit-ownership.js').replace(/\\/g, '/')}"`;
 
   for (const settingsPath of settingsFiles) {
     ensurePreToolUseHook(settingsPath, 'Task', spawnMapCommand, 5);
     ensurePreToolUseHook(settingsPath, 'Bash', gitRootCommand, 5);
+    ensurePreToolUseHook(settingsPath, 'Edit|Write|MultiEdit', sourceOwnershipCommand, 5);
     ensurePreToolUseHook(settingsPath, 'Bash|Edit|Write|MultiEdit', coordinatorCommand, 5);
     ensurePreToolUseHook(settingsPath, 'Bash|Edit|Write|MultiEdit', maestroCommand, 5);
   }

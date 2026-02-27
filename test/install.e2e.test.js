@@ -146,6 +146,7 @@ describe('install E2E', { concurrency: false }, () => {
       'enforce-kiln-git-root.js',
       'enforce-kiln-coordinator-discipline.js',
       'enforce-kiln-maestro-discipline.js',
+      'enforce-kiln-source-edit-ownership.js',
       'enforce-kiln-spawn-map.js',
     ];
     for (const name of expected) {
