@@ -26,8 +26,11 @@ function existsKilnPolicy(cwd) {
   if (!cwd) return false;
   let dir = path.resolve(cwd);
   for (let i = 0; i < 8; i += 1) {
-    const probe = path.join(dir, ".agent", "policy", "KilnProtocol.md");
-    if (fs.existsSync(probe)) return true;
+    const probes = [
+      path.join(dir, ".agent", "policy", "KilnProtocol.md"),
+      path.join(path.dirname(dir), ".agent", "policy", "KilnProtocol.md"),
+    ];
+    if (probes.some((p) => fs.existsSync(p))) return true;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -179,4 +182,3 @@ async function main() {
 main().catch(() => {
   console.log("{}");
 });
-
