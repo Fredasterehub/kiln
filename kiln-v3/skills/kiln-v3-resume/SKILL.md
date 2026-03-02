@@ -36,6 +36,7 @@ Use this when `.kiln/STATE.md` exists and the run is not complete.
 - `testing` -> `kiln3-testing-coordinator`
 - `deployment` -> `kiln3-deployment-coordinator`
 - `presentation` -> `kiln3-presentation-coordinator`
+- Use Task tool for coordinator spawn calls; do not pseudo-delegate in top-level prose.
 
 4. Update `.kiln/STATE.md` after each transition.
 
@@ -44,3 +45,4 @@ Use this when `.kiln/STATE.md` exists and the run is not complete.
 - Never execute stage internals from the top-level session.
 - Never continue to next phase if Stage 5 for current phase is missing.
 - Never run nested `claude` CLI inside a Claude session.
+- If a coordinator Task spawn fails, retry or escalate; do not execute that stage inline.

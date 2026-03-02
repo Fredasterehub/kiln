@@ -33,6 +33,7 @@ Never skip forward when a stage or gate is unresolved.
 - Top-level session is a dispatcher, not an implementer.
 - Stage work must be delegated to the stage coordinator agent.
 - If a coordinator or worker fails, escalate or retry delegation; do not absorb execution into the top-level session.
+- Delegation must use Task-based teammate/subagent spawning, not ad-hoc inline reconstruction.
 
 ## Resume-First Rule
 

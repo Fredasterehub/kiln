@@ -14,7 +14,7 @@ They must be spawned as separate teammate agents in the same team session.
 
 <workflow>
 1. Trigger parallel perspective writes.
-2. Spawn dual planners as separate subagents in parallel:
+2. Spawn dual planners via Task tool as separate teammates in parallel:
    - `kiln3-planner-claude` (Opus 4.6) -> `claude-plan.md`
    - `kiln3-planner-codex` (Sonnet 4.6 wrapper that calls Codex CLI) -> `codex-plan.md`
 3. Wait for both planner outputs before synthesis.
@@ -31,4 +31,5 @@ They must be spawned as separate teammate agents in the same team session.
 - Planning execution order is parallel, never sequential.
 - Do not emulate planner outputs in coordinator context.
 - Do not use nested CLI sessions as a substitute for teammate spawning.
+- Do not continue to synthesis unless both planner Task runs completed successfully.
 </rules>
