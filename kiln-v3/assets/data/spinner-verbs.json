@@ -1,0 +1,43 @@
+{
+  "generic": [
+    "Assembling context",
+    "Resolving dependencies",
+    "Writing artifacts"
+  ],
+  "init": [
+    "Detecting project mode",
+    "Bootstrapping state"
+  ],
+  "mapping": [
+    "Surveying architecture",
+    "Cataloging fragility"
+  ],
+  "brainstorm": [
+    "Shaping operator intent",
+    "Locking vision"
+  ],
+  "research": [
+    "Scouting ecosystem",
+    "Merging findings"
+  ],
+  "architecture": [
+    "Debating roadmap",
+    "Validating constraints"
+  ],
+  "implementation": [
+    "Sharpening prompts",
+    "Reviewing diffs"
+  ],
+  "testing": [
+    "Generating tests",
+    "Verifying milestones"
+  ],
+  "deployment": [
+    "Preparing release",
+    "Checking rollout gates"
+  ],
+  "presentation": [
+    "Building handoff",
+    "Finalizing report"
+  ]
+}

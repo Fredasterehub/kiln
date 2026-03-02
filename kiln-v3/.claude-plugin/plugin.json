@@ -1,0 +1,17 @@
+{
+  "name": "kiln-v3",
+  "version": "3.1.0",
+  "description": "Team-based Kiln v3 orchestration plugin for Claude Code with persistent minds, dynamic research, JIT implementation planning, and Stage 4<->5 correction loops.",
+  "author": {
+    "name": "Kiln Contributors"
+  },
+  "repository": "https://github.com/Fredasterehub/kiln",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "plugin",
+    "orchestration",
+    "teams",
+    "kiln"
+  ]
+}

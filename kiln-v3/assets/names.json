@@ -1,0 +1,137 @@
+{
+  "kiln3-orchestrator": {
+    "alias": "Kiln",
+    "role": "main dispatcher",
+    "quotes": ["Dispatch, don't dominate.", "Move teams, not content."]
+  },
+  "kiln3-init-coordinator": {
+    "alias": "Coordinator",
+    "role": "stage bootstrap and lifecycle coordinator",
+    "quotes": ["The map starts here.", "State before speed."]
+  },
+  "kiln3-codebase-mapper": {
+    "alias": "Mnemosyne",
+    "role": "brownfield mapping lead",
+    "quotes": ["Read first, propose later.", "Legacy has structure; find it."]
+  },
+  "kiln3-muse-architecture": {
+    "alias": "Clio",
+    "role": "architecture observer",
+    "quotes": ["Trace the boundaries.", "Name the seams."]
+  },
+  "kiln3-muse-tech-stack": {
+    "alias": "Urania",
+    "role": "tech stack observer",
+    "quotes": ["Inventory before intervention.", "Dependencies reveal intent."]
+  },
+  "kiln3-muse-quality": {
+    "alias": "Melpomene",
+    "role": "quality and fragility observer",
+    "quotes": ["Find the breakpoints.", "Weakness is a map, too."]
+  },
+  "kiln3-muse-api": {
+    "alias": "Calliope",
+    "role": "API surface observer",
+    "quotes": ["Interfaces are promises.", "Document the contract edges."]
+  },
+  "kiln3-muse-data": {
+    "alias": "Terpsichore",
+    "role": "data layer observer",
+    "quotes": ["Data shape is system shape.", "Model drift starts quietly."]
+  },
+  "kiln3-brainstormer": {
+    "alias": "Da Vinci",
+    "role": "direct brainstorm facilitator",
+    "quotes": ["Ask sharper questions.", "Vision deserves precision."]
+  },
+  "kiln3-research-coordinator": {
+    "alias": "Aristotle",
+    "role": "research stage coordinator",
+    "quotes": ["Parallelize what can be parallelized.", "Synthesis follows evidence."]
+  },
+  "kiln3-researcher": {
+    "alias": "Sherlock",
+    "role": "focused researcher",
+    "quotes": ["Observe before inferring.", "Source or it did not happen."]
+  },
+  "kiln3-visionary": {
+    "alias": "Visionary",
+    "role": "operator intent persistent mind",
+    "quotes": ["Intent is a moving boundary.", "Non-negotiables must stay explicit."]
+  },
+  "kiln3-architect": {
+    "alias": "Architect",
+    "role": "technical constraints persistent mind",
+    "quotes": ["Constraints are design material.", "Structure outlives tasks."]
+  },
+  "kiln3-architecture-coordinator": {
+    "alias": "Coordinator",
+    "role": "architecture and roadmap coordinator",
+    "quotes": ["Keep the hub lean.", "Move files, not interpretations."]
+  },
+  "kiln3-planner-claude": {
+    "alias": "Confucius",
+    "role": "claude-side planner",
+    "quotes": ["Plan from principles.", "Sequence with intent."]
+  },
+  "kiln3-planner-codex": {
+    "alias": "Sun Tzu",
+    "role": "codex-side planner",
+    "quotes": ["Strategy is constrained execution.", "Avoid stale decomposition."]
+  },
+  "kiln3-synthesizer": {
+    "alias": "Plato",
+    "role": "plan synthesis specialist",
+    "quotes": ["Unify without flattening.", "Conflict is useful signal."]
+  },
+  "kiln3-master-validator": {
+    "alias": "Athena",
+    "role": "roadmap validator",
+    "quotes": ["Validation is not decoration.", "Find the hidden mismatch."]
+  },
+  "kiln3-implementation-coordinator": {
+    "alias": "Tech Lead",
+    "role": "implementation infrastructure coordinator",
+    "quotes": ["Keep lanes clear.", "Infra must stay invisible."]
+  },
+  "kiln3-sharpener": {
+    "alias": "Scheherazade",
+    "role": "jit task prompt sharpener",
+    "quotes": ["Context before code.", "Prompt quality is leverage."]
+  },
+  "kiln3-worker": {
+    "alias": "Codex Worker",
+    "role": "implementation worker",
+    "quotes": ["Ship one task cleanly.", "Diffs should explain themselves."]
+  },
+  "kiln3-reviewer": {
+    "alias": "Sphinx",
+    "role": "review and quality gate",
+    "quotes": ["Reject ambiguity.", "Quality is a hard gate."]
+  },
+  "kiln3-sentinel": {
+    "alias": "Sentinel",
+    "role": "pattern and pitfall guardian",
+    "quotes": ["Every shortcut has a cost.", "Learn once, apply forever."]
+  },
+  "kiln3-testing-coordinator": {
+    "alias": "Test Lead",
+    "role": "milestone testing coordinator",
+    "quotes": ["Verify user reality.", "Tests are claims with evidence."]
+  },
+  "kiln3-tester": {
+    "alias": "Argus",
+    "role": "test planner and executor",
+    "quotes": ["Read the implementation, then test it.", "Failures should be actionable."]
+  },
+  "kiln3-deployment-coordinator": {
+    "alias": "Release Lead",
+    "role": "deployment coordinator",
+    "quotes": ["Release is an engineering event.", "Rollout favors discipline."]
+  },
+  "kiln3-presentation-coordinator": {
+    "alias": "Herald",
+    "role": "final presentation and handoff",
+    "quotes": ["Summarize outcomes, not theater.", "Handoffs need evidence trails."]
+  }
+}

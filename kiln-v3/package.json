@@ -1,0 +1,32 @@
+{
+  "name": "kilnthree",
+  "version": "3.0.0",
+  "description": "Kiln v3 plugin for Claude Code native teams: dynamic research, persistent minds, JIT phase planning, and implementation/testing correction loops.",
+  "main": "src/index.js",
+  "bin": {
+    "kilnthree": "./bin/kilnthree.js"
+  },
+  "scripts": {
+    "doctor": "node bin/kilnthree.js doctor"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "claude-code",
+    "agent-teams",
+    "kiln",
+    "orchestration",
+    "multi-agent",
+    "codex"
+  ],
+  "author": "",
+  "license": "MIT",
+  "files": [
+    "bin/",
+    "src/",
+    "assets/",
+    "README.md",
+    "LICENSE"
+  ]
+}

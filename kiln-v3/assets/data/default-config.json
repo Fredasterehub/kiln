@@ -1,0 +1,26 @@
+{
+  "version": "3.0.0",
+  "autonomy": "guided",
+  "max_fix_loops": 3,
+  "default_worker_count": 2,
+  "max_worker_count": 3,
+  "brainstorm": {
+    "direct_mode": true,
+    "silence_timeout_minutes": 20,
+    "nudge_interval_minutes": 20,
+    "max_nudges": 3
+  },
+  "researcher_sizing": {
+    "feature": [1, 3],
+    "integration": [0, 3],
+    "risk": [0, 3],
+    "unknowns": [0, 2],
+    "max_researchers": 5
+  },
+  "gates": {
+    "master_plan": true,
+    "phase_plan": true,
+    "code_review": true,
+    "deployment": true
+  }
+}

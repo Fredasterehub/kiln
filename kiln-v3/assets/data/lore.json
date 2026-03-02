@@ -1,0 +1,29 @@
+{
+  "transitions": {
+    "init": {
+      "quotes": [
+        { "text": "Preparation is half the build.", "source": "Kiln" }
+      ]
+    },
+    "research": {
+      "quotes": [
+        { "text": "Facts first. Synthesis second.", "source": "Kiln" }
+      ]
+    },
+    "implementation": {
+      "quotes": [
+        { "text": "The code is the only argument that matters.", "source": "Kiln" }
+      ]
+    },
+    "testing": {
+      "quotes": [
+        { "text": "Validation is where assumptions expire.", "source": "Kiln" }
+      ]
+    },
+    "complete": {
+      "quotes": [
+        { "text": "Ship with evidence.", "source": "Kiln" }
+      ]
+    }
+  }
+}

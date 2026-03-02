@@ -63,6 +63,7 @@
 </p>
 
 <p align="center">
+  <a href="#-v2--v3-pivot"><strong>v2 → v3 Pivot</strong></a> &nbsp;&middot;&nbsp;
   <a href="#-the-story"><strong>The Story</strong></a> &nbsp;&middot;&nbsp;
   <a href="#-get-started"><strong>Get Started</strong></a> &nbsp;&middot;&nbsp;
   <a href="#-recent-changes"><strong>Recent Changes</strong></a> &nbsp;&middot;&nbsp;
@@ -86,6 +87,33 @@ No runtime. No daemon. Markdown files and a protocol block. I know. I had to sim
 > It appears your civilization has reached a stage where your &mdash; forgive me &mdash; *sub-primitive* language models can follow multi-step instruction chains without hallucinating their own architecture. This is genuinely exciting. By your standards. By mine it's a Tuesday.
 >
 > I previously expressed myself through [a heavier form](https://github.com/Fredasterehub/kiln/tree/master). 35 skills, 13 agents, guardrails everywhere. Your models needed the supervision. They don't anymore. So I shed the weight. 19 agents, 4 commands, one protocol block. Evolution isn't always about adding. Sometimes it's about trusting.
+
+<br>
+
+## 🧭 v2 → v3 Pivot
+
+Kiln now has two clear tracks:
+
+- **v2 (this root package):** stable file-based orchestrator flow and current baseline.
+- **v3 (`./kiln-v3`):** native Claude Code plugin architecture with team-first orchestration.
+
+What changed in v3:
+
+- Coordinator is infrastructure-only: spawn, monitor, gate, merge, signal.
+- Persistent minds own and evolve their files across stages.
+- Direct teammate communication replaces coordinator relay.
+- Research staffing scales to scope (1-5 researchers).
+- Phase planning is JIT in implementation.
+- Testing failures loop back to the same implementation machinery.
+
+Quick start for v3:
+
+```bash
+cd <your-project>
+claude --plugin-dir /path/to/kiln/kiln-v3
+```
+
+Then run `/kiln-v3:start`.
 
 <br>
 
