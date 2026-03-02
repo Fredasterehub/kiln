@@ -12,6 +12,10 @@ Run Kiln v3 protocol using Claude Code native teams.
 
 ## Workflow
 
+0. Existing state check (resume handoff).
+- If `.kiln/STATE.md` exists and `status != complete`, do not run a fresh start.
+- Route to `/kiln-v3:kiln-v3-resume`.
+
 1. Initialize workspace.
 - Ensure `${KILN_DIR}` exists.
 - Ensure all required memory files exist from templates.
@@ -79,3 +83,4 @@ Run Kiln v3 protocol using Claude Code native teams.
 - Any ambiguous requirement: stop and ask operator.
 - Any gate rejection: pause and set `status: blocked` in STATE.
 - Any test loop >3: escalate with concise failure bundle.
+- If delegation fails, retry delegation or escalate; never execute stage internals from top-level session.

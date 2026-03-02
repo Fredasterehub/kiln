@@ -28,6 +28,23 @@ Use this skill for all Kiln v3 operations.
 
 Never skip forward when a stage or gate is unresolved.
 
+## Delegation Invariant
+
+- Top-level session is a dispatcher, not an implementer.
+- Stage work must be delegated to the stage coordinator agent.
+- If a coordinator or worker fails, escalate or retry delegation; do not absorb execution into the top-level session.
+
+## Resume-First Rule
+
+- If `.kiln/STATE.md` exists and `status` is not `complete`, use `/kiln-v3:kiln-v3-resume`.
+- Do not restart with `/kiln-v3:start` over an active run.
+- If `start` is invoked with active state, route immediately to resume flow.
+
+## Stage 5 Backfill Gate
+
+- Never advance to next implementation phase without milestone testing for the current phase.
+- If a phase is marked complete but there is no matching Stage 5 test result, resume must backfill Stage 5 first.
+
 ## Brainstorm Direct Mode
 
 - Stage 1 must be direct operator <-> Da Vinci.

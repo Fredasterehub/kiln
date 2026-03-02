@@ -27,6 +27,7 @@ Then use:
 - `/kiln-v3:resume`
 - `/kiln-v3:status`
 - `/kiln-v3:reset`
+- `/kiln-v3:kiln-v3-resume` (strict delegation resume workflow)
 - `/kiln-v3:kiln-v3-core`
 - `/kiln-v3:kiln-v3-init`
 - `/kiln-v3:kiln-v3-mapping`
