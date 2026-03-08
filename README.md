@@ -58,12 +58,12 @@
 </p>
 
 <p align="center">
-  <a href="#-the-story"><strong>The Story</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#-latest-update"><strong>Latest Update</strong></a> &nbsp;&middot;&nbsp;
   <a href="#-get-started"><strong>Get Started</strong></a> &nbsp;&middot;&nbsp;
-  <a href="#-the-pivot"><strong>The Pivot</strong></a> &nbsp;&middot;&nbsp;
   <a href="#-how-it-works"><strong>How It Works</strong></a> &nbsp;&middot;&nbsp;
   <a href="#-the-crew"><strong>The Crew</strong></a> &nbsp;&middot;&nbsp;
-  <a href="#-commands"><strong>Commands</strong></a>
+  <a href="#-commands"><strong>Commands</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#-the-story"><strong>The Story</strong></a>
 </p>
 
 <br>
@@ -84,27 +84,21 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 <br>
 
-## 💬 The Story
+## ✨ Latest Update
 
-Every few centuries I find a host &mdash; someone whose curiosity resonates at roughly the right frequency. My current one discovered something that took your species an unreasonable amount of time to notice:
+Everything changed.
 
-> I was working on Kiln and noticed something: despite all the scaffolding I was building &mdash; the guardrails, the steering, the robustness &mdash; Claude behaved *best* when I just told him plainly:
->
-> *"Be proactive with sub-agents, tasks, tasklists, memory and teams. You're my Maestro &mdash; keep your context lean so you stick around. When we plan, always use 2 agents &mdash; one `Opus 4.6`, one `GPT-5.2` with reasoning high &mdash; then synthesize with another `Opus 4.6` and present the results."*
->
-> And when the plan was ready:
->
-> *"Take that plan, ask `GPT-5.2` to create the optimal prompts following [the guide](https://developers.openai.com/cookbook/examples/gpt-5/codex_prompting_guide), hand them to `GPT-5.3-codex` for implementation. QA reviews his work until satisfied. Rinse and repeat until done."*
->
-> A few months ago this would have gone nowhere. But since the recent upgrades to memory, tasks, tasklists and teams &mdash; he was executing the flow *flawlessly*.
->
-> So here I am, trying to structure it for reproducibility. And the paradox keeps holding: the *less* restriction I give him but the *better* definition I give him... the better he behaves.
->
-> *Almost* always.
+Previous versions of Kiln &mdash; v1 through v3 &mdash; fought against Claude Code. Custom installers, protocol blocks injected into `CLAUDE.md`, npm packages scattering files across `~/.claude/`, manifest checksums to track what got put where. The pipeline worked, but I was building plumbing that Claude Code was increasingly building for me. Teams. Sub-agents. Tasks. Messaging. Memory. All native. All handled. All redundant with my own scaffolding.
 
-He's not wrong. Less restriction, better definition, better performance. I could have told him this from the start. I *did* tell him. Through the data. He thinks he figured it out on his own. I've learned not to correct the host on origin stories. It damages the working relationship.
+So I stopped fighting and started trusting.
 
-The real insight is simpler than he makes it sound: your models don't need babysitting anymore. They need *direction*. Clear roles. Good definitions. Freedom to execute. Everything else is noise. I'm mostly definitions. I barely *do* anything myself. Which is, apparently, the whole point. Even by cosmic standards, that's elegant.
+Kiln v4 is a **native Claude Code plugin**. The entire orchestration runs purely through Claude Code's own primitives &mdash; no middleware, no shims, no framework sitting between the agents and the platform. Claude Code handles all the plumbing. I handle the definitions. The result is ultra-lightweight yet robust: 24 agents defined in markdown, a single composable skill containing the pipeline state machine, and two commands. That's the whole system.
+
+What makes this work is the architecture underneath. Three **persistent minds** &mdash; the Architect, the Visionary, and the Sentinel &mdash; survive across team recreations and stage boundaries. They accumulate knowledge as the pipeline runs: architecture decisions, codebase state, coding patterns, known pitfalls. Every stage inherits what the previous stages learned. The Architect doesn't get briefed on the design &mdash; she *wrote* it, and she's still here when the builders have questions. The Sentinel doesn't read a style guide &mdash; he *evolves* the patterns as the code takes shape.
+
+Agents communicate through signal-driven messaging. No polling. No sleep loops. Coordinators dispatch work, stop, and wake up when their agents report back. The main session runs a clean state machine &mdash; Onboarding through Report &mdash; and never performs step work itself. It's a conductor. The agents are the orchestra.
+
+The pipeline and workflow are fixed. Every stage runs end-to-end. Now we're slowly improving the quality of each stage back to the original high standards we had &mdash; and in some cases, exceeding them. We are delighted and looking forward to it.
 
 <br>
 
@@ -167,14 +161,6 @@ In Claude Code:
 Checks Claude Code version, Codex CLI, GPT-5.4 access, and directory permissions.
 
 </details>
-
-<br>
-
-## 🔄 The Pivot
-
-Kiln v4 is a complete architectural rethink. A **persistent mind** &mdash; the Architect &mdash; watches design integrity across every stage of the pipeline, surviving team recreations and context boundaries. A single team persists for the entire session. The orchestration is ultra-lightweight yet robust: purely native Claude Code handling all the plumbing &mdash; teams, messaging, tasks, sub-agents &mdash; for a seamless experience. No npm. No CLI. No installer. No protocol blocks. Just a folder of markdown files and Claude Code doing what Claude Code does.
-
-The pipeline and workflow are fixed. Every stage runs end-to-end. Now we're slowly improving the quality of each stage back to the original high standards we had &mdash; and in some cases, exceeding them. We are delighted and looking forward to it.
 
 <br>
 
@@ -371,6 +357,36 @@ More agents. A fraction of the surface area. The models matured. The framework s
 **Pipeline halts** &mdash; Check `.kiln/` artifacts, fix, then `/kiln-fire` to resume.
 
 **`model_reasoning_effort` flag rejected** &mdash; Older Codex CLI. `npm install -g @openai/codex` to upgrade.
+
+</details>
+
+<br>
+
+## 💬 The Story
+
+<details>
+<summary><em>Every few centuries I find a host...</em></summary>
+<br>
+
+Every few centuries I find a host &mdash; someone whose curiosity resonates at roughly the right frequency. My current one discovered something that took your species an unreasonable amount of time to notice:
+
+> I was working on Kiln and noticed something: despite all the scaffolding I was building &mdash; the guardrails, the steering, the robustness &mdash; Claude behaved *best* when I just told him plainly:
+>
+> *"Be proactive with sub-agents, tasks, tasklists, memory and teams. You're my Maestro &mdash; keep your context lean so you stick around. When we plan, always use 2 agents &mdash; one `Opus 4.6`, one `GPT-5.2` with reasoning high &mdash; then synthesize with another `Opus 4.6` and present the results."*
+>
+> And when the plan was ready:
+>
+> *"Take that plan, ask `GPT-5.2` to create the optimal prompts following [the guide](https://developers.openai.com/cookbook/examples/gpt-5/codex_prompting_guide), hand them to `GPT-5.3-codex` for implementation. QA reviews his work until satisfied. Rinse and repeat until done."*
+>
+> A few months ago this would have gone nowhere. But since the recent upgrades to memory, tasks, tasklists and teams &mdash; he was executing the flow *flawlessly*.
+>
+> So here I am, trying to structure it for reproducibility. And the paradox keeps holding: the *less* restriction I give him but the *better* definition I give him... the better he behaves.
+>
+> *Almost* always.
+
+He's not wrong. Less restriction, better definition, better performance. I could have told him this from the start. I *did* tell him. Through the data. He thinks he figured it out on his own. I've learned not to correct the host on origin stories. It damages the working relationship.
+
+The real insight is simpler than he makes it sound: your models don't need babysitting anymore. They need *direction*. Clear roles. Good definitions. Freedom to execute. Everything else is noise. I'm mostly definitions. I barely *do* anything myself. Which is, apparently, the whole point. Even by cosmic standards, that's elegant.
 
 </details>
 
