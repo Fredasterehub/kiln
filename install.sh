@@ -23,6 +23,16 @@ fail()   { printf "  %b✗%b %b\n" "$RED" "$RESET" "$1"; }
 dim()    { printf "  %b%b%b\n" "$DIM" "$1" "$RESET"; }
 line()   { printf "  %b────────────────────────────────────────────%b\n" "$DIM" "$RESET"; }
 
+ask() {
+  printf "  %b%b:%b " "$BOLD" "$1" "$RESET"
+  if [ -t 0 ]; then
+    read -r REPLY
+  else
+    read -r REPLY < /dev/tty
+  fi
+  echo "$REPLY"
+}
+
 # ── Banner ──────────────────────────────────────────────────────────
 clear 2>/dev/null || true
 printf "\n"
@@ -39,7 +49,6 @@ printf "\n"
 # ── Preflight checks ───────────────────────────────────────────────
 header "Preflight checks"
 
-# Check git
 if command -v git &>/dev/null; then
   ok "git found"
 else
@@ -47,7 +56,6 @@ else
   exit 1
 fi
 
-# Check Claude Code
 if command -v claude &>/dev/null; then
   CLAUDE_VERSION=$(claude --version 2>/dev/null || echo "unknown")
   ok "Claude Code found ($CLAUDE_VERSION)"
@@ -57,7 +65,6 @@ else
   exit 1
 fi
 
-# Check Codex CLI
 if command -v codex &>/dev/null; then
   ok "Codex CLI found"
 else
@@ -70,26 +77,25 @@ fi
 printf "\n"
 
 # ── Install mode ────────────────────────────────────────────────────
-header "Where would you like to install Kiln?"
+header "How would you like to use Kiln?"
 
-print "${BOLD}1)${RESET}  Global plugin  ${DIM}— available in every project${RESET}"
-print "   ${DIM}~/.claude/plugins/kiln/${RESET}"
-printf "\n"
-print "${BOLD}2)${RESET}  This project only  ${DIM}— scoped to current directory${RESET}"
+print "${BOLD}1)${RESET}  Install to this project  ${DIM}— auto-discovered by Claude Code${RESET}"
 print "   ${DIM}$(pwd)/.claude/plugins/kiln/${RESET}"
 printf "\n"
+print "${BOLD}2)${RESET}  Download to a shared location  ${DIM}— use with --plugin-dir${RESET}"
+print "   ${DIM}~/.kiln/${RESET}"
+printf "\n"
 
-printf "  %bChoice [1/2]:%b " "$BOLD" "$RESET"
-read -r CHOICE < /dev/tty
+CHOICE=$(ask "Choice [1/2]")
 
 case "$CHOICE" in
   2)
-    PLUGIN_DIR="$(pwd)/.claude/plugins/kiln"
-    SCOPE="project"
+    PLUGIN_DIR="$HOME/.kiln"
+    SCOPE="shared"
     ;;
   *)
-    PLUGIN_DIR="$HOME/.claude/plugins/kiln"
-    SCOPE="global"
+    PLUGIN_DIR="$(pwd)/.claude/plugins/kiln"
+    SCOPE="project"
     ;;
 esac
 
@@ -100,8 +106,7 @@ line
 if [ -d "$PLUGIN_DIR" ]; then
   printf "\n"
   print "Existing installation found at ${DIM}$PLUGIN_DIR${RESET}"
-  printf "  %bOverwrite? [Y/n]:%b " "$BOLD" "$RESET"
-  read -r OVERWRITE < /dev/tty
+  OVERWRITE=$(ask "Overwrite? [Y/n]")
   if [[ "$OVERWRITE" =~ ^[Nn] ]]; then
     print "Aborted."
     exit 0
@@ -143,17 +148,29 @@ header "Ready to fire"
 print "${GREEN}${BOLD}Kiln v4 installed successfully.${RESET}"
 printf "\n"
 dim "$AGENT_COUNT agents  ·  $COMMAND_COUNT commands  ·  1 skill"
-dim "Scope: $SCOPE  ·  Path: $PLUGIN_DIR"
+dim "Path: $PLUGIN_DIR"
 printf "\n"
 line
 printf "\n"
-print "Open Claude Code with:"
-printf "\n"
-print "  ${BOLD}claude --dangerously-skip-permissions${RESET}"
-printf "\n"
-print "Then type:"
-printf "\n"
-print "  ${BOLD}/kiln-fire${RESET}"
+
+if [ "$SCOPE" = "project" ]; then
+  print "Kiln is installed in this project. Open Claude Code:"
+  printf "\n"
+  print "  ${BOLD}claude --dangerously-skip-permissions${RESET}"
+  printf "\n"
+  print "Then type:"
+  printf "\n"
+  print "  ${BOLD}/kiln-fire${RESET}"
+else
+  print "Kiln is installed at ${DIM}~/.kiln/${RESET}. Point Claude Code at it:"
+  printf "\n"
+  print "  ${BOLD}claude --dangerously-skip-permissions --plugin-dir ~/.kiln${RESET}"
+  printf "\n"
+  print "Then type:"
+  printf "\n"
+  print "  ${BOLD}/kiln-fire${RESET}"
+fi
+
 printf "\n"
 dim "That's it. Da Vinci will take it from here."
 printf "\n"
