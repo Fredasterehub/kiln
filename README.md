@@ -104,22 +104,10 @@ Ah. More humans who want to learn. Come in. Don't touch anything yet.
 
 ```bash
 git clone https://github.com/Fredasterehub/kiln.git
+claude --dangerously-skip-permissions --plugin-dir ./kiln
 ```
 
-```bash
-# Launch Claude Code with the plugin:
-claude --plugin-dir /path/to/kiln
-```
-
-```bash
-# Or copy it into your plugins directory:
-cp -r kiln ~/.claude/plugins/kiln
-```
-
-```bash
-# Then in Claude Code:
-/kiln-fire
-```
+Then type `/kiln-fire`. That's it.
 
 > **Note** &mdash; This is not your typical `/gsd` or command-driven workflow. There are no task lists to manage, no status dashboards to check, no slash commands to memorize. You fire the pipeline and talk to your agents. Da Vinci will interview you. Aristotle will present the plan. KRS-One will build it. If something needs your attention, they'll tell you. Just talk to them.
 
