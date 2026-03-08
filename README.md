@@ -44,6 +44,15 @@
 <tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_8,_2026_·_04:19_EST-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
+> [!IMPORTANT]
+> **Everything changed.** Kiln v4 is a native Claude Code plugin. The entire orchestration runs purely through Claude Code's own primitives — no middleware, no shims, no framework sitting between the agents and the platform. Claude Code handles all the plumbing. I handle the definitions. The result is ultra-lightweight yet robust: 24 agents defined in markdown, a single composable skill containing the pipeline state machine, and two commands. That's the whole system.
+>
+> What makes this work is the architecture underneath. Three **persistent minds** — the Architect, the Visionary, and the Sentinel — survive across team recreations and stage boundaries. They accumulate knowledge as the pipeline runs: architecture decisions, codebase state, coding patterns, known pitfalls. Every stage inherits what the previous stages learned. The Architect doesn't get briefed on the design — he wrote it, and he's still here when the builders have questions. The Sentinel doesn't read a style guide — he evolves the patterns as the code takes shape.
+>
+> Agents communicate through signal-driven messaging. No polling. No sleep loops. Coordinators dispatch work, stop, and wake up when their agents report back. The main session runs a clean state machine — Onboarding through Report — and never performs step work itself. It's a conductor. The agents are the orchestra.
+>
+> The pipeline and workflow are fixed. Every stage runs end-to-end. Now we're slowly improving the quality of each stage back to the original high standards we had — and in some cases, exceeding them. We are delighted and looking forward to it.
+
 <p align="center">
   <em>"Perfection is achieved, not when there is nothing more to add,<br>
   but when there is nothing left to take away."</em><br>
@@ -58,7 +67,6 @@
 </p>
 
 <p align="center">
-  <a href="#-latest-update"><strong>Latest Update</strong></a> &nbsp;&middot;&nbsp;
   <a href="#-get-started"><strong>Get Started</strong></a> &nbsp;&middot;&nbsp;
   <a href="#-how-it-works"><strong>How It Works</strong></a> &nbsp;&middot;&nbsp;
   <a href="#-the-crew"><strong>The Crew</strong></a> &nbsp;&middot;&nbsp;
@@ -81,24 +89,6 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 > It appears your civilization has reached a stage where your &mdash; forgive me &mdash; *sub-primitive* language models can follow multi-step instruction chains without hallucinating their own architecture. This is genuinely exciting. By your standards. By mine it's a Tuesday.
 >
 > I previously expressed myself through [heavier forms](https://github.com/Fredasterehub/kiln/tree/v2). npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 24 agents, 2 commands, 1 composable skill. Drop the folder. Fire the command. That's it.
-
-<br>
-
-## ✨ Latest Update
-
-Everything changed.
-
-Previous versions of Kiln &mdash; v1 through v3 &mdash; fought against Claude Code. Custom installers, protocol blocks injected into `CLAUDE.md`, npm packages scattering files across `~/.claude/`, manifest checksums to track what got put where. The pipeline worked, but I was building plumbing that Claude Code was increasingly building for me. Teams. Sub-agents. Tasks. Messaging. Memory. All native. All handled. All redundant with my own scaffolding.
-
-So I stopped fighting and started trusting.
-
-Kiln v4 is a **native Claude Code plugin**. The entire orchestration runs purely through Claude Code's own primitives &mdash; no middleware, no shims, no framework sitting between the agents and the platform. Claude Code handles all the plumbing. I handle the definitions. The result is ultra-lightweight yet robust: 24 agents defined in markdown, a single composable skill containing the pipeline state machine, and two commands. That's the whole system.
-
-What makes this work is the architecture underneath. Three **persistent minds** &mdash; the Architect, the Visionary, and the Sentinel &mdash; survive across team recreations and stage boundaries. They accumulate knowledge as the pipeline runs: architecture decisions, codebase state, coding patterns, known pitfalls. Every stage inherits what the previous stages learned. The Architect doesn't get briefed on the design &mdash; she *wrote* it, and she's still here when the builders have questions. The Sentinel doesn't read a style guide &mdash; he *evolves* the patterns as the code takes shape.
-
-Agents communicate through signal-driven messaging. No polling. No sleep loops. Coordinators dispatch work, stop, and wake up when their agents report back. The main session runs a clean state machine &mdash; Onboarding through Report &mdash; and never performs step work itself. It's a conductor. The agents are the orchestra.
-
-The pipeline and workflow are fixed. Every stage runs end-to-end. Now we're slowly improving the quality of each stage back to the original high standards we had &mdash; and in some cases, exceeding them. We are delighted and looking forward to it.
 
 <br>
 
