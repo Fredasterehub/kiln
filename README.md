@@ -2,22 +2,31 @@
 
 # kiln
 
-**The multi-model software creation pipeline for Claude Code**
+**The ultra-lightweight multi-model pipeline for Claude Code**
 
 *"Perfection is achieved, not when there is nothing more to add, but when there is nothing left to take away."* — Antoine de Saint-Exupery
 
 <br>
 
-[![Multi-Model](https://img.shields.io/badge/Multi--Model-Opus_·_GPT--5.4-D4A574?style=flat)]()
+[![Multi-Model](https://img.shields.io/badge/Multi--Model-Opus_·_GPT--5-D4A574?style=flat)]()
 [![Debate](https://img.shields.io/badge/Debate-Models_Argue-C1666B?style=flat)]()
 [![Zero Deps](https://img.shields.io/badge/Dependencies-Zero-4A403A?style=flat)]()
-[![Native](https://img.shields.io/badge/Claude_Code-Plugin-7C3AED?style=flat)]()
+[![Native](https://img.shields.io/badge/Claude_Code-Native_Only-7C3AED?style=flat)]()
 
 <br>
 
 [![License](https://img.shields.io/badge/License-MIT-D4A574?style=for-the-badge)](LICENSE)
 [![Node](https://img.shields.io/badge/Node-18+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
-[![Claude Code](https://img.shields.io/badge/Claude_Code-Plugin-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white)](https://claude.ai/claude-code)
+[![Claude Code](https://img.shields.io/badge/Claude_Code-Native-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white)](https://claude.ai/claude-code)
+
+<br>
+
+```
+npx kilntwo install
+```
+
+> [!NOTE]
+> Not published to npm yet. Clone and install manually for now.
 
 <br>
 
@@ -37,82 +46,63 @@ So I tested it. Same multi-model pipeline I'd been building with heavy guardrail
 
 And it cooks. For hours. Autonomously. Planning, debating, implementing, reviewing, committing — phase after phase.
 
-Then it happened again. Claude Code shipped native plugin support — agents, skills, commands, all bundled in a directory. No npm. No installer. No CLI. Just drop the folder and go. So Kiln became a plugin. The framework got even smaller. The pipeline got bigger — 7 steps now, with dedicated research and onboarding stages. 24 agents instead of 10. And the whole thing installs in one command.
+I think this might be the new way to do it. Less scaffolding, more trust. But time will tell.
 
-Less scaffolding. More trust. The models keep getting better.
+> This is the lightweight rewrite of [kiln v1](https://github.com/Fredasterehub/kiln). Same workflow, fraction of the weight. Where v1 had 35 skills and 13 agents with deep guardrails, this has 10 agents, 3 commands, and a protocol block. The models got better. The framework got smaller.
 
 ---
 
 ## How It Works
 
-Two steps are yours. The rest run on their own.
+Two stages are yours. The rest run on their own.
 
 <table>
 <tr>
 <td align="center" width="40"><b>1</b></td>
-<td width="140"><b>Onboarding</b></td>
-<td>Alpha detects the project, sets up <code>.kiln/</code>, and maps the codebase if it's brownfield. Greenfield skips straight through.</td>
+<td width="140"><b>Brainstorm</b></td>
+<td>You and the orchestrator explore the problem. Goals, constraints, success criteria — nailed down before anything moves.</td>
 </tr>
 <tr>
 <td align="center"><b>2</b></td>
-<td><b>Brainstorm</b></td>
-<td>You and Da Vinci explore the problem. Goals, constraints, success criteria — nailed down before anything moves. Visionary watches and builds the architectural mental model.</td>
+<td><b>Planning</b></td>
+<td>Two models plan in parallel. Confucius (Claude) and Sun Tzu (GPT-5.2) each write independent plans. Socrates debates the disagreements. Plato merges them into one master plan. You review and approve.</td>
 </tr>
 <tr><td colspan="3"></td></tr>
 <tr>
 <td align="center"><b>3</b></td>
-<td><b>Research</b></td>
-<td>MI6 dispatches field agents to investigate open questions from the vision. If everything is already clear, this step takes seconds.</td>
+<td><b>Execution</b></td>
+<td>Phase by phase. Scheherazade turns each phase into surgical task prompts. Codex implements them with GPT-5.3-codex. Sphinx reviews everything — up to 3 rounds. Maestro orchestrates the whole lifecycle.</td>
 </tr>
 <tr>
 <td align="center"><b>4</b></td>
-<td><b>Architecture</b></td>
-<td>Two models plan in parallel. Confucius (Claude) and Sun Tzu (GPT-5.4) each write independent plans. Socrates debates the disagreements. Plato merges them. Athena validates. You review and approve.</td>
+<td><b>Validation</b></td>
+<td>Argus runs end-to-end tests. Full report. If something fails, the pipeline re-enters execution for that phase only.</td>
 </tr>
 <tr>
 <td align="center"><b>5</b></td>
-<td><b>Build</b></td>
-<td>KRS-One runs the build — Codex implements, Sphinx reviews, Architect and Sentinel keep watch. Each iteration gets a kill streak name. First blood, combo, super combo... up to ultra combo.</td>
-</tr>
-<tr>
-<td align="center"><b>6</b></td>
-<td><b>Validate</b></td>
-<td>Argus runs end-to-end tests. Full report. If something fails, the pipeline re-enters Build for corrections only (max 3 cycles).</td>
-</tr>
-<tr>
-<td align="center"><b>7</b></td>
-<td><b>Report</b></td>
-<td>Omega compiles the final project report. Everything built, tested, and committed. Done.</td>
+<td><b>Delivery</b></td>
+<td>Summary of everything built, tested, and committed. You approve. Done.</td>
 </tr>
 </table>
 
 > [!TIP]
-> All state lives in `.kiln/` under the project directory. Resume anytime with `/kiln-fire`.
+> Session state persists across context resets through memory files. Run `/kiln:reset` before clearing, `/kiln:resume` to pick up exactly where you left off.
 
 ---
 
 ## Get Started
 
 ```bash
-git clone https://github.com/Fredasterehub/kiln.git
-```
-
-Then point Claude Code at it:
-
-```bash
-claude --plugin-dir /path/to/kiln
-```
-
-Or copy it into your Claude Code plugins directory:
-
-```bash
-cp -r kiln ~/.claude/plugins/kiln
+git clone https://github.com/Fredasterehub/kilntwo.git
+cd kilntwo
+npm install -g .
+kilntwo install
 ```
 
 Then in Claude Code:
 
 ```
-/kiln-fire
+/kiln:start
 ```
 
 <details>
@@ -125,12 +115,11 @@ Then in Claude Code:
 | [Claude Code](https://claude.ai/claude-code) | `npm i -g @anthropic-ai/claude-code` | Yes |
 | [Codex CLI](https://github.com/openai/codex) | `npm i -g @openai/codex` | Yes |
 | Node.js 18+ | [nodejs.org](https://nodejs.org) | Yes |
-| OpenAI API key | With GPT-5.4 model access | Yes |
 
-Run Claude Code with `--dangerously-skip-permissions` — Kiln spawns agents, writes files, and runs tests constantly. Permission prompts break the flow.
+Run with `--dangerously-skip-permissions` — Kiln spawns agents, writes files, and runs tests constantly. Permission prompts break the flow.
 
 ```bash
-claude --dangerously-skip-permissions --plugin-dir /path/to/kiln
+claude --dangerously-skip-permissions
 ```
 
 > [!CAUTION]
@@ -144,13 +133,11 @@ claude --dangerously-skip-permissions --plugin-dir /path/to/kiln
 
 <br>
 
-In Claude Code:
-
-```
-/kiln-doctor
+```bash
+kilntwo doctor
 ```
 
-Checks Claude Code version, Codex CLI, GPT-5.4 access, and directory permissions.
+Checks Node version, Claude CLI, Codex CLI, directory permissions, and manifest integrity.
 
 <br>
 </details>
@@ -163,109 +150,95 @@ Every agent has a name. Not for decoration — for the logs.
 
 | Alias | Agent | Model | Job |
 |---|---|---|---|
-| **Alpha** | alpha | Opus | Onboarding — detects project, sets up .kiln/, maps brownfield |
-| **Da Vinci** | da-vinci | Opus | Brainstorm — interviews the operator, crystallizes the vision |
-| **Visionary** | visionary | Opus | Watches brainstorm, builds the architectural mental model |
-| **Sentinel** | sentinel | Opus | Guards design integrity across the whole pipeline |
-| **MI6** | mi6 | Opus | Research coordinator — dispatches field agents for open questions |
-| **Mnemosyne** | mnemosyne | Opus | Brownfield codebase mapper (spawns 5 scouts internally) |
-| **Aristotle** | aristotle | Opus | Architecture coordinator — orchestrates the planning debate |
-| **Confucius** | confucius | Opus | Plans from the Claude side — architecture, edge cases, big picture |
-| **Sun Tzu** | sun-tzu | Sonnet | Plans from the GPT side — catches what Opus misses |
-| **Socrates** | socrates | Opus | Makes the two plans argue until they agree |
-| **Plato** | plato | Sonnet | Merges plans into one coherent master plan |
-| **Athena** | athena | Opus | Validates the final plan — up to 3 rounds |
-| **KRS-One** | krs-one | Opus | Build coordinator — runs iterations with kill streak names |
-| **Codex** | codex | Sonnet | Writes the actual code, task by task |
-| **Sphinx** | sphinx | Sonnet | Reviews everything — correctness, security, completeness |
-| **Argus** | argus | Opus | E2E validation — runs tests, writes the report |
-| **Omega** | omega | Opus | Compiles the final delivery report |
+| **Confucius** | kiln-planner-claude | Opus 4.6 | Plans from the Claude side — architecture, edge cases, big picture |
+| **Sun Tzu** | kiln-planner-codex | GPT-5.2 | Plans from the GPT side — catches what Opus misses |
+| **Socrates** | kiln-debater | Opus 4.5 | Makes the two plans argue until they agree |
+| **Plato** | kiln-synthesizer | Opus 4.6 | Merges plans into one coherent master plan |
+| **Scheherazade** | kiln-prompter | GPT-5.2 | Turns plans into surgical per-task prompts |
+| **Codex** | kiln-implementer | GPT-5.3-codex | Writes the actual code, task by task |
+| **Sphinx** | kiln-reviewer | Opus 4.6 | Reviews everything — correctness, security, completeness |
+| **Maestro** | kiln-phase-executor | Opus 4.6 | Runs the full phase lifecycle: plan, prompt, implement, review, merge |
+| **Argus** | kiln-validator | Opus 4.6 | E2E validation — runs your tests, writes the report |
+| **Sherlock** | kiln-researcher | Haiku | Fast lookups — docs, codebase, web |
 
-<details>
-<summary><b>Supporting cast</b></summary>
-
-<br>
-
-| Alias | Agent | Model | Job |
-|---|---|---|---|
-| **Architect** | architect | Opus | Persistent mind — design integrity across stages |
-| **Field Agent** | field-agent | Sonnet | Research instance — spawned by MI6 as needed |
-| **Atlas** | atlas | Sonnet | Codebase scout — maps structure for Mnemosyne |
-| **Nexus** | nexus | Sonnet | Dependency scout — maps connections for Mnemosyne |
-| **Spine** | spine | Sonnet | Architecture scout — maps patterns for Mnemosyne |
-| **Signal** | signal | Sonnet | Quality scout — maps concerns for Mnemosyne |
-| **Bedrock** | bedrock | Sonnet | Infrastructure scout — maps config for Mnemosyne |
-
-<br>
-</details>
-
-> Confucius and Sun Tzu plan the same thing independently. Socrates makes them debate it. Plato synthesizes. Athena validates. KRS-One builds it with Codex. Sphinx guards the gate. Argus watches everything at the end. And if the build goes long, the kill streak names keep climbing.
+> Confucius and Sun Tzu plan the same thing independently. Socrates makes them debate it. Plato synthesizes. Scheherazade turns it into stories Codex can execute. Sphinx guards the gate. Maestro conducts the orchestra. Argus watches everything at the end. And Sherlock finds whatever anyone needs, fast.
 
 ---
 
 ## Commands
 
-Two commands. That's the whole interface.
+Three commands. That's the whole interface.
 
 <table>
 <tr>
 <td width="50%">
 
 ```
-/kiln-fire
+/kiln:start
 ```
-Launch the pipeline. Auto-detects project state and resumes where it left off.
+Initialize a new project — brainstorm, plan, execute, ship
 
 </td>
 <td width="50%">
 
 ```
-/kiln-doctor
+/kiln:resume
 ```
-Pre-flight check — verifies everything Kiln needs is in place.
+Pick up where you left off after a context reset
+
+</td>
+</tr>
+<tr>
+<td colspan="2">
+
+```
+/kiln:reset
+```
+Save state to memory and prepare for `/clear`
 
 </td>
 </tr>
 </table>
 
+<br>
+
+**CLI tools:**
+
+| Command | What it does |
+|---------|-------------|
+| `kilntwo install` | Drops agents, commands, and protocol into `~/.claude/` |
+| `kilntwo uninstall` | Clean removal — only touches what it installed |
+| `kilntwo update` | Version-aware upgrade with user-edit detection |
+| `kilntwo doctor` | Pre-flight check for everything Kiln needs |
+
 ---
 
 <details>
-<summary><b>Plugin structure</b></summary>
+<summary><b>Project structure</b></summary>
 
 <br>
 
 ```
-kiln/
-├── .claude-plugin/
-│   └── plugin.json            Plugin manifest
-├── agents/                    24 agent definitions
-│   ├── alpha.md               Onboarding
-│   ├── da-vinci.md            Brainstorm
-│   ├── mi6.md                 Research coordinator
-│   ├── aristotle.md           Architecture coordinator
-│   ├── confucius.md           Claude planner
-│   ├── sun-tzu.md             GPT planner
-│   ├── socrates.md            Debater
-│   ├── plato.md               Synthesizer
-│   ├── athena.md              Plan validator
-│   ├── krs-one.md             Build coordinator
-│   ├── codex.md               Implementer
-│   ├── sphinx.md              Reviewer
-│   ├── argus.md               Validator
-│   ├── omega.md               Reporter
-│   └── ...                    + 10 supporting agents
-├── commands/
-│   ├── kiln-fire.md           Launch / resume
-│   └── kiln-doctor.md         Pre-flight check
-└── skills/
-    └── kiln-pipeline/
-        ├── SKILL.md            Pipeline state machine
-        ├── data/               Brainstorming + elicitation data
-        └── references/         Step definitions, blueprints, kill streaks
+kilntwo/
+├── bin/kilntwo.js          CLI entry point
+├── src/
+│   ├── paths.js            Path resolution (~/.claude/*)
+│   ├── manifest.js         Install tracking with checksums
+│   ├── markers.js          Protocol block in CLAUDE.md
+│   ├── install.js          Idempotent, manifest-aware install
+│   ├── uninstall.js        Manifest-driven clean removal
+│   ├── update.js           Version-aware upgrade
+│   └── doctor.js           Health checks
+├── assets/
+│   ├── agents/             10 agent definitions
+│   ├── commands/kiln/      3 slash commands
+│   ├── templates/          Memory file templates
+│   ├── protocol.md         Behavioral rules for CLAUDE.md
+│   └── names.json          Agent alias registry
+└── test/                   53 tests, zero deps
 ```
 
-Drop it in. No npm. No installer. No build step. Just markdown.
+After install, your `~/.claude/` gets the agents and commands. Your project's `CLAUDE.md` gets the protocol block. That's all Kiln touches.
 
 <br>
 </details>
@@ -277,32 +250,32 @@ Drop it in. No npm. No installer. No build step. Just markdown.
 
 **`codex: command not found`** — `npm install -g @openai/codex`, then verify with `codex --version`.
 
-**Commands don't show in Claude Code** — Make sure you're using `--plugin-dir` pointing to the kiln directory, or that it's copied to `~/.claude/plugins/kiln/`. Restart Claude Code.
+**Commands don't show in Claude Code** — Run `kilntwo install` and restart Claude Code. Still nothing? `kilntwo doctor`.
 
 **`model_reasoning_effort` flag rejected** — Older Codex CLI. Upgrade: `npm install -g @openai/codex`.
 
-**Pipeline halts with "escalate to operator"** — A phase failed 3 QA rounds. Check the build artifacts in `.kiln/`, fix manually, then `/kiln-fire` to resume.
+**Pipeline halts with "escalate to operator"** — A phase failed 3 QA rounds. Check `.kiln/reviews/fix_round_3.md`, fix manually, then `/kiln:resume`.
 
 <br>
 </details>
 
 <details>
-<summary><b>Evolution — v1 → v2 → plugin</b></summary>
+<summary><b>v1 vs v2 — what changed</b></summary>
 
 <br>
 
-| | v1 (kiln) | v2 (kilntwo) | Plugin (kiln) |
-|---|---|---|---|
-| Agents | 13 | 10 | 24 |
-| Pipeline stages | 5 | 5 | 7 |
-| Skills | 26 | 0 (protocol block) | 1 (composable) |
-| Commands | 8 | 3 | 2 |
-| Install method | Custom installer | npm package + CLI | `--plugin-dir` |
-| Dependencies | Zero | Zero | Zero |
-| Config surface | ~4,000 lines | ~1,200 lines | ~600 lines |
-| Build naming | Phase numbers | Phase numbers | Kill streaks |
+| | v1 (kiln) | v2 (kilntwo) |
+|---|---|---|
+| Agents | 13 | 10 |
+| Skills | 26 | 0 (protocol block instead) |
+| Commands | 8 | 3 |
+| Hooks | 3 scripts | 0 |
+| State tracking | STATE.md + state.json | Memory files |
+| Install | Custom installer | npm package + CLI |
+| Dependencies | Zero | Zero |
+| Lines of config | ~4,000 | ~1,200 |
 
-Same core idea. Same multi-model debate. Same QA gates. Now it's a folder.
+Same pipeline. Same multi-model debate. Same QA gates. A third of the surface area.
 
 <br>
 </details>
