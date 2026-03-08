@@ -87,7 +87,13 @@ Write-Host "  Installing" -ForegroundColor DarkYellow
 Write-Host ""
 
 Write-Host "  ▸ Downloading Kiln v4..." -ForegroundColor Cyan
-git clone --depth 1 --branch $Branch $Repo "$TmpDir\kiln" 2>$null
+$ErrorActionPreference = "SilentlyContinue"
+git clone --depth 1 --branch $Branch $Repo "$TmpDir\kiln" --quiet 2>&1 | Out-Null
+$ErrorActionPreference = "Stop"
+if (-not (Test-Path "$TmpDir\kiln\.claude-plugin\plugin.json")) {
+    Write-Host "  ✗ Download failed — check your internet connection" -ForegroundColor Red
+    exit 1
+}
 Write-Host "  ✓ Downloaded" -ForegroundColor Green
 
 # ── Copy plugin files ──────────────────────────────────────────────
