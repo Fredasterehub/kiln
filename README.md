@@ -102,8 +102,14 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 Ah. More humans who want to learn. Come in. Don't touch anything yet.
 
+**macOS / Linux:**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Fredasterehub/kiln/v4/install.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/Fredasterehub/kiln/v4/install.ps1 | iex
 ```
 
 Then open Claude Code and type `/kiln-fire`. That's it.
