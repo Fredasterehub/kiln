@@ -80,7 +80,7 @@ print "   ${DIM}$(pwd)/.claude/plugins/kiln/${RESET}"
 printf "\n"
 
 printf "  %bChoice [1/2]:%b " "$BOLD" "$RESET"
-read -r CHOICE
+read -r CHOICE < /dev/tty
 
 case "$CHOICE" in
   2)
@@ -101,7 +101,7 @@ if [ -d "$PLUGIN_DIR" ]; then
   printf "\n"
   print "Existing installation found at ${DIM}$PLUGIN_DIR${RESET}"
   printf "  %bOverwrite? [Y/n]:%b " "$BOLD" "$RESET"
-  read -r OVERWRITE
+  read -r OVERWRITE < /dev/tty
   if [[ "$OVERWRITE" =~ ^[Nn] ]]; then
     print "Aborted."
     exit 0
