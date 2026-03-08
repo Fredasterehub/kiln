@@ -103,11 +103,10 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 Ah. More humans who want to learn. Come in. Don't touch anything yet.
 
 ```bash
-git clone https://github.com/Fredasterehub/kiln.git
-claude --dangerously-skip-permissions --plugin-dir ./kiln
+curl -fsSL https://raw.githubusercontent.com/Fredasterehub/kiln/v4/install.sh | bash
 ```
 
-Then type `/kiln-fire`. That's it.
+Then open Claude Code and type `/kiln-fire`. That's it.
 
 > **Note** &mdash; This is not your typical `/gsd` or command-driven workflow. There are no task lists to manage, no status dashboards to check, no slash commands to memorize. You fire the pipeline and talk to your agents. Da Vinci will interview you. Aristotle will present the plan. KRS-One will build it. If something needs your attention, they'll tell you. Just talk to them.
 
