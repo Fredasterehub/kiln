@@ -107,10 +107,7 @@ Ah. More humans who want to learn. Come in. Don't touch anything yet.
 curl -fsSL https://raw.githubusercontent.com/Fredasterehub/kiln/v4/install.sh | bash
 ```
 
-**Windows (PowerShell):**
-```powershell
-irm https://raw.githubusercontent.com/Fredasterehub/kiln/v4/install.ps1 | iex
-```
+**Windows:** coming soon.
 
 Then open Claude Code and type `/kiln-fire`. That's it.
 
