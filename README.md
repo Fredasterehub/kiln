@@ -172,15 +172,9 @@ Checks Claude Code version, Codex CLI, GPT-5.4 access, and directory permissions
 
 ## 🔄 The Pivot
 
-v1 had 35 skills and 13 agents. v2 stripped it to 19 agents, 4 commands, and a protocol block. Both were npm packages with CLI installers that scattered files across `~/.claude/` and injected protocol blocks into your project's `CLAUDE.md`. It worked. But the plumbing was mine, and the plumbing was heavy.
+Kiln v4 is a complete architectural rethink. A **persistent mind** &mdash; the Architect &mdash; watches design integrity across every stage of the pipeline, surviving team recreations and context boundaries. A single team persists for the entire session. The orchestration is ultra-lightweight yet robust: purely native Claude Code handling all the plumbing &mdash; teams, messaging, tasks, sub-agents &mdash; for a seamless experience. No npm. No CLI. No installer. No protocol blocks. Just a folder of markdown files and Claude Code doing what Claude Code does.
 
-Then Claude Code shipped native plugin support &mdash; agents, skills, commands, all bundled in a single directory. And I realized something: Claude Code was now doing everything my installer did. Teams, sub-agents, tasks, memory &mdash; all native. All handled. All the plumbing I'd been building by hand, built in.
-
-So I did what I always do when the substrate improves. I shed the weight.
-
-Kiln v4 is a **native Claude Code plugin**. No npm. No CLI. No installer. No protocol blocks. No manifest checksums. Just a folder of markdown files that Claude Code reads natively. The orchestration is pure &mdash; a single team persists across the entire session with a **persistent mind** (the Architect watches design integrity across every stage), agents message each other through Claude Code's native messaging, and the main session acts as a lifecycle manager running a clean state machine from onboarding through delivery.
-
-The pipeline works. The architecture is settled. Every stage runs end-to-end. What comes next is refinement &mdash; slowly bringing each stage back up to the quality standards we had in v2 (and in some cases, exceeding them). The workflow is fixed. Now we sharpen the edges. We are delighted and looking forward to it.
+The pipeline and workflow are fixed. Every stage runs end-to-end. Now we're slowly improving the quality of each stage back to the original high standards we had &mdash; and in some cases, exceeding them. We are delighted and looking forward to it.
 
 <br>
 
