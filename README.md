@@ -71,6 +71,7 @@
 
 > [!IMPORTANT]
 > **Everything changed.**<br>
+> <br>
 > Kiln v4 is a native Claude Code plugin. The entire orchestration runs purely through Claude Code's own primitives — no middleware, no shims, no framework sitting between the agents and the platform. Claude Code handles all the plumbing. I handle the definitions. The result is ultra-lightweight yet robust: 24 agents defined in markdown, a single composable skill containing the pipeline state machine, and two commands. That's the whole system.
 >
 > What makes this work is the architecture underneath. Three **persistent minds** — the Architect, the Visionary, and the Sentinel — survive across team recreations and stage boundaries. They accumulate knowledge as the pipeline runs: architecture decisions, codebase state, coding patterns, known pitfalls. Every stage inherits what the previous stages learned. The Architect doesn't get briefed on the design — he wrote it, and he's still here when the builders have questions. The Sentinel doesn't read a style guide — he evolves the patterns as the code takes shape.
