@@ -77,25 +77,25 @@ fi
 printf "\n"
 
 # ── Install mode ────────────────────────────────────────────────────
-header "How would you like to use Kiln?"
+header "Where would you like to install Kiln?"
 
-print "${BOLD}1)${RESET}  Install to this project  ${DIM}— auto-discovered by Claude Code${RESET}"
-print "   ${DIM}$(pwd)/.claude/plugins/kiln/${RESET}"
+print "${BOLD}1)${RESET}  Global  ${DIM}— available in every project${RESET}"
+print "   ${DIM}~/.claude/plugins/kiln/${RESET}"
 printf "\n"
-print "${BOLD}2)${RESET}  Download to a shared location  ${DIM}— use with --plugin-dir${RESET}"
-print "   ${DIM}~/.kiln/${RESET}"
+print "${BOLD}2)${RESET}  This project only  ${DIM}— scoped to current directory${RESET}"
+print "   ${DIM}$(pwd)/.claude/plugins/kiln/${RESET}"
 printf "\n"
 
 CHOICE=$(ask "Choice [1/2]")
 
 case "$CHOICE" in
   2)
-    PLUGIN_DIR="$HOME/.kiln"
-    SCOPE="shared"
-    ;;
-  *)
     PLUGIN_DIR="$(pwd)/.claude/plugins/kiln"
     SCOPE="project"
+    ;;
+  *)
+    PLUGIN_DIR="$HOME/.claude/plugins/kiln"
+    SCOPE="global"
     ;;
 esac
 
@@ -153,23 +153,13 @@ printf "\n"
 line
 printf "\n"
 
-if [ "$SCOPE" = "project" ]; then
-  print "Kiln is installed in this project. Open Claude Code:"
-  printf "\n"
-  print "  ${BOLD}claude --dangerously-skip-permissions${RESET}"
-  printf "\n"
-  print "Then type:"
-  printf "\n"
-  print "  ${BOLD}/kiln-fire${RESET}"
-else
-  print "Kiln is installed at ${DIM}~/.kiln/${RESET}. Point Claude Code at it:"
-  printf "\n"
-  print "  ${BOLD}claude --dangerously-skip-permissions --plugin-dir ~/.kiln${RESET}"
-  printf "\n"
-  print "Then type:"
-  printf "\n"
-  print "  ${BOLD}/kiln-fire${RESET}"
-fi
+print "Open Claude Code in any project:"
+printf "\n"
+print "  ${BOLD}claude --dangerously-skip-permissions${RESET}"
+printf "\n"
+print "Then type:"
+printf "\n"
+print "  ${BOLD}/kiln-fire${RESET}"
 
 printf "\n"
 dim "That's it. Da Vinci will take it from here."
