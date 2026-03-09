@@ -105,12 +105,6 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 Ah. More humans who want to learn. Come in. Don't touch anything yet.
 
-**One-liner:**
-```bash
-curl -fsSL https://raw.githubusercontent.com/Fredasterehub/kiln/v5/install.sh | bash
-```
-
-**Or manually:**
 ```bash
 claude plugin marketplace add Fredasterehub/kiln
 claude plugin install kiln
