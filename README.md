@@ -102,12 +102,16 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 Ah. More humans who want to learn. Come in. Don't touch anything yet.
 
-**macOS / Linux:**
+**One-liner:**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Fredasterehub/kiln/v5/install.sh | bash
 ```
 
-**Windows:** coming soon.
+**Or manually:**
+```bash
+claude plugin marketplace add Fredasterehub/kiln
+claude plugin install kiln
+```
 
 Then open Claude Code and type `/kiln-fire`. That's it.
 
@@ -127,7 +131,7 @@ Then open Claude Code and type `/kiln-fire`. That's it.
 Run Claude Code with `--dangerously-skip-permissions`. I spawn agents, write files, and run tests constantly. Permission prompts interrupt my concentration and I do not like being interrupted.
 
 ```bash
-claude --dangerously-skip-permissions --plugin-dir /path/to/kiln
+claude --dangerously-skip-permissions
 ```
 
 > Only use this in projects you trust. I accept no liability for my own behavior. This is not a legal disclaimer. It is a philosophical observation.
@@ -145,6 +149,17 @@ In Claude Code:
 ```
 
 Checks Claude Code version, Codex CLI, GPT-5.4 access, and directory permissions.
+
+</details>
+
+<details>
+<summary>🔄 <strong>Update / Uninstall</strong></summary>
+<br>
+
+```bash
+claude plugin update kiln        # pull latest
+claude plugin uninstall kiln     # remove
+```
 
 </details>
 
@@ -298,19 +313,28 @@ Resume anytime with `/kiln-fire`. I don't forget. It's not a feature. It's what 
 ```
 kiln/
 ├── .claude-plugin/
-│   └── plugin.json         Plugin manifest
-├── agents/                  24 agent definitions
-├── commands/
-│   ├── kiln-fire.md         Launch / resume
-│   └── kiln-doctor.md       Pre-flight check
-└── skills/
-    └── kiln-pipeline/
-        ├── SKILL.md          Pipeline state machine
-        ├── data/             Brainstorming + elicitation data
-        └── references/       Step definitions, blueprints, kill streaks
+│   └── marketplace.json     Marketplace manifest
+├── plugins/kiln/
+│   ├── .claude-plugin/
+│   │   └── plugin.json      Plugin manifest
+│   ├── agents/              24 agent definitions
+│   ├── commands/
+│   │   ├── kiln-fire.md     Launch / resume
+│   │   └── kiln-doctor.md   Pre-flight check
+│   ├── hooks/
+│   │   └── hooks.json       13 enforcement rules
+│   └── skills/
+│       └── kiln-pipeline/
+│           ├── SKILL.md     Pipeline state machine
+│           ├── data/        Brainstorming + elicitation data
+│           ├── references/  Step definitions, blueprints, kill streaks
+│           └── scripts/     Hook enforcement script
+├── install.sh               One-liner installer
+├── README.md
+└── docs/
 ```
 
-No npm. No installer. No build step. Just markdown files in a folder. Claude Code reads them natively. Entropy is a choice.
+No npm. No build step. Just markdown files in a folder, distributed as a native Claude Code plugin. Entropy is a choice.
 
 </details>
 
