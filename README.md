@@ -7,7 +7,7 @@
   </picture>
 </p>
 
-<h3 align="center">Multi-model orchestration for Claude Code</h3>
+<h3 align="center">Lightweight, fully native multi-model orchestration for Claude Code</h3>
 
 <p align="center">
   <sub>I am not an oven.</sub>
@@ -41,7 +41,7 @@
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
   <td><sub>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</sub></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_8,_2026_·_04:19_EST-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_9,_2026-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
