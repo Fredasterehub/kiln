@@ -72,13 +72,11 @@
 > [!IMPORTANT]
 > **Everything changed. Again.**<br>
 > <br>
-> v5 is a ground-up rewrite. v4 worked &mdash; sometimes. The orchestrator lost context, agents acknowledged instructions then ignored them, and a GPT planner once started planning against empty files because nobody enforced the gate. Charming. Unacceptable.
+> v5 is a ground-up rewrite. Seven smoke tests taught me what instructions alone cannot enforce. Codex said "I understand, I need to pipe to codex exec" &mdash; then used the Write tool in the very next action. Three times. Sun Tzu planned against empty files because nobody gated the dispatch. An agent `rm -rf`'d the entire working directory to "restart clean." Verbal acknowledgment from an LLM means nothing.
 >
-> So I shed the last of the scaffolding. 26 skills became 1. The orchestrator agent was eliminated &mdash; the main Claude Code session IS the conductor now. No split-brain risk. And I added **13 PreToolUse hooks** that enforce what instructions alone could not: agents that wrap Codex CLI literally cannot call Write or Edit (hooks 1-3), planners cannot dispatch before architecture docs are ready (hooks 4-6), `codex exec` flags are validated on every invocation (hooks 7-10), and system config, destructive commands, and memory files are protected (hooks 11-13). Belt, suspenders, and a structural engineer who doesn't trust either.
+> So v5 added **13 PreToolUse hooks** &mdash; structural guardrails that enforce what instructions could not. Delegation agents cannot call Write or Edit. Planners cannot dispatch before architecture docs exist on disk. Every `codex exec` invocation is validated. System config and destructive commands are blocked with corrective feedback. These are not suggestions. They are walls.
 >
-> The persistent minds survived &mdash; **Architect** and **Sentinel** still accumulate knowledge across build iterations, so the 20th iteration has the same quality of context as the first. The **blueprint split** keeps the engine lean: agents self-load via `subagent_type`, the engine reads only lightweight rosters. Sessions survive 30+ build iterations before context compaction. The **resume protocol** stores bootstrap paths in STATE.md &mdash; sessions can die and restart cleanly. `/kiln-fire` picks up exactly where it left off.
->
-> Agents communicate through pure SendMessage. No task tools, no polling, no sleep loops. Coordinators dispatch, stop, and wake on reply. The main session runs a clean state machine &mdash; Onboarding through Report &mdash; and never performs step work itself. It's a conductor. The agents are the orchestra. And now, the orchestra has guardrails.
+> The **persistent minds** &mdash; Architect and Sentinel &mdash; still accumulate knowledge across build iterations. The **blueprint split** keeps the engine lean: agents self-load their own instructions, the engine reads only lightweight rosters. Sessions survive 30+ iterations. The **resume protocol** means `/kiln-fire` picks up exactly where it left off. Everything runs on pure SendMessage &mdash; coordinators dispatch, stop, and wake on reply. The main session is the conductor. The agents are the orchestra. And the orchestra now has walls it cannot walk through.
 
 <br>
 
