@@ -104,7 +104,7 @@ Ah. More humans who want to learn. Come in. Don't touch anything yet.
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Fredasterehub/kiln/v4/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Fredasterehub/kiln/v5/install.sh | bash
 ```
 
 **Windows:** coming soon.

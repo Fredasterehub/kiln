@@ -35,7 +35,7 @@ Check that all 24 Kiln agent files exist in the plugin:
 ```bash
 ls -1 ${CLAUDE_PLUGIN_ROOT}/agents/*.md | wc -l
 ```
-- Expected: 23 agent files
+- Expected: 24 agent files
 - List any missing agents if count is wrong.
 
 ### 4. Pipeline Skill
@@ -67,7 +67,7 @@ Kiln Doctor Report
 ==================
 [PASS] Codex CLI: codex-cli found on PATH
 [PASS] GPT-5.4: Model accessible
-[PASS] Agent files: 23/23 present
+[PASS] Agent files: 24/24 present
 [PASS] Pipeline skill: All files present
 [INFO] Pipeline state: No existing run (ready for fresh start)
 [WARN] Brainstorm data: elicitation-methods.json missing
