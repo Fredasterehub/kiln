@@ -1,0 +1,17 @@
+{
+  "description": "Kiln pipeline enforcement hooks — delegation, sequencing, flags, safety",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/scripts/enforce-pipeline.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

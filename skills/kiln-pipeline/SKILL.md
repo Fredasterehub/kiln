@@ -7,12 +7,6 @@ description: >-
 version: 0.1.0
 user_invocable: false
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent, TeamCreate, TeamDelete, TaskCreate, TaskGet, TaskUpdate, TaskList, SendMessage
-hooks:
-  PreToolUse:
-    - matcher: ""
-      hooks:
-        - type: command
-          command: "${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/scripts/enforce-pipeline.sh"
 ---
 
 # Kiln Pipeline Engine
@@ -94,11 +88,12 @@ For each step, follow this exact pattern. No shortcuts, no improvising.
 ### 0. Pipeline Start (first step only)
 
 On fresh run (not resume), before step 1:
-1. Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/lore-engine.md` — rendering spec for the entire run.
-2. Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/data/agents.json` — agent personality quotes.
-3. Output a random **greeting** from `data/lore.json` → `greetings` in terracotta (`\033[38;5;173m`).
+1. Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/brand.md` — visual vocabulary for the entire run.
+2. Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/lore-engine.md` — rendering spec, event mappings, data file locations.
+3. Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/data/agents.json` — agent personality quotes.
+4. Output a random **greeting** from `data/lore.json` → `greetings` as the first line of the ignition banner.
 
-On resume, read lore-engine.md alongside SKILL.md (it's part of the protocol, not optional).
+On resume, read brand.md and lore-engine.md alongside SKILL.md (they're part of the protocol, not optional).
 
 ### 1. Read Blueprint and Step Definition
 
@@ -110,20 +105,16 @@ The blueprint tells you WHO to spawn and HOW they communicate. The agent `.md` f
 
 ### 2. Render Transition and Create Team
 
-**Before creating the team**, render the step's presentation in ONE Bash call (see lore-engine.md for exact formats). This single call does everything:
-1. **ANSI banner** with inline step progress (e.g. `━━━ Ignition [1► 2○ 3○ 4○ 5○ 6○ 7○]`) + lore quote (2-3 lines max — Claude Code truncates longer output)
-2. **Spinner verb install** — silently writes to `{working_dir}/.claude/settings.local.json`
-3. **For Build iterations**: kill streak announcement instead of standard banner
+**Before creating the team**, render the step's transition. Visual vocabulary is in `brand.md`, exact formats in `lore-engine.md`. Two parts:
 
-The Bash **description** parameter is part of the narrative — use the evocative descriptions from lore-engine.md (e.g. "The philosophers convene...", "KRS-One takes the stage..."). The description sets the scene; the ANSI output delivers the visual payoff. They complement, never duplicate.
+1. **Bash call** — ONE call that renders the Unicode banner + installs spinner verbs silently. 3-line max output. Set the `description:` parameter to the narrative line from brand.md (e.g. "The philosophers convene..."). For Build iterations: kill streak banner instead of standard.
+2. **Spawning indicator** — markdown block listing agents being spawned (see brand.md § Spawning Indicators).
 
-**No engine text before or after the Bash call.** Do not narrate what you are about to do ("Let me render the banner...") or explain what just happened. The Bash call IS the presentation — the description sets the scene, the output delivers it. Any engine text around it is noise.
-
-The Bash tool's `description` parameter is what the user sees in the `● Bash(...)` header. Set it explicitly:
+**No engine text before or after the Bash call.** The call IS the presentation — description sets the scene, output delivers it. Any surrounding text is noise.
 
 ```
 Bash(
-  description: "The forge ignites...",    # narrative setup — NOT the command
+  description: "The forge ignites...",
   command: "printf '...' && echo '...' > settings.local.json"
 )
 ```
