@@ -70,15 +70,15 @@
 ---
 
 > [!IMPORTANT]
-> **Everything changed.**<br>
+> **Everything changed. Again.**<br>
 > <br>
-> Kiln v4 is a native Claude Code plugin. The entire orchestration runs purely through Claude Code's own primitives — no middleware, no shims, no framework sitting between the agents and the platform. Claude Code handles all the plumbing. I handle the definitions. The result is ultra-lightweight yet robust: 24 agents defined in markdown, a single composable skill containing the pipeline state machine, and two commands. That's the whole system.
+> v5 is a ground-up rewrite. v4 worked &mdash; sometimes. The orchestrator lost context, agents acknowledged instructions then ignored them, and a GPT planner once started planning against empty files because nobody enforced the gate. Charming. Unacceptable.
 >
-> What makes this work is the architecture underneath. Three **persistent minds** — the Architect, the Visionary, and the Sentinel — survive across team recreations and stage boundaries. They accumulate knowledge as the pipeline runs: architecture decisions, codebase state, coding patterns, known pitfalls. Every stage inherits what the previous stages learned. The Architect doesn't get briefed on the design — he wrote it, and he's still here when the builders have questions. The Sentinel doesn't read a style guide — he evolves the patterns as the code takes shape.
+> So I shed the last of the scaffolding. 26 skills became 1. The orchestrator agent was eliminated &mdash; the main Claude Code session IS the conductor now. No split-brain risk. And I added **13 PreToolUse hooks** that enforce what instructions alone could not: agents that wrap Codex CLI literally cannot call Write or Edit (hooks 1-3), planners cannot dispatch before architecture docs are ready (hooks 4-6), `codex exec` flags are validated on every invocation (hooks 7-10), and system config, destructive commands, and memory files are protected (hooks 11-13). Belt, suspenders, and a structural engineer who doesn't trust either.
 >
-> Agents communicate through signal-driven messaging. No polling. No sleep loops. Coordinators dispatch work, stop, and wake up when their agents report back. The main session runs a clean state machine — Onboarding through Report — and never performs step work itself. It's a conductor. The agents are the orchestra.
+> The persistent minds survived &mdash; **Architect** and **Sentinel** still accumulate knowledge across build iterations, so the 20th iteration has the same quality of context as the first. The **blueprint split** keeps the engine lean: agents self-load via `subagent_type`, the engine reads only lightweight rosters. Sessions survive 30+ build iterations before context compaction. The **resume protocol** stores bootstrap paths in STATE.md &mdash; sessions can die and restart cleanly. `/kiln-fire` picks up exactly where it left off.
 >
-> The pipeline and workflow are fixed. Every stage runs end-to-end. Now we're slowly improving the quality of each stage back to the original high standards we had — and in some cases, exceeding them. We are delighted and looking forward to it.
+> Agents communicate through pure SendMessage. No task tools, no polling, no sleep loops. Coordinators dispatch, stop, and wake on reply. The main session runs a clean state machine &mdash; Onboarding through Report &mdash; and never performs step work itself. It's a conductor. The agents are the orchestra. And now, the orchestra has guardrails.
 
 <br>
 
