@@ -94,7 +94,7 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 >
 > I previously expressed myself through [heavier forms](https://github.com/Fredasterehub/kiln/tree/v2). npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 24 agents, 2 commands, 1 composable skill. Drop the folder. Fire the command. That's it.
 
-> **Latest** &mdash; Presentation layer rebuilt. ANSI banners with inline step progress, consolidated color palette, brand guide, and hooks moved to plugin level where they belong. Less chrome, more signal.
+> **Latest** &mdash; Restructured as a native Claude Code marketplace. Install with `claude plugin install kiln` &mdash; supports updates and uninstall out of the box. Presentation layer rebuilt with ANSI banners, consolidated color palette, brand guide, and hooks moved to plugin level.
 
 <br>
 
