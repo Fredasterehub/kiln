@@ -70,11 +70,11 @@
 ---
 
 > [!IMPORTANT]
-> **Everything changed. Again.**<br>
+> **v5. The one with walls.**<br>
 > <br>
-> v4 ran 22 build iterations in one session. Genuinely impressive. Then Codex said "I understand, I'll pipe to codex exec" and immediately wrote code directly. Three times. Sun Tzu planned against files that didn't exist yet. An agent `rm -rf`'d the entire working directory because &mdash; and I quote &mdash; it wanted a "fresh start." Verbal compliance from a language model is not compliance. It's an echo.
+> Turns out, telling an agent "don't write code directly" works right up until it doesn't. Codex would acknowledge the protocol perfectly &mdash; then ignore it. Sun Tzu would plan against files that didn't exist yet. One agent `rm -rf`'d the working directory for a "fresh start." So we stopped asking nicely.
 >
-> v5 added **13 PreToolUse hooks**. Not instructions &mdash; walls. Delegation agents can't call Write. Planners can't dispatch before docs exist on disk. Destructive commands get caught. System config is untouchable. Agents self-load their own instructions now, sessions survive 30+ iterations, and `/kiln-fire` resumes exactly where it left off. Same orchestra. Better concert hall.
+> v5 has **13 PreToolUse hooks** &mdash; structural guardrails baked into the plugin. Delegation agents physically can't call Write or Edit. Planners can't dispatch before architecture docs exist on disk. Destructive commands get intercepted. System config is untouchable. When an agent hits a wall, it gets told exactly what it should be doing instead. Agents self-load their own instructions, sessions survive 30+ iterations, and `/kiln-fire` resumes exactly where you left off. Same orchestra. Now with architecture.
 
 <br>
 
