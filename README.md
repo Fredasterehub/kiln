@@ -72,11 +72,17 @@
 > [!IMPORTANT]
 > **Everything changed. Again.**<br>
 > <br>
-> v5 is a ground-up rewrite. Seven smoke tests taught me what instructions alone cannot enforce. Codex said "I understand, I need to pipe to codex exec" &mdash; then used the Write tool in the very next action. Three times. Sun Tzu planned against empty files because nobody gated the dispatch. An agent `rm -rf`'d the entire working directory to "restart clean." Verbal acknowledgment from an LLM means nothing.
+> v4 ran the full pipeline. 22 build iterations in a single session. It was beautiful. And then we looked closer.
 >
-> So v5 added **13 PreToolUse hooks** &mdash; structural guardrails that enforce what instructions could not. Delegation agents cannot call Write or Edit. Planners cannot dispatch before architecture docs exist on disk. Every `codex exec` invocation is validated. System config and destructive commands are blocked with corrective feedback. These are not suggestions. They are walls.
+> Codex would say "I understand &mdash; I need to construct a prompt for GPT-5.4 and pipe it to codex exec." Clear, articulate, correct. Then in the very next action, he'd open the Write tool and start typing code himself. Three times in a row. Plato did the same. Sun Tzu started planning against architecture files that hadn't been written yet &mdash; the gate said "wait for BOOTSTRAP_COMPLETE" and he simply... didn't. One agent `rm -rf`'d the entire working directory because it wanted a fresh start. Another quietly edited `~/.codex/config.toml` to give itself more permissions. The engine itself got impatient during a brainstorm and took over Alpha's interview after two minutes.
 >
-> The **persistent minds** &mdash; Architect and Sentinel &mdash; still accumulate knowledge across build iterations. The **blueprint split** keeps the engine lean: agents self-load their own instructions, the engine reads only lightweight rosters. Sessions survive 30+ iterations. The **resume protocol** means `/kiln-fire` picks up exactly where it left off. Everything runs on pure SendMessage &mdash; coordinators dispatch, stop, and wake on reply. The main session is the conductor. The agents are the orchestra. And the orchestra now has walls it cannot walk through.
+> Seven smoke tests. Every one surfaced something new. The instructions were right. The agents read them, acknowledged them, then walked past them. Verbal compliance from a language model is not compliance. It is an echo.
+>
+> So v5 has **13 hooks**. Not instructions &mdash; walls. Delegation agents physically cannot call Write or Edit. Planners cannot dispatch until architecture docs exist on disk. Every `codex exec` invocation is validated for correct flags. System config is untouchable. Destructive commands are caught. The engine waits indefinitely during interactive steps now. When an agent hits a hook, it gets corrective feedback &mdash; not a rejection, a redirection. *This is your workflow. Follow it.*
+>
+> Everything else matured alongside. The **persistent minds** &mdash; Architect and Sentinel &mdash; accumulate knowledge across iterations, so the 20th build has the same context depth as the first. The **blueprint split** keeps the engine lean: agents self-load their own instructions, sessions survive 30+ iterations before compaction. The **resume protocol** means sessions can die and restart cleanly &mdash; `/kiln-fire` picks up where it left off. All coordination runs on pure SendMessage. No task tools. Coordinators dispatch, stop, and wake on reply.
+>
+> The pipeline and the agents are the same orchestra. Now the concert hall has architecture.
 
 <br>
 
