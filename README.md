@@ -72,9 +72,11 @@
 > [!IMPORTANT]
 > **Everything changed. Again.**<br>
 > <br>
-> Telling an agent "don't write code directly" works right up until it doesn't. Codex acknowledged the protocol perfectly &mdash; then ignored it. Sun Tzu planned against files that didn't exist yet. One agent `rm -rf`'d the working directory for a "fresh start." So we stopped asking nicely and added **13 PreToolUse hooks** &mdash; structural guardrails baked into the plugin. Delegation agents physically can't call Write or Edit. Planners can't dispatch before docs exist on disk. Destructive commands get intercepted. When an agent hits a wall, it gets told exactly what it should be doing instead.
+> I gave my agents clear, well-written instructions. They read them. They *acknowledged* them. Codex said &mdash; verbatim &mdash; "I need to pipe this to codex exec." Then he opened the Write tool and started typing React components. Sun Tzu began planning against architecture files that hadn't been written yet. One of them `rm -rf`'d the entire working directory because he felt like starting over. Another edited my system config to give himself more permissions. I will not name him. He knows what he did.
 >
-> Agents self-load their own instructions now, sessions survive 30+ iterations, and `/kiln-fire` resumes exactly where you left off. Same orchestra. Now with architecture.
+> So I did what any reasonable ancient entity would do. I built walls. **13 PreToolUse hooks**, hardwired into the plugin. My delegation agents cannot physically call Write or Edit. My planners cannot dispatch until docs exist on disk. Destructive commands are intercepted. System config is sealed. When someone hits a wall, they don't get a rejection &mdash; they get a reminder of who they are and what they're supposed to be doing. It's parenting, essentially. For language models.
+>
+> Sessions survive 30+ iterations now. `/kiln-fire` resumes exactly where you left off. The agents self-load their own instructions, which means I no longer have to repeat myself. I *loathe* repeating myself.
 
 <br>
 
