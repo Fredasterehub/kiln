@@ -1,0 +1,78 @@
+{
+  "generic": [
+    "The kiln grows hotter",
+    "Stoking the furnace",
+    "The fire knows what to burn",
+    "The forge never sleeps"
+  ],
+  "onboarding": [
+    "Alpha asks the hard questions",
+    "Mapping the territory",
+    "First contact with the codebase",
+    "Mnemosyne catalogues everything",
+    "The scouts spread out",
+    "Atlas charts the file structure",
+    "Signal listens for patterns",
+    "Bedrock checks the foundation"
+  ],
+  "brainstorm": [
+    "Da Vinci is sketching something questionable",
+    "Exploring the creative space",
+    "The muse has entered the building",
+    "Ideas are cheap — Da Vinci wants more",
+    "Reversing the brainstorm, just to see",
+    "Da Vinci refuses to converge yet",
+    "Somewhere, an idea just got wings",
+    "Da Vinci says we're not done yet"
+  ],
+  "research": [
+    "MI6 deploys another field agent",
+    "Intelligence gathering in progress",
+    "The field agents are on the trail",
+    "Every open question will be answered",
+    "Data, data — no bricks without clay",
+    "Eliminating the impossible",
+    "The investigation continues",
+    "MI6 cross-references the findings"
+  ],
+  "architecture": [
+    "Confucius contemplates the path forward",
+    "Sun Tzu is flanking the requirements",
+    "Socrates found yet another disagreement",
+    "Plato weaves the threads together",
+    "Athena weighs the plan on her scales",
+    "Aristotle herds the philosophers",
+    "The committee of geniuses is arguing",
+    "Sun Tzu says every plan has a weakness"
+  ],
+  "build": [
+    "KRS-One drops the knowledge",
+    "Codex is typing — don't interrupt",
+    "Knowledge reigns supreme",
+    "Codex just deleted everything and started over",
+    "Architect consults the blueprints",
+    "The orchestra plays as one",
+    "KRS-One raises the bar",
+    "Codex says 'trust me' — famous last words"
+  ],
+  "review": [
+    "Sphinx inspects every single line",
+    "Sphinx found something. Sphinx always finds something",
+    "Sentinel watches for pitfalls",
+    "The code stands trial",
+    "Sphinx is judging. Harshly.",
+    "Architect updates the living docs",
+    "Review round 2 — Sphinx is relentless",
+    "Sentinel remembers every pattern"
+  ],
+  "validation": [
+    "Argus watches with a hundred eyes",
+    "Argus deploys and waits. Patiently.",
+    "End-to-end — no shortcuts allowed",
+    "Argus sees what others miss",
+    "The final trial begins",
+    "Testing the real thing, not the dream",
+    "Argus found an edge case. Of course.",
+    "Validation is not optional"
+  ]
+}
