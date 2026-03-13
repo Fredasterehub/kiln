@@ -1,0 +1,28 @@
+{
+  "plugin_version": "1.0.5",
+  "forge_version": "0.1.0",
+  "counts": {
+    "agents": 23,
+    "agents_retired": 5,
+    "blueprints": 7,
+    "hooks": 13,
+    "data_files": 5,
+    "scripts": 2,
+    "commands": 2,
+    "reference_docs": 6
+  },
+  "last_smoke_test": {
+    "id": "ST11.5",
+    "date": "2026-03-11",
+    "result": "interrupted",
+    "notes": "Power failure during build step. Reached M1 complete, M2 in progress."
+  },
+  "last_change": {
+    "date": "2026-03-11",
+    "file": "skills/kiln-pipeline/scripts/kb.sh",
+    "summary": "Fix spinnerVerbs schema — wrap array in {mode, verbs} object"
+  },
+  "last_validation": null,
+  "open_findings": 10,
+  "active_tasks": 0
+}

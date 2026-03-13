@@ -1,0 +1,136 @@
+[
+  {
+    "timestamp": "2026-03-10T00:00:00Z",
+    "scenario": "manual",
+    "name": "ST10",
+    "duration_seconds": null,
+    "result": "pass",
+    "artifacts_found": null,
+    "artifacts_expected": null,
+    "compliance_passed": null,
+    "compliance_total": null,
+    "metrics": {
+      "correction_cycles": 0,
+      "hook_violations": 0,
+      "milestones_complete": 4,
+      "notes": "Full 7-step run at /DEV/finalkiln/ (Linkah). All milestones, 0 corrections. Cleanest run to date."
+    },
+    "workspace": "/DEV/finalkiln/",
+    "baseline": true,
+    "notes": "Manual smoke test \u2014 no automated metrics collection. Used as seed data source for scenarios."
+  },
+  {
+    "timestamp": "2026-03-11T00:00:00Z",
+    "scenario": "manual",
+    "name": "ST11",
+    "duration_seconds": null,
+    "result": "interrupted",
+    "artifacts_found": null,
+    "artifacts_expected": null,
+    "compliance_passed": null,
+    "compliance_total": null,
+    "metrics": {
+      "correction_cycles": 0,
+      "hook_violations": 0,
+      "milestones_complete": 0,
+      "notes": "Fresh start at /DEV/kilnagain/ (Studio Undo). Lost to power failure."
+    },
+    "workspace": "/DEV/kilnagain/",
+    "baseline": false,
+    "notes": "Power failure. 15 findings logged in TWEAKS.md Task 20."
+  },
+  {
+    "timestamp": "2026-03-11T12:00:00Z",
+    "scenario": "manual",
+    "name": "ST11.5",
+    "duration_seconds": null,
+    "result": "interrupted",
+    "artifacts_found": null,
+    "artifacts_expected": null,
+    "compliance_passed": null,
+    "compliance_total": null,
+    "metrics": {
+      "correction_cycles": 0,
+      "hook_violations": 0,
+      "milestones_complete": 1,
+      "notes": "Resume test after spinner schema fix. Reached M1 complete, M2 in progress. Resume flow validated. Lost to power failure."
+    },
+    "workspace": "/DEV/kilnagain/",
+    "baseline": false,
+    "notes": "Resume flow works. Engine correctly detected state and resumed at build. No git commits (all untracked) \u2014 workspace unrecoverable."
+  },
+  {
+    "timestamp": "2026-03-12T19:05:17",
+    "scenario": "s1-research-only",
+    "name": "Research Only",
+    "duration_seconds": 235.6345222,
+    "result": "pass",
+    "artifacts_found": 2,
+    "artifacts_expected": 2,
+    "compliance_passed": null,
+    "compliance_total": null,
+    "metrics": {
+      "artifacts": [
+        {
+          "actual": true,
+          "expected": true,
+          "pass": true,
+          "path": ".kiln/docs/research.md"
+        },
+        {
+          "actual": true,
+          "expected": true,
+          "pass": true,
+          "path": ".kiln/STATE.md"
+        }
+      ]
+    },
+    "workspace": "/tmp/tmp.4qJtLYuwNn",
+    "baseline": true,
+    "notes": null,
+    "purecheck_score": 50,
+    "purecheck_cost_usd": 26.76,
+    "purecheck_agents": 2,
+    "purecheck_deviations": 1,
+    "purecheck_steps": 1,
+    "purecheck_json_path": "/tmp/tmp.4qJtLYuwNn/.kiln/purecheck_deep_tmp4qjtlyuwnn_27275798_2026-03-12.json",
+    "session_jsonl_path": "/home/dev/.claude/projects/-tmp-tmp-4qJtLYuwNn/27275798-f0ce-46a4-8da9-1b591b091c7e.jsonl"
+  },
+  {
+    "timestamp": "2026-03-12T21:34:58",
+    "scenario": "s1-research-only",
+    "name": "Research Only",
+    "duration_seconds": 467.467336613,
+    "result": "pass",
+    "artifacts_found": 2,
+    "artifacts_expected": 2,
+    "compliance_passed": null,
+    "compliance_total": null,
+    "metrics": {
+      "artifacts": [
+        {
+          "actual": true,
+          "expected": true,
+          "pass": true,
+          "path": ".kiln/docs/research.md"
+        },
+        {
+          "actual": true,
+          "expected": true,
+          "pass": true,
+          "path": ".kiln/STATE.md"
+        }
+      ]
+    },
+    "workspace": "/tmp/tmp.qxlC8DC9Do",
+    "baseline": true,
+    "notes": "GitHub baseline (Fredasterehub/kiln current)",
+    "purecheck_score": 50,
+    "purecheck_cost_usd": 57.91,
+    "purecheck_agents": 1,
+    "purecheck_deviations": 1,
+    "purecheck_steps": 1,
+    "purecheck_json_path": "/tmp/tmp.qxlC8DC9Do/.kiln/purecheck_deep_tmpqxlc8dc9do_a3db5732_2026-03-12.json",
+    "session_jsonl_path": "/home/dev/.claude/projects/-tmp-tmp-qxlC8DC9Do/a3db5732-b0e6-445c-80cc-712c3778a55a.jsonl"
+  }
+]

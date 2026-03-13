@@ -8,17 +8,20 @@
 
 <br>
 
+[![Plugin](https://img.shields.io/badge/Plugin-Native_Claude_Code-7C3AED?style=flat)]()
+[![Agents](https://img.shields.io/badge/Agents-25-D4A574?style=flat)]()
 [![Multi-Model](https://img.shields.io/badge/Multi--Model-Opus_·_GPT--5-D4A574?style=flat)]()
-[![Debate](https://img.shields.io/badge/Debate-Models_Argue-C1666B?style=flat)]()
-[![Teams](https://img.shields.io/badge/Teams-Parallel_Workers-4A403A?style=flat)]()
-[![Auto Correct](https://img.shields.io/badge/Auto_Correct-3_Cycles-2d4a3e?style=flat)]()
+[![Teams](https://img.shields.io/badge/Teams-SendMessage-D4A574?style=flat)]()
+[![Hooks](https://img.shields.io/badge/Hooks-14_PreToolUse-D4A574?style=flat)]()
+[![Auto Correct](https://img.shields.io/badge/Auto_Correct-3_Cycles-999?style=flat)]()
+[![Debate](https://img.shields.io/badge/Debate-Models_Argue-999?style=flat)]()
 
 <br>
 
 [![License](https://img.shields.io/badge/License-MIT-D4A574?style=for-the-badge)](LICENSE)
-[![Node](https://img.shields.io/badge/Node-18+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
-[![Claude Code](https://img.shields.io/badge/Claude_Code-Native-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white)](https://claude.ai/claude-code)
+[![Claude Code](https://img.shields.io/badge/Claude_Code-Plugin-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white)](https://claude.ai/claude-code)
 [![Dependencies](https://img.shields.io/badge/Dependencies-Zero-4A403A?style=for-the-badge)]()
+[![Updated](https://img.shields.io/badge/Updated-March_2026-339933?style=for-the-badge)]()
 
 <br>
 
@@ -87,6 +90,21 @@ The result is **working software**, not "vibes."
 ---
 
 ## Recent changes
+
+> [!IMPORTANT]
+> **Plugin Architecture + 25 Agents** (2026-03-13)
+>
+> Kiln is now a native Claude Code plugin. 25 agents, 14 PreToolUse hooks, SendMessage-based inter-agent communication, stateful auto-resume, and file ownership — all enforced at the platform level.
+
+- Full rewrite as a Claude Code plugin (`plugins/kiln/`)
+- 25 agent definitions: brainstorm, research, architecture (dual-model debate), build, validate
+- 14 PreToolUse hooks via `enforce-pipeline.sh` — runtime guardrails, not prompt engineering
+- `SendMessage` replaces file polling — agents push updates directly
+- File ownership model: each agent owns specific artifacts and pushes changes
+- `TaskCreate`/`TaskUpdate`/`TaskList` for build iteration tracking
+- Stateful auto-resume via `.kiln/STATE.md` — survives shutdowns
+- `anvil` CLI for plugin management
+- `kiln-forge` and `kiln-pipeline` skill modules
 
 > [!NOTE]
 > **Terminal UX Overhaul** (2026-02-17)

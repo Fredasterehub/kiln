@@ -1,0 +1,75 @@
+{
+  "description": "Structural health checks for quick plugin integrity verification",
+  "checks": [
+    {
+      "id": "agent-count",
+      "name": "Agent file count",
+      "command": "ls ${CLAUDE_PLUGIN_ROOT}/../agents/*.md | wc -l",
+      "expected": 23,
+      "operator": "eq"
+    },
+    {
+      "id": "blueprint-count",
+      "name": "Blueprint file count",
+      "command": "ls ${CLAUDE_PLUGIN_ROOT}/../skills/kiln-pipeline/references/blueprints/*.md | wc -l",
+      "expected": 7,
+      "operator": "eq"
+    },
+    {
+      "id": "agents-json-parse",
+      "name": "agents.json is valid JSON",
+      "command": "jq empty ${CLAUDE_PLUGIN_ROOT}/../skills/kiln-pipeline/data/agents.json",
+      "expected": 0,
+      "operator": "exit_code"
+    },
+    {
+      "id": "spinner-verbs-parse",
+      "name": "spinner-verbs.json is valid JSON",
+      "command": "jq empty ${CLAUDE_PLUGIN_ROOT}/../skills/kiln-pipeline/data/spinner-verbs.json",
+      "expected": 0,
+      "operator": "exit_code"
+    },
+    {
+      "id": "lore-json-parse",
+      "name": "lore.json is valid JSON",
+      "command": "jq empty ${CLAUDE_PLUGIN_ROOT}/../skills/kiln-pipeline/data/lore.json",
+      "expected": 0,
+      "operator": "exit_code"
+    },
+    {
+      "id": "hooks-json-parse",
+      "name": "hooks.json is valid JSON",
+      "command": "jq empty ${CLAUDE_PLUGIN_ROOT}/../hooks/hooks.json",
+      "expected": 0,
+      "operator": "exit_code"
+    },
+    {
+      "id": "enforce-executable",
+      "name": "enforce-pipeline.sh is executable",
+      "command": "test -x ${CLAUDE_PLUGIN_ROOT}/../skills/kiln-pipeline/scripts/enforce-pipeline.sh",
+      "expected": 0,
+      "operator": "exit_code"
+    },
+    {
+      "id": "kb-executable",
+      "name": "kb.sh is executable",
+      "command": "test -x ${CLAUDE_PLUGIN_ROOT}/../skills/kiln-pipeline/scripts/kb.sh",
+      "expected": 0,
+      "operator": "exit_code"
+    },
+    {
+      "id": "plugin-json-parse",
+      "name": "plugin.json is valid JSON",
+      "command": "jq empty ${CLAUDE_PLUGIN_ROOT}/../.claude-plugin/plugin.json",
+      "expected": 0,
+      "operator": "exit_code"
+    },
+    {
+      "id": "hook-count",
+      "name": "Hook count in enforce-pipeline.sh",
+      "command": "grep -c '^# Hook' ${CLAUDE_PLUGIN_ROOT}/../skills/kiln-pipeline/scripts/enforce-pipeline.sh",
+      "expected": 13,
+      "operator": "eq"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "kiln",
+  "version": "1.0.5",
+  "description": "Multi-modal software creation pipeline. From idea to deployed code in 7 autonomous steps.",
+  "author": {
+    "name": "Kilntop"
+  }
+}

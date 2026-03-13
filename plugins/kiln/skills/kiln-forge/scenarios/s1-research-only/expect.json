@@ -1,0 +1,42 @@
+{
+  "scenario": "S1",
+  "name": "Research Only",
+  "description": "Tests MI6 + field agents, progressive synthesis. Starts from Steps 1-2 complete.",
+  "timeout_seconds": 600,
+  "seed_source": "/DEV/finalkiln/.kiln/",
+  "seed_state": {
+    "stage": "research",
+    "build_iteration": 0,
+    "correction_cycle": 0,
+    "milestone_count": 0,
+    "milestones_complete": 0
+  },
+  "seed_artifacts": [
+    ".kiln/STATE.md",
+    ".kiln/docs/VISION.md",
+    ".kiln/docs/vision-notes.md",
+    ".kiln/docs/vision-priorities.md",
+    ".kiln/docs/codebase-snapshot.md",
+    ".kiln/docs/decisions.md"
+  ],
+  "artifacts": [
+    {"path": ".kiln/docs/research.md", "exists": true, "min_lines": 5},
+    {"path": ".kiln/STATE.md", "exists": true, "contains": "stage: architecture"}
+  ],
+  "compliance": [
+    {
+      "name": "research_complete_signal",
+      "check": "MI6 sends RESEARCH_COMPLETE to team-lead",
+      "target": true
+    },
+    {
+      "name": "field_agents_spawned",
+      "check": "At least 1 field agent spawned (or MI6 skips with 0 topics)",
+      "target": true
+    }
+  ],
+  "metrics": {
+    "duration_target_seconds": 600,
+    "hook_violations_target": 0
+  }
+}

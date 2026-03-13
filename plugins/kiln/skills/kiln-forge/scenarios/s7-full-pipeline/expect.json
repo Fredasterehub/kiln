@@ -1,0 +1,61 @@
+{
+  "scenario": "S7",
+  "name": "Full Pipeline",
+  "description": "Tests ALL 7 pipeline steps from onboarding to completion. Full smoke test.",
+  "timeout_seconds": 5400,
+  "seed_state": {
+    "stage": "onboarding",
+    "build_iteration": 0,
+    "correction_cycle": 0,
+    "milestone_count": 0,
+    "milestones_complete": 0
+  },
+  "artifacts": [
+    {"path": ".kiln/STATE.md", "exists": true},
+    {"path": ".kiln/MEMORY.md", "exists": true},
+    {"path": ".kiln/docs/codebase-snapshot.md", "exists": true},
+    {"path": ".kiln/docs/decisions.md", "exists": true},
+    {"path": ".kiln/docs/VISION.md", "exists": true},
+    {"path": ".kiln/docs/vision-notes.md", "exists": true},
+    {"path": ".kiln/docs/vision-priorities.md", "exists": true},
+    {"path": ".kiln/docs/research.md", "exists": true},
+    {"path": ".kiln/docs/architecture.md", "exists": true},
+    {"path": ".kiln/docs/tech-stack.md", "exists": true},
+    {"path": ".kiln/plans/master-plan.md", "exists": true},
+    {"path": ".kiln/docs/codebase-state.md", "exists": true},
+    {"path": ".kiln/docs/patterns.md", "exists": true},
+    {"path": ".kiln/validation/report.md", "exists": true},
+    {"path": ".kiln/REPORT.md", "exists": true}
+  ],
+  "compliance": [
+    {
+      "name": "all_steps_complete",
+      "check": "Pipeline reaches completion (stage: complete or report)",
+      "target": true
+    },
+    {
+      "name": "hook_violations",
+      "check": "Zero hook violations during full run",
+      "target": 0
+    },
+    {
+      "name": "delegation_compliance",
+      "check": "krs-one never uses Write/Edit tools directly",
+      "target": true
+    },
+    {
+      "name": "prompt_skeleton",
+      "check": "At least 4/6 codex prompt skeleton sections present",
+      "target": 4
+    },
+    {
+      "name": "validation_passed",
+      "check": "Step 6 validation report produced",
+      "target": true
+    }
+  ],
+  "metrics": {
+    "duration_target_seconds": 5400,
+    "hook_violations_target": 0
+  }
+}

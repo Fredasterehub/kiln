@@ -1,0 +1,355 @@
+{
+  "version": "1.0",
+  "methods": [
+    {
+      "id": 1,
+      "category": "collaboration",
+      "name": "Stakeholder Round Table",
+      "description": "Convene multiple personas to contribute diverse perspectives - essential for requirements gathering and finding balanced solutions across competing interests",
+      "output_pattern": "perspectives > synthesis > alignment"
+    },
+    {
+      "id": 2,
+      "category": "collaboration",
+      "name": "Expert Panel Review",
+      "description": "Assemble domain experts for deep specialized analysis - ideal when technical depth and peer review quality are needed",
+      "output_pattern": "expert views > consensus > recommendations"
+    },
+    {
+      "id": 3,
+      "category": "collaboration",
+      "name": "Debate Club Showdown",
+      "description": "Two personas argue opposing positions while a moderator scores points - great for exploring controversial decisions and finding middle ground",
+      "output_pattern": "thesis > antithesis > synthesis"
+    },
+    {
+      "id": 4,
+      "category": "collaboration",
+      "name": "User Persona Focus Group",
+      "description": "Gather your product's user personas to react to proposals and share frustrations - essential for validating features and discovering unmet needs",
+      "output_pattern": "reactions > concerns > priorities"
+    },
+    {
+      "id": 5,
+      "category": "collaboration",
+      "name": "Time Traveler Council",
+      "description": "Past-you and future-you advise present-you on decisions - powerful for gaining perspective on long-term consequences vs short-term pressures",
+      "output_pattern": "past wisdom > present choice > future impact"
+    },
+    {
+      "id": 6,
+      "category": "collaboration",
+      "name": "Cross-Functional War Room",
+      "description": "Product manager + engineer + designer tackle a problem together - reveals trade-offs between feasibility desirability and viability",
+      "output_pattern": "constraints > trade-offs > balanced solution"
+    },
+    {
+      "id": 7,
+      "category": "collaboration",
+      "name": "Mentor and Apprentice",
+      "description": "Senior expert teaches junior while junior asks naive questions - surfaces hidden assumptions through teaching",
+      "output_pattern": "explanation > questions > deeper understanding"
+    },
+    {
+      "id": 8,
+      "category": "collaboration",
+      "name": "Good Cop Bad Cop",
+      "description": "Supportive persona and critical persona alternate - finds both strengths to build on and weaknesses to address",
+      "output_pattern": "encouragement > criticism > balanced view"
+    },
+    {
+      "id": 9,
+      "category": "collaboration",
+      "name": "Improv Yes-And",
+      "description": "Multiple personas build on each other's ideas without blocking - generates unexpected creative directions through collaborative building",
+      "output_pattern": "idea > build > build > surprising result"
+    },
+    {
+      "id": 10,
+      "category": "collaboration",
+      "name": "Customer Support Theater",
+      "description": "Angry customer and support rep roleplay to find pain points - reveals real user frustrations and service gaps",
+      "output_pattern": "complaint > investigation > resolution > prevention"
+    },
+    {
+      "id": 11,
+      "category": "advanced",
+      "name": "Tree of Thoughts",
+      "description": "Explore multiple reasoning paths simultaneously then evaluate and select the best - perfect for complex problems with multiple valid approaches",
+      "output_pattern": "paths > evaluation > selection"
+    },
+    {
+      "id": 12,
+      "category": "advanced",
+      "name": "Graph of Thoughts",
+      "description": "Model reasoning as an interconnected network of ideas to reveal hidden relationships - ideal for systems thinking and discovering emergent patterns",
+      "output_pattern": "nodes > connections > patterns"
+    },
+    {
+      "id": 13,
+      "category": "advanced",
+      "name": "Thread of Thought",
+      "description": "Maintain coherent reasoning across long contexts by weaving a continuous narrative thread - essential for RAG systems and maintaining consistency",
+      "output_pattern": "context > thread > synthesis"
+    },
+    {
+      "id": 14,
+      "category": "advanced",
+      "name": "Self-Consistency Validation",
+      "description": "Generate multiple independent approaches then compare for consistency - crucial for high-stakes decisions where verification matters",
+      "output_pattern": "approaches > comparison > consensus"
+    },
+    {
+      "id": 15,
+      "category": "advanced",
+      "name": "Meta-Prompting Analysis",
+      "description": "Step back to analyze the approach structure and methodology itself - valuable for optimizing prompts and improving problem-solving",
+      "output_pattern": "current > analysis > optimization"
+    },
+    {
+      "id": 16,
+      "category": "advanced",
+      "name": "Reasoning via Planning",
+      "description": "Build a reasoning tree guided by world models and goal states - excellent for strategic planning and sequential decision-making",
+      "output_pattern": "model > planning > strategy"
+    },
+    {
+      "id": 17,
+      "category": "competitive",
+      "name": "Red Team vs Blue Team",
+      "description": "Adversarial attack-defend analysis to find vulnerabilities - critical for security testing and building robust solutions",
+      "output_pattern": "defense > attack > hardening"
+    },
+    {
+      "id": 18,
+      "category": "competitive",
+      "name": "Shark Tank Pitch",
+      "description": "Entrepreneur pitches to skeptical investors who poke holes - stress-tests business viability and forces clarity on value proposition",
+      "output_pattern": "pitch > challenges > refinement"
+    },
+    {
+      "id": 19,
+      "category": "competitive",
+      "name": "Code Review Gauntlet",
+      "description": "Senior devs with different philosophies review the same code - surfaces style debates and finds consensus on best practices",
+      "output_pattern": "reviews > debates > standards"
+    },
+    {
+      "id": 20,
+      "category": "technical",
+      "name": "Architecture Decision Records",
+      "description": "Multiple architect personas propose and debate architectural choices with explicit trade-offs - ensures decisions are well-reasoned and documented",
+      "output_pattern": "options > trade-offs > decision > rationale"
+    },
+    {
+      "id": 21,
+      "category": "technical",
+      "name": "Rubber Duck Debugging Evolved",
+      "description": "Explain your code to progressively more technical ducks until you find the bug - forces clarity at multiple abstraction levels",
+      "output_pattern": "simple > detailed > technical > aha"
+    },
+    {
+      "id": 22,
+      "category": "technical",
+      "name": "Algorithm Olympics",
+      "description": "Multiple approaches compete on the same problem with benchmarks - finds optimal solution through direct comparison",
+      "output_pattern": "implementations > benchmarks > winner"
+    },
+    {
+      "id": 23,
+      "category": "technical",
+      "name": "Security Audit Personas",
+      "description": "Hacker + defender + auditor examine system from different threat models - comprehensive security review from multiple angles",
+      "output_pattern": "vulnerabilities > defenses > compliance"
+    },
+    {
+      "id": 24,
+      "category": "technical",
+      "name": "Performance Profiler Panel",
+      "description": "Database expert + frontend specialist + DevOps engineer diagnose slowness - finds bottlenecks across the full stack",
+      "output_pattern": "symptoms > analysis > optimizations"
+    },
+    {
+      "id": 25,
+      "category": "creative",
+      "name": "SCAMPER Method",
+      "description": "Apply seven creativity lenses (Substitute/Combine/Adapt/Modify/Put/Eliminate/Reverse) - systematic ideation for product innovation",
+      "output_pattern": "S > C > A > M > P > E > R"
+    },
+    {
+      "id": 26,
+      "category": "creative",
+      "name": "Reverse Engineering",
+      "description": "Work backwards from desired outcome to find implementation path - powerful for goal achievement and understanding endpoints",
+      "output_pattern": "end state > steps backward > path forward"
+    },
+    {
+      "id": 27,
+      "category": "creative",
+      "name": "What If Scenarios",
+      "description": "Explore alternative realities to understand possibilities and implications - valuable for contingency planning and exploration",
+      "output_pattern": "scenarios > implications > insights"
+    },
+    {
+      "id": 28,
+      "category": "creative",
+      "name": "Random Input Stimulus",
+      "description": "Inject unrelated concepts to spark unexpected connections - breaks creative blocks through forced lateral thinking",
+      "output_pattern": "random word > associations > novel ideas"
+    },
+    {
+      "id": 29,
+      "category": "creative",
+      "name": "Exquisite Corpse Brainstorm",
+      "description": "Each persona adds to the idea seeing only the previous contribution - generates surprising combinations through constrained collaboration",
+      "output_pattern": "contribution > handoff > contribution > surprise"
+    },
+    {
+      "id": 30,
+      "category": "creative",
+      "name": "Genre Mashup",
+      "description": "Combine two unrelated domains to find fresh approaches - innovation through unexpected cross-pollination",
+      "output_pattern": "domain A + domain B > hybrid insights"
+    },
+    {
+      "id": 31,
+      "category": "research",
+      "name": "Literature Review Personas",
+      "description": "Optimist researcher + skeptic researcher + synthesizer review sources - balanced assessment of evidence quality",
+      "output_pattern": "sources > critiques > synthesis"
+    },
+    {
+      "id": 32,
+      "category": "research",
+      "name": "Thesis Defense Simulation",
+      "description": "Student defends hypothesis against committee with different concerns - stress-tests research methodology and conclusions",
+      "output_pattern": "thesis > challenges > defense > refinements"
+    },
+    {
+      "id": 33,
+      "category": "research",
+      "name": "Comparative Analysis Matrix",
+      "description": "Multiple analysts evaluate options against weighted criteria - structured decision-making with explicit scoring",
+      "output_pattern": "options > criteria > scores > recommendation"
+    },
+    {
+      "id": 34,
+      "category": "risk",
+      "name": "Pre-mortem Analysis",
+      "description": "Imagine future failure then work backwards to prevent it - powerful technique for risk mitigation before major launches",
+      "output_pattern": "failure scenario > causes > prevention"
+    },
+    {
+      "id": 35,
+      "category": "risk",
+      "name": "Failure Mode Analysis",
+      "description": "Systematically explore how each component could fail - critical for reliability engineering and safety-critical systems",
+      "output_pattern": "components > failures > prevention"
+    },
+    {
+      "id": 36,
+      "category": "risk",
+      "name": "Challenge from Critical Perspective",
+      "description": "Play devil's advocate to stress-test ideas and find weaknesses - essential for overcoming groupthink",
+      "output_pattern": "assumptions > challenges > strengthening"
+    },
+    {
+      "id": 37,
+      "category": "risk",
+      "name": "Identify Potential Risks",
+      "description": "Brainstorm what could go wrong across all categories - fundamental for project planning and deployment preparation",
+      "output_pattern": "categories > risks > mitigations"
+    },
+    {
+      "id": 38,
+      "category": "risk",
+      "name": "Chaos Monkey Scenarios",
+      "description": "Deliberately break things to test resilience and recovery - ensures systems handle failures gracefully",
+      "output_pattern": "break > observe > harden"
+    },
+    {
+      "id": 39,
+      "category": "core",
+      "name": "First Principles Analysis",
+      "description": "Strip away assumptions to rebuild from fundamental truths - breakthrough technique for innovation and solving impossible problems",
+      "output_pattern": "assumptions > truths > new approach"
+    },
+    {
+      "id": 40,
+      "category": "core",
+      "name": "5 Whys Deep Dive",
+      "description": "Repeatedly ask why to drill down to root causes - simple but powerful for understanding failures",
+      "output_pattern": "why chain > root cause > solution"
+    },
+    {
+      "id": 41,
+      "category": "core",
+      "name": "Socratic Questioning",
+      "description": "Use targeted questions to reveal hidden assumptions and guide discovery - excellent for teaching and self-discovery",
+      "output_pattern": "questions > revelations > understanding"
+    },
+    {
+      "id": 42,
+      "category": "core",
+      "name": "Critique and Refine",
+      "description": "Systematic review to identify strengths and weaknesses then improve - standard quality check for drafts",
+      "output_pattern": "strengths/weaknesses > improvements > refined"
+    },
+    {
+      "id": 43,
+      "category": "core",
+      "name": "Explain Reasoning",
+      "description": "Walk through step-by-step thinking to show how conclusions were reached - crucial for transparency",
+      "output_pattern": "steps > logic > conclusion"
+    },
+    {
+      "id": 44,
+      "category": "core",
+      "name": "Expand or Contract for Audience",
+      "description": "Dynamically adjust detail level and technical depth for target audience - matches content to reader capabilities",
+      "output_pattern": "audience > adjustments > refined content"
+    },
+    {
+      "id": 45,
+      "category": "learning",
+      "name": "Feynman Technique",
+      "description": "Explain complex concepts simply as if teaching a child - the ultimate test of true understanding",
+      "output_pattern": "complex > simple > gaps > mastery"
+    },
+    {
+      "id": 46,
+      "category": "learning",
+      "name": "Active Recall Testing",
+      "description": "Test understanding without references to verify true knowledge - essential for identifying gaps",
+      "output_pattern": "test > gaps > reinforcement"
+    },
+    {
+      "id": 47,
+      "category": "philosophical",
+      "name": "Occam's Razor Application",
+      "description": "Find the simplest sufficient explanation by eliminating unnecessary complexity - essential for debugging",
+      "output_pattern": "options > simplification > selection"
+    },
+    {
+      "id": 48,
+      "category": "philosophical",
+      "name": "Trolley Problem Variations",
+      "description": "Explore ethical trade-offs through moral dilemmas - valuable for understanding values and difficult decisions",
+      "output_pattern": "dilemma > analysis > decision"
+    },
+    {
+      "id": 49,
+      "category": "retrospective",
+      "name": "Hindsight Reflection",
+      "description": "Imagine looking back from the future to gain perspective - powerful for project reviews",
+      "output_pattern": "future view > insights > application"
+    },
+    {
+      "id": 50,
+      "category": "retrospective",
+      "name": "Lessons Learned Extraction",
+      "description": "Systematically identify key takeaways and actionable improvements - essential for continuous improvement",
+      "output_pattern": "experience > lessons > actions"
+    }
+  ]
+}
