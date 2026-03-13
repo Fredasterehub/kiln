@@ -8,5 +8,9 @@
 tracks/
 .planning/
 
+# Internal plugin tooling
+plugins/kiln/skills/kiln-forge/
+plugins/kiln/skills/kiln-pipeline/
+
 # OS
 .DS_Store
