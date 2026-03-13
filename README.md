@@ -8,18 +8,16 @@
 
 <br>
 
-[![Plugin](https://img.shields.io/badge/Plugin-Native_Claude_Code-7C3AED?style=flat)]()
-[![Agents](https://img.shields.io/badge/Agents-25-D4A574?style=flat)]()
-[![Multi-Model](https://img.shields.io/badge/Multi--Model-Opus_·_GPT--5-D4A574?style=flat)]()
-[![Teams](https://img.shields.io/badge/Teams-SendMessage-D4A574?style=flat)]()
-[![Hooks](https://img.shields.io/badge/Hooks-14_PreToolUse-D4A574?style=flat)]()
-[![Auto Correct](https://img.shields.io/badge/Auto_Correct-3_Cycles-999?style=flat)]()
+[![Multi-Model](https://img.shields.io/badge/Multi--Model-Opus_·_GPT--5-E8A317?style=flat)]()
 [![Debate](https://img.shields.io/badge/Debate-Models_Argue-999?style=flat)]()
+[![Teams](https://img.shields.io/badge/Teams-Parallel_Workers-E8A317?style=flat)]()
+[![Auto Correct](https://img.shields.io/badge/Auto_Correct-3_Cycles-999?style=flat)]()
 
 <br>
 
 [![License](https://img.shields.io/badge/License-MIT-D4A574?style=for-the-badge)](LICENSE)
-[![Claude Code](https://img.shields.io/badge/Claude_Code-Plugin-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white)](https://claude.ai/claude-code)
+[![Node](https://img.shields.io/badge/Node-18+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
+[![Claude Code](https://img.shields.io/badge/Claude_Code-Native-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white)](https://claude.ai/claude-code)
 [![Dependencies](https://img.shields.io/badge/Dependencies-Zero-4A403A?style=for-the-badge)]()
 [![Status](https://img.shields.io/badge/Status-Experimental-E8A317?style=for-the-badge)]()
 [![Updated](https://img.shields.io/badge/Updated-March_2026-E8A317?style=for-the-badge)]()
