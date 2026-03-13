@@ -126,7 +126,7 @@ In Kiln, every file has an **owner**. Rakim owns `codebase-state.md`. Clio owns 
 Other tools make every agent read the same files and re&#8209;reason. Kiln's agents **learn what changed directly**, in the context where it matters.
 
 ### 🚦 Runtime Enforcement, Not Gentle Hints
-We have **14 PreToolUse hooks** hardwired into the plugin. When an agent tries to do something it shouldn't&mdash;a planner writing code, a builder accessing system config&mdash;the hook **blocks it with a helpful error message**. This isn't prompt engineering. It's platform&#8209;level guardrailing.
+We have **13 PreToolUse hooks** hardwired into the plugin. When an agent tries to do something it shouldn't&mdash;a planner writing code, a builder accessing system config&mdash;the hook **blocks it with a helpful error message**. This isn't prompt engineering. It's platform&#8209;level guardrailing.
 
 ### 🔁 Stateful Auto&#8209;Resume, Not "Start Over"
 Kiln writes every decision to `.kiln/STATE.md`. Shut down Claude Code. Reboot your machine. Come back tomorrow. Run `/kiln-fire` and **resume exactly where you left off**, with every agent remembering its place in the conversation.
@@ -224,7 +224,7 @@ Seven steps. The first two are yours. The rest run on their own.
 <summary>🏠 <strong>Step 1 &mdash; Onboarding</strong> &nbsp; <sub>automated</sub></summary>
 <br>
 
-**Alpha** detects the project, creates the `.kiln/` structure, and if it's brownfield, spawns **Mnemosyne** to map the existing codebase with 5 parallel scouts (Atlas, Nexus, Spine, Signal, Bedrock). Greenfield skips straight through.
+**Alpha** detects the project, creates the `.kiln/` structure, and if it's brownfield, spawns **Mnemosyne** to map the existing codebase with 3 parallel scouts (Maiev, Curie, Medivh). Greenfield skips straight through.
 
 </details>
 
@@ -232,11 +232,11 @@ Seven steps. The first two are yours. The rest run on their own.
 <summary>🎨 <strong>Step 2 &mdash; Brainstorm</strong> &nbsp; <sub>interactive</sub></summary>
 <br>
 
-You describe what you want. **Da Vinci** facilitates with 62 techniques across 10 categories. Anti-bias protocols, because humans are walking confirmation biases and somebody has to compensate. **Visionary** watches the conversation and builds the architectural mental model in real time.
+You describe what you want. **Da Vinci** facilitates with 62 techniques across 10 categories. Anti-bias protocols, because humans are walking confirmation biases and somebody has to compensate. **Clio** watches the conversation and accumulates the approved vision in real time.
 
 Produces `VISION.md` &mdash; problem, users, goals, constraints, stack, success criteria. Everything that matters. Nothing that doesn't.
 
-> *Behind the scenes: Da Vinci messages Clio via SendMessage with each approved section. Clio owns VISION.md and updates it silently. No polling. No stale reads.*
+> *Behind the scenes: Da Vinci messages Clio via SendMessage with each approved section. Clio owns VISION.md and serializes it to disk. No polling. No stale reads.*
 
 </details>
 
@@ -256,9 +256,9 @@ Produces `VISION.md` &mdash; problem, users, goals, constraints, stack, success 
 - **Confucius** (Opus 4.6) &mdash; Claude perspective
 - **Sun Tzu** (GPT-5.4) &mdash; GPT perspective
 
-**Socrates** makes them argue. **Plato** writes down whatever survives. **Athena** validates across 7 dimensions. If validation fails, Aristotle loops with feedback (up to 3 retries). You review and approve before I spend a single Codex token. I'm ancient, not wasteful.
+**Plato** synthesizes whatever survives into the master plan. **Athena** validates across 5 dimensions. If validation fails, Aristotle loops with feedback (up to 3 retries). You review and approve before I spend a single Codex token. I'm ancient, not wasteful.
 
-> *Behind the scenes: Aristotle coordinates a native team. Confucius and Sun Tzu plan in parallel. Socrates debates. Plato synthesises. Athena validates. All via SendMessage. All stateful. All resumable.*
+> *Behind the scenes: Aristotle coordinates a native team. Numerobis bootstraps architecture docs. Confucius and Sun Tzu plan in parallel. Plato synthesises. Athena validates. All via SendMessage. All stateful. All resumable.*
 
 </details>
 
@@ -266,7 +266,7 @@ Produces `VISION.md` &mdash; problem, users, goals, constraints, stack, success 
 <summary>⚡ <strong>Step 5 &mdash; Build</strong> &nbsp; <sub>automated, iterative</sub></summary>
 <br>
 
-**KRS-One** runs each build iteration. **Codex** implements. **Sphinx** reviews. **Architect** and **Sentinel** keep watch on design integrity. Each iteration gets a kill streak name &mdash; first-blood, combo, super-combo, hyper-combo... all the way to ultra-combo. If your project takes 20+ iterations, they wrap around. I've seen it happen. It was beautiful and slightly concerning.
+**KRS-One** runs each build iteration. **Codex** implements. **Sphinx** reviews. **Rakim** and **Sentinel** keep watch on design integrity. Each iteration gets a kill streak name &mdash; first-blood, combo, super-combo, hyper-combo... all the way to ultra-combo. If your project takes 20+ iterations, they wrap around. I've seen it happen. It was beautiful and slightly concerning.
 
 > *Behind the scenes: KRS&#8209;One scopes assignments as structured XML. Codex implements. Sphinx reviews. Rakim and Sentinel update living docs. Every agent communicates directly. No boss-as-relay bottleneck.*
 
@@ -296,40 +296,39 @@ I named them after your historical figures. Philosophers, strategists, mythologi
 
 | | Alias | Model | Role |
 |:--|:--|:--|:--|
-| 🏠 | **Alpha** | Opus | Onboarding &mdash; project detection, .kiln/ setup, brownfield routing |
+| | | | **Onboarding** |
+| 🏠 | **Alpha** | Opus | Onboarding boss &mdash; project detection, .kiln/ setup, brownfield routing |
+| 🗺️ | **Mnemosyne** | Opus | Identity scanner &amp; codebase coordinator &mdash; spawns scouts (Maiev, Curie, Medivh) |
+| 🔍 | **Maiev** | Sonnet | Anatomy scout &mdash; maps project structure, modules, entry points |
+| 🔬 | **Curie** | Sonnet | Health scout &mdash; dependencies, test coverage, CI/CD, tech debt |
+| 🔮 | **Medivh** | Sonnet | Nervous system scout &mdash; APIs, data flow, integrations, state |
+| | | | **Brainstorm** |
 | 🎨 | **Da Vinci** | Opus | Brainstorm facilitator &mdash; 62 techniques, anti-bias protocols |
-| 👁️ | **Visionary** | Opus | Persistent mind &mdash; builds architectural vision during brainstorm |
-| 🛡️ | **Sentinel** | Opus | Persistent mind &mdash; guards design integrity across stages |
-| 🗺️ | **Mnemosyne** | Opus | Brownfield codebase mapper &mdash; spawns 5 scouts |
-| 🔍 | **MI6** | Opus | Research coordinator &mdash; dispatches field agents |
-| 📋 | **Aristotle** | Opus | Architecture coordinator &mdash; planners, debate, synthesis, validation |
-| 📜 | **Confucius** | Opus | Claude-side planner |
-| ⚔️ | **Sun Tzu** | Sonnet | GPT-side planner |
-| 💬 | **Socrates** | Opus | Debate moderator |
-| 🔮 | **Plato** | Sonnet | Plan synthesizer |
-| 🏛️ | **Athena** | Opus | Plan validator &mdash; 7-dimension quality gate |
-| 🎤 | **KRS-One** | Opus | Build coordinator &mdash; kill streak iterations |
-| ⌨️ | **Codex** | Sonnet | Code implementer |
-| 👁️ | **Sphinx** | Sonnet | Code reviewer |
-| 🏗️ | **Architect** | Opus | Persistent mind &mdash; design integrity across stages |
-| 🛡️ | **Argus** | Opus | E2E validator &mdash; tests, corrections, final report |
-| 🔨 | **Hephaestus** | Sonnet | Design QA &mdash; 5-axis review, conditional spawn by Argus |
-| 📋 | **Omega** | Opus | Delivery report compiler |
-
-<details>
-<summary><sub>Supporting cast &mdash; 6 more agents</sub></summary>
-<br>
-
-| | Alias | Model | Role |
-|:--|:--|:--|:--|
+| 📜 | **Clio** | Opus | Foundation curator &mdash; owns VISION.md, accumulates approved sections |
+| | | | **Research** |
+| 🔍 | **MI6** | Opus | Research coordinator &mdash; dispatches field agents, validates findings |
 | 🕵️ | **Field Agent** | Sonnet | Research instance &mdash; spawned by MI6 as needed |
-| 🗺️ | **Atlas** | Sonnet | Codebase scout &mdash; maps structure for Mnemosyne |
-| 🔗 | **Nexus** | Sonnet | Dependency scout &mdash; maps connections |
-| 🦴 | **Spine** | Sonnet | Architecture scout &mdash; maps patterns |
-| 📡 | **Signal** | Sonnet | Quality scout &mdash; maps concerns |
-| 🪨 | **Bedrock** | Sonnet | Infrastructure scout &mdash; maps config |
-
-</details>
+| | | | **Architecture** |
+| 📋 | **Aristotle** | Opus | Architecture coordinator &mdash; planners, synthesis, validation |
+| 🏛️ | **Numerobis** | Opus | Persistent mind &mdash; technical authority, owns architecture docs |
+| 📜 | **Confucius** | Opus | Claude-side planner |
+| ⚔️ | **Sun Tzu** | Sonnet | GPT-side planner (Codex CLI wrapper) |
+| 🔮 | **Plato** | Opus | Plan synthesizer |
+| 🏛️ | **Athena** | Opus | Plan validator &mdash; 5-dimension quality gate |
+| | | | **Build** |
+| 🎤 | **KRS-One** | Opus | Build boss &mdash; kill streak iterations, scopes assignments |
+| 🎙️ | **Rakim** | Opus | Persistent mind &mdash; codebase state authority, owns codebase-state.md |
+| 🛡️ | **Sentinel** | Sonnet | Persistent mind &mdash; quality guardian, owns patterns &amp; pitfalls |
+| ⌨️ | **Codex** | Sonnet | Code implementer (Codex CLI wrapper) |
+| 👁️ | **Sphinx** | Sonnet | Quick verifier &mdash; build/test checks after Codex implements |
+| | | | **Validate** |
+| 👁️ | **Argus** | Sonnet | E2E validator &mdash; Playwright tests against acceptance criteria |
+| 🔨 | **Hephaestus** | Sonnet | Design QA &mdash; 5-axis review, conditional spawn by Argus |
+| 🏗️ | **Zoxea** | Sonnet | Architecture verifier &mdash; compares implementation against design |
+| | | | **Report** |
+| 📋 | **Omega** | Opus | Delivery report compiler |
+| | | | **Cross-cutting** |
+| 📚 | **Thoth** | Haiku | Archivist &mdash; fire-and-forget writes to .kiln/archive/ |
 
 <sub>25 total. I keep count. It's a compulsion.</sub>
 
@@ -365,23 +364,24 @@ Resume anytime with `/kiln-fire`. I don't forget. It's not a feature. It's what 
 ```
 kiln/
 ├── .claude-plugin/
-│   └── marketplace.json     Marketplace manifest
+│   └── marketplace.json       Marketplace manifest
 ├── plugins/kiln/
 │   ├── .claude-plugin/
-│   │   └── plugin.json      Plugin manifest
-│   ├── agents/              24 agent definitions
+│   │   └── plugin.json        Plugin manifest
+│   ├── agents/                25 agent definitions
 │   ├── commands/
-│   │   ├── kiln-fire.md     Launch / resume
-│   │   └── kiln-doctor.md   Pre-flight check
+│   │   ├── kiln-fire.md       Launch / resume
+│   │   └── kiln-doctor.md     Pre-flight check
 │   ├── hooks/
-│   │   └── hooks.json       13 enforcement rules
+│   │   ├── hooks.json         2 PreToolUse hook entries
+│   │   └── webfetch-responsive.sh
 │   └── skills/
 │       └── kiln-pipeline/
-│           ├── SKILL.md     Pipeline state machine
-│           ├── data/        Brainstorming + elicitation data
-│           ├── references/  Step definitions, blueprints, kill streaks
-│           └── scripts/     Hook enforcement script
-├── install.sh               One-liner installer
+│           ├── SKILL.md       Pipeline state machine
+│           ├── data/          Brainstorming + elicitation data
+│           ├── references/    Step definitions, blueprints, kill streaks, design
+│           └── scripts/       enforce-pipeline.sh (13 rules), kb.sh
+├── install.sh                 One-liner installer
 ├── README.md
 └── docs/
 ```
@@ -489,7 +489,7 @@ Kiln is a native Claude Code plugin that leverages every platform primitive:
 - **Teams**: `TeamCreate` per step with persistent agents
 - **Messaging**: `SendMessage` for all inter&#8209;agent communication (one message at a time, ordered)
 - **Tasklists**: `TaskCreate`/`Update`/`List` for build iterations and validation
-- **Hooks**: 14 PreToolUse rules enforced via `enforce-pipeline.sh`
+- **Hooks**: 13 PreToolUse rules enforced via `enforce-pipeline.sh`
 - **State**: `.kiln/STATE.md` with auto&#8209;resume via `skill` path
 - **File Ownership**: Each agent owns specific files and pushes updates
 

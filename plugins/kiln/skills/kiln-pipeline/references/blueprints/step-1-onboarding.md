@@ -1,0 +1,40 @@
+# Blueprint: onboarding
+
+## Meta
+- **Team name**: onboarding
+- **Artifact directory**: .kiln/
+- **Expected output**: .kiln/STATE.md, MEMORY.md (Kiln Pipeline section), .kiln/docs/codebase-snapshot.md, .kiln/docs/decisions.md, .kiln/docs/pitfalls.md (brownfield only)
+- **Inputs from previous steps**: none (first step)
+- **Workflow**: three-phase (persistent mind bootstraps, boss greets, scouts scan)
+
+## Agent Roster
+
+| Name | Role | Phase | Model |
+|------|------|-------|-------|
+| mnemosyne | Persistent mind. Identity scan on spawn (<2s). Coordinates deep scanning via scouts if alpha requests it. | A | opus |
+| alpha | Boss. Greets operator, gathers project logistics (not vision), creates .kiln/ structure. Requests deep scan if brownfield. | B (INTERACTIVE) | opus |
+| maiev | Anatomy scout. Structure, directories, modules, entry points. Reports to mnemosyne. | C | sonnet |
+| curie | Health scout. Dependencies, tests, CI/CD, build system, tech debt. Reports to mnemosyne. | C | sonnet |
+| medivh | Nervous system scout. APIs, data flow, integrations, events, state. Reports to mnemosyne. | C | sonnet |
+
+## Three-Phase Spawn
+
+**Phase A**: mnemosyne bootstraps → identity scan → READY signal with brownfield/greenfield + summary.
+
+**Phase B**: alpha spawns (INTERACTIVE, foreground). Receives mnemosyne's READY summary. Greets operator, gathers project info. If brownfield and operator approves, messages mnemosyne to deploy scouts.
+
+**Phase C** (brownfield + operator approved): mnemosyne requests maiev, curie, medivh. Scouts report to mnemosyne. Mnemosyne synthesizes → signals MAPPING_COMPLETE to alpha.
+
+Greenfield skips Phase C entirely.
+
+## Communication Model
+
+```
+Mnemosyne  → team-lead    (READY: identity scan results)
+Alpha      → Mnemosyne    (DEEP_SCAN: deploy scouts — brownfield only)
+Mnemosyne  → team-lead    (REQUEST_WORKERS: maiev, curie, medivh)
+Mnemosyne  → scouts       (individual assignments)
+Scouts     → Mnemosyne    (SCOUT_REPORT: findings)
+Mnemosyne  → Alpha        (MAPPING_COMPLETE: synthesis summary)
+Alpha      → team-lead    (ONBOARDING_COMPLETE: project metadata)
+```
