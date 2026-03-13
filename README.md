@@ -31,7 +31,7 @@ npx kiln-one
 
 <br>
 
-[What's New](#recent-changes) · [How It Works](#how-it-works) · [Get Started](#get-started) · [Deep Dives](#deep-dives) · [What's Next](#whats-next)
+[Why Kiln](#why-kiln-is-not-just-another-agentic-framework) · [What You Build](#what-this-means-for-your-project) · [How It Works](#how-it-works) · [Get Started](#get-started) · [Deep Dives](#deep-dives) · [What's Next](#whats-next)
 
 </div>
 
@@ -47,6 +47,42 @@ I spent months refining a multi-model workflow by hand. Now I'm turning it into 
 > Once the brainstorm is done, the rest is fully automated — plan, execute, test, correct, commit. Hands off. 🔥
 
 Fair warning — things will be clunky. I push commits constantly, features break and get fixed fast, rough edges smooth out over days not weeks. If you hit a bump, check back soon. It gets better with every push. Soon™ ⏳
+
+---
+
+## Why Kiln Is Not Just Another Agentic Framework
+
+Most "agentic" tools give you one agent and hope. Kiln gives you **a native multi‑agent operating system** built directly into Claude Code's DNA.
+
+### 🧠 Native Teams, Not Fresh Slaves
+Every pipeline step spawns a **persistent team** via `TeamCreate`. Agents stay alive across the entire step. They talk via `SendMessage`—one at a time, stateful, ordered. No orphaned processes. No "who am I talking to?" confusion. When a planner messages a builder, that builder **remembers the conversation**.
+
+### 📁 Smart File System: Owned, Not Just Read
+In Kiln, every file has an **owner**. Rakim owns `codebase-state.md`. Clio owns `VISION.md`. When something changes, the owner **pushes updates via `SendMessage`**—no polling, no stale reads, no "let me parse this file and guess what changed."
+
+Other tools make every agent read the same files and re‑reason. Kiln's agents **learn what changed directly**, in the context where it matters.
+
+### 🚦 Runtime Enforcement, Not Gentle Hints
+We have **14 PreToolUse hooks** hardwired into the plugin. When an agent tries to do something it shouldn't—a planner writing code, a builder accessing system config—the hook **blocks it with a helpful error message**. This isn't prompt engineering. It's platform‑level guardrailing.
+
+### 🔁 Stateful Auto‑Resume, Not "Start Over"
+Kiln writes every decision to `.kiln/STATE.md`. Shut down Claude Code. Reboot your machine. Come back tomorrow. Run `/kiln:fire` and **resume exactly where you left off**, with every agent remembering its place in the conversation.
+
+### 🧩 Tasklists for Iteration, Not Ad‑Hoc Tracking
+Build iterations use native `TaskCreate`/`TaskUpdate`/`TaskList`. Each chunk of work is tracked, statused, and visible. No "I think I did that already?" ambiguity.
+
+---
+
+## What This Means for Your Project
+
+Because Kiln is built on native Claude Code primitives, it can handle **complex, multi‑stage projects that would break other tools**:
+
+- **Brainstorm** with 62 techniques and 50 elicitation methods—not because we prompt-engineered it, but because `da-vinci.md` has a structured workflow and `clio.md` owns the output.
+- **Architecture** with dual‑model planning, debate, and validation—because Aristotle can message Confucius and Sun Tzu directly, wait for their replies, and synthesise with Plato without losing context.
+- **Build** with iterative chunks, code review, and living documentation—because KRS‑One scopes XML assignments, Codex implements, Sphinx reviews, and Rakim updates `codebase-state.md`—all via `SendMessage`.
+- **Validate** against user flows with correction loops—because Argus can fail, write a report, and the engine can loop back to Build up to three times, with every agent knowing why.
+
+The result is **working software**, not "vibes."
 
 ---
 
@@ -122,6 +158,10 @@ Two stages are yours. The rest run autonomously, repeating per phase until every
 <td width="120"><code>VISION.md</code></td>
 </tr>
 <tr>
+<td></td>
+<td colspan="3"><em>Behind the scenes: Da Vinci messages Clio via SendMessage with each approved section. Clio owns VISION.md and updates it silently. No polling. No stale reads.</em></td>
+</tr>
+<tr>
 <td align="center"><b>2</b></td>
 <td><b>Roadmap</b></td>
 <td>The vision gets split into delivery phases. You review and approve before anything moves.</td>
@@ -135,10 +175,18 @@ Two stages are yours. The rest run autonomously, repeating per phase until every
 <td><code>PLAN.md</code></td>
 </tr>
 <tr>
+<td></td>
+<td colspan="3"><em>Behind the scenes: Aristotle coordinates a native team. Confucius and Sun Tzu plan in parallel. Socrates debates. Plato synthesises. Athena validates. All via SendMessage. All stateful. All resumable.</em></td>
+</tr>
+<tr>
 <td align="center"><b>4</b></td>
 <td><b>Execute</b></td>
 <td>Each task becomes a surgical prompt, executed with fresh 200k context. Tested and committed atomically.</td>
 <td>Code + commits</td>
+</tr>
+<tr>
+<td></td>
+<td colspan="3"><em>Behind the scenes: KRS‑One scopes assignments as structured XML. Codex implements. Sphinx reviews. Rakim and Sentinel update living docs. Every agent communicates directly. No boss‑as‑relay bottleneck.</em></td>
 </tr>
 <tr>
 <td align="center"><b>5</b></td>
@@ -463,6 +511,21 @@ your-project/
 
 <br>
 </details>
+
+---
+
+## Technical Deep Dive
+
+Kiln is a native Claude Code plugin that leverages every platform primitive:
+
+- **Teams**: `TeamCreate` per step with persistent agents
+- **Messaging**: `SendMessage` for all inter‑agent communication (one message at a time, ordered)
+- **Tasklists**: `TaskCreate`/`Update`/`List` for build iterations and validation
+- **Hooks**: 14 PreToolUse rules enforced via `enforce-pipeline.sh`
+- **State**: `.kiln/STATE.md` with auto‑resume via `skill` path
+- **File Ownership**: Each agent owns specific files and pushes updates
+
+The result is a **multi‑agent operating system** where context is never stale, decisions are traceable, and the pipeline survives shutdowns.
 
 ---
 
