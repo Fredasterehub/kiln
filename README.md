@@ -21,7 +21,8 @@
 [![License](https://img.shields.io/badge/License-MIT-D4A574?style=for-the-badge)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Plugin-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white)](https://claude.ai/claude-code)
 [![Dependencies](https://img.shields.io/badge/Dependencies-Zero-4A403A?style=for-the-badge)]()
-[![Updated](https://img.shields.io/badge/Updated-March_2026-339933?style=for-the-badge)]()
+[![Status](https://img.shields.io/badge/Status-Experimental-E8A317?style=for-the-badge)]()
+[![Updated](https://img.shields.io/badge/Updated-March_2026-E8A317?style=for-the-badge)]()
 
 <br>
 
