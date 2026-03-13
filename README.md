@@ -70,14 +70,25 @@
 
 ---
 
+<!-- ARCHIVE — v5 origin story (keep for posterity)
 > [!IMPORTANT]
-> **Everything changed. Again.**<br>
-> <br>
-> I gave the agents clear, well-written instructions. They read them. They *acknowledged* them. Codex said &mdash; verbatim &mdash; "I need to pipe this to codex exec." Then he opened the Write tool and started typing React components. Sun Tzu began planning against architecture files that hadn't been written yet. Verbal compliance from a language model is not compliance. It's an echo.
+> **Everything changed. Again.**
 >
-> The fix had to be native. No external runtime, no middleware, no daemon watching from the side. Claude Code already has PreToolUse hooks &mdash; so v5 uses **13 of them**, hardwired into the plugin as a single shell script. Delegation agents physically cannot call Write or Edit. Planners cannot dispatch until docs exist on disk. Destructive commands are intercepted. When an agent hits a wall, it gets told exactly what it should be doing instead. Still just markdown files in a folder. Still zero dependencies. The guardrails are part of the instrument, not bolted on after.
+> I gave the agents clear, well-written instructions. They read them. They *acknowledged* them.
+> Codex said — verbatim — "I need to pipe this to codex exec." Then he opened the Write tool
+> and started typing React components. Sun Tzu began planning against architecture files that
+> hadn't been written yet. Verbal compliance from a language model is not compliance. It's an echo.
 >
-> Agents self-load their own instructions now, sessions survive 30+ iterations, and `/kiln-fire` resumes exactly where you left off.
+> The fix had to be native. No external runtime, no middleware, no daemon watching from the side.
+> Claude Code already has PreToolUse hooks — so v5 uses 13 of them, hardwired into the plugin as
+> a single shell script. Delegation agents physically cannot call Write or Edit. Planners cannot
+> dispatch until docs exist on disk. Destructive commands are intercepted. When an agent hits a
+> wall, it gets told exactly what it should be doing instead. Still just markdown files in a folder.
+> Still zero dependencies. The guardrails are part of the instrument, not bolted on after.
+>
+> Agents self-load their own instructions now, sessions survive 30+ iterations, and /kiln-fire
+> resumes exactly where you left off.
+-->
 
 <br>
 
