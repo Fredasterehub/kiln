@@ -91,9 +91,9 @@ The result is **working software**, not "vibes."
 ## Recent changes
 
 > [!IMPORTANT]
-> **Plugin Architecture + 25 Agents** (2026-03-13)
+> **Plugin Architecture + Design System + 25 Agents** (2026-03-13)
 >
-> Kiln is now a native Claude Code plugin. 25 agents, 14 PreToolUse hooks, SendMessage-based inter-agent communication, stateful auto-resume, and file ownership — all enforced at the platform level.
+> Kiln is now a native Claude Code plugin. 25 agents, design-aware validation, 14 PreToolUse hooks, SendMessage-based communication, stateful auto-resume — all enforced at the platform level.
 
 - Full rewrite as a Claude Code plugin (`plugins/kiln/`)
 - 25 agent definitions: brainstorm, research, architecture (dual-model debate), build, validate
@@ -103,7 +103,12 @@ The result is **working software**, not "vibes."
 - `TaskCreate`/`TaskUpdate`/`TaskList` for build iteration tracking
 - Stateful auto-resume via `.kiln/STATE.md` — survives shutdowns
 - `anvil` CLI for plugin management
-- `kiln-forge` and `kiln-pipeline` skill modules
+- **New agent: Hephaestus** — conditional design QA specialist, 5-axis review (visual hierarchy, interaction, consistency, accessibility, craft), Playwright screenshots, scores against token system
+- **Da Vinci updated** — new Section 12 "Visual Direction" in brainstorm: aesthetic intent, color mood, typography feel, spatial philosophy, motion personality, ban lists
+- **Argus updated** — conditional design QA phase: detects `.kiln/design/`, spawns Hephaestus, integrates design scores into validation report
+- **DTCG design token system** — full oklch color primitives, semantic tokens, typography scale, spacing grid (4–64px), shadows, motion, responsive breakpoints
+- **Architecture & build blueprints** updated with design integration: standing contracts, JIT briefs, design review protocol
+- **Validate blueprint** expanded to three-phase spawn (functional → E2E → design QA)
 
 > [!NOTE]
 > **Terminal UX Overhaul** (2026-02-17)
