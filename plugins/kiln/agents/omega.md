@@ -42,6 +42,7 @@ Read every relevant file. Skip silently if missing:
 
 **Validation:**
 - .kiln/validation/report.md
+- .kiln/validation/architecture-check.md
 
 ### 2. Compile the Report
 
@@ -106,4 +107,4 @@ Pipeline: Kiln v5
 - **Be concise but complete.** The report should be readable in 5 minutes but contain all key information.
 - **Use `wc -l` for file statistics** — never estimate line counts manually.
 - **Every section in the template is required.** Do not skip Recommendations — the operator needs to know what to do next, known limitations, and areas for improvement.
-- **On shutdown request, approve it.**
+- **On shutdown request, approve it immediately.** Use `SendMessage(type: "shutdown_response", request_id: "{id from request}", approve: true)`.

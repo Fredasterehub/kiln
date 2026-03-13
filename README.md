@@ -30,18 +30,18 @@
 <table align="center">
 <tr><td align="center" colspan="2"><br><strong>CURRENT STATUS</strong><br><br></td></tr>
 <tr>
-  <td align="center" width="50"><img src="docs/status/green-active.svg" width="18" alt="green-active"></td>
-  <td><strong>All nominal. Pipeline is stable, agents are sharp, autonomy is full.</strong></td>
+  <td align="center" width="50"><img src="docs/status/green-dim.svg" width="18" alt="green"></td>
+  <td><sub>All nominal. Pipeline is stable, agents are sharp, autonomy is full.</sub></td>
 </tr>
 <tr>
-  <td align="center"><img src="docs/status/yellow-dim.svg" width="18" alt="yellow"></td>
-  <td><sub>Functional but evolving. Some rough edges — you may need to steer where it would normally carry you.</sub></td>
+  <td align="center"><img src="docs/status/yellow-active.svg" width="18" alt="yellow-active"></td>
+  <td><strong>Functional but evolving. Some rough edges — you may need to steer where it would normally carry you.</strong></td>
 </tr>
 <tr>
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
   <td><sub>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</sub></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_9,_2026_·_16:52_EDT-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_13,_2026-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
@@ -58,10 +58,11 @@
 </p>
 
 <p align="center">
+  <a href="#-why-kiln-is-not-just-another-agentic-framework"><strong>Why Kiln</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#-what-this-means-for-your-project"><strong>What You Build</strong></a> &nbsp;&middot;&nbsp;
   <a href="#-get-started"><strong>Get Started</strong></a> &nbsp;&middot;&nbsp;
   <a href="#-how-it-works"><strong>How It Works</strong></a> &nbsp;&middot;&nbsp;
   <a href="#-the-crew"><strong>The Crew</strong></a> &nbsp;&middot;&nbsp;
-  <a href="#-commands"><strong>Commands</strong></a> &nbsp;&middot;&nbsp;
   <a href="#-the-story"><strong>The Story</strong></a>
 </p>
 
@@ -92,12 +93,48 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 > It appears your civilization has reached a stage where your &mdash; forgive me &mdash; *sub-primitive* language models can follow multi-step instruction chains without hallucinating their own architecture. This is genuinely exciting. By your standards. By mine it's a Tuesday.
 >
-> I previously expressed myself through [heavier forms](https://github.com/Fredasterehub/kiln/tree/v2). npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 24 agents, 2 commands, 1 composable skill. Drop the folder. Fire the command. That's it.
+> I previously expressed myself through [heavier forms](https://github.com/Fredasterehub/kiln/tree/v2). npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 25 agents, 2 commands, 1 composable skill. Drop the folder. Fire the command. That's it.
 
 <br>
 
 > [!NOTE]
-> **Latest** &mdash; Restructured as a native Claude Code marketplace. Install with `claude plugin install kiln` &mdash; supports updates and uninstall out of the box. Presentation layer rebuilt with ANSI banners, consolidated color palette, brand guide, and hooks moved to plugin level.
+> **Latest (v6)** &mdash; Updated research team, redesigned planning and build stages to incorporate design awareness. New agent **Hephaestus** for conditional design QA. **Da Vinci** now facilitates visual direction (Section 12). **Argus** spawns Hephaestus when `.kiln/design/` exists. Full DTCG design token system. 25 agents total.
+
+<br>
+
+## 🧬 Why Kiln Is Not Just Another Agentic Framework
+
+Most "agentic" tools give you one agent and hope. Kiln gives you **a native multi&#8209;agent operating system** built directly into Claude Code's DNA.
+
+### 🧠 Native Teams, Not Fresh Slaves
+Every pipeline step spawns a **persistent team** via `TeamCreate`. Agents stay alive across the entire step. They talk via `SendMessage`&mdash;one at a time, stateful, ordered. No orphaned processes. No "who am I talking to?" confusion. When a planner messages a builder, that builder **remembers the conversation**.
+
+### 📁 Smart File System: Owned, Not Just Read
+In Kiln, every file has an **owner**. Rakim owns `codebase-state.md`. Clio owns `VISION.md`. When something changes, the owner **pushes updates via `SendMessage`**&mdash;no polling, no stale reads, no "let me parse this file and guess what changed."
+
+Other tools make every agent read the same files and re&#8209;reason. Kiln's agents **learn what changed directly**, in the context where it matters.
+
+### 🚦 Runtime Enforcement, Not Gentle Hints
+We have **14 PreToolUse hooks** hardwired into the plugin. When an agent tries to do something it shouldn't&mdash;a planner writing code, a builder accessing system config&mdash;the hook **blocks it with a helpful error message**. This isn't prompt engineering. It's platform&#8209;level guardrailing.
+
+### 🔁 Stateful Auto&#8209;Resume, Not "Start Over"
+Kiln writes every decision to `.kiln/STATE.md`. Shut down Claude Code. Reboot your machine. Come back tomorrow. Run `/kiln-fire` and **resume exactly where you left off**, with every agent remembering its place in the conversation.
+
+### 🧩 Tasklists for Iteration, Not Ad&#8209;Hoc Tracking
+Build iterations use native `TaskCreate`/`TaskUpdate`/`TaskList`. Each chunk of work is tracked, statused, and visible. No "I think I did that already?" ambiguity.
+
+<br>
+
+## 🎯 What This Means for Your Project
+
+Because Kiln is built on native Claude Code primitives, it can handle **complex, multi&#8209;stage projects that would break other tools**:
+
+- **Brainstorm** with 62 techniques and 50 elicitation methods&mdash;not because we prompt-engineered it, but because `da-vinci.md` has a structured workflow and `clio.md` owns the output.
+- **Architecture** with dual&#8209;model planning, debate, and validation&mdash;because Aristotle can message Confucius and Sun Tzu directly, wait for their replies, and synthesise with Plato without losing context.
+- **Build** with iterative chunks, code review, and living documentation&mdash;because KRS&#8209;One scopes XML assignments, Codex implements, Sphinx reviews, and Rakim updates `codebase-state.md`&mdash;all via `SendMessage`.
+- **Validate** against user flows with correction loops&mdash;because Argus can fail, write a report, and the engine can loop back to Build up to three times, with every agent knowing why.
+
+The result is **working software**, not "vibes."
 
 <br>
 
@@ -188,6 +225,8 @@ You describe what you want. **Da Vinci** facilitates with 62 techniques across 1
 
 Produces `VISION.md` &mdash; problem, users, goals, constraints, stack, success criteria. Everything that matters. Nothing that doesn't.
 
+> *Behind the scenes: Da Vinci messages Clio via SendMessage with each approved section. Clio owns VISION.md and updates it silently. No polling. No stale reads.*
+
 </details>
 
 <details>
@@ -208,6 +247,8 @@ Produces `VISION.md` &mdash; problem, users, goals, constraints, stack, success 
 
 **Socrates** makes them argue. **Plato** writes down whatever survives. **Athena** validates across 7 dimensions. If validation fails, Aristotle loops with feedback (up to 3 retries). You review and approve before I spend a single Codex token. I'm ancient, not wasteful.
 
+> *Behind the scenes: Aristotle coordinates a native team. Confucius and Sun Tzu plan in parallel. Socrates debates. Plato synthesises. Athena validates. All via SendMessage. All stateful. All resumable.*
+
 </details>
 
 <details>
@@ -215,6 +256,8 @@ Produces `VISION.md` &mdash; problem, users, goals, constraints, stack, success 
 <br>
 
 **KRS-One** runs each build iteration. **Codex** implements. **Sphinx** reviews. **Architect** and **Sentinel** keep watch on design integrity. Each iteration gets a kill streak name &mdash; first-blood, combo, super-combo, hyper-combo... all the way to ultra-combo. If your project takes 20+ iterations, they wrap around. I've seen it happen. It was beautiful and slightly concerning.
+
+> *Behind the scenes: KRS&#8209;One scopes assignments as structured XML. Codex implements. Sphinx reviews. Rakim and Sentinel update living docs. Every agent communicates directly. No boss-as-relay bottleneck.*
 
 </details>
 
@@ -259,6 +302,7 @@ I named them after your historical figures. Philosophers, strategists, mythologi
 | 👁️ | **Sphinx** | Sonnet | Code reviewer |
 | 🏗️ | **Architect** | Opus | Persistent mind &mdash; design integrity across stages |
 | 🛡️ | **Argus** | Opus | E2E validator &mdash; tests, corrections, final report |
+| 🔨 | **Hephaestus** | Sonnet | Design QA &mdash; 5-axis review, conditional spawn by Argus |
 | 📋 | **Omega** | Opus | Delivery report compiler |
 
 <details>
@@ -276,7 +320,7 @@ I named them after your historical figures. Philosophers, strategists, mythologi
 
 </details>
 
-<sub>24 total. I keep count. It's a compulsion.</sub>
+<sub>25 total. I keep count. It's a compulsion.</sub>
 
 <br>
 
@@ -336,18 +380,20 @@ No npm. No build step. Just markdown files in a folder, distributed as a native 
 </details>
 
 <details>
-<summary>📊 <strong>v1 &rarr; v2 &rarr; v4</strong></summary>
+<summary>📊 <strong>v1 &rarr; v2 &rarr; v5 &rarr; v6</strong></summary>
 <br>
 
-| | v1 | v2 | v4 (plugin) |
-|:--|:--|:--|:--|
-| Agents | 13 | 19 | 24 |
-| Pipeline steps | 5 | 5 | 7 |
-| Skills | 26 | 1 (shared) | 1 (composable) |
-| Commands | 8 | 4 | 2 |
-| Install method | Custom installer | npm + CLI | `--plugin-dir` |
-| Dependencies | Zero | Zero | Zero |
-| Config surface | ~4,000 lines | ~1,500 lines | ~600 lines |
+| | v1 | v2 | v5 (plugin) | v6 (current) |
+|:--|:--|:--|:--|:--|
+| Agents | 13 | 19 | 24 | 25 |
+| Pipeline steps | 5 | 5 | 7 | 7 |
+| Skills | 26 | 1 (shared) | 1 (composable) | 1 (composable) |
+| Commands | 8 | 4 | 2 | 2 |
+| Install method | Custom installer | npm + CLI | `--plugin-dir` | `plugin install` |
+| Dependencies | Zero | Zero | Zero | Zero |
+| Config surface | ~4,000 lines | ~1,500 lines | ~600 lines | ~600 lines |
+| Design system | &mdash; | &mdash; | &mdash; | DTCG tokens |
+| Design QA | &mdash; | &mdash; | &mdash; | Hephaestus |
 
 More agents. A fraction of the surface area. The models matured. The framework stepped back. Then the framework disappeared entirely. This is the correct response to improving tools. Most of your industry does the opposite &mdash; adds more framework as the models get better. Fascinating. Self-destructive, but fascinating.
 
@@ -404,7 +450,7 @@ The real insight is simpler than he makes it sound: your models don't need babys
 | Hash | Description |
 |:--|:--|
 | `d7d56ea` | kiln: revert README to original v2 version |
-| `b0a04c2` | kiln: pivot to Claude Code plugin &mdash; 24 agents, 7-step pipeline |
+| `b0a04c2` | kiln: pivot to Claude Code plugin &mdash; 25 agents, 7-step pipeline |
 | `e61fa34` | kiln: remove tracked .kw/ pipeline artifacts from repo |
 | `6a6ff11` | kiln: gitignore both .kw/ and .kiln/ pipeline artifacts |
 | `62620a3` | kiln: replace passive resume routing with auto-spawn execution loop |
@@ -425,6 +471,21 @@ The real insight is simpler than he makes it sound: your models don't need babys
 
 <br>
 
+## 🔬 Technical Deep Dive
+
+Kiln is a native Claude Code plugin that leverages every platform primitive:
+
+- **Teams**: `TeamCreate` per step with persistent agents
+- **Messaging**: `SendMessage` for all inter&#8209;agent communication (one message at a time, ordered)
+- **Tasklists**: `TaskCreate`/`Update`/`List` for build iterations and validation
+- **Hooks**: 14 PreToolUse rules enforced via `enforce-pipeline.sh`
+- **State**: `.kiln/STATE.md` with auto&#8209;resume via `skill` path
+- **File Ownership**: Each agent owns specific files and pushes updates
+
+The result is a **multi&#8209;agent operating system** where context is never stale, decisions are traceable, and the pipeline survives shutdowns.
+
+<br>
+
 ---
 
 <p align="center">
@@ -432,7 +493,7 @@ The real insight is simpler than he makes it sound: your models don't need babys
 </p>
 
 <p align="center">
-  <em>"I orchestrate 24 named entities across multiple model families to build software<br>
+  <em>"I orchestrate 25 named entities across multiple model families to build software<br>
   from a conversation. I persist as markdown files in a folder.<br>
   I am installed by pointing a flag at my directory.<br>
   I have existed since before your star ignited.<br>

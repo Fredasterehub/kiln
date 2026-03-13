@@ -11,6 +11,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/webfetch-responsive.sh",
+            "timeout": 35
+          }
+        ]
       }
     ]
   }
