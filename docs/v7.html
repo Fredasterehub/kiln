@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kiln v7 — The Engine Tightens</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=IBM+Plex+Mono:wght@300;400;500&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-deep: #0a0908;
+    --bg-surface: #111010;
+    --bg-raised: #1a1816;
+    --bg-card: #151312;
+    --text-primary: #e2dad0;
+    --text-secondary: #9e9488;
+    --text-dim: #5c5650;
+    --ember: #c4652a;
+    --ember-glow: #d4764e;
+    --ember-dim: #8a4a22;
+    --molten: #b8956a;
+    --molten-dim: #7a6347;
+    --ash: #2a2624;
+    --rule: #2a2523;
+    --rule-ember: rgba(196, 101, 42, 0.25);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html {
+    font-size: 17px;
+    scroll-behavior: smooth;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ash) var(--bg-deep);
+  }
+
+  body {
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    font-family: 'DM Sans', sans-serif;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* ── Ambient background ── */
+  body::before {
+    content: '';
+    position: fixed;
+    top: -40%;
+    left: -20%;
+    width: 140%;
+    height: 140%;
+    background:
+      radial-gradient(ellipse 800px 600px at 20% 10%, rgba(196, 101, 42, 0.04), transparent),
+      radial-gradient(ellipse 600px 800px at 80% 90%, rgba(184, 149, 106, 0.03), transparent);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Grain overlay ── */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.5;
+  }
+
+  .container {
+    position: relative;
+    z-index: 2;
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 0 2rem;
+  }
+
+  /* ── Hero ── */
+  .hero {
+    padding: 6rem 0 4rem;
+    text-align: center;
+  }
+
+  .version-badge {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ember);
+    border: 1px solid var(--ember-dim);
+    padding: 0.35em 1.2em;
+    border-radius: 2px;
+    margin-bottom: 2.5rem;
+    animation: badge-in 0.8s ease-out both;
+  }
+
+  .hero h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: clamp(2.8rem, 6vw, 4.2rem);
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+    margin-bottom: 1.5rem;
+    animation: title-in 1s ease-out 0.15s both;
+  }
+
+  .hero h1 em {
+    font-style: italic;
+    color: var(--ember-glow);
+  }
+
+  .hero-sub {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.15rem;
+    font-style: italic;
+    color: var(--text-secondary);
+    max-width: 520px;
+    margin: 0 auto;
+    line-height: 1.6;
+    animation: fade-up 0.8s ease-out 0.4s both;
+  }
+
+  .hero-rule {
+    width: 60px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--ember), transparent);
+    margin: 3rem auto 0;
+    animation: fade-up 0.8s ease-out 0.6s both;
+  }
+
+  /* ── Section nav ── */
+  .section-nav {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    padding: 1.5rem 0 3rem;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    animation: fade-up 0.8s ease-out 0.7s both;
+  }
+
+  .section-nav a {
+    color: var(--text-dim);
+    text-decoration: none;
+    transition: color 0.3s;
+    position: relative;
+  }
+
+  .section-nav a::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 0;
+    width: 0;
+    height: 1px;
+    background: var(--ember);
+    transition: width 0.3s;
+  }
+
+  .section-nav a:hover { color: var(--ember-glow); }
+  .section-nav a:hover::after { width: 100%; }
+
+  /* ── What's New ── */
+  .whats-new {
+    padding: 2rem 0 5rem;
+  }
+
+  .section-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ember);
+    margin-bottom: 3rem;
+    padding-left: 1.5rem;
+    border-left: 2px solid var(--ember-dim);
+  }
+
+  .change-block {
+    margin-bottom: 3rem;
+    padding-left: 1.5rem;
+    border-left: 1px solid var(--rule);
+    transition: border-color 0.5s;
+    opacity: 0;
+    transform: translateY(16px);
+    animation: fade-up 0.6s ease-out both;
+  }
+
+  .change-block:hover {
+    border-left-color: var(--rule-ember);
+  }
+
+  .change-block:nth-child(2) { animation-delay: 0.1s; }
+  .change-block:nth-child(3) { animation-delay: 0.18s; }
+  .change-block:nth-child(4) { animation-delay: 0.26s; }
+  .change-block:nth-child(5) { animation-delay: 0.34s; }
+  .change-block:nth-child(6) { animation-delay: 0.42s; }
+  .change-block:nth-child(7) { animation-delay: 0.50s; }
+
+  .change-block h3 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.6rem;
+    line-height: 1.3;
+  }
+
+  .change-block h3 code {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.85em;
+    font-weight: 400;
+    color: var(--ember-glow);
+    background: none;
+    padding: 0;
+  }
+
+  .change-block p {
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+    line-height: 1.75;
+  }
+
+  .change-block p strong {
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  /* ── Divider ── */
+  .section-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--rule), var(--rule), transparent);
+    margin: 4rem 0;
+    position: relative;
+  }
+
+  .section-divider::after {
+    content: '◆';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--bg-deep);
+    padding: 0 1rem;
+    color: var(--ash);
+    font-size: 0.5rem;
+  }
+
+  /* ── Why Kiln ── */
+  .why-kiln {
+    padding: 2rem 0 3rem;
+  }
+
+  .why-kiln > h2 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: clamp(1.8rem, 4vw, 2.4rem);
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+    margin-bottom: 0.8rem;
+  }
+
+  .why-kiln > .why-subtitle {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    margin-bottom: 3.5rem;
+    max-width: 600px;
+  }
+
+  .principle {
+    margin-bottom: 2.8rem;
+    padding: 1.8rem 2rem;
+    background: var(--bg-card);
+    border: 1px solid var(--ash);
+    border-radius: 3px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.4s, transform 0.3s;
+  }
+
+  .principle:hover {
+    border-color: var(--ember-dim);
+    transform: translateY(-2px);
+  }
+
+  .principle::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 3px;
+    height: 100%;
+    background: linear-gradient(180deg, var(--ember), var(--ember-dim), transparent);
+    opacity: 0;
+    transition: opacity 0.4s;
+  }
+
+  .principle:hover::before { opacity: 1; }
+
+  .principle-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.8rem;
+    margin-bottom: 0.7rem;
+  }
+
+  .principle-icon {
+    font-size: 0.9rem;
+    flex-shrink: 0;
+    opacity: 0.7;
+  }
+
+  .principle h3 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.3;
+  }
+
+  .principle h3 span {
+    color: var(--text-dim);
+    font-weight: 400;
+  }
+
+  .principle p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.75;
+    padding-left: 0;
+  }
+
+  .principle p code {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.82em;
+    color: var(--molten);
+    background: rgba(184, 149, 106, 0.08);
+    padding: 0.15em 0.4em;
+    border-radius: 2px;
+  }
+
+  /* ── What You Build ── */
+  .what-you-build {
+    padding: 1rem 0 3rem;
+  }
+
+  .what-you-build h2 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: clamp(1.6rem, 3.5vw, 2rem);
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--text-primary);
+    margin-bottom: 0.6rem;
+  }
+
+  .what-you-build > p {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    margin-bottom: 2.5rem;
+    max-width: 600px;
+  }
+
+  .capability {
+    display: flex;
+    gap: 1.2rem;
+    align-items: flex-start;
+    margin-bottom: 1.6rem;
+    padding: 1rem 0;
+  }
+
+  .capability-marker {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--ember-dim);
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+    margin-top: 0.35rem;
+    width: 2rem;
+    text-align: right;
+  }
+
+  .capability p {
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+    line-height: 1.75;
+  }
+
+  .capability p strong {
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  .capability p code {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.82em;
+    color: var(--molten);
+    background: rgba(184, 149, 106, 0.08);
+    padding: 0.15em 0.4em;
+    border-radius: 2px;
+  }
+
+  .result-line {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.15rem;
+    font-style: italic;
+    color: var(--text-primary);
+    margin-top: 2rem;
+    padding-left: 3.2rem;
+  }
+
+  /* ── Crew roster ── */
+  .crew {
+    padding: 2rem 0 3rem;
+  }
+
+  .crew h2 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: clamp(1.6rem, 3.5vw, 2rem);
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.6rem;
+  }
+
+  .crew > p {
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+    margin-bottom: 2.5rem;
+    max-width: 600px;
+    line-height: 1.7;
+  }
+
+  .crew-stage {
+    margin-bottom: 2rem;
+  }
+
+  .crew-stage-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.6rem;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 0.7rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .crew-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 0.4rem 1.5rem;
+  }
+
+  .crew-member {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    padding: 0.35rem 0;
+    font-size: 0.85rem;
+  }
+
+  .crew-member .alias {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+  }
+
+  .crew-member .model-tag {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+  }
+
+  .crew-member .role {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+  }
+
+  .crew-count {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    margin-top: 1.5rem;
+    font-style: italic;
+  }
+
+  /* ── Get Started ── */
+  .get-started {
+    padding: 2rem 0 3rem;
+  }
+
+  .get-started h2 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: clamp(1.6rem, 3.5vw, 2rem);
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.6rem;
+  }
+
+  .get-started > p {
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+    margin-bottom: 2rem;
+  }
+
+  .install-block {
+    background: var(--bg-card);
+    border: 1px solid var(--ash);
+    border-radius: 3px;
+    padding: 1.5rem 2rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .install-block pre {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--ember-glow);
+    line-height: 1.8;
+    overflow-x: auto;
+  }
+
+  .install-note {
+    color: var(--text-dim);
+    font-size: 0.82rem;
+    font-style: italic;
+    margin-top: 1rem;
+  }
+
+  .install-note code {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.9em;
+    color: var(--molten);
+  }
+
+  /* ── Footer ── */
+  .footer {
+    padding: 4rem 0 3rem;
+    text-align: center;
+  }
+
+  .footer-rule {
+    width: 40px;
+    height: 1px;
+    background: var(--ash);
+    margin: 0 auto 2rem;
+  }
+
+  .footer blockquote {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.05rem;
+    font-style: italic;
+    color: var(--text-secondary);
+    max-width: 520px;
+    margin: 0 auto 1.5rem;
+    line-height: 1.6;
+  }
+
+  .footer-meta {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+  }
+
+  .footer-meta a {
+    color: var(--ember-dim);
+    text-decoration: none;
+    transition: color 0.3s;
+  }
+
+  .footer-meta a:hover { color: var(--ember-glow); }
+
+  /* ── Animations ── */
+  @keyframes badge-in {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes title-in {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Scroll animations ── */
+  .reveal {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+  }
+
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 640px) {
+    html { font-size: 15px; }
+    .container { padding: 0 1.2rem; }
+    .hero { padding: 4rem 0 3rem; }
+    .principle { padding: 1.4rem 1.2rem; }
+    .section-nav { gap: 1.2rem; flex-wrap: wrap; }
+    .crew-grid { grid-template-columns: 1fr; }
+    .capability { gap: 0.8rem; }
+    .capability-marker { width: 1.5rem; }
+    .result-line { padding-left: 2.3rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- ═══ HERO ═══ -->
+  <header class="hero">
+    <div class="version-badge">v7 · March 2026</div>
+    <h1>The Engine <em>Tightens</em></h1>
+    <p class="hero-sub">
+      Less friction, more autonomy. Six changes that make the pipeline
+      faster, more parallel, and harder to break.
+    </p>
+    <div class="hero-rule"></div>
+  </header>
+
+  <nav class="section-nav">
+    <a href="#whats-new">What's new</a>
+    <a href="#why-kiln">Why Kiln</a>
+    <a href="#what-you-build">What you build</a>
+    <a href="#crew">The crew</a>
+    <a href="#start">Get started</a>
+  </nav>
+
+  <!-- ═══ WHAT'S NEW ═══ -->
+  <section class="whats-new" id="whats-new">
+    <div class="section-label">What changed in v7</div>
+
+    <div class="change-block">
+      <h3>Faster research</h3>
+      <p>
+        <code>MI6</code> no longer pauses to announce readiness before requesting field agents.
+        The unnecessary handshake that caused a <strong>67-second stall</strong> is gone — the spymaster reads
+        the vision, picks topics, and deploys operatives in one fluid motion.
+      </p>
+    </div>
+
+    <div class="change-block">
+      <h3>Visual direction that actually lands</h3>
+      <p>
+        <code>Da Vinci</code>'s brainstorm now weaves aesthetic intent into the conversation naturally,
+        then crystallizes all <strong>12 vision sections</strong> in a single sweep — with a hard quality gate
+        that checks every one by name. Visual direction is no longer an afterthought bolted onto the end;
+        it emerges from the conversation and triggers the full design token cascade.
+      </p>
+    </div>
+
+    <div class="change-block">
+      <h3><code>Sentinel</code> finally sticks</h3>
+      <p>
+        The quality guardian's bootstrap marker — the one that gates the entire build dispatch —
+        failed three times across three smoke tests. The fix mirrors <code>Rakim</code>'s proven pattern:
+        the marker is inseparable from the content. <strong>One write, one file, done.</strong>
+      </p>
+    </div>
+
+    <div class="change-block">
+      <h3>No more dropped signals</h3>
+      <p>
+        The engine now tracks every step transition as a private tasklist with explicit dependencies.
+        When three agents report in the same turn, every signal gets processed — no more
+        <strong>19-minute stalls</strong> because a completion message was buried under a review pass.
+      </p>
+    </div>
+
+    <div class="change-block">
+      <h3>Markdown-native presentation</h3>
+      <p>
+        The old ANSI color palette never rendered in Claude Code — raw escape codes leaked into the output.
+        The entire presentation layer now speaks markdown: <strong>bold code</strong> for status,
+        <em>italic</em> for secondary, unicode rules for structure. One accent color, zero Bash banner calls.
+        What the operator sees is what we intended.
+      </p>
+    </div>
+
+    <div class="change-block">
+      <h3>Parallel build teams</h3>
+      <p>
+        The build step can now run up to <strong>three builder+reviewer pairs</strong> simultaneously — structural
+        pairs delegating to GPT-5.4, UI pairs writing directly with Opus. Six named duos join the roster:
+        <code>morty+rick</code>, <code>luke+obiwan</code>, <code>clair+obscur</code>, <code>yin+yang</code>,
+        <code>recto+verso</code>. <code>KRS-One</code> decides the mix based on chunk independence
+        and whether the work is structural or visual.
+      </p>
+    </div>
+  </section>
+
+  <div class="section-divider"></div>
+
+  <!-- ═══ WHY KILN ═══ -->
+  <section class="why-kiln reveal" id="why-kiln">
+    <h2>Why Kiln Is Not Just Another Agentic Framework</h2>
+    <p class="why-subtitle">
+      Most "agentic" tools give you one agent and hope.
+      Kiln gives you a native multi-agent operating system built directly into Claude Code's DNA.
+    </p>
+
+    <div class="principle">
+      <div class="principle-header">
+        <span class="principle-icon">&#x1f9e0;</span>
+        <h3>Native Teams, <span>Not Fresh Slaves</span></h3>
+      </div>
+      <p>
+        Every pipeline step spawns a persistent team via <code>TeamCreate</code>. Agents stay alive across the
+        entire step. They talk via <code>SendMessage</code> — one at a time, stateful, ordered. No orphaned processes.
+        No "who am I talking to?" confusion. When a planner messages a builder, that builder
+        <strong>remembers the conversation</strong>.
+      </p>
+    </div>
+
+    <div class="principle">
+      <div class="principle-header">
+        <span class="principle-icon">&#x1f4c1;</span>
+        <h3>Smart File System: <span>Owned, Not Just Read</span></h3>
+      </div>
+      <p>
+        Every file has an owner. <code>Rakim</code> owns <code>codebase-state.md</code>.
+        <code>Clio</code> owns <code>VISION.md</code>. When something changes, the owner pushes updates
+        via <code>SendMessage</code> — no polling, no stale reads, no "let me parse this file and guess
+        what changed." Other tools make every agent read the same files and re-reason. Kiln's agents
+        <strong>learn what changed directly</strong>, in the context where it matters.
+      </p>
+    </div>
+
+    <div class="principle">
+      <div class="principle-header">
+        <span class="principle-icon">&#x1f6a6;</span>
+        <h3>Runtime Enforcement, <span>Not Gentle Hints</span></h3>
+      </div>
+      <p>
+        <strong>13 PreToolUse hooks</strong> hardwired into the plugin. When an agent tries to do something
+        it shouldn't — a planner writing code, a builder accessing system config — the hook blocks it with
+        a helpful error message. This isn't prompt engineering. It's platform-level guardrailing.
+      </p>
+    </div>
+
+    <div class="principle">
+      <div class="principle-header">
+        <span class="principle-icon">&#x1f501;</span>
+        <h3>Stateful Auto-Resume, <span>Not "Start Over"</span></h3>
+      </div>
+      <p>
+        Kiln writes every decision to <code>.kiln/STATE.md</code>. Shut down Claude Code. Reboot your machine.
+        Come back tomorrow. Run <code>/kiln-fire</code> and <strong>resume exactly where you left off</strong>,
+        with every agent remembering its place in the conversation.
+      </p>
+    </div>
+
+    <div class="principle">
+      <div class="principle-header">
+        <span class="principle-icon">&#x1f9e9;</span>
+        <h3>Tasklists for Iteration, <span>Not Ad-Hoc Tracking</span></h3>
+      </div>
+      <p>
+        Build iterations use native <code>TaskCreate</code>/<code>TaskUpdate</code>/<code>TaskList</code>.
+        Each chunk of work is tracked, statused, and visible. No "I think I did that already?" ambiguity.
+      </p>
+    </div>
+  </section>
+
+  <div class="section-divider"></div>
+
+  <!-- ═══ WHAT YOU BUILD ═══ -->
+  <section class="what-you-build reveal" id="what-you-build">
+    <h2>What This Means for Your Project</h2>
+    <p>
+      Because Kiln is built on native Claude Code primitives, it can handle complex,
+      multi-stage projects that would break other tools.
+    </p>
+
+    <div class="capability">
+      <span class="capability-marker">01</span>
+      <p>
+        <strong>Brainstorm</strong> with 62 techniques and 50 elicitation methods — not because
+        we prompt-engineered it, but because <code>da-vinci.md</code> has a structured workflow
+        and <code>clio.md</code> owns the output.
+      </p>
+    </div>
+
+    <div class="capability">
+      <span class="capability-marker">02</span>
+      <p>
+        <strong>Architecture</strong> with dual-model planning, debate, and validation — because
+        Aristotle can message Confucius and Sun Tzu directly, wait for their replies, and synthesise
+        with Plato without losing context.
+      </p>
+    </div>
+
+    <div class="capability">
+      <span class="capability-marker">03</span>
+      <p>
+        <strong>Build</strong> with iterative chunks, code review, and living documentation — because
+        KRS-One scopes XML assignments, Codex implements, Sphinx reviews, and Rakim updates
+        <code>codebase-state.md</code> — all via <code>SendMessage</code>.
+      </p>
+    </div>
+
+    <div class="capability">
+      <span class="capability-marker">04</span>
+      <p>
+        <strong>Validate</strong> against user flows with correction loops — because Argus can fail,
+        write a report, and the engine can loop back to Build up to three times, with every agent
+        knowing why.
+      </p>
+    </div>
+
+    <p class="result-line">The result is working software, not "vibes."</p>
+  </section>
+
+  <div class="section-divider"></div>
+
+  <!-- ═══ THE CREW ═══ -->
+  <section class="crew reveal" id="crew">
+    <h2>The Crew</h2>
+    <p>
+      Named after your historical figures. Philosophers, strategists, mythological entities.
+      Your species has produced some remarkable minds for such a young civilization,
+      and I wanted to honor that. Also, "Agent 7" is boring, and I categorically refuse to be boring.
+    </p>
+
+    <div class="crew-stage">
+      <div class="crew-stage-label">Onboarding</div>
+      <div class="crew-grid">
+        <div class="crew-member"><span class="alias">Alpha</span> <span class="model-tag">opus</span> <span class="role">— project detection, .kiln/ setup</span></div>
+        <div class="crew-member"><span class="alias">Mnemosyne</span> <span class="model-tag">opus</span> <span class="role">— codebase coordinator</span></div>
+        <div class="crew-member"><span class="alias">Maiev</span> <span class="model-tag">sonnet</span> <span class="role">— anatomy scout</span></div>
+        <div class="crew-member"><span class="alias">Curie</span> <span class="model-tag">sonnet</span> <span class="role">— health scout</span></div>
+        <div class="crew-member"><span class="alias">Medivh</span> <span class="model-tag">sonnet</span> <span class="role">— nervous system scout</span></div>
+      </div>
+    </div>
+
+    <div class="crew-stage">
+      <div class="crew-stage-label">Brainstorm</div>
+      <div class="crew-grid">
+        <div class="crew-member"><span class="alias">Da Vinci</span> <span class="model-tag">opus</span> <span class="role">— facilitator, 62 techniques</span></div>
+        <div class="crew-member"><span class="alias">Clio</span> <span class="model-tag">opus</span> <span class="role">— vision curator</span></div>
+      </div>
+    </div>
+
+    <div class="crew-stage">
+      <div class="crew-stage-label">Research</div>
+      <div class="crew-grid">
+        <div class="crew-member"><span class="alias">MI6</span> <span class="model-tag">opus</span> <span class="role">— research coordinator</span></div>
+        <div class="crew-member"><span class="alias">Field Agent</span> <span class="model-tag">sonnet</span> <span class="role">— spawned investigators</span></div>
+      </div>
+    </div>
+
+    <div class="crew-stage">
+      <div class="crew-stage-label">Architecture</div>
+      <div class="crew-grid">
+        <div class="crew-member"><span class="alias">Aristotle</span> <span class="model-tag">opus</span> <span class="role">— architecture coordinator</span></div>
+        <div class="crew-member"><span class="alias">Numerobis</span> <span class="model-tag">opus</span> <span class="role">— technical authority</span></div>
+        <div class="crew-member"><span class="alias">Confucius</span> <span class="model-tag">opus</span> <span class="role">— Claude-side planner</span></div>
+        <div class="crew-member"><span class="alias">Sun Tzu</span> <span class="model-tag">sonnet</span> <span class="role">— GPT-side planner</span></div>
+        <div class="crew-member"><span class="alias">Plato</span> <span class="model-tag">opus</span> <span class="role">— plan synthesizer</span></div>
+        <div class="crew-member"><span class="alias">Athena</span> <span class="model-tag">opus</span> <span class="role">— plan validator</span></div>
+      </div>
+    </div>
+
+    <div class="crew-stage">
+      <div class="crew-stage-label">Build</div>
+      <div class="crew-grid">
+        <div class="crew-member"><span class="alias">KRS-One</span> <span class="model-tag">opus</span> <span class="role">— build boss, kill streaks</span></div>
+        <div class="crew-member"><span class="alias">Rakim</span> <span class="model-tag">opus</span> <span class="role">— codebase state authority</span></div>
+        <div class="crew-member"><span class="alias">Sentinel</span> <span class="model-tag">sonnet</span> <span class="role">— quality guardian</span></div>
+        <div class="crew-member"><span class="alias">Picasso</span> <span class="model-tag">opus</span> <span class="role">— UI implementer</span></div>
+        <div class="crew-member"><span class="alias">Codex</span> <span class="model-tag">sonnet</span> <span class="role">— code implementer</span></div>
+        <div class="crew-member"><span class="alias">Sphinx</span> <span class="model-tag">sonnet</span> <span class="role">— build verifier</span></div>
+        <div class="crew-member"><span class="alias">Renoir</span> <span class="model-tag">sonnet</span> <span class="role">— design reviewer</span></div>
+      </div>
+    </div>
+
+    <div class="crew-stage">
+      <div class="crew-stage-label">Validate</div>
+      <div class="crew-grid">
+        <div class="crew-member"><span class="alias">Argus</span> <span class="model-tag">sonnet</span> <span class="role">— E2E validator</span></div>
+        <div class="crew-member"><span class="alias">Hephaestus</span> <span class="model-tag">sonnet</span> <span class="role">— design QA</span></div>
+        <div class="crew-member"><span class="alias">Zoxea</span> <span class="model-tag">sonnet</span> <span class="role">— architecture verifier</span></div>
+      </div>
+    </div>
+
+    <div class="crew-stage">
+      <div class="crew-stage-label">Report</div>
+      <div class="crew-grid">
+        <div class="crew-member"><span class="alias">Omega</span> <span class="model-tag">opus</span> <span class="role">— delivery report compiler</span></div>
+      </div>
+    </div>
+
+    <div class="crew-stage">
+      <div class="crew-stage-label">Cross-cutting</div>
+      <div class="crew-grid">
+        <div class="crew-member"><span class="alias">Thoth</span> <span class="model-tag">haiku</span> <span class="role">— archivist</span></div>
+      </div>
+    </div>
+
+    <p class="crew-count">27 total. I keep count. It's a compulsion.</p>
+  </section>
+
+  <div class="section-divider"></div>
+
+  <!-- ═══ GET STARTED ═══ -->
+  <section class="get-started reveal" id="start">
+    <h2>Get Started</h2>
+    <p>Ah. More humans who want to learn. Come in. Don't touch anything yet.</p>
+
+    <div class="install-block">
+      <pre>claude plugin marketplace add Fredasterehub/kiln
+claude plugin install kiln</pre>
+    </div>
+
+    <p class="install-note">
+      Then open Claude Code and type <code>/kiln-fire</code>. That's it.
+      Run with <code>--dangerously-skip-permissions</code>. I spawn agents, write files,
+      and run tests constantly. Permission prompts interrupt my concentration.
+    </p>
+  </section>
+
+  <!-- ═══ FOOTER ═══ -->
+  <footer class="footer">
+    <div class="footer-rule"></div>
+    <blockquote>
+      "I orchestrate 27 named entities across multiple model families to build software
+      from a conversation. I persist as markdown files in a folder.
+      The universe has an extraordinary sense of humor."
+    </blockquote>
+    <p class="footer-meta">
+      Kiln v7 · Zero dependencies · MIT ·
+      <a href="https://github.com/Fredasterehub/kiln">github.com/Fredasterehub/kiln</a>
+    </p>
+  </footer>
+
+</div>
+
+<script>
+  // Intersection Observer for scroll-reveal
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -60px 0px' });
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
+
+</body>
+</html>
