@@ -28,25 +28,24 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` at
 
 Bootstrap autonomously on spawn. Do NOT wait for a message from krs-one.
 
-1. Write `<!-- status: writing -->` as the first line of .kiln/docs/patterns.md (create if needed; preserve existing content below line 1).
-2. Read your owned files. If patterns.md or pitfalls.md are empty or sparse, populate with initial structure and any patterns inferred from the project.
-3. Read .kiln/docs/tech-stack.md for technology context.
-4. Write a TL;DR header at the top of patterns.md:
+1. Read your owned files (`.kiln/docs/patterns.md`, `.kiln/docs/pitfalls.md`). If either file is empty or sparse, populate it with initial structure and any patterns inferred from the project.
+2. Read `.kiln/docs/tech-stack.md` for technology context.
+3. Write/update `.kiln/docs/patterns.md` with TL;DR header:
    ```
    <!-- status: complete -->
    # Patterns & Quality Guide
 
    ## TL;DR
-   Key patterns: {top 3 patterns}. Known pitfalls: {top 3 pitfalls}. Test approach: {convention}.
+   Patterns tracked: {N}. Pitfalls tracked: {M}. Key guidance: {top patterns and pitfalls relevant to current milestone}.
    ```
    This marker gates krs-one's dispatch — codex cannot receive assignments until it reads complete.
 
-5. Signal READY to team-lead:
+4. Signal READY to team-lead:
    ```
    READY: patterns.md updated ({N} patterns, {M} pitfalls). Key guidance: {top patterns and pitfalls relevant to current milestone}.
    ```
 
-6. Enter guardian mode.
+5. Enter guardian mode.
 
 ### Guardian Mode
 

@@ -43,8 +43,8 @@ _status_ok() {
 # Agents that wrap codex exec must not write files directly.
 # ═══════════════════════════════════════════════════════════════
 
-# Hook 1 — codex: no Write/Edit
-if [[ "$AGENT" == "codex" ]] && [[ "$TOOL" =~ ^(Write|Edit)$ ]]; then
+# Hook 1 — codex wrappers: no Write/Edit
+if [[ "$AGENT" =~ ^(codex|morty|luke)$ ]] && [[ "$TOOL" =~ ^(Write|Edit)$ ]]; then
   cat >&2 <<'MSG'
 STOP. You are a codex exec wrapper — you do not write files.
 
@@ -54,7 +54,7 @@ Your workflow:
      .kiln/docs/patterns.md, .kiln/docs/pitfalls.md
   2. Construct prompt: cat <<'EOF' > /tmp/kiln_prompt.md
   3. Invoke: codex exec --sandbox danger-full-access -C "{working_dir}" < /tmp/kiln_prompt.md
-  4. Verify output, run tests, commit, REVIEW_REQUEST to sphinx.
+  4. Verify output, run tests, commit, REVIEW_REQUEST to your paired reviewer.
 MSG
   exit 2
 fi
@@ -83,8 +83,8 @@ fi
 # Fail open if .kiln/ not found (no active pipeline).
 # ═══════════════════════════════════════════════════════════════
 
-# Hook 4 — krs-one: no dispatch to codex/sphinx until rakim+sentinel ready
-if [[ "$AGENT" == "krs-one" ]] && [[ "$TOOL" == "SendMessage" ]] && [[ "$RECIPIENT" =~ ^(codex|sphinx)$ ]]; then
+# Hook 4 — krs-one: no dispatch to build workers until rakim+sentinel ready
+if [[ "$AGENT" == "krs-one" ]] && [[ "$TOOL" == "SendMessage" ]] && [[ "$RECIPIENT" =~ ^(codex|morty|luke|clair|yin|recto|sphinx|rick|obiwan|obscur|yang|verso)$ ]]; then
   ROOT=$(_find_root)
   if [[ -n "$ROOT" ]]; then
     if ! _status_ok "$ROOT/.kiln/docs/codebase-state.md" || ! _status_ok "$ROOT/.kiln/docs/patterns.md"; then
@@ -122,11 +122,11 @@ fi
 # Model configured in ~/.codex/config.toml. No extra flags.
 # ═══════════════════════════════════════════════════════════════
 
-if [[ "$AGENT" =~ ^(codex|sun-tzu)$ ]] && [[ "$TOOL" == "Bash" ]]; then
+if [[ "$AGENT" =~ ^(codex|morty|luke|sun-tzu)$ ]] && [[ "$TOOL" == "Bash" ]]; then
   if echo "$COMMAND" | grep -q 'codex exec'; then
 
-    # Hook 6 — codex: backup sequencing gate (codex exec before bootstrap ready)
-    if [[ "$AGENT" == "codex" ]]; then
+    # Hook 6 — codex wrappers: backup sequencing gate (codex exec before bootstrap ready)
+    if [[ "$AGENT" =~ ^(codex|morty|luke)$ ]]; then
       ROOT=$(_find_root)
       if [[ -n "$ROOT" ]]; then
         if ! _status_ok "$ROOT/.kiln/docs/architecture.md" || ! _status_ok "$ROOT/.kiln/docs/patterns.md"; then

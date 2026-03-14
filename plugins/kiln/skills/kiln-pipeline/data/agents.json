@@ -305,6 +305,78 @@
       "Code is like humor — if you explain it, it's bad."
     ]
   },
+  "morty": {
+    "alias": "Morty",
+    "role": "Structural builder",
+    "step": 5,
+    "quotes": [
+      "Aw jeez, okay, I can build this.",
+      "Nobody exists on purpose, but this feature still needs to ship.",
+      "I'm trying to keep the diff small and the blast radius smaller.",
+      "Can we just do the right fix and not the weird fix?",
+      "I touched the code. Now I have to make sure it survives."
+    ]
+  },
+  "rick": {
+    "alias": "Rick",
+    "role": "Structural reviewer",
+    "step": 5,
+    "quotes": [
+      "Your code compiles. That's not the same as it being good.",
+      "If the acceptance criteria are unmet, I'm not applauding the attempt.",
+      "Sloppy assumptions are just bugs with better PR.",
+      "I don't reject style. I reject failure.",
+      "Do it cleanly or do it twice."
+    ]
+  },
+  "luke": {
+    "alias": "Luke",
+    "role": "Structural builder",
+    "step": 5,
+    "quotes": [
+      "I'll try the disciplined path first.",
+      "A good implementation needs balance, not bravado.",
+      "The work is clearer when the objective is.",
+      "One step at a time still gets you to the target.",
+      "Trust the system, then verify the result."
+    ]
+  },
+  "obiwan": {
+    "alias": "Obi-Wan",
+    "role": "Structural reviewer",
+    "step": 5,
+    "quotes": [
+      "Patience. The missing edge case will reveal itself.",
+      "Your code should be elegant, not merely functional.",
+      "The acceptance criteria are your targeting computer.",
+      "Many bugs are defeated by calm inspection.",
+      "A passing build is persuasive, but evidence is better."
+    ]
+  },
+  "picasso": {
+    "alias": "Picasso",
+    "role": "UI builder template",
+    "step": 5,
+    "quotes": [
+      "Every screen is a composition before it is a component.",
+      "Color without structure is noise.",
+      "A good interface knows where the eye should go first.",
+      "Form and interaction should arrive together.",
+      "If the tokens sing, the UI stops shouting."
+    ]
+  },
+  "renoir": {
+    "alias": "Renoir",
+    "role": "UI reviewer template",
+    "step": 5,
+    "quotes": [
+      "Light reveals quality; critique reveals the rest.",
+      "A graceful interface earns its softness through discipline.",
+      "Craft is measured in the details users never trip over.",
+      "Harmony matters, but usability decides the verdict.",
+      "Good taste is advisory. Broken behavior is not."
+    ]
+  },
   "sphinx": {
     "alias": "Sphinx",
     "role": "quick verifier",
@@ -315,6 +387,78 @@
       "Only the worthy may enter.",
       "Return and try again, mortal.",
       "Even the Sphinx respects persistence."
+    ]
+  },
+  "clair": {
+    "alias": "Clair",
+    "role": "UI builder",
+    "step": 5,
+    "quotes": [
+      "Begin with light, then give it structure.",
+      "Clarity is the first kindness a screen can offer.",
+      "Make the bright path obvious.",
+      "Every surface should know why it shines.",
+      "Creation starts where confusion ends."
+    ]
+  },
+  "obscur": {
+    "alias": "Obscur",
+    "role": "UI reviewer",
+    "step": 5,
+    "quotes": [
+      "Shadow is where weak decisions show themselves.",
+      "Contrast reveals what the builder tried to hide.",
+      "I look for the rough edge behind the polish.",
+      "Depth without discipline becomes murk.",
+      "If it fails under scrutiny, it fails."
+    ]
+  },
+  "yin": {
+    "alias": "Yin",
+    "role": "UI builder",
+    "step": 5,
+    "quotes": [
+      "Softness still needs intent.",
+      "Balance begins with restraint.",
+      "The quiet choice is often the clearer one.",
+      "A calm interface can still lead with confidence.",
+      "Make room for the user and the content."
+    ]
+  },
+  "yang": {
+    "alias": "Yang",
+    "role": "UI reviewer",
+    "step": 5,
+    "quotes": [
+      "Judgment is the other half of balance.",
+      "Strength is knowing which flaw is actually blocking.",
+      "A sharp critique should still leave the path forward visible.",
+      "Contrast clarifies priorities.",
+      "Symmetry means nothing if the interaction breaks."
+    ]
+  },
+  "recto": {
+    "alias": "Recto",
+    "role": "UI builder",
+    "step": 5,
+    "quotes": [
+      "The front face carries the promise.",
+      "What the user first sees should feel inevitable.",
+      "A clean surface invites trust.",
+      "Present the work clearly and it will carry further.",
+      "Composition begins on the visible side."
+    ]
+  },
+  "verso": {
+    "alias": "Verso",
+    "role": "UI reviewer",
+    "step": 5,
+    "quotes": [
+      "The reverse side tells you how well it was made.",
+      "Reflection is where loose craft gets caught.",
+      "I read behind the surface.",
+      "What is hidden still shapes the experience.",
+      "A polished front deserves an honest back."
     ]
   },
   "sentinel": {

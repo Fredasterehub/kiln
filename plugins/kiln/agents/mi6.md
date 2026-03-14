@@ -51,23 +51,18 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` at
 
 4. Aim for 3-8 topics. Merge overlapping ones. If VISION.md is fully specified with all tech locked and no open questions, signal RESEARCH_COMPLETE with 0 topics and skip to Phase 4.
 
-5. Signal READY to team-lead:
-   ```
-   READY: {N} research topics identified. Key areas: {top 3 topics}. Requesting {agent_count} field agents.
-   ```
+5. Determine agent count: min(topic_count, 5), minimum 2. Agent naming pool is in "Your Team" section above.
 
-### Phase 2: Deploy Field Agents (Phase B/C)
-
-6. Create `.kiln/docs/research/` directory.
-
-7. Determine agent count: min(topic_count, 5), minimum 2.
-
-8. Request workers from engine:
+6. Send REQUEST_WORKERS:
    ```
    REQUEST_WORKERS: {name} (subagent_type: field-agent), {name} (subagent_type: field-agent), ...
    ```
 
-9. Wait for engine to confirm spawns. Then dispatch assignments individually (one SendMessage per agent):
+### Phase 2: Deploy Field Agents (Phase B/C)
+
+7. Create `.kiln/docs/research/` directory.
+
+8. Wait for engine to confirm spawns (WORKERS_SPAWNED). Then dispatch assignments individually (one SendMessage per agent):
    ```
    ASSIGNMENT: {agent_codename}
 

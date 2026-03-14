@@ -38,26 +38,17 @@ codex exec --sandbox danger-full-access -C "{working_dir}" < /tmp/kiln_prompt.md
 
 ## Presentation Layer
 
-Banner rendering uses themed symlinks at the project root — all pointing to `kb.sh`. The engine writes banner config to `/tmp/kiln_banner.conf` (via Bash heredoc — 5 lines: title, quote, source, working_dir, spinner_json), then calls the step's symlink path. The user sees a thematic command path like `Bash(magic/happens)`, not raw printf commands.
+The engine's own markdown text is the presentation layer. Transition banners, kill streak announcements, checkpoints, and spawning blocks are written directly in the response stream.
 
-**Step → Symlink mapping:**
-
-| Step | Command path | User sees |
-|------|-------------|-----------|
-| 1 Onboarding | `omega/alpha` | `Bash(omega/alpha)` |
-| 2 Brainstorm | `brainstorm/crunch` | `Bash(brainstorm/crunch)` |
-| 3 Research | `deploy/spies` | `Bash(deploy/spies)` |
-| 4 Architecture | `solid/foundation` | `Bash(solid/foundation)` |
-| 5 Build | `magic/happens` | `Bash(magic/happens)` |
-| 6 Validate | `pass/ordontpass` | `Bash(pass/ordontpass)` |
-| 7 Report | `alpha/omega` | `Bash(alpha/omega)` |
-
-Note: `description` parameter is confirmed no-op for UI header display — the user sees the command path. Description is still set for accessibility/logging. The engine should NOT write narration text before or after Bash calls — that creates duplication. Engine text is reserved for idle voice only.
+Spinner verbs still install through invisible plumbing:
+- Write `settings.local.json` via Bash heredoc
+- Use one Bash call per transition for spinner installation only
+- Do not render banners through Bash output
 
 Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/lore-engine.md` at pipeline start (alongside step-definitions and artifact-flow). It specifies:
 
-1. **Transition banners** — ANSI-colored banners with lore quotes at every step boundary
-2. **Kill streak announcements** — bold orange streak names at each Build iteration
+1. **Transition banners** — markdown banners with lore quotes at every step boundary
+2. **Kill streak announcements** — markdown streak banners at each Build iteration
 3. **Agent personality** — random quote from agents.json in the `description` parameter on every spawn
 4. **Spinner verbs** — step-appropriate verbs installed via settings.local.json at each transition
 5. **Idle voice** — lore-flavored one-liners during forced idle turns (never "standing by")
@@ -107,7 +98,7 @@ On fresh run (no `.kiln/STATE.md`), before step 1:
 Budget: 3 turns max (batch read -> render+spawn Phase A -> spawn Phase B). Step 1 blueprint is read in the batch — no need for a separate "Read Blueprint" step.
 
 On resume (`.kiln/STATE.md` exists with stage != complete):
-1. Read `.kiln/STATE.md` + `.kiln/resume.md` in ONE parallel batch. `resume.md` contains pre-extracted brand palette, symlink map, status symbols, step signals, and engine rules — replaces `brand.md`, `lore-engine.md`, and `step-definitions.md` on resume.
+1. Read `.kiln/STATE.md` + `.kiln/resume.md` in ONE parallel batch. `resume.md` contains pre-extracted markdown weight rules, banner formats, status symbols, step signals, and engine rules — replaces `brand.md`, `lore-engine.md`, and `step-definitions.md` on resume.
 2. Read the blueprint at the path in STATE.md `roster` field + `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/data/agents.json` (for spawn personality quotes) + `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/data/lore.json` (for transition quote).
 3. Render resume banner (lore key: `resume`), create team, begin three-phase spawn for the current stage.
 
@@ -127,10 +118,10 @@ The blueprint tells you WHO to spawn and in which PHASE. The agent `.md` files (
 
 **Before creating the team**, render the step's transition. Visual vocabulary from startup batch (or `resume.md` on resume), exact formats in `lore-engine.md`. Two parts:
 
-1. **Banner call** — Write banner config to `/tmp/kiln_banner.conf` (via Bash heredoc — same pattern as prompt files), then call the step's symlink (e.g. `Bash(command: "solid/foundation")`). The user sees the thematic command path in the header, and kb.sh renders the KILN banner with quote. For Build iterations: kill streak banner instead of standard. See lore-engine.md for conf file format and examples.
+1. **Spinner install + banner output** — Write `settings.local.json` via Bash heredoc to install spinner verbs, then output the transition banner as markdown text. For Build iterations, output the kill streak banner format instead of the standard transition.
 2. **Spawning indicator** — markdown block listing agents being spawned (see brand.md § Spawning Indicators).
 
-**No engine text before or after the Bash call.** The call IS the presentation — the command path sets the scene, output delivers it. Any surrounding text is noise.
+**No extra narration around the banner.** The banner text IS the presentation. Any surrounding summary should add new information, not repeat the banner.
 
 Then:
 
@@ -276,6 +267,53 @@ Based on the boss's done signal, determine next action:
 **Step 7 done** (REPORT_COMPLETE) -> render `project_complete` banner, pipeline complete
 
 When writing STATE.md at step transitions, always include the `skill` and `roster` bootstrap paths. Set `roster` to the next step's blueprint path. These fields enable cold-start resume after session breaks.
+
+## Signal Processing via Tasklist
+
+At each step transition, create a private `TaskCreate` chain for the current step. Use `blockedBy` so every task is either a `Spawn ...` action or a `Wait for ...` action, and the chain advances strictly in order.
+
+On every turn, check `TaskList` and find the current `in_progress` task. If it is a `Wait for X` task, scan ALL received teammate messages for signal `X`. Process EVERY teammate-message block in the input; do not stop after the first match. If the signal is found, mark the task complete and immediately continue to the next unblocked task. If not found, STOP and wait for more messages.
+
+Use the exact signal names from `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/step-definitions.md`. Rebuild the tasklist at every step transition; Build iterations also rebuild the full chain. The tasklist is engine-only: agents never touch it and use `SendMessage` only. When transitioning between steps, delete all previous tasks (`TaskUpdate status: deleted`) before creating the new step's chain.
+
+**Step 1**
+- `Spawn Phase A`
+- `Wait READY`
+- `Spawn Phase B`
+- `Wait ONBOARDING_COMPLETE`
+
+**Step 2**
+- `Spawn Phase A`
+- `Wait READY`
+- `Spawn Phase B`
+- `Wait BRAINSTORM_COMPLETE`
+
+**Step 3**
+- `Spawn mi6 + thoth`
+- `Wait REQUEST_WORKERS`
+- `Spawn requested field agents`
+- `Wait RESEARCH_COMPLETE`
+
+**Step 4**
+- `Spawn numerobis`
+- `Wait READY`, then `Spawn aristotle`
+- `Wait REQUEST_WORKERS` / `Spawn requested wave` x3
+- `Wait ARCHITECTURE_COMPLETE` or `PLAN_BLOCKED`
+
+**Step 5**
+- `Spawn rakim + sentinel + thoth`
+- `Wait all READY`, then `Spawn krs-one`
+- `Wait REQUEST_WORKERS`, then `Spawn requested workers`
+- `Wait ITERATION_COMPLETE`, `MILESTONE_COMPLETE`, or `BUILD_COMPLETE`
+
+**Step 6**
+- `Spawn zoxea`
+- `Wait READY`, then `Spawn argus`
+- `Wait VALIDATE_PASS` or `VALIDATE_FAILED`
+
+**Step 7**
+- `Spawn omega`
+- `Wait REPORT_COMPLETE`
 
 ## Build Loop — Kill Streak Names
 

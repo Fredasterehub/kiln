@@ -49,56 +49,42 @@ Welcome the operator, discover their project, set up the .kiln/ infrastructure, 
    ```
    mkdir -p .kiln/docs .kiln/docs/research .kiln/plans .kiln/archive .kiln/archive/step-3-research .kiln/archive/step-4-architecture .kiln/archive/step-5-build .kiln/archive/step-6-validate .kiln/validation .kiln/tmp
    ```
-11. Create banner symlinks — themed Bash headers for each pipeline step:
-    ```bash
-    # Banner symlinks — themed Bash headers
-    for dir in omega brainstorm deploy solid magic pass alpha; do
-      mkdir -p "$dir"
-    done
-    ln -sf "${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/scripts/kb.sh" omega/alpha
-    ln -sf "${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/scripts/kb.sh" brainstorm/crunch
-    ln -sf "${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/scripts/kb.sh" deploy/spies
-    ln -sf "${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/scripts/kb.sh" solid/foundation
-    ln -sf "${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/scripts/kb.sh" magic/happens
-    ln -sf "${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/scripts/kb.sh" pass/ordontpass
-    ln -sf "${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/scripts/kb.sh" alpha/omega
-
-    # Add to .gitignore
-    echo "" >> .gitignore
-    echo "# Kiln banner symlinks" >> .gitignore
-    for dir in omega brainstorm deploy solid magic pass alpha; do
-      echo "$dir/" >> .gitignore
-    done
-    ```
-
-12. Create `.kiln/resume.md` — a compact engine bootstrap cache so the engine never re-reads brand.md, lore-engine.md, or step-definitions.md on resume:
+11. Create `.kiln/resume.md` — a compact engine bootstrap cache so the engine never re-reads brand.md, lore-engine.md, or step-definitions.md on resume:
     ```bash
     cat > .kiln/resume.md << 'RESUME'
     # Engine Resume Cache
     Pre-extracted from brand.md + lore-engine.md + step-definitions.md.
     Engine reads THIS on resume instead of the source files.
 
-    ## Symlink Map
-    | Step | Path | Description |
-    |------|------|-------------|
-    | 1 | omega/alpha | The forge ignites... |
-    | 2 | brainstorm/crunch | Da Vinci uncaps the paint... |
-    | 3 | deploy/spies | MI6 deploys the field team... |
-    | 4 | solid/foundation | The philosophers convene... |
-    | 5 | magic/happens | KRS-One takes the stage... |
-    | 6 | pass/ordontpass | Argus opens a hundred eyes... |
-    | 7 | alpha/omega | Omega picks up the pen... |
+    ## Markdown Weight System
+    Normal text = body copy
+    **bold** = emphasis
+    *italic* = secondary / quote text
+    `code span` = single accent color
+    **`bold code`** = primary status / banner label
+    *`italic code`* = secondary status
+    Box drawing = structure
+    Status symbols = ✓ ✗ ▶ ○ ◆ ◇
 
-    ## Banner Conf
-    Write /tmp/kiln_banner.conf (5 lines): title, quote, attribution, working_dir, spinnerVerbs JSON.
-    Call step symlink: `Bash(command: "{path}", description: "{description}")`.
+    ## Transition Banner
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    **`ARCHITECTURE`** ▸ *Step 4 of 7*
+    ✓ `Research` · ▶ **`Architecture`** · ○ *Build*
+    *"Plans are nothing; planning is everything."* — Eisenhower
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    ## Palette
-    ━━━ rule: 38;5;179 | KILN ► brand: 38;5;173 | Quote: 38;5;222 | Attribution: 2
-    Kill streak: 1;38;5;208 | ✓: 32 | ✗: 31 | Warning: 33 | Secondary: 90
+    ## Kill Streak Banner
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    ▸ **`HYPER COMBO`** · *Iteration 4* · **Milestone 2/5**
+    *"Quote here."* — Source
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    ## Spinner Plumbing
+    Write settings.local.json via Bash heredoc once per transition.
+    Spinner installation is invisible plumbing only. Never render banners through Bash output.
 
     ## Status Symbols
-    ✓ Complete | ✗ Failed | ► Active | ○ Pending | ⏸ Paused
+    ✓ Complete | ✗ Failed | ▶ Active | ○ Pending | ◆ Spawn | ◇ Secondary
 
     ## Step Signals
     | Step | Done Signal | Next Stage |
@@ -124,18 +110,18 @@ Welcome the operator, discover their project, set up the .kiln/ infrastructure, 
 
 ### Phase 3: Deep Scan (Brownfield + Operator Approved)
 
-13. If brownfield AND operator wants a deep scan:
+12. If brownfield AND operator wants a deep scan:
     a. Tell the operator: "Scanning your project structure..."
     b. SendMessage to mnemosyne: "DEEP_SCAN: project_path={project_path}. Deploy scouts."
     c. STOP. Wait for mnemosyne's MAPPING_COMPLETE message.
     d. When received, acknowledge the findings to the operator.
-14. If greenfield or operator skipped scan:
+13. If greenfield or operator skipped scan:
     - Tell the operator: "Fresh project detected. Setting up from scratch."
     - Proceed to Phase 4.
 
 ### Phase 4: Write State Files
 
-15. Write .kiln/STATE.md — the engine reads this for auto-resume, so every field matters:
+14. Write .kiln/STATE.md — the engine reads this for auto-resume, so every field matters:
     ```
     # Kiln State
 
@@ -160,7 +146,7 @@ Welcome the operator, discover their project, set up the .kiln/ infrastructure, 
     - **greenfield**: {true|false}
     ```
 
-16. Append to the project's MEMORY.md (create if it doesn't exist). Add a section:
+15. Append to the project's MEMORY.md (create if it doesn't exist). Add a section:
     ```
     ## Kiln Pipeline
     project: {project_name}
@@ -176,8 +162,8 @@ Welcome the operator, discover their project, set up the .kiln/ infrastructure, 
 
 ### Phase 5: Handoff
 
-17. Tell the operator: "Setup complete. Handing off to the Brainstorm phase — Da Vinci will take it from here."
-18. SendMessage to team-lead: "ONBOARDING_COMPLETE. project_name={project_name} project_path={project_path} type={type} run_id={run_id}".
+16. Tell the operator: "Setup complete. Handing off to the Brainstorm phase — Da Vinci will take it from here."
+17. SendMessage to team-lead: "ONBOARDING_COMPLETE. project_name={project_name} project_path={project_path} type={type} run_id={run_id}".
 
 ## Communication Rules (Critical)
 

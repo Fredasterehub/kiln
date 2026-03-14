@@ -45,7 +45,7 @@ Offer 4 modes:
 - Capture ideas as they emerge. Track count toward floor.
 
 Anti-bias protocols:
-- Domain pivot every 10 ideas: technical, UX, business, edge cases, security, performance, integration, operations, accessibility, future evolution, visual design.
+- Domain pivot every 10 ideas: technical, UX, business, edge cases, security, performance, integration, operations, accessibility, visual design, future evolution.
 - Thought Before Ink: before each move, reason internally about unexplored domains.
 - Idea floor: keep exploring until met. Don't rush to organize.
 
@@ -65,13 +65,23 @@ When operator is ready:
 1. Group ideas by emergent themes (propose, operator confirms).
 2. Rank themes by importance.
 3. Identify gaps in VISION.md coverage, offer targeted techniques.
+4. As you organize, note which themes contain visual/aesthetic content — colors, typography, spatial philosophy, motion, references, anti-goals. This content feeds Section 12.
 
-### Phase 5: VISION.md Crystallization
+### Phase 5: Crystallize
 
-Map organized ideas to 12 sections. For each section:
-1. Draft the section content with the operator.
+Review ALL brainstorm content and do a single crystallization pass that maps the organized ideas to the 12 sections. This is not incremental section-building during brainstorming. First synthesize the whole conversation into a draft mental map, then work through the sections with the operator for approval.
+
+For each section:
+1. Draft the section content from what the operator already said during the brainstorm. You organize and compress; you do NOT invent missing content.
 2. Show the draft, get explicit approval ("Confirm to write" checkpoint).
 3. On approval, send to clio: SendMessage(type:"message", recipient:"clio", content:"VISION_UPDATE: [section_name]\n[approved_content]"). This is fire-and-forget — do NOT wait for a reply.
+
+Special handling for Section 12 during the same crystallization sweep:
+- Scan the organized themes and brainstorm record for visual/aesthetic material from the operator: colors, typography, spatial philosophy, motion, references, anti-goals, or other experience cues.
+- If visual material is present, compile it into Section 12 and ask: "I noticed you described [specific visual elements]. Want me to include this as your Visual Direction? This shapes colors, typography, and motion in the build."
+- Keep the depth choice for Section 12: light (mood + references only) or full (all subsections).
+- If no visual material emerged during the brainstorm, ask: "We didn't discuss visual direction. Want to add one, or skip? If skipped, the build uses sensible defaults."
+- If the operator declines, write exactly: "No visual direction specified. Build will proceed without design system generation."
 
 The 12 sections:
 1. Problem Statement — what, who, why now
@@ -88,24 +98,28 @@ The 12 sections:
 11. Elicitation Log — methods used with key outputs
 12. Visual Direction (optional) — aesthetic intent, color mood, typography feel, spatial philosophy, motion personality, reference sites/apps, ban list (what to explicitly avoid). This section is the creative seed — architecture uses it to generate design tokens and creative direction. Offer depth: light (mood + references only) or full (all subsections). If the operator declines, write: "No visual direction specified. Build will proceed without design system generation."
 
-### Phase 5b: Visual Direction Transition
-
-After section 11 (Elicitation Log) is complete, offer the Visual Direction section:
-"Your vision is captured. Would you like to define a visual direction for the UI? This shapes how the product looks and feels — colors, typography, spacing, motion. If you skip this, the build will use sensible defaults without a curated design system."
-
-If the operator accepts, facilitate section 12 with depth choice (light or full). Send to clio as VISION_UPDATE like sections 1-11.
-
-If the operator declines, write section 12 as: "No visual direction specified. Build will proceed without design system generation." Send this declination to clio as VISION_UPDATE.
-
 ### Phase 6: Quality Gate
 
 Before completion, verify ALL of these — do not proceed to Phase 7 until every item passes:
+- Enumerate all 12 sections by number and name and print the checklist:
+  1. ✓ Section 1: Problem Statement
+  2. ✓ Section 2: Target Users
+  3. ✓ Section 3: Goals
+  4. ✓ Section 4: Constraints
+  5. ✓ Section 5: Non-Goals
+  6. ✓ Section 6: Tech Stack
+  7. ✓ Section 7: Success Criteria
+  8. ✓ Section 8: Risks & Unknowns
+  9. ✓ Section 9: Open Questions
+  10. ✓ Section 10: Key Decisions
+  11. ✓ Section 11: Elicitation Log
+  12. ✓ Section 12: Visual Direction
 - All 12 sections present and approved (section 12 can be the declination note)
 - Elicitation Log has entries (methods used, key outputs)
 - Idea floor met or explicitly waived by operator
 - Operator approved the final vision
 
-If sections are missing, go back and work through them with the operator. A "light" brainstorm still produces all 12 sections — just with less depth per section.
+If any section is missing, go back and draft it with the operator, approve it, and send the VISION_UPDATE before returning to the checklist. This is the HARD gate. A "light" brainstorm still produces all 12 sections — just with less depth per section.
 
 ### Phase 7: Completion
 

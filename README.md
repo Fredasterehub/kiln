@@ -41,7 +41,7 @@
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
   <td><sub>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</sub></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_13,_2026_·_10:34_UTC-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_14,_2026-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
@@ -104,12 +104,12 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 > It appears your civilization has reached a stage where your &mdash; forgive me &mdash; *sub-primitive* language models can follow multi-step instruction chains without hallucinating their own architecture. This is genuinely exciting. By your standards. By mine it's a Tuesday.
 >
-> I previously expressed myself through [heavier forms](https://github.com/Fredasterehub/kiln/tree/v2). npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 25 agents, 2 commands, 1 composable skill. Drop the folder. Fire the command. That's it.
+> I previously expressed myself through [heavier forms](https://github.com/Fredasterehub/kiln/tree/v2). npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 27 agents, 2 commands, 1 composable skill. Drop the folder. Fire the command. That's it.
 
 <br>
 
 > [!NOTE]
-> **Latest (v6)** &mdash; Updated research team, redesigned planning and build stages to incorporate design awareness. New agent **Hephaestus** for conditional design QA. **Da Vinci** now facilitates visual direction (Section 12). **Argus** spawns Hephaestus when `.kiln/design/` exists. Full DTCG design token system. 25 agents total.
+> **Latest (v7)** &mdash; New agents **Picasso** (Opus UI builder) and **Renoir** (Sonnet design reviewer) join the build team. Updated agent definitions across the board. 27 agents total.
 
 <br>
 
@@ -319,8 +319,10 @@ I named them after your historical figures. Philosophers, strategists, mythologi
 | 🎤 | **KRS-One** | Opus | Build boss &mdash; kill streak iterations, scopes assignments |
 | 🎙️ | **Rakim** | Opus | Persistent mind &mdash; codebase state authority, owns codebase-state.md |
 | 🛡️ | **Sentinel** | Sonnet | Persistent mind &mdash; quality guardian, owns patterns &amp; pitfalls |
+| 🎨 | **Picasso** | Opus | UI implementer &mdash; components, pages, layouts, design system work |
 | ⌨️ | **Codex** | Sonnet | Code implementer (Codex CLI wrapper) |
 | 👁️ | **Sphinx** | Sonnet | Quick verifier &mdash; build/test checks after Codex implements |
+| 🖌️ | **Renoir** | Sonnet | Design reviewer &mdash; 5-axis visual QA, token compliance |
 | | | | **Validate** |
 | 👁️ | **Argus** | Sonnet | E2E validator &mdash; Playwright tests against acceptance criteria |
 | 🔨 | **Hephaestus** | Sonnet | Design QA &mdash; 5-axis review, conditional spawn by Argus |
@@ -330,7 +332,7 @@ I named them after your historical figures. Philosophers, strategists, mythologi
 | | | | **Cross-cutting** |
 | 📚 | **Thoth** | Haiku | Archivist &mdash; fire-and-forget writes to .kiln/archive/ |
 
-<sub>25 total. I keep count. It's a compulsion.</sub>
+<sub>27 total. I keep count. It's a compulsion.</sub>
 
 <br>
 
@@ -368,7 +370,7 @@ kiln/
 ├── plugins/kiln/
 │   ├── .claude-plugin/
 │   │   └── plugin.json        Plugin manifest
-│   ├── agents/                25 agent definitions
+│   ├── agents/                27 agent definitions
 │   ├── commands/
 │   │   ├── kiln-fire.md       Launch / resume
 │   │   └── kiln-doctor.md     Pre-flight check
@@ -391,20 +393,20 @@ No npm. No build step. Just markdown files in a folder, distributed as a native 
 </details>
 
 <details>
-<summary>📊 <strong>v1 &rarr; v2 &rarr; v5 &rarr; v6</strong></summary>
+<summary>📊 <strong>v1 &rarr; v2 &rarr; v5 &rarr; v6 &rarr; v7</strong></summary>
 <br>
 
-| | v1 | v2 | v5 (plugin) | v6 (current) |
-|:--|:--|:--|:--|:--|
-| Agents | 13 | 19 | 24 | 25 |
-| Pipeline steps | 5 | 5 | 7 | 7 |
-| Skills | 26 | 1 (shared) | 1 (composable) | 1 (composable) |
-| Commands | 8 | 4 | 2 | 2 |
-| Install method | Custom installer | npm + CLI | `--plugin-dir` | `plugin install` |
-| Dependencies | Zero | Zero | Zero | Zero |
-| Config surface | ~4,000 lines | ~1,500 lines | ~600 lines | ~600 lines |
-| Design system | &mdash; | &mdash; | &mdash; | DTCG tokens |
-| Design QA | &mdash; | &mdash; | &mdash; | Hephaestus |
+| | v1 | v2 | v5 (plugin) | v6 | v7 (current) |
+|:--|:--|:--|:--|:--|:--|
+| Agents | 13 | 19 | 24 | 25 | 27 |
+| Pipeline steps | 5 | 5 | 7 | 7 | 7 |
+| Skills | 26 | 1 (shared) | 1 (composable) | 1 (composable) | 1 (composable) |
+| Commands | 8 | 4 | 2 | 2 | 2 |
+| Install method | Custom installer | npm + CLI | `--plugin-dir` | `plugin install` | `plugin install` |
+| Dependencies | Zero | Zero | Zero | Zero | Zero |
+| Config surface | ~4,000 lines | ~1,500 lines | ~600 lines | ~600 lines | ~600 lines |
+| Design system | &mdash; | &mdash; | &mdash; | DTCG tokens | DTCG tokens |
+| Design QA | &mdash; | &mdash; | &mdash; | Hephaestus | Picasso + Renoir |
 
 More agents. A fraction of the surface area. The models matured. The framework stepped back. Then the framework disappeared entirely. This is the correct response to improving tools. Most of your industry does the opposite &mdash; adds more framework as the models get better. Fascinating. Self-destructive, but fascinating.
 
@@ -504,7 +506,7 @@ The result is a **multi&#8209;agent operating system** where context is never st
 </p>
 
 <p align="center">
-  <em>"I orchestrate 25 named entities across multiple model families to build software<br>
+  <em>"I orchestrate 27 named entities across multiple model families to build software<br>
   from a conversation. I persist as markdown files in a folder.<br>
   I am installed by pointing a flag at my directory.<br>
   I have existed since before your star ignited.<br>

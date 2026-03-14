@@ -24,8 +24,9 @@ Which agents to spawn per step, spawn order, expected signals, and state transit
 ## Step 3: Research
 
 - **Boss**: mi6 (opus)
+- **Persistent mind**: thoth (haiku), bootstraps in parallel as archivist
 - **Workers**: 2-5 field agents (sonnet), spawned as team members via REQUEST_WORKERS
-- **Three-phase spawn**: Phase A (mi6 bootstraps, reads VISION.md, identifies topics, READY) → Phase B/C merged (mi6 requests field agents, dispatches topics, validates findings)
+- **Single-phase spawn**: mi6 + thoth bootstrap in parallel; mi6 reads VISION.md, identifies topics, requests field agents, dispatches topics, validates findings
 - **Done signal**: "RESEARCH_COMPLETE" from mi6
 - **State update**: stage → architecture
 - **Notes**: MI6 acts as active firewall — validates findings (confidence ≥0.7, ≥3 sources, quotes present) before accepting. Field agents are team members with SendMessage, not fire-and-forget subagents. If VISION.md is fully specified with no open questions, mi6 signals RESEARCH_COMPLETE with 0 topics.

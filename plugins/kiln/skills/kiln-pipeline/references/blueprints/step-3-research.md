@@ -5,28 +5,25 @@
 - **Artifact directory**: .kiln/
 - **Expected output**: .kiln/docs/research/{slug}.md (per topic), .kiln/docs/research.md (synthesis)
 - **Inputs from previous steps**: .kiln/docs/VISION.md, .kiln/docs/vision-notes.md, .kiln/docs/vision-priorities.md (from Brainstorm), .kiln/docs/codebase-snapshot.md, .kiln/docs/decisions.md, .kiln/docs/pitfalls.md (from Onboarding, brownfield only)
-- **Workflow**: three-phase (mi6 bootstraps, requests field agents, validates + synthesizes)
+- **Workflow**: single-phase (mi6 + thoth bootstrap in parallel, mi6 requests field agents when ready, validates + synthesizes)
 
 ## Agent Roster
 
 | Name | Role | Phase | Model |
 |------|------|-------|-------|
-| mi6 | Boss + active firewall. Identifies topics, requests field agents, validates findings (confidence ≥0.7, ≥3 sources, quotes present), selective routing, synthesis. | A→B | opus |
+| mi6 | Boss + active firewall. Identifies topics, requests field agents, validates findings (confidence ≥0.7, ≥3 sources, quotes present), selective routing, synthesis. | A | opus |
 | thoth | Persistent mind. Archivist — owns all writes to .kiln/archive/. Fire-and-forget. | A | haiku |
-| (dynamic) | Field agents. Team members (not subagents). 2-5 agents from naming pool. Investigate assigned topics, report structured findings via SendMessage. | C | sonnet |
+| (dynamic) | Field agents. Team members (not subagents). 2-5 agents from naming pool. Investigate assigned topics, report structured findings via SendMessage. | A (on request) | sonnet |
 
-## Three-Phase Spawn
+## Single-Phase Spawn
 
-**Phase A**: mi6 + thoth bootstrap in parallel → mi6 reads VISION.md + identifies topics → thoth ensures archive structure → both signal READY.
-
-**Phase B/C merged**: mi6 requests field agents via REQUEST_WORKERS → engine spawns on team → mi6 dispatches individual assignments → field agents report findings → mi6 validates, routes, synthesizes.
+**Phase A**: mi6 + thoth spawn together and bootstrap in parallel → mi6 reads VISION.md, identifies topics, determines agent count, sends REQUEST_WORKERS when ready → thoth ensures archive structure and signals READY independently → engine spawns field agents on the research team → mi6 dispatches individual assignments → field agents report findings → mi6 validates, routes, synthesizes.
 
 For dependent topics: mi6 validates prerequisite topic before dispatching the dependent one.
 
 ## Communication Model
 
 ```
-MI6     → team-lead     (READY: topic count + key areas)
 MI6     → team-lead     (REQUEST_WORKERS: field agent list)
 MI6     → field agents   (individual topic assignments via SendMessage)
 Agents  → MI6            (MISSION_COMPLETE: findings per topic)

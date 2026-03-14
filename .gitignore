@@ -1,4 +1,8 @@
+# Pipeline runtime artifacts
 .kiln/
 
-# Internal plugin tooling
+# Internal dev/test tooling (not shipped)
 plugins/kiln/skills/kiln-forge/
+plugins/kiln/skills/msg-stress-test/
+purecheck*
+__pycache__/

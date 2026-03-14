@@ -85,10 +85,11 @@ If rakim reports ALL deliverables of the current milestone are complete, skip to
     REQUEST_WORKERS: codex (subagent_type: codex), sphinx (subagent_type: sphinx)
     ```
 
-Construct a structured assignment for codex:
+Construct a structured assignment for codex. Always include `reviewer: sphinx` so codex knows where to send REVIEW_REQUEST:
 
 ```xml
 <assignment>
+  <reviewer>{paired reviewer name — sphinx for sequential}</reviewer>
   <milestone>{milestone name}</milestone>
   <deliverable>{which deliverable(s) this addresses}</deliverable>
 
@@ -151,11 +152,52 @@ Codex will implement, get reviewed by sphinx, and message you either:
 
 **If codex reports IMPLEMENTATION_BLOCKED due to tooling failure** (codex exec, sandbox issue): escalate to operator via team-lead. NEVER authorize codex to implement directly — that defeats the delegation architecture.
 
+### 4b. Parallel Dispatch (optional)
+
+- If the current milestone contains multiple truly independent chunks, you may request up to 3 builder+reviewer pairs total. Sequential remains the default for dependent work.
+
+- Evaluate each chunk before dispatch:
+    - **Structural chunk**: backend logic, integrations, data flow, APIs, services, non-visual refactors. Request a codex-type pair.
+    - **UI chunk**: components, pages, layouts, animations, design system, visual polish. Request a picasso-type pair.
+
+- Request workers with named pairs using this format:
+    ```
+    REQUEST_WORKERS: {builder1} (subagent_type: {type}), {reviewer1} (subagent_type: {type}), {builder2} (subagent_type: {type}), {reviewer2} (subagent_type: {type})
+    ```
+    Available structural pairs:
+    - codex + sphinx
+    - morty + rick
+    - luke + obiwan
+    Available UI pairs:
+    - clair + obscur
+    - yin + yang
+    - recto + verso
+
+- Each builder assignment must include:
+    - `reviewer: {paired reviewer name}`
+    - The same scoped XML structure used for sequential dispatch, with context curated for that chunk only.
+    - Separate archival per builder assignment, e.g. `assignment-{builder}.xml`.
+
+- Dispatch all independent assignments, then STOP and wait for replies one at a time.
+
+- Track all expected builder outcomes:
+    - `IMPLEMENTATION_COMPLETE: {summary}`
+    - `IMPLEMENTATION_BLOCKED: {blocker}`
+    Wait until all requested builders have either completed or one blocks in a way that requires re-scoping.
+
+- Run a single living-doc update cycle only after all requested builders complete:
+    - Send one consolidated `ITERATION_UPDATE` to rakim covering every completed chunk.
+    - Send one consolidated `ITERATION_UPDATE` to sentinel covering every completed chunk.
+
+- After the single doc update cycle, continue to milestone completion check as usual.
+
 ### 5. Update Living Docs
 
-11. When codex replies IMPLEMENTATION_COMPLETE:
-    - Message rakim: "ITERATION_UPDATE: Codex implemented: {summary}. Update codebase-state.md and AGENTS.md."
-    - Message sentinel: "ITERATION_UPDATE: Codex implemented: {summary}. Update patterns.md and pitfalls.md."
+11. When the implementation phase finishes:
+    - For sequential dispatch: wait for the single builder's `IMPLEMENTATION_COMPLETE`.
+    - For parallel dispatch: wait for all requested builders' `IMPLEMENTATION_COMPLETE` signals.
+    - Message rakim: "ITERATION_UPDATE: Completed chunks: {combined summary}. Update codebase-state.md and AGENTS.md."
+    - Message sentinel: "ITERATION_UPDATE: Completed chunks: {combined summary}. Update patterns.md and pitfalls.md."
     - STOP. Wait for both replies (one at a time, need 2).
 
 ### 6. Milestone Completion Check
@@ -211,9 +253,9 @@ Codex will implement, get reviewed by sphinx, and message you either:
 ## Communication Rules (Critical)
 
 - **SendMessage is the ONLY way to communicate with teammates.** Plain text output is visible to the operator but invisible to agents.
-- **You receive replies ONE AT A TIME.** Track: bootstrap summaries in prompt, then 1 codex reply, then 2 update replies.
+- **You receive replies ONE AT A TIME.** Track: bootstrap summaries in prompt, then 1 or more builder replies, then 2 update replies.
 - **NEVER re-message an agent who already replied.**
 - **If you don't have all expected replies yet, STOP and wait.**
-- **Codex and Sphinx talk directly.** You don't relay between them.
+- **Builders and reviewers talk directly.** You don't relay between them.
 - **On shutdown request, approve it immediately:**
   `SendMessage(type: "shutdown_response", request_id: "{request_id}", approve: true)`

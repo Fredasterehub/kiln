@@ -124,6 +124,8 @@ Standard signals sent via SendMessage to team-lead (the engine):
 | `REPORT_COMPLETE` | Step 7 done | Omega |
 | `BLOCKED: {reason}` | Cannot proceed, need intervention | Any agent |
 
+Note: `READY` is for persistent minds only. Bosses who do not depend on persistent mind output should evaluate scope and go straight to `REQUEST_WORKERS`.
+
 Always include context after the signal name. A bare signal is less useful than one with specifics:
 - Bad: `RESEARCH_COMPLETE`
 - Good: `RESEARCH_COMPLETE: 6 topics researched. Key findings: RSC viable, Drizzle preferred over Prisma.`

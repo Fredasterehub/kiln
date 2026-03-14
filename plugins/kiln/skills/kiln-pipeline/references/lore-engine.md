@@ -9,107 +9,52 @@ All data lives in `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/data/`:
 
 Visual vocabulary is defined in `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/brand.md`. Read it once — single source of truth for all visual patterns.
 
-## The Two-Channel Pattern
+## Core Pattern
 
-Claude Code shows two things for every Bash call: the **command path** (in the collapsed header) and the **output** (the rendered result). The `description` parameter is a no-op — the UI always shows the command, not the description.
+Engine text IS the presentation. For every transition, the engine writes the banner directly as markdown in its own response. There are no banner-rendering tool calls and no separate visual surface behind the scenes.
 
-Kiln exploits this: themed symlinks at the project root (e.g., `magic/happens`, `deploy/spies`) all point to `kb.sh`. The user sees `Bash(magic/happens)` as the header — a thematic label, not raw printf. The output delivers the visual payoff — colored banner with quote.
-
-- The **command path** sets the scene — `omega/alpha`, `solid/foundation`, `pass/ordontpass`
-- The **output** delivers the visual payoff — KILN banner with quote
-- The **description** is set for accessibility/logging but does NOT display in the UI header
-
-**Step → Symlink mapping:**
-
-| Step | Command path | User sees |
-|------|-------------|-----------|
-| 1 Onboarding | `omega/alpha` | `Bash(omega/alpha)` |
-| 2 Brainstorm | `brainstorm/crunch` | `Bash(brainstorm/crunch)` |
-| 3 Research | `deploy/spies` | `Bash(deploy/spies)` |
-| 4 Architecture | `solid/foundation` | `Bash(solid/foundation)` |
-| 5 Build | `magic/happens` | `Bash(magic/happens)` |
-| 6 Validate | `pass/ordontpass` | `Bash(pass/ordontpass)` |
-| 7 Report | `alpha/omega` | `Bash(alpha/omega)` |
-
-**The engine's own text output before a Bash call is also visible.** If the engine writes "Ignition..." and then Bash prints the banner, the user sees both — that's duplication. Rule: **either the engine says it OR Bash prints it, never both.** Let Bash handle all visual rendering. The engine's text should only be used for idle voice and direct operator communication.
+Spinner verbs still install through invisible plumbing:
+- One Bash heredoc per transition writes `settings.local.json`
+- That Bash call is only for spinner configuration
+- The transition banner itself is always markdown text from the engine
 
 ## Transition Banners
 
-Every transition is ONE Bash call that renders banner + installs spinner verbs. Keep output to **3 lines max**.
+Every transition has two parts:
+1. Install spinner verbs silently via Bash heredoc to `settings.local.json`
+2. Output the banner as markdown text
 
-### Standard transitions (step changes)
+### Standard transitions
 
-1. Write banner config (via Bash heredoc):
-   ```
-   /tmp/kiln_banner.conf:
-   Architecture
-   Plans are nothing; planning is everything.
-   Dwight D. Eisenhower
-   /path/to/working/dir
-   {"spinnerVerbs":["Confucius contemplates the path forward","Sun Tzu is flanking the requirements",...]}
-   ```
+Use this format for step changes:
 
-2. Call the step's symlink:
-   ```
-   Bash(command: "solid/foundation", description: "The philosophers convene...")
-   ```
-
-The user sees `Bash(solid/foundation)` in the header. kb.sh reads the conf and renders:
-```
- KILN ► Architecture
- "Plans are nothing; planning is everything." — Dwight D. Eisenhower
+```md
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**`ARCHITECTURE`** ▸ *Step 4 of 7*
+✓ `Research` · ▶ **`Architecture`** · ○ *Build*
+*"Plans are nothing; planning is everything."* — Eisenhower
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-### Pipeline start (greeting + banner)
+### Pipeline start
 
-For the first transition, prepend the greeting to the conf title line:
+For ignition, output the greeting first, then the standard banner:
 
-1. Write banner config (via Bash heredoc):
-   ```
-   /tmp/kiln_banner.conf:
-   Ignition
-   The secret of getting ahead is getting started.
-   Mark Twain
-   /path/to/working/dir
-   {"spinnerVerbs":["Alpha asks the hard questions","Mapping the territory",...]}
-   ```
+```md
+The forge is hot, the agents are caffeinated, and Da Vinci already has opinions.
 
-2. Output the greeting as text, then call the symlink:
-   ```
-   "The forge is hot, the agents are caffeinated, and Da Vinci already has opinions."
-   Bash(command: "omega/alpha", description: "The forge ignites...")
-   ```
-
-The user sees the greeting text, then `Bash(omega/alpha)` with the KILN banner.
-
-### Kill Streak (Build iterations)
-
-Kill streak banners also use the symlink, but the conf title should include the streak name:
-
-1. Write banner config (via Bash heredoc):
-   ```
-   /tmp/kiln_banner.conf:
-   ▸ HYPER COMBO              Iteration 4 · Milestone 2/5
-   It does not matter how slowly you go as long as you do not stop.
-   Confucius
-   /path/to/working/dir
-   {"spinnerVerbs":["KRS-One drops the knowledge","Codex is typing — don't interrupt",...]}
-   ```
-
-2. Call the Build symlink:
-   ```
-   Bash(command: "magic/happens", description: "KRS-One announces the next combo...")
-   ```
-
-The user sees `Bash(magic/happens)` with the kill streak banner in the output.
-
-On milestone completion, add a text line: `✓ Milestone complete: {name}`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**`IGNITION`** ▸ *Step 1 of 7*
+▶ **`Onboarding`** · ○ *Brainstorm* · ○ *Research*
+*"The secret of getting ahead is getting started."* — Mark Twain
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
 
 ### Operator checkpoints
 
-When the pipeline needs operator input (plan approval, blocked state), render as **markdown** (not Bash) since the engine processes the response:
+When the pipeline needs operator input, render a markdown checkpoint:
 
-```
+```md
 ╔══════════════════════════════════════════════════════════════╗
 ║  APPROVAL REQUIRED                                           ║
 ╚══════════════════════════════════════════════════════════════╝
@@ -119,6 +64,23 @@ When the pipeline needs operator input (plan approval, blocked state), render as
 ──────────────────────────────────────────────────────────────
 → approve / edit / abort
 ──────────────────────────────────────────────────────────────
+```
+
+## Kill Streak Banners
+
+Build iterations use the streak format:
+
+```md
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+▸ **`HYPER COMBO`** · *Iteration 4* · **Milestone 2/5**
+*"It does not matter how slowly you go as long as you do not stop."* — Confucius
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+On milestone completion, add:
+
+```md
+✓ Milestone complete: {name}
 ```
 
 ## Event → Lore Key Mapping
@@ -150,7 +112,7 @@ When the pipeline needs operator input (plan approval, blocked state), render as
 
 ## Spinner Verbs
 
-Installed silently inside the transition Bash call — never as a separate visible step.
+Installed silently inside one Bash call per transition. This is invisible plumbing only — never use that call to render banners or other presentation.
 
 ### Step → Category Mapping
 
@@ -166,9 +128,9 @@ Installed silently inside the transition Bash call — never as a separate visib
 
 ## Spawning Indicators
 
-Before spawning a team, output a spawning block (markdown, not Bash):
+Before spawning a team, output a spawning block:
 
-```
+```md
 ◆ Spawning 5 agents...
   → krs-one
   → codex
@@ -178,7 +140,8 @@ Before spawning a team, output a spawning block (markdown, not Bash):
 ```
 
 After an agent completes:
-```
+
+```md
 ✓ codex complete: "14 files committed, tests passing"
 ```
 
@@ -192,11 +155,11 @@ Vary each time — never repeat the same line twice in a row.
 
 ## Rendering Rules
 
-1. **One Bash call per transition** — banner + spinner install in one call.
-2. **3-line max Bash output** — Claude Code truncates longer output.
-3. **No duplicate text** — engine text and Bash output must not overlap.
-4. **Description is for logging** — set from the brand.md table, but does not control the UI header (the command path does).
-5. **One banner per transition** — never two back-to-back without work between.
-6. **ANSI for color, Unicode for structure** — colors enhance but never carry meaning alone. Box drawing characters (━ ═ ─) and status symbols (✓ ► ✗ ○) provide structure.
-7. **Markdown for interactive output** — checkpoints, approval boxes, status tables.
-8. **Step name is the progress** — no step counters or progress icons in banners.
+1. Output banners as markdown text from the engine itself.
+2. Use one spinner-install call per transition, with no visible banner rendering in that call.
+3. Keep transition text and banner text aligned — no duplicate narration around the banner.
+4. Use the markdown weight system from `brand.md`; inline code is the only accent treatment.
+5. Use one banner per transition — never stack multiple banners without work between them.
+6. Preserve structural consistency with rules, spacing, and status symbols.
+7. Use checkpoints for interactive operator states and banners for state transitions.
+8. Show progress in the progress line, not by inventing alternate banner formats.
