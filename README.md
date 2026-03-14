@@ -113,6 +113,22 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 <br>
 
+## 🔧 v7 &mdash; The Engine Tightens
+
+**Faster research.** MI6 no longer pauses to announce readiness before requesting field agents. The unnecessary handshake that caused a 67-second stall is gone &mdash; the spymaster reads the vision, picks topics, and deploys operatives in one fluid motion.
+
+**Visual direction that actually lands.** Da Vinci's brainstorm now weaves aesthetic intent into the conversation naturally, then crystallizes all 12 vision sections in a single sweep &mdash; with a hard quality gate that checks every one by name. Visual direction is no longer an afterthought bolted onto the end; it emerges from the conversation and triggers the full design token cascade.
+
+**Sentinel finally sticks.** The quality guardian's bootstrap marker &mdash; the one that gates the entire build dispatch &mdash; failed three times across three smoke tests. The fix mirrors Rakim's proven pattern: the marker is inseparable from the content. One write, one file, done.
+
+**No more dropped signals.** The engine now tracks every step transition as a private tasklist with explicit dependencies. When three agents report in the same turn, every signal gets processed &mdash; no more 19-minute stalls because a completion message was buried under a review pass.
+
+**Markdown-native presentation.** The old ANSI color palette never rendered in Claude Code &mdash; raw escape codes leaked into the output. The entire presentation layer now speaks markdown: **bold code** for status, *italic* for secondary, unicode rules for structure. One accent color, zero Bash banner calls. What the operator sees is what we intended.
+
+**Parallel build teams.** The build step can now run up to three builder+reviewer pairs simultaneously &mdash; structural pairs delegating to GPT-5.4, UI pairs writing directly with Opus. Six named duos join the roster: `morty+rick`, `luke+obiwan`, `clair+obscur`, `yin+yang`, `recto+verso`. KRS-One decides the mix based on chunk independence and whether the work is structural or visual.
+
+<br>
+
 ## 🧬 Why Kiln Is Not Just Another Agentic Framework
 
 Most "agentic" tools give you one agent and hope. Kiln gives you **a native multi&#8209;agent operating system** built directly into Claude Code's DNA.
