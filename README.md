@@ -109,11 +109,7 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 <br>
 
 > [!NOTE]
-> **Latest (v7)** &mdash; New agents **Picasso** (Opus UI builder) and **Renoir** (Sonnet design reviewer) join the build team. Updated agent definitions across the board. 27 agents total.
-
-<br>
-
-## 🔧 v7 &mdash; The Engine Tightens
+> **🔧 v7 &mdash; The Engine Tightens**
 
 **Faster research.** MI6 no longer pauses to announce readiness before requesting field agents. The unnecessary handshake that caused a 67-second stall is gone &mdash; the spymaster reads the vision, picks topics, and deploys operatives in one fluid motion.
 
