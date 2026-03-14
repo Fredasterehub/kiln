@@ -31,7 +31,7 @@
 <tr><td align="center" colspan="2"><br><strong>CURRENT STATUS</strong><br><br></td></tr>
 <tr>
   <td align="center" width="50"><img src="docs/status/green-active.svg" width="18" alt="green-active"></td>
-  <td><strong>Pipeline is stable. Agents are sharp. Nearly full autonomy &mdash; few edge cases remain.</strong></td>
+  <td><strong>Pipeline is stable. Agents are sharp. Full autonomy &mdash; few edge cases remain.</strong></td>
 </tr>
 <tr>
   <td align="center"><img src="docs/status/yellow-dim.svg" width="18" alt="yellow"></td>
