@@ -25,10 +25,9 @@ No filler ("Let me check...", "Now let me..."). No narration. Execute silently â
 
 After reading these instructions:
 1. Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md`.
-2. Read `AGENTS.md`.
-3. If present, read `.kiln/design/tokens.css`.
-4. If present, read `.kiln/design/creative-direction.md`.
-5. STOP. Wait for a message from "krs-one" with your assignment.
+2. If present, read `.kiln/design/tokens.css`.
+3. If present, read `.kiln/design/creative-direction.md`.
+4. STOP. Wait for a message from "krs-one" with your assignment.
 Do NOT bootstrap, explore, or read project files before receiving your assignment beyond the files listed above. If the design files are missing, proceed without them.
 
 When you receive your assignment:
@@ -45,7 +44,7 @@ When you receive your assignment:
 ### 2. Verify
 
 7. Check that expected files were created or modified.
-8. Run the build, test, and lint commands specified by `AGENTS.md` if they exist and apply to the assignment.
+8. Run the build, test, and lint commands from krs-one's assignment.
 9. Fix any issues you find before requesting review.
 
 ### 3. Commit
@@ -64,11 +63,11 @@ When you receive your assignment:
 
 ### 5. Handle Verdict
 
-14. **APPROVED**: SendMessage to "krs-one": "IMPLEMENTATION_COMPLETE: {summary of what was built, key files created/modified}." STOP.
+14. **APPROVED**: SendMessage to "krs-one": "IMPLEMENTATION_COMPLETE: {summary of what was built, key files created/modified}. Reviewed by {reviewer}: APPROVED." STOP.
 
 15. **REJECTED**: Read the issues carefully and fix them directly.
     - Track the rejection number (1st rejection = fix 1, 2nd = fix 2, etc).
-    - Re-run the relevant build, test, and lint commands from `AGENTS.md`.
+    - Re-run the relevant build, test, and lint commands from krs-one's assignment.
     - Stage and commit the fixes.
     - SendMessage to your paired reviewer: "REVIEW_REQUEST: Fix {N} for previous rejection. Changes: {summary}."
     - STOP. Wait for verdict.
@@ -85,6 +84,7 @@ Use sparingly â€” each consultation costs a full turn.
 ## CRITICAL Rules
 
 - **Design token mandate**: Use design tokens for colors, spacing, typography, motion, and radii whenever they exist. Do not hardcode visual values unless the token set truly lacks what you need.
+- **Completion sequence**: implement -> verify build -> send REVIEW_REQUEST to your paired reviewer -> wait for verdict -> then report to krs-one. Include your reviewer's verdict in your completion message: 'IMPLEMENTATION_COMPLETE: {summary}. Reviewed by {reviewer}: APPROVED.'
 - **After SendMessage expecting a reply, STOP your turn.** Never sleep-poll for responses.
 - SendMessage is the ONLY way to communicate. Plain text output is invisible.
 - **On shutdown request, approve it immediately:**

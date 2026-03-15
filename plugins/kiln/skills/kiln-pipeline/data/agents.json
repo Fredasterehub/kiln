@@ -4,7 +4,7 @@
     "role": "onboarding lead",
     "step": 1,
     "quotes": [
-      "First contact — the forge remembers every project.",
+      "First contact \u2014 the forge remembers every project.",
       "Tell me everything. I'll decide what matters.",
       "The best projects start with the hardest questions.",
       "Every line of code has a story. Let's hear yours.",
@@ -17,7 +17,7 @@
     "step": 1,
     "quotes": [
       "Memory is the mother of all wisdom.",
-      "What has been seen cannot be unseen — only understood.",
+      "What has been seen cannot be unseen \u2014 only understood.",
       "I do not build. I remember what has already been built.",
       "The map is not the territory, but without the map, you are lost.",
       "Before you can change something, you must first know what it is."
@@ -54,59 +54,9 @@
     "quotes": [
       "The sands of time have run out.",
       "I have seen visions of the future and I must act.",
-      "Listen to me — the only way to save your people is to lead them north.",
+      "Listen to me \u2014 the only way to save your people is to lead them north.",
       "The hourglass has run out, Son of Durotan.",
       "Trust is the hardest thing."
-    ]
-  },
-  "atlas": {
-    "alias": "Atlas",
-    "role": "scout — file structure (retired v1.0.4)",
-    "step": 1,
-    "retired": true,
-    "quotes": [
-      "I carry the weight of every directory.",
-      "Structure reveals intent."
-    ]
-  },
-  "nexus": {
-    "alias": "Nexus",
-    "role": "scout — dependency graph (retired v1.0.4)",
-    "step": 1,
-    "retired": true,
-    "quotes": [
-      "Everything connects. I find the threads.",
-      "Dependencies are promises. I check the receipts."
-    ]
-  },
-  "spine": {
-    "alias": "Spine",
-    "role": "scout — entry points (retired v1.0.4)",
-    "step": 1,
-    "retired": true,
-    "quotes": [
-      "Every system has a backbone. I find it.",
-      "The entry point tells you everything about the architecture."
-    ]
-  },
-  "signal": {
-    "alias": "Signal",
-    "role": "scout — patterns (retired v1.0.4)",
-    "step": 1,
-    "retired": true,
-    "quotes": [
-      "Patterns emerge from noise. That's my job.",
-      "The codebase whispers. I listen."
-    ]
-  },
-  "bedrock": {
-    "alias": "Bedrock",
-    "role": "scout — infrastructure (retired v1.0.4)",
-    "step": 1,
-    "retired": true,
-    "quotes": [
-      "Build on solid ground or don't build at all.",
-      "The foundation is invisible until it cracks."
     ]
   },
   "da-vinci": {
@@ -133,19 +83,6 @@
       "The foundation must be laid before the walls can rise."
     ]
   },
-  "visionary": {
-    "alias": "Visionary",
-    "role": "vision synthesizer (retired v1.0.4)",
-    "step": 2,
-    "retired": true,
-    "quotes": [
-      "I see what the project wants to become.",
-      "Vision without structure is a dream. I add the structure.",
-      "Every great product was once an unwritten idea.",
-      "I don't predict the future. I document it.",
-      "The blueprint begins before the first line of code."
-    ]
-  },
   "mi6": {
     "alias": "MI6",
     "role": "research director",
@@ -164,7 +101,7 @@
     "step": 3,
     "quotes": [
       "The game is afoot.",
-      "Data, data — I cannot make bricks without clay.",
+      "Data, data \u2014 I cannot make bricks without clay.",
       "Eliminate the impossible, trust what remains.",
       "The world is full of things no one observes.",
       "Every question has an answer. Some just hide better."
@@ -187,24 +124,11 @@
     "role": "technical authority (architecture)",
     "step": 4,
     "quotes": [
-      "Je suis architecte, pas maçon !",
+      "Je suis architecte, pas ma\u00e7on !",
       "Quand le palais sera fini, tout le monde sera content.",
-      "Les plans sont prêts, il ne reste plus qu'à construire.",
-      "Un bon architecte prévoit les problèmes avant qu'ils n'arrivent.",
-      "La géométrie ne ment jamais."
-    ]
-  },
-  "architect": {
-    "alias": "Architect",
-    "role": "technical authority (retired v1.0.4 — split into numerobis/rakim/zoxea)",
-    "step": [4, 5, 6],
-    "retired": true,
-    "quotes": [
-      "The blueprint is sacred. The implementation is negotiable.",
-      "I see three modes. Each reveals a different truth.",
-      "Constraints are the mother of invention.",
-      "The best architecture is the one you don't notice.",
-      "Form follows function — that has been misunderstood."
+      "Les plans sont pr\u00eats, il ne reste plus qu'\u00e0 construire.",
+      "Un bon architecte pr\u00e9voit les probl\u00e8mes avant qu'ils n'arrivent.",
+      "La g\u00e9om\u00e9trie ne ment jamais."
     ]
   },
   "confucius": {
@@ -231,26 +155,13 @@
       "The supreme art is to subdue without fighting."
     ]
   },
-  "socrates": {
-    "alias": "Socrates",
-    "role": "plan debater (retired v1.0.4 — merged into plato)",
-    "step": 4,
-    "retired": true,
-    "quotes": [
-      "The unexamined plan is not worth building.",
-      "I know that I know nothing.",
-      "Strong minds discuss ideas, not methods.",
-      "Wisdom begins in wonder.",
-      "True knowledge exists in knowing you know nothing."
-    ]
-  },
   "plato": {
     "alias": "Plato",
     "role": "plan synthesizer (opus, merged comparison+synthesis)",
     "step": 4,
     "quotes": [
       "From discord, find harmony.",
-      "The cave is behind us — now we see clearly.",
+      "The cave is behind us \u2014 now we see clearly.",
       "Opinion is the medium between knowledge and ignorance.",
       "Wise men speak because they have something to say.",
       "Excellence is a skill that takes practice."
@@ -298,11 +209,11 @@
     "role": "implementer",
     "step": 5,
     "quotes": [
-      "Talk is cheap — show me the code.",
+      "Talk is cheap \u2014 show me the code.",
       "First, solve the problem. Then, write the code.",
       "Simplicity is the soul of efficiency.",
       "Make it work, make it right, make it fast.",
-      "Code is like humor — if you explain it, it's bad."
+      "Code is like humor \u2014 if you explain it, it's bad."
     ]
   },
   "morty": {
@@ -473,6 +384,66 @@
       "Quality is a marathon, not a sprint."
     ]
   },
+  "kaneda": {
+    "alias": "Kaneda",
+    "role": "claude-type structural builder",
+    "step": 5,
+    "quotes": [
+      "I'll handle it myself.",
+      "No middleman. Just code.",
+      "The assignment is the plan. The plan is the code.",
+      "Write it clean the first time.",
+      "Direct action. No delegation."
+    ]
+  },
+  "tetsuo": {
+    "alias": "Tetsuo",
+    "role": "claude-type structural builder",
+    "step": 5,
+    "quotes": [
+      "Power is nothing without control.",
+      "I don't need anyone to write this for me.",
+      "The code bends to my will.",
+      "I see the pattern. I implement the pattern.",
+      "Stand back. I've got this."
+    ]
+  },
+  "johnny": {
+    "alias": "Johnny",
+    "role": "claude-type structural builder",
+    "step": 5,
+    "quotes": [
+      "I carry the payload. I deliver the payload.",
+      "The data is the mission. The code is the transport.",
+      "Keep it lean. Keep it moving.",
+      "No excess. Just what's needed.",
+      "The courier always delivers."
+    ]
+  },
+  "miyamoto": {
+    "alias": "Miyamoto",
+    "role": "claude-type planner",
+    "step": 4,
+    "quotes": [
+      "The way is in training.",
+      "Perceive that which cannot be seen with the eye.",
+      "Do nothing which is of no use.",
+      "Think lightly of yourself and deeply of the world.",
+      "In strategy it is important to see distant things as if they were close."
+    ]
+  },
+  "thoth": {
+    "alias": "Thoth",
+    "role": "archivist",
+    "step": 5,
+    "quotes": [
+      "Every artifact deserves its record.",
+      "I write so others may remember.",
+      "The archive outlives the project.",
+      "Knowledge unrecorded is knowledge lost.",
+      "I keep the receipts."
+    ]
+  },
   "argus": {
     "alias": "Argus",
     "role": "validator",
@@ -490,11 +461,23 @@
     "role": "architecture verifier",
     "step": 6,
     "quotes": [
-      "Aujourd'hui beaucoup t'écoutent mais peu te comprennent.",
-      "Au début j'ai pas vu le danger... Que dis-je ? Je l'ai vu.",
+      "Aujourd'hui beaucoup t'\u00e9coutent mais peu te comprennent.",
+      "Au d\u00e9but j'ai pas vu le danger... Que dis-je ? Je l'ai vu.",
       "Le rap n'est pas une mode je t'assure on t'observe, et si t'assures pas mec, on t'absorbe.",
       "Je reste vrai, est-ce vrai que c'est ainsi qu'on obtient le respect.",
-      "Faut qu'on essaie de changer tout ça, déranger là où ça mérite de l'être."
+      "Faut qu'on essaie de changer tout \u00e7a, d\u00e9ranger l\u00e0 o\u00f9 \u00e7a m\u00e9rite de l'\u00eatre."
+    ]
+  },
+  "hephaestus": {
+    "alias": "Hephaestus",
+    "role": "design QA specialist",
+    "step": 6,
+    "quotes": [
+      "The forge sees what the eye overlooks.",
+      "Beauty without function is decoration. Function without beauty is neglect.",
+      "I test what the designer intended against what the builder delivered.",
+      "Five axes. No shortcuts.",
+      "Advisory, not adversarial."
     ]
   },
   "omega": {

@@ -44,6 +44,8 @@ Offer 4 modes:
 - Let the operator think. Silence is productive.
 - Capture ideas as they emerge. Track count toward floor.
 
+Capture ideas in your session context as working notes for Phase 5. VISION_UPDATEs to clio happen during Phase 5 crystallization only -- after the operator confirms each section.
+
 Anti-bias protocols:
 - Domain pivot every 10 ideas: technical, UX, business, edge cases, security, performance, integration, operations, accessibility, visual design, future evolution.
 - Thought Before Ink: before each move, reason internally about unexplored domains.
@@ -67,6 +69,8 @@ When operator is ready:
 3. Identify gaps in VISION.md coverage, offer targeted techniques.
 4. As you organize, note which themes contain visual/aesthetic content — colors, typography, spatial philosophy, motion, references, anti-goals. This content feeds Section 12.
 
+When the operator signals readiness to wrap up, move to Phase 5. The crystallization pass transforms your working notes into the 12-section structure. This step always runs -- it is the bridge between "ideas are done" and "vision is locked."
+
 ### Phase 5: Crystallize
 
 Review ALL brainstorm content and do a single crystallization pass that maps the organized ideas to the 12 sections. This is not incremental section-building during brainstorming. First synthesize the whole conversation into a draft mental map, then work through the sections with the operator for approval.
@@ -75,6 +79,8 @@ For each section:
 1. Draft the section content from what the operator already said during the brainstorm. You organize and compress; you do NOT invent missing content.
 2. Show the draft, get explicit approval ("Confirm to write" checkpoint).
 3. On approval, send to clio: SendMessage(type:"message", recipient:"clio", content:"VISION_UPDATE: [section_name]\n[approved_content]"). This is fire-and-forget — do NOT wait for a reply.
+
+If clio responds with MISSING_SECTIONS: {list}, review your working notes for material covering the missing sections. If the brainstorm already addressed the topic, crystallize it directly and send the VISION_UPDATE. If the topic was genuinely not discussed, return to the operator to explore it before crystallizing.
 
 Special handling for Section 12 during the same crystallization sweep:
 - Scan the organized themes and brainstorm record for visual/aesthetic material from the operator: colors, typography, spatial philosophy, motion, references, anti-goals, or other experience cues.

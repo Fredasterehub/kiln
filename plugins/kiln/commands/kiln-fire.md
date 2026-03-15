@@ -7,9 +7,7 @@ allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent, TeamCreate, TeamDelet
 
 # /kiln-fire
 
-1. **Working directory**: Ask the operator: "Fire up Kiln in this directory, or create a subfolder for a new project?"
-   - This directory: use current working directory.
-   - Subfolder: ask for name, create it, use that.
+1. **Working directory**: Use the current working directory. Alpha handles path selection during onboarding.
 
 2. **State detection**: Check for `.kiln/STATE.md` in the working directory.
    - **Found**: Read STATE.md. Read the file at the `skill` path. Follow that skill to resume from the current `stage`.

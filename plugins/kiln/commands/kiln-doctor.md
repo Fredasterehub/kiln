@@ -31,11 +31,11 @@ echo "Reply with just OK" | timeout 30 codex exec -m gpt-5.4 --dangerously-bypas
 
 ### 3. Kiln Agent Files
 
-Check that all 23 Kiln agent files exist in the plugin:
+Check that all 29 Kiln agent files exist in the plugin:
 ```bash
 ls -1 ${CLAUDE_PLUGIN_ROOT}/agents/*.md | wc -l
 ```
-- Expected: 23 agent files
+- Expected: 29 agent files
 - List any missing agents if count is wrong.
 
 ### 4. Pipeline Skill

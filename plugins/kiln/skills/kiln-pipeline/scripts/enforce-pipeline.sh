@@ -1,11 +1,12 @@
 #!/bin/bash
 # enforce-pipeline.sh — PreToolUse hook for Kiln pipeline
 #
-# 14 hooks across 4 categories (hook 2 removed v1.0.4, hook 14 added):
-#   Delegation (1-3):  delegation agents cannot Write/Edit files directly
-#   Sequencing (4-6):  gate dispatches until bootstrap docs are ready
-#   Flags (7-10):      block incorrect codex exec flags
-#   Safety (11-13):    protect system config, prevent rm -rf, block memory reads
+# 17 hooks across 5 categories (hook 2 removed v1.0.4, hooks 14-15+17 added v1.1):
+#   Delegation (1-3,14):  delegation agents cannot Write/Edit files directly
+#   Sequencing (4-6):     gate dispatches until bootstrap docs are ready
+#   Flags (7-10):         block incorrect codex exec flags
+#   Safety (11-13):       protect system config, prevent rm -rf, block memory reads
+#   Lifecycle (15,17):    boss shutdown block, agent spawn whitelist
 #
 # Stateless. Exit 2 + stderr = block. Exit 0 = allow.
 
@@ -14,7 +15,7 @@ TOOL=$(echo "$INPUT" | jq -r '.tool_name // ""')
 
 # Fast exit for tools we don't check
 case "$TOOL" in
-  Write|Edit|Bash|SendMessage|Read) ;;
+  Write|Edit|Bash|SendMessage|Read|Agent) ;;
   *) exit 0 ;;
 esac
 
@@ -22,6 +23,7 @@ AGENT=$(echo "$INPUT" | jq -r '.agent_type // ""')
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // ""')
 RECIPIENT=$(echo "$INPUT" | jq -r '.tool_input.recipient // ""')
+TYPE=$(echo "$INPUT" | jq -r '.tool_input.type // ""')
 
 # ── Helpers ──────────────────────────────────────────────────
 
@@ -84,7 +86,7 @@ fi
 # ═══════════════════════════════════════════════════════════════
 
 # Hook 4 — krs-one: no dispatch to build workers until rakim+sentinel ready
-if [[ "$AGENT" == "krs-one" ]] && [[ "$TOOL" == "SendMessage" ]] && [[ "$RECIPIENT" =~ ^(codex|morty|luke|clair|yin|recto|sphinx|rick|obiwan|obscur|yang|verso)$ ]]; then
+if [[ "$AGENT" == "krs-one" ]] && [[ "$TOOL" == "SendMessage" ]] && [[ "$RECIPIENT" =~ ^(codex|morty|luke|kaneda|tetsuo|johnny|clair|yin|recto|sphinx|rick|obiwan|obscur|yang|verso)$ ]]; then
   ROOT=$(_find_root)
   if [[ -n "$ROOT" ]]; then
     if ! _status_ok "$ROOT/.kiln/docs/codebase-state.md" || ! _status_ok "$ROOT/.kiln/docs/patterns.md"; then
@@ -101,7 +103,7 @@ MSG
 fi
 
 # Hook 5 — aristotle: no dispatch to planners until numerobis ready
-if [[ "$AGENT" == "aristotle" ]] && [[ "$TOOL" == "SendMessage" ]] && [[ "$RECIPIENT" =~ ^(confucius|sun-tzu|plato|athena)$ ]]; then
+if [[ "$AGENT" == "aristotle" ]] && [[ "$TOOL" == "SendMessage" ]] && [[ "$RECIPIENT" =~ ^(confucius|sun-tzu|miyamoto|plato|athena)$ ]]; then
   ROOT=$(_find_root)
   if [[ -n "$ROOT" ]]; then
     if ! _status_ok "$ROOT/.kiln/docs/architecture.md"; then
@@ -220,6 +222,45 @@ Your workflow:
   5. Wait for IMPLEMENTATION_COMPLETE
 MSG
   exit 2
+fi
+
+# Hook 15 -- bosses: shutdown is engine's job
+if [[ "$TOOL" == "SendMessage" ]] && [[ "$TYPE" == "shutdown_request" ]]; then
+  if [[ "$AGENT" =~ ^(krs-one|aristotle|mi6|argus|alpha|da-vinci)$ ]]; then
+    cat >&2 <<'MSG'
+Worker shutdown is managed by the engine at step transitions.
+After verifying deliverables, signal MILESTONE_COMPLETE to team-lead.
+This is your last action for the milestone.
+MSG
+    exit 2
+  fi
+fi
+
+# Hook 17 -- Only named Kiln agents can be spawned
+if [[ "$TOOL" == "Agent" ]]; then
+  SUBTYPE=$(echo "$INPUT" | jq -r '.tool_input.subagent_type // ""')
+  if [[ -n "$SUBTYPE" ]]; then
+    case "$SUBTYPE" in
+      alpha|mnemosyne|maiev|curie|medivh|\
+      da-vinci|clio|\
+      mi6|field-agent|\
+      aristotle|numerobis|confucius|sun-tzu|plato|athena|\
+      krs-one|rakim|sentinel|thoth|codex|morty|luke|kaneda|tetsuo|johnny|miyamoto|sphinx|rick|obiwan|\
+      picasso|clair|yin|recto|renoir|obscur|yang|verso|\
+      zoxea|argus|hephaestus|omega)
+        ;; # allowed
+      *)
+        cat >&2 <<'MSG'
+Only named Kiln agents can be spawned. Use agent types from the blueprint roster:
+  Structural builders: codex, morty, luke, kaneda, tetsuo, johnny
+  Structural reviewers: sphinx, rick, obiwan
+  UI builders: clair, yin, recto (picasso protocol)
+  UI reviewers: obscur, yang, verso (renoir protocol)
+MSG
+        exit 2
+        ;;
+    esac
+  fi
 fi
 
 # ═══════════════════════════════════════════════════════════════

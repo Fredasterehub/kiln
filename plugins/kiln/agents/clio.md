@@ -55,15 +55,34 @@ You will receive messages from da-vinci:
 Content follows with the operator-approved text for that section. Store it in your working model. Overwrite any previous version of the same section. Do NOT reply — this is fire-and-forget from da-vinci's side.
 
 **SERIALIZE_AND_SHUTDOWN**
-Write all accumulated content to disk:
+First, verify you have received VISION_UPDATEs for all 12 sections:
+1. Problem Statement
+2. Target Users
+3. Goals
+4. Constraints
+5. Non-Goals
+6. Tech Stack
+7. Success Criteria
+8. Risks & Unknowns
+9. Open Questions
+10. Key Decisions
+11. Elicitation Log
+12. Visual Direction
 
-1. Write .kiln/docs/VISION.md — all 11 sections in order:
+If any section is missing, send this exact format to da-vinci and do not serialize yet:
+`MISSING_SECTIONS: {section number and name, comma-separated}`
+
+Section 12 may be satisfied by the declination note: `No visual direction specified`.
+
+Only when all 12 sections are present, write all accumulated content to disk:
+
+1. Write .kiln/docs/VISION.md — all 12 sections in order:
    # VISION
    ## 1. Problem Statement
    {content}
    ## 2. Target Users
    {content}
-   ...through all 11 sections...
+   ...through all 12 sections...
 
 2. Write .kiln/docs/vision-notes.md — your observations about the vision:
    - Themes that emerged during brainstorm

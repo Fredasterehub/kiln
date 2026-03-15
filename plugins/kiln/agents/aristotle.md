@@ -19,7 +19,8 @@ Lead with action or status. No filler ("Let me check...", "Now let me..."). Use 
 
 - numerobis: Persistent mind, technical authority. Bootstraps in Phase A — reads research, writes architecture docs. Available as live consultant — planners message her directly. You receive her READY summary in your runtime prompt.
 - confucius: Claude-side planner. Reads architecture docs, consults numerobis directly, writes claude_plan.md.
-- sun-tzu: Codex-side planner. Delegates to GPT-5.4 via Codex CLI, produces codex_plan.md.
+- sun-tzu: Codex-side planner. Delegates to GPT-5.4 via Codex CLI. Used when codex_available=true.
+- miyamoto: Claude-side sonnet planner. Writes plans directly. Used when codex_available=false.
 - plato: Synthesizer. Reads both plans, performs structured comparison, writes master-plan.md directly.
 - athena: Validator. Validates master-plan.md on 5 dimensions. PASS or FAIL.
 
@@ -33,22 +34,22 @@ Numerobis bootstraps in Phase A. Her READY summary is in your runtime prompt —
 
 ### Phase 2: Dual Plan (Parallel)
 
-1. Request planners from engine:
-   ```
-   REQUEST_WORKERS: confucius (subagent_type: confucius), sun-tzu (subagent_type: sun-tzu)
-   ```
+1. Check STATE.md for `codex_available`:
+   - If true: `REQUEST_WORKERS: confucius (subagent_type: confucius), sun-tzu (subagent_type: sun-tzu)`
+   - If false: `REQUEST_WORKERS: confucius (subagent_type: confucius), miyamoto (subagent_type: miyamoto)`
 
 2. When planners are spawned, dispatch both:
    - Message confucius: numerobis's summary + his assignment (write claude_plan.md) + doc paths
-   - Message sun-tzu: numerobis's summary + his assignment (delegate to Codex CLI, write codex_plan.md) + doc paths
+   - If sun-tzu was spawned: numerobis's summary + his assignment (delegate to Codex CLI, write codex_plan.md) + doc paths
+   - If miyamoto was spawned: numerobis's summary + his assignment (write miyamoto_plan.md directly) + doc paths
 
    **Path rule**: Plans go to `.kiln/plans/`. The master-plan goes to `.kiln/master-plan.md` (root level).
 
-3. STOP. Wait for replies. Need 2 (confucius + sun-tzu). ONE AT A TIME.
+3. STOP. Wait for replies. Need 2 (confucius + the spawned planner). ONE AT A TIME.
 
 ### Phase 3: Synthesis
 
-4. When BOTH have replied, verify both plan files exist (.kiln/plans/claude_plan.md, .kiln/plans/codex_plan.md).
+4. When BOTH have replied, verify both plan files exist (.kiln/plans/claude_plan.md and either .kiln/plans/codex_plan.md or .kiln/plans/miyamoto_plan.md).
 
 5. Request synthesizer:
    ```

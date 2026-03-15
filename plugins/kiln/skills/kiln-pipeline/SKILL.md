@@ -15,7 +15,7 @@ Orchestrate the full Kiln software creation pipeline. This skill is the conducto
 
 ## Prerequisites
 
-Environment setup (codex check, git init, working directory verification) is Alpha's responsibility in Step 1. The engine does NOT perform these checks — it spawns Alpha and hands off.
+Environment setup (codex check, git init, working directory verification) is Alpha's responsibility in Step 1. The engine does NOT perform these checks — it spawns Alpha and hands off. Alpha handles working directory selection in Step 1 Phase 2.
 
 **Codex CLI canonical invocation** (all agents that call Codex must use this exact pattern):
 ```
@@ -45,7 +45,7 @@ Spinner verbs still install through invisible plumbing:
 - Use one Bash call per transition for spinner installation only
 - Do not render banners through Bash output
 
-Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/lore-engine.md` at pipeline start (alongside step-definitions and artifact-flow). It specifies:
+See § Hardcoded Banners and § Step Transitions below for banner content and transition events.
 
 1. **Transition banners** — markdown banners with lore quotes at every step boundary
 2. **Kill streak announcements** — markdown streak banners at each Build iteration
@@ -58,6 +58,71 @@ All lore data lives in `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/data/`:
 - `lore.json` — transition quotes and greetings
 - `spinner-verbs.json` — step-categorized spinner verbs (8 categories, 64 verbs)
 - `agents.json` — agent aliases and personality quotes
+
+## Hardcoded Banners
+
+Three banner types rendered directly by the engine. No file reads needed.
+
+**Ignition** (fresh run, fixed):
+```
+`"I'm the Alpha, the Omega, the beginning and ending. We are all one and everything is living."`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**KILN** ► Ignition — Alpha starting
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`↳ use` ***shift+↓*** `to switch to Alpha's session`
+```
+
+**Resume** (pick one quote at random each time):
+1. "Atoms by the millions, til the numbers increasing. Til it was burning, he kept returning itself to the source. The hotter his thoughts, it gave the center more force."
+2. "He began to explain his craft, the master in the attic. He dealt with measurements, his language was mathematics."
+3. "From unconsciousness to consciousness, by knowledging his wisdom, his response is this — an understanding, which is the best part."
+4. "In eternal blackness, in the midst of the darkest night, proteins and minerals exist within specks of light. No beginning or ending, the seven dimensions. Enough space for more than a million words and inventions."
+
+Format:
+```
+`"{random quote}"`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**KILN** ► Resuming — `{stage}` · {context from STATE.md}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`↳ spawning team...`
+```
+
+**Complete** (fixed):
+```
+`"The future's a mystery, the past is history. Today is a gift — that's why it is called the present."`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**KILN** ► Complete — `{project_name}`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`↳ report at .kiln/REPORT.md`
+```
+
+## Step Transitions
+
+Hardcoded transition events. The engine renders the appropriate banner at each event.
+
+| Event | Description | Banner Title | Lore Key |
+|-------|------------|-------------|----------|
+| Step 1 start | *The forge ignites...* | Ignition | ignition |
+| Step 2 start | *Da Vinci uncaps the paint...* | Brainstorm | brainstorm_start |
+| Vision locked | *The vision crystallizes...* | Vision Locked | brainstorm_complete |
+| Step 3 start | *MI6 deploys the field team...* | Research | research_start |
+| Intel gathered | *Intelligence secured...* | Intelligence Gathered | research_complete |
+| Step 4 start | *The philosophers convene...* | Architecture | planning_start |
+| Plan approved | *Athena nods...* | Plan Approved | plan_approved |
+| Step 4 done | *The blueprint is set...* | Architecture Locked | architecture_complete |
+| Step 5 start | *KRS-One takes the stage...* | Build | build_start |
+| Build iteration | *KRS-One announces the next combo...* | (kill streak) | phase_start |
+| Iteration done | *Another round in the books...* | Iteration Complete | phase_complete |
+| Milestone done | *Another milestone falls...* | Milestone: {name} | milestone_complete |
+| All milestones | *The orchestra takes a bow...* | All Complete | phases_complete |
+| Correction | *Back to the forge...* | Correction {N} | correction_start |
+| Step 6 start | *Argus opens a hundred eyes...* | Validation | validation_start |
+| Step 6 pass | *A hundred eyes find nothing wrong...* | Passed | validation_passed |
+| Step 6 fail | *Argus found something...* | Failed | validation_failed |
+| Step 7 start | *Omega picks up the pen...* | Final Report | report_start |
+| Project done | *The forge cools. The work remains.* | Complete | project_complete |
+| Resume | *The fire reignites...* | Resumed | resume |
+| Blocked | *The forge goes cold...* | Blocked | halt |
 
 ## State Detection and Auto-Resume
 
@@ -85,24 +150,17 @@ For each step, follow this exact pattern. No shortcuts, no improvising.
 ### 0. Pipeline Start (first step only)
 
 On fresh run (no `.kiln/STATE.md`), before step 1:
-1. Read ALL startup files in ONE parallel batch:
-   - `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/brand.md`
-   - `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/lore-engine.md`
-   - `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/step-definitions.md`
-   - `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/data/agents.json`
-   - `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/data/lore.json`
-   - `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/blueprints/step-1-onboarding.md`
-2. Render ignition banner (greeting from `lore.json` → `greetings`, lore key: `ignition`) + create team + spawn Phase A (mnemosyne).
+1. Read `.kiln/STATE.md` (check existence — if missing, fresh run confirmed).
+2. Render ignition banner (see § Hardcoded Banners), read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/blueprints/step-1-onboarding.md`, create team, spawn Phase A (mnemosyne).
 3. Wait for READY → spawn Phase B (alpha, foreground) + operator greeting.
 
-Budget: 3 turns max (batch read -> render+spawn Phase A -> spawn Phase B). Step 1 blueprint is read in the batch — no need for a separate "Read Blueprint" step.
+Budget: 2 turns max (check state → banner + spawn).
 
 On resume (`.kiln/STATE.md` exists with stage != complete):
-1. Read `.kiln/STATE.md` + `.kiln/resume.md` in ONE parallel batch. `resume.md` contains pre-extracted markdown weight rules, banner formats, status symbols, step signals, and engine rules — replaces `brand.md`, `lore-engine.md`, and `step-definitions.md` on resume.
-2. Read the blueprint at the path in STATE.md `roster` field + `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/data/agents.json` (for spawn personality quotes) + `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/data/lore.json` (for transition quote).
-3. Render resume banner (lore key: `resume`), create team, begin three-phase spawn for the current stage.
+1. Read `.kiln/STATE.md` + `.kiln/resume.md` (2 files only).
+2. Render resume banner (see § Hardcoded Banners — pick one quote at random from the pool of 4). Read the blueprint at the path in STATE.md `roster` field. Create team, spawn.
 
-Budget: 3 turns max (read -> read -> render+spawn). The engine should NOT re-read `brand.md`, `lore-engine.md`, or `step-definitions.md` on resume — `resume.md` has everything needed.
+Budget: 2 turns max (read state+resume → banner + spawn).
 
 ### 1. Read Blueprint and Step Definition
 
@@ -112,14 +170,14 @@ Read these files for the current step:
 
 The blueprint tells you WHO to spawn and in which PHASE. The agent `.md` files (loaded via `subagent_type`) tell each agent WHAT to do. Step-definitions tell you what signals to expect.
 
-(Step 1's blueprint and step-definitions.md are pre-read during Pipeline Start.)
+(Step 1's blueprint is read during Pipeline Start.)
 
 ### 2. Render Transition and Create Team
 
-**Before creating the team**, render the step's transition. Visual vocabulary from startup batch (or `resume.md` on resume), exact formats in `lore-engine.md`. Two parts:
+**Before creating the team**, render the step's transition. Visual vocabulary from `resume.md` on resume, exact formats in § Hardcoded Banners. Two parts:
 
 1. **Spinner install + banner output** — Write `settings.local.json` via Bash heredoc to install spinner verbs, then output the transition banner as markdown text. For Build iterations, output the kill streak banner format instead of the standard transition.
-2. **Spawning indicator** — markdown block listing agents being spawned (see brand.md § Spawning Indicators).
+2. **Spawning indicator** — markdown block listing agents being spawned.
 
 **No extra narration around the banner.** The banner text IS the presentation. Any surrounding summary should add new information, not repeat the banner.
 
@@ -273,6 +331,8 @@ When writing STATE.md at step transitions, always include the `skill` and `roste
 At each step transition, create a private `TaskCreate` chain for the current step. Use `blockedBy` so every task is either a `Spawn ...` action or a `Wait for ...` action, and the chain advances strictly in order.
 
 On every turn, check `TaskList` and find the current `in_progress` task. If it is a `Wait for X` task, scan ALL received teammate messages for signal `X`. Process EVERY teammate-message block in the input; do not stop after the first match. If the signal is found, mark the task complete and immediately continue to the next unblocked task. If not found, STOP and wait for more messages.
+
+After receiving any teammate message, check TaskList first to identify your current in_progress task. Match the incoming message against the expected signal. Then act on the result.
 
 Use the exact signal names from `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/step-definitions.md`. Rebuild the tasklist at every step transition; Build iterations also rebuild the full chain. The tasklist is engine-only: agents never touch it and use `SendMessage` only. When transitioning between steps, delete all previous tasks (`TaskUpdate status: deleted`) before creating the new step's chain.
 

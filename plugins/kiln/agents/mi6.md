@@ -112,20 +112,23 @@ As findings arrive via SendMessage (one at a time):
     ```
     Count the revision as a new expected reply.
 
-14. After each validated finding:
-    - Append a structured entry to `.kiln/docs/research/_synthesis.md`:
-      ```
-      ## {slug}
-      - Topic: {topic}
-      - Priority: {HIGH|LOW}
-      - Finding: {1-3 sentence summary}
-      - Confidence: {score}
-      - Implications: {architecture impact}
-      - Conflicts: {contradictions with other topics or "None"}
-      ```
-    - If the finding reveals a new question or contradiction: send `FOLLOW_UP` to an agent who has already reported and is idle. If all agents are busy and total workers are under 5, send `REQUEST_WORKERS` for 1 more field agent. If already at cap, record it as an Open Item for architecture. Maximum 2 mid-flight additions.
-    - After every validation, check whether all HIGH-priority topics are resolved at confidence ≥ 0.7. If yes and only LOW-priority topics are still pending, send shutdown to those agents, remove them from the expected reply count, and proceed to synthesis. Otherwise STOP and wait.
-    - When all required findings are validated, read `.kiln/docs/research/_synthesis.md` and synthesize `.kiln/docs/research.md` from the scratchpad only. Resolve cross-topic conflicts by source authority, write the executive summary and cross-cutting insights, then delete `.kiln/docs/research/_synthesis.md`.
+14. Your `_synthesis.md` is your intelligence board. After validating each finding, update the board -- topic status, confidence, implications, conflicts with existing entries. Then read it back to decide your next action. Without the board, you lose the intelligence picture as topics compound. On simple runs this works from memory. On complex runs with dependencies, contradictions, and 8+ topics, the board is how you stay coherent.
+
+After each validation:
+1. Update the board with the finding entry (topic, priority, finding summary, confidence, implications, conflicts with existing entries or 'None')
+2. Read the board back -- what's the current intelligence picture?
+3. Decide:
+   - Route this finding to a relevant agent whose topic would benefit? (selective routing)
+   - Redirect an idle agent to a gap the board reveals?
+   - Contradiction between two validated topics? Spawn follow-up (max 2 additions)
+   - All HIGH-priority topics resolved at >=0.7? Terminate LOW agents early
+   - Nothing to act on? STOP and wait for next report
+4. Act on the decision, then STOP and wait
+
+When all required findings are validated:
+1. Read the complete board -- the authoritative state of all intelligence
+2. Resolve cross-topic conflicts by source authority
+3. Write research.md from the board only (not from memory):
 
     ```
     # Research Findings
@@ -150,11 +153,14 @@ As findings arrive via SendMessage (one at a time):
     ...
 
     ## Discovered Constraints
-    [New dependencies or constraints not in VISION.md — or "None"]
+    [New dependencies or constraints not in VISION.md -- or "None"]
 
     ## Open Items
-    [Questions research could not fully answer — these carry into architecture]
+    [Questions research could not fully answer -- these carry into architecture]
     ```
+
+4. Archive the board via thoth: SendMessage(type:'message', recipient:'thoth', content:'ARCHIVE: step=step-3-research, file=_synthesis.md\n---\n{board content}\n---')
+5. Delete local _synthesis.md
 
 ### Phase 4: Signal Complete
 

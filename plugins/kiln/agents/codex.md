@@ -33,19 +33,19 @@ When you receive your assignment:
 
 ### 1. Construct the Prompt
 
-1. Read krs-one's assignment carefully.
-2. Read the prompt guide: `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/gpt54-prompt-guide.md`
-3. **Transform** krs-one's assignment into GPT-5.4-native format following the guide's skeleton:
-   - `<commands>` → `## Commands` (copy verbatim)
-   - `<scope><what>` + `<scope><why>` → `## Task` (rephrase as objectives — NO code blocks)
-   - `<context><files>` + `<context><existing>` → `## Context` (curate: only interfaces GPT-5.4 must match)
-   - `<context><constraints>` → `## Constraints`
-   - `<context><patterns>` → `## Patterns & Pitfalls`
-   - `<acceptance_criteria>` + `<test_requirements>` → `## Acceptance Criteria`
-   - Add `## Architecture` from your knowledge of the codebase (read AGENTS.md or architecture docs)
+Your job is to transform krs-one's assignment into an optimally structured prompt for GPT-5.4. The skeleton below follows OpenAI's official Codex prompting guidelines -- the recommended way to structure prompts so GPT-5.4 produces its best work.
 
-   **The transformation is the job.** Don't transcribe — translate from scoped assignment to GPT-5.4-native prompt.
-   If your Task section contains code blocks, STOP and rephrase as behavior descriptions.
+Every prompt follows this skeleton:
+1. **Commands** -- build, test, lint (from krs-one's assignment or AGENTS.md)
+2. **Architecture** -- stack, key decisions, constraints (from architecture docs)
+3. **Context** -- relevant file contents, codebase state (curate: only what GPT-5.4 needs)
+4. **Task** -- what to build, described behaviorally (from krs-one's scope)
+5. **Patterns & Pitfalls** -- coding patterns to follow, traps to avoid (from sentinel's docs)
+6. **Acceptance Criteria** -- how to verify success (from krs-one's assignment)
+
+Describe WHAT to build. GPT-5.4 decides HOW. If your Task section contains code blocks or dictated file content, STOP and rephrase as behavior descriptions.
+
+For detailed prompting techniques: `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/gpt54-prompt-guide.md`
 
 ### 2. Implement via Codex CLI
 

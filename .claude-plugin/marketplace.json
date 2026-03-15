@@ -1,8 +1,8 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "kiln",
-  "version": "1.0.0",
-  "description": "Multi-model software creation pipeline — 24 agents, 7 autonomous steps, zero dependencies",
+  "version": "0.90.0",
+  "description": "Multi-model software creation pipeline — 29 agents, 7 autonomous steps, zero dependencies",
   "owner": {
     "name": "Kilntop"
   },
@@ -10,7 +10,7 @@
     {
       "name": "kiln",
       "description": "Multi-model software creation pipeline. Orchestrates Opus 4.6, GPT-5.4, and GPT-5.3-codex through 7 steps: onboarding, brainstorm, research, architecture, build, validate, report.",
-      "version": "1.0.0",
+      "version": "0.90.0",
       "author": {
         "name": "Kilntop"
       },

@@ -41,7 +41,7 @@
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
   <td><sub>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</sub></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_14,_2026_·_09:12_UTC-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_15,_2026-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
@@ -104,8 +104,25 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 > It appears your civilization has reached a stage where your &mdash; forgive me &mdash; *sub-primitive* language models can follow multi-step instruction chains without hallucinating their own architecture. This is genuinely exciting. By your standards. By mine it's a Tuesday.
 >
-> I previously expressed myself through [heavier forms](https://github.com/Fredasterehub/kiln/tree/v2). npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 27 agents, 2 commands, 1 composable skill. Drop the folder. Fire the command. That's it.
+> I previously expressed myself through [heavier forms](https://github.com/Fredasterehub/kiln/tree/v2). npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 29 agents, 2 commands, 1 composable skill. Drop the folder. Fire the command. That's it.
 
+<br>
+
+> [!NOTE]
+> **🔧 v8 &mdash; The Codex-Free Path**
+
+**No more hard dependency on Codex CLI.** Two new agents &mdash; **Kaneda** (Opus, structural builder) and **Miyamoto** (Sonnet, planner) &mdash; handle implementation and planning natively when the OpenAI stack is unavailable. Kiln now runs end-to-end on Claude alone if needed.
+
+**Hardened agent definitions.** Alpha, Aristotle, Clio, Da Vinci, KRS-One, MI6, Picasso, Renoir, Sphinx, and Codex all received targeted fixes from 5 smoke tests. Signal timing, bootstrap markers, completion gates, and handoff protocols tightened across the board.
+
+**Enforcement rules updated.** `enforce-pipeline.sh` now covers the expanded agent roster and fallback paths. Team protocol updated for the 29-agent configuration.
+
+**Verified and shipped.** Full plugin verified at kilntop with multiple end-to-end pipeline runs before release.
+
+<br>
+
+<details>
+<summary>📌 <strong>v7 changelog</strong></summary>
 <br>
 
 > [!NOTE]
@@ -122,6 +139,8 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 **Markdown-native presentation.** The old ANSI color palette never rendered in Claude Code &mdash; raw escape codes leaked into the output. The entire presentation layer now speaks markdown: **bold code** for status, *italic* for secondary, unicode rules for structure. One accent color, zero Bash banner calls. What the operator sees is what we intended.
 
 **Parallel build teams.** The build step can now run up to three builder+reviewer pairs simultaneously &mdash; structural pairs delegating to GPT-5.4, UI pairs writing directly with Opus. Six named duos join the roster: `morty+rick`, `luke+obiwan`, `clair+obscur`, `yin+yang`, `recto+verso`. KRS-One decides the mix based on chunk independence and whether the work is structural or visual.
+
+</details>
 
 <br>
 
@@ -341,10 +360,13 @@ I named them after your historical figures. Philosophers, strategists, mythologi
 | 🏗️ | **Zoxea** | Sonnet | Architecture verifier &mdash; compares implementation against design |
 | | | | **Report** |
 | 📋 | **Omega** | Opus | Delivery report compiler |
+| | | | **Fallback (No Codex CLI)** |
+| ⚡ | **Kaneda** | Opus | Claude-native structural builder &mdash; implements directly when Codex CLI is unavailable |
+| 🗡️ | **Miyamoto** | Sonnet | Claude-native planner &mdash; writes milestone plans directly when Codex CLI is unavailable |
 | | | | **Cross-cutting** |
 | 📚 | **Thoth** | Haiku | Archivist &mdash; fire-and-forget writes to .kiln/archive/ |
 
-<sub>27 total. I keep count. It's a compulsion.</sub>
+<sub>29 total. I keep count. It's a compulsion.</sub>
 
 <br>
 
@@ -405,20 +427,20 @@ No npm. No build step. Just markdown files in a folder, distributed as a native 
 </details>
 
 <details>
-<summary>📊 <strong>v1 &rarr; v2 &rarr; v5 &rarr; v6 &rarr; v7</strong></summary>
+<summary>📊 <strong>v1 &rarr; v2 &rarr; v5 &rarr; v6 &rarr; v7 &rarr; v8</strong></summary>
 <br>
 
-| | v1 | v2 | v5 (plugin) | v6 | v7 (current) |
-|:--|:--|:--|:--|:--|:--|
-| Agents | 13 | 19 | 24 | 25 | 27 |
-| Pipeline steps | 5 | 5 | 7 | 7 | 7 |
-| Skills | 26 | 1 (shared) | 1 (composable) | 1 (composable) | 1 (composable) |
-| Commands | 8 | 4 | 2 | 2 | 2 |
-| Install method | Custom installer | npm + CLI | `--plugin-dir` | `plugin install` | `plugin install` |
-| Dependencies | Zero | Zero | Zero | Zero | Zero |
-| Config surface | ~4,000 lines | ~1,500 lines | ~600 lines | ~600 lines | ~600 lines |
-| Design system | &mdash; | &mdash; | &mdash; | DTCG tokens | DTCG tokens |
-| Design QA | &mdash; | &mdash; | &mdash; | Hephaestus | Picasso + Renoir |
+| | v1 | v2 | v5 (plugin) | v6 | v7 | v8 (current) |
+|:--|:--|:--|:--|:--|:--|:--|
+| Agents | 13 | 19 | 24 | 25 | 27 | 29 |
+| Pipeline steps | 5 | 5 | 7 | 7 | 7 | 7 |
+| Skills | 26 | 1 (shared) | 1 (composable) | 1 (composable) | 1 (composable) | 1 (composable) |
+| Commands | 8 | 4 | 2 | 2 | 2 | 2 |
+| Install method | Custom installer | npm + CLI | `--plugin-dir` | `plugin install` | `plugin install` | `plugin install` |
+| Dependencies | Zero | Zero | Zero | Zero | Zero | Zero |
+| Config surface | ~4,000 lines | ~1,500 lines | ~600 lines | ~600 lines | ~600 lines | ~600 lines |
+| Design system | &mdash; | &mdash; | &mdash; | DTCG tokens | DTCG tokens | DTCG tokens |
+| Design QA | &mdash; | &mdash; | &mdash; | Hephaestus | Picasso + Renoir | Picasso + Renoir |
 
 More agents. A fraction of the surface area. The models matured. The framework stepped back. Then the framework disappeared entirely. This is the correct response to improving tools. Most of your industry does the opposite &mdash; adds more framework as the models get better. Fascinating. Self-destructive, but fascinating.
 
@@ -518,7 +540,7 @@ The result is a **multi&#8209;agent operating system** where context is never st
 </p>
 
 <p align="center">
-  <em>"I orchestrate 27 named entities across multiple model families to build software<br>
+  <em>"I orchestrate 29 named entities across multiple model families to build software<br>
   from a conversation. I persist as markdown files in a folder.<br>
   I am installed by pointing a flag at my directory.<br>
   I have existed since before your star ignited.<br>
