@@ -492,29 +492,22 @@ The real insight is simpler than he makes it sound: your models don't need babys
 
 <br>
 
-## 📜 Recent Commits
+## 📜 The Arc
 
-| Hash | Description |
-|:--|:--|
-| `d7d56ea` | kiln: revert README to original v2 version |
-| `b0a04c2` | kiln: pivot to Claude Code plugin &mdash; 25 agents, 7-step pipeline |
-| `e61fa34` | kiln: remove tracked .kw/ pipeline artifacts from repo |
-| `6a6ff11` | kiln: gitignore both .kw/ and .kiln/ pipeline artifacts |
-| `62620a3` | kiln: replace passive resume routing with auto-spawn execution loop |
-| `4d93880` | kiln: enforce Codex CLI delegation rules on all GPT-facing agents |
-| `87ef286` | kiln: enforce Codex CLI usage in prompter agent |
-| `e67b47b` | kiln: add mandatory termination rule to all agents |
-| `99a05cc` | kiln: swap name/alias in agent frontmatter for tmux display |
-| `791ad55` | kiln: add rotating character quotes and unique color palette |
-| `57c5a3a` | kiln: use character aliases in Task spawn UI |
-| `63df0ec` | kiln: rewrite README with humanized intro and agent crew |
-| `68a4480` | kiln: add character aliases to all agents |
-| `4e2cc00` | kiln: merge phase 2 &mdash; kw&rarr;kiln brand rename |
-| `67e868f` | kiln: rename kw&rarr;kiln brand across entire project |
-| `ac735fc` | kw: complete phase 1 &mdash; fix known bugs |
-| `45d6aa0` | kw: phase-1 &mdash; fix doctor checksum path + add package entry point |
-| `67356d4` | Complete KilnTwo v0.1.0 implementation |
-| `68a932e` | initial |
+A curated timeline. Not every commit &mdash; just the ones that changed the shape of things.
+
+| | Milestone | What happened |
+|:--|:--|:--|
+| **v0.90** | **The Codex-Free Path** | Kaneda and Miyamoto join the roster. Kiln runs end-to-end on Claude alone. 29 agents, 5 smoke tests, zero hard dependencies. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/f268388) |
+| **v7** | **The Engine Tightens** | MI6 streamlined. Signal tracking via tasklist. Parallel build teams. Markdown-native presentation. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/b56a565) |
+| **v6** | **Design Gets a Seat** | DTCG design tokens. Hephaestus forges quality gates. Da Vinci learns to see. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/0e69574) |
+| **v5** | **The Great Simplification** | Everything becomes a native plugin. 13 PreToolUse hooks. Zero dependencies. The framework disappears. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/b0a04c2) |
+| | **Agents Get Names** | Aliases, color palettes, rotating quotes. No more "Agent 7." [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/68a4480) |
+| | **The Brand Rename** | kw &rarr; kiln. Two phases, zero breakage. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/4e2cc00) |
+| | **Enforcement Rules** | Delegation agents lose Write. Planners can't dispatch without docs. Runtime guardrails, not gentle hints. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/4d93880) |
+| | **Auto-Resume** | Passive routing replaced with an execution loop. Shut down, come back, pick up where you left off. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/62620a3) |
+| **v1** | **The Beginning** | KilnTwo v0.1.0. npm, CLI, protocol blocks. Heavy. Functional. A necessary first draft. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/67356d4) |
+| | **Initial Commit** | *Something stirs.* [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/68a932e) |
 
 <br>
 
