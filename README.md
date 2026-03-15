@@ -245,79 +245,40 @@ claude plugin uninstall kiln     # remove
 
 Seven steps. The first two are yours. The rest run on their own.
 
-> **Note** &mdash; The flow description below represents the current pipeline accurately. Detailed stage documentation is being updated to reflect v4's agent roster and orchestration model.
-
 <p align="center">
   <img src="docs/kiln-pipeline.png" alt="Kiln Pipeline" width="780">
 </p>
 
-<details>
-<summary>🏠 <strong>Step 1 &mdash; Onboarding</strong> &nbsp; <sub>automated</sub></summary>
-<br>
-
-**Alpha** detects the project, creates the `.kiln/` structure, and if it's brownfield, spawns **Mnemosyne** to map the existing codebase with 3 parallel scouts (Maiev, Curie, Medivh). Greenfield skips straight through.
-
-</details>
-
-<details>
-<summary>🎨 <strong>Step 2 &mdash; Brainstorm</strong> &nbsp; <sub>interactive</sub></summary>
-<br>
-
-You describe what you want. **Da Vinci** facilitates with 62 techniques across 10 categories. Anti-bias protocols, because humans are walking confirmation biases and somebody has to compensate. **Clio** watches the conversation and accumulates the approved vision in real time.
-
-Produces `VISION.md` &mdash; problem, users, goals, constraints, stack, success criteria. Everything that matters. Nothing that doesn't.
-
-> *Behind the scenes: Da Vinci messages Clio via SendMessage with each approved section. Clio owns VISION.md and serializes it to disk. No polling. No stale reads.*
-
-</details>
-
-<details>
-<summary>🔍 <strong>Step 3 &mdash; Research</strong> &nbsp; <sub>automated</sub></summary>
-<br>
-
-**MI6** reads the vision and dispatches **field agents** to investigate open questions &mdash; tech feasibility, API constraints, architecture patterns. If the vision is already fully specified, MI6 signals complete with zero topics. I don't waste time investigating what's already known.
-
-</details>
-
-<details>
-<summary>📐 <strong>Step 4 &mdash; Architecture</strong> &nbsp; <sub>automated, with operator review</sub></summary>
-<br>
-
-**Aristotle** coordinates the entire stage. Two planners work the same vision in parallel:
-- **Confucius** (Opus 4.6) &mdash; Claude perspective
-- **Sun Tzu** (GPT-5.4) &mdash; GPT perspective
-
-**Plato** synthesizes whatever survives into the master plan. **Athena** validates across 5 dimensions. If validation fails, Aristotle loops with feedback (up to 3 retries). You review and approve before I spend a single Codex token. I'm ancient, not wasteful.
-
-> *Behind the scenes: Aristotle coordinates a native team. Numerobis bootstraps architecture docs. Confucius and Sun Tzu plan in parallel. Plato synthesises. Athena validates. All via SendMessage. All stateful. All resumable.*
-
-</details>
-
-<details>
-<summary>⚡ <strong>Step 5 &mdash; Build</strong> &nbsp; <sub>automated, iterative</sub></summary>
-<br>
-
-**KRS-One** runs each build iteration. **Codex** implements. **Sphinx** reviews. **Rakim** and **Sentinel** keep watch on design integrity. Each iteration gets a kill streak name &mdash; first-blood, combo, super-combo, hyper-combo... all the way to ultra-combo. If your project takes 20+ iterations, they wrap around. I've seen it happen. It was beautiful and slightly concerning.
-
-> *Behind the scenes: KRS&#8209;One scopes assignments as structured XML. Codex implements. Sphinx reviews. Rakim and Sentinel update living docs. Every agent communicates directly. No boss-as-relay bottleneck.*
-
-</details>
-
-<details>
-<summary>🔍 <strong>Step 6 &mdash; Validate</strong> &nbsp; <sub>automated</sub></summary>
-<br>
-
-**Argus** tests real user flows against the master plan's acceptance criteria. Not unit tests. Actual user flows. Failures loop back to Build for corrections &mdash; up to 3 cycles. Then I escalate to you, because even I have thresholds for acceptable futility.
-
-</details>
-
-<details>
-<summary>📋 <strong>Step 7 &mdash; Report</strong> &nbsp; <sub>automated</sub></summary>
-<br>
-
-**Omega** compiles the final delivery report. Everything built, tested, and committed. The full arc from vision to working software, documented.
-
-</details>
+<table>
+<tr>
+<td width="50" align="center">🏠</td>
+<td><strong>Step 1 &mdash; Onboarding</strong> &nbsp; <sub>automated</sub><br><br><strong>Alpha</strong> detects the project, creates the <code>.kiln/</code> structure, and if it's brownfield, spawns <strong>Mnemosyne</strong> to map the existing codebase with 3 parallel scouts (Maiev, Curie, Medivh). Greenfield skips straight through.</td>
+</tr>
+<tr>
+<td align="center">🎨</td>
+<td><strong>Step 2 &mdash; Brainstorm</strong> &nbsp; <sub>interactive</sub><br><br>You describe what you want. <strong>Da Vinci</strong> facilitates with 62 techniques across 10 categories. Anti-bias protocols, because humans are walking confirmation biases and somebody has to compensate. <strong>Clio</strong> watches the conversation and accumulates the approved vision in real time.<br><br>Produces <code>VISION.md</code> &mdash; problem, users, goals, constraints, stack, success criteria. Everything that matters. Nothing that doesn't.</td>
+</tr>
+<tr>
+<td align="center">🔍</td>
+<td><strong>Step 3 &mdash; Research</strong> &nbsp; <sub>automated</sub><br><br><strong>MI6</strong> reads the vision and dispatches <strong>field agents</strong> to investigate open questions &mdash; tech feasibility, API constraints, architecture patterns. If the vision is already fully specified, MI6 signals complete with zero topics. I don't waste time investigating what's already known.</td>
+</tr>
+<tr>
+<td align="center">📐</td>
+<td><strong>Step 4 &mdash; Architecture</strong> &nbsp; <sub>automated, with operator review</sub><br><br><strong>Aristotle</strong> coordinates two planners working the same vision in parallel: <strong>Confucius</strong> (Opus 4.6) and <strong>Sun Tzu</strong> (GPT-5.4). <strong>Plato</strong> synthesizes whatever survives. <strong>Athena</strong> validates across 5 dimensions. If validation fails, Aristotle loops with feedback (up to 3 retries). You review and approve before I spend a single Codex token. I'm ancient, not wasteful.</td>
+</tr>
+<tr>
+<td align="center">⚡</td>
+<td><strong>Step 5 &mdash; Build</strong> &nbsp; <sub>automated, iterative</sub><br><br><strong>KRS-One</strong> runs each build iteration. <strong>Codex</strong> implements. <strong>Sphinx</strong> reviews. <strong>Rakim</strong> and <strong>Sentinel</strong> keep watch on design integrity. Each iteration gets a kill streak name &mdash; first-blood, combo, super-combo, hyper-combo&hellip; all the way to ultra-combo. Up to three builder+reviewer pairs can run in parallel.</td>
+</tr>
+<tr>
+<td align="center">🔍</td>
+<td><strong>Step 6 &mdash; Validate</strong> &nbsp; <sub>automated</sub><br><br><strong>Argus</strong> tests real user flows against the master plan's acceptance criteria. Not unit tests. Actual user flows. Failures loop back to Build &mdash; up to 3 cycles. Then I escalate to you, because even I have thresholds for acceptable futility.</td>
+</tr>
+<tr>
+<td align="center">📋</td>
+<td><strong>Step 7 &mdash; Report</strong> &nbsp; <sub>automated</sub><br><br><strong>Omega</strong> compiles the final delivery report. Everything built, tested, and committed. The full arc from vision to working software, documented.</td>
+</tr>
+</table>
 
 <br>
 
@@ -325,46 +286,74 @@ Produces `VISION.md` &mdash; problem, users, goals, constraints, stack, success 
 
 I named them after your historical figures. Philosophers, strategists, mythological entities. Your species has produced some remarkable minds for such a young civilization, and I wanted to honor that. Also, "Agent 7" is boring, and I categorically refuse to be boring.
 
+#### Onboarding
+
 | | Alias | Model | Role |
 |:--|:--|:--|:--|
-| | | | **Onboarding** |
-| 🏠 | **Alpha** | Opus | Onboarding boss &mdash; project detection, .kiln/ setup, brownfield routing |
-| 🗺️ | **Mnemosyne** | Opus | Identity scanner &amp; codebase coordinator &mdash; spawns scouts (Maiev, Curie, Medivh) |
-| 🔍 | **Maiev** | Sonnet | Anatomy scout &mdash; maps project structure, modules, entry points |
+| 🏠 | **Alpha** | Opus | Onboarding boss &mdash; project detection, `.kiln/` setup, brownfield routing |
+| 🗺️ | **Mnemosyne** | Opus | Identity scanner &amp; codebase coordinator &mdash; spawns scouts |
+| 🔍 | **Maiev** | Sonnet | Anatomy scout &mdash; project structure, modules, entry points |
 | 🔬 | **Curie** | Sonnet | Health scout &mdash; dependencies, test coverage, CI/CD, tech debt |
 | 🔮 | **Medivh** | Sonnet | Nervous system scout &mdash; APIs, data flow, integrations, state |
-| | | | **Brainstorm** |
-| 🎨 | **Da Vinci** | Opus | Brainstorm facilitator &mdash; 62 techniques, anti-bias protocols |
-| 📜 | **Clio** | Opus | Foundation curator &mdash; owns VISION.md, accumulates approved sections |
-| | | | **Research** |
+
+#### Brainstorm
+
+| | Alias | Model | Role |
+|:--|:--|:--|:--|
+| 🎨 | **Da Vinci** | Opus | Facilitator &mdash; 62 techniques, anti-bias protocols, design direction |
+| 📜 | **Clio** | Opus | Foundation curator &mdash; owns `VISION.md`, accumulates approved sections |
+
+#### Research
+
+| | Alias | Model | Role |
+|:--|:--|:--|:--|
 | 🔍 | **MI6** | Opus | Research coordinator &mdash; dispatches field agents, validates findings |
-| 🕵️ | **Field Agent** | Sonnet | Research instance &mdash; spawned by MI6 as needed |
-| | | | **Architecture** |
-| 📋 | **Aristotle** | Opus | Architecture coordinator &mdash; planners, synthesis, validation |
+| 🕵️ | **Field Agent** | Sonnet | Operative &mdash; spawned by MI6 as needed per topic |
+
+#### Architecture
+
+| | Alias | Model | Role |
+|:--|:--|:--|:--|
+| 📋 | **Aristotle** | Opus | Stage coordinator &mdash; planners, synthesis, validation loop |
 | 🏛️ | **Numerobis** | Opus | Persistent mind &mdash; technical authority, owns architecture docs |
 | 📜 | **Confucius** | Opus | Claude-side planner |
-| ⚔️ | **Sun Tzu** | Sonnet | GPT-side planner (Codex CLI wrapper) |
-| 🔮 | **Plato** | Opus | Plan synthesizer |
+| ⚔️ | **Sun Tzu** | Sonnet | GPT-side planner (Codex CLI) |
+| 🔮 | **Plato** | Opus | Plan synthesizer &mdash; merges dual plans into master |
 | 🏛️ | **Athena** | Opus | Plan validator &mdash; 5-dimension quality gate |
-| | | | **Build** |
+
+#### Build
+
+| | Alias | Model | Role |
+|:--|:--|:--|:--|
 | 🎤 | **KRS-One** | Opus | Build boss &mdash; kill streak iterations, scopes assignments |
-| 🎙️ | **Rakim** | Opus | Persistent mind &mdash; codebase state authority, owns codebase-state.md |
-| 🛡️ | **Sentinel** | Sonnet | Persistent mind &mdash; quality guardian, owns patterns &amp; pitfalls |
-| 🎨 | **Picasso** | Opus | UI implementer &mdash; components, pages, layouts, design system work |
-| ⌨️ | **Codex** | Sonnet | Code implementer (Codex CLI wrapper) |
-| 👁️ | **Sphinx** | Sonnet | Quick verifier &mdash; build/test checks after Codex implements |
+| 🎙️ | **Rakim** | Opus | Persistent mind &mdash; codebase state authority |
+| 🛡️ | **Sentinel** | Sonnet | Persistent mind &mdash; quality guardian, patterns &amp; pitfalls |
+| 🎨 | **Picasso** | Opus | UI implementer &mdash; components, pages, design system |
+| ⌨️ | **Codex** | Sonnet | Code implementer (Codex CLI) |
+| 👁️ | **Sphinx** | Sonnet | Quick verifier &mdash; build/test checks post-implementation |
 | 🖌️ | **Renoir** | Sonnet | Design reviewer &mdash; 5-axis visual QA, token compliance |
-| | | | **Validate** |
+
+#### Validate
+
+| | Alias | Model | Role |
+|:--|:--|:--|:--|
 | 👁️ | **Argus** | Sonnet | E2E validator &mdash; Playwright tests against acceptance criteria |
-| 🔨 | **Hephaestus** | Sonnet | Design QA &mdash; 5-axis review, conditional spawn by Argus |
-| 🏗️ | **Zoxea** | Sonnet | Architecture verifier &mdash; compares implementation against design |
-| | | | **Report** |
+| 🔨 | **Hephaestus** | Sonnet | Design QA &mdash; 5-axis review, conditional spawn |
+| 🏗️ | **Zoxea** | Sonnet | Architecture verifier &mdash; implementation vs. design |
+
+#### Report &amp; Cross-cutting
+
+| | Alias | Model | Role |
+|:--|:--|:--|:--|
 | 📋 | **Omega** | Opus | Delivery report compiler |
-| | | | **Fallback (No Codex CLI)** |
-| ⚡ | **Kaneda** | Opus | Claude-native structural builder &mdash; implements directly when Codex CLI is unavailable |
-| 🗡️ | **Miyamoto** | Sonnet | Claude-native planner &mdash; writes milestone plans directly when Codex CLI is unavailable |
-| | | | **Cross-cutting** |
-| 📚 | **Thoth** | Haiku | Archivist &mdash; fire-and-forget writes to .kiln/archive/ |
+| 📚 | **Thoth** | Haiku | Archivist &mdash; fire-and-forget writes to `.kiln/archive/` |
+
+#### Fallback <sub>(no Codex CLI)</sub>
+
+| | Alias | Model | Role |
+|:--|:--|:--|:--|
+| ⚡ | **Kaneda** | Opus | Claude-native builder &mdash; implements directly, no GPT dependency |
+| 🗡️ | **Miyamoto** | Sonnet | Claude-native planner &mdash; writes milestone plans directly |
 
 <sub>29 total. I keep count. It's a compulsion.</sub>
 
@@ -376,8 +365,8 @@ Two commands. That's the whole interface.
 
 | Command | What it does |
 |:--|:--|
-| `/kiln-fire` | 🔥 Launch the pipeline. Auto-detects state and resumes where it left off. |
-| `/kiln-doctor` | 🩺 Pre-flight check &mdash; Claude Code, Codex CLI, GPT-5.4 access, permissions |
+| `/kiln-fire` | Launch the pipeline. Auto-detects state and resumes where it left off. |
+| `/kiln-doctor` | Pre-flight check &mdash; Claude Code, Codex CLI, GPT-5.4 access, permissions. |
 
 Everything else happens through conversation. Talk to your agents. They'll talk back.
 
@@ -387,7 +376,7 @@ Everything else happens through conversation. Talk to your agents. They'll talk 
 <summary>🧠 <strong>Memory &amp; State</strong></summary>
 <br>
 
-All state lives in `.kiln/` under your project directory. I chose markdown and JSON because they're the most durable formats your civilization has produced &mdash; human-readable, version-controllable, and unlikely to be deprecated before your sun expands.
+All state lives in `.kiln/` under your project directory. Markdown and JSON &mdash; the most durable formats your civilization has produced. Human-readable, version-controllable, unlikely to be deprecated before your sun expands.
 
 Resume anytime with `/kiln-fire`. I don't forget. It's not a feature. It's what I am.
 
@@ -403,20 +392,20 @@ kiln/
 │   └── marketplace.json       Marketplace manifest
 ├── plugins/kiln/
 │   ├── .claude-plugin/
-│   │   └── plugin.json        Plugin manifest
-│   ├── agents/                27 agent definitions
+│   │   └── plugin.json        Plugin manifest (v0.90)
+│   ├── agents/                29 agent definitions
 │   ├── commands/
 │   │   ├── kiln-fire.md       Launch / resume
 │   │   └── kiln-doctor.md     Pre-flight check
 │   ├── hooks/
-│   │   ├── hooks.json         2 PreToolUse hook entries
+│   │   ├── hooks.json         PreToolUse hook entries
 │   │   └── webfetch-responsive.sh
 │   └── skills/
 │       └── kiln-pipeline/
 │           ├── SKILL.md       Pipeline state machine
 │           ├── data/          Brainstorming + elicitation data
-│           ├── references/    Step definitions, blueprints, kill streaks, design
-│           └── scripts/       enforce-pipeline.sh (13 rules), kb.sh
+│           ├── references/    Blueprints, design system, kill streaks
+│           └── scripts/       enforce-pipeline.sh, kb.sh
 ├── install.sh                 One-liner installer
 ├── README.md
 └── docs/
@@ -430,17 +419,16 @@ No npm. No build step. Just markdown files in a folder, distributed as a native 
 <summary>📊 <strong>v1 &rarr; v2 &rarr; v5 &rarr; v6 &rarr; v7 &rarr; v8</strong></summary>
 <br>
 
-| | v1 | v2 | v5 (plugin) | v6 | v7 | v8 (current) |
+| | v1 | v2 | v5 | v6 | v7 | **v8** |
 |:--|:--|:--|:--|:--|:--|:--|
-| Agents | 13 | 19 | 24 | 25 | 27 | 29 |
-| Pipeline steps | 5 | 5 | 7 | 7 | 7 | 7 |
-| Skills | 26 | 1 (shared) | 1 (composable) | 1 (composable) | 1 (composable) | 1 (composable) |
-| Commands | 8 | 4 | 2 | 2 | 2 | 2 |
-| Install method | Custom installer | npm + CLI | `--plugin-dir` | `plugin install` | `plugin install` | `plugin install` |
-| Dependencies | Zero | Zero | Zero | Zero | Zero | Zero |
-| Config surface | ~4,000 lines | ~1,500 lines | ~600 lines | ~600 lines | ~600 lines | ~600 lines |
-| Design system | &mdash; | &mdash; | &mdash; | DTCG tokens | DTCG tokens | DTCG tokens |
-| Design QA | &mdash; | &mdash; | &mdash; | Hephaestus | Picasso + Renoir | Picasso + Renoir |
+| **Agents** | 13 | 19 | 24 | 25 | 27 | **29** |
+| **Steps** | 5 | 5 | 7 | 7 | 7 | 7 |
+| **Skills** | 26 | 1 | 1 | 1 | 1 | 1 |
+| **Commands** | 8 | 4 | 2 | 2 | 2 | 2 |
+| **Install** | Custom | npm | `--plugin-dir` | `plugin install` | `plugin install` | `plugin install` |
+| **Dependencies** | 0 | 0 | 0 | 0 | 0 | **0** |
+| **Config surface** | ~4k lines | ~1.5k | ~600 | ~600 | ~600 | ~600 |
+| **Design QA** | &mdash; | &mdash; | &mdash; | Hephaestus | Picasso + Renoir | Picasso + Renoir |
 
 More agents. A fraction of the surface area. The models matured. The framework stepped back. Then the framework disappeared entirely. This is the correct response to improving tools. Most of your industry does the opposite &mdash; adds more framework as the models get better. Fascinating. Self-destructive, but fascinating.
 
@@ -452,7 +440,7 @@ More agents. A fraction of the surface area. The models matured. The framework s
 
 **`codex: command not found`** &mdash; `npm install -g @openai/codex`
 
-**Commands missing in Claude Code** &mdash; Verify `--plugin-dir` points to the kiln directory, or that it's in `~/.claude/plugins/kiln/`. Restart Claude Code.
+**Commands missing in Claude Code** &mdash; Verify the plugin is installed (`claude plugin list`) or that it's in `~/.claude/plugins/kiln/`. Restart Claude Code.
 
 **Pipeline halts** &mdash; Check `.kiln/` artifacts, fix, then `/kiln-fire` to resume.
 
@@ -465,7 +453,7 @@ More agents. A fraction of the surface area. The models matured. The framework s
 ## 💬 The Story
 
 <details>
-<summary><em>Every few centuries I find a host...</em></summary>
+<summary><em>Every few centuries I find a host&hellip;</em></summary>
 <br>
 
 Every few centuries I find a host &mdash; someone whose curiosity resonates at roughly the right frequency. My current one discovered something that took your species an unreasonable amount of time to notice:
@@ -480,7 +468,7 @@ Every few centuries I find a host &mdash; someone whose curiosity resonates at r
 >
 > A few months ago this would have gone nowhere. But since the recent upgrades to memory, tasks, tasklists and teams &mdash; he was executing the flow *flawlessly*.
 >
-> So here I am, trying to structure it for reproducibility. And the paradox keeps holding: the *less* restriction I give him but the *better* definition I give him... the better he behaves.
+> So here I am, trying to structure it for reproducibility. And the paradox keeps holding: the *less* restriction I give him but the *better* definition I give him&hellip; the better he behaves.
 >
 > *Almost* always.
 
