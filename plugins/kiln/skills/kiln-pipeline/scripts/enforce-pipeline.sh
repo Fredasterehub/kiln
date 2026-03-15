@@ -9,6 +9,8 @@
 #   Lifecycle (15,17):    boss shutdown block, agent spawn whitelist
 #
 # Stateless. Exit 2 + stderr = block. Exit 0 = allow.
+# Note: strips kiln: prefix from AGENT, RECIPIENT, SUBTYPE — plugin namespace
+# should not leak into hook matching or UI labels.
 
 INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name // ""')
@@ -20,9 +22,11 @@ case "$TOOL" in
 esac
 
 AGENT=$(echo "$INPUT" | jq -r '.agent_type // ""')
+AGENT="${AGENT#kiln:}"
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // ""')
 RECIPIENT=$(echo "$INPUT" | jq -r '.tool_input.recipient // ""')
+RECIPIENT="${RECIPIENT#kiln:}"
 TYPE=$(echo "$INPUT" | jq -r '.tool_input.type // ""')
 
 # ── Helpers ──────────────────────────────────────────────────
@@ -239,6 +243,7 @@ fi
 # Hook 17 -- Only named Kiln agents can be spawned
 if [[ "$TOOL" == "Agent" ]]; then
   SUBTYPE=$(echo "$INPUT" | jq -r '.tool_input.subagent_type // ""')
+  SUBTYPE="${SUBTYPE#kiln:}"
   if [[ -n "$SUBTYPE" ]]; then
     case "$SUBTYPE" in
       alpha|mnemosyne|maiev|curie|medivh|\
