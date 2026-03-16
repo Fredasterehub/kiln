@@ -246,8 +246,10 @@ MSG
   fi
 fi
 
-# Hook 17 -- Only named Kiln agents can be spawned
+# Hook 17 -- Only named Kiln agents can be spawned (only during active pipeline)
 if [[ "$TOOL" == "Agent" ]]; then
+  ROOT=$(_find_root)
+  [[ -z "$ROOT" ]] && exit 0  # no active pipeline — allow any agent
   SUBTYPE=$(echo "$INPUT" | jq -r '.tool_input.subagent_type // ""')
   SUBTYPE="${SUBTYPE#kiln:}"
   if [[ -n "$SUBTYPE" ]]; then
