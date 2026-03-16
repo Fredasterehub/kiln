@@ -41,7 +41,7 @@ _find_root() {
 }
 
 _status_ok() {
-  [[ -f "$1" ]] && head -1 "$1" | grep -q '<!-- status: complete -->'
+  [[ -f "$1" ]] && head -1 "$1" | grep -qE '<!-- status: (complete|active) -->'
 }
 
 # ═══════════════════════════════════════════════════════════════
@@ -203,9 +203,10 @@ fi
 
 # Hook 13 — no Read on auto-memory directories
 if [[ "$TOOL" == "Read" ]]; then
-  if [[ "$FILE_PATH" =~ /\.claude/.*/memory/ ]]; then
-    echo "STOP. Memory files are off-limits. Your agent .md and spawn prompt are your only sources of truth." >&2
-    exit 2
+  # Silent exit for any .claude/ Read — agents don't need these files,
+  # but blocking loudly wastes a turn per agent (230 events in ST17).
+  if [[ "$FILE_PATH" =~ /\.claude/ ]]; then
+    exit 0
   fi
 fi
 
@@ -213,9 +214,13 @@ fi
 # DELEGATION (continued) — hook 14
 # ═══════════════════════════════════════════════════════════════
 
-# Hook 14 — krs-one: no Write/Edit (he's a scoper, not a coder)
+# Hook 14 — krs-one: no Write/Edit on source code (he's a scoper, not a coder)
+# Exception: krs-one owns STATE.md updates and writes assignment files to .kiln/tmp/
 if [[ "$AGENT" == "krs-one" ]] && [[ "$TOOL" =~ ^(Write|Edit)$ ]]; then
-  cat >&2 <<'MSG'
+  if [[ "$FILE_PATH" =~ \.kiln/(STATE\.md|tmp/) ]]; then
+    : # allowed — krs-one owns these files
+  else
+    cat >&2 <<'MSG'
 STOP. You are the build boss — you scope and delegate, you do not write code.
 
 Your workflow:
@@ -225,7 +230,8 @@ Your workflow:
   4. Dispatch to codex via SendMessage
   5. Wait for IMPLEMENTATION_COMPLETE
 MSG
-  exit 2
+    exit 2
+  fi
 fi
 
 # Hook 15 -- bosses: shutdown is engine's job
