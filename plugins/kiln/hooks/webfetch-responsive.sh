@@ -12,6 +12,17 @@ block() {
   exit 0
 }
 
+# Pipeline context gate — only enforce in active kiln pipelines
+_in_pipeline() {
+  local d="$PWD"
+  while [[ "$d" != "/" ]]; do
+    [[ -d "$d/.kiln" ]] && return 0
+    d=$(dirname "$d")
+  done
+  return 1
+}
+_in_pipeline || allow
+
 [[ -n "$INPUT" ]] || allow
 
 if ! printf '%s' "$INPUT" | jq empty >/dev/null 2>&1; then

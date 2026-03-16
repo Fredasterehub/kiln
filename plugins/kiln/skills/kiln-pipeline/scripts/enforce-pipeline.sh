@@ -44,6 +44,12 @@ _status_ok() {
   [[ -f "$1" ]] && head -1 "$1" | grep -qE '<!-- status: (complete|active) -->'
 }
 
+# ── Pipeline context gate ────────────────────────────────────
+# All enforcement is pipeline-specific. No .kiln/ directory in the
+# current path hierarchy means no active pipeline — allow everything.
+KILN_ROOT=$(_find_root)
+[[ -n "$KILN_ROOT" ]] || exit 0
+
 # ═══════════════════════════════════════════════════════════════
 # DELEGATION — hooks 1, 2, 3
 # Agents that wrap codex exec must not write files directly.
@@ -86,39 +92,33 @@ fi
 # ═══════════════════════════════════════════════════════════════
 # SEQUENCING — hooks 4, 5, 6
 # Gate dispatches until bootstrap docs are marked complete.
-# Fail open if .kiln/ not found (no active pipeline).
+# KILN_ROOT guaranteed non-empty by pipeline context gate above.
 # ═══════════════════════════════════════════════════════════════
 
 # Hook 4 — krs-one: no dispatch to build workers until rakim+sentinel ready
 if [[ "$AGENT" == "krs-one" ]] && [[ "$TOOL" == "SendMessage" ]] && [[ "$RECIPIENT" =~ ^(codex|morty|luke|kaneda|tetsuo|johnny|clair|yin|recto|sphinx|rick|obiwan|obscur|yang|verso)$ ]]; then
-  ROOT=$(_find_root)
-  if [[ -n "$ROOT" ]]; then
-    if ! _status_ok "$ROOT/.kiln/docs/codebase-state.md" || ! _status_ok "$ROOT/.kiln/docs/patterns.md"; then
-      cat >&2 <<'MSG'
+  if ! _status_ok "$KILN_ROOT/.kiln/docs/codebase-state.md" || ! _status_ok "$KILN_ROOT/.kiln/docs/patterns.md"; then
+    cat >&2 <<'MSG'
 BLOCKED: rakim and sentinel haven't finished bootstrapping.
 
 Wait for BOTH READY summaries (in your runtime prompt) before dispatching:
   1. rakim — codebase state (codebase-state.md must be complete)
   2. sentinel — patterns/pitfalls guidance (patterns.md must be complete)
 MSG
-      exit 2
-    fi
+    exit 2
   fi
 fi
 
 # Hook 5 — aristotle: no dispatch to planners until numerobis ready
 if [[ "$AGENT" == "aristotle" ]] && [[ "$TOOL" == "SendMessage" ]] && [[ "$RECIPIENT" =~ ^(confucius|sun-tzu|miyamoto|plato|athena)$ ]]; then
-  ROOT=$(_find_root)
-  if [[ -n "$ROOT" ]]; then
-    if ! _status_ok "$ROOT/.kiln/docs/architecture.md"; then
-      cat >&2 <<'MSG'
+  if ! _status_ok "$KILN_ROOT/.kiln/docs/architecture.md"; then
+    cat >&2 <<'MSG'
 BLOCKED: numerobis hasn't finished writing architecture docs.
 
 Wait for numerobis's READY message. architecture.md must have
 <!-- status: complete --> on its first line before planners can be dispatched.
 MSG
-      exit 2
-    fi
+    exit 2
   fi
 fi
 
@@ -133,12 +133,9 @@ if [[ "$AGENT" =~ ^(codex|morty|luke|sun-tzu)$ ]] && [[ "$TOOL" == "Bash" ]]; th
 
     # Hook 6 — codex wrappers: backup sequencing gate (codex exec before bootstrap ready)
     if [[ "$AGENT" =~ ^(codex|morty|luke)$ ]]; then
-      ROOT=$(_find_root)
-      if [[ -n "$ROOT" ]]; then
-        if ! _status_ok "$ROOT/.kiln/docs/architecture.md" || ! _status_ok "$ROOT/.kiln/docs/patterns.md"; then
-          echo "BLOCKED: bootstrap docs not ready. Wait for krs-one's assignment." >&2
-          exit 2
-        fi
+      if ! _status_ok "$KILN_ROOT/.kiln/docs/architecture.md" || ! _status_ok "$KILN_ROOT/.kiln/docs/patterns.md"; then
+        echo "BLOCKED: bootstrap docs not ready. Wait for krs-one's assignment." >&2
+        exit 2
       fi
     fi
 
