@@ -48,7 +48,9 @@ _status_ok() {
 # All enforcement is pipeline-specific. No .kiln/ directory in the
 # current path hierarchy means no active pipeline — allow everything.
 KILN_ROOT=$(_find_root)
-[[ -n "$KILN_ROOT" ]] || exit 0
+if [[ -z "$KILN_ROOT" ]] && [[ -z "$AGENT" ]]; then
+  exit 0
+fi
 
 # ═══════════════════════════════════════════════════════════════
 # DELEGATION — hooks 1, 2, 3
@@ -174,9 +176,10 @@ fi
 # System config, destructive recovery, memory isolation.
 # ═══════════════════════════════════════════════════════════════
 
-# Hook 11 — no Write/Edit on system config (~/.codex/, ~/.claude/)
-if [[ "$TOOL" =~ ^(Write|Edit)$ ]]; then
-  if [[ "$FILE_PATH" =~ (\.codex/|\.claude/settings|\.claude/projects) ]]; then
+# Hook 11 — pipeline agents: no Write/Edit on system config (~/.codex/, ~/.claude/)
+# Main session (empty AGENT) always passes — it owns these files.
+if [[ -n "$AGENT" ]] && [[ "$TOOL" =~ ^(Write|Edit)$ ]]; then
+  if [[ "$FILE_PATH" =~ (\.codex/|\.claude/settings|\.claude/projects/[^/]+/settings) ]]; then
     echo "STOP. $FILE_PATH is system configuration. Pipeline agents cannot modify it." >&2
     echo "Escalate tooling issues to your boss — do not fix config yourself." >&2
     exit 2

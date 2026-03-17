@@ -109,11 +109,22 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 <br>
 
 > [!NOTE]
+> **🔧 v9.3 &mdash; Hook False Positive Fix** <sub>(2026-03-17)</sub>
+
+**enforce-pipeline.sh no longer blocks non-pipeline operations.** The hook's pipeline context gate relied solely on `$PWD` containing a `.kiln/` ancestor. When Claude Code ran the hook with `$PWD` pointing to a different project (e.g. an active smoketest), the gate passed and Hook 11's overly broad regex (`\.claude/projects`) blocked legitimate writes to auto-memory files. Fix: dual-signal gate (requires both `.kiln/` absent AND no `agent_type`) plus `AGENT` guard on Hook 11 so the main session always passes. Hook 11 regex narrowed to match only settings files, not memory.
+
+<details>
+<summary>📌 <strong>v9.2 changelog</strong></summary>
+<br>
+
+> [!NOTE]
 > **🔧 v9.2 &mdash; Handoff Protocol + Step Timing** <sub>(2026-03-17)</sub>
 
 **Persistent mind handoff protocol.** Rakim and sentinel now write compact handoff files at the end of each iteration. Next iteration bootstraps incrementally via `git diff` instead of re-reading the entire codebase from scratch. Falls back to full bootstrap on first iteration or if handoff is invalid (6-check gate). KRS-One writes an iteration receipt with ground truth on what was scoped vs implemented &mdash; persistent minds consume this instead of inferring from codebase scans. Expected Phase A reduction from 60-90s to 15-20s per iteration.
 
 **Step timing in REPORT.md.** Engine writes `step_N_start` / `step_N_end` ISO timestamps to STATE.md at each step transition. Omega reads them and renders a pipeline timing table in the final report &mdash; duration per step, total pipeline time.
+
+</details>
 
 <details>
 <summary>📌 <strong>v9.1 changelog</strong></summary>
