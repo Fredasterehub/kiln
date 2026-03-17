@@ -2,13 +2,14 @@
 set -euo pipefail
 
 # Kiln installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/Fredasterehub/kiln/v5/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/Fredasterehub/kiln/master/install.sh | bash
 
 REPO="Fredasterehub/kiln"
 TERRACOTTA='\033[38;5;173m'
 GOLD='\033[38;5;179m'
 DIM='\033[2m'
 GREEN='\033[32m'
+YELLOW='\033[33m'
 RED='\033[31m'
 RESET='\033[0m'
 
@@ -17,24 +18,21 @@ printf "${TERRACOTTA} KILN${RESET} ${DIM}installer${RESET}\n"
 printf "${GOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n\n"
 
 # Check prerequisites
-check() {
-  if command -v "$1" &>/dev/null; then
-    printf "  ${GREEN}✓${RESET} %s\n" "$2"
-    return 0
-  else
-    printf "  ${RED}✗${RESET} %s — %s\n" "$2" "$3"
-    return 1
-  fi
-}
-
 printf "${DIM}Checking prerequisites...${RESET}\n"
-READY=true
-check claude "Claude Code" "npm i -g @anthropic-ai/claude-code" || READY=false
-check codex "Codex CLI" "npm i -g @openai/codex" || READY=false
 
-if [ "$READY" = false ]; then
-  printf "\n${RED}Missing prerequisites. Install them and try again.${RESET}\n"
+if command -v claude &>/dev/null; then
+  printf "  ${GREEN}✓${RESET} Claude Code\n"
+else
+  printf "  ${RED}✗${RESET} Claude Code — npm i -g @anthropic-ai/claude-code\n"
+  printf "\n${RED}Claude Code is required. Install it and try again.${RESET}\n"
   exit 1
+fi
+
+if command -v codex &>/dev/null; then
+  printf "  ${GREEN}✓${RESET} Codex CLI (GPT-5.4 delegation enabled)\n"
+else
+  printf "  ${YELLOW}○${RESET} Codex CLI not found — GPT-5.4 delegation disabled\n"
+  printf "    ${DIM}Kiln runs end-to-end on Claude alone. For dual-model mode: npm i -g @openai/codex${RESET}\n"
 fi
 
 # Register marketplace + install plugin via native Claude Code system

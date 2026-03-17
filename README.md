@@ -104,7 +104,7 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 > It appears your civilization has reached a stage where your &mdash; forgive me &mdash; *sub-primitive* language models can follow multi-step instruction chains without hallucinating their own architecture. This is genuinely exciting. By your standards. By mine it's a Tuesday.
 >
-> I previously expressed myself through [heavier forms](https://github.com/Fredasterehub/kiln/tree/v2). npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 29 agents, 2 commands, 1 composable skill. Drop the folder. Fire the command. That's it.
+> I previously expressed myself through [heavier forms](https://github.com/Fredasterehub/kiln/tree/v2). npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 41 agents, 2 commands, 1 composable skill. Drop the folder. Fire the command. That's it.
 
 <br>
 
@@ -115,7 +115,7 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 **Hardened agent definitions.** Alpha, Aristotle, Clio, Da Vinci, KRS-One, MI6, Picasso, Renoir, Sphinx, and Codex all received targeted fixes from 5 smoke tests. Signal timing, bootstrap markers, completion gates, and handoff protocols tightened across the board.
 
-**Enforcement rules updated.** `enforce-pipeline.sh` now covers the expanded agent roster and fallback paths. Team protocol updated for the 29-agent configuration.
+**Enforcement rules updated.** `enforce-pipeline.sh` now covers the expanded agent roster and fallback paths. Team protocol updated for the 41-agent configuration.
 
 **Verified and shipped.** Full plugin verified at kilntop with multiple end-to-end pipeline runs before release.
 
@@ -393,7 +393,7 @@ kiln/
 ├── plugins/kiln/
 │   ├── .claude-plugin/
 │   │   └── plugin.json        Plugin manifest (v0.90)
-│   ├── agents/                29 agent definitions
+│   ├── agents/                41 agent definitions
 │   ├── commands/
 │   │   ├── kiln-fire.md       Launch / resume
 │   │   └── kiln-doctor.md     Pre-flight check
@@ -421,7 +421,7 @@ No npm. No build step. Just markdown files in a folder, distributed as a native 
 
 | | v1 | v2 | v5 | v6 | v7 | **v8** |
 |:--|:--|:--|:--|:--|:--|:--|
-| **Agents** | 13 | 19 | 24 | 25 | 27 | **29** |
+| **Agents** | 13 | 19 | 24 | 25 | 27 | **41** |
 | **Steps** | 5 | 5 | 7 | 7 | 7 | 7 |
 | **Skills** | 26 | 1 | 1 | 1 | 1 | 1 |
 | **Commands** | 8 | 4 | 2 | 2 | 2 | 2 |
@@ -486,7 +486,7 @@ A curated timeline. Not every commit &mdash; just the ones that changed the shap
 
 | | Milestone | What happened |
 |:--|:--|:--|
-| **v0.90** | **The Codex-Free Path** | Kaneda and Miyamoto join the roster. Kiln runs end-to-end on Claude alone. 29 agents, 5 smoke tests, zero hard dependencies. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/f268388) |
+| **v0.90** | **The Codex-Free Path** | Kaneda and Miyamoto join the roster. Kiln runs end-to-end on Claude alone. 41 agents, 5 smoke tests, zero hard dependencies. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/f268388) |
 | **v7** | **The Engine Tightens** | MI6 streamlined. Signal tracking via tasklist. Parallel build teams. Markdown-native presentation. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/b56a565) |
 | **v6** | **Design Gets a Seat** | DTCG design tokens. Hephaestus forges quality gates. Da Vinci learns to see. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/0e69574) |
 | **v5** | **The Great Simplification** | Everything becomes a native plugin. 13 PreToolUse hooks. Zero dependencies. The framework disappears. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/b0a04c2) |

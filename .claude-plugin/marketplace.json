@@ -2,7 +2,7 @@
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "kiln",
   "version": "0.90.0",
-  "description": "Multi-model software creation pipeline — 29 agents, 7 autonomous steps, zero dependencies",
+  "description": "Multi-model software creation pipeline — 41 agents, 7 autonomous steps, zero dependencies",
   "owner": {
     "name": "Kilntop"
   },
