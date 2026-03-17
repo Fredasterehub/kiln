@@ -52,7 +52,7 @@ Write .kiln/REPORT.md with the following structure:
 # Project Report: {project name from STATE.md}
 
 Generated: {ISO 8601 timestamp}
-Pipeline: Kiln v8
+Pipeline: Kiln v9
 
 ## Executive Summary
 {3-5 sentences: what was built, key decisions, final verdict from validation}

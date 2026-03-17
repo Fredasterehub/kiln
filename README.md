@@ -109,6 +109,21 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 <br>
 
 > [!NOTE]
+> **🔧 v9 &mdash; Parallel Build Lanes** <sub>(2026-03-17)</sub>
+
+**Named pair agents.** 12 new agents organized as builder/reviewer pairs &mdash; enabling parallel build lanes during Step 5. Three structural pairs (**morty+rick**, **luke+obiwan**, **johnny+obiwan**), three UI pairs (**yin+yang**, **clair+obscur**, **recto+verso**). Each is a thin wrapper that delegates to its archetype at runtime.
+
+**Codex-free install path.** Installer no longer fails without Codex CLI &mdash; gracefully degrades to Claude-only mode. `kiln-doctor` skips GPT-5.4 checks when codex is absent instead of crashing.
+
+**Artifact-flow fallback documentation.** Steps 4 and 5 now document both `codex_available=true` and `codex_available=false` archive structures, so the pipeline's disk contract is clear regardless of mode.
+
+**QA hardened.** Stale agent counts fixed across README, doctor, and enforcement hooks. Reviewer descriptions clarified for shared fan-in pattern. Archetype builder lists synchronized.
+
+<details>
+<summary>📌 <strong>v8 changelog</strong></summary>
+<br>
+
+> [!NOTE]
 > **🔧 v8 &mdash; The Codex-Free Path**
 
 **No more hard dependency on Codex CLI.** Two new agents &mdash; **Kaneda** (Opus, structural builder) and **Miyamoto** (Sonnet, planner) &mdash; handle implementation and planning natively when the OpenAI stack is unavailable. Kiln now runs end-to-end on Claude alone if needed.
@@ -118,6 +133,8 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 **Enforcement rules updated.** `enforce-pipeline.sh` now covers the expanded agent roster and fallback paths. Team protocol updated for the 41-agent configuration.
 
 **Verified and shipped.** Full plugin verified at kilntop with multiple end-to-end pipeline runs before release.
+
+</details>
 
 <br>
 
@@ -348,6 +365,23 @@ I named them after your historical figures. Philosophers, strategists, mythologi
 | 📋 | **Omega** | Opus | Delivery report compiler |
 | 📚 | **Thoth** | Haiku | Archivist &mdash; fire-and-forget writes to `.kiln/archive/` |
 
+#### Named Pairs <sub>(parallel build lanes)</sub>
+
+| | Alias | Model | Role |
+|:--|:--|:--|:--|
+| 🔨 | **Morty** | Sonnet | Codex-type builder &mdash; paired with Rick |
+| 👁️ | **Rick** | Sonnet | Structural reviewer &mdash; shared (morty, codex, kaneda, tetsuo, johnny) |
+| 🔨 | **Luke** | Sonnet | Codex-type builder &mdash; paired with Obiwan |
+| 👁️ | **Obiwan** | Sonnet | Structural reviewer &mdash; shared (luke, codex, kaneda, tetsuo, johnny) |
+| 🔨 | **Johnny** | Opus | Claude-type builder &mdash; paired with Obiwan |
+| 🔨 | **Tetsuo** | Opus | Claude-type builder &mdash; paired with Rick |
+| 🎨 | **Yin** | Opus | UI builder &mdash; paired with Yang |
+| 🖌️ | **Yang** | Sonnet | UI reviewer &mdash; shared (yin, picasso, clair, recto) |
+| 🎨 | **Clair** | Opus | UI builder &mdash; paired with Obscur |
+| 🖌️ | **Obscur** | Sonnet | UI reviewer &mdash; shared (clair, picasso, yin, recto) |
+| 🎨 | **Recto** | Opus | UI builder &mdash; paired with Verso |
+| 🖌️ | **Verso** | Sonnet | UI reviewer &mdash; shared (recto, picasso, clair, yin) |
+
 #### Fallback <sub>(no Codex CLI)</sub>
 
 | | Alias | Model | Role |
@@ -416,19 +450,19 @@ No npm. No build step. Just markdown files in a folder, distributed as a native 
 </details>
 
 <details>
-<summary>📊 <strong>v1 &rarr; v2 &rarr; v5 &rarr; v6 &rarr; v7 &rarr; v8</strong></summary>
+<summary>📊 <strong>v1 &rarr; v2 &rarr; v5 &rarr; v6 &rarr; v7 &rarr; v8 &rarr; v9</strong></summary>
 <br>
 
-| | v1 | v2 | v5 | v6 | v7 | **v8** |
-|:--|:--|:--|:--|:--|:--|:--|
-| **Agents** | 13 | 19 | 24 | 25 | 27 | **41** |
-| **Steps** | 5 | 5 | 7 | 7 | 7 | 7 |
-| **Skills** | 26 | 1 | 1 | 1 | 1 | 1 |
-| **Commands** | 8 | 4 | 2 | 2 | 2 | 2 |
-| **Install** | Custom | npm | `--plugin-dir` | `plugin install` | `plugin install` | `plugin install` |
-| **Dependencies** | 0 | 0 | 0 | 0 | 0 | **0** |
-| **Config surface** | ~4k lines | ~1.5k | ~600 | ~600 | ~600 | ~600 |
-| **Design QA** | &mdash; | &mdash; | &mdash; | Hephaestus | Picasso + Renoir | Picasso + Renoir |
+| | v1 | v2 | v5 | v6 | v7 | v8 | **v9** |
+|:--|:--|:--|:--|:--|:--|:--|:--|
+| **Agents** | 13 | 19 | 24 | 25 | 27 | 29 | **41** |
+| **Steps** | 5 | 5 | 7 | 7 | 7 | 7 | 7 |
+| **Skills** | 26 | 1 | 1 | 1 | 1 | 1 | 1 |
+| **Commands** | 8 | 4 | 2 | 2 | 2 | 2 | 2 |
+| **Install** | Custom | npm | `--plugin-dir` | `plugin install` | `plugin install` | `plugin install` | `plugin install` |
+| **Dependencies** | 0 | 0 | 0 | 0 | 0 | 0 | **0** |
+| **Config surface** | ~4k lines | ~1.5k | ~600 | ~600 | ~600 | ~600 | ~600 |
+| **Design QA** | &mdash; | &mdash; | &mdash; | Hephaestus | Picasso + Renoir | Picasso + Renoir | Picasso + Renoir |
 
 More agents. A fraction of the surface area. The models matured. The framework stepped back. Then the framework disappeared entirely. This is the correct response to improving tools. Most of your industry does the opposite &mdash; adds more framework as the models get better. Fascinating. Self-destructive, but fascinating.
 
@@ -486,7 +520,8 @@ A curated timeline. Not every commit &mdash; just the ones that changed the shap
 
 | | Milestone | What happened |
 |:--|:--|:--|
-| **v0.90** | **The Codex-Free Path** | Kaneda and Miyamoto join the roster. Kiln runs end-to-end on Claude alone. 41 agents, 5 smoke tests, zero hard dependencies. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/f268388) |
+| **v9** | **Parallel Build Lanes** | 12 named pair agents for concurrent build/review. Codex-free install path. 41 agents total. |
+| **v8** | **The Codex-Free Path** | Kaneda and Miyamoto join the roster. Kiln runs end-to-end on Claude alone. 29 agents, 5 smoke tests, zero hard dependencies. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/f268388) |
 | **v7** | **The Engine Tightens** | MI6 streamlined. Signal tracking via tasklist. Parallel build teams. Markdown-native presentation. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/b56a565) |
 | **v6** | **Design Gets a Seat** | DTCG design tokens. Hephaestus forges quality gates. Da Vinci learns to see. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/0e69574) |
 | **v5** | **The Great Simplification** | Everything becomes a native plugin. 13 PreToolUse hooks. Zero dependencies. The framework disappears. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/b0a04c2) |

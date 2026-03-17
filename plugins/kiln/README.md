@@ -19,8 +19,8 @@ Multi-modal software creation pipeline. From idea to deployed code in 7 autonomo
 
 ## Prerequisites
 
-- **Codex CLI**: `npm install -g @openai/codex`
-- **GPT-5.4 access**: Via OpenAI API key with model access
+- **Claude Code** (required)
+- **Codex CLI** (optional): `npm install -g @openai/codex` &mdash; enables dual-model mode with GPT-5.4
 - Run `/kiln-doctor` to verify everything is ready.
 
 ## How It Works
