@@ -227,6 +227,32 @@ Codex will implement, get reviewed by sphinx, and message you either:
 11. When the implementation phase finishes:
     - For sequential dispatch: wait for the single builder's `IMPLEMENTATION_COMPLETE`.
     - For parallel dispatch: wait for all requested builders' `IMPLEMENTATION_COMPLETE` signals.
+
+    **Write iteration receipt** before messaging persistent minds — this is their ground truth:
+    ```bash
+    ITER=$(grep 'build_iteration' .kiln/STATE.md | grep -o '[0-9]*')
+    HEAD=$(git rev-parse HEAD)
+    cat <<EOF > .kiln/docs/iteration-receipt.md
+    <!-- status: complete -->
+    # Iteration Receipt
+
+    iteration: ${ITER}
+    milestone: {current milestone name}
+    head_sha: ${HEAD}
+
+    ## Scope
+    - Planned: {deliverable IDs scoped for this iteration}
+    - Implemented: {what was actually completed}
+    - Skipped: {anything deferred, with reason}
+
+    ## QA
+    - Build: {pass/fail}
+    - Tests: {pass count}/{total}
+    - Reviewer verdict: {APPROVED/REJECTED}
+    EOF
+    ```
+
+    Then message persistent minds:
     - Message rakim: "ITERATION_UPDATE: Completed chunks: {combined summary}. Update codebase-state.md and AGENTS.md."
     - Message sentinel: "ITERATION_UPDATE: Completed chunks: {combined summary}. Update patterns.md and pitfalls.md."
     - STOP. Wait for both replies (one at a time, need 2).

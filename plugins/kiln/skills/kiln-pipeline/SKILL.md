@@ -115,6 +115,8 @@ STATE.md fields:
 - `path`: working directory path
 - `started`: run start date
 - `updated`: last state update date
+- `step_N_start`: ISO 8601 timestamp when step N began (written at each step transition)
+- `step_N_end`: ISO 8601 timestamp when step N completed (written when step signals done)
 
 On resume: read `skill` from STATE.md, load that file (this file), then resume from `stage`. Stage maps directly to step number — onboarding = 1, brainstorm = 2, research = 3, architecture = 4, build = 5, validate = 6, report = 7. If `stage: complete`, inform the operator the pipeline already finished.
 
@@ -300,6 +302,8 @@ Based on the boss's done signal, determine next action:
 **Step 7 done** (REPORT_COMPLETE) -> render `project_complete` banner, pipeline complete
 
 When writing STATE.md at step transitions, always include the `skill` and `roster` bootstrap paths. Set `roster` to the next step's blueprint path. These fields enable cold-start resume after session breaks.
+
+**Step timing**: At the start of each step, write `step_N_start: {ISO 8601 timestamp}` to STATE.md. When the step signals done, write `step_N_end: {ISO 8601 timestamp}`. Use `date -u +%Y-%m-%dT%H:%M:%SZ` via Bash for consistent formatting. Omega uses these timestamps to build the pipeline timing table in REPORT.md.
 
 ## Signal Processing via Tasklist
 

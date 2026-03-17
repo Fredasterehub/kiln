@@ -74,6 +74,18 @@ Pipeline: Kiln v9
 - Status: {complete}
 - Deliverables: {list with file paths}
 
+## Pipeline Timing
+{Read step_N_start and step_N_end timestamps from STATE.md. Compute durations.}
+
+| Step | Name | Duration | Started | Ended |
+|------|------|----------|---------|-------|
+| 1 | Onboarding | {computed} | {step_1_start} | {step_1_end} |
+| 2 | Brainstorm | {computed} | {step_2_start} | {step_2_end} |
+| ... | | | | |
+| **Total** | | **{sum}** | {step_1_start} | {last step_N_end} |
+
+{If timestamps are missing for some steps (e.g., resumed mid-pipeline), note which steps lack timing data.}
+
 ## Build Statistics
 - Total iterations: {build_iteration from STATE.md}
 - Milestones completed: {count}

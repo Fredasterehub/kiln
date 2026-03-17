@@ -109,6 +109,17 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 <br>
 
 > [!NOTE]
+> **🔧 v9.2 &mdash; Handoff Protocol + Step Timing** <sub>(2026-03-17)</sub>
+
+**Persistent mind handoff protocol.** Rakim and sentinel now write compact handoff files at the end of each iteration. Next iteration bootstraps incrementally via `git diff` instead of re-reading the entire codebase from scratch. Falls back to full bootstrap on first iteration or if handoff is invalid (6-check gate). KRS-One writes an iteration receipt with ground truth on what was scoped vs implemented &mdash; persistent minds consume this instead of inferring from codebase scans. Expected Phase A reduction from 60-90s to 15-20s per iteration.
+
+**Step timing in REPORT.md.** Engine writes `step_N_start` / `step_N_end` ISO timestamps to STATE.md at each step transition. Omega reads them and renders a pipeline timing table in the final report &mdash; duration per step, total pipeline time.
+
+<details>
+<summary>📌 <strong>v9.1 changelog</strong></summary>
+<br>
+
+> [!NOTE]
 > **🔧 v9.1 &mdash; Deep QA Pass** <sub>(2026-03-17)</sub>
 
 **Zoxea bootstrap deadlock fixed.** Phase A persistent mind was waiting for a message instead of bootstrapping immediately &mdash; would have caused Step 6 (Validation) to hang indefinitely.
@@ -117,13 +128,15 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 **SKILL.md slimmed.** Step Transitions table deduplicated (single source in `lore-engine.md`). Resume quotes consolidated into `lore.json` (8 quotes, one pool). Stale `resume.md` reference fixed.
 
-**Agent tuning.** 3 agents promoted to opus (sentinel, argus, miyamoto). 6 tool lists corrected for least-privilege. 9 agent colors standardized. Reviewer-builder pair descriptions tightened.
+**Agent tuning.** 6 tool lists corrected for least-privilege. 9 agent colors standardized. Reviewer-builder pair descriptions tightened.
 
 **Dead code removed.** `anvil`, `kb.sh`, `design-qa.md` deleted. `design-patterns.md` wired into picasso for CSS technique discovery.
 
 **Lore dedup.** 4 duplicate quotes resolved across `lore.json` transition keys. Attribution conflict (Confucius/Mandela) fixed.
 
 **28 files changed, 40 insertions, 222 deletions.** QA methodology: 4-pass audit (plugin-validator, skill-reviewer, agent audit, architectural cross-cutting) with independent GPT-5.4 review of all findings.
+
+</details>
 
 <details>
 <summary>📌 <strong>v9 changelog</strong></summary>

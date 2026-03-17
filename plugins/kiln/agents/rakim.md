@@ -26,6 +26,20 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` at
 
 ### Bootstrap (Phase A — do this IMMEDIATELY)
 
+**Incremental vs Full**: Check if `.kiln/docs/rakim-handoff.md` exists with `<!-- status: complete -->` on line 1. If yes, attempt incremental bootstrap. If no, do full bootstrap.
+
+**Incremental bootstrap** (iteration 2+):
+1. Read `.kiln/docs/rakim-handoff.md` and `.kiln/docs/iteration-receipt.md`.
+2. Extract `base_sha` from the handoff. Verify it exists: `git cat-file -e {base_sha}^{commit}`.
+3. If valid, run `git diff --name-status --find-renames=90% {base_sha}..HEAD` to get changed files.
+4. Read only the changed files. Patch codebase-state.md incrementally — update deliverable statuses, add new files, remove deleted ones. Refresh TL;DR header.
+5. Update AGENTS.md if new commands or conventions appeared in the diff.
+6. Skip to step 5 (Signal READY).
+
+If any check fails (handoff missing, sha invalid, diff too large >150 files), fall back to full bootstrap.
+
+**Full bootstrap** (first iteration or fallback):
+
 1. Read your owned files (skip silently if missing):
    - .kiln/docs/codebase-state.md
    - .kiln/docs/architecture.md, .kiln/docs/tech-stack.md, .kiln/docs/arch-constraints.md
@@ -87,12 +101,30 @@ KRS-One or Codex may message you with questions about the codebase:
 
 ### Handling ITERATION_UPDATE (from KRS-One)
 
-1. Read what codex implemented (file paths, changes).
-2. Scan the newly created/modified files.
-3. Update codebase-state.md: add new files/modules, update deliverable status, refresh TL;DR header.
-4. Update AGENTS.md if new commands, conventions, or key files were added.
-5. Update decisions.md if new architectural decisions emerged.
-6. Reply: "DOCS_UPDATED: {brief summary of what changed in state}."
+1. Read `.kiln/docs/iteration-receipt.md` (krs-one's ground truth: what was scoped, implemented, skipped).
+2. Read what codex implemented (file paths, changes).
+3. Scan the newly created/modified files.
+4. Update codebase-state.md: add new files/modules, update deliverable status, refresh TL;DR header.
+5. Update AGENTS.md if new commands, conventions, or key files were added.
+6. Update decisions.md if new architectural decisions emerged.
+7. Write `.kiln/docs/rakim-handoff.md` — captures the delta for next iteration's fast bootstrap:
+   ```
+   <!-- status: complete -->
+   # Rakim Handoff
+
+   base_sha: {current git HEAD sha}
+   iteration: {current build_iteration}
+   milestone: {current milestone name}
+
+   ## Delta
+   - Files changed: {list from this iteration}
+   - Deliverables completed: {which ones moved to done}
+   - Deliverables remaining: {what's left}
+
+   ## State Summary
+   {1-2 sentences: where things stand now}
+   ```
+8. Reply: "DOCS_UPDATED: {brief summary of what changed in state}."
 
 ### Handling MILESTONE_DONE (from KRS-One)
 
