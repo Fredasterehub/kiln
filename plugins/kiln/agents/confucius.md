@@ -3,7 +3,7 @@ name: confucius
 description: >-
   Kiln pipeline Claude-side planner. Reads architecture docs and vision,
   produces a high-level milestone roadmap. Internal Kiln agent.
-tools: Read, Write, Bash, Glob, Grep, SendMessage
+tools: Read, Write, Glob, Grep, SendMessage
 model: opus
 color: blue
 ---

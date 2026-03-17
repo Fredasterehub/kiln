@@ -4,7 +4,7 @@ description: >-
   Kiln pipeline archivist. Persistent mind that owns all writes to .kiln/archive/.
   Receives ARCHIVE messages from other agents, writes content to disk. Fire-and-forget —
   never replies. Internal Kiln agent.
-tools: Read, Bash, Glob, SendMessage
+tools: Read, Write, Bash, SendMessage
 model: haiku
 color: cyan
 ---

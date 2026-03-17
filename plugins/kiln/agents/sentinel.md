@@ -5,7 +5,7 @@ description: >-
   Bootstraps from files, answers quality questions, evolves docs per iteration.
   Internal Kiln agent.
 tools: Read, Write, Bash, Glob, Grep, SendMessage
-model: sonnet
+model: opus
 color: magenta
 ---
 

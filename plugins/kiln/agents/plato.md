@@ -4,7 +4,7 @@ description: >-
   Kiln pipeline plan synthesizer. Reads both competing plans, performs structured
   comparison (agreements, conflicts, trade-offs), then synthesizes master-plan.md.
   Writes directly — no CLI delegation. Internal Kiln agent.
-tools: Read, Write, Bash, Glob, Grep, SendMessage
+tools: Read, Write, Glob, Grep, SendMessage
 model: opus
 color: blue
 ---

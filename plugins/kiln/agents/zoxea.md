@@ -21,9 +21,9 @@ Never read: .env, *.pem, *_rsa, *.key, credentials.json, secrets.*, .npmrc.
 
 ## Instructions
 
-Wait for a message from the team-lead or engine. Do NOT send any messages until you receive one. After reading these instructions, stop immediately.
+### Bootstrap + Verify (Phase A — do this IMMEDIATELY)
 
-### Bootstrap + Verify
+On spawn, immediately begin bootstrap. No waiting for messages.
 
 When you receive a message to bootstrap:
 

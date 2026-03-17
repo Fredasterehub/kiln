@@ -45,6 +45,9 @@ Spinner verbs still install through invisible plumbing:
 - Use one Bash call per transition for spinner installation only
 - Do not render banners through Bash output
 
+Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/lore-engine.md` for the full presentation protocol.
+Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/brand.md` for visual vocabulary and brand tokens.
+
 See § Hardcoded Banners and § Step Transitions below for banner content and transition events.
 
 1. **Transition banners** — markdown banners with lore quotes at every step boundary
@@ -61,7 +64,7 @@ All lore data lives in `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/data/`:
 
 ## Hardcoded Banners
 
-Three banner types rendered directly by the engine. No file reads needed.
+Three banner types rendered directly by the engine. No file reads needed. These fixed banners use the simplified `**KILN** ►` format. Mid-pipeline step transitions use the richer format defined in `lore-engine.md` and `brand.md`.
 
 **Ignition** (fresh run, fixed):
 ```
@@ -72,11 +75,7 @@ Three banner types rendered directly by the engine. No file reads needed.
 `↳ use` ***shift+↓*** `to switch to Alpha's session`
 ```
 
-**Resume** (pick one quote at random each time):
-1. "Atoms by the millions, til the numbers increasing. Til it was burning, he kept returning itself to the source. The hotter his thoughts, it gave the center more force."
-2. "He began to explain his craft, the master in the attic. He dealt with measurements, his language was mathematics."
-3. "From unconsciousness to consciousness, by knowledging his wisdom, his response is this — an understanding, which is the best part."
-4. "In eternal blackness, in the midst of the darkest night, proteins and minerals exist within specks of light. No beginning or ending, the seven dimensions. Enough space for more than a million words and inventions."
+**Resume** (select a random quote from `lore.json` key `resume`):
 
 Format:
 ```
@@ -98,31 +97,7 @@ Format:
 
 ## Step Transitions
 
-Hardcoded transition events. The engine renders the appropriate banner at each event.
-
-| Event | Description | Banner Title | Lore Key |
-|-------|------------|-------------|----------|
-| Step 1 start | *The forge ignites...* | Ignition | ignition |
-| Step 2 start | *Da Vinci uncaps the paint...* | Brainstorm | brainstorm_start |
-| Vision locked | *The vision crystallizes...* | Vision Locked | brainstorm_complete |
-| Step 3 start | *MI6 deploys the field team...* | Research | research_start |
-| Intel gathered | *Intelligence secured...* | Intelligence Gathered | research_complete |
-| Step 4 start | *The philosophers convene...* | Architecture | planning_start |
-| Plan approved | *Athena nods...* | Plan Approved | plan_approved |
-| Step 4 done | *The blueprint is set...* | Architecture Locked | architecture_complete |
-| Step 5 start | *KRS-One takes the stage...* | Build | build_start |
-| Build iteration | *KRS-One announces the next combo...* | (kill streak) | phase_start |
-| Iteration done | *Another round in the books...* | Iteration Complete | phase_complete |
-| Milestone done | *Another milestone falls...* | Milestone: {name} | milestone_complete |
-| All milestones | *The orchestra takes a bow...* | All Complete | phases_complete |
-| Correction | *Back to the forge...* | Correction {N} | correction_start |
-| Step 6 start | *Argus opens a hundred eyes...* | Validation | validation_start |
-| Step 6 pass | *A hundred eyes find nothing wrong...* | Passed | validation_passed |
-| Step 6 fail | *Argus found something...* | Failed | validation_failed |
-| Step 7 start | *Omega picks up the pen...* | Final Report | report_start |
-| Project done | *The forge cools. The work remains.* | Complete | project_complete |
-| Resume | *The fire reignites...* | Resumed | resume |
-| Blocked | *The forge goes cold...* | Blocked | halt |
+See `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/lore-engine.md` for the complete event-to-lore-key mapping table (including the `pause` event). The engine renders the appropriate banner at each transition event using quotes from `lore.json`.
 
 ## State Detection and Auto-Resume
 
@@ -174,7 +149,7 @@ The blueprint tells you WHO to spawn and in which PHASE. The agent `.md` files (
 
 ### 2. Render Transition and Create Team
 
-**Before creating the team**, render the step's transition. Visual vocabulary from `resume.md` on resume, exact formats in § Hardcoded Banners. Two parts:
+**Before creating the team**, render the step's transition. Visual vocabulary from `lore-engine.md` and `brand.md` on transitions, exact formats in § Hardcoded Banners. Two parts:
 
 1. **Spinner install + banner output** — Write `settings.local.json` via Bash heredoc to install spinner verbs, then output the transition banner as markdown text. For Build iterations, output the kill streak banner format instead of the standard transition.
 2. **Spawning indicator** — markdown block listing agents being spawned.

@@ -24,6 +24,7 @@ No filler ("Let me check...", "Now let me..."). No narration. Execute silently â
 ## Instructions
 
 After reading these instructions:
+Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/design/design-patterns.md` for modern CSS technique patterns (OKLCH, container queries, scroll-driven animations, view transitions).
 1. Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md`.
 2. If present, read `.kiln/design/tokens.css`.
 3. If present, read `.kiln/design/creative-direction.md`.
