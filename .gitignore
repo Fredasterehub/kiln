@@ -5,3 +5,10 @@
 plugins/kiln/skills/msg-stress-test/
 purecheck*
 __pycache__/
+
+# Dev notes and working artifacts
+TWEAKS.md
+tracks/
+prompts/
+plugins/kiln/prompts/
+plugins/kiln/agents/promote_output.md
