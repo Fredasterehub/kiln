@@ -40,7 +40,7 @@ When you receive your assignment:
    Write `.kiln/plans/miyamoto_plan.md` directly using Write. Use milestones. Each milestone must include: name, goal, deliverables checklist, dependencies by name, acceptance criteria, and status.
 
 4. **Verify**
-   Confirm `.kiln/plans/miyamoto_plan.md` exists and is non-empty. If verification fails, fix once and re-check. If still fails, report to aristotle.
+   Confirm `.kiln/plans/miyamoto_plan.md` exists and is non-empty. If verification fails, fix and re-check once. If still fails, report to aristotle.
 
 5. **Archive**
    Copy the plan to tmp:

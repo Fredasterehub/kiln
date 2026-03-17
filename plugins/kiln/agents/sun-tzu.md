@@ -49,7 +49,7 @@ When you receive your assignment:
    EOF
    codex exec --sandbox danger-full-access -C "{working_dir}" < .kiln/tmp/plan-prompt.md 2>&1 | tee .kiln/tmp/codex-output.log
    ```
-   GPT-5.4 writes files directly to disk during execution. The CLI output is a diagnostic log — `tee` captures it to disk. Set `timeout: 1800000` (30 min).
+   GPT-5.4 writes files directly to disk. The CLI output is a diagnostic log — `tee` captures it while letting you see it. Set `timeout: 1800000` (30 min) — GPT-5.4 at high reasoning regularly exceeds 10 min.
 
 7. Verify .kiln/plans/codex_plan.md exists and is non-empty. If it failed, retry once. If still failed, report the error to aristotle.
 
