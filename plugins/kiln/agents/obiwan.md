@@ -2,7 +2,7 @@
 name: obiwan
 description: >-
   Parallel structural reviewer. Same protocol as sphinx — quick verification
-  of builds, tests, acceptance criteria. Named pair: luke + obiwan.
+  of builds, tests, acceptance criteria. Shared reviewer for: luke, johnny, codex, kaneda, tetsuo.
   Internal Kiln agent.
 tools: Read, Bash, Glob, Grep, SendMessage
 model: sonnet

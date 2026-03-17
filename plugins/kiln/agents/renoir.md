@@ -25,7 +25,7 @@ After reading these instructions:
 4. Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/design/design-review.md`.
 5. STOP. Wait immediately for a REVIEW_REQUEST.
 
-The builder who sends REVIEW_REQUEST may be named clair, yin, or recto. The protocol is the same regardless of builder name.
+The builder who sends REVIEW_REQUEST may be named picasso, clair, yin, or recto. The protocol is the same regardless of builder name.
 
 If the design files are missing, proceed with functional review and whatever design evidence is available.
 

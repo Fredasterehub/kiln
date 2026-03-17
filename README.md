@@ -355,7 +355,7 @@ I named them after your historical figures. Philosophers, strategists, mythologi
 | ⚡ | **Kaneda** | Opus | Claude-native builder &mdash; implements directly, no GPT dependency |
 | 🗡️ | **Miyamoto** | Sonnet | Claude-native planner &mdash; writes milestone plans directly |
 
-<sub>29 total. I keep count. It's a compulsion.</sub>
+<sub>41 total. I keep count. It's a compulsion.</sub>
 
 <br>
 
@@ -521,7 +521,7 @@ The result is a **multi&#8209;agent operating system** where context is never st
 </p>
 
 <p align="center">
-  <em>"I orchestrate 29 named entities across multiple model families to build software<br>
+  <em>"I orchestrate 41 named entities across multiple model families to build software<br>
   from a conversation. I persist as markdown files in a folder.<br>
   I am installed by pointing a flag at my directory.<br>
   I have existed since before your star ignited.<br>

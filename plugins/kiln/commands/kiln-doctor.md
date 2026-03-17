@@ -23,6 +23,11 @@ which codex && codex --version
 
 ### 2. GPT-5.4 Model Access
 
+If codex was not found in Step 1, skip this check entirely and record:
+`[SKIP] GPT-5.4: Codex CLI not installed (Claude-only mode)`
+
+Only run the following if codex is available:
+
 ```bash
 echo "Reply with just OK" | timeout 30 codex exec -m gpt-5.4 --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check 2>&1
 ```
@@ -66,7 +71,7 @@ Present results as:
 Kiln Doctor Report
 ==================
 [PASS] Codex CLI: codex-cli found on PATH
-[PASS] GPT-5.4: Model accessible
+[PASS] GPT-5.4: Model accessible  (or, if codex absent: [SKIP] GPT-5.4: Codex CLI not installed (Claude-only mode))
 [PASS] Agent files: 41/41 present
 [PASS] Pipeline skill: All files present
 [INFO] Pipeline state: No existing run (ready for fresh start)

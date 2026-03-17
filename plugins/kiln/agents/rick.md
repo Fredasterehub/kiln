@@ -2,7 +2,7 @@
 name: rick
 description: >-
   Parallel structural reviewer. Same protocol as sphinx — quick verification
-  of builds, tests, acceptance criteria. Named pair: morty + rick.
+  of builds, tests, acceptance criteria. Shared reviewer for: morty, codex, kaneda, tetsuo, johnny.
   Internal Kiln agent.
 tools: Read, Bash, Glob, Grep, SendMessage
 model: sonnet
