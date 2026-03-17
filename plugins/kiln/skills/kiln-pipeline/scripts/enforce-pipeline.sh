@@ -21,17 +21,14 @@ case "$TOOL" in
   *) exit 0 ;;
 esac
 
-AGENT=$(echo "$INPUT" | jq -r '.agent_type // ""')
-AGENT="${AGENT#kiln:}"
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
-FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // ""')
-RECIPIENT=$(echo "$INPUT" | jq -r '.tool_input.recipient // ""')
-RECIPIENT="${RECIPIENT#kiln:}"
-TYPE=$(echo "$INPUT" | jq -r '.tool_input.type // ""')
-
 # ── Helpers ──────────────────────────────────────────────────
 
 _find_root() {
+  # Use cached root if available (persists across calls in same shell)
+  if [[ -n "${KILN_ROOT_CACHE:-}" ]] && [[ -d "$KILN_ROOT_CACHE/.kiln" ]]; then
+    echo "$KILN_ROOT_CACHE"
+    return 0
+  fi
   local d="$PWD"
   while [[ "$d" != "/" ]]; do
     [[ -d "$d/.kiln" ]] && echo "$d" && return 0
@@ -49,6 +46,21 @@ _status_ok() {
 # current path hierarchy means no active pipeline — allow everything.
 KILN_ROOT=$(_find_root)
 [[ -n "$KILN_ROOT" ]] || exit 0
+
+# Lazy field extraction — only parse what each TOOL type needs.
+# Reduces jq calls from 5 to 1-2 per invocation.
+AGENT=$(echo "$INPUT" | jq -r '.agent_type // ""')
+AGENT="${AGENT#kiln:}"
+
+case "$TOOL" in
+  Write|Edit)   FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // ""') ;;
+  Bash)         COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""') ;;
+  SendMessage)  RECIPIENT=$(echo "$INPUT" | jq -r '.tool_input.recipient // ""')
+                RECIPIENT="${RECIPIENT#kiln:}"
+                TYPE=$(echo "$INPUT" | jq -r '.tool_input.type // ""') ;;
+  Read)         FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // ""') ;;
+  Agent)        ;; # SUBTYPE parsed only in hook 17
+esac
 
 # ═══════════════════════════════════════════════════════════════
 # DELEGATION — hooks 1, 2, 3

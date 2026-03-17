@@ -53,7 +53,7 @@ The engine spawns each worker on the same team. Workers appear as teammates with
 When assigning work to a teammate:
 
 1. **Scope first** — define WHAT to do and WHY, not HOW. The worker decides implementation approach.
-2. **Package context** — include relevant summaries from persistent minds, file paths, constraints. Don't make workers hunt for context across multiple files.
+2. **Package ALL context upfront** — include rakim's codebase state summary, sentinel's patterns/pitfalls excerpt, relevant architecture decisions, file paths, and constraints DIRECTLY in the assignment. The worker should have everything they need in your message. This eliminates consultation round-trips and saves 1-2 turns per worker.
 3. **One message, one assignment** — send the full assignment in a single SendMessage. Don't drip-feed instructions across multiple messages.
 4. **STOP after dispatch** — after sending, stop your turn immediately and wait for the reply.
 
@@ -61,23 +61,15 @@ When assigning work to a teammate:
 SendMessage(
   type: "message",
   recipient: "{worker}",
-  content: "ASSIGNMENT: {scope}\n\nContext:\n{packaged context}\n\nAcceptance criteria:\n{criteria}"
+  content: "ASSIGNMENT: {scope}\n\nContext:\n- Architecture: {key decisions from architecture.md}\n- Patterns: {relevant patterns from sentinel}\n- Codebase state: {relevant files/modules from rakim}\n- Constraints: {tech-stack constraints}\n\nAcceptance criteria:\n{criteria}"
 )
 ```
 
 ## 5. Peer Consultation
 
-Communication permissions are phased:
+**Before dispatch (Phase A/B):** Only the boss sends messages. Persistent minds respond to boss only.
 
-**Before dispatch (Phase A/B):** Only the boss sends messages. Persistent minds respond to boss only. Workers don't exist yet.
-
-**After dispatch (Phase C):** Workers can consult persistent minds directly for technical questions. The boss doesn't need to relay.
-
-Consultation pattern:
-1. Send your question via SendMessage to the persistent mind
-2. STOP. Wait for their reply before continuing.
-3. Incorporate the answer and continue your work.
-4. Use sparingly — each consultation costs a full turn.
+**After dispatch (Phase C):** Workers can consult persistent minds directly — but the boss should have packaged enough context to make this rare. Consultation costs a full turn.
 
 ```
 SendMessage(
@@ -132,10 +124,8 @@ Always include context after the signal name. A bare signal is less useful than 
 
 ## Communication Rules (Universal)
 
-These apply to ALL agents in every step:
+See `shared-rules.md` for security, shutdown, and communication rules that apply to all agents. Additional protocol-specific rules:
 
-1. **SendMessage is the ONLY way to communicate with teammates.** Plain text output is invisible to other agents. It IS visible to the operator (who can view your session via shift+arrow).
-2. **Never send messages before your bootstrap is complete.** Read your files first.
-3. **After sending a message expecting a reply, STOP your turn.** Never sleep-poll. Never continue working while waiting for a response.
-4. **Plain text for operator, SendMessage for agents.** Bosses in INTERACTIVE steps talk to the operator via plain text output. All agent-to-agent communication uses SendMessage exclusively.
-5. **One message at a time.** You wake up with one message. Process it fully before deciding your next action.
+1. **Never send messages before your bootstrap is complete.** Read your files first.
+2. **Plain text for operator, SendMessage for agents.** Bosses in INTERACTIVE steps talk to the operator via plain text output. All agent-to-agent communication uses SendMessage exclusively.
+3. **One message at a time.** You wake up with one message. Process it fully before deciding your next action.

@@ -149,18 +149,20 @@ For each step, follow this exact pattern. No shortcuts, no improvising.
 
 ### 0. Pipeline Start (first step only)
 
-On fresh run (no `.kiln/STATE.md`), before step 1:
-1. Read `.kiln/STATE.md` (check existence — if missing, fresh run confirmed).
-2. Render ignition banner (see § Hardcoded Banners), read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/blueprints/step-1-onboarding.md`, create team, spawn Phase A (mnemosyne).
-3. Wait for READY → spawn Phase B (alpha, foreground) + operator greeting.
+The splash screen has already been rendered by `/kiln-fire`. The operator sees the banner immediately. The engine's job is to get agents running as fast as possible.
 
-Budget: 2 turns max (check state → banner + spawn).
+**Fresh run** (no `.kiln/STATE.md`):
+1. Read blueprint `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/blueprints/step-1-onboarding.md` + create team — single turn.
+2. Spawn Phase A (mnemosyne, background) + Phase B (alpha, foreground) simultaneously. Do NOT wait for mnemosyne's READY before spawning alpha — alpha receives mnemosyne's READY summary in-flight via SendMessage. This saves 1 full turn.
+3. Output operator greeting: `Alpha is ready. ↳ shift+↓ to meet Alpha and begin.`
 
-On resume (`.kiln/STATE.md` exists with stage != complete):
-1. Read `.kiln/STATE.md` + `.kiln/resume.md` (2 files only).
-2. Render resume banner (see § Hardcoded Banners — pick one quote at random from the pool of 4). Read the blueprint at the path in STATE.md `roster` field. Create team, spawn.
+**Budget: 1 turn** (read blueprint + create team + spawn both phases).
 
-Budget: 2 turns max (read state+resume → banner + spawn).
+**Resume** (`.kiln/STATE.md` exists with stage != complete):
+1. Read `.kiln/resume.md` + blueprint at `roster` path (parallel reads, single turn).
+2. Create team, spawn per blueprint.
+
+**Budget: 1 turn** (read + create + spawn).
 
 ### 1. Read Blueprint and Step Definition
 
@@ -377,8 +379,19 @@ Use the exact signal names from `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/refe
 
 ## Build Loop — Kill Streak Names
 
-Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/kill-streaks.md` for Build step team naming (required at every Build step entry). The kill streak announcement is rendered as part of step 2 (Render Transition and Create Team) — bold orange banner with the streak name in ALL CAPS.
+Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/data/kill-streaks.json` for Build step team naming. Look up by `build_iteration` (1-indexed, wraps at 21). The kill streak announcement is rendered as part of step 2 (Render Transition and Create Team) — bold orange banner with the streak name in ALL CAPS.
 
 ## Artifact Verification
 
 Before each step, verify required input artifacts exist (see `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/artifact-flow.md`). If critical artifacts are missing, inform the operator rather than proceeding blind.
+
+## Metrics Collection
+
+Lightweight metrics tracked at natural pipeline boundaries — no polling, no extra reads.
+
+**At each step transition**, append the step name and ISO 8601 timestamp to the `step_timestamps` field in `.kiln/STATE.md`:
+```
+- **step_timestamps**: {"onboarding": "2026-03-17T10:00:00Z", "brainstorm": "2026-03-17T10:15:00Z", ...}
+```
+
+**At pipeline completion (Step 7)**, Omega writes `.kiln/METRICS.md` by aggregating STATE.md counters, git history, and archive scan. See `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/metrics.md` for the full template.
