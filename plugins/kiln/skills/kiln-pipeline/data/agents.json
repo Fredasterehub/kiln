@@ -157,7 +157,7 @@
   },
   "plato": {
     "alias": "Plato",
-    "role": "plan synthesizer (opus, merged comparison+synthesis)",
+    "role": "plan synthesizer",
     "step": 4,
     "quotes": [
       "From discord, find harmony.",

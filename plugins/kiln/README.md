@@ -19,7 +19,7 @@ Multi-modal software creation pipeline. From idea to deployed code in 7 autonomo
 
 ## Prerequisites
 
-- **Codex CLI**: `npm install -g @anthropic-ai/codex-cli`
+- **Codex CLI**: `npm install -g @openai/codex`
 - **GPT-5.4 access**: Via OpenAI API key with model access
 - Run `/kiln-doctor` to verify everything is ready.
 

@@ -40,7 +40,7 @@
       "id": 6,
       "category": "collaboration",
       "name": "Cross-Functional War Room",
-      "description": "Product manager + engineer + designer tackle a problem together - reveals trade-offs between feasibility desirability and viability",
+      "description": "Product manager + engineer + designer tackle a problem together - reveals trade-offs between feasibility, desirability, and viability",
       "output_pattern": "constraints > trade-offs > balanced solution"
     },
     {
