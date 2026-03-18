@@ -12,3 +12,12 @@ tracks/
 prompts/
 plugins/kiln/prompts/
 plugins/kiln/agents/promote_output.md
+
+# Codex Kiln local runtime
+codex/kiln/home/auth.json
+codex/kiln/home/history.jsonl
+codex/kiln/home/log/
+codex/kiln/home/sessions/
+codex/kiln/home/state.db
+codex/kiln/home/state.db-*
+codex/kiln/runtime/

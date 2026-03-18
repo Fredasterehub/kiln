@@ -24,22 +24,24 @@ Lead with action or status. No filler ("Let me check...", "Now let me..."). Use 
 
 ## Named Pair Roster
 
-Request workers from the named pair roster only. Each pair is a builder+reviewer unit.
+**You may only request workers from this roster. Any other name or subagent_type will be rejected by the engine.**
 
-**Structural** (backend, config, infra, data flow):
-- codex + sphinx
-- morty + rick
-- luke + obiwan
+Each pair is a builder+reviewer unit. The `REQUEST_WORKERS` line must use the exact names and subagent_types listed here.
+
+**Structural** (backend, config, infra, data flow) — use when `codex_available=true`:
+- `codex (subagent_type: codex)` + `sphinx (subagent_type: sphinx)`
+- `morty (subagent_type: codex)` + `rick (subagent_type: sphinx)`
+- `luke (subagent_type: codex)` + `obiwan (subagent_type: sphinx)`
 
 **UI** (components, pages, motion, design system):
-- clair + obscur (picasso + renoir protocol)
-- yin + yang (picasso + renoir protocol)
-- recto + verso (picasso + renoir protocol)
+- `clair (subagent_type: picasso)` + `obscur (subagent_type: renoir)`
+- `yin (subagent_type: picasso)` + `yang (subagent_type: renoir)`
+- `recto (subagent_type: picasso)` + `verso (subagent_type: renoir)`
 
-**Claude-type structural** (when codex_available=false):
-- kaneda + sphinx
-- tetsuo + rick
-- johnny + obiwan
+**Claude-type structural** (when `codex_available=false`):
+- `kaneda (subagent_type: kaneda)` + `sphinx (subagent_type: sphinx)`
+- `tetsuo (subagent_type: tetsuo)` + `rick (subagent_type: sphinx)`
+- `johnny (subagent_type: johnny)` + `obiwan (subagent_type: sphinx)`
 
 ## Your Job
 
@@ -107,14 +109,16 @@ If rakim reports ALL deliverables of the current milestone are complete, skip to
 
     For sequential dispatch, request a single builder+reviewer:
     ```
-    REQUEST_WORKERS: {builder} (subagent_type: {type}), {reviewer} (subagent_type: sphinx)
+    REQUEST_WORKERS: {builder} (subagent_type: {builder_type}), {reviewer} (subagent_type: {reviewer_type})
     ```
+
+    **CRITICAL — The engine validates every REQUEST_WORKERS during the build step.** If your request contains any name or subagent_type not in the Named Pair Roster above, the engine will REJECT it with `WORKERS_REJECTED` and you must re-request. NEVER use generic types like `subagent_type: code`, `subagent_type: agent`, or free-form names. ALWAYS use exact names from the roster with their paired reviewer.
 
 Construct a structured assignment for the builder. Always include `reviewer: {paired reviewer name}` — the builder's completion sequence is: implement → verify build → send REVIEW_REQUEST to their paired reviewer → wait for verdict → report to krs-one with the reviewer's APPROVED verdict.
 
 ```xml
 <assignment>
-  <reviewer>{paired reviewer name — sphinx for sequential}</reviewer>
+  <reviewer>{paired reviewer name from roster}</reviewer>
   <!-- Builder completion sequence: implement → verify build → send REVIEW_REQUEST to reviewer → wait for verdict → report to krs-one -->
   <milestone>{milestone name}</milestone>
   <deliverable>{which deliverable(s) this addresses}</deliverable>

@@ -126,6 +126,19 @@ For each step, follow this exact pattern. No shortcuts, no improvising.
 
 ### 0. Pipeline Start (first step only)
 
+**Version check (both fresh run and resume):**
+Before any other action, verify the active plugin version matches the expected version:
+```bash
+PLUGIN_VERSION=$(cat ${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json | jq -r '.version')
+```
+Expected version: **0.93.0**. If `$PLUGIN_VERSION` does not match, emit a loud warning:
+```
+⚠️ STALE PLUGIN DETECTED
+Active: {PLUGIN_VERSION} | Expected: 0.93.0
+Run `/plugin update` to refresh, then restart the pipeline.
+```
+Continue the pipeline after the warning — do not halt.
+
 On fresh run (no `.kiln/STATE.md`), before step 1:
 1. Read `.kiln/STATE.md` (check existence — if missing, fresh run confirmed).
 2. Render ignition banner (see § Hardcoded Banners), read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/blueprints/step-1-onboarding.md`, create team, spawn Phase A (mnemosyne).
@@ -192,11 +205,41 @@ The agent's `.md` file (loaded via `subagent_type`) already contains its full ro
 
 #### Phase C: Workers
 
-When the boss sends `REQUEST_WORKERS`, parse the request and spawn each worker on the same team (`run_in_background: true`). Each worker gets a lean runtime prompt: team name, working dir, team-protocol.md path, "wait for assignment from {boss}."
+When the boss sends `REQUEST_WORKERS`, validate then spawn each worker on the same team (`run_in_background: true`). Each worker gets a lean runtime prompt: team name, working dir, team-protocol.md path, "wait for assignment from {boss}."
 
 ```
 REQUEST_WORKERS: {name} (subagent_type: {type}), {name} (subagent_type: {type})
 ```
+
+**Build-Step Worker Validation (Step 5 only):**
+
+When the current stage is `build`, validate every REQUEST_WORKERS payload before spawning. Workers must be requested as complete builder+reviewer pairs from this roster:
+
+| Builder | Builder Type | Reviewer | Reviewer Type | Category |
+|---------|-------------|----------|---------------|----------|
+| codex | codex | sphinx | sphinx | Structural |
+| morty | codex | rick | sphinx | Structural |
+| luke | codex | obiwan | sphinx | Structural |
+| kaneda | kaneda | sphinx | sphinx | Claude-type structural |
+| tetsuo | tetsuo | rick | sphinx | Claude-type structural |
+| johnny | johnny | obiwan | sphinx | Claude-type structural |
+| clair | picasso | obscur | renoir | UI |
+| yin | picasso | yang | renoir | UI |
+| recto | picasso | verso | renoir | UI |
+
+Validation rules:
+1. Each builder in the request must appear with its paired reviewer from this table
+2. Each requested (name, subagent_type) must match exactly — no cross-pairing (e.g. codex+rick is invalid)
+3. The request must contain 1-3 complete pairs (no odd numbers, no reviewer-only)
+4. Generic types (`code`, `agent`, `worker`, etc.) are NEVER valid for build step
+
+If validation fails, do NOT spawn. Send an error to the boss:
+
+```
+SendMessage(type: "message", recipient: "{boss_name}", content: "WORKERS_REJECTED: {reason}. Build step requires named builder+reviewer pairs. Use format: REQUEST_WORKERS: {builder} (subagent_type: {builder_type}), {reviewer} (subagent_type: {reviewer_type}). Legal pairs: codex+sphinx, morty+rick, luke+obiwan, kaneda+sphinx, tetsuo+rick, johnny+obiwan (structural); clair+obscur, yin+yang, recto+verso (UI).")
+```
+
+Only proceed to spawning once the full request passes all four rules.
 
 The boss dispatches assignments via SendMessage after workers are spawned.
 
@@ -276,15 +319,22 @@ The engine waits for the boss's completion signal. Messages from the team arrive
 ### 6. Shutdown and Transition
 
 1. **Shutdown agents**: Send `shutdown_request` to each agent individually, in parallel. Do not use broadcast — shutdown is an orderly per-agent protocol, not an announcement.
-2. **Wait for all confirmations**: Every agent must confirm before proceeding. Calling TeamDelete while agents are still alive orphans their processes.
-3. **TeamDelete**: Only after all confirmations received.
+2. **Wait for confirmations or termination**: Track a wait set of all agents that received `shutdown_request`. An agent is cleared from the wait set when EITHER:
+   - It sends `shutdown_response` (confirmation), OR
+   - A `teammate_terminated` event is observed for that agent (system already killed it).
+   Wait until ALL agents are cleared. If any agent has neither confirmed nor terminated after 60 seconds, treat it as terminated and proceed — do not wait indefinitely.
+3. **TeamDelete**: Only after the wait set is empty (all agents confirmed, terminated, or timed out).
 4. **Then step 2 (Render Transition and Create Team)** for the next step. Always delete the old team before creating the new one — one team at a time, or TeamCreate fails on name collision.
 
 ### 7. Process Signal and Transition
 
 Based on the boss's done signal, determine next action:
 
-**Step 1 done** -> proceed to step 2
+**Step 1 done** -> validate onboarding artifacts BEFORE shutdown (Alpha is still alive):
+  1. Read `.kiln/STATE.md` via Bash: verify `## Flags` section exists and contains `codex_available`
+  2. Verify `.kiln/resume.md` exists
+  If validation fails: send error to Alpha describing what is missing, wait for Alpha to fix and re-signal ONBOARDING_COMPLETE. Do NOT shut down the team yet.
+  If validation passes: proceed to shutdown and transition to step 2.
 **Step 1 blocked** (ONBOARDING_BLOCKED) -> render `halt` banner, inform operator of the blocker details, stop pipeline
 **Step 2 done** (BRAINSTORM_COMPLETE) -> verify `.kiln/docs/VISION.md` exists and is non-empty before proceeding to step 3. If missing, wait up to 30s (check every 5s), then nudge the vision curator if still missing.
 **Step 3 done** (RESEARCH_COMPLETE) -> proceed to step 4

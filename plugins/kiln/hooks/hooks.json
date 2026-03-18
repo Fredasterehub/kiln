@@ -3,7 +3,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "",
+        "matcher": "Write|Edit|Bash|SendMessage|Read|Agent",
         "hooks": [
           {
             "type": "command",
@@ -19,6 +19,18 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/webfetch-responsive.sh",
             "timeout": 35
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/scripts/audit-bash.sh",
+            "timeout": 5
           }
         ]
       }

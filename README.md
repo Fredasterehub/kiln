@@ -41,7 +41,7 @@
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
   <td><sub>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</sub></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_15,_2026_·_03:46_UTC-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_18,_2026_·_20:55_UTC-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
@@ -109,9 +109,28 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 <br>
 
 > [!NOTE]
+> **🔧 v9.4 &mdash; Reliability Hardening** <sub>(2026-03-18)</sub>
+
+**Hooks redesigned.** Enforcement now uses a three-layer context gate (`.kiln/` directory, active stage in `STATE.md`, known-agent whitelist) so pipeline rules never leak into normal Claude Code usage. Matcher narrowed from catch-all to explicit tool list. New `PostToolUse` audit hook detects Bash-mediated writes that bypass `PreToolUse` enforcement &mdash; advisory only, never blocks.
+
+**Build dispatch hardened.** Engine validates worker requests against the named pair roster. Generic or malformed requests are rejected at the engine boundary with a corrective message. Blueprint updated with claude-type fallback pairs.
+
+**Stale plugin detection.** Engine compares cached plugin version against `plugin.json` at startup and resume. Warns loudly if the active version has drifted.
+
+**Shutdown no longer hangs on dead agents.** `teammate_terminated` clears the agent from the wait set immediately. 60-second timeout fallback for unresponsive agents.
+
+**Alpha postcondition validation.** Dual-layer &mdash; Alpha self-checks all required `STATE.md` fields before signaling completion, engine validates structurally before advancing. Three consecutive smoke tests showed the same regression; now enforced, not trusted.
+
+<details>
+<summary>📌 <strong>v9.3 changelog</strong></summary>
+<br>
+
+> [!NOTE]
 > **🔧 v9.3 &mdash; Hook False Positive Fix** <sub>(2026-03-17)</sub>
 
 **enforce-pipeline.sh no longer blocks non-pipeline operations.** The hook's pipeline context gate relied solely on `$PWD` containing a `.kiln/` ancestor. When Claude Code ran the hook with `$PWD` pointing to a different project (e.g. an active smoketest), the gate passed and Hook 11's overly broad regex (`\.claude/projects`) blocked legitimate writes to auto-memory files. Fix: dual-signal gate (requires both `.kiln/` absent AND no `agent_type`) plus `AGENT` guard on Hook 11 so the main session always passes. Hook 11 regex narrowed to match only settings files, not memory.
+
+</details>
 
 <details>
 <summary>📌 <strong>v9.2 changelog</strong></summary>
@@ -473,20 +492,20 @@ kiln/
 │   └── marketplace.json       Marketplace manifest
 ├── plugins/kiln/
 │   ├── .claude-plugin/
-│   │   └── plugin.json        Plugin manifest (v0.90)
+│   │   └── plugin.json        Plugin manifest (v0.94)
 │   ├── agents/                41 agent definitions
 │   ├── commands/
 │   │   ├── kiln-fire.md       Launch / resume
 │   │   └── kiln-doctor.md     Pre-flight check
 │   ├── hooks/
-│   │   ├── hooks.json         PreToolUse hook entries
+│   │   ├── hooks.json         PreToolUse + PostToolUse hook entries
 │   │   └── webfetch-responsive.sh
 │   └── skills/
 │       └── kiln-pipeline/
 │           ├── SKILL.md       Pipeline state machine
 │           ├── data/          Brainstorming + elicitation data
 │           ├── references/    Blueprints, design system, kill streaks
-│           └── scripts/       enforce-pipeline.sh, kb.sh
+│           └── scripts/       enforce-pipeline.sh, audit-bash.sh
 ├── install.sh                 One-liner installer
 ├── README.md
 └── docs/
@@ -588,7 +607,7 @@ Kiln is a native Claude Code plugin that leverages every platform primitive:
 - **Teams**: `TeamCreate` per step with persistent agents
 - **Messaging**: `SendMessage` for all inter&#8209;agent communication (one message at a time, ordered)
 - **Tasklists**: `TaskCreate`/`Update`/`List` for build iterations and validation
-- **Hooks**: 13 PreToolUse rules enforced via `enforce-pipeline.sh`
+- **Hooks**: 17 PreToolUse rules + PostToolUse audit via `enforce-pipeline.sh` &amp; `audit-bash.sh`
 - **State**: `.kiln/STATE.md` with auto&#8209;resume via `skill` path
 - **File Ownership**: Each agent owns specific files and pushes updates
 

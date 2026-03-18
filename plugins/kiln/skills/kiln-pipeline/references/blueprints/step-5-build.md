@@ -42,6 +42,14 @@ The pipeline runner invokes this blueprint repeatedly. Each invocation is one te
 | 2 | morty | rick | codex | sphinx |
 | 3 | luke | obiwan | codex | sphinx |
 
+### Claude-Type Structural Pairs (when codex_available=false)
+
+| Pair | Builder | Reviewer | Builder Type | Reviewer Type |
+|------|---------|----------|--------------|---------------|
+| 1 | kaneda | sphinx | kaneda | sphinx |
+| 2 | tetsuo | rick | tetsuo | sphinx |
+| 3 | johnny | obiwan | johnny | sphinx |
+
 ### UI Pairs
 
 | Pair | Builder | Reviewer | Builder Type | Reviewer Type |
@@ -56,7 +64,7 @@ The pipeline runner invokes this blueprint repeatedly. Each invocation is one te
 
 **Phase B**: krs-one spawns (BACKGROUND). Receives READY summaries from rakim and sentinel in runtime prompt. Reads master plan, scopes one chunk or up to 3 independent chunks, requests the needed worker pairs.
 
-**Phase C**: 1-3 builder+reviewer pairs, any mix of structural (subagent_type: codex/sphinx) and UI (subagent_type: picasso/renoir). Each builder receives a structured assignment with `reviewer: {paired reviewer name}`. Builders send REVIEW_REQUEST directly to their paired reviewer, reviewers reply directly to builders, and builders report IMPLEMENTATION_COMPLETE or IMPLEMENTATION_BLOCKED back to KRS-One. Sequential remains the default when work is dependent.
+**Phase C**: 1-3 builder+reviewer pairs, any mix of structural (subagent_type: codex/sphinx), claude-type structural (subagent_type: kaneda/tetsuo/johnny + sphinx, when codex_available=false), and UI (subagent_type: picasso/renoir). Each builder receives a structured assignment with `reviewer: {paired reviewer name}`. Builders send REVIEW_REQUEST directly to their paired reviewer, reviewers reply directly to builders, and builders report IMPLEMENTATION_COMPLETE or IMPLEMENTATION_BLOCKED back to KRS-One. Sequential remains the default when work is dependent.
 
 ## Communication Model
 

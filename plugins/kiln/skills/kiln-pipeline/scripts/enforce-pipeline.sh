@@ -45,11 +45,39 @@ _status_ok() {
 }
 
 # ── Pipeline context gate ────────────────────────────────────
-# All enforcement is pipeline-specific. No .kiln/ directory in the
-# current path hierarchy means no active pipeline — allow everything.
+# Enforcement only applies during ACTIVE Kiln pipeline runs.
+# Three checks: .kiln/ exists, STATE.md has active stage, agent is Kiln-known.
 KILN_ROOT=$(_find_root)
-if [[ -z "$KILN_ROOT" ]] && [[ -z "$AGENT" ]]; then
-  exit 0
+
+# No .kiln/ directory — no pipeline, allow everything
+[[ -n "$KILN_ROOT" ]] || exit 0
+
+# .kiln/ exists — check if pipeline is actually active via STATE.md
+_STATE="$KILN_ROOT/.kiln/STATE.md"
+if [[ ! -f "$_STATE" ]]; then
+  exit 0  # No STATE.md = no active pipeline (historical/stale .kiln/)
+fi
+
+_STAGE=$(grep -oP '(?<=\*\*stage\*\*: )\S+' "$_STATE" 2>/dev/null || true)
+if [[ -z "$_STAGE" ]] || [[ "$_STAGE" == "complete" ]]; then
+  exit 0  # Pipeline finished or STATE.md malformed — no enforcement
+fi
+
+# Pipeline is active. Main session (empty AGENT) is the engine — enforce.
+# For named agents, only enforce if the agent is a known Kiln pipeline agent.
+if [[ -n "$AGENT" ]]; then
+  case "$AGENT" in
+    alpha|mnemosyne|maiev|curie|medivh|\
+    da-vinci|clio|\
+    mi6|field-agent|\
+    aristotle|numerobis|confucius|sun-tzu|plato|athena|\
+    krs-one|rakim|sentinel|thoth|codex|morty|luke|kaneda|tetsuo|johnny|miyamoto|sphinx|rick|obiwan|\
+    picasso|clair|yin|recto|renoir|obscur|yang|verso|\
+    zoxea|argus|hephaestus|omega)
+      ;; # known Kiln agent — fall through to enforcement
+    *)
+      exit 0 ;; # unknown agent (Explore, statusline-setup, etc.) — not Kiln, allow
+  esac
 fi
 
 # ═══════════════════════════════════════════════════════════════

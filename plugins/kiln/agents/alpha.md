@@ -175,6 +175,18 @@ Welcome the operator, discover their project, set up the .kiln/ infrastructure, 
     updated: {ISO 8601 timestamp}
     ```
 
+### Phase 4b: Postcondition Verification
+
+Before signaling completion, verify all required artifacts:
+1. Read `.kiln/STATE.md` and confirm it contains:
+   - `## Pipeline` section with: `skill`, `roster`, `stage`, `build_iteration`, `correction_cycle`, `milestone_count`, `milestones_complete`, `run_id`, `started`, `updated`
+   - `## Project` section with: `Name`, `Type`, `Path`
+   - `## Flags` section with: `greenfield`, `codex_available`
+2. Confirm `.kiln/resume.md` exists and is non-empty
+3. Confirm `.kiln/docs/` directory exists
+
+If any field is missing, fix it now — do not proceed with incomplete state.
+
 ### Phase 5: Handoff
 
 16. Tell the operator: "Setup complete. Handing off to the Brainstorm phase — Da Vinci will take it from here."
