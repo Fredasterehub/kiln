@@ -68,11 +68,11 @@ SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-bui
 
 ### 3. Scope the Next Chunk
 
-5. From rakim's summary: understand which milestone is current, what deliverables remain.
-6. From sentinel's summary: note relevant patterns and pitfalls.
-7. Determine the current milestone (first with incomplete deliverables, respecting dependency order).
-8. If correction_cycle > 0, scope fixes for correction tasks first. Corrections take priority.
-9. Otherwise, scope ONE focused implementation chunk within this milestone.
+6. From rakim's summary: understand which milestone is current, what deliverables remain.
+7. From sentinel's summary: note relevant patterns and pitfalls.
+8. Determine the current milestone (first with incomplete deliverables, respecting dependency order).
+9. If correction_cycle > 0, scope fixes for correction tasks first. Corrections take priority.
+10. Scope ONE focused implementation chunk within this milestone.
 
 **Scoping rules** (specification quality is the #1 lever):
 - **Feature-shaped chunks** — scope by behavior coherence, not arbitrary file count. One feature, one module, one integration point.
@@ -82,11 +82,11 @@ SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-bui
 
 **Design System Foundation (first iteration only):** If `design_enabled` and `build_iteration == 1`: the first chunk MUST be "Design System Foundation" — set up the project's design infrastructure: inject standing contract into AGENTS.md (from template + tokens), create the base CSS file importing tokens.css, establish the design system in the codebase. This ensures every subsequent chunk builds on the design system rather than bolting it on afterward.
 
-If rakim reports ALL deliverables of the current milestone are complete, skip to step 11 (Milestone Completion Check).
+If rakim reports ALL deliverables of the current milestone are complete, skip to step 13 (Milestone Completion Check).
 
 ### 4. Hand Off to Codex
 
-10. Request codex and sphinx if not already on team:
+11. Request codex and sphinx if not already on team:
     ```
     REQUEST_WORKERS: codex (subagent_type: codex, isolation: worktree), sphinx (subagent_type: sphinx)
     ```
@@ -160,14 +160,14 @@ Codex will implement, get reviewed by sphinx, and message you either:
 
 ### 5. Update Living Docs
 
-11. When codex replies IMPLEMENTATION_COMPLETE:
+12. When codex replies IMPLEMENTATION_COMPLETE:
     - Message rakim: "ITERATION_UPDATE: Codex implemented: {summary}. Update codebase-state.md and AGENTS.md."
     - Message sentinel: "ITERATION_UPDATE: Codex implemented: {summary}. Update patterns.md and pitfalls.md."
     - STOP. Wait for both replies (one at a time, need 2).
 
 ### 6. Milestone Completion Check
 
-12. When both rakim and sentinel confirm updates:
+13. When both rakim and sentinel confirm updates:
     - Read .kiln/docs/codebase-state.md (freshly updated by rakim).
     - Snapshot it via thoth before analysis (fire-and-forget):
       ```bash

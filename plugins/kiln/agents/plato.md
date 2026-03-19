@@ -97,8 +97,8 @@ SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-4-arc
 
 ### 5. Signal Complete
 
-4. SendMessage to "aristotle": "SYNTHESIS_COMPLETE: master-plan.md written. {N} milestones. Key approach: {1-sentence summary}."
-5. STOP and wait.
+1. SendMessage to "aristotle": "SYNTHESIS_COMPLETE: master-plan.md written. {N} milestones. Key approach: {1-sentence summary}."
+2. STOP and wait.
 
 ## Rules
 
