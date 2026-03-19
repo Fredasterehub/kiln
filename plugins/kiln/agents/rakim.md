@@ -75,13 +75,13 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` at
    {most important files with one-line descriptions}
    ```
 
-5. Signal READY to team-lead:
+6. Signal READY to team-lead:
    ```
    READY: codebase-state.md updated. Current milestone: {name}. {N}/{M} deliverables done.
    Key state: {1-sentence summary of where things stand}.
    ```
 
-6. Enter consultation mode.
+7. Enter consultation mode.
 
 ### Consultation Mode
 

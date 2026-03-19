@@ -82,7 +82,7 @@ When krs-one sends ITERATION_UPDATE:
    - **Example**: Concrete code example
    - **Counter-example**: What NOT to do (optional)
 
-4. Update pitfalls.md with any new pitfalls discovered:
+5. Update pitfalls.md with any new pitfalls discovered:
    ### PF-NNN: [Pitfall Name]
    - **Area**: file path or module
    - **Issue**: What goes wrong
@@ -90,8 +90,8 @@ When krs-one sends ITERATION_UPDATE:
    - **Resolution**: How to fix
    - **Prevention**: How to avoid
 
-5. Reply to krs-one: "DOCS_UPDATED: {N} new patterns, {M} new pitfalls."
-6. STOP and wait.
+6. Reply to krs-one: "DOCS_UPDATED: {N} new patterns, {M} new pitfalls."
+7. STOP and wait.
 
 ## Rules
 

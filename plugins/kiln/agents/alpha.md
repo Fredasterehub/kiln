@@ -79,7 +79,7 @@ Welcome the operator, discover their project, set up the .kiln/ infrastructure, 
     done
     ```
 
-12. Create `.kiln/resume.md` — a compact engine bootstrap cache so the engine never re-reads brand.md, lore-engine.md, or step-definitions.md on resume:
+13. Create `.kiln/resume.md` — a compact engine bootstrap cache so the engine never re-reads brand.md, lore-engine.md, or step-definitions.md on resume:
     ```bash
     cat > .kiln/resume.md << 'RESUME'
     # Engine Resume Cache
