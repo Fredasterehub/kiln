@@ -126,18 +126,20 @@ For each step, follow this exact pattern. No shortcuts, no improvising.
 
 ### 0. Pipeline Start (first step only)
 
-**Version check (both fresh run and resume):**
-Before any other action, verify the active plugin version matches the expected version:
+**Version check (resume only — fresh runs have no baseline to compare against):**
+On resume, compare the active plugin version against the version recorded in STATE.md at onboarding:
 ```bash
 PLUGIN_VERSION=$(cat ${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json | jq -r '.version')
+STATE_VERSION=$(grep -oP '(?<=\*\*plugin_version\*\*: )\S+' .kiln/STATE.md 2>/dev/null || echo "")
 ```
-Expected version: **0.93.0**. If `$PLUGIN_VERSION` does not match, emit a loud warning:
+If `$STATE_VERSION` is non-empty and differs from `$PLUGIN_VERSION`, emit a loud warning:
 ```
-⚠️ STALE PLUGIN DETECTED
-Active: {PLUGIN_VERSION} | Expected: 0.93.0
-Run `/plugin update` to refresh, then restart the pipeline.
+⚠️ PLUGIN VERSION CHANGED
+Onboarding: {STATE_VERSION} | Current: {PLUGIN_VERSION}
+If you updated the plugin intentionally, this is expected.
+If not, run `/plugin update` to get the latest version.
 ```
-Continue the pipeline after the warning — do not halt.
+Then update STATE.md with the current version so the warning doesn't repeat. Continue the pipeline — do not halt.
 
 On fresh run (no `.kiln/STATE.md`), before step 1:
 1. Read `.kiln/STATE.md` (check existence — if missing, fresh run confirmed).

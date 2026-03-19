@@ -147,6 +147,7 @@ Welcome the operator, discover their project, set up the .kiln/ infrastructure, 
     - **correction_cycle**: 0
     - **milestone_count**: 0
     - **milestones_complete**: 0
+    - **plugin_version**: {read from ${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json via jq -r '.version'}
     - **run_id**: {run_id}
     - **started**: {today's date YYYY-MM-DD}
     - **updated**: {ISO 8601 timestamp}
