@@ -242,7 +242,7 @@ Progress beats surface real information from READY signals and state. The operat
 
 The engine waits for the boss's completion signal. Messages from the team arrive automatically. Do not read files, create tasks, or intervene.
 
-**INTERACTIVE steps (Steps 1, 2) — HANDS OFF.** The boss is talking to the human operator. The operator may take 5 minutes, 30 minutes, or an hour to respond — this is normal. During INTERACTIVE steps:
+**INTERACTIVE steps (Steps 1, 2, 4) — HANDS OFF.** The boss is talking to the human operator. The operator may take 5 minutes, 30 minutes, or an hour to respond — this is normal. During INTERACTIVE steps:
 - **NEVER** nudge, re-spawn, or replace the boss
 - **NEVER** take over the interview or do the boss's work yourself
 - **NEVER** assume the boss is stuck — the human is thinking
