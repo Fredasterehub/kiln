@@ -47,8 +47,8 @@ Which agents to spawn per step, spawn order, expected signals, and state transit
 
 - **Boss**: krs-one (opus)
 - **Persistent minds**: rakim (opus, Phase A — codebase state + AGENTS.md), sentinel (sonnet, Phase A — patterns + pitfalls)
-- **Workers**: codex (sonnet), sphinx (sonnet) — Phase C, requested by krs-one
-- **Three-phase spawn**: Phase A (rakim + sentinel bootstrap) → Phase B (krs-one BACKGROUND) → Phase C (codex + sphinx per request)
+- **Workers**: 9 named builder+reviewer pairs across 3 categories (Structural: codex+sphinx, morty+rick, luke+obiwan; Claude-type: kaneda+sphinx, tetsuo+rick, johnny+obiwan; UI: clair+obscur, yin+yang, recto+verso) — Phase C, requested by krs-one as 1-3 pairs per iteration
+- **Three-phase spawn**: Phase A (rakim + sentinel bootstrap) → Phase B (krs-one BACKGROUND) → Phase C (requested builder+reviewer pairs)
 - **Team name**: kill streak name based on build_iteration (see kill-streaks.md)
 - **Signals from KRS-One**:
   - `ITERATION_COMPLETE` — more work needed. Re-invoke with next kill streak name.
@@ -60,8 +60,8 @@ Which agents to spawn per step, spawn order, expected signals, and state transit
 ## Step 6: Validate
 
 - **Boss**: argus (sonnet, solo)
-- **Agents**: zoxea (sonnet, consultation only — read-only mode)
-- **Spawn order**: Both in parallel. Zoxea is passive.
+- **Agents**: zoxea (sonnet, Phase A — architecture verifier, consultation mode after bootstrap)
+- **Spawn order**: Sequential — zoxea spawns first, signals READY after bootstrap, then argus spawns. Zoxea enters consultation mode (read-only).
 - **Signals from Argus**:
   - `VALIDATE_PASS` — proceed to step 7. State: stage → report.
   - `VALIDATE_FAILED` — correction tasks in report.md.

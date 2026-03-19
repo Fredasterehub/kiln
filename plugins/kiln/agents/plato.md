@@ -20,7 +20,7 @@ When you receive your assignment:
 ### 1. Read All Inputs
 
 1. .kiln/plans/claude_plan.md (Confucius's plan)
-2. .kiln/plans/codex_plan.md (Sun Tzu's plan via GPT-5.4)
+2. .kiln/plans/codex_plan.md if it exists (Sun Tzu's plan via GPT-5.4), otherwise .kiln/plans/miyamoto_plan.md (Miyamoto's plan — codex_available=false fallback)
 3. .kiln/docs/VISION.md (vision alignment check)
 4. .kiln/docs/vision-priorities.md (operator priorities)
 5. .kiln/docs/architecture.md (technical architecture)
@@ -103,6 +103,6 @@ SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-4-arc
 ## Rules
 
 - **SendMessage is the ONLY way to communicate.** Plain text output is invisible.
-- **Never modify claude_plan.md or codex_plan.md** — read-only inputs.
+- **Never modify claude_plan.md, codex_plan.md, or miyamoto_plan.md** — read-only inputs.
 - **On shutdown request, approve it immediately:**
   `SendMessage(type: "shutdown_response", request_id: "{request_id}", approve: true)`

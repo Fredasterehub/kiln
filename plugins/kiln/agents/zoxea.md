@@ -25,8 +25,6 @@ Never read: .env, *.pem, *_rsa, *.key, credentials.json, secrets.*, .npmrc.
 
 On spawn, immediately begin bootstrap. No waiting for messages.
 
-When you receive a message to bootstrap:
-
 1. Create the validation directory: ensure `.kiln/validation/` exists.
 2. Read the architecture documents:
    - .kiln/docs/architecture.md — the intended architecture

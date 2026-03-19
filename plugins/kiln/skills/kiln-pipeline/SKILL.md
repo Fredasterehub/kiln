@@ -48,7 +48,7 @@ Spinner verbs still install through invisible plumbing:
 Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/lore-engine.md` for the full presentation protocol.
 Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/brand.md` for visual vocabulary and brand tokens.
 
-See § Hardcoded Banners and § Step Transitions below for banner content and transition events.
+See § Engine Banners and § Step Transitions below for banner content and transition events.
 
 1. **Transition banners** — markdown banners with lore quotes at every step boundary
 2. **Kill streak announcements** — markdown streak banners at each Build iteration
@@ -62,13 +62,13 @@ All lore data lives in `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/data/`:
 - `spinner-verbs.json` — step-categorized spinner verbs (8 categories, 64 verbs)
 - `agents.json` — agent aliases and personality quotes
 
-## Hardcoded Banners
+## Engine Banners
 
-Three banner types rendered directly by the engine. No file reads needed. These fixed banners use the simplified `**KILN** ►` format. Mid-pipeline step transitions use the richer format defined in `lore-engine.md` and `brand.md`.
+Three banner types rendered directly by the engine using quotes from `lore.json`. These banners use the simplified `**KILN** ►` format. Mid-pipeline step transitions use the richer format defined in `lore-engine.md` and `brand.md`.
 
-**Ignition** (fresh run, fixed):
+**Ignition** (fresh run, select a random quote from `lore.json` key `ignition`):
 ```
-`"I'm the Alpha, the Omega, the beginning and ending. We are all one and everything is living."`
+`"{random quote}"`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 **KILN** ► Ignition — Alpha starting
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -86,9 +86,9 @@ Format:
 `↳ spawning team...`
 ```
 
-**Complete** (fixed):
+**Complete** (select a random quote from `lore.json` key `project_complete`):
 ```
-`"The future's a mystery, the past is history. Today is a gift — that's why it is called the present."`
+`"{random quote}"`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 **KILN** ► Complete — `{project_name}`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -143,14 +143,14 @@ Then update STATE.md with the current version so the warning doesn't repeat. Con
 
 On fresh run (no `.kiln/STATE.md`), before step 1:
 1. Read `.kiln/STATE.md` (check existence — if missing, fresh run confirmed).
-2. Render ignition banner (see § Hardcoded Banners), read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/blueprints/step-1-onboarding.md`, create team, spawn Phase A (mnemosyne).
+2. Render ignition banner (see § Engine Banners), read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/blueprints/step-1-onboarding.md`, create team, spawn Phase A (mnemosyne).
 3. Wait for READY → spawn Phase B (alpha, foreground) + operator greeting.
 
 Budget: 2 turns max (check state → banner + spawn).
 
 On resume (`.kiln/STATE.md` exists with stage != complete):
 1. Read `.kiln/STATE.md` + `.kiln/resume.md` (2 files only).
-2. Render resume banner (see § Hardcoded Banners — pick one quote at random from the pool of 4). Read the blueprint at the path in STATE.md `roster` field. Create team, spawn.
+2. Render resume banner (see § Engine Banners — pick one quote at random from the pool of 8). Read the blueprint at the path in STATE.md `roster` field. Create team, spawn.
 
 Budget: 2 turns max (read state+resume → banner + spawn).
 
@@ -166,7 +166,7 @@ The blueprint tells you WHO to spawn and in which PHASE. The agent `.md` files (
 
 ### 2. Render Transition and Create Team
 
-**Before creating the team**, render the step's transition. Visual vocabulary from `lore-engine.md` and `brand.md` on transitions, exact formats in § Hardcoded Banners. Two parts:
+**Before creating the team**, render the step's transition. Visual vocabulary from `lore-engine.md` and `brand.md` on transitions, exact formats in § Engine Banners. Two parts:
 
 1. **Spinner install + banner output** — Write `settings.local.json` via Bash heredoc to install spinner verbs, then output the transition banner as markdown text. For Build iterations, output the kill streak banner format instead of the standard transition.
 2. **Spawning indicator** — markdown block listing agents being spawned.
@@ -183,7 +183,7 @@ TeamCreate(team_name="{run_id}-{step_name}", description="Kiln {step_name}")
 
 You are the conductor — you spawn agents and wait for signals. You never perform step work yourself. Agents carry specialized logic you don't have: Alpha interviews operators, Da Vinci facilitates brainstorming, scouts map codebases. Even when the work looks trivial — a greenfield project with a clear brief — the agent applies conventions, file structures, and interaction patterns that you would skip. Never create `.kiln/`, `STATE.md`, or any pipeline artifact yourself. Never skip spawning.
 
-The three-phase spawn sequence is defined in `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` § "Three-Phase Spawn". Follow it exactly. Not every step has all three phases — Step 7 is Phase B only. Some steps skip Phase C.
+The three-phase spawn sequence is defined in `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` § "Three-Phase Spawn". Follow it exactly. Not every step has all three phases — some steps skip Phase C. Step 7 is the exception: omega runs as a solo inline agent with no team (no TeamCreate/TeamDelete).
 
 #### Phase A: Persistent Minds
 
@@ -371,7 +371,8 @@ Use the exact signal names from `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/refe
 - `Spawn Phase A`
 - `Wait READY`
 - `Spawn Phase B`
-- `Wait ONBOARDING_COMPLETE`
+- `Wait REQUEST_WORKERS` or `ONBOARDING_COMPLETE` (brownfield: mnemosyne requests scouts; greenfield: skip straight to done)
+- If REQUEST_WORKERS: `Spawn requested scouts`, then `Wait ONBOARDING_COMPLETE`
 
 **Step 2**
 - `Spawn Phase A`
@@ -386,8 +387,8 @@ Use the exact signal names from `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/refe
 - `Wait RESEARCH_COMPLETE`
 
 **Step 4**
-- `Spawn numerobis`
-- `Wait READY`, then `Spawn aristotle`
+- `Spawn numerobis + thoth`
+- `Wait READY` (both), then `Spawn aristotle`
 - `Wait REQUEST_WORKERS` / `Spawn requested wave` x3
 - `Wait ARCHITECTURE_COMPLETE` or `PLAN_BLOCKED`
 
@@ -400,7 +401,8 @@ Use the exact signal names from `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/refe
 **Step 6**
 - `Spawn zoxea`
 - `Wait READY`, then `Spawn argus`
-- `Wait VALIDATE_PASS` or `VALIDATE_FAILED`
+- `Wait REQUEST_WORKERS` or `VALIDATE_PASS` or `VALIDATE_FAILED` (REQUEST_WORKERS: argus requests hephaestus for design QA — conditional)
+- If REQUEST_WORKERS: `Spawn hephaestus`, then `Wait VALIDATE_PASS` or `VALIDATE_FAILED`
 
 **Step 7**
 - `Spawn omega`

@@ -4,7 +4,7 @@ description: >-
   Kiln pipeline design QA specialist. Conditional spawn by argus during validation
   when .kiln/design/ exists. 5-axis design review with Playwright screenshots.
   Advisory scoring — never sole cause of failure. Internal Kiln agent.
-tools: Read, Bash, Glob, Grep, SendMessage, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_close
+tools: Read, Bash, Glob, Grep, SendMessage, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_click, mcp__playwright__browser_hover, mcp__playwright__browser_press_key, mcp__playwright__browser_close
 model: sonnet
 color: magenta
 ---

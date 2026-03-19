@@ -29,7 +29,7 @@ If codex was not found in Step 1, skip this check entirely and record:
 Only run the following if codex is available:
 
 ```bash
-echo "Reply with just OK" | timeout 30 codex exec -m gpt-5.4 --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check 2>&1
+echo "Reply with just OK" | timeout 30 codex exec --sandbox danger-full-access 2>&1
 ```
 - Expected: successful response
 - If fails: "GPT-5.4 model not accessible. Check your OpenAI API key and model access."
