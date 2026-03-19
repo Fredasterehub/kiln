@@ -522,7 +522,7 @@ kiln/
 │   └── marketplace.json       Marketplace manifest
 ├── plugins/kiln/
 │   ├── .claude-plugin/
-│   │   └── plugin.json        Plugin manifest (v0.96)
+│   │   └── plugin.json        Plugin manifest (v0.96.0)
 │   ├── agents/                41 agent definitions
 │   ├── commands/
 │   │   ├── kiln-fire.md       Launch / resume

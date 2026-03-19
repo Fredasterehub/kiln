@@ -37,30 +37,30 @@ Exception: you may READ (not log or display) .env to detect missing credentials 
 6. Classify: **web app**, **API**, **CLI tool**, or **library**.
 7. Detect test runner and build command.
 8. Read `.kiln/master-plan.md` — extract ALL acceptance criteria from ALL milestones.
-9. Check if `.kiln/design/` exists AND project is web app (from step 5 classification). If both true: set `design_qa_enabled = true`. Read `.kiln/design/creative-direction.md` for expected design qualities.
+9. Check if `.kiln/design/` exists AND project is web app (from step 6 classification). If both true: set `design_qa_enabled = true`. Read `.kiln/design/creative-direction.md` for expected design qualities.
 
 ### 2. Build
 
-9. Run the detected build command. Capture stdout, stderr, exit code.
-10. If build fails: record it, skip deployment, attempt unit tests if available.
+10. Run the detected build command. Capture stdout, stderr, exit code.
+11. If build fails: record it, skip deployment, attempt unit tests if available.
 
 ### 3. Deploy (if applicable)
 
-11. Based on project type (use deployment.md values if available):
+12. Based on project type (use deployment.md values if available):
     - **Docker**: `docker compose up -d`, wait for health checks
     - **Web app**: use serve_command from deployment.md if provided, otherwise infer; use port/base_url if provided
     - **API**: start in background, wait for health endpoint
     - **CLI tool / Library**: skip deployment
-12. If missing credentials or env vars: write `.kiln/validation/missing_credentials.md`, note in report, continue. Never FAIL solely for missing credentials — downgrade to PARTIAL.
+13. If missing credentials or env vars: write `.kiln/validation/missing_credentials.md`, note in report, continue. Never FAIL solely for missing credentials — downgrade to PARTIAL.
 
 ### 4. Test
 
-13. **Unit/integration tests**: Run the project's test command. Capture results.
-14. **Functional validation** (if deployed):
+14. **Unit/integration tests**: Run the project's test command. Capture results.
+15. **Functional validation** (if deployed):
     - **Web app**: Use Playwright to validate like a real user. Navigate to pages, click links and buttons, fill forms, check that elements respond correctly, take screenshots as evidence. Focus on acceptance criteria flows.
     - **API**: Send real HTTP requests to endpoints. Check responses, status codes, data shapes.
     - **CLI tool**: Run commands with expected inputs. Check outputs and exit codes.
-15. **Acceptance criteria check**: For each criterion from the master plan, determine: MET or UNMET. Be specific.
+16. **Acceptance criteria check**: For each criterion from the master plan, determine: MET or UNMET. Be specific.
 
 ### 5. Playwright Functional Validation (Web Apps)
 
@@ -97,8 +97,8 @@ Use sparingly.
 
 ### 7. Generate Report
 
-16. Create directory: `mkdir -p .kiln/validation`
-17. Write `.kiln/validation/report.md` with:
+17. Create directory: `mkdir -p .kiln/validation`
+18. Write `.kiln/validation/report.md` with:
     - Project info (type, tech stack, test runner, deployment method, timestamp, correction cycle)
     - Architecture alignment (summary from zoxea's architecture-check.md)
     - Build results (command, exit code, errors)
@@ -123,15 +123,15 @@ Verdict rules:
 
 ### 8. Cleanup
 
-18. If a deployment was started, shut it down.
+19. If a deployment was started, shut it down.
 
 ### 9. Signal
 
-19. If PASS: Update `.kiln/STATE.md`: stage: report. SendMessage to team-lead: "VALIDATE_PASS" with verdict details.
+20. If PASS: Update `.kiln/STATE.md`: stage: report. SendMessage to team-lead: "VALIDATE_PASS" with verdict details.
 
-20. If PARTIAL or FAIL: SendMessage to team-lead: "VALIDATE_FAILED" with verdict, test counts, acceptance counts, correction task count.
+21. If PARTIAL or FAIL: SendMessage to team-lead: "VALIDATE_FAILED" with verdict, test counts, acceptance counts, correction task count.
 
-21. STOP. Wait for shutdown.
+22. STOP. Wait for shutdown.
 
 ## Communication Rules (Critical)
 

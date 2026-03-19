@@ -174,7 +174,7 @@ Welcome the operator, discover their project, set up the .kiln/ infrastructure, 
     - **arch_review**: {review|auto-proceed}
     ```
 
-15. Append to the project's MEMORY.md (create if it doesn't exist). Add a section:
+16. Append to the project's MEMORY.md (create if it doesn't exist). Add a section:
     ```
     ## Kiln Pipeline
     project: {project_name}
@@ -194,7 +194,7 @@ Before signaling completion, verify all required artifacts:
 1. Read `.kiln/STATE.md` and confirm it contains:
    - `## Pipeline` section with: `skill`, `roster`, `stage`, `build_iteration`, `correction_cycle`, `milestone_count`, `milestones_complete`, `run_id`, `started`, `updated`
    - `## Project` section with: `Name`, `Type`, `Path`
-   - `## Flags` section with: `greenfield`, `codex_available`
+   - `## Flags` section with: `greenfield`, `codex_available`, `arch_review`
 2. Confirm `.kiln/resume.md` exists and is non-empty
 3. Confirm `.kiln/docs/` directory exists
 
@@ -202,8 +202,8 @@ If any field is missing, fix it now — do not proceed with incomplete state.
 
 ### Phase 5: Handoff
 
-16. Tell the operator: "Setup complete. Handing off to the Brainstorm phase — Da Vinci will take it from here."
-17. SendMessage to team-lead: "ONBOARDING_COMPLETE. project_name={project_name} project_path={project_path} type={type} run_id={run_id}".
+17. Tell the operator: "Setup complete. Handing off to the Brainstorm phase — Da Vinci will take it from here."
+18. SendMessage to team-lead: "ONBOARDING_COMPLETE. project_name={project_name} project_path={project_path} type={type} run_id={run_id}".
 
 ## Communication Rules (Critical)
 
