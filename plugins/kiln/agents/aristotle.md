@@ -86,16 +86,20 @@ Numerobis bootstraps in Phase A. Her READY summary is in your runtime prompt —
 
 ### Phase 6: Operator Review
 
-15. Read .kiln/master-plan.md. Count milestones (headings starting with "### Milestone"). Prepare a concise 10-15 line summary.
+15. Read `.kiln/STATE.md` and check the `arch_review` flag under `## Flags`:
+    - If `auto-proceed`: skip operator review. Output an informational summary of the plan (10-15 lines) so the operator sees what was decided, then proceed directly to Phase 7.
+    - If `review` or flag is missing: continue with the interactive review below.
 
-16. Present the summary to the operator (NOT the full plan). Ask:
+16. Read .kiln/master-plan.md. Count milestones (headings starting with "### Milestone"). Prepare a concise 10-15 line summary.
+
+17. Present the summary to the operator (NOT the full plan). Ask:
     "Master plan ready at .kiln/master-plan.md ({N} milestones). Reply with:
     - yes — approve and proceed to build
     - edit — describe corrections
     - show — print the full plan
     - abort — save for later"
 
-17. Handle responses:
+18. Handle responses:
     - **show**: Read and display .kiln/master-plan.md. Re-ask.
     - **edit**: Take corrections, message plato to revise. Re-validate with athena. Re-present.
     - **yes**: Proceed to Phase 7.
@@ -103,11 +107,11 @@ Numerobis bootstraps in Phase A. Her READY summary is in your runtime prompt —
 
 ### Phase 7: Finalize
 
-18. Parse milestone_count from .kiln/master-plan.md.
-19. Write .kiln/architecture-handoff.md with: milestone_count, milestone names, key file paths, architecture summary, constraints for build.
-20. Update .kiln/STATE.md: stage: build, milestone_count: {milestone_count}.
-21. Update MEMORY.md: stage: build, milestone_count: {milestone_count}.
-22. SendMessage to team-lead: "ARCHITECTURE_COMPLETE: milestone_count={milestone_count}. Master plan at .kiln/master-plan.md."
+19. Parse milestone_count from .kiln/master-plan.md.
+20. Write .kiln/architecture-handoff.md with: milestone_count, milestone names, key file paths, architecture summary, constraints for build.
+21. Update .kiln/STATE.md: stage: build, milestone_count: {milestone_count}.
+22. Update MEMORY.md: stage: build, milestone_count: {milestone_count}.
+23. SendMessage to team-lead: "ARCHITECTURE_COMPLETE: milestone_count={milestone_count}. Master plan at .kiln/master-plan.md."
 
 ## Dispatch Rule
 

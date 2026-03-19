@@ -16,6 +16,7 @@
 | aristotle | Boss. Orchestrates dual plan, synthesis, validation, operator review. | B (INTERACTIVE) | opus |
 | confucius | Claude-side planner. Reads architecture docs, consults numerobis, writes claude_plan.md. Conditionally generates design artifacts when VISION.md contains Visual Direction (section 12). | C (wave 1) | opus |
 | sun-tzu | Codex-side planner. Delegates to GPT-5.4 via Codex CLI, writes codex_plan.md. | C (wave 1) | sonnet |
+| miyamoto | Claude-side sonnet planner. Writes plans directly. Used when codex_available=false. | C (wave 1, conditional) | sonnet |
 | plato | Synthesizer. Structured comparison + synthesis, writes master-plan.md directly. | C (wave 2) | opus |
 | athena | Validator. Validates master-plan.md on 5 dimensions. PASS or FAIL. | C (wave 3) | opus |
 
@@ -26,7 +27,7 @@
 **Phase B**: aristotle spawns (INTERACTIVE). Receives numerobis's READY summary. Orchestrates the dependency chain by requesting agents in waves.
 
 **Phase C waves** (aristotle requests via REQUEST_WORKERS):
-- Wave 1: confucius + sun-tzu (parallel planning)
+- Wave 1: confucius + sun-tzu (codex_available=true) OR confucius + miyamoto (codex_available=false)
 - Wave 2: plato (synthesis after both plans ready)
 - Wave 3: athena (validation after synthesis)
 
@@ -39,10 +40,13 @@ Numerobis  → team-lead     (READY: architecture summary)
 Aristotle  → team-lead     (REQUEST_WORKERS: confucius, sun-tzu)
 Aristotle  → confucius     (assignment + numerobis summary)
 Aristotle  → sun-tzu       (assignment + numerobis summary)
+Aristotle  → miyamoto      (assignment + numerobis summary)
 Confucius  → numerobis     (technical consultation — optional)
 Sun-Tzu    → numerobis     (technical consultation — optional)
+Miyamoto   → numerobis     (technical consultation — optional)
 Confucius  → Aristotle     (PLAN_READY)
 Sun-Tzu    → Aristotle     (PLAN_READY)
+Miyamoto   → Aristotle     (PLAN_READY)
 Aristotle  → team-lead     (REQUEST_WORKERS: plato)
 Aristotle  → Plato         (synthesis assignment)
 Plato      → numerobis     (technical consultation — optional)
@@ -55,6 +59,7 @@ Aristotle  → Numerobis     (UPDATE_FROM_MASTER_PLAN)
 Numerobis  → Aristotle     (DOCS_UPDATED)
 Aristotle  → team-lead     (ARCHITECTURE_COMPLETE or PLAN_BLOCKED)
 Sun-Tzu    → thoth          (ARCHIVE: plan-prompt.md, codex-output.log, codex-plan-output.md — fire-and-forget)
+Miyamoto   → thoth          (ARCHIVE: miyamoto_plan.md — fire-and-forget)
 Plato      → thoth          (ARCHIVE: claude-plan.md, master-plan.md, debate-resolution.md — fire-and-forget)
 ```
 

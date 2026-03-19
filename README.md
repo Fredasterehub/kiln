@@ -109,6 +109,34 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 <br>
 
 > [!NOTE]
+> **🔧 v9.6 &mdash; Reviewah Analysis Fixes** <sub>(2026-03-19)</sub>
+
+**Architecture docs normalized.** Step-definitions and step-4 blueprint now document thoth as persistent mind in Steps 4 and 5, miyamoto as conditional planner when Codex CLI is unavailable, and the configurable architecture approval gate (`arch_review` flag).
+
+**Hook counts corrected.** Enforcement header and README now consistently report 15 PreToolUse hooks + 1 PostToolUse audit (hook 2 removed v1.0.4, hook 16 never assigned).
+
+**Deployment info capture.** Alpha asks the operator for dev server command, port, and base URL during onboarding. Argus reads `.kiln/docs/deployment.md` before deploying &mdash; no more guessing serve commands.
+
+**Silent engine bootstrap.** Engine batches prerequisite reads into parallel tool calls. The ignition/resume banner is the operator's first visible output &mdash; no file-read noise before the brand moment.
+
+**MI6 output format fixed.** Field agent assignment instructions now correctly specify structured markdown output, not JSON.
+
+<details>
+<summary>📌 <strong>v9.5 changelog</strong></summary>
+<br>
+
+> [!NOTE]
+> **🔧 v9.5 &mdash; Dual-Team Reviewah Analysis** <sub>(2026-03-18)</sub>
+
+9 fixes from Opus + GPT-5.4 dual-team review. See commit `27e195f` for details.
+
+</details>
+
+<details>
+<summary>📌 <strong>v9.4 changelog</strong></summary>
+<br>
+
+> [!NOTE]
 > **🔧 v9.4 &mdash; Reliability Hardening** <sub>(2026-03-18)</sub>
 
 **Hooks redesigned.** Enforcement now uses a three-layer context gate (`.kiln/` directory, active stage in `STATE.md`, known-agent whitelist) so pipeline rules never leak into normal Claude Code usage. Matcher narrowed from catch-all to explicit tool list. New `PostToolUse` audit hook detects Bash-mediated writes that bypass `PreToolUse` enforcement &mdash; advisory only, never blocks.
@@ -120,6 +148,8 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 **Shutdown no longer hangs on dead agents.** `teammate_terminated` clears the agent from the wait set immediately. 60-second timeout fallback for unresponsive agents.
 
 **Alpha postcondition validation.** Dual-layer &mdash; Alpha self-checks all required `STATE.md` fields before signaling completion, engine validates structurally before advancing. Three consecutive smoke tests showed the same regression; now enforced, not trusted.
+
+</details>
 
 <details>
 <summary>📌 <strong>v9.3 changelog</strong></summary>
@@ -240,7 +270,7 @@ In Kiln, every file has an **owner**. Rakim owns `codebase-state.md`. Clio owns 
 Other tools make every agent read the same files and re&#8209;reason. Kiln's agents **learn what changed directly**, in the context where it matters.
 
 ### 🚦 Runtime Enforcement, Not Gentle Hints
-We have **13 PreToolUse hooks** hardwired into the plugin. When an agent tries to do something it shouldn't&mdash;a planner writing code, a builder accessing system config&mdash;the hook **blocks it with a helpful error message**. This isn't prompt engineering. It's platform&#8209;level guardrailing.
+We have **15 PreToolUse hooks** hardwired into the plugin. When an agent tries to do something it shouldn't&mdash;a planner writing code, a builder accessing system config&mdash;the hook **blocks it with a helpful error message**. This isn't prompt engineering. It's platform&#8209;level guardrailing.
 
 ### 🔁 Stateful Auto&#8209;Resume, Not "Start Over"
 Kiln writes every decision to `.kiln/STATE.md`. Shut down Claude Code. Reboot your machine. Come back tomorrow. Run `/kiln-fire` and **resume exactly where you left off**, with every agent remembering its place in the conversation.
@@ -492,7 +522,7 @@ kiln/
 │   └── marketplace.json       Marketplace manifest
 ├── plugins/kiln/
 │   ├── .claude-plugin/
-│   │   └── plugin.json        Plugin manifest (v0.94)
+│   │   └── plugin.json        Plugin manifest (v0.96)
 │   ├── agents/                41 agent definitions
 │   ├── commands/
 │   │   ├── kiln-fire.md       Launch / resume
@@ -607,7 +637,7 @@ Kiln is a native Claude Code plugin that leverages every platform primitive:
 - **Teams**: `TeamCreate` per step with persistent agents
 - **Messaging**: `SendMessage` for all inter&#8209;agent communication (one message at a time, ordered)
 - **Tasklists**: `TaskCreate`/`Update`/`List` for build iterations and validation
-- **Hooks**: 17 PreToolUse rules + PostToolUse audit via `enforce-pipeline.sh` &amp; `audit-bash.sh`
+- **Hooks**: 15 PreToolUse rules + PostToolUse audit via `enforce-pipeline.sh` &amp; `audit-bash.sh`
 - **State**: `.kiln/STATE.md` with auto&#8209;resume via `skill` path
 - **File Ownership**: Each agent owns specific files and pushes updates
 

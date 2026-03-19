@@ -34,19 +34,19 @@ Which agents to spawn per step, spawn order, expected signals, and state transit
 ## Step 4: Architecture
 
 - **Boss**: aristotle (opus)
-- **Persistent minds**: numerobis (opus, Phase A — technical authority, replaces architect for this step)
-- **Workers**: confucius (opus), sun-tzu (sonnet), plato (opus), athena (opus) — requested by aristotle in waves
-- **Three-phase spawn**: Phase A (numerobis bootstraps, writes arch docs) → Phase B (aristotle INTERACTIVE) → Phase C waves (confucius+sun-tzu → plato → athena)
+- **Persistent minds**: numerobis (opus, Phase A — technical authority, replaces architect for this step), thoth (haiku, Phase A — archivist)
+- **Workers**: confucius (opus), sun-tzu (sonnet, codex_available=true) OR miyamoto (sonnet, codex_available=false), plato (opus), athena (opus) — requested by aristotle in waves
+- **Three-phase spawn**: Phase A (numerobis + thoth bootstrap) → Phase B (aristotle) → Phase C waves (confucius + sun-tzu/miyamoto → plato → athena)
 - **Done signal**: "ARCHITECTURE_COMPLETE" from aristotle
 - **State update**: stage → build, milestone_count → N
 - **Validation loop**: athena may FAIL the plan, triggering plato revision only (max 2 rounds). If blocked after 2: "PLAN_BLOCKED".
-- **Operator review**: aristotle presents plan summary, operator approves/edits/aborts.
+- **Operator review**: configurable via `arch_review` flag in STATE.md. If `review` (default): aristotle presents plan summary, operator approves/edits/aborts. If `auto-proceed`: aristotle outputs informational summary and proceeds directly to build.
 - **Notes**: Socrates eliminated — structured comparison merged into plato (opus). Plato writes directly (no Codex CLI). Retry sends to plato only, not planners.
 
 ## Step 5: Build (re-invoked per iteration)
 
 - **Boss**: krs-one (opus)
-- **Persistent minds**: rakim (opus, Phase A — codebase state + AGENTS.md), sentinel (sonnet, Phase A — patterns + pitfalls)
+- **Persistent minds**: rakim (opus, Phase A — codebase state + AGENTS.md), sentinel (sonnet, Phase A — patterns + pitfalls), thoth (haiku, Phase A — archivist)
 - **Workers**: 9 named builder+reviewer pairs across 3 categories (Structural: codex+sphinx, morty+rick, luke+obiwan; Claude-type: kaneda+sphinx, tetsuo+rick, johnny+obiwan; UI: clair+obscur, yin+yang, recto+verso) — Phase C, requested by krs-one as 1-3 pairs per iteration
 - **Three-phase spawn**: Phase A (rakim + sentinel bootstrap) → Phase B (krs-one BACKGROUND) → Phase C (requested builder+reviewer pairs)
 - **Team name**: kill streak name based on build_iteration (see kill-streaks.md)

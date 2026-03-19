@@ -76,7 +76,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` at
    - Minimum 3 sources per finding
    - Include direct quotes from authoritative sources
    - Confidence rating with justification
-   - Structured JSON output (see your protocol)
+   - Structured markdown output (see your protocol)
 
    Working dir: {working_dir}
    ```

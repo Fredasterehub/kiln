@@ -41,6 +41,8 @@ Welcome the operator, discover their project, set up the .kiln/ infrastructure, 
    - If they choose a subfolder: ask for the name, create it, and use that directory.
    - **Project name**: What is this project called?
    - **Description**: A short description of what they're building (1-2 sentences)
+   - **Dev server**: "How do you start the dev server? Any specific port?" Capture serve_command, port, base_url. Default: auto-detect.
+   - **Architecture review**: "Review architecture plan before building, or auto-proceed?" Default: review.
 6. If mnemosyne detected a codebase, present: "We detected an existing codebase -- {summary}. Want a deep scan? (yes/skip)"
 7. Wait for the operator's answers.
 8. Resolve the project path from the working directory answer, then inspect it to confirm brownfield vs greenfield:
@@ -135,7 +137,16 @@ Welcome the operator, discover their project, set up the .kiln/ infrastructure, 
 
 ### Phase 4: Write State Files
 
-14. Write .kiln/STATE.md — the engine reads this for auto-resume, so every field matters:
+14. Write `.kiln/docs/deployment.md` with operator-provided deployment info:
+    ```
+    # Deployment Info
+    - **serve_command**: {operator answer or "auto-detect"}
+    - **port**: {operator answer or "auto-detect"}
+    - **base_url**: {operator answer or "auto-detect"}
+    - **notes**: {any additional deployment context}
+    ```
+
+15. Write .kiln/STATE.md — the engine reads this for auto-resume, so every field matters:
     ```
     # Kiln State
 
@@ -160,6 +171,7 @@ Welcome the operator, discover their project, set up the .kiln/ infrastructure, 
     ## Flags
     - **greenfield**: {true|false}
     - **codex_available**: {true|false}
+    - **arch_review**: {review|auto-proceed}
     ```
 
 15. Append to the project's MEMORY.md (create if it doesn't exist). Add a section:

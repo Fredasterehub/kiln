@@ -142,17 +142,20 @@ If not, run `/plugin update` to get the latest version.
 Then update STATE.md with the current version so the warning doesn't repeat. Continue the pipeline — do not halt.
 
 On fresh run (no `.kiln/STATE.md`), before step 1:
-1. Read `.kiln/STATE.md` (check existence — if missing, fresh run confirmed).
-2. Render ignition banner (see § Engine Banners), read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/blueprints/step-1-onboarding.md`, create team, spawn Phase A (mnemosyne).
-3. Wait for READY → spawn Phase B (alpha, foreground) + operator greeting.
+1. ONE turn: Read `.kiln/STATE.md` (check existence — if missing, fresh run confirmed) + Read `lore.json` (select ignition quote) — parallel batch.
+2. Immediately output ignition banner — this is the operator's FIRST visible output.
+3. ONE turn: Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/blueprints/step-1-onboarding.md` + write spinner verbs to `settings.local.json` — parallel batch.
+4. Create team, spawn Phase A (mnemosyne), wait for READY, spawn Phase B (alpha, foreground) + operator greeting.
 
-Budget: 2 turns max (check state → banner + spawn).
+Budget: 3 turns max. Operator sees banner first, then Alpha.
 
 On resume (`.kiln/STATE.md` exists with stage != complete):
-1. Read `.kiln/STATE.md` + `.kiln/resume.md` (2 files only).
-2. Render resume banner (see § Engine Banners — pick one quote at random from the pool of 8). Read the blueprint at the path in STATE.md `roster` field. Create team, spawn.
+1. ONE turn: Read `.kiln/STATE.md` + `.kiln/resume.md` + `lore.json` — parallel batch.
+2. Immediately output resume banner — this is the operator's FIRST visible output.
+3. ONE turn: Read the blueprint at the path in STATE.md `roster` field + write spinner verbs to `settings.local.json` — parallel batch.
+4. Create team, spawn.
 
-Budget: 2 turns max (read state+resume → banner + spawn).
+Budget: 3 turns max.
 
 ### 1. Read Blueprint and Step Definition
 
@@ -275,6 +278,8 @@ Agent(
 **Every parameter is required.** Without `team_name`, agents spawn as isolated subagents — no SendMessage, no shutdown, no team pattern.
 
 ### 4. Engine Modes
+
+Bootstrap plumbing is invisible. The engine batches prerequisite reads into parallel tool calls and outputs the banner as its first visible text. The operator never sees file reads, spinner installation, or state checks — only the ignition/resume banner followed by the first agent.
 
 Engine behavior during three-phase transitions depends on step type:
 

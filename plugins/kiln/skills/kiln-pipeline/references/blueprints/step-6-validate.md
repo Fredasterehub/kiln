@@ -4,7 +4,7 @@
 - **Team name**: validate
 - **Artifact directory**: .kiln/
 - **Expected output**: .kiln/validation/report.md, .kiln/validation/design-review.md (conditional — when .kiln/design/ exists)
-- **Inputs from previous steps**: .kiln/master-plan.md, .kiln/docs/architecture.md, .kiln/docs/decisions.md, .kiln/docs/tech-stack.md, .kiln/docs/codebase-state.md, built source code
+- **Inputs from previous steps**: .kiln/master-plan.md, .kiln/docs/architecture.md, .kiln/docs/decisions.md, .kiln/docs/tech-stack.md, .kiln/docs/codebase-state.md, .kiln/docs/deployment.md (optional), built source code
 - **Workflow**: two-phase spawn (persistent mind + solo validator), optional Phase C (design QA)
 - **Correction cycles**: On FAIL/PARTIAL, pipeline loops back to Build (max 3 cycles). Correction tasks from report.md feed into KRS-One's scoping.
 

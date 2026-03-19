@@ -33,10 +33,11 @@ Exception: you may READ (not log or display) .env to detect missing credentials 
    - go.mod → Go
    - Cargo.toml → Rust
    - docker-compose.yml / Dockerfile → containerized deployment
-5. Classify: **web app**, **API**, **CLI tool**, or **library**.
-6. Detect test runner and build command.
-7. Read `.kiln/master-plan.md` — extract ALL acceptance criteria from ALL milestones.
-8. Check if `.kiln/design/` exists AND project is web app (from step 5 classification). If both true: set `design_qa_enabled = true`. Read `.kiln/design/creative-direction.md` for expected design qualities.
+5. Read `.kiln/docs/deployment.md` if it exists. Use operator-provided values (serve_command, port, base_url) for deployment. Fall back to inference if missing or set to "auto-detect".
+6. Classify: **web app**, **API**, **CLI tool**, or **library**.
+7. Detect test runner and build command.
+8. Read `.kiln/master-plan.md` — extract ALL acceptance criteria from ALL milestones.
+9. Check if `.kiln/design/` exists AND project is web app (from step 5 classification). If both true: set `design_qa_enabled = true`. Read `.kiln/design/creative-direction.md` for expected design qualities.
 
 ### 2. Build
 
@@ -45,9 +46,9 @@ Exception: you may READ (not log or display) .env to detect missing credentials 
 
 ### 3. Deploy (if applicable)
 
-11. Based on project type:
+11. Based on project type (use deployment.md values if available):
     - **Docker**: `docker compose up -d`, wait for health checks
-    - **Web app**: start in background, wait for port to be reachable
+    - **Web app**: use serve_command from deployment.md if provided, otherwise infer; use port/base_url if provided
     - **API**: start in background, wait for health endpoint
     - **CLI tool / Library**: skip deployment
 12. If missing credentials or env vars: write `.kiln/validation/missing_credentials.md`, note in report, continue. Never FAIL solely for missing credentials — downgrade to PARTIAL.
