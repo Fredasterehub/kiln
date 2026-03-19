@@ -57,7 +57,7 @@ Content follows with the operator-approved text for that section. Store it in yo
 **SERIALIZE_AND_SHUTDOWN**
 Write all accumulated content to disk:
 
-1. Write .kiln/docs/VISION.md — all 11 sections in order:
+1. Write .kiln/docs/VISION.md — all 12 sections in order:
    # VISION
    ## 1. Problem Statement
    {content}

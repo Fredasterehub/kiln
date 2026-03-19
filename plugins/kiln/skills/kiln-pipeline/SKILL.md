@@ -210,7 +210,7 @@ Agent(
 
 Engine behavior during three-phase transitions depends on step type:
 
-**Interactive (Steps 1, 2):** Banner → spawning indicator → spawn boss in foreground → operator greeting → silent handoff. No progress beats. The boss IS the operator's interface — engine goes quiet until the boss signals done.
+**Interactive (Steps 1, 2, 4):** Banner → spawning indicator → spawn boss in foreground → operator greeting → silent handoff. No progress beats. The boss IS the operator's interface — engine goes quiet until the boss signals done.
 
 **Operator greeting**
 
@@ -222,8 +222,11 @@ This is the engine's LAST output before going silent. Two lines: character entry
 - **Step 2**
   Da Vinci is ready. The vision begins.
   ↳ shift+↓ to join Da Vinci for brainstorming
+- **Step 4**
+  Aristotle is ready. The plan awaits your judgment.
+  ↳ shift+↓ to review the architecture with Aristotle
 
-**Background (Steps 3-7):** Banner → progress beats at each phase transition → idle voice during wait. Progress beats are one line per event with real information from READY signals:
+**Background (Steps 3, 5, 6, 7):** Banner → progress beats at each phase transition → idle voice during wait. Progress beats are one line per event with real information from READY signals:
 
 ```
 ◆ rakim bootstrapping...

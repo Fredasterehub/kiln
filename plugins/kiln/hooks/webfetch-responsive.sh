@@ -1,15 +1,17 @@
 #!/bin/bash
+# webfetch-responsive.sh — PreToolUse hook for WebFetch
+# Pre-checks URL reachability before allowing WebFetch tool calls.
+# Exit 0 = allow, Exit 2 + stderr = block.
 
 INPUT=$(cat 2>/dev/null || true)
 
 allow() {
-  printf '{"decision":"allow"}\n'
   exit 0
 }
 
 block() {
-  jq -cn --arg url "$1" --arg message "WebFetch pre-check: $1 timed out or did not respond to a HEAD request within 30 seconds. Find an alternative source." '{decision:"block",message:$message}'
-  exit 0
+  echo "WebFetch pre-check: $1 timed out or did not respond to a HEAD request within 30 seconds. Find an alternative source." >&2
+  exit 2
 }
 
 [[ -n "$INPUT" ]] || allow

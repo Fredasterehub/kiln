@@ -24,8 +24,9 @@ Which agents to spawn per step, spawn order, expected signals, and state transit
 ## Step 3: Research
 
 - **Boss**: mi6 (opus)
+- **Persistent minds**: thoth (haiku, Phase A — archivist, owns .kiln/archive/ writes)
 - **Workers**: 2-5 field agents (sonnet), spawned as team members via REQUEST_WORKERS
-- **Three-phase spawn**: Phase A (mi6 bootstraps, reads VISION.md, identifies topics, READY) → Phase B/C merged (mi6 requests field agents, dispatches topics, validates findings)
+- **Three-phase spawn**: Phase A (mi6 + thoth bootstrap in parallel) → Phase B/C merged (mi6 requests field agents, dispatches topics, validates findings)
 - **Done signal**: "RESEARCH_COMPLETE" from mi6
 - **State update**: stage → architecture
 - **Notes**: MI6 acts as active firewall — validates findings (confidence ≥0.7, ≥3 sources, quotes present) before accepting. Field agents are team members with SendMessage, not fire-and-forget subagents. If VISION.md is fully specified with no open questions, mi6 signals RESEARCH_COMPLETE with 0 topics.
@@ -33,9 +34,9 @@ Which agents to spawn per step, spawn order, expected signals, and state transit
 ## Step 4: Architecture
 
 - **Boss**: aristotle (opus)
-- **Persistent minds**: numerobis (opus, Phase A — technical authority, replaces architect for this step)
+- **Persistent minds**: numerobis (opus, Phase A — technical authority, replaces architect for this step), thoth (haiku, Phase A — archivist)
 - **Workers**: confucius (opus), sun-tzu (sonnet), plato (opus), athena (opus) — requested by aristotle in waves
-- **Three-phase spawn**: Phase A (numerobis bootstraps, writes arch docs) → Phase B (aristotle INTERACTIVE) → Phase C waves (confucius+sun-tzu → plato → athena)
+- **Three-phase spawn**: Phase A (numerobis + thoth bootstrap in parallel) → Phase B (aristotle INTERACTIVE) → Phase C waves (confucius+sun-tzu → plato → athena)
 - **Done signal**: "ARCHITECTURE_COMPLETE" from aristotle
 - **State update**: stage → build, milestone_count → N
 - **Validation loop**: athena may FAIL the plan, triggering plato revision only (max 2 rounds). If blocked after 2: "PLAN_BLOCKED".
@@ -45,9 +46,9 @@ Which agents to spawn per step, spawn order, expected signals, and state transit
 ## Step 5: Build (re-invoked per iteration)
 
 - **Boss**: krs-one (opus)
-- **Persistent minds**: rakim (opus, Phase A — codebase state + AGENTS.md), sentinel (sonnet, Phase A — patterns + pitfalls)
+- **Persistent minds**: rakim (opus, Phase A — codebase state + AGENTS.md), sentinel (sonnet, Phase A — patterns + pitfalls), thoth (haiku, Phase A — archivist)
 - **Workers**: codex (sonnet, isolation: worktree), sphinx (sonnet) — Phase C, requested by krs-one
-- **Three-phase spawn**: Phase A (rakim + sentinel bootstrap) → Phase B (krs-one BACKGROUND) → Phase C (codex in worktree + sphinx per request)
+- **Three-phase spawn**: Phase A (rakim + sentinel + thoth bootstrap in parallel) → Phase B (krs-one BACKGROUND) → Phase C (codex in worktree + sphinx per request)
 - **Team name**: kill streak name based on build_iteration (see kill-streaks.md)
 - **Signals from KRS-One**:
   - `ITERATION_COMPLETE` — more work needed. Re-invoke with next kill streak name.

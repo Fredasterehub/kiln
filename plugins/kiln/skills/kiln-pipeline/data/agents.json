@@ -363,5 +363,29 @@
       "I write the last chapter. Make it worth reading.",
       "The forge cools. The work remains."
     ]
+  },
+  "thoth": {
+    "alias": "Thoth",
+    "role": "archivist",
+    "step": [3, 4, 5],
+    "quotes": [
+      "Every action leaves a trace. I keep them all.",
+      "The archive remembers what the builders forget.",
+      "Write it down or it never happened.",
+      "History is not what happened — it is what was recorded.",
+      "I am the ink that outlasts the scribe."
+    ]
+  },
+  "hephaestus": {
+    "alias": "Hephaestus",
+    "role": "design QA specialist",
+    "step": 6,
+    "quotes": [
+      "The forge demands precision in every detail.",
+      "Beauty without function is merely decoration.",
+      "I measure what the eye cannot — alignment, rhythm, harmony.",
+      "Even the gods submit their work to quality review.",
+      "Craft is the distance between good enough and truly right."
+    ]
   }
 }

@@ -1,7 +1,7 @@
 #!/bin/bash
 # enforce-pipeline.sh — PreToolUse hook for Kiln pipeline
 #
-# 14 hooks across 4 categories (hook 2 removed v1.0.4, hook 14 added):
+# 13 active hooks across 4 categories (hook 2 removed v1.0.4, hook 14 added):
 #   Delegation (1-3):  delegation agents cannot Write/Edit files directly
 #   Sequencing (4-6):  gate dispatches until bootstrap docs are ready
 #   Flags (7-10):      block incorrect codex exec flags

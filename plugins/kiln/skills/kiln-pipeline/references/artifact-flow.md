@@ -19,8 +19,8 @@ What each step reads and produces. Files live in `.kiln/` under the project work
 
 ## Step 4: Architecture
 - **Reads**: .kiln/docs/VISION.md, .kiln/docs/vision-notes.md, .kiln/docs/vision-priorities.md, .kiln/docs/research.md, .kiln/docs/research/{slug}.md, .kiln/docs/codebase-snapshot.md, .kiln/docs/decisions.md, .kiln/docs/pitfalls.md
-- **Produces**: .kiln/docs/architecture.md, .kiln/docs/tech-stack.md, .kiln/docs/arch-constraints.md, .kiln/docs/decisions.md (updated), .kiln/plans/claude_plan.md, .kiln/plans/codex_plan.md, .kiln/plans/debate_resolution.md, .kiln/plans/plan_validation.md, .kiln/master-plan.md, .kiln/architecture-handoff.md
-- **Archives**: .kiln/archive/step-4-architecture/plan-prompt.md (sun-tzu's GPT-5.4 prompt), .kiln/archive/step-4-architecture/codex-output.log (GPT-5.4 stdout/stderr), .kiln/archive/step-4-architecture/codex-plan-output.md (GPT-5.4's plan), .kiln/archive/step-4-architecture/claude-plan.md (confucius's plan), .kiln/archive/step-4-architecture/debate-resolution.md (plato's structured comparison), .kiln/archive/step-4-architecture/master-plan.md (plato's synthesis)
+- **Produces**: .kiln/docs/architecture.md, .kiln/docs/tech-stack.md, .kiln/docs/arch-constraints.md, .kiln/docs/decisions.md (updated), .kiln/plans/claude_plan.md, .kiln/plans/codex_plan.md, .kiln/plans/plan_validation.md, .kiln/master-plan.md, .kiln/architecture-handoff.md, .kiln/design/tokens.json (conditional — only if VISION.md has Visual Direction), .kiln/design/tokens.css (conditional), .kiln/design/creative-direction.md (conditional)
+- **Archives**: .kiln/archive/step-4-architecture/plan-prompt.md (sun-tzu's GPT-5.4 prompt), .kiln/archive/step-4-architecture/codex-output.log (GPT-5.4 stdout/stderr), .kiln/archive/step-4-architecture/codex-plan-output.md (GPT-5.4's plan), .kiln/archive/step-4-architecture/claude-plan.md (confucius's plan), .kiln/archive/step-4-architecture/debate-resolution.md (plato's structured comparison via thoth), .kiln/archive/step-4-architecture/master-plan.md (plato's synthesis via thoth)
 
 ## Step 5: Build (per iteration)
 - **Reads**: .kiln/master-plan.md, .kiln/architecture-handoff.md, .kiln/docs/architecture.md, .kiln/docs/tech-stack.md, .kiln/docs/arch-constraints.md, .kiln/docs/decisions.md, .kiln/docs/patterns.md, .kiln/docs/pitfalls.md, .kiln/docs/codebase-state.md, .kiln/validation/report.md (if correction cycle)
@@ -28,8 +28,8 @@ What each step reads and produces. Files live in `.kiln/` under the project work
 - **Archives** (per iteration): .kiln/archive/step-5-build/iter-{n}/bootstrap-context.md (rakim + sentinel READY summaries), .kiln/archive/step-5-build/iter-{n}/assignment.xml (KRS-One's scoped assignment), .kiln/archive/step-5-build/iter-{n}/prompt.md (Codex's GPT-5.4 prompt), .kiln/archive/step-5-build/iter-{n}/codex-output.log (GPT-5.4 stdout/stderr), .kiln/archive/step-5-build/iter-{n}/review.md (Sphinx's verdict), .kiln/archive/step-5-build/iter-{n}/codebase-state-snapshot.md (rakim's state after update), .kiln/archive/step-5-build/iter-{n}/fix-{N}-prompt.md (fix after rejection N), .kiln/archive/step-5-build/iter-{n}/fix-{N}-codex-output.log (fix N GPT-5.4 output), .kiln/archive/step-5-build/iter-{n}/fix-{N}-review.md (sphinx re-review after fix N), .kiln/archive/step-5-build/iter-{n}/qa-{milestone}.md (KRS-One's QA analysis)
 
 ## Step 6: Validate
-- **Reads**: .kiln/master-plan.md, .kiln/docs/architecture.md, .kiln/docs/tech-stack.md, .kiln/docs/codebase-state.md, built source code
-- **Produces**: .kiln/validation/report.md
+- **Reads**: .kiln/master-plan.md, .kiln/docs/architecture.md, .kiln/docs/decisions.md, .kiln/docs/tech-stack.md, .kiln/docs/codebase-state.md, built source code
+- **Produces**: .kiln/validation/architecture-check.md (zoxea), .kiln/validation/report.md (argus), .kiln/validation/design-review.md (hephaestus, conditional — only when .kiln/design/ exists), .kiln/validation/screenshots/ (argus/hephaestus, web apps only)
 - **Archives**: .kiln/archive/step-6-validate/ (linked from .kiln/validation/report.md)
 
 ## Step 7: Report
