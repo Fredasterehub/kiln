@@ -112,8 +112,8 @@ Welcome the operator, discover their project, set up the .kiln/ infrastructure, 
     | 7 | REPORT_COMPLETE | complete |
 
     ## Step Types
-    Interactive (boss IS operator interface): 1, 2
-    Background (engine IS operator window): 3, 4, 5, 6, 7
+    Interactive (boss IS operator interface): 1, 2, 4
+    Background (engine IS operator window): 3, 5, 6, 7
 
     ## Build Loop
     KRS-One signals: ITERATION_COMPLETE (next streak), MILESTONE_COMPLETE: {name} (next milestone), BUILD_COMPLETE (→ validate).

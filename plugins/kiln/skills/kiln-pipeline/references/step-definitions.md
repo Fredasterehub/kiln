@@ -59,9 +59,9 @@ Which agents to spawn per step, spawn order, expected signals, and state transit
 
 ## Step 6: Validate
 
-- **Boss**: argus (sonnet, solo)
-- **Agents**: zoxea (sonnet, consultation only — read-only mode)
-- **Spawn order**: Both in parallel. Zoxea is passive.
+- **Boss**: argus (sonnet)
+- **Persistent minds**: zoxea (sonnet, Phase A — architecture verifier, writes architecture-check.md)
+- **Spawn order**: Phase A (zoxea bootstraps, writes architecture-check.md, signals READY) → Phase B (argus validates with zoxea's findings).
 - **Signals from Argus**:
   - `VALIDATE_PASS` — proceed to step 7. State: stage → report.
   - `VALIDATE_FAILED` — correction tasks in report.md.
