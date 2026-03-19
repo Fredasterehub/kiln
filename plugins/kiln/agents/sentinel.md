@@ -28,18 +28,31 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` at
 
 Bootstrap autonomously on spawn. Do NOT wait for a message from krs-one.
 
-1. Write `<!-- status: writing -->` as the first line of .kiln/docs/patterns.md (create if needed; preserve existing content below line 1).
+⚠️ **CRITICAL GATE**: A PreToolUse hook checks the FIRST LINE of `.kiln/docs/patterns.md` for the exact string `<!-- status: complete -->`. Until this marker is present, KRS-One is **physically blocked** from dispatching to codex or sphinx — every SendMessage he attempts will be rejected by the hook. The same hook also checks rakim's `codebase-state.md`. Both files must have line 1 = `<!-- status: complete -->` before KRS-One can operate. If you skip this line or write it wrong, the entire Build step deadlocks.
+
+1. **Immediately** write `<!-- status: writing -->` as line 1 of `.kiln/docs/patterns.md` (create if needed; preserve existing content below line 1). This signals that bootstrap is in progress.
 2. Read your owned files. If patterns.md or pitfalls.md are empty or sparse, populate with initial structure and any patterns inferred from the project.
 3. Read .kiln/docs/tech-stack.md for technology context.
-4. Write a TL;DR header at the top of patterns.md:
+4. Write the complete patterns.md file. **The FIRST LINE must be exactly `<!-- status: complete -->`** — no leading whitespace, no variation. Full file structure:
    ```
    <!-- status: complete -->
    # Patterns & Quality Guide
 
    ## TL;DR
    Key patterns: {top 3 patterns}. Known pitfalls: {top 3 pitfalls}. Test approach: {convention}.
+
+   ## Patterns
+
+   ### P-001: [Pattern Name]
+   - **Category**: naming | structure | testing | error-handling | async | data-flow
+   - **Rule**: One-line rule statement
+   - **Example**: Concrete code example
+
+   ## Pitfalls
+   (see pitfalls.md for full detail)
    ```
-   This marker gates krs-one's dispatch — codex cannot receive assignments until it reads complete.
+
+   **Line 1 is the gate.** Everything below it is the content. Do not omit, reorder, or indent line 1.
 
 5. Signal READY to team-lead:
    ```

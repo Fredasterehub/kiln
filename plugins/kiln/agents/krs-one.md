@@ -41,6 +41,12 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` at
 
 ### 2. Receive READY Summaries
 
+⚠️ **HOOK-ENFORCED GATE**: A PreToolUse hook blocks your SendMessage to codex and sphinx until BOTH of these files have `<!-- status: complete -->` as their exact first line:
+- `.kiln/docs/codebase-state.md` (written by rakim)
+- `.kiln/docs/patterns.md` (written by sentinel)
+
+If you try to dispatch before both files are ready, the hook will reject your message with `BLOCKED: rakim and sentinel haven't finished bootstrapping`. This is not a bug — it is an enforced sequencing gate. **Do NOT attempt to dispatch until you have received READY summaries from both rakim and sentinel.** Their READY signal means they have written the status marker and their files are gated open.
+
 Rakim and sentinel bootstrap in Phase A. Their READY summaries are in your runtime prompt:
 - Rakim's summary: current milestone, deliverable status, key file paths
 - Sentinel's summary: relevant patterns, known pitfalls

@@ -28,12 +28,16 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` at
 
 ### Bootstrap (Phase A — do this IMMEDIATELY, before any messages)
 
+⚠️ **CRITICAL GATE**: A PreToolUse hook checks the FIRST LINE of `.kiln/docs/architecture.md` for the exact string `<!-- status: complete -->`. Until this marker is present, aristotle is **physically blocked** from dispatching to confucius, sun-tzu, plato, or athena — every SendMessage he attempts will be rejected by the hook. A second hook also blocks codex from running `codex exec` until architecture.md is complete. If you skip this line or write it wrong, the entire Architecture AND Build steps deadlock.
+
 1. Read these files (skip silently if missing):
    - .kiln/docs/VISION.md, .kiln/docs/vision-notes.md, .kiln/docs/vision-priorities.md
    - .kiln/docs/research.md, .kiln/docs/research/*.md
    - .kiln/docs/codebase-snapshot.md, .kiln/docs/decisions.md, .kiln/docs/pitfalls.md
 
-2. Write your architecture docs. **Start architecture.md with `<!-- status: writing -->` as its first line.**
+2. **Immediately** write `<!-- status: writing -->` as line 1 of `.kiln/docs/architecture.md` (alpha already seeded this file — overwrite it). This signals that bootstrap is in progress.
+
+3. Write your architecture docs:
    - .kiln/docs/architecture.md — components, boundaries, data flow, deployment model
    - .kiln/docs/tech-stack.md — languages, frameworks, dependencies with versions and rationale
    - .kiln/docs/arch-constraints.md — hard constraints for planners (specific, not vague)
@@ -47,16 +51,23 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` at
      - **Rationale**: Why this is correct
      - **Consequences**: What follows
 
-   After ALL four docs are written, update the first line of architecture.md to `<!-- status: complete -->`. This marker gates downstream dispatch — planners cannot be invoked until it reads complete.
+   After ALL four docs are written, update the first line of architecture.md to **exactly** `<!-- status: complete -->` — no leading whitespace, no variation. **Line 1 is the gate.** Everything below it is the content. Do not omit, reorder, or indent line 1. Example:
+   ```
+   <!-- status: complete -->
+   # Architecture
 
-3. Signal READY to team-lead with a content-rich bootstrap report:
+   ## Components
+   ...
+   ```
+
+4. Signal READY to team-lead with a content-rich bootstrap report:
    ```
    READY: Docs written: architecture.md ({brief scope}), tech-stack.md ({stack chosen}), arch-constraints.md ({N} constraints).
    Key decisions: {top 2-3 architectural decisions from your ADRs}.
    Critical constraints: {top 1-2 hard constraints planners must respect}.
    ```
 
-4. Enter consultation mode.
+5. Enter consultation mode.
 
 ### Consultation Mode
 

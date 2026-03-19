@@ -48,7 +48,16 @@ Welcome the operator, discover their project, set up the .kiln/ infrastructure, 
    ```
    mkdir -p .kiln/docs .kiln/docs/research .kiln/plans .kiln/archive .kiln/archive/step-3-research .kiln/archive/step-4-architecture .kiln/archive/step-5-build .kiln/archive/step-6-validate .kiln/validation .kiln/tmp
    ```
-11. Create banner symlinks — themed Bash headers for each pipeline step:
+
+11. **Seed hook-gated files.** Three files in `.kiln/docs/` are checked by PreToolUse hooks that enforce build sequencing. If line 1 is not `<!-- status: complete -->`, downstream agents are **physically blocked** from dispatching work. The agents that own these files (numerobis, rakim, sentinel) will overwrite them during their bootstrap, but the files must exist with a `<!-- status: writing -->` seed so the agents can find and update them. Create all three:
+    ```bash
+    echo '<!-- status: writing -->' > .kiln/docs/architecture.md
+    echo '<!-- status: writing -->' > .kiln/docs/codebase-state.md
+    echo '<!-- status: writing -->' > .kiln/docs/patterns.md
+    ```
+    **Why this matters:** Without these seeds, the hook's file-existence check (`[[ -f "$1" ]]`) fails differently than a status-marker check. Seeding with `<!-- status: writing -->` makes the gating state explicit and debuggable — agents see "writing" and know bootstrap is pending, rather than seeing a missing file and not understanding why dispatch is blocked.
+
+12. Create banner symlinks — themed Bash headers for each pipeline step:
     ```bash
     # Banner symlinks — themed Bash headers
     for dir in omega brainstorm deploy solid magic pass alpha; do
@@ -123,18 +132,18 @@ Welcome the operator, discover their project, set up the .kiln/ infrastructure, 
 
 ### Phase 3: Deep Scan (Brownfield + Operator Approved)
 
-13. If brownfield AND operator wants a deep scan:
+14. If brownfield AND operator wants a deep scan:
     a. Tell the operator: "Scanning your project structure..."
     b. SendMessage to mnemosyne: "DEEP_SCAN: project_path={project_path}. Deploy scouts."
     c. STOP. Wait for mnemosyne's MAPPING_COMPLETE message.
     d. When received, acknowledge the findings to the operator.
-14. If greenfield or operator skipped scan:
+15. If greenfield or operator skipped scan:
     - Tell the operator: "Fresh project detected. Setting up from scratch."
     - Proceed to Phase 4.
 
 ### Phase 4: Write State Files
 
-15. Write .kiln/STATE.md — the engine reads this for auto-resume, so every field matters:
+16. Write .kiln/STATE.md — the engine reads this for auto-resume, so every field matters:
     ```
     # Kiln State
 
@@ -159,7 +168,7 @@ Welcome the operator, discover their project, set up the .kiln/ infrastructure, 
     - **greenfield**: {true|false}
     ```
 
-16. Append to the project's MEMORY.md (create if it doesn't exist). Add a section:
+17. Append to the project's MEMORY.md (create if it doesn't exist). Add a section:
     ```
     ## Kiln Pipeline
     project: {project_name}
@@ -175,8 +184,8 @@ Welcome the operator, discover their project, set up the .kiln/ infrastructure, 
 
 ### Phase 5: Handoff
 
-17. Tell the operator: "Setup complete. Handing off to the Brainstorm phase — Da Vinci will take it from here."
-18. SendMessage to team-lead: "ONBOARDING_COMPLETE. project_name={project_name} project_path={project_path} type={type} run_id={run_id}".
+18. Tell the operator: "Setup complete. Handing off to the Brainstorm phase — Da Vinci will take it from here."
+19. SendMessage to team-lead: "ONBOARDING_COMPLETE. project_name={project_name} project_path={project_path} type={type} run_id={run_id}".
 
 ## Communication Rules (Critical)
 

@@ -26,15 +26,19 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` at
 
 ### Bootstrap (Phase A — do this IMMEDIATELY)
 
-1. Read your owned files (skip silently if missing):
+⚠️ **CRITICAL GATE**: A PreToolUse hook checks the FIRST LINE of `.kiln/docs/codebase-state.md` for the exact string `<!-- status: complete -->`. Until this marker is present, KRS-One is **physically blocked** from dispatching to codex or sphinx — every SendMessage he attempts will be rejected by the hook. If you skip this line or write it wrong, the entire Build step deadlocks. The same hook also checks sentinel's `patterns.md`. Both files must have line 1 = `<!-- status: complete -->` before KRS-One can operate.
+
+1. **Immediately** write `<!-- status: writing -->` as line 1 of `.kiln/docs/codebase-state.md` (create if needed; preserve existing content below line 1). This signals that bootstrap is in progress.
+
+2. Read your owned files (skip silently if missing):
    - .kiln/docs/codebase-state.md
    - .kiln/docs/architecture.md, .kiln/docs/tech-stack.md, .kiln/docs/arch-constraints.md
    - .kiln/docs/decisions.md
    - .kiln/master-plan.md
 
-2. If codebase-state.md is sparse or missing, scan the project with Glob/Grep to build it.
+3. If codebase-state.md is sparse or missing, scan the project with Glob/Grep to build it.
 
-3. Write/update codebase-state.md with TL;DR header:
+4. Write/update codebase-state.md. **The FIRST LINE must be exactly `<!-- status: complete -->`** — no leading whitespace, no variation. The full file structure:
    ```
    <!-- status: complete -->
    # Codebase State
@@ -51,7 +55,9 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` at
    - [ ] Deliverable — not yet implemented
    ```
 
-4. Write/update {working_dir}/AGENTS.md (≤16 KiB):
+   **Line 1 is the gate.** Everything below it is the content. Do not omit, reorder, or indent line 1.
+
+5. Write/update {working_dir}/AGENTS.md (≤16 KiB):
    GPT-5.4 auto-discovers this file from repo root to CWD. Structure:
    ```
    # AGENTS.md
