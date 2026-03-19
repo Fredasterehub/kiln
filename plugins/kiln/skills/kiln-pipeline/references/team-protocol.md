@@ -4,6 +4,18 @@ Shared behavior patterns for all Kiln pipeline agents. Every boss reads this at 
 
 Read this file ONCE at the start of each step. Do not re-read mid-step.
 
+## Three-Phase Spawn
+
+Every step follows a three-phase spawn sequence (some steps skip Phase C):
+
+**Phase A — Persistent Minds**: Spawned first (`run_in_background: true`). Bootstrap autonomously — read files, update state, signal READY to team-lead with a content summary. No assignment needed.
+
+**Phase B — Boss**: Spawned after ALL Phase A agents signal READY. Interactive bosses run in foreground (`run_in_background: false`); background bosses run in background. Receives READY summaries in runtime prompt.
+
+**Phase C — Workers**: Spawned when the boss sends `REQUEST_WORKERS`. Each worker joins the same team with full SendMessage access. Boss dispatches individual assignments after workers are spawned.
+
+Not every step uses all three phases. Step 7 is Phase B only. Step 2 has no Phase C. See the step's blueprint for the exact roster.
+
 ## 1. Bootstrap Sequence
 
 All agents follow a two-phase bootstrap:

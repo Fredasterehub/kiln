@@ -63,7 +63,7 @@ Write all accumulated content to disk:
    {content}
    ## 2. Target Users
    {content}
-   ...through all 11 sections...
+   ...through all 12 sections...
 
 2. Write .kiln/docs/vision-notes.md — your observations about the vision:
    - Themes that emerged during brainstorm
