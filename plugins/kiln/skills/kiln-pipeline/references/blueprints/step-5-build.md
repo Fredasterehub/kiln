@@ -27,7 +27,7 @@ The pipeline runner invokes this blueprint repeatedly. Each invocation is one te
 | thoth | Persistent mind. Archivist — owns all writes to .kiln/archive/. Fire-and-forget. | A | haiku |
 | sentinel | Persistent mind. Quality guardian. Owns patterns.md (TL;DR header) and pitfalls.md. Consultation for quality questions. | A | sonnet |
 | krs-one | Boss. Reads plan, receives READY summaries, scopes chunks via structured XML assignments, dispatches to codex, updates docs, milestone QA. | B (BACKGROUND) | opus |
-| codex | Implementer. Thin Codex CLI wrapper — receives structured assignment, constructs prompt, pipes to GPT-5.4, verifies, commits, requests sphinx review. | C | sonnet |
+| codex | Implementer. Thin Codex CLI wrapper — receives structured assignment, constructs prompt, pipes to GPT-5.4, verifies, commits, requests sphinx review. | C (isolation: worktree) | sonnet |
 | sphinx | Quick verifier. APPROVED or REJECTED. Lightweight gate. | C | sonnet |
 
 ## Three-Phase Spawn
@@ -36,7 +36,7 @@ The pipeline runner invokes this blueprint repeatedly. Each invocation is one te
 
 **Phase B**: krs-one spawns (BACKGROUND). Receives READY summaries from rakim and sentinel in runtime prompt. Reads master plan, scopes one chunk, requests codex + sphinx.
 
-**Phase C**: codex + sphinx spawn on same team. KRS-One dispatches structured XML assignment to codex. Codex → sphinx review → codex reports to KRS-One. Sequential implementation.
+**Phase C**: codex + sphinx spawn on same team. Codex spawns with `isolation: "worktree"` — it gets its own git worktree copy of the repo, preventing filesystem conflicts with persistent minds. KRS-One dispatches structured XML assignment to codex. Codex → sphinx review → codex reports to KRS-One. Sequential implementation. When codex finishes, the engine merges the worktree branch back to the working branch.
 
 ## Communication Model
 

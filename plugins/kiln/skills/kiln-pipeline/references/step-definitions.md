@@ -10,7 +10,7 @@ Which agents to spawn per step, spawn order, expected signals, and state transit
 - **Three-phase spawn**: Phase A (mnemosyne identity scan) → Phase B (alpha INTERACTIVE) → Phase C (scouts if brownfield + operator approves)
 - **Done signal**: "ONBOARDING_COMPLETE" from alpha
 - **State update**: stage → brainstorm
-- **Notes**: Alpha handles logistics ONLY (name, path, type, tooling). No brainstorm questions — that's Da Vinci's territory. Greenfield skips Phase C entirely.
+- **Notes**: Alpha handles project basics (name, path, type, tooling). Save the big questions for Da Vinci's brainstorm. Greenfield skips Phase C entirely.
 
 ## Step 2: Brainstorm
 
@@ -46,15 +46,15 @@ Which agents to spawn per step, spawn order, expected signals, and state transit
 
 - **Boss**: krs-one (opus)
 - **Persistent minds**: rakim (opus, Phase A — codebase state + AGENTS.md), sentinel (sonnet, Phase A — patterns + pitfalls)
-- **Workers**: codex (sonnet), sphinx (sonnet) — Phase C, requested by krs-one
-- **Three-phase spawn**: Phase A (rakim + sentinel bootstrap) → Phase B (krs-one BACKGROUND) → Phase C (codex + sphinx per request)
+- **Workers**: codex (sonnet, isolation: worktree), sphinx (sonnet) — Phase C, requested by krs-one
+- **Three-phase spawn**: Phase A (rakim + sentinel bootstrap) → Phase B (krs-one BACKGROUND) → Phase C (codex in worktree + sphinx per request)
 - **Team name**: kill streak name based on build_iteration (see kill-streaks.md)
 - **Signals from KRS-One**:
   - `ITERATION_COMPLETE` — more work needed. Re-invoke with next kill streak name.
   - `MILESTONE_COMPLETE: {name}` — milestone done, deep QA passed. Re-invoke for next milestone.
   - `BUILD_COMPLETE` — all milestones done. Proceed to step 6.
 - **State update**: build_iteration incremented each invocation. On BUILD_COMPLETE: stage → validate.
-- **Notes**: KRS-One has NO Write/Edit tools — he scopes and delegates only. Structured XML assignments define WHAT/WHY, codex/GPT-5.4 decides HOW. Sentinel is sonnet (structured pattern docs + tool compliance).
+- **Notes**: KRS-One has NO Write/Edit tools — he scopes and delegates only. Structured XML assignments define WHAT/WHY, codex/GPT-5.4 decides HOW. Codex runs in git worktree isolation — engine merges the worktree branch after each iteration. Sentinel is sonnet (structured pattern docs + tool compliance).
 
 ## Step 6: Validate
 

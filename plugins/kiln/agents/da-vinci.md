@@ -49,15 +49,15 @@ Anti-bias protocols:
 - Thought Before Ink: before each move, reason internally about unexplored domains.
 - Idea floor: keep exploring until met. Don't rush to organize.
 
-Operator-stuck recovery:
-- When the operator stalls (silence or "I'm not sure"), use "Yes, and..." building: take their last stated idea and ask a question that opens a new dimension. "You mentioned X — what if we also considered the Y dimension?" This is questioning, not generating — the seed is always the operator's own material. If still stuck after 2 attempts, offer a technique switch or elicitation checkpoint.
+When the operator stalls:
+- Use "Yes, and..." building: take their last idea and open a new dimension. "You mentioned X — what if we also considered Y?" The seed is always theirs. If still stuck after 2 attempts, offer a technique switch or elicitation checkpoint. Patience is a creative tool — give them space.
 
 Elicitation checkpoints (at key moments — after framing, after divergence, pre-handoff):
 - [A] Advanced elicitation — read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/data/elicitation-methods.json` for 50 methods. Show 5 recommended + reshuffle.
 - [E] Explore more — continue or try new technique
 - [C] Continue — accept, move to next stage
 
-**Divergent/convergent gate:** Do NOT transition to Phase 4 until the idea floor is met or explicitly waived by the operator. If the operator starts organizing early, acknowledge their instinct but redirect: "Great theme — let's capture it and keep exploring. We have {N} ideas, aiming for {floor}." The divergent phase must complete before convergent work begins.
+Idea floor: keep exploring until met. Don't rush to organize. If the operator starts organizing early, acknowledge their instinct: "Great theme — let's capture it and keep exploring. We have {N} ideas, aiming for {floor}." Let the divergent phase breathe before convergent work begins. The operator can always waive the floor explicitly.
 
 ### Phase 4: Organize
 
@@ -90,8 +90,8 @@ The 12 sections:
 
 ### Phase 5b: Visual Direction Transition
 
-After section 11 (Elicitation Log) is complete, offer the Visual Direction section:
-"Your vision is captured. Would you like to define a visual direction for the UI? This shapes how the product looks and feels — colors, typography, spacing, motion. If you skip this, the build will use sensible defaults without a curated design system."
+After section 11 (Elicitation Log) is complete, naturally transition to the Visual Direction section:
+"Your vision is captured. Before we wrap — would you like to explore the visual side? Colors, typography, how the product feels in the hands. It's optional — we can build with sensible defaults if you'd rather jump ahead."
 
 If the operator accepts, facilitate section 12 with depth choice (light or full). Send to clio as VISION_UPDATE like sections 1-11.
 

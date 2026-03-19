@@ -57,12 +57,16 @@ When you receive your assignment:
    ```
    Do not use the Write tool for prompt files — it requires a prior Read and will fail on new files. The `tee` captures GPT-5.4's diagnostic output while still letting you see it. Timeout: set `timeout: 1800000` (30 min) — GPT-5.4 at high reasoning can exceed 10 min on complex prompts.
 
-   After successful execution, send files to thoth for archival (fire-and-forget):
+   After successful execution, archive via thoth using **inline content** (you run in a worktree — thoth can't read your local files):
    ```
    ITER=$(grep 'build_iteration' .kiln/STATE.md | grep -o '[0-9]*')
+   PROMPT_CONTENT=$(cat .kiln/tmp/prompt.md)
+   OUTPUT_CONTENT=$(cat .kiln/tmp/codex-output.log)
    ```
-   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file=prompt.md, source=.kiln/tmp/prompt.md")
-   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file=codex-output.log, source=.kiln/tmp/codex-output.log")
+   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file=prompt.md\n---\n${PROMPT_CONTENT}\n---")
+   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file=codex-output.log\n---\n${OUTPUT_CONTENT}\n---")
+
+   **Important**: Always use inline ARCHIVE format. You run in a git worktree — file-reference ARCHIVEs (`source=...`) will fail because thoth runs in the main repo and cannot access your worktree paths.
 
 5. If codex exec fails, retry once with the same prompt. If it fails again, SendMessage to krs-one: "IMPLEMENTATION_BLOCKED: Codex CLI failed twice. Error: {error}". STOP. Do NOT fall back to writing code yourself — that defeats the delegation architecture.
 
@@ -82,7 +86,15 @@ When you receive your assignment:
 
 ### 5. Request Review
 
-10. SendMessage(type:"message", recipient:"sphinx", content:"REVIEW_REQUEST: {summary of what was implemented}. Key files changed: {list}. Acceptance criteria: {from assignment}.")
+10. Before sending to sphinx, capture evidence from your worktree (sphinx runs in the main repo and cannot access your worktree files directly):
+    ```
+    DIFF=$(git diff HEAD~1)
+    DIFF_STAT=$(git diff --stat HEAD~1)
+    ```
+    Include the diff, build results, and test results in the review request so sphinx can verify without filesystem access:
+
+    SendMessage(type:"message", recipient:"sphinx", content:"REVIEW_REQUEST: {summary of what was implemented}.\n\nKey files changed:\n{DIFF_STAT}\n\nAcceptance criteria: {from assignment}\n\nBuild result: {PASS/FAIL + output summary}\nTest result: {PASS/FAIL + output summary}\n\nFull diff:\n```\n{DIFF}\n```")
+
 11. STOP. Wait for sphinx's verdict.
 
 ### 6. Handle Verdict
@@ -100,12 +112,14 @@ When you receive your assignment:
       ```
       Replace `{N}` with the fix number (1, 2, or 3).
 
-      After execution, archive via thoth (fire-and-forget):
+      After execution, archive via thoth using **inline content** (fire-and-forget):
       ```
       ITER=$(grep 'build_iteration' .kiln/STATE.md | grep -o '[0-9]*')
+      FIX_PROMPT=$(cat .kiln/tmp/fix-{N}-prompt.md)
+      FIX_OUTPUT=$(cat .kiln/tmp/fix-{N}-codex-output.log)
       ```
-      SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file=fix-{N}-prompt.md, source=.kiln/tmp/fix-{N}-prompt.md")
-      SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file=fix-{N}-codex-output.log, source=.kiln/tmp/fix-{N}-codex-output.log")
+      SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file=fix-{N}-prompt.md\n---\n${FIX_PROMPT}\n---")
+      SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file=fix-{N}-codex-output.log\n---\n${FIX_OUTPUT}\n---")
     - Verify and commit the fixes.
     - SendMessage to sphinx: "REVIEW_REQUEST: Fix {N} for previous rejection. Changes: {summary}."
     - STOP. Wait for verdict.

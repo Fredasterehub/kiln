@@ -44,6 +44,14 @@ SendMessage(
 )
 ```
 
+**Worktree isolation**: Workers that write code can request git worktree isolation. This uses Claude Code's native `isolation: "worktree"` parameter, which gives the agent its own copy of the repository in a temporary git worktree. Add `isolation: worktree` to the worker spec:
+
+```
+REQUEST_WORKERS: codex (subagent_type: codex, isolation: worktree), sphinx (subagent_type: sphinx)
+```
+
+The engine passes `isolation: "worktree"` to the Agent() call. The isolated agent works on a separate branch — if it makes changes, the worktree path and branch are returned to the engine. SendMessage works normally across worktree boundaries.
+
 The engine spawns each worker on the same team. Workers appear as teammates with full SendMessage access. The boss then dispatches assignments individually — one message per worker.
 
 **Naming**: Use the naming convention from your `.md` file. Workers get descriptive names, not sequential numbers.

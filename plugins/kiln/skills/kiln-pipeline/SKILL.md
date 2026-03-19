@@ -169,8 +169,10 @@ The agent's `.md` file (loaded via `subagent_type`) already contains its full ro
 When the boss sends `REQUEST_WORKERS`, parse the request and spawn each worker on the same team (`run_in_background: true`). Each worker gets a lean runtime prompt: team name, working dir, team-protocol.md path, "wait for assignment from {boss}."
 
 ```
-REQUEST_WORKERS: {name} (subagent_type: {type}), {name} (subagent_type: {type})
+REQUEST_WORKERS: {name} (subagent_type: {type}), {name} (subagent_type: {type}, isolation: worktree)
 ```
+
+**Worktree isolation**: If a worker spec includes `isolation: worktree`, pass `isolation: "worktree"` to the Agent() call. This uses Claude Code's native git worktree feature — the agent gets its own isolated copy of the repository. SendMessage works normally across worktree boundaries. When the agent finishes and has made changes, the worktree path and branch are returned in the result — the engine should merge the worktree branch back to the working branch before proceeding.
 
 The boss dispatches assignments via SendMessage after workers are spawned.
 
@@ -195,7 +197,8 @@ Agent(
   team_name: "{team_name}",       # the team from step 2 — REQUIRED
   subagent_type: "{agent_name}",  # matches the .md file in agents/
   prompt: "<lean runtime prompt>",
-  run_in_background: true/false   # see Engine Modes
+  run_in_background: true/false,  # see Engine Modes
+  isolation: "worktree"           # OPTIONAL — only when blueprint/REQUEST_WORKERS specifies it
 )
 ```
 
@@ -265,9 +268,9 @@ Based on the boss's done signal, determine next action:
 **Step 4 done** (ARCHITECTURE_COMPLETE) -> proceed to step 5
 **Step 4 blocked** (PLAN_BLOCKED) -> render `halt` banner, inform operator, stop pipeline
 **Step 5 signals**:
-  - ITERATION_COMPLETE -> render `phase_complete` banner, re-invoke step 5 with next kill streak name
-  - MILESTONE_COMPLETE -> render `milestone_complete` banner with celebration line, re-invoke step 5
-  - BUILD_COMPLETE -> render `phases_complete` banner, proceed to step 6
+  - ITERATION_COMPLETE -> merge codex's worktree branch if pending (see Worktree Merge below), render `phase_complete` banner, re-invoke step 5 with next kill streak name
+  - MILESTONE_COMPLETE -> merge codex's worktree branch if pending, render `milestone_complete` banner with celebration line, re-invoke step 5
+  - BUILD_COMPLETE -> merge codex's worktree branch if pending, render `phases_complete` banner, proceed to step 6
 **Step 6 signals**:
   - VALIDATE_PASS -> render `validation_passed` banner, proceed to step 7
   - VALIDATE_FAILED -> render `validation_failed` banner, check correction_cycle:
@@ -280,6 +283,17 @@ When writing STATE.md at step transitions, always include the `skill` and `roste
 ## Build Loop — Kill Streak Names
 
 Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/kill-streaks.md` for Build step team naming (required at every Build step entry). The kill streak announcement is rendered as part of step 2 (Render Transition and Create Team) — bold orange banner with the streak name in ALL CAPS.
+
+## Worktree Merge (Step 5)
+
+When codex is spawned with `isolation: "worktree"`, it works in a temporary git worktree on its own branch. After the agent completes (shutdown), the Agent tool returns the worktree path and branch name if changes were made. The engine must merge these changes back to the working branch before the next iteration:
+
+1. After shutting down the Step 5 team, check if codex's Agent result includes a worktree branch.
+2. If yes: `git merge {worktree_branch} --no-edit` to bring codex's commits into the working branch.
+3. If the merge has conflicts, inform the operator and stop the pipeline.
+4. The worktree is automatically cleaned up by the Agent tool.
+
+This merge happens during the Shutdown and Transition phase (step 6 of the execution pattern), after all agents confirm shutdown but before TeamDelete.
 
 ## Artifact Verification
 
