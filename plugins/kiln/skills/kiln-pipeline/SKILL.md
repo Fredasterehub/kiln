@@ -249,7 +249,7 @@ The engine waits for the boss's completion signal. Messages from the team arrive
 - **NEVER** spawn duplicate agents to "fix" a perceived problem
 - Just wait. Silently. Indefinitely. The boss will signal done when the human is finished.
 
-**Non-interactive steps (Steps 3-7)**: if an agent seems stuck (no activity for 5+ minutes), send ONE nudge via SendMessage. If still stuck after another 5 minutes, send one more. Never re-spawn or take over.
+**Non-interactive steps (Steps 3, 5, 6, 7)**: if an agent seems stuck (no activity for 5+ minutes), send ONE nudge via SendMessage. If still stuck after another 5 minutes, send one more. Never re-spawn or take over.
 
 **Idle voice**: when the platform forces a response (`idle_notification`), output a lore-flavored one-liner from the current step's spinner verbs. Vary each time — never repeat the same line twice in a row. Never say "standing by", "waiting for signal", or any mechanical status update.
 

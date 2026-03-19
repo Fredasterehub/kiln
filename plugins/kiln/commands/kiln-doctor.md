@@ -67,7 +67,7 @@ Kiln Doctor Report
 ==================
 [PASS] Codex CLI: codex-cli found on PATH
 [PASS] GPT-5.4: Model accessible
-[PASS] Agent files: 23/23 present
+[PASS] Agent files: 25/25 present
 [PASS] Pipeline skill: All files present
 [INFO] Pipeline state: No existing run (ready for fresh start)
 [WARN] Brainstorm data: elicitation-methods.json missing
