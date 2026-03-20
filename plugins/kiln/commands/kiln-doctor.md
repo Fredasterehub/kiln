@@ -19,7 +19,7 @@ Run all checks and present results as a checklist:
 which codex && codex --version
 ```
 - Expected: codex-cli found on PATH
-- If missing: "Install Codex CLI: npm install -g @anthropic-ai/codex-cli"
+- If missing: "Install Codex CLI: npm install -g @openai/codex"
 
 ### 2. GPT-5.4 Model Access
 
@@ -31,11 +31,11 @@ echo "Reply with just OK" | timeout 30 codex exec -m gpt-5.4 --dangerously-bypas
 
 ### 3. Kiln Agent Files
 
-Check that all 25 Kiln agent files exist in the plugin:
+Check that all 41 Kiln agent files exist in the plugin:
 ```bash
 ls -1 ${CLAUDE_PLUGIN_ROOT}/agents/*.md | wc -l
 ```
-- Expected: 25 agent files
+- Expected: 41 agent files
 - List any missing agents if count is wrong.
 
 ### 4. Pipeline Skill
@@ -67,7 +67,7 @@ Kiln Doctor Report
 ==================
 [PASS] Codex CLI: codex-cli found on PATH
 [PASS] GPT-5.4: Model accessible
-[PASS] Agent files: 25/25 present
+[PASS] Agent files: 41/41 present
 [PASS] Pipeline skill: All files present
 [INFO] Pipeline state: No existing run (ready for fresh start)
 [WARN] Brainstorm data: elicitation-methods.json missing
