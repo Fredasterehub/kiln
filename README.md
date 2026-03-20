@@ -41,7 +41,7 @@
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
   <td><sub>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</sub></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_19,_2026_·_08:20_UTC-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_20,_2026_·_03:50_UTC-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
@@ -109,7 +109,26 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 <br>
 
 > [!NOTE]
-> **🔧 v9.6 &mdash; Reviewah Analysis Fixes** <sub>(2026-03-19)</sub>
+> **🔧 v0.97 &mdash; Architecture QA + Lore Recovery** <sub>(2026-03-20)</sub>
+
+**Architecture step hardened.** Plato now waits for dispatch before acting. Aristotle verifies master-plan.md exists before spawning the validator. Athena reports BLOCKED on missing inputs instead of failing silently. Wave ordering is enforced, not trusted.
+
+**Plan purity enforced.** Sun Tzu's prompt restored to proven open-ended format with a post-generation conformance check &mdash; implementation-level plans are now rejected before reaching synthesis. Plato strips implementation leakage during comparison. Athena validates plan purity as a 6th dimension.
+
+**Onboarding warmth.** Alpha now converses in two natural rounds instead of dumping five questions at once. Voice section added. Architecture review preference explicitly captured with fallback defaults.
+
+**Archival protocol aligned.** Confucius archives design artifacts to Thoth. Plato backstops the Codex plan. Blueprint communication model updated to match actual behavior.
+
+**Lore recovered.** 24-line narrative transition table restored to brand.md. Two-Channel Pattern concept returned to lore-engine.md. 18 personality quotes from legacy agents redistributed across the current roster. Identity-rich greetings updated for 41 agents.
+
+**Branch merge.** Worktree isolation for Codex builders. Hook-gated seed markers across 5 agents. Proactive persistent mind consultation. Step numbering and tool grant corrections across 22 files.
+
+<details>
+<summary>📌 <strong>v0.96 changelog</strong></summary>
+<br>
+
+> [!NOTE]
+> **🔧 v0.96 &mdash; Documentation + Engine Fixes** <sub>(2026-03-19)</sub>
 
 **Architecture docs normalized.** Step-definitions and step-4 blueprint now document thoth as persistent mind in Steps 4 and 5, miyamoto as conditional planner when Codex CLI is unavailable, and the configurable architecture approval gate (`arch_review` flag).
 
@@ -121,23 +140,25 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 **MI6 output format fixed.** Field agent assignment instructions now correctly specify structured markdown output, not JSON.
 
+</details>
+
 <details>
-<summary>📌 <strong>v9.5 changelog</strong></summary>
+<summary>📌 <strong>v0.95 changelog</strong></summary>
 <br>
 
 > [!NOTE]
-> **🔧 v9.5 &mdash; Dual-Team Reviewah Analysis** <sub>(2026-03-18)</sub>
+> **🔧 v0.95 &mdash; Dual-Team QA Analysis** <sub>(2026-03-18)</sub>
 
 9 fixes from Opus + GPT-5.4 dual-team review. See commit `27e195f` for details.
 
 </details>
 
 <details>
-<summary>📌 <strong>v9.4 changelog</strong></summary>
+<summary>📌 <strong>v0.94 changelog</strong></summary>
 <br>
 
 > [!NOTE]
-> **🔧 v9.4 &mdash; Reliability Hardening** <sub>(2026-03-18)</sub>
+> **🔧 v0.94 &mdash; Reliability Hardening** <sub>(2026-03-18)</sub>
 
 **Hooks redesigned.** Enforcement now uses a three-layer context gate (`.kiln/` directory, active stage in `STATE.md`, known-agent whitelist) so pipeline rules never leak into normal Claude Code usage. Matcher narrowed from catch-all to explicit tool list. New `PostToolUse` audit hook detects Bash-mediated writes that bypass `PreToolUse` enforcement &mdash; advisory only, never blocks.
 
@@ -152,22 +173,22 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 </details>
 
 <details>
-<summary>📌 <strong>v9.3 changelog</strong></summary>
+<summary>📌 <strong>v0.93 changelog</strong></summary>
 <br>
 
 > [!NOTE]
-> **🔧 v9.3 &mdash; Hook False Positive Fix** <sub>(2026-03-17)</sub>
+> **🔧 v0.93 &mdash; Hook False Positive Fix** <sub>(2026-03-17)</sub>
 
 **enforce-pipeline.sh no longer blocks non-pipeline operations.** The hook's pipeline context gate relied solely on `$PWD` containing a `.kiln/` ancestor. When Claude Code ran the hook with `$PWD` pointing to a different project (e.g. an active smoketest), the gate passed and Hook 11's overly broad regex (`\.claude/projects`) blocked legitimate writes to auto-memory files. Fix: dual-signal gate (requires both `.kiln/` absent AND no `agent_type`) plus `AGENT` guard on Hook 11 so the main session always passes. Hook 11 regex narrowed to match only settings files, not memory.
 
 </details>
 
 <details>
-<summary>📌 <strong>v9.2 changelog</strong></summary>
+<summary>📌 <strong>v0.92 changelog</strong></summary>
 <br>
 
 > [!NOTE]
-> **🔧 v9.2 &mdash; Handoff Protocol + Step Timing** <sub>(2026-03-17)</sub>
+> **🔧 v0.92 &mdash; Handoff Protocol + Step Timing** <sub>(2026-03-17)</sub>
 
 **Persistent mind handoff protocol.** Rakim and sentinel now write compact handoff files at the end of each iteration. Next iteration bootstraps incrementally via `git diff` instead of re-reading the entire codebase from scratch. Falls back to full bootstrap on first iteration or if handoff is invalid (6-check gate). KRS-One writes an iteration receipt with ground truth on what was scoped vs implemented &mdash; persistent minds consume this instead of inferring from codebase scans. Expected Phase A reduction from 60-90s to 15-20s per iteration.
 
@@ -176,11 +197,11 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 </details>
 
 <details>
-<summary>📌 <strong>v9.1 changelog</strong></summary>
+<summary>📌 <strong>v0.91 changelog</strong></summary>
 <br>
 
 > [!NOTE]
-> **🔧 v9.1 &mdash; Deep QA Pass** <sub>(2026-03-17)</sub>
+> **🔧 v0.91 &mdash; Deep QA Pass** <sub>(2026-03-17)</sub>
 
 **Zoxea bootstrap deadlock fixed.** Phase A persistent mind was waiting for a message instead of bootstrapping immediately &mdash; would have caused Step 6 (Validation) to hang indefinitely.
 
@@ -199,11 +220,11 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 </details>
 
 <details>
-<summary>📌 <strong>v9 changelog</strong></summary>
+<summary>📌 <strong>v0.90 changelog</strong></summary>
 <br>
 
 > [!NOTE]
-> **🔧 v9 &mdash; Parallel Build Lanes** <sub>(2026-03-17)</sub>
+> **🔧 v0.90 &mdash; Parallel Build Lanes** <sub>(2026-03-17)</sub>
 
 **Named pair agents.** 12 new agents organized as builder/reviewer pairs &mdash; enabling parallel build lanes during Step 5. Three structural pairs (**morty+rick**, **luke+obiwan**, **johnny+obiwan**), three UI pairs (**yin+yang**, **clair+obscur**, **recto+verso**). Each is a thin wrapper that delegates to its archetype at runtime.
 
@@ -216,11 +237,11 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 </details>
 
 <details>
-<summary>📌 <strong>v8 changelog</strong></summary>
+<summary>📌 <strong>v0.80 changelog</strong></summary>
 <br>
 
 > [!NOTE]
-> **🔧 v8 &mdash; The Codex-Free Path**
+> **🔧 v0.80 &mdash; The Codex-Free Path**
 
 **No more hard dependency on Codex CLI.** Two new agents &mdash; **Kaneda** (Opus, structural builder) and **Miyamoto** (Sonnet, planner) &mdash; handle implementation and planning natively when the OpenAI stack is unavailable. Kiln now runs end-to-end on Claude alone if needed.
 
@@ -235,11 +256,11 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 <br>
 
 <details>
-<summary>📌 <strong>v7 changelog</strong></summary>
+<summary>📌 <strong>v0.70 changelog</strong></summary>
 <br>
 
 > [!NOTE]
-> **🔧 v7 &mdash; The Engine Tightens**
+> **🔧 v0.70 &mdash; The Engine Tightens**
 
 **Faster research.** MI6 no longer pauses to announce readiness before requesting field agents. The unnecessary handshake that caused a 67-second stall is gone &mdash; the spymaster reads the vision, picks topics, and deploys operatives in one fluid motion.
 
@@ -432,7 +453,7 @@ I named them after your historical figures. Philosophers, strategists, mythologi
 | 📜 | **Confucius** | Opus | Claude-side planner |
 | ⚔️ | **Sun Tzu** | Sonnet | GPT-side planner (Codex CLI) |
 | 🔮 | **Plato** | Opus | Plan synthesizer &mdash; merges dual plans into master |
-| 🏛️ | **Athena** | Opus | Plan validator &mdash; 5-dimension quality gate |
+| 🏛️ | **Athena** | Opus | Plan validator &mdash; 6-dimension quality gate |
 
 #### Build
 
@@ -522,7 +543,7 @@ kiln/
 │   └── marketplace.json       Marketplace manifest
 ├── plugins/kiln/
 │   ├── .claude-plugin/
-│   │   └── plugin.json        Plugin manifest (v0.96.0)
+│   │   └── plugin.json        Plugin manifest (v0.97.0)
 │   ├── agents/                41 agent definitions
 │   ├── commands/
 │   │   ├── kiln-fire.md       Launch / resume
