@@ -109,6 +109,23 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 <br>
 
 > [!NOTE]
+> **🔧 v0.98 — Multi-Builder Restore + Reliability Fixes** <sub>(2026-03-20)</sub>
+
+**Multi-builder parallelization restored.** KRS-One's Named Pair Roster and § 4b parallel dispatch brought back from v0.96. Up to 3 builder+reviewer pairs can run simultaneously on independent chunks. Sequential codex remains the default; parallel is optional.
+
+**Deadlock class eliminated.** Rakim and sentinel now write `<!-- status: complete -->` skeleton immediately on bootstrap — a mid-bootstrap crash can no longer permanently block the build step. The `<!-- status: writing -->` interim state is gone.
+
+**Archive reliability hardened.** Codex extracts iteration number from assignment XML (not gitignored STATE.md in worktree). Thoth added to READY gate — archive structure guaranteed before first write. Archive delimiter changed from `---` to `=====` to prevent content truncation. Worktree merge timing made explicit in engine shutdown sequence.
+
+**Hook enforcement expanded.** Hook 4 now gates all 15 builder/reviewer names (was codex+sphinx only). Hook 6 corrected to check codebase-state.md (was architecture.md). Fire-and-forget archive sends explicitly documented in krs-one communication rules.
+
+**Stale artifacts cleaned.** Doctor updated (Codex package name, agent count). Dev artifacts referencing deleted scripts removed.
+
+<details>
+<summary>📌 <strong>v0.97 changelog</strong></summary>
+<br>
+
+> [!NOTE]
 > **🔧 v0.97 &mdash; Architecture QA + Lore Recovery** <sub>(2026-03-20)</sub>
 
 **Architecture step hardened.** Plato now waits for dispatch before acting. Aristotle verifies master-plan.md exists before spawning the validator. Athena reports BLOCKED on missing inputs instead of failing silently. Wave ordering is enforced, not trusted.
@@ -122,6 +139,8 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 **Lore recovered.** 24-line narrative transition table restored to brand.md. Two-Channel Pattern concept returned to lore-engine.md. 18 personality quotes from legacy agents redistributed across the current roster. Identity-rich greetings updated for 41 agents.
 
 **Branch merge.** Worktree isolation for Codex builders. Hook-gated seed markers across 5 agents. Proactive persistent mind consultation. Step numbering and tool grant corrections across 22 files.
+
+</details>
 
 <details>
 <summary>📌 <strong>v0.96 changelog</strong></summary>
