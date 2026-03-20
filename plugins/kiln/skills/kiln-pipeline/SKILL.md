@@ -216,8 +216,6 @@ When the boss sends `REQUEST_WORKERS`, validate then spawn each worker on the sa
 REQUEST_WORKERS: {name} (subagent_type: {type}), {name} (subagent_type: {type}, isolation: worktree)
 ```
 
-**Worktree isolation**: If a worker spec includes `isolation: worktree`, pass `isolation: "worktree"` to the Agent() call. This uses Claude Code's native git worktree feature — the agent gets its own isolated copy of the repository. SendMessage works normally across worktree boundaries. When the agent finishes and has made changes, the worktree path and branch are returned in the result — the engine should merge the worktree branch back to the working branch before proceeding.
-
 **Build-Step Worker Validation (Step 5 only):**
 
 When the current stage is `build`, validate every REQUEST_WORKERS payload before spawning. Workers must be requested as complete builder+reviewer pairs from this roster:
@@ -354,9 +352,10 @@ Based on the boss's done signal, determine next action:
 **Step 4 done** (ARCHITECTURE_COMPLETE) -> proceed to step 5
 **Step 4 blocked** (PLAN_BLOCKED) -> render `halt` banner, inform operator, stop pipeline
 **Step 5 signals**:
-  - ITERATION_COMPLETE -> merge codex's worktree branch if pending (see Worktree Merge below), render `phase_complete` banner, re-invoke step 5 with next kill streak name
-  - MILESTONE_COMPLETE -> merge codex's worktree branch if pending, render `milestone_complete` banner with celebration line, re-invoke step 5
-  - BUILD_COMPLETE -> merge codex's worktree branch if pending, render `phases_complete` banner, proceed to step 6
+  - ITERATION_COMPLETE -> render `phase_complete` banner, re-invoke step 5 with next kill streak name
+  - MILESTONE_COMPLETE -> render `milestone_complete` banner with celebration line, re-invoke step 5
+  - BUILD_COMPLETE -> render `phases_complete` banner, proceed to step 6
+  Note: if codex ran in a worktree, merge its branch back before the next iteration (see § Worktree Merge).
 **Step 6 signals**:
   - VALIDATE_PASS -> render `validation_passed` banner, proceed to step 7
   - VALIDATE_FAILED -> render `validation_failed` banner, check correction_cycle:
@@ -368,24 +367,7 @@ When writing STATE.md at step transitions, always include the `skill` and `roste
 
 **Step timing**: At the start of each step, write `step_N_start: {ISO 8601 timestamp}` to STATE.md. When the step signals done, write `step_N_end: {ISO 8601 timestamp}`. Use `date -u +%Y-%m-%dT%H:%M:%SZ` via Bash for consistent formatting. Omega uses these timestamps to build the pipeline timing table in REPORT.md.
 
-**Gate log ownership (engine only)**: gate-log.md is appended ONLY by the engine at step transitions. Agents do not write gate-log entries.
-
-At every stage transition (including Build iteration loops and Validate correction loops), append one UTC entry to `.kiln/gate-log.md`:
-
-```bash
-TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-if [ ! -f .kiln/gate-log.md ]; then
-  cat > .kiln/gate-log.md <<'LOG'
-# Gate Log
-
-| timestamp_utc | from_stage | signal | to_stage | note |
-|---|---|---|---|---|
-LOG
-fi
-printf '| %s | %s | %s | %s | %s |\n' "$TS" "{from_stage}" "{signal}" "{to_stage}" "{note}" >> .kiln/gate-log.md
-```
-
-Use real UTC from `date -u` only. Never hardcode timestamps.
+**Gate log**: gate-log.md is optional. If alpha seeded it during onboarding, the engine may append a one-line entry at step transitions. Do not let gate-log writes block or delay the transition flow.
 
 ## Signal Processing via Tasklist
 
@@ -442,16 +424,9 @@ Use the exact signal names from `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/refe
 
 Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/kill-streaks.md` for Build step team naming (required at every Build step entry). The kill streak announcement is rendered as part of step 2 (Render Transition and Create Team) — bold orange banner with the streak name in ALL CAPS.
 
-## Worktree Merge (Step 5)
+## Worktree Merge (Step 5 only)
 
-When codex is spawned with `isolation: "worktree"`, it works in a temporary git worktree on its own branch. After the agent completes (shutdown), the Agent tool returns the worktree path and branch name if changes were made. The engine must merge these changes back to the working branch before the next iteration:
-
-1. After shutting down the Step 5 team, check if codex's Agent result includes a worktree branch.
-2. If yes: `git merge {worktree_branch} --no-edit` to bring codex's commits into the working branch.
-3. If the merge has conflicts, inform the operator and stop the pipeline.
-4. The worktree is automatically cleaned up by the Agent tool.
-
-This merge happens during the Shutdown and Transition phase (step 6 of the execution pattern), after all agents confirm shutdown but before TeamDelete.
+When codex returns from a worktree-isolated run with changes, merge its branch back before the next iteration: `git merge {worktree_branch} --no-edit`. If conflicts, inform the operator and stop.
 
 ## Artifact Verification
 
