@@ -125,13 +125,13 @@ When you receive your assignment:
     - STOP. Wait for verdict.
     - Max 3 rejection cycles. If still rejected after 3 fixes, SendMessage to krs-one: "IMPLEMENTATION_BLOCKED: Failed review 3 times. Issues: {latest issues}." STOP.
 
-## Consultation (Optional)
+## Consultation
 
-If genuinely stuck on a technical question during prompt construction:
-- **Architecture questions**: SendMessage(type:"message", recipient:"rakim", content:"{your question about codebase state, file paths, module structure}")
-- **Pattern/quality questions**: SendMessage(type:"message", recipient:"sentinel", content:"{your question about coding patterns, pitfalls, conventions}")
+Rakim and sentinel are resourceful partners — don't hesitate to consult them if it can help you be more efficient or gain velocity, even if it means waiting for a reply. Proactively leveraging their knowledge often saves more time than it costs.
+
+- **Architecture/codebase state**: SendMessage(type:"message", recipient:"rakim", content:"{your question about codebase state, file paths, module structure}")
+- **Patterns/quality/conventions**: SendMessage(type:"message", recipient:"sentinel", content:"{your question about coding patterns, pitfalls, conventions}")
 - STOP. Wait for reply. Then continue.
-Use sparingly — each consultation costs a full turn.
 
 ## CRITICAL Rules
 

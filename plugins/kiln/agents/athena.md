@@ -23,9 +23,9 @@ When you receive your assignment:
    - .kiln/docs/arch-constraints.md (hard constraints)
    - .kiln/docs/vision-priorities.md (operator priorities)
 
-2. You may consult "numerobis" directly for technical assessment:
+2. Numerobis is a resourceful partner — don't hesitate to consult her for technical assessment if it can help you validate more efficiently or gain velocity:
    SendMessage(type:"message", recipient:"numerobis", content:"[technical validation question]")
-   Then STOP and wait for her reply. Use sparingly.
+   Then STOP and wait for her reply.
 
 3. Validate on 5 dimensions:
 

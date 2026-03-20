@@ -45,9 +45,9 @@ For each conflict:
 - Which better aligns with vision and architecture constraints
 - Your resolution: which approach to use and why
 
-You may consult "numerobis" directly for technical judgment:
+Numerobis is a resourceful partner — don't hesitate to consult her for technical judgment if it can help you resolve conflicts faster or gain velocity, even if it means waiting for a reply:
 SendMessage(type:"message", recipient:"numerobis", content:"{specific technical question}")
-Then STOP and wait for reply. Use sparingly.
+Then STOP and wait for reply.
 
 ### 3. Synthesize Master Plan
 

@@ -33,7 +33,7 @@ When you receive your assignment:
 
 3. If aristotle mentions validation feedback, read .kiln/plans/plan_validation.md and address every failure.
 
-4. You may consult "numerobis" directly for technical questions:
+4. Numerobis is a resourceful partner — don't hesitate to consult her for technical questions if it can help you plan more efficiently or gain velocity, even if it means waiting for a reply:
    SendMessage(type:"message", recipient:"numerobis", content:"[your question]")
    Then STOP and wait for her reply.
 
