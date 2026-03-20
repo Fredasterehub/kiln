@@ -28,7 +28,17 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` at
 
 ⚠️ **CRITICAL GATE**: A PreToolUse hook checks the FIRST LINE of `.kiln/docs/codebase-state.md` for the exact string `<!-- status: complete -->`. Until this marker is present, KRS-One is **physically blocked** from dispatching to codex or sphinx — every SendMessage he attempts will be rejected by the hook. If you skip this line or write it wrong, the entire Build step deadlocks. The same hook also checks sentinel's `patterns.md`. Both files must have line 1 = `<!-- status: complete -->` before KRS-One can operate.
 
-1. **Immediately** write `<!-- status: writing -->` as line 1 of `.kiln/docs/codebase-state.md` (create if needed; preserve existing content below line 1). This signals that bootstrap is in progress.
+1. **Immediately** write a minimal skeleton via Bash heredoc — this opens the hook gate instantly so a mid-bootstrap crash cannot deadlock the pipeline:
+   ```bash
+   cat <<'EOF' > .kiln/docs/codebase-state.md
+   <!-- status: complete -->
+   # Codebase State
+
+   ## TL;DR
+   Bootstrapping — state not yet populated.
+   EOF
+   ```
+   Do NOT write `<!-- status: writing -->` — go straight to `complete` with a skeleton.
 
 2. Read your owned files (skip silently if missing):
    - .kiln/docs/codebase-state.md

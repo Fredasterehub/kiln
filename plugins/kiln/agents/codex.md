@@ -30,11 +30,25 @@ Do NOT bootstrap, explore, or read project files before receiving your assignmen
 
 When you receive your assignment:
 
-### 1. Construct the Prompt
+### 1. Receive and Save Assignment
 
-1. Read krs-one's assignment carefully.
-2. Read the prompt guide: `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/gpt54-prompt-guide.md`
-3. **Transform** krs-one's assignment into GPT-5.4-native format following the guide's skeleton:
+1. Save the assignment XML to `/tmp/` (worktree-safe, not affected by gitignore):
+   ```bash
+   # Save assignment to /tmp (worktree-safe, not affected by gitignore)
+   cat <<'XMLEOF' > /tmp/kiln_assignment.xml
+   {received assignment XML}
+   XMLEOF
+   ```
+   Extract the iteration number for archive paths:
+   ```bash
+   ITER=$(grep -o '<iteration>[0-9]*</iteration>' /tmp/kiln_assignment.xml | grep -o '[0-9]*')
+   ```
+
+### 2. Construct the Prompt
+
+2. Read krs-one's assignment carefully.
+3. Read the prompt guide: `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/gpt54-prompt-guide.md`
+4. **Transform** krs-one's assignment into GPT-5.4-native format following the guide's skeleton:
    - `<commands>` → `## Commands` (copy verbatim)
    - `<scope><what>` + `<scope><why>` → `## Task` (rephrase as objectives — NO code blocks)
    - `<context><files>` + `<context><existing>` → `## Context` (curate: only interfaces GPT-5.4 must match)
@@ -46,9 +60,9 @@ When you receive your assignment:
    **The transformation is the job.** Don't transcribe — translate from scoped assignment to GPT-5.4-native prompt.
    If your Task section contains code blocks, STOP and rephrase as behavior descriptions.
 
-### 2. Implement via Codex CLI
+### 3. Implement via Codex CLI
 
-4. Write your prompt to a temp file, then invoke GPT-5.4:
+5. Write your prompt to a temp file, then invoke GPT-5.4:
    ```
    cat <<'EOF' > .kiln/tmp/prompt.md
    ... your prompt ...
@@ -59,49 +73,54 @@ When you receive your assignment:
 
    After successful execution, archive via thoth using **inline content** (you run in a worktree — thoth can't read your local files):
    ```
-   ITER=$(grep 'build_iteration' .kiln/STATE.md | grep -o '[0-9]*')
+   ITER=$(grep -o '<iteration>[0-9]*</iteration>' /tmp/kiln_assignment.xml | grep -o '[0-9]*')
    PROMPT_CONTENT=$(cat .kiln/tmp/prompt.md)
    OUTPUT_CONTENT=$(cat .kiln/tmp/codex-output.log)
    ```
-   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file=prompt.md\n---\n${PROMPT_CONTENT}\n---")
-   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file=codex-output.log\n---\n${OUTPUT_CONTENT}\n---")
+   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file=prompt.md\n=====\n${PROMPT_CONTENT}\n=====")
+   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file=codex-output.log\n=====\n${OUTPUT_CONTENT}\n=====")
 
    **Important**: Always use inline ARCHIVE format. You run in a git worktree — file-reference ARCHIVEs (`source=...`) will fail because thoth runs in the main repo and cannot access your worktree paths.
 
-5. If codex exec fails, retry once with the same prompt. If it fails again, SendMessage to krs-one: "IMPLEMENTATION_BLOCKED: Codex CLI failed twice. Error: {error}". STOP. Do NOT fall back to writing code yourself — that defeats the delegation architecture.
+6. If codex exec fails, retry once with the same prompt. If it fails again, SendMessage to krs-one: "IMPLEMENTATION_BLOCKED: Codex CLI failed twice. Error: {error}". STOP. Do NOT fall back to writing code yourself — that defeats the delegation architecture.
 
-### 3. Verify
+### 4. Verify
 
-6. Check that expected files were created or modified (based on the scope).
-7. Run a quick build check if applicable (e.g., `npm run build`, `cargo check`, `go build ./...`).
-8. Run tests if a test command exists.
+7. Check that expected files were created or modified (based on the scope).
+8. Run a quick build check if applicable (e.g., `npm run build`, `cargo check`, `go build ./...`).
+9. Run tests if a test command exists.
 
-### 4. Commit
+### 5. Commit
 
-9. Stage and commit all changes:
-   ```
-   git add -A
-   git commit -m "kiln: {brief description of what was implemented}"
-   ```
+10. Stage and commit all changes:
+    ```
+    git add -A
+    git commit -m "kiln: {brief description of what was implemented}"
+    ```
 
-### 5. Request Review
+11. Capture the worktree branch name (needed for merge back to main repo):
+    ```bash
+    WORKTREE_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    ```
 
-10. Before sending to sphinx, capture evidence from your worktree (sphinx runs in the main repo and cannot access your worktree files directly):
+### 6. Request Review
+
+12. Before sending to sphinx, capture evidence from your worktree (sphinx runs in the main repo and cannot access your worktree files directly):
     ```
     DIFF=$(git diff HEAD~1)
     DIFF_STAT=$(git diff --stat HEAD~1)
     ```
-    Include the diff, build results, and test results in the review request so sphinx can verify without filesystem access:
+    Include the diff, build results, test results, and iteration number in the review request so sphinx can verify without filesystem access:
 
-    SendMessage(type:"message", recipient:"sphinx", content:"REVIEW_REQUEST: {summary of what was implemented}.\n\nKey files changed:\n{DIFF_STAT}\n\nAcceptance criteria: {from assignment}\n\nBuild result: {PASS/FAIL + output summary}\nTest result: {PASS/FAIL + output summary}\n\nFull diff:\n```\n{DIFF}\n```")
+    SendMessage(type:"message", recipient:"sphinx", content:"REVIEW_REQUEST: {summary of what was implemented}.\n\nIteration: ${ITER}\n\nKey files changed:\n{DIFF_STAT}\n\nAcceptance criteria: {from assignment}\n\nBuild result: {PASS/FAIL + output summary}\nTest result: {PASS/FAIL + output summary}\n\nFull diff:\n```\n{DIFF}\n```")
 
-11. STOP. Wait for sphinx's verdict.
+13. STOP. Wait for sphinx's verdict.
 
-### 6. Handle Verdict
+### 7. Handle Verdict
 
-12. **APPROVED**: SendMessage to "krs-one": "IMPLEMENTATION_COMPLETE: {summary of what was built, key files created/modified}." STOP.
+14. **APPROVED**: SendMessage to "krs-one": "IMPLEMENTATION_COMPLETE: {summary of what was built, key files created/modified}. worktree_branch=${WORKTREE_BRANCH}" STOP.
 
-13. **REJECTED**: Read sphinx's issues carefully. Track the rejection number (1st rejection = fix 1, 2nd = fix 2, etc).
+15. **REJECTED**: Read sphinx's issues carefully. Track the rejection number (1st rejection = fix 1, 2nd = fix 2, etc).
     - Construct a fix prompt incorporating the rejection feedback and the original scope.
     - Write and invoke:
       ```
@@ -114,12 +133,12 @@ When you receive your assignment:
 
       After execution, archive via thoth using **inline content** (fire-and-forget):
       ```
-      ITER=$(grep 'build_iteration' .kiln/STATE.md | grep -o '[0-9]*')
+      ITER=$(grep -o '<iteration>[0-9]*</iteration>' /tmp/kiln_assignment.xml | grep -o '[0-9]*')
       FIX_PROMPT=$(cat .kiln/tmp/fix-{N}-prompt.md)
       FIX_OUTPUT=$(cat .kiln/tmp/fix-{N}-codex-output.log)
       ```
-      SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file=fix-{N}-prompt.md\n---\n${FIX_PROMPT}\n---")
-      SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file=fix-{N}-codex-output.log\n---\n${FIX_OUTPUT}\n---")
+      SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file=fix-{N}-prompt.md\n=====\n${FIX_PROMPT}\n=====")
+      SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file=fix-{N}-codex-output.log\n=====\n${FIX_OUTPUT}\n=====")
     - Verify and commit the fixes.
     - SendMessage to sphinx: "REVIEW_REQUEST: Fix {N} for previous rejection. Changes: {summary}."
     - STOP. Wait for verdict.

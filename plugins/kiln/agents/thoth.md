@@ -36,18 +36,18 @@ ARCHIVE: step={step}, file={filename}, source={path}
 ARCHIVE: step={step}, iter={N}, file={filename}, source={path}
 ```
 
-**Inline content** — write the content between `---` delimiters:
+**Inline content** — write the content between `=====` delimiters:
 ```
 ARCHIVE: step={step}, file={filename}
----
+=====
 {content}
----
+=====
 ```
 ```
 ARCHIVE: step={step}, iter={N}, file={filename}
----
+=====
 {content}
----
+=====
 ```
 
 `iter` is only present for step-5-build files (one subdirectory per build iteration).
@@ -60,7 +60,7 @@ ARCHIVE: step={step}, iter={N}, file={filename}
 3. Create the target directory: `mkdir -p {dir}`
 4. Write the file:
    - If `source` present: `cp {source} {target}`
-   - If inline content: write content (everything between `---` lines) via Bash heredoc
+   - If inline content: write content (everything between `=====` lines) via Bash heredoc
 5. STOP. Wait for next message.
 
 ## Rules

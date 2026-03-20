@@ -48,7 +48,7 @@ Which agents to spawn per step, spawn order, expected signals, and state transit
 - **Boss**: krs-one (opus)
 - **Persistent minds**: rakim (opus, Phase A — codebase state + AGENTS.md), sentinel (sonnet, Phase A — patterns + pitfalls), thoth (haiku, Phase A — archivist)
 - **Workers**: codex (sonnet, isolation: worktree), sphinx (sonnet) — Phase C, requested by krs-one
-- **Three-phase spawn**: Phase A (rakim + sentinel + thoth bootstrap in parallel) → Phase B (krs-one BACKGROUND) → Phase C (codex in worktree + sphinx per request)
+- **Three-phase spawn**: Phase A (rakim + sentinel + thoth bootstrap in parallel, ALL THREE signal READY) → Phase B (krs-one BACKGROUND) → Phase C (1-3 builder+reviewer pairs per request)
 - **Team name**: kill streak name based on build_iteration (see kill-streaks.md)
 - **Signals from KRS-One**:
   - `ITERATION_COMPLETE` — more work needed. Re-invoke with next kill streak name.

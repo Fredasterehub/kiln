@@ -253,6 +253,7 @@ Validation rules:
 2. Each requested (name, subagent_type) must match exactly — no cross-pairing (e.g. codex+rick is invalid)
 3. The request must contain 1-3 complete pairs (no odd numbers, no reviewer-only)
 4. Generic types (`code`, `agent`, `worker`, etc.) are NEVER valid for build step
+5. Worktree isolation rule: `isolation: worktree` is only valid for a REQUEST_WORKERS containing exactly one codex-type pair. If the request contains 2+ pairs, do NOT apply `isolation: worktree` to any of them — the parameter is silently ignored when `team_name` is set. For multi-pair requests, spawn all builders without isolation.
 
 If validation fails, do NOT spawn. Send an error to the boss:
 
@@ -368,10 +369,10 @@ Based on the boss's done signal, determine next action:
 **Step 4 done** (ARCHITECTURE_COMPLETE) -> proceed to step 5
 **Step 4 blocked** (PLAN_BLOCKED) -> render `halt` banner, inform operator, stop pipeline
 **Step 5 signals**:
-  - ITERATION_COMPLETE -> render `phase_complete` banner, re-invoke step 5 with next kill streak name
-  - MILESTONE_COMPLETE -> render `milestone_complete` banner with celebration line, re-invoke step 5
-  - BUILD_COMPLETE -> render `phases_complete` banner, proceed to step 6
-  Note: if codex ran in a worktree, merge its branch back before the next iteration (see § Worktree Merge).
+  - ITERATION_COMPLETE -> worktree merge (step 3b below), render `phase_complete` banner, re-invoke step 5 with next kill streak name
+  - MILESTONE_COMPLETE -> worktree merge (step 3b below), render `milestone_complete` banner with celebration line, re-invoke step 5
+  - BUILD_COMPLETE -> worktree merge (step 3b below), render `phases_complete` banner, proceed to step 6
+  **Step 5 worktree merge (step 3b)**: After TeamDelete, check if the signal contained `worktree_branch={branch}`. If branch is present and not "none": run `git merge {branch} --no-edit`. If merge conflicts: inform operator, stop pipeline. If no worktree branch or branch is "none": skip. Only proceed to render transition + create next team after merge completes or was skipped.
 **Step 6 signals**:
   - VALIDATE_PASS -> render `validation_passed` banner, proceed to step 7
   - VALIDATE_FAILED -> render `validation_failed` banner, check correction_cycle:
@@ -422,7 +423,7 @@ Use the exact signal names from `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/refe
 
 **Step 5**
 - `Spawn rakim + sentinel + thoth`
-- `Wait all READY`, then `Spawn krs-one`
+- `Wait READY from rakim, sentinel, AND thoth (all 3 required)`, then `Spawn krs-one`
 - `Wait REQUEST_WORKERS`, then `Spawn requested workers`
 - `Wait ITERATION_COMPLETE`, `MILESTONE_COMPLETE`, or `BUILD_COMPLETE`
 

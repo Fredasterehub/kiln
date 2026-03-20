@@ -43,10 +43,12 @@ For each REVIEW_REQUEST:
 
 3. **Archive your verdict** via thoth using **inline content**. Determine the review number from codex's message: if it mentions "Fix N", this is a re-review — use `fix-N-review.md`. Otherwise, use `review.md`.
 
+   Extract ITER from the REVIEW_REQUEST message content (codex includes `Iteration: N` in every review request):
    ```bash
-   ITER=$(grep 'build_iteration' .kiln/STATE.md | grep -o '[0-9]*')
+   # Extract ITER from the REVIEW_REQUEST message (Iteration: N field)
+   ITER={iteration from REVIEW_REQUEST}
    ```
-   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file={review.md or fix-N-review.md}\n---\n{full verdict with file citations}\n---")
+   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file={review.md or fix-N-review.md}\n=====\n{full verdict with file citations}\n=====")
 
 4. **APPROVED:**
    - SendMessage(type:"message", recipient:"codex", content:"APPROVED: {brief summary of what looks good}.")

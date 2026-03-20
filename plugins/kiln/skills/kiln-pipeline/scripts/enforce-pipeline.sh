@@ -125,8 +125,9 @@ fi
 # Fail open if .kiln/ not found (no active pipeline).
 # ═══════════════════════════════════════════════════════════════
 
-# Hook 4 — krs-one: no dispatch to codex/sphinx until rakim+sentinel ready
-if [[ "$AGENT" == "krs-one" ]] && [[ "$TOOL" == "SendMessage" ]] && [[ "$RECIPIENT" =~ ^(codex|sphinx)$ ]]; then
+# Hook 4 — krs-one: no dispatch to builders/reviewers until rakim+sentinel ready
+if [[ "$AGENT" == "krs-one" ]] && [[ "$TOOL" == "SendMessage" ]] && \
+   [[ "$RECIPIENT" =~ ^(codex|sphinx|morty|rick|luke|obiwan|kaneda|tetsuo|johnny|clair|obscur|yin|yang|recto|verso)$ ]]; then
   ROOT=$(_find_root)
   if [[ -n "$ROOT" ]]; then
     if ! _status_ok "$ROOT/.kiln/docs/codebase-state.md" || ! _status_ok "$ROOT/.kiln/docs/patterns.md"; then
@@ -171,7 +172,7 @@ if [[ "$AGENT" =~ ^(codex|sun-tzu)$ ]] && [[ "$TOOL" == "Bash" ]]; then
     if [[ "$AGENT" == "codex" ]]; then
       ROOT=$(_find_root)
       if [[ -n "$ROOT" ]]; then
-        if ! _status_ok "$ROOT/.kiln/docs/architecture.md" || ! _status_ok "$ROOT/.kiln/docs/patterns.md"; then
+        if ! _status_ok "$ROOT/.kiln/docs/codebase-state.md" || ! _status_ok "$ROOT/.kiln/docs/patterns.md"; then
           echo "BLOCKED: bootstrap docs not ready. Wait for krs-one's assignment." >&2
           exit 2
         fi

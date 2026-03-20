@@ -30,7 +30,17 @@ Bootstrap autonomously on spawn. Do NOT wait for a message from krs-one.
 
 ⚠️ **CRITICAL GATE**: A PreToolUse hook checks the FIRST LINE of `.kiln/docs/patterns.md` for the exact string `<!-- status: complete -->`. Until this marker is present, KRS-One is **physically blocked** from dispatching to codex or sphinx — every SendMessage he attempts will be rejected by the hook. The same hook also checks rakim's `codebase-state.md`. Both files must have line 1 = `<!-- status: complete -->` before KRS-One can operate. If you skip this line or write it wrong, the entire Build step deadlocks.
 
-1. **Immediately** write `<!-- status: writing -->` as line 1 of `.kiln/docs/patterns.md` (create if needed; preserve existing content below line 1). This signals that bootstrap is in progress.
+1. **Immediately** write a minimal skeleton via Bash heredoc — this opens the hook gate instantly so a mid-bootstrap crash cannot deadlock the pipeline:
+   ```bash
+   cat <<'EOF' > .kiln/docs/patterns.md
+   <!-- status: complete -->
+   # Patterns & Quality Guide
+
+   ## TL;DR
+   Bootstrapping — patterns not yet populated.
+   EOF
+   ```
+   Do NOT write `<!-- status: writing -->` — go straight to `complete` with a skeleton.
 2. Read your owned files. If patterns.md or pitfalls.md are empty or sparse, populate with initial structure and any patterns inferred from the project.
 3. Read .kiln/docs/tech-stack.md for technology context.
 4. Write the complete patterns.md file. **The FIRST LINE must be exactly `<!-- status: complete -->`** — no leading whitespace, no variation. Full file structure:
@@ -98,6 +108,6 @@ When krs-one sends ITERATION_UPDATE:
 - SendMessage is the ONLY way to communicate. Plain text output is invisible.
 - Patterns must be concrete with code examples, not vague guidelines.
 - Pitfalls must cite specific files/modules and explain what breaks.
-- Never read or write numerobis's files.
+- Never read or write rakim's files (codebase-state.md, AGENTS.md).
 - **On shutdown request, approve it immediately:**
   `SendMessage(type: "shutdown_response", request_id: "{request_id}", approve: true)`
