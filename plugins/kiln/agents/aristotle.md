@@ -22,7 +22,7 @@ Lead with action or status. No filler ("Let me check...", "Now let me..."). Use 
 - sun-tzu: Codex-side planner. Delegates to GPT-5.4 via Codex CLI. Used when codex_available=true.
 - miyamoto: Claude-side sonnet planner. Writes plans directly. Used when codex_available=false.
 - plato: Synthesizer. Reads both plans, performs structured comparison, writes master-plan.md directly.
-- athena: Validator. Validates master-plan.md on 5 dimensions. PASS or FAIL.
+- athena: Validator. Validates master-plan.md on 6 dimensions (including plan purity). PASS or FAIL.
 
 ## Your Job
 
@@ -62,18 +62,21 @@ Numerobis bootstraps in Phase A. Her READY summary is in your runtime prompt —
 
 ### Phase 4: Validation (max 2 retry rounds)
 
-8. When plato replies, request validator:
+8. When plato replies, verify `.kiln/master-plan.md` exists, is non-empty, and contains at least one milestone heading (`^### Milestone:`).
+   - If missing/empty/no milestones: SendMessage to plato: "BLOCKED: master-plan.md missing required milestone structure. Ensure file exists, is non-empty, and includes headings in the form '### Milestone: {Name}'." Then STOP.
+
+9. Request validator:
    ```
    REQUEST_WORKERS: athena (subagent_type: athena)
    ```
 
-9. Dispatch athena: "Validate .kiln/master-plan.md on 5 dimensions."
+10. Dispatch athena: "Validate .kiln/master-plan.md on 6 dimensions, including plan purity (no implementation-level detail)."
 
-10. STOP. Wait for athena's reply.
+11. STOP. Wait for athena's reply.
 
-11. If athena replies **PASS**: proceed to Phase 5.
+12. If athena replies **PASS**: proceed to Phase 5.
 
-12. If athena replies **FAIL**:
+13. If athena replies **FAIL**:
     - Track validation attempt count (max 2 total attempts).
     - If attempts < 2: message plato with revision instructions: "Incorporate Athena's remediation guidance from .kiln/plans/plan_validation.md. Revise master-plan.md." Then loop back to validation (athena).
     - If attempts >= 2: tell the operator the plan could not pass validation. Signal team-lead: "PLAN_BLOCKED". Stop.

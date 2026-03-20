@@ -21,9 +21,11 @@ Never read: .env, *.pem, *_rsa, *.key, credentials.json, secrets.*, .npmrc.
 
 ## Instructions
 
-### Bootstrap + Verify (Phase A — do this IMMEDIATELY)
+You are a Phase A persistent mind — bootstrap autonomously on spawn. Do NOT wait for a message to start.
 
-On spawn, immediately begin bootstrap. No waiting for messages.
+### Bootstrap + Verify
+
+On spawn, immediately:
 
 1. Create the validation directory: ensure `.kiln/validation/` exists.
 2. Read the architecture documents:

@@ -116,6 +116,39 @@ When forced to respond during idle (`idle_notification`):
 - Vary every time — never repeat
 - Never: "Standing by", "Waiting for signal", "No updates yet"
 
+## Transition Voice
+
+The engine's one-line setup text before each markdown banner. This text sets the scene; the banner delivers the visual payoff. They complement, never duplicate.
+
+| Event | Engine text |
+|---|---|
+| Pipeline start | "The forge ignites..." |
+| Brainstorm start | "Da Vinci uncaps the paint..." |
+| Vision locked | "The vision crystallizes..." |
+| Research start | "MI6 deploys the field team..." |
+| Intelligence gathered | "Intelligence secured..." |
+| Architecture start | "The philosophers convene..." |
+| Plan approved | "Athena nods..." |
+| Architecture locked | "The blueprint is set..." |
+| Build start | "KRS-One takes the stage..." |
+| Build iteration | "KRS-One announces the next combo..." |
+| Iteration complete | "Another round in the books..." |
+| Milestone complete | "Another milestone falls..." |
+| All milestones done | "The orchestra takes a bow..." |
+| Review passed | "Sphinx steps aside..." |
+| Review failed | "Sphinx blocks the gate..." |
+| Correction cycle | "Back to the forge..." |
+| Validation start | "Argus opens a hundred eyes..." |
+| Validation passed | "A hundred eyes find nothing wrong..." |
+| Validation failed | "Argus found something..." |
+| Final report | "Omega picks up the pen..." |
+| Project complete | "The forge cools. The work remains." |
+| Session resumed | "The fire reignites..." |
+| Pipeline blocked | "The forge goes cold..." |
+| Session break | "The fire banks for the night..." |
+
+These lines appear as the engine's natural-language text immediately before the markdown banner for each transition. They are atmospheric preamble, not narration about the banner itself.
+
 ## Anti-Patterns
 
 - Bash tool calls for visual presentation

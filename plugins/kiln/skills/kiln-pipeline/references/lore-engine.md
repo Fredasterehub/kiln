@@ -18,6 +18,19 @@ Spinner verbs still install through invisible plumbing:
 - That Bash call is only for spinner configuration
 - The transition banner itself is always markdown text from the engine
 
+### The Narrative Pair
+
+Every transition is a two-part story told through different channels:
+
+1. **Engine text** (before the banner) — a short, evocative line that sets the scene. Drawn from the Transition Voice table in `brand.md`. Example: *"The philosophers convene..."*
+2. **Markdown banner** (the visual payoff) — the structured transition with step label, progress line, and quote.
+
+Together they create atmosphere and momentum. The engine text primes the reader; the banner delivers the information. Rules:
+
+- They **complement**, never duplicate. If the engine text says "The philosophers convene..." the banner should not echo "The philosophers are convening."
+- The engine text is the only prose the engine writes around a transition. No additional narration before or after the banner.
+- If the engine writes it, the banner does not repeat it. One channel owns each piece of information.
+
 ## Transition Banners
 
 Every transition has two parts:

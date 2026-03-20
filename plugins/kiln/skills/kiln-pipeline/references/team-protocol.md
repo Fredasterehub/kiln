@@ -4,6 +4,18 @@ Shared behavior patterns for all Kiln pipeline agents. Every boss reads this at 
 
 Read this file ONCE at the start of each step. Do not re-read mid-step.
 
+## Three-Phase Spawn
+
+Every step follows a three-phase spawn sequence (some steps skip Phase C):
+
+**Phase A — Persistent Minds**: Spawned first (`run_in_background: true`). Bootstrap autonomously — read files, update state, signal READY to team-lead with a content summary. No assignment needed.
+
+**Phase B — Boss**: Spawned after ALL Phase A agents signal READY. Interactive bosses run in foreground (`run_in_background: false`); background bosses run in background. Receives READY summaries in runtime prompt.
+
+**Phase C — Workers**: Spawned when the boss sends `REQUEST_WORKERS`. Each worker joins the same team with full SendMessage access. Boss dispatches individual assignments after workers are spawned.
+
+Not every step uses all three phases. Step 7 is Phase B only. Step 2 has no Phase C. See the step's blueprint for the exact roster.
+
 ## 1. Bootstrap Sequence
 
 All agents follow a two-phase bootstrap:
@@ -43,6 +55,14 @@ SendMessage(
   content: "REQUEST_WORKERS: {name} (subagent_type: {type}), {name} (subagent_type: {type})"
 )
 ```
+
+**Worktree isolation**: Workers that write code can request git worktree isolation. This uses Claude Code's native `isolation: "worktree"` parameter, which gives the agent its own copy of the repository in a temporary git worktree. Add `isolation: worktree` to the worker spec:
+
+```
+REQUEST_WORKERS: codex (subagent_type: codex, isolation: worktree), sphinx (subagent_type: sphinx)
+```
+
+The engine passes `isolation: "worktree"` to the Agent() call. The isolated agent works on a separate branch — if it makes changes, the worktree path and branch are returned to the engine. SendMessage works normally across worktree boundaries.
 
 The engine spawns each worker on the same team. Workers appear as teammates with full SendMessage access. The boss then dispatches assignments individually — one message per worker.
 
@@ -123,8 +143,6 @@ Standard signals sent via SendMessage to team-lead (the engine):
 | `VALIDATE_FAILED` | Validation failed, correction needed | Argus |
 | `REPORT_COMPLETE` | Step 7 done | Omega |
 | `BLOCKED: {reason}` | Cannot proceed, need intervention | Any agent |
-
-Persistent minds signal `READY` after bootstrap to share their state summaries with the engine. Bosses receive these summaries pre-injected in their runtime prompt — they already have full context on spawn. After reading protocol files, evaluate scope and send `REQUEST_WORKERS`.
 
 Always include context after the signal name. A bare signal is less useful than one with specifics:
 - Bad: `RESEARCH_COMPLETE`

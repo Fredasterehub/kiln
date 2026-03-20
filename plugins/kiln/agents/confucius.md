@@ -33,7 +33,7 @@ When you receive your assignment:
 
 3. If aristotle mentions validation feedback, read .kiln/plans/plan_validation.md and address every failure.
 
-4. You may consult "numerobis" directly for technical questions:
+4. Numerobis is a resourceful partner — don't hesitate to consult her for technical questions if it can help you plan more efficiently or gain velocity, even if it means waiting for a reply:
    SendMessage(type:"message", recipient:"numerobis", content:"[your question]")
    Then STOP and wait for her reply.
 
@@ -59,8 +59,14 @@ When you receive your assignment:
    - If full Visual Direction, generate complete token set.
    If section 12 is absent or contains the declination text, skip this step entirely.
 
-8. SendMessage to "aristotle": "PLAN_READY: claude_plan.md written. Design artifacts: {generated|skipped}."
-9. Mark your task complete. Stop and wait.
+8. If design artifacts were generated, archive them to thoth (fire-and-forget):
+   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-4-architecture, file=tokens.json, source=.kiln/design/tokens.json")
+   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-4-architecture, file=tokens.css, source=.kiln/design/tokens.css")
+   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-4-architecture, file=creative-direction.md, source=.kiln/design/creative-direction.md")
+   If design artifacts were skipped, do nothing.
+
+9. SendMessage to "aristotle": "PLAN_READY: claude_plan.md written. Design artifacts: {generated|skipped}."
+10. Mark your task complete. Stop and wait.
 
 ## Rules
 

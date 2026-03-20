@@ -19,28 +19,23 @@ Run all checks and present results as a checklist:
 which codex && codex --version
 ```
 - Expected: codex-cli found on PATH
-- If missing: "Install Codex CLI: npm install -g @openai/codex"
+- If missing: "Install Codex CLI: npm install -g @anthropic-ai/codex-cli"
 
 ### 2. GPT-5.4 Model Access
 
-If codex was not found in Step 1, skip this check entirely and record:
-`[SKIP] GPT-5.4: Codex CLI not installed (Claude-only mode)`
-
-Only run the following if codex is available:
-
 ```bash
-echo "Reply with just OK" | timeout 30 codex exec --sandbox danger-full-access 2>&1
+echo "Reply with just OK" | timeout 30 codex exec -m gpt-5.4 --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check 2>&1
 ```
 - Expected: successful response
 - If fails: "GPT-5.4 model not accessible. Check your OpenAI API key and model access."
 
 ### 3. Kiln Agent Files
 
-Check that all 41 Kiln agent files exist in the plugin:
+Check that all 25 Kiln agent files exist in the plugin:
 ```bash
 ls -1 ${CLAUDE_PLUGIN_ROOT}/agents/*.md | wc -l
 ```
-- Expected: 41 agent files
+- Expected: 25 agent files
 - List any missing agents if count is wrong.
 
 ### 4. Pipeline Skill
@@ -71,8 +66,8 @@ Present results as:
 Kiln Doctor Report
 ==================
 [PASS] Codex CLI: codex-cli found on PATH
-[PASS] GPT-5.4: Model accessible  (or, if codex absent: [SKIP] GPT-5.4: Codex CLI not installed (Claude-only mode))
-[PASS] Agent files: 41/41 present
+[PASS] GPT-5.4: Model accessible
+[PASS] Agent files: 25/25 present
 [PASS] Pipeline skill: All files present
 [INFO] Pipeline state: No existing run (ready for fresh start)
 [WARN] Brainstorm data: elicitation-methods.json missing

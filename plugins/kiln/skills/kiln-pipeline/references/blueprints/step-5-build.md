@@ -26,66 +26,38 @@ The pipeline runner invokes this blueprint repeatedly. Each invocation is one te
 | rakim | Persistent mind. Codebase state authority. Writes codebase-state.md (TL;DR header) + AGENTS.md. Consultation for KRS-One and Codex. | A | opus |
 | thoth | Persistent mind. Archivist — owns all writes to .kiln/archive/. Fire-and-forget. | A | haiku |
 | sentinel | Persistent mind. Quality guardian. Owns patterns.md (TL;DR header) and pitfalls.md. Consultation for quality questions. | A | sonnet |
-| krs-one | Boss. Reads plan, receives READY summaries, scopes chunks via structured XML assignments, dispatches to worker pairs, updates docs, milestone QA. | B (BACKGROUND) | opus |
-| codex | Structural implementer template. Thin Codex CLI wrapper — receives structured assignment, constructs prompt, pipes to GPT-5.4, verifies, commits, requests paired structural review. | C | sonnet |
-| sphinx | Structural reviewer template. APPROVED or REJECTED. Lightweight gate. | C | sonnet |
-| picasso | UI implementer template. Direct Opus builder for components, pages, layouts, motion, and design system work. | C | opus |
-| renoir | UI reviewer template. Design quality reviewer with 5-axis advisory scoring. | C | sonnet |
-
-## Named Pairs
-
-### Structural Pairs
-
-| Pair | Builder | Reviewer | Builder Type | Reviewer Type |
-|------|---------|----------|--------------|---------------|
-| 1 | codex | sphinx | codex | sphinx |
-| 2 | morty | rick | codex | sphinx |
-| 3 | luke | obiwan | codex | sphinx |
-
-### Claude-Type Structural Pairs (when codex_available=false)
-
-| Pair | Builder | Reviewer | Builder Type | Reviewer Type |
-|------|---------|----------|--------------|---------------|
-| 1 | kaneda | sphinx | kaneda | sphinx |
-| 2 | tetsuo | rick | tetsuo | sphinx |
-| 3 | johnny | obiwan | johnny | sphinx |
-
-### UI Pairs
-
-| Pair | Builder | Reviewer | Builder Type | Reviewer Type |
-|------|---------|----------|--------------|---------------|
-| 1 | clair | obscur | picasso | renoir |
-| 2 | yin | yang | picasso | renoir |
-| 3 | recto | verso | picasso | renoir |
+| krs-one | Boss. Reads plan, receives READY summaries, scopes chunks via structured XML assignments, dispatches to codex, updates docs, milestone QA. | B (BACKGROUND) | opus |
+| codex | Implementer. Thin Codex CLI wrapper — receives structured assignment, constructs prompt, pipes to GPT-5.4, verifies, commits, requests sphinx review. | C (isolation: worktree) | sonnet |
+| sphinx | Quick verifier. APPROVED or REJECTED. Lightweight gate. | C | sonnet |
 
 ## Three-Phase Spawn
 
 **Phase A**: rakim + sentinel + thoth bootstrap in parallel → rakim reads files + updates state → sentinel reads patterns → thoth ensures archive structure → all signal READY.
 
-**Phase B**: krs-one spawns (BACKGROUND). Receives READY summaries from rakim and sentinel in runtime prompt. Reads master plan, scopes one chunk or up to 3 independent chunks, requests the needed worker pairs.
+**Phase B**: krs-one spawns (BACKGROUND). Receives READY summaries from rakim and sentinel in runtime prompt. Reads master plan, scopes one chunk, requests codex + sphinx.
 
-**Phase C**: 1-3 builder+reviewer pairs, any mix of structural (subagent_type: codex/sphinx), claude-type structural (subagent_type: kaneda/tetsuo/johnny + sphinx, when codex_available=false), and UI (subagent_type: picasso/renoir). Each builder receives a structured assignment with `reviewer: {paired reviewer name}`. Builders send REVIEW_REQUEST directly to their paired reviewer, reviewers reply directly to builders, and builders report IMPLEMENTATION_COMPLETE or IMPLEMENTATION_BLOCKED back to KRS-One. Sequential remains the default when work is dependent.
+**Phase C**: codex + sphinx spawn on same team. Codex spawns with `isolation: "worktree"` — it gets its own git worktree copy of the repo, preventing filesystem conflicts with persistent minds. KRS-One dispatches structured XML assignment to codex. Codex → sphinx review → codex reports to KRS-One. Sequential implementation. When codex finishes, the engine merges the worktree branch back to the working branch.
 
 ## Communication Model
 
 ```
 Rakim    → team-lead      (READY: codebase state summary)
 Sentinel → team-lead      (READY: patterns/pitfalls guidance)
-KRS-One  → team-lead      (REQUEST_WORKERS: 1-3 named builder+reviewer pairs)
-KRS-One  → Builder        (structured XML assignment with packaged context and reviewer name)
-Builder  → Reviewer       (REVIEW_REQUEST after implementing)
-Reviewer → Builder        (APPROVED or REJECTED with issues)
-Builder  → KRS-One        (IMPLEMENTATION_COMPLETE or IMPLEMENTATION_BLOCKED)
-Builder  → Rakim          (architecture questions — optional)
-Builder  → Sentinel       (pattern/quality questions — optional)
+KRS-One  → team-lead      (REQUEST_WORKERS: codex, sphinx)
+KRS-One  → Codex          (structured XML assignment with packaged context)
+Codex    → Sphinx          (REVIEW_REQUEST after implementing)
+Sphinx   → Codex           (APPROVED or REJECTED with issues)
+Codex    → KRS-One         (IMPLEMENTATION_COMPLETE or IMPLEMENTATION_BLOCKED)
+Codex    → Rakim           (architecture questions — optional)
+Codex    → Sentinel        (pattern/quality questions — optional)
 KRS-One  → Rakim           (ITERATION_UPDATE / MILESTONE_DONE / QA_ISSUES)
 KRS-One  → Sentinel        (ITERATION_UPDATE)
 KRS-One  → team-lead       (ITERATION_COMPLETE / MILESTONE_COMPLETE / BUILD_COMPLETE)
 KRS-One  → thoth           (ARCHIVE: bootstrap-context.md, assignment.xml, codebase-state-snapshot.md, qa-{milestone}.md — fire-and-forget)
-Structural Builder → thoth  (ARCHIVE: prompt.md, codex-output.log, fix-{N}-*.md — fire-and-forget)
-Structural Reviewer → thoth (ARCHIVE: review.md, fix-{N}-review.md — fire-and-forget)
+Codex    → thoth            (ARCHIVE: prompt.md, codex-output.log, fix-{N}-*.md — fire-and-forget)
+Sphinx   → thoth            (ARCHIVE: review.md, fix-{N}-review.md — fire-and-forget)
 ```
 
-KRS-One packages context from rakim/sentinel into each builder's assignment so builders don't need multi-turn consultation for basic context. Direct consultation is for edge cases.
+KRS-One packages context from rakim/sentinel into codex's assignment so codex doesn't need multi-turn consultation for basic context. Direct consultation is for edge cases.
 
 When `.kiln/design/` exists, KRS-One reads design artifacts and includes a `<design>` section in XML assignments. See krs-one.md for details.

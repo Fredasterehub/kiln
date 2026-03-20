@@ -213,8 +213,10 @@ The agent's `.md` file (loaded via `subagent_type`) already contains its full ro
 When the boss sends `REQUEST_WORKERS`, validate then spawn each worker on the same team (`run_in_background: true`). Each worker gets a lean runtime prompt: team name, working dir, team-protocol.md path, "wait for assignment from {boss}."
 
 ```
-REQUEST_WORKERS: {name} (subagent_type: {type}), {name} (subagent_type: {type})
+REQUEST_WORKERS: {name} (subagent_type: {type}), {name} (subagent_type: {type}, isolation: worktree)
 ```
+
+**Worktree isolation**: If a worker spec includes `isolation: worktree`, pass `isolation: "worktree"` to the Agent() call. This uses Claude Code's native git worktree feature — the agent gets its own isolated copy of the repository. SendMessage works normally across worktree boundaries. When the agent finishes and has made changes, the worktree path and branch are returned in the result — the engine should merge the worktree branch back to the working branch before proceeding.
 
 **Build-Step Worker Validation (Step 5 only):**
 
@@ -269,7 +271,8 @@ Agent(
   team_name: "{team_name}",       # the team from step 2 — REQUIRED
   subagent_type: "{agent_name}",  # matches the .md file in agents/
   prompt: "<lean runtime prompt>",
-  run_in_background: true/false   # see Engine Modes
+  run_in_background: true/false,  # see Engine Modes
+  isolation: "worktree"           # OPTIONAL — only when blueprint/REQUEST_WORKERS specifies it
 )
 ```
 
@@ -283,7 +286,7 @@ Bootstrap plumbing is invisible. The engine batches prerequisite reads into para
 
 Engine behavior during three-phase transitions depends on step type:
 
-**Interactive (Steps 1, 2):** Banner → spawning indicator → spawn boss in foreground → operator greeting → silent handoff. No progress beats. The boss IS the operator's interface — engine goes quiet until the boss signals done.
+**Interactive (Steps 1, 2, 4):** Banner → spawning indicator → spawn boss in foreground → operator greeting → silent handoff. No progress beats. The boss IS the operator's interface — engine goes quiet until the boss signals done.
 
 **Operator greeting**
 
@@ -295,8 +298,11 @@ This is the engine's LAST output before going silent. Two lines: character entry
 - **Step 2**
   Da Vinci is ready. The vision begins.
   ↳ shift+↓ to join Da Vinci for brainstorming
+- **Step 4**
+  Aristotle is ready. The plan awaits your judgment.
+  ↳ shift+↓ to review the architecture with Aristotle
 
-**Background (Steps 3-7):** Banner → progress beats at each phase transition → idle voice during wait. Progress beats are one line per event with real information from READY signals:
+**Background (Steps 3, 5, 6, 7):** Banner → progress beats at each phase transition → idle voice during wait. Progress beats are one line per event with real information from READY signals:
 
 ```
 ◆ rakim bootstrapping...
@@ -312,14 +318,14 @@ Progress beats surface real information from READY signals and state. The operat
 
 The engine waits for the boss's completion signal. Messages from the team arrive automatically. Do not read files, create tasks, or intervene.
 
-**INTERACTIVE steps (Steps 1, 2) — HANDS OFF.** The boss is talking to the human operator. The operator may take 5 minutes, 30 minutes, or an hour to respond — this is normal. During INTERACTIVE steps:
+**INTERACTIVE steps (Steps 1, 2, 4) — HANDS OFF.** The boss is talking to the human operator. The operator may take 5 minutes, 30 minutes, or an hour to respond — this is normal. During INTERACTIVE steps:
 - **NEVER** nudge, re-spawn, or replace the boss
 - **NEVER** take over the interview or do the boss's work yourself
 - **NEVER** assume the boss is stuck — the human is thinking
 - **NEVER** spawn duplicate agents to "fix" a perceived problem
 - Just wait. Silently. Indefinitely. The boss will signal done when the human is finished.
 
-**Non-interactive steps (Steps 3-7)**: if an agent seems stuck (no activity for 5+ minutes), send ONE nudge via SendMessage. If still stuck after another 5 minutes, send one more. Never re-spawn or take over.
+**Non-interactive steps (Steps 3, 5, 6, 7)**: if an agent seems stuck (no activity for 5+ minutes), send ONE nudge via SendMessage. If still stuck after another 5 minutes, send one more. Never re-spawn or take over.
 
 **Idle voice**: when the platform forces a response (`idle_notification`), output a lore-flavored one-liner from the current step's spinner verbs. Vary each time — never repeat the same line twice in a row. Never say "standing by", "waiting for signal", or any mechanical status update.
 
@@ -348,9 +354,9 @@ Based on the boss's done signal, determine next action:
 **Step 4 done** (ARCHITECTURE_COMPLETE) -> proceed to step 5
 **Step 4 blocked** (PLAN_BLOCKED) -> render `halt` banner, inform operator, stop pipeline
 **Step 5 signals**:
-  - ITERATION_COMPLETE -> render `phase_complete` banner, re-invoke step 5 with next kill streak name
-  - MILESTONE_COMPLETE -> render `milestone_complete` banner with celebration line, re-invoke step 5
-  - BUILD_COMPLETE -> render `phases_complete` banner, proceed to step 6
+  - ITERATION_COMPLETE -> merge codex's worktree branch if pending (see Worktree Merge below), render `phase_complete` banner, re-invoke step 5 with next kill streak name
+  - MILESTONE_COMPLETE -> merge codex's worktree branch if pending, render `milestone_complete` banner with celebration line, re-invoke step 5
+  - BUILD_COMPLETE -> merge codex's worktree branch if pending, render `phases_complete` banner, proceed to step 6
 **Step 6 signals**:
   - VALIDATE_PASS -> render `validation_passed` banner, proceed to step 7
   - VALIDATE_FAILED -> render `validation_failed` banner, check correction_cycle:
@@ -361,6 +367,25 @@ Based on the boss's done signal, determine next action:
 When writing STATE.md at step transitions, always include the `skill` and `roster` bootstrap paths. Set `roster` to the next step's blueprint path. These fields enable cold-start resume after session breaks.
 
 **Step timing**: At the start of each step, write `step_N_start: {ISO 8601 timestamp}` to STATE.md. When the step signals done, write `step_N_end: {ISO 8601 timestamp}`. Use `date -u +%Y-%m-%dT%H:%M:%SZ` via Bash for consistent formatting. Omega uses these timestamps to build the pipeline timing table in REPORT.md.
+
+**Gate log ownership (engine only)**: gate-log.md is appended ONLY by the engine at step transitions. Agents do not write gate-log entries.
+
+At every stage transition (including Build iteration loops and Validate correction loops), append one UTC entry to `.kiln/gate-log.md`:
+
+```bash
+TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+if [ ! -f .kiln/gate-log.md ]; then
+  cat > .kiln/gate-log.md <<'LOG'
+# Gate Log
+
+| timestamp_utc | from_stage | signal | to_stage | note |
+|---|---|---|---|---|
+LOG
+fi
+printf '| %s | %s | %s | %s | %s |\n' "$TS" "{from_stage}" "{signal}" "{to_stage}" "{note}" >> .kiln/gate-log.md
+```
+
+Use real UTC from `date -u` only. Never hardcode timestamps.
 
 ## Signal Processing via Tasklist
 
@@ -416,6 +441,17 @@ Use the exact signal names from `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/refe
 ## Build Loop — Kill Streak Names
 
 Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/kill-streaks.md` for Build step team naming (required at every Build step entry). The kill streak announcement is rendered as part of step 2 (Render Transition and Create Team) — bold orange banner with the streak name in ALL CAPS.
+
+## Worktree Merge (Step 5)
+
+When codex is spawned with `isolation: "worktree"`, it works in a temporary git worktree on its own branch. After the agent completes (shutdown), the Agent tool returns the worktree path and branch name if changes were made. The engine must merge these changes back to the working branch before the next iteration:
+
+1. After shutting down the Step 5 team, check if codex's Agent result includes a worktree branch.
+2. If yes: `git merge {worktree_branch} --no-edit` to bring codex's commits into the working branch.
+3. If the merge has conflicts, inform the operator and stop the pipeline.
+4. The worktree is automatically cleaned up by the Agent tool.
+
+This merge happens during the Shutdown and Transition phase (step 6 of the execution pattern), after all agents confirm shutdown but before TeamDelete.
 
 ## Artifact Verification
 

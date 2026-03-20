@@ -18,7 +18,7 @@
 | sun-tzu | Codex-side planner. Delegates to GPT-5.4 via Codex CLI, writes codex_plan.md. | C (wave 1) | sonnet |
 | miyamoto | Claude-side sonnet planner. Writes plans directly. Used when codex_available=false. | C (wave 1, conditional) | sonnet |
 | plato | Synthesizer. Structured comparison + synthesis, writes master-plan.md directly. | C (wave 2) | opus |
-| athena | Validator. Validates master-plan.md on 5 dimensions. PASS or FAIL. | C (wave 3) | opus |
+| athena | Validator. Validates master-plan.md on 6 dimensions (including plan purity). PASS or FAIL. | C (wave 3) | opus |
 
 ## Three-Phase Spawn
 
@@ -60,7 +60,8 @@ Numerobis  → Aristotle     (DOCS_UPDATED)
 Aristotle  → team-lead     (ARCHITECTURE_COMPLETE or PLAN_BLOCKED)
 Sun-Tzu    → thoth          (ARCHIVE: plan-prompt.md, codex-output.log, codex-plan-output.md — fire-and-forget)
 Miyamoto   → thoth          (ARCHIVE: miyamoto_plan.md — fire-and-forget)
-Plato      → thoth          (ARCHIVE: claude-plan.md, master-plan.md, debate-resolution.md — fire-and-forget)
+Confucius  → thoth          (ARCHIVE: tokens.json, tokens.css, creative-direction.md — conditional, fire-and-forget)
+Plato      → thoth          (ARCHIVE: claude-plan.md, codex-plan.md backstop, master-plan.md, debate-resolution.md — fire-and-forget)
 ```
 
 Numerobis is the consultation hub — planners/synthesizer/validator message her directly for technical questions. Aristotle doesn't relay.

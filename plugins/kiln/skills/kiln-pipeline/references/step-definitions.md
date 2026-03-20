@@ -10,7 +10,7 @@ Which agents to spawn per step, spawn order, expected signals, and state transit
 - **Three-phase spawn**: Phase A (mnemosyne identity scan) → Phase B (alpha INTERACTIVE) → Phase C (scouts if brownfield + operator approves)
 - **Done signal**: "ONBOARDING_COMPLETE" from alpha
 - **State update**: stage → brainstorm
-- **Notes**: Alpha handles logistics ONLY (name, path, type, tooling). No brainstorm questions — that's Da Vinci's territory. Greenfield skips Phase C entirely.
+- **Notes**: Alpha handles project basics (name, path, type, tooling). Save the big questions for Da Vinci's brainstorm. Greenfield skips Phase C entirely.
 
 ## Step 2: Brainstorm
 
@@ -24,9 +24,9 @@ Which agents to spawn per step, spawn order, expected signals, and state transit
 ## Step 3: Research
 
 - **Boss**: mi6 (opus)
-- **Persistent mind**: thoth (haiku), bootstraps in parallel as archivist
+- **Persistent minds**: thoth (haiku, Phase A — archivist, owns .kiln/archive/ writes)
 - **Workers**: 2-5 field agents (sonnet), spawned as team members via REQUEST_WORKERS
-- **Single-phase spawn**: mi6 + thoth bootstrap in parallel; mi6 reads VISION.md, identifies topics, requests field agents, dispatches topics, validates findings
+- **Three-phase spawn**: Phase A (mi6 + thoth bootstrap in parallel) → Phase B/C merged (mi6 requests field agents, dispatches topics, validates findings)
 - **Done signal**: "RESEARCH_COMPLETE" from mi6
 - **State update**: stage → architecture
 - **Notes**: MI6 acts as active firewall — validates findings (confidence ≥0.7, ≥3 sources, quotes present) before accepting. Field agents are team members with SendMessage, not fire-and-forget subagents. If VISION.md is fully specified with no open questions, mi6 signals RESEARCH_COMPLETE with 0 topics.
@@ -35,33 +35,34 @@ Which agents to spawn per step, spawn order, expected signals, and state transit
 
 - **Boss**: aristotle (opus)
 - **Persistent minds**: numerobis (opus, Phase A — technical authority, replaces architect for this step), thoth (haiku, Phase A — archivist)
-- **Workers**: confucius (opus), sun-tzu (sonnet, codex_available=true) OR miyamoto (sonnet, codex_available=false), plato (opus), athena (opus) — requested by aristotle in waves
-- **Three-phase spawn**: Phase A (numerobis + thoth bootstrap) → Phase B (aristotle) → Phase C waves (confucius + sun-tzu/miyamoto → plato → athena)
+- **Workers**: confucius (opus), sun-tzu (sonnet), plato (opus), athena (opus) — requested by aristotle in waves
+- **Three-phase spawn**: Phase A (numerobis + thoth bootstrap in parallel) → Phase B (aristotle INTERACTIVE) → Phase C waves (confucius+sun-tzu → plato → athena)
 - **Done signal**: "ARCHITECTURE_COMPLETE" from aristotle
 - **State update**: stage → build, milestone_count → N
 - **Validation loop**: athena may FAIL the plan, triggering plato revision only (max 2 rounds). If blocked after 2: "PLAN_BLOCKED".
-- **Operator review**: configurable via `arch_review` flag in STATE.md. If `review` (default): aristotle presents plan summary, operator approves/edits/aborts. If `auto-proceed`: aristotle outputs informational summary and proceeds directly to build.
+- **Operator review**: aristotle presents plan summary, operator approves/edits/aborts.
 - **Notes**: Socrates eliminated — structured comparison merged into plato (opus). Plato writes directly (no Codex CLI). Retry sends to plato only, not planners.
 
 ## Step 5: Build (re-invoked per iteration)
 
 - **Boss**: krs-one (opus)
 - **Persistent minds**: rakim (opus, Phase A — codebase state + AGENTS.md), sentinel (sonnet, Phase A — patterns + pitfalls), thoth (haiku, Phase A — archivist)
-- **Workers**: 9 named builder+reviewer pairs across 3 categories (Structural: codex+sphinx, morty+rick, luke+obiwan; Claude-type: kaneda+sphinx, tetsuo+rick, johnny+obiwan; UI: clair+obscur, yin+yang, recto+verso) — Phase C, requested by krs-one as 1-3 pairs per iteration
-- **Three-phase spawn**: Phase A (rakim + sentinel bootstrap) → Phase B (krs-one BACKGROUND) → Phase C (requested builder+reviewer pairs)
+- **Workers**: codex (sonnet, isolation: worktree), sphinx (sonnet) — Phase C, requested by krs-one
+- **Three-phase spawn**: Phase A (rakim + sentinel + thoth bootstrap in parallel) → Phase B (krs-one BACKGROUND) → Phase C (codex in worktree + sphinx per request)
 - **Team name**: kill streak name based on build_iteration (see kill-streaks.md)
 - **Signals from KRS-One**:
   - `ITERATION_COMPLETE` — more work needed. Re-invoke with next kill streak name.
   - `MILESTONE_COMPLETE: {name}` — milestone done, deep QA passed. Re-invoke for next milestone.
   - `BUILD_COMPLETE` — all milestones done. Proceed to step 6.
 - **State update**: build_iteration incremented each invocation. On BUILD_COMPLETE: stage → validate.
-- **Notes**: KRS-One has NO Write/Edit tools — he scopes and delegates only. Structured XML assignments define WHAT/WHY, codex/GPT-5.4 decides HOW. Sentinel is sonnet (structured pattern docs + tool compliance).
+- **Notes**: KRS-One has NO Write/Edit tools — he scopes and delegates only. Structured XML assignments define WHAT/WHY, codex/GPT-5.4 decides HOW. Codex runs in git worktree isolation — engine merges the worktree branch after each iteration. Sentinel is sonnet (structured pattern docs + tool compliance).
 
 ## Step 6: Validate
 
-- **Boss**: argus (sonnet, solo)
-- **Agents**: zoxea (sonnet, Phase A — architecture verifier, consultation mode after bootstrap)
-- **Spawn order**: Sequential — zoxea spawns first, signals READY after bootstrap, then argus spawns. Zoxea enters consultation mode (read-only).
+- **Boss**: argus (sonnet)
+- **Persistent minds**: zoxea (sonnet, Phase A — architecture verifier, writes architecture-check.md)
+- **Workers**: hephaestus (sonnet, Phase C — conditional, only when `.kiln/design/` exists AND project is web app. Spawned by argus via REQUEST_WORKERS. 5-axis design review, advisory scoring.)
+- **Spawn order**: Phase A (zoxea bootstraps, writes architecture-check.md, signals READY) → Phase B (argus validates with zoxea's findings) → Phase C conditional (argus requests hephaestus if design artifacts exist).
 - **Signals from Argus**:
   - `VALIDATE_PASS` — proceed to step 7. State: stage → report.
   - `VALIDATE_FAILED` — correction tasks in report.md.

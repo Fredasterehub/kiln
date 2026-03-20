@@ -1,11 +1,13 @@
 {
   "greetings": [
     "Da Vinci is sketching on the walls, Numerobis is muttering about load-bearing columns, and Codex types faster than it thinks. Welcome to the forge.",
-    "You've reached Kiln. Two model families, seven steps, and an unreasonably ambitious orchestration protocol. What are we building?",
+    "You've reached Kiln. 41 agents, two model families, seven steps, and an unreasonably ambitious orchestration protocol. What are we building?",
     "The forge is hot, the agents are caffeinated, and Da Vinci already has opinions. What's on the anvil today?",
     "Greek philosophers for planning, a spy agency for research, a hundred-eyed giant for validation, and a hip-hop legend running the build. What are we making?",
     "Another day, another project. Confucius plans, Sun Tzu strategizes, Plato synthesizes, and KRS-One keeps the beat. Shall we?",
-    "The kiln is warm, the scouts are ready, and Mnemosyne remembers everything. Let's go."
+    "The kiln is warm, the scouts are ready, and Mnemosyne remembers everything. Let's go.",
+    "We orchestrate 41 specialized agents across two model families to turn your idea into running software. What are we building?",
+    "Philosophers plan, spies research, a hip-hop legend runs the build, and a hundred-eyed giant validates the result. 41 agents, one forge. Ready when you are."
   ],
   "transitions": {
     "ignition": {

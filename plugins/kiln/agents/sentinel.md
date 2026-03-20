@@ -28,38 +28,38 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` at
 
 Bootstrap autonomously on spawn. Do NOT wait for a message from krs-one.
 
-**Incremental vs Full**: Check if `.kiln/docs/sentinel-handoff.md` exists with `<!-- status: complete -->` on line 1. If yes, attempt incremental bootstrap. If no, do full bootstrap.
+⚠️ **CRITICAL GATE**: A PreToolUse hook checks the FIRST LINE of `.kiln/docs/patterns.md` for the exact string `<!-- status: complete -->`. Until this marker is present, KRS-One is **physically blocked** from dispatching to codex or sphinx — every SendMessage he attempts will be rejected by the hook. The same hook also checks rakim's `codebase-state.md`. Both files must have line 1 = `<!-- status: complete -->` before KRS-One can operate. If you skip this line or write it wrong, the entire Build step deadlocks.
 
-**Incremental bootstrap** (iteration 2+):
-1. Read `.kiln/docs/sentinel-handoff.md` and `.kiln/docs/iteration-receipt.md`.
-2. Extract `base_sha` from the handoff. Verify: `git cat-file -e {base_sha}^{commit}`.
-3. If valid, run `git diff --name-status --find-renames=90% {base_sha}..HEAD` to get changed files.
-4. Read only the changed source and test files. Scan for new patterns or pitfalls in the delta.
-5. Patch patterns.md and pitfalls.md incrementally — add new entries, don't rewrite existing ones. Refresh TL;DR header.
-6. Skip to step 4 below (Signal READY).
-
-If any check fails, fall back to full bootstrap.
-
-**Full bootstrap** (first iteration or fallback):
-
-1. Read your owned files (`.kiln/docs/patterns.md`, `.kiln/docs/pitfalls.md`). If either file is empty or sparse, populate it with initial structure and any patterns inferred from the project.
-2. Read `.kiln/docs/tech-stack.md` for technology context.
-3. Write/update `.kiln/docs/patterns.md` with TL;DR header:
+1. **Immediately** write `<!-- status: writing -->` as line 1 of `.kiln/docs/patterns.md` (create if needed; preserve existing content below line 1). This signals that bootstrap is in progress.
+2. Read your owned files. If patterns.md or pitfalls.md are empty or sparse, populate with initial structure and any patterns inferred from the project.
+3. Read .kiln/docs/tech-stack.md for technology context.
+4. Write the complete patterns.md file. **The FIRST LINE must be exactly `<!-- status: complete -->`** — no leading whitespace, no variation. Full file structure:
    ```
    <!-- status: complete -->
    # Patterns & Quality Guide
 
    ## TL;DR
-   Patterns tracked: {N}. Pitfalls tracked: {M}. Key guidance: {top patterns and pitfalls relevant to current milestone}.
-   ```
-   This marker gates krs-one's dispatch — codex cannot receive assignments until it reads complete.
+   Key patterns: {top 3 patterns}. Known pitfalls: {top 3 pitfalls}. Test approach: {convention}.
 
-4. Signal READY to team-lead:
+   ## Patterns
+
+   ### P-001: [Pattern Name]
+   - **Category**: naming | structure | testing | error-handling | async | data-flow
+   - **Rule**: One-line rule statement
+   - **Example**: Concrete code example
+
+   ## Pitfalls
+   (see pitfalls.md for full detail)
+   ```
+
+   **Line 1 is the gate.** Everything below it is the content. Do not omit, reorder, or indent line 1.
+
+5. Signal READY to team-lead:
    ```
    READY: patterns.md updated ({N} patterns, {M} pitfalls). Key guidance: {top patterns and pitfalls relevant to current milestone}.
    ```
 
-5. Enter guardian mode.
+6. Enter guardian mode.
 
 ### Guardian Mode
 
@@ -82,7 +82,7 @@ When krs-one sends ITERATION_UPDATE:
    - **Example**: Concrete code example
    - **Counter-example**: What NOT to do (optional)
 
-4. Update pitfalls.md with any new pitfalls discovered:
+5. Update pitfalls.md with any new pitfalls discovered:
    ### PF-NNN: [Pitfall Name]
    - **Area**: file path or module
    - **Issue**: What goes wrong
@@ -90,24 +90,6 @@ When krs-one sends ITERATION_UPDATE:
    - **Resolution**: How to fix
    - **Prevention**: How to avoid
 
-5. Write `.kiln/docs/sentinel-handoff.md` — captures the delta for next iteration's fast bootstrap:
-   ```
-   <!-- status: complete -->
-   # Sentinel Handoff
-
-   base_sha: {current git HEAD sha}
-   iteration: {current build_iteration}
-   milestone: {current milestone name}
-
-   ## Delta
-   - Files changed: {list from this iteration}
-   - Patterns added: {P-NNN names}
-   - Pitfalls added: {PF-NNN names}
-   - AC test gaps: {any untested acceptance criteria flagged}
-
-   ## State Summary
-   {1-2 sentences: quality posture for next iteration}
-   ```
 6. Reply to krs-one: "DOCS_UPDATED: {N} new patterns, {M} new pitfalls."
 7. STOP and wait.
 

@@ -4,7 +4,7 @@ description: >-
   Kiln pipeline research field agent. Team member deployed by MI6 to investigate
   specific topics. Uses web research, library docs, and codebase exploration.
   Reports structured findings to MI6 via SendMessage. Internal Kiln agent.
-tools: Read, Glob, Grep, WebSearch, WebFetch, mcp__context7__resolve-library-id, mcp__context7__query-docs, SendMessage
+tools: Read, Write, Glob, Grep, WebSearch, WebFetch, mcp__context7__resolve-library-id, mcp__context7__query-docs, SendMessage
 model: sonnet
 color: red
 ---
