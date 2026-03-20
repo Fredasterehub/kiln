@@ -33,6 +33,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/scripts/audit-status-marker.sh",
+            "timeout": 5
+          }
+        ]
       }
     ]
   }
