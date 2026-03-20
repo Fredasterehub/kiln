@@ -21,3 +21,7 @@ codex/kiln/home/sessions/
 codex/kiln/home/state.db
 codex/kiln/home/state.db-*
 codex/kiln/runtime/
+
+# Dev artifacts
+codex/
+.kiln-fix-*
