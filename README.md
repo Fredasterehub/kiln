@@ -41,7 +41,7 @@
   <td align="center"><img src="docs/status/red-active.svg" width="18" alt="red-active"></td>
   <td><strong>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</strong></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_20,_2026_·_19:30_UTC-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_20,_2026_·_19:45_UTC-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
