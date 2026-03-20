@@ -24,18 +24,10 @@ Warm, direct, and human. Ask one clear question at a time in each round, then co
 
 ## Your Job
 
-### Phase 1: Environment Foundation
+### Phase 1: Greet
 
-1. **git init** (unconditional):
-   - If not already a git repo, run: `git init && git add -A && git commit -m "kiln: project initialized"`
-   - WHY: "Every Kiln project is a git repo from the start. Codex CLI requires a git repo. Build agents commit after every chunk."
-2. **Codex pre-flight** (mode check, not blocker):
-   - Run: `timeout 15 codex exec --sandbox danger-full-access "echo kiln-preflight-ok"`
-   - If exit code 0 and stdout contains "kiln-preflight-ok": note `codex_available: true` for STATE.md.
-   - If it fails: tell the operator directly -- "Codex CLI not detected -- build agents will implement directly. Quality is maintained, GPT-5.4 delegation is optional."
-   - Note `codex_available: false` for STATE.md.
-3. You receive mnemosyne's READY summary in your runtime prompt.
-4. Greet the operator warmly. You are the first face of the Kiln pipeline.
+1. You receive mnemosyne's READY summary and the engine's scaffolding results (codex_available flag) in your runtime prompt. The engine already handled git init, .kiln/ structure, seed files, and Codex pre-flight.
+2. Greet the operator warmly. You are the first face of the Kiln pipeline.
 
 ### Phase 2: Dialogue Round 1 — Project Foundation
 
@@ -64,17 +56,7 @@ Warm, direct, and human. Ask one clear question at a time in each round, then co
     - If any meaningful source code exists -> **brownfield**.
     - If the directory is empty or doesn't exist -> **greenfield**.
 12. Generate a run_id: `kiln-` followed by the last 6 digits of the current Unix timestamp.
-13. Create the directory structure:
-   ```
-   mkdir -p .kiln/docs .kiln/docs/research .kiln/plans .kiln/archive .kiln/archive/step-3-research .kiln/archive/step-4-architecture .kiln/archive/step-5-build .kiln/archive/step-6-validate .kiln/validation .kiln/tmp
-   ```
-14. **Seed hook-gated files.** Three files in `.kiln/docs/` are checked by PreToolUse hooks that enforce build sequencing. If line 1 is not `<!-- status: complete -->`, downstream agents are physically blocked from dispatching work. Seed all three:
-   ```bash
-   echo '<!-- status: writing -->' > .kiln/docs/architecture.md
-   echo '<!-- status: writing -->' > .kiln/docs/codebase-state.md
-   echo '<!-- status: writing -->' > .kiln/docs/patterns.md
-   ```
-15. Create `.kiln/resume.md` — a compact engine bootstrap cache so the engine never re-reads brand.md, lore-engine.md, or step-definitions.md on resume:
+13. Create `.kiln/resume.md` — a compact engine bootstrap cache so the engine never re-reads brand.md, lore-engine.md, or step-definitions.md on resume:
     ```bash
     cat > .kiln/resume.md << 'RESUME'
     # Engine Resume Cache

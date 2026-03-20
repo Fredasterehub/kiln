@@ -15,7 +15,7 @@ Orchestrate the full Kiln software creation pipeline. This skill is the conducto
 
 ## Prerequisites
 
-Environment setup (codex check, git init, working directory verification) is Alpha's responsibility in Step 1. The engine does NOT perform these checks — it spawns Alpha and hands off. Alpha handles working directory selection in Step 1 Phase 2.
+Environment scaffolding (git init, .kiln/ structure, hook-gated seed files) runs in the engine between the ignition banner and alpha's spawn. Alpha handles the conversation: working directory, project name, description, preferences.
 
 **Codex CLI canonical invocation** (all agents that call Codex must use this exact pattern):
 ```
@@ -144,10 +144,26 @@ Then update STATE.md with the current version so the warning doesn't repeat. Con
 On fresh run (no `.kiln/STATE.md`), before step 1:
 1. ONE turn: Read `.kiln/STATE.md` (check existence — if missing, fresh run confirmed) + Read `lore.json` (select ignition quote) — parallel batch.
 2. Immediately output ignition banner — this is the operator's FIRST visible output.
-3. ONE turn: Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/blueprints/step-1-onboarding.md` + write spinner verbs to `settings.local.json` — parallel batch.
+3. ONE turn — scaffolding + blueprint read (parallel batch):
+   - Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/blueprints/step-1-onboarding.md`
+   - Write spinner verbs to `settings.local.json`
+   - Run scaffolding via Bash:
+     ```bash
+     # Git init (unconditional — Codex CLI requires a git repo)
+     if [ ! -d .git ]; then git init && git add -A && git commit -m "kiln: project initialized"; fi
+     # .kiln/ directory structure
+     mkdir -p .kiln/docs .kiln/docs/research .kiln/plans .kiln/archive .kiln/archive/step-3-research .kiln/archive/step-4-architecture .kiln/archive/step-5-build .kiln/archive/step-6-validate .kiln/validation .kiln/tmp .kiln/design
+     # Seed hook-gated files (PreToolUse hooks block dispatches until line 1 is <!-- status: complete -->)
+     echo '<!-- status: writing -->' > .kiln/docs/architecture.md
+     echo '<!-- status: writing -->' > .kiln/docs/codebase-state.md
+     echo '<!-- status: writing -->' > .kiln/docs/patterns.md
+     # Codex pre-flight (mode check, not blocker)
+     timeout 15 codex exec --sandbox danger-full-access "echo kiln-preflight-ok" 2>/dev/null && echo "codex:true" || echo "codex:false"
+     ```
+   - Capture codex result for STATE.md later (codex:true → codex_available: true)
 4. Create team, spawn Phase A (mnemosyne), wait for READY, spawn Phase B (alpha, foreground) + operator greeting.
 
-Budget: 3 turns max. Operator sees banner first, then Alpha.
+Budget: 3 turns max. Operator sees banner first, scaffolding is invisible, then Alpha.
 
 On resume (`.kiln/STATE.md` exists with stage != complete):
 1. ONE turn: Read `.kiln/STATE.md` + `.kiln/resume.md` + `lore.json` — parallel batch.
@@ -342,7 +358,7 @@ The engine waits for the boss's completion signal. Messages from the team arrive
 Based on the boss's done signal, determine next action:
 
 **Step 1 done** -> validate onboarding artifacts BEFORE shutdown (Alpha is still alive):
-  1. Read `.kiln/STATE.md` via Bash: verify `## Flags` section exists and contains `codex_available`
+  1. Read `.kiln/STATE.md` via Bash: verify `## Flags` section exists and contains `codex_available` AND `arch_review`
   2. Verify `.kiln/resume.md` exists
   If validation fails: send error to Alpha describing what is missing, wait for Alpha to fix and re-signal ONBOARDING_COMPLETE. Do NOT shut down the team yet.
   If validation passes: proceed to shutdown and transition to step 2.
