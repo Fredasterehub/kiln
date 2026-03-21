@@ -1,6 +1,18 @@
 {
   "description": "Kiln pipeline enforcement hooks — delegation, sequencing, flags, safety",
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/check-cache.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Write|Edit|Bash|SendMessage|Read|Agent",
