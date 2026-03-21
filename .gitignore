@@ -8,6 +8,7 @@ __pycache__/
 
 # Dev notes and working artifacts
 TWEAKS.md
+pipeline/
 tracks/
 prompts/
 plugins/kiln/prompts/
