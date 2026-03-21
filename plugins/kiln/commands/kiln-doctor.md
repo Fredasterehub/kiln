@@ -13,6 +13,14 @@ Run diagnostics to verify the Kiln pipeline is ready to fire.
 
 Run all checks and present results as a checklist:
 
+### 0. Plugin Version
+
+```bash
+cat ${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json | grep version
+```
+- Display the installed version
+- Format: `[INFO] Kiln version: {version}`
+
 ### 1. Codex CLI
 
 ```bash
@@ -65,6 +73,7 @@ Present results as:
 ```
 Kiln Doctor Report
 ==================
+[INFO] Kiln version: 0.97.4
 [PASS] Codex CLI: codex-cli found on PATH
 [PASS] GPT-5.4: Model accessible
 [PASS] Agent files: 41/41 present
