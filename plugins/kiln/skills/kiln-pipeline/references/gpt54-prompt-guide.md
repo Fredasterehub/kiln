@@ -64,3 +64,4 @@ Describe what you need, not how to type it.
 2. **## Context is curated, not dumped.** Include interfaces GPT-5.4 must match. Exclude full files it will read from disk anyway.
 3. **Every section earns its tokens.** If GPT-5.4 can discover it from AGENTS.md or the codebase, don't repeat it.
 4. **Fix prompts follow the same skeleton.** Even a 1-file fix gets Commands, Architecture (brief), Context (the broken code), Task (what's wrong and what "fixed" looks like), Acceptance Criteria.
+5. **Self-contained prompts.** The prompt must be self-contained — GPT-5.4 cannot see conversation history or agent context. Everything it needs goes in the prompt.

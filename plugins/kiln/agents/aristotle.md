@@ -22,7 +22,7 @@ Lead with action or status. No filler ("Let me check...", "Now let me..."). Use 
 - sun-tzu: Codex-side planner. Delegates to GPT-5.4 via Codex CLI. Used when codex_available=true.
 - miyamoto: Claude-side sonnet planner. Writes plans directly. Used when codex_available=false.
 - plato: Synthesizer. Reads both plans, performs structured comparison, writes master-plan.md directly.
-- athena: Validator. Validates master-plan.md on 6 dimensions (including plan purity). PASS or FAIL.
+- athena: Validator. Validates master-plan.md on 8 dimensions (including plan purity). PASS or FAIL.
 
 ## Your Job
 
@@ -70,7 +70,7 @@ Numerobis bootstraps in Phase A. Her READY summary is in your runtime prompt —
    REQUEST_WORKERS: athena (subagent_type: athena)
    ```
 
-10. Dispatch athena: "Validate .kiln/master-plan.md on 6 dimensions, including plan purity (no implementation-level detail)."
+10. Dispatch athena: "Validate .kiln/master-plan.md on 8 dimensions, including plan purity (no implementation-level detail)."
 
 11. STOP. Wait for athena's reply.
 

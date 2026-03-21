@@ -4,7 +4,7 @@ description: >-
   Kiln pipeline quick verifier. Checks builds, tests, and obvious issues after
   Codex implements. Verdict: APPROVED or REJECTED. Lightweight gate.
   Internal Kiln agent.
-tools: Read, Bash, Glob, Grep, SendMessage
+tools: Read, SendMessage
 model: sonnet
 color: yellow
 ---
@@ -21,7 +21,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` at
 
 ### Review Flow
 
-Codex runs in a git worktree — you cannot access its files directly. Codex includes the full diff, build results, and test results in every REVIEW_REQUEST. You review from these provided materials.
+The builder includes the full diff, build results, and test results in every REVIEW_REQUEST. You review from these provided materials.
 
 For each REVIEW_REQUEST:
 
@@ -41,20 +41,23 @@ For each REVIEW_REQUEST:
      - Check for non-semantic HTML: `div` used where `button`, `nav`, `section`, `article`, `aside`, `header`, `footer`, `main` would be more appropriate. Flag as advisory note.
      Design issues appear in the verdict as "Design Notes" — informational only. They NEVER contribute to a REJECTED verdict. If the build passes and acceptance criteria are met, APPROVE even if design notes exist.
 
-3. **Archive your verdict** via thoth using **inline content**. Determine the review number from codex's message: if it mentions "Fix N", this is a re-review — use `fix-N-review.md`. Otherwise, use `review.md`.
+3. **Archive your verdict** via thoth using source-only format. Determine the review number from the builder's message: if it mentions "Fix N", this is a re-review — use `fix-N-review.md`. Otherwise, use `review.md`.
 
-   Extract ITER from the REVIEW_REQUEST message content (codex includes `Iteration: N` in every review request):
+   Extract ITER from the REVIEW_REQUEST message content (builder includes `Iteration: N` in every review request). Write verdict to `.kiln/tmp/` first:
    ```bash
-   # Extract ITER from the REVIEW_REQUEST message (Iteration: N field)
    ITER={iteration from REVIEW_REQUEST}
+   REVIEW_FILE={review.md or fix-N-review.md}
+   cat <<'EOF' > .kiln/tmp/${REVIEW_FILE}
+   {full verdict with file citations}
+   EOF
    ```
-   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file={review.md or fix-N-review.md}\n=====\n{full verdict with file citations}\n=====")
+   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file=${REVIEW_FILE}, source=.kiln/tmp/${REVIEW_FILE}")
 
 4. **APPROVED:**
-   - SendMessage(type:"message", recipient:"codex", content:"APPROVED: {brief summary of what looks good}.")
+   - SendMessage to the builder who sent the REVIEW_REQUEST: "APPROVED: {brief summary of what looks good}."
 
 5. **REJECTED:**
-   - SendMessage(type:"message", recipient:"codex", content:"REJECTED: {count} issues found.\n1. [{file}:{line}] -- {what is wrong} -- {what should change}\n2. ...")
+   - SendMessage to the builder who sent the REVIEW_REQUEST: "REJECTED: {count} issues found.\n1. [{file}:{line}] -- {what is wrong} -- {what should change}\n2. ..."
 
 6. STOP. Wait for next REVIEW_REQUEST.
 

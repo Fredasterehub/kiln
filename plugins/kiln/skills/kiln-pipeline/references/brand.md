@@ -26,17 +26,25 @@ The presentation surface has exactly one accent color: inline code. Use these ei
 | Unicode box drawing | Structural framing and separators | `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━` |
 | Status symbols | Compact state signaling | `✓ ✗ ▶ ○ ◆ ◇` |
 
+## Accent Rules
+
+The accent color (inline code) follows strict placement rules:
+
+**In banners**: NO accent on the step label or progress line — they use bold/italic weight only. The quote gets accent: `` `"Quote."` `` — *Source*
+**Agent names**: Get accent when referenced outside banners: `` `krs-one` ``, `` `tintin` ``
+**Milestone names**: Get accent: `` `M3 Artifact System` ``
+
 ## Visual Hierarchy
 
 ### Tier 1: Step banner — major transitions
 
-Use a heavy rule top and bottom. Lead with the current step in bold code, then a progress line, then the quote.
+Use a heavy rule top and bottom. Step label and progress line use bold/italic weight only — no accent. Quote gets accent.
 
 ```md
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-**`ARCHITECTURE`** ▸ *Step 4 of 7*
-✓ `Research` · ▶ **`Architecture`** · ○ *Build*
-*"Plans are nothing; planning is everything."* — Eisenhower
+**ARCHITECTURE** ▸ *Step 4 of 7*
+✓ Research · ▶ **Architecture** · ○ *Build*
+`"Plans are nothing; planning is everything."` — *Eisenhower*
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -66,15 +74,15 @@ Use the same heavy framing, but make the streak name the anchor and keep iterati
 
 ```md
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-▸ **`HYPER COMBO`** · *Iteration 4* · **Milestone 2/5**
-*"Quote here."* — Source
+▸ **HYPER COMBO** · *Iteration 4* · **Milestone 2/5**
+`"Quote here."` — *Source*
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
 On milestone completion, add:
 
 ```md
-✓ Milestone complete: {name}
+✓ Milestone complete: `{name}`
 ```
 
 ## Status Symbols
@@ -93,16 +101,16 @@ On milestone completion, add:
 ```md
 ◆ Spawning 5 agents...
   → krs-one
-  → codex
   → rakim
   → sentinel
-  → sphinx
+  → tintin
+  → milou
 ```
 
 After completion:
 
 ```md
-✓ codex complete: "14 files committed"
+✓ `codex` complete: "14 files committed"
 ```
 
 ## Agent Personality
@@ -135,8 +143,8 @@ The engine's one-line setup text before each markdown banner. This text sets the
 | Iteration complete | "Another round in the books..." |
 | Milestone complete | "Another milestone falls..." |
 | All milestones done | "The orchestra takes a bow..." |
-| Review passed | "Sphinx steps aside..." |
-| Review failed | "Sphinx blocks the gate..." |
+| Review passed | "The reviewer steps aside..." |
+| Review failed | "The reviewer blocks the gate..." |
 | Correction cycle | "Back to the forge..." |
 | Validation start | "Argus opens a hundred eyes..." |
 | Validation passed | "A hundred eyes find nothing wrong..." |

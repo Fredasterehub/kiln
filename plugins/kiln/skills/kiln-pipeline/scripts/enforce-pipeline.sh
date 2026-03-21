@@ -41,7 +41,7 @@ _find_root() {
 }
 
 _status_ok() {
-  [[ -f "$1" ]] && head -1 "$1" | grep -qE '<!-- status: (complete|active) -->'
+  [[ -f "$1" ]] && head -1 "$1" | grep -qF '<!-- status: complete -->'
 }
 
 # ── Pipeline context gate ────────────────────────────────────
@@ -71,7 +71,7 @@ if [[ -n "$AGENT" ]]; then
     da-vinci|clio|\
     mi6|field-agent|\
     aristotle|numerobis|confucius|sun-tzu|plato|athena|\
-    krs-one|rakim|sentinel|thoth|codex|morty|luke|kaneda|tetsuo|johnny|miyamoto|sphinx|rick|obiwan|\
+    krs-one|rakim|sentinel|thoth|codex|tintin|mario|lucky|athos|porthos|aramis|asterix|tetsuo|daft|miyamoto|sphinx|milou|luigi|luke|obelix|kaneda|punk|\
     picasso|clair|yin|recto|renoir|obscur|yang|verso|\
     zoxea|argus|hephaestus|omega)
       ;; # known Kiln agent — fall through to enforcement
@@ -85,8 +85,8 @@ fi
 # Agents that wrap codex exec must not write files directly.
 # ═══════════════════════════════════════════════════════════════
 
-# Hook 1 — codex: no Write/Edit
-if [[ "$AGENT" == "codex" ]] && [[ "$TOOL" =~ ^(Write|Edit)$ ]]; then
+# Hook 1 — codex-type builders: no Write/Edit
+if [[ "$AGENT" =~ ^(codex|tintin|mario|lucky)$ ]] && [[ "$TOOL" =~ ^(Write|Edit)$ ]]; then
   cat >&2 <<'MSG'
 STOP. You are a codex exec wrapper — you do not write files.
 
@@ -96,7 +96,7 @@ Your workflow:
      .kiln/docs/patterns.md, .kiln/docs/pitfalls.md
   2. Construct prompt: cat <<'EOF' > /tmp/kiln_prompt.md
   3. Invoke: codex exec --sandbox danger-full-access -C "{working_dir}" < /tmp/kiln_prompt.md
-  4. Verify output, run tests, commit, REVIEW_REQUEST to sphinx.
+  4. Verify output, run tests, commit, REVIEW_REQUEST to your paired reviewer.
 MSG
   exit 2
 fi
@@ -127,7 +127,7 @@ fi
 
 # Hook 4 — krs-one: no dispatch to builders/reviewers until rakim+sentinel ready
 if [[ "$AGENT" == "krs-one" ]] && [[ "$TOOL" == "SendMessage" ]] && \
-   [[ "$RECIPIENT" =~ ^(codex|sphinx|morty|rick|luke|obiwan|kaneda|tetsuo|johnny|clair|obscur|yin|yang|recto|verso)$ ]]; then
+   [[ "$RECIPIENT" =~ ^(codex|sphinx|tintin|milou|mario|luigi|lucky|luke|athos|porthos|aramis|asterix|obelix|tetsuo|kaneda|daft|punk|clair|obscur|yin|yang|recto|verso)$ ]]; then
   ROOT=$(_find_root)
   if [[ -n "$ROOT" ]]; then
     if ! _status_ok "$ROOT/.kiln/docs/codebase-state.md" || ! _status_ok "$ROOT/.kiln/docs/patterns.md"; then
@@ -165,11 +165,11 @@ fi
 # Model configured in ~/.codex/config.toml. No extra flags.
 # ═══════════════════════════════════════════════════════════════
 
-if [[ "$AGENT" =~ ^(codex|sun-tzu)$ ]] && [[ "$TOOL" == "Bash" ]]; then
+if [[ "$AGENT" =~ ^(codex|tintin|mario|lucky|sun-tzu)$ ]] && [[ "$TOOL" == "Bash" ]]; then
   if echo "$COMMAND" | grep -q 'codex exec'; then
 
     # Hook 6 — codex: backup sequencing gate (codex exec before bootstrap ready)
-    if [[ "$AGENT" == "codex" ]]; then
+    if [[ "$AGENT" =~ ^(codex|tintin|mario|lucky)$ ]]; then
       ROOT=$(_find_root)
       if [[ -n "$ROOT" ]]; then
         if ! _status_ok "$ROOT/.kiln/docs/codebase-state.md" || ! _status_ok "$ROOT/.kiln/docs/patterns.md"; then
@@ -261,7 +261,7 @@ Your workflow:
   1. Read READY summaries from rakim and sentinel
   2. Scope a focused chunk from master-plan.md
   3. Construct a structured XML assignment
-  4. Dispatch to codex via SendMessage
+  4. Dispatch to your builder pair via SendMessage
   5. Wait for IMPLEMENTATION_COMPLETE
 MSG
   exit 2
@@ -289,15 +289,17 @@ if [[ "$TOOL" == "Agent" ]]; then
       da-vinci|clio|\
       mi6|field-agent|\
       aristotle|numerobis|confucius|sun-tzu|plato|athena|\
-      krs-one|rakim|sentinel|thoth|codex|morty|luke|kaneda|tetsuo|johnny|miyamoto|sphinx|rick|obiwan|\
+      krs-one|rakim|sentinel|thoth|codex|tintin|mario|lucky|athos|porthos|aramis|asterix|tetsuo|daft|miyamoto|sphinx|milou|luigi|luke|obelix|kaneda|punk|\
       picasso|clair|yin|recto|renoir|obscur|yang|verso|\
       zoxea|argus|hephaestus|omega)
         ;; # allowed
       *)
         cat >&2 <<'MSG'
 Only named Kiln agents can be spawned. Use agent types from the blueprint roster:
-  Structural builders: codex, morty, luke, kaneda, tetsuo, johnny
-  Structural reviewers: sphinx, rick, obiwan
+  Codex-type builders: codex, tintin, mario, lucky
+  Sonnet-type builders: athos, porthos, aramis
+  Opus-type builders: asterix, tetsuo, daft
+  Structural reviewers: milou, luigi, luke, obelix, kaneda, punk, sphinx
   UI builders: clair, yin, recto (picasso protocol)
   UI reviewers: obscur, yang, verso (renoir protocol)
 MSG

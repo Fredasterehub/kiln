@@ -31,6 +31,37 @@ Together they create atmosphere and momentum. The engine text primes the reader;
 - The engine text is the only prose the engine writes around a transition. No additional narration before or after the banner.
 - If the engine writes it, the banner does not repeat it. One channel owns each piece of information.
 
+## Engine Banners
+
+Three banner types rendered directly by the engine using quotes from `lore.json`. These use the simplified `**KILN** ►` format. Mid-pipeline step transitions use the richer format below.
+
+**Ignition** (fresh run, `lore.json` key `ignition`):
+```
+`"{random quote}"`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**KILN** ► Ignition — Alpha starting
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`↳ use` ***shift+↓*** `to switch to Alpha's session`
+```
+
+**Resume** (`lore.json` key `resume`):
+```
+`"{random quote}"`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**KILN** ► Resuming — `{stage}` · {context from STATE.md}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`↳ spawning team...`
+```
+
+**Complete** (`lore.json` key `project_complete`):
+```
+`"{random quote}"`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**KILN** ► Complete — `{project_name}`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`↳ report at .kiln/REPORT.md`
+```
+
 ## Transition Banners
 
 Every transition has two parts:
@@ -43,9 +74,9 @@ Use this format for step changes:
 
 ```md
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-**`ARCHITECTURE`** ▸ *Step 4 of 7*
-✓ `Research` · ▶ **`Architecture`** · ○ *Build*
-*"Plans are nothing; planning is everything."* — Eisenhower
+**ARCHITECTURE** ▸ *Step 4 of 7*
+✓ Research · ▶ **Architecture** · ○ *Build*
+`"Plans are nothing; planning is everything."` — *Eisenhower*
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -57,9 +88,9 @@ For ignition, output the greeting first, then the standard banner:
 The forge is hot, the agents are caffeinated, and Da Vinci already has opinions.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-**`IGNITION`** ▸ *Step 1 of 7*
-▶ **`Onboarding`** · ○ *Brainstorm* · ○ *Research*
-*"The secret of getting ahead is getting started."* — Mark Twain
+**IGNITION** ▸ *Step 1 of 7*
+▶ **Onboarding** · ○ *Brainstorm* · ○ *Research*
+`"The secret of getting ahead is getting started."` — *Mark Twain*
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -85,15 +116,15 @@ Build iterations use the streak format:
 
 ```md
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-▸ **`HYPER COMBO`** · *Iteration 4* · **Milestone 2/5**
-*"It does not matter how slowly you go as long as you do not stop."* — Confucius
+▸ **HYPER COMBO** · *Iteration 4* · **Milestone 2/5**
+`"It does not matter how slowly you go as long as you do not stop."` — *Confucius*
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
 On milestone completion, add:
 
 ```md
-✓ Milestone complete: {name}
+✓ Milestone complete: `{name}`
 ```
 
 ## Event → Lore Key Mapping
@@ -123,6 +154,20 @@ On milestone completion, add:
 | Pipeline blocked | `halt` | Pipeline Blocked |
 | Session break | `pause` | Session Break |
 
+## Operator Greetings
+
+Engine's last output before going silent on interactive steps. Two lines: character entry + navigation hint.
+
+- **Step 1**
+  Alpha is ready. The beginning of the end.
+  ↳ shift+↓ to meet Alpha and begin preparation of the kiln
+- **Step 2**
+  Da Vinci is ready. The vision begins.
+  ↳ shift+↓ to join Da Vinci for brainstorming
+- **Step 4**
+  Aristotle is ready. The plan awaits your judgment.
+  ↳ shift+↓ to review the architecture with Aristotle
+
 ## Spinner Verbs
 
 Installed silently inside one Bash call per transition. This is invisible plumbing only — never use that call to render banners or other presentation.
@@ -146,16 +191,16 @@ Before spawning a team, output a spawning block:
 ```md
 ◆ Spawning 5 agents...
   → krs-one
-  → codex
   → rakim
   → sentinel
-  → sphinx
+  → tintin
+  → milou
 ```
 
 After an agent completes:
 
 ```md
-✓ codex complete: "14 files committed, tests passing"
+✓ `codex` complete: "14 files committed, tests passing"
 ```
 
 ## Idle Voice

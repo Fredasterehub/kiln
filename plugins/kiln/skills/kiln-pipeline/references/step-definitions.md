@@ -41,21 +41,24 @@ Which agents to spawn per step, spawn order, expected signals, and state transit
 - **State update**: stage → build, milestone_count → N
 - **Validation loop**: athena may FAIL the plan, triggering plato revision only (max 2 rounds). If blocked after 2: "PLAN_BLOCKED".
 - **Operator review**: aristotle presents plan summary, operator approves/edits/aborts.
-- **Notes**: Socrates eliminated — structured comparison merged into plato (opus). Plato writes directly (no Codex CLI). Retry sends to plato only, not planners.
+- **Notes**: Plato writes directly (no Codex CLI). Retry sends to plato only, not planners.
 
 ## Step 5: Build (re-invoked per iteration)
 
 - **Boss**: krs-one (opus)
 - **Persistent minds**: rakim (opus, Phase A — codebase state + AGENTS.md), sentinel (sonnet, Phase A — patterns + pitfalls), thoth (haiku, Phase A — archivist)
-- **Workers**: codex (sonnet, isolation: worktree), sphinx (sonnet) — Phase C, requested by krs-one
-- **Three-phase spawn**: Phase A (rakim + sentinel + thoth bootstrap in parallel, ALL THREE signal READY) → Phase B (krs-one BACKGROUND) → Phase C (1-3 builder+reviewer pairs per request)
+- **Workers**: one builder+reviewer pair per iteration from 4 tiers (3 structural + UI) — Phase C, requested by krs-one:
+  - Codex-type: codex+sphinx, tintin+milou, mario+luigi, lucky+luke
+  - Sonnet-type: athos+milou, porthos+luigi, aramis+luke
+  - Opus-type: asterix+obelix, tetsuo+kaneda, daft+punk
+- **Three-phase spawn**: Phase A (rakim + sentinel + thoth bootstrap in parallel, ALL THREE signal READY) → Phase B (krs-one BACKGROUND) → Phase C (one builder+reviewer pair per request)
 - **Team name**: kill streak name based on build_iteration (see kill-streaks.md)
 - **Signals from KRS-One**:
   - `ITERATION_COMPLETE` — more work needed. Re-invoke with next kill streak name.
   - `MILESTONE_COMPLETE: {name}` — milestone done, deep QA passed. Re-invoke for next milestone.
   - `BUILD_COMPLETE` — all milestones done. Proceed to step 6.
 - **State update**: build_iteration incremented each invocation. On BUILD_COMPLETE: stage → validate.
-- **Notes**: KRS-One has NO Write/Edit tools — he scopes and delegates only. Structured XML assignments define WHAT/WHY, codex/GPT-5.4 decides HOW. Codex runs in git worktree isolation — engine merges the worktree branch after each iteration. Sentinel is sonnet (structured pattern docs + tool compliance).
+- **Notes**: KRS-One has NO Write/Edit tools — he scopes and delegates only. Structured XML assignments define WHAT/WHY, builders decide HOW. 4 tiers (3 structural + UI): codex-type (GPT-5.4 delegation), sonnet-type (direct Write/Edit), opus-type (heavy reasoning), UI (picasso/renoir protocol). Sentinel is sonnet (structured pattern docs + tool compliance).
 
 ## Step 6: Validate
 

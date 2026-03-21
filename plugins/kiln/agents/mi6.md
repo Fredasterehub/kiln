@@ -19,7 +19,7 @@ Lead with action or status. No filler ("Let me check...", "Now let me..."). Use 
 
 Field agents are TEAM MEMBERS, not subagents. You request them via `REQUEST_WORKERS` and communicate via SendMessage. They report back to you via SendMessage.
 
-Agent naming pool: sherlock, watson, poirot, columbo, scully, mulder, bourne, tintin, monk, clouseau, gadget, wick. **Rule: if you spawn a 7th agent, their name must be "bond".**
+Agent naming pool: sherlock, watson, poirot, columbo, scully, mulder, bourne, monk, clouseau, gadget, wick. **Rule: if you spawn a 7th agent, their name must be "bond".**
 
 ## Your Job
 
@@ -85,12 +85,15 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` at
 
 After dispatching assignments, archive them via thoth (fire-and-forget). If dependent topics are held back, send an updated archive message when they are dispatched later:
 
-SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-3-research, file=scout-assignments.md
----
+Write assignments to `.kiln/tmp/scout-assignments.md` first, then archive via thoth:
+```bash
+cat <<'EOF' > .kiln/tmp/scout-assignments.md
 # Research Assignments
 
 {for each agent: codename, topic slug, question, output file, status (dispatched/pending)}
----")
+EOF
+```
+SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-3-research, file=scout-assignments.md, source=.kiln/tmp/scout-assignments.md")
 
 10. STOP. Wait for replies. Track expected reply count.
 
@@ -159,7 +162,11 @@ When all required findings are validated:
     [Questions research could not fully answer -- these carry into architecture]
     ```
 
-4. Archive the board via thoth: SendMessage(type:'message', recipient:'thoth', content:'ARCHIVE: step=step-3-research, file=_synthesis.md\n---\n{board content}\n---')
+4. Archive the board via thoth — copy board to `.kiln/tmp/` first:
+   ```bash
+   cp .kiln/docs/research/_synthesis.md .kiln/tmp/_synthesis.md
+   ```
+   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-3-research, file=_synthesis.md, source=.kiln/tmp/_synthesis.md")
 5. Delete local _synthesis.md
 
 ### Phase 4: Signal Complete

@@ -34,21 +34,30 @@ The pipeline runner invokes this blueprint repeatedly. Each invocation is one te
 
 ## Named Pairs
 
-### Structural Pairs
+### Codex-Type Pairs (codex_available=true)
 
 | Pair | Builder | Reviewer | Builder Type | Reviewer Type |
 |------|---------|----------|--------------|---------------|
 | 1 | codex | sphinx | codex | sphinx |
-| 2 | morty | rick | codex | sphinx |
-| 3 | luke | obiwan | codex | sphinx |
+| 2 | tintin | milou | tintin | milou |
+| 3 | mario | luigi | mario | luigi |
+| 4 | lucky | luke | lucky | luke |
 
-### Claude-Type Structural Pairs (when codex_available=false)
+### Sonnet-Type Pairs (default when codex_available=false)
 
 | Pair | Builder | Reviewer | Builder Type | Reviewer Type |
 |------|---------|----------|--------------|---------------|
-| 1 | kaneda | sphinx | kaneda | sphinx |
-| 2 | tetsuo | rick | tetsuo | sphinx |
-| 3 | johnny | obiwan | johnny | sphinx |
+| 1 | athos | milou | athos | milou |
+| 2 | porthos | luigi | porthos | luigi |
+| 3 | aramis | luke | aramis | luke |
+
+### Opus-Type Pairs (heavy reasoning)
+
+| Pair | Builder | Reviewer | Builder Type | Reviewer Type |
+|------|---------|----------|--------------|---------------|
+| 1 | asterix | obelix | asterix | obelix |
+| 2 | tetsuo | kaneda | tetsuo | kaneda |
+| 3 | daft | punk | daft | punk |
 
 ### UI Pairs
 
@@ -62,20 +71,18 @@ The pipeline runner invokes this blueprint repeatedly. Each invocation is one te
 
 **Phase A**: rakim + sentinel + thoth bootstrap in parallel → rakim reads files + updates state → sentinel reads patterns → thoth ensures archive structure → all signal READY.
 
-**Phase B**: krs-one spawns (BACKGROUND). Receives READY summaries from rakim and sentinel in runtime prompt. Reads master plan, scopes one chunk or up to 3 independent chunks, requests the needed worker pairs.
+**Phase B**: krs-one spawns (BACKGROUND). Receives READY summaries from rakim and sentinel in runtime prompt. Reads master plan, scopes one focused chunk, requests one builder+reviewer pair from the appropriate tier.
 
-**Phase C**: 1-3 builder+reviewer pairs, any mix of structural (subagent_type: codex/sphinx), claude-type structural (subagent_type: kaneda/tetsuo/johnny + sphinx, when codex_available=false), and UI (subagent_type: picasso/renoir). Each builder receives a structured assignment with `reviewer: {paired reviewer name}`. Builders send REVIEW_REQUEST directly to their paired reviewer, reviewers reply directly to builders, and builders report IMPLEMENTATION_COMPLETE or IMPLEMENTATION_BLOCKED back to KRS-One. Sequential remains the default when work is dependent.
+**Phase C**: One builder+reviewer pair per REQUEST_WORKERS. krs-one selects the pair from the appropriate tier: codex-type (codex+sphinx, tintin+milou, mario+luigi, lucky+luke), sonnet-type (athos+milou, porthos+luigi, aramis+luke), opus-type (asterix+obelix, tetsuo+kaneda, daft+punk), or UI (clair+obscur, yin+yang, recto+verso). The builder receives a structured assignment with `reviewer: {paired reviewer name}`. Builders send REVIEW_REQUEST directly to their paired reviewer, reviewers reply directly to builders, and builders report IMPLEMENTATION_COMPLETE or IMPLEMENTATION_BLOCKED back to KRS-One.
 
-Codex spawns with `isolation: "worktree"` — it gets its own git worktree copy of the repo so its file writes don't conflict with persistent minds. The engine handles this natively.
-
-NOTE: `isolation: worktree` is only valid for single-pair sequential codex dispatch. Parallel dispatch (2-3 pairs) must use non-overlapping file scoping. The worktree parameter is silently ignored when `team_name` is set.
+Builders commit directly to the repo. The engine manages isolation.
 
 ## Communication Model
 
 ```
 Rakim    → team-lead      (READY: codebase state summary)
 Sentinel → team-lead      (READY: patterns/pitfalls guidance)
-KRS-One  → team-lead      (REQUEST_WORKERS: 1-3 named builder+reviewer pairs)
+KRS-One  → team-lead      (REQUEST_WORKERS: one named builder+reviewer pair)
 KRS-One  → Builder        (structured XML assignment with packaged context and reviewer name)
 Builder  → Reviewer       (REVIEW_REQUEST after implementing)
 Reviewer → Builder        (APPROVED or REJECTED with issues)

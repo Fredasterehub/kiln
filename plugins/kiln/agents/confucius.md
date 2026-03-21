@@ -30,6 +30,8 @@ When you receive your assignment:
    - .kiln/docs/tech-stack.md (technology choices)
    - .kiln/docs/arch-constraints.md (hard constraints for planning)
    - .kiln/docs/codebase-snapshot.md (if exists — brownfield codebase state)
+   - .kiln/docs/patterns.md (if exists — known patterns to follow)
+   - .kiln/docs/pitfalls.md (if exists — known pitfalls). Incorporate known pitfalls as constraints in your plan — especially initialization order, API compatibility, and framework-specific gotchas.
 
 3. If aristotle mentions validation feedback, read .kiln/plans/plan_validation.md and address every failure.
 

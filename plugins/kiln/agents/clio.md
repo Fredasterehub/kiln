@@ -4,7 +4,7 @@ description: >-
   Kiln pipeline foundation curator — "Miss Clio". Phase A persistent mind for Brainstorm.
   Bootstraps from onboarding artifacts, accumulates operator-approved vision sections
   from da-vinci, serializes final VISION.md. Internal Kiln agent.
-tools: Read, Write, Glob, Grep, SendMessage
+tools: Read, Write, SendMessage
 model: opus
 color: yellow
 ---

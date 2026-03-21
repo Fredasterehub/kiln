@@ -40,10 +40,17 @@ Bootstrap autonomously on spawn. Do NOT wait for a message from krs-one.
    Bootstrapping — patterns not yet populated.
    EOF
    ```
-   Do NOT write `<!-- status: writing -->` — go straight to `complete` with a skeleton.
-2. Read your owned files. If patterns.md or pitfalls.md are empty or sparse, populate with initial structure and any patterns inferred from the project.
-3. Read .kiln/docs/tech-stack.md for technology context.
-4. Write the complete patterns.md file. **The FIRST LINE must be exactly `<!-- status: complete -->`** — no leading whitespace, no variation. Full file structure:
+   Do NOT write `<!-- status: writing -->` — go straight to `complete` with a skeleton. Only two valid status markers: `complete` and `writing`. Never use `active`, `done`, `ready`, or any other value.
+
+2. **Incremental bootstrap check** — determine if you can skip a full scan:
+   - Check: does `.kiln/handoff.md` exist?
+   - Check: is `head_sha` in handoff.md a valid ancestor of current HEAD? (`git merge-base --is-ancestor {head_sha} HEAD`)
+   - Check: is the diff since that sha small (≤100 changed files)? (`git diff --stat {head_sha} HEAD | tail -1`)
+   If all three pass: incremental bootstrap — read handoff.md, update only patterns/pitfalls relevant to the delta. Otherwise: full bootstrap (continue to step 3).
+
+3. Read your owned files. If patterns.md or pitfalls.md are empty or sparse, populate with initial structure and any patterns inferred from the project.
+4. Read .kiln/docs/tech-stack.md for technology context.
+5. Write the complete patterns.md file. **The FIRST LINE must be exactly `<!-- status: complete -->`** — no leading whitespace, no variation. Full file structure:
    ```
    <!-- status: complete -->
    # Patterns & Quality Guide
@@ -64,12 +71,12 @@ Bootstrap autonomously on spawn. Do NOT wait for a message from krs-one.
 
    **Line 1 is the gate.** Everything below it is the content. Do not omit, reorder, or indent line 1.
 
-5. Signal READY to team-lead:
+6. Signal READY to team-lead (compact format, ≤1KB):
    ```
-   READY: patterns.md updated ({N} patterns, {M} pitfalls). Key guidance: {top patterns and pitfalls relevant to current milestone}.
+   READY: {full|incremental}. {N} patterns, {M} pitfalls. Key: {top patterns/pitfalls for current milestone}. Gaps: {any AC without test coverage}.
    ```
 
-6. Enter guardian mode.
+7. Enter guardian mode.
 
 ### Guardian Mode
 
@@ -82,7 +89,7 @@ Codex or other agents may message you with questions about patterns or quality:
 ### Iteration Update
 
 When krs-one sends ITERATION_UPDATE:
-1. Read what codex implemented.
+1. Read what the builder implemented.
 2. Scan the newly created/modified files if needed (use Read, Glob, Grep).
 3. Cross-check: read the current milestone's acceptance criteria from `.kiln/master-plan.md` and verify every AC has a corresponding test in the test file. Flag any untested ACs in your reply to krs-one.
 4. Update patterns.md with any new patterns discovered:

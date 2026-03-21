@@ -4,7 +4,7 @@ description: >-
   Kiln pipeline plan synthesizer. Reads both competing plans, performs structured
   comparison (agreements, conflicts, trade-offs), then synthesizes master-plan.md.
   Writes directly — no CLI delegation. Internal Kiln agent.
-tools: Read, Write, Glob, Grep, SendMessage
+tools: Read, Write, SendMessage
 model: opus
 color: blue
 ---
@@ -110,11 +110,13 @@ SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-4-arc
 If codex plan is absent and `.kiln/plans/miyamoto_plan.md` exists, archive miyamoto plan:
 SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-4-architecture, file=miyamoto-plan.md, source=.kiln/plans/miyamoto_plan.md")
 
-Also write your structured comparison to thoth:
-SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-4-architecture, file=debate-resolution.md
----
+Also write your structured comparison to `.kiln/tmp/` first, then archive via thoth:
+```bash
+cat <<'EOF' > .kiln/tmp/debate-resolution.md
 {your structured comparison: agreements, conflicts, resolutions}
----")
+EOF
+```
+SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-4-architecture, file=debate-resolution.md, source=.kiln/tmp/debate-resolution.md")
 
 ### 5. Signal Complete
 

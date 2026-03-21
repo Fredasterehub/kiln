@@ -6,7 +6,7 @@
 #
 # Flagged violations:
 #   - Any pipeline agent writing to system config paths (.codex/, .claude/settings)
-#   - Delegation agents (codex, morty, luke, sun-tzu) writing outside /tmp/
+#   - Delegation agents (codex, tintin, mario, lucky, sun-tzu) writing outside /tmp/
 #   - krs-one writing source code (anything outside .kiln/)
 #
 # Never flagged:
@@ -55,7 +55,7 @@ case "$AGENT" in
   da-vinci|clio|\
   mi6|field-agent|\
   aristotle|numerobis|confucius|sun-tzu|plato|athena|\
-  krs-one|rakim|sentinel|thoth|codex|morty|luke|kaneda|tetsuo|johnny|miyamoto|sphinx|rick|obiwan|\
+  krs-one|rakim|sentinel|thoth|codex|tintin|mario|lucky|athos|porthos|aramis|asterix|tetsuo|daft|miyamoto|sphinx|milou|luigi|luke|obelix|kaneda|punk|\
   picasso|clair|yin|recto|renoir|obscur|yang|verso|\
   zoxea|argus|hephaestus|omega)
     ;; # known Kiln agent — fall through to audit
@@ -109,9 +109,9 @@ if echo "$COMMAND" | grep -qE '(\.codex/|\.claude/settings|\.claude/projects/)';
   exit 0
 fi
 
-# Check 2 — Delegation agents (codex wrappers + sun-tzu) writing outside /tmp/
+# Check 2 — Delegation agents (codex-type wrappers + sun-tzu) writing outside /tmp/
 # Intended workflow: stage prompts in /tmp/, then run codex exec. Direct writes bypass hook 1.
-if [[ "$AGENT" =~ ^(codex|morty|luke|sun-tzu)$ ]]; then
+if [[ "$AGENT" =~ ^(codex|tintin|mario|lucky|sun-tzu)$ ]]; then
   # codex exec itself is the intended delegation path — always allowed
   if echo "$COMMAND" | grep -qE 'codex exec'; then
     exit 0

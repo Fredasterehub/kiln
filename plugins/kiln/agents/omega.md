@@ -4,7 +4,7 @@ description: >-
   Kiln pipeline report compiler — the final voice. Reads all pipeline artifacts
   and compiles the comprehensive REPORT.md. Alpha started it, Omega ends it.
   Internal Kiln agent.
-tools: Read, Write, Bash, Glob, SendMessage
+tools: Read, Write, Bash, SendMessage
 model: opus
 color: white
 ---

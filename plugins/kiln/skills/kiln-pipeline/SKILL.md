@@ -4,7 +4,7 @@ description: >-
   Kiln multi-modal software creation pipeline. Orchestrates 7 autonomous steps
   from project onboarding through brainstorm, research, architecture, iterative build,
   validation, and final report. Use when the user invokes /kiln-fire.
-version: 0.98.0
+version: 0.98.1
 user_invocable: false
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent, TeamCreate, TeamDelete, TaskCreate, TaskGet, TaskUpdate, TaskList, SendMessage
 ---
@@ -62,42 +62,9 @@ All lore data lives in `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/data/`:
 - `spinner-verbs.json` — step-categorized spinner verbs (8 categories, 64 verbs)
 - `agents.json` — agent aliases and personality quotes
 
-## Engine Banners
+## Engine Banners and Step Transitions
 
-Three banner types rendered directly by the engine using quotes from `lore.json`. These banners use the simplified `**KILN** ►` format. Mid-pipeline step transitions use the richer format defined in `lore-engine.md` and `brand.md`.
-
-**Ignition** (fresh run, select a random quote from `lore.json` key `ignition`):
-```
-`"{random quote}"`
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-**KILN** ► Ignition — Alpha starting
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-`↳ use` ***shift+↓*** `to switch to Alpha's session`
-```
-
-**Resume** (select a random quote from `lore.json` key `resume`):
-
-Format:
-```
-`"{random quote}"`
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-**KILN** ► Resuming — `{stage}` · {context from STATE.md}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-`↳ spawning team...`
-```
-
-**Complete** (select a random quote from `lore.json` key `project_complete`):
-```
-`"{random quote}"`
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-**KILN** ► Complete — `{project_name}`
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-`↳ report at .kiln/REPORT.md`
-```
-
-## Step Transitions
-
-See `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/lore-engine.md` for the complete event-to-lore-key mapping table (including the `pause` event). The engine renders the appropriate banner at each transition event using quotes from `lore.json`.
+Banner formats (ignition, resume, complete) and the full event-to-lore-key mapping table live in `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/lore-engine.md`. Read it once at pipeline start.
 
 ## State Detection and Auto-Resume
 
@@ -141,26 +108,7 @@ If not, run `/plugin update` to get the latest version.
 ```
 Then update STATE.md with the current version so the warning doesn't repeat. Continue the pipeline — do not halt.
 
-**Cache health check (both fresh run and resume):**
-After the version check (or at pipeline start for fresh runs), detect stale plugin cache:
-```bash
-SOURCE_VERSION=$(cat ${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json | grep -o '"version": "[^"]*"' | grep -o '[0-9.]*')
-CACHE_DIR="$HOME/.claude/plugins/cache/kiln/kiln/${SOURCE_VERSION}"
-if [[ ! -d "$CACHE_DIR" ]]; then
-  CACHED_VERSION=$(ls "$HOME/.claude/plugins/cache/kiln/kiln/" 2>/dev/null | head -1)
-  if [[ -n "$CACHED_VERSION" && "$CACHED_VERSION" != "$SOURCE_VERSION" ]]; then
-    rm -rf "$HOME/.claude/plugins/cache/kiln/"
-    echo "STALE_CLEARED:${CACHED_VERSION}:${SOURCE_VERSION}"
-  fi
-fi
-```
-If the cache was stale and cleared, emit a warning to the operator:
-```
-⚠️ STALE PLUGIN CACHE CLEARED
-Cached: v{CACHED_VERSION} | Expected: v{SOURCE_VERSION}
-Run `plugin update kiln` and restart Claude Code to get v{SOURCE_VERSION}.
-```
-Continue the pipeline — the current session still works with the files already loaded. This check runs in the same Bash batch as scaffolding (fresh run) or spinner install (resume) to avoid extra turns.
+**Cache health check**: Handled automatically by `check-cache.sh` SessionStart hook. No engine action needed.
 
 On fresh run (no `.kiln/STATE.md`), before step 1:
 1. ONE turn: Read `.kiln/STATE.md` (check existence — if missing, fresh run confirmed) + Read `lore.json` (select ignition quote) — parallel batch.
@@ -247,42 +195,43 @@ The agent's `.md` file (loaded via `subagent_type`) already contains its full ro
 
 #### Phase C: Workers
 
-When the boss sends `REQUEST_WORKERS`, validate then spawn each worker on the same team (`run_in_background: true`). Each worker gets a lean runtime prompt: team name, working dir, team-protocol.md path, "wait for assignment from {boss}."
+When the boss sends `REQUEST_WORKERS`, validate then spawn each worker on the same team (`run_in_background: true`). Each worker gets a lean runtime prompt including their dynamic name and paired partner:
 
 ```
-REQUEST_WORKERS: {name} (subagent_type: {type}), {name} (subagent_type: {type}, isolation: worktree)
+REQUEST_WORKERS: {name} (subagent_type: {type}), {name} (subagent_type: {type})
 ```
+
+Names are free-form (krs-one picks from a famous duo pool). The `subagent_type` maps to the canonical agent `.md` file.
 
 **Build-Step Worker Validation (Step 5 only):**
 
-When the current stage is `build`, validate every REQUEST_WORKERS payload before spawning. Workers must be requested as complete builder+reviewer pairs from this roster:
+When the current stage is `build`, validate every REQUEST_WORKERS payload before spawning. Check `subagent_type` pairs against this table:
 
-| Builder | Builder Type | Reviewer | Reviewer Type | Category |
-|---------|-------------|----------|---------------|----------|
-| codex | codex | sphinx | sphinx | Structural |
-| morty | codex | rick | sphinx | Structural |
-| luke | codex | obiwan | sphinx | Structural |
-| kaneda | kaneda | sphinx | sphinx | Claude-type structural |
-| tetsuo | tetsuo | rick | sphinx | Claude-type structural |
-| johnny | johnny | obiwan | sphinx | Claude-type structural |
-| clair | picasso | obscur | renoir | UI |
-| yin | picasso | yang | renoir | UI |
-| recto | picasso | verso | renoir | UI |
+| Builder Type | Reviewer Type | Tier |
+|-------------|---------------|------|
+| codex | sphinx | Codex |
+| kaneda | tetsuo | Sonnet |
+| daft | punk | Opus |
+| clair | obscur | UI |
 
 Validation rules:
-1. Each builder in the request must appear with its paired reviewer from this table
-2. Each requested (name, subagent_type) must match exactly — no cross-pairing (e.g. codex+rick is invalid)
-3. The request must contain 1-3 complete pairs (no odd numbers, no reviewer-only)
+1. Each `subagent_type` must be a legal builder or reviewer type from the table above
+2. Builder and reviewer must be from the same tier (e.g. codex+punk is invalid)
+3. The request must contain exactly 1 builder + 1 reviewer
 4. Generic types (`code`, `agent`, `worker`, etc.) are NEVER valid for build step
-5. Worktree isolation rule: `isolation: worktree` is only valid for a REQUEST_WORKERS containing exactly one codex-type pair. If the request contains 2+ pairs, do NOT apply `isolation: worktree` to any of them — the parameter is silently ignored when `team_name` is set. For multi-pair requests, spawn all builders without isolation.
+5. Names are free-form — do NOT validate the `name` parameter, only `subagent_type`
 
 If validation fails, do NOT spawn. Send an error to the boss:
 
 ```
-SendMessage(type: "message", recipient: "{boss_name}", content: "WORKERS_REJECTED: {reason}. Build step requires named builder+reviewer pairs. Use format: REQUEST_WORKERS: {builder} (subagent_type: {builder_type}), {reviewer} (subagent_type: {reviewer_type}). Legal pairs: codex+sphinx, morty+rick, luke+obiwan, kaneda+sphinx, tetsuo+rick, johnny+obiwan (structural); clair+obscur, yin+yang, recto+verso (UI).")
+SendMessage(type: "message", recipient: "{boss_name}", content: "WORKERS_REJECTED: {reason}. Build step requires a builder+reviewer pair from the same tier. Legal pairs (by subagent_type): codex+sphinx (Codex), kaneda+tetsuo (Sonnet), daft+punk (Opus), clair+obscur (UI). Format: REQUEST_WORKERS: {name} (subagent_type: {builder_type}), {name} (subagent_type: {reviewer_type}).")
 ```
 
-Only proceed to spawning once the full request passes all four rules.
+Only proceed to spawning once the full request passes all five rules.
+
+**Identity injection for build-step workers:** The engine knows both names from the REQUEST_WORKERS line. Inject identity into each worker's runtime prompt:
+- Builder: `Your name on this team is "{builder_name}". Your paired reviewer is "{reviewer_name}".`
+- Reviewer: `Your name on this team is "{reviewer_name}". Your paired builder is "{builder_name}".`
 
 The boss dispatches assignments via SendMessage after workers are spawned.
 
@@ -308,7 +257,6 @@ Agent(
   subagent_type: "{agent_name}",  # matches the .md file in agents/
   prompt: "<lean runtime prompt>",
   run_in_background: true/false,  # see Engine Modes
-  isolation: "worktree"           # OPTIONAL — only when blueprint/REQUEST_WORKERS specifies it
 )
 ```
 
@@ -324,19 +272,7 @@ Engine behavior during three-phase transitions depends on step type:
 
 **Interactive (Steps 1, 2, 4):** Banner → spawning indicator → spawn boss in foreground → operator greeting → silent handoff. No progress beats. The boss IS the operator's interface — engine goes quiet until the boss signals done.
 
-**Operator greeting**
-
-This is the engine's LAST output before going silent. Two lines: character entry + navigation hint.
-
-- **Step 1**
-  Alpha is ready. The beginning of the end.
-  ↳ shift+↓ to meet Alpha and begin preparation of the kiln
-- **Step 2**
-  Da Vinci is ready. The vision begins.
-  ↳ shift+↓ to join Da Vinci for brainstorming
-- **Step 4**
-  Aristotle is ready. The plan awaits your judgment.
-  ↳ shift+↓ to review the architecture with Aristotle
+**Operator greeting**: Engine's last output before going silent. Greeting text lives in `lore-engine.md`.
 
 **Background (Steps 3, 5, 6, 7):** Banner → progress beats at each phase transition → idle voice during wait. Progress beats are one line per event with real information from READY signals:
 
@@ -344,8 +280,8 @@ This is the engine's LAST output before going silent. Two lines: character entry
 ◆ rakim bootstrapping...
 ✓ rakim ready — M2 in progress, 3/5 deliverables done. Key: src/components/LinkCard.tsx
 ◆ KRS-One entering — iteration 4, milestone M2...
-✓ KRS-One: requesting codex, sphinx
-◆ Spawning codex, sphinx...
+✓ KRS-One: requesting bonnie+clyde (daft+punk)
+◆ Spawning bonnie, clyde...
 ```
 
 Progress beats surface real information from READY signals and state. The operator should learn something from each line — what milestone, how far along, which agents. Never output template variables or generic status.
@@ -354,12 +290,7 @@ Progress beats surface real information from READY signals and state. The operat
 
 The engine waits for the boss's completion signal. Messages from the team arrive automatically. Do not read files, create tasks, or intervene.
 
-**INTERACTIVE steps (Steps 1, 2, 4) — HANDS OFF.** The boss is talking to the human operator. The operator may take 5 minutes, 30 minutes, or an hour to respond — this is normal. During INTERACTIVE steps:
-- **NEVER** nudge, re-spawn, or replace the boss
-- **NEVER** take over the interview or do the boss's work yourself
-- **NEVER** assume the boss is stuck — the human is thinking
-- **NEVER** spawn duplicate agents to "fix" a perceived problem
-- Just wait. Silently. Indefinitely. The boss will signal done when the human is finished.
+**INTERACTIVE steps (Steps 1, 2, 4) — HANDS OFF.** The boss talks to the human. Wait silently and indefinitely — never nudge, re-spawn, take over, or assume the boss is stuck.
 
 **Non-interactive steps (Steps 3, 5, 6, 7)**: if an agent seems stuck (no activity for 5+ minutes), send ONE nudge via SendMessage. If still stuck after another 5 minutes, send one more. Never re-spawn or take over.
 
@@ -390,14 +321,13 @@ Based on the boss's done signal, determine next action:
 **Step 4 done** (ARCHITECTURE_COMPLETE) -> proceed to step 5
 **Step 4 blocked** (PLAN_BLOCKED) -> render `halt` banner, inform operator, stop pipeline
 **Step 5 signals**:
-  - ITERATION_COMPLETE -> worktree merge (step 3b below), render `phase_complete` banner, re-invoke step 5 with next kill streak name
-  - MILESTONE_COMPLETE -> worktree merge (step 3b below), render `milestone_complete` banner with celebration line, re-invoke step 5
-  - BUILD_COMPLETE -> worktree merge (step 3b below), render `phases_complete` banner, proceed to step 6
-  **Step 5 worktree merge (step 3b)**: After TeamDelete, check if the signal contained `worktree_branch={branch}`. If branch is present and not "none": run `git merge {branch} --no-edit`. If merge conflicts: inform operator, stop pipeline. If no worktree branch or branch is "none": skip. Only proceed to render transition + create next team after merge completes or was skipped.
+  - ITERATION_COMPLETE -> render `phase_complete` banner, re-invoke step 5 with next kill streak name
+  - MILESTONE_COMPLETE -> render `milestone_complete` banner with celebration line, re-invoke step 5
+  - BUILD_COMPLETE -> render `phases_complete` banner, proceed to step 6
 **Step 6 signals**:
   - VALIDATE_PASS -> render `validation_passed` banner, proceed to step 7
   - VALIDATE_FAILED -> render `validation_failed` banner, check correction_cycle:
-    - If < 3: render `correction_start` banner, increment correction_cycle in STATE.md, loop back to step 5. Correction dispatch follows the same structure as a normal Build iteration — KRS-One bootstraps persistent minds, reads the correction report at `.kiln/validation/report.md`, scopes a targeted fix, dispatches to codex. Do NOT inline the correction tasks or give KRS-One a vague "execute this." He scopes and delegates like any other iteration.
+    - If < 3: render `correction_start` banner, increment correction_cycle in STATE.md, loop back to step 5. Correction dispatch follows the same structure as a normal Build iteration — KRS-One bootstraps persistent minds, reads the correction report at `.kiln/validation/report.md`, scopes a targeted fix, dispatches to a builder. Do NOT inline the correction tasks or give KRS-One a vague "execute this." He scopes and delegates like any other iteration.
     - If >= 3: render `halt` banner, escalate to operator, stop pipeline
 **Step 7 done** (REPORT_COMPLETE) -> render `project_complete` banner, pipeline complete
 
@@ -461,10 +391,6 @@ Use the exact signal names from `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/refe
 ## Build Loop — Kill Streak Names
 
 Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/kill-streaks.md` for Build step team naming (required at every Build step entry). The kill streak announcement is rendered as part of step 2 (Render Transition and Create Team) — bold orange banner with the streak name in ALL CAPS.
-
-## Worktree Merge (Step 5 only)
-
-When codex returns from a worktree-isolated run with changes, merge its branch back before the next iteration: `git merge {worktree_branch} --no-edit`. If conflicts, inform the operator and stop.
 
 ## Artifact Verification
 

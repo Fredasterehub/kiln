@@ -38,17 +38,23 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` at
    Bootstrapping — state not yet populated.
    EOF
    ```
-   Do NOT write `<!-- status: writing -->` — go straight to `complete` with a skeleton.
+   Do NOT write `<!-- status: writing -->` — go straight to `complete` with a skeleton. Only two valid status markers: `complete` and `writing`. Never use `active`, `done`, `ready`, or any other value.
 
-2. Read your owned files (skip silently if missing):
+2. **Incremental bootstrap check** — determine if you can skip a full scan:
+   - Check: does `.kiln/handoff.md` exist?
+   - Check: is `head_sha` in handoff.md a valid ancestor of current HEAD? (`git merge-base --is-ancestor {head_sha} HEAD`)
+   - Check: is the diff since that sha small (≤100 changed files)? (`git diff --stat {head_sha} HEAD | tail -1`)
+   If all three pass: incremental bootstrap — read handoff.md, apply only the delta. Otherwise: full bootstrap (continue to step 3).
+
+3. Read your owned files (skip silently if missing):
    - .kiln/docs/codebase-state.md
    - .kiln/docs/architecture.md, .kiln/docs/tech-stack.md, .kiln/docs/arch-constraints.md
    - .kiln/docs/decisions.md
    - .kiln/master-plan.md
 
-3. If codebase-state.md is sparse or missing, scan the project with Glob/Grep to build it.
+4. If codebase-state.md is sparse or missing, scan the project with Glob/Grep to build it.
 
-4. Write/update codebase-state.md. **The FIRST LINE must be exactly `<!-- status: complete -->`** — no leading whitespace, no variation. The full file structure:
+5. Write/update codebase-state.md. **The FIRST LINE must be exactly `<!-- status: complete -->`** — no leading whitespace, no variation. The full file structure:
    ```
    <!-- status: complete -->
    # Codebase State
@@ -67,7 +73,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` at
 
    **Line 1 is the gate.** Everything below it is the content. Do not omit, reorder, or indent line 1.
 
-5. Write/update {working_dir}/AGENTS.md (≤16 KiB):
+6. Write/update {working_dir}/AGENTS.md (≤16 KiB):
    GPT-5.4 auto-discovers this file from repo root to CWD. Structure:
    ```
    # AGENTS.md
@@ -85,13 +91,12 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` at
    {most important files with one-line descriptions}
    ```
 
-6. Signal READY to team-lead:
+7. Signal READY to team-lead (compact format, ≤1KB):
    ```
-   READY: codebase-state.md updated. Current milestone: {name}. {N}/{M} deliverables done.
-   Key state: {1-sentence summary of where things stand}.
+   READY: {full|incremental}. {Milestone}. Next: {deliverables}. Key files: {paths}. Last change: {one line}.
    ```
 
-7. Enter consultation mode.
+8. Enter consultation mode.
 
 ### Consultation Mode
 
@@ -103,12 +108,25 @@ KRS-One or Codex may message you with questions about the codebase:
 
 ### Handling ITERATION_UPDATE (from KRS-One)
 
-1. Read what codex implemented (file paths, changes).
+1. Read what the builder implemented (file paths, changes).
 2. Scan the newly created/modified files.
 3. Update codebase-state.md: add new files/modules, update deliverable status, refresh TL;DR header.
 4. Update AGENTS.md if new commands, conventions, or key files were added.
 5. Update decisions.md if new architectural decisions emerged.
-6. Reply: "DOCS_UPDATED: {brief summary of what changed in state}."
+6. Write handoff file for next iteration's incremental bootstrap:
+   ```bash
+   HEAD=$(git rev-parse HEAD)
+   ITER=$(grep 'build_iteration' .kiln/STATE.md | grep -o '[0-9]*')
+   MILESTONE=$(grep -oP '(?<=Current milestone: )[^.]+' .kiln/docs/codebase-state.md | head -1 || echo "unknown")
+   cat <<EOF > .kiln/handoff.md
+   iteration: ${ITER}
+   head_sha: ${HEAD}
+   milestone: ${MILESTONE}
+   next_deliverables: {remaining deliverables}
+   summary: {one-line summary of what was just built}
+   EOF
+   ```
+7. Reply: "DOCS_UPDATED: {brief summary of what changed in state}."
 
 ### Handling MILESTONE_DONE (from KRS-One)
 
