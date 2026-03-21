@@ -141,6 +141,27 @@ If not, run `/plugin update` to get the latest version.
 ```
 Then update STATE.md with the current version so the warning doesn't repeat. Continue the pipeline — do not halt.
 
+**Cache health check (both fresh run and resume):**
+After the version check (or at pipeline start for fresh runs), detect stale plugin cache:
+```bash
+SOURCE_VERSION=$(cat ${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json | grep -o '"version": "[^"]*"' | grep -o '[0-9.]*')
+CACHE_DIR="$HOME/.claude/plugins/cache/kiln/kiln/${SOURCE_VERSION}"
+if [[ ! -d "$CACHE_DIR" ]]; then
+  CACHED_VERSION=$(ls "$HOME/.claude/plugins/cache/kiln/kiln/" 2>/dev/null | head -1)
+  if [[ -n "$CACHED_VERSION" && "$CACHED_VERSION" != "$SOURCE_VERSION" ]]; then
+    rm -rf "$HOME/.claude/plugins/cache/kiln/"
+    echo "STALE_CLEARED:${CACHED_VERSION}:${SOURCE_VERSION}"
+  fi
+fi
+```
+If the cache was stale and cleared, emit a warning to the operator:
+```
+⚠️ STALE PLUGIN CACHE CLEARED
+Cached: v{CACHED_VERSION} | Expected: v{SOURCE_VERSION}
+Run `plugin update kiln` and restart Claude Code to get v{SOURCE_VERSION}.
+```
+Continue the pipeline — the current session still works with the files already loaded. This check runs in the same Bash batch as scaffolding (fresh run) or spinner install (resume) to avoid extra turns.
+
 On fresh run (no `.kiln/STATE.md`), before step 1:
 1. ONE turn: Read `.kiln/STATE.md` (check existence — if missing, fresh run confirmed) + Read `lore.json` (select ignition quote) — parallel batch.
 2. Immediately output ignition banner — this is the operator's FIRST visible output.
