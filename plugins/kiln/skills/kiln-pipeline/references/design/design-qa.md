@@ -50,7 +50,7 @@ Expected: At least one import of tokens.css in the project entry point.
 
 ## Manual Review (Hephaestus — Validation)
 
-Hephaestus performs these checks using Playwright screenshots and code inspection during step 6. Results go into `.kiln/validation/design-review.md`.
+Hephaestus performs these checks during step 6 using Playwright screenshots when the host runtime exposes Playwright. If Playwright is unavailable, hephaestus skips browser interaction, falls back to static artifact/code inspection, and records that the visual review coverage is limited. Results go into `.kiln/validation/design-review.md`.
 
 ### Visual Hierarchy Flow
 

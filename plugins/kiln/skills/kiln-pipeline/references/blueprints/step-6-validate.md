@@ -13,8 +13,8 @@
 | Name | Role | Type | Model |
 |------|------|------|-------|
 | zoxea | Persistent mind. Reads architecture docs + ADRs + codebase, compares implementation against architectural intent, writes architecture-check.md. Available for consultation. | general | sonnet |
-| argus | Solo validator. Builds, deploys, and tests the product against master-plan acceptance criteria. Functional validation with Playwright for web UIs. Writes validation report with verdict and correction tasks. Consults zoxea for architectural questions. | general | sonnet |
-| hephaestus | Design QA specialist. Conditional spawn — only when `.kiln/design/` exists and project has web UI. 5-axis design review using Playwright screenshots. Advisory scoring — never sole cause of failure. | general | sonnet |
+| argus | Solo validator. Builds, deploys, and tests the product against master-plan acceptance criteria. Uses Playwright for web UIs when the host runtime provides it; otherwise falls back to non-browser checks and reports coverage limits explicitly. Writes validation report with verdict and correction tasks. Consults zoxea for architectural questions. | general | sonnet |
+| hephaestus | Design QA specialist. Conditional spawn — only when `.kiln/design/` exists and project has web UI. Uses Playwright screenshots when available and falls back to static review when not. Advisory scoring — never sole cause of failure. | general | sonnet |
 
 ## Communication Model
 
@@ -37,13 +37,13 @@ Zoxea bootstraps and waits. Argus drives validation. Zoxea is passive after READ
 
 **Phase B — Validation:**
 3. Spawn argus (solo validator) with zoxea's READY summary in context.
-4. Argus reads architecture-check.md, builds, deploys, runs functional validation (Playwright for web UIs), checks acceptance criteria.
+4. Argus reads architecture-check.md, builds, deploys, and checks acceptance criteria. For web UIs, use Playwright when available; otherwise run non-browser validation and record any browser-only coverage gaps.
 5. Wait for VALIDATE_PASS or VALIDATE_FAILED from argus.
 
 **Phase C — Design QA (conditional):**
 6. If `.kiln/design/` exists AND project is a web app: argus spawns hephaestus via REQUEST_WORKERS.
 7. Argus sends design artifact paths and deployed app URL to hephaestus.
-8. Hephaestus performs 5-axis design review, writes `.kiln/validation/design-review.md`.
+8. Hephaestus performs 5-axis design review, using Playwright when available or static inspection when not, then writes `.kiln/validation/design-review.md`.
 9. Hephaestus signals DESIGN_QA_COMPLETE with scores. Argus integrates into report.
 
 If `.kiln/design/` does not exist, Phase C is skipped entirely.

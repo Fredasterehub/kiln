@@ -519,8 +519,8 @@ I named them after your historical figures. Philosophers, strategists, mythologi
 
 | | Alias | Model | Role |
 |:--|:--|:--|:--|
-| 👁️ | **Argus** | Sonnet | E2E validator &mdash; Playwright tests against acceptance criteria |
-| 🔨 | **Hephaestus** | Sonnet | Design QA &mdash; 5-axis review, conditional spawn |
+| 👁️ | **Argus** | Sonnet | E2E validator &mdash; acceptance-criteria checks, Playwright when available |
+| 🔨 | **Hephaestus** | Sonnet | Design QA &mdash; 5-axis review, static fallback if Playwright is unavailable |
 | 🏗️ | **Zoxea** | Sonnet | Architecture verifier &mdash; implementation vs. design |
 
 #### Report &amp; Cross-cutting
@@ -533,19 +533,12 @@ I named them after your historical figures. Philosophers, strategists, mythologi
 #### Dynamic Duo Naming
 
 KRS-One picks a random famous duo each iteration &mdash; bonnie+clyde, batman+robin, holmes+watson&hellip; Names are cosmetic; the `subagent_type` determines which canonical agent runs. The engine injects both names at spawn. 4 tiers, 1 pair per iteration, 20 duos in the pool.
-| 🔨 | **Tetsuo** | Opus | Claude-type builder &mdash; paired with Rick |
-| 🎨 | **Yin** | Opus | UI builder &mdash; paired with Yang |
-| 🖌️ | **Yang** | Sonnet | UI reviewer &mdash; shared (yin, picasso, clair, recto) |
-| 🎨 | **Clair** | Opus | UI builder &mdash; paired with Obscur |
-| 🖌️ | **Obscur** | Sonnet | UI reviewer &mdash; shared (clair, picasso, yin, recto) |
-| 🎨 | **Recto** | Opus | UI builder &mdash; paired with Verso |
-| 🖌️ | **Verso** | Sonnet | UI reviewer &mdash; shared (recto, picasso, clair, yin) |
 
 #### Fallback <sub>(no Codex CLI)</sub>
 
 | | Alias | Model | Role |
 |:--|:--|:--|:--|
-| ⚡ | **Kaneda** | Opus | Claude-native builder &mdash; implements directly, no GPT dependency |
+| ⚡ | **Kaneda** | Sonnet | Claude-native builder &mdash; implements directly, no GPT dependency |
 | 🗡️ | **Miyamoto** | Sonnet | Claude-native planner &mdash; writes milestone plans directly |
 
 <sub>32 total. I keep count. It's a compulsion.</sub>
@@ -637,7 +630,7 @@ More agents. A fraction of the surface area. The models matured. The framework s
 
 **Pipeline halts** &mdash; Check `.kiln/` artifacts, fix, then `/kiln-fire` to resume.
 
-**`model_reasoning_effort` flag rejected** &mdash; Older Codex CLI. `npm install -g @openai/codex` to upgrade.
+**`-m` or `--config` rejected** &mdash; Kiln's Codex wrappers forbid CLI model/config overrides. Configure Codex in `~/.codex/config.toml` instead.
 
 </details>
 
