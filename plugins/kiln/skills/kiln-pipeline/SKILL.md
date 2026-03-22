@@ -71,8 +71,8 @@ Banner formats (ignition, resume, complete) and the full event-to-lore-key mappi
 Read `.kiln/STATE.md` to determine pipeline state. If it doesn't exist, start from step 1.
 
 STATE.md fields:
-- `skill`: absolute path to this skill file — read on resume to reload full protocol
-- `roster`: absolute path to current step's blueprint — read for agent spawn config
+- `skill`: absolute path to this skill file under the active plugin root. On resume, use the stored path if it is readable; otherwise recover to `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/SKILL.md`
+- `roster`: absolute path to current step's blueprint under the active plugin root. On resume, use the stored path if it is readable; otherwise recover from `stage` using the deterministic blueprint map below
 - `stage`: current step name (onboarding, brainstorm, research, architecture, build, validate, report, complete)
 - `build_iteration`: current Build iteration count
 - `milestone_count`: total milestones from Architecture
@@ -85,7 +85,25 @@ STATE.md fields:
 - `step_N_start`: ISO 8601 timestamp when step N began (written at each step transition)
 - `step_N_end`: ISO 8601 timestamp when step N completed (written when step signals done)
 
-On resume: read `skill` from STATE.md, load that file (this file), then resume from `stage`. Stage maps directly to step number — onboarding = 1, brainstorm = 2, research = 3, architecture = 4, build = 5, validate = 6, report = 7. If `stage: complete`, inform the operator the pipeline already finished.
+Deterministic blueprint map for recovery:
+- `onboarding` -> `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/blueprints/step-1-onboarding.md`
+- `brainstorm` -> `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/blueprints/step-2-brainstorm.md`
+- `research` -> `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/blueprints/step-3-research.md`
+- `architecture` -> `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/blueprints/step-4-architecture.md`
+- `build` -> `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/blueprints/step-5-build.md`
+- `validate` -> `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/blueprints/step-6-validate.md`
+- `report` -> `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/blueprints/step-7-report.md`
+
+On resume:
+1. Read `.kiln/STATE.md` and extract `stage`, `skill`, and `roster`.
+2. If `stage` is missing or not one of `onboarding`, `brainstorm`, `research`, `architecture`, `build`, `validate`, `report`, `complete`, fail with: `Kiln resume failed: .kiln/STATE.md is missing a valid stage. Expected one of onboarding, brainstorm, research, architecture, build, validate, report, complete. Fix .kiln/STATE.md or remove it to start fresh.`
+3. Resolve `skill`: prefer the stored path when it is readable; otherwise recover to `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/SKILL.md`.
+4. If the recovered `skill` path is still unreadable, fail with: `Kiln resume failed: the stored skill path is stale or missing, and the active kiln-pipeline skill was not found at ${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/SKILL.md. Reinstall or repair the Kiln plugin, then retry /kiln-fire.`
+5. If `stage: complete`, inform the operator the pipeline already finished. Do not fail because of a stale `roster` path when no blueprint read is needed.
+6. Resolve `roster`: prefer the stored path when it is readable; otherwise recover from the deterministic blueprint map for the current `stage`.
+7. If the recovered `roster` path is unreadable, fail with: `Kiln resume failed: the stored roster path is stale or missing, and no active blueprint was found for stage '{stage}' at the expected Kiln plugin path. Verify the plugin install at ${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/blueprints/ and retry /kiln-fire.`
+8. If either `skill` or `roster` was recovered, rewrite `.kiln/STATE.md` immediately so it stores the recovered active-plugin-root paths and refresh `updated` with the current UTC timestamp before continuing.
+9. Resume from `stage`. Stage maps directly to step number — onboarding = 1, brainstorm = 2, research = 3, architecture = 4, build = 5, validate = 6, report = 7.
 
 ## Step Execution Pattern
 
@@ -137,7 +155,12 @@ Budget: 3 turns max. Operator sees banner first, scaffolding is invisible, then 
 On resume (`.kiln/STATE.md` exists with stage != complete):
 1. ONE turn: Read `.kiln/STATE.md` + `.kiln/resume.md` + `lore.json` — parallel batch.
 2. Immediately output resume banner — this is the operator's FIRST visible output.
-3. ONE turn: Read the blueprint at the path in STATE.md `roster` field + write spinner verbs to `settings.local.json` — parallel batch.
+3. ONE turn: Resolve bootstrap paths from the active plugin root before failing on stale state, then read the resolved blueprint path + write spinner verbs to `settings.local.json` — parallel batch:
+   - Use the stored `skill` and `roster` paths when they are readable.
+   - If `skill` is stale or missing, recover to `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/SKILL.md`.
+   - If `roster` is stale or missing, recover from `stage` using the deterministic blueprint map above.
+   - If either path was recovered, update `.kiln/STATE.md` in the same hidden turn and refresh `updated`.
+   - Fail only when the current `stage` is invalid or the active plugin copy of the required file is missing.
 4. Create team, spawn.
 
 Budget: 3 turns max.
@@ -331,7 +354,7 @@ Based on the boss's done signal, determine next action:
     - If >= 3: render `halt` banner, escalate to operator, stop pipeline
 **Step 7 done** (REPORT_COMPLETE) -> render `project_complete` banner, pipeline complete
 
-When writing STATE.md at step transitions, always include the `skill` and `roster` bootstrap paths. Set `roster` to the next step's blueprint path. These fields enable cold-start resume after session breaks.
+When writing STATE.md at step transitions, always include the `skill` and `roster` bootstrap paths from the active plugin root. Set `skill` to `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/SKILL.md` and set `roster` to the next step's blueprint path under `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/blueprints/`. Never preserve a stale cache or previous install path when writing new state. These fields enable cold-start resume after session breaks.
 
 **Step timing**: At the start of each step, write `step_N_start: {ISO 8601 timestamp}` to STATE.md. When the step signals done, write `step_N_end: {ISO 8601 timestamp}`. Use `date -u +%Y-%m-%dT%H:%M:%SZ` via Bash for consistent formatting. Omega uses these timestamps to build the pipeline timing table in REPORT.md.
 
