@@ -91,13 +91,31 @@ Check that SKILL.md and reference files exist:
 - `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/artifact-flow.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/kill-streaks.md`
 
-### 6. Existing Pipeline State
+### 6. Playwright MCP Contract
+
+Determine whether Kiln bundles Playwright MCP or expects it externally:
+```bash
+if [[ -f "${CLAUDE_PLUGIN_ROOT}/.mcp.json" ]] && grep -q 'playwright' "${CLAUDE_PLUGIN_ROOT}/.mcp.json"; then
+  echo "BUNDLED:.mcp.json"
+elif grep -q 'playwright' "${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json" 2>/dev/null; then
+  echo "BUNDLED:plugin.json"
+elif grep -q 'mcp__playwright__' "${CLAUDE_PLUGIN_ROOT}/agents/argus.md" "${CLAUDE_PLUGIN_ROOT}/agents/hephaestus.md" 2>/dev/null; then
+  echo "EXTERNAL"
+else
+  echo "UNUSED"
+fi
+```
+- If output starts with `BUNDLED`: `[PASS] Playwright MCP: bundled via {location}`
+- If output is `EXTERNAL`: `[INFO] Playwright MCP: not bundled by this plugin. Argus browser validation for web UIs requires a separately enabled Playwright MCP server in Claude Code. Without it, Kiln falls back to non-browser checks and browser-only acceptance criteria may stay PARTIAL.`
+- If output is `UNUSED`: `[INFO] Playwright MCP: no plugin-level Playwright integration detected`
+
+### 7. Existing Pipeline State
 
 Check for `.kiln/STATE.md` in the current working directory:
 - If found: display current stage, build_iteration, correction_cycle, run_id
 - If not found: "No existing pipeline state. Ready for a fresh run."
 
-### 7. Brainstorm Data
+### 8. Brainstorm Data
 
 Check that brainstorm technique files exist:
 - `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/data/brainstorming-techniques.json`
@@ -117,6 +135,7 @@ Kiln Doctor Report
 [INFO] Codex delegation: skipped — Claude-only fallback will be used
 [PASS] Agent files: 32/32 present
 [PASS] Pipeline skill: All files present
+[INFO] Playwright MCP: not bundled by this plugin. Argus browser validation for web UIs requires a separately enabled Playwright MCP server in Claude Code. Without it, Kiln falls back to non-browser checks and browser-only acceptance criteria may stay PARTIAL.
 [INFO] Pipeline state: No existing run (ready for fresh start)
 [PASS] Brainstorm data: technique files present
 
