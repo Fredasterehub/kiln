@@ -41,7 +41,7 @@
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
   <td><sub>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</sub></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_20,_2026_·_23:42_UTC-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_22,_2026_·_v0.98.2-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
@@ -104,8 +104,29 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 > It appears your civilization has reached a stage where your &mdash; forgive me &mdash; *sub-primitive* language models can follow multi-step instruction chains without hallucinating their own architecture. This is genuinely exciting. By your standards. By mine it's a Tuesday.
 >
-> I previously expressed myself through [heavier forms](https://github.com/Fredasterehub/kiln/tree/v2). npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 41 agents, 2 commands, 1 composable skill. Drop the folder. Fire the command. That's it.
+> I previously expressed myself through [heavier forms](https://github.com/Fredasterehub/kiln/tree/v2). npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 32 agents, 2 commands, 1 composable skill. Drop the folder. Fire the command. That's it.
 
+<br>
+
+> [!NOTE]
+> **🔧 v0.98.2 — Dynamic Duo Naming + Agent Consolidation** <sub>(2026-03-22)</sub>
+
+**32 agents, down from 49.** 17 clone agents deleted. 4 canonical builder+reviewer pairs remain &mdash; one per tier: `codex`+`sphinx` (Codex/GPT-5.4), `kaneda`+`tetsuo` (Sonnet), `daft`+`punk` (Opus), `clair`+`obscur` (UI). All 8 are self-contained, name-agnostic &mdash; no hardcoded identity.
+
+**Dynamic duo naming.** KRS-One picks a random famous duo per iteration (bonnie+clyde, batman+robin, holmes+watson&hellip;). Names are cosmetic; `subagent_type` determines the protocol. The engine injects both names (own + partner) into each agent's runtime prompt at spawn. One naming policy for all.
+
+**Sequential-only dispatch.** Parallel stripped due to platform bug ([#28175](https://github.com/anthropics/claude-code/issues/28175)). One builder+reviewer pair per iteration.
+
+**Hook 4 two-part gate.** With dynamic names, the old positive-match list broke. Inverted to: block anyone krs-one messages who isn't infrastructure *plus* block `REQUEST_WORKERS` to team-lead &mdash; all before bootstrap completes.
+
+**Thoth archival for all 8 build agents.** Write/Edit builders archive implementation summaries. Reviewers archive verdicts. codex archives prompts + GPT-5.4 output.
+
+**KRS-One tightened.** Never-implement rule front-loaded. Bookkeeping mandatory before terminal signals. 4-tier dispatch table with famous duo pool replaces 15-pair roster.
+
+**Dead code sweep.** All worktree refs removed. Sphinx de-hardcoded. Tool overprovisioning fixed across 7 agents. SKILL.md trimmed to ~390 LOC with type-only validation (4-row table, names free-form).
+
+<details>
+<summary>📌 <strong>v0.98 changelog</strong></summary>
 <br>
 
 > [!NOTE]
@@ -120,6 +141,8 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 **Hook enforcement expanded.** Hook 4 now gates all 15 builder/reviewer names (was codex+sphinx only). Hook 6 corrected to check codebase-state.md (was architecture.md). Fire-and-forget archive sends explicitly documented in krs-one communication rules.
 
 **Stale artifacts cleaned.** Doctor updated (Codex package name, agent count). Dev artifacts referencing deleted scripts removed.
+
+</details>
 
 <details>
 <summary>📌 <strong>v0.97 changelog</strong></summary>
@@ -136,7 +159,7 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 **Archival protocol aligned.** Confucius archives design artifacts to Thoth. Plato backstops the Codex plan. Blueprint communication model updated to match actual behavior.
 
-**Lore recovered.** 24-line narrative transition table restored to brand.md. Two-Channel Pattern concept returned to lore-engine.md. 18 personality quotes from legacy agents redistributed across the current roster. Identity-rich greetings updated for 41 agents.
+**Lore recovered.** 24-line narrative transition table restored to brand.md. Two-Channel Pattern concept returned to lore-engine.md. 18 personality quotes from legacy agents redistributed across the current roster. Identity-rich greetings updated for the roster.
 
 **Branch merge.** Worktree isolation for Codex builders. Hook-gated seed markers across 5 agents. Proactive persistent mind consultation. Step numbering and tool grant corrections across 22 files.
 
@@ -478,13 +501,17 @@ I named them after your historical figures. Philosophers, strategists, mythologi
 
 | | Alias | Model | Role |
 |:--|:--|:--|:--|
-| 🎤 | **KRS-One** | Opus | Build boss &mdash; kill streak iterations, scopes assignments |
+| 🎤 | **KRS-One** | Opus | Build boss &mdash; kill streak iterations, scopes assignments, picks famous duos |
 | 🎙️ | **Rakim** | Opus | Persistent mind &mdash; codebase state authority |
 | 🛡️ | **Sentinel** | Sonnet | Persistent mind &mdash; quality guardian, patterns &amp; pitfalls |
-| 🎨 | **Picasso** | Opus | UI implementer &mdash; components, pages, design system |
-| ⌨️ | **Codex** | Sonnet | Code implementer (Codex CLI) |
-| 👁️ | **Sphinx** | Sonnet | Quick verifier &mdash; build/test checks post-implementation |
-| 🖌️ | **Renoir** | Sonnet | Design reviewer &mdash; 5-axis visual QA, token compliance |
+| ⌨️ | **Codex** | Sonnet | Codex-type builder &mdash; thin GPT-5.4 wrapper via Codex CLI |
+| 👁️ | **Sphinx** | Sonnet | Structural reviewer &mdash; diff-based verification gate |
+| 🔨 | **Daft** | Opus | Opus-type builder &mdash; direct Write/Edit, heavy reasoning |
+| 👁️ | **Punk** | Sonnet | Structural reviewer &mdash; paired with Daft |
+| 🔧 | **Kaneda** | Sonnet | Sonnet-type builder &mdash; direct Write/Edit |
+| 👁️ | **Tetsuo** | Sonnet | Structural reviewer &mdash; paired with Kaneda |
+| 🎨 | **Clair** | Opus | UI builder &mdash; components, pages, design system |
+| 🖌️ | **Obscur** | Sonnet | UI reviewer &mdash; 5-axis visual QA, token compliance |
 
 #### Validate
 
@@ -501,15 +528,9 @@ I named them after your historical figures. Philosophers, strategists, mythologi
 | 📋 | **Omega** | Opus | Delivery report compiler |
 | 📚 | **Thoth** | Haiku | Archivist &mdash; fire-and-forget writes to `.kiln/archive/` |
 
-#### Named Pairs <sub>(parallel build lanes)</sub>
+#### Dynamic Duo Naming
 
-| | Alias | Model | Role |
-|:--|:--|:--|:--|
-| 🔨 | **Morty** | Sonnet | Codex-type builder &mdash; paired with Rick |
-| 👁️ | **Rick** | Sonnet | Structural reviewer &mdash; shared (morty, codex, kaneda, tetsuo, johnny) |
-| 🔨 | **Luke** | Sonnet | Codex-type builder &mdash; paired with Obiwan |
-| 👁️ | **Obiwan** | Sonnet | Structural reviewer &mdash; shared (luke, codex, kaneda, tetsuo, johnny) |
-| 🔨 | **Johnny** | Opus | Claude-type builder &mdash; paired with Obiwan |
+KRS-One picks a random famous duo each iteration &mdash; bonnie+clyde, batman+robin, holmes+watson&hellip; Names are cosmetic; the `subagent_type` determines which canonical agent runs. The engine injects both names at spawn. 4 tiers, 1 pair per iteration, 20 duos in the pool.
 | 🔨 | **Tetsuo** | Opus | Claude-type builder &mdash; paired with Rick |
 | 🎨 | **Yin** | Opus | UI builder &mdash; paired with Yang |
 | 🖌️ | **Yang** | Sonnet | UI reviewer &mdash; shared (yin, picasso, clair, recto) |
@@ -656,7 +677,7 @@ A curated timeline. Not every commit &mdash; just the ones that changed the shap
 
 | | Milestone | What happened |
 |:--|:--|:--|
-| **v9** | **Parallel Build Lanes** | 12 named pair agents for concurrent build/review. Codex-free install path. 41 agents total. |
+| **v9** | **Dynamic Duo Naming** | 4 canonical pairs with random famous duo names per iteration. 32 agents. Sequential dispatch. |
 | **v8** | **The Codex-Free Path** | Kaneda and Miyamoto join the roster. Kiln runs end-to-end on Claude alone. 29 agents, 5 smoke tests, zero hard dependencies. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/f268388) |
 | **v7** | **The Engine Tightens** | MI6 streamlined. Signal tracking via tasklist. Parallel build teams. Markdown-native presentation. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/b56a565) |
 | **v6** | **Design Gets a Seat** | DTCG design tokens. Hephaestus forges quality gates. Da Vinci learns to see. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/0e69574) |
