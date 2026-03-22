@@ -1,0 +1,33 @@
+{
+  "id": "chain",
+  "name": "Chain Relay",
+  "description": "Serial relay. Boss dispatches to worker-1, who forwards to worker-2, etc. Last worker replies to boss.",
+  "communication_pattern": {
+    "dispatch": "boss → worker-1 → worker-2 → ... → worker-N",
+    "reply": "worker-N → boss (single reply with aggregated chain data)",
+    "expected_messages_formula": "chain_forwards(N) + final_reply(1) = N+1"
+  },
+  "sizes": {
+    "small": {
+      "agent_count": 2,
+      "boss_count": 1,
+      "worker_count": 1,
+      "agents": ["test-boss", "worker-1"],
+      "chain_order": ["worker-1"]
+    },
+    "medium": {
+      "agent_count": 4,
+      "boss_count": 1,
+      "worker_count": 3,
+      "agents": ["test-boss", "worker-1", "worker-2", "worker-3"],
+      "chain_order": ["worker-1", "worker-2", "worker-3"]
+    },
+    "large": {
+      "agent_count": 6,
+      "boss_count": 1,
+      "worker_count": 5,
+      "agents": ["test-boss", "worker-1", "worker-2", "worker-3", "worker-4", "worker-5"],
+      "chain_order": ["worker-1", "worker-2", "worker-3", "worker-4", "worker-5"]
+    }
+  }
+}

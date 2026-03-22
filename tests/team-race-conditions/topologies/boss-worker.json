@@ -1,0 +1,30 @@
+{
+  "id": "boss-worker",
+  "name": "Boss-Worker",
+  "description": "Standard hub-and-spoke. Boss dispatches to each worker individually, each worker replies directly to boss.",
+  "communication_pattern": {
+    "dispatch": "boss → each worker (individual messages)",
+    "reply": "each worker → boss",
+    "expected_messages_formula": "dispatches(N) + replies(N) = 2N"
+  },
+  "sizes": {
+    "small": {
+      "agent_count": 2,
+      "boss_count": 1,
+      "worker_count": 1,
+      "agents": ["test-boss", "worker-1"]
+    },
+    "medium": {
+      "agent_count": 4,
+      "boss_count": 1,
+      "worker_count": 3,
+      "agents": ["test-boss", "worker-1", "worker-2", "worker-3"]
+    },
+    "large": {
+      "agent_count": 6,
+      "boss_count": 1,
+      "worker_count": 5,
+      "agents": ["test-boss", "worker-1", "worker-2", "worker-3", "worker-4", "worker-5"]
+    }
+  }
+}

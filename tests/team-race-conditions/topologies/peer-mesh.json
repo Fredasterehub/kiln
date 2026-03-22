@@ -1,0 +1,31 @@
+{
+  "id": "peer-mesh",
+  "name": "Peer Mesh",
+  "description": "Every agent messages every other agent. Maximum message volume stress test. Boss coordinates start/end only.",
+  "communication_pattern": {
+    "dispatch": "boss signals START to all → each agent messages every other agent",
+    "reply": "each agent sends MESH_COMPLETE to boss when done with all peers",
+    "expected_messages_formula": "start_signals(N) + peer_messages(N*(N-1)) + completions(N) = N^2 + N"
+  },
+  "notes": "This topology generates O(N^2) messages and is the hardest stress test. Small teams only recommended for cost control. Tests message ordering, concurrent delivery, and agent wake-up patterns under heavy load.",
+  "sizes": {
+    "small": {
+      "agent_count": 2,
+      "boss_count": 1,
+      "worker_count": 1,
+      "agents": ["test-boss", "worker-1"]
+    },
+    "medium": {
+      "agent_count": 4,
+      "boss_count": 1,
+      "worker_count": 3,
+      "agents": ["test-boss", "worker-1", "worker-2", "worker-3"]
+    },
+    "large": {
+      "agent_count": 6,
+      "boss_count": 1,
+      "worker_count": 5,
+      "agents": ["test-boss", "worker-1", "worker-2", "worker-3", "worker-4", "worker-5"]
+    }
+  }
+}
