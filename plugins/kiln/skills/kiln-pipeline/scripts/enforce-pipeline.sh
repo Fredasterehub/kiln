@@ -71,8 +71,7 @@ if [[ -n "$AGENT" ]]; then
     da-vinci|clio|\
     mi6|field-agent|\
     aristotle|numerobis|confucius|sun-tzu|plato|athena|\
-    krs-one|rakim|sentinel|thoth|codex|tintin|mario|lucky|athos|porthos|aramis|asterix|tetsuo|daft|miyamoto|sphinx|milou|luigi|luke|obelix|kaneda|punk|\
-    picasso|clair|yin|recto|renoir|obscur|yang|verso|\
+    krs-one|rakim|sentinel|thoth|codex|daft|kaneda|clair|miyamoto|sphinx|punk|tetsuo|obscur|\
     zoxea|argus|hephaestus|omega)
       ;; # known Kiln agent — fall through to enforcement
     *)
@@ -86,7 +85,7 @@ fi
 # ═══════════════════════════════════════════════════════════════
 
 # Hook 1 — codex-type builders: no Write/Edit
-if [[ "$AGENT" =~ ^(codex|tintin|mario|lucky)$ ]] && [[ "$TOOL" =~ ^(Write|Edit)$ ]]; then
+if [[ "$AGENT" == "codex" ]] && [[ "$TOOL" =~ ^(Write|Edit)$ ]]; then
   cat >&2 <<'MSG'
 STOP. You are a codex exec wrapper — you do not write files.
 
@@ -125,20 +124,34 @@ fi
 # Fail open if .kiln/ not found (no active pipeline).
 # ═══════════════════════════════════════════════════════════════
 
-# Hook 4 — krs-one: no dispatch to builders/reviewers until rakim+sentinel ready
-if [[ "$AGENT" == "krs-one" ]] && [[ "$TOOL" == "SendMessage" ]] && \
-   [[ "$RECIPIENT" =~ ^(codex|sphinx|tintin|milou|mario|luigi|lucky|luke|athos|porthos|aramis|asterix|obelix|tetsuo|kaneda|daft|punk|clair|obscur|yin|yang|recto|verso)$ ]]; then
-  ROOT=$(_find_root)
-  if [[ -n "$ROOT" ]]; then
-    if ! _status_ok "$ROOT/.kiln/docs/codebase-state.md" || ! _status_ok "$ROOT/.kiln/docs/patterns.md"; then
-      cat >&2 <<'MSG'
+# Hook 4 — krs-one: no dispatch until rakim+sentinel ready
+# Two-part gate: (a) block messages to dynamic-named workers,
+# (b) block REQUEST_WORKERS to team-lead. Allows other team-lead messages
+# (ITERATION_COMPLETE, MILESTONE_COMPLETE) and infrastructure agents freely.
+CONTENT=$(echo "$INPUT" | jq -r '.tool_input.content // ""')
+if [[ "$AGENT" == "krs-one" ]] && [[ "$TOOL" == "SendMessage" ]]; then
+  _NEEDS_GATE=false
+  # Part 1: message to anyone outside infrastructure = worker dispatch
+  if ! [[ "$RECIPIENT" =~ ^(rakim|sentinel|thoth|team-lead)$ ]]; then
+    _NEEDS_GATE=true
+  fi
+  # Part 2: REQUEST_WORKERS to team-lead = worker spawn request
+  if [[ "$RECIPIENT" == "team-lead" ]] && [[ "$CONTENT" == *"REQUEST_WORKERS"* ]]; then
+    _NEEDS_GATE=true
+  fi
+  if [[ "$_NEEDS_GATE" == "true" ]]; then
+    ROOT=$(_find_root)
+    if [[ -n "$ROOT" ]]; then
+      if ! _status_ok "$ROOT/.kiln/docs/codebase-state.md" || ! _status_ok "$ROOT/.kiln/docs/patterns.md"; then
+        cat >&2 <<'MSG'
 BLOCKED: rakim and sentinel haven't finished bootstrapping.
 
 Wait for BOTH READY summaries (in your runtime prompt) before dispatching:
   1. rakim — codebase state (codebase-state.md must be complete)
   2. sentinel — patterns/pitfalls guidance (patterns.md must be complete)
 MSG
-      exit 2
+        exit 2
+      fi
     fi
   fi
 fi
@@ -165,11 +178,11 @@ fi
 # Model configured in ~/.codex/config.toml. No extra flags.
 # ═══════════════════════════════════════════════════════════════
 
-if [[ "$AGENT" =~ ^(codex|tintin|mario|lucky|sun-tzu)$ ]] && [[ "$TOOL" == "Bash" ]]; then
+if [[ "$AGENT" =~ ^(codex|sun-tzu)$ ]] && [[ "$TOOL" == "Bash" ]]; then
   if echo "$COMMAND" | grep -q 'codex exec'; then
 
     # Hook 6 — codex: backup sequencing gate (codex exec before bootstrap ready)
-    if [[ "$AGENT" =~ ^(codex|tintin|mario|lucky)$ ]]; then
+    if [[ "$AGENT" == "codex" ]]; then
       ROOT=$(_find_root)
       if [[ -n "$ROOT" ]]; then
         if ! _status_ok "$ROOT/.kiln/docs/codebase-state.md" || ! _status_ok "$ROOT/.kiln/docs/patterns.md"; then
@@ -289,19 +302,16 @@ if [[ "$TOOL" == "Agent" ]]; then
       da-vinci|clio|\
       mi6|field-agent|\
       aristotle|numerobis|confucius|sun-tzu|plato|athena|\
-      krs-one|rakim|sentinel|thoth|codex|tintin|mario|lucky|athos|porthos|aramis|asterix|tetsuo|daft|miyamoto|sphinx|milou|luigi|luke|obelix|kaneda|punk|\
-      picasso|clair|yin|recto|renoir|obscur|yang|verso|\
+      krs-one|rakim|sentinel|thoth|codex|daft|kaneda|clair|miyamoto|sphinx|punk|tetsuo|obscur|\
       zoxea|argus|hephaestus|omega)
         ;; # allowed
       *)
         cat >&2 <<'MSG'
 Only named Kiln agents can be spawned. Use agent types from the blueprint roster:
-  Codex-type builders: codex, tintin, mario, lucky
-  Sonnet-type builders: athos, porthos, aramis
-  Opus-type builders: asterix, tetsuo, daft
-  Structural reviewers: milou, luigi, luke, obelix, kaneda, punk, sphinx
-  UI builders: clair, yin, recto (picasso protocol)
-  UI reviewers: obscur, yang, verso (renoir protocol)
+  Codex-type: codex (builder) + sphinx (reviewer)
+  Sonnet-type: kaneda (builder) + tetsuo (reviewer)
+  Opus-type: daft (builder) + punk (reviewer)
+  UI: clair (builder) + obscur (reviewer)
 MSG
         exit 2
         ;;

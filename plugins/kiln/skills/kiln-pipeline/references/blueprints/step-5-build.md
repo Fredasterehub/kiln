@@ -27,45 +27,25 @@ The pipeline runner invokes this blueprint repeatedly. Each invocation is one te
 | thoth | Persistent mind. Archivist — owns all writes to .kiln/archive/. Fire-and-forget. | A | haiku |
 | sentinel | Persistent mind. Quality guardian. Owns patterns.md (TL;DR header) and pitfalls.md. Consultation for quality questions. | A | sonnet |
 | krs-one | Boss. Reads plan, receives READY summaries, scopes chunks via structured XML assignments, dispatches to worker pairs, updates docs, milestone QA. | B (BACKGROUND) | opus |
-| codex | Structural implementer template. Thin Codex CLI wrapper — receives structured assignment, constructs prompt, pipes to GPT-5.4, verifies, commits, requests paired structural review. | C | sonnet |
-| sphinx | Structural reviewer template. APPROVED or REJECTED. Lightweight gate. | C | sonnet |
-| picasso | UI implementer template. Direct Opus builder for components, pages, layouts, motion, and design system work. | C | opus |
-| renoir | UI reviewer template. Design quality reviewer with 5-axis advisory scoring. | C | sonnet |
+| codex | Codex-type builder. Thin Codex CLI wrapper — delegates to GPT-5.4. | C | sonnet |
+| sphinx | Structural reviewer. APPROVED or REJECTED. Lightweight gate. | C | sonnet |
+| daft | Opus-type builder. Direct implementation via Write/Edit. Heavy reasoning. | C | opus |
+| punk | Structural reviewer. APPROVED or REJECTED. | C | sonnet |
+| kaneda | Sonnet-type builder. Direct implementation via Write/Edit. | C | sonnet |
+| tetsuo | Structural reviewer. APPROVED or REJECTED. | C | sonnet |
+| clair | UI builder. Direct Opus implementation of components, pages, layouts, motion. | C | opus |
+| obscur | UI reviewer. Design quality review with 5-axis advisory scoring. | C | sonnet |
 
-## Named Pairs
+## Canonical Pairs
 
-### Codex-Type Pairs (codex_available=true)
+One pair per tier. krs-one picks dynamic duo names per iteration — the `name:` parameter is cosmetic, the `subagent_type:` maps to the canonical agent `.md` file.
 
-| Pair | Builder | Reviewer | Builder Type | Reviewer Type |
-|------|---------|----------|--------------|---------------|
-| 1 | codex | sphinx | codex | sphinx |
-| 2 | tintin | milou | tintin | milou |
-| 3 | mario | luigi | mario | luigi |
-| 4 | lucky | luke | lucky | luke |
-
-### Sonnet-Type Pairs (default when codex_available=false)
-
-| Pair | Builder | Reviewer | Builder Type | Reviewer Type |
-|------|---------|----------|--------------|---------------|
-| 1 | athos | milou | athos | milou |
-| 2 | porthos | luigi | porthos | luigi |
-| 3 | aramis | luke | aramis | luke |
-
-### Opus-Type Pairs (heavy reasoning)
-
-| Pair | Builder | Reviewer | Builder Type | Reviewer Type |
-|------|---------|----------|--------------|---------------|
-| 1 | asterix | obelix | asterix | obelix |
-| 2 | tetsuo | kaneda | tetsuo | kaneda |
-| 3 | daft | punk | daft | punk |
-
-### UI Pairs
-
-| Pair | Builder | Reviewer | Builder Type | Reviewer Type |
-|------|---------|----------|--------------|---------------|
-| 1 | clair | obscur | picasso | renoir |
-| 2 | yin | yang | picasso | renoir |
-| 3 | recto | verso | picasso | renoir |
+| Tier | Builder Type | Reviewer Type | When |
+|------|-------------|---------------|------|
+| Codex | codex | sphinx | codex_available=true (default structural) |
+| Sonnet | kaneda | tetsuo | codex_available=false (structural fallback) |
+| Opus | daft | punk | Heavy reasoning, complex architectural work |
+| UI | clair | obscur | Components, pages, layouts, motion, design system |
 
 ## Three-Phase Spawn
 
@@ -73,7 +53,7 @@ The pipeline runner invokes this blueprint repeatedly. Each invocation is one te
 
 **Phase B**: krs-one spawns (BACKGROUND). Receives READY summaries from rakim and sentinel in runtime prompt. Reads master plan, scopes one focused chunk, requests one builder+reviewer pair from the appropriate tier.
 
-**Phase C**: One builder+reviewer pair per REQUEST_WORKERS. krs-one selects the pair from the appropriate tier: codex-type (codex+sphinx, tintin+milou, mario+luigi, lucky+luke), sonnet-type (athos+milou, porthos+luigi, aramis+luke), opus-type (asterix+obelix, tetsuo+kaneda, daft+punk), or UI (clair+obscur, yin+yang, recto+verso). The builder receives a structured assignment with `reviewer: {paired reviewer name}`. Builders send REVIEW_REQUEST directly to their paired reviewer, reviewers reply directly to builders, and builders report IMPLEMENTATION_COMPLETE or IMPLEMENTATION_BLOCKED back to KRS-One.
+**Phase C**: One builder+reviewer pair per REQUEST_WORKERS. krs-one selects a tier (Codex, Sonnet, Opus, or UI) and picks a random famous duo name from the pool. Example: `REQUEST_WORKERS: bonnie (subagent_type: daft), clyde (subagent_type: punk)`. The engine injects identity into both agents' runtime prompts at spawn. Builders send REVIEW_REQUEST directly to their paired reviewer, reviewers reply directly to builders, and builders report IMPLEMENTATION_COMPLETE or IMPLEMENTATION_BLOCKED back to KRS-One.
 
 Builders commit directly to the repo. The engine manages isolation.
 

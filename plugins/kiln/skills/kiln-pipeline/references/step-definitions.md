@@ -47,10 +47,11 @@ Which agents to spawn per step, spawn order, expected signals, and state transit
 
 - **Boss**: krs-one (opus)
 - **Persistent minds**: rakim (opus, Phase A — codebase state + AGENTS.md), sentinel (sonnet, Phase A — patterns + pitfalls), thoth (haiku, Phase A — archivist)
-- **Workers**: one builder+reviewer pair per iteration from 4 tiers (3 structural + UI) — Phase C, requested by krs-one:
-  - Codex-type: codex+sphinx, tintin+milou, mario+luigi, lucky+luke
-  - Sonnet-type: athos+milou, porthos+luigi, aramis+luke
-  - Opus-type: asterix+obelix, tetsuo+kaneda, daft+punk
+- **Workers**: one builder+reviewer pair per iteration from 4 tiers — Phase C, requested by krs-one with dynamic duo names:
+  - Codex-type: codex+sphinx
+  - Sonnet-type: kaneda+tetsuo
+  - Opus-type: daft+punk
+  - UI: clair+obscur
 - **Three-phase spawn**: Phase A (rakim + sentinel + thoth bootstrap in parallel, ALL THREE signal READY) → Phase B (krs-one BACKGROUND) → Phase C (one builder+reviewer pair per request)
 - **Team name**: kill streak name based on build_iteration (see kill-streaks.md)
 - **Signals from KRS-One**:
@@ -58,7 +59,7 @@ Which agents to spawn per step, spawn order, expected signals, and state transit
   - `MILESTONE_COMPLETE: {name}` — milestone done, deep QA passed. Re-invoke for next milestone.
   - `BUILD_COMPLETE` — all milestones done. Proceed to step 6.
 - **State update**: build_iteration incremented each invocation. On BUILD_COMPLETE: stage → validate.
-- **Notes**: KRS-One has NO Write/Edit tools — he scopes and delegates only. Structured XML assignments define WHAT/WHY, builders decide HOW. 4 tiers (3 structural + UI): codex-type (GPT-5.4 delegation), sonnet-type (direct Write/Edit), opus-type (heavy reasoning), UI (picasso/renoir protocol). Sentinel is sonnet (structured pattern docs + tool compliance).
+- **Notes**: KRS-One has NO Write/Edit tools — he scopes and delegates only. Structured XML assignments define WHAT/WHY, builders decide HOW. 4 tiers (3 structural + UI): codex-type (GPT-5.4 delegation), sonnet-type (direct Write/Edit), opus-type (heavy reasoning), UI (clair/obscur). Sentinel is sonnet (structured pattern docs + tool compliance).
 
 ## Step 6: Validate
 

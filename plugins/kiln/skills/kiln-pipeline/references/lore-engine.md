@@ -193,8 +193,8 @@ Before spawning a team, output a spawning block:
   → krs-one
   → rakim
   → sentinel
-  → tintin
-  → milou
+  → bonnie (daft)
+  → clyde (punk)
 ```
 
 After an agent completes:

@@ -60,7 +60,7 @@ Workers are spawned into the team. The engine manages isolation.
 
 The engine spawns each worker on the same team. Workers appear as teammates with full SendMessage access. The boss then dispatches assignments individually — one message per worker.
 
-**Naming**: Use the naming convention from your `.md` file. Workers get descriptive names, not sequential numbers.
+**Naming**: Names are assigned by the engine at spawn via runtime prompt. Build-step workers get dynamic duo names chosen by krs-one — the engine injects both names (own + partner) into each agent's runtime prompt.
 
 ## 4. Dispatch Pattern
 
