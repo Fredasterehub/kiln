@@ -42,29 +42,45 @@ cat ${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json | grep version
 - Display the installed version
 - Format: `[INFO] Kiln version: {version}`
 
-### 2. Codex CLI
+### 2. Codex CLI Availability
 
 ```bash
-which codex && codex --version
+if command -v codex >/dev/null 2>&1; then
+  codex --version
+else
+  echo "MISSING"
+fi
 ```
-- Expected: codex-cli found on PATH
-- If missing: "Install Codex CLI: npm install -g @openai/codex"
+- If a version is returned: `[PASS] Codex CLI: {version}`
+- If output is `MISSING`: `[INFO] Codex CLI: not found — Claude-only fallback remains available`
 
-### 3. GPT-5.4 Model Access
+### 3. Codex Delegation Probe (Optional)
 
 ```bash
-echo "Reply with just OK" | timeout 30 codex exec -m gpt-5.4 --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check 2>&1
+if command -v codex >/dev/null 2>&1; then
+  TMP_DIR=$(mktemp -d)
+  PROMPT_FILE="$TMP_DIR/kiln-doctor-prompt.md"
+  trap 'rm -rf "$TMP_DIR"' EXIT
+  git -C "$TMP_DIR" init -q
+  cat >"$PROMPT_FILE" <<'EOF'
+Reply with just OK
+EOF
+  timeout 30 codex exec --sandbox danger-full-access -C "$TMP_DIR" <"$PROMPT_FILE" 2>&1
+else
+  echo "SKIP:codex-missing"
+fi
 ```
-- Expected: successful response
-- If fails: "GPT-5.4 model not accessible. Check your OpenAI API key and model access."
+- If output contains `OK`: `[PASS] Codex delegation: probe succeeded`
+- If output is `SKIP:codex-missing`: `[INFO] Codex delegation: skipped — Claude-only fallback will be used`
+- If the probe fails or times out: `[WARN] Codex delegation: probe failed — Codex-backed GPT delegation unavailable, Claude-only fallback remains available`
 
 ### 4. Kiln Agent Files
 
-Check that all 41 Kiln agent files exist in the plugin:
+Check that all 32 Kiln agent files exist in the plugin:
 ```bash
 ls -1 ${CLAUDE_PLUGIN_ROOT}/agents/*.md | wc -l
 ```
-- Expected: 41 agent files
+- Expected: 32 agent files
 - List any missing agents if count is wrong.
 
 ### 5. Pipeline Skill
@@ -86,6 +102,7 @@ Check for `.kiln/STATE.md` in the current working directory:
 Check that brainstorm technique files exist:
 - `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/data/brainstorming-techniques.json`
 - `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/data/elicitation-methods.json`
+- If both are present: `[PASS] Brainstorm data: technique files present`
 - If missing: "Brainstorm data files not found. Da Vinci will work without technique suggestions."
 
 ## Output Format
@@ -94,16 +111,16 @@ Present results as:
 ```
 Kiln Doctor Report
 ==================
-[PASS] Cache: v0.97.4 (current)
-[INFO] Kiln version: 0.97.4
-[PASS] Codex CLI: codex-cli found on PATH
-[PASS] GPT-5.4: Model accessible
-[PASS] Agent files: 41/41 present
+[PASS] Cache: v0.98.2 (current)
+[INFO] Kiln version: 0.98.2
+[INFO] Codex CLI: not found — Claude-only fallback remains available
+[INFO] Codex delegation: skipped — Claude-only fallback will be used
+[PASS] Agent files: 32/32 present
 [PASS] Pipeline skill: All files present
 [INFO] Pipeline state: No existing run (ready for fresh start)
-[WARN] Brainstorm data: elicitation-methods.json missing
+[PASS] Brainstorm data: technique files present
 
-Verdict: Ready to fire!
+Verdict: Ready to fire (Claude-only mode)!
 ```
 
-Use PASS/FAIL/WARN/INFO prefixes. End with a clear verdict.
+Use PASS/WARN/INFO/FIX prefixes. Prefer WARN or INFO over FAIL when Kiln can still run via Claude-only fallback. End with a clear verdict that reflects whether Codex-backed delegation is available.

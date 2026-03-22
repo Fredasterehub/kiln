@@ -1,7 +1,7 @@
 #!/bin/bash
 # webfetch-responsive.sh — PreToolUse hook for WebFetch
 # Pre-checks URL reachability before allowing WebFetch tool calls.
-# Exit 0 = allow, Exit 2 + stderr = block.
+# Exit 0 with structured JSON deny output = block. Exit 0 with no output = allow.
 
 INPUT=$(cat 2>/dev/null || true)
 
@@ -9,9 +9,15 @@ allow() {
   exit 0
 }
 
-block() {
-  echo "WebFetch pre-check: $1 timed out or did not respond to a HEAD request within 30 seconds. Find an alternative source." >&2
-  exit 2
+deny() {
+  jq -cn --arg reason "WebFetch pre-check: $1 timed out or did not respond to a HEAD request within 30 seconds. Find an alternative source." '{
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason: $reason
+    }
+  }'
+  exit 0
 }
 
 [[ -n "$INPUT" ]] || allow
@@ -28,4 +34,4 @@ if curl -sI -L --max-time 30 "$URL" >/dev/null 2>&1; then
   allow
 fi
 
-block "$URL"
+deny "$URL"

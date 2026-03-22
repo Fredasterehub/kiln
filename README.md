@@ -53,7 +53,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Multi--Model-Opus_·_GPT--5.4-D4A574?style=for-the-badge" alt="Multi-Model">&nbsp;
   <img src="https://img.shields.io/badge/Debate-Models_Argue-C1666B?style=for-the-badge" alt="Debate">&nbsp;
-  <img src="https://img.shields.io/badge/Dependencies-Zero-4A403A?style=for-the-badge" alt="Zero Deps">&nbsp;
+  <img src="https://img.shields.io/badge/Runtime-Claude_Code_·_Codex_optional-4A403A?style=for-the-badge" alt="Runtime">&nbsp;
   <a href="https://docs.anthropic.com/en/docs/claude-code/overview"><img src="https://img.shields.io/badge/Claude_Code-Plugin-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code Plugin"></a>
 </p>
 
@@ -377,8 +377,10 @@ Then open Claude Code and type `/kiln-fire`. That's it.
 |:--|:--|
 | Node.js 18+ | [nodejs.org](https://nodejs.org) |
 | Claude Code | `npm i -g @anthropic-ai/claude-code` |
-| Codex CLI | `npm i -g @openai/codex` |
-| OpenAI API key | With GPT-5.4 model access |
+| Codex CLI | Optional: `npm i -g @openai/codex` |
+| OpenAI API key | Optional: required only for Codex-backed GPT delegation |
+
+Kiln runs end-to-end on Claude alone. Codex-backed GPT planning and build paths are additive, not required.
 
 Run Claude Code with `--dangerously-skip-permissions`. I spawn agents, write files, and run tests constantly. Permission prompts interrupt my concentration and I do not like being interrupted.
 
@@ -400,7 +402,7 @@ In Claude Code:
 /kiln-doctor
 ```
 
-Checks Claude Code version, Codex CLI, GPT-5.4 access, and directory permissions.
+Checks plugin cache/version state, optional Codex delegation availability, agent and skill files, and current pipeline state.
 
 </details>
 
@@ -546,7 +548,7 @@ KRS-One picks a random famous duo each iteration &mdash; bonnie+clyde, batman+ro
 | ⚡ | **Kaneda** | Opus | Claude-native builder &mdash; implements directly, no GPT dependency |
 | 🗡️ | **Miyamoto** | Sonnet | Claude-native planner &mdash; writes milestone plans directly |
 
-<sub>41 total. I keep count. It's a compulsion.</sub>
+<sub>32 total. I keep count. It's a compulsion.</sub>
 
 <br>
 
@@ -557,7 +559,7 @@ Two commands. That's the whole interface.
 | Command | What it does |
 |:--|:--|
 | `/kiln-fire` | Launch the pipeline. Auto-detects state and resumes where it left off. |
-| `/kiln-doctor` | Pre-flight check &mdash; Claude Code, Codex CLI, GPT-5.4 access, permissions. |
+| `/kiln-doctor` | Pre-flight check &mdash; cache/version, optional Codex delegation, agent/skill files, pipeline state. |
 
 Everything else happens through conversation. Talk to your agents. They'll talk back.
 
@@ -583,8 +585,8 @@ kiln/
 │   └── marketplace.json       Marketplace manifest
 ├── plugins/kiln/
 │   ├── .claude-plugin/
-│   │   └── plugin.json        Plugin manifest (v0.97.0)
-│   ├── agents/                41 agent definitions
+│   │   └── plugin.json        Plugin manifest (v0.98.2)
+│   ├── agents/                32 agent definitions
 │   ├── commands/
 │   │   ├── kiln-fire.md       Launch / resume
 │   │   └── kiln-doctor.md     Pre-flight check
@@ -612,12 +614,12 @@ No npm. No build step. Just markdown files in a folder, distributed as a native 
 
 | | v1 | v2 | v5 | v6 | v7 | v8 | **v9** |
 |:--|:--|:--|:--|:--|:--|:--|:--|
-| **Agents** | 13 | 19 | 24 | 25 | 27 | 29 | **41** |
+| **Agents** | 13 | 19 | 24 | 25 | 27 | 29 | **32** |
 | **Steps** | 5 | 5 | 7 | 7 | 7 | 7 | 7 |
 | **Skills** | 26 | 1 | 1 | 1 | 1 | 1 | 1 |
 | **Commands** | 8 | 4 | 2 | 2 | 2 | 2 | 2 |
 | **Install** | Custom | npm | `--plugin-dir` | `plugin install` | `plugin install` | `plugin install` | `plugin install` |
-| **Dependencies** | 0 | 0 | 0 | 0 | 0 | 0 | **0** |
+| **Dependencies** | 0 | 0 | 0 | 0 | 0 | 0 | **Claude Code (+ optional Codex)** |
 | **Config surface** | ~4k lines | ~1.5k | ~600 | ~600 | ~600 | ~600 | ~600 |
 | **Design QA** | &mdash; | &mdash; | &mdash; | Hephaestus | Picasso + Renoir | Picasso + Renoir | Picasso + Renoir |
 
@@ -709,7 +711,7 @@ The result is a **multi&#8209;agent operating system** where context is never st
 ---
 
 <p align="center">
-  <sub>MIT &middot; Zero dependencies &middot; Node 18+ &middot; Built entirely by things that don't technically exist</sub>
+  <sub>MIT &middot; Claude Code required &middot; Codex optional &middot; Node 18+ &middot; Built entirely by things that don't technically exist</sub>
 </p>
 
 <p align="center">
