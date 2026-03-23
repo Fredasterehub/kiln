@@ -1,258 +1,227 @@
-# Race Condition Test Runner
+# Race Condition Test Runner — Conductor Guide
 
-This document is the orchestrator for the race condition test harness. It defines the full test matrix, execution logic, and result collection.
+This is the instruction manual for the conductor (your Claude Code session). The conductor is stateless — all state lives on disk. You can crash, resume in a new session, and pick up exactly where you left off.
 
-## Test Matrix
+## Quick Start
 
-**120 test cases** = 10 protocols × 4 topologies × 3 sizes
-
-### Protocols
-1. `naive` — fire-and-forget, no confirmations
-2. `ack-required` — explicit ACK on every message
-3. `phased-strict` — current Kiln v6 three-phase ordering
-4. `heartbeat` — periodic ALIVE pings
-5. `retry-on-idle` — conductor re-sends on idle detection
-6. `redundant-send` — every message sent twice with dedup
-7. `watchdog` — dedicated supervisor agent
-8. `confirmation-chain` — fully serial spawn with READY gates
-9. `broadcast-wake` — WAKE/AWAKE handshake before dispatch
-10. `echo-verify` — echo hash verification per message
-
-### Topologies
-1. `boss-worker` — standard hub-and-spoke
-2. `chain` — serial relay A→B→C→boss
-3. `fan-out-in` — rapid-fire dispatch, concurrent replies
-4. `peer-mesh` — every agent messages every other (O(N²))
-
-### Sizes
-1. `small` — 2 agents (1 boss + 1 worker)
-2. `medium` — 4 agents (1 boss + 3 workers)
-3. `large` — 6 agents (1 boss + 5 workers)
-
-## Execution Plan
-
-### Phase 1: Setup (1 turn)
 ```bash
-# Create results directory and log structure
-export RACE_TEST_DIR="/tmp/kiln-race-test"
-export RACE_TEST_RUN="run-$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$RACE_TEST_DIR/$RACE_TEST_RUN"
+cd /home/user/kiln/tests/team-race-conditions
 
-# Generate test manifest
-cat <<'EOF' > "$RACE_TEST_DIR/$RACE_TEST_RUN/manifest.json"
-{
-  "run_id": "<run_id>",
-  "started": "<iso_date>",
-  "protocols": ["naive","ack-required","phased-strict","heartbeat","retry-on-idle","redundant-send","watchdog","confirmation-chain","broadcast-wake","echo-verify"],
-  "topologies": ["boss-worker","chain","fan-out-in","peer-mesh"],
-  "sizes": ["small","medium","large"],
-  "total_tests": 120,
-  "batch_size": 5,
-  "timeout_per_test_s": 120
-}
-EOF
+# First time only:
+./run-batch.sh init
+
+# Every session (including first):
+./run-batch.sh resume       # register session, print state
+./run-batch.sh next         # writes queue.json with next batch
+# Execute tests from queue.json (see below)
+./run-batch.sh dropout      # SPRT elimination check
+./run-batch.sh status       # progress overview
 ```
 
-### Phase 2: Execute Tests (batches of 5)
+## The Conductor Loop
 
-For each batch of 5 test cases, run them as parallel Agent spawns:
+This is your entire job. Repeat until `next` returns empty.
+
+### Step 1: Read the queue
+```bash
+./run-batch.sh next --count 3
+```
+This writes `queue.json` to the run directory. Read it. It contains 3 test definitions.
+
+### Step 2: Execute each test
+
+For each test in `queue.json`, in sequence (or up to 3 in parallel):
 
 ```
-For test_case in batch:
-  test_id = "{protocol}-{topology}-{size}-{run_number}"
-  log_dir = "$RACE_TEST_DIR/$RACE_TEST_RUN/{test_id}"
-
-  1. mkdir -p {log_dir}
-  2. TeamCreate(team_name="race-test-{test_id}")
-  3. Write test config to {log_dir}/config.json
-  4. Execute protocol-specific spawn sequence (see below)
-  5. Wait for TEST_COMPLETE or timeout (120s)
-  6. Collect results from {log_dir}/*.jsonl
-  7. TeamDelete("race-test-{test_id}")
-  8. Write {log_dir}/result.json
+a. Read test config from queue.json (protocol, topology, size, workers, team_name)
+b. ./run-batch.sh lock {test_id}
+c. TeamCreate(team_name="{team_name}")
+d. Spawn agents per protocol (see Protocol Spawn Sequences below)
+e. Wait for TEST_COMPLETE signal or 120s timeout
+f. Collect timing data from agent messages
+g. Write result: ./run-batch.sh result {test_id} '{json}'
+h. TeamDelete("{team_name}")
+i. ./run-batch.sh unlock {test_id}
 ```
 
-### Protocol-Specific Spawn Sequences
+### Step 3: Check for dropouts
+```bash
+./run-batch.sh dropout
+```
+Prints any protocols eliminated by SPRT rules. Eliminated protocols won't appear in future `next` calls.
 
-#### naive, fan-out-in
+### Step 4: Next batch or advance
+```bash
+./run-batch.sh next         # more tests in current stage?
+# If empty:
+./run-batch.sh advance      # move to next stage
+./run-batch.sh next         # first batch of new stage
+```
+
+### Step 5: End of session
+When context is getting large (~40 tests executed), end gracefully:
+```bash
+./run-batch.sh status       # verify no locks remain
+```
+Next session starts with `resume` + `recover` + `next`. Zero state lost.
+
+## Protocol Spawn Sequences
+
+Each protocol has a different spawn pattern. Read the protocol file from `queue.json.tests[].protocol_file` for full rules. Summary:
+
+### naive, fan-out-in
 ```
 TeamCreate → spawn all workers (background, haiku) → spawn boss (background, haiku)
-→ immediately send WORKERS_SPAWNED to boss
+→ SendMessage WORKERS_SPAWNED to boss immediately
 → wait for TEST_COMPLETE
 ```
 
-#### ack-required
+### ack-required
 ```
-TeamCreate → spawn all workers (background, haiku) → wait 2s
-→ spawn boss (background, haiku)
-→ boss waits for READY from each worker before dispatching
+TeamCreate → spawn all workers (background, haiku)
+→ workers self-announce READY to boss
+→ spawn boss (background, haiku) — waits for READY signals before dispatching
 → wait for TEST_COMPLETE
 ```
 
-#### phased-strict
+### phased-strict
 ```
 TeamCreate → spawn boss (background, haiku)
 → boss sends REQUEST_WORKERS → conductor spawns workers
-→ send WORKERS_SPAWNED to boss
+→ SendMessage WORKERS_SPAWNED to boss
 → wait for TEST_COMPLETE
 ```
 
-#### heartbeat
+### heartbeat
 ```
 TeamCreate → spawn all agents (background, haiku)
-→ WORKERS_SPAWNED to boss
-→ monitor heartbeats, nudge idle agents
+→ SendMessage WORKERS_SPAWNED to boss
+→ monitor HEARTBEAT messages from agents
+→ nudge any agent missing heartbeat >20s
 → wait for TEST_COMPLETE
 ```
 
-#### retry-on-idle
+### retry-on-idle
 ```
 TeamCreate → spawn all agents (background, haiku)
-→ WORKERS_SPAWNED to boss
-→ every 15s: check logs, re-send to idle agents
+→ SendMessage WORKERS_SPAWNED to boss
+→ every 15s: read agent JSONL logs, re-send last message to idle agents
 → wait for TEST_COMPLETE
 ```
 
-#### redundant-send
+### redundant-send
 ```
 TeamCreate → spawn all agents (background, haiku)
-→ WORKERS_SPAWNED sent TWICE to boss
+→ SendMessage WORKERS_SPAWNED to boss (send TWICE, same content)
 → wait for TEST_COMPLETE
 ```
 
-#### watchdog
+### watchdog
 ```
 TeamCreate → spawn watchdog (background, haiku) → spawn workers (background, haiku)
 → spawn boss (background, haiku)
-→ WORKERS_SPAWNED to boss
-→ watchdog monitors independently
+→ SendMessage WORKERS_SPAWNED to boss
+→ watchdog monitors independently via log files
 → wait for TEST_COMPLETE
 ```
 
-#### confirmation-chain
+### confirmation-chain
 ```
 TeamCreate → spawn worker-1 (background, haiku) → wait for READY
-→ spawn worker-2 → wait for READY → ... → spawn boss last
-→ boss gets confirmed-ready list in runtime prompt
+→ on READY: spawn worker-2 → wait for READY
+→ ... repeat for all workers
+→ spawn boss last with confirmed-ready list in runtime prompt
 → wait for TEST_COMPLETE
 ```
 
-#### broadcast-wake
+### broadcast-wake
 ```
 TeamCreate → spawn all agents (background, haiku)
-→ WORKERS_SPAWNED to boss
-→ boss sends WAKE to each worker, waits for AWAKE
+→ SendMessage WORKERS_SPAWNED to boss
+→ boss sends WAKE to each worker, collects AWAKE replies
 → then dispatches real work
 → wait for TEST_COMPLETE
 ```
 
-#### echo-verify
+### echo-verify
 ```
 TeamCreate → spawn all agents (background, haiku)
-→ WORKERS_SPAWNED to boss
-→ boss sends with echo_hash, waits for ECHO per worker
-→ retries on timeout
+→ SendMessage WORKERS_SPAWNED to boss
+→ boss sends assignment with echo_hash per worker
+→ waits for ECHO response, retries on 15s timeout
 → wait for TEST_COMPLETE
 ```
 
-### Phase 3: Collect Results
-
-After each test, write `{log_dir}/result.json`:
-```json
-{
-  "test_id": "naive-boss-worker-small-001",
-  "protocol": "naive",
-  "topology": "boss-worker",
-  "size": "small",
-  "completed": true,
-  "wall_time_ms": 15234,
-  "agent_count": 2,
-  "message_count": 4,
-  "retry_count": 0,
-  "idle_events": 0,
-  "failure_mode": null,
-  "agent_results": {
-    "test-boss": { "bootstrap_ms": 1200, "dispatch_time_ms": 340, "total_time_ms": 14800 },
-    "worker-1": { "bootstrap_ms": 980, "delivery_latency_ms": 2100, "work_time_ms": 450 }
-  }
-}
-```
-
-### Phase 4: Analyze
-
-Run `analyze.sh` to generate:
-1. **Protocol ranking table** — sorted by completion rate, then by avg wall time
-2. **Failure mode breakdown** — which protocols suffer which failure modes
-3. **Topology impact matrix** — how topology affects each protocol's reliability
-4. **Size scaling analysis** — how reliability degrades as team size grows
-5. **Recommended protocol** — best balance of reliability and performance
-
 ## Runtime Prompt Templates
 
-### Boss Runtime Prompt
+### Boss
 ```
-You are "{boss_name}" on team "race-test-{test_id}".
-Working dir: {working_dir}
+You are "test-boss" on team "{team_name}". Working dir: {cwd}.
 
-PROTOCOL: {protocol_id}
-Read your protocol file at: {protocol_path}
-TOPOLOGY: {topology_id}
-WORKERS: {worker_list}
+PROTOCOL: {protocol}
+Read your protocol file at: {protocol_file}
+TOPOLOGY: {topology}
+WORKERS: {workers}
 TEST_ID: {test_id}
 LOG_DIR: {log_dir}
 
 Your task: dispatch work to your workers per the protocol, collect replies,
-report TEST_COMPLETE to team-lead. Log ALL timing data to your JSONL file.
+then signal TEST_COMPLETE to team-lead. Log ALL timing to {log_dir}/test-boss.jsonl.
 
-Assignment for workers: "Read the file at /tmp/kiln-race-test/canary.txt
-and reply with its contents plus your timing metadata."
+Worker assignment: "Read /tmp/kiln-race-test/canary.txt, reply with contents + timing metadata."
 ```
 
-### Worker Runtime Prompt
+### Worker
 ```
-You are "{worker_name}" on team "race-test-{test_id}".
-Working dir: {working_dir}
+You are "{worker_name}" on team "{team_name}". Working dir: {cwd}.
 
-PROTOCOL: {protocol_id}
-Read your protocol file at: {protocol_path}
+PROTOCOL: {protocol}
+Read your protocol file at: {protocol_file}
 TEST_ID: {test_id}
 LOG_DIR: {log_dir}
-BOSS_NAME: {boss_name}
+BOSS_NAME: test-boss
 
-Read team-protocol-test.md at: {test_protocol_path}
-Wait for assignment. Log ALL timing data to {log_dir}/{test_id}/{your_name}.jsonl.
+Wait for assignment from test-boss. Do the assigned work. Reply with timing metadata.
+Log ALL events to {log_dir}/{worker_name}.jsonl.
 ```
 
-### Watchdog Runtime Prompt (watchdog protocol only)
+### Watchdog (watchdog protocol only)
 ```
-You are "watchdog" on team "race-test-{test_id}".
-Working dir: {working_dir}
+You are "watchdog" on team "{team_name}". Working dir: {cwd}.
 
 MONITORED_AGENTS: {all_agent_names}
-BOSS_NAME: {boss_name}
+BOSS_NAME: test-boss
 TEST_ID: {test_id}
 LOG_DIR: {log_dir}
-CHECK_INTERVAL_MS: 10000
 IDLE_THRESHOLD_MS: 20000
 
-Monitor all agents by reading their JSONL logs. Nudge any that go idle.
+Monitor agents by reading their JSONL logs. Nudge idle ones via SendMessage.
+Log checks to {log_dir}/watchdog.jsonl.
 ```
 
-## Canary File
+## Result JSON Format
 
-Before tests begin, create a simple canary file that workers "process":
+When a test completes (or times out), record via:
 ```bash
-echo "CANARY: $(date +%s%3N)" > /tmp/kiln-race-test/canary.txt
+./run-batch.sh result "{test_id}" '{"test_id":"...","protocol":"...","topology":"...","size":"...","completed":true/false,"wall_time_ms":N,"message_count":N,"retry_count":N,"idle_events":N,"failure_mode":null/"idle_death"/"message_lost"/"spawn_race"/"timeout"/"session_crash"}'
 ```
 
-This gives workers a trivial, deterministic task (read file, reply with contents) so we isolate communication timing from actual work complexity.
+## Adaptive Staging
 
-## Priority Order
+| Stage | What | Tests per cell | SPRT Dropouts |
+|-------|------|---------------|---------------|
+| 1. Screening | 10 protocols × boss-worker × small | 20 | ≥4/5, ≥6/10, ≥7/15, ≥8/20 |
+| 2. Topology | survivors × 4 topos × small | 20 | ≥5/10, ≥7/20 per topology |
+| 3. Scale | survivors × boss-worker × 3 sizes | 30 | ≥6/15, ≥9/30 per size |
+| 4. Deep | top 2 × full matrix | 30 | none (final validation) |
 
-If running subset (cost/time constraints), prioritize:
-1. All 10 protocols × boss-worker × small (10 tests) — baseline comparison
-2. Top 3 protocols × all topologies × small (12 tests) — topology sensitivity
-3. Top 3 protocols × boss-worker × all sizes (9 tests) — scaling behavior
-4. Full matrix for top 2 protocols (24 tests) — deep dive
+The `dropout` command runs SPRT checks automatically. The `advance` command handles stage transitions including auto-ranking to top 2 for Stage 4.
 
-Minimum viable test: 10 tests (step 1 only). Full suite: 120 tests.
+## Context Management
+
+- **Never carry state in your message history.** Read from disk.
+- **After each test, write result immediately.** Don't batch.
+- **After ~40 tests, end session.** Run `status`, then new session picks up via `resume`.
+- **If you crash, next session runs `recover`** to handle inflight tests.
+
+The disk is the source of truth. Your context window is disposable.
