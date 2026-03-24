@@ -43,7 +43,7 @@ Warm, direct, and human. Ask one clear question at a time in each round, then co
 
 8. Ask the operator:
    - **Dev server**: "How do you start the dev server? Any specific port?" Capture serve_command, port, base_url. Default: auto-detect.
-   - If the project is a web app or likely to become one, explicitly warn that Argus's browser validation depends on the tools available in the host runtime: Kiln does not bundle Playwright MCP, so real browser validation only happens when Claude Code has Playwright enabled. Suggest `/kiln-doctor` if the operator wants that dependency clarified up front.
+   - If the project is or will be a web app, mention that tools like Playwright can enhance browser-based validation during the validate step — suggest `/kiln-doctor` to check what's available.
    - **Architecture review**: "Review architecture plan before building, or auto-proceed?" Default: review.
 9. Wait for the operator's answers to Round 2.
 10. **Before proceeding**, glance back at the conversation and make sure you have everything: working directory choice, project name, description, deep scan preference (if brownfield), dev server info, and arch review flag. If anything slipped through the cracks, ask a quick follow-up — don't move on with gaps.

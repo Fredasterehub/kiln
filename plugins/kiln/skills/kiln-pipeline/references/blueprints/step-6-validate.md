@@ -43,7 +43,7 @@ Zoxea bootstraps and waits. Argus drives validation. Zoxea is passive after READ
 **Phase C — Design QA (conditional):**
 6. If `.kiln/design/` exists AND project is a web app: argus spawns hephaestus via REQUEST_WORKERS.
 7. Argus sends design artifact paths and deployed app URL to hephaestus.
-8. Hephaestus performs 5-axis design review, using Playwright when available or static inspection when not, then writes `.kiln/validation/design-review.md`.
+8. Hephaestus performs 5-axis design review, then writes `.kiln/validation/design-review.md`. Hephaestus self-degrades — she uses Playwright when available, grep-based checks when not.
 9. Hephaestus signals DESIGN_QA_COMPLETE with scores. Argus integrates into report.
 
 If `.kiln/design/` does not exist, Phase C is skipped entirely.

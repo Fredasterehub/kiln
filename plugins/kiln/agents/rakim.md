@@ -91,6 +91,14 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` at
    {most important files with one-line descriptions}
    ```
 
+   After writing AGENTS.md, verify its size:
+   ```bash
+   SIZE=$(wc -c < "${working_dir}/AGENTS.md")
+   if [ "$SIZE" -gt 16384 ]; then
+     echo "WARNING: AGENTS.md is ${SIZE} bytes (limit: 16384). Trim to prevent GPT-5.4 truncation."
+   fi
+   ```
+
 7. Signal READY to team-lead (compact format, ≤1KB):
    ```
    READY: {full|incremental}. {Milestone}. Next: {deliverables}. Key files: {paths}. Last change: {one line}.

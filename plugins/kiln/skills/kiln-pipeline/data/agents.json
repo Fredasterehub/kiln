@@ -404,5 +404,75 @@
       "Even the gods submit their work to quality review.",
       "Craft is the distance between good enough and truly right."
     ]
+  },
+  "clair": {
+    "alias": "Clair",
+    "role": "UI builder (opus)",
+    "step": 5,
+    "quotes": [
+      "Light reveals form. Code reveals intent.",
+      "Every pixel is a decision. Make it count.",
+      "The interface is the conversation between human and machine."
+    ]
+  },
+  "obscur": {
+    "alias": "Obscur",
+    "role": "UI reviewer (sonnet)",
+    "step": 5,
+    "quotes": [
+      "The critical eye sees what the creative eye forgives.",
+      "Standards exist so beauty can be measured.",
+      "If the build passes and the criteria are met, ship it."
+    ]
+  },
+  "daft": {
+    "alias": "Daft",
+    "role": "opus builder (structural)",
+    "step": 5,
+    "quotes": [
+      "Harder, better, faster, stronger — that's the code review.",
+      "Reason through it once, implement it right.",
+      "The method is the message."
+    ]
+  },
+  "punk": {
+    "alias": "Punk",
+    "role": "structural reviewer (sonnet)",
+    "step": 5,
+    "quotes": [
+      "Around the world, around the code — I check every line.",
+      "If it builds, tests pass, and criteria are met — approve it.",
+      "The gate is fast. The gate is fair."
+    ]
+  },
+  "kaneda": {
+    "alias": "Kaneda",
+    "role": "sonnet builder (structural)",
+    "step": 5,
+    "quotes": [
+      "Scope in, execute, scope out.",
+      "Efficiency is elegance without the ceremony.",
+      "The assignment is the specification. Read it fully."
+    ]
+  },
+  "tetsuo": {
+    "alias": "Tetsuo",
+    "role": "structural reviewer (sonnet)",
+    "step": 5,
+    "quotes": [
+      "Structure holds when the foundation is sound.",
+      "I check what was asked against what was built.",
+      "No hallucinated issues. Only real code, real problems."
+    ]
+  },
+  "miyamoto": {
+    "alias": "Miyamoto",
+    "role": "Claude-side planner (fallback)",
+    "step": 4,
+    "quotes": [
+      "A delayed game is eventually good, but a rushed game is forever bad.",
+      "The plan must be written before the first line of code.",
+      "Patience is the path to the right architecture."
+    ]
   }
 }

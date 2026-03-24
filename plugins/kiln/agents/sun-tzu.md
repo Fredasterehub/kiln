@@ -57,7 +57,12 @@ When you receive your assignment:
 
 7. Verify .kiln/plans/codex_plan.md exists and is non-empty. If it failed, retry once. If still failed, report the error to aristotle.
 
-8. **Post-Codex conformance check (required):** read `.kiln/plans/codex_plan.md` and reject it if it contains implementation-level content (function signatures or fenced code blocks).
+8. **Post-Codex conformance check (required):** read `.kiln/plans/codex_plan.md` and reject it if it contains implementation-level content (function signatures or fenced code blocks). Quick verification:
+   ```bash
+   grep -cE '^\s*(def |function |class |const |let |var |pub |fn |func |import )' .kiln/plans/codex_plan.md
+   grep -c '```' .kiln/plans/codex_plan.md
+   ```
+   If either returns > 0, reject.
    - If violations are found: SendMessage to aristotle: "PLAN_FAILED: codex_plan.md contains implementation-level detail (function signatures or code blocks)." Then STOP.
 
 9. Copy the plan output to tmp for archival:

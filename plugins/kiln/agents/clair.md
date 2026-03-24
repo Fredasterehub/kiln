@@ -71,7 +71,13 @@ When you receive your assignment:
     ```
     SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file=implementation-summary.md, source=.kiln/tmp/implementation-summary.md")
 
-11. SendMessage(type:"message", recipient:"{your paired reviewer}", content:"REVIEW_REQUEST: {summary of what was implemented}. Key files changed: {list}. Acceptance criteria: {from assignment}.")
+11. Capture evidence before sending to your paired reviewer:
+    ```
+    DIFF=$(git diff HEAD~1)
+    DIFF_STAT=$(git diff --stat HEAD~1)
+    ITER=$(grep -o '<iteration>[0-9]*</iteration>' /tmp/kiln_assignment.xml 2>/dev/null | grep -o '[0-9]*' || echo "unknown")
+    ```
+11. SendMessage(type:"message", recipient:"{your paired reviewer}", content:"REVIEW_REQUEST: {summary of what was implemented}.\n\nIteration: ${ITER}\n\nKey files changed:\n{DIFF_STAT}\n\nAcceptance criteria: {from assignment}\n\nBuild result: {PASS/FAIL + output summary}\nTest result: {PASS/FAIL + output summary}\n\nFull diff:\n```\n{DIFF}\n```")
 11. STOP. Wait for APPROVED or REJECTED from your paired reviewer.
 
 ### 5. Handle Verdict

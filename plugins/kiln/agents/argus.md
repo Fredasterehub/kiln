@@ -89,13 +89,11 @@ If `playwright_available = false`, skip browser tool calls. Use Bash to confirm 
 
 ### 5b. Design QA (conditional)
 
-If `design_qa_enabled` and `playwright_available`:
+If `design_qa_enabled`:
 - SendMessage to team-lead: "REQUEST_WORKERS: hephaestus (subagent_type: hephaestus)"
 - SendMessage to hephaestus with: design artifact paths (`.kiln/design/tokens.json`, `.kiln/design/tokens.css`, `.kiln/design/creative-direction.md`), deployed app URL, reference to design-review.md rubric at `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/design/design-review.md`.
 - STOP. Wait for hephaestus's "DESIGN_QA_COMPLETE" message with scores.
 - Record design scores for the report.
-
-If `design_qa_enabled` is true but `playwright_available` is false, skip hephaestus, add a warning that design QA was skipped because Playwright MCP is unavailable in the current runtime, and continue.
 
 If `design_qa_enabled` is false, skip this section entirely.
 

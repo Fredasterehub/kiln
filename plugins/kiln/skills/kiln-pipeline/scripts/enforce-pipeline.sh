@@ -8,17 +8,27 @@
 #   Safety (11-13):       protect system config, prevent rm -rf, block memory reads
 #   Lifecycle (15,17):    boss shutdown block, agent spawn whitelist
 #
-# Stateless. Exit 2 + stderr = block. Exit 0 = allow.
+# Stateless. Uses allow()/deny() helpers. deny() = stderr + exit 2.
+# Flip to structured JSON later by changing deny() only.
 # Note: strips kiln: prefix from AGENT, RECIPIENT, SUBTYPE — plugin namespace
 # should not leak into hook matching or UI labels.
 
 INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name // ""')
 
+allow() {
+  exit 0
+}
+
+deny() {
+  echo "$1" >&2
+  exit 2
+}
+
 # Fast exit for tools we don't check
 case "$TOOL" in
   Write|Edit|Bash|SendMessage|Read|Agent) ;;
-  *) exit 0 ;;
+  *) allow ;;
 esac
 
 AGENT=$(echo "$INPUT" | jq -r '.agent_type // ""')
@@ -50,17 +60,17 @@ _status_ok() {
 KILN_ROOT=$(_find_root)
 
 # No .kiln/ directory — no pipeline, allow everything
-[[ -n "$KILN_ROOT" ]] || exit 0
+[[ -n "$KILN_ROOT" ]] || allow
 
 # .kiln/ exists — check if pipeline is actually active via STATE.md
 _STATE="$KILN_ROOT/.kiln/STATE.md"
 if [[ ! -f "$_STATE" ]]; then
-  exit 0  # No STATE.md = no active pipeline (historical/stale .kiln/)
+  allow  # No STATE.md = no active pipeline (historical/stale .kiln/)
 fi
 
 _STAGE=$(grep -oP '(?<=\*\*stage\*\*: )\S+' "$_STATE" 2>/dev/null || true)
 if [[ -z "$_STAGE" ]] || [[ "$_STAGE" == "complete" ]]; then
-  exit 0  # Pipeline finished or STATE.md malformed — no enforcement
+  allow  # Pipeline finished or STATE.md malformed — no enforcement
 fi
 
 # Pipeline is active. Main session (empty AGENT) is the engine — enforce.
@@ -75,7 +85,7 @@ if [[ -n "$AGENT" ]]; then
     zoxea|argus|hephaestus|omega)
       ;; # known Kiln agent — fall through to enforcement
     *)
-      exit 0 ;; # unknown agent (Explore, statusline-setup, etc.) — not Kiln, allow
+      allow ;; # unknown agent (Explore, statusline-setup, etc.) — not Kiln, allow
   esac
 fi
 
@@ -86,36 +96,30 @@ fi
 
 # Hook 1 — codex-type builders: no Write/Edit
 if [[ "$AGENT" == "codex" ]] && [[ "$TOOL" =~ ^(Write|Edit)$ ]]; then
-  cat >&2 <<'MSG'
-STOP. You are a codex exec wrapper — you do not write files.
+  deny "STOP. You are a codex exec wrapper — you do not write files.
 
 Your workflow:
   1. READ context: .kiln/master-plan.md, .kiln/docs/architecture.md,
      .kiln/docs/tech-stack.md, .kiln/docs/codebase-state.md,
      .kiln/docs/patterns.md, .kiln/docs/pitfalls.md
   2. Construct prompt: cat <<'EOF' > /tmp/kiln_prompt.md
-  3. Invoke: codex exec --sandbox danger-full-access -C "{working_dir}" < /tmp/kiln_prompt.md
-  4. Verify output, run tests, commit, REVIEW_REQUEST to your paired reviewer.
-MSG
-  exit 2
+  3. Invoke: codex exec --sandbox danger-full-access -C \"{working_dir}\" < /tmp/kiln_prompt.md
+  4. Verify output, run tests, commit, REVIEW_REQUEST to your paired reviewer."
 fi
 
 # Hook 2 — (removed v1.0.4: plato now writes directly as opus synthesizer)
 
 # Hook 3 — sun-tzu: no Write/Edit
 if [[ "$AGENT" == "sun-tzu" ]] && [[ "$TOOL" =~ ^(Write|Edit)$ ]]; then
-  cat >&2 <<'MSG'
-STOP. You are a codex exec wrapper — you do not write plan content.
+  deny "STOP. You are a codex exec wrapper — you do not write plan content.
 
 Your workflow:
   1. READ: .kiln/docs/VISION.md, .kiln/docs/vision-priorities.md,
      .kiln/docs/architecture.md, .kiln/docs/tech-stack.md,
      .kiln/docs/arch-constraints.md, .kiln/docs/codebase-snapshot.md
   2. Construct prompt: cat <<'EOF' > /tmp/kiln_prompt.md
-  3. Invoke: codex exec --sandbox danger-full-access -C "{working_dir}" < /tmp/kiln_prompt.md
-  4. Verify .kiln/plans/codex_plan.md exists. Signal aristotle: PLAN_READY.
-MSG
-  exit 2
+  3. Invoke: codex exec --sandbox danger-full-access -C \"{working_dir}\" < /tmp/kiln_prompt.md
+  4. Verify .kiln/plans/codex_plan.md exists. Signal aristotle: PLAN_READY."
 fi
 
 # ═══════════════════════════════════════════════════════════════
@@ -143,14 +147,11 @@ if [[ "$AGENT" == "krs-one" ]] && [[ "$TOOL" == "SendMessage" ]]; then
     ROOT=$(_find_root)
     if [[ -n "$ROOT" ]]; then
       if ! _status_ok "$ROOT/.kiln/docs/codebase-state.md" || ! _status_ok "$ROOT/.kiln/docs/patterns.md"; then
-        cat >&2 <<'MSG'
-BLOCKED: rakim and sentinel haven't finished bootstrapping.
+        deny "BLOCKED: rakim and sentinel haven't finished bootstrapping.
 
 Wait for BOTH READY summaries (in your runtime prompt) before dispatching:
   1. rakim — codebase state (codebase-state.md must be complete)
-  2. sentinel — patterns/pitfalls guidance (patterns.md must be complete)
-MSG
-        exit 2
+  2. sentinel — patterns/pitfalls guidance (patterns.md must be complete)"
       fi
     fi
   fi
@@ -161,13 +162,10 @@ if [[ "$AGENT" == "aristotle" ]] && [[ "$TOOL" == "SendMessage" ]] && [[ "$RECIP
   ROOT=$(_find_root)
   if [[ -n "$ROOT" ]]; then
     if ! _status_ok "$ROOT/.kiln/docs/architecture.md"; then
-      cat >&2 <<'MSG'
-BLOCKED: numerobis hasn't finished writing architecture docs.
+      deny "BLOCKED: numerobis hasn't finished writing architecture docs.
 
 Wait for numerobis's READY message. architecture.md must have
-<!-- status: complete --> on its first line before planners can be dispatched.
-MSG
-      exit 2
+<!-- status: complete --> on its first line before planners can be dispatched."
     fi
   fi
 fi
@@ -186,38 +184,33 @@ if [[ "$AGENT" =~ ^(codex|sun-tzu)$ ]] && [[ "$TOOL" == "Bash" ]]; then
       ROOT=$(_find_root)
       if [[ -n "$ROOT" ]]; then
         if ! _status_ok "$ROOT/.kiln/docs/codebase-state.md" || ! _status_ok "$ROOT/.kiln/docs/patterns.md"; then
-          echo "BLOCKED: bootstrap docs not ready. Wait for krs-one's assignment." >&2
-          exit 2
+          deny "BLOCKED: bootstrap docs not ready. Wait for krs-one's assignment."
         fi
       fi
     fi
 
     # Hook 7 — no -m flag (model set in config.toml)
     if echo "$COMMAND" | grep -qE '\s-m\s'; then
-      echo "STOP. Do not pass -m to codex exec. Model is in ~/.codex/config.toml." >&2
-      echo "Use: codex exec --sandbox danger-full-access -C \"{working_dir}\" < /tmp/kiln_prompt.md" >&2
-      exit 2
+      deny "STOP. Do not pass -m to codex exec. Model is in ~/.codex/config.toml.
+Use: codex exec --sandbox danger-full-access -C \"{working_dir}\" < /tmp/kiln_prompt.md"
     fi
 
     # Hook 8 — no --config override
     if echo "$COMMAND" | grep -qE '\-\-config\s'; then
-      echo "STOP. Do not pass --config. Configuration is in ~/.codex/config.toml." >&2
-      echo "Use: codex exec --sandbox danger-full-access -C \"{working_dir}\" < /tmp/kiln_prompt.md" >&2
-      exit 2
+      deny "STOP. Do not pass --config. Configuration is in ~/.codex/config.toml.
+Use: codex exec --sandbox danger-full-access -C \"{working_dir}\" < /tmp/kiln_prompt.md"
     fi
 
     # Hook 9 — no --full-auto (Landlock kernel restriction)
     if echo "$COMMAND" | grep -qE '\-\-full-auto'; then
-      echo "STOP. --full-auto fails in this environment (Landlock). Use --sandbox danger-full-access." >&2
-      echo "Use: codex exec --sandbox danger-full-access -C \"{working_dir}\" < /tmp/kiln_prompt.md" >&2
-      exit 2
+      deny "STOP. --full-auto fails in this environment (Landlock). Use --sandbox danger-full-access.
+Use: codex exec --sandbox danger-full-access -C \"{working_dir}\" < /tmp/kiln_prompt.md"
     fi
 
     # Hook 10 — no --skip-git-repo-check (already in a git repo)
     if echo "$COMMAND" | grep -qE '\-\-skip-git-repo-check'; then
-      echo "STOP. Working directory is already a git repo. No --skip-git-repo-check needed." >&2
-      echo "Use: codex exec --sandbox danger-full-access -C \"{working_dir}\" < /tmp/kiln_prompt.md" >&2
-      exit 2
+      deny "STOP. Working directory is already a git repo. No --skip-git-repo-check needed.
+Use: codex exec --sandbox danger-full-access -C \"{working_dir}\" < /tmp/kiln_prompt.md"
     fi
   fi
 fi
@@ -231,24 +224,20 @@ fi
 # Main session (empty AGENT) always passes — it owns these files.
 if [[ -n "$AGENT" ]] && [[ "$TOOL" =~ ^(Write|Edit)$ ]]; then
   if [[ "$FILE_PATH" =~ (\.codex/|\.claude/settings|\.claude/projects/[^/]+/settings) ]]; then
-    echo "STOP. $FILE_PATH is system configuration. Pipeline agents cannot modify it." >&2
-    echo "Escalate tooling issues to your boss — do not fix config yourself." >&2
-    exit 2
+    deny "STOP. $FILE_PATH is system configuration. Pipeline agents cannot modify it.
+Escalate tooling issues to your boss — do not fix config yourself."
   fi
 fi
 
 # Hook 12 — no rm -rf on project directories
 if [[ "$TOOL" == "Bash" ]]; then
   if echo "$COMMAND" | grep -qE 'rm\s+(-rf|-r\s+-f|-f\s+-r)\s+(/DEV/|\./?[^.]|\$)'; then
-    cat >&2 <<'MSG'
-STOP. Never delete a project directory.
+    deny "STOP. Never delete a project directory.
 
 Use git to recover:
   git checkout -- . && git clean -fd    # undo uncommitted changes
   git reset --soft HEAD~1               # undo last commit, keep changes
-  git reset --hard HEAD                 # hard-reset to last commit
-MSG
-    exit 2
+  git reset --hard HEAD                 # hard-reset to last commit"
   fi
 fi
 
@@ -257,7 +246,7 @@ if [[ "$TOOL" == "Read" ]]; then
   # Silent exit for any .claude/ Read — agents don't need these files,
   # but blocking loudly wastes a turn per agent (230 events in ST17).
   if [[ "$FILE_PATH" =~ /\.claude/ ]]; then
-    exit 0
+    allow
   fi
 fi
 
@@ -267,28 +256,22 @@ fi
 
 # Hook 14 — krs-one: no Write/Edit (he's a scoper, not a coder)
 if [[ "$AGENT" == "krs-one" ]] && [[ "$TOOL" =~ ^(Write|Edit)$ ]]; then
-  cat >&2 <<'MSG'
-STOP. You are the build boss — you scope and delegate, you do not write code.
+  deny "STOP. You are the build boss — you scope and delegate, you do not write code.
 
 Your workflow:
   1. Read READY summaries from rakim and sentinel
   2. Scope a focused chunk from master-plan.md
   3. Construct a structured XML assignment
   4. Dispatch to your builder pair via SendMessage
-  5. Wait for IMPLEMENTATION_COMPLETE
-MSG
-  exit 2
+  5. Wait for IMPLEMENTATION_COMPLETE"
 fi
 
 # Hook 15 — bosses: shutdown is engine's job
 if [[ "$TOOL" == "SendMessage" ]] && [[ "$TYPE" == "shutdown_request" ]]; then
   if [[ "$AGENT" =~ ^(krs-one|aristotle|mi6|argus|alpha|da-vinci)$ ]]; then
-    cat >&2 <<'MSG'
-Worker shutdown is managed by the engine at step transitions.
+    deny "Worker shutdown is managed by the engine at step transitions.
 After verifying deliverables, signal MILESTONE_COMPLETE to team-lead.
-This is your last action for the milestone.
-MSG
-    exit 2
+This is your last action for the milestone."
   fi
 fi
 
@@ -306,14 +289,11 @@ if [[ "$TOOL" == "Agent" ]]; then
       zoxea|argus|hephaestus|omega)
         ;; # allowed
       *)
-        cat >&2 <<'MSG'
-Only named Kiln agents can be spawned. Use agent types from the blueprint roster:
+        deny "Only named Kiln agents can be spawned. Use agent types from the blueprint roster:
   Codex-type: codex (builder) + sphinx (reviewer)
   Sonnet-type: kaneda (builder) + tetsuo (reviewer)
   Opus-type: daft (builder) + punk (reviewer)
-  UI: clair (builder) + obscur (reviewer)
-MSG
-        exit 2
+  UI: clair (builder) + obscur (reviewer)"
         ;;
     esac
   fi
@@ -323,4 +303,4 @@ fi
 # Everything else — allow
 # ═══════════════════════════════════════════════════════════════
 
-exit 0
+allow

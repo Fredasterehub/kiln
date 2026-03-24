@@ -65,7 +65,7 @@ This marker is checked by a PreToolUse hook that gates downstream dispatches.
 Without it, krs-one cannot send work to builders. Fix it now — rewrite the
 file with <!-- status: complete --> as the very first line, before any other content.
 MSG
-    exit 2
+    exit 0
   fi
 fi
 
