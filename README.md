@@ -41,7 +41,7 @@
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
   <td><sub>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</sub></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_24,_2026_·_v0.98.4_·_22:15_UTC-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_24,_2026_·_v0.98.5_·_23:30_UTC-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
@@ -109,9 +109,9 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 <br>
 
 > [!NOTE]
-> **🔧 v0.98.4 — Watchdog Hook + Engine Idle Protocol** <sub>(2026-03-24)</sub>
+> **🔧 v0.98.5 — Watchdog Hook + Engine Idle Protocol** <sub>(2026-03-24)</sub>
 
-**Pipeline deadlock prevention.** New Stop/SubagentStop hook blocks premature stops during active pipeline runs. Persistent minds must have their status marker. Builders must have a recent commit. The engine gets redirected to its watchdog protocol instead of halting.
+**Pipeline deadlock prevention.** SubagentStop hook blocks premature agent stops during active pipeline runs. Persistent minds must have their status marker. Builders must have a recent commit. Engine idle protocol replaces atmospheric poetry with health checks, malformed signal recovery, and stagnation detection.
 
 **Engine idle protocol.** Idle notifications are health checks now, not poetry. The engine scans for malformed signals, nudges silent agents, and escalates to the operator after 3 failed attempts. Inspired by [oh-my-openagent](https://github.com/code-yeongyu/oh-my-openagent)'s continuation enforcer.
 
@@ -596,7 +596,7 @@ kiln/
 │   └── marketplace.json       Marketplace manifest
 ├── plugins/kiln/
 │   ├── .claude-plugin/
-│   │   └── plugin.json        Plugin manifest (v0.98.4)
+│   │   └── plugin.json        Plugin manifest (v0.98.5)
 │   ├── agents/                32 agent definitions
 │   ├── commands/
 │   │   ├── kiln-fire.md       Launch / resume
