@@ -109,34 +109,24 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 <br>
 
 > [!NOTE]
-> **🔧 v0.98.3 — Audit Correction Pass + Engine Fixes** <sub>(2026-03-24)</sub>
+> **🔧 v0.98.3 — Engine Truth + Audit Pass** <sub>(2026-03-24)</sub>
 
-**GPT-5.4 engine fixes.** kiln-doctor aligned to runtime reality (stale Codex flags, diagnostics for experimental teams, Playwright MCP, stale resume paths, plugin version). Resume self-healing reconstructs stale plugin paths before failing. Argus/Playwright dependency made explicit with graceful degradation.
+**Doctor tells the truth now.** Diagnostics aligned to what actually runs at runtime. Resume self-heals stale paths instead of failing. Argus degrades gracefully when Playwright is absent.
 
-**Full plugin audit.** 3 creatah + 1 plugin-dev audit &mdash; 10 files corrected. `agents.json` filled with 7 missing agent entries. `enforce-pipeline.sh` refactored to `allow()`/`deny()` helpers (consolidates 14 deny + 7 allow sites). Hephaestus gate relaxed to `design_qa_enabled` only. `audit-status-marker.sh` made advisory (exit 0). Rakim gets 16KB size guard on AGENTS.md writes.
-
-**Builder parity.** Clair now sends diff/build/test in REVIEW_REQUEST like all other builders. Sun-Tzu conformance check gets explicit grep patterns.
+**Full audit pass.** 10 files corrected across agents, hooks, and data. Enforcement refactored to consolidate all allow/deny logic. Builder agents brought to parity on review protocols. Advisory hooks no longer block.
 
 <details>
 <summary>📌 <strong>v0.98.2 changelog</strong></summary>
 <br>
 
 > [!NOTE]
-> **🔧 v0.98.2 — Dynamic Duo Naming + Agent Consolidation** <sub>(2026-03-22)</sub>
+> **🔧 v0.98.2 — Dynamic Duo Naming** <sub>(2026-03-22)</sub>
 
-**32 agents, down from 49.** 17 clone agents deleted. 4 canonical builder+reviewer pairs remain &mdash; one per tier: `codex`+`sphinx` (Codex/GPT-5.4), `kaneda`+`tetsuo` (Sonnet), `daft`+`punk` (Opus), `clair`+`obscur` (UI). All 8 are self-contained, name-agnostic &mdash; no hardcoded identity.
+**32 agents, down from 49.** 17 clones deleted. 4 canonical builder+reviewer pairs remain &mdash; one per model tier. All 8 are self-contained, name-agnostic.
 
-**Dynamic duo naming.** KRS-One picks a random famous duo per iteration (bonnie+clyde, batman+robin, holmes+watson&hellip;). Names are cosmetic; `subagent_type` determines the protocol. The engine injects both names (own + partner) into each agent's runtime prompt at spawn. One naming policy for all.
+**Dynamic duo naming.** KRS-One picks a random famous duo per iteration (bonnie+clyde, batman+robin, holmes+watson&hellip;). Names are cosmetic &mdash; the engine injects both at spawn. Sequential-only dispatch due to platform bug ([#28175](https://github.com/anthropics/claude-code/issues/28175)).
 
-**Sequential-only dispatch.** Parallel stripped due to platform bug ([#28175](https://github.com/anthropics/claude-code/issues/28175)). One builder+reviewer pair per iteration.
-
-**Hook 4 two-part gate.** With dynamic names, the old positive-match list broke. Inverted to: block anyone krs-one messages who isn't infrastructure *plus* block `REQUEST_WORKERS` to team-lead &mdash; all before bootstrap completes.
-
-**Thoth archival for all 8 build agents.** Write/Edit builders archive implementation summaries. Reviewers archive verdicts. codex archives prompts + GPT-5.4 output.
-
-**KRS-One tightened.** Never-implement rule front-loaded. Bookkeeping mandatory before terminal signals. 4-tier dispatch table with famous duo pool replaces 15-pair roster.
-
-**Dead code sweep.** All worktree refs removed. Sphinx de-hardcoded. Tool overprovisioning fixed across 7 agents. SKILL.md trimmed to ~390 LOC with type-only validation (4-row table, names free-form).
+**Dead code sweep.** All worktree refs removed. Tool overprovisioning fixed across 7 agents. Archival wired to all 8 build agents. Bookkeeping mandatory before terminal signals.
 
 </details>
 
