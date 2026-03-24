@@ -1,11 +1,13 @@
 #!/bin/bash
-# watchdog-stop.sh — Stop/SubagentStop hook for Kiln pipeline
+# watchdog-stop.sh — SubagentStop hook for Kiln pipeline
 #
-# Prevents the engine or any pipeline agent from stopping while the
-# pipeline is active and their work is incomplete.
+# Prevents pipeline agents from stopping while their work is incomplete.
+# Checks deliverables per role: persistent minds need status markers,
+# builders need a recent commit.
 #
-# Stop:         engine tries to stop → check pipeline active
-# SubagentStop: agent tries to stop  → check deliverable exists
+# Stop event (engine): ALLOWED — the engine's turn ends naturally between
+# agent messages. Blocking it causes 100+ false positives per step.
+# Engine stalls are handled by SKILL.md § 5 watchdog protocol (Layer 2).
 #
 # Stateless. Reads .kiln/STATE.md for pipeline state.
 # Exit 0 = allow stop. Exit 2 = block stop (stderr = nudge message).
@@ -14,6 +16,9 @@ INPUT=$(cat)
 EVENT=$(echo "$INPUT" | jq -r '.hook_event_name // ""')
 AGENT=$(echo "$INPUT" | jq -r '.agent_type // ""')
 AGENT="${AGENT#kiln:}"
+
+# Stop event = engine turn end. Always allow — Layer 2 handles stalls.
+[[ "$EVENT" == "SubagentStop" ]] || exit 0
 
 # ── Pipeline context gate ────────────────────────────────────
 _find_root() {
@@ -34,25 +39,6 @@ _STATE="$ROOT/.kiln/STATE.md"
 _STAGE=$(grep -oP '(?<=\*\*stage\*\*: )\S+' "$_STATE" 2>/dev/null || true)
 [[ -n "$_STAGE" ]] || exit 0
 [[ "$_STAGE" != "complete" ]] || exit 0
-
-# Pipeline is active. Now decide based on event type.
-
-# ═══════════════════════════════════════════════════════════════
-# STOP — engine (main session) trying to stop
-# ═══════════════════════════════════════════════════════════════
-if [[ "$EVENT" == "Stop" ]]; then
-  cat >&2 <<MSG
-Pipeline is active (stage: $_STAGE). Do not stop.
-
-Run your watchdog protocol:
-1. Check TaskList — what is the current in_progress task?
-2. Scan received messages for the expected signal (may be malformed).
-3. If an agent sent a wrong signal, reply with the correct format.
-4. If an agent is silent, send ONE nudge with the expected action.
-5. After 3 nudges with no progress, report stall to operator.
-MSG
-  exit 2
-fi
 
 # ═══════════════════════════════════════════════════════════════
 # SUBAGENT STOP — a pipeline agent trying to stop
