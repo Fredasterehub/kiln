@@ -41,7 +41,7 @@
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
   <td><sub>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</sub></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_22,_2026_·_v0.98.2-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_24,_2026_·_v0.98.3-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
@@ -109,6 +109,19 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 <br>
 
 > [!NOTE]
+> **🔧 v0.98.3 — Audit Correction Pass + Engine Fixes** <sub>(2026-03-24)</sub>
+
+**GPT-5.4 engine fixes.** kiln-doctor aligned to runtime reality (stale Codex flags, diagnostics for experimental teams, Playwright MCP, stale resume paths, plugin version). Resume self-healing reconstructs stale plugin paths before failing. Argus/Playwright dependency made explicit with graceful degradation.
+
+**Full plugin audit.** 3 creatah + 1 plugin-dev audit &mdash; 10 files corrected. `agents.json` filled with 7 missing agent entries. `enforce-pipeline.sh` refactored to `allow()`/`deny()` helpers (consolidates 14 deny + 7 allow sites). Hephaestus gate relaxed to `design_qa_enabled` only. `audit-status-marker.sh` made advisory (exit 0). Rakim gets 16KB size guard on AGENTS.md writes.
+
+**Builder parity.** Clair now sends diff/build/test in REVIEW_REQUEST like all other builders. Sun-Tzu conformance check gets explicit grep patterns.
+
+<details>
+<summary>📌 <strong>v0.98.2 changelog</strong></summary>
+<br>
+
+> [!NOTE]
 > **🔧 v0.98.2 — Dynamic Duo Naming + Agent Consolidation** <sub>(2026-03-22)</sub>
 
 **32 agents, down from 49.** 17 clone agents deleted. 4 canonical builder+reviewer pairs remain &mdash; one per tier: `codex`+`sphinx` (Codex/GPT-5.4), `kaneda`+`tetsuo` (Sonnet), `daft`+`punk` (Opus), `clair`+`obscur` (UI). All 8 are self-contained, name-agnostic &mdash; no hardcoded identity.
@@ -124,6 +137,8 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 **KRS-One tightened.** Never-implement rule front-loaded. Bookkeeping mandatory before terminal signals. 4-tier dispatch table with famous duo pool replaces 15-pair roster.
 
 **Dead code sweep.** All worktree refs removed. Sphinx de-hardcoded. Tool overprovisioning fixed across 7 agents. SKILL.md trimmed to ~390 LOC with type-only validation (4-row table, names free-form).
+
+</details>
 
 <details>
 <summary>📌 <strong>v0.98 changelog</strong></summary>
@@ -578,7 +593,7 @@ kiln/
 │   └── marketplace.json       Marketplace manifest
 ├── plugins/kiln/
 │   ├── .claude-plugin/
-│   │   └── plugin.json        Plugin manifest (v0.98.2)
+│   │   └── plugin.json        Plugin manifest (v0.98.3)
 │   ├── agents/                32 agent definitions
 │   ├── commands/
 │   │   ├── kiln-fire.md       Launch / resume
