@@ -1,6 +1,30 @@
 {
-  "description": "Kiln pipeline enforcement hooks — delegation, sequencing, flags, safety",
+  "description": "Kiln pipeline enforcement hooks — delegation, sequencing, flags, safety, watchdog",
   "hooks": {
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/scripts/watchdog-stop.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/scripts/watchdog-stop.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "matcher": "*",

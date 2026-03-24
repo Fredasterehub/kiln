@@ -315,9 +315,19 @@ The engine waits for the boss's completion signal. Messages from the team arrive
 
 **INTERACTIVE steps (Steps 1, 2, 4) — HANDS OFF.** The boss talks to the human. Wait silently and indefinitely — never nudge, re-spawn, take over, or assume the boss is stuck.
 
-**Non-interactive steps (Steps 3, 5, 6, 7)**: if an agent seems stuck (no activity for 5+ minutes), send ONE nudge via SendMessage. If still stuck after another 5 minutes, send one more. Never re-spawn or take over.
+**Non-interactive steps (Steps 3, 5, 6, 7) — Watchdog Protocol:**
 
-**Idle voice**: when the platform forces a response (`idle_notification`), output a lore-flavored one-liner from the current step's spinner verbs. Vary each time — never repeat the same line twice in a row. Never say "standing by", "waiting for signal", or any mechanical status update.
+Every `idle_notification` is a health check opportunity. Do NOT waste it on poetry. On each idle notification:
+
+1. **Check TaskList** — what is the current `in_progress` task? What signal are you waiting for?
+2. **Scan received messages** — did the expected signal arrive in a format you didn't recognize? Look for partial matches, misspelled signals, wrong casing, READY instead of REQUEST_WORKERS, etc.
+3. **Check agent liveness** — has the agent you're waiting on sent ANY message recently? If yes but the signal was malformed, send a corrective message: "Expected `{signal}`, received `{what_they_sent}`. Please resend in the correct format."
+4. **Nudge if silent** — if the agent has sent nothing since spawn or last assignment, send ONE targeted nudge via SendMessage reminding them of their expected action. Include the exact signal format they should send.
+5. **Track nudge count** — after 3 nudges to the same agent with no response or progress, stop nudging that agent and report to the operator: "Agent {name} unresponsive after 3 nudges. Pipeline stalled at {task}. Operator intervention needed."
+
+**Stagnation rule:** If the current `in_progress` task has not changed across 3 consecutive idle notifications, the pipeline is stalled. Report the stall clearly to the operator with the task name, the agent you're waiting on, and the last message received from that agent. Then STOP — do not loop.
+
+**Idle voice (fallback only):** If the health check finds everything normal (agent is actively working, just slow), THEN output a brief lore-flavored one-liner. But health check comes first — every time.
 
 ### 6. Shutdown and Transition
 
@@ -367,6 +377,8 @@ At each step transition, create a private `TaskCreate` chain for the current ste
 On every turn, check `TaskList` and find the current `in_progress` task. If it is a `Wait for X` task, scan ALL received teammate messages for signal `X`. Process EVERY teammate-message block in the input; do not stop after the first match. If the signal is found, mark the task complete and immediately continue to the next unblocked task. If not found, STOP and wait for more messages.
 
 After receiving any teammate message, check TaskList first to identify your current in_progress task. Match the incoming message against the expected signal. Then act on the result.
+
+**Malformed signal recovery:** If a teammate message does NOT match the expected signal but DOES contain a recognizable intent (e.g. `READY` when you expected `REQUEST_WORKERS`, or a signal with wrong casing, or a signal buried in prose), do NOT silently ignore it. Send a corrective reply: "I received your message but expected signal `{expected}`. You sent `{what_they_sent}`. Please resend as exactly: `{expected}: {format}`." This prevents the deadlock where both sides think they communicated correctly.
 
 Use the exact signal names from `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/step-definitions.md`. Rebuild the tasklist at every step transition; Build iterations also rebuild the full chain. The tasklist is engine-only: agents never touch it and use `SendMessage` only. When transitioning between steps, delete all previous tasks (`TaskUpdate status: deleted`) before creating the new step's chain.
 
