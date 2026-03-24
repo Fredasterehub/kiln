@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "kiln",
-  "version": "0.98.4",
+  "version": "0.98.5",
   "description": "Multi-model software creation pipeline — 32 agents, 7 autonomous steps, Claude Code native",
   "owner": {
     "name": "Kilntop"
@@ -10,7 +10,7 @@
     {
       "name": "kiln",
       "description": "Multi-model software creation pipeline. Orchestrates Opus 4.6 with optional Codex-backed GPT delegation through 7 steps: onboarding, brainstorm, research, architecture, build, validate, report.",
-      "version": "0.98.4",
+      "version": "0.98.5",
       "author": {
         "name": "Kilntop"
       },
