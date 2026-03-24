@@ -86,7 +86,7 @@ INST_VER=$(basename "$ROOT")
 [[ "$INST_VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 0
 
 if [[ -n "$MKT_VER" && "$MKT_VER" != "$INST_VER" ]]; then
-  echo "Kiln v${MKT_VER} available (installed: v${INST_VER}). Run: claude plugin update kiln"
+  echo "Kiln v${MKT_VER} available (installed: v${INST_VER}). Run: claude plugin update kiln@kiln"
 fi
 
 exit 0
