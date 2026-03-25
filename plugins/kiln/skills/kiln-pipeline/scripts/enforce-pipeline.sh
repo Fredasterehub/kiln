@@ -2,12 +2,12 @@
 # enforce-pipeline.sh — PreToolUse hook for Kiln pipeline
 #
 # 9 hooks across 4 categories:
-#   Delegation (1,3,14):  codex/sun-tzu/krs-one cannot Write/Edit
-#   Sequencing (4,5):     gate dispatches until bootstrap docs ready
-#   Safety (11,12,12b):   system config, rm -rf, git init
-#   Lifecycle (15,17):    boss shutdown block, agent spawn whitelist
+#   Delegation (1,2,7):   codex/sun-tzu/krs-one cannot Write/Edit
+#   Sequencing (3,4):     gate dispatches until bootstrap docs ready
+#   Safety (5,6,6b):      system config, rm -rf, git init
+#   Lifecycle (8,9):      boss shutdown block, agent spawn whitelist
 #
-# Removed v1.0: Hook 2 (v1.0.4), Hooks 6-10 (redundant/zero fires), Hook 13 (confusion)
+# Removed v1.0: old Hook 2 (v1.0.4), old Hooks 6-10 (redundant/zero fires), old Hook 13 (confusion)
 # Codex flag guidance moved to gpt54-prompt-guide.md reference file.
 #
 # Stateless. allow() = exit 0. deny() = stderr + exit 2.
@@ -90,7 +90,7 @@ if [[ -n "$AGENT" ]]; then
 fi
 
 # ═══════════════════════════════════════════════════════════════
-# DELEGATION — hooks 1, 2, 3
+# DELEGATION — hooks 1, 2
 # Agents that wrap codex exec must not write files directly.
 # ═══════════════════════════════════════════════════════════════
 
@@ -107,9 +107,9 @@ Your workflow:
   4. Verify output, run tests, commit, REVIEW_REQUEST to your paired reviewer."
 fi
 
-# Hook 2 — (removed v1.0.4: plato now writes directly as opus synthesizer)
+# (Hook 2 was plato Write/Edit — removed v1.0.4: plato now writes directly as opus synthesizer)
 
-# Hook 3 — sun-tzu: no Write/Edit
+# Hook 2 — sun-tzu: no Write/Edit
 if [[ "$AGENT" == "sun-tzu" ]] && [[ "$TOOL" =~ ^(Write|Edit)$ ]]; then
   deny "STOP. You are a codex exec wrapper — you do not write plan content.
 
@@ -123,12 +123,12 @@ Your workflow:
 fi
 
 # ═══════════════════════════════════════════════════════════════
-# SEQUENCING — hooks 4, 5, 6
+# SEQUENCING — hooks 3, 4
 # Gate dispatches until bootstrap docs are marked complete.
 # Fail open if .kiln/ not found (no active pipeline).
 # ═══════════════════════════════════════════════════════════════
 
-# Hook 4 — krs-one: no dispatch until rakim+sentinel ready
+# Hook 3 — krs-one: no dispatch until rakim+sentinel ready
 # Two-part gate: (a) block messages to dynamic-named workers,
 # (b) block REQUEST_WORKERS to team-lead. Allows other team-lead messages
 # (ITERATION_COMPLETE, MILESTONE_COMPLETE) and infrastructure agents freely.
@@ -157,7 +157,7 @@ Wait for BOTH READY summaries (in your runtime prompt) before dispatching:
   fi
 fi
 
-# Hook 5 — aristotle: no dispatch to planners until numerobis ready
+# Hook 4 — aristotle: no dispatch to planners until numerobis ready
 if [[ "$AGENT" == "aristotle" ]] && [[ "$TOOL" == "SendMessage" ]] && [[ "$RECIPIENT" =~ ^(confucius|sun-tzu|plato|athena)$ ]]; then
   ROOT=$(_find_root)
   if [[ -n "$ROOT" ]]; then
@@ -170,7 +170,7 @@ Wait for numerobis's READY message. architecture.md must have
   fi
 fi
 
-# Hooks 6-10 removed v1.0: Hook 6 redundant with Hook 4, Hooks 7-10 zero fires across 22 STs.
+# Hooks 6-10 removed v1.0: Hook 6 redundant with Hook 3, Hooks 7-10 zero fires across 22 STs.
 # Codex flag guidance is now prompt-enforced via gpt54-prompt-guide.md.
 # If prompt enforcement proves insufficient, restore a single lightweight check:
 #   if ! echo "$COMMAND" | grep -qE '^codex exec --sandbox danger-full-access -C '; then
@@ -178,15 +178,15 @@ fi
 #   fi
 #
 # Bash bypass of delegation (sed -i, tee, etc.) is monitored by audit-bash.sh (advisory).
-# Zero Bash bypass incidents across 22 STs. ST21 C1 violation was via Write/Edit (now blocked by Hook 14).
+# Zero Bash bypass incidents across 22 STs. ST21 C1 violation was via Write/Edit (now blocked by Hook 7).
 # If Bash bypasses appear in future STs, harden to PreToolUse blocking.
 
 # ═══════════════════════════════════════════════════════════════
-# SAFETY — hooks 11, 12, 13
+# SAFETY — hooks 5, 6, 6b
 # System config, destructive recovery, memory isolation.
 # ═══════════════════════════════════════════════════════════════
 
-# Hook 11 — pipeline agents: no Write/Edit on system config (~/.codex/, ~/.claude/)
+# Hook 5 — pipeline agents: no Write/Edit on system config (~/.codex/, ~/.claude/)
 # Main session (empty AGENT) always passes — it owns these files.
 if [[ -n "$AGENT" ]] && [[ "$TOOL" =~ ^(Write|Edit)$ ]]; then
   if [[ "$FILE_PATH" =~ (\.codex/|\.claude/settings|\.claude/projects/[^/]+/settings) ]]; then
@@ -195,7 +195,7 @@ Escalate tooling issues to your boss — do not fix config yourself."
   fi
 fi
 
-# Hook 12 — no rm -rf on project directories
+# Hook 6 — no rm -rf on project directories
 if [[ "$TOOL" == "Bash" ]]; then
   if echo "$COMMAND" | grep -qE 'rm\s+(-rf|-fr|-r\s+-f|-f\s+-r)\s+(/|~|\$HOME|\$\{HOME|\.\.)'; then
     deny "STOP. Never delete a project directory.
@@ -205,7 +205,7 @@ Use git to recover:
   git reset --soft HEAD~1               # undo last commit, keep changes
   git reset --hard HEAD                 # hard-reset to last commit"
   fi
-  # Hook 12b — no git init during active pipeline (prevents nested repo / history destruction)
+  # Hook 6b — no git init during active pipeline (prevents nested repo / history destruction)
   if echo "$COMMAND" | grep -qE '\bgit\s+(init|-C\s+\S+\s+init)\b'; then
     if [[ -f "$KILN_ROOT/.kiln/STATE.md" ]]; then
       deny "STOP. git init is blocked during an active Kiln pipeline.
@@ -215,13 +215,13 @@ Running git init would destroy commit history. If you need a fresh repo, escalat
   fi
 fi
 
-# Hook 13 removed v1.0: silent allow caused confusion, no real protection.
+# (Hook 13 was memory isolation — removed v1.0: silent allow caused confusion, no real protection.)
 
 # ═══════════════════════════════════════════════════════════════
-# DELEGATION (continued) — hook 14
+# DELEGATION (continued) — hook 7
 # ═══════════════════════════════════════════════════════════════
 
-# Hook 14 — krs-one: no Write/Edit (he's a scoper, not a coder)
+# Hook 7 — krs-one: no Write/Edit (he's a scoper, not a coder)
 if [[ "$AGENT" == "krs-one" ]] && [[ "$TOOL" =~ ^(Write|Edit)$ ]]; then
   deny "STOP. You are the build boss — you scope and delegate, you do not write code.
 
@@ -233,7 +233,7 @@ Your workflow:
   5. Wait for IMPLEMENTATION_COMPLETE"
 fi
 
-# Hook 15 — bosses: shutdown is engine's job
+# Hook 8 — bosses: shutdown is engine's job
 if [[ "$TOOL" == "SendMessage" ]] && [[ "$TYPE" == "shutdown_request" ]]; then
   if [[ "$AGENT" =~ ^(krs-one|aristotle|mi6|argus|alpha|da-vinci)$ ]]; then
     deny "Worker shutdown is managed by the engine at step transitions.
@@ -242,7 +242,7 @@ This is your last action for the milestone."
   fi
 fi
 
-# Hook 17 — Only named Kiln agents can be spawned
+# Hook 9 — Only named Kiln agents can be spawned
 if [[ "$TOOL" == "Agent" ]]; then
   SUBTYPE=$(echo "$INPUT" | jq -r '.tool_input.subagent_type // ""')
   SUBTYPE="${SUBTYPE#kiln:}"
