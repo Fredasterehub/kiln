@@ -59,7 +59,7 @@ pool_index = (build_iteration * 7) % pool_size
     ITER=$((ITER + 1))
     sed -i "s/build_iteration: [0-9]*/build_iteration: ${ITER}/" .kiln/STATE.md
     ```
-    Use Bash (sed or heredoc) for STATE.md and MEMORY.md writes — the Write tool is blocked by Hook 14.
+    Use Bash (sed or heredoc) for STATE.md and .kiln/docs/ writes — the Write tool is blocked by Hook 7.
 2. Read .kiln/master-plan.md — understand ALL milestones, their deliverables, dependencies, and acceptance criteria.
 3. Read .kiln/architecture-handoff.md for build constraints.
 4. If `correction_cycle` > 0: read .kiln/validation/report.md — this contains correction tasks from Argus. Your scoping priority is to fix the issues listed there.
