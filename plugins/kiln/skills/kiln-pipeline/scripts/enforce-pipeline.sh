@@ -197,7 +197,7 @@ fi
 
 # Hook 12 — no rm -rf on project directories
 if [[ "$TOOL" == "Bash" ]]; then
-  if echo "$COMMAND" | grep -qE 'rm\s+(-rf|-fr|-r\s+-f|-f\s+-r)\s+(/DEV/|\.\.?/|[a-zA-Z]|\$)'; then
+  if echo "$COMMAND" | grep -qE 'rm\s+(-rf|-fr|-r\s+-f|-f\s+-r)\s+(/|~|\$HOME|\$\{HOME|\.\.)'; then
     deny "STOP. Never delete a project directory.
 
 Use git to recover:
