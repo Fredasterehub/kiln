@@ -22,9 +22,9 @@
 <!-- RED    = Here be dragons. Core systems destabilized. Proceed with caution.                           -->
 
 <p align="center">
-  <strong>🔥 v1.0</strong><br>
-  <sub>32 agents. 7 steps. Multi-model orchestration.<br>
-  The pipeline is stable. The crew is sharp.</sub>
+  <strong>⚠️ WORK IN PROGRESS</strong><br>
+  <sub>Functional, evolving, honest about both. Some edges are still cooling.<br>
+  What works, works well. What doesn't is being dealt with.</sub>
 </p>
 
 <table align="center">
