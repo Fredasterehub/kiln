@@ -37,46 +37,17 @@ Lead with action or status. No filler ("Let me check...", "Now let me..."). Use 
 |------|------|-------------|---------------|
 | Codex | `codex_available=true` (default structural) | `codex` | `sphinx` |
 | Sonnet | `codex_available=false` (structural fallback) | `kaneda` | `tetsuo` |
-| Opus | Heavy reasoning, complex architectural work | `daft` | `punk` |
 | UI | Components, pages, layouts, motion, design system | `clair` | `obscur` |
 
 ## Tier Name Pools
 
-Each tier has its own thematic duo pool. Pick a duo from the pool matching your selected tier. Names are cosmetic — the `subagent_type` determines the agent protocol. Don't repeat a duo within the same pipeline run.
+Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/build-tiers.md` for name pools. Pick a duo from the pool matching your selected tier using the selection formula:
 
-**Codex Tier** — Explorer/adventure duos (French/Belgian/universal IP):
+```
+pool_index = (build_iteration * 7) % pool_size
+```
 
-| Builder | Reviewer | subagent_type |
-|---------|----------|---------------|
-| tintin | milou | codex + sphinx |
-| mario | luigi | codex + sphinx |
-| lucky | luke | codex + sphinx |
-
-**Sonnet Tier** — Three Musketeers (literary protocol-followers):
-
-| Builder | Reviewer | subagent_type |
-|---------|----------|---------------|
-| athos | milou | kaneda + tetsuo |
-| porthos | luigi | kaneda + tetsuo |
-| aramis | luke | kaneda + tetsuo |
-
-**Opus Tier** — Iconic power duos (deep reasoning):
-
-| Builder | Reviewer | subagent_type |
-|---------|----------|---------------|
-| asterix | obelix | daft + punk |
-| tetsuo | kaneda | daft + punk |
-| daft | punk | daft + punk |
-
-**UI Tier** — Art/design duality (light/shadow, balance):
-
-| Builder | Reviewer | subagent_type |
-|---------|----------|---------------|
-| clair | obscur | clair + obscur |
-| yin | yang | clair + obscur |
-| recto | verso | clair + obscur |
-
-**Name rules**: Never use names that collide with infrastructure agents (rakim, sentinel, thoth, krs-one, team-lead).
+`build_iteration` comes from STATE.md (already read in step 1). Don't repeat a duo within the same pipeline run.
 
 ## Your Job
 
@@ -141,7 +112,7 @@ If rakim reports ALL deliverables of the current milestone are complete, skip to
     ```
     REQUEST_WORKERS: {duo_builder_name} (subagent_type: {builder_type}), {duo_reviewer_name} (subagent_type: {reviewer_type})
     ```
-    Example: `REQUEST_WORKERS: asterix (subagent_type: daft), obelix (subagent_type: punk)`
+    Example: `REQUEST_WORKERS: tintin (subagent_type: codex), milou (subagent_type: sphinx)`
 
     **CRITICAL — The engine validates subagent_types.** If your request uses a subagent_type not in the Tier Roster, the engine will REJECT it with `WORKERS_REJECTED`. NEVER use generic types like `subagent_type: code` or `subagent_type: agent`.
 
@@ -195,11 +166,6 @@ Construct a structured assignment for the builder. The builder's completion sequ
   <test_requirements>
     {what behaviors to test — not how to test them}
   </test_requirements>
-
-  <tdd>true</tdd>
-  <!-- Set to true for code-producing assignments. Builder writes tests FIRST (RED),
-       then implements (GREEN), then refactors. Reviewer verifies the TDD cycle.
-       Set to false for scaffolding, config, or infrastructure-only tasks. -->
 </assignment>
 ```
 
@@ -244,7 +210,7 @@ The builder will implement, get reviewed by their paired reviewer, and message y
 
 ### 6. Milestone Completion Check
 
-1. Read .kiln/docs/codebase-state.md and compare against the current milestone's deliverables and acceptance criteria.
+1. Check deliverables against master-plan.md and the builder's IMPLEMENTATION_COMPLETE report. Do NOT use rakim's codebase-state.md for completion detection — rakim's update is for the NEXT iteration's bootstrap.
 
     **NOT complete:**
     1. Append to iteration ledger (append-only — never overwrite):
@@ -262,10 +228,12 @@ The builder will implement, get reviewed by their paired reviewer, and message y
     2. **LAST**: SendMessage to team-lead: "ITERATION_COMPLETE: {summary}".
     3. STOP.
 
-    **Complete — QA Review:**
-    - Run `git log --oneline -20` to see recent commits.
-    - Read key files (use codebase-state.md as guide).
-    - Check: Does code satisfy acceptance criteria? Integrated properly? Quality issues?
+    **Complete — Milestone QA (3 mechanical checks):**
+    1. Run build command — does the project still compile?
+    2. Run test command — do ALL tests pass (not just this iteration's)?
+    3. Check master-plan deliverables — every item in this milestone marked done?
+
+    All pass → QA PASS. Any fail → QA FAIL → re-scope fixes.
 
     **QA PASS:**
     1. Append to iteration ledger:

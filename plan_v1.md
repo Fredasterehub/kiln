@@ -252,7 +252,7 @@ Main session does ALL of the following before the boss starts working:
 1. **Commit baseline:** `git add -A && git commit` before starting any scope. This ensures `git diff` only shows the current scope's changes — not prior work. Without this, the boss sees unrelated diffs and makes catastrophic decisions (e.g., telling implementer to revert prior work).
 2. **Create team:** `TeamCreate("selektah-scope-{x}")`
 3. **Create task graph:** One `TaskCreate` per task in the scope
-4. **Spawn implementer:** `Agent(name: "implementer", team_name: ..., run_in_background: true)` — starts idle, waits for messages
+4. **Spawn implementer:** `Agent(name: "implementer", subagent_type: "plan-implementer", team_name: ..., run_in_background: true)` — uses `.claude/agents/plan-implementer.md` which preloads creatah skill. Starts idle, waits for messages.
 5. **Spawn boss:** `Agent(name: "boss", team_name: ...)` — starts immediately, reads plan, begins dispatching
 
 The boss prompt must include:
@@ -452,13 +452,37 @@ NEXT: Execute Scope {X+1}
 
 3. Team is torn down. Fresh team for next scope.
 
+### Git Ceremony — Between Every Scope
+
+**This is mandatory. Skipping it caused a near-catastrophic data loss in Scope B run 1.**
+
+The working tree is shared across scopes. Without a baseline commit, `git diff` shows ALL uncommitted changes — the boss sees prior scope work, misattributes it to the implementer, and orders destructive reverts.
+
+**After scope teardown, before next scope:**
+```bash
+# 1. Review what changed
+git diff --stat
+git diff                          # spot-check actual changes
+
+# 2. Commit the scope (baseline for next scope)
+git add -A
+git commit -m "v1.0: Scope {X} — {description}"
+
+# 3. Verify clean state
+git status                        # must be clean (or only untracked files)
+```
+
+**After committing:** `git diff` returns empty. The next scope's boss will only see its own implementer's changes. This is the invariant that makes scoped review work.
+
+**If something went wrong:** `git diff` before committing lets the operator inspect and selectively stage. Never blindly `git add -A` if the scope had issues — review first.
+
 ### Operator Responsibilities Between Scopes
 
 After each scope completes, the operator (main session):
 
 1. **Reads the results block** in plan_v1.md — verify it matches expectations
 2. **Spot-checks changes** — `git diff` on key files, especially if GPT needed 3 passes
-3. **Commits the scope** — one commit per scope: `v1.0: Scope {X} — {scope name}`
+3. **Runs git ceremony** — commit scope, verify clean state (see above)
 4. **Decides whether to proceed** — if partial/blocked, resolve before next scope
 5. **Invokes next scope** — back to Step 0
 
@@ -583,3 +607,20 @@ Tasks: #17 partial (step-5-build.md comms model, krs-one MEMORY.md line)
 - Task #6: No changes needed — files already had Bash in tools list (likely fixed in a prior session).
 - Task #7: Only krs-one.md needed the change (3 of 4 target files already had the pattern). Plan said fix all 4 — 3 were already correct.
 - No other deviations. All changes match plan_v1.md specifications.
+
+---
+
+## Scope C — Results
+
+**Status:** COMPLETE. krs-one.md rewritten — 4 tasks, one coherent pass.
+
+| Task | Status | Files Modified | GPT Passes | Notes |
+|------|--------|----------------|------------|-------|
+| #14 partial — Tier rewrite + registry + formula | Done | `krs-one.md` | 2 | Pass 1 rejected: REQUEST_WORKERS example still used Opus tier (daft/punk). Fixed line 115 to codex/sphinx. |
+| #9 — Milestone QA redesign | Done | `krs-one.md` | 1 | Clean pass. Source of truth → master-plan.md + builder report. 3 mechanical checks. |
+| #10 partial — Remove tdd flag | Done | `krs-one.md` | 1 (override) | GPT reviewer saw cumulative diff and false-positived on prior approved changes. Override: scoped diff correct. |
+| #18 partial — Remove tdd from XML | Already done | — | 0 | Identical to Task #10 partial — tdd already removed. No changes needed. |
+
+**Deviations from plan:**
+- Task #14: REQUEST_WORKERS example (line 115) was not listed in plan as needing update, but GPT-5.4 correctly caught that daft/punk subagent_types became invalid after Opus tier removal. Fixed.
+- Task #10/18 overlap: Both tasks specified removing `<tdd>` from krs-one XML. Task #10 did the work; Task #18 was a no-op.
