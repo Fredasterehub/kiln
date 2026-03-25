@@ -31,9 +31,18 @@ URL=$(printf '%s' "$INPUT" | jq -r '.tool_input.url // ""' 2>/dev/null)
 
 [[ -n "$URL" ]] || allow
 
-# Real GET with 20s timeout — downloads first 1KB to prove content delivery.
-# HEAD passes on sites that hang on actual content (the whole problem).
-if curl -s -L --max-time 20 -r 0-1023 -o /dev/null -w '' "$URL" 2>/dev/null; then
+# Stream the response and stop after the first 1KB. This proves body bytes arrived
+# even when the server ignores Range, without waiting for the full response to finish.
+BYTES=$(
+  curl -sS -L \
+    --proto '=http,https' \
+    --proto-redir '=http,https' \
+    --connect-timeout 5 \
+    --max-time 20 \
+    --range 0-1023 \
+    -- "$URL" 2>/dev/null | head -c 1024 | wc -c | tr -d '[:space:]'
+)
+if [[ "$BYTES" =~ ^[0-9]+$ ]] && (( BYTES > 0 )); then
   allow
 fi
 
