@@ -35,10 +35,13 @@ URL=$(printf '%s' "$INPUT" | jq -r '.tool_input.url // ""' 2>/dev/null)
 # even when the server ignores Range, without waiting for the full response to finish.
 BYTES=$(
   curl -sS -L \
+    --globoff \
     --proto '=http,https' \
     --proto-redir '=http,https' \
     --connect-timeout 5 \
     --max-time 20 \
+    --speed-time 10 \
+    --speed-limit 100 \
     --range 0-1023 \
     -- "$URL" 2>/dev/null | head -c 1024 | wc -c | tr -d '[:space:]'
 )
