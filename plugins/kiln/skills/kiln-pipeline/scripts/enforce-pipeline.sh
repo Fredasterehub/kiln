@@ -259,7 +259,6 @@ if [[ "$TOOL" == "Agent" ]]; then
         deny "Only named Kiln agents can be spawned. Use agent types from the blueprint roster:
   Codex-type: codex (builder) + sphinx (reviewer)
   Sonnet-type: kaneda (builder) + tetsuo (reviewer)
-  Opus-type: daft (builder) + punk (reviewer)
   UI: clair (builder) + obscur (reviewer)"
         ;;
     esac

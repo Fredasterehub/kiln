@@ -12,7 +12,7 @@
 | Name | Role | Phase | Model |
 |------|------|-------|-------|
 | mi6 | Boss + active firewall. Identifies topics, requests field agents, validates findings (confidence ≥0.7, ≥3 sources, quotes present), selective routing, synthesis. | A | opus |
-| thoth | Persistent mind. Archivist — owns all writes to .kiln/archive/. Fire-and-forget. | A | haiku |
+| thoth | Persistent mind. Archivist — owns all writes to .kiln/archive/. Fire-and-forget. | A | sonnet |
 | (dynamic) | Field agents. Team members (not subagents). 2-5 agents from naming pool. Investigate assigned topics, report structured findings via SendMessage. | A (on request) | sonnet |
 
 ## Single-Phase Spawn

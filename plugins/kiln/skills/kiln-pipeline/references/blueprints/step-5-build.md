@@ -24,13 +24,11 @@ The pipeline runner invokes this blueprint repeatedly. Each invocation is one te
 | Name | Role | Phase | Model |
 |------|------|-------|-------|
 | rakim | Persistent mind. Codebase state authority. Writes codebase-state.md (TL;DR header) + AGENTS.md. Consultation for KRS-One and Codex. | A | opus |
-| thoth | Persistent mind. Archivist — owns all writes to .kiln/archive/. Fire-and-forget. | A | haiku |
+| thoth | Persistent mind. Archivist — owns all writes to .kiln/archive/. Fire-and-forget. | A | sonnet |
 | sentinel | Persistent mind. Quality guardian. Owns patterns.md (TL;DR header) and pitfalls.md. Consultation for quality questions. | A | sonnet |
 | krs-one | Boss. Reads plan, receives READY summaries, scopes chunks via structured XML assignments, dispatches to worker pairs, updates docs, milestone QA. | B (BACKGROUND) | opus |
 | codex | Codex-type builder. Thin Codex CLI wrapper — delegates to GPT-5.4. | C | sonnet |
 | sphinx | Structural reviewer. APPROVED or REJECTED. Lightweight gate. | C | sonnet |
-| daft | Opus-type builder. Direct implementation via Write/Edit. Heavy reasoning. | C | opus |
-| punk | Structural reviewer. APPROVED or REJECTED. | C | sonnet |
 | kaneda | Sonnet-type builder. Direct implementation via Write/Edit. | C | sonnet |
 | tetsuo | Structural reviewer. APPROVED or REJECTED. | C | sonnet |
 | clair | UI builder. Direct Opus implementation of components, pages, layouts, motion. | C | opus |
@@ -44,7 +42,6 @@ One pair per tier. krs-one picks dynamic duo names per iteration — the `name:`
 |------|-------------|---------------|------|
 | Codex | codex | sphinx | codex_available=true (default structural) |
 | Sonnet | kaneda | tetsuo | codex_available=false (structural fallback) |
-| Opus | daft | punk | Heavy reasoning, complex architectural work |
 | UI | clair | obscur | Components, pages, layouts, motion, design system |
 
 ## Three-Phase Spawn

@@ -234,7 +234,6 @@ When the current stage is `build`, validate every REQUEST_WORKERS payload before
 |-------------|---------------|------|
 | codex | sphinx | Codex |
 | kaneda | tetsuo | Sonnet |
-| daft | punk | Opus |
 | clair | obscur | UI |
 
 Validation rules:
@@ -247,7 +246,7 @@ Validation rules:
 If validation fails, do NOT spawn. Send an error to the boss:
 
 ```
-SendMessage(type: "message", recipient: "{boss_name}", content: "WORKERS_REJECTED: {reason}. Build step requires a builder+reviewer pair from the same tier. Legal pairs (by subagent_type): codex+sphinx (Codex), kaneda+tetsuo (Sonnet), daft+punk (Opus), clair+obscur (UI). Format: REQUEST_WORKERS: {name} (subagent_type: {builder_type}), {name} (subagent_type: {reviewer_type}).")
+SendMessage(type: "message", recipient: "{boss_name}", content: "WORKERS_REJECTED: {reason}. Build step requires a builder+reviewer pair from the same tier. Legal pairs (by subagent_type): codex+sphinx (Codex), kaneda+tetsuo (Sonnet), clair+obscur (UI). Format: REQUEST_WORKERS: {name} (subagent_type: {builder_type}), {name} (subagent_type: {reviewer_type}).")
 ```
 
 Only proceed to spawning once the full request passes all five rules.
@@ -303,7 +302,7 @@ Engine behavior during three-phase transitions depends on step type:
 ◆ rakim bootstrapping...
 ✓ rakim ready — M2 in progress, 3/5 deliverables done. Key: src/components/LinkCard.tsx
 ◆ KRS-One entering — iteration 4, milestone M2...
-✓ KRS-One: requesting asterix+obelix (daft+punk)
+✓ KRS-One: requesting asterix+obelix (codex+sphinx)
 ◆ Spawning asterix, obelix...
 ```
 

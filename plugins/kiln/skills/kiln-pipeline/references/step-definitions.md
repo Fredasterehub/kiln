@@ -24,7 +24,7 @@ Which agents to spawn per step, spawn order, expected signals, and state transit
 ## Step 3: Research
 
 - **Boss**: mi6 (opus)
-- **Persistent minds**: thoth (haiku, Phase A — archivist, owns .kiln/archive/ writes)
+- **Persistent minds**: thoth (sonnet, Phase A — archivist, owns .kiln/archive/ writes)
 - **Workers**: 2-5 field agents (sonnet), spawned as team members via REQUEST_WORKERS
 - **Three-phase spawn**: Phase A (mi6 + thoth bootstrap in parallel) → Phase B/C merged (mi6 requests field agents, dispatches topics, validates findings)
 - **Done signal**: "RESEARCH_COMPLETE" from mi6
@@ -34,7 +34,7 @@ Which agents to spawn per step, spawn order, expected signals, and state transit
 ## Step 4: Architecture
 
 - **Boss**: aristotle (opus)
-- **Persistent minds**: numerobis (opus, Phase A — technical authority, replaces architect for this step), thoth (haiku, Phase A — archivist)
+- **Persistent minds**: numerobis (opus, Phase A — technical authority, replaces architect for this step), thoth (sonnet, Phase A — archivist)
 - **Workers**: confucius (opus), sun-tzu (sonnet), plato (opus), athena (opus) — requested by aristotle in waves
 - **Three-phase spawn**: Phase A (numerobis + thoth bootstrap in parallel) → Phase B (aristotle INTERACTIVE) → Phase C waves (confucius+sun-tzu → plato → athena)
 - **Done signal**: "ARCHITECTURE_COMPLETE" from aristotle
@@ -46,11 +46,10 @@ Which agents to spawn per step, spawn order, expected signals, and state transit
 ## Step 5: Build (re-invoked per iteration)
 
 - **Boss**: krs-one (opus)
-- **Persistent minds**: rakim (opus, Phase A — codebase state + AGENTS.md), sentinel (sonnet, Phase A — patterns + pitfalls), thoth (haiku, Phase A — archivist)
-- **Workers**: one builder+reviewer pair per iteration from 4 tiers — Phase C, requested by krs-one with dynamic duo names:
+- **Persistent minds**: rakim (opus, Phase A — codebase state + AGENTS.md), sentinel (sonnet, Phase A — patterns + pitfalls), thoth (sonnet, Phase A — archivist)
+- **Workers**: one builder+reviewer pair per iteration from 3 tiers — Phase C, requested by krs-one with dynamic duo names:
   - Codex-type: codex+sphinx
   - Sonnet-type: kaneda+tetsuo
-  - Opus-type: daft+punk
   - UI: clair+obscur
 - **Three-phase spawn**: Phase A (rakim + sentinel + thoth bootstrap in parallel, ALL THREE signal READY) → Phase B (krs-one BACKGROUND) → Phase C (one builder+reviewer pair per request)
 - **Team name**: kill streak name based on build_iteration (see kill-streaks.md)
@@ -59,7 +58,7 @@ Which agents to spawn per step, spawn order, expected signals, and state transit
   - `MILESTONE_COMPLETE: {name}` — milestone done, deep QA passed. Re-invoke for next milestone.
   - `BUILD_COMPLETE` — all milestones done. Proceed to step 6.
 - **State update**: build_iteration incremented each invocation. On BUILD_COMPLETE: stage → validate.
-- **Notes**: KRS-One has NO Write/Edit tools — he scopes and delegates only. Structured XML assignments define WHAT/WHY, builders decide HOW. 4 tiers (3 structural + UI): codex-type (GPT-5.4 delegation), sonnet-type (direct Write/Edit), opus-type (heavy reasoning), UI (clair/obscur). Sentinel is sonnet (structured pattern docs + tool compliance).
+- **Notes**: KRS-One has NO Write/Edit tools — he scopes and delegates only. Structured XML assignments define WHAT/WHY, builders decide HOW. 3 tiers (2 structural + UI): codex-type (GPT-5.4 delegation), sonnet-type (direct Write/Edit), UI (clair/obscur). Sentinel is sonnet (structured pattern docs + tool compliance).
 
 ## Step 6: Validate
 

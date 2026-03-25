@@ -12,7 +12,7 @@
 | Name | Role | Phase | Model |
 |------|------|-------|-------|
 | numerobis | Persistent mind. Technical authority. Bootstraps from research + onboarding, writes architecture docs, consultation hub. | A | opus |
-| thoth | Persistent mind. Archivist — owns all writes to .kiln/archive/. Fire-and-forget. | A | haiku |
+| thoth | Persistent mind. Archivist — owns all writes to .kiln/archive/. Fire-and-forget. | A | sonnet |
 | aristotle | Boss. Orchestrates dual plan, synthesis, validation, operator review. | B (INTERACTIVE) | opus |
 | confucius | Claude-side planner. Reads architecture docs, consults numerobis, writes claude_plan.md. Conditionally generates design artifacts when VISION.md contains Visual Direction (section 12). | C (wave 1) | opus |
 | sun-tzu | Codex-side planner. Delegates to GPT-5.4 via Codex CLI, writes codex_plan.md. | C (wave 1) | sonnet |
