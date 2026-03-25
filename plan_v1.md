@@ -682,3 +682,28 @@ Tasks: #17 partial (step-5-build.md comms model, krs-one MEMORY.md line)
 
 ### Advisory
 - GPT-5.4 flagged Task #8 regex for missing $TMPDIR/$PWD coverage — old regex caught all $ expansions which over-blocked legitimate in-project variable paths. Plan's Safety-Net pattern is a deliberate scope reduction, not an oversight.
+
+---
+
+## Scope F Results — Thoth Upgrade + Docs
+
+**Task #15 — Thoth upgrade: model, polling, STATE.md parsing, documentation duties**
+- **Status:** COMPLETE
+- **Commit:** v1.0: Task #15 — thoth upgrade
+- **GPT-5.4 reviews:** 3 passes. Pass 1: 5 issues (2 fixed, 3 out-of-scope). Pass 2: 1 issue fixed. Pass 3: 2 issues fixed. All thoth.md issues resolved.
+- **Changes:**
+  - Model: haiku → sonnet
+  - Description: dual duty (archival + project documentation)
+  - STATE.md parsing: `grep -oP` with bold-markdown format for both `build_iteration` and `stage`
+  - Polling loop: 30s continuous scan of `.kiln/tmp/`
+  - MILESTONE_DONE handler: writes `.kiln/docs/milestones/milestone-N.md`
+  - BUILD_COMPLETE handler: writes README.md, CHANGELOG.md, conditional api.md/deployment.md
+  - Documentation-guide.md lazy-loaded via `${CLAUDE_PLUGIN_ROOT}` path
+  - Stage-to-directory mapping with `step-5-build` as default fallback
+  - Fire-and-forget preserved; bootstrap READY signal explicitly exempted
+  - Omega/thoth scope boundary documented in Rules
+  - Tools expanded: Read, Write, Bash, Glob, Grep, SendMessage
+- **Out-of-scope items (for other tasks):**
+  - krs-one wiring: MILESTONE_DONE/BUILD_COMPLETE messages to thoth (Task #17)
+  - krs-one message format: milestone number in MILESTONE_DONE payload
+  - master-plan.md sourcing: thoth reads live file (acceptable per spec)
