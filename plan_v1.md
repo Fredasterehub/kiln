@@ -660,3 +660,25 @@ Tasks: #17 partial (step-5-build.md comms model, krs-one MEMORY.md line)
 ### Advisory
 - GPT-5.4 pass 3 on Task #10 flagged abbreviated fix-cycle REVIEW_REQUEST (Handle Verdict sections) as missing `test_requirements:`. Pre-existing pattern, out of scope. Potential future improvement.
 - **Recommendation**: Commit between scopes to give GPT-5.4 clean baselines — cross-task false positives wasted 3 review passes.
+
+## Scope E Results — Hooks + Enforcement Cleanup
+
+**Status**: COMPLETE — 3/3 tasks done.
+
+### Task #8 — rm-rf regex replace with escape-path detection
+- **Files**: enforce-pipeline.sh
+- **GPT-5.4**: APPROVED (plan-overrides-reviewer — flagged $TMPDIR miss, plan's Safety-Net pattern is intentional)
+- **Changes**: Hook 6 (was 12) regex replaced with escape-path detection. Blocks: /, ~, $HOME, ${HOME}, .. — allows in-project cleanup (node_modules, dist, etc.)
+
+### Task #17 — enforce-pipeline headers + hook renumbering
+- **Files**: enforce-pipeline.sh
+- **GPT-5.4**: APPROVED (pass 2 — pass 1 caught stale "Hook 14" cross-reference on line 181, fixed to Hook 7)
+- **Changes**: All hooks renumbered sequentially 1-9 (plus 6b). Section headers, top-of-file summary, and all internal cross-references updated. Comment-only change.
+
+### Task #9 — hooks.json PostToolUse for audit-milestone.sh
+- **Files**: hooks.json
+- **GPT-5.4**: APPROVED (pass 1)
+- **Changes**: Added SendMessage PostToolUse entry wiring audit-milestone.sh as advisory milestone verification hook.
+
+### Advisory
+- GPT-5.4 flagged Task #8 regex for missing $TMPDIR/$PWD coverage — old regex caught all $ expansions which over-blocked legitimate in-project variable paths. Plan's Safety-Net pattern is a deliberate scope reduction, not an oversight.
