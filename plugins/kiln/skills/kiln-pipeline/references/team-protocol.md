@@ -1,8 +1,6 @@
 # Team Protocol Reference
 
-Shared behavior patterns for all Kiln pipeline agents. Every boss reads this at startup alongside their own `.md` file. Workers receive the path in their runtime prompt.
-
-Read this file ONCE at the start of each step. Do not re-read mid-step.
+Detailed reference for kiln-protocol skill. On-demand — bosses read when they need the full playbook. Workers receive the path in their runtime prompt.
 
 ## Three-Phase Spawn
 
@@ -22,9 +20,8 @@ All agents follow a two-phase bootstrap:
 
 **Phase 1 — Read and Confirm:**
 1. Read your agent `.md` file (loaded automatically via `subagent_type`)
-2. Read this file (`team-protocol.md`)
-3. Read any owned files listed in your `.md`
-4. Confirm what you found — your first message should reference specific content from your files
+2. Read any owned files listed in your `.md`
+3. Confirm what you found — your first message should reference specific content from your files
 
 **Phase 2 — Receive Assignment:**
 - **Bosses**: receive READY summaries from persistent minds in your runtime prompt, then evaluate scope
@@ -33,16 +30,22 @@ All agents follow a two-phase bootstrap:
 
 Persistent minds skip Phase 2. They bootstrap immediately on spawn, read their files, update state if needed, then signal READY. They don't wait for a message to start.
 
-## 2. Reply Counting
+## 2. Message Flow Control
 
-You receive replies ONE AT A TIME. Each time you wake up, you get exactly one message. Track expected replies:
+You receive messages ONE AT A TIME. Each wake-up delivers exactly one message. Process it fully before acting.
 
-1. Before dispatching, note how many agents you expect replies from
-2. Each wake-up: identify the sender, process the reply, decrement your count
-3. If count > 0: **STOP and wait.** Do NOT take any other action.
-4. If count == 0: all replies in, proceed to next phase
+**Blocking exchanges** (STOP and wait for reply):
+- Worker completion: `IMPLEMENTATION_COMPLETE` / `IMPLEMENTATION_BLOCKED` (builder → boss)
+- Reviewer verdict: APPROVED / REJECTED (reviewer → builder)
+- Worker → PM consultation: worker sends question, STOPs, waits for reply
+- Shutdown: `shutdown_response` (any agent → engine)
 
-**Never re-message an agent who already replied.** If you need additional info, message them with a NEW question — but count that as a new expected reply.
+**Fire-and-forget** (send and continue immediately):
+- Boss → PM: `ITERATION_UPDATE`, `MILESTONE_DONE`, `QA_ISSUES` — never wait for PM reply
+- Any → thoth: `ARCHIVE` requests
+- Terminal signals → engine: `ITERATION_COMPLETE`, `MILESTONE_COMPLETE`, `BUILD_COMPLETE`
+
+See `blocking-policy.md` for the full source of truth.
 
 ## 3. Dynamic Roster
 
@@ -125,6 +128,8 @@ Standard signals sent via SendMessage to team-lead (the engine):
 |--------|---------|---------|
 | `READY: {summary}` | Bootstrap complete, available for consultation | Persistent minds |
 | `REQUEST_WORKERS: {list}` | Need workers spawned on team | Boss |
+| `WORKERS_SPAWNED: {names}` | Engine confirms workers on team | Engine |
+| `WORKERS_REJECTED: {reason}` | Engine rejected REQUEST_WORKERS | Engine |
 | `ONBOARDING_COMPLETE` | Step 1 done | Alpha |
 | `BRAINSTORM_COMPLETE` | Step 2 done | Da Vinci |
 | `RESEARCH_COMPLETE: {N} topics` | Step 3 done | MI6 |

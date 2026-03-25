@@ -17,6 +17,8 @@ Send via `SendMessage(type: "message", recipient: "team-lead", content: "SIGNAL:
 |--------|---------|
 | `READY: {summary}` | PM bootstrap complete |
 | `REQUEST_WORKERS: {name} (subagent_type: {type}), ...` | Boss needs workers spawned |
+| `WORKERS_SPAWNED: {names}` | Engine confirms workers on team |
+| `WORKERS_REJECTED: {reason}` | Engine rejected REQUEST_WORKERS |
 | `ONBOARDING_COMPLETE` | Step 1 done (alpha) |
 | `BRAINSTORM_COMPLETE` | Step 2 done (da-vinci) |
 | `RESEARCH_COMPLETE: {N} topics` | Step 3 done (mi6) |

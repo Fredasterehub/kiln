@@ -145,6 +145,8 @@ If rakim reports ALL deliverables of the current milestone are complete, skip to
 
     **CRITICAL — The engine validates subagent_types.** If your request uses a subagent_type not in the Tier Roster, the engine will REJECT it with `WORKERS_REJECTED`. NEVER use generic types like `subagent_type: code` or `subagent_type: agent`.
 
+4. STOP. Wait for engine to confirm spawns (WORKERS_SPAWNED). Then proceed to construct and send the assignment.
+
 Construct a structured assignment for the builder. The builder's completion sequence is: implement → verify build → send REVIEW_REQUEST to their paired reviewer → wait for verdict → report to krs-one with the reviewer's APPROVED verdict. The engine injects both names (builder + reviewer) into their runtime prompts at spawn — you do NOT need to include the reviewer name in the assignment.
 
 ```xml

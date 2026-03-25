@@ -249,16 +249,18 @@ Fresh team per scope. Three roles. One artifact (plan_v1.md). No ambiguity.
 
 Main session does ALL of the following before the boss starts working:
 
-1. **Create team:** `TeamCreate("selektah-scope-{x}")`
-2. **Create task graph:** One `TaskCreate` per task in the scope
-3. **Spawn implementer:** `Agent(name: "implementer", team_name: ..., run_in_background: true)` — starts idle, waits for messages
-4. **Spawn boss:** `Agent(name: "boss", team_name: ...)` — starts immediately, reads plan, begins dispatching
+1. **Commit baseline:** `git add -A && git commit` before starting any scope. This ensures `git diff` only shows the current scope's changes — not prior work. Without this, the boss sees unrelated diffs and makes catastrophic decisions (e.g., telling implementer to revert prior work).
+2. **Create team:** `TeamCreate("selektah-scope-{x}")`
+3. **Create task graph:** One `TaskCreate` per task in the scope
+4. **Spawn implementer:** `Agent(name: "implementer", team_name: ..., run_in_background: true)` — starts idle, waits for messages
+5. **Spawn boss:** `Agent(name: "boss", team_name: ...)` — starts immediately, reads plan, begins dispatching
 
 The boss prompt must include:
 - The implementer's name ("implementer") so it knows who to message
 - The scope's task numbers and what to read in plan_v1.md
 - The full execution flow (Steps 1-7)
 - That it NEVER edits files and NEVER spawns agents
+- The git safety rules (Step 3 implementer constraints)
 
 ### Step 1 — Boss Bootstraps
 
@@ -324,6 +326,8 @@ Implementer receives the assignment and:
 - Stay within scope. Don't "improve" adjacent code. Don't add comments to lines you didn't change.
 - If the plan says "one-line change" — it's a one-line change. Trust the plan's precision.
 - If the plan says "same pattern as X" — read X first, then replicate exactly.
+- **NEVER run destructive git commands.** No `git checkout`, `git reset`, `git clean`, `git restore`, `git stash`. The implementer edits files with the Edit tool only. "Revert" means "edit the lines back to what they were" — NEVER `git checkout -- file`. Git commands destroy ALL uncommitted changes to a file, including prior work from other scopes.
+- **Only touch files listed in the assignment.** If a file isn't in FILES TO EDIT, don't touch it.
 
 ### Step 4 — Boss Sends to GPT-5.4 Review
 
@@ -334,13 +338,11 @@ After implementer reports IMPLEMENTATION_COMPLETE, boss collects the diff and se
 Boss uses Bash to run codex exec with a review prompt. The boss constructs the prompt, NOT the implementer.
 
 ```bash
-# Boss collects the diff
-cd /DEV/kiln && git diff > /tmp/kiln_v1_scope_diff.txt
+# 1. Boss collects the SCOPED diff (task files only, never whole repo)
+cd /DEV/kiln && git diff -- {file1} {file2} ... > /tmp/kiln_v1_scope_diff.txt
 
-# Boss writes the review prompt
+# 2. Boss writes the review prompt via heredoc (not Write tool)
 cat <<'REVIEW_EOF' > /tmp/kiln_v1_review_prompt.md
-You are reviewing changes to the Kiln pipeline plugin (Claude Code plugin for software creation).
-
 ## Task Being Reviewed
 Task #{number} — {title}
 {One-line summary of what the change should do}
@@ -348,31 +350,34 @@ Task #{number} — {title}
 ## Acceptance Criteria
 {Copy from the assignment}
 
-## Plan Context
+## Context
 {Any relevant rationale from plan_v1.md that the reviewer needs to understand WHY}
 
 ## Diff
-```
-{paste diff content}
-```
+{paste scoped diff content}
 
-## Review Checklist
-1. Does the diff match the acceptance criteria? Every criterion must be met.
-2. Are there any unintended side effects? (Changed lines that shouldn't have changed)
-3. Is the change minimal? (No extra "improvements" beyond scope)
-4. Are there any syntax errors, broken references, or copy-paste artifacts?
-5. Does the change contradict any existing patterns in the codebase?
+## Constraints
+- Only the files listed above should have changed
+- Changes must be minimal — no scope creep
+- No syntax errors, broken references, or copy-paste artifacts
 
-## Verdict
+## Acceptance Criteria
 Reply with exactly one of:
 - APPROVED: {one-line summary of why it's correct}
 - REJECTED: {numbered list of specific issues, each citing the exact file and line}
 REVIEW_EOF
 
-# Boss invokes GPT-5.4
-codex exec --model o4-mini --sandbox danger-full-access \
-  -C /DEV/kiln < /tmp/kiln_v1_review_prompt.md 2>&1 | tee /tmp/kiln_v1_review_result.txt
+# 3. Boss invokes GPT-5.4 via codex exec (see codex-cli skill for full reference)
+codex exec -m gpt-5.4 \
+  -c 'model_reasoning_effort="high"' \
+  --sandbox danger-full-access \
+  -C /DEV/kiln \
+  < /tmp/kiln_v1_review_prompt.md 2>&1 | tee /tmp/kiln_v1_review_result.txt
 ```
+
+**Timeout:** Set `timeout: 300000` (5 min) on the Bash call. GPT-5.4 with high reasoning can take time.
+
+**Verification:** `codex exec` exits 0 even on failure. Boss must read `/tmp/kiln_v1_review_result.txt` and confirm it contains an actual APPROVED/REJECTED verdict, not just errors.
 
 Boss reads the review result and proceeds based on verdict.
 
@@ -392,12 +397,13 @@ REVISION NEEDED (pass {N}/3):
 GPT-5.4 found these issues:
 {Copy the numbered issues verbatim from the review result}
 
-Fix these specific issues. Do not change anything else. Reply IMPLEMENTATION_COMPLETE when done.
+Fix these specific issues using the Edit tool. Do NOT revert files with git commands — edit the specific lines that need changing. Do not change anything beyond the cited issues. Reply IMPLEMENTATION_COMPLETE when done.
 ```
 
 - Boss STOPS and waits for implementer's fix
-- When implementer reports done, boss collects new diff, sends to GPT-5.4 again (back to Step 4)
+- When implementer reports done, boss collects new diff (scoped to task files only), sends to GPT-5.4 again (back to Step 4)
 - Track pass count: pass 1, pass 2, pass 3
+- **NEVER tell the implementer to "revert all changes" or "start over".** Always cite specific lines to fix.
 
 **If REJECTED on pass 3 — Boss Escalation (Step 6):**
 
@@ -503,6 +509,9 @@ If the boss stalls, gets interrupted, or agents misbehave:
 6. **Cross-model review is the quality gate.** GPT-5.4 catches what Claude misses. This is the whole point of the reviewer role.
 7. **Escalation has a ceiling.** Max 4 total passes (3 + 1 boss-resolved). After that, human decides.
 8. **Results go in plan_v1.md.** The plan is both the spec and the ledger. Everything is in one file.
+9. **Baseline commit before every scope.** Main session commits all prior work so `git diff` only shows current scope changes. Without this, the boss sees unrelated diffs and panics.
+10. **No destructive git commands. Ever.** Implementer uses Edit tool only. Boss uses `git diff -- {files}` (scoped to task files) for review. Nobody runs `git checkout`, `git reset`, `git restore`, or `git clean`. These destroy prior work that shares the working tree.
+11. **Diff is scoped to task files.** Boss collects `git diff -- file1 file2` not `git diff`. This prevents the boss from seeing unrelated changes and misattributing them to the implementer.
 
 ## Scopes (Sequential)
 
@@ -553,3 +562,24 @@ Tasks: #17 partial (step-5-build.md comms model, krs-one MEMORY.md line)
 - Pass 3 APPROVED.
 
 **Deviations from plan:** None. All content matches plan_v1.md specifications.
+
+---
+
+## Scope B — Results
+
+**Status:** COMPLETE. All 5 protocol alignment tasks done.
+
+| Task | Status | Files Modified | GPT Passes | Notes |
+|------|--------|----------------|------------|-------|
+| #6 — Reviewer Bash tool | Already done | `sphinx.md`, `tetsuo.md`, `punk.md` | 0 | All 3 files already had `tools: Read, Bash, SendMessage` in baseline |
+| #7 — WORKERS_SPAWNED pattern | Done | `krs-one.md` | 1 | aristotle, mnemosyne, argus already had the pattern. Only krs-one needed the addition |
+| #13 — sentinel non-blocking | Done | `sentinel.md` | 1 | Added non-blocking annotation + reply wording to match rakim's pattern |
+| #16 — kiln-protocol signals | Done | `kiln-protocol/SKILL.md` | 1 | Added WORKERS_SPAWNED and WORKERS_REJECTED to signal table |
+| #11 — team-protocol alignment | Done | `team-protocol.md` | 2 | Pass 1 rejected: bootstrap self-ref + missing shutdown_response. Pass 2 approved |
+
+**GPT-5.4 review:** 4 tasks reviewed (Task #6 skipped — already done). All approved. Task #11 needed 2 passes.
+
+**Deviations from plan:**
+- Task #6: No changes needed — files already had Bash in tools list (likely fixed in a prior session).
+- Task #7: Only krs-one.md needed the change (3 of 4 target files already had the pattern). Plan said fix all 4 — 3 were already correct.
+- No other deviations. All changes match plan_v1.md specifications.
