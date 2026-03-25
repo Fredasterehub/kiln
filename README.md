@@ -111,21 +111,19 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 > [!NOTE]
 > **🔥 v1.0 — The Realignment** <sub>(2026-03-25)</sub>
 
-**Full architectural realignment.** 18 task decisions, 7 execution scopes, every change GPT-5.4 reviewed. The pipeline that drifted is back — sharper than the golden run.
+**Blocking policy enforced.** Fire-and-forget restored for all boss&rarr;PM communication. Only 3 blocking signals remain: worker completion, reviewer verdict, engine shutdown. Persistent minds are non-blocking consultants.
 
-**Deadlock killed.** The v0.99 bookkeeping-before-signal pattern that caused 10+ hours of dead time in ST22 is gone. Fire-and-forget restored. Only 3 blocking signals remain: worker completion, reviewer verdict, engine shutdown.
+**TDD is default.** Test-Driven Development is the standard protocol for all builders. No flag, no toggle &mdash; builders apply RED&rarr;GREEN&rarr;REFACTOR based on assignment content. Reviewers verify test coverage. Reference protocol at `references/tdd-protocol.md`.
 
-**TDD is default.** Test-Driven Development is now the standard protocol for all builders — not a flag, not a toggle. Builders decide gracefully based on assignment content. Reviewers verify test files exist. Reference protocol at `references/tdd-protocol.md`.
+**3 build tiers.** Codex (GPT-5.4 delegation), Sonnet (direct implementation), UI (clair/obscur). Registry-based naming with deterministic pool selection. Tier definitions in `references/build-tiers.md`.
 
-**3 tiers, not 4.** Opus tier removed (never used in 22 smoke tests). Codex (GPT-5.4), Sonnet (direct), UI (clair/obscur). Registry-based naming with deterministic pool selection.
+**Thoth upgraded.** Haiku to sonnet. Self-scanning archival replaces message-dependent triggers. New documentation duties: README, CHANGELOG, and milestone summaries generated at build boundaries.
 
-**Thoth upgraded.** Haiku to sonnet. Self-scanning archival (no more dropped messages). Documentation duties: README, CHANGELOG, milestone summaries at build boundaries.
+**Protocol alignment.** WORKERS_SPAWNED acknowledgment propagated to all bosses. Sentinel marked non-blocking. Signal table completed in kiln-protocol skill. Team-protocol aligned as Tier 3 on-demand reference.
 
-**Protocol hardened.** WORKERS_SPAWNED pattern propagated to all 5 bosses. Sentinel marked non-blocking. kiln-protocol skill signals table completed. Team-protocol aligned as Tier 3 reference.
+**WebFetch pre-check hardened.** Real content probe with 20s timeout replaces HEAD-only check. Protocol restriction, URL globbing disabled, trickle-attack protection via speed limits, HTTP error rejection.
 
-**WebFetch hook hardened.** 4-pass GPT-5.4 review. Real GET with 20s timeout, protocol restriction, globoff, speed-limit for trickle attacks, PIPESTATUS checking, HTTP error rejection.
-
-**Bootstrap suspender.** All 32 agents now explicitly read `kiln-protocol` at spawn — `skills:` frontmatter does not preload into teammates (tested, confirmed, documented).
+**Agent bootstrap.** All 32 agents explicitly read the kiln-protocol skill file at spawn, ensuring consistent signal vocabulary and blocking policy across the pipeline.
 
 <details>
 <summary>📌 <strong>v0.98.5 changelog</strong></summary>
