@@ -26,3 +26,4 @@ codex/kiln/runtime/
 # Dev artifacts
 codex/
 .kiln-fix-*
+undokiln1
