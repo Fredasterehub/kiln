@@ -26,4 +26,14 @@ codex/kiln/runtime/
 # Dev artifacts
 codex/
 .kiln-fix-*
-undokiln1
+
+# Dev scripts and plans (not shipped)
+bump-version.sh
+release.sh
+plan_v1.md
+
+# Local dev agents (not part of plugin)
+.claude/agents/
+
+# Smoke test directories
+undokiln1/
