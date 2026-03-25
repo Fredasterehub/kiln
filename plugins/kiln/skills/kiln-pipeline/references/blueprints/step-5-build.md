@@ -72,7 +72,7 @@ Builder  → Sentinel       (pattern/quality questions — optional)
 KRS-One  → Rakim           (ITERATION_UPDATE / MILESTONE_DONE / QA_ISSUES)
 KRS-One  → Sentinel        (ITERATION_UPDATE)
 KRS-One  → team-lead       (ITERATION_COMPLETE / MILESTONE_COMPLETE / BUILD_COMPLETE)
-KRS-One  → thoth           (ARCHIVE: bootstrap-context.md, assignment.xml, codebase-state-snapshot.md, qa-{milestone}.md — fire-and-forget)
+KRS-One  → .kiln/tmp/      (writes iter-summary, assignment, QA artifacts — thoth polls for self-scan archival)
 Structural Builder → thoth  (ARCHIVE: prompt.md, codex-output.log, fix-{N}-*.md — fire-and-forget)
 Structural Reviewer → thoth (ARCHIVE: review.md, fix-{N}-review.md — fire-and-forget)
 ```
