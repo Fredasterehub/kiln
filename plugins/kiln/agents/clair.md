@@ -35,17 +35,36 @@ Do NOT bootstrap, explore, or read project files before receiving your assignmen
 
 When you receive your assignment:
 
-### 1. Build
+### 1. Receive and Save Assignment
+
+Save the assignment XML to `/tmp/` (worktree-safe):
+```bash
+cat <<'XMLEOF' > /tmp/kiln_assignment.xml
+{received assignment XML}
+XMLEOF
+```
+
+Read krs-one's XML assignment. Extract:
+- **Scope**: what to implement and why
+- **Context**: files, patterns, constraints, existing interfaces
+- **Acceptance criteria**: what defines done
+- **Test requirements**: what behavior to verify
+
+The assignment is your complete specification. Read it fully before writing any code.
+
+### 2. Build
 
 1. Read krs-one's assignment carefully.
 
-**If `<tdd>true</tdd>` — TDD Protocol:**
+TDD is the default path. If `<test_requirements>` is present in the assignment and contains testable behavior, follow the TDD protocol. If the assignment is pure config/scaffolding with no testable behavior, implement directly and note "no testable behavior" in your commit message.
+
+**TDD Protocol (when testable behavior exists):**
 
 2. **RED** — Write test files encoding `<acceptance_criteria>` and `<test_requirements>`. Run tests — must fail.
 3. **GREEN** — Implement the UI work. Run tests — must pass.
 4. **REFACTOR** — Clean up. Run tests — must still pass.
 
-**Otherwise — Standard Protocol:**
+**Direct implementation (no testable behavior):**
 
 2. Implement the requested UI work directly using Write/Edit.
 
@@ -54,13 +73,15 @@ When you receive your assignment:
 4. Reference `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/design/design-system.md` for shared UI patterns.
 5. Stay within scope. If blocked, SendMessage to krs-one with a precise blocker and STOP.
 
-### 2. Verify
+For TDD protocol details, read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/tdd-protocol.md`.
+
+### 3. Verify
 
 6. Check that expected files were created or modified.
 7. Run the build, test, and lint commands from krs-one's assignment.
 8. All tests must pass. Fix any issues before requesting review.
 
-### 3. Commit
+### 4. Commit
 
 9. Stage and commit all changes:
    ```bash
@@ -68,7 +89,7 @@ When you receive your assignment:
    git commit -m "kiln: {brief description of what was implemented}"
    ```
 
-### 4. Archive and Request Review
+### 5. Archive and Request Review
 
 10. Archive your implementation via thoth (fire-and-forget):
     ```bash
@@ -88,14 +109,14 @@ When you receive your assignment:
     DIFF_STAT=$(git diff --stat HEAD~1)
     ITER=$(grep -o '<iteration>[0-9]*</iteration>' /tmp/kiln_assignment.xml 2>/dev/null | grep -o '[0-9]*' || echo "unknown")
     ```
-11. SendMessage(type:"message", recipient:"{your paired reviewer}", content:"REVIEW_REQUEST: {summary of what was implemented}.\n\nIteration: ${ITER}\n\nKey files changed:\n{DIFF_STAT}\n\nAcceptance criteria: {from assignment}\n\nBuild result: {PASS/FAIL + output summary}\nTest result: {PASS/FAIL + output summary}\n\nFull diff:\n```\n{DIFF}\n```")
-11. STOP. Wait for APPROVED or REJECTED from your paired reviewer.
+12. SendMessage(type:"message", recipient:"{your paired reviewer}", content:"REVIEW_REQUEST: {summary of what was implemented}.\n\nIteration: ${ITER}\n\nKey files changed:\n{DIFF_STAT}\n\nAcceptance criteria: {from assignment}\ntest_requirements: {from assignment, or 'none'}\n\nBuild result: {PASS/FAIL + output summary}\nTest result: {PASS/FAIL + output summary}\n\nFull diff:\n```\n{DIFF}\n```")
+13. STOP. Wait for APPROVED or REJECTED from your paired reviewer.
 
-### 5. Handle Verdict
+### 6. Handle Verdict
 
-12. **APPROVED**: SendMessage to "krs-one": "IMPLEMENTATION_COMPLETE: {summary of what was built, key files created/modified}. Reviewed by {your paired reviewer}: APPROVED." STOP.
+14. **APPROVED**: SendMessage to "krs-one": "IMPLEMENTATION_COMPLETE: {summary of what was built, key files created/modified}. Reviewed by {your paired reviewer}: APPROVED." STOP.
 
-13. **REJECTED**: Read the issues carefully and fix them directly.
+15. **REJECTED**: Read the issues carefully and fix them directly.
     - Track the rejection number (1st rejection = fix 1, 2nd = fix 2, etc).
     - Re-run the relevant build, test, and lint commands from krs-one's assignment.
     - Stage and commit the fixes.

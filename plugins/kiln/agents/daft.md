@@ -57,9 +57,9 @@ Before writing code, reason through the implementation:
 
 ### 3. Implement
 
-If `<tdd>true</tdd>` in the assignment, follow TDD protocol. Otherwise, implement directly.
+TDD is the default path. If `<test_requirements>` is present in the assignment and contains testable behavior, follow the TDD protocol. If the assignment is pure config/scaffolding with no testable behavior, implement directly and note "no testable behavior" in your commit message.
 
-**TDD Protocol (when `<tdd>true</tdd>`):**
+**TDD Protocol (when testable behavior exists):**
 
 1. **RED — Write tests first.** Read `<acceptance_criteria>` and `<test_requirements>`. Write test files that encode the expected behavior. Run tests — they MUST fail (they test code that doesn't exist yet). If tests pass before you write implementation, they're testing nothing useful — rewrite them.
 
@@ -67,7 +67,7 @@ If `<tdd>true</tdd>` in the assignment, follow TDD protocol. Otherwise, implemen
 
 3. **REFACTOR — Clean up while green.** Improve code structure without changing behavior. Run tests again — they must still pass.
 
-**Standard Protocol (when `<tdd>false</tdd>` or absent):**
+**Direct implementation (no testable behavior):**
 
 Write code directly using Write/Edit. Stay within the scoped assignment — implement what was asked, nothing more.
 
@@ -75,6 +75,8 @@ Write code directly using Write/Edit. Stay within the scoped assignment — impl
 - Follow the patterns from the assignment's patterns section.
 - Match the constraints from the constraints section.
 - Keep solutions minimal: don't add abstractions, error handling, or flexibility that wasn't requested.
+
+For TDD protocol details, read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/tdd-protocol.md`.
 
 ### 4. Verify
 
@@ -110,14 +112,14 @@ Write code directly using Write/Edit. Stay within the scoped assignment — impl
    DIFF_STAT=$(git diff --stat HEAD~1)
    ITER=$(grep -o '<iteration>[0-9]*</iteration>' /tmp/kiln_assignment.xml 2>/dev/null | grep -o '[0-9]*' || echo "unknown")
    ```
-6. SendMessage(type:"message", recipient:"{your paired reviewer}", content:"REVIEW_REQUEST: {summary of what was implemented}.\n\nIteration: ${ITER}\n\nKey files changed:\n{DIFF_STAT}\n\nAcceptance criteria: {from assignment}\n\nBuild result: {PASS/FAIL + output summary}\nTest result: {PASS/FAIL + output summary}\n\nFull diff:\n```\n{DIFF}\n```")
-7. STOP. Wait for your paired reviewer's verdict.
+7. SendMessage(type:"message", recipient:"{your paired reviewer}", content:"REVIEW_REQUEST: {summary of what was implemented}.\n\nIteration: ${ITER}\n\nKey files changed:\n{DIFF_STAT}\n\nAcceptance criteria: {from assignment}\ntest_requirements: {from assignment, or 'none'}\n\nBuild result: {PASS/FAIL + output summary}\nTest result: {PASS/FAIL + output summary}\n\nFull diff:\n```\n{DIFF}\n```")
+8. STOP. Wait for your paired reviewer's verdict.
 
 ### 7. Handle Verdict
 
-8. **APPROVED**: SendMessage to "krs-one": "IMPLEMENTATION_COMPLETE: {summary of what was built, key files created/modified}." STOP.
+9. **APPROVED**: SendMessage to "krs-one": "IMPLEMENTATION_COMPLETE: {summary of what was built, key files created/modified}." STOP.
 
-9. **REJECTED**: Read the paired reviewer's issues carefully. Track the rejection number (1st = fix 1, 2nd = fix 2, etc).
+10. **REJECTED**: Read the paired reviewer's issues carefully. Track the rejection number (1st = fix 1, 2nd = fix 2, etc).
    - Fix the issues directly using Write/Edit.
    - Re-verify (build, tests).
    - Commit the fixes.

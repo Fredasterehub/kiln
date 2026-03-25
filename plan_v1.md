@@ -261,6 +261,7 @@ The boss prompt must include:
 - The full execution flow (Steps 1-7)
 - That it NEVER edits files and NEVER spawns agents
 - The git safety rules (Step 3 implementer constraints)
+- **Message discipline:** Boss sends messages ONLY to "implementer" or "team-lead". NEVER to itself. Boss does NOT echo or self-confirm task completions. When implementer reports IMPLEMENTATION_COMPLETE, boss proceeds silently to GPT review — no self-messages, no re-stating what the implementer said.
 
 ### Step 1 — Boss Bootstraps
 
@@ -384,7 +385,12 @@ Boss reads the review result and proceeds based on verdict.
 ### Step 5 — Handle Review Verdict
 
 **If APPROVED:**
-- Boss marks task complete in its checklist
+- Boss commits the task immediately via Bash:
+```bash
+cd /DEV/kiln && git add -A && git commit -m "v1.0: Task #{N} — {short description}"
+```
+  This ensures `git diff` is clean for the next task's review. Prevents GPT false positives from cumulative cross-task diffs.
+- Boss marks task complete (TaskUpdate)
 - Moves to next task in scope (back to Step 2)
 - If last task in scope: proceed to Step 7 (Wrap Up)
 
@@ -624,3 +630,33 @@ Tasks: #17 partial (step-5-build.md comms model, krs-one MEMORY.md line)
 **Deviations from plan:**
 - Task #14: REQUEST_WORKERS example (line 115) was not listed in plan as needing update, but GPT-5.4 correctly caught that daft/punk subagent_types became invalid after Opus tier removal. Fixed.
 - Task #10/18 overlap: Both tasks specified removing `<tdd>` from krs-one XML. Task #10 did the work; Task #18 was a no-op.
+
+---
+
+## Scope D Results — Builder + Reviewer Fixes
+
+**Status**: COMPLETE — 4/4 tasks done.
+
+### Task #10 — TDD default in builders + test_requirements in REVIEW_REQUEST
+- **Files**: codex.md, daft.md, kaneda.md, clair.md, sphinx.md, tetsuo.md, punk.md, obscur.md
+- **GPT-5.4**: APPROVED (pass 3 — 2 fix rounds: field name mismatch, 'none' value mismatch)
+- **Changes**: TDD is default path in all 4 builders. `test_requirements:` added to REVIEW_REQUEST format. All 4 reviewers check `test_requirements` with 'none' exemption for config/scaffolding tasks.
+
+### Task #12 — clair.md missing assignment save
+- **Files**: clair.md
+- **GPT-5.4**: APPROVED (cross-task false positive overridden)
+- **Changes**: Added "### 1. Receive and Save Assignment" section matching daft.md/kaneda.md pattern. Renumbered all subsequent sections (2-6).
+
+### Task #18 — step renumbering in daft.md, kaneda.md, clair.md
+- **Files**: daft.md, kaneda.md, clair.md
+- **GPT-5.4**: APPROVED (cross-task false positive overridden)
+- **Changes**: Fixed duplicate step numbers — sequential numbering throughout all 3 files.
+
+### Task #4 (from Task #10) — TDD reference line in all builders
+- **Files**: codex.md, daft.md, kaneda.md, clair.md
+- **GPT-5.4**: APPROVED (cross-task false positive overridden)
+- **Changes**: Added `For TDD protocol details, read ${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/tdd-protocol.md.` near TDD instructions in each builder.
+
+### Advisory
+- GPT-5.4 pass 3 on Task #10 flagged abbreviated fix-cycle REVIEW_REQUEST (Handle Verdict sections) as missing `test_requirements:`. Pre-existing pattern, out of scope. Potential future improvement.
+- **Recommendation**: Commit between scopes to give GPT-5.4 clean baselines — cross-task false positives wasted 3 review passes.

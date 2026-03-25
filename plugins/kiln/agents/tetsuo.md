@@ -37,7 +37,7 @@ For each REVIEW_REQUEST:
    - Check: Are there placeholder comments like "TODO", "FIXME", "implement this later" in the diff?
    - Check: Are there obvious errors — syntax issues, missing imports, broken references visible in the diff?
    - Check: Does the implementation match the acceptance criteria from the request?
-   - **TDD check**: If the acceptance criteria mention test requirements, verify that test files appear in the diff. Tests should be meaningful (not empty stubs). If a TDD assignment produced zero test files, flag as a rejection issue.
+   - **TDD check**: If `test_requirements` is present in the REVIEW_REQUEST and is not 'none', verify that test files appear in the diff. Tests should be meaningful (not empty stubs). If test_requirements lists actual requirements but no test files in diff, REJECT.
    - Design compliance checks (advisory only — NEVER reject solely for design issues):
      If `.kiln/design/` exists:
      - Check the diff for hardcoded hex colors (e.g., `#ffffff`, `#000000`, `rgb()`) that should use CSS custom properties from tokens.css. Flag as advisory note.

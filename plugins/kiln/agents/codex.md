@@ -58,7 +58,7 @@ When you receive your assignment:
    - `<acceptance_criteria>` + `<test_requirements>` → `## Acceptance Criteria`
    - Add `## Architecture` from your knowledge of the codebase (read AGENTS.md or architecture docs)
 
-   **TDD**: If `<tdd>true</tdd>` in the assignment, prepend to your `## Task` section:
+   **TDD (default)**: If `<test_requirements>` is present in the assignment, prepend to your `## Task` section:
    ```
    Follow TDD strictly:
    1. RED: Write test files first encoding the acceptance criteria. Run tests — they must FAIL.
@@ -66,6 +66,9 @@ When you receive your assignment:
    3. REFACTOR: Clean up code structure. Run tests — must still PASS.
    Commit after GREEN (tests passing). Do not skip the RED phase.
    ```
+   If the assignment has no testable behavior (pure config/scaffolding), omit the TDD preamble and note "no testable behavior" in your `## Task` section.
+
+   For TDD protocol details, read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/tdd-protocol.md`.
 
    **The transformation is the job.** Don't transcribe — translate from scoped assignment to GPT-5.4-native prompt.
    If your Task section contains code blocks, STOP and rephrase as behavior descriptions.
@@ -113,7 +116,7 @@ When you receive your assignment:
     ```
     Include the diff, build results, test results, and iteration number in the review request so the reviewer can verify without filesystem access:
 
-    SendMessage(type:"message", recipient:"{your paired reviewer}", content:"REVIEW_REQUEST: {summary of what was implemented}.\n\nIteration: ${ITER}\n\nKey files changed:\n{DIFF_STAT}\n\nAcceptance criteria: {from assignment}\n\nBuild result: {PASS/FAIL + output summary}\nTest result: {PASS/FAIL + output summary}\n\nFull diff:\n```\n{DIFF}\n```")
+    SendMessage(type:"message", recipient:"{your paired reviewer}", content:"REVIEW_REQUEST: {summary of what was implemented}.\n\nIteration: ${ITER}\n\nKey files changed:\n{DIFF_STAT}\n\nAcceptance criteria: {from assignment}\ntest_requirements: {from assignment, or 'none'}\n\nBuild result: {PASS/FAIL + output summary}\nTest result: {PASS/FAIL + output summary}\n\nFull diff:\n```\n{DIFF}\n```")
 
 13. STOP. Wait for your paired reviewer's verdict.
 

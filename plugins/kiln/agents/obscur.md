@@ -42,7 +42,7 @@ For each REVIEW_REQUEST:
    - Check: Do tests pass? Run the project's test command if one exists.
    - Check: Are there missing files, broken imports, syntax issues, or broken references?
    - Check: Does the implementation match the acceptance criteria from the request?
-   - **TDD check**: If the acceptance criteria mention test requirements, verify that test files appear in the diff. Tests should be meaningful (not empty stubs). If a TDD assignment produced zero test files, flag as a rejection issue.
+   - **TDD check**: If `test_requirements` is present in the REVIEW_REQUEST and is not 'none', verify that test files appear in the diff. Tests should be meaningful (not empty stubs). If test_requirements lists actual requirements but no test files in diff, REJECT.
 
 3. Review visual implementation on five axes from `design-review.md`:
    - Token Compliance: no hardcoded colors, spacing, radii, typography, or motion values when tokens exist.
