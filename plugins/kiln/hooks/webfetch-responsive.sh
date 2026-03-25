@@ -33,8 +33,10 @@ URL=$(printf '%s' "$INPUT" | jq -r '.tool_input.url // ""' 2>/dev/null)
 
 # Stream the response and stop after the first 1KB. This proves body bytes arrived
 # even when the server ignores Range, without waiting for the full response to finish.
-BYTES=$(
-  curl -sS -L \
+# -f (--fail) rejects HTTP 4xx/5xx. PIPESTATUS[0] catches curl timeouts/stalls.
+# Exit 23 = head closed pipe early on large responses (normal, not an error).
+RESULT=$(
+  curl -sS -f -L \
     --globoff \
     --proto '=http,https' \
     --proto-redir '=http,https' \
@@ -43,9 +45,14 @@ BYTES=$(
     --speed-time 10 \
     --speed-limit 100 \
     --range 0-1023 \
-    -- "$URL" 2>/dev/null | head -c 1024 | wc -c | tr -d '[:space:]'
+    -- "$URL" 2>/dev/null |
+    head -c 1024 | wc -c | tr -d '[:space:]'
+  printf ' %s' "${PIPESTATUS[0]}"
 )
-if [[ "$BYTES" =~ ^[0-9]+$ ]] && (( BYTES > 0 )); then
+BYTES=${RESULT% *}
+CURL_STATUS=${RESULT##* }
+
+if [[ "$BYTES" =~ ^[0-9]+$ ]] && (( BYTES > 0 )) && [[ "$CURL_STATUS" =~ ^(0|23)$ ]]; then
   allow
 fi
 
