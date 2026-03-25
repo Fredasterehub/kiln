@@ -22,26 +22,26 @@
 <!-- RED    = Here be dragons. Core systems destabilized. Proceed with caution.                           -->
 
 <p align="center">
-  <strong>⚠️ WORK IN PROGRESS</strong><br>
-  <sub>Functional, evolving, honest about both. Some edges are still cooling.<br>
-  What works, works well. What doesn't is being dealt with.</sub>
+  <strong>🔥 v1.0</strong><br>
+  <sub>32 agents. 7 steps. Multi-model orchestration.<br>
+  The pipeline is stable. The crew is sharp.</sub>
 </p>
 
 <table align="center">
 <tr><td align="center" colspan="2"><br><strong>CURRENT STATUS</strong><br><br></td></tr>
 <tr>
-  <td align="center" width="50"><img src="docs/status/green-dim.svg" width="18" alt="green"></td>
-  <td><sub>Pipeline is stable. Agents are sharp. Full autonomy &mdash; few edge cases remain.</sub></td>
+  <td align="center" width="50"><img src="docs/status/green-active.svg" width="18" alt="green-active"></td>
+  <td><strong>Pipeline is stable. Agents are sharp. Full autonomy &mdash; few edge cases remain.</strong></td>
 </tr>
 <tr>
-  <td align="center"><img src="docs/status/yellow-active.svg" width="18" alt="yellow-active"></td>
-  <td><strong>Functional but evolving. Some rough edges &mdash; you may need to steer where it would normally carry you.</strong></td>
+  <td align="center"><img src="docs/status/yellow-dim.svg" width="18" alt="yellow"></td>
+  <td><sub>Functional but evolving. Some rough edges &mdash; you may need to steer where it would normally carry you.</sub></td>
 </tr>
 <tr>
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
   <td><sub>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</sub></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_24,_2026_·_v0.98.5_·_23:30_UTC-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_25,_2026_·_v1.0.1_·_19:45_UTC-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
@@ -109,11 +109,36 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 <br>
 
 > [!NOTE]
+> **🔥 v1.0 — The Realignment** <sub>(2026-03-25)</sub>
+
+**Full architectural realignment.** 18 task decisions, 7 execution scopes, every change GPT-5.4 reviewed. The pipeline that drifted is back — sharper than the golden run.
+
+**Deadlock killed.** The v0.99 bookkeeping-before-signal pattern that caused 10+ hours of dead time in ST22 is gone. Fire-and-forget restored. Only 3 blocking signals remain: worker completion, reviewer verdict, engine shutdown.
+
+**TDD is default.** Test-Driven Development is now the standard protocol for all builders — not a flag, not a toggle. Builders decide gracefully based on assignment content. Reviewers verify test files exist. Reference protocol at `references/tdd-protocol.md`.
+
+**3 tiers, not 4.** Opus tier removed (never used in 22 smoke tests). Codex (GPT-5.4), Sonnet (direct), UI (clair/obscur). Registry-based naming with deterministic pool selection.
+
+**Thoth upgraded.** Haiku to sonnet. Self-scanning archival (no more dropped messages). Documentation duties: README, CHANGELOG, milestone summaries at build boundaries.
+
+**Protocol hardened.** WORKERS_SPAWNED pattern propagated to all 5 bosses. Sentinel marked non-blocking. kiln-protocol skill signals table completed. Team-protocol aligned as Tier 3 reference.
+
+**WebFetch hook hardened.** 4-pass GPT-5.4 review. Real GET with 20s timeout, protocol restriction, globoff, speed-limit for trickle attacks, PIPESTATUS checking, HTTP error rejection.
+
+**Bootstrap suspender.** All 32 agents now explicitly read `kiln-protocol` at spawn — `skills:` frontmatter does not preload into teammates (tested, confirmed, documented).
+
+<details>
+<summary>📌 <strong>v0.98.5 changelog</strong></summary>
+<br>
+
+> [!NOTE]
 > **🔧 v0.98.5 — Watchdog Hook + Engine Idle Protocol** <sub>(2026-03-24)</sub>
 
 **Pipeline deadlock prevention.** SubagentStop hook blocks premature agent stops during active pipeline runs. Persistent minds must have their status marker. Builders must have a recent commit. Engine idle protocol replaces atmospheric poetry with health checks, malformed signal recovery, and stagnation detection.
 
 **Engine idle protocol.** Idle notifications are health checks now, not poetry. The engine scans for malformed signals, nudges silent agents, and escalates to the operator after 3 failed attempts. Inspired by [oh-my-openagent](https://github.com/code-yeongyu/oh-my-openagent)'s continuation enforcer.
+
+</details>
 
 <details>
 <summary>📌 <strong>v0.98.3 changelog</strong></summary>
