@@ -55,6 +55,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "SendMessage",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/scripts/audit-milestone.sh",
+            "timeout": 5
+          }
+        ]
       }
     ]
   }
