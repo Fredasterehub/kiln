@@ -60,7 +60,7 @@ Workers are spawned into the team. The engine manages isolation.
 
 The engine spawns each worker on the same team. Workers appear as teammates with full SendMessage access. The boss then dispatches assignments individually — one message per worker.
 
-**Naming**: Names are assigned by the engine at spawn via runtime prompt. Build-step workers get dynamic duo names chosen by krs-one — the engine injects both names (own + partner) into each agent's runtime prompt.
+**Naming**: Names are assigned by the engine at spawn via runtime prompt. Build-step workers get tier-themed duo names chosen by krs-one from per-tier pools (Codex = explorer/adventure, Sonnet = Musketeers, Opus = iconic power duos, UI = art/design duality). The engine injects both names (own + partner) into each agent's runtime prompt.
 
 ## 4. Dispatch Pattern
 

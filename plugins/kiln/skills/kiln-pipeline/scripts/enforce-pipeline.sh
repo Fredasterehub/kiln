@@ -1,17 +1,17 @@
 #!/bin/bash
 # enforce-pipeline.sh — PreToolUse hook for Kiln pipeline
 #
-# 15 PreToolUse hooks + 1 PostToolUse audit across 5 categories (hook 2 removed v1.0.4, hook 16 never assigned):
-#   Delegation (1-3,14):  delegation agents cannot Write/Edit files directly
-#   Sequencing (4-6):     gate dispatches until bootstrap docs are ready
-#   Flags (7-10):         block incorrect codex exec flags
-#   Safety (11-13):       protect system config, prevent rm -rf, block memory reads
+# 9 hooks across 4 categories:
+#   Delegation (1,3,14):  codex/sun-tzu/krs-one cannot Write/Edit
+#   Sequencing (4,5):     gate dispatches until bootstrap docs ready
+#   Safety (11,12,12b):   system config, rm -rf, git init
 #   Lifecycle (15,17):    boss shutdown block, agent spawn whitelist
 #
-# Stateless. Uses allow()/deny() helpers. deny() = stderr + exit 2.
-# Flip to structured JSON later by changing deny() only.
-# Note: strips kiln: prefix from AGENT, RECIPIENT, SUBTYPE — plugin namespace
-# should not leak into hook matching or UI labels.
+# Removed v1.0: Hook 2 (v1.0.4), Hooks 6-10 (redundant/zero fires), Hook 13 (confusion)
+# Codex flag guidance moved to gpt54-prompt-guide.md reference file.
+#
+# Stateless. allow() = exit 0. deny() = stderr + exit 2.
+# Strips kiln: prefix from AGENT, RECIPIENT, SUBTYPE.
 
 INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name // ""')
@@ -27,7 +27,7 @@ deny() {
 
 # Fast exit for tools we don't check
 case "$TOOL" in
-  Write|Edit|Bash|SendMessage|Read|Agent) ;;
+  Write|Edit|Bash|SendMessage|Agent) ;;
   *) allow ;;
 esac
 
@@ -170,50 +170,16 @@ Wait for numerobis's READY message. architecture.md must have
   fi
 fi
 
-# ═══════════════════════════════════════════════════════════════
-# FLAGS — hooks 7, 8, 9, 10 (+ sequencing hook 6 as backup gate)
-# Correct codex exec invocation: --sandbox danger-full-access only.
-# Model configured in ~/.codex/config.toml. No extra flags.
-# ═══════════════════════════════════════════════════════════════
-
-if [[ "$AGENT" =~ ^(codex|sun-tzu)$ ]] && [[ "$TOOL" == "Bash" ]]; then
-  if echo "$COMMAND" | grep -q 'codex exec'; then
-
-    # Hook 6 — codex: backup sequencing gate (codex exec before bootstrap ready)
-    if [[ "$AGENT" == "codex" ]]; then
-      ROOT=$(_find_root)
-      if [[ -n "$ROOT" ]]; then
-        if ! _status_ok "$ROOT/.kiln/docs/codebase-state.md" || ! _status_ok "$ROOT/.kiln/docs/patterns.md"; then
-          deny "BLOCKED: bootstrap docs not ready. Wait for krs-one's assignment."
-        fi
-      fi
-    fi
-
-    # Hook 7 — no -m flag (model set in config.toml)
-    if echo "$COMMAND" | grep -qE '\s-m\s'; then
-      deny "STOP. Do not pass -m to codex exec. Model is in ~/.codex/config.toml.
-Use: codex exec --sandbox danger-full-access -C \"{working_dir}\" < /tmp/kiln_prompt.md"
-    fi
-
-    # Hook 8 — no --config override
-    if echo "$COMMAND" | grep -qE '\-\-config\s'; then
-      deny "STOP. Do not pass --config. Configuration is in ~/.codex/config.toml.
-Use: codex exec --sandbox danger-full-access -C \"{working_dir}\" < /tmp/kiln_prompt.md"
-    fi
-
-    # Hook 9 — no --full-auto (Landlock kernel restriction)
-    if echo "$COMMAND" | grep -qE '\-\-full-auto'; then
-      deny "STOP. --full-auto fails in this environment (Landlock). Use --sandbox danger-full-access.
-Use: codex exec --sandbox danger-full-access -C \"{working_dir}\" < /tmp/kiln_prompt.md"
-    fi
-
-    # Hook 10 — no --skip-git-repo-check (already in a git repo)
-    if echo "$COMMAND" | grep -qE '\-\-skip-git-repo-check'; then
-      deny "STOP. Working directory is already a git repo. No --skip-git-repo-check needed.
-Use: codex exec --sandbox danger-full-access -C \"{working_dir}\" < /tmp/kiln_prompt.md"
-    fi
-  fi
-fi
+# Hooks 6-10 removed v1.0: Hook 6 redundant with Hook 4, Hooks 7-10 zero fires across 22 STs.
+# Codex flag guidance is now prompt-enforced via gpt54-prompt-guide.md.
+# If prompt enforcement proves insufficient, restore a single lightweight check:
+#   if ! echo "$COMMAND" | grep -qE '^codex exec --sandbox danger-full-access -C '; then
+#     deny "STOP. Use exact invocation: codex exec --sandbox danger-full-access -C \"{dir}\" < prompt.md"
+#   fi
+#
+# Bash bypass of delegation (sed -i, tee, etc.) is monitored by audit-bash.sh (advisory).
+# Zero Bash bypass incidents across 22 STs. ST21 C1 violation was via Write/Edit (now blocked by Hook 14).
+# If Bash bypasses appear in future STs, harden to PreToolUse blocking.
 
 # ═══════════════════════════════════════════════════════════════
 # SAFETY — hooks 11, 12, 13
@@ -231,7 +197,7 @@ fi
 
 # Hook 12 — no rm -rf on project directories
 if [[ "$TOOL" == "Bash" ]]; then
-  if echo "$COMMAND" | grep -qE 'rm\s+(-rf|-r\s+-f|-f\s+-r)\s+(/DEV/|\./?[^.]|\$)'; then
+  if echo "$COMMAND" | grep -qE 'rm\s+(-rf|-fr|-r\s+-f|-f\s+-r)\s+(/DEV/|\.\.?/|[a-zA-Z]|\$)'; then
     deny "STOP. Never delete a project directory.
 
 Use git to recover:
@@ -239,16 +205,17 @@ Use git to recover:
   git reset --soft HEAD~1               # undo last commit, keep changes
   git reset --hard HEAD                 # hard-reset to last commit"
   fi
-fi
-
-# Hook 13 — no Read on auto-memory directories
-if [[ "$TOOL" == "Read" ]]; then
-  # Silent exit for any .claude/ Read — agents don't need these files,
-  # but blocking loudly wastes a turn per agent (230 events in ST17).
-  if [[ "$FILE_PATH" =~ /\.claude/ ]]; then
-    allow
+  # Hook 12b — no git init during active pipeline (prevents nested repo / history destruction)
+  if echo "$COMMAND" | grep -qE '\bgit\s+(init|-C\s+\S+\s+init)\b'; then
+    if [[ -f "$KILN_ROOT/.kiln/STATE.md" ]]; then
+      deny "STOP. git init is blocked during an active Kiln pipeline.
+The project repository was initialized before the build step.
+Running git init would destroy commit history. If you need a fresh repo, escalate to the operator."
+    fi
   fi
 fi
+
+# Hook 13 removed v1.0: silent allow caused confusion, no real protection.
 
 # ═══════════════════════════════════════════════════════════════
 # DELEGATION (continued) — hook 14

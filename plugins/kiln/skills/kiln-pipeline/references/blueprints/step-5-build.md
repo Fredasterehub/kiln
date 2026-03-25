@@ -53,7 +53,7 @@ One pair per tier. krs-one picks dynamic duo names per iteration — the `name:`
 
 **Phase B**: krs-one spawns (BACKGROUND). Receives READY summaries from rakim and sentinel in runtime prompt. Reads master plan, scopes one focused chunk, requests one builder+reviewer pair from the appropriate tier.
 
-**Phase C**: One builder+reviewer pair per REQUEST_WORKERS. krs-one selects a tier (Codex, Sonnet, Opus, or UI) and picks a random famous duo name from the pool. Example: `REQUEST_WORKERS: bonnie (subagent_type: daft), clyde (subagent_type: punk)`. The engine injects identity into both agents' runtime prompts at spawn. Builders send REVIEW_REQUEST directly to their paired reviewer, reviewers reply directly to builders, and builders report IMPLEMENTATION_COMPLETE or IMPLEMENTATION_BLOCKED back to KRS-One.
+**Phase C**: One builder+reviewer pair per REQUEST_WORKERS. krs-one selects a tier (Codex, Sonnet, Opus, or UI) and picks a tier-themed duo name from the matching pool. Example: `REQUEST_WORKERS: asterix (subagent_type: daft), obelix (subagent_type: punk)`. The engine injects identity into both agents' runtime prompts at spawn. Builders send REVIEW_REQUEST directly to their paired reviewer, reviewers reply directly to builders, and builders report IMPLEMENTATION_COMPLETE or IMPLEMENTATION_BLOCKED back to KRS-One.
 
 Builders commit directly to the repo. The engine manages isolation.
 

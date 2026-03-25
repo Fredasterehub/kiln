@@ -193,8 +193,8 @@ Before spawning a team, output a spawning block:
   → krs-one
   → rakim
   → sentinel
-  → bonnie (daft)
-  → clyde (punk)
+  → asterix (daft)
+  → obelix (punk)
 ```
 
 After an agent completes:
