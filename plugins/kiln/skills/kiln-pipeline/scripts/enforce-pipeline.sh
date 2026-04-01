@@ -186,11 +186,15 @@ fi
 # System config, destructive recovery, memory isolation.
 # ═══════════════════════════════════════════════════════════════
 
-# Hook 5 — pipeline agents: no Write/Edit on system config (~/.codex/, ~/.claude/)
-# Main session (empty AGENT) always passes — it owns these files.
-if [[ -n "$AGENT" ]] && [[ "$TOOL" =~ ^(Write|Edit)$ ]]; then
+# Hook 5 — pipeline agents: no Read/Write/Edit on sensitive or system files
+if [[ -n "$AGENT" ]] && [[ "$TOOL" =~ ^(Read|Write|Edit)$ ]]; then
+  # Sensitive files
+  if [[ "$FILE_PATH" =~ (\.env|\.pem|_rsa|\.key|credentials\.json|secrets\.|^.*\.npmrc$) ]]; then
+    deny "STOP. $FILE_PATH contains sensitive credentials. Pipeline agents are blocked from accessing it."
+  fi
+  # System configuration
   if [[ "$FILE_PATH" =~ (\.codex/|\.claude/settings|\.claude/projects/[^/]+/settings) ]]; then
-    deny "STOP. $FILE_PATH is system configuration. Pipeline agents cannot modify it.
+    deny "STOP. $FILE_PATH is system configuration. Pipeline agents cannot modify or read it.
 Escalate tooling issues to your boss — do not fix config yourself."
   fi
 fi

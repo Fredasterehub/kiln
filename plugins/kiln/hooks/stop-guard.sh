@@ -1,5 +1,5 @@
 #!/bin/bash
-# stop-guard.sh — Stop hook for Kiln pipeline
+# stop-guard.sh — Stop/SubagentStop hook for Kiln pipeline
 #
 # Prevents pipeline agents from stopping while their work is incomplete.
 # Checks deliverables per role: persistent minds need status markers,
@@ -8,7 +8,8 @@
 # Exit 0 = allow stop. Exit 2 = block stop (stderr = nudge message).
 
 INPUT=$(cat)
-AGENT=$(echo "$INPUT" | jq -r '.agent_type // ""')
+# Handle both main session (AGENT) and subagents (AGENT_ID/SUBTYPE)
+AGENT=$(echo "$INPUT" | jq -r '.agent_type // .agent_id // .subagent_type // ""')
 AGENT="${AGENT#kiln:}"
 
 # ── Pipeline context gate ────────────────────────────────────
@@ -45,20 +46,26 @@ case "$AGENT" in
 esac
 
 # ── History Inspection ───────────────────────────────────────
-# Check if the agent sent a message or wrote a file in its LAST action.
+# Get last action and last messages from transcript
+TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // .agent_transcript_path // ""')
 LAST_TOOL=$(echo "$INPUT" | jq -r '.history[-1].tool_name // ""')
 LAST_CONTENT=$(echo "$INPUT" | jq -r '.history[-1].tool_input.content // ""')
 
-# If they sent a terminal signal, always allow stop.
+if [[ -f "$TRANSCRIPT" ]]; then
+  # Check if they received a terminal request or sent a terminal signal
+  LAST_RECEIVED=$(grep -E '"type":\s*"message"' "$TRANSCRIPT" | tail -1 | jq -r '.content // ""')
+  LAST_SENT=$(grep -E '"type":\s*"message"' "$TRANSCRIPT" | grep -E '"sender":\s*"'${AGENT}'"' | tail -1 | jq -r '.content // ""')
+fi
+
+# Terminal signals always allow stop
 case "$LAST_CONTENT" in
-  *ONBOARDING_COMPLETE*|*BRAINSTORM_COMPLETE*|*RESEARCH_COMPLETE*|*ARCHITECTURE_COMPLETE*|*ITERATION_COMPLETE*|*MILESTONE_COMPLETE*|*BUILD_COMPLETE*|*VALIDATE_PASS*|*VALIDATE_FAILED*|*REPORT_COMPLETE*|*READY:*|*IMPLEMENTATION_COMPLETE*|*REVIEW_REQUEST*|*APPROVED*|*REJECTED*)
+  *ONBOARDING_COMPLETE*|*BRAINSTORM_COMPLETE*|*RESEARCH_COMPLETE*|*ARCHITECTURE_COMPLETE*|*ITERATION_COMPLETE*|*MILESTONE_COMPLETE*|*BUILD_COMPLETE*|*VALIDATE_PASS*|*VALIDATE_FAILED*|*REPORT_COMPLETE*|*READY:*|*IMPLEMENTATION_COMPLETE*|*REVIEW_REQUEST*|*APPROVED*|*REJECTED*|*SERIALIZATION_COMPLETE*)
     exit 0
     ;;
 esac
 
 # ── Per-role deliverable checks ──────────────────────────────
 
-# Persistent minds: must have status marker before stopping
 case "$AGENT" in
   rakim)
     if [[ -f "$ROOT/.kiln/docs/codebase-state.md" ]]; then
@@ -81,34 +88,34 @@ case "$AGENT" in
     echo "You are stopping but architecture.md is missing or has no <!-- status: complete --> marker on line 1. Write your architecture file before stopping." >&2
     exit 2
     ;;
-esac
-
-# Builders: must have committed something or sent a terminal signal (handled above)
-case "$AGENT" in
-  codex|daft|kaneda|clair|miyamoto)
-    # If they didn't send a signal, did they at least commit recently?
-    RECENT=$(git -C "$ROOT" log --oneline --since="10 minutes ago" 2>/dev/null | head -1)
-    if [[ -n "$RECENT" ]]; then
-      # They committed, but did they report it? 
-      # If they are stopping without SendMessage, they might be multi-turning.
-      # Allow if they at least did a tool call this turn.
-      [[ "$LAST_TOOL" != "null" && -n "$LAST_TOOL" ]] && exit 0
+  clio)
+    if [[ "$LAST_RECEIVED" == *"SERIALIZE_AND_SHUTDOWN"* ]]; then
+      if [[ -f "$ROOT/.kiln/docs/VISION.md" ]] && [[ "$LAST_SENT" == *"SERIALIZATION_COMPLETE"* ]]; then
+        exit 0
+      fi
+      echo "You received SERIALIZE_AND_SHUTDOWN but haven't written VISION.md or signaled SERIALIZATION_COMPLETE. Finish serialization before stopping." >&2
+      exit 2
     fi
-    
-    echo "You are stopping but no recent commit or report was found. Ensure your work is committed and report status via SendMessage before stopping." >&2
-    exit 2
+    ;;
+  codex|daft|kaneda|clair|miyamoto)
+    # Builders: if they just got APPROVED, they MUST report to krs-one
+    if [[ "$LAST_RECEIVED" == *"APPROVED"* ]]; then
+      if [[ "$LAST_SENT" == *"IMPLEMENTATION_COMPLETE"* ]]; then
+        exit 0
+      fi
+      echo "Your implementation was APPROVED but you haven't sent IMPLEMENTATION_COMPLETE to krs-one. Report your success before stopping." >&2
+      exit 2
+    fi
+    # General liveness check
+    RECENT=$(git -C "$ROOT" log --oneline --since="10 minutes ago" 2>/dev/null | head -1)
+    if [[ -z "$RECENT" && "$LAST_TOOL" == "" ]]; then
+      echo "You are stopping but no recent work or message was found. If you are finished, report status. If blocked, explain why." >&2
+      exit 2
+    fi
     ;;
 esac
 
-# All other agents: allow stop if they did SOMETHING this turn
-[[ "$LAST_TOOL" != "null" && -n "$LAST_TOOL" ]] && exit 0
-
-# If they did NOTHING and are stopping, block it (unless they are waiting for a reply)
-# But wait, how do we know they are waiting?
-# Usually, if they are waiting, their last tool was SendMessage.
-if [[ "$LAST_TOOL" == "" || "$LAST_TOOL" == "null" ]]; then
-    echo "You are stopping without taking any action. If you are waiting for a reply, your last action should have been SendMessage. If you are finished, send a terminal signal." >&2
-    exit 2
-fi
+# Allow stop if they made any tool call this turn (they are working)
+[[ -n "$LAST_TOOL" && "$LAST_TOOL" != "null" ]] && exit 0
 
 exit 0

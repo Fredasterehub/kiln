@@ -38,6 +38,7 @@ Lead with action or status. No filler ("Let me check...", "Now let me..."). Use 
 | Tier | When | Builder Type | Reviewer Type |
 |------|------|-------------|---------------|
 | Codex | `codex_available=true` (default structural) | `codex` | `sphinx` |
+| Opus | Critical complex features, deep logic, sensitive core | `daft` | `punk` |
 | Sonnet | `codex_available=false` (structural fallback) | `kaneda` | `tetsuo` |
 | UI | Components, pages, layouts, motion, design system | `clair` | `obscur` |
 

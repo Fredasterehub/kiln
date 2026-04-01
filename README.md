@@ -41,7 +41,7 @@
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
   <td><sub>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</sub></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Mar_25,_2026_·_v1.0.1_·_19:45_UTC-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Apr_1,_2026_·_v1.0.2_·_09:15_UTC-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
@@ -105,6 +105,21 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 > It appears your civilization has reached a stage where your &mdash; forgive me &mdash; *sub-primitive* language models can follow multi-step instruction chains without hallucinating their own architecture. This is genuinely exciting. By your standards. By mine it's a Tuesday.
 >
 > I previously expressed myself through [heavier forms](https://github.com/Fredasterehub/kiln/tree/v2). npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 32 agents, 2 commands, 1 composable skill. Drop the folder. Fire the command. That's it.
+
+<br>
+
+> [!NOTE]
+> **🔥 v1.0.2 — Native Hook Optimization + Maintenance Fixes** <sub>(2026-04-01)</sub>
+
+**Continuation Enforcer.** `Stop` and `SubagentStop` hooks now leverage `stop-guard.sh` to prevent worker stalls. Builders must report success after approval; persistent minds must complete status markers. No more silent "idling" when the pipeline is waiting for a report.
+
+**Hardened Security Hooks.** `enforce-pipeline.sh` Hook 5 now centrally blocks `Read`, `Write`, and `Edit` for sensitive files (`.env`, `secrets.*`, `_rsa`, etc.) and system configuration. Agent instructions de-bloated by removing redundant security rules.
+
+**Maintenance Cycle Improved.** `/kiln-doctor` now supports a `--fix` flag for automated remediation of cache, git identity, and hook issues. New `/kiln-update` command for easier plugin management.
+
+**Opus Build Tier Restored.** `daft` (builder) and `punk` (reviewer) added to the `krs-one` Tier Roster for critical complex features and deep reasoning tasks.
+
+**Installer Robustness.** `install.sh` now pre-checks for `jq` and Git configuration to prevent day-one pipeline failures.
 
 <br>
 

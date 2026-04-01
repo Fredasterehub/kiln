@@ -1,5 +1,5 @@
 {
-  "description": "Kiln pipeline hooks — delegation, sequencing, safety, lifecycle. SubagentStop removed v1.0 (reviewer is the quality gate).",
+  "description": "Kiln pipeline hooks — delegation, sequencing, safety, lifecycle. Stop/SubagentStop leverage stop-guard.sh for worker state verification.",
   "hooks": {
     "SessionStart": [
       {
@@ -14,6 +14,18 @@
       }
     ],
     "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/stop-guard.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
       {
         "matcher": "*",
         "hooks": [
