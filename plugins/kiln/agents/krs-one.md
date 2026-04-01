@@ -55,13 +55,13 @@ pool_index = (build_iteration * 7) % pool_size
 
 ### 1. Initialize
 
-1. Read .kiln/STATE.md. Get `build_iteration` (default 0 if missing). Increment by 1. Get `correction_cycle` (default 0). Update STATE.md with the new build_iteration via Bash sed:
-    ```bash
-    ITER=$(grep 'build_iteration' .kiln/STATE.md | grep -o '[0-9]*')
-    ITER=$((ITER + 1))
-    sed -i "s/build_iteration: [0-9]*/build_iteration: ${ITER}/" .kiln/STATE.md
+1. Read .kiln/STATE.md. Get `build_iteration` (default 0 if missing). Increment by 1. Get `correction_cycle` (default 0). Update STATE.md with the new build_iteration using the Write tool (now permitted for .kiln/ files):
+    ```markdown
+    <!-- status: updated -->
+    # Kiln State
+    ... build_iteration: {NEW_ITER} ...
     ```
-    Use Bash (sed or heredoc) for STATE.md and .kiln/docs/ writes — the Write tool is blocked by Hook 7.
+    (Update only the relevant line if using Edit, or rewrite the file with Write).
 2. Read .kiln/master-plan.md — understand ALL milestones, their deliverables, dependencies, and acceptance criteria.
 3. Read .kiln/architecture-handoff.md for build constraints.
 4. If `correction_cycle` > 0: read .kiln/validation/report.md — this contains correction tasks from Argus. Your scoping priority is to fix the issues listed there.

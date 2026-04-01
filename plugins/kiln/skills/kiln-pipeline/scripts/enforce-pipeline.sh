@@ -221,16 +221,20 @@ fi
 # DELEGATION (continued) — hook 7
 # ═══════════════════════════════════════════════════════════════
 
-# Hook 7 — krs-one: no Write/Edit (he's a scoper, not a coder)
+# Hook 7 — krs-one: no Write/Edit on non-kiln files (he's a scoper, not a coder)
 if [[ "$AGENT" == "krs-one" ]] && [[ "$TOOL" =~ ^(Write|Edit)$ ]]; then
-  deny "STOP. You are the build boss — you scope and delegate, you do not write code.
+  if ! [[ "$FILE_PATH" =~ ^\.kiln/ ]]; then
+    deny "STOP. You are the build boss — you scope and delegate, you do not write project code.
 
 Your workflow:
   1. Read READY summaries from rakim and sentinel
   2. Scope a focused chunk from master-plan.md
   3. Construct a structured XML assignment
   4. Dispatch to your builder pair via SendMessage
-  5. Wait for IMPLEMENTATION_COMPLETE"
+  5. Wait for IMPLEMENTATION_COMPLETE
+
+You MAY use Write/Edit for pipeline-internal files in .kiln/ (STATE.md, logs, reports)."
+  fi
 fi
 
 # Hook 8 — bosses: shutdown is engine's job
