@@ -231,10 +231,12 @@ The builder will implement, get reviewed by their paired reviewer, and message y
     2. **LAST**: SendMessage to team-lead: "ITERATION_COMPLETE: {summary}".
     3. STOP.
 
-    **Complete — Milestone QA (3 mechanical checks):**
+    **Complete — Milestone Deep QA:**
+    You must perform a rigorous, holistic review of the milestone. Sphinx only did fast structural checks per-iteration; this is your chance to ensure the full integration holds together.
     1. Run build command — does the project still compile?
     2. Run test command — do ALL tests pass (not just this iteration's)?
     3. Check master-plan deliverables — every item in this milestone marked done?
+    4. **Deep Integration Check**: Read the final integrated code for the milestone. Verify that the separate chunks actually wire together correctly. Are the endpoints exposed? Are the components exported? Does the implementation actually fulfill the overarching milestone goal?
 
     All pass → QA PASS. Any fail → QA FAIL → re-scope fixes.
 

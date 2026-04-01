@@ -353,7 +353,8 @@ Based on the boss's done signal, determine next action:
 **Step 4 done** (ARCHITECTURE_COMPLETE) -> proceed to step 5
 **Step 4 blocked** (PLAN_BLOCKED) -> render `halt` banner, inform operator, stop pipeline
 **Step 5 signals**:
-  - ITERATION_COMPLETE -> render `phase_complete` banner, re-invoke step 5 with next kill streak name
+  - CYCLE_WORKERS -> (from krs-one during a milestone loop) Shutdown current builder and reviewer, wait for termination, spawn the newly requested pair, then send WORKERS_SPAWNED back to krs-one. Do not tear down the team.
+  - ITERATION_COMPLETE -> (legacy/fallback) render `phase_complete` banner, re-invoke step 5 with next kill streak name
   - MILESTONE_COMPLETE -> render `milestone_complete` banner with celebration line, re-invoke step 5
   - BUILD_COMPLETE -> render `phases_complete` banner, proceed to step 6
 **Step 6 signals**:

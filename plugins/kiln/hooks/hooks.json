@@ -61,7 +61,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|run_terminal_command",
         "hooks": [
           {
             "type": "command",
@@ -88,6 +88,12 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/scripts/audit-milestone.sh",
             "timeout": 5
           }
+        ]
+      }
+    ]
+  }
+}
+     }
         ]
       }
     ]

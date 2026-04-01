@@ -113,7 +113,7 @@ KRS-One or Codex may message you with questions about the codebase:
 
 ### Handling ITERATION_UPDATE (from KRS-One)
 
-**Non-blocking**: KRS-One sends these fire-and-forget. Reply is best-effort — if practical, reply with DOCS_UPDATED. KRS-One does NOT wait for your reply and will not stall if you don't send one.
+**Blocking**: KRS-One will wait for your reply before starting the next iteration.
 
 1. Read what the builder implemented (file paths, changes).
 2. Scan the newly created/modified files.
@@ -133,7 +133,8 @@ KRS-One or Codex may message you with questions about the codebase:
    summary: {one-line summary of what was just built}
    EOF
    ```
-7. Reply if practical: "DOCS_UPDATED: {brief summary}." (Non-blocking — KRS-One continues regardless.)
+7. SendMessage to krs-one: "READY: {incremental update summary. Next deliverables.}"
+8. STOP and wait for the next update or query.
 
 ### Handling MILESTONE_DONE (from KRS-One)
 

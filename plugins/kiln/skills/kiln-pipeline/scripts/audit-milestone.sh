@@ -10,7 +10,7 @@
 
 INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name // ""')
-[[ "$TOOL" == "SendMessage" ]] || exit 0
+[[ "$TOOL" =~ ^(SendMessage|send_message)$ ]] || exit 0
 
 AGENT=$(echo "$INPUT" | jq -r '.agent_type // ""')
 AGENT="${AGENT#kiln:}"

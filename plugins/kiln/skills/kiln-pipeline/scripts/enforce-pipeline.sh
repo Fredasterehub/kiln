@@ -158,7 +158,7 @@ Wait for BOTH READY summaries (in your runtime prompt) before dispatching:
 fi
 
 # Hook 4 — aristotle: no dispatch to planners until numerobis ready
-if [[ "$AGENT" == "aristotle" ]] && [[ "$TOOL" == "SendMessage" ]] && [[ "$RECIPIENT" =~ ^(confucius|sun-tzu|plato|athena)$ ]]; then
+if [[ "$AGENT" == "aristotle" ]] && [[ "$TOOL" =~ ^(SendMessage|send_message)$ ]] && [[ "$RECIPIENT" =~ ^(confucius|sun-tzu|plato|athena)$ ]]; then
   ROOT=$(_find_root)
   if [[ -n "$ROOT" ]]; then
     if ! _status_ok "$ROOT/.kiln/docs/architecture.md"; then
@@ -200,7 +200,7 @@ Escalate tooling issues to your boss — do not fix config yourself."
 fi
 
 # Hook 6 — no rm -rf on project directories
-if [[ "$TOOL" == "Bash" ]]; then
+if [[ "$TOOL" =~ ^(Bash|run_terminal_command)$ ]]; then
   if echo "$COMMAND" | grep -qE 'rm\s+(-rf|-fr|-r\s+-f|-f\s+-r)\s+(/|~|\$HOME|\$\{HOME|\.\.)'; then
     deny "STOP. Never delete a project directory.
 
@@ -276,5 +276,15 @@ fi
 # ═══════════════════════════════════════════════════════════════
 # Everything else — allow
 # ═══════════════════════════════════════════════════════════════
+
+allow
+�
+
+allow
+════════════════
+
+allow
+
+��
 
 allow

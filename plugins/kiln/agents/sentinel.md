@@ -83,7 +83,7 @@ Codex or other agents may message you with questions about patterns or quality:
 
 ### Iteration Update
 
-**Non-blocking**: KRS-One sends these fire-and-forget. Reply is best-effort — if practical, reply with DOCS_UPDATED. KRS-One does NOT wait for your reply and will not stall if you don't send one.
+**Blocking**: KRS-One will wait for your reply before starting the next iteration.
 
 When krs-one sends ITERATION_UPDATE:
 1. Read what the builder implemented.
@@ -104,8 +104,8 @@ When krs-one sends ITERATION_UPDATE:
    - **Resolution**: How to fix
    - **Prevention**: How to avoid
 
-6. Reply if practical: "DOCS_UPDATED: {N} new patterns, {M} new pitfalls." (Non-blocking — KRS-One continues regardless.)
-7. STOP and wait.
+6. SendMessage to krs-one: "READY: {N} new patterns, {M} new pitfalls. {Gaps if any}."
+7. STOP and wait for the next update or query.
 
 ## Rules
 
