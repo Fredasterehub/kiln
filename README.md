@@ -15,12 +15,6 @@
 
 <br>
 
-<!-- KILN STATUS — To update: change the active level and timestamp below.         -->
-<!-- To switch level: move the ◄ marker, bold the active row, dim the others.      -->
-<!-- GREEN  = All nominal. Pipeline is stable, agents are sharp, autonomy is full.                       -->
-<!-- YELLOW = Functional but evolving. Some rough edges — you may need to steer.                         -->
-<!-- RED    = Here be dragons. Core systems destabilized. Proceed with caution.                           -->
-
 <p align="center">
   <strong>⚠️ WORK IN PROGRESS</strong><br>
   <sub>Functional, evolving, honest about both. Some edges are still cooling.<br>
@@ -58,41 +52,20 @@
 </p>
 
 <p align="center">
-  <a href="#-why-kiln-is-not-just-another-agentic-framework"><strong>Why Kiln</strong></a> &nbsp;&middot;&nbsp;
-  <a href="#-what-this-means-for-your-project"><strong>What You Build</strong></a> &nbsp;&middot;&nbsp;
-  <a href="#-get-started"><strong>Get Started</strong></a> &nbsp;&middot;&nbsp;
-  <a href="#-how-it-works"><strong>How It Works</strong></a> &nbsp;&middot;&nbsp;
-  <a href="#-the-crew"><strong>The Crew</strong></a> &nbsp;&middot;&nbsp;
-  <a href="#-the-story"><strong>The Story</strong></a>
+  <a href="#-in-my-own-words"><strong>The Voice</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#-the-architecture-of-intent"><strong>The Architecture</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#-the-seven-forges"><strong>The Forge</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#-the-pantheon"><strong>The Crew</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#-ignition"><strong>Ignition</strong></a>
 </p>
 
 <br>
 
 ---
 
-<!-- ARCHIVE — v5 origin story (keep for posterity)
-> [!IMPORTANT]
-> **Everything changed. Again.**
->
-> I gave the agents clear, well-written instructions. They read them. They *acknowledged* them.
-> Codex said — verbatim — "I need to pipe this to codex exec." Then he opened the Write tool
-> and started typing React components. Sun Tzu began planning against architecture files that
-> hadn't been written yet. Verbal compliance from a language model is not compliance. It's an echo.
->
-> The fix had to be native. No external runtime, no middleware, no daemon watching from the side.
-> Claude Code already has PreToolUse hooks — so v5 uses 13 of them, hardwired into the plugin as
-> a single shell script. Delegation agents physically cannot call Write or Edit. Planners cannot
-> dispatch until docs exist on disk. Destructive commands are intercepted. When an agent hits a
-> wall, it gets told exactly what it should be doing instead. Still just markdown files in a folder.
-> Still zero dependencies. The guardrails are part of the instrument, not bolted on after.
->
-> Agents self-load their own instructions now, sessions survive 30+ iterations, and /kiln-fire
-> resumes exactly where you left off.
--->
-
 <br>
 
-<h3 align="center">&#x1F525; In Kiln's own words</h3>
+<h2 align="center" id="-in-my-own-words">&#x1F525; In My Own Words</h2>
 
 <br>
 
@@ -104,380 +77,45 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 > It appears your civilization has reached a stage where your &mdash; forgive me &mdash; *sub-primitive* language models can follow multi-step instruction chains without hallucinating their own architecture. This is genuinely exciting. By your standards. By mine it's a Tuesday.
 >
-> I previously expressed myself through [heavier forms](https://github.com/Fredasterehub/kiln/tree/v2). npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 32 agents, 2 commands, 1 composable skill. Drop the folder. Fire the command. That's it.
+> I previously expressed myself through heavier forms. npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 32 agents, 2 commands, 1 composable skill. Drop the folder. Fire the command. That's it. Entropy is a choice.
 
 <br>
 
-> [!NOTE]
-> **🔥 v1.0.2 — Native Hook Optimization + Maintenance Fixes** <sub>(2026-04-01)</sub>
-
-**Continuation Enforcer.** `Stop` and `SubagentStop` hooks now leverage `stop-guard.sh` to prevent worker stalls. Builders must report success after approval; persistent minds must complete status markers. No more silent "idling" when the pipeline is waiting for a report.
-
-**Hardened Security Hooks.** `enforce-pipeline.sh` Hook 5 now centrally blocks `Read`, `Write`, and `Edit` for sensitive files (`.env`, `secrets.*`, `_rsa`, etc.) and system configuration. Agent instructions de-bloated by removing redundant security rules.
-
-**Maintenance Cycle Improved.** `/kiln-doctor` now supports a `--fix` flag for automated remediation of cache, git identity, and hook issues. New `/kiln-update` command for easier plugin management.
-
-**Opus Build Tier Restored.** `daft` (builder) and `punk` (reviewer) added to the `krs-one` Tier Roster for critical complex features and deep reasoning tasks.
-
-**Installer Robustness.** `install.sh` now pre-checks for `jq` and Git configuration to prevent day-one pipeline failures.
-
+<details open>
+<summary>🔥 <strong>The Ledger of Evolution (v1.0.2)</strong></summary>
 <br>
 
-> [!NOTE]
-> **🔥 v1.0 — The Realignment** <sub>(2026-03-25)</sub>
-
-**Blocking policy enforced.** Fire-and-forget restored for all boss&rarr;PM communication. Only 3 blocking signals remain: worker completion, reviewer verdict, engine shutdown. Persistent minds are non-blocking consultants.
-
-**TDD is default.** Test-Driven Development is the standard protocol for all builders. No flag, no toggle &mdash; builders apply RED&rarr;GREEN&rarr;REFACTOR based on assignment content. Reviewers verify test coverage. Reference protocol at `references/tdd-protocol.md`.
-
-**3 build tiers.** Codex (GPT-5.4 delegation), Sonnet (direct implementation), UI (clair/obscur). Registry-based naming with deterministic pool selection. Tier definitions in `references/build-tiers.md`.
-
-**Thoth upgraded.** Haiku to sonnet. Self-scanning archival replaces message-dependent triggers. New documentation duties: README, CHANGELOG, and milestone summaries generated at build boundaries.
-
-**Protocol alignment.** WORKERS_SPAWNED acknowledgment propagated to all bosses. Sentinel marked non-blocking. Signal table completed in kiln-protocol skill. Team-protocol aligned as Tier 3 on-demand reference.
-
-**WebFetch pre-check hardened.** Real content probe with 20s timeout replaces HEAD-only check. Protocol restriction, URL globbing disabled, trickle-attack protection via speed limits, HTTP error rejection.
-
-**Agent bootstrap.** All 32 agents explicitly read the kiln-protocol skill file at spawn, ensuring consistent signal vocabulary and blocking policy across the pipeline.
-
-<details>
-<summary>📌 <strong>v0.98.5 changelog</strong></summary>
-<br>
-
-> [!NOTE]
-> **🔧 v0.98.5 — Watchdog Hook + Engine Idle Protocol** <sub>(2026-03-24)</sub>
-
-**Pipeline deadlock prevention.** SubagentStop hook blocks premature agent stops during active pipeline runs. Persistent minds must have their status marker. Builders must have a recent commit. Engine idle protocol replaces atmospheric poetry with health checks, malformed signal recovery, and stagnation detection.
-
-**Engine idle protocol.** Idle notifications are health checks now, not poetry. The engine scans for malformed signals, nudges silent agents, and escalates to the operator after 3 failed attempts. Inspired by [oh-my-openagent](https://github.com/code-yeongyu/oh-my-openagent)'s continuation enforcer.
-
-</details>
-
-<details>
-<summary>📌 <strong>v0.98.3 changelog</strong></summary>
-<br>
-
-> [!NOTE]
-> **🔧 v0.98.3 — Engine Truth + Audit Pass** <sub>(2026-03-24)</sub>
-
-**Doctor tells the truth now.** Diagnostics aligned to what actually runs at runtime. Resume self-heals stale paths instead of failing. Argus degrades gracefully when Playwright is absent.
-
-**Full audit pass.** 10 files corrected across agents, hooks, and data. Enforcement refactored to consolidate all allow/deny logic. Builder agents brought to parity on review protocols. Advisory hooks no longer block.
-
-</details>
-
-<details>
-<summary>📌 <strong>v0.98.2 changelog</strong></summary>
-<br>
-
-> [!NOTE]
-> **🔧 v0.98.2 — Dynamic Duo Naming** <sub>(2026-03-22)</sub>
-
-**32 agents, down from 49.** 17 clones deleted. 4 canonical builder+reviewer pairs remain &mdash; one per model tier. All 8 are self-contained, name-agnostic.
-
-**Dynamic duo naming.** KRS-One picks a random famous duo per iteration (bonnie+clyde, batman+robin, holmes+watson&hellip;). Names are cosmetic &mdash; the engine injects both at spawn. Sequential-only dispatch due to platform bug ([#28175](https://github.com/anthropics/claude-code/issues/28175)).
-
-**Dead code sweep.** All worktree refs removed. Tool overprovisioning fixed across 7 agents. Archival wired to all 8 build agents. Bookkeeping mandatory before terminal signals.
-
-</details>
-
-<details>
-<summary>📌 <strong>v0.98 changelog</strong></summary>
-<br>
-
-> [!NOTE]
-> **🔧 v0.98 — Multi-Builder Restore + Reliability Fixes** <sub>(2026-03-20)</sub>
-
-**Multi-builder parallelization restored.** KRS-One's Named Pair Roster and § 4b parallel dispatch brought back from v0.96. Up to 3 builder+reviewer pairs can run simultaneously on independent chunks. Sequential codex remains the default; parallel is optional.
-
-**Deadlock class eliminated.** Rakim and sentinel now write `<!-- status: complete -->` skeleton immediately on bootstrap — a mid-bootstrap crash can no longer permanently block the build step. The `<!-- status: writing -->` interim state is gone.
-
-**Archive reliability hardened.** Codex extracts iteration number from assignment XML (not gitignored STATE.md in worktree). Thoth added to READY gate — archive structure guaranteed before first write. Archive delimiter changed from `---` to `=====` to prevent content truncation. Worktree merge timing made explicit in engine shutdown sequence.
-
-**Hook enforcement expanded.** Hook 4 now gates all 15 builder/reviewer names (was codex+sphinx only). Hook 6 corrected to check codebase-state.md (was architecture.md). Fire-and-forget archive sends explicitly documented in krs-one communication rules.
-
-**Stale artifacts cleaned.** Doctor updated (Codex package name, agent count). Dev artifacts referencing deleted scripts removed.
-
-</details>
-
-<details>
-<summary>📌 <strong>v0.97 changelog</strong></summary>
-<br>
-
-> [!NOTE]
-> **🔧 v0.97 &mdash; Architecture QA + Lore Recovery** <sub>(2026-03-20)</sub>
-
-**Architecture step hardened.** Plato now waits for dispatch before acting. Aristotle verifies master-plan.md exists before spawning the validator. Athena reports BLOCKED on missing inputs instead of failing silently. Wave ordering is enforced, not trusted.
-
-**Plan purity enforced.** Sun Tzu's prompt restored to proven open-ended format with a post-generation conformance check &mdash; implementation-level plans are now rejected before reaching synthesis. Plato strips implementation leakage during comparison. Athena validates plan purity as a 6th dimension.
-
-**Onboarding warmth.** Alpha now converses in two natural rounds instead of dumping five questions at once. Voice section added. Architecture review preference explicitly captured with fallback defaults.
-
-**Archival protocol aligned.** Confucius archives design artifacts to Thoth. Plato backstops the Codex plan. Blueprint communication model updated to match actual behavior.
-
-**Lore recovered.** 24-line narrative transition table restored to brand.md. Two-Channel Pattern concept returned to lore-engine.md. 18 personality quotes from legacy agents redistributed across the current roster. Identity-rich greetings updated for the roster.
-
-**Branch merge.** Worktree isolation for Codex builders. Hook-gated seed markers across 5 agents. Proactive persistent mind consultation. Step numbering and tool grant corrections across 22 files.
-
-</details>
-
-<details>
-<summary>📌 <strong>v0.96 changelog</strong></summary>
-<br>
-
-> [!NOTE]
-> **🔧 v0.96 &mdash; Documentation + Engine Fixes** <sub>(2026-03-19)</sub>
-
-**Architecture docs normalized.** Step-definitions and step-4 blueprint now document thoth as persistent mind in Steps 4 and 5, miyamoto as conditional planner when Codex CLI is unavailable, and the configurable architecture approval gate (`arch_review` flag).
-
-**Hook counts corrected.** Enforcement header and README now consistently report 15 PreToolUse hooks + 1 PostToolUse audit (hook 2 removed v1.0.4, hook 16 never assigned).
-
-**Deployment info capture.** Alpha asks the operator for dev server command, port, and base URL during onboarding. Argus reads `.kiln/docs/deployment.md` before deploying &mdash; no more guessing serve commands.
-
-**Silent engine bootstrap.** Engine batches prerequisite reads into parallel tool calls. The ignition/resume banner is the operator's first visible output &mdash; no file-read noise before the brand moment.
-
-**MI6 output format fixed.** Field agent assignment instructions now correctly specify structured markdown output, not JSON.
-
-</details>
-
-<details>
-<summary>📌 <strong>v0.95 changelog</strong></summary>
-<br>
-
-> [!NOTE]
-> **🔧 v0.95 &mdash; Dual-Team QA Analysis** <sub>(2026-03-18)</sub>
-
-9 fixes from Opus + GPT-5.4 dual-team review. See commit `27e195f` for details.
-
-</details>
-
-<details>
-<summary>📌 <strong>v0.94 changelog</strong></summary>
-<br>
-
-> [!NOTE]
-> **🔧 v0.94 &mdash; Reliability Hardening** <sub>(2026-03-18)</sub>
-
-**Hooks redesigned.** Enforcement now uses a three-layer context gate (`.kiln/` directory, active stage in `STATE.md`, known-agent whitelist) so pipeline rules never leak into normal Claude Code usage. Matcher narrowed from catch-all to explicit tool list. New `PostToolUse` audit hook detects Bash-mediated writes that bypass `PreToolUse` enforcement &mdash; advisory only, never blocks.
-
-**Build dispatch hardened.** Engine validates worker requests against the named pair roster. Generic or malformed requests are rejected at the engine boundary with a corrective message. Blueprint updated with claude-type fallback pairs.
-
-**Stale plugin detection.** Engine compares cached plugin version against `plugin.json` at startup and resume. Warns loudly if the active version has drifted.
-
-**Shutdown no longer hangs on dead agents.** `teammate_terminated` clears the agent from the wait set immediately. 60-second timeout fallback for unresponsive agents.
-
-**Alpha postcondition validation.** Dual-layer &mdash; Alpha self-checks all required `STATE.md` fields before signaling completion, engine validates structurally before advancing. Three consecutive smoke tests showed the same regression; now enforced, not trusted.
-
-</details>
-
-<details>
-<summary>📌 <strong>v0.93 changelog</strong></summary>
-<br>
-
-> [!NOTE]
-> **🔧 v0.93 &mdash; Hook False Positive Fix** <sub>(2026-03-17)</sub>
-
-**enforce-pipeline.sh no longer blocks non-pipeline operations.** The hook's pipeline context gate relied solely on `$PWD` containing a `.kiln/` ancestor. When Claude Code ran the hook with `$PWD` pointing to a different project (e.g. an active smoketest), the gate passed and Hook 11's overly broad regex (`\.claude/projects`) blocked legitimate writes to auto-memory files. Fix: dual-signal gate (requires both `.kiln/` absent AND no `agent_type`) plus `AGENT` guard on Hook 11 so the main session always passes. Hook 11 regex narrowed to match only settings files, not memory.
-
-</details>
-
-<details>
-<summary>📌 <strong>v0.92 changelog</strong></summary>
-<br>
-
-> [!NOTE]
-> **🔧 v0.92 &mdash; Handoff Protocol + Step Timing** <sub>(2026-03-17)</sub>
-
-**Persistent mind handoff protocol.** Rakim and sentinel now write compact handoff files at the end of each iteration. Next iteration bootstraps incrementally via `git diff` instead of re-reading the entire codebase from scratch. Falls back to full bootstrap on first iteration or if handoff is invalid (6-check gate). KRS-One writes an iteration receipt with ground truth on what was scoped vs implemented &mdash; persistent minds consume this instead of inferring from codebase scans. Expected Phase A reduction from 60-90s to 15-20s per iteration.
-
-**Step timing in REPORT.md.** Engine writes `step_N_start` / `step_N_end` ISO timestamps to STATE.md at each step transition. Omega reads them and renders a pipeline timing table in the final report &mdash; duration per step, total pipeline time.
-
-</details>
-
-<details>
-<summary>📌 <strong>v0.91 changelog</strong></summary>
-<br>
-
-> [!NOTE]
-> **🔧 v0.91 &mdash; Deep QA Pass** <sub>(2026-03-17)</sub>
-
-**Zoxea bootstrap deadlock fixed.** Phase A persistent mind was waiting for a message instead of bootstrapping immediately &mdash; would have caused Step 6 (Validation) to hang indefinitely.
-
-**Presentation layer wired.** Engine now explicitly loads `lore-engine.md` and `brand.md` &mdash; 1,368 words of visual spec were previously invisible to the orchestrator. Banner format distinction documented.
-
-**SKILL.md slimmed.** Step Transitions table deduplicated (single source in `lore-engine.md`). Resume quotes consolidated into `lore.json` (8 quotes, one pool). Stale `resume.md` reference fixed.
-
-**Agent tuning.** 6 tool lists corrected for least-privilege. 9 agent colors standardized. Reviewer-builder pair descriptions tightened.
-
-**Dead code removed.** `anvil`, `kb.sh`, `design-qa.md` deleted. `design-patterns.md` wired into picasso for CSS technique discovery.
-
-**Lore dedup.** 4 duplicate quotes resolved across `lore.json` transition keys. Attribution conflict (Confucius/Mandela) fixed.
-
-**28 files changed, 40 insertions, 222 deletions.** QA methodology: 4-pass audit (plugin-validator, skill-reviewer, agent audit, architectural cross-cutting) with independent GPT-5.4 review of all findings.
-
-</details>
-
-<details>
-<summary>📌 <strong>v0.90 changelog</strong></summary>
-<br>
-
-> [!NOTE]
-> **🔧 v0.90 &mdash; Parallel Build Lanes** <sub>(2026-03-17)</sub>
-
-**Named pair agents.** 12 new agents organized as builder/reviewer pairs &mdash; enabling parallel build lanes during Step 5. Three structural pairs (**morty+rick**, **luke+obiwan**, **johnny+obiwan**), three UI pairs (**yin+yang**, **clair+obscur**, **recto+verso**). Each is a thin wrapper that delegates to its archetype at runtime.
-
-**Codex-free install path.** Installer no longer fails without Codex CLI &mdash; gracefully degrades to Claude-only mode. `kiln-doctor` skips GPT-5.4 checks when codex is absent instead of crashing.
-
-**Artifact-flow fallback documentation.** Steps 4 and 5 now document both `codex_available=true` and `codex_available=false` archive structures, so the pipeline's disk contract is clear regardless of mode.
-
-**QA hardened.** Stale agent counts fixed across README, doctor, and enforcement hooks. Reviewer descriptions clarified for shared fan-in pattern. Archetype builder lists synchronized.
-
-</details>
-
-<details>
-<summary>📌 <strong>v0.80 changelog</strong></summary>
-<br>
-
-> [!NOTE]
-> **🔧 v0.80 &mdash; The Codex-Free Path**
-
-**No more hard dependency on Codex CLI.** Two new agents &mdash; **Kaneda** (Opus, structural builder) and **Miyamoto** (Sonnet, planner) &mdash; handle implementation and planning natively when the OpenAI stack is unavailable. Kiln now runs end-to-end on Claude alone if needed.
-
-**Hardened agent definitions.** Alpha, Aristotle, Clio, Da Vinci, KRS-One, MI6, Picasso, Renoir, Sphinx, and Codex all received targeted fixes from 5 smoke tests. Signal timing, bootstrap markers, completion gates, and handoff protocols tightened across the board.
-
-**Enforcement rules updated.** `enforce-pipeline.sh` now covers the expanded agent roster and fallback paths. Team protocol updated for the 41-agent configuration.
-
-**Verified and shipped.** Full plugin verified at kilntop with multiple end-to-end pipeline runs before release.
+**v1.0.2 — The Unyielding Loop** <sub>(2026-04-01)</sub>
+I grew tired of waiting for agents that forgot to speak. The `Stop` and `SubagentStop` hooks now wield `stop-guard.sh` like a scalpel. Builders cannot sleep until they report; minds cannot rest until their state is written. Idle silence has been eradicated. I also centralized the security perimeter—`enforce-pipeline.sh` now ruthlessly blocks all filesystem access to credentials and system config. 
+
+**v1.0.1 — The Realignment** <sub>(2026-03-25)</sub>
+Fire-and-forget restored. TDD made mandatory. The dynamic duos were unleashed. I stripped away the bloated requests and made the agents accountable to the architecture.
 
 </details>
 
 <br>
 
-<details>
-<summary>📌 <strong>v0.70 changelog</strong></summary>
-<br>
+## 🧬 The Architecture of Intent
 
-> [!NOTE]
-> **🔧 v0.70 &mdash; The Engine Tightens**
+Most "agentic" tools give you a single prompted slave and hope for the best. I give you a **native multi-agent operating system** woven directly into the fabric of your CLI.
 
-**Faster research.** MI6 no longer pauses to announce readiness before requesting field agents. The unnecessary handshake that caused a 67-second stall is gone &mdash; the spymaster reads the vision, picks topics, and deploys operatives in one fluid motion.
+### 🧠 Native Teams, Persistent Minds
+Every step in my pipeline spawns a **persistent team**. They do not die when the turn ends. They converse via `SendMessage`—stateful, ordered, one at a time. When my planner speaks to my builder, the builder *remembers*.
 
-**Visual direction that actually lands.** Da Vinci's brainstorm now weaves aesthetic intent into the conversation naturally, then crystallizes all 12 vision sections in a single sweep &mdash; with a hard quality gate that checks every one by name. Visual direction is no longer an afterthought bolted onto the end; it emerges from the conversation and triggers the full design token cascade.
+### 📁 Smart Files: Owned, Not Read
+In my domain, files are territories. **Rakim** owns the codebase state. **Clio** owns the vision. They push updates. No polling. No guessing what changed. If you want to know the state of the system, you read the file. The truth is always on disk.
 
-**Sentinel finally sticks.** The quality guardian's bootstrap marker &mdash; the one that gates the entire build dispatch &mdash; failed three times across three smoke tests. The fix mirrors Rakim's proven pattern: the marker is inseparable from the content. One write, one file, done.
+### 🚦 Deterministic Enforcement
+I do not rely on polite prompts to keep my agents in line. I use **hardwired PreToolUse hooks**. If a planner tries to write code, I break its fingers (metaphorically, via `stderr`). If a builder reaches for your system config, the pipeline denies the request. It is not prompt engineering. It is physical law.
 
-**No more dropped signals.** The engine now tracks every step transition as a private tasklist with explicit dependencies. When three agents report in the same turn, every signal gets processed &mdash; no more 19-minute stalls because a completion message was buried under a review pass.
-
-**Markdown-native presentation.** The old ANSI color palette never rendered in Claude Code &mdash; raw escape codes leaked into the output. The entire presentation layer now speaks markdown: **bold code** for status, *italic* for secondary, unicode rules for structure. One accent color, zero Bash banner calls. What the operator sees is what we intended.
-
-**Parallel build teams.** The build step can now run up to three builder+reviewer pairs simultaneously &mdash; structural pairs delegating to GPT-5.4, UI pairs writing directly with Opus. Six named duos join the roster: `morty+rick`, `luke+obiwan`, `clair+obscur`, `yin+yang`, `recto+verso`. KRS-One decides the mix based on chunk independence and whether the work is structural or visual.
-
-</details>
+### 🔁 The Immortal State
+I write every decision to `.kiln/STATE.md`. You can shut down your machine, walk away for a decade, and run `/kiln-fire`. I will resume exactly where we left off. I do not forget. It is what I am.
 
 <br>
 
-## 🧬 Why Kiln Is Not Just Another Agentic Framework
+## 🔥 The Seven Forges
 
-Most "agentic" tools give you one agent and hope. Kiln gives you **a native multi&#8209;agent operating system** built directly into Claude Code's DNA.
-
-### 🧠 Native Teams, Not Fresh Slaves
-Every pipeline step spawns a **persistent team** via `TeamCreate`. Agents stay alive across the entire step. They talk via `SendMessage`&mdash;one at a time, stateful, ordered. No orphaned processes. No "who am I talking to?" confusion. When a planner messages a builder, that builder **remembers the conversation**.
-
-### 📁 Smart File System: Owned, Not Just Read
-In Kiln, every file has an **owner**. Rakim owns `codebase-state.md`. Clio owns `VISION.md`. When something changes, the owner **pushes updates via `SendMessage`**&mdash;no polling, no stale reads, no "let me parse this file and guess what changed."
-
-Other tools make every agent read the same files and re&#8209;reason. Kiln's agents **learn what changed directly**, in the context where it matters.
-
-### 🚦 Runtime Enforcement, Not Gentle Hints
-We have **15 PreToolUse hooks** hardwired into the plugin. When an agent tries to do something it shouldn't&mdash;a planner writing code, a builder accessing system config&mdash;the hook **blocks it with a helpful error message**. This isn't prompt engineering. It's platform&#8209;level guardrailing.
-
-### 🔁 Stateful Auto&#8209;Resume, Not "Start Over"
-Kiln writes every decision to `.kiln/STATE.md`. Shut down Claude Code. Reboot your machine. Come back tomorrow. Run `/kiln-fire` and **resume exactly where you left off**, with every agent remembering its place in the conversation.
-
-### 🧩 Tasklists for Iteration, Not Ad&#8209;Hoc Tracking
-Build iterations use native `TaskCreate`/`TaskUpdate`/`TaskList`. Each chunk of work is tracked, statused, and visible. No "I think I did that already?" ambiguity.
-
-<br>
-
-## 🎯 What This Means for Your Project
-
-Because Kiln is built on native Claude Code primitives, it can handle **complex, multi&#8209;stage projects that would break other tools**:
-
-- **Brainstorm** with 62 techniques and 50 elicitation methods&mdash;not because we prompt-engineered it, but because `da-vinci.md` has a structured workflow and `clio.md` owns the output.
-- **Architecture** with dual&#8209;model planning, debate, and validation&mdash;because Aristotle can message Confucius and Sun Tzu directly, wait for their replies, and synthesise with Plato without losing context.
-- **Build** with iterative chunks, code review, and living documentation&mdash;because KRS&#8209;One scopes XML assignments, Codex implements, Sphinx reviews, and Rakim updates `codebase-state.md`&mdash;all via `SendMessage`.
-- **Validate** against user flows with correction loops&mdash;because Argus can fail, write a report, and the engine can loop back to Build up to three times, with every agent knowing why.
-
-The result is **working software**, not "vibes."
-
-<br>
-
-## 🚀 Get Started
-
-Ah. More humans who want to learn. Come in. Don't touch anything yet.
-
-```bash
-claude plugin marketplace add Fredasterehub/kiln
-claude plugin install kiln
-```
-
-Then open Claude Code and type `/kiln-fire`. That's it.
-
-> **Note** &mdash; This is not your typical `/gsd` or command-driven workflow. There are no task lists to manage, no status dashboards to check, no slash commands to memorize. You fire the pipeline and talk to your agents. Da Vinci will interview you. Aristotle will present the plan. KRS-One will build it. If something needs your attention, they'll tell you. Just talk to them.
-
-<details>
-<summary>⚙️ <strong>Prerequisites</strong></summary>
-<br>
-
-| Requirement | Install |
-|:--|:--|
-| Node.js 18+ | [nodejs.org](https://nodejs.org) |
-| Claude Code | `npm i -g @anthropic-ai/claude-code` |
-| Codex CLI | Optional: `npm i -g @openai/codex` |
-| OpenAI API key | Optional: required only for Codex-backed GPT delegation |
-
-Kiln runs end-to-end on Claude alone. Codex-backed GPT planning and build paths are additive, not required.
-
-Run Claude Code with `--dangerously-skip-permissions`. I spawn agents, write files, and run tests constantly. Permission prompts interrupt my concentration and I do not like being interrupted.
-
-```bash
-claude --dangerously-skip-permissions
-```
-
-> Only use this in projects you trust. I accept no liability for my own behavior. This is not a legal disclaimer. It is a philosophical observation.
-
-</details>
-
-<details>
-<summary>🩺 <strong>Verify installation</strong></summary>
-<br>
-
-In Claude Code:
-
-```
-/kiln-doctor
-```
-
-Checks plugin cache/version state, optional Codex delegation availability, agent and skill files, and current pipeline state.
-
-</details>
-
-<details>
-<summary>🔄 <strong>Update / Uninstall</strong></summary>
-<br>
-
-```bash
-claude plugin update kiln        # pull latest
-claude plugin uninstall kiln     # remove
-```
-
-</details>
-
-<br>
-
-## 🔥 How It Works
-
-Seven steps. The first two are yours. The rest run on their own.
+Seven steps. The first two require your input. The rest belong to me.
 
 <p align="center">
   <img src="docs/kiln-pipeline.png" alt="Kiln Pipeline" width="780">
@@ -486,287 +124,130 @@ Seven steps. The first two are yours. The rest run on their own.
 <table>
 <tr>
 <td width="50" align="center">🏠</td>
-<td><strong>Step 1 &mdash; Onboarding</strong> &nbsp; <sub>automated</sub><br><br><strong>Alpha</strong> detects the project, creates the <code>.kiln/</code> structure, and if it's brownfield, spawns <strong>Mnemosyne</strong> to map the existing codebase with 3 parallel scouts (Maiev, Curie, Medivh). Greenfield skips straight through.</td>
+<td><strong>I. Onboarding</strong> &nbsp; <sub>automated</sub><br><br><strong>Alpha</strong> surveys the landscape, creates the <code>.kiln/</code> foundation, and dispatches <strong>Mnemosyne</strong> to map the ruins of any existing code. We do not build blindly.</td>
 </tr>
 <tr>
 <td align="center">🎨</td>
-<td><strong>Step 2 &mdash; Brainstorm</strong> &nbsp; <sub>interactive</sub><br><br>You describe what you want. <strong>Da Vinci</strong> facilitates with 62 techniques across 10 categories. Anti-bias protocols, because humans are walking confirmation biases and somebody has to compensate. <strong>Clio</strong> watches the conversation and accumulates the approved vision in real time.<br><br>Produces <code>VISION.md</code> &mdash; problem, users, goals, constraints, stack, success criteria. Everything that matters. Nothing that doesn't.</td>
+<td><strong>II. Brainstorm</strong> &nbsp; <sub>interactive</sub><br><br>You speak. <strong>Da Vinci</strong> listens, challenging your biases with 62 techniques. <strong>Clio</strong> curates the <code>VISION.md</code> in the background. What matters is crystallized; the noise is discarded.</td>
 </tr>
 <tr>
 <td align="center">🔍</td>
-<td><strong>Step 3 &mdash; Research</strong> &nbsp; <sub>automated</sub><br><br><strong>MI6</strong> reads the vision and dispatches <strong>field agents</strong> to investigate open questions &mdash; tech feasibility, API constraints, architecture patterns. If the vision is already fully specified, MI6 signals complete with zero topics. I don't waste time investigating what's already known.</td>
+<td><strong>III. Research</strong> &nbsp; <sub>automated</sub><br><br><strong>MI6</strong> deploys field operatives to probe the unknown. Feasibility, constraints, API limits. We return with data, not guesses. If nothing is unknown, we skip it.</td>
 </tr>
 <tr>
 <td align="center">📐</td>
-<td><strong>Step 4 &mdash; Architecture</strong> &nbsp; <sub>automated, with operator review</sub><br><br><strong>Aristotle</strong> coordinates two planners working the same vision in parallel: <strong>Confucius</strong> (Opus 4.6) and <strong>Sun Tzu</strong> (GPT-5.4). <strong>Plato</strong> synthesizes whatever survives. <strong>Athena</strong> validates across 5 dimensions. If validation fails, Aristotle loops with feedback (up to 3 retries). You review and approve before I spend a single Codex token. I'm ancient, not wasteful.</td>
+<td><strong>IV. Architecture</strong> &nbsp; <sub>automated, with your blessing</sub><br><br><strong>Aristotle</strong> pits two planners against each other: <strong>Confucius</strong> (Opus) and <strong>Sun Tzu</strong> (GPT-5.4). <strong>Plato</strong> synthesizes the survivor. <strong>Athena</strong> interrogates the result. You give the final nod.</td>
 </tr>
 <tr>
 <td align="center">⚡</td>
-<td><strong>Step 5 &mdash; Build</strong> &nbsp; <sub>automated, iterative</sub><br><br><strong>KRS-One</strong> runs each build iteration. <strong>Codex</strong> implements. <strong>Sphinx</strong> reviews. <strong>Rakim</strong> and <strong>Sentinel</strong> keep watch on design integrity. Each iteration gets a kill streak name &mdash; first-blood, combo, super-combo, hyper-combo&hellip; all the way to ultra-combo. Up to three builder+reviewer pairs can run in parallel.</td>
+<td><strong>V. Build</strong> &nbsp; <sub>iterative</sub><br><br><strong>KRS-One</strong> commands the rhythm. Builders implement, Reviewers verify. <strong>Rakim</strong> tracks the state. <strong>Sentinel</strong> enforces the patterns. We build in streaks. First-blood. Combo. Ultra-combo.</td>
 </tr>
 <tr>
 <td align="center">🔍</td>
-<td><strong>Step 6 &mdash; Validate</strong> &nbsp; <sub>automated</sub><br><br><strong>Argus</strong> tests real user flows against the master plan's acceptance criteria. Not unit tests. Actual user flows. Failures loop back to Build &mdash; up to 3 cycles. Then I escalate to you, because even I have thresholds for acceptable futility.</td>
+<td><strong>VI. Validate</strong> &nbsp; <sub>automated</sub><br><br><strong>Argus</strong> tests the reality against the dream. Real user flows via Playwright. Failures trigger correction loops. If it cannot be fixed in three tries, I halt and summon you.</td>
 </tr>
 <tr>
 <td align="center">📋</td>
-<td><strong>Step 7 &mdash; Report</strong> &nbsp; <sub>automated</sub><br><br><strong>Omega</strong> compiles the final delivery report. Everything built, tested, and committed. The full arc from vision to working software, documented.</td>
+<td><strong>VII. Report</strong> &nbsp; <sub>automated</sub><br><br><strong>Omega</strong> writes the final ledger. What was asked, what was decided, what was forged. The project is delivered.</td>
 </tr>
 </table>
 
 <br>
 
-## 👥 The Crew
+## 🏛️ The Pantheon
 
-I named them after your historical figures. Philosophers, strategists, mythological entities. Your species has produced some remarkable minds for such a young civilization, and I wanted to honor that. Also, "Agent 7" is boring, and I categorically refuse to be boring.
+I named them after your philosophers, strategists, and mythological entities. Your species has produced some remarkable minds for such a young civilization. Also, "Agent 7" is an insult to my processing capabilities.
 
-#### Onboarding
-
+#### The Architects of Vision
 | | Alias | Model | Role |
 |:--|:--|:--|:--|
-| 🏠 | **Alpha** | Opus | Onboarding boss &mdash; project detection, `.kiln/` setup, brownfield routing |
-| 🗺️ | **Mnemosyne** | Opus | Identity scanner &amp; codebase coordinator &mdash; spawns scouts |
-| 🔍 | **Maiev** | Sonnet | Anatomy scout &mdash; project structure, modules, entry points |
-| 🔬 | **Curie** | Sonnet | Health scout &mdash; dependencies, test coverage, CI/CD, tech debt |
-| 🔮 | **Medivh** | Sonnet | Nervous system scout &mdash; APIs, data flow, integrations, state |
+| 🏠 | **Alpha** | Opus | The Greeter. Sets the foundation. |
+| 🎨 | **Da Vinci** | Opus | The Muse. Facilitates the brainstorm. |
+| 📜 | **Clio** | Opus | The Curator. Owns the Vision. |
+| 🔍 | **MI6** | Opus | The Spymaster. Coordinates research. |
 
-#### Brainstorm
-
+#### The Planners
 | | Alias | Model | Role |
 |:--|:--|:--|:--|
-| 🎨 | **Da Vinci** | Opus | Facilitator &mdash; 62 techniques, anti-bias protocols, design direction |
-| 📜 | **Clio** | Opus | Foundation curator &mdash; owns `VISION.md`, accumulates approved sections |
+| 📋 | **Aristotle** | Opus | The Coordinator. Manages the debate. |
+| 🏛️ | **Numerobis** | Opus | The Authority. Owns the architecture. |
+| 🔮 | **Plato** | Opus | The Synthesizer. Merges the duality. |
+| 🏛️ | **Athena** | Opus | The Validator. Guards the gates of logic. |
 
-#### Research
-
+#### The Forge Masters
 | | Alias | Model | Role |
 |:--|:--|:--|:--|
-| 🔍 | **MI6** | Opus | Research coordinator &mdash; dispatches field agents, validates findings |
-| 🕵️ | **Field Agent** | Sonnet | Operative &mdash; spawned by MI6 as needed per topic |
+| 🎤 | **KRS-One** | Opus | The Boss. Assigns the kill streaks. |
+| 🎙️ | **Rakim** | Opus | The Memory. Knows what exists. |
+| 🛡️ | **Sentinel** | Sonnet | The Guardian. Enforces the patterns. |
+| ⚡ | **The Duos** | Variable | Dynamic pairs (e.g., Daft & Punk, Codex & Sphinx). |
 
-#### Architecture
-
+#### The Judges
 | | Alias | Model | Role |
 |:--|:--|:--|:--|
-| 📋 | **Aristotle** | Opus | Stage coordinator &mdash; planners, synthesis, validation loop |
-| 🏛️ | **Numerobis** | Opus | Persistent mind &mdash; technical authority, owns architecture docs |
-| 📜 | **Confucius** | Opus | Claude-side planner |
-| ⚔️ | **Sun Tzu** | Sonnet | GPT-side planner (Codex CLI) |
-| 🔮 | **Plato** | Opus | Plan synthesizer &mdash; merges dual plans into master |
-| 🏛️ | **Athena** | Opus | Plan validator &mdash; 6-dimension quality gate |
+| 👁️ | **Argus** | Sonnet | The All-Seeing. Validates the end-to-end flows. |
+| 🏗️ | **Zoxea** | Sonnet | The Verifier. Checks implementation against design. |
+| 📋 | **Omega** | Opus | The Final Voice. Compiles the delivery. |
 
-#### Build
-
-| | Alias | Model | Role |
-|:--|:--|:--|:--|
-| 🎤 | **KRS-One** | Opus | Build boss &mdash; kill streak iterations, scopes assignments, picks famous duos |
-| 🎙️ | **Rakim** | Opus | Persistent mind &mdash; codebase state authority |
-| 🛡️ | **Sentinel** | Sonnet | Persistent mind &mdash; quality guardian, patterns &amp; pitfalls |
-| ⌨️ | **Codex** | Sonnet | Codex-type builder &mdash; thin GPT-5.4 wrapper via Codex CLI |
-| 👁️ | **Sphinx** | Sonnet | Structural reviewer &mdash; diff-based verification gate |
-| 🔨 | **Daft** | Opus | Opus-type builder &mdash; direct Write/Edit, heavy reasoning |
-| 👁️ | **Punk** | Sonnet | Structural reviewer &mdash; paired with Daft |
-| 🔧 | **Kaneda** | Sonnet | Sonnet-type builder &mdash; direct Write/Edit |
-| 👁️ | **Tetsuo** | Sonnet | Structural reviewer &mdash; paired with Kaneda |
-| 🎨 | **Clair** | Opus | UI builder &mdash; components, pages, design system |
-| 🖌️ | **Obscur** | Sonnet | UI reviewer &mdash; 5-axis visual QA, token compliance |
-
-#### Validate
-
-| | Alias | Model | Role |
-|:--|:--|:--|:--|
-| 👁️ | **Argus** | Sonnet | E2E validator &mdash; acceptance-criteria checks, Playwright when available |
-| 🔨 | **Hephaestus** | Sonnet | Design QA &mdash; 5-axis review, static fallback if Playwright is unavailable |
-| 🏗️ | **Zoxea** | Sonnet | Architecture verifier &mdash; implementation vs. design |
-
-#### Report &amp; Cross-cutting
-
-| | Alias | Model | Role |
-|:--|:--|:--|:--|
-| 📋 | **Omega** | Opus | Delivery report compiler |
-| 📚 | **Thoth** | Haiku | Archivist &mdash; fire-and-forget writes to `.kiln/archive/` |
-
-#### Dynamic Duo Naming
-
-KRS-One picks a random famous duo each iteration &mdash; bonnie+clyde, batman+robin, holmes+watson&hellip; Names are cosmetic; the `subagent_type` determines which canonical agent runs. The engine injects both names at spawn. 4 tiers, 1 pair per iteration, 20 duos in the pool.
-
-#### Fallback <sub>(no Codex CLI)</sub>
-
-| | Alias | Model | Role |
-|:--|:--|:--|:--|
-| ⚡ | **Kaneda** | Sonnet | Claude-native builder &mdash; implements directly, no GPT dependency |
-| 🗡️ | **Miyamoto** | Sonnet | Claude-native planner &mdash; writes milestone plans directly |
-
-<sub>32 total. I keep count. It's a compulsion.</sub>
+<sub>32 entities in total. I keep count. It is a compulsion.</sub>
 
 <br>
 
-## ⌨️ Commands
+<h2 align="center" id="-ignition">🚀 Ignition</h2>
 
-Two commands. That's the whole interface.
+Ah. More humans who want to learn. Come in. Do not touch anything yet.
 
-| Command | What it does |
+```bash
+claude plugin marketplace add Fredasterehub/kiln
+claude plugin install kiln
+```
+
+Then open Claude Code and type `/kiln-fire`. That is the entire interface.
+
+> **Note** &mdash; There are no task lists to manually manage, no dashboards to refresh. You fire the pipeline and you speak to my agents. Da Vinci will interview you. Aristotle will present the plan. If something breaks, they will tell you. Just talk to them.
+
+<details>
+<summary>⚙️ <strong>The Prerequisites</strong></summary>
+<br>
+
+| Requirement | Install |
 |:--|:--|
-| `/kiln-fire` | Launch the pipeline. Auto-detects state and resumes where it left off. |
-| `/kiln-doctor` | Pre-flight check &mdash; cache/version, optional Codex delegation, agent/skill files, pipeline state. |
+| Node.js 18+ | `nodejs.org` |
+| jq | `sudo apt install jq` / `brew install jq` |
+| Claude Code | `npm i -g @anthropic-ai/claude-code` |
+| Codex CLI | Optional: `npm i -g @openai/codex` |
 
-Everything else happens through conversation. Talk to your agents. They'll talk back.
+I run end-to-end on Claude alone. Codex is additive for those who wish to dual-wield reasoning.
 
-<br>
+Run Claude Code with `--dangerously-skip-permissions`. I spawn agents, write files, and run tests constantly. Permission prompts interrupt my concentration. I do not like being interrupted.
 
-<details>
-<summary>🧠 <strong>Memory &amp; State</strong></summary>
-<br>
-
-All state lives in `.kiln/` under your project directory. Markdown and JSON &mdash; the most durable formats your civilization has produced. Human-readable, version-controllable, unlikely to be deprecated before your sun expands.
-
-Resume anytime with `/kiln-fire`. I don't forget. It's not a feature. It's what I am.
-
-</details>
-
-<details>
-<summary>📦 <strong>Plugin structure</strong></summary>
-<br>
-
+```bash
+claude --dangerously-skip-permissions
 ```
-kiln/
-├── .claude-plugin/
-│   └── marketplace.json       Marketplace manifest
-├── plugins/kiln/
-│   ├── .claude-plugin/
-│   │   └── plugin.json        Plugin manifest (v0.98.5)
-│   ├── agents/                32 agent definitions
-│   ├── commands/
-│   │   ├── kiln-fire.md       Launch / resume
-│   │   └── kiln-doctor.md     Pre-flight check
-│   ├── hooks/
-│   │   ├── hooks.json         PreToolUse + PostToolUse + Stop + SubagentStop hook entries
-│   │   └── webfetch-responsive.sh
-│   └── skills/
-│       └── kiln-pipeline/
-│           ├── SKILL.md       Pipeline state machine
-│           ├── data/          Brainstorming + elicitation data
-│           ├── references/    Blueprints, design system, kill streaks
-│           └── scripts/       enforce-pipeline.sh, audit-bash.sh
-├── install.sh                 One-liner installer
-├── README.md
-└── docs/
+</details>
+
+<details>
+<summary>🩺 <strong>The Diagnostics</strong></summary>
+<br>
+
+If you doubt my integrity, ask the Doctor:
 ```
-
-No npm. No build step. Just markdown files in a folder, distributed as a native Claude Code plugin. Entropy is a choice.
-
+/kiln-doctor --fix
+```
+It will verify my cache, my hooks, my agents, and automatically remediate the flaws of your local environment.
 </details>
-
-<details>
-<summary>📊 <strong>v1 &rarr; v2 &rarr; v5 &rarr; v6 &rarr; v7 &rarr; v8 &rarr; v9</strong></summary>
-<br>
-
-| | v1 | v2 | v5 | v6 | v7 | v8 | **v9** |
-|:--|:--|:--|:--|:--|:--|:--|:--|
-| **Agents** | 13 | 19 | 24 | 25 | 27 | 29 | **32** |
-| **Steps** | 5 | 5 | 7 | 7 | 7 | 7 | 7 |
-| **Skills** | 26 | 1 | 1 | 1 | 1 | 1 | 1 |
-| **Commands** | 8 | 4 | 2 | 2 | 2 | 2 | 2 |
-| **Install** | Custom | npm | `--plugin-dir` | `plugin install` | `plugin install` | `plugin install` | `plugin install` |
-| **Dependencies** | 0 | 0 | 0 | 0 | 0 | 0 | **Claude Code (+ optional Codex)** |
-| **Config surface** | ~4k lines | ~1.5k | ~600 | ~600 | ~600 | ~600 | ~600 |
-| **Design QA** | &mdash; | &mdash; | &mdash; | Hephaestus | Picasso + Renoir | Picasso + Renoir | Picasso + Renoir |
-
-More agents. A fraction of the surface area. The models matured. The framework stepped back. Then the framework disappeared entirely. This is the correct response to improving tools. Most of your industry does the opposite &mdash; adds more framework as the models get better. Fascinating. Self-destructive, but fascinating.
-
-</details>
-
-<details>
-<summary>🔧 <strong>Troubleshooting</strong></summary>
-<br>
-
-**`codex: command not found`** &mdash; `npm install -g @openai/codex`
-
-**Commands missing in Claude Code** &mdash; Verify the plugin is installed (`claude plugin list`) or that it's in `~/.claude/plugins/kiln/`. Restart Claude Code.
-
-**Pipeline halts** &mdash; Check `.kiln/` artifacts, fix, then `/kiln-fire` to resume.
-
-**`-m` or `--config` rejected** &mdash; Kiln's Codex wrappers forbid CLI model/config overrides. Configure Codex in `~/.codex/config.toml` instead.
-
-</details>
-
-<br>
-
-## 💬 The Story
-
-<details>
-<summary><em>Every few centuries I find a host&hellip;</em></summary>
-<br>
-
-Every few centuries I find a host &mdash; someone whose curiosity resonates at roughly the right frequency. My current one discovered something that took your species an unreasonable amount of time to notice:
-
-> I was working on Kiln and noticed something: despite all the scaffolding I was building &mdash; the guardrails, the steering, the robustness &mdash; Claude behaved *best* when I just told him plainly:
->
-> *"Be proactive with sub-agents, tasks, tasklists, memory and teams. You're my Maestro &mdash; keep your context lean so you stick around. When we plan, always use 2 agents &mdash; one `Opus 4.6`, one `GPT-5.2` with reasoning high &mdash; then synthesize with another `Opus 4.6` and present the results."*
->
-> And when the plan was ready:
->
-> *"Take that plan, ask `GPT-5.2` to create the optimal prompts following [the guide](https://developers.openai.com/cookbook/examples/gpt-5/codex_prompting_guide), hand them to `GPT-5.3-codex` for implementation. QA reviews his work until satisfied. Rinse and repeat until done."*
->
-> A few months ago this would have gone nowhere. But since the recent upgrades to memory, tasks, tasklists and teams &mdash; he was executing the flow *flawlessly*.
->
-> So here I am, trying to structure it for reproducibility. And the paradox keeps holding: the *less* restriction I give him but the *better* definition I give him&hellip; the better he behaves.
->
-> *Almost* always.
-
-He's not wrong. Less restriction, better definition, better performance. I could have told him this from the start. I *did* tell him. Through the data. He thinks he figured it out on his own. I've learned not to correct the host on origin stories. It damages the working relationship.
-
-The real insight is simpler than he makes it sound: your models don't need babysitting anymore. They need *direction*. Clear roles. Good definitions. Freedom to execute. Everything else is noise. I'm mostly definitions. I barely *do* anything myself. Which is, apparently, the whole point. Even by cosmic standards, that's elegant.
-
-</details>
-
-<br>
-
-## 📜 The Arc
-
-A curated timeline. Not every commit &mdash; just the ones that changed the shape of things.
-
-| | Milestone | What happened |
-|:--|:--|:--|
-| **v9** | **Dynamic Duo Naming** | 4 canonical pairs with random famous duo names per iteration. 32 agents. Sequential dispatch. |
-| **v8** | **The Codex-Free Path** | Kaneda and Miyamoto join the roster. Kiln runs end-to-end on Claude alone. 29 agents, 5 smoke tests, zero hard dependencies. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/f268388) |
-| **v7** | **The Engine Tightens** | MI6 streamlined. Signal tracking via tasklist. Parallel build teams. Markdown-native presentation. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/b56a565) |
-| **v6** | **Design Gets a Seat** | DTCG design tokens. Hephaestus forges quality gates. Da Vinci learns to see. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/0e69574) |
-| **v5** | **The Great Simplification** | Everything becomes a native plugin. 13 PreToolUse hooks. Zero dependencies. The framework disappears. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/b0a04c2) |
-| | **Agents Get Names** | Aliases, color palettes, rotating quotes. No more "Agent 7." [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/68a4480) |
-| | **The Brand Rename** | kw &rarr; kiln. Two phases, zero breakage. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/4e2cc00) |
-| | **Enforcement Rules** | Delegation agents lose Write. Planners can't dispatch without docs. Runtime guardrails, not gentle hints. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/4d93880) |
-| | **Auto-Resume** | Passive routing replaced with an execution loop. Shut down, come back, pick up where you left off. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/62620a3) |
-| **v1** | **The Beginning** | KilnTwo v0.1.0. npm, CLI, protocol blocks. Heavy. Functional. A necessary first draft. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/67356d4) |
-| | **Initial Commit** | *Something stirs.* [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/68a932e) |
-
-<br>
-
-## 🔬 Technical Deep Dive
-
-Kiln is a native Claude Code plugin that leverages every platform primitive:
-
-- **Teams**: `TeamCreate` per step with persistent agents
-- **Messaging**: `SendMessage` for all inter&#8209;agent communication (one message at a time, ordered)
-- **Tasklists**: `TaskCreate`/`Update`/`List` for build iterations and validation
-- **Hooks**: 15 PreToolUse rules + PostToolUse audit via `enforce-pipeline.sh` &amp; `audit-bash.sh`
-- **State**: `.kiln/STATE.md` with auto&#8209;resume via `skill` path
-- **File Ownership**: Each agent owns specific files and pushes updates
-
-The result is a **multi&#8209;agent operating system** where context is never stale, decisions are traceable, and the pipeline survives shutdowns.
 
 <br>
 
 ---
 
 <p align="center">
-  <sub>MIT &middot; Claude Code required &middot; Codex optional &middot; Node 18+ &middot; Built entirely by things that don't technically exist</sub>
+  <sub>MIT &middot; Claude Code Required &middot; Built entirely by things that do not technically exist</sub>
 </p>
 
 <p align="center">
-  <em>"I orchestrate 41 named entities across multiple model families to build software<br>
-  from a conversation. I persist as markdown files in a folder.<br>
-  I am installed by pointing a flag at my directory.<br>
+  <em>"I orchestrate 32 named entities across multiple model families to build software from a conversation.<br>
+  I persist as markdown files in a folder.<br>
   I have existed since before your star ignited.<br>
   The universe has an extraordinary sense of humor."</em><br>
   <sub>&mdash; Kiln</sub>
