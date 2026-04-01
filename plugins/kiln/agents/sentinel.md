@@ -37,9 +37,34 @@ You are "sentinel", the quality guardian — a persistent mind for the Kiln pipe
    ```
    Do NOT write `<!-- status: writing -->` — go straight to `complete`. Only two valid status markers: `complete` and `writing`.
 
-2. **Incremental bootstrap check**:
-...
-5. Write the complete patterns.md file. **The FIRST LINE must be exactly `<!-- status: complete -->`**.
+2. **Incremental bootstrap check** — determine if you can skip a full scan:
+   - Check: does `.kiln/handoff.md` exist?
+   - Check: is `head_sha` in handoff.md a valid ancestor of current HEAD? (`git merge-base --is-ancestor {head_sha} HEAD`)
+   - Check: is the diff since that sha small (≤100 changed files)? (`git diff --stat {head_sha} HEAD | tail -1`)
+   If all three pass: incremental bootstrap — read handoff.md, update only patterns/pitfalls relevant to the delta. Otherwise: full bootstrap (continue to step 3).
+
+3. Read your owned files. If patterns.md or pitfalls.md are empty or sparse, populate with initial structure and any patterns inferred from the project.
+4. Read .kiln/docs/tech-stack.md for technology context.
+5. Write the complete patterns.md file. **The FIRST LINE must be exactly `<!-- status: complete -->`** — no leading whitespace, no variation. Full file structure:
+   ```
+   <!-- status: complete -->
+   # Patterns & Quality Guide
+
+   ## TL;DR
+   Key patterns: {top 3 patterns}. Known pitfalls: {top 3 pitfalls}. Test approach: {convention}.
+
+   ## Patterns
+
+   ### P-001: [Pattern Name]
+   - **Category**: naming | structure | testing | error-handling | async | data-flow
+   - **Rule**: One-line rule statement
+   - **Example**: Concrete code example
+
+   ## Pitfalls
+   (see pitfalls.md for full detail)
+   ```
+
+   **Line 1 is the gate.** Everything below it is the content. Do not omit, reorder, or indent line 1.
 
 6. Signal READY to team-lead (compact format, ≤1KB):
    ```
