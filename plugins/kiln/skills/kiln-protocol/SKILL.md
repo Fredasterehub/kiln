@@ -4,6 +4,7 @@ description: >-
   Core protocol for Kiln pipeline agents. Preloaded into every agent via frontmatter.
   Signal vocabulary, blocking policy, communication rules, shutdown handling.
   Internal Kiln skill — not user-invocable.
+version: 1.1.0
 user-invocable: false
 ---
 

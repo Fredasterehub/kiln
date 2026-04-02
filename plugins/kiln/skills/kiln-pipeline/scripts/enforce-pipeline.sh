@@ -182,16 +182,8 @@ Wait for numerobis's READY message. architecture.md must have
   fi
 fi
 
-# Hooks 6-10 removed v1.0: Hook 6 redundant with Hook 3, Hooks 7-10 zero fires across 22 STs.
-# Codex flag guidance is now prompt-enforced via gpt54-prompt-guide.md.
-# If prompt enforcement proves insufficient, restore a single lightweight check:
-#   if ! echo "$COMMAND" | grep -qE '^codex exec --sandbox danger-full-access -C '; then
-#     deny "STOP. Use exact invocation: codex exec --sandbox danger-full-access -C \"{dir}\" < prompt.md"
-#   fi
-#
-# Bash bypass of delegation (sed -i, tee, etc.) is monitored by audit-bash.sh (advisory).
-# Zero Bash bypass incidents across 22 STs. ST21 C1 violation was via Write/Edit (now blocked by Hook 7).
-# If Bash bypasses appear in future STs, harden to PreToolUse blocking.
+# v1.0 removed hooks 6-10 (zero fires across 22 STs). Codex flags now prompt-enforced.
+# Bash bypass monitored by audit-bash.sh (advisory). Zero incidents across 22 STs.
 
 # ═══════════════════════════════════════════════════════════════
 # SAFETY — hooks 5, 6, 6b

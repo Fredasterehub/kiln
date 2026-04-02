@@ -3,6 +3,10 @@
   "version": "1.1.0",
   "description": "Multi-modal software creation pipeline with milestone-scoped lifecycle and dynamic worker cycling. From idea to deployed code in 7 autonomous steps.",
   "author": {
-    "name": "Kilntop"
-  }
+    "name": "Kilntop",
+    "url": "https://github.com/Fredasterehub"
+  },
+  "repository": "https://github.com/Fredasterehub/kiln",
+  "license": "MIT",
+  "keywords": ["pipeline", "software-creation", "agents", "multi-model", "orchestration"]
 }
