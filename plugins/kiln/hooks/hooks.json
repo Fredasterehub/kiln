@@ -27,7 +27,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Read|Write|Edit|Bash|SendMessage|Agent",
+        "matcher": "Read|Write|Edit|Bash|SendMessage|Agent|WebFetch",
         "hooks": [
           {
             "type": "command",

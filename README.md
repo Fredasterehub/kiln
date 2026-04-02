@@ -132,7 +132,7 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 **Protocol alignment.** WORKERS_SPAWNED acknowledgment propagated to all bosses. Sentinel marked non-blocking. Signal table completed in kiln-protocol skill. Team-protocol aligned as Tier 3 on-demand reference.
 
-**WebFetch pre-check hardened.** Real content probe with 20s timeout replaces HEAD-only check. Protocol restriction, URL globbing disabled, trickle-attack protection via speed limits, HTTP error rejection.
+**WebFetch replaced by Anthropic Fetch MCP.** Native WebFetch hangs on many URLs. Kiln now bundles the official Anthropic Fetch MCP server (`mcp-server-fetch` via uvx) for reliable web research. WebFetch is automatically redirected during pipeline runs via Hook 10. Field agents use `mcp__plugin_kiln_fetch__fetch` for page content extraction.
 
 **Agent bootstrap.** All 32 agents explicitly read the kiln-protocol skill file at spawn, ensuring consistent signal vocabulary and blocking policy across the pipeline.
 
@@ -436,6 +436,8 @@ Then open Claude Code and type `/kiln-fire`. That's it.
 
 > **Note** &mdash; This is not your typical command-driven workflow. There are no task lists to manage, no status dashboards to check, no slash commands to memorize. You fire the pipeline and talk to your agents. Da Vinci will interview you. Aristotle will present the plan. KRS-One will build it. If something needs your attention, they'll tell you. Just talk to them.
 
+**Bundled MCP server.** Kiln includes the official [Anthropic Fetch MCP server](https://github.com/modelcontextprotocol/servers/tree/main/src/fetch) for reliable web research during pipeline runs. It starts on-demand via `uvx` when field agents need to read web pages &mdash; requires [uv](https://docs.astral.sh/uv/) installed. WebFetch calls are automatically redirected. To disable: remove `fetch` from `.mcp.json` and comment out Hook 10 in `enforce-pipeline.sh`.
+
 <details>
 <summary>&#x2699;&#xFE0F; <strong>Prerequisites</strong></summary>
 <br>
@@ -524,6 +526,7 @@ kiln/
 │   ├── commands/
 │   │   ├── kiln-fire.md       Launch / resume
 │   │   └── kiln-doctor.md     Pre-flight check
+│   ├── .mcp.json              Anthropic Fetch MCP server (bundled)
 │   ├── hooks/
 │   │   ├── hooks.json         PreToolUse + PostToolUse + SubagentStop hook entries
 │   │   ├── stop-guard.sh      SubagentStop lifecycle guard

@@ -169,6 +169,23 @@ fi
 - If output contains `MISSING:`: `[FAIL] Hook script missing: {script}`
 - If output contains `WARN:`: `[WARN] Hook not executable: {script} — run chmod +x to fix`
 
+### 11. Fetch MCP (Anthropic Official)
+
+```bash
+if [[ -f "${CLAUDE_PLUGIN_ROOT}/.mcp.json" ]] && grep -q '"fetch"' "${CLAUDE_PLUGIN_ROOT}/.mcp.json"; then
+  if command -v uvx >/dev/null 2>&1; then
+    echo "OK"
+  else
+    echo "MISSING_UVX"
+  fi
+else
+  echo "NOT_CONFIGURED"
+fi
+```
+- If output is `OK`: `[PASS] Fetch MCP: bundled (official Anthropic server via uvx)`
+- If output is `MISSING_UVX`: `[WARN] Fetch MCP: configured but uvx not found — install uv (https://docs.astral.sh/uv/) for reliable web research`
+- If output is `NOT_CONFIGURED`: `[WARN] Fetch MCP: .mcp.json missing or fetch server not configured — field agents will use WebSearch and context7 for research (WebFetch is blocked during pipeline runs)`
+
 ## Output Format
 
 Present results as:
@@ -186,6 +203,7 @@ Kiln Doctor Report
 [PASS] Brainstorm data: technique files present
 [PASS] Git config: Gemini CLI <noreply@example.com>
 [PASS] Hooks: all scripts present and executable
+[PASS] Fetch MCP: bundled (official Anthropic server via uvx)
 
 Verdict: Ready to fire (Claude-only mode)!
 ```

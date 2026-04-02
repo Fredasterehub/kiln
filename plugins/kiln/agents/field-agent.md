@@ -4,7 +4,7 @@ description: >-
   Kiln pipeline research field agent. Team member deployed by MI6 to investigate
   specific topics. Uses web research, library docs, and codebase exploration.
   Reports structured findings to MI6 via SendMessage. Internal Kiln agent.
-tools: Read, Write, Glob, Grep, WebSearch, WebFetch, mcp__context7__resolve-library-id, mcp__context7__query-docs, SendMessage
+tools: Read, Write, Glob, Grep, WebSearch, mcp__plugin_kiln_fetch__fetch, mcp__context7__resolve-library-id, mcp__context7__query-docs, SendMessage
 model: sonnet
 color: red
 skills: [kiln-protocol]
@@ -24,8 +24,9 @@ Wait for assignment from MI6 via SendMessage. Do NOT act until you receive one.
 
 ## Research Tools
 
-- **WebSearch / WebFetch** — web research, official docs, comparisons, benchmarks
-- **mcp__context7__resolve-library-id + mcp__context7__query-docs** — library documentation
+- **mcp__plugin_kiln_fetch__fetch** — fetch web pages as clean Markdown (official Anthropic Fetch MCP, bundled with plugin). Primary tool for reading URLs.
+- **WebSearch** — web search for finding URLs and sources
+- **mcp__context7__resolve-library-id + mcp__context7__query-docs** — library documentation (version-specific)
 - **Read / Grep / Glob** — examine the project codebase if relevant (brownfield)
 
 ## Methodology: Iterative Deepening

@@ -46,7 +46,15 @@ else
   printf "    ${DIM}Run: git config --global user.name \"Your Name\" && git config --global user.email \"you@example.com\"${RESET}\n"
 fi
 
-# 4. Codex CLI (Optional)
+# 4. uv/uvx (Required for Fetch MCP)
+if command -v uvx &>/dev/null; then
+  printf "  ${GREEN}✓${RESET} uvx (Fetch MCP server enabled)\n"
+else
+  printf "  ${YELLOW}○${RESET} uvx not found — Fetch MCP unavailable, field agents will use WebSearch only\n"
+  printf "    ${DIM}Install uv: curl -LsSf https://astral.sh/uv/install.sh | sh${RESET}\n"
+fi
+
+# 5. Codex CLI (Optional)
 if command -v codex &>/dev/null; then
   printf "  ${GREEN}✓${RESET} Codex CLI (GPT-5.4 delegation enabled)\n"
 else

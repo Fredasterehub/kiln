@@ -1,11 +1,12 @@
 #!/bin/bash
 # enforce-pipeline.sh — PreToolUse hook for Kiln pipeline
 #
-# 9 hooks across 4 categories:
+# 10 hooks across 5 categories:
 #   Delegation (1,2,7):   codex/sun-tzu/krs-one cannot Write/Edit
 #   Sequencing (3,4):     gate dispatches until bootstrap docs ready
 #   Safety (5,6,6b):      system config, rm -rf, git init
 #   Lifecycle (8,9):      boss shutdown block, agent spawn whitelist
+#   Tool redirect (10):   WebFetch → MCP Fetch (hangs on many URLs)
 #
 # Removed v1.0: old Hook 2 (v1.0.4), old Hooks 6-10 (redundant/zero fires), old Hook 13 (confusion)
 # Codex flag guidance moved to gpt54-prompt-guide.md reference file.
@@ -37,7 +38,7 @@ deny() {
 
 # Fast exit for tools we don't check
 case "$TOOL" in
-  Read|Write|Edit|Bash|SendMessage|Agent) ;;
+  Read|Write|Edit|Bash|SendMessage|Agent|WebFetch|web_fetch) ;;
   *) allow ;;
 esac
 
@@ -302,6 +303,17 @@ if [[ "$TOOL" == "Agent" ]]; then
         ;;
     esac
   fi
+fi
+
+# ═══════════════════════════════════════════════════════════════
+# TOOL REDIRECT — hook 10
+# WebFetch hangs on many URLs. Redirect to bundled MCP fetch.
+# ═══════════════════════════════════════════════════════════════
+
+# Hook 10 — WebFetch → MCP Fetch redirect (pipeline-only)
+# WebFetch hangs on many URLs. Redirect to the bundled Anthropic Fetch MCP server.
+if [[ "$TOOL" =~ ^(WebFetch|web_fetch)$ ]]; then
+  deny "WebFetch is disabled during Kiln pipeline runs — it hangs on many URLs. Use mcp__plugin_kiln_fetch__fetch instead (official Anthropic Fetch MCP, bundled with this plugin). To restore: comment out Hook 10 in enforce-pipeline.sh and remove WebFetch from the enforce-pipeline matcher in hooks.json."
 fi
 
 # ═══════════════════════════════════════════════════════════════
