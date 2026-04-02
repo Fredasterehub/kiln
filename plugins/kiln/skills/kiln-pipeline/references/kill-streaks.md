@@ -1,28 +1,82 @@
 # Kill Streak Sequence
 
-20 team names cycling per Build iteration. Select by `build_iteration` (1-indexed, wraps at 21). Sources: Killer Instinct (dominant) + Dota 2.
+40 team names cycling per Build iteration. Each name earns its position in a narrative arc from first spark to legend.
 
-| # | Team Name | Source |
-|---|-----------|--------|
+Select by `build_iteration` (1-indexed): `kill_streak_index = (build_iteration - 1) % 40`
+
+Past iteration 40, cycle from `kiln-of-the-first` (#38) onward — if you've gone past 38 iterations, you live in the myth tier.
+
+## Chapter I — Ignition (1-5)
+
+| # | Name | Source |
+|---|------|--------|
 | 1 | first-blood | Dota 2 |
-| 2 | combo | Killer Instinct |
-| 3 | super-combo | Killer Instinct |
-| 4 | hyper-combo | Killer Instinct |
-| 5 | rampage | Dota 2 |
-| 6 | brutal-combo | Killer Instinct |
-| 7 | dominating | Dota 2 |
-| 8 | master-combo | Killer Instinct |
-| 9 | awesome-combo | Killer Instinct |
-| 10 | unstoppable | Dota 2 |
-| 11 | killer-combo | Killer Instinct |
-| 12 | blaster-combo | Killer Instinct |
-| 13 | extreme-combo | Killer Instinct |
-| 14 | godlike | Dota 2 |
-| 15 | monster-combo | Killer Instinct |
-| 16 | king-combo | Killer Instinct |
-| 17 | beyond-godlike | Dota 2 |
-| 18 | no-mercy | Killer Instinct |
-| 19 | killer-instinct | Killer Instinct |
-| 20 | ultra-combo | Killer Instinct |
+| 2 | spark-of-life | WoW |
+| 3 | signal-fire | LOTR |
+| 4 | multipass | Fifth Element |
+| 5 | killing-spree | Dota 2 |
 
-If a project exceeds 20 iterations, wrap around to #1.
+## Chapter II — Momentum (6-11)
+
+| # | Name | Source |
+|---|------|--------|
+| 6 | combo-breaker | Killer Instinct |
+| 7 | mithril-weave | LOTR |
+| 8 | braindance | Cyberpunk 2077 |
+| 9 | the-forge-hums | Kiln |
+| 10 | ultra-combo | Killer Instinct |
+| 11 | rampage | Dota 2 |
+
+## Chapter III — The Crucible (12-18)
+
+| # | Name | Source |
+|---|------|--------|
+| 12 | c-c-c-combo | Killer Instinct |
+| 13 | dominating | Dota 2 |
+| 14 | helms-deep | LOTR |
+| 15 | sandevistan | Cyberpunk 2077 |
+| 16 | anduril-reforged | LOTR |
+| 17 | trial-by-fire | Kiln |
+| 18 | high-ground | Star Wars |
+
+## Chapter IV — Mastery (19-26)
+
+| # | Name | Source |
+|---|------|--------|
+| 19 | godlike | Dota 2 |
+| 20 | leeloo-dallas | Fifth Element |
+| 21 | chrome-plated | Cyberpunk 2077 |
+| 22 | eye-of-sauron | LOTR |
+| 23 | one-more-pull | WoW |
+| 24 | masterwork | Medieval guild |
+| 25 | wicked-sick | Dota 2 |
+| 26 | beyond-godlike | Dota 2 |
+
+## Chapter V — Transcendence (27-33)
+
+| # | Name | Source |
+|---|------|--------|
+| 27 | divine-rapier | Dota 2 |
+| 28 | the-one-ring | LOTR |
+| 29 | netrunner | Cyberpunk 2077 |
+| 30 | frostmourne | WoW / Warcraft III |
+| 31 | supreme-being | Fifth Element |
+| 32 | night-city-legend | Cyberpunk 2077 |
+| 33 | aegis-immortal | Dota 2 |
+
+## Chapter VI — Myth (34-38)
+
+| # | Name | Source |
+|---|------|--------|
+| 34 | valinor | LOTR |
+| 35 | fifth-element | Fifth Element |
+| 36 | chosen-undead | Dark Souls |
+| 37 | quintessence | Alchemy / French |
+| 38 | kiln-of-the-first | Dark Souls |
+
+## Chapter VII — Overtime (39-40)
+
+| # | Name | Source |
+|---|------|--------|
+| 39 | il-n-en-reste | French |
+| 40 | gg-wp | Universal gaming |

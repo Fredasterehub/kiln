@@ -321,7 +321,7 @@
   },
   "sphinx": {
     "alias": "Sphinx",
-    "role": "quick verifier",
+    "role": "structural reviewer (opus)",
     "step": 5,
     "quotes": [
       "Answer correctly or do not pass.",
@@ -429,6 +429,7 @@
     "alias": "Daft",
     "role": "opus builder (structural)",
     "step": 5,
+    "dormant": true,
     "quotes": [
       "Harder, better, faster, stronger — that's the code review.",
       "Reason through it once, implement it right.",
@@ -439,6 +440,7 @@
     "alias": "Punk",
     "role": "structural reviewer (sonnet)",
     "step": 5,
+    "dormant": true,
     "quotes": [
       "Around the world, around the code — I check every line.",
       "If it builds, tests pass, and criteria are met — approve it.",
@@ -459,6 +461,7 @@
     "alias": "Tetsuo",
     "role": "structural reviewer (sonnet)",
     "step": 5,
+    "dormant": true,
     "quotes": [
       "Structure holds when the foundation is sound.",
       "I check what was asked against what was built.",

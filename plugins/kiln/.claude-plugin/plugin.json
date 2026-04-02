@@ -1,7 +1,7 @@
 {
   "name": "kiln",
-  "version": "1.0.2",
-  "description": "Multi-modal software creation pipeline. From idea to deployed code in 7 autonomous steps.",
+  "version": "1.1.0",
+  "description": "Multi-modal software creation pipeline with milestone-scoped lifecycle and dynamic worker cycling. From idea to deployed code in 7 autonomous steps.",
   "author": {
     "name": "Kilntop"
   }

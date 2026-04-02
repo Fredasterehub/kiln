@@ -1,11 +1,12 @@
 #!/bin/bash
 # audit-status-marker.sh — PostToolUse hook for Write
 #
-# Checks that rakim and sentinel write <!-- status: complete --> as line 1
-# of their hook-gated files. Advisory — tells the agent to fix it.
+# Checks that rakim, sentinel, and numerobis write <!-- status: complete -->
+# as line 1 of their hook-gated files. Advisory — tells the agent to fix it.
 #
 # Only fires during active Kiln pipeline runs (full context gate).
-# Only matches rakim (codebase-state.md) and sentinel (patterns.md).
+# Only matches rakim (codebase-state.md), sentinel (patterns.md),
+# and numerobis (architecture.md).
 
 INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name // ""')
@@ -36,9 +37,9 @@ if [[ -z "$_STAGE" ]] || [[ "$_STAGE" == "complete" ]]; then
   exit 0
 fi
 
-# Only check rakim and sentinel
+# Only check rakim, sentinel, and numerobis
 case "$AGENT" in
-  rakim|sentinel) ;;
+  rakim|sentinel|numerobis) ;;
   *) exit 0 ;;
 esac
 
@@ -49,6 +50,9 @@ case "$AGENT" in
     ;;
   sentinel)
     [[ "$FILE_PATH" == *patterns.md ]] || exit 0
+    ;;
+  numerobis)
+    [[ "$FILE_PATH" == *architecture.md ]] || exit 0
     ;;
 esac
 
@@ -62,8 +66,8 @@ Line 1 of $FILE_PATH must be exactly:  <!-- status: complete -->
 You wrote: "$LINE1"
 
 This marker is checked by a PreToolUse hook that gates downstream dispatches.
-Without it, krs-one cannot send work to builders. Fix it now — rewrite the
-file with <!-- status: complete --> as the very first line, before any other content.
+Without it, downstream agents are blocked. Fix it now — rewrite the file with
+<!-- status: complete --> as the very first line, before any other content.
 MSG
     exit 0
   fi

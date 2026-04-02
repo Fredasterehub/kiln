@@ -116,7 +116,7 @@ Build iterations use the streak format:
 
 ```md
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-▸ **HYPER COMBO** · *Iteration 4* · **Milestone 2/5**
+▸ **MULTIPASS** · *Iteration 4* · **Milestone 2/5**
 `"It does not matter how slowly you go as long as you do not stop."` — *Confucius*
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
@@ -193,8 +193,8 @@ Before spawning a team, output a spawning block:
   → krs-one
   → rakim
   → sentinel
-  → asterix (daft)
-  → obelix (punk)
+  → asterix (codex)
+  → obelix (sphinx)
 ```
 
 After an agent completes:

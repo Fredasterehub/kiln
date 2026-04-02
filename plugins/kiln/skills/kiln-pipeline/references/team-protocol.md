@@ -10,7 +10,7 @@ Every step follows a three-phase spawn sequence (some steps skip Phase C):
 
 **Phase B — Boss**: Spawned after ALL Phase A agents signal READY. Interactive bosses run in foreground (`run_in_background: false`); background bosses run in background. Receives READY summaries in runtime prompt.
 
-**Phase C — Workers**: Spawned when the boss sends `REQUEST_WORKERS`. Each worker joins the same team with full SendMessage access. Boss dispatches individual assignments after workers are spawned.
+**Phase C — Workers**: Spawned when the boss sends `REQUEST_WORKERS` (initial spawn) or `CYCLE_WORKERS` (subsequent chunks). Each worker joins the same team with full SendMessage access. Boss dispatches individual assignments after workers are spawned. In step 5, Phase C workers are cycled dynamically per implementation chunk — see **Worker Cycling Pattern** below.
 
 Not every step uses all three phases. Step 7 is Phase B only. Step 2 has no Phase C. See the step's blueprint for the exact roster.
 
@@ -39,11 +39,16 @@ You receive messages ONE AT A TIME. Each wake-up delivers exactly one message. P
 - Reviewer verdict: APPROVED / REJECTED (reviewer → builder)
 - Worker → PM consultation: worker sends question, STOPs, waits for reply
 - Shutdown: `shutdown_response` (any agent → engine)
+- Worker cycling: `CYCLE_WORKERS` (KRS-One → engine, waits for `WORKERS_SPAWNED`)
+- Milestone transition: `MILESTONE_TRANSITION` (KRS-One → rakim+sentinel, waits for `READY`)
+
+**Blocking between worker cycles** (STOP and wait for READY):
+- Boss → PM: `ITERATION_UPDATE` to rakim+sentinel (60s timeout) — ensures state files are current before the next chunk is scoped. This blocks between worker CYCLES, not between worker operations within a cycle.
 
 **Fire-and-forget** (send and continue immediately):
-- Boss → PM: `ITERATION_UPDATE`, `MILESTONE_DONE`, `QA_ISSUES` — never wait for PM reply
+- Boss → PM: `MILESTONE_DONE`, `QA_ISSUES` — never wait for PM reply
 - Any → thoth: `ARCHIVE` requests
-- Terminal signals → engine: `ITERATION_COMPLETE`, `MILESTONE_COMPLETE`, `BUILD_COMPLETE`
+- Terminal signals → engine: `MILESTONE_COMPLETE`, `BUILD_COMPLETE` (`ITERATION_COMPLETE` is legacy/internal)
 
 See `blocking-policy.md` for the full source of truth.
 
@@ -63,7 +68,9 @@ Workers are spawned into the team. The engine manages isolation.
 
 The engine spawns each worker on the same team. Workers appear as teammates with full SendMessage access. The boss then dispatches assignments individually — one message per worker.
 
-**Naming**: Names are assigned by the engine at spawn via runtime prompt. Build-step workers get tier-themed duo names chosen by krs-one from per-tier pools (Codex = explorer/adventure, Sonnet = Musketeers, Opus = iconic power duos, UI = art/design duality). The engine injects both names (own + partner) into each agent's runtime prompt.
+**Worker cycling (step 5):** After the initial `REQUEST_WORKERS`, subsequent chunks use `CYCLE_WORKERS` instead — the engine shuts down the current pair and spawns a fresh one. See **Worker Cycling Pattern** for the full flow.
+
+**Naming**: Names are assigned by the engine at spawn via runtime prompt. Build-step workers get cosmetic duo names chosen by krs-one from scenario pools (General pool for Default+Fallback, UI pool for UI scenario). The engine injects both names (own + partner) into each agent's runtime prompt.
 
 ## 4. Dispatch Pattern
 
@@ -127,7 +134,8 @@ Standard signals sent via SendMessage to team-lead (the engine):
 | Signal | Meaning | Sent by |
 |--------|---------|---------|
 | `READY: {summary}` | Bootstrap complete, available for consultation | Persistent minds |
-| `REQUEST_WORKERS: {list}` | Need workers spawned on team | Boss |
+| `REQUEST_WORKERS: {list}` | Need workers spawned on team (initial) | Boss |
+| `CYCLE_WORKERS: scenario={scenario}, reason={reason}, chunk={summary}` | Shut down current workers, spawn fresh pair | KRS-One |
 | `WORKERS_SPAWNED: {names}` | Engine confirms workers on team | Engine |
 | `WORKERS_REJECTED: {reason}` | Engine rejected REQUEST_WORKERS | Engine |
 | `ONBOARDING_COMPLETE` | Step 1 done | Alpha |
@@ -135,7 +143,9 @@ Standard signals sent via SendMessage to team-lead (the engine):
 | `RESEARCH_COMPLETE: {N} topics` | Step 3 done | MI6 |
 | `ARCHITECTURE_COMPLETE: milestone_count={N}` | Step 4 done | Aristotle |
 | `PLAN_BLOCKED` | Architecture validation failed 3x | Aristotle |
-| `ITERATION_COMPLETE` | Build iteration done, more work needed | KRS-One |
+| `ITERATION_UPDATE: {summary}` | Chunk complete, update state files (blocking, 60s) | KRS-One |
+| `ITERATION_COMPLETE` | Build iteration done — legacy/internal, replaced by CYCLE_WORKERS | KRS-One |
+| `MILESTONE_TRANSITION: completed={name}, next={name}` | Milestone boundary — PMs archive + reset (blocking) | KRS-One |
 | `MILESTONE_COMPLETE: {name}` | Milestone done, QA passed | KRS-One |
 | `BUILD_COMPLETE` | All milestones done | KRS-One |
 | `VALIDATE_PASS` | Validation succeeded | Argus |
@@ -146,6 +156,36 @@ Standard signals sent via SendMessage to team-lead (the engine):
 Always include context after the signal name. A bare signal is less useful than one with specifics:
 - Bad: `RESEARCH_COMPLETE`
 - Good: `RESEARCH_COMPLETE: 6 topics researched. Key findings: RSC viable, Drizzle preferred over Prisma.`
+
+## 8. Worker Cycling Pattern
+
+### Why
+
+Fresh context per implementation chunk prevents context pollution. Builders and reviewers accumulate irrelevant context from previous chunks, leading to confused implementations. Cycling gives each chunk a clean-slate worker pair.
+
+### How
+
+1. KRS-One scopes a chunk and determines the appropriate scenario
+2. KRS-One sends `CYCLE_WORKERS` to team-lead (engine) with:
+   - `scenario`: default | fallback | ui
+   - `reason`: why this scenario was chosen
+   - `chunk`: brief description of the work
+3. Engine sends `shutdown_request` to current builder+reviewer
+4. Engine waits for shutdown confirmation (60s timeout)
+5. Engine spawns fresh builder+reviewer pair per scenario:
+   - default: codex + sphinx
+   - fallback: kaneda + sphinx
+   - ui: clair + obscur
+6. Engine sends `WORKERS_SPAWNED` to KRS-One with agent names
+7. KRS-One dispatches assignment to fresh builder
+
+### Persistent Minds
+
+rakim, sentinel, thoth persist across all worker cycles within a milestone. They accumulate knowledge and respond to `ITERATION_UPDATE` with `READY` after updating their state files.
+
+### Blocking Seam
+
+`ITERATION_UPDATE` from KRS-One to rakim+sentinel is BLOCKING (60s timeout). This ensures state files are current before the next chunk is scoped. This is a different seam point than the v9 fire-and-forget concern — v9 was worried about blocking BETWEEN worker operations, this blocks BETWEEN worker CYCLES.
 
 ## Communication Rules (Universal)
 

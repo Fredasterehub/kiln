@@ -102,7 +102,7 @@ fi
 
 # Check 1 — Any pipeline agent writing to system config paths (.codex/, .claude/settings)
 if echo "$COMMAND" | grep -qE '(\.codex/|\.claude/settings|\.claude/projects/)'; then
-  echo "AUDIT WARNING: $AGENT wrote to system config path via Bash. This bypasses PreToolUse enforcement (hook 11)." >&2
+  echo "AUDIT WARNING: $AGENT wrote to system config path via Bash. This bypasses PreToolUse enforcement (hook 5)." >&2
   echo "  Use Write/Edit tools for auditable file operations. Escalate tooling issues to the engine." >&2
   echo "  Command: $(echo "$COMMAND" | head -3)" >&2
   exit 0
@@ -127,7 +127,7 @@ fi
 # Check 3 — krs-one writing source code (anything outside .kiln/)
 if [[ "$AGENT" == "krs-one" ]]; then
   if ! echo "$COMMAND" | grep -qE '\.kiln/'; then
-    echo "AUDIT WARNING: krs-one wrote files outside .kiln/ via Bash. This bypasses PreToolUse enforcement (hook 14)." >&2
+    echo "AUDIT WARNING: krs-one wrote files outside .kiln/ via Bash. This bypasses PreToolUse enforcement (hook 7)." >&2
     echo "  krs-one should scope and delegate, not write source code directly." >&2
     echo "  Command: $(echo "$COMMAND" | head -3)" >&2
   fi

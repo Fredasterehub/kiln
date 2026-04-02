@@ -1,22 +1,23 @@
-# Build Tiers
+# Build Scenarios
 
-Tier definitions and cosmetic name pools for Step 5 (Build). krs-one reads this at iteration start to select the builder+reviewer pair and their display name.
+Scenario definitions and cosmetic name pools for Step 5 (Build). krs-one reads this at iteration start to select the builder+reviewer pair and their display name.
 
-## Tiers
+## Scenarios
 
-| Tier | Builder | Reviewer | When |
-|------|---------|----------|------|
-| Codex | `codex` | `sphinx` | Default. GPT-5.4 implements via CLI. |
-| Sonnet | `kaneda` | `tetsuo` | Fallback when Codex CLI unavailable. |
+| Scenario | Builder | Reviewer | When |
+|----------|---------|----------|------|
+| Default | `codex` | `sphinx` | `codex_available=true` and structural work. |
+| Fallback | `kaneda` | `sphinx` | `codex_available=false` (structural fallback). |
 | UI | `clair` | `obscur` | Components, pages, layouts, design tokens. |
 
 `subagent_type` handles all dispatch logic. The cosmetic name is injected at spawn for character — it never affects routing.
 
-Opus tier (daft+punk) removed: never used in 22 smoke tests. Agent files kept on disk for future reactivation.
+sphinx (opus) is the single structural reviewer for both Default and Fallback scenarios.
+obscur (sonnet) reviews UI work only.
 
 ## Name Pools
 
-### General Pool (Codex + Sonnet tiers)
+### General Pool (Default + Fallback scenarios)
 
 codex+sphinx, kaneda+tetsuo, daft+punk, tintin+milou, mario+luigi, lucky+luke, asterix+obelix, athos+aramis, porthos+dartagnan
 
@@ -38,8 +39,12 @@ These names are reserved for infrastructure and must never appear in a name pool
 
 - rakim, sentinel, thoth, krs-one, team-lead
 
+## Dormant Agents
+
+tetsuo, daft, punk are dormant — kept on disk but never dispatched as active workers. They are NOT valid targets for CYCLE_WORKERS scenario routing. Their names remain valid as cosmetic pool entries.
+
 ## Notes
 
-- Canonical pairs (codex+sphinx, kaneda+tetsuo, clair+obscur) are valid pool entries — they're just another cosmetic pick when the formula lands on them.
-- Pool size must not be a multiple of 7 (the multiplier). Any multiple (7, 14, 21, ...) causes some names to never be reached. Current pools (9 general, 4 UI) are both coprime with 7.
+- Canonical pairs (codex+sphinx, clair+obscur) appear in the pool as valid cosmetic picks.
+- Pool size must not be a multiple of 7. Current pools (9 general, 4 UI) are both coprime with 7.
 - If a pool has only one entry, the formula always returns index 0 — that's fine. The name is cosmetic.

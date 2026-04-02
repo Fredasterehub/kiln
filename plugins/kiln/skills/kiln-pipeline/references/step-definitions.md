@@ -43,22 +43,25 @@ Which agents to spawn per step, spawn order, expected signals, and state transit
 - **Operator review**: aristotle presents plan summary, operator approves/edits/aborts.
 - **Notes**: Plato writes directly (no Codex CLI). Retry sends to plato only, not planners.
 
-## Step 5: Build (re-invoked per iteration)
+## Step 5: Build (milestone-scoped lifecycle)
 
-- **Boss**: krs-one (opus)
-- **Persistent minds**: rakim (opus, Phase A — codebase state + AGENTS.md), sentinel (sonnet, Phase A — patterns + pitfalls), thoth (sonnet, Phase A — archivist)
-- **Workers**: one builder+reviewer pair per iteration from 3 tiers — Phase C, requested by krs-one with dynamic duo names:
-  - Codex-type: codex+sphinx
-  - Sonnet-type: kaneda+tetsuo
-  - UI: clair+obscur
-- **Three-phase spawn**: Phase A (rakim + sentinel + thoth bootstrap in parallel, ALL THREE signal READY) → Phase B (krs-one BACKGROUND) → Phase C (one builder+reviewer pair per request)
+- **Boss**: krs-one (opus, Phase B — persists for the full milestone)
+- **Persistent minds**: rakim (opus, Phase A — codebase state + AGENTS.md), sentinel (sonnet, Phase A — patterns + pitfalls), thoth (sonnet, Phase A — archivist). All three persist for the full milestone, bootstrap once at milestone start.
+- **Workers**: one builder+reviewer pair per chunk from 3 scenarios — Phase C, spawned dynamically via CYCLE_WORKERS (not at team creation):
+  - Default: codex+sphinx (GPT-5.4 delegation, sphinx is opus reviewer)
+  - Fallback: kaneda+sphinx (direct Write/Edit, sphinx is opus reviewer)
+  - UI: clair+obscur (components, pages, design system)
+- **Three-phase spawn**: Phase A (rakim + sentinel + thoth bootstrap in parallel, ALL THREE signal READY) → Phase B (krs-one BACKGROUND, persists for milestone) → Phase C dynamic (fresh builder+reviewer pair per CYCLE_WORKERS request, old pair shut down before new pair spawns)
 - **Team name**: kill streak name based on build_iteration (see kill-streaks.md)
+- **Worker cycling**: KRS-One scopes a chunk → sends CYCLE_WORKERS to team-lead with scenario and reason → engine shuts down current workers → engine spawns fresh builder+reviewer pair → engine sends WORKERS_SPAWNED to KRS-One with new agent names → KRS-One dispatches assignment to fresh workers. Fresh context per chunk prevents accumulated confusion.
 - **Signals from KRS-One**:
-  - `ITERATION_COMPLETE` — more work needed. Re-invoke with next kill streak name.
-  - `MILESTONE_COMPLETE: {name}` — milestone done, deep QA passed. Re-invoke for next milestone.
+  - `CYCLE_WORKERS` — request fresh builder+reviewer pair. Sent to team-lead (blocking). Engine responds with WORKERS_SPAWNED.
+  - `ITERATION_UPDATE` — sent to rakim+sentinel (blocking, 60s timeout) after builder reports `IMPLEMENTATION_COMPLETE` and reviewer gates. Persistent minds respond with READY. If builder sends `IMPLEMENTATION_BLOCKED` instead, KRS-One re-scopes the chunk as a fix.
+  - `MILESTONE_TRANSITION: completed={name}, next={name}` — sent to rakim+sentinel+thoth (blocking for rakim+sentinel, fire-and-forget for thoth). PMs archive and reset for next milestone. Sent BEFORE MILESTONE_COMPLETE.
+  - `MILESTONE_COMPLETE: {name}` — milestone done, deep QA passed. Sent to engine AFTER MILESTONE_TRANSITION acknowledged. Triggers next milestone or BUILD_COMPLETE.
   - `BUILD_COMPLETE` — all milestones done. Proceed to step 6.
-- **State update**: build_iteration incremented each invocation. On BUILD_COMPLETE: stage → validate.
-- **Notes**: KRS-One has NO Write/Edit tools — he scopes and delegates only. Structured XML assignments define WHAT/WHY, builders decide HOW. 3 tiers (2 structural + UI): codex-type (GPT-5.4 delegation), sonnet-type (direct Write/Edit), UI (clair/obscur). Sentinel is sonnet (structured pattern docs + tool compliance).
+- **State update**: build_iteration incremented per worker cycle. On MILESTONE_COMPLETE: advance to next milestone. On BUILD_COMPLETE: stage → validate.
+- **Notes**: KRS-One has NO Write/Edit tools — he scopes and delegates only. KRS-One persists for the full milestone — no re-invocation between iterations. Structured XML assignments define WHAT/WHY, builders decide HOW. 3 scenarios: default (GPT-5.4 delegation via codex+sphinx), fallback (direct Write/Edit via kaneda+sphinx), UI (clair+obscur). sphinx (opus) is the single structural reviewer for Default and Fallback. Sentinel is sonnet (structured pattern docs + tool compliance). ITERATION_COMPLETE is legacy/internal — replaced by CYCLE_WORKERS for worker management and ITERATION_UPDATE for persistent mind sync.
 
 ## Step 6: Validate
 

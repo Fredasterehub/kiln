@@ -1,5 +1,5 @@
 {
-  "description": "Kiln pipeline hooks — delegation, sequencing, safety, lifecycle. Stop/SubagentStop leverage stop-guard.sh for worker state verification.",
+  "description": "Kiln pipeline hooks — delegation, sequencing, safety, lifecycle. SubagentStop leverages stop-guard.sh for worker state verification.",
   "hooks": {
     "SessionStart": [
       {
@@ -8,18 +8,6 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/check-cache.sh",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/stop-guard.sh",
             "timeout": 10
           }
         ]
@@ -39,7 +27,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Write|Edit|Bash|SendMessage|Agent",
+        "matcher": "Read|Write|Edit|Bash|SendMessage|Agent",
         "hooks": [
           {
             "type": "command",
@@ -88,12 +76,6 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/scripts/audit-milestone.sh",
             "timeout": 5
           }
-        ]
-      }
-    ]
-  }
-}
-     }
         ]
       }
     ]

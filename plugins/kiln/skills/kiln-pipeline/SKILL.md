@@ -4,7 +4,7 @@ description: >-
   Kiln multi-modal software creation pipeline. Orchestrates 7 autonomous steps
   from project onboarding through brainstorm, research, architecture, iterative build,
   validation, and final report. Use when the user invokes /kiln-fire.
-version: 1.0.1
+version: 1.1.0
 user_invocable: false
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent, TeamCreate, TeamDelete, TaskCreate, TaskGet, TaskUpdate, TaskList, SendMessage
 ---
@@ -230,15 +230,15 @@ Names are free-form (krs-one picks from a famous duo pool). The `subagent_type` 
 
 When the current stage is `build`, validate every REQUEST_WORKERS payload before spawning. Check `subagent_type` pairs against this table:
 
-| Builder Type | Reviewer Type | Tier |
-|-------------|---------------|------|
-| codex | sphinx | Codex |
-| kaneda | tetsuo | Sonnet |
+| Builder Type | Reviewer Type | Scenario |
+|-------------|---------------|----------|
+| codex | sphinx | Default |
+| kaneda | sphinx | Fallback |
 | clair | obscur | UI |
 
 Validation rules:
 1. Each `subagent_type` must be a legal builder or reviewer type from the table above
-2. Builder and reviewer must be from the same tier (e.g. codex+punk is invalid)
+2. Builder and reviewer must be from the same scenario (e.g. codex+obscur is invalid)
 3. The request must contain exactly 1 builder + 1 reviewer
 4. Generic types (`code`, `agent`, `worker`, etc.) are NEVER valid for build step
 5. Names are free-form — do NOT validate the `name` parameter, only `subagent_type`
@@ -246,7 +246,7 @@ Validation rules:
 If validation fails, do NOT spawn. Send an error to the boss:
 
 ```
-SendMessage(type: "message", recipient: "{boss_name}", content: "WORKERS_REJECTED: {reason}. Build step requires a builder+reviewer pair from the same tier. Legal pairs (by subagent_type): codex+sphinx (Codex), kaneda+tetsuo (Sonnet), clair+obscur (UI). Format: REQUEST_WORKERS: {name} (subagent_type: {builder_type}), {name} (subagent_type: {reviewer_type}).")
+SendMessage(type: "message", recipient: "{boss_name}", content: "WORKERS_REJECTED: {reason}. Build step requires a builder+reviewer pair from the same scenario. Legal pairs (by subagent_type): codex+sphinx (Default), kaneda+sphinx (Fallback), clair+obscur (UI). Format: REQUEST_WORKERS: {name} (subagent_type: {builder_type}), {name} (subagent_type: {reviewer_type}).")
 ```
 
 Only proceed to spawning once the full request passes all five rules.
@@ -266,6 +266,50 @@ SendMessage(
   content: "WORKERS_SPAWNED: {worker_names}. All idle and awaiting assignment."
 )
 ```
+
+#### CYCLE_WORKERS — Mid-Milestone Worker Cycling (Step 5 Only)
+
+During a milestone, KRS-One may request fresh workers between iterations via `CYCLE_WORKERS` instead of `REQUEST_WORKERS`. This replaces the current builder+reviewer pair without tearing down the team — persistent minds (rakim, sentinel, thoth) and KRS-One stay alive throughout the milestone.
+
+**CYCLE_WORKERS payload format:**
+```
+CYCLE_WORKERS: scenario={default|fallback|ui}, reason="{why cycling}", chunk="{chunk summary}"
+```
+
+**Engine protocol on receiving CYCLE_WORKERS:**
+
+1. **Validate scenario** — map to builder+reviewer pair:
+
+   | Scenario | Builder | Reviewer |
+   |----------|---------|----------|
+   | default | codex | sphinx |
+   | fallback | kaneda | sphinx |
+   | ui | clair | obscur |
+
+   If the scenario is unrecognized, reject:
+   ```
+   SendMessage(type: "message", recipient: "krs-one", content: "CYCLE_REJECTED: Unknown scenario '{scenario}'. Valid scenarios: default, fallback, ui.")
+   ```
+
+2. **Shutdown current workers** — send `shutdown_request` to the current builder and reviewer (if any exist). Wait for `shutdown_response` or `teammate_terminated` from both (60s timeout). Force-terminate on timeout. Do NOT shut down persistent minds or KRS-One.
+
+3. **Spawn fresh pair** — spawn the new builder+reviewer on the existing team using the same identity injection and validation rules as Phase C. Each fresh worker starts with a clean context — this is the point of cycling.
+
+4. **Confirm to KRS-One** — send WORKERS_SPAWNED with the new agent names:
+   ```
+   SendMessage(
+     type: "message",
+     recipient: "krs-one",
+     content: "WORKERS_SPAWNED: {builder_name} (subagent_type: {builder_type}), {reviewer_name} (subagent_type: {reviewer_type}). Fresh context, awaiting assignment."
+   )
+   ```
+
+5. **Update progress beat** — output a one-line progress beat for the operator:
+   ```
+   ◆ Cycling workers — {reason}. Spawning {builder_name}+{reviewer_name} ({scenario})...
+   ```
+
+**CYCLE_WORKERS vs REQUEST_WORKERS:** REQUEST_WORKERS is the initial Phase C spawn at the start of build. CYCLE_WORKERS is the mid-milestone replacement that shuts down existing workers first. Both use the same scenario validation table and identity injection. The key difference: CYCLE_WORKERS always sends `shutdown_request` to existing workers before spawning, and it is initiated by KRS-One (not as a response to an initial team setup).
 
 #### Spawn Parameters
 
@@ -353,9 +397,9 @@ Based on the boss's done signal, determine next action:
 **Step 4 done** (ARCHITECTURE_COMPLETE) -> proceed to step 5
 **Step 4 blocked** (PLAN_BLOCKED) -> render `halt` banner, inform operator, stop pipeline
 **Step 5 signals**:
-  - CYCLE_WORKERS -> (from krs-one during a milestone loop) Shutdown current builder and reviewer, wait for termination, spawn the newly requested pair, then send WORKERS_SPAWNED back to krs-one. Do not tear down the team.
-  - ITERATION_COMPLETE -> (legacy/fallback) render `phase_complete` banner, re-invoke step 5 with next kill streak name
-  - MILESTONE_COMPLETE -> render `milestone_complete` banner with celebration line, re-invoke step 5
+  - CYCLE_WORKERS -> KRS-One requests fresh workers mid-milestone. Execute the full CYCLE_WORKERS protocol (see § CYCLE_WORKERS above): validate scenario, shutdown current builder+reviewer, spawn fresh pair, send WORKERS_SPAWNED back to KRS-One. Do NOT tear down the team — persistent minds and KRS-One stay alive. Do NOT transition steps. After sending WORKERS_SPAWNED, return to waiting for the next signal. Update `build_iteration` in STATE.md.
+  - ITERATION_COMPLETE -> (legacy/internal — CYCLE_WORKERS is preferred) Render `phase_complete` banner, increment `build_iteration` in STATE.md. This signal carries no scenario information, so wait for KRS-One's next CYCLE_WORKERS to determine the scenario. Loop back to wait.
+  - MILESTONE_COMPLETE -> Render `milestone_complete` banner with celebration line. Increment `milestones_complete` in STATE.md. KRS-One has already sent MILESTONE_TRANSITION to persistent minds before signaling MILESTONE_COMPLETE — PMs are ready. If `milestones_complete < milestone_count`: loop back to wait (KRS-One continues with next milestone's first CYCLE_WORKERS). If all milestones done: KRS-One should send BUILD_COMPLETE next.
   - BUILD_COMPLETE -> render `phases_complete` banner, proceed to step 6
 **Step 6 signals**:
   - VALIDATE_PASS -> render `validation_passed` banner, proceed to step 7
@@ -410,8 +454,14 @@ Use the exact signal names from `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/refe
 **Step 5**
 - `Spawn rakim + sentinel + thoth`
 - `Wait READY from rakim, sentinel, AND thoth (all 3 required)`, then `Spawn krs-one`
-- `Wait REQUEST_WORKERS`, then `Spawn requested workers`
-- `Wait ITERATION_COMPLETE`, `MILESTONE_COMPLETE`, or `BUILD_COMPLETE`
+- `Wait CYCLE_WORKERS or REQUEST_WORKERS` (first Phase C spawn — KRS-One sends CYCLE_WORKERS with scenario for first chunk; legacy bosses may send REQUEST_WORKERS)
+  - If CYCLE_WORKERS: validate scenario, execute cycling protocol (spawn fresh pair, send WORKERS_SPAWNED)
+  - If REQUEST_WORKERS: spawn requested workers (legacy path)
+- `Wait CYCLE_WORKERS`, `ITERATION_COMPLETE`, `MILESTONE_COMPLETE`, or `BUILD_COMPLETE`
+  - If CYCLE_WORKERS: execute cycling protocol (shutdown old workers, spawn fresh pair, send WORKERS_SPAWNED), then loop back to this wait
+  - If ITERATION_COMPLETE: (legacy) increment iteration, loop back to this wait
+  - If MILESTONE_COMPLETE: increment milestone counter, loop back to this wait (KRS-One already sent MILESTONE_TRANSITION to PMs)
+  - If BUILD_COMPLETE: proceed to shutdown and step 6
 
 **Step 6**
 - `Spawn zoxea`

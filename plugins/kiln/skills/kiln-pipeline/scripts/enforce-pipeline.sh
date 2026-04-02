@@ -10,8 +10,12 @@
 # Removed v1.0: old Hook 2 (v1.0.4), old Hooks 6-10 (redundant/zero fires), old Hook 13 (confusion)
 # Codex flag guidance moved to gpt54-prompt-guide.md reference file.
 #
-# Stateless. allow() = exit 0. deny() = stderr + exit 2.
+# Stateless. allow() = exit 0. deny() = hookSpecificOutput JSON + exit 0.
 # Strips kiln: prefix from AGENT, RECIPIENT, SUBTYPE.
+#
+# NOTE: Some matchers include snake_case tool names (send_message, run_terminal_command).
+# Claude Code v2.1.89 uses PascalCase only (Bash, SendMessage, etc.) — these don't
+# match any current tools. They are harmless future-proofing in case aliases are added.
 
 INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name // ""')
@@ -21,13 +25,19 @@ allow() {
 }
 
 deny() {
-  echo "$1" >&2
-  exit 2
+  jq -cn --arg reason "$1" '{
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason: $reason
+    }
+  }'
+  exit 0
 }
 
 # Fast exit for tools we don't check
 case "$TOOL" in
-  Write|Edit|Bash|SendMessage|Agent) ;;
+  Read|Write|Edit|Bash|SendMessage|Agent) ;;
   *) allow ;;
 esac
 
@@ -130,8 +140,9 @@ fi
 
 # Hook 3 — krs-one: no dispatch until rakim+sentinel ready
 # Two-part gate: (a) block messages to dynamic-named workers,
-# (b) block REQUEST_WORKERS to team-lead. Allows other team-lead messages
-# (ITERATION_COMPLETE, MILESTONE_COMPLETE) and infrastructure agents freely.
+# (b) block REQUEST_WORKERS or CYCLE_WORKERS to team-lead. Allows other
+# team-lead messages (ITERATION_COMPLETE, MILESTONE_COMPLETE) and
+# infrastructure agents freely.
 CONTENT=$(echo "$INPUT" | jq -r '.tool_input.content // ""')
 if [[ "$AGENT" == "krs-one" ]] && [[ "$TOOL" == "SendMessage" ]]; then
   _NEEDS_GATE=false
@@ -139,8 +150,8 @@ if [[ "$AGENT" == "krs-one" ]] && [[ "$TOOL" == "SendMessage" ]]; then
   if ! [[ "$RECIPIENT" =~ ^(rakim|sentinel|thoth|team-lead)$ ]]; then
     _NEEDS_GATE=true
   fi
-  # Part 2: REQUEST_WORKERS to team-lead = worker spawn request
-  if [[ "$RECIPIENT" == "team-lead" ]] && [[ "$CONTENT" == *"REQUEST_WORKERS"* ]]; then
+  # Part 2: REQUEST_WORKERS or CYCLE_WORKERS to team-lead = worker spawn request
+  if [[ "$RECIPIENT" == "team-lead" ]] && [[ "$CONTENT" == *"REQUEST_WORKERS"* || "$CONTENT" == *"CYCLE_WORKERS"* ]]; then
     _NEEDS_GATE=true
   fi
   if [[ "$_NEEDS_GATE" == "true" ]]; then
@@ -186,16 +197,20 @@ fi
 # System config, destructive recovery, memory isolation.
 # ═══════════════════════════════════════════════════════════════
 
-# Hook 5 — pipeline agents: no Read/Write/Edit on sensitive or system files
-if [[ -n "$AGENT" ]] && [[ "$TOOL" =~ ^(Read|Write|Edit)$ ]]; then
-  # Sensitive files
-  if [[ "$FILE_PATH" =~ (\.env|\.pem|_rsa|\.key|credentials\.json|secrets\.|^.*\.npmrc$) ]]; then
-    deny "STOP. $FILE_PATH contains sensitive credentials. Pipeline agents are blocked from accessing it."
+# Hook 5 — pipeline agents: no Read/Write/Edit on sensitive files, no Write/Edit on system config
+if [[ -n "$AGENT" ]]; then
+  # Sensitive files — block all access (Read/Write/Edit)
+  if [[ "$TOOL" =~ ^(Read|Write|Edit)$ ]]; then
+    if [[ "$FILE_PATH" =~ (\.env|\.pem|_rsa|\.key|credentials\.json|secrets\.|^.*\.npmrc$) ]]; then
+      deny "STOP. $FILE_PATH contains sensitive credentials. Pipeline agents are blocked from accessing it."
+    fi
   fi
-  # System configuration
-  if [[ "$FILE_PATH" =~ (\.codex/|\.claude/settings|\.claude/projects/[^/]+/settings) ]]; then
-    deny "STOP. $FILE_PATH is system configuration. Pipeline agents cannot modify or read it.
+  # System configuration — block Write/Edit only (Read allowed for diagnostics)
+  if [[ "$TOOL" =~ ^(Write|Edit)$ ]]; then
+    if [[ "$FILE_PATH" =~ (\.codex/|\.claude/settings|\.claude/projects/[^/]+/settings) ]]; then
+      deny "STOP. $FILE_PATH is system configuration. Pipeline agents cannot modify it.
 Escalate tooling issues to your boss — do not fix config yourself."
+    fi
   fi
 fi
 
@@ -225,9 +240,24 @@ fi
 # DELEGATION (continued) — hook 7
 # ═══════════════════════════════════════════════════════════════
 
-# Hook 7 — krs-one: no Write/Edit on non-kiln files (he's a scoper, not a coder)
+# Hook 7 — krs-one: no Write/Edit except .kiln/STATE.md and .kiln/tmp/ (he's a scoper, not a coder)
+# Hook 7b — argus: no Write/Edit except .kiln/validation/ (he validates, he doesn't fix)
+if [[ "$AGENT" == "argus" ]] && [[ "$TOOL" =~ ^(Write|Edit)$ ]]; then
+  if ! [[ "$FILE_PATH" =~ \.kiln/validation/ ]]; then
+    deny "STOP. You are the validator — you find issues and report them, you do not fix source code.
+
+Your workflow:
+  1. Build and test the product
+  2. Run acceptance criteria checks
+  3. Write findings to .kiln/validation/report.md
+  4. Signal VALIDATE_PASS or VALIDATE_FAILED
+
+You MAY write to .kiln/validation/ only. If you find bugs, document them and signal VALIDATE_FAILED. The correction cycle sends builders to fix — not you."
+  fi
+fi
+
 if [[ "$AGENT" == "krs-one" ]] && [[ "$TOOL" =~ ^(Write|Edit)$ ]]; then
-  if ! [[ "$FILE_PATH" =~ ^\.kiln/ ]]; then
+  if ! [[ "$FILE_PATH" =~ \.kiln/(STATE\.md$|tmp/) ]]; then
     deny "STOP. You are the build boss — you scope and delegate, you do not write project code.
 
 Your workflow:
@@ -237,7 +267,7 @@ Your workflow:
   4. Dispatch to your builder pair via SendMessage
   5. Wait for IMPLEMENTATION_COMPLETE
 
-You MAY use Write/Edit for pipeline-internal files in .kiln/ (STATE.md, logs, reports)."
+You MAY update .kiln/STATE.md and write to .kiln/tmp/ for pipeline state tracking."
   fi
 fi
 
@@ -262,11 +292,12 @@ if [[ "$TOOL" == "Agent" ]]; then
       aristotle|numerobis|confucius|sun-tzu|plato|athena|\
       krs-one|rakim|sentinel|thoth|codex|daft|kaneda|clair|miyamoto|sphinx|punk|tetsuo|obscur|\
       zoxea|argus|hephaestus|omega)
+        # daft, punk, tetsuo are dormant but kept in whitelist for defensive safety
         ;; # allowed
       *)
         deny "Only named Kiln agents can be spawned. Use agent types from the blueprint roster:
-  Codex-type: codex (builder) + sphinx (reviewer)
-  Sonnet-type: kaneda (builder) + tetsuo (reviewer)
+  Default: codex (builder) + sphinx (reviewer)
+  Fallback: kaneda (builder) + sphinx (reviewer)
   UI: clair (builder) + obscur (reviewer)"
         ;;
     esac
@@ -276,15 +307,5 @@ fi
 # ═══════════════════════════════════════════════════════════════
 # Everything else — allow
 # ═══════════════════════════════════════════════════════════════
-
-allow
-�
-
-allow
-════════════════
-
-allow
-
-��
 
 allow

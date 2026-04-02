@@ -73,6 +73,5 @@ printf "\n${GOLD}━━━━━━━━━━━━━━━━━━━━━
 printf "${TERRACOTTA} Installed.${RESET}\n\n"
 printf "  ${DIM}Launch:${RESET}    claude then ${TERRACOTTA}/kiln-fire${RESET}\n"
 printf "  ${DIM}Diagnose:${RESET}  claude then ${TERRACOTTA}/kiln-doctor${RESET}\n"
-printf "  ${DIM}Update:${RESET}    ${DIM}/kiln-update${RESET} or ${DIM}claude plugin update kiln${RESET}\n"
 printf "  ${DIM}Remove:${RESET}    ${DIM}claude plugin uninstall kiln${RESET}\n"
 printf "\n${GOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
