@@ -8,5 +8,11 @@
   },
   "repository": "https://github.com/Fredasterehub/kiln",
   "license": "MIT",
-  "keywords": ["pipeline", "software-creation", "agents", "multi-model", "orchestration"]
+  "keywords": [
+    "pipeline",
+    "software-creation",
+    "agents",
+    "multi-model",
+    "orchestration"
+  ]
 }
