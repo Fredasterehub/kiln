@@ -128,7 +128,7 @@ case "$AGENT" in
       echo "Your implementation was APPROVED but you haven't sent IMPLEMENTATION_COMPLETE to krs-one. Report your success before stopping." >&2
       exit 2
     fi
-    # No commit-recency check — blocking-policy.md rule 5:
+    # No commit-recency check — team-protocol.md blocking policy rule 5:
     # "No SubagentStop checks on builder commit history."
     # The reviewer is the quality gate, not the hook.
     ;;

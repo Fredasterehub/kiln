@@ -87,7 +87,7 @@ ls -1 ${CLAUDE_PLUGIN_ROOT}/agents/*.md | wc -l
 
 Check that SKILL.md and reference files exist:
 - `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/SKILL.md`
-- `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/step-definitions.md`
+- `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/artifact-flow.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/kill-streaks.md`
 

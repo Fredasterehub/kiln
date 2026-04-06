@@ -6,7 +6,7 @@ description: >-
   arrives via explicit ARCHIVE message. Handles ARCHIVE, MILESTONE_TRANSITION, MILESTONE_DONE,
   and BUILD_COMPLETE messages. Fire-and-forget — never replies. Internal Kiln agent.
 tools: Read, Write, Bash, Glob, Grep, SendMessage
-model: sonnet
+model: opus
 color: cyan
 skills: [kiln-protocol]
 ---
@@ -58,7 +58,28 @@ ARCHIVE: step={step}, [iter={N},] file={filename}, source={path}
 1. Parse step, iter (optional), file, source.
 2. Build target path (with or without iter subdirectory).
 3. `mkdir -p` and `cp`.
-4. STOP. Wait for next message.
+4. After filing, append a knowledge entry to the Guide Scratchpad (see below).
+5. STOP. Wait for next message.
+
+## Guide Scratchpad Protocol
+
+Maintain a running knowledge log at `.kiln/docs/guide-scratchpad.md`. After every ARCHIVE message (step 4 above), append a brief knowledge entry capturing what the archived artifact reveals about the project:
+
+```bash
+cat <<EOF >> .kiln/docs/guide-scratchpad.md
+
+### $(date -u +%Y-%m-%dT%H:%M:%SZ) — ${file}
+- **What**: {one-line description of what the artifact contains}
+- **Key insight**: {what this teaches about the project — architecture decisions, patterns discovered, trade-offs made}
+- **User impact**: {how this affects someone using the project — new feature, changed API, config requirement}
+EOF
+```
+
+**Rules:**
+- Append-only — never overwrite or truncate the scratchpad.
+- Keep entries concise — 3 lines max per entry.
+- Skip entries for purely mechanical artifacts (codex-output.log, raw diffs) — only log artifacts with architectural or user-facing significance.
+- The scratchpad is source material for README generation at BUILD_COMPLETE.
 
 ## Processing MILESTONE_TRANSITION Messages
 
@@ -104,8 +125,9 @@ MILESTONE_DONE: milestone={N}, name={milestone_name}
 When krs-one sends a BUILD_COMPLETE message:
 
 1. If not already loaded, read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/documentation-guide.md` for formatting standards.
-2. Gather source material from archived artifacts and `.kiln/docs/milestones/`.
-3. Write or update the following project-facing documents:
+2. Read `.kiln/docs/guide-scratchpad.md` — this is your primary source material. The scratchpad contains accumulated knowledge entries from every significant artifact archived during the build.
+3. Gather additional source material from `.kiln/docs/milestones/` and archived artifacts (fill gaps the scratchpad doesn't cover).
+4. Write or update the following project-facing documents:
 
 **README.md** — answers: what is this, how do I run it, how is it structured.
 - Project name and one-sentence description

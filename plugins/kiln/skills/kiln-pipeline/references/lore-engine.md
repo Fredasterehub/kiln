@@ -1,6 +1,6 @@
 # Lore Engine Reference
 
-How the pipeline engine renders its presentation layer. Read this once at pipeline start, alongside step-definitions, artifact-flow, and brand.md.
+How the pipeline engine renders its presentation layer. Read this once at pipeline start, alongside team-protocol, artifact-flow, and brand.md.
 
 All data lives in `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/data/`:
 - `lore.json` — transition quotes and greetings
@@ -193,8 +193,8 @@ Before spawning a team, output a spawning block:
   → krs-one
   → rakim
   → sentinel
-  → asterix (codex)
-  → obelix (sphinx)
+  → codex
+  → sphinx
 ```
 
 After an agent completes:

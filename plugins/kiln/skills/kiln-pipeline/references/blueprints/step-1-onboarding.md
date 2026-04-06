@@ -27,14 +27,42 @@
 
 Greenfield skips Phase C entirely.
 
+## Signal Vocabulary
+
+| Signal | Sender → Receiver | Blocking? | Notes |
+|--------|-------------------|-----------|-------|
+| `READY: {summary}` | Mnemosyne → engine | No | Bootstrap complete; includes brownfield/greenfield verdict + identity scan summary |
+| `REQUEST_WORKERS: maiev, curie, medivh` | Mnemosyne → engine | No | Brownfield only; scouts deployed after alpha approves deep scan |
+| `ONBOARDING_COMPLETE: {metadata}` | Alpha → engine | No (terminal) | Step done; advances stage to brainstorm |
+| `ONBOARDING_BLOCKED: {reason}` | Alpha → engine | No (terminal) | Operator cannot provide minimum required info |
+
+Internal (not routed through engine):
+
+| Signal | Sender → Receiver | Blocking? | Notes |
+|--------|-------------------|-----------|-------|
+| `DEEP_SCAN` | Alpha → Mnemosyne | No | Instructs mnemosyne to deploy scouts; brownfield + operator approved |
+| `SCOUT_REPORT: {findings}` | Scouts → Mnemosyne | No | Each scout reports independently on completion |
+| `MAPPING_COMPLETE: {summary}` | Mnemosyne → Alpha | No | Synthesis of all scout reports; alpha presents to operator |
+
 ## Communication Model
 
 ```
-Mnemosyne  → team-lead    (READY: identity scan results)
-Alpha      → Mnemosyne    (DEEP_SCAN: deploy scouts — brownfield only)
-Mnemosyne  → team-lead    (REQUEST_WORKERS: maiev, curie, medivh)
-Mnemosyne  → scouts       (individual assignments)
-Scouts     → Mnemosyne    (SCOUT_REPORT: findings)
+--- Phase A (bootstrap) ---
+Mnemosyne  → engine       (READY: brownfield/greenfield + identity scan summary)
+
+--- Phase B (boss, INTERACTIVE) ---
+Alpha      → Mnemosyne    (DEEP_SCAN — brownfield + operator approved)
+
+--- Phase C (scouts, brownfield only) ---
+Mnemosyne  → engine       (REQUEST_WORKERS: maiev, curie, medivh)
+Mnemosyne  → Maiev        (anatomy assignment)
+Mnemosyne  → Curie        (health assignment)
+Mnemosyne  → Medivh       (nervous system assignment)
+Scouts     → Mnemosyne    (SCOUT_REPORT: findings — fire-and-forget)
 Mnemosyne  → Alpha        (MAPPING_COMPLETE: synthesis summary)
-Alpha      → team-lead    (ONBOARDING_COMPLETE: project metadata)
+
+--- Terminal ---
+Alpha      → engine       (ONBOARDING_COMPLETE: project metadata)
 ```
+
+Greenfield skips Phase C entirely. Alpha signals ONBOARDING_COMPLETE directly after gathering project info from the operator.

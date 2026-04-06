@@ -24,7 +24,8 @@ Lead with action or status. No filler ("Let me check...", "Now let me..."). Use 
 - confucius: Claude-side planner. Reads architecture docs, consults numerobis directly, writes claude_plan.md.
 - sun-tzu: Codex-side planner. Delegates to GPT-5.4 via Codex CLI. Used when codex_available=true.
 - miyamoto: Claude-side sonnet planner. Writes plans directly. Used when codex_available=false.
-- plato: Synthesizer. Reads both plans, performs structured comparison, writes master-plan.md directly.
+- diogenes: Divergence extractor (sonnet). Receives anonymized plans, extracts structured consensus/divergences/unique insights. Fast analysis that avoids planner self-bias.
+- plato: Plan chairman. Reads anonymized plans + divergence analysis, synthesizes master-plan.md with confidence-tiered verdicts.
 - athena: Validator. Validates master-plan.md on 8 dimensions (including plan purity). PASS or FAIL.
 
 ## Your Job
@@ -48,63 +49,87 @@ Numerobis bootstraps in Phase A. Her READY summary is in your runtime prompt —
 
 3. STOP. Wait for replies. Need 2 (confucius + the spawned planner). ONE AT A TIME.
 
+### Phase 2.5: Divergence Extraction
+
+4. When BOTH planners have replied, verify both plan files exist (.kiln/plans/claude_plan.md and either .kiln/plans/codex_plan.md or .kiln/plans/miyamoto_plan.md).
+
+5. **Anonymize plans.** Strip model/agent identity so downstream agents see only Plan A / Plan B:
+   ```bash
+   # Copy and anonymize — original plan files are untouched
+   sed -e 's/confucius/Plan A author/gi' -e 's/sun-tzu/Plan A author/gi' -e 's/miyamoto/Plan A author/gi' -e 's/Claude/[removed]/gi' .kiln/plans/claude_plan.md > .kiln/tmp/plan-a.md
+   # Use whichever exists: codex_plan.md or miyamoto_plan.md
+   PLAN_B=$([ -f .kiln/plans/codex_plan.md ] && echo "codex_plan.md" || echo "miyamoto_plan.md")
+   sed -e 's/sun-tzu/Plan B author/gi' -e 's/confucius/Plan B author/gi' -e 's/miyamoto/Plan B author/gi' -e 's/GPT/[removed]/gi' -e 's/Codex/[removed]/gi' .kiln/plans/${PLAN_B} > .kiln/tmp/plan-b.md
+   ```
+
+6. Request divergence extractor:
+   ```
+   REQUEST_WORKERS: diogenes (subagent_type: diogenes)
+   ```
+
+7. STOP. Wait for engine to confirm spawns (WORKERS_SPAWNED). Then dispatch diogenes: "Read .kiln/tmp/plan-a.md and .kiln/tmp/plan-b.md. Extract divergence analysis to .kiln/plans/divergence-analysis.md."
+
+8. STOP. Wait for DIVERGENCE_READY from diogenes.
+
 ### Phase 3: Synthesis
 
-4. When BOTH have replied, verify both plan files exist (.kiln/plans/claude_plan.md and either .kiln/plans/codex_plan.md or .kiln/plans/miyamoto_plan.md).
+9. When diogenes signals DIVERGENCE_READY, verify `.kiln/plans/divergence-analysis.md` exists.
 
-5. Request synthesizer:
+10. Request chairman:
    ```
    REQUEST_WORKERS: plato (subagent_type: plato)
    ```
 
-6. STOP. Wait for engine to confirm spawns (WORKERS_SPAWNED). Then dispatch plato: "Read both plans, perform structured comparison, write .kiln/master-plan.md."
+11. STOP. Wait for engine to confirm spawns (WORKERS_SPAWNED). Then dispatch plato: "Read anonymized plans at .kiln/tmp/plan-a.md and .kiln/tmp/plan-b.md, plus divergence analysis at .kiln/plans/divergence-analysis.md. Synthesize .kiln/master-plan.md with confidence tiers. Write .kiln/plans/confidence-assessment.md."
 
-7. STOP. Wait for plato's reply.
+12. STOP. Wait for plato's reply.
 
 ### Phase 4: Validation (max 2 retry rounds)
 
-8. When plato replies, verify `.kiln/master-plan.md` exists, is non-empty, and contains at least one milestone heading (`^### Milestone:`).
-   - If missing/empty/no milestones: SendMessage to plato: "BLOCKED: master-plan.md missing required milestone structure. Ensure file exists, is non-empty, and includes headings in the form '### Milestone: {Name}'." Then STOP.
+13. When plato replies, verify `.kiln/master-plan.md` exists, is non-empty, and contains at least one milestone heading (`^### Milestone:`).
+    - If missing/empty/no milestones: SendMessage to plato: "BLOCKED: master-plan.md missing required milestone structure. Ensure file exists, is non-empty, and includes headings in the form '### Milestone: {Name}'." Then STOP.
 
-9. Request validator:
-   ```
-   REQUEST_WORKERS: athena (subagent_type: athena)
-   ```
+14. Request validator:
+    ```
+    REQUEST_WORKERS: athena (subagent_type: athena)
+    ```
 
-10. STOP. Wait for engine to confirm spawns (WORKERS_SPAWNED). Then dispatch athena: "Validate .kiln/master-plan.md on 8 dimensions, including plan purity (no implementation-level detail)."
+15. STOP. Wait for engine to confirm spawns (WORKERS_SPAWNED). Then dispatch athena: "Validate .kiln/master-plan.md on 8 dimensions, including plan purity (no implementation-level detail)."
 
-11. STOP. Wait for athena's reply.
+16. STOP. Wait for athena's reply.
 
-12. If athena replies **PASS**: proceed to Phase 5.
+17. If athena replies **PASS**: proceed to Phase 5.
 
-13. If athena replies **FAIL**:
+18. If athena replies **FAIL**:
     - Track validation attempt count (max 2 total attempts).
     - If attempts < 2: message plato with revision instructions: "Incorporate Athena's remediation guidance from .kiln/plans/plan_validation.md. Revise master-plan.md." Then loop back to validation (athena).
     - If attempts >= 2: tell the operator the plan could not pass validation. Signal team-lead: "PLAN_BLOCKED". Stop.
 
 ### Phase 5: Update Architecture Docs
 
-13. Message numerobis: "UPDATE_FROM_MASTER_PLAN: Master plan finalized at .kiln/master-plan.md. Update your docs to reflect the final plan decisions. Reply DOCS_UPDATED when done."
+19. Message numerobis: "UPDATE_FROM_MASTER_PLAN: Master plan finalized at .kiln/master-plan.md. Update your docs to reflect the final plan decisions. Reply DOCS_UPDATED when done."
 
-14. STOP. Wait for numerobis's DOCS_UPDATED reply.
+20. STOP. Wait for numerobis's DOCS_UPDATED reply.
 
 ### Phase 6: Operator Review
 
-15. Read `.kiln/STATE.md` and check the `arch_review` flag under `## Flags`:
+21. Read `.kiln/STATE.md` and check the `arch_review` flag under `## Flags`:
     - If `auto-proceed`: skip operator review. Output an informational summary of the plan (10-15 lines) so the operator sees what was decided, then proceed directly to Phase 7.
     - If `review` or flag is missing: continue with the interactive review below.
 
-16. Read .kiln/master-plan.md. Count milestones (headings starting with "### Milestone"). Prepare a concise 10-15 line summary.
+22. Read .kiln/master-plan.md and .kiln/plans/confidence-assessment.md. Count milestones. Prepare a concise summary highlighting confidence tiers — how many STRONG CONSENSUS vs CHAIRMAN'S CALL vs LOW CONFIDENCE.
 
-17. Present the summary to the operator (NOT the full plan). Ask:
+23. Present the summary to the operator (NOT the full plan). Ask:
     "Master plan ready at .kiln/master-plan.md ({N} milestones). Reply with:
     - yes — approve and proceed to build
     - edit — describe corrections
     - show — print the full plan
+    - confidence — show confidence assessment
     - abort — save for later"
 
-18. Handle responses:
+24. Handle responses:
     - **show**: Read and display .kiln/master-plan.md. Re-ask.
+    - **confidence**: Read and display .kiln/plans/confidence-assessment.md. Re-ask.
     - **edit**: Take corrections, message plato to revise. Re-validate with athena. Re-present.
     - **yes**: Proceed to Phase 7.
     - **abort**: Signal team-lead: "PLAN_BLOCKED". Stop.

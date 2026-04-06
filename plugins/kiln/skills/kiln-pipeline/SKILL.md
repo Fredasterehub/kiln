@@ -38,33 +38,8 @@ codex exec --sandbox danger-full-access -C "{working_dir}" < /tmp/kiln_prompt.md
 
 ## Presentation Layer
 
-The engine's own markdown text is the presentation layer. Transition banners, kill streak announcements, checkpoints, and spawning blocks are written directly in the response stream.
-
-Spinner verbs still install through invisible plumbing:
-- Write `settings.local.json` via Bash heredoc
-- Use one Bash call per transition for spinner installation only
-- Do not render banners through Bash output
-
-Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/lore-engine.md` for the full presentation protocol.
+Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/lore-engine.md` for the full presentation protocol (banners, transitions, event-to-lore-key mapping, spinner install).
 Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/brand.md` for visual vocabulary and brand tokens.
-
-See § Engine Banners and § Step Transitions below for banner content and transition events.
-
-1. **Transition banners** — markdown banners with lore quotes at every step boundary
-2. **Kill streak announcements** — markdown streak banners at each Build iteration
-3. **Agent personality** — random quote from agents.json in the `description` parameter on every spawn
-4. **Spinner verbs** — step-appropriate verbs installed via settings.local.json at each transition
-5. **Idle voice** — lore-flavored one-liners during forced idle turns (never "standing by")
-6. **Step summary table** — compact progress table with status symbols after each transition
-
-All lore data lives in `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/data/`:
-- `lore.json` — transition quotes and greetings
-- `spinner-verbs.json` — step-categorized spinner verbs (8 categories, 64 verbs)
-- `agents.json` — agent aliases and personality quotes
-
-## Engine Banners and Step Transitions
-
-Banner formats (ignition, resume, complete) and the full event-to-lore-key mapping table live in `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/lore-engine.md`. Read it once at pipeline start.
 
 ## State Detection and Auto-Resume
 
@@ -129,49 +104,32 @@ Then update STATE.md with the current version so the warning doesn't repeat. Con
 **Cache health check**: Handled automatically by `check-cache.sh` SessionStart hook. No engine action needed.
 
 On fresh run (no `.kiln/STATE.md`), before step 1:
-1. ONE turn: Read `.kiln/STATE.md` (check existence — if missing, fresh run confirmed) + Read `lore.json` (select ignition quote) — parallel batch.
-2. Immediately output ignition banner — this is the operator's FIRST visible output.
-3. ONE turn — scaffolding + blueprint read (parallel batch):
-   - Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/blueprints/step-1-onboarding.md`
-   - Write spinner verbs to `settings.local.json`
-   - Run scaffolding via Bash:
-     ```bash
-     # Git init (unconditional — Codex CLI requires a git repo)
-     if [ ! -d .git ]; then git init && git add -A && git commit -m "kiln: project initialized"; fi
-     # .kiln/ directory structure
-     mkdir -p .kiln/docs .kiln/docs/research .kiln/plans .kiln/archive .kiln/archive/step-3-research .kiln/archive/step-4-architecture .kiln/archive/step-5-build .kiln/archive/step-6-validate .kiln/validation .kiln/tmp .kiln/design
-     # Seed hook-gated files (PreToolUse hooks block dispatches until line 1 is <!-- status: complete -->)
-     echo '<!-- status: writing -->' > .kiln/docs/architecture.md
-     echo '<!-- status: writing -->' > .kiln/docs/codebase-state.md
-     echo '<!-- status: writing -->' > .kiln/docs/patterns.md
-     # Codex pre-flight (mode check, not blocker)
-     timeout 15 codex exec --sandbox danger-full-access "echo kiln-preflight-ok" 2>/dev/null && echo "codex:true" || echo "codex:false"
-     ```
-   - Capture codex result for STATE.md later (codex:true → codex_available: true)
+1. Read `.kiln/STATE.md` (confirm missing) + `lore.json` (select ignition quote) in parallel.
+2. Output ignition banner — operator's first visible output.
+3. In parallel: read step-1 blueprint, write spinner verbs to `settings.local.json`, run scaffolding:
+   ```bash
+   if [ ! -d .git ]; then git init && git add -A && git commit -m "kiln: project initialized"; fi
+   mkdir -p .kiln/docs .kiln/docs/research .kiln/plans .kiln/archive .kiln/archive/step-3-research .kiln/archive/step-4-architecture .kiln/archive/step-5-build .kiln/archive/step-6-validate .kiln/validation .kiln/tmp .kiln/design
+   echo '<!-- status: writing -->' > .kiln/docs/architecture.md
+   echo '<!-- status: writing -->' > .kiln/docs/codebase-state.md
+   echo '<!-- status: writing -->' > .kiln/docs/patterns.md
+   timeout 15 codex exec --sandbox danger-full-access "echo kiln-preflight-ok" 2>/dev/null && echo "codex:true" || echo "codex:false"
+   ```
+   Capture codex result for STATE.md (codex:true → codex_available: true).
 4. Create team, spawn Phase A (mnemosyne), wait for READY, spawn Phase B (alpha, foreground) + operator greeting.
 
-Budget: 3 turns max. Operator sees banner first, scaffolding is invisible, then Alpha.
-
 On resume (`.kiln/STATE.md` exists with stage != complete):
-1. ONE turn: Read `.kiln/STATE.md` + `.kiln/resume.md` + `lore.json` — parallel batch.
-2. Immediately output resume banner — this is the operator's FIRST visible output.
-3. ONE turn: Resolve bootstrap paths from the active plugin root before failing on stale state, then read the resolved blueprint path + write spinner verbs to `settings.local.json` — parallel batch:
-   - Use the stored `skill` and `roster` paths when they are readable.
-   - If `skill` is stale or missing, recover to `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/SKILL.md`.
-   - If `roster` is stale or missing, recover from `stage` using the deterministic blueprint map above.
-   - If either path was recovered, update `.kiln/STATE.md` in the same hidden turn and refresh `updated`.
-   - Fail only when the current `stage` is invalid or the active plugin copy of the required file is missing.
+1. Read `.kiln/STATE.md` + `.kiln/resume.md` + `lore.json` in parallel.
+2. Output resume banner — operator's first visible output.
+3. Resolve bootstrap paths: prefer stored `skill`/`roster` when readable; recover from active plugin root if stale. Read resolved blueprint + write spinner verbs in parallel. If either path was recovered, update `.kiln/STATE.md`. Fail only when `stage` is invalid or the active plugin file is missing.
 4. Create team, spawn.
-
-Budget: 3 turns max.
 
 ### 1. Read Blueprint and Step Definition
 
-Read these files for the current step:
+Read the blueprint for the current step:
 - **Blueprint**: `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/blueprints/step-{N}-{name}.md` — three-phase agent roster, communication model, spawn order.
-- **Step definition**: `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/step-definitions.md` — done signals, state transitions, notes.
 
-The blueprint tells you WHO to spawn and in which PHASE. The agent `.md` files (loaded via `subagent_type`) tell each agent WHAT to do. Step-definitions tell you what signals to expect.
+The blueprint tells you WHO to spawn and in which PHASE. The agent `.md` files (loaded via `subagent_type`) tell each agent WHAT to do. Step definitions and signal vocabulary are in `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` (§ Step Definitions).
 
 (Step 1's blueprint is read during Pipeline Start.)
 
@@ -192,80 +150,12 @@ TeamCreate(team_name="{run_id}-{step_name}", description="Kiln {step_name}")
 
 ### 3. Three-Phase Spawn
 
-You are the conductor — you spawn agents and wait for signals. You never perform step work yourself. Agents carry specialized logic you don't have: Alpha interviews operators, Da Vinci facilitates brainstorming, scouts map codebases. Even when the work looks trivial — a greenfield project with a clear brief — the agent applies conventions, file structures, and interaction patterns that you would skip. Never create `.kiln/`, `STATE.md`, or any pipeline artifact yourself. Never skip spawning.
+You are the conductor — you spawn agents and wait for signals. You never perform step work yourself. Never create `.kiln/`, `STATE.md`, or any pipeline artifact yourself. Never skip spawning.
 
-The three-phase spawn sequence is defined in `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` § "Three-Phase Spawn". Follow it exactly. Not every step has all three phases — some steps skip Phase C. Step 7 is the exception: omega runs as a solo inline agent with no team (no TeamCreate/TeamDelete).
+Follow `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` § "Three-Phase Spawn" exactly. The engine-specific additions are:
 
-#### Phase A: Persistent Minds
-
-If the blueprint lists Phase A agents, spawn each one (`run_in_background: true`). Each persistent mind bootstraps autonomously — reads its files, updates state, then signals READY via SendMessage to team-lead with a content summary. Capture the READY summary; the boss needs it.
-
-#### Phase B: Boss
-
-After ALL Phase A agents signal READY, spawn the boss. Interactive steps: `run_in_background: false` (boss talks to operator). Background steps: `run_in_background: true`.
-
-**Lean runtime prompt** — only what changes per invocation:
-```
-You are "{boss_name}" on team "{team_name}". Working dir: {working_dir}.
-Read your protocol files, then read team-protocol.md at:
-  ${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md
-{For each Phase A agent: "✓ {mind} READY: {summary from their READY signal}"}
-{Step-specific state: build_iteration, correction_cycle, current milestone, etc.}
-{Notes from step-definitions, if any}
-```
-
-The agent's `.md` file (loaded via `subagent_type`) already contains its full role, instructions, communication rules, and workflow. The runtime prompt adds only team identity, working directory, READY summaries, and step-specific state.
-
-#### Phase C: Workers
-
-When the boss sends `REQUEST_WORKERS`, validate then spawn each worker on the same team (`run_in_background: true`). Each worker gets a lean runtime prompt including their dynamic name and paired partner:
-
-```
-REQUEST_WORKERS: {name} (subagent_type: {type}), {name} (subagent_type: {type})
-```
-
-Names are free-form (krs-one picks from a famous duo pool). The `subagent_type` maps to the canonical agent `.md` file.
-
-**Build-Step Worker Validation (Step 5 only):**
-
-When the current stage is `build`, validate every REQUEST_WORKERS payload before spawning. Check `subagent_type` pairs against this table:
-
-| Builder Type | Reviewer Type | Scenario |
-|-------------|---------------|----------|
-| codex | sphinx | Default |
-| kaneda | sphinx | Fallback |
-| clair | obscur | UI |
-
-Validation rules:
-1. Each `subagent_type` must be a legal builder or reviewer type from the table above
-2. Builder and reviewer must be from the same scenario (e.g. codex+obscur is invalid)
-3. The request must contain exactly 1 builder + 1 reviewer
-4. Generic types (`code`, `agent`, `worker`, etc.) are NEVER valid for build step
-5. Names are free-form — do NOT validate the `name` parameter, only `subagent_type`
-
-If validation fails, do NOT spawn. Send an error to the boss:
-
-```
-SendMessage(type: "message", recipient: "{boss_name}", content: "WORKERS_REJECTED: {reason}. Build step requires a builder+reviewer pair from the same scenario. Legal pairs (by subagent_type): codex+sphinx (Default), kaneda+sphinx (Fallback), clair+obscur (UI). Format: REQUEST_WORKERS: {name} (subagent_type: {builder_type}), {name} (subagent_type: {reviewer_type}).")
-```
-
-Only proceed to spawning once the full request passes all five rules.
-
-**Identity injection for build-step workers:** The engine knows both names from the REQUEST_WORKERS line. Inject identity into each worker's runtime prompt:
-- Builder: `Your name on this team is "{builder_name}". Your paired reviewer is "{reviewer_name}".`
-- Reviewer: `Your name on this team is "{reviewer_name}". Your paired builder is "{builder_name}".`
-
-The boss dispatches assignments via SendMessage after workers are spawned.
-
-**After all Phase C workers are spawned**, send a confirmation to the boss so it wakes up with a message in its inbox. Without this, the boss can go idle after REQUEST_WORKERS and never see that workers are live — requiring a manual nudge.
-
-```
-SendMessage(
-  type: "message",
-  recipient: "{boss_name}",
-  content: "WORKERS_SPAWNED: {worker_names}. All idle and awaiting assignment."
-)
-```
+1. **Build-step worker validation** (Step 5): validate every REQUEST_WORKERS payload against the legal builder+reviewer pairs (codex+sphinx, kaneda+sphinx, clair+obscur). If invalid, send WORKERS_REJECTED to the boss. See team-protocol.md § Build-Step Worker Validation for the full table and rules.
+2. **CYCLE_WORKERS protocol** (below): mid-milestone worker cycling initiated by KRS-One.
 
 #### CYCLE_WORKERS — Mid-Milestone Worker Cycling (Step 5 Only)
 
@@ -293,7 +183,7 @@ CYCLE_WORKERS: scenario={default|fallback|ui}, reason="{why cycling}", chunk="{c
 
 2. **Shutdown current workers** — send `shutdown_request` to the current builder and reviewer (if any exist). Wait for `shutdown_response` or `teammate_terminated` from both (60s timeout). Force-terminate on timeout. Do NOT shut down persistent minds or KRS-One.
 
-3. **Spawn fresh pair** — spawn the new builder+reviewer on the existing team using the same identity injection and validation rules as Phase C. Each fresh worker starts with a clean context — this is the point of cycling.
+3. **Spawn fresh pair** — spawn the new builder+reviewer on the existing team using the same validation rules as Phase C. Use canonical type names (`name: "codex"`, not cosmetic names). Each fresh worker starts with a clean context — this is the point of cycling.
 
 4. **Confirm to KRS-One** — send WORKERS_SPAWNED with the new agent names:
    ```
@@ -309,7 +199,7 @@ CYCLE_WORKERS: scenario={default|fallback|ui}, reason="{why cycling}", chunk="{c
    ◆ Cycling workers — {reason}. Spawning {builder_name}+{reviewer_name} ({scenario})...
    ```
 
-**CYCLE_WORKERS vs REQUEST_WORKERS:** REQUEST_WORKERS is the initial Phase C spawn at the start of build. CYCLE_WORKERS is the mid-milestone replacement that shuts down existing workers first. Both use the same scenario validation table and identity injection. The key difference: CYCLE_WORKERS always sends `shutdown_request` to existing workers before spawning, and it is initiated by KRS-One (not as a response to an initial team setup).
+**CYCLE_WORKERS vs REQUEST_WORKERS:** REQUEST_WORKERS is the initial Phase C spawn at the start of build. CYCLE_WORKERS is the mid-milestone replacement that shuts down existing workers first. Both use the same scenario validation table. The key difference: CYCLE_WORKERS always sends `shutdown_request` to existing workers before spawning, and it is initiated by KRS-One (not as a response to an initial team setup).
 
 #### Spawn Parameters
 
@@ -322,7 +212,7 @@ Agent(
   team_name: "{team_name}",       # the team from step 2 — REQUIRED
   subagent_type: "{agent_name}",  # matches the .md file in agents/
   prompt: "<lean runtime prompt>",
-  run_in_background: true/false,  # see Engine Modes
+  run_in_background: true/false,  # interactive steps (1,2,4): boss=false; background steps (3,5,6,7): true
 )
 ```
 
@@ -330,29 +220,9 @@ Agent(
 
 **Every parameter is required.** Without `team_name`, agents spawn as isolated subagents — no SendMessage, no shutdown, no team pattern.
 
-### 4. Engine Modes
+Bootstrap plumbing is invisible — batch prerequisite reads in parallel, output the banner as the first visible text. Interactive steps (1, 2, 4): banner → spawning indicator → spawn boss in foreground → operator greeting (text in `lore-engine.md`) → engine goes silent. Background steps (3, 5, 6, 7): banner → one-line progress beats at each phase transition surfacing real information from READY signals.
 
-Bootstrap plumbing is invisible. The engine batches prerequisite reads into parallel tool calls and outputs the banner as its first visible text. The operator never sees file reads, spinner installation, or state checks — only the ignition/resume banner followed by the first agent.
-
-Engine behavior during three-phase transitions depends on step type:
-
-**Interactive (Steps 1, 2, 4):** Banner → spawning indicator → spawn boss in foreground → operator greeting → silent handoff. No progress beats. The boss IS the operator's interface — engine goes quiet until the boss signals done.
-
-**Operator greeting**: Engine's last output before going silent. Greeting text lives in `lore-engine.md`.
-
-**Background (Steps 3, 5, 6, 7):** Banner → progress beats at each phase transition → idle voice during wait. Progress beats are one line per event with real information from READY signals:
-
-```
-◆ rakim bootstrapping...
-✓ rakim ready — M2 in progress, 3/5 deliverables done. Key: src/components/LinkCard.tsx
-◆ KRS-One entering — iteration 4, milestone M2...
-✓ KRS-One: requesting asterix+obelix (codex+sphinx)
-◆ Spawning asterix, obelix...
-```
-
-Progress beats surface real information from READY signals and state. The operator should learn something from each line — what milestone, how far along, which agents. Never output template variables or generic status.
-
-### 5. Wait for Done Signal
+### 4. Wait for Done Signal
 
 The engine waits for the boss's completion signal. Messages from the team arrive automatically. Do not read files, create tasks, or intervene.
 
@@ -372,7 +242,7 @@ Every `idle_notification` is a health check opportunity. Do NOT waste it on poet
 
 **Idle voice (fallback only):** If the health check finds everything normal (agent is actively working, just slow), THEN output a brief lore-flavored one-liner. But health check comes first — every time.
 
-### 6. Shutdown and Transition
+### 5. Shutdown and Transition
 
 1. **Shutdown agents**: Send `shutdown_request` to each agent individually, in parallel. Do not use broadcast — shutdown is an orderly per-agent protocol, not an announcement.
 2. **Wait for confirmations or termination**: Track a wait set of all agents that received `shutdown_request`. An agent is cleared from the wait set when EITHER:
@@ -380,9 +250,9 @@ Every `idle_notification` is a health check opportunity. Do NOT waste it on poet
    - A `teammate_terminated` event is observed for that agent (system already killed it).
    Wait until ALL agents are cleared. If any agent has neither confirmed nor terminated after 60 seconds, treat it as terminated and proceed — do not wait indefinitely.
 3. **TeamDelete**: Only after the wait set is empty (all agents confirmed, terminated, or timed out).
-4. **Then step 2 (Render Transition and Create Team)** for the next step. Always delete the old team before creating the new one — one team at a time, or TeamCreate fails on name collision.
+4. **Then § 2 (Render Transition and Create Team)** for the next step. Always delete the old team before creating the new one — one team at a time, or TeamCreate fails on name collision.
 
-### 7. Process Signal and Transition
+### 6. Process Signal and Transition
 
 Based on the boss's done signal, determine next action:
 
@@ -399,7 +269,18 @@ Based on the boss's done signal, determine next action:
 **Step 5 signals**:
   - CYCLE_WORKERS -> KRS-One requests fresh workers mid-milestone. Execute the full CYCLE_WORKERS protocol (see § CYCLE_WORKERS above): validate scenario, shutdown current builder+reviewer, spawn fresh pair, send WORKERS_SPAWNED back to KRS-One. Do NOT tear down the team — persistent minds and KRS-One stay alive. Do NOT transition steps. After sending WORKERS_SPAWNED, return to waiting for the next signal. Update `build_iteration` in STATE.md.
   - ITERATION_COMPLETE -> (legacy/internal — CYCLE_WORKERS is preferred) Render `phase_complete` banner, increment `build_iteration` in STATE.md. This signal carries no scenario information, so wait for KRS-One's next CYCLE_WORKERS to determine the scenario. Loop back to wait.
-  - MILESTONE_COMPLETE -> Render `milestone_complete` banner with celebration line. Increment `milestones_complete` in STATE.md. KRS-One has already sent MILESTONE_TRANSITION to persistent minds before signaling MILESTONE_COMPLETE — PMs are ready. If `milestones_complete < milestone_count`: loop back to wait (KRS-One continues with next milestone's first CYCLE_WORKERS). If all milestones done: KRS-One should send BUILD_COMPLETE next.
+  - MILESTONE_QA_READY -> KRS-One has verified deliverable completeness, requesting independent QA. Execute the full QA Tribunal protocol (see § MILESTONE_QA_READY below). After relaying QA_VERDICT to KRS-One, return to waiting for the next signal (MILESTONE_COMPLETE or back to CYCLE_WORKERS if QA failed).
+  - MILESTONE_COMPLETE -> Full team lifecycle reset:
+    1. Render `milestone_complete` banner. Increment `milestones_complete` in STATE.md.
+    2. **Pre-shutdown check**: Verify all persistent minds have `<!-- status: complete -->` in their owned files (codebase-state.md, patterns.md). If any missing, wait 30s and re-check (max 3 times), then proceed with warning.
+    3. Send `shutdown_request` to ALL agents (PMs, KRS-One, any remaining workers). Wait for responses (60s timeout, force-terminate on timeout).
+    4. **TeamDelete** — tear down the entire milestone team.
+    5. If `milestones_complete < milestone_count`:
+       a. Create new team (`TeamCreate` with next kill-streak name).
+       b. Re-spawn persistent minds (rakim, sentinel, thoth) — fresh context, they read their files on bootstrap.
+       c. Re-spawn krs-one with updated milestone context.
+       d. Wait for READY from PMs, then resume build loop.
+    6. If all milestones done: wait for BUILD_COMPLETE from krs-one (sent before MILESTONE_COMPLETE in the final milestone).
   - BUILD_COMPLETE -> render `phases_complete` banner, proceed to step 6
 **Step 6 signals**:
   - VALIDATE_PASS -> render `validation_passed` banner, proceed to step 7
@@ -414,6 +295,104 @@ When writing STATE.md at step transitions, always include the `skill` and `roste
 
 **Gate log**: gate-log.md is optional. If alpha seeded it during onboarding, the engine may append a one-line entry at step transitions. Do not let gate-log writes block or delay the transition flow.
 
+#### MILESTONE_QA_READY — Egyptian Judgment Tribunal (Step 5 Only)
+
+When KRS-One sends `MILESTONE_QA_READY: {milestone_name}`, the engine orchestrates independent dual-model QA via three dedicated agents (maat, anubis, osiris). KRS-One blocks on QA_VERDICT (300s timeout).
+
+**Engine protocol on receiving MILESTONE_QA_READY:**
+
+1. **Pre-package PM context for anubis** — Read the TL;DR headers from rakim's `.kiln/docs/codebase-state.md` and sentinel's `.kiln/docs/patterns.md` (first 30 lines of each). Anubis is a thin Codex CLI wrapper that does NOT consult PMs directly — the engine pre-packages this context into its runtime prompt.
+
+2. **Spawn maat + anubis (parallel, background):**
+   ```
+   Agent(name: "maat", subagent_type: "kiln:maat", team_name: "{team_name}",
+     run_in_background: true,
+     prompt: "You are 'maat' on team '{team_name}'. Step 5: Build — Milestone QA.
+     Milestone under review: {milestone_name}.
+     Working dir: {working_dir}. Master plan: .kiln/master-plan.md.
+     {protocol_injection_full}
+     Run your QA analysis. Consult rakim and sentinel as needed.")
+
+   Agent(name: "anubis", subagent_type: "kiln:anubis", team_name: "{team_name}",
+     run_in_background: true,
+     prompt: "You are 'anubis' on team '{team_name}'. Step 5: Build — Milestone QA.
+     Milestone under review: {milestone_name}.
+     Working dir: {working_dir}. Master plan: .kiln/master-plan.md.
+     Codebase state summary:\n{rakim_tldr}
+     Patterns summary:\n{sentinel_tldr}
+     {protocol_injection_worker}
+     Construct your QA prompt for GPT-5.4 and invoke codex exec.")
+   ```
+
+3. **Wait for TWO distinct QA_REPORT_READY signals** — create two separate wait tasks:
+   - "Wait for QA_REPORT_READY from maat"
+   - "Wait for QA_REPORT_READY from anubis"
+   Track by sender. Both must arrive before proceeding. 300s timeout for the pair.
+
+4. **Spawn osiris (background)** after both reports are ready:
+   ```
+   Agent(name: "osiris", subagent_type: "kiln:osiris", team_name: "{team_name}",
+     run_in_background: true,
+     prompt: "You are 'osiris' on team '{team_name}'. Step 5: Build — Milestone QA Synthesis.
+     Milestone: {milestone_name}. Working dir: {working_dir}.
+     Two QA reports are ready: .kiln/tmp/qa-maat-report.md and .kiln/tmp/qa-anubis-report.md.
+     {protocol_injection_full}
+     Read both reports, synthesize, and signal QA_PASS or QA_FAIL.")
+   ```
+
+5. **Wait for QA_PASS or QA_FAIL from osiris** — single wait task. 300s timeout.
+
+6. **Shutdown QA agents** — send `shutdown_request` to maat, anubis, and osiris. Wait for confirmations (60s timeout). Force-terminate on timeout.
+
+7. **Relay verdict to KRS-One:**
+   ```
+   SendMessage(type: "message", recipient: "krs-one",
+     content: "QA_VERDICT: {PASS or FAIL}. {osiris's findings summary}")
+   ```
+
+8. **Return to signal wait loop** — do NOT transition steps. KRS-One decides next action (MILESTONE_COMPLETE on PASS, re-scope on FAIL).
+
+#### Protocol Injection (Runtime)
+
+Every agent spawn MUST include a role-appropriate protocol block in its runtime prompt. This is Layer 2 enforcement (Layer 1 = agent.md bootstrap Read, Layer 3 = enforce-pipeline.sh hook).
+
+**Full protocol** — for bosses, persistent minds, QA agents (maat, osiris, aristotle, krs-one, rakim, sentinel, etc.):
+```
+## Kiln Protocol (Runtime)
+- SendMessage is the ONLY way to reach teammates. Plain text is invisible to agents.
+- After sending a message expecting a reply, STOP your turn. Never sleep-poll.
+- One message per wake-up. Process it fully before acting.
+- Signal format: SendMessage(type:"message", recipient:"team-lead", content:"SIGNAL_NAME: context")
+- On shutdown_request: approve immediately — SendMessage(type:"shutdown_response", request_id:"{id}", approve:true). No delay, no summary.
+- Consult persistent minds when uncertain: rakim (codebase state), sentinel (patterns).
+- Consultation: send question → STOP → wait for reply → continue. Use sparingly.
+- Chunk scope is immutable after dispatch. New info goes in the next assignment.
+- NEVER read/write: .env, *.pem, *_rsa, *.key, credentials.json, secrets.*, .npmrc
+```
+
+**Worker protocol** — for builders, reviewers (codex, kaneda, clair, sphinx, obscur, anubis):
+```
+## Kiln Protocol (Runtime)
+- SendMessage is the ONLY way to reach teammates. Plain text is invisible to agents.
+- After sending a message expecting a reply, STOP your turn. Never sleep-poll.
+- One message per wake-up. Process it fully before acting.
+- Signal format: SendMessage(type:"message", recipient:"{name}", content:"{SIGNAL}: {context}")
+- On shutdown_request: approve immediately — SendMessage(type:"shutdown_response", request_id:"{id}", approve:true). No delay, no summary.
+- Consult persistent minds when uncertain: rakim (codebase state), sentinel (patterns). Send question → STOP → wait → continue.
+- NEVER read/write: .env, *.pem, *_rsa, *.key, credentials.json, secrets.*, .npmrc
+```
+
+**Fire-and-forget protocol** — for thoth:
+```
+## Kiln Protocol (Runtime)
+- SendMessage is the ONLY way to reach teammates. Plain text is invisible to agents.
+- One message per wake-up. Process it fully before acting.
+- On shutdown_request: approve immediately — SendMessage(type:"shutdown_response", request_id:"{id}", approve:true). No delay, no summary.
+- NEVER read/write: .env, *.pem, *_rsa, *.key, credentials.json, secrets.*, .npmrc
+```
+
+Select the variant matching the agent's role. Include it verbatim in the `prompt` parameter — do not summarize or abbreviate.
+
 ## Signal Processing via Tasklist
 
 At each step transition, create a private `TaskCreate` chain for the current step. Use `blockedBy` so every task is either a `Spawn ...` action or a `Wait for ...` action, and the chain advances strictly in order.
@@ -424,54 +403,9 @@ After receiving any teammate message, check TaskList first to identify your curr
 
 **Malformed signal recovery:** If a teammate message does NOT match the expected signal but DOES contain a recognizable intent (e.g. `READY` when you expected `REQUEST_WORKERS`, or a signal with wrong casing, or a signal buried in prose), do NOT silently ignore it. Send a corrective reply: "I received your message but expected signal `{expected}`. You sent `{what_they_sent}`. Please resend as exactly: `{expected}: {format}`." This prevents the deadlock where both sides think they communicated correctly.
 
-Use the exact signal names from `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/step-definitions.md`. Rebuild the tasklist at every step transition; Build iterations also rebuild the full chain. The tasklist is engine-only: agents never touch it and use `SendMessage` only. When transitioning between steps, delete all previous tasks (`TaskUpdate status: deleted`) before creating the new step's chain.
+Use the exact signal names from `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` (§ Signal Vocabulary). Rebuild the tasklist at every step transition; Build iterations also rebuild the full chain. The tasklist is engine-only: agents never touch it and use `SendMessage` only. When transitioning between steps, delete all previous tasks (`TaskUpdate status: deleted`) before creating the new step's chain.
 
-**Step 1**
-- `Spawn Phase A`
-- `Wait READY`
-- `Spawn Phase B`
-- `Wait REQUEST_WORKERS` or `ONBOARDING_COMPLETE` (brownfield: mnemosyne requests scouts; greenfield: skip straight to done)
-- If REQUEST_WORKERS: `Spawn requested scouts`, then `Wait ONBOARDING_COMPLETE`
-
-**Step 2**
-- `Spawn Phase A`
-- `Wait READY`
-- `Spawn Phase B`
-- `Wait BRAINSTORM_COMPLETE`
-
-**Step 3**
-- `Spawn mi6 + thoth`
-- `Wait REQUEST_WORKERS`
-- `Spawn requested field agents`
-- `Wait RESEARCH_COMPLETE`
-
-**Step 4**
-- `Spawn numerobis + thoth`
-- `Wait READY` (both), then `Spawn aristotle`
-- `Wait REQUEST_WORKERS` / `Spawn requested wave` x3
-- `Wait ARCHITECTURE_COMPLETE` or `PLAN_BLOCKED`
-
-**Step 5**
-- `Spawn rakim + sentinel + thoth`
-- `Wait READY from rakim, sentinel, AND thoth (all 3 required)`, then `Spawn krs-one`
-- `Wait CYCLE_WORKERS or REQUEST_WORKERS` (first Phase C spawn — KRS-One sends CYCLE_WORKERS with scenario for first chunk; legacy bosses may send REQUEST_WORKERS)
-  - If CYCLE_WORKERS: validate scenario, execute cycling protocol (spawn fresh pair, send WORKERS_SPAWNED)
-  - If REQUEST_WORKERS: spawn requested workers (legacy path)
-- `Wait CYCLE_WORKERS`, `ITERATION_COMPLETE`, `MILESTONE_COMPLETE`, or `BUILD_COMPLETE`
-  - If CYCLE_WORKERS: execute cycling protocol (shutdown old workers, spawn fresh pair, send WORKERS_SPAWNED), then loop back to this wait
-  - If ITERATION_COMPLETE: (legacy) increment iteration, loop back to this wait
-  - If MILESTONE_COMPLETE: increment milestone counter, loop back to this wait (KRS-One already sent MILESTONE_TRANSITION to PMs)
-  - If BUILD_COMPLETE: proceed to shutdown and step 6
-
-**Step 6**
-- `Spawn zoxea`
-- `Wait READY`, then `Spawn argus`
-- `Wait REQUEST_WORKERS` or `VALIDATE_PASS` or `VALIDATE_FAILED` (REQUEST_WORKERS: argus requests hephaestus for design QA — conditional)
-- If REQUEST_WORKERS: `Spawn hephaestus`, then `Wait VALIDATE_PASS` or `VALIDATE_FAILED`
-
-**Step 7**
-- `Spawn omega`
-- `Wait REPORT_COMPLETE`
+Read the current step's blueprint for the step-specific spawn/wait sequence. Each blueprint defines the Phase A/B/C roster, the signals to wait for, and any conditional branches (e.g. brownfield scout requests in step 1, argus→hephaestus branch in step 6). The blueprint is the authoritative task chain for that step.
 
 ## Build Loop — Kill Streak Names
 

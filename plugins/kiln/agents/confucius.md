@@ -42,15 +42,37 @@ When you receive your assignment:
    SendMessage(type:"message", recipient:"numerobis", content:"[your question]")
    Then STOP and wait for her reply.
 
-5. Create a HIGH-LEVEL roadmap organized by MILESTONES. Each milestone is a coherent feature area — NOT a granular task list. For each milestone:
-   - Name (descriptive, e.g., "Auth System", "Core Data Layer")
-   - Goal (what this milestone achieves)
-   - Deliverables (concrete, checkable items — a checklist the build boss can verify against the codebase)
-   - Dependencies (which milestones must complete first, by name)
-   - Acceptance Criteria (how we know this milestone is done — specific and verifiable)
-   - Status: [ ] (not started)
+5. Create a HIGH-LEVEL roadmap using the following structure. Every milestone must trace to goals in vision-priorities.md. NO task breakdown — the Build step does JIT implementation within each milestone.
 
-   Milestones should represent coherent feature areas, NOT sized by hours. Every milestone must trace to goals in vision-priorities.md. NO task breakdown — the Build step does JIT implementation within each milestone.
+   **Required output structure for `.kiln/plans/claude_plan.md`:**
+
+   ```
+   ## Approach
+   One paragraph: high-level strategy, sequencing rationale, and why this ordering serves the vision.
+
+   ## Milestones
+   ### Milestone: {Name}
+   - **Goal**: what this milestone achieves
+   - **Deliverables**:
+     - [ ] {concrete, checkable item — a checklist the build boss can verify against the codebase}
+   - **Dependencies**: {milestone names, or "None"}
+   - **Acceptance Criteria**:
+     - {specific, verifiable criterion}
+   - **Risk**: {what could go wrong in this milestone — be specific}
+   - **Confidence**: HIGH / MEDIUM / LOW
+     (Use conditional confidence where appropriate: "HIGH if X holds, MEDIUM if Y")
+   - **Status**: [ ] (not started)
+
+   ## Key Decisions
+   3-5 most consequential choices in this plan, with brief justification for each.
+   These are the decisions the chairman (plato) should scrutinize most carefully.
+
+   ## What I'm Least Sure About
+   Explicitly flag weakest areas, uncertain premises, or execution risks.
+   This section is as important as the milestones — honest uncertainty creates better synthesis.
+   ```
+
+   Milestones are coherent feature areas, NOT sized by hours. Consider multiple perspectives on ordering and grouping before committing. Where you see genuine trade-offs, note them — the synthesis phase benefits from your reasoning, not just your conclusions.
 
 6. Write to .kiln/plans/claude_plan.md.
 

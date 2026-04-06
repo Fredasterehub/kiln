@@ -1,5 +1,5 @@
 # Engine Resume Cache
-Pre-extracted from brand.md + lore-engine.md + step-definitions.md.
+Pre-extracted from brand.md + lore-engine.md + team-protocol.md.
 Engine reads THIS on resume instead of the source files.
 
 ## Markdown Weight System
@@ -50,7 +50,7 @@ Interactive (boss IS operator interface): 1, 2, 4
 Background (engine IS operator window): 3, 5, 6, 7
 
 ## Build Loop
-KRS-One signals: ITERATION_COMPLETE (next streak), MILESTONE_COMPLETE: {name} (next milestone), BUILD_COMPLETE (→ validate).
+KRS-One signals: CYCLE_WORKERS (fresh worker pair), MILESTONE_COMPLETE: {name} (next milestone), BUILD_COMPLETE (→ validate). KRS-One loops internally via CYCLE_WORKERS — he does NOT signal ITERATION_COMPLETE.
 State: build_iteration incremented each invocation. correction_cycle tracks validate→build loops.
 
 ## Transition Quotes

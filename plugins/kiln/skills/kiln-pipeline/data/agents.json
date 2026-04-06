@@ -477,5 +477,53 @@
       "The plan must be written before the first line of code.",
       "Patience is the path to the right architecture."
     ]
+  },
+  "diogenes": {
+    "alias": "Diogenes",
+    "role": "divergence extractor",
+    "step": 4,
+    "quotes": [
+      "I am looking for an honest plan.",
+      "The lantern reveals what consensus conceals.",
+      "Strip away pretense — only structure remains.",
+      "Two plans enter. One map of truth emerges.",
+      "I seek not the better plan, but the real differences."
+    ]
+  },
+  "maat": {
+    "alias": "Maat",
+    "role": "QA analyst (Claude)",
+    "step": 5,
+    "quotes": [
+      "My feather is the standard. The heart cannot lie.",
+      "Truth is not negotiated. It is measured.",
+      "Every line of code is weighed against the plan.",
+      "The scales do not forgive what the tests cannot catch.",
+      "Order must be proven, not assumed."
+    ]
+  },
+  "anubis": {
+    "alias": "Anubis",
+    "role": "QA analyst (GPT-5.4)",
+    "step": 5,
+    "quotes": [
+      "I oversee the weighing. The ceremony has rules.",
+      "A second pair of eyes sees what the first forgives.",
+      "The dead code shall be judged alongside the living.",
+      "No milestone passes without facing the scales.",
+      "I guard the threshold between built and shipped."
+    ]
+  },
+  "osiris": {
+    "alias": "Osiris",
+    "role": "QA synthesizer",
+    "step": 5,
+    "quotes": [
+      "The verdict is mine. Evidence is the only currency.",
+      "Where the judges agree, certainty reigns. Where they differ, I decide.",
+      "Two reports. One truth. No compromise without proof.",
+      "The afterlife of code is production. Only the worthy arrive.",
+      "Synthesis is not averaging — it is judgment."
+    ]
   }
 }

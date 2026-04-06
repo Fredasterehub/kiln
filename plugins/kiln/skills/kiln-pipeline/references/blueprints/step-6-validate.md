@@ -16,18 +16,42 @@
 | argus | Solo validator. Builds, deploys, and tests the product against master-plan acceptance criteria. Uses Playwright for web UIs when the host runtime provides it; otherwise falls back to non-browser checks and reports coverage limits explicitly. Writes validation report with verdict and correction tasks. Consults zoxea for architectural questions. | general | sonnet |
 | hephaestus | Design QA specialist. Conditional spawn — only when `.kiln/design/` exists and project has web UI. Uses Playwright screenshots when available and falls back to static review when not. Advisory scoring — never sole cause of failure. | general | sonnet |
 
+## Signal Vocabulary
+
+| Signal | Sender → Receiver | Blocking? | Notes |
+|--------|-------------------|-----------|-------|
+| `READY: {summary}` | Zoxea → engine | No | Bootstrap complete; architecture-check.md written, architectural drift summary ready |
+| `REQUEST_WORKERS: hephaestus` | Argus → engine | No | Conditional — only when `.kiln/design/` exists and project is a web app |
+| `DESIGN_QA_COMPLETE: {scores}` | Hephaestus → Argus | No | 5-axis design review scores; advisory only, never sole cause of FAIL |
+| `VALIDATE_PASS` | Argus → engine | No (terminal) | All acceptance criteria met; advances stage to report |
+| `VALIDATE_FAILED: {reason}` | Argus → engine | No (terminal) | Failures found; correction tasks in report.md; triggers Build loop if cycle < 3 |
+
+Internal (not routed through engine):
+
+| Signal | Sender → Receiver | Blocking? | Notes |
+|--------|-------------------|-----------|-------|
+| Architectural question | Argus → Zoxea | Yes (waits for reply) | Argus consults zoxea during validation; zoxea is passive until asked |
+
 ## Communication Model
 
 ```
-zoxea       → team-lead      (READY signal with architecture verification summary)
-argus       → zoxea          (architectural questions during validation — optional)
-argus       → team-lead      (REQUEST_WORKERS: hephaestus — conditional, when .kiln/design/ exists)
-argus       → hephaestus     (design artifact paths + deployed app URL)
-hephaestus  → argus          (DESIGN_QA_COMPLETE with design score)
-argus       → team-lead      (VALIDATE_PASS or VALIDATE_FAILED with verdict)
+--- Phase A (bootstrap) ---
+Zoxea      → engine         (READY: architecture verification summary)
+
+--- Phase B (validation) ---
+Argus      → Zoxea          (architectural questions — optional, blocking)
+Zoxea      → Argus          (answer — fire-and-forget reply)
+
+--- Phase C (design QA — conditional) ---
+Argus      → engine         (REQUEST_WORKERS: hephaestus)
+Argus      → Hephaestus     (design artifact paths + deployed app URL)
+Hephaestus → Argus          (DESIGN_QA_COMPLETE: 5-axis scores)
+
+--- Terminal ---
+Argus      → engine         (VALIDATE_PASS  or  VALIDATE_FAILED: reason + correction tasks)
 ```
 
-Zoxea bootstraps and waits. Argus drives validation. Zoxea is passive after READY — only responds when asked.
+Zoxea is passive after READY — only wakes on consultation. Phase C is skipped entirely when `.kiln/design/` does not exist.
 
 ## Three-Phase Spawn
 

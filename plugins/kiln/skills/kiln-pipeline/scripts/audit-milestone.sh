@@ -1,12 +1,17 @@
 #!/bin/bash
 # audit-milestone.sh — PostToolUse hook for SendMessage
 #
-# Fires when a message contains MILESTONE_COMPLETE. Verifies that
-# iter-log.md agrees with the claim: last entry must have
-# result: milestone_complete and qa: PASS.
+# Tracks terminal and coordination signals sent via SendMessage.
+# Injects system-reminder context for terminal signals to ensure
+# the engine processes them on its next idle turn.
 #
-# Advisory only — always exits 0. Warnings go to stderr (model feedback).
-# Cannot block; PostToolUse hooks are informational by design.
+# Tracked signals:
+#   Terminal: MILESTONE_COMPLETE, BUILD_COMPLETE, ARCHITECTURE_COMPLETE,
+#             ONBOARDING_COMPLETE, BRAINSTORM_COMPLETE, RESEARCH_COMPLETE,
+#             VALIDATE_PASS, VALIDATE_FAILED, REPORT_COMPLETE
+#   Coordination: CYCLE_WORKERS, REQUEST_WORKERS
+#
+# Advisory + context injection. Always exits 0.
 
 INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name // ""')
@@ -16,7 +21,38 @@ AGENT=$(echo "$INPUT" | jq -r '.agent_type // ""')
 AGENT="${AGENT#kiln:}"
 CONTENT=$(echo "$INPUT" | jq -r '.tool_input.content // ""')
 
-# Only fire when message contains MILESTONE_COMPLETE
+# Detect terminal signals — inject system-reminder so engine processes them
+if echo "$CONTENT" | grep -qE 'BUILD_COMPLETE|ARCHITECTURE_COMPLETE|ONBOARDING_COMPLETE|BRAINSTORM_COMPLETE|RESEARCH_COMPLETE|VALIDATE_PASS|VALIDATE_FAILED|REPORT_COMPLETE'; then
+  SIGNAL=$(echo "$CONTENT" | grep -oE 'BUILD_COMPLETE|ARCHITECTURE_COMPLETE|ONBOARDING_COMPLETE|BRAINSTORM_COMPLETE|RESEARCH_COMPLETE|VALIDATE_PASS|VALIDATE_FAILED|REPORT_COMPLETE' | head -1)
+  jq -cn --arg sig "$SIGNAL" --arg agent "$AGENT" '{
+    hookSpecificOutput: {
+      additionalContext: ("SIGNAL RECEIVED: " + $agent + " sent " + $sig + ". Process this signal and advance the pipeline state machine.")
+    }
+  }'
+  exit 0
+fi
+
+# Detect CYCLE_WORKERS — inject reminder for engine to execute cycling protocol
+if echo "$CONTENT" | grep -qF 'CYCLE_WORKERS'; then
+  jq -cn --arg agent "$AGENT" '{
+    hookSpecificOutput: {
+      additionalContext: ("CYCLE_WORKERS received from " + $agent + ". Execute cycling protocol: validate scenario, shutdown current workers, spawn fresh pair, send WORKERS_SPAWNED.")
+    }
+  }'
+  exit 0
+fi
+
+# Detect REQUEST_WORKERS — inject reminder
+if echo "$CONTENT" | grep -qF 'REQUEST_WORKERS'; then
+  jq -cn --arg agent "$AGENT" '{
+    hookSpecificOutput: {
+      additionalContext: ("REQUEST_WORKERS received from " + $agent + ". Spawn requested workers on the team and send WORKERS_SPAWNED confirmation.")
+    }
+  }'
+  exit 0
+fi
+
+# MILESTONE_COMPLETE gets special treatment — verify iter-log.md
 echo "$CONTENT" | grep -qF 'MILESTONE_COMPLETE' || exit 0
 
 # ── Pipeline context gate (same as audit-bash.sh) ───────────

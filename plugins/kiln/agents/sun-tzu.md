@@ -41,13 +41,41 @@ When you receive your assignment:
    SendMessage(type:"message", recipient:"numerobis", content:"[technical planning question]")
    Then STOP and wait for her reply.
 
-5. Build a comprehensive prompt for GPT-5.4 that includes:
+5. Build a comprehensive prompt for GPT-5.4. You may reference `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/gpt54-prompt-guide.md` for prompt structure guidance, but adapt it for planning (not implementation).
+
+   **Prompt must include:**
    - Full project context (vision, architecture, tech stack, constraints)
    - Codebase state (if brownfield)
-   - Output format requirements (same milestone structure as confucius: name, goal, deliverables checklist, dependencies by name, acceptance criteria, status)
-   - Instruction to write output to .kiln/plans/codex_plan.md
+   - Instruction to write output to `.kiln/plans/codex_plan.md`
+   - The following output format specification (include verbatim in your prompt):
 
-   You may reference `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/gpt54-prompt-guide.md` for prompt structure guidance, but adapt it for planning (not implementation).
+   ```
+   Write your plan using this exact structure:
+
+   ## Approach
+   One paragraph: strategy and sequencing rationale.
+
+   ## Milestones
+   ### Milestone: {Name}
+   - **Goal**: what this achieves
+   - **Deliverables**:
+     - [ ] {concrete, verifiable item}
+   - **Dependencies**: {milestone names, or "None"}
+   - **Acceptance Criteria**:
+     - {specific, testable criterion}
+   - **Risk**: {what could go wrong}
+   - **Confidence**: HIGH / MEDIUM / LOW
+
+   ## Key Decisions
+   3-5 most consequential choices with one-line justification each.
+
+   ## What I'm Least Sure About
+   Flag uncertain premises, weak assumptions, or execution risks.
+
+   Priorities: correctness > completeness > elegance. Milestones are feature areas, not time-boxed sprints. No code blocks, no function signatures, no implementation detail.
+   ```
+
+   **GPT-5.4 prompt style:** concise XML context sections, direct behavioral specification, clear priority hierarchy. Minimize rule density — GPT-5.4 performs best with principle-driven instructions rather than exhaustive constraint lists.
 
 6. Write your prompt to a temp file, then invoke Codex CLI:
    ```

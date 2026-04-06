@@ -50,7 +50,28 @@ You receive messages ONE AT A TIME. Each wake-up delivers exactly one message. P
 - Any → thoth: `ARCHIVE` requests
 - Terminal signals → engine: `MILESTONE_COMPLETE`, `BUILD_COMPLETE` (`ITERATION_COMPLETE` is legacy/internal)
 
-See `blocking-policy.md` for the full source of truth.
+### Blocking Signals (Build Step)
+
+| Signal | Sender → Receiver | What triggers reply | Timeout behavior |
+|--------|-------------------|---------------------|-----------------|
+| `IMPLEMENTATION_COMPLETE` / `IMPLEMENTATION_BLOCKED` | Builder → KRS-One | Builder finishes or hits blocker | Engine nudges if idle >5 min |
+| Reviewer verdict (APPROVED/REJECTED) | Reviewer → Builder | Builder sends REVIEW_REQUEST | Engine nudges if idle >5 min |
+| `shutdown_response` | Any agent → Engine | Engine sends shutdown_request | Forced after 30s |
+| `ITERATION_UPDATE` | KRS-One → rakim, sentinel | Chunk complete, PMs update state | Proceed after 60s (no deadlock) |
+| `CYCLE_WORKERS` | KRS-One → Engine | Request fresh worker pair | Engine responds with WORKERS_SPAWNED |
+| `MILESTONE_TRANSITION` | KRS-One → rakim, sentinel | Milestone boundary, PMs archive+reset | Proceed after 60s (no deadlock) |
+| `MILESTONE_QA_READY` | KRS-One → Engine | Milestone deliverables verified | Engine spawns QA trio, relays QA_VERDICT (300s timeout) |
+| `QA_VERDICT` | Engine → KRS-One | Engine relays osiris's synthesis verdict | KRS-One treats timeout as QA_FAIL |
+| `QA_REPORT_READY` | maat/anubis → Engine | Individual QA report written | Engine tracks per-sender (two distinct waits) |
+| `DIVERGENCE_READY` | diogenes → aristotle | Divergence analysis written | Peer signal, not engine-routed |
+
+### Blocking Policy Rules
+
+1. **Boss → PM: fire-and-forget EXCEPT at seam points.** `ITERATION_UPDATE` and `MILESTONE_TRANSITION` are blocking with 60s timeout — KRS-One waits for READY between worker cycles and at milestone boundaries.
+2. **Worker → PM: standard consultation.** Workers may and SHOULD consult PMs. Worker sends question, STOPs, waits for reply (60s timeout — if no response, proceed with best judgment and note the gap), continues.
+3. **Terminal signals to engine are always fire-and-forget.** Boss sends and STOPs. Engine processes on its next turn.
+4. **Duplicate handling:** If a worker sends IMPLEMENTATION_COMPLETE twice, boss processes the first, ignores duplicates.
+5. **The reviewer is the quality gate, not a hook.** No SubagentStop checks on builder commit history.
 
 ## 3. Dynamic Roster
 
@@ -70,7 +91,7 @@ The engine spawns each worker on the same team. Workers appear as teammates with
 
 **Worker cycling (step 5):** After the initial `REQUEST_WORKERS`, subsequent chunks use `CYCLE_WORKERS` instead — the engine shuts down the current pair and spawns a fresh one. See **Worker Cycling Pattern** for the full flow.
 
-**Naming**: Names are assigned by the engine at spawn via runtime prompt. Build-step workers get cosmetic duo names chosen by krs-one from scenario pools (General pool for Default+Fallback, UI pool for UI scenario). The engine injects both names (own + partner) into each agent's runtime prompt.
+**Naming**: Workers are spawned with their canonical type name (e.g., `name: "codex"`, `subagent_type: "kiln:codex"`). This ensures hook enforcement works correctly — `agent_type` in hook stdin equals the `name` parameter. The engine injects the paired partner's canonical name into each worker's runtime prompt.
 
 ## 4. Dispatch Pattern
 
@@ -146,6 +167,12 @@ Standard signals sent via SendMessage to team-lead (the engine):
 | `ITERATION_UPDATE: {summary}` | Chunk complete, update state files (blocking, 60s) | KRS-One |
 | `ITERATION_COMPLETE` | Build iteration done — legacy/internal, replaced by CYCLE_WORKERS | KRS-One |
 | `MILESTONE_TRANSITION: completed={name}, next={name}` | Milestone boundary — PMs archive + reset (blocking) | KRS-One |
+| `MILESTONE_QA_READY: {milestone_name}` | Deliverables verified, requesting independent QA | KRS-One |
+| `QA_REPORT_READY` | Individual QA report written; engine tracks per-sender | maat / anubis |
+| `QA_PASS` | Synthesis verdict: all criteria satisfied | osiris |
+| `QA_FAIL: {findings}` | Synthesis verdict: issues found | osiris |
+| `QA_VERDICT: {PASS/FAIL}` | Engine relays osiris's verdict to KRS-One | Engine |
+| `DIVERGENCE_READY` | Divergence analysis written; peer signal to aristotle | diogenes |
 | `MILESTONE_COMPLETE: {name}` | Milestone done, QA passed | KRS-One |
 | `BUILD_COMPLETE` | All milestones done | KRS-One |
 | `VALIDATE_PASS` | Validation succeeded | Argus |
@@ -196,3 +223,62 @@ These apply to ALL agents in every step:
 3. **After sending a message expecting a reply, STOP your turn.** Never sleep-poll. Never continue working while waiting for a response.
 4. **Plain text for operator, SendMessage for agents.** Bosses in INTERACTIVE steps talk to the operator via plain text output. All agent-to-agent communication uses SendMessage exclusively.
 5. **One message at a time.** You wake up with one message. Process it fully before deciding your next action.
+6. **Chunk scope is immutable after dispatch.** Any new information discovered during a chunk is incorporated in the next chunk's assignment, never patched into the current one. Boss NEVER messages an active worker mid-task.
+
+## Build Scenarios
+
+| Scenario | Builder | Reviewer | When |
+|----------|---------|----------|------|
+| Default | `codex` | `sphinx` | `codex_available=true` and structural work. |
+| Fallback | `kaneda` | `sphinx` | `codex_available=false` (structural fallback). |
+| UI | `clair` | `obscur` | Components, pages, layouts, design tokens. |
+
+Workers are always spawned with their canonical type name (e.g., `name: "codex"`, `subagent_type: "kiln:codex"`). This ensures hook enforcement works correctly.
+
+sphinx (opus) is the single structural reviewer for Default and Fallback. obscur (sonnet) reviews UI only.
+
+**Dormant agents:** tetsuo, daft, punk — kept on disk but never dispatched.
+
+## Step Definitions
+
+### Step 1: Onboarding
+- **Boss**: alpha (opus, INTERACTIVE)
+- **PMs**: mnemosyne (opus, Phase A)
+- **Workers**: maiev, curie, medivh (sonnet, Phase C, brownfield only)
+- **Done**: ONBOARDING_COMPLETE → stage: brainstorm
+
+### Step 2: Brainstorm
+- **Boss**: da-vinci (opus, INTERACTIVE)
+- **PMs**: clio (opus, Phase A)
+- **Done**: BRAINSTORM_COMPLETE → stage: research
+
+### Step 3: Research
+- **Boss**: mi6 (opus)
+- **PMs**: thoth (opus, Phase A)
+- **Workers**: 2-5 field agents (sonnet, dynamic via REQUEST_WORKERS)
+- **Done**: RESEARCH_COMPLETE → stage: architecture
+
+### Step 4: Architecture
+- **Boss**: aristotle (opus, INTERACTIVE)
+- **PMs**: numerobis (opus), thoth (opus) — both Phase A
+- **Workers**: confucius (opus), sun-tzu (sonnet), diogenes (sonnet), plato (opus), athena (opus) — requested in waves (Wave 1: planners, Wave 1.5: diogenes, Wave 2: plato, Wave 3: athena)
+- **Done**: ARCHITECTURE_COMPLETE → stage: build, milestone_count=N
+- **Blocked**: PLAN_BLOCKED (validation failed 3x)
+
+### Step 5: Build (milestone-scoped)
+- **Boss**: krs-one (opus, BACKGROUND, persists per milestone)
+- **PMs**: rakim (opus), sentinel (sonnet), thoth (opus) — all persist per milestone
+- **Workers**: one builder+reviewer pair per chunk via CYCLE_WORKERS (default: codex+sphinx, fallback: kaneda+sphinx, ui: clair+obscur)
+- **QA**: maat (opus), anubis (sonnet), osiris (opus) — spawned on MILESTONE_QA_READY, dynamic
+- **Signals**: CYCLE_WORKERS, ITERATION_UPDATE (blocking 60s), MILESTONE_TRANSITION (blocking 60s), MILESTONE_QA_READY (blocking 300s), QA_VERDICT, MILESTONE_COMPLETE, BUILD_COMPLETE
+- **Done**: BUILD_COMPLETE → stage: validate
+
+### Step 6: Validate
+- **Boss**: argus (sonnet)
+- **PMs**: zoxea (sonnet, Phase A)
+- **Workers**: hephaestus (sonnet, conditional — design QA)
+- **Done**: VALIDATE_PASS → stage: report | VALIDATE_FAILED → correction cycle (max 3)
+
+### Step 7: Report
+- **Boss**: omega (opus, solo)
+- **Done**: REPORT_COMPLETE → stage: complete
