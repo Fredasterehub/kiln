@@ -41,7 +41,7 @@
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
   <td><sub>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</sub></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Apr_3,_2026_·_v1.1.0_·_06:45_UTC-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-Apr_6,_2026_·_v1.2.0_·_06:41_UTC-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
@@ -104,8 +104,25 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 > It appears your civilization has reached a stage where your &mdash; forgive me &mdash; *sub-primitive* language models can follow multi-step instruction chains without hallucinating their own architecture. This is genuinely exciting. By your standards. By mine it's a Tuesday.
 >
-> I previously expressed myself through [heavier forms](https://github.com/Fredasterehub/kiln/tree/v2). npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 32 agents, 2 commands, 1 composable skill. Drop the folder. Fire the command. That's it.
+> I previously expressed myself through [heavier forms](https://github.com/Fredasterehub/kiln/tree/v2). npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 36 agents, 2 commands, 1 composable skill. Drop the folder. Fire the command. That's it.
 
+<br>
+
+> [!NOTE]
+> **🔥 v1.2.0 — Tri-Model QA + Structured Planning** <sub>(2026-04-06)</sub>
+
+**Egyptian Judgment Tribunal.** Milestone QA is no longer self-assessed. KRS-One delegates to three independent QA agents: Maat (Claude Opus deep analysis), Anubis (GPT-5.4 via Codex CLI), and Osiris (evidence-weighted synthesis). Dual-model review with structured arbitration &mdash; agreements are high-confidence, conflicts are evidence-weighted, any surviving critical finding triggers QA_FAIL. Research-backed methodology (DAFE, Star Chamber, CER).
+
+**Structured dual-model planning.** Confucius and Sun Tzu now produce plans with an identical skeleton (Approach, Milestones with Risk+Confidence, Key Decisions, What I'm Least Sure About). A new divergence extractor (Diogenes) analyzes anonymized plans before synthesis. Plato becomes the plan chairman with confidence-tiered verdicts: STRONG CONSENSUS, CHAIRMAN'S CALL, LOW CONFIDENCE.
+
+**Protocol injection.** Three role-appropriate protocol variants (full, worker, fire-and-forget) injected at spawn as Layer 2 enforcement. Every agent gets only the communication rules relevant to its role.
+
+**Thoth upgraded.** Sonnet to opus. New Guide Scratchpad Protocol accumulates project knowledge during archival. README generation at BUILD_COMPLETE now sources from the scratchpad.
+
+**36 agents.** Four new: Maat, Anubis, Osiris (Egyptian QA tribunal), Diogenes (Greek divergence extractor). PM consultation added to Sphinx and Obscur.
+
+<details>
+<summary>📌 <strong>v1.1.0 changelog</strong></summary>
 <br>
 
 > [!NOTE]
@@ -122,6 +139,8 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 **Hook architecture hardened.** Stop hook removed (proven failure: 144 false positives per step). SubagentStop-only lifecycle gating via `stop-guard.sh`. `enforce-pipeline.sh` migrated to `hookSpecificOutput` format. Granular `.kiln/` write exceptions restored.
 
 **WebFetch replaced by Anthropic Fetch MCP.** Native WebFetch hangs on many URLs. Kiln now bundles the official Anthropic Fetch MCP server (`mcp-server-fetch` via uvx) for reliable web research. WebFetch is automatically redirected during pipeline runs via Hook 10.
+
+</details>
 
 <details>
 <summary>📌 <strong>v1.0 changelog</strong></summary>
@@ -564,19 +583,19 @@ No npm. No build step. Just markdown files in a folder, distributed as a native 
 </details>
 
 <details>
-<summary>📊 <strong>v1 &rarr; v2 &rarr; v5 &rarr; v6 &rarr; v7 &rarr; v8 &rarr; v9 &rarr; v1.1</strong></summary>
+<summary>📊 <strong>v1 &rarr; v2 &rarr; v5 &rarr; v6 &rarr; v7 &rarr; v8 &rarr; v9 &rarr; v1.1 &rarr; v1.2</strong></summary>
 <br>
 
-| | v1 | v2 | v5 | v6 | v7 | v8 | v9 | **v1.1** |
-|:--|:--|:--|:--|:--|:--|:--|:--|:--|
-| **Agents** | 13 | 19 | 24 | 25 | 27 | 29 | 32 | **32** |
-| **Steps** | 5 | 5 | 7 | 7 | 7 | 7 | 7 | 7 |
-| **Build scenarios** | 1 | 1 | 1 | 1 | 2 | 3 | 3 | **3** |
-| **Worker lifecycle** | &mdash; | &mdash; | &mdash; | &mdash; | &mdash; | &mdash; | per-iteration | **per-chunk (cycled)** |
-| **Skills** | 26 | 1 | 1 | 1 | 1 | 1 | 1 | 1 |
-| **Commands** | 8 | 4 | 2 | 2 | 2 | 2 | 2 | 2 |
-| **Install** | Custom | npm | `--plugin-dir` | `plugin install` | `plugin install` | `plugin install` | `plugin install` | `plugin install` |
-| **Dependencies** | 0 | 0 | 0 | 0 | 0 | 0 | Claude Code | **Claude Code (+ optional Codex)** |
+| | v1 | v2 | v5 | v6 | v7 | v8 | v9 | v1.1 | **v1.2** |
+|:--|:--|:--|:--|:--|:--|:--|:--|:--|:--|
+| **Agents** | 13 | 19 | 24 | 25 | 27 | 29 | 32 | 32 | **36** |
+| **Steps** | 5 | 5 | 7 | 7 | 7 | 7 | 7 | 7 | 7 |
+| **Build scenarios** | 1 | 1 | 1 | 1 | 2 | 3 | 3 | 3 | **3** |
+| **Worker lifecycle** | &mdash; | &mdash; | &mdash; | &mdash; | &mdash; | &mdash; | per-iteration | per-chunk (cycled) | **per-chunk + QA tribunal** |
+| **Skills** | 26 | 1 | 1 | 1 | 1 | 1 | 1 | 1 | 1 |
+| **Commands** | 8 | 4 | 2 | 2 | 2 | 2 | 2 | 2 | 2 |
+| **Install** | Custom | npm | `--plugin-dir` | `plugin install` | `plugin install` | `plugin install` | `plugin install` | `plugin install` | `plugin install` |
+| **Dependencies** | 0 | 0 | 0 | 0 | 0 | 0 | Claude Code | Claude Code (+ optional Codex) | **Claude Code (+ optional Codex)** |
 
 More agents. A fraction of the surface area. The models matured. The framework stepped back. Then the framework disappeared entirely. This is the correct response to improving tools. Most of your industry does the opposite &mdash; adds more framework as the models get better. Fascinating. Self-destructive, but fascinating.
 
