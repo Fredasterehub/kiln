@@ -42,3 +42,4 @@ qa-review/
 # Work artifacts
 .omc/
 state/
+.omx/
