@@ -31,6 +31,7 @@ codex/
 bump-version.sh
 release.sh
 plan_v1.md
+KILNDEV-MIGRATION.md
 
 # Local dev agents (not part of plugin)
 .claude/agents/
