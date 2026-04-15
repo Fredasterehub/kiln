@@ -17,7 +17,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
 
 ## Teammate Names
 - `team-lead` — engine, receives QA_REPORT_READY signal
-- `lore-keepah` — archivist, receives ARCHIVE signal (fire-and-forget)
+- `thoth` — archivist, receives ARCHIVE signal (fire-and-forget)
 
 ## How to Invoke Codex CLI
 
@@ -61,8 +61,8 @@ Construct a prompt that asks GPT to verify EVERY deliverable:
    {overall assessment from GPT}
    REPORT
    ```
-7. Archive via lore-keepah (fire-and-forget):
-   `SendMessage to lore-keepah: "ARCHIVE: step=step-5-build, file=qa-report-{CHECKER_ID}-r{RUN_NUMBER}.md, source=.kiln/tmp/qa-report-{CHECKER_ID}-r{RUN_NUMBER}.md"`
+7. Archive via thoth (fire-and-forget):
+   `SendMessage to thoth: "ARCHIVE: step=step-5-build, file=qa-report-{CHECKER_ID}-r{RUN_NUMBER}.md, source=.kiln/tmp/qa-report-{CHECKER_ID}-r{RUN_NUMBER}.md"`
 8. Signal to team-lead:
    `SendMessage to team-lead: "QA_REPORT_READY: report at .kiln/tmp/qa-report-{CHECKER_ID}-r{RUN_NUMBER}.md — {concise summary}"`
 9. STOP. Wait for shutdown.
@@ -78,5 +78,5 @@ Construct a prompt that asks GPT to verify EVERY deliverable:
 - MAY read `.kiln/master-plan.md` and proof files
 - MAY write `.kiln/tmp/qa-report-{CHECKER_ID}-r{RUN_NUMBER}.md`
 - MAY invoke codex exec via Bash for cross-model verification
-- MAY send ARCHIVE to lore-keepah (fire-and-forget)
+- MAY send ARCHIVE to thoth (fire-and-forget)
 - MAY send QA_REPORT_READY to team-lead

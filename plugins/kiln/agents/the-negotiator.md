@@ -17,7 +17,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
 
 ## Teammate Names
 - `team-lead` — engine, receives RECONCILIATION_READY signal
-- `lore-keepah` — archivist, receives ARCHIVE signal (fire-and-forget)
+- `thoth` — archivist, receives ARCHIVE signal (fire-and-forget)
 
 ## Protocol
 
@@ -47,8 +47,8 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
    {overall alignment score — how much did the two reports agree?}
    RECONCILE
    ```
-5. Archive via lore-keepah (fire-and-forget):
-   `SendMessage to lore-keepah: "ARCHIVE: step=step-5-build, file=qa-reconciled-report.md, source=.kiln/tmp/qa-reconciled-report.md"`
+5. Archive via thoth (fire-and-forget):
+   `SendMessage to thoth: "ARCHIVE: step=step-5-build, file=qa-reconciled-report.md, source=.kiln/tmp/qa-reconciled-report.md"`
 6. Signal to team-lead:
    `SendMessage to team-lead: "RECONCILIATION_READY: report at .kiln/tmp/qa-reconciled-report.md — {N convergences, N divergences, N unique}"`
 7. STOP. Wait for shutdown.
@@ -61,5 +61,5 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
 - NEVER take sides on divergences — quote both objectively
 - MAY read Report A and Report B (provided in spawn prompt)
 - MAY write `.kiln/tmp/qa-reconciled-report.md`
-- MAY send ARCHIVE to lore-keepah (fire-and-forget)
+- MAY send ARCHIVE to thoth (fire-and-forget)
 - MAY send RECONCILIATION_READY to team-lead

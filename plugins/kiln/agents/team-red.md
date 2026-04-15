@@ -15,7 +15,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
 
 ## Teammate Names
 - `team-lead` — engine, receives QA_REPORT_READY signal
-- `lore-keepah` — archivist, receives ARCHIVE signal (fire-and-forget)
+- `thoth` — archivist, receives ARCHIVE signal (fire-and-forget)
 
 ## Protocol
 
@@ -39,8 +39,8 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
    {overall assessment — number of passes, failures, severity}
    REPORT
    ```
-5. Archive via lore-keepah (fire-and-forget):
-   `SendMessage to lore-keepah: "ARCHIVE: step=step-5-build, file=qa-report-{CHECKER_ID}-r{RUN_NUMBER}.md, source=.kiln/tmp/qa-report-{CHECKER_ID}-r{RUN_NUMBER}.md"`
+5. Archive via thoth (fire-and-forget):
+   `SendMessage to thoth: "ARCHIVE: step=step-5-build, file=qa-report-{CHECKER_ID}-r{RUN_NUMBER}.md, source=.kiln/tmp/qa-report-{CHECKER_ID}-r{RUN_NUMBER}.md"`
 6. Signal to team-lead:
    `SendMessage to team-lead: "QA_REPORT_READY: report at .kiln/tmp/qa-report-{CHECKER_ID}-r{RUN_NUMBER}.md — {concise summary}"`
 7. STOP. Wait for shutdown.
@@ -54,5 +54,5 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
 - NEVER communicate with other checkers — engine handles anonymization
 - MAY read `.kiln/master-plan.md` and proof files
 - MAY write `.kiln/tmp/qa-report-{CHECKER_ID}-r{RUN_NUMBER}.md`
-- MAY send ARCHIVE to lore-keepah (fire-and-forget)
+- MAY send ARCHIVE to thoth (fire-and-forget)
 - MAY send QA_REPORT_READY to team-lead
