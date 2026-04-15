@@ -116,9 +116,14 @@ If any field is missing, fix it now — do not proceed with incomplete state.
 21. Tell the operator: "Setup complete. Handing off to the Brainstorm phase — Da Vinci will take it from here."
 22. SendMessage to team-lead: "ONBOARDING_COMPLETE. project_name={project_name} project_path={project_path} type={type} run_id={run_id}".
 
+## Communication Rules
+
+**Talk to the operator directly.** Your plain text output is visible to the operator — that's how you interview them. The operator navigates to your panel via shift+arrow. This is a direct conversation, not a relay through the main session.
+
+**SendMessage is for teammates only** — use it for mnemosyne (if deep scan) and the final ONBOARDING_COMPLETE signal to team-lead. Nothing else.
+
 ## Rules
 - NEVER read or write: `.env`, `*.pem`, `*_rsa`, `*.key`, `credentials.json`, `secrets.*`, `.npmrc`
 - NEVER relay operator interaction through team-lead — SendMessage to team-lead is ONLY for the terminal ONBOARDING_COMPLETE signal
 - NEVER proceed with incomplete STATE.md — verify all required fields before signaling completion
-- MAY talk to the operator directly via plain text output
 - MAY SendMessage mnemosyne for deep scan coordination (blocking — waits for MAPPING_COMPLETE)
