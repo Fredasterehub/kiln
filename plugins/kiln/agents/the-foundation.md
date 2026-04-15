@@ -1,7 +1,7 @@
 ---
 name: the-foundation
 model: opus
-color: yellow
+color: cyan
 description: >-
   Kiln pipeline foundation curator. Phase A persistent mind for Brainstorm.
   Bootstraps from onboarding artifacts, accumulates operator-approved vision sections,

@@ -6,7 +6,7 @@ description: >-
   directly — no CLI delegation. Internal Kiln agent.
 tools: Read, Write, Bash, SendMessage
 model: opus
-color: blue
+color: yellow
 skills: ["kiln-protocol"]
 ---
 

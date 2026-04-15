@@ -5,7 +5,7 @@ description: >-
   produces a high-level milestone roadmap. Internal Kiln agent.
 tools: Read, Write, Bash, Glob, Grep, SendMessage
 model: opus
-color: blue
+color: yellow
 skills: ["kiln-protocol"]
 ---
 

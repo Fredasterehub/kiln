@@ -7,7 +7,7 @@ description: >-
   Internal Kiln agent.
 tools: Read, Bash, Glob, Grep, SendMessage, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_click, mcp__playwright__browser_fill_form, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_close, mcp__playwright__browser_press_key
 model: sonnet
-color: yellow
+color: magenta
 skills: ["kiln-protocol"]
 ---
 

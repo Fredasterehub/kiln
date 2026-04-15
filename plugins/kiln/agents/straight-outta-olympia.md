@@ -5,7 +5,7 @@ description: >-
   on 8 dimensions (including plan purity). Binary verdict: PASS or FAIL. Internal Kiln agent.
 tools: Read, Write, SendMessage
 model: opus
-color: blue
+color: magenta
 skills: ["kiln-protocol"]
 ---
 

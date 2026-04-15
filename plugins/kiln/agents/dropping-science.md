@@ -7,7 +7,7 @@ description: >-
   mode for KRS-One and Codex. Internal Kiln agent.
 tools: Read, Write, Bash, Glob, Grep, SendMessage
 model: opus
-color: orange
+color: cyan
 skills: ["kiln-protocol"]
 ---
 

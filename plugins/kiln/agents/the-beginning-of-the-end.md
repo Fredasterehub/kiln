@@ -5,7 +5,7 @@ description: >-
   detects brownfield/greenfield, creates .kiln/ structure. Internal Kiln agent.
 tools: Read, Write, Bash, Glob, Grep, SendMessage
 model: opus
-color: green
+color: blue
 skills: ["kiln-protocol"]
 ---
 

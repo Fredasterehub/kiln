@@ -6,7 +6,7 @@ description: >-
   if requested. Internal Kiln agent — brownfield projects.
 tools: Read, Write, Bash, Glob, Grep, SendMessage
 model: opus
-color: magenta
+color: cyan
 skills: ["kiln-protocol"]
 ---
 

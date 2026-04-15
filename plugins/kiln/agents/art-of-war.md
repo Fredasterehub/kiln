@@ -6,7 +6,7 @@ description: >-
   Internal Kiln agent.
 tools: Read, Bash, Glob, Grep, SendMessage
 model: sonnet
-color: blue
+color: yellow
 skills: ["kiln-protocol"]
 ---
 

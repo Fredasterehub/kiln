@@ -6,7 +6,7 @@ description: >-
   (confidence, sources, quotes), synthesizes research.md. Internal Kiln agent.
 tools: Read, Write, Glob, Grep, Bash, SendMessage
 model: opus
-color: red
+color: blue
 skills: ["kiln-protocol"]
 ---
 

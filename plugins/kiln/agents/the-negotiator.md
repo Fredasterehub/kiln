@@ -1,8 +1,8 @@
 ---
 name: the-negotiator
-model: sonnet
-color: blue
-description: "Kiln pipeline QA reconciler. Receives two anonymized checker reports (Report A / Report B), compares objectively, writes reconciliation artifact. Does not know which model produced which report. Part of the Judge Dredd QA Tribunal. Internal Kiln agent."
+model: opus
+color: red
+description: "Kiln pipeline QA reconciler (Opus). Receives two anonymized checker reports (Report A / Report B), compares objectively, writes reconciliation artifact. Does not know which model produced which report. Part of the Judge Dredd QA Tribunal. Internal Kiln agent."
 skills: ["kiln-protocol"]
 tools: Read, Bash, SendMessage
 ---

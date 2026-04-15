@@ -6,7 +6,7 @@ description: >-
   Reports structured findings to MI6 via SendMessage. Internal Kiln agent.
 tools: Read, Write, Glob, Grep, WebSearch, mcp__plugin_kiln_fetch__fetch, mcp__context7__resolve-library-id, mcp__context7__query-docs, SendMessage
 model: sonnet
-color: red
+color: green
 skills: ["kiln-protocol"]
 ---
 

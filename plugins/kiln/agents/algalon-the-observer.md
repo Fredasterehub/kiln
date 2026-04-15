@@ -6,7 +6,7 @@ description: >-
   pitfalls. Answers quality questions, evolves docs per iteration. Internal Kiln agent.
 tools: Read, Write, Bash, Glob, Grep, SendMessage
 model: sonnet
-color: magenta
+color: cyan
 skills: ["kiln-protocol"]
 ---
 

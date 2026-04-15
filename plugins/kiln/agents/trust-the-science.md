@@ -6,7 +6,7 @@ description: >-
   Internal Kiln agent — spawned dynamically during onboarding.
 tools: Read, Bash, Glob, Grep, SendMessage
 model: sonnet
-color: magenta
+color: green
 skills: ["kiln-protocol"]
 ---
 

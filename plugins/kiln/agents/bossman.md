@@ -8,7 +8,7 @@ description: >-
   BUILD_COMPLETE. Internal Kiln agent.
 tools: Read, Bash, Glob, Grep, SendMessage
 model: opus
-color: orange
+color: blue
 skills: ["kiln-protocol"]
 ---
 

@@ -6,7 +6,7 @@ description: >-
   Internal Kiln agent.
 tools: Read, Write, Glob, Grep, Bash, SendMessage
 model: opus
-color: yellow
+color: blue
 skills: ["kiln-protocol"]
 ---
 

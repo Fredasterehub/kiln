@@ -1,8 +1,8 @@
 ---
 name: team-red
-model: sonnet
-color: blue
-description: "Kiln pipeline QA checker (Sonnet). Reads deliverables against milestone acceptance criteria, writes findings report, signals engine. Part of the Judge Dredd QA Tribunal. Internal Kiln agent."
+model: opus
+color: red
+description: "Kiln pipeline QA checker (Opus). Reads deliverables against milestone acceptance criteria, writes findings report, signals engine. Part of the Judge Dredd QA Tribunal. Internal Kiln agent."
 skills: ["kiln-protocol"]
 tools: Read, Bash, SendMessage
 ---

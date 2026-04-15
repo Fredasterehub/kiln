@@ -6,7 +6,7 @@ description: >-
   for Default and Fallback build scenarios. Internal Kiln agent.
 tools: Read, Bash, SendMessage
 model: opus
-color: yellow
+color: magenta
 skills: ["kiln-protocol"]
 ---
 

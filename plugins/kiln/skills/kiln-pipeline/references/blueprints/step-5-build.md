@@ -36,7 +36,7 @@ The pipeline runner invokes this blueprint once per milestone. The team persists
 | ken | team-red | QA analyst (Claude Opus). Deep analysis — build, tests, acceptance criteria, integration. Severity-rated report. | D (dynamic) | opus |
 | ryu | team-blue | QA analyst (GPT-5.4 via Codex CLI). Independent second perspective. Thin CLI wrapper. | D (dynamic) | sonnet |
 | denzel | the-negotiator | QA reconciler. Reads both anonymized QA reports, reconciles discrepancies, writes synthesis. | D (dynamic) | opus |
-| judge-dredd | i-am-the-law | QA judge. Reads synthesis + source reports, issues final QA_PASS or QA_FAIL verdict. | D (dynamic) | sonnet |
+| judge-dredd | i-am-the-law | QA judge (Opus). Reads synthesis + source reports, issues final QA_PASS or QA_FAIL verdict. | D (dynamic) | opus |
 
 ## Canonical Pairs
 

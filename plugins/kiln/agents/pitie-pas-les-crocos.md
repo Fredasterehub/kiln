@@ -6,7 +6,7 @@ description: >-
   then consultation hub. Step 4 only. Internal Kiln agent.
 tools: Read, Write, Bash, Glob, Grep, SendMessage
 model: opus
-color: magenta
+color: cyan
 skills: ["kiln-protocol"]
 ---
 
