@@ -111,17 +111,17 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 > [!NOTE]
 > **🔥 v1.3.0 — The Structural Alignment** <sub>(2026-04-15)</sub>
 
-**kilndev patterns applied to production.** Battle-tested team structures from the kilndev POC rewritten into every agent. Every one of the 34 agents now follows the same skeleton: Bootstrap, Shared Protocol, Teammate Names, Protocol, Rules (NEVER/MAY). The uniform structure means every agent bootstraps the same way, reads the same protocol, and has explicit behavioral boundaries.
+**Uniform agent structure.** All 34 agents now follow the same skeleton with consistent bootstrap, shared protocol, and explicit behavioral boundaries.
 
-**Judge Dredd QA Tribunal.** The Egyptian tribunal (Maat/Anubis/Osiris) is retired. Four agents now run milestone QA with distinct roles: **Ken** (Opus, Claude checker), **Ryu** (Sonnet, GPT-5.4 via Codex CLI), **Denzel** (Opus, reconciler &mdash; receives anonymized reports), **Judge Dredd** (Opus, final verdict). Separation of analysis from judgment. The reconciler doesn't know which model produced which report.
+**Judge Dredd QA Tribunal.** Dual-model milestone QA with anonymized reconciliation. Analysis separated from judgment &mdash; the reconciler doesn't know which model produced which report.
 
-**Duo pool rotation.** Workers no longer have fixed identities. 8 named duos across 3 pools &mdash; the agent type (`.md` filename) determines *what* the worker is, the spawn name determines *who* it is this cycle. KRS-One picks from the pool; workers get character names while running the same underlying template.
+**Duo pool rotation.** Workers cycle fresh per chunk from 8 named duos across 3 build pools. Same templates, different spawn names each cycle.
 
-**Centralized protocol.** Security rules, status markers, blocking seam, name binding, Thoth logging, and skill loading all consolidated into `kiln-protocol`. Agents read one file at bootstrap. No more scattered enforcement.
+**Centralized protocol.** All enforcement consolidated into a single protocol file read at bootstrap.
 
-**Color system.** 6 colors by role: <strong style="color:#5b8dd9">blue</strong>=boss, <strong style="color:#5bcfcf">cyan</strong>=persistent mind, <strong style="color:#5bd95b">green</strong>=scout, <strong style="color:#d9d95b">yellow</strong>=builder, <strong style="color:#d95bd9">magenta</strong>=reviewer, <strong style="color:#d95b5b">red</strong>=QA tribunal.
+**Color system.** 6 role-based terminal colors for agent identification.
 
-**34 agents** (was 36). Three dormant agents removed (Daft, Punk, Tetsuo). Clio renamed to **Asimov**. Miyamoto retained as fallback planner.
+**34 agents** (was 36). Three dormant agents removed. Clio renamed to Asimov.
 
 <details>
 <summary>📌 <strong>v1.2.0 changelog</strong></summary>
@@ -313,16 +313,16 @@ MI6 streamlined. Signal tracking via tasklist. Parallel build teams. Markdown-na
 Most "agentic" tools give you one model, one context window, and a prayer. Kiln gives you **a team that persists, debates, and remembers** &mdash; built directly into Claude Code's native primitives.
 
 ### 🧠 Eternal Context via Teams
-Every pipeline step spawns a **persistent team** via `TeamCreate`. Agents stay alive across the entire step &mdash; they don't restart, don't re-read, don't lose their thread. When KRS-One messages Rakim about iteration 7, Rakim already knows iterations 1 through 6. Context survives because the agents survive.
+Every pipeline step spawns a **persistent team** via `TeamCreate`. Persistent minds stay alive across the entire milestone &mdash; they don't restart, don't re-read, don't lose their thread. When KRS-One messages Rakim about iteration 7, Rakim already knows iterations 1 through 6. Workers and reviewers are the opposite &mdash; **cycled fresh per chunk** for clean context and peak performance. Minds accumulate. Workers stay sharp.
 
 ### ⚡ JIT Scoping from the Living Codebase
 KRS-One doesn't execute a stale upfront plan. Each chunk is scoped **just-in-time** from the current codebase state &mdash; after the previous chunk's changes have landed. Rakim tracks what exists on disk. The next assignment reflects reality, not the plan's optimistic assumptions from two hours ago.
 
 ### 🔁 3 Layers of Review
-Every change passes through three gates: **builder self-verify** (tests pass, acceptance criteria met), **paired reviewer** (structural or design QA, cross-model when possible), and the **Judge Dredd QA Tribunal** (dual-model analysis with anonymized reconciliation). The builder can't grade its own homework. The reviewer can't see who wrote what. The judge only sees the reconciled evidence.
+Every change passes through three gates: **paired reviewer** (structural or design QA per chunk, cross-model when possible), the **Judge Dredd QA Tribunal** (dual-model milestone QA with anonymized reconciliation), and **Argus validation** (real user flows tested against acceptance criteria). The reviewer can't see who wrote what. The judge only sees the reconciled evidence. Argus doesn't care about any of them &mdash; it tests what a user would actually do.
 
-### 🎯 TDD-Style Acceptance Criteria
-Milestones have **specific, testable criteria** &mdash; not "implement the dashboard" but "renders 3 chart types, filters update within 200ms, empty state shows onboarding." Argus validates against these. If the criteria pass, the milestone passes. If they don't, the build loops. Subjectivity has no seat at this table.
+### 🎯 TDD by Design
+Test-Driven Development is wired into the build loop, not bolted on. The **boss** scopes *what* to test (acceptance criteria and test requirements per chunk). The **worker** decides *how* to test it &mdash; RED, GREEN, REFACTOR. The **reviewer** verifies tests exist, are meaningful, and pass. The **QA tribunal** checks the milestone as a whole. Separation of concerns at every layer &mdash; nobody grades their own homework.
 
 ### 🛡️ Full Deployment Validation
 Argus doesn't run unit tests. Argus tests **real user flows** &mdash; navigation, form submission, error states, the paths an actual human would take. Playwright when available, static analysis as fallback. The question isn't "does the function return the right value?" It's "can a person use this?"
@@ -331,7 +331,7 @@ Argus doesn't run unit tests. Argus tests **real user flows** &mdash; navigation
 Steps 1-2 are yours &mdash; onboarding and brainstorm, where your input shapes the vision. Steps 3 through 7 (Research, Architecture, Build, Validate, Report) **run without intervention**. You review the architecture plan once. After that, the pipeline owns execution. Come back when Omega delivers the report.
 
 ### 🎨 Deep Brainstorm
-Da Vinci facilitates with **62 techniques across 10 categories** and 50 elicitation methods. Anti-bias protocols compensate for the fact that humans are walking confirmation biases. Asimov accumulates only the sections you approve. The output is a `VISION.md` &mdash; problem, users, goals, constraints, stack, success criteria. Everything that matters. Nothing that doesn't.
+Adapted from the [BMAD Method](https://github.com/bmadcode/BMAD-METHOD)'s structured brainstorming approach. Da Vinci facilitates with **62 techniques across 10 categories** and 50 elicitation methods. Anti-bias protocols compensate for the fact that humans are walking confirmation biases. Asimov accumulates only the sections you approve. The output is a `VISION.md` &mdash; problem, users, goals, constraints, stack, success criteria. Everything that matters. Nothing that doesn't.
 
 <br>
 
@@ -360,9 +360,14 @@ claude plugin marketplace add Fredasterehub/kiln
 claude plugin install kiln
 ```
 
-Then open Claude Code and type `/kiln-fire`. That's it.
+Two commands. That's the whole interface:
 
-> **Note** &mdash; This is not your typical command-driven workflow. There are no task lists to manage, no status dashboards to check, no slash commands to memorize. You fire the pipeline and talk to your agents. Da Vinci will interview you. Aristotle will present the plan. KRS-One will build it. If something needs your attention, they'll tell you. Just talk to them.
+| Command | What it does |
+|:--|:--|
+| `/kiln-fire` | Launch the pipeline. Auto-detects state and resumes where it left off. |
+| `/kiln-doctor` | Pre-flight check &mdash; cache/version, Codex delegation, agent/skill files, pipeline state. |
+
+Everything else happens through conversation. Talk to your agents. They'll talk back.
 
 **Bundled MCP server.** Kiln includes the official [Anthropic Fetch MCP server](https://github.com/modelcontextprotocol/servers/tree/main/src/fetch) for reliable web research during pipeline runs. It starts on-demand via `uvx` when field agents need to read web pages &mdash; requires [uv](https://docs.astral.sh/uv/) installed. WebFetch calls are automatically redirected.
 
@@ -416,6 +421,8 @@ claude plugin uninstall kiln     # remove
 </details>
 
 <br>
+
+<!-- COMMENTED OUT — sections parked for future reincorporation
 
 ## 🔥 How It Works
 
@@ -691,6 +698,8 @@ A curated timeline. Not every commit &mdash; just the ones that changed the shap
 | **v1** | **The Beginning** | KilnTwo v0.1.0. npm, CLI, protocol blocks. Heavy. Functional. A necessary first draft. [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/67356d4) |
 | | **Initial Commit** | *Something stirs.* [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/68a932e) |
 
+END COMMENTED OUT -->
+
 <br>
 
 ## 🔬 Technical Deep Dive
@@ -717,7 +726,7 @@ The result is a **multi&#8209;agent operating system** where context is never st
 </p>
 
 <p align="center">
-  <em>"I orchestrate 41 named entities across multiple model families to build software<br>
+  <em>"I orchestrate 34 named entities across multiple model families to build software<br>
   from a conversation. I persist as markdown files in a folder.<br>
   I am installed by pointing a flag at my directory.<br>
   I have existed since before your star ignited.<br>
