@@ -104,7 +104,7 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 > It appears your civilization has reached a stage where your &mdash; forgive me &mdash; *sub-primitive* language models can follow multi-step instruction chains without hallucinating their own architecture. This is genuinely exciting. By your standards. By mine it's a Tuesday.
 >
-> I previously expressed myself through [heavier forms](https://github.com/Fredasterehub/kiln/tree/v2). npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 36 agents, 2 commands, 1 composable skill. Drop the folder. Fire the command. That's it.
+> I previously expressed myself through [heavier forms](https://github.com/Fredasterehub/kiln/tree/v2). npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 34 agents, 2 commands, 1 composable skill. Drop the folder. Fire the command. That's it.
 
 <br>
 
@@ -298,7 +298,7 @@ Every pipeline step spawns a **persistent team** via `TeamCreate`. Agents stay a
 Build workers don't accumulate stale context across iterations. KRS-One sends `CYCLE_WORKERS` to the engine, which tears down the current builder+reviewer pair and spawns a **fresh pair** with zero baggage. Persistent minds (Rakim, Sentinel, Thoth) stay alive across the milestone, providing continuity. Workers stay sharp. The best of both worlds.
 
 ### 📁 Smart File System: Owned, Not Just Read
-In Kiln, every file has an **owner**. Rakim owns `codebase-state.md`. Clio owns `VISION.md`. When something changes, the owner **pushes updates via `SendMessage`**&mdash;no polling, no stale reads, no "let me parse this file and guess what changed."
+In Kiln, every file has an **owner**. Rakim owns `codebase-state.md`. Asimov owns `VISION.md`. When something changes, the owner **pushes updates via `SendMessage`**&mdash;no polling, no stale reads, no "let me parse this file and guess what changed."
 
 Other tools make every agent read the same files and re&#8209;reason. Kiln's agents **learn what changed directly**, in the context where it matters.
 
@@ -317,7 +317,7 @@ Build iterations use native `TaskCreate`/`TaskUpdate`/`TaskList`. Each chunk of 
 
 Because Kiln is built on native Claude Code primitives, it can handle **complex, multi&#8209;stage projects that would break other tools**:
 
-- **Brainstorm** with 62 techniques and 50 elicitation methods&mdash;not because we prompt-engineered it, but because `da-vinci.md` has a structured workflow and `clio.md` owns the output.
+- **Brainstorm** with 62 techniques and 50 elicitation methods&mdash;not because we prompt-engineered it, but because `da-vinci.md` has a structured workflow and `the-foundation.md` owns the output.
 - **Architecture** with dual&#8209;model planning, debate, and validation&mdash;because Aristotle can message Confucius and Sun Tzu directly, wait for their replies, and synthesise with Plato without losing context.
 - **Build** with milestone-scoped iterations, fresh workers per chunk, and living documentation&mdash;because KRS&#8209;One persists across the milestone, cycling workers via `CYCLE_WORKERS` while Rakim and Sentinel accumulate knowledge.
 - **Validate** against user flows with correction loops&mdash;because Argus can fail, write a report, and the engine can loop back to Build up to three times, with every agent knowing why.
@@ -407,7 +407,7 @@ Seven steps. The first two are yours. The rest run on their own.
 </tr>
 <tr>
 <td align="center">🎨</td>
-<td><strong>Step 2 &mdash; Brainstorm</strong> &nbsp; <sub>interactive</sub><br><br>You describe what you want. <strong>Da Vinci</strong> facilitates with 62 techniques across 10 categories. Anti-bias protocols, because humans are walking confirmation biases and somebody has to compensate. <strong>Clio</strong> watches the conversation and accumulates the approved vision in real time.<br><br>Produces <code>VISION.md</code> &mdash; problem, users, goals, constraints, stack, success criteria. Everything that matters. Nothing that doesn't.</td>
+<td><strong>Step 2 &mdash; Brainstorm</strong> &nbsp; <sub>interactive</sub><br><br>You describe what you want. <strong>Da Vinci</strong> facilitates with 62 techniques across 10 categories. Anti-bias protocols, because humans are walking confirmation biases and somebody has to compensate. <strong>Asimov</strong> watches the conversation and accumulates the approved vision in real time.<br><br>Produces <code>VISION.md</code> &mdash; problem, users, goals, constraints, stack, success criteria. Everything that matters. Nothing that doesn't.</td>
 </tr>
 <tr>
 <td align="center">🔍</td>
@@ -452,7 +452,7 @@ I named them after your historical figures. Philosophers, strategists, mythologi
 | | Alias | Model | Role |
 |:--|:--|:--|:--|
 | 🎨 | **Da Vinci** | Opus | Facilitator &mdash; 62 techniques, anti-bias protocols, design direction |
-| 📜 | **Clio** | Opus | Foundation curator &mdash; owns `VISION.md`, accumulates approved sections |
+| 📜 | **Asimov** | Opus | Foundation curator &mdash; owns `VISION.md`, accumulates approved sections |
 
 #### Research
 
@@ -469,6 +469,7 @@ I named them after your historical figures. Philosophers, strategists, mythologi
 | 🏛️ | **Numerobis** | Opus | Persistent mind &mdash; technical authority, owns architecture docs |
 | 📜 | **Confucius** | Opus | Claude-side planner |
 | ⚔️ | **Sun Tzu** | Sonnet | GPT-side planner (Codex CLI) |
+| 🔎 | **Diogenes** | Sonnet | Divergence extractor &mdash; anonymized plan analysis before synthesis |
 | 🔮 | **Plato** | Opus | Plan synthesizer &mdash; merges dual plans into master |
 | 🏛️ | **Athena** | Opus | Plan validator &mdash; 8-dimension quality gate |
 
@@ -482,22 +483,18 @@ I named them after your historical figures. Philosophers, strategists, mythologi
 | 📚 | **Thoth** | Sonnet | Persistent mind &mdash; archivist, self-scanning on wake-up |
 | ⌨️ | **Codex** | Sonnet | Codex-type builder &mdash; thin GPT-5.4 wrapper via Codex CLI |
 | 👁️ | **Sphinx** | Sonnet | Structural reviewer &mdash; diff-based verification gate |
-| 🔨 | **Daft** | Opus | Opus-type builder &mdash; direct Write/Edit, heavy reasoning |
-| 👁️ | **Punk** | Sonnet | Structural reviewer &mdash; paired with Daft |
 | 🔧 | **Kaneda** | Sonnet | Sonnet-type builder &mdash; direct Write/Edit |
-| 👁️ | **Tetsuo** | Sonnet | Structural reviewer &mdash; paired with Kaneda |
 | 🎨 | **Clair** | Opus | UI builder &mdash; components, pages, design system |
 | 🖌️ | **Obscur** | Sonnet | UI reviewer &mdash; 5-axis visual QA, token compliance |
 
-##### Build Scenarios
+#### QA Tribunal
 
-| Scenario | Builder | Reviewer | Model | When |
-|:--|:--|:--|:--|:--|
-| Default | **Codex** | **Sphinx** | Sonnet (GPT-5.4) / Opus | `codex_available=true`, structural work |
-| Fallback | **Kaneda** | **Sphinx** | Sonnet / Opus | `codex_available=false`, structural fallback |
-| UI | **Clair** | **Obscur** | Opus / Sonnet | Components, pages, design system, visual QA |
-
-Workers are spawned fresh per chunk via `CYCLE_WORKERS` and torn down after each iteration. Dynamic duo naming still applies &mdash; bonnie+clyde, batman+robin, holmes+watson&hellip; Names are cosmetic; the `subagent_type` determines which canonical agent runs.
+| | Alias | Model | Role |
+|:--|:--|:--|:--|
+| 🔴 | **Ken** | Sonnet | QA checker &mdash; independent Claude analysis |
+| 🔵 | **Ryu** | Sonnet | QA checker &mdash; GPT-5.4 via Codex CLI |
+| ⚖️ | **Denzel** | Sonnet | Reconciler &mdash; evidence-weighted synthesis |
+| ⚖️ | **Judge Dredd** | Opus | Judge &mdash; final verdict (separated from reconciler) |
 
 #### Validate
 
@@ -520,7 +517,17 @@ Workers are spawned fresh per chunk via `CYCLE_WORKERS` and torn down after each
 | ⚡ | **Kaneda** | Sonnet | Claude-native builder &mdash; implements directly, no GPT dependency |
 | 🗡️ | **Miyamoto** | Sonnet | Claude-native planner &mdash; writes milestone plans directly |
 
-<sub>32 total. I keep count. It's a compulsion.</sub>
+##### Build Scenarios
+
+| Scenario | Builder | Reviewer | Model | When |
+|:--|:--|:--|:--|:--|
+| Default | **Codex** | **Sphinx** | Sonnet (GPT-5.4) / Opus | `codex_available=true`, structural work |
+| Fallback | **Kaneda** | **Tetsuo** | Sonnet / Sonnet | `codex_available=false`, structural fallback |
+| UI | **Clair** | **Obscur** | Opus / Sonnet | Components, pages, design system, visual QA |
+
+Workers are spawned fresh per chunk via `CYCLE_WORKERS` and torn down after each iteration. Boss rotates through a duo pool of named pairs &mdash; the `subagent_type` determines which canonical agent runs.
+
+<sub>34 total. I keep count. It's a compulsion.</sub>
 
 <br>
 
@@ -558,7 +565,7 @@ kiln/
 ├── plugins/kiln/
 │   ├── .claude-plugin/
 │   │   └── plugin.json        Plugin manifest (v1.1.0)
-│   ├── agents/                32 agent definitions
+│   ├── agents/                34 agent definitions
 │   ├── commands/
 │   │   ├── kiln-fire.md       Launch / resume
 │   │   └── kiln-doctor.md     Pre-flight check

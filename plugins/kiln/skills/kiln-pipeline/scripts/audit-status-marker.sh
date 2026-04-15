@@ -1,12 +1,13 @@
 #!/bin/bash
 # audit-status-marker.sh — PostToolUse hook for Write
 #
-# Checks that rakim, sentinel, and numerobis write <!-- status: complete -->
-# as line 1 of their hook-gated files. Advisory — tells the agent to fix it.
+# Checks that dropping-science, algalon-the-observer, and pitie-pas-les-crocos
+# write <!-- status: complete --> as line 1 of their hook-gated files.
+# Advisory — tells the agent to fix it.
 #
 # Only fires during active Kiln pipeline runs (full context gate).
-# Only matches rakim (codebase-state.md), sentinel (patterns.md),
-# and numerobis (architecture.md).
+# Only matches dropping-science (codebase-state.md),
+# algalon-the-observer (patterns.md), and pitie-pas-les-crocos (architecture.md).
 
 INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name // ""')
@@ -37,21 +38,21 @@ if [[ -z "$_STAGE" ]] || [[ "$_STAGE" == "complete" ]]; then
   exit 0
 fi
 
-# Only check rakim, sentinel, and numerobis
+# Only check dropping-science, algalon-the-observer, and pitie-pas-les-crocos
 case "$AGENT" in
-  rakim|sentinel|numerobis) ;;
+  dropping-science|algalon-the-observer|pitie-pas-les-crocos) ;;
   *) exit 0 ;;
 esac
 
 # Only check their specific gated files
 case "$AGENT" in
-  rakim)
+  dropping-science)
     [[ "$FILE_PATH" == *codebase-state.md ]] || exit 0
     ;;
-  sentinel)
+  algalon-the-observer)
     [[ "$FILE_PATH" == *patterns.md ]] || exit 0
     ;;
-  numerobis)
+  pitie-pas-les-crocos)
     [[ "$FILE_PATH" == *architecture.md ]] || exit 0
     ;;
 esac
