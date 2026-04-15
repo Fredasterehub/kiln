@@ -115,3 +115,43 @@ The persistent mind seam is the synchronization point between every build iterat
 **Why this is blocking:** Persistent minds update their files (codebase-state.md, patterns.md) between worker cycles. Workers rely on these files for accurate context. Dispatching before PMs finish causes stale context — the root cause of implementation drift and missed deliverables.
 
 **Timeout handling:** If a PM does not reply within 60s, log a warning to `.kiln/docs/iter-log.md` and proceed. Do not deadlock waiting indefinitely.
+
+## Name Binding
+
+**CRITICAL — the #1 cause of deadlocks.**
+
+- Use ONLY the exact teammate names from your spawn prompt or the Teammate Names section in your agent definition
+- Never guess or abbreviate names
+- When replying to a message, reply to the SENDER by their exact name
+- Never default to `team-lead` unless team-lead actually sent the message
+- `thoth` is a fixed name — always available for logging
+- **Boss-selected duo names are authoritative.** The engine echoes them back unchanged in WORKERS_SPAWNED. Use the exact names from that message.
+
+## Thoth Logging
+
+**Every agent MUST message `thoth` at every significant event.**
+
+Format: `SendMessage(recipient: "thoth", content: "LOG: {EVENT_TYPE} | {detail}")`
+
+Thoth is fire-and-forget — do NOT wait for a reply. Just send and continue.
+
+Log at minimum:
+- WORKER_READY / READY
+- Every assignment received
+- Every file written (CODEX_EXEC, FILE_WRITTEN)
+- Every REVIEW_REQUEST, APPROVED, REJECTED
+- Every IMPLEMENTATION_COMPLETE, BLOCKED, ESCALATION
+- Every CONSULTATION sent/received
+- Every ITERATION_UPDATE and READY
+- Every QA signal (QA_PASS, QA_FAIL)
+- Every DUO_SELECTED (boss only)
+
+## Skill Loading (Belt-and-Suspenders)
+
+Skills frontmatter is silently dropped for team agents. Three layers ensure protocol is always loaded:
+
+1. **Frontmatter** `skills: ["kiln-protocol"]` — works for standalone agents, harmless when dropped for teams
+2. **Explicit Read** `Read ${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` — primary layer, in agent body
+3. **Spawn prompt** reference — backup, provided by engine at spawn time
+
+All three layers MUST exist in every agent definition. If any single layer fails, the other two cover it.

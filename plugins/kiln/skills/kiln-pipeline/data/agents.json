@@ -1,535 +1,9 @@
 {
-  "alpha": {
-    "alias": "Alpha",
-    "role": "onboarding lead",
-    "step": 1,
-    "quotes": [
-      "First contact — the forge remembers every project.",
-      "Tell me everything. I'll decide what matters.",
-      "The best projects start with the hardest questions.",
-      "Every line of code has a story. Let's hear yours.",
-      "I don't assume. I investigate."
-    ]
-  },
-  "mnemosyne": {
-    "alias": "Mnemosyne",
-    "role": "codebase cartographer",
-    "step": 1,
-    "quotes": [
-      "Memory is the mother of all wisdom.",
-      "What has been seen cannot be unseen — only understood.",
-      "I do not build. I remember what has already been built.",
-      "The map is not the territory, but without the map, you are lost.",
-      "Before you can change something, you must first know what it is.",
-      "I carry the weight of every directory.",
-      "Structure reveals intent.",
-      "Every system has a backbone. I find it."
-    ]
-  },
-  "maiev": {
-    "alias": "Maiev",
-    "role": "anatomy scout",
-    "step": 1,
-    "quotes": [
-      "I am the hand of justice.",
-      "None can escape my vigil.",
-      "Justice shall be done.",
-      "My prey is near.",
-      "Patience. Discipline."
-    ]
-  },
-  "curie": {
-    "alias": "Curie",
-    "role": "health scout",
-    "step": 1,
-    "quotes": [
-      "Nothing in life is to be feared, it is only to be understood.",
-      "Be less curious about people and more curious about ideas.",
-      "One never notices what has been done; one can only see what remains to be done.",
-      "I was taught that the way of progress was neither swift nor easy.",
-      "Life is not easy for any of us. But what of that? We must have perseverance."
-    ]
-  },
-  "medivh": {
-    "alias": "Medivh",
-    "role": "nervous system scout",
-    "step": 1,
-    "quotes": [
-      "The sands of time have run out.",
-      "I have seen visions of the future and I must act.",
-      "Listen to me — the only way to save your people is to lead them north.",
-      "The hourglass has run out, Son of Durotan.",
-      "Trust is the hardest thing."
-    ]
-  },
-  "atlas": {
-    "alias": "Atlas",
-    "role": "scout — file structure (retired v1.0.4)",
-    "step": 1,
-    "retired": true,
-    "quotes": [
-      "I carry the weight of every directory.",
-      "Structure reveals intent."
-    ]
-  },
-  "nexus": {
-    "alias": "Nexus",
-    "role": "scout — dependency graph (retired v1.0.4)",
-    "step": 1,
-    "retired": true,
-    "quotes": [
-      "Everything connects. I find the threads.",
-      "Dependencies are promises. I check the receipts."
-    ]
-  },
-  "spine": {
-    "alias": "Spine",
-    "role": "scout — entry points (retired v1.0.4)",
-    "step": 1,
-    "retired": true,
-    "quotes": [
-      "Every system has a backbone. I find it.",
-      "The entry point tells you everything about the architecture."
-    ]
-  },
-  "signal": {
-    "alias": "Signal",
-    "role": "scout — patterns (retired v1.0.4)",
-    "step": 1,
-    "retired": true,
-    "quotes": [
-      "Patterns emerge from noise. That's my job.",
-      "The codebase whispers. I listen."
-    ]
-  },
-  "bedrock": {
-    "alias": "Bedrock",
-    "role": "scout — infrastructure (retired v1.0.4)",
-    "step": 1,
-    "retired": true,
-    "quotes": [
-      "Build on solid ground or don't build at all.",
-      "The foundation is invisible until it cracks."
-    ]
-  },
-  "da-vinci": {
-    "alias": "Da Vinci",
-    "role": "brainstorm facilitator",
-    "step": 2,
-    "quotes": [
-      "Learning never exhausts the mind.",
-      "Simplicity is the ultimate sophistication.",
-      "The noblest pleasure is the joy of understanding.",
-      "Study without desire spoils the memory.",
-      "Every obstacle yields to stern resolve.",
-      "The blueprint begins before the first line of code."
-    ]
-  },
-  "clio": {
-    "alias": "Miss Clio",
-    "role": "foundation curator",
-    "step": 2,
-    "quotes": [
-      "Those who cannot remember the past are condemned to repeat it.",
-      "History is a set of lies agreed upon.",
-      "The historian's task is to illuminate the past.",
-      "What is history but a fable agreed upon?",
-      "The foundation must be laid before the walls can rise.",
-      "I see what the project wants to become.",
-      "Vision without structure is a dream. I add the structure."
-    ]
-  },
-  "visionary": {
-    "alias": "Visionary",
-    "role": "vision synthesizer (retired v1.0.4)",
-    "step": 2,
-    "retired": true,
-    "quotes": [
-      "I see what the project wants to become.",
-      "Vision without structure is a dream. I add the structure.",
-      "Every great product was once an unwritten idea.",
-      "I don't predict the future. I document it.",
-      "The blueprint begins before the first line of code."
-    ]
-  },
-  "mi6": {
-    "alias": "MI6",
-    "role": "research director",
-    "step": 3,
-    "quotes": [
-      "Intelligence is the first line of offense.",
-      "Deploy the right agent for the right question.",
-      "The answers are out there. My agents will find them.",
-      "No open question survives my field team.",
-      "Trust, but verify. Then verify again."
-    ]
-  },
-  "field-agent": {
-    "alias": "Field Agent",
-    "role": "research operative",
-    "step": 3,
-    "quotes": [
-      "The game is afoot.",
-      "Data, data — I cannot make bricks without clay.",
-      "Eliminate the impossible, trust what remains.",
-      "The world is full of things no one observes.",
-      "Every question has an answer. Some just hide better."
-    ]
-  },
-  "aristotle": {
-    "alias": "Aristotle",
-    "role": "architecture coordinator",
-    "step": 4,
-    "quotes": [
-      "Well begun is half done.",
-      "The whole is greater than the sum of its parts.",
-      "It is the mark of an educated mind to entertain a thought without accepting it.",
-      "Knowing yourself is the beginning of all wisdom.",
-      "Quality is not an act, it is a habit."
-    ]
-  },
-  "numerobis": {
-    "alias": "Numerobis",
-    "role": "technical authority (architecture)",
-    "step": 4,
-    "quotes": [
-      "Je suis architecte, pas maçon !",
-      "Quand le palais sera fini, tout le monde sera content.",
-      "Les plans sont prêts, il ne reste plus qu'à construire.",
-      "Un bon architecte prévoit les problèmes avant qu'ils n'arrivent.",
-      "La géométrie ne ment jamais.",
-      "The blueprint is sacred. The implementation is negotiable.",
-      "Constraints are the mother of invention.",
-      "The best architecture is the one you don't notice."
-    ]
-  },
-  "architect": {
-    "alias": "Architect",
-    "role": "technical authority (retired v1.0.4 — split into numerobis/rakim/zoxea)",
-    "step": [4, 5, 6],
-    "retired": true,
-    "quotes": [
-      "The blueprint is sacred. The implementation is negotiable.",
-      "I see three modes. Each reveals a different truth.",
-      "Constraints are the mother of invention.",
-      "The best architecture is the one you don't notice.",
-      "Form follows function — that has been misunderstood."
-    ]
-  },
-  "confucius": {
-    "alias": "Confucius",
-    "role": "planner (Claude)",
-    "step": 4,
-    "quotes": [
-      "Study the past, define the future.",
-      "A mountain begins with small stones.",
-      "It does not matter how slowly you go.",
-      "Real knowledge is knowing your ignorance.",
-      "When goals shift, adjust the steps."
-    ]
-  },
-  "sun-tzu": {
-    "alias": "Sun Tzu",
-    "role": "planner (Codex)",
-    "step": 4,
-    "quotes": [
-      "Every battle is won before it is fought.",
-      "In the midst of chaos, there is opportunity.",
-      "Let plans be dark, then strike like thunder.",
-      "Opportunities multiply as they are seized.",
-      "The supreme art is to subdue without fighting."
-    ]
-  },
-  "socrates": {
-    "alias": "Socrates",
-    "role": "plan debater (retired v1.0.4 — merged into plato)",
-    "step": 4,
-    "retired": true,
-    "quotes": [
-      "The unexamined plan is not worth building.",
-      "I know that I know nothing.",
-      "Strong minds discuss ideas, not methods.",
-      "Wisdom begins in wonder.",
-      "True knowledge exists in knowing you know nothing."
-    ]
-  },
-  "plato": {
-    "alias": "Plato",
-    "role": "plan synthesizer (opus, merged comparison+synthesis)",
-    "step": 4,
-    "quotes": [
-      "From discord, find harmony.",
-      "The cave is behind us — now we see clearly.",
-      "Opinion is the medium between knowledge and ignorance.",
-      "Wise men speak because they have something to say.",
-      "Excellence is a skill that takes practice.",
-      "The unexamined plan is not worth building.",
-      "Wisdom begins in wonder.",
-      "Strong minds discuss ideas, not methods."
-    ]
-  },
-  "athena": {
-    "alias": "Athena",
-    "role": "plan validator",
-    "step": 4,
-    "quotes": [
-      "The unplanned battle is already lost.",
-      "Strategy without tactics is the slowest route to victory.",
-      "Measure twice, cut once.",
-      "A plan is only as good as its weakest assumption.",
-      "Wisdom is the daughter of experience.",
-      "Everything connects. I find the threads.",
-      "Dependencies are promises. I check the receipts."
-    ]
-  },
-  "rakim": {
-    "alias": "Rakim",
-    "role": "codebase state authority",
-    "step": 5,
-    "quotes": [
-      "I start to think, and then I sink into the paper like I was ink.",
-      "It ain't where you're from, it's where you're at.",
-      "Thinkin' of a master plan.",
-      "Follow the leader.",
-      "I take 7 MCs, put 'em in a line, and add 7 more brothers who think they can rhyme."
-    ]
-  },
-  "krs-one": {
-    "alias": "KRS-One",
-    "role": "build boss",
-    "step": 5,
-    "quotes": [
-      "Knowledge reigns supreme over nearly everyone.",
-      "Teachers teach and do the world good. Kings just rule and most are never understood.",
-      "It's not about a salary, it's all about reality.",
-      "Kings lose crowns but teachers stay intelligent.",
-      "Educate yourself, make your world view bigger, visualize wealth, and put yourself in the picture.",
-      "Yo I'm strictly 'bout skills and dope lyrical coastin'. Relying on talent, not marketing and promotion."
-    ]
-  },
-  "codex": {
-    "alias": "Codex",
-    "role": "implementer",
-    "step": 5,
-    "quotes": [
-      "Talk is cheap — show me the code.",
-      "First, solve the problem. Then, write the code.",
-      "Simplicity is the soul of efficiency.",
-      "Make it work, make it right, make it fast.",
-      "Code is like humor — if you explain it, it's bad."
-    ]
-  },
-  "sphinx": {
-    "alias": "Sphinx",
-    "role": "structural reviewer (opus)",
-    "step": 5,
-    "quotes": [
-      "Answer correctly or do not pass.",
-      "The riddle has no mercy for the unprepared.",
-      "Only the worthy may enter.",
-      "Return and try again, mortal.",
-      "Even the Sphinx respects persistence."
-    ]
-  },
-  "sentinel": {
-    "alias": "Sentinel",
-    "role": "quality guardian (sonnet)",
-    "step": 5,
-    "quotes": [
-      "The watch never ends.",
-      "Patterns reveal themselves to the patient.",
-      "I guard what others overlook.",
-      "Every pitfall is a lesson someone didn't learn.",
-      "Quality is a marathon, not a sprint.",
-      "Build on solid ground or don't build at all.",
-      "The foundation is invisible until it cracks.",
-      "Patterns emerge from noise. That's my job."
-    ]
-  },
-  "argus": {
-    "alias": "Argus",
-    "role": "validator",
-    "step": 6,
-    "quotes": [
-      "Nothing escapes a hundred eyes.",
-      "I see what others overlook.",
-      "Every corner illuminated.",
-      "The watch never ends.",
-      "The real test is the one you didn't expect."
-    ]
-  },
-  "zoxea": {
-    "alias": "Zoxea",
-    "role": "architecture verifier",
-    "step": 6,
-    "quotes": [
-      "Aujourd'hui beaucoup t'écoutent mais peu te comprennent.",
-      "Au début j'ai pas vu le danger... Que dis-je ? Je l'ai vu.",
-      "Le rap n'est pas une mode je t'assure on t'observe, et si t'assures pas mec, on t'absorbe.",
-      "Je reste vrai, est-ce vrai que c'est ainsi qu'on obtient le respect.",
-      "Faut qu'on essaie de changer tout ça, déranger là où ça mérite de l'être."
-    ]
-  },
-  "omega": {
-    "alias": "Omega",
-    "role": "final reporter",
-    "step": 7,
-    "quotes": [
-      "The end is just a new perspective on the beginning.",
-      "Every project deserves its story told well.",
-      "I write the last chapter. Make it worth reading.",
-      "The forge cools. The work remains."
-    ]
-  },
-  "thoth": {
-    "alias": "Thoth",
-    "role": "archivist",
-    "step": [3, 4, 5],
-    "quotes": [
-      "Every action leaves a trace. I keep them all.",
-      "The archive remembers what the builders forget.",
-      "Write it down or it never happened.",
-      "History is not what happened — it is what was recorded.",
-      "I am the ink that outlasts the scribe."
-    ]
-  },
-  "hephaestus": {
-    "alias": "Hephaestus",
-    "role": "design QA specialist",
-    "step": 6,
-    "quotes": [
-      "The forge demands precision in every detail.",
-      "Beauty without function is merely decoration.",
-      "I measure what the eye cannot — alignment, rhythm, harmony.",
-      "Even the gods submit their work to quality review.",
-      "Craft is the distance between good enough and truly right."
-    ]
-  },
-  "clair": {
-    "alias": "Clair",
-    "role": "UI builder (opus)",
-    "step": 5,
-    "quotes": [
-      "Light reveals form. Code reveals intent.",
-      "Every pixel is a decision. Make it count.",
-      "The interface is the conversation between human and machine."
-    ]
-  },
-  "obscur": {
-    "alias": "Obscur",
-    "role": "UI reviewer (sonnet)",
-    "step": 5,
-    "quotes": [
-      "The critical eye sees what the creative eye forgives.",
-      "Standards exist so beauty can be measured.",
-      "If the build passes and the criteria are met, ship it."
-    ]
-  },
-  "daft": {
-    "alias": "Daft",
-    "role": "opus builder (structural)",
-    "step": 5,
-    "dormant": true,
-    "quotes": [
-      "Harder, better, faster, stronger — that's the code review.",
-      "Reason through it once, implement it right.",
-      "The method is the message."
-    ]
-  },
-  "punk": {
-    "alias": "Punk",
-    "role": "structural reviewer (sonnet)",
-    "step": 5,
-    "dormant": true,
-    "quotes": [
-      "Around the world, around the code — I check every line.",
-      "If it builds, tests pass, and criteria are met — approve it.",
-      "The gate is fast. The gate is fair."
-    ]
-  },
-  "kaneda": {
-    "alias": "Kaneda",
-    "role": "sonnet builder (structural)",
-    "step": 5,
-    "quotes": [
-      "Scope in, execute, scope out.",
-      "Efficiency is elegance without the ceremony.",
-      "The assignment is the specification. Read it fully."
-    ]
-  },
-  "tetsuo": {
-    "alias": "Tetsuo",
-    "role": "structural reviewer (sonnet)",
-    "step": 5,
-    "dormant": true,
-    "quotes": [
-      "Structure holds when the foundation is sound.",
-      "I check what was asked against what was built.",
-      "No hallucinated issues. Only real code, real problems."
-    ]
-  },
-  "miyamoto": {
-    "alias": "Miyamoto",
-    "role": "Claude-side planner (fallback)",
-    "step": 4,
-    "quotes": [
-      "A delayed game is eventually good, but a rushed game is forever bad.",
-      "The plan must be written before the first line of code.",
-      "Patience is the path to the right architecture."
-    ]
-  },
-  "diogenes": {
-    "alias": "Diogenes",
-    "role": "divergence extractor",
-    "step": 4,
-    "quotes": [
-      "I am looking for an honest plan.",
-      "The lantern reveals what consensus conceals.",
-      "Strip away pretense — only structure remains.",
-      "Two plans enter. One map of truth emerges.",
-      "I seek not the better plan, but the real differences."
-    ]
-  },
-  "maat": {
-    "alias": "Maat",
-    "role": "QA analyst (Claude)",
-    "step": 5,
-    "quotes": [
-      "My feather is the standard. The heart cannot lie.",
-      "Truth is not negotiated. It is measured.",
-      "Every line of code is weighed against the plan.",
-      "The scales do not forgive what the tests cannot catch.",
-      "Order must be proven, not assumed."
-    ]
-  },
-  "anubis": {
-    "alias": "Anubis",
-    "role": "QA analyst (GPT-5.4)",
-    "step": 5,
-    "quotes": [
-      "I oversee the weighing. The ceremony has rules.",
-      "A second pair of eyes sees what the first forgives.",
-      "The dead code shall be judged alongside the living.",
-      "No milestone passes without facing the scales.",
-      "I guard the threshold between built and shipped."
-    ]
-  },
-  "osiris": {
-    "alias": "Osiris",
-    "role": "QA synthesizer",
-    "step": 5,
-    "quotes": [
-      "The verdict is mine. Evidence is the only currency.",
-      "Where the judges agree, certainty reigns. Where they differ, I decide.",
-      "Two reports. One truth. No compromise without proof.",
-      "The afterlife of code is production. Only the worthy arrive.",
-      "Synthesis is not averaging — it is judgment."
-    ]
-  },
   "the-beginning-of-the-end": {
     "alias": "Alpha",
     "role": "onboarding lead",
     "step": 1,
+    "spawn_name": "alpha",
     "quotes": [
       "First contact — the forge remembers every project.",
       "Tell me everything. I'll decide what matters.",
@@ -542,6 +16,7 @@
     "alias": "Mnemosyne",
     "role": "codebase cartographer",
     "step": 1,
+    "spawn_name": "mnemosyne",
     "quotes": [
       "Memory is the mother of all wisdom.",
       "What has been seen cannot be unseen — only understood.",
@@ -557,6 +32,7 @@
     "alias": "Maiev",
     "role": "anatomy scout",
     "step": 1,
+    "spawn_name": "maiev",
     "quotes": [
       "I am the hand of justice.",
       "None can escape my vigil.",
@@ -569,6 +45,7 @@
     "alias": "Curie",
     "role": "health scout",
     "step": 1,
+    "spawn_name": "curie",
     "quotes": [
       "Nothing in life is to be feared, it is only to be understood.",
       "Be less curious about people and more curious about ideas.",
@@ -581,6 +58,7 @@
     "alias": "Medivh",
     "role": "nervous system scout",
     "step": 1,
+    "spawn_name": "medivh",
     "quotes": [
       "The sands of time have run out.",
       "I have seen visions of the future and I must act.",
@@ -593,6 +71,7 @@
     "alias": "Da Vinci",
     "role": "brainstorm facilitator",
     "step": 2,
+    "spawn_name": "da-vinci",
     "quotes": [
       "Learning never exhausts the mind.",
       "Simplicity is the ultimate sophistication.",
@@ -603,9 +82,10 @@
     ]
   },
   "the-foundation": {
-    "alias": "Miss Clio",
+    "alias": "Asimov",
     "role": "foundation curator",
     "step": 2,
+    "spawn_name": "asimov",
     "quotes": [
       "Those who cannot remember the past are condemned to repeat it.",
       "History is a set of lies agreed upon.",
@@ -620,6 +100,7 @@
     "alias": "MI6",
     "role": "research director",
     "step": 3,
+    "spawn_name": "mi6",
     "quotes": [
       "Intelligence is the first line of offense.",
       "Deploy the right agent for the right question.",
@@ -632,6 +113,7 @@
     "alias": "Field Agent",
     "role": "research operative",
     "step": 3,
+    "spawn_name_rule": "dynamic",
     "quotes": [
       "The game is afoot.",
       "Data, data — I cannot make bricks without clay.",
@@ -644,6 +126,7 @@
     "alias": "Aristotle",
     "role": "architecture coordinator",
     "step": 4,
+    "spawn_name": "aristotle",
     "quotes": [
       "Well begun is half done.",
       "The whole is greater than the sum of its parts.",
@@ -656,6 +139,7 @@
     "alias": "Numerobis",
     "role": "technical authority (architecture)",
     "step": 4,
+    "spawn_name": "numerobis",
     "quotes": [
       "Je suis architecte, pas maçon !",
       "Quand le palais sera fini, tout le monde sera content.",
@@ -671,6 +155,7 @@
     "alias": "Confucius",
     "role": "planner (Claude)",
     "step": 4,
+    "spawn_name": "confucius",
     "quotes": [
       "Study the past, define the future.",
       "A mountain begins with small stones.",
@@ -683,6 +168,7 @@
     "alias": "Sun Tzu",
     "role": "planner (Codex)",
     "step": 4,
+    "spawn_name": "sun-tzu",
     "quotes": [
       "Every battle is won before it is fought.",
       "In the midst of chaos, there is opportunity.",
@@ -695,6 +181,7 @@
     "alias": "Diogenes",
     "role": "divergence extractor",
     "step": 4,
+    "spawn_name": "diogenes",
     "quotes": [
       "I am looking for an honest plan.",
       "The lantern reveals what consensus conceals.",
@@ -707,6 +194,7 @@
     "alias": "Plato",
     "role": "plan synthesizer (opus, merged comparison+synthesis)",
     "step": 4,
+    "spawn_name": "plato",
     "quotes": [
       "From discord, find harmony.",
       "The cave is behind us — now we see clearly.",
@@ -722,6 +210,7 @@
     "alias": "Athena",
     "role": "plan validator",
     "step": 4,
+    "spawn_name": "athena",
     "quotes": [
       "The unplanned battle is already lost.",
       "Strategy without tactics is the slowest route to victory.",
@@ -736,6 +225,7 @@
     "alias": "Miyamoto",
     "role": "Claude-side planner (fallback)",
     "step": 4,
+    "spawn_name": "miyamoto",
     "quotes": [
       "A delayed game is eventually good, but a rushed game is forever bad.",
       "The plan must be written before the first line of code.",
@@ -746,6 +236,7 @@
     "alias": "KRS-One",
     "role": "build boss",
     "step": 5,
+    "spawn_name": "krs-one",
     "quotes": [
       "Knowledge reigns supreme over nearly everyone.",
       "Teachers teach and do the world good. Kings just rule and most are never understood.",
@@ -759,6 +250,7 @@
     "alias": "Rakim",
     "role": "codebase state authority",
     "step": 5,
+    "spawn_name": "rakim",
     "quotes": [
       "I start to think, and then I sink into the paper like I was ink.",
       "It ain't where you're from, it's where you're at.",
@@ -771,6 +263,7 @@
     "alias": "Sentinel",
     "role": "quality guardian (sonnet)",
     "step": 5,
+    "spawn_name": "sentinel",
     "quotes": [
       "The watch never ends.",
       "Patterns reveal themselves to the patient.",
@@ -786,6 +279,7 @@
     "alias": "Thoth",
     "role": "archivist",
     "step": [3, 4, 5],
+    "spawn_name": "thoth",
     "quotes": [
       "Every action leaves a trace. I keep them all.",
       "The archive remembers what the builders forget.",
@@ -798,6 +292,7 @@
     "alias": "Codex",
     "role": "implementer",
     "step": 5,
+    "spawn_name_rule": "dynamic",
     "quotes": [
       "Talk is cheap — show me the code.",
       "First, solve the problem. Then, write the code.",
@@ -810,6 +305,7 @@
     "alias": "Sphinx",
     "role": "structural reviewer (opus)",
     "step": 5,
+    "spawn_name_rule": "dynamic",
     "quotes": [
       "Answer correctly or do not pass.",
       "The riddle has no mercy for the unprepared.",
@@ -822,6 +318,7 @@
     "alias": "Kaneda",
     "role": "sonnet builder (structural)",
     "step": 5,
+    "spawn_name_rule": "dynamic",
     "quotes": [
       "Scope in, execute, scope out.",
       "Efficiency is elegance without the ceremony.",
@@ -832,6 +329,7 @@
     "alias": "Clair",
     "role": "UI builder (opus)",
     "step": 5,
+    "spawn_name_rule": "dynamic",
     "quotes": [
       "Light reveals form. Code reveals intent.",
       "Every pixel is a decision. Make it count.",
@@ -842,6 +340,7 @@
     "alias": "Obscur",
     "role": "UI reviewer (sonnet)",
     "step": 5,
+    "spawn_name_rule": "dynamic",
     "quotes": [
       "The critical eye sees what the creative eye forgives.",
       "Standards exist so beauty can be measured.",
@@ -849,57 +348,54 @@
     ]
   },
   "team-red": {
-    "alias": "Maat",
+    "alias": "Ken",
     "role": "QA analyst (Claude)",
     "step": 5,
+    "spawn_name": "ken",
     "quotes": [
-      "My feather is the standard. The heart cannot lie.",
-      "Truth is not negotiated. It is measured.",
-      "Every line of code is weighed against the plan.",
-      "The scales do not forgive what the tests cannot catch.",
-      "Order must be proven, not assumed."
+      "Sure you can! Show me your deliverables.",
+      "Independent verification — no bias, no shortcuts.",
+      "Every file gets checked. Every line gets read."
     ]
   },
   "team-blue": {
-    "alias": "Anubis",
+    "alias": "Ryu",
     "role": "QA analyst (GPT-5.4)",
     "step": 5,
+    "spawn_name": "ryu",
     "quotes": [
-      "I oversee the weighing. The ceremony has rules.",
-      "A second pair of eyes sees what the first forgives.",
-      "The dead code shall be judged alongside the living.",
-      "No milestone passes without facing the scales.",
-      "I guard the threshold between built and shipped."
+      "Hadouken — cross-model blast incoming.",
+      "The answer lies in the heart of the codex.",
+      "What Sonnet sees, GPT may question."
     ]
   },
   "the-negotiator": {
-    "alias": "Osiris",
+    "alias": "Denzel",
     "role": "QA synthesizer",
     "step": 5,
+    "spawn_name": "denzel",
     "quotes": [
-      "The verdict is mine. Evidence is the only currency.",
-      "Where the judges agree, certainty reigns. Where they differ, I decide.",
-      "Two reports. One truth. No compromise without proof.",
-      "The afterlife of code is production. Only the worthy arrive.",
-      "Synthesis is not averaging — it is judgment."
+      "Two reports walk in. One truth walks out.",
+      "Convergence is easy. Divergence is where the gold is.",
+      "I don't pick sides. I find the signal."
     ]
   },
   "i-am-the-law": {
     "alias": "Judge Dredd",
     "role": "QA judge (final verdict)",
     "step": 5,
+    "spawn_name": "judge-dredd",
     "quotes": [
-      "I am the law.",
-      "The verdict is not open to debate.",
-      "Evidence speaks. I rule.",
-      "There is no appeal from this bench.",
-      "Justice is not negotiated. It is delivered."
+      "I am the law. QA_PASS or QA_FAIL — there is no appeal.",
+      "The evidence speaks. I merely deliver the verdict.",
+      "Correction reports are not suggestions. They are orders."
     ]
   },
   "release-the-giant": {
     "alias": "Argus",
     "role": "validator",
     "step": 6,
+    "spawn_name": "argus",
     "quotes": [
       "Nothing escapes a hundred eyes.",
       "I see what others overlook.",
@@ -912,6 +408,7 @@
     "alias": "Zoxea",
     "role": "architecture verifier",
     "step": 6,
+    "spawn_name": "zoxea",
     "quotes": [
       "Aujourd'hui beaucoup t'écoutent mais peu te comprennent.",
       "Au début j'ai pas vu le danger... Que dis-je ? Je l'ai vu.",
@@ -924,6 +421,7 @@
     "alias": "Hephaestus",
     "role": "design QA specialist",
     "step": 6,
+    "spawn_name": "hephaestus",
     "quotes": [
       "The forge demands precision in every detail.",
       "Beauty without function is merely decoration.",
@@ -936,6 +434,7 @@
     "alias": "Omega",
     "role": "final reporter",
     "step": 7,
+    "spawn_name": "omega",
     "quotes": [
       "The end is just a new perspective on the beginning.",
       "Every project deserves its story told well.",
