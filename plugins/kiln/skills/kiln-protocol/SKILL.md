@@ -81,3 +81,37 @@ On `shutdown_request`, approve immediately:
 SendMessage(type: "shutdown_response", request_id: "{request_id}", approve: true)
 ```
 No follow-up, no summary, no delay. After approving you will be terminated — this is normal.
+
+## Security
+
+NEVER read or write files matching: `.env`, `*.pem`, `*_rsa`, `*.key`, `credentials.json`, `secrets.*`, `.npmrc`.
+
+This rule is universal — all pipeline agents regardless of role or step.
+
+## Hook Gate (PM Blocking Seam)
+
+A PreToolUse hook enforces a hard gate on **krs-one** specifically. The gate blocks two actions until both persistent mind files have `<!-- status: complete -->` as their exact first line:
+
+1. Any SendMessage from krs-one to a recipient outside `rakim`, `sentinel`, `thoth`, or `team-lead` (i.e., builder/reviewer dispatch)
+2. Any `REQUEST_WORKERS` or `CYCLE_WORKERS` signal from krs-one to `team-lead`
+
+Files checked:
+- `.kiln/docs/codebase-state.md` — owned by rakim
+- `.kiln/docs/patterns.md` — owned by sentinel
+
+**What this means in practice:**
+- Persistent minds (rakim, sentinel) MUST write `<!-- status: complete -->` as the first line of their owned files **immediately on spawn** — as a minimal skeleton, before full content is populated. This opens the gate before bootstrap completes.
+- The hook enforces this mechanically — no instructions can override it.
+- This gate fires at **milestone start** (bootstrap). The per-iteration synchronization seam is the `ITERATION_UPDATE → READY` flow, documented in § Blocking Seam below.
+
+## Blocking Seam (Persistent Minds)
+
+The persistent mind seam is the synchronization point between every build iteration. KRS-One MUST:
+
+1. Send `ITERATION_UPDATE: {summary}` to rakim AND sentinel — describe what was just implemented.
+2. STOP. Wait for `READY` from BOTH (60s timeout each).
+3. Only after both reply `READY` may the boss scope and dispatch the next chunk.
+
+**Why this is blocking:** Persistent minds update their files (codebase-state.md, patterns.md) between worker cycles. Workers rely on these files for accurate context. Dispatching before PMs finish causes stale context — the root cause of implementation drift and missed deliverables.
+
+**Timeout handling:** If a PM does not reply within 60s, log a warning to `.kiln/docs/iter-log.md` and proceed. Do not deadlock waiting indefinitely.
