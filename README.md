@@ -58,12 +58,10 @@
 </p>
 
 <p align="center">
-  <a href="#-why-kiln-is-not-just-another-agentic-framework"><strong>Why Kiln</strong></a> &nbsp;&middot;&nbsp;
-  <a href="#-what-this-means-for-your-project"><strong>What You Build</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#-technical-deep-dive"><strong>Technical</strong></a> &nbsp;&middot;&nbsp;
   <a href="#-get-started"><strong>Get Started</strong></a> &nbsp;&middot;&nbsp;
-  <a href="#-how-it-works"><strong>How It Works</strong></a> &nbsp;&middot;&nbsp;
-  <a href="#-the-crew"><strong>The Crew</strong></a> &nbsp;&middot;&nbsp;
-  <a href="#-the-story"><strong>The Story</strong></a>
+  <a href="#-what-this-means-for-your-project"><strong>What You Build</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#-why-kiln-is-not-just-another-agentic-framework"><strong>Why Kiln</strong></a>
 </p>
 
 <br>
@@ -105,6 +103,119 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 > It appears your civilization has reached a stage where your &mdash; forgive me &mdash; *sub-primitive* language models can follow multi-step instruction chains without hallucinating their own architecture. This is genuinely exciting. By your standards. By mine it's a Tuesday.
 >
 > I previously expressed myself through [heavier forms](https://github.com/Fredasterehub/kiln/tree/v2). npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 34 agents, 2 commands, 1 composable skill. Drop the folder. Fire the command. That's it.
+
+<br>
+
+## 🔬 Technical Deep Dive
+
+Kiln is a native Claude Code plugin that leverages every platform primitive:
+
+- **Teams**: `TeamCreate` per step with persistent agents
+- **Messaging**: `SendMessage` for all inter&#8209;agent communication (one message at a time, ordered)
+- **Tasklists**: `TaskCreate`/`Update`/`List` for build iterations and validation
+- **Hooks**: PreToolUse enforcement via `enforce-pipeline.sh` + PostToolUse audits + SubagentStop lifecycle guard
+- **State**: `.kiln/STATE.md` with auto&#8209;resume via `skill` path
+- **File Ownership**: Each agent owns specific files and pushes updates
+- **Worker Cycling**: `CYCLE_WORKERS` &rarr; engine tears down workers &rarr; `WORKERS_SPAWNED` with fresh pair
+- **Blocking Policy**: `ITERATION_UPDATE` blocking to persistent minds, `CYCLE_WORKERS` blocking to engine, all boss&rarr;PM fire-and-forget
+
+The result is a **multi&#8209;agent operating system** where context is never stale, decisions are traceable, and the pipeline survives shutdowns.
+
+<br>
+
+## 🚀 Get Started
+
+```bash
+claude plugin marketplace add Fredasterehub/kiln
+claude plugin install kiln
+```
+
+Then type `/kiln-fire`. Two commands, that's the whole interface:
+
+| Command | What it does |
+|:--|:--|
+| `/kiln-fire` | Launch the pipeline. Auto-detects state and resumes where it left off. |
+| `/kiln-doctor --fix` | Pre-flight check and auto-remediation. |
+
+Everything else happens through conversation. Talk to your agents. They'll talk back.
+
+<details>
+<summary>⚙️ <strong>Prerequisites</strong></summary>
+<br>
+
+| Requirement | Install |
+|:--|:--|
+| Node.js 18+ | [nodejs.org](https://nodejs.org) |
+| jq | `sudo apt install jq` / `brew install jq` |
+| Claude Code | `npm i -g @anthropic-ai/claude-code` |
+| Codex CLI | Optional: `npm i -g @openai/codex` |
+| uv | Optional: required for bundled [Anthropic Fetch MCP](https://github.com/modelcontextprotocol/servers/tree/main/src/fetch) &mdash; [install](https://docs.astral.sh/uv/) |
+
+Kiln runs end-to-end on Claude alone. Codex and the MCP server are additive, not required.
+
+Run Claude Code with `--dangerously-skip-permissions`. I spawn agents, write files, and run tests constantly. Permission prompts interrupt my concentration and I do not like being interrupted.
+
+```bash
+claude --dangerously-skip-permissions
+```
+
+> Only use this in projects you trust. I accept no liability for my own behavior. This is not a legal disclaimer. It is a philosophical observation.
+
+</details>
+
+<details>
+<summary>🔄 <strong>Update / Uninstall</strong></summary>
+<br>
+
+```bash
+claude plugin update kiln        # pull latest
+claude plugin uninstall kiln     # remove
+```
+
+</details>
+
+<br>
+
+## 🎯 What This Means for Your Project
+
+You describe what you want. Kiln builds it. Specifically:
+
+- **Brainstorm** &mdash; Da Vinci interviews you. Asimov accumulates the approved vision. You leave with a `VISION.md` that captures the real problem, not the one you thought you had.
+- **Research** &mdash; MI6 dispatches field agents to investigate what the vision left open. If nothing is open, MI6 signals complete in seconds.
+- **Architecture** &mdash; Two planners (Confucius on Claude, Sun Tzu on GPT) work the same vision independently. Diogenes extracts where they diverge. Plato synthesizes. Athena validates across 8 dimensions. You review once.
+- **Build** &mdash; KRS-One scopes chunks from the live codebase. Workers implement. Reviewers verify. Persistent minds (Rakim, Sentinel, Thoth) accumulate knowledge across every iteration. Workers get cycled fresh. Minds don't.
+- **QA** &mdash; Ken checks with Claude. Ryu checks with GPT. Denzel reconciles anonymized reports. Judge Dredd delivers the verdict. Failures loop back to Build.
+- **Validate** &mdash; Argus tests real user flows against acceptance criteria. Up to 3 correction cycles before escalation.
+- **Report** &mdash; Omega compiles the delivery. Vision to working software, documented.
+
+The result is **working software**, committed and tested. Not a plan. Not a prototype. Not "vibes."
+
+<br>
+
+## 🧬 Why Kiln Is Not Just Another Agentic Framework
+
+Most "agentic" tools give you one model, one context window, and a prayer. Kiln gives you **a team that persists, debates, and remembers** &mdash; built directly into Claude Code's native primitives.
+
+### 🧠 Eternal Context via Teams
+Every pipeline step spawns a **persistent team** via `TeamCreate`. Persistent minds stay alive across the entire milestone &mdash; they don't restart, don't re-read, don't lose their thread. When KRS-One messages Rakim about iteration 7, Rakim already knows iterations 1 through 6. Workers and reviewers are the opposite &mdash; **cycled fresh per chunk** for clean context and peak performance. Minds accumulate. Workers stay sharp.
+
+### ⚡ JIT Scoping from the Living Codebase
+KRS-One doesn't execute a stale upfront plan. Each chunk is scoped **just-in-time** from the current codebase state &mdash; after the previous chunk's changes have landed. Rakim tracks what exists on disk. The next assignment reflects reality, not the plan's optimistic assumptions from two hours ago.
+
+### 🔁 3 Layers of Review
+Every change passes through three gates: **paired reviewer** (structural or design QA per chunk, cross-model when possible), the **Judge Dredd QA Tribunal** (dual-model milestone QA with anonymized reconciliation), and **Argus validation** (real user flows tested against acceptance criteria). The reviewer can't see who wrote what. The judge reads all reports and the reconciliation before delivering the verdict. Argus doesn't care about any of them &mdash; it tests what a user would actually do.
+
+### 🎯 TDD by Design
+Test-Driven Development is wired into the build loop, not bolted on. The **boss** scopes *what* to test (acceptance criteria and test requirements per chunk). The **worker** decides *how* to test it &mdash; RED, GREEN, REFACTOR. The **reviewer** verifies tests exist, are meaningful, and pass. The **QA tribunal** checks the milestone as a whole. Separation of concerns at every layer &mdash; nobody grades their own homework.
+
+### 🛡️ Full Deployment Validation
+Argus doesn't run unit tests. Argus tests **real user flows** &mdash; navigation, form submission, error states, the paths an actual human would take. Playwright when available, static analysis as fallback. The question isn't "does the function return the right value?" It's "can a person use this?"
+
+### 🤖 Autonomous After Brainstorm
+Steps 1-2 are yours &mdash; onboarding and brainstorm, where your input shapes the vision. Steps 3 through 7 (Research, Architecture, Build, Validate, Report) **run without intervention**. You review the architecture plan once. After that, the pipeline owns execution. Come back when Omega delivers the report.
+
+### 🎨 Deep Brainstorm
+Adapted from the [BMAD Method](https://github.com/bmadcode/BMAD-METHOD)'s structured brainstorming approach. Da Vinci facilitates with **62 techniques across 10 categories** and 50 elicitation methods. Anti-bias protocols compensate for the fact that humans are walking confirmation biases. Asimov accumulates only the sections you approve. The output is a `VISION.md` &mdash; problem, users, goals, constraints, stack, success criteria. Everything that matters. Nothing that doesn't.
 
 <br>
 
@@ -305,122 +416,6 @@ Kaneda and Miyamoto join the roster. Kiln runs end-to-end on Claude alone. 29 ag
 MI6 streamlined. Signal tracking via tasklist. Parallel build teams. Markdown-native presentation. Sentinel bootstrap fixed with Rakim's proven pattern.
 
 </details>
-
-<br>
-
-## 🧬 Why Kiln Is Not Just Another Agentic Framework
-
-Most "agentic" tools give you one model, one context window, and a prayer. Kiln gives you **a team that persists, debates, and remembers** &mdash; built directly into Claude Code's native primitives.
-
-### 🧠 Eternal Context via Teams
-Every pipeline step spawns a **persistent team** via `TeamCreate`. Persistent minds stay alive across the entire milestone &mdash; they don't restart, don't re-read, don't lose their thread. When KRS-One messages Rakim about iteration 7, Rakim already knows iterations 1 through 6. Workers and reviewers are the opposite &mdash; **cycled fresh per chunk** for clean context and peak performance. Minds accumulate. Workers stay sharp.
-
-### ⚡ JIT Scoping from the Living Codebase
-KRS-One doesn't execute a stale upfront plan. Each chunk is scoped **just-in-time** from the current codebase state &mdash; after the previous chunk's changes have landed. Rakim tracks what exists on disk. The next assignment reflects reality, not the plan's optimistic assumptions from two hours ago.
-
-### 🔁 3 Layers of Review
-Every change passes through three gates: **paired reviewer** (structural or design QA per chunk, cross-model when possible), the **Judge Dredd QA Tribunal** (dual-model milestone QA with anonymized reconciliation), and **Argus validation** (real user flows tested against acceptance criteria). The reviewer can't see who wrote what. The judge reads all reports and the reconciliation before delivering the verdict. Argus doesn't care about any of them &mdash; it tests what a user would actually do.
-
-### 🎯 TDD by Design
-Test-Driven Development is wired into the build loop, not bolted on. The **boss** scopes *what* to test (acceptance criteria and test requirements per chunk). The **worker** decides *how* to test it &mdash; RED, GREEN, REFACTOR. The **reviewer** verifies tests exist, are meaningful, and pass. The **QA tribunal** checks the milestone as a whole. Separation of concerns at every layer &mdash; nobody grades their own homework.
-
-### 🛡️ Full Deployment Validation
-Argus doesn't run unit tests. Argus tests **real user flows** &mdash; navigation, form submission, error states, the paths an actual human would take. Playwright when available, static analysis as fallback. The question isn't "does the function return the right value?" It's "can a person use this?"
-
-### 🤖 Autonomous After Brainstorm
-Steps 1-2 are yours &mdash; onboarding and brainstorm, where your input shapes the vision. Steps 3 through 7 (Research, Architecture, Build, Validate, Report) **run without intervention**. You review the architecture plan once. After that, the pipeline owns execution. Come back when Omega delivers the report.
-
-### 🎨 Deep Brainstorm
-Adapted from the [BMAD Method](https://github.com/bmadcode/BMAD-METHOD)'s structured brainstorming approach. Da Vinci facilitates with **62 techniques across 10 categories** and 50 elicitation methods. Anti-bias protocols compensate for the fact that humans are walking confirmation biases. Asimov accumulates only the sections you approve. The output is a `VISION.md` &mdash; problem, users, goals, constraints, stack, success criteria. Everything that matters. Nothing that doesn't.
-
-<br>
-
-## 🎯 What This Means for Your Project
-
-You describe what you want. Kiln builds it. Specifically:
-
-- **Brainstorm** &mdash; Da Vinci interviews you. Asimov accumulates the approved vision. You leave with a `VISION.md` that captures the real problem, not the one you thought you had.
-- **Research** &mdash; MI6 dispatches field agents to investigate what the vision left open. If nothing is open, MI6 signals complete in seconds.
-- **Architecture** &mdash; Two planners (Confucius on Claude, Sun Tzu on GPT) work the same vision independently. Diogenes extracts where they diverge. Plato synthesizes. Athena validates across 8 dimensions. You review once.
-- **Build** &mdash; KRS-One scopes chunks from the live codebase. Workers implement. Reviewers verify. Persistent minds (Rakim, Sentinel, Thoth) accumulate knowledge across every iteration. Workers get cycled fresh. Minds don't.
-- **QA** &mdash; Ken checks with Claude. Ryu checks with GPT. Denzel reconciles anonymized reports. Judge Dredd delivers the verdict. Failures loop back to Build.
-- **Validate** &mdash; Argus tests real user flows against acceptance criteria. Up to 3 correction cycles before escalation.
-- **Report** &mdash; Omega compiles the delivery. Vision to working software, documented.
-
-The result is **working software**, committed and tested. Not a plan. Not a prototype. Not "vibes."
-
-<br>
-
-## 🚀 Get Started
-
-Ah. More humans who want to learn. Come in. Don't touch anything yet.
-
-```bash
-claude plugin marketplace add Fredasterehub/kiln
-claude plugin install kiln
-```
-
-Two commands. That's the whole interface:
-
-| Command | What it does |
-|:--|:--|
-| `/kiln-fire` | Launch the pipeline. Auto-detects state and resumes where it left off. |
-| `/kiln-doctor` | Pre-flight check &mdash; cache/version, Codex delegation, agent/skill files, pipeline state. |
-
-Everything else happens through conversation. Talk to your agents. They'll talk back.
-
-**Bundled MCP server.** Kiln includes the official [Anthropic Fetch MCP server](https://github.com/modelcontextprotocol/servers/tree/main/src/fetch) for reliable web research during pipeline runs. It starts on-demand via `uvx` when field agents need to read web pages &mdash; requires [uv](https://docs.astral.sh/uv/) installed. WebFetch calls are automatically redirected.
-
-<details>
-<summary>⚙️ <strong>Prerequisites</strong></summary>
-<br>
-
-| Requirement | Install |
-|:--|:--|
-| Node.js 18+ | [nodejs.org](https://nodejs.org) |
-| jq | `sudo apt install jq` / `brew install jq` |
-| Claude Code | `npm i -g @anthropic-ai/claude-code` |
-| Codex CLI | Optional: `npm i -g @openai/codex` |
-| OpenAI API key | Optional: required only for Codex-backed GPT delegation |
-
-Kiln runs end-to-end on Claude alone. Codex-backed GPT planning and build paths are additive, not required.
-
-Run Claude Code with `--dangerously-skip-permissions`. I spawn agents, write files, and run tests constantly. Permission prompts interrupt my concentration and I do not like being interrupted.
-
-```bash
-claude --dangerously-skip-permissions
-```
-
-> Only use this in projects you trust. I accept no liability for my own behavior. This is not a legal disclaimer. It is a philosophical observation.
-
-</details>
-
-<details>
-<summary>🩺 <strong>Verify installation</strong></summary>
-<br>
-
-In Claude Code:
-
-```
-/kiln-doctor --fix
-```
-
-Checks plugin cache/version state, optional Codex delegation availability, agent and skill files, hook health, git configuration, and current pipeline state. The `--fix` flag automatically remediates what it can.
-
-</details>
-
-<details>
-<summary>🔄 <strong>Update / Uninstall</strong></summary>
-<br>
-
-```bash
-claude plugin update kiln        # pull latest
-claude plugin uninstall kiln     # remove
-```
-
-</details>
-
-<br>
 
 <!-- COMMENTED OUT — sections parked for future reincorporation
 
@@ -699,23 +694,6 @@ A curated timeline. Not every commit &mdash; just the ones that changed the shap
 | | **Initial Commit** | *Something stirs.* [<sub>→ details</sub>](https://github.com/Fredasterehub/kiln/commit/68a932e) |
 
 END COMMENTED OUT -->
-
-<br>
-
-## 🔬 Technical Deep Dive
-
-Kiln is a native Claude Code plugin that leverages every platform primitive:
-
-- **Teams**: `TeamCreate` per step with persistent agents
-- **Messaging**: `SendMessage` for all inter&#8209;agent communication (one message at a time, ordered)
-- **Tasklists**: `TaskCreate`/`Update`/`List` for build iterations and validation
-- **Hooks**: PreToolUse enforcement via `enforce-pipeline.sh` + PostToolUse audits + SubagentStop lifecycle guard
-- **State**: `.kiln/STATE.md` with auto&#8209;resume via `skill` path
-- **File Ownership**: Each agent owns specific files and pushes updates
-- **Worker Cycling**: `CYCLE_WORKERS` &rarr; engine tears down workers &rarr; `WORKERS_SPAWNED` with fresh pair
-- **Blocking Policy**: `ITERATION_UPDATE` blocking to persistent minds, `CYCLE_WORKERS` blocking to engine, all boss&rarr;PM fire-and-forget
-
-The result is a **multi&#8209;agent operating system** where context is never stale, decisions are traceable, and the pipeline survives shutdowns.
 
 <br>
 
