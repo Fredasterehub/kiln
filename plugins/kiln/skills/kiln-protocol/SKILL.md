@@ -18,7 +18,7 @@ Send via `SendMessage(type: "message", recipient: "team-lead", content: "SIGNAL:
 |--------|---------|
 | `READY: {summary}` | PM bootstrap complete |
 | `REQUEST_WORKERS: {name} (subagent_type: {type}), ...` | Boss needs workers spawned |
-| `CYCLE_WORKERS: scenario={default\|fallback\|ui}, reason={reason}, chunk={summary}` | Boss requests fresh worker pair (blocking — waits for WORKERS_SPAWNED) |
+| `CYCLE_WORKERS: scenario={default\|fallback\|ui}, duo_id={duo_id}, coder_name={name}, reviewer_name={name}, reason={reason}, chunk={summary}` | Boss requests fresh worker pair (blocking — waits for WORKERS_SPAWNED) |
 | `WORKERS_SPAWNED: {builder_name}, {reviewer_name}` | Engine confirms new worker pair ready |
 | `WORKERS_REJECTED: {reason}` | Engine rejected REQUEST_WORKERS |
 | `ONBOARDING_COMPLETE` | Step 1 done (alpha) |
