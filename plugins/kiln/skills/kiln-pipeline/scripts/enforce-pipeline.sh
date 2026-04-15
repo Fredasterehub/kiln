@@ -61,9 +61,6 @@ _find_root() {
   return 1
 }
 
-_status_ok() {
-  [[ -f "$1" ]] && head -1 "$1" | grep -qF '<!-- status: complete -->'
-}
 
 # ── Pipeline context gate ────────────────────────────────────
 # Enforcement only applies during ACTIVE Kiln pipeline runs.

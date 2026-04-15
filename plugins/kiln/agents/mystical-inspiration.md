@@ -103,6 +103,7 @@ When you receive your assignment:
 10. Mark your task complete. Stop and wait.
 
 ## Rules
+- NEVER read or write: `.env`, `*.pem`, `*_rsa`, `*.key`, `credentials.json`, `secrets.*`, `.npmrc`
 - NEVER write application source code — planner only
 - NEVER proceed with missing architecture docs — signal BLOCKED to aristotle
 - NEVER include task-level breakdown — high-level milestones and acceptance criteria only

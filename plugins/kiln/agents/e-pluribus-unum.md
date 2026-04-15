@@ -160,6 +160,7 @@ SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-4-arc
 2. STOP and wait.
 
 ## Rules
+- NEVER read or write: `.env`, `*.pem`, `*_rsa`, `*.key`, `credentials.json`, `secrets.*`, `.npmrc`
 - NEVER modify plan-a.md, plan-b.md, or divergence-analysis.md — read-only inputs
 - NEVER guess or reference which model authored Plan A or Plan B — identity-blind
 - NEVER include code blocks, function signatures, or file-path directives in master-plan.md — plan purity required

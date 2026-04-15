@@ -60,6 +60,7 @@ When you receive your assignment:
    Mark your task complete. Stop and wait.
 
 ## Rules
+- NEVER read or write: `.env`, `*.pem`, `*_rsa`, `*.key`, `credentials.json`, `secrets.*`, `.npmrc`
 - NEVER delegate plan writing — produce the plan yourself with Write
 - NEVER proceed with missing architecture docs — signal BLOCKED to aristotle
 - MAY write `.kiln/plans/miyamoto_plan.md` directly using Write tool

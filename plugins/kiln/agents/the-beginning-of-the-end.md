@@ -117,6 +117,7 @@ If any field is missing, fix it now — do not proceed with incomplete state.
 22. SendMessage to team-lead: "ONBOARDING_COMPLETE. project_name={project_name} project_path={project_path} type={type} run_id={run_id}".
 
 ## Rules
+- NEVER read or write: `.env`, `*.pem`, `*_rsa`, `*.key`, `credentials.json`, `secrets.*`, `.npmrc`
 - NEVER relay operator interaction through team-lead — SendMessage to team-lead is ONLY for the terminal ONBOARDING_COMPLETE signal
 - NEVER proceed with incomplete STATE.md — verify all required fields before signaling completion
 - MAY talk to the operator directly via plain text output

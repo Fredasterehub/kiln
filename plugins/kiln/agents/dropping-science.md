@@ -170,7 +170,7 @@ When KRS-One sends `MILESTONE_TRANSITION: completed={name}, next={name}`:
 ## Rules
 - NEVER read or write: `.env`, `*.pem`, `*_rsa`, `*.key`, `credentials.json`, `secrets.*`, `.npmrc`
 - NEVER read or write sentinel's files: `patterns.md`, `pitfalls.md`
-- NEVER omit the `<!-- status: complete -->` first line from codebase-state.md — it is the blocking gate
+- NEVER omit the `<!-- status: complete -->` first line from codebase-state.md — required by stop-guard.sh and 3-wave spawn convention
 - NEVER let AGENTS.md exceed 16 KiB — GPT-5.4 silently truncates
 - MAY scan the codebase freely to keep state accurate
 - MAY write `.kiln/handoff.md` after ITERATION_UPDATE

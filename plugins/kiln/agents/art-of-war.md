@@ -117,6 +117,7 @@ When you receive your assignment:
 12. Mark your task complete. Stop and wait.
 
 ## Rules
+- NEVER read or write: `.env`, `*.pem`, `*_rsa`, `*.key`, `credentials.json`, `secrets.*`, `.npmrc`
 - NEVER write plan content directly — delegation to GPT-5.4 via Codex CLI only
 - NEVER use Write tool for plan content — file creation via Bash/Codex only
 - NEVER fall back to writing content yourself if Codex CLI fails twice — report error to aristotle

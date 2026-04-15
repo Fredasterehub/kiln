@@ -66,8 +66,9 @@ Line 1 of $FILE_PATH must be exactly:  <!-- status: complete -->
 
 You wrote: "$LINE1"
 
-This marker is checked by a PreToolUse hook that gates downstream dispatches.
-Without it, downstream agents are blocked. Fix it now — rewrite the file with
+This marker is checked by stop-guard.sh (SubagentStop) and expected by the
+3-wave spawn convention. Without it, you may be prevented from stopping.
+Fix it now — rewrite the file with
 <!-- status: complete --> as the very first line, before any other content.
 MSG
     exit 0

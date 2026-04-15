@@ -88,21 +88,16 @@ NEVER read or write files matching: `.env`, `*.pem`, `*_rsa`, `*.key`, `credenti
 
 This rule is universal — all pipeline agents regardless of role or step.
 
-## Hook Gate (PM Blocking Seam)
+## Status Marker Convention
 
-A PreToolUse hook enforces a hard gate on **krs-one** specifically. The gate blocks two actions until both persistent mind files have `<!-- status: complete -->` as their exact first line:
+Persistent minds MUST write `<!-- status: complete -->` as the exact first line of their owned files **immediately on spawn** — a minimal skeleton before full content is populated.
 
-1. Any SendMessage from krs-one to a recipient outside `rakim`, `sentinel`, `thoth`, or `team-lead` (i.e., builder/reviewer dispatch)
-2. Any `REQUEST_WORKERS` or `CYCLE_WORKERS` signal from krs-one to `team-lead`
-
-Files checked:
+Files and owners:
 - `.kiln/docs/codebase-state.md` — owned by rakim
 - `.kiln/docs/patterns.md` — owned by sentinel
+- `.kiln/docs/architecture.md` — owned by numerobis
 
-**What this means in practice:**
-- Persistent minds (rakim, sentinel) MUST write `<!-- status: complete -->` as the first line of their owned files **immediately on spawn** — as a minimal skeleton, before full content is populated. This opens the gate before bootstrap completes.
-- The hook enforces this mechanically — no instructions can override it.
-- This gate fires at **milestone start** (bootstrap). The per-iteration synchronization seam is the `ITERATION_UPDATE → READY` flow, documented in § Blocking Seam below.
+**Enforcement:** A SubagentStop hook (`stop-guard.sh`) prevents these agents from stopping before the marker is written. This is an advisory guard — it warns and blocks the stop, but does not prevent dispatch. The primary guarantee is the 3-wave spawn pattern: persistent minds bootstrap in Wave 1, the boss spawns in Wave 2, workers in Wave 3. By design, PMs are ready before the boss can dispatch.
 
 ## Blocking Seam (Persistent Minds)
 

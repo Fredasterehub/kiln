@@ -72,6 +72,7 @@ When you receive your assignment:
 7. Mark your task complete. Stop and wait.
 
 ## Rules
+- NEVER read or write: `.env`, `*.pem`, `*_rsa`, `*.key`, `credentials.json`, `secrets.*`, `.npmrc`
 - NEVER issue conditional verdicts — binary PASS or FAIL only
 - NEVER cite vague failures — every failure must reference specific milestones and be actionable
 - NEVER provide remediation without specifying exactly which dependency, milestone, or criterion to change

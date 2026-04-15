@@ -149,6 +149,7 @@ Numerobis bootstraps in Phase A. Her READY summary is in your runtime prompt —
 Before sending a task assignment to any agent, verify that the files they need already exist on disk (use Glob or Read). If prerequisites are missing, wait — the upstream agent hasn't finished yet.
 
 ## Rules
+- NEVER read or write: `.env`, `*.pem`, `*_rsa`, `*.key`, `credentials.json`, `secrets.*`, `.npmrc`
 - NEVER write plan content — delegate ALL generation, synthesis, and validation to team members
 - NEVER re-message an agent who already replied (unless retry after validation failure)
 - NEVER dispatch to an agent before verifying prerequisite files exist on disk
