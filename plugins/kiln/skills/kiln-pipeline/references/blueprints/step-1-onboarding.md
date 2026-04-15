@@ -9,13 +9,13 @@
 
 ## Agent Roster
 
-| Name | Role | Phase | Model |
-|------|------|-------|-------|
-| mnemosyne | Persistent mind. Identity scan on spawn (<2s). Coordinates deep scanning via scouts if alpha requests it. | A | opus |
-| alpha | Boss. Greets operator, gathers project logistics (not vision), creates .kiln/ structure. Requests deep scan if brownfield. | B (INTERACTIVE) | opus |
-| maiev | Anatomy scout. Structure, directories, modules, entry points. Reports to mnemosyne. | C | sonnet |
-| curie | Health scout. Dependencies, tests, CI/CD, build system, tech debt. Reports to mnemosyne. | C | sonnet |
-| medivh | Nervous system scout. APIs, data flow, integrations, events, state. Reports to mnemosyne. | C | sonnet |
+| Name | Agent Type | Role | Phase | Model |
+|------|------------|------|-------|-------|
+| mnemosyne | the-discovery-begins | Persistent mind. Identity scan on spawn (<2s). Coordinates deep scanning via scouts if alpha requests it. | A | opus |
+| alpha | the-beginning-of-the-end | Boss. Greets operator, gathers project logistics (not vision), creates .kiln/ structure. Requests deep scan if brownfield. | B (INTERACTIVE) | opus |
+| maiev | the-anatomist | Anatomy scout. Structure, directories, modules, entry points. Reports to mnemosyne. | C | sonnet |
+| curie | trust-the-science | Health scout. Dependencies, tests, CI/CD, build system, tech debt. Reports to mnemosyne. | C | sonnet |
+| medivh | follow-the-scent | Nervous system scout. APIs, data flow, integrations, events, state. Reports to mnemosyne. | C | sonnet |
 
 ## Three-Phase Spawn
 

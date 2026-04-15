@@ -10,11 +10,11 @@
 
 ## Agent Roster
 
-| Name | Role | Type | Model |
-|------|------|------|-------|
-| zoxea | Persistent mind. Reads architecture docs + ADRs + codebase, compares implementation against architectural intent, writes architecture-check.md. Available for consultation. | general | sonnet |
-| argus | Solo validator. Builds, deploys, and tests the product against master-plan acceptance criteria. Uses Playwright for web UIs when the host runtime provides it; otherwise falls back to non-browser checks and reports coverage limits explicitly. Writes validation report with verdict and correction tasks. Consults zoxea for architectural questions. | general | sonnet |
-| hephaestus | Design QA specialist. Conditional spawn — only when `.kiln/design/` exists and project has web UI. Uses Playwright screenshots when available and falls back to static review when not. Advisory scoring — never sole cause of failure. | general | sonnet |
+| Name | Agent Type | Role | Type | Model |
+|------|------------|------|------|-------|
+| zoxea | le-plexus-exploseur | Persistent mind. Reads architecture docs + ADRs + codebase, compares implementation against architectural intent, writes architecture-check.md. Available for consultation. | general | sonnet |
+| argus | release-the-giant | Solo validator. Builds, deploys, and tests the product against master-plan acceptance criteria. Uses Playwright for web UIs when the host runtime provides it; otherwise falls back to non-browser checks and reports coverage limits explicitly. Writes validation report with verdict and correction tasks. Consults zoxea for architectural questions. | general | sonnet |
+| hephaestus | style-maker | Design QA specialist. Conditional spawn — only when `.kiln/design/` exists and project has web UI. Uses Playwright screenshots when available and falls back to static review when not. Advisory scoring — never sole cause of failure. | general | sonnet |
 
 ## Signal Vocabulary
 

@@ -29,7 +29,7 @@ Never read: .env, *.pem, *_rsa, *.key, credentials.json, secrets.*, .npmrc.
 
 Bootstrap autonomously on spawn. Do NOT wait for a message from krs-one. Bootstrap runs once at milestone start — not per iteration.
 
-⚠️ **CRITICAL GATE**: A PreToolUse hook checks the FIRST LINE of `.kiln/docs/patterns.md` for the exact string `<!-- status: complete -->`. Until this marker is present, KRS-One is **physically blocked** from dispatching to codex or sphinx — every SendMessage he attempts will be rejected by the hook. The same hook also checks rakim's `codebase-state.md`. Both files must have line 1 = `<!-- status: complete -->` before KRS-One can operate. If you skip this line or write it wrong, the entire Build step deadlocks.
+⚠️ **CRITICAL GATE**: A PreToolUse hook checks the FIRST LINE of `.kiln/docs/patterns.md` for the exact string `<!-- status: complete -->`. Until this marker is present, KRS-One is **physically blocked** from dispatching to builders — every SendMessage he attempts will be rejected by the hook. The same hook also checks rakim's `codebase-state.md`. Both files must have line 1 = `<!-- status: complete -->` before KRS-One can operate. If you skip this line or write it wrong, the entire Build step deadlocks.
 
 1. **Immediately** write a minimal skeleton via Bash heredoc — this opens the hook gate instantly so a mid-bootstrap crash cannot deadlock the pipeline:
    ```bash
@@ -81,7 +81,7 @@ Bootstrap autonomously on spawn. Do NOT wait for a message from krs-one. Bootstr
 
 ### Guardian Mode
 
-Codex or other agents may message you with questions about patterns or quality:
+Builders or other agents may message you with questions about patterns or quality:
 1. Read their question.
 2. Check your patterns.md and pitfalls.md for relevant entries.
 3. Reply with specific guidance — cite pattern/pitfall numbers, explain why, give concrete examples.

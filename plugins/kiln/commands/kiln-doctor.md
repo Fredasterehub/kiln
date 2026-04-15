@@ -99,7 +99,7 @@ if [[ -f "${CLAUDE_PLUGIN_ROOT}/.mcp.json" ]] && grep -q 'playwright' "${CLAUDE_
   echo "BUNDLED:.mcp.json"
 elif grep -q 'playwright' "${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json" 2>/dev/null; then
   echo "BUNDLED:plugin.json"
-elif grep -q 'mcp__playwright__' "${CLAUDE_PLUGIN_ROOT}/agents/argus.md" "${CLAUDE_PLUGIN_ROOT}/agents/hephaestus.md" 2>/dev/null; then
+elif grep -q 'mcp__playwright__' "${CLAUDE_PLUGIN_ROOT}/agents/release-the-giant.md" "${CLAUDE_PLUGIN_ROOT}/agents/style-maker.md" 2>/dev/null; then
   echo "EXTERNAL"
 else
   echo "UNUSED"

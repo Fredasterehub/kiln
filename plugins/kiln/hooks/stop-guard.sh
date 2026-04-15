@@ -45,12 +45,14 @@ _STAGE=$(grep -oP '(?<=\*\*stage\*\*: )\S+' "$_STATE" 2>/dev/null || true)
 
 # Only gate known Kiln pipeline agents
 case "$AGENT" in
-  alpha|mnemosyne|maiev|curie|medivh|\
-  da-vinci|clio|\
-  mi6|field-agent|\
-  aristotle|numerobis|confucius|sun-tzu|plato|athena|\
-  krs-one|rakim|sentinel|thoth|codex|daft|kaneda|clair|miyamoto|sphinx|punk|tetsuo|obscur|\
-  zoxea|argus|hephaestus|omega)
+  the-beginning-of-the-end|the-discovery-begins|the-anatomist|trust-the-science|follow-the-scent|\
+  the-creator|the-foundation|\
+  alpha-team-deploy|unit-deployed|\
+  the-plan-maker|pitie-pas-les-crocos|mystical-inspiration|art-of-war|divergences-converge|e-pluribus-unum|straight-outta-olympia|gracefully-degrading|\
+  bossman|dropping-science|algalon-the-observer|lore-keepah|dial-a-coder|backup-coder|la-peintresse|critical-drinker|the-curator|\
+  team-red|team-blue|the-negotiator|i-am-the-law|\
+  release-the-giant|le-plexus-exploseur|style-maker|\
+  the-end-of-the-beginning)
     ;; # known agent — check deliverable
   *)
     exit 0 ;; # not a Kiln agent, allow stop
@@ -79,21 +81,21 @@ esac
 # Terminal signals (MILESTONE_COMPLETE, MILESTONE_TRANSITION) are caught
 # above — persistent minds can always stop at milestone boundaries.
 case "$AGENT" in
-  rakim)
+  dropping-science)
     if [[ -f "$ROOT/.kiln/docs/codebase-state.md" ]]; then
       head -1 "$ROOT/.kiln/docs/codebase-state.md" | grep -qF '<!-- status: complete -->' && exit 0
     fi
     echo "You are stopping but codebase-state.md is missing or has no <!-- status: complete --> marker on line 1. Write your state file before stopping." >&2
     exit 2
     ;;
-  sentinel)
+  algalon-the-observer)
     if [[ -f "$ROOT/.kiln/docs/patterns.md" ]]; then
       head -1 "$ROOT/.kiln/docs/patterns.md" | grep -qF '<!-- status: complete -->' && exit 0
     fi
     echo "You are stopping but patterns.md is missing or has no <!-- status: complete --> marker on line 1. Write your patterns file before stopping." >&2
     exit 2
     ;;
-  numerobis)
+  pitie-pas-les-crocos)
     if [[ -f "$ROOT/.kiln/docs/architecture.md" ]]; then
       head -1 "$ROOT/.kiln/docs/architecture.md" | grep -qF '<!-- status: complete -->' && exit 0
     fi
@@ -102,9 +104,9 @@ case "$AGENT" in
     ;;
 esac
 
-# Clio: if SERIALIZE_AND_SHUTDOWN was requested, must have delivered
+# the-foundation: if SERIALIZE_AND_SHUTDOWN was requested, must have delivered
 case "$AGENT" in
-  clio)
+  the-foundation)
     # Check transcript for SERIALIZE_AND_SHUTDOWN request
     TRANSCRIPT=$(echo "$INPUT" | jq -r '.agent_transcript_path // ""')
     if [[ -f "$TRANSCRIPT" ]] && grep -qF 'SERIALIZE_AND_SHUTDOWN' "$TRANSCRIPT"; then
@@ -119,7 +121,7 @@ esac
 
 # Builders: if they received APPROVED, must report IMPLEMENTATION_COMPLETE
 case "$AGENT" in
-  codex|daft|kaneda|clair|miyamoto)  # daft is dormant but kept for defensive safety
+  dial-a-coder|backup-coder|la-peintresse)
     TRANSCRIPT=$(echo "$INPUT" | jq -r '.agent_transcript_path // ""')
     if [[ -f "$TRANSCRIPT" ]] && grep -qF 'APPROVED' "$TRANSCRIPT"; then
       if echo "$LAST_MSG" | grep -qF 'IMPLEMENTATION_COMPLETE'; then

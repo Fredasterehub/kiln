@@ -1,5 +1,5 @@
 ---
-name: sphinx
+name: critical-drinker
 description: >-
   Kiln pipeline structural reviewer (opus). Checks builds, tests, and acceptance
   criteria after implementation. Verdict: APPROVED or REJECTED. Primary reviewer

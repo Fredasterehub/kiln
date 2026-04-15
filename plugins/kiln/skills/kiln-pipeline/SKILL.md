@@ -138,7 +138,7 @@ The blueprint tells you WHO to spawn and in which PHASE. The agent `.md` files (
 **Before creating the team**, render the step's transition. Visual vocabulary from `lore-engine.md` and `brand.md` on transitions, exact formats in § Engine Banners. Two parts:
 
 1. **Spinner install + banner output** — Write `settings.local.json` via Bash heredoc to install spinner verbs, then output the transition banner as markdown text. For Build iterations, output the kill streak banner format instead of the standard transition.
-2. **Spawning indicator** — markdown block listing agents being spawned.
+2. **Spawning indicator** — markdown block listing agents being spawned. Format per agent: `` → `{spawn_name}` (`{agent_type}`) — "{personality_quote}" ``. See `lore-engine.md` for full examples.
 
 **No extra narration around the banner.** The banner text IS the presentation. Any surrounding summary should add new information, not repeat the banner.
 
@@ -154,7 +154,7 @@ You are the conductor — you spawn agents and wait for signals. You never perfo
 
 Follow `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` § "Three-Phase Spawn" exactly. The engine-specific additions are:
 
-1. **Build-step worker validation** (Step 5): validate every REQUEST_WORKERS payload against the legal builder+reviewer pairs (codex+sphinx, kaneda+sphinx, clair+obscur). If invalid, send WORKERS_REJECTED to the boss. See team-protocol.md § Build-Step Worker Validation for the full table and rules.
+1. **Build-step worker validation** (Step 5): validate every REQUEST_WORKERS payload against the legal builder+reviewer pairs (dial-a-coder+critical-drinker, backup-coder+critical-drinker, la-peintresse+the-curator). If invalid, send WORKERS_REJECTED to the boss. See team-protocol.md § Build-Step Worker Validation for the full table and rules.
 2. **CYCLE_WORKERS protocol** (below): mid-milestone worker cycling initiated by KRS-One.
 
 #### CYCLE_WORKERS — Mid-Milestone Worker Cycling (Step 5 Only)
@@ -163,18 +163,18 @@ During a milestone, KRS-One may request fresh workers between iterations via `CY
 
 **CYCLE_WORKERS payload format:**
 ```
-CYCLE_WORKERS: scenario={default|fallback|ui}, reason="{why cycling}", chunk="{chunk summary}"
+CYCLE_WORKERS: scenario={default|fallback|ui}, duo_id={duo_id}, coder_name={name}, reviewer_name={name}, reason="{why cycling}", chunk="{chunk summary}"
 ```
 
 **Engine protocol on receiving CYCLE_WORKERS:**
 
 1. **Validate scenario** — map to builder+reviewer pair:
 
-   | Scenario | Builder | Reviewer |
-   |----------|---------|----------|
-   | default | codex | sphinx |
-   | fallback | kaneda | sphinx |
-   | ui | clair | obscur |
+   | Scenario | Builder Type | Reviewer Type |
+   |----------|-------------|---------------|
+   | default | dial-a-coder | critical-drinker |
+   | fallback | backup-coder | critical-drinker |
+   | ui | la-peintresse | the-curator |
 
    If the scenario is unrecognized, reject:
    ```
@@ -183,14 +183,14 @@ CYCLE_WORKERS: scenario={default|fallback|ui}, reason="{why cycling}", chunk="{c
 
 2. **Shutdown current workers** — send `shutdown_request` to the current builder and reviewer (if any exist). Wait for `shutdown_response` or `teammate_terminated` from both (60s timeout). Force-terminate on timeout. Do NOT shut down persistent minds or KRS-One.
 
-3. **Spawn fresh pair** — spawn the new builder+reviewer on the existing team using the same validation rules as Phase C. Use canonical type names (`name: "codex"`, not cosmetic names). Each fresh worker starts with a clean context — this is the point of cycling.
+3. **Spawn fresh pair** — spawn the new builder+reviewer on the existing team. Use boss-selected duo names from duo-pool.md: `name` is the character's spawn name for this cycle (e.g., `tintin`), `subagent_type` is the agent type template (e.g., `kiln:dial-a-coder`). Each fresh worker starts with a clean context — this is the point of cycling.
 
 4. **Confirm to KRS-One** — send WORKERS_SPAWNED with the new agent names:
    ```
    SendMessage(
      type: "message",
      recipient: "krs-one",
-     content: "WORKERS_SPAWNED: {builder_name} (subagent_type: {builder_type}), {reviewer_name} (subagent_type: {reviewer_type}). Fresh context, awaiting assignment."
+     content: "WORKERS_SPAWNED: duo_id={duo_id}, {builder_name} (subagent_type: {builder_type}), {reviewer_name} (subagent_type: {reviewer_type}). Fresh context, awaiting assignment."
    )
    ```
 
@@ -200,6 +200,7 @@ CYCLE_WORKERS: scenario={default|fallback|ui}, reason="{why cycling}", chunk="{c
    ```
 
 **CYCLE_WORKERS vs REQUEST_WORKERS:** REQUEST_WORKERS is the initial Phase C spawn at the start of build. CYCLE_WORKERS is the mid-milestone replacement that shuts down existing workers first. Both use the same scenario validation table. The key difference: CYCLE_WORKERS always sends `shutdown_request` to existing workers before spawning, and it is initiated by KRS-One (not as a response to an initial team setup).
+See `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/duo-pool.md` for the full pool table and rotation rules.
 
 #### Spawn Parameters
 
@@ -207,16 +208,16 @@ For every agent, use ALL of these parameters:
 
 ```
 Agent(
-  name: "{agent_name}",           # from blueprint roster — EXACT name, no prefix
+  name: "{spawn_name}",           # who the agent IS this cycle — from duo pool or blueprint roster
   description: "{personality}",    # random quote from agents.json — vary each spawn
   team_name: "{team_name}",       # the team from step 2 — REQUIRED
-  subagent_type: "{agent_name}",  # matches the .md file in agents/
+  subagent_type: "{agent_type}",  # the .md template — what the agent IS (e.g., kiln:dial-a-coder)
   prompt: "<lean runtime prompt>",
   run_in_background: true/false,  # interactive steps (1,2,4): boss=false; background steps (3,5,6,7): true
 )
 ```
 
-**Naming**: The `name` parameter controls what the operator sees in the UI header for every agent spawn. It should read like a character entering the scene — just their name and personality quote. Adding prefixes, namespaces, or team identifiers to `name` pollutes the operator's view with plumbing they don't need. The blueprint roster has the exact names — use them as-is.
+**Naming**: The `name` parameter is who the agent IS this cycle — the character entering the scene. For persistent agents and bosses, `name` is a fixed, well-known spawn name defined in the step blueprint (e.g., `krs-one`, `aristotle`). For duo pool workers, `name` is the boss-selected spawn name (e.g., `tintin`, `mario`) while `subagent_type` is the agent type template (e.g., `kiln:dial-a-coder`). Never add prefixes or team identifiers to `name`.
 
 **Every parameter is required.** Without `team_name`, agents spawn as isolated subagents — no SendMessage, no shutdown, no team pattern.
 
@@ -295,27 +296,27 @@ When writing STATE.md at step transitions, always include the `skill` and `roste
 
 **Gate log**: gate-log.md is optional. If alpha seeded it during onboarding, the engine may append a one-line entry at step transitions. Do not let gate-log writes block or delay the transition flow.
 
-#### MILESTONE_QA_READY — Egyptian Judgment Tribunal (Step 5 Only)
+#### MILESTONE_QA_READY — Judge Dredd Tribunal (Step 5 Only)
 
-When KRS-One sends `MILESTONE_QA_READY: {milestone_name}`, the engine orchestrates independent dual-model QA via three dedicated agents (maat, anubis, osiris). KRS-One blocks on QA_VERDICT (300s timeout).
+When KRS-One sends `MILESTONE_QA_READY: {milestone_name}`, the engine orchestrates independent dual-model QA via four dedicated agents (ken, ryu, denzel, judge-dredd) in a sequential 4-step flow. KRS-One blocks on QA_VERDICT (300s timeout).
 
 **Engine protocol on receiving MILESTONE_QA_READY:**
 
-1. **Pre-package PM context for anubis** — Read the TL;DR headers from rakim's `.kiln/docs/codebase-state.md` and sentinel's `.kiln/docs/patterns.md` (first 30 lines of each). Anubis is a thin Codex CLI wrapper that does NOT consult PMs directly — the engine pre-packages this context into its runtime prompt.
+1. **Pre-package PM context for ryu** — Read the TL;DR headers from rakim's `.kiln/docs/codebase-state.md` and sentinel's `.kiln/docs/patterns.md` (first 30 lines of each). Ryu is a thin Codex CLI wrapper that does NOT consult PMs directly — the engine pre-packages this context into its runtime prompt.
 
-2. **Spawn maat + anubis (parallel, background):**
+2. **Spawn ken + ryu (parallel, background):**
    ```
-   Agent(name: "maat", subagent_type: "kiln:maat", team_name: "{team_name}",
+   Agent(name: "ken", subagent_type: "kiln:team-red", team_name: "{team_name}",
      run_in_background: true,
-     prompt: "You are 'maat' on team '{team_name}'. Step 5: Build — Milestone QA.
+     prompt: "You are 'ken' on team '{team_name}'. Step 5: Build — Milestone QA.
      Milestone under review: {milestone_name}.
      Working dir: {working_dir}. Master plan: .kiln/master-plan.md.
      {protocol_injection_full}
      Run your QA analysis. Consult rakim and sentinel as needed.")
 
-   Agent(name: "anubis", subagent_type: "kiln:anubis", team_name: "{team_name}",
+   Agent(name: "ryu", subagent_type: "kiln:team-blue", team_name: "{team_name}",
      run_in_background: true,
-     prompt: "You are 'anubis' on team '{team_name}'. Step 5: Build — Milestone QA.
+     prompt: "You are 'ryu' on team '{team_name}'. Step 5: Build — Milestone QA.
      Milestone under review: {milestone_name}.
      Working dir: {working_dir}. Master plan: .kiln/master-plan.md.
      Codebase state summary:\n{rakim_tldr}
@@ -325,38 +326,54 @@ When KRS-One sends `MILESTONE_QA_READY: {milestone_name}`, the engine orchestrat
    ```
 
 3. **Wait for TWO distinct QA_REPORT_READY signals** — create two separate wait tasks:
-   - "Wait for QA_REPORT_READY from maat"
-   - "Wait for QA_REPORT_READY from anubis"
+   - "Wait for QA_REPORT_READY from ken"
+   - "Wait for QA_REPORT_READY from ryu"
    Track by sender. Both must arrive before proceeding. 300s timeout for the pair.
 
-4. **Spawn osiris (background)** after both reports are ready:
+4. **Anonymize reports** — strip agent names from both reports and assign random A/B labels. Write anonymized versions to `.kiln/tmp/qa-report-a.md` and `.kiln/tmp/qa-report-b.md`. Prevents reconciler and judge bias from knowing which model produced which report.
+
+5. **Spawn denzel (background)** after both reports are anonymized:
    ```
-   Agent(name: "osiris", subagent_type: "kiln:osiris", team_name: "{team_name}",
+   Agent(name: "denzel", subagent_type: "kiln:the-negotiator", team_name: "{team_name}",
      run_in_background: true,
-     prompt: "You are 'osiris' on team '{team_name}'. Step 5: Build — Milestone QA Synthesis.
+     prompt: "You are 'denzel' on team '{team_name}'. Step 5: Build — Milestone QA Reconciliation.
      Milestone: {milestone_name}. Working dir: {working_dir}.
-     Two QA reports are ready: .kiln/tmp/qa-maat-report.md and .kiln/tmp/qa-anubis-report.md.
+     Two anonymous QA reports: .kiln/tmp/qa-report-a.md and .kiln/tmp/qa-report-b.md.
      {protocol_injection_full}
-     Read both reports, synthesize, and signal QA_PASS or QA_FAIL.")
+     Read both reports, reconcile findings, write .kiln/tmp/qa-reconciliation.md, signal RECONCILIATION_COMPLETE.")
    ```
 
-5. **Wait for QA_PASS or QA_FAIL from osiris** — single wait task. 300s timeout.
+6. **Wait for RECONCILIATION_COMPLETE from denzel** — single wait task. 300s timeout.
 
-6. **Shutdown QA agents** — send `shutdown_request` to maat, anubis, and osiris. Wait for confirmations (60s timeout). Force-terminate on timeout.
-
-7. **Relay verdict to KRS-One:**
+7. **Spawn judge-dredd (background)** after reconciliation is ready:
    ```
-   SendMessage(type: "message", recipient: "krs-one",
-     content: "QA_VERDICT: {PASS or FAIL}. {osiris's findings summary}")
+   Agent(name: "judge-dredd", subagent_type: "kiln:i-am-the-law", team_name: "{team_name}",
+     run_in_background: true,
+     prompt: "You are 'judge-dredd' on team '{team_name}'. Step 5: Build — Milestone QA Verdict.
+     Milestone: {milestone_name}. Working dir: {working_dir}.
+     QA reports: .kiln/tmp/qa-report-a.md, .kiln/tmp/qa-report-b.md.
+     Reconciliation: .kiln/tmp/qa-reconciliation.md.
+     {protocol_injection_full}
+     Read the reports and reconciliation. Signal QA_PASS or QA_FAIL with findings.")
    ```
 
-8. **Return to signal wait loop** — do NOT transition steps. KRS-One decides next action (MILESTONE_COMPLETE on PASS, re-scope on FAIL).
+8. **Wait for QA_PASS or QA_FAIL from judge-dredd** — single wait task. 300s timeout.
+
+9. **Shutdown QA agents** — send `shutdown_request` to ken, ryu, denzel, and judge-dredd. Wait for confirmations (60s timeout). Force-terminate on timeout.
+
+10. **Relay verdict to KRS-One:**
+    ```
+    SendMessage(type: "message", recipient: "krs-one",
+      content: "QA_VERDICT: {PASS or FAIL}. {judge-dredd's findings summary}")
+    ```
+
+11. **Return to signal wait loop** — do NOT transition steps. KRS-One decides next action (MILESTONE_COMPLETE on PASS, re-scope on FAIL).
 
 #### Protocol Injection (Runtime)
 
 Every agent spawn MUST include a role-appropriate protocol block in its runtime prompt. This is Layer 2 enforcement (Layer 1 = agent.md bootstrap Read, Layer 3 = enforce-pipeline.sh hook).
 
-**Full protocol** — for bosses, persistent minds, QA agents (maat, osiris, aristotle, krs-one, rakim, sentinel, etc.):
+**Full protocol** — for bosses, persistent minds, QA agents (denzel, judge-dredd, aristotle, krs-one, rakim, sentinel, etc.):
 ```
 ## Kiln Protocol (Runtime)
 - SendMessage is the ONLY way to reach teammates. Plain text is invisible to agents.
@@ -370,7 +387,7 @@ Every agent spawn MUST include a role-appropriate protocol block in its runtime 
 - NEVER read/write: .env, *.pem, *_rsa, *.key, credentials.json, secrets.*, .npmrc
 ```
 
-**Worker protocol** — for builders, reviewers (codex, kaneda, clair, sphinx, obscur, anubis):
+**Worker protocol** — for builders, reviewers (dial-a-coder, backup-coder, la-peintresse, critical-drinker, the-curator, team-blue):
 ```
 ## Kiln Protocol (Runtime)
 - SendMessage is the ONLY way to reach teammates. Plain text is invisible to agents.

@@ -9,17 +9,17 @@
 
 ## Agent Roster
 
-| Name | Role | Phase | Model |
-|------|------|-------|-------|
-| numerobis | Persistent mind. Technical authority. Bootstraps from research + onboarding, writes architecture docs, consultation hub. | A | opus |
-| thoth | Persistent mind. Archivist — owns all writes to .kiln/archive/. Fire-and-forget. | A | opus |
-| aristotle | Boss. Orchestrates dual plan, divergence extraction, synthesis, validation, operator review. | B (INTERACTIVE) | opus |
-| confucius | Claude-side planner. Reads architecture docs, consults numerobis, writes claude_plan.md with structured skeleton. Conditionally generates design artifacts when VISION.md contains Visual Direction (section 12). | C (wave 1) | opus |
-| sun-tzu | Codex-side planner. Delegates to GPT-5.4 via Codex CLI, writes codex_plan.md with structured skeleton. | C (wave 1) | sonnet |
-| miyamoto | Claude-side sonnet planner. Writes plans directly. Used when codex_available=false. | C (wave 1, conditional) | sonnet |
-| diogenes | Divergence extractor. Receives anonymized plans (Plan A/B), extracts consensus, divergences, unique insights. Fast sonnet analysis avoiding planner self-bias. | C (wave 1.5) | sonnet |
-| plato | Plan chairman. Reads anonymized plans + divergence analysis, synthesizes master-plan.md with confidence-tiered verdicts. | C (wave 2) | opus |
-| athena | Validator. Validates master-plan.md on 8 dimensions (including plan purity). PASS or FAIL. | C (wave 3) | opus |
+| Name | Agent Type | Role | Phase | Model |
+|------|------------|------|-------|-------|
+| numerobis | pitie-pas-les-crocos | Persistent mind. Technical authority. Bootstraps from research + onboarding, writes architecture docs, consultation hub. | A | opus |
+| thoth | lore-keepah | Persistent mind. Archivist — owns all writes to .kiln/archive/. Fire-and-forget. | A | opus |
+| aristotle | the-plan-maker | Boss. Orchestrates dual plan, divergence extraction, synthesis, validation, operator review. | B (INTERACTIVE) | opus |
+| confucius | mystical-inspiration | Claude-side planner. Reads architecture docs, consults numerobis, writes claude_plan.md with structured skeleton. Conditionally generates design artifacts when VISION.md contains Visual Direction (section 12). | C (wave 1) | opus |
+| sun-tzu | art-of-war | Codex-side planner. Delegates to GPT-5.4 via Codex CLI, writes codex_plan.md with structured skeleton. | C (wave 1) | sonnet |
+| miyamoto | gracefully-degrading | Claude-side sonnet planner. Writes plans directly. Used when codex_available=false. | C (wave 1, conditional) | sonnet |
+| diogenes | divergences-converge | Divergence extractor. Receives anonymized plans (Plan A/B), extracts consensus, divergences, unique insights. Fast sonnet analysis avoiding planner self-bias. | C (wave 1.5) | sonnet |
+| plato | e-pluribus-unum | Plan chairman. Reads anonymized plans + divergence analysis, synthesizes master-plan.md with confidence-tiered verdicts. | C (wave 2) | opus |
+| athena | straight-outta-olympia | Validator. Validates master-plan.md on 8 dimensions (including plan purity). PASS or FAIL. | C (wave 3) | opus |
 
 ## Three-Phase Spawn
 

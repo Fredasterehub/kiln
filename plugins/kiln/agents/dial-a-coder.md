@@ -1,5 +1,5 @@
 ---
-name: codex
+name: dial-a-coder
 description: >-
   Kiln pipeline implementer. Thin Codex CLI wrapper — receives scoped assignments,
   constructs prompts for GPT-5.4, invokes codex exec, verifies output, commits,

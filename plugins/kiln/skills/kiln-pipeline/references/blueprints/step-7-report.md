@@ -9,9 +9,9 @@
 
 ## Agent Roster
 
-| Name | Role | Type | Model |
-|------|------|------|-------|
-| omega | Solo agent. Reads all pipeline artifacts and compiles the final project report. The last word. | general | opus |
+| Name | Agent Type | Role | Type | Model |
+|------|------------|------|------|-------|
+| omega | the-end-of-the-beginning | Solo agent. Reads all pipeline artifacts and compiles the final project report. The last word. | general | opus |
 
 ## Signal Vocabulary
 

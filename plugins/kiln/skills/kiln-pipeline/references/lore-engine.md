@@ -193,14 +193,14 @@ Before spawning a team, output a spawning block:
   → krs-one
   → rakim
   → sentinel
-  → codex
-  → sphinx
+  → tintin
+  → milou
 ```
 
 After an agent completes:
 
 ```md
-✓ `codex` complete: "14 files committed, tests passing"
+✓ `tintin` complete: "14 files committed, tests passing"
 ```
 
 ## Idle Voice

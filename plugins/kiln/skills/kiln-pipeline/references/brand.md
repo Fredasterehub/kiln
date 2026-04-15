@@ -31,7 +31,7 @@ The presentation surface has exactly one accent color: inline code. Use these ei
 The accent color (inline code) follows strict placement rules:
 
 **In banners**: NO accent on the step label or progress line — they use bold/italic weight only. The quote gets accent: `` `"Quote."` `` — *Source*
-**Agent names**: Get accent when referenced outside banners: `` `krs-one` ``, `` `codex` ``
+**Agent names**: Get accent when referenced outside banners: `` `krs-one` ``, `` `tintin` ``
 **Milestone names**: Get accent: `` `M3 Artifact System` ``
 
 ## Visual Hierarchy
@@ -103,14 +103,14 @@ On milestone completion, add:
   → krs-one
   → rakim
   → sentinel
-  → codex
-  → sphinx
+  → tintin
+  → milou
 ```
 
 After completion:
 
 ```md
-✓ `codex` complete: "14 files committed"
+✓ `tintin` complete: "14 files committed"
 ```
 
 ## Agent Personality

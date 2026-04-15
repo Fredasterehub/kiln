@@ -1,5 +1,5 @@
 ---
-name: obscur
+name: the-curator
 description: >-
   Kiln pipeline UI reviewer (sonnet). Reviews visual implementation against
   design tokens, creative direction, build health, and interaction quality.

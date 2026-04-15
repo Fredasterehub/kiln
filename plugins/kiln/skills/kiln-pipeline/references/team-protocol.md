@@ -60,9 +60,10 @@ You receive messages ONE AT A TIME. Each wake-up delivers exactly one message. P
 | `ITERATION_UPDATE` | KRS-One → rakim, sentinel | Chunk complete, PMs update state | Proceed after 60s (no deadlock) |
 | `CYCLE_WORKERS` | KRS-One → Engine | Request fresh worker pair | Engine responds with WORKERS_SPAWNED |
 | `MILESTONE_TRANSITION` | KRS-One → rakim, sentinel | Milestone boundary, PMs archive+reset | Proceed after 60s (no deadlock) |
-| `MILESTONE_QA_READY` | KRS-One → Engine | Milestone deliverables verified | Engine spawns QA trio, relays QA_VERDICT (300s timeout) |
-| `QA_VERDICT` | Engine → KRS-One | Engine relays osiris's synthesis verdict | KRS-One treats timeout as QA_FAIL |
-| `QA_REPORT_READY` | maat/anubis → Engine | Individual QA report written | Engine tracks per-sender (two distinct waits) |
+| `MILESTONE_QA_READY` | KRS-One → Engine | Milestone deliverables verified | Engine orchestrates Judge Dredd Tribunal (ken+ryu→anonymize→denzel→judge-dredd), relays QA_VERDICT (300s timeout) |
+| `QA_VERDICT` | Engine → KRS-One | Engine relays judge-dredd's final verdict | KRS-One treats timeout as QA_FAIL |
+| `QA_REPORT_READY` | ken/ryu → Engine | Individual QA report written | Engine tracks per-sender (two distinct waits) |
+| `RECONCILIATION_COMPLETE` | denzel → engine | QA synthesis written, engine spawns judge-dredd | Engine tracks single wait |
 | `DIVERGENCE_READY` | diogenes → aristotle | Divergence analysis written | Peer signal, not engine-routed |
 
 ### Blocking Policy Rules
@@ -91,7 +92,7 @@ The engine spawns each worker on the same team. Workers appear as teammates with
 
 **Worker cycling (step 5):** After the initial `REQUEST_WORKERS`, subsequent chunks use `CYCLE_WORKERS` instead — the engine shuts down the current pair and spawns a fresh one. See **Worker Cycling Pattern** for the full flow.
 
-**Naming**: Workers are spawned with their canonical type name (e.g., `name: "codex"`, `subagent_type: "kiln:codex"`). This ensures hook enforcement works correctly — `agent_type` in hook stdin equals the `name` parameter. The engine injects the paired partner's canonical name into each worker's runtime prompt.
+**Naming**: Workers are spawned from the duo pool (see `references/duo-pool.md`). The `name` parameter is the boss-selected character for this cycle (e.g., `name: "tintin"`, `subagent_type: "kiln:dial-a-coder"`). Hook enforcement fires on the agent type (subagent_type stripped of `kiln:` prefix) — not the spawn name. The engine injects the paired partner's spawn name and type into each worker's runtime prompt.
 
 ## 4. Dispatch Pattern
 
@@ -156,8 +157,8 @@ Standard signals sent via SendMessage to team-lead (the engine):
 |--------|---------|---------|
 | `READY: {summary}` | Bootstrap complete, available for consultation | Persistent minds |
 | `REQUEST_WORKERS: {list}` | Need workers spawned on team (initial) | Boss |
-| `CYCLE_WORKERS: scenario={scenario}, reason={reason}, chunk={summary}` | Shut down current workers, spawn fresh pair | KRS-One |
-| `WORKERS_SPAWNED: {names}` | Engine confirms workers on team | Engine |
+| `CYCLE_WORKERS: scenario={s}, duo_id={id}, coder_name={name}, reviewer_name={name}, reason={r}, chunk={c}` | Shut down current workers, spawn fresh pair from duo pool | KRS-One |
+| `WORKERS_SPAWNED: duo_id={id}, {builder_name} (subagent_type: {type}), {reviewer_name} (subagent_type: {type})` | Engine confirms fresh pair on team | Engine |
 | `WORKERS_REJECTED: {reason}` | Engine rejected REQUEST_WORKERS | Engine |
 | `ONBOARDING_COMPLETE` | Step 1 done | Alpha |
 | `BRAINSTORM_COMPLETE` | Step 2 done | Da Vinci |
@@ -168,10 +169,11 @@ Standard signals sent via SendMessage to team-lead (the engine):
 | `ITERATION_COMPLETE` | Build iteration done — legacy/internal, replaced by CYCLE_WORKERS | KRS-One |
 | `MILESTONE_TRANSITION: completed={name}, next={name}` | Milestone boundary — PMs archive + reset (blocking) | KRS-One |
 | `MILESTONE_QA_READY: {milestone_name}` | Deliverables verified, requesting independent QA | KRS-One |
-| `QA_REPORT_READY` | Individual QA report written; engine tracks per-sender | maat / anubis |
-| `QA_PASS` | Synthesis verdict: all criteria satisfied | osiris |
-| `QA_FAIL: {findings}` | Synthesis verdict: issues found | osiris |
-| `QA_VERDICT: {PASS/FAIL}` | Engine relays osiris's verdict to KRS-One | Engine |
+| `QA_REPORT_READY` | Individual QA report written; engine tracks per-sender | ken / ryu |
+| `RECONCILIATION_COMPLETE` | QA synthesis written to .kiln/tmp/qa-synthesis.md; engine spawns judge-dredd | denzel |
+| `QA_PASS` | Final verdict: all criteria satisfied | judge-dredd |
+| `QA_FAIL: {findings}` | Final verdict: issues found | judge-dredd |
+| `QA_VERDICT: {PASS/FAIL}` | Engine relays judge-dredd's verdict to KRS-One | Engine |
 | `DIVERGENCE_READY` | Divergence analysis written; peer signal to aristotle | diogenes |
 | `MILESTONE_COMPLETE: {name}` | Milestone done, QA passed | KRS-One |
 | `BUILD_COMPLETE` | All milestones done | KRS-One |
@@ -195,14 +197,17 @@ Fresh context per implementation chunk prevents context pollution. Builders and 
 1. KRS-One scopes a chunk and determines the appropriate scenario
 2. KRS-One sends `CYCLE_WORKERS` to team-lead (engine) with:
    - `scenario`: default | fallback | ui
+   - `duo_id`: selected duo from pool (e.g., `tintin-milou`)
+   - `coder_name`: builder's spawn name for this cycle (e.g., `tintin`)
+   - `reviewer_name`: reviewer's spawn name for this cycle (e.g., `milou`)
    - `reason`: why this scenario was chosen
    - `chunk`: brief description of the work
 3. Engine sends `shutdown_request` to current builder+reviewer
 4. Engine waits for shutdown confirmation (60s timeout)
 5. Engine spawns fresh builder+reviewer pair per scenario:
-   - default: codex + sphinx
-   - fallback: kaneda + sphinx
-   - ui: clair + obscur
+   - default: dial-a-coder + critical-drinker (spawn names from duo pool)
+   - fallback: backup-coder + critical-drinker (spawn names from duo pool)
+   - ui: la-peintresse + the-curator (spawn names from duo pool)
 6. Engine sends `WORKERS_SPAWNED` to KRS-One with agent names
 7. KRS-One dispatches assignment to fresh builder
 
@@ -229,15 +234,15 @@ These apply to ALL agents in every step:
 
 | Scenario | Builder | Reviewer | When |
 |----------|---------|----------|------|
-| Default | `codex` | `sphinx` | `codex_available=true` and structural work. |
-| Fallback | `kaneda` | `sphinx` | `codex_available=false` (structural fallback). |
-| UI | `clair` | `obscur` | Components, pages, layouts, design tokens. |
+| Default | `dial-a-coder` | `critical-drinker` | `codex_available=true` and structural work. |
+| Fallback | `backup-coder` | `critical-drinker` | `codex_available=false` (structural fallback). |
+| UI | `la-peintresse` | `the-curator` | Components, pages, layouts, design tokens. |
 
-Workers are always spawned with their canonical type name (e.g., `name: "codex"`, `subagent_type: "kiln:codex"`). This ensures hook enforcement works correctly.
+Workers are spawned with duo pool names (e.g., `name: "tintin"`, `subagent_type: "kiln:dial-a-coder"`). Hook enforcement fires on the agent type, not the spawn name.
 
-sphinx (opus) is the single structural reviewer for Default and Fallback. obscur (sonnet) reviews UI only.
+critical-drinker (opus) is the single structural reviewer for Default and Fallback. the-curator (sonnet) reviews UI only.
 
-**Dormant agents:** tetsuo, daft, punk — kept on disk but never dispatched.
+**Dormant spawn names:** tetsuo, daft, punk — duo pool names only, no agent .md files.
 
 ## Step Definitions
 
@@ -249,7 +254,7 @@ sphinx (opus) is the single structural reviewer for Default and Fallback. obscur
 
 ### Step 2: Brainstorm
 - **Boss**: da-vinci (opus, INTERACTIVE)
-- **PMs**: clio (opus, Phase A)
+- **PMs**: asimov (opus, Phase A)
 - **Done**: BRAINSTORM_COMPLETE → stage: research
 
 ### Step 3: Research
@@ -268,8 +273,8 @@ sphinx (opus) is the single structural reviewer for Default and Fallback. obscur
 ### Step 5: Build (milestone-scoped)
 - **Boss**: krs-one (opus, BACKGROUND, persists per milestone)
 - **PMs**: rakim (opus), sentinel (sonnet), thoth (opus) — all persist per milestone
-- **Workers**: one builder+reviewer pair per chunk via CYCLE_WORKERS (default: codex+sphinx, fallback: kaneda+sphinx, ui: clair+obscur)
-- **QA**: maat (opus), anubis (sonnet), osiris (opus) — spawned on MILESTONE_QA_READY, dynamic
+- **Workers**: one builder+reviewer pair per chunk via CYCLE_WORKERS, duo pool names per cycle (default: dial-a-coder+critical-drinker, fallback: backup-coder+critical-drinker, ui: la-peintresse+the-curator)
+- **QA**: ken/team-red (opus), ryu/team-blue (sonnet), denzel/the-negotiator (opus), judge-dredd/i-am-the-law (sonnet) — spawned on MILESTONE_QA_READY, Judge Dredd Tribunal, dynamic
 - **Signals**: CYCLE_WORKERS, ITERATION_UPDATE (blocking 60s), MILESTONE_TRANSITION (blocking 60s), MILESTONE_QA_READY (blocking 300s), QA_VERDICT, MILESTONE_COMPLETE, BUILD_COMPLETE
 - **Done**: BUILD_COMPLETE → stage: validate
 

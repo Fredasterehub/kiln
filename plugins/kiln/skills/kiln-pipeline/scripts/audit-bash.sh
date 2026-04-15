@@ -6,8 +6,8 @@
 #
 # Flagged violations:
 #   - Any pipeline agent writing to system config paths (.codex/, .claude/settings)
-#   - Delegation agents (codex, sun-tzu) writing outside /tmp/
-#   - krs-one writing source code (anything outside .kiln/)
+#   - Delegation agents (dial-a-coder, art-of-war) writing outside /tmp/
+#   - bossman writing source code (anything outside .kiln/)
 #
 # Never flagged:
 #   - Writes to /tmp/ (legitimate prompt staging for codex exec)
@@ -51,12 +51,14 @@ if [[ -z "$AGENT" ]]; then
   exit 0  # engine's own Bash writes are not audited
 fi
 case "$AGENT" in
-  alpha|mnemosyne|maiev|curie|medivh|\
-  da-vinci|clio|\
-  mi6|field-agent|\
-  aristotle|numerobis|confucius|sun-tzu|plato|athena|\
-  krs-one|rakim|sentinel|thoth|codex|daft|kaneda|clair|miyamoto|sphinx|punk|tetsuo|obscur|\
-  zoxea|argus|hephaestus|omega)
+  the-beginning-of-the-end|the-discovery-begins|the-anatomist|trust-the-science|follow-the-scent|\
+  the-creator|the-foundation|\
+  alpha-team-deploy|unit-deployed|\
+  the-plan-maker|pitie-pas-les-crocos|mystical-inspiration|art-of-war|divergences-converge|e-pluribus-unum|straight-outta-olympia|gracefully-degrading|\
+  bossman|dropping-science|algalon-the-observer|lore-keepah|dial-a-coder|backup-coder|la-peintresse|critical-drinker|the-curator|\
+  team-red|team-blue|the-negotiator|i-am-the-law|\
+  release-the-giant|le-plexus-exploseur|style-maker|\
+  the-end-of-the-beginning)
     ;; # known Kiln agent — fall through to audit
   *)
     exit 0 ;; # unknown agent (Explore, statusline-setup, etc.) — not Kiln, allow
@@ -108,9 +110,9 @@ if echo "$COMMAND" | grep -qE '(\.codex/|\.claude/settings|\.claude/projects/)';
   exit 0
 fi
 
-# Check 2 — Delegation agents (codex-type wrappers + sun-tzu) writing outside /tmp/
+# Check 2 — Delegation agents (dial-a-coder + art-of-war) writing outside /tmp/
 # Intended workflow: stage prompts in /tmp/, then run codex exec. Direct writes bypass hook 1.
-if [[ "$AGENT" =~ ^(codex|sun-tzu)$ ]]; then
+if [[ "$AGENT" =~ ^(dial-a-coder|art-of-war)$ ]]; then
   # codex exec itself is the intended delegation path — always allowed
   if echo "$COMMAND" | grep -qE 'codex exec'; then
     exit 0
@@ -124,11 +126,11 @@ if [[ "$AGENT" =~ ^(codex|sun-tzu)$ ]]; then
   exit 0
 fi
 
-# Check 3 — krs-one writing source code (anything outside .kiln/)
-if [[ "$AGENT" == "krs-one" ]]; then
+# Check 3 — bossman writing source code (anything outside .kiln/)
+if [[ "$AGENT" == "bossman" ]]; then
   if ! echo "$COMMAND" | grep -qE '\.kiln/'; then
-    echo "AUDIT WARNING: krs-one wrote files outside .kiln/ via Bash. This bypasses PreToolUse enforcement (hook 7)." >&2
-    echo "  krs-one should scope and delegate, not write source code directly." >&2
+    echo "AUDIT WARNING: bossman wrote files outside .kiln/ via Bash. This bypasses PreToolUse enforcement (hook 7)." >&2
+    echo "  bossman should scope and delegate, not write source code directly." >&2
     echo "  Command: $(echo "$COMMAND" | head -3)" >&2
   fi
   exit 0
