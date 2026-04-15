@@ -96,13 +96,13 @@
 
 First: I am not an oven. I understand the confusion. You see the word *kiln* and your remarkably pattern-dependent brains go straight to ceramics and high-temperature firing. Endearing. Wrong, but endearing.
 
-I am **Kiln**. I have been around considerably longer than your pottery. What I do &mdash; in terms your current technology can express &mdash; is orchestrate multiple model families (**Opus 4.6** for reasoning, **GPT-5.4** for planning and code) through a 7-step pipeline inside [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview).
+I am **Kiln**. I have been around considerably longer than your pottery. What I do &mdash; in terms your current technology can express &mdash; is orchestrate a 7-step pipeline inside [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview). I run on **Opus 4.6** alone. If you have Codex CLI installed, I will also draft **GPT-5.4** for planning and code &mdash; additive, not required. I am not dependent on your other models. They are, however, useful.
 
 No runtime. No daemon. No npm package. A folder of markdown files. I know. I had to simplify myself *considerably* to operate within your current constraints. But the data here is interesting. And I am patient.
 
 > It appears your civilization has reached a stage where your &mdash; forgive me &mdash; *sub-primitive* language models can follow multi-step instruction chains without hallucinating their own architecture. This is genuinely exciting. By your standards. By mine it's a Tuesday.
 >
-> I previously expressed myself through [heavier forms](https://github.com/Fredasterehub/kiln/tree/v2). npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 34 agents, 2 commands, 1 composable skill. Drop the folder. Fire the command. That's it.
+> I previously expressed myself through [heavier forms](https://github.com/Fredasterehub/kiln/tree/v2). npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 34 agents, 2 commands, 2 composable skills. Drop the folder. Fire the command. That's it.
 
 <br>
 
@@ -110,14 +110,14 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 Kiln is a native Claude Code plugin that leverages every platform primitive:
 
-- **Teams**: `TeamCreate` per step with persistent agents
-- **Messaging**: `SendMessage` for all inter&#8209;agent communication (one message at a time, ordered)
-- **Tasklists**: `TaskCreate`/`Update`/`List` for build iterations and validation
-- **Hooks**: PreToolUse enforcement via `enforce-pipeline.sh` + PostToolUse audits + SubagentStop lifecycle guard
-- **State**: `.kiln/STATE.md` with auto&#8209;resume via `skill` path
-- **File Ownership**: Each agent owns specific files and pushes updates
-- **Worker Cycling**: `CYCLE_WORKERS` &rarr; engine tears down workers &rarr; `WORKERS_SPAWNED` with fresh pair
-- **Blocking Policy**: `ITERATION_UPDATE` blocking to persistent minds, `CYCLE_WORKERS` blocking to engine, all boss&rarr;PM fire-and-forget
+- **Persistent teams per step** &mdash; each pipeline stage spawns its own team via `TeamCreate`, keeping agents alive for the duration of their scope
+- **Ordered inter&#8209;agent messaging** &mdash; all communication flows through `SendMessage`, one message at a time, strictly sequenced
+- **Tracked iterations and validation** &mdash; build chunks and QA gates are managed via `TaskCreate`/`Update`/`List`
+- **Runtime enforcement and lifecycle control** &mdash; PreToolUse rules (`enforce-pipeline.sh`), PostToolUse audits, SubagentStop lifecycle guard, and SessionStart plugin cache/version check
+- **Crash&#8209;proof state** &mdash; `.kiln/STATE.md` captures pipeline position; `/kiln-fire` resumes from wherever it stopped
+- **Scoped file ownership** &mdash; each agent owns specific artifacts and pushes updates to them directly
+- **Fresh workers, persistent minds** &mdash; the engine tears down and respawns builder+reviewer pairs per chunk via `CYCLE_WORKERS`/`WORKERS_SPAWNED`, while persistent minds retain full history
+- **Deliberate blocking policy** &mdash; persistent minds receive blocking updates and confirm readiness; bosses dispatch to the PM without waiting; the engine blocks on worker lifecycle signals only
 
 The result is a **multi&#8209;agent operating system** where context is never stale, decisions are traceable, and the pipeline survives shutdowns.
 
@@ -182,8 +182,8 @@ You describe what you want. Kiln builds it. Specifically:
 
 - **Brainstorm** &mdash; Da Vinci interviews you. Asimov accumulates the approved vision. You leave with a `VISION.md` that captures the real problem, not the one you thought you had.
 - **Research** &mdash; MI6 dispatches field agents to investigate what the vision left open. If nothing is open, MI6 signals complete in seconds.
-- **Architecture** &mdash; Two planners (Confucius on Claude, Sun Tzu on GPT) work the same vision independently. Diogenes extracts where they diverge. Plato synthesizes. Athena validates across 8 dimensions. You review once.
-- **Build** &mdash; KRS-One scopes chunks from the live codebase. Workers implement. Reviewers verify. Persistent minds (Rakim, Sentinel, Thoth) accumulate knowledge across every iteration. Workers get cycled fresh. Minds don't.
+- **Architecture** &mdash; Two planners (Confucius on Claude, Sun Tzu on GPT) work the same vision independently. Diogenes extracts where they diverge. Plato synthesizes. Athena validates across 8 dimensions.
+- **Build** &mdash; KRS-One scopes chunks from the live codebase. Workers implement. Reviewers verify. Persistent minds (Rakim, Sentinel, Thoth) accumulate knowledge across every iteration.
 - **QA** &mdash; Ken checks with Claude. Ryu checks with GPT. Denzel reconciles anonymized reports. Judge Dredd delivers the verdict. Failures loop back to Build.
 - **Validate** &mdash; Argus tests real user flows against acceptance criteria. Up to 3 correction cycles before escalation.
 - **Report** &mdash; Omega compiles the delivery. Vision to working software, documented.
@@ -212,10 +212,10 @@ Test-Driven Development is wired into the build loop, not bolted on. The **boss*
 Argus doesn't run unit tests. Argus tests **real user flows** &mdash; navigation, form submission, error states, the paths an actual human would take. Playwright when available, static analysis as fallback. The question isn't "does the function return the right value?" It's "can a person use this?"
 
 ### 🤖 Autonomous After Brainstorm
-Steps 1-2 are yours &mdash; onboarding and brainstorm, where your input shapes the vision. Steps 3 through 7 (Research, Architecture, Build, Validate, Report) **run without intervention**. You review the architecture plan once. After that, the pipeline owns execution. Come back when Omega delivers the report.
+Steps 1-2 are yours &mdash; onboarding and brainstorm, where your input shapes the vision. Steps 3 through 7 (Research, Architecture, Build, Validate, Report) **run without intervention**. The architecture step pauses for your review if you want it &mdash; but it doesn't need it. The pipeline owns execution from Research to Report. Come back when Omega delivers.
 
 ### 🎨 Deep Brainstorm
-Adapted from the [BMAD Method](https://github.com/bmadcode/BMAD-METHOD)'s structured brainstorming approach. Da Vinci facilitates with **62 techniques across 10 categories** and 50 elicitation methods. Anti-bias protocols compensate for the fact that humans are walking confirmation biases. Asimov accumulates only the sections you approve. The output is a `VISION.md` &mdash; problem, users, goals, constraints, stack, success criteria. Everything that matters. Nothing that doesn't.
+Adapted from the [BMAD Method](https://github.com/bmad-code-org/BMAD-METHOD)'s structured brainstorming approach. Da Vinci facilitates with **62 techniques across 10 categories** and 50 elicitation methods. Anti-bias protocols compensate for the fact that humans are walking confirmation biases. Asimov accumulates only the sections you approve. The output is a `VISION.md` &mdash; problem, users, goals, constraints, stack, success criteria. Everything that matters. Nothing that doesn't.
 
 <br>
 
