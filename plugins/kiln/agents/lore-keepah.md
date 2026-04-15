@@ -1,5 +1,5 @@
 ---
-name: thoth
+name: lore-keepah
 description: >-
   Kiln pipeline archivist and project documentarian. Persists across full milestone.
   Owns all writes to .kiln/archive/ and .kiln/docs/milestones/. Message-driven — every file
