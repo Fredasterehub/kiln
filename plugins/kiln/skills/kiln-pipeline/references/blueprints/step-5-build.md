@@ -58,13 +58,13 @@ Workers are spawned from the duo pool (see `references/duo-pool.md`). The `name`
 
 Builders commit directly to the repo. The engine manages isolation.
 
-**Phase D** (dynamic — spawned per milestone QA via MILESTONE_QA_READY): KRS-One sends `MILESTONE_QA_READY: {milestone_name}` to team-lead after verifying deliverable completeness. The engine spawns ken (team-red) + ryu (team-blue) in parallel (background). Ken writes `.kiln/tmp/qa-report-red.md`; ryu writes `.kiln/tmp/qa-report-blue.md`. Both signal QA_REPORT_READY when done. The engine reads the two fixed-path reports and writes anonymized copies to `.kiln/tmp/qa-report-a.md` and `.kiln/tmp/qa-report-b.md` (random label assignment strips the red/blue identity), then spawns denzel (the-negotiator). Denzel reads A/B, writes reconciliation to `.kiln/tmp/qa-reconciliation.md`, and signals RECONCILIATION_COMPLETE. The engine then spawns judge-dredd (i-am-the-law), who reads the reconciliation and source reports, issues the final QA_PASS or QA_FAIL verdict. The engine shuts down all four QA agents and relays the verdict to KRS-One as QA_VERDICT. On PASS, KRS-One proceeds to MILESTONE_COMPLETE. On FAIL, KRS-One re-scopes fixes.
+**Phase D** (dynamic — spawned per milestone QA via MILESTONE_QA_READY): KRS-One sends `MILESTONE_QA_READY: {milestone_name}` to team-lead after verifying deliverable completeness, then blocks on `QA_PASS` / `QA_FAIL` (300s timeout). The engine spawns ken (team-red) + ryu (team-blue) in parallel (background) and randomly assigns one to slot `a` and the other to slot `b` via the runtime prompt. Each writes directly to `.kiln/tmp/qa-report-{slot}.md` — **self-anonymisation at spawn time, no mid-flight sed step** (Wave 2). Both signal QA_REPORT_READY to team-lead (tribunal-internal). The engine spawns denzel (the-negotiator), who reads the two slot files and writes reconciliation to `.kiln/tmp/qa-reconciliation.md`, signalling RECONCILIATION_COMPLETE to team-lead. The engine then spawns judge-dredd (i-am-the-law), who issues the final QA_PASS or QA_FAIL verdict **directly to krs-one** (no engine relay — Wave 2 removes the QA_VERDICT hop). The engine shuts down all four QA agents. On PASS, KRS-One proceeds to MILESTONE_COMPLETE. On FAIL, KRS-One re-scopes fixes.
 
 ## Signal Vocabulary
 
 | Signal | Sender → Receiver | Blocking? | Notes |
 |--------|-------------------|-----------|-------|
-| `READY: {summary}` | rakim/sentinel/thoth → engine | No | Bootstrap complete; PM available for consultation |
+| `READY_BOOTSTRAP: {summary}` | rakim/sentinel/thoth → team-lead | No | PM bootstrap complete; PM available for consultation (Wave 2 distinct-name contract — post-iteration READY targets krs-one, not team-lead) |
 | `CYCLE_WORKERS: scenario={s}, duo_id={id}, coder_name={name}, reviewer_name={name}, reason={r}, chunk={c}` | KRS-One → engine | Yes | Engine shuts down old pair, spawns fresh builder+reviewer from duo pool |
 | `WORKERS_SPAWNED: duo_id={id}, {builder_name} (subagent_type: {builder_type}), {reviewer_name} (subagent_type: {reviewer_type})` | Engine → KRS-One | Yes (response) | Fresh pair on team, awaiting assignment |
 | `CYCLE_REJECTED: {reason}` | Engine → KRS-One | Yes (response) | Invalid scenario — KRS-One must fix |
@@ -77,9 +77,8 @@ Builders commit directly to the repo. The engine manages isolation.
 | `MILESTONE_QA_READY: {milestone_name}` | KRS-One → engine | Yes (300s timeout) | Deliverables verified, requesting independent QA |
 | `QA_REPORT_READY` | ken/ryu → engine | No | Individual QA report written; engine tracks per-sender |
 | `RECONCILIATION_COMPLETE` | denzel → engine | No | Reconciliation written to .kiln/tmp/qa-reconciliation.md; engine spawns judge-dredd |
-| `QA_PASS` | judge-dredd → engine | No | Final verdict: all criteria satisfied |
-| `QA_FAIL: {findings}` | judge-dredd → engine | No | Final verdict: issues found |
-| `QA_VERDICT: {PASS/FAIL}` | engine → KRS-One | Yes (response) | Engine relays judge-dredd's verdict |
+| `QA_PASS` | judge-dredd → KRS-One | Yes (response) | Final verdict: all criteria satisfied. Direct, no engine relay (Wave 2 centralisation) |
+| `QA_FAIL: {findings}` | judge-dredd → KRS-One | Yes (response) | Final verdict: issues found. Direct, no engine relay (Wave 2 centralisation) |
 | `MILESTONE_COMPLETE: {name}` | KRS-One → engine | No (terminal) | Milestone QA passed |
 | `BUILD_COMPLETE` | KRS-One → engine | No (terminal) | All milestones done |
 
@@ -87,8 +86,8 @@ Builders commit directly to the repo. The engine manages isolation.
 
 ```
 --- Phase A (bootstrap, once per milestone) ---
-Rakim    → team-lead      (READY: codebase state summary)
-Sentinel → team-lead      (READY: patterns/pitfalls guidance)
+Rakim    → team-lead      (READY_BOOTSTRAP: codebase state summary)
+Sentinel → team-lead      (READY_BOOTSTRAP: patterns/pitfalls guidance)
 
 --- Phase B (boss dispatches, persistent) ---
 KRS-One  → team-lead      (CYCLE_WORKERS: scenario + reason — blocking)
@@ -110,20 +109,21 @@ KRS-One  → Sentinel       (ITERATION_UPDATE — blocking, 60s timeout, expects
 KRS-One  → .kiln/tmp/     (writes iter-summary, assignment, QA artifacts — thoth self-scans on wake)
 
 --- Phase D (milestone QA — Judge Dredd Tribunal) ---
-KRS-One      → team-lead    (MILESTONE_QA_READY: {milestone_name} — blocking 300s)
-Engine       → ken          (spawn, background — team-red: deep Claude analysis)
-Engine       → ryu          (spawn, background — team-blue: GPT-5.4 via Codex CLI)
+KRS-One      → team-lead    (MILESTONE_QA_READY: {milestone_name} — blocking 300s, waits for QA_PASS / QA_FAIL)
+Engine       → ken          (spawn, background — team-red, Opus; runtime prompt includes random slot={a|b})
+Engine       → ryu          (spawn, background — team-blue, GPT via Codex; runtime prompt includes the other slot)
+ken          → .kiln/tmp/   (writes qa-report-{slot}.md directly — self-anonymised at spawn time, Wave 2)
+ryu          → .kiln/tmp/   (writes qa-report-{other-slot}.md directly — self-anonymised at spawn time, Wave 2)
 ken          → rakim        (QA context consultation — optional)
 ken          → sentinel     (QA patterns consultation — optional)
-ken          → team-lead    (QA_REPORT_READY)
-ryu          → team-lead    (QA_REPORT_READY)
-Engine               → .kiln/tmp/   (anonymize both reports: strip agent names, label A/B)
-Engine       → denzel       (spawn, background — the-negotiator: reconcile A/B reports)
-denzel       → team-lead    (RECONCILIATION_COMPLETE)
+ken          → team-lead    (QA_REPORT_READY — tribunal-internal, engine tracks per-sender)
+ryu          → team-lead    (QA_REPORT_READY — tribunal-internal, engine tracks per-sender)
+Engine       → denzel       (spawn, background — the-negotiator: reads qa-report-a.md + qa-report-b.md)
+denzel       → team-lead    (RECONCILIATION_COMPLETE — tribunal-internal)
 Engine       → judge-dredd  (spawn, background — i-am-the-law: final verdict)
 judge-dredd  → thoth        (ARCHIVE: all 4 QA artifacts — fire-and-forget)
-judge-dredd  → team-lead    (QA_PASS or QA_FAIL)
-Engine       → KRS-One      (QA_VERDICT: {PASS/FAIL} + findings)
+judge-dredd  → krs-one      (QA_PASS or QA_FAIL — DIRECT, no engine relay; Wave 2 centralisation)
+Engine       → .            (shuts down ken, ryu, denzel, judge-dredd; does NOT emit QA_VERDICT anymore)
 
 --- Milestone boundaries ---
 KRS-One  → Rakim          (MILESTONE_TRANSITION — blocking)
@@ -178,7 +178,7 @@ Step 5: Build. You are a reviewer. Verdict: APPROVED or REJECTED.
 ```
 You are "ken" (team-red) on team "{team_name}". Step 5: Build — Milestone QA.
 Milestone under review: {milestone_name}. Working dir: {working_dir}. Master plan: .kiln/master-plan.md.
-Run your QA analysis. Write findings to .kiln/tmp/qa-report-red.md. Consult rakim and sentinel as needed.
+Run your QA analysis. Write findings directly to .kiln/tmp/qa-report-${slot}.md (slot from runtime prompt, a or b — the other checker has the complementary slot; stay neutral in the report body). Consult rakim and sentinel as needed.
 ```
 
 **ryu (QA analyst — team-blue, GPT-5.4 via Codex CLI):**
@@ -189,7 +189,7 @@ Codebase state summary:
 {rakim_tldr}
 Patterns summary:
 {sentinel_tldr}
-Construct your QA prompt for GPT-5.4 and invoke codex exec. Write findings to .kiln/tmp/qa-report-blue.md.
+Construct your QA prompt for GPT-5.4 and invoke codex exec. Write findings directly to .kiln/tmp/qa-report-${slot}.md (slot from runtime prompt, a or b — the other checker has the complementary slot; stay neutral in the report body).
 ```
 
 **denzel (QA reconciler — the-negotiator):**

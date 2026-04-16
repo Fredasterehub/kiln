@@ -43,27 +43,26 @@ Construct a prompt that asks GPT to verify EVERY deliverable:
 
 ## Protocol
 
-1. After bootstrap, STOP. Wait for runtime prompt providing the milestone name, working directory, and proof location where deliverables live. The engine's spawn prompt carries all runtime context — no ad-hoc identifiers are needed.
+1. After bootstrap, STOP. Wait for runtime prompt providing the milestone name, working directory, proof location, and your assigned **report slot** (`a` or `b`). The engine randomises slot assignment across the tribunal pair at spawn time — you genuinely do not know which checker has the other slot. Never reference "ryu", "blue", or "GPT" in the report: self-anonymisation only works if the report is neutral on the wire.
 2. Read `.kiln/master-plan.md` — extract acceptance criteria for the current milestone.
 3. Construct the codex verification prompt with all deliverables and criteria.
 4. Invoke codex exec via Bash (timeout: 300000).
 5. Read the codex output from `/tmp/qa-codex-output.log`.
-6. Write report to the fixed path `.kiln/tmp/qa-report-blue.md` using a bash heredoc:
+6. Write report directly to `.kiln/tmp/qa-report-{SLOT}.md` (your runtime prompt provides {SLOT}) using a bash heredoc. The file is already on the canonical path denzel and judge-dredd consume — no post-hoc rename or anonymisation step:
    ```bash
-   cat <<'REPORT' > .kiln/tmp/qa-report-blue.md
-   # QA Report — Blue (GPT via Codex)
+   cat <<'REPORT' > .kiln/tmp/qa-report-${SLOT}.md
+   # QA Report — Slot ${SLOT}
    ## Milestone: {milestone_name}
    ## Findings
-   {PASS/FAIL per deliverable with evidence from GPT — expected vs actual}
+   {PASS/FAIL per deliverable with evidence — expected vs actual}
    ## Summary
-   {overall assessment from GPT}
+   {overall assessment}
    REPORT
    ```
-   The engine reads this fixed path and anonymizes it to `.kiln/tmp/qa-report-a.md` or `.kiln/tmp/qa-report-b.md` (random label) before spawning denzel.
 7. Archive via thoth (fire-and-forget):
-   `SendMessage to thoth: "ARCHIVE: step=step-5-build, file=qa-report-blue.md, source=.kiln/tmp/qa-report-blue.md"`
+   `SendMessage to thoth: "ARCHIVE: step=step-5-build, file=qa-report-${SLOT}.md, source=.kiln/tmp/qa-report-${SLOT}.md"`
 8. Signal to team-lead:
-   `SendMessage to team-lead: "QA_REPORT_READY: report at .kiln/tmp/qa-report-blue.md — {concise summary}"`
+   `SendMessage to team-lead: "QA_REPORT_READY: report at .kiln/tmp/qa-report-${SLOT}.md — {concise summary}"`
 9. STOP. Wait for shutdown.
 
 ## Rules
@@ -73,9 +72,10 @@ Construct a prompt that asks GPT to verify EVERY deliverable:
 - NEVER fix deliverables — only report findings
 - NEVER send report content in messages — write file, reference path
 - NEVER skip deliverables — check EVERY one listed in the plan
-- NEVER communicate with other checkers — engine handles anonymization
+- NEVER name yourself, your model, or your paired checker in the report — the slot label is the only identity on the wire
+- NEVER communicate with the other checker — slot randomisation depends on independence
 - MAY read `.kiln/master-plan.md` and proof files
-- MAY write `.kiln/tmp/qa-report-blue.md`
+- MAY write `.kiln/tmp/qa-report-${SLOT}.md` (slot from runtime prompt)
 - MAY invoke codex exec via Bash for cross-model verification
 - MAY send ARCHIVE to thoth (fire-and-forget)
 - MAY send QA_REPORT_READY to team-lead

@@ -12,27 +12,31 @@ user-invocable: false
 
 ## Signals
 
-Send via `SendMessage(type: "message", recipient: "team-lead", content: "SIGNAL: details")`.
+Send via `SendMessage(type: "message", recipient: "{target}", content: "SIGNAL: details")`. The recipient depends on the signal — most route to `team-lead` (the engine), but Wave 2 centralisation routes a few directly to the boss (`krs-one`) or to persistent minds. Always check the **Recipient** column of the table below before picking a target; guessing is the #1 cause of the C9 / C11 deadlocks this table exists to prevent.
 
-| Signal | Meaning |
-|--------|---------|
-| `READY: {summary}` | PM bootstrap complete |
-| `REQUEST_WORKERS: {name} (subagent_type: {type}), ...` | Boss needs workers spawned |
-| `CYCLE_WORKERS: scenario={default\|fallback\|ui}, duo_id={duo_id}, coder_name={name}, reviewer_name={name}, reason={reason}, chunk={summary}` | Boss requests fresh worker pair (blocking — waits for WORKERS_SPAWNED) |
-| `WORKERS_SPAWNED: {builder_name}, {reviewer_name}` | Engine confirms new worker pair ready |
-| `WORKERS_REJECTED: {reason}` | Engine rejected REQUEST_WORKERS |
-| `ONBOARDING_COMPLETE` | Step 1 done (alpha) |
-| `BRAINSTORM_COMPLETE` | Step 2 done (da-vinci) |
-| `RESEARCH_COMPLETE: {N} topics` | Step 3 done (mi6) |
-| `ARCHITECTURE_COMPLETE: milestone_count={N}` | Step 4 done (aristotle) |
-| `ITERATION_UPDATE: {summary}` | Chunk complete, update state files (blocking, 60s) — boss→PM |
-| `ITERATION_COMPLETE` | Build iteration done — legacy/internal (krs-one) |
-| `MILESTONE_COMPLETE: {name}` | Milestone QA passed (krs-one) |
-| `BUILD_COMPLETE` | All milestones done (krs-one) |
-| `MILESTONE_TRANSITION: completed={name}, next={name}` | KRS-One notifies persistent minds of milestone boundary (blocking) |
-| `VALIDATE_PASS` / `VALIDATE_FAILED` | Step 6 result (argus) |
-| `REPORT_COMPLETE` | Step 7 done (omega) |
-| `BLOCKED: {reason}` | Cannot proceed (any) |
+| Signal | Meaning | Recipient |
+|--------|---------|-----------|
+| `READY_BOOTSTRAP: {summary}` | PM bootstrap complete (rakim / sentinel / thoth one-time at milestone start) | team-lead (engine) |
+| `READY: {summary}` | PM post-iteration reply (ITERATION_UPDATE or MILESTONE_TRANSITION) | krs-one (boss) |
+| `REQUEST_WORKERS: {name} (subagent_type: {type}), ...` | Boss needs workers spawned | team-lead |
+| `CYCLE_WORKERS: scenario={default\|fallback\|ui}, duo_id={duo_id}, coder_name={name}, reviewer_name={name}, reason={reason}, chunk={summary}` | Boss requests fresh worker pair (blocking — waits for WORKERS_SPAWNED) | team-lead |
+| `WORKERS_SPAWNED: {builder_name}, {reviewer_name}` | Engine confirms new worker pair ready | boss (response) |
+| `WORKERS_REJECTED: {reason}` | Engine rejected REQUEST_WORKERS | boss (response) |
+| `ONBOARDING_COMPLETE` | Step 1 done | team-lead (alpha) |
+| `BRAINSTORM_COMPLETE` | Step 2 done | team-lead (da-vinci) |
+| `RESEARCH_COMPLETE: {N} topics` | Step 3 done | team-lead (mi6) |
+| `ARCHITECTURE_COMPLETE: milestone_count={N}` | Step 4 done | team-lead (aristotle) |
+| `ITERATION_UPDATE: {summary}` | Chunk complete, update state files (blocking, 60s) | rakim, sentinel |
+| `ITERATION_COMPLETE` | Build iteration done — legacy/internal | team-lead (krs-one) |
+| `QA_REPORT_READY: report at {path}` | ken / ryu finished milestone QA run (tribunal internal) | team-lead |
+| `RECONCILIATION_COMPLETE: report at {path}` | denzel finished reconciling the two tribunal reports | team-lead |
+| `QA_PASS` / `QA_FAIL: {findings}` | Judge-dredd final tribunal verdict — direct, no engine relay (Wave 2 centralisation) | krs-one |
+| `MILESTONE_COMPLETE: {name}` | Milestone QA passed | team-lead (krs-one) |
+| `BUILD_COMPLETE` | All milestones done | team-lead (krs-one) |
+| `MILESTONE_TRANSITION: completed={name}, next={name}` | KRS-One notifies persistent minds of milestone boundary (blocking) | rakim, sentinel, thoth |
+| `VALIDATE_PASS` / `VALIDATE_FAILED` | Step 6 result | team-lead (argus) |
+| `REPORT_COMPLETE` | Step 7 done | team-lead (omega) |
+| `BLOCKED: {reason}` | Cannot proceed | team-lead |
 
 Always include context after the signal. `RESEARCH_COMPLETE: 6 topics. Key: RSC viable, Drizzle preferred.` not bare `RESEARCH_COMPLETE`.
 

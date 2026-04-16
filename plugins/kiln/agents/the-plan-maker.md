@@ -38,30 +38,31 @@ Numerobis bootstraps in Phase A. Her READY summary is in your runtime prompt —
 
 ### Phase 2: Dual Plan (Parallel)
 
-1. Check STATE.md for `codex_available`:
-   - If true: `REQUEST_WORKERS: confucius (subagent_type: mystical-inspiration), sun-tzu (subagent_type: art-of-war)`
-   - If false: `REQUEST_WORKERS: confucius (subagent_type: mystical-inspiration), miyamoto (subagent_type: gracefully-degrading)`
+1. Check STATE.md for `codex_available`. Then **randomise slot assignment** for this run: flip a coin so confucius gets `a` or `b`, and the second planner (sun-tzu or miyamoto) gets the remaining letter. This is Wave 2 self-anonymization — slot randomisation happens at spawn time, so the plan files are identity-free at creation and no post-hoc sed rewriting is needed.
+   ```bash
+   # Random slot assignment for the planner pair — flip once, assign complementary slots
+   if [ $((RANDOM % 2)) -eq 0 ]; then CONFUCIUS_SLOT=a; OTHER_SLOT=b; else CONFUCIUS_SLOT=b; OTHER_SLOT=a; fi
+   ```
+   - If `codex_available=true`: `REQUEST_WORKERS: confucius (subagent_type: mystical-inspiration, slot=${CONFUCIUS_SLOT}), sun-tzu (subagent_type: art-of-war, slot=${OTHER_SLOT})`
+   - If `codex_available=false`: `REQUEST_WORKERS: confucius (subagent_type: mystical-inspiration, slot=${CONFUCIUS_SLOT}), miyamoto (subagent_type: gracefully-degrading, slot=${OTHER_SLOT})`
 
-2. STOP. Wait for engine to confirm spawns (WORKERS_SPAWNED). Then dispatch both:
-   - Message confucius: numerobis's summary + his assignment (write claude_plan.md) + doc paths
-   - If sun-tzu was spawned: numerobis's summary + his assignment (delegate to Codex CLI, write codex_plan.md) + doc paths
-   - If miyamoto was spawned: numerobis's summary + his assignment (write miyamoto_plan.md directly) + doc paths
+2. STOP. Wait for engine to confirm spawns (WORKERS_SPAWNED). Then dispatch both — each planner's runtime prompt MUST include its assigned slot (`a` or `b`):
+   - Message confucius: numerobis's summary + his assignment (write `plan-${CONFUCIUS_SLOT}.md`) + slot=${CONFUCIUS_SLOT} + doc paths
+   - If sun-tzu was spawned: numerobis's summary + his assignment (delegate to Codex CLI, write `plan-${OTHER_SLOT}.md`) + slot=${OTHER_SLOT} + doc paths
+   - If miyamoto was spawned: numerobis's summary + his assignment (write `plan-${OTHER_SLOT}.md` directly) + slot=${OTHER_SLOT} + doc paths
 
-   **Path rule**: Plans go to `.kiln/plans/`. The master-plan goes to `.kiln/master-plan.md` (root level).
+   **Path rule**: Plans go to `.kiln/plans/plan-a.md` and `.kiln/plans/plan-b.md`. The master-plan goes to `.kiln/master-plan.md` (root level).
 
 3. STOP. Wait for replies. Need 2 (confucius + the spawned planner). ONE AT A TIME.
 
 ### Phase 2.5: Divergence Extraction
 
-4. When BOTH planners have replied, verify both plan files exist (.kiln/plans/claude_plan.md and either .kiln/plans/codex_plan.md or .kiln/plans/miyamoto_plan.md).
+4. When BOTH planners have replied, verify both plan files exist: `.kiln/plans/plan-a.md` and `.kiln/plans/plan-b.md`.
 
-5. **Anonymize plans.** Strip model/agent identity so downstream agents see only Plan A / Plan B:
+5. **Stage plans for downstream agents.** No mid-flight anonymization needed — planners wrote directly to anonymized slots at spawn time (Wave 2 self-anonymization). Copy verbatim to `.kiln/tmp/` so diogenes and plato read from their canonical consumption paths:
    ```bash
-   # Copy and anonymize — original plan files are untouched
-   sed -e 's/confucius/Plan A author/gi' -e 's/sun-tzu/Plan A author/gi' -e 's/miyamoto/Plan A author/gi' -e 's/Claude/[removed]/gi' .kiln/plans/claude_plan.md > .kiln/tmp/plan-a.md
-   # Use whichever exists: codex_plan.md or miyamoto_plan.md
-   PLAN_B=$([ -f .kiln/plans/codex_plan.md ] && echo "codex_plan.md" || echo "miyamoto_plan.md")
-   sed -e 's/sun-tzu/Plan B author/gi' -e 's/confucius/Plan B author/gi' -e 's/miyamoto/Plan B author/gi' -e 's/GPT/[removed]/gi' -e 's/Codex/[removed]/gi' .kiln/plans/${PLAN_B} > .kiln/tmp/plan-b.md
+   cp .kiln/plans/plan-a.md .kiln/tmp/plan-a.md
+   cp .kiln/plans/plan-b.md .kiln/tmp/plan-b.md
    ```
 
 6. Request divergence extractor:

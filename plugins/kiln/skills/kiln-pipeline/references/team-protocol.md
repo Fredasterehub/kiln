@@ -60,10 +60,10 @@ You receive messages ONE AT A TIME. Each wake-up delivers exactly one message. P
 | `ITERATION_UPDATE` | KRS-One → rakim, sentinel | Chunk complete, PMs update state | Proceed after 60s (no deadlock) |
 | `CYCLE_WORKERS` | KRS-One → Engine | Request fresh worker pair | Engine responds with WORKERS_SPAWNED |
 | `MILESTONE_TRANSITION` | KRS-One → rakim, sentinel | Milestone boundary, PMs archive+reset | Proceed after 60s (no deadlock) |
-| `MILESTONE_QA_READY` | KRS-One → Engine | Milestone deliverables verified | Engine orchestrates Judge Dredd Tribunal (ken+ryu→anonymize→denzel→judge-dredd), relays QA_VERDICT (300s timeout) |
-| `QA_VERDICT` | Engine → KRS-One | Engine relays judge-dredd's final verdict | KRS-One treats timeout as QA_FAIL |
-| `QA_REPORT_READY` | ken/ryu → Engine | Individual QA report written | Engine tracks per-sender (two distinct waits) |
-| `RECONCILIATION_COMPLETE` | denzel → engine | QA synthesis written, engine spawns judge-dredd | Engine tracks single wait |
+| `MILESTONE_QA_READY` | KRS-One → Engine | Milestone deliverables verified | Engine spawns Judge Dredd Tribunal (ken+ryu with random slot assignment → denzel → judge-dredd). KRS-One waits for QA_PASS / QA_FAIL direct from judge-dredd (300s timeout) |
+| `QA_REPORT_READY` | ken/ryu → Engine | Individual QA report written to .kiln/tmp/qa-report-{a\|b}.md (slot assigned at spawn) | Engine tracks per-sender (two distinct waits) |
+| `RECONCILIATION_COMPLETE` | denzel → engine | Reconciliation written to .kiln/tmp/qa-reconciliation.md; engine spawns judge-dredd | Engine tracks single wait |
+| `QA_PASS` / `QA_FAIL: {findings}` | judge-dredd → KRS-One | Final verdict, direct (Wave 2 — engine no longer relays as QA_VERDICT) | KRS-One treats timeout as QA_FAIL |
 | `DIVERGENCE_READY` | diogenes → aristotle | Divergence analysis written | Peer signal, not engine-routed |
 
 ### Blocking Policy Rules
@@ -155,7 +155,8 @@ Standard signals sent via SendMessage to team-lead (the engine):
 
 | Signal | Meaning | Sent by |
 |--------|---------|---------|
-| `READY: {summary}` | Bootstrap complete, available for consultation | Persistent minds |
+| `READY_BOOTSTRAP: {summary}` | Bootstrap complete, available for consultation (one-time at milestone start, recipient: team-lead) | Persistent minds |
+| `READY: {summary}` | Post-iteration reply after ITERATION_UPDATE or MILESTONE_TRANSITION (recipient: krs-one) | Persistent minds |
 | `REQUEST_WORKERS: {list}` | Need workers spawned on team (initial) | Boss |
 | `CYCLE_WORKERS: scenario={s}, duo_id={id}, coder_name={name}, reviewer_name={name}, reason={r}, chunk={c}` | Shut down current workers, spawn fresh pair from duo pool | KRS-One |
 | `WORKERS_SPAWNED: duo_id={id}, {builder_name} (subagent_type: {type}), {reviewer_name} (subagent_type: {type})` | Engine confirms fresh pair on team | Engine |
@@ -169,11 +170,10 @@ Standard signals sent via SendMessage to team-lead (the engine):
 | `ITERATION_COMPLETE` | Build iteration done — legacy/internal, replaced by CYCLE_WORKERS | KRS-One |
 | `MILESTONE_TRANSITION: completed={name}, next={name}` | Milestone boundary — PMs archive + reset (blocking) | KRS-One |
 | `MILESTONE_QA_READY: {milestone_name}` | Deliverables verified, requesting independent QA | KRS-One |
-| `QA_REPORT_READY` | Individual QA report written; engine tracks per-sender | ken / ryu |
-| `RECONCILIATION_COMPLETE` | Reconciliation written to .kiln/tmp/qa-reconciliation.md; engine spawns judge-dredd | denzel |
-| `QA_PASS` | Final verdict: all criteria satisfied | judge-dredd |
-| `QA_FAIL: {findings}` | Final verdict: issues found | judge-dredd |
-| `QA_VERDICT: {PASS/FAIL}` | Engine relays judge-dredd's verdict to KRS-One | Engine |
+| `QA_REPORT_READY` | Individual QA report written to .kiln/tmp/qa-report-{a\|b}.md; engine tracks per-sender (recipient: team-lead) | ken / ryu |
+| `RECONCILIATION_COMPLETE` | Reconciliation written to .kiln/tmp/qa-reconciliation.md; engine spawns judge-dredd (recipient: team-lead) | denzel |
+| `QA_PASS` | Final verdict: all criteria satisfied — direct to krs-one, no engine relay (Wave 2) | judge-dredd |
+| `QA_FAIL: {findings}` | Final verdict: issues found — direct to krs-one, no engine relay (Wave 2) | judge-dredd |
 | `DIVERGENCE_READY` | Divergence analysis written; peer signal to aristotle | diogenes |
 | `MILESTONE_COMPLETE: {name}` | Milestone done, QA passed | KRS-One |
 | `BUILD_COMPLETE` | All milestones done | KRS-One |
@@ -275,7 +275,7 @@ critical-drinker (opus) is the single structural reviewer for Default and Fallba
 - **PMs**: rakim (opus), sentinel (sonnet), thoth (opus) — all persist per milestone
 - **Workers**: one builder+reviewer pair per chunk via CYCLE_WORKERS, duo pool names per cycle (default: dial-a-coder+critical-drinker, fallback: backup-coder+critical-drinker, ui: la-peintresse+the-curator)
 - **QA**: ken/team-red (opus), ryu/team-blue (sonnet), denzel/the-negotiator (opus), judge-dredd/i-am-the-law (sonnet) — spawned on MILESTONE_QA_READY, Judge Dredd Tribunal, dynamic
-- **Signals**: CYCLE_WORKERS, ITERATION_UPDATE (blocking 60s), MILESTONE_TRANSITION (blocking 60s), MILESTONE_QA_READY (blocking 300s), QA_VERDICT, MILESTONE_COMPLETE, BUILD_COMPLETE
+- **Signals**: CYCLE_WORKERS, ITERATION_UPDATE (blocking 60s), MILESTONE_TRANSITION (blocking 60s), MILESTONE_QA_READY (blocking 300s, waits for direct QA_PASS / QA_FAIL from judge-dredd), MILESTONE_COMPLETE, BUILD_COMPLETE
 - **Done**: BUILD_COMPLETE → stage: validate
 
 ### Step 6: Validate

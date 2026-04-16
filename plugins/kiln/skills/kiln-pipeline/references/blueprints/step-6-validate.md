@@ -20,7 +20,7 @@
 
 | Signal | Sender → Receiver | Blocking? | Notes |
 |--------|-------------------|-----------|-------|
-| `READY: {summary}` | Zoxea → engine | No | Bootstrap complete; architecture-check.md written, architectural drift summary ready |
+| `READY_BOOTSTRAP: {summary}` | Zoxea → team-lead | No | Bootstrap complete; architecture-check.md written, architectural drift summary ready (Wave 2 distinct-name contract) |
 | `REQUEST_WORKERS: hephaestus` | Argus → engine | No | Conditional — only when `.kiln/design/` exists and project is a web app |
 | `DESIGN_QA_COMPLETE: {scores}` | Hephaestus → Argus | No | 5-axis design review scores; advisory only, never sole cause of FAIL |
 | `VALIDATE_PASS` | Argus → engine | No (terminal) | All acceptance criteria met; advances stage to report |
@@ -36,7 +36,7 @@ Internal (not routed through engine):
 
 ```
 --- Phase A (bootstrap) ---
-Zoxea      → engine         (READY: architecture verification summary)
+Zoxea      → team-lead      (READY_BOOTSTRAP: architecture verification summary)
 
 --- Phase B (validation) ---
 Argus      → Zoxea          (architectural questions — optional, blocking)

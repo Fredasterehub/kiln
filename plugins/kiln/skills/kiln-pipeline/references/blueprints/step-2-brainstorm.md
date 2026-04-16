@@ -24,7 +24,7 @@
 
 | Signal | Sender → Receiver | Blocking? | Notes |
 |--------|-------------------|-----------|-------|
-| `READY: {summary}` | Asimov → engine | No | Bootstrap complete; includes tech stack, decisions, risks (brownfield) or "Clean slate" (greenfield) |
+| `READY_BOOTSTRAP: {summary}` | Asimov → team-lead | No | Bootstrap complete; includes tech stack, decisions, risks (brownfield) or "Clean slate" (greenfield) (Wave 2 distinct-name contract) |
 | `VISION_UPDATE: {section}` | Da Vinci → Asimov | No (fire-and-forget) | One per approved brainstorm section; asimov accumulates, da-vinci never waits for ack |
 | `SERIALIZE_AND_SHUTDOWN` | Da Vinci → Asimov | Yes (waits for SERIALIZATION_COMPLETE) | Triggers asimov to write VISION.md, vision-notes.md, vision-priorities.md |
 | `SERIALIZATION_COMPLETE` | Asimov → Da Vinci | — (reply to above) | Confirms all three files written to disk |
@@ -34,7 +34,7 @@
 
 ```
 --- Phase A (bootstrap) ---
-Asimov      → engine       (READY: onboarding context summary)
+Asimov      → team-lead    (READY_BOOTSTRAP: onboarding context summary)
 
 --- Phase B (boss, INTERACTIVE — no Phase C) ---
 Da Vinci  → Asimov         (VISION_UPDATE: one per approved section — fire-and-forget)

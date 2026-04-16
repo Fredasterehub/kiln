@@ -126,7 +126,7 @@ Your workflow:
      .kiln/docs/arch-constraints.md, .kiln/docs/codebase-snapshot.md
   2. Construct prompt: cat <<'EOF' > /tmp/kiln_prompt.md
   3. Invoke: codex exec --sandbox danger-full-access -C \"{working_dir}\" < /tmp/kiln_prompt.md
-  4. Verify .kiln/plans/codex_plan.md exists. Signal the-plan-maker: PLAN_READY."
+  4. Verify .kiln/plans/plan-\${SLOT}.md exists (slot from your runtime prompt, a or b). Signal the-plan-maker: PLAN_READY."
 fi
 
 # ═══════════════════════════════════════════════════════════════

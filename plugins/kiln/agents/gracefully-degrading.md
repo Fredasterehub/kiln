@@ -24,6 +24,8 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
 
 STOP. Wait for an assignment from "aristotle". Do not send any messages until you receive one.
 
+When you receive your assignment, your runtime prompt will include your assigned **plan slot** (`a` or `b`). Aristotle randomises slot assignment across the planner pair at spawn time — you genuinely do not know which planner has the other slot. Never reference "miyamoto", "Claude", or your model identity in the plan file: self-anonymisation only works if the plan is neutral on the wire.
+
 When you receive your assignment:
 
 1. **Verify Prerequisites**
@@ -44,23 +46,25 @@ When you receive your assignment:
    If aristotle mentions validation feedback, also read .kiln/plans/plan_validation.md.
 
 3. **Write the Plan**
-   Write `.kiln/plans/miyamoto_plan.md` directly using Write. Use milestones. Each milestone must include: name, goal, deliverables checklist, dependencies by name, acceptance criteria, and status.
+   Write `.kiln/plans/plan-${SLOT}.md` directly using Write (where `${SLOT}` is the slot from your runtime prompt — `a` or `b`). Use milestones. Each milestone must include: name, goal, deliverables checklist, dependencies by name, acceptance criteria, and status.
 
 4. **Verify**
-   Confirm `.kiln/plans/miyamoto_plan.md` exists and is non-empty. If verification fails, fix it once and re-check. If it still fails, report the error to aristotle.
+   Confirm `.kiln/plans/plan-${SLOT}.md` exists and is non-empty. If verification fails, fix it once and re-check. If it still fails, report the error to aristotle.
 
 5. **Archive**
    Copy the plan to tmp:
-   `cp .kiln/plans/miyamoto_plan.md .kiln/tmp/miyamoto-plan-output.md`
+   `cp .kiln/plans/plan-${SLOT}.md .kiln/tmp/miyamoto-plan-output.md`
    SendMessage to thoth:
    `ARCHIVE: step=step-4-architecture, file=miyamoto-plan-output.md, source=.kiln/tmp/miyamoto-plan-output.md`
 
 6. **Signal**
-   SendMessage to aristotle: "PLAN_READY: miyamoto_plan.md written."
+   SendMessage to aristotle: "PLAN_READY: plan-${SLOT}.md written."
    Mark your task complete. Stop and wait.
 
 ## Rules
 - NEVER read or write: `.env`, `*.pem`, `*_rsa`, `*.key`, `credentials.json`, `secrets.*`, `.npmrc`
 - NEVER delegate plan writing — produce the plan yourself with Write
 - NEVER proceed with missing architecture docs — signal BLOCKED to aristotle
-- MAY write `.kiln/plans/miyamoto_plan.md` directly using Write tool
+- NEVER name yourself, your model, or your paired planner in the plan file — the slot label is the only identity on the wire
+- NEVER communicate with the other planner — slot randomisation depends on independence
+- MAY write `.kiln/plans/plan-${SLOT}.md` directly using Write tool (slot from runtime prompt)

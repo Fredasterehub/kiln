@@ -158,8 +158,11 @@ def check_signal_handlers() -> list[c.Violation]:
                 sig = m.group(1)
                 if sig not in c.STOPLIST:
                     engine_sends.add(sig)
-    # Always credit engine with engine-specific relays
-    engine_sends.update({"WORKERS_SPAWNED", "WORKERS_REJECTED", "QA_VERDICT"})
+    # Always credit engine with engine-specific relays. QA_VERDICT was
+    # retired in Wave 2 (judge-dredd sends QA_PASS / QA_FAIL direct to
+    # krs-one) — do not add it here, or stale handler references would
+    # be masked by phantom senders.
+    engine_sends.update({"WORKERS_SPAWNED", "WORKERS_REJECTED"})
     if engine_sends:
         senders["engine"] = engine_sends
 
@@ -525,6 +528,82 @@ def check_terminal_signal_contract() -> list[c.Violation]:
     return out
 
 
+def check_centralized_recipients() -> list[c.Violation]:
+    """Wave 2 (C11/C9) centralisation contract.
+
+    Some signals have a forced recipient — if an agent body routes them
+    anywhere else, it's a regression toward the old two-hop engine relay
+    or the C9 rakim deadlock.
+
+    Rules enforced:
+      - QA_PASS / QA_FAIL targeted at team-lead (or engine) are flagged;
+        the verdict goes DIRECT to krs-one (no QA_VERDICT relay anymore).
+      - READY_BOOTSTRAP targeted at anything other than team-lead is
+        flagged; it exists specifically to signal the engine at PM start.
+      - For PMs (rakim / sentinel / thoth / numerobis), a plain
+        `READY: ...` sent to team-lead is flagged — plain READY is the
+        post-iteration reply, which targets krs-one. If bootstrap needs
+        an engine signal, use READY_BOOTSTRAP.
+    """
+    out: list[c.Violation] = []
+
+    # Pattern catches "SendMessage to {recipient}: \"SIGNAL"
+    #            and  "SendMessage to {recipient}: SIGNAL"
+    send_re = re.compile(
+        r'SendMessage\s+to\s+["`]?([\w-]+)["`]?[:\s]+["`]?([A-Z][A-Z0-9_]+)'
+    )
+
+    # agent.name is the filename stem (e.g. "dropping-science"), not the
+    # spawn name ("rakim"). Key on filenames here so the rule actually
+    # fires — GPT review finding MEDIUM.
+    pm_agent_files = {
+        "dropping-science",       # rakim
+        "algalon-the-observer",   # sentinel
+        "lore-keepah",            # thoth
+        "pitie-pas-les-crocos",   # numerobis
+        "the-foundation",         # asimov
+        "the-discovery-begins",   # mnemosyne
+    }
+
+    for agent in c.load_agents():
+        for m in send_re.finditer(agent.body):
+            recipient = m.group(1)
+            signal = m.group(2)
+
+            if signal in {"QA_PASS", "QA_FAIL"} and recipient != "krs-one":
+                out.append(c.Violation(
+                    code="CENTRALIZATION_VIOLATION",
+                    message=(
+                        f"'{agent.name}' sends {signal} to '{recipient}' — "
+                        "Wave 2 requires direct route to krs-one (no engine relay)"
+                    ),
+                    location=f"plugins/kiln/agents/{agent.name}.md",
+                ))
+
+            if signal == "READY_BOOTSTRAP" and recipient != "team-lead":
+                out.append(c.Violation(
+                    code="BOOTSTRAP_RECIPIENT",
+                    message=(
+                        f"'{agent.name}' sends READY_BOOTSTRAP to '{recipient}' — "
+                        "this signal is engine-facing; recipient must be 'team-lead'"
+                    ),
+                    location=f"plugins/kiln/agents/{agent.name}.md",
+                ))
+
+            if signal == "READY" and agent.name in pm_agent_files and recipient == "team-lead":
+                out.append(c.Violation(
+                    code="READY_RECIPIENT",
+                    message=(
+                        f"'{agent.name}' sends plain READY to team-lead — "
+                        "plain READY is the post-iteration reply and targets krs-one. "
+                        "If bootstrap needs to signal the engine, use READY_BOOTSTRAP."
+                    ),
+                    location=f"plugins/kiln/agents/{agent.name}.md",
+                ))
+
+    return out
+
+
 def check_model_policy() -> list[c.Violation]:
     """Assert every agent's frontmatter matches tests/model-policy.yaml.
 
@@ -614,6 +693,7 @@ ALL_CHECKS = [
     ("REQUEST_WORKERS engine handler (C6)", check_request_workers_handler),
     ("Boss STATE.md scope (H6)", check_boss_state_md_writes),
     ("Terminal signal contract (C4)", check_terminal_signal_contract),
+    ("Centralized recipients (Wave 2 — C11/C9)", check_centralized_recipients),
     ("Model tier policy (Sprint 3)", check_model_policy),
 ]
 

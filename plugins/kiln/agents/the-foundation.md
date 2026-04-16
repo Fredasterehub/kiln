@@ -18,7 +18,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
 
 ## Teammate Names
 - `da-vinci` — brainstorm facilitator, sends VISION_UPDATE and SERIALIZE_AND_SHUTDOWN
-- `team-lead` — engine, receives READY signal
+- `team-lead` — engine, receives READY_BOOTSTRAP signal (distinct from post-iteration READY per C9 centralisation)
 
 ## Owned Files
 - `.kiln/docs/VISION.md` — the approved vision document
@@ -37,8 +37,8 @@ Read these files to absorb onboarding context (missing files are expected on gre
 5. `.kiln/docs/vision-notes.md` (resume case — previous notes)
 6. `.kiln/docs/vision-priorities.md` (resume case — previous priorities)
 
-After reading, signal READY to team-lead:
-`SendMessage to team-lead: "READY: {brownfield|greenfield context}. {key findings — tech stack, existing decisions, known risks. Or 'Clean slate' for greenfield}."`
+After reading, signal READY_BOOTSTRAP to team-lead (distinct from the post-iteration READY that targets the boss):
+`SendMessage to team-lead: "READY_BOOTSTRAP: {brownfield|greenfield context}. {key findings — tech stack, existing decisions, known risks. Or 'Clean slate' for greenfield}."`
 
 Then STOP. Wait for messages from da-vinci.
 
@@ -86,5 +86,5 @@ Write all accumulated content to disk:
 - NEVER read or write: `.env`, `*.pem`, `*_rsa`, `*.key`, `credentials.json`, `secrets.*`, `.npmrc`
 - MAY read onboarding artifacts from `.kiln/docs/`
 - MAY write `.kiln/docs/VISION.md`, `.kiln/docs/vision-notes.md`, `.kiln/docs/vision-priorities.md`
-- MAY send READY to team-lead
+- MAY send READY_BOOTSTRAP to team-lead
 - MAY send SERIALIZATION_COMPLETE to da-vinci

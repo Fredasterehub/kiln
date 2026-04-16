@@ -270,7 +270,7 @@ Based on the boss's done signal, determine next action:
 **Step 5 signals**:
   - CYCLE_WORKERS -> KRS-One requests fresh workers mid-milestone. Execute the full CYCLE_WORKERS protocol (see § CYCLE_WORKERS above): validate scenario, shutdown current builder+reviewer, spawn fresh pair, send WORKERS_SPAWNED back to KRS-One. Do NOT tear down the team — persistent minds and KRS-One stay alive. Do NOT transition steps. After sending WORKERS_SPAWNED, return to waiting for the next signal. Update `build_iteration` in STATE.md.
   - ITERATION_COMPLETE -> (legacy/internal — CYCLE_WORKERS is preferred) Render `phase_complete` banner, increment `build_iteration` in STATE.md. This signal carries no scenario information, so wait for KRS-One's next CYCLE_WORKERS to determine the scenario. Loop back to wait.
-  - MILESTONE_QA_READY -> KRS-One has verified deliverable completeness, requesting independent QA. Execute the full QA Tribunal protocol (see § MILESTONE_QA_READY below). After relaying QA_VERDICT to KRS-One, return to waiting for the next signal (MILESTONE_COMPLETE or back to CYCLE_WORKERS if QA failed).
+  - MILESTONE_QA_READY -> KRS-One has verified deliverable completeness, requesting independent QA. Execute the full QA Tribunal protocol (see § MILESTONE_QA_READY below). Judge-dredd signals QA_PASS / QA_FAIL directly to krs-one (Wave 2 — no engine relay). Engine just shuts down the four QA agents and returns to waiting for the next signal (MILESTONE_COMPLETE or back to CYCLE_WORKERS if QA failed).
   - MILESTONE_COMPLETE -> Full team lifecycle reset:
     1. Render `milestone_complete` banner. Increment `milestones_complete` in STATE.md.
     2. **Pre-shutdown check**: Verify all persistent minds have `<!-- status: complete -->` in their owned files (codebase-state.md, patterns.md). If any missing, wait 30s and re-check (max 3 times), then proceed with warning.
@@ -298,13 +298,15 @@ When writing STATE.md at step transitions, always include the `skill` and `roste
 
 #### MILESTONE_QA_READY — Judge Dredd Tribunal (Step 5 Only)
 
-When KRS-One sends `MILESTONE_QA_READY: {milestone_name}`, the engine orchestrates independent dual-model QA via four dedicated agents (ken, ryu, denzel, judge-dredd) in a sequential 4-step flow. KRS-One blocks on QA_VERDICT (300s timeout).
+When KRS-One sends `MILESTONE_QA_READY: {milestone_name}`, the engine orchestrates independent dual-model QA via four dedicated agents (ken, ryu, denzel, judge-dredd) in a sequential 4-step flow. KRS-One blocks on QA_PASS / QA_FAIL from judge-dredd directly — the engine no longer relays a QA_VERDICT (Wave 2 centralisation, 300s timeout).
 
 **Engine protocol on receiving MILESTONE_QA_READY:**
 
 1. **Pre-package PM context for ryu** — Read the TL;DR headers from rakim's `.kiln/docs/codebase-state.md` and sentinel's `.kiln/docs/patterns.md` (first 30 lines of each). Ryu is a thin Codex CLI wrapper that does NOT consult PMs directly — the engine pre-packages this context into its runtime prompt.
 
 2. **Spawn ken + ryu (parallel, background):**
+
+   The engine randomly assigns one checker to slot 'a' and the other to slot 'b' per milestone — this replaces the mid-flight anonymization step (Wave 2 self-anonymization).
    ```
    Agent(name: "ken", subagent_type: "kiln:team-red", team_name: "{team_name}",
      run_in_background: true,
@@ -312,7 +314,7 @@ When KRS-One sends `MILESTONE_QA_READY: {milestone_name}`, the engine orchestrat
      Milestone under review: {milestone_name}.
      Working dir: {working_dir}. Master plan: .kiln/master-plan.md.
      {protocol_injection_full}
-     Run your QA analysis. Write findings to .kiln/tmp/qa-report-red.md.
+     Run your QA analysis. Your report slot: {ken_slot}. Write to .kiln/tmp/qa-report-${ken_slot}.md.
      Consult rakim and sentinel as needed.")
 
    Agent(name: "ryu", subagent_type: "kiln:team-blue", team_name: "{team_name}",
@@ -324,7 +326,7 @@ When KRS-One sends `MILESTONE_QA_READY: {milestone_name}`, the engine orchestrat
      Patterns summary:\n{sentinel_tldr}
      {protocol_injection_worker}
      Construct your QA prompt for GPT-5.4 and invoke codex exec.
-     Write findings to .kiln/tmp/qa-report-blue.md.")
+     Your report slot: {ryu_slot}. Write to .kiln/tmp/qa-report-${ryu_slot}.md.")
    ```
 
 3. **Wait for TWO distinct QA_REPORT_READY signals** — create two separate wait tasks:
@@ -332,9 +334,7 @@ When KRS-One sends `MILESTONE_QA_READY: {milestone_name}`, the engine orchestrat
    - "Wait for QA_REPORT_READY from ryu"
    Track by sender. Both must arrive before proceeding. 300s timeout for the pair.
 
-4. **Anonymize reports** — read `.kiln/tmp/qa-report-red.md` and `.kiln/tmp/qa-report-blue.md` (fixed paths), strip agent names, and assign random A/B labels. Write anonymized copies to `.kiln/tmp/qa-report-a.md` and `.kiln/tmp/qa-report-b.md`. Prevents reconciler and judge bias from knowing which model produced which report. The red/blue source files remain on disk for thoth's archive sweep.
-
-5. **Spawn denzel (background)** after both reports are anonymized:
+4. **Spawn denzel (background)** after both reports are ready:
    ```
    Agent(name: "denzel", subagent_type: "kiln:the-negotiator", team_name: "{team_name}",
      run_in_background: true,
@@ -345,9 +345,9 @@ When KRS-One sends `MILESTONE_QA_READY: {milestone_name}`, the engine orchestrat
      Read both reports, reconcile findings, write .kiln/tmp/qa-reconciliation.md, signal RECONCILIATION_COMPLETE.")
    ```
 
-6. **Wait for RECONCILIATION_COMPLETE from denzel** — single wait task. 300s timeout.
+5. **Wait for RECONCILIATION_COMPLETE from denzel** — single wait task. 300s timeout.
 
-7. **Spawn judge-dredd (background)** after reconciliation is ready:
+6. **Spawn judge-dredd (background)** after reconciliation is ready:
    ```
    Agent(name: "judge-dredd", subagent_type: "kiln:i-am-the-law", team_name: "{team_name}",
      run_in_background: true,
@@ -359,17 +359,11 @@ When KRS-One sends `MILESTONE_QA_READY: {milestone_name}`, the engine orchestrat
      Read the reports and reconciliation. Signal QA_PASS or QA_FAIL with findings.")
    ```
 
-8. **Wait for QA_PASS or QA_FAIL from judge-dredd** — single wait task. 300s timeout.
+7. **Wait for QA_PASS or QA_FAIL from judge-dredd** — single wait task. 300s timeout.
 
-9. **Shutdown QA agents** — send `shutdown_request` to ken, ryu, denzel, and judge-dredd. Wait for confirmations (60s timeout). Force-terminate on timeout.
+8. **Shutdown QA agents** — send `shutdown_request` to ken, ryu, denzel, and judge-dredd. Wait for confirmations (60s timeout). Force-terminate on timeout.
 
-10. **Relay verdict to KRS-One:**
-    ```
-    SendMessage(type: "message", recipient: "krs-one",
-      content: "QA_VERDICT: {PASS or FAIL}. {judge-dredd's findings summary}")
-    ```
-
-11. **Return to signal wait loop** — do NOT transition steps. KRS-One decides next action (MILESTONE_COMPLETE on PASS, re-scope on FAIL).
+9. **Return to signal wait loop** — KRS-One receives QA_PASS or QA_FAIL directly from judge-dredd and advances milestone state. No engine relay.
 
 #### Protocol Injection (Runtime)
 

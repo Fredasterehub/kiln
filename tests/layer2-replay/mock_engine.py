@@ -115,6 +115,7 @@ class MockEngine:
             "QA_REPORT_READY": self._on_qa_report_ready,
             "RECONCILIATION_COMPLETE": self._on_reconciliation_complete,
             "RECONCILIATION_READY": self._on_reconciliation_ready_legacy,  # Wave 1 retired name
+            "READY_BOOTSTRAP": self._on_ready_bootstrap,  # Wave 2: distinct from post-iteration READY
             "QA_PASS": self._on_qa_verdict,
             "QA_FAIL": self._on_qa_verdict,
             "MILESTONE_COMPLETE": self._on_milestone_complete,
@@ -139,26 +140,24 @@ class MockEngine:
     # ── handlers ──
 
     def _on_ready(self, event):
-        """PM bootstrap or reply to ITERATION_UPDATE.
+        """PM post-iteration reply to ITERATION_UPDATE or MILESTONE_TRANSITION.
 
-        In v1.3.0 (pre-centralization): READY should go to team-lead on
-        bootstrap, krs-one on ITERATION_UPDATE reply. If misrouted, warn.
-        In post-centralization: all READY → krs-one, except bootstrap
-        distinguished as READY_BOOTSTRAP → team-lead.
+        Pre-centralization: legacy code accepted READY for both bootstrap
+        and iteration-ack. The ambiguity was C9 — if bootstrap READY went
+        to team-lead and ack READY went to krs-one, agents routinely
+        misrouted the second one. Wave 2 splits bootstrap off as
+        READY_BOOTSTRAP (see _on_ready_bootstrap), so plain READY is now
+        exclusively the post-iteration reply bound to krs-one.
         """
         recipient = event.get("recipient", "")
         sender = event.get("sender", "")
 
         if self.version == "pre-centralization":
-            # Bootstrap READY → team-lead (expected)
-            # ITERATION_UPDATE reply READY → krs-one (expected)
-            # Heuristic: if sender is a PM and recipient is team-lead AND
-            # we've already seen a bootstrap READY from this sender, then
-            # the second one is a misrouted iteration-update reply.
+            # Pre-centralization C9 regression heuristic: a plain READY
+            # should reach krs-one after bootstrap. If a PM still sends
+            # READY to team-lead, flag it — that's the rakim deadlock.
             if sender in {"rakim", "sentinel", "numerobis", "thoth"}:
                 if recipient == "team-lead":
-                    # Could be bootstrap or misrouted. Check if we've
-                    # already seen boot from this sender.
                     key = f"booted:{sender}"
                     if key in self.active_agents:
                         return [EngineDecision(
@@ -171,10 +170,11 @@ class MockEngine:
                                 "note": "C9 regression risk — READY to team-lead after bootstrap",
                             },
                         )]
+                    # First-time PM READY to team-lead: legacy bootstrap path.
                     self.active_agents.add(key)
                     return [EngineDecision(
                         type="pm_ready",
-                        details={"sender": sender, "stage": "bootstrap"},
+                        details={"sender": sender, "stage": "bootstrap-legacy"},
                     )]
                 elif recipient == "krs-one":
                     return [EngineDecision(
@@ -182,12 +182,49 @@ class MockEngine:
                         details={"sender": sender, "stage": "iteration-ack"},
                     )]
             return []
-        else:
-            # post-centralization
+
+        # post-centralization — READY must go to krs-one
+        if sender in {"rakim", "sentinel", "numerobis", "thoth"} and recipient != "krs-one":
             return [EngineDecision(
-                type="pm_ready",
-                details={"sender": sender, "recipient": recipient},
+                type="warn",
+                details={
+                    "code": "MISROUTED_READY",
+                    "sender": sender,
+                    "routed_to": recipient,
+                    "expected": "krs-one",
+                    "note": "Wave 2 centralisation: post-iteration READY must target krs-one",
+                },
             )]
+        return [EngineDecision(
+            type="pm_ready",
+            details={"sender": sender, "recipient": recipient, "stage": "iteration-ack"},
+        )]
+
+    def _on_ready_bootstrap(self, event):
+        """PM one-time bootstrap signal — Wave 2 distinct name fixes C9.
+
+        READY_BOOTSTRAP is the PM's first signal at milestone start and
+        MUST target team-lead (the engine needs to know the PM is live
+        before KRS-One starts dispatching). Flag any misroute.
+        """
+        sender = event.get("sender", "")
+        recipient = event.get("recipient", "")
+        if recipient != "team-lead":
+            return [EngineDecision(
+                type="warn",
+                details={
+                    "code": "MISROUTED_BOOTSTRAP",
+                    "sender": sender,
+                    "routed_to": recipient,
+                    "expected": "team-lead",
+                    "note": "READY_BOOTSTRAP is the engine-facing bootstrap signal",
+                },
+            )]
+        self.active_agents.add(f"booted:{sender}")
+        return [EngineDecision(
+            type="pm_ready",
+            details={"sender": sender, "stage": "bootstrap"},
+        )]
 
     def _on_worker_ready(self, event):
         return [EngineDecision(
@@ -319,17 +356,18 @@ class MockEngine:
         return decisions
 
     def _on_qa_report_ready(self, event):
-        """When both ken and ryu have emitted, anonymize and spawn denzel."""
+        """When both ken and ryu have emitted, spawn denzel.
+
+        Wave 2 self-anonymization: ken and ryu already wrote directly to
+        qa-report-a.md / qa-report-b.md using the slot assignment they
+        received in their spawn prompt. The engine no longer performs a
+        post-hoc anonymization step (no write_file decision) — emitting
+        one now would be a regression back toward the legacy contract.
+        """
         sender = event.get("sender", "")
         self.qa_reports_seen.add(sender)
         if {"ken", "ryu"} <= self.qa_reports_seen:
             decisions = [
-                EngineDecision(type="write_file", details={
-                    "path": ".kiln/tmp/qa-report-a.md",
-                }),
-                EngineDecision(type="write_file", details={
-                    "path": ".kiln/tmp/qa-report-b.md",
-                }),
                 EngineDecision(type="spawn", details={
                     "name": "denzel", "subagent_type": "the-negotiator",
                 }),

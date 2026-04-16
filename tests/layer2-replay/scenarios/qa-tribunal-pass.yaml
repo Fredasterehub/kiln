@@ -1,14 +1,15 @@
 name: qa-tribunal-pass
 description: >
-  Full milestone QA tribunal — all 4 agents, final QA_PASS. Engine spawns
-  ken+ryu, receives both QA_REPORT_READY, anonymizes and spawns denzel,
-  receives RECONCILIATION_COMPLETE, spawns judge-dredd, relays QA_VERDICT
-  back to krs-one.
+  Full milestone QA tribunal — all 4 agents, final QA_PASS. Pre-centralisation
+  contract: engine spawns ken+ryu on MILESTONE_QA_READY, receives both
+  QA_REPORT_READY, spawns denzel on reconciliation demand, spawns judge-dredd,
+  and relays QA_VERDICT back to krs-one. The post-centralisation equivalent
+  lives in centralized-qa-tribunal.yaml.
 engine-version: pre-centralization
 events-inline:
   - {sender: krs-one, signal: MILESTONE_QA_READY, recipient: team-lead, payload: "M1", timestamp: "00:00:01"}
-  - {sender: ken, signal: QA_REPORT_READY, recipient: team-lead, payload: "report at .kiln/tmp/qa-report-red.md", timestamp: "00:00:30"}
-  - {sender: ryu, signal: QA_REPORT_READY, recipient: team-lead, payload: "report at .kiln/tmp/qa-report-blue.md", timestamp: "00:00:45"}
+  - {sender: ken, signal: QA_REPORT_READY, recipient: team-lead, payload: "report at .kiln/tmp/qa-report-a.md", timestamp: "00:00:30"}
+  - {sender: ryu, signal: QA_REPORT_READY, recipient: team-lead, payload: "report at .kiln/tmp/qa-report-b.md", timestamp: "00:00:45"}
   - {sender: denzel, signal: RECONCILIATION_COMPLETE, recipient: team-lead, payload: "reconciliation at .kiln/tmp/qa-reconciliation.md", timestamp: "00:01:30"}
   - {sender: judge-dredd, signal: QA_PASS, recipient: team-lead, payload: "all deliverables verified", timestamp: "00:02:00"}
 assertions:

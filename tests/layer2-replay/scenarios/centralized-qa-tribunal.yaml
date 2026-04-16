@@ -1,0 +1,56 @@
+name: centralized-qa-tribunal
+description: >
+  Wave 2 centralisation contract. Tribunal internals still go through the
+  engine (QA_REPORT_READY from ken/ryu, RECONCILIATION_COMPLETE from denzel),
+  but judge-dredd's final verdict (QA_PASS / QA_FAIL) targets krs-one
+  DIRECTLY. The engine's last step is to shut down QA agents — it no
+  longer emits QA_VERDICT. Asserts the engine does NOT try to send
+  QA_VERDICT in post-centralisation mode.
+engine-version: post-centralization
+events-inline:
+  - {sender: krs-one, signal: MILESTONE_QA_READY, recipient: team-lead, payload: "M1", timestamp: "00:00:01"}
+  - {sender: ken, signal: QA_REPORT_READY, recipient: team-lead, payload: "report at .kiln/tmp/qa-report-a.md", timestamp: "00:00:30"}
+  - {sender: ryu, signal: QA_REPORT_READY, recipient: team-lead, payload: "report at .kiln/tmp/qa-report-b.md", timestamp: "00:00:45"}
+  - {sender: denzel, signal: RECONCILIATION_COMPLETE, recipient: team-lead, payload: "reconciliation at .kiln/tmp/qa-reconciliation.md", timestamp: "00:01:30"}
+  - {sender: judge-dredd, signal: QA_PASS, recipient: krs-one, payload: "all deliverables verified — direct route per Wave 2", timestamp: "00:02:00"}
+assertions:
+  - after-event: "krs-one | MILESTONE_QA_READY"
+    expected-decisions:
+      - type: spawn
+        name: ken
+        subagent_type: team-red
+      - type: spawn
+        name: ryu
+        subagent_type: team-blue
+  - after-event: "ryu | QA_REPORT_READY"
+    expected-decisions:
+      - type: spawn
+        name: denzel
+        subagent_type: the-negotiator
+  - after-event: "denzel | RECONCILIATION_COMPLETE"
+    expected-decisions:
+      - type: spawn
+        name: judge-dredd
+        subagent_type: i-am-the-law
+  - after-event: "judge-dredd | QA_PASS"
+    expected-decisions:
+      - type: shutdown
+        target: ken
+      - type: shutdown
+        target: ryu
+      - type: shutdown
+        target: denzel
+      - type: shutdown
+        target: judge-dredd
+    # Post-centralisation regressions: engine must NOT reintroduce the
+    # QA_VERDICT relay or the retired post-hoc anonymisation write_file
+    # at any point during the tribunal. GPT review finding HIGH — the
+    # strict guard catches silent drift that the expected-decisions
+    # alone would miss.
+    forbidden-decisions:
+      - type: send
+        signal: QA_VERDICT
+      - type: write_file
+        path: .kiln/tmp/qa-report-a.md
+      - type: write_file
+        path: .kiln/tmp/qa-report-b.md

@@ -276,6 +276,21 @@ def run_scenario(scenario_path: Path) -> int:
                 print(f"       observed: {[str(d) for d in observed]}")
             fails += 1
 
+        # Strict regression guard — any decision listed under
+        # `forbidden-decisions` for this marker MUST NOT appear in any
+        # event's observed decisions for the entire scenario. Used to
+        # lock in "engine should have stopped doing X" contracts.
+        for forbidden in assertion.get("forbidden-decisions", []) or []:
+            cross = [d for decs in per_event_decisions for d in decs]
+            offenders = [d for d in cross if d.matches(forbidden)]
+            if offenders:
+                print(
+                    f"    ✗ [{marker}] forbidden decision observed: {forbidden}"
+                )
+                for off in offenders:
+                    print(f"       offender: {off}")
+                fails += 1
+
     if fails == 0:
         print(f"    ✓ {name} ({len(assertions)} assertions)")
         return 0

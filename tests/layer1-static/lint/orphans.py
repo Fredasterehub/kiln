@@ -101,7 +101,8 @@ def check_vestigial_signals() -> list[c.Violation]:
                 if tok not in c.STOPLIST:
                     sent.add(tok)
 
-    # Engine SKILL.md also sends signals (WORKERS_SPAWNED, QA_VERDICT, shutdown_request)
+    # Engine SKILL.md also sends signals (WORKERS_SPAWNED, shutdown_request).
+    # QA_VERDICT was retired in Wave 2 (judge-dredd signals krs-one direct).
     engine_text = c.read_text(c.engine_skill())
     for line in engine_text.split("\n"):
         if not send_line_re.search(line):

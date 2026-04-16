@@ -5,8 +5,8 @@ description: >
 engine-version: pre-centralization
 events-inline:
   - {sender: krs-one, signal: MILESTONE_QA_READY, recipient: team-lead, payload: "M1", timestamp: "00:00:01"}
-  - {sender: ken, signal: QA_REPORT_READY, recipient: team-lead, payload: "report at .kiln/tmp/qa-report-red.md", timestamp: "00:00:30"}
-  - {sender: ryu, signal: QA_REPORT_READY, recipient: team-lead, payload: "report at .kiln/tmp/qa-report-blue.md", timestamp: "00:00:45"}
+  - {sender: ken, signal: QA_REPORT_READY, recipient: team-lead, payload: "report at .kiln/tmp/qa-report-a.md", timestamp: "00:00:30"}
+  - {sender: ryu, signal: QA_REPORT_READY, recipient: team-lead, payload: "report at .kiln/tmp/qa-report-b.md", timestamp: "00:00:45"}
   - {sender: denzel, signal: RECONCILIATION_COMPLETE, recipient: team-lead, payload: "reconciliation at .kiln/tmp/qa-reconciliation.md", timestamp: "00:01:30"}
   - {sender: judge-dredd, signal: QA_FAIL, recipient: team-lead, payload: "index.md missing", timestamp: "00:02:00"}
 assertions:

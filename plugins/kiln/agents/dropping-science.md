@@ -19,7 +19,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
 
 ## Teammate Names
 - `krs-one` — build boss, receives READY replies after ITERATION_UPDATE and MILESTONE_TRANSITION
-- `team-lead` — engine, receives READY signal at bootstrap
+- `team-lead` — engine, receives READY_BOOTSTRAP signal at bootstrap (distinct from the post-iteration READY to krs-one — fixes the C9 name-binding deadlock)
 
 ## Owned Files
 
@@ -103,9 +103,9 @@ Bootstrap autonomously on spawn. Do NOT wait for a message from krs-one. Bootstr
    fi
    ```
 
-7. Signal READY to team-lead (compact format, ≤1KB):
+7. Signal READY_BOOTSTRAP to team-lead (compact format, ≤1KB). This is the bootstrap-only signal to the engine; never use READY here — the post-iteration READY belongs to krs-one and conflating them was the C9 deadlock:
    ```
-   READY: {full|incremental}. {Milestone}. Next: {deliverables}. Key files: {paths}. Last change: {one line}.
+   READY_BOOTSTRAP: {full|incremental}. {Milestone}. Next: {deliverables}. Key files: {paths}. Last change: {one line}.
    ```
 
 8. Enter consultation mode.

@@ -3,7 +3,7 @@
 ## Meta
 - **Team name**: architecture
 - **Artifact directory**: .kiln/
-- **Expected output**: .kiln/docs/architecture.md, .kiln/docs/tech-stack.md, .kiln/docs/arch-constraints.md, .kiln/docs/decisions.md, .kiln/plans/claude_plan.md, .kiln/plans/codex_plan.md, .kiln/plans/plan_validation.md, .kiln/master-plan.md, .kiln/architecture-handoff.md, .kiln/design/tokens.json (conditional — only if VISION.md has Visual Direction), .kiln/design/tokens.css (conditional), .kiln/design/creative-direction.md (conditional)
+- **Expected output**: .kiln/docs/architecture.md, .kiln/docs/tech-stack.md, .kiln/docs/arch-constraints.md, .kiln/docs/decisions.md, .kiln/plans/plan-a.md, .kiln/plans/plan-b.md, .kiln/plans/plan_validation.md, .kiln/master-plan.md, .kiln/architecture-handoff.md, .kiln/design/tokens.json (conditional — only if VISION.md has Visual Direction), .kiln/design/tokens.css (conditional), .kiln/design/creative-direction.md (conditional)
 - **Inputs from previous steps**: .kiln/docs/VISION.md, .kiln/docs/vision-notes.md, .kiln/docs/vision-priorities.md, .kiln/docs/research.md, .kiln/docs/research/{slug}.md, .kiln/docs/codebase-snapshot.md, .kiln/docs/decisions.md, .kiln/docs/pitfalls.md (brownfield)
 - **Workflow**: three-phase (persistent mind bootstraps, boss orchestrates, planners+synthesizer+validator as waves)
 
@@ -14,9 +14,9 @@
 | numerobis | pitie-pas-les-crocos | Persistent mind. Technical authority. Bootstraps from research + onboarding, writes architecture docs, consultation hub. | A | opus |
 | thoth | lore-keepah | Persistent mind. Archivist — owns all writes to .kiln/archive/. Fire-and-forget. | A | opus |
 | aristotle | the-plan-maker | Boss. Orchestrates dual plan, divergence extraction, synthesis, validation, operator review. | B (INTERACTIVE) | opus |
-| confucius | mystical-inspiration | Claude-side planner. Reads architecture docs, consults numerobis, writes claude_plan.md with structured skeleton. Conditionally generates design artifacts when VISION.md contains Visual Direction (section 12). | C (wave 1) | opus |
-| sun-tzu | art-of-war | Codex-side planner. Delegates to GPT-5.4 via Codex CLI, writes codex_plan.md with structured skeleton. | C (wave 1) | sonnet |
-| miyamoto | gracefully-degrading | Claude-side sonnet planner. Writes plans directly. Used when codex_available=false. | C (wave 1, conditional) | sonnet |
+| confucius | mystical-inspiration | Claude-side planner. Reads architecture docs, consults numerobis, writes plan-${SLOT}.md with structured skeleton (slot from runtime prompt, assigned randomly by aristotle). Conditionally generates design artifacts when VISION.md contains Visual Direction (section 12). | C (wave 1) | opus |
+| sun-tzu | art-of-war | Codex-side planner. Delegates to GPT-5.4 via Codex CLI, writes plan-${SLOT}.md with structured skeleton (slot from runtime prompt). | C (wave 1) | sonnet |
+| miyamoto | gracefully-degrading | Claude-side sonnet planner. Writes plan-${SLOT}.md directly (slot from runtime prompt). Used when codex_available=false. | C (wave 1, conditional) | sonnet |
 | diogenes | divergences-converge | Divergence extractor. Receives anonymized plans (Plan A/B), extracts consensus, divergences, unique insights. Fast sonnet analysis avoiding planner self-bias. | C (wave 1.5) | sonnet |
 | plato | e-pluribus-unum | Plan chairman. Reads anonymized plans + divergence analysis, synthesizes master-plan.md with confidence-tiered verdicts. | C (wave 2) | opus |
 | athena | straight-outta-olympia | Validator. Validates master-plan.md on 8 dimensions (including plan purity). PASS or FAIL. | C (wave 3) | opus |
@@ -28,8 +28,8 @@
 **Phase B**: aristotle spawns (INTERACTIVE). Receives numerobis's READY summary. Orchestrates the dependency chain by requesting agents in waves.
 
 **Phase C waves** (aristotle requests via REQUEST_WORKERS):
-- Wave 1: confucius + sun-tzu (codex_available=true) OR confucius + miyamoto (codex_available=false)
-- Wave 1.5: diogenes (divergence extraction after both plans ready — aristotle anonymizes plans as Plan A/B before dispatch)
+- Wave 1: confucius + sun-tzu (codex_available=true) OR confucius + miyamoto (codex_available=false). Aristotle randomises `slot=a`/`slot=b` across the planner pair at spawn time (Wave 2 self-anonymization) — each planner writes directly to `.kiln/plans/plan-${SLOT}.md` with no identity in the content.
+- Wave 1.5: diogenes (divergence extraction after both plans ready — aristotle copies plan-a.md and plan-b.md verbatim to `.kiln/tmp/`; no sed rewriting needed since plans are already identity-free at creation)
 - Wave 2: plato (chairman synthesis after divergence analysis — receives anonymized plans + divergence-analysis.md)
 - Wave 3: athena (validation after synthesis)
 
@@ -39,8 +39,8 @@ Validation may loop: athena FAIL → plato revises → athena re-validates (max 
 
 | Signal | Sender → Receiver | Blocking? | Notes |
 |--------|-------------------|-----------|-------|
-| `READY: {summary}` | Numerobis → engine | No | Bootstrap complete; architecture docs written, technical summary ready |
-| `READY: {summary}` | Thoth → engine | No | Archive structure confirmed; independent of numerobis |
+| `READY_BOOTSTRAP: {summary}` | Numerobis → team-lead | No | Bootstrap complete; architecture docs written, technical summary ready (Wave 2 distinct-name contract) |
+| `READY_BOOTSTRAP: {summary}` | Thoth → team-lead | No | Archive structure confirmed; independent of numerobis |
 | `REQUEST_WORKERS: {list}` | Aristotle → engine | No | Four separate requests: wave 1 (planners), wave 1.5 (diogenes), wave 2 (plato), wave 3 (athena) |
 | `PLAN_READY` | Confucius / Sun-Tzu / Miyamoto → Aristotle | No | Planner signals completion; aristotle waits for both before wave 1.5 |
 | `DIVERGENCE_READY` | Diogenes → Aristotle | No | Divergence analysis written; aristotle triggers wave 2 (plato) |
@@ -56,8 +56,8 @@ Validation may loop: athena FAIL → plato revises → athena re-validates (max 
 
 ```
 --- Phase A (bootstrap, parallel) ---
-Numerobis  → engine        (READY: architecture summary)
-Thoth      → engine        (READY: archive structure confirmed)
+Numerobis  → team-lead     (READY_BOOTSTRAP: architecture summary)
+Thoth      → team-lead     (READY_BOOTSTRAP: archive structure confirmed)
 
 --- Phase B (boss, INTERACTIVE) ---
 Aristotle  → engine        (REQUEST_WORKERS: confucius, sun-tzu — or confucius, miyamoto)
@@ -73,7 +73,7 @@ Sun-Tzu    → Thoth         (ARCHIVE: plan-prompt.md, codex-output.log — fire
 Confucius  → Thoth         (ARCHIVE: tokens.json, tokens.css, creative-direction.md — conditional, fire-and-forget)
 
 --- Wave 1.5 (divergence extraction) ---
-Aristotle  → Bash          (anonymize plans → .kiln/tmp/plan-a.md, plan-b.md)
+Aristotle  → Bash          (copy .kiln/plans/plan-{a,b}.md → .kiln/tmp/plan-{a,b}.md verbatim — plans already anonymized at spawn time)
 Aristotle  → engine        (REQUEST_WORKERS: diogenes)
 Aristotle  → Diogenes      (assignment: read anonymized plans, extract divergence)
 Diogenes   → Thoth         (ARCHIVE: divergence-analysis.md — fire-and-forget)

@@ -25,8 +25,8 @@ For dependent topics: mi6 validates prerequisite topic before dispatching the de
 
 | Signal | Sender → Receiver | Blocking? | Notes |
 |--------|-------------------|-----------|-------|
-| `READY: {summary}` | MI6 → engine | No | Bootstrap complete; includes topic list and planned agent count |
-| `READY: {summary}` | Thoth → engine | No | Archive structure confirmed; independent of MI6 |
+| `READY_BOOTSTRAP: {summary}` | MI6 → team-lead | No | Bootstrap complete; includes topic list and planned agent count (Wave 2 distinct-name contract) |
+| `READY_BOOTSTRAP: {summary}` | Thoth → team-lead | No | Archive structure confirmed; independent of MI6 |
 | `REQUEST_WORKERS: {list}` | MI6 → engine | No | Requests 2-5 field agents; min(topic_count, 5), minimum 2 |
 | `MISSION_COMPLETE: {findings}` | Field agent → MI6 | No | Structured findings: confidence score, sources, quotes |
 | `REVISION_NEEDED: {reason}` | MI6 → Field agent | No | Finding failed validation (confidence <0.7, <3 sources, or missing quotes) |
@@ -37,8 +37,8 @@ For dependent topics: mi6 validates prerequisite topic before dispatching the de
 
 ```
 --- Phase A (bootstrap, parallel) ---
-MI6     → engine        (READY: topic list + agent count)
-Thoth   → engine        (READY: archive structure confirmed)
+MI6     → team-lead     (READY_BOOTSTRAP: topic list + agent count)
+Thoth   → team-lead     (READY_BOOTSTRAP: archive structure confirmed)
 
 --- Phase A continued (workers requested by MI6) ---
 MI6     → engine        (REQUEST_WORKERS: field-agent × N)

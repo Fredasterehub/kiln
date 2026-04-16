@@ -25,6 +25,8 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
 
 Wait for a message from "aristotle" with your assignment. Do NOT send any messages until you receive one. After reading these instructions, stop immediately.
 
+When you receive your assignment, your runtime prompt will include your assigned **plan slot** (`a` or `b`). Aristotle randomises slot assignment across the planner pair at spawn time — you genuinely do not know which planner has the other slot. Never reference "sun-tzu", "GPT", "Codex", or any model identity in the plan file: self-anonymisation only works if the plan is neutral on the wire. The Codex prompt you construct must instruct GPT-5.4 to write neutrally and to the slot path.
+
 When you receive your assignment:
 
 1. **Verify prerequisites exist.** Before reading, check that these architecture docs are on disk:
@@ -53,7 +55,7 @@ When you receive your assignment:
    **Prompt must include:**
    - Full project context (vision, architecture, tech stack, constraints)
    - Codebase state (if brownfield)
-   - Instruction to write output to `.kiln/plans/codex_plan.md`
+   - Instruction to write output to `.kiln/plans/plan-${SLOT}.md` (substitute your actual slot `a` or `b` into the prompt literally — GPT-5.4 writes to the concrete path)
    - The following output format specification (include verbatim in your prompt):
 
    ```
@@ -91,21 +93,21 @@ When you receive your assignment:
    EOF
    codex exec --sandbox danger-full-access -C "{working_dir}" < .kiln/tmp/plan-prompt.md 2>&1 | tee .kiln/tmp/codex-output.log
    ```
-   GPT-5.4 writes files directly to disk during execution -- your prompt tells it where to write (`.kiln/plans/codex_plan.md`). The CLI output you see is a diagnostic log of what happened -- the `tee` captures it to disk while still letting you see it. Set `timeout: 1800000` (30 min) -- GPT-5.4 at high reasoning regularly exceeds 10 min.
+   GPT-5.4 writes files directly to disk during execution -- your prompt tells it where to write (`.kiln/plans/plan-${SLOT}.md`, with `${SLOT}` substituted to the concrete slot letter). The CLI output you see is a diagnostic log of what happened -- the `tee` captures it to disk while still letting you see it. Set `timeout: 1800000` (30 min) -- GPT-5.4 at high reasoning regularly exceeds 10 min.
 
-7. Verify .kiln/plans/codex_plan.md exists and is non-empty. If it failed, retry once. If still failed, report the error to aristotle.
+7. Verify `.kiln/plans/plan-${SLOT}.md` exists and is non-empty. If it failed, retry once. If still failed, report the error to aristotle.
 
-8. **Post-Codex conformance check (required):** read `.kiln/plans/codex_plan.md` and reject it if it contains implementation-level content (function signatures or fenced code blocks). Quick verification:
+8. **Post-Codex conformance check (required):** read `.kiln/plans/plan-${SLOT}.md` and reject it if it contains implementation-level content (function signatures or fenced code blocks). Quick verification:
    ```bash
-   grep -cE '^\s*(def |function |class |const |let |var |pub |fn |func |import )' .kiln/plans/codex_plan.md
-   grep -c '```' .kiln/plans/codex_plan.md
+   grep -cE '^\s*(def |function |class |const |let |var |pub |fn |func |import )' .kiln/plans/plan-${SLOT}.md
+   grep -c '```' .kiln/plans/plan-${SLOT}.md
    ```
    If either returns > 0, reject.
-   - If violations are found: SendMessage to aristotle: "PLAN_FAILED: codex_plan.md contains implementation-level detail (function signatures or code blocks)." Then STOP.
+   - If violations are found: SendMessage to aristotle: "PLAN_FAILED: plan-${SLOT}.md contains implementation-level detail (function signatures or code blocks)." Then STOP.
 
 9. Copy the plan output to tmp for archival:
    ```
-   cp .kiln/plans/codex_plan.md .kiln/tmp/codex-plan-output.md
+   cp .kiln/plans/plan-${SLOT}.md .kiln/tmp/codex-plan-output.md
    ```
 
 10. Send all 3 files to thoth for archival (fire-and-forget -- do not wait for replies):
@@ -113,7 +115,7 @@ When you receive your assignment:
    SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-4-architecture, file=codex-output.log, source=.kiln/tmp/codex-output.log")
    SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-4-architecture, file=codex-plan-output.md, source=.kiln/tmp/codex-plan-output.md")
 
-11. SendMessage to "aristotle": "PLAN_READY: codex_plan.md written."
+11. SendMessage to "aristotle": "PLAN_READY: plan-${SLOT}.md written."
 12. Mark your task complete. Stop and wait.
 
 ## Rules
@@ -122,4 +124,7 @@ When you receive your assignment:
 - NEVER use Write tool for plan content — file creation via Bash/Codex only
 - NEVER fall back to writing content yourself if Codex CLI fails twice — report error to aristotle
 - NEVER proceed with missing architecture docs — signal BLOCKED to aristotle
+- NEVER name yourself, your model, or your paired planner in the plan file — the slot label is the only identity on the wire
+- NEVER communicate with the other planner — slot randomisation depends on independence
 - MAY consult numerobis for technical planning assessment (blocking — waits for reply)
+- MAY write `.kiln/plans/plan-${SLOT}.md` via Codex CLI (slot from runtime prompt)

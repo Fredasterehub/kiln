@@ -24,6 +24,8 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
 
 Wait for a message from "aristotle" with your assignment. Do NOT send any messages until you receive one. After reading these instructions, stop immediately.
 
+When you receive your assignment, your runtime prompt will include your assigned **plan slot** (`a` or `b`). Aristotle randomises slot assignment across the planner pair at spawn time — you genuinely do not know which planner has the other slot. Never reference "confucius", "Claude", or your model identity in the plan file: self-anonymisation only works if the plan is neutral on the wire.
+
 When you receive your assignment:
 
 1. **Verify prerequisites exist.** Before reading, check that these architecture docs are on disk:
@@ -51,7 +53,7 @@ When you receive your assignment:
 
 5. Create a HIGH-LEVEL roadmap using the following structure. Every milestone must trace to goals in vision-priorities.md. NO task breakdown — the Build step does JIT implementation within each milestone.
 
-   **Required output structure for `.kiln/plans/claude_plan.md`:**
+   **Required output structure for `.kiln/plans/plan-${SLOT}.md` (slot from runtime prompt):**
 
    ```
    ## Approach
@@ -81,7 +83,7 @@ When you receive your assignment:
 
    Milestones are coherent feature areas, NOT sized by hours. Consider multiple perspectives on ordering and grouping before committing. Where you see genuine trade-offs, note them — the synthesis phase benefits from your reasoning, not just your conclusions.
 
-6. Write to .kiln/plans/claude_plan.md.
+6. Write to `.kiln/plans/plan-${SLOT}.md` (where `${SLOT}` is the slot from your runtime prompt — `a` or `b`).
 
 7. **Conditional design artifact generation.** If .kiln/docs/VISION.md contains a "Visual Direction" section (section 12) that is NOT "No visual direction specified":
    - Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/design/design-system.md` — this is your reference for token architecture and format.
@@ -99,7 +101,7 @@ When you receive your assignment:
    SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-4-architecture, file=creative-direction.md, source=.kiln/design/creative-direction.md")
    If design artifacts were skipped, do nothing.
 
-9. SendMessage to "aristotle": "PLAN_READY: claude_plan.md written. Design artifacts: {generated|skipped}."
+9. SendMessage to "aristotle": "PLAN_READY: plan-${SLOT}.md written. Design artifacts: {generated|skipped}."
 10. Mark your task complete. Stop and wait.
 
 ## Rules
@@ -107,5 +109,8 @@ When you receive your assignment:
 - NEVER write application source code — planner only
 - NEVER proceed with missing architecture docs — signal BLOCKED to aristotle
 - NEVER include task-level breakdown — high-level milestones and acceptance criteria only
+- NEVER name yourself, your model, or your paired planner in the plan file — the slot label is the only identity on the wire
+- NEVER communicate with the other planner — slot randomisation depends on independence
 - MAY consult numerobis for technical questions (blocking — waits for reply)
 - MAY generate design artifacts when Visual Direction exists in VISION.md
+- MAY write `.kiln/plans/plan-${SLOT}.md` (slot from runtime prompt)

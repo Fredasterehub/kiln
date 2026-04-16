@@ -31,7 +31,7 @@ Greenfield skips Phase C entirely.
 
 | Signal | Sender → Receiver | Blocking? | Notes |
 |--------|-------------------|-----------|-------|
-| `READY: {summary}` | Mnemosyne → engine | No | Bootstrap complete; includes brownfield/greenfield verdict + identity scan summary |
+| `READY_BOOTSTRAP: {summary}` | Mnemosyne → team-lead | No | Bootstrap complete; includes brownfield/greenfield verdict + identity scan summary (Wave 2 distinct-name contract) |
 | `REQUEST_WORKERS: maiev, curie, medivh` | Mnemosyne → engine | No | Brownfield only; scouts deployed after alpha approves deep scan |
 | `ONBOARDING_COMPLETE: {metadata}` | Alpha → engine | No (terminal) | Step done; advances stage to brainstorm |
 | `ONBOARDING_BLOCKED: {reason}` | Alpha → engine | No (terminal) | Operator cannot provide minimum required info |
@@ -48,7 +48,7 @@ Internal (not routed through engine):
 
 ```
 --- Phase A (bootstrap) ---
-Mnemosyne  → engine       (READY: brownfield/greenfield + identity scan summary)
+Mnemosyne  → team-lead    (READY_BOOTSTRAP: brownfield/greenfield + identity scan summary)
 
 --- Phase B (boss, INTERACTIVE) ---
 Alpha      → Mnemosyne    (DEEP_SCAN — brownfield + operator approved)

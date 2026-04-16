@@ -134,14 +134,9 @@ For each:
 
 After writing master-plan.md, send files to thoth for archival (fire-and-forget):
 
-SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-4-architecture, file=claude-plan.md, source=.kiln/plans/claude_plan.md")
+SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-4-architecture, file=plan-a.md, source=.kiln/plans/plan-a.md")
+SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-4-architecture, file=plan-b.md, source=.kiln/plans/plan-b.md")
 SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-4-architecture, file=master-plan.md, source=.kiln/master-plan.md")
-
-If `.kiln/plans/codex_plan.md` exists, archive it as a backstop:
-SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-4-architecture, file=codex-plan.md, source=.kiln/plans/codex_plan.md")
-
-If codex plan is absent and `.kiln/plans/miyamoto_plan.md` exists, archive miyamoto plan:
-SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-4-architecture, file=miyamoto-plan.md, source=.kiln/plans/miyamoto_plan.md")
 
 Archive confidence assessment:
 SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-4-architecture, file=confidence-assessment.md, source=.kiln/plans/confidence-assessment.md")

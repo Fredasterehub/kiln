@@ -57,18 +57,23 @@ assertions:
 Decision types understood by MockEngine: `spawn`, `shutdown`, `send`,
 `write_file`, `transition`, `warn`, `pm_ready`, `worker_announce`.
 
-## Wave 2 readiness
+## Engine versions
 
 `mock_engine.py` has a `version` flag. Switch between:
 
-- `pre-centralization` (v1.3.0 current) — engine relays QA_VERDICT, PMs
-  have two READY patterns (bootstrap to team-lead, ack to krs-one).
-- `post-centralization` (Wave 2 target) — engine skips relay; agents
-  talk to krs-one directly. Reviewers emit `IMPLEMENTATION_APPROVED`
-  directly to krs-one.
+- `pre-centralization` (the v1.3.0 shape Wave 2 retired) — engine
+  relays `QA_VERDICT` to krs-one; PMs have two READY patterns that can
+  be confused (the C9 deadlock).
+- `post-centralization` (Wave 2 shipped) — judge-dredd sends
+  `QA_PASS` / `QA_FAIL` directly to krs-one, engine only shuts down
+  the tribunal. PMs use `READY_BOOTSTRAP` to team-lead at startup and
+  plain `READY` to krs-one for post-iteration replies (distinct names,
+  no conflation).
 
-When Wave 2 ships, the refactor is validated by running every scenario
-under both versions and comparing decisions.
+Existing pre-centralization scenarios are kept as regression locks so
+the old contract stays testable. New scenarios added in Wave 2 (e.g.
+`centralized-qa-tribunal.yaml`) target the post-centralization
+contract.
 
 ## Transcripts
 

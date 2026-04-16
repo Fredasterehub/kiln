@@ -205,11 +205,11 @@ EOF
 
 **Request Independent QA:**
 SendMessage to team-lead: `MILESTONE_QA_READY: {milestone_name}`
-STOP. Wait for `QA_VERDICT` from the engine (300s timeout).
+STOP. Wait for `QA_PASS` or `QA_FAIL` directly from judge-dredd (300s timeout).
 
-If no QA_VERDICT received within 300s: treat as QA_FAIL with reason "QA timeout — tribunal did not respond within 300s."
+If no QA_PASS / QA_FAIL received within 300s: treat as QA_FAIL with reason "QA timeout — tribunal did not respond within 300s."
 
-**QA_VERDICT: PASS:**
+**QA_PASS:**
 1. Append ledger (`result: milestone_complete, qa: PASS`).
 2. Send `MILESTONE_TRANSITION: completed={milestone_name}, next={next_milestone_name}` to rakim AND sentinel (BLOCKING, 60s timeout each).
 3. Send `MILESTONE_TRANSITION` to thoth (fire-and-forget).
@@ -218,8 +218,8 @@ If no QA_VERDICT received within 300s: treat as QA_FAIL with reason "QA timeout 
 6. If all milestones complete: update STATE.md (stage: validate) via Bash sed.
 7. **LAST**: SendMessage to team-lead: `MILESTONE_COMPLETE: {milestone_name}` (or `BUILD_COMPLETE`). STOP.
 
-**QA_VERDICT: FAIL (or timeout):**
-1. Message rakim: "QA_ISSUES: {findings from QA_VERDICT, or 'QA timeout'}." (fire-and-forget.)
+**QA_FAIL (or timeout):**
+1. Message rakim: "QA_ISSUES: {findings from QA_FAIL, or 'QA timeout'}." (fire-and-forget.)
 2. Append ledger (`result: qa_fail, reason: {findings}`). Loop back to step 3 — scope fixes targeting the specific issues. Do NOT signal to the engine.
 
 ## Rules
