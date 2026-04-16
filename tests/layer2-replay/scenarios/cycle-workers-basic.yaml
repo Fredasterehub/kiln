@@ -1,0 +1,19 @@
+name: cycle-workers-basic
+description: >
+  krs-one sends CYCLE_WORKERS with scenario=default. Engine should
+  shutdown existing workers (none here), spawn dial-a-coder + critical-drinker
+  with the boss-selected names, and emit WORKERS_SPAWNED back.
+engine-version: pre-centralization
+events-inline:
+  - {sender: krs-one, signal: CYCLE_WORKERS, recipient: team-lead, payload: "scenario=default, duo_id=mario-luigi, coder_name=mario, reviewer_name=luigi, reason=chunk-1, chunk=proof-1", timestamp: "00:00:01"}
+assertions:
+  - after-event: "krs-one | CYCLE_WORKERS"
+    expected-decisions:
+      - type: spawn
+        name: mario
+        subagent_type: dial-a-coder
+      - type: spawn
+        name: luigi
+        subagent_type: critical-drinker
+      - type: send
+        signal: WORKERS_SPAWNED

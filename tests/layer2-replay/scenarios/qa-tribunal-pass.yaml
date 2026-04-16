@@ -1,0 +1,38 @@
+name: qa-tribunal-pass
+description: >
+  Full milestone QA tribunal — all 4 agents, final QA_PASS. Engine spawns
+  ken+ryu, receives both QA_REPORT_READY, anonymizes and spawns denzel,
+  receives RECONCILIATION_COMPLETE, spawns judge-dredd, relays QA_VERDICT
+  back to krs-one.
+engine-version: pre-centralization
+events-inline:
+  - {sender: krs-one, signal: MILESTONE_QA_READY, recipient: team-lead, payload: "M1", timestamp: "00:00:01"}
+  - {sender: ken, signal: QA_REPORT_READY, recipient: team-lead, payload: "report at .kiln/tmp/qa-report-red-r1.md", timestamp: "00:00:30"}
+  - {sender: ryu, signal: QA_REPORT_READY, recipient: team-lead, payload: "report at .kiln/tmp/qa-report-blue-r1.md", timestamp: "00:00:45"}
+  - {sender: denzel, signal: RECONCILIATION_COMPLETE, recipient: team-lead, payload: "synthesis at .kiln/tmp/qa-reconciliation.md", timestamp: "00:01:30"}
+  - {sender: judge-dredd, signal: QA_PASS, recipient: team-lead, payload: "all deliverables verified", timestamp: "00:02:00"}
+assertions:
+  - after-event: "krs-one | MILESTONE_QA_READY"
+    expected-decisions:
+      - type: spawn
+        name: ken
+        subagent_type: team-red
+      - type: spawn
+        name: ryu
+        subagent_type: team-blue
+  - after-event: "ryu | QA_REPORT_READY"
+    expected-decisions:
+      - type: spawn
+        name: denzel
+        subagent_type: the-negotiator
+  - after-event: "denzel | RECONCILIATION_COMPLETE"
+    expected-decisions:
+      - type: spawn
+        name: judge-dredd
+        subagent_type: i-am-the-law
+  - after-event: "judge-dredd | QA_PASS"
+    expected-decisions:
+      - type: send
+        recipient: krs-one
+        signal: QA_VERDICT
+        content-contains: PASS

@@ -1,0 +1,8 @@
+=== STDOUT_CONTAINS ===
+"permissionDecision":"deny"
+WebFetch is disabled during Kiln pipeline runs
+=== STDERR ===
+=== EXIT ===
+0
+=== CONTEXT ===
+mock-pipeline

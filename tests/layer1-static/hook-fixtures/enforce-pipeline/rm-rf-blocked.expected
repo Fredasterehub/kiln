@@ -1,0 +1,8 @@
+=== STDOUT_CONTAINS ===
+"permissionDecision":"deny"
+Never delete a project directory
+=== STDERR ===
+=== EXIT ===
+0
+=== CONTEXT ===
+mock-pipeline

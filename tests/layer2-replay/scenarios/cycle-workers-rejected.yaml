@@ -1,0 +1,13 @@
+name: cycle-workers-rejected
+description: >
+  krs-one sends CYCLE_WORKERS with an unknown scenario. Engine should
+  reject with CYCLE_REJECTED and NOT spawn any agents.
+engine-version: pre-centralization
+events-inline:
+  - {sender: krs-one, signal: CYCLE_WORKERS, recipient: team-lead, payload: "scenario=bogus, duo_id=fake, coder_name=foo, reviewer_name=bar, reason=test", timestamp: "00:00:01"}
+assertions:
+  - after-event: "krs-one | CYCLE_WORKERS"
+    expected-decisions:
+      - type: send
+        signal: CYCLE_REJECTED
+        content-contains: "Unknown scenario"

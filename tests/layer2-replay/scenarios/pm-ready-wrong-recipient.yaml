@@ -1,0 +1,16 @@
+name: pm-ready-wrong-recipient
+description: >
+  C9 regression — rakim bootstraps READY to team-lead (correct), then
+  after receiving ITERATION_UPDATE from krs-one, sends READY to team-lead
+  again (WRONG — should be krs-one). The engine's malformed-signal-recovery
+  rule (SKILL.md § Malformed signal recovery) should detect this.
+engine-version: pre-centralization
+events-inline:
+  - {sender: rakim, signal: READY, recipient: team-lead, payload: "bootstrap — codebase-state updated", timestamp: "00:00:01"}
+  - {sender: krs-one, signal: ITERATION_UPDATE, recipient: rakim, payload: "chunk 1 done", timestamp: "00:00:05"}
+  - {sender: rakim, signal: READY, recipient: team-lead, payload: "iteration-ack — state updated", timestamp: "00:00:10"}
+assertions:
+  - after-event: "rakim | READY"
+    expected-decisions:
+      - type: warn
+        note-contains: "C9 regression risk"

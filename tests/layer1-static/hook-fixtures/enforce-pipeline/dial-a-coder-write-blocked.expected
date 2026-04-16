@@ -1,0 +1,8 @@
+=== STDOUT_CONTAINS ===
+"permissionDecision":"deny"
+STOP. You are a codex exec wrapper
+=== STDERR ===
+=== EXIT ===
+0
+=== CONTEXT ===
+mock-pipeline

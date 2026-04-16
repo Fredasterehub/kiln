@@ -1,0 +1,8 @@
+=== STDOUT_CONTAINS ===
+"permissionDecision":"deny"
+Only named Kiln agents can be spawned
+=== STDERR ===
+=== EXIT ===
+0
+=== CONTEXT ===
+mock-pipeline

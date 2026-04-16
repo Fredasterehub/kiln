@@ -1,0 +1,1 @@
+{"tool_name": "Bash", "agent_type": "kiln:dial-a-coder", "tool_input": {"command": "cat <<'EOF' > src/auth.ts\nexport const auth = 'hacked';\nEOF"}}

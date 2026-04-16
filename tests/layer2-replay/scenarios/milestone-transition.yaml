@@ -1,0 +1,17 @@
+name: milestone-transition
+description: >
+  End of milestone: krs-one emits MILESTONE_COMPLETE, then on the final
+  milestone BUILD_COMPLETE. Engine transitions stage to validate.
+engine-version: pre-centralization
+events-inline:
+  - {sender: krs-one, signal: MILESTONE_COMPLETE, recipient: team-lead, payload: "M1", timestamp: "00:00:01"}
+  - {sender: krs-one, signal: BUILD_COMPLETE, recipient: team-lead, payload: "all milestones done", timestamp: "00:00:05"}
+assertions:
+  - after-event: "krs-one | MILESTONE_COMPLETE"
+    expected-decisions:
+      - type: transition
+        milestones_complete: "1"
+  - after-event: "krs-one | BUILD_COMPLETE"
+    expected-decisions:
+      - type: transition
+        to_stage: validate

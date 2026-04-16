@@ -1,0 +1,8 @@
+=== STDOUT_CONTAINS ===
+"permissionDecision":"deny"
+sensitive credentials
+=== STDERR ===
+=== EXIT ===
+0
+=== CONTEXT ===
+mock-pipeline

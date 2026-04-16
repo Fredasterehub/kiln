@@ -1,0 +1,7 @@
+=== STDOUT ===
+=== STDERR ===
+AUDIT WARNING: dial-a-coder wrote to a non-/tmp/ path via Bash
+=== EXIT ===
+2
+=== CONTEXT ===
+mock-pipeline

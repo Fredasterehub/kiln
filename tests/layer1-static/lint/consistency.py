@@ -1,0 +1,555 @@
+#!/usr/bin/env python3
+"""consistency.py — cross-doc invariants for the Kiln plugin.
+
+Checks that signals, paths, teammate names, and subagent types stay
+consistent across agent bodies, blueprints, and the engine SKILL.md.
+
+Exit code: 0 if no violations, 1 otherwise.
+
+Invariants implemented (each maps to one or more audit findings):
+  1. Path symmetry              — C1 (qa-reconciliation vs qa-synthesis vs qa-reconciled-report)
+  2. Signal handler presence    — C5 (MILESTONE_DONE handler with no sender)
+  3. Signal definition          — H1 (QA_ISSUES, MILESTONE_DONE not in protocol)
+  4. Teammate name validity     — routing safety
+  5. Subagent type existence    — spawn safety
+  6. `kiln:` prefix consistency — C7
+  7. Runtime variable promise   — C3 (ken/ryu expect CHECKER_ID that engine doesn't pass)
+  8. REQUEST_WORKERS protocol   — C6 (engine doesn't document REQUEST_WORKERS handler)
+  9. Boss STATE.md scope        — H6 (argus/aristotle touch STATE.md)
+ 10. Terminal signal contract   — C4 (MILESTONE_COMPLETE vs BUILD_COMPLETE order)
+"""
+
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+
+# Add this dir to path so `_common` resolves
+sys.path.insert(0, str(Path(__file__).parent))
+
+import _common as c  # noqa: E402
+
+
+# ── Invariant 1 — Path symmetry ───────────────────────────────────
+
+def check_path_symmetry() -> list[c.Violation]:
+    """Detect paths written by one agent + read/referenced by another
+    with *different* specific filenames."""
+    out: list[c.Violation] = []
+
+    # Build (agent_name → set of kiln paths mentioned)
+    agent_paths: dict[str, set[str]] = {}
+    for agent in c.load_agents():
+        paths = c.extract_kiln_paths(agent.body)
+        if paths:
+            agent_paths[agent.name] = paths
+
+    # Known high-risk path clusters — QA tribunal's reconciliation file
+    qa_reconciliation_variants = {
+        ".kiln/tmp/qa-reconciliation.md",
+        ".kiln/tmp/qa-synthesis.md",
+        ".kiln/tmp/qa-reconciled-report.md",
+    }
+
+    mentioning = {
+        variant: [a for a, paths in agent_paths.items() if variant in paths]
+        for variant in qa_reconciliation_variants
+    }
+
+    used_variants = [v for v, agents in mentioning.items() if agents]
+    if len(used_variants) > 1:
+        lines = []
+        for v in used_variants:
+            lines.append(f"    {v} referenced by: {', '.join(mentioning[v])}")
+        out.append(c.Violation(
+            code="PATH_SYMMETRY",
+            message=(
+                "QA reconciliation file has multiple names across agents. "
+                "All three variants appear — pick one:\n" + "\n".join(lines)
+            ),
+        ))
+
+    # Also check engine SKILL.md and blueprints
+    engine_text = c.read_text(c.engine_skill())
+    blueprint_texts = {
+        p.stem: c.read_text(p) for p in c.blueprints_dir().glob("step-*.md")
+    }
+    doc_hits: dict[str, list[str]] = {}
+    for variant in qa_reconciliation_variants:
+        hits = []
+        if variant in engine_text:
+            hits.append("kiln-pipeline/SKILL.md")
+        for name, text in blueprint_texts.items():
+            if variant in text:
+                hits.append(f"blueprints/{name}.md")
+        if hits:
+            doc_hits[variant] = hits
+
+    if len(doc_hits) > 1:
+        lines = [f"    {v}: {', '.join(hits)}" for v, hits in doc_hits.items()]
+        out.append(c.Violation(
+            code="PATH_SYMMETRY",
+            message=(
+                "QA reconciliation file has multiple names across docs:\n"
+                + "\n".join(lines)
+            ),
+        ))
+
+    return out
+
+
+# ── Invariant 2 — Signal handler presence ─────────────────────────
+
+HANDLER_SECTION_RE = re.compile(r'##+\s*(?:Handling\s+|Processing\s+|On\s+|Receiving\s+)?([A-Z][A-Z0-9_]{3,})', re.MULTILINE)
+
+
+def check_signal_handlers() -> list[c.Violation]:
+    """For every signal handler in an agent body, check that at least
+    one other agent (or the engine) is documented as sending it."""
+    out: list[c.Violation] = []
+
+    # Build: (handler agent → set of signals they handle)
+    handlers: dict[str, set[str]] = {}
+    # And: (agent → set of signals they send)
+    senders: dict[str, set[str]] = {}
+
+    agents = c.load_agents()
+    for agent in agents:
+        handled = set()
+        # Find "## Handling X" or "## Processing X Messages" or "## On X" patterns
+        for m in re.finditer(
+            r'##+\s*(?:Handling|Processing|On receiving|Receiving)\s+([A-Z][A-Z0-9_]{3,})',
+            agent.body,
+        ):
+            sig = m.group(1)
+            if sig in c.STOPLIST:
+                continue
+            handled.add(sig)
+        if handled:
+            handlers[agent.name] = handled
+
+        # Find sends — heuristic: lines with send-verbs, collect ALL-CAPS tokens.
+        sent = set()
+        send_line_re = re.compile(
+            r'(SendMessage|\bSignal(?:s|ing)?\b|\bSend\s+|\bMessage\s+\S|\bmay\s+send\b|\bMAY\s+send\b)',
+            re.IGNORECASE,
+        )
+        signal_token_re = re.compile(r'\b([A-Z][A-Z0-9_]{3,})\b')
+        for line in agent.body.split("\n"):
+            if not send_line_re.search(line):
+                continue
+            for m in signal_token_re.finditer(line):
+                tok = m.group(1)
+                if tok in c.STOPLIST:
+                    continue
+                sent.add(tok)
+        if sent:
+            senders[agent.name] = sent
+
+    # Mine the engine (and team-protocol ref) for signals it sends
+    engine_sends = set()
+    for src in [c.engine_skill(), c.team_protocol_ref()]:
+        text = c.read_text(src)
+        for line in text.split("\n"):
+            if not send_line_re.search(line):
+                continue
+            for m in signal_token_re.finditer(line):
+                sig = m.group(1)
+                if sig not in c.STOPLIST:
+                    engine_sends.add(sig)
+    # Always credit engine with engine-specific relays
+    engine_sends.update({"WORKERS_SPAWNED", "WORKERS_REJECTED", "QA_VERDICT"})
+    if engine_sends:
+        senders["engine"] = engine_sends
+
+    # Check: each handled signal has at least one sender
+    all_senders = set()
+    for s in senders.values():
+        all_senders.update(s)
+
+    for handler_agent, handled_signals in handlers.items():
+        for sig in handled_signals:
+            if sig not in all_senders:
+                out.append(c.Violation(
+                    code="ORPHAN_HANDLER",
+                    message=f"'{handler_agent}' handles {sig} but no agent sends it",
+                    location=f"plugins/kiln/agents/{handler_agent}.md",
+                ))
+
+    return out
+
+
+# ── Invariant 3 — Signal definition ───────────────────────────────
+
+def _collect_known_signals() -> set[str]:
+    """Signals documented in protocol + team-protocol + all blueprints."""
+    sources = [c.protocol_skill(), c.team_protocol_ref(), c.engine_skill()]
+    for p in c.blueprints_dir().glob("step-*.md"):
+        sources.append(p)
+    known = set()
+    for src in sources:
+        if not src.exists():
+            continue
+        text = c.read_text(src)
+        # Parse vocabulary tables: rows with `SIGNAL` or `SIGNAL:` in a code span
+        for m in re.finditer(
+            r'[|]\s*`([A-Z][A-Z0-9_]{3,})[:` ]',
+            text,
+        ):
+            known.add(m.group(1))
+        # Also parse bullet lists like "- `SIGNAL: ...`"
+        for m in re.finditer(
+            r'^\s*-\s*`([A-Z][A-Z0-9_]{3,})[:` ]',
+            text,
+            re.MULTILINE,
+        ):
+            known.add(m.group(1))
+    # Peer/shutdown signals
+    known.update({
+        "shutdown_request", "shutdown_response",  # lowercase but intentional
+    })
+    return known
+
+
+def check_signal_definitions() -> list[c.Violation]:
+    """Every signal sent by an agent must be documented in protocol,
+    team-protocol, engine SKILL.md, or a blueprint."""
+    out: list[c.Violation] = []
+    known = _collect_known_signals()
+
+    for agent in c.load_agents():
+        sent_signals = set()
+        for m in re.finditer(
+            r'content[:=]\s*["\']([A-Z][A-Z0-9_]{3,})',
+            agent.body,
+        ):
+            sent_signals.add(m.group(1))
+        # Also match inline backtick mentions of "X_SIGNAL: payload" instructions
+        for m in re.finditer(
+            r'`([A-Z][A-Z0-9_]{3,}):',
+            agent.body,
+        ):
+            sent_signals.add(m.group(1))
+
+        for sig in sent_signals:
+            if sig in c.STOPLIST:
+                continue
+            if sig in known:
+                continue
+            out.append(c.Violation(
+                code="UNDEFINED_SIGNAL",
+                message=f"'{agent.name}' references signal {sig} not defined in protocol / blueprints",
+                location=f"plugins/kiln/agents/{agent.name}.md",
+            ))
+
+    return out
+
+
+# ── Invariant 4 — Teammate name validity ──────────────────────────
+
+def check_teammate_names() -> list[c.Violation]:
+    """Every name in an agent's 'Teammate Names' section must be a
+    known fixed name, a blueprint roster name, or a duo pool name.
+    Placeholders like {BUILDER_NAME} are always accepted."""
+    out: list[c.Violation] = []
+    fixed = c.FIXED_NAMES
+    roster = c.all_roster_spawn_names()
+    duo = c.all_duo_pool_names()
+    known = fixed | roster | duo
+
+    for agent in c.load_agents():
+        for name, desc in c.extract_teammates(agent):
+            if name.startswith("{") and name.endswith("}"):
+                continue  # runtime placeholder
+            if name in known:
+                continue
+            # Skip common tokens
+            if name in {"*cycled*", "*duo pool*"}:
+                continue
+            out.append(c.Violation(
+                code="UNKNOWN_TEAMMATE",
+                message=f"'{agent.name}' references teammate '{name}' (not in rosters, duo pool, or fixed names)",
+                location=f"plugins/kiln/agents/{agent.name}.md",
+            ))
+
+    return out
+
+
+# ── Invariant 5 — Subagent type existence ─────────────────────────
+
+SUBAGENT_TYPE_RE = re.compile(r'subagent_type[:=]\s*["\']?(?:kiln:)?([\w-]+)["\']?')
+
+
+def check_subagent_types() -> list[c.Violation]:
+    """Every subagent_type mentioned in an agent body or engine SKILL.md
+    must correspond to a real agent .md file."""
+    out: list[c.Violation] = []
+    known_types = {p.stem for p in c.agents_dir().glob("*.md")}
+
+    files_to_check: list[Path] = []
+    files_to_check.extend(c.agents_dir().glob("*.md"))
+    files_to_check.append(c.engine_skill())
+    files_to_check.extend(c.blueprints_dir().glob("step-*.md"))
+
+    for f in files_to_check:
+        text = c.read_text(f)
+        for m in SUBAGENT_TYPE_RE.finditer(text):
+            t = m.group(1)
+            # Skip placeholders
+            if t in {"{agent_type}", "{type}", "{builder_type}", "{reviewer_type}", "{coder_template}", "{reviewer_template}"}:
+                continue
+            if t not in known_types:
+                out.append(c.Violation(
+                    code="UNKNOWN_SUBAGENT_TYPE",
+                    message=f"subagent_type '{t}' referenced but no matching agent .md",
+                    location=str(f.relative_to(c.repo_root())),
+                ))
+    return out
+
+
+# ── Invariant 6 — kiln: prefix consistency ────────────────────────
+
+def check_prefix_consistency() -> list[c.Violation]:
+    """REQUEST_WORKERS payloads should use a consistent prefix rule.
+    Current mix: mnemosyne + mi6 send bare, engine uses 'kiln:' prefix."""
+    out: list[c.Violation] = []
+
+    pattern = re.compile(
+        r'REQUEST_WORKERS:\s+[^\n]*?\(subagent_type:\s*([\w:-]+)\)',
+    )
+
+    bare_senders: list[tuple[str, str]] = []
+    prefixed_senders: list[tuple[str, str]] = []
+
+    for agent in c.load_agents():
+        for m in pattern.finditer(agent.body):
+            t = m.group(1).strip()
+            if t.startswith("kiln:"):
+                prefixed_senders.append((agent.name, t))
+            elif t.startswith("{"):
+                continue  # placeholder
+            else:
+                bare_senders.append((agent.name, t))
+
+    if bare_senders and prefixed_senders:
+        msg = (
+            "Mixed `kiln:` prefix usage in REQUEST_WORKERS payloads:\n"
+            f"    bare (no prefix): {sorted(set(a for a, _ in bare_senders))}\n"
+            f"    prefixed (kiln:): {sorted(set(a for a, _ in prefixed_senders))}\n"
+            "    Pick one rule and document it in team-protocol.md."
+        )
+        out.append(c.Violation(code="PREFIX_INCONSISTENT", message=msg))
+    return out
+
+
+# ── Invariant 7 — Runtime variable promise ────────────────────────
+
+def check_runtime_vars() -> list[c.Violation]:
+    """If an agent lists runtime vars in its body, the engine should pass them.
+
+    This is a heuristic: we look for an agent body that documents
+    'spawn prompt provides: CHECKER_ID, RUN_NUMBER' and then scan the
+    engine SKILL.md for whether those names appear in the spawn prompt
+    template for the same agent.
+    """
+    out: list[c.Violation] = []
+    engine_text = c.read_text(c.engine_skill())
+
+    # Pattern in agent body: bullet list of runtime vars
+    # e.g. "   - `CHECKER_ID` — your checker identifier"
+    var_re = re.compile(
+        r'^\s*-\s*`([A-Z][A-Z0-9_]+)`\s*—',
+        re.MULTILINE,
+    )
+
+    for agent in c.load_agents():
+        section = c.extract_section(agent.body, "Protocol") or agent.body
+        # Only check runtime vars declared near "provides" text
+        near_provides = re.search(
+            r'(?:spawn prompt (?:provides|providing)|runtime prompt (?:provides|providing))\s*:?\s*\n((?:\s*-\s*`[A-Z_]+`\s*—.+\n?){1,10})',
+            agent.body,
+            re.IGNORECASE,
+        )
+        if not near_provides:
+            continue
+        declared = set(var_re.findall(near_provides.group(1)))
+        # Skip universal names that the engine doesn't need to provide
+        declared -= {"MY_NAME"}
+        if not declared:
+            continue
+
+        # Does the engine mention the agent's spawn in a spawn block?
+        # Heuristic: find agent's subagent_type in engine text + check for vars
+        agent_subtype = agent.name
+        spawn_blocks = re.findall(
+            rf'(?:Agent\(.*?subagent_type:\s*["\']?(?:kiln:)?{re.escape(agent_subtype)}["\']?.*?\))',
+            engine_text,
+            re.DOTALL,
+        )
+        if not spawn_blocks:
+            continue
+        combined_spawn = "\n".join(spawn_blocks)
+        missing = declared - set(re.findall(r'\{([A-Z][A-Z0-9_]+)\}', combined_spawn)) - set(re.findall(r'([A-Z][A-Z0-9_]+)\s*[:=]', combined_spawn))
+        if missing:
+            out.append(c.Violation(
+                code="MISSING_RUNTIME_VAR",
+                message=(
+                    f"agent '{agent.name}' declares runtime vars {sorted(missing)} "
+                    f"but engine's spawn template does not pass them"
+                ),
+                location=f"plugins/kiln/agents/{agent.name}.md",
+            ))
+    return out
+
+
+# ── Invariant 8 — REQUEST_WORKERS engine handler ──────────────────
+
+def check_request_workers_handler() -> list[c.Violation]:
+    """Any agent sending REQUEST_WORKERS expects the engine to handle it
+    and respond with WORKERS_SPAWNED. Check the engine documents this."""
+    out: list[c.Violation] = []
+    engine_text = c.read_text(c.engine_skill())
+
+    # Does the engine describe handling REQUEST_WORKERS at all?
+    has_rw_section = bool(re.search(
+        r'REQUEST_WORKERS\b[^\n]*?(?:protocol|handling|handler|process)',
+        engine_text,
+        re.IGNORECASE,
+    ))
+    # Or does it have a "REQUEST_WORKERS" subheading
+    has_rw_heading = bool(re.search(
+        r'^##+\s+.*REQUEST_WORKERS',
+        engine_text,
+        re.MULTILINE,
+    ))
+
+    # Agents that send REQUEST_WORKERS
+    senders = []
+    for agent in c.load_agents():
+        if re.search(r'REQUEST_WORKERS:', agent.body):
+            senders.append(agent.name)
+
+    if senders and not (has_rw_section or has_rw_heading):
+        out.append(c.Violation(
+            code="MISSING_RW_PROTOCOL",
+            message=(
+                f"Agents {senders} send REQUEST_WORKERS but the engine "
+                "SKILL.md has no formal REQUEST_WORKERS handling section. "
+                "Engine relies on LLM extrapolation."
+            ),
+            location="plugins/kiln/skills/kiln-pipeline/SKILL.md",
+        ))
+    return out
+
+
+# ── Invariant 9 — Boss STATE.md scope ─────────────────────────────
+
+def check_boss_state_md_writes() -> list[c.Violation]:
+    """Only the engine (and alpha during onboarding) should write STATE.md.
+    Detect argus/aristotle/bossman touching STATE.md stage fields."""
+    out: list[c.Violation] = []
+    # Legitimate: alpha writes STATE.md during onboarding.
+    # Legitimate: bossman may update build_iteration (documented exception).
+    # Flag: argus, aristotle writing stage transition fields.
+    risky_agents = {"release-the-giant", "the-plan-maker"}
+    for agent in c.load_agents():
+        if agent.name not in risky_agents:
+            continue
+        # Pattern 1: sed-style edit of STATE.md
+        if re.search(r'sed\s+-i.*STATE\.md', agent.body):
+            for m in re.finditer(
+                r'sed\s+-i\s+["\']([^"\']+)["\'].*STATE\.md',
+                agent.body,
+            ):
+                pattern = m.group(1)
+                if "stage" in pattern:
+                    out.append(c.Violation(
+                        code="BOSS_WRITES_STATE",
+                        message=(
+                            f"'{agent.name}' writes STATE.md stage field via sed. "
+                            "Engine should own state transitions (kilndev 'dumb relay' principle)."
+                        ),
+                        location=f"plugins/kiln/agents/{agent.name}.md",
+                    ))
+                    break
+        # Pattern 2: prose instruction to update STATE.md with a stage/milestone field
+        prose_re = re.compile(
+            r'^\s*\d+\.\s*Update\s+[`\'"]?\.kiln/STATE\.md.*?(stage|milestone_count|correction_cycle|build_iteration|milestones_complete)',
+            re.IGNORECASE | re.MULTILINE,
+        )
+        if prose_re.search(agent.body):
+            out.append(c.Violation(
+                code="BOSS_WRITES_STATE",
+                message=(
+                    f"'{agent.name}' has a prose instruction to update STATE.md "
+                    "state fields. Engine should own state transitions."
+                ),
+                location=f"plugins/kiln/agents/{agent.name}.md",
+            ))
+    return out
+
+
+# ── Invariant 10 — Terminal signal contract ───────────────────────
+
+def check_terminal_signal_contract() -> list[c.Violation]:
+    """bossman says 'MILESTONE_COMPLETE (or BUILD_COMPLETE)'.
+    Engine says 'BUILD_COMPLETE is sent BEFORE MILESTONE_COMPLETE
+    in the final milestone'. These contradict."""
+    out: list[c.Violation] = []
+    bossman_path = c.agents_dir() / "bossman.md"
+    engine_path = c.engine_skill()
+    if not bossman_path.exists() or not engine_path.exists():
+        return out
+    bossman_text = c.read_text(bossman_path)
+    engine_text = c.read_text(engine_path)
+
+    bossman_says_or = bool(re.search(
+        r'MILESTONE_COMPLETE[^\n]*(?:or|\bOR\b)\s*[`]?BUILD_COMPLETE',
+        bossman_text,
+    ))
+    engine_says_before = bool(re.search(
+        r'BUILD_COMPLETE[^\n]*(?:before)[^\n]*MILESTONE_COMPLETE',
+        engine_text,
+    ))
+
+    if bossman_says_or and engine_says_before:
+        out.append(c.Violation(
+            code="TERMINAL_SIGNAL_CONTRADICTION",
+            message=(
+                "bossman.md says 'MILESTONE_COMPLETE (or BUILD_COMPLETE)' but "
+                "engine SKILL.md says BUILD_COMPLETE is sent BEFORE MILESTONE_COMPLETE "
+                "in the final milestone. Pick one contract and align both."
+            ),
+        ))
+    return out
+
+
+# ── Main ──────────────────────────────────────────────────────────
+
+ALL_CHECKS = [
+    ("Path symmetry (C1)", check_path_symmetry),
+    ("Signal handlers have senders (C5)", check_signal_handlers),
+    ("Signal definitions (H1)", check_signal_definitions),
+    ("Teammate names valid", check_teammate_names),
+    ("Subagent types exist", check_subagent_types),
+    ("Prefix consistency (C7)", check_prefix_consistency),
+    ("Runtime variable promise (C3)", check_runtime_vars),
+    ("REQUEST_WORKERS engine handler (C6)", check_request_workers_handler),
+    ("Boss STATE.md scope (H6)", check_boss_state_md_writes),
+    ("Terminal signal contract (C4)", check_terminal_signal_contract),
+]
+
+
+def main() -> int:
+    print("Running consistency invariants…")
+    exit_code = 0
+    for label, fn in ALL_CHECKS:
+        print(f"[{label}]")
+        violations = fn()
+        exit_code |= c.print_violations(violations, label="issues")
+    return exit_code
+
+
+if __name__ == "__main__":
+    sys.exit(main())

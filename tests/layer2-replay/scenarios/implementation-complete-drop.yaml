@@ -1,0 +1,16 @@
+name: implementation-complete-drop
+description: >
+  C8 regression — builder receives APPROVED but never sends
+  IMPLEMENTATION_COMPLETE to krs-one. In post-centralization (Wave 3),
+  the reviewer sends IMPLEMENTATION_APPROVED directly to krs-one, closing
+  the gap. This scenario asserts: in pre-centralization the engine has no
+  way to detect the drop (just warn); in post-centralization the signal
+  path is intact via IMPLEMENTATION_APPROVED.
+engine-version: post-centralization
+events-inline:
+  - {sender: mario, signal: REVIEW_REQUEST, recipient: luigi, payload: "proof-1.md written", timestamp: "00:00:01"}
+  - {sender: luigi, signal: APPROVED, recipient: mario, payload: "looks good", timestamp: "00:00:02"}
+  - {sender: luigi, signal: IMPLEMENTATION_APPROVED, recipient: krs-one, payload: "mario's chunk 1 approved", timestamp: "00:00:03"}
+assertions:
+  - after-event: "luigi | IMPLEMENTATION_APPROVED"
+    expected-decisions: []
