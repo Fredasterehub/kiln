@@ -32,6 +32,7 @@ bump-version.sh
 release.sh
 plan_v1.md
 KILNDEV-MIGRATION.md
+phase3_potentiel.md
 
 # Local dev agents (not part of plugin)
 .claude/agents/
