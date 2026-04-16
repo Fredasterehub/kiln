@@ -170,7 +170,7 @@ Standard signals sent via SendMessage to team-lead (the engine):
 | `MILESTONE_TRANSITION: completed={name}, next={name}` | Milestone boundary — PMs archive + reset (blocking) | KRS-One |
 | `MILESTONE_QA_READY: {milestone_name}` | Deliverables verified, requesting independent QA | KRS-One |
 | `QA_REPORT_READY` | Individual QA report written; engine tracks per-sender | ken / ryu |
-| `RECONCILIATION_COMPLETE` | QA synthesis written to .kiln/tmp/qa-synthesis.md; engine spawns judge-dredd | denzel |
+| `RECONCILIATION_COMPLETE` | Reconciliation written to .kiln/tmp/qa-reconciliation.md; engine spawns judge-dredd | denzel |
 | `QA_PASS` | Final verdict: all criteria satisfied | judge-dredd |
 | `QA_FAIL: {findings}` | Final verdict: issues found | judge-dredd |
 | `QA_VERDICT: {PASS/FAIL}` | Engine relays judge-dredd's verdict to KRS-One | Engine |

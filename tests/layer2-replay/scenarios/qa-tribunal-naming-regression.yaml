@@ -1,0 +1,24 @@
+name: qa-tribunal-naming-regression
+description: >
+  Wave 1 (PLUMBING-AUDIT-v1.3.0) unified the QA tribunal artifact on
+  qa-reconciliation.md and the signal on RECONCILIATION_COMPLETE. This
+  scenario locks in the contract: if denzel sends the retired legacy
+  name RECONCILIATION_READY, the engine must still recover via alias
+  AND emit a WARN decision. The warn trips the regression if anyone
+  reintroduces the legacy name in denzel's agent body.
+engine-version: pre-centralization
+events-inline:
+  - {sender: krs-one, signal: MILESTONE_QA_READY, recipient: team-lead, payload: "M1", timestamp: "00:00:01"}
+  - {sender: ken, signal: QA_REPORT_READY, recipient: team-lead, payload: "report at .kiln/tmp/qa-report-red.md", timestamp: "00:00:30"}
+  - {sender: ryu, signal: QA_REPORT_READY, recipient: team-lead, payload: "report at .kiln/tmp/qa-report-blue.md", timestamp: "00:00:45"}
+  - {sender: denzel, signal: RECONCILIATION_READY, recipient: team-lead, payload: "legacy name (should warn + still spawn judge-dredd)", timestamp: "00:01:30"}
+assertions:
+  - after-event: "denzel | RECONCILIATION_READY"
+    expected-decisions:
+      - type: warn
+        code: LEGACY_SIGNAL
+        signal: RECONCILIATION_READY
+        canonical: RECONCILIATION_COMPLETE
+      - type: spawn
+        name: judge-dredd
+        subagent_type: i-am-the-law

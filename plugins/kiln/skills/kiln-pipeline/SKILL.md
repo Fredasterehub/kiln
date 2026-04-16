@@ -312,7 +312,8 @@ When KRS-One sends `MILESTONE_QA_READY: {milestone_name}`, the engine orchestrat
      Milestone under review: {milestone_name}.
      Working dir: {working_dir}. Master plan: .kiln/master-plan.md.
      {protocol_injection_full}
-     Run your QA analysis. Consult rakim and sentinel as needed.")
+     Run your QA analysis. Write findings to .kiln/tmp/qa-report-red.md.
+     Consult rakim and sentinel as needed.")
 
    Agent(name: "ryu", subagent_type: "kiln:team-blue", team_name: "{team_name}",
      run_in_background: true,
@@ -322,7 +323,8 @@ When KRS-One sends `MILESTONE_QA_READY: {milestone_name}`, the engine orchestrat
      Codebase state summary:\n{rakim_tldr}
      Patterns summary:\n{sentinel_tldr}
      {protocol_injection_worker}
-     Construct your QA prompt for GPT-5.4 and invoke codex exec.")
+     Construct your QA prompt for GPT-5.4 and invoke codex exec.
+     Write findings to .kiln/tmp/qa-report-blue.md.")
    ```
 
 3. **Wait for TWO distinct QA_REPORT_READY signals** — create two separate wait tasks:
@@ -330,7 +332,7 @@ When KRS-One sends `MILESTONE_QA_READY: {milestone_name}`, the engine orchestrat
    - "Wait for QA_REPORT_READY from ryu"
    Track by sender. Both must arrive before proceeding. 300s timeout for the pair.
 
-4. **Anonymize reports** — strip agent names from both reports and assign random A/B labels. Write anonymized versions to `.kiln/tmp/qa-report-a.md` and `.kiln/tmp/qa-report-b.md`. Prevents reconciler and judge bias from knowing which model produced which report.
+4. **Anonymize reports** — read `.kiln/tmp/qa-report-red.md` and `.kiln/tmp/qa-report-blue.md` (fixed paths), strip agent names, and assign random A/B labels. Write anonymized copies to `.kiln/tmp/qa-report-a.md` and `.kiln/tmp/qa-report-b.md`. Prevents reconciler and judge bias from knowing which model produced which report. The red/blue source files remain on disk for thoth's archive sweep.
 
 5. **Spawn denzel (background)** after both reports are anonymized:
    ```

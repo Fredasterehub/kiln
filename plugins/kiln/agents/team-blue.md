@@ -43,28 +43,27 @@ Construct a prompt that asks GPT to verify EVERY deliverable:
 
 ## Protocol
 
-1. After bootstrap, STOP. Wait for runtime prompt providing:
-   - `CHECKER_ID` — your checker identifier (e.g. `blue`)
-   - `RUN_NUMBER` — which QA run (e.g. `1`)
-   - Proof location — where deliverables live
+1. After bootstrap, STOP. Wait for runtime prompt providing the milestone name, working directory, and proof location where deliverables live. The engine's spawn prompt carries all runtime context — no ad-hoc identifiers are needed.
 2. Read `.kiln/master-plan.md` — extract acceptance criteria for the current milestone.
 3. Construct the codex verification prompt with all deliverables and criteria.
 4. Invoke codex exec via Bash (timeout: 300000).
 5. Read the codex output from `/tmp/qa-codex-output.log`.
-6. Write report to `.kiln/tmp/qa-report-{CHECKER_ID}-r{RUN_NUMBER}.md` using a bash heredoc:
+6. Write report to the fixed path `.kiln/tmp/qa-report-blue.md` using a bash heredoc:
    ```bash
-   cat <<'REPORT' > .kiln/tmp/qa-report-{CHECKER_ID}-r{RUN_NUMBER}.md
-   # QA Report — Checker {CHECKER_ID}, Run {RUN_NUMBER}
+   cat <<'REPORT' > .kiln/tmp/qa-report-blue.md
+   # QA Report — Blue (GPT via Codex)
+   ## Milestone: {milestone_name}
    ## Findings
    {PASS/FAIL per deliverable with evidence from GPT — expected vs actual}
    ## Summary
    {overall assessment from GPT}
    REPORT
    ```
+   The engine reads this fixed path and anonymizes it to `.kiln/tmp/qa-report-a.md` or `.kiln/tmp/qa-report-b.md` (random label) before spawning denzel.
 7. Archive via thoth (fire-and-forget):
-   `SendMessage to thoth: "ARCHIVE: step=step-5-build, file=qa-report-{CHECKER_ID}-r{RUN_NUMBER}.md, source=.kiln/tmp/qa-report-{CHECKER_ID}-r{RUN_NUMBER}.md"`
+   `SendMessage to thoth: "ARCHIVE: step=step-5-build, file=qa-report-blue.md, source=.kiln/tmp/qa-report-blue.md"`
 8. Signal to team-lead:
-   `SendMessage to team-lead: "QA_REPORT_READY: report at .kiln/tmp/qa-report-{CHECKER_ID}-r{RUN_NUMBER}.md — {concise summary}"`
+   `SendMessage to team-lead: "QA_REPORT_READY: report at .kiln/tmp/qa-report-blue.md — {concise summary}"`
 9. STOP. Wait for shutdown.
 
 ## Rules
@@ -76,7 +75,7 @@ Construct a prompt that asks GPT to verify EVERY deliverable:
 - NEVER skip deliverables — check EVERY one listed in the plan
 - NEVER communicate with other checkers — engine handles anonymization
 - MAY read `.kiln/master-plan.md` and proof files
-- MAY write `.kiln/tmp/qa-report-{CHECKER_ID}-r{RUN_NUMBER}.md`
+- MAY write `.kiln/tmp/qa-report-blue.md`
 - MAY invoke codex exec via Bash for cross-model verification
 - MAY send ARCHIVE to thoth (fire-and-forget)
 - MAY send QA_REPORT_READY to team-lead

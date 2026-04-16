@@ -58,7 +58,7 @@ Workers are spawned from the duo pool (see `references/duo-pool.md`). The `name`
 
 Builders commit directly to the repo. The engine manages isolation.
 
-**Phase D** (dynamic — spawned per milestone QA via MILESTONE_QA_READY): KRS-One sends `MILESTONE_QA_READY: {milestone_name}` to team-lead after verifying deliverable completeness. The engine spawns ken (team-red) + ryu (team-blue) in parallel (background). Both run independent QA analysis and signal QA_REPORT_READY when done. The engine anonymizes both reports (strips agent names, labels A/B) and spawns denzel (the-negotiator). Denzel reconciles both reports, writes synthesis to `.kiln/tmp/qa-synthesis.md`, and signals RECONCILIATION_COMPLETE. The engine then spawns judge-dredd (i-am-the-law), who reads the synthesis and source reports, issues the final QA_PASS or QA_FAIL verdict. The engine shuts down all four QA agents and relays the verdict to KRS-One as QA_VERDICT. On PASS, KRS-One proceeds to MILESTONE_COMPLETE. On FAIL, KRS-One re-scopes fixes.
+**Phase D** (dynamic — spawned per milestone QA via MILESTONE_QA_READY): KRS-One sends `MILESTONE_QA_READY: {milestone_name}` to team-lead after verifying deliverable completeness. The engine spawns ken (team-red) + ryu (team-blue) in parallel (background). Ken writes `.kiln/tmp/qa-report-red.md`; ryu writes `.kiln/tmp/qa-report-blue.md`. Both signal QA_REPORT_READY when done. The engine reads the two fixed-path reports and writes anonymized copies to `.kiln/tmp/qa-report-a.md` and `.kiln/tmp/qa-report-b.md` (random label assignment strips the red/blue identity), then spawns denzel (the-negotiator). Denzel reads A/B, writes reconciliation to `.kiln/tmp/qa-reconciliation.md`, and signals RECONCILIATION_COMPLETE. The engine then spawns judge-dredd (i-am-the-law), who reads the reconciliation and source reports, issues the final QA_PASS or QA_FAIL verdict. The engine shuts down all four QA agents and relays the verdict to KRS-One as QA_VERDICT. On PASS, KRS-One proceeds to MILESTONE_COMPLETE. On FAIL, KRS-One re-scopes fixes.
 
 ## Signal Vocabulary
 
@@ -76,7 +76,7 @@ Builders commit directly to the repo. The engine manages isolation.
 | `MILESTONE_TRANSITION: completed={n}, next={n}` | KRS-One → rakim + sentinel + thoth | Yes (60s, thoth fire-and-forget) | PMs archive + reset |
 | `MILESTONE_QA_READY: {milestone_name}` | KRS-One → engine | Yes (300s timeout) | Deliverables verified, requesting independent QA |
 | `QA_REPORT_READY` | ken/ryu → engine | No | Individual QA report written; engine tracks per-sender |
-| `RECONCILIATION_COMPLETE` | denzel → engine | No | QA synthesis written to .kiln/tmp/qa-synthesis.md; engine spawns judge-dredd |
+| `RECONCILIATION_COMPLETE` | denzel → engine | No | Reconciliation written to .kiln/tmp/qa-reconciliation.md; engine spawns judge-dredd |
 | `QA_PASS` | judge-dredd → engine | No | Final verdict: all criteria satisfied |
 | `QA_FAIL: {findings}` | judge-dredd → engine | No | Final verdict: issues found |
 | `QA_VERDICT: {PASS/FAIL}` | engine → KRS-One | Yes (response) | Engine relays judge-dredd's verdict |
@@ -178,7 +178,7 @@ Step 5: Build. You are a reviewer. Verdict: APPROVED or REJECTED.
 ```
 You are "ken" (team-red) on team "{team_name}". Step 5: Build — Milestone QA.
 Milestone under review: {milestone_name}. Working dir: {working_dir}. Master plan: .kiln/master-plan.md.
-Run your QA analysis. Consult rakim and sentinel as needed.
+Run your QA analysis. Write findings to .kiln/tmp/qa-report-red.md. Consult rakim and sentinel as needed.
 ```
 
 **ryu (QA analyst — team-blue, GPT-5.4 via Codex CLI):**
@@ -189,7 +189,7 @@ Codebase state summary:
 {rakim_tldr}
 Patterns summary:
 {sentinel_tldr}
-Construct your QA prompt for GPT-5.4 and invoke codex exec.
+Construct your QA prompt for GPT-5.4 and invoke codex exec. Write findings to .kiln/tmp/qa-report-blue.md.
 ```
 
 **denzel (QA reconciler — the-negotiator):**
@@ -197,13 +197,13 @@ Construct your QA prompt for GPT-5.4 and invoke codex exec.
 You are "denzel" (the-negotiator) on team "{team_name}". Step 5: Build — Milestone QA Reconciliation.
 Milestone: {milestone_name}. Working dir: {working_dir}.
 Two anonymized QA reports: .kiln/tmp/qa-report-a.md and .kiln/tmp/qa-report-b.md.
-Read both reports, reconcile discrepancies, write synthesis to .kiln/tmp/qa-synthesis.md, signal RECONCILIATION_COMPLETE.
+Read both reports, reconcile discrepancies, write reconciliation to .kiln/tmp/qa-reconciliation.md, signal RECONCILIATION_COMPLETE.
 ```
 
 **judge-dredd (QA judge — i-am-the-law):**
 ```
 You are "judge-dredd" (i-am-the-law) on team "{team_name}". Step 5: Build — Milestone QA Verdict.
 Milestone: {milestone_name}. Working dir: {working_dir}.
-Synthesis report: .kiln/tmp/qa-synthesis.md. Source reports: .kiln/tmp/qa-report-a.md, .kiln/tmp/qa-report-b.md.
-Read the synthesis and source reports. Issue final QA_PASS or QA_FAIL verdict with evidence.
+Reconciliation report: .kiln/tmp/qa-reconciliation.md. Source reports: .kiln/tmp/qa-report-a.md, .kiln/tmp/qa-report-b.md.
+Read the reconciliation and source reports. Issue final QA_PASS or QA_FAIL verdict with evidence.
 ```

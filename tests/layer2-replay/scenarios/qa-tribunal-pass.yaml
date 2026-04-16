@@ -7,9 +7,9 @@ description: >
 engine-version: pre-centralization
 events-inline:
   - {sender: krs-one, signal: MILESTONE_QA_READY, recipient: team-lead, payload: "M1", timestamp: "00:00:01"}
-  - {sender: ken, signal: QA_REPORT_READY, recipient: team-lead, payload: "report at .kiln/tmp/qa-report-red-r1.md", timestamp: "00:00:30"}
-  - {sender: ryu, signal: QA_REPORT_READY, recipient: team-lead, payload: "report at .kiln/tmp/qa-report-blue-r1.md", timestamp: "00:00:45"}
-  - {sender: denzel, signal: RECONCILIATION_COMPLETE, recipient: team-lead, payload: "synthesis at .kiln/tmp/qa-reconciliation.md", timestamp: "00:01:30"}
+  - {sender: ken, signal: QA_REPORT_READY, recipient: team-lead, payload: "report at .kiln/tmp/qa-report-red.md", timestamp: "00:00:30"}
+  - {sender: ryu, signal: QA_REPORT_READY, recipient: team-lead, payload: "report at .kiln/tmp/qa-report-blue.md", timestamp: "00:00:45"}
+  - {sender: denzel, signal: RECONCILIATION_COMPLETE, recipient: team-lead, payload: "reconciliation at .kiln/tmp/qa-reconciliation.md", timestamp: "00:01:30"}
   - {sender: judge-dredd, signal: QA_PASS, recipient: team-lead, payload: "all deliverables verified", timestamp: "00:02:00"}
 assertions:
   - after-event: "krs-one | MILESTONE_QA_READY"

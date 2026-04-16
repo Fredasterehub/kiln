@@ -114,7 +114,7 @@ class MockEngine:
             "MILESTONE_QA_READY": self._on_milestone_qa_ready,
             "QA_REPORT_READY": self._on_qa_report_ready,
             "RECONCILIATION_COMPLETE": self._on_reconciliation_complete,
-            "RECONCILIATION_READY": self._on_reconciliation_complete,  # alias
+            "RECONCILIATION_READY": self._on_reconciliation_ready_legacy,  # Wave 1 retired name
             "QA_PASS": self._on_qa_verdict,
             "QA_FAIL": self._on_qa_verdict,
             "MILESTONE_COMPLETE": self._on_milestone_complete,
@@ -346,6 +346,28 @@ class MockEngine:
             }),
         ]
         self.active_agents.add("judge-dredd")
+        return decisions
+
+    def _on_reconciliation_ready_legacy(self, event):
+        """Wave 1 retired the RECONCILIATION_READY name in favour of
+        RECONCILIATION_COMPLETE (C1/H2). Accept the old name via
+        malformed-signal recovery but emit a WARN decision so regression
+        tests catch the drift — and so real runs leave a breadcrumb.
+        """
+        sender = event.get("sender", "?")
+        warn = EngineDecision(type="warn", details={
+            "code": "LEGACY_SIGNAL",
+            "signal": "RECONCILIATION_READY",
+            "canonical": "RECONCILIATION_COMPLETE",
+            "sender": sender,
+            "reason": (
+                "RECONCILIATION_READY was retired in Wave 1 of "
+                "PLUMBING-AUDIT-v1.3.0. Use RECONCILIATION_COMPLETE. "
+                "This run recovered via alias; flag the sender."
+            ),
+        })
+        self.warnings.append(f"legacy RECONCILIATION_READY from {sender}")
+        decisions = [warn] + self._on_reconciliation_complete(event)
         return decisions
 
     def _on_qa_verdict(self, event):
