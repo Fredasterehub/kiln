@@ -15,7 +15,7 @@
 
 INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name // ""')
-[[ "$TOOL" =~ ^(SendMessage|send_message)$ ]] || exit 0
+[[ "$TOOL" == "SendMessage" ]] || exit 0
 
 AGENT=$(echo "$INPUT" | jq -r '.agent_type // ""')
 AGENT="${AGENT#kiln:}"
@@ -76,9 +76,12 @@ if [[ -z "$_STAGE" ]] || [[ "$_STAGE" == "complete" ]]; then
   exit 0
 fi
 
-# Only audit known pipeline agents that send milestone signals
+# Only audit known pipeline agents that send milestone signals.
+# AGENT is sourced from tool_input.agent_type (the subagent_type, prefix-
+# stripped), which is the ROLE name "bossman", not the runtime spawn name
+# "krs-one". See tests/layer1-static/hook-fixtures/audit-milestone/.
 case "$AGENT" in
-  krs-one) ;; # the only agent that should send MILESTONE_COMPLETE
+  bossman) ;; # the only agent that should send MILESTONE_COMPLETE
   *) exit 0 ;; # not our concern
 esac
 

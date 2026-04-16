@@ -3,20 +3,19 @@
 #
 # 10 hooks across 5 categories:
 #   Delegation (1,2,7):   dial-a-coder/art-of-war/bossman cannot Write/Edit
-#   Sequencing (3,4):     (removed v1.3.0 — redundant with agent instructions)
 #   Safety (5,6,6b):      system config, rm -rf, git init
 #   Lifecycle (8,9):      boss shutdown block, agent spawn whitelist
 #   Tool redirect (10):   WebFetch → MCP Fetch (hangs on many URLs)
 #
-# Removed v1.0: old Hook 2 (v1.0.4), old Hooks 6-10 (redundant/zero fires), old Hook 13 (confusion)
-# Codex flag guidance moved to gpt54-prompt-guide.md reference file.
+# See the CHANGELOG block at the bottom of this file for history of
+# removed hooks.
 #
 # Stateless. allow() = exit 0. deny() = hookSpecificOutput JSON + exit 0.
 # Strips kiln: prefix from AGENT, RECIPIENT, SUBTYPE.
 #
-# NOTE: Some matchers include snake_case tool names (send_message, run_terminal_command).
-# Claude Code v2.1.89 uses PascalCase only (Bash, SendMessage, etc.) — these don't
-# match any current tools. They are harmless future-proofing in case aliases are added.
+# Tool matchers use PascalCase only (Bash, SendMessage, Write, WebFetch)
+# per Claude Code v2.1.89. Snake_case aliases removed in Wave 0 — they
+# never matched anything.
 
 INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name // ""')
@@ -38,7 +37,7 @@ deny() {
 
 # Fast exit for tools we don't check
 case "$TOOL" in
-  Read|Write|Edit|Bash|SendMessage|Agent|WebFetch|web_fetch) ;;
+  Read|Write|Edit|Bash|SendMessage|Agent|WebFetch) ;;
   *) allow ;;
 esac
 
@@ -117,8 +116,6 @@ Your workflow:
   4. Verify output, run tests, commit, REVIEW_REQUEST to your paired reviewer."
 fi
 
-# (Hook 2 was plato Write/Edit — removed v1.0.4: plato now writes directly as opus synthesizer)
-
 # Hook 2 — art-of-war: no Write/Edit
 if [[ "$AGENT" == "art-of-war" ]] && [[ "$TOOL" =~ ^(Write|Edit)$ ]]; then
   deny "STOP. You are a codex exec wrapper — you do not write plan content.
@@ -131,10 +128,6 @@ Your workflow:
   3. Invoke: codex exec --sandbox danger-full-access -C \"{working_dir}\" < /tmp/kiln_prompt.md
   4. Verify .kiln/plans/codex_plan.md exists. Signal the-plan-maker: PLAN_READY."
 fi
-
-# (Hooks 3,4 — sequencing gates — removed v1.3.0: redundant with agent instructions)
-# v1.0 removed hooks 6-10 (zero fires across 22 STs). Codex flags now prompt-enforced.
-# Bash bypass monitored by audit-bash.sh (advisory). Zero incidents across 22 STs.
 
 # ═══════════════════════════════════════════════════════════════
 # SAFETY — hooks 5, 6, 6b
@@ -159,7 +152,7 @@ Escalate tooling issues to your boss — do not fix config yourself."
 fi
 
 # Hook 6 — no rm -rf on project directories
-if [[ "$TOOL" =~ ^(Bash|run_terminal_command)$ ]]; then
+if [[ "$TOOL" == "Bash" ]]; then
   if echo "$COMMAND" | grep -qE 'rm\s+(-rf|-fr|-r\s+-f|-f\s+-r)\s+(/|~|\$HOME|\$\{HOME|\.\.)'; then
     deny "STOP. Never delete a project directory.
 
@@ -177,8 +170,6 @@ Running git init would destroy commit history. If you need a fresh repo, escalat
     fi
   fi
 fi
-
-# (Hook 13 was memory isolation — removed v1.0: silent allow caused confusion, no real protection.)
 
 # ═══════════════════════════════════════════════════════════════
 # DELEGATION (continued) — hook 7
@@ -256,7 +247,7 @@ fi
 
 # Hook 10 — WebFetch → MCP Fetch redirect (pipeline-only)
 # WebFetch hangs on many URLs. Redirect to the bundled Anthropic Fetch MCP server.
-if [[ "$TOOL" =~ ^(WebFetch|web_fetch)$ ]]; then
+if [[ "$TOOL" == "WebFetch" ]]; then
   deny "WebFetch is disabled during Kiln pipeline runs — it hangs on many URLs. Use mcp__plugin_kiln_fetch__fetch instead (official Anthropic Fetch MCP, bundled with this plugin). To restore: comment out Hook 10 in enforce-pipeline.sh and remove WebFetch from the enforce-pipeline matcher in hooks.json."
 fi
 
@@ -265,3 +256,19 @@ fi
 # ═══════════════════════════════════════════════════════════════
 
 allow
+
+# ═══════════════════════════════════════════════════════════════
+# CHANGELOG — hooks removed over time (git blame has full context)
+#
+# v1.0   — removed old Hooks 6-10 (zero fires across 22 smoke tests).
+#          Codex flags moved to prompt-level enforcement.
+# v1.0   — removed old Hook 13 (memory isolation). Silent allow caused
+#          confusion; no real protection achieved.
+# v1.0.4 — removed old Hook 2 (plato Write/Edit). Plato writes directly
+#          as the opus synthesizer; the guard was no longer justified.
+# v1.3.0 — removed old Hooks 3, 4 (sequencing gates). Redundant with
+#          agent instructions; added noise without adding safety.
+# v1.3.0 — stripped dead snake_case tool-name aliases from matchers.
+#          Claude Code v2.1.89 uses PascalCase only; the aliases never
+#          matched anything. See git log for the exact list.
+# ═══════════════════════════════════════════════════════════════

@@ -5,13 +5,17 @@
 # write <!-- status: complete --> as line 1 of their hook-gated files.
 # Advisory — tells the agent to fix it.
 #
+# When the marker is missing the hook exits 2 so Claude Code surfaces the
+# stderr guidance to the agent (exit 0 hides stderr on PostToolUse per
+# v2.1.89). The underlying Write still succeeds; only the advisory fires.
+#
 # Only fires during active Kiln pipeline runs (full context gate).
 # Only matches dropping-science (codebase-state.md),
 # algalon-the-observer (patterns.md), and pitie-pas-les-crocos (architecture.md).
 
 INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name // ""')
-[[ "$TOOL" =~ ^(Write|write_to_file)$ ]] || exit 0
+[[ "$TOOL" == "Write" ]] || exit 0
 
 AGENT=$(echo "$INPUT" | jq -r '.agent_type // ""')
 AGENT="${AGENT#kiln:}"
@@ -71,7 +75,7 @@ This marker is checked by stop-guard.sh (SubagentStop) and expected by the
 Fix it now — rewrite the file with
 <!-- status: complete --> as the very first line, before any other content.
 MSG
-    exit 0
+    exit 2
   fi
 fi
 

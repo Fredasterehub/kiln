@@ -138,11 +138,10 @@ Numerobis bootstraps in Phase A. Her READY summary is in your runtime prompt —
 
 ### Phase 7: Finalize
 
-19. Parse milestone_count from .kiln/master-plan.md.
-20. Write .kiln/architecture-handoff.md with: milestone_count, milestone names, key file paths, architecture summary, constraints for build.
-21. Update .kiln/STATE.md: stage: build, milestone_count: {milestone_count}.
-22. Update MEMORY.md: stage: build, milestone_count: {milestone_count}.
-23. SendMessage to team-lead: "ARCHITECTURE_COMPLETE: milestone_count={milestone_count}. Master plan at .kiln/master-plan.md."
+25. Parse milestone_count from .kiln/master-plan.md.
+26. Write .kiln/architecture-handoff.md with: milestone_count, milestone names, key file paths, architecture summary, constraints for build.
+27. Update MEMORY.md: stage: build, milestone_count: {milestone_count}.
+28. SendMessage to team-lead: "ARCHITECTURE_COMPLETE: milestone_count={milestone_count}. Master plan at .kiln/master-plan.md." The engine advances `.kiln/STATE.md` on receipt — bosses never write state transitions directly.
 
 ## Dispatch Rule
 

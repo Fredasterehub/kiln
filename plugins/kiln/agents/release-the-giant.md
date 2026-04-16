@@ -139,7 +139,7 @@ Verdict rules:
 
 ### 9. Signal
 
-18. If PASS: Update `.kiln/STATE.md` via Bash sed: `sed -i 's/\*\*stage\*\*: .*/\*\*stage\*\*: report/' .kiln/STATE.md`. SendMessage to team-lead: "VALIDATE_PASS" with verdict details.
+18. If PASS: SendMessage to team-lead: "VALIDATE_PASS" with verdict details. The engine advances `.kiln/STATE.md` on receipt — bosses never write state transitions directly.
 
 19. If PARTIAL or FAIL: SendMessage to team-lead: "VALIDATE_FAILED" with verdict, test counts, acceptance counts, correction task count.
 

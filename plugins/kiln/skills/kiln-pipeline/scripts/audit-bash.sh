@@ -2,7 +2,9 @@
 # audit-bash.sh — PostToolUse hook for Bash filesystem audit
 #
 # Detects filesystem writes that bypass PreToolUse enforcement.
-# Audit only — always exits 0. Warnings go to stderr (model feedback).
+# Audit-only: never blocks the tool call. Warnings go to stderr AND exit 2
+# so Claude Code surfaces them to the agent (exit 0 hides stderr on
+# PostToolUse per v2.1.89 conventions).
 #
 # Flagged violations:
 #   - Any pipeline agent writing to system config paths (.codex/, .claude/settings)
@@ -107,7 +109,7 @@ if echo "$COMMAND" | grep -qE '(\.codex/|\.claude/settings|\.claude/projects/)';
   echo "AUDIT WARNING: $AGENT wrote to system config path via Bash. This bypasses PreToolUse enforcement (hook 5)." >&2
   echo "  Use Write/Edit tools for auditable file operations. Escalate tooling issues to the engine." >&2
   echo "  Command: $(echo "$COMMAND" | head -3)" >&2
-  exit 0
+  exit 2
 fi
 
 # Check 2 — Delegation agents (dial-a-coder + art-of-war) writing outside /tmp/
@@ -122,6 +124,7 @@ if [[ "$AGENT" =~ ^(dial-a-coder|art-of-war)$ ]]; then
     echo "AUDIT WARNING: $AGENT wrote to a non-/tmp/ path via Bash. This bypasses PreToolUse enforcement (hook 1)." >&2
     echo "  Delegation agents should stage prompts in /tmp/ and delegate code writes to codex exec." >&2
     echo "  Command: $(echo "$COMMAND" | head -3)" >&2
+    exit 2
   fi
   exit 0
 fi
@@ -132,6 +135,7 @@ if [[ "$AGENT" == "bossman" ]]; then
     echo "AUDIT WARNING: bossman wrote files outside .kiln/ via Bash. This bypasses PreToolUse enforcement (hook 7)." >&2
     echo "  bossman should scope and delegate, not write source code directly." >&2
     echo "  Command: $(echo "$COMMAND" | head -3)" >&2
+    exit 2
   fi
   exit 0
 fi
