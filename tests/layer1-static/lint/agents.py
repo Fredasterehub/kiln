@@ -28,6 +28,17 @@ VALID_MODELS = {"opus", "sonnet", "haiku"}
 # Minimum required frontmatter keys
 REQUIRED_KEYS = {"name", "description", "model", "color", "skills", "tools"}
 
+# Frontmatter fields that Opus 4.7 rejects with HTTP 400.
+# Adaptive thinking is the only mode on 4.7 — these sampling/budget knobs
+# must not appear on any agent. Guardrail only: Kiln is currently clean.
+# Source: research report 2026-04-16 § 2 "Key Findings → Opus 4.7".
+OPUS47_DEPRECATED_FIELDS = {
+    "temperature",
+    "top_p",
+    "top_k",
+    "budget_tokens",
+}
+
 # Sections that every agent body should contain (one of Protocol/Instructions)
 REQUIRED_SECTIONS = [
     ("Teammate Names",),
@@ -116,6 +127,21 @@ def check_bootstrap_line(agent: c.Agent) -> list[c.Violation]:
     return out
 
 
+def check_opus47_deprecated_fields(agent: c.Agent) -> list[c.Violation]:
+    out: list[c.Violation] = []
+    hits = sorted(OPUS47_DEPRECATED_FIELDS & set(agent.frontmatter.keys()))
+    if hits:
+        out.append(c.Violation(
+            code="DEPRECATED_FRONTMATTER_FIELD",
+            message=(
+                f"'{agent.name}' has Opus 4.7-rejected field(s) {hits}. "
+                "Adaptive thinking is the only mode on 4.7 — remove these knobs."
+            ),
+            location=f"plugins/kiln/agents/{agent.name}.md",
+        ))
+    return out
+
+
 def check_tools(agent: c.Agent) -> list[c.Violation]:
     out: list[c.Violation] = []
     tools_val = agent.frontmatter.get("tools")
@@ -148,6 +174,7 @@ ALL_CHECKS = [
     ("Frontmatter schema", check_frontmatter),
     ("Required sections", check_sections),
     ("Bootstrap Read line", check_bootstrap_line),
+    ("Opus 4.7 deprecated fields", check_opus47_deprecated_fields),
     ("Tool policy", check_tools),
 ]
 
