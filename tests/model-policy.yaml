@@ -1,0 +1,252 @@
+# Kiln model tier policy — Phase 2 Sprint 3 (v4, operator-finalized 2026-04-16).
+#
+# Source of truth for the per-agent model assignment. The linter
+# (tests/layer1-static/lint/consistency.py::check_model_policy) asserts
+# every agent's frontmatter matches the entry below.
+#
+# Until Wave 4 of PLUMBING-AUDIT-v1.3.0 ships the frontmatter updates,
+# running the linter against Kiln v1.3.0 surfaces MODEL_POLICY_MISMATCH
+# for every agent — that's the intended signal. DO NOT edit agent
+# frontmatters until this policy is approved.
+#
+# Design principles (operator directives):
+#   - Default is sonnet-4.6. Majority of agents ride this tier.
+#   - Core reasoning hubs → opus-4.7 xhigh. Every decision these agents make
+#     shapes the next 10+ turns (bossman, aristotle) or gates the whole
+#     milestone (judge-dredd, plato). Marginal reasoning gains compound;
+#     the apex tier earns its cost here.
+#   - Persistent minds that RETRIEVE-AND-SYNTHESIZE over accumulated docs
+#     (rakim, sentinel, thoth, numerobis, mnemosyne) stay on opus-4.6. Their
+#     work profile is retrieval-heavy over noisy sources — different from
+#     a boss's per-turn arbitration over curated PM summaries.
+#   - Persistent minds that only COLLATE operator-approved sections (asimov)
+#     drop to sonnet — the "PM → 4.6" rule is about retrieval strain,
+#     not identity.
+#   - In the Architecture dual-planner flow, plato arbitrates two plans
+#     from different model families so divergence is real, not artifact of
+#     identical-model sampling. A-side is always confucius (Opus H). When
+#     Codex is available, B-side is GPT-5.4 (external family). When Codex
+#     is unavailable, B-side is miyamoto — keep miyamoto on sonnet-4.6 so
+#     plato still sees a cross-family comparison (Opus vs Sonnet) rather
+#     than confucius vs a smaller Opus, which would collapse into
+#     same-family agreement theater.
+#   - Build-step paired reviewers are sonnet (first review layer).
+#   - CLI wrappers are sonnet (Codex/GPT does the reasoning).
+#
+# Tiers:
+#   H — opus-4.7 + effort=xhigh. Apex one-shot reasoning.
+#   O — opus-4.6. Persistent minds, high-stakes judgment, dual-planner B-side.
+#   S — sonnet-4.6. Default. Rubric/structured work, scouts, validators,
+#       build-step paired reviewers, section collators.
+#   W — sonnet-4.6. Thin CLI wrappers (Codex/GPT does the reasoning).
+#
+# Wave 4 renames `critical-drinker` → `critical-thinker`. Until that commit
+# lands the filename — and therefore the policy key — stays `critical-drinker`.
+
+# ── Tier H ─ apex reasoning, opus-4.7 xhigh (8 agents) ────────────────
+
+the-creator:
+  tier: H
+  model: opus-4.7
+  effort: xhigh
+  # da-vinci — brainstorm facilitator. Creative ignition across the whole
+  # brainstorm session.
+
+mystical-inspiration:
+  tier: H
+  model: opus-4.7
+  effort: xhigh
+  # confucius — Claude-side first-draft architecture plan. Always runs in
+  # the dual-planner flow; A-side.
+
+e-pluribus-unum:
+  tier: H
+  model: opus-4.7
+  effort: xhigh
+  # plato — plan chairman. Arbitrates two competing plans into the master
+  # plan. Highest-leverage reasoning step in the whole pipeline.
+
+bossman:
+  tier: H
+  model: opus-4.7
+  effort: xhigh
+  # krs-one — build boss. Orchestrates every chunk + QA tribunal + milestone
+  # transitions.
+
+the-plan-maker:
+  tier: H
+  model: opus-4.7
+  effort: xhigh
+  # aristotle — architecture boss. Structural analogue of krs-one for the
+  # architecture step; coordinates dual-planner synthesis, validation retry
+  # loop, and operator review.
+
+la-peintresse:
+  tier: H
+  model: opus-4.7
+  effort: xhigh
+  # UI builder. Creative + design judgment per chunk; the one place in the
+  # build loop where apex reasoning pays off.
+
+i-am-the-law:
+  tier: H
+  model: opus-4.7
+  effort: xhigh
+  # judge-dredd — final QA verdict. Compact reconciled input, highest
+  # release-gate leverage.
+
+style-maker:
+  tier: H
+  model: opus-4.7
+  effort: xhigh
+  # hephaestus — UI validator at validation stage. Operator-directed: UI
+  # validation quality is high-stakes; advisory output shapes go/no-go
+  # calls on shipped surfaces. Apex reasoning earns its cost here.
+
+# ── Tier O ─ opus-4.6 (8 agents) ──────────────────────────────────────
+
+# Bosses (1):
+alpha-team-deploy:
+  tier: O
+  model: opus-4.6
+  # mi6 — research boss, validates findings across many field agents.
+
+# Persistent minds that SYNTHESIZE (5):
+dropping-science:
+  tier: O
+  model: opus-4.6
+  # rakim — codebase-state PM. Infers state from noisy sources every turn.
+
+algalon-the-observer:
+  tier: O
+  model: opus-4.6
+  # sentinel — quality-patterns PM. Accumulates pitfall docs across
+  # iterations.
+
+lore-keepah:
+  tier: O
+  model: opus-4.6
+  # thoth — archivist PM + final README/CHANGELOG synthesis.
+
+pitie-pas-les-crocos:
+  tier: O
+  model: opus-4.6
+  # numerobis — architecture PM.
+
+the-discovery-begins:
+  tier: O
+  model: opus-4.6
+  # mnemosyne — cartographer PM. Deep scan synthesis.
+
+# High-stakes judgment (2):
+team-red:
+  tier: O
+  model: opus-4.6
+  # ken — QA checker opus-side. Reads the broadest QA context; 4.6 beats
+  # 4.7 for long-context retrieval-over-milestone-artifacts.
+
+the-negotiator:
+  tier: O
+  model: opus-4.6
+  # denzel — QA reconciler. Arbitrates two conflicting QA reports.
+
+# ── Tier S ─ sonnet-4.6 default (15 agents) ───────────────────────────
+
+backup-coder:
+  tier: S
+  model: sonnet-4.6
+  # Direct-write coder, bounded structural chunks.
+
+critical-drinker:
+  tier: S
+  model: sonnet-4.6
+  # Structural reviewer — build-step paired reviewer. First review layer.
+
+divergences-converge:
+  tier: S
+  model: sonnet-4.6
+  # diogenes — structural plan diff extractor. Near-deterministic.
+
+follow-the-scent:
+  tier: S
+  model: sonnet-4.6
+  # medivh — data-flow/routes scout, bounded scan.
+
+gracefully-degrading:
+  tier: S
+  model: sonnet-4.6
+  # miyamoto — architecture planner B-side when Codex CLI is unavailable.
+  # Kept on sonnet-4.6 so plato arbitrates Opus (confucius) vs Sonnet
+  # (miyamoto) — same family diversity the Codex path gets from Opus vs
+  # GPT-5.4. Putting miyamoto on Opus would collapse the fallback flow
+  # into same-family agreement.
+
+le-plexus-exploseur:
+  tier: S
+  model: sonnet-4.6
+  # zoxea — architecture drift verifier, rubric-based.
+
+release-the-giant:
+  tier: S
+  model: sonnet-4.6
+  # argus — validator boss, test/Playwright runner.
+
+straight-outta-olympia:
+  tier: S
+  model: sonnet-4.6
+  # athena — 8-axis plan validator, structured rubric output.
+
+the-anatomist:
+  tier: S
+  model: sonnet-4.6
+  # maiev — structure scout, bounded scan.
+
+the-beginning-of-the-end:
+  tier: S
+  model: sonnet-4.6
+  # alpha — onboarding boss, operator-facing intake. Warmth + structured
+  # output; sonnet handles this well within the "default sonnet" rule.
+
+the-curator:
+  tier: S
+  model: sonnet-4.6
+  # UI reviewer — build-step paired reviewer for la-peintresse.
+
+the-end-of-the-beginning:
+  tier: S
+  model: sonnet-4.6
+  # omega — final report compiler. Aggregates all pipeline artifacts.
+  # Operator-directed; if context strain shows up in practice, upgrade to O.
+
+the-foundation:
+  tier: S
+  model: sonnet-4.6
+  # asimov — brainstorm PM. Only collates operator-approved vision
+  # sections; no long-context synthesis. Drops from PM default (O) to S.
+
+trust-the-science:
+  tier: S
+  model: sonnet-4.6
+  # curie — health/dependencies scout, bounded audit.
+
+unit-deployed:
+  tier: S
+  model: sonnet-4.6
+  # Research field agent — one topic per deployment.
+
+# ── Tier W ─ CLI wrappers, sonnet-4.6 (3 agents) ──────────────────────
+
+art-of-war:
+  tier: W
+  model: sonnet-4.6
+  # sun-tzu — Codex CLI wrapper for architecture-phase B-side planning.
+
+dial-a-coder:
+  tier: W
+  model: sonnet-4.6
+  # Codex CLI wrapper for structural implementation.
+
+team-blue:
+  tier: W
+  model: sonnet-4.6
+  # ryu — Codex CLI wrapper for QA cross-model check.

@@ -23,7 +23,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 import _common as c  # noqa: E402
 
 
-VALID_MODELS = {"opus", "sonnet", "haiku"}
+VALID_MODELS = {
+    "opus", "sonnet", "haiku",        # short aliases (pre-Sprint 3)
+    "opus-4.6", "opus-4.7",           # pinned Opus versions (Sprint 3 policy)
+    "sonnet-4.6",                      # pinned Sonnet version (Sprint 3 policy)
+}
 
 # Minimum required frontmatter keys
 REQUIRED_KEYS = {"name", "description", "model", "color", "skills", "tools"}
@@ -127,6 +131,47 @@ def check_bootstrap_line(agent: c.Agent) -> list[c.Violation]:
     return out
 
 
+VALID_EFFORT = {"low", "medium", "high", "xhigh", "max"}
+
+
+def check_effort_field(agent: c.Agent) -> list[c.Violation]:
+    """Schema rule for the `effort:` frontmatter field.
+
+    If an agent declares `model: opus-4.7`, it MUST also declare `effort: xhigh`
+    (Claude Code default has changed; making it explicit keeps Kiln deterministic).
+    Any other model MUST NOT declare `effort:` — the field only makes sense on
+    Opus 4.7. The full tier-level policy lives in `check_model_policy`.
+    """
+    out: list[c.Violation] = []
+    model = agent.frontmatter.get("model")
+    effort = agent.frontmatter.get("effort")
+    if effort is not None and effort not in VALID_EFFORT:
+        out.append(c.Violation(
+            code="INVALID_EFFORT",
+            message=f"'{agent.name}' has effort='{effort}' (valid: {sorted(VALID_EFFORT)})",
+            location=f"plugins/kiln/agents/{agent.name}.md",
+        ))
+    if model == "opus-4.7" and effort != "xhigh":
+        out.append(c.Violation(
+            code="EFFORT_REQUIRED",
+            message=(
+                f"'{agent.name}' uses model='opus-4.7' and must set effort='xhigh' "
+                f"(got '{effort or '<missing>'}')"
+            ),
+            location=f"plugins/kiln/agents/{agent.name}.md",
+        ))
+    if model != "opus-4.7" and effort is not None:
+        out.append(c.Violation(
+            code="EFFORT_NOT_ALLOWED",
+            message=(
+                f"'{agent.name}' sets effort='{effort}' but model='{model}' — "
+                "effort is only valid with opus-4.7"
+            ),
+            location=f"plugins/kiln/agents/{agent.name}.md",
+        ))
+    return out
+
+
 def check_opus47_deprecated_fields(agent: c.Agent) -> list[c.Violation]:
     out: list[c.Violation] = []
     hits = sorted(OPUS47_DEPRECATED_FIELDS & set(agent.frontmatter.keys()))
@@ -175,6 +220,7 @@ ALL_CHECKS = [
     ("Required sections", check_sections),
     ("Bootstrap Read line", check_bootstrap_line),
     ("Opus 4.7 deprecated fields", check_opus47_deprecated_fields),
+    ("Effort field schema", check_effort_field),
     ("Tool policy", check_tools),
 ]
 

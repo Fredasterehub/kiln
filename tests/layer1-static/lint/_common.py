@@ -444,6 +444,43 @@ def all_roster_spawn_names() -> set[str]:
     return out
 
 
+# ── Model tier policy ─────────────────────────────────────────────
+
+def model_policy_path() -> Path:
+    return repo_root() / "tests" / "model-policy.yaml"
+
+
+def load_model_policy() -> dict[str, dict[str, str]]:
+    """Return {agent_name: {tier, model, effort?}} from tests/model-policy.yaml.
+
+    Nested YAML subset — top-level agent keys with 2-space indented
+    `tier: X`, `model: Y`, optional `effort: Z`. Comments with `#` ignored.
+    """
+    path = model_policy_path()
+    if not path.exists():
+        return {}
+    result: dict[str, dict[str, str]] = {}
+    current: str | None = None
+    for raw in read_text(path).splitlines():
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if not raw.startswith(" "):
+            m = re.match(r"^([\w-]+):\s*$", raw)
+            if m:
+                current = m.group(1)
+                result[current] = {}
+            else:
+                current = None
+            continue
+        if current is None:
+            continue
+        m = re.match(r"^\s+([\w-]+):\s*(.+?)\s*$", raw)
+        if m:
+            result[current][m.group(1)] = _unquote(m.group(2))
+    return result
+
+
 # ── Iterators ─────────────────────────────────────────────────────
 
 def walk_plugin_mds() -> Iterator[Path]:

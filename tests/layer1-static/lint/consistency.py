@@ -525,6 +525,82 @@ def check_terminal_signal_contract() -> list[c.Violation]:
     return out
 
 
+def check_model_policy() -> list[c.Violation]:
+    """Assert every agent's frontmatter matches tests/model-policy.yaml.
+
+    Until Wave 4 of PLUMBING-AUDIT-v1.3.0 ships, current Kiln agents all
+    use bare `opus`/`sonnet` whereas the policy pins `opus-4.6`/`opus-4.7`/
+    `sonnet-4.6`. That mismatch is the intended signal from this check.
+    """
+    out: list[c.Violation] = []
+    policy = c.load_model_policy()
+    if not policy:
+        out.append(c.Violation(
+            code="MODEL_POLICY_MISSING",
+            message="tests/model-policy.yaml not found or empty",
+            location="tests/model-policy.yaml",
+        ))
+        return out
+
+    agents = c.load_agents()
+    agent_names = {a.name for a in agents}
+    policy_names = set(policy.keys())
+
+    for extra in sorted(policy_names - agent_names):
+        out.append(c.Violation(
+            code="MODEL_POLICY_UNKNOWN_AGENT",
+            message=(
+                f"policy entry '{extra}' has no matching agent file. "
+                "Either remove from policy or rename the agent."
+            ),
+            location="tests/model-policy.yaml",
+        ))
+
+    for missing in sorted(agent_names - policy_names):
+        out.append(c.Violation(
+            code="MODEL_POLICY_MISSING_ENTRY",
+            message=f"agent '{missing}' has no entry in tests/model-policy.yaml",
+            location=f"plugins/kiln/agents/{missing}.md",
+        ))
+
+    for agent in agents:
+        spec = policy.get(agent.name)
+        if not spec:
+            continue
+        expected_model = spec.get("model")
+        actual_model = agent.frontmatter.get("model")
+        if expected_model and actual_model != expected_model:
+            out.append(c.Violation(
+                code="MODEL_POLICY_MISMATCH",
+                message=(
+                    f"'{agent.name}' has model='{actual_model}' but policy "
+                    f"(tier {spec.get('tier', '?')}) requires '{expected_model}'"
+                ),
+                location=f"plugins/kiln/agents/{agent.name}.md",
+            ))
+        expected_effort = spec.get("effort")
+        actual_effort = agent.frontmatter.get("effort")
+        if expected_effort and actual_effort != expected_effort:
+            out.append(c.Violation(
+                code="MODEL_POLICY_EFFORT_MISMATCH",
+                message=(
+                    f"'{agent.name}' (tier {spec.get('tier', '?')}) requires "
+                    f"effort='{expected_effort}', got '{actual_effort or '<missing>'}'"
+                ),
+                location=f"plugins/kiln/agents/{agent.name}.md",
+            ))
+        if not expected_effort and actual_effort:
+            out.append(c.Violation(
+                code="MODEL_POLICY_EFFORT_FORBIDDEN",
+                message=(
+                    f"'{agent.name}' (tier {spec.get('tier', '?')}) sets "
+                    f"effort='{actual_effort}' but policy forbids an effort field here"
+                ),
+                location=f"plugins/kiln/agents/{agent.name}.md",
+            ))
+    return out
+
+
 # ── Main ──────────────────────────────────────────────────────────
 
 ALL_CHECKS = [
@@ -538,6 +614,7 @@ ALL_CHECKS = [
     ("REQUEST_WORKERS engine handler (C6)", check_request_workers_handler),
     ("Boss STATE.md scope (H6)", check_boss_state_md_writes),
     ("Terminal signal contract (C4)", check_terminal_signal_contract),
+    ("Model tier policy (Sprint 3)", check_model_policy),
 ]
 
 
