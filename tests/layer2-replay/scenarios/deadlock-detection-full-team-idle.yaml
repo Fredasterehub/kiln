@@ -1,0 +1,29 @@
+name: deadlock-detection-full-team-idle
+description: >
+  P2 deadlock detection — happy path. Two teammates spawn and go idle, then
+  the synthetic clock advances past the 5-minute idle threshold. The watchdog
+  check observes: zero active teammates, idle_secs > 300, debounce satisfied
+  (no prior nudge), pipeline_phase=build — all four arm conditions met, so
+  the engine emits a `nudge_emit` decision. The scenario also forbids
+  `deadlock_escalate` because nudge_count has not yet reached 3.
+
+  TIME_TICK and DEADLOCK_CHECK are synthetic driver signals (not platform
+  events) that stand in for the real watchdog's `sleep 60 → deadlock-check`
+  loop. They exist only in layer2-replay so the deadlock rule can be
+  exercised without wall-clock waits.
+engine-version: post-centralization
+events-inline:
+  - {sender: platform, signal: SUBAGENTSTART, recipient: team-lead, payload: '{"agent_type": "kiln:rakim-build-1"}', timestamp: "00:00:01"}
+  - {sender: platform, signal: SUBAGENTSTART, recipient: team-lead, payload: '{"agent_type": "kiln:clair-review-1"}', timestamp: "00:00:02"}
+  - {sender: platform, signal: TEAMMATEIDLE, recipient: team-lead, payload: '{"teammate_name": "kiln:rakim-build-1"}', timestamp: "00:01:00"}
+  - {sender: platform, signal: TEAMMATEIDLE, recipient: team-lead, payload: '{"teammate_name": "kiln:clair-review-1"}', timestamp: "00:01:05"}
+  - {sender: watchdog, signal: TIME_TICK, recipient: watchdog, payload: "360", timestamp: "00:07:00"}
+  - {sender: watchdog, signal: DEADLOCK_CHECK, recipient: watchdog, payload: "", timestamp: "00:07:01"}
+assertions:
+  - after-event: "watchdog | DEADLOCK_CHECK"
+    strict: true
+    expected-decisions:
+      - type: nudge_emit
+        nudge_count: 1
+    forbidden-decisions:
+      - {type: deadlock_escalate}

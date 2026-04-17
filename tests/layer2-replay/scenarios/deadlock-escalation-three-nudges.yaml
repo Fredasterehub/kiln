@@ -1,0 +1,38 @@
+name: deadlock-escalation-three-nudges
+description: >
+  P2 deadlock escalation — after three delivered nudges the engine stops
+  nudging and writes `.kiln/DEADLOCK.flag`. Scenario drives four watchdog
+  checks spaced 660s apart (safely beyond the 600s debounce). Checks 1..3
+  produce `nudge_emit`; check 4 produces `deadlock_escalate` because
+  `nudge_count >= 3` on entry.
+
+  Two assertions prove the ordering structurally:
+  (1) strict assertion on the FIRST DEADLOCK_CHECK's own decisions — proves
+      the first armed check nudges (not escalates), and that it does NOT
+      emit a deadlock_escalate decision;
+  (2) non-strict assertion finds `deadlock_escalate` with `deadlock_flag=True`
+      anywhere in the stream — proves escalation eventually occurred.
+  Together they guarantee "nudge first, escalate later" rather than allowing
+  a single cross-event match to satisfy both roles.
+engine-version: post-centralization
+events-inline:
+  - {sender: platform, signal: SUBAGENTSTART, recipient: team-lead, payload: '{"agent_type": "kiln:rakim-build-1"}', timestamp: "00:00:01"}
+  - {sender: platform, signal: TEAMMATEIDLE, recipient: team-lead, payload: '{"teammate_name": "kiln:rakim-build-1"}', timestamp: "00:01:00"}
+  - {sender: watchdog, signal: TIME_TICK, recipient: watchdog, payload: "360", timestamp: "00:07:00"}
+  - {sender: watchdog, signal: DEADLOCK_CHECK, recipient: watchdog, payload: "", timestamp: "00:07:01"}
+  - {sender: watchdog, signal: TIME_TICK, recipient: watchdog, payload: "660", timestamp: "00:18:00"}
+  - {sender: watchdog, signal: DEADLOCK_CHECK, recipient: watchdog, payload: "", timestamp: "00:18:01"}
+  - {sender: watchdog, signal: TIME_TICK, recipient: watchdog, payload: "660", timestamp: "00:29:00"}
+  - {sender: watchdog, signal: DEADLOCK_CHECK, recipient: watchdog, payload: "", timestamp: "00:29:01"}
+  - {sender: watchdog, signal: TIME_TICK, recipient: watchdog, payload: "660", timestamp: "00:40:00"}
+  - {sender: watchdog, signal: DEADLOCK_CHECK, recipient: watchdog, payload: "", timestamp: "00:40:01"}
+assertions:
+  - after-event: "watchdog | DEADLOCK_CHECK"
+    strict: true
+    expected-decisions:
+      - {type: nudge_emit}
+  - after-event: "watchdog | DEADLOCK_CHECK"
+    expected-decisions:
+      - type: deadlock_escalate
+        nudge_count: 3
+        deadlock_flag: True

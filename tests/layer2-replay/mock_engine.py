@@ -97,6 +97,18 @@ class MockEngine:
         self.current_milestone: str = "M1"
         self.warnings: list[str] = []
         self.decisions_log: list[EngineDecision] = []
+        # P2 deadlock detection state — TIME_TICK + DEADLOCK_CHECK are
+        # synthetic watchdog-driver signals used by layer2-replay scenarios
+        # to model the detached watchdog loop without real wall-clock
+        # sleep. sim_time is the scenario's synthetic clock in seconds;
+        # TIME_TICK advances it, DEADLOCK_CHECK reads it.
+        self.activity_ts: int = 0
+        self.nudge_count: int = 0
+        self.last_nudge_ts: int = 0
+        self.active_teammates: set[str] = set()
+        self.deadlock_flag: bool = False
+        self.pipeline_phase: str = "build"
+        self.sim_time: int = 0
 
     # ── dispatch ──
 
@@ -115,6 +127,10 @@ class MockEngine:
             "CYCLE_WORKERS": self._on_cycle_workers,
             "WORKER_READY": self._on_worker_ready,
             "SUBAGENTSTART": self._on_subagent_start,
+            "TEAMMATEIDLE": self._on_teammate_idle,
+            "TIME_TICK": self._on_time_tick,
+            "SESSIONSTART": self._on_session_start,
+            "DEADLOCK_CHECK": self._on_deadlock_check,
             "ITERATION_COMPLETE": self._on_iteration_complete_legacy,
             "ITERATION_UPDATE": self._on_iteration_update,
             "MILESTONE_TRANSITION": self._on_milestone_transition,
@@ -265,9 +281,158 @@ class MockEngine:
         agent = kv.get("agent_type", "")
         if agent.startswith("kiln:"):
             agent = agent[len("kiln:"):]
+        # P2: register the teammate so the deadlock rule can distinguish
+        # "team active" from "team fully idle". TeammateIdle removes them.
+        if agent:
+            self.active_teammates.add(agent)
+            self.activity_ts = self.sim_time
         return [EngineDecision(
             type="subagent_start_ack",
             details={"agent": agent},
+        )]
+
+    def _on_teammate_idle(self, event):
+        """Platform TeammateIdle — drop teammate from the active set.
+
+        TeammateIdle fires ~20ms after every SubagentStop with the payload
+        `{"teammate_name": "..."}`. The deadlock rule keys on
+        `active_teammates` being empty, so each idle event prunes the set.
+        We bump `activity_ts` here too because an idle transition is itself
+        a pipeline-progress signal — it proves the teammate was working
+        right up until it went quiet.
+        """
+        payload = event.get("payload", "")
+        try:
+            kv = json.loads(payload)
+            if not isinstance(kv, dict):
+                kv = parse_kv_payload(payload)
+        except (ValueError, TypeError):
+            kv = parse_kv_payload(payload)
+        name = kv.get("teammate_name", event.get("sender", ""))
+        if isinstance(name, str) and name.startswith("kiln:"):
+            name = name[len("kiln:"):]
+        self.active_teammates.discard(name)
+        self.activity_ts = self.sim_time
+        return [EngineDecision(
+            type="teammate_idle",
+            details={"teammate": name},
+        )]
+
+    def _on_time_tick(self, event):
+        """Synthetic clock advance for scenarios.
+
+        The real watchdog sleeps 60s between checks. Scenarios can't sleep
+        in-process; TIME_TICK advances `sim_time` by `payload` seconds so
+        DEADLOCK_CHECK observes the gap the deadlock rule requires.
+        """
+        payload = event.get("payload", "")
+        try:
+            seconds = int(str(payload).strip())
+        except (ValueError, TypeError):
+            seconds = 60
+        self.sim_time += seconds
+        return [EngineDecision(
+            type="time_advance",
+            details={"sim_time": self.sim_time},
+        )]
+
+    def _on_session_start(self, event):
+        """SessionStart — recover from DEADLOCK.flag, reap stale PID, spawn watchdog.
+
+        Scenarios signal state via payload substrings:
+          - `deadlock_flag` → prior run escalated; reset nudge counters and
+            clear the flag so the new session starts clean. This is the
+            brief-mandated handoff: `.kiln/DEADLOCK.flag` tells "whoever
+            picks this up next" that counters must reset, so the next
+            session doesn't inherit a stuck nudge_count >= 3 and escalate
+            immediately.
+          - `stale_pid` → prior watchdog PID still recorded; kill it
+            before spawning to prevent zombie-watchdog stacking across
+            sessions.
+
+        Recovery runs BEFORE stale-PID cleanup so a single payload carrying
+        both concerns emits decisions in a readable order: recover → kill
+        → spawn.
+        """
+        payload = event.get("payload", "")
+        decisions: list[EngineDecision] = []
+        if "deadlock_flag" in payload:
+            self.deadlock_flag = False
+            self.nudge_count = 0
+            self.last_nudge_ts = 0
+            decisions.append(EngineDecision(
+                type="deadlock_recovery",
+                details={
+                    "reason": (
+                        "DEADLOCK.flag detected at SessionStart — counters reset"
+                    ),
+                },
+            ))
+        if "stale_pid" in payload:
+            decisions.append(EngineDecision(
+                type="kill_stale_watchdog",
+                details={"reason": "stale_pid_found"},
+            ))
+        decisions.append(EngineDecision(
+            type="spawn_watchdog",
+            details={},
+        ))
+        return decisions
+
+    def _on_deadlock_check(self, event):
+        """Synthetic watchdog fire — apply the deadlock rule.
+
+        Rule (plan §5.3 P2):
+          DEADLOCK iff
+            active_teammates is empty
+            AND (now - last_activity_ts) > 300s
+            AND (now - last_nudge_ts) > 600s   (debounce)
+            AND pipeline_phase not in {idle, awaiting_user, complete}
+
+        Nudges are delivered on 1..3; the 4th armed check escalates —
+        writes DEADLOCK.flag and exits the watchdog. nudge_count==3 is
+        the threshold because the 3rd nudge has already been delivered
+        and the run didn't recover.
+        """
+        idle_secs = self.sim_time - self.activity_ts
+        # Debounce: first nudge has no prior to space against, so the
+        # check is satisfied by definition. Subsequent nudges must be
+        # >600s after the previous one to avoid spamming STATE.md.
+        debounce_ok = (
+            self.last_nudge_ts == 0
+            or (self.sim_time - self.last_nudge_ts) > 600
+        )
+        armed = (
+            len(self.active_teammates) == 0
+            and idle_secs > 300
+            and debounce_ok
+            and self.pipeline_phase not in {"idle", "awaiting_user", "complete"}
+        )
+        if not armed:
+            return [EngineDecision(
+                type="deadlock_check_noop",
+                details={
+                    "active_teammates": len(self.active_teammates),
+                    "idle_secs": idle_secs,
+                },
+            )]
+        if self.nudge_count >= 3:
+            self.deadlock_flag = True
+            return [EngineDecision(
+                type="deadlock_escalate",
+                details={
+                    "nudge_count": self.nudge_count,
+                    "deadlock_flag": True,
+                },
+            )]
+        self.nudge_count += 1
+        self.last_nudge_ts = self.sim_time
+        return [EngineDecision(
+            type="nudge_emit",
+            details={
+                "nudge_count": self.nudge_count,
+                "idle_secs": idle_secs,
+            },
         )]
 
     def _on_request_workers(self, event):

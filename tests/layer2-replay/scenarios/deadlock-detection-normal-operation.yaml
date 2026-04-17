@@ -1,0 +1,21 @@
+name: deadlock-detection-normal-operation
+description: >
+  P2 regression guard — normal pipeline operation must NOT trigger a nudge.
+  A teammate is actively in the set and the watchdog fires after only 60s.
+  Expected: `deadlock_check_noop`. Forbidden: `nudge_emit` and
+  `deadlock_escalate`. This scenario is the negative counterpart to
+  `deadlock-detection-full-team-idle`; together they pin down the deadlock
+  rule's discrimination boundary.
+engine-version: post-centralization
+events-inline:
+  - {sender: platform, signal: SUBAGENTSTART, recipient: team-lead, payload: '{"agent_type": "kiln:rakim-build-1"}', timestamp: "00:00:01"}
+  - {sender: watchdog, signal: TIME_TICK, recipient: watchdog, payload: "60", timestamp: "00:01:00"}
+  - {sender: watchdog, signal: DEADLOCK_CHECK, recipient: watchdog, payload: "", timestamp: "00:01:01"}
+assertions:
+  - after-event: "watchdog | DEADLOCK_CHECK"
+    strict: true
+    expected-decisions:
+      - {type: deadlock_check_noop}
+    forbidden-decisions:
+      - {type: nudge_emit}
+      - {type: deadlock_escalate}

@@ -1,0 +1,21 @@
+name: watchdog-stale-pid-cleanup
+description: >
+  P2 watchdog lifecycle + recovery — SessionStart carrying BOTH a stale PID
+  file (from a prior session's watchdog) AND a `.kiln/DEADLOCK.flag` (from
+  a prior run that escalated). Asserts three decisions:
+  (1) `deadlock_recovery` — counters reset so the new session doesn't
+      inherit nudge_count>=3 and escalate immediately;
+  (2) `kill_stale_watchdog` — zombie-watchdog prevention;
+  (3) `spawn_watchdog` — fresh loop for the new session.
+  Covers the brief's "Next SessionStart detects the flag and runs recovery"
+  contract plus the stale-PID cleanup contract in a single scenario.
+engine-version: post-centralization
+events-inline:
+  - {sender: platform, signal: SESSIONSTART, recipient: team-lead, payload: "stale_pid=12345 deadlock_flag=1", timestamp: "00:00:01"}
+assertions:
+  - after-event: "platform | SESSIONSTART"
+    strict: true
+    expected-decisions:
+      - {type: deadlock_recovery}
+      - {type: kill_stale_watchdog}
+      - {type: spawn_watchdog}
