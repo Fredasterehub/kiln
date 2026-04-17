@@ -64,6 +64,18 @@
         ]
       }
     ],
+    "StopFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/stop-failure-handler.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "TeammateIdle": [
       {
         "matcher": "*",
