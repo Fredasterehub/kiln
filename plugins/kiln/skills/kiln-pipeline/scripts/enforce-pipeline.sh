@@ -280,4 +280,19 @@ allow
 #          operator-visible logging; WORKER_READY self-announce retired from
 #          builder/reviewer bodies (dial-a-coder, backup-coder, la-peintresse,
 #          critical-thinker, the-curator). See SIMPLIFY-v1.4.0 §5.3 P1.
+# v1.4.0 — P2 (TeammateIdle + detached watchdog): autonomous stall detection.
+#          Retired the manual operator Watchdog Protocol from kiln-pipeline
+#          SKILL.md §5 (Check TaskList / Scan messages / Nudge if silent /
+#          Stagnation rule block). Replaced by six thin hook scripts:
+#            activity-update.sh — heartbeat + teammate tracking on 6 events
+#            spawn-watchdog.sh  — SessionStart: DEADLOCK.flag recovery,
+#                                 stale-PID kill, nohup+disown watchdog spawn
+#            watchdog-loop.sh   — detached 60s polling loop
+#            deadlock-check.sh  — deadlock rule + nudge/escalate logic
+#            nudge-inject.sh    — PreToolUse/UserPromptSubmit additionalContext emit
+#            session-cleanup.sh — SessionEnd: PID kill + tmp file cleanup
+#          State file: .kiln/tmp/activity.json (7-field schema, atomic writes).
+#          Escalation: .kiln/DEADLOCK.flag after 3 nudges; SessionStart recovers.
+#          Ref: plugins/kiln/skills/kiln-pipeline/references/deadlock-detection.md
+#          See SIMPLIFY-v1.4.0 §5.3 P2.
 # ═══════════════════════════════════════════════════════════════

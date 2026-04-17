@@ -41,6 +41,32 @@ _STAGE=$(grep -oP '(?<=\*\*stage\*\*: )\S+' "$_STATE" 2>/dev/null || true)
 [[ -n "$_STAGE" ]] || exit 0
 [[ "$_STAGE" != "complete" ]] || exit 0
 
+# DEADLOCK.flag recovery. If the previous session exhausted 3 nudges and
+# escalated, the flag persists. Append a recovery notice to STATE.md,
+# reset counters in activity.json so the new watchdog starts clean, and
+# remove the flag.
+FLAG_FILE="$ROOT/.kiln/DEADLOCK.flag"
+ACTIVITY_FILE="$ROOT/.kiln/tmp/activity.json"
+if [[ -f "$FLAG_FILE" ]]; then
+  {
+    echo ""
+    echo "> [!NOTE] KILN DEADLOCK RECOVERY — SessionStart detected .kiln/DEADLOCK.flag."
+    echo "> Previous session escalated after 3 nudges. Resetting counters."
+    echo "> Pipeline is restartable. Operator: check the last DEADLOCK WARNING block above."
+  } >> "$_STATE" 2>/dev/null
+
+  if [[ -f "$ACTIVITY_FILE" ]]; then
+    TMP_RECOVERY="$ACTIVITY_FILE.$$.recovery.tmp"
+    if jq '.nudge_count = 0 | .last_nudge_ts = 0 | .epoch += 1' "$ACTIVITY_FILE" > "$TMP_RECOVERY" 2>/dev/null; then
+      mv "$TMP_RECOVERY" "$ACTIVITY_FILE" 2>/dev/null || rm -f "$TMP_RECOVERY" 2>/dev/null
+    else
+      rm -f "$TMP_RECOVERY" 2>/dev/null
+    fi
+  fi
+
+  rm -f "$FLAG_FILE" 2>/dev/null
+fi
+
 TMP_DIR="$ROOT/.kiln/tmp"
 mkdir -p "$TMP_DIR" 2>/dev/null || exit 0
 PID_FILE="$TMP_DIR/watchdog.pid"
