@@ -12,6 +12,7 @@ before/after a refactor.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -113,6 +114,7 @@ class MockEngine:
             "REQUEST_WORKERS": self._on_request_workers,
             "CYCLE_WORKERS": self._on_cycle_workers,
             "WORKER_READY": self._on_worker_ready,
+            "SUBAGENTSTART": self._on_subagent_start,
             "ITERATION_COMPLETE": self._on_iteration_complete_legacy,
             "ITERATION_UPDATE": self._on_iteration_update,
             "MILESTONE_TRANSITION": self._on_milestone_transition,
@@ -237,6 +239,35 @@ class MockEngine:
         return [EngineDecision(
             type="worker_announce",
             details={"sender": event.get("sender", "")},
+        )]
+
+    def _on_subagent_start(self, event):
+        """Platform-native spawn ack — Wave 5 / SIMPLIFY-v1.4.0 P1.
+
+        The SubagentStart hook (`hooks/subagent-start-ack.sh`) fires on
+        every spawn and emits `additionalContext` the engine consumes to
+        unblock CYCLE_WORKERS. Here we model the engine-side observation:
+        one `subagent_start_ack` decision per spawn, keyed on agent_type
+        from the payload so scenarios can disambiguate multi-worker bursts.
+
+        Payload fidelity: the real platform payload is JSON
+        ({"agent_type": "...", "agent_id": "..."}). Synthetic scenarios
+        may use key=value text for readability. Try JSON first, fall back
+        to kv parsing so both forms are supported.
+        """
+        payload = event.get("payload", "")
+        try:
+            kv = json.loads(payload)
+            if not isinstance(kv, dict):
+                kv = parse_kv_payload(payload)
+        except (ValueError, TypeError):
+            kv = parse_kv_payload(payload)
+        agent = kv.get("agent_type", "")
+        if agent.startswith("kiln:"):
+            agent = agent[len("kiln:"):]
+        return [EngineDecision(
+            type="subagent_start_ack",
+            details={"agent": agent},
         )]
 
     def _on_request_workers(self, event):

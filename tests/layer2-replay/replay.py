@@ -201,11 +201,24 @@ def normalize_event(ev: dict) -> dict:
 
 
 def event_matches_marker(event: dict, marker: str) -> bool:
-    """Marker format: 'sender | SIGNAL' (both lowercase-sensitive via eq)."""
-    if "|" in marker:
-        sender, sig = [s.strip() for s in marker.split("|", 1)]
-        return event["sender"] == sender and event["signal"].upper() == sig.upper()
-    # otherwise, substring on signal
+    """Marker format:
+      - 'sender | SIGNAL'                 — 2 parts (most common).
+      - 'sender | SIGNAL | disambiguator' — 3 parts; third token is a
+         substring match against the event's payload. Needed when the
+         same sender+signal pair fires multiple times in a stream
+         (e.g. two `platform | SubagentStart` events keyed on agent_type).
+      - bare signal substring otherwise.
+    """
+    parts = [p.strip() for p in marker.split("|")]
+    if len(parts) >= 2:
+        sender, sig = parts[0], parts[1]
+        if event["sender"] != sender:
+            return False
+        if event["signal"].upper() != sig.upper():
+            return False
+        if len(parts) == 3:
+            return parts[2] in str(event.get("payload", ""))
+        return True
     return marker.lower() in event["signal"].lower()
 
 
@@ -263,14 +276,19 @@ def run_scenario(scenario_path: Path) -> int:
             fails += 1
             continue
         observed = per_event_decisions[matched_event_idx]
-        # Match each expected decision — allow observed to contain more
+        # `strict: true` locks the assertion to decisions observed on the
+        # matched event only — needed when the same sender+signal pair
+        # fires multiple times in one stream (e.g. two SubagentStart
+        # events, one per spawned worker) and cross-event fallback would
+        # let one event's decision satisfy another's assertion.
+        strict = bool(assertion.get("strict", False))
         for expected in expected_decs:
             if any(d.matches(expected) for d in observed):
                 continue
-            # Also allow cross-event matching for cumulative decisions
-            cross = [d for decs in per_event_decisions for d in decs]
-            if any(d.matches(expected) for d in cross):
-                continue
+            if not strict:
+                cross = [d for decs in per_event_decisions for d in decs]
+                if any(d.matches(expected) for d in cross):
+                    continue
             print(f"    ✗ [{marker}] expected decision not observed: {expected}")
             if observed:
                 print(f"       observed: {[str(d) for d in observed]}")

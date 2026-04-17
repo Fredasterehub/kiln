@@ -1,0 +1,60 @@
+name: subagent-start-cycle-unblock
+description: >
+  P1 (SubagentStart) — CYCLE_WORKERS unblock now driven by SubagentStart
+  hook additionalContext injection rather than WORKER_READY. The platform
+  fires SubagentStart ~90ms after each Agent call and ~30ms before the
+  subagent's first PreToolUse; the hook emits additionalContext which the
+  engine consumes to unblock CYCLE_WORKERS. WORKERS_SPAWNED remains as
+  operator-visible logging signal. WORKER_READY still fires in this scenario
+  (old mechanism not yet retired — adopt-then-retire; retirement is p1-07).
+  Assertions cover: (1) spawn + WORKERS_SPAWNED on CYCLE_WORKERS, (2) per-
+  worker SubagentStart ack decisions (E1 multi-worker race — both events
+  arrive before the workers' first PreToolUse), (3) WORKER_READY announce
+  decisions still observed (not swallowed — regression guard until p1-07
+  retires them).
+
+  SubagentStart payloads use the platform's native JSON shape
+  ({"agent_type": "...", "agent_id": "..."}) for fidelity with the real
+  hook input. The per-event assertions on SubagentStart and WORKER_READY
+  use `strict: true` so a single ack/announce cannot satisfy both mario's
+  and luigi's assertions via cross-event fallback — the E1 multi-worker
+  race is only proven if each spawn produces its own ack.
+engine-version: post-centralization
+events-inline:
+  - {sender: krs-one, signal: CYCLE_WORKERS, recipient: team-lead, payload: "scenario=default, duo_id=mario-luigi, coder_name=mario, reviewer_name=luigi, reason=initial, chunk=proof-1", timestamp: "00:00:01"}
+  - {sender: platform, signal: SubagentStart, recipient: engine, payload: '{"agent_type": "mario", "agent_id": "agt-001"}', timestamp: "00:00:02"}
+  - {sender: platform, signal: SubagentStart, recipient: engine, payload: '{"agent_type": "luigi", "agent_id": "agt-002"}', timestamp: "00:00:03"}
+  - {sender: mario, signal: WORKER_READY, recipient: krs-one, payload: "ready for assignment", timestamp: "00:00:04"}
+  - {sender: luigi, signal: WORKER_READY, recipient: krs-one, payload: "ready for assignment", timestamp: "00:00:05"}
+assertions:
+  - after-event: "krs-one | CYCLE_WORKERS"
+    expected-decisions:
+      - type: spawn
+        name: mario
+        subagent_type: dial-a-coder
+      - type: spawn
+        name: luigi
+        subagent_type: critical-thinker
+      - type: send
+        recipient: krs-one
+        signal: WORKERS_SPAWNED
+  - after-event: "platform | SubagentStart | mario"
+    strict: true
+    expected-decisions:
+      - type: subagent_start_ack
+        agent: mario
+  - after-event: "platform | SubagentStart | luigi"
+    strict: true
+    expected-decisions:
+      - type: subagent_start_ack
+        agent: luigi
+  - after-event: "mario | WORKER_READY"
+    strict: true
+    expected-decisions:
+      - type: worker_announce
+        sender: mario
+  - after-event: "luigi | WORKER_READY"
+    strict: true
+    expected-decisions:
+      - type: worker_announce
+        sender: luigi
