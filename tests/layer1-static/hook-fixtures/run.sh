@@ -38,6 +38,12 @@ HOOK_SCRIPT["audit-status-marker"]="$SCRIPTS_DIR/audit-status-marker.sh"
 HOOK_SCRIPT["enforce-pipeline"]="$SCRIPTS_DIR/enforce-pipeline.sh"
 HOOK_SCRIPT["stop-guard"]="$HOOKS_DIR/stop-guard.sh"
 HOOK_SCRIPT["subagent-start-ack"]="$HOOKS_DIR/subagent-start-ack.sh"
+HOOK_SCRIPT["activity-update-heartbeat"]="$HOOKS_DIR/activity-update.sh"
+HOOK_SCRIPT["teammate-idle-updates-state"]="$HOOKS_DIR/activity-update.sh"
+HOOK_SCRIPT["subagent-start-adds-teammate"]="$HOOKS_DIR/activity-update.sh"
+HOOK_SCRIPT["subagent-stop-removes-teammate"]="$HOOKS_DIR/activity-update.sh"
+HOOK_SCRIPT["nudge-inject-with-pending"]="$HOOKS_DIR/nudge-inject.sh"
+HOOK_SCRIPT["nudge-inject-no-pending"]="$HOOKS_DIR/nudge-inject.sh"
 
 # Set up mock pipeline — a fake project with .kiln/ so hooks' context gate passes.
 setup_mock_pipeline() {
