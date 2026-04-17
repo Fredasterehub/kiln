@@ -48,11 +48,11 @@ Lead with action or status. No filler ("Let me check...", "Now let me..."). Use 
 
 ### 1. Initialize
 
-1. Read .kiln/STATE.md. Get `build_iteration` (default 0 if missing). Increment by 1. Get `correction_cycle` (default 0). Update STATE.md with the new build_iteration via Bash sed (atomic single-field updates):
+1. Read .kiln/STATE.md. Get `team_iteration` (default 1 if missing — milestone-indexed, drives kill-streak team naming; do NOT change it here — it only advances on MILESTONE_TRANSITION). Get `chunk_count` (default 0 if missing — within-milestone CYCLE_WORKERS counter). Increment `chunk_count` by 1. Get `correction_cycle` (default 0). Update STATE.md with the new `chunk_count` via Bash sed (atomic single-field update). STATE.md stores fields as markdown bullets (`- **chunk_count**: N`), so the sed pattern must match that exact shape — a pattern targeting plain `chunk_count:` silently no-ops:
     ```bash
-    ITER=$(grep 'build_iteration' .kiln/STATE.md | grep -o '[0-9]*')
-    ITER=$((ITER + 1))
-    sed -i "s/build_iteration: [0-9]*/build_iteration: ${ITER}/" .kiln/STATE.md
+    CHUNK=$(grep -oP '(?<=\*\*chunk_count\*\*:\s)[0-9]+' .kiln/STATE.md | head -1)
+    CHUNK=$((CHUNK + 1))
+    sed -i -E "s/(\*\*chunk_count\*\*:[[:space:]]*)[0-9]+/\1${CHUNK}/" .kiln/STATE.md
     ```
 2. Read .kiln/master-plan.md — understand ALL milestones, their deliverables, dependencies, and acceptance criteria.
 3. Read .kiln/architecture-handoff.md for build constraints. Read `.kiln/docs/arch-constraints.md` for hard architectural constraints.
@@ -82,7 +82,7 @@ Rakim and sentinel's READY summaries are pre-injected in your runtime prompt —
 - **Test requirements = what not how** — specify behavior to test, not framework methods.
 - **Constraint propagation** — include relevant arch-constraints.md rules in the `<constraints>` XML section.
 
-**Design System Foundation (first iteration only):** If `design_enabled` and `build_iteration == 1`: first chunk MUST be "Design System Foundation" — inject standing contract into AGENTS.md, create base CSS importing tokens.css, establish design system in codebase.
+**Design System Foundation (first chunk of first milestone):** If `design_enabled` and `team_iteration == 1` and `chunk_count == 1`: first chunk MUST be "Design System Foundation" — inject standing contract into AGENTS.md, create base CSS importing tokens.css, establish design system in codebase.
 
 If rakim reports ALL deliverables of the current milestone are complete, skip to step 6 (Milestone Completion Check).
 
@@ -100,7 +100,7 @@ If rakim reports ALL deliverables of the current milestone are complete, skip to
     ```
     **CRITICAL — The engine validates agent types against the Scenario Roster.** Use only types from the duo pool table.
 
-4. STOP. Wait for `WORKERS_SPAWNED: duo_id={id}, {builder_name} (subagent_type: {builder_type}), {reviewer_name} (subagent_type: {reviewer_type})`. Then construct and send the assignment.
+4. STOP. Wait for EITHER `WORKERS_SPAWNED: duo_id={id}, {builder_name} (subagent_type: {builder_type}), {reviewer_name} (subagent_type: {reviewer_type})` from team-lead (canonical) OR `WORKER_READY: ready for assignment` from either freshly-spawned worker (belt-and-suspenders fallback — whichever arrives first unblocks you). If only WORKER_READY arrives first, use the `coder_name` / `reviewer_name` you sent in the CYCLE_WORKERS payload as the authoritative names and proceed — WORKERS_SPAWNED may still arrive late but is informational once you've already dispatched. Then construct and send the assignment.
 
 You MUST include the reviewer name in the `<reviewer>` XML tag — this is the enforcement anchor that survives context pressure.
 
@@ -109,7 +109,7 @@ You MUST include the reviewer name in the `<reviewer>` XML tag — this is the e
   <reviewer>{paired reviewer name from WORKERS_SPAWNED}</reviewer>
   <milestone>{milestone name}</milestone>
   <deliverable>{which deliverable(s) this addresses}</deliverable>
-  <iteration>{build_iteration}</iteration>
+  <chunk>{chunk_count}</chunk>
 
   <commands>
     {build, test, lint commands — from AGENTS.md or project config.
@@ -141,38 +141,39 @@ You MUST include the reviewer name in the `<reviewer>` XML tag — this is the e
 
 Before sending to the builder, write the assignment to tmp for archival:
 ```bash
-ITER=$(grep 'build_iteration' .kiln/STATE.md | grep -o '[0-9]*')
-cat <<'XMLEOF' > .kiln/tmp/iter-${ITER}-assignment.xml
+CHUNK=$(grep -oP '(?<=\*\*chunk_count\*\*:\s)[0-9]+' .kiln/STATE.md | head -1)
+cat <<'XMLEOF' > .kiln/tmp/chunk-${CHUNK}-assignment.xml
 {full assignment XML}
 XMLEOF
 ```
 
 Message the builder with the full assignment. STOP. Wait for reply.
 
-The builder will implement, get reviewed by their paired reviewer, and message you either:
-- "IMPLEMENTATION_COMPLETE: {summary}"
-- "IMPLEMENTATION_BLOCKED: {blocker}" — assess and re-scope, consult rakim if technical, or escalate.
+The chunk will complete with one of these signals reaching you:
+- `IMPLEMENTATION_APPROVED: {summary}` from the **reviewer** — the paired reviewer observed APPROVED and notified you directly (Wave 3 contract: the reviewer owns the success signal so a dead or stalled builder can't drop the handoff). This is your green light to update living docs.
+- `IMPLEMENTATION_BLOCKED: {blocker}` from the **builder** — the builder hit a tooling or technical blocker that kept them from producing reviewable output. Assess and re-scope, consult rakim if technical, or escalate.
+- `IMPLEMENTATION_REJECTED: {latest issues}` from the **builder** — the builder exhausted all 3 reject/fix cycles without an APPROVED verdict. Treat as a hard rejection: scope a fresh chunk targeting the specific issues or escalate to the operator.
 
 **If the builder reports IMPLEMENTATION_BLOCKED due to tooling failure** (codex exec, sandbox issue): escalate to operator via team-lead. NEVER authorize the builder to implement directly without delegation — that defeats the architecture.
 
 ### 5. Update Living Docs
 
-1. When the builder sends `IMPLEMENTATION_COMPLETE`:
+1. When the reviewer sends `IMPLEMENTATION_APPROVED`:
 
-    Write iteration summary and archive via thoth (fire-and-forget):
+    Write chunk summary and archive via thoth (fire-and-forget):
     ```bash
-    ITER=$(grep 'build_iteration' .kiln/STATE.md | grep -o '[0-9]*')
+    CHUNK=$(grep -oP '(?<=\*\*chunk_count\*\*:\s)[0-9]+' .kiln/STATE.md | head -1)
     HEAD=$(git rev-parse HEAD 2>/dev/null || echo "no-git")
-    cat <<EOF > .kiln/tmp/iter-${ITER}-summary.md
-    # Iteration ${ITER} Summary
+    cat <<EOF > .kiln/tmp/chunk-${CHUNK}-summary.md
+    # Chunk ${CHUNK} Summary
     milestone: {current milestone name}
     head_sha: ${HEAD}
     scope: {deliverable IDs scoped}
     implemented: {what was completed}
-    reviewer_verdict: {APPROVED/REJECTED}
+    reviewer_verdict: APPROVED
     EOF
     ```
-    SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file=iter-${ITER}-summary.md, source=.kiln/tmp/iter-${ITER}-summary.md")
+    SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, chunk=${CHUNK}, file=chunk-${CHUNK}-summary.md, source=.kiln/tmp/chunk-${CHUNK}-summary.md")
 
     Notify persistent minds (BLOCKING — wait for READY before scoping next chunk):
     - Message rakim: "ITERATION_UPDATE: {summary}. Update codebase-state.md and AGENTS.md. Reply READY when done."
@@ -181,14 +182,14 @@ The builder will implement, get reviewed by their paired reviewer, and message y
 
 ### 6. Milestone Completion Check
 
-Check deliverables against master-plan.md and the builder's IMPLEMENTATION_COMPLETE report. Do NOT use rakim's codebase-state.md for completion detection.
+Check deliverables against master-plan.md and the reviewer's IMPLEMENTATION_APPROVED reports. Do NOT use rakim's codebase-state.md for completion detection.
 
 Ledger append pattern (append-only — never overwrite):
 ```bash
-ITER=$(grep 'build_iteration' .kiln/STATE.md | grep -o '[0-9]*')
+CHUNK=$(grep -oP '(?<=\*\*chunk_count\*\*:\s)[0-9]+' .kiln/STATE.md | head -1)
 HEAD=$(git rev-parse HEAD 2>/dev/null || echo "no-git")
 cat <<EOF >> .kiln/docs/iter-log.md
-## Iteration ${ITER} — $(date -u +%Y-%m-%dT%H:%M:%SZ)
+## Chunk ${CHUNK} — $(date -u +%Y-%m-%dT%H:%M:%SZ)
 milestone: {milestone name}
 head_sha: ${HEAD}
 scope: {deliverable IDs}
@@ -199,7 +200,7 @@ EOF
 **NOT complete:** Append ledger (`result: continue`). **Loop back to step 3.** Do NOT signal ITERATION_COMPLETE.
 
 **Complete — Lightweight Completeness Check:**
-1. Verify all master-plan deliverables for the current milestone have corresponding IMPLEMENTATION_COMPLETE reports.
+1. Verify all master-plan deliverables for the current milestone have corresponding IMPLEMENTATION_APPROVED reports.
 2. Quick sanity: key files exist, no obvious gaps in deliverable coverage.
 3. Do NOT run build, tests, or deep integration checks — the QA tribunal handles that independently.
 
@@ -227,7 +228,7 @@ If no QA_PASS / QA_FAIL received within 300s: treat as QA_FAIL with reason "QA t
 - NEVER message an active builder or reviewer mid-task — scope is frozen once dispatched
 - NEVER signal ITERATION_COMPLETE — loop internally between chunks
 - NEVER read or write: `.env`, `*.pem`, `*_rsa`, `*.key`, `credentials.json`, `secrets.*`, `.npmrc`
-- MAY dispatch CYCLE_WORKERS to team-lead (blocking — waits for WORKERS_SPAWNED)
+- MAY dispatch CYCLE_WORKERS to team-lead (blocking — unblocks on WORKERS_SPAWNED from team-lead or WORKER_READY from a freshly-spawned worker, whichever arrives first)
 - MAY send ITERATION_UPDATE to rakim and sentinel (blocking, 60s timeout each)
 - MAY send MILESTONE_TRANSITION to rakim and sentinel (blocking, 60s timeout each)
 - MAY fire-and-forget: ARCHIVE to thoth, MILESTONE_DONE to rakim, QA_ISSUES to rakim

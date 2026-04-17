@@ -49,7 +49,8 @@ STATE.md fields:
 - `skill`: absolute path to this skill file under the active plugin root. On resume, use the stored path if it is readable; otherwise recover to `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/SKILL.md`
 - `roster`: absolute path to current step's blueprint under the active plugin root. On resume, use the stored path if it is readable; otherwise recover from `stage` using the deterministic blueprint map below
 - `stage`: current step name (onboarding, brainstorm, research, architecture, build, validate, report, complete)
-- `build_iteration`: current Build iteration count
+- `team_iteration`: milestone-indexed counter (init 1, +1 per MILESTONE_TRANSITION). Drives kill-streak team naming.
+- `chunk_count`: within-milestone CYCLE_WORKERS counter (init 0, +1 per CYCLE_WORKERS, reset to 0 on MILESTONE_TRANSITION). Drives chunk archive file names (`chunk-{N}-*`).
 - `milestone_count`: total milestones from Architecture
 - `milestones_complete`: completed milestone count
 - `correction_cycle`: Validate->Build correction count (max 3)
@@ -268,11 +269,18 @@ Based on the boss's done signal, determine next action:
 **Step 4 done** (ARCHITECTURE_COMPLETE) -> proceed to step 5
 **Step 4 blocked** (PLAN_BLOCKED) -> render `halt` banner, inform operator, stop pipeline
 **Step 5 signals**:
-  - CYCLE_WORKERS -> KRS-One requests fresh workers mid-milestone. Execute the full CYCLE_WORKERS protocol (see § CYCLE_WORKERS above): validate scenario, shutdown current builder+reviewer, spawn fresh pair, send WORKERS_SPAWNED back to KRS-One. Do NOT tear down the team — persistent minds and KRS-One stay alive. Do NOT transition steps. After sending WORKERS_SPAWNED, return to waiting for the next signal. Update `build_iteration` in STATE.md.
-  - ITERATION_COMPLETE -> (legacy/internal — CYCLE_WORKERS is preferred) Render `phase_complete` banner, increment `build_iteration` in STATE.md. This signal carries no scenario information, so wait for KRS-One's next CYCLE_WORKERS to determine the scenario. Loop back to wait.
+  - CYCLE_WORKERS -> KRS-One requests fresh workers mid-milestone. Execute the full CYCLE_WORKERS protocol (see § CYCLE_WORKERS above): validate scenario, shutdown current builder+reviewer, spawn fresh pair, send WORKERS_SPAWNED back to KRS-One. Do NOT tear down the team — persistent minds and KRS-One stay alive. Do NOT transition steps. After sending WORKERS_SPAWNED, return to waiting for the next signal. The engine does NOT touch `chunk_count` — bossman owns that write at § 1 Initialize (Wave 3, C10); `team_iteration` stays fixed for the duration of the milestone and only changes inside the MILESTONE_COMPLETE handler below.
+  - ITERATION_COMPLETE -> (legacy/internal — CYCLE_WORKERS is preferred) Render `phase_complete` banner. The engine does NOT touch `chunk_count` here — bossman owns that field. This signal carries no scenario information, so wait for KRS-One's next CYCLE_WORKERS to determine the scenario. Loop back to wait.
   - MILESTONE_QA_READY -> KRS-One has verified deliverable completeness, requesting independent QA. Execute the full QA Tribunal protocol (see § MILESTONE_QA_READY below). Judge-dredd signals QA_PASS / QA_FAIL directly to krs-one (Wave 2 — no engine relay). Engine just shuts down the four QA agents and returns to waiting for the next signal (MILESTONE_COMPLETE or back to CYCLE_WORKERS if QA failed).
   - MILESTONE_COMPLETE -> Full team lifecycle reset:
-    1. Render `milestone_complete` banner. Increment `milestones_complete` in STATE.md.
+    1. Render `milestone_complete` banner. Increment `milestones_complete` in STATE.md. Increment `team_iteration` by 1 and reset `chunk_count` to 0 via Bash sed — STATE.md fields are markdown bullets (`- **team_iteration**: N`, `- **chunk_count**: N`), so the sed patterns must match that exact shape. A plain `s/team_iteration:/.../` pattern silently no-ops against the real state file:
+       ```bash
+       CURRENT_TEAM_ITER=$(grep -oP '(?<=\*\*team_iteration\*\*:\s)[0-9]+' .kiln/STATE.md | head -1)
+       NEW_TEAM_ITER=$((CURRENT_TEAM_ITER + 1))
+       sed -i -E "s/(\*\*team_iteration\*\*:[[:space:]]*)[0-9]+/\1${NEW_TEAM_ITER}/" .kiln/STATE.md
+       sed -i -E "s/(\*\*chunk_count\*\*:[[:space:]]*)[0-9]+/\10/" .kiln/STATE.md
+       ```
+       The new `team_iteration` selects the next kill-streak name for § 2 banner rendering; `chunk_count` restarts from 0 for the next milestone's chunk archive paths.
     2. **Pre-shutdown check**: Verify all persistent minds have `<!-- status: complete -->` in their owned files (codebase-state.md, patterns.md). If any missing, wait 30s and re-check (max 3 times), then proceed with warning.
     3. Send `shutdown_request` to ALL agents (PMs, KRS-One, any remaining workers). Wait for responses (60s timeout, force-terminate on timeout).
     4. **TeamDelete** — tear down the entire milestone team.

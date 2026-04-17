@@ -15,6 +15,9 @@ echo "── Layer 1 — Hook fixtures ─────────────�
 bash hook-fixtures/run.sh || FAIL=1
 
 echo ""
+bash state-mutation/run.sh || FAIL=1
+
+echo ""
 if [[ $FAIL -eq 0 ]]; then
   echo "Layer 1: PASS"
 else

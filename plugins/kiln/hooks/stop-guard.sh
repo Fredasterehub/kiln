@@ -61,21 +61,38 @@ esac
 # ── Terminal signal detection ────────────────────────────────
 # last_assistant_message is the agent's final output before stopping.
 # If it contains a terminal signal, the agent completed its work.
+#
+# WAVE 3: the reviewer enforcement block runs BEFORE this fast path —
+# otherwise a reviewer's stray `APPROVED` LAST_MSG (without the paired
+# IMPLEMENTATION_APPROVED to krs-one) would exit 0 here and skip the
+# reviewer check. See the reviewer block below.
 LAST_MSG=$(echo "$INPUT" | jq -r '.last_assistant_message // ""')
 
-case "$LAST_MSG" in
-  *ONBOARDING_COMPLETE*|*BRAINSTORM_COMPLETE*|*RESEARCH_COMPLETE*|\
-  *ARCHITECTURE_COMPLETE*|*ITERATION_COMPLETE*|*MILESTONE_COMPLETE*|\
-  *BUILD_COMPLETE*|*VALIDATE_PASS*|*VALIDATE_FAILED*|*REPORT_COMPLETE*|\
-  *READY_BOOTSTRAP*|*READY:*|*IMPLEMENTATION_COMPLETE*|*IMPLEMENTATION_BLOCKED*|\
-  *REVIEW_REQUEST*|*APPROVED*|*REJECTED*|\
-  *SERIALIZATION_COMPLETE*|*ITERATION_UPDATE*|\
-  *MILESTONE_TRANSITION*|*CYCLE_WORKERS*|*WORKERS_SPAWNED*|\
-  *QA_REPORT_READY*|*RECONCILIATION_COMPLETE*|*QA_PASS*|*QA_FAIL*|\
-  *PLAN_READY*|*DIVERGENCE_READY*|*SYNTHESIS_COMPLETE*|*VALIDATION_PASS*|\
-  *VALIDATION_FAIL*|*DOCS_UPDATED*|*MAPPING_COMPLETE*|*SCOUT_REPORT*|\
-  *MISSION_COMPLETE*|*REVISION_NEEDED*|*DESIGN_QA_COMPLETE*)
-    exit 0
+case "$AGENT" in
+  critical-drinker|the-curator)
+    # Fall through to the reviewer block; do not fast-path on terminal
+    # signals. The reviewer block re-evaluates the IMPLEMENTATION_APPROVED
+    # pairing against the full transcript and is stricter than a
+    # substring allowlist.
+    ;;
+  *)
+    case "$LAST_MSG" in
+      *ONBOARDING_COMPLETE*|*BRAINSTORM_COMPLETE*|*RESEARCH_COMPLETE*|\
+      *ARCHITECTURE_COMPLETE*|*ITERATION_COMPLETE*|*MILESTONE_COMPLETE*|\
+      *BUILD_COMPLETE*|*VALIDATE_PASS*|*VALIDATE_FAILED*|*REPORT_COMPLETE*|\
+      *READY_BOOTSTRAP*|*READY:*|*WORKER_READY*|\
+      *IMPLEMENTATION_APPROVED*|*IMPLEMENTATION_COMPLETE*|\
+      *IMPLEMENTATION_BLOCKED*|*IMPLEMENTATION_REJECTED*|\
+      *REVIEW_REQUEST*|*APPROVED*|*REJECTED*|\
+      *SERIALIZATION_COMPLETE*|*ITERATION_UPDATE*|\
+      *MILESTONE_TRANSITION*|*CYCLE_WORKERS*|*WORKERS_SPAWNED*|\
+      *QA_REPORT_READY*|*RECONCILIATION_COMPLETE*|*QA_PASS*|*QA_FAIL*|\
+      *PLAN_READY*|*DIVERGENCE_READY*|*SYNTHESIS_COMPLETE*|*VALIDATION_PASS*|\
+      *VALIDATION_FAIL*|*DOCS_UPDATED*|*MAPPING_COMPLETE*|*SCOUT_REPORT*|\
+      *MISSION_COMPLETE*|*REVISION_NEEDED*|*DESIGN_QA_COMPLETE*)
+        exit 0
+        ;;
+    esac
     ;;
 esac
 
@@ -123,20 +140,57 @@ case "$AGENT" in
     ;;
 esac
 
-# Builders: if they received APPROVED, must report IMPLEMENTATION_COMPLETE
+# Builders: Wave 3 contract — on APPROVED, the builder commits and stops
+# silently. The PAIRED REVIEWER owns the IMPLEMENTATION_APPROVED → krs-one
+# handoff, so the hook no longer demands a terminal signal from the builder
+# after APPROVED. See kiln-protocol SKILL.md § Worker Signals and the
+# audit entry C8 in PLUMBING-AUDIT-v1.3.0.md for the rationale.
+# (No commit-recency check either — team-protocol.md blocking policy rule 5:
+#  "No SubagentStop checks on builder commit history." The reviewer is the
+#  quality gate, not the hook.)
+
+# Reviewers: on every APPROVED verdict, must emit a paired
+# IMPLEMENTATION_APPROVED to krs-one (Wave 3). This is the new
+# enforcement point — the reviewer owns the success handoff.
+#
+# Contract: every `APPROVED:` the reviewer sent to the builder must be
+# paired with an `IMPLEMENTATION_APPROVED:` to krs-one. The reviewer may
+# have rejected earlier chunks in the same session (reject → fix →
+# approve is the normal flow), so a global `no REJECTED ever` heuristic
+# would let reject-then-approve sessions bypass the pairing check.
+# Instead: count the string occurrences directly.
+#
+#   grep -cF 'APPROVED:' — matches BOTH the reviewer's 'APPROVED: ...'
+#   verdict to the builder AND the 'IMPLEMENTATION_APPROVED: ...' send
+#   to krs-one (the second is a superstring of the first).
+#
+#   Therefore:
+#     approvals_to_builder = total_APPROVED - IMPLEMENTATION_APPROVED
+#   And the pairing invariant is:
+#     approvals_to_builder == IMPLEMENTATION_APPROVED
+#
+# Any unpaired APPROVED means the reviewer notified the builder but
+# did NOT notify krs-one, and the build loop is about to stall.
 case "$AGENT" in
-  dial-a-coder|backup-coder|la-peintresse)
+  critical-drinker|the-curator)
     TRANSCRIPT=$(echo "$INPUT" | jq -r '.agent_transcript_path // ""')
-    if [[ -f "$TRANSCRIPT" ]] && grep -qF 'APPROVED' "$TRANSCRIPT"; then
-      if echo "$LAST_MSG" | grep -qF 'IMPLEMENTATION_COMPLETE'; then
-        exit 0
+    if [[ -f "$TRANSCRIPT" ]]; then
+      ALL_APPROVED=$(grep -cF 'APPROVED:' "$TRANSCRIPT" 2>/dev/null || echo 0)
+      IMPL_APPROVED=$(grep -cF 'IMPLEMENTATION_APPROVED:' "$TRANSCRIPT" 2>/dev/null || echo 0)
+      # Include LAST_MSG in case it hasn't flushed to transcript yet
+      if echo "$LAST_MSG" | grep -qF 'IMPLEMENTATION_APPROVED:'; then
+        IMPL_APPROVED=$((IMPL_APPROVED + 1))
+        ALL_APPROVED=$((ALL_APPROVED + 1))
+      elif echo "$LAST_MSG" | grep -qF 'APPROVED:'; then
+        ALL_APPROVED=$((ALL_APPROVED + 1))
       fi
-      echo "Your implementation was APPROVED but you haven't sent IMPLEMENTATION_COMPLETE to krs-one. Report your success before stopping." >&2
-      exit 2
+      APPROVALS_TO_BUILDER=$((ALL_APPROVED - IMPL_APPROVED))
+      if (( APPROVALS_TO_BUILDER > IMPL_APPROVED )); then
+        UNPAIRED=$((APPROVALS_TO_BUILDER - IMPL_APPROVED))
+        echo "You issued ${APPROVALS_TO_BUILDER} APPROVED verdict(s) to the builder but only ${IMPL_APPROVED} IMPLEMENTATION_APPROVED message(s) to krs-one — ${UNPAIRED} unpaired. Wave 3 contract: every APPROVED MUST be paired with IMPLEMENTATION_APPROVED to krs-one. Send the missing handoff(s) before stopping." >&2
+        exit 2
+      fi
     fi
-    # No commit-recency check — team-protocol.md blocking policy rule 5:
-    # "No SubagentStop checks on builder commit history."
-    # The reviewer is the quality gate, not the hook.
     ;;
 esac
 

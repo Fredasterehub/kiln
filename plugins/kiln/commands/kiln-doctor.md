@@ -112,7 +112,7 @@ fi
 ### 7. Existing Pipeline State
 
 Check for `.kiln/STATE.md` in the current working directory:
-- If found: display current stage, build_iteration, correction_cycle, run_id
+- If found: display current stage, team_iteration, chunk_count, correction_cycle, run_id
 - If not found: "No existing pipeline state. Ready for a fresh run."
 
 ### 8. Brainstorm Data

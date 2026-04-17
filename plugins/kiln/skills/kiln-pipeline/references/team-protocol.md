@@ -35,11 +35,11 @@ Persistent minds skip Phase 2. They bootstrap immediately on spawn, read their f
 You receive messages ONE AT A TIME. Each wake-up delivers exactly one message. Process it fully before acting.
 
 **Blocking exchanges** (STOP and wait for reply):
-- Worker completion: `IMPLEMENTATION_COMPLETE` / `IMPLEMENTATION_BLOCKED` (builder → boss)
+- Chunk completion: `IMPLEMENTATION_APPROVED` (reviewer → boss) on success, `IMPLEMENTATION_BLOCKED` or `IMPLEMENTATION_REJECTED` (builder → boss) on failure paths
 - Reviewer verdict: APPROVED / REJECTED (reviewer → builder)
 - Worker → PM consultation: worker sends question, STOPs, waits for reply
 - Shutdown: `shutdown_response` (any agent → engine)
-- Worker cycling: `CYCLE_WORKERS` (KRS-One → engine, waits for `WORKERS_SPAWNED`)
+- Worker cycling: `CYCLE_WORKERS` (KRS-One → engine, unblocks on `WORKERS_SPAWNED` from engine OR `WORKER_READY` from a worker — whichever arrives first)
 - Milestone transition: `MILESTONE_TRANSITION` (KRS-One → rakim+sentinel, waits for `READY`)
 
 **Blocking between worker cycles** (STOP and wait for READY):
@@ -54,11 +54,13 @@ You receive messages ONE AT A TIME. Each wake-up delivers exactly one message. P
 
 | Signal | Sender → Receiver | What triggers reply | Timeout behavior |
 |--------|-------------------|---------------------|-----------------|
-| `IMPLEMENTATION_COMPLETE` / `IMPLEMENTATION_BLOCKED` | Builder → KRS-One | Builder finishes or hits blocker | Engine nudges if idle >5 min |
+| `IMPLEMENTATION_APPROVED` | Reviewer → KRS-One | Reviewer emits APPROVED (paired with APPROVED to builder). Wave 3 success handoff. | Engine nudges if idle >5 min |
+| `IMPLEMENTATION_BLOCKED` / `IMPLEMENTATION_REJECTED` | Builder → KRS-One | Builder hits tooling blocker, or exhausts 3 reject/fix cycles | Engine nudges if idle >5 min |
 | Reviewer verdict (APPROVED/REJECTED) | Reviewer → Builder | Builder sends REVIEW_REQUEST | Engine nudges if idle >5 min |
+| `WORKER_READY` | Worker → KRS-One | Worker's first-wake self-announce (fire-and-forget fallback alongside WORKERS_SPAWNED) | KRS-One treats as optional — WORKERS_SPAWNED is canonical |
 | `shutdown_response` | Any agent → Engine | Engine sends shutdown_request | Forced after 30s |
 | `ITERATION_UPDATE` | KRS-One → rakim, sentinel | Chunk complete, PMs update state | Proceed after 60s (no deadlock) |
-| `CYCLE_WORKERS` | KRS-One → Engine | Request fresh worker pair | Engine responds with WORKERS_SPAWNED |
+| `CYCLE_WORKERS` | KRS-One → Engine | Request fresh worker pair | Engine responds with WORKERS_SPAWNED; WORKER_READY from a worker is an equivalent unblock |
 | `MILESTONE_TRANSITION` | KRS-One → rakim, sentinel | Milestone boundary, PMs archive+reset | Proceed after 60s (no deadlock) |
 | `MILESTONE_QA_READY` | KRS-One → Engine | Milestone deliverables verified | Engine spawns Judge Dredd Tribunal (ken+ryu with random slot assignment → denzel → judge-dredd). KRS-One waits for QA_PASS / QA_FAIL direct from judge-dredd (300s timeout) |
 | `QA_REPORT_READY` | ken/ryu → Engine | Individual QA report written to .kiln/tmp/qa-report-{a\|b}.md (slot assigned at spawn) | Engine tracks per-sender (two distinct waits) |
@@ -71,8 +73,8 @@ You receive messages ONE AT A TIME. Each wake-up delivers exactly one message. P
 1. **Boss → PM: fire-and-forget EXCEPT at seam points.** `ITERATION_UPDATE` and `MILESTONE_TRANSITION` are blocking with 60s timeout — KRS-One waits for READY between worker cycles and at milestone boundaries.
 2. **Worker → PM: standard consultation.** Workers may and SHOULD consult PMs. Worker sends question, STOPs, waits for reply (60s timeout — if no response, proceed with best judgment and note the gap), continues.
 3. **Terminal signals to engine are always fire-and-forget.** Boss sends and STOPs. Engine processes on its next turn.
-4. **Duplicate handling:** If a worker sends IMPLEMENTATION_COMPLETE twice, boss processes the first, ignores duplicates.
-5. **The reviewer is the quality gate, not a hook.** No SubagentStop checks on builder commit history.
+4. **Duplicate handling:** If a reviewer sends IMPLEMENTATION_APPROVED twice for the same chunk, boss processes the first, ignores duplicates. Same rule for any stray builder IMPLEMENTATION_BLOCKED/REJECTED.
+5. **The reviewer is the quality gate and owns the success signal.** The reviewer emits IMPLEMENTATION_APPROVED to krs-one on every APPROVED verdict. No SubagentStop checks on builder commit history — the hook layer is not the gate.
 
 ## 3. Dynamic Roster
 
@@ -168,6 +170,10 @@ Standard signals sent via SendMessage to team-lead (the engine):
 | `PLAN_BLOCKED` | Architecture validation failed 3x | Aristotle |
 | `ITERATION_UPDATE: {summary}` | Chunk complete, update state files (blocking, 60s) | KRS-One |
 | `ITERATION_COMPLETE` | Build iteration done — legacy/internal, replaced by CYCLE_WORKERS | KRS-One |
+| `WORKER_READY: ready for assignment` | Worker self-announces on first wake — belt-and-suspenders fallback unblock for CYCLE_WORKERS (recipient: krs-one) | Build-step duo members — builders (dial-a-coder, backup-coder, la-peintresse) AND reviewers (critical-drinker, the-curator) |
+| `IMPLEMENTATION_APPROVED: {summary}` | Reviewer reports a successful chunk to the boss on APPROVED (Wave 3 — recipient: krs-one) | Reviewers (critical-drinker, the-curator) |
+| `IMPLEMENTATION_BLOCKED: {blocker}` | Builder hit tooling/technical blocker (recipient: krs-one) | Builders |
+| `IMPLEMENTATION_REJECTED: {issues}` | Builder exhausted 3 reject/fix cycles (recipient: krs-one) | Builders |
 | `MILESTONE_TRANSITION: completed={name}, next={name}` | Milestone boundary — PMs archive + reset (blocking) | KRS-One |
 | `MILESTONE_QA_READY: {milestone_name}` | Deliverables verified, requesting independent QA | KRS-One |
 | `QA_REPORT_READY` | Individual QA report written to .kiln/tmp/qa-report-{a\|b}.md; engine tracks per-sender (recipient: team-lead) | ken / ryu |

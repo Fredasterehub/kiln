@@ -20,10 +20,10 @@ Map to audit findings:
 
 | Finding | Scenario |
 |---|---|
-| C8 IMPLEMENTATION_COMPLETE drop | `implementation-complete-drop.yaml` (post-centralization asserts IMPLEMENTATION_APPROVED path works) |
+| C8 IMPLEMENTATION_COMPLETE drop | `reviewer-approves-to-boss.yaml` (post-centralization — asserts reviewer owns the success handoff via IMPLEMENTATION_APPROVED; builder stays silent on APPROVED; engine stays spectator on REVIEW_REQUEST/APPROVED/IMPLEMENTATION_APPROVED) |
 | C9 READY misrouted | `pm-ready-wrong-recipient.yaml` (warns on second READY to team-lead after bootstrap) |
 | C11 centralization refactor | every scenario can run under both engine versions — compare decisions |
-| C12 WORKERS_SPAWNED slack | `cycle-workers-basic.yaml` (asserts engine emits WORKERS_SPAWNED) |
+| C12 WORKERS_SPAWNED slack | `worker-ready-belt-suspenders.yaml` (asserts CYCLE_WORKERS still emits canonical WORKERS_SPAWNED AND each worker's WORKER_READY independently produces a worker_announce — either path unblocks krs-one). `cycle-workers-basic.yaml` covers the canonical WORKERS_SPAWNED path alone. |
 
 ## Running
 

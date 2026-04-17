@@ -51,7 +51,7 @@ Background (engine IS operator window): 3, 5, 6, 7
 
 ## Build Loop
 KRS-One signals: CYCLE_WORKERS (fresh worker pair), MILESTONE_COMPLETE: {name} (next milestone), BUILD_COMPLETE (→ validate). KRS-One loops internally via CYCLE_WORKERS — he does NOT signal ITERATION_COMPLETE.
-State: build_iteration incremented each invocation. correction_cycle tracks validate→build loops.
+State: `chunk_count` incremented each CYCLE_WORKERS dispatch (within-milestone counter, resets on MILESTONE_TRANSITION). `team_iteration` incremented once per milestone (drives kill-streak team naming). `correction_cycle` tracks validate→build loops.
 
 ## Transition Quotes
 Use quotes from lore.json for step transitions. The Step Transitions table in SKILL.md has the lore keys.

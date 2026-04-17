@@ -453,7 +453,10 @@ def check_boss_state_md_writes() -> list[c.Violation]:
     Detect argus/aristotle/bossman touching STATE.md stage fields."""
     out: list[c.Violation] = []
     # Legitimate: alpha writes STATE.md during onboarding.
-    # Legitimate: bossman may update build_iteration (documented exception).
+    # Legitimate: bossman may update chunk_count per CYCLE_WORKERS and
+    # team_iteration/chunk_count at MILESTONE_TRANSITION (Wave 3, documented
+    # exceptions in kiln-pipeline SKILL.md). The legacy single field
+    # build_iteration was split into team_iteration + chunk_count by Wave 3.
     # Flag: argus, aristotle writing stage transition fields.
     risky_agents = {"release-the-giant", "the-plan-maker"}
     for agent in c.load_agents():
@@ -478,7 +481,7 @@ def check_boss_state_md_writes() -> list[c.Violation]:
                     break
         # Pattern 2: prose instruction to update STATE.md with a stage/milestone field
         prose_re = re.compile(
-            r'^\s*\d+\.\s*Update\s+[`\'"]?\.kiln/STATE\.md.*?(stage|milestone_count|correction_cycle|build_iteration|milestones_complete)',
+            r'^\s*\d+\.\s*Update\s+[`\'"]?\.kiln/STATE\.md.*?(stage|milestone_count|correction_cycle|team_iteration|chunk_count|milestones_complete)',
             re.IGNORECASE | re.MULTILINE,
         )
         if prose_re.search(agent.body):
@@ -682,6 +685,142 @@ def check_model_policy() -> list[c.Violation]:
 
 # ── Main ──────────────────────────────────────────────────────────
 
+def check_state_md_sed_patterns() -> list[c.Violation]:
+    """Wave 3 (C10 follow-up) — STATE.md counter writes must use the
+    markdown-bullet-aware sed shape. STATE.md stores fields as
+    `- **field_name**: N` (markdown bullet, bold name, number). A sed
+    pattern that targets plain `field_name: N` silently no-ops against
+    the real file and chunk/milestone counters never advance — the exact
+    regression that the Wave 3 sed fix closed.
+
+    This invariant makes the fix sticky: any `sed -i ...` line targeting
+    `chunk_count` / `team_iteration` / `build_iteration` against STATE.md
+    MUST include the markdown-bullet markers (`\\*\\*` or `**`) in its
+    pattern. Plain patterns are flagged so round-3 regressions get caught
+    statically before they reach the state-mutation runtime suite.
+    """
+    out: list[c.Violation] = []
+    counter_fields = ("chunk_count", "team_iteration", "build_iteration")
+
+    # Any source file that rewrites STATE.md counter fields — the current
+    # set after Wave 3 is bossman.md and kiln-pipeline/SKILL.md, but we
+    # sweep the whole plugin tree so future moves stay covered.
+    sources: list[Path] = []
+    sources.extend(c.agents_dir().glob("*.md"))
+    sources.append(c.engine_skill())
+    sources.append(c.protocol_skill())
+    for p in c.blueprints_dir().glob("step-*.md"):
+        sources.append(p)
+
+    sed_line_re = re.compile(r'^\s*sed\s+-i.*STATE\.md', re.MULTILINE)
+    for path in sources:
+        text = c.read_text(path)
+        for m in sed_line_re.finditer(text):
+            line = m.group(0)
+            for field in counter_fields:
+                # Does this sed line reference the counter field?
+                if field not in line:
+                    continue
+                # Does the pattern include markdown-bullet bolding?
+                # Accept either escaped (\*\*field\*\*) or literal (**field**).
+                has_bullet = (
+                    f'\\*\\*{field}\\*\\*' in line
+                    or f'**{field}**' in line
+                )
+                if not has_bullet:
+                    out.append(c.Violation(
+                        code="PLAIN_STATE_SED",
+                        message=(
+                            f"sed line in {path.relative_to(c.repo_root())} "
+                            f"targets `{field}` against STATE.md without the "
+                            "markdown-bullet markers (`**field**`). The real "
+                            "STATE.md stores fields as `- **field**: N`; a "
+                            "plain pattern silently no-ops. Wrap the field "
+                            "name in `\\*\\*...\\*\\*` in both the match and "
+                            "replace halves."
+                        ),
+                        location=str(path.relative_to(c.repo_root())),
+                    ))
+    return out
+
+
+def check_iteration_field_rename() -> list[c.Violation]:
+    """Wave 3 (C10) rename: agent bodies must reference `team_iteration`
+    (milestone-indexed kill-streak counter) or `chunk_count` (within-
+    milestone CYCLE_WORKERS counter), never the legacy `build_iteration`.
+
+    The mock engine under tests/ still uses `self.build_iteration` as a
+    private state variable — we only flag agent .md bodies + the pipeline
+    skill + blueprints + references. The historical audit doc
+    PLUMBING-AUDIT-v1.3.0.md is also exempt (it describes the pre-Wave-3
+    state that motivated the rename).
+    """
+    out: list[c.Violation] = []
+
+    # Agent bodies
+    for agent in c.load_agents():
+        if re.search(r'\bbuild_iteration\b', agent.body):
+            out.append(c.Violation(
+                code="LEGACY_ITERATION_FIELD",
+                message=(
+                    f"'{agent.name}' references legacy `build_iteration` — "
+                    "Wave 3 (C10) split it into `team_iteration` (milestone-"
+                    "indexed, kill-streak naming) and `chunk_count` (within-"
+                    "milestone CYCLE_WORKERS counter). Pick the appropriate "
+                    "field for the context."
+                ),
+                location=f"plugins/kiln/agents/{agent.name}.md",
+            ))
+
+    # Engine skill + blueprints + references + kiln-protocol
+    extra_sources: list[tuple[str, Path]] = [
+        ("plugins/kiln/skills/kiln-pipeline/SKILL.md", c.engine_skill()),
+        ("plugins/kiln/skills/kiln-protocol/SKILL.md", c.protocol_skill()),
+        ("plugins/kiln/skills/kiln-pipeline/references/team-protocol.md", c.team_protocol_ref()),
+    ]
+    for p in c.blueprints_dir().glob("step-*.md"):
+        extra_sources.append((str(p.relative_to(c.repo_root())), p))
+    # kill-streaks + resume-template + any other reference that references
+    # the rename — sweep the whole references directory.
+    for p in (c.blueprints_dir().parent).glob("*.md"):
+        extra_sources.append((str(p.relative_to(c.repo_root())), p))
+
+    # Dedupe by path
+    seen: set[str] = set()
+    for label, path in extra_sources:
+        if label in seen or not path.exists():
+            continue
+        seen.add(label)
+        text = c.read_text(path)
+        if re.search(r'\bbuild_iteration\b', text):
+            out.append(c.Violation(
+                code="LEGACY_ITERATION_FIELD",
+                message=(
+                    f"{label} references legacy `build_iteration` — "
+                    "Wave 3 (C10) requires `team_iteration` or `chunk_count`."
+                ),
+                location=label,
+            ))
+
+    # Commands
+    commands_dir = c.repo_root() / "plugins/kiln/commands"
+    if commands_dir.exists():
+        for p in commands_dir.glob("*.md"):
+            text = c.read_text(p)
+            if re.search(r'\bbuild_iteration\b', text):
+                out.append(c.Violation(
+                    code="LEGACY_ITERATION_FIELD",
+                    message=(
+                        f"{p.relative_to(c.repo_root())} references legacy "
+                        "`build_iteration` — Wave 3 (C10) requires "
+                        "`team_iteration` or `chunk_count`."
+                    ),
+                    location=str(p.relative_to(c.repo_root())),
+                ))
+
+    return out
+
+
 ALL_CHECKS = [
     ("Path symmetry (C1)", check_path_symmetry),
     ("Signal handlers have senders (C5)", check_signal_handlers),
@@ -694,6 +833,8 @@ ALL_CHECKS = [
     ("Boss STATE.md scope (H6)", check_boss_state_md_writes),
     ("Terminal signal contract (C4)", check_terminal_signal_contract),
     ("Centralized recipients (Wave 2 — C11/C9)", check_centralized_recipients),
+    ("Iteration field rename (Wave 3 — C10)", check_iteration_field_rename),
+    ("STATE.md sed patterns (Wave 3 — C10 follow-up)", check_state_md_sed_patterns),
     ("Model tier policy (Sprint 3)", check_model_policy),
 ]
 

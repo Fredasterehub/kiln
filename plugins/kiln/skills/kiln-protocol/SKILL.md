@@ -19,9 +19,10 @@ Send via `SendMessage(type: "message", recipient: "{target}", content: "SIGNAL: 
 | `READY_BOOTSTRAP: {summary}` | PM bootstrap complete (rakim / sentinel / thoth one-time at milestone start) | team-lead (engine) |
 | `READY: {summary}` | PM post-iteration reply (ITERATION_UPDATE or MILESTONE_TRANSITION) | krs-one (boss) |
 | `REQUEST_WORKERS: {name} (subagent_type: {type}), ...` | Boss needs workers spawned | team-lead |
-| `CYCLE_WORKERS: scenario={default\|fallback\|ui}, duo_id={duo_id}, coder_name={name}, reviewer_name={name}, reason={reason}, chunk={summary}` | Boss requests fresh worker pair (blocking — waits for WORKERS_SPAWNED) | team-lead |
-| `WORKERS_SPAWNED: {builder_name}, {reviewer_name}` | Engine confirms new worker pair ready | boss (response) |
+| `CYCLE_WORKERS: scenario={default\|fallback\|ui}, duo_id={duo_id}, coder_name={name}, reviewer_name={name}, reason={reason}, chunk={summary}` | Boss requests fresh worker pair (blocking — unblocks on WORKERS_SPAWNED from engine OR WORKER_READY from a worker, whichever arrives first) | team-lead |
+| `WORKERS_SPAWNED: duo_id={duo_id}, {builder_name} (subagent_type: {builder_type}), {reviewer_name} (subagent_type: {reviewer_type})` | Engine confirms new worker pair ready (canonical payload — duo_id and subagent types authoritative for Wave 3 dispatch) | boss (response) |
 | `WORKERS_REJECTED: {reason}` | Engine rejected REQUEST_WORKERS | boss (response) |
+| `WORKER_READY: ready for assignment` | Worker self-announces on first wake — belt-and-suspenders fallback unblock for CYCLE_WORKERS if WORKERS_SPAWNED is lost/delayed (Wave 3) | krs-one (boss) |
 | `ONBOARDING_COMPLETE` | Step 1 done | team-lead (alpha) |
 | `BRAINSTORM_COMPLETE` | Step 2 done | team-lead (da-vinci) |
 | `RESEARCH_COMPLETE: {N} topics` | Step 3 done | team-lead (mi6) |
@@ -47,10 +48,11 @@ These signals go to teammates, NOT to team-lead.
 | Signal | Meaning | Sender → Receiver |
 |--------|---------|-------------------|
 | `REVIEW_REQUEST: {summary}` | Builder requests review of implementation | Builder → Reviewer |
-| `APPROVED: {summary}` | Reviewer approves implementation | Reviewer → Builder |
-| `REJECTED: {issues}` | Reviewer rejects with specific issues | Reviewer → Builder |
-| `IMPLEMENTATION_COMPLETE: {summary}` | Builder reports completion to boss | Builder → Boss |
-| `IMPLEMENTATION_BLOCKED: {reason}` | Builder cannot proceed | Builder → Boss |
+| `APPROVED: {summary}` | Reviewer approves implementation — paired with IMPLEMENTATION_APPROVED to krs-one | Reviewer → Builder |
+| `REJECTED: {issues}` | Reviewer rejects with specific issues (no boss signal; builder owns the reject/fix cycle) | Reviewer → Builder |
+| `IMPLEMENTATION_APPROVED: {summary}` | Reviewer reports a successful chunk to the boss on APPROVED (Wave 3 — owns the success handoff so a dropped builder can't stall the build loop) | Reviewer → Boss |
+| `IMPLEMENTATION_BLOCKED: {reason}` | Builder hit a tooling or technical blocker that kept them from producing reviewable output | Builder → Boss |
+| `IMPLEMENTATION_REJECTED: {latest issues}` | Builder exhausted 3 reject/fix cycles without an APPROVED verdict (Wave 3 terminal failure path) | Builder → Boss |
 
 ## Blocking Policy
 
@@ -58,15 +60,21 @@ These signals go to teammates, NOT to team-lead.
 
 **Boss → PM (other): fire-and-forget.** All other boss→PM communication is send-and-continue. Never STOP-wait for a PM reply outside the ITERATION_UPDATE seam.
 
-**Boss → Engine (CYCLE_WORKERS): blocking.** KRS-One sends CYCLE_WORKERS to team-lead and waits for WORKERS_SPAWNED. Engine shuts down current workers, spawns fresh pair, responds with names.
+**Boss → Engine (CYCLE_WORKERS): blocking — belt-and-suspenders unblock.** KRS-One sends CYCLE_WORKERS to team-lead and waits. Two independent signals unblock him: `WORKERS_SPAWNED` from the engine (canonical — carries duo_id and authoritative subagent_types), OR `WORKER_READY` from one of the freshly-spawned workers (Wave 3 fallback — the worker's own first-wake announce). Whichever arrives first unblocks. If only WORKER_READY arrives, krs-one uses the `coder_name`/`reviewer_name` he sent in his own CYCLE_WORKERS payload.
 
 **Engine → Boss (WORKERS_SPAWNED): blocking.** Engine confirms fresh worker pair to KRS-One. KRS-One proceeds to dispatch the next chunk assignment.
+
+**Worker → Boss (WORKER_READY): fire-and-forget fallback.** BOTH members of each freshly-spawned build-step duo — builder (dial-a-coder, backup-coder, la-peintresse) AND reviewer (critical-drinker, the-curator) — send exactly one `WORKER_READY: ready for assignment` to krs-one as their first action on wake. This is NOT a reply to anything; it is a redundant self-announce that guarantees krs-one can unblock CYCLE_WORKERS even when the engine's WORKERS_SPAWNED path fails or is delayed. Either worker's WORKER_READY is sufficient to unblock.
 
 **Boss → PM (MILESTONE_TRANSITION): blocking.** KRS-One notifies persistent minds of milestone boundary before signaling MILESTONE_COMPLETE to the engine. PMs acknowledge with READY and reset milestone-scoped state.
 
 **Worker → PM: consult freely.** Workers are encouraged to message PMs with questions during execution. Send question → STOP → wait for reply → continue. PMs know the codebase so workers avoid redundant scanning. This saves tokens and raises quality.
 
-**Worker → Boss: blocking.** `IMPLEMENTATION_COMPLETE` and `IMPLEMENTATION_BLOCKED` — builder reports completion or blockers to KRS-One. Standard blocking exchanges.
+**Worker → Boss: blocking.** Post-review completion signals reach krs-one on these paths:
+- `IMPLEMENTATION_APPROVED` (Reviewer → Boss) — the paired reviewer emits this on every APPROVED verdict, alongside the APPROVED message to the builder. This is the Wave 3 success path — the reviewer owns the handoff so a dropped builder can't stall the build loop.
+- `IMPLEMENTATION_BLOCKED` (Builder → Boss) — builder hit a tooling/technical blocker before producing reviewable output.
+- `IMPLEMENTATION_REJECTED` (Builder → Boss) — builder exhausted 3 reject/fix cycles without an APPROVED verdict (Wave 3 terminal failure path).
+Builders do NOT send any success signal to krs-one themselves — silence after commit on APPROVED is intentional.
 
 **Worker → Worker: blocking.** `REVIEW_REQUEST`, `APPROVED`, `REJECTED` — builder↔reviewer exchanges. Builder sends REVIEW_REQUEST and waits for verdict.
 
@@ -139,7 +147,7 @@ Log at minimum:
 - Every assignment received
 - Every file written (CODEX_EXEC, FILE_WRITTEN)
 - Every REVIEW_REQUEST, APPROVED, REJECTED
-- Every IMPLEMENTATION_COMPLETE, BLOCKED, ESCALATION
+- Every IMPLEMENTATION_APPROVED (reviewer), IMPLEMENTATION_BLOCKED, IMPLEMENTATION_REJECTED, ESCALATION
 - Every CONSULTATION sent/received
 - Every ITERATION_UPDATE and READY
 - Every QA signal (QA_PASS, QA_FAIL)

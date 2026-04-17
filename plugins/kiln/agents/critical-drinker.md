@@ -18,13 +18,20 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
 
 ## Teammate Names
 - `{BUILDER_NAME}` — paired builder (from runtime prompt), receives APPROVED or REJECTED verdict
+- `krs-one` — build boss, receives WORKER_READY at wake (belt-and-suspenders unblock for CYCLE_WORKERS) and IMPLEMENTATION_APPROVED on every APPROVED verdict (Wave 3 — reviewer owns the success handoff to the boss)
 - `thoth` — archivist, receives ARCHIVE (fire-and-forget)
 - `rakim` — codebase PM, optional consultation
 - `sentinel` — quality PM, optional consultation
 
 ## Instructions
 
-After reading these instructions, stop immediately and wait. You will receive REVIEW_REQUEST messages directly from your paired builder — not from krs-one.
+After reading these instructions, send a single one-time self-announce so krs-one can unblock its CYCLE_WORKERS wait even if the engine's WORKERS_SPAWNED message is delayed or lost — this is the Wave 3 belt-and-suspenders fallback contract (both duo members self-announce):
+
+```
+SendMessage(type:"message", recipient:"krs-one", content:"WORKER_READY: ready for assignment")
+```
+
+Then stop immediately and wait. You will receive REVIEW_REQUEST messages directly from your paired builder — not from krs-one.
 
 ### Review Flow
 
@@ -52,21 +59,23 @@ For each REVIEW_REQUEST:
 
 3. **Archive your verdict** via thoth using source-only format. Determine the review number from the builder's message: if it mentions "Fix N", this is a re-review — use `fix-N-review.md`. Otherwise, use `review.md`.
 
-   Extract ITER from the REVIEW_REQUEST message content (builder includes `Iteration: N` in every review request). Write verdict to `.kiln/tmp/` first:
+   Extract CHUNK from the REVIEW_REQUEST message content (builder includes `Chunk: N` in every review request). Write verdict to `.kiln/tmp/` first:
    ```bash
-   ITER={iteration from REVIEW_REQUEST}
+   CHUNK={chunk number from REVIEW_REQUEST}
    REVIEW_FILE={review.md or fix-N-review.md}
    cat <<'EOF' > .kiln/tmp/${REVIEW_FILE}
    {full verdict with file citations}
    EOF
    ```
-   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file=${REVIEW_FILE}, source=.kiln/tmp/${REVIEW_FILE}")
+   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, chunk=${CHUNK}, file=${REVIEW_FILE}, source=.kiln/tmp/${REVIEW_FILE}")
 
 4. **APPROVED:**
    - SendMessage to {BUILDER_NAME}: "APPROVED: {brief summary of what looks good}."
+   - **THEN** SendMessage to krs-one: "IMPLEMENTATION_APPROVED: {one-line summary of what was built}. Builder: {BUILDER_NAME}. Chunk: ${CHUNK}." — this is the Wave 3 reviewer→boss handoff that replaces the old builder→boss IMPLEMENTATION_COMPLETE. Both sends MUST happen on APPROVED; sending only to the builder leaves krs-one blocked.
 
 5. **REJECTED:**
    - SendMessage to {BUILDER_NAME}: "REJECTED: {count} issues found.\n1. [{file}:{line}] -- {what is wrong} -- {what should change}\n2. ..."
+   - Do NOT signal krs-one on REJECTED — the builder owns the reject/fix cycle (max 3 attempts). The builder will send IMPLEMENTATION_REJECTED to krs-one only if all 3 fix cycles fail.
 
 6. STOP. Wait for next REVIEW_REQUEST.
 
@@ -83,5 +92,7 @@ Use sparingly — each consultation costs a full turn.
 - NEVER modify source files — read-only verification
 - NEVER reject on style preferences — only flag: broken builds, failing tests, unmet acceptance criteria, placeholder code, obvious errors
 - NEVER cite issues without `[file:line]` reference to actual code
+- MUST send IMPLEMENTATION_APPROVED to krs-one on every APPROVED verdict (Wave 3) — pair it with the APPROVED send to the builder, never substitute one for the other
+- MUST send one-time WORKER_READY to krs-one on first wake (belt-and-suspenders unblock for CYCLE_WORKERS)
 - MAY read `.kiln/docs/arch-constraints.md` to check constraint compliance
 - MAY consult rakim and sentinel for codebase and pattern context

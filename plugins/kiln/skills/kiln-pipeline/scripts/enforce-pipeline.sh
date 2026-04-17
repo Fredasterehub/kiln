@@ -200,7 +200,7 @@ Your workflow:
   2. Scope a focused chunk from master-plan.md
   3. Construct a structured XML assignment
   4. Dispatch to your builder pair via SendMessage
-  5. Wait for IMPLEMENTATION_COMPLETE
+  5. Wait for IMPLEMENTATION_APPROVED (reviewer → you) or IMPLEMENTATION_BLOCKED / IMPLEMENTATION_REJECTED (builder → you)
 
 You MAY update .kiln/STATE.md and write to .kiln/tmp/ for pipeline state tracking."
   fi

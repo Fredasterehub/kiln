@@ -83,8 +83,9 @@ Pipeline: Kiln v5
 - Deliverables: {list with file paths}
 
 ## Build Statistics
-- Total iterations: {build_iteration from STATE.md}
+- Team iterations: {team_iteration from STATE.md — one kill-streak team name per milestone}
 - Milestones completed: {count}
+- Chunks in final milestone: {chunk_count from STATE.md}
 - Correction cycles: {correction_cycle from STATE.md}
 
 ## Quality

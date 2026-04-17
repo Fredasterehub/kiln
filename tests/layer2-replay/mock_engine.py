@@ -80,7 +80,12 @@ class MockEngine:
     def __init__(self, engine_version: str = "pre-centralization"):
         self.version = engine_version
         self.stage: str = "build"
-        self.build_iteration: int = 0
+        # Wave 3 (C10) split the legacy single `build_iteration` counter into:
+        #   - team_iteration: milestone-indexed, drives kill-streak team naming
+        #   - chunk_count: within-milestone CYCLE_WORKERS counter, resets on
+        #     MILESTONE_TRANSITION
+        self.team_iteration: int = 1
+        self.chunk_count: int = 0
         self.milestones_complete: int = 0
         self.milestone_count: int = 1
         self.correction_cycle: int = 0
@@ -125,6 +130,7 @@ class MockEngine:
             "IMPLEMENTATION_COMPLETE": self._on_implementation_complete,
             "IMPLEMENTATION_BLOCKED": self._on_implementation_blocked,
             "IMPLEMENTATION_APPROVED": self._on_implementation_approved,  # Wave 3 signal
+            "IMPLEMENTATION_REJECTED": self._on_implementation_rejected,  # Wave 3 signal
             "REVIEW_REQUEST": self._on_noop,
             "APPROVED": self._on_approved,
             "REJECTED": self._on_noop,
@@ -312,7 +318,10 @@ class MockEngine:
                 "content": "duo_id",
             },
         ))
-        self.build_iteration += 1
+        # Wave 3 (C10) moved the chunk_count write to bossman — the engine
+        # no longer mutates that counter. self.chunk_count stays at its
+        # seed value for scenario assertions; scenarios that care about
+        # chunk advancement must drive it via a simulated bossman write.
         return decisions
 
     def _is_worker(self, name: str) -> bool:
@@ -467,19 +476,48 @@ class MockEngine:
         })]
 
     def _on_implementation_complete(self, event):
-        """Builder → krs-one. Engine doesn't route but can detect drops."""
+        """Legacy Wave 2 and earlier — builder → krs-one on APPROVED. Wave 3
+        retired the signal in favour of reviewer-originated
+        IMPLEMENTATION_APPROVED. In post-centralization we still accept it
+        as legacy (no-op + warn for regression tracking); in
+        pre-centralization it passes through quietly as before.
+        """
+        if self.version == "post-centralization":
+            return [EngineDecision(type="warn", details={
+                "code": "LEGACY_SIGNAL",
+                "signal": "IMPLEMENTATION_COMPLETE",
+                "canonical": "IMPLEMENTATION_APPROVED",
+                "sender": event.get("sender", ""),
+                "reason": (
+                    "Wave 3 moves the success handoff to the reviewer. "
+                    "Builder should stay silent on APPROVED; reviewer emits "
+                    "IMPLEMENTATION_APPROVED to krs-one."
+                ),
+            })]
         return []
 
     def _on_implementation_blocked(self, event):
         return []
 
     def _on_implementation_approved(self, event):
-        """Wave 3 signal — reviewer → krs-one directly on APPROVED."""
-        if self.version == "post-centralization":
-            return []
-        return [EngineDecision(type="warn", details={
-            "reason": "IMPLEMENTATION_APPROVED is a post-centralization signal",
-        })]
+        """Wave 3 signal — reviewer → krs-one directly on APPROVED.
+
+        Asserts the sender looks like a reviewer spawn name. In
+        pre-centralization, the signal is illegal — emit a warn so scenarios
+        that target the old contract stay distinguishable.
+        """
+        sender = event.get("sender", "")
+        if self.version != "post-centralization":
+            return [EngineDecision(type="warn", details={
+                "reason": "IMPLEMENTATION_APPROVED is a post-centralization signal",
+                "sender": sender,
+            })]
+        # post-centralization — engine does not relay, just acknowledges.
+        return []
+
+    def _on_implementation_rejected(self, event):
+        """Wave 3 terminal failure path — builder → krs-one after 3 reject/fix cycles."""
+        return []
 
     def _on_approved(self, event):
         """Reviewer → Builder. Neutral for engine."""

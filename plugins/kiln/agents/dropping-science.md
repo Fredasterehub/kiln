@@ -127,13 +127,15 @@ KRS-One or Codex may message you with questions about the codebase:
 3. Update codebase-state.md: add new files/modules, update deliverable status, refresh TL;DR header.
 4. Update AGENTS.md if new commands, conventions, or key files were added.
 5. Update decisions.md if new architectural decisions emerged.
-6. Write handoff file for next iteration's incremental bootstrap:
+6. Write handoff file for next chunk's incremental bootstrap:
    ```bash
    HEAD=$(git rev-parse HEAD)
-   ITER=$(grep 'build_iteration' .kiln/STATE.md | grep -o '[0-9]*')
+   CHUNK=$(grep 'chunk_count' .kiln/STATE.md | grep -o '[0-9]\+' | head -1)
+   TEAM_ITER=$(grep 'team_iteration' .kiln/STATE.md | grep -o '[0-9]\+' | head -1)
    MILESTONE=$(grep -oP '(?<=Current milestone: )[^.]+' .kiln/docs/codebase-state.md | head -1 || echo "unknown")
    cat <<EOF > .kiln/handoff.md
-   iteration: ${ITER}
+   chunk: ${CHUNK}
+   team_iteration: ${TEAM_ITER}
    head_sha: ${HEAD}
    milestone: ${MILESTONE}
    next_deliverables: {remaining deliverables}

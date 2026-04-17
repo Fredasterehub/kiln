@@ -1,7 +1,7 @@
 # Blueprint: build
 
 ## Meta
-- **Team name**: `{kill_streak_name}` — cycles through Kill Streak Sequence based on `build_iteration` in STATE.md
+- **Team name**: `{kill_streak_name}` — cycles through Kill Streak Sequence based on `team_iteration` in STATE.md (one kill-streak per milestone; `chunk_count` tracks chunks *within* the milestone and does not rotate the name)
 - **Artifact directory**: .kiln/
 - **Expected output**: Source code (in project), {target}/AGENTS.md, updated living docs (.kiln/docs/codebase-state.md, patterns.md, pitfalls.md, decisions.md)
 - **Inputs from previous steps**: .kiln/master-plan.md, .kiln/architecture-handoff.md, .kiln/docs/architecture.md, .kiln/docs/tech-stack.md, .kiln/docs/arch-constraints.md, .kiln/docs/decisions.md, .kiln/docs/patterns.md, .kiln/docs/pitfalls.md, .kiln/design/tokens.json (conditional — present only for UI projects with design direction), .kiln/design/tokens.css (conditional), .kiln/design/creative-direction.md (conditional)
@@ -18,7 +18,7 @@ The pipeline runner invokes this blueprint once per milestone. The team persists
 
 **Legacy signal:** `ITERATION_COMPLETE` is now internal to the team (KRS-One cycles workers without runner involvement).
 
-**Team name selection:** Read `build_iteration` from STATE.md. Look up the name in the Kill Streak Sequence.
+**Team name selection:** Read `team_iteration` from STATE.md. Look up the name in the Kill Streak Sequence. (`chunk_count` is the within-milestone CYCLE_WORKERS counter and does NOT change the team name.)
 
 ## Agent Roster
 
@@ -54,7 +54,7 @@ Workers are spawned from the duo pool (see `references/duo-pool.md`). The `name`
 
 **Phase B** (persistent — spawned once at milestone start): krs-one spawns (BACKGROUND). Receives READY summaries from rakim and sentinel in runtime prompt. Reads master plan, scopes the first chunk, then sends `CYCLE_WORKERS` to team-lead to request a fresh worker pair.
 
-**Phase C** (dynamic — spawned per chunk via CYCLE_WORKERS): KRS-One sends `CYCLE_WORKERS: scenario={scenario}, duo_id={id}, coder_name={name}, reviewer_name={name}, reason={reason}, chunk={summary}` to team-lead. The engine shuts down any existing workers (sends `shutdown_request`, 60s timeout), then spawns a fresh builder+reviewer pair for the requested scenario (3 scenarios: default=dial-a-coder+critical-drinker, fallback=backup-coder+critical-drinker, ui=la-peintresse+the-curator). The engine sends `WORKERS_SPAWNED: duo_id={id}, coder_name={name}, reviewer_name={name}` back to KRS-One. KRS-One dispatches a structured XML assignment to the fresh builder. After builder completes (IMPLEMENTATION_COMPLETE), KRS-One sends blocking ITERATION_UPDATE to rakim and sentinel (60s timeout), waits for READY responses, then scopes the next chunk and issues another CYCLE_WORKERS — repeating until the milestone is complete.
+**Phase C** (dynamic — spawned per chunk via CYCLE_WORKERS): KRS-One sends `CYCLE_WORKERS: scenario={scenario}, duo_id={id}, coder_name={name}, reviewer_name={name}, reason={reason}, chunk={summary}` to team-lead. The engine shuts down any existing workers (sends `shutdown_request`, 60s timeout), then spawns a fresh builder+reviewer pair for the requested scenario (3 scenarios: default=dial-a-coder+critical-drinker, fallback=backup-coder+critical-drinker, ui=la-peintresse+the-curator). The engine sends `WORKERS_SPAWNED: duo_id={id}, coder_name={name}, reviewer_name={name}` back to KRS-One. Independently, each fresh worker sends `WORKER_READY: ready for assignment` to KRS-One as its first action — Wave 3 belt-and-suspenders fallback so krs-one unblocks even when the engine's WORKERS_SPAWNED path fails. Whichever arrives first unblocks; KRS-One dispatches a structured XML assignment to the fresh builder. After the reviewer sends `IMPLEMENTATION_APPROVED` (Wave 3 — reviewer owns the success handoff; builder just commits and stops on APPROVED), KRS-One sends blocking ITERATION_UPDATE to rakim and sentinel (60s timeout), waits for READY responses, then scopes the next chunk and issues another CYCLE_WORKERS — repeating until the milestone is complete.
 
 Builders commit directly to the repo. The engine manages isolation.
 
@@ -66,12 +66,14 @@ Builders commit directly to the repo. The engine manages isolation.
 |--------|-------------------|-----------|-------|
 | `READY_BOOTSTRAP: {summary}` | rakim/sentinel/thoth → team-lead | No | PM bootstrap complete; PM available for consultation (Wave 2 distinct-name contract — post-iteration READY targets krs-one, not team-lead) |
 | `CYCLE_WORKERS: scenario={s}, duo_id={id}, coder_name={name}, reviewer_name={name}, reason={r}, chunk={c}` | KRS-One → engine | Yes | Engine shuts down old pair, spawns fresh builder+reviewer from duo pool |
-| `WORKERS_SPAWNED: duo_id={id}, {builder_name} (subagent_type: {builder_type}), {reviewer_name} (subagent_type: {reviewer_type})` | Engine → KRS-One | Yes (response) | Fresh pair on team, awaiting assignment |
+| `WORKERS_SPAWNED: duo_id={id}, {builder_name} (subagent_type: {builder_type}), {reviewer_name} (subagent_type: {reviewer_type})` | Engine → KRS-One | Yes (response) | Fresh pair on team, awaiting assignment — canonical CYCLE_WORKERS ack |
+| `WORKER_READY: ready for assignment` | Worker → KRS-One | No (fire-and-forget fallback) | Wave 3 belt-and-suspenders: each freshly-spawned worker self-announces on first wake so krs-one unblocks CYCLE_WORKERS even when the engine's WORKERS_SPAWNED is delayed or lost |
 | `CYCLE_REJECTED: {reason}` | Engine → KRS-One | Yes (response) | Invalid scenario — KRS-One must fix |
-| `IMPLEMENTATION_COMPLETE: {summary}` | Builder → KRS-One | Yes | Builder done, reviewed and approved |
-| `IMPLEMENTATION_BLOCKED: {blocker}` | Builder → KRS-One | Yes | Builder hit a blocker |
+| `IMPLEMENTATION_APPROVED: {summary}` | Reviewer → KRS-One | Yes | Wave 3 success handoff — reviewer owns the signal; builder just commits and stops on APPROVED |
+| `IMPLEMENTATION_BLOCKED: {blocker}` | Builder → KRS-One | Yes | Builder hit a tooling/technical blocker before producing reviewable output |
+| `IMPLEMENTATION_REJECTED: {issues}` | Builder → KRS-One | Yes | Builder exhausted 3 reject/fix cycles without an APPROVED verdict |
 | `REVIEW_REQUEST` | Builder → Reviewer | Yes | Builder requests paired review |
-| `APPROVED` / `REJECTED: {issues}` | Reviewer → Builder | Yes (response) | Reviewer verdict |
+| `APPROVED` / `REJECTED: {issues}` | Reviewer → Builder | Yes (response) | Reviewer verdict (paired with IMPLEMENTATION_APPROVED → krs-one on APPROVED) |
 | `ITERATION_UPDATE: {summary}` | KRS-One → rakim + sentinel | Yes (60s timeout) | PMs update state files, reply READY |
 | `MILESTONE_TRANSITION: completed={n}, next={n}` | KRS-One → rakim + sentinel + thoth | Yes (60s, thoth fire-and-forget) | PMs archive + reset |
 | `MILESTONE_QA_READY: {milestone_name}` | KRS-One → engine | Yes (300s timeout) | Deliverables verified, requesting independent QA |
@@ -90,14 +92,18 @@ Rakim    → team-lead      (READY_BOOTSTRAP: codebase state summary)
 Sentinel → team-lead      (READY_BOOTSTRAP: patterns/pitfalls guidance)
 
 --- Phase B (boss dispatches, persistent) ---
-KRS-One  → team-lead      (CYCLE_WORKERS: scenario + reason — blocking)
-Engine   → KRS-One        (WORKERS_SPAWNED: builder_name + reviewer_name — blocking)
+KRS-One  → team-lead      (CYCLE_WORKERS: scenario + reason — blocking, unblocks on first of: WORKERS_SPAWNED OR WORKER_READY)
+Engine   → KRS-One        (WORKERS_SPAWNED: builder_name + reviewer_name — canonical ack)
+Builder  → KRS-One        (WORKER_READY: ready for assignment — first-wake self-announce, belt-and-suspenders fallback)
+Reviewer → KRS-One        (WORKER_READY: ready for assignment — first-wake self-announce, belt-and-suspenders fallback)
 KRS-One  → Builder        (structured XML assignment with packaged context and reviewer name)
 
 --- Phase C (worker execution, fresh per chunk) ---
 Builder  → Reviewer       (REVIEW_REQUEST after implementing)
 Reviewer → Builder        (APPROVED or REJECTED with issues)
-Builder  → KRS-One        (IMPLEMENTATION_COMPLETE or IMPLEMENTATION_BLOCKED)
+Reviewer → KRS-One        (IMPLEMENTATION_APPROVED on APPROVED — Wave 3 reviewer-owned success handoff, paired with APPROVED to the builder)
+Builder  → KRS-One        (IMPLEMENTATION_BLOCKED on tooling/technical blockers, IMPLEMENTATION_REJECTED after 3 failed review cycles)
+Builder  → KRS-One        (silent stop on APPROVED — no signal, just commit)
 Builder  → Rakim          (architecture questions — optional)
 Builder  → Sentinel       (pattern/quality questions — optional)
 Structural Builder → thoth  (ARCHIVE: prompt.md, codex-output.log, fix-{N}-*.md — fire-and-forget)
@@ -106,7 +112,7 @@ Structural Reviewer → thoth (ARCHIVE: review.md, fix-{N}-review.md — fire-an
 --- Between chunks (persistent minds sync) ---
 KRS-One  → Rakim          (ITERATION_UPDATE — blocking, 60s timeout, expects READY back)
 KRS-One  → Sentinel       (ITERATION_UPDATE — blocking, 60s timeout, expects READY back)
-KRS-One  → .kiln/tmp/     (writes iter-summary, assignment, QA artifacts — thoth self-scans on wake)
+KRS-One  → .kiln/tmp/     (writes chunk-${N}-summary, chunk-${N}-assignment, QA artifacts — thoth self-scans on wake)
 
 --- Phase D (milestone QA — Judge Dredd Tribunal) ---
 KRS-One      → team-lead    (MILESTONE_QA_READY: {milestone_name} — blocking 300s, waits for QA_PASS / QA_FAIL)

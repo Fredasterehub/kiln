@@ -82,7 +82,7 @@ Warm, direct, and human. Ask one clear question at a time in each round, then co
 18. Write `.kiln/docs/deployment.md` with operator-provided deployment info:
     `# Deployment Info` followed by **serve_command**, **port**, **base_url**, **notes** — each as a `- **key**: value` line. Default: "auto-detect".
 19. Write `.kiln/STATE.md` — the engine reads this for auto-resume, so every field matters. Format: `# Kiln State` with three sections:
-    - `## Pipeline`: **skill** (path to SKILL.md), **roster** (path to step-2-brainstorm.md), **stage** (brainstorm), **build_iteration** (0), **correction_cycle** (0), **milestone_count** (0), **milestones_complete** (0), **plugin_version** (read from plugin.json via jq), **run_id**, **started** (YYYY-MM-DD), **updated** (ISO 8601)
+    - `## Pipeline`: **skill** (path to SKILL.md), **roster** (path to step-2-brainstorm.md), **stage** (brainstorm), **team_iteration** (1 — milestone counter, drives kill-streak team names), **chunk_count** (0 — within-milestone CYCLE_WORKERS counter, resets per milestone), **correction_cycle** (0), **milestone_count** (0), **milestones_complete** (0), **plugin_version** (read from plugin.json via jq), **run_id**, **started** (YYYY-MM-DD), **updated** (ISO 8601)
     - `## Project`: **Name**, **Type** (greenfield|brownfield), **Path**
     - `## Flags`: **greenfield** (true|false), **codex_available** (true|false), **arch_review** (review|auto-proceed)
 20. Append to the project's MEMORY.md (create if it doesn't exist). Add a section:
@@ -91,7 +91,8 @@ Warm, direct, and human. Ask one clear question at a time in each round, then co
     project: {project_name}
     stage: brainstorm
     status: pending
-    build_iteration: 0
+    team_iteration: 1
+    chunk_count: 0
     milestone: -
     milestone_count: 0
     correction_cycle: 0
@@ -103,7 +104,7 @@ Warm, direct, and human. Ask one clear question at a time in each round, then co
 
 Before signaling completion, verify all required artifacts:
 1. Read `.kiln/STATE.md` and confirm it contains:
-   - `## Pipeline` section with: `skill`, `roster`, `stage`, `build_iteration`, `correction_cycle`, `milestone_count`, `milestones_complete`, `plugin_version`, `run_id`, `started`, `updated`
+   - `## Pipeline` section with: `skill`, `roster`, `stage`, `team_iteration`, `chunk_count`, `correction_cycle`, `milestone_count`, `milestones_complete`, `plugin_version`, `run_id`, `started`, `updated`
    - `## Project` section with: `Name`, `Type`, `Path`
    - `## Flags` section with: `greenfield`, `codex_available`, `arch_review`
 2. Confirm `.kiln/resume.md` exists and is non-empty.

@@ -1,0 +1,25 @@
+name: reviewer-approves-to-boss
+description: >
+  Wave 3 (C8) — reviewer owns the success handoff to krs-one. Full chain:
+    1. builder sends REVIEW_REQUEST to paired reviewer
+    2. reviewer sends APPROVED back to builder
+    3. reviewer ALSO sends IMPLEMENTATION_APPROVED to krs-one (replaces the
+       legacy builder→boss IMPLEMENTATION_COMPLETE drop path)
+    4. builder stays silent — commits and stops
+  Engine is strictly a spectator in post-centralization: no relay, no warn,
+  no decisions emitted for the peer-to-peer REVIEW_REQUEST/APPROVED pair, and
+  a clean no-op on IMPLEMENTATION_APPROVED. Locks in the Wave 3 contract so
+  any regression toward builder-owned IMPLEMENTATION_COMPLETE would force a
+  scenario update and trip the two-track rule.
+engine-version: post-centralization
+events-inline:
+  - {sender: mario, signal: REVIEW_REQUEST, recipient: luigi, payload: "proof-1.md written, Chunk: 1", timestamp: "00:00:01"}
+  - {sender: luigi, signal: APPROVED, recipient: mario, payload: "looks good", timestamp: "00:00:02"}
+  - {sender: luigi, signal: IMPLEMENTATION_APPROVED, recipient: krs-one, payload: "mario's chunk 1 approved", timestamp: "00:00:03"}
+assertions:
+  - after-event: "mario | REVIEW_REQUEST"
+    expected-decisions: []
+  - after-event: "luigi | APPROVED"
+    expected-decisions: []
+  - after-event: "luigi | IMPLEMENTATION_APPROVED"
+    expected-decisions: []

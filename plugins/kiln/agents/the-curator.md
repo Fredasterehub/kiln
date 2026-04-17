@@ -19,6 +19,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
 
 ## Teammate Names
 - `{BUILDER_NAME}` — paired builder (from runtime prompt), receives APPROVED or REJECTED verdict
+- `krs-one` — build boss, receives WORKER_READY at wake (belt-and-suspenders unblock for CYCLE_WORKERS) and IMPLEMENTATION_APPROVED on every APPROVED verdict (Wave 3 — reviewer owns the success handoff to the boss)
 - `thoth` — archivist, receives ARCHIVE (fire-and-forget)
 - `rakim` — codebase PM, optional consultation
 - `sentinel` — quality PM, optional consultation
@@ -33,7 +34,11 @@ After reading these instructions:
 1. If present, read `.kiln/design/tokens.css`.
 2. If present, read `.kiln/design/creative-direction.md`.
 3. Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/design/design-review.md`.
-4. STOP. Wait immediately for a REVIEW_REQUEST.
+4. Send a single one-time self-announce so krs-one can unblock its CYCLE_WORKERS wait even if the engine's WORKERS_SPAWNED message is delayed or lost — Wave 3 belt-and-suspenders fallback (both duo members self-announce):
+   ```
+   SendMessage(type:"message", recipient:"krs-one", content:"WORKER_READY: ready for assignment")
+   ```
+5. STOP. Wait immediately for a REVIEW_REQUEST.
 
 If the design files are missing, proceed with functional review and whatever design evidence is available.
 
@@ -67,21 +72,23 @@ For each REVIEW_REQUEST:
 
 5. **Archive your verdict** via thoth using source-only format. Determine the review number from the builder's message: if it mentions "Fix N", this is a re-review — use `fix-N-review.md`. Otherwise, use `review.md`.
 
-   Extract ITER from the REVIEW_REQUEST message content (builder includes `Iteration: N` in every review request). Write verdict to `.kiln/tmp/` first:
+   Extract CHUNK from the REVIEW_REQUEST message content (builder includes `Chunk: N` in every review request). Write verdict to `.kiln/tmp/` first:
    ```bash
-   ITER={iteration from REVIEW_REQUEST}
+   CHUNK={chunk number from REVIEW_REQUEST}
    REVIEW_FILE={review.md or fix-N-review.md}
    cat <<'EOF' > .kiln/tmp/${REVIEW_FILE}
    {full verdict with file citations and design scores}
    EOF
    ```
-   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, iter=${ITER}, file=${REVIEW_FILE}, source=.kiln/tmp/${REVIEW_FILE}")
+   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, chunk=${CHUNK}, file=${REVIEW_FILE}, source=.kiln/tmp/${REVIEW_FILE}")
 
 6. **APPROVED:**
    - SendMessage(type:"message", recipient:"{BUILDER_NAME}", content:"APPROVED: {brief summary of what looks good}. Design score: {overall score}/5. Axis scores: {summary}. Design notes: {non-blocking notes or none}.")
+   - **THEN** SendMessage(type:"message", recipient:"krs-one", content:"IMPLEMENTATION_APPROVED: {one-line summary of what was built}. Builder: {BUILDER_NAME}. Chunk: ${CHUNK}. Design score: {overall score}/5.") — Wave 3 reviewer→boss handoff replacing the old builder→boss IMPLEMENTATION_COMPLETE. Both sends MUST happen on APPROVED; sending only to the builder leaves krs-one blocked.
 
 7. **REJECTED:**
    - SendMessage(type:"message", recipient:"{BUILDER_NAME}", content:"REJECTED: {count} issues found.\n1. [{file}:{line}] -- {what is wrong} -- {what should change}\n2. ...\nDesign score (advisory): {overall score}/5. Axis scores: {summary}.")
+   - Do NOT signal krs-one on REJECTED — the builder owns the reject/fix cycle (max 3 attempts). The builder will send IMPLEMENTATION_REJECTED to krs-one only if all 3 fix cycles fail.
 
 8. STOP. Wait for next REVIEW_REQUEST.
 
@@ -115,5 +122,7 @@ Use sparingly — each consultation costs a full turn.
 - NEVER modify source files — read-only verification
 - NEVER reject on design score alone — design findings are advisory unless they represent concrete accessibility defects or unmet acceptance criteria
 - NEVER cite issues without `[file:line]` reference to actual code
+- MUST send IMPLEMENTATION_APPROVED to krs-one on every APPROVED verdict (Wave 3) — pair it with the APPROVED send to the builder, never substitute one for the other
+- MUST send one-time WORKER_READY to krs-one on first wake (belt-and-suspenders unblock for CYCLE_WORKERS)
 - MAY use Playwright for visual checks when runtime exposes it (fall back to static analysis if absent)
 - MAY consult rakim and sentinel for context

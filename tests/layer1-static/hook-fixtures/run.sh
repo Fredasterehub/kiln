@@ -49,7 +49,8 @@ setup_mock_pipeline() {
 - **skill**: /DEV/kiln/plugins/kiln/skills/kiln-pipeline/SKILL.md
 - **roster**: /DEV/kiln/plugins/kiln/skills/kiln-pipeline/references/blueprints/step-5-build.md
 - **stage**: build
-- **build_iteration**: 3
+- **team_iteration**: 1
+- **chunk_count**: 3
 - **correction_cycle**: 0
 - **milestone_count**: 2
 - **milestones_complete**: 0

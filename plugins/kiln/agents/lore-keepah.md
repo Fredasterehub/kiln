@@ -37,18 +37,18 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
 
 1. Read current state from STATE.md:
    ```bash
-   ITER=$(grep -oP '(?<=\*\*build_iteration\*\*: )\S+' .kiln/STATE.md || echo "0")
+   CHUNK=$(grep -oP '(?<=\*\*chunk_count\*\*: )\S+' .kiln/STATE.md || echo "0")
    STEP=$(grep -oP '(?<=\*\*stage\*\*: )\S+' .kiln/STATE.md || echo "build")
    ```
 2. List all files in `.kiln/tmp/`:
    ```bash
    ls -1 .kiln/tmp/ 2>/dev/null
    ```
-3. For each file matching `iter-*` pattern:
-   - Extract iteration number from filename (e.g., `iter-3-summary.md` → iter 3)
-   - Build target: `.kiln/archive/step-5-build/iter-{N}/{filename}`
+3. For each file matching `chunk-*` pattern:
+   - Extract chunk number from filename (e.g., `chunk-3-summary.md` → chunk 3)
+   - Build target: `.kiln/archive/step-5-build/chunk-{N}/{filename}`
    - If target doesn't exist: `mkdir -p` and `cp`
-4. For other `.kiln/tmp/` files (non-iter prefixed):
+4. For other `.kiln/tmp/` files (non-chunk prefixed):
    - Map stage to archive directory: research→`step-3-research`, architecture→`step-4-architecture`, build (or any other stage)→`step-5-build`
    - Archive to `.kiln/archive/{mapped-directory}/`
 5. Done. Proceed to STOP and wait for messages.
@@ -58,11 +58,11 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
 If an agent sends an explicit ARCHIVE message, honor it:
 
 ```
-ARCHIVE: step={step}, [iter={N},] file={filename}, source={path}
+ARCHIVE: step={step}, [chunk={N},] file={filename}, source={path}
 ```
 
-1. Parse step, iter (optional), file, source.
-2. Build target path (with or without iter subdirectory).
+1. Parse step, chunk (optional — legacy `iter={N}` is accepted as an alias for back-compat), file, source.
+2. Build target path (with or without chunk subdirectory — e.g., `.kiln/archive/step-5-build/chunk-${CHUNK}/${file}`).
 3. `mkdir -p` and `cp`.
 4. After filing, append a knowledge entry to the Guide Scratchpad (see below).
 5. STOP. Wait for next message.
