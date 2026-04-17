@@ -34,8 +34,11 @@ plan_v1.md
 KILNDEV-MIGRATION.md
 phase3_potentiel.md
 
-# Local dev agents (not part of plugin)
+# Local dev agents (not part of plugin) — broad rule covers .claude/agents/_dev/
 .claude/agents/
+
+# SIMPLIFY-v1.4.0 Pass 1 dev work tree (briefs, task lists, diffs, handoffs, run log)
+/.kiln-dev/
 
 # Smoke test directories
 undokiln1/
