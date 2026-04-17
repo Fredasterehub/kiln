@@ -156,7 +156,53 @@ You are the conductor — you spawn agents and wait for signals. You never perfo
 Follow `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` § "Three-Phase Spawn" exactly. The engine-specific additions are:
 
 1. **Build-step worker validation** (Step 5): validate every REQUEST_WORKERS payload against the legal builder+reviewer pairs (dial-a-coder+critical-thinker, backup-coder+critical-thinker, la-peintresse+the-curator). If invalid, send WORKERS_REJECTED to the boss. See team-protocol.md § Build-Step Worker Validation for the full table and rules.
-2. **CYCLE_WORKERS protocol** (below): mid-milestone worker cycling initiated by KRS-One.
+2. **REQUEST_WORKERS protocol** (below): universal Phase C spawn handler for every step.
+3. **CYCLE_WORKERS protocol** (below): mid-milestone worker cycling initiated by KRS-One.
+
+#### REQUEST_WORKERS — Universal Phase C Spawn (Wave 4 C6)
+
+Every boss that spawns workers sends `REQUEST_WORKERS` and STOPs waiting for a `WORKERS_SPAWNED` confirmation. Five bosses use this across the pipeline: mnemosyne (Step 1 scouts), mi6 (Step 3 field agents), aristotle (Step 4 planners + diogenes + plato + athena), argus (Step 6 hephaestus), krs-one's first Phase C spawn at Step 5 (before cycling via CYCLE_WORKERS). Pre-Wave-4 the engine documented WORKERS_SPAWNED only for CYCLE_WORKERS, so every non-Step-5 boss depended on engine LLM extrapolation. This section makes the contract explicit.
+
+**REQUEST_WORKERS payload format:**
+```
+REQUEST_WORKERS: {name} (subagent_type: {type}[, {key}={value}]*), {name} (subagent_type: {type}[, {key}={value}]*), ...
+```
+
+The worker tuple's required fields are `{name}` and `subagent_type: {type}`. Bosses MAY append any number of extra `{key}={value}` pairs (comma-separated, inside the parentheses) to communicate per-worker configuration the engine must inject into the runtime prompt. The live example is Aristotle at Step 4, which passes `slot=a` / `slot=b` to self-anonymise the dual-planner pair (`confucius (subagent_type: mystical-inspiration, slot=a)`). The engine collects these pairs as-is and templates them into the spawned worker's runtime prompt; it does not interpret them beyond that.
+
+Agents send **bare** subagent types (e.g., `the-anatomist`, `unit-deployed`, `art-of-war`) — the engine normalises by prepending `kiln:` when calling the `Agent(...)` tool. This is the Wave 4 C7 rule; agents that still emit `kiln:the-anatomist` are accepted (the engine strips-then-re-adds the prefix), but bare is canonical.
+
+**Engine protocol on receiving REQUEST_WORKERS:**
+
+1. **Parse the payload** into a list of `(name, type, extras)` triples, where `extras` is a (possibly empty) dict of the trailing `key=value` pairs. The regex shape to match one tuple is `(\w[\w-]*)\s*\(subagent_type:\s*(?:kiln:)?([\w-]+)(?:,\s*([^)]*))?\)` — group 1 is the name, group 2 is the bare type, group 3 (optional) is the raw extras string that gets parsed on `,\s*` into `key=value` entries. Reject on malformed input with `WORKERS_REJECTED: unable to parse payload '{payload}'`.
+
+2. **Normalise types** — strip any leading `kiln:` prefix so the match against known agent templates is canonical.
+
+3. **Validate types** exist as agent `.md` files under `plugins/kiln/agents/`. For Step 5 additionally match the scenario roster (`dial-a-coder`/`critical-thinker`/`backup-coder`/`la-peintresse`/`the-curator` only). Unknown types: send `WORKERS_REJECTED: unknown subagent_type '{type}'`.
+
+4. **Spawn each worker** on the current team with `run_in_background: true`, inlining any extras from the tuple into the runtime prompt (e.g., `slot=a` becomes `Your assigned slot: a.` in the prompt body):
+   ```
+   Agent(
+     name: "{name}",
+     subagent_type: "kiln:{type}",      # engine adds the prefix
+     team_name: "{team_name}",
+     prompt: "<lean runtime prompt — include the role-appropriate Protocol Injection block from § Protocol Injection, plus a line for each key=value from extras>",
+     run_in_background: true,
+   )
+   ```
+
+5. **Confirm to boss** — emit a single canonical `WORKERS_SPAWNED` with every spawned pair echoed back (carrying the normalised `subagent_type`, WITH the `kiln:` prefix restored so the boss sees exactly what was spawned). Extras are NOT re-echoed — they are spawn-time configuration, not part of the ack contract:
+   ```
+   SendMessage(
+     type: "message",
+     recipient: "{boss}",
+     content: "WORKERS_SPAWNED: {name} (subagent_type: kiln:{type}), {name} (subagent_type: kiln:{type}), ..."
+   )
+   ```
+
+6. **Partial failure** — if any single spawn fails, treat the whole request as failed: shut down any workers already spawned in this batch, then send `WORKERS_REJECTED: {reason}` with enough detail for the boss to retry or escalate.
+
+**CYCLE_WORKERS vs REQUEST_WORKERS**: REQUEST_WORKERS is the initial Phase C spawn at the start of any step. CYCLE_WORKERS is Step-5-only, mid-milestone, and shuts down the existing builder+reviewer before spawning the fresh pair. Both end with a `WORKERS_SPAWNED` confirmation in the same shape.
 
 #### CYCLE_WORKERS — Mid-Milestone Worker Cycling (Step 5 Only)
 
@@ -270,7 +316,6 @@ Based on the boss's done signal, determine next action:
 **Step 4 blocked** (PLAN_BLOCKED) -> render `halt` banner, inform operator, stop pipeline
 **Step 5 signals**:
   - CYCLE_WORKERS -> KRS-One requests fresh workers mid-milestone. Execute the full CYCLE_WORKERS protocol (see § CYCLE_WORKERS above): validate scenario, shutdown current builder+reviewer, spawn fresh pair, send WORKERS_SPAWNED back to KRS-One. Do NOT tear down the team — persistent minds and KRS-One stay alive. Do NOT transition steps. After sending WORKERS_SPAWNED, return to waiting for the next signal. The engine does NOT touch `chunk_count` — bossman owns that write at § 1 Initialize (Wave 3, C10); `team_iteration` stays fixed for the duration of the milestone and only changes inside the MILESTONE_COMPLETE handler below.
-  - ITERATION_COMPLETE -> (legacy/internal — CYCLE_WORKERS is preferred) Render `phase_complete` banner. The engine does NOT touch `chunk_count` here — bossman owns that field. This signal carries no scenario information, so wait for KRS-One's next CYCLE_WORKERS to determine the scenario. Loop back to wait.
   - MILESTONE_QA_READY -> KRS-One has verified deliverable completeness, requesting independent QA. Execute the full QA Tribunal protocol (see § MILESTONE_QA_READY below). Judge-dredd signals QA_PASS / QA_FAIL directly to krs-one (Wave 2 — no engine relay). Engine just shuts down the four QA agents and returns to waiting for the next signal (MILESTONE_COMPLETE or back to CYCLE_WORKERS if QA failed).
   - MILESTONE_COMPLETE -> Full team lifecycle reset:
     1. Render `milestone_complete` banner. Increment `milestones_complete` in STATE.md. Increment `team_iteration` by 1 and reset `chunk_count` to 0 via Bash sed — STATE.md fields are markdown bullets (`- **team_iteration**: N`, `- **chunk_count**: N`), so the sed patterns must match that exact shape. A plain `s/team_iteration:/.../` pattern silently no-ops against the real state file:
@@ -284,13 +329,18 @@ Based on the boss's done signal, determine next action:
     2. **Pre-shutdown check**: Verify all persistent minds have `<!-- status: complete -->` in their owned files (codebase-state.md, patterns.md). If any missing, wait 30s and re-check (max 3 times), then proceed with warning.
     3. Send `shutdown_request` to ALL agents (PMs, KRS-One, any remaining workers). Wait for responses (60s timeout, force-terminate on timeout).
     4. **TeamDelete** — tear down the entire milestone team.
-    5. If `milestones_complete < milestone_count`:
+    5. Non-final milestone (`milestones_complete < milestone_count`):
        a. Create new team (`TeamCreate` with next kill-streak name).
        b. Re-spawn persistent minds (rakim, sentinel, thoth) — fresh context, they read their files on bootstrap.
        c. Re-spawn krs-one with updated milestone context.
        d. Wait for READY from PMs, then resume build loop.
-    6. If all milestones done: wait for BUILD_COMPLETE from krs-one (sent before MILESTONE_COMPLETE in the final milestone).
-  - BUILD_COMPLETE -> render `phases_complete` banner, proceed to step 6
+    6. Final-milestone note (Wave 4 C4 contract): `MILESTONE_COMPLETE` is sent on every milestone EXCEPT the final one. On the final milestone, krs-one sends `BUILD_COMPLETE` alone — no MILESTONE_COMPLETE pair — and the engine handles it in the BUILD_COMPLETE branch below. If the engine ever sees both signals for the same final milestone it is a contract regression; flag and take whichever arrived first.
+  - BUILD_COMPLETE -> Wave 4 C4 terminal for the final milestone. The engine treats this as the sole close-out for milestone N when `milestones_complete == milestone_count - 1` (i.e., the in-flight milestone is the final one). Steps:
+    1. Increment `milestones_complete` to match `milestone_count` in STATE.md.
+    2. Update STATE.md `stage` to `validate` via Bash sed using the markdown-bullet-aware pattern (same shape as team_iteration / chunk_count).
+    3. Run the same pre-shutdown check as MILESTONE_COMPLETE — verify persistent-mind status markers, then send `shutdown_request` to every agent in the active team, TeamDelete.
+    4. Render `phases_complete` banner, proceed to step 6 (Validate).
+    Do NOT wait for a paired `MILESTONE_COMPLETE` after `BUILD_COMPLETE` — the pre-Wave-4 sequencing (final milestone emitted both) is retired; `BUILD_COMPLETE` is the sole terminal.
 **Step 6 signals**:
   - VALIDATE_PASS -> render `validation_passed` banner, proceed to step 7
   - VALIDATE_FAILED -> render `validation_failed` banner, check correction_cycle:

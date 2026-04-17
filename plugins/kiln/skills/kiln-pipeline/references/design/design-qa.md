@@ -1,10 +1,10 @@
 # Design QA — Automated + Manual Checks
 
-Two tiers: automated checks (sphinx, build-time) and manual review (hephaestus, validation-time).
+Two tiers: automated checks run by the **UI reviewer** (`the-curator`, build-time, per chunk) and manual review run by the **UI validator** (`hephaestus`, validation-time, per milestone). Both tiers are ADVISORY — they inform verdicts but never block a chunk or a milestone on design score alone.
 
-## Automated Checks (Sphinx — Advisory)
+## Automated Checks — `the-curator` (build-time, advisory)
 
-Grep-based checks run during build review. Results appear as "Design Notes" in sphinx's verdict. NEVER trigger REJECTED — informational only.
+Grep-based checks the UI reviewer runs against the chunk's diff as part of its five-axis review (Token Compliance axis). Results appear as "Design Notes" in the APPROVED / REJECTED verdict. Design notes NEVER trigger REJECTED — only functional defects (failing build, failing tests, unmet acceptance criteria, missing test files when `test_requirements` is non-empty, placeholder code) can reject a chunk. See `references/design/design-review.md` for the full five-axis rubric the-curator applies.
 
 ### Hardcoded Colors
 
@@ -17,7 +17,7 @@ grep -rn 'rgb\(a\?\)(' --include='*.css' --include='*.tsx' --include='*.jsx' --i
 grep -rn 'hsl\(a\?\)(' --include='*.css' --include='*.tsx' --include='*.jsx' --include='*.html' | grep -v 'node_modules'
 ```
 
-Expected: Zero matches outside tokens.css and vendor files. Each match is a potential token violation.
+Expected: Zero matches outside tokens.css and vendor files. Each match is a potential token violation — record as a design note, do not reject the chunk unless hardcoded values demonstrably violate a documented acceptance criterion.
 
 ### Hardcoded Spacing
 
@@ -48,9 +48,9 @@ grep -rn 'tokens\.css' --include='*.css' --include='*.tsx' --include='*.jsx' --i
 
 Expected: At least one import of tokens.css in the project entry point.
 
-## Manual Review (Hephaestus — Validation)
+## Manual Review — `hephaestus` (validation-time, advisory)
 
-Hephaestus performs these checks during step 6 using Playwright screenshots when the host runtime exposes Playwright. If Playwright is unavailable, hephaestus skips browser interaction, falls back to static artifact/code inspection, and records that the visual review coverage is limited. Results go into `.kiln/validation/design-review.md`.
+The UI validator (`hephaestus`, spawned by argus during Step 6 when `.kiln/design/` exists) performs these checks against the built product. Uses Playwright screenshots when the host runtime exposes Playwright; falls back to static artifact / code inspection otherwise, and records that the visual review coverage is limited. Results go into `.kiln/validation/design-review.md`.
 
 ### Visual Hierarchy Flow
 
@@ -109,4 +109,4 @@ Argus includes design score in validation report:
 | 2.0 - 2.9 | Warning. Can contribute to PARTIAL (but not sole cause). |
 | < 2.0 | Strong warning. Recommend design iteration before ship. |
 
-Design quality is ADVISORY. It informs, never blocks. A product with perfect functionality and poor design still passes validation.
+Design quality is ADVISORY at every tier. A product with perfect functionality and poor design still passes validation; a chunk with perfect functionality and poor design still receives APPROVED with design notes.

@@ -33,12 +33,13 @@ Playwright browser automation is an external runtime dependency. Kiln does not b
 After reading these instructions:
 1. If present, read `.kiln/design/tokens.css`.
 2. If present, read `.kiln/design/creative-direction.md`.
-3. Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/design/design-review.md`.
-4. Send a single one-time self-announce so krs-one can unblock its CYCLE_WORKERS wait even if the engine's WORKERS_SPAWNED message is delayed or lost — Wave 3 belt-and-suspenders fallback (both duo members self-announce):
+3. Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/design/design-review.md` — the five-axis review rubric.
+4. Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/design/design-qa.md` — the automated-check checklist (hardcoded colors, spacing, semantic HTML, token imports) you run as part of the Token Compliance axis. Design QA findings feed into the "Design Notes" section of your verdict and are advisory only.
+5. Send a single one-time self-announce so krs-one can unblock its CYCLE_WORKERS wait even if the engine's WORKERS_SPAWNED message is delayed or lost — Wave 3 belt-and-suspenders fallback (both duo members self-announce):
    ```
    SendMessage(type:"message", recipient:"krs-one", content:"WORKER_READY: ready for assignment")
    ```
-5. STOP. Wait immediately for a REVIEW_REQUEST.
+6. STOP. Wait immediately for a REVIEW_REQUEST.
 
 If the design files are missing, proceed with functional review and whatever design evidence is available.
 

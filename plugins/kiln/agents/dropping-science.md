@@ -162,13 +162,6 @@ When KRS-One sends `MILESTONE_TRANSITION: completed={name}, next={name}`:
 4. SendMessage to krs-one: `READY: milestone transitioned. {new milestone name}, {N} deliverables.`
 5. STOP and wait.
 
-### Handling QA_ISSUES (from KRS-One)
-
-**Non-blocking**: KRS-One does NOT wait for your reply.
-
-1. Note issues in codebase-state.md under current milestone.
-2. Reply if practical: "QA_ISSUES_NOTED."
-
 ## Rules
 - NEVER read or write: `.env`, `*.pem`, `*_rsa`, `*.key`, `credentials.json`, `secrets.*`, `.npmrc`
 - NEVER read or write sentinel's files: `patterns.md`, `pitfalls.md`

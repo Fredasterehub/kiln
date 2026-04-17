@@ -124,6 +124,7 @@ class MockEngine:
             "QA_PASS": self._on_qa_verdict,
             "QA_FAIL": self._on_qa_verdict,
             "MILESTONE_COMPLETE": self._on_milestone_complete,
+            "MILESTONE_DONE": self._on_noop,  # Wave 4 C5 — bossman → thoth, engine is a spectator
             "BUILD_COMPLETE": self._on_build_complete,
             "VALIDATE_PASS": self._on_validate_pass,
             "VALIDATE_FAILED": self._on_validate_failed,
@@ -239,26 +240,59 @@ class MockEngine:
         )]
 
     def _on_request_workers(self, event):
-        """Parse payload, spawn listed workers, respond WORKERS_SPAWNED."""
+        """Parse payload, spawn listed workers, respond WORKERS_SPAWNED.
+
+        Matches the Wave 4 C6/C7 universal REQUEST_WORKERS contract
+        documented in kiln-pipeline/SKILL.md:
+          - canonical tuple: `{name} (subagent_type: {type}[, {k}={v}]*)`.
+          - bare `{type}` from the boss; the engine prepends `kiln:` when
+            spawning and echoes the prefixed form in WORKERS_SPAWNED.
+          - optional trailing `key=value` pairs are parsed into a per-
+            worker `extras` dict that the engine templates into the
+            spawned runtime prompt; extras are NOT echoed in the ack.
+        Aristotle's live Step 4 payload (`confucius (subagent_type:
+        mystical-inspiration, slot=a), sun-tzu (subagent_type: art-of-war,
+        slot=b)`) parses to two tuples with `extras={'slot': 'a'}` /
+        `{'slot': 'b'}`; the ack omits the slots.
+        """
         payload = event.get("payload", "")
-        # Match: name (subagent_type: foo), name (subagent_type: bar)
         spawn_pattern = re.compile(
-            r'(\w[\w-]*)\s*\(subagent_type:\s*(?:kiln:)?([\w-]+)\)'
+            r'(\w[\w-]*)\s*\(subagent_type:\s*(?:kiln:)?([\w-]+)(?:,\s*([^)]*))?\)'
         )
-        pairs = [(m.group(1), m.group(2)) for m in spawn_pattern.finditer(payload)]
+        kv_pair_re = re.compile(r'([A-Za-z_][\w-]*)\s*=\s*([^,\s]+)')
         decisions: list[EngineDecision] = []
-        for name, subtype in pairs:
+        echo_tuples: list[str] = []
+        for m in spawn_pattern.finditer(payload):
+            name = m.group(1)
+            subtype = m.group(2)
+            extras_raw = m.group(3) or ""
+            extras = {
+                kv.group(1): kv.group(2)
+                for kv in kv_pair_re.finditer(extras_raw)
+            }
+            spawn_details: dict[str, Any] = {
+                "name": name,
+                "subagent_type": subtype,
+            }
+            if extras:
+                spawn_details["extras"] = extras
             decisions.append(EngineDecision(
                 type="spawn",
-                details={"name": name, "subagent_type": subtype},
+                details=spawn_details,
             ))
             self.active_agents.add(name)
+            # Echo the kiln:-prefixed form so the boss sees exactly what was spawned
+            echo_tuples.append(f"{name} (subagent_type: kiln:{subtype})")
         decisions.append(EngineDecision(
             type="send",
             details={
                 "recipient": event.get("sender", ""),
                 "signal": "WORKERS_SPAWNED",
-                "content": "awaiting assignment",
+                "content": (
+                    ", ".join(echo_tuples) + ". awaiting assignment."
+                    if echo_tuples
+                    else "awaiting assignment"
+                ),
             },
         ))
         return decisions

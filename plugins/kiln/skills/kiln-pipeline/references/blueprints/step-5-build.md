@@ -180,6 +180,11 @@ You are "{reviewer_name}" ({reviewer_type}) on team "{team_name}". Your paired b
 Step 5: Build. You are a reviewer. Verdict: APPROVED or REJECTED.
 ```
 
+UI-reviewer spawn (the-curator) additionally primes the design QA rubric path — belt-and-suspenders with the Instructions read in the-curator.md:
+```
+Read ${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/design/design-qa.md for the automated design-check list that feeds your Token Compliance axis. Design findings are advisory only — never cause a REJECTED verdict on their own.
+```
+
 **ken (QA analyst — team-red, Claude Opus):**
 ```
 You are "ken" (team-red) on team "{team_name}". Step 5: Build — Milestone QA.

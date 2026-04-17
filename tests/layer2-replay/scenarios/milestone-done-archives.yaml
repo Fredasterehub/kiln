@@ -1,0 +1,30 @@
+name: milestone-done-archives
+description: >
+  Wave 4 (C5) — bossman tells thoth to write the per-milestone summary doc
+  via MILESTONE_DONE. Pre-Wave-4 the signal went to rakim, which had no
+  handler, and `.kiln/docs/milestones/milestone-{N}.md` never wrote.
+  Wave 4 retargets MILESTONE_DONE → thoth.
+
+  This scenario locks the routing: MILESTONE_DONE is a peer signal from
+  bossman to thoth — the engine stays a spectator (no decisions emitted)
+  and thoth executes its MILESTONE_DONE handler (outside the mock engine's
+  scope) to write the summary doc. If anyone reroutes MILESTONE_DONE back
+  to rakim or to team-lead, the replay will surface because the scenario
+  asserts the direct bossman → thoth path with zero engine decisions.
+engine-version: post-centralization
+events-inline:
+  - {sender: krs-one, signal: MILESTONE_DONE, recipient: thoth, payload: "milestone=1, name=foundation", timestamp: "00:00:01"}
+assertions:
+  - after-event: "krs-one | MILESTONE_DONE"
+    expected-decisions: []
+    # Strict silence: the engine MUST NOT spawn, send, or warn on a
+    # peer-to-peer MILESTONE_DONE routed bossman → thoth. The peer
+    # handler lives in thoth (out of scope for the mock engine), so
+    # any decision from the engine here would be a re-routing bug.
+    forbidden-decisions:
+      - type: spawn
+      - type: send
+      - type: warn
+      - type: shutdown
+      - type: transition
+      - type: write_file

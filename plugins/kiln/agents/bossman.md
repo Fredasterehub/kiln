@@ -215,13 +215,13 @@ If no QA_PASS / QA_FAIL received within 300s: treat as QA_FAIL with reason "QA t
 1. Append ledger (`result: milestone_complete, qa: PASS`).
 2. Send `MILESTONE_TRANSITION: completed={milestone_name}, next={next_milestone_name}` to rakim AND sentinel (BLOCKING, 60s timeout each).
 3. Send `MILESTONE_TRANSITION` to thoth (fire-and-forget).
-4. Message rakim: "MILESTONE_DONE: {milestone_name}." (fire-and-forget.)
-5. If more milestones remain: update STATE.md milestone pointer via Bash sed.
-6. If all milestones complete: update STATE.md (stage: validate) via Bash sed.
-7. **LAST**: SendMessage to team-lead: `MILESTONE_COMPLETE: {milestone_name}` (or `BUILD_COMPLETE`). STOP.
+4. Message thoth: "MILESTONE_DONE: milestone={N}, name={milestone_name}." (fire-and-forget; thoth writes `.kiln/docs/milestones/milestone-{N}.md` as the per-milestone summary — Wave 4 C5 owner change; previously sent to rakim where it had no handler).
+5. Terminal signal — pick exactly ONE based on whether this was the final milestone (Wave 4 C4 contract: `BUILD_COMPLETE` is the sole terminal signal on the final milestone; `MILESTONE_COMPLETE` is the per-milestone signal; never both):
+   - **Not the final milestone**: update STATE.md milestone pointer via Bash sed. Then `SendMessage to team-lead: MILESTONE_COMPLETE: {milestone_name}`. STOP.
+   - **Final milestone**: update STATE.md (stage: validate) via Bash sed. Then `SendMessage to team-lead: BUILD_COMPLETE`. STOP. Do NOT additionally send MILESTONE_COMPLETE — the engine treats BUILD_COMPLETE alone as the final-milestone terminal.
 
 **QA_FAIL (or timeout):**
-1. Message rakim: "QA_ISSUES: {findings from QA_FAIL, or 'QA timeout'}." (fire-and-forget.)
+1. Send `ITERATION_UPDATE: QA findings — {findings from QA_FAIL, or 'QA timeout'}. Update pitfalls.md / patterns.md with the surfaced issues. Reply READY when done.` to rakim AND sentinel (BLOCKING, 60s timeout each). Wave 4 H1 contract: QA failure context flows through the structured ITERATION_UPDATE — the retired pre-Wave-4 boss-to-rakim fire-and-forget channel (see audit item H1 for the deprecation record) left findings out of the deterministic PM ingestion path.
 2. Append ledger (`result: qa_fail, reason: {findings}`). Loop back to step 3 — scope fixes targeting the specific issues. Do NOT signal to the engine.
 
 ## Rules
@@ -232,4 +232,4 @@ If no QA_PASS / QA_FAIL received within 300s: treat as QA_FAIL with reason "QA t
 - MAY dispatch CYCLE_WORKERS to team-lead (blocking — unblocks on WORKERS_SPAWNED from team-lead or WORKER_READY from a freshly-spawned worker, whichever arrives first)
 - MAY send ITERATION_UPDATE to rakim and sentinel (blocking, 60s timeout each)
 - MAY send MILESTONE_TRANSITION to rakim and sentinel (blocking, 60s timeout each)
-- MAY fire-and-forget: ARCHIVE to thoth, MILESTONE_DONE to rakim, QA_ISSUES to rakim
+- MAY fire-and-forget: ARCHIVE and MILESTONE_DONE to thoth, MILESTONE_TRANSITION to thoth (the blocking MILESTONE_TRANSITION to rakim + sentinel is the line above)

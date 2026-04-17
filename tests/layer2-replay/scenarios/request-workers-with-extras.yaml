@@ -1,0 +1,51 @@
+name: request-workers-with-extras
+description: >
+  Wave 4 (C6/C7) — universal REQUEST_WORKERS contract with optional
+  `key=value` extras in the worker tuple. Aristotle's Step 4 dual-planner
+  dispatch is the live use case: each planner gets a `slot=a|b` value that
+  the engine templates into the spawned runtime prompt (Wave 2 self-
+  anonymisation). The engine parses the tuples, strips any `kiln:` prefix
+  from the type, collects extras into a dict, spawns with the prefixed
+  form, and echoes the prefixed form in WORKERS_SPAWNED — without the
+  extras (extras are spawn-time config, not part of the ack contract).
+
+  This scenario locks four invariants:
+    1. The old no-extras regex would match zero tuples on this payload;
+       the Wave 4 regex matches both. If mock_engine regresses to the old
+       shape, the assertions on spawn decisions go red.
+    2. Each spawn decision carries an `extras` dict with the slot value.
+    3. The WORKERS_SPAWNED ack carries the `kiln:` prefix (C7 echo rule)
+       and does NOT include the extras.
+    4. Bare subagent types on the boss side are accepted (C7 send rule).
+engine-version: post-centralization
+events-inline:
+  - {sender: aristotle, signal: REQUEST_WORKERS, recipient: team-lead, payload: "confucius (subagent_type: mystical-inspiration, slot=a), sun-tzu (subagent_type: art-of-war, slot=b)", timestamp: "00:00:01"}
+assertions:
+  - after-event: "aristotle | REQUEST_WORKERS"
+    expected-decisions:
+      - type: spawn
+        name: confucius
+        subagent_type: mystical-inspiration
+        extras-contains: slot
+      - type: spawn
+        name: sun-tzu
+        subagent_type: art-of-war
+        extras-contains: slot
+      - type: send
+        recipient: aristotle
+        signal: WORKERS_SPAWNED
+        content-contains: "subagent_type: kiln:mystical-inspiration"
+      - type: send
+        recipient: aristotle
+        signal: WORKERS_SPAWNED
+        content-contains: "subagent_type: kiln:art-of-war"
+    forbidden-decisions:
+      # slot values are spawn-time config and MUST NOT be echoed in ack
+      - type: send
+        recipient: aristotle
+        signal: WORKERS_SPAWNED
+        content-contains: "slot=a"
+      - type: send
+        recipient: aristotle
+        signal: WORKERS_SPAWNED
+        content-contains: "slot=b"

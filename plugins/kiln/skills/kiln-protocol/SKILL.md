@@ -27,14 +27,14 @@ Send via `SendMessage(type: "message", recipient: "{target}", content: "SIGNAL: 
 | `BRAINSTORM_COMPLETE` | Step 2 done | team-lead (da-vinci) |
 | `RESEARCH_COMPLETE: {N} topics` | Step 3 done | team-lead (mi6) |
 | `ARCHITECTURE_COMPLETE: milestone_count={N}` | Step 4 done | team-lead (aristotle) |
-| `ITERATION_UPDATE: {summary}` | Chunk complete, update state files (blocking, 60s) | rakim, sentinel |
-| `ITERATION_COMPLETE` | Build iteration done — legacy/internal | team-lead (krs-one) |
+| `ITERATION_UPDATE: {summary}` | Chunk complete, update state files (blocking, 60s). Also carries QA failure findings on QA_FAIL / timeout so PM pitfalls.md and patterns.md ingest the surfaced issues deterministically (Wave 4 H1 — supersedes the pre-Wave-4 direct-to-rakim fire-and-forget channel in favour of this single structured channel). | rakim, sentinel |
 | `QA_REPORT_READY: report at {path}` | ken / ryu finished milestone QA run (tribunal internal) | team-lead |
 | `RECONCILIATION_COMPLETE: report at {path}` | denzel finished reconciling the two tribunal reports | team-lead |
 | `QA_PASS` / `QA_FAIL: {findings}` | Judge-dredd final tribunal verdict — direct, no engine relay (Wave 2 centralisation) | krs-one |
-| `MILESTONE_COMPLETE: {name}` | Milestone QA passed | team-lead (krs-one) |
-| `BUILD_COMPLETE` | All milestones done | team-lead (krs-one) |
-| `MILESTONE_TRANSITION: completed={name}, next={name}` | KRS-One notifies persistent minds of milestone boundary (blocking) | rakim, sentinel, thoth |
+| `MILESTONE_COMPLETE: {name}` | Per-milestone QA passed — KRS-One's terminal signal for the milestone (sent on every milestone EXCEPT the final one, where `BUILD_COMPLETE` alone terminates). | team-lead (krs-one) |
+| `BUILD_COMPLETE` | All milestones done — sole terminal signal on the final milestone. Never paired with MILESTONE_COMPLETE. | team-lead (krs-one) |
+| `MILESTONE_TRANSITION: completed={name}, next={name}` | KRS-One notifies persistent minds of milestone boundary (blocking for rakim+sentinel, fire-and-forget for thoth). | rakim, sentinel, thoth |
+| `MILESTONE_DONE: milestone={N}, name={name}` | KRS-One tells thoth to write the per-milestone summary doc `.kiln/docs/milestones/milestone-{N}.md` (fire-and-forget). Wave 4 C5: routed to thoth, not rakim — rakim had no handler and the per-milestone docs never wrote. | thoth |
 | `VALIDATE_PASS` / `VALIDATE_FAILED` | Step 6 result | team-lead (argus) |
 | `REPORT_COMPLETE` | Step 7 done | team-lead (omega) |
 | `BLOCKED: {reason}` | Cannot proceed | team-lead |

@@ -9,7 +9,7 @@ Exit code: 0 if no violations, 1 otherwise.
 Invariants implemented (each maps to one or more audit findings):
   1. Path symmetry              — C1 (qa-reconciliation vs qa-synthesis vs qa-reconciled-report)
   2. Signal handler presence    — C5 (MILESTONE_DONE handler with no sender)
-  3. Signal definition          — H1 (QA_ISSUES, MILESTONE_DONE not in protocol)
+  3. Signal definition          — H1 (retired and promoted signals that were not in the central protocol pre-Wave-4)
   4. Teammate name validity     — routing safety
   5. Subagent type existence    — spawn safety
   6. `kiln:` prefix consistency — C7
@@ -299,9 +299,25 @@ def check_subagent_types() -> list[c.Violation]:
         text = c.read_text(f)
         for m in SUBAGENT_TYPE_RE.finditer(text):
             t = m.group(1)
-            # Skip placeholders
-            if t in {"{agent_type}", "{type}", "{builder_type}", "{reviewer_type}", "{coder_template}", "{reviewer_template}"}:
+            # Skip pure placeholders (regex never captures these because
+            # `{` isn't in `[\w-]`, but list them for documentation).
+            if t in {"{agent_type}", "{type}", "{builder_type}",
+                     "{reviewer_type}", "{coder_template}", "{reviewer_template}"}:
                 continue
+            # Narrow skip for the `kiln` false-positive: `SUBAGENT_TYPE_RE`
+            # captures bare `kiln` when it backtracks past a
+            # `subagent_type: "kiln:{placeholder}"` example — the optional
+            # `(?:kiln:)?` group releases because `[\w-]+` can't match the
+            # `{` in the placeholder, so it falls back to matching `kiln`
+            # as the type and leaves the `:` behind in the source. A
+            # legitimate `subagent_type: "kiln"` (no colon follows in the
+            # source) would have the closing quote / whitespace / end-of-
+            # line right after the match and MUST still be flagged.
+            if t == "kiln":
+                after = text[m.end():m.end() + 1]
+                if after == ":":
+                    continue
+                # else fall through — real `subagent_type: "kiln"` bug
             if t not in known_types:
                 out.append(c.Violation(
                     code="UNKNOWN_SUBAGENT_TYPE",

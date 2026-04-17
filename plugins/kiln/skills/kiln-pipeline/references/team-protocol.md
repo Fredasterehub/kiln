@@ -46,9 +46,9 @@ You receive messages ONE AT A TIME. Each wake-up delivers exactly one message. P
 - Boss → PM: `ITERATION_UPDATE` to rakim+sentinel (60s timeout) — ensures state files are current before the next chunk is scoped. This blocks between worker CYCLES, not between worker operations within a cycle.
 
 **Fire-and-forget** (send and continue immediately):
-- Boss → PM: `MILESTONE_DONE`, `QA_ISSUES` — never wait for PM reply
+- Boss → thoth: `MILESTONE_DONE` — triggers per-milestone summary doc write; never wait for reply. (Wave 4 C5: retargeted from rakim to thoth — rakim had no handler, so per-milestone docs never wrote.)
 - Any → thoth: `ARCHIVE` requests
-- Terminal signals → engine: `MILESTONE_COMPLETE`, `BUILD_COMPLETE` (`ITERATION_COMPLETE` is legacy/internal)
+- Terminal signals → engine: `MILESTONE_COMPLETE` on every milestone EXCEPT the final, and `BUILD_COMPLETE` as the sole terminal on the final milestone (Wave 4 C4 contract — never paired). QA failure context now flows through structured `ITERATION_UPDATE` to rakim+sentinel; the pre-Wave-4 direct-to-rakim fire-and-forget channel for QA findings (see audit item H1) is gone.
 
 ### Blocking Signals (Build Step)
 
@@ -95,6 +95,8 @@ The engine spawns each worker on the same team. Workers appear as teammates with
 **Worker cycling (step 5):** After the initial `REQUEST_WORKERS`, subsequent chunks use `CYCLE_WORKERS` instead — the engine shuts down the current pair and spawns a fresh one. See **Worker Cycling Pattern** for the full flow.
 
 **Naming**: Workers are spawned from the duo pool (see `references/duo-pool.md`). The `name` parameter is the boss-selected character for this cycle (e.g., `name: "tintin"`, `subagent_type: "kiln:dial-a-coder"`). Hook enforcement fires on the agent type (subagent_type stripped of `kiln:` prefix) — not the spawn name. The engine injects the paired partner's spawn name and type into each worker's runtime prompt.
+
+**`kiln:` prefix rule (Wave 4 C7)**: Agents send **bare** subagent types in REQUEST_WORKERS payloads (e.g., `(subagent_type: the-anatomist)`, not `(subagent_type: kiln:the-anatomist)`). The engine adds the `kiln:` prefix when calling the `Agent(...)` tool. The WORKERS_SPAWNED confirmation echoes back the prefixed form so the boss sees exactly what was spawned. A bare-vs-prefixed regression is no longer possible — bosses cannot accidentally send unprefixed types to an engine that expects prefixed ones, because the engine owns normalisation on both the receive and the echo side.
 
 ## 4. Dispatch Pattern
 
@@ -168,8 +170,8 @@ Standard signals sent via SendMessage to team-lead (the engine):
 | `RESEARCH_COMPLETE: {N} topics` | Step 3 done | MI6 |
 | `ARCHITECTURE_COMPLETE: milestone_count={N}` | Step 4 done | Aristotle |
 | `PLAN_BLOCKED` | Architecture validation failed 3x | Aristotle |
-| `ITERATION_UPDATE: {summary}` | Chunk complete, update state files (blocking, 60s) | KRS-One |
-| `ITERATION_COMPLETE` | Build iteration done — legacy/internal, replaced by CYCLE_WORKERS | KRS-One |
+| `ITERATION_UPDATE: {summary}` | Chunk complete, update state files (blocking, 60s). Also the channel for QA failure findings on QA_FAIL / timeout (Wave 4 H1 replaces the pre-Wave-4 direct-to-rakim fire-and-forget channel). | KRS-One |
+| `MILESTONE_DONE: milestone={N}, name={name}` | Per-milestone summary trigger — thoth writes `.kiln/docs/milestones/milestone-{N}.md` | KRS-One |
 | `WORKER_READY: ready for assignment` | Worker self-announces on first wake — belt-and-suspenders fallback unblock for CYCLE_WORKERS (recipient: krs-one) | Build-step duo members — builders (dial-a-coder, backup-coder, la-peintresse) AND reviewers (critical-thinker, the-curator) |
 | `IMPLEMENTATION_APPROVED: {summary}` | Reviewer reports a successful chunk to the boss on APPROVED (Wave 3 — recipient: krs-one) | Reviewers (critical-thinker, the-curator) |
 | `IMPLEMENTATION_BLOCKED: {blocker}` | Builder hit tooling/technical blocker (recipient: krs-one) | Builders |
