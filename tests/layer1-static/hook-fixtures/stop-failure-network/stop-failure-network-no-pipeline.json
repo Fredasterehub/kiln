@@ -1,0 +1,9 @@
+{
+  "session_id": "fixture-session-server",
+  "transcript_path": "/tmp/fixture/transcript.jsonl",
+  "cwd": "/tmp/fixture-project",
+  "permission_mode": "default",
+  "hook_event_name": "StopFailure",
+  "error": "server_error",
+  "error_details": "Upstream server returned 503"
+}

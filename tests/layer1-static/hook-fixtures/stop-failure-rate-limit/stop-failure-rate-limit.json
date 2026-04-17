@@ -1,0 +1,10 @@
+{
+  "session_id": "fixture-session-rate-limit",
+  "transcript_path": "/tmp/fixture/transcript.jsonl",
+  "cwd": "/tmp/fixture-project",
+  "permission_mode": "default",
+  "hook_event_name": "StopFailure",
+  "error": "rate_limit",
+  "error_details": "Rate limit exceeded for 5-hour window.",
+  "last_assistant_message": "Working on chunk 3 — implementing handler function"
+}

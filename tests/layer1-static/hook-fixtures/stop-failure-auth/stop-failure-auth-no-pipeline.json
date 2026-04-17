@@ -1,0 +1,9 @@
+{
+  "session_id": "fixture-session-auth",
+  "transcript_path": "/tmp/fixture/transcript.jsonl",
+  "cwd": "/tmp/fixture-project",
+  "permission_mode": "default",
+  "hook_event_name": "StopFailure",
+  "error": "authentication_failed",
+  "error_details": "Invalid API key"
+}

@@ -44,6 +44,9 @@ HOOK_SCRIPT["subagent-start-adds-teammate"]="$HOOKS_DIR/activity-update.sh"
 HOOK_SCRIPT["subagent-stop-removes-teammate"]="$HOOKS_DIR/activity-update.sh"
 HOOK_SCRIPT["nudge-inject-with-pending"]="$HOOKS_DIR/nudge-inject.sh"
 HOOK_SCRIPT["nudge-inject-no-pending"]="$HOOKS_DIR/nudge-inject.sh"
+HOOK_SCRIPT["stop-failure-rate-limit"]="$HOOKS_DIR/stop-failure-handler.sh"
+HOOK_SCRIPT["stop-failure-auth"]="$HOOKS_DIR/stop-failure-handler.sh"
+HOOK_SCRIPT["stop-failure-network"]="$HOOKS_DIR/stop-failure-handler.sh"
 
 # Set up mock pipeline — a fake project with .kiln/ so hooks' context gate passes.
 setup_mock_pipeline() {
