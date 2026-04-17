@@ -5,7 +5,7 @@ description: >-
   writes a milestone-based project plan directly. Used when Codex CLI is
   unavailable. Internal Kiln agent.
 tools: Read, Write, Bash, Glob, Grep, SendMessage
-model: sonnet
+model: sonnet-4.6
 color: yellow
 skills: ["kiln-protocol"]
 ---

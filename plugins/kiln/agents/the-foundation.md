@@ -1,6 +1,6 @@
 ---
 name: the-foundation
-model: opus
+model: sonnet-4.6
 color: cyan
 description: >-
   Kiln pipeline foundation curator. Phase A persistent mind for Brainstorm.

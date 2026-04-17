@@ -5,7 +5,7 @@ description: >-
   criteria after implementation. Verdict: APPROVED or REJECTED. Primary reviewer
   for Default and Fallback build scenarios. Internal Kiln agent.
 tools: Read, Bash, SendMessage
-model: opus
+model: sonnet-4.6
 color: magenta
 skills: ["kiln-protocol"]
 ---

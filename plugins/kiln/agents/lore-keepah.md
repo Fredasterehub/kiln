@@ -6,7 +6,7 @@ description: >-
   arrives via explicit ARCHIVE message. Handles ARCHIVE, MILESTONE_TRANSITION, MILESTONE_DONE,
   and BUILD_COMPLETE messages. Fire-and-forget — never replies. Internal Kiln agent.
 tools: Read, Write, Bash, Glob, Grep, SendMessage
-model: opus
+model: opus-4.6
 color: cyan
 skills: ["kiln-protocol"]
 ---

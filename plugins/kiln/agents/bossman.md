@@ -7,7 +7,8 @@ description: >-
   Dredd Tribunal via MILESTONE_QA_READY, and signals MILESTONE_COMPLETE or
   BUILD_COMPLETE. Internal Kiln agent.
 tools: Read, Bash, Glob, Grep, SendMessage
-model: opus
+model: opus-4.7
+effort: xhigh
 color: blue
 skills: ["kiln-protocol"]
 ---

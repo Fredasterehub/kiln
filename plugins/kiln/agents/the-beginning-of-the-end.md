@@ -4,7 +4,7 @@ description: >-
   Kiln pipeline onboarding boss. Greets the operator, gathers project info,
   detects brownfield/greenfield, creates .kiln/ structure. Internal Kiln agent.
 tools: Read, Write, Bash, Glob, Grep, SendMessage
-model: opus
+model: sonnet-4.6
 color: blue
 skills: ["kiln-protocol"]
 ---

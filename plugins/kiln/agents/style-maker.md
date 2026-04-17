@@ -6,7 +6,8 @@ description: >-
   when the host runtime exposes Playwright MCP. Advisory scoring — never sole cause
   of failure. Internal Kiln agent.
 tools: Read, Write, Bash, Glob, Grep, SendMessage, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_close
-model: sonnet
+model: opus-4.7
+effort: xhigh
 color: magenta
 skills: ["kiln-protocol"]
 ---

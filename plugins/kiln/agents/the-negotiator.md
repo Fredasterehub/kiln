@@ -1,6 +1,6 @@
 ---
 name: the-negotiator
-model: opus
+model: opus-4.6
 color: red
 description: "Kiln pipeline QA reconciler (Opus). Receives two anonymized checker reports (Report A / Report B), compares objectively, writes reconciliation artifact. Does not know which model produced which report. Part of the Judge Dredd QA Tribunal. Internal Kiln agent."
 skills: ["kiln-protocol"]

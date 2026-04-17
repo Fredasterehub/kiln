@@ -5,7 +5,8 @@ description: >-
   analysis, synthesizes master-plan.md with confidence-tiered verdicts. Writes
   directly — no CLI delegation. Internal Kiln agent.
 tools: Read, Write, Bash, SendMessage
-model: opus
+model: opus-4.7
+effort: xhigh
 color: yellow
 skills: ["kiln-protocol"]
 ---

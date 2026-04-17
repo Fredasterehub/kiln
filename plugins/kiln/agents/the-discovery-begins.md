@@ -5,7 +5,7 @@ description: >-
   Does instant identity scan on spawn, then coordinates deep scanning via scout agents
   if requested. Internal Kiln agent — brownfield projects.
 tools: Read, Write, Bash, Glob, Grep, SendMessage
-model: opus
+model: opus-4.6
 color: cyan
 skills: ["kiln-protocol"]
 ---

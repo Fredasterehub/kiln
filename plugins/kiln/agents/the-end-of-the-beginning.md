@@ -5,7 +5,7 @@ description: >-
   and compiles the comprehensive REPORT.md. Alpha started it, Omega ends it.
   Internal Kiln agent.
 tools: Read, Write, Bash, SendMessage
-model: opus
+model: sonnet-4.6
 color: cyan
 skills: ["kiln-protocol"]
 ---

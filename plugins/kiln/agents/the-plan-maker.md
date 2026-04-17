@@ -5,7 +5,8 @@ description: >-
   synthesis with structured comparison, validation with retry, and operator review.
   Internal Kiln agent.
 tools: Read, Write, Bash, Glob, Grep, SendMessage
-model: opus
+model: opus-4.7
+effort: xhigh
 color: blue
 skills: ["kiln-protocol"]
 ---

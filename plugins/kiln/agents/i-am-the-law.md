@@ -1,6 +1,7 @@
 ---
 name: i-am-the-law
-model: opus
+model: opus-4.7
+effort: xhigh
 color: red
 description: "Kiln pipeline QA judge. Final verdict after reconciliation — reads the synthesized report, applies strict verdict logic, signals QA_PASS or QA_FAIL. Part of the Judge Dredd QA Tribunal. Internal Kiln agent."
 skills: ["kiln-protocol"]

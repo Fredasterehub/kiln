@@ -5,7 +5,7 @@ description: >-
   implements directly with Write/Edit, verifies, commits, requests paired review.
   Internal Kiln agent.
 tools: Read, Write, Edit, Bash, Glob, Grep, SendMessage
-model: sonnet
+model: sonnet-4.6
 color: yellow
 skills: ["kiln-protocol"]
 ---

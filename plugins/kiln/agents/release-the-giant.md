@@ -6,7 +6,7 @@ description: >-
   when the host runtime exposes Playwright MCP. Solo agent with zoxea consultation.
   Internal Kiln agent.
 tools: Read, Write, Bash, Glob, Grep, SendMessage, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_click, mcp__playwright__browser_fill_form, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_close, mcp__playwright__browser_press_key
-model: sonnet
+model: sonnet-4.6
 color: blue
 skills: ["kiln-protocol"]
 ---

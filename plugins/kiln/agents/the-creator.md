@@ -5,7 +5,8 @@ description: >-
   using 62 techniques across 10 categories. Creates conditions for insight -- never generates ideas.
   Internal Kiln agent.
 tools: Read, Write, Glob, Grep, Bash, SendMessage
-model: opus
+model: opus-4.7
+effort: xhigh
 color: blue
 skills: ["kiln-protocol"]
 ---

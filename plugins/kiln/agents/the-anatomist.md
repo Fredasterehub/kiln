@@ -5,7 +5,7 @@ description: >-
   file organization, and entry points. Reports to mnemosyne via SendMessage.
   Internal Kiln agent — spawned dynamically during onboarding.
 tools: Read, Glob, Grep, SendMessage
-model: sonnet
+model: sonnet-4.6
 color: green
 skills: ["kiln-protocol"]
 ---

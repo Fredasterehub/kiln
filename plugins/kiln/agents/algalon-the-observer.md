@@ -5,7 +5,7 @@ description: >-
   accumulating pattern knowledge across iterations. Owns coding patterns and known
   pitfalls. Answers quality questions, evolves docs per iteration. Internal Kiln agent.
 tools: Read, Write, Bash, Glob, Grep, SendMessage
-model: sonnet
+model: opus-4.6
 color: cyan
 skills: ["kiln-protocol"]
 ---

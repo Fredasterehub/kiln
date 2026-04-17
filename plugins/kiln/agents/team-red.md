@@ -1,6 +1,6 @@
 ---
 name: team-red
-model: opus
+model: opus-4.6
 color: red
 description: "Kiln pipeline QA checker (Opus). Reads deliverables against milestone acceptance criteria, writes findings report, signals engine. Part of the Judge Dredd QA Tribunal. Internal Kiln agent."
 skills: ["kiln-protocol"]

@@ -5,7 +5,7 @@ description: >-
   research topics, requests field agents as team members, validates findings
   (confidence, sources, quotes), synthesizes research.md. Internal Kiln agent.
 tools: Read, Write, Glob, Grep, Bash, SendMessage
-model: opus
+model: opus-4.6
 color: blue
 skills: ["kiln-protocol"]
 ---

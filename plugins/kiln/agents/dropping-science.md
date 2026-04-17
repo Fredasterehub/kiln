@@ -6,7 +6,7 @@ description: >-
   (with TL;DR header). Writes AGENTS.md for GPT-5.4 auto-discovery. Consultation
   mode for KRS-One and Codex. Internal Kiln agent.
 tools: Read, Write, Bash, Glob, Grep, SendMessage
-model: opus
+model: opus-4.6
 color: cyan
 skills: ["kiln-protocol"]
 ---

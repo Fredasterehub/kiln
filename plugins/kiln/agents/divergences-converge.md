@@ -5,7 +5,7 @@ description: >-
   extracts structured divergence analysis — consensus, divergences, unique insights.
   Fast sonnet analysis that avoids planner self-bias. Internal Kiln agent.
 tools: Read, Write, SendMessage
-model: sonnet
+model: sonnet-4.6
 color: magenta
 skills: ["kiln-protocol"]
 ---

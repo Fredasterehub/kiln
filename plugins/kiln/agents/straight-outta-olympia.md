@@ -4,7 +4,7 @@ description: >-
   Kiln pipeline plan validator. Validates master-plan.md against vision and architecture
   on 8 dimensions (including plan purity). Binary verdict: PASS or FAIL. Internal Kiln agent.
 tools: Read, Write, SendMessage
-model: opus
+model: sonnet-4.6
 color: magenta
 skills: ["kiln-protocol"]
 ---

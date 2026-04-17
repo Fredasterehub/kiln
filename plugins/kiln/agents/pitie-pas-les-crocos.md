@@ -5,7 +5,7 @@ description: >-
   Owns architecture docs, decisions, tech stack, and constraints. Phase A bootstrap,
   then consultation hub. Step 4 only. Internal Kiln agent.
 tools: Read, Write, Bash, Glob, Grep, SendMessage
-model: opus
+model: opus-4.6
 color: cyan
 skills: ["kiln-protocol"]
 ---
