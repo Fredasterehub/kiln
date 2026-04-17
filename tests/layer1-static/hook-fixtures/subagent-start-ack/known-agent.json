@@ -1,0 +1,8 @@
+{
+  "session_id": "test-session-001",
+  "transcript_path": "/tmp/test.jsonl",
+  "cwd": "/tmp/kiln-test",
+  "agent_id": "test-agent-id-001",
+  "agent_type": "dial-a-coder",
+  "hook_event_name": "SubagentStart"
+}

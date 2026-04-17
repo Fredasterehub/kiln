@@ -37,6 +37,7 @@ HOOK_SCRIPT["audit-bash"]="$SCRIPTS_DIR/audit-bash.sh"
 HOOK_SCRIPT["audit-status-marker"]="$SCRIPTS_DIR/audit-status-marker.sh"
 HOOK_SCRIPT["enforce-pipeline"]="$SCRIPTS_DIR/enforce-pipeline.sh"
 HOOK_SCRIPT["stop-guard"]="$HOOKS_DIR/stop-guard.sh"
+HOOK_SCRIPT["subagent-start-ack"]="$HOOKS_DIR/subagent-start-ack.sh"
 
 # Set up mock pipeline — a fake project with .kiln/ so hooks' context gate passes.
 setup_mock_pipeline() {

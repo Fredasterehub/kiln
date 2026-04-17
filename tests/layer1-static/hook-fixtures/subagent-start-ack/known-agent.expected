@@ -1,0 +1,8 @@
+=== STDOUT_CONTAINS ===
+"additionalContext"
+SubagentStart: agent_type=dial-a-coder agent_id=test-agent-id-001
+=== STDERR ===
+=== EXIT ===
+0
+=== CONTEXT ===
+mock-pipeline
