@@ -40,8 +40,8 @@
 #       build-step paired reviewers, section collators.
 #   W — sonnet-4.6. Thin CLI wrappers (Codex/GPT does the reasoning).
 #
-# Wave 4 renames `critical-drinker` → `critical-thinker`. Until that commit
-# lands the filename — and therefore the policy key — stays `critical-drinker`.
+# Wave 4 (commit 4a) renamed `critical-drinker` → `critical-thinker`. The
+# filename and policy key now match the new canonical agent name.
 
 # ── Tier H ─ apex reasoning, opus-4.7 xhigh (8 agents) ────────────────
 
@@ -157,7 +157,7 @@ backup-coder:
   model: sonnet-4.6
   # Direct-write coder, bounded structural chunks.
 
-critical-drinker:
+critical-thinker:
   tier: S
   model: sonnet-4.6
   # Structural reviewer — build-step paired reviewer. First review layer.

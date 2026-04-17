@@ -58,7 +58,7 @@ BOOTSTRAP_RE = re.compile(
 # Over-provisioned tools per role. Reviewers shouldn't Write source, only their report dir.
 TOOL_POLICY = {
     # reviewer agents — should NOT have Write/Edit
-    "critical-drinker": {"forbidden": {"Write", "Edit"}},
+    "critical-thinker": {"forbidden": {"Write", "Edit"}},
     "the-curator":      {"forbidden": {"Write", "Edit"}},
     "team-red":         {"forbidden": {"Write", "Edit"}},
     "team-blue":        {"forbidden": {"Write", "Edit"}},

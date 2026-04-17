@@ -170,8 +170,8 @@ Standard signals sent via SendMessage to team-lead (the engine):
 | `PLAN_BLOCKED` | Architecture validation failed 3x | Aristotle |
 | `ITERATION_UPDATE: {summary}` | Chunk complete, update state files (blocking, 60s) | KRS-One |
 | `ITERATION_COMPLETE` | Build iteration done — legacy/internal, replaced by CYCLE_WORKERS | KRS-One |
-| `WORKER_READY: ready for assignment` | Worker self-announces on first wake — belt-and-suspenders fallback unblock for CYCLE_WORKERS (recipient: krs-one) | Build-step duo members — builders (dial-a-coder, backup-coder, la-peintresse) AND reviewers (critical-drinker, the-curator) |
-| `IMPLEMENTATION_APPROVED: {summary}` | Reviewer reports a successful chunk to the boss on APPROVED (Wave 3 — recipient: krs-one) | Reviewers (critical-drinker, the-curator) |
+| `WORKER_READY: ready for assignment` | Worker self-announces on first wake — belt-and-suspenders fallback unblock for CYCLE_WORKERS (recipient: krs-one) | Build-step duo members — builders (dial-a-coder, backup-coder, la-peintresse) AND reviewers (critical-thinker, the-curator) |
+| `IMPLEMENTATION_APPROVED: {summary}` | Reviewer reports a successful chunk to the boss on APPROVED (Wave 3 — recipient: krs-one) | Reviewers (critical-thinker, the-curator) |
 | `IMPLEMENTATION_BLOCKED: {blocker}` | Builder hit tooling/technical blocker (recipient: krs-one) | Builders |
 | `IMPLEMENTATION_REJECTED: {issues}` | Builder exhausted 3 reject/fix cycles (recipient: krs-one) | Builders |
 | `MILESTONE_TRANSITION: completed={name}, next={name}` | Milestone boundary — PMs archive + reset (blocking) | KRS-One |
@@ -211,8 +211,8 @@ Fresh context per implementation chunk prevents context pollution. Builders and 
 3. Engine sends `shutdown_request` to current builder+reviewer
 4. Engine waits for shutdown confirmation (60s timeout)
 5. Engine spawns fresh builder+reviewer pair per scenario:
-   - default: dial-a-coder + critical-drinker (spawn names from duo pool)
-   - fallback: backup-coder + critical-drinker (spawn names from duo pool)
+   - default: dial-a-coder + critical-thinker (spawn names from duo pool)
+   - fallback: backup-coder + critical-thinker (spawn names from duo pool)
    - ui: la-peintresse + the-curator (spawn names from duo pool)
 6. Engine sends `WORKERS_SPAWNED` to KRS-One with agent names
 7. KRS-One dispatches assignment to fresh builder
@@ -240,13 +240,13 @@ These apply to ALL agents in every step:
 
 | Scenario | Builder | Reviewer | When |
 |----------|---------|----------|------|
-| Default | `dial-a-coder` | `critical-drinker` | `codex_available=true` and structural work. |
-| Fallback | `backup-coder` | `critical-drinker` | `codex_available=false` (structural fallback). |
+| Default | `dial-a-coder` | `critical-thinker` | `codex_available=true` and structural work. |
+| Fallback | `backup-coder` | `critical-thinker` | `codex_available=false` (structural fallback). |
 | UI | `la-peintresse` | `the-curator` | Components, pages, layouts, design tokens. |
 
 Workers are spawned with duo pool names (e.g., `name: "tintin"`, `subagent_type: "kiln:dial-a-coder"`). Hook enforcement fires on the agent type, not the spawn name.
 
-critical-drinker (opus) is the single structural reviewer for Default and Fallback. the-curator (sonnet) reviews UI only.
+critical-thinker (opus) is the single structural reviewer for Default and Fallback. the-curator (sonnet) reviews UI only.
 
 **Dormant spawn names:** tetsuo, daft, punk — duo pool names only, no agent .md files.
 
@@ -279,7 +279,7 @@ critical-drinker (opus) is the single structural reviewer for Default and Fallba
 ### Step 5: Build (milestone-scoped)
 - **Boss**: krs-one (opus, BACKGROUND, persists per milestone)
 - **PMs**: rakim (opus), sentinel (sonnet), thoth (opus) — all persist per milestone
-- **Workers**: one builder+reviewer pair per chunk via CYCLE_WORKERS, duo pool names per cycle (default: dial-a-coder+critical-drinker, fallback: backup-coder+critical-drinker, ui: la-peintresse+the-curator)
+- **Workers**: one builder+reviewer pair per chunk via CYCLE_WORKERS, duo pool names per cycle (default: dial-a-coder+critical-thinker, fallback: backup-coder+critical-thinker, ui: la-peintresse+the-curator)
 - **QA**: ken/team-red (opus), ryu/team-blue (sonnet), denzel/the-negotiator (opus), judge-dredd/i-am-the-law (sonnet) — spawned on MILESTONE_QA_READY, Judge Dredd Tribunal, dynamic
 - **Signals**: CYCLE_WORKERS, ITERATION_UPDATE (blocking 60s), MILESTONE_TRANSITION (blocking 60s), MILESTONE_QA_READY (blocking 300s, waits for direct QA_PASS / QA_FAIL from judge-dredd), MILESTONE_COMPLETE, BUILD_COMPLETE
 - **Done**: BUILD_COMPLETE → stage: validate

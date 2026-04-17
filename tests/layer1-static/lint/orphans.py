@@ -175,7 +175,7 @@ def check_snake_case_aliases() -> list[c.Violation]:
     return out
 
 
-DELETED_ROLES = ["sphinx", "clio"]
+DELETED_ROLES = ["sphinx", "clio", "critical-drinker"]
 
 
 def check_deleted_roles() -> list[c.Violation]:

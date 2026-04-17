@@ -57,7 +57,7 @@ case "$AGENT" in
   the-creator|the-foundation|\
   alpha-team-deploy|unit-deployed|\
   the-plan-maker|pitie-pas-les-crocos|mystical-inspiration|art-of-war|divergences-converge|e-pluribus-unum|straight-outta-olympia|gracefully-degrading|\
-  bossman|dropping-science|algalon-the-observer|lore-keepah|dial-a-coder|backup-coder|la-peintresse|critical-drinker|the-curator|\
+  bossman|dropping-science|algalon-the-observer|lore-keepah|dial-a-coder|backup-coder|la-peintresse|critical-thinker|the-curator|\
   team-red|team-blue|the-negotiator|i-am-the-law|\
   release-the-giant|le-plexus-exploseur|style-maker|\
   the-end-of-the-beginning)

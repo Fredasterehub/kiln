@@ -64,7 +64,7 @@ These signals go to teammates, NOT to team-lead.
 
 **Engine → Boss (WORKERS_SPAWNED): blocking.** Engine confirms fresh worker pair to KRS-One. KRS-One proceeds to dispatch the next chunk assignment.
 
-**Worker → Boss (WORKER_READY): fire-and-forget fallback.** BOTH members of each freshly-spawned build-step duo — builder (dial-a-coder, backup-coder, la-peintresse) AND reviewer (critical-drinker, the-curator) — send exactly one `WORKER_READY: ready for assignment` to krs-one as their first action on wake. This is NOT a reply to anything; it is a redundant self-announce that guarantees krs-one can unblock CYCLE_WORKERS even when the engine's WORKERS_SPAWNED path fails or is delayed. Either worker's WORKER_READY is sufficient to unblock.
+**Worker → Boss (WORKER_READY): fire-and-forget fallback.** BOTH members of each freshly-spawned build-step duo — builder (dial-a-coder, backup-coder, la-peintresse) AND reviewer (critical-thinker, the-curator) — send exactly one `WORKER_READY: ready for assignment` to krs-one as their first action on wake. This is NOT a reply to anything; it is a redundant self-announce that guarantees krs-one can unblock CYCLE_WORKERS even when the engine's WORKERS_SPAWNED path fails or is delayed. Either worker's WORKER_READY is sufficient to unblock.
 
 **Boss → PM (MILESTONE_TRANSITION): blocking.** KRS-One notifies persistent minds of milestone boundary before signaling MILESTONE_COMPLETE to the engine. PMs acknowledge with READY and reset milestone-scoped state.
 

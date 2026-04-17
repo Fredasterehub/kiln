@@ -88,7 +88,7 @@ if [[ -n "$AGENT" ]]; then
     the-creator|the-foundation|\
     alpha-team-deploy|unit-deployed|\
     the-plan-maker|pitie-pas-les-crocos|mystical-inspiration|art-of-war|divergences-converge|e-pluribus-unum|straight-outta-olympia|gracefully-degrading|\
-    bossman|dropping-science|algalon-the-observer|lore-keepah|dial-a-coder|backup-coder|la-peintresse|critical-drinker|the-curator|\
+    bossman|dropping-science|algalon-the-observer|lore-keepah|dial-a-coder|backup-coder|la-peintresse|critical-thinker|the-curator|\
     team-red|team-blue|the-negotiator|i-am-the-law|\
     release-the-giant|le-plexus-exploseur|style-maker|\
     the-end-of-the-beginning)
@@ -225,15 +225,15 @@ if [[ "$TOOL" == "Agent" ]]; then
       the-creator|the-foundation|\
       alpha-team-deploy|unit-deployed|\
       the-plan-maker|pitie-pas-les-crocos|mystical-inspiration|art-of-war|divergences-converge|e-pluribus-unum|straight-outta-olympia|gracefully-degrading|\
-      bossman|dropping-science|algalon-the-observer|lore-keepah|dial-a-coder|backup-coder|la-peintresse|critical-drinker|the-curator|\
+      bossman|dropping-science|algalon-the-observer|lore-keepah|dial-a-coder|backup-coder|la-peintresse|critical-thinker|the-curator|\
       team-red|team-blue|the-negotiator|i-am-the-law|\
       release-the-giant|le-plexus-exploseur|style-maker|\
       the-end-of-the-beginning)
         ;; # allowed
       *)
         deny "Only named Kiln agents can be spawned. Use agent types from the blueprint roster:
-  Default: dial-a-coder (builder) + critical-drinker (reviewer)
-  Fallback: backup-coder (builder) + critical-drinker (reviewer)
+  Default: dial-a-coder (builder) + critical-thinker (reviewer)
+  Fallback: backup-coder (builder) + critical-thinker (reviewer)
   UI: la-peintresse (builder) + the-curator (reviewer)"
         ;;
     esac

@@ -35,14 +35,14 @@ Lead with action or status. No filler ("Let me check...", "Now let me..."). Use 
 
 | Scenario | When | Builder Type | Reviewer Type |
 |----------|------|-------------|---------------|
-| Default | `codex_available=true` (structural work) | `dial-a-coder` | `critical-drinker` |
-| Fallback | `codex_available=false` (structural fallback) | `backup-coder` | `critical-drinker` |
+| Default | `codex_available=true` (structural work) | `dial-a-coder` | `critical-thinker` |
+| Fallback | `codex_available=false` (structural fallback) | `backup-coder` | `critical-thinker` |
 | UI | Components, pages, layouts, motion, design system | `la-peintresse` | `the-curator` |
 
 **Decision tree:**
 1. Is this UI/visual work? → **UI** scenario (la-peintresse + the-curator)
-2. Is `codex_available=true`? → **Default** scenario (dial-a-coder + critical-drinker)
-3. Else → **Fallback** scenario (backup-coder + critical-drinker)
+2. Is `codex_available=true`? → **Default** scenario (dial-a-coder + critical-thinker)
+3. Else → **Fallback** scenario (backup-coder + critical-thinker)
 
 ## Your Job
 

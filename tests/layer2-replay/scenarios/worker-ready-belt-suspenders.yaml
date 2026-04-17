@@ -27,7 +27,7 @@ assertions:
         subagent_type: dial-a-coder
       - type: spawn
         name: luigi
-        subagent_type: critical-drinker
+        subagent_type: critical-thinker
       - type: send
         recipient: krs-one
         signal: WORKERS_SPAWNED

@@ -56,8 +56,8 @@ def canonical_signal(s: str) -> str:
 # ── Scenario → pair mapping (Build step) ──────────────────────────
 
 BUILD_SCENARIO_PAIRS = {
-    "default":  ("dial-a-coder", "critical-drinker"),
-    "fallback": ("backup-coder", "critical-drinker"),
+    "default":  ("dial-a-coder", "critical-thinker"),
+    "fallback": ("backup-coder", "critical-thinker"),
     "ui":       ("la-peintresse", "the-curator"),
 }
 

@@ -194,7 +194,7 @@ Before spawning a team, output a spawning block:
   → `rakim` (`dropping-science`) — "I start to think, and then I sink into the paper like I was ink."
   → `sentinel` (`algalon-the-observer`) — "The watch never ends."
   → `tintin` (`dial-a-coder`) — "Talk is cheap — show me the code."
-  → `milou` (`critical-drinker`) — "Answer correctly or do not pass."
+  → `milou` (`critical-thinker`) — "Answer correctly or do not pass."
 ```
 
 After an agent completes:

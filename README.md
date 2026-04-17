@@ -516,8 +516,8 @@ Workers are **templates** &mdash; the same agent definition runs under different
 
 | Pool | Builder <sub>(type)</sub> | Reviewer <sub>(type)</sub> | Duos |
 |:--|:--|:--|:--|
-| **Default** | dial-a-coder <sub>(Sonnet &rarr; GPT-5.4)</sub> | critical-drinker <sub>(Opus)</sub> | codex+sphinx, tintin+milou, mario+luigi, lucky+luke |
-| **Fallback** | backup-coder <sub>(Sonnet direct)</sub> | critical-drinker <sub>(Opus)</sub> | kaneda+tetsuo, athos+porthos |
+| **Default** | dial-a-coder <sub>(Sonnet &rarr; GPT-5.4)</sub> | critical-thinker <sub>(Opus)</sub> | codex+sphinx, tintin+milou, mario+luigi, lucky+luke |
+| **Fallback** | backup-coder <sub>(Sonnet direct)</sub> | critical-thinker <sub>(Opus)</sub> | kaneda+tetsuo, athos+porthos |
 | **UI** | la-peintresse <sub>(Opus)</sub> | the-curator <sub>(Sonnet)</sub> | clair+obscur, yin+yang |
 
 #### QA Tribunal

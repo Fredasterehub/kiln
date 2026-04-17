@@ -49,7 +49,7 @@ case "$AGENT" in
   the-creator|the-foundation|\
   alpha-team-deploy|unit-deployed|\
   the-plan-maker|pitie-pas-les-crocos|mystical-inspiration|art-of-war|divergences-converge|e-pluribus-unum|straight-outta-olympia|gracefully-degrading|\
-  bossman|dropping-science|algalon-the-observer|lore-keepah|dial-a-coder|backup-coder|la-peintresse|critical-drinker|the-curator|\
+  bossman|dropping-science|algalon-the-observer|lore-keepah|dial-a-coder|backup-coder|la-peintresse|critical-thinker|the-curator|\
   team-red|team-blue|the-negotiator|i-am-the-law|\
   release-the-giant|le-plexus-exploseur|style-maker|\
   the-end-of-the-beginning)
@@ -69,7 +69,7 @@ esac
 LAST_MSG=$(echo "$INPUT" | jq -r '.last_assistant_message // ""')
 
 case "$AGENT" in
-  critical-drinker|the-curator)
+  critical-thinker|the-curator)
     # Fall through to the reviewer block; do not fast-path on terminal
     # signals. The reviewer block re-evaluates the IMPLEMENTATION_APPROVED
     # pairing against the full transcript and is stricter than a
@@ -172,7 +172,7 @@ esac
 # Any unpaired APPROVED means the reviewer notified the builder but
 # did NOT notify krs-one, and the build loop is about to stall.
 case "$AGENT" in
-  critical-drinker|the-curator)
+  critical-thinker|the-curator)
     TRANSCRIPT=$(echo "$INPUT" | jq -r '.agent_transcript_path // ""')
     if [[ -f "$TRANSCRIPT" ]]; then
       ALL_APPROVED=$(grep -cF 'APPROVED:' "$TRANSCRIPT" 2>/dev/null || echo 0)

@@ -6,12 +6,12 @@ The duo pool defines the legal builder+reviewer pairs for Build step (Step 5). K
 
 | Pool | Duo ID | Builder Name | Reviewer Name | Builder Type | Reviewer Type |
 |---|---|---|---|---|---|
-| `default` | `codex-sphinx` | `codex` | `sphinx` | `dial-a-coder` | `critical-drinker` |
-| `default` | `tintin-milou` | `tintin` | `milou` | `dial-a-coder` | `critical-drinker` |
-| `default` | `mario-luigi` | `mario` | `luigi` | `dial-a-coder` | `critical-drinker` |
-| `default` | `lucky-luke` | `lucky` | `luke` | `dial-a-coder` | `critical-drinker` |
-| `fallback` | `kaneda-tetsuo` | `kaneda` | `tetsuo` | `backup-coder` | `critical-drinker` |
-| `fallback` | `athos-porthos` | `athos` | `porthos` | `backup-coder` | `critical-drinker` |
+| `default` | `codex-sphinx` | `codex` | `sphinx` | `dial-a-coder` | `critical-thinker` |
+| `default` | `tintin-milou` | `tintin` | `milou` | `dial-a-coder` | `critical-thinker` |
+| `default` | `mario-luigi` | `mario` | `luigi` | `dial-a-coder` | `critical-thinker` |
+| `default` | `lucky-luke` | `lucky` | `luke` | `dial-a-coder` | `critical-thinker` |
+| `fallback` | `kaneda-tetsuo` | `kaneda` | `tetsuo` | `backup-coder` | `critical-thinker` |
+| `fallback` | `athos-porthos` | `athos` | `porthos` | `backup-coder` | `critical-thinker` |
 | `ui` | `clair-obscur` | `clair` | `obscur` | `la-peintresse` | `the-curator` |
 | `ui` | `yin-yang` | `yin` | `yang` | `la-peintresse` | `the-curator` |
 
@@ -32,8 +32,8 @@ When KRS-One sends `CYCLE_WORKERS: scenario={pool}`, the engine maps pool to bui
 
 | Scenario | Builder Type | Reviewer Type |
 |---|---|---|
-| `default` | `dial-a-coder` | `critical-drinker` |
-| `fallback` | `backup-coder` | `critical-drinker` |
+| `default` | `dial-a-coder` | `critical-thinker` |
+| `fallback` | `backup-coder` | `critical-thinker` |
 | `ui` | `la-peintresse` | `the-curator` |
 
 KRS-One selects the next duo from the pool using timestamp-seeded rotation. The engine spawns both agents with the boss-selected names and their corresponding types from this table.

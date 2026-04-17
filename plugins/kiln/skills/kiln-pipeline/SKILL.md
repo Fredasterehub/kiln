@@ -155,7 +155,7 @@ You are the conductor — you spawn agents and wait for signals. You never perfo
 
 Follow `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/team-protocol.md` § "Three-Phase Spawn" exactly. The engine-specific additions are:
 
-1. **Build-step worker validation** (Step 5): validate every REQUEST_WORKERS payload against the legal builder+reviewer pairs (dial-a-coder+critical-drinker, backup-coder+critical-drinker, la-peintresse+the-curator). If invalid, send WORKERS_REJECTED to the boss. See team-protocol.md § Build-Step Worker Validation for the full table and rules.
+1. **Build-step worker validation** (Step 5): validate every REQUEST_WORKERS payload against the legal builder+reviewer pairs (dial-a-coder+critical-thinker, backup-coder+critical-thinker, la-peintresse+the-curator). If invalid, send WORKERS_REJECTED to the boss. See team-protocol.md § Build-Step Worker Validation for the full table and rules.
 2. **CYCLE_WORKERS protocol** (below): mid-milestone worker cycling initiated by KRS-One.
 
 #### CYCLE_WORKERS — Mid-Milestone Worker Cycling (Step 5 Only)
@@ -173,8 +173,8 @@ CYCLE_WORKERS: scenario={default|fallback|ui}, duo_id={duo_id}, coder_name={name
 
    | Scenario | Builder Type | Reviewer Type |
    |----------|-------------|---------------|
-   | default | dial-a-coder | critical-drinker |
-   | fallback | backup-coder | critical-drinker |
+   | default | dial-a-coder | critical-thinker |
+   | fallback | backup-coder | critical-thinker |
    | ui | la-peintresse | the-curator |
 
    If the scenario is unrecognized, reject:
@@ -391,7 +391,7 @@ Every agent spawn MUST include a role-appropriate protocol block in its runtime 
 - NEVER read/write: .env, *.pem, *_rsa, *.key, credentials.json, secrets.*, .npmrc
 ```
 
-**Worker protocol** — for builders, reviewers (dial-a-coder, backup-coder, la-peintresse, critical-drinker, the-curator, team-blue):
+**Worker protocol** — for builders, reviewers (dial-a-coder, backup-coder, la-peintresse, critical-thinker, the-curator, team-blue):
 ```
 ## Kiln Protocol (Runtime)
 - SendMessage is the ONLY way to reach teammates. Plain text is invisible to agents.

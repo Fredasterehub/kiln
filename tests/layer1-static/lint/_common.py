@@ -391,7 +391,7 @@ def load_duo_pool() -> dict[str, list[str]]:
     text = read_text(path)
     out: dict[str, list[str]] = {"default": [], "fallback": [], "ui": []}
     for line in text.split("\n"):
-        # rows: | `default` | `codex-sphinx` | `codex` | `sphinx` | `dial-a-coder` | `critical-drinker` |
+        # rows: | `default` | `codex-sphinx` | `codex` | `sphinx` | `dial-a-coder` | `critical-thinker` |
         m = re.match(r'\|\s*`(default|fallback|ui)`\s*\|\s*`[\w-]+`\s*\|\s*`([\w-]+)`\s*\|\s*`([\w-]+)`\s*\|', line)
         if m:
             pool = m.group(1)

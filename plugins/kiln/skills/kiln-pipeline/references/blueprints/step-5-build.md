@@ -29,7 +29,7 @@ The pipeline runner invokes this blueprint once per milestone. The team persists
 | sentinel | algalon-the-observer | Persistent mind. Quality guardian. Owns patterns.md (TL;DR header) and pitfalls.md. Consultation for quality questions. | A | sonnet |
 | krs-one | bossman | Boss. Reads plan, receives READY summaries, scopes chunks, dispatches to worker pairs, delegates milestone QA via MILESTONE_QA_READY. | B (BACKGROUND) | opus |
 | *duo pool* | dial-a-coder | Codex-type builder. Thin Codex CLI wrapper — delegates to GPT-5.4. | C (dynamic) | sonnet |
-| *duo pool* | critical-drinker | Structural reviewer. Primary reviewer for Default and Fallback scenarios. APPROVED or REJECTED. | C (dynamic) | opus |
+| *duo pool* | critical-thinker | Structural reviewer. Primary reviewer for Default and Fallback scenarios. APPROVED or REJECTED. | C (dynamic) | opus |
 | *duo pool* | backup-coder | Sonnet-type builder. Direct implementation via Write/Edit. Fallback scenario. | C (dynamic) | sonnet |
 | *duo pool* | la-peintresse | UI builder. Direct Opus implementation of components, pages, layouts, motion. | C (dynamic) | opus |
 | *duo pool* | the-curator | UI reviewer. Design quality review with 5-axis advisory scoring. | C (dynamic) | sonnet |
@@ -44,8 +44,8 @@ Workers are spawned from the duo pool (see `references/duo-pool.md`). The `name`
 
 | Scenario | Builder Type | Reviewer Type | When |
 |----------|-------------|---------------|------|
-| Default | dial-a-coder | critical-drinker | codex_available=true (structural work) |
-| Fallback | backup-coder | critical-drinker | codex_available=false (structural fallback) |
+| Default | dial-a-coder | critical-thinker | codex_available=true (structural work) |
+| Fallback | backup-coder | critical-thinker | codex_available=false (structural fallback) |
 | UI | la-peintresse | the-curator | Components, pages, layouts, motion, design system |
 
 ## Three-Phase Spawn
@@ -54,7 +54,7 @@ Workers are spawned from the duo pool (see `references/duo-pool.md`). The `name`
 
 **Phase B** (persistent — spawned once at milestone start): krs-one spawns (BACKGROUND). Receives READY summaries from rakim and sentinel in runtime prompt. Reads master plan, scopes the first chunk, then sends `CYCLE_WORKERS` to team-lead to request a fresh worker pair.
 
-**Phase C** (dynamic — spawned per chunk via CYCLE_WORKERS): KRS-One sends `CYCLE_WORKERS: scenario={scenario}, duo_id={id}, coder_name={name}, reviewer_name={name}, reason={reason}, chunk={summary}` to team-lead. The engine shuts down any existing workers (sends `shutdown_request`, 60s timeout), then spawns a fresh builder+reviewer pair for the requested scenario (3 scenarios: default=dial-a-coder+critical-drinker, fallback=backup-coder+critical-drinker, ui=la-peintresse+the-curator). The engine sends `WORKERS_SPAWNED: duo_id={id}, coder_name={name}, reviewer_name={name}` back to KRS-One. Independently, each fresh worker sends `WORKER_READY: ready for assignment` to KRS-One as its first action — Wave 3 belt-and-suspenders fallback so krs-one unblocks even when the engine's WORKERS_SPAWNED path fails. Whichever arrives first unblocks; KRS-One dispatches a structured XML assignment to the fresh builder. After the reviewer sends `IMPLEMENTATION_APPROVED` (Wave 3 — reviewer owns the success handoff; builder just commits and stops on APPROVED), KRS-One sends blocking ITERATION_UPDATE to rakim and sentinel (60s timeout), waits for READY responses, then scopes the next chunk and issues another CYCLE_WORKERS — repeating until the milestone is complete.
+**Phase C** (dynamic — spawned per chunk via CYCLE_WORKERS): KRS-One sends `CYCLE_WORKERS: scenario={scenario}, duo_id={id}, coder_name={name}, reviewer_name={name}, reason={reason}, chunk={summary}` to team-lead. The engine shuts down any existing workers (sends `shutdown_request`, 60s timeout), then spawns a fresh builder+reviewer pair for the requested scenario (3 scenarios: default=dial-a-coder+critical-thinker, fallback=backup-coder+critical-thinker, ui=la-peintresse+the-curator). The engine sends `WORKERS_SPAWNED: duo_id={id}, coder_name={name}, reviewer_name={name}` back to KRS-One. Independently, each fresh worker sends `WORKER_READY: ready for assignment` to KRS-One as its first action — Wave 3 belt-and-suspenders fallback so krs-one unblocks even when the engine's WORKERS_SPAWNED path fails. Whichever arrives first unblocks; KRS-One dispatches a structured XML assignment to the fresh builder. After the reviewer sends `IMPLEMENTATION_APPROVED` (Wave 3 — reviewer owns the success handoff; builder just commits and stops on APPROVED), KRS-One sends blocking ITERATION_UPDATE to rakim and sentinel (60s timeout), waits for READY responses, then scopes the next chunk and issues another CYCLE_WORKERS — repeating until the milestone is complete.
 
 Builders commit directly to the repo. The engine manages isolation.
 
@@ -149,7 +149,7 @@ Spawn names for Phase C workers come from the duo pool (selected by KRS-One). Us
 
 **Codex-type builder (dial-a-coder):**
 ```
-You are "{coder_name}" (dial-a-coder) on team "{team_name}". Your paired reviewer is "{reviewer_name}" (critical-drinker). Working dir: {working_dir}.
+You are "{coder_name}" (dial-a-coder) on team "{team_name}". Your paired reviewer is "{reviewer_name}" (critical-thinker). Working dir: {working_dir}.
 Step 5: Build. You are a Codex-type builder (GPT-5.4 delegation via Codex CLI).
 MANDATORY: You are a thin Codex CLI wrapper. You write prompts to /tmp/ and invoke codex exec. You NEVER call Write or Edit on source files. The enforcement hook will block you if you try.
 Await your structured XML assignment from krs-one. Codex CLI available (v{codex_version}).
@@ -164,7 +164,7 @@ MANDATORY: You construct prompts and invoke codex exec. You NEVER write plan con
 
 **Fallback builder (backup-coder):**
 ```
-You are "{coder_name}" (backup-coder) on team "{team_name}". Your paired reviewer is "{reviewer_name}" (critical-drinker). Working dir: {working_dir}.
+You are "{coder_name}" (backup-coder) on team "{team_name}". Your paired reviewer is "{reviewer_name}" (critical-thinker). Working dir: {working_dir}.
 Step 5: Build. You are a Sonnet-type builder — direct implementation via Write/Edit.
 ```
 
@@ -174,7 +174,7 @@ You are "{coder_name}" (la-peintresse) on team "{team_name}". Your paired review
 Step 5: Build. You are a UI builder — direct Opus implementation of components, pages, layouts, motion.
 ```
 
-**Structural reviewer (critical-drinker) and UI reviewer (the-curator):**
+**Structural reviewer (critical-thinker) and UI reviewer (the-curator):**
 ```
 You are "{reviewer_name}" ({reviewer_type}) on team "{team_name}". Your paired builder is "{coder_name}" ({builder_type}). Working dir: {working_dir}.
 Step 5: Build. You are a reviewer. Verdict: APPROVED or REJECTED.

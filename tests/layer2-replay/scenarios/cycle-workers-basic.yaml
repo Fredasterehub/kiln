@@ -1,7 +1,7 @@
 name: cycle-workers-basic
 description: >
   krs-one sends CYCLE_WORKERS with scenario=default. Engine should
-  shutdown existing workers (none here), spawn dial-a-coder + critical-drinker
+  shutdown existing workers (none here), spawn dial-a-coder + critical-thinker
   with the boss-selected names, and emit WORKERS_SPAWNED back.
 engine-version: pre-centralization
 events-inline:
@@ -14,6 +14,6 @@ assertions:
         subagent_type: dial-a-coder
       - type: spawn
         name: luigi
-        subagent_type: critical-drinker
+        subagent_type: critical-thinker
       - type: send
         signal: WORKERS_SPAWNED
