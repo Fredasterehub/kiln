@@ -295,4 +295,17 @@ allow
 #          Escalation: .kiln/DEADLOCK.flag after 3 nudges; SessionStart recovers.
 #          Ref: plugins/kiln/skills/kiln-pipeline/references/deadlock-detection.md
 #          See SIMPLIFY-v1.4.0 §5.3 P2.
+# v1.4.0 — P3 (StopFailure): agent-death detection. Pure addition — no retirements.
+#          SubagentStop fires on both clean finish and agent death; StopFailure fires
+#          only on API-induced main-session turn death with a categorized error enum.
+#          New hook stop-failure-handler.sh routes by error category:
+#            rate_limit      → pending-nudge.json (does NOT bump nudge_count)
+#            auth/billing    → pending-nudge.json + DEADLOCK.flag (P2 escalation sink)
+#            server/invalid  → pending-nudge.json (retryable, engine decides)
+#            unknown/*       → pending-nudge.json (unclassified, no policy)
+#          Error enum (7 values from Claude Code binary Zod schema): rate_limit,
+#          authentication_failed, billing_error, invalid_request, server_error,
+#          max_output_tokens, unknown. Plan's "network" category is NOT a platform
+#          enum value — fixtures use server_error instead.
+#          See SIMPLIFY-v1.4.0 §5.3 P3.
 # ═══════════════════════════════════════════════════════════════
