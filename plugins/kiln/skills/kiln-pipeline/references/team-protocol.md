@@ -176,6 +176,7 @@ Standard signals sent via SendMessage to team-lead (the engine):
 | `IMPLEMENTATION_APPROVED: {summary}` | Reviewer reports a successful chunk to the boss on APPROVED (Wave 3 — recipient: krs-one) | Reviewers (critical-thinker, the-curator) |
 | `IMPLEMENTATION_BLOCKED: {blocker}` | Builder hit tooling/technical blocker (recipient: krs-one) | Builders |
 | `IMPLEMENTATION_REJECTED: {issues}` | Builder exhausted 3 reject/fix cycles (recipient: krs-one) | Builders |
+| `ARCHIVE: step={step}, [chunk={N},] file={filename}, source={path}` | File the named artifact under `.kiln/archive/` and log it to the guide scratchpad (recipient: thoth; fire-and-forget — thoth never replies) | krs-one, builders, reviewers |
 | `MILESTONE_TRANSITION: completed={name}, next={name}` | Milestone boundary — PMs archive + reset (blocking) | KRS-One |
 | `MILESTONE_QA_READY: {milestone_name}` | Deliverables verified, requesting independent QA | KRS-One |
 | `QA_REPORT_READY` | Individual QA report written to .kiln/tmp/qa-report-{a\|b}.md; engine tracks per-sender (recipient: team-lead) | ken / ryu |

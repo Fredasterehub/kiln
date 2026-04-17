@@ -53,6 +53,7 @@ These signals go to teammates, NOT to team-lead.
 | `IMPLEMENTATION_APPROVED: {summary}` | Reviewer reports a successful chunk to the boss on APPROVED (Wave 3 — owns the success handoff so a dropped builder can't stall the build loop) | Reviewer → Boss |
 | `IMPLEMENTATION_BLOCKED: {reason}` | Builder hit a tooling or technical blocker that kept them from producing reviewable output | Builder → Boss |
 | `IMPLEMENTATION_REJECTED: {latest issues}` | Builder exhausted 3 reject/fix cycles without an APPROVED verdict (Wave 3 terminal failure path) | Builder → Boss |
+| `ARCHIVE: step={step}, [chunk={N},] file={filename}, source={path}` | Archive a pipeline artifact — thoth files it under `.kiln/archive/` and logs to the guide scratchpad. Fire-and-forget (thoth never replies). | Any agent → thoth |
 
 ## Blocking Policy
 

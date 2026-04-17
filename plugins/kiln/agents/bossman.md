@@ -99,7 +99,7 @@ If rakim reports ALL deliverables of the current milestone are complete, skip to
     ```
     CYCLE_WORKERS: scenario={scenario_name}, duo_id={duo_id}, coder_name={coder_name}, reviewer_name={reviewer_name}, reason="{one-line rationale}", chunk="{deliverable IDs}"
     ```
-    **CRITICAL — The engine validates agent types against the Scenario Roster.** Use only types from the duo pool table.
+    **CRITICAL — The engine validates the `scenario` field against the Scenario Roster and maps it to the builder/reviewer types itself.** CYCLE_WORKERS carries no agent types in its payload — only the scenario name — so pick a valid scenario (`default`, `fallback`, `ui`) and the engine does the type mapping. `CYCLE_REJECTED` comes back if the scenario name is unrecognised.
 
 4. STOP. Wait for EITHER `WORKERS_SPAWNED: duo_id={id}, {builder_name} (subagent_type: {builder_type}), {reviewer_name} (subagent_type: {reviewer_type})` from team-lead (canonical) OR `WORKER_READY: ready for assignment` from either freshly-spawned worker (belt-and-suspenders fallback — whichever arrives first unblocks you). If only WORKER_READY arrives first, use the `coder_name` / `reviewer_name` you sent in the CYCLE_WORKERS payload as the authoritative names and proceed — WORKERS_SPAWNED may still arrive late but is informational once you've already dispatched. Then construct and send the assignment.
 
