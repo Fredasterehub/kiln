@@ -276,19 +276,7 @@ The engine waits for the boss's completion signal. Messages from the team arrive
 
 **INTERACTIVE steps (Steps 1, 2, 4) — HANDS OFF.** The boss talks to the human. Wait silently and indefinitely — never nudge, re-spawn, take over, or assume the boss is stuck.
 
-**Non-interactive steps (Steps 3, 5, 6, 7) — Watchdog Protocol:**
-
-Every `idle_notification` is a health check opportunity. Do NOT waste it on poetry. On each idle notification:
-
-1. **Check TaskList** — what is the current `in_progress` task? What signal are you waiting for?
-2. **Scan received messages** — did the expected signal arrive in a format you didn't recognize? Look for partial matches, misspelled signals, wrong casing, READY instead of REQUEST_WORKERS, etc.
-3. **Check agent liveness** — has the agent you're waiting on sent ANY message recently? If yes but the signal was malformed, send a corrective message: "Expected `{signal}`, received `{what_they_sent}`. Please resend in the correct format."
-4. **Nudge if silent** — if the agent has sent nothing since spawn or last assignment, send ONE targeted nudge via SendMessage reminding them of their expected action. Include the exact signal format they should send.
-5. **Track nudge count** — after 3 nudges to the same agent with no response or progress, stop nudging that agent and report to the operator: "Agent {name} unresponsive after 3 nudges. Pipeline stalled at {task}. Operator intervention needed."
-
-**Stagnation rule:** If the current `in_progress` task has not changed across 3 consecutive idle notifications, the pipeline is stalled. Report the stall clearly to the operator with the task name, the agent you're waiting on, and the last message received from that agent. Then STOP — do not loop.
-
-**Idle voice (fallback only):** If the health check finds everything normal (agent is actively working, just slow), THEN output a brief lore-flavored one-liner. But health check comes first — every time.
+**Non-interactive steps (Steps 3, 5, 6, 7) — Stall detection is native.** The detached watchdog (`watchdog-loop.sh`) monitors `.kiln/tmp/activity.json` and injects nudges automatically when the pipeline stalls. See `plugins/kiln/skills/kiln-pipeline/references/deadlock-detection.md` for the contract. On each idle notification, output a brief lore-flavored one-liner only — no manual polling needed.
 
 ### 5. Shutdown and Transition
 

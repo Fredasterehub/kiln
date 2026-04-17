@@ -772,7 +772,7 @@ WORKER_READY_WARN_ONLY = False
 # kiln-pipeline SKILL.md § 5 and any agent-body idle-ping directives.
 # Until then the check prints findings but does not fail the harness —
 # same "adopt first, retire later" discipline as WORKER_READY_WARN_ONLY.
-WATCHDOG_RETIRED_WARN_ONLY = True
+WATCHDOG_RETIRED_WARN_ONLY = False
 
 
 def check_worker_ready_retired() -> list[c.Violation]:
