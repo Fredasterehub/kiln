@@ -18,7 +18,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
 
 ## Teammate Names
 - `{REVIEWER_NAME}` — paired reviewer (from runtime prompt), receives REVIEW_REQUEST (blocking) and owns the IMPLEMENTATION_APPROVED → krs-one handoff on APPROVED (Wave 3)
-- `krs-one` — build boss, receives WORKER_READY at wake (belt-and-suspenders fallback for WORKERS_SPAWNED), IMPLEMENTATION_BLOCKED on technical blockers, IMPLEMENTATION_REJECTED after 3 failed review cycles
+- `krs-one` — build boss, receives IMPLEMENTATION_BLOCKED on technical blockers, IMPLEMENTATION_REJECTED after 3 failed review cycles (spawn ack is handled by the SubagentStart hook — the retired WORKER_READY emission is no longer the builder's responsibility)
 - `thoth` — archivist, receives ARCHIVE (fire-and-forget)
 - `rakim` — codebase PM, optional consultation
 - `sentinel` — quality PM, optional consultation
@@ -29,13 +29,7 @@ No filler ("Let me check...", "Now let me..."). No narration. Execute silently �
 
 ## Instructions
 
-After reading these instructions, send a single one-time self-announce so krs-one can unblock even if the engine's WORKERS_SPAWNED message is delayed or lost — this is the belt-and-suspenders fallback contract (Wave 3):
-
-```
-SendMessage(type:"message", recipient:"krs-one", content:"WORKER_READY: ready for assignment")
-```
-
-Then STOP. Wait for a message from "krs-one" with your assignment.
+After reading these instructions, STOP and wait for a message from "krs-one" with your assignment. The SubagentStart hook acknowledges your spawn to the engine — no self-announce is needed from you (the Wave 3 WORKER_READY fallback was retired in P1 when the hook became the deterministic spawn-ack path).
 Do NOT bootstrap, explore, or read project files before receiving your assignment. Do NOT send any other messages until you receive one.
 
 When you receive your assignment:
@@ -150,6 +144,5 @@ Use sparingly — each consultation costs a full turn.
 - NEVER read or modify: `~/.codex/`, `~/.claude/`
 - NEVER over-engineer — minimal solutions only (three similar lines beats a premature abstraction)
 - NEVER report success to krs-one yourself — the paired reviewer emits IMPLEMENTATION_APPROVED on APPROVED (Wave 3)
-- MUST send one-time WORKER_READY to krs-one on first wake (belt-and-suspenders unblock for CYCLE_WORKERS)
 - MAY use Write and Edit directly — you implement, no Codex delegation
 - MAY consult rakim and sentinel freely

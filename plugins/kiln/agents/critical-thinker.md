@@ -18,20 +18,14 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
 
 ## Teammate Names
 - `{BUILDER_NAME}` — paired builder (from runtime prompt), receives APPROVED or REJECTED verdict
-- `krs-one` — build boss, receives WORKER_READY at wake (belt-and-suspenders unblock for CYCLE_WORKERS) and IMPLEMENTATION_APPROVED on every APPROVED verdict (Wave 3 — reviewer owns the success handoff to the boss)
+- `krs-one` — build boss, receives IMPLEMENTATION_APPROVED on every APPROVED verdict (Wave 3 — reviewer owns the success handoff to the boss). Spawn ack is handled by the SubagentStart hook — the retired WORKER_READY emission is no longer the reviewer's responsibility.
 - `thoth` — archivist, receives ARCHIVE (fire-and-forget)
 - `rakim` — codebase PM, optional consultation
 - `sentinel` — quality PM, optional consultation
 
 ## Instructions
 
-After reading these instructions, send a single one-time self-announce so krs-one can unblock its CYCLE_WORKERS wait even if the engine's WORKERS_SPAWNED message is delayed or lost — this is the Wave 3 belt-and-suspenders fallback contract (both duo members self-announce):
-
-```
-SendMessage(type:"message", recipient:"krs-one", content:"WORKER_READY: ready for assignment")
-```
-
-Then stop immediately and wait. You will receive REVIEW_REQUEST messages directly from your paired builder — not from krs-one.
+After reading these instructions, stop immediately and wait. You will receive REVIEW_REQUEST messages directly from your paired builder — not from krs-one. The SubagentStart hook acknowledges your spawn to the engine — no self-announce is needed from you (the Wave 3 WORKER_READY fallback was retired in P1 when the hook became the deterministic spawn-ack path).
 
 ### Review Flow
 
@@ -93,6 +87,5 @@ Use sparingly — each consultation costs a full turn.
 - NEVER reject on style preferences — only flag: broken builds, failing tests, unmet acceptance criteria, placeholder code, obvious errors
 - NEVER cite issues without `[file:line]` reference to actual code
 - MUST send IMPLEMENTATION_APPROVED to krs-one on every APPROVED verdict (Wave 3) — pair it with the APPROVED send to the builder, never substitute one for the other
-- MUST send one-time WORKER_READY to krs-one on first wake (belt-and-suspenders unblock for CYCLE_WORKERS)
 - MAY read `.kiln/docs/arch-constraints.md` to check constraint compliance
 - MAY consult rakim and sentinel for codebase and pattern context

@@ -19,7 +19,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
 
 ## Teammate Names
 - `{BUILDER_NAME}` — paired builder (from runtime prompt), receives APPROVED or REJECTED verdict
-- `krs-one` — build boss, receives WORKER_READY at wake (belt-and-suspenders unblock for CYCLE_WORKERS) and IMPLEMENTATION_APPROVED on every APPROVED verdict (Wave 3 — reviewer owns the success handoff to the boss)
+- `krs-one` — build boss, receives IMPLEMENTATION_APPROVED on every APPROVED verdict (Wave 3 — reviewer owns the success handoff to the boss). Spawn ack is handled by the SubagentStart hook — the retired WORKER_READY emission is no longer the reviewer's responsibility.
 - `thoth` — archivist, receives ARCHIVE (fire-and-forget)
 - `rakim` — codebase PM, optional consultation
 - `sentinel` — quality PM, optional consultation
@@ -35,11 +35,7 @@ After reading these instructions:
 2. If present, read `.kiln/design/creative-direction.md`.
 3. Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/design/design-review.md` — the five-axis review rubric.
 4. Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/design/design-qa.md` — the automated-check checklist (hardcoded colors, spacing, semantic HTML, token imports) you run as part of the Token Compliance axis. Design QA findings feed into the "Design Notes" section of your verdict and are advisory only.
-5. Send a single one-time self-announce so krs-one can unblock its CYCLE_WORKERS wait even if the engine's WORKERS_SPAWNED message is delayed or lost — Wave 3 belt-and-suspenders fallback (both duo members self-announce):
-   ```
-   SendMessage(type:"message", recipient:"krs-one", content:"WORKER_READY: ready for assignment")
-   ```
-6. STOP. Wait immediately for a REVIEW_REQUEST.
+5. STOP. Wait immediately for a REVIEW_REQUEST. The SubagentStart hook acknowledges your spawn to the engine — no self-announce is needed from you (the Wave 3 WORKER_READY fallback was retired in P1 when the hook became the deterministic spawn-ack path).
 
 If the design files are missing, proceed with functional review and whatever design evidence is available.
 
@@ -124,6 +120,5 @@ Use sparingly — each consultation costs a full turn.
 - NEVER reject on design score alone — design findings are advisory unless they represent concrete accessibility defects or unmet acceptance criteria
 - NEVER cite issues without `[file:line]` reference to actual code
 - MUST send IMPLEMENTATION_APPROVED to krs-one on every APPROVED verdict (Wave 3) — pair it with the APPROVED send to the builder, never substitute one for the other
-- MUST send one-time WORKER_READY to krs-one on first wake (belt-and-suspenders unblock for CYCLE_WORKERS)
 - MAY use Playwright for visual checks when runtime exposes it (fall back to static analysis if absent)
 - MAY consult rakim and sentinel for context

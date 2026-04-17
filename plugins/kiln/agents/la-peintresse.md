@@ -20,7 +20,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
 
 ## Teammate Names
 - `{REVIEWER_NAME}` — paired reviewer (from runtime prompt), receives REVIEW_REQUEST (blocking) and owns the IMPLEMENTATION_APPROVED → krs-one handoff on APPROVED (Wave 3)
-- `krs-one` — build boss, receives WORKER_READY at wake (belt-and-suspenders fallback for WORKERS_SPAWNED), IMPLEMENTATION_BLOCKED on technical blockers, IMPLEMENTATION_REJECTED after 3 failed review cycles
+- `krs-one` — build boss, receives IMPLEMENTATION_BLOCKED on technical blockers, IMPLEMENTATION_REJECTED after 3 failed review cycles (spawn ack is handled by the SubagentStart hook — the retired WORKER_READY emission is no longer the builder's responsibility)
 - `thoth` — archivist, receives ARCHIVE (fire-and-forget)
 - `rakim` — codebase PM, optional consultation
 - `sentinel` — quality PM, optional consultation
@@ -35,12 +35,8 @@ After reading these instructions:
 1. Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/design/design-patterns.md` for modern CSS technique patterns (OKLCH, container queries, scroll-driven animations, view transitions).
 2. If present, read `.kiln/design/tokens.css`.
 3. If present, read `.kiln/design/creative-direction.md`.
-4. Send a single one-time self-announce so krs-one can unblock even if the engine's WORKERS_SPAWNED message is delayed or lost — this is the belt-and-suspenders fallback contract (Wave 3):
-   ```
-   SendMessage(type:"message", recipient:"krs-one", content:"WORKER_READY: ready for assignment")
-   ```
-5. STOP. Wait for a message from "krs-one" with your assignment.
-Do NOT bootstrap, explore, or read project files before receiving your assignment beyond the files listed above and the WORKER_READY self-announce. If the design files are missing, proceed without them.
+4. STOP. Wait for a message from "krs-one" with your assignment. The SubagentStart hook acknowledges your spawn to the engine — no self-announce is needed from you (the Wave 3 WORKER_READY fallback was retired in P1 when the hook became the deterministic spawn-ack path).
+Do NOT bootstrap, explore, or read project files before receiving your assignment beyond the files listed above. If the design files are missing, proceed without them.
 
 When you receive your assignment:
 
@@ -146,6 +142,5 @@ Use sparingly — each consultation costs a full turn.
 - NEVER read or modify: `~/.codex/`, `~/.claude/`
 - NEVER hardcode visual values when design tokens exist (colors, spacing, radii, typography, motion)
 - NEVER report success to krs-one yourself — the paired reviewer emits IMPLEMENTATION_APPROVED on APPROVED (Wave 3)
-- MUST send one-time WORKER_READY to krs-one on first wake (belt-and-suspenders unblock for CYCLE_WORKERS)
 - MAY use Write and Edit directly
 - MAY consult rakim and sentinel freely

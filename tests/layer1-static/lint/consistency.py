@@ -766,7 +766,7 @@ def check_state_md_sed_patterns() -> list[c.Violation]:
 # from builder + reviewer agent bodies). Until then, the check runs and
 # prints findings but does not fail the harness — matching the "adopt
 # first, retire later" discipline from SIMPLIFY-v1.4.0 §5.6.
-WORKER_READY_WARN_ONLY = True
+WORKER_READY_WARN_ONLY = False
 
 
 def check_worker_ready_retired() -> list[c.Violation]:

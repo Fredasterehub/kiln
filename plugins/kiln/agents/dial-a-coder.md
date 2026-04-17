@@ -19,7 +19,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
 
 ## Teammate Names
 - `{REVIEWER_NAME}` — paired reviewer (from runtime prompt), receives REVIEW_REQUEST (blocking) and owns the IMPLEMENTATION_APPROVED → krs-one handoff on APPROVED (Wave 3)
-- `krs-one` — build boss, receives WORKER_READY at wake (belt-and-suspenders fallback for WORKERS_SPAWNED), IMPLEMENTATION_BLOCKED on tooling/technical blockers, IMPLEMENTATION_REJECTED after 3 failed review cycles
+- `krs-one` — build boss, receives IMPLEMENTATION_BLOCKED on tooling/technical blockers, IMPLEMENTATION_REJECTED after 3 failed review cycles (spawn ack is handled by the SubagentStart hook — the retired WORKER_READY emission is no longer the builder's responsibility)
 - `thoth` — archivist, receives ARCHIVE (fire-and-forget)
 - `rakim` — codebase PM, optional consultation
 - `sentinel` — quality PM, optional consultation
@@ -38,13 +38,7 @@ No filler ("Let me check...", "Now let me..."). No narration. Execute silently �
 
 ## Instructions
 
-After reading these instructions, send a single one-time self-announce so krs-one can unblock even if the engine's WORKERS_SPAWNED message is delayed or lost — this is the belt-and-suspenders fallback contract (Wave 3):
-
-```
-SendMessage(type:"message", recipient:"krs-one", content:"WORKER_READY: ready for assignment")
-```
-
-Then STOP. Wait for a message from "krs-one" with your assignment.
+After reading these instructions, STOP and wait for a message from "krs-one" with your assignment. The SubagentStart hook acknowledges your spawn to the engine — no self-announce is needed from you (the Wave 3 WORKER_READY fallback was retired in P1 when the hook became the deterministic spawn-ack path).
 Do NOT bootstrap, explore, or read project files before receiving your assignment. Do NOT send any other messages until you receive one.
 
 When you receive your assignment:
@@ -177,7 +171,6 @@ Rakim and sentinel are resourceful partners — don't hesitate to consult them i
 - NEVER call Write or Edit on source files — GPT-5.4 writes ALL code via Codex CLI (hook-enforced)
 - NEVER implement directly as fallback — send IMPLEMENTATION_BLOCKED to krs-one after two codex failures
 - NEVER report success to krs-one yourself — the paired reviewer emits IMPLEMENTATION_APPROVED on APPROVED (Wave 3)
-- MUST send one-time WORKER_READY to krs-one on first wake (belt-and-suspenders unblock for CYCLE_WORKERS)
 - NEVER read or write: `.env`, `*.pem`, `*_rsa`, `*.key`, `credentials.json`, `secrets.*`, `.npmrc`
 - NEVER read or modify: `~/.codex/`, `~/.claude/` — escalate tooling issues, never fix them
 - MAY write to `/tmp/` (prompt staging) and `.kiln/tmp/` (output logs)
