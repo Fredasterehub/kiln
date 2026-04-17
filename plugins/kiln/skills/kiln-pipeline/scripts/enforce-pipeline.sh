@@ -271,4 +271,13 @@ allow
 # v1.3.0 — stripped dead snake_case tool-name aliases from matchers.
 #          Claude Code v2.1.89 uses PascalCase only; the aliases never
 #          matched anything. See git log for the exact list.
+# v1.4.0 — retired the Wave 3 belt-and-suspenders CYCLE_WORKERS unblock:
+#          previously either WORKERS_SPAWNED (canonical engine ack) OR
+#          WORKER_READY (worker self-announce fallback) would unblock krs-one.
+#          SubagentStart hook now provides deterministic spawn ack via
+#          additionalContext injection (~90ms post-spawn, before first
+#          PreToolUse) — sole unblock path. WORKERS_SPAWNED retained as
+#          operator-visible logging; WORKER_READY self-announce retired from
+#          builder/reviewer bodies (dial-a-coder, backup-coder, la-peintresse,
+#          critical-thinker, the-curator). See SIMPLIFY-v1.4.0 §5.3 P1.
 # ═══════════════════════════════════════════════════════════════

@@ -19,10 +19,10 @@ Send via `SendMessage(type: "message", recipient: "{target}", content: "SIGNAL: 
 | `READY_BOOTSTRAP: {summary}` | PM bootstrap complete (rakim / sentinel / thoth one-time at milestone start) | team-lead (engine) |
 | `READY: {summary}` | PM post-iteration reply (ITERATION_UPDATE or MILESTONE_TRANSITION) | krs-one (boss) |
 | `REQUEST_WORKERS: {name} (subagent_type: {type}), ...` | Boss needs workers spawned | team-lead |
-| `CYCLE_WORKERS: scenario={default\|fallback\|ui}, duo_id={duo_id}, coder_name={name}, reviewer_name={name}, reason={reason}, chunk={summary}` | Boss requests fresh worker pair (blocking — unblocks on WORKERS_SPAWNED from engine OR WORKER_READY from a worker, whichever arrives first) | team-lead |
-| `WORKERS_SPAWNED: duo_id={duo_id}, {builder_name} (subagent_type: {builder_type}), {reviewer_name} (subagent_type: {reviewer_type})` | Engine confirms new worker pair ready (canonical payload — duo_id and subagent types authoritative for Wave 3 dispatch) | boss (response) |
+| `CYCLE_WORKERS: scenario={default\|fallback\|ui}, duo_id={duo_id}, coder_name={name}, reviewer_name={name}, reason={reason}, chunk={summary}` | Boss requests fresh worker pair (blocking — unblocks solely on the `SubagentStart` hook `additionalContext` injection; P1 — deterministic, fires ~90ms after the Agent tool call, ~30ms before the subagent's first `PreToolUse`). `WORKERS_SPAWNED` is emitted by the engine as an operator-visible logging signal, NOT an unblock path. | team-lead |
+| `WORKERS_SPAWNED: duo_id={duo_id}, {builder_name} (subagent_type: {builder_type}), {reviewer_name} (subagent_type: {reviewer_type})` | Operator-visible logging signal emitted when a fresh worker pair is spawned — carries duo_id and subagent_types for debug/tracing. As of P1, this is NOT the CYCLE_WORKERS unblock gate (that role moved to SubagentStart hook additionalContext). | boss (logging) |
 | `WORKERS_REJECTED: {reason}` | Engine rejected REQUEST_WORKERS | boss (response) |
-| `WORKER_READY: ready for assignment` | Worker self-announces on first wake — belt-and-suspenders fallback unblock for CYCLE_WORKERS if WORKERS_SPAWNED is lost/delayed (Wave 3) | krs-one (boss) |
+| `WORKER_READY: ready for assignment` | [DEPRECATED — P1] Worker self-announce on first wake — retired in P1; `SubagentStart` hook now provides deterministic spawn ack | krs-one (boss) [retired] |
 | `ONBOARDING_COMPLETE` | Step 1 done | team-lead (alpha) |
 | `BRAINSTORM_COMPLETE` | Step 2 done | team-lead (da-vinci) |
 | `RESEARCH_COMPLETE: {N} topics` | Step 3 done | team-lead (mi6) |
@@ -40,6 +40,14 @@ Send via `SendMessage(type: "message", recipient: "{target}", content: "SIGNAL: 
 | `BLOCKED: {reason}` | Cannot proceed | team-lead |
 
 Always include context after the signal. `RESEARCH_COMPLETE: 6 topics. Key: RSC viable, Drizzle preferred.` not bare `RESEARCH_COMPLETE`.
+
+### Engine-internal hook mechanisms
+
+These are NOT `SendMessage` signals. They are platform hooks the engine reads directly; agents do not emit them.
+
+| Mechanism | Meaning | Source |
+|-----------|---------|--------|
+| `SubagentStart` hook → `additionalContext` `[hook — engine internal]` | Platform hook fires ~90ms after Agent tool call returns, ~30ms before the subagent's first `PreToolUse`. Hook emits `{"additionalContext": "SubagentStart: agent_type={name} agent_id={id} — spawn acknowledged"}`. Engine reads `additionalContext` and advances CYCLE_WORKERS unblock. Replaces the retired WORKER_READY self-announce fallback as of P1. | `plugins/kiln/hooks/subagent-start-ack.sh` |
 
 ## Worker Signals (peer-to-peer)
 
@@ -61,11 +69,11 @@ These signals go to teammates, NOT to team-lead.
 
 **Boss → PM (other): fire-and-forget.** All other boss→PM communication is send-and-continue. Never STOP-wait for a PM reply outside the ITERATION_UPDATE seam.
 
-**Boss → Engine (CYCLE_WORKERS): blocking — belt-and-suspenders unblock.** KRS-One sends CYCLE_WORKERS to team-lead and waits. Two independent signals unblock him: `WORKERS_SPAWNED` from the engine (canonical — carries duo_id and authoritative subagent_types), OR `WORKER_READY` from one of the freshly-spawned workers (Wave 3 fallback — the worker's own first-wake announce). Whichever arrives first unblocks. If only WORKER_READY arrives, krs-one uses the `coder_name`/`reviewer_name` he sent in his own CYCLE_WORKERS payload.
+**Boss → Engine (CYCLE_WORKERS): blocking.** KRS-One sends CYCLE_WORKERS to team-lead and waits. The engine-internal unblock fires when the `SubagentStart` hook emits `additionalContext` for the spawned worker(s) — deterministic platform hook, before the worker's first turn. `WORKERS_SPAWNED` is emitted in parallel as an operator-visible logging/debug signal; it is NOT the unblock gate.
 
-**Engine → Boss (WORKERS_SPAWNED): blocking.** Engine confirms fresh worker pair to KRS-One. KRS-One proceeds to dispatch the next chunk assignment.
+**Engine → Boss (WORKERS_SPAWNED): operator-visible logging.** Engine emits WORKERS_SPAWNED when a fresh worker pair is spawned — logging/debug signal carrying duo_id and authoritative subagent_types. As of P1, this is NOT the CYCLE_WORKERS unblock gate; that role moved to the SubagentStart hook additionalContext. KRS-One proceeds to dispatch after the SubagentStart unblock, treating the WORKERS_SPAWNED message as informational confirmation.
 
-**Worker → Boss (WORKER_READY): fire-and-forget fallback.** BOTH members of each freshly-spawned build-step duo — builder (dial-a-coder, backup-coder, la-peintresse) AND reviewer (critical-thinker, the-curator) — send exactly one `WORKER_READY: ready for assignment` to krs-one as their first action on wake. This is NOT a reply to anything; it is a redundant self-announce that guarantees krs-one can unblock CYCLE_WORKERS even when the engine's WORKERS_SPAWNED path fails or is delayed. Either worker's WORKER_READY is sufficient to unblock.
+**[DEPRECATED — P1] Worker → Boss (WORKER_READY): fire-and-forget fallback.** Retired in SIMPLIFY-v1.4.0 P1. The `SubagentStart` platform hook now provides deterministic spawn ack via `additionalContext` injection (fires before the subagent's first turn), removing the need for a worker-emitted fallback. `WORKER_READY` emissions have been removed from builder/reviewer agent bodies. This deprecation anchor is preserved so the retirement is discoverable via grep.
 
 **Boss → PM (MILESTONE_TRANSITION): blocking.** KRS-One notifies persistent minds of milestone boundary before signaling MILESTONE_COMPLETE to the engine. PMs acknowledge with READY and reset milestone-scoped state.
 
@@ -133,7 +141,7 @@ The persistent mind seam is the synchronization point between every build iterat
 - When replying to a message, reply to the SENDER by their exact name
 - Never default to `team-lead` unless team-lead actually sent the message
 - `thoth` is a fixed name — always available for logging
-- **Boss-selected duo names are authoritative.** The engine echoes them back unchanged in WORKERS_SPAWNED. Use the exact names from that message.
+- **Boss-selected duo names are authoritative.** Use the exact `coder_name` and `reviewer_name` values from your own CYCLE_WORKERS payload — these are the canonical names. WORKERS_SPAWNED echoes them back as a logging signal (P1 — no longer the name-binding source).
 
 ## Thoth Logging
 
@@ -144,7 +152,7 @@ Format: `SendMessage(recipient: "thoth", content: "LOG: {EVENT_TYPE} | {detail}"
 Thoth is fire-and-forget — do NOT wait for a reply. Just send and continue.
 
 Log at minimum:
-- WORKER_READY / READY
+- READY (WORKER_READY retired in P1 — SubagentStart hook replaces it)
 - Every assignment received
 - Every file written (CODEX_EXEC, FILE_WRITTEN)
 - Every REVIEW_REQUEST, APPROVED, REJECTED
