@@ -760,6 +760,81 @@ def check_state_md_sed_patterns() -> list[c.Violation]:
     return out
 
 
+# ── Invariant 15 — WORKER_READY retired (P1 — SubagentStart) ──────
+
+# Flip to False in p1-07 (same commit that removes the live emissions
+# from builder + reviewer agent bodies). Until then, the check runs and
+# prints findings but does not fail the harness — matching the "adopt
+# first, retire later" discipline from SIMPLIFY-v1.4.0 §5.6.
+WORKER_READY_WARN_ONLY = True
+
+
+def check_worker_ready_retired() -> list[c.Violation]:
+    """P1 (SubagentStart) retirement: no agent body should carry a live
+    `SendMessage(...)` call emitting `WORKER_READY`. Spawn acknowledgement
+    is handled by the SubagentStart hook
+    (`plugins/kiln/hooks/subagent-start-ack.sh`); the old belt-and-
+    suspenders one-time emission is obsolete.
+
+    Detection is limited to the unambiguous machine-readable call shape:
+    `SendMessage(...content:"WORKER_READY...")`. Every live emission in
+    the codebase uses this shape, so recall is sufficient without parsing
+    natural-language imperatives (which produced false positives on
+    passive routing prose in earlier iterations).
+
+    Deprecation-evidence prose (a line whose text contains `deprecat` or
+    `retir`) is exempted — matching the Wave 3 `build_iteration`
+    precedent where the old name remains in CHANGELOG-style commentary
+    even after the code no longer emits it. The exemption is applied
+    only to lines that already matched the send-call pattern, so passive
+    prose is skipped cheaply without consulting the exemption regex.
+
+    Passive mentions — a bullet describing WHAT the recipient receives,
+    a table row in a routing inventory, or prose that only names the
+    signal — are out of scope. The purpose is to catch regressions on
+    the emission contract, not to purge the string.
+    """
+    out: list[c.Violation] = []
+
+    send_call_re = re.compile(
+        r'SendMessage[^)]*content\s*[:=]\s*["\']WORKER_READY',
+        re.IGNORECASE,
+    )
+    deprecation_re = re.compile(
+        r'deprecat|retir',
+        re.IGNORECASE,
+    )
+
+    for agent in c.load_agents():
+        for idx, line in enumerate(agent.body.split("\n"), start=1):
+            if "WORKER_READY" not in line:
+                continue
+            if not send_call_re.search(line):
+                continue
+            if deprecation_re.search(line):
+                continue
+            out.append(c.Violation(
+                    code="WORKER_READY_LIVE",
+                    message=(
+                        f"'{agent.name}' carries a live "
+                        "SendMessage(...content:\"WORKER_READY...\") "
+                        "emission — P1 retires this in favour of the "
+                        "SubagentStart hook. If this is an intentional "
+                        "deprecation note, include `deprecated` or "
+                        "`retired` on the same line."
+                    ),
+                    location=f"plugins/kiln/agents/{agent.name}.md:{idx}",
+                ))
+
+    if WORKER_READY_WARN_ONLY:
+        if out:
+            print(f"  ! {len(out)} WORKER_READY_LIVE findings (warn-only until p1-07):")
+            for v in out:
+                print(f"    {v}")
+        return []
+    return out
+
+
 def check_iteration_field_rename() -> list[c.Violation]:
     """Wave 3 (C10) rename: agent bodies must reference `team_iteration`
     (milestone-indexed kill-streak counter) or `chunk_count` (within-
@@ -852,6 +927,7 @@ ALL_CHECKS = [
     ("Iteration field rename (Wave 3 — C10)", check_iteration_field_rename),
     ("STATE.md sed patterns (Wave 3 — C10 follow-up)", check_state_md_sed_patterns),
     ("Model tier policy (Sprint 3)", check_model_policy),
+    ("WORKER_READY retired (P1 — SubagentStart)", check_worker_ready_retired),
 ]
 
 
