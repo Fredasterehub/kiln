@@ -131,6 +131,7 @@ class MockEngine:
             "TIME_TICK": self._on_time_tick,
             "SESSIONSTART": self._on_session_start,
             "DEADLOCK_CHECK": self._on_deadlock_check,
+            "STOPFAILURE": self._on_stop_failure,
             "ITERATION_COMPLETE": self._on_iteration_complete_legacy,
             "ITERATION_UPDATE": self._on_iteration_update,
             "MILESTONE_TRANSITION": self._on_milestone_transition,
@@ -434,6 +435,67 @@ class MockEngine:
                 "idle_secs": idle_secs,
             },
         )]
+
+    def _on_stop_failure(self, event):
+        """StopFailure — API-induced main-session turn death (P3).
+
+        Mirrors the case branching in stop-failure-handler.sh across the
+        7-value Zod enum (rate_limit, authentication_failed, billing_error,
+        server_error, invalid_request, max_output_tokens, unknown).
+        Unrecoverable classes escalate directly to `deadlock_flag`; all
+        classes emit a `nudge_emit` carrying the category AND the
+        classifier `class` so scenarios can assert on the bounded-retry
+        vs retryable vs unclassified distinction (the handler's case
+        labels, kept in lockstep here). Treating `class` as the oracle
+        instead of `category` means a misclassification (rate_limit
+        falling through to unclassified, for example) is caught as a
+        decision-shape mismatch rather than a silently-passing assertion.
+
+        nudge_count is deliberately NOT bumped for any class — stacking
+        a StopFailure nudge onto the P2 3-nudge watchdog counter would
+        corrupt the deadlock-escalation rule.
+        """
+        payload = event.get("payload", "")
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except (ValueError, TypeError):
+                payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+
+        error_cat = payload.get("error", "unknown") or "unknown"
+        decisions: list[EngineDecision] = []
+
+        RATE_LIMIT = {"rate_limit"}
+        UNRECOVERABLE = {"authentication_failed", "billing_error"}
+        RETRYABLE = {"server_error", "invalid_request", "max_output_tokens"}
+
+        if error_cat in UNRECOVERABLE:
+            self.deadlock_flag = True
+            decisions.append(EngineDecision(
+                type="deadlock_flag",
+                details={"source": "stop_failure", "error": error_cat},
+            ))
+
+        if error_cat in RATE_LIMIT:
+            cls = "recoverable"
+        elif error_cat in UNRECOVERABLE:
+            cls = "unrecoverable"
+        elif error_cat in RETRYABLE:
+            cls = "retryable"
+        else:
+            cls = "unclassified"
+
+        decisions.append(EngineDecision(
+            type="nudge_emit",
+            details={
+                "source": "stop_failure",
+                "category": error_cat,
+                "class": cls,
+            },
+        ))
+        return decisions
 
     def _on_request_workers(self, event):
         """Parse payload, spawn listed workers, respond WORKERS_SPAWNED.

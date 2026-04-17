@@ -1,0 +1,29 @@
+name: stop-failure-rate-limit-backoff
+description: >
+  P3 StopFailure — rate_limit recovery path. A StopFailure event with
+  error="rate_limit" fires on the main session. The engine model asserts
+  a `nudge_emit` carrying source=stop_failure, category=rate_limit AND
+  class=recoverable — `class` is the load-bearing field: it proves the
+  handler's case branching classified rate_limit as the bounded-retry
+  class rather than letting it fall through to the default `unclassified`
+  branch. Forbidding `{type: nudge_emit, class: unclassified}` locks
+  that regression out across the scenario. Forbidding `deadlock_flag`
+  proves rate_limit is not escalated (only authentication_failed /
+  billing_error write DEADLOCK.flag).
+
+  STOPFAILURE is a synthetic driver signal (not a platform event name)
+  that stands in for the StopFailure hook firing inside layer2-replay.
+engine-version: post-centralization
+events-inline:
+  - {sender: platform, signal: STOPFAILURE, recipient: team-lead, payload: '{"hook_event_name": "StopFailure", "error": "rate_limit", "error_details": "Rate limit exceeded for 5-hour window.", "last_assistant_message": "Working on chunk 3"}', timestamp: "00:05:00"}
+assertions:
+  - after-event: "platform | STOPFAILURE"
+    strict: true
+    expected-decisions:
+      - type: nudge_emit
+        source: stop_failure
+        category: rate_limit
+        class: recoverable
+    forbidden-decisions:
+      - {type: deadlock_flag}
+      - {type: nudge_emit, class: unclassified}
