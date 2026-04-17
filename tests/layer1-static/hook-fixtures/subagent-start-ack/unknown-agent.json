@@ -1,0 +1,8 @@
+{
+  "session_id": "test-session-002",
+  "transcript_path": "/tmp/test.jsonl",
+  "cwd": "/tmp/kiln-test",
+  "agent_id": "test-agent-id-002",
+  "agent_type": "Explore",
+  "hook_event_name": "SubagentStart"
+}
