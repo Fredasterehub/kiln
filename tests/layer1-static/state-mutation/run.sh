@@ -144,11 +144,160 @@ test_pre_wave3_pattern_would_noop() {
   rm -rf "$tmp"
 }
 
+test_activity_json_atomic_write() {
+  local name="activity-json-atomic-write"
+  local tmp
+  tmp=$(mktempdir)
+  mkdir -p "$tmp/.kiln/tmp"
+
+  local ACTIVITY="$tmp/.kiln/tmp/activity.json"
+  local TMP_FILE="$ACTIVITY.$$.tmp"
+  local NOW=1713379200
+
+  echo '{}' | jq --arg ts "$NOW" --arg src "PostToolUse:SendMessage" --arg phase "build" \
+    '(.last_activity_ts = ($ts | tonumber)) | (.epoch = 1) | (.last_nudge_ts = 0) | (.nudge_count = 0)
+     | (.last_activity_source = $src) | (.pipeline_phase = $phase) | (.active_teammates = {})' \
+    > "$TMP_FILE" 2>/dev/null && mv "$TMP_FILE" "$ACTIVITY"
+
+  local ok=1
+  if ! jq empty "$ACTIVITY" 2>/dev/null; then
+    echo "       activity.json is not valid JSON"
+    ok=0
+  fi
+  local got_ts got_epoch got_phase
+  got_ts=$(jq -r '.last_activity_ts // "missing"' "$ACTIVITY" 2>/dev/null)
+  got_epoch=$(jq -r '.epoch // "missing"' "$ACTIVITY" 2>/dev/null)
+  got_phase=$(jq -r '.pipeline_phase // "missing"' "$ACTIVITY" 2>/dev/null)
+  [[ "$got_ts" == "$NOW" ]] || { echo "       last_activity_ts: got '$got_ts', expected '$NOW'"; ok=0; }
+  [[ "$got_epoch" == "1" ]] || { echo "       epoch: got '$got_epoch', expected '1'"; ok=0; }
+  [[ "$got_phase" == "build" ]] || { echo "       pipeline_phase: got '$got_phase', expected 'build'"; ok=0; }
+  local got_src got_teammates got_nudge_ts got_nudge_count
+  got_src=$(jq -r '.last_activity_source // "missing"' "$ACTIVITY" 2>/dev/null)
+  got_teammates=$(jq -r '.active_teammates // "missing"' "$ACTIVITY" 2>/dev/null)
+  got_nudge_ts=$(jq -r '.last_nudge_ts // "missing"' "$ACTIVITY" 2>/dev/null)
+  got_nudge_count=$(jq -r '.nudge_count // "missing"' "$ACTIVITY" 2>/dev/null)
+  [[ "$got_src" == "PostToolUse:SendMessage" ]] || { echo "       last_activity_source: got '$got_src', expected 'PostToolUse:SendMessage'"; ok=0; }
+  [[ "$got_teammates" == "{}" ]] || { echo "       active_teammates: got '$got_teammates', expected '{}'"; ok=0; }
+  [[ "$got_nudge_ts" == "0" ]] || { echo "       last_nudge_ts: got '$got_nudge_ts', expected '0'"; ok=0; }
+  [[ "$got_nudge_count" == "0" ]] || { echo "       nudge_count: got '$got_nudge_count', expected '0'"; ok=0; }
+  if ls "$tmp/.kiln/tmp/"*.tmp 2>/dev/null | grep -q .; then
+    echo "       temp file left behind after atomic write"
+    ok=0
+  fi
+
+  if (( ok == 1 )); then
+    echo "    ✓ $name"
+    PASS=$((PASS + 1))
+  else
+    echo "    ✗ $name"
+    FAIL=$((FAIL + 1))
+    FAILED+=("$name")
+  fi
+  rm -rf "$tmp"
+}
+
+test_activity_json_concurrent_write_no_clobber() {
+  local name="activity-json-concurrent-write-no-clobber"
+  local tmp
+  tmp=$(mktempdir)
+  mkdir -p "$tmp/.kiln/tmp"
+
+  local ACTIVITY="$tmp/.kiln/tmp/activity.json"
+  local LOCK="$tmp/.kiln/tmp/activity.lock"
+
+  echo '{"epoch": 0, "nudge_count": 0, "last_nudge_ts": 0, "active_teammates": {}}' > "$ACTIVITY"
+
+  local i
+  for i in $(seq 1 20); do
+    (
+      local TMP_FILE="$ACTIVITY.$$.tmp"
+      (
+        flock -x 9
+        local EXISTING
+        EXISTING=$(cat "$ACTIVITY" 2>/dev/null) || exit 0
+        [[ -n "$EXISTING" ]] || exit 0
+        echo "$EXISTING" | jq --arg ts "$((1713379200 + i))" \
+          '(.last_activity_ts = ($ts | tonumber)) | (.epoch = ((.epoch // 0) + 1))' \
+          > "$TMP_FILE" 2>/dev/null && mv "$TMP_FILE" "$ACTIVITY" || rm -f "$TMP_FILE"
+      ) 9>"$LOCK"
+    ) &
+  done
+  wait
+
+  local ok=1
+  if ! jq empty "$ACTIVITY" 2>/dev/null; then
+    echo "       activity.json corrupted after concurrent writes"
+    ok=0
+  fi
+  local got_epoch
+  got_epoch=$(jq -r '.epoch // 0' "$ACTIVITY" 2>/dev/null)
+  if [[ "$got_epoch" -ne 20 ]]; then
+    echo "       epoch=$got_epoch after 20 concurrent writers — expected 20 (some writes dropped)"
+    ok=0
+  fi
+  if ls "$tmp/.kiln/tmp/"*.tmp 2>/dev/null | grep -q .; then
+    echo "       temp files left behind after concurrent writes"
+    ok=0
+  fi
+
+  if (( ok == 1 )); then
+    echo "    ✓ $name"
+    PASS=$((PASS + 1))
+  else
+    echo "    ✗ $name"
+    FAIL=$((FAIL + 1))
+    FAILED+=("$name")
+  fi
+  rm -rf "$tmp"
+}
+
+test_activity_json_failed_write_no_clobber() {
+  local name="activity-json-failed-write-no-clobber"
+  local tmp
+  tmp=$(mktempdir)
+  mkdir -p "$tmp/.kiln/tmp"
+
+  local ACTIVITY="$tmp/.kiln/tmp/activity.json"
+  local TMP_FILE="$ACTIVITY.$$.tmp"
+
+  echo '{"epoch": 5, "last_activity_ts": 1713379200}' > "$ACTIVITY"
+
+  echo '{}' | jq 'this_is_not_valid_jq_syntax' > "$TMP_FILE" 2>/dev/null || rm -f "$TMP_FILE"
+
+  local ok=1
+  if ! jq empty "$ACTIVITY" 2>/dev/null; then
+    echo "       activity.json corrupted after failed write attempt"
+    ok=0
+  fi
+  local got_epoch
+  got_epoch=$(jq -r '.epoch // "missing"' "$ACTIVITY" 2>/dev/null)
+  [[ "$got_epoch" == "5" ]] || { echo "       epoch: got '$got_epoch', expected '5' (original untouched)"; ok=0; }
+  if [[ -f "$TMP_FILE" ]]; then
+    echo "       temp file not cleaned up after failed write"
+    ok=0
+  fi
+
+  if (( ok == 1 )); then
+    echo "    ✓ $name"
+    PASS=$((PASS + 1))
+  else
+    echo "    ✗ $name"
+    FAIL=$((FAIL + 1))
+    FAILED+=("$name")
+  fi
+  rm -rf "$tmp"
+}
+
 echo "── State-mutation tests ─────────────────"
 echo "  chunk_count / team_iteration sed patterns"
 test_bossman_chunk_increment
 test_milestone_transition_reset
 test_pre_wave3_pattern_would_noop
+echo ""
+echo "  activity.json atomic-write patterns"
+test_activity_json_atomic_write
+test_activity_json_concurrent_write_no_clobber
+test_activity_json_failed_write_no_clobber
 echo ""
 echo "State-mutation: ${PASS} passed, ${FAIL} failed"
 if (( FAIL > 0 )); then
