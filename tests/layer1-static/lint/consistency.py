@@ -768,6 +768,12 @@ def check_state_md_sed_patterns() -> list[c.Violation]:
 # first, retire later" discipline from SIMPLIFY-v1.4.0 §5.6.
 WORKER_READY_WARN_ONLY = False
 
+# Warn-only until p2-11 retires the manual watchdog prose from
+# kiln-pipeline SKILL.md § 5 and any agent-body idle-ping directives.
+# Until then the check prints findings but does not fail the harness —
+# same "adopt first, retire later" discipline as WORKER_READY_WARN_ONLY.
+WATCHDOG_RETIRED_WARN_ONLY = True
+
 
 def check_worker_ready_retired() -> list[c.Violation]:
     """P1 (SubagentStart) retirement: no agent body should carry a live
@@ -912,6 +918,227 @@ def check_iteration_field_rename() -> list[c.Violation]:
     return out
 
 
+# ── Invariant 16 — Watchdog polling retired (P2 — TeammateIdle) ────
+
+_WATCHDOG_PROSE_PATTERNS = [
+    r"Watchdog Protocol",
+    r"idle_notification",
+    r"health check opportunity",
+    r"Stagnation rule",
+    r"idle-ping",
+    r"ping them",
+]
+
+
+def check_watchdog_retired() -> list[c.Violation]:
+    """P2 (TeammateIdle + detached watchdog) retirement target: the
+    kiln-pipeline SKILL.md § 5 "Non-interactive steps — Watchdog
+    Protocol" block (lines ~279-291 pre-retirement) and any agent-body
+    idle-ping directives. Self-recovery is native — the `TeammateIdle`
+    hook feeds `activity.json`, `watchdog-loop.sh` detects stalls, and
+    `nudge-inject.sh` wakes the engine without operator intervention.
+    Manual polling prose is obsolete.
+
+    Pattern anchors chosen to match the actual § 5 vocabulary:
+    "Watchdog Protocol" (§5 heading), "idle_notification" (the event
+    name repeated through the section), "health check opportunity"
+    (§5 opening phrase), "Stagnation rule" (§5 subheading). The
+    `idle-ping` / `ping them` patterns catch any agent-body directives
+    that followed the same manual-polling pattern.
+
+    One violation per file (break after the first matching pattern) so
+    a file with multiple retired phrases surfaces as a single finding
+    rather than drowning the report. While `WATCHDOG_RETIRED_WARN_ONLY`
+    is True (the `adopt-first, retire-later` discipline — p2-11 flips
+    it) findings print but do not fail the harness.
+    """
+    out: list[c.Violation] = []
+
+    compiled = [re.compile(p, re.IGNORECASE) for p in _WATCHDOG_PROSE_PATTERNS]
+
+    sources: list[tuple[str, Path]] = []
+    for p in sorted(c.agents_dir().glob("*.md")):
+        sources.append((f"plugins/kiln/agents/{p.name}", p))
+    sources.append(
+        ("plugins/kiln/skills/kiln-pipeline/SKILL.md", c.engine_skill())
+    )
+    sources.append(
+        ("plugins/kiln/skills/kiln-protocol/SKILL.md", c.protocol_skill())
+    )
+
+    for label, path in sources:
+        if not path.exists():
+            continue
+        text = c.read_text(path)
+        for pattern in compiled:
+            if pattern.search(text):
+                out.append(c.Violation(
+                    code="WATCHDOG_PROSE_LIVE",
+                    message=(
+                        f"{label} carries manual-watchdog / idle-ping prose "
+                        f"matching pattern `{pattern.pattern}`. P2 retires "
+                        "manual polling in favour of the detached watchdog "
+                        "+ TeammateIdle hook; remove the prose in p2-11."
+                    ),
+                    location=label,
+                ))
+                break
+
+    if WATCHDOG_RETIRED_WARN_ONLY:
+        if out:
+            print(f"  ! {len(out)} WATCHDOG_PROSE_LIVE findings (warn-only until p2-11):")
+            for v in out:
+                print(f"    {v}")
+        return []
+    return out
+
+
+# ── Invariant 17 — activity.json schema completeness (P2) ─────────
+
+_ACTIVITY_JSON_FIELDS = [
+    "last_activity_ts",
+    "last_activity_source",
+    "active_teammates",
+    "last_nudge_ts",
+    "nudge_count",
+    "epoch",
+    "pipeline_phase",
+]
+
+
+def check_activity_json_schema() -> list[c.Violation]:
+    """P2 aggregation layer: the hook that seeds `.kiln/tmp/activity.json`
+    must touch all 7 authoritative fields so the watchdog never reads a
+    half-built record. The state file's schema is documented in the
+    activity-update.sh header; the check here is the static mirror.
+
+    Detection scope: the canonical schema seeder — the .sh that
+    mentions `activity.json` AND contains the two anchor assignments
+    `.last_activity_ts = ` + `.last_activity_source = ` from the full-
+    write jq pipeline. That pair uniquely identifies activity-update.sh
+    today and would match any future hook that takes over the full-
+    seed role.
+
+    Partial updaters like deadlock-check.sh — which mutate a subset
+    (nudge_count / last_nudge_ts / epoch) and preserve the rest via
+    `jq <<< $EXISTING` — are intentionally out of scope: their
+    contract is "don't lose fields the seeder wrote", not "restate the
+    whole schema on every write". A broader `jq`-based discriminator
+    would flag them with false positives for fields they correctly
+    preserve-by-merge.
+    """
+    out: list[c.Violation] = []
+
+    for path in sorted(c.hooks_dir().glob("*.sh")):
+        text = c.read_text(path)
+        if "activity.json" not in text:
+            continue
+        has_seed_write = (
+            ".last_activity_ts = " in text
+            and ".last_activity_source = " in text
+        )
+        if not has_seed_write:
+            continue
+
+        rel = f"plugins/kiln/hooks/{path.name}"
+        for field in _ACTIVITY_JSON_FIELDS:
+            if field not in text:
+                out.append(c.Violation(
+                    code="ACTIVITY_JSON_FIELD_MISSING",
+                    message=(
+                        f"{rel} seeds activity.json but does not reference "
+                        f"required field `{field}`. The P2 schema requires "
+                        "all 7 fields on the full-write path so the watchdog "
+                        "never reads a half-built record."
+                    ),
+                    location=rel,
+                ))
+    return out
+
+
+# ── Invariant 18 — P2 hooks gate on active Kiln pipeline ──────────
+
+# Two P2 hooks are intentionally gate-free; file-existence still
+# applies. The exemption set keeps the rationale discoverable so a
+# future reader doesn't re-add gates and break the design:
+#   - session-cleanup.sh: SessionEnd must run regardless of stage —
+#     pipeline-complete and mid-pipeline exits BOTH need cleanup, and
+#     gating would leak state on abort (header in the script explains).
+#   - watchdog-loop.sh: pure orchestration (sleep → deadlock-check →
+#     check exit). The gate lives in deadlock-check.sh which this loop
+#     invokes every 60s; duplicating it here would be code-for-lint.
+_P2_HOOK_NAMES = [
+    "activity-update.sh",
+    "spawn-watchdog.sh",
+    "session-cleanup.sh",
+    "watchdog-loop.sh",
+    "deadlock-check.sh",
+    "nudge-inject.sh",
+]
+_P2_HOOK_GATE_EXEMPT = {"session-cleanup.sh", "watchdog-loop.sh"}
+
+
+def check_hooks_gate_on_kiln() -> list[c.Violation]:
+    """P2 discipline: every P2 hook except those in `_P2_HOOK_GATE_EXEMPT`
+    must gate on `.kiln/STATE.md` existing AND stage != `complete`.
+    This is the fail-open pattern shared with enforce-pipeline.sh /
+    stop-guard.sh — zero overhead outside active Kiln pipelines,
+    nothing blocks a non-Kiln session.
+
+    Exemptions (file-existence still checked):
+      - session-cleanup.sh: SessionEnd must always run regardless of
+        stage. Gating would leak state on mid-pipeline abort (the exact
+        scenario where a stale watchdog + stale activity.json cause the
+        zombie-and-false-alarm pattern the spike flagged).
+      - watchdog-loop.sh: delegates the gate to deadlock-check.sh,
+        which it invokes every 60s. Duplicating the gate in the loop
+        body would be code-for-lint — the gate already exists one
+        frame down the call graph.
+
+    Three distinct violation codes so a regression surfaces with the
+    right fix direction:
+      MISSING              — script not present (partial deployment)
+      MISSING_STATE_GATE   — script runs but doesn't check for STATE.md
+      MISSING_COMPLETE_GATE — script runs on completed pipelines
+    """
+    out: list[c.Violation] = []
+
+    for name in _P2_HOOK_NAMES:
+        path = c.hooks_dir() / name
+        rel = f"plugins/kiln/hooks/{name}"
+        if not path.exists():
+            out.append(c.Violation(
+                code="P2_HOOK_MISSING",
+                message=f"P2 hook `{name}` is not present in plugins/kiln/hooks/.",
+                location=rel,
+            ))
+            continue
+        if name in _P2_HOOK_GATE_EXEMPT:
+            continue
+        text = c.read_text(path)
+        if "STATE.md" not in text:
+            out.append(c.Violation(
+                code="P2_HOOK_MISSING_STATE_GATE",
+                message=(
+                    f"{rel} does not reference `STATE.md` — P2 hooks must "
+                    "gate on `.kiln/STATE.md` existence so they no-op "
+                    "outside an active Kiln pipeline."
+                ),
+                location=rel,
+            ))
+        if "complete" not in text:
+            out.append(c.Violation(
+                code="P2_HOOK_MISSING_COMPLETE_GATE",
+                message=(
+                    f"{rel} has no reference to `complete` — P2 hooks must "
+                    "skip when the pipeline stage is `complete` so "
+                    "post-pipeline sessions don't trigger deadlock logic."
+                ),
+                location=rel,
+            ))
+    return out
+
+
 ALL_CHECKS = [
     ("Path symmetry (C1)", check_path_symmetry),
     ("Signal handlers have senders (C5)", check_signal_handlers),
@@ -928,6 +1155,9 @@ ALL_CHECKS = [
     ("STATE.md sed patterns (Wave 3 — C10 follow-up)", check_state_md_sed_patterns),
     ("Model tier policy (Sprint 3)", check_model_policy),
     ("WORKER_READY retired (P1 — SubagentStart)", check_worker_ready_retired),
+    ("Watchdog polling retired (P2 — TeammateIdle)", check_watchdog_retired),
+    ("activity.json schema completeness (P2)", check_activity_json_schema),
+    ("P2 hooks gate on active Kiln pipeline", check_hooks_gate_on_kiln),
 ]
 
 
