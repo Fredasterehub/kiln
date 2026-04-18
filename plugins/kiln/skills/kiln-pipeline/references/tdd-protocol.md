@@ -1,6 +1,6 @@
 # TDD Protocol
 
-On-demand reference for builders. TDD is the default workflow for all testable behavior — this file is insurance, not a tutorial.
+On-demand reference for builders executing a TDD chunk. Primary consumers are the build-step implementers — dial-a-coder, backup-coder, la-peintresse — running at medium-to-high effort depending on how much design the chunk leaves open. Reviewers consult it secondarily when checking that the test-first loop was followed. TDD is the default workflow for all testable behavior; this file is insurance against drift under pressure, not a tutorial.
 
 ## RED -> GREEN -> REFACTOR
 
