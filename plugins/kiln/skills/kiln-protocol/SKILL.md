@@ -10,9 +10,122 @@ user-invocable: false
 
 # Kiln Protocol
 
-## Signals
+This skill defines the wire protocol that every Kiln pipeline agent follows: signal vocabulary, blocking semantics, communication rules, shutdown handling, security scope, name-binding discipline, and thoth-logging. Its audience is team-agent bodies — each agent Reads this file on spawn as the second of three belt-and-suspenders layers (see Skill Loading at the bottom). The host session does not read this skill; it reads `kiln-pipeline/SKILL.md`.
 
-Send via `SendMessage(type: "message", recipient: "{target}", content: "SIGNAL: details")`. The recipient depends on the signal — most route to `team-lead` (the engine), but Wave 2 centralisation routes a few directly to the boss (`krs-one`) or to persistent minds. Always check the **Recipient** column of the table below before picking a target; guessing is the #1 cause of the C9 / C11 deadlocks this table exists to prevent.
+Read the policy sections first — they are the rules each agent is responsible for honouring. The signal and hook tables below the policy serve as reference lookups.
+
+## Policy
+
+### Communication
+
+- `SendMessage` is the only way to reach teammates. Plain text is visible to the operator but invisible to other agents, so anything you need a teammate to act on goes through `SendMessage`.
+- After sending a message you expect a reply to, STOP your turn. Polling wastes tokens and can race the reply; the platform wakes you when the reply arrives.
+- Process one inbound message per wake-up fully before acting on the next. Partial handling of a message is how interleaved protocol conversations desynchronise.
+
+### Blocking Policy
+
+The rules below name each send-path in the pipeline and state whether it blocks. Blocking means "send, STOP, wait"; fire-and-forget means "send and continue on the same turn." Mixing these is the #1 source of pipeline deadlocks, which is why every path is named explicitly.
+
+**Boss → PM (ITERATION_UPDATE): blocking, 60s timeout.** KRS-One sends ITERATION_UPDATE to rakim and sentinel between worker cycles and waits for READY back from each. Blocking is safe here because it happens between cycles, not mid-execution. The 60s timeout keeps a silent PM from deadlocking the build — if a PM does not respond within the window, KRS-One proceeds.
+
+**Boss → PM (other): fire-and-forget.** All other boss→PM sends are send-and-continue. STOP-waiting for a PM reply outside the ITERATION_UPDATE seam is what causes the boss to hang on a signal the PM was never going to send.
+
+**Boss → Engine (CYCLE_WORKERS): blocking.** KRS-One sends CYCLE_WORKERS to team-lead and waits. The unblock is the `SubagentStart` platform hook: it emits `additionalContext` for each spawned worker, deterministically, before the worker's first `PreToolUse`. `WORKERS_SPAWNED` is emitted by the engine in parallel as an operator-visible logging signal — it is not the unblock gate. Treating it as one re-introduces the race P1 was designed to remove.
+
+**Engine → Boss (WORKERS_SPAWNED): operator-visible logging.** The engine emits WORKERS_SPAWNED carrying `duo_id` and the authoritative subagent_types when a fresh worker pair is spawned. As of P1 this is no longer the CYCLE_WORKERS unblock gate — that role moved to the SubagentStart hook additionalContext. By the time the message arrives, the boss has already been unblocked by the hook, so the boss proceeds to dispatch and treats the WORKERS_SPAWNED message as informational confirmation rather than a gate.
+
+**[DEPRECATED — P1] Worker → Boss (WORKER_READY): fire-and-forget fallback.** Retired in SIMPLIFY-v1.4.0 P1. The `SubagentStart` hook now provides deterministic spawn ack before the subagent's first turn, which removes the need for a worker-emitted fallback. The WORKER_READY emissions were removed from builder and reviewer agent bodies. The deprecation anchor is preserved here so the retirement is discoverable via grep.
+
+**Boss → PM (MILESTONE_TRANSITION): blocking.** KRS-One notifies persistent minds of a milestone boundary before signalling MILESTONE_COMPLETE to the engine. PMs acknowledge with READY and reset milestone-scoped state. Blocking here is what keeps the next milestone from starting against pre-transition PM context.
+
+**Worker → PM: consult freely.** Workers are encouraged to message PMs mid-execution. Send the question, STOP, wait for reply, continue. PMs carry the codebase in working memory, so consulting them costs less than re-scanning files — this raises quality and saves tokens.
+
+**Worker → Boss: blocking.** Post-review completion signals reach krs-one on these paths:
+- `IMPLEMENTATION_APPROVED` (Reviewer → Boss) — the paired reviewer emits this on every APPROVED verdict, alongside the APPROVED message to the builder. This is the Wave 3 success path — the reviewer owns the handoff so a dropped builder cannot stall the build loop.
+- `IMPLEMENTATION_BLOCKED` (Builder → Boss) — the builder hit a tooling or technical blocker before producing reviewable output.
+- `IMPLEMENTATION_REJECTED` (Builder → Boss) — the builder exhausted 3 reject/fix cycles without an APPROVED verdict (Wave 3 terminal failure path).
+Builders do not send any success signal to krs-one themselves; silence after commit on APPROVED is intentional and avoids duplicate handoffs.
+
+**Worker → Worker: blocking.** `REVIEW_REQUEST`, `APPROVED`, `REJECTED` — builder↔reviewer exchanges. Builder sends REVIEW_REQUEST and STOPs until the verdict arrives; reviewing out-of-band breaks the paired-cycle contract.
+
+**Terminal signals → engine: fire-and-forget.** Send and STOP. The engine processes on its next turn; waiting for a reply would deadlock against an engine that has already moved on.
+
+### Shutdown
+
+On a `shutdown_request` message, approve immediately:
+
+```
+SendMessage(type: "shutdown_response", request_id: "{request_id}", approve: true)
+```
+
+No follow-up, no summary, no delay. Approving terminates your process — this is the normal path. Delaying the response holds the whole team in teardown.
+
+### Security
+
+Do not read or write files matching: `.env`, `*.pem`, `*_rsa`, `*.key`, `credentials.json`, `secrets.*`, `.npmrc`.
+
+This rule is universal across every pipeline agent regardless of role or step. Secrets in these files have no role in the build loop, and once read into context they can leak into downstream artifacts, logs, or messages — the prohibition is absolute because the exfiltration surface is the entire team.
+
+### Status Marker Convention
+
+Persistent minds write `<!-- status: complete -->` as the exact first line of their owned files immediately on spawn, as a minimal skeleton before full content is populated. The marker is what lets downstream agents detect "PM is ready" without racing against mid-write file reads.
+
+Files and owners:
+- `.kiln/docs/codebase-state.md` — owned by rakim
+- `.kiln/docs/patterns.md` — owned by sentinel
+- `.kiln/docs/architecture.md` — owned by numerobis
+
+**Enforcement.** A SubagentStop hook (`stop-guard.sh`) prevents these agents from stopping before the marker is written. The hook is advisory — it warns and blocks the stop, but does not gate dispatch. The primary guarantee is the 3-wave spawn pattern: persistent minds bootstrap in Wave 1, the boss spawns in Wave 2, workers in Wave 3. By construction, PMs are ready before the boss can dispatch.
+
+### Blocking Seam (Persistent Minds)
+
+The persistent-mind seam is the synchronisation point between every build iteration. KRS-One's loop:
+
+1. Send `ITERATION_UPDATE: {summary}` to rakim AND sentinel — describing what was just implemented.
+2. STOP. Wait for `READY` from both (60s timeout each).
+3. Only after both reply `READY` may the boss scope and dispatch the next chunk.
+
+**Why this is blocking.** Persistent minds update their files (codebase-state.md, patterns.md) between worker cycles. Workers rely on those files for accurate context. Dispatching before PMs finish the update causes stale context, which is the root cause of implementation drift and missed deliverables.
+
+**Timeout handling.** If a PM does not reply within 60s, log a warning to `.kiln/docs/iter-log.md` and proceed. Deadlocking the whole build on a silent PM is strictly worse than proceeding with slightly stale context.
+
+### Name Binding
+
+Name binding is the #1 cause of deadlocks observed in the pipeline, because a message sent to the wrong name is silently dropped — the sender waits forever for a reply that will never route.
+
+- Use only the exact teammate names from your spawn prompt or the Teammate Names section in your agent definition.
+- Never guess or abbreviate names. Abbreviating or guessing produces a routing miss, not a fuzzy match.
+- When replying to a message, reply to the sender by their exact name.
+- Never default to `team-lead` unless team-lead actually sent the message — doing so strands the real sender.
+- `thoth` is a fixed name — always available for logging.
+- Boss-selected duo names are authoritative. Use the exact `coder_name` and `reviewer_name` values from your own CYCLE_WORKERS payload — these are the canonical names. WORKERS_SPAWNED echoes them back as a logging signal (P1 — no longer the name-binding source).
+
+### Thoth Logging
+
+Every agent messages `thoth` at every significant event. Thoth is the pipeline's audit log — if it does not see an event, post-run diagnosis cannot reconstruct what happened, which is what makes these log calls load-bearing rather than cosmetic.
+
+Format: `SendMessage(recipient: "thoth", content: "LOG: {EVENT_TYPE} | {detail}")`
+
+Thoth is fire-and-forget — send and continue, do not STOP-wait. Waiting for a reply would serialise every log call and deadlock the team if thoth is busy.
+
+Log at minimum:
+- READY (WORKER_READY retired in P1 — SubagentStart hook replaces it)
+- Every assignment received
+- Every file written (CODEX_EXEC, FILE_WRITTEN)
+- Every REVIEW_REQUEST, APPROVED, REJECTED
+- Every IMPLEMENTATION_APPROVED (reviewer), IMPLEMENTATION_BLOCKED, IMPLEMENTATION_REJECTED, ESCALATION
+- Every CONSULTATION sent/received
+- Every ITERATION_UPDATE and READY
+- Every QA signal (QA_PASS, QA_FAIL)
+- Every DUO_SELECTED (boss only)
+
+## Reference
+
+### Signals
+
+Send via `SendMessage(type: "message", recipient: "{target}", content: "SIGNAL: details")`. The recipient depends on the signal — most route to `team-lead` (the engine), but Wave 2 centralisation routes a few directly to the boss (`krs-one`) or to persistent minds. Check the **Recipient** column below before picking a target; guessing is what produces the C9 and C11 deadlocks this table exists to prevent.
+
+Always include context after the signal. `RESEARCH_COMPLETE: 6 topics. Key: RSC viable, Drizzle preferred.` carries diagnosis-ready detail; bare `RESEARCH_COMPLETE` forces the recipient to go looking.
 
 | Signal | Meaning | Recipient |
 |--------|---------|-----------|
@@ -39,11 +152,9 @@ Send via `SendMessage(type: "message", recipient: "{target}", content: "SIGNAL: 
 | `REPORT_COMPLETE` | Step 7 done | team-lead (omega) |
 | `BLOCKED: {reason}` | Cannot proceed | team-lead |
 
-Always include context after the signal. `RESEARCH_COMPLETE: 6 topics. Key: RSC viable, Drizzle preferred.` not bare `RESEARCH_COMPLETE`.
-
 ### Engine-internal hook mechanisms
 
-These are NOT `SendMessage` signals. They are platform hooks the engine reads directly; agents do not emit them.
+These are not `SendMessage` signals. They are platform hooks the engine reads directly; agents do not emit them. They are documented here so agent authors do not accidentally reimplement a path the platform already covers.
 
 | Mechanism | Meaning | Source |
 |-----------|---------|--------|
@@ -52,11 +163,11 @@ These are NOT `SendMessage` signals. They are platform hooks the engine reads di
 | `SessionStart` → watchdog spawn; `SessionEnd` → watchdog cleanup `[hook — engine internal]` | `spawn-watchdog.sh` (on `SessionStart`) detects `.kiln/DEADLOCK.flag` (if present: appends a [!NOTE] KILN DEADLOCK RECOVERY block to STATE.md, resets nudge_count/last_nudge_ts + bumps epoch in activity.json, removes flag), kills any stale watchdog PID, then spawns `watchdog-loop.sh` via `nohup + disown`. Loop polls every 60s: applies deadlock rule (active_teammates empty AND idle>300s AND since_nudge>600s AND phase not in {idle,awaiting_user,complete}); stages nudge in `.kiln/tmp/pending-nudge.json`; escalates to `.kiln/DEADLOCK.flag` after 3 nudges then exits. `session-cleanup.sh` (on `SessionEnd`) kills the watchdog PID and removes `activity.json` + `watchdog.pid`. See `plugins/kiln/skills/kiln-pipeline/references/deadlock-detection.md` for the full contract. | `plugins/kiln/hooks/spawn-watchdog.sh`, `watchdog-loop.sh`, `deadlock-check.sh`, `session-cleanup.sh` |
 | `StopFailure` hook → `pending-nudge.json` + optional `DEADLOCK.flag` `[hook — engine internal]` | Platform hook fires instead of `Stop` when the main-session turn ends due to an API error. Payload carries `error` (enum: `rate_limit`, `authentication_failed`, `billing_error`, `server_error`, `invalid_request`, `max_output_tokens`, `unknown`) and optional `error_details` / `last_assistant_message`. Hook never fires for subagents — `SubagentStop` has no error field. Fire-and-forget: exit code ignored. Handler routes by category: `rate_limit` → stages `pending-nudge.json` (does NOT bump `nudge_count` — separate from the P2 deadlock-escalation counter); `authentication_failed` / `billing_error` → stages nudge AND writes `.kiln/DEADLOCK.flag` directly (unrecoverable; reuses P2 SessionStart recovery pathway); `server_error` / `invalid_request` / `max_output_tokens` → stages nudge only (retryable class, engine decides on escalation); `unknown` / unexpected → stages nudge only (unclassified; no policy prescribed). | `plugins/kiln/hooks/stop-failure-handler.sh` |
 
-**SubagentStop vs StopFailure:** `SubagentStop` fires on both clean finish AND error-terminated subagents — its payload has no `error` field, so Kiln cannot distinguish the two via `SubagentStop` alone. `StopFailure` fires only on main-session API-induced death (never for subagents). Together they cover the full agent-death surface: subagent death is observed via `SubagentStop` (clean finish assumed unless a higher-level signal indicates otherwise); main-session API death is observed via `StopFailure` with categorized error context.
+**SubagentStop vs StopFailure.** `SubagentStop` fires on both clean finish AND error-terminated subagents — its payload has no `error` field, so Kiln cannot distinguish the two from `SubagentStop` alone. `StopFailure` fires only on main-session API-induced death (never for subagents). Together they cover the full agent-death surface: subagent death is observed via `SubagentStop` (clean finish assumed unless a higher-level signal indicates otherwise); main-session API death is observed via `StopFailure` with categorised error context.
 
-## Worker Signals (peer-to-peer)
+### Worker Signals (peer-to-peer)
 
-These signals go to teammates, NOT to team-lead.
+These signals go to teammates, not to team-lead. Routing them to team-lead is the most common misrouting error in pipeline traces.
 
 | Signal | Meaning | Sender → Receiver |
 |--------|---------|-------------------|
@@ -68,111 +179,12 @@ These signals go to teammates, NOT to team-lead.
 | `IMPLEMENTATION_REJECTED: {latest issues}` | Builder exhausted 3 reject/fix cycles without an APPROVED verdict (Wave 3 terminal failure path) | Builder → Boss |
 | `ARCHIVE: step={step}, [chunk={N},] file={filename}, source={path}` | Archive a pipeline artifact — thoth files it under `.kiln/archive/` and logs to the guide scratchpad. Fire-and-forget (thoth never replies). | Any agent → thoth |
 
-## Blocking Policy
-
-**Boss → PM (ITERATION_UPDATE): blocking, 60s timeout.** KRS-One sends ITERATION_UPDATE to rakim+sentinel between worker cycles and waits for READY back from each. This is safe because it happens between cycles, not mid-execution. Timeout prevents deadlock — if a PM doesn't respond within 60s, KRS-One proceeds.
-
-**Boss → PM (other): fire-and-forget.** All other boss→PM communication is send-and-continue. Never STOP-wait for a PM reply outside the ITERATION_UPDATE seam.
-
-**Boss → Engine (CYCLE_WORKERS): blocking.** KRS-One sends CYCLE_WORKERS to team-lead and waits. The engine-internal unblock fires when the `SubagentStart` hook emits `additionalContext` for the spawned worker(s) — deterministic platform hook, before the worker's first turn. `WORKERS_SPAWNED` is emitted in parallel as an operator-visible logging/debug signal; it is NOT the unblock gate.
-
-**Engine → Boss (WORKERS_SPAWNED): operator-visible logging.** Engine emits WORKERS_SPAWNED when a fresh worker pair is spawned — logging/debug signal carrying duo_id and authoritative subagent_types. As of P1, this is NOT the CYCLE_WORKERS unblock gate; that role moved to the SubagentStart hook additionalContext. KRS-One proceeds to dispatch after the SubagentStart unblock, treating the WORKERS_SPAWNED message as informational confirmation.
-
-**[DEPRECATED — P1] Worker → Boss (WORKER_READY): fire-and-forget fallback.** Retired in SIMPLIFY-v1.4.0 P1. The `SubagentStart` platform hook now provides deterministic spawn ack via `additionalContext` injection (fires before the subagent's first turn), removing the need for a worker-emitted fallback. `WORKER_READY` emissions have been removed from builder/reviewer agent bodies. This deprecation anchor is preserved so the retirement is discoverable via grep.
-
-**Boss → PM (MILESTONE_TRANSITION): blocking.** KRS-One notifies persistent minds of milestone boundary before signaling MILESTONE_COMPLETE to the engine. PMs acknowledge with READY and reset milestone-scoped state.
-
-**Worker → PM: consult freely.** Workers are encouraged to message PMs with questions during execution. Send question → STOP → wait for reply → continue. PMs know the codebase so workers avoid redundant scanning. This saves tokens and raises quality.
-
-**Worker → Boss: blocking.** Post-review completion signals reach krs-one on these paths:
-- `IMPLEMENTATION_APPROVED` (Reviewer → Boss) — the paired reviewer emits this on every APPROVED verdict, alongside the APPROVED message to the builder. This is the Wave 3 success path — the reviewer owns the handoff so a dropped builder can't stall the build loop.
-- `IMPLEMENTATION_BLOCKED` (Builder → Boss) — builder hit a tooling/technical blocker before producing reviewable output.
-- `IMPLEMENTATION_REJECTED` (Builder → Boss) — builder exhausted 3 reject/fix cycles without an APPROVED verdict (Wave 3 terminal failure path).
-Builders do NOT send any success signal to krs-one themselves — silence after commit on APPROVED is intentional.
-
-**Worker → Worker: blocking.** `REVIEW_REQUEST`, `APPROVED`, `REJECTED` — builder↔reviewer exchanges. Builder sends REVIEW_REQUEST and waits for verdict.
-
-**Terminal signals → engine: fire-and-forget.** Send and STOP. Engine processes on its next turn.
-
-## Communication
-
-- `SendMessage` is the only way to reach teammates. Plain text output is invisible to agents (visible to operator).
-- After sending a message expecting a reply, STOP your turn. Never sleep-poll.
-- One message in per wake-up. Process fully before acting.
-
-## Shutdown
-
-On `shutdown_request`, approve immediately:
-```
-SendMessage(type: "shutdown_response", request_id: "{request_id}", approve: true)
-```
-No follow-up, no summary, no delay. After approving you will be terminated — this is normal.
-
-## Security
-
-NEVER read or write files matching: `.env`, `*.pem`, `*_rsa`, `*.key`, `credentials.json`, `secrets.*`, `.npmrc`.
-
-This rule is universal — all pipeline agents regardless of role or step.
-
-## Status Marker Convention
-
-Persistent minds MUST write `<!-- status: complete -->` as the exact first line of their owned files **immediately on spawn** — a minimal skeleton before full content is populated.
-
-Files and owners:
-- `.kiln/docs/codebase-state.md` — owned by rakim
-- `.kiln/docs/patterns.md` — owned by sentinel
-- `.kiln/docs/architecture.md` — owned by numerobis
-
-**Enforcement:** A SubagentStop hook (`stop-guard.sh`) prevents these agents from stopping before the marker is written. This is an advisory guard — it warns and blocks the stop, but does not prevent dispatch. The primary guarantee is the 3-wave spawn pattern: persistent minds bootstrap in Wave 1, the boss spawns in Wave 2, workers in Wave 3. By design, PMs are ready before the boss can dispatch.
-
-## Blocking Seam (Persistent Minds)
-
-The persistent mind seam is the synchronization point between every build iteration. KRS-One MUST:
-
-1. Send `ITERATION_UPDATE: {summary}` to rakim AND sentinel — describe what was just implemented.
-2. STOP. Wait for `READY` from BOTH (60s timeout each).
-3. Only after both reply `READY` may the boss scope and dispatch the next chunk.
-
-**Why this is blocking:** Persistent minds update their files (codebase-state.md, patterns.md) between worker cycles. Workers rely on these files for accurate context. Dispatching before PMs finish causes stale context — the root cause of implementation drift and missed deliverables.
-
-**Timeout handling:** If a PM does not reply within 60s, log a warning to `.kiln/docs/iter-log.md` and proceed. Do not deadlock waiting indefinitely.
-
-## Name Binding
-
-**CRITICAL — the #1 cause of deadlocks.**
-
-- Use ONLY the exact teammate names from your spawn prompt or the Teammate Names section in your agent definition
-- Never guess or abbreviate names
-- When replying to a message, reply to the SENDER by their exact name
-- Never default to `team-lead` unless team-lead actually sent the message
-- `thoth` is a fixed name — always available for logging
-- **Boss-selected duo names are authoritative.** Use the exact `coder_name` and `reviewer_name` values from your own CYCLE_WORKERS payload — these are the canonical names. WORKERS_SPAWNED echoes them back as a logging signal (P1 — no longer the name-binding source).
-
-## Thoth Logging
-
-**Every agent MUST message `thoth` at every significant event.**
-
-Format: `SendMessage(recipient: "thoth", content: "LOG: {EVENT_TYPE} | {detail}")`
-
-Thoth is fire-and-forget — do NOT wait for a reply. Just send and continue.
-
-Log at minimum:
-- READY (WORKER_READY retired in P1 — SubagentStart hook replaces it)
-- Every assignment received
-- Every file written (CODEX_EXEC, FILE_WRITTEN)
-- Every REVIEW_REQUEST, APPROVED, REJECTED
-- Every IMPLEMENTATION_APPROVED (reviewer), IMPLEMENTATION_BLOCKED, IMPLEMENTATION_REJECTED, ESCALATION
-- Every CONSULTATION sent/received
-- Every ITERATION_UPDATE and READY
-- Every QA signal (QA_PASS, QA_FAIL)
-- Every DUO_SELECTED (boss only)
-
 ## Skill Loading (Belt-and-Suspenders)
 
-Skills frontmatter is silently dropped for team agents. Three layers ensure protocol is always loaded:
+The platform silently drops the `skills:` frontmatter list for team agents, so a skill named there alone will not load inside a teammate. Three layers cover the gap — if any one fails, the others still load the protocol:
 
-1. **Frontmatter** `skills: ["kiln-protocol"]` — works for standalone agents, harmless when dropped for teams
-2. **Explicit Read** `Read ${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` — primary layer, in agent body
-3. **Spawn prompt** reference — backup, provided by engine at spawn time
+1. **Frontmatter** `skills: ["kiln-protocol"]` — works for standalone agents, harmless when dropped for teams.
+2. **Explicit Read** `Read ${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` — the primary layer, emitted from the agent body.
+3. **Spawn prompt** reference — backup, provided by the engine at spawn time.
 
-All three layers MUST exist in every agent definition. If any single layer fails, the other two cover it.
+Every agent definition keeps all three layers. The redundancy is the point: no single layer is trusted to load the protocol on its own.
