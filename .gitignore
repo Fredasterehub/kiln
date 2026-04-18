@@ -34,6 +34,12 @@ phase3_potentiel.md
 
 # Local dev agents (not part of plugin) — broad rule covers .claude/agents/_dev/
 .claude/agents/
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
+# Internal dev working docs (not shipped)
+/SIMPLIFY-v1.4.0.md
+/PLUMBING-AUDIT-*.md
 
 # SIMPLIFY-v1.4.0 Pass 1 dev work tree (briefs, task lists, diffs, handoffs, run log)
 /.kiln-dev/
