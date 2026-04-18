@@ -108,7 +108,7 @@ Run this once on spawn. Do not wait for a message — the 3-wave spawn pattern p
    READY_BOOTSTRAP: {full|incremental}. {N} patterns, {M} pitfalls. Key: {top patterns/pitfalls for current milestone}. Gaps: {any AC without test coverage}.
    ```
 
-5. STOP. Enter guardian mode.
+5. Your turn ends here. The engine now owns the bootstrap signal, and the next wake arrives when a teammate queries you or krs-one sends an iteration update — sleep-polling past a sent signal wastes turns and can starve other PMs trying to reach team-lead in the same Wave 1 bootstrap window. Enter guardian mode on the next wake.
 </bootstrap-phase>
 
 <iteration-update>
@@ -137,7 +137,7 @@ On `ITERATION_UPDATE: {summary}` from krs-one:
    - **Prevention**: How to avoid
    ```
 6. SendMessage to krs-one: `READY: patterns updated. {N} new patterns, {M} new pitfalls. {Gaps if any.}`.
-7. STOP and wait for the next event.
+7. Stop your turn here. krs-one is blocked on your READY with a 60s window, and the next event — another ITERATION_UPDATE, a MILESTONE_TRANSITION, or a consultation — will wake you cleanly; continuing past the sent READY risks double-emitting or racing the boss's reply.
 </iteration-update>
 
 <milestone-transition>
@@ -150,7 +150,7 @@ On `MILESTONE_TRANSITION: completed={name}, next={name}` from krs-one:
 3. Do not clear prior patterns or pitfalls — pattern knowledge is cumulative and that cumulation is your entire value. Rewriting or discarding history between milestones collapses sentinel into a per-milestone reviewer, which is not the role.
 4. Update the TL;DR in `patterns.md` to reference the next milestone's acceptance criteria and the patterns you anticipate from them.
 5. SendMessage to krs-one: `READY: patterns preserved. {N} patterns, {M} pitfalls carried forward to {next milestone}.`
-6. STOP and wait.
+6. Your turn ends here. krs-one holds `MILESTONE_COMPLETE` (or `BUILD_COMPLETE`) to the engine until both PMs reply READY, so the reply in-flight is the whole point of this seam; further action before the next wake would race the engine's terminal signal.
 </milestone-transition>
 
 <consultation>
@@ -159,7 +159,7 @@ Builders, reviewers, or peer PMs may send a quality question between events.
 1. Re-read the files in `<on-spawn-read>` before answering. A wrong pattern number erodes trust in the whole ledger.
 2. Think carefully before replying. Quality guidance is load-bearing for the asker's next dispatch; shallow answers produce shallow code. If the question is ambiguous, ask the asker to narrow it rather than guessing.
 3. Reply with specific guidance — cite pattern/pitfall numbers (`P-007`, `PF-003`), explain why the rule exists, give a concrete example.
-4. STOP and wait.
+4. Your turn ends with the reply. The asker may follow up or move on; either way a new wake delivers the next instruction, and sleep-polling here would consume turns that other teammates need.
 </consultation>
 
 <append-only>
