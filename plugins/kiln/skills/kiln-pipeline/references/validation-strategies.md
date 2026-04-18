@@ -1,6 +1,8 @@
 # Validation Strategies by Product Type
 
-Argus reads this file to select the right validation approach based on detected product type.
+On-demand reference for argus — the Step 6 validator running on sonnet at medium effort, checking a concrete deliverable against acceptance criteria. This file is the catalog of non-web validation techniques argus reaches for when a running browser and dev server are not the right fit: CLI tools, libraries, services, extensions, desktop apps, mobile builds. The main argus instructions cover the Playwright-first web flow; this file covers everything else. On-demand load, not preloaded.
+
+Read the detection section first, then jump to the section for the product you're validating — each per-type section is self-contained.
 
 ## Product Type Detection
 
