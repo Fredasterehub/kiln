@@ -101,6 +101,13 @@ done
 
 print_banner
 
+printf "  ${DIM}→ %s${RESET}\n" "git fetch origin"
+if ! git fetch origin; then
+  printf "%b\n" "  ${RED}✗${RESET} git fetch origin failed" >&2
+  exit 1
+fi
+printf "%b\n\n" "  ${GREEN}✓${RESET} Fetched origin"
+
 for v in $VERSIONS; do
   SHA="$(git log --grep="^release: v${v}\b" --format="%H" "origin/${REMOTE_BRANCH}" -n 1)"
 
@@ -110,7 +117,8 @@ for v in $VERSIONS; do
     continue
   fi
 
-  if git rev-parse -q --verify "refs/tags/v${v}" >/dev/null 2>&1; then
+  if git rev-parse -q --verify "refs/tags/v${v}" >/dev/null 2>&1 || \
+    git ls-remote --tags --exit-code origin "refs/tags/v${v}" >/dev/null 2>&1; then
     printf "  ${YELLOW}○${RESET} v%s already tagged, skipping\n\n" "$v"
     SKIPPED=$((SKIPPED + 1))
     continue
