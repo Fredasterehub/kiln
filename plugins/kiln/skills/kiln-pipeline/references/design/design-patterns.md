@@ -1,6 +1,6 @@
 # Design Patterns — Modern CSS Techniques
 
-Ten techniques that separate premium UI from generic output. Each: description, complete code, DO vs DON'T.
+On-demand reference for UI scenarios. Primary consumer is la-peintresse (UI builder, high effort — design density justifies the headroom); the-curator reads it secondarily when auditing a chunk's token and technique choices. The ten techniques below separate premium UI from the generic output 4.7 reaches for by default, so each entry pairs a description with complete code and a DO vs DON'T — the DON'T line is the cheaper path you have to actively reject.
 
 ## 1. OKLCH Color System with color-mix()
 

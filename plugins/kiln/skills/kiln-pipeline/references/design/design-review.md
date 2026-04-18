@@ -1,6 +1,6 @@
 # Design Review — 5-Axis Rubric
 
-Advisory scoring for design QA. Used by hephaestus during validation. Overall score = mean of 5 axes, mapped to percentage (score/5 * 100). Design review is ADVISORY — never the sole cause of a FAIL verdict.
+On-demand reference during UI scenarios. Primary consumer is hephaestus (UI validator, high/sonnet effort) when scoring a built milestone; la-peintresse reads it secondarily to self-check work before handing off. Overall score = mean of 5 axes, mapped to percentage (score/5 * 100). The rubric is advisory — never the sole cause of a FAIL verdict, because design quality is a signal for iteration rather than a gate on shipping functional code.
 
 ## Axis 1: Visual Hierarchy
 

@@ -1,6 +1,6 @@
 # Design QA — Automated + Manual Checks
 
-Two tiers: automated checks run by the **UI reviewer** (`the-curator`, build-time, per chunk) and manual review run by the **UI validator** (`hephaestus`, validation-time, per milestone). Both tiers are ADVISORY — they inform verdicts but never block a chunk or a milestone on design score alone.
+On-demand reference during UI scenarios. Primary consumer is hephaestus (UI validator, high/sonnet effort — the five-axis manual review is judgment-heavy); the-curator reads the automated-check section during build-time reviews. Two tiers live here: automated checks run by **the-curator** (build-time, per chunk) and manual review run by **hephaestus** (validation-time, per milestone). Both tiers are advisory by design — they inform verdicts but a poor design score alone never blocks a chunk or a milestone, because that gate would punish correct functional work for cosmetic reasons.
 
 ## Automated Checks — `the-curator` (build-time, advisory)
 

@@ -1,6 +1,6 @@
 # Standing Contract Template
 
-Injected into AGENTS.md during the first build iteration when `.kiln/design/` exists. KRS-One populates the placeholders from tokens.json and creative-direction.md. Target: 800-1000 tokens.
+Fill-in skeleton, not a reference lookup. KRS-One (art-of-war, xhigh) populates the placeholders from tokens.json and creative-direction.md, then injects the result into AGENTS.md during the first build iteration when `.kiln/design/` exists — after which every la-peintresse cycle (high effort) consumes it as its standing design contract. Target: 800-1000 tokens.
 
 ---
 

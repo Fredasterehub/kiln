@@ -1,6 +1,6 @@
 # JIT Component Brief Template
 
-KRS-One generates one brief per chunk when `design_enabled` and the chunk contains UI components. Injected into the `<design>` section of the XML assignment. Target: 200-500 tokens.
+Fill-in skeleton, not a reference lookup. KRS-One (art-of-war, xhigh) generates one brief per chunk when `design_enabled` and the chunk contains UI components, then hands it to la-peintresse (high effort) via the `<design>` section of the XML assignment. Target: 200-500 tokens.
 
 ---
 

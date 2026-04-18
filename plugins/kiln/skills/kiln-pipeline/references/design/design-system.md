@@ -1,5 +1,7 @@
 # Design System — Token Architecture
 
+On-demand reference during UI scenarios. Primary consumer is la-peintresse (UI builder, high effort — design density is why this role runs at the upper tier); the-curator reads the token tables when auditing compliance, and hephaestus cross-references them when rating the Consistency axis. This file is the canonical source for every token name and value the other design refs assume — preserve the primitive/semantic/component hierarchy when reading, because downstream references quote these names verbatim.
+
 ## Token Hierarchy (DTCG Standard)
 
 Three tiers. Each tier references the one below it. Never skip tiers.
