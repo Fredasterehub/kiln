@@ -62,6 +62,35 @@ else
   printf "    ${DIM}For dual-model mode: npm i -g @openai/codex${RESET}\n"
 fi
 
+MKT="${HOME}/.claude/plugins/marketplaces/kiln"
+if [[ -d "$MKT" ]]; then
+  if git -C "$MKT" rev-parse --git-dir >/dev/null 2>&1; then
+    BRANCH="$(git -C "$MKT" rev-parse --abbrev-ref HEAD 2>/dev/null)" || BRANCH=""
+    if [[ "$BRANCH" == "v9" ]]; then
+      printf "\n${YELLOW}○${RESET} Existing install detected on deprecated 'v9' branch. Repairing...\n"
+      printf "  ${DIM}git remote set-branches origin main...${RESET}\n"
+      git -C "${MKT}" remote set-branches origin main
+      printf "  ${DIM}git fetch origin...${RESET}\n"
+      git -C "${MKT}" fetch origin
+      printf "  ${DIM}git checkout main...${RESET}\n"
+      git -C "${MKT}" checkout main
+      printf "  ${DIM}git branch -D v9...${RESET}\n"
+      git -C "${MKT}" branch -D v9
+      BRANCH_NOW="$(git -C "$MKT" rev-parse --abbrev-ref HEAD 2>/dev/null)" || BRANCH_NOW=""
+      if [[ "$BRANCH_NOW" != "main" ]]; then
+        printf "  ${RED}✗${RESET} Repair failed — expected branch 'main', got '%s'\n" "$BRANCH_NOW"
+        exit 1
+      fi
+      printf "  ${GREEN}✓${RESET} Aligned to main — existing install repaired\n"
+      printf "\n${GOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
+      printf "${TERRACOTTA} Repaired.${RESET}\n\n"
+      printf "  ${DIM}Diagnose:${RESET}  claude then ${TERRACOTTA}/kiln-doctor${RESET}\n"
+      printf "\n${GOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
+      exit 0
+    fi
+  fi
+fi
+
 # Register marketplace + install plugin via native Claude Code system
 printf "\n${DIM}Registering marketplace...${RESET}\n"
 if ! claude plugin marketplace add "$REPO" --yes 2>&1; then
