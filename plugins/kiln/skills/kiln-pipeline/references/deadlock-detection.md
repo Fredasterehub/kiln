@@ -1,8 +1,6 @@
 # Deadlock Detection
 
-Autonomous self-recovery for stalled Kiln pipelines. Replaces the pre-P2 manual
-operator-watchdog polling protocol — runs unattended overnight without losing
-work on a 2am stall.
+Design and ops reference for Kiln's autonomous self-recovery system. Primary consumers are operators reading it to understand overnight-run resilience and engineers maintaining any of the six hook scripts or the watchdog loop — not a runtime agent prompt, so there is no effort tier; read it in documentation posture. Replaces the pre-P2 manual operator-watchdog polling protocol so a 2am stall does not lose work.
 
 ## Overview
 
