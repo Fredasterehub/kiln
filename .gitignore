@@ -28,8 +28,6 @@ codex/
 .kiln-fix-*
 
 # Dev scripts and plans (not shipped)
-bump-version.sh
-release.sh
 plan_v1.md
 KILNDEV-MIGRATION.md
 phase3_potentiel.md
