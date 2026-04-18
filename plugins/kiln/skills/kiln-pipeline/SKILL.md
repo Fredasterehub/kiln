@@ -6,6 +6,7 @@ description: >-
   validation, and final report. Use when the user invokes /kiln-fire.
 version: 1.4.0
 user-invocable: false
+context: fork
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent, TeamCreate, TeamDelete, TaskCreate, TaskGet, TaskUpdate, TaskList, SendMessage
 ---
 
