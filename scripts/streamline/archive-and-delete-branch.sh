@@ -146,6 +146,7 @@ printf "  ${GREEN}✓${RESET} Branch tip SHA: %s\n" "$SHA"
 confirm_or_abort
 printf "%b\n" "\n${DIM}Archiving remote branch tip...${RESET}"
 
+run_write "git fetch origin \"$BRANCH\"" git fetch origin "$BRANCH"
 run_write "git tag -a \"$ARCHIVE_TAG\" \"$SHA\" -m \"$TAG_MESSAGE\"" git tag -a "$ARCHIVE_TAG" "$SHA" -m "$TAG_MESSAGE"
 run_write "git push origin \"$ARCHIVE_TAG\"" git push origin "$ARCHIVE_TAG"
 
