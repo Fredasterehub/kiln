@@ -1,54 +1,54 @@
 # Team Protocol Reference
 
-Detailed reference for kiln-protocol skill. On-demand — bosses read when they need the full playbook. Workers receive the path in their runtime prompt.
+Detailed reference for the kiln-protocol skill. Bosses are the primary consumers and run at xhigh — they reach for this file when they need the definitive wire spec for spawn ordering, bootstrap, message flow, dispatch, peer consultation, shutdown, signal vocabulary, worker cycling, and per-step roster. Workers consult it secondarily, receiving the path via their runtime prompt. On-demand load, not preloaded; the host session does not read it.
+
+Read the policy sections before the tables. Policy tells each agent what it is responsible for; the Blocking Signals and Signal Vocabulary tables that follow are reference lookups for exact signal strings and routing.
 
 ## Three-Phase Spawn
 
-Every step follows a three-phase spawn sequence (some steps skip Phase C):
+Every step follows a three-phase spawn sequence. Some steps skip Phase C.
 
-**Phase A — Persistent Minds**: Spawned first (`run_in_background: true`). Bootstrap autonomously — read files, update state, signal READY to team-lead with a content summary. No assignment needed.
+**Phase A — Persistent Minds.** Spawned first (`run_in_background: true`). They bootstrap autonomously — read files, update state, signal READY to team-lead with a content summary — without waiting for an assignment. Phase A completing first is what lets Phase B bosses receive the READY summaries in their runtime prompt rather than having to poll for them.
 
-**Phase B — Boss**: Spawned after ALL Phase A agents signal READY. Interactive bosses run in foreground (`run_in_background: false`); background bosses run in background. Receives READY summaries in runtime prompt.
+**Phase B — Boss.** Spawned only after every Phase A agent has signalled READY. Interactive bosses run in the foreground (`run_in_background: false`); background bosses run in the background. The READY summaries arrive as part of the runtime prompt.
 
-**Phase C — Workers**: Spawned when the boss sends `REQUEST_WORKERS` (initial spawn) or `CYCLE_WORKERS` (subsequent chunks). Each worker joins the same team with full SendMessage access. Boss dispatches individual assignments after workers are spawned. In step 5, Phase C workers are cycled dynamically per implementation chunk — see **Worker Cycling Pattern** below.
+**Phase C — Workers.** Spawned when the boss sends `REQUEST_WORKERS` (initial spawn) or `CYCLE_WORKERS` (subsequent chunks). Each worker joins the same team with full SendMessage access, and the boss dispatches individual assignments one per worker after spawn. In step 5, Phase C workers are cycled dynamically per implementation chunk — see **Worker Cycling Pattern** below.
 
-Not every step uses all three phases. Step 7 is Phase B only. Step 2 has no Phase C. See the step's blueprint for the exact roster.
+Not every step uses all three phases. Step 7 is Phase B only; Step 2 has no Phase C. The step's blueprint carries the exact roster.
 
 ## 1. Bootstrap Sequence
 
-All agents follow a two-phase bootstrap:
+Every agent follows a two-phase bootstrap.
 
-**Phase 1 — Read and Confirm:**
-1. Read your agent `.md` file (loaded automatically via `subagent_type`)
-2. Read any owned files listed in your `.md`
-3. Confirm what you found — your first message should reference specific content from your files
+**Phase 1 — Read and confirm:**
+1. Read your agent `.md` file (loaded automatically via `subagent_type`).
+2. Read any owned files listed in your `.md`.
+3. Confirm what you found — your first message should reference specific content from those files, so downstream agents can tell a genuine read from a guess.
 
-**Phase 2 — Receive Assignment:**
-- **Bosses**: receive READY summaries from persistent minds in your runtime prompt, then evaluate scope
-- **Workers**: wait for assignment from boss via SendMessage — do NOT act until you receive one
-- **Persistent minds**: bootstrap autonomously → signal READY to team-lead with content summary. No assignment needed.
-
-Persistent minds skip Phase 2. They bootstrap immediately on spawn, read their files, update state if needed, then signal READY. They don't wait for a message to start.
+**Phase 2 — Receive assignment:**
+- **Bosses**: receive READY summaries from persistent minds in the runtime prompt, then evaluate scope.
+- **Workers**: wait for assignment from the boss via SendMessage. Acting before an assignment arrives produces work that was never scoped.
+- **Persistent minds**: skip Phase 2. They bootstrap immediately on spawn, read their files, update state if needed, then signal READY — no inbound message required.
 
 ## 2. Message Flow Control
 
-You receive messages ONE AT A TIME. Each wake-up delivers exactly one message. Process it fully before acting.
+Messages arrive one at a time; each wake-up delivers exactly one message. Process it fully before acting, because interleaved handling of a half-read message is how protocol conversations desynchronise.
 
-**Blocking exchanges** (STOP and wait for reply):
-- Chunk completion: `IMPLEMENTATION_APPROVED` (reviewer → boss) on success, `IMPLEMENTATION_BLOCKED` or `IMPLEMENTATION_REJECTED` (builder → boss) on failure paths
-- Reviewer verdict: APPROVED / REJECTED (reviewer → builder)
-- Worker → PM consultation: worker sends question, STOPs, waits for reply
-- Shutdown: `shutdown_response` (any agent → engine)
-- Worker cycling: `CYCLE_WORKERS` (KRS-One → engine, unblocks on `WORKERS_SPAWNED` from engine OR `WORKER_READY` from a worker — whichever arrives first)
-- Milestone transition: `MILESTONE_TRANSITION` (KRS-One → rakim+sentinel, waits for `READY`)
+**Blocking exchanges** — send, stop your turn, wait for reply:
+- Chunk completion: `IMPLEMENTATION_APPROVED` (reviewer → boss) on success, `IMPLEMENTATION_BLOCKED` or `IMPLEMENTATION_REJECTED` (builder → boss) on failure paths.
+- Reviewer verdict: APPROVED / REJECTED (reviewer → builder).
+- Worker → PM consultation: worker sends question, stops, waits for reply.
+- Shutdown: `shutdown_response` (any agent → engine).
+- Worker cycling: `CYCLE_WORKERS` (KRS-One → engine, unblocks on `WORKERS_SPAWNED` from engine or `WORKER_READY` from a worker — whichever arrives first).
+- Milestone transition: `MILESTONE_TRANSITION` (KRS-One → rakim+sentinel, waits for `READY`).
 
-**Blocking between worker cycles** (STOP and wait for READY):
-- Boss → PM: `ITERATION_UPDATE` to rakim+sentinel (60s timeout) — ensures state files are current before the next chunk is scoped. This blocks between worker CYCLES, not between worker operations within a cycle.
+**Blocking between worker cycles** — send and wait for READY:
+- Boss → PM: `ITERATION_UPDATE` to rakim+sentinel (60s timeout). This blocks between worker CYCLES, not between worker operations within a cycle, so state files are current before the next chunk is scoped.
 
-**Fire-and-forget** (send and continue immediately):
-- Boss → thoth: `MILESTONE_DONE` — triggers per-milestone summary doc write; never wait for reply. (Wave 4 C5: retargeted from rakim to thoth — rakim had no handler, so per-milestone docs never wrote.)
-- Any → thoth: `ARCHIVE` requests
-- Terminal signals → engine: `MILESTONE_COMPLETE` on every milestone EXCEPT the final, and `BUILD_COMPLETE` as the sole terminal on the final milestone (Wave 4 C4 contract — never paired). QA failure context now flows through structured `ITERATION_UPDATE` to rakim+sentinel; the pre-Wave-4 direct-to-rakim fire-and-forget channel for QA findings (see audit item H1) is gone.
+**Fire-and-forget** — send and continue on the same turn:
+- Boss → thoth: `MILESTONE_DONE` triggers a per-milestone summary doc write; waiting for a reply would hang, since thoth never sends one. (Wave 4 C5: retargeted from rakim to thoth — rakim had no handler, so per-milestone docs never wrote.)
+- Any → thoth: `ARCHIVE` requests.
+- Terminal signals → engine: `MILESTONE_COMPLETE` on every milestone except the final, and `BUILD_COMPLETE` as the sole terminal on the final milestone (Wave 4 C4 contract — never paired). QA failure context now flows through structured `ITERATION_UPDATE` to rakim+sentinel; the pre-Wave-4 direct-to-rakim fire-and-forget channel for QA findings (see audit item H1) is gone.
 
 ### Blocking Signals (Build Step)
 
@@ -70,15 +70,15 @@ You receive messages ONE AT A TIME. Each wake-up delivers exactly one message. P
 
 ### Blocking Policy Rules
 
-1. **Boss → PM: fire-and-forget EXCEPT at seam points.** `ITERATION_UPDATE` and `MILESTONE_TRANSITION` are blocking with 60s timeout — KRS-One waits for READY between worker cycles and at milestone boundaries.
-2. **Worker → PM: standard consultation.** Workers may and SHOULD consult PMs. Worker sends question, STOPs, waits for reply (60s timeout — if no response, proceed with best judgment and note the gap), continues.
-3. **Terminal signals to engine are always fire-and-forget.** Boss sends and STOPs. Engine processes on its next turn.
-4. **Duplicate handling:** If a reviewer sends IMPLEMENTATION_APPROVED twice for the same chunk, boss processes the first, ignores duplicates. Same rule for any stray builder IMPLEMENTATION_BLOCKED/REJECTED.
-5. **The reviewer is the quality gate and owns the success signal.** The reviewer emits IMPLEMENTATION_APPROVED to krs-one on every APPROVED verdict. No SubagentStop checks on builder commit history — the hook layer is not the gate.
+1. **Boss → PM is fire-and-forget except at seam points.** `ITERATION_UPDATE` and `MILESTONE_TRANSITION` are the two blocking seams with 60s timeouts — KRS-One waits for READY between worker cycles and at milestone boundaries. Blocking outside these seams stalls the build against a PM reply that was never coming.
+2. **Worker → PM consultation is encouraged.** Workers send a question, stop, wait for reply (60s timeout — if nothing comes back, proceed with best judgment and note the gap), continue. PMs carry codebase context, so consulting them is cheaper than re-scanning files.
+3. **Terminal signals to the engine are fire-and-forget.** The boss sends and stops; the engine processes on its next turn. A reply is not coming — waiting for one deadlocks against an engine that has already moved on.
+4. **Duplicate handling:** if a reviewer sends IMPLEMENTATION_APPROVED twice for the same chunk, the boss processes the first and ignores the rest. Same rule for any stray builder IMPLEMENTATION_BLOCKED/REJECTED.
+5. **The reviewer is the quality gate and owns the success signal.** The reviewer emits IMPLEMENTATION_APPROVED to krs-one on every APPROVED verdict — no SubagentStop checks on builder commit history, because the hook layer is not the gate.
 
 ## 3. Dynamic Roster
 
-Bosses request workers from the engine (team-lead) when they've evaluated scope and know what they need:
+Bosses request workers from the engine (team-lead) once they have evaluated scope and know the shape they need:
 
 ```
 SendMessage(
@@ -88,24 +88,22 @@ SendMessage(
 )
 ```
 
-Workers are spawned into the team. The engine manages isolation.
+The engine spawns each worker onto the same team. Workers appear as teammates with full SendMessage access. The boss then dispatches assignments individually — one message per worker.
 
-The engine spawns each worker on the same team. Workers appear as teammates with full SendMessage access. The boss then dispatches assignments individually — one message per worker.
+**Worker cycling (step 5).** After the initial `REQUEST_WORKERS`, subsequent chunks use `CYCLE_WORKERS` instead — the engine shuts down the current pair and spawns a fresh one. See **Worker Cycling Pattern** for the full flow.
 
-**Worker cycling (step 5):** After the initial `REQUEST_WORKERS`, subsequent chunks use `CYCLE_WORKERS` instead — the engine shuts down the current pair and spawns a fresh one. See **Worker Cycling Pattern** for the full flow.
+**Naming.** Workers are spawned from the duo pool (see `references/duo-pool.md`). The `name` parameter is the boss-selected character for this cycle (e.g., `name: "tintin"`, `subagent_type: "kiln:dial-a-coder"`). Hook enforcement fires on the agent type (subagent_type stripped of the `kiln:` prefix), not the spawn name. The engine injects the paired partner's spawn name and type into each worker's runtime prompt.
 
-**Naming**: Workers are spawned from the duo pool (see `references/duo-pool.md`). The `name` parameter is the boss-selected character for this cycle (e.g., `name: "tintin"`, `subagent_type: "kiln:dial-a-coder"`). Hook enforcement fires on the agent type (subagent_type stripped of `kiln:` prefix) — not the spawn name. The engine injects the paired partner's spawn name and type into each worker's runtime prompt.
-
-**`kiln:` prefix rule (Wave 4 C7)**: Agents send **bare** subagent types in REQUEST_WORKERS payloads (e.g., `(subagent_type: the-anatomist)`, not `(subagent_type: kiln:the-anatomist)`). The engine adds the `kiln:` prefix when calling the `Agent(...)` tool. The WORKERS_SPAWNED confirmation echoes back the prefixed form so the boss sees exactly what was spawned. A bare-vs-prefixed regression is no longer possible — bosses cannot accidentally send unprefixed types to an engine that expects prefixed ones, because the engine owns normalisation on both the receive and the echo side.
+**`kiln:` prefix rule (Wave 4 C7).** Agents send **bare** subagent types in REQUEST_WORKERS payloads (e.g., `(subagent_type: the-anatomist)`, not `(subagent_type: kiln:the-anatomist)`). The engine adds the `kiln:` prefix when calling the `Agent(...)` tool and echoes the prefixed form back in `WORKERS_SPAWNED`, so the boss sees exactly what was spawned. A bare-vs-prefixed regression is no longer possible — the engine owns normalisation on both the receive and echo sides, so bosses cannot accidentally send unprefixed types to an engine that expects prefixed ones.
 
 ## 4. Dispatch Pattern
 
 When assigning work to a teammate:
 
-1. **Scope first** — define WHAT to do and WHY, not HOW. The worker decides implementation approach.
-2. **Package context** — include relevant summaries from persistent minds, file paths, constraints. Don't make workers hunt for context across multiple files.
-3. **One message, one assignment** — send the full assignment in a single SendMessage. Don't drip-feed instructions across multiple messages.
-4. **STOP after dispatch** — after sending, stop your turn immediately and wait for the reply.
+1. **Scope first.** Define what to do and why, not how. The worker decides implementation approach — dictating mechanism produces worse output than scoping the goal.
+2. **Package context.** Include relevant summaries from persistent minds, file paths, constraints. Making workers hunt for context across multiple files burns cycles and produces inconsistent interpretation.
+3. **One message, one assignment.** Send the full assignment in a single SendMessage. Drip-feeding instructions across multiple messages violates the chunk-scope-is-immutable rule below and causes the worker to re-start mid-task.
+4. **Stop after dispatch.** After sending, stop your turn immediately and wait for the reply. Continuing to work after dispatch races the reply and produces interleaved turn state.
 
 ```
 SendMessage(
@@ -117,17 +115,17 @@ SendMessage(
 
 ## 5. Peer Consultation
 
-Communication permissions are phased:
+Communication permissions are phased by spawn stage.
 
-**Before dispatch (Phase A/B):** Only the boss sends messages. Persistent minds respond to boss only. Workers don't exist yet.
+**Before dispatch (Phase A/B):** only the boss sends messages. Persistent minds respond to the boss only. Workers do not exist yet.
 
-**After dispatch (Phase C):** Workers can consult persistent minds directly for technical questions. The boss doesn't need to relay.
+**After dispatch (Phase C):** workers can consult persistent minds directly for technical questions. The boss does not need to relay.
 
 Consultation pattern:
-1. Send your question via SendMessage to the persistent mind
-2. STOP. Wait for their reply before continuing.
-3. Incorporate the answer and continue your work.
-4. Use sparingly — each consultation costs a full turn.
+1. Send the question via SendMessage to the persistent mind.
+2. Stop. Wait for the reply before continuing — polling races the reply.
+3. Incorporate the answer and continue.
+4. Use sparingly — each consultation costs a full turn, so batch related questions when you can.
 
 ```
 SendMessage(
@@ -139,23 +137,23 @@ SendMessage(
 
 ## 6. Shutdown Protocol
 
-When you receive a `shutdown_request`, approve it immediately with this exact tool call:
+When a `shutdown_request` arrives, approve it immediately with this exact tool call:
 
 ```
 SendMessage(type: "shutdown_response", request_id: "{request_id}", approve: true)
 ```
 
-Where `{request_id}` is extracted from the shutdown request message you received.
+The `{request_id}` is extracted from the shutdown request message you received.
 
-**Rules:**
-- Approve immediately — no follow-up questions, no "anything else?", no delay
-- Do not ask the requester if they're sure, do not summarize your work, do not offer to continue
-- After approving, you will be terminated — this is normal and expected
-- Never ignore or delay a shutdown request
+**Why this shape:**
+- Approval is unconditional. Follow-up questions, "anything else?", or delay leave the engine waiting and stall the next cycle.
+- Do not ask the requester if they are sure, do not summarize your work, do not offer to continue. The engine has already decided.
+- After approving, you will be terminated — this is normal and expected.
+- Ignoring or delaying a shutdown request forces the engine to kill you after 30s, which loses any graceful cleanup you could have done in-protocol.
 
 ## 7. Signal Vocabulary
 
-Standard signals sent via SendMessage to team-lead (the engine):
+Standard signals sent via SendMessage to team-lead (the engine), unless a different recipient is noted in the row.
 
 | Signal | Meaning | Sent by |
 |--------|---------|---------|
@@ -191,7 +189,7 @@ Standard signals sent via SendMessage to team-lead (the engine):
 | `REPORT_COMPLETE` | Step 7 done | Omega |
 | `BLOCKED: {reason}` | Cannot proceed, need intervention | Any agent |
 
-Always include context after the signal name. A bare signal is less useful than one with specifics:
+Include context after the signal name. A bare signal name tells the receiver something happened but not what to do with it, which forces them back to scanning state files:
 - Bad: `RESEARCH_COMPLETE`
 - Good: `RESEARCH_COMPLETE: 6 topics researched. Key findings: RSC viable, Drizzle preferred over Prisma.`
 
@@ -199,11 +197,11 @@ Always include context after the signal name. A bare signal is less useful than 
 
 ### Why
 
-Fresh context per implementation chunk prevents context pollution. Builders and reviewers accumulate irrelevant context from previous chunks, leading to confused implementations. Cycling gives each chunk a clean-slate worker pair.
+Fresh context per implementation chunk prevents context pollution. Builders and reviewers accumulate irrelevant context from previous chunks, and that residue leads to confused implementations where earlier-chunk assumptions leak into later-chunk code. Cycling gives each chunk a clean-slate worker pair.
 
 ### How
 
-1. KRS-One scopes a chunk and determines the appropriate scenario
+1. KRS-One scopes a chunk and determines the appropriate scenario.
 2. KRS-One sends `CYCLE_WORKERS` to team-lead (engine) with:
    - `scenario`: default | fallback | ui
    - `duo_id`: selected duo from pool (e.g., `tintin-milou`)
@@ -211,14 +209,14 @@ Fresh context per implementation chunk prevents context pollution. Builders and 
    - `reviewer_name`: reviewer's spawn name for this cycle (e.g., `milou`)
    - `reason`: why this scenario was chosen
    - `chunk`: brief description of the work
-3. Engine sends `shutdown_request` to current builder+reviewer
-4. Engine waits for shutdown confirmation (60s timeout)
-5. Engine spawns fresh builder+reviewer pair per scenario:
+3. Engine sends `shutdown_request` to the current builder+reviewer.
+4. Engine waits for shutdown confirmation (60s timeout).
+5. Engine spawns a fresh builder+reviewer pair per scenario:
    - default: dial-a-coder + critical-thinker (spawn names from duo pool)
    - fallback: backup-coder + critical-thinker (spawn names from duo pool)
    - ui: la-peintresse + the-curator (spawn names from duo pool)
-6. Engine sends `WORKERS_SPAWNED` to KRS-One with agent names
-7. KRS-One dispatches assignment to fresh builder
+6. Engine sends `WORKERS_SPAWNED` to KRS-One with agent names.
+7. KRS-One dispatches the assignment to the fresh builder.
 
 ### Persistent Minds
 
@@ -226,18 +224,18 @@ rakim, sentinel, thoth persist across all worker cycles within a milestone. They
 
 ### Blocking Seam
 
-`ITERATION_UPDATE` from KRS-One to rakim+sentinel is BLOCKING (60s timeout). This ensures state files are current before the next chunk is scoped. This is a different seam point than the v9 fire-and-forget concern — v9 was worried about blocking BETWEEN worker operations, this blocks BETWEEN worker CYCLES.
+`ITERATION_UPDATE` from KRS-One to rakim+sentinel is blocking with a 60s timeout, ensuring state files are current before the next chunk is scoped. This is a different seam from the v9 fire-and-forget concern — v9 was worried about blocking between worker operations; this blocks between worker CYCLES, which is safe.
 
 ## Communication Rules (Universal)
 
-These apply to ALL agents in every step:
+These apply to every agent in every step:
 
-1. **SendMessage is the ONLY way to communicate with teammates.** Plain text output is invisible to other agents. It IS visible to the operator (who can view your session via shift+arrow).
-2. **Never send messages before your bootstrap is complete.** Read your files first.
-3. **After sending a message expecting a reply, STOP your turn.** Never sleep-poll. Never continue working while waiting for a response.
-4. **Plain text for operator, SendMessage for agents.** Bosses in INTERACTIVE steps talk to the operator via plain text output. All agent-to-agent communication uses SendMessage exclusively.
-5. **One message at a time.** You wake up with one message. Process it fully before deciding your next action.
-6. **Chunk scope is immutable after dispatch.** Any new information discovered during a chunk is incorporated in the next chunk's assignment, never patched into the current one. Boss NEVER messages an active worker mid-task.
+1. **SendMessage is the only way to reach teammates.** Plain text output is invisible to other agents (though visible to the operator, who can view your session via shift+arrow). Anything a teammate needs to act on goes through SendMessage.
+2. **Do not send messages before bootstrap is complete.** Read your files first — a message that references content you have not read is a guess, and downstream agents cannot distinguish that from a quote.
+3. **After sending a message that expects a reply, stop your turn.** The platform wakes you when the reply arrives. Sleep-polling or continuing to work races the reply and burns tokens for no gain.
+4. **Plain text for operator, SendMessage for agents.** Bosses in INTERACTIVE steps talk to the operator via plain text output. All agent-to-agent communication uses SendMessage exclusively, since plain text cannot reach another agent.
+5. **One message at a time.** You wake up with one message. Process it fully before deciding your next action — partial handling is how protocol conversations desynchronise.
+6. **Chunk scope is immutable after dispatch.** New information discovered mid-chunk is incorporated into the next chunk's assignment, never patched into the current one. The boss does not message an active worker mid-task, because a mid-task patch invalidates the acceptance criteria the worker is already executing against.
 
 ## Build Scenarios
 
@@ -251,7 +249,7 @@ Workers are spawned with duo pool names (e.g., `name: "tintin"`, `subagent_type:
 
 critical-thinker (opus) is the single structural reviewer for Default and Fallback. the-curator (sonnet) reviews UI only.
 
-**Dormant spawn names:** tetsuo, daft, punk — duo pool names only, no agent .md files.
+**Dormant spawn names:** tetsuo, daft, punk — duo pool names only, no agent `.md` files.
 
 ## Step Definitions
 
