@@ -1,8 +1,10 @@
 # Artifact Flow
 
-> **Archive writer**: All files under `.kiln/archive/` are written exclusively by **thoth** (archivist agent). Other agents stage files in `.kiln/tmp/` and send ARCHIVE messages to thoth. No agent writes directly to `.kiln/archive/`.
+Per-step catalog of what each of the 7 pipeline steps reads, produces, and archives. Consulted on demand by every agent that writes to `.kiln/` — bosses confirming scope before dispatch, persistent minds (rakim, sentinel, thoth) tracking state and routing ARCHIVE requests, and workers that need to know where their output lands. Effort tier is the consumer's — this file is a reference, not a prompt.
 
-What each step reads and produces. Files live in `.kiln/` under the project working directory.
+> **Archive writer**: All files under `.kiln/archive/` are written exclusively by **thoth** (archivist agent). Other agents stage files in `.kiln/tmp/` and send ARCHIVE messages to thoth. Routing every archive write through a single agent keeps the archive layout stable and auditable — parallel writers would race on directory layout and diverge over time.
+
+Files live in `.kiln/` under the project working directory. Paths, filenames, and conditional markers below are the contract — consumers read them literally.
 
 ## Step 1: Onboarding
 - **Reads**: (none — first step)
