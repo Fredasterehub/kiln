@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # bump-version.sh — Single source of truth for Kiln version
-# Usage: ./bump-version.sh 0.97.0
+# Usage: ./scripts/bump-version.sh 0.97.0
 set -euo pipefail
 
-VERSION="${1:?Usage: ./bump-version.sh <version>}"
-ROOT="$(cd "$(dirname "$0")" && pwd)"
+VERSION="${1:?Usage: ./scripts/bump-version.sh <version>}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # 1. plugin.json (canonical)
 jq --arg v "$VERSION" '.version = $v' "$ROOT/plugins/kiln/.claude-plugin/plugin.json" > /tmp/kiln_plugin.json \

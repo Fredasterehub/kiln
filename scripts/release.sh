@@ -9,7 +9,7 @@ YELLOW='\033[33m'
 RED='\033[31m'
 RESET='\033[0m'
 
-ROOT="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 VERSION=""
@@ -26,7 +26,7 @@ print_banner() {
 }
 
 print_usage() {
-  printf "%s\n" "Usage: ./release.sh X.Y.Z \"short description\""
+  printf "%s\n" "Usage: ./scripts/release.sh X.Y.Z \"short description\""
   printf "\n"
   printf "%s\n" "Cut a Kiln release by bumping the version files, committing, tagging,"
   printf "%s\n" "pushing the branch and tag, verifying the tag on origin, and creating"
@@ -102,8 +102,8 @@ printf "  ${GREEN}✓${RESET} GitHub CLI authenticated\n"
 
 printf "%b\n" "\n${DIM}Running release flow...${RESET}"
 
-print_command "./bump-version.sh \"$VERSION\""
-./bump-version.sh "$VERSION"
+print_command "./scripts/bump-version.sh \"$VERSION\""
+./scripts/bump-version.sh "$VERSION"
 printf "  ${GREEN}✓${RESET} Version files updated\n"
 
 print_command "git add plugins/kiln/.claude-plugin/plugin.json .claude-plugin/marketplace.json plugins/kiln/skills/kiln-pipeline/SKILL.md"
