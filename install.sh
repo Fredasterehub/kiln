@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Kiln installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/Fredasterehub/kiln/master/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/Fredasterehub/kiln/main/install.sh | bash
 
 REPO="Fredasterehub/kiln"
 TERRACOTTA='\033[38;5;173m'
