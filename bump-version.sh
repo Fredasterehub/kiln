@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # bump-version.sh — Single source of truth for Kiln version
 # Usage: ./bump-version.sh 0.97.0
 set -euo pipefail
@@ -15,7 +15,8 @@ jq --arg v "$VERSION" '.version = $v | .plugins[0].version = $v' "$ROOT/.claude-
   && mv /tmp/kiln_marketplace.json "$ROOT/.claude-plugin/marketplace.json"
 
 # 3. SKILL.md frontmatter
-sed -i "s/^version: .*/version: $VERSION/" "$ROOT/plugins/kiln/skills/kiln-pipeline/SKILL.md"
+sed "s/^version: .*/version: $VERSION/" "$ROOT/plugins/kiln/skills/kiln-pipeline/SKILL.md" > /tmp/kiln_skill.md \
+  && mv /tmp/kiln_skill.md "$ROOT/plugins/kiln/skills/kiln-pipeline/SKILL.md"
 
 echo "Bumped to $VERSION in:"
 echo "  plugins/kiln/.claude-plugin/plugin.json"
