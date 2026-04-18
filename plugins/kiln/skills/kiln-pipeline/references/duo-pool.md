@@ -1,6 +1,18 @@
 # Duo Pool — Worker Naming Rotation
 
-The duo pool defines the legal builder+reviewer pairs for Build step (Step 5). KRS-One selects a duo from the pool using timestamp-seeded rotation. The engine spawns with the boss-selected names.
+This reference defines the legal builder+reviewer pairs krs-one selects from when emitting `CYCLE_WORKERS` during Step 5 (Build). Consumer: the boss on spawn, running at xhigh — it reads this file with literal precision, so every duo_id, name, and type below must match the strings the engine and boss agree on at spawn time.
+
+## Selection Rules
+
+Krs-one picks a pool per cycle using this decision tree:
+
+1. UI/visual work → `ui` pool
+2. `codex_available=true` → `default` pool
+3. Otherwise → `fallback` pool
+
+Within the chosen pool, the boss picks a duo via timestamp-seeded rotation. The engine then spawns both agents using the boss-selected names and the types listed in the pool table.
+
+**Name vs type — the subtle bit.** The spawn `name` (e.g. `tintin`) is who the agent IS this cycle and is the only address SendMessage routes on. The `subagent_type` (e.g. `dial-a-coder`) is the `.md` template the spawn loads behavior from. They are not interchangeable: routing by type, or using a type where a name is expected, produces silent delivery failures that surface only as deadlock.
 
 ## Pool Table
 
@@ -15,20 +27,11 @@ The duo pool defines the legal builder+reviewer pairs for Build step (Step 5). K
 | `ui` | `clair-obscur` | `clair` | `obscur` | `la-peintresse` | `the-curator` |
 | `ui` | `yin-yang` | `yin` | `yang` | `la-peintresse` | `the-curator` |
 
-## Selection Rules
-
-**Pool selection** (KRS-One decision tree):
-1. Is this UI/visual work? → `ui` pool
-2. Is `codex_available=true`? → `default` pool
-3. Else → `fallback` pool
-
-**Duo rotation**: Boss picks the duo using timestamp-seeded rotation within the selected pool. The engine spawns both agents with the boss-selected builder/reviewer names and their respective agent types from this table.
-
-**Name/type separation**: The `name` parameter at spawn (e.g., `tintin`) is who the agent IS this cycle. The `subagent_type` (e.g., `dial-a-coder`) is what .md template it uses. SendMessage always uses spawn names, never agent types.
+The `duo_id` is the builder and reviewer spawn names hyphenated — it identifies the pairing for rotation bookkeeping, not for routing.
 
 ## CYCLE_WORKERS Scenario Mapping
 
-When KRS-One sends `CYCLE_WORKERS: scenario={pool}`, the engine maps pool to builder+reviewer types:
+`CYCLE_WORKERS: scenario={pool}` carries the pool label; the engine resolves it to types via this lookup at spawn time:
 
 | Scenario | Builder Type | Reviewer Type |
 |---|---|---|
@@ -36,4 +39,4 @@ When KRS-One sends `CYCLE_WORKERS: scenario={pool}`, the engine maps pool to bui
 | `fallback` | `backup-coder` | `critical-thinker` |
 | `ui` | `la-peintresse` | `the-curator` |
 
-KRS-One selects the next duo from the pool using timestamp-seeded rotation. The engine spawns both agents with the boss-selected names and their corresponding types from this table.
+This table and the Pool Table are not redundant — the Pool Table is the per-duo source of truth the boss rotates through; the Scenario Mapping is the pool→type lookup the engine reads to spawn, once the boss has committed to a duo.
