@@ -1,5 +1,7 @@
 # Blueprint: onboarding
 
+The engine reads this blueprint at step spawn time to assemble the onboarding roster and order the three-phase launch. The step boss (alpha) consults it from inside the conversation when it needs the authoritative signal vocabulary or phase contract. Reference posture — not a prompt to act on; everything below is the spec that the spawning code and the boss both commit to.
+
 ## Meta
 - **Team name**: onboarding
 - **Artifact directory**: .kiln/

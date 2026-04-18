@@ -1,5 +1,7 @@
 # Blueprint: validate
 
+The engine reads this blueprint at step spawn to stand up zoxea and argus, and returns to it when argus's REQUEST_WORKERS asks for hephaestus. Argus consults it inside the conversation for the verdict contract, the advisory-only design scoring rules, and the correction-cycle semantics the pipeline runner honours on VALIDATE_FAILED. Reference posture — the shared contract between the spawning engine, the step boss, and the runner that loops back to Build.
+
 ## Meta
 - **Team name**: validate
 - **Artifact directory**: .kiln/

@@ -1,5 +1,7 @@
 # Blueprint: research
 
+The engine reads this blueprint at step spawn to bootstrap mi6 and thoth in parallel and to spawn field agents when mi6 requests them. MI6 consults it inside the conversation for the validation rules and signal vocabulary it must emit. Reference posture — the shared contract between the spawning engine and the step boss.
+
 ## Meta
 - **Team name**: research
 - **Artifact directory**: .kiln/

@@ -1,5 +1,7 @@
 # Blueprint: report
 
+The engine reads this blueprint at step spawn to launch omega as a solo agent with no phases and no teammates. Omega is the step boss and the only worker at once, and consults this blueprint inside the conversation for the terminal signal it must emit. Reference posture — the shared contract between the spawning engine and the step boss.
+
 ## Meta
 - **Team name**: report
 - **Artifact directory**: .kiln/

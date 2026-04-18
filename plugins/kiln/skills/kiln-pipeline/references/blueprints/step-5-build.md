@@ -1,5 +1,7 @@
 # Blueprint: build
 
+The engine reads this blueprint once per milestone to stand up the persistent minds plus krs-one, and returns to it every CYCLE_WORKERS to spawn the next duo, every MILESTONE_QA_READY to run the tribunal, and every milestone boundary to reset. KRS-One consults it inside the conversation for the duo-pool scenarios, the phase ordering, the complete signal vocabulary, and the per-role runtime-prompt templates. Reference posture — the shared contract between the spawning engine and the step boss across the full milestone.
+
 ## Meta
 - **Team name**: `{kill_streak_name}` — cycles through Kill Streak Sequence based on `team_iteration` in STATE.md (one kill-streak per milestone; `chunk_count` tracks chunks *within* the milestone and does not rotate the name)
 - **Artifact directory**: .kiln/

@@ -1,5 +1,7 @@
 # Blueprint: brainstorm
 
+The engine reads this blueprint at step spawn time to stand up asimov and da-vinci in the correct order. Da-vinci consults it mid-conversation for the signal vocabulary between boss and persistent mind. Reference posture — the contract that the spawning engine and the step boss both commit to.
+
 ## Meta
 - **Team name**: brainstorm
 - **Artifact directory**: .kiln/

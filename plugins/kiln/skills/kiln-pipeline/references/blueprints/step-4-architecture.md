@@ -1,5 +1,7 @@
 # Blueprint: architecture
 
+The engine reads this blueprint at step spawn to launch numerobis and thoth, then to service aristotle's wave-by-wave REQUEST_WORKERS. Aristotle consults it inside the conversation for the wave ordering, the validation loop, and the exact signal names. Reference posture — the contract that the spawning engine and the step boss both commit to.
+
 ## Meta
 - **Team name**: architecture
 - **Artifact directory**: .kiln/
