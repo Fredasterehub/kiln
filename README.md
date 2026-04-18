@@ -219,6 +219,8 @@ Adapted from the [BMAD Method](https://github.com/bmad-code-org/BMAD-METHOD)'s s
 
 <br>
 
+See [GitHub Releases](https://github.com/Fredasterehub/kiln/releases) for the full changelog.
+
 > [!NOTE]
 > **🔥 v1.3.0 — The Structural Alignment** <sub>(2026-04-15)</sub>
 
