@@ -186,6 +186,30 @@ fi
 - If output is `MISSING_UVX`: `[WARN] Fetch MCP: configured but uvx not found — install uv (https://docs.astral.sh/uv/) for reliable web research`
 - If output is `NOT_CONFIGURED`: `[WARN] Fetch MCP: .mcp.json missing or fetch server not configured — field agents will use WebSearch and context7 for research (WebFetch is blocked during pipeline runs)`
 
+### 12. Plugin Branch Alignment
+
+```bash
+if [[ -d "${HOME}/.claude/plugins/marketplaces/kiln" ]] && git -C "${HOME}/.claude/plugins/marketplaces/kiln" rev-parse --git-dir >/dev/null 2>&1; then
+  BRANCH="$(git -C "${HOME}/.claude/plugins/marketplaces/kiln" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+  echo "BRANCH:${BRANCH}"
+else
+  echo "NOT_FOUND"
+fi
+```
+- If output is `NOT_FOUND`: `[INFO] Plugin branch: clone not found — skipping`
+- If output is `BRANCH:main`: `[PASS] Plugin branch: main`
+- If output is `BRANCH:v9`: `[WARN] Plugin branch: v9 (deprecated — should be main)`
+  Fix:
+    `git -C "${HOME}/.claude/plugins/marketplaces/kiln" remote set-branches origin main`
+    `git -C "${HOME}/.claude/plugins/marketplaces/kiln" fetch origin`
+    `git -C "${HOME}/.claude/plugins/marketplaces/kiln" checkout main`
+    `git -C "${HOME}/.claude/plugins/marketplaces/kiln" branch -D v9`
+  Prompt the user for confirmation with `[y/N]` before executing the fix. Only `y` or `Y` proceeds; bare Enter defaults to No.
+  If confirmed, run the four fix commands above in order, then run `git -C "${HOME}/.claude/plugins/marketplaces/kiln" rev-parse --abbrev-ref HEAD` to verify success.
+  If verification returns `main`: `[PASS] Aligned to main`
+  If the user declines: `[INFO] Skipped (user declined)`
+- If output starts with `BRANCH:` and is not `BRANCH:main` or `BRANCH:v9`: `[INFO] Plugin branch: {branch}`
+
 ## Output Format
 
 Present results as:
