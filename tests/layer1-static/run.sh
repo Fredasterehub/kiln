@@ -8,6 +8,7 @@ FAIL=0
 echo "── Layer 1 — Static lint ─────────────────"
 python3 lint/consistency.py || FAIL=1
 python3 lint/agents.py || FAIL=1
+python3 lint/skills.py || FAIL=1
 python3 lint/orphans.py --warn-only || FAIL=1
 
 echo ""
