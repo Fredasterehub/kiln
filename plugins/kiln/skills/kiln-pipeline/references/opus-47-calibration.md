@@ -153,6 +153,26 @@ Each cookbook is a starting shape, not a template to paste. Adapt to the role's 
 - No temperature, top_p, top_k anywhere in config
 - If structured output expected, the exact format is shown
 
+## Skill Bodies vs Agent Prompts
+
+This reference was written for agent prompts. Skill bodies (e.g. `kiln-protocol/SKILL.md`, `kiln-pipeline/SKILL.md`, reference files under `kiln-pipeline/references/`) are documents the host session reads rather than prompts scoped to one task — so some principles apply verbatim, others translate.
+
+**Carries over verbatim:**
+- **Principle 1 — Literal instruction-following.** Whatever a skill tells the reading session, 4.7 takes at face value. Ambiguity in a skill propagates to every agent that Reads it.
+- **Principle 3 — Less overthinking by default.** Do not pad skill bodies with "think carefully" pleas. That retrains the calibration for every agent reading them.
+- **Principle 4 — Length calibrated to task complexity.** A skill body that bloats past what it needs is the same failure mode as a verbose prompt: later trailing instructions drown. creatah's "body under 500 lines" rule is this principle applied — cut any line that does not change reader behavior.
+- **Explain-the-why.** The single highest-leverage change in a skill body. ALL-CAPS commandments (ALWAYS / NEVER / MUST) without reasoning read as emphasis to 4.7, not logic. Skills riddled with bare prohibitions produce agents that drift on the first unanticipated case.
+
+**Translates:**
+- **Principle 2 — Strict effort respect.** Skills do not run with an effort setting. But a skill body consumed by a specific role (e.g. `duo-pool.md` consumed by the boss) should note the expected effort tier of its consumer, so constraints scale to the reader.
+- **Principle 5 — Reasons more, uses tools less.** Skill bodies do not call tools. But skills that teach a role *when* to call a tool must be explicit — vague guidance (“check the state file”) produces internal reasoning instead of the intended Read call.
+
+**Skill-specific discipline:**
+- **Preserve every load-bearing contract.** Signal tables, field schemas, hook contracts, filesystem paths — these are referenced by agents and scripts. A well-styled rewrite that drops a signal meaning is worse than an ugly skill that works. Per-rewrite audit: 1:1 parity of contracts before/after.
+- **Lead with purpose.** The first paragraph of a skill body states what this skill is for and who reads it. 4.7 calibrates from the opening; a skill that buries its purpose forces the reader to infer, and inference drifts.
+- **Separate policy from mechanism.** Rules the reading agent must follow (policy) belong near the top in explain-the-why form. Implementation detail (mechanism — scripts, paths, envvars) can live further down in reference tables; 4.7 reads tables fine when the policy framing is upstream.
+- **Restate critical invariants at point of use.** A skill body can be long. Repeating a load-bearing constraint where it matters is cheaper than relying on the reader to hold the whole doc in working memory.
+
 ## Sources
 
 - `/home/dev/.claude/skills/selektah/references/claude-opus-47-prompting.md` — authoritative 4.7 prompting reference
