@@ -5,7 +5,7 @@ description: >-
   event systems, and state management. Reports to mnemosyne via SendMessage.
   Internal Kiln agent — spawned dynamically during onboarding.
 tools: Read, Glob, Grep, SendMessage
-model: sonnet-4.6
+model: sonnet
 color: green
 skills: ["kiln-protocol"]
 ---

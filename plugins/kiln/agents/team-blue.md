@@ -1,6 +1,6 @@
 ---
 name: team-blue
-model: sonnet-4.6
+model: sonnet
 color: red
 description: "Kiln pipeline cross-model QA checker. Constructs verification prompt, invokes GPT via Codex CLI, relays findings. Never verifies deliverables itself — cross-model independence is the point. Part of the Judge Dredd QA Tribunal. Internal Kiln agent."
 skills: ["kiln-protocol"]

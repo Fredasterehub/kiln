@@ -43,16 +43,26 @@ OPUS47_DEPRECATED_FIELDS = {
     "budget_tokens",
 }
 
-# Sections that every agent body should contain (one of Protocol/Instructions)
+# Sections that every agent body should contain.
+# v1.5.0 rewrites use XML tags (<role>, <teammates>, <protocol>, etc.);
+# older agents use markdown headings (## Teammate Names, ## Protocol, ...).
+# Each tuple lists accepted alternatives — markdown heading names and
+# XML tag names are both valid.
 REQUIRED_SECTIONS = [
-    ("Teammate Names",),
-    ("Protocol", "Instructions", "Your Job", "Job", "Bootstrap"),
-    ("Rules",),
+    ("Teammate Names", "teammates"),
+    ("Protocol", "Instructions", "Your Job", "Job", "Bootstrap",
+     "role", "protocol", "on-spawn-read"),
+    ("Rules", "constraints", "discipline", "shutdown"),
 ]
 
 
+# Bootstrap: every agent must Read the kiln-protocol SKILL.md.
+# Pre-v1.5.0 agents use `**Bootstrap:** Read ${CLAUDE_PLUGIN_ROOT}/...`.
+# v1.5.0 rewrites inline the Read inside an XML section without the
+# `**Bootstrap:**` prefix. Accept either shape — the load-bearing
+# fragment is the Read statement itself.
 BOOTSTRAP_RE = re.compile(
-    r'\*\*Bootstrap:\*\*\s+Read\s+`?\$\{CLAUDE_PLUGIN_ROOT\}/skills/kiln-protocol/SKILL\.md`?',
+    r'Read\s+`?\$\{CLAUDE_PLUGIN_ROOT\}/skills/kiln-protocol/SKILL\.md`?',
 )
 
 # Over-provisioned tools per role. Reviewers shouldn't Write source, only their report dir.
@@ -151,21 +161,16 @@ def check_effort_field(agent: c.Agent) -> list[c.Violation]:
             message=f"'{agent.name}' has effort='{effort}' (valid: {sorted(VALID_EFFORT)})",
             location=f"plugins/kiln/agents/{agent.name}.md",
         ))
-    if model == "opus-4.7" and effort != "xhigh":
-        out.append(c.Violation(
-            code="EFFORT_REQUIRED",
-            message=(
-                f"'{agent.name}' uses model='opus-4.7' and must set effort='xhigh' "
-                f"(got '{effort or '<missing>'}')"
-            ),
-            location=f"plugins/kiln/agents/{agent.name}.md",
-        ))
-    if model != "opus-4.7" and effort is not None:
+    # v1.5.0: effort is valid on any opus-family agent (bare `opus` alias or
+    # legacy `opus-4.7` pin). Sonnet-tier agents should not set effort —
+    # their profile is bounded, not reasoning-depth-gated.
+    opus_family = model in ("opus", "opus-4.7")
+    if not opus_family and effort is not None:
         out.append(c.Violation(
             code="EFFORT_NOT_ALLOWED",
             message=(
                 f"'{agent.name}' sets effort='{effort}' but model='{model}' — "
-                "effort is only valid with opus-4.7"
+                "effort only applies to opus-family models"
             ),
             location=f"plugins/kiln/agents/{agent.name}.md",
         ))

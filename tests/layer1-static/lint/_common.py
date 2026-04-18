@@ -125,9 +125,12 @@ def _unquote(s: str) -> str:
 # ── Section extraction ────────────────────────────────────────────
 
 def extract_section(body: str, heading: str) -> str | None:
-    """Return body of the named ## or ### section. None if absent.
+    """Return body of the named section. None if absent.
 
-    Stops at next heading of same-or-higher level.
+    Tries markdown headings (## or ###) first for backward compat with
+    pre-v1.5.0 agents. If the heading looks like an XML tag name
+    (lowercase alnum with optional hyphens, no spaces), also matches an
+    XML-style <tag>...</tag> block — v1.5.0 agents use XML structure.
     """
     pattern = rf"^(#{{2,3}})\s+{re.escape(heading)}\s*$"
     lines = body.split("\n")
@@ -139,15 +142,23 @@ def extract_section(body: str, heading: str) -> str | None:
             start = idx + 1
             level = len(m.group(1))
             break
-    if start is None:
-        return None
-    end = len(lines)
-    for idx in range(start, len(lines)):
-        m = re.match(r"^(#{1,6})\s+\S", lines[idx])
-        if m and len(m.group(1)) <= level:
-            end = idx
-            break
-    return "\n".join(lines[start:end]).strip()
+    if start is not None:
+        end = len(lines)
+        for idx in range(start, len(lines)):
+            m = re.match(r"^(#{1,6})\s+\S", lines[idx])
+            if m and len(m.group(1)) <= level:
+                end = idx
+                break
+        return "\n".join(lines[start:end]).strip()
+
+    # XML-tag fallback: only when heading could name an XML tag.
+    if re.fullmatch(r"[a-z][a-z0-9-]*", heading):
+        xml_pattern = rf"<{re.escape(heading)}>(.*?)</{re.escape(heading)}>"
+        m = re.search(xml_pattern, body, re.DOTALL)
+        if m:
+            return m.group(1).strip()
+
+    return None
 
 
 # ── Signal extraction ─────────────────────────────────────────────
@@ -320,8 +331,14 @@ TEAMMATE_LINE_RE = re.compile(r'^-\s+[`*]?([\w-]+|\{[\w_]+\})[`*]?\s*[—–-]\s
 
 
 def extract_teammates(agent: Agent) -> list[tuple[str, str]]:
-    """Return list of (name, description) from the Teammate Names section."""
+    """Return list of (name, description) from the Teammate Names section.
+
+    Accepts the pre-v1.5.0 markdown heading `## Teammate Names` and the
+    v1.5.0 XML tag `<teammates>`. Bullet-line format is the same either way.
+    """
     section = extract_section(agent.body, "Teammate Names")
+    if not section:
+        section = extract_section(agent.body, "teammates")
     if not section:
         return []
     out: list[tuple[str, str]] = []

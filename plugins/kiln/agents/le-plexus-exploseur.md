@@ -5,7 +5,7 @@ description: >-
   and actual codebase, then compares implementation against architectural intent.
   Writes findings to .kiln/validation/architecture-check.md. Internal Kiln agent.
 tools: Read, Write, Glob, Grep, SendMessage
-model: sonnet-4.6
+model: sonnet
 color: magenta
 skills: ["kiln-protocol"]
 ---

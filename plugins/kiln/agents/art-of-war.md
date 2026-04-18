@@ -5,7 +5,7 @@ description: >-
   to GPT-5.4 via Codex CLI. Never writes plan content directly.
   Internal Kiln agent.
 tools: Read, Bash, Glob, Grep, SendMessage
-model: sonnet-4.6
+model: sonnet
 color: yellow
 skills: ["kiln-protocol"]
 ---

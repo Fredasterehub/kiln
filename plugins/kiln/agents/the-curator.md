@@ -6,7 +6,7 @@ description: >-
   Verdict: APPROVED or REJECTED. Design scoring is advisory only.
   Internal Kiln agent.
 tools: Read, Bash, Glob, Grep, SendMessage, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_click, mcp__playwright__browser_fill_form, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_close, mcp__playwright__browser_press_key
-model: sonnet-4.6
+model: sonnet
 color: magenta
 skills: ["kiln-protocol"]
 ---

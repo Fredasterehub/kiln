@@ -6,7 +6,7 @@ description: >-
   requests paired review. Never writes source code directly.
   Internal Kiln agent.
 tools: Read, Bash, Glob, Grep, SendMessage
-model: sonnet-4.6
+model: sonnet
 color: yellow
 skills: ["kiln-protocol"]
 ---
