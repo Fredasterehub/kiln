@@ -18,7 +18,7 @@ Map to audit findings (`PLUMBING-AUDIT-v1.3.0.md`):
 | Finding | Detected by |
 |---|---|
 | C1 path mismatch | `consistency.py::check_path_symmetry` |
-| C2 audit-milestone filter | `hook-fixtures/audit-milestone/bossman-no-ledger` |
+| C2 audit-milestone filter | `hook-fixtures/stop-guard/bossman-milestone-no-ledger-blocked` (moved from retired audit-milestone in v1.5.3) |
 | C3 missing CHECKER_ID | `consistency.py::check_runtime_vars` |
 | C4 terminal signal contradiction | `consistency.py::check_terminal_signal_contract` |
 | C5 orphan MILESTONE_DONE handler | `consistency.py::check_signal_handlers` |
@@ -85,7 +85,7 @@ Then cds there and pipes the JSON into the hook. Per-fixture fixups override spe
 
 ## Adding a hook fixture
 
-1. Pick the hook directory (`audit-milestone`, `audit-bash`, etc.).
+1. Pick the hook directory (`stop-guard`, `audit-bash`, etc.).
 2. Create `{name}.json` — the tool_input JSON.
 3. Create `{name}.expected` — with STDOUT/STDERR/EXIT assertions.
 4. (Optional) Create `{name}.fixup.sh` to modify the mock pipeline before the hook runs.

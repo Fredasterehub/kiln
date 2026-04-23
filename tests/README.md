@@ -39,11 +39,10 @@ layer1-static/
 │   └── orphans.py                  # unused refs, vestigials, snake_case aliases
 └── hook-fixtures/
     ├── run.sh                      # pipe each *.json into its hook, diff against *.expected
-    ├── audit-milestone/            # 4 fixtures — C2 regression
     ├── audit-bash/                 # 4 fixtures
-    ├── audit-status-marker/        # 4 fixtures
-    ├── enforce-pipeline/           # 11 fixtures — all 10 hook categories
-    └── stop-guard/                 # 6 fixtures
+    ├── enforce-pipeline/           # 13 fixtures — all 10 hook categories
+    └── stop-guard/                 # 10 fixtures (incl. bossman iter-log — C2 regression,
+                                    #   moved from audit-milestone in v1.5.3)
 ```
 
 ## Layer 2 structure
