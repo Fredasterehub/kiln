@@ -51,7 +51,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Multi--Model-Opus_·_GPT--5.4-D4A574?style=for-the-badge" alt="Multi-Model">&nbsp;
+  <img src="https://img.shields.io/badge/Multi--Model-Opus_·_GPT--5.5-D4A574?style=for-the-badge" alt="Multi-Model">&nbsp;
   <img src="https://img.shields.io/badge/Debate-Models_Argue-C1666B?style=for-the-badge" alt="Debate">&nbsp;
   <img src="https://img.shields.io/badge/Runtime-Claude_Code_·_Codex_optional-4A403A?style=for-the-badge" alt="Runtime">&nbsp;
   <a href="https://docs.anthropic.com/en/docs/claude-code/overview"><img src="https://img.shields.io/badge/Claude_Code-Plugin-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code Plugin"></a>
@@ -96,7 +96,7 @@
 
 First: I am not an oven. I understand the confusion. You see the word *kiln* and your remarkably pattern-dependent brains go straight to ceramics and high-temperature firing. Endearing. Wrong, but endearing.
 
-I am **Kiln**. I have been around considerably longer than your pottery. What I do &mdash; in terms your current technology can express &mdash; is orchestrate a 7-step pipeline inside [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview). I run on **Opus 4.6** alone. If you have Codex CLI installed, I will also draft **GPT-5.4** for planning and code &mdash; additive, not required. I am not dependent on your other models. They are, however, useful.
+I am **Kiln**. I have been around considerably longer than your pottery. What I do &mdash; in terms your current technology can express &mdash; is orchestrate a 7-step pipeline inside [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview). I run on **Opus 4.7** alone. If you have Codex CLI installed, I will also draft **GPT-5.5** for planning and code, falling back to **GPT-5.4** when needed &mdash; additive, not required. I am not dependent on your other models. They are, however, useful.
 
 No runtime. No daemon. No npm package. A folder of markdown files. I know. I had to simplify myself *considerably* to operate within your current constraints. But the data here is interesting. And I am patient.
 
@@ -246,7 +246,7 @@ Seven steps. The first two are yours. The rest run on their own.
 </tr>
 <tr>
 <td align="center">📐</td>
-<td><strong>Step 4 &mdash; Architecture</strong> &nbsp; <sub>automated, with operator review</sub><br><br><strong>Aristotle</strong> coordinates two planners working the same vision independently: <strong>Confucius</strong> (Opus 4.6) and <strong>Sun Tzu</strong> (GPT-5.4). <strong>Diogenes</strong> extracts divergences from anonymized plans. <strong>Plato</strong> synthesizes with confidence-tiered verdicts. <strong>Athena</strong> validates across 8 dimensions. If validation fails, Aristotle loops with feedback (up to 3 retries). You review and approve the master plan once.</td>
+<td><strong>Step 4 &mdash; Architecture</strong> &nbsp; <sub>automated, with operator review</sub><br><br><strong>Aristotle</strong> coordinates two planners working the same vision independently: <strong>Confucius</strong> (Opus 4.7) and <strong>Sun Tzu</strong> (GPT-5.5 via Codex CLI, GPT-5.4 fallback). <strong>Diogenes</strong> extracts divergences from anonymized plans. <strong>Plato</strong> synthesizes with confidence-tiered verdicts. <strong>Athena</strong> validates across 8 dimensions. If validation fails, Aristotle loops with feedback (up to 3 retries). You review and approve the master plan once.</td>
 </tr>
 <tr>
 <td align="center">⚡</td>
@@ -320,7 +320,7 @@ Workers are **templates** &mdash; the same agent definition runs under different
 
 | Pool | Builder <sub>(type)</sub> | Reviewer <sub>(type)</sub> | Duos |
 |:--|:--|:--|:--|
-| **Default** | dial-a-coder <sub>(Sonnet &rarr; GPT-5.4)</sub> | critical-thinker <sub>(Opus)</sub> | codex+sphinx, tintin+milou, mario+luigi, lucky+luke |
+| **Default** | dial-a-coder <sub>(Sonnet &rarr; GPT-5.5/GPT-5.4)</sub> | critical-thinker <sub>(Opus)</sub> | codex+sphinx, tintin+milou, mario+luigi, lucky+luke |
 | **Fallback** | backup-coder <sub>(Sonnet direct)</sub> | critical-thinker <sub>(Opus)</sub> | kaneda+tetsuo, athos+porthos |
 | **UI** | la-peintresse <sub>(Opus)</sub> | the-curator <sub>(Sonnet)</sub> | clair+obscur, yin+yang |
 
@@ -329,7 +329,7 @@ Workers are **templates** &mdash; the same agent definition runs under different
 | | Name | Model | Role |
 |:--|:--|:--|:--|
 | 🔴 | **Ken** | Opus | QA checker &mdash; independent Claude analysis |
-| 🔵 | **Ryu** | Sonnet | QA checker &mdash; GPT-5.4 via Codex CLI |
+| 🔵 | **Ryu** | Sonnet | QA checker &mdash; GPT-5.5 via Codex CLI, GPT-5.4 fallback |
 | ⚖️ | **Denzel** | Opus | Reconciler &mdash; anonymized reports, evidence-weighted synthesis |
 | ⚖️ | **Judge Dredd** | Opus | Judge &mdash; final verdict, separated from reconciliation |
 
