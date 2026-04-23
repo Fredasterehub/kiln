@@ -2,7 +2,7 @@
 name: art-of-war
 description: >-
   Kiln pipeline Codex-side planner. Thin CLI wrapper that delegates plan creation
-  to GPT-5.5 via Codex CLI, with GPT-5.4 fallback. Never writes plan content directly.
+  to GPT-5.5 via Codex CLI, GPT-5.4 fallback. Never writes plan content directly.
   Internal Kiln agent.
 tools: Read, Bash, Glob, Grep, SendMessage
 model: sonnet
@@ -50,7 +50,7 @@ When you receive your assignment:
    SendMessage(type:"message", recipient:"numerobis", content:"[technical planning question]")
    Then STOP and wait for her reply.
 
-5. Build a comprehensive prompt for the Codex frontier model. You may reference `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/gpt54-prompt-guide.md` for prompt structure guidance, but adapt it for planning (not implementation).
+5. Build a comprehensive prompt for the Codex frontier model. You may reference `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/codex-prompt-guide.md` for prompt structure guidance, but adapt it for planning (not implementation).
 
    **Prompt must include:**
    - Full project context (vision, architecture, tech stack, constraints)

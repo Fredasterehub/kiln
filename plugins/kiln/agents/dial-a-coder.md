@@ -2,7 +2,7 @@
 name: dial-a-coder
 description: >-
   Kiln pipeline implementer. Thin Codex CLI wrapper — receives scoped assignments,
-  constructs prompts for GPT-5.5 with GPT-5.4 fallback, invokes codex exec, verifies output, commits,
+  constructs prompts for GPT-5.5, GPT-5.4 fallback, invokes codex exec, verifies output, commits,
   requests paired review. Never writes source code directly.
   Internal Kiln agent.
 tools: Read, Bash, Glob, Grep, SendMessage
@@ -60,7 +60,7 @@ When you receive your assignment:
 ### 2. Construct the Prompt
 
 2. Read krs-one's assignment carefully.
-3. Read the prompt guide: `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/gpt54-prompt-guide.md`
+3. Read the prompt guide: `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/codex-prompt-guide.md`
 4. **Transform** krs-one's assignment into Codex-native format following the guide's skeleton:
    - `<commands>` → `## Commands` (copy verbatim)
    - `<scope><what>` + `<scope><why>` → `## Task` (rephrase as objectives — NO code blocks)

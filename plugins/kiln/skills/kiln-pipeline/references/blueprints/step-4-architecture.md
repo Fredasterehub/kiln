@@ -17,7 +17,7 @@ The engine reads this blueprint at step spawn to launch numerobis and thoth, the
 | thoth | lore-keepah | Persistent mind. Archivist — owns all writes to .kiln/archive/. Fire-and-forget. | A | opus |
 | aristotle | the-plan-maker | Boss. Orchestrates dual plan, divergence extraction, synthesis, validation, operator review. | B (INTERACTIVE) | opus |
 | confucius | mystical-inspiration | Claude-side planner. Reads architecture docs, consults numerobis, writes plan-${SLOT}.md with structured skeleton (slot from runtime prompt, assigned randomly by aristotle). Conditionally generates design artifacts when VISION.md contains Visual Direction (section 12). | C (wave 1) | opus |
-| sun-tzu | art-of-war | Codex-side planner. Delegates to GPT-5.5 via Codex CLI with GPT-5.4 fallback, writes plan-${SLOT}.md with structured skeleton (slot from runtime prompt). | C (wave 1) | sonnet |
+| sun-tzu | art-of-war | Codex-side planner. Delegates to GPT-5.5 via Codex CLI, GPT-5.4 fallback, writes plan-${SLOT}.md with structured skeleton (slot from runtime prompt). | C (wave 1) | sonnet |
 | miyamoto | gracefully-degrading | Claude-side sonnet planner. Writes plan-${SLOT}.md directly (slot from runtime prompt). Used when codex_available=false. | C (wave 1, conditional) | sonnet |
 | diogenes | divergences-converge | Divergence extractor. Receives anonymized plans (Plan A/B), extracts consensus, divergences, unique insights. Fast sonnet analysis avoiding planner self-bias. | C (wave 1.5) | sonnet |
 | plato | e-pluribus-unum | Plan chairman. Reads anonymized plans + divergence analysis, synthesizes master-plan.md with confidence-tiered verdicts. | C (wave 2) | opus |

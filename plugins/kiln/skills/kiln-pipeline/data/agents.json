@@ -360,7 +360,7 @@
   },
   "team-blue": {
     "alias": "Ryu",
-    "role": "QA analyst (GPT-5.5, GPT-5.4 fallback)",
+    "role": "QA analyst (GPT-5.5 via Codex CLI, GPT-5.4 fallback)",
     "step": 5,
     "spawn_name": "ryu",
     "quotes": [

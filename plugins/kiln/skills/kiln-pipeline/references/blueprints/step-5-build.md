@@ -30,7 +30,7 @@ The pipeline runner invokes this blueprint once per milestone. The team persists
 | thoth | lore-keepah | Persistent mind. Archivist — owns all writes to .kiln/archive/. Fire-and-forget. Guide scratchpad. | A | opus |
 | sentinel | algalon-the-observer | Persistent mind. Quality guardian. Owns patterns.md (TL;DR header) and pitfalls.md. Consultation for quality questions. | A | sonnet |
 | krs-one | bossman | Boss. Reads plan, receives READY summaries, scopes chunks, dispatches to worker pairs, delegates milestone QA via MILESTONE_QA_READY. | B (BACKGROUND) | opus |
-| *duo pool* | dial-a-coder | Codex-type builder. Thin Codex CLI wrapper — delegates to GPT-5.5 with GPT-5.4 fallback. | C (dynamic) | sonnet |
+| *duo pool* | dial-a-coder | Codex-type builder. Thin Codex CLI wrapper — delegates to GPT-5.5, GPT-5.4 fallback. | C (dynamic) | sonnet |
 | *duo pool* | critical-thinker | Structural reviewer. Primary reviewer for Default and Fallback scenarios. APPROVED or REJECTED. | C (dynamic) | opus |
 | *duo pool* | backup-coder | Sonnet-type builder. Direct implementation via Write/Edit. Fallback scenario. | C (dynamic) | sonnet |
 | *duo pool* | la-peintresse | UI builder. Direct Opus implementation of components, pages, layouts, motion. | C (dynamic) | opus |
@@ -194,7 +194,7 @@ Milestone under review: {milestone_name}. Working dir: {working_dir}. Master pla
 Run your QA analysis. Write findings directly to .kiln/tmp/qa-report-${slot}.md (slot from runtime prompt, a or b — the other checker has the complementary slot; stay neutral in the report body). Consult rakim and sentinel as needed.
 ```
 
-**ryu (QA analyst — team-blue, GPT-5.5 via Codex CLI with GPT-5.4 fallback):**
+**ryu (QA analyst — team-blue, GPT-5.5 via Codex CLI, GPT-5.4 fallback):**
 ```
 You are "ryu" (team-blue) on team "{team_name}". Step 5: Build — Milestone QA.
 Milestone under review: {milestone_name}. Working dir: {working_dir}. Master plan: .kiln/master-plan.md.

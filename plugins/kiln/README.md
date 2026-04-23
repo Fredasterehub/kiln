@@ -12,7 +12,7 @@ Multi-modal software creation pipeline. From idea to deployed code in 7 autonomo
 1. **Onboarding** (Alpha) — Detect project, create .kiln/ structure, map codebase if brownfield
 2. **Brainstorm** (Da Vinci) — Interactive vision discovery with the operator
 3. **Research** (MI6) — Investigate open questions from the vision
-4. **Architecture** (Aristotle) — Dual-model planning (Claude + GPT-5.5, GPT-5.4 fallback), debate, synthesis, validation
+4. **Architecture** (Aristotle) — Dual-model planning (Claude + GPT-5.5 via Codex CLI, GPT-5.4 fallback), debate, synthesis, validation
 5. **Build** (KRS-One) — JIT implementation with kill streak team names
 6. **Validate** (Argus) — Test against acceptance criteria, may loop back to Build
 7. **Report** (Omega) — Compile final project report
@@ -20,7 +20,7 @@ Multi-modal software creation pipeline. From idea to deployed code in 7 autonomo
 ## Prerequisites
 
 - **Claude Code** (required)
-- **Codex CLI** (optional): `npm install -g @openai/codex` &mdash; enables dual-model mode with GPT-5.5 when available, GPT-5.4 fallback
+- **Codex CLI** (optional): `npm install -g @openai/codex` &mdash; enables dual-model mode: GPT-5.5 via Codex CLI, GPT-5.4 fallback
 - Run `/kiln-doctor` to verify everything is ready.
 
 ## How It Works

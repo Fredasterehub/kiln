@@ -14,7 +14,7 @@ Three cooperating parts:
    stderr so the teammate is resumed immediately instead of waiting for a
    later hook turn.
 3. **Detached watchdog** — a `nohup + disown` bash loop spawned from
-   `SessionStart`, or from the first post-write hook after a new
+   `SessionStart`, or from a `PostToolUse:Write/Edit` hook after a new
    `.kiln/STATE.md` appears. Every 60 seconds it reads `activity.json`,
    applies the deadlock rule, and writes a nudge when the pipeline is stalled.
 
