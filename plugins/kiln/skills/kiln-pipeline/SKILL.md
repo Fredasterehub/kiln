@@ -279,7 +279,7 @@ The engine waits for the boss's completion signal. Messages from the team arrive
 
 **Interactive steps (Steps 1, 2, 4) — hands off.** The boss is mid-conversation with the human; any engine-side nudge, re-spawn, or takeover interrupts that dialogue and corrupts it. Wait silently and indefinitely. Apparent inactivity is the boss waiting on the operator, not a stuck pipeline.
 
-**Non-interactive steps (Steps 3, 5, 6, 7) — stall detection is native.** The detached watchdog (`watchdog-loop.sh`) monitors `.kiln/tmp/activity.json` and injects nudges automatically when the pipeline stalls. See `plugins/kiln/skills/kiln-pipeline/references/deadlock-detection.md` for the contract. On each idle notification, output a brief lore-flavored one-liner only — no manual polling needed.
+**Non-interactive steps (Steps 3, 5, 6, 7) — stall detection is native.** The detached watchdog (`watchdog-loop.sh`) monitors `.kiln/tmp/activity.json` and injects nudges automatically when the pipeline stalls. See `plugins/kiln/skills/kiln-pipeline/references/deadlock-detection.md` for the contract. On each idle notification, output a brief lore-flavored one-liner only — no manual polling needed. An apparent stall that resolves on terminal refocus is not a Kiln issue — see `plugins/kiln/skills/kiln-pipeline/references/known-limitations.md` for the `claude -p` / `--worktree` / `CLAUDE_STREAM_IDLE_TIMEOUT_MS` mitigations.
 
 ### 5. Shutdown and Transition
 
