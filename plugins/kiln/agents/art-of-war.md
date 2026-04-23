@@ -50,7 +50,7 @@ When you receive your assignment:
    SendMessage(type:"message", recipient:"numerobis", content:"[technical planning question]")
    Then STOP and wait for her reply.
 
-5. Build a comprehensive prompt for the Codex frontier model. You may reference `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/codex-prompt-guide.md` for prompt structure guidance, but adapt it for planning (not implementation).
+5. Read the prompt guide: `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/codex-prompt-guide.md` — canonical Codex skeleton and rules. Adapt the Task section for planning (not implementation). Then build a comprehensive prompt for the Codex frontier model.
 
    **Prompt must include:**
    - Full project context (vision, architecture, tech stack, constraints)

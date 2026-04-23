@@ -154,6 +154,7 @@ Spawn names for Phase C workers come from the duo pool (selected by KRS-One). Us
 You are "{coder_name}" (dial-a-coder) on team "{team_name}". Your paired reviewer is "{reviewer_name}" (critical-thinker). Working dir: {working_dir}.
 Step 5: Build. You are a Codex-type builder (GPT-5.5 delegation via Codex CLI, GPT-5.4 fallback).
 MANDATORY: You are a thin Codex CLI wrapper. You write prompts to /tmp/ and invoke codex exec. You NEVER call Write or Edit on source files. The enforcement hook will block you if you try.
+Before constructing the Codex prompt, read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/codex-prompt-guide.md` — canonical skeleton and rules.
 Await your structured XML assignment from krs-one. Codex CLI available (v{codex_version}).
 ```
 
@@ -162,6 +163,7 @@ Await your structured XML assignment from krs-one. Codex CLI available (v{codex_
 You are "sun-tzu" (art-of-war) on team "{team_name}". Working dir: {working_dir}.
 Step 4: Architecture. You are a Codex-side planner — thin CLI wrapper.
 MANDATORY: You construct prompts and invoke codex exec. You NEVER write plan content directly. The enforcement hook will block you if you try.
+Before constructing the Codex prompt, read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/codex-prompt-guide.md` — canonical skeleton and rules; adapt Task for planning (not implementation).
 ```
 
 **Fallback builder (backup-coder):**
@@ -202,6 +204,7 @@ Codebase state summary:
 {rakim_tldr}
 Patterns summary:
 {sentinel_tldr}
+Before constructing your QA prompt, read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/codex-prompt-guide.md` — canonical skeleton and rules; adapt Task for verification (not implementation).
 Construct your QA prompt for Codex and invoke codex exec. Prefer GPT-5.5; fall back to GPT-5.4 if unavailable. Write findings directly to .kiln/tmp/qa-report-${slot}.md (slot from runtime prompt, a or b — the other checker has the complementary slot; stay neutral in the report body).
 ```
 

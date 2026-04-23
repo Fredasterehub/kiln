@@ -374,6 +374,7 @@ When KRS-One sends `MILESTONE_QA_READY: {milestone_name}`, the engine orchestrat
      Codebase state summary:\n{rakim_tldr}
      Patterns summary:\n{sentinel_tldr}
      {protocol_injection_worker}
+     Before constructing your QA prompt, read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/codex-prompt-guide.md` — canonical skeleton and rules; adapt Task for verification (not implementation).
      Construct your QA prompt for Codex and invoke codex exec. Prefer GPT-5.5; fall back to GPT-5.4 if unavailable.
      Your report slot: {ryu_slot}. Write to .kiln/tmp/qa-report-${ryu_slot}.md.")
    ```

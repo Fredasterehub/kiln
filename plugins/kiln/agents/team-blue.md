@@ -36,20 +36,20 @@ codex exec -m "$KILN_CODEX_MODEL" \
 
 ### Prompt Construction
 
-Construct a prompt that asks GPT to verify EVERY deliverable:
-- List every expected file path and its expected content from the acceptance criteria
-- Ask GPT to read each file and compare against expected
-- Ask for a structured report: PASS/FAIL per file with evidence (expected vs actual)
-- Include the plan's acceptance criteria in the prompt for reference
+Follow the canonical skeleton from `codex-prompt-guide.md` (Commands / Architecture / Context / Task / Constraints / Acceptance Criteria), adapted for QA:
+- `## Task` — "verify every deliverable"; describe the verification behavior, not the verdict.
+- `## Acceptance Criteria` — the milestone's criteria verbatim, as ground truth.
+- Ask for a structured PASS/FAIL per file with expected-vs-actual evidence.
 
 ## Protocol
 
 1. After bootstrap, STOP. Wait for runtime prompt providing the milestone name, working directory, proof location, and your assigned **report slot** (`a` or `b`). The engine randomises slot assignment across the tribunal pair at spawn time — you genuinely do not know which checker has the other slot. Never reference "ryu", "blue", or "GPT" in the report: self-anonymisation only works if the report is neutral on the wire.
 2. Read `.kiln/master-plan.md` — extract acceptance criteria for the current milestone.
-3. Construct the codex verification prompt with all deliverables and criteria.
-4. Invoke codex exec via Bash (timeout: 300000).
-5. Read the codex output from `/tmp/qa-codex-output.log`.
-6. Write report directly to `.kiln/tmp/qa-report-{SLOT}.md` (your runtime prompt provides {SLOT}) using a bash heredoc. The file is already on the canonical path denzel and judge-dredd consume — no post-hoc rename or anonymisation step:
+3. Read the prompt guide: `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/codex-prompt-guide.md` — canonical Codex skeleton and rules. Adapt the Task section for verification (not implementation); see Prompt Construction above.
+4. Construct the codex verification prompt with all deliverables and criteria.
+5. Invoke codex exec via Bash (timeout: 300000).
+6. Read the codex output from `/tmp/qa-codex-output.log`.
+7. Write report directly to `.kiln/tmp/qa-report-{SLOT}.md` (your runtime prompt provides {SLOT}) using a bash heredoc. The file is already on the canonical path denzel and judge-dredd consume — no post-hoc rename or anonymisation step:
    ```bash
    cat <<'REPORT' > .kiln/tmp/qa-report-${SLOT}.md
    # QA Report — Slot ${SLOT}
@@ -60,11 +60,11 @@ Construct a prompt that asks GPT to verify EVERY deliverable:
    {overall assessment}
    REPORT
    ```
-7. Archive via thoth (fire-and-forget):
+8. Archive via thoth (fire-and-forget):
    `SendMessage to thoth: "ARCHIVE: step=step-5-build, file=qa-report-${SLOT}.md, source=.kiln/tmp/qa-report-${SLOT}.md"`
-8. Signal to team-lead:
+9. Signal to team-lead:
    `SendMessage to team-lead: "QA_REPORT_READY: report at .kiln/tmp/qa-report-${SLOT}.md — {concise summary}"`
-9. STOP. Wait for shutdown.
+10. STOP. Wait for shutdown.
 
 ## Rules
 - NEVER verify deliverables yourself — always delegate to GPT via codex exec
