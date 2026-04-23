@@ -288,6 +288,48 @@ test_activity_json_failed_write_no_clobber() {
   rm -rf "$tmp"
 }
 
+test_ensure_watchdog_starts_after_state_creation() {
+  local name="ensure-watchdog-starts-after-state-creation"
+  local tmp
+  tmp=$(mktempdir)
+  mkdir -p "$tmp/.kiln"
+  seed_state "$tmp" 1 0
+
+  (
+    cd "$tmp" || exit 1
+    printf '{"hook_event_name":"PostToolUse","tool_name":"Write"}' \
+      | bash "$REPO_ROOT/plugins/kiln/hooks/ensure-watchdog.sh"
+  )
+
+  local ok=1
+  local pid_file="$tmp/.kiln/tmp/watchdog.pid"
+  if [[ ! -f "$pid_file" ]]; then
+    echo "       watchdog.pid was not created"
+    ok=0
+  else
+    local pid
+    pid=$(cat "$pid_file" 2>/dev/null)
+    if [[ -z "$pid" ]]; then
+      echo "       watchdog.pid is empty"
+      ok=0
+    elif [[ ! -r "/proc/$pid/cmdline" ]] || ! grep -q "watchdog-loop" "/proc/$pid/cmdline" 2>/dev/null; then
+      echo "       pid '$pid' is not a live watchdog-loop process"
+      ok=0
+    fi
+    [[ -n "${pid:-}" ]] && kill "$pid" 2>/dev/null || true
+  fi
+
+  if (( ok == 1 )); then
+    echo "    ✓ $name"
+    PASS=$((PASS + 1))
+  else
+    echo "    ✗ $name"
+    FAIL=$((FAIL + 1))
+    FAILED+=("$name")
+  fi
+  rm -rf "$tmp"
+}
+
 echo "── State-mutation tests ─────────────────"
 echo "  chunk_count / team_iteration sed patterns"
 test_bossman_chunk_increment
@@ -298,6 +340,9 @@ echo "  activity.json atomic-write patterns"
 test_activity_json_atomic_write
 test_activity_json_concurrent_write_no_clobber
 test_activity_json_failed_write_no_clobber
+echo ""
+echo "  watchdog startup"
+test_ensure_watchdog_starts_after_state_creation
 echo ""
 echo "State-mutation: ${PASS} passed, ${FAIL} failed"
 if (( FAIL > 0 )); then

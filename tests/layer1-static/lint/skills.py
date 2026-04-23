@@ -14,8 +14,8 @@ catch the specific regressions the rewrites could introduce:
      reference it.
 
 This lint intentionally does not attempt ALL-CAPS heuristic warnings — the
-creatah-reviewer (cross-family GPT-5.4 review) catches stylistic issues more
-reliably than a regex can.
+creatah-reviewer cross-family review catches stylistic issues more reliably
+than a regex can.
 
 Exit code: 0 clean, 1 violations.
 """
