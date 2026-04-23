@@ -28,28 +28,13 @@
 # old file and the second mv would silently clobber the first's
 # nudge_count / active_teammates mutations.
 
+. "$(dirname "$0")/_kiln-lib.sh"
+
 INPUT=$(cat)
 
-_find_root() {
-  local d="$PWD"
-  while [[ "$d" != "/" ]]; do
-    [[ -d "$d/.kiln" ]] && echo "$d" && return 0
-    d=$(dirname "$d")
-  done
-  return 1
-}
+_kiln_pipeline_active || exit 0
 
-ROOT=$(_find_root)
-[[ -n "$ROOT" ]] || exit 0
-
-_STATE="$ROOT/.kiln/STATE.md"
-[[ -f "$_STATE" ]] || exit 0
-
-_STAGE=$(grep -oP '(?<=\*\*stage\*\*: )\S+' "$_STATE" 2>/dev/null || true)
-[[ -n "$_STAGE" ]] || exit 0
-[[ "$_STAGE" != "complete" ]] || exit 0
-
-TMP_DIR="$ROOT/.kiln/tmp"
+TMP_DIR="$KILN_ROOT/.kiln/tmp"
 mkdir -p "$TMP_DIR" 2>/dev/null || exit 0
 ACTIVITY="$TMP_DIR/activity.json"
 LOCK="$TMP_DIR/activity.lock"
@@ -100,7 +85,7 @@ SOURCE="$EVENT"
 
   echo "$EXISTING" | jq --arg ts "$NOW" \
      --arg src "$SOURCE" \
-     --arg phase "$_STAGE" \
+     --arg phase "$KILN_STAGE" \
      --arg event "$EVENT" \
      --arg teammate "$TEAMMATE" \
      '(.last_activity_ts = ($ts | tonumber))

@@ -20,26 +20,13 @@
 # failing the session start. The watchdog is a recovery mechanism; its
 # own absence must never be the thing that stalls the pipeline.
 
+. "$(dirname "$0")/_kiln-lib.sh"
+
 INPUT=$(cat)
 
-_find_root() {
-  local d="$PWD"
-  while [[ "$d" != "/" ]]; do
-    [[ -d "$d/.kiln" ]] && echo "$d" && return 0
-    d=$(dirname "$d")
-  done
-  return 1
-}
-
-ROOT=$(_find_root)
-[[ -n "$ROOT" ]] || exit 0
-
+_kiln_pipeline_active || exit 0
+ROOT="$KILN_ROOT"
 _STATE="$ROOT/.kiln/STATE.md"
-[[ -f "$_STATE" ]] || exit 0
-
-_STAGE=$(grep -oP '(?<=\*\*stage\*\*: )\S+' "$_STATE" 2>/dev/null || true)
-[[ -n "$_STAGE" ]] || exit 0
-[[ "$_STAGE" != "complete" ]] || exit 0
 
 # DEADLOCK.flag recovery. If the previous session exhausted 3 nudges and
 # escalated, the flag persists. Append a recovery notice to STATE.md,

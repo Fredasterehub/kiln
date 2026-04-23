@@ -26,20 +26,13 @@
 # written") stops the loop. Any other non-zero (OS error, signal, jq
 # crash) is treated as transient and the loop continues.
 
-_find_root() {
-  local d="$PWD"
-  while [[ "$d" != "/" ]]; do
-    [[ -d "$d/.kiln" ]] && echo "$d" && return 0
-    d=$(dirname "$d")
-  done
-  return 1
-}
+HOOK_DIR=$(realpath "$(dirname "$0")" 2>/dev/null || (cd "$(dirname "$0")" && pwd))
+. "$HOOK_DIR/_kiln-lib.sh"
 
-[[ -n "$KILN_ROOT" ]] || KILN_ROOT=$(_find_root)
+[[ -n "$KILN_ROOT" ]] || KILN_ROOT=$(_kiln_find_root)
 [[ -n "$KILN_ROOT" ]] || exit 0
 export KILN_ROOT
 
-HOOK_DIR=$(realpath "$(dirname "$0")" 2>/dev/null || (cd "$(dirname "$0")" && pwd))
 CHECK="$HOOK_DIR/deadlock-check.sh"
 [[ -f "$CHECK" ]] || exit 0
 

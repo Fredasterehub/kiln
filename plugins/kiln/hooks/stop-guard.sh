@@ -15,6 +15,9 @@
 # Stateless. Reads .kiln/STATE.md for pipeline state.
 # Exit 0 = allow stop. Exit 2 = block stop (stderr = nudge message).
 
+. "$(dirname "$0")/_kiln-lib.sh"
+. "$(dirname "$0")/_kiln-agents.sh"
+
 INPUT=$(cat)
 EVENT=$(echo "$INPUT" | jq -r '.hook_event_name // ""')
 AGENT=$(echo "$INPUT" | jq -r '.agent_type // ""')
@@ -23,40 +26,10 @@ AGENT="${AGENT#kiln:}"
 # Only SubagentStop is registered, but guard anyway
 [[ "$EVENT" == "SubagentStop" ]] || exit 0
 
-# ── Pipeline context gate ────────────────────────────────────
-_find_root() {
-  local d="$PWD"
-  while [[ "$d" != "/" ]]; do
-    [[ -d "$d/.kiln" ]] && echo "$d" && return 0
-    d=$(dirname "$d")
-  done
-  return 1
-}
-
-ROOT=$(_find_root)
-[[ -n "$ROOT" ]] || exit 0
-
-_STATE="$ROOT/.kiln/STATE.md"
-[[ -f "$_STATE" ]] || exit 0
-
-_STAGE=$(grep -oP '(?<=\*\*stage\*\*: )\S+' "$_STATE" 2>/dev/null || true)
-[[ -n "$_STAGE" ]] || exit 0
-[[ "$_STAGE" != "complete" ]] || exit 0
-
-# Only gate known Kiln pipeline agents
-case "$AGENT" in
-  the-beginning-of-the-end|the-discovery-begins|the-anatomist|trust-the-science|follow-the-scent|\
-  the-creator|the-foundation|\
-  alpha-team-deploy|unit-deployed|\
-  the-plan-maker|pitie-pas-les-crocos|mystical-inspiration|art-of-war|divergences-converge|e-pluribus-unum|straight-outta-olympia|gracefully-degrading|\
-  bossman|dropping-science|algalon-the-observer|lore-keepah|dial-a-coder|backup-coder|la-peintresse|critical-thinker|the-curator|\
-  team-red|team-blue|the-negotiator|i-am-the-law|\
-  release-the-giant|le-plexus-exploseur|style-maker|\
-  the-end-of-the-beginning)
-    ;; # known agent — check deliverable
-  *)
-    exit 0 ;; # not a Kiln agent, allow stop
-esac
+# ── Pipeline context gate + Kiln agent whitelist ─────────────
+_kiln_pipeline_active || exit 0
+_kiln_is_known_agent "$AGENT" || exit 0
+ROOT="$KILN_ROOT"
 
 # ── Terminal signal detection ────────────────────────────────
 # last_assistant_message is the agent's final output before stopping.

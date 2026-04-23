@@ -20,37 +20,23 @@
 # payload's hook_event_name, defaulting to PreToolUse since that's the
 # primary wiring and the safe fallback.
 
+. "$(dirname "$0")/_kiln-lib.sh"
+
 INPUT=$(cat)
 
 # ── Pipeline context gate ────────────────────────────────────
-# Mirrors subagent-start-ack.sh. Zero overhead outside active Kiln
-# pipelines: no .kiln dir, no STATE.md, or stage=complete → silent no-op.
-_find_root() {
-  local d="$PWD"
-  while [[ "$d" != "/" ]]; do
-    [[ -d "$d/.kiln" ]] && echo "$d" && return 0
-    d=$(dirname "$d")
-  done
-  return 1
-}
-
-ROOT=$(_find_root)
-[[ -n "$ROOT" ]] || exit 0
-
-_STATE="$ROOT/.kiln/STATE.md"
-[[ -f "$_STATE" ]] || exit 0
-
-_STAGE=$(grep -oP '(?<=\*\*stage\*\*: )\S+' "$_STATE" 2>/dev/null || true)
-[[ -n "$_STAGE" ]] || exit 0
-[[ "$_STAGE" != "complete" ]] || exit 0
+# Zero overhead outside active Kiln pipelines: no .kiln dir, no
+# STATE.md, or stage=complete → silent no-op. _kiln_pipeline_active
+# sets KILN_ROOT on success.
+_kiln_pipeline_active || exit 0
 
 # ── Atomic claim ─────────────────────────────────────────────
 # mv is atomic on Linux (same filesystem). Two concurrent hook fires
 # both seeing the pending file would otherwise emit the same nudge
 # twice; the rename race ensures only the winner owns the content and
 # all losers see ENOENT and silently exit.
-PENDING="$ROOT/.kiln/tmp/pending-nudge.json"
-CLAIMED="$ROOT/.kiln/tmp/pending-nudge.$$.claimed"
+PENDING="$KILN_ROOT/.kiln/tmp/pending-nudge.json"
+CLAIMED="$KILN_ROOT/.kiln/tmp/pending-nudge.$$.claimed"
 mv "$PENDING" "$CLAIMED" 2>/dev/null || exit 0
 
 # ── Read additionalContext ───────────────────────────────────

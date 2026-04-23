@@ -18,16 +18,12 @@
 # Fail-open everywhere. The session is exiting; nothing we do here can
 # block it, and nothing that fails here should surface as an error.
 
-_find_root() {
-  local d="$PWD"
-  while [[ "$d" != "/" ]]; do
-    [[ -d "$d/.kiln" ]] && echo "$d" && return 0
-    d=$(dirname "$d")
-  done
-  return 1
-}
+. "$(dirname "$0")/_kiln-lib.sh"
 
-ROOT=$(_find_root)
+# NOTE: session-cleanup deliberately does NOT gate on stage != complete
+# (the session is ending regardless — a mid-pipeline exit still deserves
+# teardown). Only needs root resolution, not the full composite gate.
+ROOT=$(_kiln_find_root)
 [[ -n "$ROOT" ]] || exit 0
 
 TMP_DIR="$ROOT/.kiln/tmp"

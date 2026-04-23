@@ -17,6 +17,15 @@
 # per Claude Code v2.1.89. Snake_case aliases removed in Wave 0 — they
 # never matched anything.
 
+# Resolve the hooks dir once and source the shared primitives. Prefer
+# CLAUDE_PLUGIN_ROOT when the runtime sets it; fall back to deriving
+# from $0 so fixtures (which invoke bash directly without the env var)
+# still find the lib. Relative path is three levels up from scripts/
+# to the plugin root, then down into hooks/.
+_KILN_HOOKS_DIR="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/../../.." && pwd)}/hooks"
+. "$_KILN_HOOKS_DIR/_kiln-lib.sh"
+. "$_KILN_HOOKS_DIR/_kiln-agents.sh"
+
 INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name // ""')
 
@@ -49,53 +58,15 @@ RECIPIENT=$(echo "$INPUT" | jq -r '.tool_input.recipient // ""')
 RECIPIENT="${RECIPIENT#kiln:}"
 TYPE=$(echo "$INPUT" | jq -r '.tool_input.type // ""')
 
-# ── Helpers ──────────────────────────────────────────────────
-
-_find_root() {
-  local d="$PWD"
-  while [[ "$d" != "/" ]]; do
-    [[ -d "$d/.kiln" ]] && echo "$d" && return 0
-    d=$(dirname "$d")
-  done
-  return 1
-}
-
-
 # ── Pipeline context gate ────────────────────────────────────
 # Enforcement only applies during ACTIVE Kiln pipeline runs.
 # Three checks: .kiln/ exists, STATE.md has active stage, agent is Kiln-known.
-KILN_ROOT=$(_find_root)
-
-# No .kiln/ directory — no pipeline, allow everything
-[[ -n "$KILN_ROOT" ]] || allow
-
-# .kiln/ exists — check if pipeline is actually active via STATE.md
-_STATE="$KILN_ROOT/.kiln/STATE.md"
-if [[ ! -f "$_STATE" ]]; then
-  allow  # No STATE.md = no active pipeline (historical/stale .kiln/)
-fi
-
-_STAGE=$(grep -oP '(?<=\*\*stage\*\*: )\S+' "$_STATE" 2>/dev/null || true)
-if [[ -z "$_STAGE" ]] || [[ "$_STAGE" == "complete" ]]; then
-  allow  # Pipeline finished or STATE.md malformed — no enforcement
-fi
+_kiln_pipeline_active || allow
 
 # Pipeline is active. Main session (empty AGENT) is the engine — enforce.
 # For named agents, only enforce if the agent is a known Kiln pipeline agent.
 if [[ -n "$AGENT" ]]; then
-  case "$AGENT" in
-    the-beginning-of-the-end|the-discovery-begins|the-anatomist|trust-the-science|follow-the-scent|\
-    the-creator|the-foundation|\
-    alpha-team-deploy|unit-deployed|\
-    the-plan-maker|pitie-pas-les-crocos|mystical-inspiration|art-of-war|divergences-converge|e-pluribus-unum|straight-outta-olympia|gracefully-degrading|\
-    bossman|dropping-science|algalon-the-observer|lore-keepah|dial-a-coder|backup-coder|la-peintresse|critical-thinker|the-curator|\
-    team-red|team-blue|the-negotiator|i-am-the-law|\
-    release-the-giant|le-plexus-exploseur|style-maker|\
-    the-end-of-the-beginning)
-      ;; # known Kiln agent — fall through to enforcement
-    *)
-      allow ;; # unknown agent (Explore, statusline-setup, etc.) — not Kiln, allow
-  esac
+  _kiln_is_known_agent "$AGENT" || allow
 fi
 
 # ═══════════════════════════════════════════════════════════════
@@ -220,23 +191,12 @@ if [[ "$TOOL" == "Agent" ]]; then
   SUBTYPE=$(echo "$INPUT" | jq -r '.tool_input.subagent_type // ""')
   SUBTYPE="${SUBTYPE#kiln:}"
   if [[ -n "$SUBTYPE" ]]; then
-    case "$SUBTYPE" in
-      the-beginning-of-the-end|the-discovery-begins|the-anatomist|trust-the-science|follow-the-scent|\
-      the-creator|the-foundation|\
-      alpha-team-deploy|unit-deployed|\
-      the-plan-maker|pitie-pas-les-crocos|mystical-inspiration|art-of-war|divergences-converge|e-pluribus-unum|straight-outta-olympia|gracefully-degrading|\
-      bossman|dropping-science|algalon-the-observer|lore-keepah|dial-a-coder|backup-coder|la-peintresse|critical-thinker|the-curator|\
-      team-red|team-blue|the-negotiator|i-am-the-law|\
-      release-the-giant|le-plexus-exploseur|style-maker|\
-      the-end-of-the-beginning)
-        ;; # allowed
-      *)
-        deny "Only named Kiln agents can be spawned. Use agent types from the blueprint roster:
+    if ! _kiln_is_known_agent "$SUBTYPE"; then
+      deny "Only named Kiln agents can be spawned. Use agent types from the blueprint roster:
   Default: dial-a-coder (builder) + critical-thinker (reviewer)
   Fallback: backup-coder (builder) + critical-thinker (reviewer)
   UI: la-peintresse (builder) + the-curator (reviewer)"
-        ;;
-    esac
+    fi
   fi
 fi
 

@@ -37,25 +37,15 @@
 # SessionStart recovery, so we keep the watchdog alive to retry next
 # tick).
 
-_find_root() {
-  local d="$PWD"
-  while [[ "$d" != "/" ]]; do
-    [[ -d "$d/.kiln" ]] && echo "$d" && return 0
-    d=$(dirname "$d")
-  done
-  return 1
-}
+. "$(dirname "$0")/_kiln-lib.sh"
 
-[[ -n "$KILN_ROOT" ]] || KILN_ROOT=$(_find_root)
-[[ -n "$KILN_ROOT" ]] || exit 0
+# _kiln_pipeline_active honours a pre-set KILN_ROOT in env, which the
+# detached watchdog-loop propagates to skip a second _kiln_find_root
+# walk from an unknown CWD. Falls back to walking if the env is empty
+# (direct invocation, tests).
+_kiln_pipeline_active || exit 0
 ROOT="$KILN_ROOT"
-
 STATE="$ROOT/.kiln/STATE.md"
-[[ -f "$STATE" ]] || exit 0
-
-STAGE=$(grep -oP '(?<=\*\*stage\*\*: )\S+' "$STATE" 2>/dev/null || true)
-[[ -n "$STAGE" ]] || exit 0
-[[ "$STAGE" != "complete" ]] || exit 0
 
 TMP_DIR="$ROOT/.kiln/tmp"
 ACTIVITY="$TMP_DIR/activity.json"

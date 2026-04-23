@@ -18,6 +18,12 @@
 #   - Main session (engine owns all files)
 #   - Commands with no filesystem write patterns
 
+# Resolve the hooks dir once and source shared primitives (see
+# enforce-pipeline.sh for the CLAUDE_PLUGIN_ROOT fallback rationale).
+_KILN_HOOKS_DIR="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/../../.." && pwd)}/hooks"
+. "$_KILN_HOOKS_DIR/_kiln-lib.sh"
+. "$_KILN_HOOKS_DIR/_kiln-agents.sh"
+
 INPUT=$(cat)
 AGENT=$(echo "$INPUT" | jq -r '.agent_type // ""')
 AGENT="${AGENT#kiln:}"
@@ -25,46 +31,12 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
 
 # ── Pipeline context gate ────────────────────────────────────
 # Only audit during active Kiln pipeline runs.
-# Reuses the same logic as enforce-pipeline.sh.
-
-_find_root() {
-  local d="$PWD"
-  while [[ "$d" != "/" ]]; do
-    [[ -d "$d/.kiln" ]] && echo "$d" && return 0
-    d=$(dirname "$d")
-  done
-  return 1
-}
-
-KILN_ROOT=$(_find_root)
-[[ -n "$KILN_ROOT" ]] || exit 0
-
-_STATE="$KILN_ROOT/.kiln/STATE.md"
-[[ -f "$_STATE" ]] || exit 0
-
-_STAGE=$(grep -oP '(?<=\*\*stage\*\*: )\S+' "$_STATE" 2>/dev/null || true)
-if [[ -z "$_STAGE" ]] || [[ "$_STAGE" == "complete" ]]; then
-  exit 0
-fi
+_kiln_pipeline_active || exit 0
 
 # Main session (empty AGENT) is the engine — it owns all files, no audit needed.
 # For named agents, only audit known Kiln pipeline agents.
-if [[ -z "$AGENT" ]]; then
-  exit 0  # engine's own Bash writes are not audited
-fi
-case "$AGENT" in
-  the-beginning-of-the-end|the-discovery-begins|the-anatomist|trust-the-science|follow-the-scent|\
-  the-creator|the-foundation|\
-  alpha-team-deploy|unit-deployed|\
-  the-plan-maker|pitie-pas-les-crocos|mystical-inspiration|art-of-war|divergences-converge|e-pluribus-unum|straight-outta-olympia|gracefully-degrading|\
-  bossman|dropping-science|algalon-the-observer|lore-keepah|dial-a-coder|backup-coder|la-peintresse|critical-thinker|the-curator|\
-  team-red|team-blue|the-negotiator|i-am-the-law|\
-  release-the-giant|le-plexus-exploseur|style-maker|\
-  the-end-of-the-beginning)
-    ;; # known Kiln agent — fall through to audit
-  *)
-    exit 0 ;; # unknown agent (Explore, statusline-setup, etc.) — not Kiln, allow
-esac
+[[ -n "$AGENT" ]] || exit 0
+_kiln_is_known_agent "$AGENT" || exit 0
 
 # ── Write-pattern detection ──────────────────────────────────
 # Detect commands with filesystem write side effects.
