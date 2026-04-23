@@ -351,7 +351,7 @@ When KRS-One sends `MILESTONE_QA_READY: {milestone_name}`, the engine orchestrat
 
 **Engine protocol on receiving MILESTONE_QA_READY:**
 
-1. **Pre-package PM context for ryu** — Read the TL;DR headers from rakim's `.kiln/docs/codebase-state.md` and sentinel's `.kiln/docs/patterns.md` (first 30 lines of each). Ryu is a thin Codex CLI wrapper that does not consult PMs directly — the engine pre-packages this context into its runtime prompt so the GPT-5.4 side still sees the same ground truth as ken.
+1. **Pre-package PM context for ryu** — Read the TL;DR headers from rakim's `.kiln/docs/codebase-state.md` and sentinel's `.kiln/docs/patterns.md` (first 30 lines of each). Ryu is a thin Codex CLI wrapper that does not consult PMs directly — the engine pre-packages this context into its runtime prompt so the Codex side still sees the same ground truth as ken.
 
 2. **Spawn ken + ryu (parallel, background):**
 
@@ -374,7 +374,7 @@ When KRS-One sends `MILESTONE_QA_READY: {milestone_name}`, the engine orchestrat
      Codebase state summary:\n{rakim_tldr}
      Patterns summary:\n{sentinel_tldr}
      {protocol_injection_worker}
-     Construct your QA prompt for GPT-5.4 and invoke codex exec.
+     Construct your QA prompt for Codex and invoke codex exec. Prefer GPT-5.5; fall back to GPT-5.4 if unavailable.
      Your report slot: {ryu_slot}. Write to .kiln/tmp/qa-report-${ryu_slot}.md.")
    ```
 

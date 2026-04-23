@@ -25,13 +25,14 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
 cat <<'PROMPT' > /tmp/qa-codex-prompt.md
 {your verification prompt}
 PROMPT
-codex exec -m gpt-5.4 \
+KILN_CODEX_MODEL="${KILN_CODEX_MODEL:-gpt-5.5}"
+codex exec -m "$KILN_CODEX_MODEL" \
   -c 'model_reasoning_effort="high"' \
   --sandbox danger-full-access \
   < /tmp/qa-codex-prompt.md 2>&1 | tee /tmp/qa-codex-output.log
 ```
 
-**Always set `timeout: 300000` on the Bash call.**
+**Always set `timeout: 300000` on the Bash call.** If GPT-5.5 is unavailable, retry once with `KILN_CODEX_MODEL=gpt-5.4` and record the fallback in `/tmp/qa-codex-output.log`.
 
 ### Prompt Construction
 

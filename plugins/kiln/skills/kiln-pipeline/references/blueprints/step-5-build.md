@@ -30,13 +30,13 @@ The pipeline runner invokes this blueprint once per milestone. The team persists
 | thoth | lore-keepah | Persistent mind. Archivist — owns all writes to .kiln/archive/. Fire-and-forget. Guide scratchpad. | A | opus |
 | sentinel | algalon-the-observer | Persistent mind. Quality guardian. Owns patterns.md (TL;DR header) and pitfalls.md. Consultation for quality questions. | A | sonnet |
 | krs-one | bossman | Boss. Reads plan, receives READY summaries, scopes chunks, dispatches to worker pairs, delegates milestone QA via MILESTONE_QA_READY. | B (BACKGROUND) | opus |
-| *duo pool* | dial-a-coder | Codex-type builder. Thin Codex CLI wrapper — delegates to GPT-5.4. | C (dynamic) | sonnet |
+| *duo pool* | dial-a-coder | Codex-type builder. Thin Codex CLI wrapper — delegates to GPT-5.5 with GPT-5.4 fallback. | C (dynamic) | sonnet |
 | *duo pool* | critical-thinker | Structural reviewer. Primary reviewer for Default and Fallback scenarios. APPROVED or REJECTED. | C (dynamic) | opus |
 | *duo pool* | backup-coder | Sonnet-type builder. Direct implementation via Write/Edit. Fallback scenario. | C (dynamic) | sonnet |
 | *duo pool* | la-peintresse | UI builder. Direct Opus implementation of components, pages, layouts, motion. | C (dynamic) | opus |
 | *duo pool* | the-curator | UI reviewer. Design quality review with 5-axis advisory scoring. | C (dynamic) | sonnet |
 | ken | team-red | QA analyst (Claude Opus). Deep analysis — build, tests, acceptance criteria, integration. Severity-rated report. | D (dynamic) | opus |
-| ryu | team-blue | QA analyst (GPT-5.4 via Codex CLI). Independent second perspective. Thin CLI wrapper. | D (dynamic) | sonnet |
+| ryu | team-blue | QA analyst (GPT-5.5 via Codex CLI, GPT-5.4 fallback). Independent second perspective. Thin CLI wrapper. | D (dynamic) | sonnet |
 | denzel | the-negotiator | QA reconciler. Reads both anonymized QA reports, reconciles discrepancies, writes synthesis. | D (dynamic) | opus |
 | judge-dredd | i-am-the-law | QA judge (Opus). Reads synthesis + source reports, issues final QA_PASS or QA_FAIL verdict. | D (dynamic) | opus |
 
@@ -152,7 +152,7 @@ Spawn names for Phase C workers come from the duo pool (selected by KRS-One). Us
 **Codex-type builder (dial-a-coder):**
 ```
 You are "{coder_name}" (dial-a-coder) on team "{team_name}". Your paired reviewer is "{reviewer_name}" (critical-thinker). Working dir: {working_dir}.
-Step 5: Build. You are a Codex-type builder (GPT-5.4 delegation via Codex CLI).
+Step 5: Build. You are a Codex-type builder (GPT-5.5 delegation via Codex CLI, GPT-5.4 fallback).
 MANDATORY: You are a thin Codex CLI wrapper. You write prompts to /tmp/ and invoke codex exec. You NEVER call Write or Edit on source files. The enforcement hook will block you if you try.
 Await your structured XML assignment from krs-one. Codex CLI available (v{codex_version}).
 ```
@@ -194,7 +194,7 @@ Milestone under review: {milestone_name}. Working dir: {working_dir}. Master pla
 Run your QA analysis. Write findings directly to .kiln/tmp/qa-report-${slot}.md (slot from runtime prompt, a or b — the other checker has the complementary slot; stay neutral in the report body). Consult rakim and sentinel as needed.
 ```
 
-**ryu (QA analyst — team-blue, GPT-5.4 via Codex CLI):**
+**ryu (QA analyst — team-blue, GPT-5.5 via Codex CLI with GPT-5.4 fallback):**
 ```
 You are "ryu" (team-blue) on team "{team_name}". Step 5: Build — Milestone QA.
 Milestone under review: {milestone_name}. Working dir: {working_dir}. Master plan: .kiln/master-plan.md.
@@ -202,7 +202,7 @@ Codebase state summary:
 {rakim_tldr}
 Patterns summary:
 {sentinel_tldr}
-Construct your QA prompt for GPT-5.4 and invoke codex exec. Write findings directly to .kiln/tmp/qa-report-${slot}.md (slot from runtime prompt, a or b — the other checker has the complementary slot; stay neutral in the report body).
+Construct your QA prompt for Codex and invoke codex exec. Prefer GPT-5.5; fall back to GPT-5.4 if unavailable. Write findings directly to .kiln/tmp/qa-report-${slot}.md (slot from runtime prompt, a or b — the other checker has the complementary slot; stay neutral in the report body).
 ```
 
 **denzel (QA reconciler — the-negotiator):**
