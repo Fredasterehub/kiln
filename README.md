@@ -90,10 +90,11 @@
 
 <br>
 
-<h3 align="center">&#x1F525; Dev notes</h3>
+## Dev quick notes:
 
-> Make sure to  ```bash claude plugin update kiln@kiln" ``` often! as apparently i still can't figure out how to properly auto update on release and all. will be fixed :3 
-> I'm keeping it yellow although technically it never deadlocks but there's some issues where it seem if the terminal is not active, say you are working in another terminal, it stops at some points until you just click back on the terminal and then right away it picks up so heavily investigating as time permits
+> Make sure to ```bash claude plugin update kiln@kiln" ```often! as apparently i still can't figure out how to properly auto update on release and all. Sorry, will be fixed :3 
+>
+> I'm keeping it yellow although technically it never deadlocks but there's some issues where it seem if the terminal is not active, say you are working in another terminal, it stops at some points until you just click back on the terminal and then right away it picks up so heavily investigating as time permits.
 
 
 ---
