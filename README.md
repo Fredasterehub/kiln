@@ -92,9 +92,9 @@
 
 ## Dev quick notes:
 
-> Make sure to ``` claude plugin update kiln@kiln ```often! as apparently i still can't figure out how to properly auto update on release and all. Sorry, will be fixed :3 
+> Make sure to run `claude plugin update kiln@kiln` often! Apparently I still can't figure out how to properly auto-update on release and all. Sorry, will be fixed :3
 >
-> I'm keeping it yellow although technically it never deadlocks but there's some issues where it seem if the terminal is not active, say you are working in another terminal, it stops at some points until you just click back on the terminal and then right away it picks up so heavily investigating as time permits.
+> I'm keeping it yellow — technically it never deadlocks, but there are some issues where it seems if the terminal is not active (say, you're working in another terminal) it stops at some points until you click back on the terminal and it picks right up. Actively investigating as time permits.
 
 
 ---
