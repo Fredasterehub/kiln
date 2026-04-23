@@ -32,7 +32,6 @@ SCRIPTS_DIR="$REPO_ROOT/plugins/kiln/skills/kiln-pipeline/scripts"
 HOOKS_DIR="$REPO_ROOT/plugins/kiln/hooks"
 
 declare -A HOOK_SCRIPT
-HOOK_SCRIPT["audit-milestone"]="$SCRIPTS_DIR/audit-milestone.sh"
 HOOK_SCRIPT["audit-bash"]="$SCRIPTS_DIR/audit-bash.sh"
 HOOK_SCRIPT["enforce-pipeline"]="$SCRIPTS_DIR/enforce-pipeline.sh"
 HOOK_SCRIPT["stop-guard"]="$HOOKS_DIR/stop-guard.sh"

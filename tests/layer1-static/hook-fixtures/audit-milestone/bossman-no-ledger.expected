@@ -1,7 +1,0 @@
-=== STDOUT ===
-=== STDERR ===
-AUDIT WARNING: MILESTONE_COMPLETE claimed but iter-log.md does not exist
-=== EXIT ===
-0
-=== CONTEXT ===
-mock-pipeline

@@ -1,7 +1,7 @@
 === STDOUT ===
 === STDERR ===
-qa: PASS
+iter-log.md does not exist
 === EXIT ===
-0
+2
 === CONTEXT ===
 mock-pipeline

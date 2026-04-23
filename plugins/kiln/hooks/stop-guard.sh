@@ -41,6 +41,41 @@ ROOT="$KILN_ROOT"
 # reviewer check. See the reviewer block below.
 LAST_MSG=$(echo "$INPUT" | jq -r '.last_assistant_message // ""')
 
+# ── Bossman MILESTONE_COMPLETE: verify iter-log ──────────────
+# Moved in v1.5.3 from the retired audit-milestone.sh. Bossman must
+# write a final iter-log.md entry with `result: milestone_complete`
+# and `qa: PASS` before claiming a milestone is done. Exit 2 here
+# rather than the audit's exit-0-with-stderr — PostToolUse exit 0
+# hides stderr from the agent's transcript, so the original was only
+# advisory in name; SubagentStop surfaces stderr reliably when exit 2
+# blocks the stop, and the stop is refused until the ledger matches
+# the claim. Runs before the fast-path MILESTONE_COMPLETE exit so the
+# fast path can't bypass the ledger check. Patterns are fixed-string
+# (grep -F) with no line anchor so a single combined
+# `result: milestone_complete, qa: PASS` line passes both checks —
+# that's the shape the fixtures seed and bossman writes in practice.
+if [[ "$AGENT" == "bossman" ]] && [[ "$LAST_MSG" == *MILESTONE_COMPLETE* ]]; then
+  ITER_LOG="$ROOT/.kiln/docs/iter-log.md"
+  if [[ ! -f "$ITER_LOG" ]]; then
+    echo "You signaled MILESTONE_COMPLETE but .kiln/docs/iter-log.md does not exist. Write the iteration ledger entry before stopping." >&2
+    exit 2
+  fi
+  LAST_HEADER_LINE=$(grep -n '^## Iteration' "$ITER_LOG" | tail -1 | cut -d: -f1)
+  if [[ -z "$LAST_HEADER_LINE" ]]; then
+    echo "You signaled MILESTONE_COMPLETE but iter-log.md has no '## Iteration' entries. Add the final entry before stopping." >&2
+    exit 2
+  fi
+  LAST_ENTRY=$(tail -n +"$LAST_HEADER_LINE" "$ITER_LOG")
+  if ! echo "$LAST_ENTRY" | grep -qiF 'result: milestone_complete'; then
+    echo "You signaled MILESTONE_COMPLETE but iter-log.md last entry does not show 'result: milestone_complete'. Update the ledger before stopping." >&2
+    exit 2
+  fi
+  if ! echo "$LAST_ENTRY" | grep -qiF 'qa: PASS'; then
+    echo "You signaled MILESTONE_COMPLETE but iter-log.md last entry does not show 'qa: PASS'. QA must pass before claiming milestone completion." >&2
+    exit 2
+  fi
+fi
+
 case "$AGENT" in
   critical-thinker|the-curator)
     # Fall through to the reviewer block; do not fast-path on terminal

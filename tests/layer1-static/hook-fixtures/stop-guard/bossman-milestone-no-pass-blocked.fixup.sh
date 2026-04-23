@@ -1,5 +1,5 @@
 #!/bin/bash
-# Overwrite iter-log to simulate "milestone claimed but last entry lacks qa: PASS"
+# Overwrite iter-log with an entry that has result: milestone_complete but no qa: PASS
 cat > "$1/.kiln/docs/iter-log.md" <<'EOF'
 ## Iteration 1 — 2026-04-16T11:00:00Z
 milestone: M1
