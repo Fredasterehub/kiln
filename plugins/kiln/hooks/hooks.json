@@ -87,6 +87,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/teammate-idle-feedback.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/activity-update.sh",
             "timeout": 5
           }
@@ -164,6 +169,16 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/scripts/audit-status-marker.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/ensure-watchdog.sh",
             "timeout": 5
           }
         ]

@@ -52,3 +52,7 @@ qa-review/
 .omc/
 state/
 .omx/
+
+# Local workstation markers (not shipped)
+/.codex
+/AGENTS.md

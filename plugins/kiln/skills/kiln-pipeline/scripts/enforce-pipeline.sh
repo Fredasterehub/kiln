@@ -295,6 +295,11 @@ allow
 #          Escalation: .kiln/DEADLOCK.flag after 3 nudges; SessionStart recovers.
 #          Ref: plugins/kiln/skills/kiln-pipeline/references/deadlock-detection.md
 #          See SIMPLIFY-v1.4.0 §5.3 P2.
+# v1.5.2 — strengthened P2 recovery in two narrow places:
+#            teammate-idle-feedback.sh — TeammateIdle direct exit-2 feedback
+#                                         when a teammate is still active
+#            ensure-watchdog.sh        — PostToolUse Write/Edit starts the
+#                                         watchdog after fresh STATE.md creation
 # v1.4.0 — P3 (StopFailure): agent-death detection. Pure addition — no retirements.
 #          SubagentStop fires on both clean finish and agent death; StopFailure fires
 #          only on API-induced main-session turn death with a categorized error enum.

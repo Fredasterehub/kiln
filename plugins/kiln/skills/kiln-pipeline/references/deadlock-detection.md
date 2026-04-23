@@ -4,19 +4,26 @@ Design and ops reference for Kiln's autonomous self-recovery system. Primary con
 
 ## Overview
 
-Two cooperating parts:
+Three cooperating parts:
 
 1. **Aggregation layer** — a handful of thin hook scripts maintain
    `.kiln/tmp/activity.json`, a single JSON state file describing the
    pipeline's recent activity and active teammates.
-2. **Detached watchdog** — a `nohup + disown` bash loop spawned from
-   `SessionStart`. Every 60 seconds it reads `activity.json`, applies the
-   deadlock rule, and writes a nudge when the pipeline is stalled.
+2. **Direct idle intervention** — `TeammateIdle` checks whether the teammate
+   is still marked active. If so, it returns exit code 2 with actionable
+   stderr so the teammate is resumed immediately instead of waiting for a
+   later hook turn.
+3. **Detached watchdog** — a `nohup + disown` bash loop spawned from
+   `SessionStart`, or from the first post-write hook after a new
+   `.kiln/STATE.md` appears. Every 60 seconds it reads `activity.json`,
+   applies the deadlock rule, and writes a nudge when the pipeline is stalled.
 
-Recovery is built on re-injection: the next hook fire after a nudge emits the
-nudge text via `additionalContext`, and the engine — itself a Claude LLM —
-reads the structured prompt on its next turn and resumes. No operator needed
-for a single stall.
+Recovery has two paths. A dangling teammate gets immediate `TeammateIdle`
+feedback through the native exit-2 path. Whole-pipeline silence is built on
+re-injection: the next hook fire after a nudge emits the nudge text via
+`additionalContext`, and the engine — itself a Claude LLM — reads the
+structured prompt on its next turn and resumes. No operator needed for a
+single stall.
 
 All hooks gate on `.kiln/STATE.md` existing and `stage != complete`. Zero
 overhead outside an active Kiln pipeline.
@@ -67,6 +74,15 @@ the watchdog silent when the pipeline is intentionally waiting.
 
 ## Nudge mechanism
 
+When `TeammateIdle` fires before the teammate has been removed from
+`active_teammates`, `teammate-idle-feedback.sh` emits a concise diagnostic to
+stderr and exits 2. That path is deliberately synchronous: it is for a known
+teammate that still owes a handoff. Normal completions stay quiet because
+`SubagentStop` removes the teammate before the idle check becomes relevant.
+
+The watchdog path is for the larger case where no teammate is active and the
+engine has gone silent.
+
 When the rule fires:
 
 1. `deadlock-check.sh` appends a `> [!WARNING] KILN DEADLOCK — …` block to
@@ -103,7 +119,9 @@ it up.
 | Script | Event | Role |
 |---|---|---|
 | `activity-update.sh` | `SubagentStart` / `SubagentStop` / `TeammateIdle` / `PreToolUse` / `PostToolUse` / `UserPromptSubmit` | Heartbeat + teammate tracking; writes `activity.json` |
+| `teammate-idle-feedback.sh` | `TeammateIdle` | Direct exit-2 feedback when a teammate is still marked active and tries to idle |
 | `spawn-watchdog.sh` | `SessionStart` | Gate, stale-PID kill, spawn detached `nohup + disown` loop |
+| `ensure-watchdog.sh` | `PostToolUse:Write/Edit` | Starts the watchdog after `.kiln/STATE.md` is created later in a fresh session |
 | `session-cleanup.sh` | `SessionEnd` | Kill watchdog PID; remove `activity.json` and `watchdog.pid` |
 | `watchdog-loop.sh` | (detached — not hook-registered) | 60s polling loop body; invokes `deadlock-check.sh` |
 | `deadlock-check.sh` | (called by `watchdog-loop.sh`) | Evaluate rule; write nudge + STATE.md warning; escalate at 3 |
