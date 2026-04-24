@@ -14,6 +14,12 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/spawn-watchdog.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/async-rewake-watchdog.sh",
+            "asyncRewake": true,
+            "timeout": 21600
           }
         ]
       }
@@ -165,6 +171,12 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/ensure-watchdog.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/async-rewake-watchdog.sh",
+            "asyncRewake": true,
+            "timeout": 21600
           }
         ]
       },

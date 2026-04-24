@@ -22,11 +22,12 @@
 #   pipeline_phase        stage value from STATE.md, or "unknown"
 #
 # Fail-open everywhere: this is an advisory state writer, never a veto.
-# Every branch exits 0. Concurrent fires are serialized via flock on a
-# dedicated .lock file so the read-modify-write critical section is not
-# a TOCTOU race — otherwise two concurrent fires could both read the
-# old file and the second mv would silently clobber the first's
-# nudge_count / active_teammates mutations.
+# _kiln_pipeline_active gates on .kiln/STATE.md and skips stage=complete
+# before any state mutation. Every branch exits 0. Concurrent fires are
+# serialized via flock on a dedicated .lock file so the read-modify-write
+# critical section is not a TOCTOU race — otherwise two concurrent fires
+# could both read the old file and the second mv would silently clobber
+# the first's nudge_count / active_teammates mutations.
 
 . "$(dirname "$0")/_kiln-lib.sh"
 

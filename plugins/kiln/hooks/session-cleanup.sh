@@ -28,6 +28,7 @@ ROOT=$(_kiln_find_root)
 
 TMP_DIR="$ROOT/.kiln/tmp"
 PID_FILE="$TMP_DIR/watchdog.pid"
+REWAKE_PID_FILE="$TMP_DIR/async-rewake-watchdog.pid"
 
 # Best-effort kill, with a recycled-PID guard. On a long-running host
 # the kernel may have rolled the saved PID over to an unrelated
@@ -48,6 +49,16 @@ if [[ -f "$PID_FILE" ]]; then
   rm -f "$PID_FILE" 2>/dev/null
 fi
 
+if [[ -f "$REWAKE_PID_FILE" ]]; then
+  PID=$(cat "$REWAKE_PID_FILE" 2>/dev/null)
+  if [[ -n "$PID" && -r "/proc/$PID/cmdline" ]]; then
+    if grep -q "async-rewake-watchdog" "/proc/$PID/cmdline" 2>/dev/null; then
+      kill "$PID" 2>/dev/null
+    fi
+  fi
+  rm -f "$REWAKE_PID_FILE" 2>/dev/null
+fi
+
 # Transient state. activity.json and activity.lock are scoped to a
 # single session's lifecycle — the next SessionStart will re-seed
 # them. .kiln/DEADLOCK.flag is intentionally NOT removed here: it
@@ -56,5 +67,6 @@ fi
 # detect and respond to it.
 rm -f "$TMP_DIR/activity.json" 2>/dev/null
 rm -f "$TMP_DIR/activity.lock" 2>/dev/null
+rmdir "$TMP_DIR/async-rewake-watchdog.lock" 2>/dev/null
 
 exit 0
