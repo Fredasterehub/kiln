@@ -66,6 +66,95 @@ Do not read or write files matching: `.env`, `*.pem`, `*_rsa`, `*.key`, `credent
 
 This rule is universal across every pipeline agent regardless of role or step. Secrets in these files have no role in the build loop, and once read into context they can leak into downstream artifacts, logs, or messages — the prohibition is absolute because the exfiltration surface is the entire team.
 
+Tool frontmatter and skill `allowed-tools` lists are capability declarations and routing hints, not a security boundary. Real restriction comes from Claude Code permission deny rules and Kiln's `PreToolUse` hooks. If host permissions are bypassed, deny rules and hooks must still protect secrets and destructive commands.
+
+### Freshness Proofs
+
+Any artifact that scopes, implements, reviews, or summarises build work must carry a measurable freshness proof:
+
+- `assignment_id`
+- `milestone_id`
+- `chunk_id`
+- `head_sha` or `current_head_sha_before` / `current_head_sha_after`
+- `dirty_status` or an explicit `git status --short` summary
+- source artifact paths used for scoping
+
+KRS-One includes these fields in every assignment. Builders copy them into TDD evidence. Reviewers record their observed `HEAD` in verdicts and flag any unexpected movement between assignment and review. Persistent minds include `head_sha` in their owned state and report whether it matches current repo state on every consult or update.
+
+### TDD Evidence Contract
+
+TDD is evidenced by an artifact, not by a claim in chat. For every testable build chunk, the builder creates:
+
+`.kiln/archive/milestone-<N>/chunk-<M>/tdd-evidence.md`
+
+Builders stage the file in `.kiln/tmp/`, send it to thoth with `ARCHIVE`, and include the staged path plus archive target in `REVIEW_REQUEST`. The artifact schema is literal:
+
+```
+testable: yes|no
+no_test_waiver_reason: {required when testable=no}
+assignment_id: {id}
+milestone_id: {id}
+chunk_id: {id}
+current_head_sha_before: {sha}
+current_head_sha_after: {sha}
+red_command: {command or N/A}
+red_result_summary: {summary}
+green_command: {command or N/A}
+green_result_summary: {summary}
+refactor_command: {command or N/A}
+refactor_result_summary: {summary}
+test_files_added_or_changed: {paths}
+production_files_changed: {paths}
+reviewer_reran_commands: {filled by reviewer or N/A before review}
+reviewer_rerun_results: {filled by reviewer or N/A before review}
+limitations: {known limits}
+```
+
+For `testable: yes`, RED/GREEN/REFACTOR commands and summaries must be non-empty. For `testable: no`, the waiver reason must be specific enough for a reviewer to challenge. A testable chunk without TDD evidence cannot receive a full approval.
+
+### Review Verdict Contract
+
+Reviewers must separate what the builder reported from what they independently verified. Every build review verdict archived as `review.md` or `fix-N-review.md` includes these fields:
+
+```
+verdict: APPROVED|REJECTED|PARTIAL_PASS_STATIC_ONLY|BLOCKED_BROWSER_VALIDATION_MISSING|FAIL_BROWSER_EVIDENCE_MISSING
+assignment_id: {id}
+milestone_id: {id}
+chunk_id: {id}
+observed_head_sha: {sha}
+assignment_head_sha: {sha from assignment}
+head_changed_unexpectedly: yes|no
+test_requirements: {summary or none}
+tdd_evidence_path: {path or N/A}
+builder_reported_evidence: {commands/results from REVIEW_REQUEST}
+reviewer_reran_commands: {commands rerun by reviewer, or N/A}
+reviewer_rerun_results: {results, or N/A}
+lsp_diagnostics: {used/not available/not applicable + summary}
+not_verified_or_limitations: {what was not independently checked}
+```
+
+An APPROVED verdict for testable work requires a readable TDD evidence artifact and either independent rerun results or an explicit limitation that explains why reruns were impossible. The limitation is visible to downstream QA; it is never treated as equivalent to a rerun.
+
+### Browser Validation Contract
+
+Static UI review is not browser validation. When acceptance criteria require browser behavior, visual rendering, interaction, keyboard flow, layout, or accessibility behavior in a rendered app, a reviewer or validator must use Playwright/browser automation or mark the verdict honestly:
+
+- `BLOCKED_BROWSER_VALIDATION_MISSING` — browser validation was required and no usable browser capability existed.
+- `PARTIAL_PASS_STATIC_ONLY` — static checks passed, but browser-only criteria remain unverified.
+- `FAIL_BROWSER_EVIDENCE_MISSING` — the chunk claimed browser acceptance without producing required browser evidence.
+
+No agent may emit a clean full PASS/APPROVED for browser-scoped work based only on static review.
+
+### Task DAG and State Hooks
+
+Kiln uses native Claude Code task hooks where available:
+
+- `TaskCreated` blocks malformed critical tasks that omit milestone/chunk/role metadata.
+- `TaskCompleted` blocks completion of implementation/review/QA/build-complete tasks when visible metadata proves the workflow is premature.
+- `FileChanged` surfaces invalid persistent-state files immediately; it cannot block writes, so `PostToolUse` also runs the validator for critical writes.
+
+Hook input does not expose the full hidden task graph, so the task hooks enforce visible invariants and require missing links to be represented in task metadata (`review_task_id`, `verdict_path`, `qa_verdict_path`, `open_blocking_tasks`, `final_archive_check`).
+
 ### Status Marker Convention
 
 Persistent minds write `<!-- status: complete -->` as the exact first line of their owned files immediately on spawn, as a minimal skeleton before full content is populated. The marker is what lets downstream agents detect "PM is ready" without racing against mid-write file reads.
@@ -148,6 +237,9 @@ Always include context after the signal. `RESEARCH_COMPLETE: 6 topics. Key: RSC 
 | `BUILD_COMPLETE` | All milestones done — sole terminal signal on the final milestone. Never paired with MILESTONE_COMPLETE. | team-lead (krs-one) |
 | `MILESTONE_TRANSITION: completed={name}, next={name}` | KRS-One notifies persistent minds of milestone boundary (blocking for rakim+sentinel, fire-and-forget for thoth). | rakim, sentinel, thoth |
 | `MILESTONE_DONE: milestone={N}, name={name}` | KRS-One tells thoth to write the per-milestone summary doc `.kiln/docs/milestones/milestone-{N}.md` (fire-and-forget). Wave 4 C5: routed to thoth, not rakim — rakim had no handler and the per-milestone docs never wrote. | thoth |
+| `FINAL_ARCHIVE_CHECK: milestone_count={N}, chunk_count={N}` | KRS-One asks thoth for a final blocking archive readiness check before BUILD_COMPLETE. | thoth |
+| `ARCHIVE_READY` | Thoth's final archive readiness pass reply. | krs-one |
+| `ARCHIVE_BLOCKED: {missing}` | Thoth's final archive readiness failure reply. Prevents BUILD_COMPLETE until corrected. | krs-one |
 | `VALIDATE_PASS` / `VALIDATE_FAILED` | Step 6 result | team-lead (argus) |
 | `REPORT_COMPLETE` | Step 7 done | team-lead (omega) |
 | `BLOCKED: {reason}` | Cannot proceed | team-lead |
@@ -177,7 +269,7 @@ These signals go to teammates, not to team-lead. Routing them to team-lead is th
 | `IMPLEMENTATION_APPROVED: {summary}` | Reviewer reports a successful chunk to the boss on APPROVED (Wave 3 — owns the success handoff so a dropped builder can't stall the build loop) | Reviewer → Boss |
 | `IMPLEMENTATION_BLOCKED: {reason}` | Builder hit a tooling or technical blocker that kept them from producing reviewable output | Builder → Boss |
 | `IMPLEMENTATION_REJECTED: {latest issues}` | Builder exhausted 3 reject/fix cycles without an APPROVED verdict (Wave 3 terminal failure path) | Builder → Boss |
-| `ARCHIVE: step={step}, [chunk={N},] file={filename}, source={path}` | Archive a pipeline artifact — thoth files it under `.kiln/archive/` and logs to the guide scratchpad. Fire-and-forget (thoth never replies). | Any agent → thoth |
+| `ARCHIVE: step={step}, [milestone={N},] [chunk={N},] file={filename}, source={path}` | Archive a pipeline artifact — thoth files it under `.kiln/archive/` and logs to the guide scratchpad. When milestone+chunk are present, thoth writes the canonical build-evidence path `.kiln/archive/milestone-{N}/chunk-{M}/`. Fire-and-forget (thoth never replies). | Any agent → thoth |
 
 ## Skill Loading (Belt-and-Suspenders)
 

@@ -21,6 +21,8 @@ Invariants implemented (each maps to one or more audit findings):
 
 from __future__ import annotations
 
+import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -776,61 +778,58 @@ WATCHDOG_RETIRED_WARN_ONLY = False
 
 
 def check_worker_ready_retired() -> list[c.Violation]:
-    """P1 (SubagentStart) retirement: no agent body should carry a live
-    `SendMessage(...)` call emitting `WORKER_READY`. Spawn acknowledgement
-    is handled by the SubagentStart hook
-    (`plugins/kiln/hooks/subagent-start-ack.sh`); the old belt-and-
-    suspenders one-time emission is obsolete.
+    """P1 (SubagentStart) retirement: `WORKER_READY` may only appear in
+    explicitly retired/deprecated prose or archival transcripts.
 
-    Detection is limited to the unambiguous machine-readable call shape:
-    `SendMessage(...content:"WORKER_READY...")`. Every live emission in
-    the codebase uses this shape, so recall is sufficient without parsing
-    natural-language imperatives (which produced false positives on
-    passive routing prose in earlier iterations).
-
-    Deprecation-evidence prose (a line whose text contains `deprecat` or
-    `retir`) is exempted — matching the Wave 3 `build_iteration`
-    precedent where the old name remains in CHANGELOG-style commentary
-    even after the code no longer emits it. The exemption is applied
-    only to lines that already matched the send-call pattern, so passive
-    prose is skipped cheaply without consulting the exemption regex.
-
-    Passive mentions — a bullet describing WHAT the recipient receives,
-    a table row in a routing inventory, or prose that only names the
-    signal — are out of scope. The purpose is to catch regressions on
-    the emission contract, not to purge the string.
+    The old check only detected the exact SendMessage emission shape. That
+    let active fallback prose drift back in while still passing. The current
+    contract is stricter: any live-file mention must make the retirement
+    obvious on the same line or the surrounding comment/prose window.
     """
     out: list[c.Violation] = []
 
-    send_call_re = re.compile(
-        r'SendMessage[^)]*content\s*[:=]\s*["\']WORKER_READY',
+    allowed_context_re = re.compile(
+        r"deprecat|retir|obsolete|archiv|histor|replaces|no self-announce|"
+        r"no longer|fallback was|fallback.*retir",
         re.IGNORECASE,
     )
-    deprecation_re = re.compile(
-        r'deprecat|retir',
+    active_dependency_re = re.compile(
+        r"wait|emit|send|fallback|unblock|ready\s+for\s+assignment",
         re.IGNORECASE,
     )
+    excluded_parts = {
+        "tests/layer1-static/lint/consistency.py",
+    }
 
-    for agent in c.load_agents():
-        for idx, line in enumerate(agent.body.split("\n"), start=1):
+    sources: list[Path] = []
+    sources.extend(c.plugin_root().rglob("*"))
+    sources.extend((c.repo_root() / "tests").rglob("*"))
+
+    for path in sorted(p for p in sources if p.is_file()):
+        rel = str(path.relative_to(c.repo_root()))
+        if rel in excluded_parts or "/transcripts/" in rel:
+            continue
+        try:
+            lines = c.read_text(path).splitlines()
+        except UnicodeDecodeError:
+            continue
+        for idx, line in enumerate(lines, start=1):
             if "WORKER_READY" not in line:
                 continue
-            if not send_call_re.search(line):
+            window = "\n".join(lines[max(0, idx - 3): min(len(lines), idx + 2)])
+            if allowed_context_re.search(window):
                 continue
-            if deprecation_re.search(line):
-                continue
+            code = "WORKER_READY_LIVE" if active_dependency_re.search(line) else "WORKER_READY_UNSCOPED"
             out.append(c.Violation(
-                    code="WORKER_READY_LIVE",
-                    message=(
-                        f"'{agent.name}' carries a live "
-                        "SendMessage(...content:\"WORKER_READY...\") "
-                        "emission — P1 retires this in favour of the "
-                        "SubagentStart hook. If this is an intentional "
-                        "deprecation note, include `deprecated` or "
-                        "`retired` on the same line."
-                    ),
-                    location=f"plugins/kiln/agents/{agent.name}.md:{idx}",
-                ))
+                code=code,
+                message=(
+                    "`WORKER_READY` is retired from active protocol. "
+                    "Live references must be removed, or archival/deprecation "
+                    "mentions must say `retired`, `deprecated`, `historical`, "
+                    "or equivalent in the surrounding prose."
+                ),
+                location=f"{rel}:{idx}",
+            ))
 
     if WORKER_READY_WARN_ONLY:
         if out:
@@ -838,6 +837,123 @@ def check_worker_ready_retired() -> list[c.Violation]:
             for v in out:
                 print(f"    {v}")
         return []
+    return out
+
+
+def check_hook_config_integrity() -> list[c.Violation]:
+    """Every command hook in hooks.json must point at a real executable.
+
+    Also catches matchers on hook events that Claude Code documents as
+    matcherless, because those matcher fields are silently ignored and can
+    create a false sense of enforcement.
+    """
+    out: list[c.Violation] = []
+    hooks_path = c.hooks_dir() / "hooks.json"
+    try:
+        data = json.loads(c.read_text(hooks_path))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [c.Violation(
+            code="HOOK_CONFIG_INVALID",
+            message=f"hooks.json could not be parsed: {exc}",
+            location=str(hooks_path.relative_to(c.repo_root())),
+        )]
+
+    matcherless_events = {
+        "UserPromptSubmit",
+        "Stop",
+        "TeammateIdle",
+        "TaskCreated",
+        "TaskCompleted",
+        "WorktreeCreate",
+        "WorktreeRemove",
+        "CwdChanged",
+    }
+    hooks = data.get("hooks", {})
+    if not isinstance(hooks, dict):
+        return [c.Violation(
+            code="HOOK_CONFIG_INVALID",
+            message="hooks.json top-level `hooks` field is missing or not an object",
+            location=str(hooks_path.relative_to(c.repo_root())),
+        )]
+
+    for event, entries in hooks.items():
+        if not isinstance(entries, list):
+            out.append(c.Violation(
+                code="HOOK_EVENT_INVALID",
+                message=f"hook event `{event}` must be a list",
+                location=str(hooks_path.relative_to(c.repo_root())),
+            ))
+            continue
+        for entry_idx, entry in enumerate(entries, start=1):
+            if event in matcherless_events and "matcher" in entry:
+                out.append(c.Violation(
+                    code="IGNORED_HOOK_MATCHER",
+                    message=(
+                        f"`{event}` entry {entry_idx} sets `matcher`, but "
+                        "Claude Code ignores matchers for this event."
+                    ),
+                    location=str(hooks_path.relative_to(c.repo_root())),
+                ))
+            for hook_idx, hook in enumerate(entry.get("hooks", []), start=1):
+                if hook.get("type") != "command":
+                    continue
+                command = hook.get("command")
+                if not isinstance(command, str):
+                    out.append(c.Violation(
+                        code="HOOK_COMMAND_INVALID",
+                        message=f"`{event}` entry {entry_idx} hook {hook_idx} has no command string",
+                        location=str(hooks_path.relative_to(c.repo_root())),
+                    ))
+                    continue
+                if not command.startswith("${CLAUDE_PLUGIN_ROOT}/"):
+                    continue
+                rel_command = command.removeprefix("${CLAUDE_PLUGIN_ROOT}/")
+                path = c.plugin_root() / rel_command
+                if not path.exists():
+                    out.append(c.Violation(
+                        code="HOOK_SCRIPT_MISSING",
+                        message=f"hook command `{command}` points at a missing file",
+                        location=str(hooks_path.relative_to(c.repo_root())),
+                    ))
+                    continue
+                if not os.access(path, os.X_OK):
+                    out.append(c.Violation(
+                        code="HOOK_SCRIPT_NOT_EXECUTABLE",
+                        message=f"hook command `{command}` is not executable",
+                        location=str(path.relative_to(c.repo_root())),
+                    ))
+    return out
+
+
+def check_doctor_hard_gates() -> list[c.Violation]:
+    """Doctor must not drift back to soft-greening agent-team failures."""
+    out: list[c.Violation] = []
+    path = c.plugin_root() / "commands" / "kiln-doctor.md"
+    text = c.read_text(path)
+    required_markers = {
+        "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "agent-team experimental flag check",
+        "TeamCreate": "TeamCreate declaration check",
+        "TeamDelete": "TeamDelete declaration check",
+        "SendMessage": "SendMessage declaration check",
+        "TaskCreate": "TaskCreate declaration check",
+        "TaskGet": "TaskGet declaration check",
+        "TaskList": "TaskList declaration check",
+        "TaskUpdate": "TaskUpdate declaration check",
+        "validate-state.py": "critical state validator check",
+        "task-dag-guard.py": "task DAG hook check",
+        "dangerously-skip-permissions": "unsafe permission posture check",
+        "BLOCKED_BROWSER_VALIDATION_MISSING": "browser validation missing status",
+        "PARTIAL_PASS_STATIC_ONLY": "static-only browser status",
+        "[FAIL] Agent teams flag": "hard fail for missing team flag",
+        "Runtime tool availability": "runtime tool introspection limitation",
+    }
+    for marker, label in required_markers.items():
+        if marker not in text:
+            out.append(c.Violation(
+                code="DOCTOR_GATE_MISSING",
+                message=f"kiln-doctor.md missing {label} marker `{marker}`",
+                location=str(path.relative_to(c.repo_root())),
+            ))
     return out
 
 
@@ -1155,6 +1271,8 @@ ALL_CHECKS = [
     ("STATE.md sed patterns (Wave 3 — C10 follow-up)", check_state_md_sed_patterns),
     ("Model tier policy (Sprint 3)", check_model_policy),
     ("WORKER_READY retired (P1 — SubagentStart)", check_worker_ready_retired),
+    ("Hook config integrity", check_hook_config_integrity),
+    ("Doctor hard gates", check_doctor_hard_gates),
     ("Watchdog polling retired (P2 — TeammateIdle)", check_watchdog_retired),
     ("activity.json schema completeness (P2)", check_activity_json_schema),
     ("P2 hooks gate on active Kiln pipeline", check_hooks_gate_on_kiln),
