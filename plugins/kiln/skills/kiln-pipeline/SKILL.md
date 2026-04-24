@@ -16,6 +16,8 @@ The engine body for the Kiln creation pipeline. This skill is read by the forked
 
 The host session is the conductor. The conductor spawns agents, waits for signals, renders transitions, and rewrites STATE.md at step boundaries. Step work itself — editing source, reviewing diffs, running Codex — belongs to the spawned teams. If the engine ever finds itself authoring artifacts instead of dispatching, that is drift: dispatch instead.
 
+The `allowed-tools` frontmatter is not a restriction boundary. It declares what the forked pipeline session expects to call; actual denial of dangerous actions comes from Claude Code permission deny rules and Kiln hooks. `/kiln-doctor` must fail or degrade loudly when agent-team tools, hooks, or deny-rule posture are not available.
+
 ## Prerequisites
 
 Environment scaffolding (git init, `.kiln/` structure, hook-gated seed files) runs in the engine between the ignition banner and alpha's spawn. Alpha then handles the interactive onboarding conversation: working directory, project name, description, preferences.
@@ -235,7 +237,9 @@ CYCLE_WORKERS: scenario={default|fallback|ui}, duo_id={duo_id}, coder_name={name
 
 3. **Spawn fresh pair** — spawn the new builder+reviewer on the existing team. Use boss-selected duo names from duo-pool.md: `name` is the character's spawn name for this cycle (e.g., `tintin`), `subagent_type` is the agent type template (e.g., `kiln:dial-a-coder`). Each fresh worker starts with a clean context — this is the point of cycling.
 
-4. **Confirm to KRS-One** — send WORKERS_SPAWNED with the new agent names:
+4. **Deterministic readiness gate** — wait until the `SubagentStart` hook has fired for both fresh workers. This hook path is the only active readiness path for `CYCLE_WORKERS`. Do not wait for or accept any worker self-announcement fallback.
+
+5. **Confirm to KRS-One / audit** — send WORKERS_SPAWNED with the new agent names after the SubagentStart readiness gate has completed. This message is operator-visible audit/logging, not an alternate readiness path:
    ```
    SendMessage(
      type: "message",
@@ -244,7 +248,7 @@ CYCLE_WORKERS: scenario={default|fallback|ui}, duo_id={duo_id}, coder_name={name
    )
    ```
 
-5. **Update progress beat** — output a one-line progress beat for the operator:
+6. **Update progress beat** — output a one-line progress beat for the operator:
    ```
    ◆ Cycling workers — {reason}. Spawning {builder_name}+{reviewer_name} ({scenario})...
    ```
@@ -272,6 +276,20 @@ Agent(
 `team_name` is the reason for the REQUIRED annotation on that parameter: without it agents spawn as isolated subagents with no SendMessage routing, no shutdown, and no team pattern. A silently dropped `team_name` looks like it worked until the first inter-agent signal disappears.
 
 Bootstrap plumbing is invisible — batch prerequisite reads in parallel, output the banner as the first visible text. Interactive steps (1, 2, 4): banner → spawning indicator → spawn boss in foreground → operator greeting (text in `lore-engine.md`) → engine goes silent. Background steps (3, 5, 6, 7): banner → one-line progress beats at each phase transition surfacing real information from READY signals.
+
+### 3b. Native Task and State Gates
+
+When native task tools are available, create task records for critical build work. The hooks enforce visible workflow invariants, so task metadata must be complete:
+
+- Implementation tasks: include `milestone_id`, `chunk_id`, `role: builder`, `assignment_id`, `review_task_id`, and `tdd_evidence`.
+- Review tasks: include `milestone_id`, `chunk_id`, `role: reviewer`, `assignment_id`, and `verdict_path`.
+- Milestone QA tasks: include `milestone_id`, `role: qa`, `all_chunk_tasks_resolved: yes`, and `qa_verdict_path`.
+- Worker-cycle tasks: include `milestone_id`, `chunk_id`, `role: boss`, and `duo_id`.
+- Build-complete tasks: include `role: boss`, `open_blocking_tasks: 0`, and `final_archive_check: pass`.
+
+`TaskCreated` blocks malformed critical tasks. `TaskCompleted` blocks visible premature completions. If the runtime lacks enough task context to prove an invariant, the task description must carry the proof path or status explicitly. Do not mark implementation complete before a review task exists, and do not mark review complete without an archived verdict.
+
+`validate-state.py` runs on `FileChanged` and `PostToolUse` for critical files. `FileChanged` is advisory because Claude Code cannot block writes there; `PostToolUse` returns a block decision for malformed critical state/evidence files.
 
 ### 4. Wait for Done Signal
 
@@ -329,8 +347,9 @@ Based on the boss's done signal, determine the next action:
   - BUILD_COMPLETE -> Wave 4 C4 terminal for the final milestone. The engine treats this as the sole close-out for milestone N when `milestones_complete == milestone_count - 1` (the in-flight milestone is the final one). Steps:
     1. Increment `milestones_complete` to match `milestone_count` in STATE.md.
     2. Update STATE.md `stage` to `validate` via Bash sed using the markdown-bullet-aware pattern (same shape as team_iteration / chunk_count).
-    3. Run the same pre-shutdown check as MILESTONE_COMPLETE — verify persistent-mind status markers, then send `shutdown_request` to every agent in the active team, TeamDelete.
-    4. Render `phases_complete` banner, proceed to step 6 (Validate).
+    3. Verify the final archival contract: KRS-One must have obtained `ARCHIVE_READY` from thoth before sending BUILD_COMPLETE, and any build-complete task metadata must include `final_archive_check: pass`. If the evidence is absent, treat it as a protocol regression and ask krs-one/thoth to complete `FINAL_ARCHIVE_CHECK` before advancing.
+    4. Run the same pre-shutdown check as MILESTONE_COMPLETE — verify persistent-mind status markers, then send `shutdown_request` to every agent in the active team, TeamDelete.
+    5. Render `phases_complete` banner, proceed to step 6 (Validate).
     Do not wait for a paired `MILESTONE_COMPLETE` after `BUILD_COMPLETE` — the pre-Wave-4 sequencing (final milestone emitted both) is retired; `BUILD_COMPLETE` is the sole terminal.
 **Step 6 signals**:
   - VALIDATE_PASS -> render `validation_passed` banner, proceed to step 7.

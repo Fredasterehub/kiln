@@ -39,7 +39,7 @@ Messages arrive one at a time; each wake-up delivers exactly one message. Proces
 - Reviewer verdict: APPROVED / REJECTED (reviewer → builder).
 - Worker → PM consultation: worker sends question, stops, waits for reply.
 - Shutdown: `shutdown_response` (any agent → engine).
-- Worker cycling: `CYCLE_WORKERS` (KRS-One → engine, unblocks on `WORKERS_SPAWNED` from engine or `WORKER_READY` from a worker — whichever arrives first).
+- Worker cycling: `CYCLE_WORKERS` (KRS-One → engine, unblocks only after the engine observes `SubagentStart` for both fresh workers; `WORKERS_SPAWNED` is audit/logging after readiness).
 - Milestone transition: `MILESTONE_TRANSITION` (KRS-One → rakim+sentinel, waits for `READY`).
 
 **Blocking between worker cycles** — send and wait for READY:
@@ -50,6 +50,9 @@ Messages arrive one at a time; each wake-up delivers exactly one message. Proces
 - Any → thoth: `ARCHIVE` requests.
 - Terminal signals → engine: `MILESTONE_COMPLETE` on every milestone except the final, and `BUILD_COMPLETE` as the sole terminal on the final milestone (Wave 4 C4 contract — never paired). QA failure context now flows through structured `ITERATION_UPDATE` to rakim+sentinel; the pre-Wave-4 direct-to-rakim fire-and-forget channel for QA findings (see audit item H1) is gone.
 
+**Final blocking archival check** — final milestone only:
+- KRS-One → thoth: `FINAL_ARCHIVE_CHECK` after QA_PASS and before BUILD_COMPLETE. Thoth replies `ARCHIVE_READY` or `ARCHIVE_BLOCKED`. BUILD_COMPLETE is illegal until archive readiness is proven.
+
 ### Blocking Signals (Build Step)
 
 | Signal | Sender → Receiver | What triggers reply | Timeout behavior |
@@ -57,12 +60,12 @@ Messages arrive one at a time; each wake-up delivers exactly one message. Proces
 | `IMPLEMENTATION_APPROVED` | Reviewer → KRS-One | Reviewer emits APPROVED (paired with APPROVED to builder). Wave 3 success handoff. | Engine nudges if idle >5 min |
 | `IMPLEMENTATION_BLOCKED` / `IMPLEMENTATION_REJECTED` | Builder → KRS-One | Builder hits tooling blocker, or exhausts 3 reject/fix cycles | Engine nudges if idle >5 min |
 | Reviewer verdict (APPROVED/REJECTED) | Reviewer → Builder | Builder sends REVIEW_REQUEST | Engine nudges if idle >5 min |
-| `WORKER_READY` | Worker → KRS-One | Worker's first-wake self-announce (fire-and-forget fallback alongside WORKERS_SPAWNED) | KRS-One treats as optional — WORKERS_SPAWNED is canonical |
 | `shutdown_response` | Any agent → Engine | Engine sends shutdown_request | Forced after 30s |
 | `ITERATION_UPDATE` | KRS-One → rakim, sentinel | Chunk complete, PMs update state | Proceed after 60s (no deadlock) |
-| `CYCLE_WORKERS` | KRS-One → Engine | Request fresh worker pair | Engine responds with WORKERS_SPAWNED; WORKER_READY from a worker is an equivalent unblock |
+| `CYCLE_WORKERS` | KRS-One → Engine | Request fresh worker pair | Engine shuts down old workers, spawns the pair, observes `SubagentStart` for both, then resumes KRS-One; `WORKERS_SPAWNED` is audit/logging |
 | `MILESTONE_TRANSITION` | KRS-One → rakim, sentinel | Milestone boundary, PMs archive+reset | Proceed after 60s (no deadlock) |
 | `MILESTONE_QA_READY` | KRS-One → Engine | Milestone deliverables verified | Engine spawns Judge Dredd Tribunal (ken+ryu with random slot assignment → denzel → judge-dredd). KRS-One waits for QA_PASS / QA_FAIL direct from judge-dredd (300s timeout) |
+| `FINAL_ARCHIVE_CHECK` | KRS-One → thoth | Final milestone QA_PASS, before BUILD_COMPLETE | Proceed only on `ARCHIVE_READY`; `ARCHIVE_BLOCKED` keeps build open |
 | `QA_REPORT_READY` | ken/ryu → Engine | Individual QA report written to .kiln/tmp/qa-report-{a\|b}.md (slot assigned at spawn) | Engine tracks per-sender (two distinct waits) |
 | `RECONCILIATION_COMPLETE` | denzel → engine | Reconciliation written to .kiln/tmp/qa-reconciliation.md; engine spawns judge-dredd | Engine tracks single wait |
 | `QA_PASS` / `QA_FAIL: {findings}` | judge-dredd → KRS-One | Final verdict, direct (Wave 2 — engine no longer relays as QA_VERDICT) | KRS-One treats timeout as QA_FAIL |
@@ -161,7 +164,7 @@ Standard signals sent via SendMessage to team-lead (the engine), unless a differ
 | `READY: {summary}` | Post-iteration reply after ITERATION_UPDATE or MILESTONE_TRANSITION (recipient: krs-one) | Persistent minds |
 | `REQUEST_WORKERS: {list}` | Need workers spawned on team (initial) | Boss |
 | `CYCLE_WORKERS: scenario={s}, duo_id={id}, coder_name={name}, reviewer_name={name}, reason={r}, chunk={c}` | Shut down current workers, spawn fresh pair from duo pool | KRS-One |
-| `WORKERS_SPAWNED: duo_id={id}, {builder_name} (subagent_type: {type}), {reviewer_name} (subagent_type: {type})` | Engine confirms fresh pair on team | Engine |
+| `WORKERS_SPAWNED: duo_id={id}, {builder_name} (subagent_type: {type}), {reviewer_name} (subagent_type: {type})` | Audit/log after `SubagentStart` readiness for both fresh workers | Engine |
 | `WORKERS_REJECTED: {reason}` | Engine rejected REQUEST_WORKERS | Engine |
 | `ONBOARDING_COMPLETE` | Step 1 done | Alpha |
 | `BRAINSTORM_COMPLETE` | Step 2 done | Da Vinci |
@@ -170,11 +173,10 @@ Standard signals sent via SendMessage to team-lead (the engine), unless a differ
 | `PLAN_BLOCKED` | Architecture validation failed 3x | Aristotle |
 | `ITERATION_UPDATE: {summary}` | Chunk complete, update state files (blocking, 60s). Also the channel for QA failure findings on QA_FAIL / timeout (Wave 4 H1 replaces the pre-Wave-4 direct-to-rakim fire-and-forget channel). | KRS-One |
 | `MILESTONE_DONE: milestone={N}, name={name}` | Per-milestone summary trigger — thoth writes `.kiln/docs/milestones/milestone-{N}.md` | KRS-One |
-| `WORKER_READY: ready for assignment` | Worker self-announces on first wake — belt-and-suspenders fallback unblock for CYCLE_WORKERS (recipient: krs-one) | Build-step duo members — builders (dial-a-coder, backup-coder, la-peintresse) AND reviewers (critical-thinker, the-curator) |
 | `IMPLEMENTATION_APPROVED: {summary}` | Reviewer reports a successful chunk to the boss on APPROVED (Wave 3 — recipient: krs-one) | Reviewers (critical-thinker, the-curator) |
 | `IMPLEMENTATION_BLOCKED: {blocker}` | Builder hit tooling/technical blocker (recipient: krs-one) | Builders |
 | `IMPLEMENTATION_REJECTED: {issues}` | Builder exhausted 3 reject/fix cycles (recipient: krs-one) | Builders |
-| `ARCHIVE: step={step}, [chunk={N},] file={filename}, source={path}` | File the named artifact under `.kiln/archive/` and log it to the guide scratchpad (recipient: thoth; fire-and-forget — thoth never replies) | krs-one, builders, reviewers |
+| `ARCHIVE: step={step}, [milestone={N},] [chunk={N},] file={filename}, source={path}` | File the named artifact under `.kiln/archive/` and log it to the guide scratchpad. Milestone+chunk targets canonical build evidence under `.kiln/archive/milestone-{N}/chunk-{M}/`. Fire-and-forget — thoth never replies to ARCHIVE. | krs-one, builders, reviewers |
 | `MILESTONE_TRANSITION: completed={name}, next={name}` | Milestone boundary — PMs archive + reset (blocking) | KRS-One |
 | `MILESTONE_QA_READY: {milestone_name}` | Deliverables verified, requesting independent QA | KRS-One |
 | `QA_REPORT_READY` | Individual QA report written to .kiln/tmp/qa-report-{a\|b}.md; engine tracks per-sender (recipient: team-lead) | ken / ryu |
@@ -183,7 +185,10 @@ Standard signals sent via SendMessage to team-lead (the engine), unless a differ
 | `QA_FAIL: {findings}` | Final verdict: issues found — direct to krs-one, no engine relay (Wave 2) | judge-dredd |
 | `DIVERGENCE_READY` | Divergence analysis written; peer signal to aristotle | diogenes |
 | `MILESTONE_COMPLETE: {name}` | Milestone done, QA passed | KRS-One |
-| `BUILD_COMPLETE` | All milestones done | KRS-One |
+| `FINAL_ARCHIVE_CHECK: milestone_count={n}, chunk_count={n}` | Final blocking archive readiness check before BUILD_COMPLETE | KRS-One |
+| `ARCHIVE_READY` | Final archive check passed | thoth |
+| `ARCHIVE_BLOCKED: {missing}` | Final archive check failed; missing archives must be resolved before BUILD_COMPLETE | thoth |
+| `BUILD_COMPLETE` | All milestones done after `ARCHIVE_READY` | KRS-One |
 | `VALIDATE_PASS` | Validation succeeded | Argus |
 | `VALIDATE_FAILED` | Validation failed, correction needed | Argus |
 | `REPORT_COMPLETE` | Step 7 done | Omega |
@@ -215,8 +220,8 @@ Fresh context per implementation chunk prevents context pollution. Builders and 
    - default: dial-a-coder + critical-thinker (spawn names from duo pool)
    - fallback: backup-coder + critical-thinker (spawn names from duo pool)
    - ui: la-peintresse + the-curator (spawn names from duo pool)
-6. Engine sends `WORKERS_SPAWNED` to KRS-One with agent names.
-7. KRS-One dispatches the assignment to the fresh builder.
+6. Engine waits for `SubagentStart` hook acknowledgement for both workers, then sends `WORKERS_SPAWNED` to KRS-One as audit/logging.
+7. KRS-One dispatches the assignment to the fresh builder. Assignment XML includes `assignment_id`, `milestone_id`, `chunk`, `head_sha`, `dirty_status`, `codebase_state_head_sha`, timestamp, and source artifact paths.
 
 ### Persistent Minds
 
@@ -282,7 +287,7 @@ critical-thinker (opus) is the single structural reviewer for Default and Fallba
 - **PMs**: rakim (opus), sentinel (sonnet), thoth (opus) — all persist per milestone
 - **Workers**: one builder+reviewer pair per chunk via CYCLE_WORKERS, duo pool names per cycle (default: dial-a-coder+critical-thinker, fallback: backup-coder+critical-thinker, ui: la-peintresse+the-curator)
 - **QA**: ken/team-red (opus), ryu/team-blue (sonnet), denzel/the-negotiator (opus), judge-dredd/i-am-the-law (sonnet) — spawned on MILESTONE_QA_READY, Judge Dredd Tribunal, dynamic
-- **Signals**: CYCLE_WORKERS, ITERATION_UPDATE (blocking 60s), MILESTONE_TRANSITION (blocking 60s), MILESTONE_QA_READY (blocking 300s, waits for direct QA_PASS / QA_FAIL from judge-dredd), MILESTONE_COMPLETE, BUILD_COMPLETE
+- **Signals**: CYCLE_WORKERS, ITERATION_UPDATE (blocking 60s), MILESTONE_TRANSITION (blocking 60s), MILESTONE_QA_READY (blocking 300s, waits for direct QA_PASS / QA_FAIL from judge-dredd), FINAL_ARCHIVE_CHECK (blocking 60s on final milestone), MILESTONE_COMPLETE, BUILD_COMPLETE
 - **Done**: BUILD_COMPLETE → stage: validate
 
 ### Step 6: Validate
