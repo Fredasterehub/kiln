@@ -89,8 +89,18 @@ Read the full XML. Extract:
 - **Acceptance criteria** — what defines done
 - **Test requirements** — what behavior to verify
 - **File boundaries** — the files you may touch; nothing outside this list
+- **Freshness** — `assignment_id`, `milestone_id`, `chunk`, assignment `head_sha`, dirty status, and source artifact paths
 
 The assignment is your complete specification. Read it fully before writing any code — 4.7 will otherwise pattern-match the first clause and miss constraints in the later sections.
+
+Capture the freshness values before editing:
+```bash
+CHUNK=$(grep -o '<chunk>[0-9]\+</chunk>' /tmp/kiln_assignment.xml 2>/dev/null | grep -o '[0-9]\+' | head -1 || echo "unknown")
+MILESTONE_ID=$(grep -o '<milestone_id>[^<]*</milestone_id>' /tmp/kiln_assignment.xml | sed -E 's#</?milestone_id>##g' | head -1)
+ASSIGNMENT_ID=$(grep -o '<assignment_id>[^<]*</assignment_id>' /tmp/kiln_assignment.xml | sed -E 's#</?assignment_id>##g' | head -1)
+ASSIGNMENT_HEAD=$(grep -o '<head_sha>[^<]*</head_sha>' /tmp/kiln_assignment.xml | sed -E 's#</?head_sha>##g' | head -1)
+HEAD_BEFORE=$(git rev-parse HEAD 2>/dev/null || echo "no-git")
+```
 </receive-assignment>
 
 <build>
@@ -112,10 +122,38 @@ TDD is the default path. If `<test_requirements>` is present in the assignment a
 For TDD protocol details, read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/tdd-protocol.md`.
 </build>
 
+<tdd-evidence>
+Before review, write `.kiln/tmp/tdd-evidence.md` with this exact schema:
+
+```
+testable: yes|no
+no_test_waiver_reason: {required if testable=no}
+assignment_id: {ASSIGNMENT_ID}
+milestone_id: {MILESTONE_ID}
+chunk_id: {CHUNK}
+current_head_sha_before: {HEAD_BEFORE}
+current_head_sha_after: {git rev-parse HEAD after implementation}
+red_command: {command or N/A}
+red_result_summary: {summary}
+green_command: {command or N/A}
+green_result_summary: {summary}
+refactor_command: {command or N/A}
+refactor_result_summary: {summary}
+test_files_added_or_changed: {paths}
+production_files_changed: {paths}
+reviewer_reran_commands: N/A - pending reviewer
+reviewer_rerun_results: N/A - pending reviewer
+limitations: {known limits, including Playwright/browser evidence gaps}
+```
+
+For UI chunks with browser acceptance criteria, include the browser evidence you captured, or explicitly state that Playwright/browser tools were unavailable. Do not claim visual/browser acceptance without evidence.
+</tdd-evidence>
+
 <verify>
 1. Check that expected files were created or modified, and no files outside the assignment's boundaries were touched.
 2. Run the build, test, and lint commands from the assignment's specification. Capture output.
 3. All tests must pass and the build must be clean before review. A REVIEW_REQUEST against a failing build wastes the reviewer's cycle and earns a REJECTED on the first read.
+4. Confirm `.kiln/tmp/tdd-evidence.md` exists and includes the freshness and RED/GREEN/REFACTOR evidence or a concrete no-test waiver.
 </verify>
 
 <commit-and-archive>
@@ -136,6 +174,7 @@ ${DIFF_STAT}
 EOF
 ```
 `SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, chunk=${CHUNK}, file=implementation-summary.md, source=.kiln/tmp/implementation-summary.md")`
+`SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, milestone=${MILESTONE_ID}, chunk=${CHUNK}, file=tdd-evidence.md, source=.kiln/tmp/tdd-evidence.md")`
 </commit-and-archive>
 
 <request-review>
@@ -144,9 +183,10 @@ Capture evidence before sending to your paired reviewer:
 DIFF=$(git diff HEAD~1)
 DIFF_STAT=$(git diff --stat HEAD~1)
 CHUNK=$(grep -o '<chunk>[0-9]\+</chunk>' /tmp/kiln_assignment.xml 2>/dev/null | grep -o '[0-9]\+' | head -1 || echo "unknown")
+HEAD_AFTER=$(git rev-parse HEAD 2>/dev/null || echo "no-git")
 ```
 
-`SendMessage(type:"message", recipient:"{REVIEWER_NAME}", content:"REVIEW_REQUEST: {summary of what was implemented}.\n\nChunk: ${CHUNK}\n\nKey files changed:\n{DIFF_STAT}\n\nAcceptance criteria: {from assignment}\ntest_requirements: {from assignment, or 'none'}\n\nBuild result: {PASS/FAIL + output summary}\nTest result: {PASS/FAIL + output summary}\n\nFull diff:\n\`\`\`\n{DIFF}\n\`\`\`")`
+`SendMessage(type:"message", recipient:"{REVIEWER_NAME}", content:"REVIEW_REQUEST: {summary of what was implemented}.\n\nassignment_id: ${ASSIGNMENT_ID}\nmilestone_id: ${MILESTONE_ID}\nchunk_id: ${CHUNK}\nassignment_head_sha: ${ASSIGNMENT_HEAD}\ncurrent_head_sha_after: ${HEAD_AFTER}\ntdd_evidence_path: .kiln/tmp/tdd-evidence.md\ntdd_evidence_archive_target: .kiln/archive/milestone-${MILESTONE_ID}/chunk-${CHUNK}/tdd-evidence.md\n\nKey files changed:\n{DIFF_STAT}\n\nAcceptance criteria: {from assignment}\ntest_requirements: {from assignment, or 'none'}\n\nBuild result: {PASS/FAIL + output summary}\nTest result: {PASS/FAIL + output summary}\nBrowser evidence: {Playwright/screenshot paths, or unavailable/static-only limitation}\n\nTDD evidence summary: {red/green/refactor summaries or no-test waiver}\n\nFull diff:\n\`\`\`\n{DIFF}\n\`\`\`")`
 
 Your turn ends here. Wait for APPROVED or REJECTED from the paired reviewer.
 </request-review>
@@ -158,8 +198,9 @@ Your turn ends here. Wait for APPROVED or REJECTED from the paired reviewer.
 - Track the rejection number (1st rejection = fix 1, 2nd = fix 2, and so on).
 - Stay within the original file boundaries — a rejection is a fix, not a rescope.
 - Re-run the relevant build, test, and lint commands.
+- Update `.kiln/tmp/tdd-evidence.md` with fix rerun commands/results and archive it again through thoth.
 - Stage and commit the fixes.
-- `SendMessage(recipient:"{REVIEWER_NAME}", content:"REVIEW_REQUEST: Fix {N} for previous rejection. Changes: {summary}.")`
+- `SendMessage(recipient:"{REVIEWER_NAME}", content:"REVIEW_REQUEST: Fix {N} for previous rejection. assignment_id: ${ASSIGNMENT_ID}. milestone_id: ${MILESTONE_ID}. chunk_id: ${CHUNK}. tdd_evidence_path: .kiln/tmp/tdd-evidence.md. Commands rerun: {commands}. Changes: {summary}.")`
 - Your turn ends; wait for the next verdict.
 - Cap is 3 rejection cycles. On a 4th rejection, `SendMessage(recipient:"krs-one", content:"IMPLEMENTATION_REJECTED: Failed review 3 times. Issues: {latest issues}.")` and stop — a chunk that fails 3 times has a scoping problem the boss must resolve, not an implementation problem another fix-cycle can solve.
 </verdict>

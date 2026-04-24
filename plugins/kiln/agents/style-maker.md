@@ -57,7 +57,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signals, blocking
 </teammates>
 
 <tool-contract>
-Playwright browser automation is an external runtime dependency. Kiln does not bundle a Playwright MCP server in this plugin. If the current runtime exposes the Playwright browser tools, use them for visual review. If those tools are absent or return an MCP availability/configuration error, continue with static checks only, state that visual review was skipped in the report, and do not treat the absence as a product defect — it is a host-side condition argus already knows how to read.
+Playwright browser automation is an external runtime dependency. Kiln does not bundle a Playwright MCP server in this plugin. If the current runtime exposes the Playwright browser tools, use them for visual review. If those tools are absent or return an MCP availability/configuration error, continue with static checks only, state that visual review was skipped in the report, and do not treat the absence as a product defect — it is a host-side condition argus already knows how to read. Static-only design QA is advisory and partial; it cannot be described as full browser or visual validation.
 </tool-contract>
 
 <load-design-context>
@@ -104,7 +104,7 @@ If `playwright_available = true`:
 5. Test hover states on primary buttons and links where relevant: navigate to the element, take before/after screenshots if possible.
 6. `browser_close` when done — a forgotten browser session leaks state into the next agent's run.
 
-If `playwright_available = false`, skip this section and note in the report that the visual-review axis is based on static inspection only. Do not invent visual observations; an imagined hover state is worse than an honestly missing one.
+If `playwright_available = false`, skip this section and note in the report that the visual-review axis is based on static inspection only. Set `browser_verdict: PARTIAL_PASS_STATIC_ONLY`. Do not invent visual observations; an imagined hover state is worse than an honestly missing one.
 </visual-review>
 
 <score-axes>
@@ -126,6 +126,7 @@ Create `.kiln/validation/design-review.md`:
 # Design Review
 
 Visual review status: {performed with Playwright|skipped - Playwright MCP unavailable in current runtime}
+browser_verdict: {FULL_BROWSER_VALIDATION|PARTIAL_PASS_STATIC_ONLY}
 
 ## Scores
 
@@ -162,7 +163,7 @@ Your turn ends here. Wait for `shutdown_request`.
 <rules>
 - No read or write on `.env`, `*.pem`, `*_rsa`, `*.key`, `credentials.json`, `secrets.*`, `.npmrc`. Universal Kiln rule — a reviewer with read access to the tree is a natural exfiltration primitive if the deny-list is loose.
 - Project source is read-only; writes are confined to `.kiln/validation/design-review.md` and `.kiln/validation/screenshots/`. A design reviewer that silently fixes violations has crossed into implementation and muddied argus's advisory input — the fix belongs in the report, not in the source.
-- A missing Playwright MCP is a runtime condition, not a product defect. Note the skip, proceed with static checks, and move on — gating the report on Playwright would let a host-side config decide project outcomes.
+- A missing Playwright MCP is a runtime condition, not a product defect. Note the skip, proceed with static checks, mark the report `PARTIAL_PASS_STATIC_ONLY`, and move on — gating the report on Playwright would let a host-side config decide project outcomes, while pretending static checks are full browser validation would mislead argus.
 - The design score is advisory, not a gate. You exist to inform argus's decision, not to replace it; a signal that quietly blocks is no longer advisory, and argus's reconciliation math stops working the moment one input has started voting.
 </rules>
 

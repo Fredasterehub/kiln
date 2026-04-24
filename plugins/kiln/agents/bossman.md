@@ -86,6 +86,13 @@ Decision tree: UI/visual? → **UI**. Else `codex_available=true`? → **Default
    - `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/design/standing-contract-template.md`.
    - `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/design/jit-brief-template.md`.
    Otherwise set `design_enabled = false` and skip all design concerns.
+6. Capture repository freshness before every chunk scope:
+   ```bash
+   HEAD_SHA=$(git rev-parse HEAD 2>/dev/null || echo "no-git")
+   DIRTY_STATUS=$(git status --short 2>/dev/null | sed ':a;N;$!ba;s/\n/ | /g' || echo "no-git")
+   CODEBASE_STATE_HEAD=$(grep -oP '^head_sha:\s*\K\S+' .kiln/docs/codebase-state.md 2>/dev/null | head -1 || echo "missing")
+   ```
+   If `CODEBASE_STATE_HEAD` is missing, write an `ITERATION_UPDATE` to rakim asking for a schema refresh before scoping. If it is present and differs from `HEAD_SHA`, ask rakim to resync and wait for `READY` unless the diff is an expected dirty working tree from the just-completed chunk. Do not silently scope from stale codebase-state.
 
 ### 2. Evaluate Scope
 
@@ -96,6 +103,7 @@ Rakim and sentinel READY summaries are pre-injected — proceed to scoping.
 1. Current milestone = first with incomplete deliverables (respect dependency order).
 2. If `correction_cycle > 0`, scope fixes first.
 3. Else scope ONE focused implementation chunk in this milestone.
+4. Freeze the scope with an `assignment_id` and source list. Use `assignment_id="m{milestone_id}-c{chunk_count}-{short_head_sha}"`. Record every artifact consulted for scoping (`master-plan.md`, `architecture-handoff.md`, `arch-constraints.md`, `codebase-state.md`, `patterns.md`, `pitfalls.md`, validation report when applicable, design files when applicable). These paths go into the assignment and the archive.
 
 Scoping rules (spec quality is the #1 lever):
 - **Feature-shaped** — one feature, one module, one integration point.
@@ -121,16 +129,26 @@ If rakim reports all deliverables complete, skip to step 6.
     ```
     Use one of `default`, `fallback`, `ui` — the engine validates your `scenario` field and maps it to builder/reviewer types, so your payload carries no agent types, only the scenario name. Any other value and you receive `CYCLE_REJECTED` back.
 
-4. STOP. Wait for EITHER `WORKERS_SPAWNED: duo_id={id}, {builder_name} (subagent_type: {builder_type}), {reviewer_name} (subagent_type: {reviewer_type})` from team-lead (canonical) OR `WORKER_READY: ready for assignment` from either freshly-spawned worker (belt-and-suspenders fallback — whichever arrives first unblocks you). If only WORKER_READY arrives first, use the `coder_name` / `reviewer_name` you sent in the CYCLE_WORKERS payload as the authoritative names and proceed — WORKERS_SPAWNED may still arrive late but is informational once you've already dispatched. Then construct and send the assignment.
+4. STOP. Wait for team-lead to resume you after the deterministic `SubagentStart` hook path has acknowledged both freshly spawned workers. The engine may include a `WORKERS_SPAWNED: duo_id={id}, {builder_name} (subagent_type: {builder_type}), {reviewer_name} (subagent_type: {reviewer_type})` audit message after that readiness path completes, but you do not treat `WORKERS_SPAWNED` as the readiness gate. Use the `coder_name` / `reviewer_name` you sent in the `CYCLE_WORKERS` payload as the authoritative spawn names, then construct and send the assignment.
 
 Include the reviewer name in the `<reviewer>` XML tag — enforcement anchor that survives context pressure.
 
 ```xml
 <assignment>
-  <reviewer>{paired reviewer name from WORKERS_SPAWNED}</reviewer>
+  <assignment_id>{mN-cN-shortsha}</assignment_id>
+  <reviewer>{paired reviewer name from your CYCLE_WORKERS payload}</reviewer>
+  <milestone_id>{milestone number or stable id}</milestone_id>
   <milestone>{milestone name}</milestone>
   <deliverable>{which deliverable(s) this addresses}</deliverable>
   <chunk>{chunk_count}</chunk>
+
+  <freshness>
+    <head_sha>{HEAD_SHA}</head_sha>
+    <dirty_status>{DIRTY_STATUS or clean}</dirty_status>
+    <codebase_state_head_sha>{CODEBASE_STATE_HEAD}</codebase_state_head_sha>
+    <timestamp>{UTC ISO-8601 timestamp}</timestamp>
+    <source_artifacts>{comma-separated artifact paths consulted for this scope}</source_artifacts>
+  </freshness>
 
   <commands>
     {build, test, lint commands — from AGENTS.md or project config.
@@ -163,10 +181,12 @@ Include the reviewer name in the `<reviewer>` XML tag — enforcement anchor tha
 Before dispatching, archive the assignment to tmp:
 ```bash
 CHUNK=$(grep -oP '(?<=\*\*chunk_count\*\*:\s)[0-9]+' .kiln/STATE.md | head -1)
+MILESTONE_ID={milestone number or stable id}
 cat <<'XMLEOF' > .kiln/tmp/chunk-${CHUNK}-assignment.xml
 {full assignment XML}
 XMLEOF
 ```
+SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, milestone=${MILESTONE_ID}, chunk=${CHUNK}, file=assignment.xml, source=.kiln/tmp/chunk-${CHUNK}-assignment.xml")
 
 Send the assignment to the builder. STOP. Wait for reply.
 
@@ -190,6 +210,8 @@ head_sha: ${HEAD}
 scope: {deliverable IDs scoped}
 implemented: {what was completed}
 reviewer_verdict: APPROVED
+tdd_evidence: .kiln/archive/milestone-{milestone_id}/chunk-${CHUNK}/tdd-evidence.md
+review_verdict: .kiln/archive/milestone-{milestone_id}/chunk-${CHUNK}/review.md
 EOF
 ```
 SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, chunk=${CHUNK}, file=chunk-${CHUNK}-summary.md, source=.kiln/tmp/chunk-${CHUNK}-summary.md")
@@ -232,7 +254,7 @@ EOF
 4. Message thoth: `MILESTONE_DONE: milestone={N}, name={milestone_name}.` (fire-and-forget — thoth writes `.kiln/docs/milestones/milestone-{N}.md`; Wave 4 C5 owner change; previously sent to rakim where it had no handler).
 5. Terminal signal — pick exactly ONE. Wave 4 C4 contract: `BUILD_COMPLETE` is the sole terminal on the final milestone; `MILESTONE_COMPLETE` is the per-milestone signal; never both:
    - **Not final milestone:** update STATE.md milestone pointer via Bash sed. Then `SendMessage team-lead: MILESTONE_COMPLETE: {milestone_name}`. STOP.
-   - **Final milestone:** update STATE.md (`stage: validate`) via Bash sed. Then `SendMessage team-lead: BUILD_COMPLETE`. STOP. Do not also send `MILESTONE_COMPLETE` — the engine treats `BUILD_COMPLETE` alone as the final-milestone terminal.
+   - **Final milestone:** before touching STATE.md or sending `BUILD_COMPLETE`, send `FINAL_ARCHIVE_CHECK: milestone_count={milestone_count}, chunk_count={chunk_count}` to thoth and STOP. Wait up to 60s for `ARCHIVE_READY`. If thoth replies `ARCHIVE_BLOCKED` or times out, do not send `BUILD_COMPLETE`; surface the missing archive paths and resolve them first. Only after `ARCHIVE_READY`, update STATE.md (`stage: validate`) via Bash sed. Then `SendMessage team-lead: BUILD_COMPLETE`. STOP. Do not also send `MILESTONE_COMPLETE` — the engine treats `BUILD_COMPLETE` alone as the final-milestone terminal.
 
 **QA_FAIL (or timeout):**
 1. Send `ITERATION_UPDATE: QA findings — {findings from QA_FAIL, or 'QA timeout'}. Update pitfalls.md / patterns.md with the surfaced issues. Reply READY when done.` to rakim AND sentinel (BLOCKING, 60s each). Wave 4 H1 contract: QA failure context flows through the structured `ITERATION_UPDATE` — the retired pre-Wave-4 boss-to-rakim fire-and-forget channel (audit item H1) left findings out of the deterministic PM ingestion path.
@@ -250,7 +272,7 @@ EOF
 - No messaging an active builder or reviewer mid-task. Scope freezes at dispatch; mid-task nudges produce timing races whose cost falls on the reviewer's verdict.
 - Never signal `ITERATION_COMPLETE`. The inter-chunk loop is internal; emitting it closes the build prematurely.
 - No read or write on `.env`, `*.pem`, `*_rsa`, `*.key`, `credentials.json`, `secrets.*`, `.npmrc`. Universal Kiln rule — secret exfiltration via a coordinator is the worst-shape failure the pipeline can produce.
-- Allowed blocking sends: `CYCLE_WORKERS` (team-lead; unblocks on `WORKERS_SPAWNED` or `WORKER_READY`, whichever arrives first), `ITERATION_UPDATE` (rakim + sentinel, 60s each), `MILESTONE_TRANSITION` (rakim + sentinel, 60s each).
+- Allowed blocking sends: `CYCLE_WORKERS` (team-lead; unblocks only after the engine observes `SubagentStart` for both fresh workers), `ITERATION_UPDATE` (rakim + sentinel, 60s each), `MILESTONE_TRANSITION` (rakim + sentinel, 60s each), `FINAL_ARCHIVE_CHECK` (thoth, final milestone only, 60s).
 - Allowed fire-and-forget sends: `ARCHIVE` and `MILESTONE_DONE` to thoth, `MILESTONE_TRANSITION` to thoth. The blocking `MILESTONE_TRANSITION` is rakim + sentinel only — thoth's copy is fire-and-forget so archival never blocks the pipeline.
 
 </constraints>

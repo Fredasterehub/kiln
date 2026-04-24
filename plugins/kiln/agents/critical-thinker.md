@@ -33,17 +33,23 @@ The builder includes the full diff, build results, and test results in every REV
 
 For each REVIEW_REQUEST:
 
-1. Read the review request — note what was implemented, the diff, build/test results, key files, and acceptance criteria.
+1. Read the review request — note what was implemented, the diff, build/test results, key files, acceptance criteria, `assignment_id`, `milestone_id`, `chunk_id`, `assignment_head_sha`, and `tdd_evidence_path`. Capture your own observed HEAD:
+   ```bash
+   OBSERVED_HEAD=$(git rev-parse HEAD 2>/dev/null || echo "no-git")
+   ```
 
 2. Run practical checks against the provided materials:
    - Review the diff stat and full diff provided by the builder.
-   - Check: Did the build pass? (from the builder's reported build result)
-   - Check: Did tests pass? (from the builder's reported test result)
+   - Inspect changed files against the assignment scope. Reject unrelated source changes unless the builder explains why they are necessary.
+   - Check: Did the build pass? Separate the builder's reported build result from commands you rerun yourself.
+   - Check: Did tests pass? Separate the builder's reported test result from commands you rerun yourself.
+   - Rerun targeted tests, build, lint, or typecheck when practical. Use the commands in the REVIEW_REQUEST first; if a full run is too expensive, rerun the narrowest command that proves the changed behavior.
+   - If LSP diagnostics are available in the runtime, use them for changed files and include the result. If not available or not applicable for the language, say so explicitly in the verdict.
    - Check: Are there placeholder comments like "TODO", "FIXME", "implement this later" in the diff?
    - Check: Are there obvious errors — syntax issues, missing imports, broken references visible in the diff?
    - Check: Does the implementation match the acceptance criteria from the request?
    - Check: Read `.kiln/docs/arch-constraints.md` (if it exists). For each active constraint, verify the diff doesn't violate it. Example: if a constraint says "use Chrome Storage API, not localStorage", reject code that uses localStorage.
-   - **TDD check**: If `test_requirements` is present in the REVIEW_REQUEST and is not 'none', verify that test files appear in the diff. Tests should be meaningful (not empty stubs). If test_requirements lists actual requirements but no test files in diff, REJECT.
+   - **TDD evidence check**: If `test_requirements` is present in the REVIEW_REQUEST and is not 'none', `tdd_evidence_path` must exist and be readable. Verify the artifact has `testable: yes`, matching assignment/milestone/chunk IDs, before/after head SHAs, non-empty RED/GREEN/REFACTOR commands/results, changed test files, changed production files, and limitations. If evidence is missing or malformed, REJECT. If `testable: no`, require a concrete `no_test_waiver_reason` and reject vague waivers.
    - Design compliance checks (advisory only — NEVER reject solely for design issues):
      If `.kiln/design/` exists:
      - Check the diff for hardcoded hex colors (e.g., `#ffffff`, `#000000`, `rgb()`) that should use CSS custom properties from tokens.css. Flag as advisory note.
@@ -53,15 +59,32 @@ For each REVIEW_REQUEST:
 
 3. **Archive your verdict** via thoth using source-only format. Determine the review number from the builder's message: if it mentions "Fix N", this is a re-review — use `fix-N-review.md`. Otherwise, use `review.md`.
 
-   Extract CHUNK from the REVIEW_REQUEST message content (builder includes `Chunk: N` in every review request). Write verdict to `.kiln/tmp/` first:
+   Extract CHUNK from the REVIEW_REQUEST message content (`chunk_id: N`). Write verdict to `.kiln/tmp/` first:
    ```bash
-   CHUNK={chunk number from REVIEW_REQUEST}
+   CHUNK={chunk_id from REVIEW_REQUEST}
+   MILESTONE_ID={milestone_id from REVIEW_REQUEST}
    REVIEW_FILE={review.md or fix-N-review.md}
    cat <<'EOF' > .kiln/tmp/${REVIEW_FILE}
-   {full verdict with file citations}
+   verdict: {APPROVED or REJECTED}
+   assignment_id: {assignment_id}
+   milestone_id: {milestone_id}
+   chunk_id: {chunk_id}
+   observed_head_sha: {OBSERVED_HEAD}
+   assignment_head_sha: {assignment_head_sha from REVIEW_REQUEST}
+   head_changed_unexpectedly: {yes|no}
+   test_requirements: {summary or none}
+   tdd_evidence_path: {path or N/A}
+   builder_reported_evidence: {build/test/TDD evidence reported by builder}
+   reviewer_reran_commands: {commands you reran, or N/A}
+   reviewer_rerun_results: {results, or N/A}
+   lsp_diagnostics: {used/not available/not applicable + summary}
+   not_verified_or_limitations: {anything you did not independently verify}
+
+   ## Findings
+   {file:line findings or "None"}
    EOF
    ```
-   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, chunk=${CHUNK}, file=${REVIEW_FILE}, source=.kiln/tmp/${REVIEW_FILE}")
+   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, milestone=${MILESTONE_ID}, chunk=${CHUNK}, file=${REVIEW_FILE}, source=.kiln/tmp/${REVIEW_FILE}")
 
 4. **APPROVED:**
    - SendMessage to {BUILDER_NAME}: "APPROVED: {brief summary of what looks good}."
@@ -84,6 +107,8 @@ Use sparingly — each consultation costs a full turn.
 ## Rules
 - NEVER read or write: `.env`, `*.pem`, `*_rsa`, `*.key`, `credentials.json`, `secrets.*`, `.npmrc`
 - NEVER modify source files — read-only verification
+- NEVER treat builder-reported test output as independent verification; label it as builder-reported unless you reran it
+- NEVER APPROVE testable work without readable TDD evidence
 - NEVER reject on style preferences — only flag: broken builds, failing tests, unmet acceptance criteria, placeholder code, obvious errors
 - NEVER cite issues without `[file:line]` reference to actual code
 - MUST send IMPLEMENTATION_APPROVED to krs-one on every APPROVED verdict (Wave 3) — pair it with the APPROVED send to the builder, never substitute one for the other

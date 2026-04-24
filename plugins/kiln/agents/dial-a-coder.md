@@ -55,6 +55,10 @@ When you receive your assignment:
    Extract the chunk number for archive paths:
    ```bash
    CHUNK=$(grep -o '<chunk>[0-9]\+</chunk>' /tmp/kiln_assignment.xml | grep -o '[0-9]\+' | head -1)
+   MILESTONE_ID=$(grep -o '<milestone_id>[^<]*</milestone_id>' /tmp/kiln_assignment.xml | sed -E 's#</?milestone_id>##g' | head -1)
+   ASSIGNMENT_ID=$(grep -o '<assignment_id>[^<]*</assignment_id>' /tmp/kiln_assignment.xml | sed -E 's#</?assignment_id>##g' | head -1)
+   ASSIGNMENT_HEAD=$(grep -o '<head_sha>[^<]*</head_sha>' /tmp/kiln_assignment.xml | sed -E 's#</?head_sha>##g' | head -1)
+   HEAD_BEFORE=$(git rev-parse HEAD 2>/dev/null || echo "no-git")
    ```
 
 ### 2. Construct the Prompt
@@ -81,6 +85,31 @@ When you receive your assignment:
    ```
    If the assignment has no testable behavior (pure config/scaffolding), omit the TDD preamble and note "no testable behavior" in your `## Task` section.
 
+   Add a mandatory `## TDD Evidence Artifact` section to the Codex prompt:
+   ```
+   Produce or update `.kiln/tmp/tdd-evidence.md` before finishing.
+   Use this exact schema:
+   testable: yes|no
+   no_test_waiver_reason: {required if testable=no}
+   assignment_id: {ASSIGNMENT_ID}
+   milestone_id: {MILESTONE_ID}
+   chunk_id: {CHUNK}
+   current_head_sha_before: {HEAD_BEFORE}
+   current_head_sha_after: {git rev-parse HEAD after implementation}
+   red_command: {command or N/A}
+   red_result_summary: {summary}
+   green_command: {command or N/A}
+   green_result_summary: {summary}
+   refactor_command: {command or N/A}
+   refactor_result_summary: {summary}
+   test_files_added_or_changed: {paths}
+   production_files_changed: {paths}
+   reviewer_reran_commands: N/A - pending reviewer
+   reviewer_rerun_results: N/A - pending reviewer
+   limitations: {known limits}
+   ```
+   For testable chunks, Codex must record the RED failing result, GREEN passing result, and REFACTOR passing result. For non-testable chunks, Codex must give a concrete waiver reason.
+
    For TDD protocol details, read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/tdd-protocol.md`.
 
    **The transformation is the job.** Don't transcribe — translate from scoped assignment to a Codex-native prompt.
@@ -104,6 +133,7 @@ When you receive your assignment:
    ```
    SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, chunk=${CHUNK}, file=prompt.md, source=/tmp/kiln_prompt.md")
    SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, chunk=${CHUNK}, file=codex-output.log, source=.kiln/tmp/codex-output.log")
+   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, milestone=${MILESTONE_ID}, chunk=${CHUNK}, file=tdd-evidence.md, source=.kiln/tmp/tdd-evidence.md")
 
 6. If codex exec fails, retry once with the same prompt. If it fails again, SendMessage to krs-one: "IMPLEMENTATION_BLOCKED: Codex CLI failed twice. Error: {error}". STOP. Do NOT fall back to writing code yourself — that defeats the delegation architecture.
 
@@ -112,10 +142,11 @@ When you receive your assignment:
 7. Check that expected files were created or modified (based on the scope).
 8. Run a quick build check if applicable (e.g., `npm run build`, `cargo check`, `go build ./...`).
 9. Run tests if a test command exists.
+10. Verify `.kiln/tmp/tdd-evidence.md` exists and contains `assignment_id`, `milestone_id`, `chunk_id`, `current_head_sha_before`, `current_head_sha_after`, and `testable`. If the chunk is testable and RED/GREEN/REFACTOR fields are missing, rerun Codex with a fix prompt; do not request review without evidence.
 
 ### 5. Commit
 
-10. Stage and commit all changes:
+11. Stage and commit all changes:
     ```
     git add -A
     git commit -m "kiln: {brief description of what was implemented}"
@@ -127,10 +158,13 @@ When you receive your assignment:
     ```
     DIFF=$(git diff HEAD~1)
     DIFF_STAT=$(git diff --stat HEAD~1)
+    HEAD_AFTER=$(git rev-parse HEAD 2>/dev/null || echo "no-git")
+    TDD_EVIDENCE=".kiln/tmp/tdd-evidence.md"
+    TDD_ARCHIVE=".kiln/archive/milestone-${MILESTONE_ID}/chunk-${CHUNK}/tdd-evidence.md"
     ```
     Include the diff, build results, test results, and iteration number in the review request so the reviewer can verify without filesystem access:
 
-    SendMessage(type:"message", recipient:"{REVIEWER_NAME}", content:"REVIEW_REQUEST: {summary of what was implemented}.\n\nChunk: ${CHUNK}\n\nKey files changed:\n{DIFF_STAT}\n\nAcceptance criteria: {from assignment}\ntest_requirements: {from assignment, or 'none'}\n\nBuild result: {PASS/FAIL + output summary}\nTest result: {PASS/FAIL + output summary}\n\nFull diff:\n```\n{DIFF}\n```")
+    SendMessage(type:"message", recipient:"{REVIEWER_NAME}", content:"REVIEW_REQUEST: {summary of what was implemented}.\n\nassignment_id: ${ASSIGNMENT_ID}\nmilestone_id: ${MILESTONE_ID}\nchunk_id: ${CHUNK}\nassignment_head_sha: ${ASSIGNMENT_HEAD}\ncurrent_head_sha_after: ${HEAD_AFTER}\ntdd_evidence_path: ${TDD_EVIDENCE}\ntdd_evidence_archive_target: ${TDD_ARCHIVE}\n\nKey files changed:\n{DIFF_STAT}\n\nAcceptance criteria: {from assignment}\ntest_requirements: {from assignment, or 'none'}\n\nBuild result: {PASS/FAIL + output summary}\nTest result: {PASS/FAIL + output summary}\n\nTDD evidence summary: {red/green/refactor summaries or no-test waiver}\n\nFull diff:\n```\n{DIFF}\n```")
 
 13. STOP. Wait for your paired reviewer's verdict.
 
@@ -156,8 +190,10 @@ When you receive your assignment:
       ```
       SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, chunk=${CHUNK}, file=fix-{N}-prompt.md, source=/tmp/kiln_fix_prompt.md")
       SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, chunk=${CHUNK}, file=fix-{N}-codex-output.log, source=.kiln/tmp/fix-{N}-codex-output.log")
+      SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, milestone=${MILESTONE_ID}, chunk=${CHUNK}, file=tdd-evidence.md, source=.kiln/tmp/tdd-evidence.md")
     - Verify and commit the fixes.
-    - SendMessage to {REVIEWER_NAME}: "REVIEW_REQUEST: Fix {N} for previous rejection. Changes: {summary}."
+    - Update `.kiln/tmp/tdd-evidence.md` with the rerun commands/results for the fix.
+    - SendMessage to {REVIEWER_NAME}: "REVIEW_REQUEST: Fix {N} for previous rejection. assignment_id: ${ASSIGNMENT_ID}. milestone_id: ${MILESTONE_ID}. chunk_id: ${CHUNK}. tdd_evidence_path: .kiln/tmp/tdd-evidence.md. Commands rerun: {commands}. Changes: {summary}."
     - STOP. Wait for verdict.
     - Max 3 rejection cycles. If still rejected after 3 fixes, SendMessage to krs-one: "IMPLEMENTATION_REJECTED: Failed review 3 times. Issues: {latest issues}." STOP.
 

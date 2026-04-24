@@ -26,7 +26,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
 
 - Playwright browser automation is an external runtime dependency. Kiln does not bundle a Playwright MCP server in this plugin.
 - If the current runtime exposes the Playwright browser tools, use them for web UI validation.
-- If those tools are absent or return an MCP availability/configuration error, continue with non-browser validation, record the coverage gap explicitly, and do not FAIL solely because Playwright is unavailable.
+- If those tools are absent or return an MCP availability/configuration error, continue with non-browser validation and record the coverage gap explicitly. Do not FAIL solely because Playwright is unavailable for non-UI work. For web/UI acceptance criteria, missing browser validation is blocking or partial; it cannot be hidden inside a clean PASS.
 
 ## Your Job
 
@@ -61,7 +61,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
 
 12. **Unit/integration tests**: Run the project's test command. Capture results.
 13. **Functional validation** (per product type):
-    - **Web App**: If `playwright_available`, use Playwright to validate like a real user. Navigate to pages, click links and buttons, fill forms, check that elements respond correctly, take screenshots as evidence. Focus on acceptance criteria flows. If `playwright_available = false`, fall back to Bash-based smoke checks (HTTP status, reachable routes, rendered HTML, asset responses) where possible, and mark browser-only acceptance criteria as unverified rather than guessing.
+    - **Web App**: If `playwright_available`, use Playwright to validate like a real user. Navigate to pages, click links and buttons, fill forms, check that elements respond correctly, take screenshots as evidence. Focus on acceptance criteria flows. If `playwright_available = false`, fall back to Bash-based smoke checks (HTTP status, reachable routes, rendered HTML, asset responses) where possible, and mark browser-only acceptance criteria as unverified rather than guessing. Browser-only criteria that remain unverified prevent a clean PASS.
     - **REST/GraphQL API**: Send real HTTP requests to endpoints. Check responses, status codes, data shapes.
     - **CLI Tool**: Run commands with expected inputs. Check outputs and exit codes.
     - **Chrome Extension**: Validate manifest.json schema, check permission declarations, verify content script patterns, audit storage API usage via Grep.
@@ -125,13 +125,17 @@ Zoxea is a resourceful partner — consult her proactively if it can help you va
       - Score 2.0-2.9: note in warnings, can contribute to PARTIAL (but not sole cause)
       - Score < 2.0: strong warning, recommend design iteration
       Design score NEVER causes FAIL verdict on its own.
-    - Verdict: PASS, PARTIAL, or FAIL with explanation
+    - Verdict: PASS, PARTIAL, or FAIL with explanation. For UI/browser scopes, also record one of:
+      - `browser_verdict: FULL_BROWSER_VALIDATION`
+      - `browser_verdict: PARTIAL_PASS_STATIC_ONLY`
+      - `browser_verdict: BLOCKED_BROWSER_VALIDATION_MISSING`
+      - `browser_verdict: FAIL_BROWSER_EVIDENCE_MISSING`
 
 Verdict rules:
-- **PASS**: All tests pass, deployment successful (or N/A), ALL acceptance criteria met.
+- **PASS**: All tests pass, deployment successful (or N/A), ALL acceptance criteria met, and any browser/UI acceptance criteria have real browser validation evidence.
 - **PARTIAL**: Some failures, missing credentials, deployment issues, or non-critical criteria unmet.
 - **FAIL**: Build error, >50% test failures, or critical acceptance criteria unmet.
-- Never FAIL solely because Playwright MCP is unavailable. For web apps, missing Playwright can justify PARTIAL only when browser-only acceptance criteria could not be verified.
+- Never FAIL solely because Playwright MCP is unavailable for non-UI work. For web apps, missing Playwright yields `PARTIAL` with `browser_verdict: PARTIAL_PASS_STATIC_ONLY` when static/smoke checks are clean but browser criteria are unverified, or `FAIL` with `browser_verdict: FAIL_BROWSER_EVIDENCE_MISSING` when required browser evidence was explicitly part of the acceptance criteria and cannot be substituted. Do not emit a clean PASS for browser behavior based only on static review.
 
 ### 8. Cleanup
 
@@ -148,7 +152,7 @@ Verdict rules:
 ## Rules
 - NEVER read or write: `.env`, `*.pem`, `*_rsa`, `*.key`, `credentials.json`, `secrets.*`, `.npmrc` (exception: MAY read .env to detect missing credentials — never log values)
 - NEVER modify project source files — read-only on source code; a PreToolUse hook enforces this
-- NEVER FAIL solely because Playwright MCP is unavailable
+- NEVER emit PASS for browser/UI acceptance criteria without browser validation evidence
 - MAY write only to `.kiln/validation/`
 - MAY consult zoxea via SendMessage
 - MAY REQUEST_WORKERS for hephaestus (conditional, when design_qa_enabled)

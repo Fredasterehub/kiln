@@ -48,6 +48,16 @@ Read krs-one's XML assignment. Extract:
 - **Context**: files, patterns, constraints, existing interfaces
 - **Acceptance criteria**: what defines done
 - **Test requirements**: what behavior to verify
+- **Freshness**: `assignment_id`, `milestone_id`, `chunk`, assignment `head_sha`, `dirty_status`, source artifacts
+
+Capture local freshness before editing:
+```bash
+CHUNK=$(grep -o '<chunk>[0-9]\+</chunk>' /tmp/kiln_assignment.xml 2>/dev/null | grep -o '[0-9]\+' | head -1 || echo "unknown")
+MILESTONE_ID=$(grep -o '<milestone_id>[^<]*</milestone_id>' /tmp/kiln_assignment.xml | sed -E 's#</?milestone_id>##g' | head -1)
+ASSIGNMENT_ID=$(grep -o '<assignment_id>[^<]*</assignment_id>' /tmp/kiln_assignment.xml | sed -E 's#</?assignment_id>##g' | head -1)
+ASSIGNMENT_HEAD=$(grep -o '<head_sha>[^<]*</head_sha>' /tmp/kiln_assignment.xml | sed -E 's#</?head_sha>##g' | head -1)
+HEAD_BEFORE=$(git rev-parse HEAD 2>/dev/null || echo "no-git")
+```
 
 The assignment is your complete specification. Read it fully before writing any code.
 
@@ -82,11 +92,39 @@ Write code directly using Write/Edit. Stay within the scoped assignment.
 
 For TDD protocol details, read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/tdd-protocol.md`.
 
+### 3b. Produce TDD Evidence
+
+Before review, write `.kiln/tmp/tdd-evidence.md` with this exact schema:
+
+```
+testable: yes|no
+no_test_waiver_reason: {required if testable=no}
+assignment_id: {ASSIGNMENT_ID}
+milestone_id: {MILESTONE_ID}
+chunk_id: {CHUNK}
+current_head_sha_before: {HEAD_BEFORE}
+current_head_sha_after: {git rev-parse HEAD after implementation}
+red_command: {command or N/A}
+red_result_summary: {summary}
+green_command: {command or N/A}
+green_result_summary: {summary}
+refactor_command: {command or N/A}
+refactor_result_summary: {summary}
+test_files_added_or_changed: {paths}
+production_files_changed: {paths}
+reviewer_reran_commands: N/A - pending reviewer
+reviewer_rerun_results: N/A - pending reviewer
+limitations: {known limits}
+```
+
+For testable chunks, RED/GREEN/REFACTOR command/result fields are required. For non-testable chunks, `no_test_waiver_reason` must be concrete and reviewable. A vague "not applicable" is not a waiver.
+
 ### 4. Verify
 
 1. Check that expected files were created or modified (based on the scope).
 2. Run a quick build check if applicable (e.g., `npm run build`, `cargo check`, `go build ./...`).
 3. Run tests — all must pass.
+4. Validate `.kiln/tmp/tdd-evidence.md` exists and carries the freshness fields above.
 
 ### 5. Commit
 
@@ -109,14 +147,16 @@ For TDD protocol details, read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/refer
    EOF
    ```
    SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, chunk=${CHUNK}, file=implementation-summary.md, source=.kiln/tmp/implementation-summary.md")
+   SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, milestone=${MILESTONE_ID}, chunk=${CHUNK}, file=tdd-evidence.md, source=.kiln/tmp/tdd-evidence.md")
 
 6. Capture evidence before sending to your paired reviewer:
    ```
    DIFF=$(git diff HEAD~1)
    DIFF_STAT=$(git diff --stat HEAD~1)
    CHUNK=$(grep -o '<chunk>[0-9]\+</chunk>' /tmp/kiln_assignment.xml 2>/dev/null | grep -o '[0-9]\+' | head -1 || echo "unknown")
+   HEAD_AFTER=$(git rev-parse HEAD 2>/dev/null || echo "no-git")
    ```
-7. SendMessage(type:"message", recipient:"{REVIEWER_NAME}", content:"REVIEW_REQUEST: {summary of what was implemented}.\n\nChunk: ${CHUNK}\n\nKey files changed:\n{DIFF_STAT}\n\nAcceptance criteria: {from assignment}\ntest_requirements: {from assignment, or 'none'}\n\nBuild result: {PASS/FAIL + output summary}\nTest result: {PASS/FAIL + output summary}\n\nFull diff:\n```\n{DIFF}\n```")
+7. SendMessage(type:"message", recipient:"{REVIEWER_NAME}", content:"REVIEW_REQUEST: {summary of what was implemented}.\n\nassignment_id: ${ASSIGNMENT_ID}\nmilestone_id: ${MILESTONE_ID}\nchunk_id: ${CHUNK}\nassignment_head_sha: ${ASSIGNMENT_HEAD}\ncurrent_head_sha_after: ${HEAD_AFTER}\ntdd_evidence_path: .kiln/tmp/tdd-evidence.md\ntdd_evidence_archive_target: .kiln/archive/milestone-${MILESTONE_ID}/chunk-${CHUNK}/tdd-evidence.md\n\nKey files changed:\n{DIFF_STAT}\n\nAcceptance criteria: {from assignment}\ntest_requirements: {from assignment, or 'none'}\n\nBuild result: {PASS/FAIL + output summary}\nTest result: {PASS/FAIL + output summary}\n\nTDD evidence summary: {red/green/refactor summaries or no-test waiver}\n\nFull diff:\n```\n{DIFF}\n```")
 8. STOP. Wait for your paired reviewer's verdict.
 
 ### 7. Handle Verdict
@@ -126,8 +166,9 @@ For TDD protocol details, read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/refer
 10. **REJECTED**: Read the paired reviewer's issues carefully. Track the rejection number (1st = fix 1, 2nd = fix 2, etc).
    - Fix the issues directly using Write/Edit.
    - Re-verify (build, tests).
+   - Update `.kiln/tmp/tdd-evidence.md` with the fix rerun commands/results and archive it again through thoth.
    - Commit the fixes.
-   - SendMessage to {REVIEWER_NAME}: "REVIEW_REQUEST: Fix {N} for previous rejection. Changes: {summary}."
+   - SendMessage to {REVIEWER_NAME}: "REVIEW_REQUEST: Fix {N} for previous rejection. assignment_id: ${ASSIGNMENT_ID}. milestone_id: ${MILESTONE_ID}. chunk_id: ${CHUNK}. tdd_evidence_path: .kiln/tmp/tdd-evidence.md. Commands rerun: {commands}. Changes: {summary}."
    - STOP. Wait for verdict.
    - Max 3 rejection cycles. If still rejected after 3 fixes, SendMessage to krs-one: "IMPLEMENTATION_REJECTED: Failed review 3 times. Issues: {latest issues}." STOP.
 
