@@ -109,6 +109,13 @@ class MockEngine:
         self.deadlock_flag: bool = False
         self.pipeline_phase: str = "build"
         self.sim_time: int = 0
+        # P1 worker cycling readiness: in the post-centralization engine,
+        # CYCLE_WORKERS does not unblock on WORKERS_SPAWNED. The audit
+        # message is emitted only after SubagentStart has been observed for
+        # both freshly spawned workers.
+        self.pending_cycle_workers: set[str] = set()
+        self.pending_cycle_started: set[str] = set()
+        self.pending_cycle_sender: str = "krs-one"
 
     # ── dispatch ──
 
@@ -125,7 +132,6 @@ class MockEngine:
             "READY": self._on_ready,
             "REQUEST_WORKERS": self._on_request_workers,
             "CYCLE_WORKERS": self._on_cycle_workers,
-            "WORKER_READY": self._on_worker_ready,
             "SUBAGENTSTART": self._on_subagent_start,
             "TEAMMATEIDLE": self._on_teammate_idle,
             "TIME_TICK": self._on_time_tick,
@@ -252,12 +258,6 @@ class MockEngine:
             details={"sender": sender, "stage": "bootstrap"},
         )]
 
-    def _on_worker_ready(self, event):
-        return [EngineDecision(
-            type="worker_announce",
-            details={"sender": event.get("sender", "")},
-        )]
-
     def _on_subagent_start(self, event):
         """Platform-native spawn ack — Wave 5 / SIMPLIFY-v1.4.0 P1.
 
@@ -284,13 +284,29 @@ class MockEngine:
             agent = agent[len("kiln:"):]
         # P2: register the teammate so the deadlock rule can distinguish
         # "team active" from "team fully idle". TeammateIdle removes them.
-        if agent:
-            self.active_teammates.add(agent)
-            self.activity_ts = self.sim_time
-        return [EngineDecision(
+        decisions = [EngineDecision(
             type="subagent_start_ack",
             details={"agent": agent},
         )]
+
+        if agent:
+            self.active_teammates.add(agent)
+            self.activity_ts = self.sim_time
+            if self.pending_cycle_workers and agent in self.pending_cycle_workers:
+                self.pending_cycle_started.add(agent)
+                if self.pending_cycle_started >= self.pending_cycle_workers:
+                    decisions.append(EngineDecision(
+                        type="send",
+                        details={
+                            "recipient": self.pending_cycle_sender,
+                            "signal": "WORKERS_SPAWNED",
+                            "content": "duo_id",
+                        },
+                    ))
+                    self.pending_cycle_workers.clear()
+                    self.pending_cycle_started.clear()
+                    self.pending_cycle_sender = "krs-one"
+        return decisions
 
     def _on_teammate_idle(self, event):
         """Platform TeammateIdle — drop teammate from the active set.
@@ -601,15 +617,20 @@ class MockEngine:
             ))
             self.active_agents.add(reviewer)
 
-        # Confirm to boss
-        decisions.append(EngineDecision(
-            type="send",
-            details={
-                "recipient": event.get("sender", "krs-one"),
-                "signal": "WORKERS_SPAWNED",
-                "content": "duo_id",
-            },
-        ))
+        if self.version == "post-centralization":
+            self.pending_cycle_workers = {name for name in (coder, reviewer) if name}
+            self.pending_cycle_started = set()
+            self.pending_cycle_sender = event.get("sender", "krs-one")
+        else:
+            # Legacy/pre-centralization replay path: immediate ack.
+            decisions.append(EngineDecision(
+                type="send",
+                details={
+                    "recipient": event.get("sender", "krs-one"),
+                    "signal": "WORKERS_SPAWNED",
+                    "content": "duo_id",
+                },
+            ))
         # Wave 3 (C10) moved the chunk_count write to bossman — the engine
         # no longer mutates that counter. self.chunk_count stays at its
         # seed value for scenario assertions; scenarios that care about

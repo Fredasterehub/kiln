@@ -23,7 +23,7 @@ Map to audit findings:
 | C8 IMPLEMENTATION_COMPLETE drop | `reviewer-approves-to-boss.yaml` (post-centralization — asserts reviewer owns the success handoff via IMPLEMENTATION_APPROVED; builder stays silent on APPROVED; engine stays spectator on REVIEW_REQUEST/APPROVED/IMPLEMENTATION_APPROVED) |
 | C9 READY misrouted | `pm-ready-wrong-recipient.yaml` (warns on second READY to team-lead after bootstrap) |
 | C11 centralization refactor | every scenario can run under both engine versions — compare decisions |
-| C12 WORKERS_SPAWNED slack | The original C12 contract was two-path unblock for `CYCLE_WORKERS`: canonical `WORKERS_SPAWNED` from the engine, plus `WORKER_READY` as a self-announce fallback from each freshly-spawned worker (engine logs a `worker_announce` decision per announcement, proving the signal is observed and routed, not swallowed). The dedicated scenario `worker-ready-belt-suspenders.yaml` was retired in P1 (deleted). Current coverage: `cycle-workers-basic.yaml` for the canonical `WORKERS_SPAWNED` path; `subagent-start-cycle-unblock.yaml` for the P1 replacement — `SubagentStart` deterministic spawn-ack drives the unblock via `additionalContext` injection, and the scenario retains per-worker `worker_announce` assertions as a regression guard that `WORKER_READY` (still emitted until retired in a later pass) is not swallowed. |
+| C12 worker cycling readiness | The active contract is single-path: `CYCLE_WORKERS` blocks until the engine has observed `SubagentStart` for both new workers. `WORKERS_SPAWNED` remains an audit/logging message emitted after readiness is proven. The old worker self-announce fallback is fully retired and is covered only by archived transcripts. |
 
 ## Running
 
