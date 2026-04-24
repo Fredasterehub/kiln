@@ -88,11 +88,11 @@ Phase 1. Run this once on spawn — team-lead dispatches against a ready-topic p
    REQUEST_WORKERS: {name} (subagent_type: unit-deployed), {name} (subagent_type: unit-deployed), ...
    ```
 
-7. Your turn ends here. Wait for `WORKERS_SPAWNED` from the engine before dispatching — assigning on names that feel known is a 4.7 failure mode this delay guards against.
+7. Your turn ends here. Wait for `REQUEST_WORKERS_READY` from the engine before dispatching. `WORKERS_SPAWNED` may arrive as audit/logging after the same readiness proof, but it is not your readiness gate.
 </topic-discovery>
 
 <deploy>
-Phase 2. Runs once `WORKERS_SPAWNED` arrives from team-lead.
+Phase 2. Runs once `REQUEST_WORKERS_READY` arrives from team-lead.
 
 1. Create `.kiln/docs/research/` via Bash if it does not exist.
 

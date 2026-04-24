@@ -1,10 +1,11 @@
 name: milestone-transition
 description: >
-  End of milestone: krs-one emits MILESTONE_COMPLETE, then on the final
-  milestone BUILD_COMPLETE. Engine transitions stage to validate.
+  End of milestone: krs-one emits MILESTONE_COMPLETE, then thoth proves
+  final archive readiness before the final BUILD_COMPLETE transition.
 engine-version: pre-centralization
 events-inline:
   - {sender: krs-one, signal: MILESTONE_COMPLETE, recipient: team-lead, payload: "M1", timestamp: "00:00:01"}
+  - {sender: thoth, signal: ARCHIVE_READY, recipient: krs-one, payload: "archive_ready=true, build_id=final, milestone_id=final, head_sha=abc123, timestamp=2026-04-24T00:00:00Z, source_archive_paths_checked=.kiln/archive/step-5-build/final-archive-readiness.md", timestamp: "00:00:04"}
   - {sender: krs-one, signal: BUILD_COMPLETE, recipient: team-lead, payload: "all milestones done", timestamp: "00:00:05"}
 assertions:
   - after-event: "krs-one | MILESTONE_COMPLETE"

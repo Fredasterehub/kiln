@@ -65,14 +65,29 @@ On every wake (bootstrap, iteration update, milestone transition, consultation),
 <bootstrap-phase>
 Run this once on spawn. Do not wait for a message — the 3-wave spawn pattern puts you in Wave 1 so the boss can dispatch against ready state.
 
-1. Write a minimal skeleton to `.kiln/docs/patterns.md` immediately so the stop-guard marker is in place:
+1. Capture freshness and write minimal skeletons immediately so the stop-guard marker and validator freshness fields are in place:
    ```bash
-   cat <<'EOF' > .kiln/docs/patterns.md
+   HEAD=$(git rev-parse HEAD 2>/dev/null || echo "no-git")
+   NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+   cat <<EOF > .kiln/docs/patterns.md
    <!-- status: complete -->
    # Patterns & Quality Guide
 
+   head_sha: ${HEAD}
+   last_updated: ${NOW}
+
    ## TL;DR
    Bootstrapping — patterns not yet populated.
+   EOF
+   cat <<EOF > .kiln/docs/pitfalls.md
+   <!-- status: complete -->
+   # Pitfalls & Fragile Areas
+
+   head_sha: ${HEAD}
+   last_updated: ${NOW}
+
+   ## TL;DR
+   Bootstrapping — pitfalls not yet populated.
    EOF
    ```
    Go straight to `complete` with a skeleton rather than `writing`. The only valid markers are `complete` and `writing`; variants like `active`, `done`, `ready` trip the guard.
@@ -86,10 +101,14 @@ Run this once on spawn. Do not wait for a message — the 3-wave spawn pattern p
 
 3. Write the full `.kiln/docs/patterns.md`. Line 1 stays `<!-- status: complete -->` — no leading whitespace, no reordering. Structure:
    ```
-   <!-- status: complete -->
-   # Patterns & Quality Guide
+	   <!-- status: complete -->
+	   # Patterns & Quality Guide
 
-   ## TL;DR
+	   head_sha: {git rev-parse HEAD}
+	   last_updated: {UTC ISO-8601 timestamp}
+	   source_evidence_paths: {comma-separated paths consulted}
+
+	   ## TL;DR
    Key patterns: {top 3}. Known pitfalls: {top 3}. Test approach: {convention}.
 
    ## Patterns
@@ -99,9 +118,10 @@ Run this once on spawn. Do not wait for a message — the 3-wave spawn pattern p
    - **Rule**: One-line rule statement
    - **Example**: Concrete code example
 
-   ## Pitfalls
-   (see pitfalls.md for full detail)
-   ```
+	   ## Pitfalls
+	   (see pitfalls.md for full detail)
+	   ```
+	   Write `.kiln/docs/pitfalls.md` with the same freshness header (`head_sha`, `last_updated`, `source_evidence_paths`) before the TL;DR and PF-NNN ledger.
 
 4. Send the bootstrap signal to team-lead (compact, ≤1KB). Engine signal — never send `READY` here, because post-iteration `READY` is krs-one's and conflating them is the C9 deadlock:
    ```

@@ -97,9 +97,11 @@ When KRS-One sends `MILESTONE_TRANSITION: completed={name}, next={name}`:
 
 1. Run Self-Scan Protocol (archive any remaining tmp files from completed milestone).
 2. Write milestone summary to `.kiln/archive/step-5-build/milestone-{completed}-summary.md`:
+   - `milestone_id: {completed milestone id}`
+   - `head_sha: {git rev-parse HEAD}`
+   - `timestamp: {UTC ISO-8601 timestamp}`
    - Milestone name and iteration count
    - List of archived artifacts for this milestone
-   - Timestamp
 3. Ensure archive subdirectory exists for next milestone:
    ```bash
    # Use next milestone name from the MILESTONE_TRANSITION signal
@@ -180,9 +182,25 @@ This is the only blocking archival path. It exists so the final BUILD_COMPLETE s
    - `.kiln/tmp/` has no pending critical files matching `chunk-*assignment.xml`, `tdd-evidence.md`, `review.md`, `fix-*-review.md`, or `qa-verdict-report.md` that are newer than their archive target.
    - `.kiln/validation/report.md` exists if validation has already run; during Step 5 close-out it may not exist yet.
    - Known limitations from milestone summaries or TDD evidence are present in archive files, not only in chat messages.
-3. If all checks pass, send:
-   `SendMessage(type:"message", recipient:"krs-one", content:"ARCHIVE_READY: final archive check passed.")`
-4. If anything is missing, write `.kiln/tmp/final-archive-blockers.md` with the missing paths and send:
+3. If all checks pass, write `.kiln/archive/step-5-build/final-archive-readiness.md` and validate it:
+   ```bash
+   HEAD=$(git rev-parse HEAD 2>/dev/null || echo "no-git")
+   NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+   mkdir -p .kiln/archive/step-5-build
+   cat <<EOF > .kiln/archive/step-5-build/final-archive-readiness.md
+   archive_ready: true
+   run_id: {run_id from STATE.md}
+   build_id: final
+   milestone_id: final
+   head_sha: ${HEAD}
+   timestamp: ${NOW}
+   source_archive_paths_checked: {comma-separated milestone summaries, chunk assignment/tdd/review paths, and guide-scratchpad.md}
+   EOF
+   python3 "${CLAUDE_PLUGIN_ROOT}/hooks/validate-state.py" --root "$PWD" --path .kiln/archive/step-5-build/final-archive-readiness.md
+   ```
+   Then send:
+   `SendMessage(type:"message", recipient:"krs-one", content:"ARCHIVE_READY: archive_ready=true, build_id=final, milestone_id=final, head_sha=${HEAD}, timestamp=${NOW}, source_archive_paths_checked=.kiln/archive/step-5-build/final-archive-readiness.md")`
+4. If anything is missing or the readiness artifact fails validation, write `.kiln/tmp/final-archive-blockers.md` with the missing paths and send:
    `SendMessage(type:"message", recipient:"krs-one", content:"ARCHIVE_BLOCKED: see .kiln/tmp/final-archive-blockers.md. Missing: {one-line summary}")`
 5. STOP. Wait for next message.
 

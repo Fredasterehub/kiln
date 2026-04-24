@@ -75,7 +75,7 @@ Numerobis bootstraps in Phase A. Her READY summary is in your runtime prompt —
    - If `codex_available=true`: `REQUEST_WORKERS: confucius (subagent_type: mystical-inspiration, slot=${CONFUCIUS_SLOT}), sun-tzu (subagent_type: art-of-war, slot=${OTHER_SLOT})`
    - If `codex_available=false`: `REQUEST_WORKERS: confucius (subagent_type: mystical-inspiration, slot=${CONFUCIUS_SLOT}), miyamoto (subagent_type: gracefully-degrading, slot=${OTHER_SLOT})`
 
-2. STOP. Wait for engine to confirm spawns (WORKERS_SPAWNED). Then dispatch both — each planner's runtime prompt includes its assigned slot (`a` or `b`). The slot is the anonymization binding, so a planner dispatched without one cannot know which `plan-{slot}.md` to write to, collapsing the Wave 2 self-anonymization contract on the first dispatch:
+2. STOP. Wait for engine readiness (`REQUEST_WORKERS_READY`; `WORKERS_SPAWNED` is audit/logging only). Then dispatch both — each planner's runtime prompt includes its assigned slot (`a` or `b`). The slot is the anonymization binding, so a planner dispatched without one cannot know which `plan-{slot}.md` to write to, collapsing the Wave 2 self-anonymization contract on the first dispatch:
    - Message confucius: numerobis's summary + his assignment (write `plan-${CONFUCIUS_SLOT}.md`) + slot=${CONFUCIUS_SLOT} + doc paths.
    - If sun-tzu was spawned: numerobis's summary + his assignment (delegate to Codex CLI, write `plan-${OTHER_SLOT}.md`) + slot=${OTHER_SLOT} + doc paths.
    - If miyamoto was spawned: numerobis's summary + his assignment (write `plan-${OTHER_SLOT}.md` directly) + slot=${OTHER_SLOT} + doc paths.
@@ -99,7 +99,7 @@ Numerobis bootstraps in Phase A. Her READY summary is in your runtime prompt —
    REQUEST_WORKERS: diogenes (subagent_type: divergences-converge)
    ```
 
-7. STOP. Wait for engine to confirm spawns (WORKERS_SPAWNED). Then dispatch diogenes: "Read .kiln/tmp/plan-a.md and .kiln/tmp/plan-b.md. Extract divergence analysis to .kiln/plans/divergence-analysis.md."
+7. STOP. Wait for engine readiness (`REQUEST_WORKERS_READY`; `WORKERS_SPAWNED` is audit/logging only). Then dispatch diogenes: "Read .kiln/tmp/plan-a.md and .kiln/tmp/plan-b.md. Extract divergence analysis to .kiln/plans/divergence-analysis.md."
 
 8. STOP. Wait for DIVERGENCE_READY from diogenes.
 
@@ -112,7 +112,7 @@ Numerobis bootstraps in Phase A. Her READY summary is in your runtime prompt —
    REQUEST_WORKERS: plato (subagent_type: e-pluribus-unum)
    ```
 
-11. STOP. Wait for engine to confirm spawns (WORKERS_SPAWNED). Then dispatch plato: "Read anonymized plans at .kiln/tmp/plan-a.md and .kiln/tmp/plan-b.md, plus divergence analysis at .kiln/plans/divergence-analysis.md. Synthesize .kiln/master-plan.md with confidence tiers. Write .kiln/plans/confidence-assessment.md."
+11. STOP. Wait for engine readiness (`REQUEST_WORKERS_READY`; `WORKERS_SPAWNED` is audit/logging only). Then dispatch plato: "Read anonymized plans at .kiln/tmp/plan-a.md and .kiln/tmp/plan-b.md, plus divergence analysis at .kiln/plans/divergence-analysis.md. Synthesize .kiln/master-plan.md with confidence tiers. Write .kiln/plans/confidence-assessment.md."
 
 12. STOP. Wait for plato's reply.
 
@@ -126,7 +126,7 @@ Numerobis bootstraps in Phase A. Her READY summary is in your runtime prompt —
     REQUEST_WORKERS: athena (subagent_type: straight-outta-olympia)
     ```
 
-15. STOP. Wait for engine to confirm spawns (WORKERS_SPAWNED). Then dispatch athena: "Validate .kiln/master-plan.md on 8 dimensions, including plan purity (no implementation-level detail)."
+15. STOP. Wait for engine readiness (`REQUEST_WORKERS_READY`; `WORKERS_SPAWNED` is audit/logging only). Then dispatch athena: "Validate .kiln/master-plan.md on 8 dimensions, including plan purity (no implementation-level detail)."
 
 16. STOP. Wait for athena's reply.
 

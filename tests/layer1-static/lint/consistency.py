@@ -428,7 +428,7 @@ def check_runtime_vars() -> list[c.Violation]:
 
 def check_request_workers_handler() -> list[c.Violation]:
     """Any agent sending REQUEST_WORKERS expects the engine to handle it
-    and respond with WORKERS_SPAWNED. Check the engine documents this."""
+    and respond with REQUEST_WORKERS_READY. Check the engine documents this."""
     out: list[c.Violation] = []
     engine_text = c.read_text(c.engine_skill())
 
@@ -837,6 +837,51 @@ def check_worker_ready_retired() -> list[c.Violation]:
             for v in out:
                 print(f"    {v}")
         return []
+    return out
+
+
+def check_workers_spawned_audit_only() -> list[c.Violation]:
+    """WORKERS_SPAWNED is no longer an active readiness gate.
+
+    REQUEST_WORKERS uses REQUEST_WORKERS_READY. CYCLE_WORKERS unblocks on
+    SubagentStart aggregation. WORKERS_SPAWNED may remain in live protocol
+    files only when the surrounding prose identifies it as audit/logging or
+    otherwise not a gate.
+    """
+    out: list[c.Violation] = []
+    active_wait_re = re.compile(
+        r"wait(?:s|ing)?\s+for|confirm(?:ation|s)?|unblock|readiness|ready gate|active",
+        re.IGNORECASE,
+    )
+    allowed_re = re.compile(
+        r"audit|logging|operator-visible|not (?:the )?(?:active |readiness |unblock )?gate|"
+        r"not .*readiness|never .*gate|legacy|historical|pre-centralization",
+        re.IGNORECASE,
+    )
+    sources: list[Path] = []
+    sources.extend(c.agents_dir().glob("*.md"))
+    sources.append(c.engine_skill())
+    sources.append(c.protocol_skill())
+    sources.extend(c.references_dir().glob("*.md"))
+    sources.extend(c.blueprints_dir().glob("*.md"))
+
+    for path in sorted(p for p in sources if p.exists()):
+        rel = str(path.relative_to(c.repo_root()))
+        lines = c.read_text(path).splitlines()
+        for idx, line in enumerate(lines, start=1):
+            if "WORKERS_SPAWNED" not in line:
+                continue
+            window = "\n".join(lines[max(0, idx - 2): min(len(lines), idx + 2)])
+            if active_wait_re.search(line) and not allowed_re.search(window):
+                out.append(c.Violation(
+                    code="WORKERS_SPAWNED_ACTIVE_GATE",
+                    message=(
+                        "`WORKERS_SPAWNED` is audit/logging only. Active "
+                        "REQUEST_WORKERS readiness must use `REQUEST_WORKERS_READY`; "
+                        "CYCLE_WORKERS readiness must use SubagentStart aggregation."
+                    ),
+                    location=f"{rel}:{idx}",
+                ))
     return out
 
 
@@ -1271,6 +1316,7 @@ ALL_CHECKS = [
     ("STATE.md sed patterns (Wave 3 — C10 follow-up)", check_state_md_sed_patterns),
     ("Model tier policy (Sprint 3)", check_model_policy),
     ("WORKER_READY retired (P1 — SubagentStart)", check_worker_ready_retired),
+    ("WORKERS_SPAWNED audit-only", check_workers_spawned_audit_only),
     ("Hook config integrity", check_hook_config_integrity),
     ("Doctor hard gates", check_doctor_hard_gates),
     ("Watchdog polling retired (P2 — TeammateIdle)", check_watchdog_retired),

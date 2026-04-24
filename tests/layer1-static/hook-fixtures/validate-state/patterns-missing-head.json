@@ -1,0 +1,1 @@
+{"hook_event_name":"PostToolUse","cwd":"/tmp/fixture","tool_name":"Write","tool_input":{"file_path":".kiln/docs/patterns.md"},"tool_response":{"filePath":".kiln/docs/patterns.md","success":true}}

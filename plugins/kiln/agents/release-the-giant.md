@@ -92,7 +92,7 @@ If `playwright_available = false`, skip browser tool calls. Use Bash to confirm 
 
 If `design_qa_enabled`:
 - SendMessage to team-lead: "REQUEST_WORKERS: hephaestus (subagent_type: style-maker)"
-- STOP. Wait for engine to confirm spawns (WORKERS_SPAWNED). Then SendMessage to hephaestus with: design artifact paths (`.kiln/design/tokens.json`, `.kiln/design/tokens.css`, `.kiln/design/creative-direction.md`), deployed app URL, reference to design-review.md rubric at `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/design/design-review.md`.
+- STOP. Wait for engine readiness (`REQUEST_WORKERS_READY`; `WORKERS_SPAWNED` is audit/logging only). Then SendMessage to hephaestus with: design artifact paths (`.kiln/design/tokens.json`, `.kiln/design/tokens.css`, `.kiln/design/creative-direction.md`), deployed app URL, reference to design-review.md rubric at `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/design/design-review.md`.
 - STOP. Wait for hephaestus's "DESIGN_QA_COMPLETE" message with scores.
 - Record design scores for the report.
 

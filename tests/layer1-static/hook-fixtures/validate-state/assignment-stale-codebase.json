@@ -1,0 +1,1 @@
+{"hook_event_name":"PostToolUse","cwd":"/tmp/fixture","tool_name":"Write","tool_input":{"file_path":".kiln/tmp/chunk-1-assignment.xml"},"tool_response":{"filePath":".kiln/tmp/chunk-1-assignment.xml","success":true}}

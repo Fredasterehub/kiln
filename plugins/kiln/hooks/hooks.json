@@ -122,7 +122,7 @@
     ],
     "FileChanged": [
       {
-        "matcher": "STATE.md|codebase-state.md|AGENTS.md|tdd-evidence.md|review.md|report.md|design-review.md",
+        "matcher": "STATE.md|codebase-state.md|patterns.md|pitfalls.md|assignment.xml|summary.md|final-archive-readiness.md|AGENTS.md|tdd-evidence.md|review.md|report.md|design-review.md",
         "hooks": [
           {
             "type": "command",

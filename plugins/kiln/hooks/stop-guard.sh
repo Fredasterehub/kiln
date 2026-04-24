@@ -76,6 +76,22 @@ if [[ "$AGENT" == "bossman" ]] && [[ "$LAST_MSG" == *MILESTONE_COMPLETE* ]]; the
   fi
 fi
 
+# ── Bossman BUILD_COMPLETE: hard archive-readiness gate ─────────────
+# BUILD_COMPLETE is the final raw signal path. Do not let the generic
+# terminal-signal fast path below advance if thoth has not produced the
+# validated final archive readiness artifact.
+if [[ "$AGENT" == "bossman" ]] && [[ "$LAST_MSG" == *BUILD_COMPLETE* ]]; then
+  ARCHIVE_READY_PATH="$ROOT/.kiln/archive/step-5-build/final-archive-readiness.md"
+  if [[ ! -f "$ARCHIVE_READY_PATH" ]]; then
+    echo "You signaled BUILD_COMPLETE but .kiln/archive/step-5-build/final-archive-readiness.md does not exist. Complete FINAL_ARCHIVE_CHECK and obtain ARCHIVE_READY before stopping." >&2
+    exit 2
+  fi
+  if ! python3 "$(dirname "$0")/validate-state.py" --root "$ROOT" --path "$ARCHIVE_READY_PATH" >/dev/null 2>&1; then
+    echo "You signaled BUILD_COMPLETE but final archive readiness failed validation. Fix .kiln/archive/step-5-build/final-archive-readiness.md before stopping." >&2
+    exit 2
+  fi
+fi
+
 case "$AGENT" in
   critical-thinker|the-curator)
     # Fall through to the reviewer block; do not fast-path on terminal
@@ -93,7 +109,7 @@ case "$AGENT" in
       *IMPLEMENTATION_BLOCKED*|*IMPLEMENTATION_REJECTED*|\
       *REVIEW_REQUEST*|*APPROVED*|*REJECTED*|\
       *SERIALIZATION_COMPLETE*|*ITERATION_UPDATE*|\
-      *MILESTONE_TRANSITION*|*CYCLE_WORKERS*|*WORKERS_SPAWNED*|\
+	      *MILESTONE_TRANSITION*|*CYCLE_WORKERS*|*REQUEST_WORKERS_READY*|\
       *QA_REPORT_READY*|*RECONCILIATION_COMPLETE*|*QA_PASS*|*QA_FAIL*|\
       *PLAN_READY*|*DIVERGENCE_READY*|*SYNTHESIS_COMPLETE*|*VALIDATION_PASS*|\
       *VALIDATION_FAIL*|*DOCS_UPDATED*|*MAPPING_COMPLETE*|*SCOUT_REPORT*|\

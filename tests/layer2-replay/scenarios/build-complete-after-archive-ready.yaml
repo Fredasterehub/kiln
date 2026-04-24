@@ -1,0 +1,22 @@
+name: build-complete-after-archive-ready
+description: >
+  BUILD_COMPLETE may transition only after ARCHIVE_READY carries the final
+  archive readiness proof metadata.
+engine-version: post-centralization
+events-inline:
+  - {sender: thoth, signal: ARCHIVE_READY, recipient: krs-one, payload: "archive_ready=true, build_id=final, milestone_id=final, head_sha=abc123, timestamp=2026-04-24T00:00:00Z, source_archive_paths_checked=.kiln/archive/step-5-build/final-archive-readiness.md", timestamp: "00:00:01"}
+  - {sender: krs-one, signal: BUILD_COMPLETE, recipient: team-lead, payload: "final milestone complete", timestamp: "00:00:02"}
+assertions:
+  - after-event: "thoth | ARCHIVE_READY"
+    strict: true
+    expected-decisions:
+      - type: archive_ready
+        sequence: 1
+  - after-event: "krs-one | BUILD_COMPLETE"
+    strict: true
+    expected-decisions:
+      - type: transition
+        to_stage: validate
+    forbidden-decisions-local:
+      - type: block
+        reason: ARCHIVE_READY required before BUILD_COMPLETE

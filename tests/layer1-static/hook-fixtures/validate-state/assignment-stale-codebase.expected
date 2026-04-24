@@ -1,0 +1,7 @@
+=== STDOUT_CONTAINS ===
+assignment XML scoped from stale codebase-state
+=== STDERR ===
+=== EXIT ===
+0
+=== CONTEXT ===
+mock-pipeline

@@ -1,0 +1,7 @@
+=== STDOUT_CONTAINS ===
+verified review requires substantive `reviewer_rerun_results`
+=== STDERR ===
+=== EXIT ===
+0
+=== CONTEXT ===
+mock-pipeline

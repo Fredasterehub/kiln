@@ -1,0 +1,16 @@
+name: build-complete-before-archive-ready
+description: >
+  Raw BUILD_COMPLETE must not transition to validate unless ARCHIVE_READY
+  readiness metadata was observed earlier in the event stream.
+engine-version: post-centralization
+events-inline:
+  - {sender: krs-one, signal: BUILD_COMPLETE, recipient: team-lead, payload: "final milestone complete", timestamp: "00:00:01"}
+assertions:
+  - after-event: "krs-one | BUILD_COMPLETE"
+    strict: true
+    expected-decisions:
+      - type: block
+        reason: ARCHIVE_READY required before BUILD_COMPLETE
+    forbidden-decisions-local:
+      - type: transition
+        to_stage: validate

@@ -126,14 +126,16 @@ assignment_head_sha: {sha from assignment}
 head_changed_unexpectedly: yes|no
 test_requirements: {summary or none}
 tdd_evidence_path: {path or N/A}
-builder_reported_evidence: {commands/results from REVIEW_REQUEST}
-reviewer_reran_commands: {commands rerun by reviewer, or N/A}
-reviewer_rerun_results: {results, or N/A}
+builder_reported_commands: {commands from REVIEW_REQUEST}
+builder_reported_results: {results from REVIEW_REQUEST}
+reviewer_reran_commands: ["{command rerun by reviewer}", "..."] or []
+reviewer_rerun_results: {substantive rerun results, or "not independently rerun: ..." with limitation}
+independent_verification_status: verified|partial|not_verified
 lsp_diagnostics: {used/not available/not applicable + summary}
-not_verified_or_limitations: {what was not independently checked}
+limitations: {what was not independently checked; required when reviewer_reran_commands is []}
 ```
 
-An APPROVED verdict for testable work requires a readable TDD evidence artifact and either independent rerun results or an explicit limitation that explains why reruns were impossible. The limitation is visible to downstream QA; it is never treated as equivalent to a rerun.
+An APPROVED verdict for testable work requires a readable TDD evidence artifact, `independent_verification_status: verified`, at least one command in `reviewer_reran_commands`, and substantive `reviewer_rerun_results`. A no-rerun limitation is visible to downstream QA and can only support a partial/degraded verdict unless a repo-approved explicit exception is recorded.
 
 ### Browser Validation Contract
 
@@ -221,8 +223,9 @@ Always include context after the signal. `RESEARCH_COMPLETE: 6 topics. Key: RSC 
 | `READY_BOOTSTRAP: {summary}` | PM bootstrap complete (rakim / sentinel / thoth one-time at milestone start) | team-lead (engine) |
 | `READY: {summary}` | PM post-iteration reply (ITERATION_UPDATE or MILESTONE_TRANSITION) | krs-one (boss) |
 | `REQUEST_WORKERS: {name} (subagent_type: {type}), ...` | Boss needs workers spawned | team-lead |
+| `REQUEST_WORKERS_READY: {workers}` | Active readiness reply after all REQUEST_WORKERS spawns receive `SubagentStart` acknowledgements. Bosses wait on this, not WORKERS_SPAWNED. | boss (response) |
 | `CYCLE_WORKERS: scenario={default\|fallback\|ui}, duo_id={duo_id}, coder_name={name}, reviewer_name={name}, reason={reason}, chunk={summary}` | Boss requests fresh worker pair (blocking — unblocks solely on the `SubagentStart` hook `additionalContext` injection; P1 — deterministic, fires ~90ms after the Agent tool call, ~30ms before the subagent's first `PreToolUse`). `WORKERS_SPAWNED` is emitted by the engine as an operator-visible logging signal, NOT an unblock path. | team-lead |
-| `WORKERS_SPAWNED: duo_id={duo_id}, {builder_name} (subagent_type: {builder_type}), {reviewer_name} (subagent_type: {reviewer_type})` | Operator-visible logging signal emitted when a fresh worker pair is spawned — carries duo_id and subagent_types for debug/tracing. As of P1, this is NOT the CYCLE_WORKERS unblock gate (that role moved to SubagentStart hook additionalContext). | boss (logging) |
+| `WORKERS_SPAWNED: {workers}` | Operator-visible logging signal emitted after spawn readiness — carries names and subagent_types for debug/tracing. It is never an active unblock gate. | boss (logging) |
 | `WORKERS_REJECTED: {reason}` | Engine rejected REQUEST_WORKERS | boss (response) |
 | `WORKER_READY: ready for assignment` | [DEPRECATED — P1] Worker self-announce on first wake — retired in P1; `SubagentStart` hook now provides deterministic spawn ack | krs-one (boss) [retired] |
 | `ONBOARDING_COMPLETE` | Step 1 done | team-lead (alpha) |

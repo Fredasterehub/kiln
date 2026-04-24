@@ -87,12 +87,16 @@ Decision tree: UI/visual? → **UI**. Else `codex_available=true`? → **Default
    - `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/design/jit-brief-template.md`.
    Otherwise set `design_enabled = false` and skip all design concerns.
 6. Capture repository freshness before every chunk scope:
-   ```bash
-   HEAD_SHA=$(git rev-parse HEAD 2>/dev/null || echo "no-git")
-   DIRTY_STATUS=$(git status --short 2>/dev/null | sed ':a;N;$!ba;s/\n/ | /g' || echo "no-git")
-   CODEBASE_STATE_HEAD=$(grep -oP '^head_sha:\s*\K\S+' .kiln/docs/codebase-state.md 2>/dev/null | head -1 || echo "missing")
-   ```
-   If `CODEBASE_STATE_HEAD` is missing, write an `ITERATION_UPDATE` to rakim asking for a schema refresh before scoping. If it is present and differs from `HEAD_SHA`, ask rakim to resync and wait for `READY` unless the diff is an expected dirty working tree from the just-completed chunk. Do not silently scope from stale codebase-state.
+	   ```bash
+	   HEAD_SHA=$(git rev-parse HEAD 2>/dev/null || echo "no-git")
+	   DIRTY_STATUS=$(git status --short 2>/dev/null | sed ':a;N;$!ba;s/\n/ | /g' || echo "no-git")
+	   CODEBASE_STATE_HEAD=$(grep -oP '^head_sha:\s*\K\S+' .kiln/docs/codebase-state.md 2>/dev/null | head -1 || echo "missing")
+	   ```
+	   Then run the executable freshness gate:
+	   ```bash
+	   python3 "${CLAUDE_PLUGIN_ROOT}/hooks/validate-state.py" --root "$PWD" --path .kiln/docs/codebase-state.md
+	   ```
+	   If the validator fails, write an `ITERATION_UPDATE` to rakim asking for a schema refresh/resync before scoping and wait for `READY`. If `CODEBASE_STATE_HEAD` is missing or differs from `HEAD_SHA`, ask rakim to resync and wait for `READY` unless the diff is an expected dirty working tree from the just-completed chunk. Do not silently scope from stale codebase-state.
 
 ### 2. Evaluate Scope
 
@@ -182,10 +186,11 @@ Before dispatching, archive the assignment to tmp:
 ```bash
 CHUNK=$(grep -oP '(?<=\*\*chunk_count\*\*:\s)[0-9]+' .kiln/STATE.md | head -1)
 MILESTONE_ID={milestone number or stable id}
-cat <<'XMLEOF' > .kiln/tmp/chunk-${CHUNK}-assignment.xml
-{full assignment XML}
-XMLEOF
-```
+	cat <<'XMLEOF' > .kiln/tmp/chunk-${CHUNK}-assignment.xml
+	{full assignment XML}
+	XMLEOF
+	python3 "${CLAUDE_PLUGIN_ROOT}/hooks/validate-state.py" --root "$PWD" --path ".kiln/tmp/chunk-${CHUNK}-assignment.xml"
+	```
 SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-build, milestone=${MILESTONE_ID}, chunk=${CHUNK}, file=assignment.xml, source=.kiln/tmp/chunk-${CHUNK}-assignment.xml")
 
 Send the assignment to the builder. STOP. Wait for reply.
@@ -203,12 +208,13 @@ When the reviewer sends `IMPLEMENTATION_APPROVED`, archive via thoth (fire-and-f
 ```bash
 CHUNK=$(grep -oP '(?<=\*\*chunk_count\*\*:\s)[0-9]+' .kiln/STATE.md | head -1)
 HEAD=$(git rev-parse HEAD 2>/dev/null || echo "no-git")
-cat <<EOF > .kiln/tmp/chunk-${CHUNK}-summary.md
-# Chunk ${CHUNK} Summary
-milestone: {current milestone name}
-head_sha: ${HEAD}
-scope: {deliverable IDs scoped}
-implemented: {what was completed}
+	cat <<EOF > .kiln/tmp/chunk-${CHUNK}-summary.md
+	# Chunk ${CHUNK} Summary
+	milestone_id: {current milestone id}
+	chunk_id: ${CHUNK}
+	head_sha: ${HEAD}
+	scope: {deliverable IDs scoped}
+	implemented: {what was completed}
 reviewer_verdict: APPROVED
 tdd_evidence: .kiln/archive/milestone-{milestone_id}/chunk-${CHUNK}/tdd-evidence.md
 review_verdict: .kiln/archive/milestone-{milestone_id}/chunk-${CHUNK}/review.md

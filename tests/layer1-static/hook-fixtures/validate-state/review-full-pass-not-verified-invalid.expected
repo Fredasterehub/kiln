@@ -1,0 +1,7 @@
+=== STDOUT_CONTAINS ===
+full approval cannot be partial or not_verified
+=== STDERR ===
+=== EXIT ===
+0
+=== CONTEXT ===
+mock-pipeline

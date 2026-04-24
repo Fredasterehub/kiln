@@ -5,11 +5,12 @@
 # call returns and ~30ms before the subagent's first PreToolUse, so any
 # additionalContext emitted here lands in the subagent's first turn.
 #
-# Replaces the WORKER_READY belt-and-suspenders path for CYCLE_WORKERS
-# unblock: instead of relying on the freshly-spawned worker to emit a
-# one-time signal, the platform itself fires this event and the engine
-# unblocks on the additionalContext injection. WORKERS_SPAWNED stays
-# operator-visible for logging; the engine-internal unblock moves here.
+# Replaces worker-emitted readiness for CYCLE_WORKERS and backs
+# REQUEST_WORKERS_READY for initial spawn batches: instead of relying on the
+# freshly-spawned worker to emit a one-time signal, the platform itself fires
+# this event and the engine unblocks on the additionalContext injection.
+# WORKERS_SPAWNED stays operator-visible for logging; active readiness moves
+# to SubagentStart aggregation.
 #
 # SubagentStart payload: session_id, transcript_path, cwd, agent_id,
 #   agent_type, hook_event_name. team_name is NOT present — the engine

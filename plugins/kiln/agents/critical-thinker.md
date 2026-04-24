@@ -74,11 +74,13 @@ For each REVIEW_REQUEST:
    head_changed_unexpectedly: {yes|no}
    test_requirements: {summary or none}
    tdd_evidence_path: {path or N/A}
-   builder_reported_evidence: {build/test/TDD evidence reported by builder}
-   reviewer_reran_commands: {commands you reran, or N/A}
-   reviewer_rerun_results: {results, or N/A}
+   builder_reported_commands: {commands the builder reported}
+   builder_reported_results: {results the builder reported}
+   reviewer_reran_commands: ["{command you independently reran}", "..."] or []
+   reviewer_rerun_results: {substantive rerun result summary, or "not independently rerun: ..." with limitation}
+   independent_verification_status: verified|partial|not_verified
    lsp_diagnostics: {used/not available/not applicable + summary}
-   not_verified_or_limitations: {anything you did not independently verify}
+   limitations: {anything you did not independently verify; required if reviewer_reran_commands is []}
 
    ## Findings
    {file:line findings or "None"}

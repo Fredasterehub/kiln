@@ -1,0 +1,7 @@
+=== STDOUT_CONTAINS ===
+codebase-state.md head_sha `stale-head` does not match current HEAD
+=== STDERR ===
+=== EXIT ===
+0
+=== CONTEXT ===
+mock-pipeline

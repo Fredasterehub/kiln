@@ -116,11 +116,22 @@ class MockEngine:
         self.pending_cycle_workers: set[str] = set()
         self.pending_cycle_started: set[str] = set()
         self.pending_cycle_sender: str = "krs-one"
+        # REQUEST_WORKERS readiness uses REQUEST_WORKERS_READY as the active
+        # signal. WORKERS_SPAWNED remains operator-visible audit after the
+        # same SubagentStart aggregation has completed.
+        self.pending_request_workers: set[str] = set()
+        self.pending_request_started: set[str] = set()
+        self.pending_request_sender: str = ""
+        self.pending_request_echo_tuples: list[str] = []
+        self.archive_ready: bool = False
+        self.archive_ready_sequence: int | None = None
+        self.event_index: int = 0
 
     # ── dispatch ──
 
     def handle(self, event: dict[str, Any]) -> list[EngineDecision]:
         """Return the engine decisions produced for this event."""
+        self.event_index += 1
         sig = canonical_signal(event.get("signal", ""))
         handler = self._dispatch_table().get(sig, self._on_unknown)
         decisions = handler(event) or []
@@ -150,6 +161,8 @@ class MockEngine:
             "QA_FAIL": self._on_qa_verdict,
             "MILESTONE_COMPLETE": self._on_milestone_complete,
             "MILESTONE_DONE": self._on_noop,  # Wave 4 C5 — bossman → thoth, engine is a spectator
+            "ARCHIVE_READY": self._on_archive_ready,
+            "ARCHIVE_BLOCKED": self._on_archive_blocked,
             "BUILD_COMPLETE": self._on_build_complete,
             "VALIDATE_PASS": self._on_validate_pass,
             "VALIDATE_FAILED": self._on_validate_failed,
@@ -306,6 +319,34 @@ class MockEngine:
                     self.pending_cycle_workers.clear()
                     self.pending_cycle_started.clear()
                     self.pending_cycle_sender = "krs-one"
+            if self.pending_request_workers and agent in self.pending_request_workers:
+                self.pending_request_started.add(agent)
+                if self.pending_request_started >= self.pending_request_workers:
+                    content = (
+                        ", ".join(self.pending_request_echo_tuples) + ". awaiting assignment."
+                        if self.pending_request_echo_tuples
+                        else "awaiting assignment"
+                    )
+                    decisions.append(EngineDecision(
+                        type="send",
+                        details={
+                            "recipient": self.pending_request_sender,
+                            "signal": "REQUEST_WORKERS_READY",
+                            "content": content,
+                        },
+                    ))
+                    decisions.append(EngineDecision(
+                        type="send",
+                        details={
+                            "recipient": self.pending_request_sender,
+                            "signal": "WORKERS_SPAWNED",
+                            "content": content,
+                        },
+                    ))
+                    self.pending_request_workers.clear()
+                    self.pending_request_started.clear()
+                    self.pending_request_sender = ""
+                    self.pending_request_echo_tuples.clear()
         return decisions
 
     def _on_teammate_idle(self, event):
@@ -514,16 +555,16 @@ class MockEngine:
         return decisions
 
     def _on_request_workers(self, event):
-        """Parse payload, spawn listed workers, respond WORKERS_SPAWNED.
+        """Parse payload, spawn listed workers, wait for SubagentStart.
 
         Matches the Wave 4 C6/C7 universal REQUEST_WORKERS contract
         documented in kiln-pipeline/SKILL.md:
           - canonical tuple: `{name} (subagent_type: {type}[, {k}={v}]*)`.
           - bare `{type}` from the boss; the engine prepends `kiln:` when
-            spawning and echoes the prefixed form in WORKERS_SPAWNED.
+            spawning and echoes the prefixed form in REQUEST_WORKERS_READY.
           - optional trailing `key=value` pairs are parsed into a per-
             worker `extras` dict that the engine templates into the
-            spawned runtime prompt; extras are NOT echoed in the ack.
+            spawned runtime prompt; extras are NOT echoed in readiness/audit.
         Aristotle's live Step 4 payload (`confucius (subagent_type:
         mystical-inspiration, slot=a), sun-tzu (subagent_type: art-of-war,
         slot=b)`) parses to two tuples with `extras={'slot': 'a'}` /
@@ -536,6 +577,7 @@ class MockEngine:
         kv_pair_re = re.compile(r'([A-Za-z_][\w-]*)\s*=\s*([^,\s]+)')
         decisions: list[EngineDecision] = []
         echo_tuples: list[str] = []
+        pending_names: set[str] = set()
         for m in spawn_pattern.finditer(payload):
             name = m.group(1)
             subtype = m.group(2)
@@ -555,20 +597,23 @@ class MockEngine:
                 details=spawn_details,
             ))
             self.active_agents.add(name)
+            pending_names.add(name)
             # Echo the kiln:-prefixed form so the boss sees exactly what was spawned
             echo_tuples.append(f"{name} (subagent_type: kiln:{subtype})")
-        decisions.append(EngineDecision(
-            type="send",
-            details={
-                "recipient": event.get("sender", ""),
-                "signal": "WORKERS_SPAWNED",
-                "content": (
-                    ", ".join(echo_tuples) + ". awaiting assignment."
-                    if echo_tuples
-                    else "awaiting assignment"
-                ),
-            },
-        ))
+        if not pending_names:
+            decisions.append(EngineDecision(
+                type="send",
+                details={
+                    "recipient": event.get("sender", ""),
+                    "signal": "WORKERS_REJECTED",
+                    "content": "unable to parse REQUEST_WORKERS payload",
+                },
+            ))
+            return decisions
+        self.pending_request_workers = pending_names
+        self.pending_request_started = set()
+        self.pending_request_sender = event.get("sender", "")
+        self.pending_request_echo_tuples = echo_tuples
         return decisions
 
     def _on_cycle_workers(self, event):
@@ -769,9 +814,57 @@ class MockEngine:
         })]
         return decisions
 
+    def _archive_ready_payload_valid(self, payload: Any) -> bool:
+        if isinstance(payload, str):
+            try:
+                parsed = json.loads(payload)
+                if isinstance(parsed, dict):
+                    kv = {str(k): str(v) for k, v in parsed.items()}
+                else:
+                    kv = parse_kv_payload(payload)
+            except (ValueError, TypeError):
+                kv = parse_kv_payload(payload)
+        elif isinstance(payload, dict):
+            kv = {str(k): str(v) for k, v in payload.items()}
+        else:
+            kv = {}
+        ready = str(kv.get("archive_ready", "true")).lower() in {"true", "yes", "pass", "passed"}
+        has_run = bool(kv.get("run_id") or kv.get("build_id"))
+        has_scope = bool(kv.get("milestone_id") or kv.get("final_build_scope"))
+        has_head = bool(kv.get("head_sha"))
+        has_time = bool(kv.get("timestamp") or kv.get("sequence"))
+        has_sources = bool(kv.get("source_archive_paths_checked") or kv.get("source_paths"))
+        return ready and has_run and has_scope and has_head and has_time and has_sources
+
+    def _on_archive_ready(self, event):
+        if not self._archive_ready_payload_valid(event.get("payload", "")):
+            self.archive_ready = False
+            return [EngineDecision(type="block", details={
+                "reason": "ARCHIVE_READY missing readiness metadata",
+            })]
+        self.archive_ready = True
+        self.archive_ready_sequence = self.event_index
+        return [EngineDecision(type="archive_ready", details={
+            "sequence": self.archive_ready_sequence,
+        })]
+
+    def _on_archive_blocked(self, event):
+        self.archive_ready = False
+        self.archive_ready_sequence = None
+        return [EngineDecision(type="block", details={
+            "reason": "ARCHIVE_BLOCKED received",
+        })]
+
     def _on_build_complete(self, event):
+        if not self.archive_ready:
+            return [EngineDecision(type="block", details={
+                "reason": "ARCHIVE_READY required before BUILD_COMPLETE",
+            })]
         self.stage = "validate"
-        return [EngineDecision(type="transition", details={"to_stage": "validate"})]
+        return [EngineDecision(type="transition", details={
+            "to_stage": "validate",
+            "archive_ready_sequence": self.archive_ready_sequence,
+        })]
 
     def _on_validate_pass(self, event):
         self.stage = "report"

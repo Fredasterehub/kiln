@@ -99,7 +99,26 @@ next_boss_consult_notes: none
 ## TL;DR
 Test fixture.
 CODEBASE_EOF
-  printf '<!-- status: complete -->\n# Patterns\n\n## TL;DR\nTest fixture.\n' > "$dir/.kiln/docs/patterns.md"
+  cat > "$dir/.kiln/docs/patterns.md" <<'PATTERNS_EOF'
+<!-- status: complete -->
+# Patterns
+
+head_sha: fixture-head
+last_updated: 2026-04-16T12:00:00Z
+
+## TL;DR
+Test fixture.
+PATTERNS_EOF
+  cat > "$dir/.kiln/docs/pitfalls.md" <<'PITFALLS_EOF'
+<!-- status: complete -->
+# Pitfalls
+
+head_sha: fixture-head
+last_updated: 2026-04-16T12:00:00Z
+
+## TL;DR
+Test fixture.
+PITFALLS_EOF
   printf '<!-- status: complete -->\n# Architecture\n' > "$dir/.kiln/docs/architecture.md"
 
   # seed iter-log with a happy milestone-complete entry
@@ -119,6 +138,17 @@ ITER_EOF
 
   # minimal master-plan so agents that read it don't crash
   printf '# Master Plan\n\n### Milestone: M1\nDeliverables.\n' > "$dir/.kiln/master-plan.md"
+
+  git -C "$dir" init -q >/dev/null 2>&1 || true
+  git -C "$dir" config user.email kiln-fixture@example.invalid >/dev/null 2>&1 || true
+  git -C "$dir" config user.name "Kiln Fixture" >/dev/null 2>&1 || true
+  git -C "$dir" add . >/dev/null 2>&1 || true
+  git -C "$dir" commit -qm "seed fixture" >/dev/null 2>&1 || true
+  local head
+  head=$(git -C "$dir" rev-parse HEAD 2>/dev/null || true)
+  if [[ -n "$head" ]]; then
+    sed -i "s/fixture-head/$head/g" "$dir/.kiln/docs/codebase-state.md" "$dir/.kiln/docs/patterns.md" "$dir/.kiln/docs/pitfalls.md"
+  fi
 }
 
 parse_section() {

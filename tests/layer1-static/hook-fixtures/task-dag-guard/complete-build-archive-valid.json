@@ -1,0 +1,1 @@
+{"hook_event_name":"TaskCompleted","cwd":"/tmp/fixture","task_id":"task-build-complete","task_subject":"BUILD_COMPLETE final milestone","task_description":"milestone_id: final\nrole: boss\nopen_blocking_tasks: 0\nfinal_archive_check: pass\narchive_ready_path: .kiln/archive/step-5-build/final-archive-readiness.md","team_name":"kiln-test","teammate_name":"krs-one"}

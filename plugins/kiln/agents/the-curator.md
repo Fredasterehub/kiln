@@ -94,12 +94,14 @@ For each REVIEW_REQUEST:
    head_changed_unexpectedly: {yes|no}
    test_requirements: {summary or none}
    tdd_evidence_path: {path or N/A}
-   builder_reported_evidence: {build/test/browser/TDD evidence reported by builder}
-   reviewer_reran_commands: {commands you reran, or N/A}
-   reviewer_rerun_results: {results, or N/A}
+   builder_reported_commands: {commands the builder reported}
+   builder_reported_results: {build/test/browser/TDD results the builder reported}
+   reviewer_reran_commands: ["{command you independently reran}", "..."] or []
+   reviewer_rerun_results: {substantive rerun/browser result summary, or "not independently rerun: ..." with limitation}
+   independent_verification_status: verified|partial|not_verified
    browser_validation: {playwright evidence path/status, or static-only limitation}
    lsp_diagnostics: {used/not available/not applicable + summary}
-   not_verified_or_limitations: {anything you did not independently verify}
+   limitations: {anything you did not independently verify; required if reviewer_reran_commands is []}
 
    ## Findings
    {file:line findings, browser evidence gaps, and design scores}

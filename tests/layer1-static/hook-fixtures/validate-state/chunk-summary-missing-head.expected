@@ -1,0 +1,7 @@
+=== STDOUT_CONTAINS ===
+chunk summary missing required field `head_sha`
+=== STDERR ===
+=== EXIT ===
+0
+=== CONTEXT ===
+mock-pipeline

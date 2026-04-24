@@ -71,11 +71,26 @@ fi
 Check the experimental flag through environment and likely settings files:
 
 ```bash
+existing_settings_files_contain_required_flag() {
+  local file
+  local settings_files=(
+    "$HOME/.claude/settings.json"
+    "$HOME/.claude/settings.local.json"
+    ".claude/settings.json"
+    ".claude/settings.local.json"
+  )
+  for file in "${settings_files[@]}"; do
+    [[ -f "$file" ]] || continue
+    if grep -Eq '"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"[[:space:]]*:[[:space:]]*"?1"?([[:space:],}]|$)' "$file"; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 if [[ "${CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS:-}" == "1" ]]; then
   echo "OK:env"
-elif grep -R '"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"[[:space:]]*:[[:space:]]*"\\?1"\\?' \
-    "$HOME/.claude/settings.json" "$HOME/.claude/settings.local.json" \
-    ".claude/settings.json" ".claude/settings.local.json" 2>/dev/null | head -1 >/dev/null; then
+elif existing_settings_files_contain_required_flag; then
   echo "OK:settings"
 else
   echo "MISSING"

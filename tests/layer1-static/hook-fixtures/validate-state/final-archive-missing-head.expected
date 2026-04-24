@@ -1,0 +1,7 @@
+=== STDOUT_CONTAINS ===
+final archive readiness missing substantive `head_sha`
+=== STDERR ===
+=== EXIT ===
+0
+=== CONTEXT ===
+mock-pipeline

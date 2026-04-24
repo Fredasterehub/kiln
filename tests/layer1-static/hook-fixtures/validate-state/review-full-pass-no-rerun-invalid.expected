@@ -1,0 +1,7 @@
+=== STDOUT_CONTAINS ===
+full approval for testable work requires independent_verification_status: verified
+=== STDERR ===
+=== EXIT ===
+0
+=== CONTEXT ===
+mock-pipeline

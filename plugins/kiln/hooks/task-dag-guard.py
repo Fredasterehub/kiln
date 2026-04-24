@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -123,6 +124,28 @@ def path_exists(root: Path, value: str | None) -> bool:
     return p.exists()
 
 
+def validate_state_artifact(root: Path, value: str | None) -> tuple[bool, str]:
+    if not value:
+        return False, "missing path"
+    p = Path(value)
+    if not p.is_absolute():
+        p = root / p
+    if not p.exists():
+        return False, f"path does not exist: {value}"
+    script = Path(__file__).with_name("validate-state.py")
+    proc = subprocess.run(
+        [sys.executable, str(script), "--root", str(root), "--path", str(p)],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout).strip()
+        return False, detail or f"validator rejected {value}"
+    return True, ""
+
+
 def validate_completed(payload: dict, root: Path) -> None:
     subject = payload.get("task_subject") or ""
     description = payload.get("task_description") or ""
@@ -141,6 +164,9 @@ def validate_completed(payload: dict, root: Path) -> None:
         verdict = metadata(text, "verdict_path")
         if not path_exists(root, verdict):
             block("Kiln task blocked: review completion must include an existing verdict_path.")
+        ok, reason = validate_state_artifact(root, verdict)
+        if not ok:
+            block(f"Kiln task blocked: review verdict failed validation: {reason}")
 
     if kind == "milestone_qa":
         if (metadata(text, "all_chunk_tasks_resolved") or "").lower() not in {"yes", "true", "pass"}:
@@ -153,6 +179,12 @@ def validate_completed(payload: dict, root: Path) -> None:
             block("Kiln task blocked: BUILD_COMPLETE cannot close with open_blocking_tasks other than 0.")
         if (metadata(text, "final_archive_check") or "").lower() not in {"pass", "passed", "yes"}:
             block("Kiln task blocked: BUILD_COMPLETE requires final_archive_check: pass.")
+        archive_ready_path = metadata(text, "archive_ready_path")
+        if not archive_ready_path:
+            block("Kiln task blocked: BUILD_COMPLETE requires archive_ready_path.")
+        ok, reason = validate_state_artifact(root, archive_ready_path)
+        if not ok:
+            block(f"Kiln task blocked: BUILD_COMPLETE archive readiness failed validation: {reason}")
 
     if kind == "worker_cycle":
         lock = root / ".kiln" / "tmp" / "active-worker-cycle-task"

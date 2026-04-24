@@ -1,0 +1,1 @@
+{"hook_event_name":"PostToolUse","cwd":"/tmp/fixture","tool_name":"Write","tool_input":{"file_path":".kiln/archive/milestone-1/chunk-13/review.md"},"tool_response":{"filePath":".kiln/archive/milestone-1/chunk-13/review.md","success":true}}

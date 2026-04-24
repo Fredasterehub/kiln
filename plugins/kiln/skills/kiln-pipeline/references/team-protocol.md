@@ -91,13 +91,13 @@ SendMessage(
 )
 ```
 
-The engine spawns each worker onto the same team. Workers appear as teammates with full SendMessage access. The boss then dispatches assignments individually — one message per worker.
+The engine spawns each worker onto the same team, waits for `SubagentStart` acknowledgement for the full requested set, then sends `REQUEST_WORKERS_READY`. Workers appear as teammates with full SendMessage access. The boss then dispatches assignments individually — one message per worker. `WORKERS_SPAWNED` is audit/logging only after readiness.
 
 **Worker cycling (step 5).** After the initial `REQUEST_WORKERS`, subsequent chunks use `CYCLE_WORKERS` instead — the engine shuts down the current pair and spawns a fresh one. See **Worker Cycling Pattern** for the full flow.
 
 **Naming.** Workers are spawned from the duo pool (see `references/duo-pool.md`). The `name` parameter is the boss-selected character for this cycle (e.g., `name: "tintin"`, `subagent_type: "kiln:dial-a-coder"`). Hook enforcement fires on the agent type (subagent_type stripped of the `kiln:` prefix), not the spawn name. The engine injects the paired partner's spawn name and type into each worker's runtime prompt.
 
-**`kiln:` prefix rule (Wave 4 C7).** Agents send **bare** subagent types in REQUEST_WORKERS payloads (e.g., `(subagent_type: the-anatomist)`, not `(subagent_type: kiln:the-anatomist)`). The engine adds the `kiln:` prefix when calling the `Agent(...)` tool and echoes the prefixed form back in `WORKERS_SPAWNED`, so the boss sees exactly what was spawned. A bare-vs-prefixed regression is no longer possible — the engine owns normalisation on both the receive and echo sides, so bosses cannot accidentally send unprefixed types to an engine that expects prefixed ones.
+**`kiln:` prefix rule (Wave 4 C7).** Agents send **bare** subagent types in REQUEST_WORKERS payloads (e.g., `(subagent_type: the-anatomist)`, not `(subagent_type: kiln:the-anatomist)`). The engine adds the `kiln:` prefix when calling the `Agent(...)` tool and echoes the prefixed form back in `REQUEST_WORKERS_READY` and audit `WORKERS_SPAWNED`, so the boss sees exactly what was spawned. A bare-vs-prefixed regression is no longer possible — the engine owns normalisation on both the receive and echo sides, so bosses cannot accidentally send unprefixed types to an engine that expects prefixed ones.
 
 ## 4. Dispatch Pattern
 
@@ -179,6 +179,7 @@ Standard signals sent via SendMessage to team-lead (the engine), unless a differ
 | `ARCHIVE: step={step}, [milestone={N},] [chunk={N},] file={filename}, source={path}` | File the named artifact under `.kiln/archive/` and log it to the guide scratchpad. Milestone+chunk targets canonical build evidence under `.kiln/archive/milestone-{N}/chunk-{M}/`. Fire-and-forget — thoth never replies to ARCHIVE. | krs-one, builders, reviewers |
 | `MILESTONE_TRANSITION: completed={name}, next={name}` | Milestone boundary — PMs archive + reset (blocking) | KRS-One |
 | `MILESTONE_QA_READY: {milestone_name}` | Deliverables verified, requesting independent QA | KRS-One |
+| `REQUEST_WORKERS_READY: {workers}` | Active readiness signal after all REQUEST_WORKERS spawns receive `SubagentStart` acknowledgements | Engine |
 | `QA_REPORT_READY` | Individual QA report written to .kiln/tmp/qa-report-{a\|b}.md; engine tracks per-sender (recipient: team-lead) | ken / ryu |
 | `RECONCILIATION_COMPLETE` | Reconciliation written to .kiln/tmp/qa-reconciliation.md; engine spawns judge-dredd (recipient: team-lead) | denzel |
 | `QA_PASS` | Final verdict: all criteria satisfied — direct to krs-one, no engine relay (Wave 2) | judge-dredd |
@@ -220,7 +221,7 @@ Fresh context per implementation chunk prevents context pollution. Builders and 
    - default: dial-a-coder + critical-thinker (spawn names from duo pool)
    - fallback: backup-coder + critical-thinker (spawn names from duo pool)
    - ui: la-peintresse + the-curator (spawn names from duo pool)
-6. Engine waits for `SubagentStart` hook acknowledgement for both workers, then sends `WORKERS_SPAWNED` to KRS-One as audit/logging.
+6. Engine waits for `SubagentStart` hook acknowledgement for both workers, then may send `WORKERS_SPAWNED` to KRS-One as audit/logging.
 7. KRS-One dispatches the assignment to the fresh builder. Assignment XML includes `assignment_id`, `milestone_id`, `chunk`, `head_sha`, `dirty_status`, `codebase_state_head_sha`, timestamp, and source artifact paths.
 
 ### Persistent Minds

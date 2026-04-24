@@ -1,0 +1,7 @@
+=== STDOUT ===
+=== STDERR ===
+BUILD_COMPLETE archive readiness failed validation
+=== EXIT ===
+2
+=== CONTEXT ===
+mock-pipeline

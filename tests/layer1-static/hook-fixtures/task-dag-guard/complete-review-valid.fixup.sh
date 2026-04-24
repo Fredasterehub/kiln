@@ -1,4 +1,6 @@
 #!/bin/bash
 set -e
 mkdir -p "$1/.kiln/tmp"
-printf 'verdict: APPROVED\nobserved_head_sha: abc123\nbuilder_reported_evidence: tests pass\nreviewer_reran_commands: pytest\nreviewer_rerun_results: pass\nnot_verified_or_limitations: none\n' > "$1/.kiln/tmp/review.md"
+printf 'verdict: APPROVED\nobserved_head_sha: abc123\ntest_requirements: pytest auth behavior\ntdd_evidence_path: .kiln/archive/milestone-1/chunk-2/tdd-evidence.md\nbuilder_reported_commands: pytest tests/test_auth.py\nbuilder_reported_results: passed\nreviewer_reran_commands: ["pytest tests/test_auth.py"]\nreviewer_rerun_results: passed independently on reviewer machine\nindependent_verification_status: verified\nlimitations: no known limitations\n' > "$1/.kiln/tmp/review.md"
+mkdir -p "$1/.kiln/archive/milestone-1/chunk-2"
+printf 'testable: yes\nassignment_id: assign-1\nmilestone_id: M1\nchunk_id: 2\ncurrent_head_sha_before: abc123\ncurrent_head_sha_after: def456\nred_command: pytest tests/test_auth.py\nred_result_summary: failed as expected\ngreen_command: pytest tests/test_auth.py\ngreen_result_summary: passed\nrefactor_command: pytest tests/test_auth.py\nrefactor_result_summary: passed\ntest_files_added_or_changed: tests/test_auth.py\nproduction_files_changed: src/auth.py\nreviewer_reran_commands: N/A - pending reviewer\nreviewer_rerun_results: N/A - pending reviewer\nlimitations: no known limitations\n' > "$1/.kiln/archive/milestone-1/chunk-2/tdd-evidence.md"
