@@ -4,7 +4,7 @@ description: >-
   Kiln multi-modal software creation pipeline. Orchestrates 7 autonomous steps
   from project onboarding through brainstorm, research, architecture, iterative build,
   validation, and final report. Use when the user invokes /kiln-fire.
-version: 1.5.4
+version: 1.5.5
 user-invocable: false
 context: fork
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent, TeamCreate, TeamDelete, TaskCreate, TaskGet, TaskUpdate, TaskList, SendMessage
