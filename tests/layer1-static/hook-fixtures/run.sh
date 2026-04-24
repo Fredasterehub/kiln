@@ -48,6 +48,8 @@ HOOK_SCRIPT["nudge-inject-no-pending"]="$HOOKS_DIR/nudge-inject.sh"
 HOOK_SCRIPT["stop-failure-rate-limit"]="$HOOKS_DIR/stop-failure-handler.sh"
 HOOK_SCRIPT["stop-failure-auth"]="$HOOKS_DIR/stop-failure-handler.sh"
 HOOK_SCRIPT["stop-failure-network"]="$HOOKS_DIR/stop-failure-handler.sh"
+HOOK_SCRIPT["task-dag-guard"]="$HOOKS_DIR/task-dag-guard.py"
+HOOK_SCRIPT["validate-state"]="$HOOKS_DIR/validate-state.py"
 
 # Set up mock pipeline — a fake project with .kiln/ so hooks' context gate passes.
 setup_mock_pipeline() {
@@ -83,7 +85,20 @@ STATE_EOF
   sed -i "s|PWDSUB|$dir|" "$dir/.kiln/STATE.md"
 
   # seed PM-owned files with the correct status marker
-  printf '<!-- status: complete -->\n# Codebase State\n\n## TL;DR\nTest fixture.\n' > "$dir/.kiln/docs/codebase-state.md"
+  cat > "$dir/.kiln/docs/codebase-state.md" <<'CODEBASE_EOF'
+<!-- status: complete -->
+# Codebase State
+
+head_sha: fixture-head
+last_update_summary: fixture bootstrap
+changed_files: none
+known_constraints: none
+open_risks: none
+next_boss_consult_notes: none
+
+## TL;DR
+Test fixture.
+CODEBASE_EOF
   printf '<!-- status: complete -->\n# Patterns\n\n## TL;DR\nTest fixture.\n' > "$dir/.kiln/docs/patterns.md"
   printf '<!-- status: complete -->\n# Architecture\n' > "$dir/.kiln/docs/architecture.md"
 
@@ -165,12 +180,20 @@ run_one() {
 
   # Run hook
   local actual_stdout actual_exit actual_stderr
+  local stderr_file="$tmpdir/hook.stderr"
   pushd "$tmpdir" >/dev/null
-  actual_stdout="$(cat "$json" | bash "$script" 2>/tmp/kiln_fixture_stderr_$$)"
+  if [[ "$script" == *.py ]]; then
+    actual_stdout="$(cat "$json" | python3 "$script" 2>"$stderr_file")"
+  else
+    actual_stdout="$(cat "$json" | bash "$script" 2>"$stderr_file")"
+  fi
   actual_exit=$?
   popd >/dev/null
-  actual_stderr="$(cat /tmp/kiln_fixture_stderr_$$)"
-  rm -f /tmp/kiln_fixture_stderr_$$
+  if [[ -f "$stderr_file" ]]; then
+    actual_stderr="$(cat "$stderr_file")"
+  else
+    actual_stderr=""
+  fi
 
   # Parse expected
   local exp_stdout exp_stdout_contains exp_stderr exp_exit

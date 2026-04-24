@@ -1,0 +1,7 @@
+=== STDOUT_CONTAINS ===
+tdd evidence missing `chunk_id`
+=== STDERR ===
+=== EXIT ===
+0
+=== CONTEXT ===
+mock-pipeline

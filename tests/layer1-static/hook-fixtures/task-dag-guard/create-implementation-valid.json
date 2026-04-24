@@ -1,0 +1,1 @@
+{"hook_event_name":"TaskCreated","cwd":"/tmp/fixture","task_id":"task-impl-1","task_subject":"Implement chunk-2 auth middleware","task_description":"milestone_id: M1\nchunk_id: 2\nrole: builder\nreview_task: task-review-1\ntdd_evidence: .kiln/archive/milestone-1/chunk-2/tdd-evidence.md","team_name":"kiln-test","teammate_name":"krs-one"}

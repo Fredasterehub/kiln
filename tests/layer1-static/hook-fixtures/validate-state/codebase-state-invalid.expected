@@ -1,0 +1,7 @@
+=== STDOUT_CONTAINS ===
+codebase-state.md missing required schema marker `head_sha:`
+=== STDERR ===
+=== EXIT ===
+0
+=== CONTEXT ===
+mock-pipeline

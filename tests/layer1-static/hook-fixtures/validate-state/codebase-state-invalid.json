@@ -1,0 +1,1 @@
+{"hook_event_name":"PostToolUse","cwd":"/tmp/fixture","tool_name":"Write","tool_input":{"file_path":".kiln/docs/codebase-state.md"},"tool_response":{"filePath":".kiln/docs/codebase-state.md","success":true}}

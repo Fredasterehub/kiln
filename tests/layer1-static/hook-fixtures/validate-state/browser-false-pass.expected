@@ -1,0 +1,7 @@
+=== STDOUT_CONTAINS ===
+browser/UI verdict cannot be full PASS/APPROVED
+=== STDERR ===
+=== EXIT ===
+0
+=== CONTEXT ===
+mock-pipeline
