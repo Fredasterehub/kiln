@@ -4,7 +4,7 @@ Design and ops reference for Kiln's autonomous self-recovery system. Primary con
 
 ## Overview
 
-Three cooperating parts:
+Four cooperating parts:
 
 1. **Aggregation layer** — a handful of thin hook scripts maintain
    `.kiln/tmp/activity.json`, a single JSON state file describing the
@@ -17,6 +17,10 @@ Three cooperating parts:
    `SessionStart`, or from a `PostToolUse:Write/Edit` hook after a new
    `.kiln/STATE.md` appears. Every 60 seconds it reads `activity.json`,
    applies the deadlock rule, and writes a nudge when the pipeline is stalled.
+4. **Async rewake bridge** — an `asyncRewake` command hook runs the same
+   deadlock rule in the background and exits 2 when a nudge is staged. Claude
+   Code treats that exit as an immediate wake even when the session is idle,
+   which covers terminal-focus stalls where no later hook would fire.
 
 Recovery has two paths. A dangling teammate gets immediate `TeammateIdle`
 feedback through the native exit-2 path. Whole-pipeline silence is built on
@@ -81,7 +85,9 @@ teammate that still owes a handoff. Normal completions stay quiet because
 `SubagentStop` removes the teammate before the idle check becomes relevant.
 
 The watchdog path is for the larger case where no teammate is active and the
-engine has gone silent.
+engine has gone silent. The detached loop stages a nudge for the next hook turn;
+the async rewake bridge uses Claude Code's native asyncRewake exit-2 path to
+wake the idle engine when there may not be a next hook turn.
 
 When the rule fires:
 
@@ -125,6 +131,7 @@ it up.
 | `session-cleanup.sh` | `SessionEnd` | Kill watchdog PID; remove `activity.json` and `watchdog.pid` |
 | `watchdog-loop.sh` | (detached — not hook-registered) | 60s polling loop body; invokes `deadlock-check.sh` |
 | `deadlock-check.sh` | (called by `watchdog-loop.sh`) | Evaluate rule; write nudge + STATE.md warning; escalate at 3 |
+| `async-rewake-watchdog.sh` | `SessionStart` / `PostToolUse:Write/Edit` (`asyncRewake`) | Runs the same rule in a single background process and exits 2 with the staged nudge so Claude Code wakes even if the terminal-focus stall prevents ordinary hook delivery. |
 | `nudge-inject.sh` | `PreToolUse` / `UserPromptSubmit` | Emit `pending-nudge.json` via `additionalContext` on the engine's next turn; delete file. Registered on both `PreToolUse` and `UserPromptSubmit` to catch whichever fires first. |
 
 Every hook fails open — on any error the script exits 0 so the pipeline is

@@ -14,17 +14,19 @@ Tracked upstream as **`anthropics/claude-code#25068`** — Claude Code sessions 
 
 Compounding factor: the server-sent events (SSE) idle timeout defaults to 5 minutes (`CLAUDE_STREAM_IDLE_TIMEOUT_MS=300000`). When an SSE stream aborts and retries, the retry can race with the focus wake-up, which is why the stall sometimes looks like it "recovers on its own" after a few minutes even without operator input.
 
-### Why Kiln's watchdog cannot help
+### Why the old watchdog could not help
 
-The detached watchdog (`watchdog-loop.sh` + `deadlock-check.sh`) delivers nudges through a two-step indirection: write `.kiln/tmp/pending-nudge.json`, then wait for the next hook fire to consume it via `nudge-inject.sh`'s `additionalContext` injection. For a teammate stall (teammate still active after SubagentStop), the `TeammateIdle` native exit-2 path handles it directly — no hook indirection needed.
+The original detached watchdog (`watchdog-loop.sh` + `deadlock-check.sh`) delivered nudges through a two-step indirection: write `.kiln/tmp/pending-nudge.json`, then wait for the next hook fire to consume it via `nudge-inject.sh`'s `additionalContext` injection. For a teammate stall (teammate still active after SubagentStop), the `TeammateIdle` native exit-2 path handles it directly — no hook indirection needed.
 
-The terminal-focus class of stall is neither: the stalled party is the main engine session itself, and the main session is not firing any hooks while stalled. Every nudge the watchdog writes sits in `pending-nudge.json` undelivered, piling up. When focus returns, the first hook fire after refocus consumes the most recent nudge — but the session was already going to resume from the focus event, so the nudge arrives after the stall has already self-resolved.
+The terminal-focus class of stall is neither: the stalled party is the main engine session itself, and the main session may not fire ordinary hooks while stalled. Under the old delivery path, every nudge the watchdog wrote sat in `pending-nudge.json` undelivered. When focus returned, the first hook fire after refocus consumed the most recent nudge — but the session was already going to resume from the focus event, so the nudge arrived after the stall had self-resolved.
 
-The watchdog is not broken; it handles a different class of deadlock (teammate died, main session waiting on nothing). It cannot reach through a stalled event loop that isn't firing hooks.
+### Kiln-side mitigation
+
+Kiln now also starts `async-rewake-watchdog.sh` as a Claude Code `asyncRewake` hook. It reuses the same deadlock rule as `deadlock-check.sh`, but exits 2 when a nudge is staged. Claude Code documents this as the native way for an async hook to wake Claude immediately even when the session is idle. This is a bandaid, not an upstream fix: it can wake the engine after the deadlock threshold, but it cannot make terminal focus independent orchestration immediate.
 
 ### Operator mitigations
 
-Three options, in rough order of preference:
+If async rewake still misses a stall in your terminal / Claude Code version, use one of these options, in rough order of preference:
 
 1. **`claude -p` for autonomous runs.** Non-interactive mode doesn't depend on TTY input to stay alive, so terminal focus is irrelevant. This is the right mode for overnight or untended pipelines and is what the Kiln design target has always assumed.
 
@@ -36,9 +38,9 @@ Remote Control mode (for server / CI runs) is a fourth option when available in 
 
 ### What NOT to do
 
-- Do **not** file this as a Kiln deadlock bug. The deadlock detection subsystem works as designed; the terminal-focus stall is out of its reach by construction.
-- Do **not** try to work around the stall with operator-side nudges (keyboard activity in the terminal, shell bells, etc.) — they will work, but they're slower than just switching mode to `claude -p`, and the habit papers over the actual upstream fix path.
-- Do **not** modify `deadlock-check.sh` or the watchdog loop frequency to chase this case. The watchdog's indirection through `additionalContext` is the mechanism that makes it safe; there is no shorter path that doesn't fight the platform.
+- Do **not** file this as a plain Kiln protocol deadlock bug unless `async-rewake-watchdog.sh` also failed to emit a wake after the deadlock threshold. The root focus dependency is upstream; Kiln's role is bounded recovery.
+- Do **not** try to work around the stall with operator-side nudges (keyboard activity in the terminal, shell bells, etc.) — they will work, but they're slower and less deterministic than the async rewake bridge or `claude -p`.
+- Do **not** lower the deadlock threshold aggressively. A too-fast rewake creates model churn during legitimate long thinking. If tuning is needed, prefer measured changes to the shared deadlock rule, not terminal-specific key injection.
 
 ### Upstream status
 
