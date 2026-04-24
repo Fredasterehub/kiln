@@ -330,6 +330,68 @@ test_ensure_watchdog_starts_after_state_creation() {
   rm -rf "$tmp"
 }
 
+test_async_rewake_exits_2_on_deadlock() {
+  local name="async-rewake-exits-2-on-deadlock"
+  local tmp
+  tmp=$(mktempdir)
+  mkdir -p "$tmp/.kiln/tmp"
+  seed_state "$tmp" 1 0
+
+  local old_ts
+  old_ts=$(( $(date +%s) - 700 ))
+  cat > "$tmp/.kiln/tmp/activity.json" <<EOF
+{
+  "last_activity_ts": $old_ts,
+  "last_activity_source": "SubagentStop:dial-a-coder",
+  "active_teammates": {},
+  "last_nudge_ts": 0,
+  "nudge_count": 0,
+  "epoch": 1,
+  "pipeline_phase": "build"
+}
+EOF
+
+  local stderr_file="$tmp/stderr.txt"
+  local stdout_file="$tmp/stdout.txt"
+  local rc
+  (
+    cd "$tmp" || exit 1
+    KILN_ASYNC_REWAKE_ONCE=1 \
+      printf '{"hook_event_name":"SessionStart"}' \
+      | KILN_ASYNC_REWAKE_ONCE=1 bash "$REPO_ROOT/plugins/kiln/hooks/async-rewake-watchdog.sh" \
+        > "$stdout_file" 2> "$stderr_file"
+  )
+  rc=$?
+
+  local ok=1
+  if [[ "$rc" -ne 2 ]]; then
+    echo "       exit code: got '$rc', expected '2'"
+    ok=0
+  fi
+  if ! grep -q "KILN ASYNC REWAKE: KILN DEADLOCK WATCHDOG" "$stderr_file"; then
+    echo "       stderr missing async rewake deadlock message"
+    ok=0
+  fi
+  if [[ ! -f "$tmp/.kiln/tmp/pending-nudge.json" ]]; then
+    echo "       pending-nudge.json was not staged"
+    ok=0
+  fi
+  if [[ -d "$tmp/.kiln/tmp/async-rewake-watchdog.lock" ]]; then
+    echo "       async rewake lock was not cleaned up"
+    ok=0
+  fi
+
+  if (( ok == 1 )); then
+    echo "    ✓ $name"
+    PASS=$((PASS + 1))
+  else
+    echo "    ✗ $name"
+    FAIL=$((FAIL + 1))
+    FAILED+=("$name")
+  fi
+  rm -rf "$tmp"
+}
+
 echo "── State-mutation tests ─────────────────"
 echo "  chunk_count / team_iteration sed patterns"
 test_bossman_chunk_increment
@@ -343,6 +405,7 @@ test_activity_json_failed_write_no_clobber
 echo ""
 echo "  watchdog startup"
 test_ensure_watchdog_starts_after_state_creation
+test_async_rewake_exits_2_on_deadlock
 echo ""
 echo "State-mutation: ${PASS} passed, ${FAIL} failed"
 if (( FAIL > 0 )); then
