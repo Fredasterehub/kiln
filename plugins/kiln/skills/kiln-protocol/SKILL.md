@@ -20,6 +20,12 @@ Read the policy sections first — they are the rules each agent is responsible 
 
 - `SendMessage` is the only way to reach teammates. Plain text is visible to the operator but invisible to other agents, so anything you need a teammate to act on goes through `SendMessage`.
 - After sending a message you expect a reply to, STOP your turn. Polling wastes tokens and can race the reply; the platform wakes you when the reply arrives.
+  You cannot send AND continue in the same turn — these are mutually exclusive operations.
+
+  Sending a message and continuing in the same turn races the platform's wake-up.
+  The recipient reads disk-state via Read tool; any edit between dispatch and the recipient's read produces stale-read responses unrelated to your actual position.
+  STOP immediately after sending; the platform wakes you when the reply arrives.
+  This applies to every blocking SendMessage — not just REVIEW_REQUEST.
 - Process one inbound message per wake-up fully before acting on the next. Partial handling of a message is how interleaved protocol conversations desynchronise.
 
 ### Blocking Policy
