@@ -1,0 +1,28 @@
+name: dormant-teammate-not-deadlocked
+description: >
+  P2 regression guard — a dormant teammate is not deadlocked just because it
+  remains tracked in active_teammates. Under the A.1/A.2 contract,
+  TeammateIdle is heartbeat-only: it keeps the teammate tracked and bumps
+  activity_ts. The deadlock rule ignores active_teammates presence, so the
+  dormant-not-deadlocked guarantee here comes from recent activity_ts
+  freshness (120s idle), not from teammate presence.
+
+  TIME_TICK and DEADLOCK_CHECK are synthetic driver signals (not platform
+  events) that stand in for the real watchdog's `sleep 60 -> deadlock-check`
+  loop. They exist only in layer2-replay so the deadlock rule can be
+  exercised without wall-clock waits.
+engine-version: post-centralization
+events-inline:
+  - {sender: platform, signal: SUBAGENTSTART, recipient: team-lead, payload: '{"agent_type": "kiln:rakim-build-1"}', timestamp: "00:00:01"}
+  - {sender: watchdog, signal: TIME_TICK, recipient: watchdog, payload: "60", timestamp: "00:01:00"}
+  - {sender: platform, signal: TEAMMATEIDLE, recipient: team-lead, payload: '{"teammate_name": "kiln:rakim-build-1"}', timestamp: "00:01:00"}
+  - {sender: watchdog, signal: TIME_TICK, recipient: watchdog, payload: "120", timestamp: "00:03:00"}
+  - {sender: watchdog, signal: DEADLOCK_CHECK, recipient: watchdog, payload: "", timestamp: "00:03:01"}
+assertions:
+  - after-event: "watchdog | DEADLOCK_CHECK"
+    strict: true
+    expected-decisions:
+      - {type: deadlock_check_noop}
+    forbidden-decisions:
+      - {type: nudge_emit}
+      - {type: deadlock_escalate}

@@ -105,6 +105,7 @@ class MockEngine:
         self.activity_ts: int = 0
         self.nudge_count: int = 0
         self.last_nudge_ts: int = 0
+        self.last_activity_source: str = "init"
         self.active_teammates: set[str] = set()
         self.deadlock_flag: bool = False
         self.pipeline_phase: str = "build"
@@ -144,6 +145,7 @@ class MockEngine:
             "REQUEST_WORKERS": self._on_request_workers,
             "CYCLE_WORKERS": self._on_cycle_workers,
             "SUBAGENTSTART": self._on_subagent_start,
+            "SUBAGENTSTOP": self._on_subagent_stop,
             "TEAMMATEIDLE": self._on_teammate_idle,
             "TIME_TICK": self._on_time_tick,
             "SESSIONSTART": self._on_session_start,
@@ -295,8 +297,9 @@ class MockEngine:
         agent = kv.get("agent_type", "")
         if agent.startswith("kiln:"):
             agent = agent[len("kiln:"):]
-        # P2: register the teammate so the deadlock rule can distinguish
-        # "team active" from "team fully idle". TeammateIdle removes them.
+        # P2: register the teammate so diagnostics can name tracked
+        # subagents. TeammateIdle is heartbeat-only; SubagentStop is the
+        # only clean-exit removal path.
         decisions = [EngineDecision(
             type="subagent_start_ack",
             details={"agent": agent},
@@ -305,6 +308,7 @@ class MockEngine:
         if agent:
             self.active_teammates.add(agent)
             self.activity_ts = self.sim_time
+            self.last_activity_source = "SubagentStart"
             if self.pending_cycle_workers and agent in self.pending_cycle_workers:
                 self.pending_cycle_started.add(agent)
                 if self.pending_cycle_started >= self.pending_cycle_workers:
@@ -349,15 +353,34 @@ class MockEngine:
                     self.pending_request_echo_tuples.clear()
         return decisions
 
-    def _on_teammate_idle(self, event):
-        """Platform TeammateIdle — drop teammate from the active set.
+    def _on_subagent_stop(self, event):
+        """Platform-native clean exit — remove teammate tracking."""
+        payload = event.get("payload", "")
+        try:
+            kv = json.loads(payload)
+            if not isinstance(kv, dict):
+                kv = parse_kv_payload(payload)
+        except (ValueError, TypeError):
+            kv = parse_kv_payload(payload)
+        name = kv.get("agent_type", "")
+        if name.startswith("kiln:"):
+            name = name[len("kiln:"):]
+        self.active_teammates.discard(name)
+        self.activity_ts = self.sim_time
+        self.last_activity_source = "SubagentStop"
+        return [EngineDecision(
+            type="subagent_stop_ack",
+            details={"agent": name},
+        )]
 
-        TeammateIdle fires ~20ms after every SubagentStop with the payload
-        `{"teammate_name": "..."}`. The deadlock rule keys on
-        `active_teammates` being empty, so each idle event prunes the set.
-        We bump `activity_ts` here too because an idle transition is itself
-        a pipeline-progress signal — it proves the teammate was working
-        right up until it went quiet.
+    def _on_teammate_idle(self, event):
+        """Platform TeammateIdle — heartbeat while the teammate stays tracked.
+
+        The payload carries `{"teammate_name": "..."}`. Under the A.1
+        contract, TeammateIdle does not mean the subagent exited and does
+        not remove it from `active_teammates`; only SubagentStop does that.
+        We still bump `activity_ts` because the idle signal is a heartbeat:
+        it proves the platform observed the teammate recently.
         """
         payload = event.get("payload", "")
         try:
@@ -369,8 +392,8 @@ class MockEngine:
         name = kv.get("teammate_name", event.get("sender", ""))
         if isinstance(name, str) and name.startswith("kiln:"):
             name = name[len("kiln:"):]
-        self.active_teammates.discard(name)
         self.activity_ts = self.sim_time
+        self.last_activity_source = "TeammateIdle"
         return [EngineDecision(
             type="teammate_idle",
             details={"teammate": name},
@@ -440,12 +463,17 @@ class MockEngine:
     def _on_deadlock_check(self, event):
         """Synthetic watchdog fire — apply the deadlock rule.
 
-        Rule (plan §5.3 P2):
+        Rule (A.2):
           DEADLOCK iff
-            active_teammates is empty
-            AND (now - last_activity_ts) > 300s
+            (now - last_activity_ts) > 300s
             AND (now - last_nudge_ts) > 600s   (debounce)
             AND pipeline_phase not in {idle, awaiting_user, complete}
+
+        The old fourth clause required `active_teammates` to be empty.
+        That conflated dormant-waiting-for-message with dead and became
+        wrong once A.1 kept dormant teammates in `active_teammates`: it
+        would suppress real stalls where a teammate is still tracked but
+        the pipeline has had no hook-observed activity.
 
         Nudges are delivered on 1..3; the 4th armed check escalates —
         writes DEADLOCK.flag and exits the watchdog. nudge_count==3 is
@@ -461,8 +489,7 @@ class MockEngine:
             or (self.sim_time - self.last_nudge_ts) > 600
         )
         armed = (
-            len(self.active_teammates) == 0
-            and idle_secs > 300
+            idle_secs > 300
             and debounce_ok
             and self.pipeline_phase not in {"idle", "awaiting_user", "complete"}
         )
@@ -490,6 +517,7 @@ class MockEngine:
             details={
                 "nudge_count": self.nudge_count,
                 "idle_secs": idle_secs,
+                "last_activity_source": self.last_activity_source,
             },
         )]
 

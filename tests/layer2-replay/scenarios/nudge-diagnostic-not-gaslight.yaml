@@ -1,0 +1,26 @@
+name: nudge-diagnostic-not-gaslight
+description: >
+  P2 positive guard — genuine pipeline silence emits a diagnostic nudge.
+  A worker spawns, then no TeammateIdle or other heartbeat arrives. The
+  synthetic clock advances past 300s, debounce is satisfied because no prior
+  nudge exists, and phase defaults to build, so the 3-condition rule arms.
+
+  The mock engine's nudge_emit decision carries idle_secs and nudge_count;
+  real deadlock-check.sh nudge text carries diagnostic fields such as
+  idle_seconds=, last_activity_source=, and active_teammates=. This Layer 2
+  scenario asserts the decision shape: nudge_emit fires with nudge_count=1.
+  The exact nudge text is covered by the Layer 1 fixture.
+engine-version: post-centralization
+events-inline:
+  - {sender: platform, signal: SUBAGENTSTART, recipient: team-lead, payload: '{"agent_type": "kiln:rakim-build-1"}', timestamp: "00:00:01"}
+  - {sender: watchdog, signal: TIME_TICK, recipient: watchdog, payload: "360", timestamp: "00:06:00"}
+  - {sender: watchdog, signal: DEADLOCK_CHECK, recipient: watchdog, payload: "", timestamp: "00:06:01"}
+assertions:
+  - after-event: "watchdog | DEADLOCK_CHECK"
+    strict: true
+    expected-decisions:
+      - type: nudge_emit
+        nudge_count: 1
+        last_activity_source: SubagentStart
+    forbidden-decisions:
+      - {type: deadlock_escalate}

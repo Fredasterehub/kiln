@@ -53,7 +53,7 @@ rename) by every participating hook.
 |---|---|---|
 | `last_activity_ts` | int (unix epoch, seconds) | Timestamp of the most recent hook-observed activity. Heartbeat — every relevant hook fire bumps it. |
 | `last_activity_source` | string | Event that last bumped the timestamp, e.g. `"PostToolUse:SendMessage"`. Debug aid — identifies which hook channel is still firing when others have gone quiet. |
-| `active_teammates` | object | Map of `teammate_name` → `last_seen_ts`. Populated by `SubagentStart` (add entry). Removed by `SubagentStop` (clean exit) and `TeammateIdle` (timeout/idle signal). An empty map means no active teammates — necessary condition for deadlock. |
+| `active_teammates` | object | Map of `teammate_name` → `last_seen_ts`. Populated by `SubagentStart` (add entry). Removed ONLY by `SubagentStop` (clean exit). `TeammateIdle` is heartbeat-only — the teammate stays tracked because dormant-waiting-for-message is not the same as exited. An empty map means no active subagent processes are running, but it is no longer a deadlock precondition (see Deadlock rule below). |
 | `last_nudge_ts` | int (unix epoch, seconds; `0` = never) | When the most recent nudge was emitted. Used for debounce — a fresh nudge cannot fire within 600s of the previous one. |
 | `nudge_count` | int | Nudges delivered in the current pipeline run. Watchdog escalates when this reaches 3. |
 | `epoch` | int | Monotonically bumps on every activity write. Lets the watchdog distinguish stale reads from fresh state without a lock. |
@@ -61,33 +61,42 @@ rename) by every participating hook.
 
 ## Deadlock rule
 
-The watchdog declares deadlock if and only if all four conditions hold:
+The watchdog declares deadlock if and only if all three conditions hold:
 
 ```
 DEADLOCK iff
-  active_teammates is empty
-  AND (now - last_activity_ts) > 300s
+  (now - last_activity_ts) > 300s
   AND (now - last_nudge_ts) > 600s   (debounce; last_nudge_ts == 0 bypasses this clause)
   AND pipeline_phase not in {"idle", "awaiting_user", "complete"}
 ```
 
-Each clause has a purpose: empty `active_teammates` rules out teammates
-mid-turn; 300s idle rules out normal think time; 600s debounce keeps a
-persistent stall from producing a flood of nudges; the phase filter keeps
-the watchdog silent when the pipeline is intentionally waiting.
+Each clause has a purpose: 300s idle rules out normal think time; 600s
+debounce keeps a persistent stall from producing a flood of nudges; the
+phase filter keeps the watchdog silent when the pipeline is intentionally
+waiting.
+
+We used to require `active_teammates` to be empty as a 4th condition. That
+conflated dormant-waiting-for-message with exited and produced
+false-positives — the benoit M9-C2 stall was the concrete evidence. Once
+A.1 keeps dormant teammates tracked in `active_teammates`, the clause would
+prevent the watchdog from firing on real stalls where a teammate is alive
+but the pipeline is genuinely stuck. The load-bearing signal is
+`idle > 300s + phase filter`.
 
 ## Nudge mechanism
 
-When `TeammateIdle` fires before the teammate has been removed from
+When `TeammateIdle` arrives for a teammate that is still tracked in
 `active_teammates`, `teammate-idle-feedback.sh` emits a concise diagnostic to
-stderr and exits 2. That path is deliberately synchronous: it is for a known
-teammate that still owes a handoff. Normal completions stay quiet because
-`SubagentStop` removes the teammate before the idle check becomes relevant.
+stderr and exits 2. A dormant-but-tracked teammate may have missed a message,
+so this path prompts immediate re-engagement without waiting for the
+watchdog loop. Normal completions stay quiet because `SubagentStop` removes
+the teammate before the idle check becomes relevant.
 
-The watchdog path is for the larger case where no teammate is active and the
-engine has gone silent. The detached loop stages a nudge for the next hook turn;
-the async rewake bridge uses Claude Code's native asyncRewake exit-2 path to
-wake the idle engine when there may not be a next hook turn.
+The watchdog path is for the larger case where the pipeline has gone silent:
+no hook-observed activity for 300s, regardless of how many teammates are
+tracked. The detached loop stages a nudge for the next hook turn; the async
+rewake bridge uses Claude Code's native asyncRewake exit-2 path to wake the
+idle engine when there may not be a next hook turn.
 
 When the rule fires:
 
@@ -124,7 +133,7 @@ it up.
 
 | Script | Event | Role |
 |---|---|---|
-| `activity-update.sh` | `SubagentStart` / `SubagentStop` / `TeammateIdle` / `PreToolUse` / `PostToolUse` / `UserPromptSubmit` | Heartbeat + teammate tracking; writes `activity.json` |
+| `activity-update.sh` | `SubagentStart` / `SubagentStop` / `TeammateIdle` / `PreToolUse` / `PostToolUse` / `UserPromptSubmit` | Heartbeat + teammate tracking; writes `activity.json`. `TeammateIdle` is heartbeat-only and does not remove from `active_teammates`. |
 | `teammate-idle-feedback.sh` | `TeammateIdle` | Direct exit-2 feedback when a teammate is still marked active and tries to idle |
 | `spawn-watchdog.sh` | `SessionStart` | Gate, stale-PID kill, spawn detached `nohup + disown` loop |
 | `ensure-watchdog.sh` | `PostToolUse:Write/Edit` | Starts the watchdog after `.kiln/STATE.md` is created later in a fresh session |
