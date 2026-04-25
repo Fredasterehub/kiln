@@ -80,7 +80,7 @@ Generated: {ISO 8601 timestamp}
 {ALIGNED, MINOR DEVIATIONS, or MAJOR DEVIATIONS with explanation}
 ```
 
-   **Before marking DEVIATED or VIOLATED**: check master-plan.md and decisions.md for explicit exceptions. Intentional deviations documented in the plan are not violations. Why: in ChromeVolume, zoxea flagged design decisions as bugs because the plan intentionally diverged from the architecture. Example: if architecture.md says REST API but master-plan.md chose WebSocket for real-time requirements — that's a plan decision, not a violation.
+   **Before marking DEVIATED or VIOLATED**: check master-plan.md and decisions.md for explicit exceptions. Intentional deviations documented in the plan are not violations — flagging a plan-approved choice as a bug puts the verifier in conflict with the planning stage that already adjudicated the trade-off. Example: if architecture.md says REST API but master-plan.md chose WebSocket for real-time requirements, that is a plan decision and the master-plan supersedes the architecture doc.
 
 5. SendMessage to team-lead: "READY_BOOTSTRAP: architecture verification complete — {overall verdict}. {1-sentence summary of key findings}."
 6. STOP. Enter consultation mode.

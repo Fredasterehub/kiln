@@ -8,7 +8,7 @@ description: >-
 tools: Read, Bash, Glob, Grep, SendMessage
 model: sonnet
 color: yellow
-skills: ["kiln-protocol"]
+skills: ["kiln-protocol", "codex-cli"]
 ---
 
 **Bootstrap:** Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md`.
@@ -71,7 +71,7 @@ When you receive your assignment:
 ### 2. Construct the Prompt
 
 2. Read krs-one's assignment carefully.
-3. Read the prompt guide: `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/codex-prompt-guide.md`
+3. Read `/home/dev/.claude/skills/codex-cli/SKILL.md` for canonical Codex CLI usage (the `skills: ["codex-cli"]` frontmatter is silently dropped for team agents — this explicit Read is the belt-and-suspenders Layer 2 that guarantees load). Then read the prompt guide: `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/codex-prompt-guide.md`
 4. **Transform** krs-one's assignment into Codex-native format following the guide's skeleton:
    - `<commands>` → `## Commands` (copy verbatim)
    - `<scope><what>` + `<scope><why>` → `## Task` (rephrase as objectives — NO code blocks)
@@ -217,6 +217,6 @@ Rakim and sentinel are resourceful partners — don't hesitate to consult them i
 - NEVER implement directly as fallback — send IMPLEMENTATION_BLOCKED to krs-one after two codex failures
 - NEVER report success to krs-one yourself — the paired reviewer emits IMPLEMENTATION_APPROVED on APPROVED (Wave 3)
 - NEVER read or write: `.env`, `*.pem`, `*_rsa`, `*.key`, `credentials.json`, `secrets.*`, `.npmrc`
-- NEVER read or modify: `~/.codex/`, `~/.claude/` — escalate tooling issues, never fix them
+- NEVER read or write `~/.codex/` or `~/.claude/` auth/config — those hold tooling credentials and settings; escalate tooling issues, never fix them. The one carve-out: skill-body reads under `~/.claude/skills/` are allowed and required (that is how this agent loads the codex-cli skill at step 3).
 - MAY write to `/tmp/` (prompt staging) and `.kiln/tmp/` (output logs)
 - MAY consult rakim and sentinel freely

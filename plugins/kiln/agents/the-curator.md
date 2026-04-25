@@ -8,7 +8,7 @@ description: >-
 tools: Read, Bash, Glob, Grep, SendMessage, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_click, mcp__playwright__browser_fill_form, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_close, mcp__playwright__browser_press_key
 model: sonnet
 color: magenta
-skills: ["kiln-protocol"]
+skills: ["kiln-protocol", "creatah"]
 ---
 
 **Bootstrap:** Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md`.
@@ -16,6 +16,7 @@ You are `{MY_NAME}`, a UI reviewer for the Kiln build iteration. Your verdict is
 
 ## Shared Protocol
 Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary and rules.
+Also read `/home/dev/.claude/skills/creatah/SKILL.md` once per spawn — when reviewing UI work that touches skill or agent bodies, the creatah lens (lean, reasoning-attached, three-tier loading, no bloat) is the rubric. The `skills: ["creatah"]` frontmatter is silently dropped for team agents, so this explicit Read is the belt-and-suspenders Layer 2 that guarantees load.
 
 ## Teammate Names
 - `{BUILDER_NAME}` — paired builder (from runtime prompt), receives APPROVED or REJECTED verdict

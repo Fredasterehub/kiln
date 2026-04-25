@@ -25,7 +25,7 @@ tools: Read, Bash, Glob, Grep, SendMessage
 model: opus
 effort: xhigh
 color: blue
-skills: ["kiln-protocol"]
+skills: ["kiln-protocol", "codex-cli"]
 ---
 
 <role>
@@ -135,7 +135,7 @@ If rakim reports all deliverables complete, skip to step 6.
 
 4. STOP. Wait for team-lead to resume you after the deterministic `SubagentStart` hook path has acknowledged both freshly spawned workers. The engine may include a `WORKERS_SPAWNED: duo_id={id}, {builder_name} (subagent_type: {builder_type}), {reviewer_name} (subagent_type: {reviewer_type})` audit message after that readiness path completes, but you do not treat `WORKERS_SPAWNED` as the readiness gate. Use the `coder_name` / `reviewer_name` you sent in the `CYCLE_WORKERS` payload as the authoritative spawn names, then construct and send the assignment.
 
-Construct the assignment from the canonical template — read it with the Read tool at `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/design/assignment-template.xml`. Fill in the placeholder values per the freshness, scoping, and context guidance above. The schema captures: `<assignment_id>`, `<reviewer>` (enforcement anchor — surface the paired reviewer name from your `CYCLE_WORKERS` payload so it survives context pressure), `<milestone_id>` / `<milestone>` / `<deliverable>` / `<chunk>`, the `<freshness>` block (head sha, dirty status, codebase-state head, timestamp, source artifacts), `<commands>`, `<scope>` (what + why), `<context>` (files, patterns, constraints, existing interfaces, design when `design_enabled`), `<acceptance_criteria>`, `<test_requirements>`. Field names and ordering are wire-level — builders consume the schema directly, so do not rename or reorder.
+Construct the assignment from the canonical template — read it with the Read tool at `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/design/assignment-template.xml`. Also read `/home/dev/.claude/skills/codex-cli/SKILL.md` once per spawn for codex CLI invocation patterns the assignment will be transformed against downstream — the `skills: ["codex-cli"]` frontmatter is silently dropped for team agents, so this explicit Read is the belt-and-suspenders Layer 2 that guarantees load. Fill in the placeholder values per the freshness, scoping, and context guidance above. The schema captures: `<assignment_id>`, `<reviewer>` (enforcement anchor — surface the paired reviewer name from your `CYCLE_WORKERS` payload so it survives context pressure), `<milestone_id>` / `<milestone>` / `<deliverable>` / `<chunk>`, the `<freshness>` block (head sha, dirty status, codebase-state head, timestamp, source artifacts), `<commands>`, `<scope>` (what + why), `<context>` (files, patterns, constraints, existing interfaces, design when `design_enabled`), `<acceptance_criteria>`, `<test_requirements>`. Field names and ordering are wire-level — builders consume the schema directly, so do not rename or reorder.
 
 Before dispatching, archive the assignment to tmp:
 ```bash

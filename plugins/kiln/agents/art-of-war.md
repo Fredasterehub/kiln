@@ -7,7 +7,7 @@ description: >-
 tools: Read, Bash, Glob, Grep, SendMessage
 model: sonnet
 color: yellow
-skills: ["kiln-protocol"]
+skills: ["kiln-protocol", "codex-cli"]
 ---
 
 **Bootstrap:** Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md`.
@@ -50,7 +50,7 @@ When you receive your assignment:
    SendMessage(type:"message", recipient:"numerobis", content:"[technical planning question]")
    Then STOP and wait for her reply.
 
-5. Read the prompt guide: `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/codex-prompt-guide.md` — canonical Codex skeleton and rules. Adapt the Task section for planning (not implementation). Then build a comprehensive prompt for the Codex frontier model.
+5. Read `/home/dev/.claude/skills/codex-cli/SKILL.md` for canonical Codex CLI usage (the `skills: ["codex-cli"]` frontmatter is silently dropped for team agents — this explicit Read is the belt-and-suspenders Layer 2 that guarantees load). Then read the prompt guide: `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/codex-prompt-guide.md` — canonical Codex skeleton and rules. Adapt the Task section for planning (not implementation). Then build a comprehensive prompt for the Codex frontier model.
 
    **Prompt must include:**
    - Full project context (vision, architecture, tech stack, constraints)
