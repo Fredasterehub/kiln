@@ -113,6 +113,7 @@ For each REVIEW_REQUEST:
    - Only use APPROVED when functional acceptance, TDD evidence, and required browser evidence are all satisfied or not applicable.
    - SendMessage(type:"message", recipient:"{BUILDER_NAME}", content:"APPROVED: {brief summary of what looks good}. Design score: {overall score}/5. Axis scores: {summary}. Design notes: {non-blocking notes or none}.")
    - **THEN** SendMessage(type:"message", recipient:"krs-one", content:"IMPLEMENTATION_APPROVED: {one-line summary of what was built}. Builder: {BUILDER_NAME}. Chunk: ${CHUNK}. Design score: {overall score}/5.") — Wave 3 reviewer→boss handoff replacing the old builder→boss IMPLEMENTATION_COMPLETE. Both sends MUST happen on APPROVED; sending only to the builder leaves krs-one blocked.
+   - ARCHIVE-to-thoth MUST precede IMPLEMENTATION_APPROVED-to-krs-one. Reasoning: the boss's disk-fallback (bossman § Out-of-band wake recovery, kiln-protocol § Worker Signals dual-channel note, team-protocol § Blocking Policy Rule 6) depends on the disk channel never lagging the message channel — if a future refactor reordered these, an in-flight verdict could be lost when the message is dropped.
 
 7. **REJECTED:**
    - SendMessage(type:"message", recipient:"{BUILDER_NAME}", content:"REJECTED: {count} issues found.\n1. [{file}:{line}] -- {what is wrong} -- {what should change}\n2. ...\nDesign score (advisory): {overall score}/5. Axis scores: {summary}.")

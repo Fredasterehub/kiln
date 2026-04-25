@@ -1,0 +1,26 @@
+name: boss-disk-fallback-recovers-missed-verdict
+description: >
+  B.3 regression guard — if the reviewer successfully archived an APPROVED
+  verdict but the IMPLEMENTATION_APPROVED message to krs-one is missing, a
+  later watchdog nudge must still reach the boss so bossman can run
+  Out-of-band wake recovery and consult the disk fallback. The mock engine
+  models only the signal side: DISK_FIXTURE places the archived review.md in
+  the in-memory fixture store, DEADLOCK_CHECK emits the nudge, and no worker
+  cycling or blocked escalation is requested by the engine.
+engine-version: post-centralization
+events-inline:
+  - {sender: platform, signal: SUBAGENTSTART, recipient: team-lead, payload: '{"agent_type": "kiln:krs-one"}', timestamp: "00:00:01"}
+  - {sender: platform, signal: SUBAGENTSTART, recipient: team-lead, payload: '{"agent_type": "kiln:rakim-build-1"}', timestamp: "00:00:02"}
+  - {sender: platform, signal: SUBAGENTSTART, recipient: team-lead, payload: '{"agent_type": "kiln:clair-review-1"}', timestamp: "00:00:03"}
+  - {sender: fixture, signal: DISK_FIXTURE, recipient: engine, payload: "path=.kiln/archive/milestone-1/chunk-1/review.md, verdict=APPROVED, assignment_id=m1-c1-abc1234", timestamp: "00:00:04"}
+  - {sender: watchdog, signal: TIME_TICK, recipient: watchdog, payload: "360", timestamp: "00:06:00"}
+  - {sender: watchdog, signal: DEADLOCK_CHECK, recipient: watchdog, payload: "", timestamp: "00:06:01"}
+assertions:
+  - after-event: "watchdog | DEADLOCK_CHECK"
+    strict: true
+    expected-decisions:
+      - type: nudge_emit
+        nudge_count: 1
+    forbidden-decisions:
+      - {type: spawn}
+      - {type: block}

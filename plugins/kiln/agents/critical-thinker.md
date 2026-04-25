@@ -91,6 +91,7 @@ For each REVIEW_REQUEST:
 4. **APPROVED:**
    - SendMessage to {BUILDER_NAME}: "APPROVED: {brief summary of what looks good}."
    - **THEN** SendMessage to krs-one: "IMPLEMENTATION_APPROVED: {one-line summary of what was built}. Builder: {BUILDER_NAME}. Chunk: ${CHUNK}." — this is the Wave 3 reviewer→boss handoff that replaces the old builder→boss IMPLEMENTATION_COMPLETE. Both sends MUST happen on APPROVED; sending only to the builder leaves krs-one blocked.
+   - ARCHIVE-to-thoth MUST precede IMPLEMENTATION_APPROVED-to-krs-one. Reasoning: the boss's disk-fallback (bossman § Out-of-band wake recovery, kiln-protocol § Worker Signals dual-channel note, team-protocol § Blocking Policy Rule 6) depends on the disk channel never lagging the message channel — if a future refactor reordered these, an in-flight verdict could be lost when the message is dropped.
 
 5. **REJECTED:**
    - SendMessage to {BUILDER_NAME}: "REJECTED: {count} issues found.\n1. [{file}:{line}] -- {what is wrong} -- {what should change}\n2. ..."

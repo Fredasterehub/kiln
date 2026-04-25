@@ -110,6 +110,7 @@ class MockEngine:
         self.deadlock_flag: bool = False
         self.pipeline_phase: str = "build"
         self.sim_time: int = 0
+        self.disk_fixtures: dict[str, dict] = {}
         # P1 worker cycling readiness: in the post-centralization engine,
         # CYCLE_WORKERS does not unblock on WORKERS_SPAWNED. The audit
         # message is emitted only after SubagentStart has been observed for
@@ -148,6 +149,7 @@ class MockEngine:
             "SUBAGENTSTOP": self._on_subagent_stop,
             "TEAMMATEIDLE": self._on_teammate_idle,
             "TIME_TICK": self._on_time_tick,
+            "DISK_FIXTURE": self._on_disk_fixture,
             "SESSIONSTART": self._on_session_start,
             "DEADLOCK_CHECK": self._on_deadlock_check,
             "STOPFAILURE": self._on_stop_failure,
@@ -415,6 +417,21 @@ class MockEngine:
         return [EngineDecision(
             type="time_advance",
             details={"sim_time": self.sim_time},
+        )]
+
+    def _on_disk_fixture(self, event):
+        """Synthetic layer2 setup signal for files already archived to disk."""
+        fields = parse_kv_payload(str(event.get("payload", "")))
+        path = fields.get("path", "")
+        fixture = {
+            "path": path,
+            "verdict": fields.get("verdict", ""),
+            "assignment_id": fields.get("assignment_id", ""),
+        }
+        self.disk_fixtures[path] = fixture
+        return [EngineDecision(
+            type="disk_fixture_placed",
+            details=fixture,
         )]
 
     def _on_session_start(self, event):
