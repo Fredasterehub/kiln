@@ -4,6 +4,13 @@
 The hook input does not expose the full task DAG, so this script enforces
 the invariants that are visible at task-create/task-complete time and makes
 the remaining requirements explicit in task metadata.
+
+Detection is by explicit `category:` field read from task_description metadata.
+Substring matching on description text was retired in v1.5.7 because it produced
+false-positive blocks on agent narration containing review/verdict/chunk/implement
+words. Categories must be explicit; the contract trades discoverability for
+predictability. The worker_cycle substring path was also retired — no external
+code consumed the lock-file it wrote.
 """
 
 from __future__ import annotations
@@ -74,45 +81,34 @@ def has_role(text: str) -> bool:
     return any(re.search(rf"(?i)\b{role_name}\b", text) for role_name in VALID_ROLES)
 
 
-def critical_kind(text: str) -> str | None:
-    lowered = text.lower()
-    if "cycle_workers" in lowered or "cycle workers" in lowered or "worker-cycle" in lowered:
-        return "worker_cycle"
-    if "build_complete" in lowered or "build complete" in lowered:
-        return "build_complete"
-    if "milestone qa" in lowered or "qa tribunal" in lowered:
-        return "milestone_qa"
-    if "review" in lowered or "verdict" in lowered:
-        return "review"
-    if "implement" in lowered or "builder" in lowered or "chunk" in lowered:
-        return "implementation"
-    return None
+def critical_kind(payload: dict, text: str) -> str | None:
+    category = payload.get("category") or metadata(text, "category")
+    if not isinstance(category, str) or category not in {"review", "implementation", "qa", "build_complete"}:
+        return None
+    return {
+        "review": "review",
+        "implementation": "implementation",
+        "qa": "milestone_qa",
+        "build_complete": "build_complete",
+    }.get(category)
 
 
 def validate_created(payload: dict, root: Path) -> None:
     subject = payload.get("task_subject") or ""
     description = payload.get("task_description") or ""
     text = f"{subject}\n{description}"
-    kind = critical_kind(text)
-    if not kind:
+    kind = critical_kind(payload, text)
+
+    if kind is None:
         return
 
     if not has_milestone(text):
         block("Kiln task blocked: critical tasks must include milestone_id or milestone-N.")
-    if kind in {"implementation", "review", "worker_cycle"} and not has_chunk(text):
-        block("Kiln task blocked: implementation/review/worker-cycle tasks must include chunk_id or chunk-N.")
     if not has_role(text):
         block("Kiln task blocked: critical tasks must include role: boss|builder|reviewer|qa|pm|archivist|validator|engine.")
 
-    if kind == "worker_cycle":
-        if not re.search(r"(?i)\bduo_id\s*:", text):
-            block("Kiln task blocked: worker-cycle tasks must include duo_id.")
-        lock = root / ".kiln" / "tmp" / "active-worker-cycle-task"
-        task_id = str(payload.get("task_id") or "unknown")
-        if lock.exists() and lock.read_text(encoding="utf-8").strip() not in {"", task_id}:
-            block("Kiln task blocked: another worker-cycle task is already active.")
-        lock.parent.mkdir(parents=True, exist_ok=True)
-        lock.write_text(task_id + "\n", encoding="utf-8")
+    if kind in {"implementation", "review"} and not has_chunk(text):
+        block("Kiln task blocked: implementation/review tasks must include chunk_id or chunk-N.")
 
 
 def path_exists(root: Path, value: str | None) -> bool:
@@ -150,8 +146,9 @@ def validate_completed(payload: dict, root: Path) -> None:
     subject = payload.get("task_subject") or ""
     description = payload.get("task_description") or ""
     text = f"{subject}\n{description}"
-    kind = critical_kind(text)
-    if not kind:
+    kind = critical_kind(payload, text)
+
+    if kind is None:
         return
 
     if kind == "implementation":
@@ -185,12 +182,6 @@ def validate_completed(payload: dict, root: Path) -> None:
         ok, reason = validate_state_artifact(root, archive_ready_path)
         if not ok:
             block(f"Kiln task blocked: BUILD_COMPLETE archive readiness failed validation: {reason}")
-
-    if kind == "worker_cycle":
-        lock = root / ".kiln" / "tmp" / "active-worker-cycle-task"
-        task_id = str(payload.get("task_id") or "")
-        if lock.exists() and (not task_id or lock.read_text(encoding="utf-8").strip() == task_id):
-            lock.unlink()
 
 
 def main() -> int:
