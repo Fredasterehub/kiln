@@ -173,6 +173,21 @@ This reference was written for agent prompts. Skill bodies (e.g. `kiln-protocol/
 - **Separate policy from mechanism.** Rules the reading agent must follow (policy) belong near the top in explain-the-why form. Implementation detail (mechanism — scripts, paths, envvars) can live further down in reference tables; 4.7 reads tables fine when the policy framing is upstream.
 - **Restate critical invariants at point of use.** A skill body can be long. Repeating a load-bearing constraint where it matters is cheaper than relying on the reader to hold the whole doc in working memory.
 
+## Agent Body Calibration Boilerplate
+
+This section is the canonical destination of the `Background: ${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/opus-47-calibration.md` pointer that every Kiln agent body carries in its `<calibration>` block. Generic 4.7 facts live here so a single edit propagates to every agent; role-specific framing (effort tier, the load that earns it, role-specific constraints) stays in each agent body where it is load-bearing.
+
+When an agent Reads this file, the following are the 4.7 facts it would otherwise have inlined:
+
+- **Literal reading.** 4.7 takes the prompt at its word. If a constraint mattered under 4.6 it must now be stated; ambiguity produces surprises rather than helpful guesses. Sharper rules beat more rules.
+- **Reasoning preference over tool calls.** 4.7 reasons more and reaches for tools less by default. When you reference a file's contents, read it with the Read tool first — invented quotations corrupt the archive that downstream readers cannot distinguish from truth. Name the tool explicitly ("read the file with the Read tool"), not vague verbs like "check."
+- **Prior reads do not persist across wakes.** Persistent minds and any role that lives across cycles must re-read state on every wake. A file summarised from memory against disk you have not re-read is a fabrication, not a citation.
+- **Higher bug recall.** Anthropic measures 11pp higher bug-finding recall than 4.6. Reviewers tuned for 4.6 will feel stricter on 4.7 — that is the upgrade working, not noise. Trust the recall before softening the rubric.
+- **ALL-CAPS reads as emphasis, not logic.** Capitalisation does not strengthen a rule the model does not understand; attach the reason instead and let 4.7 generalise from it.
+- **No `temperature`, `top_p`, `top_k`, or `budget_tokens`.** The API rejects these on 4.7. Behavior control is prompt-only — strip any legacy config that sets them.
+
+**Agent-body shape after factoring.** Each calibrated agent's `<calibration>` block contains: (1) effort tier and the role-specific load that earns it, (2) any role-specific 4.7 constraint that does not appear above, (3) the `Background:` pointer to this section. Generic 4.7 prose duplicated from the bullets above belongs here, not in the agent body.
+
 ## Sources
 
 - `/home/dev/.claude/skills/selektah/references/claude-opus-47-prompting.md` — authoritative 4.7 prompting reference
