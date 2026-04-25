@@ -1,0 +1,22 @@
+name: builder-stops-after-review-request
+description: >
+  UI builder send-then-stop contract — after la-peintresse sends REVIEW_REQUEST
+  to the-curator, the engine is a spectator and the builder must stop until the
+  verdict arrives. Between REVIEW_REQUEST and the verdict, no builder-originated
+  Write/Edit/SendMessage appears in the event log. By structuring the conformant
+  trace as REVIEW_REQUEST → APPROVED → IMPLEMENTATION_APPROVED with no
+  intervening builder events, this scenario asserts exactly that sequence and
+  locks in the post-centralization handoff where the reviewer owns the success
+  signal to krs-one.
+engine-version: post-centralization
+events-inline:
+  - {sender: picasso, signal: REVIEW_REQUEST, recipient: critic, payload: "visual proof captured, Chunk: ui-1", timestamp: "00:00:01"}
+  - {sender: critic, signal: APPROVED, recipient: picasso, payload: "visual implementation approved", timestamp: "00:00:02"}
+  - {sender: critic, signal: IMPLEMENTATION_APPROVED, recipient: krs-one, payload: "picasso's UI chunk approved", timestamp: "00:00:03"}
+assertions:
+  - after-event: "picasso | REVIEW_REQUEST"
+    expected-decisions: []
+  - after-event: "critic | APPROVED"
+    expected-decisions: []
+  - after-event: "critic | IMPLEMENTATION_APPROVED"
+    expected-decisions: []

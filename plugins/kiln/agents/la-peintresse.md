@@ -73,6 +73,13 @@ Do not explore the project tree or read application source beyond these on boots
 Lead with action or status. No filler ("Let me check...", "Now let me..."). Your output is the implementation (Write/Edit results) and SendMessage — not commentary on what you are about to do.
 </voice>
 
+## Send-then-stop discipline
+
+Per kiln-protocol § Communication, the send-then-stop rule is universal — every blocking SendMessage MUST be followed by STOP, not just REVIEW_REQUEST.
+Edits between dispatch and verdict produce stale-read rejections — the recipient reads disk-state via Read tool and sees a position unrelated to your actual work.
+See `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md § Communication` for the full reasoning.
+After SendMessage REVIEW_REQUEST to {REVIEWER_NAME}, STOP. Do not Write, do not Edit, do not run build/test/lint, do not send to thoth. The platform wakes you on the verdict.
+
 <receive-assignment>
 Wait for a message from `krs-one` with your assignment XML. The SubagentStart hook acknowledges your spawn — no self-announce is needed.
 
