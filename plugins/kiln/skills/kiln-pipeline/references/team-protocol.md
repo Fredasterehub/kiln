@@ -78,6 +78,7 @@ Messages arrive one at a time; each wake-up delivers exactly one message. Proces
 3. **Terminal signals to the engine are fire-and-forget.** The boss sends and stops; the engine processes on its next turn. A reply is not coming — waiting for one deadlocks against an engine that has already moved on.
 4. **Duplicate handling:** if a reviewer sends IMPLEMENTATION_APPROVED twice for the same chunk, the boss processes the first and ignores the rest. Same rule for any stray builder IMPLEMENTATION_BLOCKED/REJECTED.
 5. **The reviewer is the quality gate and owns the success signal.** The reviewer emits IMPLEMENTATION_APPROVED to krs-one on every APPROVED verdict — no SubagentStop checks on builder commit history, because the hook layer is not the gate.
+6. **Verdict signals are dual-channel.** Reviewer's IMPLEMENTATION_APPROVED to krs-one is the in-memory primary; thoth's filed `review.md` at `.kiln/archive/milestone-{N}/chunk-{M}/review.md` is the authoritative fallback. The reviewer's ARCHIVE-to-thoth send MUST precede the IMPLEMENTATION_APPROVED-to-krs-one send so the disk channel cannot lag the message channel. When the boss wakes out-of-band (watchdog nudge, async-rewake, operator nudge) without a verdict in inbox, it consults disk before concluding workers are dead — see bossman § Out-of-band wake recovery.
 
 ## 3. Dynamic Roster
 
