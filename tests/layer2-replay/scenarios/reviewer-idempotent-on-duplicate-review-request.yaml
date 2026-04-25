@@ -1,0 +1,39 @@
+name: reviewer-idempotent-on-duplicate-review-request
+description: >
+  Regression guard for reviewer idempotence on duplicate REVIEW_REQUEST.
+  After a reviewer has already APPROVED an assignment_id and archived the
+  verdict, a duplicate request for the same assignment_id receives
+  ALREADY_APPROVED back to the builder and the reviewer re-emits
+  IMPLEMENTATION_APPROVED to krs-one. The engine remains a spectator for
+  reviewer-to-builder peer signals and for IMPLEMENTATION_APPROVED in
+  post-centralization.
+engine-version: post-centralization
+events-inline:
+  - {sender: platform, signal: SUBAGENTSTART, recipient: team-lead, payload: '{"agent_type": "kiln:krs-one"}', timestamp: "00:00:01"}
+  - {sender: platform, signal: SUBAGENTSTART, recipient: team-lead, payload: '{"agent_type": "kiln:tintin"}', timestamp: "00:00:02"}
+  - {sender: platform, signal: SUBAGENTSTART, recipient: team-lead, payload: '{"agent_type": "kiln:milou"}', timestamp: "00:00:03"}
+  - {sender: fixture, signal: DISK_FIXTURE, recipient: engine, payload: "path=.kiln/archive/milestone-1/chunk-1/review.md, verdict=APPROVED, assignment_id=m1-c1-d5test1", timestamp: "00:00:04"}
+  - {sender: tintin, signal: REVIEW_REQUEST, recipient: milou, payload: "assignment_id=m1-c1-d5test1 chunk_id=1 summary=first legitimate request", timestamp: "00:00:05"}
+  - {sender: milou, signal: APPROVED, recipient: tintin, payload: "assignment_id=m1-c1-d5test1 chunk_id=1 looks good", timestamp: "00:00:06"}
+  - {sender: milou, signal: IMPLEMENTATION_APPROVED, recipient: krs-one, payload: "assignment_id=m1-c1-d5test1 Builder: tintin. Chunk: 1.", timestamp: "00:00:07"}
+  - {sender: tintin, signal: REVIEW_REQUEST, recipient: milou, payload: "duplicate=true assignment_id=m1-c1-d5test1 chunk_id=1 same assignment race", timestamp: "00:00:08"}
+  - {sender: milou, signal: ALREADY_APPROVED, recipient: tintin, payload: "assignment_id=m1-c1-d5test1 chunk_id=1; verdict at .kiln/archive/milestone-1/chunk-1/review.md. No re-review needed.", timestamp: "00:00:09"}
+  - {sender: milou, signal: IMPLEMENTATION_APPROVED, recipient: krs-one, payload: "re-emitted=true assignment_id=m1-c1-d5test1 Builder: tintin. Chunk: 1.", timestamp: "00:00:10"}
+assertions:
+  - after-event: "tintin | REVIEW_REQUEST | duplicate=true"
+    strict: true
+    expected-decisions: []
+    forbidden-decisions:
+      - {type: spawn}
+      - {type: block}
+      - {type: warn}
+  - after-event: "milou | ALREADY_APPROVED"
+    strict: true
+    expected-decisions: []
+    forbidden-decisions:
+      - {type: spawn}
+      - {type: block}
+      - {type: warn}
+  - after-event: "milou | IMPLEMENTATION_APPROVED | re-emitted=true"
+    strict: true
+    expected-decisions: []

@@ -176,6 +176,7 @@ class MockEngine:
             "IMPLEMENTATION_REJECTED": self._on_implementation_rejected,  # Wave 3 signal
             "REVIEW_REQUEST": self._on_noop,
             "APPROVED": self._on_approved,
+            "ALREADY_APPROVED": self._on_noop,
             "REJECTED": self._on_noop,
             "BLOCKED": self._on_blocked,
             "PLAN_BLOCKED": self._on_plan_blocked,
