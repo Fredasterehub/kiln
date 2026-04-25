@@ -135,52 +135,7 @@ If rakim reports all deliverables complete, skip to step 6.
 
 4. STOP. Wait for team-lead to resume you after the deterministic `SubagentStart` hook path has acknowledged both freshly spawned workers. The engine may include a `WORKERS_SPAWNED: duo_id={id}, {builder_name} (subagent_type: {builder_type}), {reviewer_name} (subagent_type: {reviewer_type})` audit message after that readiness path completes, but you do not treat `WORKERS_SPAWNED` as the readiness gate. Use the `coder_name` / `reviewer_name` you sent in the `CYCLE_WORKERS` payload as the authoritative spawn names, then construct and send the assignment.
 
-Include the reviewer name in the `<reviewer>` XML tag — enforcement anchor that survives context pressure.
-
-```xml
-<assignment>
-  <assignment_id>{mN-cN-shortsha}</assignment_id>
-  <reviewer>{paired reviewer name from your CYCLE_WORKERS payload}</reviewer>
-  <milestone_id>{milestone number or stable id}</milestone_id>
-  <milestone>{milestone name}</milestone>
-  <deliverable>{which deliverable(s) this addresses}</deliverable>
-  <chunk>{chunk_count}</chunk>
-
-  <freshness>
-    <head_sha>{HEAD_SHA}</head_sha>
-    <dirty_status>{DIRTY_STATUS or clean}</dirty_status>
-    <codebase_state_head_sha>{CODEBASE_STATE_HEAD}</codebase_state_head_sha>
-    <timestamp>{UTC ISO-8601 timestamp}</timestamp>
-    <source_artifacts>{comma-separated artifact paths consulted for this scope}</source_artifacts>
-  </freshness>
-
-  <commands>
-    {build, test, lint commands — from AGENTS.md or project config.
-     The builder uses these to verify its work.}
-  </commands>
-
-  <scope>
-    <what>{behavior and objectives — not file-by-file changes. Describe what to build, not how.}</what>
-    <why>{which acceptance criteria / milestone goals this satisfies}</why>
-  </scope>
-
-  <context>
-    <files>{relevant file paths from rakim's state}</files>
-    <patterns>{relevant patterns from sentinel}</patterns>
-    <constraints>{architectural constraints that apply}</constraints>
-    <existing>{curated interfaces the builder must match — type signatures, function signatures. No full file dumps. Keep under 20 lines.}</existing>
-    <design>{ONLY when design_enabled. JIT component brief: relevant token subset, interaction states, design constraints. Omit if no UI components.}</design>
-  </context>
-
-  <acceptance_criteria>
-    {specific, verifiable criteria for this chunk}
-  </acceptance_criteria>
-
-  <test_requirements>
-    {what behaviors to test — not how to test them}
-  </test_requirements>
-</assignment>
-```
+Construct the assignment from the canonical template — read it with the Read tool at `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/references/design/assignment-template.xml`. Fill in the placeholder values per the freshness, scoping, and context guidance above. The schema captures: `<assignment_id>`, `<reviewer>` (enforcement anchor — surface the paired reviewer name from your `CYCLE_WORKERS` payload so it survives context pressure), `<milestone_id>` / `<milestone>` / `<deliverable>` / `<chunk>`, the `<freshness>` block (head sha, dirty status, codebase-state head, timestamp, source artifacts), `<commands>`, `<scope>` (what + why), `<context>` (files, patterns, constraints, existing interfaces, design when `design_enabled`), `<acceptance_criteria>`, `<test_requirements>`. Field names and ordering are wire-level — builders consume the schema directly, so do not rename or reorder.
 
 Before dispatching, archive the assignment to tmp:
 ```bash

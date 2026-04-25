@@ -1,0 +1,48 @@
+<!-- Canonical assignment template for the Kiln build step.
+     Bossman (krs-one) fills in placeholder values when dispatching to forge agents.
+     Consumed by dial-a-coder / backup-coder / la-peintresse — the schema is wire-level,
+     so field names, ordering, and placeholder text are load-bearing.
+     Source of truth: this file. Cross-reference: bossman.md § "Cycle Workers and Hand Off".
+     v1.5.7 extraction from bossman.md (F.2). -->
+<assignment>
+  <assignment_id>{mN-cN-shortsha}</assignment_id>
+  <reviewer>{paired reviewer name from your CYCLE_WORKERS payload}</reviewer>
+  <milestone_id>{milestone number or stable id}</milestone_id>
+  <milestone>{milestone name}</milestone>
+  <deliverable>{which deliverable(s) this addresses}</deliverable>
+  <chunk>{chunk_count}</chunk>
+
+  <freshness>
+    <head_sha>{HEAD_SHA}</head_sha>
+    <dirty_status>{DIRTY_STATUS or clean}</dirty_status>
+    <codebase_state_head_sha>{CODEBASE_STATE_HEAD}</codebase_state_head_sha>
+    <timestamp>{UTC ISO-8601 timestamp}</timestamp>
+    <source_artifacts>{comma-separated artifact paths consulted for this scope}</source_artifacts>
+  </freshness>
+
+  <commands>
+    {build, test, lint commands — from AGENTS.md or project config.
+     The builder uses these to verify its work.}
+  </commands>
+
+  <scope>
+    <what>{behavior and objectives — not file-by-file changes. Describe what to build, not how.}</what>
+    <why>{which acceptance criteria / milestone goals this satisfies}</why>
+  </scope>
+
+  <context>
+    <files>{relevant file paths from rakim's state}</files>
+    <patterns>{relevant patterns from sentinel}</patterns>
+    <constraints>{architectural constraints that apply}</constraints>
+    <existing>{curated interfaces the builder must match — type signatures, function signatures. No full file dumps. Keep under 20 lines.}</existing>
+    <design>{ONLY when design_enabled. JIT component brief: relevant token subset, interaction states, design constraints. Omit if no UI components.}</design>
+  </context>
+
+  <acceptance_criteria>
+    {specific, verifiable criteria for this chunk}
+  </acceptance_criteria>
+
+  <test_requirements>
+    {what behaviors to test — not how to test them}
+  </test_requirements>
+</assignment>
