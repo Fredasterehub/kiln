@@ -195,10 +195,23 @@ SendMessage(type:"message", recipient:"thoth", content:"ARCHIVE: step=step-5-bui
 
 Send the assignment to the builder. STOP. Wait for reply.
 
-The chunk closes on one of three signals:
+### Out-of-band wake recovery
+
+When you wake from something other than a teammate inbound message — typically a watchdog nudge, operator nudge, or async-rewake — do not immediately conclude that workers are dead. The benoit M9-C2 stall (2026-04-24) was caused by exactly this misread: the watchdog fired prematurely, the boss looked at an empty inbox, and concluded the duo had evaporated, when in fact the reviewer's verdict had already landed on disk via thoth's archive. The watchdog nudge text (Scope A, commit ee303d8) now tells you to check disk archives — this procedure is the boss-side contract that backs that instruction.
+
+1. Identify the in-flight `assignment_id` from your most recent assignment XML because verdict files are only authoritative for the assignment currently being coordinated.
+2. Read both candidate verdict paths via the Read tool: `.kiln/archive/milestone-{milestone_id}/chunk-{chunk_id}/review.md` (canonical archive — thoth files this on every reviewer ARCHIVE message) AND `.kiln/tmp/review.md` (transient stage — reviewer writes here before the ARCHIVE message, so it often lands first) because the disk channel may contain the verdict even when the inbound message is missing.
+3. If either file exists AND `verdict: APPROVED` AND `assignment_id:` matches the in-flight one: treat as `IMPLEMENTATION_APPROVED` because the reviewer has already completed the approval contract on disk. Proceed to Step 5 (update living docs).
+4. If either file exists AND `verdict: REJECTED` AND `assignment_id:` matches: relay issues to the builder per the existing REJECTED handling because the paired review has produced actionable fix feedback. Restart the fix-cycle from there.
+5. If neither file exists OR neither matches the in-flight `assignment_id`: this is genuine silence because no disk verdict can be tied to the current assignment. The cause is upstream — message dropped before send, or workers genuinely dead. Send `BLOCKED: out-of-band wake; no verdict on disk for assignment_id={X}; workers may be dead or upstream message dropped` to team-lead and STOP because team-lead owns respawn/escalation adjudication for platform-side uncertainty. Do NOT request `CYCLE_WORKERS` automatically because the operator may want to investigate the platform-side drop before paying for fresh duos.
+
+Verdict signals are dual-channel by contract (kiln-protocol § Worker Signals; team-protocol § Blocking Policy Rule 6). The reviewer's ARCHIVE-to-thoth precedes the IMPLEMENTATION_APPROVED-to-boss message, so the disk channel cannot lag the message channel. When the message is missing, disk is the canonical fallback — never silence.
+
+The chunk closes on one of four signals:
 - `IMPLEMENTATION_APPROVED: {summary}` from the **reviewer** — paired reviewer observed APPROVED and notified you directly (Wave 3: reviewer owns the success signal so a dead builder cannot drop the handoff). Green-light updating living docs.
 - `IMPLEMENTATION_BLOCKED: {blocker}` from the **builder** — tooling or technical blocker. Assess, re-scope, consult rakim if technical, or escalate.
 - `IMPLEMENTATION_REJECTED: {latest issues}` from the **builder** — 3 reject/fix cycles exhausted without APPROVED. Hard rejection: scope a fresh chunk targeting specific issues, or escalate to operator.
+- Out-of-band wake (watchdog nudge / async-rewake / operator nudge) → run § Out-of-band wake recovery; do NOT auto-respawn workers.
 
 If `IMPLEMENTATION_BLOCKED` is a tooling failure (codex exec, sandbox), escalate via team-lead. Do not authorise the builder to implement directly — the hook-enforced non-authorship rule keeps edits reviewable through the paired duo.
 
