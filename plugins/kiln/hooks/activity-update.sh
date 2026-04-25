@@ -10,8 +10,11 @@
 # Schema (authoritative — tests, watchdog, and deadlock-check.sh rely on it):
 #   last_activity_ts      unix epoch of this fire
 #   last_activity_source  event name, or event:tool (e.g. PostToolUse:SendMessage)
-#   active_teammates      { name: last_seen_ts } — SubagentStart adds,
-#                         SubagentStop/TeammateIdle remove, others untouched.
+#   active_teammates      { name: last_seen_ts } — SubagentStart adds.
+#                         Removed only by SubagentStop. TeammateIdle is a
+#                         heartbeat-only event — the teammate stays tracked
+#                         because dormant-waiting-for-message is not the same
+#                         as exited. Others untouched.
 #                         Key source varies by event: agent_type for
 #                         SubagentStart/Stop (confirmed in P1 spike + stop-guard),
 #                         teammate_name for TeammateIdle (P2 spike).
@@ -98,7 +101,7 @@ SOURCE="$EVENT"
       | (.nudge_count = (.nudge_count // 0))
       | if $event == "SubagentStart" and $teammate != "" then
           .active_teammates[$teammate] = ($ts | tonumber)
-        elif ($event == "SubagentStop" or $event == "TeammateIdle") and $teammate != "" then
+        elif $event == "SubagentStop" and $teammate != "" then
           del(.active_teammates[$teammate])
         else . end' \
      > "$TMP" 2>/dev/null \
