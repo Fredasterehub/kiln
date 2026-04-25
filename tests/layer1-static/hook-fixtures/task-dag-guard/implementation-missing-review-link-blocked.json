@@ -1,0 +1,1 @@
+{"hook_event_name":"TaskCompleted","category":"implementation","cwd":"/tmp/fixture","task_id":"task-implementation-missing-review-link","task_subject":"Complete auth implementation","task_description":"milestone_id: M1\nchunk_id: 2\nrole: builder\ntdd_evidence: .kiln/archive/milestone-1/chunk-2/tdd-evidence.md","team_name":"kiln-test","teammate_name":"krs-one"}

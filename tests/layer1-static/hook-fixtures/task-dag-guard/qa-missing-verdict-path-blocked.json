@@ -1,0 +1,1 @@
+{"hook_event_name":"TaskCompleted","category":"qa","cwd":"/tmp/fixture","task_id":"task-qa-missing-verdict-path","task_subject":"Complete milestone QA","task_description":"milestone_id: M1\nrole: qa\nall_chunk_tasks_resolved: yes\nqa_verdict_path: .kiln/tmp/nonexistent-qa.md","team_name":"kiln-test","teammate_name":"critic"}

@@ -1,0 +1,1 @@
+{"hook_event_name":"TaskCreated","cwd":"/tmp/fixture","task_id":"task-narration-review","task_subject":"Summarize auth output","task_description":"This task will review the output of the auth module and summarize findings.","team_name":"kiln-test","teammate_name":"krs-one"}

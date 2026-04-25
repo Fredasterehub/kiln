@@ -1,0 +1,7 @@
+=== STDOUT ===
+=== STDERR ===
+review completion must include an existing verdict_path
+=== EXIT ===
+2
+=== CONTEXT ===
+mock-pipeline

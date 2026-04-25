@@ -1,0 +1,1 @@
+{"hook_event_name":"TaskCreated","cwd":"/tmp/fixture","task_id":"task-narration-chunk","task_subject":"Process uploaded dataset","task_description":"Process each chunk of the uploaded dataset and emit progress events.","team_name":"kiln-test","teammate_name":"krs-one"}

@@ -1,0 +1,1 @@
+{"hook_event_name":"TaskCompleted","category":"review","cwd":"/tmp/fixture","task_id":"task-review-missing-verdict-path","task_subject":"Complete auth review","task_description":"milestone_id: M1\nchunk_id: 2\nrole: reviewer\nverdict_path: .kiln/tmp/nonexistent-review.md","team_name":"kiln-test","teammate_name":"critic"}

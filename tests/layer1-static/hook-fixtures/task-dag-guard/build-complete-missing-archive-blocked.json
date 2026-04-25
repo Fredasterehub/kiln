@@ -1,0 +1,1 @@
+{"hook_event_name":"TaskCompleted","category":"build_complete","cwd":"/tmp/fixture","task_id":"task-build-complete-missing-archive","task_subject":"Complete final build milestone","task_description":"milestone_id: final\nrole: boss\nopen_blocking_tasks: 0","team_name":"kiln-test","teammate_name":"krs-one"}

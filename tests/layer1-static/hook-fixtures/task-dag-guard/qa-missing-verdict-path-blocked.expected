@@ -1,0 +1,7 @@
+=== STDOUT ===
+=== STDERR ===
+milestone QA completion must include an existing qa_verdict_path
+=== EXIT ===
+2
+=== CONTEXT ===
+mock-pipeline

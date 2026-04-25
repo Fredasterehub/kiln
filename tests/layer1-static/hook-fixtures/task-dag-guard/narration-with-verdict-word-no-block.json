@@ -1,0 +1,1 @@
+{"hook_event_name":"TaskCreated","cwd":"/tmp/fixture","task_id":"task-narration-verdict","task_subject":"Summarize integration results","task_description":"After running tests, report the verdict of the integration suite.","team_name":"kiln-test","teammate_name":"krs-one"}
