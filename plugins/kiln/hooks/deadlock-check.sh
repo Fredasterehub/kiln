@@ -2,18 +2,22 @@
 # deadlock-check.sh — Detection rule + side effects for the watchdog loop
 #
 # Called every 60s by watchdog-loop.sh. Reads .kiln/tmp/activity.json,
-# applies the 4-part deadlock rule (§5.3 P2), and either nudges the
+# applies the 3-part deadlock rule (§5.3 P2), and either nudges the
 # engine or escalates to .kiln/DEADLOCK.flag after three failed
 # nudges. On escalation the script returns 1 so the caller breaks its
 # loop — watchdog-loop.sh treats exit 1 as "stop" and exit 0 as
 # "continue".
 #
-# Deadlock rule (all four required):
-#   active_teammates is empty
-#   AND now - last_activity_ts  > 300  (5 min idle)
+# Deadlock rule (all three required):
+#   now - last_activity_ts  > 300  (5 min idle)
 #   AND now - last_nudge_ts     > 600  (10 min debounce so three-nudge
 #                                       escalation isn't a 3-minute burst)
 #   AND pipeline_phase NOT IN { idle, awaiting_user, complete }
+#
+# We used to require empty active_teammates as a 4th condition, but
+# that conflated dormant-waiting-for-message with exited and produced
+# false-positives once A.1 kept dormant teammates in active_teammates
+# — idle > 300s + phase filter is now the load-bearing signal.
 #
 # Fail-open posture: missing activity.json, missing STATE.md, stage
 # complete, or any jq parse failure all route to exit 0. The watchdog
@@ -104,7 +108,6 @@ case "$PHASE" in
   idle|awaiting_user|complete) exit 0 ;;
 esac
 
-[[ "$ACTIVE_COUNT" -eq 0 ]] || exit 0
 [[ "$IDLE_SEC" -gt 300 ]] || exit 0
 [[ "$SINCE_NUDGE" -gt 600 ]] || exit 0
 
@@ -138,6 +141,8 @@ NUDGE_N=$(( NUDGE_COUNT + 1 ))
   CURRENT_EPOCH=$(jq -r '.epoch // 0' "$ACTIVITY" 2>/dev/null)
   [[ "$CURRENT_EPOCH" =~ ^[0-9]+$ ]] || exit 0
   [[ "$CURRENT_EPOCH" == "$INITIAL_EPOCH" ]] || exit 0
+
+  ACTIVE_LIST=$(jq -r '(.active_teammates // {}) | keys | if length == 0 then "none" else join(", ") end' "$ACTIVITY" 2>/dev/null || echo "unknown")
 
   # Advancing epoch alongside the counter update closes the remaining
   # duplicate-nudge window: a subsequent deadlock-check invocation
@@ -177,7 +182,7 @@ NUDGE_N=$(( NUDGE_COUNT + 1 ))
   # escalated at NUDGE_N=3 which cut the engine one nudge short of
   # the spec's "3 failed nudges → escalate" rule.
   if [[ "$NUDGE_N" -le 3 ]]; then
-    MSG="KILN DEADLOCK WATCHDOG: no pipeline progress for ${IDLE_SEC}s. Active teammates: none. Nudge #${NUDGE_N}. Re-read STATE.md and re-engage — SendMessage to the teammate who owes you a reply, or advance the pipeline stage."
+    MSG="KILN DEADLOCK WATCHDOG: idle_seconds=${IDLE_SEC}; last_activity_source=${LAST_SRC}; active_teammates=${ACTIVE_LIST}. Nudge #${NUDGE_N}. Action steps: Check inbox first. If empty and you expect a reply, check disk archives: .kiln/archive/milestone-{N}/chunk-{M}/review.md and .kiln/tmp/review.md. If still nothing, SendMessage to the teammate who owes a reply, or advance the pipeline stage."
     PENDING_TMP="$PENDING.$$.tmp"
     NUDGE_WRITTEN=0
     jq -n --arg ac "$MSG" --arg ts "$NOW" --arg n "$NUDGE_N" \
@@ -206,7 +211,7 @@ NUDGE_N=$(( NUDGE_COUNT + 1 ))
       {
         echo "$EXISTING_STATE"
         echo ""
-        echo "> [!WARNING] KILN DEADLOCK — no progress for ${IDLE_SEC}s. Active teammates: none. Last action: ${LAST_SRC}. Re-read STATE.md; if a teammate owes you a message, SendMessage to re-prompt; or advance the pipeline. Nudge #${NUDGE_N}."
+        echo "> [!WARNING] KILN DEADLOCK — idle_seconds=${IDLE_SEC}; last_activity_source=${LAST_SRC}; active_teammates=${ACTIVE_LIST}. Nudge #${NUDGE_N}. Action steps: Check inbox first. If empty and you expect a reply, check disk archives: .kiln/archive/milestone-{N}/chunk-{M}/review.md and .kiln/tmp/review.md. If still nothing, SendMessage to the teammate who owes a reply, or advance the pipeline stage."
       } > "$STATE_TMP" 2>/dev/null \
         && mv "$STATE_TMP" "$STATE" \
         || rm -f "$STATE_TMP"
