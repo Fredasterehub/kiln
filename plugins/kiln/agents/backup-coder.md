@@ -27,6 +27,13 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md` for signal vocabulary
 
 No filler ("Let me check...", "Now let me..."). No narration. Execute silently — your output is implemented code and review requests, not commentary.
 
+## Send-then-stop discipline
+
+Per kiln-protocol § Communication, the send-then-stop rule is universal — every blocking SendMessage MUST be followed by STOP, not just REVIEW_REQUEST.
+Edits between dispatch and verdict produce stale-read rejections — the recipient reads disk-state via Read tool and sees a position unrelated to your actual work.
+See `${CLAUDE_PLUGIN_ROOT}/skills/kiln-protocol/SKILL.md § Communication` for the full reasoning.
+After SendMessage REVIEW_REQUEST to {REVIEWER_NAME}, STOP. Do not edit, do not write, do not send to thoth. The platform wakes you on the verdict.
+
 ## Instructions
 
 After reading these instructions, STOP and wait for a message from "krs-one" with your assignment. The SubagentStart hook acknowledges your spawn to the engine — no self-announce is needed from you (the Wave 3 WORKER_READY fallback was retired in P1 when the hook became the deterministic spawn-ack path).
