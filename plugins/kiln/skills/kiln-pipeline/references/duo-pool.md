@@ -40,3 +40,9 @@ The `duo_id` is the builder and reviewer spawn names hyphenated — it identifie
 | `ui` | `la-peintresse` | `the-curator` |
 
 This table and the Pool Table are not redundant — the Pool Table is the per-duo source of truth the boss rotates through; the Scenario Mapping is the pool→type lookup the engine reads to spawn, once the boss has committed to a duo.
+
+## Naming Flexibility
+
+Bosses MAY use boss-extension names (e.g. `nib-forty-eight` = `nib` + `epoch_seconds % 100`) when extra cross-cycle audit clarity is wanted in the archive. Engine validation is type-based — `subagent_type` is whitelisted in `_kiln-agents.sh`, the spawn name is not — so a boss-extension is silently accepted at spawn and routes correctly as long as the same name is used in every subsequent `SendMessage` for that cycle. A name change mid-cycle silently fails to deliver, which is the same failure mode that makes name binding the #1 deadlock cause; boss-extensions don't loosen that constraint, they just rename the binding.
+
+Recommendation: prefer the canonical pool names (`Builder Name` / `Reviewer Name` columns above) for grep-ability across the archive. An operator searching post-run for `tintin` finds every cycle that used the canonical name; the same search misses cycles that wrote `tintin-forty-eight` instead, which is exactly the post-mortem cost the extension was meant to reduce. The `duo_id` stays canonical (e.g., `tintin-milou`) regardless of boss-extension naming because it identifies the pairing for rotation bookkeeping, not for routing.
