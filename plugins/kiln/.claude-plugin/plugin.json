@@ -1,9 +1,9 @@
 {
   "name": "kiln",
-  "version": "1.5.7",
-  "description": "Multi-modal software creation pipeline with milestone-scoped lifecycle and dynamic worker cycling. From idea to deployed code in 7 autonomous steps.",
+  "version": "2.0.0",
+  "description": "Multi-model software creation pipeline. From a conversation to deployed code in 7 steps — interactive brainstorm, then autonomous research, architecture, build, and validation orchestrated as native Claude Code workflows with Claude and GPT-5.",
   "author": {
-    "name": "Kilntop",
+    "name": "Fredastere",
     "url": "https://github.com/Fredasterehub"
   },
   "repository": "https://github.com/Fredasterehub/kiln",
@@ -12,6 +12,7 @@
     "pipeline",
     "software-creation",
     "agents",
+    "workflows",
     "multi-model",
     "orchestration"
   ]

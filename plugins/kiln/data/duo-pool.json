@@ -1,0 +1,25 @@
+{
+  "_doc": "Builder+reviewer name matrix for the build stage, ported from v1 (skills/kiln-pipeline/references/duo-pool.md + agents.json). The conductor reads this for spawn indicators and post-run grep-ability; build.js carries an inline display copy of the same pairs (workflow scripts cannot import JSON) — keep the two in sync. Builder family is ALWAYS different from reviewer family. Rotate deterministically off the milestone index (no Math.random/Date.now).",
+  "routing": {
+    "ui": { "pool": "ui", "builder_family": "opus", "reviewer_family": "codex", "note": "front-facing surface — Opus builds (la-peintresse), GPT-5.5/Codex reviews static correctness (the-curator); no test tribunal on a pure page" },
+    "mixed": { "pool": "ui", "builder_family": "opus", "reviewer_family": "codex", "note": "front-facing surface + tightly-coupled logic — Opus builds, Codex reviews; the milestone tribunal covers the logic when >1 slice" },
+    "logic": { "pool": "default", "builder_family": "codex", "reviewer_family": "opus", "note": "separable backend concern — GPT-5.5/Codex builds, Opus reviews + re-runs the suite" },
+    "logic_fallback": { "pool": "fallback", "builder_family": "sonnet", "reviewer_family": "opus", "note": "codex unavailable — Sonnet builds, Opus reviews (cross-context, the best split available without a second family)" }
+  },
+  "pools": {
+    "default": [
+      { "duo_id": "codex-sphinx", "builder": { "name": "codex", "type": "dial-a-coder", "alias": "Codex", "quote": "Talk is cheap — show me the code." }, "reviewer": { "name": "sphinx", "type": "critical-thinker", "alias": "Sphinx", "quote": "Answer correctly or do not pass." } },
+      { "duo_id": "tintin-milou", "builder": { "name": "tintin", "type": "dial-a-coder", "alias": "Codex", "quote": "First, solve the problem. Then, write the code." }, "reviewer": { "name": "milou", "type": "critical-thinker", "alias": "Sphinx", "quote": "The riddle has no mercy for the unprepared." } },
+      { "duo_id": "mario-luigi", "builder": { "name": "mario", "type": "dial-a-coder", "alias": "Codex", "quote": "Make it work, make it right, make it fast." }, "reviewer": { "name": "luigi", "type": "critical-thinker", "alias": "Sphinx", "quote": "Only the worthy may enter." } },
+      { "duo_id": "lucky-luke", "builder": { "name": "lucky", "type": "dial-a-coder", "alias": "Codex", "quote": "Simplicity is the soul of efficiency." }, "reviewer": { "name": "luke", "type": "critical-thinker", "alias": "Sphinx", "quote": "Even the Sphinx respects persistence." } }
+    ],
+    "fallback": [
+      { "duo_id": "kaneda-tetsuo", "builder": { "name": "kaneda", "type": "backup-coder", "alias": "Kaneda", "quote": "Scope in, execute, scope out." }, "reviewer": { "name": "tetsuo", "type": "critical-thinker", "alias": "Sphinx", "quote": "Answer correctly or do not pass." } },
+      { "duo_id": "athos-porthos", "builder": { "name": "athos", "type": "backup-coder", "alias": "Kaneda", "quote": "The assignment is the specification. Read it fully." }, "reviewer": { "name": "porthos", "type": "critical-thinker", "alias": "Sphinx", "quote": "Return and try again, mortal." } }
+    ],
+    "ui": [
+      { "duo_id": "clair-obscur", "builder": { "name": "clair", "type": "la-peintresse", "alias": "Clair", "quote": "Light reveals form. Code reveals intent." }, "reviewer": { "name": "obscur", "type": "the-curator", "alias": "Obscur", "quote": "The critical eye sees what the creative eye forgives." } },
+      { "duo_id": "yin-yang", "builder": { "name": "yin", "type": "la-peintresse", "alias": "Clair", "quote": "Every pixel is a decision. Make it count." }, "reviewer": { "name": "yang", "type": "the-curator", "alias": "Obscur", "quote": "Standards exist so beauty can be measured." } }
+    ]
+  }
+}

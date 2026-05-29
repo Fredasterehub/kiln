@@ -1,22 +1,27 @@
 ---
-name: kiln-fire
-description: Launch the Kiln software creation pipeline. Detects project state and auto-resumes.
-argument-hint: [no arguments needed]
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent, TeamCreate, TeamDelete, TaskCreate, TaskGet, TaskUpdate, TaskList, SendMessage
+description: Launch or resume the Kiln software-creation pipeline.
+argument-hint: "[optional: a one-line description of what to build]"
 ---
 
-# /kiln-fire
+The operator has invoked Kiln. Act as the pipeline conductor.
 
-1. **Working directory**: Use the current working directory. Alpha handles path selection during onboarding.
+**Bootstrap (do this first, before anything else):** the Skill-tool launch does not inject the
+skill body and `${CLAUDE_PLUGIN_ROOT}` is not expanded here, so resolve the plugin root yourself and
+read your own instructions. Run exactly this, then read the SKILL.md it points to and follow it:
 
-2. **State detection**: Check for `.kiln/STATE.md` in the working directory.
-   - **Found**:
-     1. Read `.kiln/STATE.md`.
-     2. Extract `stage` and `skill`.
-     3. If `stage` is missing or not one of `onboarding`, `brainstorm`, `research`, `architecture`, `build`, `validate`, `report`, `complete`, fail with: `Kiln resume failed: .kiln/STATE.md is missing a valid stage. Expected one of onboarding, brainstorm, research, architecture, build, validate, report, complete. Fix .kiln/STATE.md or remove it to start fresh.`
-     4. Set the active skill path to `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/SKILL.md`.
-     5. If the stored `skill` path is present and readable, use it.
-     6. If the stored `skill` path is missing or unreadable, try the active skill path instead. If that succeeds, treat it as a recovered path and update `.kiln/STATE.md` so `skill` points to the recovered path and `updated` reflects the recovery timestamp before continuing.
-     7. If neither the stored path nor the active skill path can be read, fail with: `Kiln resume failed: the stored skill path is stale or missing, and the active kiln-pipeline skill was not found at ${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/SKILL.md. Reinstall or repair the Kiln plugin, then retry /kiln-fire.`
-     8. Read the resolved skill file and resume from the current `stage`. The skill handles `roster` recovery from the active plugin root if the stored roster path is stale or missing.
-   - **Not found**: Fresh run. Read `${CLAUDE_PLUGIN_ROOT}/skills/kiln-pipeline/SKILL.md` and start from step 1.
+```bash
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
+if [ -z "$PLUGIN_ROOT" ] || [ ! -f "$PLUGIN_ROOT/skills/kiln-fire/SKILL.md" ]; then
+  for d in "$HOME"/.claude/plugins/cache/*/kiln/[0-9]*/; do
+    [ -f "$d/skills/kiln-fire/SKILL.md" ] && { PLUGIN_ROOT="${d%/}"; break; }
+  done
+fi
+echo "$PLUGIN_ROOT/skills/kiln-fire/SKILL.md"
+```
+
+Read that `SKILL.md`, treat `$PLUGIN_ROOT` as the value of every `${CLAUDE_PLUGIN_ROOT}` reference in
+it, and run the conductor state machine. Do **not** `find /` for plugin files. If the resolver prints
+an empty root, tell the operator the Kiln plugin is not installed/enabled and stop.
+
+If the operator passed any text after the command, treat it as their initial intent for the
+project and carry it into onboarding: $ARGUMENTS

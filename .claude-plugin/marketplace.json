@@ -1,21 +1,22 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "kiln",
-  "version": "1.5.6",
-  "description": "Multi-model software creation pipeline — 34 agents, 7 autonomous steps, Claude Code native",
+  "version": "2.0.0",
+  "description": "Multi-model software creation pipeline — native Claude Code, Dynamic Workflows, multi-model (Opus 4.8 + GPT-5 via Codex).",
   "owner": {
-    "name": "Kilntop"
+    "name": "Fredastere",
+    "url": "https://github.com/Fredasterehub"
   },
   "plugins": [
     {
       "name": "kiln",
-      "description": "Multi-model software creation pipeline. Orchestrates Opus 4.6 with optional Codex-backed GPT delegation through 7 steps: onboarding, brainstorm, research, architecture, build, validate, report.",
-      "version": "1.5.6",
+      "description": "One command turns a conversation into working, tested software. Native Claude Code Dynamic Workflows drive seven steps — onboarding, brainstorm, research, architecture, build, validate, report. Opus 4.8 reasons and reviews; GPT-5 (via Codex CLI) builds; Claude-only fallback when Codex isn't installed.",
+      "version": "2.0.0",
       "author": {
-        "name": "Kilntop"
+        "name": "Fredastere",
+        "url": "https://github.com/Fredasterehub"
       },
-      "source": "./plugins/kiln",
-      "category": "development"
+      "source": "./plugins/kiln"
     }
   ]
 }

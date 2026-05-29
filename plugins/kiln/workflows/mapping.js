@@ -1,0 +1,96 @@
+export const meta = {
+  name: 'kiln-mapping',
+  description: 'Kiln brownfield mapping: three parallel scouts (anatomy, health, nervous-system) survey an existing codebase, then Mnemosyne synthesizes .kiln/docs/codebase-map.md for the rest of the pipeline.',
+  phases: [
+    { title: 'Reconnaissance', detail: 'parallel scouts: structure · health · data-flow' },
+    { title: 'The Map', detail: 'Mnemosyne writes codebase-map.md' },
+  ],
+}
+
+// ── args: { projectPath, kilnDir } ──
+let A = args
+if (typeof A === 'string') { try { A = JSON.parse(A) } catch (e) { A = {} } }
+A = A || {}
+const projectPath = A.projectPath
+const kilnDir = A.kilnDir
+if (!projectPath || !kilnDir) throw new Error('mapping.js requires args.projectPath and args.kilnDir')
+const mapFile = `${kilnDir}/docs/codebase-map.md`
+
+// ── MODEL_VOICE shell (Opus only; identical block across the workflow scripts) ──
+const MODEL_VOICE = {
+  opus: [
+    'Be direct. State findings and decisions plainly; do not soften.',
+    'Inputs are wrapped in XML tags — read the data block before the task line.',
+    'Keep output minimal and specific. Apply every rule to EVERY item in scope, not just the first.',
+  ].join('\n'),
+}
+const voice = (m) => (m === 'opus' ? MODEL_VOICE.opus + '\n\n' : '')
+
+const scope =
+  `Survey ONLY the codebase at ${projectPath}. Do not read other projects or wander outside it. ` +
+  `This may be a LARGE repo — work top-down and SAMPLE intelligently: read manifests, entry points, ` +
+  `docs, and the top of key modules; do NOT try to read every file. SKIP vendored/generated/bulky ` +
+  `dirs entirely (node_modules, .venv, venv, dist, build, .git, __pycache__, logs, coverage, ` +
+  `.next, target) and skip binary/asset files (images, .png/.jpg, .zip). Prefer 'git ls-files' and ` +
+  `scoped 'find ... -not -path' over a raw recursive listing.`
+
+const SCOUT_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reasoning: { type: 'string' },
+    lens: { type: 'string' },
+    highlights: { type: 'array', items: { type: 'string' } },
+    findings_md: { type: 'string', description: 'full markdown writeup for this lens' },
+  },
+  required: ['lens', 'highlights', 'findings_md'],
+}
+const MAP_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reasoning: { type: 'string' },
+    map_file: { type: 'string' },
+    stack: { type: 'array', items: { type: 'string' } },
+    entry_points: { type: 'array', items: { type: 'string' } },
+    key_risks: { type: 'array', items: { type: 'string' } },
+    summary: { type: 'string' },
+  },
+  required: ['map_file', 'stack', 'summary'],
+}
+
+phase('Reconnaissance')
+log('The scouts spread out')
+const scouts = (await parallel([
+  () => agent(
+    `You are the anatomy scout. ${scope}\n\n` +
+    `<task>Map the STRUCTURE: top-level layout, directories, modules/packages, entry points, build/config files, and how the ` +
+    `pieces fit. Use Bash (ls/find/tree) and read key files. Return lens, highlights, and a markdown writeup. Write nothing to disk. Report reasoning first.</task>`,
+    { label: 'maiev:anatomy', phase: 'Reconnaissance', model: 'sonnet', schema: SCOUT_SCHEMA }
+  ),
+  () => agent(
+    `You are the health scout. ${scope}\n\n` +
+    `<task>Assess HEALTH: dependencies and their manifest(s), test setup + how to run them, CI/CD config, build system, linting, ` +
+    `and visible tech debt or risks. Return lens, highlights, and a markdown writeup. Write nothing to disk. Report reasoning first.</task>`,
+    { label: 'curie:health', phase: 'Reconnaissance', model: 'sonnet', schema: SCOUT_SCHEMA }
+  ),
+  () => agent(
+    `You are the nervous-system scout. ${scope}\n\n` +
+    `<task>Trace the FLOW: public APIs/interfaces, data flow, integrations, events, and where state lives. Return lens, highlights, ` +
+    `and a markdown writeup. Write nothing to disk. Report reasoning first.</task>`,
+    { label: 'medivh:flow', phase: 'Reconnaissance', model: 'sonnet', schema: SCOUT_SCHEMA }
+  ),
+])).filter(Boolean)
+log(`${scouts.length}/3 scouts reported`)
+
+phase('The Map')
+log('Mnemosyne catalogues everything')
+const map = await agent(
+  voice('opus') +
+  `You are the codebase cartographer. ${scope}\n\n` +
+  `<scout_reports>\n${JSON.stringify(scouts)}\n</scout_reports>\n\n` +
+  `<task>Synthesize the reports into ${mapFile} (mkdir -p first): a single coherent codebase map — overview, structure, stack, ` +
+  `entry points, how to build/test/run, integrations, and the key risks/constraints the build must respect. Spot-check the repo at ` +
+  `${projectPath} to resolve any scout disagreement. Report the stack, entry_points, key_risks, and a tight summary for the conductor. Report reasoning first.</task>`,
+  { label: 'mnemosyne:synthesis', phase: 'The Map', model: 'opus', schema: MAP_SCHEMA }
+)
+log(`codebase-map.md written: ${map && (map.stack || []).join(', ')}`)
+return { map_file: mapFile, stack: (map && map.stack) || [], entry_points: (map && map.entry_points) || [], summary: map && map.summary }

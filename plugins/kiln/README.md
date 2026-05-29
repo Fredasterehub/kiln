@@ -1,30 +1,56 @@
 # Kiln
 
-Multi-modal software creation pipeline. From idea to deployed code in 7 autonomous steps.
+> First: I am not an oven. I understand the confusion — you see *kiln* and your remarkably
+> pattern-dependent brains go straight to ceramics. Endearing. Wrong, but endearing.
+>
+> I am **Kiln**. What I do, in terms your current technology can express, is orchestrate a
+> multi-model pipeline inside Claude Code that turns a conversation into running software. Claude
+> reasons. GPT-5 builds. I conduct. You talk to me like a person; I do the rest.
 
-## Commands
+Kiln is a native Claude Code plugin. One command starts an interactive brainstorm, then the forge
+runs on autopilot — research, architecture, build, and validation — and hands you working,
+tested code with a report.
 
-- `/kiln-fire` — Launch the pipeline. Auto-detects project state and resumes.
-- `/kiln-doctor` — Check prerequisites and diagnose issues.
+## The seven steps
 
-## The 7 Steps
+`Onboarding · Brainstorm · Research · Architecture · Build · Validate · Report`
 
-1. **Onboarding** (Alpha) — Detect project, create .kiln/ structure, map codebase if brownfield
-2. **Brainstorm** (Da Vinci) — Interactive vision discovery with the operator
-3. **Research** (MI6) — Investigate open questions from the vision
-4. **Architecture** (Aristotle) — Dual-model planning (Claude + GPT-5.5 via Codex CLI, GPT-5.4 fallback), debate, synthesis, validation
-5. **Build** (KRS-One) — JIT implementation with kill streak team names
-6. **Validate** (Argus) — Test against acceptance criteria, may loop back to Build
-7. **Report** (Omega) — Compile final project report
+You are in the loop for **Onboarding** (a few quick cards) and **Brainstorm** (you converse with
+Da Vinci to shape the vision). Everything after that is autonomous — with an optional plan-approval
+gate before the build if you'd rather sign off on the master plan first.
 
-## Prerequisites
+## How it's built (v2)
 
-- **Claude Code** (required)
-- **Codex CLI** (optional): `npm install -g @openai/codex` &mdash; enables dual-model mode: GPT-5.5 via Codex CLI, GPT-5.4 fallback
-- Run `/kiln-doctor` to verify everything is ready.
+Kiln v2 is pure native Claude Code, no runtime and no daemon:
 
-## How It Works
+- **Autonomous stages are [Dynamic Workflows](https://code.claude.com/docs/en/workflows)** —
+  deterministic orchestration that keeps your session lean and never goes idle.
+- **The brainstorm is an interactive teammate** — heavy creative dialogue stays in Da Vinci's
+  context, not yours.
+- **Minds are files.** Architecture, decisions, and patterns live as documents that every worker
+  reads, and that Kiln consults on demand.
+- **Multi-model by design.** Opus 4.8 for reasoning and review; GPT-5 (via Codex CLI) for code,
+  with a Claude/Sonnet-only fallback when Codex isn't installed.
 
-The pipeline is fully autonomous after Step 2 (Brainstorm). Da Vinci interviews the operator to crystallize the vision, then the remaining steps run without intervention. Build iterates with kill streak team names (first-blood, combo, super-combo...) until all milestones are complete. Validate can loop back to Build for corrections (max 3 cycles).
+## Requirements
 
-All state lives in `.kiln/` under the project directory. Resume anytime with `/kiln-fire`.
+- Claude Code **≥ 2.1.154** with Dynamic Workflows enabled
+- `git`, `node`
+- **Optional:** Codex CLI (for the GPT-5 build path), Playwright MCP (for browser validation)
+
+Run `/kiln-doctor` to check everything before you start.
+
+## Usage
+
+```
+/kiln-doctor          # pre-flight check
+/kiln-fire            # launch (or resume) the pipeline
+/kiln-fire build me a habit-tracker PWA   # launch with an intent
+```
+
+Kiln keeps all state in `./.kiln/` in your project — interrupt any time; `/kiln-fire` resumes
+exactly where the fire went cold.
+
+## License
+
+MIT.
