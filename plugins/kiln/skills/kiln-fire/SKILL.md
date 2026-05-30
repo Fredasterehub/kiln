@@ -126,8 +126,11 @@ surface and onboarding is cheap. Detect first, then confirm.
      Sets `qa_tier`.
    - **Stack hint** *(optional)* — let them steer language/framework, or `Let Kiln decide`.
 4. **Brownfield only:** run the mapping workflow to understand the existing code before brainstorm:
-   `Workflow({scriptPath: "$PLUGIN_ROOT/workflows/mapping.js", args: {projectPath: "<abs>"}})`.
-   It returns a structured map; write it to `.kiln/docs/codebase-map.md`.
+   `Workflow({scriptPath: "$PLUGIN_ROOT/workflows/mapping.js", args: {projectPath: "<abs>", kilnDir: "<abs>/.kiln"}})`.
+   For brownfield the `project_path` is the existing codebase dir, so both args are known here. The
+   workflow **writes the map itself** to `<abs>/.kiln/docs/codebase-map.md` (it `mkdir -p`s the dir)
+   and returns a structured summary (`map_file`, `stack`, `entry_points`, `summary`) — you just read
+   that file for the brief; do not write it yourself.
 5. **Resolve `project_path` (absolute) and write state.** Determine the project directory:
    - If the session cwd *is* the project (operator launched inside it, or it's an empty dir they want
      to build in), `project_path` = the absolute cwd.
