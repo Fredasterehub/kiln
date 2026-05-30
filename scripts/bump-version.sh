@@ -14,11 +14,15 @@ jq --arg v "$VERSION" '.version = $v' "$ROOT/plugins/kiln/.claude-plugin/plugin.
 jq --arg v "$VERSION" '.version = $v | .plugins[0].version = $v' "$ROOT/.claude-plugin/marketplace.json" > /tmp/kiln_marketplace.json \
   && mv /tmp/kiln_marketplace.json "$ROOT/.claude-plugin/marketplace.json"
 
-# 3. SKILL.md frontmatter
-sed "s/^version: .*/version: $VERSION/" "$ROOT/plugins/kiln/skills/kiln-pipeline/SKILL.md" > /tmp/kiln_skill.md \
-  && mv /tmp/kiln_skill.md "$ROOT/plugins/kiln/skills/kiln-pipeline/SKILL.md"
+# 3. Assert the three version fields agree after the writes.
+PLUGIN_VER="$(jq -r .version "$ROOT/plugins/kiln/.claude-plugin/plugin.json")"
+MKT_VER="$(jq -r .version "$ROOT/.claude-plugin/marketplace.json")"
+MKT_PLUGIN_VER="$(jq -r '.plugins[0].version' "$ROOT/.claude-plugin/marketplace.json")"
+if [[ "$PLUGIN_VER" != "$VERSION" || "$MKT_VER" != "$VERSION" || "$MKT_PLUGIN_VER" != "$VERSION" ]]; then
+  echo "Version drift after bump: plugin.json=$PLUGIN_VER marketplace.version=$MKT_VER marketplace.plugins[0].version=$MKT_PLUGIN_VER (expected $VERSION)" >&2
+  exit 1
+fi
 
 echo "Bumped to $VERSION in:"
 echo "  plugins/kiln/.claude-plugin/plugin.json"
 echo "  .claude-plugin/marketplace.json"
-echo "  plugins/kiln/skills/kiln-pipeline/SKILL.md"

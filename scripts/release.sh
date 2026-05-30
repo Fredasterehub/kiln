@@ -71,8 +71,8 @@ printf "%b\n" "${DIM}Checking preconditions...${RESET}"
 
 print_command "git rev-parse --abbrev-ref HEAD"
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-if [[ "$CURRENT_BRANCH" != "main" ]] && [[ "$CURRENT_BRANCH" != "v9" ]]; then
-  fail "Must release from main or v9. Current branch: ${CURRENT_BRANCH}"
+if [[ "$CURRENT_BRANCH" != "main" ]]; then
+  fail "Must release from main. Current branch: ${CURRENT_BRANCH}"
 fi
 printf "  ${GREEN}✓${RESET} Current branch: %s\n" "$CURRENT_BRANCH"
 
@@ -100,17 +100,22 @@ if ! gh auth status >/dev/null 2>&1; then
 fi
 printf "  ${GREEN}✓${RESET} GitHub CLI authenticated\n"
 
+print_command "./scripts/validate-release.sh"
+if ! ./scripts/validate-release.sh; then
+  fail "Pre-release gate failed. See output above."
+fi
+printf "  ${GREEN}✓${RESET} Pre-release gate passed\n"
+
 printf "%b\n" "\n${DIM}Running release flow...${RESET}"
 
 print_command "./scripts/bump-version.sh \"$VERSION\""
 ./scripts/bump-version.sh "$VERSION"
 printf "  ${GREEN}✓${RESET} Version files updated\n"
 
-print_command "git add plugins/kiln/.claude-plugin/plugin.json .claude-plugin/marketplace.json plugins/kiln/skills/kiln-pipeline/SKILL.md"
+print_command "git add plugins/kiln/.claude-plugin/plugin.json .claude-plugin/marketplace.json"
 git add \
   plugins/kiln/.claude-plugin/plugin.json \
-  .claude-plugin/marketplace.json \
-  plugins/kiln/skills/kiln-pipeline/SKILL.md
+  .claude-plugin/marketplace.json
 printf "  ${GREEN}✓${RESET} Staged release files\n"
 
 print_command "git commit -m \"release: ${TAG_NAME} — ${DESCRIPTION}\""
@@ -135,14 +140,13 @@ if ! git ls-remote --tags --exit-code origin "refs/tags/${TAG_NAME}" >/dev/null;
 fi
 printf "  ${GREEN}✓${RESET} Verified tag on origin: %s\n" "$TAG_NAME"
 
-if [[ "$CURRENT_BRANCH" == "main" ]] && [[ -f "/DEV/kiln/.kiln-dev/sunset-window.flag" ]]; then
-  print_command "git push origin main:v9"
-  git push origin main:v9
-  printf "  ${GREEN}✓${RESET} Sunset dual-push completed: main -> v9\n"
+if [[ -f "$ROOT/.kiln-dev/RELEASE_NOTES.md" ]]; then
+  print_command "gh release create \"${TAG_NAME}\" --title \"${TAG_NAME} — ${DESCRIPTION}\" --notes-file .kiln-dev/RELEASE_NOTES.md --latest --verify-tag"
+  RELEASE_URL="$(gh release create "${TAG_NAME}" --title "${TAG_NAME} — ${DESCRIPTION}" --notes-file .kiln-dev/RELEASE_NOTES.md --latest --verify-tag)"
+else
+  print_command "gh release create \"${TAG_NAME}\" --title \"${TAG_NAME} — ${DESCRIPTION}\" --generate-notes --latest --verify-tag"
+  RELEASE_URL="$(gh release create "${TAG_NAME}" --title "${TAG_NAME} — ${DESCRIPTION}" --generate-notes --latest --verify-tag)"
 fi
-
-print_command "gh release create \"${TAG_NAME}\" --notes \"${DESCRIPTION}\""
-RELEASE_URL="$(gh release create "${TAG_NAME}" --notes "${DESCRIPTION}")"
 printf "  ${GREEN}✓${RESET} Created GitHub release\n"
 
 print_command "git rev-parse HEAD"

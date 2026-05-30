@@ -29,13 +29,12 @@ else
   exit 1
 fi
 
-# 2. jq (Critical for hooks)
+# 2. jq (optional — handy for release tooling, not required at runtime)
 if command -v jq &>/dev/null; then
   printf "  ${GREEN}✓${RESET} jq\n"
 else
-  printf "  ${RED}✗${RESET} jq — required for pipeline hooks\n"
+  printf "  ${YELLOW}○${RESET} jq not found — optional; install for release tooling\n"
   printf "    ${DIM}Install via: sudo apt install jq / brew install jq${RESET}\n"
-  exit 1
 fi
 
 # 3. Git config (Crucial for builders)
@@ -46,49 +45,12 @@ else
   printf "    ${DIM}Run: git config --global user.name \"Your Name\" && git config --global user.email \"you@example.com\"${RESET}\n"
 fi
 
-# 4. uv/uvx (Required for Fetch MCP)
-if command -v uvx &>/dev/null; then
-  printf "  ${GREEN}✓${RESET} uvx (Fetch MCP server enabled)\n"
-else
-  printf "  ${YELLOW}○${RESET} uvx not found — Fetch MCP unavailable, field agents will use WebSearch only\n"
-  printf "    ${DIM}Install uv: curl -LsSf https://astral.sh/uv/install.sh | sh${RESET}\n"
-fi
-
-# 5. Codex CLI (Optional)
+# 4. Codex CLI (Optional)
 if command -v codex &>/dev/null; then
-  printf "  ${GREEN}✓${RESET} Codex CLI (GPT-5.4 delegation enabled)\n"
+  printf "  ${GREEN}✓${RESET} Codex CLI (GPT-5 (Codex) build path enabled)\n"
 else
   printf "  ${YELLOW}○${RESET} Codex CLI not found — Claude-only fallback enabled\n"
   printf "    ${DIM}For dual-model mode: npm i -g @openai/codex${RESET}\n"
-fi
-
-MKT="${HOME}/.claude/plugins/marketplaces/kiln"
-if [[ -d "$MKT" ]]; then
-  if git -C "$MKT" rev-parse --git-dir >/dev/null 2>&1; then
-    BRANCH="$(git -C "$MKT" rev-parse --abbrev-ref HEAD 2>/dev/null)" || BRANCH=""
-    if [[ "$BRANCH" == "v9" ]]; then
-      printf "\n${YELLOW}○${RESET} Existing install detected on deprecated 'v9' branch. Repairing...\n"
-      printf "  ${DIM}git remote set-branches origin main...${RESET}\n"
-      git -C "${MKT}" remote set-branches origin main
-      printf "  ${DIM}git fetch origin...${RESET}\n"
-      git -C "${MKT}" fetch origin
-      printf "  ${DIM}git checkout main...${RESET}\n"
-      git -C "${MKT}" checkout main
-      printf "  ${DIM}git branch -D v9...${RESET}\n"
-      git -C "${MKT}" branch -D v9
-      BRANCH_NOW="$(git -C "$MKT" rev-parse --abbrev-ref HEAD 2>/dev/null)" || BRANCH_NOW=""
-      if [[ "$BRANCH_NOW" != "main" ]]; then
-        printf "  ${RED}✗${RESET} Repair failed — expected branch 'main', got '%s'\n" "$BRANCH_NOW"
-        exit 1
-      fi
-      printf "  ${GREEN}✓${RESET} Aligned to main — existing install repaired\n"
-      printf "\n${GOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
-      printf "${TERRACOTTA} Repaired.${RESET}\n\n"
-      printf "  ${DIM}Diagnose:${RESET}  claude then ${TERRACOTTA}/kiln-doctor${RESET}\n"
-      printf "\n${GOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
-      exit 0
-    fi
-  fi
 fi
 
 # Register marketplace + install plugin via native Claude Code system
