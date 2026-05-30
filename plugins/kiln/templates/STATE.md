@@ -13,7 +13,6 @@ Keep the field names and markdown bullet format unchanged.
 - **mode**: interactive
 - **plan_approval**: gated
 - **testing_rigor**: standard
-- **qa_tier**: standard
 - **last_completed_stage**: none
 - **next_action**: Complete onboarding and write the first durable Kiln artifacts.
 - **started_at**: pending

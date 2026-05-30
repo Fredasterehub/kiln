@@ -113,17 +113,12 @@ surface and onboarding is cheap. Detect first, then confirm.
    (manifests, source, git history), it is **brownfield**; if empty/new, **greenfield**.
 2. **Capture intent.** If the operator passed a one-liner with the command, use it; otherwise ask
    (free text) what they want to build.
-3. **Ask the setup cards** (AskUserQuestion — one round, max 4 questions). Project type is auto-detected
-   in step 1; only make it a card if detection is genuinely ambiguous. Otherwise ask these four:
+3. **Ask the setup cards** (AskUserQuestion — one round). Project type is auto-detected
+   in step 1; only make it a card if detection is genuinely ambiguous. Otherwise ask:
    - **Plan approval** — `Gated` (you pause for operator approval of the master plan before build)
      vs `Autonomous` (run straight through). Sets `plan_approval`.
    - **Testing rigor** — `TDD (tests first, full)` / `Standard (tests alongside)` /
      `Minimal (smoke only)`. Sets `testing_rigor` (drives how the build writes tests).
-   - **QA tier** — how heavy the per-milestone QA pass is (this is the biggest cost lever):
-     `Light` (a single judge), `Standard` (one analyst → judge), `Full tribunal` (cross-model
-     Ken/Opus ∥ Ryu/Codex → Denzel → Judge Dredd). Default `Standard`; reserve `Full` for when the
-     operator wants maximum scrutiny — it is several agents *per milestone per correction cycle*.
-     Sets `qa_tier`.
    - **Stack hint** *(optional)* — let them steer language/framework, or `Let Kiln decide`.
 4. **Brownfield only:** run the mapping workflow to understand the existing code before brainstorm:
    `Workflow({scriptPath: "$PLUGIN_ROOT/workflows/mapping.js", args: {projectPath: "<abs>", kilnDir: "<abs>/.kiln"}})`.
@@ -142,11 +137,11 @@ surface and onboarding is cheap. Detect first, then confirm.
 
    Create `<project_path>/.kiln/` and `<project_path>/.kiln/docs/`. Copy
    `$PLUGIN_ROOT/templates/STATE.md` to `<project_path>/.kiln/STATE.md` and fill:
-   `stage: brainstorm`, `mode`, `plan_approval`, `testing_rigor`, `qa_tier`, `project_name`,
+   `stage: brainstorm`, `mode`, `plan_approval`, `testing_rigor`, `project_name`,
    `project_path` (absolute), `project_type`, `greenfield`, `started_at`/`updated_at` (real ISO-8601 —
    the template ships `pending` sentinels, never leave them), `last_completed_stage: onboarding`,
    `next_action`. Write `<project_path>/.kiln/docs/project-brief.md` (intent, type, constraints,
-   testing rigor, qa tier, stack hint). Stamp `step_onboarding_completed_at`.
+   testing rigor, stack hint). Stamp `step_onboarding_completed_at`.
 6. **From here on, resolve every `.kiln/` path and every workflow `projectPath`/`kilnDir` arg against
    the absolute `project_path`** — not against `./` (see *Path discipline*). Render the Tier-1 banner
    transitioning to **Brainstorm** and proceed.
@@ -193,10 +188,22 @@ artifact summary it wrote to `.kiln/`, update STATE, render the transition, adva
 | Build | `workflows/build.js` | master-plan.md | source code, living docs, tests |
 | Validate | `workflows/validate.js` | master-plan.md, built app | `.kiln/validation/report.md` |
 
-Launch pattern: `Workflow({scriptPath: "$PLUGIN_ROOT/workflows/<stage>.js", args: {kilnDir: "<abs>/.kiln", projectPath: "<abs>", mode, testingRigor, qaTier, codexAvailable}})`.
-Pass the absolute `$PLUGIN_ROOT`-resolved paths, the operator's `testing_rigor` and `qa_tier` from
-STATE, and `codexAvailable` from the kiln-doctor probe (drives the Codex-vs-Sonnet paths). `build.js`
-honors `qaTier` (light/standard/full) and `milestoneLimit` (omit in production = all milestones).
+Base launch pattern: `Workflow({scriptPath: "$PLUGIN_ROOT/workflows/<stage>.js", args: {kilnDir: "<abs>/.kiln", projectPath: "<abs>", testingRigor, codexAvailable}})`.
+Pass the absolute `$PLUGIN_ROOT`-resolved paths, the operator's `testing_rigor` from STATE, and
+`codexAvailable` from the kiln-doctor probe (drives the Codex-vs-Sonnet paths). `build.js` honors
+`testingRigor` (tdd/standard/minimal). Each stage adds the args it actually reads:
+- **Research** also takes `mode`.
+- **Build** also takes `milestoneLimit` (omit in production = all milestones), `uiBuild`, and
+  `pluginRoot`. **`uiBuild` defaults `false`** — set it `true` only for a genuinely pure-UI/static
+  deliverable (no backend). `uiBuild===true` forces build.js's `surfaceOf()` to route *every*
+  milestone to the UI builder, overriding each milestone's own `surface` tag, so a normal app left
+  at `false` lets architecture's per-milestone `surface` route backend/logic milestones correctly.
+  `pluginRoot` is the same absolute `$PLUGIN_ROOT` you resolved in §0 — a launched Workflow cannot
+  see `${CLAUDE_PLUGIN_ROOT}` (it is unset there), so build.js workers need the resolved path passed
+  in to Read plugin reference files by absolute path.
+- **Validate** also takes `designPresent` — `true` if the architecture stage wrote a `design/`
+  directory, else `false`.
+
 Validate failures feed corrections back to Build while `correction_cycle < 3`, then escalate to the
 operator. Use the matching transition lines from `brand.md` for each event.
 
