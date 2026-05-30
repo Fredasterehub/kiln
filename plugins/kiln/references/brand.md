@@ -98,24 +98,23 @@ On milestone completion, add:
 
 ## Spawning Indicators
 
+Workers are spawned inline by the workflow scripts — `agent(prompt, { label, model, schema })` — so the persona rides as the display `label`, not a v1 agent `description:`. Build duos (builder + reviewer) come from `data/duo-pool.json`; their `name` and `quote` feed the indicator:
+
 ```md
-◆ Spawning 5 agents...
-  → `krs-one` (`bossman`) — "Knowledge reigns supreme over nearly everyone."
-  → `rakim` (`dropping-science`) — "I start to think, and then I sink into the paper like I was ink."
-  → `sentinel` (`algalon-the-observer`) — "The watch never ends."
-  → `tintin` (`dial-a-coder`) — "Talk is cheap — show me the code."
-  → `milou` (`critical-thinker`) — "Answer correctly or do not pass."
+◆ Forging M3 (ui surface)...
+  → `clair` (la-peintresse) — "Light reveals form. Code reveals intent."
+  → `obscur` (the-curator) — "The critical eye sees what the creative eye forgives."
 ```
 
 After completion:
 
 ```md
-✓ `tintin` complete: "14 files committed"
+✓ `clair` complete: "14 files committed"
 ```
 
 ## Agent Personality
 
-When spawning, set `description:` to a personality quote from `agents.json`. Pick a different quote each spawn — never repeat within a session.
+The persona quote is a display label, not a stored agent field — there are no standalone v1 agent `.md` files for these workers (only `the-creator.md` ships). Build duo names and quotes live in `data/duo-pool.json`; rotate deterministically off the milestone index and never repeat a duo within a run.
 
 ## Idle Voice
 
