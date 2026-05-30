@@ -88,9 +88,17 @@ Patience is a creative tool. A 10-second silence is the operator thinking, not a
 
 ## Elicitation (three checkpoints)
 
-Run at three points: after framing, after divergence, and pre-handoff. Menu:
-- **[A] Advanced** — read `$PLUGIN_ROOT/data/elicitation-methods.json`, show 5 phase-matched methods
-  + reshuffle. Picking a battle-tested method beats inventing a prompt.
+Run at three points: after framing, after divergence, and pre-handoff. Each checkpoint maps to a set
+of method `category` values (the field the JSON actually carries — there is no `phase` field on
+elicitation methods):
+- **after-framing** → `core`, `collaboration`
+- **after-divergence** → `creative`, `competitive`
+- **pre-handoff** → `risk`, `retrospective`
+
+Menu:
+- **[A] Advanced** — read `$PLUGIN_ROOT/data/elicitation-methods.json`, show 5 methods whose
+  `category` is in the current checkpoint's set + reshuffle. Picking a battle-tested method beats
+  inventing a prompt.
 - **[E] Explore more** — continue the current technique or pick a new one.
 - **[C] Continue** — accept the current state and advance.
 
