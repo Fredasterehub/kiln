@@ -187,6 +187,7 @@ artifact summary it wrote to `.kiln/`, update STATE, render the transition, adva
 | Architecture | `workflows/architecture.js` | research.md, VISION.md | `.kiln/master-plan.md`, architecture docs |
 | Build | `workflows/build.js` | master-plan.md | source code, living docs, tests |
 | Validate | `workflows/validate.js` | master-plan.md, built app | `.kiln/validation/report.md` |
+| Report | `workflows/report.js` | all .kiln artifacts + built project | `.kiln/REPORT.md` |
 
 Base launch pattern: `Workflow({scriptPath: "$PLUGIN_ROOT/workflows/<stage>.js", args: {kilnDir: "<abs>/.kiln", projectPath: "<abs>", testingRigor, codexAvailable}})`.
 Pass the absolute `$PLUGIN_ROOT`-resolved paths, the operator's `testing_rigor` from STATE, and
@@ -232,11 +233,12 @@ The build duo names come from `data/duo-pool.json` if you want to name them in t
   (`uiBuild`) handles anything from a one-pager to a full frontend — the milestone *count* scales with
   real scope, not ceremony.
 
-## Stage: REPORT
+## Stage: REPORT (autonomous, Workflow)
 
-Read all `.kiln/` artifacts; have Omega (`kiln:the-end-of-the-beginning`) compile
-`./.kiln/REPORT.md` in Kiln's voice. Render *"The forge cools. The work remains."* and present the
-delivery summary.
+Launch `report.js` like the other autonomous stages — it reads all `.kiln/` artifacts plus the built
+project and writes `./.kiln/REPORT.md` in Kiln's voice (the Omega persona lives inside the workflow):
+`Workflow({scriptPath: "$PLUGIN_ROOT/workflows/report.js", args: {kilnDir: "<abs>/.kiln", projectPath: "<abs>"}})`.
+Wait for completion, render *"The forge cools. The work remains."* and present the delivery summary.
 
 ## STATE.md discipline
 
