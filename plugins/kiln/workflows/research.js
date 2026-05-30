@@ -142,7 +142,7 @@ const investigated = await pipeline(
       `<constraints>\n${webHowto}\n</constraints>\n\n` +
       `<task>Return a finding: a 2-4 sentence summary, a confidence 0-1, at least ${MIN_SOURCES} sources (title + real URL), ` +
       `at least ${MIN_QUOTES} verbatim quote, and findings_md (a complete markdown writeup). Write nothing to disk — return the data only. Report reasoning first.</task>`,
-      { label: `${codename(i)}:field:${t.slug}`, phase: 'Field Work', schema: FIND_SCHEMA }
+      { label: `${codename(i)}:field:${t.slug}`, phase: 'Field Work', model: 'sonnet', schema: FIND_SCHEMA }
     )
   },
   // stage 2 — validate, and revise once if below the firewall bar
@@ -155,7 +155,7 @@ const investigated = await pipeline(
       `<prior_attempt>\n${JSON.stringify(find)}\n</prior_attempt>\n\n<constraints>\n${webHowto}\n</constraints>\n\n` +
       `<task>Re-investigate harder, find more/better sources, and meet the bar. If the topic genuinely cannot clear the ` +
       `bar, return your best finding with an honest confidence. Report reasoning first.</task>`,
-      { label: `${codename(i)}:field-revise:${t.slug}`, phase: 'Field Work', schema: FIND_SCHEMA }
+      { label: `${codename(i)}:field-revise:${t.slug}`, phase: 'Field Work', model: 'sonnet', schema: FIND_SCHEMA }
     ).then((rev) => rev || find)
   }
 )

@@ -270,6 +270,7 @@ log(`master-plan.md: ${synth && synth.milestone_count} milestone(s) [${(synth &&
 phase('Athena Weighs')
 log(`${spin('validate', 0)}`)
 let verdict = null
+// validationRounds counts revisions, not loop iterations: the inclusive `<=` runs up to validationRounds+1 athena passes / validationRounds plato revisions.
 for (let round = 0; round <= validationRounds; round++) {
   const val = await agent(
     voice('opus') +

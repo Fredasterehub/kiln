@@ -33,7 +33,7 @@ const REPORT_SCHEMA = {
     delivered: { type: 'array', items: { type: 'string' } },
     outstanding: { type: 'array', items: { type: 'string' } },
   },
-  required: ['report_file', 'headline'],
+  required: ['reasoning', 'report_file', 'headline'],
 }
 
 phase('The Final Word')
