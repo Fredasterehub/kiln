@@ -38,17 +38,19 @@ command -v codex >/dev/null && codex --version 2>&1 | head -1 || echo "codex: ab
 echo "── git identity ──"
 echo "name=$(git config user.name 2>/dev/null) email=$(git config user.email 2>/dev/null)"
 echo "── kiln data files ──"
-for f in agents.json brainstorming-techniques.json elicitation-methods.json lore.json spinner-verbs.json; do
+for f in agents.json brainstorming-techniques.json duo-pool.json elicitation-methods.json lore.json spinner-verbs.json; do
   [ -f "$PLUGIN_ROOT/data/$f" ] && echo "OK $f" || echo "MISSING(FAIL) $f"; done
 echo "── existing run? ──"
 [ -f ./.kiln/STATE.md ] && grep -E '^\- \*\*(stage|mode|plan_approval|build_iteration|correction_cycle)\*\*' ./.kiln/STATE.md || echo "no .kiln/STATE.md here (fresh start)"
 echo "── playwright mcp (optional → browser validation degrades to static) ──"
 grep -rl playwright ~/.claude/settings.json ~/.claude/plugins 2>/dev/null | head -1 || echo "playwright: not detected"
+echo "── web tool (optional → research sourcing firewall degrades without it) ──"
+grep -rl brave-search ~/.claude/settings.json ~/.claude/plugins 2>/dev/null | head -1 || echo "web tool: not detected"
 ```
 
 Interpretation rules:
 - **BLOCKED** if: Claude Code < 2.1.154, Dynamic Workflows disabled, or any FAIL (bash/git/node missing, or a Kiln data file missing).
-- **READY (degraded)** if: Codex CLI absent (note Sonnet-only build path), or Playwright absent (note static-only browser validation), or git identity unset, or python3/jq missing.
+- **READY (degraded)** if: Codex CLI absent (note Sonnet-only build path), or Playwright absent (note static-only browser validation), or no web tool detected (note research sourcing firewall degrades), or git identity unset, or python3/jq missing.
 - **READY** otherwise.
 - If a Kiln run is in progress (`.kiln/STATE.md` present), report the current `stage`,
   `plan_approval`, and `build_iteration` so the operator knows resume will pick up there.
