@@ -1,8 +1,0 @@
-=== STDOUT_CONTAINS ===
-"permissionDecision":"deny"
-STOP. You are the validator
-=== STDERR ===
-=== EXIT ===
-0
-=== CONTEXT ===
-mock-pipeline

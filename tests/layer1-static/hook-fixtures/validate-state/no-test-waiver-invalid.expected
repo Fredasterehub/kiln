@@ -1,7 +1,0 @@
-=== STDOUT_CONTAINS ===
-non-testable chunks require a substantive `no_test_waiver_reason`
-=== STDERR ===
-=== EXIT ===
-0
-=== CONTEXT ===
-mock-pipeline

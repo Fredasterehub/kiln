@@ -1,7 +1,0 @@
-=== STDOUT_CONTAINS ===
-assignment XML missing substantive `<head_sha>`
-=== STDERR ===
-=== EXIT ===
-0
-=== CONTEXT ===
-mock-pipeline

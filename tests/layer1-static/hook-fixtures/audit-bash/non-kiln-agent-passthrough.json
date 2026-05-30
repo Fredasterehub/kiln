@@ -1,1 +1,0 @@
-{"tool_name": "Bash", "agent_type": "Explore", "tool_input": {"command": "echo hi > /tmp/x"}}

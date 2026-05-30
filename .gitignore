@@ -32,10 +32,8 @@ plan_v1.md
 KILNDEV-MIGRATION.md
 phase3_potentiel.md
 
-# Local dev agents (not part of plugin) — broad rule covers .claude/agents/_dev/
-.claude/agents/
-.claude/settings.local.json
-.claude/scheduled_tasks.lock
+# Local dev agents + IDE state (nothing under .claude/ ships)
+.claude/
 
 # Internal dev working docs (not shipped)
 /SIMPLIFY-v1.4.0.md
@@ -56,3 +54,13 @@ state/
 # Local workstation markers (not shipped)
 /.codex
 /AGENTS.md
+
+# Dev artifacts and untrack-and-keep assets (v2.0.1 repo hygiene)
+brainstorm/
+run-data/
+# Dead v1 test harness — untracked, kept on disk as seed for the v2 harness
+tests/
+# Stale v1 docs assets — untracked, kept on disk
+docs/v7.html
+docs/kiln-pipeline.png
+docs/kiln-planning.png

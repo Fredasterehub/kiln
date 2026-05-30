@@ -1,7 +1,0 @@
-=== STDOUT ===
-=== STDERR ===
-critical tasks must include milestone_id
-=== EXIT ===
-2
-=== CONTEXT ===
-mock-pipeline

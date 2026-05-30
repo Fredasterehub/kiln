@@ -1,9 +1,0 @@
-=== STDOUT_CONTAINS ===
-hookSpecificOutput
-hookEventName
-additionalContext
-DEADLOCK WARNING
-=== EXIT ===
-0
-=== CONTEXT ===
-mock-pipeline
