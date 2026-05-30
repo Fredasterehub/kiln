@@ -22,6 +22,9 @@ const testingRigor = ['tdd', 'standard', 'minimal'].includes(String(A.testingRig
 const milestoneLimit = typeof A.milestoneLimit === 'number' ? A.milestoneLimit : Infinity
 // uiBuild forces every milestone onto the ui surface (Opus builds, Codex reviews) — an optional override.
 const uiBuild = A.uiBuild === true
+// pluginRoot is the conductor-resolved absolute $PLUGIN_ROOT (a launched Workflow can't see ${CLAUDE_PLUGIN_ROOT}).
+// Optional/defensive: when absent, the reference-file Read instructions degrade out and workers fall back.
+const pluginRoot = A.pluginRoot
 
 // Bounds (the runaway/ceremony guards).
 const MAX_SLICES_PER_MILESTONE = 12 // for-cap, not a while-true — bounds a slicer that never says done
@@ -190,8 +193,25 @@ function routing(surf) {
 
 const scope = `Read ONLY the files named in this brief (absolute paths). Do not search the filesystem or read other projects.`
 const repoRule = `Project repo: ${projectPath}. Work and commit there directly — this is a sequential cumulative build; do NOT create a detached git worktree (later slices and milestones must see your commits). Maintain a .gitignore for the stack and NEVER commit generated artifacts (Python: __pycache__/, *.pyc, *.egg-info/, build/, dist/, .pytest_cache/) — add them to .gitignore and 'git rm --cached' any that slipped in.`
-// The wrapper TRANSLATES (Goal/Context/Constraints/Done-when) — it never forwards this brief verbatim.
-const codexHowto = `You are a thin wrapper around GPT-5.5. TRANSLATE this brief into a 4-part Codex prompt and pipe it via stdin — Goal (the outcome in 1-2 sentences, a result not a procedure), Context (file paths + the slice spec; code/data last), Constraints (conventions + "do X instead of Y", each with its reason), Done-when (the exact test command + expected exit 0). Write the prompt to a file then: 'codex exec -m gpt-5.5 -c model_reasoning_effort="high" --sandbox workspace-write --skip-git-repo-check < /tmp/kiln-codex.md'. Do NOT forward this brief verbatim and do NOT put code blocks in Goal. If GPT-5.5 is unavailable, retry the same prompt with -m gpt-5.4; if codex still errors or exits 0 with no usable artifact, do the work directly.`
+// The wrapper TRANSLATES the brief into a 4-part Codex prompt — it never forwards it verbatim.
+// The full discipline (per-role flags, --output-schema/reasoning-first/flat-schema, heredoc-to-stdin,
+// the codex #15451 caveat) lives in references/codex-prompt-guide.md — point at it, don't duplicate it.
+const codexGuide = pluginRoot ? `${pluginRoot}/references/codex-prompt-guide.md` : null
+const codexHowto = codexGuide
+  ? `You shell out to GPT-5.5 via 'codex exec'. Read ${codexGuide} and follow it — it is the single source of truth for the codex-prompt discipline (TRANSLATE the brief, never forward it; per-role flags; --output-schema/reasoning-first/flat-schema; the heredoc-to-stdin invocation; the exit-0 and #15451 caveats). If GPT-5.5 is unavailable retry with -m gpt-5.4; if codex still produces no usable artifact, do the work directly.`
+  : `You shell out to GPT-5.5 via 'codex exec': TRANSLATE this brief into a Codex-native prompt (do not forward it verbatim), pipe it via stdin, and close the verify loop on the test command. If GPT-5.5 is unavailable retry with -m gpt-5.4; if codex still produces no usable artifact, implement directly with your file tools.`
+
+// Shipped design references the UI builder consults for visual/design decisions — injected only when
+// pluginRoot is known (a launched Workflow can't resolve plugin paths on its own; absence degrades out).
+const designRefsNote = pluginRoot
+  ? `- Read the design references at ${pluginRoot}/references/design/design-system.md (token architecture) and ${pluginRoot}/references/design/design-patterns.md (modern-CSS techniques) by absolute path and follow them for visual/design decisions.\n`
+  : ``
+
+// One-line pointer for the other codex-shelling legs (UI reviewer, Ryu QA) — the logic builder gets it
+// via codexHowto. Same single source of truth; gated on pluginRoot so absence degrades gracefully.
+const codexGuideNote = codexGuide
+  ? `Read ${codexGuide} first and follow it for the full codex-prompt discipline (per-role flags — note Ryu/QA runs at xhigh — the --output-schema/reasoning-first/flat-schema rules, the heredoc-to-stdin invocation, and the exit-0 and #15451 caveats). `
+  : ``
 
 // ── Prompt builders (functional role+stance only; persona names live in labels, never here) ──
 function slicerPrompt(m, surf, builtSlices) {
@@ -239,6 +259,7 @@ function buildPrompt(m, surf, slice, sliceId, fixNote) {
       `<constraints>\n` +
       `- ${scope} ${repoRule}\n` +
       `- Keep the solution minimal; add no abstraction the slice does not require.\n` +
+      designRefsNote +
       `- Craft any motion/effects at 60fps, gated by prefers-reduced-motion; never let an effect touch text contrast (keep AA).\n` +
       `- If the acceptance contract is "opens by double-click via file://", emit ONE inlined index.html (CSS and JS inlined) — Chrome blocks sibling file:// loads cross-origin. If it deploys over http instead, sibling files are fine; do not force-inline there.\n` +
       (surf === 'mixed' ? `- This is a MIXED slice — it also carries tightly-coupled non-visual logic: implement that cleanly and add a behavior/smoke test you run green, IN ADDITION to the static page check.\n` : ``) +
@@ -285,7 +306,7 @@ function reviewPrompt(m, surf, slice, sliceId, build) {
       (surf === 'mixed' ? `Also RE-RUN the slice's behavior/smoke test for the non-visual logic and confirm it passes.\n` : ``) +
       `Re-run the STATIC check yourself (HTML parses, sections/ids present, 'node --check' the JS). Do NOT open a browser or Playwright.\n` +
       `</checks>\n\n` +
-      (codexAvailable ? `<how>Delegate this review to GPT-5.5 via 'codex exec' — you are the thin wrapper and the cross-model check; if codex errors, review directly as the independent reviewer.</how>\n\n` : ``) +
+      (codexAvailable ? `<how>${codexGuideNote}Delegate this review to GPT-5.5 via 'codex exec' — you are the thin wrapper and the cross-model check; if codex errors, review directly as the independent reviewer.</how>\n\n` : ``) +
       `<task>Set tests_green to whether the static check (and any mixed smoke test) passes. Verdict APPROVED only if the page is structurally sound, accessible, on-brief, and free of invented claims; else REJECTED with specific, actionable [file:line] issues. Report reasoning first.</task>`
   }
   return voice('opus') +
@@ -311,7 +332,7 @@ function kenPrompt(m) {
 }
 function ryuPrompt(m) {
   return (codexAvailable
-    ? `You are QA analyst B, delegating analysis to GPT-5.5 via 'codex exec' for a genuinely cross-model second perspective — run codex at model_reasoning_effort="xhigh"; if it errors, analyze directly.\n`
+    ? `You are QA analyst B, delegating analysis to GPT-5.5 via 'codex exec' for a genuinely cross-model second perspective — run codex at model_reasoning_effort="xhigh". ${codexGuideNote}If it errors, analyze directly.\n`
     : `You are QA analyst B — an independent second perspective.\n`) +
     `Run the tests yourself and probe DIFFERENT failure modes than a first pass would.\n\n` +
     `<inputs>\n- Milestone ${m.id} "${m.title}" — acceptance: ${m.acceptance}\n- Inspect the repo at ${projectPath}: git log/diff, read files, RUN the tests.\n</inputs>\n\n` +

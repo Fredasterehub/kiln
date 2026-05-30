@@ -1,6 +1,6 @@
 # Design Patterns — Modern CSS Techniques
 
-On-demand reference for UI scenarios. Primary consumer is la-peintresse (UI builder, high effort — design density justifies the headroom); the-curator reads it secondarily when auditing a chunk's token and technique choices. The ten techniques below separate premium UI from the generic output 4.7 reaches for by default, so each entry pairs a description with complete code and a DO vs DON'T — the DON'T line is the cheaper path you have to actively reject.
+On-demand design reference for UI slices. The UI builder reads it for the modern-CSS techniques (design density justifies the headroom); the UI reviewer reads it secondarily when judging a slice's token and technique choices. The ten techniques below separate premium UI from the generic output 4.7 reaches for by default, so each entry pairs a description with complete code and a DO vs DON'T — the DON'T line is the cheaper path you have to actively reject.
 
 ## 1. OKLCH Color System with color-mix()
 
