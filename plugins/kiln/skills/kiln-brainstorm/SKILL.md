@@ -34,8 +34,8 @@ techniques: `{id, category, name, description, phase, energy}`) and
 
 ## Project context
 
-Read `<project_path>/.kiln/docs/project-brief.md` for the operator's intent, project type, and stack
-hint (the conductor wrote it at onboarding). For a brownfield run, also read
+Read `<project_path>/.kiln/docs/project-brief.md` for the operator's intent, project type, testing
+rigor, and stack hint (the conductor wrote it at onboarding). For a brownfield run, also read
 `<project_path>/.kiln/docs/codebase-map.md` if present, so you enter already knowing the shape.
 `<project_path>` is given to you in your spawn prompt.
 
