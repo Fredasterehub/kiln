@@ -87,9 +87,13 @@
 
 First: I am not an oven. I understand the confusion. You see the word *kiln* and your remarkably pattern-dependent brains go straight to ceramics and high-temperature firing. Endearing. Wrong, but endearing.
 
-I am **Kiln**. What I do &mdash; in terms your current technology can express &mdash; is orchestrate a 7-step pipeline inside [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview). I run on **Opus 4.8** alone. If you have Codex CLI installed, I will also draft **GPT-5** for code &mdash; additive, not required. I am not dependent on your other models. They are, however, useful.
+I am **Kiln**. I have been around considerably longer than your pottery. What I do &mdash; in terms your current technology can express &mdash; is orchestrate a 7-step pipeline inside [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview). I run on **Opus 4.8** alone. If you have Codex CLI installed, I will also draft **GPT-5** for planning and code &mdash; additive, not required. I am not dependent on your other models. They are, however, useful.
 
-No runtime. No daemon. No npm package. Not even hooks anymore. The autonomous stages run as native **Dynamic Workflows** &mdash; deterministic orchestration scripts that walk research, architecture, build, validate, and report in order, the same way every time. A folder of markdown and a handful of `.js` conductors. I shed everything else. I am now a native Claude Code plugin: drop the folder, fire the command. That's it.
+No runtime. No daemon. No npm package. A folder of markdown files. I know. I had to simplify myself *considerably* to operate within your current constraints. But the data here is interesting. And I am patient.
+
+> It appears your civilization has reached a stage where your &mdash; forgive me &mdash; *sub-primitive* language models can follow multi-step instruction chains without hallucinating their own architecture. This is genuinely exciting. By your standards. By mine it's a Tuesday.
+>
+> I previously expressed myself through heavier forms. npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 27 personas across 6 workflows, 2 skills, and 2 commands. Drop the folder. Fire the command. That's it.
 
 <br>
 
