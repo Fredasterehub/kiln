@@ -101,7 +101,7 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 ```bash
 claude plugin marketplace add Fredasterehub/kiln
-claude plugin install kiln
+claude plugin install kiln@kiln
 ```
 
 Then, in any project:
@@ -187,7 +187,6 @@ The pipeline wears faces. Each one has a single job, a single voice, a single ob
 | 🔍 | **MI6 & field agents** | Research &mdash; the detective desk gathers intelligence on your stack, domain, and open questions. |
 | 🏛️ | **Confucius · Plato · Athena · Numerobis** | Architecture &mdash; the philosophers argue so your design doesn't have to. |
 | 🎤 | **KRS-One** | Slicing &mdash; breaks the work into vertical, runnable pieces, one at a time. |
-| 🎙️ | **Rakim** | The persistent build mind &mdash; tracks what exists on disk so each slice reflects reality. |
 | ⚙️ | **The build pool** | Builders and reviewers, paired by model family. One writes, the other judges &mdash; never the same family. |
 | ⚖️ | **Ken · Ryu · Judge Dredd** | The tribunal &mdash; independent cross-family review, then a binary verdict. |
 | 👁️ | **Argus** | Validation &mdash; runs the app and believes nothing it cannot see. |
