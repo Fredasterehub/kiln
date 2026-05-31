@@ -1,6 +1,6 @@
 {
   "name": "kiln",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Multi-model software creation pipeline. From a conversation to deployed code in 7 steps — interactive brainstorm, then autonomous research, architecture, build, and validation orchestrated as native Claude Code workflows with Claude and GPT-5.",
   "author": {
     "name": "Fredastere",
