@@ -158,18 +158,41 @@ export function goalAuditUsable(report) {
     && Array.isArray(report.findings))
 }
 
+// tribunalThreshold(sliceCount, minSlices) — the §3.2 milestone-gate ROUTING predicate (the row's
+// "multi-slice → dual analysts ∥ … judge" vs "single-slice → slice review + goal-backward IS the
+// gate", tasks.md T3.1: "slices_built ≥ min_slices_for_tribunal"), computed IN-SCRIPT (never an
+// agent). Returns true ⇒ the milestone runs the dual-analyst tribunal; false ⇒ the slice review +
+// goal-backward audit IS the gate (the tribunal redundancy skip, proven safe class
+// [R:adaptive-orchestration §4]). The boundary is inclusive: at EXACTLY the threshold the tribunal
+// fires. Fail toward scrutiny (§3.3 "scrutiny may only rise"): a non-positive sliceCount can never
+// reach a positive threshold (false — caught upstream by the "no slices built" branch), and an
+// absent/non-finite/non-positive minSlices is treated as the most conservative threshold of 1, so
+// every built milestone runs the tribunal rather than silently downgrading to the lighter gate.
+export function tribunalThreshold(sliceCount, minSlices) {
+  const n = (typeof sliceCount === 'number' && Number.isFinite(sliceCount)) ? sliceCount : 0
+  const min = (typeof minSlices === 'number' && Number.isFinite(minSlices) && minSlices >= 1) ? minSlices : 1
+  return n >= min
+}
+
 // gateDecision(reconciled, overallA, overallB) — the §3.2 milestone-gate judge-spawn condition,
 // computed IN-SCRIPT (never an agent): the judge is spawned ONLY on an AMBIGUOUS reconcile —
 // zero blocking findings AND the two analysts' overall verdicts disagree. Everything else is
 // COMPUTED (§3.2: "else verdict is computed" — hasBlocking → QA_FAIL, else QA_PASS):
 //   · blocking findings → QA_FAIL, no judge — the deterministic reconcile decides and a judge
 //     could only soften it away;
-//   · zero blocking + analysts agree → QA_PASS, no judge. This holds even for an agreed 'fail':
-//     an overall 'fail' unbacked by any critical|high finding is noise to the deterministic
-//     reconcile (the analyst prompts demand a fail be backed by one) — the §3.2 computed rule is
-//     exact, and an agreed verdict is by definition not ambiguous;
-//   · a missing/unreadable analyst verdict can never compute agreement — it reads as
-//     disagreement, so ambiguity resolves toward the judge (scrutiny may only rise, §3.3).
+//   · a missing/unreadable analyst verdict → QA_FAIL, no judge. The §3.2 judge-spawn condition is
+//     EXHAUSTIVE over usable inputs ("the two analysts' overall verdicts disagree" presupposes two
+//     readable verdicts), and the operator ruling (p2/tasks.md "Gate failure semantics") is
+//     explicit: "The judge NEVER spawns on missing inputs … absent evidence is fail-closed,
+//     mirroring the P0 Athena ruling." An absent analyst verdict is not "two disagreeing verdicts";
+//     it is missing evidence, so the boundary fails closed. (The judge can only SOFTEN a gate, so
+//     spawning it on a missing input would lower scrutiny, not raise it — §3.3.)
+//   · zero blocking + BOTH verdicts readable AND they agree → QA_PASS, no judge. This holds even
+//     for an agreed 'fail': an overall 'fail' unbacked by any critical|high finding is noise to the
+//     deterministic reconcile (the analyst prompts demand a fail be backed by one) — the §3.2
+//     computed rule is exact, and an agreed verdict is by definition not ambiguous;
+//   · zero blocking + BOTH verdicts readable AND they disagree → the judge rules (the sole §3.2
+//     ambiguous reconcile).
 // Returns { judge, verdict, reason }: judge=true ⇒ verdict null (the judge rules);
 // judge=false ⇒ verdict is the computed 'QA_PASS' | 'QA_FAIL'.
 export function gateDecision(reconciled, overallA, overallB) {
@@ -177,7 +200,12 @@ export function gateDecision(reconciled, overallA, overallB) {
     return { judge: false, verdict: 'QA_FAIL', reason: 'blocking findings — the verdict is computed (hasBlocking → QA_FAIL); no judge can soften a deterministic gate' }
   }
   const known = (v) => v === 'pass' || v === 'fail'
-  if (known(overallA) && known(overallB) && overallA === overallB) {
+  if (!known(overallA) || !known(overallB)) {
+    const a = known(overallA) ? overallA : 'unreadable'
+    const b = known(overallB) ? overallB : 'unreadable'
+    return { judge: false, verdict: 'QA_FAIL', reason: `an analyst overall verdict is missing/unreadable (A: ${a}, B: ${b}) — the §3.2 judge-spawn condition needs two readable, disagreeing verdicts; missing evidence fails the boundary closed (QA_FAIL), the judge never spawns on missing inputs` }
+  }
+  if (overallA === overallB) {
     return {
       judge: false, verdict: 'QA_PASS',
       reason: overallA === 'pass'
@@ -185,9 +213,7 @@ export function gateDecision(reconciled, overallA, overallB) {
         : 'the analysts agree (fail) yet produced zero blocking findings — an unbacked fail is noise to the deterministic reconcile; the §3.2 computed rule (no blocking ⇒ QA_PASS) applies and an agreed verdict is not ambiguous, so no judge',
     }
   }
-  const a = known(overallA) ? overallA : 'unreadable'
-  const b = known(overallB) ? overallB : 'unreadable'
-  return { judge: true, verdict: null, reason: `zero blocking findings and the analyst overall verdicts disagree (A: ${a}, B: ${b}) — ambiguous reconcile, the judge rules` }
+  return { judge: true, verdict: null, reason: `zero blocking findings and the analyst overall verdicts disagree (A: ${overallA}, B: ${overallB}) — ambiguous reconcile, the judge rules` }
 }
 
 // rejectionClass(review) — the §3.3 master-signal classifier: Sentinel escalation keys on
@@ -204,4 +230,33 @@ export function rejectionClass(review) {
   const findings = Array.isArray(review.findings) ? review.findings : []
   if (findings.some((f) => f && f.finding_class === 'logical')) return 'logical'
   return findings.length ? 'mechanical' : 'logical'
+}
+
+// pipelineInvalidated(baseSha, headSha) — the §9 next-milestone pipelining invalidation predicate
+// (review finding #8, BLUEPRINT §9). Velocity lever 3 launches M(i+1)'s slice-plan IN PARALLEL with
+// M(i)'s milestone gate, against the HEAD that existed when the pipeline launched (its recorded
+// `base_sha`). But M(i)'s gate may mutate that HEAD: a tribunal correction commit (and later a
+// validate-loop fix) lands new work on M(i), so a slice plan computed against the pre-correction
+// codebase is now stale — it may re-cut work the correction already did, or miss state the
+// correction introduced. The rule (normative §9): "the pipelined slice plan records its base
+// commit SHA; any corrective commit on the current milestone (tribunal correction, validate loop)
+// invalidates it and forces a re-slice against the new HEAD."
+//
+// This is the pure decision: given the SHA HEAD pointed at when the speculative plan launched
+// (baseSha) and the SHA HEAD points at when the gate completes (headSha), is the plan still good?
+// It is good ONLY when both are non-empty strings AND equal — HEAD never moved, so no corrective
+// commit landed, so the plan was computed against exactly the codebase that the next milestone
+// inherits. ANY of: HEAD advanced (a corrective commit), a missing/blank base anchor (the launch
+// never recorded where it ran), or a missing/blank current HEAD (HEAD is unreadable, so freshness
+// cannot be PROVEN) ⇒ invalidate. Fail-closed: an unproven plan is never trusted — re-slicing
+// against the real HEAD is always safe; trusting a stale plan is not. Returns
+// { invalidated: boolean, reason }; reason is ledger-ready (drops into the events.jsonl
+// slice_plan_invalidated `data`), and is the empty string when the plan stands.
+export function pipelineInvalidated(baseSha, headShaArg) {
+  const base = typeof baseSha === 'string' ? baseSha.trim() : ''
+  const head = typeof headShaArg === 'string' ? headShaArg.trim() : ''
+  if (!base) return { invalidated: true, reason: 'the pipelined plan recorded no base_sha — its launch HEAD is unknown, so freshness cannot be proven; re-slice against the current HEAD' }
+  if (!head) return { invalidated: true, reason: 'the current HEAD is unreadable — freshness cannot be proven; re-slice against the current HEAD' }
+  if (base !== head) return { invalidated: true, reason: `a corrective commit moved the milestone HEAD since the pipelined plan was cut (base_sha ${base}, current HEAD ${head}) — the speculative plan is stale; re-slice against the new HEAD` }
+  return { invalidated: false, reason: '' }
 }

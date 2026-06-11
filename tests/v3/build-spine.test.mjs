@@ -460,6 +460,18 @@ test('milestone gate (§3.2): zero blocking findings + analyst overall verdicts 
   assert.match(ken.prompt, /'fail' MUST be backed by at least one critical or high finding/)
 })
 
+test('milestone gate (§3.2): a dead analyst at the tribunal threshold fails the boundary closed (QA_FAIL) — the judge NEVER spawns on a missing overall verdict, mirroring the goal-audit ruling', async () => {
+  // ken dies (null) → reports[0] is null → gateDecision cannot read its overall. The §3.2
+  // judge-spawn condition presupposes TWO readable, disagreeing verdicts; a missing one is not
+  // disagreement, it is absent evidence → fail closed, no judge (operator ruling: "the judge
+  // NEVER spawns on missing inputs").
+  const { result, calls } = await runBuild(baseArgs, mkRespond({}, (label) => {
+    if (label.startsWith('ken:qa')) return null
+  }))
+  assert.equal(count(calls, 'judge-dredd:verdict'), 0, 'a missing analyst verdict cannot be "two disagreeing verdicts" — no judge spawns on missing inputs')
+  assert.equal(result.built[0].qa, 'QA_FAIL', 'absent analyst evidence fails the milestone boundary closed')
+})
+
 test('milestone gate (§3.2): goal-backward findings JOIN the reconcile — a critical audit finding blocks the milestone without any judge', async () => {
   const { result, calls } = await runBuild(baseArgs, mkRespond({}, (label) => {
     if (label.startsWith('aristotle:goal-backward')) return { reasoning: 'r', overall: 'fail', findings: [{ text: 'checks pass but the feature is unreachable from the CLI entry point', severity: 'critical' }] }
@@ -604,4 +616,94 @@ test('commit-before-review: an uncommitted build is auto-rejected with NO runner
   assert.equal(count(calls, ':review:'), 1)
   const fixBuild = labelsOf(calls, ':build:')[1].prompt
   assert.match(fixBuild, /was not committed/)
+})
+
+// ── velocity levers (§9 lever 3 + the model downshifts) ─────────────────────────────────────────
+
+test('velocity levers: rakim:setup ∥ confucius:parse are both haiku; assetPrep is haiku; ryu QA runs at effort "high" not "xhigh"', async () => {
+  const uiState = { milestones: [milestone({ surface: 'ui' })], law: lawOne, plan: planOne }
+  const { calls } = await runBuild(baseArgs, mkRespond(uiState))
+  const modelOf = (frag) => (calls.find((c) => c.label.includes(frag)) || {}).model
+  assert.equal(modelOf('rakim:setup'), 'haiku', 'rakim:setup downshifts to haiku')
+  assert.equal(modelOf('confucius:parse'), 'haiku', 'confucius:parse downshifts to haiku')
+  assert.equal(modelOf('rakim:state'), 'haiku', 'the per-milestone state doc leg is haiku')
+  assert.equal(modelOf(':prep:'), 'haiku', 'the asset-prep probe is haiku')
+  // ryu runs at the tribunal threshold (a 2-slice milestone); drive one and read its effort
+  const twoSlice = await runBuild(baseArgs, mkRespond())
+  const ryu = twoSlice.calls.find((c) => c.label.startsWith('ryu:qa'))
+  assert.ok(ryu, 'ryu runs at the 2-slice tribunal threshold')
+  assert.match(ryu.prompt, /model_reasoning_effort="high"/)
+  assert.doesNotMatch(ryu.prompt, /xhigh/, 'ryu QA dropped from xhigh to high (BLUEPRINT §8 / lever 4)')
+})
+
+// ── §9 lever 3: pipelined next-milestone slicing + base_sha invalidation ─────────────────────────
+
+// Two single-slice logic milestones, each owning one Law SC. mkTwoMilestone keeps both lite-gate
+// (single-slice) so the gate is cheap; `headFn(label)` decides each thoth:head probe's sha.
+const lawM1M2 = [{ id: 'SC-001', milestone: 'M1', kind: 'shell' }, { id: 'SC-002', milestone: 'M2', kind: 'shell' }]
+const twoMilestones = [milestone({ id: 'M1', surface: 'logic' }), milestone({ id: 'M2', title: 'Next', surface: 'logic' })]
+const mkPipeline = (headFn, extra) => mkRespond({}, (label, prompt, model) => {
+  if (label.startsWith('asimov:law-read')) return { reasoning: 'r', locked: true, checks: lawM1M2 }
+  if (label === 'confucius:parse') return { reasoning: 'r', milestones: twoMilestones }
+  if (label.startsWith('thoth:head')) return { reasoning: 'r', head: headFn(label) }
+  if (label.startsWith('krs-one:slice-plan')) {
+    // each milestone's plan flips exactly its own SC
+    return { reasoning: 'r', slices: [{ objective: label.includes(':M2') ? 'm2 work' : 'm1 work', files: [], constraints: '', done_when: 'works', sc_ids: label.includes(':M2') ? ['SC-002'] : ['SC-001'] }] }
+  }
+  if (extra) return extra(label, prompt, model)
+})
+
+test('lever 3: M2\'s slice plan is cut SPECULATIVELY during M1\'s gate (a krs-one:slice-plan:M2 call fires before M2\'s own Scoring), and reused when HEAD never moved', async () => {
+  // HEAD constant across the run — no corrective commit — so the pipelined plan stays valid.
+  const { calls, log } = await runBuild(baseArgs, mkPipeline(() => 'HEAD_STABLE'))
+  const planLabels = labelsOf(calls, 'krs-one:slice-plan').map((c) => c.label)
+  // exactly one M1 plan and one M2 plan — the M2 plan was the SPECULATIVE one, REUSED (not re-cut)
+  assert.equal(planLabels.filter((l) => l.includes(':M1')).length, 1, 'one M1 slice plan')
+  assert.equal(planLabels.filter((l) => l.includes(':M2')).length, 1, 'M2 planned exactly once — the speculative plan, reused')
+  // the base probe fires during M1's gate, the check probe at M2's head
+  assert.ok(labelsOf(calls, 'thoth:head:M1:pipeline-base').length === 1, 'base_sha anchored during M1\'s gate')
+  assert.ok(labelsOf(calls, 'thoth:head:M2:pipeline-check').length === 1, 'HEAD re-checked when M2 consumes the plan')
+  assert.ok(log.some((l) => /reusing the PIPELINED slice plan/.test(l)), 'M2 reused the pipelined plan')
+  // ordering proof: the speculative M2 plan was issued BEFORE M2\'s own Scoring phase began
+  const allLabels = calls.map((c) => c.label)
+  const m2Plan = allLabels.indexOf('krs-one:slice-plan:M2')
+  const m2Confirm = allLabels.indexOf('krs-one:confirm:M2:s0')
+  assert.ok(m2Plan > -1 && m2Plan < m2Confirm, 'the M2 plan was cut speculatively, before M2\'s slice confirm')
+})
+
+test('lever 3 invalidation (§9 finding #8): a corrective commit moves HEAD between base_sha and consume → the pipelined plan is invalidated, M2 RE-SLICES, and slice_plan_invalidated is LEDGERED', async () => {
+  // base probe (during M1's gate) sees HEAD_BEFORE; the consume-time check sees HEAD_AFTER — a
+  // corrective commit moved it. M2 must re-slice and ledger the invalidation.
+  const headFn = (label) => label.includes('pipeline-base') ? 'HEAD_BEFORE' : 'HEAD_AFTER'
+  let ledgered = null
+  const { calls, log } = await runBuild(baseArgs, mkPipeline(headFn, (label, prompt) => {
+    if (label === 'thoth:ledger' && /slice_plan_invalidated/.test(prompt)) { ledgered = prompt; return { ok: true } }
+  }))
+  assert.ok(log.some((l) => /PIPELINED plan invalidated/.test(l)), 'M2 detected the moved HEAD')
+  assert.ok(ledgered, 'slice_plan_invalidated was ledgered')
+  assert.match(ledgered, /HEAD_BEFORE/)
+  assert.match(ledgered, /HEAD_AFTER/)
+  // M2 was planned TWICE: the (discarded) speculative cut + the fresh re-slice against the new HEAD
+  const m2Plans = labelsOf(calls, 'krs-one:slice-plan:M2')
+  assert.equal(m2Plans.length, 2, 'M2 re-sliced against the new HEAD after invalidation')
+})
+
+test('lever 3 fail-closed: an unreadable HEAD at consume time invalidates the pipelined plan (freshness cannot be proven → re-slice)', async () => {
+  // base probe returns a sha; the consume-time check returns '' (git failed) — fail closed.
+  const headFn = (label) => label.includes('pipeline-base') ? 'HEAD_X' : ''
+  const { calls, log } = await runBuild(baseArgs, mkPipeline(headFn))
+  assert.ok(log.some((l) => /PIPELINED plan invalidated/.test(l)), 'an unreadable HEAD forces a re-slice')
+  assert.equal(labelsOf(calls, 'krs-one:slice-plan:M2').length, 2, 'M2 re-sliced (fail-closed on the blank HEAD)')
+})
+
+test('lever 3: a blank base_sha (the HEAD probe failed when anchoring) never starts the pipeline — M2 plans normally, once, no invalidation ledger', async () => {
+  // every head probe returns '' — the base anchor is blank, so the pipeline is never launched.
+  let invalidatedLedger = false
+  const { calls } = await runBuild(baseArgs, mkPipeline(() => '', (label, prompt) => {
+    if (label === 'thoth:ledger' && /slice_plan_invalidated/.test(prompt)) { invalidatedLedger = true; return { ok: true } }
+  }))
+  // the base probe ran (and returned blank), so NO speculative M2 plan was launched during M1's gate
+  assert.equal(labelsOf(calls, 'krs-one:slice-plan:M2').length, 1, 'M2 planned exactly once — synchronously, the pipeline never started')
+  assert.equal(labelsOf(calls, 'thoth:head:M2:pipeline-check').length, 0, 'no consume-time check — there was no pipelined plan to consume')
+  assert.equal(invalidatedLedger, false, 'a never-started pipeline produces no invalidation ledger')
 })

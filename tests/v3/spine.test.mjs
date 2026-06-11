@@ -10,7 +10,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { validateSlicePlan, runnerGate, rejectionClass, gateDecision, goalAuditUsable } from '../../plugins/kiln/src/spine.mjs'
+import { validateSlicePlan, runnerGate, rejectionClass, tribunalThreshold, gateDecision, goalAuditUsable, pipelineInvalidated } from '../../plugins/kiln/src/spine.mjs'
 
 // ── validateSlicePlan — §5 coverage is arithmetic, not judgment ─────────────────────────────────
 const slice = (objective, scIds, extra = {}) => ({ objective, done_when: `${objective} works`, sc_ids: scIds, ...extra })
@@ -218,6 +218,27 @@ test('runnerGate: every stale reason accumulates — one pass reports them all',
   assert.ok(v.reasons.length >= 4, `expected all gaps reported, got: ${JSON.stringify(v.reasons)}`)
 })
 
+// ── tribunalThreshold — the §3.2 milestone-gate ROUTING predicate (multi-slice tribunal vs ──────
+//    single-slice slice-review-as-gate; the inclusive `slices_built ≥ min_slices_for_tribunal` row)
+test('tribunalThreshold: inclusive boundary — the tribunal fires AT and ABOVE the threshold, the single-slice gate is below it', () => {
+  assert.equal(tribunalThreshold(1, 2), false, '1 slice, threshold 2 → below → slice-review-as-gate')
+  assert.equal(tribunalThreshold(2, 2), true, 'EXACTLY at the threshold → tribunal (inclusive ≥)')
+  assert.equal(tribunalThreshold(5, 2), true, 'above the threshold → tribunal')
+  assert.equal(tribunalThreshold(1, 1), true, 'a threshold of 1 means every built milestone gets the tribunal')
+})
+
+test('tribunalThreshold: fails toward scrutiny — an absent/non-finite/non-positive minSlices defaults to 1 (never silently downgrades the gate)', () => {
+  for (const bad of [undefined, null, 0, -3, NaN, Infinity, '2', {}]) {
+    assert.equal(tribunalThreshold(1, bad), true, `minSlices=${String(bad)} must default to the conservative threshold of 1 → tribunal`)
+  }
+})
+
+test('tribunalThreshold: a non-positive or non-finite sliceCount never reaches a positive threshold (the no-slices guard is upstream)', () => {
+  for (const n of [0, -1, undefined, null, NaN]) {
+    assert.equal(tribunalThreshold(n, 2), false, `sliceCount=${String(n)} cannot reach threshold 2`)
+  }
+})
+
 // ── gateDecision — the §3.2 judge-spawn condition (judge ONLY on ambiguous reconcile) ───────────
 const rec = (hasBlocking) => ({ hasBlocking, findings: [], blocking: [], summaryLines: [] })
 
@@ -248,11 +269,11 @@ test('gateDecision: zero blocking + verdicts DISAGREE → the judge is spawned (
   }
 })
 
-test('gateDecision: a missing/unreadable analyst verdict can never compute agreement — ambiguity resolves toward the judge', () => {
-  for (const [a, b] of [[undefined, 'pass'], ['fail', null], ['PASS', 'pass'], [undefined, undefined]]) {
+test('gateDecision: a missing/unreadable analyst verdict fails the boundary closed (QA_FAIL), the judge NEVER spawns on missing inputs — §3.2 + operator ruling', () => {
+  for (const [a, b] of [[undefined, 'pass'], ['fail', null], ['PASS', 'pass'], [undefined, undefined], [null, null], ['pass', 'crash']]) {
     const d = gateDecision(rec(false), a, b)
-    assert.equal(d.judge, true, `overalls=${JSON.stringify([a, b])} must be ambiguous`)
-    assert.match(d.reason, /unreadable|disagree/)
+    assert.deepEqual({ judge: d.judge, verdict: d.verdict }, { judge: false, verdict: 'QA_FAIL' }, `overalls=${JSON.stringify([a, b])} must fail closed without a judge`)
+    assert.match(d.reason, /missing\/unreadable|never spawns on missing/)
   }
 })
 
@@ -305,4 +326,37 @@ test('rejectionClass: a dead reviewer (null/non-object) is mechanical — infras
 test('rejectionClass: a real verdict with NO findings errs toward scrutiny — logical', () => {
   assert.equal(rejectionClass({ verdict: 'REJECTED', findings: [] }), 'logical')
   assert.equal(rejectionClass({ verdict: 'REJECTED' }), 'logical')
+})
+
+// ── pipelineInvalidated — the §9 next-milestone pipelining invalidation predicate (finding #8) ───
+test('pipelineInvalidated: HEAD unchanged since the pipelined plan launched → still good, no re-slice', () => {
+  const v = pipelineInvalidated('abc123', 'abc123')
+  assert.deepEqual(v, { invalidated: false, reason: '' })
+})
+
+test('pipelineInvalidated: a corrective commit advanced HEAD → invalidated, naming both shas (the §9 rule)', () => {
+  const v = pipelineInvalidated('abc123', 'def456')
+  assert.equal(v.invalidated, true)
+  assert.match(v.reason, /base_sha abc123, current HEAD def456/)
+  assert.match(v.reason, /re-slice against the new HEAD/)
+})
+
+test('pipelineInvalidated: a missing/blank base_sha is fail-closed (launch HEAD unknown → re-slice)', () => {
+  for (const base of ['', '   ', null, undefined, 42, {}]) {
+    const v = pipelineInvalidated(base, 'def456')
+    assert.equal(v.invalidated, true, `base=${JSON.stringify(base)} must invalidate`)
+    assert.match(v.reason, /no base_sha/)
+  }
+})
+
+test('pipelineInvalidated: an unreadable current HEAD is fail-closed (freshness cannot be proven → re-slice)', () => {
+  for (const head of ['', '  ', null, undefined, NaN, []]) {
+    const v = pipelineInvalidated('abc123', head)
+    assert.equal(v.invalidated, true, `head=${JSON.stringify(head)} must invalidate`)
+    assert.match(v.reason, /current HEAD is unreadable/)
+  }
+})
+
+test('pipelineInvalidated: trimming — surrounding whitespace never makes equal shas look different', () => {
+  assert.equal(pipelineInvalidated('  abc123  ', 'abc123').invalidated, false)
 })

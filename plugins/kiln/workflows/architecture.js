@@ -280,8 +280,18 @@ const foundation = await agent(
 log(`Foundation docs written; visual direction: ${foundation && foundation.has_visual_direction}`)
 
 // ── Design tokens (conditional — only when VISION has real Visual Direction) ──
+// Velocity lever 6 (§9): design:tokens runs in PARALLEL with The Council. Its only inputs are
+// VISION section 12 + tech-stack.md (both already on disk after foundation), and NO downstream
+// architecture agent reads the design system — it is consumed by the BUILD stage's UI builder —
+// so the write only needs to land before this stage returns. We launch it here as a detached
+// promise that overlaps The Council + The Lantern (full path) or the synthesis (lite path), and
+// await it once before the stage's existence check. Detached from the council `parallel` on
+// purpose: the two conditions differ (tokens gate on has_visual_direction, the council on the
+// posture/scope), so coupling them would wrongly skip tokens on a lite-path visual deliverable.
+let designPromise = null
 if (foundation && foundation.has_visual_direction) {
-  await agent(
+  log('Design tokens launching in parallel (visual direction present)')
+  designPromise = agent(
     voice('opus') +
     `You are Kiln's design lead.\n\n` +
     `<inputs>\n- Visual Direction (section 12) of ${visionFile}\n- ${docsDir}/tech-stack.md\n</inputs>\n\n` +
@@ -291,8 +301,7 @@ if (foundation && foundation.has_visual_direction) {
     `- ${designDir}/creative-direction.md — the aesthetic narrative, references, and an explicit ban list.\n` +
     `Honor the operator's stated visual intent exactly; do not invent a direction they did not give.</task>`,
     { label: 'design:tokens', phase: 'Laying Stone', model: 'opus' }
-  )
-  log('Design tokens generated (visual direction present)')
+  ).catch(() => null)
 }
 
 // Shared guidance reused by planners + chairman.
@@ -333,6 +342,16 @@ const liteScope = planning !== null
 // (v2's `round 0..MAX_VALIDATION_ROUNDS` was 3 passes full / 2 passes lite). The number of plato
 // revisions is validationPasses - 1 (a revision happens only between two passes).
 const validationPasses = validationRoundsArg !== null ? validationRoundsArg : (liteScope ? LITE_VALIDATION_PASSES : FULL_VALIDATION_PASSES)
+
+// Velocity lever 5 (§9, partial): on the LITE path, Plato folds the build-stage handoff INTO its
+// synthesis output — one Opus call writes both master-plan.md and architecture-handoff.md — and
+// the dedicated numerobis:handoff agent is skipped. The fold rides EVERY Plato write (synthesis
+// AND each revision) so the handoff always matches the FINAL plan, never a pre-revision stale one.
+// Standard/complex keep the separate handoff agent: a non-trivial handoff is its own deliverable
+// worth a dedicated pass (lever 5 is "partial" by contract). The clause is empty off the lite path.
+const handoffFoldClause = liteScope
+  ? ` Then ALSO write ${handoffFile}: a concise build-stage handoff — the ordered milestone list, the tech stack, the non-negotiable constraints, and any low-confidence areas the build should watch (this is what the build stage reads first). Rewrite it whenever you rewrite the plan so the two never drift.`
+  : ``
 
 let synthBrief
 let synthLead
@@ -415,7 +434,7 @@ let synth = await agent(
   `${synthLead}\n${synthBrief}\n\n` +
   `<task>Write a single ${masterPlanFile}. Structure it as ordered milestones (M1, M2, …), each with ` +
   `acceptance criteria and a confidence tier (high/medium/low). Mark low-confidence milestones explicitly so ` +
-  `build treats them carefully. ${rightSizeRule} ${surfaceRule} ${executableAcRule}\n` +
+  `build treats them carefully. ${rightSizeRule} ${surfaceRule} ${executableAcRule}${handoffFoldClause}\n` +
   `Write the file, then report milestone_count and the milestone list (id, title, surface, confidence). Report reasoning first.</task>`,
   { label: 'plato:synthesis', phase: 'One From Many', model: 'opus', schema: SYNTH_SCHEMA }
 )
@@ -455,7 +474,7 @@ for (let round = 0; round < validationPasses; round++) {
     voice('opus') +
     `You are the plan chairman, revising ${masterPlanFile}.\n\n` +
     `<inputs>\nAthena failed it on: ${(val.failed_dimensions || []).join(', ')}.\nApply these fixes: ${(val.fixes || []).join(' | ')}\n${synthBrief}\n</inputs>\n\n` +
-    `<task>Apply the fixes and rewrite the file (keep surfaces + executable acceptance criteria). Report the updated milestone_count and milestone list. Report reasoning first.</task>`,
+    `<task>Apply the fixes and rewrite the file (keep surfaces + executable acceptance criteria).${handoffFoldClause} Report the updated milestone_count and milestone list. Report reasoning first.</task>`,
     { label: `plato:revise:r${round + 1}`, phase: 'One From Many', model: 'opus', schema: SYNTH_SCHEMA }
   )) || synth
 }
@@ -573,14 +592,26 @@ if (!(verdict && verdict.verdict === 'PASS')) {
 }
 if (!lawLocked) log(`THE LAW IS NOT LOCKED — ${lawReason}. The conductor must escalate; build must not start without locked gates.`)
 
+// Await the parallel design:tokens leg (lever 6) before the stage closes — no architecture agent
+// reads the design system, so this is the convergence point; the existence check below then sees
+// the landed writes. Null on a crashed leg (already caught) — the existence verifier surfaces a
+// genuinely missing artifact in the return value, never a phantom green.
+if (designPromise) { await designPromise; log('Design tokens generated (visual direction present)') }
+
 // ── Handoff doc for the build stage ──
-await agent(
-  `You are the technical authority. ${noWander}\n\n` +
-  `<inputs>\n${masterPlanFile}\n</inputs>\n\n` +
-  `<task>Write ${handoffFile}: a concise build-stage handoff — the ordered milestone list, the tech stack, the ` +
-  `non-negotiable constraints, and any low-confidence areas the build should watch. This is what the build stage reads first.</task>`,
-  { label: 'numerobis:handoff', phase: 'The Law', model: 'sonnet' }
-)
+// Lever 5: on the LITE path Plato already folded the handoff into its synthesis (no separate
+// agent). Standard/complex keep the dedicated handoff pass — a non-trivial handoff earns its own.
+if (!liteScope) {
+  await agent(
+    `You are the technical authority. ${noWander}\n\n` +
+    `<inputs>\n${masterPlanFile}\n</inputs>\n\n` +
+    `<task>Write ${handoffFile}: a concise build-stage handoff — the ordered milestone list, the tech stack, the ` +
+    `non-negotiable constraints, and any low-confidence areas the build should watch. This is what the build stage reads first.</task>`,
+    { label: 'numerobis:handoff', phase: 'The Law', model: 'sonnet' }
+  )
+} else {
+  log('Handoff folded into Plato\'s synthesis (lever 5, lite path) — no separate handoff pass')
+}
 
 // Artifact existence check: v2 returned constructed paths without confirming the writes landed.
 // One cheap haiku verifier ls-es the claimed files; misses surface in the log + return value.

@@ -279,3 +279,50 @@ test('T3 architecture: research.md ABSENT ⇒ no phantom path; agents grounded i
   assert.doesNotMatch(foundationPrompt, /Ground every decision in the research \(cite/, 'absent ⇒ the citation demand is dropped')
   assert.match(foundationPrompt, /ground every decision in VISION\.md/, 'absent ⇒ the prompt redirects grounding to VISION.md')
 })
+
+// ── ARCHITECTURE T3 velocity levers: design:tokens ∥ The Council (lever 6) + handoff fold (lever 5) ──
+
+// archRespondVD — like archRespond but the foundation reports a real Visual Direction, so the
+// design:tokens leg runs. It returns null (its writes are out-of-band); the existence check passes.
+const archRespondVD = (scope, athenaVerdict = 'PASS') => (label) => {
+  const base = archRespond(scope, athenaVerdict)(label)
+  if (label === 'numerobis:foundation') return { ...foundation(scope), has_visual_direction: true }
+  return base
+}
+
+test('T3 lever 6: design:tokens runs (visual direction present) and is launched as a parallel leg, awaited before the stage closes', async () => {
+  const { calls, log, result } = await runWorkflow(ARCHITECTURE, { ...baseArgs, planning: 'dual' }, archRespondVD('standard'))
+  assert.ok(labelsIn(calls).includes('design:tokens'), 'design:tokens runs when VISION carries a visual direction')
+  assert.equal(result.has_visual_direction, true)
+  assert.ok(log.some((l) => /Design tokens launching in parallel/.test(l)), 'lever 6: the design leg is launched in parallel')
+  assert.ok(log.some((l) => /Design tokens generated/.test(l)), 'the parallel design leg is awaited (and confirmed) before the stage closes')
+})
+
+test('T3 lever 6: no visual direction ⇒ design:tokens never runs (the leg stays conditional)', async () => {
+  const { calls } = await runWorkflow(ARCHITECTURE, { ...baseArgs, planning: 'dual' }, archRespond('standard'))
+  assert.ok(!labelsIn(calls).includes('design:tokens'), 'no design tokens without a visual direction')
+})
+
+test('T3 lever 5: on the LITE path the handoff is folded into Plato\'s synthesis — NO numerobis:handoff agent', async () => {
+  const { calls, log } = await runWorkflow(ARCHITECTURE, { ...baseArgs, planning: 'single' }, archRespond('complex'))
+  assert.ok(!labelsIn(calls).includes('numerobis:handoff'), 'lite path: no dedicated handoff agent')
+  const synth = calls.find((c) => c.label === 'plato:synthesis').prompt
+  assert.match(synth, /architecture-handoff\.md/, 'Plato\'s synthesis brief carries the folded handoff')
+  assert.match(synth, /Rewrite it whenever you rewrite the plan/, 'the fold rides every Plato write so the handoff never drifts from the final plan')
+  assert.ok(log.some((l) => /Handoff folded into Plato/.test(l)), 'the lever-5 fold is logged')
+})
+
+test('T3 lever 5: the fold also rides every plato:revise on the lite path (so a revised plan keeps a matching handoff)', async () => {
+  // force Athena FAIL so a plato:revise fires; lite path → 2 validation passes / 1 revision.
+  const { calls } = await runWorkflow(ARCHITECTURE, { ...baseArgs, planning: 'single' }, archRespond('complex', 'FAIL'))
+  const revise = calls.find((c) => c.label.startsWith('plato:revise'))
+  assert.ok(revise, 'a plato:revise fires on the lite path when Athena FAILs')
+  assert.match(revise.prompt, /architecture-handoff\.md/, 'the revise brief re-folds the handoff so it matches the revised plan')
+})
+
+test('T3 lever 5: the FULL (council) path KEEPS the dedicated numerobis:handoff agent — and does NOT fold it into synthesis', async () => {
+  const { calls } = await runWorkflow(ARCHITECTURE, { ...baseArgs, planning: 'dual' }, archRespond('standard'))
+  assert.ok(labelsIn(calls).includes('numerobis:handoff'), 'full path: the dedicated handoff pass is kept (lever 5 is partial)')
+  const synth = calls.find((c) => c.label === 'plato:synthesis').prompt
+  assert.doesNotMatch(synth, /architecture-handoff\.md/, 'full path: Plato does NOT fold the handoff (the dedicated agent owns it)')
+})

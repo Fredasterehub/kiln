@@ -791,7 +791,13 @@ test('T1 Law phase: happy path — Asimov runs after Athena PASS, before handoff
   assert.equal(result.law_check_count, 2)
   const l = labels(calls)
   assert.ok(l.indexOf('asimov:law') > l.lastIndexOf('athena:validate:r0'), 'the Law compiles only after Athena PASS')
-  assert.ok(l.indexOf('asimov:law') < l.indexOf('numerobis:handoff'), 'the Law phase sits BEFORE the handoff')
+  // Lever 5 (lite path, the trivial-scope fixture): the dedicated numerobis:handoff agent is
+  // skipped — Plato folds the handoff into its synthesis — and the Law sits before the existence
+  // verifier (the stage's final convergence point).
+  assert.ok(!l.includes('numerobis:handoff'), 'lite path: no separate handoff agent (folded into Plato\'s synthesis)')
+  assert.ok(l.indexOf('asimov:law') < l.indexOf('thoth:verify'), 'the Law phase sits BEFORE the stage\'s existence verifier')
+  const synthHandoff = calls.find((c) => c.label === 'plato:synthesis').prompt
+  assert.match(synthHandoff, /architecture-handoff\.md/, 'lite path: Plato\'s synthesis brief folds in the handoff')
   assert.ok(l.indexOf('thoth:law-lock') < l.indexOf('thoth:law-verify'), 'lock before the existence verifier')
   // Asimov's brief: project-native checks, probes as inert templates, no browser code
   const asimovPrompt = calls.find((c) => c.label === 'asimov:law').prompt

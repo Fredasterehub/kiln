@@ -1,13 +1,13 @@
 // GENERATED from workflows-src/build.js — edit the source, run scripts/bundle-workflows.mjs
 export const meta = {
   name: 'kiln-build',
-  description: 'Kiln build stage — two nested loops over the locked Law. OUTER: each master-plan milestone in dependency order (sequential, cumulative commits). INNER: the batch slice spine — KRS-One plans the milestone\'s ENTIRE ordered slice list in ONE call, mapped 1:1 to law.json SC ids (coverage is arithmetic, validated in-script); a haiku confirm checks each slice against live state before its build; a builder implements the slice (Opus builds ui/mixed, GPT-5.5/Codex builds logic) and commits it; the deterministic runner then executes kiln-law (verify = tamper gate; run --only/--flips = the §5.1 red/green lifecycle where the EXIT CODE is the verdict — expected flips computed from the recorded prior status via --before, previously-GREEN regressions fatal) and persists the project suite as hashed evidence (kiln-law suite → suite.log + suite.jsonl in the evidence dir), and the workflow gates tamper + evidence freshness + the lifecycle exit MECHANICALLY — a touched lock, stale evidence, or a failed flip auto-REJECTS with no reviewer spawned. A cross-FAMILY reviewer rules on diff + evidence with mechanical|logical finding classes and must re-run the mapped checks itself; the Sentinel escalates the feedback source after repeated logical rejections and stops a slice as split_required at the split threshold (a conductor/operator decision, never silent). After the slices integrate, the §3.2 milestone gate rules: Aristotle\'s goal-backward audit hunts "checks pass but the goal is broken" at EVERY milestone boundary — split/plan-abort failures included, where its findings merge into the failure record — and an unusable audit is re-asked ONCE, then fails the boundary closed (QA_FAIL, blocking finding goal-audit-failure; the judge NEVER spawns on missing inputs); milestones at the tribunal threshold add dual analysts (Ken/Opus ∥ Ryu/Codex) whose findings the deterministic reconcile folds with the audit\'s, and the judge is spawned ONLY on an ambiguous reconcile (zero blocking findings AND the analysts\' overall verdicts disagree) — otherwise the verdict is computed; below the threshold the slice review + the audit IS the gate. The heavy end-to-end gate is validate, not per-slice ceremony.',
+  description: 'Kiln build stage — two nested loops over the locked Law. OUTER: each master-plan milestone in dependency order (sequential, cumulative commits). INNER: the batch slice spine — KRS-One plans the milestone\'s ENTIRE ordered slice list in ONE call, mapped 1:1 to law.json SC ids (coverage is arithmetic, validated in-script); a haiku confirm checks each slice against live state before its build; a builder implements the slice (Opus builds ui/mixed, GPT-5.5/Codex builds logic) and commits it; the deterministic runner then executes kiln-law (verify = tamper gate; run --only/--flips = the §5.1 red/green lifecycle where the EXIT CODE is the verdict — expected flips computed from the recorded prior status via --before, previously-GREEN regressions fatal) and persists the project suite as hashed evidence (kiln-law suite → suite.log + suite.jsonl in the evidence dir), and the workflow gates tamper + evidence freshness + the lifecycle exit MECHANICALLY — a touched lock, stale evidence, or a failed flip auto-REJECTS with no reviewer spawned. A cross-FAMILY reviewer rules on diff + evidence with mechanical|logical finding classes and must re-run the mapped checks itself; the Sentinel escalates the feedback source after repeated logical rejections and stops a slice as split_required at the split threshold (a conductor/operator decision, never silent). After the slices integrate, the §3.2 milestone gate rules: Aristotle\'s goal-backward audit hunts "checks pass but the goal is broken" at EVERY milestone boundary — split/plan-abort failures included, where its findings merge into the failure record — and an unusable audit is re-asked ONCE, then fails the boundary closed (QA_FAIL, blocking finding goal-audit-failure; the judge NEVER spawns on missing inputs); milestones at the tribunal threshold add dual analysts (Ken/Opus ∥ Ryu/Codex) whose findings the deterministic reconcile folds with the audit\'s, and the judge is spawned ONLY on an ambiguous reconcile (zero blocking findings AND the analysts\' overall verdicts disagree) — otherwise the verdict is computed; below the threshold the slice review + the audit IS the gate. Velocity lever 3 (§9): the next milestone\'s slice plan is cut SPECULATIVELY in parallel with the current milestone\'s gate, anchored on its base_sha — any corrective commit on the current milestone (tribunal correction / validate loop) moves HEAD and invalidates it (ledgered slice_plan_invalidated), forcing a re-slice against the new HEAD. The heavy end-to-end gate is validate, not per-slice ceremony.',
   phases: [
     { title: 'The Forge Heats', detail: 'read the locked Law; rakim ensures the git repo + seeds codebase-state; parse the master plan into milestones' },
-    { title: 'Scoring the Cut', detail: 'KRS-One plans the milestone\'s entire ordered slice list in ONE call, mapped to the Law\'s SC ids; a haiku confirm checks each slice against live state (proceed | replan)' },
+    { title: 'Scoring the Cut', detail: 'KRS-One plans the milestone\'s entire ordered slice list in ONE call, mapped to the Law\'s SC ids (reusing a valid pipelined plan from the prior gate when HEAD has not moved); a haiku confirm checks each slice against live state (proceed | replan)' },
     { title: 'Forging', detail: 'builder implements the slice (Opus for ui/mixed, GPT-5.5/Codex for logic) and commits it' },
     { title: 'The Trial', detail: 'the deterministic runner executes the Law — the exit code is the lifecycle verdict (declared flips + regressions) — and persists the project suite as hashed evidence; the workflow gates tamper + freshness + the flip plan mechanically; a cross-family reviewer re-runs the mapped checks and rules with classed findings; the Sentinel escalates on logical rejections' },
-    { title: 'Judgment', detail: 'the §3.2 milestone gate — goal-backward audit at EVERY boundary (split/abort included; an unusable audit is re-asked once, then fails closed); dual analysts + deterministic reconcile at the tribunal threshold, the judge spawned only on an ambiguous reconcile; below it, slice review + the audit IS the gate' },
+    { title: 'Judgment', detail: 'the §3.2 milestone gate — goal-backward audit at EVERY boundary (split/abort included; an unusable audit is re-asked once, then fails closed); dual analysts + deterministic reconcile at the tribunal threshold, the judge spawned only on an ambiguous reconcile; below it, slice review + the audit IS the gate. The next milestone\'s slice plan is pipelined in parallel here, anchored on base_sha and invalidated by any corrective commit' },
   ],
 }
 
@@ -399,12 +399,22 @@ function rejectionClass(review) {
   if (findings.some((f) => f && f.finding_class === 'logical')) return 'logical'
   return findings.length ? 'mechanical' : 'logical'
 }
+function tribunalThreshold(sliceCount, minSlices) {
+  const n = (typeof sliceCount === 'number' && Number.isFinite(sliceCount)) ? sliceCount : 0
+  const min = (typeof minSlices === 'number' && Number.isFinite(minSlices) && minSlices >= 1) ? minSlices : 1
+  return n >= min
+}
 function gateDecision(reconciled, overallA, overallB) {
   if (reconciled && reconciled.hasBlocking === true) {
     return { judge: false, verdict: 'QA_FAIL', reason: 'blocking findings — the verdict is computed (hasBlocking → QA_FAIL); no judge can soften a deterministic gate' }
   }
   const known = (v) => v === 'pass' || v === 'fail'
-  if (known(overallA) && known(overallB) && overallA === overallB) {
+  if (!known(overallA) || !known(overallB)) {
+    const a = known(overallA) ? overallA : 'unreadable'
+    const b = known(overallB) ? overallB : 'unreadable'
+    return { judge: false, verdict: 'QA_FAIL', reason: `an analyst overall verdict is missing/unreadable (A: ${a}, B: ${b}) — the §3.2 judge-spawn condition needs two readable, disagreeing verdicts; missing evidence fails the boundary closed (QA_FAIL), the judge never spawns on missing inputs` }
+  }
+  if (overallA === overallB) {
     return {
       judge: false, verdict: 'QA_PASS',
       reason: overallA === 'pass'
@@ -412,14 +422,20 @@ function gateDecision(reconciled, overallA, overallB) {
         : 'the analysts agree (fail) yet produced zero blocking findings — an unbacked fail is noise to the deterministic reconcile; the §3.2 computed rule (no blocking ⇒ QA_PASS) applies and an agreed verdict is not ambiguous, so no judge',
     }
   }
-  const a = known(overallA) ? overallA : 'unreadable'
-  const b = known(overallB) ? overallB : 'unreadable'
-  return { judge: true, verdict: null, reason: `zero blocking findings and the analyst overall verdicts disagree (A: ${a}, B: ${b}) — ambiguous reconcile, the judge rules` }
+  return { judge: true, verdict: null, reason: `zero blocking findings and the analyst overall verdicts disagree (A: ${overallA}, B: ${overallB}) — ambiguous reconcile, the judge rules` }
 }
 function goalAuditUsable(report) {
   return !!(report && typeof report === 'object' && !Array.isArray(report)
     && (report.overall === 'pass' || report.overall === 'fail')
     && Array.isArray(report.findings))
+}
+function pipelineInvalidated(baseSha, headShaArg) {
+  const base = typeof baseSha === 'string' ? baseSha.trim() : ''
+  const head = typeof headShaArg === 'string' ? headShaArg.trim() : ''
+  if (!base) return { invalidated: true, reason: 'the pipelined plan recorded no base_sha — its launch HEAD is unknown, so freshness cannot be proven; re-slice against the current HEAD' }
+  if (!head) return { invalidated: true, reason: 'the current HEAD is unreadable — freshness cannot be proven; re-slice against the current HEAD' }
+  if (base !== head) return { invalidated: true, reason: `a corrective commit moved the milestone HEAD since the pipelined plan was cut (base_sha ${base}, current HEAD ${head}) — the speculative plan is stale; re-slice against the new HEAD` }
+  return { invalidated: false, reason: '' }
 }
 function escalate(posture, signal, config) {
   // §3.3 signal shapes, ranked by evidence strength:
@@ -554,7 +570,7 @@ const designRefsNote = pluginRoot
 // One-line pointer for the other codex-shelling legs (reviewers, Ryu QA) — the logic builder gets it
 // via codexHowto. Same single source of truth; gated on pluginRoot so absence degrades gracefully.
 const codexGuideNote = codexGuide
-  ? `Read ${codexGuide} first and follow it for the full codex-prompt discipline (per-role flags — note Ryu/QA runs at xhigh — the --output-schema/reasoning-first/flat-schema rules, the heredoc-to-stdin invocation, and the exit-0 and #15451 caveats). `
+  ? `Read ${codexGuide} first and follow it for the full codex-prompt discipline (per-role flags — run codex at the model_reasoning_effort this prompt specifies — the --output-schema/reasoning-first/flat-schema rules, the heredoc-to-stdin invocation, and the exit-0 and #15451 caveats). `
   : ``
 
 // ── Prompt builders (functional role+stance only; persona names live in labels, never here) ──
@@ -761,7 +777,7 @@ function kenPrompt(m) {
 }
 function ryuPrompt(m) {
   return (codexAvailable
-    ? `You are QA analyst B, delegating analysis to GPT-5.5 via 'codex exec' for a genuinely cross-model second perspective — run codex at model_reasoning_effort="xhigh". ${codexGuideNote}If it errors, analyze directly.\n`
+    ? `You are QA analyst B, delegating analysis to GPT-5.5 via 'codex exec' for a genuinely cross-model second perspective — run codex at model_reasoning_effort="high". ${codexGuideNote}If it errors, analyze directly.\n`
     : `You are QA analyst B — an independent second perspective.\n`) +
     `Run the tests yourself and probe DIFFERENT failure modes than a first pass would.\n\n` +
     `<inputs>\n- Milestone ${m.id} "${m.title}" — acceptance: ${m.acceptance}\n- Inspect the repo at ${projectPath}: git log/diff, read files, RUN the tests.\n</inputs>\n\n` +
@@ -806,6 +822,59 @@ async function ledger(type, data, phaseName) {
 //    run (green OR red: a red run's fold is the truthful current status for the next fix cycle's
 //    flip plan; tamper/stale runs never anchor — their evidence is untrusted by definition). ──
 let lastRunId = null
+
+// ── HEAD probe (the §9 pipelining base-SHA anchor): one cheap haiku reads the project HEAD so the
+//    in-script pipelineInvalidated predicate can compare the SHA a speculative slice plan was cut
+//    against (its base_sha) with the SHA after the milestone gate completes. Returns '' on any
+//    failure — pipelineInvalidated fails closed on a blank HEAD (an unreadable HEAD forces a
+//    re-slice, never a stale-plan reuse). ──
+const HEAD_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: { reasoning: { type: 'string' }, head: { type: 'string', description: 'git rev-parse HEAD — the full sha, or "" if git failed' } },
+  required: ['head'],
+}
+async function headSha(suffix) {
+  const r = await agent(
+    `You are the HEAD probe — you read one git fact and report it; you never write or fix anything.\n\n` +
+    `<task>Run 'git -C ${projectPath} rev-parse HEAD' (Bash). Report head = the full sha it prints, or "" if the command fails. Do not read anything else.</task>`,
+    { label: loreLabel('thoth', 'head', suffix), phase: 'Scoring the Cut', model: 'haiku', schema: HEAD_SCHEMA }
+  )
+  return (r && typeof r.head === 'string') ? r.head.trim() : ''
+}
+
+// ── planMilestone(targetM, targetSurf, targetScs) — the §5 batch slice plan for ONE milestone,
+//    parameterized so it can run for the CURRENT milestone synchronously OR for the NEXT milestone
+//    SPECULATIVELY (velocity lever 3, §9 pipelining). ONE batch krs-one:slice-plan call, coverage
+//    validated in-script, ONE re-ask on gaps. Returns { ok, planned, errors }. The pipelined call
+//    runs against an EMPTY built-list (nothing of the next milestone exists yet) — exactly the cold
+//    plan the synchronous path computes; if the gate's corrective commit moves HEAD, the speculative
+//    plan is discarded and re-cut (pipelineInvalidated). The `note`/`built` params keep the replan
+//    path (a mid-milestone state-drift re-slice for the remainder) working unchanged. ──
+async function planMilestone(targetM, targetSurf, scs, built = [], note = null, labelSuffix = null) {
+  const ids = scs.map((c) => c.id)
+  const ls = labelSuffix || targetM.id
+  const askPlan = async (n, sfx) => {
+    const res = await agent(slicePlanPrompt(targetM, targetSurf, scs, built, n), { label: loreLabel('krs-one', 'slice-plan', sfx), phase: 'Scoring the Cut', model: 'opus', schema: SLICE_PLAN_SCHEMA })
+    return (res && Array.isArray(res.slices)) ? res.slices : []
+  }
+  let planned = await askPlan(note, ls)
+  let v = validateSlicePlan(planned, ids)
+  if (!v.ok) {
+    const errText = v.errors.map((e) => e.message).join('; ')
+    log(`${targetM.id}: slice plan failed the coverage arithmetic [${errText}] — one re-ask`)
+    planned = await askPlan(`${note ? note + '\n' : ''}Your previous plan was REJECTED by the coverage arithmetic: ${errText}. Fix EXACTLY these gaps — every listed Law check id in exactly one slice's sc_ids, every slice flipping at least one.`, `${ls}:retry`)
+    v = validateSlicePlan(planned, ids)
+  }
+  return { planned, ok: v.ok, errors: v.errors }
+}
+
+// ── The pipeline carry (§9 lever 3): a speculative slice plan launched DURING the previous
+//    milestone's gate, against the HEAD it was cut at (base_sha). { milestoneId, base_sha, promise }.
+//    Consumed at the head of the next milestone iteration: a corrective commit on the prior
+//    milestone (tribunal correction / validate loop) that moved HEAD off base_sha invalidates it
+//    (pipelineInvalidated) — then the milestone re-slices against the real HEAD. Carrying only one
+//    plan keeps the speculation bounded (the next milestone only). ──
+let pipelinedPlan = null
 
 // ── The Trial, mechanized (§5.1/§6): commit gate → deterministic runner → freshness probe →
 //    in-script runnerGate → reviewer ONLY on 'proceed'. lawCtx = { flips, only }: the SC ids this
@@ -883,17 +952,24 @@ if (!lawChecks.length) {
 }
 log(`The Law: ${lawChecks.length} locked check(s) across ${[...new Set(lawChecks.map((c) => c.milestone))].length} milestone(s)`)
 
-await agent(
-  `You are the codebase-state authority. ${scope} ${repoRuleLine}\n\n` +
-  `<task>\n1. If ${projectPath} is not a git repo (no .git), initialize it: set a local user.name/email if unset, then 'git -C ${projectPath} init -q && git -C ${projectPath} add -A && git -C ${projectPath} commit -q -m "chore: kiln build baseline"'.\n` +
-  `2. Read ${masterPlanFile} and ${handoffFile}, then write ${codebaseStateFile} (mkdir -p ${docsDir} first): a short TL;DR of the intended architecture and the current (likely empty) state, for the slicer and builders to read each milestone.\n</task>`,
-  { label: loreLabel('rakim', 'setup'), phase: 'The Forge Heats', model: 'sonnet' }
-)
-const planRes = await agent(
-  `You are the build planner. ${scope}\n\n<inputs>\nRead ${masterPlanFile}.\n</inputs>\n\n` +
-  `<task>Return the milestones in build order — id, title, summary, acceptance, surface (copy the plan's ui|logic|mixed tag; if absent, infer: a visible/front-facing deliverable is 'ui', a non-visual backend/CLI/logic deliverable is 'logic'), and confidence. Extract exactly what the plan defines — do not invent milestones. Report reasoning first.</task>`,
-  { label: loreLabel('confucius', 'parse'), phase: 'The Forge Heats', model: 'sonnet', schema: MILESTONES_SCHEMA }
-)
+// Velocity lever 3 (§9): rakim:setup ∥ confucius:parse — independent legs run in PARALLEL. rakim
+// initializes the git baseline + writes codebase-state.md (the slicer/builders read it); confucius
+// parses the already-written master-plan.md into the milestone list. Neither reads the other's
+// output, so concurrency is free. Both downshift to haiku: a git-init + TL;DR doc, and a
+// schema-forced extraction against an existing plan, are mechanical legs — not reasoning tasks.
+const [, planRes] = await parallel([
+  () => agent(
+    `You are the codebase-state authority. ${scope} ${repoRuleLine}\n\n` +
+    `<task>\n1. If ${projectPath} is not a git repo (no .git), initialize it: set a local user.name/email if unset, then 'git -C ${projectPath} init -q && git -C ${projectPath} add -A && git -C ${projectPath} commit -q -m "chore: kiln build baseline"'.\n` +
+    `2. Read ${masterPlanFile} and ${handoffFile}, then write ${codebaseStateFile} (mkdir -p ${docsDir} first): a short TL;DR of the intended architecture and the current (likely empty) state, for the slicer and builders to read each milestone.\n</task>`,
+    { label: loreLabel('rakim', 'setup'), phase: 'The Forge Heats', model: 'haiku' }
+  ),
+  () => agent(
+    `You are the build planner. ${scope}\n\n<inputs>\nRead ${masterPlanFile}.\n</inputs>\n\n` +
+    `<task>Return the milestones in build order — id, title, summary, acceptance, surface (copy the plan's ui|logic|mixed tag; if absent, infer: a visible/front-facing deliverable is 'ui', a non-visual backend/CLI/logic deliverable is 'logic'), and confidence. Extract exactly what the plan defines — do not invent milestones. Report reasoning first.</task>`,
+    { label: loreLabel('confucius', 'parse'), phase: 'The Forge Heats', model: 'haiku', schema: MILESTONES_SCHEMA }
+  ),
+])
 let milestones = (planRes && planRes.milestones) || []
 if (Number.isFinite(milestoneLimit)) milestones = milestones.slice(0, milestoneLimit)
 log(`Building ${milestones.length} milestone(s): ${milestones.map((m) => `${m.id}[${surfaceOf(m)}]`).join(', ')}`)
@@ -919,30 +995,40 @@ for (const m of milestones) {
   if (!mScIds.length) {
     log(`${m.id}: NO Law checks map to this milestone — the spine cannot gate it. Recording QA_FAIL and skipping the build (Athena's SC-coverage dimension should have blocked this; the conductor escalates).`)
     results.push({ id: m.id, title: m.title, surface: surf, slices: 0, sc_ids: [], tests_green: false, qa: 'QA_FAIL', findings: ['no law.json checks map to this milestone — ungatable'], split_required: [], replanned: false, slice_plan_failed: true })
+    pipelinedPlan = null // a skipped milestone never consumes a pipelined plan — discard the speculation
     continue
   }
 
-  // ── Scoring the Cut: ONE batch slice-plan call (velocity lever 1), coverage validated in-script,
-  //    ONE re-ask on gaps, then escalate — never build against broken coverage. ──
+  // ── Scoring the Cut: the §5 batch slice plan (velocity lever 1) — but lever 3 (§9 pipelining)
+  //    may have ALREADY cut this milestone's plan speculatively during the previous milestone's
+  //    gate. Consume that plan iff it survives the invalidation predicate: its base_sha (the HEAD
+  //    it was cut at) must still equal the current HEAD — any corrective commit on the prior
+  //    milestone (tribunal correction / validate loop) moved HEAD and forces a re-slice
+  //    (pipelineInvalidated, ledgered slice_plan_invalidated). Otherwise plan synchronously now.
+  //    Either path: ONE batch call, coverage validated in-script, ONE re-ask on gaps, then escalate
+  //    — never build against broken coverage. ──
   phase('Scoring the Cut')
-  log(`${spin('slice', milestoneIndex)} — ${m.id}: batch slice plan`)
-  const askPlan = async (scs, built, note, labelSuffix) => {
-    const res = await agent(slicePlanPrompt(m, surf, scs, built, note), { label: loreLabel('krs-one', 'slice-plan', labelSuffix), phase: 'Scoring the Cut', model: 'opus', schema: SLICE_PLAN_SCHEMA })
-    return (res && Array.isArray(res.slices)) ? res.slices : []
-  }
-  const planFor = async (scs, built, note, labelSuffix) => {
-    const ids = scs.map((c) => c.id)
-    let planned = await askPlan(scs, built, note, labelSuffix)
-    let v = validateSlicePlan(planned, ids)
-    if (!v.ok) {
-      const errText = v.errors.map((e) => e.message).join('; ')
-      log(`${m.id}: slice plan failed the coverage arithmetic [${errText}] — one re-ask`)
-      planned = await askPlan(scs, built, `${note ? note + '\n' : ''}Your previous plan was REJECTED by the coverage arithmetic: ${errText}. Fix EXACTLY these gaps — every listed Law check id in exactly one slice's sc_ids, every slice flipping at least one.`, `${labelSuffix}:retry`)
-      v = validateSlicePlan(planned, ids)
+  let firstPlan = null
+  let usedPipeline = false
+  if (pipelinedPlan && pipelinedPlan.milestoneId === m.id) {
+    const speculative = await pipelinedPlan.promise // resolve the plan launched during the prior gate
+    const curHead = await headSha(`${m.id}:pipeline-check`)
+    const inval = pipelineInvalidated(pipelinedPlan.base_sha, curHead)
+    if (!inval.invalidated && speculative && speculative.ok) {
+      firstPlan = speculative
+      usedPipeline = true
+      log(`${spin('slice', milestoneIndex)} — ${m.id}: reusing the PIPELINED slice plan (cut during ${pipelinedPlan.cutDuring}'s gate; HEAD unchanged at ${curHead})`)
+    } else {
+      const why = inval.invalidated ? inval.reason : 'the speculative plan failed coverage'
+      log(`${spin('slice', milestoneIndex)} — ${m.id}: PIPELINED plan invalidated [${why}] — re-slicing against the current HEAD`)
+      await ledger('slice_plan_invalidated', { milestone: m.id, base_sha: pipelinedPlan.base_sha, current_head: curHead, reason: why }, 'Scoring the Cut')
     }
-    return { planned, ok: v.ok, errors: v.errors }
   }
-  const firstPlan = await planFor(mScs, [], null, m.id)
+  pipelinedPlan = null // consumed (or never matched) — clear before this milestone's gate may set the next
+  if (!firstPlan) {
+    log(`${spin('slice', milestoneIndex)} — ${m.id}: batch slice plan`)
+    firstPlan = await planMilestone(m, surf, mScs)
+  }
   if (!firstPlan.ok) {
     const errText = firstPlan.errors.map((e) => e.message).join('; ')
     log(`${m.id}: slice plan STILL fails coverage after the re-ask [${errText}] — escalating; this milestone is not built (the conductor decides, validate backstops).`)
@@ -951,7 +1037,7 @@ for (const m of milestones) {
     continue
   }
   let queue = firstPlan.planned
-  log(`${m.id}: ${queue.length} slice(s) planned — [${queue.map((s) => s.sc_ids.join('+')).join(' | ')}]`)
+  log(`${m.id}: ${queue.length} slice(s) planned${usedPipeline ? ' (pipelined)' : ''} — [${queue.map((s) => s.sc_ids.join('+')).join(' | ')}]`)
 
   // ── INNER loop over the planned queue ──
   const slices = []
@@ -979,7 +1065,7 @@ for (const m of milestones) {
         const flipped = slices.flatMap((s) => s.sc_ids)
         const remainingScs = mScs.filter((c) => !flipped.includes(c.id))
         await ledger('slice_plan_replanned', { milestone: m.id, at_slice: qi, reason: conf.reason || 'state drift', remaining_sc_ids: remainingScs.map((c) => c.id) }, 'Scoring the Cut')
-        const rePlan = await planFor(remainingScs, slices, `The codebase state has DRIFTED from the original plan (${conf.reason || 'unspecified'}). Plan ONLY the remainder: the slices that flip the remaining checks listed above.`, `${m.id}:replan`)
+        const rePlan = await planMilestone(m, surf, remainingScs, slices, `The codebase state has DRIFTED from the original plan (${conf.reason || 'unspecified'}). Plan ONLY the remainder: the slices that flip the remaining checks listed above.`, `${m.id}:replan`)
         if (!rePlan.ok) {
           log(`${m.id}: the replanned remainder STILL fails coverage [${rePlan.errors.map((e) => e.message).join('; ')}] — escalating; the remaining slices are not built.`)
           await ledger('slice_plan_invalid', { milestone: m.id, errors: rePlan.errors, replan: true }, 'Scoring the Cut')
@@ -994,9 +1080,11 @@ for (const m of milestones) {
     }
 
     // Phase-6 speed fix: pre-process heavy assets ONCE before the first ui/mixed slice builds.
+    // Velocity lever 3 (§9): a haiku probe — recompress-if-present-else-no-op is mechanical leg
+    // work, not a reasoning task; the build leg downstream owns the design effort.
     if ((surf === 'ui' || surf === 'mixed') && slices.length === 0) {
       phase('Forging')
-      await agent(assetPrepPrompt(m), { label: loreLabel(builderName, 'prep', m.id), phase: 'Forging', model: 'sonnet' })
+      await agent(assetPrepPrompt(m), { label: loreLabel(builderName, 'prep', m.id), phase: 'Forging', model: 'haiku' })
     }
 
     phase('Forging')
@@ -1067,6 +1155,33 @@ for (const m of milestones) {
   let qaFindings = []
   const splitSlices = slices.filter((s) => s.split_required)
   const goalOn = livePosture.milestone_gate.goal_backward !== false
+
+  // ── Velocity lever 3 (§9 pipelining): launch the NEXT milestone's slice-plan IN PARALLEL with
+  //    THIS milestone's gate. The gate is expensive (dual analysts + goal-backward + maybe a judge
+  //    + a correction loop) and its agent calls are I/O-bound — the speculative slice-plan call
+  //    overlaps that wall-clock for free. We anchor it on base_sha = the HEAD it is cut against;
+  //    if the gate then commits a correction, the next milestone's consumer detects the moved HEAD
+  //    (pipelineInvalidated) and re-slices. We speculate only when the next milestone exists and
+  //    owns Law checks (a no-SC milestone is skipped before it would consume a plan). The launched
+  //    promise resolves to planMilestone's { ok, planned, errors }; per-item fault isolation keeps
+  //    a thrown speculation from breaking the gate (the consumer falls back to a fresh plan). ──
+  const nextM = milestones[milestoneIndex + 1]
+  if (nextM) {
+    const nextScs = lawChecks.filter((c) => c.milestone === nextM.id)
+    if (nextScs.length) {
+      const base_sha = await headSha(`${m.id}:pipeline-base`)
+      if (base_sha) {
+        const nextSurf = surfaceOf(nextM)
+        log(`Pipelining ${nextM.id}'s slice plan in parallel with ${m.id}'s gate (base_sha ${base_sha})`)
+        pipelinedPlan = {
+          milestoneId: nextM.id,
+          base_sha,
+          cutDuring: m.id,
+          promise: planMilestone(nextM, nextSurf, nextScs).catch(() => null),
+        }
+      }
+    }
+  }
   const goalAudit = (suffix) => agent(goalBackwardPrompt(m), { label: loreLabel('aristotle', 'goal-backward', suffix), phase: 'Judgment', model: 'opus', schema: QA_FINDINGS_SCHEMA })
   // auditOrNull — the ruling's retry shape: returns a USABLE report, or null after the ONE
   // re-ask (ledgered goal_audit_failure); the caller fails the boundary closed on null.
@@ -1098,7 +1213,7 @@ for (const m of milestones) {
       if (goal) qaFindings.push(...denzelReconcile(goal, null).summaryLines)
       else qaFindings.push(GOAL_AUDIT_FAILURE)
     } else await skipAudit()
-  } else if (slices.length >= livePosture.milestone_gate.min_slices_for_tribunal) {
+  } else if (tribunalThreshold(slices.length, livePosture.milestone_gate.min_slices_for_tribunal)) {
     if (!goalOn) await skipAudit()
     for (let c = 0; c <= MAX_TRIBUNAL_CORRECTION; c++) {
       const legs = [
@@ -1186,7 +1301,7 @@ for (const m of milestones) {
   await agent(
     `You are the codebase-state authority. ${scope} ${repoRuleLine}\n\n` +
     `<task>Milestone ${m.id} ("${m.title}") was just built. Update ${codebaseStateFile}: what now exists (modules, public surface) so the next milestone's slicer and builder have accurate context. Read 'git -C ${projectPath} log --oneline -8' and 'git -C ${projectPath} show --stat HEAD' for what changed.</task>`,
-    { label: loreLabel('rakim', 'state', m.id), phase: 'The Forge Heats', model: 'sonnet' }
+    { label: loreLabel('rakim', 'state', m.id), phase: 'The Forge Heats', model: 'haiku' }
   )
 
   results.push({
