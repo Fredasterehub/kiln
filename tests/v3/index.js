@@ -8,6 +8,7 @@
 // is what lets a .js entry use static imports; directory resolution only ever finds index.js,
 // never index.mjs. Zero dependencies, like everything else in the harness.
 import './src-modules.test.mjs'
+import './gauge.test.mjs'
 import './bundler.test.mjs'
 import './kiln-state.test.mjs'
 import './defect-fixes.test.mjs'
