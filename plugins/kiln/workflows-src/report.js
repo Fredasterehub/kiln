@@ -1,4 +1,3 @@
-// GENERATED from workflows-src/report.js — edit the source, run scripts/bundle-workflows.mjs
 export const meta = {
   name: 'kiln-report',
   description: 'Kiln report stage: Omega reads every .kiln artifact and the built project, then writes .kiln/REPORT.md — the final delivery summary in Kiln\'s voice.',
@@ -6,12 +5,7 @@ export const meta = {
 }
 
 // ── args: { kilnDir, projectPath } ──
-function normalizeArgs(args) {
-  if (typeof args === 'string') {
-    try { args = JSON.parse(args) } catch (e) { return { __parse_error: true } }
-  }
-  return (args && typeof args === 'object') ? args : {}
-}
+// @inline:args:normalizeArgs
 const A = normalizeArgs(args)
 const kilnDir = A.kilnDir
 const projectPath = A.projectPath
@@ -19,17 +13,10 @@ if (!kilnDir) throw new Error('report.js requires args.kilnDir')
 
 const reportFile = `${kilnDir}/REPORT.md`
 
-const NO_WANDER = 'Read ONLY the files named in this brief (absolute paths). Do not search the filesystem or read other projects.'
+// @inline:guards:NO_WANDER
 
 // ── MODEL_VOICE shell (Opus only; inlined from src/voice.mjs by the bundler) ──
-const MODEL_VOICE = {
-  opus: [
-    'Be direct. State findings and decisions plainly; do not soften.',
-    'Inputs are wrapped in XML tags — read the data block before the task line.',
-    'Keep output minimal and specific. Apply every rule to EVERY item in scope, not just the first.',
-  ].join('\n'),
-}
-const voice = (m) => (m === 'opus' ? MODEL_VOICE.opus + '\n\n' : '')
+// @inline:voice:MODEL_VOICE,voice
 
 const REPORT_SCHEMA = {
   type: 'object', additionalProperties: false,

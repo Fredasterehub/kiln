@@ -1,4 +1,3 @@
-// GENERATED from workflows-src/research.js — edit the source, run scripts/bundle-workflows.mjs
 export const meta = {
   name: 'kiln-research',
   description: 'Kiln research stage: identify topics from VISION.md, investigate them in parallel, validate findings (confidence/sources/quotes), and synthesize .kiln/docs/research.md.',
@@ -11,12 +10,7 @@ export const meta = {
 
 // ── args from the conductor: { kilnDir, projectPath, mode, testingRigor } ──
 // args may arrive as an object or a JSON string depending on how the caller encoded it. Normalise both.
-function normalizeArgs(args) {
-  if (typeof args === 'string') {
-    try { args = JSON.parse(args) } catch (e) { return { __parse_error: true } }
-  }
-  return (args && typeof args === 'object') ? args : {}
-}
+// @inline:args:normalizeArgs
 const A = normalizeArgs(args)
 const kilnDir = A.kilnDir
 if (!kilnDir) throw new Error('research.js requires args.kilnDir (absolute path to .kiln). Received args of type ' + typeof args)
@@ -32,14 +26,7 @@ const MAX_TOPICS = 5
 const MIN_TOPICS = 2
 
 // ── MODEL_VOICE shell (Opus only; inlined from src/voice.mjs by the bundler) ──
-const MODEL_VOICE = {
-  opus: [
-    'Be direct. State findings and decisions plainly; do not soften.',
-    'Inputs are wrapped in XML tags — read the data block before the task line.',
-    'Keep output minimal and specific. Apply every rule to EVERY item in scope, not just the first.',
-  ].join('\n'),
-}
-const voice = (m) => (m === 'opus' ? MODEL_VOICE.opus + '\n\n' : '')
+// @inline:voice:MODEL_VOICE,voice
 // Field operatives get detective codenames (the v1 "unit-deployed" Sherlock lineage) — display only.
 const FIELD_CODENAMES = ['sherlock', 'poirot', 'marple', 'dupin', 'holmes']
 const codename = (i) => FIELD_CODENAMES[((i % FIELD_CODENAMES.length) + FIELD_CODENAMES.length) % FIELD_CODENAMES.length]

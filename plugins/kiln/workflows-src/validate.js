@@ -1,4 +1,3 @@
-// GENERATED from workflows-src/validate.js — edit the source, run scripts/bundle-workflows.mjs
 export const meta = {
   name: 'kiln-validate',
   description: 'Kiln validate stage — the real L3 backstop. Architecture-drift + seam check, then detect the product type, install the app correctly (venv + editable install for src-layout, never bare pytest), run the FULL suite, and exercise EVERY acceptance criterion by actually running the app (CLI commands, HTTP requests, exports — executable checks, not prose). One single judge over all evidence rules PASS/PARTIAL/FAIL. UI behavioral verification is specified as a precise out-of-loop browser checklist (this workflow never launches a browser); a clean PASS is never emitted for UI behavior from static review alone.',
@@ -10,12 +9,7 @@ export const meta = {
 }
 
 // ── args: { kilnDir, projectPath, testingRigor, codexAvailable, designPresent } ──
-function normalizeArgs(args) {
-  if (typeof args === 'string') {
-    try { args = JSON.parse(args) } catch (e) { return { __parse_error: true } }
-  }
-  return (args && typeof args === 'object') ? args : {}
-}
+// @inline:args:normalizeArgs
 const A = normalizeArgs(args)
 const kilnDir = A.kilnDir
 const projectPath = A.projectPath
@@ -27,18 +21,11 @@ const valDir = `${kilnDir}/validation`
 const masterPlanFile = `${kilnDir}/master-plan.md`
 const archCheckFile = `${valDir}/architecture-check.md`
 const reportFile = `${valDir}/report.md`
-const NO_WANDER = 'Read ONLY the files named in this brief (absolute paths). Do not search the filesystem or read other projects.'
+// @inline:guards:NO_WANDER
 const scope = `${NO_WANDER} Exception: the built project at ${projectPath} is also in scope.`
 
 // ── MODEL_VOICE shell (Opus only; inlined from src/voice.mjs by the bundler) ──
-const MODEL_VOICE = {
-  opus: [
-    'Be direct. State findings and decisions plainly; do not soften.',
-    'Inputs are wrapped in XML tags — read the data block before the task line.',
-    'Keep output minimal and specific. Apply every rule to EVERY item in scope, not just the first.',
-  ].join('\n'),
-}
-const voice = (m) => (m === 'opus' ? MODEL_VOICE.opus + '\n\n' : '')
+// @inline:voice:MODEL_VOICE,voice
 const SPIN = {
   drift: ['Measuring the drift', 'Zoxea checks the seams', 'Intent versus reality'],
   validate: ['Argus watches with a hundred eyes', 'Testing the real thing, not the dream', 'Argus found an edge case. Of course.', 'End-to-end — no shortcuts allowed'],

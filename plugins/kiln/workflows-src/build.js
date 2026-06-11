@@ -1,4 +1,3 @@
-// GENERATED from workflows-src/build.js — edit the source, run scripts/bundle-workflows.mjs
 export const meta = {
   name: 'kiln-build',
   description: 'Kiln build stage — two nested loops. OUTER: each master-plan milestone in dependency order (sequential, cumulative commits). INNER: a just-in-time slice loop — the slicer scopes one vertical slice at a time from the live codebase state, a builder implements it (Opus builds ui/mixed, GPT-5.5/Codex builds logic), and a cross-FAMILY reviewer (always a different model family from the builder) rules on it with ≤3 fix cycles before commit. After the slices integrate, a single-pass milestone tribunal (Ken/Opus ∥ Ryu/Codex → deterministic reconcile → judge) gates the whole — SKIPPED for single-slice milestones, where the slice review is the milestone QA. The heavy end-to-end gate is validate, not per-slice ceremony.',
@@ -12,12 +11,7 @@ export const meta = {
 }
 
 // ── args: { kilnDir, projectPath, codexAvailable, testingRigor, milestoneLimit, uiBuild } ──
-function normalizeArgs(args) {
-  if (typeof args === 'string') {
-    try { args = JSON.parse(args) } catch (e) { return { __parse_error: true } }
-  }
-  return (args && typeof args === 'object') ? args : {}
-}
+// @inline:args:normalizeArgs
 const A = normalizeArgs(args)
 const kilnDir = A.kilnDir
 const projectPath = A.projectPath
@@ -45,14 +39,7 @@ const codebaseStateFile = `${docsDir}/codebase-state.md`
 const codebaseMapFile = `${docsDir}/codebase-map.md`
 
 // ── MODEL_VOICE — the thin model-tuned shell (Opus only; the Codex leg is shaped by the wrapper) ──
-const MODEL_VOICE = {
-  opus: [
-    'Be direct. State findings and decisions plainly; do not soften.',
-    'Inputs are wrapped in XML tags — read the data block before the task line.',
-    'Keep output minimal and specific. Apply every rule to EVERY item in scope, not just the first.',
-  ].join('\n'),
-}
-const voice = (m) => (m === 'opus' ? MODEL_VOICE.opus + '\n\n' : '')
+// @inline:voice:MODEL_VOICE,voice
 
 // ── Lore display layer (NEVER enters a model prompt — labels + log lines only) ──
 // Canonical copy lives in data/duo-pool.json (conductor reads that); this inline copy is the
@@ -166,21 +153,7 @@ const VERDICT_SCHEMA = {
 
 // ── denzelReconcile — PURE function, no agent call. Dedupe by normalized text, max-severity wins,
 //    blocking = any critical|high. A deterministic blocking gate the judge cannot soften away. ──
-const SEV_RANK = { critical: 4, high: 3, medium: 2, low: 1 }
-const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9 ]+/g, '').replace(/\s+/g, ' ').trim()
-function denzelReconcile(repA, repB) {
-  const all = [...((repA && repA.findings) || []), ...((repB && repB.findings) || [])]
-  const byKey = new Map()
-  for (const f of all) {
-    if (!f || !f.text) continue
-    const k = norm(f.text); const sev = SEV_RANK[f.severity] || 1
-    const prev = byKey.get(k)
-    if (!prev || sev > prev.rank) byKey.set(k, { text: f.text, severity: f.severity, rank: sev })
-  }
-  const merged = [...byKey.values()].sort((x, y) => y.rank - x.rank)
-  const blocking = merged.filter((f) => f.rank >= SEV_RANK.high)
-  return { findings: merged, blocking, hasBlocking: blocking.length > 0, summaryLines: merged.map((f) => `[${f.severity}] ${f.text}`) }
-}
+// @inline:reconcile:SEV_RANK,norm,denzelReconcile
 
 // ── Routing: builder family != reviewer family, derived in ONE place ──
 // ui/mixed → Opus builds, GPT/Codex reviews · logic → GPT/Codex builds, Opus reviews.
@@ -196,8 +169,7 @@ function routing(surf) {
     : { buildModel: 'sonnet', reviewModel: 'opus' }   // Codex builds, Opus reviews
 }
 
-const NO_WANDER = 'Read ONLY the files named in this brief (absolute paths). Do not search the filesystem or read other projects.'
-const repoRule = (projectPath) => `Project repo: ${projectPath}. Work and commit there directly — this is a sequential cumulative build; do NOT create a detached git worktree (later slices and milestones must see your commits). Maintain a .gitignore for the stack and NEVER commit generated artifacts (Python: __pycache__/, *.pyc, *.egg-info/, build/, dist/, .pytest_cache/) — add them to .gitignore and 'git rm --cached' any that slipped in.`
+// @inline:guards:NO_WANDER,repoRule
 const scope = NO_WANDER
 const repoRuleLine = repoRule(projectPath)
 // The wrapper TRANSLATES the brief into a 4-part Codex prompt — it never forwards it verbatim.

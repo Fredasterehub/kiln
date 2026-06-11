@@ -1,4 +1,3 @@
-// GENERATED from workflows-src/mapping.js — edit the source, run scripts/bundle-workflows.mjs
 export const meta = {
   name: 'kiln-mapping',
   description: 'Kiln brownfield mapping: three parallel scouts (anatomy, health, nervous-system) survey an existing codebase, then Mnemosyne synthesizes .kiln/docs/codebase-map.md for the rest of the pipeline.',
@@ -9,12 +8,7 @@ export const meta = {
 }
 
 // ── args: { projectPath, kilnDir } ──
-function normalizeArgs(args) {
-  if (typeof args === 'string') {
-    try { args = JSON.parse(args) } catch (e) { return { __parse_error: true } }
-  }
-  return (args && typeof args === 'object') ? args : {}
-}
+// @inline:args:normalizeArgs
 const A = normalizeArgs(args)
 const projectPath = A.projectPath
 const kilnDir = A.kilnDir
@@ -22,14 +16,7 @@ if (!projectPath || !kilnDir) throw new Error('mapping.js requires args.projectP
 const mapFile = `${kilnDir}/docs/codebase-map.md`
 
 // ── MODEL_VOICE shell (Opus only; inlined from src/voice.mjs by the bundler) ──
-const MODEL_VOICE = {
-  opus: [
-    'Be direct. State findings and decisions plainly; do not soften.',
-    'Inputs are wrapped in XML tags — read the data block before the task line.',
-    'Keep output minimal and specific. Apply every rule to EVERY item in scope, not just the first.',
-  ].join('\n'),
-}
-const voice = (m) => (m === 'opus' ? MODEL_VOICE.opus + '\n\n' : '')
+// @inline:voice:MODEL_VOICE,voice
 
 const scope =
   `Survey ONLY the codebase at ${projectPath}. Do not read other projects or wander outside it. ` +

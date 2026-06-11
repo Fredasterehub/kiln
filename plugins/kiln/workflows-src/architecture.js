@@ -1,4 +1,3 @@
-// GENERATED from workflows-src/architecture.js — edit the source, run scripts/bundle-workflows.mjs
 export const meta = {
   name: 'kiln-architecture',
   description: 'Kiln architecture stage: foundation docs, then (for non-trivial scope) two anonymized plans (Claude ∥ Codex), divergence extraction, and chairman synthesis into master-plan.md, validated with a bounded fix loop. Right-sizes to a lite single-plan path for trivial scope. Tags every milestone with a build surface (ui/logic/mixed) so build routes models per slice, and requires acceptance criteria written as EXECUTABLE checks (validate exercises them literally).',
@@ -12,12 +11,7 @@ export const meta = {
 }
 
 // ── args: { kilnDir, projectPath, mode, testingRigor, codexAvailable } ──
-function normalizeArgs(args) {
-  if (typeof args === 'string') {
-    try { args = JSON.parse(args) } catch (e) { return { __parse_error: true } }
-  }
-  return (args && typeof args === 'object') ? args : {}
-}
+// @inline:args:normalizeArgs
 const A = normalizeArgs(args)
 const kilnDir = A.kilnDir
 if (!kilnDir) throw new Error('architecture.js requires args.kilnDir (absolute path to .kiln). Received args of type ' + typeof args)
@@ -33,18 +27,11 @@ const masterPlanFile = `${kilnDir}/master-plan.md`
 const handoffFile = `${kilnDir}/architecture-handoff.md`
 const MAX_VALIDATION_ROUNDS = 2
 
-const NO_WANDER = 'Read ONLY the files named in this brief (absolute paths). Do not search the filesystem or read other projects.'
+// @inline:guards:NO_WANDER
 const noWander = NO_WANDER
 
 // ── MODEL_VOICE shell (Opus only; inlined from src/voice.mjs by the bundler) ──
-const MODEL_VOICE = {
-  opus: [
-    'Be direct. State findings and decisions plainly; do not soften.',
-    'Inputs are wrapped in XML tags — read the data block before the task line.',
-    'Keep output minimal and specific. Apply every rule to EVERY item in scope, not just the first.',
-  ].join('\n'),
-}
-const voice = (m) => (m === 'opus' ? MODEL_VOICE.opus + '\n\n' : '')
+// @inline:voice:MODEL_VOICE,voice
 // The wrapper TRANSLATES (Goal/Context/Constraints/Done-when); it never forwards a Claude brief verbatim.
 const codexHowto = `Delegate authoring to GPT-5.5: TRANSLATE this brief into a 4-part Codex prompt — Goal (the deliverable in 1-2 sentences), Context (the file paths + summary; no full dumps), Constraints (the arch-constraints + "do X instead of Y"), Done-when (the file written + what it must contain) — write it to a file and pipe via stdin: 'codex exec -m gpt-5.5 -c model_reasoning_effort="high" --sandbox workspace-write --skip-git-repo-check < /tmp/kiln-codex.md'. Do NOT forward this brief verbatim. If GPT-5.5 is unavailable retry with -m gpt-5.4; if codex errors or yields nothing usable, author the plan yourself.`
 const SPIN = {
