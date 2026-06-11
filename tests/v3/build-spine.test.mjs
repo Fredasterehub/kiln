@@ -97,7 +97,7 @@ const runnerOk = { reasoning: 'r', verify_exit: 0, tamper_paths: [], law_run_exi
 const freshOk = {
   results_jsonl_exists: true, head: 'abc123', head_committed_epoch: 1000,
   manifest_head: 'abc123', manifest_results_sha256: 'feed01', manifest_completed_epoch: 1000,
-  results_sha256: 'feed01',
+  results_sha256: 'feed01', manifest_verification_class: 'full',
 }
 const reviewOk = { reasoning: 'r', verdict: 'APPROVED', law_green: true, tests_green: true, findings: [] }
 const rejectLogical = { reasoning: 'r', verdict: 'REJECTED', law_green: false, tests_green: false, findings: [{ text: 'wrong behavior in add()', finding_class: 'logical' }] }
@@ -276,7 +276,7 @@ test('tamper drill: kiln-law exit 2 → slice auto-REJECTED with NO reviewer spa
 
 // ── the freshness gate (§6: evidence timestamps/hashes compared against HEAD, in-script) ────────
 
-test('freshness gate: stale evidence on ANY §6 arm → auto-REJECTED, no reviewer — HEAD moved, results.jsonl missing, manifest from another commit, hash mismatch, unfinalized run, evidence predating HEAD', async () => {
+test('freshness gate: stale evidence on ANY §6 arm → auto-REJECTED, no reviewer — HEAD moved, results.jsonl missing, manifest from another commit, hash mismatch, unfinalized run, evidence predating HEAD, unreadable verification_class', async () => {
   const staleProbes = [
     { ...freshOk, head: 'def456' },                      // HEAD moved since the runner anchored
     { ...freshOk, results_jsonl_exists: false },         // no evidence file at all
@@ -284,6 +284,7 @@ test('freshness gate: stale evidence on ANY §6 arm → auto-REJECTED, no review
     { ...freshOk, results_sha256: 'beef02' },            // results.jsonl altered after the run
     { ...freshOk, manifest_results_sha256: '' },         // run never finalized (aborted mid-run)
     { ...freshOk, manifest_completed_epoch: 999 },       // evidence predates the HEAD commit
+    { ...freshOk, manifest_verification_class: '' },     // §7: degradation unprovable — fail closed
   ]
   for (const probe of staleProbes) {
     const { result, calls } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
@@ -296,7 +297,7 @@ test('freshness gate: stale evidence on ANY §6 arm → auto-REJECTED, no review
   }
 })
 
-test('freshness probe prompt: mechanical transcription of the §6 anchors — run.json manifest, results.jsonl rehash, HEAD sha + commit epoch', async () => {
+test('freshness probe prompt: mechanical transcription of the §6 anchors — run.json manifest, results.jsonl rehash, HEAD sha + commit epoch, §7 verification_class', async () => {
   const { calls } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }))
   const probe = labelsOf(calls, 'thoth:freshness')[0]
   assert.equal(probe.model, 'haiku')
@@ -304,7 +305,33 @@ test('freshness probe prompt: mechanical transcription of the §6 anchors — ru
   assert.match(probe.prompt, /sha256sum \/tmp\/kiln-x\/\.kiln\/evidence\/RUN1\/results\.jsonl/)
   assert.match(probe.prompt, /git -C \/tmp\/kiln-x rev-parse HEAD/)
   assert.match(probe.prompt, /git -C \/tmp\/kiln-x show -s --format=%ct HEAD/)
+  assert.match(probe.prompt, /manifest_verification_class = its "verification_class"/)
   assert.match(probe.prompt, /trust nothing the runner reported/)
+})
+
+// ── the §7 honesty channel: a static-only run proceeds HONESTLY degraded — ledgered + surfaced ──
+
+test('verification degraded (§7): a static-only manifest with law exit 0 still reaches the reviewer, but the degradation is LEDGERED and NAMED in the review prompt — never silently green', async () => {
+  const { result, calls } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
+    if (label.startsWith('thoth:freshness')) return { ...freshOk, manifest_verification_class: 'static-only' }
+  }))
+  assert.equal(count(calls, ':review:'), 1, 'degradation is the capability tier, not an error — the trial proceeds')
+  assert.equal(result.built[0].qa, 'QA_PASS')
+  const degraded = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('verification_degraded'))
+  assert.equal(degraded.length, 1, 'the static-only run is ledgered the moment the gate sees it')
+  assert.match(degraded[0].prompt, /"verification_class":"static-only"/)
+  const review = labelsOf(calls, ':review:')[0].prompt
+  assert.match(review, /VERIFICATION DEGRADED \(verification_class: static-only\)/, 'the reviewer is told the probe evidence was deferred')
+  assert.match(review, /A deferral is never green/)
+})
+
+test('verification full (§7): a fully-verified run tells the reviewer the probe evidence EXISTS and must be read — no stale "later phase" language anywhere', async () => {
+  const { calls } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }))
+  assert.equal(labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('verification_degraded')).length, 0, 'a full-verification run ledgers no degradation')
+  const review = labelsOf(calls, ':review:')[0].prompt
+  assert.match(review, /verification_class is 'full': every mapped probe EXECUTED/)
+  assert.match(review, /PROBE_DEFERRED\/PROBE_UNAVAILABLE lines are honest deferrals — neither red nor green/)
+  assert.doesNotMatch(review, /arrives in a later phase/, 'T1 made probes executable — the reviewer must not be told to ignore available probe evidence')
 })
 
 // ── slice-plan coverage: re-ask once, then escalate ─────────────────────────────────────────────

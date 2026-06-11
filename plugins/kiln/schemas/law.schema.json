@@ -38,7 +38,7 @@
           },
           "kind": {
             "enum": ["shell", "pytest", "http", "probe"],
-            "description": "Check class; 'probe' entries are browser-probe TEMPLATES — wired but inert until a later phase makes them runnable (the runner skips them with PROBE_DEFERRED)"
+            "description": "Check class; 'probe' entries carry a declarative `spec` (BLUEPRINT §7 Tier-1) that the runner executes via kiln-probe — a one-shot browser subprocess with a deadline, never a service. A spec-less probe is an un-instantiated template: the runner defers it (PROBE_DEFERRED), never errors"
           },
           "cmd": {
             "type": "string",
@@ -67,6 +67,84 @@
           "pre_satisfied": {
             "type": "boolean",
             "description": "§5.1 brownfield lifecycle: GREEN at lock time — excluded from flip accounting, guarded as a regression instead"
+          },
+          "spec": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["url", "landmarks"],
+            "description": "The §7 Tier-1 probe spec — declarative assertions only, never browser code; legal ONLY on kind 'probe' (cross-field, enforced by validateLaw). Authored by Asimov at Law time from the SC text; executed by kiln-probe as a one-shot subprocess under a hard deadline; the builder never writes or edits it",
+            "properties": {
+              "url": {
+                "type": "string",
+                "pattern": "^/",
+                "description": "The path to load, joined to the served base URL (e.g. '/' or '/app')"
+              },
+              "landmarks": {
+                "type": "array",
+                "minItems": 1,
+                "description": "The SC's key UI elements that must be VISIBLE — selectors by role+name (taken from the SC text), never CSS",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["role", "name"],
+                  "properties": {
+                    "role": { "type": "string", "minLength": 1 },
+                    "name": { "type": "string", "minLength": 1 }
+                  }
+                }
+              },
+              "interactions": {
+                "type": "array",
+                "description": "Slice-specific interaction asserts in user order, only when the SC declares a behavior. click/expect need role+name; fill needs role+name+value; press needs key",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["action"],
+                  "properties": {
+                    "action": { "enum": ["click", "fill", "press", "expect"] },
+                    "role": { "type": "string", "minLength": 1 },
+                    "name": { "type": "string", "minLength": 1 },
+                    "value": { "type": "string" },
+                    "key": { "type": "string", "minLength": 1 }
+                  },
+                  "allOf": [
+                    { "if": { "properties": { "action": { "enum": ["click", "expect"] } } }, "then": { "required": ["role", "name"] } },
+                    { "if": { "properties": { "action": { "const": "fill" } } }, "then": { "required": ["role", "name", "value"] } },
+                    { "if": { "properties": { "action": { "const": "press" } } }, "then": { "required": ["key"] } }
+                  ]
+                }
+              },
+              "viewports": {
+                "type": "array",
+                "minItems": 1,
+                "description": "Viewport matrix; default [{1440×900}] when absent",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["width", "height"],
+                  "properties": {
+                    "width": { "type": "integer", "minimum": 1 },
+                    "height": { "type": "integer", "minimum": 1 }
+                  }
+                }
+              },
+              "serve_cmd": {
+                "type": "string",
+                "minLength": 1,
+                "description": "ONLY when the stack needs its own server: the exact serve command (kiln-probe manages its PID under its own deadline and ALWAYS kills it). Requires base_url"
+              },
+              "base_url": {
+                "type": "string",
+                "pattern": "^https?://",
+                "description": "Where the serve_cmd app listens; legal only WITH serve_cmd — without one, kiln-probe serves the statics itself via node:http on an ephemeral port"
+              },
+              "serve_dir": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional root for kiln's built-in static server, projectPath-relative (no leading '/', no '..'); legal only WITHOUT serve_cmd"
+              }
+            },
+            "dependentRequired": { "serve_cmd": ["base_url"], "base_url": ["serve_cmd"] }
           }
         }
       }

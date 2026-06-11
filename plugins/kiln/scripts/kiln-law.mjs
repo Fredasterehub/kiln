@@ -62,12 +62,43 @@
 //                every check expected RED at lock except `pre_satisfied: true` (brownfield
 //                GREEN-at-lock, excluded from flip accounting, guarded as a regression instead).
 //                Regression is asserted over the checks that actually ran — run without --only
-//                for full coverage. A flip whose check is a P2 probe folds 'deferred' and is
-//                exempt (wired but inert, ledgered PROBE_DEFERRED — probes run in a later phase).
-//            P2 probe stance: kind:"probe" entries are wired but INERT — always skipped with a
-//            PROBE_DEFERRED line and a {id, deferred:"probe_deferred"} results entry (status
-//            needs them to fold deferred); --skip-probes is accepted for forward compatibility.
-//            No browser anything here.
+//                for full coverage. A flip whose check folds 'deferred' (a spec-less probe
+//                template, --skip-probes, or playwright absent) is exempt from flip accounting —
+//                deferred is honest degradation, NEVER green.
+//            P3 probe stance (BLUEPRINT §7): kind:"probe" checks with a `spec` EXECUTE via
+//            kiln-probe.mjs — one bounded subprocess per probe (the browser is a subprocess with
+//            a deadline, never a service; kiln-probe owns serve/deadline/sweep/evidence). The
+//            probe's stdout lands in checks/<SC>.log and its exit maps mechanically:
+//              0  → GREEN (results line {id, exit:0, …} like any check)
+//              78 → PROBE_UNAVAILABLE — playwright absent: folds {id, deferred:
+//                   "probe_unavailable"} — capability-degraded, NEVER green
+//              79 → RED (probe assert deadline hit — recorded exit 79)
+//              other → RED with that exit
+//            Spec-less probe templates and --skip-probes still defer with a PROBE_DEFERRED line
+//            and {id, deferred:"probe_deferred"}. When ANY probe deferred in a run (either
+//            reason), the finalized run.json marks verification_class: "static-only" and the run
+//            prints a VERIFICATION_CLASS line — degraded paths are recorded end-to-end, never
+//            silently green; otherwise verification_class is "full". A probe child killed by
+//            ANY signal (the outer timeout_s SIGKILL included) gets a `kiln-probe sweep <runId>`
+//            fired behind it — the dead wrapper cannot sweep its own token, and the sweep reaps
+//            BOTH the token-cmdline survivors (browser/template) and the managed serve_cmd
+//            process group via the wrapper's /tmp/kiln-pw-<runId>-….server.pid record (the
+//            server's own cmdline carries no token — lifecycle step 4: no server outlives the
+//            check that spawned it).
+//            STAGE-LEVEL SWEEPS (discipline-spec lifecycle step 3) bracket every probe-executing
+//            run: a pre-flight `kiln-probe sweep` of the WHOLE kiln-pw- namespace fires before
+//            the first check runs (prior crashed runs leave stale profiles/SingletonLocks and
+//            orphaned trees under tokens this run cannot know), and a run-end `kiln-probe sweep
+//            <runId>` is registered on process 'exit' so it fires UNCONDITIONALLY on every path
+//            out — clean completion, unmet expectation/flip gates (exit 1), and the mid-run
+//            tamper abort (exit 2) alike (die() is process.exit, which skips finally blocks but
+//            never 'exit' handlers; sweep spawning is synchronous, exit-handler-safe). The
+//            brackets exist exactly when the selection contains an executable probe (spec'd,
+//            not --skip-probes): a run that launches no browser HAS no browser stage to sweep,
+//            and a namespace-wide sweep from a logic-only run would kill a concurrent legitimate
+//            session — named-token discipline, never blanket. The workflow-boundary pair (build
+//            start pre-flight + build-end cleanup, both ledgered) is build.js's own (P3 T2),
+//            layered above these.
 //   status — fold one run's results.jsonl → {green, red, deferred} JSON on stdout (green = exit
 //            matched the check's expected 'exit0'; last line wins per id; law.json check order).
 //   suite  — persist the PROJECT suite as hashed evidence beside a recorded Law run (§6): the
@@ -104,9 +135,13 @@
 import { createHash } from 'node:crypto'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { readFileSync, writeFileSync, renameSync, mkdirSync, appendFileSync, existsSync } from 'node:fs'
-import { join, relative, resolve, isAbsolute } from 'node:path'
+import { join, relative, resolve, isAbsolute, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { validateLaw, flipPlan } from '../src/law.mjs'
+
+// kiln-probe.mjs lives beside this CLI — the §7 Tier-1 probe wrapper kind:'probe' checks run through
+const KILN_PROBE = join(dirname(fileURLToPath(import.meta.url)), 'kiln-probe.mjs')
 
 const die = (msg, code = 1) => { console.error(`kiln-law: ${msg}`); process.exit(code) }
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex')
@@ -363,42 +398,86 @@ function cmdRun(projectPath, kilnDir, flags) {
     die(`run: tamper gate failed before ${id} — locked path(s) changed mid-run; run ${runId} aborted, its evidence is partial and untrusted`, 2)
   }
 
+  // §7 stage-level sweeps (discipline-spec lifecycle step 3): when this run will EXECUTE any
+  // probe — a spec'd kind:'probe' in the selection, not opted out by --skip-probes — the
+  // browser-verification stage exists and gets BOTH brackets. Pre-flight: the WHOLE kiln-pw-
+  // namespace, before any probe spawns — prior crashed runs leave stale profiles/SingletonLocks
+  // and orphaned process trees under tokens this run cannot enumerate, and they poison fresh
+  // launches. Run-end: this run's token prefix, registered on process 'exit' so it fires on
+  // EVERY path out — clean completion, unmet gates (exit 1), the mid-run tamper abort (exit 2)
+  // — die() is process.exit, which skips finally blocks but never 'exit' handlers, and
+  // spawnSync is exit-handler-safe. A run with no executable probe launches no browser: no
+  // browser stage, no sweep — a namespace-wide sweep from a logic-only run could kill a
+  // concurrent legitimate session (named-token discipline, never blanket). Per-probe sweeps
+  // (kiln-probe's finally + the kill-path sweep below) stay targeted inside these brackets.
+  // Sweeps are cleanup, never verdicts — kiln-probe sweep always exits 0 and gates nothing.
+  if (selected.some((c) => c.kind === 'probe' && c.spec && !flags['skip-probes'])) {
+    spawnSync(process.execPath, [KILN_PROBE, 'sweep'], { stdio: 'inherit' })
+    process.on('exit', () => spawnSync(process.execPath, [KILN_PROBE, 'sweep', runId], { stdio: 'inherit' }))
+  }
+
   let green = 0; let red = 0; let deferredN = 0
+  let anyProbeDeferred = false // any probe deferral (no spec, --skip-probes, playwright absent) degrades the run to static-only
   const byId = {}
   for (const c of selected) {
     assertGateBefore(c.id)
-    if (c.kind === 'probe') {
-      // P2: probes are wired but inert — deferred, never executed (no browser anything).
+    if (c.kind === 'probe' && (flags['skip-probes'] || !c.spec)) {
+      // a spec-less probe is an un-instantiated template; --skip-probes is the explicit opt-out —
+      // both defer honestly (deferred is NEVER green), and the run degrades to static-only.
       console.log(`PROBE_DEFERRED ${c.id}`)
       appendFileSync(resultsFile, JSON.stringify({ id: c.id, deferred: 'probe_deferred' }) + '\n')
-      byId[c.id] = 'deferred'; deferredN++
+      byId[c.id] = 'deferred'; deferredN++; anyProbeDeferred = true
       continue
     }
     const started = Date.now()
-    const res = spawnSync('bash', ['-c', c.cmd], {
-      cwd: projectPath, encoding: 'utf8',
-      timeout: c.timeout_s * 1000, killSignal: 'SIGKILL', maxBuffer: 16 * 1024 * 1024,
-    })
+    // §7: a probe check executes via kiln-probe — one bounded browser subprocess with its own
+    // serve/deadline/sweep/evidence lifecycle; every other kind runs its exact locked cmd.
+    const res = c.kind === 'probe'
+      ? spawnSync(process.execPath, [KILN_PROBE, 'run', projectPath, kilnDir, c.id, runId], {
+          encoding: 'utf8', timeout: c.timeout_s * 1000, killSignal: 'SIGKILL', maxBuffer: 16 * 1024 * 1024,
+        })
+      : spawnSync('bash', ['-c', c.cmd], {
+          cwd: projectPath, encoding: 'utf8',
+          timeout: c.timeout_s * 1000, killSignal: 'SIGKILL', maxBuffer: 16 * 1024 * 1024,
+        })
     const durationMs = Date.now() - started
     const timedOut = res.signal === 'SIGKILL' || (res.error && res.error.code === 'ETIMEDOUT')
+    // a kiln-probe child killed by ANY signal (the outer timeout's SIGKILL included) never ran
+    // its own finally-sweep — fire one by the run's token prefix so its survivors die NOW, not
+    // at the stage-end sweep. The sweep's pidfile arm is what reaps the managed serve_cmd group:
+    // the server's cmdline carries no token, so pattern-kill alone would leave it running.
+    if (c.kind === 'probe' && (timedOut || res.signal)) spawnSync(process.execPath, [KILN_PROBE, 'sweep', runId], { stdio: 'ignore' })
     // exit code IS the verdict; a timed-out check records 124 (the coreutils timeout convention),
     // any other signal-death records 1 — never a fake 0.
     const exit = res.status !== null ? res.status : (timedOut ? 124 : 1)
     const logContent =
-      `$ ${c.cmd}\n--- stdout ---\n${res.stdout || ''}\n--- stderr ---\n${res.stderr || ''}\n` +
+      `$ ${c.kind === 'probe' ? `kiln-probe run ${c.id} (run ${runId})` : c.cmd}\n--- stdout ---\n${res.stdout || ''}\n--- stderr ---\n${res.stderr || ''}\n` +
       `--- exit ${exit} (${durationMs}ms)${timedOut ? ' TIMEOUT' : ''} ---\n`
     writeFileSync(join(runDir, 'checks', `${c.id}.log`), logContent)
+    if (c.kind === 'probe' && exit === 78) {
+      // playwright absent — the capability tier, not an error: folds DEFERRED, never green; the
+      // run is honestly degraded (verification_class below) and the build spine ledgers it.
+      console.log(`PROBE_UNAVAILABLE ${c.id} (${durationMs}ms)`)
+      appendFileSync(resultsFile, JSON.stringify({ id: c.id, deferred: 'probe_unavailable', log_sha256: sha256(logContent) }) + '\n')
+      byId[c.id] = 'deferred'; deferredN++; anyProbeDeferred = true
+      continue
+    }
     appendFileSync(resultsFile, JSON.stringify({ id: c.id, exit, duration_ms: durationMs, log_sha256: sha256(logContent) }) + '\n')
     if (exit === 0) { console.log(`GREEN ${c.id} (${durationMs}ms)`); byId[c.id] = 'green'; green++ }
     else { console.log(`RED ${c.id} exit ${exit}${timedOut ? ' (timeout)' : ''} (${durationMs}ms)`); byId[c.id] = 'red'; red++ }
   }
   // Every selected check ran — finalize the manifest BEFORE the expectation gates (an unmet
   // expectation is a verdict about the work, not about the evidence: the evidence is complete).
-  writeManifest({ results_sha256: sha256(readFileSync(resultsFile)), completed_at: Math.floor(Date.now() / 1000) })
+  // verification_class is part of the finalized evidence: 'static-only' the moment ANY probe
+  // deferred in THIS run (spec-less template, --skip-probes, or playwright absent) — degraded
+  // verification is recorded in the §6 anchor itself, never inferred from prose.
+  const verificationClass = anyProbeDeferred ? 'static-only' : 'full'
+  writeManifest({ results_sha256: sha256(readFileSync(resultsFile)), completed_at: Math.floor(Date.now() / 1000), verification_class: verificationClass })
   console.log(`RESULT ${runId} green=${green} red=${red} deferred=${deferredN}`)
+  if (anyProbeDeferred) console.log(`VERIFICATION_CLASS static-only — probe evidence deferred for: ${selected.filter((c) => byId[c.id] === 'deferred').map((c) => c.id).join(',')}`)
 
   // The gates, evaluated together so every failure is reported in one pass:
-  // --expect-green is hard greenness (a P2 deferred probe can never satisfy it); --flips is the
+  // --expect-green is hard greenness (a deferred probe can never satisfy it); --flips is the
   // §5.1 lifecycle — declared flips must be green NOW (RED→GREEN from statusBefore; deferred
   // probes exempt), and no previously-GREEN check that ran may have gone red.
   const failures = []

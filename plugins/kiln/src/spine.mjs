@@ -50,10 +50,16 @@ export function validateSlicePlan(slices, milestoneScIds) {
 // law_run_exit, flip_unmet, regressed, run_id, head, … }); `probe` is the independent freshness
 // probe's report — a fresh pair of eyes over the evidence ON DISK ({ results_jsonl_exists, head,
 // head_committed_epoch, manifest_head, manifest_results_sha256, manifest_completed_epoch,
-// results_sha256 }), never the runner's own claims. The manifest fields come from the run.json
-// kiln-law ITSELF writes inside the evidence dir (and finalizes only on a complete run) — the
-// evidence carries its own anchors; the agents only transcribe them. Returns
-// { verdict: 'tamper' | 'stale' | 'red' | 'proceed', tamper_paths, reasons }:
+// results_sha256, manifest_verification_class }), never the runner's own claims. The manifest
+// fields come from the run.json kiln-law ITSELF writes inside the evidence dir (and finalizes
+// only on a complete run) — the evidence carries its own anchors; the agents only transcribe
+// them. Returns { verdict: 'tamper' | 'stale' | 'red' | 'proceed', tamper_paths, reasons }, and
+// on the trustworthy-evidence verdicts ('red' | 'proceed') also verification_class
+// ('full' | 'static-only', from the finalized manifest) — the §7 honesty channel: a
+// probe-deferred run (uninstantiated template, --skip-probes, playwright absent) can exit 0,
+// so the GATE must carry the degradation mechanically or a static-only run proceeds silently
+// green. A finalized manifest whose verification_class is missing or unreadable is foreign or
+// pre-contract evidence — 'stale', fail-closed, like every other absent anchor.
 //   tamper  — kiln-law exited 2 anywhere or TAMPER paths were reported: a locked Law path was
 //             touched. The slice is auto-REJECTED by the WORKFLOW (no agent judgment, no reviewer
 //             spawned) and the fix brief names the touched lock(s). Checked FIRST — tamper
@@ -101,6 +107,7 @@ export function runnerGate(runner, probe) {
     if (typeof r.head !== 'string' || !r.head.trim()) reasons.push('the runner reported no HEAD anchor')
   }
   const p = (probe && typeof probe === 'object' && !Array.isArray(probe)) ? probe : null
+  let verificationClass = ''
   if (!p) reasons.push('the freshness probe produced no report')
   else {
     const str = (v) => (typeof v === 'string' ? v.trim() : '')
@@ -126,6 +133,16 @@ export function runnerGate(runner, probe) {
     const committed = (typeof p.head_committed_epoch === 'number' && Number.isFinite(p.head_committed_epoch)) ? p.head_committed_epoch : -1
     if (completed < 0 || committed < 0) reasons.push('the evidence/HEAD timestamps are unavailable — freshness cannot be proven')
     else if (completed < committed) reasons.push(`the evidence completed at epoch ${completed}, before HEAD was committed at epoch ${committed} — stale by time`)
+    // §7 honesty arm: every finalized run.json carries verification_class ('full' when every
+    // selected probe EXECUTED, 'static-only' the moment any probe deferred — uninstantiated
+    // template, --skip-probes, or playwright absent). A deferred probe folds into a law_run_exit
+    // of 0, so the exit code alone CANNOT distinguish a fully-verified run from a degraded one —
+    // the gate must read the class from the evidence itself or a static-only run proceeds
+    // silently green. Missing/unreadable ⇒ foreign or pre-contract evidence ⇒ stale, fail-closed.
+    verificationClass = str(p.manifest_verification_class)
+    if (verificationClass !== 'full' && verificationClass !== 'static-only') {
+      reasons.push(`the evidence carries no readable verification_class (run.json reports ${JSON.stringify(p.manifest_verification_class)}) — whether probe verification was degraded cannot be proven`)
+    }
   }
   if (reasons.length) return { verdict: 'stale', tamper_paths: [], reasons }
   // The lifecycle verdict (T2-fix ruling, §5.1 red/green): the evidence is complete and fresh —
@@ -139,9 +156,9 @@ export function runnerGate(runner, probe) {
     if (unmet.length) why.push(`declared RED→GREEN flip(s) still not green: ${unmet.join(', ')}`)
     if (regressed.length) why.push(`previously-GREEN check(s) regressed: ${regressed.join(', ')}`)
     if (!why.length) why.push(`kiln-law run exited ${r.law_run_exit} — the lifecycle gate failed without transcribed FLIP_UNMET/REGRESSION ids; read the evidence logs under the run's checks/ dir`)
-    return { verdict: 'red', tamper_paths: [], reasons: why, flip_unmet: unmet, regressed }
+    return { verdict: 'red', tamper_paths: [], reasons: why, flip_unmet: unmet, regressed, verification_class: verificationClass }
   }
-  return { verdict: 'proceed', tamper_paths: [], reasons: [] }
+  return { verdict: 'proceed', tamper_paths: [], reasons: [], verification_class: verificationClass }
 }
 
 // goalAuditUsable(report) — the milestone gate's usability predicate for the goal-backward

@@ -79,11 +79,11 @@ const runnerOk = { verify_exit: 0, tamper_paths: [], law_run_exit: 0, flip_unmet
 const probeOk = {
   results_jsonl_exists: true, head: 'abc123', head_committed_epoch: 1000,
   manifest_head: 'abc123', manifest_results_sha256: 'feed01', manifest_completed_epoch: 1000,
-  results_sha256: 'feed01',
+  results_sha256: 'feed01', manifest_verification_class: 'full',
 }
 
-test('runnerGate: clean runner + fresh probe → proceed', () => {
-  assert.deepEqual(runnerGate(runnerOk, probeOk), { verdict: 'proceed', tamper_paths: [], reasons: [] })
+test('runnerGate: clean runner + fresh probe → proceed, carrying the manifest verification_class', () => {
+  assert.deepEqual(runnerGate(runnerOk, probeOk), { verdict: 'proceed', tamper_paths: [], reasons: [], verification_class: 'full' })
 })
 
 test('runnerGate: tamper on ANY arm — verify exit 2, run exit 2, or named TAMPER paths', () => {
@@ -209,6 +209,28 @@ test('runnerGate §6 timestamp arm: evidence completed before HEAD was committed
     const v = runnerGate(runnerOk, { ...probeOk, ...miss })
     assert.equal(v.verdict, 'stale')
     assert.match(v.reasons.join(' '), /timestamps are unavailable/)
+  }
+})
+
+test('runnerGate §7 honesty arm: a static-only manifest still proceeds, but the gate CARRIES the degradation — never silently green', () => {
+  const v = runnerGate(runnerOk, { ...probeOk, manifest_verification_class: 'static-only' })
+  assert.equal(v.verdict, 'proceed', 'degradation is the capability tier, not an error — the run proceeds')
+  assert.equal(v.verification_class, 'static-only', 'the gate transcribes the degradation mechanically — the workflow ledgers it and the reviewer sees it')
+})
+
+test('runnerGate §7 honesty arm: the red verdict carries verification_class too — a degraded red is still a fully-recorded red', () => {
+  const v = runnerGate({ ...runnerOk, law_run_exit: 1, flip_unmet: ['SC-002'] }, { ...probeOk, manifest_verification_class: 'static-only' })
+  assert.equal(v.verdict, 'red')
+  assert.equal(v.verification_class, 'static-only')
+  assert.equal(runnerGate({ ...runnerOk, law_run_exit: 1 }, probeOk).verification_class, 'full')
+})
+
+test('runnerGate §7 honesty arm: a missing/unreadable verification_class is STALE, fail-closed — a probe_unavailable deferral exits 0, so an evidence manifest that cannot prove its class could proceed silently green', () => {
+  for (const bad of [{ manifest_verification_class: '' }, { manifest_verification_class: 'partial' }, { manifest_verification_class: 42 }, { manifest_verification_class: undefined }]) {
+    const v = runnerGate(runnerOk, { ...probeOk, ...bad })
+    assert.equal(v.verdict, 'stale', `verification_class=${JSON.stringify(bad.manifest_verification_class)} must be stale`)
+    assert.match(v.reasons.join(' '), /no readable verification_class/)
+    assert.equal(v.verification_class, undefined, 'an untrusted manifest contributes no class')
   }
 })
 

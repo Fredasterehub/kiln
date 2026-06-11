@@ -489,7 +489,7 @@ log(`${spin('law', 0)}`)
 const lawFile = `${kilnDir}/law.json`
 let lawLocked = false
 let lawReason = null
-let lawCheckCount = 0
+let lawChecks = [] // hoisted: the return derives law_check_count from it on every path
 if (!(verdict && verdict.verdict === 'PASS')) {
   lawReason = 'master plan never reached Athena PASS — the Law locks only a validated plan'
 } else if (!projectPath) {
@@ -512,22 +512,31 @@ if (!(verdict && verdict.verdict === 'PASS')) {
     `or 'http' (a script driving the running app's HTTP surface). Every check must FAIL right now (the product ` +
     `is unbuilt — checks are expected RED at lock) and pass only when its criterion is genuinely met; never ` +
     `write a check that trivially passes.\n` +
-    `3. ui-surface SCs get a probe TEMPLATE instead — kind 'probe': a placeholder file whose header comment ` +
-    `precisely describes the landmarks and behaviors to assert (selectors by role+name, taken from the SC ` +
-    `text). Write NO browser code of any kind — probe evidence arrives in a later phase. A template's cmd ` +
-    `stays empty ("").\n` +
+    `3. ui-surface SCs get kind 'probe' — a DECLARATIVE probe spec the kiln-probe engine executes as a ` +
+    `bounded browser subprocess; builders never write, edit, or run probes. Write NO browser code of any ` +
+    `kind — no Playwright scripts, no test runners; the spec is pure JSON authored from the SC text: ` +
+    `{"url": <path to load, starting with '/'>, "landmarks": [{"role", "name"}, …] — the SC's key UI ` +
+    `elements by role+name exactly as the SC names them (never CSS selectors), "interactions": ` +
+    `[{"action": "click|fill|press|expect", "role", "name", "value", "key"}, …] in user order ONLY when ` +
+    `the SC declares a behavior (click/expect need role+name; fill adds value; press needs key), optional ` +
+    `"viewports": [{"width", "height"}] (default 1440×900), and ONLY when the stack needs its own server: ` +
+    `"serve_cmd" (the exact serve command) + "base_url" (where it listens) — static deliverables omit ` +
+    `both (kiln serves them itself; add "serve_dir" only if the served root is a subdirectory). Write the ` +
+    `spec to ${projectPath}/tests/acceptance/<sc-id>.probe.json (lowercase id; the locked, project-native ` +
+    `artifact — list it in the check's files) AND verbatim as the check's "spec" field in law.json. A ` +
+    `probe's cmd stays empty (""); give probes timeout_s 120 (server start + a hard-killed 90s probe).\n` +
     `4. Write ${lawFile} matching law schema 1 EXACTLY: {"schema": 1, "lock_commit": null, "checks": [{"id", ` +
     `"milestone", "kind": "shell|pytest|http|probe", "cmd": <exact command run from the project root>, ` +
     `"files": [<this check's file paths, relative to the project root>], "sha256": {}, "expected": "exit0", ` +
-    `"timeout_s": <integer seconds>}]} — exactly ONE entry per SC. Leave every sha256 map EMPTY and ` +
+    `"timeout_s": <integer seconds>, "spec": <the probe spec — kind 'probe' only, omitted otherwise>}]} — ` +
+    `exactly ONE entry per SC. Leave every sha256 map EMPTY and ` +
     `lock_commit null; kiln-law index fills them (do NOT run it yourself, and do NOT commit).\n` +
     `Report the check inventory (id, milestone, kind) and plan_sc_ids = every SC id you enumerated from the ` +
     `plan. Report reasoning first.\n</task>`,
     { label: 'asimov:law', phase: 'The Law', model: lawModel, schema: LAW_COMPILE_SCHEMA }
   )
-  const lawChecks = (asimov && Array.isArray(asimov.checks)) ? asimov.checks : []
+  lawChecks = (asimov && Array.isArray(asimov.checks)) ? asimov.checks : []
   const planScIds = (asimov && Array.isArray(asimov.plan_sc_ids)) ? asimov.plan_sc_ids : []
-  lawCheckCount = lawChecks.length
   if (!lawChecks.length) {
     lawReason = 'Asimov produced no check manifest'
   } else {
@@ -547,7 +556,7 @@ if (!(verdict && verdict.verdict === 'PASS')) {
     } else if (!pluginRoot) {
       lawReason = 'pluginRoot absent — the kiln-law CLI cannot be located; the gates were written but never indexed/locked'
     } else {
-      log(`Asimov compiled ${lawChecks.length} check(s) (${lawChecks.filter((c) => c.kind === 'probe').length} probe template(s)) covering ${planScIds.length} SC(s) — locking`)
+      log(`Asimov compiled ${lawChecks.length} check(s) (${lawChecks.filter((c) => c.kind === 'probe').length} probe spec(s)) covering ${planScIds.length} SC(s) — locking`)
       // Index BEFORE the single lock commit (the §5 sequence): kiln-law index hashes the on-disk
       // gates and records lock_commit = HEAD (the last pre-gate commit — git content-addressing
       // means law.json can never carry the sha of the commit that contains it). The one
@@ -639,6 +648,6 @@ return {
   law_locked: lawLocked,
   law_reason: lawLocked ? null : lawReason,
   law_file: lawFile,
-  law_check_count: lawCheckCount,
+  law_check_count: lawChecks.length,
   missing,
 }

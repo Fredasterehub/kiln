@@ -13,8 +13,11 @@
 // duplicate check ids are rejected, and the document must sit in one of its two legal states —
 // pre-lock (lock_commit null, every sha256 map EMPTY — as Asimov writes it) or locked
 // (lock_commit a git sha, every check's sha256 map covering EXACTLY its files — as kiln-law
-// index rewrites it). Returns { ok, errors } with typed errors ({ code, path, message }) so
-// callers can report precisely.
+// index rewrites it). kind:'probe' checks may carry a `spec` — the declarative browser-probe
+// contract (BLUEPRINT §7 Tier-1) that kiln-probe executes: url path, landmarks by role+name,
+// interaction steps, viewports, and the serve arrangement; spec is legal ONLY on probes, and a
+// spec-less probe is an un-instantiated template (the runner defers it, never errors). Returns
+// { ok, errors } with typed errors ({ code, path, message }) so callers can report precisely.
 export function validateLaw(law) {
   // codes: not_object | unknown_key | invalid_value | missing_key | duplicate_id | lock_state
   const errors = []
@@ -33,8 +36,53 @@ export function validateLaw(law) {
     err('invalid_value', 'checks', 'checks must be a non-empty array')
     return { ok: errors.length === 0, errors }
   }
-  const KEYS = ['id', 'milestone', 'kind', 'cmd', 'files', 'sha256', 'expected', 'timeout_s', 'pre_satisfied']
+  const KEYS = ['id', 'milestone', 'kind', 'cmd', 'files', 'sha256', 'expected', 'timeout_s', 'pre_satisfied', 'spec']
   const KINDS = ['shell', 'pytest', 'http', 'probe']
+  // the probe spec contract (§7 Tier-1) — declarative assertions only, never browser code
+  const SPEC_KEYS = ['url', 'landmarks', 'interactions', 'viewports', 'serve_cmd', 'base_url', 'serve_dir']
+  const ACTIONS = ['click', 'fill', 'press', 'expect']
+  const nonempty = (v) => typeof v === 'string' && v !== ''
+  const validateSpec = (s, at) => {
+    if (!s || typeof s !== 'object' || Array.isArray(s)) { err('invalid_value', at, `${at} must be an object (the §7 probe spec)`); return }
+    for (const k of Object.keys(s)) if (!SPEC_KEYS.includes(k)) err('unknown_key', `${at}.${k}`, `${at}: unknown spec key '${k}'`)
+    if (!nonempty(s.url) || !s.url.startsWith('/')) err('invalid_value', `${at}.url`, `${at}: url must be a path starting with '/' (joined to the served base URL)`)
+    if (!Array.isArray(s.landmarks) || s.landmarks.length === 0) err('invalid_value', `${at}.landmarks`, `${at}: landmarks must be a non-empty array of {role, name} — the SC's key UI elements by role+name`)
+    else s.landmarks.forEach((lm, j) => {
+      const lat = `${at}.landmarks[${j}]`
+      if (!lm || typeof lm !== 'object' || Array.isArray(lm)) { err('invalid_value', lat, `${lat} must be an object {role, name}`); return }
+      for (const k of Object.keys(lm)) if (!['role', 'name'].includes(k)) err('unknown_key', `${lat}.${k}`, `${lat}: unknown landmark key '${k}'`)
+      if (!nonempty(lm.role) || !nonempty(lm.name)) err('invalid_value', lat, `${lat}: role and name must be nonempty strings (selectors by role+name, never CSS)`)
+    })
+    if ('interactions' in s) {
+      if (!Array.isArray(s.interactions)) err('invalid_value', `${at}.interactions`, `${at}: interactions must be an array of steps`)
+      else s.interactions.forEach((step, j) => {
+        const iat = `${at}.interactions[${j}]`
+        if (!step || typeof step !== 'object' || Array.isArray(step)) { err('invalid_value', iat, `${iat} must be an object`); return }
+        for (const k of Object.keys(step)) if (!['action', 'role', 'name', 'value', 'key'].includes(k)) err('unknown_key', `${iat}.${k}`, `${iat}: unknown interaction key '${k}'`)
+        if (!ACTIONS.includes(step.action)) { err('invalid_value', `${iat}.action`, `${iat}: action must be one of ${ACTIONS.join('|')}`); return }
+        if ((step.action === 'click' || step.action === 'expect') && (!nonempty(step.role) || !nonempty(step.name))) err('invalid_value', iat, `${iat}: ${step.action} requires role and name`)
+        if (step.action === 'fill' && (!nonempty(step.role) || !nonempty(step.name) || typeof step.value !== 'string')) err('invalid_value', iat, `${iat}: fill requires role, name, and a string value`)
+        if (step.action === 'press' && !nonempty(step.key)) err('invalid_value', iat, `${iat}: press requires key (e.g. 'Enter')`)
+      })
+    }
+    if ('viewports' in s) {
+      if (!Array.isArray(s.viewports) || s.viewports.length === 0) err('invalid_value', `${at}.viewports`, `${at}: viewports must be a non-empty array of {width, height}`)
+      else s.viewports.forEach((vp, j) => {
+        const vat = `${at}.viewports[${j}]`
+        if (!vp || typeof vp !== 'object' || Array.isArray(vp)) { err('invalid_value', vat, `${vat} must be an object {width, height}`); return }
+        for (const k of Object.keys(vp)) if (!['width', 'height'].includes(k)) err('unknown_key', `${vat}.${k}`, `${vat}: unknown viewport key '${k}'`)
+        if (!Number.isInteger(vp.width) || vp.width < 1 || !Number.isInteger(vp.height) || vp.height < 1) err('invalid_value', vat, `${vat}: width and height must be integers ≥ 1`)
+      })
+    }
+    if ('serve_cmd' in s && !nonempty(s.serve_cmd)) err('invalid_value', `${at}.serve_cmd`, `${at}: serve_cmd must be a nonempty command string`)
+    if ('base_url' in s && !(typeof s.base_url === 'string' && /^https?:\/\/\S+$/.test(s.base_url))) err('invalid_value', `${at}.base_url`, `${at}: base_url must be an http(s) URL`)
+    if ('serve_cmd' in s && !('base_url' in s)) err('invalid_value', `${at}.base_url`, `${at}: serve_cmd requires base_url (where the served app listens)`)
+    if ('base_url' in s && !('serve_cmd' in s)) err('invalid_value', `${at}.base_url`, `${at}: base_url is only legal with serve_cmd — without one, kiln serves the statics itself`)
+    if ('serve_dir' in s) {
+      if ('serve_cmd' in s) err('invalid_value', `${at}.serve_dir`, `${at}: serve_dir is only legal without serve_cmd (it roots kiln's built-in static server)`)
+      if (!nonempty(s.serve_dir) || s.serve_dir.startsWith('/') || s.serve_dir.split('/').includes('..')) err('invalid_value', `${at}.serve_dir`, `${at}: serve_dir must be a relative path inside the project (no leading '/', no '..')`)
+    }
+  }
   const seen = []
   law.checks.forEach((c, i) => {
     const at = `checks[${i}]`
@@ -74,6 +122,10 @@ export function validateLaw(law) {
     if (c.expected !== 'exit0') err('invalid_value', `${at}.expected`, `${at}: expected must be 'exit0'`)
     if (!Number.isInteger(c.timeout_s) || c.timeout_s < 1) err('invalid_value', `${at}.timeout_s`, `${at}: timeout_s must be an integer ≥ 1`)
     if ('pre_satisfied' in c && typeof c.pre_satisfied !== 'boolean') err('invalid_value', `${at}.pre_satisfied`, `${at}: pre_satisfied must be a boolean when present`)
+    if ('spec' in c) {
+      if (c.kind !== 'probe') err('invalid_value', `${at}.spec`, `${at}: spec is legal only on kind 'probe' (the §7 Tier-1 browser-probe contract)`)
+      else validateSpec(c.spec, `${at}.spec`)
+    }
   })
   return { ok: errors.length === 0, errors }
 }

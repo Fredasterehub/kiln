@@ -227,15 +227,16 @@ const FRESHNESS_SCHEMA = {
     manifest_results_sha256: { type: 'string', description: 'the "results_sha256" field of run.json, verbatim ("" if missing — an unfinalized/aborted run has none)' },
     manifest_completed_epoch: { type: 'number', description: 'the "completed_at" field of run.json (-1 if missing)' },
     results_sha256: { type: 'string', description: 'sha256 of results.jsonl as YOU computed it ("" if the file is missing)' },
+    manifest_verification_class: { type: 'string', description: 'the "verification_class" field of run.json, verbatim ("" if missing) — "full" when every probe executed, "static-only" when any probe deferred' },
   },
-  required: ['results_jsonl_exists', 'head', 'head_committed_epoch', 'manifest_head', 'manifest_results_sha256', 'manifest_completed_epoch', 'results_sha256'],
+  required: ['results_jsonl_exists', 'head', 'head_committed_epoch', 'manifest_head', 'manifest_results_sha256', 'manifest_completed_epoch', 'results_sha256', 'manifest_verification_class'],
 }
 const REVIEW_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
     reasoning: { type: 'string' },
     verdict: { type: 'string', enum: ['APPROVED', 'REJECTED'] },
-    law_green: { type: 'boolean', description: 'the slice\'s mapped SC checks pass as YOU re-ran them via kiln-law (PROBE_DEFERRED lines are deferred templates, not red)' },
+    law_green: { type: 'boolean', description: 'the slice\'s mapped SC checks pass as YOU re-ran them via kiln-law (instantiated probes EXECUTE in the rerun; PROBE_DEFERRED/PROBE_UNAVAILABLE lines are honest deferrals — neither red nor green)' },
     tests_green: { type: 'boolean', description: 'green as the reviewer re-ran it (not as the builder reported)' },
     findings: {
       type: 'array',
@@ -351,6 +352,7 @@ function runnerGate(runner, probe) {
     if (typeof r.head !== 'string' || !r.head.trim()) reasons.push('the runner reported no HEAD anchor')
   }
   const p = (probe && typeof probe === 'object' && !Array.isArray(probe)) ? probe : null
+  let verificationClass = ''
   if (!p) reasons.push('the freshness probe produced no report')
   else {
     const str = (v) => (typeof v === 'string' ? v.trim() : '')
@@ -376,6 +378,16 @@ function runnerGate(runner, probe) {
     const committed = (typeof p.head_committed_epoch === 'number' && Number.isFinite(p.head_committed_epoch)) ? p.head_committed_epoch : -1
     if (completed < 0 || committed < 0) reasons.push('the evidence/HEAD timestamps are unavailable — freshness cannot be proven')
     else if (completed < committed) reasons.push(`the evidence completed at epoch ${completed}, before HEAD was committed at epoch ${committed} — stale by time`)
+    // §7 honesty arm: every finalized run.json carries verification_class ('full' when every
+    // selected probe EXECUTED, 'static-only' the moment any probe deferred — uninstantiated
+    // template, --skip-probes, or playwright absent). A deferred probe folds into a law_run_exit
+    // of 0, so the exit code alone CANNOT distinguish a fully-verified run from a degraded one —
+    // the gate must read the class from the evidence itself or a static-only run proceeds
+    // silently green. Missing/unreadable ⇒ foreign or pre-contract evidence ⇒ stale, fail-closed.
+    verificationClass = str(p.manifest_verification_class)
+    if (verificationClass !== 'full' && verificationClass !== 'static-only') {
+      reasons.push(`the evidence carries no readable verification_class (run.json reports ${JSON.stringify(p.manifest_verification_class)}) — whether probe verification was degraded cannot be proven`)
+    }
   }
   if (reasons.length) return { verdict: 'stale', tamper_paths: [], reasons }
   // The lifecycle verdict (T2-fix ruling, §5.1 red/green): the evidence is complete and fresh —
@@ -389,9 +401,9 @@ function runnerGate(runner, probe) {
     if (unmet.length) why.push(`declared RED→GREEN flip(s) still not green: ${unmet.join(', ')}`)
     if (regressed.length) why.push(`previously-GREEN check(s) regressed: ${regressed.join(', ')}`)
     if (!why.length) why.push(`kiln-law run exited ${r.law_run_exit} — the lifecycle gate failed without transcribed FLIP_UNMET/REGRESSION ids; read the evidence logs under the run's checks/ dir`)
-    return { verdict: 'red', tamper_paths: [], reasons: why, flip_unmet: unmet, regressed }
+    return { verdict: 'red', tamper_paths: [], reasons: why, flip_unmet: unmet, regressed, verification_class: verificationClass }
   }
-  return { verdict: 'proceed', tamper_paths: [], reasons: [] }
+  return { verdict: 'proceed', tamper_paths: [], reasons: [], verification_class: verificationClass }
 }
 function rejectionClass(review) {
   if (!review || typeof review !== 'object' || Array.isArray(review)) return 'mechanical'
@@ -677,7 +689,7 @@ function buildPrompt(m, surf, slice, sliceId, fixNote) {
     `<task>Implement the slice to green tests, then 'git add -A && git commit' with a clear message. Report reasoning, files_changed, tests_added, red_confirmed, tests_green (must be true), committed, the test_command you used, and the trimmed passing test output as evidence.</task>`
 }
 
-function runnerPrompt(slice, build, lawCtx, beforeRunId) {
+function runnerPrompt(build, lawCtx, beforeRunId) {
   // The §5.1 lifecycle invocation (T2-fix ruling: the exit code IS the verdict): --flips declares
   // the slice's expected RED→GREEN set, --only also re-runs every SC this milestone already
   // turned green (so regressions are OBSERVED, not assumed), and --before anchors statusBefore in
@@ -705,20 +717,23 @@ function freshPrompt(runId) {
     `<task>Run (Bash) and transcribe EXACTLY:\n` +
     `1. 'ls ${dir}/results.jsonl' — results_jsonl_exists = true iff the file exists.\n` +
     `2. 'sha256sum ${dir}/results.jsonl' (or 'shasum -a 256' where sha256sum is unavailable) — results_sha256 = the hex digest, '' if the file is missing.\n` +
-    `3. 'cat ${dir}/run.json' — the manifest kiln-law itself wrote into the evidence: manifest_head = its "head", manifest_results_sha256 = its "results_sha256", manifest_completed_epoch = its "completed_at" (sentinels '' / '' / -1 when the file or a field is missing — an unfinalized manifest means the run never completed).\n` +
+    `3. 'cat ${dir}/run.json' — the manifest kiln-law itself wrote into the evidence: manifest_head = its "head", manifest_results_sha256 = its "results_sha256", manifest_completed_epoch = its "completed_at", manifest_verification_class = its "verification_class" (sentinels '' / '' / -1 / '' when the file or a field is missing — an unfinalized manifest means the run never completed; verification_class is the §7 degradation record: 'full' = every probe executed, 'static-only' = some probe deferred).\n` +
     `4. 'git -C ${projectPath} rev-parse HEAD' — head = the full sha.\n` +
     `5. 'git -C ${projectPath} show -s --format=%ct HEAD' — head_committed_epoch = the number (-1 if git failed).\n` +
     `Do not read anything else, do not write or fix anything. Report the seven fields.</task>`
 }
 
-function reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort) {
+function reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort, vclass) {
   const ids = slice.sc_ids.join(',')
   const evidenceDir = `${kilnDir}/evidence/${runner.run_id}`
   const evidenceBlock =
     `- SC mapping: this slice claims ${slice.sc_ids.join(', ')}.\n` +
     `- Hashed evidence from the deterministic runner (tamper-gated, freshness-verified at HEAD ${runner.head}): ${evidenceDir}/results.jsonl + per-check logs under ${evidenceDir}/checks/.` +
     (typeof runner.suite_exit === 'number' ? ` Project suite ('${runner.suite_cmd || ''}') exited ${runner.suite_exit} — its full output is persisted at ${evidenceDir}/suite.log (sha256'd result line in ${evidenceDir}/suite.jsonl).` : '') + `\n` +
-    `- Independent-rerun floor (non-negotiable): re-run the slice's mapped checks YOURSELF — 'node ${pluginRoot}/scripts/kiln-law.mjs run ${projectPath} ${kilnDir} --only ${ids}' — and set law_green from YOUR run (PROBE_DEFERRED lines are deferred probe templates, not red; probe evidence arrives in a later phase). Read the runner's evidence for everything broader instead of re-deriving it; re-run broader scopes only on concrete doubt.\n`
+    (vclass === 'static-only'
+      ? `- VERIFICATION DEGRADED (verification_class: static-only): one or more probe checks were honestly DEFERRED in this run (uninstantiated template, --skip-probes, or playwright absent) — there is NO browser-probe evidence for them. A deferral is never green: judge those criteria from the static evidence only and weigh your verdict accordingly.\n`
+      : `- This run's verification_class is 'full': every mapped probe EXECUTED — its evidence (probe-<SC>.json result + screenshot(s) + probe-<SC>.log) sits in ${evidenceDir}/ beside the check logs; read it before ruling.\n`) +
+    `- Independent-rerun floor (non-negotiable): re-run the slice's mapped checks YOURSELF — 'node ${pluginRoot}/scripts/kiln-law.mjs run ${projectPath} ${kilnDir} --only ${ids}' — and set law_green from YOUR run. Instantiated probe checks EXECUTE in that rerun (one bounded browser subprocess each, evidence written under the new run id); PROBE_DEFERRED/PROBE_UNAVAILABLE lines are honest deferrals — neither red nor green, never proof. Read the runner's evidence for everything broader instead of re-deriving it; re-run broader scopes only on concrete doubt.\n`
   const escNote = leg.escalated
     ? `\n<escalated>You are the ESCALATED feedback source: prior review cycles rejected this slice on logical findings and the loop is stuck. Fresh eyes, full depth — verify the prior findings were genuinely addressed AND hunt what the earlier reviews missed.</escalated>\n`
     : ''
@@ -739,7 +754,7 @@ function reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort) {
       `<checks>\nApply EVERY check to EVERY interactive element/section, not just the first:\n` +
       `1. structural / responsive breakage; 2. dead or missing event handlers + JS correctness; 3. accessibility — AA contrast (compute it), prefers-reduced-motion honored, semantics; 4. ban-list adherence + design-token consistency; 5. content accuracy vs the map (no invented features/metrics/images).\n` +
       (surf === 'mixed' ? `Also RE-RUN the slice's behavior/smoke test for the non-visual logic and confirm it passes.\n` : ``) +
-      `Re-run the STATIC check yourself (HTML parses, sections/ids present, 'node --check' the JS). Do NOT open a browser or Playwright.\n` +
+      `Re-run the STATIC check yourself (HTML parses, sections/ids present, 'node --check' the JS). NEVER open a browser or drive Playwright yourself — browser evidence comes ONLY through the kiln-law rerun above (each probe is one bounded, token-swept subprocess; the browser is a subprocess with a deadline, never a service).\n` +
       `</checks>\n${escNote}\n` +
       how +
       `<task>Set law_green from YOUR kiln-law re-run and tests_green from the static/smoke check you re-ran. Verdict APPROVED only if the mapped checks pass and the page is structurally sound, accessible, on-brief, and free of invented claims; else REJECTED with specific, actionable findings. ${classRule} Report reasoning first.</task>`
@@ -891,7 +906,7 @@ async function evidencedReview(m, surf, slice, sliceId, build, fix, escalated, r
   }
   phase('The Trial')
   log(`${spin('law', fix)} — ${m.id} ${sliceId} f${fix}`)
-  const runner = await agent(runnerPrompt(slice, build, lawCtx, lastRunId), { label: loreLabel('asimov', 'runner', `${sliceId}:f${fix}`), phase: 'The Trial', model: 'sonnet', schema: RUNNER_SCHEMA })
+  const runner = await agent(runnerPrompt(build, lawCtx, lastRunId), { label: loreLabel('asimov', 'runner', `${sliceId}:f${fix}`), phase: 'The Trial', model: 'sonnet', schema: RUNNER_SCHEMA })
   let fresh = null
   if (runner && typeof runner.run_id === 'string' && runner.run_id) {
     fresh = await agent(freshPrompt(runner.run_id), { label: loreLabel('thoth', 'freshness', `${sliceId}:f${fix}`), phase: 'The Trial', model: 'haiku', schema: FRESHNESS_SCHEMA })
@@ -900,6 +915,14 @@ async function evidencedReview(m, surf, slice, sliceId, build, fix, escalated, r
   // Advance the status anchor on every complete, fresh run — 'proceed' AND 'red' both carry a
   // finalized manifest the probe just verified; the next trial's --before folds this run.
   if (gate.verdict === 'proceed' || gate.verdict === 'red') lastRunId = runner.run_id
+  // §7 honesty: a static-only run (some probe deferred — uninstantiated template, --skip-probes,
+  // or playwright absent) can carry law_run_exit 0, so the degradation must be LEDGERED the
+  // moment the gate sees it — recorded end-to-end, never silently green. The run proceeds
+  // honestly degraded (capability tier, not an error); the reviewer prompt below names it too.
+  if ((gate.verdict === 'proceed' || gate.verdict === 'red') && gate.verification_class === 'static-only') {
+    log(`${m.id} ${sliceId}: VERIFICATION DEGRADED — run ${runner.run_id} is static-only (probe evidence deferred); ledgered, surfaced to the reviewer, never folded green`)
+    await ledger('verification_degraded', { milestone: m.id, slice: sliceId, fix, run_id: runner.run_id, verification_class: 'static-only' }, 'The Trial')
+  }
   if (gate.verdict === 'tamper') {
     // §5.1 tamper model: the slice is auto-REJECTED by the WORKFLOW (not an agent judgment), the
     // event is LEDGERED, and the fix brief names exactly which locked path was touched.
@@ -925,7 +948,7 @@ async function evidencedReview(m, surf, slice, sliceId, build, fix, escalated, r
   const leg = reviewLeg(surf, escalated)
   const effort = reviewEffort(fix, escalated)
   log(`${spin('review', fix)} — ${m.id} ${sliceId} f${fix}${leg.escalated ? ' (escalated feedback source)' : ''}`)
-  return await agent(reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort), { label: loreLabel(reviewerName, 'review', `${sliceId}:f${fix}${leg.escalated ? ':esc' : ''}`), phase: 'The Trial', model: leg.model, schema: REVIEW_SCHEMA })
+  return await agent(reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort, gate.verification_class), { label: loreLabel(reviewerName, 'review', `${sliceId}:f${fix}${leg.escalated ? ':esc' : ''}`), phase: 'The Trial', model: leg.model, schema: REVIEW_SCHEMA })
 }
 
 // ── The Forge Heats — the §3.4 floor gates, then git baseline + codebase-state + milestone parse ──
