@@ -45,7 +45,12 @@
 //            and the per-check timeout_s, capture stdout+stderr to
 //            .kiln/evidence/<runId>/checks/<SC>.log, append {id, exit, duration_ms, log_sha256}
 //            per check to .kiln/evidence/<runId>/results.jsonl, print one summary line per
-//            check. Default is report-only (exit 0 regardless of red checks); two gates change
+//            check. The run also writes .kiln/evidence/<runId>/run.json — the §6 freshness
+//            anchor, CLI-written (never agent-transcribed): {schema, run_id, head, started_at}
+//            up front, plus {results_sha256, completed_at} ONLY when the run completes — the
+//            build spine's freshness gate compares these against the current HEAD before any
+//            reviewer spawns, and an aborted run's unfinalized manifest fails closed as stale.
+//            Default is report-only (exit 0 regardless of red checks); two gates change
 //            that:
 //              --expect-green SC-001,SC-002 — those checks must be green NOW (hard greenness; a
 //                deferred probe never satisfies it).
@@ -65,6 +70,17 @@
 //            No browser anything here.
 //   status — fold one run's results.jsonl → {green, red, deferred} JSON on stdout (green = exit
 //            matched the check's expected 'exit0'; last line wins per id; law.json check order).
+//   suite  — persist the PROJECT suite as hashed evidence beside a recorded Law run (§6): the
+//            same tamper gate fires first (offenders → TAMPER lines + exit 2, nothing executed),
+//            then --cmd runs with cwd=projectPath under --timeout-s (default 600), stdout+stderr
+//            captured to .kiln/evidence/<runId>/suite.log and one
+//            {cmd, exit, duration_ms, log_sha256} line appended to
+//            .kiln/evidence/<runId>/suite.jsonl. suite.jsonl is a SIBLING of results.jsonl on
+//            purpose: run.json finalizes sha256(results.jsonl) when the Law run completes, so
+//            suite evidence appended afterwards must never touch the hashed file (the §6 hash
+//            arm would read it as altered evidence). Prints `SUITE <runId> exit=<n> …` with the
+//            suite's REAL exit code; the CLI itself exits 0 (suite green) / 1 (suite red or
+//            infra error) — exit 2 stays reserved for tamper.
 //
 // law.json is validated against plugins/kiln/schemas/law.schema.json on EVERY command —
 // validateLaw (../src/law.mjs) mirrors that schema field-for-field (no ajv, no deps). Which
@@ -79,10 +95,11 @@
 //   kiln-law.mjs run    <projectPath> <kilnDir> [--only SC-001,SC-002] [--skip-probes]
 //                       [--expect-green SC-001,SC-002] [--flips SC-001,SC-002] [--before <runId>]
 //   kiln-law.mjs status <kilnDir> <runId>
+//   kiln-law.mjs suite  <projectPath> <kilnDir> <runId> --cmd '<command>' [--timeout-s N]
 // Exit codes: 0 ok · 1 error (usage, invalid law.json, missing files, unmet --expect-green,
-// unmet flip, regression) · 2 TAMPER — reserved EXCLUSIVELY for tamper-gate mismatches (verify,
-// and run's pre-execution gate) so the build spine can key on it mechanically (exit 2 ⇒ slice
-// auto-REJECTED, no reviewer spawned).
+// unmet flip, regression, red suite) · 2 TAMPER — reserved EXCLUSIVELY for tamper-gate
+// mismatches (verify, run's pre-execution gate, suite's pre-execution gate) so the build spine
+// can key on it mechanically (exit 2 ⇒ slice auto-REJECTED, no reviewer spawned).
 
 import { createHash } from 'node:crypto'
 import { execFileSync, spawnSync } from 'node:child_process'
@@ -313,6 +330,22 @@ function cmdRun(projectPath, kilnDir, flags) {
   const runDir = join(kilnDir, 'evidence', runId)
   mkdirSync(join(runDir, 'checks'), { recursive: true })
   const resultsFile = join(runDir, 'results.jsonl')
+  // run.json — the §6 freshness anchor the build spine's gate keys on, written by THIS CLI so
+  // the evidence carries its own HEAD/hash/timestamp anchors (agents only transcribe them).
+  // Written unfinalized up front (head + started_at), finalized with sha256(results.jsonl) +
+  // completed_at only when every selected check ran — a mid-run abort (tamper, crash) leaves no
+  // results_sha256, and the freshness gate fails closed on it. Atomic like writeLaw. The
+  // timestamp threat model is staleness (HEAD drift, evidence from an earlier commit), not a
+  // local adversary — an actor who could forge run.json could forge results.jsonl itself; the
+  // LAW's integrity is what the tamper gate anchors in git.
+  const startedAt = Math.floor(Date.now() / 1000)
+  const manifestFile = join(runDir, 'run.json')
+  const writeManifest = (extra) => {
+    writeFileSync(manifestFile + '.tmp', JSON.stringify({ schema: 1, run_id: runId, head, started_at: startedAt, ...extra }, null, 2) + '\n')
+    renameSync(manifestFile + '.tmp', manifestFile)
+  }
+  writeFileSync(resultsFile, '') // evidence exists from t0 — a zero-check run still leaves a (finalizable) trace
+  writeManifest({})
   console.log(`RUN ${runId} HEAD ${head}`)
   if (plan) console.log(`PLAN flip=${plan.flip.join(',')} regression=${plan.regression.join(',')} pre_satisfied=${plan.pre_satisfied.join(',')} deferred=${plan.deferred.join(',')} (before: ${beforeSrc})`)
 
@@ -359,6 +392,9 @@ function cmdRun(projectPath, kilnDir, flags) {
     if (exit === 0) { console.log(`GREEN ${c.id} (${durationMs}ms)`); byId[c.id] = 'green'; green++ }
     else { console.log(`RED ${c.id} exit ${exit}${timedOut ? ' (timeout)' : ''} (${durationMs}ms)`); byId[c.id] = 'red'; red++ }
   }
+  // Every selected check ran — finalize the manifest BEFORE the expectation gates (an unmet
+  // expectation is a verdict about the work, not about the evidence: the evidence is complete).
+  writeManifest({ results_sha256: sha256(readFileSync(resultsFile)), completed_at: Math.floor(Date.now() / 1000) })
   console.log(`RESULT ${runId} green=${green} red=${red} deferred=${deferredN}`)
 
   // The gates, evaluated together so every failure is reported in one pass:
@@ -370,7 +406,12 @@ function cmdRun(projectPath, kilnDir, flags) {
   if (unmetExpect.length) failures.push(`expectation unmet — not green: ${unmetExpect.join(', ')}`)
   if (plan) {
     const unmetFlip = plan.flip.filter((id) => byId[id] !== 'green' && byId[id] !== 'deferred')
-    if (unmetFlip.length) failures.push(`flip unmet — declared RED→GREEN, still not green: ${unmetFlip.join(', ')}`)
+    if (unmetFlip.length) {
+      // one machine-readable line per unmet flip (mirrors REGRESSION below) — the build spine's
+      // runner agent transcribes these ids into its report; the workflow gates on them, no prose.
+      for (const id of unmetFlip) console.log(`FLIP_UNMET ${id}`)
+      failures.push(`flip unmet — declared RED→GREEN, still not green: ${unmetFlip.join(', ')}`)
+    }
     const regressed = plan.regression.filter((id) => byId[id] === 'red')
     if (regressed.length) {
       for (const id of regressed) console.log(`REGRESSION ${id}`)
@@ -378,6 +419,45 @@ function cmdRun(projectPath, kilnDir, flags) {
     }
   }
   if (failures.length) die(`run: ${failures.join('; ')}`)
+}
+
+// ── suite — persist the project suite as hashed evidence beside a recorded Law run (§6) ─────────
+// The suite command is the project's own (recorded by the builder); its output is evidence the
+// reviewer reads, so it lands in the SAME evidence dir as the Law run it accompanies — log +
+// sha256'd result line, never prose. Written to suite.jsonl, a sibling of results.jsonl: the
+// run.json manifest finalized sha256(results.jsonl) when the Law run completed, and appending
+// here would make every suite-carrying run read as altered evidence at the freshness gate.
+function cmdSuite(projectPath, kilnDir, runId, flags) {
+  for (const k of Object.keys(flags)) if (!['cmd', 'timeout-s'].includes(k)) die(`suite: unknown flag --${k}`)
+  if (typeof flags.cmd !== 'string' || !flags.cmd.trim()) die(`suite: --cmd '<project suite command>' is required`)
+  const timeoutS = flags['timeout-s'] === undefined ? 600 : Number(flags['timeout-s'])
+  if (!Number.isInteger(timeoutS) || timeoutS < 1) die(`suite: --timeout-s must be an integer ≥ 1`)
+  // Same trust stance as run: the tamper gate fires before the suite executes — suite evidence
+  // is never produced against a tampered Law (exit 2, nothing executed, exit 2 stays tamper-only).
+  const gate = tamperGate(projectPath, kilnDir)
+  if (!gate.locked) die(`suite: law.json is not locked — suite evidence must anchor to a locked Law; run 'index' first`)
+  if (gate.offenders.length) {
+    for (const p of gate.offenders) console.log(`TAMPER: ${p}`)
+    die(`suite: tamper gate failed — locked path(s) changed since lock; the suite was not executed`, 2)
+  }
+  const runDir = join(kilnDir, 'evidence', runId)
+  if (!existsSync(join(runDir, 'results.jsonl'))) die(`suite: run '${runId}' has no results.jsonl under ${kilnDir}/evidence — suite evidence anchors to a recorded Law run`)
+  const started = Date.now()
+  const res = spawnSync('bash', ['-c', flags.cmd], {
+    cwd: projectPath, encoding: 'utf8',
+    timeout: timeoutS * 1000, killSignal: 'SIGKILL', maxBuffer: 16 * 1024 * 1024,
+  })
+  const durationMs = Date.now() - started
+  const timedOut = res.signal === 'SIGKILL' || (res.error && res.error.code === 'ETIMEDOUT')
+  // exit code IS the verdict — same conventions as the check runner (124 timeout, never a fake 0)
+  const exit = res.status !== null ? res.status : (timedOut ? 124 : 1)
+  const logContent =
+    `$ ${flags.cmd}\n--- stdout ---\n${res.stdout || ''}\n--- stderr ---\n${res.stderr || ''}\n` +
+    `--- exit ${exit} (${durationMs}ms)${timedOut ? ' TIMEOUT' : ''} ---\n`
+  writeFileSync(join(runDir, 'suite.log'), logContent)
+  appendFileSync(join(runDir, 'suite.jsonl'), JSON.stringify({ cmd: flags.cmd, exit, duration_ms: durationMs, log_sha256: sha256(logContent) }) + '\n')
+  console.log(`SUITE ${runId} exit=${exit}${timedOut ? ' (timeout)' : ''} (${durationMs}ms) log_sha256=${sha256(logContent)}`)
+  if (exit !== 0) die(`suite: project suite exited ${exit} — evidence at ${join(runDir, 'suite.log')}`)
 }
 
 // ── status — fold one run's results.jsonl → {green, red, deferred} ──────────────────────────────
@@ -397,7 +477,7 @@ function cmdStatus(kilnDir, runId) {
 }
 
 // ── Dispatch ─────────────────────────────────────────────────────────────────────────────────────
-const USAGE = `usage: kiln-law.mjs <index|verify|run|status> …   (header comment has the full forms)`
+const USAGE = `usage: kiln-law.mjs <index|verify|run|status|suite> …   (header comment has the full forms)`
 function parseFlags(argv) {
   const flags = {}
   for (let i = 0; i < argv.length; i++) {
@@ -423,5 +503,9 @@ try {
     const [kilnDir, runId] = rest
     if (!kilnDir || !runId || rest.length !== 2) die(USAGE)
     cmdStatus(resolve(kilnDir), runId)
+  } else if (cmd === 'suite') {
+    const [projectPath, kilnDir, runId] = rest
+    if (!projectPath || !kilnDir || !runId || runId.startsWith('--') || !isAbsolute(projectPath)) die(USAGE)
+    cmdSuite(resolve(projectPath), resolve(kilnDir), runId, parseFlags(rest.slice(3)))
   } else die(USAGE)
 } catch (e) { die(e.message) }

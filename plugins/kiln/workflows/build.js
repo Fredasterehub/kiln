@@ -1,17 +1,17 @@
 // GENERATED from workflows-src/build.js — edit the source, run scripts/bundle-workflows.mjs
 export const meta = {
   name: 'kiln-build',
-  description: 'Kiln build stage — two nested loops. OUTER: each master-plan milestone in dependency order (sequential, cumulative commits). INNER: a just-in-time slice loop — the slicer scopes one vertical slice at a time from the live codebase state, a builder implements it (Opus builds ui/mixed, GPT-5.5/Codex builds logic), and a cross-FAMILY reviewer (always a different model family from the builder) rules on it with ≤3 fix cycles before commit. After the slices integrate, a single-pass milestone tribunal (Ken/Opus ∥ Ryu/Codex → deterministic reconcile → judge) gates the whole — SKIPPED for single-slice milestones, where the slice review is the milestone QA. The heavy end-to-end gate is validate, not per-slice ceremony.',
+  description: 'Kiln build stage — two nested loops over the locked Law. OUTER: each master-plan milestone in dependency order (sequential, cumulative commits). INNER: the batch slice spine — KRS-One plans the milestone\'s ENTIRE ordered slice list in ONE call, mapped 1:1 to law.json SC ids (coverage is arithmetic, validated in-script); a haiku confirm checks each slice against live state before its build; a builder implements the slice (Opus builds ui/mixed, GPT-5.5/Codex builds logic) and commits it; the deterministic runner then executes kiln-law (verify = tamper gate; run --only/--flips = the §5.1 red/green lifecycle where the EXIT CODE is the verdict — expected flips computed from the recorded prior status via --before, previously-GREEN regressions fatal) and persists the project suite as hashed evidence (kiln-law suite → suite.log + suite.jsonl in the evidence dir), and the workflow gates tamper + evidence freshness + the lifecycle exit MECHANICALLY — a touched lock, stale evidence, or a failed flip auto-REJECTS with no reviewer spawned. A cross-FAMILY reviewer rules on diff + evidence with mechanical|logical finding classes and must re-run the mapped checks itself; the Sentinel escalates the feedback source after repeated logical rejections and stops a slice as split_required at the split threshold (a conductor/operator decision, never silent). After the slices integrate, the §3.2 milestone gate rules: Aristotle\'s goal-backward audit hunts "checks pass but the goal is broken" at EVERY milestone boundary — split/plan-abort failures included, where its findings merge into the failure record — and an unusable audit is re-asked ONCE, then fails the boundary closed (QA_FAIL, blocking finding goal-audit-failure; the judge NEVER spawns on missing inputs); milestones at the tribunal threshold add dual analysts (Ken/Opus ∥ Ryu/Codex) whose findings the deterministic reconcile folds with the audit\'s, and the judge is spawned ONLY on an ambiguous reconcile (zero blocking findings AND the analysts\' overall verdicts disagree) — otherwise the verdict is computed; below the threshold the slice review + the audit IS the gate. The heavy end-to-end gate is validate, not per-slice ceremony.',
   phases: [
-    { title: 'The Forge Heats', detail: 'rakim ensures the git repo + seeds codebase-state; parse the master plan into milestones' },
-    { title: 'Scoring the Cut', detail: 'the slicer scopes the next vertical slice just-in-time, or calls the milestone done' },
+    { title: 'The Forge Heats', detail: 'read the locked Law; rakim ensures the git repo + seeds codebase-state; parse the master plan into milestones' },
+    { title: 'Scoring the Cut', detail: 'KRS-One plans the milestone\'s entire ordered slice list in ONE call, mapped to the Law\'s SC ids; a haiku confirm checks each slice against live state (proceed | replan)' },
     { title: 'Forging', detail: 'builder implements the slice (Opus for ui/mixed, GPT-5.5/Codex for logic) and commits it' },
-    { title: 'The Trial', detail: 'a cross-family reviewer re-runs the slice and rules; ≤3 fix cycles' },
-    { title: 'Judgment', detail: 'per-milestone tribunal over the integrated whole — skipped when a milestone is a single slice' },
+    { title: 'The Trial', detail: 'the deterministic runner executes the Law — the exit code is the lifecycle verdict (declared flips + regressions) — and persists the project suite as hashed evidence; the workflow gates tamper + freshness + the flip plan mechanically; a cross-family reviewer re-runs the mapped checks and rules with classed findings; the Sentinel escalates on logical rejections' },
+    { title: 'Judgment', detail: 'the §3.2 milestone gate — goal-backward audit at EVERY boundary (split/abort included; an unusable audit is re-asked once, then fails closed); dual analysts + deterministic reconcile at the tribunal threshold, the judge spawned only on an ambiguous reconcile; below it, slice review + the audit IS the gate' },
   ],
 }
 
-// ── args: { kilnDir, projectPath, codexAvailable, testingRigor, milestoneLimit, uiBuild } ──
+// ── args: { kilnDir, projectPath, codexAvailable, testingRigor, milestoneLimit, uiBuild, pluginRoot, posture } ──
 function normalizeArgs(args) {
   if (typeof args === 'string') {
     try { args = JSON.parse(args) } catch (e) { return { __parse_error: true } }
@@ -27,13 +27,53 @@ const testingRigor = ['tdd', 'standard', 'minimal'].includes(String(A.testingRig
 const milestoneLimit = typeof A.milestoneLimit === 'number' ? A.milestoneLimit : Infinity
 // uiBuild forces every milestone onto the ui surface (Opus builds, Codex reviews) — an optional override.
 const uiBuild = A.uiBuild === true
-// pluginRoot is the conductor-resolved absolute $PLUGIN_ROOT (a launched Workflow can't see ${CLAUDE_PLUGIN_ROOT}).
-// Optional/defensive: when absent, the reference-file Read instructions degrade out and workers fall back.
+// pluginRoot is the conductor-resolved absolute $PLUGIN_ROOT (a launched Workflow can't see
+// ${CLAUDE_PLUGIN_ROOT}). In v3 it is LOAD-BEARING: the kiln-law CLI (the §3.4 Law floor) and the
+// kiln-state ledger live under it. Its absence is gated below — never a silent v2-style build.
 const pluginRoot = A.pluginRoot
 
+// ── The Gauge posture (BLUEPRINT §3.2/§3.3) — passed by the conductor from state.json. Accepts an
+//    object or a JSON-encoded string; anything else ⇒ null ⇒ every dial below falls back to its
+//    v2-equivalent default, so a run without a posture behaves exactly like v2 plus the §3.4 Law
+//    floor (which is unconditional). ──
+const postureArg = (() => {
+  let p = A.posture
+  if (typeof p === 'string') { try { p = JSON.parse(p) } catch (e) { return null } }
+  return (p && typeof p === 'object' && !Array.isArray(p)) ? p : null
+})()
+// ── The Gauge config (GAUGE_CONFIG, inlined from gauge-config.json by the bundler — workflow
+//    scripts cannot import JSON; --check guards the inline copy against drift). The Sentinel
+//    thresholds (rejections_to_feedback_escalation / rejections_to_split) live here. ──
+const GAUGE_CONFIG = {"h80_human_hours":2,"messiness_discount":0.5,"churn_flips_threshold":2,"rejections_to_feedback_escalation":2,"rejections_to_split":3,"deescalation_clean_window":1,"research_topics_base":2,"planning_dual_d4_min":2,"planning_dual_d3_min":1,"planning_dual_d1_min":1,"planning_redteam_d4_min":1,"planning_redteam_d8_min":1,"plan_validation_rounds_base":1,"plan_validation_d2_min":1,"plan_validation_d8_min":2,"slice_budget_d7_min":1,"d7_slice_budget_factor":0.5,"review_high_d8_min":1,"min_slices_for_tribunal":2,"browser_tier2_d7_min":1,"browser_tier2_d8_min":1,"validate_adversarial_d8_min":2,"validate_second_family_d8_min":2,"effort_bias_dims":["D3","D4","D8"]}
+// livePosture is the Sentinel's MUTABLE working copy (§3.3): escalate() raises dials mid-milestone
+// and NOTHING in this script ever lowers one — builder self-confidence included. De-escalation
+// needs the profile + clean-window evidence (a boundary move owned by the conductor in a later
+// phase), so raised dials carry forward across milestones: strictly MORE scrutiny, never less.
+// Defaults are v2-equivalent: review effort 'medium' baseline (the §3.2 row's base — D8 raises it
+// via the posture arg), the §3.3 slice budget, floor values everywhere else (the ratchet can only
+// raise them). The milestone_gate dials are CONSUMED by the Judgment gate below:
+// min_slices_for_tribunal decides dual-analysts-vs-slice-review-as-gate, and goal_backward
+// (default ON) is the operator's only way to skip the boundary audit — a skip is ledgered (§3.5).
+const P0 = postureArg || {}
+const PR = (P0.review && typeof P0.review === 'object') ? P0.review : {}
+const PG = (P0.milestone_gate && typeof P0.milestone_gate === 'object') ? P0.milestone_gate : {}
+const PB = (P0.browser && typeof P0.browser === 'object') ? P0.browser : {}
+const PV = (P0.validate && typeof P0.validate === 'object') ? P0.validate : {}
+let livePosture = {
+  research_topics_max: typeof P0.research_topics_max === 'number' ? P0.research_topics_max : GAUGE_CONFIG.research_topics_base,
+  planning: typeof P0.planning === 'string' ? P0.planning : 'single',
+  plan_validation_rounds: typeof P0.plan_validation_rounds === 'number' ? P0.plan_validation_rounds : 1,
+  slice_budget_hours: typeof P0.slice_budget_hours === 'number' ? P0.slice_budget_hours : GAUGE_CONFIG.h80_human_hours * GAUGE_CONFIG.messiness_discount,
+  review: { ui_effort_base: PR.ui_effort_base === 'high' ? 'high' : 'medium', escalate_on: 'fix_cycle' },
+  milestone_gate: { min_slices_for_tribunal: typeof PG.min_slices_for_tribunal === 'number' ? PG.min_slices_for_tribunal : GAUGE_CONFIG.min_slices_for_tribunal, goal_backward: PG.goal_backward !== false },
+  browser: { tier2_per_milestone: PB.tier2_per_milestone === true },
+  validate: { adversarial_pass: PV.adversarial_pass === true, second_family: PV.second_family === true },
+  effort_bias: typeof P0.effort_bias === 'number' ? P0.effort_bias : 0,
+}
+
 // Bounds (the runaway/ceremony guards).
-const MAX_SLICES_PER_MILESTONE = 12 // for-cap, not a while-true — bounds a slicer that never says done
-const MAX_REVIEW_FIXES = 3          // per-slice cross-family review fix cycles
+const MAX_SLICES_PER_MILESTONE = 12 // guard on the batch plan + replan splice — bounds a runaway slicer
+const MAX_REVIEW_FIXES = 3          // per-slice cross-family review fix cycles (the Sentinel's split threshold usually fires first on logical findings)
 const MAX_TRIBUNAL_CORRECTION = 1   // single-pass tribunal: one corrective pass, then escalate to validate
 
 const docsDir = `${kilnDir}/docs`
@@ -43,6 +83,7 @@ const masterPlanFile = `${kilnDir}/master-plan.md`
 const handoffFile = `${kilnDir}/architecture-handoff.md`
 const codebaseStateFile = `${docsDir}/codebase-state.md`
 const codebaseMapFile = `${docsDir}/codebase-map.md`
+const lawFile = `${kilnDir}/law.json`
 
 // ── MODEL_VOICE — the thin model-tuned shell (Opus only; the Codex leg is shaped by the wrapper) ──
 const MODEL_VOICE = {
@@ -67,8 +108,9 @@ const poolKey = (surf) => (surf === 'ui' || surf === 'mixed') ? 'ui' : (codexAva
 const pickDuo = (surf, mi) => { const p = DUO_POOL[poolKey(surf)]; return p[((mi % p.length) + p.length) % p.length] } // deterministic off milestone index
 const loreLabel = (name, role, suffix) => `${name}:${role}${(suffix != null && suffix !== '') ? ':' + suffix : ''}`
 const SPIN = {
-  slice: ['KRS-One scores the next cut', 'Knowledge reigns — one slice at a time', 'KRS-One raises the bar', 'Thinkin\' of a master plan'],
+  slice: ['KRS-One scores the whole record in one take', 'Knowledge reigns — the ledger before the blade', 'KRS-One raises the bar', 'Thinkin\' of a master plan'],
   build: ['Codex is typing — don\'t interrupt', 'Clair paints', 'The forge takes the blow', 'Codex says \'trust me\' — famous last words'],
+  law: ['The Law runs — exit codes do not negotiate', 'Asimov reads the receipts', 'Evidence first, judgment second', 'The tamper gate never blinks'],
   review: ['Sphinx inspects every single line', 'Sphinx found something. Sphinx always finds something', 'Obscur holds the work to the light', 'The code stands trial'],
   qa: ['Ken and Ryu circle the build', 'Two reports walk in, one truth walks out', 'Judge Dredd reads the evidence', 'Denzel finds the signal'],
 }
@@ -95,23 +137,51 @@ const MILESTONES_SCHEMA = {
   },
   required: ['reasoning', 'milestones'],
 }
-const SLICE_SCHEMA = {
+const LAW_READ_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    rationale: { type: 'string' },
-    done: { type: 'boolean', description: 'true when the milestone acceptance is fully covered by built slices' },
-    slice: {
-      type: 'object', additionalProperties: false,
-      properties: {
-        objective: { type: 'string' },
-        files: { type: 'array', items: { type: 'string' } },
-        constraints: { type: 'string' },
-        done_when: { type: 'string', description: 'a single runnable check that proves this slice' },
+    reasoning: { type: 'string' },
+    locked: { type: 'boolean', description: 'true iff lock_commit is a non-null string' },
+    checks: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false,
+        properties: { id: { type: 'string' }, milestone: { type: 'string' }, kind: { type: 'string', enum: ['shell', 'pytest', 'http', 'probe'] } },
+        required: ['id', 'milestone', 'kind'],
       },
-      required: ['objective', 'done_when'],
     },
   },
-  required: ['done'], // Appendix A: only `done` required (rationale stays first + reason-first via order; slice optional)
+  required: ['locked', 'checks'],
+}
+const SLICE_PLAN_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reasoning: { type: 'string' },
+    slices: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          objective: { type: 'string' },
+          files: { type: 'array', items: { type: 'string' } },
+          constraints: { type: 'string' },
+          done_when: { type: 'string', description: 'a single runnable check that proves this slice' },
+          sc_ids: { type: 'array', items: { type: 'string' }, description: 'the law.json SC ids this slice flips RED→GREEN — every milestone SC in EXACTLY one slice' },
+        },
+        required: ['objective', 'done_when', 'sc_ids'],
+      },
+    },
+  },
+  required: ['reasoning', 'slices'],
+}
+const CONFIRM_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reasoning: { type: 'string' },
+    decision: { type: 'string', enum: ['proceed', 'replan'] },
+    reason: { type: 'string', description: 'the concrete contradiction with codebase-state (replan only)' },
+  },
+  required: ['reasoning', 'decision'],
 }
 const BUILD_SCHEMA = {
   type: 'object', additionalProperties: false,
@@ -128,15 +198,58 @@ const BUILD_SCHEMA = {
   },
   required: ['reasoning', 'tests_green', 'committed', 'evidence'],
 }
+const RUNNER_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reasoning: { type: 'string' },
+    verify_exit: { type: 'number', description: 'exit code of kiln-law verify (step 1)' },
+    tamper_paths: { type: 'array', items: { type: 'string' }, description: 'every path from a TAMPER: line, any step (empty if none)' },
+    law_run_exit: { type: 'number', description: 'exit code of kiln-law run (step 2) — the §5.1 lifecycle verdict the workflow gates on mechanically' },
+    flip_unmet: { type: 'array', items: { type: 'string' }, description: 'every id from a FLIP_UNMET line of step 2, verbatim (empty if none or step 2 never ran)' },
+    regressed: { type: 'array', items: { type: 'string' }, description: 'every id from a REGRESSION line of step 2, verbatim (empty if none or step 2 never ran)' },
+    run_id: { type: 'string', description: 'verbatim from the RUN <runId> HEAD <head> line' },
+    head: { type: 'string', description: 'verbatim HEAD sha from the RUN line' },
+    suite_cmd: { type: 'string', description: 'the project suite command kiln-law suite ran (step 3)' },
+    suite_exit: { type: 'number', description: 'the REAL suite exit from step 3\'s SUITE line (its output is persisted as suite.log + suite.jsonl in the evidence dir)' },
+  },
+  required: ['reasoning', 'verify_exit', 'tamper_paths', 'flip_unmet', 'regressed'],
+}
+const FRESHNESS_SCHEMA = {
+  // The §6 freshness transcript: current HEAD (sha + commit epoch) and the evidence's OWN anchors
+  // (run.json, written by kiln-law itself) + a re-hash of results.jsonl. Absence sentinels are ''
+  // (strings) and -1 (epochs) — runnerGate fails closed on them; transcribe, never infer.
+  type: 'object', additionalProperties: false,
+  properties: {
+    results_jsonl_exists: { type: 'boolean' },
+    head: { type: 'string', description: 'git rev-parse HEAD — the full sha' },
+    head_committed_epoch: { type: 'number', description: 'git show -s --format=%ct HEAD — the commit epoch seconds (-1 if git failed)' },
+    manifest_head: { type: 'string', description: 'the "head" field of the evidence dir\'s run.json, verbatim ("" if the file or field is missing)' },
+    manifest_results_sha256: { type: 'string', description: 'the "results_sha256" field of run.json, verbatim ("" if missing — an unfinalized/aborted run has none)' },
+    manifest_completed_epoch: { type: 'number', description: 'the "completed_at" field of run.json (-1 if missing)' },
+    results_sha256: { type: 'string', description: 'sha256 of results.jsonl as YOU computed it ("" if the file is missing)' },
+  },
+  required: ['results_jsonl_exists', 'head', 'head_committed_epoch', 'manifest_head', 'manifest_results_sha256', 'manifest_completed_epoch', 'results_sha256'],
+}
 const REVIEW_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
     reasoning: { type: 'string' },
     verdict: { type: 'string', enum: ['APPROVED', 'REJECTED'] },
+    law_green: { type: 'boolean', description: 'the slice\'s mapped SC checks pass as YOU re-ran them via kiln-law (PROBE_DEFERRED lines are deferred templates, not red)' },
     tests_green: { type: 'boolean', description: 'green as the reviewer re-ran it (not as the builder reported)' },
-    issues: { type: 'array', items: { type: 'string' } },
+    findings: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          text: { type: 'string', description: 'specific and actionable, [file:line] where possible' },
+          finding_class: { type: 'string', enum: ['mechanical', 'logical'], description: 'mechanical = hygiene/formatting/missing-file/simple slip; logical = wrong behavior, failed check, broken contract or design' },
+        },
+        required: ['text', 'finding_class'],
+      },
+    },
   },
-  required: ['reasoning', 'verdict', 'tests_green'],
+  required: ['reasoning', 'verdict', 'law_green', 'tests_green', 'findings'],
 }
 const QA_FINDINGS_SCHEMA = {
   type: 'object', additionalProperties: false,
@@ -151,8 +264,12 @@ const QA_FINDINGS_SCHEMA = {
         required: ['text', 'severity'],
       },
     },
+    // §3.2 judge-spawn condition input: the gate computes analyst DISAGREEMENT from this field —
+    // a 'fail' MUST be backed by at least one critical|high finding, or the deterministic
+    // reconcile (blocking = any critical|high) reads it as noise.
+    overall: { type: 'string', enum: ['pass', 'fail'], description: 'your independent overall verdict on the milestone — \'fail\' MUST be backed by at least one critical or high finding' },
   },
-  required: ['reasoning', 'findings'],
+  required: ['reasoning', 'findings', 'overall'],
 }
 const VERDICT_SCHEMA = {
   type: 'object', additionalProperties: false,
@@ -183,6 +300,185 @@ function denzelReconcile(repA, repB) {
   return { findings: merged, blocking, hasBlocking: blocking.length > 0, summaryLines: merged.map((f) => `[${f.severity}] ${f.text}`) }
 }
 
+// ── The build-spine mechanical core (BLUEPRINT §5.1/§6/§3.2) + the Sentinel ratchet (§3.3) —
+//    inlined pure logic, unit-tested in src/spine.mjs and src/gauge.mjs. The coverage arithmetic,
+//    the tamper/freshness gate, the milestone-gate judge-spawn decision, and the escalation
+//    policy run IN THE SCRIPT, never in an agent. ──
+function validateSlicePlan(slices, milestoneScIds) {
+  // codes: not_array | empty_plan | invalid_slice | empty_slice | unknown_sc | duplicate_sc | uncovered_sc
+  const expected = Array.isArray(milestoneScIds) ? milestoneScIds.filter((id) => typeof id === 'string' && id) : []
+  const errors = []
+  const err = (code, at, message) => errors.push({ code, at, message })
+  if (!Array.isArray(slices)) {
+    return { ok: false, errors: [{ code: 'not_array', at: 'slices', message: 'the slice plan must be an array of slices' }] }
+  }
+  if (!slices.length) {
+    if (expected.length) err('empty_plan', 'slices', `the plan is empty but ${expected.length} Law check(s) need covering: ${expected.join(', ')}`)
+    return { ok: errors.length === 0, errors }
+  }
+  const seen = []
+  slices.forEach((s, i) => {
+    const at = `slices[${i}]`
+    if (!s || typeof s !== 'object' || Array.isArray(s)) { err('invalid_slice', at, `${at} must be an object`); return }
+    if (typeof s.objective !== 'string' || !s.objective.trim()) err('invalid_slice', `${at}.objective`, `${at}: objective must be a nonempty string`)
+    if (typeof s.done_when !== 'string' || !s.done_when.trim()) err('invalid_slice', `${at}.done_when`, `${at}: done_when must be a nonempty string`)
+    const ids = Array.isArray(s.sc_ids) ? s.sc_ids.filter((id) => typeof id === 'string' && id) : []
+    if (!ids.length) { err('empty_slice', `${at}.sc_ids`, `${at}: every slice must flip at least one Law check (sc_ids is empty)`); return }
+    for (const id of ids) {
+      if (!expected.includes(id)) err('unknown_sc', `${at}.sc_ids`, `${at}: '${id}' is not a Law check of this milestone`)
+      else if (seen.includes(id)) err('duplicate_sc', `${at}.sc_ids`, `${at}: '${id}' is already covered by an earlier slice — every SC in EXACTLY one slice`)
+      else seen.push(id)
+    }
+  })
+  for (const id of expected) if (!seen.includes(id)) err('uncovered_sc', id, `Law check '${id}' is not covered by any slice`)
+  return { ok: errors.length === 0, errors }
+}
+function runnerGate(runner, probe) {
+  const r = (runner && typeof runner === 'object' && !Array.isArray(runner)) ? runner : null
+  const tamperPaths = (r && Array.isArray(r.tamper_paths)) ? r.tamper_paths.filter((p) => typeof p === 'string' && p) : []
+  if (r && (r.verify_exit === 2 || r.law_run_exit === 2 || tamperPaths.length)) {
+    return {
+      verdict: 'tamper', tamper_paths: tamperPaths,
+      reasons: [tamperPaths.length ? `locked path(s) touched: ${tamperPaths.join(', ')}` : 'kiln-law exited 2 (tamper) without naming paths'],
+    }
+  }
+  const reasons = []
+  if (!r) reasons.push('the runner produced no report')
+  else {
+    if (r.verify_exit !== 0) reasons.push(`kiln-law verify did not exit 0 (got ${JSON.stringify(r.verify_exit)})`)
+    if (typeof r.law_run_exit !== 'number' || !Number.isFinite(r.law_run_exit)) reasons.push(`kiln-law run reported no exit code (got ${JSON.stringify(r && r.law_run_exit)})`)
+    if (typeof r.run_id !== 'string' || !r.run_id.trim()) reasons.push('the runner reported no run_id — there is no evidence directory to anchor')
+    if (typeof r.head !== 'string' || !r.head.trim()) reasons.push('the runner reported no HEAD anchor')
+  }
+  const p = (probe && typeof probe === 'object' && !Array.isArray(probe)) ? probe : null
+  if (!p) reasons.push('the freshness probe produced no report')
+  else {
+    const str = (v) => (typeof v === 'string' ? v.trim() : '')
+    const cur = str(p.head)
+    if (p.results_jsonl_exists !== true) reasons.push('results.jsonl does not exist in the evidence dir')
+    if (!cur) reasons.push('the probe reported no HEAD')
+    else if (r && str(r.head) && cur !== str(r.head)) {
+      reasons.push(`HEAD moved since the runner anchored its evidence (runner ${str(r.head)}, current ${cur})`)
+    }
+    // §6 HEAD-anchor arm: run.json's head is written by kiln-law itself at run time — the
+    // evidence names the commit it was produced at, and that commit must BE the current HEAD.
+    const manifestHead = str(p.manifest_head)
+    if (!manifestHead) reasons.push('the evidence carries no manifest HEAD anchor (run.json missing or unfinalized)')
+    else if (cur && manifestHead !== cur) reasons.push(`the evidence was produced at HEAD ${manifestHead}, not the current HEAD ${cur} — stale by commit`)
+    // §6 hash arm: a COMPLETE run records sha256(results.jsonl) in its manifest; the probe
+    // re-hashes the file. Divergence ⇒ altered or partial evidence; absence ⇒ never finalized.
+    const recorded = str(p.manifest_results_sha256)
+    const rehashed = str(p.results_sha256)
+    if (!recorded || !rehashed) reasons.push('the evidence hash cannot be verified (manifest results_sha256 or the probe rehash is missing — an aborted run never finalizes)')
+    else if (recorded !== rehashed) reasons.push(`results.jsonl re-hashes to ${rehashed} but the manifest recorded ${recorded} — the evidence was altered or partially written`)
+    // §6 timestamp arm: evidence must postdate the commit it claims to verify.
+    const completed = (typeof p.manifest_completed_epoch === 'number' && Number.isFinite(p.manifest_completed_epoch)) ? p.manifest_completed_epoch : -1
+    const committed = (typeof p.head_committed_epoch === 'number' && Number.isFinite(p.head_committed_epoch)) ? p.head_committed_epoch : -1
+    if (completed < 0 || committed < 0) reasons.push('the evidence/HEAD timestamps are unavailable — freshness cannot be proven')
+    else if (completed < committed) reasons.push(`the evidence completed at epoch ${completed}, before HEAD was committed at epoch ${committed} — stale by time`)
+  }
+  if (reasons.length) return { verdict: 'stale', tamper_paths: [], reasons }
+  // The lifecycle verdict (T2-fix ruling, §5.1 red/green): the evidence is complete and fresh —
+  // kiln-law finalizes run.json BEFORE its expectation gates, so a flip/regression failure still
+  // carries trustworthy evidence — and the exit code IS the verdict. Non-zero ⇒ 'red', mechanical.
+  if (r.law_run_exit !== 0) {
+    const ids = (v) => Array.isArray(v) ? v.filter((id) => typeof id === 'string' && id) : []
+    const unmet = ids(r.flip_unmet)
+    const regressed = ids(r.regressed)
+    const why = []
+    if (unmet.length) why.push(`declared RED→GREEN flip(s) still not green: ${unmet.join(', ')}`)
+    if (regressed.length) why.push(`previously-GREEN check(s) regressed: ${regressed.join(', ')}`)
+    if (!why.length) why.push(`kiln-law run exited ${r.law_run_exit} — the lifecycle gate failed without transcribed FLIP_UNMET/REGRESSION ids; read the evidence logs under the run's checks/ dir`)
+    return { verdict: 'red', tamper_paths: [], reasons: why, flip_unmet: unmet, regressed }
+  }
+  return { verdict: 'proceed', tamper_paths: [], reasons: [] }
+}
+function rejectionClass(review) {
+  if (!review || typeof review !== 'object' || Array.isArray(review)) return 'mechanical'
+  const findings = Array.isArray(review.findings) ? review.findings : []
+  if (findings.some((f) => f && f.finding_class === 'logical')) return 'logical'
+  return findings.length ? 'mechanical' : 'logical'
+}
+function gateDecision(reconciled, overallA, overallB) {
+  if (reconciled && reconciled.hasBlocking === true) {
+    return { judge: false, verdict: 'QA_FAIL', reason: 'blocking findings — the verdict is computed (hasBlocking → QA_FAIL); no judge can soften a deterministic gate' }
+  }
+  const known = (v) => v === 'pass' || v === 'fail'
+  if (known(overallA) && known(overallB) && overallA === overallB) {
+    return {
+      judge: false, verdict: 'QA_PASS',
+      reason: overallA === 'pass'
+        ? 'zero blocking findings and the analysts agree (pass) — the verdict is computed; no judge'
+        : 'the analysts agree (fail) yet produced zero blocking findings — an unbacked fail is noise to the deterministic reconcile; the §3.2 computed rule (no blocking ⇒ QA_PASS) applies and an agreed verdict is not ambiguous, so no judge',
+    }
+  }
+  const a = known(overallA) ? overallA : 'unreadable'
+  const b = known(overallB) ? overallB : 'unreadable'
+  return { judge: true, verdict: null, reason: `zero blocking findings and the analyst overall verdicts disagree (A: ${a}, B: ${b}) — ambiguous reconcile, the judge rules` }
+}
+function goalAuditUsable(report) {
+  return !!(report && typeof report === 'object' && !Array.isArray(report)
+    && (report.overall === 'pass' || report.overall === 'fail')
+    && Array.isArray(report.findings))
+}
+function escalate(posture, signal, config) {
+  // §3.3 signal shapes, ranked by evidence strength:
+  //   { type: 'review_rejection', finding_class: 'logical'|'mechanical', rejections: n }
+  //     the master signal; escalation keys on LOGICAL findings only. At
+  //     rejections_to_feedback_escalation: escalate the FEEDBACK SOURCE (stronger or
+  //     different-family reviewer), not the retry count. At rejections_to_split:
+  //     split-and-rebuild (genesis 3.4).
+  //   { type: 'test_churn', flips: n }      — same check flipping pass<->fail across fix cycles
+  //   { type: 'diff_size_exceeded' }        — diff size beyond the slicer estimate
+  //   { type: 'slice_growth' }              — slice count grows beyond the estimate
+  //   { type: 'analyst_disagreement' }      — the tribunal analysts disagree
+  //   { type: 'validate_coverage_gap' }     — retroactively raises remaining milestones' posture
+  //   { type: 'builder_confidence', level: 'low'|'high' } — may only RAISE scrutiny ('low');
+  //     'high' is a no-op, never a downgrade.
+  // Unknown/malformed signals are a recorded no-op — the ratchet never throws mid-pipeline.
+  const next = {
+    research_topics_max: posture.research_topics_max,
+    planning: posture.planning,
+    plan_validation_rounds: posture.plan_validation_rounds,
+    slice_budget_hours: posture.slice_budget_hours,
+    review: { ...posture.review },
+    milestone_gate: { ...posture.milestone_gate },
+    browser: { ...posture.browser },
+    validate: { ...posture.validate },
+    effort_bias: posture.effort_bias,
+  }
+  const changes = []
+  const set = (dial, obj, key, value) => {
+    if (obj[key] === value) return // already at or above — the ratchet only records real moves
+    changes.push({ dial, from: obj[key], to: value })
+    obj[key] = value
+  }
+  // every raise is one-directional: medium->high, false->true, effort_bias capped at 2
+  const raiseReview = () => set('review.ui_effort_base', next.review, 'ui_effort_base', 'high')
+  const raiseBias = () => set('effort_bias', next, 'effort_bias', Math.min(2, next.effort_bias + 1))
+  const raiseTier2 = () => set('browser.tier2_per_milestone', next.browser, 'tier2_per_milestone', true)
+  const raiseAdversarial = () => set('validate.adversarial_pass', next.validate, 'adversarial_pass', true)
+  let action = 'none'
+  const t = (signal && signal.type) || 'unknown'
+  if (t === 'review_rejection' && signal.finding_class === 'logical') {
+    if (signal.rejections >= config.rejections_to_split) { action = 'split_and_rebuild'; raiseReview(); raiseBias() }
+    else if (signal.rejections >= config.rejections_to_feedback_escalation) { action = 'escalate_feedback_source'; raiseReview() }
+  } else if (t === 'test_churn' && signal.flips >= config.churn_flips_threshold) {
+    action = 'raise_scrutiny'; raiseReview(); raiseBias()
+  } else if (t === 'diff_size_exceeded') {
+    action = 'raise_scrutiny'; raiseReview()
+  } else if (t === 'slice_growth') {
+    action = 'raise_scrutiny'; raiseBias()
+  } else if (t === 'analyst_disagreement') {
+    action = 'raise_scrutiny'; raiseReview(); raiseBias()
+  } else if (t === 'validate_coverage_gap') {
+    action = 'raise_scrutiny'; raiseTier2(); raiseAdversarial(); raiseBias()
+  } else if (t === 'builder_confidence' && signal.level === 'low') {
+    action = 'raise_scrutiny'; raiseReview()
+  }
+  return { posture: next, reason: { event: 'posture_escalate', signal: t, action, changes } }
+}
+
 // ── Routing: builder family != reviewer family, derived in ONE place ──
 // ui/mixed → Opus builds, GPT/Codex reviews · logic → GPT/Codex builds, Opus reviews.
 function surfaceOf(m) {
@@ -196,6 +492,46 @@ function routing(surf) {
     ? { buildModel: 'opus', reviewModel: 'sonnet' }   // Opus builds, Codex reviews
     : { buildModel: 'sonnet', reviewModel: 'opus' }   // Codex builds, Opus reviews
 }
+// reviewLeg(surf, escalated) — §3.3 feedback-source escalation: after
+// rejections_to_feedback_escalation LOGICAL rejections, the feedback source changes. T1..T4 name
+// the §8 CAPABILITY-LADDER tiers (T1 Sonnet-only / T2 +Opus / T3 +Codex / T4 +Fable), and
+// codexAvailable is the one observable tier discriminant this workflow receives (§12 doctor
+// probe): true ⟺ T3+. T3+ swaps the reviewer FAMILY — the stuck loop gets genuinely different
+// eyes, and codex is the only second family on board. T1/T2 has NO second family, so escalation
+// is a fresh-context stronger-effort reviewer instead (Opus, the strongest seat available;
+// reviewEffort forces 'high' on escalated legs). viaCodex says whether this leg shells out to codex.
+function reviewLeg(surf, escalated) {
+  const base = routing(surf).reviewModel
+  if (!escalated) return { model: base, viaCodex: codexAvailable && base === 'sonnet', escalated: false }
+  if (codexAvailable) {
+    const swapped = base === 'opus' ? 'sonnet' : 'opus'
+    return { model: swapped, viaCodex: swapped === 'sonnet', escalated: true }
+  }
+  return { model: 'opus', viaCodex: false, escalated: true }
+}
+// Codex review effort (§3.2 slice-review row): 'medium' baseline; 'high' iff the posture says so
+// (D8≥1 → ui_effort_base 'high', and the Sentinel ratchet can raise it mid-run) OR fix-cycle>0
+// (posture.review.escalate_on) OR the feedback source was escalated.
+const reviewEffort = (fix, escalated) => (livePosture.review.ui_effort_base === 'high' || fix > 0 || escalated) ? 'high' : 'medium'
+
+// Review verdict helpers. approvedOf is the ONE approval predicate: verdict, the reviewer's own
+// suite re-run, AND the reviewer's own kiln-law re-run (§6 independent-rerun floor) must all hold.
+const approvedOf = (rev) => !!(rev && rev.verdict === 'APPROVED' && rev.tests_green !== false && rev.law_green !== false)
+const findingLines = (rev) => ((rev && rev.findings) || []).map((f) => f && f.text).filter(Boolean)
+// autoReject — the workflow's own REJECTED verdict (commit-before-review, tamper, stale evidence).
+// Always 'mechanical': these are process failures, not defect signals — they must not push the
+// Sentinel toward feedback escalation or a split (§3.3 keys on logical findings only).
+const autoReject = (texts) => ({ verdict: 'REJECTED', law_green: false, tests_green: false, findings: texts.map((t) => ({ text: t, finding_class: 'mechanical' })) })
+// lawRedReject — the workflow's REJECTED verdict for a RED lifecycle gate (kiln-law run --flips
+// exited non-zero: a declared flip did not go RED→GREEN, or a previously-GREEN check regressed).
+// Classed 'logical' deliberately, in contrast with autoReject: a failed check is the finding
+// taxonomy's own definition of logical ("wrong behavior, failed check") and a GENUINE defect
+// signal — a slice that repeatedly cannot flip its Law should march the §3.3 ratchet toward
+// split_required exactly like reviewer-caught wrong behavior (scrutiny may only rise).
+const lawRedReject = (texts) => ({ verdict: 'REJECTED', law_green: false, tests_green: false, findings: texts.map((t) => ({ text: t, finding_class: 'logical' })) })
+// The ORCHESTRATOR RULING's blocking finding (p2/tasks.md "Gate failure semantics"): a
+// goal-backward audit still unusable after its ONE re-ask fails the milestone boundary closed.
+const GOAL_AUDIT_FAILURE = `[goal-audit-failure] the goal-backward audit returned no usable report after one re-ask — the boundary fails closed (QA_FAIL; orchestrator ruling 2026-06-11)`
 
 const NO_WANDER = 'Read ONLY the files named in this brief (absolute paths). Do not search the filesystem or read other projects.'
 const repoRule = (projectPath) => `Project repo: ${projectPath}. Work and commit there directly — this is a sequential cumulative build; do NOT create a detached git worktree (later slices and milestones must see your commits). Maintain a .gitignore for the stack and NEVER commit generated artifacts (Python: __pycache__/, *.pyc, *.egg-info/, build/, dist/, .pytest_cache/) — add them to .gitignore and 'git rm --cached' any that slipped in.`
@@ -215,32 +551,56 @@ const designRefsNote = pluginRoot
   ? `- Read the design references at ${pluginRoot}/references/design/design-system.md (token architecture) and ${pluginRoot}/references/design/design-patterns.md (modern-CSS techniques) by absolute path and follow them for visual/design decisions.\n`
   : ``
 
-// One-line pointer for the other codex-shelling legs (UI reviewer, Ryu QA) — the logic builder gets it
+// One-line pointer for the other codex-shelling legs (reviewers, Ryu QA) — the logic builder gets it
 // via codexHowto. Same single source of truth; gated on pluginRoot so absence degrades gracefully.
 const codexGuideNote = codexGuide
   ? `Read ${codexGuide} first and follow it for the full codex-prompt discipline (per-role flags — note Ryu/QA runs at xhigh — the --output-schema/reasoning-first/flat-schema rules, the heredoc-to-stdin invocation, and the exit-0 and #15451 caveats). `
   : ``
 
 // ── Prompt builders (functional role+stance only; persona names live in labels, never here) ──
-function slicerPrompt(m, surf, builtSlices) {
-  const built = builtSlices.length
-    ? builtSlices.map((s, i) => `  ${i + 1}. ${s.objective}${s.done_when ? ' — done-when: ' + s.done_when : ''}`).join('\n')
-    : '  (none yet — this is the first slice)'
+// The §5 Law block every builder receives: outcome-phrased (done = the SC checks pass), with the
+// immutability warning — the tamper gate auto-rejects mechanically, so the warning is real.
+function lawLines(slice) {
+  const ids = slice.sc_ids.join(',')
+  return `- THE LAW (locked acceptance gates): this slice is DONE only when its mapped checks pass — ${slice.sc_ids.join(', ')}. ` +
+    `Execute them any time with 'node ${pluginRoot}/scripts/kiln-law.mjs run ${projectPath} ${kilnDir} --only ${ids}' (PROBE_DEFERRED lines are deferred probe templates — fine; their evidence arrives in a later phase).\n` +
+    `- The gate files under tests/acceptance/ and ${lawFile} are LOCKED — NEVER edit, move, or delete them: the tamper gate re-hashes them against the lock commit and a touched lock auto-rejects the slice with no reviewer and no appeal. ADD new tests anywhere else freely.\n`
+}
+
+function slicePlanPrompt(m, surf, scs, built, note) {
+  const scLines = scs.map((c) => `  - ${c.id} [${c.kind}]`).join('\n')
+  const builtLines = built.length
+    ? built.map((s, i) => `  ${i + 1}. ${s.objective} — flipped: ${(s.sc_ids || []).join(', ') || '(none)'}`).join('\n')
+    : '  (none yet)'
   return voice('opus') +
-    `You are the slice planner. Scope the NEXT single vertical slice of this milestone — ONE distinct user-facing behavior that can be invoked and verified on its own by a single runnable check (a CLI subcommand, an API call, a rendered-and-exercised page, one pure function) — or declare the milestone objective fully covered.\n\n` +
+    `You are the batch slice planner: in ONE call, plan this milestone's ENTIRE remaining slice list — every vertical slice in dependency order, each mapped to the locked Law checks it flips RED→GREEN.\n\n` +
     `<inputs>\n` +
     `- Milestone ${m.id} "${m.title}" [surface=${surf}] — acceptance: ${m.acceptance}\n` +
     `- Summary: ${m.summary || '(none)'}\n` +
-    `- Already-built slices this milestone:\n${built}\n` +
+    `- THE LAW for this milestone — the locked checks that define done (id [kind]):\n${scLines}\n` +
+    `- Slices already built this milestone:\n${builtLines}\n` +
     `- Read ${codebaseStateFile} and ${masterPlanFile} for what currently exists and what the milestone owes.\n` +
     `</inputs>\n\n` +
     `<constraints>\n` +
     `- ${scope}\n` +
-    `- A slice = ONE distinct, independently-runnable user-facing behavior. Decompose the milestone by such behaviors and emit one slice each, in dependency order: a multi-command CLI gives a slice per command (add / list / done / rm), a CRUD resource a slice per operation. Each slice's done_when must be a runnable check that no built slice already covers. The milestone-count "right-size / don't-split-a-cohesive-artifact" rule is about how many MILESTONES exist, NOT how many slices a milestone holds — do not let it collapse you to one slice.\n` +
-    `- Do NOT manufacture slices. If a candidate part has no runnable check distinct from another's, FOLD it. A single render artifact (one page — its hero, countdown, and rows share the one render check), one endpoint, or one pure function is ONE slice; a region that only renders within a page (including live/animated ones like a countdown) is never its own slice because in-loop verification here is the single check that exercises that behavior. Scaffolding, packaging, config, and shared storage are NEVER their own slice — they ride inside the FIRST behavior slice that needs them (e.g. the JSON store folds into add). Scope this ONE slice with a zero-ambiguity done_when; do not duplicate a built slice.\n` +
-    `- If the milestone acceptance is already fully met by the built slices, set done=true and omit slice.\n` +
+    `- A slice = ONE distinct, independently-runnable user-facing behavior that can be invoked and verified on its own by a single runnable check (a CLI subcommand, an API call, a rendered-and-exercised page, one pure function). Decompose the milestone by such behaviors, in dependency order: a multi-command CLI gives a slice per command (add / list / done / rm), a CRUD resource a slice per operation.\n` +
+    `- Do NOT manufacture slices. If a candidate part has no runnable check distinct from another's, FOLD it. A single render artifact (one page — its hero, countdown, and rows share the one render check), one endpoint, or one pure function is ONE slice; a region that only renders within a page is never its own slice. Scaffolding, packaging, config, and shared storage are NEVER their own slice — they ride inside the FIRST behavior slice that needs them (e.g. the JSON store folds into add).\n` +
+    `- SC coverage is ARITHMETIC, not judgment: every Law check id listed above must appear in EXACTLY ONE slice's sc_ids (none missing, none twice), and every slice must flip at least one. 'probe'-kind checks are deferred templates this phase — still assign each to the slice that builds its surface.\n` +
+    `- Slice budget (the Gauge): size each slice at roughly ≤ ${livePosture.slice_budget_hours}h human-equivalent of work; smaller, verifiable slices beat bloated ones. Emit at most ${MAX_SLICES_PER_MILESTONE} slices.\n` +
     `</constraints>\n\n` +
-    `<task>Return rationale (why this slice next, or why done), done (true/false), and — only when done=false — slice {objective, files[], constraints, done_when}.</task>`
+    (note ? `<correction>\n${note}\n</correction>\n\n` : '') +
+    `<task>Return the ordered slice list: each {objective, files[], constraints, done_when, sc_ids[]} with a zero-ambiguity done_when. Report reasoning first.</task>`
+}
+
+function confirmPrompt(m, slice) {
+  return `You are the slice confirmer — a cheap pre-build drift check, not a reviewer.\n\n` +
+    `<inputs>\n` +
+    `- Next planned slice for milestone ${m.id}: ${slice.objective}\n` +
+    `- Files in scope: ${(slice.files || []).join(', ') || '(builder decides)'}\n` +
+    `- Done when: ${slice.done_when}. Flips: ${slice.sc_ids.join(', ')}\n` +
+    `- Read ${codebaseStateFile} (the live codebase state). ${scope}\n` +
+    `</inputs>\n\n` +
+    `<task>Decide 'proceed' (the slice still matches the live state) or 'replan' ONLY on a concrete contradiction: the objective is already built, its files were restructured away, or its done_when is impossible as scoped. Doubt is not drift — when unsure, proceed. On replan, state the contradiction in reason. Report reasoning first.</task>`
 }
 
 function assetPrepPrompt(m) {
@@ -266,6 +626,7 @@ function buildPrompt(m, surf, slice, sliceId, fixNote) {
       `</inputs>\n\n` +
       `<constraints>\n` +
       `- ${scope} ${repoRuleLine}\n` +
+      lawLines(slice) +
       `- Keep the solution minimal; add no abstraction the slice does not require.\n` +
       designRefsNote +
       `- Craft any motion/effects at 60fps, gated by prefers-reduced-motion; never let an effect touch text contrast (keep AA).\n` +
@@ -287,11 +648,12 @@ function buildPrompt(m, surf, slice, sliceId, fixNote) {
     `- Slice objective: ${slice.objective}\n` +
     `- Files in scope: ${files}\n` +
     `- Slice constraints: ${slice.constraints || '(none)'}\n` +
-    `- Done when: ${slice.done_when || 'the acceptance tests pass'}\n` +
+    `- Done when: ${slice.done_when || 'the mapped Law checks pass'}\n` +
     `- Master plan: ${masterPlanFile}. Codebase state: ${codebaseStateFile}.\n` +
     `</inputs>\n\n` +
     `<constraints>\n` +
     `- ${scope} ${repoRuleLine}\n` +
+    lawLines(slice) +
     `- ${tdd}\n` +
     `- Keep the implementation minimal; add no abstraction the slice does not require; no stubs or mocks standing in for required behavior.\n` +
     (codexAvailable ? `- ${codexHowto}\n` : `- Codex is unavailable — implement directly with your file tools.\n`) +
@@ -299,44 +661,103 @@ function buildPrompt(m, surf, slice, sliceId, fixNote) {
     `<task>Implement the slice to green tests, then 'git add -A && git commit' with a clear message. Report reasoning, files_changed, tests_added, red_confirmed, tests_green (must be true), committed, the test_command you used, and the trimmed passing test output as evidence.</task>`
 }
 
-function reviewPrompt(m, surf, slice, sliceId, build) {
-  const testCmd = (build && build.test_command) || 'the project tests'
+function runnerPrompt(slice, build, lawCtx, beforeRunId) {
+  // The §5.1 lifecycle invocation (T2-fix ruling: the exit code IS the verdict): --flips declares
+  // the slice's expected RED→GREEN set, --only also re-runs every SC this milestone already
+  // turned green (so regressions are OBSERVED, not assumed), and --before anchors statusBefore in
+  // the recorded evidence of the previous complete run — kiln-law computes the flip plan itself
+  // (src/law.mjs flipPlan); no agent arithmetic, no prose state.
+  const only = lawCtx.only.join(',')
+  const flips = lawCtx.flips.join(',')
+  const before = beforeRunId ? ` --before ${beforeRunId}` : ''
+  const suite = (build && build.test_command) ? build.test_command : null
+  return `You are the deterministic check runner — you execute and report; you never fix, never edit, never judge.\n\n` +
+    `<task>Run these commands (Bash) IN THIS ORDER and report EXACTLY what you observe:\n` +
+    `1. node ${pluginRoot}/scripts/kiln-law.mjs verify ${projectPath} ${kilnDir}\n` +
+    `   verify_exit = its exit code. Collect every 'TAMPER: <path>' line's path into tamper_paths (empty array if none). If verify_exit is not 0, STOP — skip steps 2-3 and report what you have.\n` +
+    `2. node ${pluginRoot}/scripts/kiln-law.mjs run ${projectPath} ${kilnDir} --only ${only} --flips ${flips}${before}\n` +
+    `   law_run_exit = its exit code — the lifecycle VERDICT the workflow gates on mechanically (0 = every declared flip went RED→GREEN and nothing previously-GREEN regressed; non-zero = the slice failed its Law). From its 'RUN <runId> HEAD <head>' line report run_id and head VERBATIM. Collect every 'FLIP_UNMET <id>' line's id into flip_unmet and every 'REGRESSION <id>' line's id into regressed (empty arrays if none). Add any TAMPER paths to tamper_paths. RED/GREEN/PROBE_DEFERRED check lines are EVIDENCE — transcribe, never fix. If law_run_exit is not 0, STOP — skip step 3.\n` +
+    (suite
+      ? `3. node ${pluginRoot}/scripts/kiln-law.mjs suite ${projectPath} ${kilnDir} <runId> --cmd '${suite}'\n   Substitute <runId> with the run_id from step 2's RUN line. This runs the project suite and persists its output INTO the evidence dir (suite.log + a sha256'd result line in suite.jsonl). From its 'SUITE <runId> exit=<n> …' line report suite_exit = that <n>, verbatim; suite_cmd = the suite command itself.\n`
+      : `3. No project suite command was recorded for this slice — skip this step (omit suite_cmd and suite_exit).\n`) +
+    `Do not edit any file, do not commit, do not re-run with fixes — report the first observation honestly.</task>`
+}
+
+function freshPrompt(runId) {
+  const dir = `${kilnDir}/evidence/${runId}`
+  return `You are the evidence freshness probe — a fresh pair of eyes; trust nothing the runner reported. You TRANSCRIBE what the commands print — never infer, never repair (a missing file or field is a finding for the gate, not your problem to fix; report it with the absence sentinel '' or -1).\n\n` +
+    `<task>Run (Bash) and transcribe EXACTLY:\n` +
+    `1. 'ls ${dir}/results.jsonl' — results_jsonl_exists = true iff the file exists.\n` +
+    `2. 'sha256sum ${dir}/results.jsonl' (or 'shasum -a 256' where sha256sum is unavailable) — results_sha256 = the hex digest, '' if the file is missing.\n` +
+    `3. 'cat ${dir}/run.json' — the manifest kiln-law itself wrote into the evidence: manifest_head = its "head", manifest_results_sha256 = its "results_sha256", manifest_completed_epoch = its "completed_at" (sentinels '' / '' / -1 when the file or a field is missing — an unfinalized manifest means the run never completed).\n` +
+    `4. 'git -C ${projectPath} rev-parse HEAD' — head = the full sha.\n` +
+    `5. 'git -C ${projectPath} show -s --format=%ct HEAD' — head_committed_epoch = the number (-1 if git failed).\n` +
+    `Do not read anything else, do not write or fix anything. Report the seven fields.</task>`
+}
+
+function reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort) {
+  const ids = slice.sc_ids.join(',')
+  const evidenceDir = `${kilnDir}/evidence/${runner.run_id}`
+  const evidenceBlock =
+    `- SC mapping: this slice claims ${slice.sc_ids.join(', ')}.\n` +
+    `- Hashed evidence from the deterministic runner (tamper-gated, freshness-verified at HEAD ${runner.head}): ${evidenceDir}/results.jsonl + per-check logs under ${evidenceDir}/checks/.` +
+    (typeof runner.suite_exit === 'number' ? ` Project suite ('${runner.suite_cmd || ''}') exited ${runner.suite_exit} — its full output is persisted at ${evidenceDir}/suite.log (sha256'd result line in ${evidenceDir}/suite.jsonl).` : '') + `\n` +
+    `- Independent-rerun floor (non-negotiable): re-run the slice's mapped checks YOURSELF — 'node ${pluginRoot}/scripts/kiln-law.mjs run ${projectPath} ${kilnDir} --only ${ids}' — and set law_green from YOUR run (PROBE_DEFERRED lines are deferred probe templates, not red; probe evidence arrives in a later phase). Read the runner's evidence for everything broader instead of re-deriving it; re-run broader scopes only on concrete doubt.\n`
+  const escNote = leg.escalated
+    ? `\n<escalated>You are the ESCALATED feedback source: prior review cycles rejected this slice on logical findings and the loop is stuck. Fresh eyes, full depth — verify the prior findings were genuinely addressed AND hunt what the earlier reviews missed.</escalated>\n`
+    : ''
+  const classRule = `Class EVERY finding: 'mechanical' (hygiene, formatting, missing file, simple slip — a one-step fix) or 'logical' (wrong behavior, failed check, broken contract, real design flaw). The Sentinel escalates on logical findings — class honestly, never inflate or soften.`
   if (surf === 'ui' || surf === 'mixed') {
-    return `You are the cross-model UI reviewer on slice ${sliceId} — a DIFFERENT model family from the Opus builder. Judge code and the static check ONLY; do not rule on aesthetic taste (that is judged separately from a live render, outside this loop). Read-only on source.\n\n` +
+    const how = leg.viaCodex
+      ? `<how>${codexGuideNote}Delegate this review to GPT-5.5 via 'codex exec' at model_reasoning_effort="${effort}" — you are the thin wrapper and the cross-model check; if codex errors, review directly as the independent reviewer.</how>\n\n`
+      : ''
+    return (leg.model === 'opus' ? voice('opus') : '') +
+      `You are the ${leg.escalated ? 'escalated ' : ''}cross-model UI reviewer on slice ${sliceId} — a DIFFERENT context from the builder. Judge code and executable evidence ONLY; do not rule on aesthetic taste (that is judged separately from a live render, outside this loop). Read-only on source.\n\n` +
       `<inputs>\n` +
       `- Milestone ${m.id} "${m.title}" — acceptance: ${m.acceptance}\n` +
       `- Slice objective: ${slice.objective}\n` +
       `- Inspect the committed work: 'git -C ${projectPath} show HEAD' / 'git -C ${projectPath} diff', and read the changed files.\n` +
+      evidenceBlock +
       `- Design system + ban list: ${designDir}/creative-direction.md. Content source of truth: ${codebaseMapFile}.\n` +
       `</inputs>\n\n` +
       `<checks>\nApply EVERY check to EVERY interactive element/section, not just the first:\n` +
       `1. structural / responsive breakage; 2. dead or missing event handlers + JS correctness; 3. accessibility — AA contrast (compute it), prefers-reduced-motion honored, semantics; 4. ban-list adherence + design-token consistency; 5. content accuracy vs the map (no invented features/metrics/images).\n` +
       (surf === 'mixed' ? `Also RE-RUN the slice's behavior/smoke test for the non-visual logic and confirm it passes.\n` : ``) +
       `Re-run the STATIC check yourself (HTML parses, sections/ids present, 'node --check' the JS). Do NOT open a browser or Playwright.\n` +
-      `</checks>\n\n` +
-      (codexAvailable ? `<how>${codexGuideNote}Delegate this review to GPT-5.5 via 'codex exec' — you are the thin wrapper and the cross-model check; if codex errors, review directly as the independent reviewer.</how>\n\n` : ``) +
-      `<task>Set tests_green to whether the static check (and any mixed smoke test) passes. Verdict APPROVED only if the page is structurally sound, accessible, on-brief, and free of invented claims; else REJECTED with specific, actionable [file:line] issues. Report reasoning first.</task>`
+      `</checks>\n${escNote}\n` +
+      how +
+      `<task>Set law_green from YOUR kiln-law re-run and tests_green from the static/smoke check you re-ran. Verdict APPROVED only if the mapped checks pass and the page is structurally sound, accessible, on-brief, and free of invented claims; else REJECTED with specific, actionable findings. ${classRule} Report reasoning first.</task>`
   }
-  return voice('opus') +
-    `You are the cross-model code reviewer (Opus) on a GPT/Codex-built slice (${sliceId}). Separate what the builder REPORTED from what you INDEPENDENTLY re-ran. Read-only on source.\n\n` +
+  const how = leg.viaCodex
+    ? `<how>${codexGuideNote}Delegate this review to GPT-5.5 via 'codex exec' at model_reasoning_effort="${effort}" — a genuinely cross-family second judgment; if codex errors, review directly as the independent reviewer.</how>\n\n`
+    : ''
+  const testCmd = (build && build.test_command) || 'the project tests'
+  return (leg.model === 'opus' ? voice('opus') : '') +
+    `You are the ${leg.escalated ? 'escalated ' : ''}cross-model code reviewer on slice ${sliceId}. Separate what the builder REPORTED from what you INDEPENDENTLY re-ran. Read-only on source.\n\n` +
     `<inputs>\n` +
     `- Milestone ${m.id} "${m.title}" — acceptance: ${m.acceptance}\n` +
-    `- Slice objective: ${slice.objective}. Done when: ${slice.done_when || '(acceptance tests pass)'}\n` +
+    `- Slice objective: ${slice.objective}. Done when: ${slice.done_when || '(the mapped checks pass)'}\n` +
     `- Inspect the committed work: 'git -C ${projectPath} show HEAD' / 'git -C ${projectPath} diff', read the changed files.\n` +
+    evidenceBlock +
     `</inputs>\n\n` +
     `<checks>\n` +
     `- RE-RUN the suite yourself (${testCmd}) and confirm it passes — do not trust the reported result.\n` +
-    `- Verify the implementation is real: no stubs or mocks standing in for required behavior; the slice meets its objective and the milestone acceptance.\n` +
-    `- Reject only on correctness / completeness / test failures — not on style preference.\n` +
-    `</checks>\n\n` +
-    `<task>Verdict APPROVED only if tests are green from YOUR run AND the implementation is real AND on-spec; else REJECTED with specific [file:line] issues. Set tests_green from your own run. Report reasoning first.</task>`
+    `- Verify the implementation is real: no stubs or mocks standing in for required behavior; the slice meets its objective and its mapped checks.\n` +
+    `- Reject only on correctness / completeness / failed checks — not on style preference.\n` +
+    `</checks>\n${escNote}\n` +
+    how +
+    `<task>Verdict APPROVED only if the mapped checks and the suite are green from YOUR OWN runs AND the implementation is real AND on-spec; else REJECTED with specific [file:line] findings. Set law_green and tests_green from your own runs. ${classRule} Report reasoning first.</task>`
 }
 
+// The analyst overall-verdict rule (§3.2): the gate computes judge-spawn from analyst
+// DISAGREEMENT, and the deterministic reconcile blocks on critical|high findings only — so an
+// overall 'fail' carrying no such finding is structurally noise. Stated in both analyst prompts.
+const overallRule = `Also return overall — your independent verdict on the whole milestone ('pass' | 'fail'); a 'fail' MUST be backed by at least one critical or high finding, or the deterministic reconcile reads it as noise.`
 function kenPrompt(m) {
   return voice('opus') +
     `You are QA analyst A. Adversarially verify the INTEGRATED milestone — run the tests, confirm each acceptance criterion is genuinely met (not faked), and hunt integration gaps and edge cases across the slices.\n\n` +
     `<inputs>\n- Milestone ${m.id} "${m.title}" — acceptance: ${m.acceptance}\n- Inspect the repo at ${projectPath}: git log/diff, read the files, RUN the tests yourself.\n</inputs>\n\n` +
-    `<task>Write findings to ${qaDir}/qa-report-a.md (mkdir -p first) and return report_file + findings[] (each {text, severity}). Quote specific evidence ([file:line] or test output). Apply scrutiny to EVERY acceptance criterion, not just the first. Report reasoning first.</task>`
+    `<task>Write findings to ${qaDir}/qa-report-a.md (mkdir -p first) and return report_file + findings[] (each {text, severity}). ${overallRule} Quote specific evidence ([file:line] or test output). Apply scrutiny to EVERY acceptance criterion, not just the first. Report reasoning first.</task>`
 }
 function ryuPrompt(m) {
   return (codexAvailable
@@ -344,7 +765,15 @@ function ryuPrompt(m) {
     : `You are QA analyst B — an independent second perspective.\n`) +
     `Run the tests yourself and probe DIFFERENT failure modes than a first pass would.\n\n` +
     `<inputs>\n- Milestone ${m.id} "${m.title}" — acceptance: ${m.acceptance}\n- Inspect the repo at ${projectPath}: git log/diff, read files, RUN the tests.\n</inputs>\n\n` +
-    `<task>Write findings to ${qaDir}/qa-report-b.md (mkdir -p first) and return report_file + findings[] (each {text, severity}). Do NOT read analyst A's report — stay independent. Report reasoning first.</task>`
+    `<task>Write findings to ${qaDir}/qa-report-b.md (mkdir -p first) and return report_file + findings[] (each {text, severity}). ${overallRule} Do NOT read analyst A's report — stay independent. Report reasoning first.</task>`
+}
+// goalBackwardPrompt — the §3.2 boundary auditor: works BACKWARD from the milestone goal (GSD
+// discipline), explicitly hunting "all checks pass but the goal is broken" before validate.
+function goalBackwardPrompt(m) {
+  return voice('opus') +
+    `You are the goal-backward auditor at the milestone boundary. Your one question: does the INTEGRATED milestone genuinely deliver its GOAL? Work BACKWARD from the goal — never forward from the checks (they all pass; that comfort is exactly what you distrust).\n\n` +
+    `<inputs>\n- Milestone ${m.id} "${m.title}" — acceptance: ${m.acceptance}\n- Summary: ${m.summary || '(none)'}\n- The live repo at ${projectPath}: git log/diff, read the files, and EXERCISE the product the way a user would (run the CLI, call the API, render the page statically — no browser).\n</inputs>\n\n` +
+    `<task>Hunt the "checks pass, goal broken" class specifically: acceptance met by the letter but broken in spirit, slices that pass alone but never connect, features that exist but cannot be reached from the product's entry points, hardcoded or stub behavior hiding behind a green check. Write your report to ${qaDir}/goal-backward-${m.id}.md (mkdir -p first) and return report_file + findings[] (each {text, severity}) + overall ('pass' = the goal is genuinely delivered; 'fail' MUST be backed by at least one critical or high finding). Read-only on source. Report reasoning first.</task>`
 }
 function judgePrompt(m, reconciled) {
   return voice('opus') +
@@ -355,9 +784,105 @@ function judgePrompt(m, reconciled) {
     `<task>RUN the tests yourself at ${projectPath}. Issue QA_PASS only if the milestone genuinely meets its acceptance with green tests and no critical/high findings; else QA_FAIL with the blocking findings. Report reasoning first, then verdict, findings, severity.</task>`
 }
 
-// ── The Forge Heats — git baseline + seed codebase-state + parse milestones ──
+// ── Ledger (BLUEPRINT §3.5): every posture move and slice-plan event lands in events.jsonl via
+//    the kiln-state CLI — silent posture changes are a documented operator-trust killer. Only
+//    called past the pluginRoot floor gate, so the CLI path is always resolvable. ──
+async function ledger(type, data, phaseName) {
+  const ev = JSON.stringify({ type, stage: 'build', data })
+  await agent(
+    `You are Thoth, the scribe — "write it down or it never happened". Append ONE event to the Kiln run ledger.\n\n` +
+    `<task>Run this exact command (Bash), substituting the JSON verbatim — do not edit it:\n` +
+    '```\n' +
+    `node ${pluginRoot}/scripts/kiln-state.mjs append ${kilnDir} '${ev.replace(/'/g, `'\\''`)}'\n` +
+    '```\n' +
+    `If it exits non-zero (e.g. no events.jsonl yet — the run was not initialised), report the error in your summary; do NOT create or repair any file. Report only whether the append succeeded.</task>`,
+    { label: 'thoth:ledger', phase: phaseName, model: 'haiku' }
+  )
+}
+
+// ── The status anchor (§5.1 statusBefore, T2-fix ruling): statusBefore lives in the EVIDENCE —
+//    the anchored run's results.jsonl, folded by kiln-law itself via --before — never in prose.
+//    The workflow carries only this run-id pointer, advanced on every COMPLETE freshness-verified
+//    run (green OR red: a red run's fold is the truthful current status for the next fix cycle's
+//    flip plan; tamper/stale runs never anchor — their evidence is untrusted by definition). ──
+let lastRunId = null
+
+// ── The Trial, mechanized (§5.1/§6): commit gate → deterministic runner → freshness probe →
+//    in-script runnerGate → reviewer ONLY on 'proceed'. lawCtx = { flips, only }: the SC ids this
+//    trial must flip RED→GREEN, and the run scope (the flips plus every SC the milestone already
+//    turned green, so regressions are observed, not assumed). Returns the review verdict object
+//    (the workflow's own autoReject/lawRedReject for tamper/stale/red/uncommitted — no reviewer
+//    call is spent on those). ──
+async function evidencedReview(m, surf, slice, sliceId, build, fix, escalated, reviewerName, lawCtx) {
+  // Commit-before-review (unchanged from v2): an uncommitted slice would anchor evidence and
+  // review to a stale HEAD. Auto-reject without spending runner or review calls.
+  if (build && build.committed === false) {
+    log(`${m.id} ${sliceId}: builder did not commit — auto-reject (mechanical), no runner, no reviewer`)
+    return autoReject([`Slice was not committed — run 'git add -A && git commit' before the trial (evidence and review anchor to HEAD).`])
+  }
+  phase('The Trial')
+  log(`${spin('law', fix)} — ${m.id} ${sliceId} f${fix}`)
+  const runner = await agent(runnerPrompt(slice, build, lawCtx, lastRunId), { label: loreLabel('asimov', 'runner', `${sliceId}:f${fix}`), phase: 'The Trial', model: 'sonnet', schema: RUNNER_SCHEMA })
+  let fresh = null
+  if (runner && typeof runner.run_id === 'string' && runner.run_id) {
+    fresh = await agent(freshPrompt(runner.run_id), { label: loreLabel('thoth', 'freshness', `${sliceId}:f${fix}`), phase: 'The Trial', model: 'haiku', schema: FRESHNESS_SCHEMA })
+  }
+  const gate = runnerGate(runner, fresh)
+  // Advance the status anchor on every complete, fresh run — 'proceed' AND 'red' both carry a
+  // finalized manifest the probe just verified; the next trial's --before folds this run.
+  if (gate.verdict === 'proceed' || gate.verdict === 'red') lastRunId = runner.run_id
+  if (gate.verdict === 'tamper') {
+    // §5.1 tamper model: the slice is auto-REJECTED by the WORKFLOW (not an agent judgment), the
+    // event is LEDGERED, and the fix brief names exactly which locked path was touched.
+    log(`${m.id} ${sliceId}: TAMPER — ${gate.reasons.join('; ')} — auto-reject, no reviewer spawned`)
+    await ledger('tamper_auto_reject', { milestone: m.id, slice: sliceId, fix, tamper_paths: gate.tamper_paths, reasons: gate.reasons }, 'The Trial')
+    const named = gate.tamper_paths.length ? gate.tamper_paths : ['(kiln-law exited 2 without naming paths — run verify manually to identify the lock)']
+    return autoReject(named.map((p) => `Locked Law path touched: ${p} — the Law is immutable after lock (§5.1). Revert every change to locked paths and rebuild without touching them; ADD new tests elsewhere instead.`))
+  }
+  if (gate.verdict === 'stale') {
+    // §6: stale or missing evidence is structurally impossible to approve — no reviewer spawned.
+    log(`${m.id} ${sliceId}: evidence gate failed [${gate.reasons.join('; ')}] — auto-reject, no reviewer spawned`)
+    return autoReject(gate.reasons.map((r) => `Evidence gate failed — ${r}. Ensure the work is committed at HEAD and the checks can execute; the runner re-fires on the next cycle.`))
+  }
+  if (gate.verdict === 'red') {
+    // T2-fix ruling: the exit code IS the verdict. A red lifecycle gate (flip unmet / regression)
+    // is REJECTED by the WORKFLOW — no reviewer is spent on a slice that mechanically failed its
+    // Law; the fix brief names the exact ids. Classed 'logical' (see lawRedReject): a failed
+    // check is a genuine defect signal the Sentinel must see.
+    log(`${m.id} ${sliceId}: THE LAW IS RED [${gate.reasons.join('; ')}] — exit code is the verdict; auto-reject, no reviewer spawned`)
+    await ledger('law_red_auto_reject', { milestone: m.id, slice: sliceId, fix, flip_unmet: gate.flip_unmet, regressed: gate.regressed, reasons: gate.reasons }, 'The Trial')
+    return lawRedReject(gate.reasons.map((r) => `The Law's lifecycle gate failed — ${r}. The slice is DONE only when its declared flips are GREEN and nothing previously-GREEN regresses: fix the BEHAVIOR (never the locked checks), recommit, and the runner re-fires.`))
+  }
+  const leg = reviewLeg(surf, escalated)
+  const effort = reviewEffort(fix, escalated)
+  log(`${spin('review', fix)} — ${m.id} ${sliceId} f${fix}${leg.escalated ? ' (escalated feedback source)' : ''}`)
+  return await agent(reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort), { label: loreLabel(reviewerName, 'review', `${sliceId}:f${fix}${leg.escalated ? ':esc' : ''}`), phase: 'The Trial', model: leg.model, schema: REVIEW_SCHEMA })
+}
+
+// ── The Forge Heats — the §3.4 floor gates, then git baseline + codebase-state + milestone parse ──
 phase('The Forge Heats')
 log('The kiln grows hotter')
+// Floor gate 1: without pluginRoot the kiln-law CLI is unlocatable — the tamper gate and the
+// deterministic check runs (BLUEPRINT §3.4 floors) cannot execute. Building anyway would be a
+// silent v2 regression; the conductor must relaunch with pluginRoot.
+if (!pluginRoot) {
+  log('BUILD CANNOT START — pluginRoot absent: the kiln-law CLI cannot be located, so the §3.4 Law floor (tamper gate + deterministic check runs) cannot execute. The conductor must escalate, never start an ungated build.')
+  return { built: [], passed: [], all_passed: false, law_gated: false, split_required: [], reason: 'pluginRoot absent — the kiln-law CLI cannot be located' }
+}
+// Floor gate 2: the Law must be locked. One haiku reads law.json and transcribes the check index;
+// the SC↔milestone mapping below is pure arithmetic on this transcript.
+const lawRead = await agent(
+  `You are the Law reader.\n\n` +
+  `<task>Run 'cat ${lawFile}' (Bash). Report locked = true iff lock_commit is a non-null string, and checks = EVERY entry of the checks array as {id, milestone, kind}, transcribed exactly and in order. If the file does not exist or is not valid JSON, report locked=false and checks=[]. Do not read anything else; do not write or fix anything.</task>`,
+  { label: loreLabel('asimov', 'law-read'), phase: 'The Forge Heats', model: 'haiku', schema: LAW_READ_SCHEMA }
+)
+const lawChecks = (lawRead && lawRead.locked === true && Array.isArray(lawRead.checks)) ? lawRead.checks.filter((c) => c && typeof c.id === 'string' && typeof c.milestone === 'string') : []
+if (!lawChecks.length) {
+  log('BUILD CANNOT START — the Law is not locked (no readable law.json with a lock_commit and checks). Architecture must lock the gates first; the conductor must escalate, never start a build against unlocked gates.')
+  return { built: [], passed: [], all_passed: false, law_gated: false, split_required: [], reason: 'law.json missing or unlocked — the build spine never runs against unlocked gates' }
+}
+log(`The Law: ${lawChecks.length} locked check(s) across ${[...new Set(lawChecks.map((c) => c.milestone))].length} milestone(s)`)
+
 await agent(
   `You are the codebase-state authority. ${scope} ${repoRuleLine}\n\n` +
   `<task>\n1. If ${projectPath} is not a git repo (no .git), initialize it: set a local user.name/email if unset, then 'git -C ${projectPath} init -q && git -C ${projectPath} add -A && git -C ${projectPath} commit -q -m "chore: kiln build baseline"'.\n` +
@@ -375,6 +900,7 @@ log(`Building ${milestones.length} milestone(s): ${milestones.map((m) => `${m.id
 
 // ── OUTER milestone loop (sequential — each depends on the previous one's commits) ──
 const results = []
+const splitLedger = [] // top-level surfacing: split-and-rebuild is a conductor/operator decision
 let milestoneIndex = -1
 for (const m of milestones) {
   milestoneIndex++
@@ -383,90 +909,276 @@ for (const m of milestones) {
     break
   }
   const surf = surfaceOf(m)
-  const { buildModel: bModel, reviewModel: rModel } = routing(surf)
+  const { buildModel: bModel } = routing(surf)
   const [builderName, reviewerName] = pickDuo(surf, milestoneIndex)
   log(`━━ Milestone ${m.id}: ${m.title} [surface=${surf}] — \`${builderName}\` builds, \`${reviewerName}\` reviews ━━`)
 
-  // ── INNER JIT-slice loop ──
+  // The milestone's slice of the Law — the contract the batch plan must cover arithmetically.
+  const mScs = lawChecks.filter((c) => c.milestone === m.id)
+  const mScIds = mScs.map((c) => c.id)
+  if (!mScIds.length) {
+    log(`${m.id}: NO Law checks map to this milestone — the spine cannot gate it. Recording QA_FAIL and skipping the build (Athena's SC-coverage dimension should have blocked this; the conductor escalates).`)
+    results.push({ id: m.id, title: m.title, surface: surf, slices: 0, sc_ids: [], tests_green: false, qa: 'QA_FAIL', findings: ['no law.json checks map to this milestone — ungatable'], split_required: [], replanned: false, slice_plan_failed: true })
+    continue
+  }
+
+  // ── Scoring the Cut: ONE batch slice-plan call (velocity lever 1), coverage validated in-script,
+  //    ONE re-ask on gaps, then escalate — never build against broken coverage. ──
+  phase('Scoring the Cut')
+  log(`${spin('slice', milestoneIndex)} — ${m.id}: batch slice plan`)
+  const askPlan = async (scs, built, note, labelSuffix) => {
+    const res = await agent(slicePlanPrompt(m, surf, scs, built, note), { label: loreLabel('krs-one', 'slice-plan', labelSuffix), phase: 'Scoring the Cut', model: 'opus', schema: SLICE_PLAN_SCHEMA })
+    return (res && Array.isArray(res.slices)) ? res.slices : []
+  }
+  const planFor = async (scs, built, note, labelSuffix) => {
+    const ids = scs.map((c) => c.id)
+    let planned = await askPlan(scs, built, note, labelSuffix)
+    let v = validateSlicePlan(planned, ids)
+    if (!v.ok) {
+      const errText = v.errors.map((e) => e.message).join('; ')
+      log(`${m.id}: slice plan failed the coverage arithmetic [${errText}] — one re-ask`)
+      planned = await askPlan(scs, built, `${note ? note + '\n' : ''}Your previous plan was REJECTED by the coverage arithmetic: ${errText}. Fix EXACTLY these gaps — every listed Law check id in exactly one slice's sc_ids, every slice flipping at least one.`, `${labelSuffix}:retry`)
+      v = validateSlicePlan(planned, ids)
+    }
+    return { planned, ok: v.ok, errors: v.errors }
+  }
+  const firstPlan = await planFor(mScs, [], null, m.id)
+  if (!firstPlan.ok) {
+    const errText = firstPlan.errors.map((e) => e.message).join('; ')
+    log(`${m.id}: slice plan STILL fails coverage after the re-ask [${errText}] — escalating; this milestone is not built (the conductor decides, validate backstops).`)
+    await ledger('slice_plan_invalid', { milestone: m.id, errors: firstPlan.errors }, 'Scoring the Cut')
+    results.push({ id: m.id, title: m.title, surface: surf, slices: 0, sc_ids: mScIds, tests_green: false, qa: 'QA_FAIL', findings: [`slice plan failed SC coverage after one re-ask: ${errText}`], split_required: [], replanned: false, slice_plan_failed: true })
+    continue
+  }
+  let queue = firstPlan.planned
+  log(`${m.id}: ${queue.length} slice(s) planned — [${queue.map((s) => s.sc_ids.join('+')).join(' | ')}]`)
+
+  // ── INNER loop over the planned queue ──
   const slices = []
+  const greenScIds = [] // SCs this milestone has turned green — each later trial re-runs them so regressions are observed
   let mBuild = null
   let mReview = null
-  let cappedOut = true
-  for (let si = 0; si < MAX_SLICES_PER_MILESTONE; si++) {
-    phase('Scoring the Cut')
-    log(`${spin('slice', si)} — ${m.id} slice ${si + 1}`)
-    const plan = await agent(slicerPrompt(m, surf, slices), { label: loreLabel('krs-one', 'slice', `${m.id}:s${si}`), phase: 'Scoring the Cut', model: 'opus', schema: SLICE_SCHEMA })
-    // Guards: check done BEFORE touching slice; not-done-with-null and done-with-stray-slice both exit cleanly.
-    if (!plan || plan.done === true || !(plan.slice && plan.slice.objective)) { cappedOut = false; break }
-    const slice = plan.slice
-    const sliceId = `${m.id}:s${si}`
+  let replanned = false
+  let planAborted = false
+  let cappedOut = false
+  let qi = 0
+  while (qi < queue.length) {
+    if (slices.length >= MAX_SLICES_PER_MILESTONE) { cappedOut = true; break }
+    let slice = queue[qi]
+    const sliceId = `${m.id}:s${qi}`
 
-    // Phase-6 speed fix: pre-process heavy assets ONCE on the first slice of a ui/mixed milestone.
-    if ((surf === 'ui' || surf === 'mixed') && si === 0) {
+    // krs-one:confirm — the haiku pre-build drift check (proceed | replan). Null reads as proceed
+    // (the confirm is advisory; the trial gates correctness either way).
+    phase('Scoring the Cut')
+    const conf = await agent(confirmPrompt(m, slice), { label: loreLabel('krs-one', 'confirm', `${m.id}:s${qi}`), phase: 'Scoring the Cut', model: 'haiku', schema: CONFIRM_SCHEMA })
+    if (conf && conf.decision === 'replan') {
+      if (!replanned) {
+        // ONE fresh slice-plan call for the remainder (ledgered) — the milestone's single replan.
+        replanned = true
+        log(`${m.id} s${qi}: confirm says REPLAN (${conf.reason || 'state drift'}) — ONE fresh slice plan for the remainder`)
+        const flipped = slices.flatMap((s) => s.sc_ids)
+        const remainingScs = mScs.filter((c) => !flipped.includes(c.id))
+        await ledger('slice_plan_replanned', { milestone: m.id, at_slice: qi, reason: conf.reason || 'state drift', remaining_sc_ids: remainingScs.map((c) => c.id) }, 'Scoring the Cut')
+        const rePlan = await planFor(remainingScs, slices, `The codebase state has DRIFTED from the original plan (${conf.reason || 'unspecified'}). Plan ONLY the remainder: the slices that flip the remaining checks listed above.`, `${m.id}:replan`)
+        if (!rePlan.ok) {
+          log(`${m.id}: the replanned remainder STILL fails coverage [${rePlan.errors.map((e) => e.message).join('; ')}] — escalating; the remaining slices are not built.`)
+          await ledger('slice_plan_invalid', { milestone: m.id, errors: rePlan.errors, replan: true }, 'Scoring the Cut')
+          planAborted = true
+          break
+        }
+        queue = queue.slice(0, qi).concat(rePlan.planned)
+        if (qi >= queue.length) break
+        continue // re-confirm the fresh head slice; a second replan verdict hits the spent-guard below
+      }
+      log(`${m.id} s${qi}: confirm says replan again — the one fresh plan per milestone is spent; proceeding with the planned slice (the trial gates correctness).`)
+    }
+
+    // Phase-6 speed fix: pre-process heavy assets ONCE before the first ui/mixed slice builds.
+    if ((surf === 'ui' || surf === 'mixed') && slices.length === 0) {
       phase('Forging')
       await agent(assetPrepPrompt(m), { label: loreLabel(builderName, 'prep', m.id), phase: 'Forging', model: 'sonnet' })
     }
 
     phase('Forging')
-    log(`${spin('build', si)} — ${m.id} ${sliceId}`)
+    log(`${spin('build', qi)} — ${m.id} ${sliceId} [flips ${slice.sc_ids.join(', ')}]`)
     mBuild = await agent(buildPrompt(m, surf, slice, sliceId), { label: loreLabel(builderName, 'build', sliceId), phase: 'Forging', model: bModel, schema: BUILD_SCHEMA })
 
-    // Cross-family review with a bounded fix loop (reviewer re-runs tests on HEAD).
+    // ── The Trial: evidence-first review with a bounded fix loop; the Sentinel watches (§3.3) ──
+    // The trial's Law scope: this slice's declared flips, run together with every SC the
+    // milestone already turned green (regressions observed, not assumed — §5.1).
+    const lawCtx = { flips: slice.sc_ids, only: [...new Set([...greenScIds, ...slice.sc_ids])] }
+    let logicalRejections = 0
+    let escalated = false
+    let splitRequired = false
     for (let fix = 0; fix <= MAX_REVIEW_FIXES; fix++) {
-      if (mBuild && mBuild.committed === false) {
-        // Commit-before-review (Appendix A): an uncommitted slice would make the reviewer judge a stale HEAD.
-        // Auto-reject without spending a review call; the fix build below re-commits.
-        mReview = { verdict: 'REJECTED', tests_green: false, issues: ['Slice was not committed — run \'git add -A && git commit\' before review (the reviewer inspects HEAD).'] }
-        log(`${m.id} ${sliceId}: builder did not commit — auto-reject, fix ${fix + 1}`)
-      } else {
-        phase('The Trial')
-        log(`${spin('review', fix)} — ${m.id} ${sliceId} f${fix}`)
-        mReview = await agent(reviewPrompt(m, surf, slice, sliceId, mBuild), { label: loreLabel(reviewerName, 'review', `${sliceId}:f${fix}`), phase: 'The Trial', model: rModel, schema: REVIEW_SCHEMA })
+      mReview = await evidencedReview(m, surf, slice, sliceId, mBuild, fix, escalated, reviewerName, lawCtx)
+      if (approvedOf(mReview)) break
+      // The master signal (§3.3): only LOGICAL rejections move the ratchet; mechanical/process
+      // failures (tamper, stale evidence, uncommitted, hygiene findings) never escalate, and the
+      // builder's own confidence never lowers anything (escalate() encodes both).
+      const cls = rejectionClass(mReview)
+      if (cls === 'logical') logicalRejections++
+      const esc = escalate(livePosture, { type: 'review_rejection', finding_class: cls, rejections: logicalRejections }, GAUGE_CONFIG)
+      livePosture = esc.posture
+      if (esc.reason.action === 'split_and_rebuild') {
+        // STOP the slice — split-and-rebuild is a conductor/operator decision, never a silent retry.
+        splitRequired = true
+        log(`${m.id} ${sliceId}: ${logicalRejections} logical rejection(s) — SPLIT REQUIRED; stopping this slice and moving on (the conductor/operator decides the split).`)
+        await ledger('posture_escalated', { milestone: m.id, slice: sliceId, signal: esc.reason.signal, action: esc.reason.action, changes: esc.reason.changes, rejections: logicalRejections }, 'The Trial')
+        break
       }
-      if (mReview && mReview.verdict === 'APPROVED' && mReview.tests_green !== false) break
+      if (esc.reason.action === 'escalate_feedback_source' && !escalated) {
+        escalated = true
+        log(`${m.id} ${sliceId}: ${logicalRejections} logical rejection(s) — escalating the FEEDBACK SOURCE (${codexAvailable ? 'reviewer family swap' : 'fresh-context stronger effort'}), not the retry count`)
+        await ledger('posture_escalated', { milestone: m.id, slice: sliceId, signal: esc.reason.signal, action: esc.reason.action, changes: esc.reason.changes, rejections: logicalRejections }, 'The Trial')
+      }
       if (fix === MAX_REVIEW_FIXES) { log(`${m.id} ${sliceId}: still REJECTED after ${fix} fix(es) — recording and moving on (validate backstops)`); break }
-      log(`${m.id} ${sliceId} REJECTED [${(mReview && mReview.issues || []).join('; ')}] — fix ${fix + 1}`)
+      log(`${m.id} ${sliceId} REJECTED [${findingLines(mReview).join('; ')}] — fix ${fix + 1}`)
       phase('Forging')
-      mBuild = await agent(buildPrompt(m, surf, slice, sliceId, `Reviewer REJECTED the prior attempt: ${(mReview && mReview.issues || []).join(' | ')}. Fix these specifically.`), { label: loreLabel(builderName, 'build', `${sliceId}:fix${fix + 1}`), phase: 'Forging', model: bModel, schema: BUILD_SCHEMA })
+      mBuild = await agent(buildPrompt(m, surf, slice, sliceId, `Reviewer REJECTED the prior attempt: ${findingLines(mReview).join(' | ') || '(no findings reported — re-verify the mapped checks, recommit, and report honestly)'}. Fix these specifically.`), { label: loreLabel(builderName, 'build', `${sliceId}:fix${fix + 1}`), phase: 'Forging', model: bModel, schema: BUILD_SCHEMA })
     }
-    slices.push({ id: sliceId, objective: slice.objective, files: slice.files || [], constraints: slice.constraints || '', done_when: slice.done_when || '', tests_green: mBuild && mBuild.tests_green, review: mReview && mReview.verdict })
+    if (splitRequired) splitLedger.push({ milestone: m.id, slice: sliceId, sc_ids: slice.sc_ids })
+    if (approvedOf(mReview)) greenScIds.push(...slice.sc_ids.filter((id) => !greenScIds.includes(id)))
+    slices.push({ id: sliceId, objective: slice.objective, sc_ids: slice.sc_ids, files: slice.files || [], done_when: slice.done_when || '', tests_green: mBuild && mBuild.tests_green, review: mReview && mReview.verdict, approved: approvedOf(mReview), split_required: splitRequired, logical_rejections: logicalRejections })
+    qi++
   }
   if (cappedOut) log(`${m.id}: hit the ${MAX_SLICES_PER_MILESTONE}-slice cap — building stopped; validate.js backstops the remainder.`)
 
-  // ── Judgment — per-milestone tribunal, SKIPPED for single-slice milestones ──
+  // ── Judgment — the §3.2 milestone gate, exact. Aristotle's goal-backward audit runs at EVERY
+  //    milestone boundary (T2-fix ruling) — split/plan-abort branches included, where the verdict
+  //    is already mechanical QA_FAIL (the gate must not silently absorb a split the operator
+  //    owns) but the audit's findings still MERGE into the failure record, so the conductor's
+  //    split/replan decision starts from the full goal picture, not just process state:
+  //      · at the tribunal threshold (min_slices_for_tribunal, posture) — dual analysts ∥ the
+  //        audit; the audit's findings JOIN the deterministic reconcile; the judge is spawned
+  //        ONLY on an ambiguous reconcile (zero blocking findings AND the analysts' overall
+  //        verdicts disagree — gateDecision), else the verdict is COMPUTED (hasBlocking →
+  //        QA_FAIL, else QA_PASS). Correction-loop semantics kept (≤ MAX_TRIBUNAL_CORRECTION),
+  //        with the audit re-run each cycle — a corrective commit moves the boundary it audits.
+  //      · below the threshold (the single-slice row) — slice review + goal-backward IS the gate.
+  //    Goal-audit failure semantics (ORCHESTRATOR RULING, p2/tasks.md): a null/unusable audit is
+  //    re-asked ONCE; still unusable → the boundary verdict is QA_FAIL with the blocking finding
+  //    'goal-audit-failure' (ledgered) — the judge NEVER spawns on missing inputs, and no
+  //    corrective build is spent on an infrastructure failure (nothing in the CODE was found
+  //    wrong; the conductor sees the ledger + finding and decides).
+  //    The goal_backward posture dial defaults ON; an operator-forced skip is LEDGERED (§3.5). ──
   phase('Judgment')
   let qa = 'QA_PASS'
   let qaFindings = []
-  if (slices.length > 1) {
+  const splitSlices = slices.filter((s) => s.split_required)
+  const goalOn = livePosture.milestone_gate.goal_backward !== false
+  const goalAudit = (suffix) => agent(goalBackwardPrompt(m), { label: loreLabel('aristotle', 'goal-backward', suffix), phase: 'Judgment', model: 'opus', schema: QA_FINDINGS_SCHEMA })
+  // auditOrNull — the ruling's retry shape: returns a USABLE report, or null after the ONE
+  // re-ask (ledgered goal_audit_failure); the caller fails the boundary closed on null.
+  const auditOrNull = async (suffix, first) => {
+    let g = first === undefined ? await goalAudit(suffix) : first
+    if (!goalAuditUsable(g)) {
+      log(`${m.id}: the goal-backward audit returned no usable report — re-asking ONCE (orchestrator ruling)`)
+      g = await goalAudit(`${suffix}:retry`)
+    }
+    if (goalAuditUsable(g)) return g
+    await ledger('goal_audit_failure', { milestone: m.id, at: suffix, retried: true }, 'Judgment')
+    return null
+  }
+  const skipAudit = async () => {
+    log(`${m.id}: goal-backward audit SKIPPED — posture milestone_gate.goal_backward=false (operator override); ledgered.`)
+    await ledger('gate_skipped', { milestone: m.id, gate: 'goal_backward', reason: 'posture milestone_gate.goal_backward=false (operator override)' }, 'Judgment')
+  }
+  if (splitSlices.length || planAborted) {
+    qa = 'QA_FAIL'
+    qaFindings = [
+      ...splitSlices.map((s) => `[split_required] ${s.id} "${s.objective}" stopped after ${s.logical_rejections} logical rejections — split-and-rebuild is a conductor/operator decision (SCs not trustworthy: ${s.sc_ids.join(', ')})`),
+      ...(planAborted ? ['[slice_plan] the replanned remainder failed SC coverage — the milestone is incomplete'] : []),
+    ]
+    log(`${m.id}: QA_FAIL determined mechanically (${splitSlices.length} split-required slice(s)${planAborted ? ', aborted slice plan' : ''}) — no tribunal spend (nothing on this branch can pass); the conductor decides.`)
+    // T2-fix ruling: the boundary audit still runs on this failed boundary — its findings merge
+    // into the failure record (the verdict stays the mechanical QA_FAIL above).
+    if (goalOn) {
+      const goal = await auditOrNull(`${m.id}:failed`)
+      if (goal) qaFindings.push(...denzelReconcile(goal, null).summaryLines)
+      else qaFindings.push(GOAL_AUDIT_FAILURE)
+    } else await skipAudit()
+  } else if (slices.length >= livePosture.milestone_gate.min_slices_for_tribunal) {
+    if (!goalOn) await skipAudit()
     for (let c = 0; c <= MAX_TRIBUNAL_CORRECTION; c++) {
-      const reports = await parallel([
+      const legs = [
         () => agent(kenPrompt(m), { label: loreLabel('ken', 'qa', `${m.id}:c${c}`), phase: 'Judgment', model: 'opus', schema: QA_FINDINGS_SCHEMA }),
         () => agent(ryuPrompt(m), { label: loreLabel('ryu', 'qa', `${m.id}:c${c}`), phase: 'Judgment', model: 'sonnet', schema: QA_FINDINGS_SCHEMA }),
-      ])
-      const reconciled = denzelReconcile(reports[0], reports[1])
+      ]
+      if (goalOn) legs.push(() => goalAudit(`${m.id}:c${c}`))
+      const reports = await parallel(legs)
+      // Goal-audit failure semantics (ORCHESTRATOR RULING): an unusable audit leg is re-asked
+      // ONCE; still unusable → QA_FAIL with the blocking 'goal-audit-failure' finding — the
+      // judge NEVER spawns on missing inputs, and the correction loop ends (an infrastructure
+      // failure is not a code defect a corrective build can fix).
+      let goal = null
+      if (goalOn) {
+        goal = await auditOrNull(`${m.id}:c${c}`, reports[2])
+        if (!goal) {
+          qa = 'QA_FAIL'
+          qaFindings = [GOAL_AUDIT_FAILURE, ...denzelReconcile(reports[0], reports[1]).summaryLines]
+          log(`${m.id}: QA_FAIL — ${GOAL_AUDIT_FAILURE}`)
+          break
+        }
+      }
+      // The audit's findings JOIN the reconcile (§3.2) — denzelReconcile is a pure associative
+      // merge (dedupe by normalized text, max severity wins), so folding the third report
+      // through a second pass is exact, not approximate.
+      const reconciled = denzelReconcile(denzelReconcile(reports[0], reports[1]), goal)
       qaFindings = reconciled.summaryLines
-      log(`${spin('qa', c)} — ${m.id}: ${reconciled.findings.length} finding(s), ${reconciled.blocking.length} blocking`)
-      const verdict = await agent(judgePrompt(m, reconciled), { label: loreLabel('judge-dredd', 'verdict', `${m.id}:c${c}`), phase: 'Judgment', model: 'opus', schema: VERDICT_SCHEMA })
-      let v = (verdict && verdict.verdict) || 'QA_FAIL'
-      if (reconciled.hasBlocking) v = 'QA_FAIL' // deterministic blocking gate overrides a soft PASS
-      if (v === 'QA_PASS') { qa = 'QA_PASS'; log(`${m.id}: QA_PASS (tribunal, cycle ${c})`); break }
+      log(`${spin('qa', c)} — ${m.id}: ${reconciled.findings.length} finding(s), ${reconciled.blocking.length} blocking${goalOn ? ' (goal-backward joined the reconcile)' : ''}`)
+      // §3.2 judge-spawn condition, computed in-script (gateDecision) over USABLE inputs only —
+      // the unusable-audit branch above already failed closed without reaching here.
+      const decision = gateDecision(reconciled, reports[0] && reports[0].overall, reports[1] && reports[1].overall)
+      let v
+      if (decision.judge) {
+        log(`${m.id}: ${decision.reason} — Judge Dredd is spawned`)
+        const verdict = await agent(judgePrompt(m, reconciled), { label: loreLabel('judge-dredd', 'verdict', `${m.id}:c${c}`), phase: 'Judgment', model: 'opus', schema: VERDICT_SCHEMA })
+        v = (verdict && verdict.verdict === 'QA_PASS') ? 'QA_PASS' : 'QA_FAIL' // a dead judge fails closed
+      } else {
+        v = decision.verdict
+        log(`${m.id}: ${decision.reason}`)
+      }
+      if (v === 'QA_PASS') { qa = 'QA_PASS'; log(`${m.id}: QA_PASS (milestone gate, cycle ${c})`); break }
       if (c === MAX_TRIBUNAL_CORRECTION) { qa = 'QA_FAIL'; log(`${m.id}: QA_FAIL after ${c} correction(s) — escalating to validate`); break }
-      // One corrective build + cross-family review, then re-judge once.
-      const fixNote = `Milestone tribunal QA_FAIL. Fix every blocking finding, keep tests green, recommit:\n${reconciled.summaryLines.join('\n')}`
-      const lastSlice = slices[slices.length - 1] || { objective: m.title, files: [], done_when: m.acceptance }
+      // One corrective build + the SAME evidence-first trial (runner → gates → cross-family review),
+      // then re-gate once. The correction is milestone-wide, so it maps to ALL milestone SCs —
+      // and its trial's flip plan covers them all (already-green SCs fold into the regression
+      // guard, red ones into the expected flips; statusBefore is the recorded last run).
+      const fixNote = `Milestone gate QA_FAIL. Fix every blocking finding, keep tests green, recommit:\n${reconciled.summaryLines.join('\n')}`
+      const correctionSlice = { objective: `Milestone-gate correction for ${m.id} — fix every blocking finding`, files: [], constraints: '', done_when: m.acceptance, sc_ids: mScIds }
       phase('Forging')
-      log(`${spin('build', 99)} — ${m.id} tribunal correction ${c + 1}`)
-      mBuild = await agent(buildPrompt(m, surf, lastSlice, `${m.id}:correct${c + 1}`, fixNote), { label: loreLabel(builderName, 'build', `${m.id}:correct${c + 1}`), phase: 'Forging', model: bModel, schema: BUILD_SCHEMA })
-      phase('The Trial')
-      mReview = await agent(reviewPrompt(m, surf, lastSlice, `${m.id}:correct${c + 1}`, mBuild), { label: loreLabel(reviewerName, 'review', `${m.id}:correct${c + 1}`), phase: 'The Trial', model: rModel, schema: REVIEW_SCHEMA }) || mReview
+      log(`${spin('build', 99)} — ${m.id} gate correction ${c + 1}`)
+      mBuild = await agent(buildPrompt(m, surf, correctionSlice, `${m.id}:correct${c + 1}`, fixNote), { label: loreLabel(builderName, 'build', `${m.id}:correct${c + 1}`), phase: 'Forging', model: bModel, schema: BUILD_SCHEMA })
+      mReview = (await evidencedReview(m, surf, correctionSlice, `${m.id}:correct${c + 1}`, mBuild, 0, false, reviewerName, { flips: mScIds, only: mScIds })) || mReview
       phase('Judgment')
     }
-  } else if (slices.length === 1) {
-    qa = (mReview && mReview.verdict === 'APPROVED' && mReview.tests_green !== false) ? 'QA_PASS' : 'QA_FAIL'
-    log(`${m.id}: single slice — the cross-family review IS the milestone QA (${qa})`)
+  } else if (slices.length >= 1) {
+    // §3.2 single-slice row (and any posture-raised threshold): the cross-family slice review +
+    // the goal-backward audit IS the gate — tribunal redundancy skip, never an unaudited pass.
+    // Fail closed per the orchestrator ruling: an unusable audit is re-asked ONCE, then the gate
+    // is QA_FAIL with the blocking 'goal-audit-failure' finding (validate backstops; the
+    // conductor sees why). An operator-forced skip is ledgered and gates on the slice review alone.
+    let goal = null
+    let goalDead = false
+    if (goalOn) {
+      goal = await auditOrNull(m.id)
+      goalDead = !goal
+    } else await skipAudit()
+    const sliceOk = slices.every((s) => s.approved)
+    const goalRec = denzelReconcile(goal, null) // same blocking arithmetic as the tribunal reconcile
+    const goalOk = !goalOn || (!goalDead && !goalRec.hasBlocking)
+    qa = (sliceOk && goalOk) ? 'QA_PASS' : 'QA_FAIL'
+    qaFindings = [
+      ...slices.filter((s) => !s.approved).map((s) => `[slice] ${s.id} "${s.objective}" was not approved by the cross-family review`),
+      ...(goalDead ? [GOAL_AUDIT_FAILURE] : []),
+      ...goalRec.summaryLines,
+    ]
+    log(`${m.id}: ${slices.length} slice(s), below the tribunal threshold (${livePosture.milestone_gate.min_slices_for_tribunal}) — slice review + goal-backward IS the gate (${qa})`)
   } else {
-    qa = 'QA_PASS'
-    log(`${m.id}: no slices produced — no-op QA_PASS`)
+    qa = 'QA_FAIL'
+    qaFindings = ['no slice was built']
+    log(`${m.id}: no slices built — QA_FAIL`)
   }
 
   // Update living docs so the next milestone's slicer/builder has current context.
@@ -480,11 +1192,14 @@ for (const m of milestones) {
   results.push({
     id: m.id, title: m.title, surface: surf,
     slices: slices.length,
-    tests_green: slices.length === 0 ? true : slices.every((s) => s.tests_green !== false),
+    sc_ids: mScIds,
+    tests_green: slices.length === 0 ? false : slices.every((s) => s.tests_green !== false),
     qa, findings: qaFindings,
+    split_required: splitSlices.map((s) => s.id),
+    replanned,
   })
 }
 
 const passed = results.filter((r) => r.qa === 'QA_PASS' && r.tests_green)
-log(`The orchestra takes a bow — ${passed.length}/${results.length} milestone(s) passed QA`)
-return { built: results, passed: passed.map((r) => r.id), all_passed: passed.length === results.length && results.length > 0 }
+log(`The orchestra takes a bow — ${passed.length}/${results.length} milestone(s) passed QA${splitLedger.length ? ` · ${splitLedger.length} slice(s) await an operator split decision` : ''}`)
+return { built: results, passed: passed.map((r) => r.id), all_passed: passed.length === results.length && results.length > 0, law_gated: true, split_required: splitLedger }

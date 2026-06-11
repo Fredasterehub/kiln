@@ -9,8 +9,10 @@
 // never index.mjs. Zero dependencies, like everything else in the harness.
 import './src-modules.test.mjs'
 import './gauge.test.mjs'
+import './spine.test.mjs'
 import './gauge-workflow.test.mjs'
 import './posture-args.test.mjs'
+import './build-spine.test.mjs'
 import './bundler.test.mjs'
 import './kiln-state.test.mjs'
 import './law.test.mjs'

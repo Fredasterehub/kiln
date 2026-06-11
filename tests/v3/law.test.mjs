@@ -421,6 +421,12 @@ test('CLI run mid-run tamper drill (review cycle 3): the gate re-fires before EV
     const lines = readFileSync(join(kiln, 'evidence', runId, 'results.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
     assert.deepEqual(lines.map((l) => l.id), ['SC-001'])
     assert.ok(!existsSync(join(kiln, 'evidence', runId, 'checks', 'SC-002.log')), 'no log for a never-executed check')
+    // §6 fail-closed: the aborted run never finalizes its manifest — no results_sha256, no
+    // completed_at — so the build spine's freshness gate reads the partial evidence as stale.
+    const manifest = JSON.parse(readFileSync(join(kiln, 'evidence', runId, 'run.json'), 'utf8'))
+    assert.equal(manifest.results_sha256, undefined, 'an aborted run must NOT finalize results_sha256')
+    assert.equal(manifest.completed_at, undefined, 'an aborted run must NOT record completed_at')
+    assert.equal(typeof manifest.head, 'string', 'the unfinalized manifest still anchors head/started_at')
     // and a follow-up verify reports the tamper exactly as the drill expects
     const ver = cli('verify', proj, kiln)
     assert.equal(ver.status, 2)
@@ -470,10 +476,12 @@ test('CLI run --flips: declared flips must go RED→GREEN from the lock-time rec
   try {
     writeFileSync(join(proj, 'tests/acceptance/sc-002.sh'), 'test -f done.txt\n') // red until built
     lockFixture(proj, kiln)
-    // flip declared but the check is still red → exit 1
+    // flip declared but the check is still red → exit 1, with the machine-readable FLIP_UNMET
+    // line the build spine's runner transcribes (one per unmet id, mirroring REGRESSION)
     const unmet = cli('run', proj, kiln, '--flips', 'SC-002')
     assert.equal(unmet.status, 1)
     assert.match(unmet.stdout, /^PLAN flip=SC-002 regression=SC-001 pre_satisfied= deferred= \(before: lock\)$/m)
+    assert.match(unmet.stdout, /^FLIP_UNMET SC-002$/m)
     assert.match(unmet.stderr, /flip unmet — declared RED→GREEN, still not green: SC-002/)
     // the builder does the work (a product file, NOT a locked path) → flip satisfied
     writeFileSync(join(proj, 'done.txt'), 'done\n')
@@ -510,6 +518,54 @@ test('CLI run --flips --before: prior status comes from a recorded run — unmet
     const missing = cli('run', proj, kiln, '--flips', 'SC-002', '--before', 'no-such-run')
     assert.equal(missing.status, 1)
     assert.match(missing.stderr, /--before run 'no-such-run' has no results\.jsonl/)
+  } finally { rmSync(proj, { recursive: true, force: true }) }
+})
+
+test('CLI suite: persists the project suite as hashed evidence beside a recorded Law run — suite.log + sha256\'d suite.jsonl line, real exit on the SUITE line; exit 0 green / 1 red / 2 tamper; anchors only to a recorded run', () => {
+  const { proj, kiln } = makeFixture()
+  try {
+    lockFixture(proj, kiln)
+    const runA = cli('run', proj, kiln)
+    assert.equal(runA.status, 0)
+    const runId = runA.stdout.match(/^RUN (\S+) /m)[1]
+    const runDir = join(kiln, 'evidence', runId)
+    // green suite → exit 0, log + jsonl evidence with a verifiable hash
+    const green = cli('suite', proj, kiln, runId, '--cmd', 'echo suite-ok && grep -q hello app.txt')
+    assert.equal(green.status, 0, green.stderr)
+    assert.match(green.stdout, new RegExp(`^SUITE ${runId} exit=0 .*log_sha256=[0-9a-f]{64}$`, 'm'))
+    const log1 = readFileSync(join(runDir, 'suite.log'), 'utf8')
+    assert.match(log1, /suite-ok/)
+    const lines1 = readFileSync(join(runDir, 'suite.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+    assert.equal(lines1.length, 1)
+    assert.equal(lines1[0].exit, 0)
+    assert.equal(lines1[0].cmd, 'echo suite-ok && grep -q hello app.txt')
+    assert.equal(lines1[0].log_sha256, sha256(log1), 'the jsonl line hashes the exact persisted log')
+    assert.equal(typeof lines1[0].duration_ms, 'number')
+    // red suite → CLI exit 1 (exit 2 stays tamper-only), REAL exit on the SUITE line + in the evidence
+    const red = cli('suite', proj, kiln, runId, '--cmd', 'exit 3')
+    assert.equal(red.status, 1)
+    assert.match(red.stdout, new RegExp(`^SUITE ${runId} exit=3 `, 'm'))
+    assert.match(red.stderr, /project suite exited 3/)
+    const lines2 = readFileSync(join(runDir, 'suite.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+    assert.equal(lines2.length, 2, 'suite evidence appends — every attempt stays on the record')
+    assert.equal(lines2[1].exit, 3)
+    // suite.jsonl is a SIBLING of results.jsonl: the finalized run.json hash must still verify
+    const manifest = JSON.parse(readFileSync(join(runDir, 'run.json'), 'utf8'))
+    assert.equal(manifest.results_sha256, sha256(readFileSync(join(runDir, 'results.jsonl'), 'utf8')), 'suite evidence never touches the hash-finalized results.jsonl')
+    // an unrecorded run id refuses (suite evidence anchors to a recorded Law run)
+    const orphan = cli('suite', proj, kiln, 'no-such-run', '--cmd', 'echo x')
+    assert.equal(orphan.status, 1)
+    assert.match(orphan.stderr, /no results\.jsonl/)
+    // --cmd is mandatory
+    assert.equal(cli('suite', proj, kiln, runId).status, 1)
+    // tamper gate fires BEFORE the suite executes — exit 2, nothing run, no new evidence line
+    writeFileSync(join(proj, 'tests/acceptance/sc-001.sh'), 'exit 0\n')
+    const tampered = cli('suite', proj, kiln, runId, '--cmd', 'echo never > tampered-ran.txt')
+    assert.equal(tampered.status, 2)
+    assert.match(tampered.stdout, /^TAMPER: tests\/acceptance\/sc-001\.sh$/m)
+    assert.match(tampered.stderr, /the suite was not executed/)
+    assert.ok(!existsSync(join(proj, 'tampered-ran.txt')), 'the suite command must never execute against a tampered Law')
+    assert.equal(readFileSync(join(runDir, 'suite.jsonl'), 'utf8').split('\n').filter(Boolean).length, 2, 'no evidence line for a refused suite')
   } finally { rmSync(proj, { recursive: true, force: true }) }
 })
 
@@ -553,6 +609,16 @@ test('CLI run: report-only — green + red + PROBE_DEFERRED summary lines, hashe
     assert.equal(r1.log_sha256, sha256(logContent), 'log_sha256 must hash the log file content')
     assert.deepEqual(lines.find((l) => l.id === 'SC-003'), { id: 'SC-003', deferred: 'probe_deferred' })
     assert.ok(!existsSync(join(runDir, 'checks', 'SC-003.log')), 'a deferred probe executes nothing and logs nothing')
+    // run.json — the §6 freshness anchor, CLI-written and FINALIZED on a complete run: head +
+    // sha256(results.jsonl) + epochs are what the build spine's gate compares against HEAD.
+    const manifest = JSON.parse(readFileSync(join(runDir, 'run.json'), 'utf8'))
+    assert.equal(manifest.schema, 1)
+    assert.equal(manifest.run_id, runId[1])
+    assert.equal(manifest.head, gitIn(proj, 'rev-parse', 'HEAD'))
+    assert.equal(manifest.results_sha256, sha256(readFileSync(join(runDir, 'results.jsonl'))), 'the manifest records the hash of the COMPLETE results.jsonl')
+    const headEpoch = Number(gitIn(proj, 'show', '-s', '--format=%ct', 'HEAD'))
+    assert.ok(Number.isInteger(manifest.started_at) && manifest.started_at >= headEpoch, 'evidence starts at or after the HEAD commit epoch')
+    assert.ok(Number.isInteger(manifest.completed_at) && manifest.completed_at >= manifest.started_at, 'completed_at closes the run')
   } finally { rmSync(proj, { recursive: true, force: true }) }
 })
 
