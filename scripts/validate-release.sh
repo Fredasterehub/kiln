@@ -44,7 +44,7 @@ for name in agents.json brainstorming-techniques.json duo-pool.json elicitation-
   [[ -f "$f" ]] || fail "Missing data file: $f"
   jq empty "$f" 2>/dev/null || fail "Invalid JSON: $f"
 done
-for f in plugins/kiln/schemas/event.schema.json plugins/kiln/schemas/state.schema.json; do
+for f in plugins/kiln/schemas/event.schema.json plugins/kiln/schemas/state.schema.json plugins/kiln/schemas/law.schema.json; do
   [[ -f "$f" ]] || fail "Missing schema file: $f"
   jq empty "$f" 2>/dev/null || fail "Invalid JSON: $f"
 done

@@ -7,16 +7,28 @@ export const meta = {
     { title: 'The Lantern', detail: 'diogenes extracts consensus / divergences / unique insights' },
     { title: 'One From Many', detail: 'plato writes master-plan.md with confidence tiers + surfaces + executable acceptance criteria' },
     { title: 'Athena Weighs', detail: 'athena validates; plato revises (≤2 rounds) on FAIL' },
+    { title: 'The Law', detail: 'asimov compiles ONE executable check per SC (tests/acceptance/ + law.json); kiln-law indexes; the gates lock in their own commit' },
   ],
 }
 
-// ── args: { kilnDir, projectPath, mode, testingRigor, codexAvailable, planning, validationRounds } ──
+// ── args: { kilnDir, projectPath, mode, testingRigor, codexAvailable, planning, validationRounds, lawModel, pluginRoot } ──
 // @inline:args:normalizeArgs
 const A = normalizeArgs(args)
 const kilnDir = A.kilnDir
 if (!kilnDir) throw new Error('architecture.js requires args.kilnDir (absolute path to .kiln). Received args of type ' + typeof args)
 const codexAvailable = A.codexAvailable !== false // default true; conductor passes kiln-doctor's probe result
 const testingRigor = A.testingRigor || 'standard'
+// projectPath is the project repo root — the Law's checks live there (tests/acceptance/ is
+// project-native, the gates ship with the product) and the lock commit lands there. Absent ⇒ the
+// Law cannot be compiled; the stage returns law_locked:false + reason (conductor escalates).
+const projectPath = A.projectPath
+// lawModel: the §8 slot for Asimov the Lawgiver (default 'opus' — the workhorse; the conductor
+// may pass another slot per capability tier).
+const lawModel = A.lawModel || 'opus'
+// pluginRoot is the conductor-resolved absolute $CLAUDE_PLUGIN_ROOT (a launched Workflow cannot
+// see the env var). It locates the kiln-law CLI for the index/lock step; absence degrades to
+// law_locked:false + reason — never a silent proceed, never a stage crash.
+const pluginRoot = A.pluginRoot
 // planning is the Gauge's posture.planning (BLUEPRINT §3.2 planning row): 'dual' | 'single+redteam'
 // | 'single', passed by the conductor. It decides whether The Council (two anonymized plans +
 // divergence) runs or the single-plan chairman path is taken. Absent ⇒ null ⇒ the historical
@@ -64,6 +76,7 @@ const SPIN = {
   council: ['The committee of geniuses is arguing', 'Confucius contemplates the path forward', 'Sun Tzu is flanking the requirements'],
   synth: ['Plato weaves the threads together', 'From discord, find harmony', 'One map of truth emerges'],
   validate: ['Athena weighs the plan on her scales', 'A plan is only as good as its weakest assumption', 'Athena checks the receipts'],
+  law: ['Asimov drafts the Law', 'One check per criterion — coverage is arithmetic', 'The gates lock before the first brick is laid'],
 }
 const spin = (k, i) => { const a = SPIN[k] || []; return a.length ? a[((i % a.length) + a.length) % a.length] : '' }
 
@@ -160,6 +173,51 @@ const MISSING_SCHEMA = {
   required: ['missing'],
 }
 
+// Asimov's compile report — the inventory the in-script coverage arithmetic runs on (§5:
+// "coverage is arithmetic, not judgment").
+const LAW_COMPILE_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reasoning: { type: 'string' },
+    law_file: { type: 'string' },
+    checks: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          id: { type: 'string', description: 'SC-NNN' },
+          milestone: { type: 'string' },
+          kind: { type: 'string', enum: ['shell', 'pytest', 'http', 'probe'] },
+        },
+        required: ['id', 'milestone', 'kind'],
+      },
+    },
+    plan_sc_ids: { type: 'array', items: { type: 'string' }, description: 'EVERY SC id enumerated from the master plan' },
+  },
+  required: ['law_file', 'checks', 'plan_sc_ids'],
+}
+
+const LAW_LOCK_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reasoning: { type: 'string' },
+    indexed: { type: 'boolean', description: 'step 1 — kiln-law index exited 0' },
+    committed: { type: 'boolean', description: 'step 2 — the "test(law): lock acceptance gates" commit was created' },
+    error: { type: 'string', description: 'verbatim error output of the first failed step; empty when all succeeded' },
+  },
+  required: ['indexed', 'committed'],
+}
+
+const LAW_VERIFY_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reasoning: { type: 'string' },
+    law_json_exists: { type: 'boolean' },
+    lock_commit_exists: { type: 'boolean' },
+  },
+  required: ['law_json_exists', 'lock_commit_exists'],
+}
+
 // ── Laying Stone: numerobis writes the technical docs the planners build on ──
 phase('Laying Stone')
 // research.md is OPTIONAL on a normative path: BLUEPRINT §3.2 lets research scope to zero topics
@@ -244,7 +302,10 @@ const surfaceRule =
 const executableAcRule =
   `Write each acceptance criterion as an EXECUTABLE check, not prose — a shell command, a pytest ` +
   `invocation, an HTTP request with the expected response, or a Playwright step. validate exercises ` +
-  `these literally, so "the CLI adds a todo" must become e.g. \`todo add "x" && todo list | grep x\`.`
+  `these literally, so "the CLI adds a todo" must become e.g. \`todo add "x" && todo list | grep x\`. ` +
+  `Number every acceptance criterion with a globally unique SC id (SC-001, SC-002, … — unique across ` +
+  `ALL milestones): the Law (BLUEPRINT §5) compiles exactly ONE locked check per SC, so coverage ` +
+  `stays arithmetic, never judgment.`
 
 // The single-vs-dual fork. The Gauge posture (planning) is the authoritative upstream decider when
 // present: 'dual' runs The Council, 'single'/'single+redteam' take the lite single-plan path.
@@ -366,7 +427,9 @@ for (let round = 0; round < validationPasses; round++) {
     `testability (acceptance criteria PRESENT and written as EXECUTABLE checks — shell/pytest/HTTP/Playwright — not prose; ` +
     `fits "${testingRigor}" rigor), constraint adherence, ${researchPresent ? `research-grounding (no decision contradicts research), ` : ``}` +
     `feasibility, plan purity (no leftover dual-plan/identity cruft), surface tagging (every milestone tagged ` +
-    `ui/logic/mixed, cut by the interface seam not the screen), and risk coverage. Return PASS only if ALL hold; ` +
+    `ui/logic/mixed, cut by the interface seam not the screen), SC-to-Law coverage (every SC has exactly one ` +
+    `law.json check entry — so every acceptance criterion must carry a globally unique SC-NNN id; a missing or ` +
+    `duplicate id makes the 1:1 compilation impossible and blocks the lock), and risk coverage. Return PASS only if ALL hold; ` +
     `else FAIL with the failed dimensions and concrete fixes. Report reasoning first.</task>`,
     { label: `athena:validate:r${round}`, phase: 'Athena Weighs', model: 'opus', schema: VALIDATION_SCHEMA }
   )) || { verdict: 'FAIL', failed_dimensions: ['validator-failure'], fixes: [] }
@@ -384,13 +447,126 @@ for (let round = 0; round < validationPasses; round++) {
   )) || synth
 }
 
+// ── The Law: Asimov compiles the locked acceptance gates (BLUEPRINT §5/§5.1) ──
+// A §3.4 FLOOR: the Law compiles + locks at ANY posture, lite path included. Runs only after
+// Athena PASS (locking gates compiled from an unvalidated plan would lock the wrong law); every
+// failure path returns law_locked:false + reason so the conductor escalates — never a silent
+// proceed, never an unguarded build.
+phase('The Law')
+log(`${spin('law', 0)}`)
+const lawFile = `${kilnDir}/law.json`
+let lawLocked = false
+let lawReason = null
+let lawCheckCount = 0
+if (!(verdict && verdict.verdict === 'PASS')) {
+  lawReason = 'master plan never reached Athena PASS — the Law locks only a validated plan'
+} else if (!projectPath) {
+  lawReason = 'projectPath absent — acceptance checks are project-native (tests/acceptance/) and cannot be written'
+} else {
+  const lawVoice = lawModel === 'opus' ? voice('opus') : ''
+  const asimov = await agent(
+    lawVoice +
+    `You are Asimov, the Lawgiver (BLUEPRINT §5). You compile the validated master plan's acceptance criteria ` +
+    `into THE LAW: one locked, executable check per SC — the gates every build slice is judged against. ` +
+    `You write checks only; you never implement the product.\n\n` +
+    `<inputs>\nRead (${noWander}): ${masterPlanFile}, ${docsDir}/architecture.md, ${docsDir}/tech-stack.md, ` +
+    `${docsDir}/arch-constraints.md.\n</inputs>\n\n` +
+    `<task>\n` +
+    `1. Enumerate EVERY acceptance criterion in the master plan as an SC id (SC-001, SC-002, …) — adopt the ` +
+    `plan's ids where present, assign sequential ones where missing; ids are globally unique across milestones.\n` +
+    `2. For EACH SC write exactly ONE executable check under ${projectPath}/tests/acceptance/ (Bash ` +
+    `'mkdir -p ${projectPath}/tests/acceptance' first) — project-native, the checks ship with the product. ` +
+    `Choose the kind by the milestone's stack: 'shell' (a script exiting 0 on pass), 'pytest' (a test file), ` +
+    `or 'http' (a script driving the running app's HTTP surface). Every check must FAIL right now (the product ` +
+    `is unbuilt — checks are expected RED at lock) and pass only when its criterion is genuinely met; never ` +
+    `write a check that trivially passes.\n` +
+    `3. ui-surface SCs get a probe TEMPLATE instead — kind 'probe': a placeholder file whose header comment ` +
+    `precisely describes the landmarks and behaviors to assert (selectors by role+name, taken from the SC ` +
+    `text). Write NO browser code of any kind — probe evidence arrives in a later phase. A template's cmd ` +
+    `stays empty ("").\n` +
+    `4. Write ${lawFile} matching law schema 1 EXACTLY: {"schema": 1, "lock_commit": null, "checks": [{"id", ` +
+    `"milestone", "kind": "shell|pytest|http|probe", "cmd": <exact command run from the project root>, ` +
+    `"files": [<this check's file paths, relative to the project root>], "sha256": {}, "expected": "exit0", ` +
+    `"timeout_s": <integer seconds>}]} — exactly ONE entry per SC. Leave every sha256 map EMPTY and ` +
+    `lock_commit null; kiln-law index fills them (do NOT run it yourself, and do NOT commit).\n` +
+    `Report the check inventory (id, milestone, kind) and plan_sc_ids = every SC id you enumerated from the ` +
+    `plan. Report reasoning first.\n</task>`,
+    { label: 'asimov:law', phase: 'The Law', model: lawModel, schema: LAW_COMPILE_SCHEMA }
+  )
+  const lawChecks = (asimov && Array.isArray(asimov.checks)) ? asimov.checks : []
+  const planScIds = (asimov && Array.isArray(asimov.plan_sc_ids)) ? asimov.plan_sc_ids : []
+  lawCheckCount = lawChecks.length
+  if (!lawChecks.length) {
+    lawReason = 'Asimov produced no check manifest'
+  } else {
+    // §5 coverage is ARITHMETIC, not judgment: every SC exactly one check entry. Duplicates,
+    // uncovered SCs, and orphan checks all block the lock — locking a partial law would gate the
+    // build against the wrong contract.
+    const checkIds = lawChecks.map((c) => c.id)
+    const dupes = checkIds.filter((id, i) => checkIds.indexOf(id) !== i).filter((id, i, a) => a.indexOf(id) === i)
+    const uncovered = planScIds.filter((id) => !checkIds.includes(id))
+    const orphans = checkIds.filter((id) => !planScIds.includes(id))
+    const gaps = []
+    if (dupes.length) gaps.push(`duplicate check ids: ${dupes.join(', ')}`)
+    if (uncovered.length) gaps.push(`SCs with no check: ${uncovered.join(', ')}`)
+    if (orphans.length) gaps.push(`checks with no plan SC: ${orphans.join(', ')}`)
+    if (gaps.length) {
+      lawReason = `SC↔check coverage failed — ${gaps.join('; ')}`
+    } else if (!pluginRoot) {
+      lawReason = 'pluginRoot absent — the kiln-law CLI cannot be located; the gates were written but never indexed/locked'
+    } else {
+      log(`Asimov compiled ${lawChecks.length} check(s) (${lawChecks.filter((c) => c.kind === 'probe').length} probe template(s)) covering ${planScIds.length} SC(s) — locking`)
+      // Index BEFORE the single lock commit (the §5 sequence): kiln-law index hashes the on-disk
+      // gates and records lock_commit = HEAD (the last pre-gate commit — git content-addressing
+      // means law.json can never carry the sha of the commit that contains it). The one
+      // "test(law): lock acceptance gates" commit that follows carries the gates + the indexed
+      // law.json; the tamper gate's git arm anchors on that commit (lock_commit's first
+      // descendant touching the locked paths), so laundering is caught from the moment the
+      // gates land in history.
+      const lock = await agent(
+        `You are Thoth, the scribe — a law is only law once indexed and committed.\n\n` +
+        `<task>Run these commands (Bash) IN THIS ORDER and report honestly. Index comes FIRST; the single ` +
+        `lock commit that follows carries the gates AND the indexed law.json:\n` +
+        `1. node ${pluginRoot}/scripts/kiln-law.mjs index ${projectPath} ${kilnDir}\n` +
+        `2. cd ${projectPath} && git add tests/acceptance .kiln/law.json && git commit -m "test(law): lock acceptance gates"\n` +
+        `If a step fails, STOP — do not improvise a fix, do not amend, do not edit any file; report the ` +
+        `failure verbatim in error. Report indexed (step 1 exited 0) and committed (step 2 succeeded).</task>`,
+        { label: 'thoth:law-lock', phase: 'The Law', model: 'sonnet', schema: LAW_LOCK_SCHEMA }
+      )
+      // Fail CLOSED: a null/partial lock report is a failed lock, never a shrug.
+      if (!(lock && lock.indexed === true && lock.committed === true)) {
+        lawReason = `lock sequence failed${lock && lock.error ? ` — ${lock.error}` : (lock ? ` — indexed=${lock.indexed} committed=${lock.committed}` : ' — the locksmith produced no report')}`
+      } else {
+        // The contract's verifier: law.json + the lock commit EXIST — checked by a fresh pair of
+        // eyes, not taken from the locksmith's own report.
+        const lawProof = await agent(
+          `You are the lock verifier.\n\n` +
+          `<task>Run (Bash):\n` +
+          `1. 'ls ${lawFile}' — law_json_exists = true iff the file exists.\n` +
+          `2. 'git -C ${projectPath} log --format=%s -n 5' — lock_commit_exists = true iff one subject line is ` +
+          `exactly "test(law): lock acceptance gates".\n` +
+          `Do not read, write, or fix anything. Report the two booleans.</task>`,
+          { label: 'thoth:law-verify', phase: 'The Law', model: 'haiku', schema: LAW_VERIFY_SCHEMA }
+        )
+        if (lawProof && lawProof.law_json_exists === true && lawProof.lock_commit_exists === true) {
+          lawLocked = true
+          log(`The Law is locked: ${lawChecks.length} check(s) committed as "test(law): lock acceptance gates"`)
+        } else {
+          lawReason = `lock verification failed — law.json exists: ${!!(lawProof && lawProof.law_json_exists)}, lock commit exists: ${!!(lawProof && lawProof.lock_commit_exists)}`
+        }
+      }
+    }
+  }
+}
+if (!lawLocked) log(`THE LAW IS NOT LOCKED — ${lawReason}. The conductor must escalate; build must not start without locked gates.`)
+
 // ── Handoff doc for the build stage ──
 await agent(
   `You are the technical authority. ${noWander}\n\n` +
   `<inputs>\n${masterPlanFile}\n</inputs>\n\n` +
   `<task>Write ${handoffFile}: a concise build-stage handoff — the ordered milestone list, the tech stack, the ` +
   `non-negotiable constraints, and any low-confidence areas the build should watch. This is what the build stage reads first.</task>`,
-  { label: 'numerobis:handoff', phase: 'Athena Weighs', model: 'sonnet' }
+  { label: 'numerobis:handoff', phase: 'The Law', model: 'sonnet' }
 )
 
 // Artifact existence check: v2 returned constructed paths without confirming the writes landed.
@@ -400,7 +576,7 @@ const existence = await agent(
   `You are the artifact existence verifier.\n\n` +
   `<task>For each path below, run 'ls <path>' (Bash). Return missing = exactly the paths that do not exist (an empty array if all exist). Do not read, write, or fix anything.\n` +
   claimed.map((p) => `- ${p}`).join('\n') + `\n</task>`,
-  { label: 'thoth:verify', phase: 'Athena Weighs', model: 'haiku', schema: MISSING_SCHEMA }
+  { label: 'thoth:verify', phase: 'The Law', model: 'haiku', schema: MISSING_SCHEMA }
 )
 const missing = (existence && existence.missing) || []
 if (missing.length) log(`MISSING claimed artifact(s): ${missing.join(', ')}`)
@@ -414,5 +590,11 @@ return {
   scope: foundation && foundation.scope,
   lite_path: liteScope,
   surfaces: (synth && synth.milestones || []).map((m) => ({ id: m.id, surface: m.surface })),
+  // The Law (§5): law_locked:false + law_reason is the conductor's escalation signal — the
+  // build stage must never start against unlocked gates.
+  law_locked: lawLocked,
+  law_reason: lawLocked ? null : lawReason,
+  law_file: lawFile,
+  law_check_count: lawCheckCount,
   missing,
 }
