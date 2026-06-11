@@ -31,19 +31,24 @@ if [[ "$PLUGIN_VER" != "$MKT_VER" || "$PLUGIN_VER" != "$MKT_PLUGIN_VER" ]]; then
 fi
 pass "Version consistent across manifests ($PLUGIN_VER)"
 
-# (c) Every workflow parses as JavaScript.
+# (c) Every workflow parses as JavaScript and matches workflows-src/ (the bundler is the only writer).
 for js in plugins/kiln/workflows/*.js; do
   node --check "$js" 2>/dev/null || fail "node --check failed: $js"
 done
-pass "Workflows pass node --check"
+node scripts/bundle-workflows.mjs --check >/dev/null 2>&1 || fail "Generated workflows out of sync — run 'node scripts/bundle-workflows.mjs'"
+pass "Workflows pass node --check and match workflows-src"
 
-# (d) The six data files exist and parse as JSON.
+# (d) The six data files and the two state schemas exist and parse as JSON.
 for name in agents.json brainstorming-techniques.json duo-pool.json elicitation-methods.json lore.json spinner-verbs.json; do
   f="plugins/kiln/data/$name"
   [[ -f "$f" ]] || fail "Missing data file: $f"
   jq empty "$f" 2>/dev/null || fail "Invalid JSON: $f"
 done
-pass "Data files present and valid"
+for f in plugins/kiln/schemas/event.schema.json plugins/kiln/schemas/state.schema.json; do
+  [[ -f "$f" ]] || fail "Missing schema file: $f"
+  jq empty "$f" 2>/dev/null || fail "Invalid JSON: $f"
+done
+pass "Data files and schemas present and valid"
 
 # (e) Zero-hooks invariant: no tracked files under the plugin hooks dir.
 HOOKS="$(git ls-files plugins/kiln/hooks/)"
@@ -57,18 +62,7 @@ if STALE="$(git grep -l -e 'skills/kiln-pipeline/' -e 'skills/kiln-protocol/' --
 fi
 pass "No stale v1 skill-path references"
 
-# (g) Generated workflows are in sync with workflows-src/ (the bundler is the only writer).
-node scripts/bundle-workflows.mjs --check >/dev/null 2>&1 || fail "Generated workflows out of sync — run 'node scripts/bundle-workflows.mjs'"
-pass "Generated workflows in sync with workflows-src"
-
-# (h) The two state schemas exist and parse as JSON.
-for f in plugins/kiln/schemas/event.schema.json plugins/kiln/schemas/state.schema.json; do
-  [[ -f "$f" ]] || fail "Missing schema file: $f"
-  jq empty "$f" 2>/dev/null || fail "Invalid JSON: $f"
-done
-pass "State schemas present and valid"
-
-# (i) The v3 harness is green.
+# (g) The v3 harness is green.
 bash tests/v3/run.sh >/dev/null 2>&1 || fail "v3 harness failed — run 'bash tests/v3/run.sh'"
 pass "v3 harness green (node --test tests/v3/)"
 
