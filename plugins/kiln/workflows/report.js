@@ -15,7 +15,7 @@ function normalizeArgs(args) {
 const A = normalizeArgs(args)
 const kilnDir = A.kilnDir
 const projectPath = A.projectPath
-if (!kilnDir) throw new Error('report.js requires args.kilnDir')
+if (!kilnDir || !projectPath) throw new Error('report.js requires args.kilnDir and args.projectPath')
 
 const reportFile = `${kilnDir}/REPORT.md`
 

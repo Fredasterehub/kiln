@@ -48,6 +48,14 @@ const MAP_SCHEMA = {
   },
   required: ['map_file', 'stack', 'summary'],
 }
+const MISSING_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reasoning: { type: 'string' },
+    missing: { type: 'array', items: { type: 'string' }, description: 'exactly the claimed paths that do not exist on disk' },
+  },
+  required: ['missing'],
+}
 
 phase('Reconnaissance')
 log('The scouts spread out')
@@ -85,4 +93,15 @@ const map = await agent(
   { label: 'mnemosyne:synthesis', phase: 'The Map', model: 'opus', schema: MAP_SCHEMA }
 )
 log(`codebase-map.md written: ${map && (map.stack || []).join(', ')}`)
-return { map_file: mapFile, stack: (map && map.stack) || [], entry_points: (map && map.entry_points) || [], summary: map && map.summary }
+
+// Artifact existence check: v2 returned the constructed map path without confirming the write
+// landed. One cheap haiku verifier ls-es the claimed file; a miss surfaces in the log + return value.
+const existence = await agent(
+  `You are the artifact existence verifier.\n\n` +
+  `<task>Run 'ls ${mapFile}' (Bash). Return missing = ["${mapFile}"] if it does not exist, else []. Do not read, write, or fix anything.</task>`,
+  { label: 'thoth:verify', phase: 'The Map', model: 'haiku', schema: MISSING_SCHEMA }
+)
+const missing = (existence && existence.missing) || []
+if (missing.length) log(`MISSING claimed artifact(s): ${missing.join(', ')}`)
+
+return { map_file: mapFile, stack: (map && map.stack) || [], entry_points: (map && map.entry_points) || [], summary: map && map.summary, missing }

@@ -58,8 +58,9 @@ state/
 # Dev artifacts and untrack-and-keep assets (v2.0.1 repo hygiene)
 brainstorm/
 run-data/
-# Dead v1 test harness — untracked, kept on disk as seed for the v2 harness
-tests/
+# Dead v1 test harness — untracked, kept on disk as seed; the live v3 harness at tests/v3/ ships
+tests/*
+!tests/v3/
 # Stale v1 docs assets — untracked, kept on disk
 docs/v7.html
 docs/kiln-pipeline.png

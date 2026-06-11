@@ -1,10 +1,10 @@
 # Kill Streak Sequence
 
-40 team names cycling per milestone. Each name earns its position in a narrative arc from first spark to legend. A single `team_iteration` governs a milestone's entire build — within-milestone chunking (`chunk_count`) does not change the team name.
+40 kill-streak names cycling per build milestone. Each name earns its position in a narrative arc from first spark to legend. A single `build_iteration` governs a milestone's entire build — within-milestone slices do not change the name.
 
-Select by `team_iteration` (1-indexed, milestone-scoped): `kill_streak_index = (team_iteration - 1) % 40`
+Select by `build_iteration` (1-indexed, milestone-scoped): `kill_streak_index = (build_iteration - 1) % 40`
 
-Past iteration 40, cycle from `kiln-of-the-first` (#38) onward — if you've gone past 38 milestones, you live in the myth tier.
+Past iteration 40 the sequence wraps back to `first-blood` (#1) and the arc begins again — exactly what the formula yields.
 
 ## Chapter I — Ignition (1-5)
 

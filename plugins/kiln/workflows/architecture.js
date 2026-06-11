@@ -46,7 +46,7 @@ const MODEL_VOICE = {
 }
 const voice = (m) => (m === 'opus' ? MODEL_VOICE.opus + '\n\n' : '')
 // The wrapper TRANSLATES (Goal/Context/Constraints/Done-when); it never forwards a Claude brief verbatim.
-const codexHowto = `Delegate authoring to GPT-5.5: TRANSLATE this brief into a 4-part Codex prompt — Goal (the deliverable in 1-2 sentences), Context (the file paths + summary; no full dumps), Constraints (the arch-constraints + "do X instead of Y"), Done-when (the file written + what it must contain) — write it to a file and pipe via stdin: 'codex exec -m gpt-5.5 -c model_reasoning_effort="high" --sandbox workspace-write --skip-git-repo-check < /tmp/kiln-codex.md'. Do NOT forward this brief verbatim. If GPT-5.5 is unavailable retry with -m gpt-5.4; if codex errors or yields nothing usable, author the plan yourself.`
+const codexHowto = `Delegate authoring to GPT-5.5: TRANSLATE this brief into a 4-part Codex prompt — Goal (the deliverable in 1-2 sentences), Context (the file paths + summary; no full dumps), Constraints (the arch-constraints + "do X instead of Y"), Done-when (the file written + what it must contain) — write it to a fresh temp file ('TMP="$(mktemp /tmp/kiln-codex.XXXXXX.md)"'; a fixed path collides across concurrent runs) and pipe via stdin: 'codex exec -m gpt-5.5 -c model_reasoning_effort="high" --sandbox workspace-write --skip-git-repo-check < "$TMP"'. Do NOT forward this brief verbatim. If GPT-5.5 is unavailable retry with -m gpt-5.4; if codex errors or yields nothing usable, author the plan yourself.`
 const SPIN = {
   foundation: ['Numerobis drafts the constraints', 'Laying the first stone', 'The geometry never lies'],
   council: ['The committee of geniuses is arguing', 'Confucius contemplates the path forward', 'Sun Tzu is flanking the requirements'],
@@ -137,6 +137,15 @@ const VALIDATION_SCHEMA = {
     fixes: { type: 'array', items: { type: 'string' }, description: 'concrete fixes Plato must apply on FAIL' },
   },
   required: ['reasoning', 'verdict', 'failed_dimensions'],
+}
+
+const MISSING_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reasoning: { type: 'string' },
+    missing: { type: 'array', items: { type: 'string' }, description: 'exactly the claimed paths that do not exist on disk' },
+  },
+  required: ['missing'],
 }
 
 // ── Laying Stone: numerobis writes the technical docs the planners build on ──
@@ -237,23 +246,37 @@ if (liteScope) {
   const plans = (await parallel(planners)).filter(Boolean)
   log(`${plans.length}/2 plans written (${plans.map((p) => p.slot).join(', ')})`)
 
-  // ── The Lantern: diogenes compares the two anonymized plans ──
-  phase('The Lantern')
-  const divergence = await agent(
-    `You are the divergence extractor. ${noWander}\n\n` +
-    `<inputs>\nThe two anonymized plans: ${plansDir}/plan-a.md and ${plansDir}/plan-b.md.\n</inputs>\n\n` +
-    `<task>Write ${plansDir}/divergence-analysis.md and report: consensus (where both agree), divergences ` +
-    `(point-by-point: what plan A says vs plan B), and unique insights each surfaced. Be neutral — do not pick a ` +
-    `winner; surface the real decision points the chairman must resolve. Report reasoning first.</task>`,
-    { label: 'diogenes:divergence', phase: 'The Lantern', model: 'sonnet', schema: DIVERGENCE_SCHEMA }
-  )
-  log(`Divergence: ${(divergence && divergence.divergences || []).length} decision points`)
+  if (plans.length < 2) {
+    // Council guard: a dead planner would leave diogenes a nonexistent plan file to read — skip
+    // The Lantern and route to a single-plan synthesis brief instead.
+    log(`Council guard: only ${plans.length}/2 plan(s) survived — skipping divergence; single-plan synthesis.`)
+    const survivorFile = plans.length === 1 && plans[0].slot ? `${plansDir}/plan-${plans[0].slot}.md` : null
+    synthBrief =
+      `<inputs>\nRead (${noWander}): ${survivorFile ? `${survivorFile}, ` : ''}${docsDir}/architecture.md, ` +
+      `${docsDir}/tech-stack.md, ${docsDir}/arch-constraints.md, ${researchFile}. Foundation summary: ${foundation && foundation.summary}\n</inputs>`
+    synthLead = survivorFile
+      ? `You are the plan chairman. Only one council plan survived — there is nothing to reconcile; author the ` +
+        `plan from the surviving plan, the foundation docs, and the research.`
+      : `You are the plan chairman. No council plan survived — author the plan directly from the foundation docs and the research.`
+  } else {
+    // ── The Lantern: diogenes compares the two anonymized plans ──
+    phase('The Lantern')
+    const divergence = await agent(
+      `You are the divergence extractor. ${noWander}\n\n` +
+      `<inputs>\nThe two anonymized plans: ${plansDir}/plan-a.md and ${plansDir}/plan-b.md.\n</inputs>\n\n` +
+      `<task>Write ${plansDir}/divergence-analysis.md and report: consensus (where both agree), divergences ` +
+      `(point-by-point: what plan A says vs plan B), and unique insights each surfaced. Be neutral — do not pick a ` +
+      `winner; surface the real decision points the chairman must resolve. Report reasoning first.</task>`,
+      { label: 'diogenes:divergence', phase: 'The Lantern', model: 'sonnet', schema: DIVERGENCE_SCHEMA }
+    )
+    log(`Divergence: ${(divergence && divergence.divergences || []).length} decision points`)
 
-  synthBrief =
-    `<inputs>\nRead (${noWander}): ${plansDir}/plan-a.md, ${plansDir}/plan-b.md, ` +
-    `${plansDir}/divergence-analysis.md, ${docsDir}/arch-constraints.md, ${researchFile}.\n</inputs>`
-  synthLead =
-    `You are the plan chairman. Synthesize the best of both plans, resolving each divergence with a rationale.`
+    synthBrief =
+      `<inputs>\nRead (${noWander}): ${plansDir}/plan-a.md, ${plansDir}/plan-b.md, ` +
+      `${plansDir}/divergence-analysis.md, ${docsDir}/arch-constraints.md, ${researchFile}.\n</inputs>`
+    synthLead =
+      `You are the plan chairman. Synthesize the best of both plans, resolving each divergence with a rationale.`
+  }
 }
 
 // ── One From Many: plato writes master-plan.md with confidence tiers + surfaces + executable ACs ──
@@ -276,7 +299,9 @@ log(`${spin('validate', 0)}`)
 let verdict = null
 // validationRounds counts revisions, not loop iterations: the inclusive `<=` runs up to validationRounds+1 athena passes / validationRounds plato revisions.
 for (let round = 0; round <= validationRounds; round++) {
-  const val = await agent(
+  // Fail CLOSED: a null/crashed validator is a FAIL, never a silent PASS (the v2 fail-open
+  // shipped an unvalidated plan under a green "Athena: PASS" log line).
+  const val = (await agent(
     voice('opus') +
     `You are the plan validator — your sole job is to find holes, not to propose the solution.\n\n` +
     `<inputs>\n${masterPlanFile} (and ${docsDir}/arch-constraints.md, ${researchFile} for grounding). ${noWander}\n</inputs>\n\n` +
@@ -287,18 +312,19 @@ for (let round = 0; round <= validationRounds; round++) {
     `ui/logic/mixed, cut by the interface seam not the screen), and risk coverage. Return PASS only if ALL hold; ` +
     `else FAIL with the failed dimensions and concrete fixes. Report reasoning first.</task>`,
     { label: `athena:validate:r${round}`, phase: 'Athena Weighs', model: 'opus', schema: VALIDATION_SCHEMA }
-  )
+  )) || { verdict: 'FAIL', failed_dimensions: ['validator-failure'], fixes: [] }
   verdict = val
-  if (!val || val.verdict === 'PASS') { log(`Athena: PASS (round ${round})`); break }
+  if (val.verdict === 'PASS') { log(`Athena: PASS (round ${round})`); break }
   if (round === validationRounds) { log(`Athena still FAIL after ${round} revision(s) — escalating`); break }
   log(`Athena FAIL [${(val.failed_dimensions || []).join(', ')}] — Plato revision round ${round + 1}`)
-  synth = await agent(
+  // Null-keep: a crashed reviser must not wipe the last good synthesis.
+  synth = (await agent(
     voice('opus') +
     `You are the plan chairman, revising ${masterPlanFile}.\n\n` +
     `<inputs>\nAthena failed it on: ${(val.failed_dimensions || []).join(', ')}.\nApply these fixes: ${(val.fixes || []).join(' | ')}\n${synthBrief}\n</inputs>\n\n` +
     `<task>Apply the fixes and rewrite the file (keep surfaces + executable acceptance criteria). Report the updated milestone_count and milestone list. Report reasoning first.</task>`,
     { label: `plato:revise:r${round + 1}`, phase: 'One From Many', model: 'opus', schema: SYNTH_SCHEMA }
-  )
+  )) || synth
 }
 
 // ── Handoff doc for the build stage ──
@@ -310,6 +336,18 @@ await agent(
   { label: 'numerobis:handoff', phase: 'Athena Weighs', model: 'sonnet' }
 )
 
+// Artifact existence check: v2 returned constructed paths without confirming the writes landed.
+// One cheap haiku verifier ls-es the claimed files; misses surface in the log + return value.
+const claimed = [`${docsDir}/architecture.md`, `${docsDir}/tech-stack.md`, `${docsDir}/arch-constraints.md`, masterPlanFile, handoffFile]
+const existence = await agent(
+  `You are the artifact existence verifier.\n\n` +
+  `<task>For each path below, run 'ls <path>' (Bash). Return missing = exactly the paths that do not exist (an empty array if all exist). Do not read, write, or fix anything.\n` +
+  claimed.map((p) => `- ${p}`).join('\n') + `\n</task>`,
+  { label: 'thoth:verify', phase: 'Athena Weighs', model: 'haiku', schema: MISSING_SCHEMA }
+)
+const missing = (existence && existence.missing) || []
+if (missing.length) log(`MISSING claimed artifact(s): ${missing.join(', ')}`)
+
 return {
   master_plan_file: masterPlanFile,
   milestone_count: synth && synth.milestone_count,
@@ -319,4 +357,5 @@ return {
   scope: foundation && foundation.scope,
   lite_path: liteScope,
   surfaces: (synth && synth.milestones || []).map((m) => ({ id: m.id, surface: m.surface })),
+  missing,
 }

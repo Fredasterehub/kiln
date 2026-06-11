@@ -42,13 +42,10 @@ const codebaseMapFile = `${docsDir}/codebase-map.md`
 // @inline:voice:MODEL_VOICE,voice
 
 // ── Lore display layer (NEVER enters a model prompt — labels + log lines only) ──
-// Canonical copy lives in data/duo-pool.json (conductor reads that); this inline copy is the
-// workflow's display copy because workflow scripts cannot import JSON. Keep the two in sync.
-const DUO_POOL = {
-  default: [['codex', 'sphinx'], ['tintin', 'milou'], ['mario', 'luigi'], ['lucky', 'luke']],
-  fallback: [['kaneda', 'tetsuo'], ['athos', 'porthos']],
-  ui: [['clair', 'obscur'], ['yin', 'yang']],
-}
+// Canonical copy lives in data/duo-pool.json (conductor reads that); the bundler's duo-pool step
+// regenerates this inline display copy from that JSON (workflow scripts cannot import JSON), so
+// the two can no longer drift.
+// @duo-pool
 const poolKey = (surf) => (surf === 'ui' || surf === 'mixed') ? 'ui' : (codexAvailable ? 'default' : 'fallback')
 const pickDuo = (surf, mi) => { const p = DUO_POOL[poolKey(surf)]; return p[((mi % p.length) + p.length) % p.length] } // deterministic off milestone index
 const loreLabel = (name, role, suffix) => `${name}:${role}${(suffix != null && suffix !== '') ? ':' + suffix : ''}`

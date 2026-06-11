@@ -57,6 +57,21 @@ if STALE="$(git grep -l -e 'skills/kiln-pipeline/' -e 'skills/kiln-protocol/' --
 fi
 pass "No stale v1 skill-path references"
 
+# (g) Generated workflows are in sync with workflows-src/ (the bundler is the only writer).
+node scripts/bundle-workflows.mjs --check >/dev/null 2>&1 || fail "Generated workflows out of sync — run 'node scripts/bundle-workflows.mjs'"
+pass "Generated workflows in sync with workflows-src"
+
+# (h) The two state schemas exist and parse as JSON.
+for f in plugins/kiln/schemas/event.schema.json plugins/kiln/schemas/state.schema.json; do
+  [[ -f "$f" ]] || fail "Missing schema file: $f"
+  jq empty "$f" 2>/dev/null || fail "Invalid JSON: $f"
+done
+pass "State schemas present and valid"
+
+# (i) The v3 harness is green.
+bash tests/v3/run.sh >/dev/null 2>&1 || fail "v3 harness failed — run 'bash tests/v3/run.sh'"
+pass "v3 harness green (node --test tests/v3/)"
+
 printf "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
 printf "${GREEN} Release gate passed.${RESET}\n"
 printf "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"

@@ -117,7 +117,10 @@ const topicRes = await agent(
 )
 let topics = (topicRes && Array.isArray(topicRes.topics) ? topicRes.topics : []).slice(0, MAX_TOPICS)
 if (topics.length === 0) {
-  log('No research topics identified from VISION.md — writing an empty research.md and finishing.')
+  // Zero topics → nothing to research. Return early with empty results — no research.md is
+  // written; the conductor reads this return/state, never the file blindly.
+  log('No research topics identified from VISION.md — nothing to research; finishing with empty results (no research.md).')
+  return { topics: [], cleared: [], research_file: null, headline_findings: [] }
 }
 log(`${topics.length} research topic(s) scoped`)
 

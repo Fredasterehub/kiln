@@ -7,6 +7,7 @@
 //
 //   plugins/kiln/workflows-src/<name>.js — the editable source; marker lines declare inlines:
 //     // @inline:<module>:<export>[,<export>...]
+//     // @duo-pool   (build.js — the inline DUO_POOL regenerated from data/duo-pool.json)
 //   plugins/kiln/workflows/<name>.js     — GENERATED; never edit by hand.
 //
 // Each marker is replaced with the exact source text of those exports (the `export ` keyword
@@ -49,10 +50,24 @@ for (const f of readdirSync(srcDir).filter((f) => f.endsWith('.mjs')).sort()) {
   modules[f.replace(/\.mjs$/, '')] = parseModule(join(srcDir, f))
 }
 
+// ── The duo-pool step: a `// @duo-pool` marker is replaced with a DUO_POOL const regenerated
+//    from plugins/kiln/data/duo-pool.json — the JSON stays canonical and the inline display copy
+//    can no longer drift (--check covers it like any other generated content). Lazy + cached:
+//    only read when a workflow actually carries the marker. ──
+let duoPoolBlock = null
+function duoPool() {
+  if (duoPoolBlock) return duoPoolBlock
+  const pools = JSON.parse(readFileSync(join(root, 'plugins/kiln/data/duo-pool.json'), 'utf8')).pools
+  const row = (k) => `  ${k}: [${pools[k].map((d) => `['${d.builder.name}', '${d.reviewer.name}']`).join(', ')}],`
+  return (duoPoolBlock = `const DUO_POOL = {\n${Object.keys(pools).map(row).join('\n')}\n}`)
+}
+
 // ── Bundle one workflow source: replace each marker line with the named export declarations. ──
 const MARKER_RE = /^\/\/ @inline:([\w-]+):([\w$]+(?:,[\w$]+)*)\s*$/
+const DUO_RE = /^\/\/ @duo-pool\s*$/
 function bundle(name, src) {
   const body = src.split('\n').map((line) => {
+    if (DUO_RE.test(line)) return duoPool()
     const m = line.match(MARKER_RE)
     if (!m) return line
     const [, mod, names] = m

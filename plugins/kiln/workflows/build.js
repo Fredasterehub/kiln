@@ -55,8 +55,9 @@ const MODEL_VOICE = {
 const voice = (m) => (m === 'opus' ? MODEL_VOICE.opus + '\n\n' : '')
 
 // ── Lore display layer (NEVER enters a model prompt — labels + log lines only) ──
-// Canonical copy lives in data/duo-pool.json (conductor reads that); this inline copy is the
-// workflow's display copy because workflow scripts cannot import JSON. Keep the two in sync.
+// Canonical copy lives in data/duo-pool.json (conductor reads that); the bundler's duo-pool step
+// regenerates this inline display copy from that JSON (workflow scripts cannot import JSON), so
+// the two can no longer drift.
 const DUO_POOL = {
   default: [['codex', 'sphinx'], ['tintin', 'milou'], ['mario', 'luigi'], ['lucky', 'luke']],
   fallback: [['kaneda', 'tetsuo'], ['athos', 'porthos']],
