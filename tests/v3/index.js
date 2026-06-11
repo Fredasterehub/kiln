@@ -10,6 +10,7 @@
 import './src-modules.test.mjs'
 import './gauge.test.mjs'
 import './gauge-workflow.test.mjs'
+import './posture-args.test.mjs'
 import './bundler.test.mjs'
 import './kiln-state.test.mjs'
 import './defect-fixes.test.mjs'

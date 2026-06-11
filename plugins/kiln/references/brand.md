@@ -132,6 +132,8 @@ The engine's one-line setup text before each markdown banner. This text sets the
 | Pipeline start | "The forge ignites..." |
 | Brainstorm start | "Da Vinci uncaps the paint..." |
 | Vision locked | "The vision crystallizes..." |
+| Gauge start | "Alpha takes the measure of the work..." |
+| Posture set | "The gauge settles. The pipeline knows its weight." |
 | Research start | "MI6 deploys the field team..." |
 | Intelligence gathered | "Intelligence secured..." |
 | Architecture start | "The philosophers convene..." |

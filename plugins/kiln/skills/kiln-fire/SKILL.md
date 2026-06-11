@@ -1,6 +1,6 @@
 ---
 name: kiln-fire
-description: Kiln pipeline conductor. Launches and resumes the 7-step software-creation pipeline (onboarding, brainstorm, research, architecture, build, validate, report). Use when the operator runs /kiln-fire, asks to build software with Kiln, or wants to resume a Kiln run. Drives onboarding inline, brainstorm via an interactive teammate, and the autonomous stages via native workflows.
+description: Kiln pipeline conductor. Launches and resumes the 8-step software-creation pipeline (onboarding, brainstorm, gauge, research, architecture, build, validate, report). Use when the operator runs /kiln-fire, asks to build software with Kiln, or wants to resume a Kiln run. Drives onboarding inline, brainstorm via an interactive teammate, and the autonomous stages via native workflows.
 ---
 
 # Kiln — the Conductor
@@ -98,9 +98,9 @@ truth. Resume is *anchored* (cwd or explicit path), never *discovered* by scanni
 
 ## Progress line (use in every Tier-1 banner)
 
-Seven steps: `Onboarding · Brainstorm · Research · Architecture · Build · Validate · Report`.
+Eight steps: `Onboarding · Brainstorm · Gauge · Research · Architecture · Build · Validate · Report`.
 Mark each `✓` done, `▶` active, `○` pending. Example active-on-Architecture line:
-`✓ Onboarding · ✓ Brainstorm · ✓ Research · ▶ **Architecture** · ○ Build · ○ Validate · ○ Report`
+`✓ Onboarding · ✓ Brainstorm · ✓ Gauge · ✓ Research · ▶ **Architecture** · ○ Build · ○ Validate · ○ Report`
 
 ---
 
@@ -119,6 +119,14 @@ surface and onboarding is cheap. Detect first, then confirm.
      vs `Autonomous` (run straight through). Sets `plan_approval`.
    - **Testing rigor** — `TDD (tests first, full)` / `Standard (tests alongside)` /
      `Minimal (smoke only)`. Sets `testing_rigor` (drives how the build writes tests).
+   - **Rigor** — how hard the pipeline machinery works for this build:
+     `Let Kiln gauge it (Recommended)` / `Always maximum` / `Fast and honest`. This is the operator
+     override on **the Gauge** (the proportionality engine — see the Gauge stage below), *distinct*
+     from testing rigor. Map the answer to `posture_override`: `Let Kiln gauge it` → `null` (the
+     Gauge decides from the assessed complexity profile), `Always maximum` → `'max'` (every optional
+     dial forced to its ceiling), `Fast and honest` → `'fast'` (the leanest posture the mapping
+     yields). The floors always run regardless of this choice. Store the mapped value as
+     `posture_override` for the Gauge stage launch.
    - **Stack hint** *(optional)* — let them steer language/framework, or `Let Kiln decide`.
 4. **Brownfield only:** run the mapping workflow to understand the existing code before brainstorm:
    `Workflow({scriptPath: "$PLUGIN_ROOT/workflows/mapping.js", args: {projectPath: "<abs>", kilnDir: "<abs>/.kiln"}})`.
@@ -140,8 +148,11 @@ surface and onboarding is cheap. Detect first, then confirm.
    `stage: brainstorm`, `mode`, `plan_approval`, `testing_rigor`, `project_name`,
    `project_path` (absolute), `project_type`, `greenfield`, `started_at`/`updated_at` (real ISO-8601 —
    the template ships `pending` sentinels, never leave them), `last_completed_stage: onboarding`,
-   `next_action`. Write `<project_path>/.kiln/docs/project-brief.md` (intent, type, constraints,
-   testing rigor, stack hint). Stamp `step_onboarding_completed_at`.
+   `next_action`. Leave `posture: not yet gauged` (the Gauge stage fills it). Write
+   `<project_path>/.kiln/docs/project-brief.md` (intent, type, constraints, testing rigor, stack
+   hint, **and the `posture_override` from the Rigor card** — `null`/`max`/`fast` — so a cross-session
+   resume that reaches the Gauge stage recovers the operator's rigor choice from the brief). Stamp
+   `step_onboarding_completed_at`.
 6. **From here on, resolve every `.kiln/` path and every workflow `projectPath`/`kilnDir` arg against
    the absolute `project_path`** — not against `./` (see *Path discipline*). Render the Tier-1 banner
    transitioning to **Brainstorm** and proceed.
@@ -162,13 +173,50 @@ single facilitator cannot trip the idle/deadlock bug.
    for one message — do no work in this context while the brainstorm runs.
 4. On the teammate's terminal `BRAINSTORM_COMPLETE` message: tear down the team (it is finished — no
    second `TeamCreate` this run), confirm `<project_path>/.kiln/docs/VISION.md` exists, render
-   *"The vision crystallizes…"*, update STATE (`stage: research`, `last_completed_stage: brainstorm`,
-   stamp `step_brainstorm_completed_at`), and proceed to the autonomous engine.
+   *"The vision crystallizes…"*, update STATE (`stage: gauge`, `last_completed_stage: brainstorm`,
+   stamp `step_brainstorm_completed_at`), and proceed to the **Gauge** stage (it reads the fresh
+   VISION before any autonomous stage runs).
 
 **Soft prerequisite:** interactive teams need `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`. If team spawn
 is unavailable, **fall back** to facilitating the brainstorm yourself in this session using the
 `kiln-brainstorm` skill, write the same files, then continue — no team, no signal. (This is the
 documented idle-bug fallback; the artifact contract is identical either way.)
+
+## Stage: GAUGE (autonomous, Workflow) — the proportionality engine
+
+The Gauge runs once, right after the vision crystallizes and before any heavy autonomous work. It is
+cheap (one ~2-minute assessor call) and it buys back tens of minutes downstream: Alpha scores the
+work's complexity across eight dimensions, a deterministic non-compensatory mapping (running IN the
+workflow, never in an agent) turns those scores into a **posture** — the dial settings every later
+stage reads — and the posture is ledgered. The profile sets the posture; the function decides; this
+stage never builds.
+
+1. Render the *"Alpha takes the measure of the work…"* transition (brand.md *Gauge start*) + the
+   Gauge Tier-1 banner.
+2. **Launch the workflow:**
+   `Workflow({scriptPath: "$PLUGIN_ROOT/workflows/gauge.js", args: {kilnDir: "<abs>/.kiln", projectPath: "<abs>", postureOverride, assessorModel, codexAvailable, pluginRoot: "<abs $PLUGIN_ROOT>"}})`.
+   - `postureOverride` is the `posture_override` you carried from the onboarding **Rigor** card
+     (`null` / `'max'` / `'fast'`) — recover it from `project-brief.md` on a cross-session resume.
+     `null` lets the Gauge decide; `'max'`/`'fast'` force the ceiling/floor (still above the floors).
+   - `assessorModel` is the §8 Assessor slot for this capability tier (default `'opus'`; a
+     Sonnet-only run passes `'sonnet'`).
+   - `codexAvailable` is the kiln-doctor probe result (drives the cross-family second scorer at the
+     high-stakes D8=2 path). `pluginRoot` is the same absolute `$PLUGIN_ROOT` you resolved in §0 — a
+     launched Workflow cannot see `${CLAUDE_PLUGIN_ROOT}`, and the Gauge needs it to ledger the
+     `posture_set` event via the kiln-state CLI (absence degrades the append to a log line, never a
+     stage failure).
+3. The workflow returns `{profile, posture, override_applied}`. **Store the posture summary line in
+   the run** (transitional, both surfaces supported this phase):
+   - If `<abs>/.kiln/state.json` exists, the Gauge already appended a `posture_set` event through the
+     ledger (kiln-state) — nothing more to write; the posture lives in `state.json.posture`.
+   - Else write a one-line summary into STATE.md's `posture:` field, e.g.
+     `posture: planning=<posture.planning> · research_cap=<posture.research_topics_max> · plan_rounds=<posture.plan_validation_rounds> · review=<posture.review.ui_effort_base>`.
+4. **Carry the posture-derived args into the downstream stage launches** (see the stage table and its
+   arg notes): research takes `topicsMax` = `posture.research_topics_max`; architecture takes
+   `planning` = `posture.planning` and `validationRounds` = `posture.plan_validation_rounds`.
+5. Update STATE (`stage: research`, `last_completed_stage: gauge`, refresh `posture:`,
+   `next_action`, stamp `step_gauge_completed_at`), render *"The gauge settles…"* (brand.md
+   *Posture set*) then the Research transition, and proceed to the autonomous engine.
 
 ## The plan-approval gate (between Architecture and Build)
 
@@ -183,8 +231,9 @@ artifact summary it wrote to `.kiln/`, update STATE, render the transition, adva
 
 | Stage | Launch | Reads | Writes |
 |---|---|---|---|
-| Research | `workflows/research.js` | VISION.md | `.kiln/docs/research.md` |
-| Architecture | `workflows/architecture.js` | research.md, VISION.md | `.kiln/master-plan.md`, architecture docs |
+| Gauge | `workflows/gauge.js` | VISION.md (+codebase-map.md) | `state.json.posture` / STATE `posture:`, ledger `posture_set` |
+| Research | `workflows/research.js` | VISION.md | `.kiln/docs/research.md` (only when topics > 0; the §3.2 zero-topics route writes none and returns `research_file: null`) |
+| Architecture | `workflows/architecture.js` | research.md (if present), VISION.md | `.kiln/master-plan.md`, architecture docs |
 | Build | `workflows/build.js` | master-plan.md | source code, living docs, tests |
 | Validate | `workflows/validate.js` | master-plan.md, built app | `.kiln/validation/report.md` |
 | Report | `workflows/report.js` | all .kiln artifacts + built project | `.kiln/REPORT.md` |
@@ -193,7 +242,28 @@ Base launch pattern: `Workflow({scriptPath: "$PLUGIN_ROOT/workflows/<stage>.js",
 Pass the absolute `$PLUGIN_ROOT`-resolved paths, the operator's `testing_rigor` from STATE, and
 `codexAvailable` from the kiln-doctor probe (drives the Codex-vs-Sonnet paths). `build.js` honors
 `testingRigor` (tdd/standard/minimal). Each stage adds the args it actually reads:
-- **Research** also takes `mode`.
+- **Gauge** takes `postureOverride`, `assessorModel`, `pluginRoot` (see the Gauge stage above). It is
+  the source of the posture-derived args every downstream stage reads.
+- **Research** also takes `mode` and **`topicsMax`** = `posture.research_topics_max` (always a
+  positive integer — the §3.2 cap `2 + D3 + D5`). Passing it is the signal that the Gauge ran and
+  switches research to the §3.2 rule: topics come ONLY from high-priority before-build OQs, capped at
+  `topicsMax`, with NO lower floor — so **zero qualifying OQs ⇒ zero topics ⇒ no research.md is
+  written** and the stage returns `research_file: null`. **Omit it** (or pass nothing) and research.js
+  runs the verbatim v2 behavior instead: OQs plus load-bearing unknowns, a floor of 2 and a cap of 5,
+  so a run without a posture is unchanged (and always produces a research.md). Architecture tolerates
+  either outcome (next bullet).
+- **Architecture** also takes **`planning`** = `posture.planning`
+  (`'dual'`/`'single+redteam'`/`'single'`) and **`validationRounds`** = `posture.plan_validation_rounds`.
+  `planning` decides whether The Council (dual anonymized plans + divergence) runs: `'dual'` runs it,
+  `'single'`/`'single+redteam'` take the lite single-plan path (the cross-family red-team critique
+  `'single+redteam'` names is build-spine machinery scheduled for a later phase — BLUEPRINT §16 — so
+  in this phase it routes like `'single'`). `validationRounds` is the number of Athena VALIDATION
+  PASSES to run (BLUEPRINT §3.2 `plan_validation_rounds`, NOT a revision count): `1` ⇒ one pass / zero
+  revisions, `3` ⇒ three passes / ≤2 revisions. **Omit both** and architecture.js falls back to its
+  historical behavior (the foundation's `scope === 'trivial'` decides lite-vs-dual; 2 passes lite /
+  3 passes full) — a run without a posture is unchanged. Architecture self-detects whether research.md
+  exists (a cheap `ls` probe, the §4 self-validation discipline) and grounds in VISION.md directly when
+  the §3.2 zero-topics route wrote none — it never points an agent at a phantom research file.
 - **Build** also takes `milestoneLimit` (omit in production = all milestones), `uiBuild`, and
   `pluginRoot`. **`uiBuild` defaults `false`** — set it `true` only for a genuinely pure-UI/static
   deliverable (no backend). `uiBuild===true` forces build.js's `surfaceOf()` to route *every*

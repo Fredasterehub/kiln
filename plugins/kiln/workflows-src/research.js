@@ -8,7 +8,7 @@ export const meta = {
   ],
 }
 
-// ── args from the conductor: { kilnDir, projectPath, mode, testingRigor } ──
+// ── args from the conductor: { kilnDir, projectPath, mode, testingRigor, topicsMax } ──
 // args may arrive as an object or a JSON string depending on how the caller encoded it. Normalise both.
 // @inline:args:normalizeArgs
 const A = normalizeArgs(args)
@@ -22,8 +22,25 @@ const visionFile = `${docsDir}/VISION.md`
 const MIN_CONFIDENCE = 0.7
 const MIN_SOURCES = 3
 const MIN_QUOTES = 1
-const MAX_TOPICS = 5
-const MIN_TOPICS = 2
+// topicsMax is the Gauge's posture.research_topics_max — the §3.2 research-row CAP (2 + D3 + D5),
+// which gauge.mjs always computes as a positive integer (research_topics_base ≥ 2 + non-negative
+// dims). Its PRESENCE is the signal that the Gauge ran: it is what makes this a posture-driven run.
+//
+// Two regimes, switched on that presence — so T3's "no behavior change when the arg is absent"
+// (tasks.md §T3) holds AND the BLUEPRINT §3.2 research row is encoded when a posture IS supplied:
+//   • POSTURE ABSENT (no valid topicsMax) ⇒ v2 behavior, byte-for-byte: scope from the OQs PLUS
+//     load-bearing unknowns (Tech Stack / Constraints / Risks), floor of 2, cap of 5, and the
+//     zero-topics branch is unreachable (the floor guarantees ≥ 2). A run without the Gauge is
+//     identical to v2 — the contract default equals current behavior.
+//   • POSTURE PRESENT (valid topicsMax) ⇒ the §3.2 rule the Gauge delegates here:
+//     `topics = 0 if no high-priority before-build OQs; else min(OQ-count, cap)`. OQs are the SOLE
+//     topic source, there is NO lower floor (a floor would force topics the formula forbids and
+//     would zero out the 0-if-no-OQs branch), and zero qualifying OQs ⇒ zero topics. The Gauge
+//     never sends topicsMax: 0 — the "drop to 0" decision is made HERE, given the posture cap.
+const HISTORICAL_MAX_TOPICS = 5
+const HISTORICAL_MIN_TOPICS = 2
+const postureGated = Number.isInteger(A.topicsMax) && A.topicsMax > 0
+const MAX_TOPICS = postureGated ? A.topicsMax : HISTORICAL_MAX_TOPICS
 
 // ── MODEL_VOICE shell (Opus only; inlined from src/voice.mjs by the bundler) ──
 // @inline:voice:MODEL_VOICE,voice
@@ -105,14 +122,29 @@ const valid = (f) =>
 // ── The Briefing: identify topics (MI6) ──
 phase('The Briefing')
 log('MI6 deploys the field team')
+// The scoping brief switches on the same posture-presence gate (see MAX_TOPICS above): the §3.2
+// OQ-only rule when the Gauge supplied a cap, the verbatim v2 brief otherwise.
+const postureBrief =
+  `<task>The research scope is set by the project's high-priority before-build Open Questions, capped. ` +
+  `First, identify the QUALIFYING OQs: every "OQ-{N}" line (or YAML frontmatter OQ entry) with Priority: high ` +
+  `AND Timing: before-build — these are the questions that MUST be answered before architecture. ` +
+  `If there are NONE, return an EMPTY topics list — nothing needs researching before architecture, and the ` +
+  `stage will finish with no research. ` +
+  `Otherwise return one topic per qualifying OQ, most important first, up to a hard ceiling of ${MAX_TOPICS} ` +
+  `topic(s): never return more topics than there are qualifying OQs, and never exceed ${MAX_TOPICS}. ` +
+  `Do NOT invent topics beyond the qualifying OQs to pad the list; only when a qualifying OQ is itself ` +
+  `under-specified may you sharpen it into a concrete research question. Each topic: a kebab-case slug, a precise ` +
+  `question, a priority, and concrete acceptance criteria. Report reasoning first.</task>`
+const historicalBrief =
+  `<task>Prioritise the Open Questions section: every "OQ-{N}" line with Priority: high and Timing: before-build is a ` +
+  `mandatory topic. Add topics for load-bearing unknowns in Tech Stack, Constraints, and Risks. Return between ` +
+  `${HISTORICAL_MIN_TOPICS} and ${MAX_TOPICS} topics, most important first — each with a kebab-case slug, a precise question, a ` +
+  `priority, and concrete acceptance criteria. Report reasoning first.</task>`
 const topicRes = await agent(
   voice('opus') +
   `You are the research director. Scope the research topics this project must answer BEFORE architecture — do not research yet.\n\n` +
   `<inputs>\nRead the vision at ${visionFile} (use your Read tool).\n</inputs>\n\n` +
-  `<task>Prioritise the Open Questions section: every "OQ-{N}" line with Priority: high and Timing: before-build is a ` +
-  `mandatory topic. Add topics for load-bearing unknowns in Tech Stack, Constraints, and Risks. Return between ` +
-  `${MIN_TOPICS} and ${MAX_TOPICS} topics, most important first — each with a kebab-case slug, a precise question, a ` +
-  `priority, and concrete acceptance criteria. Report reasoning first.</task>`,
+  (postureGated ? postureBrief : historicalBrief),
   { label: 'mi6:topics', phase: 'The Briefing', model: 'opus', schema: TOPIC_SCHEMA }
 )
 let topics = (topicRes && Array.isArray(topicRes.topics) ? topicRes.topics : []).slice(0, MAX_TOPICS)

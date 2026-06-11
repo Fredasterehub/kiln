@@ -34,6 +34,7 @@ Keep the field names and markdown bullet format unchanged.
 - **current_milestone**: none
 - **validation_routing_target**: build
 - **last_approval_checkpoint**: none
+- **posture**: not yet gauged
 
 ## Required Artifacts
 
@@ -65,6 +66,8 @@ Keep the field names and markdown bullet format unchanged.
 - **step_onboarding_completed_at**: pending
 - **step_brainstorm_started_at**: pending
 - **step_brainstorm_completed_at**: pending
+- **step_gauge_started_at**: pending
+- **step_gauge_completed_at**: pending
 - **step_research_started_at**: pending
 - **step_research_completed_at**: pending
 - **step_architecture_started_at**: pending
