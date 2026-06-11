@@ -26,6 +26,18 @@ const uiBuild = A.uiBuild === true
 // kiln-state ledger live under it. Its absence is gated below — never a silent v2-style build.
 const pluginRoot = A.pluginRoot
 
+// ── BUILD_RUN_TOKEN (BLUEPRINT §7 / discipline-spec lifecycle step 3) — this build stage's own,
+//    stage-scoped browser kill token. The discipline-spec post-check cleanup is RUN-TOKEN scoped:
+//    a sweep must reap only THIS stage's browser survivors, never a concurrent Kiln run's (a
+//    validate-stage Tier-2 traversal, a parallel build in another project). So the stage mints one
+//    token here and threads it as the kiln-law `--run-prefix` into EVERY check run — every probe
+//    kiln-law spawns is named kiln-pw-<runId>-<SC>-<entropy> and its runId now begins with this
+//    token, so `kiln-probe sweep <BUILD_RUN_TOKEN>` matches exactly this build's probe trees and
+//    nothing else. Charset is the inert token charset (it becomes a pkill -f / readdir pattern);
+//    Date.now()+entropy is unique-enough for one stage (the per-probe entropy tail still guarantees
+//    per-spawn uniqueness downstream). The reviewer's independent rerun threads the same prefix. ──
+const BUILD_RUN_TOKEN = `kbuild-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`.replace(/[^A-Za-z0-9._-]/g, '-')
+
 // ── The Gauge posture (BLUEPRINT §3.2/§3.3) — passed by the conductor from state.json. Accepts an
 //    object or a JSON-encoded string; anything else ⇒ null ⇒ every dial below falls back to its
 //    v2-equivalent default, so a run without a posture behaves exactly like v2 plus the §3.4 Law
@@ -274,7 +286,7 @@ const VERDICT_SCHEMA = {
 //    inlined pure logic, unit-tested in src/spine.mjs and src/gauge.mjs. The coverage arithmetic,
 //    the tamper/freshness gate, the milestone-gate judge-spawn decision, and the escalation
 //    policy run IN THE SCRIPT, never in an agent. ──
-// @inline:spine:validateSlicePlan,runnerGate,rejectionClass,tribunalThreshold,gateDecision,goalAuditUsable,pipelineInvalidated
+// @inline:spine:validateSlicePlan,runnerGate,probeGate,rejectionClass,tribunalThreshold,gateDecision,goalAuditUsable,pipelineInvalidated
 // @inline:gauge:escalate
 
 // ── Routing: builder family != reviewer family, derived in ONE place ──
@@ -472,7 +484,7 @@ function runnerPrompt(build, lawCtx, beforeRunId) {
     `<task>Run these commands (Bash) IN THIS ORDER and report EXACTLY what you observe:\n` +
     `1. node ${pluginRoot}/scripts/kiln-law.mjs verify ${projectPath} ${kilnDir}\n` +
     `   verify_exit = its exit code. Collect every 'TAMPER: <path>' line's path into tamper_paths (empty array if none). If verify_exit is not 0, STOP — skip steps 2-3 and report what you have.\n` +
-    `2. node ${pluginRoot}/scripts/kiln-law.mjs run ${projectPath} ${kilnDir} --only ${only} --flips ${flips}${before}\n` +
+    `2. node ${pluginRoot}/scripts/kiln-law.mjs run ${projectPath} ${kilnDir} --only ${only} --flips ${flips}${before} --run-prefix ${BUILD_RUN_TOKEN}\n` +
     `   law_run_exit = its exit code — the lifecycle VERDICT the workflow gates on mechanically (0 = every declared flip went RED→GREEN and nothing previously-GREEN regressed; non-zero = the slice failed its Law). From its 'RUN <runId> HEAD <head>' line report run_id and head VERBATIM. Collect every 'FLIP_UNMET <id>' line's id into flip_unmet and every 'REGRESSION <id>' line's id into regressed (empty arrays if none). Add any TAMPER paths to tamper_paths. RED/GREEN/PROBE_DEFERRED check lines are EVIDENCE — transcribe, never fix. If law_run_exit is not 0, STOP — skip step 3.\n` +
     (suite
       ? `3. node ${pluginRoot}/scripts/kiln-law.mjs suite ${projectPath} ${kilnDir} <runId> --cmd '${suite}'\n   Substitute <runId> with the run_id from step 2's RUN line. This runs the project suite and persists its output INTO the evidence dir (suite.log + a sha256'd result line in suite.jsonl). From its 'SUITE <runId> exit=<n> …' line report suite_exit = that <n>, verbatim; suite_cmd = the suite command itself.\n`
@@ -502,7 +514,7 @@ function reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort, vclas
     (vclass === 'static-only'
       ? `- VERIFICATION DEGRADED (verification_class: static-only): one or more probe checks were honestly DEFERRED in this run (uninstantiated template, --skip-probes, or playwright absent) — there is NO browser-probe evidence for them. A deferral is never green: judge those criteria from the static evidence only and weigh your verdict accordingly.\n`
       : `- This run's verification_class is 'full': every mapped probe EXECUTED — its evidence (probe-<SC>.json result + screenshot(s) + probe-<SC>.log) sits in ${evidenceDir}/ beside the check logs; read it before ruling.\n`) +
-    `- Independent-rerun floor (non-negotiable): re-run the slice's mapped checks YOURSELF — 'node ${pluginRoot}/scripts/kiln-law.mjs run ${projectPath} ${kilnDir} --only ${ids}' — and set law_green from YOUR run. Instantiated probe checks EXECUTE in that rerun (one bounded browser subprocess each, evidence written under the new run id); PROBE_DEFERRED/PROBE_UNAVAILABLE lines are honest deferrals — neither red nor green, never proof. Read the runner's evidence for everything broader instead of re-deriving it; re-run broader scopes only on concrete doubt.\n`
+    `- Independent-rerun floor (non-negotiable): re-run the slice's mapped checks YOURSELF — 'node ${pluginRoot}/scripts/kiln-law.mjs run ${projectPath} ${kilnDir} --only ${ids} --run-prefix ${BUILD_RUN_TOKEN}' — and set law_green from YOUR run. Instantiated probe checks EXECUTE in that rerun (one bounded browser subprocess each, evidence written under the new run id, swept under this build's stage token); PROBE_DEFERRED/PROBE_UNAVAILABLE lines are honest deferrals — neither red nor green, never proof. Read the runner's evidence for everything broader instead of re-deriving it; re-run broader scopes only on concrete doubt.\n`
   const escNote = leg.escalated
     ? `\n<escalated>You are the ESCALATED feedback source: prior review cycles rejected this slice on logical findings and the loop is stuck. Fresh eyes, full depth — verify the prior findings were genuinely addressed AND hunt what the earlier reviews missed.</escalated>\n`
     : ''
@@ -511,8 +523,17 @@ function reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort, vclas
     const how = leg.viaCodex
       ? `<how>${codexGuideNote}Delegate this review to GPT-5.5 via 'codex exec' at model_reasoning_effort="${effort}" — you are the thin wrapper and the cross-model check; if codex errors, review directly as the independent reviewer.</how>\n\n`
       : ''
+    // §7 screenshot rule (tasks.md T2.2): the reviewer judges the probe SCREENSHOT by a BINARY
+    // RUBRIC only — pass/fail visibility questions ("is the nav visible? is text clipped? does it
+    // match the stated design language?") — NEVER a free-form aesthetic score. VLMs rank reliably
+    // and SCORE unreliably [R:playwright-discipline §4]; numeric taste scores are out of scope and
+    // judged separately from a live render at validate. When the run is static-only there is no
+    // screenshot to judge — that arm is gated below.
+    const screenshotRubric = vclass === 'static-only'
+      ? `6. Screenshot rubric: SKIPPED this run — verification_class is static-only, so no probe screenshot was captured (judge the visual criteria from the static evidence only; never infer a clean render you cannot see).\n`
+      : `6. Screenshot rubric (binary ONLY): the probe captured screenshot(s) under ${evidenceDir}/ (named in probe-<SC>.json's "screenshots"). View them and answer ONLY binary visibility questions — is the key content/nav visible? is any text clipped or overlapping? does the layout match the stated design language and ban list? NEVER assign a numeric or aesthetic score (VLMs rank reliably but score unreliably; taste is judged separately from a live render at validate). A failed binary rubric question is a finding.\n`
     return (leg.model === 'opus' ? voice('opus') : '') +
-      `You are the ${leg.escalated ? 'escalated ' : ''}cross-model UI reviewer on slice ${sliceId} — a DIFFERENT context from the builder. Judge code and executable evidence ONLY; do not rule on aesthetic taste (that is judged separately from a live render, outside this loop). Read-only on source.\n\n` +
+      `You are the ${leg.escalated ? 'escalated ' : ''}cross-model UI reviewer on slice ${sliceId} — a DIFFERENT context from the builder. Judge code and executable evidence ONLY; rule on the screenshot by BINARY RUBRIC (visibility/clipping/on-brief), never a free-form aesthetic score (taste is judged separately from a live render, outside this loop). Read-only on source.\n\n` +
       `<inputs>\n` +
       `- Milestone ${m.id} "${m.title}" — acceptance: ${m.acceptance}\n` +
       `- Slice objective: ${slice.objective}\n` +
@@ -522,8 +543,9 @@ function reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort, vclas
       `</inputs>\n\n` +
       `<checks>\nApply EVERY check to EVERY interactive element/section, not just the first:\n` +
       `1. structural / responsive breakage; 2. dead or missing event handlers + JS correctness; 3. accessibility — AA contrast (compute it), prefers-reduced-motion honored, semantics; 4. ban-list adherence + design-token consistency; 5. content accuracy vs the map (no invented features/metrics/images).\n` +
+      screenshotRubric +
       (surf === 'mixed' ? `Also RE-RUN the slice's behavior/smoke test for the non-visual logic and confirm it passes.\n` : ``) +
-      `Re-run the STATIC check yourself (HTML parses, sections/ids present, 'node --check' the JS). NEVER open a browser or drive Playwright yourself — browser evidence comes ONLY through the kiln-law rerun above (each probe is one bounded, token-swept subprocess; the browser is a subprocess with a deadline, never a service).\n` +
+      `Re-run the STATIC check yourself (HTML parses, sections/ids present, 'node --check' the JS). RE-RUN the slice's mapped probe SCs via the kiln-law rerun above (each probe is one bounded, token-swept subprocess — the browser is a subprocess with a deadline, never a service); NEVER open a browser or drive Playwright yourself — every browser observation comes through that rerun's evidence.\n` +
       `</checks>\n${escNote}\n` +
       how +
       `<task>Set law_green from YOUR kiln-law re-run and tests_green from the static/smoke check you re-ran. Verdict APPROVED only if the mapped checks pass and the page is structurally sound, accessible, on-brief, and free of invented claims; else REJECTED with specific, actionable findings. ${classRule} Report reasoning first.</task>`
@@ -598,6 +620,39 @@ async function ledger(type, data, phaseName) {
     `If it exits non-zero (e.g. no events.jsonl yet — the run was not initialised), report the error in your summary; do NOT create or repair any file. Report only whether the append succeeded.</task>`,
     { label: 'thoth:ledger', phase: phaseName, model: 'haiku' }
   )
+}
+
+// ── Stage-level browser sweeps (BLUEPRINT §7 / discipline-spec lifecycle step 3, tasks.md T2.3) —
+//    the OUTER bracket around the whole build stage. The browser is a subprocess with a deadline,
+//    never a service: kiln-law already brackets each probe-EXECUTING run with its own per-run
+//    `kiln-probe sweep <runId>` (registered on process 'exit' + on timeout SIGKILL), but a
+//    kiln-law wrapper that is itself SIGKILLed by an OUTER deadline never runs its exit handler,
+//    leaving an orphaned chrome-headless-shell / managed server tree behind. THIS stage bracket is
+//    the backstop for that — a PRE-FLIGHT sweep at build start and an UNCONDITIONAL sweep at build
+//    end (the latter in the finally below, so any throw still reaps).
+//    Scope is RUN-TOKEN, not the whole namespace (the reviewer's MAJOR / the discipline-spec
+//    "post-check cleanup is run-token scoped"): both sweeps target THIS build's BUILD_RUN_TOKEN —
+//    every probe this stage spawned runs under a runId prefixed with it (--run-prefix on each
+//    kiln-law run), so `kiln-probe sweep <BUILD_RUN_TOKEN>` reaps exactly this stage's survivors
+//    and CANNOT touch a concurrent Kiln run (a validate Tier-2 traversal, a parallel build) — let
+//    alone the operator's own browser (blanket `pkill -f chrome` stays forbidden). The old
+//    whole-namespace pre-flight "stale-SingletonLock" defense (#1311) is unnecessary here: that
+//    failure mode requires a REUSED --user-data-dir, and Kiln gives every probe a unique
+//    /tmp/kiln-pw-<token> profile dir (kiln-probe.mjs), so a prior crashed run's stale lock lives
+//    in a dir this build never reuses and can never block it. Both sweeps are ledgered (§3.5) and
+//    the sweep CLI always exits 0 so cleanup never fails a stage. Only called past the pluginRoot
+//    floor gate (the CLI is locatable) via a haiku leg — a mechanical `pkill`/`rm` cleanup. ──
+async function stageSweep(when) {
+  await agent(
+    `You are the browser-leak sweeper — the stage-level bracket of the bounded-browser discipline (the browser is a subprocess with a deadline, never a service). You run ONE cleanup command and report what it swept; you never launch a browser, never edit, never judge.\n\n` +
+    `<task>Run this exact command (Bash):\n` +
+    '```\n' +
+    `node ${pluginRoot}/scripts/kiln-probe.mjs sweep ${BUILD_RUN_TOKEN}\n` +
+    '```\n' +
+    `The prefix '${BUILD_RUN_TOKEN}' scopes the sweep to THIS build's own browser trees ONLY (every probe this stage spawned runs under it) — it can never touch a concurrent Kiln run or the operator's own browser; blanket 'pkill -f chrome' is forbidden. It ALWAYS exits 0. Transcribe the 'SWEEP …' line it prints (pattern / killed / server_groups_killed / removed counts). Do not run anything else.</task>`,
+    { label: loreLabel('sentinel', 'sweep', when), phase: 'The Forge Heats', model: 'haiku' }
+  )
+  await ledger('browser_sweep', { stage: 'build', when, token: BUILD_RUN_TOKEN }, 'The Forge Heats')
 }
 
 // ── The status anchor (§5.1 statusBefore, T2-fix ruling): statusBefore lives in the EVIDENCE —
@@ -684,13 +739,27 @@ async function evidencedReview(m, surf, slice, sliceId, build, fix, escalated, r
   // Advance the status anchor on every complete, fresh run — 'proceed' AND 'red' both carry a
   // finalized manifest the probe just verified; the next trial's --before folds this run.
   if (gate.verdict === 'proceed' || gate.verdict === 'red') lastRunId = runner.run_id
-  // §7 honesty: a static-only run (some probe deferred — uninstantiated template, --skip-probes,
-  // or playwright absent) can carry law_run_exit 0, so the degradation must be LEDGERED the
-  // moment the gate sees it — recorded end-to-end, never silently green. The run proceeds
-  // honestly degraded (capability tier, not an error); the reviewer prompt below names it too.
-  if ((gate.verdict === 'proceed' || gate.verdict === 'red') && gate.verification_class === 'static-only') {
-    log(`${m.id} ${sliceId}: VERIFICATION DEGRADED — run ${runner.run_id} is static-only (probe evidence deferred); ledgered, surfaced to the reviewer, never folded green`)
-    await ledger('verification_degraded', { milestone: m.id, slice: sliceId, fix, run_id: runner.run_id, verification_class: 'static-only' }, 'The Trial')
+  // §7 honesty (tasks.md T2.1): a static-only run (a mapped probe deferred — playwright absent →
+  // exit 78, an un-instantiated template, or --skip-probes) folds to law_run_exit 0, so the
+  // degradation must be LEDGERED the moment the gate sees it — recorded end-to-end, never silently
+  // green. The probeGate pure predicate (src/spine.mjs) makes the decision surface-aware: a
+  // ui/mixed slice that lost its browser-probe evidence ledgers 'probe_unavailable' (the §7
+  // capability-tier event) and the ui review falls back to the v2 static checks; a logic slice has
+  // no browser path so probeGate passes it through (a static-only class there means a mapped probe
+  // SC the slicer attached to logic-adjacent work — still surfaced as the generic degradation so
+  // the reviewer is never told a full verification it did not get). The run proceeds honestly
+  // degraded (a capability tier, not an error); the reviewer prompt below names it either way.
+  if (gate.verdict === 'proceed' || gate.verdict === 'red') {
+    const pg = probeGate(surf, gate)
+    if (pg.action === 'degrade') {
+      log(`${m.id} ${sliceId}: VERIFICATION DEGRADED — run ${runner.run_id} is static-only (${pg.reason}); ledgered probe_unavailable, the ui review falls back to the static checks, never folded green`)
+      await ledger('probe_unavailable', { milestone: m.id, slice: sliceId, surface: surf, fix, run_id: runner.run_id, verification_class: 'static-only' }, 'The Trial')
+    } else if (gate.verification_class === 'static-only') {
+      // logic surface (probeGate passes it) but the run is still static-only — surface the generic
+      // degradation so a non-ui reviewer is never handed a "full" verification it did not receive.
+      log(`${m.id} ${sliceId}: VERIFICATION DEGRADED — run ${runner.run_id} is static-only (probe evidence deferred on a non-ui slice); ledgered, surfaced to the reviewer, never folded green`)
+      await ledger('verification_degraded', { milestone: m.id, slice: sliceId, surface: surf, fix, run_id: runner.run_id, verification_class: 'static-only' }, 'The Trial')
+    }
   }
   if (gate.verdict === 'tamper') {
     // §5.1 tamper model: the slice is auto-REJECTED by the WORKFLOW (not an agent judgment), the
@@ -744,6 +813,11 @@ if (!lawChecks.length) {
 }
 log(`The Law: ${lawChecks.length} locked check(s) across ${[...new Set(lawChecks.map((c) => c.milestone))].length} milestone(s)`)
 
+// §7 / T2.3 pre-flight sweep: clear any orphaned browser tree from a prior crashed run BEFORE the
+// first probe could spawn (the discipline-spec defense against #1311's stale SingletonLock). Past
+// the floor gates, so pluginRoot + the ledger are usable.
+await stageSweep('pre-flight')
+
 // Velocity lever 3 (§9): rakim:setup ∥ confucius:parse — independent legs run in PARALLEL. rakim
 // initializes the git baseline + writes codebase-state.md (the slicer/builders read it); confucius
 // parses the already-written master-plan.md into the milestone list. Neither reads the other's
@@ -770,6 +844,12 @@ log(`Building ${milestones.length} milestone(s): ${milestones.map((m) => `${m.id
 const results = []
 const splitLedger = [] // top-level surfacing: split-and-rebuild is a conductor/operator decision
 let milestoneIndex = -1
+// §7 / T2.3: the milestone loop + return live inside a try whose finally runs the UNCONDITIONAL
+// stage-end sweep. The browser is a subprocess with a deadline, never a service — so the stage's
+// closing bracket must reap this build's browser survivors on EVERY exit path, a thrown
+// agent()/parse error included (a crash mid-probe is exactly when leaks must be swept). The sweep
+// sits in finally, not after the loop, so no throw can skip it.
+try {
 for (const m of milestones) {
   milestoneIndex++
   if (typeof budget !== 'undefined' && budget && budget.total && budget.remaining() <= 0) {
@@ -1107,6 +1187,14 @@ for (const m of milestones) {
   })
 }
 
-const passed = results.filter((r) => r.qa === 'QA_PASS' && r.tests_green)
-log(`The orchestra takes a bow — ${passed.length}/${results.length} milestone(s) passed QA${splitLedger.length ? ` · ${splitLedger.length} slice(s) await an operator split decision` : ''}`)
-return { built: results, passed: passed.map((r) => r.id), all_passed: passed.length === results.length && results.length > 0, law_gated: true, split_required: splitLedger }
+  const passed = results.filter((r) => r.qa === 'QA_PASS' && r.tests_green)
+  log(`The orchestra takes a bow — ${passed.length}/${results.length} milestone(s) passed QA${splitLedger.length ? ` · ${splitLedger.length} slice(s) await an operator split decision` : ''}`)
+  return { built: results, passed: passed.map((r) => r.id), all_passed: passed.length === results.length && results.length > 0, law_gated: true, split_required: splitLedger }
+} finally {
+  // §7 / T2.3 stage-end sweep: UNCONDITIONAL at build end — reaps THIS build's browser survivors
+  // (an outer-deadline SIGKILL of a probe wrapper, a crashed run mid-probe) before the stage hands
+  // off. kiln-law's per-run brackets are the inner defense; this is the OUTER one, run-token
+  // scoped to BUILD_RUN_TOKEN. The sweep is itself try/guarded so a cleanup failure can never mask
+  // a real build error propagating out of the try.
+  try { await stageSweep('stage-end') } catch (e) { log(`stage-end browser sweep failed (non-fatal): ${e && e.message ? e.message : e}`) }
+}

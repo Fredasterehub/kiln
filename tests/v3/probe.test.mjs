@@ -16,9 +16,11 @@
 //      green); spec-less templates and --skip-probes still defer (probe_deferred); any deferral
 //      marks verification_class: static-only in the finalized run.json (and a VERIFICATION_CLASS
 //      stdout line); an outer-timeout-killed probe is swept by runId; stage-level sweeps bracket
-//      every probe-executing run (pre-flight namespace-wide BEFORE any probe spawns, runId-scoped
-//      end sweep on EVERY exit path — gate-failed exits included), and a run with no executable
-//      probe fires none.
+//      every probe-executing run, each scoped BY TOKEN (BLUEPRINT §7: never blanket) — pre-flight
+//      scoped to the stage's --run-prefix (else the run's own full runId) BEFORE any probe spawns,
+//      runId-scoped end sweep on EVERY exit path (gate-failed exits included) — so a concurrent
+//      Kiln run under a different prefix is NEVER reaped, and a run with no executable probe fires
+//      no sweep at all.
 //   4. Real-playwright integration smoke — SKIPPED cleanly when playwright is absent (detected,
 //      logged via the skip message, never failed): the capability tier, not an error.
 
@@ -595,35 +597,74 @@ test('kiln-law run: an outer-timeout kill cannot leak the managed serve_cmd eith
   }
 })
 
-test('kiln-law run stage-level sweeps: a probe-executing run is BRACKETED — pre-flight sweep of the WHOLE kiln-pw- namespace reaps a prior crashed run\'s litter BEFORE any probe spawns; a runId end sweep fires after all probes finish', async () => {
+test('kiln-law run stage-level sweeps: a probe-executing run is BRACKETED — pre-flight sweep is SCOPED to the stage\'s --run-prefix (reaps THIS stage\'s prior crashed run, NEVER a concurrent run under a different prefix); a runId end sweep fires after all probes finish', async () => {
   const { proj, kiln } = makeLawFixture()
-  // the prior crashed run: a live orphan whose cmdline carries a token THIS run cannot know,
-  // plus its stale profile dir (#1311's stale-SingletonLock class) — only a namespace-wide
-  // pre-flight sweep can reach either.
-  const staleTag = `stale${process.pid}${Date.now().toString(36)}`
-  const orphan = spawn(process.execPath, ['-e', 'setTimeout(()=>{},300000)', '--', `--user-data-dir=/tmp/kiln-pw-${staleTag}`], { detached: true, stdio: 'ignore' })
-  orphan.unref()
-  mkdirSync(`/tmp/kiln-pw-${staleTag}`, { recursive: true })
+  const stageTok = `stg${process.pid}${Date.now().toString(36)}`
+  // (a) THIS stage's own prior crashed run: a live orphan + stale profile dir under the stage
+  // prefix (sibling runId from an earlier --run-prefix=stageTok run that died). The prefix-scoped
+  // pre-flight MUST reap it (#1311's stale-SingletonLock class, owned by this stage).
+  const mineTag = `${stageTok}-prior${Date.now().toString(36)}`
+  const mine = spawn(process.execPath, ['-e', 'setTimeout(()=>{},300000)', '--', `--user-data-dir=/tmp/kiln-pw-${mineTag}`], { detached: true, stdio: 'ignore' })
+  mine.unref()
+  mkdirSync(`/tmp/kiln-pw-${mineTag}`, { recursive: true })
+  // (b) a CONCURRENT Kiln run's in-flight browser, under a DIFFERENT prefix — a parallel build or
+  // a validate Tier-2 traversal. The discipline-spec ban: this run's sweep must NEVER reap it.
+  const otherTag = `other${process.pid}${Date.now().toString(36)}`
+  const other = spawn(process.execPath, ['-e', 'setTimeout(()=>{},300000)', '--', `--user-data-dir=/tmp/kiln-pw-${otherTag}`], { detached: true, stdio: 'ignore' })
+  other.unref()
+  mkdirSync(`/tmp/kiln-pw-${otherTag}`, { recursive: true })
   try {
     const deadline = Date.now() + 5000
-    while (pgrepf(`kiln-pw-${staleTag}`).length !== 1 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100))
-    assert.equal(pgrepf(`kiln-pw-${staleTag}`).length, 1, 'the prior-run orphan is alive before the run')
-    const res = lawCli(['run', proj, kiln, '--only', 'SC-001,SC-002'], { KILN_FAKE_PW_MODE: 'pass' })
+    while ((pgrepf(`kiln-pw-${mineTag}`).length !== 1 || pgrepf(`kiln-pw-${otherTag}`).length !== 1) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100))
+    assert.equal(pgrepf(`kiln-pw-${mineTag}`).length, 1, 'this stage\'s prior-run orphan is alive before the run')
+    assert.equal(pgrepf(`kiln-pw-${otherTag}`).length, 1, 'the concurrent run\'s browser is alive before the run')
+    const res = lawCli(['run', proj, kiln, '--only', 'SC-001,SC-002', '--run-prefix', stageTok], { KILN_FAKE_PW_MODE: 'pass' })
     assert.equal(res.status, 0, res.stderr + res.stdout)
-    // pre-flight: whole-namespace, and BEFORE the probe executed — stale litter cannot poison the launch
-    const pre = res.stdout.match(/^SWEEP pattern=kiln-pw- killed=\d+.*$/m)
-    assert.ok(pre, 'the pre-flight sweep line is namespace-wide (bare kiln-pw- pattern)')
+    // pre-flight: SCOPED to the stage prefix (never bare kiln-pw-), and BEFORE the probe executed
+    const pre = res.stdout.match(new RegExp(`^SWEEP pattern=kiln-pw-${stageTok} killed=\\d+.*$`, 'm'))
+    assert.ok(pre, 'the pre-flight sweep is scoped to the --run-prefix, NOT the whole kiln-pw- namespace')
+    assert.doesNotMatch(res.stdout, /^SWEEP pattern=kiln-pw- killed=/m, 'no bare-namespace sweep line is emitted')
     assert.ok(res.stdout.indexOf(pre[0]) < res.stdout.indexOf('GREEN SC-002'), 'pre-flight fires BEFORE any probe runs')
-    assert.deepEqual(pgrepf(`kiln-pw-${staleTag}`), [], 'the prior-run orphan is dead — reaped by the pre-flight sweep')
-    assert.ok(!existsSync(`/tmp/kiln-pw-${staleTag}`), 'its stale profile dir is removed')
-    // run-end: this run's token prefix, AFTER all checks finished
+    assert.deepEqual(pgrepf(`kiln-pw-${mineTag}`), [], 'this stage\'s prior-run orphan is dead — reaped by the prefix-scoped pre-flight')
+    assert.ok(!existsSync(`/tmp/kiln-pw-${mineTag}`), 'its stale profile dir is removed')
+    assert.equal(pgrepf(`kiln-pw-${otherTag}`).length, 1, 'the CONCURRENT run\'s browser SURVIVES — a different prefix is never reaped (the discipline-spec cross-run ban)')
+    assert.ok(existsSync(`/tmp/kiln-pw-${otherTag}`), 'the concurrent run\'s profile dir is untouched')
+    // run-end: this run's full runId prefix (which begins with the stage prefix), AFTER all checks
     const runId = res.stdout.match(/^RUN (\S+) /m)[1]
+    assert.ok(runId.startsWith(`${stageTok}-`), 'the runId is prefixed with the stage token')
     const post = res.stdout.match(new RegExp(`^SWEEP pattern=kiln-pw-${runId} .*$`, 'm'))
-    assert.ok(post, 'the run-end sweep is scoped to THIS run\'s token prefix')
+    assert.ok(post, 'the run-end sweep is scoped to THIS run\'s full token prefix')
     assert.ok(res.stdout.indexOf(post[0]) > res.stdout.indexOf('RESULT '), 'the end sweep fires after all probes finish')
   } finally {
-    spawnSync('pkill', ['-9', '-f', `kiln-pw-${staleTag}`], { stdio: 'ignore' })
-    rmSync(`/tmp/kiln-pw-${staleTag}`, { recursive: true, force: true })
+    spawnSync('pkill', ['-9', '-f', `kiln-pw-${mineTag}`], { stdio: 'ignore' })
+    spawnSync('pkill', ['-9', '-f', `kiln-pw-${otherTag}`], { stdio: 'ignore' })
+    rmSync(`/tmp/kiln-pw-${mineTag}`, { recursive: true, force: true })
+    rmSync(`/tmp/kiln-pw-${otherTag}`, { recursive: true, force: true })
+    rmSync(proj, { recursive: true, force: true })
+  }
+})
+
+test('kiln-law run stage-level sweeps: an UNPREFIXED probe run scopes its pre-flight to its own full runId (never the whole namespace) — a concurrent run under any other token is never reaped', async () => {
+  const { proj, kiln } = makeLawFixture()
+  // a concurrent run's in-flight browser; an unprefixed run cannot claim it and must not reap it.
+  const otherTag = `other${process.pid}${Date.now().toString(36)}`
+  const other = spawn(process.execPath, ['-e', 'setTimeout(()=>{},300000)', '--', `--user-data-dir=/tmp/kiln-pw-${otherTag}`], { detached: true, stdio: 'ignore' })
+  other.unref()
+  mkdirSync(`/tmp/kiln-pw-${otherTag}`, { recursive: true })
+  try {
+    const deadline = Date.now() + 5000
+    while (pgrepf(`kiln-pw-${otherTag}`).length !== 1 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100))
+    assert.equal(pgrepf(`kiln-pw-${otherTag}`).length, 1, 'the concurrent run\'s browser is alive before the run')
+    const res = lawCli(['run', proj, kiln, '--only', 'SC-001,SC-002'], { KILN_FAKE_PW_MODE: 'pass' })
+    assert.equal(res.status, 0, res.stderr + res.stdout)
+    const runId = res.stdout.match(/^RUN (\S+) /m)[1]
+    assert.doesNotMatch(res.stdout, /^SWEEP pattern=kiln-pw- killed=/m, 'no whole-namespace pre-flight from an unprefixed run')
+    assert.ok(res.stdout.match(new RegExp(`^SWEEP pattern=kiln-pw-${runId} `, 'm')), 'the pre-flight is scoped to the run\'s own full runId')
+    assert.equal(pgrepf(`kiln-pw-${otherTag}`).length, 1, 'the concurrent run\'s browser SURVIVES the unprefixed run\'s sweeps')
+    assert.ok(existsSync(`/tmp/kiln-pw-${otherTag}`), 'and its profile dir is untouched')
+  } finally {
+    spawnSync('pkill', ['-9', '-f', `kiln-pw-${otherTag}`], { stdio: 'ignore' })
+    rmSync(`/tmp/kiln-pw-${otherTag}`, { recursive: true, force: true })
     rmSync(proj, { recursive: true, force: true })
   }
 })

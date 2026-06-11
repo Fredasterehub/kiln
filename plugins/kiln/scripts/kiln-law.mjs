@@ -86,19 +86,21 @@
 //            server's own cmdline carries no token — lifecycle step 4: no server outlives the
 //            check that spawned it).
 //            STAGE-LEVEL SWEEPS (discipline-spec lifecycle step 3) bracket every probe-executing
-//            run: a pre-flight `kiln-probe sweep` of the WHOLE kiln-pw- namespace fires before
-//            the first check runs (prior crashed runs leave stale profiles/SingletonLocks and
-//            orphaned trees under tokens this run cannot know), and a run-end `kiln-probe sweep
-//            <runId>` is registered on process 'exit' so it fires UNCONDITIONALLY on every path
-//            out — clean completion, unmet expectation/flip gates (exit 1), and the mid-run
-//            tamper abort (exit 2) alike (die() is process.exit, which skips finally blocks but
-//            never 'exit' handlers; sweep spawning is synchronous, exit-handler-safe). The
-//            brackets exist exactly when the selection contains an executable probe (spec'd,
-//            not --skip-probes): a run that launches no browser HAS no browser stage to sweep,
-//            and a namespace-wide sweep from a logic-only run would kill a concurrent legitimate
-//            session — named-token discipline, never blanket. The workflow-boundary pair (build
-//            start pre-flight + build-end cleanup, both ledgered) is build.js's own (P3 T2),
-//            layered above these.
+//            run, each scoped BY TOKEN (BLUEPRINT §7: "pre- and post-stage sweeps by token, never
+//            blanket pkill"): a pre-flight `kiln-probe sweep <runPrefix||runId>` fires before the
+//            first check runs (it reaps THIS stage's own prior crashed runs — a sibling run under
+//            the same --run-prefix that died leaving stale profiles/SingletonLocks/orphaned trees;
+//            an unprefixed direct run scopes to its own unique runId, a near-no-op by construction
+//            — never the whole kiln-pw- namespace, which would reap a CONCURRENT Kiln run's
+//            in-flight browser), and a run-end `kiln-probe sweep <runId>` is registered on process
+//            'exit' so it fires UNCONDITIONALLY on every path out — clean completion, unmet
+//            expectation/flip gates (exit 1), and the mid-run tamper abort (exit 2) alike (die()
+//            is process.exit, which skips finally blocks but never 'exit' handlers; sweep spawning
+//            is synchronous, exit-handler-safe). The brackets exist exactly when the selection
+//            contains an executable probe (spec'd, not --skip-probes): a run that launches no
+//            browser HAS no browser stage to sweep. The workflow-boundary pair (build start
+//            pre-flight + build-end cleanup, both ledgered, both scoped to the build's own
+//            BUILD_RUN_TOKEN) is build.js's own (P3 T2), layered above these.
 //   status — fold one run's results.jsonl → {green, red, deferred} JSON on stdout (green = exit
 //            matched the check's expected 'exit0'; last line wins per id; law.json check order).
 //   suite  — persist the PROJECT suite as hashed evidence beside a recorded Law run (§6): the
@@ -125,6 +127,11 @@
 //   kiln-law.mjs verify <projectPath> <kilnDir>
 //   kiln-law.mjs run    <projectPath> <kilnDir> [--only SC-001,SC-002] [--skip-probes]
 //                       [--expect-green SC-001,SC-002] [--flips SC-001,SC-002] [--before <runId>]
+//                       [--run-prefix <token>]   (prepended to runId so every probe this run
+//                                                  spawns falls under <token>; both this run's
+//                                                  pre-flight and run-end sweeps scope to that
+//                                                  token, so they reap only this stage's browsers,
+//                                                  never a concurrent run's)
 //   kiln-law.mjs status <kilnDir> <runId>
 //   kiln-law.mjs suite  <projectPath> <kilnDir> <runId> --cmd '<command>' [--timeout-s N]
 // Exit codes: 0 ok · 1 error (usage, invalid law.json, missing files, unmet --expect-green,
@@ -314,7 +321,7 @@ function cmdVerify(projectPath, kilnDir) {
 // ── run — the deterministic runner (§5.1): tamper gate before EVERY check, fixed cwd, per-check
 //    timeout, hashed evidence, then the expectation + red/green lifecycle gates ──────────────────
 function cmdRun(projectPath, kilnDir, flags) {
-  for (const k of Object.keys(flags)) if (!['only', 'skip-probes', 'expect-green', 'flips', 'before'].includes(k)) die(`run: unknown flag --${k}`)
+  for (const k of Object.keys(flags)) if (!['only', 'skip-probes', 'expect-green', 'flips', 'before', 'run-prefix'].includes(k)) die(`run: unknown flag --${k}`)
   const gate = tamperGate(projectPath, kilnDir)
   if (!gate.locked) die(`run: law.json is not locked — evidence must anchor to a locked Law; run 'index' first`)
   // §5.1 tamper model: "before EVERY check run … the runner re-hashes the locked paths against
@@ -360,8 +367,19 @@ function cmdRun(projectPath, kilnDir, flags) {
   let head
   try { head = git(projectPath, ['rev-parse', 'HEAD']).trim() } catch (e) { die(`run: git failed in ${projectPath} — ${e.message}`) }
   // runId: sortable timestamp + pid — unique per invocation; the RUN line hands it (and HEAD,
-  // which the build spine's freshness gate compares) to the calling agent.
-  const runId = `${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z')}-${process.pid}`
+  // which the build spine's freshness gate compares) to the calling agent. An optional
+  // --run-prefix (the CALLER's stage-owned token) is PREPENDED so every probe this run spawns —
+  // its token is kiln-pw-<runId>-<SC>-<entropy> (kiln-probe.mjs) — falls under <prefix>: a
+  // stage-level `kiln-probe sweep <prefix>` then reaps ONLY this stage's survivors, never a
+  // concurrent run's browsers (discipline-spec post-check cleanup is run-token scoped). The
+  // prefix is a pkill -f / readdir pattern, so it shares the inert token charset; runId stays a
+  // safe evidence-path segment + sweep prefix either way. Absent ⇒ the prior bare format.
+  let runPrefix = ''
+  if (flags['run-prefix'] !== undefined) {
+    runPrefix = String(flags['run-prefix'])
+    if (runPrefix === '' || !/^[A-Za-z0-9._-]+$/.test(runPrefix)) die(`run: --run-prefix may only contain [A-Za-z0-9._-] and must be non-empty — it becomes a runId/sweep prefix`)
+  }
+  const runId = `${runPrefix ? `${runPrefix}-` : ''}${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z')}-${process.pid}`
   const runDir = join(kilnDir, 'evidence', runId)
   mkdirSync(join(runDir, 'checks'), { recursive: true })
   const resultsFile = join(runDir, 'results.jsonl')
@@ -400,19 +418,31 @@ function cmdRun(projectPath, kilnDir, flags) {
 
   // §7 stage-level sweeps (discipline-spec lifecycle step 3): when this run will EXECUTE any
   // probe — a spec'd kind:'probe' in the selection, not opted out by --skip-probes — the
-  // browser-verification stage exists and gets BOTH brackets. Pre-flight: the WHOLE kiln-pw-
-  // namespace, before any probe spawns — prior crashed runs leave stale profiles/SingletonLocks
-  // and orphaned process trees under tokens this run cannot enumerate, and they poison fresh
-  // launches. Run-end: this run's token prefix, registered on process 'exit' so it fires on
-  // EVERY path out — clean completion, unmet gates (exit 1), the mid-run tamper abort (exit 2)
-  // — die() is process.exit, which skips finally blocks but never 'exit' handlers, and
-  // spawnSync is exit-handler-safe. A run with no executable probe launches no browser: no
-  // browser stage, no sweep — a namespace-wide sweep from a logic-only run could kill a
-  // concurrent legitimate session (named-token discipline, never blanket). Per-probe sweeps
-  // (kiln-probe's finally + the kill-path sweep below) stay targeted inside these brackets.
-  // Sweeps are cleanup, never verdicts — kiln-probe sweep always exits 0 and gates nothing.
+  // browser-verification stage exists and gets BOTH brackets, each scoped BY TOKEN (BLUEPRINT §7:
+  // "pre- and post-stage sweeps by token, never blanket pkill"). A whole-kiln-pw- namespace sweep
+  // is forbidden HERE: this run cannot tell its own prior litter from a CONCURRENT Kiln run's
+  // in-flight browsers (a parallel build, a validate Tier-2 traversal), and reaping the latter is
+  // exactly the cross-run kill the discipline spec bans. Both brackets therefore scope to this
+  // run's spawn namespace. Pre-flight: the runId PREFIX (the --run-prefix the stage owns when one
+  // is threaded, else the full runId) — fired before any probe spawns, it reaps THIS stage's own
+  // prior crashed runs (#1311's stale SingletonLock / orphaned trees: a sibling run sharing the
+  // stage prefix), never a concurrent run under a different prefix. The stage that owns a token is
+  // the right place for any broader sweep, and the build stage does exactly that via its own
+  // BUILD_RUN_TOKEN pre-flight bracket. An unprefixed direct run scopes pre-flight to its full
+  // runId (unique per invocation) — a near-no-op by construction: an unprefixed run cannot claim
+  // ownership of shared-namespace litter, so it honestly sweeps only what it will spawn. The
+  // belt-and-suspenders truth (per build.js): every probe gets a UNIQUE /tmp/kiln-pw-<token>
+  // profile dir, so the reused-user-data-dir failure #1311 needs cannot reproduce across runs
+  // anyway — the pre-flight is defense-in-depth, not a correctness load-bearer. Run-end: this
+  // run's full token prefix (runId), registered on process 'exit' so it fires on EVERY path out —
+  // clean completion, unmet gates (exit 1), the mid-run tamper abort (exit 2) — die() is
+  // process.exit, which skips finally blocks but never 'exit' handlers, and spawnSync is
+  // exit-handler-safe. A run with no executable probe launches no browser: no browser stage, no
+  // sweep. Per-probe sweeps (kiln-probe's finally + the kill-path sweep below) stay targeted
+  // inside these brackets. Sweeps are cleanup, never verdicts — kiln-probe sweep always exits 0
+  // and gates nothing.
   if (selected.some((c) => c.kind === 'probe' && c.spec && !flags['skip-probes'])) {
-    spawnSync(process.execPath, [KILN_PROBE, 'sweep'], { stdio: 'inherit' })
+    spawnSync(process.execPath, [KILN_PROBE, 'sweep', runPrefix || runId], { stdio: 'inherit' })
     process.on('exit', () => spawnSync(process.execPath, [KILN_PROBE, 'sweep', runId], { stdio: 'inherit' }))
   }
 

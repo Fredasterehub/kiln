@@ -10,7 +10,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { validateSlicePlan, runnerGate, rejectionClass, tribunalThreshold, gateDecision, goalAuditUsable, pipelineInvalidated } from '../../plugins/kiln/src/spine.mjs'
+import { validateSlicePlan, runnerGate, probeGate, rejectionClass, tribunalThreshold, gateDecision, goalAuditUsable, pipelineInvalidated } from '../../plugins/kiln/src/spine.mjs'
 
 // ── validateSlicePlan — §5 coverage is arithmetic, not judgment ─────────────────────────────────
 const slice = (objective, scIds, extra = {}) => ({ objective, done_when: `${objective} works`, sc_ids: scIds, ...extra })
@@ -381,4 +381,50 @@ test('pipelineInvalidated: an unreadable current HEAD is fail-closed (freshness 
 
 test('pipelineInvalidated: trimming — surrounding whitespace never makes equal shas look different', () => {
   assert.equal(pipelineInvalidated('  abc123  ', 'abc123').invalidated, false)
+})
+
+// ── probeGate — the §7 ui-slice probe gating predicate (tasks.md T2.1: probe exit → reject /
+//    degrade / pass). It runs on the TRUSTWORTHY runnerGate verdicts only (reject/stale/tamper are
+//    disposed mechanically upstream), so its input is { verification_class } off a proceed/red gate.
+const gateFull = { verdict: 'proceed', verification_class: 'full' }
+const gateStatic = { verdict: 'proceed', verification_class: 'static-only' }
+
+test('probeGate: ui + full verification → pass (every mapped probe EXECUTED — full-strength review)', () => {
+  for (const surf of ['ui', 'mixed']) {
+    assert.deepEqual(probeGate(surf, gateFull), { action: 'pass', verification_class: 'full', reason: '' }, `${surf} full`)
+  }
+})
+
+test('probeGate: ui + static-only → degrade (probe deferred — exit 78 / un-instantiated / --skip-probes; honest degradation, ledger probe_unavailable, static fallback)', () => {
+  for (const surf of ['ui', 'mixed']) {
+    const v = probeGate(surf, gateStatic)
+    assert.equal(v.action, 'degrade', `${surf} static-only must degrade`)
+    assert.equal(v.verification_class, 'static-only')
+    assert.match(v.reason, /probe was deferred/)
+    assert.match(v.reason, /never silently green/)
+  }
+})
+
+test('probeGate: a logic slice has NO browser path — always pass, verification_class irrelevant (a probe never maps to logic)', () => {
+  assert.deepEqual(probeGate('logic', gateFull), { action: 'pass', verification_class: 'full', reason: '' })
+  assert.deepEqual(probeGate('logic', gateStatic), { action: 'pass', verification_class: 'static-only', reason: '' })
+  // an unknown surface normalizes to logic (fail-safe: never treat an unknown surface as ui)
+  assert.equal(probeGate('something-else', gateStatic).action, 'pass')
+})
+
+test('probeGate: ui with an unreadable/absent verification_class → reject (fail-closed; a ui gate is never passed as "full" when degradation cannot be PROVEN)', () => {
+  for (const gate of [{ verdict: 'proceed' }, { verdict: 'proceed', verification_class: '' }, { verdict: 'proceed', verification_class: 'bogus' }, {}, null]) {
+    const v = probeGate('ui', gate)
+    assert.equal(v.action, 'reject', `gate=${JSON.stringify(gate)} must reject`)
+    assert.match(v.reason, /no readable verification_class/)
+    assert.match(v.reason, /fail closed/)
+  }
+})
+
+test('probeGate: the predicate is total and PURE — same input, same output; the red verdict carries verification_class too (a red ui run that degraded is still classed honestly)', () => {
+  const redStatic = { verdict: 'red', verification_class: 'static-only' }
+  const a = probeGate('ui', redStatic)
+  const b = probeGate('ui', redStatic)
+  assert.deepEqual(a, b)
+  assert.equal(a.action, 'degrade')
 })

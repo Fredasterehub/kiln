@@ -636,6 +636,31 @@ test('CLI run: --only filters the check set; unknown ids die', () => {
   } finally { rmSync(proj, { recursive: true, force: true }) }
 })
 
+test('CLI run: --run-prefix prepends the caller\'s stage token to the runId (so probes fall under it for a run-token-scoped sweep); a malformed prefix dies; absent ⇒ the bare runId format', () => {
+  const { proj, kiln } = makeFixture()
+  try {
+    lockFixture(proj, kiln)
+    // with --run-prefix: runId = <prefix>-<ISO>-<pid>; the evidence dir is named after it, and
+    // the run.json manifest records the same prefixed id (so a sweep by <prefix> reaps this run).
+    const tok = 'kbuild-abc-123'
+    const res = cli('run', proj, kiln, '--only', 'SC-001', '--run-prefix', tok)
+    assert.equal(res.status, 0, res.stderr)
+    const runId = res.stdout.match(/^RUN (\S+) HEAD [0-9a-f]{40}$/m)[1]
+    assert.ok(runId.startsWith(`${tok}-`), `the runId must begin with the prefix: ${runId}`)
+    assert.match(runId, new RegExp(`^${tok}-\\d{8}T\\d{6}Z-\\d+$`), 'prefix + compact-ISO + pid')
+    assert.equal(JSON.parse(readFileSync(join(kiln, 'evidence', runId, 'run.json'), 'utf8')).run_id, runId)
+    // absent ⇒ the prior bare format (backward compatible — no leading prefix segment)
+    const bare = cli('run', proj, kiln, '--only', 'SC-001').stdout.match(/^RUN (\S+) /m)[1]
+    assert.match(bare, /^\d{8}T\d{6}Z-\d+$/, 'no --run-prefix ⇒ the unchanged <ISO>-<pid> runId')
+    // a malformed prefix (a pkill -f / readdir pattern) is rejected — never an injection vector
+    const bad = cli('run', proj, kiln, '--only', 'SC-001', '--run-prefix', 'has space;rm')
+    assert.equal(bad.status, 1)
+    assert.match(bad.stderr, /--run-prefix may only contain \[A-Za-z0-9._-\]/)
+    const empty = cli('run', proj, kiln, '--only', 'SC-001', '--run-prefix', '')
+    assert.equal(empty.status, 1, 'an empty prefix is rejected (would be a no-op leading dash)')
+  } finally { rmSync(proj, { recursive: true, force: true }) }
+})
+
 test('CLI run: --expect-green gates the exit — green passes, red fails, a P2 probe can never satisfy it', () => {
   const { proj, kiln } = makeFixture()
   try {

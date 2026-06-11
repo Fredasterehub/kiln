@@ -233,6 +233,54 @@ export function gateDecision(reconciled, overallA, overallB) {
   return { judge: true, verdict: null, reason: `zero blocking findings and the analyst overall verdicts disagree (A: ${overallA}, B: ${overallB}) — ambiguous reconcile, the judge rules` }
 }
 
+// probeGate(surface, gate) — the §7 ui-slice probe gating predicate (tasks.md T2.1), a PURE
+// classifier the build spine consults AFTER the mechanical runnerGate has already disposed of the
+// reject paths a probe shares with every other check. The browser is a subprocess with a deadline,
+// never a service, and "the builder NEVER gets a browser" — so probe outcomes reach the spine ONLY
+// as the runnerGate verdict + the finalized run.json verification_class the freshness probe
+// transcribed. This fn names the surface-aware decision the contract demands (probe exit → reject /
+// degrade / pass) in ONE tested place, instead of leaving it implicit across kiln-law's exit-code
+// folding and runnerGate's verdict.
+//
+// The exit-code mapping is already MECHANICAL upstream and must not be second-guessed here
+// (re-deriving it from prose would be exactly the v2 mistake this phase repeals):
+//   · probe exit 1 (assert-fail) or 79 (timeout) → kiln-law folds the check 'red' → its declared
+//     flip is UNMET → kiln-law run exits non-zero → runnerGate returns 'red' → the spine
+//     auto-REJECTS before any reviewer (lawRedReject). probeGate is never consulted on 'red'.
+//   · missing/stale probe evidence → the §6 freshness arms fail → runnerGate returns 'stale' → the
+//     spine auto-REJECTS before any reviewer. probeGate is never consulted on 'stale'/'tamper'.
+//   · probe exit 78 (playwright absent) → kiln-law folds the check 'deferred' (exempt from flip
+//     accounting — deferred is NEVER green), the run can exit 0, and run.json is finalized
+//     verification_class:'static-only'. THIS is the honest-degradation case probeGate names.
+//   · every mapped probe executed → verification_class:'full'.
+//
+// So probeGate runs on the TRUSTWORTHY verdicts only ('proceed'|'red' carry verification_class; the
+// spine calls it on the proceed path) and returns { action, verification_class, reason }:
+//   · logic surface → { action:'pass' } unconditionally — a logic slice has no browser path, a probe
+//     never mapped to it, and verification_class is irrelevant. The browser law applies to ui/mixed.
+//   · ui/mixed + verification_class 'full' → { action:'pass' } — every mapped probe EXECUTED; the
+//     ui review is full-strength and reads the probe evidence (screenshot + console/net/axe logs).
+//   · ui/mixed + verification_class 'static-only' → { action:'degrade' } — a probe was honestly
+//     deferred (playwright absent → exit 78, an un-instantiated template, or --skip-probes). The
+//     run proceeds HONESTLY DEGRADED: the spine ledgers 'probe_unavailable', the ui review falls
+//     back to the v2 static checks, and verification_class is recorded end-to-end. A capability
+//     tier, NEVER an error, and NEVER silently green (the §7 honesty law).
+//   · ui/mixed + an unreadable/absent verification_class → { action:'reject' } — fail-closed: a
+//     trustworthy-looking run whose degradation cannot be PROVEN must not pass a ui gate as 'full'.
+//     (runnerGate already routes a missing class to 'stale', so the spine never reaches probeGate
+//     with one; this arm makes the predicate total and is unit-tested directly.)
+// reason is ledger-/brief-ready and empty on 'pass'.
+export function probeGate(surface, gate) {
+  const surf = (surface === 'ui' || surface === 'mixed') ? surface : 'logic'
+  const vc = (gate && typeof gate === 'object' && typeof gate.verification_class === 'string') ? gate.verification_class : ''
+  if (surf === 'logic') return { action: 'pass', verification_class: vc || 'full', reason: '' }
+  if (vc === 'full') return { action: 'pass', verification_class: 'full', reason: '' }
+  if (vc === 'static-only') {
+    return { action: 'degrade', verification_class: 'static-only', reason: 'a mapped probe was deferred (playwright absent → exit 78, an un-instantiated template, or --skip-probes) — no browser-probe evidence for this ui slice; the review falls back to the static checks, ledgered probe_unavailable, verification_class static-only (honest degradation, never silently green)' }
+  }
+  return { action: 'reject', verification_class: vc, reason: `the ui slice carries no readable verification_class (${JSON.stringify(vc)}) — whether probe verification was degraded cannot be proven; fail closed rather than pass a ui gate as fully verified` }
+}
+
 // rejectionClass(review) — the §3.3 master-signal classifier: Sentinel escalation keys on
 // LOGICAL findings only (genesis 3.3 semantics — a required mechanical|logical enum on every
 // reviewer finding). Classification of one REJECTED verdict:

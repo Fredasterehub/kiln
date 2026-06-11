@@ -260,13 +260,14 @@ test('tamper drill: kiln-law exit 2 → slice auto-REJECTED with NO reviewer spa
   }))
   assert.equal(count(calls, ':review:'), 0, 'a tampered slice must never reach a reviewer')
   assert.equal(count(calls, 'thoth:freshness'), 0, 'verify stopped the runner — no run_id, no probe')
-  const led = labelsOf(calls, 'thoth:ledger')
+  const led = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('tamper_auto_reject'))
   assert.equal(led.length, 4, '§5.1: every locked-path mismatch is ledgered — one event per trial cycle f0..f3')
   for (const l of led) {
     assert.match(l.prompt, /tamper_auto_reject/, 'the ledger event records the workflow auto-reject, not an agent judgment')
     assert.match(l.prompt, /tests\/acceptance\/sc-001\.sh/, 'the ledger event names the touched lock')
     assert.doesNotMatch(l.prompt, /posture_escalated/, 'tamper is mechanical — the Sentinel must not escalate')
   }
+  assert.equal(labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('posture_escalated')).length, 0, 'tamper is mechanical — the Sentinel must not escalate')
   assert.equal(count(calls, ':build:'), 4, 'initial build + MAX_REVIEW_FIXES fix builds')
   const fixBuild = labelsOf(calls, ':build:')[1].prompt
   assert.match(fixBuild, /tests\/acceptance\/sc-001\.sh/)
@@ -358,7 +359,7 @@ test('coverage gap unrecovered: after the re-ask still broken → ledgered slice
     if (label.startsWith('krs-one:slice-plan')) return { reasoning: 'r', slices: planOne } // always misses SC-002
   }))
   assert.equal(count(calls, ':build:'), 0, 'never build against broken coverage')
-  const ledger = labelsOf(calls, 'thoth:ledger')
+  const ledger = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('slice_plan_invalid'))
   assert.equal(ledger.length, 1)
   assert.match(ledger[0].prompt, /slice_plan_invalid/)
   assert.equal(result.built[0].qa, 'QA_FAIL')
@@ -379,7 +380,7 @@ test('replan: confirm says replan → ONE ledgered fresh slice-plan for the rema
   const replan = calls.find((c) => c.label === 'krs-one:slice-plan:M1:replan')
   assert.ok(replan, 'the remainder must be replanned under the :replan label')
   assert.match(replan.prompt, /DRIFTED/)
-  const ledger = labelsOf(calls, 'thoth:ledger')
+  const ledger = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('slice_plan_replanned'))
   assert.equal(ledger.length, 1)
   assert.match(ledger[0].prompt, /slice_plan_replanned/)
   assert.equal(count(calls, ':build:'), 2)
@@ -399,7 +400,7 @@ test('Sentinel ladder (§8 T3+ capability tier — codex on board): 2 logical re
   assert.ok(reviews[2].label.endsWith(':esc'))
   assert.match(reviews[2].prompt, /<escalated>/)
   assert.match(reviews[2].prompt, /model_reasoning_effort="high"/, 'the escalated codex leg runs at high effort')
-  const ledger = labelsOf(calls, 'thoth:ledger')
+  const ledger = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('posture_escalated'))
   assert.equal(ledger.length, 2, 'posture_escalated ledgered at the escalation AND at the split')
   assert.match(ledger[0].prompt, /posture_escalated/)
   assert.match(ledger[0].prompt, /escalate_feedback_source/)
@@ -434,7 +435,7 @@ test('Sentinel ladder (§8 T1/T2 capability tiers — no codex): escalation is a
   assert.ok(reviews[2].label.endsWith(':esc'), 'the escalated leg is still a distinct fresh-context feedback source')
   assert.match(reviews[2].prompt, /<escalated>/)
   assert.ok(!reviews[2].prompt.includes('codex exec'), 'the swap arm must not fire below T3 — no codex delegation')
-  const ledger = labelsOf(calls, 'thoth:ledger')
+  const ledger = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('posture_escalated'))
   assert.equal(ledger.length, 2, 'posture_escalated ledgered at the escalation AND at the split — tier-independent')
   assert.match(ledger[0].prompt, /escalate_feedback_source/)
   assert.match(ledger[1].prompt, /split_and_rebuild/)
@@ -445,7 +446,7 @@ test('Sentinel: mechanical rejections never escalate — full fix cycles, no led
   const { calls } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
     if (label.includes(':review:')) return { reasoning: 'r', verdict: 'REJECTED', law_green: true, tests_green: true, findings: [{ text: 'stray debug print', finding_class: 'mechanical' }] }
   }))
-  assert.equal(count(calls, 'thoth:ledger'), 0)
+  assert.equal(labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('posture_escalated')).length, 0, 'mechanical rejections never escalate — no posture ledger')
   assert.equal(count(calls, ':review:'), 4, 'f0..f3 — the full MAX_REVIEW_FIXES loop')
   assert.ok(labelsOf(calls, ':review:').every((c) => c.model === 'opus' && !c.label.endsWith(':esc')))
 })
@@ -517,7 +518,7 @@ test('ORCHESTRATOR RULING at the tribunal: a null/unusable goal-backward audit i
   assert.ok(audits[1].label.endsWith(':retry'), 'the re-ask is labeled :retry')
   assert.equal(count(calls, 'judge-dredd:verdict'), 0, 'the judge NEVER spawns on missing inputs (§3.2 condition is exhaustive; absent evidence is fail-closed)')
   assert.equal(count(calls, ':build:'), 2, 'no corrective build — an infrastructure failure is not a code defect a builder can fix')
-  const led = labelsOf(calls, 'thoth:ledger')
+  const led = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('goal_audit_failure'))
   assert.equal(led.length, 1)
   assert.match(led[0].prompt, /goal_audit_failure/)
   assert.equal(result.built[0].qa, 'QA_FAIL')
@@ -534,7 +535,7 @@ test('ORCHESTRATOR RULING at the tribunal: an audit that is unusable once but US
   }))
   assert.equal(audits, 2)
   assert.equal(count(calls, 'judge-dredd:verdict'), 0, 'usable inputs + agreeing analysts ⇒ computed verdict, no judge')
-  assert.equal(count(calls, 'thoth:ledger'), 0, 'a recovered audit ledgers nothing')
+  assert.equal(labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('goal_audit_failure')).length, 0, 'a recovered audit ledgers no failure')
   assert.equal(result.built[0].qa, 'QA_PASS')
   assert.doesNotMatch(result.built[0].findings.join(' '), /goal-audit-failure/)
 })
@@ -561,7 +562,7 @@ test('milestone gate single-slice row (§3.2): slice review + goal-backward IS t
   assert.equal(c.result.built[0].qa, 'QA_FAIL')
   assert.match(c.result.built[0].findings.join(' '), /goal-audit-failure/)
   assert.match(c.result.built[0].findings.join(' '), /fails closed/)
-  const led = labelsOf(c.calls, 'thoth:ledger')
+  const led = labelsOf(c.calls, 'thoth:ledger').filter((l) => l.prompt.includes('goal_audit_failure'))
   assert.equal(led.length, 1)
   assert.match(led[0].prompt, /goal_audit_failure/)
 })
@@ -588,7 +589,7 @@ test('milestone gate: the goal_backward posture dial OFF skips the audit with a 
   const posture = { milestone_gate: { goal_backward: false } }
   const { result, calls } = await runBuild({ ...baseArgs, posture }, mkRespond({ law: lawOne, plan: planOne }))
   assert.equal(count(calls, 'aristotle:goal-backward'), 0)
-  const led = labelsOf(calls, 'thoth:ledger')
+  const led = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('gate_skipped'))
   assert.equal(led.length, 1)
   assert.match(led[0].prompt, /gate_skipped/)
   assert.match(led[0].prompt, /goal_backward/)
@@ -733,4 +734,198 @@ test('lever 3: a blank base_sha (the HEAD probe failed when anchoring) never sta
   assert.equal(labelsOf(calls, 'krs-one:slice-plan:M2').length, 1, 'M2 planned exactly once — synchronously, the pipeline never started')
   assert.equal(labelsOf(calls, 'thoth:head:M2:pipeline-check').length, 0, 'no consume-time check — there was no pipelined plan to consume')
   assert.equal(invalidatedLedger, false, 'a never-started pipeline produces no invalidation ledger')
+})
+
+// ── P3 T2: ui-slice probe gating (§7 default-fail / honest-degrade) ──────────────────────────────
+// A ui milestone so surfaceOf() ⇒ 'ui'; one probe-kind SC mapped to the one slice. The ui review
+// leg is the codex wrapper (sonnet) — Opus builds, Codex reviews — so :review: calls are sonnet.
+const uiMilestone = (over = {}) => milestone({ surface: 'ui', ...over })
+const lawProbe = [{ id: 'SC-001', milestone: 'M1', kind: 'probe' }]
+const planProbe = [{ objective: 'render the hero page', files: ['index.html'], constraints: '', done_when: 'the probe SC passes', sc_ids: ['SC-001'] }]
+const uiProbeState = { milestones: [uiMilestone()], law: lawProbe, plan: planProbe }
+
+test('T2.1 ui probe gating — FULL: every mapped probe EXECUTED (verification_class full) → the slice proceeds, NO probe_unavailable ledger, and the ui reviewer is told the probe evidence exists and must be read', async () => {
+  const { result, calls } = await runBuild(baseArgs, mkRespond(uiProbeState))
+  assert.equal(count(calls, ':review:'), 1, 'a fully-verified ui slice reaches the reviewer')
+  assert.equal(labelsOf(calls, ':review:')[0].model, 'sonnet', 'ui review is the cross-family codex (sonnet wrapper) leg')
+  assert.equal(labelsOf(calls, 'thoth:ledger').filter((l) => /probe_unavailable|verification_degraded/.test(l.prompt)).length, 0, 'a full-verification run ledgers no degradation')
+  assert.equal(result.built[0].qa, 'QA_PASS')
+  const review = labelsOf(calls, ':review:')[0].prompt
+  assert.match(review, /verification_class is 'full': every mapped probe EXECUTED/)
+})
+
+test('T2.1 ui probe gating — DEGRADE (exit 78 / deferred → static-only): the slice proceeds HONESTLY DEGRADED, ledgers probe_unavailable (the §7 capability event, surface recorded), and the ui review falls back to the static checks — never silently green', async () => {
+  const { result, calls } = await runBuild(baseArgs, mkRespond(uiProbeState, (label) => {
+    if (label.startsWith('thoth:freshness')) return { ...freshOk, manifest_verification_class: 'static-only' }
+  }))
+  assert.equal(count(calls, ':review:'), 1, 'degradation is the capability tier, not an error — the trial proceeds')
+  const pu = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('probe_unavailable'))
+  assert.equal(pu.length, 1, 'a ui slice that lost its browser-probe evidence ledgers probe_unavailable (NOT the generic verification_degraded)')
+  assert.match(pu[0].prompt, /"verification_class":"static-only"/)
+  assert.match(pu[0].prompt, /"surface":"ui"/, 'the probe_unavailable event records the surface')
+  assert.equal(labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('verification_degraded')).length, 0, 'a ui slice uses probe_unavailable, never the logic-surface generic event')
+  const review = labelsOf(calls, ':review:')[0].prompt
+  assert.match(review, /VERIFICATION DEGRADED \(verification_class: static-only\)/)
+  assert.match(review, /A deferral is never green/)
+  assert.match(review, /Screenshot rubric: SKIPPED this run/, 'a static-only run has no screenshot to judge — the binary rubric is gated out')
+  assert.equal(result.built[0].qa, 'QA_PASS')
+})
+
+test('T2.1 probe exit 1/79 (assert-fail / timeout) folds to RED upstream → slice auto-REJECTED before any reviewer (the exit code is the verdict — probeGate is never consulted on a red gate)', async () => {
+  // kiln-law folds a probe exit 1/79 to a red check ⇒ its declared flip is UNMET ⇒ kiln-law run
+  // exits non-zero ⇒ runnerGate returns 'red'. The runner agent transcribes the FLIP_UNMET id.
+  const { result, calls } = await runBuild(baseArgs, mkRespond(uiProbeState, (label) => {
+    if (label.startsWith('asimov:runner')) return { ...runnerOk, law_run_exit: 1, flip_unmet: ['SC-001'] }
+  }))
+  assert.equal(count(calls, ':review:'), 0, 'a probe that asserted-failed or timed out makes the Law RED — no reviewer is spent')
+  assert.equal(labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('law_red_auto_reject')).length, 3, 'every red trial is ledgered (f0..f2; the split stops the slice)')
+  assert.equal(labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('probe_unavailable')).length, 0, 'a red probe is a defect, not a capability degradation — never probe_unavailable')
+  assert.equal(result.built[0].qa, 'QA_FAIL')
+})
+
+test('T2.1 missing/stale probe evidence → stale gate → slice auto-REJECTED before any reviewer (default-fail; probeGate never reached)', async () => {
+  const { result, calls } = await runBuild(baseArgs, mkRespond(uiProbeState, (label) => {
+    if (label.startsWith('thoth:freshness')) return { ...freshOk, results_jsonl_exists: false } // no probe evidence file at all
+  }))
+  assert.equal(count(calls, ':review:'), 0, 'missing probe evidence is structurally impossible to approve — no reviewer')
+  assert.equal(result.built[0].qa, 'QA_FAIL')
+  const fixBuild = labelsOf(calls, ':build:')[1].prompt
+  assert.match(fixBuild, /Evidence gate failed/)
+})
+
+test('T2.2 ui reviewer brief: probe evidence paths + SCREENSHOT judged by BINARY RUBRIC only (no numeric aesthetic score), and the reviewer RE-RUNS the slice\'s mapped probe SCs itself (independent-rerun floor)', async () => {
+  const { calls } = await runBuild(baseArgs, mkRespond(uiProbeState))
+  const review = labelsOf(calls, ':review:')[0].prompt
+  // probe evidence paths
+  assert.match(review, /\/tmp\/kiln-x\/\.kiln\/evidence\/RUN1\//, 'the evidence dir is named')
+  assert.match(review, /probe-<SC>\.json/, 'the probe result file is named')
+  // screenshot binary rubric (the §7 rule)
+  assert.match(review, /Screenshot rubric \(binary ONLY\)/)
+  assert.match(review, /NEVER assign a numeric or aesthetic score/)
+  assert.match(review, /VLMs rank reliably but score unreliably/)
+  // independent rerun of the mapped probe SCs
+  assert.match(review, /RE-RUN the slice's mapped probe SCs via the kiln-law rerun/)
+  assert.match(review, /node \/plug\/scripts\/kiln-law\.mjs run \/tmp\/kiln-x \/tmp\/kiln-x\/\.kiln --only SC-001/)
+  // the builder-never-browser law restated for the reviewer
+  assert.match(review, /NEVER open a browser or drive Playwright yourself/)
+  assert.match(review, /a subprocess with a deadline, never a service/)
+})
+
+// ── P3 T2.3: stage-level browser sweeps (the OUTER bracket — pre-flight + unconditional end) ──────
+
+// The build's stage-scoped browser kill token — minted once per run as kbuild-<base36>-<rand>
+// (build.js BUILD_RUN_TOKEN). Both stage sweeps and every kiln-law --run-prefix carry it, so a
+// sweep reaps ONLY this build's browser trees, never a concurrent Kiln run's (the reviewer's
+// MAJOR / discipline-spec "post-check cleanup is run-token scoped").
+const BUILD_TOKEN_RE = /kbuild-[a-z0-9]+-[a-z0-9]+/
+
+test('T2.3 stage sweeps: a PRE-FLIGHT sweep fires at build start and an UNCONDITIONAL sweep at build end — both run kiln-probe sweep scoped to THIS build\'s run token (never the whole namespace, never blanket pkill), both LEDGERED browser_sweep with the token', async () => {
+  const { calls } = await runBuild(baseArgs, mkRespond())
+  const sweeps = labelsOf(calls, 'sentinel:sweep')
+  assert.equal(sweeps.length, 2, 'exactly two stage sweeps: pre-flight + stage-end')
+  assert.ok(sweeps[0].label.endsWith(':pre-flight'), 'the first sweep is the pre-flight')
+  assert.ok(sweeps[1].label.endsWith(':stage-end'), 'the second sweep is the unconditional stage-end')
+  // both sweeps must carry the SAME token (one stage, one token)
+  const t0 = sweeps[0].prompt.match(BUILD_TOKEN_RE)
+  assert.ok(t0, 'the pre-flight sweep is scoped to a kbuild- run token')
+  const token = t0[0]
+  for (const s of sweeps) {
+    assert.equal(s.model, 'haiku', 'the sweep is a mechanical haiku leg')
+    assert.match(s.prompt, new RegExp(`node /plug/scripts/kiln-probe\\.mjs sweep ${token}\\b`), 'it runs kiln-probe sweep with THIS build\'s run-token prefix — never bare')
+    assert.doesNotMatch(s.prompt, /sweep['"`\s]*\n/, 'never a bare (whole-namespace) sweep')
+    assert.match(s.prompt, /scopes the sweep to THIS build's own browser trees ONLY/, 'run-token scoped, never a concurrent run')
+    assert.match(s.prompt, /blanket 'pkill -f chrome' is forbidden/)
+  }
+  const led = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('browser_sweep'))
+  assert.equal(led.length, 2, 'both sweeps are ledgered (§3.5 — every browser-lifecycle action is an event)')
+  assert.match(led[0].prompt, /"when":"pre-flight"/)
+  assert.match(led[0].prompt, new RegExp(`"token":"${token}"`), 'the ledger records the scoping token')
+  assert.match(led[1].prompt, /"when":"stage-end"/)
+})
+
+test('T2.3 run-token scoping: every kiln-law run (the runner AND the reviewer rerun) threads the SAME --run-prefix as the sweeps — so every probe this build spawns falls under the token the sweep reaps', async () => {
+  const { calls } = await runBuild(baseArgs, mkRespond(uiProbeState))
+  const token = labelsOf(calls, 'sentinel:sweep')[0].prompt.match(BUILD_TOKEN_RE)[0]
+  const runner = labelsOf(calls, 'asimov:runner')[0].prompt
+  assert.match(runner, new RegExp(`kiln-law\\.mjs run [^\\n]*--run-prefix ${token}\\b`), 'the deterministic runner names this build\'s run token on kiln-law run')
+  const review = labelsOf(calls, ':review:')[0].prompt
+  assert.match(review, new RegExp(`kiln-law\\.mjs run [^\\n]*--run-prefix ${token}\\b`), 'the reviewer\'s independent rerun threads the SAME token, so its probe trees are swept by the same stage bracket')
+})
+
+test('T2.3 ordering: the pre-flight sweep precedes the first builder, and the stage-end sweep is the FINAL agent call (the OUTER bracket around every probe spawn)', async () => {
+  const { calls } = await runBuild(baseArgs, mkRespond())
+  const labels = calls.map((c) => c.label)
+  const preFlight = labels.indexOf('sentinel:sweep:pre-flight')
+  const firstBuild = labels.findIndex((l) => l.includes(':build:'))
+  const lastGate = Math.max(...labels.map((l, i) => (l.startsWith('aristotle:goal-backward') || l.startsWith('judge-dredd') || l.startsWith('ken:qa') || l.startsWith('ryu:qa')) ? i : -1))
+  const stageEnd = labels.indexOf('sentinel:sweep:stage-end')
+  assert.ok(preFlight > -1 && firstBuild > -1 && preFlight < firstBuild, 'the pre-flight sweep runs before the first builder could spawn a probe')
+  assert.ok(stageEnd > -1 && lastGate > -1 && stageEnd > lastGate, 'the stage-end sweep runs after the last milestone gate')
+})
+
+test('T2.3 the stage-end sweep is UNCONDITIONAL — it still fires when the build ends in QA_FAIL (a crashed/aborted probe run is exactly when leaked browsers must be reaped)', async () => {
+  // drive a QA_FAIL via a split (logical rejections) on a single-slice ui milestone
+  const { result, calls } = await runBuild(baseArgs, mkRespond(uiProbeState, (label) => {
+    if (label.includes(':review:')) return rejectLogical
+  }))
+  assert.equal(result.built[0].qa, 'QA_FAIL')
+  assert.equal(labelsOf(calls, 'sentinel:sweep').filter((s) => s.label.endsWith(':stage-end')).length, 1, 'the stage-end sweep fires even on a failed build')
+  assert.equal(labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('browser_sweep')).length, 2, 'both sweeps ledgered regardless of verdict')
+})
+
+test('T2.3 floor gates skip the sweep — an ungated early return (no pluginRoot) spawns no agent at all, so there is no browser stage to bracket', async () => {
+  const { calls } = await runBuild({ kilnDir: '/tmp/k/.kiln', projectPath: '/tmp/k' }, mkRespond())
+  assert.equal(calls.length, 0, 'the pluginRoot floor returns before any agent — including the sweeper (the CLI would be unlocatable)')
+})
+
+// runBuildCapturing — like runBuild but it surfaces the recorded calls EVEN WHEN the workflow body
+// throws. The reviewer's CRITICAL: the stage-end sweep must be in the cleanup/finally so any throw
+// after pre-flight still reaps this build's browsers (a crash mid-probe is exactly when leaks
+// survive). Returns { thrown, calls }.
+async function runBuildCapturing(args, respond) {
+  const calls = []
+  const agent = async (prompt, opts) => {
+    const label = (opts && opts.label) || ''
+    const model = (opts && opts.model) || ''
+    calls.push({ label, prompt, model })
+    return respond(label, prompt, model)
+  }
+  const stubs = {
+    args, phase: () => {}, log: () => {}, agent,
+    parallel: async (thunks) => Promise.all(thunks.map((t) => Promise.resolve().then(t).catch(() => null))),
+    pipeline: async () => [], budget: undefined, workflow: async () => null,
+  }
+  const keys = Object.keys(stubs)
+  const run = new AsyncFunction(...keys, wfBody)
+  let thrown = null
+  try { await run(...keys.map((k) => stubs[k])) } catch (e) { thrown = e }
+  return { thrown, calls }
+}
+
+test('T2.3 CRITICAL: a throw AFTER pre-flight (a post-preflight parse/agent crash) still runs the stage-end sweep — it lives in finally, never after the loop, so no throw can skip the OUTER browser bracket', async () => {
+  // crash the build mid-milestone: the runner step throws on its first call (a post-preflight
+  // parse crash, exactly the reviewer's synthetic). The pre-flight sweep has already run; the
+  // milestone loop then throws; the finally MUST still fire the stage-end sweep.
+  const boom = new Error('synthetic post-preflight crash')
+  const { thrown, calls } = await runBuildCapturing(baseArgs, mkRespond(uiProbeState, (label) => {
+    if (label.startsWith('asimov:runner')) throw boom
+  }))
+  assert.equal(thrown, boom, 'the original error propagates out unmasked')
+  const sweeps = labelsOf(calls, 'sentinel:sweep')
+  assert.ok(sweeps.some((s) => s.label.endsWith(':pre-flight')), 'the pre-flight sweep ran before the crash')
+  assert.ok(sweeps.some((s) => s.label.endsWith(':stage-end')), 'the stage-end sweep STILL ran via finally despite the throw (the reviewer\'s CRITICAL)')
+  // and it was the run-token-scoped sweep, not a bare one
+  const end = sweeps.find((s) => s.label.endsWith(':stage-end'))
+  assert.match(end.prompt, new RegExp(`kiln-probe\\.mjs sweep ${BUILD_TOKEN_RE.source}\\b`), 'the finally sweep is still run-token scoped')
+})
+
+test('T2.3 the stage-end sweep failing in finally never masks the real build error (cleanup is itself guarded)', async () => {
+  const boom = new Error('the real build crash')
+  // the build crashes mid-milestone AND the stage-end sweeper itself rejects — the ORIGINAL crash
+  // must still be what propagates (a swallowed primary error is a debugging nightmare).
+  const { thrown } = await runBuildCapturing(baseArgs, mkRespond(uiProbeState, (label) => {
+    if (label.startsWith('asimov:runner')) throw boom
+    if (label === 'sentinel:sweep:stage-end') throw new Error('sweep also failed')
+  }))
+  assert.equal(thrown, boom, 'the finally guards the sweep so the primary error survives unmasked')
 })
