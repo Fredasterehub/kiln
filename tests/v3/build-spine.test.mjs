@@ -813,11 +813,12 @@ test('T2.2 ui reviewer brief: probe evidence paths + SCREENSHOT judged by BINARY
 
 // ── P3 T2.3: stage-level browser sweeps (the OUTER bracket — pre-flight + unconditional end) ──────
 
-// The build's stage-scoped browser kill token — minted once per run as kbuild-<base36>-<rand>
-// (build.js BUILD_RUN_TOKEN). Both stage sweeps and every kiln-law --run-prefix carry it, so a
-// sweep reaps ONLY this build's browser trees, never a concurrent Kiln run's (the reviewer's
-// MAJOR / discipline-spec "post-check cleanup is run-token scoped").
-const BUILD_TOKEN_RE = /kbuild-[a-z0-9]+-[a-z0-9]+/
+// The build's stage-scoped browser kill token — kbuild-<args.runToken | projectPath-hash>
+// (build.js BUILD_RUN_TOKEN; Date.now/Math.random are forbidden in workflow scripts, so the
+// conductor mints cross-run uniqueness via args.runToken). Both stage sweeps and every kiln-law
+// --run-prefix carry it, so a sweep reaps ONLY this build's browser trees, never a concurrent
+// Kiln run's (the reviewer's MAJOR / discipline-spec "post-check cleanup is run-token scoped").
+const BUILD_TOKEN_RE = /kbuild-[A-Za-z0-9._-]+/
 
 test('T2.3 stage sweeps: a PRE-FLIGHT sweep fires at build start and an UNCONDITIONAL sweep at build end — both run kiln-probe sweep scoped to THIS build\'s run token (never the whole namespace, never blanket pkill), both LEDGERED browser_sweep with the token', async () => {
   const { calls } = await runBuild(baseArgs, mkRespond())

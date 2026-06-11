@@ -104,3 +104,31 @@ test('timeout proof: an infinite async microtask loop is killed and reported as 
     assert.ok(r.timedOut, 'the harness must kill the spinning child at the deadline and report a TIMEOUT failure')
   })
 })
+
+test('determinism-poison proof: Date.now() / Math.random() / argless new Date() fail the dry-run exactly like the Workflow runtime (DOGFOOD FINDING 3)', async () => {
+  await inSandbox(async (dir) => {
+    // The exact blind spot the live dogfood hit: plain node allows Date.now, the runtime forbids
+    // it — build.js crashed in 27ms in the real engine after a green smoke. Each violation class
+    // must now fail in the harness too.
+    const cases = [
+      ['date-now.js', 'const t = Date.now()', /Date\.now\(\) is unavailable/],
+      ['math-random.js', 'const r = Math.random()', /Math\.random\(\) is unavailable/],
+      ['new-date.js', 'const d = new Date()', /new Date\(\) is unavailable/],
+    ]
+    for (const [name, line, re] of cases) {
+      const fixture = [`export const meta = { name: 'kiln-poison-${name}' }`, line].join('\n')
+      const probeFile = join(dir, name)
+      writeFileSync(probeFile, fixture)
+      const r = dryRun(probeFile, dir)
+      assert.ok(!r.timedOut, `${name}: must fail fast, not hang`)
+      assert.ok(r.failure, `${name}: the poisoned global must surface a failure`)
+      assert.match((r.failure && r.failure.message) || '', re, `${name}: wrong failure: ${JSON.stringify(r.failure)}`)
+    }
+    // and the legal form stays legal: new Date(value) must NOT trip the poison
+    const legal = ["export const meta = { name: 'kiln-legal-date' }", "const d = new Date('2026-06-11T00:00:00Z'); if (d.getUTCFullYear() !== 2026) throw new Error('bad date')"].join('\n')
+    const legalFile = join(dir, 'legal-date.js')
+    writeFileSync(legalFile, legal)
+    const ok = dryRun(legalFile, dir)
+    assert.ok(!ok.failure && !ok.timedOut, `new Date(value) must remain legal, got: ${JSON.stringify(ok.failure)}`)
+  })
+})

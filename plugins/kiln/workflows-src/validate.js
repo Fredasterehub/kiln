@@ -37,7 +37,11 @@ const pluginRoot = A.pluginRoot
 //    sweeps reap exactly this stage's survivors and nothing else (never a concurrent Kiln run's, let
 //    alone the operator's own browser — blanket pkill -f chrome stays forbidden). Inert charset
 //    (it becomes a pkill -f / readdir pattern). ──
-const VALIDATE_RUN_TOKEN = `kval-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`.replace(/[^A-Za-z0-9._-]/g, '-')
+//    Date.now()/Math.random are FORBIDDEN in workflow scripts (runtime determinism guard) — token
+//    from args.runToken (conductor-minted) with a deterministic projectPath-hash fallback; see the
+//    build.js token note for the uniqueness argument. ──
+const valTokenHash = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; return h.toString(36) }
+const VALIDATE_RUN_TOKEN = `kval-${String(A.runToken || valTokenHash(String(projectPath))).replace(/[^A-Za-z0-9._-]/g, '-')}`
 
 // ── The Tier-2 traversal deadline (BLUEPRINT §7 / discipline-spec "≤10 min/Tier-2 session") — a
 //    CAPABILITY-ENFORCED hard cap (ORCHESTRATOR RULING). A workflow cannot CANCEL a spawned agent, so
@@ -445,18 +449,17 @@ try {
       const ids = argusCriteria.filter((c) => c && c.browser_only === true && typeof c.id === 'string').map((c) => c.id)
       return Array.from(new Set(ids))
     })()
-    // The §7 ≤10-min session cap, enforced by the WORKFLOW (not the prompt): each pass races the
-    // remaining budget. A timed-out pass is discarded as a sentinel → folds 'static-only' (no proof of
-    // a clean traversal) and we stop launching further passes; the stage-end sweep reaps its browser.
-    const traversalStart = Date.now()
+    // The §7 ≤10-min session cap, enforced per pass by the WORKFLOW deadline race — cumulative
+    // wall-clock tracking is impossible in-script (Date.now is forbidden by the runtime determinism
+    // guard), so the CUMULATIVE enforcer is the browser LEASE: its watchdog kills every browser at
+    // lease expiry no matter how many passes are in flight. A timed-out pass is discarded as a
+    // sentinel → folds 'static-only' and we stop launching further passes; the sweep reaps survivors.
     const passes = []
     let deadlineHit = false
     for (const sfx of traversalSuffixes) {
-      const remaining = TRAVERSAL_DEADLINE_MS - (Date.now() - traversalStart)
-      if (remaining <= 0) { deadlineHit = true; break } // session budget already spent — do not launch another browser pass
       const t = await withDeadline(
         () => agent(traversalPrompt(uiScs), { label: `argus:traversal${sfx}`, phase: 'The Traversal', model: 'opus', schema: TRAVERSAL_SCHEMA }),
-        remaining
+        TRAVERSAL_DEADLINE_MS
       )
       if (t === TRAVERSAL_TIMEOUT) {
         // A deadline is a DEGRADATION (static-only ceiling → PARTIAL), never a UI DEFECT (→ FAILED):

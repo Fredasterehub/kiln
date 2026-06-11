@@ -39,10 +39,14 @@ const pluginRoot = A.pluginRoot
 //    token here and threads it as the kiln-law `--run-prefix` into EVERY check run — every probe
 //    kiln-law spawns is named kiln-pw-<runId>-<SC>-<entropy> and its runId now begins with this
 //    token, so `kiln-probe sweep <BUILD_RUN_TOKEN>` matches exactly this build's probe trees and
-//    nothing else. Charset is the inert token charset (it becomes a pkill -f / readdir pattern);
-//    Date.now()+entropy is unique-enough for one stage (the per-probe entropy tail still guarantees
-//    per-spawn uniqueness downstream). The reviewer's independent rerun threads the same prefix. ──
-const BUILD_RUN_TOKEN = `kbuild-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`.replace(/[^A-Za-z0-9._-]/g, '-')
+//    nothing else. Charset is the inert token charset (it becomes a pkill -f / readdir pattern).
+//    Date.now()/Math.random are FORBIDDEN in workflow scripts (runtime determinism guard — breaks
+//    resume), so the token comes from args.runToken (the conductor mints one per run via
+//    kiln-state, which runs in agents where clocks are legal) with a deterministic projectPath-hash
+//    fallback: cross-run uniqueness is the conductor's job, and concurrent runs of ONE project are
+//    unsupported by the state contract anyway. The reviewer's independent rerun threads the same prefix. ──
+const tokenHash = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; return h.toString(36) }
+const BUILD_RUN_TOKEN = `kbuild-${String(A.runToken || tokenHash(String(projectPath))).replace(/[^A-Za-z0-9._-]/g, '-')}`
 
 // ── The Gauge posture (BLUEPRINT §3.2/§3.3) — passed by the conductor from state.json. Accepts an
 //    object or a JSON-encoded string; anything else ⇒ null ⇒ every dial below falls back to its

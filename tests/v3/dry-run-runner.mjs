@@ -45,6 +45,24 @@ function makeStubs(sandbox) {
     },
     budget: undefined,
     workflow: async () => null,
+    // Determinism poison — mirrors the Workflow runtime's guard (DOGFOOD FINDING 3: plain node
+    // allows Date.now/Math.random, so the smoke test passed scripts the real runtime rejects).
+    // Shadowed via the same parameter mechanism as the other globals: Date.now(), Math.random(),
+    // and argless `new Date()` throw exactly like the engine; new Date(value) stays legal.
+    Date: new Proxy(Date, {
+      construct(target, dateArgs) {
+        if (dateArgs.length === 0) throw new Error('new Date() is unavailable in workflow scripts (breaks resume)')
+        return new target(...dateArgs)
+      },
+      get(target, prop) {
+        if (prop === 'now') return () => { throw new Error('Date.now() is unavailable in workflow scripts (breaks resume)') }
+        const v = target[prop]
+        return typeof v === 'function' ? v.bind(target) : v
+      },
+    }),
+    Math: Object.freeze(Object.assign(Object.create(Math), {
+      random: () => { throw new Error('Math.random() is unavailable in workflow scripts (breaks resume)') },
+    })),
   }
 }
 
