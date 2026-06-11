@@ -272,8 +272,24 @@ Pass the absolute `$PLUGIN_ROOT`-resolved paths, the operator's `testing_rigor` 
   `pluginRoot` is the same absolute `$PLUGIN_ROOT` you resolved in §0 — a launched Workflow cannot
   see `${CLAUDE_PLUGIN_ROOT}` (it is unset there), so build.js workers need the resolved path passed
   in to Read plugin reference files by absolute path.
-- **Validate** also takes `designPresent` — `true` if the architecture stage wrote a `design/`
-  directory, else `false`.
+- **Validate** also takes `designPresent`, `pluginRoot`, and `posture`.
+  `designPresent` is `true` if the architecture stage wrote a `design/` directory (a HINT only —
+  validate.js self-detects `design/` from disk, so a wrong/absent hint never mis-routes the design
+  QA leg). `pluginRoot` is the same absolute `$PLUGIN_ROOT` from §0 — LOAD-BEARING here: it locates
+  the `kiln-law` CLI (the deterministic Law floor — fresh install, then `verify` + `run` FULL +
+  `suite` as the real backstop) and `kiln-probe` (the Tier-2 scripted browser path + the token sweeps
+  + the browser lease). Pass the **whole `posture` object** (`state.json.posture`) — validate.js reads
+  its `validate.adversarial_pass` / `validate.second_family` dials (the D8=2 extras: a second
+  adversarial traversal pass and a second cross-family goal-backward auditor); omit it and validate
+  runs the floor without the extras. **Playwright MCP is NOT driven by autonomous validate** (an MCP
+  server is a persistent browser service, which §7 forbids in-loop) — there is no `playwrightMcp` arg.
+  The Tier-2 traversal uses the scripted, lease-gated, one-shot `kiln-probe` ORACLE only; if playwright
+  is absent on disk the UI criteria degrade honestly to `PARTIAL_PASS_STATIC_ONLY` (verification_class
+  recorded), never silently green. MCP stays a doctor-detected capability for the operator's
+  INTERACTIVE/manual visual QA, named as the manual alternative in the emitted `visual_qa_checklist`.
+  The **in-loop Tier-2 browser traversal is the v3 repeal of the v2 ban** — it runs INSIDE validate as
+  one bounded, swept, lease-gated evaluator (the browser is a subprocess with a deadline, never a
+  service); the out-of-loop `visual_qa_checklist` still ships as the optional operator re-check below.
 
 Validate failures feed corrections back to Build while `correction_cycle < 3`, then escalate to the
 operator. Use the matching transition lines from `brand.md` for each event.
@@ -289,15 +305,36 @@ theater; do **not** re-narrate worker progress here (it would duplicate the tree
 The build duo names come from `data/duo-pool.json` if you want to name them in the build transition.
 
 ### Resource & visual-verification discipline (load-bearing — a leaked browser OOM'd the box once)
-- **Autonomous stages NEVER spawn a browser.** No Playwright/Chromium inside any workflow loop — they
-  leak processes and exhaust memory. Reviewers (the-curator, hephaestus) and smoke checks verify
-  **statically** (read the code; parse HTML; `node --check`). This holds for every UI build, any size.
-- **Live visual verification, when wanted, is a single one-shot step OUTSIDE the loops** — one
-  screenshot pass with explicit teardown (the conductor or operator), never per-milestone, never in a
-  fan-out. Treat it as an optional post-validate check, not part of the build/validate workflows.
-  `validate.js` emits a `visual_qa_checklist` (serve over http — never `file://`; exercise every wired
-  interaction; traverse empty/loading/error/success states; capture console errors; axe-core a11y; ≥2
-  viewports; scroll-and-capture each scroll-reveal section) — run THAT as the one-shot pass, then tear down.
+- **The browser is a subprocess with a deadline, never a service (BLUEPRINT §7).** The v2 blanket
+  ban is repealed, but the discipline is absolute: no browser process may outlive the check that
+  spawned it; every spawn carries a unique kill token; pre/post **token-scoped** sweeps bracket every
+  stage that can spawn one (blanket `pkill -f chrome` stays forbidden — it would reap the operator's
+  own browser). The leaks that OOM'd the box all require a long-lived holder process; one-shot
+  launch→assert→close probes under a hard `timeout` cannot reproduce them.
+- **Builders and reviewers NEVER drive a browser themselves.** UI verification is mediated by the
+  bounded `kiln-probe` / `kiln-law run` subprocesses (build's Tier-1 per-slice probes) and by
+  validate's single Tier-2 evaluator — agents read EVIDENCE files (screenshot + console/net/axe logs
+  + exit code), they do not open Chromium. Static checks (read the code; parse HTML; `node --check`)
+  still carry the per-slice review; the probe is the executable oracle beside them.
+- **The Tier-2 live traversal lives INSIDE validate** (and, posture-gated, per ui milestone in
+  build) — ONE fresh cross-family evaluator whose ≤10-minute cap is enforced on the **CAPABILITY**, not
+  on an un-cancelable agent: before the traversal the workflow takes a `kiln-probe` browser LEASE
+  (token `kval-…`, the traversal budget in seconds, a detached self-terminating watchdog that sweeps +
+  deletes the lease at expiry), and every scripted probe carries `--lease <token>` so it REFUSES (exit
+  77 LEASE_EXPIRED) once the lease expires. An evaluator alive past the deadline can do no further
+  browser work. A `withDeadline` timer is the belt to that — it stops the workflow AWAITING a wedged
+  evaluator (folds the pass static-only) — and the stage finally RELEASES the lease (kill watchdog +
+  immediate token sweep). The scripted one-shot `kiln-probe` is the BOUNDED ORACLE (each criterion =
+  one launch→assert→close process, hard-killed at 90s, swept by the `kval-…` token) and is the ONLY
+  browser path autonomous validate takes — **Playwright MCP is NOT driven in-loop** (an MCP server is a
+  persistent browser service §7 forbids inside the loop); it stays a doctor-detected capability for the
+  operator's INTERACTIVE/manual visual QA (named in the `visual_qa_checklist`). No scripted oracle on
+  disk ⇒ honest degradation to `PARTIAL_PASS_STATIC_ONLY` (verification_class recorded), never silently green.
+- **The out-of-loop one-shot pass still ships as an OPTIONAL operator re-check.** `validate.js`
+  emits a `visual_qa_checklist` (serve over http — never `file://`; exercise every wired interaction;
+  traverse empty/loading/error/success states; capture console errors; axe-core a11y; ≥2 viewports;
+  scroll-and-capture each scroll-reveal section) — run THAT as an independent human re-check when
+  wanted, then tear down. It complements the in-loop Tier-2 traversal; it no longer substitutes for it.
 - **Right-size the build to the deliverable.** Architecture must not over-decompose: a one-page site
   is ONE milestone; reserve many milestones only for genuinely independent components. The UI path
   (`uiBuild`) handles anything from a one-pager to a full frontend — the milestone *count* scales with

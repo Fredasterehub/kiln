@@ -121,6 +121,10 @@ test('probe spec: serve_cmd⇄base_url pair, and serve_dir only without serve_cm
 const probeCli = (args, env = {}) => spawnSync(process.execPath, [PROBE_CLI, ...args], { encoding: 'utf8', env: { ...process.env, ...env } })
 const lawCli = (args, env = {}) => spawnSync(process.execPath, [LAW_CLI, ...args], { encoding: 'utf8', env: { ...process.env, ...env } })
 const pgrepf = (pattern) => (spawnSync('pgrep', ['-f', pattern], { encoding: 'utf8' }).stdout || '').split('\n').filter(Boolean)
+// leaderCmdlineLive(pid) — truthy iff <pid> is a live process (readable, non-empty /proc cmdline; a
+// dead/zombie process has neither). Per-PID liveness for the mcp-sweep drill, where several decoys share
+// argv0/path shapes and only their exact PIDs distinguish them.
+const leaderCmdlineLive = (pid) => { try { return readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0+$/, '') !== '' } catch { return false } }
 
 // The FAKE playwright — a CJS module the probe-template resolves from the project's
 // node_modules exactly like a user install. Modes via KILN_FAKE_PW_MODE:
@@ -399,6 +403,75 @@ test('kiln-probe sweep: targeted by token namespace — kills and removes ONLY t
   }
 })
 
+test('kiln-probe mcp-sweep: reaps ONLY the orphaned MCP browser (browser-binary arg0 + ms-playwright/mcp- profile) — never the operator\'s own Chrome, never the kiln-pw- oracle, never a shell that merely names the path; exits 0 idempotently, takes no args', async () => {
+  // The host-configured Playwright MCP browser is the one path the kiln-pw- token sweep cannot reach:
+  // its profile lives under ~/.cache/ms-playwright/mcp-<channel>-<hash> (verified on box), not a kiln
+  // token. mcp-sweep is the process-level backstop behind the evaluator's browser_close. It must be
+  // DOUBLY gated — kill only a process whose arg0 is a browser binary AND whose --user-data-dir points
+  // into ms-playwright/mcp-, so it can never reap the operator's shell, an editor, or our own command.
+  const tag = `${process.pid}${Date.now().toString(36)}`
+  // Decoys are node sleepers. argv0 spoofs /proc/<pid>/cmdline[0] (verified) so a decoy can present as a
+  // real `chrome-headless-shell` exactly as @playwright/mcp launches it; the --user-data-dir rides in
+  // argv exactly as a real browser keeps it. browser:true → arg0 is a browser binary; browser:false →
+  // arg0 is plain node (a stand-in for a shell/editor/grep that merely mentions the path in its args).
+  const decoy = (udd, { browser, arg0 } = {}) => {
+    const opts = { detached: true, stdio: 'ignore' }
+    if (arg0) opts.argv0 = arg0 // spoof an arbitrary arg0 (e.g. the crashpad helper)
+    else if (browser) opts.argv0 = '/opt/ms-playwright/chrome-headless-shell' // arg0 looks like the real binary
+    const c = spawn(process.execPath, ['-e', 'setTimeout(()=>{},300000)', '--', `--user-data-dir=${udd}`], opts)
+    c.unref(); return c
+  }
+  // (a) the orphaned MCP browser — browser arg0 + ms-playwright/mcp- profile → the ONLY thing reaped.
+  // (b) the operator's own Chrome — a browser, but a NON-mcp profile → spared (the profile gate).
+  // (c) a kiln-pw- scripted-oracle browser — a different namespace, the token sweep's job → spared.
+  // (d) a non-browser process whose ARGS mention an ms-playwright/mcp- path (a shell/log-tail) → spared
+  //     (the arg0 gate — this is exactly the over-reach a naive `pkill -f ms-playwright/mcp-` would cause).
+  // (e) chrome_crashpad_handler under the mcp- profile — the crash-reporter HELPER, NOT a browser, so it
+  //     is NOT in the documented browser set (chrome / chromium / chrome-headless-shell / headless_shell)
+  //     → spared (review cycle 3, finding 2: the arg0 gate must not be widened past the stated set).
+  const mcpProfile = `/tmp/ms-playwright/mcp-${tag}`
+  const operatorProfile = `/tmp/kiln-test-operator-chrome-${tag}`
+  const oracleProfile = `/tmp/kiln-pw-mcptest-${tag}`
+  const decoyMcp = decoy(mcpProfile, { browser: true })
+  const decoyOperator = decoy(operatorProfile, { browser: true })
+  const decoyOracle = decoy(oracleProfile, { browser: true })
+  const decoyShell = decoy(`/tmp/ms-playwright/mcp-${tag}-shell-noise`, { browser: false }) // names the path, NOT a browser
+  const decoyCrashpad = decoy(`/tmp/ms-playwright/mcp-${tag}-crash`, { arg0: '/opt/ms-playwright/chrome_crashpad_handler' }) // helper, NOT a browser
+  try {
+    const deadline = Date.now() + 5000
+    const allUp = () => [decoyMcp, decoyOperator, decoyOracle, decoyShell, decoyCrashpad].every((c) => leaderCmdlineLive(c.pid))
+    while (!allUp() && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100))
+    assert.ok(leaderCmdlineLive(decoyMcp.pid), 'the MCP browser stand-in is alive before the sweep')
+    assert.ok(leaderCmdlineLive(decoyShell.pid), 'the path-naming non-browser stand-in is alive before the sweep')
+    assert.ok(leaderCmdlineLive(decoyCrashpad.pid), 'the crashpad-handler stand-in is alive before the sweep')
+
+    const res = probeCli(['mcp-sweep'])
+    assert.equal(res.status, 0, 'mcp-sweep always exits 0 — cleanup never fails a stage')
+    assert.match(res.stdout, /^MCP_SWEEP pattern=ms-playwright\/mcp- killed=\d+$/m, 'reports what the namespace sweep reaped')
+
+    const gone = Date.now() + 5000
+    while (leaderCmdlineLive(decoyMcp.pid) && Date.now() < gone) await new Promise((r) => setTimeout(r, 100))
+    assert.ok(!leaderCmdlineLive(decoyMcp.pid), 'the orphaned MCP browser (browser arg0 + mcp- profile) is reaped')
+    assert.ok(leaderCmdlineLive(decoyOperator.pid), "the operator's own Chrome (non-mcp profile) is UNTOUCHED — never a blanket chrome kill")
+    assert.ok(leaderCmdlineLive(decoyOracle.pid), "the kiln-pw- scripted oracle is UNTOUCHED — that namespace is the token sweep's job")
+    assert.ok(leaderCmdlineLive(decoyShell.pid), 'the non-browser process that merely NAMES the mcp- path is UNTOUCHED — the arg0 gate prevents the naive-pkill over-reach')
+    assert.ok(leaderCmdlineLive(decoyCrashpad.pid), 'chrome_crashpad_handler under the mcp- profile is UNTOUCHED — the crash-reporter helper is NOT in the documented browser set (finding 2: the gate is not widened past chrome/chromium/chrome-headless-shell/headless_shell)')
+
+    // idempotent: with the one browser gone, a clean re-sweep is a no-op, still exit 0
+    const again = probeCli(['mcp-sweep'])
+    assert.equal(again.status, 0)
+    assert.match(again.stdout, /^MCP_SWEEP pattern=ms-playwright\/mcp- killed=0$/m)
+
+    // takes NO args — the pattern is fixed and inert; a stray arg is a usage error
+    const withArg = probeCli(['mcp-sweep', 'anything'])
+    assert.equal(withArg.status, 1)
+    assert.match(withArg.stderr, /usage:/)
+  } finally {
+    for (const c of [decoyMcp, decoyOperator, decoyOracle, decoyShell, decoyCrashpad]) { try { process.kill(c.pid, 'SIGKILL') } catch { /* gone */ } }
+    rmSync(`/tmp/ms-playwright`, { recursive: true, force: true })
+  }
+})
+
 test('kiln-probe sweep: the server-pidfile arm — kills the recorded process GROUP only when the live leader still matches the recorded cmd (recycled-PID guard), and always consumes the pidfile', async () => {
   // the managed server's cmdline carries NO kiln-pw token (it is the user's command, verbatim) —
   // exactly the cycle-1 leak: pattern-kill can never reach it, ONLY the pidfile group-kill can.
@@ -432,6 +505,171 @@ test('kiln-probe sweep: the server-pidfile arm — kills the recorded process GR
     spawnSync('pkill', ['-9', '-f', mark], { stdio: 'ignore' })
     rmSync(pidfile, { force: true })
   }
+})
+
+// ── 2b. the browser LEASE — the §7 CAPABILITY deadline (ORCHESTRATOR RULING, p3/tasks.md) ─────────
+// A workflow cannot CANCEL a spawned agent, so the Tier-2 ≤10-min cap is enforced on the CAPABILITY:
+// `kiln-probe lease` writes a token-keyed lease + a detached self-terminating watchdog; `kiln-probe
+// run --lease <token>` REFUSES (exit 77) once the lease is absent/expired/mismatched; `lease-release`
+// kills the watchdog + sweeps. The Tier-1 build probe path (no lease) is UNCHANGED. These drills use
+// the fake browser so the harness needs no chromium. The whole point: an evaluator alive past the
+// deadline can do no further browser work — the lease gate, not goodwill, is the enforcement.
+const leaseOf = (kiln, runId) => JSON.parse(readFileSync(join(kiln, 'evidence', runId, 'browser.lease'), 'utf8'))
+const leaseAlive = (pid) => { try { return Number.isInteger(pid) && pid > 1 && (process.kill(pid, 0), true) } catch { return false } }
+
+test('kiln-probe lease: writes the {token, expires_at, watchdog_pid} lease + a live detached watchdog; lease-release kills the watchdog, sweeps the token namespace, deletes the lease', async () => {
+  const { proj, kiln } = makeProbeFixture()
+  const tok = `kvalA${process.pid}${Date.now().toString(36)}`
+  try {
+    const take = probeCli(['lease', kiln, tok, tok, '600'])
+    assert.equal(take.status, 0, take.stderr)
+    assert.match(take.stdout, new RegExp(`^LEASE ${tok} expires_at=\\d+ watchdog_pid=\\d+$`, 'm'))
+    const l = leaseOf(kiln, tok)
+    assert.equal(l.token, tok)
+    assert.ok(l.expires_at > Math.floor(Date.now() / 1000), 'expires_at is in the future')
+    assert.ok(Number.isInteger(l.watchdog_pid) && l.watchdog_pid > 1, 'the watchdog pid is recorded')
+    const deadline = Date.now() + 5000
+    while (!leaseAlive(l.watchdog_pid) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50))
+    assert.ok(leaseAlive(l.watchdog_pid), 'the detached watchdog is alive while the lease holds')
+    // a decoy "leaked browser" carrying the lease token — lease-release must sweep it
+    const decoy = spawn(process.execPath, ['-e', 'setTimeout(()=>{},300000)', '--', `--user-data-dir=/tmp/kiln-pw-${tok}-decoy`], { detached: true, stdio: 'ignore' })
+    decoy.unref(); mkdirSync(`/tmp/kiln-pw-${tok}-decoy`, { recursive: true })
+    const up = Date.now() + 5000
+    while (pgrepf(`kiln-pw-${tok}`).length !== 1 && Date.now() < up) await new Promise((r) => setTimeout(r, 50))
+    assert.equal(pgrepf(`kiln-pw-${tok}`).length, 1, 'the leaked-browser decoy is alive before release')
+
+    const rel = probeCli(['lease-release', kiln, tok])
+    assert.equal(rel.status, 0, rel.stderr)
+    assert.match(rel.stdout, new RegExp(`^LEASE_RELEASE ${tok} token=${tok} watchdog_pid=\\d+ swept$`, 'm'))
+    const gone = Date.now() + 5000
+    while ((leaseAlive(l.watchdog_pid) || pgrepf(`kiln-pw-${tok}`).length) && Date.now() < gone) await new Promise((r) => setTimeout(r, 50))
+    assert.ok(!leaseAlive(l.watchdog_pid), 'lease-release kills the watchdog — teardown is now, not at the deadline')
+    assert.deepEqual(pgrepf(`kiln-pw-${tok}`), [], 'lease-release sweeps the leaked browser by token')
+    assert.ok(!existsSync(join(kiln, 'evidence', tok, 'browser.lease')), 'lease-release deletes the lease file — no stale lease blocks a later run')
+    assert.ok(!existsSync(`/tmp/kiln-pw-${tok}-decoy`), 'the profile dir is removed')
+    // lease-release on a fixture with no lease is a clean no-op, still exit 0
+    const noop = probeCli(['lease-release', kiln, `nolease${tok}`])
+    assert.equal(noop.status, 0)
+    assert.match(noop.stdout, /no lease present \(no-op\)/)
+  } finally {
+    spawnSync('pkill', ['-9', '-f', `kiln-pw-${tok}`], { stdio: 'ignore' })
+    rmSync(`/tmp/kiln-pw-${tok}-decoy`, { recursive: true, force: true })
+    rmSync(proj, { recursive: true, force: true })
+  }
+})
+
+test('kiln-probe run --lease: a VALID lease lets the leased probe run (exit 0); an ABSENT/MISMATCHED lease REFUSES with exit 77 LEASE_EXPIRED — no browser is launched', () => {
+  const { proj, kiln } = makeProbeFixture()
+  const tok = `kvalB${process.pid}${Date.now().toString(36)}`
+  try {
+    const take = probeCli(['lease', kiln, tok, tok, '600'])
+    assert.equal(take.status, 0, take.stderr)
+    // a probe under a child runId of the leased token, WITH a valid lease → runs (exit 0)
+    const ok = probeCli(['run', proj, kiln, 'SC-001', `${tok}-eval1`, '--lease', tok], { KILN_FAKE_PW_MODE: 'pass' })
+    assert.equal(ok.status, 0, `a probe under a valid lease must run: ${ok.stderr}${ok.stdout}`)
+    assert.match(ok.stdout, /^PROBE SC-001 exit=0 mapped=pass/m)
+    // a probe demanding a lease token that has no lease file → REFUSED, exit 77, no probe evidence
+    const noLease = probeCli(['run', proj, kiln, 'SC-001', 'kvalNoLease-eval1', '--lease', 'kvalNoLease'])
+    assert.equal(noLease.status, 77, `an absent lease must refuse with 77: ${noLease.stdout}`)
+    assert.match(noLease.stderr, /LEASE_EXPIRED no usable lease/)
+    assert.ok(!existsSync(join(kiln, 'evidence', 'kvalNoLease-eval1', 'probe-SC-001.json')), 'a refused probe launches no browser and writes no evidence')
+    // a probe whose runId is OUTSIDE the leased token namespace → token-mismatch, exit 77
+    const outOfNs = probeCli(['run', proj, kiln, 'SC-001', 'someOtherRun-eval1', '--lease', tok], { KILN_FAKE_PW_MODE: 'pass' })
+    assert.equal(outOfNs.status, 77, 'a runId outside the leased token namespace is refused')
+    assert.match(outOfNs.stderr, /not inside the leased token namespace/)
+    // KILN_PROBE_LEASE env is the alternative demand form — same refusal on an absent lease
+    const envDemand = probeCli(['run', proj, kiln, 'SC-001', 'kvalEnv-eval1'], { KILN_PROBE_LEASE: 'kvalEnv' })
+    assert.equal(envDemand.status, 77, 'KILN_PROBE_LEASE env demands the lease too')
+    assert.match(envDemand.stderr, /LEASE_EXPIRED/)
+  } finally {
+    spawnSync('pkill', ['-9', '-f', `kiln-pw-${tok}`], { stdio: 'ignore' })
+    probeCli(['lease-release', kiln, tok])
+    rmSync(proj, { recursive: true, force: true })
+  }
+})
+
+test('kiln-probe run --lease: an EXPIRED lease REFUSES — an over-deadline evaluator can do no further browser work (the capability deadline); the watchdog self-terminates and sweeps at expiry', async () => {
+  const { proj, kiln } = makeProbeFixture()
+  const tok = `kvalC${process.pid}${Date.now().toString(36)}`
+  try {
+    // a 1s lease; spawn a decoy "leaked browser" under the token BEFORE expiry — the watchdog must reap it
+    const take = probeCli(['lease', kiln, tok, tok, '1'])
+    assert.equal(take.status, 0, take.stderr)
+    const wd = leaseOf(kiln, tok).watchdog_pid
+    const decoy = spawn(process.execPath, ['-e', 'setTimeout(()=>{},300000)', '--', `--user-data-dir=/tmp/kiln-pw-${tok}-decoy`], { detached: true, stdio: 'ignore' })
+    decoy.unref(); mkdirSync(`/tmp/kiln-pw-${tok}-decoy`, { recursive: true })
+    const up = Date.now() + 5000
+    while (pgrepf(`kiln-pw-${tok}`).length !== 1 && Date.now() < up) await new Promise((r) => setTimeout(r, 50))
+    assert.equal(pgrepf(`kiln-pw-${tok}`).length, 1, 'the leaked-browser decoy is alive before expiry')
+    // wait out the lease + the watchdog's sweep
+    const swept = Date.now() + 8000
+    while ((pgrepf(`kiln-pw-${tok}`).length || existsSync(join(kiln, 'evidence', tok, 'browser.lease')) || leaseAlive(wd)) && Date.now() < swept) await new Promise((r) => setTimeout(r, 100))
+    // THE DRILL: a probe fired AFTER the cap is REFUSED (exit 77) — no further browser work is authorized
+    const refused = probeCli(['run', proj, kiln, 'SC-001', `${tok}-late`, '--lease', tok], { KILN_FAKE_PW_MODE: 'pass' })
+    assert.equal(refused.status, 77, `an over-deadline probe must be REFUSED: ${refused.stdout}${refused.stderr}`)
+    assert.match(refused.stderr, /LEASE_EXPIRED/)
+    assert.ok(!existsSync(join(kiln, 'evidence', `${tok}-late`, 'probe-SC-001.json')), 'the refused over-deadline probe launches no browser')
+    // the self-terminating watchdog swept its survivors + deleted the lease at expiry, on its own
+    assert.deepEqual(pgrepf(`kiln-pw-${tok}`), [], 'the watchdog swept the leaked browser at expiry — survivors die at the cap, not by luck')
+    assert.ok(!leaseAlive(wd), 'the watchdog self-terminated at expiry (timeout-bounded)')
+    assert.ok(!existsSync(join(kiln, 'evidence', tok, 'browser.lease')), 'the watchdog deleted the lease at expiry')
+  } finally {
+    spawnSync('pkill', ['-9', '-f', `kiln-pw-${tok}`], { stdio: 'ignore' })
+    rmSync(`/tmp/kiln-pw-${tok}-decoy`, { recursive: true, force: true })
+    rmSync(proj, { recursive: true, force: true })
+  }
+})
+
+test('kiln-probe run: the Tier-1 build path (NO lease demanded, no lease file) is UNCHANGED — a probe runs without any lease, exactly as before', () => {
+  const { proj, kiln } = makeProbeFixture()
+  try {
+    // no --lease, no KILN_PROBE_LEASE, no browser.lease in the runId dir → unleased, runs as Tier-1 does
+    const res = probeCli(['run', proj, kiln, 'SC-001', 'tier1run'], { KILN_FAKE_PW_MODE: 'pass' })
+    assert.equal(res.status, 0, `the unleased Tier-1 probe must run unchanged: ${res.stderr}${res.stdout}`)
+    assert.match(res.stdout, /^PROBE SC-001 exit=0 mapped=pass/m)
+    assert.equal(probeEvidence(kiln, 'tier1run').mapped, 'pass')
+  } finally {
+    spawnSync('pkill', ['-9', '-f', 'kiln-pw-tier1run'], { stdio: 'ignore' })
+    rmSync(proj, { recursive: true, force: true })
+  }
+})
+
+test('kiln-probe run: the "lease file exists for the runId" trigger — a browser.lease in the probe\'s OWN runId dir enforces the lease even without --lease/env', () => {
+  const { proj, kiln } = makeProbeFixture()
+  const tok = `kvalD${process.pid}${Date.now().toString(36)}`
+  let origWatchdog = null // captured before the hand-overwrite so the finally never orphans it
+  try {
+    // take a SHORT lease keyed by the exact runId the probe will use — no --lease flag passed to run
+    const take = probeCli(['lease', kiln, tok, tok, '3'])
+    assert.equal(take.status, 0, take.stderr)
+    origWatchdog = leaseOf(kiln, tok).watchdog_pid
+    const ok = probeCli(['run', proj, kiln, 'SC-001', tok], { KILN_FAKE_PW_MODE: 'pass' }) // runId === leaseRunId, no --lease
+    assert.equal(ok.status, 0, `a probe under its own valid lease runs: ${ok.stderr}${ok.stdout}`)
+    // now expire it by hand-writing a past expiry, then run again under the same runId → refused, no flag.
+    // (the original watchdog is killed in the finally so this deterministic overwrite leaks nothing.)
+    writeFileSync(join(kiln, 'evidence', tok, 'browser.lease'), JSON.stringify({ token: tok, expires_at: 1, watchdog_pid: null }) + '\n')
+    const refused = probeCli(['run', proj, kiln, 'SC-001', tok], { KILN_FAKE_PW_MODE: 'pass' })
+    assert.equal(refused.status, 77, 'an in-dir lease that has expired refuses without any flag')
+    assert.match(refused.stderr, /LEASE_EXPIRED/)
+  } finally {
+    if (Number.isInteger(origWatchdog) && origWatchdog > 1) { try { process.kill(origWatchdog, 'SIGKILL') } catch { /* already gone */ } }
+    spawnSync('pkill', ['-9', '-f', `kiln-pw-${tok}`], { stdio: 'ignore' })
+    probeCli(['lease-release', kiln, tok])
+    rmSync(proj, { recursive: true, force: true })
+  }
+})
+
+test('kiln-probe lease/lease-release: usage + charset validation — the token/runId are kiln-pw- sweep prefixes, kept inert; seconds is a positive integer', () => {
+  const { proj, kiln } = makeProbeFixture()
+  try {
+    assert.equal(probeCli(['lease', kiln, 'ok', 'ok']).status, 1, 'lease needs 4 args')
+    assert.match(probeCli(['lease', kiln, 'a|b', 'tok', '60']).stderr, /runId may only contain/)
+    assert.match(probeCli(['lease', kiln, 'run', 'a|b', '60']).stderr, /token may only contain/)
+    assert.match(probeCli(['lease', kiln, 'run', 'tok', '0']).stderr, /seconds must be a positive integer/)
+    assert.match(probeCli(['lease', kiln, 'run', 'tok', 'x']).stderr, /seconds must be a positive integer/)
+    assert.equal(probeCli(['lease-release', kiln]).status, 1, 'lease-release needs runId')
+    assert.match(probeCli(['run', proj, kiln, 'SC-001', 'r', '--lease', 'a|b']).stderr, /--lease token may only contain/)
+  } finally { rmSync(proj, { recursive: true, force: true }) }
 })
 
 // ── 3. kiln-law run — probes execute through kiln-probe with the same evidence contract ─────────

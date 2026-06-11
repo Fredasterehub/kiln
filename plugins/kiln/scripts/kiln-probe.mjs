@@ -14,7 +14,7 @@
 // builder NEVER gets a browser; agents call this CLI (or kiln-law run, which calls it per probe
 // check) and read evidence files.
 //
-//   run <projectPath> <kilnDir> <SC-id> <runId>
+//   run <projectPath> <kilnDir> <SC-id> <runId> [--lease <token>]
 //       Reads the probe spec from <kilnDir>/law.json (kind:'probe' entries carry `spec` — written
 //       by Asimov at Law time; schema-validated here, TAMPER-anchored by kiln-law, which is the
 //       gated path to this command). Serves the app: spec.serve_cmd under a managed PID with its
@@ -26,8 +26,12 @@
 //       probe-<SC>.log (template stdout+stderr), probe-<SC>.json (the result line: mapped
 //       verdict + parsed PROBE_RESULT + hashes), screenshots (written by the template), and
 //       probe-<SC>-server.log when a serve_cmd ran. Exit codes — the build spine keys on them
-//       mechanically: 0 pass · 1 assert-fail (or infra/usage error) · 78 unavailable (playwright
-//       absent — capability tier, NEVER folded green) · 79 timeout (hard-killed at the deadline).
+//       mechanically: 0 pass · 1 assert-fail (or infra/usage error) · 77 LEASE_EXPIRED (a Tier-2
+//       lease was in force and is absent/expired/token-mismatched — the capability deadline reached;
+//       refused BEFORE any browser launches) · 78 unavailable (playwright absent — capability tier,
+//       NEVER folded green) · 79 timeout (hard-killed at the deadline). A lease is enforced ONLY when
+//       --lease/KILN_PROBE_LEASE demands it or a browser.lease already sits in this runId's dir, so
+//       Tier-1 build probes (no lease) keep working unchanged.
 //   sweep [token-prefix]
 //       Stage-level pre/post sweep, THREE arms over the token namespace: (1) every
 //       /tmp/kiln-pw-<prefix>*.server.pid file (written at serve_cmd spawn — the managed server
@@ -39,6 +43,37 @@
 //       kiln-pw- namespace, so the operator's own browser can never match (blanket `pkill -f
 //       chrome` is forbidden). No prefix sweeps the whole kiln-pw- namespace (the pre-flight
 //       defense against prior crashed runs). Always exits 0 — cleanup never fails a stage.
+//   lease <kilnDir> <runId> <token> <seconds>
+//       TAKE the validate Tier-2 browser lease — the §7 CAPABILITY deadline (ORCHESTRATOR RULING).
+//       A workflow cannot CANCEL a spawned agent, so the ≤10-min Tier-2 cap is enforced on the
+//       capability: writes <kilnDir>/evidence/<runId>/browser.lease {token, expires_at, watchdog_pid}
+//       and spawns a DETACHED, timeout-wrapped, self-terminating watchdog that at expiry sweeps the
+//       kiln-pw-<token> namespace and deletes the lease (so a browser launched past the cap dies even
+//       if the workflow never runs its own cleanup). The lease runId IS the lease token (the stage's
+//       VALIDATE_RUN_TOKEN), so an evaluator probe under runId '<token>-…' is inside the leased
+//       namespace by construction. Always exits 0.
+//   lease-release <kilnDir> <runId>
+//       RELEASE the lease at stage end: kill the watchdog (teardown is NOW, not at the deadline),
+//       sweep kiln-pw-<token> immediately, delete the lease file. No-op when no lease is present.
+//       Always exits 0 — release is cleanup, never a verdict.
+//   mcp-sweep
+//       The backstop for the ONE browser the kiln-pw- token cannot tag: a HOST-configured Playwright
+//       MCP browser. Autonomous validate NO LONGER drives MCP (the ORCHESTRATOR RULING removed the
+//       MCP traversal path — an MCP server is a persistent browser service §7 forbids in-loop), so
+//       this is now a CAPABILITY for the operator's INTERACTIVE/manual visual QA: an interactive MCP
+//       session (launched without our --isolated/--user-data-dir, PID unkillable by us, no kiln token
+//       in its browser) is told to browser_close, but prompt text is not a teardown guarantee (#1311
+//       strands a Chrome on a SingletonLock; codex#17832/claude-code#15861 orphan MCP browser
+//       children). Run this by hand after such a session to reap a leaked orphan. This SIGKILLs an
+//       orphaned MCP browser under a DOUBLE gate so it can never over-reach: a target must have BOTH
+//       (a) a browser-binary arg0 (chrome / chromium / chrome-headless-shell / headless_shell) AND (b)
+//       a --user-data-dir into the `ms-playwright/mcp-` profile namespace (rides every Playwright-MCP
+//       browser's cmdline). The operator's own Chrome (a non-mcp profile) is spared by (b); a shell,
+//       editor, grep, or our own command that merely NAMES an mcp- path is spared by (a) — so it is far
+//       more targeted than a blanket `pkill -f` and can never reap a non-browser process. It does NOT
+//       touch the @playwright/mcp SERVER node process (the host's shared service to reap; a later
+//       correction-cycle evaluator may reuse it) — only the orphaned browser. No args. Always exits 0 —
+//       cleanup never fails a stage.
 //
 // KILN_PROBE_TIMEOUT_S overrides the 90 s probe deadline — harness escape hatch ONLY (the fixture
 // fake-browser drills prove timeout-kill without waiting 90 real seconds); never set it in a run.
@@ -114,6 +149,146 @@ function sweep(prefix) {
   console.log(`SWEEP pattern=${pattern} killed=${pids.length} server_groups_killed=${serversKilled} removed=${removed}`)
 }
 
+// ── mcp-sweep — the backstop for the ONE browser the workflow cannot token-tag ───────────────────
+// The scripted kiln-probe path above is leak-proof by construction: every browser it spawns rides a
+// unique `kiln-pw-<token>` and is reaped by sweep(). Playwright MCP, when HOST-configured, is the one
+// exception — its server is the session host's (Claude Code's) shared stdio child, launched without
+// our flags, so we can neither pass it --isolated/--user-data-dir nor kill its PID (it belongs to the
+// session running Kiln itself) nor ride a kiln token into its browser. Autonomous validate NO LONGER
+// drives MCP (the ORCHESTRATOR RULING removed the MCP traversal path: an MCP server is a persistent
+// browser service §7 forbids in-loop). MCP is now a CAPABILITY for the operator's INTERACTIVE/manual
+// visual QA — an interactive session is told to browser_close, but prompt text is not a teardown
+// guarantee (microsoft/playwright-mcp#1311: a client that dies without browser_close strands a Chrome
+// holding a SingletonLock; codex#17832 / claude-code#15861: hosts demonstrably orphan MCP browser
+// children). THIS is the process-level backstop the operator runs by hand after an interactive session.
+//
+// What it reaps — ONLY MCP-managed browser processes, by their PROFILE NAMESPACE, never blanket: a
+// Playwright-MCP browser always carries `--user-data-dir=<…>/ms-playwright/mcp-<channel>-<hash>` in
+// its cmdline (deepwiki.com/microsoft/playwright-mcp; verified on box: ~/.cache/ms-playwright/mcp-…).
+// The operator's own interactive Chrome lives under ~/.config/google-chrome (or the OS default), NEVER
+// under `ms-playwright/mcp-`, so this pattern is as targeted as the `kiln-pw-` namespace and can no
+// more reap a neighbor than sweep() can — blanket `pkill -f chrome` stays forbidden. It deliberately
+// does NOT touch the `@playwright/mcp` SERVER node process: that is the host's shared service to reap
+// (discipline-spec: a stdio MCP server inherits its host's process reaping), and the operator may
+// legitimately reuse it in a later interactive session. We reap the orphaned BROWSER, not the server.
+function mcpSweep() {
+  const pattern = 'ms-playwright/mcp-' // candidate gate: the Playwright-MCP profile namespace (no leading dash)
+  // Find candidates whose cmdline carries the ms-playwright/mcp- profile namespace, then CONFIRM each is
+  // genuinely an MCP-managed BROWSER before SIGKILL — never a shell, editor, grep, or log tail that
+  // merely mentions the path. A real match has BOTH (a) a browser-binary arg0 (chromium / chrome /
+  // chrome-headless-shell / headless_shell) AND (b) a --user-data-dir pointing into ms-playwright/mcp-.
+  // This is the recycled-PID-guard discipline applied to the MCP path: kill only what we can positively
+  // identify as the orphaned browser, so the pattern can never reap the operator's own Chrome (a non-mcp
+  // profile, spared by (b)), nor any non-browser process (spared by (a)), nor our own sweep command.
+  const BROWSER_BIN = /(?:^|\/)(?:chrom(?:e|ium)(?:-headless-shell)?|headless_shell)\b/i // the documented browser set ONLY (chrome / chromium / chrome-headless-shell / headless_shell) — NOT chrome_crashpad_handler (the crash-reporter helper, not a browser; killing it would not reap a browser and widens the gate past the stated arg0 set)
+  const MCP_PROFILE = /--user-data-dir=\S*ms-playwright\/mcp-/
+  const found = spawnSync('pgrep', ['-f', '--', pattern], { encoding: 'utf8' }) // '--' so pgrep never parses pattern as an option
+  const candidates = (found.stdout || '').split('\n').map((s) => s.trim()).filter(Boolean)
+  let killed = 0
+  for (const pid of candidates) {
+    if (pid === String(process.pid)) continue // never sweep ourselves
+    const cmd = leaderCmdline(pid)
+    if (!cmd) continue // gone / unreadable — never kill what we cannot identify (fail-safe)
+    if (!MCP_PROFILE.test(cmd)) continue // not an MCP profile browser (names the path without the --user-data-dir flag)
+    if (!BROWSER_BIN.test(cmd.split(/\s+/)[0] || '')) continue // arg0 is not a browser binary (a shell/editor mentioning the path)
+    try { process.kill(Number(pid), 'SIGKILL'); killed++ } catch { /* already gone */ }
+  }
+  console.log(`MCP_SWEEP pattern=${pattern} killed=${killed}`)
+}
+
+// ── the browser lease — the §7 CAPABILITY deadline (ORCHESTRATOR RULING, p3/tasks.md) ────────────
+// A workflow script cannot CANCEL a spawned agent, so the Tier-2 deadline is enforced on the
+// CAPABILITY, not the agent: an evaluator alive past the cap is harmless because every browser
+// action it can take goes through a one-shot `kiln-probe run`, and `run` REFUSES once the lease has
+// expired. The lease file lives at <kilnDir>/evidence/<leaseRunId>/browser.lease and carries
+// { token, expires_at (unix s), watchdog_pid }. The lease's runId IS the lease token (the validate
+// stage's VALIDATE_RUN_TOKEN), so an evaluator probe under runId '<token>-<suffix>' is INSIDE the
+// leased namespace by construction — the token-match is the namespace prefix, no extra secret to pass.
+//
+// `run` enforces the lease ONLY when it is DEMANDED (the --lease <token> flag, or KILN_PROBE_LEASE
+// env) OR when a browser.lease already sits in the probe's OWN runId dir. Tier-1 build probes
+// (kiln-law run → kiln-probe run, their own outer timeout_s the bound) demand no lease and write
+// none, so they keep working UNCHANGED — the lease is purely the Tier-2 traversal gate.
+const leaseFile = (kilnDir, leaseRunId) => join(kilnDir, 'evidence', leaseRunId, 'browser.lease')
+function readLease(kilnDir, leaseRunId) {
+  try {
+    const l = JSON.parse(readFileSync(leaseFile(kilnDir, leaseRunId), 'utf8'))
+    if (l && typeof l === 'object' && typeof l.token === 'string' && Number.isFinite(Number(l.expires_at))) return l
+  } catch { /* absent or malformed — the caller treats it as no usable lease */ }
+  return null
+}
+// leaseStatus(kilnDir, leaseToken, runId) — the run-time gate verdict over a DEMANDED lease.
+// Returns { ok:true } or { ok:false, why } (why → the exit-77 message). A lease is honored ONLY when
+// the file exists, its token equals the demanded token, the runId is inside that token's namespace
+// (runId === token OR runId starts with '<token>-'), and now() has not passed expires_at. Anything
+// else fails CLOSED (no browser): absent / malformed / token-mismatch / out-of-namespace / expired.
+function leaseStatus(kilnDir, leaseToken, runId) {
+  const l = readLease(kilnDir, leaseToken)
+  if (!l) return { ok: false, why: `LEASE_EXPIRED no usable lease at ${leaseFile(kilnDir, leaseToken)} for token '${leaseToken}'` }
+  if (l.token !== leaseToken) return { ok: false, why: `LEASE_EXPIRED lease token '${l.token}' does not match the demanded token '${leaseToken}'` }
+  if (runId !== leaseToken && !runId.startsWith(`${leaseToken}-`)) {
+    return { ok: false, why: `LEASE_EXPIRED runId '${runId}' is not inside the leased token namespace '${leaseToken}-' — a probe must run under the lease that authorized it` }
+  }
+  if (Math.floor(Date.now() / 1000) > Number(l.expires_at)) {
+    return { ok: false, why: `LEASE_EXPIRED the browser lease for '${leaseToken}' expired at ${new Date(Number(l.expires_at) * 1000).toISOString()} — the Tier-2 deadline cap is reached; no further browser work is authorized` }
+  }
+  return { ok: true }
+}
+
+// cmdLease(kilnDir, leaseRunId, token, seconds) — TAKE a browser lease for the validate Tier-2
+// traversal. Writes the lease file, then spawns the DETACHED self-terminating watchdog: a
+// timeout-wrapped child that sleeps `seconds`, then sweeps the kiln-pw-<token> namespace and deletes
+// the lease — so a browser the evaluator launched past the cap dies at the deadline even if the
+// workflow never reaches its own cleanup. The watchdog PID is recorded back into the lease so
+// stage cleanup / lease-release can SIGKILL it (and a clean release sweeps immediately). Always
+// exits 0 — taking a lease never fails a stage (a write failure degrades to no-enforcement honestly).
+function cmdLease(kilnDir, leaseRunId, token, seconds) {
+  const dir = join(kilnDir, 'evidence', leaseRunId)
+  const expiresAt = Math.floor(Date.now() / 1000) + seconds
+  try {
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(leaseFile(kilnDir, leaseRunId), JSON.stringify({ token, expires_at: expiresAt, watchdog_pid: null }) + '\n')
+  } catch (e) {
+    console.log(`LEASE_TAKE_FAILED ${token} — ${e.message} (no enforcement; the stage deadline degrades to the workflow timer)`)
+    return
+  }
+  // the watchdog: `timeout <seconds> bash -c '<sleep then sweep+delete>'`, detached + unref'd so it
+  // outlives this short-lived `lease` invocation. At expiry it calls THIS CLI's own sweep (the
+  // kiln-pw-<token> namespace — same targeted kill the run/stage sweeps use, never blanket) and rm's
+  // the lease file. timeout is the self-terminating bound: the watchdog can never outlive the cap.
+  const self = fileURLToPath(import.meta.url)
+  const sweepCmd = `node ${JSON.stringify(self)} sweep ${JSON.stringify(token)}; rm -f ${JSON.stringify(leaseFile(kilnDir, leaseRunId))}`
+  let watchdogPid = null
+  try {
+    const wd = spawn('timeout', ['--kill-after=10', String(seconds + 5), 'bash', '-c', `sleep ${seconds}; ${sweepCmd}`], {
+      detached: true, stdio: 'ignore',
+    })
+    wd.unref()
+    watchdogPid = wd.pid
+    writeFileSync(leaseFile(kilnDir, leaseRunId), JSON.stringify({ token, expires_at: expiresAt, watchdog_pid: watchdogPid }) + '\n')
+  } catch (e) {
+    console.log(`LEASE_WATCHDOG_FAILED ${token} — ${e.message} (the lease still gates run; the workflow timer + stage sweep remain the backstop)`)
+  }
+  console.log(`LEASE ${token} expires_at=${expiresAt} watchdog_pid=${watchdogPid === null ? 'none' : watchdogPid}`)
+}
+
+// cmdLeaseRelease(kilnDir, leaseRunId) — RELEASE the lease at stage end: kill the watchdog (it is no
+// longer needed — the stage is tearing down NOW, not at the deadline), sweep the kiln-pw-<token>
+// namespace immediately, and delete the lease file (so a stale lease never blocks a later run). A
+// no-op when no lease is present. Always exits 0 — release is cleanup, never a verdict.
+function cmdLeaseRelease(kilnDir, leaseRunId) {
+  const l = readLease(kilnDir, leaseRunId)
+  if (!l) { console.log(`LEASE_RELEASE ${leaseRunId} — no lease present (no-op)`); return }
+  const wd = Number(l.watchdog_pid)
+  if (Number.isInteger(wd) && wd > 1) { try { process.kill(wd, 'SIGKILL') } catch { /* watchdog already self-terminated at expiry */ } }
+  // sweep() builds the kill pattern as `kiln-pw-<arg>`; the lease token IS the bare runId prefix the
+  // evaluator's probes namespaced their browsers under (kiln-pw-<token>-<SC>-…), so the token passes
+  // straight through as the sweep prefix — reaping exactly this lease's browser trees, never blanket.
+  if (typeof l.token === 'string' && TOKEN_SAFE_RE.test(l.token)) sweep(l.token)
+  try { rmSync(leaseFile(kilnDir, leaseRunId), { force: true }) } catch { /* already gone */ }
+  console.log(`LEASE_RELEASE ${leaseRunId} token=${l.token} watchdog_pid=${Number.isInteger(wd) ? wd : 'none'} swept`)
+}
+
 // ── the built-in static server — node:http, no npx, no deps ─────────────────────────────────────
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.htm': 'text/html; charset=utf-8', '.js': 'text/javascript',
@@ -140,7 +315,17 @@ function startStaticServer(rootDir) {
 }
 
 // ── run — one probe, full lifecycle ──────────────────────────────────────────────────────────────
-async function cmdRun(projectPath, kilnDir, scId, runId) {
+// leaseDemand: the explicit --lease <token> / KILN_PROBE_LEASE token, or null. When null, the lease
+// is enforced ONLY if a browser.lease already sits in this probe's OWN runId dir (the §7 ruling's "a
+// lease file exists for the runId" trigger); otherwise this is an UNLEASED probe (a Tier-1 build
+// probe) and runs unchanged. When a lease IS in force and it is absent/expired/token-mismatched/
+// out-of-namespace, run REFUSES with exit 77 LEASE_EXPIRED — the capability deadline, not the agent.
+async function cmdRun(projectPath, kilnDir, scId, runId, leaseDemand = null) {
+  const leaseToken = leaseDemand || (existsSync(leaseFile(kilnDir, runId)) ? runId : null)
+  if (leaseToken) {
+    const ls = leaseStatus(kilnDir, leaseToken, runId)
+    if (!ls.ok) { console.error(`kiln-probe: ${ls.why}`); process.exit(77) }
+  }
   let law
   try { law = JSON.parse(readFileSync(join(kilnDir, 'law.json'), 'utf8')) } catch (e) { die(`run: cannot read ${join(kilnDir, 'law.json')} — ${e.message}`) }
   const { ok, errors } = validateLaw(law)
@@ -258,21 +443,51 @@ async function cmdRun(projectPath, kilnDir, scId, runId) {
 }
 
 // ── Dispatch ─────────────────────────────────────────────────────────────────────────────────────
-const USAGE = `usage: kiln-probe.mjs run <projectPath> <kilnDir> <SC-id> <runId> | kiln-probe.mjs sweep [token-prefix]`
+const USAGE = `usage: kiln-probe.mjs run <projectPath> <kilnDir> <SC-id> <runId> [--lease <token>] | kiln-probe.mjs sweep [token-prefix] | kiln-probe.mjs mcp-sweep | kiln-probe.mjs lease <kilnDir> <runId> <token> <seconds> | kiln-probe.mjs lease-release <kilnDir> <runId>`
 const [cmd, ...rest] = process.argv.slice(2)
 try {
   if (cmd === 'run') {
-    const [projectPath, kilnDir, scId, runId] = rest
-    if (!projectPath || !kilnDir || !scId || !runId || rest.length !== 4 || !isAbsolute(projectPath)) die(USAGE)
+    // run takes the 4 positionals and an OPTIONAL trailing --lease <token>; KILN_PROBE_LEASE is the
+    // env-form demand (the §7 ruling's "an env/flag demands it"). The Tier-2 evaluator passes the
+    // VALIDATE_RUN_TOKEN as the lease so its probes refuse once the stage deadline has expired; a
+    // Tier-1 build probe passes neither and writes none, so it runs unchanged.
+    let leaseDemand = process.env.KILN_PROBE_LEASE ? String(process.env.KILN_PROBE_LEASE) : null
+    const args = []
+    for (let i = 0; i < rest.length; i++) {
+      if (rest[i] === '--lease') { leaseDemand = rest[++i]; continue }
+      args.push(rest[i])
+    }
+    const [projectPath, kilnDir, scId, runId] = args
+    if (!projectPath || !kilnDir || !scId || !runId || args.length !== 4 || !isAbsolute(projectPath)) die(USAGE)
     // runId becomes an evidence path segment AND a sweep-prefix — keep it in the inert charset
     if (!TOKEN_SAFE_RE.test(runId) || runId === '') die(`run: runId may only contain [A-Za-z0-9._-]`)
-    process.exit(await cmdRun(resolve(projectPath), resolve(kilnDir), scId, runId))
+    if (leaseDemand !== null && (leaseDemand === '' || !TOKEN_SAFE_RE.test(leaseDemand))) die(`run: --lease token may only contain [A-Za-z0-9._-] and must be non-empty`)
+    process.exit(await cmdRun(resolve(projectPath), resolve(kilnDir), scId, runId, leaseDemand))
   } else if (cmd === 'sweep') {
     const [prefix] = rest
     if (rest.length > 1) die(USAGE)
     const p = prefix === undefined ? '' : prefix
     if (!TOKEN_SAFE_RE.test(p)) die(`sweep: token-prefix may only contain [A-Za-z0-9._-] — it is a pkill -f pattern`)
     sweep(p)
+    process.exit(0)
+  } else if (cmd === 'mcp-sweep') {
+    if (rest.length) die(USAGE) // no args — the pattern is the fixed ms-playwright/mcp- namespace
+    mcpSweep()
+    process.exit(0)
+  } else if (cmd === 'lease') {
+    const [kilnDir, runId, token, secondsArg] = rest
+    if (!kilnDir || !runId || !token || !secondsArg || rest.length !== 4) die(USAGE)
+    if (!TOKEN_SAFE_RE.test(runId) || runId === '') die(`lease: runId may only contain [A-Za-z0-9._-]`)
+    if (!TOKEN_SAFE_RE.test(token) || token === '') die(`lease: token may only contain [A-Za-z0-9._-] (it is a kiln-pw- sweep prefix)`)
+    const seconds = Number(secondsArg)
+    if (!Number.isInteger(seconds) || seconds < 1) die(`lease: seconds must be a positive integer`)
+    cmdLease(resolve(kilnDir), runId, token, seconds)
+    process.exit(0)
+  } else if (cmd === 'lease-release') {
+    const [kilnDir, runId] = rest
+    if (!kilnDir || !runId || rest.length !== 2) die(USAGE)
+    if (!TOKEN_SAFE_RE.test(runId) || runId === '') die(`lease-release: runId may only contain [A-Za-z0-9._-]`)
+    cmdLeaseRelease(resolve(kilnDir), runId)
     process.exit(0)
   } else die(USAGE)
 } catch (e) { die(e.message) }

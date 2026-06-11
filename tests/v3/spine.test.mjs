@@ -10,7 +10,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { validateSlicePlan, runnerGate, probeGate, rejectionClass, tribunalThreshold, gateDecision, goalAuditUsable, pipelineInvalidated } from '../../plugins/kiln/src/spine.mjs'
+import { validateSlicePlan, runnerGate, probeGate, rejectionClass, tribunalThreshold, gateDecision, goalAuditUsable, pipelineInvalidated, validateVerdict } from '../../plugins/kiln/src/spine.mjs'
 
 // ── validateSlicePlan — §5 coverage is arithmetic, not judgment ─────────────────────────────────
 const slice = (objective, scIds, extra = {}) => ({ objective, done_when: `${objective} works`, sc_ids: scIds, ...extra })
@@ -427,4 +427,193 @@ test('probeGate: the predicate is total and PURE — same input, same output; th
   const b = probeGate('ui', redStatic)
   assert.deepEqual(a, b)
   assert.equal(a.action, 'degrade')
+})
+
+// ── validateVerdict — §3.2/§5 deterministic-first validate verdict (tasks.md T3.5) ──────────────
+// A green non-UI floor: install ok, Law run + suite exit 0, every criterion met, zero blocking.
+const greenLogic = {
+  install_ok: true, law_run_exit: 0, suite_exit: 0, tests_passed: 12, tests_failed: 0,
+  criteria: [{ id: 'SC-001', met: true }, { id: 'SC-002', met: true }],
+  blocking_findings: [], ui_scope: false,
+}
+
+test('validateVerdict: a clean non-UI run is VALIDATE_PASS, full, browser NOT_APPLICABLE', () => {
+  const v = validateVerdict(greenLogic)
+  assert.equal(v.verdict, 'VALIDATE_PASS')
+  assert.equal(v.verification_class, 'full')
+  assert.equal(v.browser_verdict, 'NOT_APPLICABLE')
+  assert.deepEqual(v.blocking, [])
+  assert.deepEqual(v.reasons, [])
+})
+
+test('validateVerdict: install/build failure → VALIDATE_FAILED (the v2 build-error class)', () => {
+  const v = validateVerdict({ ...greenLogic, install_ok: false })
+  assert.equal(v.verdict, 'VALIDATE_FAILED')
+  assert.ok(v.reasons.some((r) => /install\/build failed/.test(r)))
+})
+
+test('validateVerdict: a RED Law run is VALIDATE_FAILED — the exit code is the verdict, no softening', () => {
+  const v = validateVerdict({ ...greenLogic, law_run_exit: 1 })
+  assert.equal(v.verdict, 'VALIDATE_FAILED')
+  assert.ok(v.reasons.some((r) => /Law run is RED/.test(r) && /exited 1/.test(r)))
+})
+
+test('validateVerdict: a missing/un-transcribed Law run exit fails CLOSED (FAILED, not PASS)', () => {
+  const v = validateVerdict({ ...greenLogic, law_run_exit: undefined })
+  assert.equal(v.verdict, 'VALIDATE_FAILED')
+  assert.ok(v.reasons.some((r) => /Law run is RED/.test(r) && /was not run/.test(r)))
+})
+
+test('validateVerdict: >50% suite failures → VALIDATE_FAILED; ≤50% → VALIDATE_PARTIAL (the v2 boundary)', () => {
+  const majority = validateVerdict({ ...greenLogic, suite_exit: 1, tests_passed: 4, tests_failed: 6 })
+  assert.equal(majority.verdict, 'VALIDATE_FAILED')
+  assert.ok(majority.reasons.some((r) => /majority/.test(r)))
+  const minority = validateVerdict({ ...greenLogic, suite_exit: 1, tests_passed: 9, tests_failed: 1 })
+  assert.equal(minority.verdict, 'VALIDATE_PARTIAL')
+  assert.ok(minority.reasons.some((r) => /suite is red/.test(r) && /≤50%/.test(r)))
+})
+
+test('validateVerdict: a red suite at EXACTLY 50% is PARTIAL — >50% is strict (5/10 failed is not a majority)', () => {
+  const v = validateVerdict({ ...greenLogic, suite_exit: 1, tests_passed: 5, tests_failed: 5 })
+  assert.equal(v.verdict, 'VALIDATE_PARTIAL')
+})
+
+test('validateVerdict: a red suite with no counts is PARTIAL (counts unavailable — never a silent PASS)', () => {
+  const v = validateVerdict({ ...greenLogic, suite_exit: 2, tests_passed: undefined, tests_failed: undefined })
+  assert.equal(v.verdict, 'VALIDATE_PARTIAL')
+  assert.ok(v.reasons.some((r) => /counts unavailable/.test(r)))
+})
+
+test('validateVerdict: a MISSING/un-transcribed suite exit FAILS CLOSED — never falls through to PASS (§3.2/§5.1)', () => {
+  for (const missing of [undefined, null, 'x', NaN]) {
+    const v = validateVerdict({ ...greenLogic, suite_exit: missing })
+    assert.equal(v.verdict, 'VALIDATE_FAILED', `suite_exit=${JSON.stringify(missing)} must fail closed, never PASS`)
+    assert.ok(v.reasons.some((r) => /suite exit was not run or not transcribed/.test(r)))
+  }
+})
+
+test('validateVerdict: a degraded suite_exit=-1 (no-pluginRoot path) is PARTIAL, not FAILED — honest degradation, never a silent PASS', () => {
+  // -1 is a transcribed number meaning "not run" in the degraded floor; it is red-but-ran ⇒ PARTIAL.
+  const v = validateVerdict({ ...greenLogic, suite_exit: -1, tests_passed: undefined, tests_failed: undefined })
+  assert.equal(v.verdict, 'VALIDATE_PARTIAL')
+  assert.ok(v.reasons.some((r) => /suite is red/.test(r) && /counts unavailable/.test(r)))
+})
+
+test('validateVerdict: the FULL no-pluginRoot path (law_run_exit=-1 AND suite_exit=-1) is PARTIAL, not FAILED — the degraded floor degrades honestly (review cycle 3, finding 1: -1 must NOT collapse to VALIDATE_FAILED)', () => {
+  // The actual no-pluginRoot branch (validate.js argusPrompt) transcribes BOTH as -1: the kiln-law CLI
+  // lives under pluginRoot, so its absence makes the deterministic floor un-runnable. -1 is the agreed
+  // "not run because the oracle was unavailable" sentinel — symmetric with the suite arm, it caps the
+  // verdict at PARTIAL (honest degradation to the v2 static path), NEVER a hard FAILED on the missing
+  // floor alone. Before the fix this returned VALIDATE_FAILED (lawExit -1 ≠ 0), contradicting the
+  // prompt's documented degraded fallback.
+  const v = validateVerdict({ ...greenLogic, law_run_exit: -1, suite_exit: -1, tests_passed: undefined, tests_failed: undefined })
+  assert.equal(v.verdict, 'VALIDATE_PARTIAL', 'no_plugin_root_sentinels must degrade to PARTIAL, not FAILED')
+  assert.ok(v.reasons.some((r) => /deterministic Law floor did not run/.test(r) && /never a silent PASS/.test(r)))
+  assert.ok(!v.reasons.some((r) => /Law run is RED/.test(r)), 'a -1 degraded floor is NOT framed as a RED Law (that is null / a genuine non-zero)')
+})
+
+test('validateVerdict: law_run_exit=-1 caps at PARTIAL even when the agent ran its OWN suite clean (suite_exit=0) — the missing floor never earns a silent PASS', () => {
+  // The load-bearing case: pluginRoot absent (law=-1) but the agent installed + ran the project suite
+  // itself to a clean exit 0. Without the explicit degraded-floor PARTIAL arm this would fall through to
+  // VALIDATE_PASS — a green the deterministic floor never proved. It must cap at PARTIAL.
+  const v = validateVerdict({ ...greenLogic, law_run_exit: -1, suite_exit: 0, tests_passed: 12, tests_failed: 0 })
+  assert.equal(v.verdict, 'VALIDATE_PARTIAL', 'a clean self-run suite cannot lift a no-floor run to PASS')
+  assert.ok(v.reasons.some((r) => /deterministic Law floor did not run/.test(r)))
+})
+
+test('validateVerdict: a GENUINE red/un-transcribed Law run still FAILS — only -1 is the degraded sentinel (the fix is surgical, not a softening of real failures)', () => {
+  // A genuinely red Law (exit 1/2) or an un-transcribed one (null/undefined/NaN/non-number) stays a hard
+  // FAILED — the -1 carve-out is for the structural-unavailability sentinel ONLY, never a general softener.
+  for (const red of [1, 2, 127]) {
+    const v = validateVerdict({ ...greenLogic, law_run_exit: red })
+    assert.equal(v.verdict, 'VALIDATE_FAILED', `law_run_exit=${red} (a genuinely red Law) must FAIL`)
+    assert.ok(v.reasons.some((r) => /Law run is RED/.test(r) && new RegExp(`exited ${red}`).test(r)))
+  }
+  for (const missing of [undefined, null, 'x', NaN]) {
+    const v = validateVerdict({ ...greenLogic, law_run_exit: missing })
+    assert.equal(v.verdict, 'VALIDATE_FAILED', `law_run_exit=${JSON.stringify(missing)} (un-transcribed) must fail closed`)
+    assert.ok(v.reasons.some((r) => /Law run is RED/.test(r) && /was not run/.test(r)))
+  }
+})
+
+test('validateVerdict: a CRITICAL criterion unmet → VALIDATE_FAILED; a non-critical unmet → VALIDATE_PARTIAL', () => {
+  const crit = validateVerdict({ ...greenLogic, criteria: [{ id: 'SC-001', met: false, critical: true, note: 'export broken' }] })
+  assert.equal(crit.verdict, 'VALIDATE_FAILED')
+  assert.ok(crit.reasons.some((r) => /CRITICAL acceptance criterion is unmet: SC-001/.test(r) && /export broken/.test(r)))
+  const noncrit = validateVerdict({ ...greenLogic, criteria: [{ id: 'SC-001', met: true }, { id: 'SC-009', met: false, critical: false }] })
+  assert.equal(noncrit.verdict, 'VALIDATE_PARTIAL')
+  assert.ok(noncrit.reasons.some((r) => /non-critical acceptance criterion is unmet: SC-009/.test(r)))
+})
+
+test('validateVerdict: an UNCATEGORIZED unmet criterion is treated as CRITICAL — scrutiny only rises', () => {
+  const v = validateVerdict({ ...greenLogic, criteria: [{ id: 'SC-007', met: false }] })
+  assert.equal(v.verdict, 'VALIDATE_FAILED')
+  assert.ok(v.reasons.some((r) => /CRITICAL acceptance criterion is unmet: SC-007/.test(r)))
+})
+
+test('validateVerdict: any blocking finding (drift/seam/goal-backward) → VALIDATE_FAILED, deduped', () => {
+  const v = validateVerdict({ ...greenLogic, blocking_findings: ['goal broken: cart never persists', 'goal broken: cart never persists', 'seam mismatch: API returns 422'] })
+  assert.equal(v.verdict, 'VALIDATE_FAILED')
+  assert.deepEqual(v.blocking, ['goal broken: cart never persists', 'seam mismatch: API returns 422'])
+  assert.equal(v.reasons.filter((r) => /cart never persists/.test(r)).length, 1)
+})
+
+test('validateVerdict: missing creds caps at VALIDATE_PARTIAL — never FAILED on its own (v2 rule)', () => {
+  const v = validateVerdict({ ...greenLogic, missing_creds: true })
+  assert.equal(v.verdict, 'VALIDATE_PARTIAL')
+  assert.ok(v.reasons.some((r) => /missing credentials/.test(r)))
+})
+
+// ── UI scope + the browser path (§3.2: a UI scope maxes at PARTIAL unless Tier-2 is clean) ──
+const greenUi = { ...greenLogic, ui_scope: true }
+
+test('validateVerdict: UI scope + a CLEAN Tier-2 traversal → VALIDATE_PASS, full, FULL_BROWSER_VALIDATION', () => {
+  const v = validateVerdict({ ...greenUi, browser_path: 'full' })
+  assert.equal(v.verdict, 'VALIDATE_PASS')
+  assert.equal(v.verification_class, 'full')
+  assert.equal(v.browser_verdict, 'FULL_BROWSER_VALIDATION')
+})
+
+test('validateVerdict: UI scope + no browser path (static-only) → VALIDATE_PARTIAL, static-only, PARTIAL_PASS_STATIC_ONLY — the v2 ceiling, honestly degraded', () => {
+  const v = validateVerdict({ ...greenUi, browser_path: 'static-only' })
+  assert.equal(v.verdict, 'VALIDATE_PARTIAL')
+  assert.equal(v.verification_class, 'static-only')
+  assert.equal(v.browser_verdict, 'PARTIAL_PASS_STATIC_ONLY')
+  assert.ok(v.reasons.some((r) => /no clean browser path/.test(r) && /never silently green/.test(r)))
+})
+
+test('validateVerdict: UI scope with an UNKNOWN/absent browser_path defaults to static-only — a UI scope never claims a clean browser pass it cannot prove', () => {
+  for (const bp of [undefined, '', 'bogus']) {
+    const v = validateVerdict({ ...greenUi, browser_path: bp })
+    assert.equal(v.verdict, 'VALIDATE_PARTIAL', `browser_path=${JSON.stringify(bp)}`)
+    assert.equal(v.verification_class, 'static-only')
+    assert.equal(v.browser_verdict, 'PARTIAL_PASS_STATIC_ONLY')
+  }
+})
+
+test('validateVerdict: UI scope + a FAILED Tier-2 traversal (a real UI defect) → VALIDATE_FAILED, FAIL_BROWSER_EVIDENCE_MISSING', () => {
+  const v = validateVerdict({ ...greenUi, browser_path: 'failed' })
+  assert.equal(v.verdict, 'VALIDATE_FAILED')
+  assert.equal(v.browser_verdict, 'FAIL_BROWSER_EVIDENCE_MISSING')
+  assert.ok(v.reasons.some((r) => /Tier-2 browser traversal ran and found a UI defect/.test(r)))
+})
+
+test('validateVerdict: non-compensatory — a FAILED arm beats a PARTIAL arm (a red Law outranks static-only degradation)', () => {
+  const v = validateVerdict({ ...greenUi, law_run_exit: 1, browser_path: 'static-only', missing_creds: true })
+  assert.equal(v.verdict, 'VALIDATE_FAILED')
+  // verification_class still records the honest UI degradation even on a FAILED verdict
+  assert.equal(v.verification_class, 'static-only')
+})
+
+test('validateVerdict: total + fail-closed — garbage/empty input never passes a gate', () => {
+  for (const bad of [null, undefined, 'x', 42, [], {}]) {
+    const v = validateVerdict(bad)
+    assert.equal(v.verdict, 'VALIDATE_FAILED', `input=${JSON.stringify(bad)} must fail closed`)
+    // {} has install_ok≠true and law_run_exit not 0 ⇒ FAILED; never a silent PASS
+  }
+})
+
+test('validateVerdict: PURE — same input, same output', () => {
+  const input = { ...greenUi, browser_path: 'static-only', criteria: [{ id: 'SC-001', met: false, critical: false }] }
+  assert.deepEqual(validateVerdict(input), validateVerdict(input))
 })

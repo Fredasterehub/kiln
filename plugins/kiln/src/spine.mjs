@@ -325,3 +325,152 @@ export function pipelineInvalidated(baseSha, headShaArg) {
   if (base !== head) return { invalidated: true, reason: `a corrective commit moved the milestone HEAD since the pipelined plan was cut (base_sha ${base}, current HEAD ${head}) — the speculative plan is stale; re-slice against the new HEAD` }
   return { invalidated: false, reason: '' }
 }
+
+// validateVerdict(ev) — the §3.2/§5 validate-stage verdict, computed DETERMINISTICALLY FIRST
+// (tasks.md T3.5: "Verdict computation deterministic-first") instead of trusting an agent's
+// self-assigned verdict. The validate stage is the real L3 backstop, so its PASS/PARTIAL/FAILED
+// ruling is mechanical over the EVIDENCE FILES — the deterministic Law floor (kiln-law verify +
+// run FULL + suite), the per-criterion results, the Tier-2 browser path, and the goal-backward
+// audit — never a prose self-grade. The agent ORCHESTRATES those commands and reports what they
+// printed; this function rules. A reviewer cannot soften an exit code, and a missing input never
+// passes a gate. Inlined into validate.js by the bundler (// @inline:spine:validateVerdict).
+//
+// `ev` is the validate stage's assembled evidence (every field fail-closed on absence):
+//   { law_run_exit, suite_exit         — the §5.1 Law floor exit codes (numbers; non-0 = the Law
+//                                         is red / the project suite failed; non-number ⇒ null =
+//                                         the command was not run or its exit was not transcribed,
+//                                         which FAILS CLOSED — a PASS requires BOTH at exit 0, so a
+//                                         missing exit code is fatal, never softened to PASS. The
+//                                         ONE exception: -1 is the no-pluginRoot DEGRADED sentinel
+//                                         (the kiln-law CLI lives under pluginRoot, so its absence
+//                                         makes the deterministic floor structurally un-runnable —
+//                                         validate.js argusPrompt transcribes -1 for both). -1 is an
+//                                         HONEST "not run because the oracle was unavailable" — it
+//                                         caps the verdict at PARTIAL, never PASS, never a hard
+//                                         FAILED on this alone, per the §1.6/§7 honest-degradation
+//                                         contract. null vs -1 is the load-bearing distinction:
+//                                         null = oracle present, exit dropped ⇒ FAILED; -1 = oracle
+//                                         absent, honestly marked ⇒ degraded PARTIAL.)
+//     install_ok                        — false ⇒ a build/install error (the v2 VALIDATE_FAILED
+//                                         "build error" class); a non-true value fails closed
+//     criteria: [{ id, met, critical }] — every acceptance criterion the agent exercised; `met`
+//                                         is the agent's per-criterion observation, `critical`
+//                                         flags an SC whose failure is fatal (default true on a
+//                                         non-false value — an uncategorized criterion is treated
+//                                         as critical: scrutiny may only rise)
+//     tests_passed, tests_failed        — suite counts, for the v2 ">50% test failures" FAILED arm
+//     blocking_findings: [string]       — the drift/seam/goal-backward findings the workflow has
+//                                         already classed BLOCKING (critical|high), deduped — any
+//                                         one is fatal (the deterministic reconcile's blocking arm)
+//     ui_scope                          — true iff the deliverable has UI/web behavioral criteria
+//                                         (designPresent OR a product_type of web/extension/electron
+//                                         OR any criterion the agent marked browser-only)
+//     browser_path                      — 'full' (Tier-2 traversal ran clean), 'failed' (traversal
+//                                         ran and found a UI defect), 'static-only' (no browser
+//                                         path available — playwright/MCP absent, honest
+//                                         degradation), or '' / anything else (unknown ⇒ treated
+//                                         as static-only: a UI scope never claims a clean browser
+//                                         pass it cannot prove)
+//     missing_creds                     — true ⇒ a credentials/env gap (the v2 "NEVER fail solely
+//                                         for missing creds" rule — caps the verdict at PARTIAL,
+//                                         never FAILED on this alone) }
+//
+// Returns { verdict, verification_class, browser_verdict, blocking, reasons }:
+//   · verdict ∈ 'VALIDATE_PASS' | 'VALIDATE_PARTIAL' | 'VALIDATE_FAILED'
+//   · verification_class ∈ 'full' | 'static-only' — the §1.6/§7 honesty channel, recorded
+//     end-to-end: 'static-only' the moment a UI scope ran without a browser path (degraded but
+//     honest), else 'full'. A non-UI deliverable is always 'full' (no browser gap exists).
+//   · browser_verdict — the v2 enum, preserved: NOT_APPLICABLE (no UI scope) ·
+//     FULL_BROWSER_VALIDATION (Tier-2 clean) · FAIL_BROWSER_EVIDENCE_MISSING (Tier-2 found a UI
+//     defect — blocking) · PARTIAL_PASS_STATIC_ONLY (UI scope, no browser path — the v2 ceiling).
+//   · blocking — the deduped blocking-reason list that forced a non-PASS (empty on PASS).
+//   · reasons — every rule that fired, ledger-/report-ready.
+//
+// The matrix, fail-closed and non-compensatory (any FAILED arm wins, then any PARTIAL arm, else
+// PASS — scrutiny only rises):
+//   FAILED iff  install failed · the Law run is red OR un-transcribed (law_run_exit ≠ 0, null
+//               included — EXCEPT the -1 degraded-floor sentinel, which is PARTIAL below) · the
+//               suite exit is MISSING/un-transcribed (suite_exit = null — a PASS requires the suite
+//               at exit 0 per §3.2/§5.1, so an unproven suite fails closed exactly like an
+//               un-transcribed Law run; suite_exit=-1 is likewise the degraded sentinel, PARTIAL) ·
+//               the suite ran red AND >50% of its tests failed · any CRITICAL criterion unmet · any
+//               blocking finding · the Tier-2 traversal ran and FAILED (a real UI defect). These
+//               are the v2 VALIDATE_FAILED classes plus the new Law/suite-transcription/goal-
+//               backward/browser-defect gates.
+//   PARTIAL iff (not FAILED and) the deterministic Law floor was unavailable (law_run_exit=-1 — the
+//               no-pluginRoot honest degradation, never a silent PASS) · the suite is red but ≤50%
+//               failed (incl. suite_exit=-1) · any NON-critical criterion unmet · missing creds · a
+//               UI scope with no clean browser path (static-only — the v2 "UI behavior pending the
+//               out-of-loop pass" ceiling, now satisfiable in-loop only by a clean Tier-2
+//               traversal). The §3.2 rule: a UI scope maxes at PARTIAL unless its browser traversal
+//               is clean.
+//   PASS    otherwise: install ok, Law run + suite both exit 0, every critical criterion met,
+//               zero blocking findings, and (no UI scope OR the Tier-2 traversal ran clean).
+export function validateVerdict(ev) {
+  const e = (ev && typeof ev === 'object' && !Array.isArray(ev)) ? ev : {}
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v)) ? v : null
+  const lawExit = num(e.law_run_exit)
+  const suiteExit = num(e.suite_exit)
+  const passed = num(e.tests_passed)
+  const failed = num(e.tests_failed)
+  const installOk = e.install_ok === true
+  const missingCreds = e.missing_creds === true
+  const uiScope = e.ui_scope === true
+  const browserPath = (e.browser_path === 'full' || e.browser_path === 'failed' || e.browser_path === 'static-only') ? e.browser_path : (uiScope ? 'static-only' : '')
+  const criteria = Array.isArray(e.criteria) ? e.criteria.filter((c) => c && typeof c === 'object' && !Array.isArray(c)) : []
+  // a criterion is critical unless EXPLICITLY flagged non-critical; uncategorized ⇒ critical.
+  const isCritical = (c) => c.critical !== false
+  const unmet = criteria.filter((c) => c.met !== true)
+  const criticalUnmet = unmet.filter(isCritical)
+  const nonCriticalUnmet = unmet.filter((c) => !isCritical(c))
+  const blocking = Array.from(new Set((Array.isArray(e.blocking_findings) ? e.blocking_findings : []).filter((s) => typeof s === 'string' && s.trim()).map((s) => s.trim())))
+
+  // The degraded-floor sentinel (no-pluginRoot path): the kiln-law CLI lives under pluginRoot, so when
+  // pluginRoot is absent the deterministic floor cannot run and Argus is told (validate.js argusPrompt)
+  // to transcribe law_run_exit=-1 / suite_exit=-1 — an HONEST "not run because the oracle was
+  // structurally unavailable", distinct from null ("the oracle was available but its exit was dropped").
+  // §1.6/§7 + the validate.js L30-31 contract: pluginRoot absence DEGRADES to the v2 static path —
+  // honestly, never a silent skip and never a clean green. So -1 is a degradation (→ PARTIAL ceiling
+  // below), not a hard FAILED: it can never PASS (the floor never proved exit 0), but the run is honestly
+  // degraded, not declared broken. It is symmetric with the suite arm, where -1 already lands in PARTIAL.
+  // A null or any OTHER non-zero Law exit is still a hard FAILED (un-transcribed, or a genuinely red Law).
+  const lawFloorUnavailable = lawExit === -1
+  const failedReasons = []
+  if (!installOk) failedReasons.push('install/build failed — the app could not be installed or built (the runner reported install_ok ≠ true)')
+  if (lawExit !== 0 && !lawFloorUnavailable) failedReasons.push(`the Law run is RED — kiln-law run (FULL) ${lawExit === null ? 'was not run or its exit was not transcribed' : `exited ${lawExit}`}; the verdict is mechanical (no agent softens an exit code)`)
+  // suite: a MISSING/un-transcribed exit fails CLOSED (§5.1 — exit codes are transcribed exactly and
+  // the verdict rules over them; §3.2 — PASS requires the suite at exit 0, so an unproven suite is
+  // never PASS, exactly as the Law run above). >50% failed is FAILED; a red suite that RAN with ≤50%
+  // failed (or ran red with counts unavailable) is the softer PARTIAL arm below. null ⇒ FAILED here.
+  if (suiteExit === null) failedReasons.push('the project suite exit was not run or not transcribed — kiln-law suite produced no exit code; a PASS requires the suite at exit 0 (§5.1/§3.2), so a missing suite oracle fails closed (no agent softens a missing exit code)')
+  let suiteMajorityFailed = false
+  if (suiteExit !== null && suiteExit !== 0 && passed !== null && failed !== null && (passed + failed) > 0) {
+    suiteMajorityFailed = failed > (passed + failed) / 2
+  }
+  if (suiteMajorityFailed) failedReasons.push(`the project suite failed the majority of its tests (${failed} failed / ${passed + failed} total)`)
+  for (const c of criticalUnmet) failedReasons.push(`a CRITICAL acceptance criterion is unmet: ${c.id || '(unnamed)'}${c.note ? ` — ${c.note}` : ''}`)
+  for (const b of blocking) failedReasons.push(`blocking finding: ${b}`)
+  if (uiScope && browserPath === 'failed') failedReasons.push('the Tier-2 browser traversal ran and found a UI defect — a clean PASS is never emitted for broken UI behavior')
+
+  const partialReasons = []
+  // the degraded-floor sentinel caps at PARTIAL: the deterministic Law floor never ran (pluginRoot
+  // absent), so a clean green can never be PROVEN — but the run is honestly degraded, not FAILED. This
+  // is the load-bearing arm when Argus ran its own suite to a clean exit 0: without it the verdict would
+  // fall through to a silent PASS the missing floor never earned (the mandate's "never silently green").
+  if (lawFloorUnavailable) partialReasons.push('the deterministic Law floor did not run — kiln-law was unavailable (pluginRoot absent), so law_run_exit=-1; the run is honestly degraded to the v2 static path (the floor never proved a clean exit 0), capped at PARTIAL, never a silent PASS (§1.6/§7)')
+  // a red suite that did NOT fail the majority (or whose counts are unavailable) is PARTIAL, not PASS.
+  if (suiteExit !== null && suiteExit !== 0 && !suiteMajorityFailed) partialReasons.push(`the project suite is red (exit ${suiteExit}) but ≤50% of tests failed${passed !== null && failed !== null ? ` (${failed}/${passed + failed})` : ' (counts unavailable)'}`)
+  for (const c of nonCriticalUnmet) partialReasons.push(`a non-critical acceptance criterion is unmet: ${c.id || '(unnamed)'}${c.note ? ` — ${c.note}` : ''}`)
+  if (missingCreds) partialReasons.push('missing credentials/env — never a FAILED on its own (v2 rule), capped at PARTIAL')
+  if (uiScope && browserPath === 'static-only') partialReasons.push('UI scope with no clean browser path — static-only (playwright/MCP absent or the traversal did not run clean); the §3.2 ceiling is PARTIAL until a clean Tier-2 traversal, honestly degraded, never silently green')
+
+  const verification_class = (uiScope && browserPath !== 'full') ? 'static-only' : 'full'
+  const browser_verdict = !uiScope ? 'NOT_APPLICABLE'
+    : browserPath === 'full' ? 'FULL_BROWSER_VALIDATION'
+      : browserPath === 'failed' ? 'FAIL_BROWSER_EVIDENCE_MISSING'
+        : 'PARTIAL_PASS_STATIC_ONLY'
+
+  if (failedReasons.length) return { verdict: 'VALIDATE_FAILED', verification_class, browser_verdict, blocking, reasons: failedReasons }
+  if (partialReasons.length) return { verdict: 'VALIDATE_PARTIAL', verification_class, browser_verdict, blocking, reasons: partialReasons }
+  return { verdict: 'VALIDATE_PASS', verification_class, browser_verdict, blocking: [], reasons: [] }
+}
