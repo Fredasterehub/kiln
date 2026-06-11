@@ -55,8 +55,8 @@ const inSandbox = async (fn) => {
   try { return await fn(dir) } finally { rmSync(dir, { recursive: true, force: true }) }
 }
 
-test('the harness sees all six shipped workflows', () => {
-  assert.deepEqual(files, ['architecture.js', 'build.js', 'mapping.js', 'report.js', 'research.js', 'validate.js'])
+test('the harness sees all seven shipped workflows', () => {
+  assert.deepEqual(files, ['architecture.js', 'build.js', 'gauge.js', 'mapping.js', 'report.js', 'research.js', 'validate.js'])
 })
 
 for (const file of files) {

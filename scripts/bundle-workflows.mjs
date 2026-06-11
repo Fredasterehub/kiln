@@ -62,12 +62,29 @@ function duoPool() {
   return (duoPoolBlock = `const DUO_POOL = {\n${Object.keys(pools).map(row).join('\n')}\n}`)
 }
 
+// ── The gauge-config step: a `// @gauge-config` marker is replaced with a GAUGE_CONFIG const
+//    regenerated from plugins/kiln/gauge-config.json — same discipline as duo-pool. The Gauge's
+//    deterministic mapping runs IN gauge.js (not in an agent), so the workflow needs the thresholds
+//    in-process; workflow scripts cannot import JSON, so the canonical file is inlined here and
+//    --check guards the inline copy against drift. The `_doc`/`_doc_*` commentary keys (JSON has no
+//    comments) are stripped — only the consumed knobs ship into the workflow. Lazy + cached. ──
+let gaugeConfigBlock = null
+function gaugeConfig() {
+  if (gaugeConfigBlock) return gaugeConfigBlock
+  const raw = JSON.parse(readFileSync(join(root, 'plugins/kiln/gauge-config.json'), 'utf8'))
+  const clean = {}
+  for (const k of Object.keys(raw)) if (k !== '_doc' && !k.startsWith('_doc_')) clean[k] = raw[k]
+  return (gaugeConfigBlock = `const GAUGE_CONFIG = ${JSON.stringify(clean)}`)
+}
+
 // ── Bundle one workflow source: replace each marker line with the named export declarations. ──
 const MARKER_RE = /^\/\/ @inline:([\w-]+):([\w$]+(?:,[\w$]+)*)\s*$/
 const DUO_RE = /^\/\/ @duo-pool\s*$/
+const GAUGE_RE = /^\/\/ @gauge-config\s*$/
 function bundle(name, src) {
   const body = src.split('\n').map((line) => {
     if (DUO_RE.test(line)) return duoPool()
+    if (GAUGE_RE.test(line)) return gaugeConfig()
     const m = line.match(MARKER_RE)
     if (!m) return line
     const [, mod, names] = m

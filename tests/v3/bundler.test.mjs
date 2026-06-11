@@ -2,7 +2,7 @@
 // The bundler resolves its tree from its own file location (dirname/..), so each test clones it
 // into a throwaway sandbox mirroring the repo layout — scripts/ + plugins/kiln/{src,workflows-src,
 // workflows} — and drives it there. One test runs --check against the REAL repo so the harness
-// itself proves the six shipped workflows are in sync with their sources.
+// itself proves every shipped workflow is in sync with its source.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -176,7 +176,56 @@ test('duo-pool step: --check fails when data/duo-pool.json drifts from the gener
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
-test('REAL repo: the six shipped workflows are in sync with workflows-src', () => {
+// ── The gauge-config step (T2): `// @gauge-config` regenerates GAUGE_CONFIG from gauge-config.json,
+//    stripping the _doc/_doc_* commentary keys. Same drift discipline as duo-pool. ──
+const FIXTURE_GAUGE_JSON = JSON.stringify({
+  _doc: 'top-level commentary — must be stripped',
+  h80_human_hours: 2,
+  _doc_h80_human_hours: 'commentary for the above — must be stripped',
+  effort_bias_dims: ['D3', 'D4', 'D8'],
+})
+
+const FIXTURE_GAUGE_WF = `// gtest.js — fixture workflow exercising the gauge-config step.
+// @gauge-config
+return GAUGE_CONFIG
+`
+
+const GAUGE_GOLDEN = `// GENERATED from workflows-src/gtest.js — edit the source, run scripts/bundle-workflows.mjs
+// gtest.js — fixture workflow exercising the gauge-config step.
+const GAUGE_CONFIG = {"h80_human_hours":2,"effort_bias_dims":["D3","D4","D8"]}
+return GAUGE_CONFIG
+`
+
+function withGauge(dir) {
+  writeFileSync(join(dir, 'plugins/kiln/gauge-config.json'), FIXTURE_GAUGE_JSON)
+  writeFileSync(join(dir, 'plugins/kiln/workflows-src/gtest.js'), FIXTURE_GAUGE_WF)
+}
+
+test('gauge-config step: the @gauge-config marker emits a GAUGE_CONFIG const with the _doc keys stripped', () => {
+  const dir = sandbox()
+  try {
+    withGauge(dir)
+    const res = runBundler(dir)
+    assert.equal(res.status, 0, res.stderr)
+    assert.equal(readFileSync(join(dir, 'plugins/kiln/workflows/gtest.js'), 'utf8'), GAUGE_GOLDEN)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('gauge-config step: --check fails when gauge-config.json drifts from the generated GAUGE_CONFIG', () => {
+  const dir = sandbox()
+  try {
+    withGauge(dir)
+    assert.equal(runBundler(dir).status, 0)
+    assert.equal(runBundler(dir, '--check').status, 0)
+    writeFileSync(join(dir, 'plugins/kiln/gauge-config.json'), FIXTURE_GAUGE_JSON.replace('"h80_human_hours":2', '"h80_human_hours":3'))
+    const res = runBundler(dir, '--check')
+    assert.notEqual(res.status, 0)
+    assert.match(res.stderr, /OUT OF SYNC/)
+    assert.match(res.stderr, /gtest\.js/)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('REAL repo: the shipped workflows are in sync with workflows-src', () => {
   const res = spawnSync(process.execPath, [BUNDLER, '--check'], { encoding: 'utf8' })
   assert.equal(res.status, 0, res.stderr)
 })
