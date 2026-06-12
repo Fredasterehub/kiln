@@ -614,10 +614,12 @@ const codexGuideNote = codexGuide
 // ── Prompt builders (functional role+stance only; persona names live in labels, never here) ──
 // The §5 Law block every builder receives: outcome-phrased (done = the SC checks pass), with the
 // immutability warning — the tamper gate auto-rejects mechanically, so the warning is real.
+// The builder's kiln-law run is stage-tokened (--run-prefix BUILD_RUN_TOKEN) so the stage-end sweep
+// can reap a hard-killed builder's probe tree — kiln-law's per-run bracket covers normal exits only (DOGFOOD FINDING 6).
 function lawLines(slice) {
   const ids = slice.sc_ids.join(',')
   return `- THE LAW (locked acceptance gates): this slice is DONE only when its mapped checks pass — ${slice.sc_ids.join(', ')}. ` +
-    `Execute them any time with 'node ${pluginRoot}/scripts/kiln-law.mjs run ${projectPath} ${kilnDir} --only ${ids}' (PROBE_DEFERRED lines are deferred probe templates — fine; their evidence arrives in a later phase).\n` +
+    `Execute them any time with 'node ${pluginRoot}/scripts/kiln-law.mjs run ${projectPath} ${kilnDir} --only ${ids} --run-prefix ${BUILD_RUN_TOKEN}' (PROBE_DEFERRED lines are deferred probe templates — fine; their evidence arrives in a later phase).\n` +
     `- The gate files under tests/acceptance/ and ${lawFile} are LOCKED — NEVER edit, move, or delete them: the tamper gate re-hashes them against the lock commit and a touched lock auto-rejects the slice with no reviewer and no appeal. ADD new tests anywhere else freely.\n`
 }
 
