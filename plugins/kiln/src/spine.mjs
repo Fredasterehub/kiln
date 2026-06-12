@@ -161,6 +161,33 @@ export function runnerGate(runner, probe) {
   return { verdict: 'proceed', tamper_paths: [], reasons: [], verification_class: verificationClass }
 }
 
+// gateOnlyRefusal(gate) — the P3.5 T3 (dogfood finding 4) refuse-on-red predicate for the
+// gate-only retry path. gateOnly re-runs a STARVED milestone gate over an ALREADY-COMPLETED build:
+// no slicer, no builder — just ONE deterministic trial-shaped pass over ALL the milestone's SCs
+// (kiln-law verify + run --only <all milestone SCs> --expect-green <all milestone SCs>, no --flips
+// because nothing is being flipped — every SC must already be GREEN over the completed build),
+// then this predicate over the resulting runnerGate verdict. It exists to re-run a starved gate,
+// NEVER to skip building or to gate a RED Law: the trial may PROCEED only when the Law is fully
+// green over evidence that is tamper-clean, complete, and fresh. ANY other runnerGate verdict —
+// 'red' (an SC is not green, or a regression), 'stale' (the evidence is missing/altered/predates
+// HEAD), 'tamper' (a locked path was touched), or a malformed/absent gate — REFUSES the milestone
+// with the single contract reason `gate-only-on-red` (QA_FAIL). Fail-closed by construction: the
+// only non-refusing input is an exact 'proceed'. Returns { refuse, reason, detail }: reason is the
+// fixed `gate-only-on-red` tag the conductor matches on; detail is ledger-/finding-ready (the
+// underlying gate verdict + its reasons) and the empty string when the Law is green.
+export function gateOnlyRefusal(gate) {
+  const g = (gate && typeof gate === 'object' && !Array.isArray(gate)) ? gate : null
+  if (g && g.verdict === 'proceed') return { refuse: false, reason: '', detail: '' }
+  const verdict = g && typeof g.verdict === 'string' ? g.verdict : 'no-gate'
+  const reasons = (g && Array.isArray(g.reasons)) ? g.reasons.filter((r) => typeof r === 'string' && r) : []
+  const why = reasons.length ? reasons.join('; ') : (g ? `the gate returned '${verdict}' without naming reasons` : 'the trial produced no gate verdict')
+  return {
+    refuse: true,
+    reason: 'gate-only-on-red',
+    detail: `gate-only refused — the Law is not fully green over the completed build (trial verdict '${verdict}': ${why}). gate-only re-runs a starved gate over a completed build; it never gates a red Law and never skips building.`,
+  }
+}
+
 // goalAuditUsable(report) — the milestone gate's usability predicate for the goal-backward
 // audit report (ORCHESTRATOR RULING, p2/tasks.md "Gate failure semantics"): the §3.2 judge-spawn
 // condition is exhaustive over USABLE inputs, and the judge NEVER spawns on missing ones — a

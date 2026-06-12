@@ -109,10 +109,13 @@ test('drift guard NEGATIVE self-test: the extractor surfaces a planted unknown t
 })
 
 // ── Round-trip: kiln-state append accepts every workflow event type, then validate + project pass. ──
+// gate_only_refused joined in P3.5 T3 (the gateOnly refuse path) — the guard caught its absence
+// the same session it shipped; this fixture updates CONSCIOUSLY with every vocabulary change.
 const WORKFLOW_TYPES = [
-  'browser_lease', 'browser_sweep', 'gate_skipped', 'goal_audit_failure', 'law_red_auto_reject',
-  'probe_unavailable', 'slice_plan_invalid', 'slice_plan_invalidated', 'slice_plan_replanned',
-  'tamper_auto_reject', 'tier2_traversal', 'validate_verdict', 'verification_degraded',
+  'browser_lease', 'browser_sweep', 'gate_only_refused', 'gate_skipped', 'goal_audit_failure',
+  'law_red_auto_reject', 'probe_unavailable', 'slice_plan_invalid', 'slice_plan_invalidated',
+  'slice_plan_replanned', 'tamper_auto_reject', 'tier2_traversal', 'validate_verdict',
+  'verification_degraded',
 ]
 
 test('round-trip: append accepts each widened workflow type; validate + project exit 0', () => {
@@ -136,7 +139,7 @@ test('round-trip: append accepts each widened workflow type; validate + project 
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
-test('round-trip: every WORKFLOW_TYPES entry is one of the 13 widened types (no stale fixture drift)', () => {
+test('round-trip: every WORKFLOW_TYPES entry is one of the widened workflow types (no stale fixture drift)', () => {
   // Guards the fixture itself: the round-trip list must equal exactly the enum minus the pre-existing
   // core lifecycle types, so this test cannot silently rot if the enum widens again without updating it.
   const CORE = ['run_init', 'stage_started', 'stage_completed', 'gate_decision', 'posture_set', 'posture_escalated', 'check_result', 'commit', 'evidence', 'escalation', 'note']

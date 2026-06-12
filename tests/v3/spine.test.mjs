@@ -10,7 +10,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { validateSlicePlan, runnerGate, probeGate, rejectionClass, tribunalThreshold, gateDecision, goalAuditUsable, pipelineInvalidated, validateVerdict } from '../../plugins/kiln/src/spine.mjs'
+import { validateSlicePlan, runnerGate, gateOnlyRefusal, probeGate, rejectionClass, tribunalThreshold, gateDecision, goalAuditUsable, pipelineInvalidated, validateVerdict } from '../../plugins/kiln/src/spine.mjs'
 
 // ── validateSlicePlan — §5 coverage is arithmetic, not judgment ─────────────────────────────────
 const slice = (objective, scIds, extra = {}) => ({ objective, done_when: `${objective} works`, sc_ids: scIds, ...extra })
@@ -238,6 +238,47 @@ test('runnerGate: every stale reason accumulates — one pass reports them all',
   const v = runnerGate({ verify_exit: 1, tamper_paths: [] }, null)
   assert.equal(v.verdict, 'stale')
   assert.ok(v.reasons.length >= 4, `expected all gaps reported, got: ${JSON.stringify(v.reasons)}`)
+})
+
+// ── gateOnlyRefusal — the P3.5 T3 refuse-on-red predicate (dogfood finding 4): gate-only re-runs
+//    a STARVED milestone gate over an already-COMPLETED build and may proceed ONLY when the Law is
+//    fully green over tamper-clean, fresh, complete evidence. Every other runnerGate verdict
+//    refuses with the single contract reason `gate-only-on-red`. ───────────────────────────────────
+
+test('gateOnlyRefusal: a clean proceed does NOT refuse (the Law is fully green over the completed build)', () => {
+  const r = gateOnlyRefusal({ verdict: 'proceed', reasons: [], verification_class: 'full' })
+  assert.deepEqual(r, { refuse: false, reason: '', detail: '' })
+})
+
+test('gateOnlyRefusal: a red gate refuses with gate-only-on-red, carrying the gate reasons (an SC is not green over the completed build)', () => {
+  const r = gateOnlyRefusal({ verdict: 'red', reasons: ['declared RED→GREEN flip(s) still not green: SC-002'] })
+  assert.equal(r.refuse, true)
+  assert.equal(r.reason, 'gate-only-on-red')
+  assert.match(r.detail, /not fully green/)
+  assert.match(r.detail, /SC-002/)
+  assert.match(r.detail, /never gates a red Law/)
+})
+
+test('gateOnlyRefusal: stale and tamper verdicts BOTH refuse (gate-only never gates over untrusted or tampered evidence) — fail-closed, the single reason tag throughout', () => {
+  const stale = gateOnlyRefusal({ verdict: 'stale', reasons: ['results.jsonl does not exist in the evidence dir'] })
+  assert.equal(stale.refuse, true)
+  assert.equal(stale.reason, 'gate-only-on-red')
+  assert.match(stale.detail, /results\.jsonl/)
+  const tamper = gateOnlyRefusal({ verdict: 'tamper', tamper_paths: ['.kiln/law.json'], reasons: ['locked path(s) touched: .kiln/law.json'] })
+  assert.equal(tamper.refuse, true)
+  assert.equal(tamper.reason, 'gate-only-on-red')
+  assert.match(tamper.detail, /law\.json/)
+})
+
+test('gateOnlyRefusal: a malformed/absent gate refuses fail-closed (no verdict ⇒ never a silent green)', () => {
+  for (const bad of [null, undefined, {}, [], 'proceed', { verdict: 'unknown' }, { verdict: 'red' }]) {
+    const r = gateOnlyRefusal(bad)
+    assert.equal(r.refuse, true, `${JSON.stringify(bad)} must refuse`)
+    assert.equal(r.reason, 'gate-only-on-red')
+    assert.ok(typeof r.detail === 'string' && r.detail, 'a refusal always carries a ledger-ready detail')
+  }
+  // only the EXACT 'proceed' string is non-refusing
+  assert.equal(gateOnlyRefusal({ verdict: 'proceed' }).refuse, false)
 })
 
 // ── tribunalThreshold — the §3.2 milestone-gate ROUTING predicate (multi-slice tribunal vs ──────

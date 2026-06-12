@@ -31,8 +31,9 @@ const TIMEOUT_MS = 10_000
 // the child with SIGKILL at the deadline, unconditionally. Returns { timedOut, status, failure }:
 // timedOut when the kill fired, failure as the runner's {name, message} JSON when an exception
 // escaped (raw output as a fallback when the child died without reporting).
-function dryRun(file, dir, timeoutMs = TIMEOUT_MS) {
-  const res = spawnSync(process.execPath, [RUNNER, file, dir], {
+function dryRun(file, dir, timeoutMs = TIMEOUT_MS, argsOverlay = null) {
+  const argv = argsOverlay ? [RUNNER, file, dir, JSON.stringify(argsOverlay)] : [RUNNER, file, dir]
+  const res = spawnSync(process.execPath, argv, {
     encoding: 'utf8',
     timeout: timeoutMs,
     killSignal: 'SIGKILL',
@@ -130,5 +131,18 @@ test('determinism-poison proof: Date.now() / Math.random() / argless new Date() 
     writeFileSync(legalFile, legal)
     const ok = dryRun(legalFile, dir)
     assert.ok(!ok.failure && !ok.timedOut, `new Date(value) must remain legal, got: ${JSON.stringify(ok.failure)}`)
+  })
+})
+
+test('gateOnly smoke (P3.5 T3): build.js executes its gateOnly:true branch under the runtime poison stubs — no exception escapes, no clock/host-global slips into the gate-only legs (DOGFOOD FINDING 3 holds)', async () => {
+  // The gateOnly path takes a structurally different route (skips Scoring + Forging, runs the
+  // gate-only trial + the forced tribunal) — node --check is blind to it, so it must execute under
+  // the exact runtime poison the engine enforces. agent() resolves null throughout, exactly as the
+  // base smoke does; with valid args, any escaping exception (any class) is a failure.
+  await inSandbox(async (dir) => {
+    const r = dryRun(join(WORKFLOWS, 'build.js'), dir, TIMEOUT_MS, { gateOnly: true })
+    assert.ok(!r.timedOut, `build.js {gateOnly:true}: TIMEOUT — child killed at the ${TIMEOUT_MS}ms deadline`)
+    assert.equal(r.status, 0,
+      `build.js {gateOnly:true}: ${r.failure && r.failure.name}: ${r.failure && r.failure.message} — the gateOnly branch must execute cleanly under the runtime poison stubs`)
   })
 })

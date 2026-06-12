@@ -18,15 +18,25 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const [file, dir] = process.argv.slice(2)
+const [file, dir, argsOverlayRaw] = process.argv.slice(2)
 if (!file || !dir) {
-  process.stderr.write('usage: node dry-run-runner.mjs <script-file> <sandbox-dir>\n')
+  process.stderr.write('usage: node dry-run-runner.mjs <script-file> <sandbox-dir> [args-overlay-json]\n')
   process.exit(2)
+}
+// Optional third arg: a JSON object merged over the base args (e.g. '{"gateOnly":true}') so the
+// harness can smoke a workflow's argument-gated branch (P3.5 T3: the gateOnly path) under the exact
+// runtime poison stubs. A malformed overlay is a usage error (exit 2) — never a silent no-op.
+let argsOverlay = {}
+if (argsOverlayRaw) {
+  try { argsOverlay = JSON.parse(argsOverlayRaw) } catch (e) {
+    process.stderr.write(`dry-run-runner: malformed args overlay JSON: ${e.message}\n`)
+    process.exit(2)
+  }
 }
 
 function makeStubs(sandbox) {
   return {
-    args: { kilnDir: join(sandbox, '.kiln'), projectPath: sandbox, codexAvailable: false, testingRigor: 'standard' },
+    args: { kilnDir: join(sandbox, '.kiln'), projectPath: sandbox, codexAvailable: false, testingRigor: 'standard', ...argsOverlay },
     phase: () => {},
     log: () => {},
     agent: async () => null,

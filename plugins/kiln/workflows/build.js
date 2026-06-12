@@ -11,7 +11,7 @@ export const meta = {
   ],
 }
 
-// ── args: { kilnDir, projectPath, codexAvailable, testingRigor, milestoneLimit, uiBuild, pluginRoot, posture } ──
+// ── args: { kilnDir, projectPath, codexAvailable, testingRigor, milestoneLimit, uiBuild, pluginRoot, posture, runToken, gateOnly } ──
 function normalizeArgs(args) {
   if (typeof args === 'string') {
     try { args = JSON.parse(args) } catch (e) { return { __parse_error: true } }
@@ -27,6 +27,20 @@ const testingRigor = ['tdd', 'standard', 'minimal'].includes(String(A.testingRig
 const milestoneLimit = typeof A.milestoneLimit === 'number' ? A.milestoneLimit : Infinity
 // uiBuild forces every milestone onto the ui surface (Opus builds, Codex reviews) — an optional override.
 const uiBuild = A.uiBuild === true
+// gateOnly is the P3.5 T3 (dogfood finding 4) STARVED-GATE retry path: re-run a milestone gate
+// that was starved (session death mid-Judgment) over an ALREADY-COMPLETED build, without the
+// 40-minute full re-build the v3 slicer otherwise forces (validateSlicePlan rejects a zero-slice
+// plan while SCs remain uncovered, so a completed build re-enters through builder/confirm churn it
+// does not need). Under gateOnly, Scoring the Cut and Forging are SKIPPED entirely — no slicer, no
+// confirm, no builders. Per milestone: the same §3.4 floor gates, then ONE deterministic
+// trial-shaped pass over ALL the milestone's SCs (kiln-law verify + run --only/--expect-green over
+// every milestone SC — NO --flips: nothing is flipped, every SC must already be GREEN over the
+// completed build) + the freshness probe + runnerGate. If the Law is not fully green the milestone
+// REFUSES (QA_FAIL, reason gate-only-on-red — never a red gate, never a skipped build); if green it
+// routes CONSERVATIVELY to the FULL tribunal (the historical slice count is unknown to a fresh
+// session, so tribunalThreshold's fail-toward-scrutiny doctrine applies — gate-only never lowers
+// the gate). The tribunal correction loop stays available and runs the NORMAL build+trial path.
+const gateOnly = A.gateOnly === true
 // pluginRoot is the conductor-resolved absolute $PLUGIN_ROOT (a launched Workflow can't see
 // ${CLAUDE_PLUGIN_ROOT}). In v3 it is LOAD-BEARING: the kiln-law CLI (the §3.4 Law floor) and the
 // kiln-state ledger live under it. Its absence is gated below — never a silent v2-style build.
@@ -421,6 +435,18 @@ function runnerGate(runner, probe) {
   }
   return { verdict: 'proceed', tamper_paths: [], reasons: [], verification_class: verificationClass }
 }
+function gateOnlyRefusal(gate) {
+  const g = (gate && typeof gate === 'object' && !Array.isArray(gate)) ? gate : null
+  if (g && g.verdict === 'proceed') return { refuse: false, reason: '', detail: '' }
+  const verdict = g && typeof g.verdict === 'string' ? g.verdict : 'no-gate'
+  const reasons = (g && Array.isArray(g.reasons)) ? g.reasons.filter((r) => typeof r === 'string' && r) : []
+  const why = reasons.length ? reasons.join('; ') : (g ? `the gate returned '${verdict}' without naming reasons` : 'the trial produced no gate verdict')
+  return {
+    refuse: true,
+    reason: 'gate-only-on-red',
+    detail: `gate-only refused — the Law is not fully green over the completed build (trial verdict '${verdict}': ${why}). gate-only re-runs a starved gate over a completed build; it never gates a red Law and never skips building.`,
+  }
+}
 function probeGate(surface, gate) {
   const surf = (surface === 'ui' || surface === 'mixed') ? surface : 'logic'
   const vc = (gate && typeof gate === 'object' && typeof gate.verification_class === 'string') ? gate.verification_class : ''
@@ -723,16 +749,27 @@ function runnerPrompt(build, lawCtx, beforeRunId) {
   // turned green (so regressions are OBSERVED, not assumed), and --before anchors statusBefore in
   // the recorded evidence of the previous complete run — kiln-law computes the flip plan itself
   // (src/law.mjs flipPlan); no agent arithmetic, no prose state.
+  //   The gateOnly variant (P3.5 T3, dogfood finding 4) re-runs a STARVED gate over an
+  //   already-completed build: it asserts every milestone SC is GREEN NOW (--expect-green over the
+  //   full --only scope, kiln-law's hard-greenness gate) and declares NO --flips — nothing is being
+  //   flipped, so there is no RED→GREEN lifecycle and no statusBefore to anchor (--before is
+  //   omitted). The exit code is still the verdict: any SC not green ⇒ non-zero ⇒ runnerGate 'red'
+  //   ⇒ gateOnlyRefusal fires (gate-only-on-red). It never gates a red Law and never skips building.
   const only = lawCtx.only.join(',')
   const flips = lawCtx.flips.join(',')
-  const before = beforeRunId ? ` --before ${beforeRunId}` : ''
+  const lawArgs = lawCtx.gateOnly
+    ? `--only ${only} --expect-green ${only}`
+    : `--only ${only} --flips ${flips}${beforeRunId ? ` --before ${beforeRunId}` : ''}`
+  const lawVerdictNote = lawCtx.gateOnly
+    ? `(0 = every milestone SC is GREEN now over the completed build; non-zero = an SC is not green or a check regressed — the Law is red, gate-only refuses)`
+    : `(0 = every declared flip went RED→GREEN and nothing previously-GREEN regressed; non-zero = the slice failed its Law)`
   const suite = (build && build.test_command) ? build.test_command : null
   return `You are the deterministic check runner — you execute and report; you never fix, never edit, never judge.\n\n` +
     `<task>Run these commands (Bash) IN THIS ORDER and report EXACTLY what you observe:\n` +
     `1. node ${pluginRoot}/scripts/kiln-law.mjs verify ${projectPath} ${kilnDir}\n` +
     `   verify_exit = its exit code. Collect every 'TAMPER: <path>' line's path into tamper_paths (empty array if none). If verify_exit is not 0, STOP — skip steps 2-3 and report what you have.\n` +
-    `2. node ${pluginRoot}/scripts/kiln-law.mjs run ${projectPath} ${kilnDir} --only ${only} --flips ${flips}${before} --run-prefix ${BUILD_RUN_TOKEN}\n` +
-    `   law_run_exit = its exit code — the lifecycle VERDICT the workflow gates on mechanically (0 = every declared flip went RED→GREEN and nothing previously-GREEN regressed; non-zero = the slice failed its Law). From its 'RUN <runId> HEAD <head>' line report run_id and head VERBATIM. Collect every 'FLIP_UNMET <id>' line's id into flip_unmet and every 'REGRESSION <id>' line's id into regressed (empty arrays if none). Add any TAMPER paths to tamper_paths. RED/GREEN/PROBE_DEFERRED check lines are EVIDENCE — transcribe, never fix. If law_run_exit is not 0, STOP — skip step 3.\n` +
+    `2. node ${pluginRoot}/scripts/kiln-law.mjs run ${projectPath} ${kilnDir} ${lawArgs} --run-prefix ${BUILD_RUN_TOKEN}\n` +
+    `   law_run_exit = its exit code — the lifecycle VERDICT the workflow gates on mechanically ${lawVerdictNote}. From its 'RUN <runId> HEAD <head>' line report run_id and head VERBATIM. Collect every 'FLIP_UNMET <id>' line's id into flip_unmet and every 'REGRESSION <id>' line's id into regressed (empty arrays if none). Add any TAMPER paths to tamper_paths. RED/GREEN/PROBE_DEFERRED check lines are EVIDENCE — transcribe, never fix. If law_run_exit is not 0, STOP — skip step 3.\n` +
     (suite
       ? `3. node ${pluginRoot}/scripts/kiln-law.mjs suite ${projectPath} ${kilnDir} <runId> --cmd '${suite}'\n   Substitute <runId> with the run_id from step 2's RUN line. This runs the project suite and persists its output INTO the evidence dir (suite.log + a sha256'd result line in suite.jsonl). From its 'SUITE <runId> exit=<n> …' line report suite_exit = that <n>, verbatim; suite_cmd = the suite command itself.\n`
       : `3. No project suite command was recorded for this slice — skip this step (omit suite_cmd and suite_exit).\n`) +
@@ -1036,6 +1073,43 @@ async function evidencedReview(m, surf, slice, sliceId, build, fix, escalated, r
   return await agent(reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort, gate.verification_class), { label: loreLabel(reviewerName, 'review', `${sliceId}:f${fix}${leg.escalated ? ':esc' : ''}`), phase: 'The Trial', model: leg.model, schema: REVIEW_SCHEMA })
 }
 
+// ── gateOnlyTrial (P3.5 T3, dogfood finding 4) — the STARVED-GATE deterministic Law check over an
+//    already-completed build. SAME trial legs as evidencedReview (the deterministic runner → the
+//    freshness probe → the in-script runnerGate), but in gateOnly law context — verify + run
+//    --only/--expect-green over ALL the milestone's SCs, NO --flips, NO --before — and it spawns NO
+//    builder, NO reviewer: a starved gate is re-run, never re-built. The §7 degradation channel is
+//    preserved (a static-only run is ledgered, never silently green). Returns the runnerGate
+//    verdict object so the caller applies the pure gateOnlyRefusal predicate: any verdict but
+//    'proceed' refuses the milestone with gate-only-on-red; a clean 'proceed' routes to Judgment. ──
+async function gateOnlyTrial(m, surf, mScIds) {
+  phase('The Trial')
+  log(`${spin('law', 0)} — ${m.id} gate-only Law check over ${mScIds.length} SC(s) [${mScIds.join(', ')}]`)
+  const lawCtx = { gateOnly: true, flips: [], only: mScIds }
+  const runner = await agent(runnerPrompt(null, lawCtx, null), { label: loreLabel('asimov', 'runner', `${m.id}:gate-only`), phase: 'The Trial', model: 'sonnet', schema: RUNNER_SCHEMA })
+  let fresh = null
+  if (runner && typeof runner.run_id === 'string' && runner.run_id) {
+    fresh = await agent(freshPrompt(runner.run_id), { label: loreLabel('thoth', 'freshness', `${m.id}:gate-only`), phase: 'The Trial', model: 'haiku', schema: FRESHNESS_SCHEMA })
+  }
+  const gate = runnerGate(runner, fresh)
+  // Advance the status anchor on a trustworthy verdict (proceed) — the gate-only run is a complete,
+  // fresh, finalized run, so a subsequent tribunal-correction trial can fold it via --before and
+  // expect the milestone's SCs to STAY green (regression guard) rather than re-flip from the lock.
+  if (gate.verdict === 'proceed') lastRunId = runner.run_id
+  // §7 honesty: a static-only run (a mapped probe deferred) must be LEDGERED the moment the gate
+  // sees it — recorded end-to-end, never silently green — exactly as the slice trial does.
+  if (gate.verdict === 'proceed') {
+    const pg = probeGate(surf, gate)
+    if (pg.action === 'degrade') {
+      log(`${m.id}: gate-only VERIFICATION DEGRADED — run ${runner.run_id} is static-only (${pg.reason}); ledgered probe_unavailable`)
+      await ledger('probe_unavailable', { milestone: m.id, slice: `${m.id}:gate-only`, surface: surf, fix: 0, run_id: runner.run_id, verification_class: 'static-only' }, 'The Trial')
+    } else if (gate.verification_class === 'static-only') {
+      log(`${m.id}: gate-only VERIFICATION DEGRADED — run ${runner.run_id} is static-only (probe evidence deferred on a non-ui slice); ledgered`)
+      await ledger('verification_degraded', { milestone: m.id, slice: `${m.id}:gate-only`, surface: surf, fix: 0, run_id: runner.run_id, verification_class: 'static-only' }, 'The Trial')
+    }
+  }
+  return gate
+}
+
 // ── The Forge Heats — the §3.4 floor gates, then git baseline + codebase-state + milestone parse ──
 phase('The Forge Heats')
 log('The kiln grows hotter')
@@ -1118,6 +1192,43 @@ for (const m of milestones) {
     continue
   }
 
+  // ── Milestone-scoped state read by Judgment below — hoisted because gateOnly (P3.5 T3) bypasses
+  //    Scoring + Forging entirely and the gate must still see them. Under gateOnly the slice list is
+  //    EMPTY (nothing was sliced or built — a starved gate is re-run, never re-built), there is no
+  //    replan/plan-abort/cap, and forceTribunal routes the gate to the FULL tribunal regardless of
+  //    the (unknown) historical slice count. mBuild/mReview are seeded by the inner loop normally
+  //    and re-used by the tribunal CORRECTION path (which runs the normal build+trial under gateOnly
+  //    too — a real fix, never a skipped build). ──
+  const slices = []
+  let mBuild = null
+  let mReview = null
+  let replanned = false
+  let planAborted = false
+  let cappedOut = false
+  let forceTribunal = false
+  let gateOnlyGreen = false
+
+  if (gateOnly) {
+    // ── P3.5 T3 (dogfood finding 4) STARVED-GATE retry: skip Scoring + Forging entirely. ONE
+    //    deterministic trial-shaped pass over ALL the milestone's SCs (verify + run
+    //    --only/--expect-green, NO --flips) + freshness + runnerGate. The pure gateOnlyRefusal
+    //    predicate rules: any verdict but a clean 'proceed' REFUSES the milestone (QA_FAIL, reason
+    //    gate-only-on-red — never gating a red Law, never skipping a build); a green Law routes to
+    //    the FULL tribunal (forceTribunal — fail toward scrutiny: the prior slice count is unknown). ──
+    log(`${m.id}: GATE-ONLY retry — Scoring + Forging SKIPPED; re-running the milestone gate over the completed build`)
+    const gate = await gateOnlyTrial(m, surf, mScIds)
+    const refusal = gateOnlyRefusal(gate)
+    if (refusal.refuse) {
+      log(`${m.id}: gate-only REFUSES — ${refusal.detail}`)
+      await ledger('gate_only_refused', { milestone: m.id, sc_ids: mScIds, verdict: gate && gate.verdict, reason: refusal.reason, detail: refusal.detail }, 'The Trial')
+      results.push({ id: m.id, title: m.title, surface: surf, slices: 0, sc_ids: mScIds, tests_green: false, qa: 'QA_FAIL', findings: [`[${refusal.reason}] ${refusal.detail}`], split_required: [], replanned: false, gate_only: true })
+      continue
+    }
+    log(`${m.id}: gate-only Law GREEN over the completed build — routing to the FULL tribunal (conservative; prior slice count unknown to a fresh session)`)
+    gateOnlyGreen = true
+    forceTribunal = true
+  } else {
+
   // ── Scoring the Cut: the §5 batch slice plan (velocity lever 1) — but lever 3 (§9 pipelining)
   //    may have ALREADY cut this milestone's plan speculatively during the previous milestone's
   //    gate. Consume that plan iff it survives the invalidation predicate: its base_sha (the HEAD
@@ -1158,14 +1269,9 @@ for (const m of milestones) {
   let queue = firstPlan.planned
   log(`${m.id}: ${queue.length} slice(s) planned${usedPipeline ? ' (pipelined)' : ''} — [${queue.map((s) => s.sc_ids.join('+')).join(' | ')}]`)
 
-  // ── INNER loop over the planned queue ──
-  const slices = []
+  // ── INNER loop over the planned queue (slices/mBuild/mReview/replanned/planAborted/cappedOut are
+  //    the hoisted milestone-scope state; greenScIds + qi are local to this Forging branch) ──
   const greenScIds = [] // SCs this milestone has turned green — each later trial re-runs them so regressions are observed
-  let mBuild = null
-  let mReview = null
-  let replanned = false
-  let planAborted = false
-  let cappedOut = false
   let qi = 0
   while (qi < queue.length) {
     if (slices.length >= MAX_SLICES_PER_MILESTONE) { cappedOut = true; break }
@@ -1250,6 +1356,7 @@ for (const m of milestones) {
     qi++
   }
   if (cappedOut) log(`${m.id}: hit the ${MAX_SLICES_PER_MILESTONE}-slice cap — building stopped; validate.js backstops the remainder.`)
+  } // end !gateOnly Scoring + Forging
 
   // ── Judgment — the §3.2 milestone gate, exact. Aristotle's goal-backward audit runs at EVERY
   //    milestone boundary (T2-fix ruling) — split/plan-abort branches included, where the verdict
@@ -1283,9 +1390,11 @@ for (const m of milestones) {
   //    (pipelineInvalidated) and re-slices. We speculate only when the next milestone exists and
   //    owns Law checks (a no-SC milestone is skipped before it would consume a plan). The launched
   //    promise resolves to planMilestone's { ok, planned, errors }; per-item fault isolation keeps
-  //    a thrown speculation from breaking the gate (the consumer falls back to a fresh plan). ──
+  //    a thrown speculation from breaking the gate (the consumer falls back to a fresh plan).
+  //    NEVER under gateOnly (P3.5 T3): the gate-only path slices NO milestone, so nothing would
+  //    ever consume a speculative plan — launching one would burn a krs-one call for nothing. ──
   const nextM = milestones[milestoneIndex + 1]
-  if (nextM) {
+  if (!gateOnly && nextM) {
     const nextScs = lawChecks.filter((c) => c.milestone === nextM.id)
     if (nextScs.length) {
       const base_sha = await headSha(`${m.id}:pipeline-base`)
@@ -1332,7 +1441,10 @@ for (const m of milestones) {
       if (goal) qaFindings.push(...denzelReconcile(goal, null).summaryLines)
       else qaFindings.push(GOAL_AUDIT_FAILURE)
     } else await skipAudit()
-  } else if (tribunalThreshold(slices.length, livePosture.milestone_gate.min_slices_for_tribunal)) {
+  } else if (forceTribunal || tribunalThreshold(slices.length, livePosture.milestone_gate.min_slices_for_tribunal)) {
+    // forceTribunal (gateOnly, P3.5 T3): the historical slice count is unknown to a fresh session,
+    // so route CONSERVATIVELY to the FULL tribunal regardless of min_slices_for_tribunal — fail
+    // toward scrutiny, gate-only never lowers the gate.
     if (!goalOn) await skipAudit()
     for (let c = 0; c <= MAX_TRIBUNAL_CORRECTION; c++) {
       const legs = [
@@ -1415,22 +1527,29 @@ for (const m of milestones) {
     log(`${m.id}: no slices built — QA_FAIL`)
   }
 
-  // Update living docs so the next milestone's slicer/builder has current context.
-  phase('The Forge Heats')
-  await agent(
-    `You are the codebase-state authority. ${scope} ${repoRuleLine}\n\n` +
-    `<task>Milestone ${m.id} ("${m.title}") was just built. Update ${codebaseStateFile}: what now exists (modules, public surface) so the next milestone's slicer and builder have accurate context. Read 'git -C ${projectPath} log --oneline -8' and 'git -C ${projectPath} show --stat HEAD' for what changed.</task>`,
-    { label: loreLabel('rakim', 'state', m.id), phase: 'The Forge Heats', model: 'haiku' }
-  )
+  // Update living docs so the next milestone's slicer/builder has current context. SKIPPED under
+  // gateOnly (P3.5 T3): nothing was sliced or built — "was just built" would be a lie, and there is
+  // no next-milestone slicer to feed (gate-only re-runs a gate over an already-complete build).
+  if (!gateOnly) {
+    phase('The Forge Heats')
+    await agent(
+      `You are the codebase-state authority. ${scope} ${repoRuleLine}\n\n` +
+      `<task>Milestone ${m.id} ("${m.title}") was just built. Update ${codebaseStateFile}: what now exists (modules, public surface) so the next milestone's slicer and builder have accurate context. Read 'git -C ${projectPath} log --oneline -8' and 'git -C ${projectPath} show --stat HEAD' for what changed.</task>`,
+      { label: loreLabel('rakim', 'state', m.id), phase: 'The Forge Heats', model: 'haiku' }
+    )
+  }
 
   results.push({
     id: m.id, title: m.title, surface: surf,
     slices: slices.length,
     sc_ids: mScIds,
-    tests_green: slices.length === 0 ? false : slices.every((s) => s.tests_green !== false),
+    // gateOnly green ⇒ the Law is green over the completed build (the trial proved it); the empty
+    // slice list must NOT read as "no tests green" or the milestone would drop out of `passed`.
+    tests_green: gateOnlyGreen ? true : (slices.length === 0 ? false : slices.every((s) => s.tests_green !== false)),
     qa, findings: qaFindings,
     split_required: splitSlices.map((s) => s.id),
     replanned,
+    ...(gateOnly ? { gate_only: true } : {}),
   })
 }
 

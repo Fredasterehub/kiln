@@ -930,3 +930,123 @@ test('T2.3 the stage-end sweep failing in finally never masks the real build err
   }))
   assert.equal(thrown, boom, 'the finally guards the sweep so the primary error survives unmasked')
 })
+
+// ── P3.5 T3: gate-only retry path (dogfood finding 4) — re-run a STARVED milestone gate over an
+//    already-COMPLETED build. Scoring + Forging are SKIPPED; ONE deterministic Law check over ALL
+//    the milestone's SCs (verify + run --only/--expect-green, NO --flips) gates the milestone, then
+//    the FULL tribunal (conservative — the prior slice count is unknown to a fresh session). Refuses
+//    with gate-only-on-red on anything but a fully-green Law. Pipelining never fires. ───────────────
+
+const gateOnlyArgs = { ...baseArgs, gateOnly: true }
+
+test('gateOnly happy path: NO slicer / NO confirm / NO builder — ONE Law check over ALL milestone SCs, then the FULL tribunal (ken ∥ ryu ∥ goal-backward), QA_PASS, gate_only flagged and counted as passed', async () => {
+  const { result, calls } = await runBuild(gateOnlyArgs, mkRespond())
+  // Scoring + Forging skipped entirely
+  assert.equal(count(calls, 'krs-one:slice-plan'), 0, 'gate-only never slices')
+  assert.equal(count(calls, 'krs-one:confirm'), 0, 'gate-only never confirms a slice')
+  assert.equal(count(calls, ':build:'), 0, 'gate-only never builds — a starved gate is re-run, not re-built')
+  // ONE deterministic Law check (runner + freshness), not one-per-slice
+  assert.equal(count(calls, 'asimov:runner'), 1, 'one gate-only trial pass over the whole milestone')
+  assert.equal(count(calls, 'thoth:freshness'), 1)
+  assert.ok(labelsOf(calls, 'asimov:runner')[0].label.endsWith(':M1:gate-only'))
+  // the FULL tribunal regardless of slice count
+  assert.equal(count(calls, 'ken:qa'), 1)
+  assert.equal(count(calls, 'ryu:qa'), 1)
+  assert.equal(count(calls, 'aristotle:goal-backward'), 1)
+  assert.equal(result.built[0].qa, 'QA_PASS')
+  assert.equal(result.built[0].gate_only, true)
+  assert.equal(result.built[0].tests_green, true, 'a green gate-only Law must read as tests_green so the milestone counts as passed')
+  assert.equal(result.all_passed, true)
+  assert.deepEqual(result.passed, ['M1'])
+})
+
+test('gateOnly runner prompt: verify + run --only ALL milestone SCs with --expect-green and NO --flips / NO --before (a regressions/green check, nothing is being flipped)', async () => {
+  const { calls } = await runBuild(gateOnlyArgs, mkRespond())
+  const runner = labelsOf(calls, 'asimov:runner')[0].prompt
+  assert.match(runner, /kiln-law\.mjs verify \/tmp\/kiln-x \/tmp\/kiln-x\/\.kiln/)
+  assert.match(runner, /kiln-law\.mjs run \/tmp\/kiln-x \/tmp\/kiln-x\/\.kiln --only SC-001,SC-002 --expect-green SC-001,SC-002 --run-prefix kbuild-/)
+  assert.doesNotMatch(runner, /--flips/, 'gate-only flips nothing')
+  assert.doesNotMatch(runner, /--before/, 'gate-only has no RED→GREEN lifecycle, so no statusBefore anchor')
+  assert.match(runner, /every milestone SC is GREEN now over the completed build/)
+})
+
+test('gateOnly refuse-on-red: kiln-law run exit 1 (an SC not green over the completed build) → QA_FAIL with gate-only-on-red, NO tribunal, ledgered gate_only_refused — never gates a red Law, never builds', async () => {
+  const { result, calls } = await runBuild(gateOnlyArgs, mkRespond({}, (label) => {
+    if (label.startsWith('asimov:runner')) return { ...runnerOk, law_run_exit: 1 }
+  }))
+  assert.equal(count(calls, ':build:'), 0, 'a refused gate never builds')
+  assert.equal(count(calls, 'ken:qa') + count(calls, 'ryu:qa') + count(calls, 'aristotle:goal-backward') + count(calls, 'judge-dredd:verdict'), 0, 'a red Law never reaches the tribunal under gate-only')
+  assert.equal(result.built[0].qa, 'QA_FAIL')
+  assert.equal(result.built[0].gate_only, true)
+  assert.match(result.built[0].findings.join(' '), /gate-only-on-red/)
+  assert.match(result.built[0].findings.join(' '), /never gates a red Law/)
+  const led = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('gate_only_refused'))
+  assert.equal(led.length, 1, 'the refusal is ledgered')
+  assert.match(led[0].prompt, /gate-only-on-red/)
+  assert.equal(result.all_passed, false)
+})
+
+test('gateOnly refuse-on-stale: stale/missing evidence (no results.jsonl) → gate-only-on-red, NO tribunal — gate-only never gates over untrusted evidence', async () => {
+  const { result, calls } = await runBuild(gateOnlyArgs, mkRespond({}, (label) => {
+    if (label.startsWith('thoth:freshness')) return { ...freshOk, results_jsonl_exists: false }
+  }))
+  assert.equal(count(calls, 'ken:qa') + count(calls, 'aristotle:goal-backward'), 0, 'stale evidence never reaches the tribunal')
+  assert.equal(result.built[0].qa, 'QA_FAIL')
+  assert.match(result.built[0].findings.join(' '), /gate-only-on-red/)
+  assert.equal(labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('gate_only_refused')).length, 1)
+})
+
+test('gateOnly refuse-on-tamper: kiln-law verify exit 2 (a locked path touched) → gate-only-on-red, NO tribunal', async () => {
+  const { result, calls } = await runBuild(gateOnlyArgs, mkRespond({}, (label) => {
+    if (label.startsWith('asimov:runner')) return { reasoning: 'r', verify_exit: 2, tamper_paths: ['.kiln/law.json'] }
+  }))
+  assert.equal(count(calls, 'ken:qa') + count(calls, 'aristotle:goal-backward'), 0)
+  assert.equal(result.built[0].qa, 'QA_FAIL')
+  assert.match(result.built[0].findings.join(' '), /gate-only-on-red/)
+})
+
+test('gateOnly routes CONSERVATIVELY to the FULL tribunal regardless of min_slices_for_tribunal — a raised dial cannot downgrade a fresh-session gate (the prior slice count is unknown)', async () => {
+  const posture = { milestone_gate: { min_slices_for_tribunal: 9 } }
+  const { result, calls } = await runBuild({ ...gateOnlyArgs, posture }, mkRespond())
+  assert.equal(count(calls, 'ken:qa'), 1, 'the dual analysts fire under gate-only even at a high threshold')
+  assert.equal(count(calls, 'ryu:qa'), 1)
+  assert.equal(count(calls, 'aristotle:goal-backward'), 1)
+  assert.equal(result.built[0].qa, 'QA_PASS')
+})
+
+test('gateOnly milestone gate: a blocking goal-backward finding still fails the gate (the §3.2 gate is unchanged under gate-only — only the build legs are skipped)', async () => {
+  const { result, calls } = await runBuild(gateOnlyArgs, mkRespond({}, (label) => {
+    if (label.startsWith('aristotle:goal-backward')) return { reasoning: 'r', overall: 'fail', findings: [{ text: 'the milestone goal is unreachable from the entry point', severity: 'critical' }] }
+  }))
+  assert.equal(result.built[0].qa, 'QA_FAIL')
+  assert.match(result.built[0].findings.join(' '), /unreachable from the entry point/)
+})
+
+test('gateOnly tribunal correction runs the NORMAL build+trial path (the existing correction code, unchanged) — a blocking analyst finding fires one corrective build + re-trial', async () => {
+  const blocking = { reasoning: 'r', overall: 'fail', findings: [{ text: 'integration gap between slices', severity: 'critical' }] }
+  const { result, calls } = await runBuild(gateOnlyArgs, mkRespond({}, (label) => {
+    if (label.startsWith('ken:qa')) return blocking
+  }))
+  // the correction is the NORMAL build+trial path — a real fix, not a skipped build
+  const correction = calls.find((c) => c.label.includes(':build:M1:correct1'))
+  assert.ok(correction, 'gate-only corrections build (the existing correction path, reused unchanged)')
+  assert.match(correction.prompt, /integration gap between slices/)
+  assert.equal(count(calls, 'judge-dredd:verdict'), 0, 'hasBlocking ⇒ computed QA_FAIL, no judge')
+  assert.equal(result.built[0].qa, 'QA_FAIL')
+})
+
+test('gateOnly NEVER pipelines: a two-milestone run cuts NO speculative slice plan and probes NO pipeline base/check HEAD (nothing would consume a plan — gate-only slices nothing)', async () => {
+  const { calls, result } = await runBuild(gateOnlyArgs, mkRespond({ law: lawM1M2, milestones: twoMilestones }))
+  assert.equal(count(calls, 'krs-one:slice-plan'), 0, 'gate-only launches no slice plan, speculative or otherwise')
+  assert.equal(count(calls, 'thoth:head'), 0, 'no pipeline base/check HEAD probes — the pipelining lever is guarded off')
+  // both milestones gated independently, each with its own gate-only trial + full tribunal
+  assert.equal(count(calls, 'asimov:runner'), 2, 'one gate-only trial per milestone')
+  assert.equal(count(calls, 'ken:qa'), 2)
+  assert.equal(result.built.length, 2)
+  assert.equal(result.all_passed, true)
+})
+
+test('gateOnly skips the per-milestone codebase-state doc update (nothing was built — "was just built" would be a lie, and there is no next-milestone slicer to feed)', async () => {
+  const { calls } = await runBuild(gateOnlyArgs, mkRespond())
+  assert.equal(count(calls, 'rakim:state'), 0, 'no living-docs update under gate-only')
+})
