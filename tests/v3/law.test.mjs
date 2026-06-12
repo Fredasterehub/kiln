@@ -793,6 +793,18 @@ const asimovResult = {
 }
 const lockResult = { reasoning: 'l', indexed: true, committed: true, error: '' }
 const lawProofResult = { reasoning: 'v', law_json_exists: true, lock_commit_exists: true }
+// The P3.5 T1 dry-run gate legs (between Asimov's compile and the lock): a clean default
+// transcript — one honest shell red (ambiguous by exit code, ruled honest downstream) + the
+// deferred probe — and a PASS ruling with nothing broken and nothing green. Schema-faithful:
+// every entry carries all eight evidence fields, nulls included (DRYRUN_SCHEMA requires them).
+const dryrunResult = {
+  reasoning: 'd', exit: 0, error: '',
+  transcript: [
+    { id: 'SC-001', kind: 'shell', classification: 'ambiguous', exit: 1, signal: null, duration_ms: 4, stdout_tail: '', stderr_tail: 'AssertionError: feature missing' },
+    { id: 'SC-002', kind: 'probe', classification: 'deferred', exit: null, signal: null, duration_ms: 0, stdout_tail: '', stderr_tail: '' },
+  ],
+}
+const dryrunRulingResult = { reasoning: 'r', verdict: 'PASS', broken: [], green_legitimate: [] }
 
 // lawRespond — drive the lite (trivial-scope) path with Athena PASS; `over` swaps any Law leg.
 const lawRespond = (over = {}) => (label) => {
@@ -801,6 +813,9 @@ const lawRespond = (over = {}) => (label) => {
   if (label === 'plato:synthesis' || label.startsWith('plato:revise')) return synthResult
   if (label.startsWith('athena:validate')) return { reasoning: 'v', verdict: 'athena' in over ? over.athena : 'PASS', failed_dimensions: [], fixes: [] }
   if (label === 'asimov:law') return 'asimov' in over ? over.asimov : asimovResult
+  if (label.startsWith('thoth:dryrun')) return 'dryrun' in over ? over.dryrun : dryrunResult
+  if (label.startsWith('athena:dryrun')) return 'dryrunRuling' in over ? over.dryrunRuling : dryrunRulingResult
+  if (label.startsWith('asimov:check-revise')) return null // no schema — the re-dryrun is the proof
   if (label === 'thoth:law-lock') return 'lock' in over ? over.lock : lockResult
   if (label === 'thoth:law-verify') return 'proof' in over ? over.proof : lawProofResult
   if (label === 'thoth:verify') return { reasoning: 'ok', missing: [] }

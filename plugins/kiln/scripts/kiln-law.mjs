@@ -101,6 +101,23 @@
 //            browser HAS no browser stage to sweep. The workflow-boundary pair (build start
 //            pre-flight + build-end cleanup, both ledgered, both scoped to the build's own
 //            BUILD_RUN_TOKEN) is build.js's own (P3 T2), layered above these.
+//   dryrun — the PRE-LOCK check executor (P3.5 T1, dogfood finding 1): checks are code; they
+//            execute before we trust them — reading is not executing. Legal PRE-LOCK by design:
+//            reads the LIVE law.json (schema-validated), requires NO lock_commit, fires NO
+//            tamper gate, touches NO git. Executes every check with cwd=projectPath and the
+//            per-check timeout_s (probes stay DEFERRED — never executed here; §7's exit-78
+//            semantics belong to the locked runner and are untouched), captures a ~25-line
+//            stdout/stderr tail per check, and classifies deterministically where the exit code
+//            carries it (classifyDryrun, ../src/law.mjs): pytest 1 = honest-red; pytest 2/3/4/5
+//            = broken-check (pytest's own taxonomy); exit 126/127 = broken-check (not
+//            executable / command not found); timeout or signal-death = broken-check; exit 0 =
+//            green (pre-satisfied candidate); any other nonzero = ambiguous (transcribed,
+//            judged downstream — the architecture stage feeds the transcript to Athena).
+//            A dry-run is a TRANSCRIPT, never a run record: no evidence dir, no run.json, no
+//            results.jsonl — zero disk residue. Default output: one readable line per check +
+//            one DRYRUN_RESULT summary line; --json: one JSON object {schema, transcript,
+//            summary} on stdout. Exits 0 whenever the dry-run executed (the classifications ARE
+//            the report — gating is the architecture stage's job); 1 only on usage/infra errors.
 //   status — fold one run's results.jsonl → {green, red, deferred} JSON on stdout (green = exit
 //            matched the check's expected 'exit0'; last line wins per id; law.json check order).
 //   suite  — persist the PROJECT suite as hashed evidence beside a recorded Law run (§6): the
@@ -132,6 +149,7 @@
 //                                                  pre-flight and run-end sweeps scope to that
 //                                                  token, so they reap only this stage's browsers,
 //                                                  never a concurrent run's)
+//   kiln-law.mjs dryrun <projectPath> <kilnDir> [--json]
 //   kiln-law.mjs status <kilnDir> <runId>
 //   kiln-law.mjs suite  <projectPath> <kilnDir> <runId> --cmd '<command>' [--timeout-s N]
 // Exit codes: 0 ok · 1 error (usage, invalid law.json, missing files, unmet --expect-green,
@@ -145,7 +163,7 @@ import { readFileSync, writeFileSync, renameSync, mkdirSync, appendFileSync, exi
 import { join, relative, resolve, isAbsolute, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { validateLaw, flipPlan } from '../src/law.mjs'
+import { validateLaw, flipPlan, classifyDryrun } from '../src/law.mjs'
 
 // kiln-probe.mjs lives beside this CLI — the §7 Tier-1 probe wrapper kind:'probe' checks run through
 const KILN_PROBE = join(dirname(fileURLToPath(import.meta.url)), 'kiln-probe.mjs')
@@ -530,6 +548,55 @@ function cmdRun(projectPath, kilnDir, flags) {
   if (failures.length) die(`run: ${failures.join('; ')}`)
 }
 
+// ── dryrun — the PRE-LOCK check executor (P3.5 T1, dogfood finding 1): checks are code; they
+//    execute before we trust them. A dry-run is a transcript, never a run record ───────────────────
+// Legality is the point: pre-lock there is nothing locked to tamper and often no git history to
+// anchor (greenfield — the lock sequence itself owns the baseline, T2), so this command reads the
+// LIVE law.json (schema-validated by readLaw), requires no lock_commit, fires no tamper gate, and
+// runs no git command at all. It also writes NOTHING: no evidence dir, no run.json, no
+// results.jsonl — folding a pre-lock execution into evidence would let an unlocked, unanchored
+// run masquerade as a freshness-gated record. The output IS the deliverable: a per-check
+// transcript {id, kind, classification, exit, signal, duration_ms, stdout_tail, stderr_tail}
+// with the deterministic exit-code classification (classifyDryrun) applied where the code
+// carries the verdict; ambiguous entries ship their tails for the downstream judge.
+function cmdDryrun(projectPath, kilnDir, flags) {
+  for (const k of Object.keys(flags)) if (k !== 'json') die(`dryrun: unknown flag --${k}`)
+  const { law } = readLaw(kilnDir) // the LIVE file — pre-lock legal; a locked law dry-runs identically
+  const TAIL_LINES = 25
+  const tail = (s) => {
+    const lines = String(s || '').split('\n')
+    if (lines.length && lines[lines.length - 1] === '') lines.pop() // the terminal newline, not a line
+    return (lines.length <= TAIL_LINES ? lines : lines.slice(-TAIL_LINES)).join('\n')
+  }
+  const transcript = []
+  for (const c of law.checks) {
+    if (c.kind === 'probe') {
+      // probes stay deferred at dry-run: there is no built product to probe pre-lock, and the
+      // §7 probe lifecycle (exit 78/79, sweeps, evidence) belongs to the locked runner — a
+      // dry-run executes no browser and leaves those semantics untouched.
+      transcript.push({ id: c.id, kind: c.kind, classification: 'deferred', exit: null, signal: null, duration_ms: 0, stdout_tail: '', stderr_tail: '' })
+      if (!flags.json) console.log(`DRYRUN ${c.id} probe deferred`)
+      continue
+    }
+    const started = Date.now()
+    const res = spawnSync('bash', ['-c', c.cmd], {
+      cwd: projectPath, encoding: 'utf8',
+      timeout: c.timeout_s * 1000, killSignal: 'SIGKILL', maxBuffer: 16 * 1024 * 1024,
+    })
+    const durationMs = Date.now() - started
+    const timedOut = res.signal === 'SIGKILL' || (res.error && res.error.code === 'ETIMEDOUT')
+    const exit = res.status // null on signal-death — preserved verbatim; classification carries the verdict
+    const signal = res.signal || null
+    const classification = classifyDryrun(c.kind, exit, signal, timedOut)
+    transcript.push({ id: c.id, kind: c.kind, classification, exit, signal, duration_ms: durationMs, stdout_tail: tail(res.stdout), stderr_tail: tail(res.stderr) })
+    if (!flags.json) console.log(`DRYRUN ${c.id} ${c.kind} ${classification}${exit !== null ? ` exit=${exit}` : ''}${signal ? ` signal=${signal}` : ''}${timedOut ? ' timeout' : ''} (${durationMs}ms)`)
+  }
+  const summary = { green: 0, 'honest-red': 0, 'broken-check': 0, ambiguous: 0, deferred: 0 }
+  for (const t of transcript) summary[t.classification]++
+  if (flags.json) console.log(JSON.stringify({ schema: 1, transcript, summary }))
+  else console.log(`DRYRUN_RESULT checks=${transcript.length} green=${summary.green} honest-red=${summary['honest-red']} broken-check=${summary['broken-check']} ambiguous=${summary.ambiguous} deferred=${summary.deferred}`)
+}
+
 // ── suite — persist the project suite as hashed evidence beside a recorded Law run (§6) ─────────
 // The suite command is the project's own (recorded by the builder); its output is evidence the
 // reviewer reads, so it lands in the SAME evidence dir as the Law run it accompanies — log +
@@ -586,13 +653,13 @@ function cmdStatus(kilnDir, runId) {
 }
 
 // ── Dispatch ─────────────────────────────────────────────────────────────────────────────────────
-const USAGE = `usage: kiln-law.mjs <index|verify|run|status|suite> …   (header comment has the full forms)`
+const USAGE = `usage: kiln-law.mjs <index|verify|run|dryrun|status|suite> …   (header comment has the full forms)`
 function parseFlags(argv) {
   const flags = {}
   for (let i = 0; i < argv.length; i++) {
     if (!argv[i].startsWith('--')) die(USAGE)
     const k = argv[i].slice(2)
-    if (k === 'skip-probes') { flags[k] = true; continue }
+    if (k === 'skip-probes' || k === 'json') { flags[k] = true; continue }
     if (argv[i + 1] === undefined) die(USAGE)
     flags[k] = argv[++i]
   }
@@ -601,12 +668,13 @@ function parseFlags(argv) {
 
 const [cmd, ...rest] = process.argv.slice(2)
 try {
-  if (cmd === 'index' || cmd === 'verify' || cmd === 'run') {
+  if (cmd === 'index' || cmd === 'verify' || cmd === 'run' || cmd === 'dryrun') {
     const [projectPath, kilnDir] = rest
     if (!projectPath || !kilnDir || !isAbsolute(projectPath)) die(USAGE)
-    if (cmd !== 'run' && rest.length !== 2) die(USAGE)
+    if ((cmd === 'index' || cmd === 'verify') && rest.length !== 2) die(USAGE)
     if (cmd === 'index') cmdIndex(resolve(projectPath), resolve(kilnDir))
     else if (cmd === 'verify') cmdVerify(resolve(projectPath), resolve(kilnDir))
+    else if (cmd === 'dryrun') cmdDryrun(resolve(projectPath), resolve(kilnDir), parseFlags(rest.slice(2)))
     else cmdRun(resolve(projectPath), resolve(kilnDir), parseFlags(rest.slice(2)))
   } else if (cmd === 'status') {
     const [kilnDir, runId] = rest

@@ -169,6 +169,38 @@ export function flipPlan(law, sliceScIds, statusBefore) {
   return { flip, regression, pre_satisfied: preSatisfied, deferred, unknown }
 }
 
+// classifyDryrun(kind, exit, signal, timedOut) — the P3.5 T1 deterministic PRE-LOCK dry-run
+// classification (dogfood finding 1: checks are code; they execute before we trust them —
+// reading is not executing). This table is the verdict the EXIT CODE carries mechanically,
+// before any judgment; the downstream judge (Athena, over the transcript tails) rules only
+// what the code cannot:
+//   'green'        — exit 0: the check passes already (brownfield pre_satisfied candidate; on
+//                    a greenfield deliverable a green pre-lock check gates nothing — judged
+//                    downstream, never silently accepted).
+//   'honest-red'   — pytest exit 1: tests RAN and assertions failed on the missing feature —
+//                    exactly what a pre-lock check must do (pytest's own taxonomy: 1 = tests
+//                    collected and failed).
+//   'broken-check' — the check crashed on its own machinery and produced NO verdict: pytest
+//                    2/3/4/5 (interrupted / internal error / usage error / collected nothing —
+//                    pytest's taxonomy), exit 126/127 (not executable / command not found —
+//                    any kind: every cmd runs through bash), a timeout, any signal-death, or
+//                    a missing exit code with no recorded signal.
+//   'ambiguous'    — every other nonzero exit (shell exit 1, http failures): the exit code
+//                    does not say WHY — transcribed with its tails, judged downstream.
+// Pure: no I/O, no clocks. Probes never reach this table — the dry-run defers them (§7 owns
+// probe exit semantics, exit-78 included; a dry-run executes no browser).
+export function classifyDryrun(kind, exit, signal, timedOut) {
+  if (timedOut === true || (typeof signal === 'string' && signal !== '')) return 'broken-check'
+  if (exit === 0) return 'green'
+  if (!Number.isInteger(exit)) return 'broken-check' // died with neither exit nor signal recorded — no verdict was produced
+  if (exit === 126 || exit === 127) return 'broken-check'
+  if (kind === 'pytest') {
+    if (exit === 1) return 'honest-red'
+    if (exit >= 2 && exit <= 5) return 'broken-check'
+  }
+  return 'ambiguous'
+}
+
 // lawSummary(law) — fold the law into log/ledger-ready counts: total checks, unique locked
 // files, per-kind and per-milestone tallies (in first-appearance order), lock state, and a
 // one-line rendering. Tolerates a malformed law (counts what it can) — summarising never throws.

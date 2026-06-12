@@ -7,7 +7,7 @@ export const meta = {
     { title: 'The Lantern', detail: 'diogenes extracts consensus / divergences / unique insights' },
     { title: 'One From Many', detail: 'plato writes master-plan.md with confidence tiers + surfaces + executable acceptance criteria' },
     { title: 'Athena Weighs', detail: 'athena validates; plato revises (≤2 rounds) on FAIL' },
-    { title: 'The Law', detail: 'asimov compiles ONE executable check per SC (tests/acceptance/ + law.json); kiln-law indexes; the gates lock in their own commit' },
+    { title: 'The Law', detail: 'asimov compiles ONE executable check per SC (tests/acceptance/ + law.json); every check dry-runs pre-lock (athena rules honest-red vs broken-check over the executed transcript; asimov fixes broken checks); kiln-law indexes; the gates lock in their own commit' },
   ],
 }
 
@@ -195,6 +195,61 @@ const LAW_COMPILE_SCHEMA = {
     plan_sc_ids: { type: 'array', items: { type: 'string' }, description: 'EVERY SC id enumerated from the master plan' },
   },
   required: ['law_file', 'checks', 'plan_sc_ids'],
+}
+
+// The pre-lock dry-run transcript (P3.5 T1, dogfood finding 1) — Thoth transcribes the
+// `kiln-law dryrun --json` output verbatim; the workflow feeds the FULL transcript to Athena's
+// ruling pass. The classification field is the CLI's deterministic exit-code table, never the
+// scribe's opinion.
+const DRYRUN_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reasoning: { type: 'string' },
+    exit: { type: 'number', description: 'the kiln-law dryrun process exit code' },
+    transcript: {
+      type: 'array',
+      items: {
+        // EVERY evidence field is required — the CLI emits all eight on every entry (null where
+        // nothing was recorded: a deferred probe's exit/signal, a signal-death's exit). A
+        // schema-legal transcription can therefore never drop the tails Athena rules on.
+        type: 'object', additionalProperties: false,
+        properties: {
+          id: { type: 'string' },
+          kind: { type: 'string' },
+          classification: { type: 'string', enum: ['green', 'honest-red', 'broken-check', 'ambiguous', 'deferred'] },
+          exit: { type: ['number', 'null'], description: 'null where the CLI printed null (deferred probe, signal-death)' },
+          signal: { type: ['string', 'null'], description: 'null where the CLI printed null' },
+          duration_ms: { type: 'number' },
+          stdout_tail: { type: 'string' },
+          stderr_tail: { type: 'string' },
+        },
+        required: ['id', 'kind', 'classification', 'exit', 'signal', 'duration_ms', 'stdout_tail', 'stderr_tail'],
+      },
+    },
+    error: { type: 'string', description: 'verbatim failure output when the dryrun command itself failed; empty otherwise' },
+  },
+  required: ['exit', 'transcript'],
+}
+
+// Athena's per-check ruling over the EXECUTED transcript — honest-red vs broken-check vs
+// legitimately green. The lock proceeds only on a clean verdict.
+const DRYRUN_RULING_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reasoning: { type: 'string' },
+    verdict: { type: 'string', enum: ['PASS', 'FAIL'] },
+    broken: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false,
+        properties: { id: { type: 'string' }, why: { type: 'string' }, fix: { type: 'string' } },
+        required: ['id', 'why'],
+      },
+      description: 'checks that crashed on their own code (or pass trivially) — each goes back to Asimov',
+    },
+    green_legitimate: { type: 'array', items: { type: 'string' }, description: 'green check ids whose criterion is GENUINELY already met (brownfield) — recorded pre_satisfied at lock (§5.1)' },
+  },
+  required: ['verdict', 'broken', 'green_legitimate'],
 }
 
 const LAW_LOCK_SCHEMA = {
@@ -543,44 +598,157 @@ if (!(verdict && verdict.verdict === 'PASS')) {
     } else if (!pluginRoot) {
       lawReason = 'pluginRoot absent — the kiln-law CLI cannot be located; the gates were written but never indexed/locked'
     } else {
-      log(`Asimov compiled ${lawChecks.length} check(s) (${lawChecks.filter((c) => c.kind === 'probe').length} probe spec(s)) covering ${planScIds.length} SC(s) — locking`)
-      // Index BEFORE the single lock commit (the §5 sequence): kiln-law index hashes the on-disk
-      // gates and records lock_commit = HEAD (the last pre-gate commit — git content-addressing
-      // means law.json can never carry the sha of the commit that contains it). The one
-      // "test(law): lock acceptance gates" commit that follows carries the gates + the indexed
-      // law.json; the tamper gate's git arm anchors on that commit (lock_commit's first
-      // descendant touching the locked paths), so laundering is caught from the moment the
-      // gates land in history.
-      const lock = await agent(
-        `You are Thoth, the scribe — a law is only law once indexed and committed.\n\n` +
-        `<task>Run these commands (Bash) IN THIS ORDER and report honestly. Index comes FIRST; the single ` +
-        `lock commit that follows carries the gates AND the indexed law.json:\n` +
-        `1. node ${pluginRoot}/scripts/kiln-law.mjs index ${projectPath} ${kilnDir}\n` +
-        `2. cd ${projectPath} && git add tests/acceptance .kiln/law.json && git commit -m "test(law): lock acceptance gates"\n` +
-        `If a step fails, STOP — do not improvise a fix, do not amend, do not edit any file; report the ` +
-        `failure verbatim in error. Report indexed (step 1 exited 0) and committed (step 2 succeeded).</task>`,
-        { label: 'thoth:law-lock', phase: 'The Law', model: 'sonnet', schema: LAW_LOCK_SCHEMA }
-      )
-      // Fail CLOSED: a null/partial lock report is a failed lock, never a shrug.
-      if (!(lock && lock.indexed === true && lock.committed === true)) {
-        lawReason = `lock sequence failed${lock && lock.error ? ` — ${lock.error}` : (lock ? ` — indexed=${lock.indexed} committed=${lock.committed}` : ' — the locksmith produced no report')}`
-      } else {
-        // The contract's verifier: law.json + the lock commit EXIST — checked by a fresh pair of
-        // eyes, not taken from the locksmith's own report.
-        const lawProof = await agent(
-          `You are the lock verifier.\n\n` +
-          `<task>Run (Bash):\n` +
-          `1. 'ls ${lawFile}' — law_json_exists = true iff the file exists.\n` +
-          `2. 'git -C ${projectPath} log --format=%s -n 5' — lock_commit_exists = true iff one subject line is ` +
-          `exactly "test(law): lock acceptance gates".\n` +
-          `Do not read, write, or fix anything. Report the two booleans.</task>`,
-          { label: 'thoth:law-verify', phase: 'The Law', model: 'haiku', schema: LAW_VERIFY_SCHEMA }
+      log(`Asimov compiled ${lawChecks.length} check(s) (${lawChecks.filter((c) => c.kind === 'probe').length} probe spec(s)) covering ${planScIds.length} SC(s) — dry-run gate before lock`)
+      // ── The dry-run gate (P3.5 T1, dogfood finding 1): checks are code; they execute before
+      // we trust them — reading is not executing. `kiln-law dryrun` is legal PRE-LOCK (no
+      // lock_commit, no tamper gate, no git) and leaves ZERO evidence residue: a dry-run is a
+      // transcript, never a run record; probes stay deferred (§7's exit-78 semantics untouched).
+      // Athena's testability duty moves onto EXECUTED evidence: per check she rules honest-red
+      // (ran, failed on the missing feature — the greenfield expectation) vs broken-check
+      // (crashed on its own code: traceback class, usage error, missing interpreter) vs
+      // legitimately green (brownfield pre-satisfaction, recorded pre_satisfied at lock — §5.1).
+      // Where the exit code carries the verdict the CLI's classification is mechanical and
+      // non-relitigable — the deterministic floor below enforces it past any sloppy PASS;
+      // Athena judges only what the code cannot (ambiguous tails, green legitimacy). Broken
+      // checks go back to Asimov — the check-revision fix cycle, the same bounded shape as the
+      // plato loop — and the dry-run re-runs. The lock proceeds ONLY when every executed check
+      // is honest-red or legitimately green.
+      const DRYRUN_PASSES = 3 // bounded like the plan loop: 3 dry-run passes / ≤2 Asimov check revisions
+      let dryrunReason = null
+      let greenLegit = []
+      for (let round = 0; round < DRYRUN_PASSES; round++) {
+        const dry = await agent(
+          `You are Thoth, the scribe — transcribe, never judge, never fix.\n\n` +
+          `<task>Run (Bash): node ${pluginRoot}/scripts/kiln-law.mjs dryrun ${projectPath} ${kilnDir} --json\n` +
+          `It executes every compiled check pre-lock (probes defer) and prints ONE JSON object ` +
+          `{schema, transcript, summary}. Transcribe transcript VERBATIM into the schema — every entry, every ` +
+          `field, nulls included (transcribe null as null — every field is required), and the full ` +
+          `stdout_tail/stderr_tail strings — and report exit = the command's exit code. If the command itself ` +
+          `fails, report its nonzero exit, an empty transcript, and its output verbatim in error. Do not edit ` +
+          `or fix anything.</task>`,
+          { label: `thoth:dryrun:r${round}`, phase: 'The Law', model: 'sonnet', schema: DRYRUN_SCHEMA }
         )
-        if (lawProof && lawProof.law_json_exists === true && lawProof.lock_commit_exists === true) {
-          lawLocked = true
-          log(`The Law is locked: ${lawChecks.length} check(s) committed as "test(law): lock acceptance gates"`)
+        // Fail CLOSED: a dead scribe or a failed dry-run is a blocked lock, never a shrug.
+        const transcript = (dry && dry.exit === 0 && Array.isArray(dry.transcript)) ? dry.transcript : []
+        if (!transcript.length) {
+          dryrunReason = `dry-run produced no transcript${dry && dry.error ? ` — ${dry.error}` : (dry ? ` (dryrun exit ${dry.exit})` : ' — the scribe produced no report')}`
+          break
+        }
+        const ruling = (await agent(
+          voice('opus') +
+          `You are Athena — ruling testability over EXECUTED evidence, not static reading. Every compiled ` +
+          `acceptance check just ran pre-lock (kiln-law dryrun); the full per-check transcript is below. The ` +
+          `classification field is the CLI's deterministic exit-code table (pytest 1 = honest-red; pytest ` +
+          `2-5, exit 126/127, timeout/signal = broken-check; exit 0 = green; any other nonzero = ambiguous; ` +
+          `probes defer — exempt here).\n\n` +
+          `<transcript>\n${JSON.stringify(transcript, null, 2)}\n</transcript>\n\n` +
+          `<task>Rule PER CHECK from the transcript — the tails are the evidence:\n` +
+          `- honest-red: the check RAN and failed because the feature is unbuilt — exactly what a pre-lock ` +
+          `check must do. Rule an ambiguous entry honest-red only when its tail shows an honest ` +
+          `assertion/expectation failure.\n` +
+          `- broken-check: the check crashed on ITS OWN code — a traceback class (KeyError, argv handling), ` +
+          `a usage error, a missing interpreter or command. Every deterministic broken-check entry STAYS ` +
+          `broken; rule an ambiguous entry broken when its tail shows the check's own defect.\n` +
+          `- legitimately green: exit 0 because the criterion is ALREADY met (brownfield) — list it in ` +
+          `green_legitimate (recorded pre_satisfied at lock). A green check for an UNBUILT feature is a ` +
+          `trivially-passing check — that is broken (it can gate nothing), never legitimate.\n` +
+          `Verdict PASS only when every executed check is honest-red or legitimately green; else FAIL with ` +
+          `the broken list (id, why, concrete fix). Report reasoning first.</task>`,
+          { label: `athena:dryrun:r${round}`, phase: 'The Law', model: 'opus', schema: DRYRUN_RULING_SCHEMA }
+        )) || { verdict: 'FAIL', broken: [{ id: '(ruling)', why: 'the ruling agent produced no verdict' }], green_legitimate: [] }
+        // Deterministic floor under the ruling: a mechanical broken-check stays broken, and a
+        // green check Athena did not rule legitimate has no lawful pre-lock state (the greenfield
+        // expectation is RED) — both force the fix cycle even past a sloppy PASS. Arithmetic, not
+        // judgment.
+        const ruledLegit = Array.isArray(ruling.green_legitimate) ? ruling.green_legitimate : []
+        const broken = (Array.isArray(ruling.broken) ? ruling.broken : []).slice()
+        for (const t of transcript) {
+          if (t.classification === 'broken-check' && !broken.some((b) => b.id === t.id)) broken.push({ id: t.id, why: 'deterministic broken-check (exit-code class)' })
+          if (t.classification === 'green' && !ruledLegit.includes(t.id) && !broken.some((b) => b.id === t.id)) broken.push({ id: t.id, why: 'green but not ruled legitimately green — a check that passes against the unbuilt feature gates nothing' })
+        }
+        if (ruling.verdict === 'PASS' && !broken.length) {
+          // Ruling-soundness guard: a pre_satisfied record must trace to an EXECUTED green. An id
+          // ruled green_legitimate whose transcript classification is not 'green' (or which never
+          // ran) is evidence the RULING itself is unsound — not the check broken, so the Asimov
+          // fix cycle is the wrong remedy. Fail the gate CLOSED with the named offender(s); never
+          // silently filter the id, never lock on an unsound ruling.
+          const unsound = ruledLegit.filter((id) => !transcript.some((t) => t.id === id && t.classification === 'green'))
+          if (unsound.length) {
+            dryrunReason = `ruling unsound — green_legitimate names id(s) the executed transcript does not classify green: ${unsound.map((id) => { const t = transcript.find((x) => x.id === id); return `${id} (${t ? t.classification : 'not in transcript'})` }).join(', ')}; a pre_satisfied record must trace to an executed green`
+            break
+          }
+          greenLegit = ruledLegit
+          log(`Dry-run gate clean (pass ${round + 1}/${DRYRUN_PASSES}): every executed check honest-red or legitimately green${greenLegit.length ? ` (pre-satisfied: ${greenLegit.join(', ')})` : ''}`)
+          break
+        }
+        if (round === DRYRUN_PASSES - 1) {
+          dryrunReason = `broken check(s) after ${DRYRUN_PASSES} dry-run pass(es): ${broken.map((b) => b.id).join(', ')}`
+          break
+        }
+        log(`Dry-run gate: ${broken.length} broken check(s) [${broken.map((b) => b.id).join(', ')}] — Asimov check revision ${round + 1}`)
+        await agent(
+          lawVoice +
+          `You are Asimov, the Lawgiver — revising broken CHECK CODE. These checks crashed on their own ` +
+          `defects at the pre-lock dry-run (Athena's ruling over the executed transcript, below); the ` +
+          `product is unbuilt by design and is NOT yours to touch.\n\n` +
+          `<inputs>\nBroken checks:\n${broken.map((b) => `- ${b.id}: ${b.why}${b.fix ? ` — fix: ${b.fix}` : ''}`).join('\n')}\n` +
+          `The Law: ${lawFile}. The check code lives under ${projectPath}/tests/acceptance/.\n</inputs>\n\n` +
+          `<task>Fix EXACTLY the named checks' own code so each one RUNS and fails honestly on the missing ` +
+          `feature (or passes only when its criterion is genuinely met — never trivially). Update the ` +
+          `matching law.json entries (cmd/files/timeout_s) when the fix changes them — keep lock_commit ` +
+          `null and every sha256 map EMPTY (do NOT run kiln-law index, do NOT commit). Never weaken a check ` +
+          `to dodge its defect; never touch product code or any other check.</task>`,
+          { label: `asimov:check-revise:r${round + 1}`, phase: 'The Law', model: lawModel }
+        )
+      }
+      if (dryrunReason) {
+        lawReason = `dry-run gate failed — ${dryrunReason}; the lock is blocked (checks are code: they execute before we trust them)`
+      } else {
+        log(`Dry-run gate passed — locking`)
+        // Index BEFORE the single lock commit (the §5 sequence): kiln-law index hashes the on-disk
+        // gates and records lock_commit = HEAD (the last pre-gate commit — git content-addressing
+        // means law.json can never carry the sha of the commit that contains it). The one
+        // "test(law): lock acceptance gates" commit that follows carries the gates + the indexed
+        // law.json; the tamper gate's git arm anchors on that commit (lock_commit's first
+        // descendant touching the locked paths), so laundering is caught from the moment the
+        // gates land in history. Checks the dry-run gate ruled legitimately green are recorded
+        // pre_satisfied IN the Law before index hashes it (§5.1 brownfield GREEN-at-lock — the
+        // flip arithmetic excludes them and guards them as regressions instead).
+        const preSatStep = greenLegit.length
+          ? `0. FIRST edit ${lawFile} (file tools): set "pre_satisfied": true on exactly the check entr${greenLegit.length === 1 ? 'y' : 'ies'} ${greenLegit.join(', ')} — ruled legitimately green at the pre-lock dry-run (brownfield, §5.1). Change NOTHING else in the file.\n`
+          : ''
+        const lock = await agent(
+          `You are Thoth, the scribe — a law is only law once indexed and committed.\n\n` +
+          `<task>Run these commands (Bash) IN THIS ORDER and report honestly. Index comes FIRST; the single ` +
+          `lock commit that follows carries the gates AND the indexed law.json:\n` +
+          preSatStep +
+          `1. node ${pluginRoot}/scripts/kiln-law.mjs index ${projectPath} ${kilnDir}\n` +
+          `2. cd ${projectPath} && git add tests/acceptance .kiln/law.json && git commit -m "test(law): lock acceptance gates"\n` +
+          `If a step fails, STOP — do not improvise a fix, do not amend, do not edit any ${greenLegit.length ? 'other ' : ''}file; report the ` +
+          `failure verbatim in error. Report indexed (step 1 exited 0) and committed (step 2 succeeded).</task>`,
+          { label: 'thoth:law-lock', phase: 'The Law', model: 'sonnet', schema: LAW_LOCK_SCHEMA }
+        )
+        // Fail CLOSED: a null/partial lock report is a failed lock, never a shrug.
+        if (!(lock && lock.indexed === true && lock.committed === true)) {
+          lawReason = `lock sequence failed${lock && lock.error ? ` — ${lock.error}` : (lock ? ` — indexed=${lock.indexed} committed=${lock.committed}` : ' — the locksmith produced no report')}`
         } else {
-          lawReason = `lock verification failed — law.json exists: ${!!(lawProof && lawProof.law_json_exists)}, lock commit exists: ${!!(lawProof && lawProof.lock_commit_exists)}`
+          // The contract's verifier: law.json + the lock commit EXIST — checked by a fresh pair of
+          // eyes, not taken from the locksmith's own report.
+          const lawProof = await agent(
+            `You are the lock verifier.\n\n` +
+            `<task>Run (Bash):\n` +
+            `1. 'ls ${lawFile}' — law_json_exists = true iff the file exists.\n` +
+            `2. 'git -C ${projectPath} log --format=%s -n 5' — lock_commit_exists = true iff one subject line is ` +
+            `exactly "test(law): lock acceptance gates".\n` +
+            `Do not read, write, or fix anything. Report the two booleans.</task>`,
+            { label: 'thoth:law-verify', phase: 'The Law', model: 'haiku', schema: LAW_VERIFY_SCHEMA }
+          )
+          if (lawProof && lawProof.law_json_exists === true && lawProof.lock_commit_exists === true) {
+            lawLocked = true
+            log(`The Law is locked: ${lawChecks.length} check(s) committed as "test(law): lock acceptance gates"`)
+          } else {
+            lawReason = `lock verification failed — law.json exists: ${!!(lawProof && lawProof.law_json_exists)}, lock commit exists: ${!!(lawProof && lawProof.lock_commit_exists)}`
+          }
         }
       }
     }
