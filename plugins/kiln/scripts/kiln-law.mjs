@@ -12,7 +12,10 @@
 //            FIRST DESCENDANT that touches it (the lock commit) — verify anchors its git arm
 //            there. Refuses to re-index when the live law is locked OR a committed locked Law
 //            already exists — the Law is immutable after lock (§5.1); nulling the live
-//            lock_commit cannot re-open it.
+//            lock_commit cannot re-open it. Refuses a projectPath with no HEAD to record (not a
+//            git repo, or a repo with no commits) with a NAMED reason — creating the greenfield
+//            baseline ("chore: kiln build baseline") is the architecture lock sequence's
+//            pre-flight (P3.5 T2), never this CLI's job.
 //   verify — the tamper gate. TRUST ROOT (§5.1 immutable-Law model): the live .kiln/law.json is
 //            mutable by anything with disk access — a tamperer can launder a hash AND move
 //            lock_commit in one edit — so once a locked law.json exists in git history (oldest
@@ -308,6 +311,15 @@ function tamperGate(projectPath, kilnDir) {
 function cmdIndex(projectPath, kilnDir) {
   const { file, law } = readLaw(kilnDir)
   if (law.lock_commit !== null) die(`index: law.json is already locked (lock_commit ${law.lock_commit}) — the Law is immutable after lock`)
+  // P3.5 T2 (dogfood finding 2): index NEEDS a HEAD — it records lock_commit = HEAD. A repo-less
+  // projectPath (greenfield before the lock sequence's pre-flight ran) or an unborn HEAD used to
+  // die deep inside findCommittedLaw with a misleading "tamper gate: git log failed"; refuse with
+  // the REAL reason and the remedy instead — the named reason flows verbatim into the lock leg's
+  // error report and the conductor's law_reason escalation. Creating the baseline is the
+  // architecture lock sequence's pre-flight, never this CLI's.
+  if (!gitOk(projectPath, ['rev-parse', '--verify', 'HEAD'])) {
+    die(`index: ${projectPath} has no git HEAD to record as lock_commit (not a git repository, or a repo with no commits) — the Law anchors in git; the lock sequence's greenfield pre-flight creates the baseline first (git init -q, then git add -A && git commit -m "chore: kiln build baseline")`)
+  }
   const committed = findCommittedLaw(projectPath, lawRelPath(projectPath, kilnDir))
   if (committed) die(`index: the Law is already locked and committed (${committed.lockedBy}) — immutable after lock (§5.1); a pre-lock live law.json cannot re-open it`)
   const files = allFiles(law)

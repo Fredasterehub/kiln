@@ -8,7 +8,7 @@ export const meta = {
     { title: 'The Lantern', detail: 'diogenes extracts consensus / divergences / unique insights' },
     { title: 'One From Many', detail: 'plato writes master-plan.md with confidence tiers + surfaces + executable acceptance criteria' },
     { title: 'Athena Weighs', detail: 'athena validates; plato revises (≤2 rounds) on FAIL' },
-    { title: 'The Law', detail: 'asimov compiles ONE executable check per SC (tests/acceptance/ + law.json); every check dry-runs pre-lock (athena rules honest-red vs broken-check over the executed transcript; asimov fixes broken checks); kiln-law indexes; the gates lock in their own commit' },
+    { title: 'The Law', detail: 'asimov compiles ONE executable check per SC (tests/acceptance/ + law.json); every check dry-runs pre-lock (athena rules honest-red vs broken-check over the executed transcript; asimov fixes broken checks); the lock leg pre-flights the git baseline (no .git ⇒ init + baseline commit — the disk decides, never the flag); kiln-law indexes; the gates lock in their own commit' },
   ],
 }
 
@@ -727,6 +727,28 @@ if (!(verdict && verdict.verdict === 'PASS')) {
         // gates land in history. Checks the dry-run gate ruled legitimately green are recorded
         // pre_satisfied IN the Law before index hashes it (§5.1 brownfield GREEN-at-lock — the
         // flip arithmetic excludes them and guards them as regressions instead).
+        // Greenfield pre-flight (P3.5 T2, dogfood finding 2): architecture runs BEFORE build's
+        // rakim git-init, so a greenfield projectPath has no repo when this leg fires — Run A's
+        // lock failed honestly on exactly that and the conductor recovered by hand. The recovery
+        // is now the contract: the lock sequence OWNS its git baseline. The branch is decided
+        // MECHANICALLY from disk (one `ls .git` probe at run time) — the greenfield flag
+        // describes intent, the disk states fact — so a brownfield repo is untouched
+        // byte-for-byte and build's rakim init (already idempotent: "if not a git repo") never
+        // creates a second baseline. The pre-flight is ONE self-contained command (the step-2
+        // idiom — no cwd carry-over between agent Bash calls); identity is set LOCALLY and only
+        // where none resolves. A skipped or botched pre-flight still fails closed at step 1:
+        // kiln-law index refuses a HEAD-less repo with a named reason, never a deep-gate error.
+        const preFlightStep =
+          `PRE-FLIGHT, before any numbered step — the repo baseline. Decide MECHANICALLY from the disk, ` +
+          `never from any flag (a flag describes intent; the disk states fact): run ` +
+          `'ls -d "${projectPath}/.git"' (Bash). If it EXISTS, the repo is brownfield — change NOTHING ` +
+          `about the repo (no init, no baseline commit, no identity edits); go straight to the numbered ` +
+          `steps. If it does NOT exist (greenfield — the lock sequence owns its baseline), run exactly:\n` +
+          `   cd "${projectPath}" && git init -q && (git config user.name >/dev/null || git config user.name "Kiln") && ` +
+          `(git config user.email >/dev/null || git config user.email "kiln@localhost") && ` +
+          `git add -A && git commit -m "chore: kiln build baseline"\n` +
+          `(the config pairs set a LOCAL identity only where none resolves — never overwrite an existing ` +
+          `one; the baseline commit is created here exactly once, never on an existing repo.)\n`
         const preSatStep = greenLegit.length
           ? `0. FIRST edit ${lawFile} (file tools): set "pre_satisfied": true on exactly the check entr${greenLegit.length === 1 ? 'y' : 'ies'} ${greenLegit.join(', ')} — ruled legitimately green at the pre-lock dry-run (brownfield, §5.1). Change NOTHING else in the file.\n`
           : ''
@@ -734,10 +756,11 @@ if (!(verdict && verdict.verdict === 'PASS')) {
           `You are Thoth, the scribe — a law is only law once indexed and committed.\n\n` +
           `<task>Run these commands (Bash) IN THIS ORDER and report honestly. Index comes FIRST; the single ` +
           `lock commit that follows carries the gates AND the indexed law.json:\n` +
+          preFlightStep +
           preSatStep +
           `1. node ${pluginRoot}/scripts/kiln-law.mjs index ${projectPath} ${kilnDir}\n` +
           `2. cd ${projectPath} && git add tests/acceptance .kiln/law.json && git commit -m "test(law): lock acceptance gates"\n` +
-          `If a step fails, STOP — do not improvise a fix, do not amend, do not edit any ${greenLegit.length ? 'other ' : ''}file; report the ` +
+          `If a step fails (the pre-flight included), STOP — do not improvise a fix, do not amend, do not edit any ${greenLegit.length ? 'other ' : ''}file; report the ` +
           `failure verbatim in error. Report indexed (step 1 exited 0) and committed (step 2 succeeded).</task>`,
           { label: 'thoth:law-lock', phase: 'The Law', model: 'sonnet', schema: LAW_LOCK_SCHEMA }
         )
