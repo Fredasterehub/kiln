@@ -241,10 +241,12 @@ artifact summary it wrote to `.kiln/`, update STATE, render the transition, adva
 Base launch pattern: `Workflow({scriptPath: "$PLUGIN_ROOT/workflows/<stage>.js", args: {kilnDir: "<abs>/.kiln", projectPath: "<abs>", testingRigor, codexAvailable}})`.
 Pass the absolute `$PLUGIN_ROOT`-resolved paths, the operator's `testing_rigor` from STATE, and
 `codexAvailable` from the kiln-doctor probe (drives the Codex-vs-Sonnet paths). `build.js` honors
-`testingRigor` (tdd/standard/minimal). Each stage adds the args it actually reads:
+`testingRigor` (tdd/standard/minimal). The base pattern is a **launch convenience** — one shape for
+every stage, and a workflow simply ignores base args it doesn't read; the per-stage notes below are
+the authoritative consumption contract. Each stage adds the args it actually reads:
 - **Gauge** takes `postureOverride`, `assessorModel`, `pluginRoot` (see the Gauge stage above). It is
   the source of the posture-derived args every downstream stage reads.
-- **Research** also takes `mode` and **`topicsMax`** = `posture.research_topics_max` (always a
+- **Research** also takes **`topicsMax`** = `posture.research_topics_max` (always a
   positive integer — the §3.2 cap `2 + D3 + D5`). Passing it is the signal that the Gauge ran and
   switches research to the §3.2 rule: topics come ONLY from high-priority before-build OQs, capped at
   `topicsMax`, with NO lower floor — so **zero qualifying OQs ⇒ zero topics ⇒ no research.md is
@@ -261,18 +263,32 @@ Pass the absolute `$PLUGIN_ROOT`-resolved paths, the operator's `testing_rigor` 
   PASSES to run (BLUEPRINT §3.2 `plan_validation_rounds`, NOT a revision count): `1` ⇒ one pass / zero
   revisions, `3` ⇒ three passes / ≤2 revisions. **Omit both** and architecture.js falls back to its
   historical behavior (the foundation's `scope === 'trivial'` decides lite-vs-dual; 2 passes lite /
-  3 passes full) — a run without a posture is unchanged. Architecture self-detects whether research.md
+  3 passes full) — a run without a posture is unchanged. Architecture also reads **`lawModel`** and
+  **`pluginRoot`**. `lawModel` is the §8 slot for Asimov the Lawgiver (compiles and revises the Law's
+  checks; default `'opus'` — pass another slot per capability tier). `pluginRoot` is the same absolute
+  `$PLUGIN_ROOT` from §0 — it locates the `kiln-law` CLI for the Law's dryrun and index/lock step;
+  omit it and the lock degrades to `law_locked: false` with a recorded reason — never a silent
+  proceed, never a stage crash. Architecture self-detects whether research.md
   exists (a cheap `ls` probe, the §4 self-validation discipline) and grounds in VISION.md directly when
   the §3.2 zero-topics route wrote none — it never points an agent at a phantom research file.
-- **Build** also takes `milestoneLimit` (omit in production = all milestones), `uiBuild`, and
-  `pluginRoot`. **`uiBuild` defaults `false`** — set it `true` only for a genuinely pure-UI/static
+- **Build** also takes `milestoneLimit` (omit in production = all milestones), `uiBuild`,
+  `pluginRoot`, and — exactly like Validate — the whole **`posture`** object and a **`runToken`**.
+  **`uiBuild` defaults `false`** — set it `true` only for a genuinely pure-UI/static
   deliverable (no backend). `uiBuild===true` forces build.js's `surfaceOf()` to route *every*
   milestone to the UI builder, overriding each milestone's own `surface` tag, so a normal app left
   at `false` lets architecture's per-milestone `surface` route backend/logic milestones correctly.
   `pluginRoot` is the same absolute `$PLUGIN_ROOT` you resolved in §0 — a launched Workflow cannot
   see `${CLAUDE_PLUGIN_ROOT}` (it is unset there), so build.js workers need the resolved path passed
-  in to Read plugin reference files by absolute path.
-- **Validate** also takes `designPresent`, `pluginRoot`, and `posture`.
+  in to Read plugin reference files by absolute path. Pass the **whole `posture` object**
+  (`state.json.posture`) — build.js reads its Gauge dials (`review.ui_effort_base`,
+  `min_slices_for_tribunal`, `browser.tier2_per_milestone`, and the validate-extras it carries
+  downstream); omit it and the entire build stage drops to v2-equivalent defaults. **`runToken`** is
+  conductor-minted per run (see *The run token* below) — build.js derives its `kbuild-…` browser-kill
+  token from it; omit it and it falls back to a per-project hash that is NOT unique across runs.
+  For the `gateOnly` retry arg, see *Build failure routing* below.
+- **Validate** also takes `designPresent`, `pluginRoot`, `posture`, and a **`runToken`** (same recipe
+  as Build — see *The run token* below; validate.js derives its `kval-…` browser-kill / lease token
+  from it, with the same non-unique per-project hash fallback when omitted).
   `designPresent` is `true` if the architecture stage wrote a `design/` directory (a HINT only —
   validate.js self-detects `design/` from disk, so a wrong/absent hint never mis-routes the design
   QA leg). `pluginRoot` is the same absolute `$PLUGIN_ROOT` from §0 — LOAD-BEARING here: it locates
@@ -291,8 +307,27 @@ Pass the absolute `$PLUGIN_ROOT`-resolved paths, the operator's `testing_rigor` 
   one bounded, swept, lease-gated evaluator (the browser is a subprocess with a deadline, never a
   service); the out-of-loop `visual_qa_checklist` still ships as the optional operator re-check below.
 
+**The run token.** Build and Validate each derive their per-stage browser-kill token (`kbuild-…` /
+`kval-…`) from `args.runToken`. Workflow scripts cannot mint one — `Date.now()`/`Math.random` are
+forbidden inside them (the determinism guard that keeps resume reproducible), and the per-project hash
+fallback they fall to is NOT unique across runs. So **cross-run uniqueness is your job, here, where
+clocks are legal.** Mint ONE token per run, reuse it for every Build and Validate launch that run, and
+keep it in the inert charset `[A-Za-z0-9._-]` (it becomes a `pkill -f` / `readdir` pattern). Epoch
+seconds plus a short suffix is plenty — e.g. `1718200000-a1`. Mint a fresh one for a gate-only retry
+(below) so its sweep can't collide with the starved run's leftovers.
+
 Validate failures feed corrections back to Build while `correction_cycle < 3`, then escalate to the
 operator. Use the matching transition lines from `brand.md` for each event.
+
+**Build failure routing — the gate-only retry.** When a build run returns `QA_FAIL` whose ONLY
+blocking finding is `goal-audit-failure` — or the gate was visibly *starved* (session death
+mid-Judgment with the slices already built and committed) — do not pay for a full re-run. The slicer
+cannot legally cut zero slices over a completed build, so a full re-run churns through builder/confirm
+work it doesn't need. Instead relaunch build with `{gateOnly: true, …same args, fresh runToken}`:
+it skips Scoring the Cut and Forging entirely and re-runs only the §3.2 milestone gate (Law verify +
+full run + the tribunal) over the finished build. `gateOnly` REFUSES on a red Law (`gate-only-on-red`)
+— it re-runs a starved gate, it never skips building. Any other `QA_FAIL` (real red checks, failed
+flips) is a genuine build failure: route it back through the correction loop above, not gate-only.
 
 ### The workflow tree is now a lore surface (don't duplicate it)
 Each autonomous workflow renders its OWN lore in the `/workflows` progress tree: lore-flavored phase
