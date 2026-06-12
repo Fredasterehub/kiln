@@ -60,9 +60,12 @@ const VALIDATE_RUN_TOKEN = `kval-${String(A.runToken || valTokenHash(String(proj
 //    static-only, rather than blocking on it forever. The lease is the hard browser bound; withDeadline
 //    is the await bound. The budget is shared across passes (adversarial = a 2nd pass must fit the same
 //    session cap — and the SAME lease, so a 2nd pass past the cap is refused too).
-//    KILN_VALIDATE_TRAVERSAL_MS is a harness escape hatch ONLY — never set it in a run. ──
+//    KILN_VALIDATE_TRAVERSAL_MS is a harness escape hatch ONLY — never set it in a run. The Workflow
+//    runtime exposes NO `process` global (DOGFOOD FINDING 7: a bare read crashed the stage at module
+//    scope; probed surface 2026-06-12 — setTimeout/clearTimeout exist, process/Buffer/fetch do not),
+//    so the escape hatch is typeof-guarded: harness plain-node reads it, the runtime falls through. ──
 const TRAVERSAL_DEADLINE_MS = (() => {
-  const v = Number(process.env.KILN_VALIDATE_TRAVERSAL_MS)
+  const v = (typeof process !== 'undefined' && process.env) ? Number(process.env.KILN_VALIDATE_TRAVERSAL_MS) : NaN
   return Number.isInteger(v) && v >= 1 ? v : 10 * 60 * 1000 // §7 hard bound: 10 min / Tier-2 session
 })()
 // withDeadline(thunk, ms): resolves to the thunk's value, or the sentinel { __kiln_timeout: true } if
