@@ -85,18 +85,22 @@ let landmarksChecked = 0
 let interactionsRun = 0
 let axe = 'skipped'
 
-let browser = null
+// Per-viewport persistent context: the user-data-dir is a reserved Playwright concern, so it is
+// passed as the launchPersistentContext() positional arg (NOT a --user-data-dir launch flag, which
+// modern Playwright rejects). The token still lands in the chromium process cmdline via that dir
+// path, so the sweep keys on it — targeted, never blanket. One dir per viewport (a profile cannot be
+// shared by two live contexts), token-prefixed so every spawned browser dies with `pkill -f <token>`.
+const contexts = []
 try {
-  browser = await chromium.launch({
-    headless: true,
-    // the §7 launch contract verbatim, plus the unique kill token: the sweep keys on the
-    // user-data-dir path appearing in the chromium process cmdline — targeted, never blanket.
-    args: ['--disable-dev-shm-usage', '--disable-gpu', '--mute-audio', '--no-first-run', `--user-data-dir=/tmp/${token}`],
-  })
   for (const [vi, vp] of viewports.entries()) {
     const tag = `${vp.width}x${vp.height}`
-    const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height } })
-    const page = await context.newPage()
+    const context = await chromium.launchPersistentContext(`/tmp/${token}-${vi}`, {
+      headless: true,
+      viewport: { width: vp.width, height: vp.height },
+      args: ['--disable-dev-shm-usage', '--disable-gpu', '--mute-audio', '--no-first-run'],
+    })
+    contexts.push(context)
+    const page = context.pages()[0] ?? await context.newPage()
     page.setDefaultTimeout(ACTION_TIMEOUT_MS)
     page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(`[${tag}] ${msg.text()}`) })
     page.on('response', (res) => {
@@ -161,7 +165,7 @@ try {
   failures.push(`infra: ${e.message.split('\n')[0]}`)
 } finally {
   // the discipline-spec lifecycle: the browser NEVER outlives the check that spawned it
-  if (browser) { try { await browser.close() } catch { /* the wrapper's token sweep is the backstop */ } }
+  for (const context of contexts) { try { await context.close() } catch { /* the wrapper's token sweep is the backstop */ } }
 }
 
 // 4 + 5. zero console errors, zero first-party 4xx/5xx — collected across all viewports
