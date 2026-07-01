@@ -339,7 +339,8 @@ function argusPrompt() {
     `5. Missing credentials/env: set missing_creds=true, note it, continue — NEVER FAIL solely for missing creds.\n` +
     `</procedure>\n\n` +
     lawNote +
-    `<output>Write ${reportFile} (mkdir -p first): product type, install result, the three Law exit codes + run_id, suite summary, per-criterion results with evidence, coverage_gaps, blocking_findings (any failure that blocks a PASS not already an exit code or unmet critical criterion), and a prioritized correction_tasks list (one per distinct failure: failure, evidence, affected files, suggested fix). Report reasoning first, then the transcribed fields.</output>`
+    `<output>Persist the full prose report to ${reportFile} via Bash — mkdir -p first, then a heredoc (cat <<'EOF' > file); do NOT use the Write tool for it (the platform may nudge-reject subagent Write calls for report files — observed in the field 2026-07-01; Bash writes are the engine's normal artifact channel). The report carries: product type, install result, the three Law exit codes + run_id, suite summary, per-criterion results with full evidence, coverage_gaps, blocking_findings (any failure that blocks a PASS not already an exit code or unmet critical criterion), and a prioritized correction_tasks list (one per distinct failure: failure, evidence, affected files, suggested fix).\n` +
+    `STRUCTURED-OUTPUT DISCIPLINE (a failed schema is a failed stage — the verdict computes from these fields): the criteria array is REQUIRED and must carry EVERY criterion you exercised as {id, met, critical} with note ≤ 1 line — the full prose evidence lives in the report file, never in the schema; omitting the array (or flooding notes until the output truncates) IS the observed death mode. Reasoning ≤ a short paragraph. Report reasoning first, then the transcribed fields.</output>`
 }
 
 function hephaestusPrompt() {
