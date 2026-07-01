@@ -859,10 +859,19 @@ function reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort, vclas
 // DISAGREEMENT, and the deterministic reconcile blocks on critical|high findings only — so an
 // overall 'fail' carrying no such finding is structurally noise. Stated in both analyst prompts.
 const overallRule = `Also return overall — your independent verdict on the whole milestone ('pass' | 'fail'); a 'fail' MUST be backed by at least one critical or high finding, or the deterministic reconcile reads it as noise.`
+// THE BROWSER LAW for the gate legs (RUN-B F3 ruling, 2026-06-13): the tribunal analyst and the
+// judge were the ONLY browser-capable prompts WITHOUT a browser-law line, and the field run proved
+// it — Ken drove the Playwright-MCP browser_* tools on two milestone gates (superb adversarial QA
+// through a forbidden channel) and leaked an MCP chrome the token sweep structurally cannot reap
+// (an MCP browser is a persistent SERVICE, the exact class §7 forbids in-loop). Every prompt that
+// carried any browser-law line held; the two without it did not. The law names all three channels
+// and re-channels the analyst's hunger to the probe evidence — the value is redirected, not lost.
+const browserLaw = `NEVER launch a browser, NEVER drive Playwright yourself, and NEVER use Playwright-MCP browser_* tools (an MCP browser is a persistent service outside this stage's kill-token sweep — the exact leak class §7 forbids). Every browser observation you need already exists as probe evidence under ${kilnDir}/evidence/ (screenshots, console/net logs, probe-<SC>.json results) — judge UI behavior from that evidence and static inspection; live UI verification beyond it belongs to validate's bounded Tier-2 traversal, not to you.`
 function kenPrompt(m) {
   return voice('opus') +
     `You are QA analyst A. Adversarially verify the INTEGRATED milestone — run the tests, confirm each acceptance criterion is genuinely met (not faked), and hunt integration gaps and edge cases across the slices.\n\n` +
     `<inputs>\n- Milestone ${m.id} "${m.title}" — acceptance: ${m.acceptance}\n- Inspect the repo at ${projectPath}: git log/diff, read the files, RUN the tests yourself.\n</inputs>\n\n` +
+    `<constraints>\n- ${browserLaw}\n</constraints>\n\n` +
     `<task>Write findings to ${qaDir}/qa-report-a.md (mkdir -p first) and return report_file + findings[] (each {text, severity}). ${overallRule} Quote specific evidence ([file:line] or test output). Apply scrutiny to EVERY acceptance criterion, not just the first. Report reasoning first.</task>`
 }
 function ryuPrompt(m) {
@@ -887,6 +896,7 @@ function judgePrompt(m, reconciled) {
     `<inputs>\n- Milestone ${m.id} "${m.title}" — acceptance: ${m.acceptance}\n` +
     `- Reconciled findings (deduped, severity-ranked):\n${reconciled.summaryLines.map((l) => '  - ' + l).join('\n') || '  (none)'}\n` +
     `- The repo at ${projectPath}.\n</inputs>\n\n` +
+    `<constraints>\n- ${browserLaw}\n</constraints>\n\n` +
     `<task>RUN the tests yourself at ${projectPath}. Issue QA_PASS only if the milestone genuinely meets its acceptance with green tests and no critical/high findings; else QA_FAIL with the blocking findings. Report reasoning first, then verdict, findings, severity.</task>`
 }
 
