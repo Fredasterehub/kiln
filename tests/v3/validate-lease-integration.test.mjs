@@ -29,16 +29,14 @@ const RUNNER = fileURLToPath(new URL('./validate-lease-integration-runner.mjs', 
 
 // the fake playwright (mirrors probe.test.mjs) so the fixture probe could launch IF it were allowed —
 // the point is that the LEASE refuses it before it ever launches, not that playwright is absent.
+// Mirrors the real contract (probe-template post-0f09fbd): launchPersistentContext(dir, opts).
 const FAKE_PLAYWRIGHT = `'use strict'
 const { writeFileSync, mkdirSync } = require('fs')
-module.exports = { chromium: { async launch(opts) {
-  const args = (opts && opts.args) || []
-  const udd = args.find((a) => a.startsWith('--user-data-dir='))
-  if (udd) mkdirSync(udd.slice('--user-data-dir='.length), { recursive: true })
+module.exports = { chromium: { async launchPersistentContext(dir, opts) {
+  mkdirSync(dir, { recursive: true })
   const locator = { first(){return this}, async waitFor(){}, async click(){}, async fill(){}, async press(){} }
   const page = { setDefaultTimeout(){}, on(){}, async goto(){return {status:()=>200}}, getByRole(){return locator}, keyboard:{async press(){}}, async addScriptTag(){}, async evaluate(){return []}, async screenshot({path}){writeFileSync(path,'FAKEPNG')} }
-  const context = { async newPage(){return page}, async close(){} }
-  return { async newContext(){return context}, async close(){} }
+  return { pages(){return [page]}, async newPage(){return page}, async close(){} }
 } } }
 `
 

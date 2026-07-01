@@ -130,25 +130,27 @@ const leaderCmdlineLive = (pid) => { try { return readFileSync(`/proc/${pid}/cmd
 // node_modules exactly like a user install. Modes via KILN_FAKE_PW_MODE:
 //   pass      — every assertion succeeds; screenshot writes a stub file
 //   fail-role — locator.waitFor throws (landmark invisible)
-//   hang      — launch() never resolves (the timeout-kill drill)
-// Every launch ALWAYS: records the launch options to KILN_FAKE_PW_LOG (when set), creates the
-// real profile dir named by --user-data-dir, and spawns a detached REAL decoy process whose
-// cmdline carries the launch args (and so the kiln-pw token) — a stand-in for a leaked browser
-// process that ONLY the token sweep can reap. The decoy is a node sleeper with the args as a
-// trailing argv entry: real chromium keeps its args in its cmdline, and so must the stand-in
-// (bash -c would exec-optimize and DROP them — verified).
+//   hang      — launchPersistentContext() never resolves (the timeout-kill drill)
+// Mirrors the REAL call contract (probe-template post-0f09fbd, Playwright ≥1.59):
+// launchPersistentContext(dir, opts) — the user-data-dir is the POSITIONAL arg, never a
+// --user-data-dir launch flag (modern Playwright rejects the flag; the operator's field fix).
+// Every launch ALWAYS: records {dir, ...opts} to KILN_FAKE_PW_LOG (when set), creates the real
+// profile dir, and spawns a detached REAL decoy process whose cmdline carries the dir path (and
+// so the kiln-pw token — exactly as real chromium's cmdline carries the profile path) — a
+// stand-in for a leaked browser process that ONLY the token sweep can reap. The decoy is a node
+// sleeper with dir+args as a trailing argv entry (bash -c would exec-optimize and DROP them —
+// verified).
 const FAKE_PLAYWRIGHT = `'use strict'
 const { spawn } = require('child_process')
 const { writeFileSync, mkdirSync } = require('fs')
 const MODE = process.env.KILN_FAKE_PW_MODE || 'pass'
 module.exports = {
   chromium: {
-    async launch(opts) {
+    async launchPersistentContext(dir, opts) {
       const args = (opts && opts.args) || []
-      if (process.env.KILN_FAKE_PW_LOG) writeFileSync(process.env.KILN_FAKE_PW_LOG, JSON.stringify(opts))
-      const udd = args.find((a) => a.startsWith('--user-data-dir='))
-      if (udd) mkdirSync(udd.slice('--user-data-dir='.length), { recursive: true })
-      const decoy = spawn(process.execPath, ['-e', 'setTimeout(()=>{},300000)', '--', args.join(' ')], { detached: true, stdio: 'ignore' })
+      if (process.env.KILN_FAKE_PW_LOG) writeFileSync(process.env.KILN_FAKE_PW_LOG, JSON.stringify({ dir, ...opts }))
+      mkdirSync(dir, { recursive: true })
+      const decoy = spawn(process.execPath, ['-e', 'setTimeout(()=>{},300000)', '--', dir + ' ' + args.join(' ')], { detached: true, stdio: 'ignore' })
       decoy.unref()
       // hang: never resolve, with a live handle so the process cannot fall off the event loop
       // and exit on its own — only the wrapper's deadline kill ends it (the timeout drill).
@@ -170,8 +172,8 @@ module.exports = {
         async evaluate() { return [] },
         async screenshot({ path }) { writeFileSync(path, 'FAKEPNG') },
       }
-      const context = { async newPage() { return page }, async close() {} }
-      return { async newContext() { return context }, async close() {} }
+      // launchPersistentContext returns a BrowserContext: pages() may already hold the initial page.
+      return { pages() { return [page] }, async newPage() { return page }, async close() {} }
     },
   },
 }
@@ -245,14 +247,15 @@ test('kiln-probe run (pass): exit 0, §7 launch contract honored, full evidence 
     const shot = join(kiln, 'evidence', 'run1', 'probe-SC-001-1440x900.png')
     assert.ok(existsSync(shot), 'screenshot evidence at the default 1440x900 viewport')
     assert.equal(readFileSync(shot, 'utf8'), 'FAKEPNG')
-    // the §7 launch contract, recorded by the fake from the real call
+    // the §7 launch contract, recorded by the fake from the real call (launchPersistentContext:
+    // the user-data-dir is the POSITIONAL dir — token-prefixed, one per viewport — never a flag)
     const opts = JSON.parse(readFileSync(pwLog, 'utf8'))
     assert.equal(opts.headless, true)
     for (const a of ['--disable-dev-shm-usage', '--disable-gpu', '--mute-audio', '--no-first-run']) assert.ok(opts.args.includes(a), a)
-    assert.ok(opts.args.includes(`--user-data-dir=/tmp/${ev.token}`), 'the kill token rides in the chromium cmdline')
-    // lifecycle: the leaked decoy is DEAD and the profile dir is GONE — swept by token
+    assert.equal(opts.dir, `/tmp/${ev.token}-0`, 'the kill token rides in the per-viewport profile dir path (and so the chromium cmdline)')
+    // lifecycle: the leaked decoy is DEAD and the profile dir is GONE — swept by token prefix
     assert.deepEqual(pgrepf(ev.token), [], 'no process carrying the token survives the run')
-    assert.ok(!existsSync(`/tmp/${ev.token}`), 'the profile dir is removed')
+    assert.ok(!existsSync(`/tmp/${ev.token}-0`), 'the per-viewport profile dir is removed')
   } finally { rmSync(proj, { recursive: true, force: true }) }
 })
 
@@ -267,7 +270,7 @@ test('kiln-probe run (fail-role): exit 1, mapped fail, the failed assertion land
     assert.equal(ev.result.ok, false)
     assert.ok(ev.result.failures.some((f) => /landmark not visible: role=heading/.test(f)), JSON.stringify(ev.result.failures))
     assert.deepEqual(pgrepf(ev.token), [], 'fail path sweeps too')
-    assert.ok(!existsSync(`/tmp/${ev.token}`))
+    assert.ok(!existsSync(`/tmp/${ev.token}-0`))
   } finally { rmSync(proj, { recursive: true, force: true }) }
 })
 
@@ -286,7 +289,7 @@ test('kiln-probe run (hang): the deadline hard-kills the template — exit 79, m
     // THE drill: SIGKILL skipped the template's finally{close()} — the orphaned decoy (the
     // leaked browser stand-in) dies to the token sweep, not to luck.
     assert.deepEqual(pgrepf(ev.token), [], 'timeout survivors are swept by token')
-    assert.ok(!existsSync(`/tmp/${ev.token}`), 'the profile dir is removed after a timeout kill')
+    assert.ok(!existsSync(`/tmp/${ev.token}-0`), 'the per-viewport profile dir is removed after a timeout kill')
   } finally { rmSync(proj, { recursive: true, force: true }) }
 })
 
