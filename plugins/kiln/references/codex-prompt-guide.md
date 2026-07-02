@@ -21,13 +21,13 @@ TMP="$(mktemp /tmp/kiln-codex.XXXXXX.md)"   # write the four-part prompt into "$
 codex exec -m "$KILN_CODEX_MODEL" \
   -c 'model_reasoning_effort="high"' \
   --output-schema /tmp/schema.json \
-  --ask-for-approval never \
   --sandbox workspace-write \
   --skip-git-repo-check < "$TMP"
 ```
 
 Caveats at the call site:
 - **Write the prompt to a file, then pipe.** Heredoc into stdin is reliable; argument or interactive input is not. This is a tooling property of codex, not style. Mint the file with `mktemp` (`/tmp/kiln-codex.XXXXXX.md`) — a fixed path collides across concurrent runs.
+- **No approval flag.** `codex exec` is non-interactive and never asks for approval; do NOT pass `--ask-for-approval` (rejected at parse time as of codex v0.141.0).
 - **Fallback deliberately.** If GPT-5.5 is unavailable for the signed-in account, retry the same prompt with `-m gpt-5.4`. Do not silently downgrade without capturing the chosen model in the archived output.
 - **Exit 0 on internal failure.** Codex can exit 0 after GPT hit an internal error and produced nothing usable. Check stdout contains the expected artifact (file written / tests run) before acting on the result; if it is empty, do the work directly.
 - **Sandbox.** Default to `--sandbox workspace-write`; widen with `--add-dir <path>` when a slice legitimately needs another directory — do NOT reach for `danger-full-access`.
