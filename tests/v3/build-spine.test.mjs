@@ -704,6 +704,42 @@ test('velocity levers: rakim:setup ∥ confucius:parse are both haiku; assetPrep
   assert.doesNotMatch(ryu.prompt, /xhigh/, 'ryu QA dropped from xhigh to high (BLUEPRINT §8 / lever 4)')
 })
 
+test('runner downshift (P5.5 T3): the transcription seat is haiku at trivial posture and sonnet at standard — at BOTH the per-slice and gate-only call sites (the high-dims/effort-0 trap reads standard)', async () => {
+  const { posture: gaugePosture } = await import('../../plugins/kiln/src/gauge.mjs')
+  const gaugeConfig = JSON.parse(readFileSync(new URL('../../plugins/kiln/gauge-config.json', import.meta.url), 'utf8'))
+  const mkProf = (over = {}) => Object.fromEntries(['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'].map((d) => [d, { score: over[d] || 0, evidence: 'e' }]))
+  const runnerModels = (calls) => labelsOf(calls, 'asimov:runner').map((c) => c.model)
+
+  const trivial = gaugePosture(mkProf(), gaugeConfig)
+  const standard = gaugePosture(mkProf({ D6: 1 }), gaugeConfig)
+  const trap = gaugePosture(mkProf({ D1: 2, D2: 2, D5: 2, D6: 2, D7: 2 }), gaugeConfig) // effort 0, but 5 elevated dims
+  assert.equal(trivial.scope_tier, 'trivial')
+  assert.equal(standard.scope_tier, 'standard')
+  assert.equal(trap.scope_tier, 'standard')
+
+  // per-slice call site (the normal build trial — two slices ⇒ two per-slice runner trials)
+  const triv = await runBuild({ ...baseArgs, posture: trivial }, mkRespond())
+  const trivModels = runnerModels(triv.calls)
+  assert.equal(trivModels.length, 2, 'two per-slice trials')
+  assert.ok(trivModels.every((m) => m === 'haiku'), 'per-slice runner downshifts to haiku at trivial posture')
+  const std = await runBuild({ ...baseArgs, posture: standard }, mkRespond())
+  const stdModels = runnerModels(std.calls)
+  assert.equal(stdModels.length, 2)
+  assert.ok(stdModels.every((m) => m === 'sonnet'), 'per-slice runner stays sonnet at standard posture')
+  const trapRun = await runBuild({ ...baseArgs, posture: trap }, mkRespond())
+  const trapModels = runnerModels(trapRun.calls)
+  assert.equal(trapModels.length, 2)
+  assert.ok(trapModels.every((m) => m === 'sonnet'), 'the high-dims/effort-0 profile keeps the per-slice runner at sonnet')
+
+  // gate-only call site (the starved-gate retry — one runner over ALL milestone SCs)
+  const gTriv = await runBuild({ ...baseArgs, gateOnly: true, posture: trivial }, mkRespond())
+  assert.deepEqual(runnerModels(gTriv.calls), ['haiku'], 'gate-only runner downshifts to haiku at trivial posture')
+  const gStd = await runBuild({ ...baseArgs, gateOnly: true, posture: standard }, mkRespond())
+  assert.deepEqual(runnerModels(gStd.calls), ['sonnet'], 'gate-only runner stays sonnet at standard posture')
+  const gTrap = await runBuild({ ...baseArgs, gateOnly: true, posture: trap }, mkRespond())
+  assert.deepEqual(runnerModels(gTrap.calls), ['sonnet'], 'the high-dims/effort-0 profile keeps the gate-only runner at sonnet')
+})
+
 // ── §9 lever 3: pipelined next-milestone slicing + base_sha invalidation ─────────────────────────
 
 // Two single-slice logic milestones, each owning one Law SC. mkTwoMilestone keeps both lite-gate

@@ -345,6 +345,14 @@ function reviewLeg(surf, escalated) {
 // (posture.review.escalate_on) OR the feedback source was escalated.
 const reviewEffort = (fix, escalated) => (livePosture.review.ui_effort_base === 'high' || fix > 0 || escalated) ? 'high' : 'medium'
 
+// P5.5 lever 2 (§9, run-a-report.md): the deterministic runner EXECUTES kiln-law and TRANSCRIBES
+// its output — the gate arithmetic is downstream and deterministic (kiln-law exit codes + evidence
+// hashes), so a weaker transcription seat cannot weaken the gate; it can only fail more visibly,
+// which the fail-closed tamper/stale/red paths already catch. At trivial scope the seat downshifts
+// to haiku; at standard it stays sonnet. Keyed on scope_tier ONLY — the effort dial is a per-call
+// reasoning signal, never a scope signal (the r1 finding). Both trial call sites route through it.
+const runnerModel = livePosture.scope_tier === 'trivial' ? 'haiku' : 'sonnet'
+
 // Review verdict helpers. approvedOf is the ONE approval predicate: verdict, the reviewer's own
 // suite re-run, AND the reviewer's own kiln-law re-run (§6 independent-rerun floor) must all hold.
 const approvedOf = (rev) => !!(rev && rev.verdict === 'APPROVED' && rev.tests_green !== false && rev.law_green !== false)
@@ -825,7 +833,7 @@ async function evidencedReview(m, surf, slice, sliceId, build, fix, escalated, r
   }
   phase('The Trial')
   log(`${spin('law', fix)} — ${m.id} ${sliceId} f${fix}`)
-  const runner = await agent(runnerPrompt(build, lawCtx, lastRunId), { label: loreLabel('asimov', 'runner', `${sliceId}:f${fix}`), phase: 'The Trial', model: 'sonnet', schema: RUNNER_SCHEMA })
+  const runner = await agent(runnerPrompt(build, lawCtx, lastRunId), { label: loreLabel('asimov', 'runner', `${sliceId}:f${fix}`), phase: 'The Trial', model: runnerModel, schema: RUNNER_SCHEMA })
   let fresh = null
   if (runner && typeof runner.run_id === 'string' && runner.run_id) {
     fresh = await agent(freshPrompt(runner.run_id), { label: loreLabel('thoth', 'freshness', `${sliceId}:f${fix}`), phase: 'The Trial', model: 'haiku', schema: FRESHNESS_SCHEMA })
@@ -896,7 +904,7 @@ async function gateOnlyTrial(m, surf, mScIds) {
   phase('The Trial')
   log(`${spin('law', 0)} — ${m.id} gate-only Law check over ${mScIds.length} SC(s) [${mScIds.join(', ')}]`)
   const lawCtx = { gateOnly: true, flips: [], only: mScIds }
-  const runner = await agent(runnerPrompt(null, lawCtx, null), { label: loreLabel('asimov', 'runner', `${m.id}:gate-only`), phase: 'The Trial', model: 'sonnet', schema: RUNNER_SCHEMA })
+  const runner = await agent(runnerPrompt(null, lawCtx, null), { label: loreLabel('asimov', 'runner', `${m.id}:gate-only`), phase: 'The Trial', model: runnerModel, schema: RUNNER_SCHEMA })
   let fresh = null
   if (runner && typeof runner.run_id === 'string' && runner.run_id) {
     fresh = await agent(freshPrompt(runner.run_id), { label: loreLabel('thoth', 'freshness', `${m.id}:gate-only`), phase: 'The Trial', model: 'haiku', schema: FRESHNESS_SCHEMA })
