@@ -10,6 +10,12 @@
 // `ts` assignment. Projection itself IS fully deterministic: updated_at is the ts of the last
 // event (never the wall clock), so the same ledger always projects byte-identical state.json.
 //
+// Stage authority (P3.6 T4): state.json.stage is a projection of the stage_started/stage_completed
+// brackets the workflows append. It is stage-accurate at the gauge/build/validate boundaries — those
+// stages bracket their runs — and coarse across research/architecture until they gain ledger legs.
+// A conducted run births the ledger at onboarding (kiln-fire SKILL.md §5, `init`); a harness-driven
+// run that skips the conductor still gets correct stage projections wherever the workflows bracket.
+//
 // Usage:
 //   kiln-state.mjs init <kilnDir> --project-path <abs> [--name <s>] [--type <s>] [--greenfield true|false]
 //   kiln-state.mjs append <kilnDir> '<event-json>'   event-json: {type, stage, data?, git?} — seq + ts assigned here

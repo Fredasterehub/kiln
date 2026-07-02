@@ -936,6 +936,15 @@ if (!lawChecks.length) {
 }
 log(`The Law: ${lawChecks.length} locked check(s) across ${[...new Set(lawChecks.map((c) => c.milestone))].length} milestone(s)`)
 
+// §3.5 stage bracket (P3.6 T4): the build stage is entered — past both §3.4 floor gates, so the
+// ledger CLI is locatable, and BEFORE any other build-stage ledger activity (the pre-flight sweep
+// below appends browser_sweep at stage:'build'; a projection read must never see build events
+// while stage still reads the prior projection — T4 review r1). gateOnly re-enters the stage too
+// (accurate), so this fires either way; stage_completed only lands on the genuine
+// all-milestones-passed return below (a QA_FAIL/refusal leaves the projection at 'build', which
+// is the truthful state for the correction loop).
+await ledger('stage_started', { stage: 'build', gate_only: gateOnly }, 'The Forge Heats')
+
 // §7 / T2.3 pre-flight sweep: clear any orphaned browser tree from a prior crashed run BEFORE the
 // first probe could spawn (the discipline-spec defense against #1311's stale SingletonLock). Past
 // the floor gates, so pluginRoot + the ledger are usable.
@@ -1356,8 +1365,13 @@ for (const m of milestones) {
 }
 
   const passed = results.filter((r) => r.qa === 'QA_PASS' && r.tests_green)
+  const allPassed = passed.length === results.length && results.length > 0
   log(`The orchestra takes a bow — ${passed.length}/${results.length} milestone(s) passed QA${splitLedger.length ? ` · ${splitLedger.length} slice(s) await an operator split decision` : ''}`)
-  return { built: results, passed: passed.map((r) => r.id), all_passed: passed.length === results.length && results.length > 0, law_gated: true, split_required: splitLedger }
+  // §3.5 stage bracket (P3.6 T4): the build stage COMPLETES only when every milestone passed its
+  // gate. A QA_FAIL / refusal / gate-only-on-red leaves the projection at 'build' (accurate — the
+  // conductor re-enters via the correction loop or a gate-only retry). Fail-open like every ledger leg.
+  if (allPassed) await ledger('stage_completed', { stage: 'build', milestones: results.length, passed: passed.length }, 'Judgment')
+  return { built: results, passed: passed.map((r) => r.id), all_passed: allPassed, law_gated: true, split_required: splitLedger }
 } finally {
   // §7 / T2.3 stage-end sweep: UNCONDITIONAL at build end — reaps THIS build's browser survivors
   // (an outer-deadline SIGKILL of a probe wrapper, a crashed run mid-probe) before the stage hands

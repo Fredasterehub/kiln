@@ -454,6 +454,9 @@ function goalPrompt() {
 // ── Measuring Drift — the parallel fan-out (lever 9): zoxea ∥ argus ∥ hephaestus ─────────────────
 phase('Measuring Drift')
 log(`${spin('drift', 0)} — drift ∥ the Law floor ∥ design QA fan out`)
+// §3.5 stage bracket (P3.6 T4): the validate stage is entered. ledger() gates on pluginRoot itself
+// and degrades to a log line when the CLI is absent — never a stage failure.
+await ledger('stage_started', { stage: 'validate' })
 
 // hephaestus runs iff design/ exists on disk (§4 self-validation — the conductor's designPresent is
 // only a hint; a cheap detect probe is authoritative). A no-pluginRoot run still detects via the
@@ -632,6 +635,11 @@ try {
     adversarial_pass: posture.adversarial_pass,
     second_family: posture.second_family,
   })
+
+  // §3.5 stage bracket (P3.6 T4): validate COMPLETES only on a clean VALIDATE_PASS — a PARTIAL/FAILED
+  // verdict leaves the projection at 'validate' (accurate: the conductor loops corrections back to
+  // build, or escalates). stage_completed bumps the projection to 'report' (STAGE_ORDER).
+  if (v.verdict === 'VALIDATE_PASS') await ledger('stage_completed', { stage: 'validate' })
 
   return {
     verdict: v.verdict,

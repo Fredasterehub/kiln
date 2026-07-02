@@ -1093,3 +1093,56 @@ test('gateOnly skips the per-milestone codebase-state doc update (nothing was bu
   const { calls } = await runBuild(gateOnlyArgs, mkRespond())
   assert.equal(count(calls, 'rakim:state'), 0, 'no living-docs update under gate-only')
 })
+
+// ── P3.6 T4: the build stage brackets (RUN-B FINDING 2) — stage_started at the pre-flight bracket,
+//    stage_completed ONLY on the genuine all-milestones-passed return. A QA_FAIL leaves the stage
+//    current, so the projection reads 'build' and the conductor re-enters via the correction loop. ──
+const stageLedgers = (calls, type) => labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes(`"type":"${type}"`))
+
+test('P3.6 T4 stage brackets: the success path emits stage_started once and exactly one stage_completed; a QA_FAIL emits stage_started but NO stage_completed (the stage stays current)', async () => {
+  // success: the happy path — every milestone passes its gate → all_passed
+  const ok = await runBuild(baseArgs, mkRespond())
+  assert.equal(ok.result.all_passed, true)
+  const okStarted = stageLedgers(ok.calls, 'stage_started')
+  const okCompleted = stageLedgers(ok.calls, 'stage_completed')
+  assert.equal(okStarted.length, 1, 'stage_started fires exactly once, at the pre-flight bracket')
+  assert.equal(okCompleted.length, 1, 'the genuine-completion path emits exactly one stage_completed')
+  assert.match(okStarted[0].prompt, /"stage":"build"/, 'the entry bracket names the build stage')
+  assert.match(okCompleted[0].prompt, /"stage":"build"/, 'stage_completed carries stage:build so the projection bumps to validate')
+  // ordering: stage_started precedes EVERY other build-stage ledger event — the pre-flight sweep
+  // appends browser_sweep at stage:'build', and a projection read must never see build events while
+  // stage still reads the prior projection (T4 review r1) — and stage_completed follows the gate
+  const labels = ok.calls.map((c) => c.label)
+  const firstBuild = labels.findIndex((l) => l.includes(':build:'))
+  const startedIdx = ok.calls.indexOf(okStarted[0])
+  const completedIdx = ok.calls.indexOf(okCompleted[0])
+  const preflightSweepIdx = labels.findIndex((l) => l.startsWith('sentinel:sweep'))
+  assert.ok(preflightSweepIdx > -1, 'the pre-flight sweep leg exists')
+  assert.ok(startedIdx > -1 && startedIdx < preflightSweepIdx, 'stage_started precedes the pre-flight sweep (the first build-stage ledger activity)')
+  assert.ok(startedIdx < firstBuild, 'stage_started is bracketed before the first builder')
+  assert.ok(completedIdx > firstBuild, 'stage_completed lands after the build work, on the completion return')
+
+  // failure: a split (logical rejections) drives a milestone QA_FAIL → all_passed false → no completion
+  const fail = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
+    if (label.includes(':review:')) return rejectLogical
+  }))
+  assert.equal(fail.result.all_passed, false)
+  assert.equal(fail.result.built[0].qa, 'QA_FAIL')
+  assert.equal(stageLedgers(fail.calls, 'stage_started').length, 1, 'stage_started still fires — the stage WAS entered')
+  assert.equal(stageLedgers(fail.calls, 'stage_completed').length, 0, 'a QA_FAIL never emits stage_completed — the projection stays at build')
+})
+
+test('P3.6 T4 stage brackets: a floor-gate refusal (no pluginRoot) emits NEITHER bracket — the stage was never entered', async () => {
+  const { calls } = await runBuild({ kilnDir: '/tmp/k/.kiln', projectPath: '/tmp/k' }, mkRespond())
+  assert.equal(stageLedgers(calls, 'stage_started').length, 0)
+  assert.equal(stageLedgers(calls, 'stage_completed').length, 0)
+})
+
+test('P3.6 T4 stage brackets: a gateOnly retry that ends green completes the stage (stage_started fires as a re-entry, stage_completed on the all-passed return)', async () => {
+  const { result, calls } = await runBuild(gateOnlyArgs, mkRespond())
+  assert.equal(result.all_passed, true)
+  const started = stageLedgers(calls, 'stage_started')
+  assert.equal(started.length, 1, 'gateOnly re-enters the stage — stage_started fires')
+  assert.match(started[0].prompt, /"gate_only":true/, 'the entry bracket records the gate-only re-entry')
+  assert.equal(stageLedgers(calls, 'stage_completed').length, 1, 'a green gate-only pass completes the stage')
+})

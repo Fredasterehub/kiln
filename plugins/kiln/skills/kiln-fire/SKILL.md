@@ -143,7 +143,15 @@ surface and onboarding is cheap. Detect first, then confirm.
      anything now, but to **continue this run in a future session**, launch `claude` from inside that
      folder, or run `/kiln-fire <abs path>` from anywhere."*
 
-   Create `<project_path>/.kiln/` and `<project_path>/.kiln/docs/`. Copy
+   Create `<project_path>/.kiln/` and `<project_path>/.kiln/docs/`. **Birth the run ledger** the
+   moment `.kiln/` exists (Bash):
+   `node $PLUGIN_ROOT/scripts/kiln-state.mjs init <project_path>/.kiln --project-path <project_path> --name <project_name> --type <project_type> --greenfield <true|false>`.
+   This writes `events.jsonl` (seq 1 = `run_init`) and its `state.json` projection — the §4
+   machine-first state bus the autonomous stages append to. It runs ONCE, here, at onboarding;
+   `init` REFUSES over a live `events.jsonl`, so a **resume never re-inits** — the resume path (the
+   *orient* section above) gates on the file already existing and routes to a stage handler, it does
+   not touch `init`. If the ledger append can't reach the CLI later, the stages degrade to log lines,
+   never a stage failure. Copy
    `$PLUGIN_ROOT/templates/STATE.md` to `<project_path>/.kiln/STATE.md` and fill:
    `stage: brainstorm`, `mode`, `plan_approval`, `testing_rigor`, `project_name`,
    `project_path` (absolute), `project_type`, `greenfield`, `started_at`/`updated_at` (real ISO-8601 —
@@ -389,6 +397,13 @@ Wait for completion, render *"The forge cools. The work remains."* and present t
 - Keep field names and bullet format byte-stable — they are machine-read on resume.
 - `build_iteration` increments per build milestone (drives kill-streak names from
   `$PLUGIN_ROOT/references/kill-streaks.md`); `correction_cycle` tracks validation loops.
+- **The dual surface (§4).** `STATE.md` is the conductor's human/resume register — the source of
+  truth you rewrite here and read on resume. `state.json` is the *ledger's* projection of
+  `events.jsonl` (rebuilt by `kiln-state project`), a machine-first mirror you never hand-edit. It is
+  stage-accurate at the **gauge / build / validate** boundaries — those workflows bracket their runs
+  with `stage_started`/`stage_completed` events — and coarse across research/architecture until those
+  stages gain their own ledger legs (a later phase rides them in). Resume routing keys off `STATE.md`,
+  not `state.json`.
 
 ## Voice discipline
 

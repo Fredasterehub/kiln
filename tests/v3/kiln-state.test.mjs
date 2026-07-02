@@ -92,6 +92,35 @@ test('append: stage_completed sets last_completed_stage and bumps stage per the 
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
+test('append: the workflow stage brackets fold per the order table — gauge→research, build→validate, validate→report (P3.6 T4)', () => {
+  const dir = sandbox(); const kilnDir = join(dir, '.kiln')
+  try {
+    init(kilnDir)
+    // gauge bracket: stage_started sets the stage, stage_completed bumps to the next entry
+    run('append', kilnDir, '{"type":"stage_started","stage":"gauge"}')
+    assert.equal(readState(kilnDir).stage, 'gauge')
+    run('append', kilnDir, '{"type":"stage_completed","stage":"gauge"}')
+    let st = readState(kilnDir)
+    assert.equal(st.last_completed_stage, 'gauge')
+    assert.equal(st.stage, 'research')
+    // build bracket: started sets 'build', completed bumps to 'validate' (the flagged consumer fold)
+    run('append', kilnDir, '{"type":"stage_started","stage":"build"}')
+    assert.equal(readState(kilnDir).stage, 'build')
+    run('append', kilnDir, '{"type":"stage_completed","stage":"build"}')
+    st = readState(kilnDir)
+    assert.equal(st.last_completed_stage, 'build')
+    assert.equal(st.stage, 'validate')
+    // validate bracket: started sets 'validate', completed bumps to 'report'
+    run('append', kilnDir, '{"type":"stage_started","stage":"validate"}')
+    assert.equal(readState(kilnDir).stage, 'validate')
+    run('append', kilnDir, '{"type":"stage_completed","stage":"validate"}')
+    st = readState(kilnDir)
+    assert.equal(st.last_completed_stage, 'validate')
+    assert.equal(st.stage, 'report')
+    assert.equal(run('validate', kilnDir).status, 0)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
 test('append: rejects caller-supplied seq/ts, unknown types, unknown keys, and non-JSON — ledger untouched', () => {
   const dir = sandbox(); const kilnDir = join(dir, '.kiln')
   try {

@@ -38,6 +38,24 @@ const docsDir = `${kilnDir}/docs`
 const visionFile = `${docsDir}/VISION.md`
 const mapFile = `${docsDir}/codebase-map.md`
 
+// ── The ledger (BLUEPRINT §3.5): the gauge stage brackets + the posture_set event land in
+//    events.jsonl via the kiln-state CLI. Thoth appends; every caller gates on pluginRoot (a
+//    launched Workflow can't see ${CLAUDE_PLUGIN_ROOT}) and degrades to a log line when it is
+//    absent — a missing CLI never fails the gauge (the §3 floors run regardless; the posture still
+//    returns to the conductor, which persists it to STATE.md). ──
+async function ledger(type, data, phaseName) {
+  const ev = JSON.stringify({ type, stage: 'gauge', data })
+  await agent(
+    `You are Thoth, the scribe — "write it down or it never happened". Append ONE event to the Kiln run ledger.\n\n` +
+    `<task>Run this exact command (Bash), substituting the JSON verbatim — do not edit it:\n` +
+    '```\n' +
+    `node ${pluginRoot}/scripts/kiln-state.mjs append ${kilnDir} '${ev.replace(/'/g, `'\\''`)}'\n` +
+    '```\n' +
+    `If it exits non-zero (e.g. no events.jsonl yet — the run was not initialised), report the error in your summary; do NOT create or repair any file. Report only whether the append succeeded.</task>`,
+    { label: 'thoth:ledger', phase: phaseName, model: 'haiku' }
+  )
+}
+
 // ── The Gauge pure core (validateProfile + posture, inlined from src/gauge.mjs) ──
 // The §3.2 non-compensatory mapping runs HERE, in the script — never in an agent (BLUEPRINT §3.2).
 function validateProfile(profile) {
@@ -178,6 +196,11 @@ const assessBrief =
 // ── The Assessment: ONE Alpha agent scores the profile ──
 phase('The Assessment')
 log(spin(0))
+// §3.5 stage bracket (P3.6 T4): the gauge stage is entered — mark it in the ledger so state.json's
+// projection is stage-accurate from the gauge boundary onward. Gated on pluginRoot like every ledger
+// leg; absence degrades to a log line, never a stage failure.
+if (pluginRoot) await ledger('stage_started', {}, 'The Assessment')
+else log('pluginRoot absent — gauge stage_started not ledgered')
 const askAlpha = (label, extra) => agent(
   assessorVoice + assessBrief + (extra || ''),
   { label, phase: 'The Assessment', model: assessorModel, schema: PROFILE_SCHEMA }
@@ -264,30 +287,17 @@ function overrideProfile(score) {
   return p
 }
 
-// ── The Ledger: Thoth appends posture_set to events.jsonl via the kiln-state CLI (BLUEPRINT §3.5).
-//    pass pluginRoot so the launched Workflow can locate the CLI; degrade to a log line if absent. ──
+// ── The Ledger: Thoth appends posture_set + the stage-completed bracket to events.jsonl via the
+//    kiln-state CLI (BLUEPRINT §3.5). Each append is gated on pluginRoot; absence degrades it to a
+//    log line, never a stage failure. ──
 phase('The Ledger')
-const ledgerData = JSON.stringify({
-  posture: post,
-  profile,
-  override_applied: postureOverride,
-  source: degraded ? 'conservative_default' : (secondScored ? 'two_scorer_max_reconcile' : 'single_scorer'),
-})
-if (pluginRoot) {
-  const ev = JSON.stringify({ type: 'posture_set', stage: 'gauge', data: { posture: post, profile, override_applied: postureOverride, source: degraded ? 'conservative_default' : (secondScored ? 'two_scorer_max_reconcile' : 'single_scorer') } })
-  await agent(
-    `You are Thoth, the scribe — "write it down or it never happened". Append ONE event to the Kiln run ledger.\n\n` +
-    `<task>Run this exact command (Bash), substituting the JSON verbatim — do not edit it:\n` +
-    "```\n" +
-    `node ${pluginRoot}/scripts/kiln-state.mjs append ${kilnDir} '${ev.replace(/'/g, `'\\''`)}'\n` +
-    "```\n" +
-    `If it exits non-zero (e.g. no events.jsonl yet — the run was not initialised), report the error in your summary; ` +
-    `do NOT create or repair any file. Report only whether the append succeeded.</task>`,
-    { label: 'thoth:ledger', phase: 'The Ledger', model: 'haiku' }
-  )
-} else {
-  log(`pluginRoot absent — posture not ledgered to events.jsonl. posture_set data: ${ledgerData}`)
-}
+const postureData = { posture: post, profile, override_applied: postureOverride, source: degraded ? 'conservative_default' : (secondScored ? 'two_scorer_max_reconcile' : 'single_scorer') }
+if (pluginRoot) await ledger('posture_set', postureData, 'The Ledger')
+else log(`pluginRoot absent — posture not ledgered to events.jsonl. posture_set data: ${JSON.stringify(postureData)}`)
+// §3.5 stage bracket (P3.6 T4): the gauge stage completes — the posture is set. stage_completed
+// bumps the projection to 'research' (STAGE_ORDER); like the entry bracket it degrades to a log line.
+if (pluginRoot) await ledger('stage_completed', {}, 'The Ledger')
+else log('pluginRoot absent — gauge stage_completed not ledgered')
 
 // Return the conductor's hand-off: the assessed profile, the resolved posture, and which override
 // (if any) shaped it. The conductor stores the summary line and passes posture-derived args

@@ -209,23 +209,27 @@ test('T2 high-stakes: a flaky second scorer (invalid profile) is discarded; the 
   assert.deepEqual(result.posture, referencePosture(primary, CONFIG))
 })
 
-// ── The ledger leg: with pluginRoot present, Thoth gets a kiln-state append carrying posture_set ──
-test('T2 ledger: pluginRoot present → Thoth receives a kiln-state append with type posture_set', async () => {
+// eventOf — parse the kiln-state event JSON embedded (single-quoted, shell-escaped) in a ledger cmd.
+const eventOf = (cmd) => JSON.parse(cmd.slice(cmd.indexOf("'") + 1, cmd.lastIndexOf("'")).replace(/'\\''/g, "'"))
+
+// ── The ledger legs: with pluginRoot present the gauge brackets its run (stage_started at entry,
+//    posture_set in The Ledger, stage_completed on the genuine-completion path) — P3.6 T4 ─────────
+test('T2 ledger: pluginRoot present → Thoth receives THREE kiln-state appends — stage_started, posture_set, stage_completed (in order)', async () => {
   const { ledgerCmds } = await runGauge(
     { ...baseArgs, pluginRoot: '/abs/plugin/root' },
     (label) => label === 'alpha:assess' ? { reasoning: 'x', profile: fixtureProfile } : null
   )
-  assert.equal(ledgerCmds.length, 1, 'exactly one ledger append is issued')
-  const cmd = ledgerCmds[0]
-  assert.match(cmd, /\/abs\/plugin\/root\/scripts\/kiln-state\.mjs append/)
-  assert.match(cmd, /\/tmp\/nonexistent-kiln\/\.kiln/)
-  // the embedded event JSON parses and is a posture_set on the gauge stage with the full posture.
-  const jsonStart = cmd.indexOf("'") + 1
-  const jsonEnd = cmd.lastIndexOf("'")
-  const eventJson = cmd.slice(jsonStart, jsonEnd).replace(/'\\''/g, "'")
-  const ev = JSON.parse(eventJson)
-  assert.equal(ev.type, 'posture_set')
-  assert.equal(ev.stage, 'gauge')
-  assert.deepEqual(ev.data.posture, referencePosture(fixtureProfile, CONFIG))
-  assert.deepEqual(ev.data.profile, fixtureProfile)
+  assert.equal(ledgerCmds.length, 3, 'the stage brackets + posture_set = three ledger appends')
+  const evs = ledgerCmds.map(eventOf)
+  assert.deepEqual(evs.map((e) => e.type), ['stage_started', 'posture_set', 'stage_completed'],
+    'the entry bracket precedes the posture, and the completion bracket follows it')
+  for (const cmd of ledgerCmds) {
+    assert.match(cmd, /\/abs\/plugin\/root\/scripts\/kiln-state\.mjs append/)
+    assert.match(cmd, /\/tmp\/nonexistent-kiln\/\.kiln/)
+  }
+  for (const e of evs) assert.equal(e.stage, 'gauge', 'every gauge event carries stage:gauge (drives the projection fold)')
+  // the posture_set still carries the full posture + assessed profile
+  const posture = evs.find((e) => e.type === 'posture_set')
+  assert.deepEqual(posture.data.posture, referencePosture(fixtureProfile, CONFIG))
+  assert.deepEqual(posture.data.profile, fixtureProfile)
 })
