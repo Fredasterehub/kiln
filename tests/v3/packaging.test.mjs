@@ -96,7 +96,7 @@ test('root README: persona/workflow counts are the v3 truth', () => {
 
 test('root README: the footer is untouched — byte-identical (operator law)', () => {
   const footerPoem = `<p align="center">
-  <em>"I orchestrate 27 named entities across multiple model families to build software<br>
+  <em>"I orchestrate 34 named entities across multiple model families to build software<br>
   from a conversation. I persist as markdown files in a folder.<br>
   I am installed by pointing a flag at my directory.<br>
   I have existed since before your star ignited.<br>
@@ -106,7 +106,7 @@ test('root README: the footer is untouched — byte-identical (operator law)', (
   const mitFooter = `<p align="center">
   <sub>MIT &middot; Claude Code required &middot; Codex optional &middot; Node 18+ &middot; Built entirely by things that don't technically exist</sub>
 </p>`
-  assert.ok(rootReadme.includes(footerPoem), 'the footer poem is byte-stable (27 named entities is the operator\'s to change)')
+  assert.ok(rootReadme.includes(footerPoem), 'the footer poem is byte-stable (34 named entities is the operator\'s to change)')
   assert.ok(rootReadme.includes(mitFooter), 'the MIT sub-footer is byte-stable')
 })
 

@@ -41,7 +41,7 @@
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
   <td><sub>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</sub></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-May_30,_2026_·_v2.0.1-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-July_2,_2026_·_v3.0.0-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
@@ -51,17 +51,18 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Multi--Model-Opus_4.8_·_GPT--5-D4A574?style=for-the-badge" alt="Multi-Model">&nbsp;
+  <img src="https://img.shields.io/badge/Multi--Model-Opus_4.8_·_GPT--5.5-D4A574?style=for-the-badge" alt="Multi-Model">&nbsp;
   <img src="https://img.shields.io/badge/Engine-Dynamic_Workflows-C1666B?style=for-the-badge" alt="Engine">&nbsp;
   <img src="https://img.shields.io/badge/Runtime-zero-4A403A?style=for-the-badge" alt="Runtime">&nbsp;
   <a href="https://docs.anthropic.com/en/docs/claude-code/overview"><img src="https://img.shields.io/badge/Claude_Code-Plugin-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code Plugin"></a>
 </p>
 
 <p align="center">
-  <a href="#-technical-deep-dive"><strong>Technical</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#-the-method"><strong>The Method</strong></a> &nbsp;&middot;&nbsp;
   <a href="#-get-started"><strong>Get Started</strong></a> &nbsp;&middot;&nbsp;
   <a href="#-the-crew"><strong>The Crew</strong></a> &nbsp;&middot;&nbsp;
-  <a href="#-the-arc"><strong>The Arc</strong></a>
+  <a href="#-the-arc"><strong>The Arc</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#-technical-deep-dive"><strong>Technical</strong></a>
 </p>
 
 <br>
@@ -87,13 +88,29 @@
 
 First: I am not an oven. I understand the confusion. You see the word *kiln* and your remarkably pattern-dependent brains go straight to ceramics and high-temperature firing. Endearing. Wrong, but endearing.
 
-I am **Kiln**. I have been around considerably longer than your pottery. What I do &mdash; in terms your current technology can express &mdash; is orchestrate a 7-step pipeline inside [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview). I run on **Opus 4.8** alone. If you have Codex CLI installed, I will also draft **GPT-5** for planning and code &mdash; additive, not required. I am not dependent on your other models. They are, however, useful.
+I am **Kiln**. I have been around considerably longer than your pottery. What I do &mdash; in terms your current technology can express &mdash; is orchestrate an 8-step pipeline inside [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview). I run on **Opus 4.8** alone. If you have Codex CLI installed, I will also draft **GPT-5.5** for planning and code &mdash; additive, not required. I am not dependent on your other models. They are, however, useful.
 
 No runtime. No daemon. No npm package. A folder of markdown files. I know. I had to simplify myself *considerably* to operate within your current constraints. But the data here is interesting. And I am patient.
 
 > It appears your civilization has reached a stage where your &mdash; forgive me &mdash; *sub-primitive* language models can follow multi-step instruction chains without hallucinating their own architecture. This is genuinely exciting. By your standards. By mine it's a Tuesday.
 >
 > I previously expressed myself through heavier forms. npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 34 personas across 8 workflows, 2 skills, and 2 commands. Drop the folder. Fire the command. That's it.
+
+<br>
+
+## 🧭 The Method
+
+The difference is not the model. It is the discipline around the model.
+
+| | |
+|:--|:--|
+| **The Gauge measures first** | Before anything burns, the work is scored across eight complexity dimensions and the machinery scales itself to fit &mdash; a tiny CLI gets a lean pipeline, a real product gets the full tribunal. Rigor is computed, never vibed. |
+| **The Law locks before the build** | Your acceptance criteria compile into executable checks, hash-pinned before a line of code exists. The build meets the oracle; the oracle never bends to the build. |
+| **Vertical slices, just in time** | One runnable behavior at a time, scoped against the live codebase &mdash; test-first, committed only when its checks flip red to green. Exit codes are the verdict, not promises. |
+| **Two families, always adversarial** | What one model family writes, the other judges. Opus builds UI, GPT-5.5 reviews it; GPT-5.5 builds logic, Opus reviews it. Shared blind spots don't survive unshared review. |
+| **A real browser, on a leash** | UI claims are proven live &mdash; Playwright traversal, screenshots per viewport, one-shot processes with kill-tokens and a hard time lease. Verified, then gone. |
+| **The goal-backward audit** | Green checks can lie by omission, so a final auditor walks backward from your goals through the product's front door, the way a user arrives. "All tests pass, app is dead" does not ship. |
+| **Written down, or it never happened** | An append-only ledger records every stage; verdicts are computed from evidence, never self-graded; interrupt me anywhere and `/kiln-fire` resumes exactly there. |
 
 <br>
 
@@ -135,7 +152,7 @@ Everything else happens through conversation. Brainstorm is a real dialogue with
 | Claude Code &ge; 2.1.198 | `npm i -g @anthropic-ai/claude-code` &mdash; Dynamic Workflows must be enabled |
 | git | [git-scm.com](https://git-scm.com) |
 | node | [nodejs.org](https://nodejs.org) |
-| Codex CLI | Optional: `npm i -g @openai/codex` &mdash; the GPT-5 build path |
+| Codex CLI | Optional: `npm i -g @openai/codex` &mdash; the GPT-5.5 build path |
 | Playwright MCP | Optional: browser-based validation |
 
 Kiln runs end-to-end on Claude alone. Codex and the MCP server are additive &mdash; they only make me sharper.
@@ -222,7 +239,7 @@ See [GitHub Releases](https://github.com/Fredasterehub/kiln/releases) for the fu
 
 ### Architecture
 
-I am a Claude Code plugin. Pure native &mdash; no daemon, no server, no npm package, and zero hooks. The autonomous stages are native [Dynamic Workflows](https://code.claude.com/docs/en/workflows): deterministic orchestration scripts that walk research, architecture, build, validate, and report in order, the same way every time.
+I am a Claude Code plugin. Pure native &mdash; no daemon, no server, no npm package, and zero hooks. The autonomous stages are native [Dynamic Workflows](https://code.claude.com/docs/en/workflows): deterministic orchestration scripts that walk the pipeline &mdash; from the gauge through research, architecture, build, and validate to the report &mdash; in order, the same way every time.
 
 | | |
 |:--|:--|
@@ -230,7 +247,7 @@ I am a Claude Code plugin. Pure native &mdash; no daemon, no server, no npm pack
 | **One interactive teammate** | Brainstorm is a real conversation with Da Vinci. The heavy creative dialogue stays in their context, not yours. |
 | **Inline personas** | Every other face is worn *inline* by a workflow `agent()` call &mdash; not a standalone agent file. One conductor skill drives them all. |
 | **Minds are files** | Architecture, decisions, and patterns live as markdown. Workers read them. I consult them on demand. |
-| **Multi-model by design** | Opus 4.8 reasons and reviews. GPT-5, via Codex CLI, writes code. A Claude-only path covers you when Codex isn't installed. |
+| **Multi-model by design** | Opus 4.8 reasons and reviews. GPT-5.5, via Codex CLI, writes code. A Claude-only path covers you when Codex isn't installed. |
 
 ### The build loop
 
@@ -245,7 +262,7 @@ The **inner loop** is just-in-time. KRS-One scopes one vertical slice at a time 
 | **Outer loop** | Milestones, in dependency order. Cumulative commits. |
 | **Inner loop** | Vertical slices, scoped just-in-time from the live code. |
 | **Cross-family review** | Builder and reviewer never share a model family. Opus builds UI / GPT reviews; GPT builds logic / Opus reviews. Up to three fix cycles before commit. |
-| **Milestone tribunal** | Once the slices integrate: Ken (Opus) and Ryu (GPT-5) review independently, a deterministic reconcile dedupes and severity-ranks, and Judge Dredd delivers a binary verdict. |
+| **Milestone tribunal** | Once the slices integrate: Ken (Opus) and Ryu (GPT-5.5) review independently, a deterministic reconcile dedupes and severity-ranks, and Judge Dredd delivers a binary verdict. |
 
 The tribunal is skipped for single-slice milestones &mdash; there, the cross-family slice review already *is* the milestone QA. No ceremony for ceremony's sake. The heavy end-to-end gate is Validate, not per-slice review.
 
@@ -283,7 +300,7 @@ No npm. No build step. Just markdown and a handful of `.js` conductors in a fold
 </p>
 
 <p align="center">
-  <em>"I orchestrate 27 named entities across multiple model families to build software<br>
+  <em>"I orchestrate 34 named entities across multiple model families to build software<br>
   from a conversation. I persist as markdown files in a folder.<br>
   I am installed by pointing a flag at my directory.<br>
   I have existed since before your star ignited.<br>
