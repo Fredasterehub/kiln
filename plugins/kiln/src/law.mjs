@@ -169,6 +169,54 @@ export function flipPlan(law, sliceScIds, statusBefore) {
   return { flip, regression, pre_satisfied: preSatisfied, deferred, unknown }
 }
 
+// probeTwinRel(check) — the on-disk twin convention for a probe check (RUN-B F1 tail): Asimov
+// writes every probe spec TWICE — embedded as the check's `spec` (the copy kiln-probe EXECUTES)
+// and as tests/acceptance/<id lowercase>.probe.json (the copy the lock hashes and the product
+// ships). This one-liner is the single source of that path convention for both CLI arms.
+export function probeTwinRel(check) {
+  return `tests/acceptance/${String((check && check.id) || '').toLowerCase()}.probe.json`
+}
+
+// probeTwinIssues(check, twinRaw) — the twin-sync contract for ONE probe check (RUN-B F1 tail,
+// the M2 QA integrity-chain finding): kiln-probe executes the EMBEDDED spec while the lock
+// attests the ON-DISK twin, and nothing else ever compares them — a desynced pair locks
+// permanently desynced, certifying an artifact that is not the spec that gated the build.
+// twinRaw is the on-disk twin's raw content (string) or null when the file is unreadable —
+// the caller does the I/O (this module stays pure). Issues, in order of detection: the twin
+// not listed in the check's files (un-attested), missing on disk, unparseable, or not
+// DEEP-EQUAL to the embedded spec (strict recursive equality — key order irrelevant, array
+// order significant). Empty array ⇔ the twins are in sync and attested.
+export function probeTwinIssues(check, twinRaw) {
+  const rel = `tests/acceptance/${String((check && check.id) || '').toLowerCase()}.probe.json`
+  const deepEq = (a, b) => {
+    if (a === b) return true
+    if (typeof a !== typeof b) return false
+    if (a === null || b === null || typeof a !== 'object') return false
+    const aArr = Array.isArray(a)
+    if (aArr !== Array.isArray(b)) return false
+    if (aArr) return a.length === b.length && a.every((v, i) => deepEq(v, b[i]))
+    const ak = Object.keys(a)
+    const bk = Object.keys(b)
+    return ak.length === bk.length && ak.every((k) => Object.prototype.hasOwnProperty.call(b, k) && deepEq(a[k], b[k]))
+  }
+  const issues = []
+  const files = (check && Array.isArray(check.files)) ? check.files : []
+  if (!files.includes(rel)) issues.push(`${rel} is not listed in the check's files — the on-disk twin must be locked/attested with the check`)
+  if (twinRaw === null || twinRaw === undefined) {
+    issues.push(`${rel} is missing on disk — the embedded spec has no on-disk twin`)
+    return issues
+  }
+  let twin
+  try { twin = JSON.parse(twinRaw) } catch (e) {
+    issues.push(`${rel} is not valid JSON — ${e.message}`)
+    return issues
+  }
+  if (!deepEq((check && check.spec) || null, twin)) {
+    issues.push(`${rel} does not deep-equal the embedded spec — the twins are desynced (kiln-probe executes the EMBEDDED spec; the on-disk twin is what the lock attests)`)
+  }
+  return issues
+}
+
 // classifyDryrun(kind, exit, signal, timedOut) — the P3.5 T1 deterministic PRE-LOCK dry-run
 // classification (dogfood finding 1: checks are code; they execute before we trust them —
 // reading is not executing). This table is the verdict the EXIT CODE carries mechanically,

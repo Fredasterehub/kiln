@@ -15,7 +15,11 @@
 //            lock_commit cannot re-open it. Refuses a projectPath with no HEAD to record (not a
 //            git repo, or a repo with no commits) with a NAMED reason — creating the greenfield
 //            baseline ("chore: kiln build baseline") is the architecture lock sequence's
-//            pre-flight (P3.5 T2), never this CLI's job.
+//            pre-flight (P3.5 T2), never this CLI's job. Refuses a probe whose EMBEDDED spec
+//            does not deep-equal its on-disk tests/acceptance/<id>.probe.json twin (or whose
+//            twin is missing/unlisted/unparseable) — RUN-B F1: kiln-probe executes the embedded
+//            spec, the index attests the twin, and the Law is immutable after lock, so a
+//            desynced pair can never be allowed to lock.
 //   verify — the tamper gate. TRUST ROOT (§5.1 immutable-Law model): the live .kiln/law.json is
 //            mutable by anything with disk access — a tamperer can launder a hash AND move
 //            lock_commit in one edit — so once a locked law.json exists in git history (oldest
@@ -117,10 +121,21 @@
 //            green (pre-satisfied candidate); any other nonzero = ambiguous (transcribed,
 //            judged downstream — the architecture stage feeds the transcript to Athena).
 //            A dry-run is a TRANSCRIPT, never a run record: no evidence dir, no run.json, no
-//            results.jsonl — zero disk residue. Default output: one readable line per check +
-//            one DRYRUN_RESULT summary line; --json: one JSON object {schema, transcript,
-//            summary} on stdout. Exits 0 whenever the dry-run executed (the classifications ARE
-//            the report — gating is the architecture stage's job); 1 only on usage/infra errors.
+//            results.jsonl — zero disk residue. Probe twins ARE checked here (RUN-B F1 tail):
+//            a spec'd probe whose on-disk tests/acceptance twin is missing/unlisted/
+//            unparseable/not-deep-equal classifies broken-check (a pure file comparison — no
+//            browser), so the revise loop routes the desync to its author pre-lock. A
+//            PRESENT-but-invalid law.json (bad JSON, schema violations) is itself a
+//            transcribable report — RUN-B FINDING 1: {transcript: [], law_violations: [typed
+//            errors], summary: zeros}, exit 0 — so the architecture loop can route Asimov's own
+//            compilation defects into the same bounded revise cycle instead of dead-ending the
+//            gate; a MISSING law.json still dies (nothing to revise), and every other command
+//            keeps the fail-closed throw. Default output: one readable line per check + one
+//            DRYRUN_RESULT summary line (DRYRUN_LAW_INVALID lines on the violations path);
+//            --json: one JSON object {schema, transcript, law_violations, summary} on stdout
+//            (law_violations always present, empty on a normal dry-run). Exits 0 whenever the
+//            dry-run executed OR transcribed a defective Law (the report IS the deliverable —
+//            gating is the architecture stage's job); 1 only on usage/infra errors.
 //   status — fold one run's results.jsonl → {green, red, deferred} JSON on stdout (green = exit
 //            matched the check's expected 'exit0'; last line wins per id; law.json check order).
 //   suite  — persist the PROJECT suite as hashed evidence beside a recorded Law run (§6): the
@@ -166,7 +181,7 @@ import { readFileSync, writeFileSync, renameSync, mkdirSync, appendFileSync, exi
 import { join, relative, resolve, isAbsolute, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { validateLaw, flipPlan, classifyDryrun } from '../src/law.mjs'
+import { validateLaw, flipPlan, classifyDryrun, probeTwinRel, probeTwinIssues } from '../src/law.mjs'
 
 // kiln-probe.mjs lives beside this CLI — the §7 Tier-1 probe wrapper kind:'probe' checks run through
 const KILN_PROBE = join(dirname(fileURLToPath(import.meta.url)), 'kiln-probe.mjs')
@@ -322,6 +337,21 @@ function cmdIndex(projectPath, kilnDir) {
   }
   const committed = findCommittedLaw(projectPath, lawRelPath(projectPath, kilnDir))
   if (committed) die(`index: the Law is already locked and committed (${committed.lockedBy}) — immutable after lock (§5.1); a pre-lock live law.json cannot re-open it`)
+  // RUN-B F1 tail — the lock's twin floor, checked BEFORE the generic missing-file guard so a
+  // listed-but-missing twin gets the NAMED twin refusal (which teaches the regenerate-to-
+  // deep-equal fix), never the generic message: kiln-probe executes the EMBEDDED spec while
+  // this index hashes the on-disk twin; the Law is immutable after lock, so a desynced pair
+  // would lock PERMANENTLY desynced — certifying an artifact that is not the spec that gates
+  // the build. Whatever path wrote the divergence (a manual recovery included), it can never lock.
+  const desynced = []
+  for (const c of law.checks) {
+    if (c.kind !== 'probe' || !c.spec) continue
+    let twinRaw = null
+    try { twinRaw = readFileSync(resolve(projectPath, probeTwinRel(c)), 'utf8') } catch { twinRaw = null }
+    const issues = probeTwinIssues(c, twinRaw)
+    if (issues.length) desynced.push(`${c.id}: ${issues.join('; ')}`)
+  }
+  if (desynced.length) die(`index: probe twin desync — every embedded spec must deep-equal its on-disk tests/acceptance twin at lock:\n  ${desynced.join('\n  ')}`)
   const files = allFiles(law)
   const missing = files.filter((p) => !existsSync(resolve(projectPath, p)))
   if (missing.length) die(`index: locked file(s) missing on disk:\n  ${missing.join('\n  ')}`)
@@ -573,7 +603,34 @@ function cmdRun(projectPath, kilnDir, flags) {
 // carries the verdict; ambiguous entries ship their tails for the downstream judge.
 function cmdDryrun(projectPath, kilnDir, flags) {
   for (const k of Object.keys(flags)) if (k !== 'json') die(`dryrun: unknown flag --${k}`)
-  const { law } = readLaw(kilnDir) // the LIVE file — pre-lock legal; a locked law dry-runs identically
+  // RUN-B FINDING 1: pre-lock, a DEFECTIVE Law is Asimov's own artifact, and the dry-run gate
+  // exists to route authored defects back to their author. So dryrun ALONE treats a
+  // present-but-invalid law.json (bad JSON, schema violations) as a TRANSCRIBABLE report —
+  // law_violations carried in the output, exit 0 — never a crash: the architecture loop routes
+  // the typed violations into the same bounded revise cycle as a broken check. A MISSING
+  // law.json stays die (there is nothing to revise), and every OTHER command keeps readLaw's
+  // fail-closed throw (post-lock, a corrupted live law.json is TAMPER territory, never routable).
+  const lawFile = join(kilnDir, 'law.json')
+  if (!existsSync(lawFile)) die(`no law.json in ${kilnDir} — Asimov has not written the Law`)
+  let law = null
+  let lawViolations = []
+  let parsed = false
+  try { law = JSON.parse(readFileSync(lawFile, 'utf8')); parsed = true } catch (e) {
+    lawViolations = [{ code: 'invalid_json', path: 'law', message: `law.json is not valid JSON — ${e.message}` }]
+  }
+  if (parsed) {
+    const { ok, errors } = validateLaw(law)
+    if (!ok) lawViolations = errors
+  }
+  if (lawViolations.length) {
+    const summary = { green: 0, 'honest-red': 0, 'broken-check': 0, ambiguous: 0, deferred: 0 }
+    if (flags.json) console.log(JSON.stringify({ schema: 1, transcript: [], law_violations: lawViolations, summary }))
+    else {
+      for (const v of lawViolations) console.log(`DRYRUN_LAW_INVALID ${v.message}`)
+      console.log(`DRYRUN_RESULT checks=0 law_violations=${lawViolations.length}`)
+    }
+    return
+  }
   const TAIL_LINES = 25
   const tail = (s) => {
     const lines = String(s || '').split('\n')
@@ -585,7 +642,21 @@ function cmdDryrun(projectPath, kilnDir, flags) {
     if (c.kind === 'probe') {
       // probes stay deferred at dry-run: there is no built product to probe pre-lock, and the
       // §7 probe lifecycle (exit 78/79, sweeps, evidence) belongs to the locked runner — a
-      // dry-run executes no browser and leaves those semantics untouched.
+      // dry-run executes no browser and leaves those semantics untouched. But the TWIN contract
+      // is checked where checks are checked (RUN-B F1 tail): kiln-probe executes the EMBEDDED
+      // spec while the lock attests the on-disk tests/acceptance twin — a desynced pair
+      // pre-lock is Asimov's own defect, classified broken-check so the existing revise loop
+      // routes it to its author. No browser runs; the twin check is a pure file comparison.
+      if (c.spec) {
+        let twinRaw = null
+        try { twinRaw = readFileSync(resolve(projectPath, probeTwinRel(c)), 'utf8') } catch { twinRaw = null }
+        const issues = probeTwinIssues(c, twinRaw)
+        if (issues.length) {
+          transcript.push({ id: c.id, kind: c.kind, classification: 'broken-check', exit: null, signal: null, duration_ms: 0, stdout_tail: '', stderr_tail: issues.join('\n') })
+          if (!flags.json) console.log(`DRYRUN ${c.id} probe broken-check (twin desync)`)
+          continue
+        }
+      }
       transcript.push({ id: c.id, kind: c.kind, classification: 'deferred', exit: null, signal: null, duration_ms: 0, stdout_tail: '', stderr_tail: '' })
       if (!flags.json) console.log(`DRYRUN ${c.id} probe deferred`)
       continue
@@ -605,7 +676,9 @@ function cmdDryrun(projectPath, kilnDir, flags) {
   }
   const summary = { green: 0, 'honest-red': 0, 'broken-check': 0, ambiguous: 0, deferred: 0 }
   for (const t of transcript) summary[t.classification]++
-  if (flags.json) console.log(JSON.stringify({ schema: 1, transcript, summary }))
+  // law_violations is ALWAYS present in --json (empty on every normal dry-run) — the workflow's
+  // scribe transcribes one fixed shape whichever path the CLI took.
+  if (flags.json) console.log(JSON.stringify({ schema: 1, transcript, law_violations: [], summary }))
   else console.log(`DRYRUN_RESULT checks=${transcript.length} green=${summary.green} honest-red=${summary['honest-red']} broken-check=${summary['broken-check']} ambiguous=${summary.ambiguous} deferred=${summary.deferred}`)
 }
 

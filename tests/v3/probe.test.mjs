@@ -686,9 +686,12 @@ function makeLawFixture({ fakePw = true, probeTimeoutS = 120, spec = baseSpec() 
   writeFileSync(join(proj, 'tests/acceptance/sc-003.probe.md'), '# template SC-003 — not yet instantiated\n')
   const law = lawOf(
     { id: 'SC-001', milestone: 'M1', kind: 'shell', cmd: 'bash tests/acceptance/sc-001.sh', files: ['tests/acceptance/sc-001.sh'], sha256: {}, expected: 'exit0', timeout_s: 10 },
-    probeCheck({ id: 'SC-002', files: ['tests/acceptance/sc-001.probe.json'], timeout_s: probeTimeoutS, spec }),
+    probeCheck({ id: 'SC-002', files: ['tests/acceptance/sc-002.probe.json'], timeout_s: probeTimeoutS, spec }),
     template,
   )
+  // P3.6 T2 twin contract: a spec'd probe locks ONLY with its on-disk twin listed and deep-equal
+  // (kiln-law index refuses a desynced pair) — the fixture follows the §5 shape Asimov writes.
+  writeFileSync(join(proj, 'tests/acceptance/sc-002.probe.json'), JSON.stringify(spec, null, 2) + '\n')
   writeFileSync(join(kiln, 'law.json'), JSON.stringify(law, null, 2) + '\n')
   writeFileSync(join(proj, '.gitignore'), 'node_modules/\n')
   const gitIn = (...args) => {

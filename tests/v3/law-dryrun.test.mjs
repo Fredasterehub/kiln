@@ -15,6 +15,13 @@
 //      broken check is BLOCKED from lock (the drill); the bounded Asimov check-revision cycle
 //      re-dryruns; the deterministic floor overrides a sloppy PASS; legitimately-green checks
 //      are recorded pre_satisfied at lock; every degraded leg fails CLOSED.
+// P3.6 T2 (RUN-B FINDING 1) extends all three floors: a PRESENT-but-schema-invalid law.json is
+// a TRANSCRIPT (exit 0, typed law_violations), never a crash — the workflow routes it to an
+// asimov:law-revise pass (Athena skipped: validator output needs no judge) through the same
+// bounded cycle; a MISSING law.json still dies. And the probe TWINS (embedded spec — the copy
+// kiln-probe executes — vs on-disk tests/acceptance/<id>.probe.json — the copy the lock
+// attests) are checked at dryrun (desync = broken-check, routed to the author) and at index
+// (desync = refusal: the Law is immutable after lock, so a desynced pair must never lock).
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -24,7 +31,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { classifyDryrun } from '../../plugins/kiln/src/law.mjs'
+import { classifyDryrun, probeTwinRel, probeTwinIssues } from '../../plugins/kiln/src/law.mjs'
 
 // ── 1. classifyDryrun — the deterministic table, row by row ─────────────────────────────────────
 test('classifyDryrun: pytest taxonomy — 1 honest-red; 2/3/4/5 broken-check; other nonzero ambiguous', () => {
@@ -45,6 +52,31 @@ test('classifyDryrun: timeout and signal-death are broken-check — no verdict w
   assert.equal(classifyDryrun('shell', null, 'SIGTERM', false), 'broken-check')
   assert.equal(classifyDryrun('pytest', 1, null, true), 'broken-check', 'timeout outranks the exit code')
   assert.equal(classifyDryrun('shell', null, null, false), 'broken-check', 'neither exit nor signal recorded — broken, never silently ambiguous')
+})
+
+// ── 1b. probeTwinRel / probeTwinIssues — the twin-sync pure core (P3.6 T2, RUN-B F1 tail) ───────
+test('probeTwinRel: the on-disk twin convention — tests/acceptance/<id lowercase>.probe.json', () => {
+  assert.equal(probeTwinRel({ id: 'SC-006' }), 'tests/acceptance/sc-006.probe.json')
+  assert.equal(probeTwinRel({}), 'tests/acceptance/.probe.json', 'a malformed check degrades, never throws')
+})
+
+test('probeTwinIssues: deep-equal semantics — key order irrelevant, array order significant, values strict', () => {
+  const check = { id: 'SC-001', files: ['tests/acceptance/sc-001.probe.json'], spec: { url: '/', landmarks: [{ role: 'list', name: 'Bookmarks' }] } }
+  assert.deepEqual(probeTwinIssues(check, '{"landmarks": [{"name": "Bookmarks", "role": "list"}], "url": "/"}'), [], 'shuffled keys ARE the same spec — semantics, not bytes')
+  assert.equal(probeTwinIssues(check, '{"url": "/", "landmarks": [{"role": "list", "name": "OldWeakName"}]}').length, 1, 'a differing value is a desync')
+  const two = { ...check, spec: { url: '/', landmarks: [{ role: 'list', name: 'A' }, { role: 'button', name: 'B' }] } }
+  assert.equal(probeTwinIssues(two, '{"url": "/", "landmarks": [{"role": "button", "name": "B"}, {"role": "list", "name": "A"}]}').length, 1, 'array order is significant — landmarks are ordered assertions')
+})
+
+test('probeTwinIssues: unlisted, missing, and unparseable twins are each named issues — the attestation contract', () => {
+  const spec = { url: '/', landmarks: [{ role: 'list', name: 'Bookmarks' }] }
+  const listed = { id: 'SC-001', files: ['tests/acceptance/sc-001.probe.json'], spec }
+  const unlisted = { id: 'SC-001', files: ['tests/acceptance/other.sh'], spec }
+  assert.match(probeTwinIssues(unlisted, JSON.stringify(spec))[0], /not listed in the check's files/, 'an unlisted twin is un-attested — the lock would never hash it')
+  assert.match(probeTwinIssues(listed, null)[0], /missing on disk/, 'null twinRaw = unreadable file')
+  assert.match(probeTwinIssues(listed, '{nope')[0], /not valid JSON/)
+  const both = probeTwinIssues(unlisted, null)
+  assert.equal(both.length, 2, 'unlisted AND missing accumulate — the author sees every defect at once')
 })
 
 test('classifyDryrun: exit 0 is green (pre-satisfied candidate); shell/http nonzero is ambiguous — judged downstream', () => {
@@ -132,6 +164,7 @@ test('CLI dryrun --json: one machine object — full transcript with tails carry
     assert.equal(byId['SC-005'].classification, 'green')
     assert.deepEqual(byId['SC-006'], { id: 'SC-006', kind: 'probe', classification: 'deferred', exit: null, signal: null, duration_ms: 0, stdout_tail: '', stderr_tail: '' })
     assert.deepEqual(out.summary, { green: 1, 'honest-red': 1, 'broken-check': 2, ambiguous: 1, deferred: 1 })
+    assert.deepEqual(out.law_violations, [], 'law_violations is ALWAYS present in --json — empty on a normal dry-run (one fixed shape for the scribe)')
     assert.ok(!existsSync(join(kiln, 'evidence')), 'zero residue in --json mode too')
   } finally { rmSync(proj, { recursive: true, force: true }) }
 })
@@ -233,7 +266,7 @@ test('CLI back-compat: the lock path is unaffected by dryrun — skipped entirel
   } finally { rmSync(b.proj, { recursive: true, force: true }) }
 })
 
-test('CLI dryrun usage: relative projectPath, missing kilnDir, unknown flag, missing/invalid law.json all die exit 1', () => {
+test('CLI dryrun usage: relative projectPath, missing kilnDir, unknown flag, MISSING law.json all die exit 1 — a defect needs an artifact to revise', () => {
   assert.equal(cli('dryrun', 'relative/path', '/tmp/x/.kiln').status, 1)
   assert.equal(cli('dryrun', '/tmp/x').status, 1)
   const { proj, kiln } = makeDryFixture()
@@ -242,16 +275,149 @@ test('CLI dryrun usage: relative projectPath, missing kilnDir, unknown flag, mis
     const flag = cli('dryrun', proj, kiln, '--nope', 'x')
     assert.equal(flag.status, 1)
     assert.match(flag.stderr, /unknown flag --nope/)
-    const law = dryFixtureLaw()
-    law.checks.push(law.checks[0]) // duplicate id — schema violation
-    writeFileSync(join(kiln, 'law.json'), JSON.stringify(law, null, 2) + '\n')
-    const bad = cli('dryrun', proj, kiln)
-    assert.equal(bad.status, 1)
-    assert.match(bad.stderr, /violates the schema/)
     rmSync(join(kiln, 'law.json'))
     const gone = cli('dryrun', proj, kiln)
-    assert.equal(gone.status, 1)
+    assert.equal(gone.status, 1, 'a MISSING law.json stays fail-closed — Asimov wrote nothing; there is nothing to route')
     assert.match(gone.stderr, /no law\.json/)
+  } finally { rmSync(proj, { recursive: true, force: true }) }
+})
+
+// ── RUN-B FINDING 1 (P3.6 T2): a defective Law is a TRANSCRIPT, not a crash — dryrun only ────────
+test('CLI dryrun: a PRESENT but schema-invalid law.json transcribes — exit 0, typed law_violations verbatim, zero checks executed, zero residue', () => {
+  const law = dryFixtureLaw()
+  // the FIELD shape: Run B's Asimov emitted probe landmarks {role:"list", name:""} — six of them
+  law.checks[5].spec = { url: '/', landmarks: [{ role: 'list', name: '' }] }
+  const { proj, kiln } = makeDryFixture(law)
+  try {
+    const res = cli('dryrun', proj, kiln, '--json')
+    assert.equal(res.status, 0, `a defective Law is a report, never a crash: ${res.stderr}`)
+    const out = JSON.parse(res.stdout)
+    assert.equal(out.schema, 1)
+    assert.deepEqual(out.transcript, [], 'no check executes against an invalid Law')
+    assert.deepEqual(out.summary, { green: 0, 'honest-red': 0, 'broken-check': 0, ambiguous: 0, deferred: 0 })
+    assert.ok(out.law_violations.length >= 1)
+    const v = out.law_violations.find((x) => x.path.includes('landmarks'))
+    assert.ok(v, 'the violation names the landmark path')
+    assert.equal(v.code, 'invalid_value')
+    assert.match(v.message, /role and name must be nonempty strings/, 'validateLaw\'s typed error passes through VERBATIM — the revise loop feeds on it')
+    assert.ok(!existsSync(join(kiln, 'evidence')), 'zero residue on the violations path too')
+    // human mode: one DRYRUN_LAW_INVALID line per violation + the summary line
+    const human = cli('dryrun', proj, kiln)
+    assert.equal(human.status, 0)
+    assert.match(human.stdout, /^DRYRUN_LAW_INVALID .*landmarks.*role and name must be nonempty strings/m)
+    assert.match(human.stdout, /^DRYRUN_RESULT checks=0 law_violations=1$/m)
+  } finally { rmSync(proj, { recursive: true, force: true }) }
+})
+
+test('CLI dryrun: a law.json that is not JSON at all transcribes as invalid_json — same routing, same exit 0', () => {
+  const { proj, kiln } = makeDryFixture()
+  try {
+    writeFileSync(join(kiln, 'law.json'), '{"schema": 1, "lock_commit": null, "checks": [')
+    const out = JSON.parse(cli('dryrun', proj, kiln, '--json').stdout)
+    assert.equal(out.law_violations.length, 1)
+    assert.equal(out.law_violations[0].code, 'invalid_json')
+    assert.match(out.law_violations[0].message, /not valid JSON/)
+    assert.deepEqual(out.transcript, [])
+  } finally { rmSync(proj, { recursive: true, force: true }) }
+})
+
+test('CLI dryrun: every OTHER command keeps the fail-closed die on an invalid Law — the routing is dryrun\'s alone', () => {
+  const law = dryFixtureLaw()
+  law.checks.push(law.checks[0]) // duplicate id — schema violation
+  const { proj, kiln } = makeDryFixture(law)
+  try {
+    // a git baseline so verify/run reach the schema validation (their tamper gate needs git and,
+    // with no committed Law yet, falls back to the live file — schema-validated)
+    gitIn(proj, 'init', '-q')
+    gitIn(proj, 'add', '-A')
+    gitIn(proj, 'commit', '-qm', 'baseline')
+    for (const args of [['index', proj, kiln], ['verify', proj, kiln], ['run', proj, kiln]]) {
+      const res = cli(...args)
+      assert.equal(res.status, 1, `${args[0]} must die on a schema-invalid Law`)
+      assert.match(res.stderr, /violates the schema/, args[0])
+    }
+  } finally { rmSync(proj, { recursive: true, force: true }) }
+})
+
+// ── RUN-B F1 tail (P3.6 T2): the probe twins — embedded executes, on-disk attests, both in sync ──
+const twinSpec = () => ({ url: '/', landmarks: [{ role: 'list', name: 'Bookmarks' }] })
+const twinLaw = (spec = twinSpec()) => ({
+  schema: 1, lock_commit: null,
+  checks: [{ id: 'SC-006', milestone: 'M2', kind: 'probe', cmd: '', files: ['tests/acceptance/sc-006.probe.json'], sha256: {}, expected: 'exit0', timeout_s: 120, spec }],
+})
+
+test('CLI dryrun twin arm: desynced / missing / unlisted / unparseable twins are broken-check with the reason in stderr_tail; a synced twin defers', () => {
+  const { proj, kiln } = makeDryFixture(twinLaw())
+  try {
+    const dry = () => JSON.parse(cli('dryrun', proj, kiln, '--json').stdout).transcript[0]
+    // missing twin
+    let t = dry()
+    assert.equal(t.classification, 'broken-check')
+    assert.match(t.stderr_tail, /missing on disk/)
+    // desynced twin (the Run-B manual-recovery shape: embedded strengthened, on-disk stale)
+    writeFileSync(join(proj, 'tests/acceptance/sc-006.probe.json'), JSON.stringify({ url: '/', landmarks: [{ role: 'list', name: 'OldWeakName' }] }))
+    t = dry()
+    assert.equal(t.classification, 'broken-check')
+    assert.match(t.stderr_tail, /does not deep-equal the embedded spec/)
+    // unparseable twin
+    writeFileSync(join(proj, 'tests/acceptance/sc-006.probe.json'), '{nope')
+    t = dry()
+    assert.equal(t.classification, 'broken-check')
+    assert.match(t.stderr_tail, /not valid JSON/)
+    // synced twin, keys shuffled — deep-equal, not byte-equal → deferred exactly as before
+    writeFileSync(join(proj, 'tests/acceptance/sc-006.probe.json'), '{"landmarks": [{"name": "Bookmarks", "role": "list"}], "url": "/"}')
+    t = dry()
+    assert.equal(t.classification, 'deferred', 'an in-sync spec\'d probe defers — no browser at dry-run, semantics unchanged')
+    // unlisted twin: on disk and equal, but not in files — un-attested
+    const law = twinLaw()
+    law.checks[0].files = ['tests/acceptance/other.txt']
+    writeFileSync(join(kiln, 'law.json'), JSON.stringify(law, null, 2) + '\n')
+    writeFileSync(join(proj, 'tests/acceptance/other.txt'), 'x\n')
+    t = dry()
+    assert.equal(t.classification, 'broken-check')
+    assert.match(t.stderr_tail, /not listed in the check's files/)
+  } finally { rmSync(proj, { recursive: true, force: true }) }
+})
+
+test('CLI dryrun twin arm: a spec-less probe TEMPLATE still defers untouched — un-instantiated is not desynced', () => {
+  const law = twinLaw()
+  delete law.checks[0].spec
+  const { proj, kiln } = makeDryFixture(law)
+  try {
+    const t = JSON.parse(cli('dryrun', proj, kiln, '--json').stdout).transcript[0]
+    assert.deepEqual(t, { id: 'SC-006', kind: 'probe', classification: 'deferred', exit: null, signal: null, duration_ms: 0, stdout_tail: '', stderr_tail: '' })
+  } finally { rmSync(proj, { recursive: true, force: true }) }
+})
+
+test('CLI index twin floor: a desynced twin can NEVER lock (named id, exit 1); a synced twin locks — the Law is immutable after lock', () => {
+  const proj = mkdtempSync(join(tmpdir(), 'kiln-dryrun-twin-git-'))
+  const kiln = join(proj, '.kiln')
+  try {
+    mkdirSync(join(proj, 'tests/acceptance'), { recursive: true })
+    mkdirSync(kiln, { recursive: true })
+    writeFileSync(join(proj, 'app.txt'), 'hello\n')
+    gitIn(proj, 'init', '-q')
+    gitIn(proj, 'add', '-A')
+    gitIn(proj, 'commit', '-qm', 'baseline')
+    writeFileSync(join(kiln, 'law.json'), JSON.stringify(twinLaw(), null, 2) + '\n')
+    // listed-but-MISSING twin: the NAMED twin refusal fires, never the generic missing-file
+    // message — the twin diagnostic teaches the regenerate-to-deep-equal fix
+    const gone = cli('index', proj, kiln)
+    assert.equal(gone.status, 1)
+    assert.match(gone.stderr, /probe twin desync/, 'the twin floor outranks the generic missing-file guard')
+    assert.match(gone.stderr, /SC-006: tests\/acceptance\/sc-006\.probe\.json is missing on disk/)
+    assert.doesNotMatch(gone.stderr, /locked file\(s\) missing on disk/)
+    writeFileSync(join(proj, 'tests/acceptance/sc-006.probe.json'), JSON.stringify({ url: '/', landmarks: [{ role: 'list', name: 'OldWeakName' }] }))
+    const bad = cli('index', proj, kiln)
+    assert.equal(bad.status, 1, 'a desynced pair locks PERMANENTLY desynced — index must refuse')
+    assert.match(bad.stderr, /probe twin desync/)
+    assert.match(bad.stderr, /SC-006/)
+    assert.equal(JSON.parse(readFileSync(join(kiln, 'law.json'), 'utf8')).lock_commit, null, 'the refusal left the Law untouched')
+    // sync (shuffled keys — deep-equal is the contract) → the identical sequence locks
+    writeFileSync(join(proj, 'tests/acceptance/sc-006.probe.json'), '{"landmarks": [{"name": "Bookmarks", "role": "list"}], "url": "/"}')
+    const good = cli('index', proj, kiln)
+    assert.equal(good.status, 0, good.stderr)
+    assert.match(good.stdout, /locked 1 check\(s\)/)
   } finally { rmSync(proj, { recursive: true, force: true }) }
 })
 
@@ -296,8 +462,9 @@ const asimovResult = {
 }
 // schema-faithful mock: every entry carries all EIGHT evidence fields, nulls included — exactly
 // what the CLI emits and what DRYRUN_SCHEMA requires (a legal scribe cannot drop the tails).
+// law_violations rides on every dry-run report since P3.6 T2 (empty on the normal path).
 const cleanDry = {
-  reasoning: 'd', exit: 0, error: '',
+  reasoning: 'd', exit: 0, error: '', law_violations: [],
   transcript: [
     { id: 'SC-001', kind: 'shell', classification: 'ambiguous', exit: 1, signal: null, duration_ms: 7, stdout_tail: 'check starting', stderr_tail: "TypeError: Cannot read properties of undefined (reading 'trim')" },
     { id: 'SC-002', kind: 'probe', classification: 'deferred', exit: null, signal: null, duration_ms: 0, stdout_tail: '', stderr_tail: '' },
@@ -368,6 +535,9 @@ test('arch dry-run drill: a crashing check is BLOCKED from lock — fix cycles e
   assert.match(revise, /SC-001: KeyError-class crash/)
   assert.match(revise, /never touch product code/)
   assert.match(revise, /keep lock_commit\s+null and every sha256 map EMPTY/)
+  // P3.6 T2: the revise brief carries the twin-sync duty — a spec edit regenerates the on-disk twin
+  assert.match(revise, /regenerate the on-disk twin/)
+  assert.match(revise, /<sc-id>\.probe\.json/)
 })
 
 test('arch dry-run fix cycle: broken on pass 1, clean on pass 2 — revision then re-dryrun then lock', async () => {
@@ -430,6 +600,11 @@ test('arch DRYRUN_SCHEMA: every transcript-entry evidence field is REQUIRED — 
   assert.deepEqual(entry.properties.exit.type, ['number', 'null'])
   assert.deepEqual(entry.properties.signal.type, ['string', 'null'])
   assert.equal(entry.additionalProperties, false)
+  // P3.6 T2: law_violations is REQUIRED top-level (empty on the normal path) with the typed shape
+  assert.deepEqual([...schema.required].sort(), ['exit', 'law_violations', 'transcript'])
+  const viol = schema.properties.law_violations.items
+  assert.deepEqual([...viol.required].sort(), ['code', 'message', 'path'], 'the typed validator error passes through whole')
+  assert.equal(viol.additionalProperties, false)
   // and the ruling leg still demands the verdict triple
   const rulingSchema = calls.find((c) => c.label === 'athena:dryrun:r0').schema
   assert.deepEqual([...rulingSchema.required].sort(), ['broken', 'green_legitimate', 'verdict'])
@@ -463,11 +638,61 @@ test('arch dry-run gate fails CLOSED: dead scribe, failed dryrun command, dead r
   assert.match(dead.result.law_reason, /dry-run produced no transcript — the scribe produced no report/)
   assert.ok(!labels(dead.calls).includes('thoth:law-lock'))
 
-  const failedCmd = await runArch(lawArgs, respond({ dryrun: { reasoning: 'd', exit: 1, transcript: [], error: 'kiln-law: law.json violates the schema' } }))
+  // an INFRA-failed command (nonzero exit, no violations reported) is not routable — plain break
+  const failedCmd = await runArch(lawArgs, respond({ dryrun: { reasoning: 'd', exit: 127, transcript: [], law_violations: [], error: 'bash: node: command not found' } }))
   assert.equal(failedCmd.result.law_locked, false)
-  assert.match(failedCmd.result.law_reason, /law\.json violates the schema/)
+  assert.match(failedCmd.result.law_reason, /command not found/)
+  assert.ok(!labels(failedCmd.calls).includes('asimov:law-revise:r1'), 'an infra failure is NOT a law defect — no author to route to')
 
   const noRuling = await runArch(lawArgs, respond({ ruling: null }))
   assert.equal(noRuling.result.law_locked, false, 'a dead ruling agent is a FAIL, never a shrug')
   assert.ok(!labels(noRuling.calls).includes('thoth:law-lock'))
+})
+
+// ── RUN-B FINDING 1 (P3.6 T2): the law-revise routing — the author fixes his own Law ────────────
+const violationsDry = {
+  reasoning: 'd', exit: 0, error: '', transcript: [],
+  law_violations: [{ code: 'invalid_value', path: 'checks[1].spec.landmarks[0]', message: 'checks[1].spec.landmarks[0]: role and name must be nonempty strings (selectors by role+name, never CSS)' }],
+}
+
+test('arch law-revise drill: a schema-invalid law routes to asimov:law-revise (Athena skipped — validator output needs no judge), a valid second round locks', async () => {
+  const dryrun = (r) => (r === 0 ? violationsDry : cleanDry)
+  const { result, calls } = await runArch(lawArgs, respond({ dryrun }))
+  assert.equal(result.law_locked, true, 'one law revision, then the normal gate — the field fixture is lockable after the fix')
+  const l = labels(calls)
+  assert.ok(l.includes('asimov:law-revise:r1'), 'the violations route to the LAW author')
+  assert.ok(!l.includes('athena:dryrun:r0'), 'no Athena on the violations round — deterministic validator output')
+  assert.ok(l.includes('athena:dryrun:r1'), 'the revised Law goes through the normal executed-transcript ruling')
+  assert.ok(l.indexOf('asimov:law-revise:r1') < l.indexOf('thoth:dryrun:r1'), 'the fix re-dryruns')
+  assert.ok(l.indexOf('athena:dryrun:r1') < l.indexOf('thoth:law-lock'), 'lock only after the clean pass')
+  // the revise brief: violations verbatim, the twin-sync duty, the landmark rule, product untouchable
+  const revise = calls.find((c) => c.label === 'asimov:law-revise:r1').prompt
+  assert.match(revise, /\[invalid_value\] checks\[1\]\.spec\.landmarks\[0\]: checks\[1\]\.spec\.landmarks\[0\]: role and name must be nonempty strings/, 'the typed violation rides verbatim — code, path, AND message (invalid_json vs invalid_value tells Asimov rewrite-vs-surgical; validateLaw messages embed the path, so it renders twice — verbatim means verbatim)')
+  assert.match(revise, /regenerate the matching on-disk twin/)
+  assert.match(revise, /ACCESSIBLE NAME — role AND name, both nonempty/)
+  assert.match(revise, /derive a stable user-visible name from the SC text/)
+  assert.match(revise, /never touch product code/)
+  assert.match(revise, /Keep lock_commit null and every sha256 map EMPTY/)
+})
+
+test('arch law-revise drill: violations on EVERY round exhaust the bounded cycle — law_locked:false, the lock never runs, Athena never called', async () => {
+  const { result, calls } = await runArch(lawArgs, respond({ dryrun: violationsDry }))
+  assert.equal(result.law_locked, false)
+  assert.match(result.law_reason, /law\.json still schema-invalid after 3 dry-run pass\(es\)/)
+  assert.match(result.law_reason, /checks\[1\]\.spec\.landmarks\[0\]/, 'the reason names the violation path for the conductor')
+  const l = labels(calls)
+  assert.ok(l.includes('asimov:law-revise:r1') && l.includes('asimov:law-revise:r2'), 'two revisions in three passes — the same bound as the check cycle')
+  assert.ok(!l.includes('asimov:law-revise:r3'), 'the bound holds')
+  assert.ok(!l.some((x) => x.startsWith('athena:dryrun')), 'nothing to judge on any round')
+  assert.ok(!l.includes('thoth:law-lock'), 'exhausted revisions still end blocked — fail-closed survives the routing')
+})
+
+test('arch law-revise drill: a scribe reporting violations WITH a transcript routes on the transcript — executed evidence outranks a mixed report', async () => {
+  // belt-and-suspenders: the CLI never emits both, but a confused scribe might — the executed
+  // transcript path (Athena + deterministic floor) must win over the violations branch.
+  const mixed = { ...cleanDry, law_violations: violationsDry.law_violations }
+  const { result, calls } = await runArch(lawArgs, respond({ dryrun: mixed }))
+  assert.equal(result.law_locked, true, 'the normal gate ran')
+  assert.ok(labels(calls).includes('athena:dryrun:r0'), 'Athena rules the executed transcript')
+  assert.ok(!labels(calls).some((x) => x.startsWith('asimov:law-revise')), 'no law-revise when checks actually executed')
 })

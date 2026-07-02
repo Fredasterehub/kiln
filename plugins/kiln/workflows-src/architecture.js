@@ -7,7 +7,7 @@ export const meta = {
     { title: 'The Lantern', detail: 'diogenes extracts consensus / divergences / unique insights' },
     { title: 'One From Many', detail: 'plato writes master-plan.md with confidence tiers + surfaces + executable acceptance criteria' },
     { title: 'Athena Weighs', detail: 'athena validates; plato revises (≤2 rounds) on FAIL' },
-    { title: 'The Law', detail: 'asimov compiles ONE executable check per SC (tests/acceptance/ + law.json); every check dry-runs pre-lock (athena rules honest-red vs broken-check over the executed transcript; asimov fixes broken checks); the lock leg pre-flights the git baseline (no .git ⇒ init + baseline commit — the disk decides, never the flag); kiln-law indexes; the gates lock in their own commit' },
+    { title: 'The Law', detail: 'asimov compiles ONE executable check per SC (tests/acceptance/ + law.json); every check dry-runs pre-lock (athena rules honest-red vs broken-check over the executed transcript; asimov fixes broken checks AND his own schema-invalid law — typed violations route back, never dead-end); probe twins are checked embedded-vs-on-disk at dryrun and index; the lock leg pre-flights the git baseline (no .git ⇒ init + baseline commit — the disk decides, never the flag); kiln-law indexes; the gates lock in their own commit' },
   ],
 }
 
@@ -200,12 +200,22 @@ const LAW_COMPILE_SCHEMA = {
 // The pre-lock dry-run transcript (P3.5 T1, dogfood finding 1) — Thoth transcribes the
 // `kiln-law dryrun --json` output verbatim; the workflow feeds the FULL transcript to Athena's
 // ruling pass. The classification field is the CLI's deterministic exit-code table, never the
-// scribe's opinion.
+// scribe's opinion. law_violations (RUN-B FINDING 1) carries the CLI's typed law.json defects
+// verbatim — a present-but-invalid Law is a report the loop routes to Asimov, never a dead end.
 const DRYRUN_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
     reasoning: { type: 'string' },
     exit: { type: 'number', description: 'the kiln-law dryrun process exit code' },
+    law_violations: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false,
+        properties: { code: { type: 'string' }, path: { type: 'string' }, message: { type: 'string' } },
+        required: ['code', 'path', 'message'],
+      },
+      description: 'the CLI\'s typed law.json defects, transcribed VERBATIM — empty on every normal dry-run',
+    },
     transcript: {
       type: 'array',
       items: {
@@ -228,7 +238,7 @@ const DRYRUN_SCHEMA = {
     },
     error: { type: 'string', description: 'verbatim failure output when the dryrun command itself failed; empty otherwise' },
   },
-  required: ['exit', 'transcript'],
+  required: ['exit', 'transcript', 'law_violations'],
 }
 
 // Athena's per-check ruling over the EXECUTED transcript — honest-red vs broken-check vs
@@ -558,7 +568,10 @@ if (!(verdict && verdict.verdict === 'PASS')) {
     `bounded browser subprocess; builders never write, edit, or run probes. Write NO browser code of any ` +
     `kind — no Playwright scripts, no test runners; the spec is pure JSON authored from the SC text: ` +
     `{"url": <path to load, starting with '/'>, "landmarks": [{"role", "name"}, …] — the SC's key UI ` +
-    `elements by role+name exactly as the SC names them (never CSS selectors), "interactions": ` +
+    `elements by role+name (never CSS selectors); EVERY landmark needs an ACCESSIBLE NAME — role AND name, ` +
+    `both nonempty: use the plan's name verbatim where it names the element, and where it does not, derive ` +
+    `a stable user-visible name from the SC text (the named landmark becomes part of the locked contract ` +
+    `the build must expose — an unnamed landmark is a schema violation that blocks the lock), "interactions": ` +
     `[{"action": "click|fill|press|expect", "role", "name", "value", "key"}, …] in user order ONLY when ` +
     `the SC declares a behavior (click/expect need role+name; fill adds value; press needs key), optional ` +
     `"viewports": [{"width", "height"}] (default 1440×900), and ONLY when the stack needs its own server: ` +
@@ -621,15 +634,50 @@ if (!(verdict && verdict.verdict === 'PASS')) {
           `You are Thoth, the scribe — transcribe, never judge, never fix.\n\n` +
           `<task>Run (Bash): node ${pluginRoot}/scripts/kiln-law.mjs dryrun ${projectPath} ${kilnDir} --json\n` +
           `It executes every compiled check pre-lock (probes defer) and prints ONE JSON object ` +
-          `{schema, transcript, summary}. Transcribe transcript VERBATIM into the schema — every entry, every ` +
-          `field, nulls included (transcribe null as null — every field is required), and the full ` +
-          `stdout_tail/stderr_tail strings — and report exit = the command's exit code. If the command itself ` +
-          `fails, report its nonzero exit, an empty transcript, and its output verbatim in error. Do not edit ` +
-          `or fix anything.</task>`,
+          `{schema, transcript, law_violations, summary}. Transcribe transcript AND law_violations VERBATIM ` +
+          `into the schema — every entry, every field, nulls included (transcribe null as null — every field ` +
+          `is required), and the full stdout_tail/stderr_tail strings — and report exit = the command's exit ` +
+          `code. law_violations is usually empty; when the CLI reports typed law.json defects there, carry ` +
+          `them verbatim. If the command itself fails, report its nonzero exit, an empty transcript, empty ` +
+          `law_violations, and its output verbatim in error. Do not edit or fix anything.</task>`,
           { label: `thoth:dryrun:r${round}`, phase: 'The Law', model: 'sonnet', schema: DRYRUN_SCHEMA }
         )
         // Fail CLOSED: a dead scribe or a failed dry-run is a blocked lock, never a shrug.
         const transcript = (dry && dry.exit === 0 && Array.isArray(dry.transcript)) ? dry.transcript : []
+        // RUN-B FINDING 1: a present-but-schema-invalid law.json is Asimov's OWN compilation
+        // defect — the CLI transcribes it (exit 0, typed law_violations, empty transcript)
+        // instead of dying, and THIS branch routes it to its author through the same bounded
+        // revise cycle as a broken check. Athena is skipped for the round: the violations are
+        // deterministic validator output — there is nothing to judge. The revision consumes a
+        // DRYRUN_PASSES round like any other; exhausted rounds still end law_locked:false.
+        const lawViolations = (dry && dry.exit === 0 && Array.isArray(dry.law_violations)) ? dry.law_violations : []
+        if (!transcript.length && lawViolations.length) {
+          if (round === DRYRUN_PASSES - 1) {
+            dryrunReason = `law.json still schema-invalid after ${DRYRUN_PASSES} dry-run pass(es): ${lawViolations.map((v) => v.path).join(', ')}`
+            break
+          }
+          log(`Dry-run gate: law.json is schema-invalid (${lawViolations.length} violation(s)) — Asimov law revision ${round + 1}`)
+          await agent(
+            lawVoice +
+            `You are Asimov, the Lawgiver — revising THE LAW FILE itself. The pre-lock dry-run refused to ` +
+            `execute: ${lawFile} violates law schema 1 — your own compilation defect, and yours to fix; the ` +
+            `product is unbuilt by design and is NOT yours to touch.\n\n` +
+            `<inputs>\nSchema violations (typed, verbatim from kiln-law):\n` +
+            lawViolations.map((v) => `- [${v.code}] ${v.path}: ${v.message}`).join('\n') + `\n` +
+            `The Law: ${lawFile}. Check code and probe twins live under ${projectPath}/tests/acceptance/.\n</inputs>\n\n` +
+            `<task>Fix EXACTLY the named defects in ${lawFile} so it satisfies law schema 1. When a fix ` +
+            `changes a probe's embedded "spec", regenerate the matching on-disk twin ` +
+            `${projectPath}/tests/acceptance/<sc-id>.probe.json (lowercase id) so the two deep-equal — ` +
+            `kiln-probe executes the embedded spec, the lock attests the twin; they must never diverge. ` +
+            `Every probe landmark needs an ACCESSIBLE NAME — role AND name, both nonempty: use the plan's ` +
+            `name verbatim where it names the element; where it does not, derive a stable user-visible name ` +
+            `from the SC text (the named landmark becomes part of the locked contract the build must ` +
+            `expose). Keep lock_commit null and every sha256 map EMPTY (do NOT run kiln-law index, do NOT ` +
+            `commit). Never weaken a check to dodge a defect; never touch product code.</task>`,
+            { label: `asimov:law-revise:r${round + 1}`, phase: 'The Law', model: lawModel }
+          )
+          continue
+        }
         if (!transcript.length) {
           dryrunReason = `dry-run produced no transcript${dry && dry.error ? ` — ${dry.error}` : (dry ? ` (dryrun exit ${dry.exit})` : ' — the scribe produced no report')}`
           break
@@ -695,9 +743,12 @@ if (!(verdict && verdict.verdict === 'PASS')) {
           `The Law: ${lawFile}. The check code lives under ${projectPath}/tests/acceptance/.\n</inputs>\n\n` +
           `<task>Fix EXACTLY the named checks' own code so each one RUNS and fails honestly on the missing ` +
           `feature (or passes only when its criterion is genuinely met — never trivially). Update the ` +
-          `matching law.json entries (cmd/files/timeout_s) when the fix changes them — keep lock_commit ` +
-          `null and every sha256 map EMPTY (do NOT run kiln-law index, do NOT commit). Never weaken a check ` +
-          `to dodge its defect; never touch product code or any other check.</task>`,
+          `matching law.json entries (cmd/files/timeout_s/spec) when the fix changes them — keep lock_commit ` +
+          `null and every sha256 map EMPTY (do NOT run kiln-law index, do NOT commit). When an embedded ` +
+          `probe "spec" changes (or the check was flagged for twin desync), regenerate the on-disk twin ` +
+          `${projectPath}/tests/acceptance/<sc-id>.probe.json (lowercase id) so the two deep-equal — ` +
+          `kiln-probe executes the embedded spec, the lock attests the twin; they must never diverge. ` +
+          `Never weaken a check to dodge its defect; never touch product code or any other check.</task>`,
           { label: `asimov:check-revise:r${round + 1}`, phase: 'The Law', model: lawModel }
         )
       }
