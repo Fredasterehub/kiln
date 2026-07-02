@@ -18,6 +18,7 @@ function normalizeArgs(args) {
   return (args && typeof args === 'object') ? args : {}
 }
 const A = normalizeArgs(args)
+const REASONING_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. reasoning is its FIRST property and stays CONCISE (a summary, never the carrier of the answer): every other required property must be a real, separately-populated JSON field — the validator hard-rejects a reasoning-only call, each rejection burns one of five attempts, and five failures kill this leg.'
 const kilnDir = A.kilnDir
 const projectPath = A.projectPath
 if (!kilnDir || !projectPath) throw new Error('vision.js requires args.kilnDir and args.projectPath (absolute paths — the conductor resolves them; never launch with relative paths). Received args of type ' + typeof args)
@@ -160,7 +161,7 @@ const compileBrief =
   `- **A-N**:, - **OQ-N**:) — a validator counts them mechanically. All 16 section titles, ` +
   `byte-stable, each exactly once. No HTML comments in your output — those are template ` +
   `scaffolding.\n` +
-  `Report the counts you wrote. Report reasoning first.</task>`
+  `Report the counts you wrote. ${REASONING_FIRST}</task>`
 const COMPILE_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
@@ -211,7 +212,7 @@ for (let round = 0; round < COMPILE_PASSES; round++) {
     `The ledger: ${ledgerFile}. The template: ${pluginRoot}/templates/VISION.md. The file to fix: ${visionFile}.\n</inputs>\n\n` +
     `<task>Fix EXACTLY the named violations in ${visionFile} — recompute the frontmatter ` +
     `arithmetic from what the body actually carries, never bend the body to dodge a count. ` +
-    `Report the corrected counts. Report reasoning first.</task>`,
+    `Report the corrected counts. ${REASONING_FIRST}</task>`,
     { label: `aristotle:compile-revise:r${round + 1}`, phase: 'The Compilation', model: 'opus', schema: COMPILE_SCHEMA }
   )
 }

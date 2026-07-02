@@ -12,6 +12,7 @@ export const meta = {
 // ── args: { kilnDir, projectPath, testingRigor, codexAvailable, designPresent, posture, pluginRoot, runToken } ──
 // @inline:args:normalizeArgs
 const A = normalizeArgs(args)
+const REASONING_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. reasoning is its FIRST property and stays CONCISE (a summary, never the carrier of the answer): every other required property must be a real, separately-populated JSON field — the validator hard-rejects a reasoning-only call, each rejection burns one of five attempts, and five failures kill this leg.'
 const kilnDir = A.kilnDir
 const projectPath = A.projectPath
 if (!kilnDir || !projectPath) throw new Error('validate.js requires args.kilnDir and args.projectPath (absolute paths — the conductor resolves them; never launch with relative paths). Received args of type ' + typeof args)
@@ -362,7 +363,7 @@ function driftPrompt() {
   return voice('sonnet') +
     `You are the architecture-drift verifier. ${scope}\n\n` +
     `<inputs>\n- Architectural intent: ${docsDir}/architecture.md, ${docsDir}/arch-constraints.md\n- What was built: ${docsDir}/codebase-state.md and the actual source under ${projectPath}\n</inputs>\n\n` +
-    `<task>Compare what was BUILT against the architectural intent and constraints. Then check the interface SEAMS — where modules meet, do the contracts (signatures, shapes, events, shared state) actually line up, or did a later slice break an earlier one's interface? Write ${archCheckFile} (mkdir -p first): list any drift (constraint violations, structural divergence, missing seams), any seam/regression issues, and a BLOCKING subset — only the findings severe enough to block a PASS (a broken seam, a violated load-bearing constraint). Be concrete and file-specific. Report reasoning first.</task>`
+    `<task>Compare what was BUILT against the architectural intent and constraints. Then check the interface SEAMS — where modules meet, do the contracts (signatures, shapes, events, shared state) actually line up, or did a later slice break an earlier one's interface? Write ${archCheckFile} (mkdir -p first): list any drift (constraint violations, structural divergence, missing seams), any seam/regression issues, and a BLOCKING subset — only the findings severe enough to block a PASS (a broken seam, a violated load-bearing constraint). Be concrete and file-specific. ${REASONING_FIRST}</task>`
 }
 
 function argusPrompt() {
@@ -385,7 +386,7 @@ function argusPrompt() {
     `</procedure>\n\n` +
     lawNote +
     `<output>Persist the full prose report to ${reportFile} via Bash — mkdir -p first, then a heredoc (cat <<'EOF' > file); do NOT use the Write tool for it (the platform may nudge-reject subagent Write calls for report files — observed in the field 2026-07-01; Bash writes are the engine's normal artifact channel). The report carries: product type, install result, the three Law exit codes + run_id, suite summary, per-criterion results with full evidence, coverage_gaps, blocking_findings (any failure that blocks a PASS not already an exit code or unmet critical criterion), and a prioritized correction_tasks list (one per distinct failure: failure, evidence, affected files, suggested fix).\n` +
-    `STRUCTURED-OUTPUT DISCIPLINE (a failed schema is a failed stage — the verdict computes from these fields): the criteria array is REQUIRED and must carry EVERY criterion you exercised as {id, met, critical} with note ≤ 1 line — the full prose evidence lives in the report file, never in the schema; omitting the array (or flooding notes until the output truncates) IS the observed death mode. Reasoning ≤ a short paragraph. Report reasoning first, then the transcribed fields.</output>`
+    `STRUCTURED-OUTPUT DISCIPLINE (a failed schema is a failed stage — the verdict computes from these fields): the criteria array is REQUIRED and must carry EVERY criterion you exercised as {id, met, critical} with note ≤ 1 line — the full prose evidence lives in the report file, never in the schema; omitting the array (or flooding notes until the output truncates) IS the observed death mode. Reasoning ≤ a short paragraph. ${REASONING_FIRST} The transcribed fields ride as their own properties.</output>`
 }
 
 function hephaestusPrompt() {
@@ -437,14 +438,14 @@ function traversalPrompt(scsForProbe) {
     `4. THE DEADLINE (capability-enforced, not goodwill): each scripted probe is hard-killed at 90s, and the lease expires at the ≤10-minute Tier-2 cap — a probe after the cap is REFUSED (exit 77), and the workflow also stops awaiting you at the cap and folds this pass static-only (UI criteria UNVERIFIED). So work efficiently and do NOT loop or re-launch. When done, let scripted probes exit cleanly (the stage sweeps and releases their kiln-pw- token / lease).\n` +
     `</procedure>\n\n` +
     how +
-    `<task>Write ${valDir}/traversal.md (mkdir -p first) and return tool, browser_result, per-criterion {id, met, verified, note}, findings (live UI defects), and report_file. Report reasoning first.</task>`
+    `<task>Write ${valDir}/traversal.md (mkdir -p first) and return tool, browser_result, per-criterion {id, met, verified, note}, findings (live UI defects), and report_file. ${REASONING_FIRST}</task>`
 }
 
 // goalBody — the shared audit body (no role line, no voice header) so the first auditor and the
 // D8=2 second-family auditor share identical inputs/task and only differ in their role preamble.
 const goalBody = (reportName) =>
   `<inputs>\n- VISION success criteria (SC-xx, the promise): ${visionFile}. Master plan: ${masterPlanFile}.\n- The live repo at ${projectPath}: git log/diff, read the files, and EXERCISE the product the way a user would (run the CLI, call the API, render the page statically — no browser; the Tier-2 traversal owns live UI).\n</inputs>\n\n` +
-  `<task>Hunt the "checks pass, goal broken" class across the whole product: success criteria met by the letter but broken in spirit, features that exist but cannot be reached from the entry points, slices that pass alone but never connect, hardcoded/stub behavior behind green checks. Write ${qaDir}/${reportName} (mkdir -p first) and return overall ('pass' = the deliverable genuinely delivers the VISION; 'fail' MUST be backed by at least one critical or high finding), findings (each {text, severity}), and report_file. Read-only on source. Report reasoning first.</task>`
+  `<task>Hunt the "checks pass, goal broken" class across the whole product: success criteria met by the letter but broken in spirit, features that exist but cannot be reached from the entry points, slices that pass alone but never connect, hardcoded/stub behavior behind green checks. Write ${qaDir}/${reportName} (mkdir -p first) and return overall ('pass' = the deliverable genuinely delivers the VISION; 'fail' MUST be backed by at least one critical or high finding), findings (each {text, severity}), and report_file. Read-only on source. ${REASONING_FIRST}</task>`
 function goalPrompt() {
   return voice('opus') +
     `You are the goal-backward final auditor over the WHOLE deliverable. Your one question: does the finished product genuinely deliver the VISION success criteria? Work BACKWARD from the goal — never forward from the checks (they pass; that comfort is exactly what you distrust). This runs over the entire deliverable, not one milestone (per-milestone goal-backward already ran in build).\n\n` +

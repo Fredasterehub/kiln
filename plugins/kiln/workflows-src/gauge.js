@@ -12,6 +12,7 @@ export const meta = {
 // args may arrive as an object or a JSON string depending on how the caller encoded it. Normalise both.
 // @inline:args:normalizeArgs
 const A = normalizeArgs(args)
+const REASONING_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. reasoning is its FIRST property and stays CONCISE (a summary, never the carrier of the answer): every other required property must be a real, separately-populated JSON field — the validator hard-rejects a reasoning-only call, each rejection burns one of five attempts, and five failures kill this leg.'
 const kilnDir = A.kilnDir
 if (!kilnDir) throw new Error('gauge.js requires args.kilnDir (absolute path to .kiln). Received args of type ' + typeof args)
 const projectPath = A.projectPath
@@ -114,7 +115,7 @@ const assessBrief =
   `<task>For EVERY dimension D1..D8 return { score, evidence } where evidence is ONE verbatim quote from ` +
   `VISION/codebase-map that anchors the score (this counters anchoring on the vision's own self-framing — ` +
   `quote the text, do not paraphrase). If a dimension has no direct quote, quote the closest relevant line and ` +
-  `score conservatively. Apply the rubric to EVERY dimension, not just the first. Report reasoning first, then the profile.</task>`
+  `score conservatively. Apply the rubric to EVERY dimension, not just the first. ${REASONING_FIRST} The profile rides as its own property.</task>`
 
 // ── The Assessment: ONE Alpha agent scores the profile ──
 phase('The Assessment')

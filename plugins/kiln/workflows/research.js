@@ -18,6 +18,7 @@ function normalizeArgs(args) {
   return (args && typeof args === 'object') ? args : {}
 }
 const A = normalizeArgs(args)
+const REASONING_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. reasoning is its FIRST property and stays CONCISE (a summary, never the carrier of the answer): every other required property must be a real, separately-populated JSON field — the validator hard-rejects a reasoning-only call, each rejection burns one of five attempts, and five failures kill this leg.'
 const kilnDir = A.kilnDir
 if (!kilnDir) throw new Error('research.js requires args.kilnDir (absolute path to .kiln). Received args of type ' + typeof args)
 const docsDir = `${kilnDir}/docs`
@@ -147,12 +148,12 @@ const postureBrief =
   `topic(s): never return more topics than there are qualifying OQs, and never exceed ${MAX_TOPICS}. ` +
   `Do NOT invent topics beyond the qualifying OQs to pad the list; only when a qualifying OQ is itself ` +
   `under-specified may you sharpen it into a concrete research question. Each topic: a kebab-case slug, a precise ` +
-  `question, a priority, and concrete acceptance criteria. Report reasoning first.</task>`
+  `question, a priority, and concrete acceptance criteria. ${REASONING_FIRST}</task>`
 const historicalBrief =
   `<task>Prioritise the Open Questions section: every "OQ-{N}" line (or YAML frontmatter OQ entry) with Priority: high and Timing: before-build is a ` +
   `mandatory topic. Add topics for load-bearing unknowns in Tech Stack, Constraints, and Risks. Return between ` +
   `${HISTORICAL_MIN_TOPICS} and ${MAX_TOPICS} topics, most important first — each with a kebab-case slug, a precise question, a ` +
-  `priority, and concrete acceptance criteria. Report reasoning first.</task>`
+  `priority, and concrete acceptance criteria. ${REASONING_FIRST}</task>`
 const topicRes = await agent(
   voice('opus') +
   `You are the research director. Scope the research topics this project must answer BEFORE architecture — do not research yet.\n\n` +
@@ -181,7 +182,7 @@ const investigated = await pipeline(
       `<inputs>\n- Topic: "${t.title}" (slug: ${t.slug})\n- Question: ${t.question}\n- Acceptance criteria: ${t.acceptance_criteria}\n</inputs>\n\n` +
       `<constraints>\n${webHowto}\n</constraints>\n\n` +
       `<task>Return a finding: a 2-4 sentence summary, a confidence 0-1, at least ${MIN_SOURCES} sources (title + real URL), ` +
-      `at least ${MIN_QUOTES} verbatim quote, and findings_md (a complete markdown writeup). Write nothing to disk — return the data only. Report reasoning first.</task>`,
+      `at least ${MIN_QUOTES} verbatim quote, and findings_md (a complete markdown writeup). Write nothing to disk — return the data only. ${REASONING_FIRST}</task>`,
       { label: `${codename(i)}:field:${t.slug}`, phase: 'Field Work', model: 'sonnet', schema: FIND_SCHEMA }
     )
   },
@@ -194,7 +195,7 @@ const investigated = await pipeline(
       `(need confidence >= ${MIN_CONFIDENCE}, >= ${MIN_SOURCES} sources with URLs, >= ${MIN_QUOTES} quote).\n\n` +
       `<prior_attempt>\n${JSON.stringify(find)}\n</prior_attempt>\n\n<constraints>\n${webHowto}\n</constraints>\n\n` +
       `<task>Re-investigate harder, find more/better sources, and meet the bar. If the topic genuinely cannot clear the ` +
-      `bar, return your best finding with an honest confidence. Report reasoning first.</task>`,
+      `bar, return your best finding with an honest confidence. ${REASONING_FIRST}</task>`,
       { label: `${codename(i)}:field-revise:${t.slug}`, phase: 'Field Work', model: 'sonnet', schema: FIND_SCHEMA }
     ).then((rev) => rev || find)
   }
@@ -214,7 +215,7 @@ const synth = await agent(
   `a "Decisions this enables" section, any unresolved gaps (topics that did not clear confidence ${MIN_CONFIDENCE}), and a "Sources" appendix. ` +
   `Flag low-confidence topics explicitly so architecture treats them as open.\n` +
   `3. Return research_file (the path), topic_files (paths written), topics_written (count), and headline_findings (the 3-6 most decision-relevant bullets).\n` +
-  `Write real markdown; never invent sources beyond what the findings contain. Report reasoning first.\n</task>`,
+  `Write real markdown; never invent sources beyond what the findings contain. ${REASONING_FIRST}\n</task>`,
   { label: 'mi6:synthesis', phase: 'The Debrief', model: 'opus', schema: SYNTH_SCHEMA }
 )
 

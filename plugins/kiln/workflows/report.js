@@ -13,6 +13,7 @@ function normalizeArgs(args) {
   return (args && typeof args === 'object') ? args : {}
 }
 const A = normalizeArgs(args)
+const REASONING_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. reasoning is its FIRST property and stays CONCISE (a summary, never the carrier of the answer): every other required property must be a real, separately-populated JSON field — the validator hard-rejects a reasoning-only call, each rejection burns one of five attempts, and five failures kill this leg.'
 const kilnDir = A.kilnDir
 const projectPath = A.projectPath
 if (!kilnDir || !projectPath) throw new Error('report.js requires args.kilnDir and args.projectPath (absolute paths — the conductor resolves them; never launch with relative paths). Received args of type ' + typeof args)
@@ -54,7 +55,7 @@ const res = await agent(
   `<task>Write ${reportFile} in Kiln's first-person, sardonic-but-earned voice (no status-symbol banners — that is the conductor's job). ` +
   `Cover: what was asked, what was built (the journey through the stages, named milestones), the validation outcome ` +
   `(tests passed/failed, criteria met), what remains or was deferred, and how to run it. Be truthful — if validation was ` +
-  `PARTIAL or FAILED, say so plainly and list what's left. Then report the headline, the delivered items, and any outstanding items. Report reasoning first.</task>`,
+  `PARTIAL or FAILED, say so plainly and list what's left. Then report the headline, the delivered items, and any outstanding items. ${REASONING_FIRST}</task>`,
   { label: 'omega:report', phase: 'The Final Word', model: 'opus', schema: REPORT_SCHEMA }
 )
 

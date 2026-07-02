@@ -13,6 +13,7 @@ export const meta = {
 // ── args: { kilnDir, projectPath, codexAvailable, testingRigor, milestoneLimit, uiBuild, pluginRoot, posture, runToken, gateOnly } ──
 // @inline:args:normalizeArgs
 const A = normalizeArgs(args)
+const REASONING_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. reasoning is its FIRST property and stays CONCISE (a summary, never the carrier of the answer): every other required property must be a real, separately-populated JSON field — the validator hard-rejects a reasoning-only call, each rejection burns one of five attempts, and five failures kill this leg.'
 const kilnDir = A.kilnDir
 const projectPath = A.projectPath
 if (!kilnDir || !projectPath) throw new Error('build.js requires args.kilnDir and args.projectPath (absolute paths — the conductor resolves them; never launch with relative paths). Received args of type ' + typeof args)
@@ -435,7 +436,7 @@ function slicePlanPrompt(m, surf, scs, built, note) {
     `- Slice budget (the Gauge): size each slice at roughly ≤ ${livePosture.slice_budget_hours}h human-equivalent of work; smaller, verifiable slices beat bloated ones. Emit at most ${MAX_SLICES_PER_MILESTONE} slices.\n` +
     `</constraints>\n\n` +
     (note ? `<correction>\n${note}\n</correction>\n\n` : '') +
-    `<task>Return the ordered slice list: each {objective, files[], constraints, done_when, sc_ids[]} with a zero-ambiguity done_when. Report reasoning first.</task>`
+    `<task>Return the ordered slice list: each {objective, files[], constraints, done_when, sc_ids[]} with a zero-ambiguity done_when. ${REASONING_FIRST}</task>`
 }
 
 function confirmPrompt(m, slice) {
@@ -446,7 +447,7 @@ function confirmPrompt(m, slice) {
     `- Done when: ${slice.done_when}. Flips: ${slice.sc_ids.join(', ')}\n` +
     `- Read ${codebaseStateFile} (the live codebase state). ${scope}\n` +
     `</inputs>\n\n` +
-    `<task>Decide 'proceed' (the slice still matches the live state) or 'replan' ONLY on a concrete contradiction: the objective is already built, its files were restructured away, or its done_when is impossible as scoped. Doubt is not drift — when unsure, proceed. On replan, state the contradiction in reason. Report reasoning first.</task>`
+    `<task>Decide 'proceed' (the slice still matches the live state) or 'replan' ONLY on a concrete contradiction: the objective is already built, its files were restructured away, or its done_when is impossible as scoped. Doubt is not drift — when unsure, proceed. On replan, state the contradiction in reason. ${REASONING_FIRST}</task>`
 }
 
 function assetPrepPrompt(m) {
@@ -596,7 +597,7 @@ function reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort, vclas
       `Re-run the STATIC check yourself (HTML parses, sections/ids present, 'node --check' the JS). RE-RUN the slice's mapped probe SCs via the kiln-law rerun above (each probe is one bounded, token-swept subprocess — the browser is a subprocess with a deadline, never a service); NEVER open a browser or drive Playwright yourself — every browser observation comes through that rerun's evidence.\n` +
       `</checks>\n${escNote}\n` +
       how +
-      `<task>Set law_green from YOUR kiln-law re-run and tests_green from the static/smoke check you re-ran. Verdict APPROVED only if the mapped checks pass and the page is structurally sound, accessible, on-brief, and free of invented claims; else REJECTED with specific, actionable findings. ${classRule} Report reasoning first.</task>`
+      `<task>Set law_green from YOUR kiln-law re-run and tests_green from the static/smoke check you re-ran. Verdict APPROVED only if the mapped checks pass and the page is structurally sound, accessible, on-brief, and free of invented claims; else REJECTED with specific, actionable findings. ${classRule} ${REASONING_FIRST}</task>`
   }
   const how = leg.viaCodex
     ? `<how>${codexGuideNote}Delegate this review to GPT-5.5 via 'codex exec' at model_reasoning_effort="${effort}" — a genuinely cross-family second judgment; if codex errors, review directly as the independent reviewer.</how>\n\n`
@@ -616,7 +617,7 @@ function reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort, vclas
     `- Reject only on correctness / completeness / failed checks — not on style preference.\n` +
     `</checks>\n${escNote}\n` +
     how +
-    `<task>Verdict APPROVED only if the mapped checks and the suite are green from YOUR OWN runs AND the implementation is real AND on-spec; else REJECTED with specific [file:line] findings. Set law_green and tests_green from your own runs. ${classRule} Report reasoning first.</task>`
+    `<task>Verdict APPROVED only if the mapped checks and the suite are green from YOUR OWN runs AND the implementation is real AND on-spec; else REJECTED with specific [file:line] findings. Set law_green and tests_green from your own runs. ${classRule} ${REASONING_FIRST}</task>`
 }
 
 // The analyst overall-verdict rule (§3.2): the gate computes judge-spawn from analyst
@@ -636,7 +637,7 @@ function kenPrompt(m) {
     `You are QA analyst A. Adversarially verify the INTEGRATED milestone — run the tests, confirm each acceptance criterion is genuinely met (not faked), and hunt integration gaps and edge cases across the slices.\n\n` +
     `<inputs>\n- Milestone ${m.id} "${m.title}" — acceptance: ${m.acceptance}\n- Inspect the repo at ${projectPath}: git log/diff, read the files, RUN the tests yourself.\n</inputs>\n\n` +
     `<constraints>\n- ${browserLaw}\n</constraints>\n\n` +
-    `<task>Write findings to ${qaDir}/qa-report-a.md (mkdir -p first) and return report_file + findings[] (each {text, severity}). ${overallRule} Quote specific evidence ([file:line] or test output). Apply scrutiny to EVERY acceptance criterion, not just the first. Report reasoning first.</task>`
+    `<task>Write findings to ${qaDir}/qa-report-a.md (mkdir -p first) and return report_file + findings[] (each {text, severity}). ${overallRule} Quote specific evidence ([file:line] or test output). Apply scrutiny to EVERY acceptance criterion, not just the first. ${REASONING_FIRST}</task>`
 }
 function ryuPrompt(m) {
   return (codexAvailable
@@ -644,7 +645,7 @@ function ryuPrompt(m) {
     : `You are QA analyst B — an independent second perspective.\n`) +
     `Run the tests yourself and probe DIFFERENT failure modes than a first pass would.\n\n` +
     `<inputs>\n- Milestone ${m.id} "${m.title}" — acceptance: ${m.acceptance}\n- Inspect the repo at ${projectPath}: git log/diff, read files, RUN the tests.\n</inputs>\n\n` +
-    `<task>Write findings to ${qaDir}/qa-report-b.md (mkdir -p first) and return report_file + findings[] (each {text, severity}). ${overallRule} Do NOT read analyst A's report — stay independent. Report reasoning first.</task>`
+    `<task>Write findings to ${qaDir}/qa-report-b.md (mkdir -p first) and return report_file + findings[] (each {text, severity}). ${overallRule} Do NOT read analyst A's report — stay independent. ${REASONING_FIRST}</task>`
 }
 // goalBackwardPrompt — the §3.2 boundary auditor: works BACKWARD from the milestone goal (GSD
 // discipline), explicitly hunting "all checks pass but the goal is broken" before validate.
@@ -652,7 +653,7 @@ function goalBackwardPrompt(m) {
   return voice('opus') +
     `You are the goal-backward auditor at the milestone boundary. Your one question: does the INTEGRATED milestone genuinely deliver its GOAL? Work BACKWARD from the goal — never forward from the checks (they all pass; that comfort is exactly what you distrust).\n\n` +
     `<inputs>\n- Milestone ${m.id} "${m.title}" — acceptance: ${m.acceptance}\n- Summary: ${m.summary || '(none)'}\n- The live repo at ${projectPath}: git log/diff, read the files, and EXERCISE the product the way a user would (run the CLI, call the API, render the page statically — no browser).\n</inputs>\n\n` +
-    `<task>Hunt the "checks pass, goal broken" class specifically: acceptance met by the letter but broken in spirit, slices that pass alone but never connect, features that exist but cannot be reached from the product's entry points, hardcoded or stub behavior hiding behind a green check. Write your report to ${qaDir}/goal-backward-${m.id}.md (mkdir -p first) and return report_file + findings[] (each {text, severity}) + overall ('pass' = the goal is genuinely delivered; 'fail' MUST be backed by at least one critical or high finding). Read-only on source. Report reasoning first.</task>`
+    `<task>Hunt the "checks pass, goal broken" class specifically: acceptance met by the letter but broken in spirit, slices that pass alone but never connect, features that exist but cannot be reached from the product's entry points, hardcoded or stub behavior hiding behind a green check. Write your report to ${qaDir}/goal-backward-${m.id}.md (mkdir -p first) and return report_file + findings[] (each {text, severity}) + overall ('pass' = the goal is genuinely delivered; 'fail' MUST be backed by at least one critical or high finding). Read-only on source. ${REASONING_FIRST}</task>`
 }
 function judgePrompt(m, reconciled) {
   return voice('opus') +
@@ -661,7 +662,7 @@ function judgePrompt(m, reconciled) {
     `- Reconciled findings (deduped, severity-ranked):\n${reconciled.summaryLines.map((l) => '  - ' + l).join('\n') || '  (none)'}\n` +
     `- The repo at ${projectPath}.\n</inputs>\n\n` +
     `<constraints>\n- ${browserLaw}\n</constraints>\n\n` +
-    `<task>RUN the tests yourself at ${projectPath}. Issue QA_PASS only if the milestone genuinely meets its acceptance with green tests and no critical/high findings; else QA_FAIL with the blocking findings. Report reasoning first, then verdict, findings, severity.</task>`
+    `<task>RUN the tests yourself at ${projectPath}. Issue QA_PASS only if the milestone genuinely meets its acceptance with green tests and no critical/high findings; else QA_FAIL with the blocking findings. ${REASONING_FIRST} verdict, findings, and severity ride as their own properties.</task>`
 }
 
 // ── Ledger (BLUEPRINT §3.5): every posture move and slice-plan event lands in events.jsonl via
@@ -981,7 +982,7 @@ const [, planRes] = await parallel([
   ),
   () => agent(
     `You are the build planner. ${scope}\n\n<inputs>\nRead ${masterPlanFile}.\n</inputs>\n\n` +
-    `<task>Return the milestones in build order — id, title, summary, acceptance, surface (copy the plan's ui|logic|mixed tag; if absent, infer: a visible/front-facing deliverable is 'ui', a non-visual backend/CLI/logic deliverable is 'logic'), and confidence. Extract exactly what the plan defines — do not invent milestones. Report reasoning first.</task>`,
+    `<task>Return the milestones in build order — id, title, summary, acceptance, surface (copy the plan's ui|logic|mixed tag; if absent, infer: a visible/front-facing deliverable is 'ui', a non-visual backend/CLI/logic deliverable is 'logic'), and confidence. Extract exactly what the plan defines — do not invent milestones. ${REASONING_FIRST}</task>`,
     { label: loreLabel('confucius', 'parse'), phase: 'The Forge Heats', model: 'haiku', schema: MILESTONES_SCHEMA }
   ),
 ])
