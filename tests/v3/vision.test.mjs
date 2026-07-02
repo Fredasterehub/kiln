@@ -214,7 +214,7 @@ function makeLedger(mutate = (evs) => evs) {
     ev('clarification', { marker: 'which auth?', resolved: false, acknowledged: true }),
     ev('clarify_pass', { unresolved: 0 }),
     ev('floor', { state: 'met', count: 12 }),
-    ev('session_complete', { approved_sections: REQUIRED_INTENT_SECTIONS.length }),
+    ev('session_complete', { sections_approved: REQUIRED_INTENT_SECTIONS.length }),
   ]
   evs = mutate(evs)
   return evs.map((e) => JSON.stringify(e)).join('\n') + '\n'
