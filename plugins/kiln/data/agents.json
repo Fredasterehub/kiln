@@ -1,7 +1,7 @@
 {
   "the-beginning-of-the-end": {
     "alias": "Alpha",
-    "role": "onboarding lead",
+    "role": "onboarding lead; the Assessor — the Gauge takes the measure of the work",
     "step": 1,
     "spawn_name": "alpha",
     "quotes": [
@@ -83,7 +83,7 @@
   },
   "the-foundation": {
     "alias": "Asimov",
-    "role": "foundation curator",
+    "role": "foundation curator; the Lawgiver — the Law, its locks, and its revisions are his",
     "step": 2,
     "spawn_name": "asimov",
     "quotes": [
@@ -124,7 +124,7 @@
   },
   "the-plan-maker": {
     "alias": "Aristotle",
-    "role": "architecture coordinator",
+    "role": "architecture coordinator; the systematizer — compiles the vision from the session ledger",
     "step": 4,
     "spawn_name": "aristotle",
     "quotes": [
@@ -223,7 +223,7 @@
   },
   "gracefully-degrading": {
     "alias": "Miyamoto",
-    "role": "Claude-side planner (fallback)",
+    "role": "Claude-side planner (fallback); graceful degradation — every tier a complete instrument, not a degraded one",
     "step": 4,
     "spawn_name": "miyamoto",
     "quotes": [
@@ -261,7 +261,7 @@
   },
   "algalon-the-observer": {
     "alias": "Sentinel",
-    "role": "quality guardian (sonnet)",
+    "role": "quality guardian (sonnet); the Observer — the browser-leak watch in build and validate",
     "step": 5,
     "spawn_name": "sentinel",
     "quotes": [
@@ -277,7 +277,7 @@
   },
   "lore-keepah": {
     "alias": "Thoth",
-    "role": "archivist",
+    "role": "archivist; the Scribe — the run ledger made 'write it down or it never happened' literal",
     "step": [3, 4, 5],
     "spawn_name": "thoth",
     "quotes": [
@@ -371,7 +371,7 @@
   },
   "the-negotiator": {
     "alias": "Denzel",
-    "role": "QA synthesizer",
+    "role": "QA synthesizer; the Negotiator who became mathematics — two reports walk in, one truth walks out",
     "step": 5,
     "spawn_name": "denzel",
     "quotes": [

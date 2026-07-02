@@ -176,7 +176,7 @@ const COMPILE_SCHEMA = {
 // harmless — the next pass overwrites it, and nothing downstream reads an ungated VISION.
 const COMPILE_PASSES = 3
 let verdict = null
-let compiled = await agent(compileBrief, { label: 'numerobis:compile', phase: 'The Compilation', model: 'opus', schema: COMPILE_SCHEMA })
+let compiled = await agent(compileBrief, { label: 'aristotle:compile', phase: 'The Compilation', model: 'opus', schema: COMPILE_SCHEMA })
 for (let round = 0; round < COMPILE_PASSES; round++) {
   if (!(compiled && compiled.written === true)) {
     log('THE COMPILER PRODUCED NO FILE — vision_valid:false; the conductor must escalate.')
@@ -212,7 +212,7 @@ for (let round = 0; round < COMPILE_PASSES; round++) {
     `<task>Fix EXACTLY the named violations in ${visionFile} — recompute the frontmatter ` +
     `arithmetic from what the body actually carries, never bend the body to dodge a count. ` +
     `Report the corrected counts. Report reasoning first.</task>`,
-    { label: `numerobis:compile-revise:r${round + 1}`, phase: 'The Compilation', model: 'opus', schema: COMPILE_SCHEMA }
+    { label: `aristotle:compile-revise:r${round + 1}`, phase: 'The Compilation', model: 'opus', schema: COMPILE_SCHEMA }
   )
 }
 

@@ -56,8 +56,8 @@ const compiledOk = { reasoning: 'c', written: true, counts: '{"frs":2}' }
 const respond = (over = {}) => (label) => {
   if (label === 'thoth:ledger') return { ok: true }
   if (label === 'thoth:ledger-gate') return 'gate' in over ? over.gate : gateClean
-  if (label === 'numerobis:compile') return 'compile' in over ? over.compile : compiledOk
-  if (label.startsWith('numerobis:compile-revise')) return 'revise' in over ? over.revise : compiledOk
+  if (label === 'aristotle:compile') return 'compile' in over ? over.compile : compiledOk
+  if (label.startsWith('aristotle:compile-revise')) return 'revise' in over ? over.revise : compiledOk
   if (label.startsWith('thoth:validate:r')) {
     const r = Number(label.slice('thoth:validate:r'.length))
     return typeof over.validate === 'function' ? over.validate(r) : ('validate' in over ? over.validate : validateClean)
@@ -73,9 +73,9 @@ test('vision.js clean path: gate → ONE fresh compiler → validator clean → 
   assert.equal(result.tier, 'standard')
   assert.equal(result.unresolved, 0)
   const l = labels(calls)
-  assert.ok(l.indexOf('thoth:ledger-gate') < l.indexOf('numerobis:compile'), 'the mechanical floor precedes the compiler')
-  assert.ok(l.indexOf('numerobis:compile') < l.indexOf('thoth:validate:r0'), 'the validator rules the compiled file')
-  assert.ok(!l.some((x) => x.startsWith('numerobis:compile-revise')), 'no revision on a clean pass')
+  assert.ok(l.indexOf('thoth:ledger-gate') < l.indexOf('aristotle:compile'), 'the mechanical floor precedes the compiler')
+  assert.ok(l.indexOf('aristotle:compile') < l.indexOf('thoth:validate:r0'), 'the validator rules the compiled file')
+  assert.ok(!l.some((x) => x.startsWith('aristotle:compile-revise')), 'no revision on a clean pass')
   // run-ledger ordering (r1 F5): stage_started first; vision_compiled then stage_completed last
   const started = ledgersOf(calls, 'stage_started')
   const sealed = ledgersOf(calls, 'vision_compiled')
@@ -88,7 +88,7 @@ test('vision.js clean path: gate → ONE fresh compiler → validator clean → 
   assert.match(sealed[0].prompt, /"visual_direction":true/, 'the seal event carries the summary the ledger reconstructs from')
   assert.match(started[0].prompt, /"stage":"brainstorm"/)
   // the compiler brief is the traceability contract: ledger + template are the SOLE sources
-  const brief = calls.find((c) => c.label === 'numerobis:compile').prompt
+  const brief = calls.find((c) => c.label === 'aristotle:compile').prompt
   assert.match(brief, /ONLY sources are the two/, 'fresh context, sole-source framing')
   assert.match(brief, /brainstorm-ledger\.jsonl/)
   assert.match(brief, /templates\/VISION\.md/)
@@ -109,7 +109,7 @@ test('vision.js ledger-gate refusal: an incomplete session NEVER spawns a compil
   assert.match(result.reason, /incomplete_session/)
   assert.deepEqual(result.violations.map((v) => v.code), ['incomplete_session'])
   const l = labels(calls)
-  assert.ok(!l.includes('numerobis:compile'), 'zero compiler spawns against an incomplete ledger')
+  assert.ok(!l.includes('aristotle:compile'), 'zero compiler spawns against an incomplete ledger')
   assert.equal(ledgersOf(calls, 'vision_compiled').length, 0)
   assert.equal(ledgersOf(calls, 'stage_completed').length, 0)
   assert.equal(ledgersOf(calls, 'stage_started').length, 1, 'the entry bracket still fired — the leg WAS entered')
@@ -120,10 +120,10 @@ test('vision.js revise loop: violations on r0, clean on r1 — one revision, bou
   const { result, calls } = await runVision(baseArgs, respond({ validate }))
   assert.equal(result.vision_valid, true)
   const l = labels(calls)
-  assert.ok(l.includes('numerobis:compile-revise:r1'))
-  assert.ok(!l.includes('numerobis:compile-revise:r2'), 'one revision sufficed')
-  assert.ok(l.indexOf('numerobis:compile-revise:r1') < l.indexOf('thoth:validate:r1'), 'the fix re-validates')
-  const revise = calls.find((c) => c.label === 'numerobis:compile-revise:r1').prompt
+  assert.ok(l.includes('aristotle:compile-revise:r1'))
+  assert.ok(!l.includes('aristotle:compile-revise:r2'), 'one revision sufficed')
+  assert.ok(l.indexOf('aristotle:compile-revise:r1') < l.indexOf('thoth:validate:r1'), 'the fix re-validates')
+  const revise = calls.find((c) => c.label === 'aristotle:compile-revise:r1').prompt
   assert.match(revise, /\[count_mismatch\] frontmatter\.counts\.frs: counts\.frs says 5/, 'typed violation rides verbatim — code, path, message')
   assert.match(revise, /never bend the body to dodge a count/, 'the arithmetic is recomputed from the body, not gamed')
 })
@@ -134,8 +134,8 @@ test('vision.js exhausted revisions: vision_valid:false with the violations name
   assert.match(result.reason, /invalid after 3 passes/)
   assert.deepEqual(result.violations.map((v) => v.code), ['count_mismatch'])
   const l = labels(calls)
-  assert.ok(l.includes('numerobis:compile-revise:r1') && l.includes('numerobis:compile-revise:r2'), 'two revisions in three passes — the bound')
-  assert.ok(!l.includes('numerobis:compile-revise:r3'))
+  assert.ok(l.includes('aristotle:compile-revise:r1') && l.includes('aristotle:compile-revise:r2'), 'two revisions in three passes — the bound')
+  assert.ok(!l.includes('aristotle:compile-revise:r3'))
   assert.equal(ledgersOf(calls, 'vision_compiled').length, 0, 'no seal on exhaustion')
   assert.equal(ledgersOf(calls, 'stage_completed').length, 0, 'the stage stays current — the truthful projection')
 })
@@ -144,7 +144,7 @@ test('vision.js fails CLOSED: dead gate scribe, dead compiler, dead validate scr
   const deadGate = await runVision(baseArgs, respond({ gate: null }))
   assert.equal(deadGate.result.vision_valid, false)
   assert.match(deadGate.result.reason, /gate scribe produced no report/)
-  assert.ok(!labels(deadGate.calls).includes('numerobis:compile'))
+  assert.ok(!labels(deadGate.calls).includes('aristotle:compile'))
 
   const deadCompiler = await runVision(baseArgs, respond({ compile: null }))
   assert.equal(deadCompiler.result.vision_valid, false)
@@ -160,7 +160,7 @@ test('vision.js fails CLOSED: dead gate scribe, dead compiler, dead validate scr
   const infra = await runVision(baseArgs, respond({ validate: infraDead }))
   assert.equal(infra.result.vision_valid, false)
   assert.match(infra.result.reason, /validate command failed — bash: node: command not found/)
-  assert.ok(!labels(infra.calls).some((x) => x.startsWith('numerobis:compile-revise')), 'an infra failure is never a revise trigger — revising against no violations is wasted work')
+  assert.ok(!labels(infra.calls).some((x) => x.startsWith('aristotle:compile-revise')), 'an infra failure is never a revise trigger — revising against no violations is wasted work')
   assert.equal(ledgersOf(infra.calls, 'stage_completed').length, 0)
 
   const vanished = await runVision(baseArgs, respond({ verify: { reasoning: 'r', exists: false } }))
@@ -174,7 +174,7 @@ test('vision.js pluginRoot absent: fails CLOSED with a named reason — the gate
   assert.equal(result.vision_valid, false)
   assert.match(result.reason, /pluginRoot absent/)
   const l = labels(calls)
-  assert.ok(!l.includes('thoth:ledger-gate') && !l.includes('numerobis:compile'), 'nothing runs without the gate')
+  assert.ok(!l.includes('thoth:ledger-gate') && !l.includes('aristotle:compile'), 'nothing runs without the gate')
 })
 
 test('vision.js GATE_SCHEMA discipline: every evidence field REQUIRED — a schema-legal scribe cannot drop the violations the revise loop feeds on', async () => {

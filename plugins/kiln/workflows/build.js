@@ -1536,7 +1536,7 @@ for (const m of milestones) {
       // through a second pass is exact, not approximate.
       const reconciled = denzelReconcile(denzelReconcile(reports[0], reports[1]), goal)
       qaFindings = reconciled.summaryLines
-      log(`${spin('qa', c)} — ${m.id}: ${reconciled.findings.length} finding(s), ${reconciled.blocking.length} blocking${goalOn ? ' (goal-backward joined the reconcile)' : ''}`)
+      log(`${spin('qa', c)} — ${m.id}: Denzel reconciles — ${reconciled.findings.length} finding(s), ${reconciled.blocking.length} blocking${goalOn ? ' (goal-backward joined the reconcile)' : ''}`)
       // §3.2 judge-spawn condition, computed in-script (gateDecision) over USABLE inputs only —
       // the unusable-audit branch above already failed closed without reaching here.
       const decision = gateDecision(reconciled, reports[0] && reports[0].overall, reports[1] && reports[1].overall)

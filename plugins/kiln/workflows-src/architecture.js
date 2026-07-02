@@ -79,7 +79,7 @@ const noWander = NO_WANDER
 const codexHowto = `Delegate authoring to GPT-5.5: TRANSLATE this brief into a 4-part Codex prompt — Goal (the deliverable in 1-2 sentences), Context (the file paths + summary; no full dumps), Constraints (the arch-constraints + "do X instead of Y"), Done-when (the file written + what it must contain) — write it to a fresh temp file ('TMP="$(mktemp /tmp/kiln-codex.XXXXXX.md)"'; a fixed path collides across concurrent runs) and pipe via stdin: 'codex exec -m gpt-5.5 -c model_reasoning_effort="high" --sandbox workspace-write --skip-git-repo-check < "$TMP"'. Do NOT forward this brief verbatim. If GPT-5.5 is unavailable retry with -m gpt-5.4; if codex errors or yields nothing usable, author the plan yourself.`
 const SPIN = {
   foundation: ['Numerobis drafts the constraints', 'Laying the first stone', 'The geometry never lies'],
-  council: ['The committee of geniuses is arguing', 'Confucius contemplates the path forward', 'Sun Tzu is flanking the requirements'],
+  council: ['The committee of geniuses is arguing', 'Confucius contemplates the path forward', codexAvailable ? 'Sun Tzu is flanking the requirements' : 'Miyamoto makes the fallback the plan'],
   synth: ['Plato weaves the threads together', 'From discord, find harmony', 'One map of truth emerges'],
   validate: ['Athena weighs the plan on her scales', 'A plan is only as good as its weakest assumption', 'Athena checks the receipts'],
   law: ['Asimov drafts the Law', 'One check per criterion — coverage is arithmetic', 'The gates lock before the first brick is laid'],
@@ -459,7 +459,9 @@ if (liteScope) {
         ? `You are the slot-B planner (Codex-side). ${codexHowto} Write the plan to ${plansDir}/plan-b.md.\n${planBrief}`
         : `You are the slot-B planner (independent Sonnet reasoning — Codex unavailable). Write your plan to ` +
           `${plansDir}/plan-b.md, taking a deliberately different architectural angle so the comparison is meaningful.\n${planBrief}`,
-      { label: 'sun-tzu:plan', phase: 'The Council', model: 'sonnet', schema: PLAN_SCHEMA }
+      // Sun Tzu is the Codex seat; on the no-codex branch the Sonnet fallback is Miyamoto's
+      // (a label must name the seat that actually runs — never a ghost credit).
+      { label: codexAvailable ? 'sun-tzu:plan' : 'miyamoto:plan', phase: 'The Council', model: 'sonnet', schema: PLAN_SCHEMA }
     ),
   ]
   const plans = (await parallel(planners)).filter(Boolean)

@@ -159,7 +159,7 @@ const archRespond = (scope, athenaVerdict = 'PASS', researchMissing = false) => 
   if (label === 'thoth:research-check') return { reasoning: 'ls', missing: researchMissing ? ['/x/research.md'] : [] }
   if (label === 'numerobis:foundation') return foundation(scope)
   if (label === 'confucius:plan') return planResult('a')
-  if (label === 'sun-tzu:plan') return planResult('b')
+  if (label === 'sun-tzu:plan' || label === 'miyamoto:plan') return planResult('b')
   if (label === 'diogenes:divergence') return divergenceResult
   if (label === 'plato:synthesis' || label.startsWith('plato:revise')) return synthResult
   if (label.startsWith('athena:validate')) return validateResult(athenaVerdict)
@@ -167,11 +167,14 @@ const archRespond = (scope, athenaVerdict = 'PASS', researchMissing = false) => 
   if (label === 'thoth:verify') return { reasoning: 'ok', missing: [] }
   return null
 }
-const councilRan = (calls) => labelsIn(calls).includes('confucius:plan') || labelsIn(calls).includes('sun-tzu:plan')
+const councilRan = (calls) => labelsIn(calls).includes('confucius:plan') || labelsIn(calls).includes('sun-tzu:plan') || labelsIn(calls).includes('miyamoto:plan')
 
 test("T3 architecture: planning='dual' runs The Council even when foundation scope is trivial", async () => {
   const { calls, result } = await runWorkflow(ARCHITECTURE, { ...baseArgs, planning: 'dual' }, archRespond('trivial'))
   assert.ok(councilRan(calls), "planning='dual' must run the dual-plan council regardless of scope")
+  // Seat identity under codexAvailable:false — the fallback is Miyamoto's seat, never Sun Tzu's.
+  assert.ok(labelsIn(calls).includes('miyamoto:plan'), 'the no-codex slot-B must run as miyamoto:plan')
+  assert.ok(!labelsIn(calls).includes('sun-tzu:plan'), 'crediting Sun Tzu without codex is a ghost credit')
   assert.ok(labelsIn(calls).includes('diogenes:divergence'), 'the divergence step runs when both plans land')
   assert.equal(result.lite_path, false)
 })
@@ -271,7 +274,7 @@ test('T3 architecture: research.md ABSENT ⇒ no phantom path; agents grounded i
   assert.ok(labelsIn(calls).includes('thoth:research-check'), 'architecture must probe for research.md existence')
   assert.ok(log.some((l) => /Research input: none/.test(l)), 'the stage logs that it is grounding in VISION when research is absent')
   // NO agent prompt may reference the phantom research.md path.
-  const grounding = ['numerobis:foundation', 'confucius:plan', 'sun-tzu:plan', 'plato:synthesis']
+  const grounding = ['numerobis:foundation', 'confucius:plan', 'sun-tzu:plan', 'miyamoto:plan', 'plato:synthesis']
   for (const lbl of grounding) {
     const c = calls.find((x) => x.label === lbl)
     if (!c) continue
