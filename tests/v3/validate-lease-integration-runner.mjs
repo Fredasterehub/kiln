@@ -48,11 +48,18 @@ const argusResult = {
   ui_scope: true, missing_creds: false, coverage_gaps: [], blocking_findings: [], correction_tasks: [],
 }
 
-// pull the exact `node …` command out of a fenced ``` block in a sentinel prompt and run it as Bash.
+// pull the `node …` command(s) out of a fenced ``` block in a sentinel prompt and run each as Bash,
+// in order. The sweep leg now embeds TWO commands (owned sweep, then the READ-ONLY leak-scan); the
+// lease legs embed one. Returns the LAST command's result (the LEASE line lives on the lease-take leg's
+// single command).
 function runEmbeddedCommand(prompt) {
-  const m = prompt.match(/```\n(node [^\n]+)\n```/)
-  if (!m) return null
-  return spawnSync('bash', ['-c', m[1]], { encoding: 'utf8' })
+  const fence = prompt.match(/```\n([\s\S]*?)\n```/)
+  if (!fence) return null
+  const cmds = fence[1].split('\n').map((l) => l.trim()).filter((l) => l.startsWith('node '))
+  if (!cmds.length) return null
+  let last = null
+  for (const c of cmds) last = spawnSync('bash', ['-c', c], { encoding: 'utf8' })
+  return last
 }
 
 // the VALIDATE_RUN_TOKEN is minted inside the workflow; we recover it from the lease-take command line.

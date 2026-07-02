@@ -475,6 +475,91 @@ test('kiln-probe mcp-sweep: reaps ONLY the orphaned MCP browser (browser-binary 
   }
 })
 
+test('kiln-probe leak-scan: READ-ONLY — names a FOREIGN browser in BOTH watched namespaces and lists abandoned temp-profile dirs, and every suspect is STILL ALIVE after the scan (the never-kill drill); excludes the owned kiln-pw- namespace and an args-only shell; exits 0, takes no args', async () => {
+  // RUN-B FINDING 3b: a tribunal analyst drove the host's Playwright-MCP browser mid-build, in a
+  // namespace no kiln sweep watches (`playwright_chromiumdev_profile-*` temp profiles + `ms-playwright/
+  // mcp-`). leak-scan is the READ-ONLY eye for exactly that — it must NAME the foreign browser and NEVER
+  // kill it: the operator's MCP servers and browsers survive every scan by construction (operator law).
+  const tag = `${process.pid}${Date.now().toString(36)}`
+  // Decoys are node sleepers. argv0 spoofs /proc/<pid>/cmdline[0] so a decoy presents as a real browser
+  // binary exactly as Playwright launches chrome-headless-shell; the --user-data-dir rides in argv as a
+  // real browser keeps it. browser:true → a browser arg0 (a real suspect); browser:false → plain node
+  // arg0 (a shell/editor/grep that merely NAMES a watched path — must NOT be a suspect: read-only is no
+  // excuse to ledger a false positive).
+  const decoy = (udd, { browser } = {}) => {
+    const opts = { detached: true, stdio: 'ignore' }
+    if (browser) opts.argv0 = '/opt/ms-playwright/chrome-headless-shell'
+    const c = spawn(process.execPath, ['-e', 'setTimeout(()=>{},300000)', '--', `--user-data-dir=${udd}`], opts)
+    c.unref(); return c
+  }
+  // (a) a foreign Playwright temp-profile browser — the load-bearing namespace the real leak used.
+  const pwUdd = `/tmp/playwright_chromiumdev_profile-${tag}`
+  // (b) a foreign Playwright-MCP browser — the host's MCP browser, the other watched namespace.
+  const mcpUdd = `/tmp/ms-playwright/mcp-${tag}`
+  // (c) an OWNED kiln-pw- probe browser that also touches a watched path — the kiln-pw- exclusion must
+  //     win over namespace membership (owned is sweep's jurisdiction, never a foreign suspect).
+  const ownedUdd = `/tmp/playwright_chromiumdev_profile-${tag}-kiln-pw-owned`
+  // (d) an args-only NON-browser that merely names a watched path (a shell/log-tail) — the arg0 gate.
+  const shellUdd = `/tmp/playwright_chromiumdev_profile-${tag}-shell-noise`
+  const decoyPw = decoy(pwUdd, { browser: true })
+  const decoyMcp = decoy(mcpUdd, { browser: true })
+  const decoyOwned = decoy(ownedUdd, { browser: true })
+  const decoyShell = decoy(shellUdd, { browser: false })
+  // disk arm — an abandoned temp-profile DIR (a dead leak's profile is still evidence). Membership-
+  // asserted only: the box may carry real leaks, so an exact global count is never asserted.
+  const diskDir = `/tmp/playwright_chromiumdev_profile-disk${tag}`
+  mkdirSync(diskDir, { recursive: true })
+  try {
+    const deadline = Date.now() + 5000
+    const decoys = [decoyPw, decoyMcp, decoyOwned, decoyShell]
+    while (!decoys.every((c) => leaderCmdlineLive(c.pid)) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100))
+    for (const c of decoys) assert.ok(leaderCmdlineLive(c.pid), 'every decoy is alive before the scan')
+
+    const res = probeCli(['leak-scan'])
+    assert.equal(res.status, 0, `leak-scan always exits 0 — a scan is a report, never a failure: ${res.stderr}`)
+    assert.match(res.stdout, /^LEAK_SCAN_SUSPECTS \d+/m, 'a human suspects summary line')
+    assert.match(res.stdout, /^LEAK_SCAN_PROFILE_DIRS \d+ — abandoned Playwright temp profiles under \/tmp$/m, 'a human profile-dir summary line')
+    const line = res.stdout.match(/^LEAK_SCAN (.*)$/m)
+    assert.ok(line, 'the ONE machine line is present (the PROBE_RESULT idiom)')
+    const scan = JSON.parse(line[1])
+    // JSON shape
+    assert.equal(scan.schema, 1)
+    assert.ok(Array.isArray(scan.suspects) && Array.isArray(scan.profile_dirs))
+    assert.equal(scan.counts.suspects, scan.suspects.length, 'counts.suspects is self-consistent')
+    assert.equal(scan.counts.profile_dirs, scan.profile_dirs.length, 'counts.profile_dirs is self-consistent')
+    // (a) the temp-profile browser is a suspect, correctly attributed
+    const pwSuspect = scan.suspects.find((s) => s.pid === decoyPw.pid)
+    assert.ok(pwSuspect, 'the Playwright temp-profile browser is reported')
+    assert.equal(pwSuspect.namespace, 'playwright_chromiumdev_profile-', 'the matched namespace family is the value')
+    assert.equal(pwSuspect.user_data_dir, pwUdd)
+    assert.equal(pwSuspect.arg0, '/opt/ms-playwright/chrome-headless-shell')
+    // (b) the MCP browser is a suspect too — BOTH watched namespaces are covered
+    const mcpSuspect = scan.suspects.find((s) => s.pid === decoyMcp.pid)
+    assert.ok(mcpSuspect, 'the Playwright-MCP browser is reported')
+    assert.equal(mcpSuspect.namespace, 'ms-playwright/mcp-')
+    assert.equal(mcpSuspect.user_data_dir, mcpUdd)
+    // (c) the owned kiln-pw- browser is EXCLUDED, (d) the args-only shell is EXCLUDED
+    assert.equal(scan.suspects.find((s) => s.pid === decoyOwned.pid), undefined, 'a kiln-pw- cmdline is owned — sweep\'s jurisdiction, never a foreign suspect')
+    assert.equal(scan.suspects.find((s) => s.pid === decoyShell.pid), undefined, 'an args-only non-browser (no browser arg0) is never a suspect — read-only is no excuse for a false positive')
+    // disk arm: the abandoned temp-profile dir is reported with an ISO mtime — membership only
+    const diskEntry = scan.profile_dirs.find((d) => d.path === diskDir)
+    assert.ok(diskEntry, 'the abandoned temp-profile dir is listed by the disk arm')
+    assert.match(diskEntry.mtime, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/, 'mtime is an ISO-8601 string')
+
+    // THE NEVER-KILL DRILL: every decoy — suspect or not — is STILL ALIVE after the scan
+    for (const c of decoys) assert.ok(leaderCmdlineLive(c.pid), 'leak-scan killed nothing: every browser survives the scan (operator law)')
+    assert.ok(existsSync(diskDir), 'leak-scan removed nothing: the profile dir it reported still exists')
+
+    // takes NO args — a stray arg is a usage error
+    const withArg = probeCli(['leak-scan', 'anything'])
+    assert.equal(withArg.status, 1)
+    assert.match(withArg.stderr, /usage:/)
+  } finally {
+    for (const c of [decoyPw, decoyMcp, decoyOwned, decoyShell]) { try { process.kill(c.pid, 'SIGKILL') } catch { /* gone */ } }
+    rmSync(diskDir, { recursive: true, force: true })
+  }
+})
+
 test('kiln-probe sweep: the server-pidfile arm — kills the recorded process GROUP only when the live leader still matches the recorded cmd (recycled-PID guard), and always consumes the pidfile', async () => {
   // the managed server's cmdline carries NO kiln-pw token (it is the user's command, verbatim) —
   // exactly the cycle-1 leak: pattern-kill can never reach it, ONLY the pidfile group-kill can.

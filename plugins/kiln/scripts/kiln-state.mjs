@@ -21,7 +21,7 @@
 import { readFileSync, writeFileSync, appendFileSync, renameSync, mkdirSync, existsSync } from 'node:fs'
 import { join, resolve, isAbsolute, basename } from 'node:path'
 
-const EVENT_TYPES = ['run_init', 'stage_started', 'stage_completed', 'gate_decision', 'posture_set', 'posture_escalated', 'check_result', 'commit', 'evidence', 'escalation', 'note', 'browser_lease', 'browser_sweep', 'gate_only_refused', 'gate_skipped', 'goal_audit_failure', 'law_red_auto_reject', 'probe_unavailable', 'slice_plan_invalid', 'slice_plan_invalidated', 'slice_plan_replanned', 'tamper_auto_reject', 'tier2_traversal', 'validate_verdict', 'verification_degraded']
+const EVENT_TYPES = ['run_init', 'stage_started', 'stage_completed', 'gate_decision', 'posture_set', 'posture_escalated', 'check_result', 'commit', 'evidence', 'escalation', 'note', 'browser_leak_suspect', 'browser_lease', 'browser_sweep', 'gate_only_refused', 'gate_skipped', 'goal_audit_failure', 'law_red_auto_reject', 'probe_unavailable', 'slice_plan_invalid', 'slice_plan_invalidated', 'slice_plan_replanned', 'tamper_auto_reject', 'tier2_traversal', 'validate_verdict', 'verification_degraded']
 const STAGE_ORDER = ['onboarding', 'brainstorm', 'gauge', 'research', 'architecture', 'build', 'validate', 'report']
 const TS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/
 const SHA_RE = /^[0-9a-f]{7,40}$/

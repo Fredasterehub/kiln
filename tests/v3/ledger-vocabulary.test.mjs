@@ -112,7 +112,7 @@ test('drift guard NEGATIVE self-test: the extractor surfaces a planted unknown t
 // gate_only_refused joined in P3.5 T3 (the gateOnly refuse path) — the guard caught its absence
 // the same session it shipped; this fixture updates CONSCIOUSLY with every vocabulary change.
 const WORKFLOW_TYPES = [
-  'browser_lease', 'browser_sweep', 'gate_only_refused', 'gate_skipped', 'goal_audit_failure',
+  'browser_leak_suspect', 'browser_lease', 'browser_sweep', 'gate_only_refused', 'gate_skipped', 'goal_audit_failure',
   'law_red_auto_reject', 'probe_unavailable', 'slice_plan_invalid', 'slice_plan_invalidated',
   'slice_plan_replanned', 'tamper_auto_reject', 'tier2_traversal', 'validate_verdict',
   'verification_degraded',

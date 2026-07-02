@@ -74,6 +74,24 @@
 //       touch the @playwright/mcp SERVER node process (the host's shared service to reap; a later
 //       correction-cycle evaluator may reuse it) — only the orphaned browser. No args. Always exits 0 —
 //       cleanup never fails a stage.
+//   leak-scan
+//       STRICTLY READ-ONLY detection of a browser we do NOT own — the eye the sweeps lack (RUN-B
+//       FINDING 3b: a tribunal analyst drove the host's Playwright-MCP browser mid-build, in a namespace
+//       NO kiln sweep watches). Kills NOTHING, removes NOTHING, by construction — the operator's MCP
+//       servers and browsers survive every scan (operator law). Two arms:
+//       (a) process arm — pgrep candidates over the two FOREIGN namespaces (the Playwright temp-profile
+//           family `playwright_<browser>dev_profile-`, which MUST cover `playwright_chromiumdev_profile-`,
+//           the namespace the real leak used, AND `ms-playwright/mcp-`), each CONFIRMED by mcp-sweep's
+//           two-factor discipline (a browser-binary arg0 AND a --user-data-dir into a watched namespace)
+//           — read-only is no excuse to ledger a shell/editor/grep that merely NAMES a path. A cmdline
+//           carrying `kiln-pw-` is EXCLUDED (owned — sweep's jurisdiction); self (this pid) is skipped.
+//       (b) disk arm — /tmp entries in the Playwright temp-profile family, reported with mtime (a dead
+//           leak's abandoned profile dir is still leak evidence). The `ms-playwright` cache tree is NOT
+//           scanned on disk — the operator's legitimate MCP install lives there permanently.
+//       Prints human summary lines + ONE machine line `LEAK_SCAN {json}` (the PROBE_RESULT idiom; parse
+//       with /^LEAK_SCAN (.*)$/m) carrying { schema:1, suspects:[{pid, arg0, namespace, user_data_dir}],
+//       profile_dirs:[{path, mtime}], counts:{suspects, profile_dirs} } — mtime is an ISO-8601 string.
+//       Takes no args. ALWAYS exits 0 — a scan is a report; suspects are DATA, never a kill, never a fail.
 //
 // KILN_PROBE_TIMEOUT_S overrides the 90 s probe deadline — harness escape hatch ONLY (the fixture
 // fake-browser drills prove timeout-kill without waiting 90 real seconds); never set it in a run.
@@ -171,6 +189,14 @@ function sweep(prefix) {
 // does NOT touch the `@playwright/mcp` SERVER node process: that is the host's shared service to reap
 // (discipline-spec: a stdio MCP server inherits its host's process reaping), and the operator may
 // legitimately reuse it in a later interactive session. We reap the orphaned BROWSER, not the server.
+//
+// The shared browser-identity gates — the two-factor discipline mcp-sweep and leak-scan both apply to a
+// pgrep candidate before acting on it (KILL for mcp-sweep, REPORT for leak-scan): a real target has a
+// browser-binary arg0 AND a --user-data-dir into a watched profile namespace. PW_TMP_PROFILE is the
+// extra Playwright temp-profile family leak-scan watches (the namespace Run B's real leak rode).
+const BROWSER_BIN = /(?:^|\/)(?:chrom(?:e|ium)(?:-headless-shell)?|headless_shell)\b/i // the documented browser set ONLY (chrome / chromium / chrome-headless-shell / headless_shell) — NOT chrome_crashpad_handler (the crash-reporter helper, not a browser; killing it would not reap a browser and widens the gate past the stated arg0 set)
+const MCP_PROFILE = /--user-data-dir=\S*ms-playwright\/mcp-/ // the Playwright-MCP profile-namespace half of the two-factor gate
+const PW_TMP_PROFILE = /playwright_[a-z]+dev_profile-/ // the Playwright temp-profile family (chromium/firefox/webkit) — leak-scan's disk-arm dir-name gate and the profile half of its process two-factor
 function mcpSweep() {
   const pattern = 'ms-playwright/mcp-' // candidate gate: the Playwright-MCP profile namespace (no leading dash)
   // Find candidates whose cmdline carries the ms-playwright/mcp- profile namespace, then CONFIRM each is
@@ -180,8 +206,6 @@ function mcpSweep() {
   // This is the recycled-PID-guard discipline applied to the MCP path: kill only what we can positively
   // identify as the orphaned browser, so the pattern can never reap the operator's own Chrome (a non-mcp
   // profile, spared by (b)), nor any non-browser process (spared by (a)), nor our own sweep command.
-  const BROWSER_BIN = /(?:^|\/)(?:chrom(?:e|ium)(?:-headless-shell)?|headless_shell)\b/i // the documented browser set ONLY (chrome / chromium / chrome-headless-shell / headless_shell) — NOT chrome_crashpad_handler (the crash-reporter helper, not a browser; killing it would not reap a browser and widens the gate past the stated arg0 set)
-  const MCP_PROFILE = /--user-data-dir=\S*ms-playwright\/mcp-/
   const found = spawnSync('pgrep', ['-f', '--', pattern], { encoding: 'utf8' }) // '--' so pgrep never parses pattern as an option
   const candidates = (found.stdout || '').split('\n').map((s) => s.trim()).filter(Boolean)
   let killed = 0
@@ -194,6 +218,58 @@ function mcpSweep() {
     try { process.kill(Number(pid), 'SIGKILL'); killed++ } catch { /* already gone */ }
   }
   console.log(`MCP_SWEEP pattern=${pattern} killed=${killed}`)
+}
+
+// ── leak-scan — READ-ONLY: name the foreign browser, never kill it (RUN-B FINDING 3b) ─────────────
+// The one gap the sweeps above cannot see. sweep() reaps only the OWNED `kiln-pw-` namespace; mcp-sweep
+// is the operator's MANUAL kill of an orphaned MCP browser. Neither is an EYE the autonomous path can
+// use to say "a browser I do not own is alive right now" — which is exactly what Run B needed when a
+// tribunal analyst drove the host's Playwright-MCP browser mid-build, in the `playwright_chromiumdev_
+// profile-*` / `ms-playwright/mcp-` namespaces no sweep watches. leak-scan is that eye and ONLY an eye:
+// it NEVER kills, NEVER removes — the operator's MCP servers and browsers survive every scan by
+// construction (operator law). It applies the SAME two-factor discipline mcp-sweep uses (browser arg0 +
+// watched-namespace --user-data-dir) so read-only never becomes false-positive: a shell/editor/grep
+// that merely mentions a watched path is not a suspect, and the ledger never carries one.
+function leakScan() {
+  // process arm — one pgrep per foreign namespace family; a candidate is only a NARROWING, every one is
+  // two-factor CONFIRMED below before it is named. Read-only does not excuse a false positive: a shell
+  // or log-tail that merely mentions a watched path must never land in the ledger as a live browser.
+  const suspects = []
+  const seen = new Set()
+  for (const nsPattern of ['playwright_', 'ms-playwright/mcp-']) {
+    const found = spawnSync('pgrep', ['-f', '--', nsPattern], { encoding: 'utf8' }) // '--' so pgrep never parses the pattern as an option
+    for (const pid of (found.stdout || '').split('\n').map((s) => s.trim()).filter(Boolean)) {
+      if (pid === String(process.pid) || seen.has(pid)) continue // never scan ourselves; a browser can match both pgreps
+      const cmd = leaderCmdline(pid)
+      if (!cmd) continue // gone / unreadable — never name what we cannot read (fail-safe)
+      if (cmd.includes('kiln-pw-')) continue // the OWNED namespace — sweep's jurisdiction, never a foreign suspect
+      if (!BROWSER_BIN.test(cmd.split(/\s+/)[0] || '')) continue // arg0 is not a browser binary (a shell/editor naming the path)
+      const udd = (cmd.match(/--user-data-dir=(\S+)/) || [])[1]
+      if (!udd) continue // no --user-data-dir flag — the path is only named in other args, not the two-factor gate
+      let namespace = null
+      const pw = udd.match(PW_TMP_PROFILE)
+      if (pw) namespace = pw[0] // e.g. 'playwright_chromiumdev_profile-'
+      else if (MCP_PROFILE.test(cmd)) namespace = 'ms-playwright/mcp-'
+      if (!namespace) continue // the --user-data-dir points at neither WATCHED namespace
+      seen.add(pid)
+      suspects.push({ pid: Number(pid), arg0: cmd.split(/\s+/)[0], namespace, user_data_dir: udd })
+    }
+  }
+  // disk arm — /tmp entries in the Playwright temp-profile family, with mtime: a dead leak's abandoned
+  // profile dir is still leak evidence. ms-playwright/ is NEVER scanned on disk — the operator's
+  // legitimate MCP install lives there permanently, and a scan is no place to second-guess it.
+  const profileDirs = []
+  let names = []
+  try { names = readdirSync('/tmp') } catch { /* no /tmp listing — nothing to report */ }
+  for (const name of names) {
+    if (!name.startsWith('playwright_') || !PW_TMP_PROFILE.test(name)) continue // the family, anchored at the name start
+    const path = join('/tmp', name)
+    try { profileDirs.push({ path, mtime: statSync(path).mtime.toISOString() }) } catch { /* vanished mid-scan — not evidence */ }
+  }
+  const result = { schema: 1, suspects, profile_dirs: profileDirs, counts: { suspects: suspects.length, profile_dirs: profileDirs.length } }
+  console.log(`LEAK_SCAN_SUSPECTS ${suspects.length}${suspects.length ? ' — ' + suspects.map((s) => `pid ${s.pid} [${s.namespace}]`).join(', ') : ' — no foreign browser alive'}`)
+  console.log(`LEAK_SCAN_PROFILE_DIRS ${profileDirs.length} — abandoned Playwright temp profiles under /tmp`)
+  console.log(`LEAK_SCAN ${JSON.stringify(result)}`)
 }
 
 // ── the browser lease — the §7 CAPABILITY deadline (ORCHESTRATOR RULING, p3/tasks.md) ────────────
@@ -443,7 +519,7 @@ async function cmdRun(projectPath, kilnDir, scId, runId, leaseDemand = null) {
 }
 
 // ── Dispatch ─────────────────────────────────────────────────────────────────────────────────────
-const USAGE = `usage: kiln-probe.mjs run <projectPath> <kilnDir> <SC-id> <runId> [--lease <token>] | kiln-probe.mjs sweep [token-prefix] | kiln-probe.mjs mcp-sweep | kiln-probe.mjs lease <kilnDir> <runId> <token> <seconds> | kiln-probe.mjs lease-release <kilnDir> <runId>`
+const USAGE = `usage: kiln-probe.mjs run <projectPath> <kilnDir> <SC-id> <runId> [--lease <token>] | kiln-probe.mjs sweep [token-prefix] | kiln-probe.mjs leak-scan | kiln-probe.mjs mcp-sweep | kiln-probe.mjs lease <kilnDir> <runId> <token> <seconds> | kiln-probe.mjs lease-release <kilnDir> <runId>`
 const [cmd, ...rest] = process.argv.slice(2)
 try {
   if (cmd === 'run') {
@@ -473,6 +549,10 @@ try {
   } else if (cmd === 'mcp-sweep') {
     if (rest.length) die(USAGE) // no args — the pattern is the fixed ms-playwright/mcp- namespace
     mcpSweep()
+    process.exit(0)
+  } else if (cmd === 'leak-scan') {
+    if (rest.length) die(USAGE) // no args — the two watched namespaces are fixed; a scan reports, it does not target
+    leakScan()
     process.exit(0)
   } else if (cmd === 'lease') {
     const [kilnDir, runId, token, secondsArg] = rest

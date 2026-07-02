@@ -683,17 +683,62 @@ async function ledger(type, data, phaseName) {
 //    in a dir this build never reuses and can never block it. Both sweeps are ledgered (§3.5) and
 //    the sweep CLI always exits 0 so cleanup never fails a stage. Only called past the pluginRoot
 //    floor gate (the CLI is locatable) via a haiku leg — a mechanical `pkill`/`rm` cleanup. ──
+// SWEEP_SCAN_SCHEMA — the sweep leg now runs TWO commands (sweep, then the READ-ONLY leak-scan) and
+// reports both: the SWEEP line (owned-namespace cleanup, as before) and the LEAK_SCAN json (a foreign
+// browser we do not own — the eye Run B lacked, RUN-B FINDING 3b). leak_suspects rides the baseline
+// browser_sweep event on EVERY bracket; the suspect/profile-dir detail rides a separate
+// browser_leak_suspect event ONLY when count>0 (a lean ledger — zero-suspect scans ride the count).
+const SWEEP_SCAN_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reasoning: { type: 'string' },
+    sweep_line: { type: 'string', description: 'the SWEEP … line the sweep command printed, verbatim' },
+    leak_scan_line: { type: 'string', description: 'the LEAK_SCAN {json} line leak-scan printed, verbatim' },
+    leak_suspects: { type: 'integer', description: "the LEAK_SCAN json's counts.suspects — foreign browsers alive (0 when none)" },
+    suspects: {
+      type: 'array', description: "the LEAK_SCAN json's suspects array ([] when none)",
+      items: {
+        type: 'object', additionalProperties: false,
+        properties: { pid: { type: 'integer' }, arg0: { type: 'string' }, namespace: { type: 'string' }, user_data_dir: { type: 'string' } },
+        required: ['pid', 'arg0', 'namespace', 'user_data_dir'],
+      },
+    },
+    profile_dirs: {
+      type: 'array', description: "the LEAK_SCAN json's profile_dirs array — abandoned temp profiles ([] when none)",
+      items: {
+        type: 'object', additionalProperties: false,
+        properties: { path: { type: 'string' }, mtime: { type: 'string' } },
+        required: ['path', 'mtime'],
+      },
+    },
+  },
+  required: ['sweep_line', 'leak_scan_line', 'leak_suspects', 'suspects', 'profile_dirs'],
+}
 async function stageSweep(when) {
-  await agent(
-    `You are the browser-leak sweeper — the stage-level bracket of the bounded-browser discipline (the browser is a subprocess with a deadline, never a service). You run ONE cleanup command and report what it swept; you never launch a browser, never edit, never judge.\n\n` +
-    `<task>Run this exact command (Bash):\n` +
+  const r = await agent(
+    `You are the browser-leak sweeper — the stage-level bracket of the bounded-browser discipline (the browser is a subprocess with a deadline, never a service). You run TWO commands and report what they found; you never launch a browser, never edit, never judge, and never kill anything yourself.\n\n` +
+    `<task>Run these TWO exact commands in order (Bash):\n` +
     '```\n' +
     `node ${pluginRoot}/scripts/kiln-probe.mjs sweep ${BUILD_RUN_TOKEN}\n` +
+    `node ${pluginRoot}/scripts/kiln-probe.mjs leak-scan\n` +
     '```\n' +
-    `The prefix '${BUILD_RUN_TOKEN}' scopes the sweep to THIS build's own browser trees ONLY (every probe this stage spawned runs under it) — it can never touch a concurrent Kiln run or the operator's own browser; blanket 'pkill -f chrome' is forbidden. It ALWAYS exits 0. Transcribe the 'SWEEP …' line it prints (pattern / killed / server_groups_killed / removed counts). Do not run anything else.</task>`,
-    { label: loreLabel('sentinel', 'sweep', when), phase: 'The Forge Heats', model: 'haiku' }
+    `The FIRST sweeps THIS build's own browser trees ONLY — the prefix '${BUILD_RUN_TOKEN}' can never touch a concurrent Kiln run or the operator's own browser; blanket 'pkill -f chrome' is forbidden. It ALWAYS exits 0.\n` +
+    `The SECOND is a STRICTLY READ-ONLY scan for a FOREIGN browser we do not own (a stray Playwright temp-profile or Playwright-MCP browser) — it kills NOTHING, removes NOTHING, and ALWAYS exits 0. It prints ONE 'LEAK_SCAN {json}' line.\n` +
+    `Report: sweep_line = the 'SWEEP …' line verbatim; leak_scan_line = the 'LEAK_SCAN …' line verbatim; leak_suspects = the LEAK_SCAN json's counts.suspects; suspects = its suspects array ([] when none); profile_dirs = its profile_dirs array ([] when none). Do not run anything else.</task>`,
+    { label: loreLabel('sentinel', 'sweep', when), phase: 'The Forge Heats', model: 'haiku', schema: SWEEP_SCAN_SCHEMA }
   )
-  await ledger('browser_sweep', { stage: 'build', when, token: BUILD_RUN_TOKEN }, 'The Forge Heats')
+  const leakSuspects = (r && Number.isInteger(r.leak_suspects)) ? r.leak_suspects : 0
+  const suspects = (r && Array.isArray(r.suspects)) ? r.suspects : []
+  const profileDirs = (r && Array.isArray(r.profile_dirs)) ? r.profile_dirs : []
+  // Baseline proof for BOTH arms on every bracket (T3 review r1 ruling): leak_suspects AND
+  // leak_profile_dirs ride browser_sweep, so the ledger records that disk evidence existed
+  // even when no foreign browser is alive. The detail event stays gated on LIVE suspects —
+  // stale /tmp profile dirs from unrelated work would make a dirs-only alarm cry wolf; their
+  // detail rides whenever the alarm fires, and the LEAK_SCAN line is in the transcript anyway.
+  await ledger('browser_sweep', { stage: 'build', when, token: BUILD_RUN_TOKEN, leak_suspects: leakSuspects, leak_profile_dirs: profileDirs.length }, 'The Forge Heats')
+  if (leakSuspects > 0) {
+    await ledger('browser_leak_suspect', { stage: 'build', when, token: BUILD_RUN_TOKEN, suspects, profile_dirs: profileDirs }, 'The Forge Heats')
+  }
 }
 
 // ── The status anchor (§5.1 statusBefore, T2-fix ruling): statusBefore lives in the EVIDENCE —

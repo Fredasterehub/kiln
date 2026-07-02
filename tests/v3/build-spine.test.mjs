@@ -52,7 +52,7 @@ async function runBuild(args, respond) {
   const agent = async (prompt, opts) => {
     const label = (opts && opts.label) || ''
     const model = (opts && opts.model) || ''
-    calls.push({ label, prompt, model })
+    calls.push({ label, prompt, model, schema: (opts && opts.schema) || null })
     return respond(label, prompt, model)
   }
   const stubs = {
@@ -834,7 +834,7 @@ test('T2.3 stage sweeps: a PRE-FLIGHT sweep fires at build start and an UNCONDIT
     assert.equal(s.model, 'haiku', 'the sweep is a mechanical haiku leg')
     assert.match(s.prompt, new RegExp(`node /plug/scripts/kiln-probe\\.mjs sweep ${token}\\b`), 'it runs kiln-probe sweep with THIS build\'s run-token prefix — never bare')
     assert.doesNotMatch(s.prompt, /sweep['"`\s]*\n/, 'never a bare (whole-namespace) sweep')
-    assert.match(s.prompt, /scopes the sweep to THIS build's own browser trees ONLY/, 'run-token scoped, never a concurrent run')
+    assert.match(s.prompt, /sweeps THIS build's own browser trees ONLY/, 'run-token scoped, never a concurrent run')
     assert.match(s.prompt, /blanket 'pkill -f chrome' is forbidden/)
   }
   const led = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('browser_sweep'))
@@ -842,6 +842,49 @@ test('T2.3 stage sweeps: a PRE-FLIGHT sweep fires at build start and an UNCONDIT
   assert.match(led[0].prompt, /"when":"pre-flight"/)
   assert.match(led[0].prompt, new RegExp(`"token":"${token}"`), 'the ledger records the scoping token')
   assert.match(led[1].prompt, /"when":"stage-end"/)
+})
+
+// ── P3.6 T3: each sweep leg ALSO runs the READ-ONLY leak-scan (RUN-B FINDING 3b) ─────────────────
+// The sweep bracket learns to SEE a foreign browser it does not own — a stray Playwright temp-profile
+// or Playwright-MCP browser, in a namespace no sweep reaps. browser_sweep now carries leak_suspects
+// on EVERY bracket (baseline proof); the suspect/profile-dir detail rides a SEPARATE browser_leak_
+// suspect event ONLY when count>0 (a lean ledger — zero-suspect scans ride the count).
+test('T2.3 leak-scan: each sweep leg runs the READ-ONLY leak-scan right after the owned sweep; browser_sweep gains leak_suspects on every bracket; browser_leak_suspect rides ONLY when a foreign browser is seen', async () => {
+  let sweepN = 0
+  const { calls } = await runBuild(baseArgs, mkRespond({}, (label) => {
+    if (label.startsWith('sentinel:sweep')) {
+      // pre-flight sees 2 foreign browsers + 1 abandoned profile dir; stage-end sees a clean box
+      return ++sweepN === 1
+        ? { leak_suspects: 2, suspects: [{ pid: 111, arg0: '/opt/ms-playwright/chrome-headless-shell', namespace: 'playwright_chromiumdev_profile-', user_data_dir: '/tmp/playwright_chromiumdev_profile-abc' }, { pid: 222, arg0: '/opt/ms-playwright/chrome-headless-shell', namespace: 'ms-playwright/mcp-', user_data_dir: '/tmp/ms-playwright/mcp-x' }], profile_dirs: [{ path: '/tmp/playwright_chromiumdev_profile-dead', mtime: '2026-07-02T00:00:00.000Z' }] }
+        : { leak_suspects: 0, suspects: [], profile_dirs: [] }
+    }
+    return undefined
+  }))
+  const sweeps = labelsOf(calls, 'sentinel:sweep')
+  assert.equal(sweeps.length, 2)
+  for (const s of sweeps) {
+    assert.match(s.prompt, /node \/plug\/scripts\/kiln-probe\.mjs sweep kbuild-\w+/, 'the owned-namespace sweep runs first')
+    assert.match(s.prompt, /node \/plug\/scripts\/kiln-probe\.mjs leak-scan\b/, 'the READ-ONLY foreign-browser scan runs right after')
+    assert.match(s.prompt, /kills NOTHING, removes NOTHING/, 'the leg states the read-only contract to the scribe')
+  }
+  // the evidence-schema discipline (review r1 ruling): every field the ledger event carries is
+  // REQUIRED — a schema-legal scribe can never report leak_suspects>0 while dropping the detail
+  const sweepSchema = sweeps[0].schema
+  assert.deepEqual([...sweepSchema.required].sort(), ['leak_scan_line', 'leak_suspects', 'profile_dirs', 'suspects', 'sweep_line'])
+  assert.deepEqual([...sweepSchema.properties.suspects.items.required].sort(), ['arg0', 'namespace', 'pid', 'user_data_dir'])
+  assert.deepEqual([...sweepSchema.properties.profile_dirs.items.required].sort(), ['mtime', 'path'])
+  // baseline: every bracket ledgers browser_sweep WITH both arm counts
+  const sweepLedgers = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('"browser_sweep"'))
+  assert.equal(sweepLedgers.length, 2, 'browser_sweep is ledgered on every bracket')
+  for (const l of sweepLedgers) assert.match(l.prompt, /"leak_suspects":\d+/, 'browser_sweep data gains leak_suspects on every bracket (baseline proof)')
+  assert.match(sweepLedgers[0].prompt, /"leak_profile_dirs":1/, 'the disk arm rides the baseline too — dirs-only evidence is never silently dropped (review r1 ruling)')
+  assert.match(sweepLedgers[1].prompt, /"leak_profile_dirs":0/, 'a clean box records zero, honestly')
+  // detail: browser_leak_suspect rides ONLY the pre-flight bracket (2 suspects), NOT the clean stage-end
+  const suspectLedgers = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('"browser_leak_suspect"'))
+  assert.equal(suspectLedgers.length, 1, 'browser_leak_suspect is appended ONLY when a foreign browser is seen (count>0)')
+  assert.match(suspectLedgers[0].prompt, /"when":"pre-flight"/, 'the detail event rides the bracket that saw the leak')
+  assert.match(suspectLedgers[0].prompt, /"pid":111/, 'the suspect detail is carried in data')
+  assert.match(suspectLedgers[0].prompt, /"profile_dirs":\[/, 'the abandoned-profile detail rides too')
 })
 
 test('T2.3 run-token scoping: every kiln-law run (the runner AND the reviewer rerun) threads the SAME --run-prefix as the sweeps — so every probe this build spawns falls under the token the sweep reaps', async () => {
@@ -888,7 +931,7 @@ async function runBuildCapturing(args, respond) {
   const agent = async (prompt, opts) => {
     const label = (opts && opts.label) || ''
     const model = (opts && opts.model) || ''
-    calls.push({ label, prompt, model })
+    calls.push({ label, prompt, model, schema: (opts && opts.schema) || null })
     return respond(label, prompt, model)
   }
   const stubs = {
