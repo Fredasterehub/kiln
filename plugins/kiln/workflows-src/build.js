@@ -84,6 +84,9 @@ const PG = (P0.milestone_gate && typeof P0.milestone_gate === 'object') ? P0.mil
 const PB = (P0.browser && typeof P0.browser === 'object') ? P0.browser : {}
 const PV = (P0.validate && typeof P0.validate === 'object') ? P0.validate : {}
 let livePosture = {
+  // P5.5: the scope tier the trivial-tier levers key on. Fail-soft to 'standard' — an absent
+  // or unknown tier means NO lever fires (false-standard costs minutes, false-trivial costs gates).
+  scope_tier: P0.scope_tier === 'trivial' ? 'trivial' : 'standard',
   research_topics_max: typeof P0.research_topics_max === 'number' ? P0.research_topics_max : GAUGE_CONFIG.research_topics_base,
   planning: typeof P0.planning === 'string' ? P0.planning : 'single',
   plan_validation_rounds: typeof P0.plan_validation_rounds === 'number' ? P0.plan_validation_rounds : 1,
@@ -412,7 +415,13 @@ function slicePlanPrompt(m, surf, scs, built, note) {
     `</inputs>\n\n` +
     `<constraints>\n` +
     `- ${scope}\n` +
-    `- A slice = ONE distinct, independently-runnable user-facing behavior that can be invoked and verified on its own by a single runnable check (a CLI subcommand, an API call, a rendered-and-exercised page, one pure function). Decompose the milestone by such behaviors, in dependency order: a multi-command CLI gives a slice per command (add / list / done / rm), a CRUD resource a slice per operation.\n` +
+    `- A slice = ONE distinct, independently-runnable user-facing behavior that can be invoked and verified on its own by a single runnable check (a CLI subcommand, an API call, a rendered-and-exercised page, one pure function). ` +
+    // P5.5 lever 1: at trivial tier the slice BUDGET rules the grouping (Run A: 16 SCs went into
+    // 5 slices where 2-3 carried identical verification value — the per-slice fixed cost is where
+    // the trivial tier bleeds). At standard, the pre-P5.5 text rides byte-identical.
+    (livePosture.scope_tier === 'trivial'
+      ? `Decompose the milestone by such behaviors in dependency order — then GROUP toward the budget: at trivial scope (the Gauge's ruling) the slice budget is the sizing authority, not behavior count. Group ADJACENT behaviors on the same seam (same file cluster, same runnable check family) into one slice up to the budget — the trial runs the cumulative SC set and regressions are observed per-trial, so grouping loses no verification value; a multi-command CLI is two or three grouped slices, not one per command.\n`
+      : `Decompose the milestone by such behaviors, in dependency order: a multi-command CLI gives a slice per command (add / list / done / rm), a CRUD resource a slice per operation.\n`) +
     `- Do NOT manufacture slices. If a candidate part has no runnable check distinct from another's, FOLD it. A single render artifact (one page — its hero, countdown, and rows share the one render check), one endpoint, or one pure function is ONE slice; a region that only renders within a page is never its own slice. Scaffolding, packaging, config, and shared storage are NEVER their own slice — they ride inside the FIRST behavior slice that needs them (e.g. the JSON store folds into add).\n` +
     `- SC coverage is ARITHMETIC, not judgment: every Law check id listed above must appear in EXACTLY ONE slice's sc_ids (none missing, none twice), and every slice must flip at least one. 'probe'-kind checks are deferred templates this phase — still assign each to the slice that builds its surface.\n` +
     `- Slice budget (the Gauge): size each slice at roughly ≤ ${livePosture.slice_budget_hours}h human-equivalent of work; smaller, verifiable slices beat bloated ones. Emit at most ${MAX_SLICES_PER_MILESTONE} slices.\n` +

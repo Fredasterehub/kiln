@@ -604,6 +604,33 @@ test('milestone gate: min_slices_for_tribunal is the posture dial — raised to 
   assert.equal(result.built[0].qa, 'QA_PASS')
 })
 
+test('slicer consolidation (P5.5): trivial posture briefs the budget-grouping directive; standard keeps the pre-P5.5 text byte-identical; the high-dims/effort-0 trap reads standard', async () => {
+  const { posture: gaugePosture } = await import('../../plugins/kiln/src/gauge.mjs')
+  const gaugeConfig = JSON.parse(readFileSync(new URL('../../plugins/kiln/gauge-config.json', import.meta.url), 'utf8'))
+  const mkProf = (over = {}) => Object.fromEntries(['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'].map((d) => [d, { score: over[d] || 0, evidence: 'e' }]))
+  const PRE_P55_TEXT = 'Decompose the milestone by such behaviors, in dependency order: a multi-command CLI gives a slice per command (add / list / done / rm), a CRUD resource a slice per operation.'
+  const DIRECTIVE = 'the slice budget is the sizing authority, not behavior count'
+  const sliceBrief = (calls) => calls.find((c) => c.label.startsWith('krs-one:slice-plan')).prompt
+
+  // trivial (all-zero) => the grouping directive, and the per-command example is GONE
+  const triv = await runBuild({ ...baseArgs, posture: gaugePosture(mkProf(), gaugeConfig) }, mkRespond())
+  assert.ok(sliceBrief(triv.calls).includes(DIRECTIVE), 'trivial tier briefs the budget-grouping directive')
+  assert.ok(!sliceBrief(triv.calls).includes(PRE_P55_TEXT), 'the per-command fragmentation example dies at trivial tier')
+
+  // standard (one elevated dim) => byte-identical pre-P5.5 sentence, no directive
+  const std = await runBuild({ ...baseArgs, posture: gaugePosture(mkProf({ D6: 1 }), gaugeConfig) }, mkRespond())
+  assert.ok(sliceBrief(std.calls).includes(PRE_P55_TEXT), 'standard tier keeps the pre-P5.5 decomposition text verbatim')
+  assert.ok(!sliceBrief(std.calls).includes(DIRECTIVE), 'no directive at standard')
+
+  // the r1 trap: high dims, effort 0 => standard behavior
+  const trap = await runBuild({ ...baseArgs, posture: gaugePosture(mkProf({ D1: 2, D2: 2, D5: 2, D6: 2, D7: 2 }), gaugeConfig) }, mkRespond())
+  assert.ok(sliceBrief(trap.calls).includes(PRE_P55_TEXT) && !sliceBrief(trap.calls).includes(DIRECTIVE), 'high-dims/effort-0 reads standard')
+
+  // absent posture (resume compatibility) => fail-soft standard
+  const bare = await runBuild(baseArgs, mkRespond())
+  assert.ok(sliceBrief(bare.calls).includes(PRE_P55_TEXT) && !sliceBrief(bare.calls).includes(DIRECTIVE), 'absent posture fails soft to standard')
+})
+
 test('milestone gate chain (P5.5): the REAL posture() at an all-zero (trivial) profile routes a 2-slice milestone to the skip path with goal-backward still run', async () => {
   const { posture: gaugePosture } = await import('../../plugins/kiln/src/gauge.mjs')
   const gaugeConfig = JSON.parse(readFileSync(new URL('../../plugins/kiln/gauge-config.json', import.meta.url), 'utf8'))
