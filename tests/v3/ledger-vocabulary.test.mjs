@@ -116,6 +116,7 @@ const WORKFLOW_TYPES = [
   'law_red_auto_reject', 'probe_unavailable', 'slice_plan_invalid', 'slice_plan_invalidated',
   'slice_plan_replanned', 'tamper_auto_reject', 'tier2_traversal', 'validate_verdict',
   'verification_degraded',
+  'vision_compiled',
 ]
 
 test('round-trip: append accepts each widened workflow type; validate + project exit 0', () => {

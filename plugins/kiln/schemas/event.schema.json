@@ -17,7 +17,7 @@
       "description": "ISO-8601 timestamp, assigned by kiln-state.mjs append from the system clock"
     },
     "type": {
-      "enum": ["run_init", "stage_started", "stage_completed", "gate_decision", "posture_set", "posture_escalated", "check_result", "commit", "evidence", "escalation", "note", "browser_leak_suspect", "browser_lease", "browser_sweep", "gate_only_refused", "gate_skipped", "goal_audit_failure", "law_red_auto_reject", "probe_unavailable", "slice_plan_invalid", "slice_plan_invalidated", "slice_plan_replanned", "tamper_auto_reject", "tier2_traversal", "validate_verdict", "verification_degraded"],
+      "enum": ["run_init", "stage_started", "stage_completed", "gate_decision", "posture_set", "posture_escalated", "check_result", "commit", "evidence", "escalation", "note", "browser_leak_suspect", "browser_lease", "browser_sweep", "gate_only_refused", "gate_skipped", "goal_audit_failure", "law_red_auto_reject", "probe_unavailable", "slice_plan_invalid", "slice_plan_invalidated", "slice_plan_replanned", "tamper_auto_reject", "tier2_traversal", "validate_verdict", "verification_degraded", "vision_compiled"],
       "description": "Projection folds unknown types into nothing without erroring (forward compat), but validate holds the ledger to this enum"
     },
     "stage": {
