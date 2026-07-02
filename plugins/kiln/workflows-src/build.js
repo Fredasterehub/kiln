@@ -15,7 +15,7 @@ export const meta = {
 const A = normalizeArgs(args)
 const kilnDir = A.kilnDir
 const projectPath = A.projectPath
-if (!kilnDir || !projectPath) throw new Error('build.js requires args.kilnDir and args.projectPath')
+if (!kilnDir || !projectPath) throw new Error('build.js requires args.kilnDir and args.projectPath (absolute paths — the conductor resolves them; never launch with relative paths). Received args of type ' + typeof args)
 const codexAvailable = A.codexAvailable !== false
 const testingRigor = ['tdd', 'standard', 'minimal'].includes(String(A.testingRigor || '').toLowerCase()) ? String(A.testingRigor).toLowerCase() : 'standard'
 const milestoneLimit = typeof A.milestoneLimit === 'number' ? A.milestoneLimit : Infinity
@@ -936,7 +936,7 @@ log('The kiln grows hotter')
 // deterministic check runs (BLUEPRINT §3.4 floors) cannot execute. Building anyway would be a
 // silent v2 regression; the conductor must relaunch with pluginRoot.
 if (!pluginRoot) {
-  log('BUILD CANNOT START — pluginRoot absent: the kiln-law CLI cannot be located, so the §3.4 Law floor (tamper gate + deterministic check runs) cannot execute. The conductor must escalate, never start an ungated build.')
+  log('BUILD CANNOT START — pluginRoot absent: the kiln-law CLI cannot be located, so the §3.4 Law floor (tamper gate + deterministic check runs) cannot execute. Fix: relaunch with args.pluginRoot = the absolute $PLUGIN_ROOT the conductor resolved at onboarding (${CLAUDE_PLUGIN_ROOT} is unset inside a launched Workflow). Never start an ungated build.')
   return { built: [], passed: [], all_passed: false, law_gated: false, split_required: [], reason: 'pluginRoot absent — the kiln-law CLI cannot be located' }
 }
 // Floor gate 2: the Law must be locked. One haiku reads law.json and transcribes the check index;

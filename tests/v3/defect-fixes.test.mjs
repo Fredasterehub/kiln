@@ -43,7 +43,7 @@ test('fix 4 — codex temp file is mktemp-minted; the fixed collision path is go
 })
 
 test('fix 5 — report.js throws early when projectPath is missing, same style as the kilnDir check', () => {
-  assert.ok(report.includes("throw new Error('report.js requires args.kilnDir and args.projectPath')"))
+  assert.ok(report.includes("throw new Error('report.js requires args.kilnDir and args.projectPath (absolute paths — the conductor resolves them; never launch with relative paths). Received args of type ' + typeof args)"))
 })
 
 test('fix 6 — research.js zero-topics path returns early with empty results and an honest log', () => {

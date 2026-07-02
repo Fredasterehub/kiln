@@ -313,15 +313,15 @@ into a re-run of architecture. If `plan_approval: auto`, render *"Athena nods…
 Each is one shipped workflow script. You launch it, wait for the completion notification, read the
 artifact summary it wrote to `.kiln/`, update STATE, render the transition, advance.
 
-| Stage | Launch | Reads | Writes |
-|---|---|---|---|
-| Brainstorm→VISION | `workflows/vision.js` | brainstorm-ledger.jsonl | `.kiln/docs/VISION.md` (compiled + gated; the brainstorm-stage compile leg — launched from the Brainstorm handler above, not a top-level stage) |
-| Gauge | `workflows/gauge.js` | VISION.md (+codebase-map.md) | `state.json.posture` / STATE `posture:`, ledger `posture_set` |
-| Research | `workflows/research.js` | VISION.md | `.kiln/docs/research.md` (only when topics > 0; the §3.2 zero-topics route writes none and returns `research_file: null`) |
-| Architecture | `workflows/architecture.js` | research.md (if present), VISION.md | `.kiln/master-plan.md`, architecture docs |
-| Build | `workflows/build.js` | master-plan.md | source code, living docs, tests |
-| Validate | `workflows/validate.js` | master-plan.md, built app | `.kiln/validation/report.md` |
-| Report | `workflows/report.js` | all .kiln artifacts + built project | `.kiln/REPORT.md` |
+| Stage | Launch | Args (minimal + options) | Reads | Writes |
+|---|---|---|---|---|
+| Brainstorm→VISION | `workflows/vision.js` | `kilnDir`, `projectPath`, **`pluginRoot`** (load-bearing) | brainstorm-ledger.jsonl | `.kiln/docs/VISION.md` (compiled + gated; the brainstorm-stage compile leg — launched from the Brainstorm handler above, not a top-level stage) |
+| Gauge | `workflows/gauge.js` | `kilnDir`, `projectPath`, `pluginRoot` (+`postureOverride`, `assessorModel`, `codexAvailable`) | VISION.md (+codebase-map.md) | `state.json.posture` / STATE `posture:`, ledger `posture_set` |
+| Research | `workflows/research.js` | `kilnDir`, `projectPath` (+`mode`, `testingRigor`, `topicsMax`) | VISION.md | `.kiln/docs/research.md` (only when topics > 0; the §3.2 zero-topics route writes none and returns `research_file: null`) |
+| Architecture | `workflows/architecture.js` | `kilnDir`, `projectPath` (+`mode`, `testingRigor`, `codexAvailable`, `planning`, `validationRounds`, `lawModel`, `pluginRoot`) | research.md (if present), VISION.md | `.kiln/master-plan.md`, architecture docs |
+| Build | `workflows/build.js` | `kilnDir`, `projectPath`, **`pluginRoot`** (load-bearing), `posture`, `runToken` (+`codexAvailable`, `testingRigor`, `milestoneLimit`, `uiBuild`, `gateOnly`) | master-plan.md | source code, living docs, tests |
+| Validate | `workflows/validate.js` | `kilnDir`, `projectPath`, `pluginRoot`, `posture`, `runToken` (+`testingRigor`, `codexAvailable`, `designPresent` hint) | master-plan.md, built app | `.kiln/validation/report.md` |
+| Report | `workflows/report.js` | `kilnDir`, `projectPath` | all .kiln artifacts + built project | `.kiln/REPORT.md` |
 
 The `VISION.md` that Gauge, Research, and Architecture read is the **v3 compiled + gated artifact**
 `vision.js` produces from the brainstorm ledger — its YAML frontmatter (`tier`, `visual_direction`,

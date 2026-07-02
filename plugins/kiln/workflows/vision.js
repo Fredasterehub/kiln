@@ -20,7 +20,7 @@ function normalizeArgs(args) {
 const A = normalizeArgs(args)
 const kilnDir = A.kilnDir
 const projectPath = A.projectPath
-if (!kilnDir || !projectPath) throw new Error('vision.js requires args.kilnDir and args.projectPath')
+if (!kilnDir || !projectPath) throw new Error('vision.js requires args.kilnDir and args.projectPath (absolute paths — the conductor resolves them; never launch with relative paths). Received args of type ' + typeof args)
 // pluginRoot is the conductor-resolved absolute $CLAUDE_PLUGIN_ROOT (a launched Workflow can't see
 // ${CLAUDE_PLUGIN_ROOT}). LOAD-BEARING here — unlike an optional ledger append, the kiln-vision CLI
 // IS this workflow's floor and verdict: without it there is no mechanical gate, and a compile
@@ -105,7 +105,7 @@ log(spin(0))
 await runLedger('stage_started', { leg: 'vision-compile' }, 'The Gate')
 
 if (!pluginRoot) {
-  log('VISION CANNOT COMPILE — pluginRoot absent, the kiln-vision gate CLI cannot be located. The conductor must escalate; a gateless compile is self-graded homework.')
+  log('VISION CANNOT COMPILE — pluginRoot absent, the kiln-vision gate CLI cannot be located. Fix: relaunch with args.pluginRoot = the absolute $PLUGIN_ROOT the conductor resolved at onboarding (${CLAUDE_PLUGIN_ROOT} is unset inside a launched Workflow). A gateless compile is self-graded homework.')
   return { vision_valid: false, vision_file: visionFile, reason: 'pluginRoot absent — the kiln-vision gate CLI is load-bearing for this leg', violations: [] }
 }
 

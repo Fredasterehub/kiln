@@ -364,3 +364,35 @@ test('T4 (d): absent visualDirection ⇒ the foundation agent judges, given the 
   assert.match(fp, /No visual direction specified\. Build will proceed without design system generation\./, 'the EXACT decline bytes are quoted, not the elided "..." the scout flagged')
   assert.doesNotMatch(fp, /section 12/, 'the "section 12" reference is retired (v3 renumbered)')
 })
+
+
+// ── P6 T1: required-arg validation — every workflow refuses an empty launch VERBOSELY ────────────
+
+const ALL_WORKFLOWS = ['mapping', 'gauge', 'research', 'architecture', 'vision', 'build', 'validate', 'report']
+
+test('P6 T1: every workflow throws a verbose required-arg error on an empty launch (absolute-path guidance + type diagnostic)', async () => {
+  for (const name of ALL_WORKFLOWS) {
+    const file = fileURLToPath(new URL(`../../plugins/kiln/workflows/${name}.js`, import.meta.url))
+    await assert.rejects(
+      () => runWorkflow(file, {}, () => null),
+      (err) => {
+        assert.match(err.message, new RegExp(`${name}\\.js requires args\\.`), `${name}: names itself and the missing arg`)
+        assert.match(err.message, /absolute path/, `${name}: carries the absolute-path guidance`)
+        assert.match(err.message, /Received args of type/, `${name}: carries the type diagnostic`)
+        return true
+      },
+      `${name}.js must refuse an empty launch`
+    )
+  }
+})
+
+test('P6 T1: the load-bearing pluginRoot gates carry the FIX in their message (vision + build)', async () => {
+  const VISION = fileURLToPath(new URL('../../plugins/kiln/workflows/vision.js', import.meta.url))
+  const v = await runWorkflow(VISION, { kilnDir: '/tmp/nonexistent-kiln/.kiln', projectPath: '/tmp/nonexistent-kiln' }, () => null)
+  assert.match(v.result.reason, /pluginRoot absent/)
+  assert.ok(v.log.some((l) => /Fix: relaunch with args\.pluginRoot/.test(l)), 'vision names the fix')
+  const BUILD = fileURLToPath(new URL('../../plugins/kiln/workflows/build.js', import.meta.url))
+  const b = await runWorkflow(BUILD, { kilnDir: '/tmp/nonexistent-kiln/.kiln', projectPath: '/tmp/nonexistent-kiln' }, () => null)
+  assert.match(b.result.reason, /pluginRoot absent/)
+  assert.ok(b.log.some((l) => /Fix: relaunch with args\.pluginRoot/.test(l)), 'build names the fix')
+})

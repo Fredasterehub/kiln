@@ -18,7 +18,7 @@ function normalizeArgs(args) {
 const A = normalizeArgs(args)
 const projectPath = A.projectPath
 const kilnDir = A.kilnDir
-if (!projectPath || !kilnDir) throw new Error('mapping.js requires args.projectPath and args.kilnDir')
+if (!projectPath || !kilnDir) throw new Error('mapping.js requires args.projectPath and args.kilnDir (absolute paths — the conductor resolves them; never launch with relative paths). Received args of type ' + typeof args)
 const mapFile = `${kilnDir}/docs/codebase-map.md`
 
 // ── MODEL_VOICE shell (Opus only; inlined from src/voice.mjs by the bundler) ──

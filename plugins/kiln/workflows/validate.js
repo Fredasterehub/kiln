@@ -10,7 +10,7 @@ export const meta = {
   ],
 }
 
-// ── args: { kilnDir, projectPath, testingRigor, codexAvailable, designPresent, posture, pluginRoot } ──
+// ── args: { kilnDir, projectPath, testingRigor, codexAvailable, designPresent, posture, pluginRoot, runToken } ──
 function normalizeArgs(args) {
   if (typeof args === 'string') {
     try { args = JSON.parse(args) } catch (e) { return { __parse_error: true } }
@@ -20,7 +20,7 @@ function normalizeArgs(args) {
 const A = normalizeArgs(args)
 const kilnDir = A.kilnDir
 const projectPath = A.projectPath
-if (!kilnDir || !projectPath) throw new Error('validate.js requires args.kilnDir and args.projectPath')
+if (!kilnDir || !projectPath) throw new Error('validate.js requires args.kilnDir and args.projectPath (absolute paths — the conductor resolves them; never launch with relative paths). Received args of type ' + typeof args)
 const codexAvailable = A.codexAvailable !== false
 // designPresent is a conductor HINT; the workflow self-detects design/ from disk (§4 self-validation
 // — solve, don't punt) so a wrong/absent hint never silently skips or runs the design-QA leg.
