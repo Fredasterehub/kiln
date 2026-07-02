@@ -261,7 +261,7 @@
   },
   "algalon-the-observer": {
     "alias": "Sentinel",
-    "role": "quality guardian (sonnet); the Observer — the browser-leak watch in build and validate",
+    "role": "quality guardian; the Observer — the browser-leak watch in build and validate",
     "step": 5,
     "spawn_name": "sentinel",
     "quotes": [

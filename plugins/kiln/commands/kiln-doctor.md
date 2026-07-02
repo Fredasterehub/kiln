@@ -54,5 +54,9 @@ Interpretation rules:
 - **READY** otherwise.
 - If a Kiln run is in progress (`.kiln/STATE.md` present), report the current `stage`,
   `plan_approval`, and `build_iteration` so the operator knows resume will pick up there.
+- When you report **READY (degraded)** for an absent Codex CLI, name the Sonnet build path
+  as Miyamoto's ladder, not a downgrade: *the ladder is Miyamoto's design &mdash; every tier
+  is a complete instrument, not a degraded one.* The forge still runs at full craft; it just
+  climbs a different rung.
 
 End with one sardonic Kiln line appropriate to the verdict.

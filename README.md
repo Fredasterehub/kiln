@@ -93,7 +93,7 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 > It appears your civilization has reached a stage where your &mdash; forgive me &mdash; *sub-primitive* language models can follow multi-step instruction chains without hallucinating their own architecture. This is genuinely exciting. By your standards. By mine it's a Tuesday.
 >
-> I previously expressed myself through heavier forms. npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 27 personas across 6 workflows, 2 skills, and 2 commands. Drop the folder. Fire the command. That's it.
+> I previously expressed myself through heavier forms. npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 34 personas across 8 workflows, 2 skills, and 2 commands. Drop the folder. Fire the command. That's it.
 
 <br>
 
@@ -179,17 +179,22 @@ claude plugin uninstall kiln@kiln     # remove
 
 ## 👥 The Crew
 
-The pipeline wears faces. Each one has a single job, a single voice, a single obsession &mdash; **27 personas** in all. They are my hands, not separate products: most are worn *inline* by a workflow as it runs. Only Da Vinci ships as a teammate you actually talk to.
+The pipeline wears faces. Each one has a single job, a single voice, a single obsession &mdash; **34 personas** in all. They are my hands, not separate products: most are worn *inline* by a workflow as it runs. Only Da Vinci ships as a teammate you actually talk to.
 
 | | Persona | Role |
 |:--|:--|:--|
-| 🎨 | **Da Vinci** | Brainstorm facilitator &mdash; sees what you meant, not just what you said. The one teammate you converse with. |
-| 🔍 | **MI6 & field agents** | Research &mdash; the detective desk gathers intelligence on your stack, domain, and open questions. |
-| 🏛️ | **Confucius · Plato · Athena · Numerobis** | Architecture &mdash; the philosophers argue so your design doesn't have to. |
+| 📐 | **Alpha** | The Assessor &mdash; takes the measure of the work before a line is written, scoring its complexity so the forge sets the right heat. |
+| 🎨 | **Da Vinci** | Brainstorm facilitator &mdash; sees what you meant, not just what you said. The one teammate you actually converse with. |
+| 🗂️ | **Aristotle** | The systematizer &mdash; compiles the loose sketch of your conversation into an ordered vision, and won't sign off until it holds together. |
+| 🔍 | **MI6 & the field operative** | Research &mdash; the detective desk gathers intelligence on your stack, domain, and open questions. Two seats here; the detective codenames you'll see in the logs (Sherlock, Poirot, and company) are the same desk in different hats, not extra personas. |
+| 🏛️ | **Confucius · Plato · Athena · Numerobis · Asimov** | Architecture &mdash; the philosophers argue so your design doesn't have to, and Asimov the Lawgiver pins the acceptance criteria into law. |
+| 🥋 | **Miyamoto** | Graceful degradation &mdash; the Claude-side planner who steps in when Codex isn't installed. Every tier is a complete instrument, not a lesser one. |
 | 🎤 | **KRS-One** | Slicing &mdash; breaks the work into vertical, runnable pieces, one at a time. |
 | ⚙️ | **The build pool** | Builders and reviewers, paired by model family. One writes, the other judges &mdash; never the same family. |
-| ⚖️ | **Ken · Ryu · Judge Dredd** | The tribunal &mdash; independent cross-family review, then a binary verdict. |
+| 🛡️ | **Sentinel** | The Observer &mdash; the quiet watch through build and validate that catches a browser left open before it leaks into the next slice. |
+| ⚖️ | **Ken · Ryu · Denzel · Judge Dredd** | The tribunal &mdash; Ken and Ryu review across families, Denzel the Negotiator reconciles their two reports into one by pure arithmetic, and Judge Dredd hands down the binary verdict. |
 | 👁️ | **Argus** | Validation &mdash; runs the app and believes nothing it cannot see. |
+| 🪶 | **Thoth** | The Scribe &mdash; keeps the run ledger across every stage. Write it down or it never happened. |
 | 📋 | **Omega** | The report &mdash; tells you the truth, even when it's partial. |
 
 <br>
@@ -200,6 +205,7 @@ A curated timeline. Not every commit &mdash; just the ones that changed the shap
 
 | | Milestone | What happened |
 |:--|:--|:--|
+| **v3.0** | **The Reserved Seven Return** | v2 shelved seven names to travel light. v3 gave each of them a seat that actually runs. The Assessor got a Gauge to size the work, the Lawgiver got a Law to pin the acceptance criteria, the Scribe got a ledger that makes "write it down or it never happened" literal, the Observer got the watch that catches a leaked browser, the systematizer got the vision it compiles from your conversation, and the fallback planner got his ladder &mdash; every tier a complete instrument, not a lesser one. The Negotiator won every argument at last, by becoming the arithmetic that reconciles two reviews into one. The roster reads 34 again, and every name is a seat the engine fills. |
 | **v2.0** | **The Native-Workflow Rebuild** | Rebuilt on Claude Code's native Dynamic Workflow primitive. Persistent teams, ordered SendMessage, and a wall of PreToolUse hooks &mdash; gone. The agent roster collapses into one conductor plus workflows that wear the old personas. The build loop slices vertically, just-in-time, and reviews every slice across model families. Lighter. Quieter. Still honest. |
 | **v1.x** | **The Teams Era** | The first working forge. A seven-step pipeline driven by hooks and per-step teams. It proved the idea: a sentence in, a repository out. |
 
@@ -258,7 +264,7 @@ Adapted from the [BMAD Method](https://github.com/bmad-code-org/BMAD-METHOD)'s s
 | | |
 |:--|:--|
 | **2 skills** | The pipeline conductor (kiln-fire) and the brainstorm playbook (kiln-brainstorm). |
-| **6 Dynamic Workflows** | Mapping, research, architecture, build, validate, report. |
+| **8 Dynamic Workflows** | Gauge, mapping, research, architecture, vision, build, validate, report. |
 | **1 interactive agent** | `the-creator` (Da Vinci) &mdash; the brainstorm teammate. |
 | **2 commands** | `/kiln-fire`, `/kiln-doctor`. |
 
