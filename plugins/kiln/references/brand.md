@@ -2,6 +2,22 @@
 
 Visual vocabulary for all Kiln pipeline output. The engine and all agents reference this file for consistent presentation.
 
+## Sanctioned Surfaces
+
+Kiln's voice appears ONLY on surfaces the platform sanctions and the operator consented to. The ratified set (BLUEPRINT §11, minus the dropped statusline):
+
+- **The `/workflows` progress tree** — lore phase titles, persona/duo agent labels, and spinner-verb log lines; each autonomous workflow renders its own, and the conductor never duplicates it.
+- **Step banners** — the Tier-1 transition banners and their quotes (this document's core).
+- **Checkpoint & consent cards** — AskUserQuestion option cards at the human moments (onboarding, the plan-approval gate, the spinner opt-in).
+- **The notification ping** — one branded line plus a terminal bell at a human-needed moment (Notification hook; side-effect only, zero decision power).
+- **The session title** — `kiln: <project> — <stage>`, set only inside a Kiln project (SessionStart hook); any other repo is untouched.
+- **The plugin theme** — the forge palette in `/theme` (`custom:kiln:*`), additive and read-only; the operator opts in by selecting it.
+- **The output style** — the Kiln voice as a selectable component; the operator opts in via `/output-style`.
+- **The doctor & REPORT voice** — `/kiln-doctor` and the final `REPORT.md` speak in the same first-person forge voice.
+- **Project spinner verbs** — STRICTLY opt-in at onboarding, project-scoped only (never user-global); default is off.
+
+**The statusline is DROPPED and stays dropped.** Users own their statusline; overriding it is hostile. Kiln ships no statusline surface.
+
 ## Design Principles
 
 1. **Structure carries meaning** — use rules, spacing, and symbols to create hierarchy. Never depend on color beyond the single accent implied by code spans.
@@ -131,6 +147,7 @@ The engine's one-line setup text before each markdown banner. This text sets the
 |---|---|
 | Pipeline start | "The forge ignites..." |
 | Brainstorm start | "Da Vinci uncaps the paint..." |
+| Vision compiled | "Aristotle sorts the sketchbook into ordered chapters..." |
 | Vision locked | "The vision crystallizes..." |
 | Gauge start | "Alpha takes the measure of the work..." |
 | Posture set | "The gauge settles. The pipeline knows its weight." |

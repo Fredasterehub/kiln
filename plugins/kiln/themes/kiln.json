@@ -1,0 +1,9 @@
+{
+  "name": "Kiln — Forge",
+  "base": "dark",
+  "overrides": {
+    "claude": "#E8823C",
+    "error": "#E24A3B",
+    "success": "#5FB98A"
+  }
+}

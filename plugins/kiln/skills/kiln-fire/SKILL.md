@@ -137,6 +137,15 @@ surface and onboarding is cheap. Detect first, then confirm.
      yields). The floors always run regardless of this choice. Store the mapped value as
      `posture_override` for the Gauge stage launch.
    - **Stack hint** *(optional)* — let them steer language/framework, or `Let Kiln decide`.
+
+   **Spinner-verbs offer (offer-only, its own card).** After the setup round, make ONE more
+   offer with **AskUserQuestion** — never impose: *May Kiln flavor this project's progress spinner
+   with forge verbs?* `Yes, forge verbs` / `No, leave it default`. This is the only surface that
+   writes to the operator's machine config, so it stays strictly consent-framed and strictly
+   project-scoped. Ask it **exactly once** — a resume routes to a stage handler and never re-onboards,
+   so it is never re-asked. Record the answer as `spinner_verbs: accept|decline` and carry it to
+   step 5 (written to `project-brief.md` there either way; on `accept`, also into the project's
+   `.claude/settings.json`).
 4. **Brownfield only:** run the mapping workflow to understand the existing code before brainstorm:
    `Workflow({scriptPath: "$PLUGIN_ROOT/workflows/mapping.js", args: {projectPath: "<abs>", kilnDir: "<abs>/.kiln"}})`.
    For brownfield the `project_path` is the existing codebase dir, so both args are known here. The
@@ -169,8 +178,32 @@ surface and onboarding is cheap. Detect first, then confirm.
    `<project_path>/.kiln/docs/project-brief.md` (intent, type, constraints, testing rigor, stack
    hint, **the `posture_override` from the Rigor card** — `null`/`max`/`fast` — so a cross-session
    resume that reaches the Gauge stage recovers the operator's rigor choice from the brief, **and the
-   `brainstorm_intake` choice** — `full`/`express` — so the Brainstorm stage recovers it on resume).
+   `brainstorm_intake` choice** — `full`/`express` — so the Brainstorm stage recovers it on resume,
+   **and the `spinner_verbs` choice** — `accept`/`decline` — so the record of the opt-in persists).
    Stamp `step_onboarding_completed_at`.
+
+   **Spinner opt-in write (only on `spinner_verbs: accept`).** The write goes to
+   `<project_path>/.claude/settings.json` — the PROJECT's settings, **never** the user-global
+   `~/.claude/settings.json` — and it MERGES: add/replace exactly two keys, preserving every other
+   key the operator may have there. Do it as a deterministic read-parse-merge-write, never a
+   whole-file rewrite from memory (an existing settings.json carries operator keys you must not lose):
+   ```bash
+   node -e '
+   const fs = require("fs"), path = require("path");
+   const [file, verbsFile] = process.argv.slice(1);
+   const verbs = JSON.parse(fs.readFileSync(verbsFile, "utf8")).generic;
+   let s = {}; try { s = JSON.parse(fs.readFileSync(file, "utf8")) } catch {}
+   s.spinnerVerbs = { mode: "append", verbs };
+   s.spinnerTipsOverride = { tips: [
+     "Kiln keeps the whole run in .kiln/ — walk away and resume anytime.",
+     "Every persona you see is a real seat in the engine, not set dressing.",
+     "A long stage is the work, not a stall — the forge is patient."
+   ], excludeDefault: false };
+   fs.mkdirSync(path.dirname(file), { recursive: true });
+   fs.writeFileSync(file, JSON.stringify(s, null, 2) + "\n");
+   ' "<project_path>/.claude/settings.json" "$PLUGIN_ROOT/data/spinner-verbs.json"
+   ```
+   On `decline`, write nothing to settings — the `project-brief.md` record is the whole footprint.
 6. **From here on, resolve every `.kiln/` path and every workflow `projectPath`/`kilnDir` arg against
    the absolute `project_path`** — not against `./` (see *Path discipline*). Render the Tier-1 banner
    transitioning to **Brainstorm** and proceed.

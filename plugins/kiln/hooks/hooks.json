@@ -1,0 +1,29 @@
+{
+  "description": "Two micro hooks, side-effect only, no decision power (BLUEPRINT §11; platform-surfaces §3). Notification: one branded Kiln ping at the moments a human is needed. SessionStart: names the session after the run, but only inside a Kiln project.",
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "permission_prompt|idle_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ${CLAUDE_PLUGIN_ROOT}/hooks/notify.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ${CLAUDE_PLUGIN_ROOT}/hooks/session-title.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
