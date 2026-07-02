@@ -1,7 +1,7 @@
 {
   "_doc": "The Gauge's ONE versioned config (BLUEPRINT 3.3 normative block + the 3.2 mapping thresholds). Every threshold the posture mapping and the Sentinel ratchet consume lives here, unit-tested with posture() — never inline in workflow code. Dimension thresholds are min-thresholds: the rule fires at score >= value, and on the 0|1|2 ordinal domain a min of 2 is exactly the table's '=2'. Keys prefixed _doc_ are commentary only (JSON has no comments); consumers ignore them.",
 
-  "_doc_h80_human_hours": "Horizon anchor: the human-equivalent hours a current-generation model completes at ~80% success. Re-derived per model generation, not tuned ad hoc [R:complexity-assessment 5].",
+  "_doc_h80_human_hours": "Horizon anchor: the human-equivalent hours a current-generation model completes at ~80% success. Re-derived per model generation, not tuned ad hoc [R:complexity-assessment 5]. Derivation record 2026-07-02 (P5.5 T4): value HOLDS at 2 — the builder seats (Opus 4.8 / GPT-5.5) did not change generation; Sonnet 5 filled transport/analyst sonnet seats only, which the anchor does not key on. Re-derive when a BUILDER seat changes generation.",
   "h80_human_hours": 2,
 
   "_doc_messiness_discount": "Real-repo discount on the H80 horizon — benchmark tasks are cleaner than live codebases. Slice budget = h80_human_hours x messiness_discount human-equivalent.",
