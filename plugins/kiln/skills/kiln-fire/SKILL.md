@@ -279,6 +279,8 @@ stage never builds.
    - `postureOverride` is the `posture_override` you carried from the onboarding **Rigor** card
      (`null` / `'max'` / `'fast'`) — recover it from `project-brief.md` on a cross-session resume.
      `null` lets the Gauge decide; `'max'`/`'fast'` force the ceiling/floor (still above the floors).
+     When the operator skipped the Rigor card, the plugin setting is the default: `${user_config.posture}`
+     (`auto` ⇒ `null` — the Gauge decides; `max`/`fast` ⇒ that override).
    - `assessorModel` is the §8 Assessor slot for this capability tier (default `'opus'`; a
      Sonnet-only run passes `'sonnet'`).
    - `codexAvailable` is the kiln-doctor probe result (drives the cross-family second scorer at the
@@ -381,3 +383,8 @@ All output obeys `$PLUGIN_ROOT/references/brand.md` — the single owner of the 
 status symbols, transition lines, idle voice, and the agent quotes in `data/agents.json`. The one
 non-negotiable this skill restates: **one transition line + one banner per stage change** — never
 narrate the banner, and never repeat a persona quote within a session.
+The plugin setting `${user_config.theaterIntensity}` scales the show: `full` renders everything
+brand.md sanctions; `light` keeps banners + status symbols but drops transition lore/quotes;
+`off` is bare functional output — only the operative status lines (stage names, verdicts, file
+paths) — and the non-negotiable above still holds at every intensity (a stage change is always
+announced once, however plainly).

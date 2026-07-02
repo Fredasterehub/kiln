@@ -50,6 +50,7 @@ qa-review/
 .omc/
 state/
 .omx/
+.playwright-mcp/
 
 # Local workstation markers (not shipped)
 /.codex
