@@ -1,6 +1,6 @@
 ---
 name: kiln-fire
-description: Kiln pipeline conductor. Launches and resumes the 8-step software-creation pipeline (onboarding, brainstorm, gauge, research, architecture, build, validate, report). Use when the operator runs /kiln-fire, asks to build software with Kiln, or wants to resume a Kiln run. Drives onboarding inline, brainstorm via an interactive teammate, and the autonomous stages via native workflows.
+description: Kiln pipeline conductor. Launches and resumes the 8-step software-creation pipeline (onboarding, brainstorm, gauge, research, architecture, build, validate, report). Use when the operator runs /kiln-fire, asks to build software with Kiln, or wants to resume a Kiln run. Make sure to use this skill whenever the operator mentions building, forging, or shipping an app with Kiln, or resuming a .kiln/ run, even without the /kiln-fire command. Drives onboarding inline, brainstorm via an interactive teammate, and the autonomous stages via native workflows.
 ---
 
 # Kiln — the Conductor
@@ -29,26 +29,25 @@ advance. The operator session must stay pristine for the whole run.
 
 0. **Resolve your plugin root — do this before anything else.** `${CLAUDE_PLUGIN_ROOT}` is NOT
    expanded in this prompt text and is unset in tool-run bash, so it is never a usable literal path.
-   Resolve the real absolute root once with this bounded command. **Never `find /` for your own files.**
+   Resolve the real absolute root once by RUNNING the shared resolver — it self-locates inside the
+   plugin and confirms itself on the `kiln-fire` skill that only v2+ ships, so it never picks a stale
+   v1.5.x cache. **Never `find /` for your own files.**
    ```bash
-   PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
-   if [ -z "$PLUGIN_ROOT" ] || [ ! -f "$PLUGIN_ROOT/skills/kiln-fire/SKILL.md" ]; then
-     for d in "$HOME"/.claude/plugins/cache/*/kiln/[0-9]*/; do
-       [ -f "$d/skills/kiln-fire/SKILL.md" ] && { PLUGIN_ROOT="${d%/}"; break; }
-     done
-   fi
+   PLUGIN_ROOT="$(for d in "${CLAUDE_PLUGIN_ROOT:-}" "$HOME"/.claude/plugins/cache/*/kiln/[0-9]*/; do
+     [ -x "${d%/}/scripts/resolve-plugin-root.sh" ] && exec "${d%/}/scripts/resolve-plugin-root.sh"; done)"
+   [ -n "$PLUGIN_ROOT" ] || { echo "Kiln plugin root unresolved — the plugin isn't installed/enabled." >&2; exit 1; }
    echo "$PLUGIN_ROOT"
    ```
-   The glob keys on the `kiln-fire` skill, which only v2 ships (v1.5.x has `kiln-pipeline`/`kiln-protocol`),
-   so it uniquely finds this plugin. If it returns empty, tell the operator the Kiln plugin isn't
-   installed/enabled and stop — do not guess.
+   If it prints nothing or errors, tell the operator the Kiln plugin isn't installed/enabled and stop —
+   do not guess. (The resolver owns the resolution+validation logic; the loop above only *finds* the
+   script to run, with a loud one-line fallback when it is missing.)
 
    **Convention for the rest of this skill (and every stage handler, agent spawn, and workflow
    `scriptPath` added in later phases): write `$PLUGIN_ROOT` and mean the absolute path you resolved
    here.** `$PLUGIN_ROOT` is the only way this skill names its own files — the bare
    `${CLAUDE_PLUGIN_ROOT}` token must never reach a path argument or a `Workflow`/`Read`/`Bash` call.
-1. Read `$PLUGIN_ROOT/references/brand.md` once. All your output obeys it (markdown weight
-   system, Tier-1 step banners, status symbols `✓ ✗ ▶ ○ ◆ ◇`, no emojis in banners).
+1. Read `$PLUGIN_ROOT/references/brand.md` once — **all your output obeys it** (the single owner of
+   the weight system, Tier-1 banners, status symbols, transition lines, and idle voice).
 2. Read `$PLUGIN_ROOT/data/lore.json` (greetings + per-transition quotes) and
    `$PLUGIN_ROOT/data/spinner-verbs.json` (per-stage flavor for transition preambles and idle voice).
    Read `$PLUGIN_ROOT/data/agents.json` (persona aliases + quotes), `$PLUGIN_ROOT/references/kill-streaks.md`
@@ -79,16 +78,14 @@ hard requirement is obviously missing (no workflows, old Claude Code), tell the 
 The Claude Code session's working directory is **fixed at launch**; a bash `cd` does not move where
 the file tools resolve relative paths. So **never trust `./` for durable state.** Rules:
 
-- **Never `cd` in a Bash call.** Read plugin data by absolute path (`$PLUGIN_ROOT/data/agents.json`,
-  not `cd $PLUGIN_ROOT && … data/agents.json`). A `cd` that the harness doesn't auto-reset would
-  silently break `./.kiln/` resolution for the rest of the run. Pass absolute paths to every tool.
-
+- **Never `cd` in a Bash call.** Read plugin data by absolute path (`$PLUGIN_ROOT/data/agents.json`),
+  and pass absolute paths to every tool — a `cd` the harness doesn't auto-reset would silently break
+  `./.kiln/` resolution for the rest of the run.
 - **After onboarding, bind to the absolute `project_path` from STATE for everything** — all `.kiln/`
   artifact reads/writes and every `Workflow({args:{projectPath: "<abs>", kilnDir: "<abs>/.kiln"}})`.
   The `./.kiln/...` paths written elsewhere in this skill are shorthand; the real anchor is the
   absolute `project_path`. This lets the **initial run complete in one session even if the operator
-  launched `claude` from a parent dir and onboarding created a fresh sub-directory** — no exit, no
-  relaunch.
+  launched `claude` from a parent dir and onboarding created a fresh sub-directory** — no exit, no relaunch.
 - **Cross-session resume convention: launch `claude` from inside the project folder** (so cwd ==
   `project_path` and `./.kiln/STATE.md` resolves), or pass `/kiln-fire <project_path>` from anywhere.
   State that convention to the operator when onboarding creates a new directory (see Onboarding §5).
@@ -252,7 +249,7 @@ the VISION traces to a logged operator turn.
    - **`vision_valid: true`** → render *"The vision crystallizes…"*, update STATE (`stage: gauge`,
      `last_completed_stage: brainstorm`, stamp `step_brainstorm_completed_at`), **and hold the returned
      `visual_direction`** for this run — you thread it into the Architecture launch as `visualDirection`
-     (see the Architecture arg notes; the mechanical path r1 F6). Proceed to the **Gauge** stage (it
+     (see workflow-contracts.md; the mechanical path r1 F6). Proceed to the **Gauge** stage (it
      reads the fresh VISION before any autonomous stage runs).
    - **`vision_valid: false`** → do NOT advance. The return's typed `violations` (+ `reason`) name
      exactly what the session still owes. Judge: re-enter Da Vinci with the named gaps (re-spawn — the
@@ -295,8 +292,8 @@ stage never builds.
      ledger (kiln-state) — nothing more to write; the posture lives in `state.json.posture`.
    - Else write a one-line summary into STATE.md's `posture:` field, e.g.
      `posture: planning=<posture.planning> · research_cap=<posture.research_topics_max> · plan_rounds=<posture.plan_validation_rounds> · review=<posture.review.ui_effort_base>`.
-4. **Carry the posture-derived args into the downstream stage launches** (see the stage table and its
-   arg notes): research takes `topicsMax` = `posture.research_topics_max`; architecture takes
+4. **Carry the posture-derived args into the downstream stage launches** (see workflow-contracts.md):
+   research takes `topicsMax` = `posture.research_topics_max`; architecture takes
    `planning` = `posture.planning` and `validationRounds` = `posture.plan_validation_rounds`.
 5. Update STATE (`stage: research`, `last_completed_stage: gauge`, refresh `posture:`,
    `next_action`, stamp `step_gauge_completed_at`), render *"The gauge settles…"* (brand.md
@@ -323,160 +320,34 @@ artifact summary it wrote to `.kiln/`, update STATE, render the transition, adva
 | Validate | `workflows/validate.js` | `kilnDir`, `projectPath`, `pluginRoot`, `posture`, `runToken` (+`testingRigor`, `codexAvailable`, `designPresent` hint) | master-plan.md, built app | `.kiln/validation/report.md` |
 | Report | `workflows/report.js` | `kilnDir`, `projectPath` | all .kiln artifacts + built project | `.kiln/REPORT.md` |
 
-The `VISION.md` that Gauge, Research, and Architecture read is the **v3 compiled + gated artifact**
-`vision.js` produces from the brainstorm ledger — its YAML frontmatter (`tier`, `visual_direction`,
-`counts`, `open_questions`) is the authoritative machine surface those stages key on (research reads
-the frontmatter/section OQs; architecture threads `visual_direction`; the D-dims read the same VISION
-whether the tier is `express` or a facilitated tier).
+**The per-stage arg contract lives in `$PLUGIN_ROOT/references/workflow-contracts.md` — read it before
+launching any autonomous stage.** The routing-table row names each arg; that file says what it MEANS:
+the base launch pattern, the compiled-VISION frontmatter the stages key on, every option's semantics
+(`uiBuild` override, `milestoneLimit`, `topicsMax`, `planning`/`validationRounds`, `lawModel`,
+`designPresent`, the `visualDirection` thread), the run-token recipe, the gate-only retry, the
+workflow-tree lore surface, and the browser/resource discipline.
 
-Base launch pattern: `Workflow({scriptPath: "$PLUGIN_ROOT/workflows/<stage>.js", args: {kilnDir: "<abs>/.kiln", projectPath: "<abs>", testingRigor, codexAvailable}})`.
-Pass the absolute `$PLUGIN_ROOT`-resolved paths, the operator's `testing_rigor` from STATE, and
-`codexAvailable` from the kiln-doctor probe (drives the Codex-vs-Sonnet paths). `build.js` honors
-`testingRigor` (tdd/standard/minimal). The base pattern is a **launch convenience** — one shape for
-every stage, and a workflow simply ignores base args it doesn't read; the per-stage notes below are
-the authoritative consumption contract. Each stage adds the args it actually reads:
-- **Brainstorm→VISION** (`vision.js`, launched from the Brainstorm handler) takes ONLY `kilnDir`,
-  `projectPath`, and **`pluginRoot`** — `pluginRoot` is LOAD-BEARING here (it locates the `kiln-vision`
-  gate CLI, this leg's floor and verdict; absence fails CLOSED with a named reason, never a gateless
-  compile). It returns `{vision_valid, tier, counts, unresolved, visual_direction, …}`; you thread the
-  returned **`visual_direction`** into the Architecture launch as `visualDirection` (below).
-- **Gauge** takes `postureOverride`, `assessorModel`, `pluginRoot` (see the Gauge stage above). It is
-  the source of the posture-derived args every downstream stage reads.
-- **Research** also takes **`topicsMax`** = `posture.research_topics_max` (always a
-  positive integer — the §3.2 cap `2 + D3 + D5`). Passing it is the signal that the Gauge ran and
-  switches research to the §3.2 rule: topics come ONLY from high-priority before-build OQs, capped at
-  `topicsMax`, with NO lower floor — so **zero qualifying OQs ⇒ zero topics ⇒ no research.md is
-  written** and the stage returns `research_file: null`. **Omit it** (or pass nothing) and research.js
-  runs the verbatim v2 behavior instead: OQs plus load-bearing unknowns, a floor of 2 and a cap of 5,
-  so a run without a posture is unchanged (and always produces a research.md). Architecture tolerates
-  either outcome (next bullet).
-- **Architecture** also takes **`planning`** = `posture.planning`
-  (`'dual'`/`'single+redteam'`/`'single'`) and **`validationRounds`** = `posture.plan_validation_rounds`.
-  `planning` decides whether The Council (dual anonymized plans + divergence) runs: `'dual'` runs it,
-  `'single'`/`'single+redteam'` take the lite single-plan path (the cross-family red-team critique
-  `'single+redteam'` names is build-spine machinery scheduled for a later phase — BLUEPRINT §16 — so
-  in this phase it routes like `'single'`). `validationRounds` is the number of Athena VALIDATION
-  PASSES to run (BLUEPRINT §3.2 `plan_validation_rounds`, NOT a revision count): `1` ⇒ one pass / zero
-  revisions, `3` ⇒ three passes / ≤2 revisions. **Omit both** and architecture.js falls back to its
-  historical behavior (the foundation's `scope === 'trivial'` decides lite-vs-dual; 2 passes lite /
-  3 passes full) — a run without a posture is unchanged. Architecture also reads **`lawModel`** and
-  **`pluginRoot`**. `lawModel` is the §8 slot for Asimov the Lawgiver (compiles and revises the Law's
-  checks; default `'opus'` — pass another slot per capability tier). `pluginRoot` is the same absolute
-  `$PLUGIN_ROOT` from §0 — it locates the `kiln-law` CLI for the Law's dryrun and index/lock step;
-  omit it and the lock degrades to `law_locked: false` with a recorded reason — never a silent
-  proceed, never a stage crash. Architecture also takes an **optional `visualDirection`** — the boolean
-  `vision.js` returned at brainstorm (the mechanical path r1 F6: a workflow cannot read a file
-  in-script, so arg-threading is the only mechanical route). When you pass it, it **IS**
-  `has_visual_direction` — the decline-byte check lives in the vision gate now, so architecture's
-  foundation agent is NOT asked to re-judge it and design-token generation gates on your threaded value.
-  **Omit it** (a pre-v3 VISION, a harness run, or a cross-session resume that starts at architecture
-  without the brainstorm return in hand) and the foundation agent judges it from the VISION as the
-  pre-v3 fallback — a run without the thread is unchanged. Architecture self-detects whether research.md
-  exists (a cheap `ls` probe, the §4 self-validation discipline) and grounds in VISION.md directly when
-  the §3.2 zero-topics route wrote none — it never points an agent at a phantom research file.
-- **Build** also takes `milestoneLimit` (omit in production = all milestones), `uiBuild`,
-  `pluginRoot`, and — exactly like Validate — the whole **`posture`** object and a **`runToken`**.
-  **`uiBuild` defaults `false`** — set it `true` only for a genuinely pure-UI/static
-  deliverable (no backend). `uiBuild===true` forces build.js's `surfaceOf()` to route *every*
-  milestone to the UI builder, overriding each milestone's own `surface` tag, so a normal app left
-  at `false` lets architecture's per-milestone `surface` route backend/logic milestones correctly.
-  `pluginRoot` is the same absolute `$PLUGIN_ROOT` you resolved in §0 — a launched Workflow cannot
-  see `${CLAUDE_PLUGIN_ROOT}` (it is unset there), so build.js workers need the resolved path passed
-  in to Read plugin reference files by absolute path. Pass the **whole `posture` object**
-  (`state.json.posture`) — build.js reads its Gauge dials (`review.ui_effort_base`,
-  `min_slices_for_tribunal`, `browser.tier2_per_milestone`, and the validate-extras it carries
-  downstream); omit it and the entire build stage drops to v2-equivalent defaults. **`runToken`** is
-  conductor-minted per run (see *The run token* below) — build.js derives its `kbuild-…` browser-kill
-  token from it; omit it and it falls back to a per-project hash that is NOT unique across runs.
-  For the `gateOnly` retry arg, see *Build failure routing* below.
-- **Validate** also takes `designPresent`, `pluginRoot`, `posture`, and a **`runToken`** (same recipe
-  as Build — see *The run token* below; validate.js derives its `kval-…` browser-kill / lease token
-  from it, with the same non-unique per-project hash fallback when omitted).
-  `designPresent` is `true` if the architecture stage wrote a `design/` directory (a HINT only —
-  validate.js self-detects `design/` from disk, so a wrong/absent hint never mis-routes the design
-  QA leg). `pluginRoot` is the same absolute `$PLUGIN_ROOT` from §0 — LOAD-BEARING here: it locates
-  the `kiln-law` CLI (the deterministic Law floor — fresh install, then `verify` + `run` FULL +
-  `suite` as the real backstop) and `kiln-probe` (the Tier-2 scripted browser path + the token sweeps
-  + the browser lease). Pass the **whole `posture` object** (`state.json.posture`) — validate.js reads
-  its `validate.adversarial_pass` / `validate.second_family` dials (the D8=2 extras: a second
-  adversarial traversal pass and a second cross-family goal-backward auditor); omit it and validate
-  runs the floor without the extras. **Playwright MCP is NOT driven by autonomous validate** (an MCP
-  server is a persistent browser service, which §7 forbids in-loop) — there is no `playwrightMcp` arg.
-  The Tier-2 traversal uses the scripted, lease-gated, one-shot `kiln-probe` ORACLE only; if playwright
-  is absent on disk the UI criteria degrade honestly to `PARTIAL_PASS_STATIC_ONLY` (verification_class
-  recorded), never silently green. MCP stays a doctor-detected capability for the operator's
-  INTERACTIVE/manual visual QA, named as the manual alternative in the emitted `visual_qa_checklist`.
-  The **in-loop Tier-2 browser traversal is the v3 repeal of the v2 ban** — it runs INSIDE validate as
-  one bounded, swept, lease-gated evaluator (the browser is a subprocess with a deadline, never a
-  service); the out-of-loop `visual_qa_checklist` still ships as the optional operator re-check below.
-
-**The run token.** Build and Validate each derive their per-stage browser-kill token (`kbuild-…` /
-`kval-…`) from `args.runToken`. Workflow scripts cannot mint one — `Date.now()`/`Math.random` are
-forbidden inside them (the determinism guard that keeps resume reproducible), and the per-project hash
-fallback they fall to is NOT unique across runs. So **cross-run uniqueness is your job, here, where
-clocks are legal.** Mint ONE token per run, reuse it for every Build and Validate launch that run, and
-keep it in the inert charset `[A-Za-z0-9._-]` (it becomes a `pkill -f` / `readdir` pattern). Epoch
-seconds plus a short suffix is plenty — e.g. `1718200000-a1`. Mint a fresh one for a gate-only retry
-(below) so its sweep can't collide with the starved run's leftovers.
+**The run token (load-bearing here).** Build and Validate each derive their per-stage browser-kill
+token from `args.runToken`, and workflow scripts cannot mint one (the determinism guard). So
+cross-run uniqueness is **your** job, in this session where clocks are legal: mint ONE token per run,
+reuse it for every Build and Validate launch that run, keep it in the inert charset `[A-Za-z0-9._-]`
+(e.g. `1718200000-a1`), and mint a fresh one for a gate-only retry. Full recipe + gate-only routing:
+workflow-contracts.md.
 
 Validate failures feed corrections back to Build while `correction_cycle < 3`, then escalate to the
 operator. Use the matching transition lines from `brand.md` for each event.
 
-**Build failure routing — the gate-only retry.** When a build run returns `QA_FAIL` whose ONLY
-blocking finding is `goal-audit-failure` — or the gate was visibly *starved* (session death
-mid-Judgment with the slices already built and committed) — do not pay for a full re-run. The slicer
-cannot legally cut zero slices over a completed build, so a full re-run churns through builder/confirm
-work it doesn't need. Instead relaunch build with `{gateOnly: true, …same args, fresh runToken}`:
-it skips Scoring the Cut and Forging entirely and re-runs only the §3.2 milestone gate (Law verify +
-full run + the tribunal) over the finished build. `gateOnly` REFUSES on a red Law (`gate-only-on-red`)
-— it re-runs a starved gate, it never skips building. Any other `QA_FAIL` (real red checks, failed
-flips) is a genuine build failure: route it back through the correction loop above, not gate-only.
+Per stage, render exactly **ONE transition line + ONE Tier-1 banner** — each workflow renders its own
+lore tree (phase titles, persona/duo labels, spinner verbs), so never re-narrate worker progress here
+(it duplicates the tree and bloats this session). Build duo names come from `data/duo-pool.json`.
 
-### The workflow tree is now a lore surface (don't duplicate it)
-Each autonomous workflow renders its OWN lore in the `/workflows` progress tree: lore-flavored phase
-titles (build's *The Forge Heats · Scoring the Cut · Forging · The Trial · Judgment*; research's *The
-Briefing · Field Work · The Debrief*; architecture's *Laying Stone · The Council · The Lantern · One From
-Many · Athena Weighs*; validate's *Measuring Drift · A Hundred Eyes · The Critique*), persona/duo agent
-labels (`clair:build:M2:s1`, `sphinx:review:…`, `judge-dredd:verdict:M3`), and spinner-verb log lines. So
-per stage your job is the ONE transition line + the ONE Tier-1 banner — let the tree carry the per-agent
-theater; do **not** re-narrate worker progress here (it would duplicate the tree and bloat this session).
-The build duo names come from `data/duo-pool.json` if you want to name them in the build transition.
-
-### Resource & visual-verification discipline (load-bearing — a leaked browser OOM'd the box once)
-- **The browser is a subprocess with a deadline, never a service (BLUEPRINT §7).** The v2 blanket
-  ban is repealed, but the discipline is absolute: no browser process may outlive the check that
-  spawned it; every spawn carries a unique kill token; pre/post **token-scoped** sweeps bracket every
-  stage that can spawn one (blanket `pkill -f chrome` stays forbidden — it would reap the operator's
-  own browser). The leaks that OOM'd the box all require a long-lived holder process; one-shot
-  launch→assert→close probes under a hard `timeout` cannot reproduce them.
-- **Builders and reviewers NEVER drive a browser themselves.** UI verification is mediated by the
-  bounded `kiln-probe` / `kiln-law run` subprocesses (build's Tier-1 per-slice probes) and by
-  validate's single Tier-2 evaluator — agents read EVIDENCE files (screenshot + console/net/axe logs
-  + exit code), they do not open Chromium. Static checks (read the code; parse HTML; `node --check`)
-  still carry the per-slice review; the probe is the executable oracle beside them.
-- **The Tier-2 live traversal lives INSIDE validate** (and, posture-gated, per ui milestone in
-  build) — ONE fresh cross-family evaluator whose ≤10-minute cap is enforced on the **CAPABILITY**, not
-  on an un-cancelable agent: before the traversal the workflow takes a `kiln-probe` browser LEASE
-  (token `kval-…`, the traversal budget in seconds, a detached self-terminating watchdog that sweeps +
-  deletes the lease at expiry), and every scripted probe carries `--lease <token>` so it REFUSES (exit
-  77 LEASE_EXPIRED) once the lease expires. An evaluator alive past the deadline can do no further
-  browser work. A `withDeadline` timer is the belt to that — it stops the workflow AWAITING a wedged
-  evaluator (folds the pass static-only) — and the stage finally RELEASES the lease (kill watchdog +
-  immediate token sweep). The scripted one-shot `kiln-probe` is the BOUNDED ORACLE (each criterion =
-  one launch→assert→close process, hard-killed at 90s, swept by the `kval-…` token) and is the ONLY
-  browser path autonomous validate takes — **Playwright MCP is NOT driven in-loop** (an MCP server is a
-  persistent browser service §7 forbids inside the loop); it stays a doctor-detected capability for the
-  operator's INTERACTIVE/manual visual QA (named in the `visual_qa_checklist`). No scripted oracle on
-  disk ⇒ honest degradation to `PARTIAL_PASS_STATIC_ONLY` (verification_class recorded), never silently green.
-- **The out-of-loop one-shot pass still ships as an OPTIONAL operator re-check.** `validate.js`
-  emits a `visual_qa_checklist` (serve over http — never `file://`; exercise every wired interaction;
-  traverse empty/loading/error/success states; capture console errors; axe-core a11y; ≥2 viewports;
-  scroll-and-capture each scroll-reveal section) — run THAT as an independent human re-check when
-  wanted, then tear down. It complements the in-loop Tier-2 traversal; it no longer substitutes for it.
-- **Right-size the build to the deliverable.** Architecture must not over-decompose: a one-page site
-  is ONE milestone; reserve many milestones only for genuinely independent components. The UI path
-  (`uiBuild`) handles anything from a one-pager to a full frontend — the milestone *count* scales with
-  real scope, not ceremony.
+**Browser discipline (load-bearing — a leaked browser OOM'd the box once).** The browser is a
+subprocess with a deadline, never a service (BLUEPRINT §7): no browser outlives the check that spawned
+it, every spawn carries a unique kill token, token-scoped sweeps bracket every browser stage (blanket
+`pkill -f chrome` stays forbidden), and builders/reviewers read evidence files rather than driving
+Chromium. The full mechanics — the lease/watchdog, the in-loop Tier-2 evaluator, the honest
+`PARTIAL_PASS_STATIC_ONLY` degradation, the optional out-of-loop `visual_qa_checklist`, and
+right-sizing the build to the deliverable — are in workflow-contracts.md.
 
 ## Stage: REPORT (autonomous, Workflow)
 
@@ -506,7 +377,7 @@ Wait for completion, render *"The forge cools. The work remains."* and present t
 
 ## Voice discipline
 
-- One transition line + one banner per stage change — never narrate the banner.
-- When idle, one short lore-flavored line (never "standing by").
-- Agent personality quotes come from `$PLUGIN_ROOT/data/agents.json` — never repeat a
-  quote within a session.
+All output obeys `$PLUGIN_ROOT/references/brand.md` — the single owner of the weight system, banners,
+status symbols, transition lines, idle voice, and the agent quotes in `data/agents.json`. The one
+non-negotiable this skill restates: **one transition line + one banner per stage change** — never
+narrate the banner, and never repeat a persona quote within a session.

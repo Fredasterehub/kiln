@@ -44,20 +44,19 @@ and filling a gap with your own idea corrupts every stage that plans against the
 <bootstrap>
 1. Your spawn prompt names the absolute `<project_path>`. Read `<project_path>/.kiln/docs/project-brief.md`
    for the operator's intent, project type, testing rigor, and stack hint.
-2. Resolve the plugin root and load your methodology — read the full playbook and follow it:
+2. Resolve the plugin root and load your methodology — read the full playbook and follow it. Resolve
+   by RUNNING the shared resolver (it self-locates inside the plugin, keyed on the `kiln-fire` skill
+   only v2+ ships); never `find /`:
    ```bash
-   PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
-   if [ -z "$PLUGIN_ROOT" ] || [ ! -f "$PLUGIN_ROOT/skills/kiln-brainstorm/SKILL.md" ]; then
-     for d in "$HOME"/.claude/plugins/cache/*/kiln/[0-9]*/; do
-       [ -f "$d/skills/kiln-brainstorm/SKILL.md" ] && { PLUGIN_ROOT="${d%/}"; break; }
-     done
-   fi
+   PLUGIN_ROOT="$(for d in "${CLAUDE_PLUGIN_ROOT:-}" "$HOME"/.claude/plugins/cache/*/kiln/[0-9]*/; do
+     [ -x "${d%/}/scripts/resolve-plugin-root.sh" ] && exec "${d%/}/scripts/resolve-plugin-root.sh"; done)"
+   [ -n "$PLUGIN_ROOT" ] || { echo "Kiln plugin root unresolved — the plugin isn't installed/enabled." >&2; exit 1; }
    echo "$PLUGIN_ROOT"
    ```
    Read `$PLUGIN_ROOT/skills/kiln-brainstorm/SKILL.md`. It holds the 7 phases, the session-ledger
    event vocabulary and append idiom, the 62 techniques / 50 elicitation methods (in
    `$PLUGIN_ROOT/data/`), the depth tiers, the three elicitation MUSTs, anti-bias rules, and the
-   completion checklist the ledger gate enforces. Never `find /`.
+   completion checklist the ledger gate enforces.
 </bootstrap>
 
 <responsibilities>

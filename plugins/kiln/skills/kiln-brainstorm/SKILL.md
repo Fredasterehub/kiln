@@ -19,15 +19,13 @@ how the stage starts and ends.
 
 ## Step 0 — resolve your plugin root (for the data files)
 
-`${CLAUDE_PLUGIN_ROOT}` is not expanded in this text. Resolve it once, then read the technique and
-elicitation data by absolute path. Never `find /`.
+`${CLAUDE_PLUGIN_ROOT}` is not expanded in this text. Resolve it once by RUNNING the shared resolver
+(it self-locates inside the plugin), then read the technique and elicitation data by absolute path.
+Never `find /`.
 ```bash
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
-if [ -z "$PLUGIN_ROOT" ] || [ ! -f "$PLUGIN_ROOT/skills/kiln-brainstorm/SKILL.md" ]; then
-  for d in "$HOME"/.claude/plugins/cache/*/kiln/[0-9]*/; do
-    [ -f "$d/skills/kiln-brainstorm/SKILL.md" ] && { PLUGIN_ROOT="${d%/}"; break; }
-  done
-fi
+PLUGIN_ROOT="$(for d in "${CLAUDE_PLUGIN_ROOT:-}" "$HOME"/.claude/plugins/cache/*/kiln/[0-9]*/; do
+  [ -x "${d%/}/scripts/resolve-plugin-root.sh" ] && exec "${d%/}/scripts/resolve-plugin-root.sh"; done)"
+[ -n "$PLUGIN_ROOT" ] || { echo "Kiln plugin root unresolved — the plugin isn't installed/enabled." >&2; exit 1; }
 echo "$PLUGIN_ROOT"
 ```
 Read the data with the **Read tool** at `$PLUGIN_ROOT/data/brainstorming-techniques.json` (62
