@@ -71,6 +71,16 @@ pass "No stale v1 skill-path references"
 bash tests/v3/run.sh >/dev/null 2>&1 || fail "v3 harness failed — run 'bash tests/v3/run.sh'"
 pass "v3 harness green (node --test tests/v3/)"
 
+# (h) The plugin manifest passes the platform's own strict validator, when the CLI is present.
+# CI boxes may lack the claude binary — skip with a visible note rather than fail the floor.
+if command -v claude >/dev/null 2>&1; then
+  claude plugin validate plugins/kiln --strict >/dev/null 2>&1 \
+    || fail "'claude plugin validate plugins/kiln --strict' failed — inspect the manifest"
+  pass "Plugin manifest passes 'claude plugin validate --strict'"
+else
+  printf "  - %s\n" "claude CLI absent — skipped 'claude plugin validate --strict' (check h)"
+fi
+
 printf "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
 printf "${GREEN} Release gate passed.${RESET}\n"
 printf "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"

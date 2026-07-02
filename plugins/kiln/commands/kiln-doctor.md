@@ -58,8 +58,8 @@ else
 fi
 echo "── CAPABILITY browser-leak pre-flight (READ-ONLY scan — reuses the kiln-probe leak-scan) ──"
 node "$PLUGIN_ROOT/scripts/kiln-probe.mjs" leak-scan 2>&1 | grep -E "^LEAK_SCAN_SUSPECTS|^LEAK_SCAN_PROFILE_DIRS" || echo "leak-scan: unavailable"
-echo "── sandbox posture (advisory — see 'Sandbox & permissions') ──"
-grep -hE "sandbox|autoAllowBashIfSandboxed|allowedDomains" ~/.claude/settings.json ~/.claude/settings.local.json ./.claude/settings.json 2>/dev/null | head -4 || true
+echo "── sandbox posture + long-run resilience (advisory — see 'Sandbox & permissions') ──"
+grep -hE "sandbox|autoAllowBashIfSandboxed|allowedDomains|fallbackModel" ~/.claude/settings.json ~/.claude/settings.local.json ./.claude/settings.json 2>/dev/null | head -6 || true
 echo "── project path (advisory) ──"
 case "$PWD" in *" "*) echo "WARN: project path contains spaces — Kiln's workflow briefs assume space-free absolute paths; use a space-free path" ;; *) echo "path: space-free (OK)" ;; esac
 echo "── configured model (Opus/Fable read; session default when blank) ──"
@@ -112,10 +112,14 @@ Interpretation rules:
 
 **Sandbox & permissions** (advisory — Kiln runs identically under either):
 - **Recommended: sandbox-first.** Enable `sandbox.enabled` with `autoAllowBashIfSandboxed` and a
-  curated `allowedDomains` — Kiln's bash runs unattended, no prompts. (Playwright via MCP sits
-  *outside* the bash sandbox, so browser validation is unaffected.)
+  curated `allowedDomains` — Kiln's bash runs unattended, no prompts. Add `sandbox.credentials`
+  (`files` / `envVars`) to deny sandboxed commands your credential files and secret env vars.
+  (Playwright via MCP sits *outside* the bash sandbox, so browser validation is unaffected.)
 - **Power-user path:** `claude --dangerously-skip-permissions` — honest and simple, only in projects
   you trust. If neither is configured, note that the run will prompt on every bash/write.
+- **Long-run resilience:** recommend a `fallbackModel` chain (up to three models tried in order when
+  the primary is overloaded) so a long autonomous run rides out a provider blip instead of dying —
+  it composes with Kiln's tier-named routing.
 
 **The capability record.** The resolved `{ tier, verification_class, probes }` you render IS the
 shape of `state.json.capability` (singular) — the raw probe outputs above are its `probes`; the

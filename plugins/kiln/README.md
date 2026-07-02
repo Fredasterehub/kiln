@@ -47,10 +47,17 @@ Kiln's bash runs unattended — it spawns workflows, writes files, and runs test
 honest ways to keep it out of a permission-prompt loop; the forge runs identically under either:
 
 - **Recommended — sandbox-first.** Enable `sandbox.enabled` with `autoAllowBashIfSandboxed` and a
-  curated `allowedDomains`. Bash runs inside the sandbox with no prompts. Playwright (via MCP) sits
-  *outside* the bash sandbox, so browser validation is unaffected.
+  curated `allowedDomains`. Bash runs inside the sandbox with no prompts. Add `sandbox.credentials`
+  (`files` / `envVars`) so sandboxed commands can't read your credential files or secret environment
+  variables — cheap hardening for the autonomous build stages. Playwright (via MCP) sits *outside*
+  the bash sandbox, so browser validation is unaffected.
 - **Power-user path — `claude --dangerously-skip-permissions`.** Simple and total. Only in projects
   you trust; Kiln accepts no liability for its own enthusiasm.
+
+**Long-run resilience.** A Kiln run is a long autonomous session, and a single model-overload blip
+can otherwise end it. Set a `fallbackModel` chain (up to three models tried in order when the primary
+is overloaded or unavailable) so the forge rides out a provider hiccup instead of dying on it — it
+composes with Kiln's tier-named routing, no pinned model IDs to fight.
 
 ## Usage
 
