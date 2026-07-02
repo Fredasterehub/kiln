@@ -74,7 +74,7 @@ const postureArg = (() => {
 // ── The Gauge config (GAUGE_CONFIG, inlined from gauge-config.json by the bundler — workflow
 //    scripts cannot import JSON; --check guards the inline copy against drift). The Sentinel
 //    thresholds (rejections_to_feedback_escalation / rejections_to_split) live here. ──
-const GAUGE_CONFIG = {"h80_human_hours":2,"messiness_discount":0.5,"churn_flips_threshold":2,"rejections_to_feedback_escalation":2,"rejections_to_split":3,"deescalation_clean_window":1,"research_topics_base":2,"planning_dual_d4_min":2,"planning_dual_d3_min":1,"planning_dual_d1_min":1,"planning_redteam_d4_min":1,"planning_redteam_d8_min":1,"plan_validation_rounds_base":1,"plan_validation_d2_min":1,"plan_validation_d8_min":2,"slice_budget_d7_min":1,"d7_slice_budget_factor":0.5,"review_high_d8_min":1,"min_slices_for_tribunal":2,"browser_tier2_d7_min":1,"browser_tier2_d8_min":1,"validate_adversarial_d8_min":2,"validate_second_family_d8_min":2,"effort_bias_dims":["D3","D4","D8"]}
+const GAUGE_CONFIG = {"h80_human_hours":2,"messiness_discount":0.5,"churn_flips_threshold":2,"rejections_to_feedback_escalation":2,"rejections_to_split":3,"deescalation_clean_window":1,"research_topics_base":2,"planning_dual_d4_min":2,"planning_dual_d3_min":1,"planning_dual_d1_min":1,"planning_redteam_d4_min":1,"planning_redteam_d8_min":1,"plan_validation_rounds_base":1,"plan_validation_d2_min":1,"plan_validation_d8_min":2,"slice_budget_d7_min":1,"d7_slice_budget_factor":0.5,"review_high_d8_min":1,"min_slices_for_tribunal":2,"trivial_tier_dim_max":0,"tribunal_threshold_trivial_bump":1,"browser_tier2_d7_min":1,"browser_tier2_d8_min":1,"validate_adversarial_d8_min":2,"validate_second_family_d8_min":2,"effort_bias_dims":["D3","D4","D8"]}
 // livePosture is the Sentinel's MUTABLE working copy (§3.3): escalate() raises dials mid-milestone
 // and NOTHING in this script ever lowers one — builder self-confidence included. De-escalation
 // needs the profile + clean-window evidence (a boundary move owned by the conductor in a later
@@ -517,6 +517,7 @@ function escalate(posture, signal, config) {
   //     'high' is a no-op, never a downgrade.
   // Unknown/malformed signals are a recorded no-op — the ratchet never throws mid-pipeline.
   const next = {
+    scope_tier: posture.scope_tier,
     research_topics_max: posture.research_topics_max,
     planning: posture.planning,
     plan_validation_rounds: posture.plan_validation_rounds,

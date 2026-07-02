@@ -82,7 +82,15 @@ function validateProfile(profile) {
 }
 function posture(profile, config) {
   const D = (k) => profile[k].score
+  // P5.5 scope-tier predicate: trivial iff EVERY dimension <= trivial_tier_dim_max (default 0).
+  // Non-compensatory like everything else here — and deliberately NOT the effort dial:
+  // effort_bias is max(D3,D4,D8), a reasoning dial, so a large/ambiguous/stateful profile
+  // (D1:2,D2:2,D5:2,D6:2,D7:2) still dials effort 0 while being nothing like trivial scope.
+  const scope_tier = ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'].every((k) => D(k) <= config.trivial_tier_dim_max) ? 'trivial' : 'standard'
   return {
+    // P5.5: the tier the trivial-tier levers key on (slice consolidation, runner seat,
+    // tribunal bump) — never re-derived inline in workflow code.
+    scope_tier,
     // §3.2 research row — the CAP only: base + D3 (novelty) + D5 (integration surface). The
     // research stage applies min(OQ-count, cap) and drops to 0 when no high-priority
     // before-build OQs exist — OQ data is runtime input, not a profile dimension.
@@ -110,7 +118,9 @@ function posture(profile, config) {
     // §3.2 milestone-gate row — the goal-backward audit runs at EVERY milestone boundary
     // regardless of slice count; the dual-analyst tribunal only when the milestone has >=
     // min_slices_for_tribunal slices (single-slice: slice review + goal-backward IS the gate).
-    milestone_gate: { min_slices_for_tribunal: config.min_slices_for_tribunal, goal_backward: true },
+    // P5.5: at trivial tier the threshold gains tribunal_threshold_trivial_bump (2->3 at
+    // defaults) — Run A's tribunal was marginal at trivial scope; goal_backward never moves.
+    milestone_gate: { min_slices_for_tribunal: config.min_slices_for_tribunal + (scope_tier === 'trivial' ? config.tribunal_threshold_trivial_bump : 0), goal_backward: true },
     // §3.2 browser row — Tier-2 traversal per ui milestone iff D7>=1 OR D8>=1; else matrix-only.
     browser: { tier2_per_milestone: D('D7') >= config.browser_tier2_d7_min || D('D8') >= config.browser_tier2_d8_min },
     // §3.2 validate row — the validate floor always runs (§3.4); the adversarial probe pass and
@@ -126,7 +136,7 @@ function posture(profile, config) {
 // ── The Gauge config (GAUGE_CONFIG, inlined from gauge-config.json by the bundler — workflow
 //    scripts cannot import JSON; the canonical file stays the single source of truth, --check
 //    guards the inline copy against drift, and the _doc commentary keys are stripped) ──
-const GAUGE_CONFIG = {"h80_human_hours":2,"messiness_discount":0.5,"churn_flips_threshold":2,"rejections_to_feedback_escalation":2,"rejections_to_split":3,"deescalation_clean_window":1,"research_topics_base":2,"planning_dual_d4_min":2,"planning_dual_d3_min":1,"planning_dual_d1_min":1,"planning_redteam_d4_min":1,"planning_redteam_d8_min":1,"plan_validation_rounds_base":1,"plan_validation_d2_min":1,"plan_validation_d8_min":2,"slice_budget_d7_min":1,"d7_slice_budget_factor":0.5,"review_high_d8_min":1,"min_slices_for_tribunal":2,"browser_tier2_d7_min":1,"browser_tier2_d8_min":1,"validate_adversarial_d8_min":2,"validate_second_family_d8_min":2,"effort_bias_dims":["D3","D4","D8"]}
+const GAUGE_CONFIG = {"h80_human_hours":2,"messiness_discount":0.5,"churn_flips_threshold":2,"rejections_to_feedback_escalation":2,"rejections_to_split":3,"deescalation_clean_window":1,"research_topics_base":2,"planning_dual_d4_min":2,"planning_dual_d3_min":1,"planning_dual_d1_min":1,"planning_redteam_d4_min":1,"planning_redteam_d8_min":1,"plan_validation_rounds_base":1,"plan_validation_d2_min":1,"plan_validation_d8_min":2,"slice_budget_d7_min":1,"d7_slice_budget_factor":0.5,"review_high_d8_min":1,"min_slices_for_tribunal":2,"trivial_tier_dim_max":0,"tribunal_threshold_trivial_bump":1,"browser_tier2_d7_min":1,"browser_tier2_d8_min":1,"validate_adversarial_d8_min":2,"validate_second_family_d8_min":2,"effort_bias_dims":["D3","D4","D8"]}
 
 // ── MODEL_VOICE shell (Opus only; inlined from src/voice.mjs by the bundler) ──
 const MODEL_VOICE = {

@@ -604,6 +604,19 @@ test('milestone gate: min_slices_for_tribunal is the posture dial — raised to 
   assert.equal(result.built[0].qa, 'QA_PASS')
 })
 
+test('milestone gate chain (P5.5): the REAL posture() at an all-zero (trivial) profile routes a 2-slice milestone to the skip path with goal-backward still run', async () => {
+  const { posture: gaugePosture } = await import('../../plugins/kiln/src/gauge.mjs')
+  const gaugeConfig = JSON.parse(readFileSync(new URL('../../plugins/kiln/gauge-config.json', import.meta.url), 'utf8'))
+  const allZero = Object.fromEntries(['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'].map((d) => [d, { score: 0, evidence: 'quiet' }]))
+  const posture = gaugePosture(allZero, gaugeConfig)
+  assert.equal(posture.scope_tier, 'trivial')
+  assert.equal(posture.milestone_gate.min_slices_for_tribunal, 3)
+  const { result, calls } = await runBuild({ ...baseArgs, posture }, mkRespond())
+  assert.equal(count(calls, 'ken:qa') + count(calls, 'ryu:qa') + count(calls, 'judge-dredd:verdict'), 0, 'no analysts below the bumped threshold')
+  assert.equal(count(calls, 'aristotle:goal-backward'), 1, 'goal-backward NEVER skips')
+  assert.equal(result.built[0].qa, 'QA_PASS')
+})
+
 // ── posture plumbing: the codex review effort dial ───────────────────────────────────────────────
 
 test('posture: ui review effort is medium baseline (v2-equivalent default), high when the posture says so (D8≥1), and high on fix-cycle>0', async () => {

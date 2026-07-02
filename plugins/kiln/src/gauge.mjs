@@ -43,7 +43,15 @@ export function validateProfile(profile) {
 // the table's '=2', and a lowered override behaves sanely (the rule fires earlier).
 export function posture(profile, config) {
   const D = (k) => profile[k].score
+  // P5.5 scope-tier predicate: trivial iff EVERY dimension <= trivial_tier_dim_max (default 0).
+  // Non-compensatory like everything else here — and deliberately NOT the effort dial:
+  // effort_bias is max(D3,D4,D8), a reasoning dial, so a large/ambiguous/stateful profile
+  // (D1:2,D2:2,D5:2,D6:2,D7:2) still dials effort 0 while being nothing like trivial scope.
+  const scope_tier = ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'].every((k) => D(k) <= config.trivial_tier_dim_max) ? 'trivial' : 'standard'
   return {
+    // P5.5: the tier the trivial-tier levers key on (slice consolidation, runner seat,
+    // tribunal bump) — never re-derived inline in workflow code.
+    scope_tier,
     // §3.2 research row — the CAP only: base + D3 (novelty) + D5 (integration surface). The
     // research stage applies min(OQ-count, cap) and drops to 0 when no high-priority
     // before-build OQs exist — OQ data is runtime input, not a profile dimension.
@@ -71,7 +79,9 @@ export function posture(profile, config) {
     // §3.2 milestone-gate row — the goal-backward audit runs at EVERY milestone boundary
     // regardless of slice count; the dual-analyst tribunal only when the milestone has >=
     // min_slices_for_tribunal slices (single-slice: slice review + goal-backward IS the gate).
-    milestone_gate: { min_slices_for_tribunal: config.min_slices_for_tribunal, goal_backward: true },
+    // P5.5: at trivial tier the threshold gains tribunal_threshold_trivial_bump (2->3 at
+    // defaults) — Run A's tribunal was marginal at trivial scope; goal_backward never moves.
+    milestone_gate: { min_slices_for_tribunal: config.min_slices_for_tribunal + (scope_tier === 'trivial' ? config.tribunal_threshold_trivial_bump : 0), goal_backward: true },
     // §3.2 browser row — Tier-2 traversal per ui milestone iff D7>=1 OR D8>=1; else matrix-only.
     browser: { tier2_per_milestone: D('D7') >= config.browser_tier2_d7_min || D('D8') >= config.browser_tier2_d8_min },
     // §3.2 validate row — the validate floor always runs (§3.4); the adversarial probe pass and
@@ -108,6 +118,7 @@ export function escalate(posture, signal, config) {
   //     'high' is a no-op, never a downgrade.
   // Unknown/malformed signals are a recorded no-op — the ratchet never throws mid-pipeline.
   const next = {
+    scope_tier: posture.scope_tier,
     research_topics_max: posture.research_topics_max,
     planning: posture.planning,
     plan_validation_rounds: posture.plan_validation_rounds,
@@ -169,6 +180,7 @@ export function deescalate(current, unitOutcome, config) {
   const baseline = posture(unitOutcome.profile, config)
   // diff the dials for the ledger — restoring an unescalated posture records zero changes
   const flat = (p) => ({
+    scope_tier: p.scope_tier,
     research_topics_max: p.research_topics_max,
     planning: p.planning,
     plan_validation_rounds: p.plan_validation_rounds,

@@ -58,6 +58,12 @@
   "_doc_min_slices_for_tribunal": "3.2 milestone-gate row: the dual-analyst tribunal runs only when a milestone has at least this many slices; a single-slice milestone's gate is slice review + goal-backward (tribunal redundancy skip, proven safe class [R:adaptive-orchestration 4]).",
   "min_slices_for_tribunal": 2,
 
+  "_doc_trivial_tier_dim_max": "P5.5 scope-tier predicate: scope_tier is 'trivial' iff EVERY dimension D1..D8 scores <= this value; one elevated dimension anywhere reads 'standard' (non-compensatory — a lone D8=1 or D4=1 must never read trivial). Field anchors: Run A's all-quiet profile => trivial; Run B's D1=1,D2=1,D6=1,D7=1 => standard. Conservative default 0 — false-standard costs minutes, false-trivial costs gates.",
+  "trivial_tier_dim_max": 0,
+
+  "_doc_tribunal_threshold_trivial_bump": "P5.5 tribunal-vs-posture lever: at scope_tier 'trivial' the effective tribunal threshold is min_slices_for_tribunal + this bump (2->3 at defaults); at 'standard', unchanged. Field evidence: Run A (trivial) tribunal marginal — one MEDIUM beyond the slice reviews; Run B (standard) decisive — the M2 path-traversal catch. Goal-backward NEVER skips at any tier.",
+  "tribunal_threshold_trivial_bump": 1,
+
   "_doc_browser_tier2_d7_min": "3.2 browser row: Tier-2 traversal per ui milestone when D7 >= this OR D8 >= browser_tier2_d8_min. Table: D7>=1.",
   "browser_tier2_d7_min": 1,
 

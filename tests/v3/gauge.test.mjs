@@ -80,7 +80,7 @@ test('validateProfile: extra keys are rejected — the profile holds exactly D1.
 test('posture: the returned shape is EXACTLY the T1 contract (consistency gate absent — it is a floor)', () => {
   const p = posture(prof(), CONFIG)
   assert.deepEqual(Object.keys(p), [
-    'research_topics_max', 'planning', 'plan_validation_rounds', 'slice_budget_hours',
+    'scope_tier', 'research_topics_max', 'planning', 'plan_validation_rounds', 'slice_budget_hours',
     'review', 'milestone_gate', 'browser', 'validate', 'effort_bias',
   ])
   assert.deepEqual(Object.keys(p.review), ['ui_effort_base', 'escalate_on'])
@@ -143,11 +143,32 @@ test('posture: review — ui_effort_base flips medium->high at D8>=1; escalate_o
   assert.equal(posture(prof({ D8: 2 }), CONFIG).review.ui_effort_base, 'high')
 })
 
-// ── posture: §3.2 milestone-gate row — constants, any posture ────────────────────────────────────
-test('posture: milestone_gate — goal-backward always true, tribunal at >=2 slices, profile-independent', () => {
-  const expected = { min_slices_for_tribunal: 2, goal_backward: true }
-  assert.deepEqual(posture(prof(), CONFIG).milestone_gate, expected)
-  assert.deepEqual(posture(prof({ D1: 2, D2: 2, D3: 2, D4: 2, D5: 2, D6: 2, D7: 2, D8: 2 }), CONFIG).milestone_gate, expected)
+// ── posture: §3.2 milestone-gate row + the P5.5 trivial bump ─────────────────────────────────────
+test('posture: milestone_gate — goal-backward ALWAYS true; tribunal threshold 3 at trivial tier, 2 at standard', () => {
+  // trivial (all-zero profile): the P5.5 bump raises the threshold 2->3; goal-backward untouched
+  assert.deepEqual(posture(prof(), CONFIG).milestone_gate, { min_slices_for_tribunal: 3, goal_backward: true })
+  // any single elevated dimension => standard => the table's 2
+  assert.deepEqual(posture(prof({ D6: 1 }), CONFIG).milestone_gate, { min_slices_for_tribunal: 2, goal_backward: true })
+  assert.deepEqual(posture(prof({ D1: 2, D2: 2, D3: 2, D4: 2, D5: 2, D6: 2, D7: 2, D8: 2 }), CONFIG).milestone_gate, { min_slices_for_tribunal: 2, goal_backward: true })
+  // the bump is a config knob
+  assert.equal(posture(prof(), { ...CONFIG, tribunal_threshold_trivial_bump: 2 }).milestone_gate.min_slices_for_tribunal, 4)
+})
+
+// ── posture: the P5.5 scope-tier predicate (the trivial-tier levers key on THIS, never effort) ───
+test('posture: scope_tier — trivial iff EVERY dimension <= trivial_tier_dim_max; non-compensatory', () => {
+  assert.equal(posture(prof(), CONFIG).scope_tier, 'trivial')
+  // one elevated dimension ANYWHERE reads standard — all eight, one by one
+  for (const d of ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8']) {
+    assert.equal(posture(prof({ [d]: 1 }), CONFIG).scope_tier, 'standard', `${d}=1 must read standard`)
+  }
+  // the r1 catch: a high-dims/effort-0 profile is NOT trivial (effort_bias is a reasoning dial)
+  const highDims = posture(prof({ D1: 2, D2: 2, D5: 2, D6: 2, D7: 2 }), CONFIG)
+  assert.equal(highDims.effort_bias, 0)
+  assert.equal(highDims.scope_tier, 'standard')
+  // Run B's field profile => standard
+  assert.equal(posture(prof({ D1: 1, D2: 1, D6: 1, D7: 1 }), CONFIG).scope_tier, 'standard')
+  // the predicate is a config knob: at dim_max 1 the Run-B-like profile reads trivial
+  assert.equal(posture(prof({ D1: 1, D2: 1, D6: 1, D7: 1 }), { ...CONFIG, trivial_tier_dim_max: 1 }).scope_tier, 'trivial')
 })
 
 // ── posture: §3.2 browser row — tier2 iff D7>=1 OR D8>=1 ─────────────────────────────────────────
@@ -358,6 +379,7 @@ test('gauge-config.json: every §3.3 normative constant ships at its normative v
     plan_validation_rounds_base: 1, plan_validation_d2_min: 1, plan_validation_d8_min: 2,
     slice_budget_d7_min: 1, d7_slice_budget_factor: 0.5,
     review_high_d8_min: 1, min_slices_for_tribunal: 2,
+    trivial_tier_dim_max: 0, tribunal_threshold_trivial_bump: 1,
     browser_tier2_d7_min: 1, browser_tier2_d8_min: 1,
     validate_adversarial_d8_min: 2, validate_second_family_d8_min: 2,
   }
