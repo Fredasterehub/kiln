@@ -50,10 +50,15 @@ for f in plugins/kiln/schemas/event.schema.json plugins/kiln/schemas/state.schem
 done
 pass "Data files and schemas present and valid"
 
-# (e) Zero-hooks invariant: no tracked files under the plugin hooks dir.
-HOOKS="$(git ls-files plugins/kiln/hooks/)"
-[[ -z "$HOOKS" ]] || fail "Zero-hooks invariant broken — tracked files under plugins/kiln/hooks/:"$'\n'"$HOOKS"
-pass "Zero-hooks invariant holds"
+# (e) Sanctioned-hooks invariant (P5 T2 retired v2's zero-hooks law): the plugin ships EXACTLY
+# the design-approved micro hook set — hooks.json + the two command scripts. Anything more or
+# less is hook creep or a broken surface; both fail the floor.
+HOOKS="$(git ls-files plugins/kiln/hooks/ | sort)"
+EXPECTED_HOOKS="plugins/kiln/hooks/hooks.json
+plugins/kiln/hooks/notify.sh
+plugins/kiln/hooks/session-title.sh"
+[[ "$HOOKS" == "$EXPECTED_HOOKS" ]] || fail "Sanctioned-hooks invariant broken — expected exactly the P5 T2 micro set, got:"$'\n'"$HOOKS"
+pass "Sanctioned-hooks invariant holds (the P5 T2 micro set, exactly)"
 
 # (f) No tracked file references the deleted v1 skill paths. git grep searches
 # tracked files only; exclude this script, which contains the patterns literally.
