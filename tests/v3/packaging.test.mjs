@@ -48,8 +48,8 @@ test('manifest: description is the 8-stage / GPT-5.5 truth — no lying count', 
 })
 
 // ── kiln-doctor v3: §12 probe semantics, letter-for-letter ────────────────────────────────────────
-test('doctor: version floor require >= 2.1.154, recommend latest', () => {
-  assert.match(doctor, /2\.1\.154/)
+test('doctor: version floor require >= 2.1.198, recommend latest', () => {
+  assert.match(doctor, /2\.1\.198/)
   assert.match(doctor, /RECOMMEND latest/)
 })
 

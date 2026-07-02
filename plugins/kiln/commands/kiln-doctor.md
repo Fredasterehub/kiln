@@ -29,7 +29,7 @@ fi
 echo "── plugin root ──"; echo "$PLUGIN_ROOT"
 echo "── plugin version ──"
 grep '"version"' "$PLUGIN_ROOT/.claude-plugin/plugin.json"
-echo "── claude code (REQUIRE >= 2.1.154 for Dynamic Workflows; RECOMMEND latest) ──"
+echo "── claude code (REQUIRE >= 2.1.198 — implicit-team spawn + structured-output hardening + teammate liveness; RECOMMEND latest) ──"
 claude --version 2>&1 | head -1
 echo "── workflows disabled? (empty = enabled) ──"
 echo "env: ${CLAUDE_CODE_DISABLE_WORKFLOWS:-unset}"
@@ -92,9 +92,9 @@ echo "── existing run? ──"
 when playwright is absent (UI validation degrades honestly, never silently green).
 
 Interpretation rules:
-- **BLOCKED** if: Claude Code `< 2.1.154`, Dynamic Workflows disabled, `$PLUGIN_ROOT` unresolved, or
+- **BLOCKED** if: Claude Code `< 2.1.198`, **Dynamic Workflows disabled** (`disableWorkflows` in any settings file OR `CLAUDE_CODE_DISABLE_WORKFLOWS` set — the `── workflows disabled? ──` block above is this probe; a kill switch means the pipeline cannot run), `$PLUGIN_ROOT` unresolved, or
   any FAIL (bash/git/node missing, or a Kiln data file missing).
-- **RECOMMEND latest** whenever Claude Code is `>= 2.1.154` but not the newest you know of — a soft
+- **RECOMMEND latest** whenever Claude Code is `>= 2.1.198` but not the newest you know of — a soft
   nudge (`claude plugin update` and `npm i -g @anthropic-ai/claude-code@latest`), never a block.
   There is no manifest version gate; this runtime check is the only floor.
 - **READY (degraded)** if — any of: codex absent/non-functional (Sonnet-only build path, tier T1/T2);

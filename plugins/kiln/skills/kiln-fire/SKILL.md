@@ -207,7 +207,7 @@ surface and onboarding is cheap. Detect first, then confirm.
 
 ## Stage: BRAINSTORM (interactive, Teams) — da-vinci keeps a ledger; a compiler writes the VISION
 
-The only stage that uses a team, and only because the operator drives it live — a human-scheduled
+The only stage that uses an interactive teammate, and only because the operator drives it live — a human-scheduled
 single facilitator cannot trip the idle/deadlock bug. Da Vinci **no longer authors `VISION.md`**: he
 keeps an append-only **session ledger** at `<project_path>/.kiln/docs/brainstorm-ledger.jsonl`, and a
 fresh-context compiler (the `vision.js` leg in step 4) turns that ledger — its SOLE source — into the
@@ -222,8 +222,10 @@ the VISION traces to a logged operator turn.
    for a cold session). Never silently discard a ledger. On a fresh run (no ledger) go straight to step 1.
 1. Render the *"Da Vinci uncaps the paint…"* transition + the Brainstorm Tier-1 banner, and **stamp
    `step_brainstorm_started_at`** in STATE (real ISO-8601 — this entry-stamp was never set before).
-2. `TeamCreate` a single-purpose team, then spawn **Da Vinci** (agent `kiln:the-creator`) as an
-   interactive teammate. His spawn prompt carries:
+2. Spawn **Da Vinci** (agent `kiln:the-creator`) directly with the **Agent tool**, passing a
+   `name` (e.g. `da-vinci`) so he is SendMessage-addressable — on current binaries every session
+   has one implicit team and there is NO team-setup step (the setup tool was removed in 2.1.178;
+   `team_name` is ignored). His spawn prompt carries:
    - the absolute `project_path` — he reads `<project_path>/.kiln/docs/project-brief.md` (and, for a
      brownfield run, `codebase-map.md`) and writes ONLY `brainstorm-ledger.jsonl`, never `VISION.md`.
    - the **intake mode** — the express offer you made at onboarding (see the Express intake note in
@@ -239,7 +241,7 @@ the VISION traces to a logged operator turn.
 3. Tell the operator to switch to Da Vinci's window (Shift+Down) and converse there. Then **you wait**
    for one message — do no work in this context while the brainstorm runs.
 4. On the teammate's terminal **`BRAINSTORM_COMPLETE. Ledger at <abs path>, <N> entries.`** message:
-   tear down the team (it is finished — no second `TeamCreate` this run). The ledger is sealed; now
+   Da Vinci's work is finished — spawn nothing further for this stage. The ledger is sealed; now
    **compile and gate it** with the vision-compile leg:
    `Workflow({scriptPath: "$PLUGIN_ROOT/workflows/vision.js", args: {kilnDir: "<abs>/.kiln", projectPath: "<abs>", pluginRoot: "<abs $PLUGIN_ROOT>"}})`.
    It runs the mechanical `kiln-vision ledger-gate` (an incomplete session can never compile), then ONE
@@ -257,8 +259,9 @@ the VISION traces to a logged operator turn.
      operator. `VISION.md` is derived — a re-run recompiles it from the ledger, so a partial file left
      on disk is harmless.
 
-**Soft prerequisite:** interactive teams need `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`. If team spawn
-is unavailable, **fall back** to facilitating the brainstorm yourself in this session using the
+**Soft prerequisite:** the interactive-teammate surface may still require
+`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` on some configurations. If the teammate spawn is
+unavailable, **fall back** to facilitating the brainstorm yourself in this session using the
 `kiln-brainstorm` skill — the artifact contract is **identical**: write the append-only
 `brainstorm-ledger.jsonl` (never `VISION.md` directly), then run `vision.js` exactly as in step 4 to
 compile and gate it. No team, no signal, one artifact contract either way.

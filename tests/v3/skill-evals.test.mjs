@@ -203,3 +203,19 @@ test('scenario 3: onboarding still births the ledger, the two-world rule holds, 
   // The per-stage arg prose moved to a single one-level-deep reference the body points to.
   assert.match(fireSrc, /workflow-contracts\.md/, 'the body does not point to references/workflow-contracts.md')
 })
+
+
+// ── P6.1 T1: platform currency — the conductor speaks the current binary's spawn semantics ──────
+
+test('P6.1: zero TeamCreate/TeamDelete anywhere in the conductor; the Agent-tool spawn is named', () => {
+  const fire = readFileSync(join(SKILLS, 'kiln-fire', 'SKILL.md'), 'utf8')
+  assert.ok(!/TeamCreate|TeamDelete/.test(fire), 'the removed team-setup tools must not be instructed')
+  assert.match(fire, /Agent tool/, 'the implicit-team Agent-tool spawn is the documented path')
+  assert.match(fire, /`name`/, 'the spawn names Da Vinci for SendMessage addressability')
+})
+
+test('P6.1: the version floor reads 2.1.198 in the doctor and nothing still says 2.1.154', () => {
+  const doctor = readFileSync(join(SKILLS, '..', 'commands', 'kiln-doctor.md'), 'utf8')
+  assert.match(doctor, /2\.1\.198/)
+  assert.ok(!doctor.includes('2.1.154'), 'the old floor must be gone from the doctor')
+})

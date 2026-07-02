@@ -132,7 +132,7 @@ Everything else happens through conversation. Brainstorm is a real dialogue with
 
 | Requirement | Install |
 |:--|:--|
-| Claude Code &ge; 2.1.154 | `npm i -g @anthropic-ai/claude-code` &mdash; Dynamic Workflows must be enabled |
+| Claude Code &ge; 2.1.198 | `npm i -g @anthropic-ai/claude-code` &mdash; Dynamic Workflows must be enabled |
 | git | [git-scm.com](https://git-scm.com) |
 | node | [nodejs.org](https://nodejs.org) |
 | Codex CLI | Optional: `npm i -g @openai/codex` &mdash; the GPT-5 build path |
@@ -167,7 +167,7 @@ claude plugin uninstall kiln@kiln     # remove
 
 **`codex: command not found`** &mdash; `npm install -g @openai/codex`. Optional &mdash; Kiln falls back to a Claude-only build path without it.
 
-**Commands missing in Claude Code** &mdash; Verify the plugin is installed (`claude plugin list`). Confirm Dynamic Workflows are available on your Claude Code build (&ge; 2.1.154). Restart Claude Code.
+**Commands missing in Claude Code** &mdash; Verify the plugin is installed (`claude plugin list`). Confirm Dynamic Workflows are available on your Claude Code build (&ge; 2.1.198). Restart Claude Code.
 
 **Pipeline halts** &mdash; Check `.kiln/` artifacts, fix, then `/kiln-fire` to resume.
 

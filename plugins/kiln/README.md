@@ -34,7 +34,7 @@ Kiln v3 is pure native Claude Code, no runtime and no daemon:
 
 ## Requirements
 
-- Claude Code **≥ 2.1.154** with Dynamic Workflows enabled
+- Claude Code **≥ 2.1.198** with Dynamic Workflows enabled
 - `git`, `node`
 - **Optional:** Codex CLI (for the GPT-5.5 build path), Playwright MCP (for browser validation)
 
