@@ -93,6 +93,9 @@ test('vision.js clean path: gate → ONE fresh compiler → validator clean → 
   assert.match(brief, /brainstorm-ledger\.jsonl/)
   assert.match(brief, /templates\/VISION\.md/)
   assert.doesNotMatch(brief, /conversation history|chat transcript/, 'no chat context reaches the compiler')
+  // P4 T4 item 5 (T3 ruling 2): the Elicitation Log source is named concretely — the distinct
+  // data.method fields across theme/decision/style_probe/clarify_pass events plus that trail.
+  assert.match(brief, /DISTINCT data\.method fields across the theme\/decision\/style_probe\/clarify_pass events/, 'the compiler is told exactly where the Elicitation Log comes from')
 })
 
 test('vision.js ledger-gate refusal: an incomplete session NEVER spawns a compiler — the typed violations are the escalation payload', async () => {

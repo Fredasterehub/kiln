@@ -134,8 +134,9 @@ const compileBrief =
   `directly from events: Open Questions from unresolved-but-acknowledged clarifications and any ` +
   `question-shaped decisions (each an OQ entry in BOTH the frontmatter list — with priority/` +
   `timing/context — and the body mirror), Assumptions Ledger from assumption events (- **A-N**: ` +
-  `entries), Elicitation Log from the techniques and methods the session_meta/style_probe/` +
-  `elicitation trail records.\n` +
+  `entries), Elicitation Log from the DISTINCT data.method fields across the theme/decision/` +
+  `style_probe/clarify_pass events plus the style_probe/clarify_pass trail (T3 ruling 2 — the ` +
+  `methods the session actually used; an unlogged method never happened).\n` +
   `2. The frontmatter is arithmetic you compute from what you write: status: gated (the ledger ` +
   `passed its gate; zero [NEEDS CLARIFICATION markers may remain — acknowledged unknowns are ` +
   `assumptions or OQs now), tier from session_meta, session.ideas = the ledger's idea count, ` +

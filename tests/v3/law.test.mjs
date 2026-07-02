@@ -902,10 +902,14 @@ test('T1 Law phase: every degraded leg fails CLOSED with a reason — null Asimo
   assert.match(proofFail.result.law_reason, /lock verification failed — law\.json exists: true, lock commit exists: false/)
 })
 
-test('T1 Law phase: Athena gains the SC-to-Law dimension; Plato is told to number SCs', async () => {
+test('T1 Law phase: Athena gains the SC-to-Law dimension; Plato ADOPTS VISION SC ids (P4 T4 (b))', async () => {
   const { calls } = await runArch(lawArgs, lawRespond())
   const athenaPrompt = calls.find((c) => c.label === 'athena:validate:r0').prompt
   assert.match(athenaPrompt, /every SC has exactly one law\.json check entry/)
   const platoPrompt = calls.find((c) => c.label === 'plato:synthesis').prompt
-  assert.match(platoPrompt, /globally unique SC id \(SC-001, SC-002/)
+  // P4 T4 (b): Plato no longer MINTS all ids — he adopts VISION's SC-NNN ids and mints only for
+  // plan-added criteria, so VISION→plan→Law→goal-backward is ONE identifier space.
+  assert.match(platoPrompt, /ADOPT VISION's SC-NNN ids VERBATIM where a criterion traces to one/)
+  assert.match(platoPrompt, /one identifier space/i)
+  assert.match(platoPrompt, /Success Criteria section of \/tmp\/nonexistent-kiln\/\.kiln\/docs\/VISION\.md/, 'Plato reads VISION for its SC ids')
 })

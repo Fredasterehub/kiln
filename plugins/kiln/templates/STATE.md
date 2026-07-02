@@ -54,8 +54,7 @@ Keep the field names and markdown bullet format unchanged.
 
 - **open_questions_file**: .kiln/docs/open-questions.md
 - **decisions_file**: .kiln/docs/decisions.md
-- **vision_notes_file**: .kiln/docs/vision-notes.md
-- **vision_priorities_file**: .kiln/docs/vision-priorities.md
+- **brainstorm_ledger_file**: .kiln/docs/brainstorm-ledger.jsonl
 - **codebase_map_file**: .kiln/docs/codebase-map.md
 - **correction_tasks_file**: .kiln/validation/correction-tasks.md
 - **runtime_dir**: .kiln/runtime

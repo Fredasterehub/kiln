@@ -149,7 +149,7 @@ const postureBrief =
   `under-specified may you sharpen it into a concrete research question. Each topic: a kebab-case slug, a precise ` +
   `question, a priority, and concrete acceptance criteria. Report reasoning first.</task>`
 const historicalBrief =
-  `<task>Prioritise the Open Questions section: every "OQ-{N}" line with Priority: high and Timing: before-build is a ` +
+  `<task>Prioritise the Open Questions section: every "OQ-{N}" line (or YAML frontmatter OQ entry) with Priority: high and Timing: before-build is a ` +
   `mandatory topic. Add topics for load-bearing unknowns in Tech Stack, Constraints, and Risks. Return between ` +
   `${HISTORICAL_MIN_TOPICS} and ${MAX_TOPICS} topics, most important first — each with a kebab-case slug, a precise question, a ` +
   `priority, and concrete acceptance criteria. Report reasoning first.</task>`

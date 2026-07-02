@@ -102,6 +102,9 @@ test('T3 research: topicsMax absent ⇒ the VERBATIM v2 brief + behavior (no beh
   // The v2 brief: "Return between 2 and 5 topics" + the load-bearing-unknowns instruction.
   assert.match(brief, /Return between 2 and 5 topics/, 'the no-posture brief must be the verbatim v2 "between 2 and 5 topics" brief')
   assert.match(brief, /load-bearing unknowns in Tech Stack, Constraints, and Risks/, 'the no-posture brief must keep the v2 load-bearing-unknowns topic source')
+  // P4 T4 (a): the historical brief now carries the frontmatter-OQ alternative the posture brief has
+  // always had — the two briefs agree on BOTH OQ encodings (a "OQ-N" body line OR a frontmatter entry).
+  assert.match(brief, /or YAML frontmatter OQ entry/, 'the historical brief must accept the frontmatter OQ encoding too (P4 T4 (a))')
   // And it must NOT carry the posture-only §3.2 instructions (those would change v2 behavior).
   assert.doesNotMatch(brief, /EMPTY topics list/, 'no-posture brief must NOT instruct the zero-topics branch (that is posture-only)')
   assert.doesNotMatch(brief, /hard ceiling/, 'no-posture brief must NOT use the posture cap wording')
@@ -325,4 +328,36 @@ test('T3 lever 5: the FULL (council) path KEEPS the dedicated numerobis:handoff 
   assert.ok(labelsIn(calls).includes('numerobis:handoff'), 'full path: the dedicated handoff pass is kept (lever 5 is partial)')
   const synth = calls.find((c) => c.label === 'plato:synthesis').prompt
   assert.doesNotMatch(synth, /architecture-handoff\.md/, 'full path: Plato does NOT fold the handoff (the dedicated agent owns it)')
+})
+
+// ── P4 T4 consumer alignment: the visualDirection thread (d) + athena reads VISION (c) ───────────
+const visionPath = '/tmp/nonexistent-kiln/.kiln/docs/VISION.md'
+
+test('T4 (c): athena:validate reads VISION for the completeness-vs-goals ruling', async () => {
+  const { calls } = await runWorkflow(ARCHITECTURE, { ...baseArgs, planning: 'single' }, archRespond('trivial'))
+  const av = calls.find((c) => c.label.startsWith('athena:validate')).prompt
+  assert.ok(av.includes(visionPath), 'the validator now has VISION in her read list — she rules completeness vs VISION goals')
+})
+
+test('T4 (d): a threaded visualDirection arg IS has_visual_direction — the foundation agent is not consulted', async () => {
+  // arg=true even though the foundation reports has_visual_direction:false → the arg wins in the SCRIPT
+  const argTrue = await runWorkflow(ARCHITECTURE, { ...baseArgs, planning: 'single', visualDirection: true }, archRespond('trivial'))
+  assert.equal(argTrue.result.has_visual_direction, true, 'the conductor-threaded arg wins over the foundation judgment')
+  assert.ok(labelsIn(argTrue.calls).includes('design:tokens'), 'arg=true forces the design leg even when foundation said false')
+  const fpTrue = argTrue.calls.find((c) => c.label === 'numerobis:foundation').prompt
+  assert.match(fpTrue, /set has_visual_direction=true verbatim/, 'the foundation agent is TOLD the answer, not asked to judge it')
+  assert.doesNotMatch(fpTrue, /decline line/, 'the decline-byte judgment is not asked when the arg is threaded')
+
+  // arg=false even though the foundation reports has_visual_direction:true → the arg wins, design leg skipped
+  const argFalse = await runWorkflow(ARCHITECTURE, { ...baseArgs, planning: 'single', visualDirection: false }, archRespondVD('trivial'))
+  assert.equal(argFalse.result.has_visual_direction, false, 'arg=false overrides a foundation true')
+  assert.ok(!labelsIn(argFalse.calls).includes('design:tokens'), 'arg=false skips the design leg even when foundation said true')
+})
+
+test('T4 (d): absent visualDirection ⇒ the foundation agent judges, given the EXACT decline bytes', async () => {
+  const { calls } = await runWorkflow(ARCHITECTURE, { ...baseArgs, planning: 'single' }, archRespond('trivial'))
+  const fp = calls.find((c) => c.label === 'numerobis:foundation').prompt
+  assert.match(fp, /whether the VISION Visual Direction section contains real Visual Direction/, 'absent ⇒ the agent is asked to judge (the pre-v3 fallback)')
+  assert.match(fp, /No visual direction specified\. Build will proceed without design system generation\./, 'the EXACT decline bytes are quoted, not the elided "..." the scout flagged')
+  assert.doesNotMatch(fp, /section 12/, 'the "section 12" reference is retired (v3 renumbered)')
 })

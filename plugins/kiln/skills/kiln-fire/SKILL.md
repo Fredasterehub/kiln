@@ -113,6 +113,15 @@ surface and onboarding is cheap. Detect first, then confirm.
    (manifests, source, git history), it is **brownfield**; if empty/new, **greenfield**.
 2. **Capture intent.** If the operator passed a one-liner with the command, use it; otherwise ask
    (free text) what they want to build.
+
+   **Express-intake offer (only when the brief is already substantial).** If the operator arrived
+   with a real brief — pasted a spec, pointed at a doc, or dictated several paragraphs of concrete
+   intent — **OFFER** (AskUserQuestion, never impose — the brainstorm is one of the two human moments
+   this pipeline reserves): *Full facilitation* (the guided ideation arc) vs *Express intake* (Da Vinci
+   ingests the brief, still runs the mandatory style probe + clarify pass as one confirmation round,
+   and records the tier `express`). A thin or absent brief ⇒ don't offer; full facilitation is the
+   default. Record the choice as `brainstorm_intake: full|express` in `project-brief.md` (so a
+   cross-session resume recovers it) — it rides Da Vinci's spawn prompt at the Brainstorm stage.
 3. **Ask the setup cards** (AskUserQuestion — one round). Project type is auto-detected
    in step 1; only make it a card if detection is genuinely ambiguous. Otherwise ask:
    - **Plan approval** — `Gated` (you pause for operator approval of the master plan before build)
@@ -158,37 +167,71 @@ surface and onboarding is cheap. Detect first, then confirm.
    the template ships `pending` sentinels, never leave them), `last_completed_stage: onboarding`,
    `next_action`. Leave `posture: not yet gauged` (the Gauge stage fills it). Write
    `<project_path>/.kiln/docs/project-brief.md` (intent, type, constraints, testing rigor, stack
-   hint, **and the `posture_override` from the Rigor card** — `null`/`max`/`fast` — so a cross-session
-   resume that reaches the Gauge stage recovers the operator's rigor choice from the brief). Stamp
-   `step_onboarding_completed_at`.
+   hint, **the `posture_override` from the Rigor card** — `null`/`max`/`fast` — so a cross-session
+   resume that reaches the Gauge stage recovers the operator's rigor choice from the brief, **and the
+   `brainstorm_intake` choice** — `full`/`express` — so the Brainstorm stage recovers it on resume).
+   Stamp `step_onboarding_completed_at`.
 6. **From here on, resolve every `.kiln/` path and every workflow `projectPath`/`kilnDir` arg against
    the absolute `project_path`** — not against `./` (see *Path discipline*). Render the Tier-1 banner
    transitioning to **Brainstorm** and proceed.
 
-## Stage: BRAINSTORM (interactive, Teams)
+## Stage: BRAINSTORM (interactive, Teams) — da-vinci keeps a ledger; a compiler writes the VISION
 
 The only stage that uses a team, and only because the operator drives it live — a human-scheduled
-single facilitator cannot trip the idle/deadlock bug.
+single facilitator cannot trip the idle/deadlock bug. Da Vinci **no longer authors `VISION.md`**: he
+keeps an append-only **session ledger** at `<project_path>/.kiln/docs/brainstorm-ledger.jsonl`, and a
+fresh-context compiler (the `vision.js` leg in step 4) turns that ledger — its SOLE source — into the
+gated `VISION.md`. Traceability is now structural: the compiler never saw the chat, so every idea in
+the VISION traces to a logged operator turn.
 
-1. Render the *"Da Vinci uncaps the paint…"* transition + the Brainstorm Tier-1 banner.
+0. **Resume check (mid-brainstorm is now crash-proof).** Before spawning, look for
+   `<project_path>/.kiln/docs/brainstorm-ledger.jsonl`. If it exists with entries, a prior session was
+   interrupted mid-brainstorm — the ledger IS the recoverable state. Offer the operator (AskUserQuestion
+   or plain prose): **continue from the last logged entry** (spawn Da Vinci with a *resume* note — he
+   re-reads the ledger and continues from its last `seq`+1) or **start fresh** (they may `rm` the ledger
+   for a cold session). Never silently discard a ledger. On a fresh run (no ledger) go straight to step 1.
+1. Render the *"Da Vinci uncaps the paint…"* transition + the Brainstorm Tier-1 banner, and **stamp
+   `step_brainstorm_started_at`** in STATE (real ISO-8601 — this entry-stamp was never set before).
 2. `TeamCreate` a single-purpose team, then spawn **Da Vinci** (agent `kiln:the-creator`) as an
-   interactive teammate. **In his spawn prompt, give him the absolute `project_path`** so he can read
-   `<project_path>/.kiln/docs/project-brief.md` and write `<project_path>/.kiln/docs/VISION.md`
-   (plus `vision-notes.md`, `vision-priorities.md`). Set his `description:` to an unused Da Vinci
-   quote from `data/agents.json`. He loads the `kiln-brainstorm` skill himself (62 techniques, 50
-   elicitation methods, 7 phases, the 12-section schema) — you do not duplicate that here.
+   interactive teammate. His spawn prompt carries:
+   - the absolute `project_path` — he reads `<project_path>/.kiln/docs/project-brief.md` (and, for a
+     brownfield run, `codebase-map.md`) and writes ONLY `brainstorm-ledger.jsonl`, never `VISION.md`.
+   - the **intake mode** — the express offer you made at onboarding (see the Express intake note in
+     Onboarding). If the operator chose **express**, say so and point him at the substantial brief:
+     the `kiln-brainstorm` express-intake section triggers on exactly this — it ingests the brief,
+     infers nothing silently (every default logged as an `assumption`), and runs the style probe +
+     clarify pass as the ONE confirmation round, recording the tier `express`. Otherwise say **full
+     facilitation** (he offers the depth tiers in Phase 1 himself).
+   - a *resume* note when step 0 chose continue (resume from the ledger's last `seq`).
+   Set his `description:` to an unused Da Vinci quote from `data/agents.json`. He loads the
+   `kiln-brainstorm` skill himself (62 techniques, 50 elicitation methods, the 7 phases, the
+   session-ledger event vocabulary, the three MUSTs) — you do not duplicate that here.
 3. Tell the operator to switch to Da Vinci's window (Shift+Down) and converse there. Then **you wait**
    for one message — do no work in this context while the brainstorm runs.
-4. On the teammate's terminal `BRAINSTORM_COMPLETE` message: tear down the team (it is finished — no
-   second `TeamCreate` this run), confirm `<project_path>/.kiln/docs/VISION.md` exists, render
-   *"The vision crystallizes…"*, update STATE (`stage: gauge`, `last_completed_stage: brainstorm`,
-   stamp `step_brainstorm_completed_at`), and proceed to the **Gauge** stage (it reads the fresh
-   VISION before any autonomous stage runs).
+4. On the teammate's terminal **`BRAINSTORM_COMPLETE. Ledger at <abs path>, <N> entries.`** message:
+   tear down the team (it is finished — no second `TeamCreate` this run). The ledger is sealed; now
+   **compile and gate it** with the vision-compile leg:
+   `Workflow({scriptPath: "$PLUGIN_ROOT/workflows/vision.js", args: {kilnDir: "<abs>/.kiln", projectPath: "<abs>", pluginRoot: "<abs $PLUGIN_ROOT>"}})`.
+   It runs the mechanical `kiln-vision ledger-gate` (an incomplete session can never compile), then ONE
+   fresh-context compiler writes `<project_path>/.kiln/docs/VISION.md` from the ledger, then the
+   deterministic `kiln-vision validate` gate (≤2 revise passes). It returns
+   `{vision_valid, vision_file, tier, counts, unresolved, visual_direction}`.
+   - **`vision_valid: true`** → render *"The vision crystallizes…"*, update STATE (`stage: gauge`,
+     `last_completed_stage: brainstorm`, stamp `step_brainstorm_completed_at`), **and hold the returned
+     `visual_direction`** for this run — you thread it into the Architecture launch as `visualDirection`
+     (see the Architecture arg notes; the mechanical path r1 F6). Proceed to the **Gauge** stage (it
+     reads the fresh VISION before any autonomous stage runs).
+   - **`vision_valid: false`** → do NOT advance. The return's typed `violations` (+ `reason`) name
+     exactly what the session still owes. Judge: re-enter Da Vinci with the named gaps (re-spawn — the
+     ledger is already on disk; he appends the fixes and re-signals), or surface the violations to the
+     operator. `VISION.md` is derived — a re-run recompiles it from the ledger, so a partial file left
+     on disk is harmless.
 
 **Soft prerequisite:** interactive teams need `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`. If team spawn
 is unavailable, **fall back** to facilitating the brainstorm yourself in this session using the
-`kiln-brainstorm` skill, write the same files, then continue — no team, no signal. (This is the
-documented idle-bug fallback; the artifact contract is identical either way.)
+`kiln-brainstorm` skill — the artifact contract is **identical**: write the append-only
+`brainstorm-ledger.jsonl` (never `VISION.md` directly), then run `vision.js` exactly as in step 4 to
+compile and gate it. No team, no signal, one artifact contract either way.
 
 ## Stage: GAUGE (autonomous, Workflow) — the proportionality engine
 
@@ -239,6 +282,7 @@ artifact summary it wrote to `.kiln/`, update STATE, render the transition, adva
 
 | Stage | Launch | Reads | Writes |
 |---|---|---|---|
+| Brainstorm→VISION | `workflows/vision.js` | brainstorm-ledger.jsonl | `.kiln/docs/VISION.md` (compiled + gated; the brainstorm-stage compile leg — launched from the Brainstorm handler above, not a top-level stage) |
 | Gauge | `workflows/gauge.js` | VISION.md (+codebase-map.md) | `state.json.posture` / STATE `posture:`, ledger `posture_set` |
 | Research | `workflows/research.js` | VISION.md | `.kiln/docs/research.md` (only when topics > 0; the §3.2 zero-topics route writes none and returns `research_file: null`) |
 | Architecture | `workflows/architecture.js` | research.md (if present), VISION.md | `.kiln/master-plan.md`, architecture docs |
@@ -246,12 +290,23 @@ artifact summary it wrote to `.kiln/`, update STATE, render the transition, adva
 | Validate | `workflows/validate.js` | master-plan.md, built app | `.kiln/validation/report.md` |
 | Report | `workflows/report.js` | all .kiln artifacts + built project | `.kiln/REPORT.md` |
 
+The `VISION.md` that Gauge, Research, and Architecture read is the **v3 compiled + gated artifact**
+`vision.js` produces from the brainstorm ledger — its YAML frontmatter (`tier`, `visual_direction`,
+`counts`, `open_questions`) is the authoritative machine surface those stages key on (research reads
+the frontmatter/section OQs; architecture threads `visual_direction`; the D-dims read the same VISION
+whether the tier is `express` or a facilitated tier).
+
 Base launch pattern: `Workflow({scriptPath: "$PLUGIN_ROOT/workflows/<stage>.js", args: {kilnDir: "<abs>/.kiln", projectPath: "<abs>", testingRigor, codexAvailable}})`.
 Pass the absolute `$PLUGIN_ROOT`-resolved paths, the operator's `testing_rigor` from STATE, and
 `codexAvailable` from the kiln-doctor probe (drives the Codex-vs-Sonnet paths). `build.js` honors
 `testingRigor` (tdd/standard/minimal). The base pattern is a **launch convenience** — one shape for
 every stage, and a workflow simply ignores base args it doesn't read; the per-stage notes below are
 the authoritative consumption contract. Each stage adds the args it actually reads:
+- **Brainstorm→VISION** (`vision.js`, launched from the Brainstorm handler) takes ONLY `kilnDir`,
+  `projectPath`, and **`pluginRoot`** — `pluginRoot` is LOAD-BEARING here (it locates the `kiln-vision`
+  gate CLI, this leg's floor and verdict; absence fails CLOSED with a named reason, never a gateless
+  compile). It returns `{vision_valid, tier, counts, unresolved, visual_direction, …}`; you thread the
+  returned **`visual_direction`** into the Architecture launch as `visualDirection` (below).
 - **Gauge** takes `postureOverride`, `assessorModel`, `pluginRoot` (see the Gauge stage above). It is
   the source of the posture-derived args every downstream stage reads.
 - **Research** also takes **`topicsMax`** = `posture.research_topics_max` (always a
@@ -276,7 +331,14 @@ the authoritative consumption contract. Each stage adds the args it actually rea
   checks; default `'opus'` — pass another slot per capability tier). `pluginRoot` is the same absolute
   `$PLUGIN_ROOT` from §0 — it locates the `kiln-law` CLI for the Law's dryrun and index/lock step;
   omit it and the lock degrades to `law_locked: false` with a recorded reason — never a silent
-  proceed, never a stage crash. Architecture self-detects whether research.md
+  proceed, never a stage crash. Architecture also takes an **optional `visualDirection`** — the boolean
+  `vision.js` returned at brainstorm (the mechanical path r1 F6: a workflow cannot read a file
+  in-script, so arg-threading is the only mechanical route). When you pass it, it **IS**
+  `has_visual_direction` — the decline-byte check lives in the vision gate now, so architecture's
+  foundation agent is NOT asked to re-judge it and design-token generation gates on your threaded value.
+  **Omit it** (a pre-v3 VISION, a harness run, or a cross-session resume that starts at architecture
+  without the brainstorm return in hand) and the foundation agent judges it from the VISION as the
+  pre-v3 fallback — a run without the thread is unchanged. Architecture self-detects whether research.md
   exists (a cheap `ls` probe, the §4 self-validation discipline) and grounds in VISION.md directly when
   the §3.2 zero-topics route wrote none — it never points an agent at a phantom research file.
 - **Build** also takes `milestoneLimit` (omit in production = all milestones), `uiBuild`,

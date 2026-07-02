@@ -56,6 +56,12 @@ const planning = (A.planning === 'dual' || A.planning === 'single+redteam' || A.
 // (2 on the lite path, 3 otherwise, matching v2). A positive integer arg overrides it; garbage is
 // ignored.
 const validationRoundsArg = (Number.isInteger(A.validationRounds) && A.validationRounds > 0) ? A.validationRounds : null
+// visualDirection (P4 T4 / r1 F6): the conductor threads vision.js's validator-parsed
+// visual_direction. When boolean it IS has_visual_direction — the decline-byte check lives in the
+// vision gate now, so the foundation agent is NOT consulted for it. Absent (pre-v3 VISION, harness
+// runs, a resume without the return) ⇒ null ⇒ the foundation agent judges it as the fallback, given
+// the EXACT decline bytes (src/vision.mjs DECLINE_LINE, quoted — a workflow cannot import it).
+const visualDirection = (typeof A.visualDirection === 'boolean') ? A.visualDirection : null
 
 const docsDir = `${kilnDir}/docs`
 const plansDir = `${kilnDir}/plans`
@@ -100,7 +106,7 @@ const FOUNDATION_SCHEMA = {
     architecture_file: { type: 'string' },
     tech_stack_file: { type: 'string' },
     arch_constraints_file: { type: 'string' },
-    has_visual_direction: { type: 'boolean', description: 'true unless VISION section 12 is the decline string' },
+    has_visual_direction: { type: 'boolean', description: 'true unless the VISION Visual Direction section is the decline string (consulted only when the conductor does not thread visualDirection)' },
     scope: { type: 'string', enum: ['trivial', 'standard', 'complex'], description: 'trivial = ONE cohesive artifact (a single page/script/small CLI) with one obvious approach and no competing architectures worth comparing; standard = a handful of components; complex = many interacting parts or genuine architectural forks' },
     estimated_milestones: { type: 'number', description: 'honest count of genuinely independent, separately-buildable-and-verifiable milestones (a single cohesive artifact is 1)' },
     summary: { type: 'string', description: 'tech summary the planners need: stack, key constraints, decisions' },
@@ -331,6 +337,13 @@ const researchInList = researchPresent ? `${researchFile}, ` : ''
 // researchSummaryClause — trailing prose ("...and the research") used in two single-plan leads.
 const researchSummaryClause = researchPresent ? ' and the research' : ''
 log(`${spin('foundation', 0)}`)
+// (d) Visual-direction authority (P4 T4): the conductor threads vision.js's visual_direction as the
+// visualDirection arg — when present it IS has_visual_direction and the foundation agent is not asked
+// to re-judge it (the byte-check moved INTO the vision gate). Absent ⇒ the agent judges it here, given
+// the EXACT decline bytes (not the elided quote the consumer scout flagged).
+const vdAsk = visualDirection === null
+  ? `and whether the VISION Visual Direction section contains real Visual Direction (set has_visual_direction=false ONLY if that section is exactly this decline line: "No visual direction specified. Build will proceed without design system generation.")`
+  : `and set has_visual_direction=${visualDirection} verbatim — the visual direction was already determined upstream from the compiled VISION frontmatter; do NOT re-judge it`
 const foundation = await agent(
   voice('opus') +
   `You are the technical authority — decide the architecture, do not implement it.\n\n` +
@@ -339,14 +352,18 @@ const foundation = await agent(
   `- ${docsDir}/architecture.md — the chosen high-level architecture and component breakdown.\n` +
   `- ${docsDir}/tech-stack.md — concrete stack decisions, justified by ${researchPresent ? 'the research findings' : 'the VISION requirements'}.\n` +
   `- ${docsDir}/arch-constraints.md — invariants and constraints every plan must honor.\n` +
-  `${researchGrounding} Then report a tight technical summary the planners will build on, and whether VISION section 12 contains real Visual Direction (has_visual_direction=false only if it is exactly the "No visual direction specified..." decline line). Finally, classify the deliverable's scope honestly: 'trivial' = ONE cohesive artifact (a single page, script, or small CLI) with one obvious approach and no competing architectures worth comparing; 'standard' = a handful of independent components; 'complex' = many interacting parts or genuine architectural forks. Give estimated_milestones = the count of genuinely independent, separately-buildable-and-verifiable milestones (a single cohesive artifact is 1). Report reasoning first.\n</task>`,
+  `${researchGrounding} Then report a tight technical summary the planners will build on, ${vdAsk}. Finally, classify the deliverable's scope honestly: 'trivial' = ONE cohesive artifact (a single page, script, or small CLI) with one obvious approach and no competing architectures worth comparing; 'standard' = a handful of independent components; 'complex' = many interacting parts or genuine architectural forks. Give estimated_milestones = the count of genuinely independent, separately-buildable-and-verifiable milestones (a single cohesive artifact is 1). Report reasoning first.\n</task>`,
   { label: 'numerobis:foundation', phase: 'Laying Stone', model: 'opus', schema: FOUNDATION_SCHEMA }
 )
-log(`Foundation docs written; visual direction: ${foundation && foundation.has_visual_direction}`)
+// (d) The authoritative visual-direction boolean: the conductor-threaded arg wins; else the
+// foundation agent's judgment (the pre-v3 fallback). Everything downstream reads THIS, not the
+// raw foundation field, so a threaded arg short-circuits mechanically in the SCRIPT.
+const hasVisualDirection = (typeof visualDirection === 'boolean') ? visualDirection : !!(foundation && foundation.has_visual_direction)
+log(`Foundation docs written; visual direction: ${hasVisualDirection}${visualDirection === null ? '' : ' (conductor-threaded)'}`)
 
 // ── Design tokens (conditional — only when VISION has real Visual Direction) ──
 // Velocity lever 6 (§9): design:tokens runs in PARALLEL with The Council. Its only inputs are
-// VISION section 12 + tech-stack.md (both already on disk after foundation), and NO downstream
+// VISION's Visual Direction section + tech-stack.md (both already on disk after foundation), and NO downstream
 // architecture agent reads the design system — it is consumed by the BUILD stage's UI builder —
 // so the write only needs to land before this stage returns. We launch it here as a detached
 // promise that overlaps The Council + The Lantern (full path) or the synthesis (lite path), and
@@ -354,12 +371,12 @@ log(`Foundation docs written; visual direction: ${foundation && foundation.has_v
 // purpose: the two conditions differ (tokens gate on has_visual_direction, the council on the
 // posture/scope), so coupling them would wrongly skip tokens on a lite-path visual deliverable.
 let designPromise = null
-if (foundation && foundation.has_visual_direction) {
+if (hasVisualDirection) {
   log('Design tokens launching in parallel (visual direction present)')
   designPromise = agent(
     voice('opus') +
     `You are Kiln's design lead.\n\n` +
-    `<inputs>\n- Visual Direction (section 12) of ${visionFile}\n- ${docsDir}/tech-stack.md\n</inputs>\n\n` +
+    `<inputs>\n- the Visual Direction section of ${visionFile}\n- ${docsDir}/tech-stack.md\n</inputs>\n\n` +
     `<task>Write a design system (Bash 'mkdir -p ${designDir}' first):\n` +
     `- ${designDir}/tokens.json — design tokens (color, typography, spacing, motion) as structured JSON.\n` +
     `- ${designDir}/tokens.css — the same tokens as CSS custom properties.\n` +
@@ -390,9 +407,12 @@ const executableAcRule =
   `Write each acceptance criterion as an EXECUTABLE check, not prose — a shell command, a pytest ` +
   `invocation, an HTTP request with the expected response, or a Playwright step. validate exercises ` +
   `these literally, so "the CLI adds a todo" must become e.g. \`todo add "x" && todo list | grep x\`. ` +
-  `Number every acceptance criterion with a globally unique SC id (SC-001, SC-002, … — unique across ` +
-  `ALL milestones): the Law (BLUEPRINT §5) compiles exactly ONE locked check per SC, so coverage ` +
-  `stays arithmetic, never judgment.`
+  `Give every acceptance criterion a Success Criterion id: ADOPT VISION's SC-NNN ids VERBATIM where a ` +
+  `criterion traces to one (read the Success Criteria section of ${visionFile}), and MINT a new ` +
+  `sequential SC id only for a criterion the plan itself adds — so VISION, the plan, the Law, and ` +
+  `validate's goal-backward all share ONE identifier space. Ids stay globally unique across ALL ` +
+  `milestones: the Law (BLUEPRINT §5) compiles exactly ONE locked check per SC, so coverage stays ` +
+  `arithmetic, never judgment.`
 
 // The single-vs-dual fork. The Gauge posture (planning) is the authoritative upstream decider when
 // present: 'dual' runs The Council, 'single'/'single+redteam' take the lite single-plan path.
@@ -519,7 +539,7 @@ for (let round = 0; round < validationPasses; round++) {
   const val = (await agent(
     voice('opus') +
     `You are the plan validator — your sole job is to find holes, not to propose the solution.\n\n` +
-    `<inputs>\n${masterPlanFile} (and ${docsDir}/arch-constraints.md${researchPresent ? `, ${researchFile}` : ''} for grounding). ${noWander}\n</inputs>\n\n` +
+    `<inputs>\n${masterPlanFile} (and ${visionFile}, ${docsDir}/arch-constraints.md${researchPresent ? `, ${researchFile}` : ''} for grounding). ${noWander}\n</inputs>\n\n` +
     `<task>Validate the plan on EVERY dimension: completeness vs VISION goals, milestone ordering/dependencies, ` +
     `testability (acceptance criteria PRESENT and written as EXECUTABLE checks — shell/pytest/HTTP/Playwright — not prose; ` +
     `fits "${testingRigor}" rigor), constraint adherence, ${researchPresent ? `research-grounding (no decision contradicts research), ` : ``}` +
@@ -569,8 +589,10 @@ if (!(verdict && verdict.verdict === 'PASS')) {
     `<inputs>\nRead (${noWander}): ${masterPlanFile}, ${docsDir}/architecture.md, ${docsDir}/tech-stack.md, ` +
     `${docsDir}/arch-constraints.md.\n</inputs>\n\n` +
     `<task>\n` +
-    `1. Enumerate EVERY acceptance criterion in the master plan as an SC id (SC-001, SC-002, …) — adopt the ` +
-    `plan's ids where present, assign sequential ones where missing; ids are globally unique across milestones.\n` +
+    `1. Enumerate EVERY acceptance criterion in the master plan as an SC id (SC-001, SC-002, …) — ADOPT the ` +
+    `plan's ids VERBATIM where present (they carry VISION's Success Criterion ids forward — one identifier ` +
+    `space VISION→plan→Law), assign sequential ones only where the plan left a criterion un-numbered; ids ` +
+    `are globally unique across milestones.\n` +
     `2. For EACH SC write exactly ONE executable check under ${projectPath}/tests/acceptance/ (Bash ` +
     `'mkdir -p ${projectPath}/tests/acceptance' first) — project-native, the checks ship with the product. ` +
     `Choose the kind by the milestone's stack: 'shell' (a script exiting 0 on pass), 'pytest' (a test file), ` +
@@ -881,7 +903,7 @@ return {
   milestone_count: synth && synth.milestone_count,
   validation: verdict && verdict.verdict,
   failed_dimensions: (verdict && verdict.failed_dimensions) || [],
-  has_visual_direction: foundation && foundation.has_visual_direction,
+  has_visual_direction: hasVisualDirection,
   scope: foundation && foundation.scope,
   lite_path: liteScope,
   surfaces: (synth && synth.milestones || []).map((m) => ({ id: m.id, surface: m.surface })),
