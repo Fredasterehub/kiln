@@ -58,8 +58,14 @@
   "_doc_min_slices_for_tribunal": "3.2 milestone-gate row: the dual-analyst tribunal runs only when a milestone has at least this many slices; a single-slice milestone's gate is slice review + goal-backward (tribunal redundancy skip, proven safe class [R:adaptive-orchestration 4]).",
   "min_slices_for_tribunal": 2,
 
-  "_doc_trivial_tier_dim_max": "P5.5 scope-tier predicate: scope_tier is 'trivial' iff EVERY dimension D1..D8 scores <= this value; one elevated dimension anywhere reads 'standard' (non-compensatory — a lone D8=1 or D4=1 must never read trivial). Field anchors: Run A's all-quiet profile => trivial; Run B's D1=1,D2=1,D6=1,D7=1 => standard. Conservative default 0 — false-standard costs minutes, false-trivial costs gates.",
+  "_doc_trivial_tier_dim_max": "P5.5 scope-tier predicate, recalibrated at the P6 T4 benchmark (Bench Finding 1): the ceiling for every dimension NOT in trivial_tier_soft_dims. Non-compensatory — no sums; a lone D8=1 or D4=1 must never read trivial (D4/D8 are structurally outside the soft set). Field anchors: bench-a profile (D6=1 alone, the rubric's own 'single store, simple schema' example) => trivial; Run B's D1=1,D2=1,D6=1,D7=1 => standard; the high-dims/effort-0 trap => standard.",
   "trivial_tier_dim_max": 0,
+
+  "_doc_trivial_tier_soft_dims": "The NAMED benign dimensions allowed up to trivial_tier_soft_dim_max while the tier still reads trivial. Field-derived, one entry per ledger-proven case: D6 (data & state) — the canonical trivial fixture (todo CLI, one flat JSON file) honestly scores D6=1 because ANY persistent store does; demanding D6=0 made the trivial tier empty in practice (P6 T4 benchmark, gauge r1). Extend only with ledger evidence.",
+  "trivial_tier_soft_dims": ["D6"],
+
+  "_doc_trivial_tier_soft_dim_max": "The ceiling for the soft dimensions above. 1 = the rubric's 'single store, simple schema'; 2 (migrations/concurrency/multi-tenant) is never trivial.",
+  "trivial_tier_soft_dim_max": 1,
 
   "_doc_tribunal_threshold_trivial_bump": "P5.5 tribunal-vs-posture lever: at scope_tier 'trivial' the effective tribunal threshold is min_slices_for_tribunal + this bump (2->3 at defaults); at 'standard', unchanged. Field evidence: Run A (trivial) tribunal marginal — one MEDIUM beyond the slice reviews; Run B (standard) decisive — the M2 path-traversal catch. Goal-backward NEVER skips at any tier.",
   "tribunal_threshold_trivial_bump": 1,

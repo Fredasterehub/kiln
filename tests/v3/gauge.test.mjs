@@ -147,27 +147,34 @@ test('posture: review — ui_effort_base flips medium->high at D8>=1; escalate_o
 test('posture: milestone_gate — goal-backward ALWAYS true; tribunal threshold 3 at trivial tier, 2 at standard', () => {
   // trivial (all-zero profile): the P5.5 bump raises the threshold 2->3; goal-backward untouched
   assert.deepEqual(posture(prof(), CONFIG).milestone_gate, { min_slices_for_tribunal: 3, goal_backward: true })
-  // any single elevated dimension => standard => the table's 2
-  assert.deepEqual(posture(prof({ D6: 1 }), CONFIG).milestone_gate, { min_slices_for_tribunal: 2, goal_backward: true })
+  // the soft dimension at 1 stays trivial => still the bumped 3 (Bench Finding 1)
+  assert.deepEqual(posture(prof({ D6: 1 }), CONFIG).milestone_gate, { min_slices_for_tribunal: 3, goal_backward: true })
+  // any elevated NON-soft dimension => standard => the table's 2
+  assert.deepEqual(posture(prof({ D1: 1 }), CONFIG).milestone_gate, { min_slices_for_tribunal: 2, goal_backward: true })
   assert.deepEqual(posture(prof({ D1: 2, D2: 2, D3: 2, D4: 2, D5: 2, D6: 2, D7: 2, D8: 2 }), CONFIG).milestone_gate, { min_slices_for_tribunal: 2, goal_backward: true })
   // the bump is a config knob
   assert.equal(posture(prof(), { ...CONFIG, tribunal_threshold_trivial_bump: 2 }).milestone_gate.min_slices_for_tribunal, 4)
 })
 
 // ── posture: the P5.5 scope-tier predicate (the trivial-tier levers key on THIS, never effort) ───
-test('posture: scope_tier — trivial iff EVERY dimension <= trivial_tier_dim_max; non-compensatory', () => {
+test('posture: scope_tier — soft-dims predicate (Bench Finding 1): D6 may sit at 1, everything else at 0', () => {
   assert.equal(posture(prof(), CONFIG).scope_tier, 'trivial')
-  // one elevated dimension ANYWHERE reads standard — all eight, one by one
-  for (const d of ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8']) {
+  // the bench-a field profile: D6=1 alone (any persistent store) => TRIVIAL — the canonical case
+  assert.equal(posture(prof({ D6: 1 }), CONFIG).scope_tier, 'trivial')
+  // the soft ceiling is 1: migrations/concurrency-grade state (D6=2) is never trivial
+  assert.equal(posture(prof({ D6: 2 }), CONFIG).scope_tier, 'standard')
+  // every NON-soft dimension at 1 reads standard — seven, one by one (D4/D8 structurally banned)
+  for (const d of ['D1', 'D2', 'D3', 'D4', 'D5', 'D7', 'D8']) {
     assert.equal(posture(prof({ [d]: 1 }), CONFIG).scope_tier, 'standard', `${d}=1 must read standard`)
   }
   // the r1 catch: a high-dims/effort-0 profile is NOT trivial (effort_bias is a reasoning dial)
   const highDims = posture(prof({ D1: 2, D2: 2, D5: 2, D6: 2, D7: 2 }), CONFIG)
   assert.equal(highDims.effort_bias, 0)
   assert.equal(highDims.scope_tier, 'standard')
-  // Run B's field profile => standard
+  // Run B's field profile => standard (three non-soft dims elevated)
   assert.equal(posture(prof({ D1: 1, D2: 1, D6: 1, D7: 1 }), CONFIG).scope_tier, 'standard')
-  // the predicate is a config knob: at dim_max 1 the Run-B-like profile reads trivial
+  // both knobs are config: widening the soft set admits a new benign dim; raising dim_max widens all
+  assert.equal(posture(prof({ D3: 1, D6: 1 }), { ...CONFIG, trivial_tier_soft_dims: ['D3', 'D6'] }).scope_tier, 'trivial')
   assert.equal(posture(prof({ D1: 1, D2: 1, D6: 1, D7: 1 }), { ...CONFIG, trivial_tier_dim_max: 1 }).scope_tier, 'trivial')
 })
 
@@ -379,12 +386,13 @@ test('gauge-config.json: every §3.3 normative constant ships at its normative v
     plan_validation_rounds_base: 1, plan_validation_d2_min: 1, plan_validation_d8_min: 2,
     slice_budget_d7_min: 1, d7_slice_budget_factor: 0.5,
     review_high_d8_min: 1, min_slices_for_tribunal: 2,
-    trivial_tier_dim_max: 0, tribunal_threshold_trivial_bump: 1,
+    trivial_tier_dim_max: 0, tribunal_threshold_trivial_bump: 1, trivial_tier_soft_dim_max: 1,
     browser_tier2_d7_min: 1, browser_tier2_d8_min: 1,
     validate_adversarial_d8_min: 2, validate_second_family_d8_min: 2,
   }
   for (const [k, v] of Object.entries(mapping)) assert.equal(CONFIG[k], v, k)
   assert.deepEqual(CONFIG.effort_bias_dims, ['D3', 'D4', 'D8'])
+  assert.deepEqual(CONFIG.trivial_tier_soft_dims, ['D6'])
 })
 
 test('gauge-config.json: every functional key carries a sibling _doc_ comment key', () => {

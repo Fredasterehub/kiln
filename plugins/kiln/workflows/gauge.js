@@ -82,11 +82,16 @@ function validateProfile(profile) {
 }
 function posture(profile, config) {
   const D = (k) => profile[k].score
-  // P5.5 scope-tier predicate: trivial iff EVERY dimension <= trivial_tier_dim_max (default 0).
-  // Non-compensatory like everything else here — and deliberately NOT the effort dial:
-  // effort_bias is max(D3,D4,D8), a reasoning dial, so a large/ambiguous/stateful profile
-  // (D1:2,D2:2,D5:2,D6:2,D7:2) still dials effort 0 while being nothing like trivial scope.
-  const scope_tier = ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'].every((k) => D(k) <= config.trivial_tier_dim_max) ? 'trivial' : 'standard'
+  // P5.5 scope-tier predicate, recalibrated at the P6 T4 benchmark: trivial iff every
+  // dimension sits at trivial_tier_dim_max (default 0) — except the NAMED soft dimensions
+  // (default ["D6"]), which may reach trivial_tier_soft_dim_max (default 1): any persistent
+  // store scores D6=1 under honest rubric reading, so an all-zeros demand made the trivial
+  // tier empty in practice. Still non-compensatory (no sums), still NOT the effort dial
+  // (effort_bias is max(D3,D4,D8) — a reasoning dial), and D4/D8 stay structurally banned
+  // from trivial by not being in the soft set.
+  const scope_tier = ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'].every(
+    (k) => D(k) <= (config.trivial_tier_soft_dims.includes(k) ? config.trivial_tier_soft_dim_max : config.trivial_tier_dim_max)
+  ) ? 'trivial' : 'standard'
   return {
     // P5.5: the tier the trivial-tier levers key on (slice consolidation, runner seat,
     // tribunal bump) — never re-derived inline in workflow code.
@@ -136,7 +141,7 @@ function posture(profile, config) {
 // ── The Gauge config (GAUGE_CONFIG, inlined from gauge-config.json by the bundler — workflow
 //    scripts cannot import JSON; the canonical file stays the single source of truth, --check
 //    guards the inline copy against drift, and the _doc commentary keys are stripped) ──
-const GAUGE_CONFIG = {"h80_human_hours":2,"messiness_discount":0.5,"churn_flips_threshold":2,"rejections_to_feedback_escalation":2,"rejections_to_split":3,"deescalation_clean_window":1,"research_topics_base":2,"planning_dual_d4_min":2,"planning_dual_d3_min":1,"planning_dual_d1_min":1,"planning_redteam_d4_min":1,"planning_redteam_d8_min":1,"plan_validation_rounds_base":1,"plan_validation_d2_min":1,"plan_validation_d8_min":2,"slice_budget_d7_min":1,"d7_slice_budget_factor":0.5,"review_high_d8_min":1,"min_slices_for_tribunal":2,"trivial_tier_dim_max":0,"tribunal_threshold_trivial_bump":1,"browser_tier2_d7_min":1,"browser_tier2_d8_min":1,"validate_adversarial_d8_min":2,"validate_second_family_d8_min":2,"effort_bias_dims":["D3","D4","D8"]}
+const GAUGE_CONFIG = {"h80_human_hours":2,"messiness_discount":0.5,"churn_flips_threshold":2,"rejections_to_feedback_escalation":2,"rejections_to_split":3,"deescalation_clean_window":1,"research_topics_base":2,"planning_dual_d4_min":2,"planning_dual_d3_min":1,"planning_dual_d1_min":1,"planning_redteam_d4_min":1,"planning_redteam_d8_min":1,"plan_validation_rounds_base":1,"plan_validation_d2_min":1,"plan_validation_d8_min":2,"slice_budget_d7_min":1,"d7_slice_budget_factor":0.5,"review_high_d8_min":1,"min_slices_for_tribunal":2,"trivial_tier_dim_max":0,"trivial_tier_soft_dims":["D6"],"trivial_tier_soft_dim_max":1,"tribunal_threshold_trivial_bump":1,"browser_tier2_d7_min":1,"browser_tier2_d8_min":1,"validate_adversarial_d8_min":2,"validate_second_family_d8_min":2,"effort_bias_dims":["D3","D4","D8"]}
 
 // ── MODEL_VOICE shell (Opus only; inlined from src/voice.mjs by the bundler) ──
 const MODEL_VOICE = {

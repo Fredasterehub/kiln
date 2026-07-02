@@ -618,7 +618,7 @@ test('slicer consolidation (P5.5): trivial posture briefs the budget-grouping di
   assert.ok(!sliceBrief(triv.calls).includes(PRE_P55_TEXT), 'the per-command fragmentation example dies at trivial tier')
 
   // standard (one elevated dim) => byte-identical pre-P5.5 sentence, no directive
-  const std = await runBuild({ ...baseArgs, posture: gaugePosture(mkProf({ D6: 1 }), gaugeConfig) }, mkRespond())
+  const std = await runBuild({ ...baseArgs, posture: gaugePosture(mkProf({ D1: 1 }), gaugeConfig) }, mkRespond())
   assert.ok(sliceBrief(std.calls).includes(PRE_P55_TEXT), 'standard tier keeps the pre-P5.5 decomposition text verbatim')
   assert.ok(!sliceBrief(std.calls).includes(DIRECTIVE), 'no directive at standard')
 
@@ -711,7 +711,7 @@ test('runner downshift (P5.5 T3): the transcription seat is haiku at trivial pos
   const runnerModels = (calls) => labelsOf(calls, 'asimov:runner').map((c) => c.model)
 
   const trivial = gaugePosture(mkProf(), gaugeConfig)
-  const standard = gaugePosture(mkProf({ D6: 1 }), gaugeConfig)
+  const standard = gaugePosture(mkProf({ D1: 1 }), gaugeConfig)
   const trap = gaugePosture(mkProf({ D1: 2, D2: 2, D5: 2, D6: 2, D7: 2 }), gaugeConfig) // effort 0, but 5 elevated dims
   assert.equal(trivial.scope_tier, 'trivial')
   assert.equal(standard.scope_tier, 'standard')

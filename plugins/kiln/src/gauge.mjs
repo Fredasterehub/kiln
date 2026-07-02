@@ -43,11 +43,16 @@ export function validateProfile(profile) {
 // the table's '=2', and a lowered override behaves sanely (the rule fires earlier).
 export function posture(profile, config) {
   const D = (k) => profile[k].score
-  // P5.5 scope-tier predicate: trivial iff EVERY dimension <= trivial_tier_dim_max (default 0).
-  // Non-compensatory like everything else here — and deliberately NOT the effort dial:
-  // effort_bias is max(D3,D4,D8), a reasoning dial, so a large/ambiguous/stateful profile
-  // (D1:2,D2:2,D5:2,D6:2,D7:2) still dials effort 0 while being nothing like trivial scope.
-  const scope_tier = ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'].every((k) => D(k) <= config.trivial_tier_dim_max) ? 'trivial' : 'standard'
+  // P5.5 scope-tier predicate, recalibrated at the P6 T4 benchmark: trivial iff every
+  // dimension sits at trivial_tier_dim_max (default 0) — except the NAMED soft dimensions
+  // (default ["D6"]), which may reach trivial_tier_soft_dim_max (default 1): any persistent
+  // store scores D6=1 under honest rubric reading, so an all-zeros demand made the trivial
+  // tier empty in practice. Still non-compensatory (no sums), still NOT the effort dial
+  // (effort_bias is max(D3,D4,D8) — a reasoning dial), and D4/D8 stay structurally banned
+  // from trivial by not being in the soft set.
+  const scope_tier = ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'].every(
+    (k) => D(k) <= (config.trivial_tier_soft_dims.includes(k) ? config.trivial_tier_soft_dim_max : config.trivial_tier_dim_max)
+  ) ? 'trivial' : 'standard'
   return {
     // P5.5: the tier the trivial-tier levers key on (slice consolidation, runner seat,
     // tribunal bump) — never re-derived inline in workflow code.
