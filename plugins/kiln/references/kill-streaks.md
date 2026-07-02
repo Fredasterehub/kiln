@@ -1,10 +1,15 @@
 # Kill Streak Sequence
 
-40 kill-streak names cycling per build milestone. Each name earns its position in a narrative arc from first spark to legend. A single `build_iteration` governs a milestone's entire build — within-milestone slices do not change the name.
+40 kill-streak names cycling per build milestone. Each name earns its position in a narrative arc from first spark to legend. A run's ladder position climbs with both build iterations and validation correction cycles — so a run that fights through corrections actually climbs the ladder.
 
-Select by `build_iteration` (1-indexed, milestone-scoped): `kill_streak_index = (build_iteration - 1) % 40`
+Select by ladder position:
 
-Past iteration 40 the sequence wraps back to `first-blood` (#1) and the arc begins again — exactly what the formula yields.
+- `ladder_position = max(build_iteration + correction_cycle, 1)`
+- `kill_streak_index = (ladder_position - 1) % 40`
+
+Read `build_iteration` from STATE.md's `- **build_iteration**: N` bullet and `correction_cycle` from its `- **correction_cycle**: N` bullet. A missing, `pending`, or non-integer field reads as `0` — a fresh STATE (both `0`, or unwritten) fails soft to `ladder_position = 1` (`first-blood`, Chapter I), never a crash.
+
+Past position 40 the sequence wraps back to `first-blood` (#1) and the arc begins again — exactly what the formula yields.
 
 ## Chapter I — Ignition (1-5)
 

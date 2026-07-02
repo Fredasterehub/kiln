@@ -31,7 +31,7 @@ fi
 echo "$PLUGIN_ROOT"
 ```
 Read the data with the **Read tool** at `$PLUGIN_ROOT/data/brainstorming-techniques.json` (62
-techniques: `{id, category, name, description, phase, energy}`) and
+techniques: `{id, category, name, description, phase}`) and
 `$PLUGIN_ROOT/data/elicitation-methods.json` (50 methods). Do not infer their contents — read them.
 
 ## Project context

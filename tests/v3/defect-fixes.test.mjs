@@ -61,10 +61,11 @@ test('fix 7 — mapping + architecture verify claimed artifacts with a haiku che
   assert.ok(arch.includes('  missing,\n}'))
 })
 
-test('fix 8 — kill-streaks speaks build_iteration, drops chunk_count, and the overflow rule wraps per % 40', () => {
+test('fix 8 — kill-streaks re-keyed to the ladder-position formula, drops chunk_count, wraps per % 40', () => {
   const ks = read('plugins/kiln/references/kill-streaks.md')
   assert.ok(!ks.includes('team_iteration') && !ks.includes('chunk_count'))
-  assert.ok(ks.includes('(build_iteration - 1) % 40'))
+  assert.ok(ks.includes('max(build_iteration + correction_cycle, 1)'))
+  assert.ok(ks.includes('(ladder_position - 1) % 40'))
   assert.ok(ks.includes('wraps back to `first-blood` (#1)'))
   assert.ok(!ks.includes('cycle from `kiln-of-the-first`'))
 })

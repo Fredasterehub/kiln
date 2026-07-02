@@ -14,7 +14,6 @@
       "label": "Project ignition",
       "quotes": [
         { "text": "A journey of a thousand miles begins with a single step.", "source": "Lao Tzu" },
-        { "text": "The secret of getting ahead is getting started.", "source": "Mark Twain" },
         { "text": "Well begun is half done.", "source": "Aristotle" },
         { "text": "You do not have to see the whole staircase, just take the first step.", "source": "Martin Luther King Jr." },
         { "text": "The beginning is the most important part of the work.", "source": "Plato" },
@@ -75,9 +74,6 @@
     "plan_approved": {
       "label": "Plan approved",
       "quotes": [
-        { "text": "Believe you can and you are halfway there.", "source": "Theodore Roosevelt" },
-        { "text": "Whether you think you can, or you think you cannot, you are right.", "source": "Henry Ford" },
-        { "text": "Optimism is the faith that leads to achievement.", "source": "Helen Keller" },
         { "text": "The most difficult thing is the decision to act, the rest is merely tenacity.", "source": "Amelia Earhart" },
         { "text": "Commitment is an act, not a word.", "source": "Jean-Paul Sartre" }
       ]
@@ -96,7 +92,6 @@
       "quotes": [
         { "text": "Knowledge reigns supreme over nearly everyone.", "source": "KRS-One" },
         { "text": "Talk is cheap. Show me the code.", "source": "Linus Torvalds" },
-        { "text": "The way to get started is to quit talking and begin doing.", "source": "Walt Disney" },
         { "text": "First, solve the problem. Then, write the code.", "source": "John Johnson" },
         { "text": "Vision without execution is hallucination.", "source": "Thomas A. Edison" }
       ]
@@ -108,28 +103,21 @@
         { "text": "Great things are done by a series of small things brought together.", "source": "Vincent van Gogh" },
         { "text": "Opportunity is missed by most people because it is dressed in overalls and looks like work.", "source": "Thomas A. Edison" },
         { "text": "Nothing can be changed until it is faced.", "source": "James Baldwin" },
-        { "text": "The secret of success is to do the common things uncommonly well.", "source": "John D. Rockefeller" },
         { "text": "Do not wait to strike till the iron is hot, but make it hot by striking.", "source": "William Butler Yeats" }
       ]
     },
     "phase_complete": {
       "label": "Iteration complete",
       "quotes": [
-        { "text": "It always seems impossible until it is done.", "source": "Nelson Mandela" },
-        { "text": "Nothing will work unless you do.", "source": "Maya Angelou" },
         { "text": "Success is not final, failure is not fatal: it is the courage to continue that counts.", "source": "Winston Churchill" },
-        { "text": "Success is to be measured not so much by the position that one has reached in life as by the obstacles which he has overcome.", "source": "Booker T. Washington" },
         { "text": "Take the best that exists and make it better.", "source": "Henry Royce" }
       ]
     },
     "milestone_complete": {
       "label": "Milestone complete",
       "quotes": [
-        { "text": "Talent wins games, but teamwork and intelligence win championships.", "source": "Michael Jordan" },
-        { "text": "The reward of a thing well done is to have done it.", "source": "Ralph Waldo Emerson" },
-        { "text": "None of us is as smart as all of us.", "source": "Ken Blanchard" },
-        { "text": "If everyone is moving forward together, then success takes care of itself.", "source": "Henry Ford" },
-        { "text": "Quality is never an accident. It is always the result of intelligent effort.", "source": "John Ruskin" }
+        { "text": "Quality is never an accident. It is always the result of intelligent effort.", "source": "John Ruskin" },
+        { "text": "Kings lose crowns but teachers stay intelligent.", "source": "KRS-One" }
       ]
     },
     "validation_start": {
@@ -144,9 +132,6 @@
     "validation_passed": {
       "label": "Validation passed",
       "quotes": [
-        { "text": "The reward of a thing well done is to have done it.", "source": "Ralph Waldo Emerson" },
-        { "text": "The only place success comes before work is in the dictionary.", "source": "Vince Lombardi" },
-        { "text": "The only way to do great work is to love what you do.", "source": "Steve Jobs" },
         { "text": "Pleasure in the job puts perfection in the work.", "source": "Aristotle" },
         { "text": "Details make perfection, and perfection is not a detail.", "source": "Leonardo da Vinci" }
       ]
@@ -156,17 +141,14 @@
       "quotes": [
         { "text": "Fall seven times, stand up eight.", "source": "Japanese Proverb" },
         { "text": "Success is stumbling from failure to failure with no loss of enthusiasm.", "source": "Winston Churchill" },
-        { "text": "Failure is simply the opportunity to begin again, this time more intelligently.", "source": "Henry Ford" },
         { "text": "Our greatest glory is not in never falling, but in rising every time we fall.", "source": "Confucius" },
-        { "text": "Ever tried. Ever failed. No matter. Try again. Fail again. Fail better.", "source": "Samuel Beckett" },
-        { "text": "I have failed over and over and over again in my life and that is why I succeed.", "source": "Michael Jordan" }
+        { "text": "Ever tried. Ever failed. No matter. Try again. Fail again. Fail better.", "source": "Samuel Beckett" }
       ]
     },
     "correction_start": {
       "label": "Correction cycle",
       "quotes": [
         { "text": "Perfect is the enemy of good.", "source": "Voltaire" },
-        { "text": "Perfection is achieved, not when there is nothing more to add, but when there is nothing left to take away.", "source": "Antoine de Saint-Exupery" },
         { "text": "Art is never finished, only abandoned.", "source": "Leonardo da Vinci" },
         { "text": "Try to be better than yourself.", "source": "William Faulkner" },
         { "text": "I have not failed. I have just found 10,000 ways that will not work.", "source": "Thomas A. Edison" },
@@ -178,17 +160,13 @@
       "quotes": [
         { "text": "The end is just a new perspective on the beginning.", "source": "T. S. Eliot" },
         { "text": "We do not learn from experience. We learn from reflecting on experience.", "source": "John Dewey" },
-        { "text": "A story has no beginning or end; arbitrarily one chooses that moment from which to look back or from which to look ahead.", "source": "Graham Greene" },
-        { "text": "Reflection is the lamp of the heart. If it departs, the heart has no light.", "source": "Imam Al-Haddad" }
+        { "text": "A story has no beginning or end; arbitrarily one chooses that moment from which to look back or from which to look ahead.", "source": "Graham Greene" }
       ]
     },
     "project_complete": {
       "label": "Project complete",
       "quotes": [
-        { "text": "Coming together is a beginning; keeping together is progress; working together is success.", "source": "Henry Ford" },
-        { "text": "What lies behind us and what lies before us are tiny matters compared to what lies within us.", "source": "Ralph Waldo Emerson" },
         { "text": "Do the best you can until you know better. Then when you know better, do better.", "source": "Maya Angelou" },
-        { "text": "The greatest glory in living lies not in never falling, but in rising every time we fall.", "source": "Nelson Mandela" },
         { "text": "Life is what happens to you while you're busy making other plans.", "source": "John Lennon" }
       ]
     },
@@ -197,7 +175,6 @@
       "quotes": [
         { "text": "No man ever steps in the same river twice.", "source": "Heraclitus" },
         { "text": "What we call the beginning is often the end. And to make an end is to make a beginning.", "source": "T. S. Eliot" },
-        { "text": "Our greatest glory is not in never falling, but in rising every time we fall.", "source": "Confucius" },
         { "text": "As long as you live, keep learning how to live.", "source": "Seneca" },
         { "text": "Atoms by the millions, til the numbers increasing. Til it was burning, he kept returning itself to the source. The hotter his thoughts, it gave the center more force.", "source": "Poetic legendary" },
         { "text": "He began to explain his craft, the master in the attic. He dealt with measurements, his language was mathematics.", "source": "Poetic legendary" },
@@ -208,17 +185,13 @@
     "phases_complete": {
       "label": "All milestones complete",
       "quotes": [
-        { "text": "Talent wins games, but teamwork and intelligence win championships.", "source": "Michael Jordan" },
-        { "text": "None of us is as smart as all of us.", "source": "Ken Blanchard" },
         { "text": "The whole is greater than the sum of its parts.", "source": "Aristotle" },
-        { "text": "If everyone is moving forward together, then success takes care of itself.", "source": "Henry Ford" },
         { "text": "Quality is everyone's responsibility.", "source": "W. Edwards Deming" }
       ]
     },
     "halt": {
       "label": "Pipeline blocked",
       "quotes": [
-        { "text": "Obstacles are those frightful things you see when you take your eyes off your goal.", "source": "Henry Ford" },
         { "text": "A smooth sea never made a skilled sailor.", "source": "Franklin D. Roosevelt" },
         { "text": "The brick walls are there for a reason. They let us prove how badly we want things.", "source": "Randy Pausch" },
         { "text": "Difficulties are meant to rouse, not discourage. The human spirit is to grow strong by conflict.", "source": "William Ellery Channing" }
@@ -229,7 +202,6 @@
       "quotes": [
         { "text": "Rest is not idleness, and to lie sometimes on the grass under trees on a summer's day is by no means a waste of time.", "source": "John Lubbock" },
         { "text": "Almost everything will work again if you unplug it for a few minutes, including you.", "source": "Anne Lamott" },
-        { "text": "Patience is the companion of wisdom.", "source": "Saint Augustine" },
         { "text": "Nature does not hurry, yet everything is accomplished.", "source": "Lao Tzu" }
       ]
     }

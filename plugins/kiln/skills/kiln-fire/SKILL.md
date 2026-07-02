@@ -490,8 +490,12 @@ Wait for completion, render *"The forge cools. The work remains."* and present t
 - Rewrite `STATE.md` at every transition: bump `stage`, set `last_completed_stage`, refresh
   `updated_at` and `next_action`, stamp the relevant `step_*_completed_at`.
 - Keep field names and bullet format byte-stable — they are machine-read on resume.
-- `build_iteration` increments per build milestone (drives kill-streak names from
-  `$PLUGIN_ROOT/references/kill-streaks.md`); `correction_cycle` tracks validation loops.
+- `build_iteration` increments per build milestone and `correction_cycle` per validation loop;
+  together they drive the kill-streak name off the 40-name ladder in
+  `$PLUGIN_ROOT/references/kill-streaks.md`: `ladder_position = max(build_iteration + correction_cycle, 1)`,
+  `kill_streak_index = (ladder_position - 1) % 40`. Read both from their `- **build_iteration**: N`
+  and `- **correction_cycle**: N` bullets; a missing/`pending`/non-integer field reads as 0, so a
+  fresh STATE fails soft to `first-blood`.
 - **The dual surface (§4).** `STATE.md` is the conductor's human/resume register — the source of
   truth you rewrite here and read on resume. `state.json` is the *ledger's* projection of
   `events.jsonl` (rebuilt by `kiln-state project`), a machine-first mirror you never hand-edit. It is
