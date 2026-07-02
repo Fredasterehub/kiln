@@ -480,7 +480,7 @@ function buildPrompt(m, surf, slice, sliceId, fixNote) {
       (surf === 'mixed' ? `- This is a MIXED slice — it also carries tightly-coupled non-visual logic: implement that cleanly and add a behavior/smoke test you run green, IN ADDITION to the static page check.\n` : ``) +
       `- Verify STATICALLY — do NOT launch a browser or Playwright (autonomous stages never spawn browsers; they leak memory). Confirm the HTML parses and required sections/ids exist, 'node --check' the JS, and assets/fonts are inlined. Live visual QA is a separate one-shot step outside this loop.\n` +
       `</constraints>${fix}\n` +
-      `<task>Build the slice, run the static check, then 'git add -A && git commit' with a clear message. Report reasoning, files_changed, tests_added (smoke), red_confirmed (false is fine for a page), tests_green (the static/smoke check passed), committed, the check command, and concrete evidence of what you observed.</task>`
+      `<task>Build the slice, run the static check, then 'git add -A && git commit' with a clear message. Report reasoning, files_changed, tests_added (smoke), red_confirmed (false is fine for a page), tests_green (the static/smoke check passed), committed, the check command, and concrete evidence of what you observed. Structured-output discipline (a platform guardrail killed a builder at the retry cap here): your work product lives in the COMMIT, never in the final message — the final message is ONLY the StructuredOutput tool call carrying EVERY required field (reasoning <= 3 sentences, evidence = the few decisive lines, trimmed); a reasoning-only or missing-field attempt burns one of five retries, and five failures kill the slice.</task>`
   }
   // logic slice — GPT-5.5/Codex builds (cross-family vs the Opus reviewer)
   const tdd = testingRigor === 'minimal'
@@ -504,7 +504,7 @@ function buildPrompt(m, surf, slice, sliceId, fixNote) {
     `- Keep the implementation minimal; add no abstraction the slice does not require; no stubs or mocks standing in for required behavior.\n` +
     (codexAvailable ? `- ${codexHowto}\n` : `- Codex is unavailable — implement directly with your file tools.\n`) +
     `</constraints>${fix}\n` +
-    `<task>Implement the slice to green tests, then 'git add -A && git commit' with a clear message. Report reasoning, files_changed, tests_added, red_confirmed, tests_green (must be true), committed, the test_command you used, and the trimmed passing test output as evidence.</task>`
+    `<task>Implement the slice to green tests, then 'git add -A && git commit' with a clear message. Report reasoning, files_changed, tests_added, red_confirmed, tests_green (must be true), committed, the test_command you used, and the trimmed passing test output as evidence. Structured-output discipline (a platform guardrail killed a builder at the retry cap here): your work product lives in the COMMIT, never in the final message — the final message is ONLY the StructuredOutput tool call carrying EVERY required field (reasoning <= 3 sentences, evidence = the few decisive lines, trimmed); a reasoning-only or missing-field attempt burns one of five retries, and five failures kill the slice.</task>`
 }
 
 function runnerPrompt(build, lawCtx, beforeRunId) {
