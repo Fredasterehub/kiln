@@ -451,6 +451,7 @@ export function validateVerdict(ev) {
   const criticalUnmet = unmet.filter(isCritical)
   const nonCriticalUnmet = unmet.filter((c) => !isCritical(c))
   const blocking = Array.from(new Set((Array.isArray(e.blocking_findings) ? e.blocking_findings : []).filter((s) => typeof s === 'string' && s.trim()).map((s) => s.trim())))
+  const unruled = Array.from(new Set((Array.isArray(e.unruled_gates) ? e.unruled_gates : []).filter((s) => typeof s === 'string' && s.trim()).map((s) => s.trim())))
 
   // The degraded-floor sentinel (no-pluginRoot path): the kiln-law CLI lives under pluginRoot, so when
   // pluginRoot is absent the deterministic floor cannot run and Argus is told (validate.js argusPrompt)
@@ -485,6 +486,12 @@ export function validateVerdict(ev) {
   // is the load-bearing arm when Argus ran its own suite to a clean exit 0: without it the verdict would
   // fall through to a silent PASS the missing floor never earned (the mandate's "never silently green").
   if (lawFloorUnavailable) partialReasons.push('the deterministic Law floor did not run — kiln-law was unavailable (pluginRoot absent), so law_run_exit=-1; the run is honestly degraded to the v2 static path (the floor never proved a clean exit 0), capped at PARTIAL, never a silent PASS (§1.6/§7)')
+  // a MUTE GATE is epistemic ABSENCE, not proven breakage (the 2026-07-04 cross-family ruling): the
+  // gate agent AND its one fresh re-dispatch both died on the structured-output retry cap, so that
+  // gate's coverage is UNKNOWN — the Law-floor doctrine above applies verbatim: PASS is impossible,
+  // but a dead reporter proves nothing about the product, so the run is honestly degraded, never
+  // declared broken. The remedy is re-running validate (infrastructure retry), not a product fix.
+  for (const g of unruled) partialReasons.push(`a validate gate never ruled: ${g}; coverage UNKNOWN — capped at PARTIAL, never a silent PASS (the remedy is re-running validate to restore the gate, not correcting the product)`)
   // a red suite that did NOT fail the majority (or whose counts are unavailable) is PARTIAL, not PASS.
   if (suiteExit !== null && suiteExit !== 0 && !suiteMajorityFailed) partialReasons.push(`the project suite is red (exit ${suiteExit}) but ≤50% of tests failed${passed !== null && failed !== null ? ` (${failed}/${passed + failed})` : ' (counts unavailable)'}`)
   for (const c of nonCriticalUnmet) partialReasons.push(`a non-critical acceptance criterion is unmet: ${c.id || '(unnamed)'}${c.note ? ` — ${c.note}` : ''}`)
@@ -497,7 +504,7 @@ export function validateVerdict(ev) {
       : browserPath === 'failed' ? 'FAIL_BROWSER_EVIDENCE_MISSING'
         : 'PARTIAL_PASS_STATIC_ONLY'
 
-  if (failedReasons.length) return { verdict: 'VALIDATE_FAILED', verification_class, browser_verdict, blocking, reasons: failedReasons }
-  if (partialReasons.length) return { verdict: 'VALIDATE_PARTIAL', verification_class, browser_verdict, blocking, reasons: partialReasons }
-  return { verdict: 'VALIDATE_PASS', verification_class, browser_verdict, blocking: [], reasons: [] }
+  if (failedReasons.length) return { verdict: 'VALIDATE_FAILED', verification_class, browser_verdict, blocking, unruled_gates: unruled, reasons: failedReasons }
+  if (partialReasons.length) return { verdict: 'VALIDATE_PARTIAL', verification_class, browser_verdict, blocking, unruled_gates: unruled, reasons: partialReasons }
+  return { verdict: 'VALIDATE_PASS', verification_class, browser_verdict, blocking: [], unruled_gates: [], reasons: [] }
 }

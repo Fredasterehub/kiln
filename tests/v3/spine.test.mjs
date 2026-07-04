@@ -562,6 +562,29 @@ test('validateVerdict: law_run_exit=-1 caps at PARTIAL even when the agent ran i
   assert.ok(v.reasons.some((r) => /deterministic Law floor did not run/.test(r)))
 })
 
+test('validateVerdict: a mute gate (unruled_gates) caps at PARTIAL, never PASS and never FAILED — epistemic absence is not proven breakage (the 2026-07-04 cross-family ruling)', () => {
+  // The gate agent and its one fresh re-dispatch both died on the structured-output retry cap: its
+  // coverage is UNKNOWN. The Law-floor doctrine applies — PASS impossible, but a dead reporter proves
+  // nothing about the product, so it must NOT ride blocking_findings into VALIDATE_FAILED (which would
+  // route the conductor into a product-correction loop with nothing to fix).
+  const v = validateVerdict({ ...greenLogic, unruled_gates: ['the goal-backward gate (aristotle:goal-final and its re-dispatch died on the structured-output retry cap) — VISION delivery UNKNOWN'] })
+  assert.equal(v.verdict, 'VALIDATE_PARTIAL', 'a mute gate is a PARTIAL ceiling, not FAILED and never PASS')
+  assert.deepEqual(v.unruled_gates.length, 1)
+  assert.ok(v.reasons.some((r) => /never ruled/.test(r) && /re-running validate/.test(r)))
+})
+
+test('validateVerdict: unruled gates NEVER soften a real failure — FAILED reasons still rule, and the mute gate stays visible in the payload', () => {
+  const v = validateVerdict({ ...greenLogic, law_run_exit: 1, unruled_gates: ['the arch-check gate — drift/seam status UNKNOWN'] })
+  assert.equal(v.verdict, 'VALIDATE_FAILED')
+  assert.equal(v.unruled_gates.length, 1, 'the unruled gate must survive into the FAILED payload for the report')
+})
+
+test('validateVerdict: a clean run carries unruled_gates: [] — stable payload shape across all three verdicts', () => {
+  const v = validateVerdict(greenLogic)
+  assert.equal(v.verdict, 'VALIDATE_PASS')
+  assert.deepEqual(v.unruled_gates, [])
+})
+
 test('validateVerdict: a GENUINE red/un-transcribed Law run still FAILS — only -1 is the degraded sentinel (the fix is surgical, not a softening of real failures)', () => {
   // A genuinely red Law (exit 1/2) or an un-transcribed one (null/undefined/NaN/non-number) stays a hard
   // FAILED — the -1 carve-out is for the structural-unavailability sentinel ONLY, never a general softener.

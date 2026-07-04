@@ -89,8 +89,9 @@ function withDeadline(thunk, ms) {
 //    times), re-dispatch ONE fresh agent; if that dies the same way, return null — and every gate call
 //    site below folds a null through a FAIL-CLOSED path: a null argus yields null exit codes, which
 //    fail closed in validateVerdict; a null traversal pass folds static-only (the PARTIAL ceiling); a
-//    null arch-check or null primary goal audit injects a synthetic blocking finding into the verdict
-//    (the gate never ruled — UNKNOWN blocks a PASS). Never a silent pass. Any OTHER error still throws.
+//    null arch-check or null goal audit rides the dedicated unruled_gates channel into validateVerdict
+//    (the gate never ruled — coverage UNKNOWN caps at PARTIAL, the Law-floor doctrine: a mute reporter
+//    is epistemic absence, not proven breakage). Never a silent pass. Any OTHER error still throws.
 //    The match below is deliberately NARROW — structured-output phrasing only, no bare 'retry cap'
 //    alternative (that could swallow-and-null unrelated capped errors on gate legs); an unmatched
 //    death rethrows and fails the stage, which is itself fail-closed. ──
@@ -273,6 +274,7 @@ function validateVerdict(ev) {
   const criticalUnmet = unmet.filter(isCritical)
   const nonCriticalUnmet = unmet.filter((c) => !isCritical(c))
   const blocking = Array.from(new Set((Array.isArray(e.blocking_findings) ? e.blocking_findings : []).filter((s) => typeof s === 'string' && s.trim()).map((s) => s.trim())))
+  const unruled = Array.from(new Set((Array.isArray(e.unruled_gates) ? e.unruled_gates : []).filter((s) => typeof s === 'string' && s.trim()).map((s) => s.trim())))
 
   // The degraded-floor sentinel (no-pluginRoot path): the kiln-law CLI lives under pluginRoot, so when
   // pluginRoot is absent the deterministic floor cannot run and Argus is told (validate.js argusPrompt)
@@ -307,6 +309,12 @@ function validateVerdict(ev) {
   // is the load-bearing arm when Argus ran its own suite to a clean exit 0: without it the verdict would
   // fall through to a silent PASS the missing floor never earned (the mandate's "never silently green").
   if (lawFloorUnavailable) partialReasons.push('the deterministic Law floor did not run — kiln-law was unavailable (pluginRoot absent), so law_run_exit=-1; the run is honestly degraded to the v2 static path (the floor never proved a clean exit 0), capped at PARTIAL, never a silent PASS (§1.6/§7)')
+  // a MUTE GATE is epistemic ABSENCE, not proven breakage (the 2026-07-04 cross-family ruling): the
+  // gate agent AND its one fresh re-dispatch both died on the structured-output retry cap, so that
+  // gate's coverage is UNKNOWN — the Law-floor doctrine above applies verbatim: PASS is impossible,
+  // but a dead reporter proves nothing about the product, so the run is honestly degraded, never
+  // declared broken. The remedy is re-running validate (infrastructure retry), not a product fix.
+  for (const g of unruled) partialReasons.push(`a validate gate never ruled: ${g}; coverage UNKNOWN — capped at PARTIAL, never a silent PASS (the remedy is re-running validate to restore the gate, not correcting the product)`)
   // a red suite that did NOT fail the majority (or whose counts are unavailable) is PARTIAL, not PASS.
   if (suiteExit !== null && suiteExit !== 0 && !suiteMajorityFailed) partialReasons.push(`the project suite is red (exit ${suiteExit}) but ≤50% of tests failed${passed !== null && failed !== null ? ` (${failed}/${passed + failed})` : ' (counts unavailable)'}`)
   for (const c of nonCriticalUnmet) partialReasons.push(`a non-critical acceptance criterion is unmet: ${c.id || '(unnamed)'}${c.note ? ` — ${c.note}` : ''}`)
@@ -319,9 +327,9 @@ function validateVerdict(ev) {
       : browserPath === 'failed' ? 'FAIL_BROWSER_EVIDENCE_MISSING'
         : 'PARTIAL_PASS_STATIC_ONLY'
 
-  if (failedReasons.length) return { verdict: 'VALIDATE_FAILED', verification_class, browser_verdict, blocking, reasons: failedReasons }
-  if (partialReasons.length) return { verdict: 'VALIDATE_PARTIAL', verification_class, browser_verdict, blocking, reasons: partialReasons }
-  return { verdict: 'VALIDATE_PASS', verification_class, browser_verdict, blocking: [], reasons: [] }
+  if (failedReasons.length) return { verdict: 'VALIDATE_FAILED', verification_class, browser_verdict, blocking, unruled_gates: unruled, reasons: failedReasons }
+  if (partialReasons.length) return { verdict: 'VALIDATE_PARTIAL', verification_class, browser_verdict, blocking, unruled_gates: unruled, reasons: partialReasons }
+  return { verdict: 'VALIDATE_PASS', verification_class, browser_verdict, blocking: [], unruled_gates: [], reasons: [] }
 }
 const SEV_RANK = { critical: 4, high: 3, medium: 2, low: 1 }
 const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9 ]+/g, '').replace(/\s+/g, ' ').trim()
@@ -689,18 +697,23 @@ try {
   // blocking findings the verdict gates on: arch-check blocking ∪ argus blocking_findings ∪ the
   // goal-backward critical|high reconcile ∪ the live UI traversal's defects (a UI defect is fatal —
   // browserPath==='failed' also gates, but the finding text is what the report shows).
-  // FAIL-CLOSED (checklist 5): a DEAD gate never rules green. arch===null (zoxea and its re-dispatch
-  // both died on the structured-output cap), goal===null (aristotle and its re-dispatch both died),
-  // or a posture-required second-family leg that never ruled (goalSecond===null) means that gate
-  // NEVER RULED — each injects a synthetic blocking finding, so the deterministic verdict can never
-  // be VALIDATE_PASS on a mute gate and the return payload is never byte-identical to a clean check.
+  // UNRULED GATES (the 2026-07-04 cross-family ruling — Fable ∥ GPT-5.5, unanimous): a DEAD gate never
+  // rules green, but a mute reporter is epistemic ABSENCE, not proven breakage. arch===null (zoxea and
+  // its re-dispatch both died on the structured-output cap), goal===null (aristotle and its re-dispatch
+  // both died), or a posture-required second-family leg that never ruled (goalSecond===null) rides the
+  // dedicated unruled_gates channel into validateVerdict — the PARTIAL ceiling, same doctrine as the
+  // Law-floor-unavailable sentinel: VALIDATE_PASS stays impossible, yet no synthetic blocking finding
+  // masquerades as product breakage (a FAILED would route the conductor into a product-correction loop
+  // with nothing to fix — the remedy for a mute gate is re-running validate).
+  const unruledGates = [
+    ...(arch ? [] : ['the arch-check gate (zoxea:arch-check and its re-dispatch died on the structured-output retry cap) — drift/seam status UNKNOWN']),
+    ...(goal ? [] : ['the goal-backward gate (aristotle:goal-final and its re-dispatch died on the structured-output retry cap) — VISION delivery UNKNOWN']),
+    ...((posture.second_family && !goalSecond) ? ['the second-family goal gate (aristotle:goal-final:second-family and its re-dispatch died on the structured-output retry cap) — the posture-required independent cross-family judgment UNKNOWN'] : []),
+  ]
   const blockingFindings = [
     ...((arch && Array.isArray(arch.blocking)) ? arch.blocking : []),
-    ...(arch ? [] : ['[fail-closed] the arch-check gate never ruled (zoxea:arch-check and its re-dispatch died on the structured-output retry cap) — drift/seam status is UNKNOWN, which blocks a PASS']),
     ...((argus && Array.isArray(argus.blocking_findings)) ? argus.blocking_findings : []),
     ...goalRec.blocking.map((f) => `[goal-backward] ${f.text}`),
-    ...(goal ? [] : ['[fail-closed] the goal-backward gate never ruled (aristotle:goal-final and its re-dispatch died on the structured-output retry cap) — VISION delivery is UNKNOWN, which blocks a PASS']),
-    ...((posture.second_family && !goalSecond) ? ['[fail-closed] the second-family goal gate never ruled (aristotle:goal-final:second-family and its re-dispatch died on the structured-output retry cap) — the posture requires an independent cross-family judgment, which is UNKNOWN and blocks a PASS'] : []),
     ...((traversal && Array.isArray(traversal.findings)) ? traversal.findings.map((f) => `[ui-traversal] ${f}`) : []),
   ].filter((s) => typeof s === 'string' && s.trim())
 
@@ -712,6 +725,7 @@ try {
     tests_failed: (argus && typeof argus.tests_failed === 'number') ? argus.tests_failed : null,
     criteria: argusCriteria.map((c) => ({ id: c.id, met: c.met === true, critical: c.critical !== false, note: c.note })),
     blocking_findings: blockingFindings,
+    unruled_gates: unruledGates,
     ui_scope: uiScope,
     browser_path: browserPath,
     missing_creds: argus ? argus.missing_creds === true : false,
@@ -748,6 +762,7 @@ try {
     law_run_exit: verdictInput.law_run_exit,
     suite_exit: verdictInput.suite_exit,
     blocking: v.blocking.length,
+    unruled_gates: unruledGates,
     adversarial_pass: posture.adversarial_pass,
     second_family: posture.second_family,
   })
@@ -771,6 +786,7 @@ try {
     visual_qa_checklist,
     correction_tasks,
     blocking: v.blocking,
+    unruled_gates: v.unruled_gates,
     coverage_gaps: (argus && argus.coverage_gaps) || [],
     drift: (arch && arch.drift) || [],
     seam_issues: (arch && arch.seam_issues) || [],
