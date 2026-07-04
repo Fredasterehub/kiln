@@ -41,7 +41,7 @@
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
   <td><sub>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</sub></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-July_2,_2026_·_v3.0.0-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-July_4,_2026_·_v3.0.1-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
@@ -103,13 +103,23 @@ The difference is not the model. It is the discipline around the model.
 
 | | |
 |:--|:--|
-| **The Gauge measures first** | Before anything burns, the work is scored across eight complexity dimensions and the machinery scales itself to fit &mdash; a tiny CLI gets a lean pipeline, a real product gets the full tribunal. Rigor is computed, never vibed. |
-| **The Law locks before the build** | Your acceptance criteria compile into executable checks, hash-pinned before a line of code exists. The build meets the oracle; the oracle never bends to the build. |
-| **Vertical slices, just in time** | One runnable behavior at a time, scoped against the live codebase &mdash; test-first, committed only when its checks flip red to green. Exit codes are the verdict, not promises. |
-| **Two families, always adversarial** | What one model family writes, the other judges. Opus builds UI, GPT-5.5 reviews it; GPT-5.5 builds logic, Opus reviews it. Shared blind spots don't survive unshared review. |
-| **A real browser, on a leash** | UI claims are proven live &mdash; Playwright traversal, screenshots per viewport, one-shot processes with kill-tokens and a hard time lease. Verified, then gone. |
-| **The goal-backward audit** | Green checks can lie by omission, so a final auditor walks backward from your goals through the product's front door, the way a user arrives. "All tests pass, app is dead" does not ship. |
-| **Written down, or it never happened** | An append-only ledger records every stage; verdicts are computed from evidence, never self-graded; interrupt me anywhere and `/kiln-fire` resumes exactly there. |
+| **The Gauge measures first** | Before anything burns, I size the job. A small script gets a lean pipeline; a real product gets the full ceremony. How much rigor you get is computed from the work itself &mdash; never vibed. |
+| **The Law locks before the build** | Your definition of "done" becomes runnable checks before any code exists &mdash; then it's frozen. The code must satisfy the checks. The checks can never be quietly edited to satisfy the code. |
+| **Vertical slices, just in time** | I build one runnable behavior at a time, scoped from the code as it actually is &mdash; not as the plan imagined it. A test proves it broken, the build turns it green, then it's committed. Exit codes decide. Not promises. |
+| **Two families, always adversarial** | Nothing ships on one model's word. What Claude writes, GPT judges &mdash; and vice versa. Two model families make *different* mistakes, so the blind spots they share with themselves don't survive each other. |
+| **A real browser, on a leash** | If I claim your UI works, it's because a real browser opened it, walked the screens, and took the screenshots &mdash; then died on a timer. Verified, then gone. No zombie browsers, no "trust me." |
+| **The goal-backward audit** | Every test can pass while the product is unusable. So a final auditor starts from your *goal* and walks in through the front door, the way a user arrives. "All green, app dead" does not ship. |
+| **Written down, or it never happened** | Every stage leaves a written record, and verdicts are computed from that evidence &mdash; I never grade my own homework. Interrupt me anywhere; `/kiln-fire` resumes exactly there. |
+
+<br>
+
+## 🔥 Fresh from the Kiln
+
+**v3.0.1 &mdash; payload-first structured output** &nbsp;<sub>July 4, 2026</sub>
+
+Every worker in my pipeline files a structured report when it finishes. Those reports used to open with the reasoning essay and end with the verdict. When a long report got clipped mid-essay, the verdict never arrived &mdash; and one silenced reviewer could kill a five-hour build over a formatting technicality. Fixed, everywhere: the verdict now comes first, the commentary last, and the commentary is optional. And a reviewer that goes mute twice no longer detonates the run &mdash; the result is honestly downgraded instead. Never silently passed, never falsely failed. [<sub>→ release notes</sub>](https://github.com/Fredasterehub/kiln/releases/tag/v3.0.1)
+
+<sub>Older firings live in [The Arc](#-the-arc) and the full [release history](https://github.com/Fredasterehub/kiln/releases).</sub>
 
 <br>
 
