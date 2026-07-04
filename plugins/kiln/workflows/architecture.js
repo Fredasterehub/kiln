@@ -20,7 +20,7 @@ function normalizeArgs(args) {
   return (args && typeof args === 'object') ? args : {}
 }
 const A = normalizeArgs(args)
-const REASONING_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. reasoning is its FIRST property and stays CONCISE (a summary, never the carrier of the answer): every other required property must be a real, separately-populated JSON field — the validator hard-rejects a reasoning-only call, each rejection burns one of five attempts, and five failures kill this leg.'
+const PAYLOAD_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. Emit the payload properties FIRST; reasoning is the LAST property, OPTIONAL, and under 50 words — put detail in the designated report file or field, never in reasoning. A long leading reasoning string is the observed death mode: the call truncates before the payload lands, the validator rejects it, each rejection burns one of five attempts, and five failures kill this leg.'
 const kilnDir = A.kilnDir
 if (!kilnDir) throw new Error('architecture.js requires args.kilnDir (absolute path to .kiln). Received args of type ' + typeof args)
 const codexAvailable = A.codexAvailable !== false // default true; conductor passes kiln-doctor's probe result
@@ -103,7 +103,6 @@ const spin = (k, i) => { const a = SPIN[k] || []; return a.length ? a[((i % a.le
 const FOUNDATION_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     architecture_file: { type: 'string' },
     tech_stack_file: { type: 'string' },
     arch_constraints_file: { type: 'string' },
@@ -111,14 +110,14 @@ const FOUNDATION_SCHEMA = {
     scope: { type: 'string', enum: ['trivial', 'standard', 'complex'], description: 'trivial = ONE cohesive artifact (a single page/script/small CLI) with one obvious approach and no competing architectures worth comparing; standard = a handful of components; complex = many interacting parts or genuine architectural forks' },
     estimated_milestones: { type: 'number', description: 'honest count of genuinely independent, separately-buildable-and-verifiable milestones (a single cohesive artifact is 1)' },
     summary: { type: 'string', description: 'tech summary the planners need: stack, key constraints, decisions' },
+    reasoning: { type: 'string', maxLength: 700 },
   },
-  required: ['reasoning', 'architecture_file', 'tech_stack_file', 'arch_constraints_file', 'has_visual_direction', 'scope', 'summary'],
+  required: ['architecture_file', 'tech_stack_file', 'arch_constraints_file', 'has_visual_direction', 'scope', 'summary'],
 }
 
 const PLAN_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     slot: { type: 'string', enum: ['a', 'b'] },
     plan_file: { type: 'string' },
     approach_summary: { type: 'string' },
@@ -131,6 +130,7 @@ const PLAN_SCHEMA = {
       },
     },
     key_decisions: { type: 'array', items: { type: 'string' } },
+    reasoning: { type: 'string', maxLength: 700 },
   },
   required: ['slot', 'plan_file', 'approach_summary', 'milestones'],
 }
@@ -138,7 +138,6 @@ const PLAN_SCHEMA = {
 const DIVERGENCE_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     analysis_file: { type: 'string' },
     consensus: { type: 'array', items: { type: 'string' } },
     divergences: {
@@ -150,6 +149,7 @@ const DIVERGENCE_SCHEMA = {
       },
     },
     unique_insights: { type: 'array', items: { type: 'string' } },
+    reasoning: { type: 'string', maxLength: 700 },
   },
   required: ['analysis_file', 'consensus', 'divergences'],
 }
@@ -157,7 +157,6 @@ const DIVERGENCE_SCHEMA = {
 const SYNTH_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     master_plan_file: { type: 'string' },
     milestone_count: { type: 'number' },
     milestones: {
@@ -169,6 +168,7 @@ const SYNTH_SCHEMA = {
       },
     },
     confidence_summary: { type: 'string' },
+    reasoning: { type: 'string', maxLength: 700 },
   },
   required: ['master_plan_file', 'milestone_count', 'milestones'],
 }
@@ -176,19 +176,19 @@ const SYNTH_SCHEMA = {
 const VALIDATION_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     verdict: { type: 'string', enum: ['PASS', 'FAIL'] },
     failed_dimensions: { type: 'array', items: { type: 'string' } },
     fixes: { type: 'array', items: { type: 'string' }, description: 'concrete fixes Plato must apply on FAIL' },
+    reasoning: { type: 'string', maxLength: 700 },
   },
-  required: ['reasoning', 'verdict', 'failed_dimensions'],
+  required: ['verdict', 'failed_dimensions'],
 }
 
 const MISSING_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     missing: { type: 'array', items: { type: 'string' }, description: 'exactly the claimed paths that do not exist on disk' },
+    reasoning: { type: 'string', maxLength: 700 },
   },
   required: ['missing'],
 }
@@ -198,7 +198,6 @@ const MISSING_SCHEMA = {
 const LAW_COMPILE_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     law_file: { type: 'string' },
     checks: {
       type: 'array',
@@ -213,6 +212,7 @@ const LAW_COMPILE_SCHEMA = {
       },
     },
     plan_sc_ids: { type: 'array', items: { type: 'string' }, description: 'EVERY SC id enumerated from the master plan' },
+    reasoning: { type: 'string', maxLength: 700 },
   },
   required: ['law_file', 'checks', 'plan_sc_ids'],
 }
@@ -225,7 +225,6 @@ const LAW_COMPILE_SCHEMA = {
 const DRYRUN_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     exit: { type: 'number', description: 'the kiln-law dryrun process exit code' },
     law_violations: {
       type: 'array',
@@ -257,6 +256,7 @@ const DRYRUN_SCHEMA = {
       },
     },
     error: { type: 'string', description: 'verbatim failure output when the dryrun command itself failed; empty otherwise' },
+    reasoning: { type: 'string', maxLength: 700 },
   },
   required: ['exit', 'transcript', 'law_violations'],
 }
@@ -266,7 +266,6 @@ const DRYRUN_SCHEMA = {
 const DRYRUN_RULING_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     verdict: { type: 'string', enum: ['PASS', 'FAIL'] },
     broken: {
       type: 'array',
@@ -278,6 +277,7 @@ const DRYRUN_RULING_SCHEMA = {
       description: 'checks that crashed on their own code (or pass trivially) — each goes back to Asimov',
     },
     green_legitimate: { type: 'array', items: { type: 'string' }, description: 'green check ids whose criterion is GENUINELY already met (brownfield) — recorded pre_satisfied at lock (§5.1)' },
+    reasoning: { type: 'string', maxLength: 700 },
   },
   required: ['verdict', 'broken', 'green_legitimate'],
 }
@@ -285,10 +285,10 @@ const DRYRUN_RULING_SCHEMA = {
 const LAW_LOCK_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     indexed: { type: 'boolean', description: 'step 1 — kiln-law index exited 0' },
     committed: { type: 'boolean', description: 'step 2 — the "test(law): lock acceptance gates" commit was created' },
     error: { type: 'string', description: 'verbatim error output of the first failed step; empty when all succeeded' },
+    reasoning: { type: 'string', maxLength: 700 },
   },
   required: ['indexed', 'committed'],
 }
@@ -296,9 +296,9 @@ const LAW_LOCK_SCHEMA = {
 const LAW_VERIFY_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     law_json_exists: { type: 'boolean' },
     lock_commit_exists: { type: 'boolean' },
+    reasoning: { type: 'string', maxLength: 700 },
   },
   required: ['law_json_exists', 'lock_commit_exists'],
 }
@@ -353,7 +353,7 @@ const foundation = await agent(
   `- ${docsDir}/architecture.md — the chosen high-level architecture and component breakdown.\n` +
   `- ${docsDir}/tech-stack.md — concrete stack decisions, justified by ${researchPresent ? 'the research findings' : 'the VISION requirements'}.\n` +
   `- ${docsDir}/arch-constraints.md — invariants and constraints every plan must honor.\n` +
-  `${researchGrounding} Then report a tight technical summary the planners will build on, ${vdAsk}. Finally, classify the deliverable's scope honestly: 'trivial' = ONE cohesive artifact (a single page, script, or small CLI) with one obvious approach and no competing architectures worth comparing; 'standard' = a handful of independent components; 'complex' = many interacting parts or genuine architectural forks. Give estimated_milestones = the count of genuinely independent, separately-buildable-and-verifiable milestones (a single cohesive artifact is 1). ${REASONING_FIRST}\n</task>`,
+  `${researchGrounding} Then report a tight technical summary the planners will build on, ${vdAsk}. Finally, classify the deliverable's scope honestly: 'trivial' = ONE cohesive artifact (a single page, script, or small CLI) with one obvious approach and no competing architectures worth comparing; 'standard' = a handful of independent components; 'complex' = many interacting parts or genuine architectural forks. Give estimated_milestones = the count of genuinely independent, separately-buildable-and-verifiable milestones (a single cohesive artifact is 1). Emit the three doc paths, has_visual_direction, scope, estimated_milestones, and summary first; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}\n</task>`,
   { label: 'numerobis:foundation', phase: 'Laying Stone', model: 'opus', schema: FOUNDATION_SCHEMA }
 )
 // (d) The authoritative visual-direction boolean: the conductor-threaded arg wins; else the
@@ -457,7 +457,8 @@ if (liteScope) {
     `<task>Write a concrete, milestone-structured implementation plan. Each milestone: id (M1, M2, …), title, ` +
     `and a summary of what it delivers and how it is verified. Honor the arch-constraints. ${rightSizeRule} ` +
     `Write your plan to the given path with NO mention of which planner you are (it is compared anonymously). ` +
-    `${noWander} ${REASONING_FIRST}</task>`
+    `Emit slot, plan_file, approach_summary, and milestones first; reasoning is optional and under 50 words. ` +
+    `${noWander} ${PAYLOAD_FIRST}</task>`
 
   // ── The Council: two anonymized planners in parallel (slot a = Claude, slot b = Codex) ──
   phase('The Council')
@@ -501,7 +502,8 @@ if (liteScope) {
       `<inputs>\nThe two anonymized plans: ${plansDir}/plan-a.md and ${plansDir}/plan-b.md.\n</inputs>\n\n` +
       `<task>Write ${plansDir}/divergence-analysis.md and report: consensus (where both agree), divergences ` +
       `(point-by-point: what plan A says vs plan B), and unique insights each surfaced. Be neutral — do not pick a ` +
-      `winner; surface the real decision points the chairman must resolve. ${REASONING_FIRST}</task>`,
+      `winner; surface the real decision points the chairman must resolve. Put the detail in the analysis file; ` +
+      `emit analysis_file, consensus, divergences, and unique_insights first — reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`,
       { label: 'diogenes:divergence', phase: 'The Lantern', model: 'sonnet', schema: DIVERGENCE_SCHEMA }
     )
     log(`Divergence: ${(divergence && divergence.divergences || []).length} decision points`)
@@ -523,7 +525,7 @@ let synth = await agent(
   `<task>Write a single ${masterPlanFile}. Structure it as ordered milestones (M1, M2, …), each with ` +
   `acceptance criteria and a confidence tier (high/medium/low). Mark low-confidence milestones explicitly so ` +
   `build treats them carefully. ${rightSizeRule} ${surfaceRule} ${executableAcRule}${handoffFoldClause}\n` +
-  `Write the file, then report milestone_count and the milestone list (id, title, surface, confidence). ${REASONING_FIRST}</task>`,
+  `Write the file, then emit master_plan_file, milestone_count, and the milestone list (id, title, surface, confidence) first; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`,
   { label: 'plato:synthesis', phase: 'One From Many', model: 'opus', schema: SYNTH_SCHEMA }
 )
 log(`master-plan.md: ${synth && synth.milestone_count} milestone(s) [${(synth && synth.milestones || []).map((m) => m.id + ':' + m.surface).join(', ')}]`)
@@ -550,7 +552,7 @@ for (let round = 0; round < validationPasses; round++) {
     `ui/logic/mixed, cut by the interface seam not the screen), SC-to-Law coverage (every SC has exactly one ` +
     `law.json check entry — so every acceptance criterion must carry a globally unique SC-NNN id; a missing or ` +
     `duplicate id makes the 1:1 compilation impossible and blocks the lock), and risk coverage. Return PASS only if ALL hold; ` +
-    `else FAIL with the failed dimensions and concrete fixes. ${REASONING_FIRST}</task>`,
+    `else FAIL with the failed dimensions and concrete fixes. Emit verdict, failed_dimensions, and fixes first; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`,
     { label: `athena:validate:r${round}`, phase: 'Athena Weighs', model: 'opus', schema: VALIDATION_SCHEMA }
   )) || { verdict: 'FAIL', failed_dimensions: ['validator-failure'], fixes: [] }
   verdict = val
@@ -562,7 +564,7 @@ for (let round = 0; round < validationPasses; round++) {
     voice('opus') +
     `You are the plan chairman, revising ${masterPlanFile}.\n\n` +
     `<inputs>\nAthena failed it on: ${(val.failed_dimensions || []).join(', ')}.\nApply these fixes: ${(val.fixes || []).join(' | ')}\n${synthBrief}\n</inputs>\n\n` +
-    `<task>Apply the fixes and rewrite the file (keep surfaces + executable acceptance criteria).${handoffFoldClause} Report the updated milestone_count and milestone list. ${REASONING_FIRST}</task>`,
+    `<task>Apply the fixes and rewrite the file (keep surfaces + executable acceptance criteria).${handoffFoldClause} Emit master_plan_file, the updated milestone_count, and milestone list first; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`,
     { label: `plato:revise:r${round + 1}`, phase: 'One From Many', model: 'opus', schema: SYNTH_SCHEMA }
   )) || synth
 }
@@ -624,8 +626,8 @@ if (!(verdict && verdict.verdict === 'PASS')) {
     `"timeout_s": <integer seconds>, "spec": <the probe spec — kind 'probe' only, omitted otherwise>}]} — ` +
     `exactly ONE entry per SC. Leave every sha256 map EMPTY and ` +
     `lock_commit null; kiln-law index fills them (do NOT run it yourself, and do NOT commit).\n` +
-    `Report the check inventory (id, milestone, kind) and plan_sc_ids = every SC id you enumerated from the ` +
-    `plan. ${REASONING_FIRST}\n</task>`,
+    `Emit law_file, checks (the inventory: id, milestone, kind), and plan_sc_ids (every SC id you enumerated ` +
+    `from the plan) first; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}\n</task>`,
     { label: 'asimov:law', phase: 'The Law', model: lawModel, schema: LAW_COMPILE_SCHEMA }
   )
   lawChecks = (asimov && Array.isArray(asimov.checks)) ? asimov.checks : []
@@ -739,7 +741,8 @@ if (!(verdict && verdict.verdict === 'PASS')) {
           `green_legitimate (recorded pre_satisfied at lock). A green check for an UNBUILT feature is a ` +
           `trivially-passing check — that is broken (it can gate nothing), never legitimate.\n` +
           `Verdict PASS only when every executed check is honest-red or legitimately green; else FAIL with ` +
-          `the broken list (id, why, concrete fix). ${REASONING_FIRST}</task>`,
+          `the broken list (id, why, concrete fix). Emit verdict, broken, and green_legitimate first; ` +
+          `reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`,
           { label: `athena:dryrun:r${round}`, phase: 'The Law', model: 'opus', schema: DRYRUN_RULING_SCHEMA }
         )) || { verdict: 'FAIL', broken: [{ id: '(ruling)', why: 'the ruling agent produced no verdict' }], green_legitimate: [] }
         // Deterministic floor under the ruling: a mechanical broken-check stays broken, and a

@@ -18,7 +18,7 @@ function normalizeArgs(args) {
   return (args && typeof args === 'object') ? args : {}
 }
 const A = normalizeArgs(args)
-const REASONING_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. reasoning is its FIRST property and stays CONCISE (a summary, never the carrier of the answer): every other required property must be a real, separately-populated JSON field — the validator hard-rejects a reasoning-only call, each rejection burns one of five attempts, and five failures kill this leg.'
+const PAYLOAD_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. Emit the payload properties FIRST; reasoning is the LAST property, OPTIONAL, and under 50 words — put detail in the designated report file or field, never in reasoning. A long leading reasoning string is the observed death mode: the call truncates before the payload lands, the validator rejects it, each rejection burns one of five attempts, and five failures kill this leg.'
 const kilnDir = A.kilnDir
 const projectPath = A.projectPath
 if (!kilnDir || !projectPath) throw new Error('validate.js requires args.kilnDir and args.projectPath (absolute paths — the conductor resolves them; never launch with relative paths). Received args of type ' + typeof args)
@@ -84,6 +84,19 @@ function withDeadline(thunk, ms) {
   })
 }
 
+// ── gateAgent — a mute gate reviewer must DEGRADE, never detonate the run. When an agent() call dies
+//    on the structured-output retry cap (the observed death mode: a truncated tool call rejected five
+//    times), re-dispatch ONE fresh agent; if that dies the same way, return null — and every gate call
+//    site below folds a null through a FAIL-CLOSED path: a null argus yields null exit codes, which
+//    fail closed in validateVerdict; a null traversal pass folds static-only (the PARTIAL ceiling); a
+//    null arch-check or null primary goal audit injects a synthetic blocking finding into the verdict
+//    (the gate never ruled — UNKNOWN blocks a PASS). Never a silent pass. Any OTHER error still throws.
+//    The match below is deliberately NARROW — structured-output phrasing only, no bare 'retry cap'
+//    alternative (that could swallow-and-null unrelated capped errors on gate legs); an unmatched
+//    death rethrows and fails the stage, which is itself fail-closed. ──
+const isStructuredOutputFailure = (e) => /structured.?output/i.test(String((e && e.message) || e))
+async function gateAgent(prompt, opts) { try { return await agent(prompt, opts) } catch (e) { if (!isStructuredOutputFailure(e)) throw e; log(`${opts.label || 'gate'}: structured-output retry cap — re-dispatching one fresh agent`); try { return await agent(prompt, { ...opts, label: (opts.label || 'gate') + ':redispatch' }) } catch (e2) { if (!isStructuredOutputFailure(e2)) throw e2; log(`${opts.label || 'gate'}: re-dispatch failed too — degrading to null (fail-closed)`); return null } } }
+
 // ── The Gauge posture (BLUEPRINT §3.2 validate row) — passed by the conductor from state.json.
 //    Accepts an object or a JSON string; anything else ⇒ null ⇒ every dial falls back to its v2
 //    default, so a run without a posture behaves exactly like v2 plus the deterministic Law floor
@@ -137,18 +150,18 @@ const codexGuideNote = codexGuide
   ? `Read ${codexGuide} first and follow it for the full codex-prompt discipline (per-role flags — run codex at the model_reasoning_effort this prompt specifies — the --output-schema/reasoning-first/flat-schema rules, the heredoc-to-stdin invocation, and the exit-0 and #15451 caveats). `
   : ``
 
-// ── Schemas (additionalProperties:false; reasoning FIRST = reason-before-emit) ──
+// ── Schemas (additionalProperties:false; payload fields FIRST, reasoning LAST + optional + capped — a long leading reasoning string truncated tool calls before the payload landed and blew the 5-attempt retry cap) ──
 const ARCHCHECK_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     check_file: { type: 'string' },
     drift: { type: 'array', items: { type: 'string' }, description: 'places the implementation diverges from architectural intent' },
     seam_issues: { type: 'array', items: { type: 'string' }, description: 'interface-boundary / cross-module contract mismatches (the regressions that hide under N commits)' },
     blocking: { type: 'array', items: { type: 'string' }, description: 'the drift/seam findings severe enough to block a PASS (a broken seam, a violated load-bearing constraint) — these gate the verdict' },
     summary: { type: 'string' },
+    reasoning: { type: 'string', maxLength: 700 },
   },
-  required: ['reasoning', 'check_file', 'summary'],
+  required: ['check_file', 'summary'],
 }
 // The §5/§3.2 deterministic-first evidence schema: argus ORCHESTRATES the install + the three
 // kiln-law commands and the per-criterion exercise, and TRANSCRIBES what they printed. The verdict
@@ -156,7 +169,6 @@ const ARCHCHECK_SCHEMA = {
 const VALIDATE_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     report_file: { type: 'string' },
     product_type: { type: 'string', enum: ['cli', 'api', 'web', 'extension', 'electron', 'library', 'mobile'] },
     install_ok: { type: 'boolean', description: 'the app installed/built cleanly (false ⇒ a build error — the verdict FAILS)' },
@@ -185,17 +197,17 @@ const VALIDATE_SCHEMA = {
     coverage_gaps: { type: 'array', items: { type: 'string' } },
     blocking_findings: { type: 'array', items: { type: 'string' }, description: 'any failure severe enough to block a PASS that is not already captured by an exit code or an unmet critical criterion' },
     correction_tasks: { type: 'array', items: { type: 'string' } },
+    reasoning: { type: 'string', maxLength: 700 },
   },
   // §5.1: exit codes are transcribed EXACTLY and the verdict rules over them — so the two Law-floor
   // exit codes are MANDATORY (a missing suite_exit folds to null and FAILS CLOSED in validateVerdict;
   // requiring it forces the honest transcription, -1 in the no-pluginRoot degraded branch). suite_cmd
   // is required alongside so the transcribed suite exit is always traceable to the command that produced it.
-  required: ['reasoning', 'report_file', 'install_ok', 'law_run_exit', 'suite_exit', 'suite_cmd', 'criteria', 'ui_scope'],
+  required: ['report_file', 'install_ok', 'law_run_exit', 'suite_exit', 'suite_cmd', 'criteria', 'ui_scope'],
 }
 const TRAVERSAL_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     tool: { type: 'string', enum: ['kiln-probe', 'none'], description: 'the browser path you actually used (kiln-probe = the scripted one-shot oracle, the ONLY autonomous path; none = no browser available — playwright absent)' },
     browser_result: { type: 'string', enum: ['full', 'failed', 'static-only'], description: 'full = every UI criterion exercised live and clean via the scripted oracle; failed = a real UI defect found; static-only = no browser path available OR the lease expired before all criteria were confirmed (honest degradation)' },
     criteria: {
@@ -213,13 +225,13 @@ const TRAVERSAL_SCHEMA = {
     },
     findings: { type: 'array', items: { type: 'string' }, description: 'UI defects found by the live traversal (each one blocks a clean UI PASS)' },
     report_file: { type: 'string' },
+    reasoning: { type: 'string', maxLength: 700 },
   },
-  required: ['reasoning', 'tool', 'browser_result', 'criteria', 'findings'],
+  required: ['tool', 'browser_result', 'criteria', 'findings'],
 }
 const GOAL_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     overall: { type: 'string', enum: ['pass', 'fail'], description: 'does the WHOLE deliverable genuinely deliver the VISION success criteria? \'fail\' MUST be backed by at least one critical or high finding' },
     findings: {
       type: 'array',
@@ -230,12 +242,13 @@ const GOAL_SCHEMA = {
       },
     },
     report_file: { type: 'string' },
+    reasoning: { type: 'string', maxLength: 700 },
   },
-  required: ['reasoning', 'overall', 'findings'],
+  required: ['overall', 'findings'],
 }
 const DETECT_SCHEMA = {
   type: 'object', additionalProperties: false,
-  properties: { reasoning: { type: 'string' }, design_present: { type: 'boolean', description: 'true iff a non-empty design/ directory exists under .kiln' } },
+  properties: { design_present: { type: 'boolean', description: 'true iff a non-empty design/ directory exists under .kiln' }, reasoning: { type: 'string', maxLength: 700 } },
   required: ['design_present'],
 }
 
@@ -362,7 +375,6 @@ async function ledger(type, data) {
 const SWEEP_SCAN_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     sweep_line: { type: 'string', description: 'the SWEEP … line the sweep command printed, verbatim' },
     leak_scan_line: { type: 'string', description: 'the LEAK_SCAN {json} line leak-scan printed, verbatim' },
     leak_suspects: { type: 'integer', description: "the LEAK_SCAN json's counts.suspects — foreign browsers alive (0 when none)" },
@@ -382,6 +394,7 @@ const SWEEP_SCAN_SCHEMA = {
         required: ['path', 'mtime'],
       },
     },
+    reasoning: { type: 'string', maxLength: 700 },
   },
   required: ['sweep_line', 'leak_scan_line', 'leak_suspects', 'suspects', 'profile_dirs'],
 }
@@ -457,7 +470,7 @@ function driftPrompt() {
   return voice('sonnet') +
     `You are the architecture-drift verifier. ${scope}\n\n` +
     `<inputs>\n- Architectural intent: ${docsDir}/architecture.md, ${docsDir}/arch-constraints.md\n- What was built: ${docsDir}/codebase-state.md and the actual source under ${projectPath}\n</inputs>\n\n` +
-    `<task>Compare what was BUILT against the architectural intent and constraints. Then check the interface SEAMS — where modules meet, do the contracts (signatures, shapes, events, shared state) actually line up, or did a later slice break an earlier one's interface? Write ${archCheckFile} (mkdir -p first): list any drift (constraint violations, structural divergence, missing seams), any seam/regression issues, and a BLOCKING subset — only the findings severe enough to block a PASS (a broken seam, a violated load-bearing constraint). Be concrete and file-specific. ${REASONING_FIRST}</task>`
+    `<task>Compare what was BUILT against the architectural intent and constraints. Then check the interface SEAMS — where modules meet, do the contracts (signatures, shapes, events, shared state) actually line up, or did a later slice break an earlier one's interface? Write ${archCheckFile} (mkdir -p first): list any drift (constraint violations, structural divergence, missing seams), any seam/regression issues, and a BLOCKING subset — only the findings severe enough to block a PASS (a broken seam, a violated load-bearing constraint). Be concrete and file-specific — the full detail lives in that file. Emit check_file, drift, seam_issues, blocking, and summary first; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`
 }
 
 function argusPrompt() {
@@ -480,7 +493,7 @@ function argusPrompt() {
     `</procedure>\n\n` +
     lawNote +
     `<output>Persist the full prose report to ${reportFile} via Bash — mkdir -p first, then a heredoc (cat <<'EOF' > file); do NOT use the Write tool for it (the platform may nudge-reject subagent Write calls for report files — observed in the field 2026-07-01; Bash writes are the engine's normal artifact channel). The report carries: product type, install result, the three Law exit codes + run_id, suite summary, per-criterion results with full evidence, coverage_gaps, blocking_findings (any failure that blocks a PASS not already an exit code or unmet critical criterion), and a prioritized correction_tasks list (one per distinct failure: failure, evidence, affected files, suggested fix).\n` +
-    `STRUCTURED-OUTPUT DISCIPLINE (a failed schema is a failed stage — the verdict computes from these fields): the criteria array is REQUIRED and must carry EVERY criterion you exercised as {id, met, critical} with note ≤ 1 line — the full prose evidence lives in the report file, never in the schema; omitting the array (or flooding notes until the output truncates) IS the observed death mode. Reasoning ≤ a short paragraph. ${REASONING_FIRST} The transcribed fields ride as their own properties.</output>`
+    `STRUCTURED-OUTPUT DISCIPLINE (a failed schema is a failed stage — the verdict computes from these fields): emit report_file, install_ok, law_run_exit, suite_cmd, suite_exit, criteria, and ui_scope first; the criteria array is REQUIRED and must carry EVERY criterion you exercised as {id, met, critical} with note ≤ 1 line — the full prose evidence lives in the report file, never in the schema; omitting the array (or flooding notes until the output truncates) is an observed death mode. reasoning is optional and under 50 words. ${PAYLOAD_FIRST} The transcribed fields ride as their own properties.</output>`
 }
 
 function hephaestusPrompt() {
@@ -532,14 +545,14 @@ function traversalPrompt(scsForProbe) {
     `4. THE DEADLINE (capability-enforced, not goodwill): each scripted probe is hard-killed at 90s, and the lease expires at the ≤10-minute Tier-2 cap — a probe after the cap is REFUSED (exit 77), and the workflow also stops awaiting you at the cap and folds this pass static-only (UI criteria UNVERIFIED). So work efficiently and do NOT loop or re-launch. When done, let scripted probes exit cleanly (the stage sweeps and releases their kiln-pw- token / lease).\n` +
     `</procedure>\n\n` +
     how +
-    `<task>Write ${valDir}/traversal.md — persist it via a Bash heredoc (mkdir -p the dir, then cat with a quoted heredoc into the file) — NEVER the Write tool: a platform guardrail rejects subagent Write calls on report files, and the rejection poisons the structured-output attempts that follow (an observed death mode). Return tool, browser_result, per-criterion {id, met, verified, note}, findings (live UI defects), and report_file. ${REASONING_FIRST}</task>`
+    `<task>Write ${valDir}/traversal.md — persist it via a Bash heredoc (mkdir -p the dir, then cat with a quoted heredoc into the file) — NEVER the Write tool: a platform guardrail rejects subagent Write calls on report files, and the rejection poisons the structured-output attempts that follow (an observed death mode). Emit tool, browser_result, per-criterion criteria {id, met, verified, note}, findings (live UI defects), and report_file first; reasoning is optional and under 50 words — the full detail lives in the report file. ${PAYLOAD_FIRST}</task>`
 }
 
 // goalBody — the shared audit body (no role line, no voice header) so the first auditor and the
 // D8=2 second-family auditor share identical inputs/task and only differ in their role preamble.
 const goalBody = (reportName) =>
   `<inputs>\n- VISION success criteria (SC-xx, the promise): ${visionFile}. Master plan: ${masterPlanFile}.\n- The live repo at ${projectPath}: git log/diff, read the files, and EXERCISE the product the way a user would (run the CLI, call the API, render the page statically — no browser; the Tier-2 traversal owns live UI).\n</inputs>\n\n` +
-  `<task>Hunt the "checks pass, goal broken" class across the whole product: success criteria met by the letter but broken in spirit, features that exist but cannot be reached from the entry points, slices that pass alone but never connect, hardcoded/stub behavior behind green checks. Write ${qaDir}/${reportName} — persist it via a Bash heredoc (mkdir -p the dir, then cat with a quoted heredoc into the file) — NEVER the Write tool: a platform guardrail rejects subagent Write calls on report files, and the rejection poisons the structured-output attempts that follow (an observed death mode). Return overall ('pass' = the deliverable genuinely delivers the VISION; 'fail' MUST be backed by at least one critical or high finding), findings (each {text, severity}), and report_file. Read-only on source. ${REASONING_FIRST}</task>`
+  `<task>Hunt the "checks pass, goal broken" class across the whole product: success criteria met by the letter but broken in spirit, features that exist but cannot be reached from the entry points, slices that pass alone but never connect, hardcoded/stub behavior behind green checks. Write ${qaDir}/${reportName} — persist it via a Bash heredoc (mkdir -p the dir, then cat with a quoted heredoc into the file) — NEVER the Write tool: a platform guardrail rejects subagent Write calls on report files, and the rejection poisons the structured-output attempts that follow (an observed death mode). Emit overall ('pass' = the deliverable genuinely delivers the VISION; 'fail' MUST be backed by at least one critical or high finding), findings (each {text, severity}), and report_file first; reasoning is optional and under 50 words — the full detail lives in the report file. Read-only on source. ${PAYLOAD_FIRST}</task>`
 function goalPrompt() {
   return voice('opus') +
     `You are the goal-backward final auditor over the WHOLE deliverable. Your one question: does the finished product genuinely deliver the VISION success criteria? Work BACKWARD from the goal — never forward from the checks (they pass; that comfort is exactly what you distrust). This runs over the entire deliverable, not one milestone (per-milestone goal-backward already ran in build).\n\n` +
@@ -564,8 +577,8 @@ const detect = await agent(
 const designPresent = detect ? detect.design_present === true : designHint
 
 const fanLegs = [
-  () => agent(driftPrompt(), { label: 'zoxea:arch-check', phase: 'Measuring Drift', model: 'sonnet', schema: ARCHCHECK_SCHEMA }),
-  () => agent(argusPrompt(), { label: 'argus:validate', phase: 'Measuring Drift', model: 'opus', schema: VALIDATE_SCHEMA }),
+  () => gateAgent(driftPrompt(), { label: 'zoxea:arch-check', phase: 'Measuring Drift', model: 'sonnet', schema: ARCHCHECK_SCHEMA }),
+  () => gateAgent(argusPrompt(), { label: 'argus:validate', phase: 'Measuring Drift', model: 'opus', schema: VALIDATE_SCHEMA }),
 ]
 if (designPresent) fanLegs.push(() => agent(hephaestusPrompt(), { label: 'hephaestus:design-qa', phase: 'Measuring Drift', model: 'sonnet' }))
 const fan = await parallel(fanLegs)
@@ -605,7 +618,7 @@ try {
     let deadlineHit = false
     for (const sfx of traversalSuffixes) {
       const t = await withDeadline(
-        () => agent(traversalPrompt(uiScs), { label: `argus:traversal${sfx}`, phase: 'The Traversal', model: 'opus', schema: TRAVERSAL_SCHEMA }),
+        () => gateAgent(traversalPrompt(uiScs), { label: `argus:traversal${sfx}`, phase: 'The Traversal', model: 'opus', schema: TRAVERSAL_SCHEMA }),
         TRAVERSAL_DEADLINE_MS
       )
       if (t === TRAVERSAL_TIMEOUT) {
@@ -648,10 +661,10 @@ try {
   // ── Goal Backward — the whole-deliverable audit vs the VISION success criteria ─────────────────
   phase('Goal Backward')
   log(`${spin('goal', 0)} — judging the whole deliverable backward from the VISION`)
-  const goalLegs = [() => agent(goalPrompt(), { label: 'aristotle:goal-final', phase: 'Goal Backward', model: 'opus', schema: GOAL_SCHEMA })]
+  const goalLegs = [() => gateAgent(goalPrompt(), { label: 'aristotle:goal-final', phase: 'Goal Backward', model: 'opus', schema: GOAL_SCHEMA })]
   // D8=2 second_family: a second cross-family auditor over the same deliverable (codex when present).
   if (posture.second_family) {
-    goalLegs.push(() => agent(
+    goalLegs.push(() => gateAgent(
       (codexAvailable
         ? `You are the SECOND-FAMILY goal-backward auditor over the WHOLE deliverable, delegating to GPT-5.5 via 'codex exec' for a genuinely cross-family second judgment — run codex at model_reasoning_effort="high". ${codexGuideNote}If it errors, audit directly. Work BACKWARD from the VISION success criteria; do NOT read the first auditor's report — stay independent.\n\n`
         : `You are the SECOND goal-backward auditor over the WHOLE deliverable — an independent second perspective. Work BACKWARD from the VISION success criteria; do NOT read the first auditor's report — stay independent.\n\n`) +
@@ -676,10 +689,18 @@ try {
   // blocking findings the verdict gates on: arch-check blocking ∪ argus blocking_findings ∪ the
   // goal-backward critical|high reconcile ∪ the live UI traversal's defects (a UI defect is fatal —
   // browserPath==='failed' also gates, but the finding text is what the report shows).
+  // FAIL-CLOSED (checklist 5): a DEAD gate never rules green. arch===null (zoxea and its re-dispatch
+  // both died on the structured-output cap), goal===null (aristotle and its re-dispatch both died),
+  // or a posture-required second-family leg that never ruled (goalSecond===null) means that gate
+  // NEVER RULED — each injects a synthetic blocking finding, so the deterministic verdict can never
+  // be VALIDATE_PASS on a mute gate and the return payload is never byte-identical to a clean check.
   const blockingFindings = [
     ...((arch && Array.isArray(arch.blocking)) ? arch.blocking : []),
+    ...(arch ? [] : ['[fail-closed] the arch-check gate never ruled (zoxea:arch-check and its re-dispatch died on the structured-output retry cap) — drift/seam status is UNKNOWN, which blocks a PASS']),
     ...((argus && Array.isArray(argus.blocking_findings)) ? argus.blocking_findings : []),
     ...goalRec.blocking.map((f) => `[goal-backward] ${f.text}`),
+    ...(goal ? [] : ['[fail-closed] the goal-backward gate never ruled (aristotle:goal-final and its re-dispatch died on the structured-output retry cap) — VISION delivery is UNKNOWN, which blocks a PASS']),
+    ...((posture.second_family && !goalSecond) ? ['[fail-closed] the second-family goal gate never ruled (aristotle:goal-final:second-family and its re-dispatch died on the structured-output retry cap) — the posture requires an independent cross-family judgment, which is UNKNOWN and blocks a PASS'] : []),
     ...((traversal && Array.isArray(traversal.findings)) ? traversal.findings.map((f) => `[ui-traversal] ${f}`) : []),
   ].filter((s) => typeof s === 'string' && s.trim())
 

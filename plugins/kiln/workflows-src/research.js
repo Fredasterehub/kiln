@@ -12,7 +12,7 @@ export const meta = {
 // args may arrive as an object or a JSON string depending on how the caller encoded it. Normalise both.
 // @inline:args:normalizeArgs
 const A = normalizeArgs(args)
-const REASONING_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. reasoning is its FIRST property and stays CONCISE (a summary, never the carrier of the answer): every other required property must be a real, separately-populated JSON field — the validator hard-rejects a reasoning-only call, each rejection burns one of five attempts, and five failures kill this leg.'
+const PAYLOAD_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. Emit the payload properties FIRST; reasoning is the LAST property, OPTIONAL, and under 50 words — put detail in the designated report file or field, never in reasoning. A long leading reasoning string is the observed death mode: the call truncates before the payload lands, the validator rejects it, each rejection burns one of five attempts, and five failures kill this leg.'
 const kilnDir = A.kilnDir
 if (!kilnDir) throw new Error('research.js requires args.kilnDir (absolute path to .kiln). Received args of type ' + typeof args)
 const docsDir = `${kilnDir}/docs`
@@ -54,7 +54,6 @@ const spin = (i) => SPIN[((i % SPIN.length) + SPIN.length) % SPIN.length]
 const TOPIC_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     topics: {
       type: 'array',
       items: {
@@ -69,6 +68,7 @@ const TOPIC_SCHEMA = {
         required: ['slug', 'title', 'question', 'priority', 'acceptance_criteria'],
       },
     },
+    reasoning: { type: 'string', maxLength: 700 },
   },
   required: ['topics'],
 }
@@ -76,7 +76,6 @@ const TOPIC_SCHEMA = {
 const FIND_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     slug: { type: 'string' },
     summary: { type: 'string', description: '2-4 sentence answer to the topic question' },
     confidence: { type: 'number', description: '0.0-1.0 confidence the question is answered' },
@@ -90,6 +89,7 @@ const FIND_SCHEMA = {
     },
     quotes: { type: 'array', items: { type: 'string' }, description: 'direct quotes from sources' },
     findings_md: { type: 'string', description: 'full markdown writeup for this topic file' },
+    reasoning: { type: 'string', maxLength: 700 },
   },
   required: ['slug', 'summary', 'confidence', 'sources', 'quotes', 'findings_md'],
 }
@@ -97,11 +97,11 @@ const FIND_SCHEMA = {
 const SYNTH_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     research_file: { type: 'string' },
     topic_files: { type: 'array', items: { type: 'string' } },
     headline_findings: { type: 'array', items: { type: 'string' } },
     topics_written: { type: 'number' },
+    reasoning: { type: 'string', maxLength: 700 },
   },
   required: ['research_file', 'topics_written', 'headline_findings'],
 }
@@ -135,12 +135,12 @@ const postureBrief =
   `topic(s): never return more topics than there are qualifying OQs, and never exceed ${MAX_TOPICS}. ` +
   `Do NOT invent topics beyond the qualifying OQs to pad the list; only when a qualifying OQ is itself ` +
   `under-specified may you sharpen it into a concrete research question. Each topic: a kebab-case slug, a precise ` +
-  `question, a priority, and concrete acceptance criteria. ${REASONING_FIRST}</task>`
+  `question, a priority, and concrete acceptance criteria. Emit topics first; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`
 const historicalBrief =
   `<task>Prioritise the Open Questions section: every "OQ-{N}" line (or YAML frontmatter OQ entry) with Priority: high and Timing: before-build is a ` +
   `mandatory topic. Add topics for load-bearing unknowns in Tech Stack, Constraints, and Risks. Return between ` +
   `${HISTORICAL_MIN_TOPICS} and ${MAX_TOPICS} topics, most important first — each with a kebab-case slug, a precise question, a ` +
-  `priority, and concrete acceptance criteria. ${REASONING_FIRST}</task>`
+  `priority, and concrete acceptance criteria. Emit topics first; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`
 const topicRes = await agent(
   voice('opus') +
   `You are the research director. Scope the research topics this project must answer BEFORE architecture — do not research yet.\n\n` +
@@ -169,7 +169,8 @@ const investigated = await pipeline(
       `<inputs>\n- Topic: "${t.title}" (slug: ${t.slug})\n- Question: ${t.question}\n- Acceptance criteria: ${t.acceptance_criteria}\n</inputs>\n\n` +
       `<constraints>\n${webHowto}\n</constraints>\n\n` +
       `<task>Return a finding: a 2-4 sentence summary, a confidence 0-1, at least ${MIN_SOURCES} sources (title + real URL), ` +
-      `at least ${MIN_QUOTES} verbatim quote, and findings_md (a complete markdown writeup). Write nothing to disk — return the data only. ${REASONING_FIRST}</task>`,
+      `at least ${MIN_QUOTES} verbatim quote, and findings_md (a complete markdown writeup). Write nothing to disk — return the data only. ` +
+      `Emit slug, summary, confidence, sources, quotes, and findings_md first — put the full writeup in findings_md; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`,
       { label: `${codename(i)}:field:${t.slug}`, phase: 'Field Work', model: 'sonnet', schema: FIND_SCHEMA }
     )
   },
@@ -182,7 +183,8 @@ const investigated = await pipeline(
       `(need confidence >= ${MIN_CONFIDENCE}, >= ${MIN_SOURCES} sources with URLs, >= ${MIN_QUOTES} quote).\n\n` +
       `<prior_attempt>\n${JSON.stringify(find)}\n</prior_attempt>\n\n<constraints>\n${webHowto}\n</constraints>\n\n` +
       `<task>Re-investigate harder, find more/better sources, and meet the bar. If the topic genuinely cannot clear the ` +
-      `bar, return your best finding with an honest confidence. ${REASONING_FIRST}</task>`,
+      `bar, return your best finding with an honest confidence. ` +
+      `Emit slug, summary, confidence, sources, quotes, and findings_md first — put the full writeup in findings_md; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`,
       { label: `${codename(i)}:field-revise:${t.slug}`, phase: 'Field Work', model: 'sonnet', schema: FIND_SCHEMA }
     ).then((rev) => rev || find)
   }
@@ -201,8 +203,9 @@ const synth = await agent(
   `2. Write ${docsDir}/research.md: a synthesis with a one-paragraph executive summary, a "Key Findings" bullet list across all topics, ` +
   `a "Decisions this enables" section, any unresolved gaps (topics that did not clear confidence ${MIN_CONFIDENCE}), and a "Sources" appendix. ` +
   `Flag low-confidence topics explicitly so architecture treats them as open.\n` +
-  `3. Return research_file (the path), topic_files (paths written), topics_written (count), and headline_findings (the 3-6 most decision-relevant bullets).\n` +
-  `Write real markdown; never invent sources beyond what the findings contain. ${REASONING_FIRST}\n</task>`,
+  `3. Return research_file (the path), topic_files (paths written), topics_written (count), and headline_findings (the 3-6 most decision-relevant bullets) — ` +
+  `emit those fields first; the detail lives in the files you wrote, and reasoning is optional and under 50 words.\n` +
+  `Write real markdown; never invent sources beyond what the findings contain. ${PAYLOAD_FIRST}\n</task>`,
   { label: 'mi6:synthesis', phase: 'The Debrief', model: 'opus', schema: SYNTH_SCHEMA }
 )
 

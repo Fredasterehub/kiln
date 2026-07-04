@@ -13,7 +13,7 @@ export const meta = {
 // ── args: { kilnDir, projectPath, codexAvailable, testingRigor, milestoneLimit, uiBuild, pluginRoot, posture, runToken, gateOnly } ──
 // @inline:args:normalizeArgs
 const A = normalizeArgs(args)
-const REASONING_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. reasoning is its FIRST property and stays CONCISE (a summary, never the carrier of the answer): every other required property must be a real, separately-populated JSON field — the validator hard-rejects a reasoning-only call, each rejection burns one of five attempts, and five failures kill this leg.'
+const PAYLOAD_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. Emit the payload properties FIRST; reasoning is the LAST property, OPTIONAL, and under 50 words — put detail in the designated report file or field, never in reasoning. A long leading reasoning string is the observed death mode: the call truncates before the payload lands, the validator rejects it, each rejection burns one of five attempts, and five failures kill this leg.'
 const kilnDir = A.kilnDir
 const projectPath = A.projectPath
 if (!kilnDir || !projectPath) throw new Error('build.js requires args.kilnDir and args.projectPath (absolute paths — the conductor resolves them; never launch with relative paths). Received args of type ' + typeof args)
@@ -133,11 +133,10 @@ const SPIN = {
 }
 const spin = (k, i) => { const a = SPIN[k] || []; return a.length ? a[((i % a.length) + a.length) % a.length] : '' }
 
-// ── Schemas (additionalProperties:false; reasoning/rationale FIRST = reason-before-emit) ──
+// ── Schemas (additionalProperties:false; payload fields FIRST, reasoning LAST + optional + capped — a long leading reasoning string truncated tool calls before the payload landed and blew the 5-attempt retry cap) ──
 const MILESTONES_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     milestones: {
       type: 'array',
       items: {
@@ -151,13 +150,13 @@ const MILESTONES_SCHEMA = {
         required: ['id', 'title', 'summary', 'acceptance', 'surface', 'confidence'],
       },
     },
+    reasoning: { type: 'string', maxLength: 700 },
   },
-  required: ['reasoning', 'milestones'],
+  required: ['milestones'],
 }
 const LAW_READ_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     locked: { type: 'boolean', description: 'true iff lock_commit is a non-null string' },
     checks: {
       type: 'array',
@@ -167,13 +166,13 @@ const LAW_READ_SCHEMA = {
         required: ['id', 'milestone', 'kind'],
       },
     },
+    reasoning: { type: 'string', maxLength: 700 },
   },
   required: ['locked', 'checks'],
 }
 const SLICE_PLAN_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     slices: {
       type: 'array',
       items: {
@@ -188,37 +187,37 @@ const SLICE_PLAN_SCHEMA = {
         required: ['objective', 'done_when', 'sc_ids'],
       },
     },
+    reasoning: { type: 'string', maxLength: 700 },
   },
-  required: ['reasoning', 'slices'],
+  required: ['slices'],
 }
 const CONFIRM_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     decision: { type: 'string', enum: ['proceed', 'replan'] },
     reason: { type: 'string', description: 'the concrete contradiction with codebase-state (replan only)' },
+    reasoning: { type: 'string', maxLength: 700 },
   },
-  required: ['reasoning', 'decision'],
+  required: ['decision'],
 }
 const BUILD_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
+    tests_green: { type: 'boolean', description: 'the check/suite passes after implementation' },
+    committed: { type: 'boolean' },
+    evidence: { type: 'string' },
     slice_id: { type: 'string' },
     files_changed: { type: 'array', items: { type: 'string' } },
     tests_added: { type: 'array', items: { type: 'string' } },
     red_confirmed: { type: 'boolean', description: 'tests were observed failing before implementation (false is fine for a static page)' },
-    tests_green: { type: 'boolean', description: 'the check/suite passes after implementation' },
-    committed: { type: 'boolean' },
     test_command: { type: 'string' },
-    evidence: { type: 'string' },
+    reasoning: { type: 'string', maxLength: 700 },
   },
-  required: ['reasoning', 'tests_green', 'committed', 'evidence'],
+  required: ['tests_green', 'committed', 'evidence'],
 }
 const RUNNER_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     verify_exit: { type: 'number', description: 'exit code of kiln-law verify (step 1)' },
     tamper_paths: { type: 'array', items: { type: 'string' }, description: 'every path from a TAMPER: line, any step (empty if none)' },
     law_run_exit: { type: 'number', description: 'exit code of kiln-law run (step 2) — the §5.1 lifecycle verdict the workflow gates on mechanically' },
@@ -228,8 +227,9 @@ const RUNNER_SCHEMA = {
     head: { type: 'string', description: 'verbatim HEAD sha from the RUN line' },
     suite_cmd: { type: 'string', description: 'the project suite command kiln-law suite ran (step 3)' },
     suite_exit: { type: 'number', description: 'the REAL suite exit from step 3\'s SUITE line (its output is persisted as suite.log + suite.jsonl in the evidence dir)' },
+    reasoning: { type: 'string', maxLength: 700 },
   },
-  required: ['reasoning', 'verify_exit', 'tamper_paths', 'flip_unmet', 'regressed'],
+  required: ['verify_exit', 'tamper_paths', 'flip_unmet', 'regressed'],
 }
 const FRESHNESS_SCHEMA = {
   // The §6 freshness transcript: current HEAD (sha + commit epoch) and the evidence's OWN anchors
@@ -251,7 +251,6 @@ const FRESHNESS_SCHEMA = {
 const REVIEW_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     verdict: { type: 'string', enum: ['APPROVED', 'REJECTED'] },
     law_green: { type: 'boolean', description: 'the slice\'s mapped SC checks pass as YOU re-ran them via kiln-law (instantiated probes EXECUTE in the rerun; PROBE_DEFERRED/PROBE_UNAVAILABLE lines are honest deferrals — neither red nor green)' },
     tests_green: { type: 'boolean', description: 'green as the reviewer re-ran it (not as the builder reported)' },
@@ -266,14 +265,13 @@ const REVIEW_SCHEMA = {
         required: ['text', 'finding_class'],
       },
     },
+    reasoning: { type: 'string', maxLength: 700 },
   },
-  required: ['reasoning', 'verdict', 'law_green', 'tests_green', 'findings'],
+  required: ['verdict', 'law_green', 'tests_green', 'findings'],
 }
 const QA_FINDINGS_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
-    report_file: { type: 'string' },
     findings: {
       type: 'array',
       items: {
@@ -286,18 +284,20 @@ const QA_FINDINGS_SCHEMA = {
     // a 'fail' MUST be backed by at least one critical|high finding, or the deterministic
     // reconcile (blocking = any critical|high) reads it as noise.
     overall: { type: 'string', enum: ['pass', 'fail'], description: 'your independent overall verdict on the milestone — \'fail\' MUST be backed by at least one critical or high finding' },
+    report_file: { type: 'string' },
+    reasoning: { type: 'string', maxLength: 700 },
   },
-  required: ['reasoning', 'findings', 'overall'],
+  required: ['findings', 'overall'],
 }
 const VERDICT_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     verdict: { type: 'string', enum: ['QA_PASS', 'QA_FAIL'] },
     findings: { type: 'array', items: { type: 'string' } },
     severity: { type: 'string', enum: ['none', 'low', 'medium', 'high', 'critical'] },
+    reasoning: { type: 'string', maxLength: 700 },
   },
-  required: ['reasoning', 'verdict', 'findings'],
+  required: ['verdict', 'findings'],
 }
 
 // ── denzelReconcile — PURE function, no agent call. Dedupe by normalized text, max-severity wins,
@@ -373,6 +373,14 @@ const lawRedReject = (texts) => ({ verdict: 'REJECTED', law_green: false, tests_
 // goal-backward audit still unusable after its ONE re-ask fails the milestone boundary closed.
 const GOAL_AUDIT_FAILURE = `[goal-audit-failure] the goal-backward audit returned no usable report after one re-ask — the boundary fails closed (QA_FAIL; orchestrator ruling 2026-06-11)`
 
+// ── Gate hardening: a MUTE gate leg (the structured-output retry cap) must DEGRADE, never
+//    detonate the run — one fresh re-dispatch, then null, and every gate call site folds null
+//    through its EXISTING fail-closed path (rejection / QA_FAIL / re-ask / dead-judge-fails-closed).
+//    Gate legs only (reviewers, tribunal analysts, the judge, the goal-backward audit); builders,
+//    slicers, and scaffold legs stay on plain agent() — their failures are real work lost. ──
+const isStructuredOutputFailure = (e) => /StructuredOutput|structured.?output|retry cap/i.test(String((e && e.message) || e))
+async function gateAgent(prompt, opts) { try { return await agent(prompt, opts) } catch (e) { if (!isStructuredOutputFailure(e)) throw e; log(`${opts.label || 'gate'}: structured-output retry cap — re-dispatching one fresh agent`); try { return await agent(prompt, { ...opts, label: (opts.label || 'gate') + ':redispatch' }) } catch (e2) { if (!isStructuredOutputFailure(e2)) throw e2; log(`${opts.label || 'gate'}: re-dispatch failed too — degrading to null (fail-closed)`); return null } } }
+
 // @inline:guards:NO_WANDER,repoRule
 const scope = NO_WANDER
 const repoRuleLine = repoRule(projectPath)
@@ -436,7 +444,7 @@ function slicePlanPrompt(m, surf, scs, built, note) {
     `- Slice budget (the Gauge): size each slice at roughly ≤ ${livePosture.slice_budget_hours}h human-equivalent of work; smaller, verifiable slices beat bloated ones. Emit at most ${MAX_SLICES_PER_MILESTONE} slices.\n` +
     `</constraints>\n\n` +
     (note ? `<correction>\n${note}\n</correction>\n\n` : '') +
-    `<task>Return the ordered slice list: each {objective, files[], constraints, done_when, sc_ids[]} with a zero-ambiguity done_when. ${REASONING_FIRST}</task>`
+    `<task>Return the ordered slice list: each {objective, files[], constraints, done_when, sc_ids[]} with a zero-ambiguity done_when. Emit slices first; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`
 }
 
 function confirmPrompt(m, slice) {
@@ -447,7 +455,7 @@ function confirmPrompt(m, slice) {
     `- Done when: ${slice.done_when}. Flips: ${slice.sc_ids.join(', ')}\n` +
     `- Read ${codebaseStateFile} (the live codebase state). ${scope}\n` +
     `</inputs>\n\n` +
-    `<task>Decide 'proceed' (the slice still matches the live state) or 'replan' ONLY on a concrete contradiction: the objective is already built, its files were restructured away, or its done_when is impossible as scoped. Doubt is not drift — when unsure, proceed. On replan, state the contradiction in reason. ${REASONING_FIRST}</task>`
+    `<task>Decide 'proceed' (the slice still matches the live state) or 'replan' ONLY on a concrete contradiction: the objective is already built, its files were restructured away, or its done_when is impossible as scoped. Doubt is not drift — when unsure, proceed. On replan, state the contradiction in reason. Emit decision (and reason) first; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`
 }
 
 function assetPrepPrompt(m) {
@@ -481,7 +489,7 @@ function buildPrompt(m, surf, slice, sliceId, fixNote) {
       (surf === 'mixed' ? `- This is a MIXED slice — it also carries tightly-coupled non-visual logic: implement that cleanly and add a behavior/smoke test you run green, IN ADDITION to the static page check.\n` : ``) +
       `- Verify STATICALLY — do NOT launch a browser or Playwright (autonomous stages never spawn browsers; they leak memory). Confirm the HTML parses and required sections/ids exist, 'node --check' the JS, and assets/fonts are inlined. Live visual QA is a separate one-shot step outside this loop.\n` +
       `</constraints>${fix}\n` +
-      `<task>Build the slice, run the static check, then 'git add -A && git commit' with a clear message. Report reasoning, files_changed, tests_added (smoke), red_confirmed (false is fine for a page), tests_green (the static/smoke check passed), committed, the check command, and concrete evidence of what you observed. Structured-output discipline (a platform guardrail killed a builder at the retry cap here): your work product lives in the COMMIT, never in the final message — the final message is ONLY the StructuredOutput tool call carrying EVERY required field (reasoning <= 3 sentences, evidence = the few decisive lines, trimmed); a reasoning-only or missing-field attempt burns one of five retries, and five failures kill the slice.</task>`
+      `<task>Build the slice, run the static check, then 'git add -A && git commit' with a clear message. Report tests_green (the static/smoke check passed), committed, and concrete evidence of what you observed FIRST, then files_changed, tests_added (smoke), red_confirmed (false is fine for a page), and the check command; reasoning is optional and under 50 words. Structured-output discipline (a platform guardrail killed a builder at the retry cap here): your work product lives in the COMMIT, never in the final message — the final message is ONLY the StructuredOutput tool call carrying EVERY required field (evidence = the few decisive lines, trimmed; reasoning LAST, optional, under 50 words); a reasoning-heavy or missing-field attempt burns one of five retries, and five failures kill the slice.</task>`
   }
   // logic slice — GPT-5.5/Codex builds (cross-family vs the Opus reviewer)
   const tdd = testingRigor === 'minimal'
@@ -505,7 +513,7 @@ function buildPrompt(m, surf, slice, sliceId, fixNote) {
     `- Keep the implementation minimal; add no abstraction the slice does not require; no stubs or mocks standing in for required behavior.\n` +
     (codexAvailable ? `- ${codexHowto}\n` : `- Codex is unavailable — implement directly with your file tools.\n`) +
     `</constraints>${fix}\n` +
-    `<task>Implement the slice to green tests, then 'git add -A && git commit' with a clear message. Report reasoning, files_changed, tests_added, red_confirmed, tests_green (must be true), committed, the test_command you used, and the trimmed passing test output as evidence. Structured-output discipline (a platform guardrail killed a builder at the retry cap here): your work product lives in the COMMIT, never in the final message — the final message is ONLY the StructuredOutput tool call carrying EVERY required field (reasoning <= 3 sentences, evidence = the few decisive lines, trimmed); a reasoning-only or missing-field attempt burns one of five retries, and five failures kill the slice.</task>`
+    `<task>Implement the slice to green tests, then 'git add -A && git commit' with a clear message. Report tests_green (must be true), committed, and the trimmed passing test output as evidence FIRST, then files_changed, tests_added, red_confirmed, and the test_command you used; reasoning is optional and under 50 words. Structured-output discipline (a platform guardrail killed a builder at the retry cap here): your work product lives in the COMMIT, never in the final message — the final message is ONLY the StructuredOutput tool call carrying EVERY required field (evidence = the few decisive lines, trimmed; reasoning LAST, optional, under 50 words); a reasoning-heavy or missing-field attempt burns one of five retries, and five failures kill the slice.</task>`
 }
 
 function runnerPrompt(build, lawCtx, beforeRunId) {
@@ -597,7 +605,7 @@ function reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort, vclas
       `Re-run the STATIC check yourself (HTML parses, sections/ids present, 'node --check' the JS). RE-RUN the slice's mapped probe SCs via the kiln-law rerun above (each probe is one bounded, token-swept subprocess — the browser is a subprocess with a deadline, never a service); NEVER open a browser or drive Playwright yourself — every browser observation comes through that rerun's evidence.\n` +
       `</checks>\n${escNote}\n` +
       how +
-      `<task>Set law_green from YOUR kiln-law re-run and tests_green from the static/smoke check you re-ran. Verdict APPROVED only if the mapped checks pass and the page is structurally sound, accessible, on-brief, and free of invented claims; else REJECTED with specific, actionable findings. ${classRule} ${REASONING_FIRST}</task>`
+      `<task>Set law_green from YOUR kiln-law re-run and tests_green from the static/smoke check you re-ran. Verdict APPROVED only if the mapped checks pass and the page is structurally sound, accessible, on-brief, and free of invented claims; else REJECTED with specific, actionable findings. ${classRule} Emit verdict, law_green, tests_green, and findings first; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`
   }
   const how = leg.viaCodex
     ? `<how>${codexGuideNote}Delegate this review to GPT-5.5 via 'codex exec' at model_reasoning_effort="${effort}" — a genuinely cross-family second judgment; if codex errors, review directly as the independent reviewer.</how>\n\n`
@@ -617,7 +625,7 @@ function reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort, vclas
     `- Reject only on correctness / completeness / failed checks — not on style preference.\n` +
     `</checks>\n${escNote}\n` +
     how +
-    `<task>Verdict APPROVED only if the mapped checks and the suite are green from YOUR OWN runs AND the implementation is real AND on-spec; else REJECTED with specific [file:line] findings. Set law_green and tests_green from your own runs. ${classRule} ${REASONING_FIRST}</task>`
+    `<task>Verdict APPROVED only if the mapped checks and the suite are green from YOUR OWN runs AND the implementation is real AND on-spec; else REJECTED with specific [file:line] findings. Set law_green and tests_green from your own runs. ${classRule} Emit verdict, law_green, tests_green, and findings first; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`
 }
 
 // The analyst overall-verdict rule (§3.2): the gate computes judge-spawn from analyst
@@ -637,7 +645,7 @@ function kenPrompt(m) {
     `You are QA analyst A. Adversarially verify the INTEGRATED milestone — run the tests, confirm each acceptance criterion is genuinely met (not faked), and hunt integration gaps and edge cases across the slices.\n\n` +
     `<inputs>\n- Milestone ${m.id} "${m.title}" — acceptance: ${m.acceptance}\n- Inspect the repo at ${projectPath}: git log/diff, read the files, RUN the tests yourself.\n</inputs>\n\n` +
     `<constraints>\n- ${browserLaw}\n</constraints>\n\n` +
-    `<task>Write findings to ${qaDir}/qa-report-a.md — persist it via a Bash heredoc (mkdir -p the dir, then cat with a quoted heredoc into the file) — NEVER the Write tool: a platform guardrail rejects subagent Write calls on report files, and the rejection poisons the structured-output attempts that follow (an observed death mode). Return report_file + findings[] (each {text, severity}). ${overallRule} Quote specific evidence ([file:line] or test output). Apply scrutiny to EVERY acceptance criterion, not just the first. ${REASONING_FIRST}</task>`
+    `<task>Write findings to ${qaDir}/qa-report-a.md — persist it via a Bash heredoc (mkdir -p the dir, then cat with a quoted heredoc into the file) — NEVER the Write tool: a platform guardrail rejects subagent Write calls on report files, and the rejection poisons the structured-output attempts that follow (an observed death mode). Return findings[] (each {text, severity}) and overall FIRST, then report_file. ${overallRule} Quote specific evidence ([file:line] or test output). Apply scrutiny to EVERY acceptance criterion, not just the first. Put ALL detail in the report file; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`
 }
 function ryuPrompt(m) {
   return (codexAvailable
@@ -645,7 +653,7 @@ function ryuPrompt(m) {
     : `You are QA analyst B — an independent second perspective.\n`) +
     `Run the tests yourself and probe DIFFERENT failure modes than a first pass would.\n\n` +
     `<inputs>\n- Milestone ${m.id} "${m.title}" — acceptance: ${m.acceptance}\n- Inspect the repo at ${projectPath}: git log/diff, read files, RUN the tests.\n</inputs>\n\n` +
-    `<task>Write findings to ${qaDir}/qa-report-b.md — persist it via a Bash heredoc (mkdir -p the dir, then cat with a quoted heredoc into the file) — NEVER the Write tool: a platform guardrail rejects subagent Write calls on report files, and the rejection poisons the structured-output attempts that follow (an observed death mode). Return report_file + findings[] (each {text, severity}). ${overallRule} Do NOT read analyst A's report — stay independent. ${REASONING_FIRST}</task>`
+    `<task>Write findings to ${qaDir}/qa-report-b.md — persist it via a Bash heredoc (mkdir -p the dir, then cat with a quoted heredoc into the file) — NEVER the Write tool: a platform guardrail rejects subagent Write calls on report files, and the rejection poisons the structured-output attempts that follow (an observed death mode). Return findings[] (each {text, severity}) and overall FIRST, then report_file. ${overallRule} Do NOT read analyst A's report — stay independent. Put ALL detail in the report file; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`
 }
 // goalBackwardPrompt — the §3.2 boundary auditor: works BACKWARD from the milestone goal (GSD
 // discipline), explicitly hunting "all checks pass but the goal is broken" before validate.
@@ -653,7 +661,7 @@ function goalBackwardPrompt(m) {
   return voice('opus') +
     `You are the goal-backward auditor at the milestone boundary. Your one question: does the INTEGRATED milestone genuinely deliver its GOAL? Work BACKWARD from the goal — never forward from the checks (they all pass; that comfort is exactly what you distrust).\n\n` +
     `<inputs>\n- Milestone ${m.id} "${m.title}" — acceptance: ${m.acceptance}\n- Summary: ${m.summary || '(none)'}\n- The live repo at ${projectPath}: git log/diff, read the files, and EXERCISE the product the way a user would (run the CLI, call the API, render the page statically — no browser).\n</inputs>\n\n` +
-    `<task>Hunt the "checks pass, goal broken" class specifically: acceptance met by the letter but broken in spirit, slices that pass alone but never connect, features that exist but cannot be reached from the product's entry points, hardcoded or stub behavior hiding behind a green check. Write your report to ${qaDir}/goal-backward-${m.id}.md — persist it via a Bash heredoc (mkdir -p the dir, then cat with a quoted heredoc into the file) — NEVER the Write tool: a platform guardrail rejects subagent Write calls on report files, and the rejection poisons the structured-output attempts that follow (an observed death mode). Return report_file + findings[] (each {text, severity}) + overall ('pass' = the goal is genuinely delivered; 'fail' MUST be backed by at least one critical or high finding). Read-only on source. ${REASONING_FIRST}</task>`
+    `<task>Hunt the "checks pass, goal broken" class specifically: acceptance met by the letter but broken in spirit, slices that pass alone but never connect, features that exist but cannot be reached from the product's entry points, hardcoded or stub behavior hiding behind a green check. Write your report to ${qaDir}/goal-backward-${m.id}.md — persist it via a Bash heredoc (mkdir -p the dir, then cat with a quoted heredoc into the file) — NEVER the Write tool: a platform guardrail rejects subagent Write calls on report files, and the rejection poisons the structured-output attempts that follow (an observed death mode). Return findings[] (each {text, severity}) and overall ('pass' = the goal is genuinely delivered; 'fail' MUST be backed by at least one critical or high finding) FIRST, then report_file. Put ALL detail in the report file; reasoning is optional and under 50 words. Read-only on source. ${PAYLOAD_FIRST}</task>`
 }
 function judgePrompt(m, reconciled) {
   return voice('opus') +
@@ -662,7 +670,7 @@ function judgePrompt(m, reconciled) {
     `- Reconciled findings (deduped, severity-ranked):\n${reconciled.summaryLines.map((l) => '  - ' + l).join('\n') || '  (none)'}\n` +
     `- The repo at ${projectPath}.\n</inputs>\n\n` +
     `<constraints>\n- ${browserLaw}\n</constraints>\n\n` +
-    `<task>RUN the tests yourself at ${projectPath}. Issue QA_PASS only if the milestone genuinely meets its acceptance with green tests and no critical/high findings; else QA_FAIL with the blocking findings. ${REASONING_FIRST} verdict, findings, and severity ride as their own properties.</task>`
+    `<task>RUN the tests yourself at ${projectPath}. Issue QA_PASS only if the milestone genuinely meets its acceptance with green tests and no critical/high findings; else QA_FAIL with the blocking findings. Emit verdict FIRST, then findings and severity as their own properties; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`
 }
 
 // ── Ledger (BLUEPRINT §3.5): every posture move and slice-plan event lands in events.jsonl via
@@ -709,7 +717,6 @@ async function ledger(type, data, phaseName) {
 const SWEEP_SCAN_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     sweep_line: { type: 'string', description: 'the SWEEP … line the sweep command printed, verbatim' },
     leak_scan_line: { type: 'string', description: 'the LEAK_SCAN {json} line leak-scan printed, verbatim' },
     leak_suspects: { type: 'integer', description: "the LEAK_SCAN json's counts.suspects — foreign browsers alive (0 when none)" },
@@ -729,6 +736,7 @@ const SWEEP_SCAN_SCHEMA = {
         required: ['path', 'mtime'],
       },
     },
+    reasoning: { type: 'string', maxLength: 700 },
   },
   required: ['sweep_line', 'leak_scan_line', 'leak_suspects', 'suspects', 'profile_dirs'],
 }
@@ -773,7 +781,7 @@ let lastRunId = null
 //    re-slice, never a stale-plan reuse). ──
 const HEAD_SCHEMA = {
   type: 'object', additionalProperties: false,
-  properties: { reasoning: { type: 'string' }, head: { type: 'string', description: 'git rev-parse HEAD — the full sha, or "" if git failed' } },
+  properties: { head: { type: 'string', description: 'git rev-parse HEAD — the full sha, or "" if git failed' }, reasoning: { type: 'string', maxLength: 700 } },
   required: ['head'],
 }
 async function headSha(suffix) {
@@ -890,7 +898,9 @@ async function evidencedReview(m, surf, slice, sliceId, build, fix, escalated, r
   const leg = reviewLeg(surf, escalated)
   const effort = reviewEffort(fix, escalated)
   log(`${spin('review', fix)} — ${m.id} ${sliceId} f${fix}${leg.escalated ? ' (escalated feedback source)' : ''}`)
-  return await agent(reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort, gate.verification_class), { label: loreLabel(reviewerName, 'review', `${sliceId}:f${fix}${leg.escalated ? ':esc' : ''}`), phase: 'The Trial', model: leg.model, schema: REVIEW_SCHEMA })
+  // gateAgent: a mute reviewer degrades to null — approvedOf(null) rejects, rejectionClass(null)
+  // reads 'mechanical', findingLines(null) is empty. Fail-closed, never a silent pass.
+  return await gateAgent(reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort, gate.verification_class), { label: loreLabel(reviewerName, 'review', `${sliceId}:f${fix}${leg.escalated ? ':esc' : ''}`), phase: 'The Trial', model: leg.model, schema: REVIEW_SCHEMA })
 }
 
 // ── gateOnlyTrial (P3.5 T3, dogfood finding 4) — the STARVED-GATE deterministic Law check over an
@@ -982,7 +992,7 @@ const [, planRes] = await parallel([
   ),
   () => agent(
     `You are the build planner. ${scope}\n\n<inputs>\nRead ${masterPlanFile}.\n</inputs>\n\n` +
-    `<task>Return the milestones in build order — id, title, summary, acceptance, surface (copy the plan's ui|logic|mixed tag; if absent, infer: a visible/front-facing deliverable is 'ui', a non-visual backend/CLI/logic deliverable is 'logic'), and confidence. Extract exactly what the plan defines — do not invent milestones. ${REASONING_FIRST}</task>`,
+    `<task>Return the milestones in build order — id, title, summary, acceptance, surface (copy the plan's ui|logic|mixed tag; if absent, infer: a visible/front-facing deliverable is 'ui', a non-visual backend/CLI/logic deliverable is 'logic'), and confidence. Extract exactly what the plan defines — do not invent milestones. Emit milestones first; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`,
     { label: loreLabel('confucius', 'parse'), phase: 'The Forge Heats', model: 'haiku', schema: MILESTONES_SCHEMA }
   ),
 ])
@@ -1239,7 +1249,10 @@ for (const m of milestones) {
       }
     }
   }
+  // A structured-output death on the audit leg degrades to null (unusable) rather than throwing —
+  // auditOrNull's ONE re-ask below is already the retry, so no gateAgent re-dispatch on top of it.
   const goalAudit = (suffix) => agent(goalBackwardPrompt(m), { label: loreLabel('aristotle', 'goal-backward', suffix), phase: 'Judgment', model: 'opus', schema: QA_FINDINGS_SCHEMA })
+    .catch((e) => { if (!isStructuredOutputFailure(e)) throw e; log(`aristotle:goal-backward:${suffix}: structured-output retry cap — unusable audit (auditOrNull's re-ask is the retry)`); return null })
   // auditOrNull — the ruling's retry shape: returns a USABLE report, or null after the ONE
   // re-ask (ledgered goal_audit_failure); the caller fails the boundary closed on null.
   const auditOrNull = async (suffix, first) => {
@@ -1276,9 +1289,11 @@ for (const m of milestones) {
     // toward scrutiny, gate-only never lowers the gate.
     if (!goalOn) await skipAudit()
     for (let c = 0; c <= MAX_TRIBUNAL_CORRECTION; c++) {
+      // gateAgent: a mute analyst degrades to null — denzelReconcile is null-safe and gateDecision
+      // reads an unreadable overall as QA_FAIL (fail-closed), never a silent pass.
       const legs = [
-        () => agent(kenPrompt(m), { label: loreLabel('ken', 'qa', `${m.id}:c${c}`), phase: 'Judgment', model: 'opus', schema: QA_FINDINGS_SCHEMA }),
-        () => agent(ryuPrompt(m), { label: loreLabel('ryu', 'qa', `${m.id}:c${c}`), phase: 'Judgment', model: 'sonnet', schema: QA_FINDINGS_SCHEMA }),
+        () => gateAgent(kenPrompt(m), { label: loreLabel('ken', 'qa', `${m.id}:c${c}`), phase: 'Judgment', model: 'opus', schema: QA_FINDINGS_SCHEMA }),
+        () => gateAgent(ryuPrompt(m), { label: loreLabel('ryu', 'qa', `${m.id}:c${c}`), phase: 'Judgment', model: 'sonnet', schema: QA_FINDINGS_SCHEMA }),
       ]
       if (goalOn) legs.push(() => goalAudit(`${m.id}:c${c}`))
       const reports = await parallel(legs)
@@ -1308,8 +1323,8 @@ for (const m of milestones) {
       let v
       if (decision.judge) {
         log(`${m.id}: ${decision.reason} — Judge Dredd is spawned`)
-        const verdict = await agent(judgePrompt(m, reconciled), { label: loreLabel('judge-dredd', 'verdict', `${m.id}:c${c}`), phase: 'Judgment', model: 'opus', schema: VERDICT_SCHEMA })
-        v = (verdict && verdict.verdict === 'QA_PASS') ? 'QA_PASS' : 'QA_FAIL' // a dead judge fails closed
+        const verdict = await gateAgent(judgePrompt(m, reconciled), { label: loreLabel('judge-dredd', 'verdict', `${m.id}:c${c}`), phase: 'Judgment', model: 'opus', schema: VERDICT_SCHEMA })
+        v = (verdict && verdict.verdict === 'QA_PASS') ? 'QA_PASS' : 'QA_FAIL' // a dead/mute judge fails closed
       } else {
         v = decision.verdict
         log(`${m.id}: ${decision.reason}`)

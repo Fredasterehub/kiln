@@ -18,7 +18,7 @@ function normalizeArgs(args) {
   return (args && typeof args === 'object') ? args : {}
 }
 const A = normalizeArgs(args)
-const REASONING_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. reasoning is its FIRST property and stays CONCISE (a summary, never the carrier of the answer): every other required property must be a real, separately-populated JSON field — the validator hard-rejects a reasoning-only call, each rejection burns one of five attempts, and five failures kill this leg.'
+const PAYLOAD_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. Emit the payload properties FIRST; reasoning is the LAST property, OPTIONAL, and under 50 words — put detail in the designated report file or field, never in reasoning. A long leading reasoning string is the observed death mode: the call truncates before the payload lands, the validator rejects it, each rejection burns one of five attempts, and five failures kill this leg.'
 const kilnDir = A.kilnDir
 const projectPath = A.projectPath
 if (!kilnDir || !projectPath) throw new Error('vision.js requires args.kilnDir and args.projectPath (absolute paths — the conductor resolves them; never launch with relative paths). Received args of type ' + typeof args)
@@ -69,7 +69,6 @@ async function runLedger(type, data, phaseName) {
 const GATE_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     exit: { type: 'number', description: 'the kiln-vision process exit code' },
     valid: { type: 'boolean', description: "the payload's valid field (false when the command died without JSON)" },
     violations: {
@@ -83,6 +82,7 @@ const GATE_SCHEMA = {
     },
     summary: { type: 'string', description: "the payload's summary object as a JSON string, verbatim; '' when the command died" },
     error: { type: 'string', description: 'verbatim stderr when the command itself failed (nonzero without JSON); empty otherwise' },
+    reasoning: { type: 'string', maxLength: 700 },
   },
   required: ['exit', 'valid', 'violations', 'summary', 'error'],
 }
@@ -161,13 +161,13 @@ const compileBrief =
   `- **A-N**:, - **OQ-N**:) — a validator counts them mechanically. All 16 section titles, ` +
   `byte-stable, each exactly once. No HTML comments in your output — those are template ` +
   `scaffolding.\n` +
-  `Report the counts you wrote. ${REASONING_FIRST}</task>`
+  `Emit written and counts (the counts you wrote) FIRST; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`
 const COMPILE_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     written: { type: 'boolean', description: 'VISION.md was written to disk' },
     counts: { type: 'string', description: 'the counts object you wrote into the frontmatter, as a JSON string' },
+    reasoning: { type: 'string', maxLength: 700 },
   },
   required: ['written', 'counts'],
 }
@@ -212,7 +212,7 @@ for (let round = 0; round < COMPILE_PASSES; round++) {
     `The ledger: ${ledgerFile}. The template: ${pluginRoot}/templates/VISION.md. The file to fix: ${visionFile}.\n</inputs>\n\n` +
     `<task>Fix EXACTLY the named violations in ${visionFile} — recompute the frontmatter ` +
     `arithmetic from what the body actually carries, never bend the body to dodge a count. ` +
-    `Report the corrected counts. ${REASONING_FIRST}</task>`,
+    `Emit written and the corrected counts FIRST; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`,
     { label: `aristotle:compile-revise:r${round + 1}`, phase: 'The Compilation', model: 'opus', schema: COMPILE_SCHEMA }
   )
 }
@@ -225,7 +225,7 @@ const vSummary = parseSummary(verdict) || {}
 const proof = await agent(
   `You are the artifact existence verifier.\n\n` +
   `<task>Run 'ls ${visionFile}' (Bash). Return exists = true iff the file exists. Do not read, write, or fix anything.</task>`,
-  { label: 'thoth:verify', phase: 'The Seal', model: 'haiku', schema: { type: 'object', additionalProperties: false, properties: { reasoning: { type: 'string' }, exists: { type: 'boolean' } }, required: ['exists'] } }
+  { label: 'thoth:verify', phase: 'The Seal', model: 'haiku', schema: { type: 'object', additionalProperties: false, properties: { exists: { type: 'boolean' }, reasoning: { type: 'string', maxLength: 700 } }, required: ['exists'] } }
 )
 if (!(proof && proof.exists === true)) {
   log('THE SEAL FAILED — the validated VISION is not on disk (a vanished artifact is a failed compile).')

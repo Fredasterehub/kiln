@@ -16,7 +16,7 @@ function normalizeArgs(args) {
   return (args && typeof args === 'object') ? args : {}
 }
 const A = normalizeArgs(args)
-const REASONING_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. reasoning is its FIRST property and stays CONCISE (a summary, never the carrier of the answer): every other required property must be a real, separately-populated JSON field — the validator hard-rejects a reasoning-only call, each rejection burns one of five attempts, and five failures kill this leg.'
+const PAYLOAD_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. Emit the payload properties FIRST; reasoning is the LAST property, OPTIONAL, and under 50 words — put detail in the designated report file or field, never in reasoning. A long leading reasoning string is the observed death mode: the call truncates before the payload lands, the validator rejects it, each rejection burns one of five attempts, and five failures kill this leg.'
 const projectPath = A.projectPath
 const kilnDir = A.kilnDir
 if (!projectPath || !kilnDir) throw new Error('mapping.js requires args.projectPath and args.kilnDir (absolute paths — the conductor resolves them; never launch with relative paths). Received args of type ' + typeof args)
@@ -43,30 +43,30 @@ const scope =
 const SCOUT_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     lens: { type: 'string' },
     highlights: { type: 'array', items: { type: 'string' } },
     findings_md: { type: 'string', description: 'full markdown writeup for this lens' },
+    reasoning: { type: 'string', maxLength: 700 },
   },
   required: ['lens', 'highlights', 'findings_md'],
 }
 const MAP_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     map_file: { type: 'string' },
     stack: { type: 'array', items: { type: 'string' } },
     entry_points: { type: 'array', items: { type: 'string' } },
     key_risks: { type: 'array', items: { type: 'string' } },
     summary: { type: 'string' },
+    reasoning: { type: 'string', maxLength: 700 },
   },
   required: ['map_file', 'stack', 'summary'],
 }
 const MISSING_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string' },
     missing: { type: 'array', items: { type: 'string' }, description: 'exactly the claimed paths that do not exist on disk' },
+    reasoning: { type: 'string', maxLength: 700 },
   },
   required: ['missing'],
 }
@@ -77,19 +77,19 @@ const scouts = (await parallel([
   () => agent(
     `You are the anatomy scout. ${scope}\n\n` +
     `<task>Map the STRUCTURE: top-level layout, directories, modules/packages, entry points, build/config files, and how the ` +
-    `pieces fit. Use Bash (ls/find/tree) and read key files. Return lens, highlights, and a markdown writeup. Write nothing to disk. ${REASONING_FIRST}</task>`,
+    `pieces fit. Use Bash (ls/find/tree) and read key files. Emit lens, highlights, and findings_md (the markdown writeup) first; reasoning is optional and under 50 words. Write nothing to disk. ${PAYLOAD_FIRST}</task>`,
     { label: 'maiev:anatomy', phase: 'Reconnaissance', model: 'sonnet', schema: SCOUT_SCHEMA }
   ),
   () => agent(
     `You are the health scout. ${scope}\n\n` +
     `<task>Assess HEALTH: dependencies and their manifest(s), test setup + how to run them, CI/CD config, build system, linting, ` +
-    `and visible tech debt or risks. Return lens, highlights, and a markdown writeup. Write nothing to disk. ${REASONING_FIRST}</task>`,
+    `and visible tech debt or risks. Emit lens, highlights, and findings_md (the markdown writeup) first; reasoning is optional and under 50 words. Write nothing to disk. ${PAYLOAD_FIRST}</task>`,
     { label: 'curie:health', phase: 'Reconnaissance', model: 'sonnet', schema: SCOUT_SCHEMA }
   ),
   () => agent(
     `You are the nervous-system scout. ${scope}\n\n` +
-    `<task>Trace the FLOW: public APIs/interfaces, data flow, integrations, events, and where state lives. Return lens, highlights, ` +
-    `and a markdown writeup. Write nothing to disk. ${REASONING_FIRST}</task>`,
+    `<task>Trace the FLOW: public APIs/interfaces, data flow, integrations, events, and where state lives. Emit lens, highlights, ` +
+    `and findings_md (the markdown writeup) first; reasoning is optional and under 50 words. Write nothing to disk. ${PAYLOAD_FIRST}</task>`,
     { label: 'medivh:flow', phase: 'Reconnaissance', model: 'sonnet', schema: SCOUT_SCHEMA }
   ),
 ])).filter(Boolean)
@@ -103,7 +103,7 @@ const map = await agent(
   `<scout_reports>\n${JSON.stringify(scouts)}\n</scout_reports>\n\n` +
   `<task>Synthesize the reports into ${mapFile} (mkdir -p first): a single coherent codebase map — overview, structure, stack, ` +
   `entry points, how to build/test/run, integrations, and the key risks/constraints the build must respect. Spot-check the repo at ` +
-  `${projectPath} to resolve any scout disagreement. Report the stack, entry_points, key_risks, and a tight summary for the conductor. ${REASONING_FIRST}</task>`,
+  `${projectPath} to resolve any scout disagreement. Emit map_file, stack, entry_points, key_risks, and a tight summary for the conductor first; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`,
   { label: 'mnemosyne:synthesis', phase: 'The Map', model: 'opus', schema: MAP_SCHEMA }
 )
 log(`codebase-map.md written: ${map && (map.stack || []).join(', ')}`)

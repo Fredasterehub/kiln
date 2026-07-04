@@ -12,7 +12,7 @@ export const meta = {
 // args may arrive as an object or a JSON string depending on how the caller encoded it. Normalise both.
 // @inline:args:normalizeArgs
 const A = normalizeArgs(args)
-const REASONING_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. reasoning is its FIRST property and stays CONCISE (a summary, never the carrier of the answer): every other required property must be a real, separately-populated JSON field — the validator hard-rejects a reasoning-only call, each rejection burns one of five attempts, and five failures kill this leg.'
+const PAYLOAD_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. Emit the payload properties FIRST; reasoning is the LAST property, OPTIONAL, and under 50 words — put detail in the designated report file or field, never in reasoning. A long leading reasoning string is the observed death mode: the call truncates before the payload lands, the validator rejects it, each rejection burns one of five attempts, and five failures kill this leg.'
 const kilnDir = A.kilnDir
 if (!kilnDir) throw new Error('gauge.js requires args.kilnDir (absolute path to .kiln). Received args of type ' + typeof args)
 const projectPath = A.projectPath
@@ -67,8 +67,7 @@ const assessorVoice = assessorModel === 'opus' ? voice('opus') : ''
 const SPIN = ['Alpha takes the measure of the work', 'The Assessor reads between the lines', 'No dimension hides from the gauge', 'Eight readings, one posture']
 const spin = (i) => SPIN[((i % SPIN.length) + SPIN.length) % SPIN.length]
 
-// The 8-dimension profile schema (BLUEPRINT §3.1). Reason-first: the agent reasons, THEN scores —
-// the reasoning is dropped before the profile reaches validateProfile (which rejects extra keys).
+// ── Schemas (additionalProperties:false; payload fields FIRST, reasoning LAST + optional + capped — a long leading reasoning string truncated tool calls before the payload landed and blew the 5-attempt retry cap) ──
 const DIM_KEYS = ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8']
 const DIM_LABELS = {
   D1: 'Scope size — 0: ≤5 features/screens/endpoints · 1: 6–15 · 2: >15',
@@ -94,10 +93,10 @@ for (const k of DIM_KEYS) {
 const PROFILE_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string', description: 'reason about the work FIRST — then score each dimension' },
     profile: { type: 'object', additionalProperties: false, properties: dimProps, required: DIM_KEYS },
+    reasoning: { type: 'string', maxLength: 700 },
   },
-  required: ['reasoning', 'profile'],
+  required: ['profile'],
 }
 
 // The brief the Assessor scores against. Names BOTH VISION formats explicitly: the P4 YAML
@@ -115,7 +114,7 @@ const assessBrief =
   `<task>For EVERY dimension D1..D8 return { score, evidence } where evidence is ONE verbatim quote from ` +
   `VISION/codebase-map that anchors the score (this counters anchoring on the vision's own self-framing — ` +
   `quote the text, do not paraphrase). If a dimension has no direct quote, quote the closest relevant line and ` +
-  `score conservatively. Apply the rubric to EVERY dimension, not just the first. ${REASONING_FIRST} The profile rides as its own property.</task>`
+  `score conservatively. Apply the rubric to EVERY dimension, not just the first. ${PAYLOAD_FIRST} Emit the profile FIRST as its own property; reasoning is optional and under 50 words.</task>`
 
 // ── The Assessment: ONE Alpha agent scores the profile ──
 phase('The Assessment')
@@ -164,8 +163,8 @@ if (!degraded && profile.D8.score === 2) {
   const codexGuide = pluginRoot ? `${pluginRoot}/references/codex-prompt-guide.md` : null
   const crossHowto = codexAvailable
     ? (codexGuide
-      ? `You score this independently via GPT-5.5 (cross-family) using 'codex exec'. Read ${codexGuide} and follow it — TRANSLATE the brief into a Codex-native prompt (do not forward it verbatim), use --output-schema for the flat reason-first profile shape, and the heredoc-to-stdin invocation. If GPT-5.5 is unavailable retry with -m gpt-5.4; if codex yields nothing usable, score directly as the independent second reader.`
-      : `You score this independently via GPT-5.5 (cross-family) using 'codex exec': TRANSLATE the brief into a Codex-native prompt (do not forward it verbatim), force the flat reason-first profile via --output-schema, pipe via stdin. If GPT-5.5 is unavailable retry with -m gpt-5.4; if codex yields nothing usable, score directly.`)
+      ? `You score this independently via GPT-5.5 (cross-family) using 'codex exec'. Read ${codexGuide} and follow it — TRANSLATE the brief into a Codex-native prompt (do not forward it verbatim), use --output-schema for the flat profile-first shape (reasoning LAST + optional), and the heredoc-to-stdin invocation. If GPT-5.5 is unavailable retry with -m gpt-5.4; if codex yields nothing usable, score directly as the independent second reader.`
+      : `You score this independently via GPT-5.5 (cross-family) using 'codex exec': TRANSLATE the brief into a Codex-native prompt (do not forward it verbatim), force the flat profile-first shape (reasoning LAST + optional) via --output-schema, pipe via stdin. If GPT-5.5 is unavailable retry with -m gpt-5.4; if codex yields nothing usable, score directly.`)
     : `You are a FRESH, independent second reader — do NOT see or anchor on any prior scoring. Score the profile from the inputs alone.`
   log('Failure penalty is maximal (D8=2) — a second independent scorer cross-checks the profile')
   const second = await agent(
