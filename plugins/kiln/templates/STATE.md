@@ -8,7 +8,7 @@ Keep the field names and markdown bullet format unchanged.
 
 ## Schema
 
-- **schema_version**: 2
+- **schema_version**: 3
 - **stage**: onboarding
 - **mode**: interactive
 - **plan_approval**: gated
@@ -35,6 +35,7 @@ Keep the field names and markdown bullet format unchanged.
 - **validation_routing_target**: build
 - **last_approval_checkpoint**: none
 - **posture**: not yet gauged
+- **last_rendered_seq**: 0
 
 ## Required Artifacts
 

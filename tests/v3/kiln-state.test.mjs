@@ -284,6 +284,223 @@ test('summary: renders the human view to stdout and writes NO file', () => {
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
+// ── since: the read-only story-telegraph tail (WS-C/C3) ────────────────────────────────────────
+
+test('since: missing events.jsonl ⇒ exit 0 with {events:[],last_seq:null,truncated:false}, no write', () => {
+  const dir = sandbox(); const kilnDir = join(dir, '.kiln')
+  try {
+    const res = run('since', kilnDir, '0') // kilnDir never created
+    assert.equal(res.status, 0)
+    assert.deepEqual(JSON.parse(res.stdout), { events: [], last_seq: null, truncated: false })
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('since: no events after the cursor ⇒ empty batch, last_seq is the ledger tail', () => {
+  const dir = sandbox(); const kilnDir = join(dir, '.kiln')
+  try {
+    init(kilnDir) // seq 1 only
+    const out = JSON.parse(run('since', kilnDir, '1').stdout)
+    assert.deepEqual(out.events, [])
+    assert.equal(out.last_seq, 1) // tail — the cursor advances even with nothing new
+    assert.equal(out.truncated, false)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('since: returns only events after the cursor, in seq order, last_seq = tail', () => {
+  const dir = sandbox(); const kilnDir = join(dir, '.kiln')
+  try {
+    init(kilnDir)
+    run('append', kilnDir, '{"type":"stage_started","stage":"brainstorm"}') // seq 2
+    run('append', kilnDir, '{"type":"note","stage":"brainstorm","data":{"kind":"lore","message":"beat"}}') // seq 3
+    const after1 = JSON.parse(run('since', kilnDir, '1').stdout)
+    assert.deepEqual(after1.events.map((e) => e.seq), [2, 3])
+    assert.equal(after1.last_seq, 3)
+    assert.equal(after1.truncated, false)
+    const after3 = JSON.parse(run('since', kilnDir, '3').stdout)
+    assert.deepEqual(after3.events, [])
+    const fromZero = JSON.parse(run('since', kilnDir, '0').stdout)
+    assert.deepEqual(fromZero.events.map((e) => e.seq), [1, 2, 3]) // run_init included
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('since --kind: filters note events by data.kind; structural (non-note) events always pass', () => {
+  const dir = sandbox(); const kilnDir = join(dir, '.kiln')
+  try {
+    init(kilnDir)
+    run('append', kilnDir, '{"type":"note","stage":"build","data":{"kind":"lore","message":"forged"}}') // seq 2
+    run('append', kilnDir, '{"type":"note","stage":"build","data":{"kind":"divergence","message":"noise"}}') // seq 3
+    run('append', kilnDir, '{"type":"stage_completed","stage":"build"}') // seq 4 — lifecycle, not a kind
+    const lore = JSON.parse(run('since', kilnDir, '1', '--kind', 'lore').stdout)
+    assert.deepEqual(lore.events.map((e) => e.seq), [2, 4]) // lore note + stage_completed pass; divergence dropped
+    assert.equal(lore.events[0].data.kind, 'lore')
+    assert.ok(lore.events.some((e) => e.type === 'stage_completed'), 'stage_completed must survive the kind filter')
+    assert.ok(!lore.events.some((e) => e.data && e.data.kind === 'divergence'), 'a non-matching note kind is filtered out')
+    // multi-kind: both note kinds return (plus the structural event)
+    const multi = JSON.parse(run('since', kilnDir, '1', '--kind', 'lore,divergence').stdout)
+    assert.deepEqual(multi.events.map((e) => e.seq), [2, 3, 4])
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('since --limit: caps the batch and reports truncated with a resumable last_seq', () => {
+  const dir = sandbox(); const kilnDir = join(dir, '.kiln')
+  try {
+    init(kilnDir)
+    for (let i = 0; i < 4; i++) run('append', kilnDir, '{"type":"note","stage":"build","data":{"kind":"lore"}}') // seq 2..5
+    const first = JSON.parse(run('since', kilnDir, '1', '--kind', 'lore', '--limit', '2').stdout)
+    assert.deepEqual(first.events.map((e) => e.seq), [2, 3])
+    assert.equal(first.truncated, true)
+    assert.equal(first.last_seq, 3) // resume from the last DELIVERED event, not the tail
+    const rest = JSON.parse(run('since', kilnDir, String(first.last_seq), '--kind', 'lore', '--limit', '2').stdout)
+    assert.deepEqual(rest.events.map((e) => e.seq), [4, 5])
+    assert.equal(rest.truncated, false)
+    assert.equal(rest.last_seq, 5)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('since: a torn (unterminated) final line is skipped, never errors, and nothing is written', () => {
+  const dir = sandbox(); const kilnDir = join(dir, '.kiln')
+  try {
+    init(kilnDir)
+    run('append', kilnDir, '{"type":"note","stage":"build","data":{"kind":"lore"}}') // seq 2
+    appendFileSync(join(kilnDir, 'events.jsonl'), '{"seq":3,"ts":"2026-06-1') // interrupted append, no newline
+    const res = run('since', kilnDir, '0')
+    assert.equal(res.status, 0)
+    assert.deepEqual(JSON.parse(res.stdout).events.map((e) => e.seq), [1, 2]) // torn tail dropped
+    assert.ok(!readdirSync(kilnDir).includes('.state.lock'), 'since must take no lock')
+    // read-only: the torn bytes are still on disk (since heals nothing)
+    assert.match(readFileSync(join(kilnDir, 'events.jsonl'), 'utf8'), /\{"seq":3,"ts":"2026-06-1$/)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('since: bad usage — missing afterSeq, non-integer cursor, unknown flag, bad --limit exit 2', () => {
+  const dir = sandbox(); const kilnDir = join(dir, '.kiln')
+  try {
+    init(kilnDir)
+    assert.equal(run('since', kilnDir).status, 2)
+    assert.equal(run('since', kilnDir, 'abc').status, 2)
+    assert.equal(run('since', kilnDir, '1', '--nope', 'x').status, 2)
+    assert.equal(run('since', kilnDir, '1', '--limit', '0').status, 2)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+// ── since tail: the cursor-bootstrap form (r2 finding 1) ───────────────────────────────────────
+
+test('since tail: delivers nothing and returns the TRUE ledger tail — never a truncated first seq', () => {
+  const dir = sandbox(); const kilnDir = join(dir, '.kiln')
+  try {
+    init(kilnDir)
+    for (let i = 0; i < 4; i++) run('append', kilnDir, '{"type":"note","stage":"build","data":{"kind":"lore"}}') // seq 2..5
+    const res = run('since', kilnDir, 'tail')
+    assert.equal(res.status, 0)
+    assert.deepEqual(JSON.parse(res.stdout), { events: [], last_seq: 5, truncated: false })
+    // the contrast that motivated the form: a capped numeric query stops at its first delivered seq
+    assert.equal(JSON.parse(run('since', kilnDir, '0', '--limit', '1').stdout).last_seq, 1)
+    // missing file: same null shape as the numeric form
+    assert.deepEqual(JSON.parse(run('since', join(dir, 'nowhere'), 'tail').stdout), { events: [], last_seq: null, truncated: false })
+    // no flags on the tail form
+    assert.equal(run('since', kilnDir, 'tail', '--limit', '1').status, 2)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('cursor bootstrap: fresh-v3 (cursor 0) and v2-resume (absent) capture the tail and replay NOTHING', () => {
+  const dir = sandbox(); const kilnDir = join(dir, '.kiln')
+  try {
+    init(kilnDir)
+    // a multi-event historical ledger — the replay hazard both first-use paths shared
+    for (let i = 0; i < 5; i++) run('append', kilnDir, '{"type":"note","stage":"build","data":{"kind":"lore","message":"old beat"}}') // seq 2..6
+    run('append', kilnDir, '{"type":"stage_completed","stage":"build"}') // seq 7
+    // the SKILL recipe: 0 / absent / non-integer are ALL uncaptured ⇒ resolve via the tail form
+    const cursor = JSON.parse(run('since', kilnDir, 'tail').stdout).last_seq
+    assert.equal(cursor, 7)
+    // first wake from the captured cursor: zero historical events replayed
+    assert.deepEqual(JSON.parse(run('since', kilnDir, String(cursor), '--kind', 'lore').stdout).events, [])
+    // new beats after capture are delivered exactly once
+    run('append', kilnDir, '{"type":"note","stage":"validate","data":{"kind":"lore","message":"new beat"}}') // seq 8
+    const wake = JSON.parse(run('since', kilnDir, String(cursor), '--kind', 'lore').stdout)
+    assert.deepEqual(wake.events.map((e) => e.seq), [8])
+    assert.equal(wake.last_seq, 8)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('since: an empty or fully-torn ledger degrades to the missing-file shape, exit 0 (fail-soft)', () => {
+  const dir = sandbox(); const kilnDir = join(dir, '.kiln')
+  try {
+    init(kilnDir)
+    const file = join(kilnDir, 'events.jsonl')
+    // empty file — readLedger would refuse; since degrades
+    writeFileSync(file, '')
+    let res = run('since', kilnDir, '0')
+    assert.equal(res.status, 0)
+    assert.deepEqual(JSON.parse(res.stdout), { events: [], last_seq: null, truncated: false })
+    // fully-torn: a single unterminated partial line, nothing valid survives
+    writeFileSync(file, '{"seq":1,"ts":"2026-06-1')
+    res = run('since', kilnDir, '0')
+    assert.equal(res.status, 0)
+    assert.deepEqual(JSON.parse(res.stdout), { events: [], last_seq: null, truncated: false })
+    // the tail form degrades identically
+    res = run('since', kilnDir, 'tail')
+    assert.equal(res.status, 0)
+    assert.deepEqual(JSON.parse(res.stdout), { events: [], last_seq: null, truncated: false })
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('notification-first closure across consecutive stages: the final drain isolates the stages', () => {
+  const dir = sandbox(); const kilnDir = join(dir, '.kiln')
+  try {
+    init(kilnDir)
+    // research runs; the tail's cursor sits at seq 1 when the completion notification arrives FIRST
+    run('append', kilnDir, '{"type":"note","stage":"research","data":{"kind":"lore","message":"field work"}}') // seq 2
+    run('append', kilnDir, '{"type":"stage_completed","stage":"research"}') // seq 3
+    // the close-out drain at notification close (one fetch suffices here — the under-limit case;
+    // the >limit drain-LOOP boundary is the next test): leftovers rendered, cursor advanced past
+    // the completed stage's events — INCLUDING its stage_completed
+    const drain = JSON.parse(run('since', kilnDir, '1', '--kind', 'lore').stdout)
+    assert.deepEqual(drain.events.map((e) => e.seq), [2, 3])
+    assert.equal(drain.events[1].type, 'stage_completed')
+    assert.equal(drain.events[1].stage, 'research') // the match rule: terminate only on the ACTIVE stage's completion
+    const cursor = drain.last_seq
+    assert.equal(cursor, 3)
+    // architecture launches from the drained cursor: the prior stage's completion event is BEHIND
+    // the cursor, so the new telegraph can neither close on it nor misattribute research's beats
+    run('append', kilnDir, '{"type":"note","stage":"architecture","data":{"kind":"lore","message":"laying stone"}}') // seq 4
+    const next = JSON.parse(run('since', kilnDir, String(cursor), '--kind', 'lore').stdout)
+    assert.deepEqual(next.events.map((e) => e.seq), [4])
+    assert.ok(!next.events.some((e) => e.type === 'stage_completed'), 'the prior stage_completed must not reappear')
+    assert.ok(next.events.every((e) => e.stage === 'architecture'), 'no prior-stage beats misattributed')
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('drain-loop boundary (r3): more unread events than --limit — loop while truncated + completion unconsumed, then the stages stay isolated', () => {
+  const dir = sandbox(); const kilnDir = join(dir, '.kiln')
+  try {
+    init(kilnDir)
+    // 7 research beats + the completion = 8 unread events, drained with --limit 3 — Sol's r2 hazard:
+    // a single capped fetch strands a prior-stage beat AND the completion for the next telegraph
+    for (let i = 0; i < 7; i++) run('append', kilnDir, `{"type":"note","stage":"research","data":{"kind":"lore","message":"beat ${i}"}}`) // seq 2..8
+    run('append', kilnDir, '{"type":"stage_completed","stage":"research"}') // seq 9
+    // the SKILL close-out loop: REPEAT since WHILE truncated AND the active completion is unconsumed
+    let cursor = 1
+    let fetches = 0
+    let consumedCompletion = false
+    for (;;) {
+      const batch = JSON.parse(run('since', kilnDir, String(cursor), '--kind', 'lore', '--limit', '3').stdout)
+      fetches++
+      assert.ok(batch.events.every((e) => e.stage === 'research'), 'every drained event belongs to the completed stage')
+      if (batch.events.some((e) => e.type === 'stage_completed' && e.stage === 'research')) consumedCompletion = true
+      cursor = batch.last_seq
+      if (!(batch.truncated && !consumedCompletion)) break
+    }
+    assert.equal(consumedCompletion, true, 'the drain must consume the active stage_completed')
+    assert.equal(cursor, 9, 'the cursor persists only at the ledger tail — past the completion')
+    assert.equal(fetches, 3, '8 events at limit 3 ⇒ exactly three close-out fetches')
+    // the next stage's telegraph starts from the drained cursor: nothing of research remains ahead
+    run('append', kilnDir, '{"type":"note","stage":"architecture","data":{"kind":"lore","message":"laying stone"}}') // seq 10
+    const next = JSON.parse(run('since', kilnDir, String(cursor), '--kind', 'lore').stdout)
+    assert.deepEqual(next.events.map((e) => e.seq), [10])
+    assert.ok(next.events.every((e) => e.stage === 'architecture'), 'no prior-stage beat renders under the next stage')
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
 test('usage: missing or unknown commands exit 2', () => {
   assert.equal(run().status, 2)
   assert.equal(run('frobnicate', '/tmp/nowhere').status, 2)

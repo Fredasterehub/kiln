@@ -68,8 +68,12 @@ advance. The operator session must stay pristine for the whole run.
      `node $PLUGIN_ROOT/scripts/kiln-state.mjs append <project_path>/.kiln '{"type":"note","stage":"<current_stage>","data":{"kind":"capability","capability":{"tier":"<tier>","verification_class":"<class>","probes":{...}}}}'`
      (nested under `data.capability`, exactly as onboarding writes it; the projection folds the latest
      capability note, so the replacement supersedes the onboarding record). Degrade to a log line if
-     the CLI is unreachable, never a failure. Then route to that stage's handler below. Do not redo
-     completed stages.
+     the CLI is unreachable, never a failure. **Also read `last_rendered_seq`** — the story-telegraph
+     cursor (see *The story telegraph* below). `0`, absent (a pre-v3 STATE), or non-integer ALL mean
+     UNCAPTURED: resolve the *current ledger tail* via `kiln-state since <kiln> tail` at the next
+     capture so a resume never replays a whole historical ledger, and write the captured value forward
+     as a v3 `last_rendered_seq` on the next STATE rewrite — a live v2 run resumes cleanly. Then route
+     to that stage's handler below. Do not redo completed stages.
    - **Absent, but the operator clearly described a *new* project** (or this is obviously an empty
      dir they want to build in) → fresh run. Render a random greeting from `lore.json`, go to
      **Onboarding**.
@@ -330,14 +334,26 @@ into a re-run of architecture. If `plan_approval: auto`, render *"Athena nods…
 
 ## Stages: RESEARCH · ARCHITECTURE · BUILD · VALIDATE (autonomous, Workflows)
 
-Each is one shipped workflow script. You launch it, wait for the completion notification, read the
-artifact summary it wrote to `.kiln/`, update STATE, render the transition, advance.
+Each is one shipped workflow script. You launch it, **tail its story telegraph while it runs** (see
+*The story telegraph* below), read the artifact summary it wrote to `.kiln/` on completion, update
+STATE, render the transition, and — on a clean finish — launch the next stage in the same turn.
+
+**Unattended chaining (D4).** A stage's CLEAN completion (a `stage_completed` beat for THAT stage AND
+a healthy workflow return; when the ledger degraded to log lines the healthy return alone rules — the
+telegraph never stalls the chain) auto-advances the run: update STATE, render the transition, and
+LAUNCH the next stage in the same turn — no idle gap, so the overnight hours keep forging. The chain
+NEVER crosses a hard
+stop: the `plan_approval: gated` Tier-2 checkpoint before build (below), the validate→build correction
+escalation at `correction_cycle >= 3` (below), any stage that returns blocked / degraded / law-unlocked
+(escalate to the operator exactly as today), or any operator interrupt. `plan_approval: auto` chains
+straight through architecture per the gate rule above. At a genuine overnight break, keep the existing
+pause voice — *"The fire banks for the night…"* — then resume the chain next session.
 
 | Stage | Launch | Args (minimal + options) | Reads | Writes |
 |---|---|---|---|---|
 | Brainstorm→VISION | `workflows/vision.js` | `kilnDir`, `projectPath`, **`pluginRoot`** (load-bearing) | brainstorm-ledger.jsonl | `.kiln/docs/VISION.md` (compiled + gated; the brainstorm-stage compile leg — launched from the Brainstorm handler above, not a top-level stage) |
 | Gauge | `workflows/gauge.js` | `kilnDir`, `projectPath`, `pluginRoot` (+`postureOverride`, `assessorModel`, `codexAvailable`) | VISION.md (+codebase-map.md) | `state.json.posture` / STATE `posture:`, ledger `posture_set` |
-| Research | `workflows/research.js` | `kilnDir`, `projectPath` (+`mode`, `testingRigor`, `topicsMax`) | VISION.md | `.kiln/docs/research.md` (only when topics > 0; the §3.2 zero-topics route writes none and returns `research_file: null`) |
+| Research | `workflows/research.js` | `kilnDir`, `projectPath` (+`mode`, `testingRigor`, `topicsMax`, `pluginRoot` — locates kiln-state for the stage brackets; absence degrades them to log lines) | VISION.md | `.kiln/docs/research.md` (only when topics > 0; the §3.2 zero-topics route writes none and returns `research_file: null`) |
 | Architecture | `workflows/architecture.js` | `kilnDir`, `projectPath` (+`mode`, `testingRigor`, `codexAvailable`, `planning`, `validationRounds`, `lawModel`, `pluginRoot`, `runToken`, `capabilityTier`) | research.md (if present), VISION.md | `.kiln/master-plan.md`, architecture docs |
 | Build | `workflows/build.js` | `kilnDir`, `projectPath`, **`pluginRoot`** (load-bearing), `posture`, `runToken` (+`codexAvailable`, `testingRigor`, `milestoneLimit`, `uiBuild`, `gateOnly`) | master-plan.md | source code, living docs, tests |
 | Validate | `workflows/validate.js` | `kilnDir`, `projectPath`, `pluginRoot`, `posture`, `runToken` (+`testingRigor`, `codexAvailable`, `designPresent` hint) | master-plan.md, built app | `.kiln/validation/report.md` |
@@ -371,6 +387,67 @@ Per stage, render exactly **ONE transition line + ONE Tier-1 banner** — each w
 lore tree (phase titles, persona/duo labels, spinner verbs), so never re-narrate worker progress here
 (it duplicates the tree and bloats this session). Build duo names come from `data/duo-pool.json`.
 
+## The story telegraph (tail the ledger while a stage runs)
+
+A workflow always runs in the background — nothing it narrates reaches this session on its own. So
+while an autonomous stage runs, you tail its ledger and relay the beats as body lines *between* the
+banners: the workflows append keystone beats as `note{kind:'lore'}` events, and the one-transition-line
++ one-Tier-1-banner rule above is untouched — beats REPLACE nothing, they only fill the space between
+banners.
+
+- **Capture the cursor BEFORE launch.** Read `last_rendered_seq` from STATE. A value of `0`, an absent
+  field (a pre-v3 STATE), or a non-integer ALL mean UNCAPTURED — `0` is the template's uncaptured
+  sentinel, never a real cursor. On uncaptured, run `node $PLUGIN_ROOT/scripts/kiln-state.mjs since
+  <abs>/.kiln tail` — the explicit tail form, which delivers no events and returns the TRUE ledger tail
+  as `last_seq` (a capped numeric query cannot stand in: when truncated its `last_seq` is the first
+  delivered seq, which would replay history). Take that `last_seq` as the cursor and PERSIST it to
+  STATE before launching (`null` ⇒ no ledger yet ⇒ keep `0`; the tail stays dark until beats exist) —
+  never replay a whole historical ledger on first use.
+- **Wake on a bounded budget — 6–8 checks per stage, a HARD cap.** Prefer the **Monitor tool** with an
+  until-condition on `<abs>/.kiln/events.jsonl` when it is available; otherwise space the checks out
+  yourself. This skill sets the budget and the cadence — it does not script the platform. Each wake runs
+  `node $PLUGIN_ROOT/scripts/kiln-state.mjs since <abs>/.kiln <cursor> --kind lore`, renders the NEW lore
+  beats, then advances the cursor to the returned `last_seq`.
+- **COALESCE overflow — never spam.** If one wake returns more beats than fit a single body line,
+  summarize them into ONE coalesced line (e.g. *"…and 6 more slices forged"*) instead of dumping every
+  beat. A `truncated: true` return means there is more behind the `--limit` — fetch the rest on the next
+  wake (or coalesce it too); do not burn extra turns draining it now.
+- **SANITIZE every ledger-derived string before it renders.** Project-controlled text never gets raw
+  access to this transcript: strip newlines and control sequences and cap the length before you print a
+  beat's message or args. A garbled beat is dropped, not rendered raw.
+- **theaterIntensity scales the beats.** `full` renders the beats; `light` renders only a coalesced
+  count at phase changes; `off` renders NOTHING intra-stage (the one plain stage-change line still holds).
+- **Terminate on the completion notification AND on a `stage_completed` whose `stage` field MATCHES the
+  active stage** — whichever comes first. A `stage_completed` from any OTHER stage is rendered/coalesced
+  like an ordinary beat, never a terminator. When the notification closes the tail FIRST, drain to the
+  ledger tail before checkpointing: REPEAT `since <cursor> --kind lore` WHILE the return says
+  `truncated: true` AND the active stage's `stage_completed` has not yet been consumed — coalescing
+  aggressively (the stage is already over; one summary line can cover the whole drain). These close-out
+  fetches are NOT part of the 6–8 in-stage wake budget — the budget bounds the LIVE tail, never the
+  close-out. Only THEN — the completed stage's events, its `stage_completed` included, all consumed —
+  persist the cursor, so no beat can ever render under the next stage and the next telegraph can never
+  be closed by the prior stage's completion event. A FAILED stage emits no `stage_completed`, so the
+  completion notification (plus that same drain loop, which then simply stops at the ledger tail) alone
+  closes the tail; never spin waiting for an event a failed stage will not write.
+- **Persist `last_rendered_seq` after every render batch and at stage close** (rewrite it in STATE). This
+  is exact-once resume: a resumed session re-renders NOTHING already shown, because the cursor it reads
+  is the last beat it printed.
+- **FAIL-SOFT, always.** If `since` errors, the Monitor tool is unavailable, or a batch is garbled, log
+  ONE line and fall back to the plain **wait-for-completion** behavior — read the artifact summary when
+  the stage finishes, as before. The telegraph is presentation only; it never blocks a stage, never
+  retries into one, and never fails a run.
+
+**Stage-completion ping.** At each stage's post-completion render point, emit ONE **PushNotification** —
+title `Kiln — <stage> complete` (or `<stage> failed` / `<stage> blocked`, honest to the outcome), body =
+the stage's one-line outcome (sanitized). This is the ping doctrine (brand.md — side-effect only, zero
+decision power): one per stage completion, NEVER per beat or per slice. `theaterIntensity: off` still
+sends it (a notification is functional, not theater) but in plain wording. And ONCE per run — at the
+FIRST autonomous stage only — add a single line pointing the operator at the live tree:
+*"`/workflows` shows the forge in motion."* Derive "first", don't remember it: show the hint only while
+`last_completed_stage` is still pre-autonomous (`onboarding` or `brainstorm`) — once any autonomous
+stage has completed, the hint has been given. No new STATE field; a resume mid-first-stage re-derives
+it correctly.
+
 **Browser discipline (load-bearing — a leaked browser OOM'd the box once).** The browser is a
 subprocess with a deadline, never a service (BLUEPRINT §7): no browser outlives the check that spawned
 it, every spawn carries a unique kill token, token-scoped sweeps bracket every browser stage (blanket
@@ -391,6 +468,12 @@ Wait for completion, render *"The forge cools. The work remains."* and present t
 - Rewrite `STATE.md` at every transition: bump `stage`, set `last_completed_stage`, refresh
   `updated_at` and `next_action`, stamp the relevant `step_*_completed_at`.
 - Keep field names and bullet format byte-stable — they are machine-read on resume.
+- `last_rendered_seq` is the story-telegraph cursor (the seq of the last lore beat you rendered):
+  rewrite it after every render batch and at stage close so a resume re-renders nothing (exact-once).
+  The template ships it as `0` — the UNCAPTURED sentinel, resolved to the true ledger tail via
+  `kiln-state since <kilnDir> tail` at first capture (see the telegraph). The template now ships
+  `schema_version: 3`; a pre-v3 STATE without the field is likewise uncaptured and is written forward
+  as v3 on the next rewrite.
 - `build_iteration` increments per build milestone and `correction_cycle` per validation loop;
   together they drive the kill-streak name off the 40-name ladder in
   `$PLUGIN_ROOT/references/kill-streaks.md`: `ladder_position = max(build_iteration + correction_cycle, 1)`,
@@ -400,10 +483,10 @@ Wait for completion, render *"The forge cools. The work remains."* and present t
 - **The dual surface (§4).** `STATE.md` is the conductor's human/resume register — the source of
   truth you rewrite here and read on resume. `state.json` is the *ledger's* projection of
   `events.jsonl` (rebuilt by `kiln-state project`), a machine-first mirror you never hand-edit. It is
-  stage-accurate at the **gauge / build / validate** boundaries — those workflows bracket their runs
-  with `stage_started`/`stage_completed` events — and coarse across research/architecture until those
-  stages gain their own ledger legs (a later phase rides them in). Resume routing keys off `STATE.md`,
-  not `state.json`.
+  stage-accurate at the **gauge / research / architecture / build / validate** boundaries — those
+  workflows bracket their runs with `stage_started`/`stage_completed` events (architecture completes
+  only on a locked Law; a failed stage emits no completion; report/mapping brackets ride the C1 lore
+  batch). Resume routing keys off `STATE.md`, not `state.json`.
 
 ## Voice discipline
 

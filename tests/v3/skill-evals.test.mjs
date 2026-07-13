@@ -219,3 +219,147 @@ test('P6.1: the version floor reads 2.1.198 in the doctor and nothing still says
   assert.match(doctor, /2\.1\.198/)
   assert.ok(!doctor.includes('2.1.154'), 'the old floor must be gone from the doctor')
 })
+
+// ── WS-C/C3 + C4: the story telegraph tail contract lives in the conductor ──────────────────────
+
+test('telegraph: the tail captures a sequence cursor before launch', () => {
+  assert.match(fireSrc, /Capture the cursor BEFORE launch/i, 'cursor-capture step is missing')
+  assert.match(fireSrc, /last_rendered_seq/, 'the cursor field is not named')
+})
+
+test('telegraph: the wake budget is bounded 6–8 checks per stage', () => {
+  assert.match(fireSrc, /6[–-]8 checks per stage/, 'the 6–8 hard wake budget is not stated')
+})
+
+test('telegraph: the wake runs kiln-state since --kind lore and advances the cursor', () => {
+  assert.match(fireSrc, /kiln-state\.mjs\s+since/, 'the tail does not call kiln-state since')
+  assert.match(fireSrc, /--kind lore/, 'the wake does not filter to lore beats')
+})
+
+test('telegraph: overflow beats coalesce into one summary line, never spam', () => {
+  assert.match(fireSrc, /coalesce/i, 'the coalescing rule is missing')
+  assert.match(fireSrc, /truncated: true/, 'the --limit overflow signal is not handled')
+})
+
+test('telegraph: ledger-derived strings are sanitized before rendering', () => {
+  assert.match(fireSrc, /saniti[sz]e/i, 'the sanitize-before-render rule is missing')
+  assert.match(fireSrc, /newlines and control sequences/i, 'the newline/control-sequence strip is not specified')
+})
+
+test('telegraph: terminates on the completion notification AND a stage_completed beat', () => {
+  assert.match(fireSrc, /stage_completed/, 'stage_completed termination is missing')
+  assert.match(fireSrc, /completion notification/i, 'the completion-notification termination is missing')
+})
+
+test('telegraph: last_rendered_seq is persisted for exact-once resume', () => {
+  assert.match(fireSrc, /exact-once/i, 'the exact-once resume rule is missing')
+  assert.match(fireSrc, /Persist `last_rendered_seq`/, 'the cursor is not persisted per batch/at stage close')
+})
+
+test('telegraph: fails soft to plain wait-for-completion', () => {
+  assert.match(fireSrc, /FAIL-SOFT/i, 'the fail-soft rule is missing')
+  assert.match(fireSrc, /wait-for-completion/i, 'the plain wait-for-completion fallback is not named')
+})
+
+test('telegraph: theaterIntensity scales the beats (full renders, light coalesces, off is silent)', () => {
+  const m = fireSrc.match(/theaterIntensity scales the beats[\s\S]*?intra-stage/i)
+  assert.ok(m, 'the theaterIntensity scaling of beats is missing')
+  assert.match(m[0], /full/)
+  assert.match(m[0], /light/)
+  assert.match(m[0], /off/)
+})
+
+test('telegraph: one PushNotification per stage completion + a one-time /workflows hint', () => {
+  assert.match(fireSrc, /PushNotification/, 'the stage-completion PushNotification is missing')
+  assert.match(fireSrc, /NEVER per beat or per slice/i, 'the one-per-stage ping doctrine is not stated')
+  assert.match(fireSrc, /FIRST autonomous stage only/i, 'the one-time /workflows hint is missing')
+})
+
+// ── WS-D/D4: the unattended-chaining hard-stop list survives ────────────────────────────────────
+
+test('chaining: clean completion auto-advances in the same turn', () => {
+  assert.match(fireSrc, /Unattended chaining \(D4\)/, 'the D4 chaining doctrine paragraph is missing')
+  assert.match(fireSrc, /auto-advances/i)
+})
+
+test('chaining: every hard stop is enumerated and plan_approval:auto chains through architecture', () => {
+  assert.match(fireSrc, /plan_approval: gated/, 'the gated checkpoint hard stop is missing')
+  assert.match(fireSrc, /correction_cycle >= 3/, 'the correction-escalation hard stop is missing')
+  assert.match(fireSrc, /blocked \/ degraded \/ law-unlocked/, 'the blocked/degraded/law-unlocked hard stop is missing')
+  assert.match(fireSrc, /operator interrupt/i, 'the operator-interrupt hard stop is missing')
+  assert.match(fireSrc, /plan_approval: auto/, 'the auto-chains-through-architecture rule is missing')
+})
+
+// ── WS-C deliverable 3: the STATE template carries the cursor field at schema_version 3 ──────────
+
+test('STATE template: last_rendered_seq bullet + schema_version 3', () => {
+  const stateSrc = readFileSync(join(SKILLS, '..', 'templates', 'STATE.md'), 'utf8')
+  assert.match(stateSrc, /\*\*schema_version\*\*:\s*3/, 'schema_version was not bumped to 3')
+  assert.match(stateSrc, /\*\*last_rendered_seq\*\*:\s*0/, 'the last_rendered_seq cursor bullet is missing')
+})
+
+// ── WS-C r2 (Sol round 1) — cursor bootstrap, matching termination, drain, hint derivation ──────
+
+test('r2 bootstrap: 0/absent/non-integer all read UNCAPTURED and resolve via the since-tail form', () => {
+  assert.match(fireSrc, /UNCAPTURED/, 'the uncaptured-cursor rule is missing')
+  assert.match(fireSrc, /since\s*\n?\s*<abs>\/\.kiln tail/, 'the explicit since-tail bootstrap call is missing')
+  assert.match(fireSrc, /`0`[^.]*uncaptured\s+sentinel/i, 'the 0-as-sentinel rule is not stated')
+  assert.match(fireSrc, /PERSIST it to\s*\n?\s*STATE before launching/i, 'the captured cursor is not persisted pre-launch')
+  assert.doesNotMatch(fireSrc, /since <abs>\/\.kiln 0 --limit 1/, 'the truncating bootstrap query must be gone')
+})
+
+test('r2 termination: only a stage_completed MATCHING the active stage terminates; others render as beats', () => {
+  assert.match(fireSrc, /`stage` field MATCHES the\s*\n?\s*active stage/, 'the matching-stage termination rule is missing')
+  assert.match(fireSrc, /any OTHER stage is rendered\/coalesced/i, 'a foreign stage_completed must degrade to a beat')
+})
+
+test('r3 drain loop: notification-first closure drains to the tail — loop while truncated + completion unconsumed', () => {
+  assert.match(fireSrc, /REPEAT `since <cursor> --kind lore` WHILE/, 'the drain loop is missing')
+  assert.match(fireSrc, /`truncated: true` AND the active stage's `stage_completed` has not yet been consumed/, 'the loop condition is not stated')
+  assert.match(fireSrc, /NOT part of the 6[–-]8 in-stage wake budget/, 'close-out fetches must be excluded from the wake budget')
+  assert.match(fireSrc, /Only THEN[\s\S]{0,150}persist the cursor/, 'the cursor must persist only after the drain completes')
+  assert.match(fireSrc, /no beat can ever render under the next stage/i, 'the boundary-isolation guarantee is missing')
+  assert.match(fireSrc, /never\s*\n?\s*be closed by the prior stage's completion event/i, 'the cross-stage closure hazard is not named')
+  // the single-fetch wording is retired — a bounded ONE-shot drain cannot guarantee boundary isolation
+  assert.doesNotMatch(fireSrc, /ONE\s*\n?\s*bounded final `since` drain/i, 'the r2 single-drain wording must be gone')
+})
+
+test('r2 hint: the /workflows hint is derived from last_completed_stage, no new state field', () => {
+  const m = fireSrc.match(/shows the forge in motion[\s\S]{0,400}/)
+  assert.ok(m, 'the /workflows hint line is missing')
+  assert.match(m[0], /last_completed_stage/, 'the hint must derive "first" from last_completed_stage')
+  assert.match(m[0], /No new STATE field/i, 'the no-new-state-field rule is not stated')
+})
+
+test('r2 mirror: the workflow-contracts cadence line carries the full hard-stop list incl. operator interrupt', () => {
+  const contracts = readFileSync(join(SKILLS, '..', 'references', 'workflow-contracts.md'), 'utf8')
+  const m = contracts.match(/\*\*Launch cadence \(D4\)\.\*\*[\s\S]*?operator interrupt/)
+  assert.ok(m, 'the cadence line is missing the operator-interrupt hard stop')
+})
+
+// ── WS-C r2 finding 2 — research/architecture emit honest stage brackets (the D4 chain predicate) ──
+
+const WORKFLOWS_SRC = join(ROOT, 'plugins', 'kiln', 'workflows-src')
+const researchSrc = readFileSync(join(WORKFLOWS_SRC, 'research.js'), 'utf8')
+const archSrc = readFileSync(join(WORKFLOWS_SRC, 'architecture.js'), 'utf8')
+
+test('chaining predicate: research.js brackets its run — started at entry, completed on BOTH success returns', () => {
+  assert.match(researchSrc, /runLedger\('stage_started', \{\}, 'The Briefing'\)/, 'research stage_started is missing')
+  const completions = researchSrc.match(/runLedger\('stage_completed'/g) || []
+  assert.equal(completions.length, 2, `research must complete on BOTH success returns (zero-topics + synthesis), found ${completions.length}`)
+  // the zero-topics completion sits inside the early-return branch, before its return
+  assert.match(researchSrc, /await runLedger\('stage_completed', \{\}, 'The Briefing'\)\n  return \{ topics: \[\]/, 'the zero-topics route must complete the stage before returning')
+})
+
+test('chaining predicate: architecture.js completes ONLY on a locked Law — an escalation emits nothing', () => {
+  assert.match(archSrc, /runLedger\('stage_started', \{\}, 'Laying Stone'\)/, 'architecture stage_started is missing')
+  const completions = archSrc.match(/runLedger\('stage_completed'/g) || []
+  assert.equal(completions.length, 1, 'architecture has exactly one completion emission')
+  assert.match(archSrc, /if \(lawLocked\) await runLedger\('stage_completed'/, 'the completion must be gated on lawLocked === true')
+})
+
+test('chaining predicate: both bracket helpers are pluginRoot-gated and degrade to a log line', () => {
+  for (const [name, src] of [['research.js', researchSrc], ['architecture.js', archSrc]]) {
+    assert.match(src, /if \(!pluginRoot\) \{ log\(`pluginRoot absent — \$\{type\} not ledgered/, `${name}: the bracket helper must degrade, never fail the stage`)
+  }
+})

@@ -1361,8 +1361,31 @@ const sealRatified = async (rF, rS, sinkF, sinkS, bH, pH, solCross, ckptPhase, p
   log(`TWIN COUNCIL RATIFIED — the master plan carries two valid head signatures (bundle ${String(bH).slice(0, 12)}…); the Law may lock a council-ratified plan.`)
 }
 
+// ── The run ledger (BLUEPRINT §3.5): stage brackets land in events.jsonl via the kiln-state CLI —
+//    the vision.js runLedger idiom (appendCouncilCheckpoint above is the council's specialized twin).
+//    Thoth appends; gated on pluginRoot and degrades to a log line — an append failure never fails
+//    the stage. stage_completed fires ONLY on the genuine-success path: lawLocked === true. An
+//    unlocked Law or blocked council is an ESCALATION, not a completion — no event, per the
+//    telegraph's failed-stages-emit-nothing rule. report/mapping brackets ride the C1 lore batch,
+//    not this one. ──
+async function runLedger(type, data, phaseName) {
+  if (!pluginRoot) { log(`pluginRoot absent — ${type} not ledgered to events.jsonl`); return }
+  const ev = JSON.stringify({ type, stage: 'architecture', data })
+  await agent(
+    `You are Thoth, the scribe — "write it down or it never happened". Append ONE event to the Kiln run ledger.\n\n` +
+    `<task>Run this exact command (Bash), substituting the JSON verbatim — do not edit it:\n` +
+    '```\n' +
+    `node ${pluginRoot}/scripts/kiln-state.mjs append ${kilnDir} '${ev.replace(/'/g, `'\\''`)}'\n` +
+    '```\n' +
+    `If it exits non-zero (e.g. no events.jsonl yet — the run was not initialised), report the error in your summary; do NOT create or repair any file. Report only whether the append succeeded.</task>`,
+    { label: 'thoth:ledger', phase: phaseName, model: 'haiku' }
+  )
+}
+
 // ── Laying Stone: numerobis writes the technical docs the planners build on ──
 phase('Laying Stone')
+// §3.5 stage bracket: stage_started on every entry — a re-run is the stage still in progress.
+await runLedger('stage_started', {}, 'Laying Stone')
 // research.md is OPTIONAL on a normative path: BLUEPRINT §3.2 lets research scope to zero topics
 // (no high-priority before-build OQs), in which case the research stage writes NO research.md and
 // returns research_file: null. Architecture must not point its agents at a phantom file. Per the
@@ -2348,6 +2371,11 @@ let councilPathReason = null
 if (councilPromised && !liteScope) councilPathReason = councilCapable ? null : 'runToken absent'
 else if (councilPromised && liteScope) councilPathReason = 'lite path'
 else councilPathReason = 'sub-T4 tier'
+
+// §3.5 stage bracket: stage_completed ONLY when the Law locked — the stage's one genuine-success
+// criterion. law_locked:false (unlocked Law, blocked council, missing pluginRoot) is the conductor's
+// escalation signal, never a completion: no event.
+if (lawLocked) await runLedger('stage_completed', {}, 'The Law')
 
 return {
   master_plan_file: masterPlanFile,

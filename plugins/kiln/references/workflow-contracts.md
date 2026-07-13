@@ -26,6 +26,11 @@ Pass the absolute `$PLUGIN_ROOT`-resolved paths, the operator's `testing_rigor` 
 every stage, and a workflow simply ignores base args it doesn't read; the per-stage notes below are
 the authoritative consumption contract. Each stage adds the args it actually reads.
 
+**Launch cadence (D4).** A stage's CLEAN completion auto-advances the run — the conductor launches the
+next stage in the same turn (see *The story telegraph* / unattended chaining in the conductor), bounded
+by the hard stops: the `plan_approval: gated` checkpoint, the `correction_cycle >= 3` escalation, any
+blocked / degraded / law-unlocked return, and any operator interrupt.
+
 ## What the autonomous stages read: the compiled VISION
 
 The `VISION.md` that Gauge, Research, and Architecture read is the **v3 compiled + gated artifact**
@@ -50,7 +55,9 @@ whether the tier is `express` or a facilitated tier).
   written** and the stage returns `research_file: null`. **Omit it** (or pass nothing) and research.js
   runs the verbatim v2 behavior instead: OQs plus load-bearing unknowns, a floor of 2 and a cap of 5,
   so a run without a posture is unchanged (and always produces a research.md). Architecture tolerates
-  either outcome (next bullet).
+  either outcome (next bullet). Research also takes **`pluginRoot`** — it locates the kiln-state CLI
+  for the stage brackets (`stage_started` at entry; `stage_completed` on BOTH success returns — the
+  zero-topics route IS a completion); absence degrades the brackets to log lines, never a failure.
 - **Architecture** also takes **`planning`** = `posture.planning`
   (`'dual'`/`'single+redteam'`/`'single'`) and **`validationRounds`** = `posture.plan_validation_rounds`.
   `planning` decides whether The Council (dual anonymized plans + divergence) runs: `'dual'` runs it,

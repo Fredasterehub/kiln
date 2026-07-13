@@ -11,8 +11,9 @@
 // event (never the wall clock), so the same ledger always projects byte-identical state.json.
 //
 // Stage authority (P3.6 T4): state.json.stage is a projection of the stage_started/stage_completed
-// brackets the workflows append. It is stage-accurate at the gauge/build/validate boundaries — those
-// stages bracket their runs — and coarse across research/architecture until they gain ledger legs.
+// brackets the workflows append. It is stage-accurate at the gauge/research/architecture/build/
+// validate boundaries — those stages bracket their runs (architecture completes only on a locked
+// Law; a failed stage emits no completion). report/mapping brackets ride the C1 lore batch.
 // A conducted run births the ledger at onboarding (kiln-fire SKILL.md §5, `init`); a harness-driven
 // run that skips the conductor still gets correct stage projections wherever the workflows bracket.
 //
@@ -22,6 +23,8 @@
 //   kiln-state.mjs project <kilnDir>                 rebuild state.json from the ledger
 //   kiln-state.mjs validate <kilnDir>                schema + seq contiguity + projection sync; exit 1 on violation
 //   kiln-state.mjs summary <kilnDir>                 human markdown run summary to stdout
+//   kiln-state.mjs since <kilnDir> <afterSeq> [--kind <k>[,<k>...]] [--limit <n>]   read-only tail: events seq > afterSeq as one JSON line (NO lock)
+//   kiln-state.mjs since <kilnDir> tail              cursor bootstrap: {events:[], last_seq:<true ledger tail>, truncated:false} — no flags
 //   kiln-state.mjs unlock <kilnDir>                  clear a stale append lock (refuses while the holder is alive)
 // Exit codes: 0 ok · 1 violation/error · 2 usage.
 
@@ -392,6 +395,54 @@ function cmdSummary(kilnDir) {
   ].join('\n') + '\n')
 }
 
+// Read-only ledger tail (WS-C/C3): events with seq > afterSeq as ONE JSON line, for the conductor's
+// story-telegraph loop. Takes NO lock and writes nothing — pure read. Tolerant of a torn final line
+// (an interrupted append): readLedger drops an unterminated unparseable tail with a warning, so the
+// telegraph never errors on the very tail it is chasing. --kind filters NOTE events by data.kind
+// (lore beats vs slice_telemetry / divergence / …); structural lifecycle events (stage_completed, …)
+// are not kinds and always pass, so ONE `since … --kind lore` call both feeds the beats and lets the
+// tail see the stage close. --limit caps the batch (default 200): truncated:true with last_seq at the
+// last delivered event means "call again from there"; otherwise last_seq is the ledger tail (so the
+// cursor advances past filtered-out events too). Missing file ⇒ {events:[],last_seq:null,truncated:false}, exit 0.
+//
+// `since <kilnDir> tail` is the CURSOR BOOTSTRAP form (r2 finding 1): it delivers NOTHING and
+// returns the TRUE ledger tail as last_seq — the one non-truncating way to capture a first cursor
+// (a capped numeric query returns the first delivered seq when truncated, which would replay
+// history). No flags: the form answers exactly one question.
+//
+// Every failure mode here is FAIL-SOFT (the telegraph is presentation — it may never stall a run):
+// an empty or fully-torn ledger, or any other readLedger refusal, degrades to the missing-file
+// shape with a stderr warning, exit 0. The loud refusals stay where repair decisions live —
+// `project` and `validate` still exit 1 on real corruption.
+function cmdSince(kilnDir, afterSeqArg, flags) {
+  for (const k of Object.keys(flags)) if (!['kind', 'limit'].includes(k)) die(`since: unknown flag --${k}`, 2)
+  const tailForm = afterSeqArg === 'tail'
+  if (tailForm && Object.keys(flags).length) die('since tail takes no flags', 2)
+  const afterSeq = tailForm ? null : Number(afterSeqArg)
+  if (!tailForm && (!Number.isInteger(afterSeq) || afterSeq < 0)) die("since requires <afterSeq> as an integer ≥ 0 (or the literal 'tail')", 2)
+  const limit = flags.limit === undefined ? 200 : Number(flags.limit)
+  if (!Number.isInteger(limit) || limit < 1) die('since: --limit takes an integer ≥ 1', 2)
+  const kinds = flags.kind === undefined ? null : flags.kind.split(',').map((s) => s.trim()).filter(Boolean)
+  const emptyShape = () => console.log(JSON.stringify({ events: [], last_seq: null, truncated: false }))
+  const file = join(kilnDir, 'events.jsonl')
+  if (!existsSync(file)) { emptyShape(); return }
+  let events
+  try { ({ events } = readLedger(kilnDir)) } catch (e) { warn(`since: ${e.message} — degrading to the empty shape (read-only tail, fail-soft)`); emptyShape(); return }
+  const tailSeq = events[events.length - 1].seq
+  if (tailForm) { console.log(JSON.stringify({ events: [], last_seq: tailSeq, truncated: false })); return }
+  const passesKind = (ev) => {
+    if (kinds === null) return true
+    if (ev.type !== 'note') return true // lifecycle events carry no data.kind — never filtered out
+    const k = isObj(ev.data) ? ev.data.kind : undefined
+    return typeof k === 'string' && kinds.includes(k)
+  }
+  const matched = events.filter((ev) => Number.isInteger(ev.seq) && ev.seq > afterSeq && passesKind(ev))
+  const truncated = matched.length > limit
+  const out = truncated ? matched.slice(0, limit) : matched
+  const last_seq = truncated ? out[out.length - 1].seq : tailSeq
+  console.log(JSON.stringify({ events: out, last_seq, truncated }))
+}
+
 // Out-of-band recovery for a wedged lock: NEVER called by append. Clears .state.lock only when its
 // holder is provably gone — a live pid (process.kill(pid, 0) succeeds, or EPERM = exists-not-ours)
 // refuses, so a running writer can never have its lock pulled out from under it.
@@ -410,7 +461,7 @@ function cmdUnlock(kilnDir) {
 }
 
 // ── Dispatch ─────────────────────────────────────────────────────────────────────────────────────
-const USAGE = `usage: kiln-state.mjs <init|append|project|validate|summary|unlock> <kilnDir> [args]   (header comment has the full forms)`
+const USAGE = `usage: kiln-state.mjs <init|append|project|validate|summary|since|unlock> <kilnDir> [args]   (header comment has the full forms)`
 function parseFlags(argv) {
   const flags = {}
   for (let i = 0; i < argv.length; i += 2) {
@@ -429,6 +480,7 @@ try {
   else if (cmd === 'project') cmdProject(kilnDir)
   else if (cmd === 'validate') cmdValidate(kilnDir)
   else if (cmd === 'summary') cmdSummary(kilnDir)
+  else if (cmd === 'since') { if (rest.length < 1) die(USAGE, 2); cmdSince(kilnDir, rest[0], parseFlags(rest.slice(1))) }
   else if (cmd === 'unlock') cmdUnlock(kilnDir)
   else die(USAGE, 2)
 } catch (e) { die(e.message) }

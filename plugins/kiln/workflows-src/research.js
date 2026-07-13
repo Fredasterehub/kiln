@@ -8,10 +8,14 @@ export const meta = {
   ],
 }
 
-// ── args from the conductor: { kilnDir, projectPath, mode, testingRigor, topicsMax } ──
+// ── args from the conductor: { kilnDir, projectPath, mode, testingRigor, topicsMax, pluginRoot } ──
 // args may arrive as an object or a JSON string depending on how the caller encoded it. Normalise both.
 // @inline:args:normalizeArgs
 const A = normalizeArgs(args)
+// pluginRoot is the conductor-resolved absolute $CLAUDE_PLUGIN_ROOT (a launched Workflow cannot see
+// the env var). It locates the kiln-state CLI for the stage brackets below; absence degrades each
+// bracket to a log line — never a stage failure.
+const pluginRoot = A.pluginRoot
 const PAYLOAD_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. Emit the payload properties FIRST; reasoning is the LAST property, OPTIONAL, and under 50 words — put detail in the designated report file or field, never in reasoning. A long leading reasoning string is the observed death mode: the call truncates before the payload lands, the validator rejects it, each rejection burns one of five attempts, and five failures kill this leg.'
 const kilnDir = A.kilnDir
 if (!kilnDir) throw new Error('research.js requires args.kilnDir (absolute path to .kiln). Received args of type ' + typeof args)
@@ -106,6 +110,26 @@ const SYNTH_SCHEMA = {
   required: ['research_file', 'topics_written', 'headline_findings'],
 }
 
+// ── The run ledger (BLUEPRINT §3.5): stage brackets land in events.jsonl via the kiln-state CLI —
+//    the vision.js runLedger idiom. Thoth appends; gated on pluginRoot and degrades to a log line —
+//    an append failure never fails the stage. stage_completed fires ONLY on the genuine-success
+//    paths (both returns below — the zero-topics route IS a completion); a failed stage emits
+//    nothing, per the telegraph's termination rule. report/mapping brackets ride the C1 lore batch,
+//    not this one. ──
+async function runLedger(type, data, phaseName) {
+  if (!pluginRoot) { log(`pluginRoot absent — ${type} not ledgered to events.jsonl`); return }
+  const ev = JSON.stringify({ type, stage: 'research', data })
+  await agent(
+    `You are Thoth, the scribe — "write it down or it never happened". Append ONE event to the Kiln run ledger.\n\n` +
+    `<task>Run this exact command (Bash), substituting the JSON verbatim — do not edit it:\n` +
+    '```\n' +
+    `node ${pluginRoot}/scripts/kiln-state.mjs append ${kilnDir} '${ev.replace(/'/g, `'\\''`)}'\n` +
+    '```\n' +
+    `If it exits non-zero (e.g. no events.jsonl yet — the run was not initialised), report the error in your summary; do NOT create or repair any file. Report only whether the append succeeded.</task>`,
+    { label: 'thoth:ledger', phase: phaseName, model: 'haiku' }
+  )
+}
+
 const webHowto =
   'Scope: research THIS topic from the open web only. Do NOT read project files or search the local ' +
   'filesystem — the question and acceptance criteria below are your complete brief; the project owns ' +
@@ -123,6 +147,8 @@ const valid = (f) =>
 // ── The Briefing: identify topics (MI6) ──
 phase('The Briefing')
 log('MI6 deploys the field team')
+// §3.5 stage bracket: stage_started on every entry — a re-run is the stage still in progress.
+await runLedger('stage_started', {}, 'The Briefing')
 // The scoping brief switches on the same posture-presence gate (see MAX_TOPICS above): the §3.2
 // OQ-only rule when the Gauge supplied a cap, the verbatim v2 brief otherwise.
 const postureBrief =
@@ -153,6 +179,9 @@ if (topics.length === 0) {
   // Zero topics → nothing to research. Return early with empty results — no research.md is
   // written; the conductor reads this return/state, never the file blindly.
   log('No research topics identified from VISION.md — nothing to research; finishing with empty results (no research.md).')
+  // §3.5 stage bracket: the zero-topics route is a GENUINE completion (§3.2 says so), so it closes
+  // the stage like any other success.
+  await runLedger('stage_completed', {}, 'The Briefing')
   return { topics: [], cleared: [], research_file: null, headline_findings: [] }
 }
 log(`${topics.length} research topic(s) scoped`)
@@ -210,6 +239,8 @@ const synth = await agent(
 )
 
 log(`research.md written with ${synth ? synth.topics_written : 0} topic(s)`)
+// §3.5 stage bracket: the synthesis landed — the stage genuinely completed.
+await runLedger('stage_completed', {}, 'The Debrief')
 return {
   topics: topics.map((t) => t.slug),
   cleared: cleared.map((f) => f.slug),
