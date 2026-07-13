@@ -666,6 +666,19 @@ const GOAL_AUDIT_FAILURE = `[goal-audit-failure] the goal-backward audit returne
 // degrade rather than rethrow. The regex is scoped to the OBSERVED platform phrasing ONLY — the real
 // error "StructuredOutput retry cap (5) exceeded" matches 'StructuredOutput'; a bare 'retry cap' is
 // deliberately NOT matched (it false-positives unrelated errors like an "HTTP retry cap exceeded").
+//
+// RECEIPT PROVENANCE (twin-council; sol-b34-design "Codex transport receipt"). A Sol council seat runs
+// a Sonnet wrapper over `transport:'codex'`, and a Sonnet's WORD that it invoked Codex is worthless: the
+// deterministic kiln-codex-receipt.mjs boundary owns process capture + hashing + verification. So a
+// codex-transport wrapped agent() returns an ENVELOPE { payload, codex_receipt, raw_artifact_refs }, and
+// gateAgent STRUCTURALLY validates the relayed receipt — all 14 receipt keys present and well-formed,
+// exit 0, and reported_model === requested_model === the pinned transportModel. gate.mjs can NEVER hash
+// (it validates shape + equality, never recomputes — the deterministic ledger cross-check is the call
+// site's leg, batch 1b-ii). A valid receipt returns envelope.payload and records the transport
+// attestation. `receiptRequired` + a missing/invalid receipt is a DEAD Sol seat: two_heads:required
+// fails closed to null (Sonnet's own answer NEVER substitutes for Sol); best_effort may retain the
+// wrapper answer as honest Sonnet provenance that can never later claim second-family verification. All
+// of this fires ONLY on a codex leg — a non-codex leg's provenance is byte-for-byte the v3.0.1 shape.
 const GATE_FAILURE_RE = /StructuredOutput|structured.?output/i
 const isStructuredOutputFailure = (e) => GATE_FAILURE_RE.test(String((e && e.message) || e))
 
@@ -697,7 +710,15 @@ function classifyGateFailure(e) {
 //                     a gated operator checkpoint (that routing is conductor-side, out of scope here
 //                     — this function only refuses to substitute and records why).
 //   opts.transport  'codex' marks a seat that shells out to GPT via codex. 'ultra' effort on such a
-//                     seat THROWS at call time (never-ultra doctrine — codex has no ultra tier).
+//                     seat THROWS at call time (never-ultra doctrine — codex has no ultra tier). On a
+//                     codex leg the wrapped agent() returns an ENVELOPE (see the RECEIPT PROVENANCE note
+//                     above); on any other leg agent() returns the result directly (v3.0.1 behavior).
+//   opts.transportModel  the PINNED codex model the receipt must attest (e.g. the gpt-5.6-sol id). The
+//                     receipt is valid only when reported_model === requested_model === transportModel,
+//                     so CODEX_FALLBACK cannot sign a required Sol seat. Codex-only meta key.
+//   opts.receiptRequired  true ⇒ a missing/malformed/model-mismatched receipt is a DEAD Sol seat (see
+//                     the honest-failure paths below). THROWS at call time if set without transport:'codex'
+//                     (a misconfigured seat is a programming error, not a degradation). Codex-only meta key.
 //   opts.effort     reasoning effort, passed through to agent() (a real platform opt).
 //   opts.provenance optional sink object. gateAgent writes {requested_model, actual_model,
 //                     fallback_reason, classification} onto it so a caller that ALREADY ledgers can
@@ -706,22 +727,88 @@ function classifyGateFailure(e) {
 //                     actually produced the returned result — the requested model on a clean call or
 //                     a same-model re-dispatch, 'opus' after a fable→opus substitution, and null on a
 //                     fail-closed null. classification is the seat-death class that forced the
-//                     degradation (null on a clean success). Absent sink ⇒ the record is dropped.
+//                     degradation (null on a clean success). Absent sink ⇒ the record is dropped. On a
+//                     CODEX leg the record additionally carries the transport-attestation block
+//                     (wrapper_model, transport, requested_transport_model, actual_transport_model,
+//                     receipt_verified, receipt_hash, session_id, tokens_used, prompt_hash, output_hash);
+//                     these fields are ABSENT on every non-codex leg (the exact v3.0.1 shape).
+//
+// RECEIPT_KEYS — the 14 fields kiln-codex-receipt.mjs assembles; gateAgent checks all are present and
+// well-formed (structural verification only — it never recomputes a hash). Mirrored, not imported.
+const RECEIPT_KEYS = [
+  'receipt_version', 'parser_version', 'transport', 'invocation_id', 'prompt_sha256', 'packet_sha256',
+  'cli_version', 'requested_model', 'reported_model', 'session_id', 'exit_code', 'tokens_used',
+  'output_sha256', 'stderr_sha256',
+]
+const RECEIPT_SHA_RE = /^[0-9a-f]{64}$/
+// the exact constants the sealed validator pins (kiln-codex-receipt.mjs:24-31,354) — mirrored, not
+// imported. A drifting receipt_version/parser_version/transport/session/cli is a fail-closed reject,
+// never a silent downgrade: a receipt whose parser or transport we do not recognize is unverifiable.
+const RECEIPT_VERSION = 1
+const RECEIPT_PARSER_VERSION = 'kiln-codex-receipt/1'
+const RECEIPT_TRANSPORT = 'codex_exec'
+const RECEIPT_CLI_VERSION = '0.144.1' // the EXACT trusted CLI the sealed parser accepts (kiln-codex-receipt.mjs CLI_VERSION)
+const RECEIPT_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+// validateCodexReceipt(env, transportModel) — STRUCTURALLY validate the receipt a codex-transport
+// wrapper relayed inside its envelope. Returns { ok:true, receipt } or { ok:false, reason } where reason
+// is 'transport_receipt_missing' (no codex_receipt object) or 'transport_receipt_invalid' (any structural
+// or model failure). Every field is TYPE-checked before any regex — NO String()/coercion anywhere, so an
+// object with a crafted toString() can never masquerade as a hash. The model gate is the pinned-seat
+// rule: reported_model === requested_model === transportModel, so a CODEX_FALLBACK receipt (a different
+// reported model) can never sign the seat; cli_version is pinned to the exact trusted release.
+function validateCodexReceipt(env, transportModel) {
+  if (!env || typeof env !== 'object' || Array.isArray(env)) return { ok: false, reason: 'transport_receipt_missing' }
+  const r = env.codex_receipt
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return { ok: false, reason: 'transport_receipt_missing' }
+  for (const k of RECEIPT_KEYS) if (!Object.prototype.hasOwnProperty.call(r, k)) return { ok: false, reason: 'transport_receipt_invalid' }
+  for (const k of ['invocation_id', 'prompt_sha256', 'packet_sha256', 'output_sha256', 'stderr_sha256']) if (typeof r[k] !== 'string' || !RECEIPT_SHA_RE.test(r[k])) return { ok: false, reason: 'transport_receipt_invalid' }
+  if (r.exit_code !== 0) return { ok: false, reason: 'transport_receipt_invalid' }
+  for (const k of ['cli_version', 'parser_version', 'transport', 'session_id', 'reported_model', 'requested_model']) if (typeof r[k] !== 'string' || !r[k]) return { ok: false, reason: 'transport_receipt_invalid' }
+  if (r.receipt_version !== RECEIPT_VERSION) return { ok: false, reason: 'transport_receipt_invalid' }
+  if (r.parser_version !== RECEIPT_PARSER_VERSION) return { ok: false, reason: 'transport_receipt_invalid' }
+  if (r.transport !== RECEIPT_TRANSPORT) return { ok: false, reason: 'transport_receipt_invalid' }
+  if (!RECEIPT_UUID_RE.test(r.session_id)) return { ok: false, reason: 'transport_receipt_invalid' }
+  if (r.cli_version !== RECEIPT_CLI_VERSION) return { ok: false, reason: 'transport_receipt_invalid' }
+  if (!Number.isSafeInteger(r.tokens_used) || r.tokens_used < 0) return { ok: false, reason: 'transport_receipt_invalid' }
+  if (!(r.reported_model === r.requested_model && r.requested_model === transportModel)) return { ok: false, reason: 'transport_receipt_invalid' }
+  return { ok: true, receipt: r }
+}
+
+// liftReceiptHash(env) — lift the ledger's receipt_sha256 if the envelope RELAYED it (top-level or under
+// raw_artifact_refs); else null. NEVER computed here — gate.mjs cannot hash.
+function liftReceiptHash(env) {
+  const direct = env && env.receipt_sha256
+  if (typeof direct === 'string' && RECEIPT_SHA_RE.test(direct)) return direct
+  const nested = env && env.raw_artifact_refs && env.raw_artifact_refs.receipt_sha256
+  if (typeof nested === 'string' && RECEIPT_SHA_RE.test(nested)) return nested
+  return null
+}
+
 async function gateAgent(prompt, opts) {
   const o = opts || {}
   if (o.effort === 'ultra' && o.transport === 'codex') {
     throw new Error(`gateAgent(${o.label || 'gate'}): 'ultra' effort is forbidden on a codex-transport seat — never-ultra doctrine`)
   }
-  const { twoHeads, transport, provenance, ...agentOpts } = o // meta keys never reach agent()
+  if (o.receiptRequired && o.transport !== 'codex') {
+    throw new Error(`gateAgent(${o.label || 'gate'}): receiptRequired demands transport:'codex' — a misconfigured seat is a programming error, not a degradation`)
+  }
+  const { twoHeads, transport, transportModel, receiptRequired, provenance, ...agentOpts } = o // meta keys never reach agent()
   const requested = o.model != null ? o.model : null
   const required = twoHeads === 'required'
   const label = o.label || 'gate'
+  const isCodex = transport === 'codex'
+  // codex-static provenance — present on EVERY codex leg. wrapper_model is the platform seat that relayed
+  // codex (opts.model, e.g. sonnet); requested_transport_model is the pinned codex model the receipt must attest.
+  const codexStatic = () => ({ wrapper_model: requested, transport: 'codex', requested_transport_model: transportModel != null ? transportModel : null })
   // truthful provenance: actual_model is whatever model produced the RETURNED result (null on a
-  // fail-closed null); classification is the seat-death class that forced any degradation.
+  // fail-closed null); classification is the seat-death class that forced any degradation. A codex leg
+  // additionally carries the transport-attestation block, receipt-derived fields NULLED (a seat-death or a
+  // dead-receipt Sol seat never invents attestation); a non-codex leg keeps the exact v3.0.1 four fields.
   const record = (actual_model, fallback_reason, classification) => {
-    if (provenance && typeof provenance === 'object') {
-      Object.assign(provenance, { requested_model: requested, actual_model, fallback_reason, classification })
-    }
+    if (!(provenance && typeof provenance === 'object')) return
+    Object.assign(provenance, { requested_model: requested, actual_model, fallback_reason, classification })
+    if (isCodex) Object.assign(provenance, codexStatic(), { actual_transport_model: null, receipt_verified: false, receipt_hash: null, session_id: null, tokens_used: null, prompt_hash: null, output_hash: null })
   }
   // one dispatch attempt → { ok, value, cls, error }. A null/undefined RETURN is a DEAD SEAT
   // (cls 'null_result'), never a usable result; a caught error is classified; a usable result is ok.
@@ -734,8 +821,40 @@ async function gateAgent(prompt, opts) {
       return { ok: false, value: null, cls: classifyGateFailure(e), error: e }
     }
   }
+  // settleCodex(env, history) — a codex dispatch returned a usable envelope. STRUCTURALLY validate the
+  // relayed receipt (gate.mjs never hashes; the deterministic ledger cross-check is the 1b-ii call-site
+  // leg). A verified receipt requires a NON-NULL payload (a receipt with no answer is not a verification —
+  // provenance never lies); it returns envelope.payload + the full attestation, carrying the dispatch
+  // history (fallback_reason/classification of the path that led here, e.g. a best-effort redispatch after
+  // a refusal — never erased to null/null). A missing/invalid receipt OR a payload-less envelope is a DEAD
+  // Sol seat: required ⇒ fail-closed null (Sonnet's own answer NEVER substitutes for Sol); best_effort ⇒
+  // retain the wrapper answer as honest Sonnet provenance (receipt_verified:false — never second-family).
+  const settleCodex = (env, history) => {
+    const h = history || {}
+    const hasPayload = env && typeof env === 'object' && 'payload' in env
+    const v = validateCodexReceipt(env, transportModel)
+    if (v.ok && hasPayload && env.payload != null) {
+      if (provenance && typeof provenance === 'object') Object.assign(provenance, {
+        requested_model: requested, actual_model: requested,
+        fallback_reason: h.fallback_reason != null ? h.fallback_reason : null,
+        classification: h.classification != null ? h.classification : null,
+        ...codexStatic(),
+        actual_transport_model: v.receipt.reported_model, receipt_verified: true, receipt_hash: liftReceiptHash(env),
+        session_id: v.receipt.session_id, tokens_used: v.receipt.tokens_used, prompt_hash: v.receipt.prompt_sha256, output_hash: v.receipt.output_sha256,
+      })
+      return env.payload
+    }
+    const reason = v.ok ? 'transport_receipt_invalid' : v.reason // a verified receipt with no payload is invalid
+    if (required) { log(`${label}: ${reason} — two_heads:required, a dead Sol seat → null (fail-closed to a gated operator checkpoint)`); record(null, reason, h.classification != null ? h.classification : null); return null }
+    log(`${label}: ${reason} — best_effort, retaining the Sonnet wrapper answer with honest provenance (never second-family)`)
+    record(requested, reason, h.classification != null ? h.classification : null) // actual_model = the wrapper model; codexStatic() fields nulled by record()
+    return hasPayload ? env.payload : env
+  }
   const first = await dispatch(agentOpts)
-  if (first.ok) { record(requested, null, null); return first.value } // clean seat — actual == requested
+  if (first.ok) {
+    if (isCodex) return settleCodex(first.value, { fallback_reason: null, classification: null })
+    record(requested, null, null); return first.value // clean seat — actual == requested
+  }
   if (first.cls === 'other') { record(null, 'rethrow', 'other'); throw first.error } // unrelated exception — never swallowed
   // a seat-death class. In required mode a council seat is never silently substituted.
   if (required) {
@@ -746,7 +865,10 @@ async function gateAgent(prompt, opts) {
   // best_effort: ONE fresh re-dispatch on the SAME model (v3.0.1 semantics).
   log(`${label}: ${first.cls} — re-dispatching one fresh agent (same model)`)
   const second = await dispatch({ ...agentOpts, label: label + ':redispatch' })
-  if (second.ok) { record(requested, 'redispatch', first.cls); return second.value }
+  if (second.ok) {
+    if (isCodex) return settleCodex(second.value, { fallback_reason: 'redispatch', classification: first.cls })
+    record(requested, 'redispatch', first.cls); return second.value
+  }
   if (second.cls === 'other') { record(null, 'redispatch_rethrow', 'other'); throw second.error }
   // the same-model retry also died a seat-death. The twin-council degradation rail: if the requested
   // model was 'fable', ONE substitution dispatch on 'opus' — recorded as such, never claimed as fable.

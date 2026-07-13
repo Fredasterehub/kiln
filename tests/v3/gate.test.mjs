@@ -147,6 +147,177 @@ test('gate: ultra effort on a codex-transport seat throws at call time (never-ul
   assert.equal(agent.calls.length, 0, 'the guard throws BEFORE any dispatch')
 })
 
+// ── Codex transport receipt provenance (sol-b34-design "Codex transport receipt"). A Sol council seat is
+// a Sonnet wrapper over transport:'codex' whose wrapped agent() returns an ENVELOPE
+// { payload, codex_receipt, raw_artifact_refs }; gateAgent STRUCTURALLY validates the relayed receipt
+// (never hashes) and records the transport attestation. A missing/invalid/model-mismatched receipt is a
+// DEAD Sol seat — required fails closed to null, best_effort retains the wrapper answer honestly. ────────
+const PSHA = '1'.repeat(64), OSHA = '2'.repeat(64), HSHA = '3'.repeat(64), RSHA = '4'.repeat(64)
+const SESSION = '019f5a46-fc83-7181-8303-f516494485ac'
+const validReceipt = (over = {}) => ({
+  receipt_version: 1, parser_version: 'kiln-codex-receipt/1', transport: 'codex_exec', invocation_id: HSHA,
+  prompt_sha256: PSHA, packet_sha256: HSHA, cli_version: '0.144.1', requested_model: 'gpt-5.6-sol',
+  reported_model: 'gpt-5.6-sol', session_id: SESSION, exit_code: 0, tokens_used: 18747, output_sha256: OSHA,
+  stderr_sha256: HSHA, ...over,
+})
+const envelope = (receipt, over = {}) => ({ payload: { verdict: 'APPROVE' }, codex_receipt: receipt, raw_artifact_refs: { stderr: 's', output: 'o' }, ...over })
+const solSeat = (extra = {}) => ({ label: 'sol', model: 'sonnet', transport: 'codex', transportModel: 'gpt-5.6-sol', receiptRequired: true, ...extra })
+
+test('gate/codex: a clean verified receipt returns the payload and records the full transport attestation', async () => {
+  const agent = queuedAgent([{ return: envelope(validReceipt(), { receipt_sha256: RSHA }) }])
+  const { gateAgent } = await loadGate(agent)
+  const prov = {}
+  const r = await gateAgent('p', solSeat({ twoHeads: 'required', provenance: prov }))
+  assert.deepEqual(r, { verdict: 'APPROVE' }, 'the call site keeps receiving the payload, not the envelope')
+  assert.deepEqual(prov, {
+    requested_model: 'sonnet', actual_model: 'sonnet', fallback_reason: null, classification: null,
+    wrapper_model: 'sonnet', transport: 'codex', requested_transport_model: 'gpt-5.6-sol',
+    actual_transport_model: 'gpt-5.6-sol', receipt_verified: true, receipt_hash: RSHA, session_id: SESSION,
+    tokens_used: 18747, prompt_hash: PSHA, output_hash: OSHA,
+  })
+})
+
+test('gate/codex: receipt_hash is null when the envelope does not relay the ledger receipt_sha256 (never computed here)', async () => {
+  const agent = queuedAgent([{ return: envelope(validReceipt()) }]) // no receipt_sha256 relayed
+  const { gateAgent } = await loadGate(agent)
+  const prov = {}
+  const r = await gateAgent('p', solSeat({ twoHeads: 'required', provenance: prov }))
+  assert.deepEqual(r, { verdict: 'APPROVE' })
+  assert.equal(prov.receipt_verified, true)
+  assert.equal(prov.receipt_hash, null, 'gate.mjs never fabricates a receipt hash')
+})
+
+test('gate/codex: a wrong reported_model is invalid — required fails closed to null, wrapper answer never returned', async () => {
+  const agent = queuedAgent([{ return: envelope(validReceipt({ reported_model: 'gpt-5.5' })) }])
+  const { gateAgent } = await loadGate(agent)
+  const prov = {}
+  const r = await gateAgent('p', solSeat({ twoHeads: 'required', provenance: prov }))
+  assert.equal(r, null, 'a required Sol seat with an invalid receipt returns null, NOT the Sonnet payload')
+  assert.equal(prov.fallback_reason, 'transport_receipt_invalid')
+  assert.equal(prov.receipt_verified, false)
+  assert.equal(prov.actual_model, null)
+  assert.equal(prov.actual_transport_model, null)
+})
+
+test('gate/codex: a fallback-model receipt cannot sign a pinned Sol seat (gpt-5.5 != gpt-5.6-sol)', async () => {
+  const agent = queuedAgent([{ return: envelope(validReceipt({ requested_model: 'gpt-5.5', reported_model: 'gpt-5.5' })) }])
+  const { gateAgent } = await loadGate(agent)
+  const prov = {}
+  const r = await gateAgent('p', solSeat({ twoHeads: 'required', provenance: prov }))
+  assert.equal(r, null)
+  assert.equal(prov.fallback_reason, 'transport_receipt_invalid')
+})
+
+test('gate/codex: a missing codex_receipt is transport_receipt_missing (required -> null)', async () => {
+  const agent = queuedAgent([{ return: { payload: { verdict: 'APPROVE' }, raw_artifact_refs: {} } }]) // no codex_receipt key
+  const { gateAgent } = await loadGate(agent)
+  const prov = {}
+  const r = await gateAgent('p', solSeat({ twoHeads: 'required', provenance: prov }))
+  assert.equal(r, null)
+  assert.equal(prov.fallback_reason, 'transport_receipt_missing')
+  assert.equal(prov.receipt_verified, false)
+})
+
+test('gate/codex: a malformed receipt — a bad hash shape and a nonzero exit — is invalid', async () => {
+  for (const bad of [{ prompt_sha256: 'not-a-sha' }, { exit_code: 1 }, { tokens_used: -5 }]) {
+    const agent = queuedAgent([{ return: envelope(validReceipt(bad)) }])
+    const { gateAgent } = await loadGate(agent)
+    const prov = {}
+    const r = await gateAgent('p', solSeat({ twoHeads: 'required', provenance: prov }))
+    assert.equal(r, null, `receipt override ${JSON.stringify(bad)} must be invalid`)
+    assert.equal(prov.fallback_reason, 'transport_receipt_invalid')
+  }
+})
+
+test('gate/codex: best_effort retains the wrapper answer as HONEST Sonnet provenance (never second-family)', async () => {
+  const agent = queuedAgent([{ return: envelope(validReceipt({ reported_model: 'gpt-5.5' })) }]) // invalid receipt
+  const { gateAgent } = await loadGate(agent)
+  const prov = {}
+  const r = await gateAgent('p', solSeat({ twoHeads: 'best_effort', provenance: prov }))
+  assert.deepEqual(r, { verdict: 'APPROVE' }, 'best_effort MAY keep the wrapper answer')
+  assert.equal(prov.actual_model, 'sonnet', 'recorded as the wrapper model, not Sol')
+  assert.equal(prov.actual_transport_model, null)
+  assert.equal(prov.receipt_verified, false, 'this answer can never claim second-family verification')
+  assert.equal(prov.fallback_reason, 'transport_receipt_invalid')
+})
+
+test('gate/codex: receiptRequired without transport:codex throws at call time (a misconfigured seat is a bug)', async () => {
+  const agent = queuedAgent([{ return: { verdict: 'APPROVE' } }])
+  const { gateAgent } = await loadGate(agent)
+  await assert.rejects(() => gateAgent('p', { label: 'g', model: 'sonnet', receiptRequired: true }), /receiptRequired demands transport/)
+  assert.equal(agent.calls.length, 0, 'the guard throws BEFORE any dispatch')
+})
+
+test('gate/codex: a NON-codex leg keeps the exact v3.0.1 provenance shape — no transport-attestation fields leak', async () => {
+  const agent = queuedAgent([{ return: { verdict: 'QA_PASS' } }])
+  const { gateAgent } = await loadGate(agent)
+  const prov = {}
+  await gateAgent('p', { label: 'g', model: 'opus', provenance: prov })
+  assert.deepEqual(Object.keys(prov).sort(), ['actual_model', 'classification', 'fallback_reason', 'requested_model'])
+  for (const k of ['wrapper_model', 'transport', 'receipt_verified', 'actual_transport_model']) assert.equal(k in prov, false, `${k} must be absent on a non-codex leg`)
+})
+
+test('gate/codex: a drifting receipt_version / parser_version / transport / session_id / cli_version is rejected (pinned like the sealed script)', async () => {
+  for (const bad of [{ receipt_version: 2 }, { receipt_version: 1.5 }, { parser_version: 'attacker/999' }, { transport: 'not_codex' }, { cli_version: 'garbage' }, { session_id: 'x' }]) {
+    const agent = queuedAgent([{ return: envelope(validReceipt(bad)) }])
+    const { gateAgent } = await loadGate(agent)
+    const prov = {}
+    const r = await gateAgent('p', solSeat({ twoHeads: 'required', provenance: prov }))
+    assert.equal(r, null, `receipt drift ${JSON.stringify(bad)} must NOT verify`)
+    assert.equal(prov.receipt_verified, false)
+    assert.equal(prov.fallback_reason, 'transport_receipt_invalid')
+  }
+})
+
+test('gate/codex: cli_version is pinned to the EXACT trusted release — a well-formed-but-wrong semver is rejected', async () => {
+  for (const cli of ['9.9.9', '0.144.2', '0.143.1']) {
+    const agent = queuedAgent([{ return: envelope(validReceipt({ cli_version: cli })) }])
+    const { gateAgent } = await loadGate(agent)
+    const prov = {}
+    const r = await gateAgent('p', solSeat({ twoHeads: 'required', provenance: prov }))
+    assert.equal(r, null, `cli_version ${cli} is not the trusted release`)
+    assert.equal(prov.receipt_verified, false)
+  }
+})
+
+test('gate/codex: a hash field is TYPE-checked before the regex — a crafted toString() object is never accepted', async () => {
+  const evil = { toString: () => '1'.repeat(64) } // a valid-looking sha only after coercion
+  const agent = queuedAgent([{ return: envelope(validReceipt({ prompt_sha256: evil })) }])
+  const { gateAgent } = await loadGate(agent)
+  const prov = {}
+  const r = await gateAgent('p', solSeat({ twoHeads: 'required', provenance: prov }))
+  assert.equal(r, null, 'an object-valued hash is not a string hash — no String() coercion in the validator')
+  assert.equal(prov.receipt_verified, false)
+  assert.equal(prov.fallback_reason, 'transport_receipt_invalid')
+})
+
+test('gate/codex: a verified-looking receipt with NO payload is transport_receipt_invalid (provenance never lies)', async () => {
+  for (const env of [{ codex_receipt: validReceipt(), raw_artifact_refs: {} }, { payload: null, codex_receipt: validReceipt(), raw_artifact_refs: {} }]) {
+    const agent = queuedAgent([{ return: env }])
+    const { gateAgent } = await loadGate(agent)
+    const prov = {}
+    const r = await gateAgent('p', solSeat({ twoHeads: 'required', provenance: prov }))
+    assert.equal(r, null, 'a receipt with no answer is not a verification')
+    assert.equal(prov.receipt_verified, false)
+    assert.equal(prov.fallback_reason, 'transport_receipt_invalid')
+  }
+})
+
+test('gate/codex: a successful best-effort redispatch after a refusal carries the dispatch history into the verified provenance', async () => {
+  // the refusal degrades once (same-model redispatch), the redispatch returns a clean verified envelope —
+  // the verified record must PRESERVE fallback_reason:'redispatch' + classification:'refusal', not erase them.
+  const agent = queuedAgent([{ throw: 'the model refused to rule' }, { return: envelope(validReceipt(), { receipt_sha256: RSHA }) }])
+  const { gateAgent } = await loadGate(agent)
+  const prov = {}
+  const r = await gateAgent('p', solSeat({ twoHeads: 'best_effort', provenance: prov }))
+  assert.deepEqual(r, { verdict: 'APPROVE' })
+  assert.equal(agent.calls.length, 2, 'one refusal, one successful redispatch')
+  assert.equal(prov.receipt_verified, true)
+  assert.equal(prov.fallback_reason, 'redispatch', 'the redispatch history is preserved, not erased to null')
+  assert.equal(prov.classification, 'refusal')
+  assert.equal(prov.actual_transport_model, 'gpt-5.6-sol')
+})
+
 // ── R1 classifier precision (Sol finding 4): the narrow 'other' boundary rethrows unrelated errors ──
 // Each of these is a REAL error that must NOT be mistaken for a seat-death: an "HTTP retry cap" is not
 // the platform's StructuredOutput cap; ECONNREFUSED contains the substring 'refus' but is a transport
