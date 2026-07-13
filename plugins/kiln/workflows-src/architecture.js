@@ -11,7 +11,7 @@ export const meta = {
   ],
 }
 
-// ── args: { kilnDir, projectPath, mode, testingRigor, codexAvailable, planning, validationRounds, lawModel, pluginRoot } ──
+// ── args: { kilnDir, projectPath, mode, testingRigor, codexAvailable, planning, validationRounds, lawModel, pluginRoot, runToken, capabilityTier } ──
 // @inline:args:normalizeArgs
 const A = normalizeArgs(args)
 const PAYLOAD_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. Emit the payload properties FIRST; reasoning is the LAST property, OPTIONAL, and under 50 words — put detail in the designated report file or field, never in reasoning. A long leading reasoning string is the observed death mode: the call truncates before the payload lands, the validator rejects it, each rejection burns one of five attempts, and five failures kill this leg.'
@@ -57,6 +57,25 @@ const validationRoundsArg = (Number.isInteger(A.validationRounds) && A.validatio
 // runs, a resume without the return) ⇒ null ⇒ the foundation agent judges it as the fallback, given
 // the EXACT decline bytes (src/vision.mjs DECLINE_LINE, quoted — a workflow cannot import it).
 const visualDirection = (typeof A.visualDirection === 'boolean') ? A.visualDirection : null
+// ── Twin Council args (v3.0.2 B4-1b-ii; FC-1 tier-gating). The council path REPLACES the v3.0.1
+// draft/ratify machinery ONLY when the capability record promised BOTH heads (T4 = fable + codex)
+// AND the conductor minted a runToken. Lite path and T1–T3 run the v3.0.1 machinery BYTE-IDENTICAL,
+// capability-honestly labeled (never twin_ratified, never a council claim). A PROMISED council
+// missing its runToken is NOT a clean v3.0.1 run — see councilPromised below. runToken is the
+// conductor's per-run token (same recipe Build/Validate use); architecture uses it for the council
+// SEED + the receipt-invocation binding, NEVER for browser kills. capabilityTier is T1|T2|T3|T4 from
+// the freshest capability record (state.json.capability.tier); anything else ⇒ null. ──
+const runToken = (typeof A.runToken === 'string' && A.runToken.length > 0) ? A.runToken : null
+const capabilityTier = (A.capabilityTier === 'T1' || A.capabilityTier === 'T2' || A.capabilityTier === 'T3' || A.capabilityTier === 'T4') ? A.capabilityTier : null
+// councilPromised = the capability record PROMISED both heads (T4 + codex); councilCapable adds the
+// conductor-minted runToken. A PROMISED council missing its token is a MISCONFIGURED conductor — on
+// the FULL path the council rules DEGRADED and the Law is BLOCKED (scope ruling item 6: a promised
+// guarantee never silently downgrades to a clean v3.0.1 label); lite and sub-T4 routes are untouched.
+const councilPromised = capabilityTier === 'T4' && codexAvailable
+const councilCapable = councilPromised && typeof A.runToken === 'string' && A.runToken.length > 0
+if (councilPromised && !runToken) {
+  log('MISCONFIGURED CONDUCTOR — capability tier T4 with both heads reachable but NO runToken: the twin council cannot bind its receipts/seed. On the full path the council terminal is DEGRADED and the Law is BLOCKED (never a silent v3.0.1 downgrade). Relaunch with the per-run token to convene the council.')
+}
 
 const docsDir = `${kilnDir}/docs`
 const plansDir = `${kilnDir}/plans`
@@ -78,6 +97,14 @@ const noWander = NO_WANDER
 // @inline:voice:MODEL_VOICE,voice
 // ── Codex model pins (CODEX_MODEL default + CODEX_FALLBACK, inlined from src/models.mjs) ──
 // @models
+// ── The single gateAgent (+ receipt attestation) — whole src/gate.mjs inlined verbatim (like build/
+//    validate). The Twin Council's Sol seats are Sonnet wrappers over transport:'codex'; gateAgent
+//    STRUCTURALLY validates the relayed receipt and fails a dead Sol seat closed to null. ──
+// @gate
+// ── Twin Council pure core (constitution twin-council.md; sol-b34-design §B3) — the deterministic
+//    council machinery inlined from src/council.mjs. Every function that CALLS another travels WITH it
+//    in ONE marker (buildDivergenceSet is B3, not inlined here). ──
+// @inline:council:COUNCIL_PROTOCOL_VERSION,sha256Hex,canonicalJson,councilSeed,deriveId,claimTypeForClass,compareEvidence,validateReversal,buildDecisionBundle,bundleHash,validateRatification,councilSignature,verifySignature,buildCheckpoint,twinRatified,councilDeadlock,degraded
 // The wrapper TRANSLATES (Goal/Context/Constraints/Done-when); it never forwards a Claude brief verbatim.
 const codexHowto = `Delegate authoring to ${CODEX_MODEL}: TRANSLATE this brief into a 4-part Codex prompt — Goal (the deliverable in 1-2 sentences), Context (the file paths + summary; no full dumps), Constraints (the arch-constraints + "do X instead of Y"), Done-when (the file written + what it must contain) — write it to a fresh temp file ('TMP="$(mktemp /tmp/kiln-codex.XXXXXX.md)"'; a fixed path collides across concurrent runs) and pipe via stdin: 'codex exec -m ${CODEX_MODEL} -c model_reasoning_effort="high" --sandbox workspace-write --skip-git-repo-check < "$TMP"'. Do NOT forward this brief verbatim. If ${CODEX_MODEL} is unavailable retry with -m ${CODEX_FALLBACK}; if codex errors or yields nothing usable, author the plan yourself.`
 const SPIN = {
@@ -292,6 +319,412 @@ const LAW_VERIFY_SCHEMA = {
   required: ['law_json_exists', 'lock_commit_exists'],
 }
 
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// ── TWIN COUNCIL scaffolding (v3.0.2 B4-1b-ii) — all deterministic, script-side. Everything here is
+//    INERT on the v3.0.1 paths (councilCapable === false): consts compute cheaply, functions are only
+//    DEFINED, never called. It runs ONLY when councilCapable && !liteScope, so posture-args behavior
+//    is byte-preserved. The B3 debate middle (critiques→negotiation→divergence machine) and the
+//    fresh-round re-adjudication ladder are NOT here — 1b-ii ledgers DRAFTS_SEALED + the RATIFY_*
+//    barriers only, so the checkpoint chain has a DOCUMENTED gap (it is telemetry/audit, not yet a
+//    resume anchor; matchCheckpoint reuse arrives with B3, an interrupted architecture reruns whole).
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+const COUNCIL_TEMPLATE_VERSION = 'arch-council/1'
+const RENDERER_VERSION = 'v301-plato/1'
+const keystoneId = 'master_plan'
+// Council artifacts under a per-run kilnDir with FIXED deterministic names (kilnDir is per-run, so
+// fixed paths are collision-safe AND auditable — no mktemp for council artifacts). ONE receipt ledger
+// per run: the receipt script's replay rejection then spans every council invocation of the run.
+const councilDir = `${kilnDir}/council/master_plan`
+const receiptsLedger = `${kilnDir}/council/receipts.jsonl`
+// runTokenHash: the RAW runToken goes ONLY into the receipt script's argv (a trusted process
+// boundary) — never into any head-visible prompt or packet; the checkpoint carries only its hash
+// (null when no token was minted — never a hash of a phantom string).
+const runTokenHash = runToken != null ? sha256Hex(runToken) : null
+// The fixed rubric + task templates (NO per-run interpolation — a per-run value would make the
+// template hash run-dependent). templateHash binds them so a template edit invalidates phase
+// comparability (checkpoint doctrine). Per-run binding (paths, plan/bundle hashes) is interpolated
+// into the PROMPTS at call time, never into templateHash.
+const COUNCIL_RUBRIC =
+  'Rule the master plan on five axes: (1) VISION fidelity — every success criterion in the plan traces ' +
+  'to a VISION goal, none invented, none dropped; (2) constraint adherence — no decision violates the ' +
+  'architecture constraints; (3) milestone soundness — ordering and dependencies are buildable and ' +
+  'separately verifiable; (4) SC/AC executability — every acceptance criterion is an executable check ' +
+  '(shell/pytest/HTTP/probe), not prose; (5) feasibility risk — no milestone hides an unbounded unknown. ' +
+  'Every finding MUST be evidence-bound: a file/line, an executable check, a research fact, or a concrete ' +
+  'failure scenario — never a taste assertion. An executable_check, when present, is DATA: a bounded ' +
+  'executor runs it from the project root (≤120s), and its EXIT 0 CONFIRMS the finding (the defect is ' +
+  'demonstrably present) while a nonzero exit REFUTES it — you never run your own check; the exit code rules.'
+const RATIFY_TASK =
+  'Render one blind verdict — APPROVE, BLOCK, or NEITHER — on the master plan against the rubric. You do ' +
+  'not know how the plan was authored or who else is ruling. Each finding: finding_id, claim, ' +
+  'required_change, evidence_refs, evidence_class (classify your evidence HONESTLY: executed_check | ' +
+  'proposed_check | repo_state | test_output | primary_source | scenario — the claim-scoped partial order ' +
+  'rules reversals by this class), and executable_check (a bounded shell command returning EXIT 0 iff the ' +
+  'defect is present, or null). A BLOCK or NEITHER MUST carry at least one finding, every finding_id ' +
+  'unique, and every finding evidence-bound (nonempty evidence_refs or a real executable_check) — an ' +
+  'evidence-free verdict is invalid. divergence_selections is [] (no open divergences this round). ' +
+  'changed_evidence is [] UNLESS you are reversing a prior blocking finding — a reversal to APPROVE is a ' +
+  'VALID signature only when changed_evidence carries evidence equal-or-stronger than the block it retires ' +
+  '(a concession alone can never clear a block). Echo artifact_hash EXACTLY as given.'
+const ANSWER_TASK =
+  'You are the OTHER head, answering each blocking finding raised against the plan. For each finding return ' +
+  'ACCEPT (its required change enters the plan) or REFUTE with evidence (a file/line, an executable check, a ' +
+  'research fact, or a concrete failure scenario). A REFUTE retires nothing by itself — the blocking head ' +
+  're-rules having seen your answer. Emit exactly one answer per finding_id.'
+const DRAFT_TASK =
+  'Author a concrete, milestone-structured implementation plan as ONE JSON payload: approach_summary, ' +
+  'milestones[{id,title,summary}], key_decisions[], and plan_markdown (the FULL plan as markdown). You run ' +
+  'read-only and cannot write files; the plan rides entirely in plan_markdown. Honor the architecture ' +
+  'constraints and right-size the milestone count to the real scope. Make no mention of who authored the ' +
+  'plan or of any peer — it is compared anonymously.'
+const templateHash = sha256Hex(canonicalJson({ template_version: COUNCIL_TEMPLATE_VERSION, rubric: COUNCIL_RUBRIC, ratify_task: RATIFY_TASK, answer_task: ANSWER_TASK, draft_task: DRAFT_TASK }))
+
+// ── Council schemas ──
+// SOL_DRAFT_PAYLOAD_SCHEMA — codex runs --sandbox read-only inside the receipt script, so it CANNOT
+// write plan-b.md; the plan content rides the attested payload's plan_markdown.
+const SOL_DRAFT_PAYLOAD_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reasoning: { type: 'string', maxLength: 700 },
+    approach_summary: { type: 'string' },
+    milestones: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string' }, title: { type: 'string' }, summary: { type: 'string' } }, required: ['id', 'title', 'summary'] } },
+    key_decisions: { type: 'array', items: { type: 'string' } },
+    plan_markdown: { type: 'string' },
+  },
+  required: ['approach_summary', 'milestones', 'plan_markdown'],
+}
+// RATIFY_SCHEMA (§6 verbatim): evidence fields BEFORE the verdict field (B6 ordering — Claude legs keep
+// PAYLOAD_FIRST, codex legs follow the reasoning-first guide). executable_check present, null allowed.
+const RATIFY_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reasoning: { type: 'string', maxLength: 400, description: 'optional, ≤50 words' },
+    artifact_hash: { type: 'string' },
+    findings: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          finding_id: { type: 'string' }, claim: { type: 'string' }, required_change: { type: 'string' },
+          evidence_refs: { type: 'array', items: { type: 'string' } },
+          evidence_class: { type: 'string', enum: ['executed_check', 'proposed_check', 'repo_state', 'test_output', 'primary_source', 'scenario'], description: 'the HONEST class of this finding\'s evidence — the claim-scoped partial order rules reversals by it' },
+          executable_check: { type: ['string', 'null'], description: 'a bounded shell command (EXIT 0 iff the defect is present) or null' },
+        },
+        required: ['finding_id', 'claim', 'required_change', 'evidence_refs', 'evidence_class', 'executable_check'],
+      },
+    },
+    changed_evidence: { type: 'array', items: { type: 'object', additionalProperties: true, properties: { class: { type: 'string' }, refs: { type: 'array', items: { type: 'string' } } }, required: ['class'] } },
+    divergence_selections: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { divergence_id: { type: 'string' }, selection: { type: 'string', enum: ['P0', 'P1', 'MERGED', 'NEITHER'] }, evidence_refs: { type: 'array', items: { type: 'string' } } }, required: ['divergence_id', 'selection'] } },
+    verdict: { type: 'string', enum: ['APPROVE', 'BLOCK', 'NEITHER'] },
+  },
+  required: ['artifact_hash', 'verdict', 'divergence_selections', 'findings', 'changed_evidence'],
+}
+const ANSWER_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reasoning: { type: 'string', maxLength: 400 },
+    answers: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { finding_id: { type: 'string' }, answer: { type: 'string', enum: ['ACCEPT', 'REFUTE'] }, evidence_refs: { type: 'array', items: { type: 'string' } }, evidence_class: { type: 'string' } }, required: ['finding_id', 'answer', 'evidence_refs'] } },
+  },
+  required: ['answers'],
+}
+// envelopeSchema(payload) — permissive on the receipt BY DESIGN: gateAgent's validateCodexReceipt is
+// the single structural authority; a strict agent-schema copy of the receipt would be a second
+// validator that can drift. So codex_receipt is a bare object here.
+const envelopeSchema = (payload) => ({
+  type: 'object',
+  properties: { payload, codex_receipt: { type: 'object' }, raw_artifact_refs: { type: 'object' } },
+  required: ['payload', 'codex_receipt'],
+  additionalProperties: true,
+})
+// The receipt-ledger CROSS-CHECK transcription (thoth:receipt-check). INVOCATION-EXACT (Sol F1): the
+// extract selects the LAST verified row matching THIS leg's output hash + session id, then that row's
+// 'started' RESERVATION by invocation_id — the SCRIPT then binds reservation ↔ verified ↔ sink ↔
+// payload, so a run-global stale/replayed row can never be blessed. Nulls where unmatched.
+const CROSS_CHECK_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reasoning: { type: 'string', maxLength: 400 },
+    output_sha256_disk: { type: 'string' },
+    output_canonical_sha256: { type: 'string' },
+    ledger: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        verified: {
+          type: ['object', 'null'], additionalProperties: false,
+          properties: {
+            status: { type: ['string', 'null'] }, invocation_id: { type: ['string', 'null'] }, receipt_sha256: { type: ['string', 'null'] },
+            output_sha256: { type: ['string', 'null'] }, session_id: { type: ['string', 'null'] }, reported_model: { type: ['string', 'null'] },
+            tokens_used: { type: ['number', 'null'] }, exit_code: { type: ['number', 'null'] }, receipt_verified: { type: ['boolean', 'null'] },
+          },
+          required: ['status', 'invocation_id', 'receipt_sha256', 'output_sha256', 'session_id', 'reported_model', 'tokens_used', 'exit_code', 'receipt_verified'],
+        },
+        reservation: {
+          type: ['object', 'null'], additionalProperties: false,
+          properties: {
+            invocation_id: { type: ['string', 'null'] }, keystone: { type: ['string', 'null'] }, phase: { type: ['string', 'null'] },
+            seat: { type: ['string', 'null'] }, attempt: { type: ['number', 'null'] }, run_token: { type: ['string', 'null'] },
+            prompt_sha256: { type: ['string', 'null'] }, packet_sha256: { type: ['string', 'null'] },
+          },
+          required: ['invocation_id', 'keystone', 'phase', 'seat', 'attempt', 'run_token', 'prompt_sha256', 'packet_sha256'],
+        },
+      },
+      required: ['verified', 'reservation'],
+    },
+  },
+  required: ['output_sha256_disk', 'output_canonical_sha256', 'ledger'],
+}
+// The council-ledger append confirmation (Sol F10): the checkpoint counter increments ONLY on a
+// confirmed append — a mute/failed scribe is logged, never counted.
+const LEDGER_APPEND_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: { reasoning: { type: 'string', maxLength: 400 }, appended: { type: 'boolean', description: 'true iff the append command exited 0' } },
+  required: ['appended'],
+}
+const ANCHOR_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reasoning: { type: 'string', maxLength: 400 },
+    files: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { path: { type: 'string' }, sha256: { type: 'string' } }, required: ['path', 'sha256'] } },
+    initial_ledger_seq: { type: ['number', 'null'] },
+  },
+  required: ['files', 'initial_ledger_seq'],
+}
+const SEAT_HASH_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: { reasoning: { type: 'string', maxLength: 400 }, plan_a_sha256: { type: 'string' }, plan_b_sha256: { type: 'string' } },
+  required: ['plan_a_sha256', 'plan_b_sha256'],
+}
+const PLAN_HASH_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: { reasoning: { type: 'string', maxLength: 400 }, plan_sha256: { type: 'string' } },
+  required: ['plan_sha256'],
+}
+const EXEC_CHECK_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: { reasoning: { type: 'string', maxLength: 400 }, finding_id: { type: 'string' }, exit: { type: 'number' }, stdout_tail: { type: 'string' }, stderr_tail: { type: 'string' } },
+  required: ['finding_id', 'exit', 'stdout_tail', 'stderr_tail'],
+}
+
+// ── Council STATE (hoisted): the draft flow binds the evidence; the ratify flow, the Law gate, and
+//    the return envelope read it. councilSeedDigest is the run-bound entropy (councilSeed) reserved
+//    for B3 divergence-id derivation; it NEVER appears in any prompt (anonymity + tie-break rails). ──
+const SHA64_RE = /^[0-9a-f]{64}$/
+let councilTerminal = null           // 'RATIFIED' | 'COUNCIL_DEADLOCK' | 'DEGRADED' | null
+let councilCertificate = null        // twinRatified output or null
+let councilTerminalRecord = null     // the degraded()/councilDeadlock() constructor record (null when RATIFIED — the certificate IS that record)
+let councilBlockedReason = null      // human string on DEGRADED/DEADLOCK, else null
+const councilReceipts = []           // [{ leg, invocation_id, receipt_verified, ledger_verified, session_id, tokens_used }]
+let councilCheckpointCount = 0
+let evidenceManifestHash = null
+let evidenceInputHashes = []
+let councilInitialSeq = null
+let councilSeedDigest = null
+
+// ── The pinned cross-check one-liners (written ONCE as consts). CANON must reproduce canonicalJson
+//    EXACTLY — recursive key-sort + JSON.stringify semantics over UTF-8 bytes — so its digest equals
+//    sha256Hex(canonicalJson(payload)). LEDGER is INVOCATION-EXACT (Sol F1): argv carries the leg's
+//    output sha + session id; it selects the LAST verified row matching BOTH, then that row's
+//    'started' RESERVATION by invocation_id, and prints { verified, reservation } (nulls unmatched) —
+//    the SCRIPT does every comparison. Neither one-liner contains a single quote, so each rides
+//    safely inside `node -e '...'`. ──
+const CANON_HASH_ONELINER = `const fs=require("fs"),crypto=require("crypto");const c=v=>v===null||typeof v!=="object"?JSON.stringify(v===undefined?null:v):Array.isArray(v)?"["+v.map(c).join(",")+"]":"{"+Object.keys(v).sort().map(k=>JSON.stringify(k)+":"+c(v[k])).join(",")+"}";const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.stdout.write(crypto.createHash("sha256").update(Buffer.from(c(p),"utf8")).digest("hex"))`
+const LEDGER_EXTRACT_ONELINER = `const fs=require("fs");let L=[];try{L=fs.readFileSync(process.argv[1],"utf8").split("\\n").filter(Boolean).map(s=>JSON.parse(s))}catch(e){}const O=process.argv[2],S=process.argv[3];const pick=(o,ks)=>{const x={};for(const k of ks)x[k]=(o&&o[k]!==undefined)?o[k]:null;return x};const vs=L.filter(e=>e&&e.status==="verified"&&e.output_sha256===O&&e.session_id===S);const v=vs.length?vs[vs.length-1]:null;const rs=v?L.filter(e=>e&&e.status==="started"&&e.invocation_id===v.invocation_id):[];const r=rs.length?rs[rs.length-1]:null;process.stdout.write(JSON.stringify({verified:v?pick(v,["status","invocation_id","receipt_sha256","output_sha256","session_id","reported_model","tokens_used","exit_code","receipt_verified"]):null,reservation:r?pick(r,["invocation_id","keystone","phase","seat","attempt","run_token","prompt_sha256","packet_sha256"]):null}))`
+
+// seatProv(sink, head) — a per-head provenance snapshot for signatures + checkpoints. The `head` field
+// makes the two signatures' seat_provenance DISTINCT (twinRatified requires distinct, non-null seats).
+const seatProv = (sink, head) => ({
+  head,
+  requested_model: sink && sink.requested_model != null ? sink.requested_model : null,
+  actual_model: sink && sink.actual_model != null ? sink.actual_model : null,
+  receipt_verified: !!(sink && sink.receipt_verified),
+  actual_transport_model: sink && sink.actual_transport_model != null ? sink.actual_transport_model : null,
+  session_id: sink && sink.session_id != null ? sink.session_id : null,
+})
+
+// pushSolReceipt — one receipt row per Sol leg (verified or dead), so the return's `receipts` array is
+// honest even on a dead seat (receipt_verified:false, ledger_verified:false).
+const pushSolReceipt = (leg, sink, cross) => councilReceipts.push({
+  leg,
+  invocation_id: cross && cross.invocation_id ? cross.invocation_id : null,
+  receipt_verified: !!(sink && sink.receipt_verified),
+  ledger_verified: !!(cross && cross.ledger_verified),
+  session_id: sink && sink.session_id != null ? sink.session_id : null,
+  tokens_used: sink && sink.tokens_used != null ? sink.tokens_used : null,
+})
+
+// appendCouncilCheckpoint — mirror vision.js's runLedger idiom: a haiku Thoth appends
+// {type:'note', stage:'architecture', data: buildCheckpoint(fields)} via the kiln-state CLI; gated on
+// pluginRoot, degrades to a log line, NEVER fails the stage. status:'sealed' on completed barriers.
+const appendCouncilCheckpoint = async (fields, phaseName) => {
+  if (!pluginRoot) { log(`pluginRoot absent — council checkpoint ${fields.phase} not ledgered to events.jsonl`); return }
+  const ev = JSON.stringify({ type: 'note', stage: 'architecture', data: buildCheckpoint(fields) })
+  const res = await agent(
+    `You are Thoth, the scribe — "write it down or it never happened". Append ONE council checkpoint to the Kiln run ledger.\n\n` +
+    `<task>Run this exact command (Bash), substituting the JSON verbatim — do not edit it:\n` +
+    '```\n' +
+    `node ${pluginRoot}/scripts/kiln-state.mjs append ${kilnDir} '${ev.replace(/'/g, `'\\''`)}'\n` +
+    '```\n' +
+    `If it exits non-zero (e.g. no events.jsonl yet), report the error; do NOT create or repair any file. Report appended = true iff the command exited 0, false otherwise.</task>`,
+    { label: 'thoth:council-ledger', phase: phaseName, model: 'haiku', schema: LEDGER_APPEND_SCHEMA }
+  )
+  // Count ONLY confirmed appends (Sol F10) — the return's checkpoint count is an audit figure, and an
+  // unconfirmed append must not inflate it. Degrade-to-log, never a stage failure.
+  if (res && res.appended === true) councilCheckpointCount++
+  else log(`council checkpoint ${fields.phase} append NOT confirmed — not counted (scribe ${res ? 'reported failure' : 'was mute'})`)
+}
+
+// degradeCouncil — a promised head died / a receipt failed (constitution Degradation, NOT deadlock):
+// mark DEGRADED, ledger the terminal checkpoint, log loudly. The Law is BLOCKED (h) and the stage still
+// returns. Idempotent: a first terminal wins.
+const degradeCouncil = async (missing, reason, phaseName) => {
+  // First terminal wins; the constructor record is RETAINED into the return (Sol F10) — an audit
+  // consumer gets the structured twin_degraded record, not just a string.
+  if (councilTerminal === null) { councilTerminal = 'DEGRADED'; councilBlockedReason = reason; councilTerminalRecord = degraded({ missing, reason }) }
+  log(`TWIN COUNCIL DEGRADED — missing '${missing}' head (${reason}); the master plan cannot advance as council-ratified. The Law is BLOCKED; the conductor must escalate (gated operator checkpoint).`)
+  await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'DEGRADED', decision_bundle_hash: null, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: {}, seat_provenance: { missing, reason }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
+}
+
+// deadlockCouncil — persistent disagreement after two valid receipt-complete rounds (constitution §8):
+// an HONEST fail. The fresh-context re-adjudication ladder (twin-council.md §5) slots between RATIFY_2
+// and this terminal in batch B3; until then the conductor's gated operator checkpoint is the
+// constitutional resolution authority. Never synthesize, never pick a winner, never demote to v3.0.1.
+const deadlockCouncil = async (divergences, phaseName) => {
+  // First terminal wins; the structured councilDeadlock record (the disagreement cards) is RETAINED
+  // into the return (Sol F10) — the operator rules from the full artifact, not a log line.
+  if (councilTerminal === null) {
+    councilTerminal = 'COUNCIL_DEADLOCK'
+    councilBlockedReason = 'twin council deadlock — persistent disagreement survived RATIFY_2 (the B3 fresh-context ladder is not yet wired; the operator resolves with the full structured disagreement artifact)'
+    councilTerminalRecord = councilDeadlock({ divergences, last_ratified_hash: null })
+  }
+  log(`TWIN COUNCIL DEADLOCK — persistent disagreement survived RATIFY_2; the Law is BLOCKED, last ratified state preserved, NO stage_completed. Operator resolution required (B3 fresh-round ladder not yet wired).`)
+  await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'COUNCIL_DEADLOCK', decision_bundle_hash: null, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: {}, seat_provenance: {}, codex_receipt_hash: null, status: 'sealed' }, phaseName)
+}
+
+// ── Prompt builders that need no late vars (parametrised) ──
+const anchorPrompt = (inputs) =>
+  `You are Thoth, the scribe — transcribe hashes, never judge, never fix.\n\n` +
+  `<task>Run (Bash): 'sha256sum ${inputs.join(' ')}' and, separately, 'wc -l < ${kilnDir}/events.jsonl'. Transcribe each input file's sha256 into files[] as {path, sha256} (VERBATIM, lowercase hex, the path exactly as given). Set initial_ledger_seq to the wc -l integer, or null if events.jsonl does not exist. Do not read file contents, do not write or fix anything.</task>`
+const seatHashPrompt = (a, b) =>
+  `You are Thoth, the scribe — transcribe hashes, never judge.\n\n` +
+  `<task>Run (Bash): 'sha256sum ${a} ${b}'. Report plan_a_sha256 = the digest of ${a} and plan_b_sha256 = the digest of ${b} (lowercase hex, VERBATIM). Do not read contents, do not write or fix anything.</task>`
+const planHashPrompt = (file) =>
+  `You are Thoth, the scribe — transcribe hashes, never judge.\n\n` +
+  `<task>Run (Bash): 'sha256sum ${file}'. Report plan_sha256 = its digest (lowercase hex, VERBATIM). Do not read contents, do not write or fix anything.</task>`
+// Pinned commands carry every path argument SHELL-QUOTED (scope ruling item 4) — a space or glob
+// char in a per-run path must never split or expand an EXACT command.
+const crossCheckPrompt = (outFile, outputSha, sessionId) =>
+  `You are Thoth, the receipt cross-checker — transcribe, never compose, never judge. Run these three EXACT commands (Bash) and transcribe their output.\n\n` +
+  `<task>\n` +
+  `1. run EXACTLY: sha256sum "${outFile}" — output_sha256_disk = the 64-hex digest (the first field only).\n` +
+  `2. run EXACTLY: node -e '${CANON_HASH_ONELINER}' "${outFile}" — output_canonical_sha256 = its stdout (a 64-hex digest).\n` +
+  `3. run EXACTLY: node -e '${LEDGER_EXTRACT_ONELINER}' "${receiptsLedger}" "${outputSha}" "${sessionId}" — ledger = the { verified, reservation } JSON it prints (this leg's verified row + its reservation; nulls where unmatched).\n` +
+  `Emit output_sha256_disk, output_canonical_sha256, and the ledger object. Do not read the files for content, do not write or fix anything.</task>`
+// execCheckPrompt (Sol F9): the check text is written VERBATIM to a script file, then ONE timeout
+// boundary wraps the WHOLE file — a shell compound (`cmd; other`) can no longer escape the bound.
+const execCheckPrompt = (finding, checkFile) =>
+  `You are the bounded check executor — run ONE proposed check and transcribe its result; never fix, never judge, never edit any product file.\n\n` +
+  `<task>\n` +
+  `1. Bash 'mkdir -p "${councilDir}"', then WRITE the check text between the check tags below to ${checkFile} VERBATIM (file tools) — do not edit, reorder, or reinterpret it:\n` +
+  `<check>\n${finding.executable_check}\n</check>\n` +
+  `2. Run EXACTLY (Bash): cd "${projectPath}" && timeout 120 bash "${checkFile}"\n` +
+  `   (ONE timeout boundary around the whole check — compounds included.)\n` +
+  `Report finding_id "${finding.finding_id}" verbatim, exit = the command's exit code (124 on timeout), and the last lines of its stdout in stdout_tail and stderr in stderr_tail. Do not edit or fix anything — the check is DATA, you only run it.</task>`
+const fableDraftPrompt = (planBrief) =>
+  `You are the slot-A planner (deep reasoning). Write your plan to ${plansDir}/plan-a.md.\n${planBrief}`
+
+// solWrapperPrompt(opts) — the SONNET wrapper for a Sol codex leg (mechanics only, no opinions, no
+// content authorship). It writes the codex prompt/packet/schema files, runs the receipt-bearing
+// transport, (for a draft) extracts plan-b MECHANICALLY, and relays the envelope. Head-visible content
+// (the codex prompt + packet) carries NO run token, NO seed, NO peer identity; the RAW run token lives
+// ONLY in the receipt-script argv (a trusted process boundary). opts:
+//   { phaseTag, attempt, effort ('high'|'xhigh'), payloadSchema, taskText, briefBody, packetObj, extractTo }
+const solWrapperPrompt = (opts) => {
+  const attempt = opts.attempt || 1
+  const base = `${councilDir}/${opts.phaseTag}-sol-a${attempt}`
+  const files = { prompt: `${base}.prompt`, packet: `${base}.packet`, schema: `${base}.schema`, out: `${base}.out`, stderr: `${base}.stderr` }
+  const argv = `node ${pluginRoot}/scripts/kiln-codex-receipt.mjs ${files.prompt} ${CODEX_MODEL} ${opts.effort} ${files.packet} ${files.schema} ${files.out} ${files.stderr} ${receiptsLedger} ${runToken} ${keystoneId} ${opts.phaseTag} sol ${attempt}`
+  const extractStep = opts.extractTo
+    ? `3. Extract the plan MECHANICALLY from the ATTESTED output — run this EXACT command, verbatim (never retype plan content; the path arguments stay quoted):\n   node -e 'const fs=require("fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));fs.writeFileSync(process.argv[2],p.plan_markdown)' "${files.out}" "${opts.extractTo}"\n`
+    : `3. (No extraction — the attested payload IS the deliverable.)\n`
+  const prompt =
+    `You are the Sol transport wrapper — MECHANICS ONLY. You never author plan content or a verdict; you TRANSLATE a fixed brief into a codex prompt (per the codex-guide 4-part shape), run the receipt-bearing transport, and relay the attested result. You do not know the peer seat's identity.\n\n` +
+    `<task>\n` +
+    `1. Bash 'mkdir -p ${councilDir}'. Then WRITE three files (file tools):\n` +
+    `   - ${files.prompt} — the codex prompt: TRANSLATE the fixed brief below into Goal / Context / Constraints / Done-when, instruction-first, plain markdown, no persona padding, reasoning-first per the schema. Demand the final message be ONE JSON object matching the schema. Include NONE of: a run token, a seed, a session id, the peer seat's identity — codex sees ONLY this prompt + packet.\n` +
+    `   - ${files.packet} — this JSON, verbatim: ${JSON.stringify(opts.packetObj)}\n` +
+    `   - ${files.schema} — this payload schema, verbatim: ${JSON.stringify(opts.payloadSchema)}\n` +
+    `2. Run EXACTLY (Bash, foreground, generous timeout) — the raw run token belongs ONLY in this argv (a trusted process boundary), NEVER in a prompt or packet:\n   ${argv}\n   Exit 0 ⇒ its stdout IS the verified receipt JSON.\n` +
+    extractStep +
+    `4. Emit the envelope (StructuredOutput): payload = the ${files.out} JSON verbatim, codex_receipt = the transport's stdout receipt verbatim, raw_artifact_refs = { "stderr": "${files.stderr}", "output": "${files.out}" }. On ANY failure (nonzero exit, missing files), report the failure honestly with NO codex_receipt key — a dead Sol seat is never faked.\n` +
+    `</task>\n\n` +
+    `<fixed-brief>\n${opts.taskText}\n\n${opts.briefBody || ''}\n</fixed-brief>`
+  return { files, prompt }
+}
+
+// runSolCrossCheck — the structural→LEDGER-VERIFIED upgrade, INVOCATION-EXACT (Sol F1). gate.mjs
+// validated the receipt STRUCTURE via the provenance sink; this deterministic haiku leg extracts the
+// verified ledger row matching THIS leg's output hash + session id AND its 'started' reservation, and
+// the SCRIPT binds the whole chain: reservation ↔ verified (same invocation_id), reservation ↔ THIS
+// seat (keystone/phase/seat/attempt/run_token/prompt hash), verified ↔ sink (output/session/model/
+// tokens/exit), payload ↔ canonical hash. Any miss is a DEAD Sol seat — a stale or replayed row of the
+// right shape can never be blessed. A mute/garbled leg gets ONE re-dispatch, then fails closed.
+const runSolCrossCheck = async (legLabel, phaseTag, outFile, sink, payload, phaseName) => {
+  const canon = sha256Hex(canonicalJson(payload))
+  const relayed = sink && sink.output_hash
+  const dispatch = () => agent(crossCheckPrompt(outFile, relayed, sink && sink.session_id), { label: `thoth:receipt-check:${legLabel}`, phase: phaseName, model: 'haiku', schema: CROSS_CHECK_SCHEMA })
+  let cc = await dispatch()
+  if (!(cc && cc.ledger)) cc = await dispatch()
+  if (!(cc && cc.ledger)) return { ledger_verified: false, reason: 'cross-check leg produced no ledger extract' }
+  const V = cc.ledger.verified
+  const R = cc.ledger.reservation
+  const ok =
+    cc.output_sha256_disk === relayed &&
+    cc.output_canonical_sha256 === canon &&
+    V && R &&
+    V.status === 'verified' && V.receipt_verified === true &&
+    V.output_sha256 === relayed &&
+    V.session_id === (sink && sink.session_id) &&
+    V.reported_model === (sink && sink.actual_transport_model) &&
+    V.tokens_used === (sink && sink.tokens_used) &&
+    V.exit_code === 0 &&
+    typeof V.invocation_id === 'string' && SHA64_RE.test(V.invocation_id) &&
+    // every LEDGER-PROMOTED field is SHAPE-VALIDATED before promotion (scope ruling item 1): the
+    // receipt hash rides forward into checkpoints and the return, so a garbled ledger value must
+    // fail the leg, never travel.
+    typeof V.receipt_sha256 === 'string' && SHA64_RE.test(V.receipt_sha256) &&
+    V.invocation_id === R.invocation_id &&
+    R.keystone === keystoneId &&
+    R.phase === phaseTag &&
+    R.seat === 'sol' &&
+    R.attempt === 1 &&
+    R.run_token === runToken &&
+    R.prompt_sha256 === (sink && sink.prompt_hash)
+  return ok
+    ? { ledger_verified: true, codex_receipt_hash: V.receipt_sha256, invocation_id: V.invocation_id }
+    : { ledger_verified: false, invocation_id: V && typeof V.invocation_id === 'string' && SHA64_RE.test(V.invocation_id) ? V.invocation_id : null, reason: 'invocation-exact cross-check mismatch — the ledger reservation/verified chain disagrees with this seat, the relayed receipt, or the payload' }
+}
+
+// sealRatified — both heads APPROVE and valid: bind two DISTINCT-head signatures into the twinRatified
+// certificate over the (possibly amended) bundle, ledger the RATIFY_*_SEALED barrier + the RATIFIED
+// terminal. twinRatified THROWS on any binding defect (a blocked ratification, never a ratified one) —
+// caught → DEGRADED (fail-closed, never a crash).
+const sealRatified = async (rF, rS, sinkF, sinkS, bH, pH, solCross, ckptPhase, phaseName) => {
+  const sigF = councilSignature({ bundle_hash: bH, renderer_version: RENDERER_VERSION, plan_hash: pH, evidence_manifest_hash: evidenceManifestHash, protocol_version: COUNCIL_PROTOCOL_VERSION, seat_provenance: seatProv(sinkF, 'fable') })
+  const sigS = councilSignature({ bundle_hash: bH, renderer_version: RENDERER_VERSION, plan_hash: pH, evidence_manifest_hash: evidenceManifestHash, protocol_version: COUNCIL_PROTOCOL_VERSION, seat_provenance: seatProv(sinkS, 'sol') })
+  let cert = null
+  try {
+    cert = twinRatified({ signatures: [sigF, sigS], context: { bundle_hash: bH, renderer_version: RENDERER_VERSION, plan_hash: pH, evidence_manifest_hash: evidenceManifestHash, protocol_version: COUNCIL_PROTOCOL_VERSION, seat_provenance: null }, ratifications: [rF, rS], open_divergence_ids: [] })
+  } catch (e) {
+    await degradeCouncil('both', `certificate could not seal: ${e.message}`, phaseName)
+    return
+  }
+  councilCertificate = cert
+  councilTerminal = 'RATIFIED'
+  await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: ckptPhase, decision_bundle_hash: bH, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: { P0: sha256Hex(canonicalJson(rF)), P1: sha256Hex(canonicalJson(rS)) }, seat_provenance: { P0: seatProv(sinkF, 'fable'), P1: seatProv(sinkS, 'sol') }, codex_receipt_hash: solCross && solCross.codex_receipt_hash ? solCross.codex_receipt_hash : null, status: 'sealed' }, phaseName)
+  await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'RATIFIED', decision_bundle_hash: bH, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: {}, seat_provenance: {}, codex_receipt_hash: null, status: 'sealed' }, phaseName)
+  log(`TWIN COUNCIL RATIFIED — the master plan carries two valid head signatures (bundle ${String(bH).slice(0, 12)}…); the Law may lock a council-ratified plan.`)
+}
+
 // ── Laying Stone: numerobis writes the technical docs the planners build on ──
 phase('Laying Stone')
 // research.md is OPTIONAL on a normative path: BLUEPRINT §3.2 lets research scope to zero topics
@@ -449,26 +882,100 @@ if (liteScope) {
     `Emit slot, plan_file, approach_summary, and milestones first; reasoning is optional and under 50 words. ` +
     `${noWander} ${PAYLOAD_FIRST}</task>`
 
-  // ── The Council: two anonymized planners in parallel (slot a = Claude, slot b = Codex) ──
+  // ── The Council: two anonymized planners ──
   phase('The Council')
   log(`${spin('council', 0)}`)
-  const planners = [
-    () => agent(
-      voice('opus') +
-      `You are the slot-A planner (Claude-side, deep reasoning). Write your plan to ${plansDir}/plan-a.md.\n${planBrief}`,
-      { label: 'confucius:plan', phase: 'The Council', model: 'opus', schema: PLAN_SCHEMA }
-    ),
-    () => agent(
-      codexAvailable
-        ? `You are the slot-B planner (Codex-side). ${codexHowto} Write the plan to ${plansDir}/plan-b.md.\n${planBrief}`
-        : `You are the slot-B planner (independent Sonnet reasoning — Codex unavailable). Write your plan to ` +
-          `${plansDir}/plan-b.md, taking a deliberately different architectural angle so the comparison is meaningful.\n${planBrief}`,
-      // Sun Tzu is the Codex seat; on the no-codex branch the Sonnet fallback is Miyamoto's
-      // (a label must name the seat that actually runs — never a ghost credit).
-      { label: codexAvailable ? 'sun-tzu:plan' : 'miyamoto:plan', phase: 'The Council', model: 'sonnet', schema: PLAN_SCHEMA }
-    ),
-  ]
-  const plans = (await parallel(planners)).filter(Boolean)
+  let plans
+  if (councilCapable) {
+    // ═══ Twin Council draft pair (T4, FULL path): Fable drafts plan-a itself; the receipt-attested Sol
+    //     wrapper drafts plan-b (codex read-only, plan rides the attested payload). Both see the SAME
+    //     frozen evidence + rubric; neither sees the peer's identity, model, receipt, or the run
+    //     token/seed. A promised head that dies at DRAFTS ⇒ FC-1 promised-head rule: DEGRADED, but we
+    //     still produce a DRAFT master plan from the survivor (the v3.0.1 single-plan guard) — the plan
+    //     exists for the operator yet never advances as authoritative (Law BLOCKED, council terminal
+    //     DEGRADED). No fable→opus substitution, no sonnet stand-in for Sol (twoHeads:'required'). ═══
+    const frozenInputs = [visionFile, `${docsDir}/architecture.md`, `${docsDir}/tech-stack.md`, `${docsDir}/arch-constraints.md`].concat(researchPresent ? [researchFile] : [])
+    const anchor = await agent(anchorPrompt(frozenInputs), { label: 'thoth:council-anchor', phase: 'The Council', model: 'haiku', schema: ANCHOR_SCHEMA })
+    // EXACT coverage (Sol F6): every frozen input present exactly once with a real 64-hex digest and NO
+    // extra paths — a certificate must never bind a manifest missing VISION or the constraints.
+    const anchorFiles = (anchor && Array.isArray(anchor.files)) ? anchor.files.filter((f) => f && typeof f.path === 'string' && typeof f.sha256 === 'string' && SHA64_RE.test(f.sha256)) : []
+    const anchorPaths = anchorFiles.map((f) => f.path)
+    const anchorExact =
+      anchor && Array.isArray(anchor.files) && anchorFiles.length === anchor.files.length &&
+      anchorFiles.length === frozenInputs.length &&
+      new Set(anchorPaths).size === anchorFiles.length &&
+      frozenInputs.every((p) => anchorPaths.includes(p))
+    if (!anchorExact) {
+      // Fail closed: a dead/garbled/partial anchor cannot bind the council's evidence ⇒ DEGRADED (still draft).
+      await degradeCouncil('evidence', 'council-anchor did not produce an exact evidence manifest (every frozen input exactly once, 64-hex digests, no extras)', 'The Council')
+      plans = []
+    } else {
+      const manifest = {}
+      for (const f of anchorFiles) manifest[f.path] = f.sha256
+      evidenceManifestHash = sha256Hex(canonicalJson(manifest))
+      evidenceInputHashes = Object.keys(manifest).sort().map((k) => manifest[k])
+      councilInitialSeq = (anchor.initial_ledger_seq === null || Number.isInteger(anchor.initial_ledger_seq)) ? anchor.initial_ledger_seq : null
+      // seed — run-bound entropy (councilSeed). Reserved for B3 divergence-id derivation; it NEVER
+      // appears in any prompt (anonymity + tie-break-unpredictability rails). Bound here so the
+      // checkpoint chain and the blindness rails bind against the REAL seed.
+      councilSeedDigest = councilSeed({ protocolVersion: COUNCIL_PROTOCOL_VERSION, runToken, initialSeq: councilInitialSeq, keystoneId, templateHash })
+      const solDraft = solWrapperPrompt({ phaseTag: 'DRAFTS', attempt: 1, effort: 'high', payloadSchema: SOL_DRAFT_PAYLOAD_SCHEMA, taskText: DRAFT_TASK, briefBody: planBrief, packetObj: { inputs: frozenInputs, foundation_summary: foundation && foundation.summary, testing_rigor: testingRigor }, extractTo: `${plansDir}/plan-b.md` })
+      const sinkS = {}
+      const [fablePlan, solPayload] = await parallel([
+        () => agent(fableDraftPrompt(planBrief), { label: 'fable:draft', phase: 'The Council', model: 'fable', effort: 'high', schema: PLAN_SCHEMA }),
+        () => gateAgent(solDraft.prompt, { label: 'sol:draft', phase: 'The Council', model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(SOL_DRAFT_PAYLOAD_SCHEMA), provenance: sinkS }),
+      ])
+      let solCross = { ledger_verified: false }
+      if (solPayload != null && sinkS.receipt_verified === true) solCross = await runSolCrossCheck('sol:draft', 'DRAFTS', solDraft.files.out, sinkS, solPayload, 'The Council')
+      pushSolReceipt('sol:draft', sinkS, solCross)
+      const fableAlive = fablePlan != null
+      const solAlive = solPayload != null && sinkS.receipt_verified === true && solCross.ledger_verified === true
+      if (!fableAlive || !solAlive) {
+        const missing = !fableAlive && !solAlive ? 'both' : (!fableAlive ? 'fable' : 'sol')
+        await degradeCouncil(missing, `head death at DRAFTS (${missing})`, 'The Council')
+        // Draft-death SYMMETRY (Fable second key F13): the Sol plan is UNTRUSTED on any Sol-seat death,
+        // but a FABLE death with a fully-verified Sol (payload + structural receipt + ledger-verified
+        // cross-check) keeps the ATTESTED plan-b as the single-plan survivor — the terminal is still
+        // DEGRADED and the Law still blocks; only the DRAFT source material changes.
+        plans = []
+        if (fableAlive) plans.push({ ...fablePlan, slot: 'a' })
+        else if (solAlive) plans.push({ slot: 'b', plan_file: `${plansDir}/plan-b.md`, approach_summary: solPayload.approach_summary, milestones: solPayload.milestones })
+      } else {
+        const seatHashes = await agent(seatHashPrompt(`${plansDir}/plan-a.md`, `${plansDir}/plan-b.md`), { label: 'thoth:seat-hashes', phase: 'The Council', model: 'haiku', schema: SEAT_HASH_SCHEMA })
+        await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'DRAFTS_SEALED', decision_bundle_hash: null, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: { P0: seatHashes && seatHashes.plan_a_sha256 ? seatHashes.plan_a_sha256 : null, P1: seatHashes && seatHashes.plan_b_sha256 ? seatHashes.plan_b_sha256 : null }, seat_provenance: { P0: { head: 'fable', model: 'fable' }, P1: seatProv(sinkS, 'sol') }, codex_receipt_hash: solCross.codex_receipt_hash, status: 'sealed' }, 'The Council')
+        // The plans shim: the payload carries approach_summary/milestones; the lantern/plato read
+        // plan-a.md / plan-b.md from disk (both written), UNCHANGED — anonymity preserved (no receipt/
+        // model/token leaks in any lantern or plato prompt).
+        plans = [
+          { ...fablePlan, slot: 'a' },
+          { slot: 'b', plan_file: `${plansDir}/plan-b.md`, approach_summary: solPayload.approach_summary, milestones: solPayload.milestones },
+        ]
+      }
+    }
+  } else {
+    // Scope ruling item 6: a PROMISED council (T4 + codex) launched without the run token reaches
+    // here (councilCapable false) on the FULL path — the promise never silently downgrades to a
+    // clean v3.0.1 label. The v3.0.1 pair still drafts (a DRAFT plan for the operator), but the
+    // council terminal is DEGRADED and the Law is BLOCKED. Lite and sub-T4 routes are untouched.
+    if (councilPromised) await degradeCouncil('both', 'runToken absent — a T4 launch missing the conductor-minted run token cannot bind council receipts or the seed', 'The Council')
+    const planners = [
+      () => agent(
+        voice('opus') +
+        `You are the slot-A planner (Claude-side, deep reasoning). Write your plan to ${plansDir}/plan-a.md.\n${planBrief}`,
+        { label: 'confucius:plan', phase: 'The Council', model: 'opus', schema: PLAN_SCHEMA }
+      ),
+      () => agent(
+        codexAvailable
+          ? `You are the slot-B planner (Codex-side). ${codexHowto} Write the plan to ${plansDir}/plan-b.md.\n${planBrief}`
+          : `You are the slot-B planner (independent Sonnet reasoning — Codex unavailable). Write your plan to ` +
+            `${plansDir}/plan-b.md, taking a deliberately different architectural angle so the comparison is meaningful.\n${planBrief}`,
+        // Sun Tzu is the Codex seat; on the no-codex branch the Sonnet fallback is Miyamoto's
+        // (a label must name the seat that actually runs — never a ghost credit).
+        { label: codexAvailable ? 'sun-tzu:plan' : 'miyamoto:plan', phase: 'The Council', model: 'sonnet', schema: PLAN_SCHEMA }
+      ),
+    ]
+    plans = (await parallel(planners)).filter(Boolean)
+  }
   log(`${plans.length}/2 plans written (${plans.map((p) => p.slot).join(', ')})`)
 
   if (plans.length < 2) {
@@ -558,6 +1065,305 @@ for (let round = 0; round < validationPasses; round++) {
   )) || synth
 }
 
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// ── The Twin Council: blind dual ratification of the master plan (constitution §1–4; sol-b34-design
+//    §6). Runs at T4 on the FULL path once Athena PASSes and the draft pair sealed (no prior degrade).
+//    Blind simultaneous verdicts → one bounded answer exchange on any BLOCK (executable checks settled
+//    by exit code) → one blind re-verdict → an HONEST terminal (RATIFIED certificate / COUNCIL_DEADLOCK
+//    / DEGRADED). The B3 fresh-context re-adjudication ladder slots between RATIFY_2 and the deadlock
+//    terminal; until then the conductor's gated operator checkpoint is the resolution authority. ──
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+const runTwinCouncilRatify = async () => {
+  const phaseName = 'Athena Weighs'
+  // The evidence docs a ratifier reads (anonymous — never named by authorship path).
+  const evidenceDocs = [masterPlanFile, `${docsDir}/architecture.md`, `${docsDir}/tech-stack.md`, `${docsDir}/arch-constraints.md`, visionFile].concat(researchPresent ? [researchFile] : [])
+  const ratifyInputs = `<inputs>\n- The master plan: ${masterPlanFile}\n- Evidence docs: ${evidenceDocs.join(', ')}\n</inputs>`
+  const bindingLine = (bH, pH) => `Binding: artifact_hash = "${bH}" (echo it VERBATIM). plan_sha256 = ${pH}. evidence_manifest_hash = ${evidenceManifestHash}. divergence_selections = [] (no open divergences this round).`
+  // F7: the round-two prompt carries THAT head's exchange evidence — the other head's answers to its
+  // OWN standing findings, the executable-check transcripts where one ran, and the changes Plato
+  // already applied. Attribution is only ever "the other head" — no identity, receipt, model, or
+  // token rides in (the blindness rails extend here, test-asserted).
+  const exchangeBlock = (exchange) => exchange
+    ? `\n<exchange-evidence>\nAnswers from the other head to YOUR prior blocking findings (ACCEPT = the change is already applied to the plan; REFUTE = their evidence against it), the executable-check transcripts where one ran (the exit code already ruled), and the applied changes. The plan file is the AMENDED artifact.\n${JSON.stringify(exchange)}\n</exchange-evidence>\n`
+    : ''
+  const fableRatifyPrompt = (suffix, bH, pH, exchange) =>
+    `You are a council ratifier (${suffix}) — rule the master plan against the fixed rubric, blind and independent.\n\n` +
+    `${ratifyInputs}\n\n<rubric>\n${COUNCIL_RUBRIC}\n</rubric>\n\n` +
+    `<binding>\n${bindingLine(bH, pH)}\n</binding>\n` +
+    exchangeBlock(exchange) +
+    `\n<task>${RATIFY_TASK}\nEmit the evidence-bound findings + changed_evidence + divergence_selections FIRST, then the verdict (evidence-before-commit); reasoning is optional, last, and under 50 words. ${PAYLOAD_FIRST}</task>`
+  const fableAnswerPrompt = (findings) =>
+    `You are the OTHER head, answering blocking findings raised against the master plan, blind and independent.\n\n` +
+    `${ratifyInputs}\n\n<findings-to-answer>\n${findings.map((f) => `- ${f.finding_id}: ${f.claim} → required_change: ${f.required_change}`).join('\n')}\n</findings-to-answer>\n\n` +
+    `<task>${ANSWER_TASK} Emit answers first; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`
+  const platoRevisePrompt = (changes) =>
+    voice('opus') +
+    `You are the plan chairman, revising ${masterPlanFile} to fold in the council-accepted corrections.\n\n` +
+    `<inputs>\nAccepted required-changes (apply each):\n${changes.map((c) => `- ${c}`).join('\n')}\n</inputs>\n\n` +
+    `<task>Apply the accepted changes and rewrite the file (keep surfaces + executable acceptance criteria + every SC id).${handoffFoldClause} Emit master_plan_file, the updated milestone_count, and milestone list first; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`
+  // F2: an empty/duplicate/evidence-free BLOCK or NEITHER is an INVALID verdict — a head that fails to
+  // seal a valid verdict is a missing head (constitution §8) ⇒ DEGRADED, never a silent standing-free
+  // block that a bare round-two APPROVE could clear. Returns null (valid) or the defect string.
+  const verdictShapeError = (r) => {
+    if (!(r.verdict === 'BLOCK' || r.verdict === 'NEITHER')) return null
+    const fs = Array.isArray(r.findings) ? r.findings : []
+    if (!fs.length) return `${r.verdict} with no findings`
+    const seen = new Set()
+    for (const f of fs) {
+      if (!f || typeof f.finding_id !== 'string' || !f.finding_id) return 'a finding without a finding_id'
+      if (seen.has(f.finding_id)) return `duplicate finding_id '${f.finding_id}'`
+      seen.add(f.finding_id)
+      const hasRefs = Array.isArray(f.evidence_refs) && f.evidence_refs.length > 0
+      const hasCheck = typeof f.executable_check === 'string' && f.executable_check.trim() !== ''
+      if (!hasRefs && !hasCheck) return `finding '${f.finding_id}' is evidence-free (no refs, no check)`
+    }
+    return null
+  }
+  // F8: an answer set is RELATIONALLY validated — exactly one answer per requested finding, no unknown
+  // or duplicate ids, enum-legal, a REFUTE evidence-bound. An invalid set is a failed exchange duty by
+  // the ANSWERING head ⇒ DEGRADED naming it (a schema-valid-but-empty set no longer sails through).
+  const answerSetError = (requested, ans) => {
+    const ids = requested.map((f) => f.finding_id)
+    const list = ans && Array.isArray(ans.answers) ? ans.answers : null
+    if (!list) return 'no answers array'
+    const seen = new Set()
+    for (const a of list) {
+      if (!a || !ids.includes(a.finding_id)) return `answer targets an unknown finding '${a && a.finding_id}'`
+      if (seen.has(a.finding_id)) return `duplicate answer for '${a.finding_id}'`
+      seen.add(a.finding_id)
+      if (a.answer !== 'ACCEPT' && a.answer !== 'REFUTE') return `answer for '${a.finding_id}' outside ACCEPT|REFUTE`
+      if (a.answer === 'REFUTE' && !(Array.isArray(a.evidence_refs) && a.evidence_refs.length > 0)) return `REFUTE of '${a.finding_id}' carries no evidence`
+    }
+    for (const id of ids) if (!seen.has(id)) return `finding '${id}' left unanswered`
+    return null
+  }
+  // runBlindVerdict — the sealed-before-exposed pair: Fable and receipt-attested Sol rule blind, in
+  // parallel. Sol death / invalid receipt / failed cross-check ⇒ DEGRADED (constitution §8: a missing
+  // head is degradation, not deadlock). BLINDNESS RAILS: the fable prompt never mentions
+  // codex/receipt/session/Sol; the sol packet never mentions fable; neither reveals the plan's
+  // authorship path or the run token/seed.
+  const runBlindVerdict = async (phaseTag, suffix, bH, pH, exchange) => {
+    const sinkF = {}, sinkS = {}
+    const ex = exchange || {}
+    // Sol-side exchange evidence (F7) rides the packet + one briefBody line; the fable-side rides the
+    // <exchange-evidence> prompt block. Both carry ONLY that head's own-finding answers/transcripts.
+    const solBrief = `${bindingLine(bH, pH)}\nRubric:\n${COUNCIL_RUBRIC}` +
+      (ex.sol ? `\nExchange evidence for YOUR prior blocking findings (the other head's answers, the executable-check transcripts, the applied changes) rides in the packet's exchange field; the plan file is the AMENDED artifact.` : '')
+    const solR = solWrapperPrompt({ phaseTag, attempt: 1, effort: 'xhigh', payloadSchema: RATIFY_SCHEMA, taskText: RATIFY_TASK, briefBody: solBrief, packetObj: { master_plan: masterPlanFile, evidence: evidenceDocs, artifact_hash: bH, plan_sha256: pH, evidence_manifest_hash: evidenceManifestHash, exchange: ex.sol != null ? ex.sol : null } })
+    const [rF, rS] = await parallel([
+      () => gateAgent(fableRatifyPrompt(suffix, bH, pH, ex.fable != null ? ex.fable : null), { label: `fable:ratify:${suffix}`, phase: phaseName, model: 'fable', effort: 'xhigh', twoHeads: 'required', schema: RATIFY_SCHEMA, provenance: sinkF }),
+      () => gateAgent(solR.prompt, { label: `sol:ratify:${suffix}`, phase: phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(RATIFY_SCHEMA), provenance: sinkS }),
+    ])
+    let solCross = { ledger_verified: false }
+    if (rS != null && sinkS.receipt_verified === true) solCross = await runSolCrossCheck(`sol:ratify:${suffix}`, phaseTag, solR.files.out, sinkS, rS, phaseName)
+    pushSolReceipt(`sol:ratify:${suffix}`, sinkS, solCross)
+    const solOk = rS != null && sinkS.receipt_verified === true && solCross.ledger_verified === true
+    if (rF == null || !solOk) {
+      const missing = rF == null && !solOk ? 'both' : (rF == null ? 'fable' : 'sol')
+      await degradeCouncil(missing, `seat death at ${phaseTag} (${missing})`, phaseName)
+      return { degraded: true }
+    }
+    return { degraded: false, rF, rS, sinkF, sinkS, solCross }
+  }
+  // runSolAnswerLeg — the Sol side of the answer exchange (receipt-attested, phase ANSWER_EXCHANGE).
+  // Returns sink + cross so the ANSWER_EXCHANGE_SEALED checkpoint can carry provenance + receipt (F10).
+  const runSolAnswerLeg = async (findings) => {
+    const sink = {}
+    const sol = solWrapperPrompt({ phaseTag: 'ANSWER_EXCHANGE', attempt: 1, effort: 'high', payloadSchema: ANSWER_SCHEMA, taskText: ANSWER_TASK, briefBody: `Findings to answer:\n${findings.map((f) => `- ${f.finding_id}: ${f.claim} → required_change: ${f.required_change}`).join('\n')}`, packetObj: { master_plan: masterPlanFile, evidence: evidenceDocs, findings } })
+    const payload = await gateAgent(sol.prompt, { label: 'sol:answer', phase: phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(ANSWER_SCHEMA), provenance: sink })
+    let cross = { ledger_verified: false }
+    if (payload != null && sink.receipt_verified === true) cross = await runSolCrossCheck('sol:answer', 'ANSWER_EXCHANGE', sol.files.out, sink, payload, phaseName)
+    pushSolReceipt('sol:answer', sink, cross)
+    if (!(payload != null && sink.receipt_verified === true && cross.ledger_verified === true)) { await degradeCouncil('sol', 'Sol seat death during the answer exchange', phaseName); return { degraded: true } }
+    return { degraded: false, payload, sink, cross }
+  }
+
+  // ── ratify-anchor r1: hash the (possibly Plato-revised) master plan — the binding plan_sha256.
+  //    F3: ONLY a real 64-hex digest binds; anything else degrades — never a guessed/stale hash. ──
+  const ra = await agent(planHashPrompt(masterPlanFile), { label: 'thoth:ratify-anchor:r1', phase: phaseName, model: 'haiku', schema: PLAN_HASH_SCHEMA })
+  const planHash = ra && typeof ra.plan_sha256 === 'string' && SHA64_RE.test(ra.plan_sha256) ? ra.plan_sha256 : null
+  if (!planHash) { await degradeCouncil('evidence', 'ratify-anchor produced no valid plan hash', phaseName); return }
+  // The 1b-ii decision bundle: an EMPTY open-divergence set is the HONEST bundle — the mechanical
+  // divergence machine is B3. common_trunk carries the plan + its hash + milestones.
+  const bundleH = buildDecisionBundle({ common_trunk: { master_plan_file: masterPlanFile, plan_sha256: planHash, milestones: (synth && synth.milestones) || [] }, settled_decisions: {}, open_divergences: [], renderer_version: RENDERER_VERSION, evidence_manifest_hash: evidenceManifestHash }).hash
+
+  // ── RATIFY_1: blind simultaneous verdicts ──
+  const r1 = await runBlindVerdict('RATIFY_1', 'r1', bundleH, planHash, null)
+  if (r1.degraded) return
+  const vF1 = validateRatification(r1.rF, { bundle_hash: bundleH, open_divergence_ids: [] })
+  const vS1 = validateRatification(r1.rS, { bundle_hash: bundleH, open_divergence_ids: [] })
+  // F2 rail: an empty, duplicate-id, or evidence-free BLOCK/NEITHER is ALSO an invalid verdict — a
+  // standing-free block would otherwise be clearable by a bare round-two APPROVE.
+  const shapeF1 = verdictShapeError(r1.rF), shapeS1 = verdictShapeError(r1.rS)
+  if (!vF1.valid || !vS1.valid || shapeF1 || shapeS1) {
+    // A head that failed to seal a VALID verdict (bad echo / malformed / evidence-free findings) is a
+    // missing head (constitution §8: a missing head is degradation, not deadlock) — fail closed.
+    const fBad = !vF1.valid || !!shapeF1, sBad = !vS1.valid || !!shapeS1
+    await degradeCouncil(fBad && sBad ? 'both' : (fBad ? 'fable' : 'sol'), `invalid ratification at RATIFY_1 (${[fBad ? `fable${shapeF1 ? `: ${shapeF1}` : ''}` : null, sBad ? `sol${shapeS1 ? `: ${shapeS1}` : ''}` : null].filter(Boolean).join('; ')})`, phaseName)
+    return
+  }
+  if (r1.rF.verdict === 'APPROVE' && r1.rS.verdict === 'APPROVE') { await sealRatified(r1.rF, r1.rS, r1.sinkF, r1.sinkS, bundleH, planHash, r1.solCross, 'RATIFY_1_SEALED', phaseName); return }
+
+  // ── Any BLOCK/NEITHER ⇒ exactly ONE answer exchange (constitution §3). A NEITHER is a legal verdict
+  //    (§7): its findings name the defects, so it is treated like a BLOCK for the exchange. ──
+  await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'RATIFY_1_SEALED', decision_bundle_hash: bundleH, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: { P0: sha256Hex(canonicalJson(r1.rF)), P1: sha256Hex(canonicalJson(r1.rS)) }, seat_provenance: { P0: seatProv(r1.sinkF, 'fable'), P1: seatProv(r1.sinkS, 'sol') }, codex_receipt_hash: r1.solCross.codex_receipt_hash, status: 'sealed' }, phaseName)
+  const standingFindings = (r) => (r.verdict === 'BLOCK' || r.verdict === 'NEITHER') ? (Array.isArray(r.findings) ? r.findings : []) : []
+  const fableBlocks = standingFindings(r1.rF)
+  const solBlocks = standingFindings(r1.rS)
+  // ── Executable-check floor FIRST: a check is DATA until the bounded executor runs it — never let a
+  //    head run its own check. Identity is SEAT-SCOPED (F4: `head|finding_id` — a same-string id from
+  //    the other head can never alias; the scoping lives in the SCRIPT's keys, never in a prompt).
+  //    Execution is FILE-BOUND (F9): the check text lands verbatim in a script file and ONE timeout
+  //    wraps the whole thing. Three states: 'confirmed' (exit 0, id-matched — the defect is
+  //    demonstrably present, class executed_check), 'refuted' (clean nonzero, id-matched — retired
+  //    MECHANICALLY), 'unrun' (no projectPath / mute / garbled / id-mismatched transcript, OR the
+  //    infrastructure exits 124/126/127 — timeout / not-executable / not-found mean the check never
+  //    truly RAN, so it can neither confirm nor refute; the block STANDS as proposed_check. Scope
+  //    ruling item 2 — the residual misclassification risk of a dependency failure deep in a compound
+  //    is ACCEPTED and recorded; the blocking head re-rules at RATIFY_2 with the state visible). ──
+  const seatKey = (head, id) => `${head}|${id}`
+  const checkState = new Map() // seatKey → 'confirmed' | 'refuted' | 'unrun'
+  const checkExit = new Map()  // seatKey → the id-matched exit code (null when the check never ran) — the TYPED evidence heads see
+  if (!projectPath) log('TWIN COUNCIL: projectPath absent — executable checks are NOT run; every checked finding stands as proposed_check (fail-closed)')
+  const INFRA_EXITS = [124, 126, 127] // timeout / found-but-not-executable / command-not-found
+  const runChecksFor = async (head, findings) => {
+    for (const f of findings) {
+      if (!(f && typeof f.executable_check === 'string' && f.executable_check.trim() !== '')) continue
+      const key = seatKey(head, f.finding_id)
+      if (!projectPath) { checkState.set(key, 'unrun'); continue }
+      const checkFile = `${councilDir}/check-${key.replace(/[^A-Za-z0-9._-]/g, '-')}.check.sh`
+      const res = await agent(execCheckPrompt(f, checkFile), { label: `thoth:exec-check:${f.finding_id}`, phase: phaseName, model: 'sonnet', schema: EXEC_CHECK_SCHEMA })
+      if (res && res.finding_id === f.finding_id && Number.isInteger(res.exit)) {
+        checkExit.set(key, res.exit)
+        checkState.set(key, res.exit === 0 ? 'confirmed' : (INFRA_EXITS.includes(res.exit) ? 'unrun' : 'refuted'))
+      } else checkState.set(key, 'unrun')
+    }
+  }
+  await runChecksFor('fable', fableBlocks)
+  await runChecksFor('sol', solBlocks)
+  const remainingFable = fableBlocks.filter((f) => f && f.finding_id && checkState.get(seatKey('fable', f.finding_id)) !== 'refuted') // answered by SOL
+  const remainingSol = solBlocks.filter((f) => f && f.finding_id && checkState.get(seatKey('sol', f.finding_id)) !== 'refuted')      // answered by FABLE
+  let solAnswers = { answers: [] }, fableAnswers = { answers: [] }
+  let solAnswerSink = null, solAnswerCross = null, fableAnswerSink = null
+  if (remainingFable.length) {
+    const ans = await runSolAnswerLeg(remainingFable)
+    if (ans.degraded) return
+    // F8: relational validation — a schema-valid-but-incomplete answer set is a FAILED exchange duty
+    // by the ANSWERING head (here Sol) ⇒ DEGRADED naming it.
+    const err = answerSetError(remainingFable, ans.payload)
+    if (err) { await degradeCouncil('sol', `invalid answer set from the Sol head (${err})`, phaseName); return }
+    solAnswers = ans.payload
+    solAnswerSink = ans.sink
+    solAnswerCross = ans.cross
+  }
+  if (remainingSol.length) {
+    fableAnswerSink = {}
+    const fa = await gateAgent(fableAnswerPrompt(remainingSol), { label: 'fable:answer', phase: phaseName, model: 'fable', effort: 'high', twoHeads: 'required', schema: ANSWER_SCHEMA, provenance: fableAnswerSink })
+    if (fa == null) { await degradeCouncil('fable', 'Fable seat death during the answer exchange', phaseName); return }
+    const err = answerSetError(remainingSol, fa)
+    if (err) { await degradeCouncil('fable', `invalid answer set from the Fable head (${err})`, phaseName); return }
+    fableAnswers = fa
+  }
+  // ── Seal the exchange barrier FIRST (scope ruling item 3): ANSWER_EXCHANGE_SEALED is bound to
+  //    bundle₁ — the artifact the answers were RENDERED AGAINST — and lands BEFORE Plato consumes the
+  //    answers and BEFORE the rehash, so the sealed record can never absorb a post-hoc amendment.
+  //    It carries the paired answer artifacts + both answer-leg provenances + the Sol answer leg's
+  //    receipt hash (F10) — an unanswered side hashes its empty {answers:[]} honestly. ──
+  await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'ANSWER_EXCHANGE_SEALED', decision_bundle_hash: bundleH, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: { P0: sha256Hex(canonicalJson(fableAnswers)), P1: sha256Hex(canonicalJson(solAnswers)) }, seat_provenance: { P0: fableAnswerSink ? seatProv(fableAnswerSink, 'fable') : null, P1: solAnswerSink ? seatProv(solAnswerSink, 'sol') : null }, codex_receipt_hash: solAnswerCross && solAnswerCross.codex_receipt_hash ? solAnswerCross.codex_receipt_hash : null, status: 'sealed' }, phaseName)
+  // ACCEPTED findings' required_change texts → ONE plato revision. Acceptance is SEAT-SCOPED (F4):
+  // Sol answers fable-raised findings, Fable answers sol-raised ones — a same-string id across heads
+  // never aliases. REFUTE answers retire NOTHING by themselves — the blocking head re-rules having
+  // seen them (peer refutation is re-verdict input, never a script-side retirement).
+  const acceptedKeys = new Set()
+  for (const a of (Array.isArray(solAnswers.answers) ? solAnswers.answers : [])) if (a && a.answer === 'ACCEPT') acceptedKeys.add(seatKey('fable', a.finding_id))
+  for (const a of (Array.isArray(fableAnswers.answers) ? fableAnswers.answers : [])) if (a && a.answer === 'ACCEPT') acceptedKeys.add(seatKey('sol', a.finding_id))
+  const acceptedChanges = [
+    ...remainingFable.filter((f) => acceptedKeys.has(seatKey('fable', f.finding_id))),
+    ...remainingSol.filter((f) => acceptedKeys.has(seatKey('sol', f.finding_id))),
+  ].map((f) => f.required_change)
+  if (acceptedChanges.length) {
+    synth = (await agent(platoRevisePrompt(acceptedChanges), { label: 'plato:revise:council', phase: 'One From Many', model: 'opus', schema: SYNTH_SCHEMA })) || synth
+  }
+  // ── re-hash the amended plan + rebuild the bundle (bundleH2, planHash2). F3: a mute/invalid SECOND
+  //    anchor ALSO degrades — the certificate must NEVER bind the stale pre-revision hash while the
+  //    Law would compile the changed file. ──
+  const ra2 = await agent(planHashPrompt(masterPlanFile), { label: 'thoth:ratify-anchor:r2', phase: phaseName, model: 'haiku', schema: PLAN_HASH_SCHEMA })
+  const planHash2 = ra2 && typeof ra2.plan_sha256 === 'string' && SHA64_RE.test(ra2.plan_sha256) ? ra2.plan_sha256 : null
+  if (!planHash2) { await degradeCouncil('evidence', 'post-revision rehash failed — the amended plan has no valid hash (never binding the stale pre-revision hash)', phaseName); return }
+  const bundleH2 = buildDecisionBundle({ common_trunk: { master_plan_file: masterPlanFile, plan_sha256: planHash2, milestones: (synth && synth.milestones) || [] }, settled_decisions: {}, open_divergences: [], renderer_version: RENDERER_VERSION, evidence_manifest_hash: evidenceManifestHash }).hash
+  // Standing blocks per head (own prior blocking findings minus the check-refuted), with HONEST
+  // evidence classes (F5): a runner-CONFIRMED check is executed_check (a real execution happened); a
+  // checked-but-unrun finding is proposed_check; an unchecked finding keeps its DECLARED class with
+  // claim_type derived via claimTypeForClass — an unrecognized class stays as-is so compareEvidence
+  // rules it INCOMPARABLE and the block stands (fail-closed; never coerce to scenario). At RATIFY_2
+  // that head's APPROVE must carry changed_evidence equal-or-stronger, or the block STANDS
+  // (validateRatification enforces the anti-capitulation rail via validateReversal).
+  const standingBlockOf = (head) => (f) => {
+    const hasCheck = typeof f.executable_check === 'string' && f.executable_check.trim() !== ''
+    if (hasCheck) {
+      const cls = checkState.get(seatKey(head, f.finding_id)) === 'confirmed' ? 'executed_check' : 'proposed_check'
+      return { finding_id: f.finding_id, evidence: { class: cls }, claim_type: 'executable' }
+    }
+    return { finding_id: f.finding_id, evidence: { class: f.evidence_class }, claim_type: claimTypeForClass(f.evidence_class) }
+  }
+  const fableStanding = remainingFable.map(standingBlockOf('fable'))
+  const solStanding = remainingSol.map(standingBlockOf('sol'))
+  // F7 as bounded by scope ruling item 5: each round-two head sees, for its OWN standing findings
+  // only — the finding itself (claim, required_change, evidence_refs, evidence_class), the other
+  // head's answer (attributed ONLY as "the other head"), and the TYPED check state (state + exit
+  // code ONLY — raw stdout/stderr tails NEVER enter any head prompt; they live on disk and in the
+  // runner leg's transcript). No identity, receipt, session, model, or token count rides in.
+  const exchangeFor = (head, own, peerAnswers) => {
+    if (!own.length) return null
+    const answersList = Array.isArray(peerAnswers.answers) ? peerAnswers.answers : []
+    return {
+      findings: own.map((f) => {
+        const key = seatKey(head, f.finding_id)
+        const a = answersList.find((x) => x && x.finding_id === f.finding_id) || null
+        const hasCheck = typeof f.executable_check === 'string' && f.executable_check.trim() !== ''
+        return {
+          finding_id: f.finding_id,
+          claim: f.claim,
+          required_change: f.required_change,
+          evidence_refs: Array.isArray(f.evidence_refs) ? f.evidence_refs : [],
+          evidence_class: f.evidence_class != null ? f.evidence_class : null,
+          other_head_answer: a ? { answer: a.answer, evidence_refs: a.evidence_refs, evidence_class: a.evidence_class != null ? a.evidence_class : null } : null,
+          check: hasCheck ? { state: checkState.get(key) || 'unrun', exit: checkExit.has(key) ? checkExit.get(key) : null } : null,
+        }
+      }),
+      applied_changes: acceptedChanges,
+    }
+  }
+  const exchange = { fable: exchangeFor('fable', remainingFable, solAnswers), sol: exchangeFor('sol', remainingSol, fableAnswers) }
+
+  // ── RATIFY_2: blind re-verdict over the amended bundle ──
+  const r2 = await runBlindVerdict('RATIFY_2', 'r2', bundleH2, planHash2, exchange)
+  if (r2.degraded) return
+  const vF2 = validateRatification(r2.rF, { bundle_hash: bundleH2, open_divergence_ids: [], standing_blocks: fableStanding })
+  const vS2 = validateRatification(r2.rS, { bundle_hash: bundleH2, open_divergence_ids: [], standing_blocks: solStanding })
+  // A STRUCTURAL invalidity (bad echo / malformed / evidence-free findings — the F2 rail again) is a
+  // missing head ⇒ DEGRADED; an unevidenced reversal is NOT structural — it leaves the prior block
+  // standing (the anti-capitulation rail), which is persistent disagreement ⇒ COUNCIL_DEADLOCK below.
+  const structuralErr = (v) => v.errors.some((e) => e.code !== 'unevidenced_reversal')
+  const shapeF2 = verdictShapeError(r2.rF), shapeS2 = verdictShapeError(r2.rS)
+  const fBad2 = structuralErr(vF2) || !!shapeF2, sBad2 = structuralErr(vS2) || !!shapeS2
+  if (fBad2 || sBad2) { await degradeCouncil(fBad2 && sBad2 ? 'both' : (fBad2 ? 'fable' : 'sol'), `invalid ratification at RATIFY_2${shapeF2 ? ` (fable: ${shapeF2})` : ''}${shapeS2 ? ` (sol: ${shapeS2})` : ''}`, phaseName); return }
+  if (r2.rF.verdict === 'APPROVE' && r2.rS.verdict === 'APPROVE' && vF2.valid && vS2.valid) {
+    await sealRatified(r2.rF, r2.rS, r2.sinkF, r2.sinkS, bundleH2, planHash2, r2.solCross, 'RATIFY_2_SEALED', phaseName)
+    return
+  }
+  // Persistent disagreement after RATIFY_2 (any surviving BLOCK/NEITHER, incl. dual NEITHER, or an
+  // unevidenced-reversal block that STANDS). F10: round two is a completed paired barrier — seal
+  // RATIFY_2_SEALED (verdict hashes + provenance + receipt) BEFORE the honest COUNCIL_DEADLOCK
+  // terminal. Never synthesize, never pick a winner, never demote to a v3.0.1 label.
+  await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'RATIFY_2_SEALED', decision_bundle_hash: bundleH2, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: { P0: sha256Hex(canonicalJson(r2.rF)), P1: sha256Hex(canonicalJson(r2.rS)) }, seat_provenance: { P0: seatProv(r2.sinkF, 'fable'), P1: seatProv(r2.sinkS, 'sol') }, codex_receipt_hash: r2.solCross.codex_receipt_hash, status: 'sealed' }, phaseName)
+  const cards = [...standingFindings(r2.rF), ...standingFindings(r2.rS), ...fableStanding.filter(() => !vF2.valid && r2.rF.verdict === 'APPROVE'), ...solStanding.filter(() => !vS2.valid && r2.rS.verdict === 'APPROVE')].map((f) => ({ finding_id: f.finding_id, claim: f.claim || 'standing block (unevidenced reversal)', required_change: f.required_change || 'operator resolution' }))
+  await deadlockCouncil(cards.length ? cards : [{ finding_id: 'ratify-2', claim: 'persistent disagreement', required_change: 'operator resolution' }], phaseName)
+}
+if (councilCapable && !liteScope && verdict && verdict.verdict === 'PASS' && councilTerminal === null) {
+  await runTwinCouncilRatify()
+}
+
 // ── The Law: Asimov compiles the locked acceptance gates (BLUEPRINT §5/§5.1) ──
 // A §3.4 FLOOR: the Law compiles + locks at ANY posture, lite path included. Runs only after
 // Athena PASS (locking gates compiled from an unvalidated plan would lock the wrong law); every
@@ -571,6 +1377,11 @@ let lawReason = null
 let lawChecks = [] // hoisted: the return derives law_check_count from it on every path
 if (!(verdict && verdict.verdict === 'PASS')) {
   lawReason = 'master plan never reached Athena PASS — the Law locks only a validated plan'
+} else if (councilPromised && !liteScope && councilTerminal !== 'RATIFIED') {
+  // On the twin-council path (PROMISED — a missing runToken cannot buy the way out; scope ruling
+  // item 6) the Law's precondition is Athena PASS AND a valid certificate: a DEGRADED,
+  // COUNCIL_DEADLOCK, or absent terminal locks nothing. Every OTHER path keeps the v3.0.1 precondition.
+  lawReason = `master plan not council-ratified (${councilTerminal || 'no certificate'}) — on the twin-council path the Law locks only a ratified plan`
 } else if (!projectPath) {
   lawReason = 'projectPath absent — acceptance checks are project-native (tests/acceptance/) and cannot be written'
 } else {
@@ -893,6 +1704,15 @@ const existence = await agent(
 const missing = (existence && existence.missing) || []
 if (missing.length) log(`MISSING claimed artifact(s): ${missing.join(', ')}`)
 
+// The council path label + honest reason (a consumer can NEVER derive twin_ratified or second-family
+// verification from a non-council run). The PROMISED full path is 'twin_council' even when the
+// runToken was missing (scope ruling item 6 — that run carries terminal DEGRADED, reason
+// 'runToken absent', never a clean v301 label). Lite and sub-T4 stay 'v301'.
+let councilPathReason = null
+if (councilPromised && !liteScope) councilPathReason = councilCapable ? null : 'runToken absent'
+else if (councilPromised && liteScope) councilPathReason = 'lite path'
+else councilPathReason = 'sub-T4 tier'
+
 return {
   master_plan_file: masterPlanFile,
   milestone_count: synth && synth.milestone_count,
@@ -909,4 +1729,20 @@ return {
   law_file: lawFile,
   law_check_count: lawChecks.length,
   missing,
+  // Twin Council (v3.0.2 B4-1b-ii) — ONE additive field. On every v3.0.1 route path:'v301' with an
+  // honest reason; on the council path the terminal + certificate + receipts tell the true story.
+  council: {
+    eligible: councilPromised && !liteScope,
+    tier: capabilityTier,
+    path: (councilPromised && !liteScope) ? 'twin_council' : 'v301',
+    terminal: councilTerminal,
+    certificate: councilCertificate,
+    // the RETAINED constructor record (F10): twin_degraded / council_deadlock (with its disagreement
+    // cards) — null when RATIFIED (the certificate IS that record) and on every v3.0.1 route.
+    terminal_record: councilTerminalRecord,
+    blocked_reason: councilBlockedReason,
+    receipts: councilReceipts,
+    checkpoints: councilCheckpointCount,
+    reason: councilPathReason,
+  },
 }

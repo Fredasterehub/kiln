@@ -75,6 +75,20 @@ whether the tier is `express` or a facilitated tier).
   pre-v3 fallback — a run without the thread is unchanged. Architecture self-detects whether research.md
   exists (a cheap `ls` probe, the §4 self-validation discipline) and grounds in VISION.md directly when
   the §3.2 zero-topics route wrote none — it never points an agent at a phantom research file.
+  Architecture also takes a **`runToken`** (council receipt binding + council seed at T4 — NOT a browser
+  token; see [The run token](#the-run-token)) and a **`capabilityTier`** (`T1`|`T2`|`T3`|`T4` = the
+  freshest capability record's `tier`). When `capabilityTier === 'T4'` AND `codexAvailable` AND a
+  `runToken` is present, on the FULL (non-lite) path the master plan's draft pair + final ratification
+  become the **twin council** (Fable ∥ receipt-attested Sol drafts, then blind dual ratification of the
+  plan); sub-T4, `codexAvailable:false`, and the lite path run the
+  v3.0.1 path BYTE-IDENTICAL, labeled `council.path:'v301'` with an honest reason (never `twin_ratified`,
+  never second-family verification). The return grows ONE additive field: `council: { eligible, tier,
+  path:'twin_council'|'v301', terminal:'RATIFIED'|'COUNCIL_DEADLOCK'|'DEGRADED'|null, certificate,
+  terminal_record, blocked_reason, receipts[], checkpoints, reason }` — and on the council path the Law locks ONLY a
+  `RATIFIED` plan (a `DEGRADED`/`COUNCIL_DEADLOCK` terminal returns `law_locked:false` naming the
+  council). A full-path T4 launch missing `runToken` is a misconfigured conductor: the council rules
+  `DEGRADED` (reason `runToken absent`, Law blocked — a promised guarantee never silently downgrades
+  to a clean v301 label); the v3.0.1 pair still produces a DRAFT plan for the operator.
 - **Build** also takes `milestoneLimit` (omit in production = all milestones), `uiBuild`,
   `pluginRoot`, and — exactly like Validate — the whole **`posture`** object and a **`runToken`**.
   **`uiBuild` defaults `false`** — set it `true` only for a genuinely pure-UI/static
@@ -114,13 +128,16 @@ whether the tier is `express` or a facilitated tier).
 ## The run token
 
 Build and Validate each derive their per-stage browser-kill token (`kbuild-…` / `kval-…`) from
-`args.runToken`. Workflow scripts cannot mint one — `Date.now()`/`Math.random` are forbidden inside
-them (the determinism guard that keeps resume reproducible), and the per-project hash fallback they
-fall to is NOT unique across runs. So **cross-run uniqueness is the conductor's job, in the session,
+`args.runToken`, and **Architecture at capability tier T4** binds its twin-council receipt-invocation
+IDs + the council seed to the SAME per-run token (a receipt/seed binding, not a browser kill). Workflow
+scripts cannot mint one — `Date.now()`/`Math.random` are forbidden inside them (the determinism guard
+that keeps resume reproducible), and the per-project hash fallback they fall to is NOT unique across runs. So **cross-run uniqueness is the conductor's job, in the session,
 where clocks are legal.** Mint ONE token per run, reuse it for every Build and Validate launch that
 run, and keep it in the inert charset `[A-Za-z0-9._-]` (it becomes a `pkill -f` / `readdir` pattern).
 Epoch seconds plus a short suffix is plenty — e.g. `1718200000-a1`. Mint a fresh one for a gate-only
-retry (below) so its sweep can't collide with the starved run's leftovers.
+retry (below) so its sweep can't collide with the starved run's leftovers. **An architecture RE-RUN
+likewise mints a FRESH runToken** — the council receipt ledger rejects replayed invocation IDs, so
+relaunching architecture under the aborted run's token would collide with its own reservations.
 
 Validate failures feed corrections back to Build while `correction_cycle < 3`, then escalate to the
 operator. Use the matching transition lines from `brand.md` for each event.

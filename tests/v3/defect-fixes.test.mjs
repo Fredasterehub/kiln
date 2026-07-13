@@ -58,7 +58,11 @@ test('fix 7 — mapping + architecture verify claimed artifacts with a haiku che
     assert.ok(txt.includes('MISSING claimed artifact(s)'))
   }
   assert.ok(mapping.includes(', missing }'))
-  assert.ok(arch.includes('  missing,\n}'))
+  // architecture returns missing[] as a top-level return key. v3.0.2 B4-1b-ii appends ONE additive
+  // `council` field AFTER it (brief §h), so missing is no longer the return's last line — assert it is
+  // a standalone return key (the fix-7 intent) and that the additive council field follows it.
+  assert.ok(arch.includes('\n  missing,\n'))
+  assert.ok(arch.includes('\n  council: {\n'))
 })
 
 test('fix 8 — kill-streaks re-keyed to the ladder-position formula, drops chunk_count, wraps per % 40', () => {

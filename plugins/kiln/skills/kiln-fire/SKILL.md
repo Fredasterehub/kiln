@@ -338,7 +338,7 @@ artifact summary it wrote to `.kiln/`, update STATE, render the transition, adva
 | Brainstorm→VISION | `workflows/vision.js` | `kilnDir`, `projectPath`, **`pluginRoot`** (load-bearing) | brainstorm-ledger.jsonl | `.kiln/docs/VISION.md` (compiled + gated; the brainstorm-stage compile leg — launched from the Brainstorm handler above, not a top-level stage) |
 | Gauge | `workflows/gauge.js` | `kilnDir`, `projectPath`, `pluginRoot` (+`postureOverride`, `assessorModel`, `codexAvailable`) | VISION.md (+codebase-map.md) | `state.json.posture` / STATE `posture:`, ledger `posture_set` |
 | Research | `workflows/research.js` | `kilnDir`, `projectPath` (+`mode`, `testingRigor`, `topicsMax`) | VISION.md | `.kiln/docs/research.md` (only when topics > 0; the §3.2 zero-topics route writes none and returns `research_file: null`) |
-| Architecture | `workflows/architecture.js` | `kilnDir`, `projectPath` (+`mode`, `testingRigor`, `codexAvailable`, `planning`, `validationRounds`, `lawModel`, `pluginRoot`) | research.md (if present), VISION.md | `.kiln/master-plan.md`, architecture docs |
+| Architecture | `workflows/architecture.js` | `kilnDir`, `projectPath` (+`mode`, `testingRigor`, `codexAvailable`, `planning`, `validationRounds`, `lawModel`, `pluginRoot`, `runToken`, `capabilityTier`) | research.md (if present), VISION.md | `.kiln/master-plan.md`, architecture docs |
 | Build | `workflows/build.js` | `kilnDir`, `projectPath`, **`pluginRoot`** (load-bearing), `posture`, `runToken` (+`codexAvailable`, `testingRigor`, `milestoneLimit`, `uiBuild`, `gateOnly`) | master-plan.md | source code, living docs, tests |
 | Validate | `workflows/validate.js` | `kilnDir`, `projectPath`, `pluginRoot`, `posture`, `runToken` (+`testingRigor`, `codexAvailable`, `designPresent` hint) | master-plan.md, built app | `.kiln/validation/report.md` |
 | Report | `workflows/report.js` | `kilnDir`, `projectPath` | all .kiln artifacts + built project | `.kiln/REPORT.md` |
@@ -354,7 +354,14 @@ workflow-tree lore surface, and the browser/resource discipline.
 token from `args.runToken`, and workflow scripts cannot mint one (the determinism guard). So
 cross-run uniqueness is **your** job, in this session where clocks are legal: mint ONE token per run,
 reuse it for every Build and Validate launch that run, keep it in the inert charset `[A-Za-z0-9._-]`
-(e.g. `1718200000-a1`), and mint a fresh one for a gate-only retry. Full recipe + gate-only routing:
+(e.g. `1718200000-a1`), and mint a fresh one for a gate-only retry. **Architecture at capability tier
+T4 binds its twin-council receipts and council seed to the SAME per-run token** (not for browser kills —
+for the codex receipt-invocation binding + the council seed): same mint, same reuse rule, still one
+token per run. **An architecture RE-RUN mints a FRESH runToken** (mirrors the gate-only-retry rule —
+the receipt ledger's replay rejection is invocation-bound, so a stale token would collide with the
+aborted run's reservations). Also thread **`capabilityTier`** (= `state.json.capability.tier`, the freshest capability
+record — the §3 resume re-probe keeps it fresh) into the Architecture launch; absent or unknown ⇒ omit
+the arg and the workflow runs the v3.0.1 path, honestly labeled. Full recipe + gate-only routing:
 workflow-contracts.md.
 
 Validate failures feed corrections back to Build while `correction_cycle < 3`, then escalate to the
