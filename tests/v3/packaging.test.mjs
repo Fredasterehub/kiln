@@ -54,7 +54,7 @@ test('doctor: version floor require >= 2.1.198, recommend latest', () => {
 })
 
 test('doctor: the §12 capability probes are present verbatim', () => {
-  assert.match(doctor, /codex exec "echo ok"/)      // codex functional preflight
+  assert.match(doctor, /codex exec --skip-git-repo-check "echo ok"/) // codex functional preflight (fresh dirs never false-FAIL)
   assert.match(doctor, /timeout 15 codex exec/)     // the 15s bound
   assert.match(doctor, /@playwright\/mcp/)          // playwright arm 1
   assert.match(doctor, /npx --no-install playwright --version/) // playwright arm 2

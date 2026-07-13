@@ -40,11 +40,18 @@ for b in python3 jq; do command -v "$b" >/dev/null && echo "OK $b" || echo "MISS
 echo "── CAPABILITY codex (the T2→T3 discriminator: binary on PATH + a functional 15s preflight) ──"
 if command -v codex >/dev/null; then
   echo "codex binary: $(codex --version 2>&1 | head -1)"
-  if timeout 15 codex exec "echo ok" >/dev/null 2>&1; then
+  if timeout 15 codex exec --skip-git-repo-check "echo ok" >/dev/null 2>&1; then
     echo "codex preflight: OK (functional → T3 Codex build path available)"
   else
     echo "codex preflight: FAILED (present but non-functional → treated as ABSENT; Sonnet build path)"
   fi
+  CODEX_V=$(codex --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+  if [ -n "$CODEX_V" ] && printf '0.143.0\n%s\n' "$CODEX_V" | sort -V -C 2>/dev/null; then
+    echo "codex supports_max: yes (>= 0.143.0 — additional capability line, never an availability gate)"
+  else
+    echo "codex supports_max: no (< 0.143.0 — capability note only; availability unaffected)"
+  fi
+  grep -h model_context_window ~/.codex/config.toml 2>/dev/null || true
 else
   echo "codex binary: absent (Claude/Sonnet-only build path)"
 fi
@@ -81,7 +88,10 @@ echo "── existing run? ──"
 - **opus/fable** (model availability from the session/config): the model you are running as proves
   its own tier is reachable. Read the `── configured model ──` line: treat **Opus as available**
   unless the config pins a Sonnet-only model; treat **Fable (the T4 bonus tier) as available** only
-  when the session or config shows Fable access. Do not claim a tier the environment cannot reach.
+  when the session or config shows Fable access. Fable seats need a ONE-TIME interactive consent
+  (`/model fable` run once in an interactive session) that bash cannot probe — report whether the
+  session/config shows Fable access, and remind that an unconsented account must run `/model fable`
+  once before a Fable-gated run. Do not claim a tier the environment cannot reach.
 
 **Resolve the capability tier** (§8 ladder) from the probes:
 - **T3 (+Codex, full)** — codex preflight OK **and** Opus available. The default full-craft tier.
@@ -102,6 +112,9 @@ Interpretation rules:
   a browser-leak **suspect or abandoned profile** reported (a foreign browser may be alive — name it,
   advise the operator to close it; the scan never kills); git identity unset; python3/jq missing.
 - **READY** otherwise.
+- **Advisory, never a FAIL:** a `model_context_window` in `~/.codex/config.toml` pinned above the
+  backend's real serving window (e.g. `1000000` vs the 372k ChatGPT-backend window for
+  `gpt-5.6-sol`) miscalibrates codex auto-compaction — advise correcting it.
 - If a Kiln run is in progress (`./.kiln/events.jsonl` present), the `── existing run? ──` block is
   the `kiln-state summary` — report the current `Stage`, `Posture`, and `Capability` so the operator
   knows resume will pick up there.
@@ -124,7 +137,9 @@ Interpretation rules:
 **The capability record.** The resolved `{ tier, verification_class, probes }` you render IS the
 shape of `state.json.capability` (singular) — the raw probe outputs above are its `probes`; the
 resolved tier and verification class are the fields the run and the final `REPORT.md` consume. This
-pre-flight *renders* that record only — nothing writes it today (the ledger write is a recorded
-post-v3.0 item). Do not write to `./.kiln/` from this check.
+pre-flight *renders* the record; **onboarding carries it into the run** — persisted to the ledger as
+a `note` event (`data.kind: 'capability'`) right after `kiln-state init`, and re-probed +
+re-appended on resume so a changed environment never rides a stale record. Do not write to
+`./.kiln/` from this check — the write belongs to onboarding/resume, never to doctor.
 
 End with one sardonic Kiln line appropriate to the verdict.

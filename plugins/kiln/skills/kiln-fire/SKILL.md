@@ -58,8 +58,18 @@ advance. The operator session must stay pristine for the whole run.
    - Else use the **session working directory** (where `claude` was launched).
    Then check for `<run-dir>/.kiln/STATE.md`:
    - **Present** → resume. Read it, render the *"The fire reignites…"* transition line, show a
-     Tier-1 banner for the current `stage`, summarize `next_action`, and route to that stage's
-     handler below. Do not redo completed stages.
+     Tier-1 banner for the current `stage`, summarize `next_action`. **Before routing, refresh the
+     capability record** (a changed environment must never ride the stale onboarding record): re-run
+     the same §12 capability probes `/kiln-doctor` uses — codex binary + the `timeout 15 codex exec
+     --skip-git-repo-check "echo ok"` preflight, the playwright probe (`@playwright/mcp` configured OR
+     `npx --no-install playwright --version` succeeds) that sets `verification_class` (`full` present /
+     `static-only` absent), and the `── configured model ──` line — resolve the
+     `{tier, verification_class, probes}` from them, and append a fresh capability note via
+     `node $PLUGIN_ROOT/scripts/kiln-state.mjs append <project_path>/.kiln '{"type":"note","stage":"<current_stage>","data":{"kind":"capability","capability":{"tier":"<tier>","verification_class":"<class>","probes":{...}}}}'`
+     (nested under `data.capability`, exactly as onboarding writes it; the projection folds the latest
+     capability note, so the replacement supersedes the onboarding record). Degrade to a log line if
+     the CLI is unreachable, never a failure. Then route to that stage's handler below. Do not redo
+     completed stages.
    - **Absent, but the operator clearly described a *new* project** (or this is obviously an empty
      dir they want to build in) → fresh run. Render a random greeting from `lore.json`, go to
      **Onboarding**.
@@ -166,7 +176,15 @@ surface and onboarding is cheap. Detect first, then confirm.
    `init` REFUSES over a live `events.jsonl`, so a **resume never re-inits** — the resume path (the
    *orient* section above) gates on the file already existing and routes to a stage handler, it does
    not touch `init`. If the ledger append can't reach the CLI later, the stages degrade to log lines,
-   never a stage failure. Copy
+   never a stage failure. Right after the init, append the doctor capability record (the
+   `{tier, verification_class, probes}` `/kiln-doctor` rendered) via
+   `node $PLUGIN_ROOT/scripts/kiln-state.mjs append <project_path>/.kiln '{"type":"note","stage":"onboarding","data":{"kind":"capability","capability":{"tier":"<tier>","verification_class":"<class>","probes":{...}}}}'`
+   — the record nests under `data.capability` (the projection reads `data.capability`, not the
+   flattened fields). Degrade to a log line if the CLI is unreachable, never a failure. For a **greenfield** project
+   with no `.git`, also run `git init -q` in `<project_path>` with a local identity fallback
+   (`git config user.name >/dev/null || git config user.name "Kiln"`; `user.email` → `kiln@localhost`
+   likewise) so every later codex call runs in-repo (the architecture-stage Law pre-flight stays as
+   the backstop). Copy
    `$PLUGIN_ROOT/templates/STATE.md` to `<project_path>/.kiln/STATE.md` and fill:
    `stage: brainstorm`, `mode`, `plan_approval`, `testing_rigor`, `project_name`,
    `project_path` (absolute), `project_type`, `greenfield`, `started_at`/`updated_at` (real ISO-8601 —
