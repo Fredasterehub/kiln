@@ -108,6 +108,8 @@ const scope = `${NO_WANDER} Exception: the built project at ${projectPath} is al
 
 // ── MODEL_VOICE shell (Opus only; inlined from src/voice.mjs by the bundler) ──
 // @inline:voice:MODEL_VOICE,voice
+// ── Codex model pins (CODEX_MODEL default + CODEX_FALLBACK, inlined from src/models.mjs) ──
+// @models
 const SPIN = {
   drift: ['Measuring the drift', 'Zoxea checks the seams', 'Intent versus reality'],
   validate: ['Argus watches with a hundred eyes', 'The Law runs fresh — confirmation, not discovery', 'Argus found an edge case. Of course.', 'Install, suite, every criterion — no shortcuts'],
@@ -425,7 +427,7 @@ function traversalPrompt(scsForProbe) {
     ? `- SCRIPTED BOUNDED ORACLE (the ONLY browser path — run it for EVERY UI criterion): 'node ${probePath} run ${projectPath} ${kilnDir} <SC-id> <runId> --lease ${VALIDATE_RUN_TOKEN}' where <runId> begins with '${VALIDATE_RUN_TOKEN}-' (MANDATORY — the stage pre/post sweeps reap exactly these runIds, the wrapper hard-kills each probe at a 90s deadline). The '--lease ${VALIDATE_RUN_TOKEN}' is MANDATORY too: it is the browser lease the workflow took for you, and it expires at the ≤10-min Tier-2 cap — a probe fired after the cap REFUSES with exit 77 LEASE_EXPIRED (the capability deadline), so do NOT loop or re-launch. Each call is one launch→assert→close OS process; it writes evidence (probe-<SC>.json + screenshot + log) into ${kilnDir}/evidence/<runId>/ and exits 0 pass · 1 assert-fail · 77 lease-expired (the cap was reached) · 78 unavailable (playwright absent) · 79 timeout. The Law's probe checks already carry specs (kind:'probe' in ${lawFile}); these SCs map to UI criteria: ${scsForProbe.length ? scsForProbe.join(', ') : '(none in law.json — author a minimal spec inline only if a criterion truly needs one)'}. If a 78 (PROBE_UNAVAILABLE) comes back, playwright is absent — there is NO browser path: stop, set browser_result='static-only', mark every UI criterion verified:false (UNVERIFIED). If a 77 (LEASE_EXPIRED) comes back you have hit the cap — stop immediately and report what you confirmed so far (criteria you did NOT confirm live stay verified:false).\n`
     : `- The kiln-probe CLI is unavailable (pluginRoot absent) — there is NO browser path. Set tool='none', browser_result='static-only', mark every UI criterion verified:false (UNVERIFIED) — honest degradation, never a clean UI pass invented from static review.\n`
   const how = codexAvailable
-    ? `<how>${codexGuideNote}You are a CROSS-FAMILY evaluator — translate this brief into a Codex-native prompt and delegate the analysis to GPT-5.5 via 'codex exec' at model_reasoning_effort="high" (the build's UI builder is Opus, so a different family genuinely re-checks the work). The scripted kiln-probe calls run as Bash either way; if codex errors, evaluate directly.</how>\n\n`
+    ? `<how>${codexGuideNote}You are a CROSS-FAMILY evaluator — translate this brief into a Codex-native prompt and delegate the analysis to ${CODEX_MODEL} via 'codex exec' at model_reasoning_effort="high" (the build's UI builder is Opus, so a different family genuinely re-checks the work). The scripted kiln-probe calls run as Bash either way; if codex errors, evaluate directly.</how>\n\n`
     : ''
   return voice('opus') +
     `You are the Tier-2 bounded browser evaluator — a FRESH context, the only agent in this pipeline that drives a real browser, and you do it under a hard deadline. THE LAW: the browser is a subprocess with a deadline, never a service; one one-shot process per check; nothing you spawn may outlive you. You do NOT use Playwright MCP or any persistent browser tool — only the scripted one-shot kiln-probe below. "Out of the box, Claude is a poor QA agent" — do NOT talk yourself into approving superficially-tested work.\n\n` +
@@ -604,7 +606,7 @@ try {
   if (posture.second_family) {
     goalLegs.push(() => gateAgent(
       (codexAvailable
-        ? `You are the SECOND-FAMILY goal-backward auditor over the WHOLE deliverable, delegating to GPT-5.5 via 'codex exec' for a genuinely cross-family second judgment — run codex at model_reasoning_effort="high". ${codexGuideNote}If it errors, audit directly. Work BACKWARD from the VISION success criteria; do NOT read the first auditor's report — stay independent.\n\n`
+        ? `You are the SECOND-FAMILY goal-backward auditor over the WHOLE deliverable, delegating to ${CODEX_MODEL} via 'codex exec' for a genuinely cross-family second judgment — run codex at model_reasoning_effort="high". ${codexGuideNote}If it errors, audit directly. Work BACKWARD from the VISION success criteria; do NOT read the first auditor's report — stay independent.\n\n`
         : `You are the SECOND goal-backward auditor over the WHOLE deliverable — an independent second perspective. Work BACKWARD from the VISION success criteria; do NOT read the first auditor's report — stay independent.\n\n`) +
       goalBody('goal-backward-final-second.md'),
       { label: 'aristotle:goal-final:second-family', phase: 'Goal Backward', model: codexAvailable ? 'sonnet' : 'opus', schema: GOAL_SCHEMA, provenance: goalSecondProv, transport: codexAvailable ? 'codex' : undefined }

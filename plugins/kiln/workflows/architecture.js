@@ -89,8 +89,17 @@ const MODEL_VOICE = {
   ].join('\n'),
 }
 const voice = (m) => (m === 'opus' ? MODEL_VOICE.opus + '\n\n' : '')
+// ── Codex model pins (CODEX_MODEL default + CODEX_FALLBACK, inlined from src/models.mjs) ──
+// models.mjs — the codex model pins, single source of truth (BLUEPRINT WS-B2). Inlined verbatim
+// into every GPT-pinning workflow by the `// @models` bundler marker (like @gate pulls the whole
+// module), so the model id can never drift across build/gauge/architecture/validate.
+// DOCTRINE (references/codex-prompt-guide.md): the fallback is RECORDED when used, never silent — a
+// leg that drops to CODEX_FALLBACK must capture the chosen model in its archived output, never
+// downgrade invisibly.
+const CODEX_MODEL = 'gpt-5.6-sol' // GPT-5.6 Sol, GA 2026-07-09 — the codex CLI model id
+const CODEX_FALLBACK = 'gpt-5.5'  // recorded rollout fallback (5.4 dropped — two rungs suffice)
 // The wrapper TRANSLATES (Goal/Context/Constraints/Done-when); it never forwards a Claude brief verbatim.
-const codexHowto = `Delegate authoring to GPT-5.5: TRANSLATE this brief into a 4-part Codex prompt — Goal (the deliverable in 1-2 sentences), Context (the file paths + summary; no full dumps), Constraints (the arch-constraints + "do X instead of Y"), Done-when (the file written + what it must contain) — write it to a fresh temp file ('TMP="$(mktemp /tmp/kiln-codex.XXXXXX.md)"'; a fixed path collides across concurrent runs) and pipe via stdin: 'codex exec -m gpt-5.5 -c model_reasoning_effort="high" --sandbox workspace-write --skip-git-repo-check < "$TMP"'. Do NOT forward this brief verbatim. If GPT-5.5 is unavailable retry with -m gpt-5.4; if codex errors or yields nothing usable, author the plan yourself.`
+const codexHowto = `Delegate authoring to ${CODEX_MODEL}: TRANSLATE this brief into a 4-part Codex prompt — Goal (the deliverable in 1-2 sentences), Context (the file paths + summary; no full dumps), Constraints (the arch-constraints + "do X instead of Y"), Done-when (the file written + what it must contain) — write it to a fresh temp file ('TMP="$(mktemp /tmp/kiln-codex.XXXXXX.md)"'; a fixed path collides across concurrent runs) and pipe via stdin: 'codex exec -m ${CODEX_MODEL} -c model_reasoning_effort="high" --sandbox workspace-write --skip-git-repo-check < "$TMP"'. Do NOT forward this brief verbatim. If ${CODEX_MODEL} is unavailable retry with -m ${CODEX_FALLBACK}; if codex errors or yields nothing usable, author the plan yourself.`
 const SPIN = {
   foundation: ['Numerobis drafts the constraints', 'Laying the first stone', 'The geometry never lies'],
   council: ['The committee of geniuses is arguing', 'Confucius contemplates the path forward', codexAvailable ? 'Sun Tzu is flanking the requirements' : 'Miyamoto makes the fallback the plan'],

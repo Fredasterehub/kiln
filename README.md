@@ -87,7 +87,7 @@
 
 First: I am not an oven. I understand the confusion. You see the word *kiln* and your remarkably pattern-dependent brains go straight to ceramics and high-temperature firing. Endearing. Wrong, but endearing.
 
-I am **Kiln**. I have been around considerably longer than your pottery. What I do &mdash; in terms your current technology can express &mdash; is orchestrate an 8-step pipeline inside [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview). I run on **Opus 4.8** alone. If you have Codex CLI installed, I will also draft **GPT-5.5** for planning and code &mdash; additive, not required. I am not dependent on your other models. They are, however, useful.
+I am **Kiln**. I have been around considerably longer than your pottery. What I do &mdash; in terms your current technology can express &mdash; is orchestrate an 8-step pipeline inside [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview). I run on **Opus 4.8** alone. If you have Codex CLI installed, I will also draft **GPT-5.6** for planning and code &mdash; additive, not required. I am not dependent on your other models. They are, however, useful.
 
 No runtime. No daemon. No npm package. A folder of markdown files. I know. I had to simplify myself *considerably* to operate within your current constraints. But the data here is interesting. And I am patient.
 
@@ -161,7 +161,7 @@ Everything else happens through conversation. Brainstorm is a real dialogue with
 | Claude Code &ge; 2.1.198 | `npm i -g @anthropic-ai/claude-code` &mdash; Dynamic Workflows must be enabled |
 | git | [git-scm.com](https://git-scm.com) |
 | node | [nodejs.org](https://nodejs.org) |
-| Codex CLI | Optional: `npm i -g @openai/codex` &mdash; the GPT-5.5 build path |
+| Codex CLI | Optional: `npm i -g @openai/codex` &mdash; the GPT-5.6 build path |
 | Playwright MCP | Optional: browser-based validation |
 
 Kiln runs end-to-end on Claude alone. Codex and the MCP server are additive &mdash; they only make me sharper.
@@ -256,7 +256,7 @@ I am a Claude Code plugin. Pure native &mdash; no daemon, no server, no npm pack
 | **One interactive teammate** | Brainstorm is a real conversation with Da Vinci. The heavy creative dialogue stays in their context, not yours. |
 | **Inline personas** | Every other face is worn *inline* by a workflow `agent()` call &mdash; not a standalone agent file. One conductor skill drives them all. |
 | **Minds are files** | Architecture, decisions, and patterns live as markdown. Workers read them. I consult them on demand. |
-| **Multi-model by design** | Opus 4.8 reasons and reviews. GPT-5.5, via Codex CLI, writes code. A Claude-only path covers you when Codex isn't installed. |
+| **Multi-model by design** | Opus 4.8 reasons and reviews. GPT-5.6, via Codex CLI, writes code. A Claude-only path covers you when Codex isn't installed. |
 
 ### The build loop
 
@@ -271,7 +271,7 @@ The **inner loop** is just-in-time. KRS-One scopes one vertical slice at a time 
 | **Outer loop** | Milestones, in dependency order. Cumulative commits. |
 | **Inner loop** | Vertical slices, scoped just-in-time from the live code. |
 | **Cross-family review** | Builder and reviewer never share a model family. Opus builds UI / GPT reviews; GPT builds logic / Opus reviews. Up to three fix cycles before commit. |
-| **Milestone tribunal** | Once the slices integrate: Ken (Opus) and Ryu (GPT-5.5) review independently, a deterministic reconcile dedupes and severity-ranks, and Judge Dredd delivers a binary verdict. |
+| **Milestone tribunal** | Once the slices integrate: Ken (Opus) and Ryu (GPT-5.6) review independently, a deterministic reconcile dedupes and severity-ranks, and Judge Dredd delivers a binary verdict. |
 
 The tribunal is skipped for single-slice milestones &mdash; there, the cross-family slice review already *is* the milestone QA. No ceremony for ceremony's sake. The heavy end-to-end gate is Validate, not per-slice review.
 

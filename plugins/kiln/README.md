@@ -5,7 +5,7 @@
 >
 > I am **Kiln**. What I do, in terms your current technology can express, is orchestrate a
 > multi-model pipeline inside Claude Code that turns a conversation into running software. Claude
-> reasons. GPT-5.5 builds. I conduct. You talk to me like a person; I do the rest.
+> reasons. GPT-5.6 builds. I conduct. You talk to me like a person; I do the rest.
 
 Kiln is a native Claude Code plugin. One command starts an interactive brainstorm, then the forge
 runs on autopilot — research, architecture, build, and validation — and hands you working,
@@ -29,14 +29,14 @@ Kiln v3 is pure native Claude Code, no runtime and no daemon:
   context, not yours.
 - **Minds are files.** Architecture, decisions, and patterns live as documents that every worker
   reads, and that Kiln consults on demand.
-- **Multi-model by design.** Opus 4.8 for reasoning and review; GPT-5.5 (via Codex CLI) for code,
+- **Multi-model by design.** Opus 4.8 for reasoning and review; GPT-5.6 (via Codex CLI) for code,
   with a Claude/Sonnet-only fallback when Codex isn't installed.
 
 ## Requirements
 
 - Claude Code **≥ 2.1.198** with Dynamic Workflows enabled
 - `git`, `node`
-- **Optional:** Codex CLI (for the GPT-5.5 build path), Playwright MCP (for browser validation)
+- **Optional:** Codex CLI (for the GPT-5.6 build path), Playwright MCP (for browser validation)
 
 Run `/kiln-doctor` to check everything before you start — it resolves your capability tier
 (T1 Sonnet-only … T4 +Fable), the browser-verification class, and any stray browser left running.

@@ -1,9 +1,9 @@
 {
   "_doc": "Builder+reviewer name matrix for the build stage. This JSON is canonical — the conductor reads it for spawn indicators and post-run grep-ability; workflows/build.js carries an inline display copy of the same pairs (workflow scripts cannot import JSON), kept in sync. Builder family is always different from reviewer family. Rotate deterministically off the milestone index (no Math.random/Date.now).",
   "routing": {
-    "ui": { "pool": "ui", "builder_family": "opus", "reviewer_family": "codex", "note": "front-facing surface — Opus builds (la-peintresse), GPT-5.5/Codex reviews static correctness (the-curator); the milestone tribunal runs whenever the milestone has >1 slice (surface-agnostic), and is skipped for a single-slice milestone where the cross-family slice review is the milestone QA" },
+    "ui": { "pool": "ui", "builder_family": "opus", "reviewer_family": "codex", "note": "front-facing surface — Opus builds (la-peintresse), GPT-5.6/Codex reviews static correctness (the-curator); the milestone tribunal runs whenever the milestone has >1 slice (surface-agnostic), and is skipped for a single-slice milestone where the cross-family slice review is the milestone QA" },
     "mixed": { "pool": "ui", "builder_family": "opus", "reviewer_family": "codex", "note": "front-facing surface + tightly-coupled logic — Opus builds, Codex reviews; the milestone tribunal runs whenever the milestone has >1 slice (surface-agnostic), and is skipped for a single-slice milestone where the cross-family slice review is the milestone QA" },
-    "logic": { "pool": "default", "builder_family": "codex", "reviewer_family": "opus", "note": "separable backend concern — GPT-5.5/Codex builds, Opus reviews + re-runs the suite" },
+    "logic": { "pool": "default", "builder_family": "codex", "reviewer_family": "opus", "note": "separable backend concern — GPT-5.6/Codex builds, Opus reviews + re-runs the suite" },
     "logic_fallback": { "pool": "fallback", "builder_family": "sonnet", "reviewer_family": "opus", "note": "codex unavailable — Sonnet builds, Opus reviews (cross-context, the best split available without a second family)" }
   },
   "pools": {

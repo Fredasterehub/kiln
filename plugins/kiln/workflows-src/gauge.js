@@ -59,6 +59,9 @@ async function ledger(type, data, phaseName) {
 //    guards the inline copy against drift, and the _doc commentary keys are stripped) ──
 // @gauge-config
 
+// ── Codex model pins (CODEX_MODEL default + CODEX_FALLBACK, inlined from src/models.mjs) ──
+// @models
+
 // ── MODEL_VOICE shell (Opus only; inlined from src/voice.mjs by the bundler) ──
 // @inline:voice:MODEL_VOICE,voice
 // Opus prose voice only when the assessor IS opus; other slots get the bare brief.
@@ -161,10 +164,12 @@ if (!validation.ok) {
 let secondScored = false
 if (!degraded && profile.D8.score === 2) {
   const codexGuide = pluginRoot ? `${pluginRoot}/references/codex-prompt-guide.md` : null
+  // codex --output-schema is reasoning-FIRST (reason-before-commit token order; codex-prompt-guide.md:102) —
+  // the OPPOSITE of Kiln's Claude payload-first PROFILE_SCHEMA; only this codex emission ordering flips.
   const crossHowto = codexAvailable
     ? (codexGuide
-      ? `You score this independently via GPT-5.5 (cross-family) using 'codex exec'. Read ${codexGuide} and follow it — TRANSLATE the brief into a Codex-native prompt (do not forward it verbatim), use --output-schema for the flat profile-first shape (reasoning LAST + optional), and the heredoc-to-stdin invocation. If GPT-5.5 is unavailable retry with -m gpt-5.4; if codex yields nothing usable, score directly as the independent second reader.`
-      : `You score this independently via GPT-5.5 (cross-family) using 'codex exec': TRANSLATE the brief into a Codex-native prompt (do not forward it verbatim), force the flat profile-first shape (reasoning LAST + optional) via --output-schema, pipe via stdin. If GPT-5.5 is unavailable retry with -m gpt-5.4; if codex yields nothing usable, score directly.`)
+      ? `You score this independently via ${CODEX_MODEL} (cross-family) using 'codex exec'. Read ${codexGuide} and follow it — TRANSLATE the brief into a Codex-native prompt (do not forward it verbatim), use --output-schema for the flat shape with the reasoning field FIRST (~50 words, reason-before-commit) then the profile — this codex ordering OVERRIDES the payload-first note in the brief below — and the heredoc-to-stdin invocation. If ${CODEX_MODEL} is unavailable retry with -m ${CODEX_FALLBACK}; if codex yields nothing usable, score directly as the independent second reader.`
+      : `You score this independently via ${CODEX_MODEL} (cross-family) using 'codex exec': TRANSLATE the brief into a Codex-native prompt (do not forward it verbatim), force the flat shape with the reasoning field FIRST (~50 words) then the profile via --output-schema (this codex ordering OVERRIDES the payload-first note in the brief below), pipe via stdin. If ${CODEX_MODEL} is unavailable retry with -m ${CODEX_FALLBACK}; if codex yields nothing usable, score directly.`)
     : `You are a FRESH, independent second reader — do NOT see or anchor on any prior scoring. Score the profile from the inputs alone.`
   log('Failure penalty is maximal (D8=2) — a second independent scorer cross-checks the profile')
   const second = await agent(

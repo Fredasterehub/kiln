@@ -1,13 +1,17 @@
 # Codex Frontier Prompt Guide
 
-This reference teaches Kiln's codex-invoking legs (the logic builder, the UI reviewer, the slot-B planner, Ryu QA — any role that shells out to `codex exec`) how to construct a prompt for the GPT-5.5 frontier model. The invoking agent runs as a thin Sonnet wrapper; **its job is to TRANSLATE the Kiln brief into a Codex-native prompt, never to forward it.** Prefer GPT-5.5; use GPT-5.4 as the rollout fallback. Read this before you build a prompt.
+This reference teaches Kiln's codex-invoking legs (the logic builder, the UI reviewer, the slot-B planner, Ryu QA — any role that shells out to `codex exec`) how to construct a prompt for the GPT-5.6 Sol frontier model (codex model id `gpt-5.6-sol`). The invoking agent runs as a thin Sonnet wrapper; **its job is to TRANSLATE the Kiln brief into a Codex-native prompt, never to forward it.** Prefer `gpt-5.6-sol`; use `gpt-5.5` as the recorded rollout fallback (`gpt-5.4` dropped — two rungs suffice). Read this before you build a prompt.
 
 The invoking wrapper runs at sonnet-medium; Codex itself runs at the `model_reasoning_effort` you set. Effort lives on the receiver, so the prompt you ship must carry the context and scope Codex cannot infer from the wrapper's history.
+
+## GPT-5.6 prompting deltas (vendor-reported)
+
+GPT-5.6 Sol rewards LEANER prompts. OpenAI reports (vendor-reported, 2026-07) that leaner, less-redundant prompts gained 10-15% on coding evals. Concretely: state each instruction ONCE — repeated or restated directives read as noise and can degrade output; drop belt-and-suspenders re-emphasis, persona padding, and duplicated constraints. The four-part discipline below already trends this way; under 5.6, cut harder.
 
 ## The wrapper's job (TRANSLATE, do not forward)
 
 1. **Extract, then invert.** Pull the Goal / Context / Constraints / Done-when out of the Kiln brief and re-order them instruction-first. The Claude brief is data-last (large payloads above the task); the Codex prompt is instruction-first (the goal up top, code/data last).
-2. **Strip what is Claude-shaped.** Drop XML data-delimiters (use plain markdown sections), drop any prose JSON-schema description (the schema rides on `--output-schema`), and drop all persona / "think step by step" / "world-class expert" padding — GPT-5.5 classifies persona padding as noise and discards it.
+2. **Strip what is Claude-shaped.** Drop XML data-delimiters (use plain markdown sections), drop any prose JSON-schema description (the schema rides on `--output-schema`), and drop all persona / "think step by step" / "world-class expert" padding — GPT-5.6 classifies persona padding as noise and discards it.
 3. **One vertical slice per call.** Bounded scope is better output. Do not batch slices into one `codex exec`.
 4. **Sanitize.** Never pipe untrusted/LLM-generated content into `codex exec` without sanitizing it first.
 
@@ -16,7 +20,7 @@ The invoking wrapper runs at sonnet-medium; Codex itself runs at the `model_reas
 The canonical command writes the prompt to a file and pipes it into stdin. Long prompts as arguments or typed interactively hang — codex's stdin handler does not drain past a few KB, so heredoc-to-stdin is the only transport that works end-to-end:
 
 ```
-KILN_CODEX_MODEL="${KILN_CODEX_MODEL:-gpt-5.5}"
+KILN_CODEX_MODEL="${KILN_CODEX_MODEL:-gpt-5.6-sol}"
 TMP="$(mktemp /tmp/kiln-codex.XXXXXX.md)"   # write the four-part prompt into "$TMP" first
 codex exec -m "$KILN_CODEX_MODEL" \
   -c 'model_reasoning_effort="high"' \
@@ -28,7 +32,7 @@ codex exec -m "$KILN_CODEX_MODEL" \
 Caveats at the call site:
 - **Write the prompt to a file, then pipe.** Heredoc into stdin is reliable; argument or interactive input is not. This is a tooling property of codex, not style. Mint the file with `mktemp` (`/tmp/kiln-codex.XXXXXX.md`) — a fixed path collides across concurrent runs.
 - **No approval flag.** `codex exec` is non-interactive and never asks for approval; do NOT pass `--ask-for-approval` (rejected at parse time as of codex v0.141.0).
-- **Fallback deliberately.** If GPT-5.5 is unavailable for the signed-in account, retry the same prompt with `-m gpt-5.4`. Do not silently downgrade without capturing the chosen model in the archived output.
+- **Fallback deliberately.** If `gpt-5.6-sol` is unavailable for the signed-in account, retry the same prompt with `-m gpt-5.5`. Do not silently downgrade without capturing the chosen model in the archived output — the fallback is RECORDED when used, never silent.
 - **Exit 0 on internal failure.** Codex can exit 0 after GPT hit an internal error and produced nothing usable. Check stdout contains the expected artifact (file written / tests run) before acting on the result; if it is empty, do the work directly.
 - **Sandbox.** Default to `--sandbox workspace-write`; widen with `--add-dir <path>` when a slice legitimately needs another directory — do NOT reach for `danger-full-access`.
 
@@ -80,24 +84,24 @@ Constraints:
 
 Done when: `npm test src/auth/session` exits 0 and tsc reports no errors.
 ```
-(`--output-schema` carries the result shape; `-m gpt-5.5 -c model_reasoning_effort="high"`, `text.verbosity=low` for schema agents.)
+(`--output-schema` carries the result shape; `-m gpt-5.6-sol -c model_reasoning_effort="high"`, `text.verbosity=low` for schema agents.)
 
 ## Per-role flags
 
 | Role | `-m` | `model_reasoning_effort` | `text.verbosity` | notes |
 |---|---|---|---|---|
-| logic builder | gpt-5.5 | high | (default) | one slice per call; Done-when = test cmd + exit 0 |
-| UI reviewer / cross-model reviewer | gpt-5.5 | high | low (schema) | judge code + static only; read-only |
-| slot-B planner / architect | gpt-5.5 | high | low (schema) | outcome-first; no step prescription |
-| Ryu / QA analyst / judge | gpt-5.5 | xhigh | low (schema) | adversarial; quote evidence |
-| pure transform / formatting | gpt-5.5 | low or none | low | no reasoning budget needed |
+| logic builder | gpt-5.6-sol | high | (default) | one slice per call; Done-when = test cmd + exit 0 |
+| UI reviewer / cross-model reviewer | gpt-5.6-sol | high | low (schema) | judge code + static only; read-only |
+| slot-B planner / architect | gpt-5.6-sol | high | low (schema) | outcome-first; no step prescription |
+| Ryu / QA analyst / judge | gpt-5.6-sol | high | low (schema) | adversarial; quote evidence (BLUEPRINT §8 seats Ryu at high; build.js runs it as sonnet transport at model_reasoning_effort="high") |
+| pure transform / formatting | gpt-5.6-sol | low or none | low | no reasoning budget needed |
 
 ## Schema & reasoning rules
 
 1. **Pass the JSON schema via `--output-schema`, never in prose.** Remove every schema description from the prompt body. Test for the MCP silent-ignore bug (codex #15451) — confirm the output actually validates against the schema before trusting it.
-2. **`reasoning` field FIRST in the schema.** Put a `reasoning` (string) field before any verdict/score/decision field so token order forces reason-before-commit. Never place the answer before the reasoning ("broken chain of thought").
+2. **`reasoning` field FIRST in the schema.** Put a `reasoning` (string) field before any verdict/score/decision field so token order forces reason-before-commit. Never place the answer before the reasoning ("broken chain of thought"). **Transport cross-note (do not confuse with Kiln's payload-first doctrine):** this reasoning-FIRST rule is specific to codex `--output-schema` and is the OPPOSITE of Kiln's Claude `StructuredOutput` ordering, which is payload-FIRST (v3.0.1) — a long leading reasoning string truncated the Claude tool call before the payload landed and burned the 5-attempt retry cap. Different transports, different ordering: codex streams schema-constrained JSON where reason-before-commit token order helps and truncation is not the failure mode; Claude's `StructuredOutput` tool call risks truncation, so the payload leads and reasoning is last + optional + capped. Apply reasoning-first ONLY to codex `--output-schema` legs; never carry it back to a Claude schema.
 3. **Keep schemas flat.** Mark only truly-required fields required; avoid deep nesting and premature enums.
-4. **Do not over-engineer.** Skip two-pass free-form→reformat, CRANE-style constrained decoding, and self-reflection-under-constraint loops — those target small open-weight models; marginal-to-zero gain on GPT-5.5.
+4. **Do not over-engineer.** Skip two-pass free-form→reformat, CRANE-style constrained decoding, and self-reflection-under-constraint loops — those target small open-weight models; marginal-to-zero gain on GPT-5.6.
 
 ## Durable conventions
 

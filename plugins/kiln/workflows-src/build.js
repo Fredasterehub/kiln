@@ -1,10 +1,10 @@
 export const meta = {
   name: 'kiln-build',
-  description: 'Kiln build stage — two nested loops over the locked Law. OUTER: each master-plan milestone in dependency order (sequential, cumulative commits). INNER: the batch slice spine — KRS-One plans the milestone\'s ENTIRE ordered slice list in ONE call, mapped 1:1 to law.json SC ids (coverage is arithmetic, validated in-script); a haiku confirm checks each slice against live state before its build; a builder implements the slice (Opus builds ui/mixed, GPT-5.5/Codex builds logic) and commits it; the deterministic runner then executes kiln-law (verify = tamper gate; run --only/--flips = the §5.1 red/green lifecycle where the EXIT CODE is the verdict — expected flips computed from the recorded prior status via --before, previously-GREEN regressions fatal) and persists the project suite as hashed evidence (kiln-law suite → suite.log + suite.jsonl in the evidence dir), and the workflow gates tamper + evidence freshness + the lifecycle exit MECHANICALLY — a touched lock, stale evidence, or a failed flip auto-REJECTS with no reviewer spawned. A cross-FAMILY reviewer rules on diff + evidence with mechanical|logical finding classes and must re-run the mapped checks itself; the Sentinel escalates the feedback source after repeated logical rejections and stops a slice as split_required at the split threshold (a conductor/operator decision, never silent). After the slices integrate, the §3.2 milestone gate rules: Aristotle\'s goal-backward audit hunts "checks pass but the goal is broken" at EVERY milestone boundary — split/plan-abort failures included, where its findings merge into the failure record — and an unusable audit is re-asked ONCE, then fails the boundary closed (QA_FAIL, blocking finding goal-audit-failure; the judge NEVER spawns on missing inputs); milestones at the tribunal threshold add dual analysts (Ken/Opus ∥ Ryu/Codex) whose findings the deterministic reconcile folds with the audit\'s, and the judge is spawned ONLY on an ambiguous reconcile (zero blocking findings AND the analysts\' overall verdicts disagree) — otherwise the verdict is computed; below the threshold the slice review + the audit IS the gate. Velocity lever 3 (§9): the next milestone\'s slice plan is cut SPECULATIVELY in parallel with the current milestone\'s gate, anchored on its base_sha — any corrective commit on the current milestone (tribunal correction / validate loop) moves HEAD and invalidates it (ledgered slice_plan_invalidated), forcing a re-slice against the new HEAD. The heavy end-to-end gate is validate, not per-slice ceremony.',
+  description: 'Kiln build stage — two nested loops over the locked Law. OUTER: each master-plan milestone in dependency order (sequential, cumulative commits). INNER: the batch slice spine — KRS-One plans the milestone\'s ENTIRE ordered slice list in ONE call, mapped 1:1 to law.json SC ids (coverage is arithmetic, validated in-script); a haiku confirm checks each slice against live state before its build; a builder implements the slice (Opus builds ui/mixed, Codex builds logic) and commits it; the deterministic runner then executes kiln-law (verify = tamper gate; run --only/--flips = the §5.1 red/green lifecycle where the EXIT CODE is the verdict — expected flips computed from the recorded prior status via --before, previously-GREEN regressions fatal) and persists the project suite as hashed evidence (kiln-law suite → suite.log + suite.jsonl in the evidence dir), and the workflow gates tamper + evidence freshness + the lifecycle exit MECHANICALLY — a touched lock, stale evidence, or a failed flip auto-REJECTS with no reviewer spawned. A cross-FAMILY reviewer rules on diff + evidence with mechanical|logical finding classes and must re-run the mapped checks itself; the Sentinel escalates the feedback source after repeated logical rejections and stops a slice as split_required at the split threshold (a conductor/operator decision, never silent). After the slices integrate, the §3.2 milestone gate rules: Aristotle\'s goal-backward audit hunts "checks pass but the goal is broken" at EVERY milestone boundary — split/plan-abort failures included, where its findings merge into the failure record — and an unusable audit is re-asked ONCE, then fails the boundary closed (QA_FAIL, blocking finding goal-audit-failure; the judge NEVER spawns on missing inputs); milestones at the tribunal threshold add dual analysts (Ken/Opus ∥ Ryu/Codex) whose findings the deterministic reconcile folds with the audit\'s, and the judge is spawned ONLY on an ambiguous reconcile (zero blocking findings AND the analysts\' overall verdicts disagree) — otherwise the verdict is computed; below the threshold the slice review + the audit IS the gate. Velocity lever 3 (§9): the next milestone\'s slice plan is cut SPECULATIVELY in parallel with the current milestone\'s gate, anchored on its base_sha — any corrective commit on the current milestone (tribunal correction / validate loop) moves HEAD and invalidates it (ledgered slice_plan_invalidated), forcing a re-slice against the new HEAD. The heavy end-to-end gate is validate, not per-slice ceremony.',
   phases: [
     { title: 'The Forge Heats', detail: 'read the locked Law; rakim ensures the git repo + seeds codebase-state; parse the master plan into milestones' },
     { title: 'Scoring the Cut', detail: 'KRS-One plans the milestone\'s entire ordered slice list in ONE call, mapped to the Law\'s SC ids (reusing a valid pipelined plan from the prior gate when HEAD has not moved); a haiku confirm checks each slice against live state (proceed | replan)' },
-    { title: 'Forging', detail: 'builder implements the slice (Opus for ui/mixed, GPT-5.5/Codex for logic) and commits it' },
+    { title: 'Forging', detail: 'builder implements the slice (Opus for ui/mixed, Codex for logic) and commits it' },
     { title: 'The Trial', detail: 'the deterministic runner executes the Law — the exit code is the lifecycle verdict (declared flips + regressions) — and persists the project suite as hashed evidence; the workflow gates tamper + freshness + the flip plan mechanically; a cross-family reviewer re-runs the mapped checks and rules with classed findings; the Sentinel escalates on logical rejections' },
     { title: 'Judgment', detail: 'the §3.2 milestone gate — goal-backward audit at EVERY boundary (split/abort included; an unusable audit is re-asked once, then fails closed); dual analysts + deterministic reconcile at the tribunal threshold, the judge spawned only on an ambiguous reconcile; below it, slice review + the audit IS the gate. The next milestone\'s slice plan is pipelined in parallel here, anchored on base_sha and invalidated by any corrective commit' },
   ],
@@ -115,6 +115,9 @@ const lawFile = `${kilnDir}/law.json`
 
 // ── MODEL_VOICE — the thin model-tuned shell (Opus only; the Codex leg is shaped by the wrapper) ──
 // @inline:voice:MODEL_VOICE,voice
+
+// ── Codex model pins (CODEX_MODEL default + CODEX_FALLBACK, inlined from src/models.mjs) ──
+// @models
 
 // ── Lore display layer (NEVER enters a model prompt — labels + log lines only) ──
 // Canonical copy lives in data/duo-pool.json (conductor reads that); the bundler's duo-pool step
@@ -319,7 +322,7 @@ function surfaceOf(m) {
   return (s === 'ui' || s === 'mixed') ? s : 'logic'
 }
 function routing(surf) {
-  // The 'sonnet' model on a build/review leg is the thin Codex wrapper (delegates to GPT-5.5 via codex exec).
+  // The 'sonnet' model on a build/review leg is the thin Codex wrapper (delegates to the codex model via codex exec).
   return (surf === 'ui' || surf === 'mixed')
     ? { buildModel: 'opus', reviewModel: 'sonnet' }   // Opus builds, Codex reviews
     : { buildModel: 'sonnet', reviewModel: 'opus' }   // Codex builds, Opus reviews
@@ -385,8 +388,8 @@ const repoRuleLine = repoRule(projectPath)
 // the codex #15451 caveat) lives in references/codex-prompt-guide.md — point at it, don't duplicate it.
 const codexGuide = pluginRoot ? `${pluginRoot}/references/codex-prompt-guide.md` : null
 const codexHowto = codexGuide
-  ? `You shell out to GPT-5.5 via 'codex exec'. Read ${codexGuide} and follow it — it is the single source of truth for the codex-prompt discipline (TRANSLATE the brief, never forward it; per-role flags; --output-schema/reasoning-first/flat-schema; the heredoc-to-stdin invocation; the exit-0 and #15451 caveats). If GPT-5.5 is unavailable retry with -m gpt-5.4; if codex still produces no usable artifact, do the work directly.`
-  : `You shell out to GPT-5.5 via 'codex exec': TRANSLATE this brief into a Codex-native prompt (do not forward it verbatim), pipe it via stdin, and close the verify loop on the test command. If GPT-5.5 is unavailable retry with -m gpt-5.4; if codex still produces no usable artifact, implement directly with your file tools.`
+  ? `You shell out to ${CODEX_MODEL} via 'codex exec'. Read ${codexGuide} and follow it — it is the single source of truth for the codex-prompt discipline (TRANSLATE the brief, never forward it; per-role flags; --output-schema/reasoning-first/flat-schema; the heredoc-to-stdin invocation; the exit-0 and #15451 caveats). If ${CODEX_MODEL} is unavailable retry with -m ${CODEX_FALLBACK}; if codex still produces no usable artifact, do the work directly.`
+  : `You shell out to ${CODEX_MODEL} via 'codex exec': TRANSLATE this brief into a Codex-native prompt (do not forward it verbatim), pipe it via stdin, and close the verify loop on the test command. If ${CODEX_MODEL} is unavailable retry with -m ${CODEX_FALLBACK}; if codex still produces no usable artifact, implement directly with your file tools.`
 
 // Shipped design references the UI builder consults for visual/design decisions — injected only when
 // pluginRoot is known (a launched Workflow can't resolve plugin paths on its own; absence degrades out).
@@ -487,7 +490,7 @@ function buildPrompt(m, surf, slice, sliceId, fixNote) {
       `</constraints>${fix}\n` +
       `<task>Build the slice, run the static check, then 'git add -A && git commit' with a clear message. Report tests_green (the static/smoke check passed), committed, and concrete evidence of what you observed FIRST, then files_changed, tests_added (smoke), red_confirmed (false is fine for a page), and the check command; reasoning is optional and under 50 words. Structured-output discipline (a platform guardrail killed a builder at the retry cap here): your work product lives in the COMMIT, never in the final message — the final message is ONLY the StructuredOutput tool call carrying EVERY required field (evidence = the few decisive lines, trimmed; reasoning LAST, optional, under 50 words); a reasoning-heavy or missing-field attempt burns one of five retries, and five failures kill the slice.</task>`
   }
-  // logic slice — GPT-5.5/Codex builds (cross-family vs the Opus reviewer)
+  // logic slice — Codex builds (cross-family vs the Opus reviewer)
   const tdd = testingRigor === 'minimal'
     ? 'Write at least a smoke test and run it green.'
     : testingRigor === 'tdd'
@@ -574,7 +577,7 @@ function reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort, vclas
   const classRule = `Class EVERY finding: 'mechanical' (hygiene, formatting, missing file, simple slip — a one-step fix) or 'logical' (wrong behavior, failed check, broken contract, real design flaw). The Sentinel escalates on logical findings — class honestly, never inflate or soften.`
   if (surf === 'ui' || surf === 'mixed') {
     const how = leg.viaCodex
-      ? `<how>${codexGuideNote}Delegate this review to GPT-5.5 via 'codex exec' at model_reasoning_effort="${effort}" — you are the thin wrapper and the cross-model check; if codex errors, review directly as the independent reviewer.</how>\n\n`
+      ? `<how>${codexGuideNote}Delegate this review to ${CODEX_MODEL} via 'codex exec' at model_reasoning_effort="${effort}" — you are the thin wrapper and the cross-model check; if codex errors, review directly as the independent reviewer.</how>\n\n`
       : ''
     // §7 screenshot rule (tasks.md T2.2): the reviewer judges the probe SCREENSHOT by a BINARY
     // RUBRIC only — pass/fail visibility questions ("is the nav visible? is text clipped? does it
@@ -604,7 +607,7 @@ function reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort, vclas
       `<task>Set law_green from YOUR kiln-law re-run and tests_green from the static/smoke check you re-ran. Verdict APPROVED only if the mapped checks pass and the page is structurally sound, accessible, on-brief, and free of invented claims; else REJECTED with specific, actionable findings. ${classRule} Emit verdict, law_green, tests_green, and findings first; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`
   }
   const how = leg.viaCodex
-    ? `<how>${codexGuideNote}Delegate this review to GPT-5.5 via 'codex exec' at model_reasoning_effort="${effort}" — a genuinely cross-family second judgment; if codex errors, review directly as the independent reviewer.</how>\n\n`
+    ? `<how>${codexGuideNote}Delegate this review to ${CODEX_MODEL} via 'codex exec' at model_reasoning_effort="${effort}" — a genuinely cross-family second judgment; if codex errors, review directly as the independent reviewer.</how>\n\n`
     : ''
   const testCmd = (build && build.test_command) || 'the project tests'
   return (leg.model === 'opus' ? voice('opus') : '') +
@@ -645,7 +648,7 @@ function kenPrompt(m) {
 }
 function ryuPrompt(m) {
   return (codexAvailable
-    ? `You are QA analyst B, delegating analysis to GPT-5.5 via 'codex exec' for a genuinely cross-model second perspective — run codex at model_reasoning_effort="high". ${codexGuideNote}If it errors, analyze directly.\n`
+    ? `You are QA analyst B, delegating analysis to ${CODEX_MODEL} via 'codex exec' for a genuinely cross-model second perspective — run codex at model_reasoning_effort="high". ${codexGuideNote}If it errors, analyze directly.\n`
     : `You are QA analyst B — an independent second perspective.\n`) +
     `Run the tests yourself and probe DIFFERENT failure modes than a first pass would.\n\n` +
     `<inputs>\n- Milestone ${m.id} "${m.title}" — acceptance: ${m.acceptance}\n- Inspect the repo at ${projectPath}: git log/diff, read files, RUN the tests.\n</inputs>\n\n` +

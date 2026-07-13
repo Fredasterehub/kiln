@@ -292,6 +292,59 @@ test('gate step: --check fails when src/gate.mjs drifts from the generated inlin
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
+// ── The models step (WS-B2): `// @models` inlines the WHOLE src/models.mjs body (the codex model
+//    pins CODEX_MODEL + CODEX_FALLBACK), `export ` stripped from each declaration, doctrine comments
+//    carried through verbatim. Like @gate it names no exports — it pulls the module as one unit so
+//    every GPT-pinning workflow shares one model id and cannot drift. Same --check drift discipline. ──
+const FIXTURE_MODELS_SRC = `// mdlfix.mjs — fixture models module for the @models marker golden test.
+export const CODEX_MODEL = 'gpt-x'
+// CODEX_FALLBACK — interior comment kept with its declaration.
+export const CODEX_FALLBACK = 'gpt-y'
+`
+
+const FIXTURE_MODELS_WF = `// mwf.js — fixture workflow exercising the @models marker.
+// @models
+return CODEX_MODEL + '/' + CODEX_FALLBACK
+`
+
+const MODELS_GOLDEN = `// GENERATED from workflows-src/mwf.js — edit the source, run scripts/bundle-workflows.mjs
+// mwf.js — fixture workflow exercising the @models marker.
+// mdlfix.mjs — fixture models module for the @models marker golden test.
+const CODEX_MODEL = 'gpt-x'
+// CODEX_FALLBACK — interior comment kept with its declaration.
+const CODEX_FALLBACK = 'gpt-y'
+return CODEX_MODEL + '/' + CODEX_FALLBACK
+`
+
+function withModels(dir) {
+  writeFileSync(join(dir, 'plugins/kiln/src/models.mjs'), FIXTURE_MODELS_SRC)
+  writeFileSync(join(dir, 'plugins/kiln/workflows-src/mwf.js'), FIXTURE_MODELS_WF)
+}
+
+test('models step: the @models marker inlines the whole models.mjs body with the export keyword stripped', () => {
+  const dir = sandbox()
+  try {
+    withModels(dir)
+    const res = runBundler(dir)
+    assert.equal(res.status, 0, res.stderr)
+    assert.equal(readFileSync(join(dir, 'plugins/kiln/workflows/mwf.js'), 'utf8'), MODELS_GOLDEN)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('models step: --check fails when src/models.mjs drifts from the generated inline copy', () => {
+  const dir = sandbox()
+  try {
+    withModels(dir)
+    assert.equal(runBundler(dir).status, 0)
+    assert.equal(runBundler(dir, '--check').status, 0)
+    writeFileSync(join(dir, 'plugins/kiln/src/models.mjs'), FIXTURE_MODELS_SRC.replace("'gpt-x'", "'gpt-z'"))
+    const res = runBundler(dir, '--check')
+    assert.notEqual(res.status, 0)
+    assert.match(res.stderr, /OUT OF SYNC/)
+    assert.match(res.stderr, /mwf\.js/)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
 test('REAL repo: the shipped workflows are in sync with workflows-src', () => {
   const res = spawnSync(process.execPath, [BUNDLER, '--check'], { encoding: 'utf8' })
   assert.equal(res.status, 0, res.stderr)

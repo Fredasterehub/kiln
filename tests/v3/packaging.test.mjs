@@ -18,7 +18,7 @@ const pluginReadme = readFileSync(join(PLUGIN, 'README.md'), 'utf8')
 const rootReadme = readFileSync(join(ROOT, 'README.md'), 'utf8')
 const agents = JSON.parse(readFileSync(join(PLUGIN, 'data', 'agents.json'), 'utf8'))
 const gitignore = readFileSync(join(ROOT, '.gitignore'), 'utf8')
-const BARE_GPT5 = /GPT-5(?!\.5)/ // "GPT-5" not followed by ".5" — the stale-model string
+const BARE_GPT5 = /GPT-5(?!\.6)/ // "GPT-5" not followed by ".6" — the stale-model string (bare GPT-5 or the retired GPT-5.5)
 
 // ── plugin.json modernization (§12) ─────────────────────────────────────────────────────────────
 test('manifest: $schema + displayName + keeps its identity', () => {
@@ -40,9 +40,9 @@ test('manifest: the userConfig knobs (posture + theaterIntensity — both consum
   }
 })
 
-test('manifest: description is the 8-stage / GPT-5.5 truth — no lying count', () => {
+test('manifest: description is the 8-stage / GPT-5.6 truth — no lying count', () => {
   assert.match(manifest.description, /8 stages/)
-  assert.match(manifest.description, /GPT-5\.5/)
+  assert.match(manifest.description, /GPT-5\.6/)
   assert.doesNotMatch(manifest.description, /in 7 steps/)
   assert.doesNotMatch(manifest.description, BARE_GPT5)
 })
@@ -80,10 +80,10 @@ test('doctor: documents the sandbox-first + power-user stance (§12)', () => {
 })
 
 // ── plugins/kiln/README.md: the v3 pass ───────────────────────────────────────────────────────────
-test('plugin README: v2 framing is gone, v3 + GPT-5.5 are in', () => {
+test('plugin README: v2 framing is gone, v3 + GPT-5.6 are in', () => {
   assert.doesNotMatch(pluginReadme, /How it's built \(v2\)/)
   assert.match(pluginReadme, /How it's built \(v3\)/)
-  assert.match(pluginReadme, /GPT-5\.5/)
+  assert.match(pluginReadme, /GPT-5\.6/)
   assert.doesNotMatch(pluginReadme, BARE_GPT5)
   assert.match(pluginReadme, /## Sandbox & permissions/)
 })
@@ -92,6 +92,21 @@ test('plugin README: v2 framing is gone, v3 + GPT-5.5 are in', () => {
 test('root README: persona/workflow counts are the v3 truth', () => {
   assert.match(rootReadme, /34 personas/)
   assert.match(rootReadme, /8 workflows/)
+})
+
+// The LIVE marketing prose must name the current build model (GPT-5.6), never the retired GPT-5.5 or a
+// bare "GPT-5" — mirrors the plugin README's BARE_GPT5 guard. Changelog/history sections are excluded:
+// "Fresh from the Kiln" and "The Arc" legitimately preserve the model a past release actually shipped.
+test('root README: live prose names GPT-5.6 — no stale bare GPT-5.5 outside changelog/history', () => {
+  let inHistory = false
+  const liveLines = rootReadme.split('\n').filter((line) => {
+    const heading = /^##\s/.test(line)
+    if (heading) inHistory = /Fresh from the Kiln|The Arc/i.test(line)
+    return !inHistory
+  })
+  const live = liveLines.join('\n')
+  assert.match(live, /GPT-5\.6/, 'the modern build model is named in live prose')
+  assert.doesNotMatch(live, BARE_GPT5) // stale GPT-5.5 / bare GPT-5 live claim fails the harness
 })
 
 test('root README: the footer is untouched — byte-identical (operator law)', () => {

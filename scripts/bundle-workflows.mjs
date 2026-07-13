@@ -91,16 +91,31 @@ function gate() {
   return (gateBlock = src.replace(/^export /gm, '').replace(/\s+$/, ''))
 }
 
+// ── The models step: a `// @models` marker is replaced with the ENTIRE plugins/kiln/src/models.mjs
+//    body — the codex model pins (CODEX_MODEL + CODEX_FALLBACK) and their recorded-fallback doctrine,
+//    the `export ` keyword stripped from each declaration. Like @gate (and unlike @inline) it names
+//    no exports: it pulls the whole module as one unit so every GPT-pinning workflow shares one model
+//    id and cannot drift. --check guards the inline copies like any other generated content. Lazy +
+//    cached — only read when a workflow actually carries the marker. ──
+let modelsBlock = null
+function models() {
+  if (modelsBlock) return modelsBlock
+  const src = readFileSync(join(srcDir, 'models.mjs'), 'utf8')
+  return (modelsBlock = src.replace(/^export /gm, '').replace(/\s+$/, ''))
+}
+
 // ── Bundle one workflow source: replace each marker line with the named export declarations. ──
 const MARKER_RE = /^\/\/ @inline:([\w-]+):([\w$]+(?:,[\w$]+)*)\s*$/
 const DUO_RE = /^\/\/ @duo-pool\s*$/
 const GAUGE_RE = /^\/\/ @gauge-config\s*$/
 const GATE_RE = /^\/\/ @gate\s*$/
+const MODELS_RE = /^\/\/ @models\s*$/
 function bundle(name, src) {
   const body = src.split('\n').map((line) => {
     if (DUO_RE.test(line)) return duoPool()
     if (GAUGE_RE.test(line)) return gaugeConfig()
     if (GATE_RE.test(line)) return gate()
+    if (MODELS_RE.test(line)) return models()
     const m = line.match(MARKER_RE)
     if (!m) return line
     const [, mod, names] = m
