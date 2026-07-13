@@ -805,7 +805,7 @@ function traversalPrompt(scsForProbe) {
   const probePath = pluginRoot ? `${pluginRoot}/scripts/kiln-probe.mjs` : null
   // The scripted oracle is the ONLY browser path. It exists whenever pluginRoot is known.
   const probeArm = probePath
-    ? `- SCRIPTED BOUNDED ORACLE (the ONLY browser path — run it for EVERY UI criterion): 'node ${probePath} run ${projectPath} ${kilnDir} <SC-id> <runId> --lease ${VALIDATE_RUN_TOKEN}' where <runId> begins with '${VALIDATE_RUN_TOKEN}-' (MANDATORY — the stage pre/post sweeps reap exactly these runIds, the wrapper hard-kills each probe at a 90s deadline). The '--lease ${VALIDATE_RUN_TOKEN}' is MANDATORY too: it is the browser lease the workflow took for you, and it expires at the ≤10-min Tier-2 cap — a probe fired after the cap REFUSES with exit 77 LEASE_EXPIRED (the capability deadline), so do NOT loop or re-launch. Each call is one launch→assert→close OS process; it writes evidence (probe-<SC>.json + screenshot + log) into ${kilnDir}/evidence/<runId>/ and exits 0 pass · 1 assert-fail · 77 lease-expired (the cap was reached) · 78 unavailable (playwright absent) · 79 timeout. The Law's probe checks already carry specs (kind:'probe' in ${lawFile}); these SCs map to UI criteria: ${scsForProbe.length ? scsForProbe.join(', ') : '(none in law.json — author a minimal spec inline only if a criterion truly needs one)'}. If a 78 (PROBE_UNAVAILABLE) comes back, playwright is absent — there is NO browser path: stop, set browser_result='static-only', mark every UI criterion verified:false (UNVERIFIED). If a 77 (LEASE_EXPIRED) comes back you have hit the cap — stop immediately and report what you confirmed so far (criteria you did NOT confirm live stay verified:false).\n`
+    ? `- SCRIPTED BOUNDED ORACLE (the ONLY browser path — run it for EVERY UI criterion): 'node ${probePath} run ${projectPath} ${kilnDir} <SC-id> ${traversalPassRunId} --lease ${VALIDATE_RUN_TOKEN}'. The runId is EXACTLY '${traversalPassRunId}' for EVERY probe call this pass — script-assigned, never your own (MANDATORY: the stage pre/post sweeps reap exactly this id, the wrapper hard-kills each probe at a 90s deadline, and the correction briefs name this run's evidence paths deterministically; the per-SC files never collide). The '--lease ${VALIDATE_RUN_TOKEN}' is MANDATORY too: it is the browser lease the workflow took for you, and it expires at the ≤10-min Tier-2 cap — a probe fired after the cap REFUSES with exit 77 LEASE_EXPIRED (the capability deadline), so do NOT loop or re-launch. Each call is one launch→assert→close OS process; it writes evidence (probe-<SC>.json + screenshot + log) into ${kilnDir}/evidence/${traversalPassRunId}/ and exits 0 pass · 1 assert-fail · 77 lease-expired (the cap was reached) · 78 unavailable (playwright absent) · 79 timeout. The Law's probe checks already carry specs (kind:'probe' in ${lawFile}); these SCs map to UI criteria: ${scsForProbe.length ? scsForProbe.join(', ') : '(none in law.json — author a minimal spec inline only if a criterion truly needs one)'}. If a 78 (PROBE_UNAVAILABLE) comes back, playwright is absent — there is NO browser path: stop, set browser_result='static-only', mark every UI criterion verified:false (UNVERIFIED). If a 77 (LEASE_EXPIRED) comes back you have hit the cap — stop immediately and report what you confirmed so far (criteria you did NOT confirm live stay verified:false).\n`
     : `- The kiln-probe CLI is unavailable (pluginRoot absent) — there is NO browser path. Set tool='none', browser_result='static-only', mark every UI criterion verified:false (UNVERIFIED) — honest degradation, never a clean UI pass invented from static review.\n`
   const how = codexAvailable
     ? `<how>${codexGuideNote}You are a CROSS-FAMILY evaluator — translate this brief into a Codex-native prompt and delegate the analysis to ${CODEX_MODEL} via 'codex exec' at model_reasoning_effort="high" (the build's UI builder is Opus, so a different family genuinely re-checks the work). The scripted kiln-probe calls run as Bash either way; if codex errors, evaluate directly.</how>\n\n`
@@ -888,6 +888,15 @@ const uiScope = (argus && argus.ui_scope === true) || designPresent || argusCrit
 let traversal = null
 let traversalRan = false
 const traversalSuffixes = posture.adversarial_pass ? ['', ':adversarial'] : [''] // D8=2: a second adversarial pass
+// D2 (Sol WSD-r1 finding 2): the traversal run ids are SCRIPT-ASSIGNED — one deterministic id per
+// pass, derived from the stage token — so the correction assembly below can emit CONCRETE artifact
+// paths. An evaluator-invented runId would leave build re-entry briefs pointing at a '<runId>'
+// placeholder no builder can resolve. traversalPassRunId is set per pass immediately before the
+// evaluator spawns (passes run sequentially, so the prompt always reads its own pass's id);
+// launchedRunIds records every pass that actually launched, for the evidence hint.
+const traversalRunIdOf = (sfx) => `${VALIDATE_RUN_TOKEN}-traversal${sfx ? '-adversarial' : ''}`
+let traversalPassRunId = traversalRunIdOf('')
+const launchedRunIds = []
 try {
   if (uiScope) {
     phase('The Traversal')
@@ -909,6 +918,10 @@ try {
     let deadlineHit = false
     for (const sfx of traversalSuffixes) {
       const pass = sfx || 'primary'
+      // D2 (Sol WSD-r1 f2): assign THIS pass's deterministic run id before the evaluator spawns —
+      // traversalPrompt reads it, and the correction assembly emits its concrete evidence paths.
+      traversalPassRunId = traversalRunIdOf(sfx)
+      launchedRunIds.push(traversalPassRunId)
       // A FRESH per-pass provenance object: gateAgent records into it; the workflow snapshots it into the
       // append-only traversalProvLog. Because each pass owns its own object and the log holds snapshots, a
       // late writer (a timed-out pass that completes later) can never mutate a prior pass's record.
@@ -1062,9 +1075,24 @@ try {
         'If you used Playwright MCP: browser_close when done — leave no browser session alive.',
       ]
     : []
+  // D2 (§9 velocity, Sol WSD-r1 f2): a probe-derived correction task (a [ui-traversal] UI defect the
+  // Tier-2 scripted oracle found) inherits the traversal's on-disk evidence as CONCRETE paths — the
+  // run ids are script-assigned per pass (launchedRunIds above) and the probe SCs are argus's
+  // browser_only criteria, so every path is fully resolved here (never a '<runId>'/'<SC>' placeholder
+  // a build re-entry cannot follow). Reading artifacts is NOT browser authority — the builder still
+  // never spawns a browser; amendment 7 intact. The paths ride the existing string field; no schema
+  // change. When the SC ids are unknown to the script (no browser_only criteria), the hint names the
+  // concrete evidence dir(s) and their probe-*.json/.log + screenshot files instead.
+  const probeSCs = argusCriteria.filter((c) => c && c.browser_only === true && typeof c.id === 'string').map((c) => c.id)
+  const traversalEvidenceDirs = launchedRunIds.map((rid) => `${kilnDir}/evidence/${rid}`)
+  const traversalArtifactPaths = traversalEvidenceDirs.flatMap((d) => probeSCs.map((sc) => `${d}/probe-${sc}.json (+ ${d}/probe-${sc}.log and the screenshot(s) it names)`))
+  const traversalEvidenceHint = !traversalEvidenceDirs.length ? '' : (traversalArtifactPaths.length
+    ? ` — probe evidence on disk: read ${traversalArtifactPaths.join('; ')} before changing a line (reading artifacts is not browser authority — never launch a browser)`
+    : ` — probe evidence on disk under ${traversalEvidenceDirs.join(' and ')}: read every probe-*.json (result) and probe-*.log (console/stderr) there, plus the screenshot(s) each result names, before changing a line (reading artifacts is not browser authority — never launch a browser)`)
+  const withEvidence = (t) => (typeof t === 'string' && t.includes('[ui-traversal]')) ? t + traversalEvidenceHint : t
   const correction_tasks = Array.from(new Set([
-    ...((argus && Array.isArray(argus.correction_tasks)) ? argus.correction_tasks : []),
-    ...v.reasons,
+    ...((argus && Array.isArray(argus.correction_tasks)) ? argus.correction_tasks : []).map(withEvidence),
+    ...v.reasons.map(withEvidence),
   ]))
 
   // Cross-family honesty (F3): a posture-required second-family goal leg earns a cross-family

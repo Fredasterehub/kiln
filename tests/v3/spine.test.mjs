@@ -10,7 +10,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { validateSlicePlan, runnerGate, gateOnlyRefusal, probeGate, rejectionClass, tribunalThreshold, gateDecision, goalAuditUsable, pipelineInvalidated, validateVerdict } from '../../plugins/kiln/src/spine.mjs'
+import { validateSlicePlan, runnerGate, gateOnlyRefusal, probeGate, rejectionClass, failureFingerprint, admitRetry, tribunalThreshold, gateDecision, goalAuditUsable, pipelineInvalidated, validateVerdict } from '../../plugins/kiln/src/spine.mjs'
 
 // ── validateSlicePlan — §5 coverage is arithmetic, not judgment ─────────────────────────────────
 const slice = (objective, scIds, extra = {}) => ({ objective, done_when: `${objective} works`, sc_ids: scIds, ...extra })
@@ -680,4 +680,115 @@ test('validateVerdict: total + fail-closed — garbage/empty input never passes 
 test('validateVerdict: PURE — same input, same output', () => {
   const input = { ...greenUi, browser_path: 'static-only', criteria: [{ id: 'SC-001', met: false, critical: false }] }
   assert.deepEqual(validateVerdict(input), validateVerdict(input))
+})
+
+// ── failureFingerprint — the D1 retry-router signature (§9 velocity) ─────────────────────────────
+const red = { verdict: 'red' } // failureFingerprint emits ONLY on a check-level 'red' gate
+const cr = (id, exit, timeout = false) => ({ id, exit, timeout })
+
+test('failureFingerprint: no fingerprint unless the gate is RED — proceed/stale/tamper/absent all yield the null fingerprint (fail toward v3.0.1)', () => {
+  const rows = [cr('SC-001', 1)]
+  for (const g of [{ verdict: 'proceed' }, { verdict: 'stale' }, { verdict: 'tamper' }, null, undefined, 'x', []]) {
+    assert.deepEqual(failureFingerprint(rows, g), { class: null, failed: [], signature: '' }, `gate=${JSON.stringify(g)} must not fingerprint`)
+  }
+})
+
+test('failureFingerprint: null/empty/garbled checkResults on a red gate → null fingerprint', () => {
+  for (const bad of [null, undefined, [], 'x', 42, [null, {}, { id: '' }, { id: 'x' /* no exit */ }, { id: 'y', exit: 0 }]]) {
+    assert.deepEqual(failureFingerprint(bad, red), { class: null, failed: [], signature: '' }, `checkResults=${JSON.stringify(bad)} → null fp`)
+  }
+})
+
+test('failureFingerprint: every INFRA exit class + the timeout flag → class infra', () => {
+  for (const exit of [124, 77, 78, 79, 126, 127, -9]) {
+    const fp = failureFingerprint([cr('SC-001', exit)], red)
+    assert.equal(fp.class, 'infra', `exit ${exit} is infra`)
+    assert.deepEqual(fp.failed, ['SC-001'])
+    assert.equal(fp.signature, 'infra|SC-001:infra')
+  }
+  // the timeout flag alone (even with a non-infra exit code) is an infra failure
+  const fp = failureFingerprint([cr('SC-001', 1, true)], red)
+  assert.equal(fp.class, 'infra')
+})
+
+test('failureFingerprint: any other nonzero exit → class assertion', () => {
+  for (const exit of [1, 2, 3, 42]) {
+    const fp = failureFingerprint([cr('SC-001', exit)], red)
+    assert.equal(fp.class, 'assertion', `exit ${exit} is assertion`)
+    assert.equal(fp.signature, 'assertion|SC-001:assertion')
+  }
+})
+
+test('failureFingerprint: a mix of infra + assertion failures → class mixed, signature carries each per-id class', () => {
+  const fp = failureFingerprint([cr('SC-002', 1), cr('SC-001', 124)], red)
+  assert.equal(fp.class, 'mixed')
+  assert.deepEqual(fp.failed, ['SC-001', 'SC-002']) // id-sorted
+  assert.equal(fp.signature, 'mixed|SC-001:infra,SC-002:assertion')
+})
+
+test('failureFingerprint: green (exit 0) rows are NOT failures — only the reds count (deferred lines never reach check_results; the runner skips them)', () => {
+  const fp = failureFingerprint([cr('SC-001', 0), cr('SC-003', 1)], red)
+  assert.deepEqual(fp.failed, ['SC-003'])
+  assert.equal(fp.class, 'assertion')
+})
+
+test('failureFingerprint: ATOMIC (Sol r1-3) — ANY malformed entry poisons the WHOLE transcription; valid rows never survive a partial garble into a fingerprint', () => {
+  const valid = cr('SC-001', 124, true) // alone, this row is an infra fingerprint
+  assert.equal(failureFingerprint([valid], red).class, 'infra', 'sanity: the valid row alone fingerprints')
+  const garbles = [
+    [valid, { nope: 1 }],                                  // foreign shape
+    [valid, null],                                         // null row
+    [valid, { id: '', exit: 1, timeout: false }],          // blank id
+    [valid, { id: 'SC-002', exit: '1', timeout: false }],  // stringy exit
+    [valid, { id: 'SC-002', exit: 1 }],                    // missing timeout
+    [valid, { id: 'SC-002' }],                             // exit-less (a mis-transcribed deferred line)
+    [{ id: 'SC-002', exit: NaN, timeout: false }, valid],  // non-finite exit, garble FIRST
+  ]
+  for (const rows of garbles) {
+    assert.deepEqual(failureFingerprint(rows, red), { class: null, failed: [], signature: '' },
+      `rows=${JSON.stringify(rows)} must yield the NULL fingerprint — a partial garble is NO fingerprint (v3.0.1 admission), never half a signature`)
+  }
+})
+
+test('failureFingerprint: ORDER-INSENSITIVE — the same failed set in any order yields the identical signature', () => {
+  const a = failureFingerprint([cr('SC-001', 1), cr('SC-002', 124), cr('SC-003', 1)], red)
+  const b = failureFingerprint([cr('SC-003', 1), cr('SC-001', 1), cr('SC-002', 124)], red)
+  assert.equal(a.signature, b.signature)
+  assert.deepEqual(a.failed, b.failed)
+})
+
+// ── admitRetry — the D1 admission decision over two consecutive fingerprints ─────────────────────
+const fpInfra = { class: 'infra', failed: ['SC-001'], signature: 'infra|SC-001:infra' }
+const fpAssert = { class: 'assertion', failed: ['SC-001'], signature: 'assertion|SC-001:assertion' }
+const fpMixed = { class: 'mixed', failed: ['SC-001', 'SC-002'], signature: 'mixed|SC-001:infra,SC-002:assertion' }
+const fpNull = { class: null, failed: [], signature: '' }
+
+test('admitRetry: no comparable current fingerprint (null / null-class / garbled) → admit as v3.0.1 (no_fingerprint)', () => {
+  for (const cur of [null, undefined, fpNull, 'x', {}, { class: 'infra', signature: '' }]) {
+    assert.deepEqual(admitRetry(fpInfra, cur), { admit: true, reason: 'no_fingerprint' }, `cur=${JSON.stringify(cur)}`)
+  }
+})
+
+test('admitRetry: a first fingerprinted failure (no prior) → admit (first)', () => {
+  for (const prev of [null, undefined, fpNull, 'x']) {
+    assert.deepEqual(admitRetry(prev, fpInfra), { admit: true, reason: 'first' })
+  }
+})
+
+test('admitRetry: a CHANGED signature is progress → admit', () => {
+  assert.deepEqual(admitRetry(fpAssert, fpInfra), { admit: true, reason: 'progress' })
+  assert.deepEqual(admitRetry(fpInfra, fpAssert), { admit: true, reason: 'progress' })
+})
+
+test('admitRetry: identical INFRA (or mixed-infra) signature twice → REFUSE (environment_repeat)', () => {
+  assert.deepEqual(admitRetry(fpInfra, { ...fpInfra }), { admit: false, reason: 'environment_repeat' })
+  assert.deepEqual(admitRetry(fpMixed, { ...fpMixed }), { admit: false, reason: 'environment_repeat' })
+})
+
+test('admitRetry: identical ASSERTION signature twice → admit once more but strengthen the Sentinel (assertion_repeat)', () => {
+  assert.deepEqual(admitRetry(fpAssert, { ...fpAssert }), { admit: true, escalate_diagnosis: true, reason: 'assertion_repeat' })
+})
+
+test('admitRetry: PURE — same inputs, same output', () => {
+  assert.deepEqual(admitRetry(fpInfra, fpInfra), admitRetry(fpInfra, fpInfra))
 })

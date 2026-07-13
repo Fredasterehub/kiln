@@ -1222,3 +1222,257 @@ test('P3.6 T4 stage brackets: a gateOnly retry that ends green completes the sta
   assert.match(started[0].prompt, /"gate_only":true/, 'the entry bracket records the gate-only re-entry')
   assert.equal(stageLedgers(calls, 'stage_completed').length, 1, 'a green gate-only pass completes the stage')
 })
+
+// ── D1 failure-fingerprint retry router + D2 probe reject briefs + D5 slice telemetry (§9) ────────
+// The RUNNER now transcribes evidence/<runId>/results.jsonl into check_results; the in-script
+// admitRetry routes the NEXT builder attempt off the failure fingerprint. FAIL TOWARD v3.0.1: every
+// existing test above passes a runner WITHOUT check_results, so the fingerprint is null and the
+// admission is byte-identical to the old unconditional respawn (that is why none of them changed).
+const redInfra = { ...runnerOk, law_run_exit: 1, flip_unmet: ['SC-001'], check_results: [{ id: 'SC-001', exit: 124, timeout: true }] }
+const redAssert = { ...runnerOk, law_run_exit: 1, flip_unmet: ['SC-001'], check_results: [{ id: 'SC-001', exit: 1, timeout: false }] }
+
+test('D1 environment_repeat: identical INFRA failure ×2 → NO third builder spawn, ONE environment-repair trial, slice closed environment_blocked (splitLedger carries the distinct class marker)', async () => {
+  const { result, calls } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
+    if (label.startsWith('asimov:runner')) return redInfra // the same infra fault every trial
+  }))
+  assert.equal(count(calls, ':build:'), 2, 'initial + ONE fix build — the environment repeat NEVER burns a builder attempt into an unchanged broken environment')
+  assert.equal(count(calls, 'asimov:runner'), 3, 'fix0 trial + fix1 trial + ONE environment-repair trial (same commit, no builder change)')
+  assert.equal(count(calls, ':review:'), 0, 'a red Law never reaches a reviewer')
+  const pe = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('posture_escalated'))
+  assert.equal(pe.length, 2, 'the repair probe AND the environment-blocked close are each ledgered')
+  assert.ok(pe.some((l) => l.prompt.includes('environment_repair')), 'the environment-repair probe is ledgered')
+  assert.ok(pe.some((l) => l.prompt.includes('environment_blocked')), 'the environment-blocked close is ledgered')
+  assert.deepEqual(result.split_required, [{ milestone: 'M1', slice: 'M1:s0', sc_ids: ['SC-001'], class: 'environment' }], 'the splitLedger surface carries the distinct environment marker — the conductor reads "environment, not code"')
+  assert.equal(result.built[0].qa, 'QA_FAIL')
+  assert.match(result.built[0].findings.join(' '), /environment_blocked/, 'the milestone-gate finding names the environment block')
+})
+
+test('D1 environment repair RECOVERY: the same infra fault twice, but the no-change repair trial goes GREEN → it was environmental noise, the loop resumes and the slice PASSES (still no extra builder spawn)', async () => {
+  let trials = 0
+  const { result, calls } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
+    if (label.startsWith('asimov:runner')) { trials++; return trials <= 2 ? redInfra : runnerOk } // repair (3rd) recovers
+  }))
+  assert.equal(count(calls, 'asimov:runner'), 3, 'fix0, fix1, then the ONE environment-repair trial')
+  assert.equal(count(calls, ':build:'), 2, 'the repair used NO builder — the loop resumed on the recovered green')
+  assert.equal(count(calls, ':review:'), 1, 'only the recovered (green, proceed) repair trial reaches a reviewer')
+  assert.equal(result.built[0].qa, 'QA_PASS')
+  assert.deepEqual(result.split_required, [], 'a recovered environment repeat is not blocked')
+})
+
+test('D1 assertion_repeat: identical ASSERTION failure ×2 → the retry is admitted but the Sentinel signal STRENGTHENS — split fires ONE CYCLE SOONER (2 builds, not the v3.0.1 three)', async () => {
+  const { result, calls, log } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
+    if (label.startsWith('asimov:runner')) return redAssert // the same assertion fault every trial
+  }))
+  assert.equal(count(calls, ':build:'), 2, 'escalate-diagnosis drives the split at fix1 — the v3.0.1 unconditional path would take 3 builds')
+  assert.equal(count(calls, 'asimov:runner'), 2, 'assertion repeat ADMITS the retry — no environment-repair trial')
+  const pe = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('posture_escalated'))
+  assert.equal(pe.length, 1, 'the +1 diagnosis jump lands directly on split_and_rebuild — no separate feedback-escalation ledger')
+  assert.ok(pe[0].prompt.includes('split_and_rebuild'))
+  assert.ok(log.some((l) => /escalating diagnosis/.test(l)), 'the diagnosis escalation is logged')
+  assert.deepEqual(result.split_required, [{ milestone: 'M1', slice: 'M1:s0', sc_ids: ['SC-001'] }])
+})
+
+test('D1 progress: CHANGING failure signatures admit exactly as v3.0.1 — the call/label sequence is byte-identical to a run with NO check_results', async () => {
+  let t = 0
+  const withFp = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
+    if (label.startsWith('asimov:runner')) { t++; return { ...runnerOk, law_run_exit: 1, flip_unmet: ['SC-001'], check_results: [{ id: `C${t}`, exit: 1, timeout: false }] } } // a NEW failing id each trial ⇒ progress
+  }))
+  const noFp = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
+    if (label.startsWith('asimov:runner')) return { ...runnerOk, law_run_exit: 1, flip_unmet: ['SC-001'] } // v3.0.1: no check_results
+  }))
+  assert.deepEqual(withFp.calls.map((c) => c.label), noFp.calls.map((c) => c.label), 'a changing fingerprint never diverts the admission — identical label sequence to v3.0.1')
+  assert.deepEqual(withFp.result.split_required, noFp.result.split_required)
+})
+
+test('D1 fail-safe: garbled/missing check_results → NO fingerprint → v3.0.1 admission exactly (3 builds, split at 3, no repair trial) — a PARTIAL garble beside a valid infra row included (Sol r1-3 atomicity)', async () => {
+  for (const bad of [undefined, 'garbage', [{ id: '', exit: 'x' }], [{ nope: 1 }], [{ id: 'SC-001', exit: 124, timeout: true }, { nope: 1 }]]) {
+    const { result, calls } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
+      if (label.startsWith('asimov:runner')) return { ...runnerOk, law_run_exit: 1, flip_unmet: ['SC-001'], check_results: bad }
+    }))
+    assert.equal(count(calls, ':build:'), 3, `check_results=${JSON.stringify(bad)} → v3.0.1 unconditional respawns`)
+    assert.equal(count(calls, 'asimov:runner'), 3, 'no environment-repair trial — a garbled transcription means no fingerprint')
+    assert.deepEqual(result.split_required, [{ milestone: 'M1', slice: 'M1:s0', sc_ids: ['SC-001'] }])
+  }
+})
+
+test('D1 runner prompt: the runner is instructed to transcribe results.jsonl into check_results (id, exit, timeout = 124/79) — and told the transcription happens on EVERY run, a red exit skipping only the suite (r1 advisory)', async () => {
+  const { calls } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }))
+  const runner = labelsOf(calls, 'asimov:runner')[0].prompt
+  assert.match(runner, /results\.jsonl.*check_results/s)
+  assert.match(runner, /timeout = true iff exit is 124 or 79/)
+  assert.match(runner, /a red law_run_exit skips only the suite, never this/)
+  assert.match(runner, /STOP after that transcription — skip step 3/)
+})
+
+test('D2 probe reject brief: a FAILED probe check makes the fix build brief carry the deterministic artifact paths (probe-<id>.json, .log, screenshot) — script-assembled from runId + failed ids', async () => {
+  const lawProbe = [{ id: 'SC-001', milestone: 'M1', kind: 'probe' }]
+  const { calls } = await runBuild(baseArgs, mkRespond({ law: lawProbe, plan: planOne, milestones: [milestone({ surface: 'ui' })] }, (label) => {
+    if (label.startsWith('asimov:runner')) return redAssert // the probe SC fails red
+  }))
+  const fix1 = calls.find((c) => c.label.includes(':build:M1:s0:fix1'))
+  assert.ok(fix1, 'a fix build fires after the first probe rejection')
+  assert.match(fix1.prompt, /\/tmp\/kiln-x\/\.kiln\/evidence\/RUN1\/probe-SC-001\.json/)
+  assert.match(fix1.prompt, /probe-SC-001\.log/)
+  assert.match(fix1.prompt, /screenshot/)
+  assert.match(fix1.prompt, /READ its captured evidence/)
+  assert.match(fix1.prompt, /NOT browser authority/, 'reading artifacts is not browser authority — the builder still never spawns a browser')
+})
+
+test('D2 probe reject brief: a SHELL (non-probe) failure carries NO artifact paths — the brief stays plain', async () => {
+  const { calls } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
+    if (label.startsWith('asimov:runner')) return redAssert
+  }))
+  const fix1 = calls.find((c) => c.label.includes(':build:M1:s0:fix1'))
+  assert.ok(fix1)
+  assert.doesNotMatch(fix1.prompt, /probe-SC-001\.json/, 'a shell check leaves no probe artifacts to name')
+})
+
+test('D2 tribunal fixNote: a milestone-gate correction over probe-covered SCs inherits the last trial\'s probe artifacts (from lastRunId + the milestone probe SCs)', async () => {
+  const lawProbeTwo = [{ id: 'SC-001', milestone: 'M1', kind: 'probe' }, { id: 'SC-002', milestone: 'M1', kind: 'probe' }]
+  const blocking = { reasoning: 'r', overall: 'fail', findings: [{ text: 'the two panels never wire together', severity: 'critical' }] }
+  const { calls } = await runBuild(baseArgs, mkRespond({ law: lawProbeTwo, plan: planTwo, milestones: [milestone({ surface: 'ui' })] }, (label) => {
+    if (label.startsWith('ken:qa')) return blocking // blocking → computed QA_FAIL → correction loop
+  }))
+  const correction = calls.find((c) => c.label.includes(':build:M1:correct1'))
+  assert.ok(correction, 'the tribunal correction build fires')
+  assert.match(correction.prompt, /evidence\/RUN1\/probe-SC-001\.json/)
+  assert.match(correction.prompt, /evidence\/RUN1\/probe-SC-002\.json/)
+  assert.match(correction.prompt, /READ its captured evidence/)
+})
+
+test('D5 slice telemetry: each slice close emits a note{kind:slice_telemetry} carrying the required deterministic keys (NO clocks)', async () => {
+  const { calls } = await runBuild(baseArgs, mkRespond())
+  const notes = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('slice_telemetry'))
+  assert.equal(notes.length, 2, 'one telemetry note per slice')
+  const p = notes[0].prompt
+  assert.match(p, /"type":"note"/)
+  for (const key of ['"kind":"slice_telemetry"', '"slice_id":"M1:s0"', '"surface":"logic"', '"builder_model":"sonnet"', '"reviewer_escalated":false', '"attempts":1', '"rejection_classes":[]', '"fingerprint":null', '"first_pass_green":true', '"environment_blocked":false', '"split":false']) {
+    assert.ok(p.includes(key), `slice_telemetry note must carry ${key}`)
+  }
+})
+
+test('D5 slice telemetry: an environment-blocked slice records environment_blocked:true and the last fingerprint signature', async () => {
+  const { calls } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
+    if (label.startsWith('asimov:runner')) return redInfra
+  }))
+  const note = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('slice_telemetry'))[0].prompt
+  assert.match(note, /"environment_blocked":true/)
+  assert.match(note, /"fingerprint":"infra\|SC-001:infra"/)
+  assert.match(note, /"split":false/)
+})
+
+// ── Sol WSD-r1 round-2 fixes: the repair trial is an OBSERVATION; mixed honesty; telemetry null ──
+
+test('D1 repair observation (Sol r1-1 + r2-1): identical infra ×2, the repair trial fails RED with a CHANGED signature → the observation never counts, but the GENUINE outer rejection still escalates the Sentinel — the admitted correction is reviewed by the ESCALATED source and the slice RECOVERS (no split)', async () => {
+  let trials = 0
+  const { result, calls, log } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
+    if (label.startsWith('asimov:runner')) {
+      trials++
+      if (trials <= 2) return redInfra                       // fix0 + fix1: the identical infra fault
+      if (trials === 3) return redAssert                     // the repair trial: still red, but the failure MOVED
+      return runnerOk                                        // the admitted correction goes green
+    }
+  }))
+  assert.equal(count(calls, 'asimov:runner'), 4, 'fix0 + fix1 + the ONE repair trial + the admitted correction\'s trial')
+  assert.equal(count(calls, ':build:'), 3, 'initial + fix1 + the ONE admitted correction — the repair itself spends no builder')
+  const reviews = labelsOf(calls, ':review:')
+  assert.equal(reviews.length, 1, 'only the recovered green trial reaches a reviewer')
+  assert.equal(reviews[0].model, 'sonnet', 'Sol r2-1: the correction is reviewed by the ESCALATED source — the outer rejection reached the feedback threshold, so the family swapped')
+  assert.ok(reviews[0].label.endsWith(':esc'), 'the correction review rides the escalated leg')
+  assert.equal(result.built[0].qa, 'QA_PASS', 'the promised correction was admitted and the slice recovered — round-1 wrongly split here (2 rejections + the observation reached the split threshold)')
+  assert.deepEqual(result.split_required, [], 'no split, no environment block')
+  assert.ok(log.some((l) => /moved the failure/.test(l)), 'the moved-fingerprint observation is logged')
+  const pe = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('posture_escalated'))
+  assert.equal(pe.length, 2, 'the environment-repair probe AND the outer rejection\'s feedback escalation are each ledgered — the observation itself spends nothing')
+  assert.ok(pe.some((l) => l.prompt.includes('environment_repair')))
+  assert.ok(pe.some((l) => l.prompt.includes('escalate_feedback_source')), 'Sol r2-1: escalate() still runs for the genuine outer rejection at its already-incremented count')
+  assert.ok(!pe.some((l) => l.prompt.includes('split_and_rebuild')), 'the observation never pushes the count to the split threshold')
+})
+
+test('D1 repair observation (Sol r1-1 + r2-1): the repair trial clears the Law but the REVIEWER rejects → observation not counted, the outer rejection still escalates — the admitted correction is reviewed by the ESCALATED source, recovery to QA_PASS (no split)', async () => {
+  let trials = 0
+  let revN = 0
+  const { result, calls } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
+    if (label.startsWith('asimov:runner')) { trials++; return trials <= 2 ? redInfra : runnerOk } // repair (3rd) + correction (4th) go green
+    if (label.includes(':review:')) { revN++; return revN === 1 ? rejectLogical : reviewOk } // the repair's reviewer rejects; the correction's approves
+  }))
+  assert.equal(count(calls, 'asimov:runner'), 4, 'fix0 + fix1 + the repair trial + the correction\'s trial')
+  const reviews = labelsOf(calls, ':review:')
+  assert.equal(reviews.length, 2, 'the repair\'s green trial reached a reviewer (rejected), then the correction\'s (approved)')
+  assert.equal(reviews[0].model, 'opus', 'the repair observation itself is reviewed by the not-yet-escalated source (the outer rejection\'s escalation follows the observation)')
+  assert.equal(reviews[1].model, 'sonnet', 'Sol r2-1: the admitted correction is reviewed by the ESCALATED (swapped-family) source')
+  assert.ok(reviews[1].label.endsWith(':esc'))
+  assert.equal(count(calls, ':build:'), 3, 'initial + fix1 + the ONE admitted correction')
+  assert.equal(result.built[0].qa, 'QA_PASS', 'round-1 wrongly split here: 2 environmental rejections + the observation\'s reviewer rejection reached the split threshold')
+  assert.deepEqual(result.split_required, [])
+  const correction = calls.find((c) => c.label.includes(':build:M1:s0:fix2'))
+  assert.ok(correction, 'the admitted correction is the fix2 build')
+  assert.match(correction.prompt, /wrong behavior in add\(\)/, 'the correction brief carries the repair reviewer\'s findings')
+  const pe = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('posture_escalated'))
+  assert.equal(pe.length, 2, 'environment_repair + the outer rejection\'s escalate_feedback_source — no split_and_rebuild')
+  assert.ok(pe.some((l) => l.prompt.includes('environment_repair')))
+  assert.ok(pe.some((l) => l.prompt.includes('escalate_feedback_source')))
+  assert.ok(!pe.some((l) => l.prompt.includes('split_and_rebuild')))
+})
+
+test('D1 cap extension (Sol r2-2): a moved repair at fix === MAX_REVIEW_FIXES still admits its ONE promised correction — the observation consumed no builder attempt, the extension is one-shot, and the correction is reviewed by the escalated source', async () => {
+  // Sol's reachable sequence: two mechanical rejections, a first infra fingerprint at fix2, the
+  // identical infra fingerprint at fix3 (the cap), then a CHANGED repair fingerprint.
+  let trials = 0
+  let revN = 0
+  const mechReject = { reasoning: 'r', verdict: 'REJECTED', law_green: true, tests_green: true, findings: [{ text: 'stray debug print', finding_class: 'mechanical' }] }
+  const { result, calls, log } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
+    if (label.startsWith('asimov:runner')) {
+      trials++
+      if (trials <= 2) return runnerOk    // fix0 + fix1: green Law, the reviewer rejects mechanically
+      if (trials <= 4) return redInfra    // fix2: first infra fp · fix3 (the cap): the identical repeat
+      if (trials === 5) return redAssert  // the repair trial: MOVED
+      return runnerOk                     // the extension correction goes green
+    }
+    if (label.includes(':review:')) { revN++; return revN <= 2 ? mechReject : reviewOk }
+  }))
+  const fix4 = calls.find((c) => c.label.includes(':build:M1:s0:fix4'))
+  assert.ok(fix4, 'Sol r2-2: the promised correction is admitted DESPITE the cap — round 2 broke on the cap before it')
+  assert.equal(count(calls, ':build:'), 5, 'initial + fix1..fix3 + the ONE extension correction — never more than one extension')
+  assert.equal(count(calls, 'asimov:runner'), 6, 'four cycle trials + the repair trial + the extension correction\'s trial')
+  const reviews = labelsOf(calls, ':review:')
+  assert.equal(reviews.length, 3, 'two mechanical rejections + the extension correction\'s review')
+  assert.ok(reviews[2].label.endsWith(':esc'), 'the extension correction is reviewed by the escalated source (the outer rejection hit the feedback threshold)')
+  assert.equal(result.built[0].qa, 'QA_PASS', 'the extension correction recovered the slice')
+  assert.deepEqual(result.split_required, [])
+  assert.ok(log.some((l) => /promised correction is still admitted/.test(l)), 'the one-shot cap extension is logged')
+})
+
+test('D1 mixed honesty (Sol r1-5): an identical MIXED repeat closes blocked with class \'mixed\' naming the unresolved assertion(s) — never the pure-infra "not the code" claim', async () => {
+  const lawBoth = [{ id: 'SC-001', milestone: 'M1', kind: 'shell' }, { id: 'SC-002', milestone: 'M1', kind: 'shell' }]
+  const planBoth = [{ objective: 'both', files: [], constraints: '', done_when: 'both work', sc_ids: ['SC-001', 'SC-002'] }]
+  const redMixed = { ...runnerOk, law_run_exit: 1, flip_unmet: ['SC-001', 'SC-002'], check_results: [{ id: 'SC-001', exit: 124, timeout: true }, { id: 'SC-002', exit: 1, timeout: false }] }
+  const { result, calls, log } = await runBuild(baseArgs, mkRespond({ law: lawBoth, plan: planBoth }, (label) => {
+    if (label.startsWith('asimov:runner')) return redMixed // the identical mixed fault every trial
+  }))
+  assert.equal(count(calls, 'asimov:runner'), 3, 'fix0 + fix1 + the ONE environment-repair trial')
+  assert.equal(count(calls, ':build:'), 2, 'the mixed-infra diversion itself is retained (ratified) — no third builder into the unchanged environment')
+  assert.deepEqual(result.split_required, [{ milestone: 'M1', slice: 'M1:s0', sc_ids: ['SC-001', 'SC-002'], class: 'mixed', unresolved_assertions: ['SC-002'] }], 'the splitLedger marker is mixed (not environment) and names the unresolved assertion SCs')
+  const findings = result.built[0].findings.join(' ')
+  assert.match(findings, /UNRESOLVED/, 'the QA finding says the product assertions remain unresolved')
+  assert.match(findings, /SC-002/, 'the unresolved assertion SC is named')
+  assert.match(findings, /code work is still owed/, 'mixed honesty: code work remains after the environment repair')
+  assert.doesNotMatch(findings, /not the code/, 'a MIXED repeat may never claim "environment, not code" — it contains a product assertion')
+  assert.ok(log.some((l) => /MIXED failure/.test(l)), 'the blocked log line is the mixed wording')
+  assert.ok(log.some((l) => /blocked MIXED \(environment repair \+ unresolved assertions/.test(l)), 'the closing bow distinguishes mixed blocks from split decisions and pure environment repair')
+  const blocked = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('"action":"environment_blocked"'))
+  assert.equal(blocked.length, 1, 'exactly one blocked-close ledger event (the telemetry note also carries the environment_blocked KEY — filter on the action)')
+  assert.match(blocked[0].prompt, /"fingerprint_class":"mixed"/)
+  assert.match(blocked[0].prompt, /"unresolved_assertions":\["SC-002"\]/)
+})
+
+test('D5 telemetry (Sol r1-4): a rejected NO-fingerprint slice emits fingerprint:null — never the empty string of a truthy null-fingerprint object', async () => {
+  const { calls } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
+    if (label.includes(':review:')) return { reasoning: 'r', verdict: 'REJECTED', law_green: true, tests_green: true, findings: [{ text: 'stray debug print', finding_class: 'mechanical' }] }
+  }))
+  const note = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('slice_telemetry'))[0].prompt
+  assert.ok(note.includes('"fingerprint":null'), 'a reviewer-rejected (green-Law) slice has NO fingerprint — telemetry must carry null')
+  assert.ok(!note.includes('"fingerprint":""'), 'the truthy null-fingerprint object must not leak "" (Sol r1-4)')
+  assert.match(note, /"first_pass_green":false/)
+  assert.match(note, /"attempts":4/)
+})

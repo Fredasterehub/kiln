@@ -324,6 +324,90 @@ export function rejectionClass(review) {
   return findings.length ? 'mechanical' : 'logical'
 }
 
+// failureFingerprint(checkResults, gate) — the D1 retry-router signature (BLUEPRINT §9 velocity;
+// plan D1, Sol amendment 8). Before another builder attempt is admitted, the failure is
+// fingerprinted so an IDENTICAL repeat can be caught (splitting or re-building an unchanged broken
+// environment just makes two failing slices). `checkResults` is the runner's VERBATIM transcription
+// of the run's evidence/<runId>/results.jsonl — one { id, exit, timeout } per check kiln-law ran
+// (the failing exits ARE the flip-unmet/regressed set). `gate` is the runnerGate verdict object.
+//
+// FAIL TOWARD v3.0.1: a fingerprint is emitted ONLY for a check-level lifecycle failure — a 'red'
+// gate, the one mode whose per-check exits carry a signature comparable across attempts. A 'proceed'
+// gate (the Law is green; any rejection is the reviewer's LOGICAL judgment, routed by the Sentinel,
+// never here), a 'stale'/'tamper' gate (an evidence/lock fault, not a wrong-behavior signature — and
+// a touched lock must never masquerade as an infra repeat), an absent/garbled gate, or empty/garbled
+// checkResults all yield the NULL fingerprint ({ class: null, failed: [], signature: '' }) — so
+// admitRetry admits exactly as the old unconditional respawn did. The router removes waste; it never
+// adds a new way to wedge a run.
+//
+// Per-check classification (the ENVIRONMENT-vs-ASSERTION split, exit semantics per kiln-law.mjs and
+// kiln-probe.mjs): a hard timeout (the `timeout` flag, or exit 124/79), a probe lease-expiry/absence
+// (77/78), a non-executable / not-found command (126/127), or a raw signal-death (a negative exit)
+// is an INFRA fault — the environment, not the code. Every other nonzero exit is an ASSERTION fault —
+// wrong behavior. A green check (exit 0, no timeout) is not a failure; a deferred probe records no
+// exit and the runner skips its line entirely, so it never reaches this function.
+// ATOMIC transcription validation (Sol WSD-r1 finding 3): the transcription is trusted WHOLE or not
+// at all — ANY malformed entry (non-object, blank id, non-finite exit, non-boolean timeout) yields
+// the NULL fingerprint. A partially-garbled results.jsonl must read as NO fingerprint (the v3.0.1
+// admission), never as a confident partial signature that could route environment_repeat off half
+// the truth.
+// Overall class: all-infra ⇒ 'infra', all-assertion ⇒ 'assertion', both present ⇒ 'mixed', none ⇒ null.
+// signature = class + the id-sorted failed list + each id's class — deterministic and order-insensitive
+// (no hashing; workflows compare the plain string for equality). Returns { class, failed, signature }.
+export function failureFingerprint(checkResults, gate) {
+  const NULL_FP = { class: null, failed: [], signature: '' }
+  const g = (gate && typeof gate === 'object' && !Array.isArray(gate)) ? gate : null
+  if (!g || g.verdict !== 'red') return NULL_FP
+  if (!Array.isArray(checkResults) || !checkResults.length) return NULL_FP
+  const INFRA_EXITS = [124, 77, 78, 79, 126, 127]
+  const failed = []
+  for (const row of checkResults) {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return NULL_FP
+    const id = typeof row.id === 'string' ? row.id.trim() : ''
+    if (!id) return NULL_FP
+    if (typeof row.exit !== 'number' || !Number.isFinite(row.exit)) return NULL_FP
+    if (typeof row.timeout !== 'boolean') return NULL_FP
+    if (!row.timeout && row.exit === 0) continue // a green check is not a failure
+    const cls = (row.timeout || INFRA_EXITS.includes(row.exit) || row.exit < 0) ? 'infra' : 'assertion'
+    failed.push({ id, cls })
+  }
+  if (!failed.length) return NULL_FP
+  failed.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  const anyInfra = failed.some((f) => f.cls === 'infra')
+  const anyAssertion = failed.some((f) => f.cls === 'assertion')
+  const klass = (anyInfra && anyAssertion) ? 'mixed' : (anyInfra ? 'infra' : 'assertion')
+  return { class: klass, failed: failed.map((f) => f.id), signature: `${klass}|${failed.map((f) => `${f.id}:${f.cls}`).join(',')}` }
+}
+
+// admitRetry(prevFp, curFp) — the D1 admission decision over two consecutive failure fingerprints
+// (plan D1). curFp is THIS attempt's fingerprint, prevFp the prior attempt's. FAIL TOWARD v3.0.1:
+// anything but an identical repeat admits the next builder attempt exactly as before.
+//   · no comparable current fingerprint (green Law / reviewer judgment / stale / garbled) → admit,
+//     reason 'no_fingerprint' — the Sentinel alone governs, as in v3.0.1.
+//   · a first fingerprinted failure (nothing to compare) → admit, reason 'first'.
+//   · a CHANGED signature → admit, reason 'progress' — the failure moved, so the correction is doing
+//     something; keep going.
+//   · an identical INFRA (or mixed-infra) signature twice → REFUSE, reason 'environment_repeat': the
+//     environment reproduced the exact same fault with no change to show for it. The caller stops
+//     builder retries and runs one environment-repair probe instead of burning another attempt into
+//     an unchanged broken environment.
+//   · an identical ASSERTION signature twice → admit ONCE MORE (escalate_diagnosis) — the retry is
+//     allowed, but the Sentinel signal strengthens so it reaches feedback-escalation/split one cycle
+//     sooner on identical-assertion spin (never on progress).
+// Returns { admit, reason } (+ escalate_diagnosis:true on assertion_repeat).
+export function admitRetry(prevFp, curFp) {
+  const norm = (fp) => (fp && typeof fp === 'object' && !Array.isArray(fp)
+    && (fp.class === 'infra' || fp.class === 'assertion' || fp.class === 'mixed')
+    && typeof fp.signature === 'string' && fp.signature) ? fp : null
+  const cur = norm(curFp)
+  if (!cur) return { admit: true, reason: 'no_fingerprint' }
+  const prev = norm(prevFp)
+  if (!prev) return { admit: true, reason: 'first' }
+  if (prev.signature !== cur.signature) return { admit: true, reason: 'progress' }
+  if (cur.class === 'infra' || cur.class === 'mixed') return { admit: false, reason: 'environment_repeat' }
+  return { admit: true, escalate_diagnosis: true, reason: 'assertion_repeat' }
+}
+
 // pipelineInvalidated(baseSha, headSha) — the §9 next-milestone pipelining invalidation predicate
 // (review finding #8, BLUEPRINT §9). Velocity lever 3 launches M(i+1)'s slice-plan IN PARALLEL with
 // M(i)'s milestone gate, against the HEAD that existed when the pipeline launched (its recorded

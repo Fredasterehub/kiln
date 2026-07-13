@@ -147,3 +147,21 @@ test('round-trip: every WORKFLOW_TYPES entry is one of the widened workflow type
   const widened = parseEventTypes().filter((t) => !CORE.includes(t))
   assert.deepEqual([...WORKFLOW_TYPES].sort(), widened.sort())
 })
+
+// ── D5 slice telemetry (§9, note.data.kind — no new event type): the build workflow's first `note`
+//    emission. The event TYPE is the pre-existing 'note' (a CORE type, so WORKFLOW_TYPES is
+//    unchanged); this test guards the PAYLOAD shape at the source, the ledger-vocabulary idiom
+//    (regex over the workflow files), so a dropped telemetry key is a red harness. ──
+test('D5 slice telemetry: build emits note{kind:slice_telemetry} with the required deterministic payload keys (no clocks) — src AND generated agree', () => {
+  for (const dir of [SRC_DIR, GEN_DIR]) {
+    const src = readFileSync(join(dir, 'build.js'), 'utf8')
+    assert.match(src, /ledger\('note',\s*\{/, `${dir}/build.js emits a note event`)
+    const m = src.match(/kind:\s*'slice_telemetry'[\s\S]{0,500}?\}/)
+    assert.ok(m, `${dir}: a slice_telemetry note payload is present`)
+    const block = m[0]
+    for (const key of ['slice_id', 'surface', 'builder_model', 'reviewer_escalated', 'attempts', 'rejection_classes', 'fingerprint', 'first_pass_green', 'environment_blocked', 'split']) {
+      assert.ok(block.includes(key), `${dir}: slice_telemetry payload must carry ${key}`)
+    }
+    assert.ok(!/Date\.now|Math\.random|elapsed|tokens/.test(block), `${dir}: telemetry carries NO clock/token fields (workflow determinism forbids clocks)`)
+  }
+})

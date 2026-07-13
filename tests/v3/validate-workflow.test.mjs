@@ -95,3 +95,41 @@ test('P3.6 T4 validate brackets: a PARTIAL verdict (missing creds) also withhold
   assert.equal(result.verdict, 'VALIDATE_PARTIAL')
   assert.equal(ledgersOf(calls, 'stage_completed').length, 0, 'PARTIAL is not completion — the conductor still owns the next move')
 })
+
+// ── D2: a UI-traversal defect's correction task inherits the traversal's on-disk probe artifacts ──
+// A UI scope whose Tier-2 traversal finds a defect ([ui-traversal] finding) — the correction task
+// that rides back to a build re-entry must NAME the probe evidence paths so the builder reads the
+// real DOM/console/screenshot state before re-attempting (reading artifacts is not browser authority).
+const argusUi = {
+  reasoning: 'r', report_file: 'report.md', product_type: 'web',
+  install_ok: true, law_run_exit: 0, suite_cmd: 'npm test', suite_exit: 0,
+  tests_passed: 3, tests_failed: 0, run_id: 'RUN1', verification_class_full: true,
+  criteria: [{ id: 'SC-UI-1', met: true, critical: true, browser_only: true }],
+  ui_scope: true, missing_creds: false, coverage_gaps: [], blocking_findings: [], correction_tasks: [],
+}
+const traversalFail = { reasoning: 'r', tool: 'kiln-probe', browser_result: 'failed', criteria: [{ id: 'SC-UI-1', met: false, verified: true }], findings: ['the primary nav is clipped below 400px'] }
+
+test('D2 validate (Sol r1-2): a [ui-traversal] correction task carries CONCRETE probe artifact paths — the traversal run id is SCRIPT-ASSIGNED, and no placeholder survives into the build re-entry brief', async () => {
+  const { result, calls } = await runValidate(baseArgs, (label) => {
+    if (label === 'thoth:ledger') return { ok: true }
+    if (label === 'hephaestus:detect') return { reasoning: 'r', design_present: false }
+    if (label === 'zoxea:arch-check') return { reasoning: 'r', check_file: 'ac.md', summary: 's', drift: [], seam_issues: [], blocking: [] }
+    if (label === 'argus:validate') return argusUi
+    if (label.startsWith('argus:traversal')) return traversalFail
+    if (label === 'aristotle:goal-final') return { reasoning: 'r', overall: 'pass', findings: [] }
+    return null // sentinel lease/sweep legs degrade gracefully
+  })
+  assert.equal(result.verdict, 'VALIDATE_FAILED', 'a live UI defect fails the verdict')
+  // the traversal PROMPT carries the script-assigned run id — the evaluator is never allowed to invent one
+  const tp = calls.find((c) => c.label === 'argus:traversal')
+  assert.ok(tp, 'the traversal evaluator spawned')
+  assert.match(tp.prompt, /run \/tmp\/val-x \/tmp\/val-x\/\.kiln <SC-id> kval-[A-Za-z0-9._-]+-traversal --lease/, 'the probe invocation names the concrete script-assigned runId')
+  assert.match(tp.prompt, /script-assigned, never your own/)
+  const uiTask = result.correction_tasks.find((t) => t.includes('[ui-traversal]'))
+  assert.ok(uiTask, 'the traversal defect became a correction task')
+  assert.doesNotMatch(uiTask, /<runId>|<SC>/, 'a placeholder path is useless to a build re-entry — every path must be concrete (Sol r1-2)')
+  assert.match(uiTask, /\/tmp\/val-x\/\.kiln\/evidence\/kval-[A-Za-z0-9._-]+-traversal\/probe-SC-UI-1\.json/, 'the per-SC result path is fully resolved: evidence dir + script-assigned runId + SC id')
+  assert.match(uiTask, /probe-SC-UI-1\.log/, 'the console/stderr log path is fully resolved too')
+  assert.match(uiTask, /screenshot/)
+  assert.match(uiTask, /not browser authority/, 'reading artifacts is not browser authority')
+})
