@@ -22,9 +22,10 @@
 //   kiln-state.mjs project <kilnDir>                 rebuild state.json from the ledger
 //   kiln-state.mjs validate <kilnDir>                schema + seq contiguity + projection sync; exit 1 on violation
 //   kiln-state.mjs summary <kilnDir>                 human markdown run summary to stdout
+//   kiln-state.mjs unlock <kilnDir>                  clear a stale append lock (refuses while the holder is alive)
 // Exit codes: 0 ok · 1 violation/error · 2 usage.
 
-import { readFileSync, writeFileSync, appendFileSync, renameSync, mkdirSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, appendFileSync, renameSync, mkdirSync, rmdirSync, rmSync, existsSync } from 'node:fs'
 import { join, resolve, isAbsolute, basename } from 'node:path'
 
 const EVENT_TYPES = ['run_init', 'stage_started', 'stage_completed', 'gate_decision', 'posture_set', 'posture_escalated', 'check_result', 'commit', 'evidence', 'escalation', 'note', 'browser_leak_suspect', 'browser_lease', 'browser_sweep', 'gate_only_refused', 'gate_skipped', 'goal_audit_failure', 'law_red_auto_reject', 'probe_unavailable', 'slice_plan_invalid', 'slice_plan_invalidated', 'slice_plan_replanned', 'tamper_auto_reject', 'tier2_traversal', 'validate_verdict', 'verification_degraded', 'vision_compiled']
@@ -127,6 +128,69 @@ function writeState(kilnDir, st) {
   writeFileSync(file + '.tmp', JSON.stringify(st, null, 2) + '\n')
   renameSync(file + '.tmp', file)
   return file
+}
+
+// ── Append lock ────────────────────────────────────────────────────────────────────────────────
+// Concurrent appends corrupt the ledger: two writers deriving next seq off the same tail duplicate
+// it, and one healing the unterminated tail while the other appends loses bytes across the rename.
+// The whole read→heal→derive→append→project section runs under one atomic mkdir lock (POSIX-atomic,
+// no deps). There is NO steal in the hot path: a crashed writer's lock is cleared out-of-band by the
+// `unlock` subcommand (which refuses while the holder is alive), never yanked mid-write by a racer.
+const LOCK_DEADLINE_MS = 5000
+const LOCK_RETRY_MS = 25
+const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+let lockCounter = 0
+
+// The lock carries a MANDATORY ownership token. mkdir is the atomic gate; the moment it wins, we
+// write {pid, ts, token} into owner.json INSIDE the dir. If that write fails we rmdir the lock and
+// die rather than hold a tokenless lock — the write fence and release both key on the token, so a
+// tokenless lock would be un-fenceable and un-releasable. The token is unique per acquire.
+function acquireAppendLock(kilnDir) {
+  const lockDir = join(kilnDir, '.state.lock')
+  const token = `${process.pid}-${Date.now()}-${lockCounter++}-${Math.random().toString(36).slice(2)}`
+  const deadline = Date.now() + LOCK_DEADLINE_MS
+  for (;;) {
+    try {
+      mkdirSync(lockDir)
+    } catch (e) {
+      if (e.code !== 'EEXIST') throw e
+      if (Date.now() >= deadline) {
+        let who = 'owner.json unreadable'
+        try { const o = JSON.parse(readFileSync(join(lockDir, 'owner.json'), 'utf8')); who = `held by pid ${o.pid} since ${o.ts}` } catch { /* owner gone/garbage */ }
+        die(`append: could not acquire ${lockDir} within ${LOCK_DEADLINE_MS}ms — ${who}. If that process is dead, clear it with: kiln-state unlock ${kilnDir} (refuses while the holder is alive)`)
+      }
+      sleep(LOCK_RETRY_MS)
+      continue
+    }
+    // mkdir won the gate — the token MUST land or we don't hold the lock.
+    try {
+      writeFileSync(join(lockDir, 'owner.json'), JSON.stringify({ pid: process.pid, ts: new Date().toISOString(), token }))
+    } catch (e) {
+      try { rmdirSync(lockDir) } catch { /* nothing to unwind */ }
+      die(`append: acquired ${lockDir} but could not write owner.json (${e.message}) — released it rather than hold a tokenless lock`)
+    }
+    return { lockDir, token }
+  }
+}
+
+// Write fence: re-read owner.json and confirm OUR token still owns the lock. Called immediately
+// before each write in the critical section. With no steal in the hot path this only ever fires
+// against an out-of-band `unlock` (or manual tampering) racing a live holder — so we abort BEFORE
+// writing rather than scribble under a lock we no longer own.
+function lockStillOurs(lockDir, token) {
+  let owner
+  try { owner = JSON.parse(readFileSync(join(lockDir, 'owner.json'), 'utf8')) } catch { return false }
+  return isObj(owner) && owner.token === token
+}
+
+function releaseAppendLock(lockDir, token) {
+  // Tear the lock down only if owner.json still holds OUR token; a differing/vanished owner means
+  // something out-of-band already cleared us, so touch nothing. Belt-and-suspenders with no steal.
+  let owner
+  try { owner = JSON.parse(readFileSync(join(lockDir, 'owner.json'), 'utf8')) } catch { return }
+  if (!isObj(owner) || owner.token !== token) return
+  try { rmSync(join(lockDir, 'owner.json'), { force: true }) } catch { /* already gone */ }
+  try { rmdirSync(lockDir) } catch { /* already released */ }
 }
 
 // ── Projection — the only producer of state.json content (tasks.md T2.4, encoded exactly) ───────
@@ -244,27 +308,38 @@ function cmdAppend(kilnDir, json) {
     if (k === 'seq' || k === 'ts') die(`append assigns ${k} itself — provide only type, stage, data, git`)
     if (!['type', 'stage', 'data', 'git'].includes(k)) die(`append: unknown event key '${k}'`)
   }
-  const { file, events, lines, unterminated } = readLedger(kilnDir)
-  // Heal before appending: an unterminated tail would swallow the new event's bytes. Rewrite the
-  // surviving lines atomically (original raw lines, not re-serialized), then append as usual.
-  if (unterminated) {
-    writeFileSync(file + '.tmp', lines.join('\n') + '\n')
-    renameSync(file + '.tmp', file)
+  const { lockDir, token } = acquireAppendLock(kilnDir)
+  try {
+    const { file, events, lines, unterminated } = readLedger(kilnDir)
+    // Heal before appending: an unterminated tail would swallow the new event's bytes. Rewrite the
+    // surviving lines atomically (original raw lines, not re-serialized), then append as usual.
+    if (unterminated) {
+      writeFileSync(file + '.tmp', lines.join('\n') + '\n')
+      renameSync(file + '.tmp', file)
+    }
+    const ev = {
+      seq: events[events.length - 1].seq + 1,
+      ts: new Date().toISOString(),
+      type: input.type,
+      stage: input.stage,
+      data: input.data === undefined ? {} : input.data, // defaults fill absent fields, never mask bad ones
+      git: input.git === undefined ? null : input.git,
+    }
+    const viol = validateEvent(ev, 'event')
+    if (viol.length) throw new Error(`append: invalid event:\n  ${viol.join('\n  ')}`) // finally releases the lock; dispatch reports it
+    // Write-ahead discipline: the ledger line lands FIRST, then the projection updates atomically.
+    // Write fence before EACH write: re-verify our token owns the lock (guards an out-of-band `unlock`
+    // racing us). If the fence fires between the two writes the ledger is already extended but the
+    // projection is skipped — state.json is then stale by exactly one event, which `kiln-state project`
+    // rebuilds; the ledger (the write-ahead source of truth) stays intact either way.
+    if (!lockStillOurs(lockDir, token)) die('append: lock lost before write — ledger untouched')
+    appendFileSync(file, JSON.stringify(ev) + '\n')
+    if (!lockStillOurs(lockDir, token)) die('append: lock lost between writes — ledger extended, projection skipped (kiln-state project rebuilds it)')
+    writeState(kilnDir, projectState([...events, ev]))
+    console.log(JSON.stringify(ev))
+  } finally {
+    releaseAppendLock(lockDir, token)
   }
-  const ev = {
-    seq: events[events.length - 1].seq + 1,
-    ts: new Date().toISOString(),
-    type: input.type,
-    stage: input.stage,
-    data: input.data === undefined ? {} : input.data, // defaults fill absent fields, never mask bad ones
-    git: input.git === undefined ? null : input.git,
-  }
-  const viol = validateEvent(ev, 'event')
-  if (viol.length) die(`append: invalid event:\n  ${viol.join('\n  ')}`)
-  // Write-ahead discipline: the ledger line lands FIRST, then the projection updates atomically.
-  appendFileSync(file, JSON.stringify(ev) + '\n')
-  writeState(kilnDir, projectState([...events, ev]))
-  console.log(JSON.stringify(ev))
 }
 
 function cmdProject(kilnDir) {
@@ -317,8 +392,25 @@ function cmdSummary(kilnDir) {
   ].join('\n') + '\n')
 }
 
+// Out-of-band recovery for a wedged lock: NEVER called by append. Clears .state.lock only when its
+// holder is provably gone — a live pid (process.kill(pid, 0) succeeds, or EPERM = exists-not-ours)
+// refuses, so a running writer can never have its lock pulled out from under it.
+function cmdUnlock(kilnDir) {
+  const lockDir = join(kilnDir, '.state.lock')
+  if (!existsSync(lockDir)) { console.log(`kiln-state: no lock at ${lockDir} — nothing to clear`); return }
+  let owner = null
+  try { owner = JSON.parse(readFileSync(join(lockDir, 'owner.json'), 'utf8')) } catch { /* tokenless/garbage lock — clearable */ }
+  if (isObj(owner) && Number.isInteger(owner.pid)) {
+    let alive = false
+    try { process.kill(owner.pid, 0); alive = true } catch (e) { alive = e.code === 'EPERM' } // EPERM → exists, just not ours
+    if (alive) die(`unlock: ${lockDir} is held by a LIVE process (pid ${owner.pid} since ${owner.ts}) — refusing to clear it; stop that process first`)
+  }
+  rmSync(lockDir, { recursive: true, force: true })
+  console.log(`kiln-state: cleared stale lock ${lockDir} — was ${isObj(owner) ? `pid ${owner.pid} (ts ${owner.ts})` : 'a tokenless/unreadable owner'}`)
+}
+
 // ── Dispatch ─────────────────────────────────────────────────────────────────────────────────────
-const USAGE = `usage: kiln-state.mjs <init|append|project|validate|summary> <kilnDir> [args]   (header comment has the full forms)`
+const USAGE = `usage: kiln-state.mjs <init|append|project|validate|summary|unlock> <kilnDir> [args]   (header comment has the full forms)`
 function parseFlags(argv) {
   const flags = {}
   for (let i = 0; i < argv.length; i += 2) {
@@ -337,5 +429,6 @@ try {
   else if (cmd === 'project') cmdProject(kilnDir)
   else if (cmd === 'validate') cmdValidate(kilnDir)
   else if (cmd === 'summary') cmdSummary(kilnDir)
+  else if (cmd === 'unlock') cmdUnlock(kilnDir)
   else die(USAGE, 2)
 } catch (e) { die(e.message) }
