@@ -19,6 +19,12 @@ const reportFile = `${kilnDir}/REPORT.md`
 // ── MODEL_VOICE shell (Opus only; inlined from src/voice.mjs by the bundler) ──
 // @inline:voice:MODEL_VOICE,voice
 
+// ── gateAgent (inlined from src/gate.mjs) — Omega's closing report is a gate leg too: a
+//    structured-output retry-cap death here used to detonate the whole report stage. Behind
+//    gateAgent it degrades to null (one re-dispatch first), and the null-safe return below still
+//    ships a REPORT.md pointer instead of failing the pipeline's final step. ──
+// @gate
+
 const REPORT_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
@@ -33,7 +39,10 @@ const REPORT_SCHEMA = {
 
 phase('The Final Word')
 log('Omega picks up the pen')
-const res = await agent(
+// F3 provenance: Omega's gate leg records {requested_model, actual_model, fallback_reason,
+// classification} onto this sink; there is no report-stage ledger, so it rides the returned summary.
+const omegaProv = {}
+const res = await gateAgent(
   voice('opus') +
   `You are the closing reporter. Write the honest final delivery report.\n\n` +
   `<inputs>\n${NO_WANDER} Exception: the built project at ${projectPath} is also in scope. The files:\n` +
@@ -43,8 +52,8 @@ const res = await agent(
   `Cover: what was asked, what was built (the journey through the stages, named milestones), the validation outcome ` +
   `(tests passed/failed, criteria met), what remains or was deferred, and how to run it. Be truthful — if validation was ` +
   `PARTIAL or FAILED, say so plainly and list what's left. Then in the structured output emit report_file, headline, delivered, and outstanding FIRST — all detail belongs in ${reportFile}; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`,
-  { label: 'omega:report', phase: 'The Final Word', model: 'opus', schema: REPORT_SCHEMA }
+  { label: 'omega:report', phase: 'The Final Word', model: 'opus', schema: REPORT_SCHEMA, provenance: omegaProv }
 )
 
 log(`REPORT.md written: ${res && res.headline}`)
-return { report_file: reportFile, headline: res && res.headline, delivered: (res && res.delivered) || [], outstanding: (res && res.outstanding) || [] }
+return { report_file: reportFile, headline: res && res.headline, delivered: (res && res.delivered) || [], outstanding: (res && res.outstanding) || [], gate_provenance: omegaProv }

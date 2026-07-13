@@ -1,41 +1,3 @@
-// GENERATED from workflows-src/report.js — edit the source, run scripts/bundle-workflows.mjs
-export const meta = {
-  name: 'kiln-report',
-  description: 'Kiln report stage: Omega reads every .kiln artifact and the built project, then writes .kiln/REPORT.md — the final delivery summary in Kiln\'s voice.',
-  phases: [{ title: 'The Final Word', detail: 'Omega compiles REPORT.md from all artifacts' }],
-}
-
-// ── args: { kilnDir, projectPath } ──
-function normalizeArgs(args) {
-  if (typeof args === 'string') {
-    try { args = JSON.parse(args) } catch (e) { return { __parse_error: true } }
-  }
-  return (args && typeof args === 'object') ? args : {}
-}
-const A = normalizeArgs(args)
-const PAYLOAD_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. Emit the payload properties FIRST; reasoning is the LAST property, OPTIONAL, and under 50 words — put detail in the designated report file or field, never in reasoning. A long leading reasoning string is the observed death mode: the call truncates before the payload lands, the validator rejects it, each rejection burns one of five attempts, and five failures kill this leg.'
-const kilnDir = A.kilnDir
-const projectPath = A.projectPath
-if (!kilnDir || !projectPath) throw new Error('report.js requires args.kilnDir and args.projectPath (absolute paths — the conductor resolves them; never launch with relative paths). Received args of type ' + typeof args)
-
-const reportFile = `${kilnDir}/REPORT.md`
-
-const NO_WANDER = 'Read ONLY the files named in this brief (absolute paths). Do not search the filesystem or read other projects.'
-
-// ── MODEL_VOICE shell (Opus only; inlined from src/voice.mjs by the bundler) ──
-const MODEL_VOICE = {
-  opus: [
-    'Be direct. State findings and decisions plainly; do not soften.',
-    'Inputs are wrapped in XML tags — read the data block before the task line.',
-    'Keep output minimal and specific. Apply every rule to EVERY item in scope, not just the first.',
-  ].join('\n'),
-}
-const voice = (m) => (m === 'opus' ? MODEL_VOICE.opus + '\n\n' : '')
-
-// ── gateAgent (inlined from src/gate.mjs) — Omega's closing report is a gate leg too: a
-//    structured-output retry-cap death here used to detonate the whole report stage. Behind
-//    gateAgent it degrades to null (one re-dispatch first), and the null-safe return below still
-//    ships a REPORT.md pointer instead of failing the pipeline's final step. ──
 // gate.mjs — the single gateAgent for every gate/judgment leg (BLUEPRINT WS-B1). ONE source of
 // truth: inlined verbatim into build/validate/report by the `// @gate` bundler marker, so the
 // v3.0.1 drift (build's copy matched 'retry cap', validate's did not) can never recur again.
@@ -64,8 +26,8 @@ const voice = (m) => (m === 'opus' ? MODEL_VOICE.opus + '\n\n' : '')
 // degrade rather than rethrow. The regex is scoped to the OBSERVED platform phrasing ONLY — the real
 // error "StructuredOutput retry cap (5) exceeded" matches 'StructuredOutput'; a bare 'retry cap' is
 // deliberately NOT matched (it false-positives unrelated errors like an "HTTP retry cap exceeded").
-const GATE_FAILURE_RE = /StructuredOutput|structured.?output/i
-const isStructuredOutputFailure = (e) => GATE_FAILURE_RE.test(String((e && e.message) || e))
+export const GATE_FAILURE_RE = /StructuredOutput|structured.?output/i
+export const isStructuredOutputFailure = (e) => GATE_FAILURE_RE.test(String((e && e.message) || e))
 
 // classifyGateFailure — label a CAUGHT error for the provenance record AND the degrade decision.
 // Structured-output is tested FIRST so its exact phrasing wins; then refusal (/refus/, but the
@@ -74,7 +36,7 @@ const isStructuredOutputFailure = (e) => GATE_FAILURE_RE.test(String((e && e.mes
 // null_result is NEVER string-matched: a null/undefined RETURN (not a caught error) is classified
 // 'null_result' STRUCTURALLY at the dispatch site, so a message that merely contains 'null'
 // (e.g. "Cannot read properties of null") stays 'other' and RETHROWS.
-function classifyGateFailure(e) {
+export function classifyGateFailure(e) {
   const s = String((e && e.message) || e)
   if (GATE_FAILURE_RE.test(s)) return 'structured_output_failure'
   if (/refus/i.test(s) && !/ECONNREFUSED|connection refused/i.test(s)) return 'refusal'
@@ -105,7 +67,7 @@ function classifyGateFailure(e) {
 //                     a same-model re-dispatch, 'opus' after a fable→opus substitution, and null on a
 //                     fail-closed null. classification is the seat-death class that forced the
 //                     degradation (null on a clean success). Absent sink ⇒ the record is dropped.
-async function gateAgent(prompt, opts) {
+export async function gateAgent(prompt, opts) {
   const o = opts || {}
   if (o.effort === 'ultra' && o.transport === 'codex') {
     throw new Error(`gateAgent(${o.label || 'gate'}): 'ultra' effort is forbidden on a codex-transport seat — never-ultra doctrine`)
@@ -175,8 +137,8 @@ async function gateAgent(prompt, opts) {
 // settles AFTER the deadline already fired, lets the caller APPEND a late-completion provenance record
 // rather than mutate the timeout record it already wrote — the append-only sink guard against a late
 // writer. DO-NOT-TOUCH: sentinel absorb, onLate, unref, and the never-rejects contract are load-bearing.
-const TRAVERSAL_TIMEOUT = { __kiln_timeout: true }
-function withDeadline(thunk, ms, onLate) {
+export const TRAVERSAL_TIMEOUT = { __kiln_timeout: true }
+export function withDeadline(thunk, ms, onLate) {
   return new Promise((resolve) => {
     let settled = false
     const done = (v) => { if (!settled) { settled = true; resolve(v) } }
@@ -188,36 +150,3 @@ function withDeadline(thunk, ms, onLate) {
     )
   })
 }
-
-const REPORT_SCHEMA = {
-  type: 'object', additionalProperties: false,
-  properties: {
-    report_file: { type: 'string' },
-    headline: { type: 'string' },
-    delivered: { type: 'array', items: { type: 'string' } },
-    outstanding: { type: 'array', items: { type: 'string' } },
-    reasoning: { type: 'string', maxLength: 700 },
-  },
-  required: ['report_file', 'headline'],
-}
-
-phase('The Final Word')
-log('Omega picks up the pen')
-// F3 provenance: Omega's gate leg records {requested_model, actual_model, fallback_reason,
-// classification} onto this sink; there is no report-stage ledger, so it rides the returned summary.
-const omegaProv = {}
-const res = await gateAgent(
-  voice('opus') +
-  `You are the closing reporter. Write the honest final delivery report.\n\n` +
-  `<inputs>\n${NO_WANDER} Exception: the built project at ${projectPath} is also in scope. The files:\n` +
-  `${kilnDir}/STATE.md, ${kilnDir}/docs/project-brief.md, ${kilnDir}/docs/VISION.md, ${kilnDir}/docs/research.md, ` +
-  `${kilnDir}/master-plan.md, ${kilnDir}/validation/report.md (if present), ${kilnDir}/docs/codebase-state.md.\n</inputs>\n\n` +
-  `<task>Write ${reportFile} — persist it via a Bash heredoc (mkdir -p the dir, then cat with a quoted heredoc into the file) — NEVER the Write tool: a platform guardrail rejects subagent Write calls on report files, and the rejection poisons the structured-output attempts that follow (an observed death mode). Compose it in Kiln's first-person, sardonic-but-earned voice (no status-symbol banners — that is the conductor's job). ` +
-  `Cover: what was asked, what was built (the journey through the stages, named milestones), the validation outcome ` +
-  `(tests passed/failed, criteria met), what remains or was deferred, and how to run it. Be truthful — if validation was ` +
-  `PARTIAL or FAILED, say so plainly and list what's left. Then in the structured output emit report_file, headline, delivered, and outstanding FIRST — all detail belongs in ${reportFile}; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`,
-  { label: 'omega:report', phase: 'The Final Word', model: 'opus', schema: REPORT_SCHEMA, provenance: omegaProv }
-)
-
-log(`REPORT.md written: ${res && res.headline}`)
-return { report_file: reportFile, headline: res && res.headline, delivered: (res && res.delivered) || [], outstanding: (res && res.outstanding) || [], gate_provenance: omegaProv }

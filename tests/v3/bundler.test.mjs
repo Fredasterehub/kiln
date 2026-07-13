@@ -225,6 +225,73 @@ test('gauge-config step: --check fails when gauge-config.json drifts from the ge
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
+// ── The gate step (WS-B1): `// @gate` inlines the WHOLE src/gate.mjs body (the single gateAgent),
+//    `export ` stripped from each declaration, doctrine comments carried through verbatim. Unlike
+//    @inline it names no exports — it pulls the module as one unit so build/validate/report share
+//    one gateAgent and cannot drift. Same --check drift discipline as duo-pool/gauge-config. ──
+const FIXTURE_GATE_SRC = `// gatefix.mjs — fixture gate module for the @gate marker golden test.
+export const MARK = 'closed'
+// classify — interior comment kept with its declaration.
+export function classify(x) {
+  return x === MARK
+}
+`
+
+const FIXTURE_GATE_WF = `// gwf.js — fixture workflow exercising the @gate marker.
+// @gate
+return classify('closed')
+`
+
+const GATE_GOLDEN = `// GENERATED from workflows-src/gwf.js — edit the source, run scripts/bundle-workflows.mjs
+// gwf.js — fixture workflow exercising the @gate marker.
+// gatefix.mjs — fixture gate module for the @gate marker golden test.
+const MARK = 'closed'
+// classify — interior comment kept with its declaration.
+function classify(x) {
+  return x === MARK
+}
+return classify('closed')
+`
+
+function withGate(dir) {
+  writeFileSync(join(dir, 'plugins/kiln/src/gate.mjs'), FIXTURE_GATE_SRC)
+  writeFileSync(join(dir, 'plugins/kiln/workflows-src/gwf.js'), FIXTURE_GATE_WF)
+}
+
+test('gate step: the @gate marker inlines the whole gate.mjs body with the export keyword stripped', () => {
+  const dir = sandbox()
+  try {
+    withGate(dir)
+    const res = runBundler(dir)
+    assert.equal(res.status, 0, res.stderr)
+    assert.equal(readFileSync(join(dir, 'plugins/kiln/workflows/gwf.js'), 'utf8'), GATE_GOLDEN)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('gate step: the emitted @gate workflow passes node --check', () => {
+  const dir = sandbox()
+  try {
+    withGate(dir)
+    assert.equal(runBundler(dir).status, 0)
+    const check = spawnSync(process.execPath, ['--check', join(dir, 'plugins/kiln/workflows/gwf.js')], { encoding: 'utf8' })
+    assert.equal(check.status, 0, check.stderr)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('gate step: --check fails when src/gate.mjs drifts from the generated inline copy', () => {
+  const dir = sandbox()
+  try {
+    withGate(dir)
+    assert.equal(runBundler(dir).status, 0)
+    assert.equal(runBundler(dir, '--check').status, 0)
+    writeFileSync(join(dir, 'plugins/kiln/src/gate.mjs'), FIXTURE_GATE_SRC.replace("'closed'", "'tampered'"))
+    const res = runBundler(dir, '--check')
+    assert.notEqual(res.status, 0)
+    assert.match(res.stderr, /OUT OF SYNC/)
+    assert.match(res.stderr, /gwf\.js/)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
 test('REAL repo: the shipped workflows are in sync with workflows-src', () => {
   const res = spawnSync(process.execPath, [BUNDLER, '--check'], { encoding: 'utf8' })
   assert.equal(res.status, 0, res.stderr)

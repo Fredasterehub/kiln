@@ -626,13 +626,160 @@ const lawRedReject = (texts) => ({ verdict: 'REJECTED', law_green: false, tests_
 // goal-backward audit still unusable after its ONE re-ask fails the milestone boundary closed.
 const GOAL_AUDIT_FAILURE = `[goal-audit-failure] the goal-backward audit returned no usable report after one re-ask — the boundary fails closed (QA_FAIL; orchestrator ruling 2026-06-11)`
 
-// ── Gate hardening: a MUTE gate leg (the structured-output retry cap) must DEGRADE, never
-//    detonate the run — one fresh re-dispatch, then null, and every gate call site folds null
-//    through its EXISTING fail-closed path (rejection / QA_FAIL / re-ask / dead-judge-fails-closed).
-//    Gate legs only (reviewers, tribunal analysts, the judge, the goal-backward audit); builders,
-//    slicers, and scaffold legs stay on plain agent() — their failures are real work lost. ──
-const isStructuredOutputFailure = (e) => /StructuredOutput|structured.?output|retry cap/i.test(String((e && e.message) || e))
-async function gateAgent(prompt, opts) { try { return await agent(prompt, opts) } catch (e) { if (!isStructuredOutputFailure(e)) throw e; log(`${opts.label || 'gate'}: structured-output retry cap — re-dispatching one fresh agent`); try { return await agent(prompt, { ...opts, label: (opts.label || 'gate') + ':redispatch' }) } catch (e2) { if (!isStructuredOutputFailure(e2)) throw e2; log(`${opts.label || 'gate'}: re-dispatch failed too — degrading to null (fail-closed)`); return null } } }
+// ── Gate hardening: the single gateAgent (+ isStructuredOutputFailure / classifyGateFailure),
+//    inlined from src/gate.mjs — a mute gate leg DEGRADES to null, never detonates the run. ──
+// gate.mjs — the single gateAgent for every gate/judgment leg (BLUEPRINT WS-B1). ONE source of
+// truth: inlined verbatim into build/validate/report by the `// @gate` bundler marker, so the
+// v3.0.1 drift (build's copy matched 'retry cap', validate's did not) can never recur again.
+// Kept SEPARATE from spine.mjs on purpose — spine.mjs is pure-functions-only by its header
+// contract; gateAgent awaits the ambient agent() and speaks through the ambient log(), so it does
+// not belong in the pure module. Every gate-bearing workflow already carries both globals.
+//
+// A MUTE gate leg must DEGRADE, never detonate the run — but a MUTE seat is never a PASS. There are
+// four SEAT-DEATH classes, and every one of them routes through the twoHeads policy below:
+//   · structured_output_failure — the observed death: a truncated tool call rejected five times.
+//   · null_result               — agent() returned null/undefined (a DEAD SEAT, never success). This
+//                                 class is STRUCTURAL ONLY: set when the RETURN is null, never string-matched.
+//   · timeout                   — the seat ran past its deadline.
+//   · refusal                   — the seat declined to rule.
+// A dead seat is NOT a silent success and NOT a stage-detonation: the policy converts it to a
+// fail-closed null (or, in best_effort, one fresh re-dispatch first), and every gate call site folds
+// that null through its EXISTING fail-closed path (rejection / QA_FAIL / re-ask / the unruled-gate
+// PARTIAL ceiling). gateAgent wraps ONLY gate/judgment legs (reviewers, tribunal analysts, the judge,
+// the goal-backward audit, the report closer); a builder, slicer, or scaffold leg stays on plain
+// agent() — its failure is real work lost, not a mute voice.
+//
+// The narrow-regex doctrine is PRESERVED but scoped precisely: its ONLY job is to keep an UNRELATED
+// exception (class 'other') from being swallowed into a silent degradation on a gate leg
+// (DO-NOT-TOUCH) — so 'other' still RETHROWS and fails the stage, itself fail-closed. The seat-death
+// classes are NOT unrelated errors; they are the very failure the gate is built to survive, so they
+// degrade rather than rethrow. The regex is scoped to the OBSERVED platform phrasing ONLY — the real
+// error "StructuredOutput retry cap (5) exceeded" matches 'StructuredOutput'; a bare 'retry cap' is
+// deliberately NOT matched (it false-positives unrelated errors like an "HTTP retry cap exceeded").
+const GATE_FAILURE_RE = /StructuredOutput|structured.?output/i
+const isStructuredOutputFailure = (e) => GATE_FAILURE_RE.test(String((e && e.message) || e))
+
+// classifyGateFailure — label a CAUGHT error for the provenance record AND the degrade decision.
+// Structured-output is tested FIRST so its exact phrasing wins; then refusal (/refus/, but the
+// TRANSPORT errors ECONNREFUSED / 'connection refused' are EXCLUDED — they are not a seat's refusal
+// to rule); then timeout. Anything else is 'other' — an unrelated exception that RETHROWS.
+// null_result is NEVER string-matched: a null/undefined RETURN (not a caught error) is classified
+// 'null_result' STRUCTURALLY at the dispatch site, so a message that merely contains 'null'
+// (e.g. "Cannot read properties of null") stays 'other' and RETHROWS.
+function classifyGateFailure(e) {
+  const s = String((e && e.message) || e)
+  if (GATE_FAILURE_RE.test(s)) return 'structured_output_failure'
+  if (/refus/i.test(s) && !/ECONNREFUSED|connection refused/i.test(s)) return 'refusal'
+  if (/\btimed?[ -]?out\b|\bdeadline exceeded\b|ETIMEDOUT/i.test(s)) return 'timeout'
+  return 'other'
+}
+
+// gateAgent(prompt, opts) — wrap a single gate/judgment leg. opts extends the agent() opts with
+// gateAgent-only meta keys (stripped before agent() is called, never leaked to the platform):
+//   opts.twoHeads   'required' | 'best_effort' (default 'best_effort' = the v3.0.1 behavior).
+//                   'best_effort': on ANY seat-death class, one fresh re-dispatch on the SAME model
+//                     (v3.0.1 semantics); if THAT also dies a seat-death and the requested model is
+//                     'fable', ONE substitution dispatch on 'opus' (the twin-council degradation
+//                     rail) — actual_model:'opus', fallback recorded; otherwise fail-closed null.
+//                   'required': a council-seat leg that must NOT be silently substituted — on ANY
+//                     seat-death class return the fail-closed null WITHOUT a re-dispatch. The caller's
+//                     existing fail-closed path takes the null and the CONDUCTOR routes the block to
+//                     a gated operator checkpoint (that routing is conductor-side, out of scope here
+//                     — this function only refuses to substitute and records why).
+//   opts.transport  'codex' marks a seat that shells out to GPT via codex. 'ultra' effort on such a
+//                     seat THROWS at call time (never-ultra doctrine — codex has no ultra tier).
+//   opts.effort     reasoning effort, passed through to agent() (a real platform opt).
+//   opts.provenance optional sink object. gateAgent writes {requested_model, actual_model,
+//                     fallback_reason, classification} onto it so a caller that ALREADY ledgers can
+//                     ride the record into its EXISTING note/evidence data payload — no new event
+//                     type is minted (BLUEPRINT §B6/§10). actual_model is ALWAYS the model that
+//                     actually produced the returned result — the requested model on a clean call or
+//                     a same-model re-dispatch, 'opus' after a fable→opus substitution, and null on a
+//                     fail-closed null. classification is the seat-death class that forced the
+//                     degradation (null on a clean success). Absent sink ⇒ the record is dropped.
+async function gateAgent(prompt, opts) {
+  const o = opts || {}
+  if (o.effort === 'ultra' && o.transport === 'codex') {
+    throw new Error(`gateAgent(${o.label || 'gate'}): 'ultra' effort is forbidden on a codex-transport seat — never-ultra doctrine`)
+  }
+  const { twoHeads, transport, provenance, ...agentOpts } = o // meta keys never reach agent()
+  const requested = o.model != null ? o.model : null
+  const required = twoHeads === 'required'
+  const label = o.label || 'gate'
+  // truthful provenance: actual_model is whatever model produced the RETURNED result (null on a
+  // fail-closed null); classification is the seat-death class that forced any degradation.
+  const record = (actual_model, fallback_reason, classification) => {
+    if (provenance && typeof provenance === 'object') {
+      Object.assign(provenance, { requested_model: requested, actual_model, fallback_reason, classification })
+    }
+  }
+  // one dispatch attempt → { ok, value, cls, error }. A null/undefined RETURN is a DEAD SEAT
+  // (cls 'null_result'), never a usable result; a caught error is classified; a usable result is ok.
+  const dispatch = async (agentO) => {
+    try {
+      const r = await agent(prompt, agentO)
+      if (r == null) return { ok: false, value: null, cls: 'null_result' }
+      return { ok: true, value: r }
+    } catch (e) {
+      return { ok: false, value: null, cls: classifyGateFailure(e), error: e }
+    }
+  }
+  const first = await dispatch(agentOpts)
+  if (first.ok) { record(requested, null, null); return first.value } // clean seat — actual == requested
+  if (first.cls === 'other') { record(null, 'rethrow', 'other'); throw first.error } // unrelated exception — never swallowed
+  // a seat-death class. In required mode a council seat is never silently substituted.
+  if (required) {
+    log(`${label}: ${first.cls} — two_heads:required, no substitution → null (fail-closed to a gated operator checkpoint)`)
+    record(null, 'required_no_substitution', first.cls)
+    return null
+  }
+  // best_effort: ONE fresh re-dispatch on the SAME model (v3.0.1 semantics).
+  log(`${label}: ${first.cls} — re-dispatching one fresh agent (same model)`)
+  const second = await dispatch({ ...agentOpts, label: label + ':redispatch' })
+  if (second.ok) { record(requested, 'redispatch', first.cls); return second.value }
+  if (second.cls === 'other') { record(null, 'redispatch_rethrow', 'other'); throw second.error }
+  // the same-model retry also died a seat-death. The twin-council degradation rail: if the requested
+  // model was 'fable', ONE substitution dispatch on 'opus' — recorded as such, never claimed as fable.
+  if (requested === 'fable') {
+    log(`${label}: re-dispatch failed too — substituting opus for fable (twin-council degradation rail)`)
+    const sub = await dispatch({ ...agentOpts, model: 'opus', label: label + ':opus-sub' })
+    if (sub.ok) { record('opus', 'fable_substituted_opus', second.cls); return sub.value }
+    if (sub.cls === 'other') { record(null, 'opus_sub_rethrow', 'other'); throw sub.error }
+    log(`${label}: opus substitution failed too — degrading to null (fail-closed)`)
+    record(null, 'redispatch_exhausted', sub.cls)
+    return null
+  }
+  log(`${label}: re-dispatch failed too — degrading to null (fail-closed)`)
+  record(null, 'redispatch_exhausted', second.cls)
+  return null
+}
+
+// withDeadline(thunk, ms, onLate) — the await-bound for a Tier-2 traversal leg (BLUEPRINT §7). Lives
+// here (one implementation, imported by the unit tests, inlined into validate by the @gate marker) so
+// the tested wrapper and the shipped wrapper can never drift. Resolves to the thunk's value, the
+// sentinel TRAVERSAL_TIMEOUT ({ __kiln_timeout: true }) if ms elapses first, or the sentinel
+// { __kiln_rejected: true, error } if the thunk REJECTS before the deadline. Never itself rejects — a
+// traversal leg's failure is a DEGRADATION, not a stage error. This is the DESIGNED EXCEPTION to
+// gateAgent's 'other' rethrow rule (see validate's traversal loop): the outer contract ABSORBS a
+// rejected traversal leg to static-only so a Tier-2 failure can never kill validate, yet the caller
+// still receives the error so provenance NEVER lies (it records the real class + a bounded message).
+// The timer is unref'd so a resolved race never keeps the event loop alive. onLate, when the thunk
+// settles AFTER the deadline already fired, lets the caller APPEND a late-completion provenance record
+// rather than mutate the timeout record it already wrote — the append-only sink guard against a late
+// writer. DO-NOT-TOUCH: sentinel absorb, onLate, unref, and the never-rejects contract are load-bearing.
+const TRAVERSAL_TIMEOUT = { __kiln_timeout: true }
+function withDeadline(thunk, ms, onLate) {
+  return new Promise((resolve) => {
+    let settled = false
+    const done = (v) => { if (!settled) { settled = true; resolve(v) } }
+    const timer = setTimeout(() => done(TRAVERSAL_TIMEOUT), Math.max(1, ms))
+    if (typeof timer.unref === 'function') timer.unref()
+    Promise.resolve().then(thunk).then(
+      (v) => { clearTimeout(timer); if (settled) { if (typeof onLate === 'function') onLate(null, v) } else done(v) },
+      (e) => { clearTimeout(timer); if (settled) { if (typeof onLate === 'function') onLate(e) } else done({ __kiln_rejected: true, error: e }) }
+    )
+  })
+}
 
 const NO_WANDER = 'Read ONLY the files named in this brief (absolute paths). Do not search the filesystem or read other projects.'
 const repoRule = (projectPath) => `Project repo: ${projectPath}. Work and commit there directly — this is a sequential cumulative build; do NOT create a detached git worktree (later slices and milestones must see your commits). Maintain a .gitignore for the stack and NEVER commit generated artifacts (Python: __pycache__/, *.pyc, *.egg-info/, build/, dist/, .pytest_cache/) — add them to .gitignore and 'git rm --cached' any that slipped in.`
@@ -1087,7 +1234,7 @@ let pipelinedPlan = null
 //    turned green, so regressions are observed, not assumed). Returns the review verdict object
 //    (the workflow's own autoReject/lawRedReject for tamper/stale/red/uncommitted — no reviewer
 //    call is spent on those). ──
-async function evidencedReview(m, surf, slice, sliceId, build, fix, escalated, reviewerName, lawCtx) {
+async function evidencedReview(m, surf, slice, sliceId, build, fix, escalated, reviewerName, lawCtx, prov) {
   // Commit-before-review (unchanged from v2): an uncommitted slice would anchor evidence and
   // review to a stale HEAD. Auto-reject without spending runner or review calls.
   if (build && build.committed === false) {
@@ -1154,7 +1301,7 @@ async function evidencedReview(m, surf, slice, sliceId, build, fix, escalated, r
   log(`${spin('review', fix)} — ${m.id} ${sliceId} f${fix}${leg.escalated ? ' (escalated feedback source)' : ''}`)
   // gateAgent: a mute reviewer degrades to null — approvedOf(null) rejects, rejectionClass(null)
   // reads 'mechanical', findingLines(null) is empty. Fail-closed, never a silent pass.
-  return await gateAgent(reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort, gate.verification_class), { label: loreLabel(reviewerName, 'review', `${sliceId}:f${fix}${leg.escalated ? ':esc' : ''}`), phase: 'The Trial', model: leg.model, schema: REVIEW_SCHEMA })
+  return await gateAgent(reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort, gate.verification_class), { label: loreLabel(reviewerName, 'review', `${sliceId}:f${fix}${leg.escalated ? ':esc' : ''}`), phase: 'The Trial', model: leg.model, schema: REVIEW_SCHEMA, provenance: prov })
 }
 
 // ── gateOnlyTrial (P3.5 T3, dogfood finding 4) — the STARVED-GATE deterministic Law check over an
@@ -1274,6 +1421,11 @@ for (const m of milestones) {
   const { buildModel: bModel } = routing(surf)
   const [builderName, reviewerName] = pickDuo(surf, milestoneIndex)
   log(`━━ Milestone ${m.id}: ${m.title} [surface=${surf}] — \`${builderName}\` builds, \`${reviewerName}\` reviews ━━`)
+  // F3 provenance collector: every gate leg in this milestone (slice reviews, the tribunal analysts,
+  // the judge, the goal-backward audit) records {requested_model, actual_model, fallback_reason,
+  // classification} into a fresh sink; they collect here and ride the EXISTING gate_decision ledger
+  // append at the milestone close (no new event type — §B6/§10).
+  const gateProv = []
 
   // The milestone's slice of the Law — the contract the batch plan must cover arithmetically.
   const mScs = lawChecks.filter((c) => c.milestone === m.id)
@@ -1416,8 +1568,9 @@ for (const m of milestones) {
     let logicalRejections = 0
     let escalated = false
     let splitRequired = false
+    const sliceReviewProv = {} // the DECISIVE (last) review's provenance for this slice
     for (let fix = 0; fix <= MAX_REVIEW_FIXES; fix++) {
-      mReview = await evidencedReview(m, surf, slice, sliceId, mBuild, fix, escalated, reviewerName, lawCtx)
+      mReview = await evidencedReview(m, surf, slice, sliceId, mBuild, fix, escalated, reviewerName, lawCtx, sliceReviewProv)
       if (approvedOf(mReview)) break
       // The master signal (§3.3): only LOGICAL rejections move the ratchet; mechanical/process
       // failures (tamper, stale evidence, uncommitted, hygiene findings) never escalate, and the
@@ -1443,6 +1596,7 @@ for (const m of milestones) {
       phase('Forging')
       mBuild = await agent(buildPrompt(m, surf, slice, sliceId, `Reviewer REJECTED the prior attempt: ${findingLines(mReview).join(' | ') || '(no findings reported — re-verify the mapped checks, recommit, and report honestly)'}. Fix these specifically.`), { label: loreLabel(builderName, 'build', `${sliceId}:fix${fix + 1}`), phase: 'Forging', model: bModel, schema: BUILD_SCHEMA })
     }
+    gateProv.push({ gate: 'review', slice: sliceId, ...sliceReviewProv })
     if (splitRequired) splitLedger.push({ milestone: m.id, slice: sliceId, sc_ids: slice.sc_ids })
     if (approvedOf(mReview)) greenScIds.push(...slice.sc_ids.filter((id) => !greenScIds.includes(id)))
     slices.push({ id: sliceId, objective: slice.objective, sc_ids: slice.sc_ids, files: slice.files || [], done_when: slice.done_when || '', tests_green: mBuild && mBuild.tests_green, review: mReview && mReview.verdict, approved: approvedOf(mReview), split_required: splitRequired, logical_rejections: logicalRejections })
@@ -1503,19 +1657,36 @@ for (const m of milestones) {
       }
     }
   }
-  // A structured-output death on the audit leg degrades to null (unusable) rather than throwing —
-  // auditOrNull's ONE re-ask below is already the retry, so no gateAgent re-dispatch on top of it.
-  const goalAudit = (suffix) => agent(goalBackwardPrompt(m), { label: loreLabel('aristotle', 'goal-backward', suffix), phase: 'Judgment', model: 'opus', schema: QA_FINDINGS_SCHEMA })
-    .catch((e) => { if (!isStructuredOutputFailure(e)) throw e; log(`aristotle:goal-backward:${suffix}: structured-output retry cap — unusable audit (auditOrNull's re-ask is the retry)`); return null })
-  // auditOrNull — the ruling's retry shape: returns a USABLE report, or null after the ONE
-  // re-ask (ledgered goal_audit_failure); the caller fails the boundary closed on null.
-  const auditOrNull = async (suffix, first) => {
-    let g = first === undefined ? await goalAudit(suffix) : first
+  // The goal-backward audit IS a gate leg, so it rides gateAgent: a seat-death degrades to a
+  // fail-closed null (never rethrown), an unrelated 'other' error still rethrows, and every attempt
+  // is classified into a provenance sink. The hand-written structured-output catch is gone. twoHeads
+  // is 'required' — ONE attempt per call, no substitution: the SINGLE re-ask this ruling preserves is
+  // owned by auditOrNull below (keeping the ':retry' provenance AND the transient-unusable recovery
+  // that a policy re-dispatch cannot express), so gateAgent must not add a second same-model dispatch.
+  const goalAudit = (suffix, prov) => gateAgent(goalBackwardPrompt(m), { label: loreLabel('aristotle', 'goal-backward', suffix), phase: 'Judgment', model: 'opus', schema: QA_FINDINGS_SCHEMA, twoHeads: 'required', provenance: prov })
+  // auditOrNull — returns a USABLE report, or null (ledgered goal_audit_failure); the caller fails the
+  // boundary closed on null. The ONE re-ask fires when the first attempt is unusable (a null seat-death
+  // OR a non-binary report). A RECOVERED first failure records the first attempt's class + recovered:true,
+  // NEVER classification:null (finding 3) — an unusable-but-non-seat-death first attempt proxies to
+  // 'null_result' (there is no usable report to trust either way).
+  const auditOrNull = async (suffix, first, firstProv) => {
+    const p1 = firstProv || {}
+    let g = first === undefined ? await goalAudit(suffix, p1) : first
+    let retried = false
+    let p = p1
     if (!goalAuditUsable(g)) {
       log(`${m.id}: the goal-backward audit returned no usable report — re-asking ONCE (orchestrator ruling)`)
-      g = await goalAudit(`${suffix}:retry`)
+      const p2 = {}
+      g = await goalAudit(`${suffix}:retry`, p2)
+      retried = true
+      p = p2
     }
-    if (goalAuditUsable(g)) return g
+    if (goalAuditUsable(g)) {
+      const firstClass = p1.classification != null ? p1.classification : 'null_result' // the first attempt's death class (proxy 'null_result' for an unusable-but-non-seat-death report)
+      gateProv.push({ gate: 'goal-backward', at: suffix, requested_model: 'opus', actual_model: p.actual_model != null ? p.actual_model : 'opus', fallback_reason: retried ? 'reask' : null, classification: retried ? firstClass : null, recovered: retried })
+      return g
+    }
+    gateProv.push({ gate: 'goal-backward', at: suffix, requested_model: 'opus', actual_model: null, fallback_reason: 'audit_unusable', classification: p.classification != null ? p.classification : 'null_result', recovered: false })
     await ledger('goal_audit_failure', { milestone: m.id, at: suffix, retried: true }, 'Judgment')
     return null
   }
@@ -1545,19 +1716,22 @@ for (const m of milestones) {
     for (let c = 0; c <= MAX_TRIBUNAL_CORRECTION; c++) {
       // gateAgent: a mute analyst degrades to null — denzelReconcile is null-safe and gateDecision
       // reads an unreadable overall as QA_FAIL (fail-closed), never a silent pass.
+      const kenProv = {}, ryuProv = {}
       const legs = [
-        () => gateAgent(kenPrompt(m), { label: loreLabel('ken', 'qa', `${m.id}:c${c}`), phase: 'Judgment', model: 'opus', schema: QA_FINDINGS_SCHEMA }),
-        () => gateAgent(ryuPrompt(m), { label: loreLabel('ryu', 'qa', `${m.id}:c${c}`), phase: 'Judgment', model: 'sonnet', schema: QA_FINDINGS_SCHEMA }),
+        () => gateAgent(kenPrompt(m), { label: loreLabel('ken', 'qa', `${m.id}:c${c}`), phase: 'Judgment', model: 'opus', schema: QA_FINDINGS_SCHEMA, provenance: kenProv }),
+        () => gateAgent(ryuPrompt(m), { label: loreLabel('ryu', 'qa', `${m.id}:c${c}`), phase: 'Judgment', model: 'sonnet', schema: QA_FINDINGS_SCHEMA, provenance: ryuProv }),
       ]
-      if (goalOn) legs.push(() => goalAudit(`${m.id}:c${c}`))
+      const goalProvC = {}
+      if (goalOn) legs.push(() => goalAudit(`${m.id}:c${c}`, goalProvC))
       const reports = await parallel(legs)
+      gateProv.push({ gate: 'ken', cycle: c, ...kenProv }, { gate: 'ryu', cycle: c, ...ryuProv })
       // Goal-audit failure semantics (ORCHESTRATOR RULING): an unusable audit leg is re-asked
       // ONCE; still unusable → QA_FAIL with the blocking 'goal-audit-failure' finding — the
       // judge NEVER spawns on missing inputs, and the correction loop ends (an infrastructure
       // failure is not a code defect a corrective build can fix).
       let goal = null
       if (goalOn) {
-        goal = await auditOrNull(`${m.id}:c${c}`, reports[2])
+        goal = await auditOrNull(`${m.id}:c${c}`, reports[2], goalProvC)
         if (!goal) {
           qa = 'QA_FAIL'
           qaFindings = [GOAL_AUDIT_FAILURE, ...denzelReconcile(reports[0], reports[1]).summaryLines]
@@ -1577,7 +1751,9 @@ for (const m of milestones) {
       let v
       if (decision.judge) {
         log(`${m.id}: ${decision.reason} — Judge Dredd is spawned`)
-        const verdict = await gateAgent(judgePrompt(m, reconciled), { label: loreLabel('judge-dredd', 'verdict', `${m.id}:c${c}`), phase: 'Judgment', model: 'opus', schema: VERDICT_SCHEMA })
+        const judgeProv = {}
+        const verdict = await gateAgent(judgePrompt(m, reconciled), { label: loreLabel('judge-dredd', 'verdict', `${m.id}:c${c}`), phase: 'Judgment', model: 'opus', schema: VERDICT_SCHEMA, provenance: judgeProv })
+        gateProv.push({ gate: 'judge', cycle: c, ...judgeProv })
         v = (verdict && verdict.verdict === 'QA_PASS') ? 'QA_PASS' : 'QA_FAIL' // a dead/mute judge fails closed
       } else {
         v = decision.verdict
@@ -1594,7 +1770,9 @@ for (const m of milestones) {
       phase('Forging')
       log(`${spin('build', 99)} — ${m.id} gate correction ${c + 1}`)
       mBuild = await agent(buildPrompt(m, surf, correctionSlice, `${m.id}:correct${c + 1}`, fixNote), { label: loreLabel(builderName, 'build', `${m.id}:correct${c + 1}`), phase: 'Forging', model: bModel, schema: BUILD_SCHEMA })
-      mReview = (await evidencedReview(m, surf, correctionSlice, `${m.id}:correct${c + 1}`, mBuild, 0, false, reviewerName, { flips: mScIds, only: mScIds })) || mReview
+      const correctReviewProv = {}
+      mReview = (await evidencedReview(m, surf, correctionSlice, `${m.id}:correct${c + 1}`, mBuild, 0, false, reviewerName, { flips: mScIds, only: mScIds }, correctReviewProv)) || mReview
+      gateProv.push({ gate: 'review', slice: `${m.id}:correct${c + 1}`, ...correctReviewProv })
       phase('Judgment')
     }
   } else if (slices.length >= 1) {
@@ -1636,6 +1814,11 @@ for (const m of milestones) {
       { label: loreLabel('rakim', 'state', m.id), phase: 'The Forge Heats', model: 'haiku' }
     )
   }
+
+  // F3: the milestone's gate-leg provenance rides the EXISTING gate_decision ledger type (in the
+  // enum, previously unemitted by a workflow — no new type minted) so every degradation/substitution
+  // on a review, tribunal analyst, judge, or goal-backward leg is recorded durably at the boundary.
+  if (gateProv.length) await ledger('gate_decision', { milestone: m.id, qa, gate_provenance: gateProv }, 'Judgment')
 
   results.push({
     id: m.id, title: m.title, surface: surf,

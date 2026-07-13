@@ -8,6 +8,7 @@
 //   plugins/kiln/workflows-src/<name>.js — the editable source; marker lines declare inlines:
 //     // @inline:<module>:<export>[,<export>...]
 //     // @duo-pool   (build.js — the inline DUO_POOL regenerated from data/duo-pool.json)
+//     // @gate       (build/validate/report — the whole src/gate.mjs body: the single gateAgent)
 //   plugins/kiln/workflows/<name>.js     — GENERATED; never edit by hand.
 //
 // Each marker is replaced with the exact source text of those exports (the `export ` keyword
@@ -77,14 +78,29 @@ function gaugeConfig() {
   return (gaugeConfigBlock = `const GAUGE_CONFIG = ${JSON.stringify(clean)}`)
 }
 
+// ── The gate step: a `// @gate` marker is replaced with the ENTIRE plugins/kiln/src/gate.mjs body —
+//    the single gateAgent (+ its classification/predicate helpers), the `export ` keyword stripped
+//    from each declaration. Unlike @inline (which names one export at a time) this pulls the whole
+//    module as one unit, so the shared gate implementation and its doctrine comments travel together
+//    and cannot drift between build/validate/report. --check guards the inline copies like any other
+//    generated content. Lazy + cached — only read when a workflow actually carries the marker. ──
+let gateBlock = null
+function gate() {
+  if (gateBlock) return gateBlock
+  const src = readFileSync(join(srcDir, 'gate.mjs'), 'utf8')
+  return (gateBlock = src.replace(/^export /gm, '').replace(/\s+$/, ''))
+}
+
 // ── Bundle one workflow source: replace each marker line with the named export declarations. ──
 const MARKER_RE = /^\/\/ @inline:([\w-]+):([\w$]+(?:,[\w$]+)*)\s*$/
 const DUO_RE = /^\/\/ @duo-pool\s*$/
 const GAUGE_RE = /^\/\/ @gauge-config\s*$/
+const GATE_RE = /^\/\/ @gate\s*$/
 function bundle(name, src) {
   const body = src.split('\n').map((line) => {
     if (DUO_RE.test(line)) return duoPool()
     if (GAUGE_RE.test(line)) return gaugeConfig()
+    if (GATE_RE.test(line)) return gate()
     const m = line.match(MARKER_RE)
     if (!m) return line
     const [, mod, names] = m
