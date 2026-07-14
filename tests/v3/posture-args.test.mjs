@@ -386,6 +386,16 @@ test('P6 T1: every workflow throws a verbose required-arg error on an empty laun
   }
 })
 
+test('B4-2 D5: the generated build.js validates capabilityTier to T1..T4 (the exact architecture.js:69 idiom) and gates the councils on it + codexAvailable + runToken', () => {
+  const src = readFileSync(fileURLToPath(new URL('../../plugins/kiln/workflows/build.js', import.meta.url)), 'utf8')
+  // the T1..T4 validation idiom, verbatim from architecture.js:69
+  assert.match(src, /const capabilityTier = \(A\.capabilityTier === 'T1' \|\| A\.capabilityTier === 'T2' \|\| A\.capabilityTier === 'T3' \|\| A\.capabilityTier === 'T4'\) \? A\.capabilityTier : null/)
+  // councilPromised = T4 + codex; councilCapable adds the runToken; misconfigured = promised-but-tokenless
+  assert.match(src, /councilPromised = capabilityTier === 'T4' && codexAvailable/)
+  assert.match(src, /councilCapable = councilPromised && runTokenRaw != null/)
+  assert.match(src, /councilMisconfigured = councilPromised && runTokenRaw == null/)
+})
+
 test('P6 T1: the load-bearing pluginRoot gates carry the FIX in their message (vision + build)', async () => {
   const VISION = fileURLToPath(new URL('../../plugins/kiln/workflows/vision.js', import.meta.url))
   const v = await runWorkflow(VISION, { kilnDir: '/tmp/nonexistent-kiln/.kiln', projectPath: '/tmp/nonexistent-kiln' }, () => null)

@@ -186,6 +186,22 @@ test('scenario 1: the stage routing table survives — 7 workflow rows + an Args
   assert.match(fireSrc, /pluginRoot/, 'pluginRoot dropped from the routing table')
 })
 
+// ── B4-2 D5: the Build routing row + workflow-contracts thread capabilityTier (the milestone-council
+//    tier gate), the exact 1b-ii runToken-threading precedent Architecture set. ─────────────────────
+test('B4-2: the Build routing row carries capabilityTier (the milestone-council tier gate)', () => {
+  const buildRow = fireSrc.split('\n').find((l) => l.startsWith('| Build |'))
+  assert.ok(buildRow, 'the Build routing row is gone')
+  assert.match(buildRow, /capabilityTier/, 'the Build row must thread capabilityTier (T4 milestone-council gate)')
+  assert.match(buildRow, /runToken/, 'the Build row still threads runToken (the council receipt binding)')
+})
+
+test('B4-2: workflow-contracts.md Build bullet documents the capabilityTier milestone-council semantics', () => {
+  const contracts = readFileSync(join(SKILLS, '..', 'references', 'workflow-contracts.md'), 'utf8')
+  assert.match(contracts, /Build also takes a \*\*`capabilityTier`\*\*|Build also takes.*capabilityTier/, 'the Build bullet must name capabilityTier')
+  assert.match(contracts, /twin_ratified|close-ratification pair|milestone gate's three judgment seats/i, 'the Build bullet must describe the T4 council behavior')
+  assert.match(contracts, /misconfigured conductor|fails CLOSED/i, 'the Build bullet must state the promised-but-tokenless fail-closed rule')
+})
+
 test('scenario 2: the plan-approval gate and STATE.md discipline sections survive', () => {
   assert.match(fireSrc, /^##[^\n]*plan-approval gate/mi, 'the plan-approval gate section is gone')
   assert.match(fireSrc, /^##\s*STATE\.md discipline/mi, 'the STATE.md discipline section is gone')

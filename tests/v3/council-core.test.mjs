@@ -20,6 +20,9 @@ import {
   FRESH_CELLS, freshRoundSchedule, normalizeCellVerdict, aggregateHead, aggregateCouncil,
   sealReversibility, buildMelRecord, buildCheckpoint, matchCheckpoint,
   twinRatified, twinDeadlockResolved, councilDeadlock, degraded,
+  SHA64_RE, RATIFY_SCHEMA, ANSWER_SCHEMA, envelopeSchema, CROSS_CHECK_SCHEMA, LEDGER_APPEND_SCHEMA,
+  CANON_HASH_ONELINER, LEDGER_EXTRACT_ONELINER, councilTemplateHash, seatProv, solWrapperPlan,
+  crossCheckOk, assembleRatifyCertificate,
 } from '../../plugins/kiln/src/council.mjs'
 
 const COUNCIL_SRC = readFileSync(new URL('../../plugins/kiln/src/council.mjs', import.meta.url), 'utf8')
@@ -677,4 +680,195 @@ test('determinism: repeated calls with identical inputs produce byte-identical s
 test('determinism: the module source uses no Date.now / Math.random / new Date primitive (comments aside)', () => {
   const code = COUNCIL_SRC.split('\n').map((l) => l.replace(/\/\/.*$/, '')).join('\n')
   assert.doesNotMatch(code, /Date\.now|Math\.random|new Date/, 'protocol decisions must derive from the SHA-256 seed alone')
+})
+
+// ── B4-2 D1: the lifted call-site core (schemas, cross-check strings, and the pure helpers build.js
+//    and architecture.js now SHARE via the @inline:council marker — helpers, never copy-paste) ────────
+
+test('D1 councilTemplateHash pins the recipe sha256Hex(canonicalJson(parts)) — key-order insensitive', () => {
+  const parts = { rubric: 'R', task: 'T', renderer: 'x/1' }
+  assert.equal(councilTemplateHash(parts), sha256Hex(canonicalJson(parts)))
+  // key-order insensitive (canonical hashing) yet value-sensitive
+  assert.equal(councilTemplateHash({ task: 'T', rubric: 'R', renderer: 'x/1' }), councilTemplateHash(parts))
+  assert.notEqual(councilTemplateHash({ ...parts, task: 'T2' }), councilTemplateHash(parts))
+})
+
+test('D1 schema consts export intact — RATIFY/ANSWER/envelope/CROSS_CHECK/LEDGER_APPEND shapes + evidence-before-verdict ordering', () => {
+  // RATIFY_SCHEMA: evidence fields required BEFORE verdict; executable_check present, null allowed.
+  assert.deepEqual(RATIFY_SCHEMA.required, ['artifact_hash', 'verdict', 'divergence_selections', 'findings', 'changed_evidence'])
+  assert.equal(RATIFY_SCHEMA.properties.verdict.enum.join(','), 'APPROVE,BLOCK,NEITHER')
+  assert.deepEqual(RATIFY_SCHEMA.properties.findings.items.properties.executable_check.type, ['string', 'null'])
+  assert.deepEqual(ANSWER_SCHEMA.required, ['answers'])
+  // envelopeSchema wraps a payload with a bare codex_receipt object (gate.mjs is the sole receipt authority)
+  const env = envelopeSchema({ type: 'object' })
+  assert.deepEqual(env.required, ['payload', 'codex_receipt'])
+  assert.equal(env.properties.codex_receipt.type, 'object')
+  assert.equal(env.additionalProperties, true)
+  // CROSS_CHECK_SCHEMA carries the { verified, reservation } ledger extract shape
+  assert.deepEqual(CROSS_CHECK_SCHEMA.required, ['output_sha256_disk', 'output_canonical_sha256', 'ledger'])
+  assert.deepEqual(CROSS_CHECK_SCHEMA.properties.ledger.required, ['verified', 'reservation'])
+  assert.deepEqual(LEDGER_APPEND_SCHEMA.required, ['appended'])
+  assert.ok(SHA64_RE.test('a'.repeat(64)) && !SHA64_RE.test('a'.repeat(63)) && !SHA64_RE.test('A'.repeat(64)))
+})
+
+test('D1 the cross-check one-liners are single-quote-free (ride safely inside node -e \'...\') and CANON reproduces canonicalJson', () => {
+  assert.ok(!CANON_HASH_ONELINER.includes("'"), 'CANON one-liner must carry no single quote')
+  assert.ok(!LEDGER_EXTRACT_ONELINER.includes("'"), 'LEDGER one-liner must carry no single quote')
+  // CANON one-liner's canonical function must equal sha256Hex(canonicalJson(x)) for a sample object
+  const obj = { b: 2, a: [1, { z: 'q' }], c: null }
+  const viaOneLiner = createHash('sha256').update(Buffer.from((() => {
+    const c = (v) => v === null || typeof v !== 'object' ? JSON.stringify(v === undefined ? null : v) : Array.isArray(v) ? '[' + v.map(c).join(',') + ']' : '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + c(v[k])).join(',') + '}'
+    return c(obj)
+  })(), 'utf8')).digest('hex')
+  assert.equal(viaOneLiner, sha256Hex(canonicalJson(obj)))
+})
+
+test('D1 seatProv snapshots a per-head provenance with a distinct, non-null head (twinRatified distinctness)', () => {
+  const pF = seatProv({ requested_model: 'fable', actual_model: 'fable' }, 'fable')
+  const pS = seatProv({ requested_model: 'sonnet', actual_transport_model: 'gpt-5.6-sol', session_id: 's', receipt_verified: true }, 'sol')
+  assert.equal(pF.head, 'fable'); assert.equal(pS.head, 'sol')
+  assert.equal(pS.actual_transport_model, 'gpt-5.6-sol'); assert.equal(pS.receipt_verified, true)
+  assert.notEqual(canonicalJson(pF), canonicalJson(pS))
+  // a null sink degrades to all-null fields, never a throw
+  const pn = seatProv(null, 'fable')
+  assert.equal(pn.requested_model, null); assert.equal(pn.receipt_verified, false)
+})
+
+test('D1 solWrapperPlan: the RAW run token appears ONLY in the argv (never elsewhere in the wrapper prompt), and paths derive from councilDir/phaseTag/attempt', () => {
+  const cfg = { councilDir: '/k/council/build/M1', pluginRoot: '/pr', receiptsLedger: '/k/council/receipts.jsonl', runToken: 'RAW-TOKEN-9', keystone: 'milestone_close:M1', transportModel: 'gpt-5.6-sol', phaseTag: 'CLOSE_RATIFY_C0', attempt: 1, effort: 'xhigh', payloadSchema: { type: 'object' }, taskText: 'T', briefBody: 'B', packetObj: { a: 1 } }
+  const plan = solWrapperPlan(cfg)
+  assert.equal(plan.files.out, '/k/council/build/M1/CLOSE_RATIFY_C0-sol-a1.out')
+  assert.ok(plan.argv.includes('RAW-TOKEN-9'), 'the raw token belongs in the receipt-script argv')
+  // the ONLY occurrence of the raw token in the whole wrapper prompt is inside the argv line
+  assert.ok(plan.prompt.includes(plan.argv), 'the wrapper prompt embeds the exact argv')
+  assert.equal(plan.prompt.split('RAW-TOKEN-9').length - 1, plan.argv.split('RAW-TOKEN-9').length - 1, 'the token must not leak anywhere in the prompt except the embedded argv')
+  // the argv is the sealed 14-field receipt-script invocation (seat sol, attempt 1)
+  assert.match(plan.argv, /kiln-codex-receipt\.mjs .*CLOSE_RATIFY_C0-sol-a1\.prompt gpt-5\.6-sol xhigh .* \/k\/council\/receipts\.jsonl RAW-TOKEN-9 milestone_close:M1 CLOSE_RATIFY_C0 sol 1$/)
+})
+
+test('D1 solWrapperPlan: extractTo emits the mechanical extract step (field-parameterised); no extractTo ⇒ no extraction', () => {
+  const withExtract = solWrapperPlan({ councilDir: '/c', pluginRoot: '/pr', receiptsLedger: '/l', runToken: 't', keystone: 'k', transportModel: 'gpt-5.6-sol', phaseTag: 'P', attempt: 1, effort: 'high', payloadSchema: {}, taskText: 'T', packetObj: {}, extractTo: '/out/qa-report-b.md', extractField: 'report_markdown', extractLabel: 'report' })
+  assert.match(withExtract.prompt, /Extract the report MECHANICALLY/)
+  assert.match(withExtract.prompt, /p\.report_markdown/)
+  assert.match(withExtract.prompt, /"\/out\/qa-report-b\.md"/)
+  // default label/field = plan/plan_markdown (architecture byte-preservation)
+  const planDefault = solWrapperPlan({ councilDir: '/c', pluginRoot: '/pr', receiptsLedger: '/l', runToken: 't', keystone: 'k', transportModel: 'gpt-5.6-sol', phaseTag: 'P', attempt: 1, effort: 'high', payloadSchema: {}, taskText: 'T', packetObj: {}, extractTo: '/out/plan-b.md' })
+  assert.match(planDefault.prompt, /Extract the plan MECHANICALLY/)
+  assert.match(planDefault.prompt, /p\.plan_markdown/)
+  const none = solWrapperPlan({ councilDir: '/c', pluginRoot: '/pr', receiptsLedger: '/l', runToken: 't', keystone: 'k', transportModel: 'gpt-5.6-sol', phaseTag: 'P', attempt: 1, effort: 'high', payloadSchema: {}, taskText: 'T', packetObj: {} })
+  assert.match(none.prompt, /No extraction — the attested payload IS the deliverable/)
+})
+
+// crossCheckOk fixtures: a coherent invocation-exact chain, plus each mismatch class ────────────────
+const _payload = { verdict: 'APPROVE', artifact_hash: 'b'.repeat(64) }
+const _relayed = sha256Hex('out-bytes')
+const _canon = sha256Hex(canonicalJson(_payload))
+const _inv = '3'.repeat(64), _rcpt = 'a'.repeat(64), _psha = '1'.repeat(64)
+const _sink = { output_hash: _relayed, session_id: 'sess', actual_transport_model: 'gpt-5.6-sol', tokens_used: 42, prompt_hash: _psha }
+const _binding = { relayedOutputHash: _relayed, canonicalHash: _canon, sink: _sink, keystone: 'milestone_close:M1', phaseTag: 'CLOSE_RATIFY_C0', seat: 'sol', attempt: 1, runToken: 'RT' }
+const _cc = (over = {}) => ({
+  output_sha256_disk: over.disk !== undefined ? over.disk : _relayed,
+  output_canonical_sha256: over.canon !== undefined ? over.canon : _canon,
+  ledger: {
+    verified: over.verified === null ? null : { status: 'verified', invocation_id: _inv, receipt_sha256: _rcpt, output_sha256: _relayed, session_id: 'sess', reported_model: 'gpt-5.6-sol', tokens_used: 42, exit_code: 0, receipt_verified: true, ...(over.verified || {}) },
+    reservation: over.reservation === null ? null : { invocation_id: _inv, keystone: 'milestone_close:M1', phase: 'CLOSE_RATIFY_C0', seat: 'sol', attempt: 1, run_token: 'RT', prompt_sha256: _psha, packet_sha256: '5'.repeat(64), ...(over.reservation || {}) },
+  },
+})
+
+test('D1 crossCheckOk: a coherent invocation-exact chain verifies and promotes the receipt hash + invocation id', () => {
+  const r = crossCheckOk(_cc(), _binding)
+  assert.equal(r.ok, true)
+  assert.equal(r.codex_receipt_hash, _rcpt)
+  assert.equal(r.invocation_id, _inv)
+})
+
+test('D1 crossCheckOk: EACH mismatch class fails closed with the invocation-exact reason (disk/canon/status/receipt/output/session/model/tokens/exit/inv-shape/receipt-shape/inv-link/keystone/phase/seat/attempt/token/prompt/null-rows)', () => {
+  const fails = [
+    ['disk', _cc({ disk: 'f'.repeat(64) })],
+    ['canon', _cc({ canon: 'f'.repeat(64) })],
+    ['status', _cc({ verified: { status: 'started' } })],
+    ['receipt_verified', _cc({ verified: { receipt_verified: false } })],
+    ['output', _cc({ verified: { output_sha256: 'f'.repeat(64) } })],
+    ['session', _cc({ verified: { session_id: 'other' } })],
+    ['model', _cc({ verified: { reported_model: 'gpt-5.5' } })],
+    ['tokens', _cc({ verified: { tokens_used: 1 } })],
+    ['exit', _cc({ verified: { exit_code: 1 } })],
+    ['inv-shape', _cc({ verified: { invocation_id: 'short' } })],
+    ['receipt-shape', _cc({ verified: { receipt_sha256: 'short' } })],
+    ['inv-link', _cc({ reservation: { invocation_id: '9'.repeat(64) } })],
+    ['keystone', _cc({ reservation: { keystone: 'correction:M1' } })],
+    ['phase', _cc({ reservation: { phase: 'QA_EVIDENCE_C0' } })],
+    ['seat', _cc({ reservation: { seat: 'fable' } })],
+    ['attempt', _cc({ reservation: { attempt: 2 } })],
+    ['token', _cc({ reservation: { run_token: 'WRONG' } })],
+    ['prompt', _cc({ reservation: { prompt_sha256: '9'.repeat(64) } })],
+    ['null-verified', _cc({ verified: null })],
+    ['null-reservation', _cc({ reservation: null })],
+  ]
+  for (const [name, cc] of fails) {
+    const r = crossCheckOk(cc, _binding)
+    assert.equal(r.ok, false, `${name} must fail the cross-check closed`)
+    assert.match(r.reason, /invocation-exact cross-check mismatch/)
+  }
+})
+
+test('D1 assembleRatifyCertificate: two distinct-head APPROVE ratifications ⇒ a twin_ratified certificate', () => {
+  const bH = sha256Hex('bundle'), eH = sha256Hex('evid')
+  const ctx = { bundle_hash: bH, renderer_version: 'b42-close/1', plan_hash: bH, evidence_manifest_hash: eH, protocol_version: COUNCIL_PROTOCOL_VERSION, seat_provenance: null }
+  const r = (over = {}) => ({ verdict: 'APPROVE', artifact_hash: bH, divergence_selections: [], findings: [], changed_evidence: [], ...over })
+  const res = assembleRatifyCertificate({ rF: r(), rS: r(), provF: seatProv({ actual_model: 'fable' }, 'fable'), provS: seatProv({ actual_transport_model: 'gpt-5.6-sol', receipt_verified: true }, 'sol'), context: ctx })
+  assert.equal(res.ok, true)
+  assert.equal(res.certificate.terminal, 'RATIFIED')
+  assert.equal(res.certificate.label, 'twin_ratified')
+  assert.equal(res.certificate.signatures.length, 2)
+})
+
+test('D1 assembleRatifyCertificate DEGRADES (never throws) on a binding defect — null evidence_manifest_hash, same-head provenance, a non-APPROVE verdict', () => {
+  const bH = sha256Hex('bundle'), eH = sha256Hex('evid')
+  const ctx = (over = {}) => ({ bundle_hash: bH, renderer_version: 'b42-close/1', plan_hash: bH, evidence_manifest_hash: eH, protocol_version: COUNCIL_PROTOCOL_VERSION, seat_provenance: null, ...over })
+  const r = (over = {}) => ({ verdict: 'APPROVE', artifact_hash: bH, divergence_selections: [], findings: [], changed_evidence: [], ...over })
+  const pF = seatProv({ actual_model: 'fable' }, 'fable'), pS = seatProv({ receipt_verified: true }, 'sol')
+  const nullManifest = assembleRatifyCertificate({ rF: r(), rS: r(), provF: pF, provS: pS, context: ctx({ evidence_manifest_hash: null }) })
+  assert.equal(nullManifest.ok, false); assert.match(nullManifest.reason, /evidence_manifest_hash/)
+  const sameHead = assembleRatifyCertificate({ rF: r(), rS: r(), provF: pF, provS: pF, context: ctx() })
+  assert.equal(sameHead.ok, false); assert.match(sameHead.reason, /DISTINCT/)
+  const block = assembleRatifyCertificate({ rF: r(), rS: r({ verdict: 'BLOCK' }), provF: pF, provS: pS, context: ctx() })
+  assert.equal(block.ok, false); assert.match(block.reason, /APPROVE/)
+})
+
+test('D1 bundled artifacts: architecture.js AND build.js inline the lifted call-site core via the extended @inline:council marker (helpers, not copy-paste — no local duplicate defs survive)', () => {
+  const archGen = readFileSync(new URL('../../plugins/kiln/workflows/architecture.js', import.meta.url), 'utf8')
+  const archSrc = readFileSync(new URL('../../plugins/kiln/workflows-src/architecture.js', import.meta.url), 'utf8')
+  const buildSrc = readFileSync(new URL('../../plugins/kiln/workflows-src/build.js', import.meta.url), 'utf8')
+  // names BOTH stages share; ANSWER_SCHEMA is architecture-only (the answer exchange is a full-path leg).
+  const SHARED = ['solWrapperPlan', 'crossCheckOk', 'assembleRatifyCertificate', 'councilTemplateHash', 'seatProv', 'RATIFY_SCHEMA', 'envelopeSchema', 'CROSS_CHECK_SCHEMA', 'LEDGER_APPEND_SCHEMA', 'CANON_HASH_ONELINER', 'LEDGER_EXTRACT_ONELINER', 'SHA64_RE']
+  const archMarker = archSrc.split('\n').find((l) => l.startsWith('// @inline:council:'))
+  const buildMarker = buildSrc.split('\n').find((l) => l.startsWith('// @inline:council:'))
+  for (const n of SHARED) {
+    assert.ok(archMarker.includes(n), `architecture.js @inline:council must list ${n}`)
+    assert.ok(buildMarker.includes(n), `build.js @inline:council must list ${n}`)
+    assert.ok(archGen.includes(`function ${n}`) || archGen.includes(`const ${n}`), `architecture.js must inline ${n}`)
+  }
+  assert.ok(archMarker.includes('ANSWER_SCHEMA'), 'architecture keeps ANSWER_SCHEMA (the answer exchange)')
+  // the local duplicate schema/const defs were DELETED from architecture source (single copy discipline):
+  // each lifted name appears exactly ONCE as a definition (the marker line is a comment, not a def).
+  for (const n of ['RATIFY_SCHEMA', 'CANON_HASH_ONELINER', 'solWrapperPlan']) {
+    const localDefs = archSrc.split('\n').filter((l) => new RegExp(`^(const|export function|function) ${n}\\b`).test(l.trim()))
+    assert.equal(localDefs.length, 0, `architecture.js must NOT keep a local ${n} definition (it is inlined from council.mjs)`)
+  }
+  // architecture's solWrapperPrompt is now a THIN adapter over the lifted solWrapperPlan
+  assert.match(archSrc, /const solWrapperPrompt = \(opts\) => solWrapperPlan\(/)
+})
+
+test('D1 assembleRatifyCertificate: each signature verifies against its OWN seat_provenance (the shared context is seat-null)', () => {
+  const bH = sha256Hex('bundle'), eH = sha256Hex('evid')
+  const ctx = { bundle_hash: bH, renderer_version: 'b42-close/1', plan_hash: bH, evidence_manifest_hash: eH, protocol_version: COUNCIL_PROTOCOL_VERSION, seat_provenance: null }
+  const r = { verdict: 'APPROVE', artifact_hash: bH, divergence_selections: [], findings: [], changed_evidence: [] }
+  const provF = seatProv({ actual_model: 'fable' }, 'fable'), provS = seatProv({ receipt_verified: true }, 'sol')
+  const res = assembleRatifyCertificate({ rF: r, rS: r, provF, provS, context: ctx })
+  assert.equal(res.ok, true)
+  const [sigF, sigS] = res.certificate.signatures
+  assert.equal(canonicalJson(sigF.seat_provenance), canonicalJson(provF))
+  assert.equal(canonicalJson(sigS.seat_provenance), canonicalJson(provS))
+  assert.notEqual(canonicalJson(sigF.seat_provenance), canonicalJson(sigS.seat_provenance))
 })

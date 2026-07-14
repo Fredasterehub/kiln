@@ -85,17 +85,20 @@ whether the tier is `express` or a facilitated tier).
   Architecture also takes a **`runToken`** (council receipt binding + council seed at T4 — NOT a browser
   token; see [The run token](#the-run-token)) and a **`capabilityTier`** (`T1`|`T2`|`T3`|`T4` = the
   freshest capability record's `tier`). When `capabilityTier === 'T4'` AND `codexAvailable` AND a
-  `runToken` is present, on the FULL (non-lite) path the master plan's draft pair + final ratification
-  become the **twin council** (Fable ∥ receipt-attested Sol drafts, then blind dual ratification of the
-  plan); sub-T4, `codexAvailable:false`, and the lite path run the
-  v3.0.1 path BYTE-IDENTICAL, labeled `council.path:'v301'` with an honest reason (never `twin_ratified`,
-  never second-family verification). The return grows ONE additive field: `council: { eligible, tier,
-  path:'twin_council'|'v301', terminal:'RATIFIED'|'COUNCIL_DEADLOCK'|'DEGRADED'|null, certificate,
-  terminal_record, blocked_reason, receipts[], checkpoints, reason }` — and on the council path the Law locks ONLY a
-  `RATIFIED` plan (a `DEGRADED`/`COUNCIL_DEADLOCK` terminal returns `law_locked:false` naming the
-  council). A full-path T4 launch missing `runToken` is a misconfigured conductor: the council rules
-  `DEGRADED` (reason `runToken absent`, Law blocked — a promised guarantee never silently downgrades
-  to a clean v301 label); the v3.0.1 pair still produces a DRAFT plan for the operator.
+  `runToken` is present, BOTH the FULL and the LITE paths become the **twin council**: the FULL path
+  runs the anonymized Fable ∥ receipt-attested-Sol draft pair + a divergence-aware blind ratification
+  ladder; the LITE path (B4-2 D7) runs the blind required ratification pair ALONE over the single lite
+  master plan — ONE round, no answer exchange, renderer `b42-lite/1`. Sub-T4 and `codexAvailable:false`
+  run the v3.0.1 path BYTE-IDENTICAL, labeled `council.path:'v301'` with an honest reason (never
+  `twin_ratified`, never second-family verification). The return grows ONE additive field: `council: {
+  eligible, tier, path:'twin_council'|'v301', terminal:'RATIFIED'|'COUNCIL_DEADLOCK'|'BLOCKED'|'DEGRADED'|null,
+  certificate, terminal_record, blocked_reason, receipts[], checkpoints, reason }` — a live, valid
+  BLOCK/NEITHER on the lite plan is an honest `BLOCKED` terminal (the lite form has no answer-exchange
+  remedy). On the twin-council path — FULL or LITE — the Law locks ONLY a `RATIFIED` plan; any other
+  terminal (`BLOCKED`/`DEGRADED`/`COUNCIL_DEADLOCK`/absent) returns `law_locked:false` naming the
+  council. A T4 launch (FULL or LITE) missing `runToken` is a misconfigured conductor: the council rules
+  `DEGRADED` (reason `runToken absent`, Law blocked — a promised guarantee never silently downgrades to
+  a clean v301 label); on the FULL path the v3.0.1 pair still produces a DRAFT plan for the operator.
 - **Build** also takes `milestoneLimit` (omit in production = all milestones), `uiBuild`,
   `pluginRoot`, and — exactly like Validate — the whole **`posture`** object and a **`runToken`**.
   **`uiBuild` defaults `false`** — set it `true` only for a genuinely pure-UI/static
@@ -109,8 +112,22 @@ whether the tier is `express` or a facilitated tier).
   `min_slices_for_tribunal`, `browser.tier2_per_milestone`, and the validate-extras it carries
   downstream); omit it and the entire build stage drops to v2-equivalent defaults. **`runToken`** is
   conductor-minted per run (see [The run token](#the-run-token)) — build.js derives its `kbuild-…`
-  browser-kill token from it; omit it and it falls back to a per-project hash that is NOT unique across
-  runs. For the `gateOnly` retry arg, see [Build failure routing](#build-failure-routing--the-gate-only-retry).
+  browser-kill token from it AND (at capability tier T4) binds its milestone-council receipt-invocation
+  IDs to the SAME per-run token. Build also takes a **`capabilityTier`** (`T1`|`T2`|`T3`|`T4` = the
+  freshest capability record's `tier`, same as Architecture). When `capabilityTier === 'T4'` AND
+  `codexAvailable` AND a `runToken` is present, the milestone gate's three judgment seats go
+  council-grade: the Ryu analyst becomes a receipt-attested Sol evidence analyst (xhigh, read-only,
+  judging from the runner's persisted hashed evidence), Judge Dredd is retired in favor of a blind
+  Fable/Sol required close-ratification pair (dual-APPROVE ⇒ QA_PASS + a `twin_ratified` certificate;
+  any other outcome ⇒ QA_FAIL fail-closed with an honest terminal), and the single corrective build is
+  gated by a blind Fable/Sol correction council over `retry | escalate | replan` (split/dead ⇒
+  fail-closed escalate). Sub-T4, `codexAvailable:false`, and a missing `runToken` keep the v3.0.1
+  prompt-delegated Ryu, single-Opus Judge Dredd, and unconditional corrective build BYTE-IDENTICAL —
+  except a **PROMISED** council (T4 + codex) launched WITHOUT a `runToken`, which is a misconfigured
+  conductor: the affected milestone ruling fails CLOSED (QA_FAIL, terminal DEGRADED — never a silent
+  downgrade to Judge Dredd). Council terminals ride the milestone result's additive `council`
+  field and the `gate_decision` ledger summary; deterministic red gates are never converted to green by
+  council prose. For the `gateOnly` retry arg, see [Build failure routing](#build-failure-routing--the-gate-only-retry).
 - **Validate** also takes `designPresent`, `pluginRoot`, `posture`, and a **`runToken`** (same recipe
   as Build — see [The run token](#the-run-token); validate.js derives its `kval-…` browser-kill / lease
   token from it, with the same non-unique per-project hash fallback when omitted).

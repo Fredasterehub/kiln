@@ -38,8 +38,11 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { admitSpeculation } from '../../plugins/kiln/src/spine.mjs'
+import { createHash } from 'node:crypto'
+import { sha256Hex, canonicalJson } from '../../plugins/kiln/src/council.mjs'
 
 const WORKFLOW = fileURLToPath(new URL('../../plugins/kiln/workflows/build.js', import.meta.url))
+const BUILD_SRC = fileURLToPath(new URL('../../plugins/kiln/workflows-src/build.js', import.meta.url))
 
 const AsyncFunction = (async () => {}).constructor
 const wfBody = readFileSync(WORKFLOW, 'utf8').replace(/^export const meta\b/m, 'const meta')
@@ -1557,4 +1560,420 @@ test('D5 telemetry (Sol r1-4): a rejected NO-fingerprint slice emits fingerprint
   assert.ok(!note.includes('"fingerprint":""'), 'the truthy null-fingerprint object must not leak "" (Sol r1-4)')
   assert.match(note, /"first_pass_green":false/)
   assert.match(note, /"attempts":4/)
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════
+// ── B4-2 build keystones at capability tier T4 (D2/D3/D4/D5/D6): the Sol evidence analyst (Ryu bump),
+//    the milestone-close ratification pair (Judge Dredd retired), and the correction council. Every
+//    Sol leg rides a receipt-attested codex envelope + an invocation-exact ledger cross-check (the
+//    inlined gate.mjs + council.mjs machinery, driven by the same programmable mock). Fixtures derive
+//    every cross-side hash from real bytes (the architecture-council.test.mjs discipline).
+// ══════════════════════════════════════════════════════════════════════════════════════════════════
+const T4TOKEN = 'BUILD-RUNTOKEN-xyz'
+const t4args = (extra = {}) => ({ ...baseArgs, capabilityTier: 'T4', runToken: T4TOKEN, ...extra })
+const shaB = (buf) => createHash('sha256').update(buf).digest('hex')
+const oshaOf = (p) => shaB(Buffer.from(JSON.stringify(p)))
+const rshaOf = (r) => shaB(Buffer.from(JSON.stringify(r)))
+const SESSION = '019f5a46-fc83-7181-8303-f516494485ac', INV = '3'.repeat(64), PSHA = '1'.repeat(64), XSHA = '5'.repeat(64)
+const validReceipt = (payload, over = {}) => ({
+  receipt_version: 1, parser_version: 'kiln-codex-receipt/1', transport: 'codex_exec', invocation_id: INV,
+  prompt_sha256: PSHA, packet_sha256: XSHA, cli_version: '0.144.1', requested_model: 'gpt-5.6-sol',
+  reported_model: 'gpt-5.6-sol', session_id: SESSION, exit_code: 0, tokens_used: 18747,
+  output_sha256: oshaOf(payload), stderr_sha256: XSHA, ...over,
+})
+const solEnv = (payload, rOver) => ({ payload, codex_receipt: validReceipt(payload, rOver || {}), raw_artifact_refs: { stderr: 's', output: 'o' } })
+const crossOkB = (payload, keystone, phaseTag, over = {}) => ({
+  output_sha256_disk: over.disk !== undefined ? over.disk : oshaOf(payload),
+  output_canonical_sha256: over.canon !== undefined ? over.canon : sha256Hex(canonicalJson(payload)),
+  ledger: {
+    verified: over.verified === null ? null : { status: 'verified', invocation_id: INV, receipt_sha256: rshaOf(validReceipt(payload)), output_sha256: oshaOf(payload), session_id: SESSION, reported_model: 'gpt-5.6-sol', tokens_used: 18747, exit_code: 0, receipt_verified: true, ...(over.verified || {}) },
+    reservation: over.reservation === null ? null : { invocation_id: INV, keystone, phase: phaseTag, seat: 'sol', attempt: 1, run_token: T4TOKEN, prompt_sha256: PSHA, packet_sha256: XSHA, ...(over.reservation || {}) },
+  },
+})
+const rat = (h, over = {}) => ({ reasoning: 'r', artifact_hash: h, verdict: 'APPROVE', divergence_selections: [], findings: [], changed_evidence: [], ...over })
+const corr = (h, choice, over = {}) => ({ reasoning: 'r', artifact_hash: h, findings: [], reasons: ['route'], choice, ...over })
+const CLOSE_FINDING = { finding_id: 'CF-1', claim: 'the goal is not reachable from the entry point', required_change: 'wire the entry point', evidence_refs: ['src/app.js:10'], evidence_class: 'repo_state', executable_check: null }
+// anchorFilesFromPrompt (B42-3) — mirror the Thoth close-anchor: parse the paths from the
+// 'sha256sum <paths>' one-liner and return one {path, sha256} per named artifact (a real 64-hex
+// digest of the path bytes, so the in-script evidence_manifest_hash is deterministic + exact-coverage).
+const anchorFilesFromPrompt = (prompt) => {
+  const m = prompt.match(/sha256sum ([^\n']+)/)
+  const paths = m ? m[1].trim().split(/\s+/).filter(Boolean) : []
+  return paths.map((p) => ({ path: p, sha256: sha256Hex(p) }))
+}
+
+// t4Council(cfg) — a council-leg responder (returns undefined for non-council labels ⇒ mkRespond
+// defaults). Captures the close/correction artifact hashes from the fable/sol prompts so the ratify
+// payloads + their cross-checks echo whatever hash the workflow computed (robust to closeRecord drift).
+function t4Council(cfg = {}) {
+  let closeHash = null, corrHash = null
+  const analystB = cfg.solAnalyst !== undefined ? cfg.solAnalyst : { findings: [], overall: 'fail', report_markdown: '# b' }
+  return (label, prompt) => {
+    if (label.startsWith('thoth:probe-exec')) return cfg.probeExec !== undefined ? cfg.probeExec : { executed_ids: [] }
+    if (label.startsWith('thoth:close-anchor')) return cfg.closeAnchor !== undefined ? cfg.closeAnchor : { reasoning: 'a', files: anchorFilesFromPrompt(prompt) }
+    if (label.startsWith('ken:qa')) return cfg.ken !== undefined ? cfg.ken : { reasoning: 'r', overall: 'pass', findings: [] }
+    if (label.startsWith('aristotle:goal-backward')) return cfg.goal !== undefined ? cfg.goal : { reasoning: 'r', overall: 'pass', findings: [] }
+    if (label.startsWith('ryu:qa')) return cfg.solAnalystEnv !== undefined ? cfg.solAnalystEnv : solEnv(analystB)
+    if (label.startsWith('thoth:receipt-check:ryu:')) return cfg.analystCross !== undefined ? cfg.analystCross : crossOkB(analystB, 'milestone_close:M1', 'QA_EVIDENCE_C0')
+    if (label.startsWith('fable:close')) { const m = prompt.match(/artifact_hash = "([0-9a-f]{64})"/); if (m) closeHash = m[1]; return cfg.fableClose ? cfg.fableClose(closeHash) : rat(closeHash) }
+    if (label.startsWith('sol:close')) { const m = prompt.match(/"artifact_hash":"([0-9a-f]{64})"/); if (m) closeHash = m[1]; if (cfg.solClose === 'dead') return {}; return cfg.solClose ? solEnv(cfg.solClose(closeHash)) : solEnv(rat(closeHash)) }
+    if (label.startsWith('thoth:receipt-check:sol:close')) return crossOkB(cfg.solClose && cfg.solClose !== 'dead' ? cfg.solClose(closeHash) : rat(closeHash), 'milestone_close:M1', 'CLOSE_RATIFY_C0')
+    if (label.startsWith('fable:correction')) { const m = prompt.match(/artifact_hash = "([0-9a-f]{64})"/); if (m) corrHash = m[1]; return corr(corrHash, cfg.fableCorr || 'RETRY', cfg.corrOver || {}) }
+    if (label.startsWith('sol:correction')) { const m = prompt.match(/"artifact_hash":"([0-9a-f]{64})"/); if (m) corrHash = m[1]; if (cfg.solCorr === 'dead') return {}; return solEnv(corr(corrHash, cfg.solCorr || 'RETRY', cfg.corrOver || {})) }
+    if (label.startsWith('thoth:receipt-check:sol:correction')) return crossOkB(corr(corrHash, cfg.solCorr && cfg.solCorr !== 'dead' ? cfg.solCorr : 'RETRY', cfg.corrOver || {}), 'correction:M1', 'CORRECTION_C0')
+    return undefined
+  }
+}
+const ledgerPrompts = (calls) => labelsOf(calls, 'thoth:ledger').map((c) => c.prompt)
+
+// ── D3: dual-APPROVE close ⇒ QA_PASS + a twin_ratified certificate (Judge Dredd never spawns) ──
+test('D3 milestone close: an ambiguous reconcile at T4 spawns the blind Fable/Sol close pair (NOT Judge Dredd); dual-APPROVE ⇒ QA_PASS + a twin_ratified certificate', async () => {
+  const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council()))
+  const exact = (label) => calls.filter((c) => c.label === label).length
+  assert.equal(count(calls, 'judge-dredd:verdict'), 0, 'Judge Dredd is retired at T4')
+  assert.equal(exact('fable:close:M1:c0'), 1, 'the blind Fable close ratifier is dispatched once on the ambiguous branch')
+  assert.equal(exact('sol:close:M1:c0'), 1, 'the receipt-attested Sol close ratifier is dispatched once')
+  assert.equal(exact('thoth:receipt-check:sol:close:M1:c0'), 1, 'the Sol close leg is cross-checked invocation-exact')
+  assert.equal(result.built[0].qa, 'QA_PASS')
+  assert.equal(result.built[0].council.close_terminal, 'RATIFIED')
+  assert.equal(result.built[0].council.certificate.label, 'twin_ratified')
+  assert.equal(result.built[0].council.certificate.terminal, 'RATIFIED')
+})
+
+// ── DSGN-B42-2: certificate context exactness — deterministic non-null evidence_manifest_hash, per-sig provenance ──
+test('DSGN-B42-2 certificate context: bundle_hash = plan_hash (the close record IS the artifact), evidence_manifest_hash is non-null + 64-hex, per-signature seat_provenance is distinct', async () => {
+  const { result } = await runBuild(t4args(), mkRespond({}, t4Council()))
+  const cert = result.built[0].council.certificate
+  assert.equal(cert.plan_hash, cert.decision_bundle_hash, 'no second render on the close pair — plan_hash = bundle_hash')
+  const [sigF, sigS] = cert.signatures
+  assert.equal(sigF.renderer_version, 'b42-close/1')
+  assert.ok(/^[0-9a-f]{64}$/.test(sigF.evidence_manifest_hash), 'evidence_manifest_hash is deterministic + non-null (never null)')
+  assert.equal(sigF.evidence_manifest_hash, sigS.evidence_manifest_hash)
+  assert.equal(sigF.plan_hash, cert.decision_bundle_hash)
+  assert.notEqual(canonicalJson(sigF.seat_provenance), canonicalJson(sigS.seat_provenance), 'each signature carries its OWN head provenance')
+})
+
+// ── D3: split / BLOCK / dead ⇒ QA_FAIL fail-closed, honest terminal, no judge fallback ──
+test('D3 milestone close: a BLOCK verdict ⇒ QA_FAIL fail-closed (terminal BLOCKED), no judge fallback at T4, frozen findings surfaced', async () => {
+  const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council({ fableClose: (h) => ({ ...rat(h), verdict: 'BLOCK', findings: [CLOSE_FINDING] }), fableCorr: 'ESCALATE', solCorr: 'ESCALATE' })))
+  assert.equal(count(calls, 'judge-dredd:verdict'), 0, 'a non-dual-APPROVE close never falls back to a judge at T4')
+  assert.equal(result.built[0].qa, 'QA_FAIL')
+  assert.equal(result.built[0].council.close_terminal, 'BLOCKED')
+  assert.equal(result.built[0].council.certificate, null, 'twin_ratified appears ONLY with a valid certificate')
+  assert.ok(result.built[0].findings.some((f) => /CF-1/.test(f)), 'the frozen close_council finding is rendered into the boundary record')
+})
+
+test('D3 milestone close: a SPLIT (fable APPROVE, sol BLOCK) ⇒ QA_FAIL fail-closed BLOCKED', async () => {
+  const { result } = await runBuild(t4args(), mkRespond({}, t4Council({ solClose: (h) => ({ ...rat(h), verdict: 'BLOCK', findings: [CLOSE_FINDING] }), fableCorr: 'ESCALATE', solCorr: 'ESCALATE' })))
+  assert.equal(result.built[0].qa, 'QA_FAIL')
+  assert.equal(result.built[0].council.close_terminal, 'BLOCKED')
+})
+
+test('D3 milestone close: a DEAD Sol close seat (no receipt) ⇒ QA_FAIL fail-closed DEGRADED (never a Sonnet stand-in, never a judge)', async () => {
+  const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council({ solClose: 'dead', fableCorr: 'ESCALATE', solCorr: 'ESCALATE' })))
+  assert.equal(count(calls, 'judge-dredd:verdict'), 0)
+  assert.equal(result.built[0].qa, 'QA_FAIL')
+  assert.equal(result.built[0].council.close_terminal, 'DEGRADED')
+})
+
+// ── D2: the Ryu bump — receipt attestation + invocation-exact cross-check binding ──
+test('D2 Sol evidence analyst: the Ryu leg rides a receipt-attested codex envelope + an invocation-exact cross-check; a FAILED cross-check (wrong keystone) ⇒ dead analyst B ⇒ QA_FAIL via the reconcile, no close pair', async () => {
+  const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council({ analystCross: crossOkB({ findings: [], overall: 'fail', report_markdown: '# b' }, 'wrong:keystone', 'QA_EVIDENCE_C0') })))
+  assert.equal(count(calls, 'thoth:receipt-check:ryu:M1:c0'), 1, 'the analyst receipt is cross-checked')
+  assert.equal(count(calls, 'fable:close:M1:c0'), 0, 'a dead analyst B fails the gate closed BEFORE any close pair (unreadable overall ⇒ QA_FAIL)')
+  assert.equal(result.built[0].qa, 'QA_FAIL')
+})
+
+// ── D4: correction council — three rulings + fail-closed ESCALATE ──
+test('D4 correction council: RETRY ⇒ the sole corrective build fires; ESCALATE ⇒ break QA_FAIL, no build; REPLAN ⇒ replan_required marker', async () => {
+  // Force a blocking reconcile (computed QA_FAIL, no close pair) so the correction council is reached at c0.
+  const blockingKen = { reasoning: 'r', overall: 'fail', findings: [{ text: 'list renders nothing', severity: 'critical' }] }
+  const retry = await runBuild(t4args(), mkRespond({}, t4Council({ ken: blockingKen, fableCorr: 'RETRY', solCorr: 'RETRY' })))
+  assert.equal(count(retry.calls, 'fable:correction:M1:c0'), 1, 'the correction council runs BEFORE the corrective build')
+  assert.ok(labelsOf(retry.calls, ':build:').some((c) => /correct1/.test(c.label)), 'RETRY ⇒ the sole corrective build fires')
+  assert.equal(retry.result.built[0].council.correction_ruling, 'RETRY')
+  assert.equal(retry.result.built[0].council.correction_terminal, 'RULED', 'B42-5: matched choices ⇒ an honest RULED terminal')
+
+  const escalate = await runBuild(t4args(), mkRespond({}, t4Council({ ken: blockingKen, fableCorr: 'ESCALATE', solCorr: 'ESCALATE' })))
+  assert.ok(!labelsOf(escalate.calls, ':build:').some((c) => /correct1/.test(c.label)), 'ESCALATE ⇒ NO corrective build spent')
+  assert.equal(escalate.result.built[0].qa, 'QA_FAIL')
+  assert.equal(escalate.result.built[0].council.correction_ruling, 'ESCALATE')
+  assert.ok(escalate.result.built[0].findings.some((f) => /ESCALATE/.test(f)))
+
+  const replan = await runBuild(t4args(), mkRespond({}, t4Council({ ken: blockingKen, fableCorr: 'REPLAN', solCorr: 'REPLAN' })))
+  assert.equal(replan.result.built[0].council.replan_required, true, 'REPLAN ⇒ the never-silent replan_required marker on the milestone result')
+  assert.equal(replan.result.built[0].council.correction_ruling, 'REPLAN')
+})
+
+test('D4 correction council: a SPLIT (fable RETRY, sol ESCALATE) ⇒ fail-closed ESCALATE (never a silent RETRY); a DEAD correction seat ⇒ fail-closed ESCALATE', async () => {
+  const blockingKen = { reasoning: 'r', overall: 'fail', findings: [{ text: 'broken', severity: 'high' }] }
+  const split = await runBuild(t4args(), mkRespond({}, t4Council({ ken: blockingKen, fableCorr: 'RETRY', solCorr: 'ESCALATE' })))
+  assert.equal(split.result.built[0].council.correction_ruling, 'ESCALATE', 'a split correction routes fail-closed to ESCALATE')
+  assert.equal(split.result.built[0].council.correction_terminal, 'BLOCKED', 'B42-5: a LIVE legal split is an honest BLOCKED terminal (not silently unlabeled)')
+  assert.ok(!labelsOf(split.calls, ':build:').some((c) => /correct1/.test(c.label)))
+  const dead = await runBuild(t4args(), mkRespond({}, t4Council({ ken: blockingKen, solCorr: 'dead' })))
+  assert.equal(dead.result.built[0].council.correction_ruling, 'ESCALATE', 'a dead correction seat routes fail-closed to ESCALATE')
+  assert.equal(dead.result.built[0].council.correction_terminal, 'DEGRADED', 'B42-5: a dead correction seat is an honest DEGRADED terminal')
+})
+
+// ── DSGN-B42-1: the frozen close_council_findings reach the correction packet AND the corrective fixNote ──
+test('DSGN-B42-1 council-findings carriage: a blocked close freezes its findings into qaFindings, the correction-council packet, AND the corrective build fixNote (verbatim IDs)', async () => {
+  const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council({ fableClose: (h) => ({ ...rat(h), verdict: 'BLOCK', findings: [CLOSE_FINDING] }), fableCorr: 'RETRY', solCorr: 'RETRY' })))
+  assert.equal(result.built[0].council.close_terminal, 'BLOCKED')
+  const corrFable = calls.find((c) => c.label === 'fable:correction:M1:c0').prompt
+  assert.match(corrFable, /close-council-findings/, 'the correction packet carries a close-council-findings block')
+  assert.match(corrFable, /CF-1/, 'the frozen finding id rides the correction packet verbatim')
+  const correctBuild = calls.find((c) => /:build:.*correct1/.test(c.label)).prompt
+  assert.match(correctBuild, /CF-1/, 'the corrective build fixNote carries the frozen finding id — never spent blind to what blocked the close')
+})
+
+// ── B42-2: the Sol evidence analyst packet NAMES the per-milestone/cycle artifacts (script-derived) ──
+test('B42-2 analyst packet names the artifacts: the Sol evidence analyst packet + brief name law.json + the last trial\'s results/suite/run files (from lastRunId), not just the evidence-dir root', async () => {
+  const { calls } = await runBuild(t4args(), mkRespond({}, t4Council()))
+  const ryu = calls.find((c) => c.label === 'ryu:qa:M1:c0').prompt
+  assert.match(ryu, /\/tmp\/kiln-x\/\.kiln\/law\.json/, 'law.json is named')
+  assert.match(ryu, /evidence\/RUN1\/results\.jsonl/, 'the last trial results are named')
+  assert.match(ryu, /evidence\/RUN1\/suite\.log/, 'the last trial suite log is named')
+  assert.match(ryu, /evidence\/RUN1\/run\.json/, 'the run manifest is named')
+  assert.match(ryu, /"evidence_artifacts":\[/, 'the packet carries the NAMED evidence_artifacts, not the bare dir root')
+  // B42-2 derived-probe semantics: a shell-only milestone has no probe SCs ⇒ NO derivation leg is
+  // dispatched and NO probe artifact is named (the analyst list derives from executed state, never the Law).
+  assert.equal(count(calls, 'thoth:probe-exec'), 0, 'no probe SCs ⇒ no derivation leg dispatched (logic milestone byte-preserved)')
+  const ryuArtifacts = (ryu.match(/"evidence_artifacts":\[([^\]]*)\]/) || [])[1] || ''
+  assert.doesNotMatch(ryuArtifacts, /probe/, 'a shell-only milestone names NO probe artifact in the evidence_artifacts list')
+})
+
+// ── B42-3: the close record BINDS names to hashes (a Thoth anchor); a dead/partial anchor ⇒ DEGRADED ──
+test('B42-3 evidence-bound close: a Thoth transcription leg binds each NAMED artifact to its sha256, both packets carry the COMPLETE closeRecord, and a dead/partial anchor ⇒ DEGRADED (the certificate never binds unhashed names)', async () => {
+  // a dead/partial anchor fails the close CLOSED — the certificate must never bind unhashed names
+  const deadAnchor = await runBuild(t4args(), mkRespond({}, t4Council({ closeAnchor: { reasoning: 'a', files: [] }, fableCorr: 'ESCALATE', solCorr: 'ESCALATE' })))
+  assert.equal(deadAnchor.result.built[0].council.close_terminal, 'DEGRADED', 'a dead/partial anchor fails the close CLOSED')
+  assert.equal(deadAnchor.result.built[0].council.certificate, null)
+  assert.equal(deadAnchor.result.built[0].qa, 'QA_FAIL')
+
+  // the happy close: the anchor binds {path, sha256}; both packets carry the complete closeRecord
+  const { calls } = await runBuild(t4args(), mkRespond({}, t4Council()))
+  assert.equal(calls.filter((c) => c.label === 'thoth:close-anchor:M1:c0').length, 1, 'the Thoth transcription leg runs once')
+  const solClose = calls.find((c) => c.label === 'sol:close:M1:c0').prompt
+  assert.match(solClose, /"evidence_refs":\[\{"path":/, 'the sol packet carries the complete closeRecord with {path, sha256} evidence_refs (never bare path strings)')
+  assert.match(solClose, /law\.json/, 'law.json is bound in the evidence refs')
+  const fableClose = calls.find((c) => c.label === 'fable:close:M1:c0').prompt
+  assert.match(fableClose, /evidence_refs/, 'the fable prompt carries the complete frozen closeRecord')
+  assert.match(fableClose, /results\.jsonl/, 'the last trial results are bound')
+  // AMB-B42-2: a suite-recorded build (buildOk.test_command = 'npm test') names the FULL five-artifact
+  // manifest — law.json + results.jsonl + suite.log + suite.jsonl + run.json — and states it honestly.
+  assert.match(solClose, /suite\.log/, 'a suite-recorded build binds suite.log')
+  assert.match(solClose, /suite\.jsonl/, 'and suite.jsonl')
+  assert.match(solClose, /"suite_recorded":true/, 'the close record honestly states the full manifest it binds')
+  const anchor = calls.find((c) => c.label === 'thoth:close-anchor:M1:c0').prompt
+  assert.equal(anchorFilesFromPrompt(anchor).length, 5, 'the full five-artifact manifest (law + results + suite.log + suite.jsonl + run)')
+  // B42-3 derived-probe semantics: a shell-only milestone binds NO probe artifact — the close manifest
+  // never names probe-<SC> files that the trial did not record (derived from executed state, not the Law).
+  assert.doesNotMatch(anchor, /probe-/, 'a shell-only milestone binds NO probe artifact into the close manifest')
+  assert.match(solClose, /"executed_probe_ids":\[\]/, 'the close record honestly states an empty executed-probe set when the milestone has no probe SCs')
+})
+
+// ── AMB-B42-2: a genuinely suite-less product at the ambiguous close names the REDUCED manifest — no
+//    absent suite file is named, so the pair CONVENES (suite_recorded:false) instead of DEGRADING ──
+test('AMB-B42-2 suite-less close: a build that recorded NO project suite names only law.json + results.jsonl + run.json — the pair CONVENES over the reduced hashed manifest (suite_recorded:false), never a spurious DEGRADE', async () => {
+  const council = t4Council()
+  const suiteless = (label, prompt, model) => {
+    if (label.includes(':build:')) return { ...buildOk, test_command: undefined }
+    return council(label, prompt, model)
+  }
+  const { result, calls } = await runBuild(t4args(), mkRespond({}, suiteless))
+  assert.equal(count(calls, 'fable:close:M1:c0'), 1, 'the close pair convenes over the reduced manifest — no spurious anchor DEGRADE')
+  assert.equal(result.built[0].qa, 'QA_PASS', 'a genuinely suite-less product never spuriously DEGRADEs at the close')
+  assert.equal(result.built[0].council.close_terminal, 'RATIFIED')
+  const anchor = calls.find((c) => c.label === 'thoth:close-anchor:M1:c0').prompt
+  assert.doesNotMatch(anchor, /suite\.log/, 'the close anchor names NO suite file when none was recorded')
+  assert.doesNotMatch(anchor, /suite\.jsonl/)
+  assert.match(anchor, /results\.jsonl/, 'results.jsonl is always named')
+  assert.match(anchor, /run\.json/, 'run.json is always named')
+  assert.equal(anchorFilesFromPrompt(anchor).length, 3, 'exactly the reduced three-artifact manifest (law + results + run)')
+  const solClose = calls.find((c) => c.label === 'sol:close:M1:c0').prompt
+  assert.match(solClose, /"suite_recorded":false/, 'the close record honestly states the reduced manifest it binds')
+  assert.doesNotMatch(solClose, /suite\.log/, 'the reduced evidence_refs bind no absent suite file')
+  // B42-2 fix (brief point 4): the Sol analyst's NAMED list (the packet's evidence_artifacts) gets the
+  // SAME script-side conditioning, so the analyst list and the close-anchor list never disagree.
+  const ryu = calls.find((c) => c.label === 'ryu:qa:M1:c0').prompt
+  const ryuArtifacts = (ryu.match(/"evidence_artifacts":\[([^\]]*)\]/) || [])[1] || ''
+  assert.doesNotMatch(ryuArtifacts, /suite/, 'the Sol analyst named list drops the suite files too — the two named lists never disagree')
+  assert.match(ryuArtifacts, /results\.jsonl/, 'results.jsonl stays named in the analyst list')
+})
+
+// ── B42-2/B42-3 (derived-probe semantics): probe artifacts derive from the trial's RECORDED execution
+//    state — a DEFERRED probe is named NOWHERE; an EXECUTED probe is named in the analyst packet AND the
+//    close manifest AND hash-bound in evidence_refs. ONE derivation leg feeds both named lists. ──
+test('B42-2/B42-3 derived-probe close: a DEFERRED probe SC is named nowhere (analyst packet + close manifest both omit it) while an EXECUTED probe SC is named in BOTH and hash-bound in evidence_refs (single derivation leg)', async () => {
+  const lawProbeTwo = [{ id: 'SC-001', milestone: 'M1', kind: 'probe' }, { id: 'SC-002', milestone: 'M1', kind: 'probe' }]
+  const state = { milestones: [uiMilestone()], law: lawProbeTwo, plan: planTwo }
+  // the single derivation leg reports SC-001 EXECUTED (a recorded exit row) and SC-002 NOT (deferred → no artifacts)
+  const { result, calls } = await runBuild(t4args(), mkRespond(state, t4Council({ probeExec: { executed_ids: ['SC-001'] } })))
+  assert.equal(count(calls, 'thoth:probe-exec:M1:c0'), 1, 'the single probe-execution derivation leg runs once per gate cycle')
+  // (B42-2) the analyst packet NAMES the executed probe artifacts and OMITS the deferred one
+  const ryu = calls.find((c) => c.label === 'ryu:qa:M1:c0').prompt
+  assert.match(ryu, /evidence\/RUN1\/probe-SC-001\.json/, 'the executed probe result is named in the analyst packet')
+  assert.match(ryu, /evidence\/RUN1\/probe-SC-001\.log/, 'the executed probe log is named in the analyst packet')
+  assert.doesNotMatch(ryu, /probe-SC-002/, 'a DEFERRED probe left no artifacts — the analyst packet names it NOWHERE (never the Law probe list)')
+  // (B42-3) the close anchor HASHES the executed probe artifacts and OMITS the deferred one
+  const anchor = calls.find((c) => c.label === 'thoth:close-anchor:M1:c0').prompt
+  assert.match(anchor, /probe-SC-001\.json/, 'the close anchor hashes the executed probe result')
+  assert.match(anchor, /probe-SC-001\.log/, 'and the executed probe log')
+  assert.doesNotMatch(anchor, /probe-SC-002/, 'the close anchor never hashes a deferred probe artifact')
+  // (B42-3) the executed probe artifacts ENTER closeRecord.evidence_refs (hash-bound) + executed_probe_ids
+  const solClose = calls.find((c) => c.label === 'sol:close:M1:c0').prompt
+  assert.match(solClose, /"path":"[^"]*probe-SC-001\.json","sha256":"[0-9a-f]{64}"/, 'the executed probe result is hash-bound in evidence_refs (never a bare path)')
+  assert.match(solClose, /"executed_probe_ids":\["SC-001"\]/, 'the close record states exactly the executed probe id it binds')
+  assert.doesNotMatch(solClose, /probe-SC-002/, 'the deferred probe enters neither evidence_refs nor executed_probe_ids')
+  // the certificate seals over the manifest that now includes the executed probe artifacts
+  assert.equal(result.built[0].qa, 'QA_PASS')
+  assert.equal(result.built[0].council.close_terminal, 'RATIFIED')
+})
+
+// ── B42-4: per-slice fingerprint + attempts ride the correction packet (retained on the slice records) ──
+test('B42-4 correction telemetry: the correction packet carries per-slice fingerprint + attempts (retained on the slice records, passed through sliceTelemetry)', async () => {
+  const blockingKen = { reasoning: 'r', overall: 'fail', findings: [{ text: 'list renders nothing', severity: 'critical' }] }
+  const { calls } = await runBuild(t4args(), mkRespond({}, t4Council({ ken: blockingKen, fableCorr: 'RETRY', solCorr: 'RETRY' })))
+  const corrFable = calls.find((c) => c.label === 'fable:correction:M1:c0').prompt
+  assert.match(corrFable, /"fingerprint":/, 'per-slice fingerprint rides the correction packet')
+  assert.match(corrFable, /"attempts":/, 'per-slice attempts ride the correction packet')
+  const corrSol = calls.find((c) => c.label === 'sol:correction:M1:c0').prompt
+  assert.match(corrSol, /"fingerprint":/, 'the Sol packet carries the same telemetry')
+  assert.match(corrSol, /"attempts":/)
+})
+
+test('B42-4 correction telemetry VALUE: a reject-then-green slice records fingerprint:null — the last attempt was green, never the overcome failure signature (Sol r2 seed: the value, not just the key)', async () => {
+  const blockingKen = { reasoning: 'r', overall: 'fail', findings: [{ text: 'x', severity: 'critical' }] }
+  const council = t4Council({ ken: blockingKen, fableCorr: 'RETRY', solCorr: 'RETRY' })
+  let trials = 0
+  const { calls } = await runBuild(t4args(), mkRespond({}, (label, prompt, model) => {
+    // slice0's FIRST trial is RED with an assertion fingerprint; every later trial is GREEN — so slice0
+    // is reject-then-green (approved) and slice1 is first-pass green.
+    if (label.startsWith('asimov:runner')) { trials++; return trials === 1 ? redAssert : runnerOk }
+    return council(label, prompt, model)
+  }))
+  const corrFable = calls.find((c) => c.label === 'fable:correction:M1:c0').prompt
+  const tel = JSON.parse(corrFable.match(/Slice telemetry: (\[[^\n]*\])/)[1])
+  const s0 = tel.find((s) => s.id === 'M1:s0')
+  assert.equal(s0.fingerprint, null, 'B42-4: an APPROVED (reject-then-green) slice carries fingerprint:null — the decisive trial was green, no failure signature')
+  assert.ok(s0.attempts >= 2, 'the slice really did retry (fix0 red → fix1 green) before approval — the null is earned, not vacuous')
+  assert.ok(!/assertion\|SC-001/.test(corrFable), 'the overcome assertion signature never leaks into the correction telemetry')
+})
+
+// ── B42-5: the correction heads' findings + reasons are RETAINED and ride qaFindings verbatim ──
+test('B42-5 correction findings carried: ESCALATE rides the heads\' retained findings + reasons verbatim into qaFindings (never generic synthesized prose), with an honest RULED terminal', async () => {
+  const blockingKen = { reasoning: 'r', overall: 'fail', findings: [{ text: 'broken', severity: 'high' }] }
+  const { result } = await runBuild(t4args(), mkRespond({}, t4Council({ ken: blockingKen, fableCorr: 'ESCALATE', solCorr: 'ESCALATE', corrOver: { findings: [{ text: 'the route needs a conductor decision', severity: 'high' }], reasons: ['beyond one corrective build'] } })))
+  assert.equal(result.built[0].council.correction_ruling, 'ESCALATE')
+  assert.equal(result.built[0].council.correction_terminal, 'RULED', 'both heads agree on ESCALATE ⇒ matched ⇒ RULED')
+  assert.ok(result.built[0].findings.some((f) => /the route needs a conductor decision/.test(f)), 'the correction finding rides qaFindings verbatim')
+  assert.ok(result.built[0].findings.some((f) => /beyond one corrective build/.test(f)), 'the correction reason rides qaFindings verbatim')
+})
+
+test('B42-5 dead-seat carriage: a DEAD Sol correction seat still carries the SURVIVING Fable head\'s findings + reasons verbatim into qaFindings AND the council_ruling note (never discarded on a degraded pair)', async () => {
+  const blockingKen = { reasoning: 'r', overall: 'fail', findings: [{ text: 'broken', severity: 'high' }] }
+  // sol correction seat is DEAD (no receipt); the fable head survives with its own findings + reasons.
+  const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council({ ken: blockingKen, solCorr: 'dead', corrOver: { findings: [{ text: 'the surviving head still ruled the route', severity: 'high' }], reasons: ['the fable seat reasoning survives the dead sol seat'] } })))
+  assert.equal(result.built[0].council.correction_ruling, 'ESCALATE', 'a dead correction seat routes fail-closed to ESCALATE')
+  assert.equal(result.built[0].council.correction_terminal, 'DEGRADED', 'and is an honest DEGRADED terminal')
+  assert.ok(result.built[0].findings.some((f) => /the surviving head still ruled the route/.test(f)), 'the surviving Fable head\'s finding rides qaFindings verbatim (never discarded on a dead seat)')
+  assert.ok(result.built[0].findings.some((f) => /the fable seat reasoning survives/.test(f)), 'the surviving head\'s reason rides qaFindings verbatim')
+  const ruling = ledgerPrompts(calls).find((p) => /"phase":"CORRECTION_C0"/.test(p) && /"terminal":"DEGRADED"/.test(p))
+  assert.ok(ruling && /the surviving head still ruled the route/.test(ruling), 'the council_ruling note carries the surviving head\'s finding')
+})
+
+// ── B42-7: an invalid close ratification degrades honestly — never mislabeled BLOCKED ──
+test('B42-7 invalid close ratification: dual APPROVE echoing a WRONG artifact_hash ⇒ DEGRADED (never mislabeled BLOCKED, never a frozen-findings carry from an invalid verdict)', async () => {
+  const badHash = '9'.repeat(64)
+  const { result } = await runBuild(t4args(), mkRespond({}, t4Council({ fableClose: () => rat(badHash), solClose: () => rat(badHash), fableCorr: 'ESCALATE', solCorr: 'ESCALATE' })))
+  assert.equal(result.built[0].qa, 'QA_FAIL')
+  assert.equal(result.built[0].council.close_terminal, 'DEGRADED', 'an invalid ratification degrades honestly — never mislabeled BLOCKED')
+  assert.equal(result.built[0].council.certificate, null)
+})
+
+// ── red-findings monotonicity (structural): hasBlocking ⇒ QA_FAIL with NO close-pair dispatch ──
+test('red-findings monotonicity: a blocking reconcile ⇒ computed QA_FAIL with NO close-pair dispatch — a council can never green a deterministic red gate', async () => {
+  const blockingKen = { reasoning: 'r', overall: 'fail', findings: [{ text: 'the store is never read', severity: 'critical' }] }
+  const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council({ ken: blockingKen, fableCorr: 'ESCALATE', solCorr: 'ESCALATE' })))
+  assert.equal(count(calls, 'fable:close:M1:c0'), 0, 'a deterministic QA_FAIL never reaches the close pair (structural red monotonicity)')
+  assert.equal(count(calls, 'sol:close:M1:c0'), 0)
+  assert.equal(result.built[0].qa, 'QA_FAIL')
+})
+
+// ── B42-1 (the fail-open catch): promised-but-tokenless ⇒ analyst B is a DEAD SEAT (zero legacy Ryu),
+//    QA_FAIL before any computed pass, never a silent Judge Dredd downgrade; sub-T4 byte-preserved ──
+test('B42-1 promised-but-tokenless: T4 + codex but NO runToken, AGREEING zero-blocking analysts ⇒ QA_FAIL DEGRADED with ZERO legacy Ryu dispatches (never a computed QA_PASS, never a Judge Dredd downgrade)', async () => {
+  // The exact fail-open seed (Sol's probe): both analysts would agree with zero blocking. Under the OLD
+  // code this computed QA_PASS via the legacy receiptless Ryu. Now analyst B is a DEAD SEAT — no Ryu leg
+  // is dispatched, and the reconcile arithmetic (unreadable overall B) fails the boundary CLOSED first.
+  const { result, calls } = await runBuild({ ...baseArgs, capabilityTier: 'T4' }, mkRespond({}, (label) => {
+    if (label.startsWith('ken:qa')) return { reasoning: 'r', overall: 'pass', findings: [] }
+    if (label.startsWith('ryu:qa')) return { reasoning: 'r', overall: 'pass', findings: [] } // would-be AGREEING zero-blocking analyst — never reached
+    if (label.startsWith('aristotle:goal-backward')) return { reasoning: 'r', overall: 'pass', findings: [] }
+    return undefined
+  }))
+  assert.equal(count(calls, 'ryu:qa'), 0, 'B42-1: analyst B is a DEAD SEAT under misconfiguration — NO legacy receiptless Ryu is ever dispatched (zero legacy_ryu_calls)')
+  assert.equal(count(calls, 'judge-dredd:verdict'), 0, 'no silent downgrade to Judge Dredd')
+  assert.equal(count(calls, 'fable:close:M1:c0'), 0, 'the close pair cannot convene without a runToken')
+  assert.equal(result.built[0].qa, 'QA_FAIL', 'agreeing zero-blocking analysts no longer compute QA_PASS — the boundary fails CLOSED before any computed pass')
+  assert.equal(result.built[0].council.close_terminal, 'DEGRADED')
+  assert.ok(result.built[0].findings.some((f) => /runToken/.test(f)))
+})
+
+test('D5 sub-T4 byte-preservation: at T3 (no council) an ambiguous reconcile spawns the v3.0.1 Judge Dredd — NO Sol analyst envelope, NO close pair, NO receipt-check', async () => {
+  const { result, calls } = await runBuild({ ...baseArgs, capabilityTier: 'T3', runToken: T4TOKEN }, mkRespond({}, (label) => {
+    if (label.startsWith('ken:qa')) return { reasoning: 'r', overall: 'pass', findings: [] }
+    if (label.startsWith('ryu:qa')) return { reasoning: 'r', overall: 'fail', findings: [] }
+    if (label.startsWith('aristotle:goal-backward')) return { reasoning: 'r', overall: 'pass', findings: [] }
+    if (label.startsWith('judge-dredd:verdict')) return { reasoning: 'r', verdict: 'QA_PASS', findings: [] }
+    return undefined
+  }))
+  assert.equal(count(calls, 'judge-dredd:verdict'), 1, 'T3 keeps the v3.0.1 single-Opus Judge Dredd')
+  assert.equal(count(calls, 'fable:close:M1:c0'), 0, 'no close pair below T4')
+  assert.equal(count(calls, 'thoth:receipt-check:ryu:M1:c0'), 0, 'the T3 Ryu leg is a plain sonnet — no receipt cross-check')
+  assert.equal(result.built[0].qa, 'QA_PASS')
+  assert.equal(result.built[0].council, undefined, 'sub-T4 results carry NO council field (byte-preserved)')
+})
+
+// ── B42-6: boundary records — the gate_decision council seat-summary ARRAY + the results[].council fields ──
+test('B42-6 boundary records: the gate_decision ledger append carries a council seat-summary ARRAY (exact shape, COMPUTED bundle_hash), receipts ride a separate council_receipts key, and results[].council carries the honest terminals', async () => {
+  const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council()))
+  const gd = ledgerPrompts(calls).find((p) => p.includes('"type":"gate_decision"'))
+  assert.ok(gd, 'a gate_decision event is appended')
+  assert.match(gd, /"council":\[/, 'the gate_decision council field is an ARRAY of per-seat summaries')
+  assert.match(gd, /"seat":"milestone_close"/)
+  assert.match(gd, /"terminal":"RATIFIED"/)
+  assert.match(gd, /"certificate_present":true/)
+  assert.match(gd, /"bundle_hash":"[0-9a-f]{64}"/, 'bundle_hash is the COMPUTED record hash, present on every seat entry')
+  assert.match(gd, /"receipt_verified":true/)
+  assert.match(gd, /"ledger_verified":true/)
+  assert.match(gd, /"council_receipts":\[/, 'the receipts list rides gate_decision as a SEPARATE council_receipts key')
+  assert.equal(result.built[0].council.close_terminal, 'RATIFIED')
+  assert.equal(result.built[0].council.replan_required, false)
+})
+
+// ── bundled-artifact presence: the extended @inline:council name list ships into workflows/build.js ──
+test('bundled artifact: workflows/build.js inlines the extended @inline:council name list (solWrapperPlan, crossCheckOk, assembleRatifyCertificate, RATIFY_SCHEMA, …)', () => {
+  const gen = readFileSync(WORKFLOW, 'utf8')
+  for (const name of ['solWrapperPlan', 'crossCheckOk', 'assembleRatifyCertificate', 'councilTemplateHash', 'seatProv', 'twinRatified', 'validateRatification', 'buildCheckpoint', 'RATIFY_SCHEMA', 'CROSS_CHECK_SCHEMA', 'envelopeSchema', 'CANON_HASH_ONELINER', 'LEDGER_EXTRACT_ONELINER', 'SHA64_RE']) {
+    assert.ok(gen.includes(`function ${name}`) || gen.includes(`const ${name}`), `workflows/build.js must inline ${name}`)
+  }
+  // the src marker lists the names (build.js source carries the extended @inline:council marker)
+  const src = readFileSync(BUILD_SRC, 'utf8')
+  assert.match(src, /@inline:council:.*solWrapperPlan.*crossCheckOk.*assembleRatifyCertificate/)
+})
+
+// ── capabilityTier threading: build reads A.capabilityTier with the T1..T4 validation idiom ──
+test('D5 capabilityTier threading: a garbage capabilityTier ⇒ no council (validated to null, exactly architecture.js:69 idiom)', async () => {
+  const { result, calls } = await runBuild({ ...baseArgs, capabilityTier: 'T9', runToken: T4TOKEN }, mkRespond({}, (label) => {
+    if (label.startsWith('ken:qa')) return { reasoning: 'r', overall: 'pass', findings: [] }
+    if (label.startsWith('ryu:qa')) return { reasoning: 'r', overall: 'fail', findings: [] }
+    if (label.startsWith('aristotle:goal-backward')) return { reasoning: 'r', overall: 'pass', findings: [] }
+    if (label.startsWith('judge-dredd:verdict')) return { reasoning: 'r', verdict: 'QA_PASS', findings: [] }
+    return undefined
+  }))
+  assert.equal(count(calls, 'fable:close:M1:c0'), 0, 'an unrecognised tier validates to null ⇒ no council')
+  assert.equal(count(calls, 'judge-dredd:verdict'), 1, 'the v3.0.1 path stands')
+  assert.equal(result.built[0].council, undefined)
 })

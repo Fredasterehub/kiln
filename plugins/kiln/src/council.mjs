@@ -1010,3 +1010,239 @@ export function degraded(parts) {
   const p = parts || {}
   return { terminal: 'DEGRADED', label: 'twin_degraded', missing: p.missing != null ? p.missing : null, reason: p.reason != null ? p.reason : null }
 }
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// ── B4-1b-ii CALL-SITE CORE, lifted to pure exports (B4-2 D1). The sealed 1b-ii ratification
+//    machinery had a call-site-AGNOSTIC core living inside architecture.js; B4-2 lifts it here as
+//    dependency-closed pure exports so build.js reuses it through the SAME `@inline:council` bundler
+//    contract — helpers, never copy-paste (the T4-lite carry-forward). Semantics are VERBATIM the
+//    architecture.js originals (design note §D1 receipts); the only change is parameterization over
+//    the per-keystone binding (councilDir/keystone/phaseTag/seat/attempt/runToken) the caller supplies.
+//    The raw runToken appears ONLY in the rendered argv (architecture.js:344-346 trusted-boundary
+//    doctrine); no head-visible string here carries it. ──
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+
+// SHA64_RE — the lowercase-hex-64 shape gate every ledger-promoted receipt/invocation hash passes.
+export const SHA64_RE = /^[0-9a-f]{64}$/
+
+// RATIFY_SCHEMA (§6 verbatim): evidence fields BEFORE the verdict field (B6 ordering — Claude legs keep
+// PAYLOAD_FIRST, codex legs follow the reasoning-first guide). executable_check present, null allowed.
+export const RATIFY_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reasoning: { type: 'string', maxLength: 400, description: 'optional, ≤50 words' },
+    artifact_hash: { type: 'string' },
+    findings: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          finding_id: { type: 'string' }, claim: { type: 'string' }, required_change: { type: 'string' },
+          evidence_refs: { type: 'array', items: { type: 'string' } },
+          evidence_class: { type: 'string', enum: ['executed_check', 'proposed_check', 'repo_state', 'test_output', 'primary_source', 'scenario'], description: 'the HONEST class of this finding\'s evidence — the claim-scoped partial order rules reversals by it' },
+          executable_check: { type: ['string', 'null'], description: 'a bounded shell command (EXIT 0 iff the defect is present) or null' },
+        },
+        required: ['finding_id', 'claim', 'required_change', 'evidence_refs', 'evidence_class', 'executable_check'],
+      },
+    },
+    changed_evidence: { type: 'array', items: { type: 'object', additionalProperties: true, properties: { class: { type: 'string' }, refs: { type: 'array', items: { type: 'string' } } }, required: ['class'] } },
+    divergence_selections: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { divergence_id: { type: 'string' }, selection: { type: 'string', enum: ['P0', 'P1', 'MERGED', 'NEITHER'] }, evidence_refs: { type: 'array', items: { type: 'string' } } }, required: ['divergence_id', 'selection'] } },
+    verdict: { type: 'string', enum: ['APPROVE', 'BLOCK', 'NEITHER'] },
+  },
+  required: ['artifact_hash', 'verdict', 'divergence_selections', 'findings', 'changed_evidence'],
+}
+
+// ANSWER_SCHEMA — the §3 answer-exchange payload (one ACCEPT/REFUTE per finding).
+export const ANSWER_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reasoning: { type: 'string', maxLength: 400 },
+    answers: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { finding_id: { type: 'string' }, answer: { type: 'string', enum: ['ACCEPT', 'REFUTE'] }, evidence_refs: { type: 'array', items: { type: 'string' } }, evidence_class: { type: 'string' } }, required: ['finding_id', 'answer', 'evidence_refs'] } },
+  },
+  required: ['answers'],
+}
+
+// envelopeSchema(payload) — permissive on the receipt BY DESIGN: gateAgent's validateCodexReceipt is
+// the single structural authority; a strict agent-schema copy of the receipt would be a second
+// validator that can drift. So codex_receipt is a bare object here.
+export const envelopeSchema = (payload) => ({
+  type: 'object',
+  properties: { payload, codex_receipt: { type: 'object' }, raw_artifact_refs: { type: 'object' } },
+  required: ['payload', 'codex_receipt'],
+  additionalProperties: true,
+})
+
+// CROSS_CHECK_SCHEMA — the receipt-ledger CROSS-CHECK transcription (thoth:receipt-check). INVOCATION-
+// EXACT (Sol F1): the extract selects the LAST verified row matching THIS leg's output hash + session
+// id, then that row's 'started' RESERVATION by invocation_id — the SCRIPT (crossCheckOk) then binds
+// reservation ↔ verified ↔ sink ↔ payload, so a run-global stale/replayed row can never be blessed.
+export const CROSS_CHECK_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reasoning: { type: 'string', maxLength: 400 },
+    output_sha256_disk: { type: 'string' },
+    output_canonical_sha256: { type: 'string' },
+    ledger: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        verified: {
+          type: ['object', 'null'], additionalProperties: false,
+          properties: {
+            status: { type: ['string', 'null'] }, invocation_id: { type: ['string', 'null'] }, receipt_sha256: { type: ['string', 'null'] },
+            output_sha256: { type: ['string', 'null'] }, session_id: { type: ['string', 'null'] }, reported_model: { type: ['string', 'null'] },
+            tokens_used: { type: ['number', 'null'] }, exit_code: { type: ['number', 'null'] }, receipt_verified: { type: ['boolean', 'null'] },
+          },
+          required: ['status', 'invocation_id', 'receipt_sha256', 'output_sha256', 'session_id', 'reported_model', 'tokens_used', 'exit_code', 'receipt_verified'],
+        },
+        reservation: {
+          type: ['object', 'null'], additionalProperties: false,
+          properties: {
+            invocation_id: { type: ['string', 'null'] }, keystone: { type: ['string', 'null'] }, phase: { type: ['string', 'null'] },
+            seat: { type: ['string', 'null'] }, attempt: { type: ['number', 'null'] }, run_token: { type: ['string', 'null'] },
+            prompt_sha256: { type: ['string', 'null'] }, packet_sha256: { type: ['string', 'null'] },
+          },
+          required: ['invocation_id', 'keystone', 'phase', 'seat', 'attempt', 'run_token', 'prompt_sha256', 'packet_sha256'],
+        },
+      },
+      required: ['verified', 'reservation'],
+    },
+  },
+  required: ['output_sha256_disk', 'output_canonical_sha256', 'ledger'],
+}
+
+// LEDGER_APPEND_SCHEMA — the council-ledger append confirmation (Sol F10): the checkpoint counter
+// increments ONLY on a confirmed append — a mute/failed scribe is logged, never counted.
+export const LEDGER_APPEND_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: { reasoning: { type: 'string', maxLength: 400 }, appended: { type: 'boolean', description: 'true iff the append command exited 0' } },
+  required: ['appended'],
+}
+
+// The pinned cross-check one-liners (written ONCE as consts). CANON reproduces canonicalJson EXACTLY —
+// recursive key-sort + JSON.stringify semantics over UTF-8 bytes — so its digest equals
+// sha256Hex(canonicalJson(payload)). LEDGER is INVOCATION-EXACT (Sol F1): argv carries the leg's output
+// sha + session id; it selects the LAST verified row matching BOTH, then that row's 'started'
+// RESERVATION by invocation_id, and prints { verified, reservation } (nulls unmatched) — the SCRIPT
+// (crossCheckOk) does every comparison. Neither one-liner contains a single quote, so each rides safely
+// inside `node -e '...'`.
+export const CANON_HASH_ONELINER = `const fs=require("fs"),crypto=require("crypto");const c=v=>v===null||typeof v!=="object"?JSON.stringify(v===undefined?null:v):Array.isArray(v)?"["+v.map(c).join(",")+"]":"{"+Object.keys(v).sort().map(k=>JSON.stringify(k)+":"+c(v[k])).join(",")+"}";const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.stdout.write(crypto.createHash("sha256").update(Buffer.from(c(p),"utf8")).digest("hex"))`
+export const LEDGER_EXTRACT_ONELINER = `const fs=require("fs");let L=[];try{L=fs.readFileSync(process.argv[1],"utf8").split("\\n").filter(Boolean).map(s=>JSON.parse(s))}catch(e){}const O=process.argv[2],S=process.argv[3];const pick=(o,ks)=>{const x={};for(const k of ks)x[k]=(o&&o[k]!==undefined)?o[k]:null;return x};const vs=L.filter(e=>e&&e.status==="verified"&&e.output_sha256===O&&e.session_id===S);const v=vs.length?vs[vs.length-1]:null;const rs=v?L.filter(e=>e&&e.status==="started"&&e.invocation_id===v.invocation_id):[];const r=rs.length?rs[rs.length-1]:null;process.stdout.write(JSON.stringify({verified:v?pick(v,["status","invocation_id","receipt_sha256","output_sha256","session_id","reported_model","tokens_used","exit_code","receipt_verified"]):null,reservation:r?pick(r,["invocation_id","keystone","phase","seat","attempt","run_token","prompt_sha256","packet_sha256"]):null}))`
+
+// councilTemplateHash(parts) — pins the recipe sha256Hex(canonicalJson(parts)) (architecture.js:385) so
+// a keystone's template hash cannot drift in construction. Inline WITH sha256Hex, canonicalJson.
+export function councilTemplateHash(parts) {
+  return sha256Hex(canonicalJson(parts))
+}
+
+// seatProv(sink, head) — a per-head provenance snapshot for signatures + checkpoints. The `head` field
+// makes the two signatures' seat_provenance DISTINCT (twinRatified requires distinct, non-null seats).
+export const seatProv = (sink, head) => ({
+  head,
+  requested_model: sink && sink.requested_model != null ? sink.requested_model : null,
+  actual_model: sink && sink.actual_model != null ? sink.actual_model : null,
+  receipt_verified: !!(sink && sink.receipt_verified),
+  actual_transport_model: sink && sink.actual_transport_model != null ? sink.actual_transport_model : null,
+  session_id: sink && sink.session_id != null ? sink.session_id : null,
+})
+
+// solWrapperPlan(cfg) — the pure planning core of the SONNET wrapper for a Sol codex leg (mechanics
+// only, no opinions, no content authorship). Renders the codex prompt/packet/schema file paths, the
+// receipt-bearing transport argv, and the wrapper prompt. Head-visible content (the codex prompt +
+// packet) carries NO run token, NO seed, NO peer identity; the RAW run token lives ONLY in the argv
+// (a trusted process boundary — the caller runs it, never a head). cfg:
+//   { councilDir, pluginRoot, receiptsLedger, runToken, keystone, transportModel,
+//     phaseTag, attempt, effort ('high'|'xhigh'), payloadSchema, taskText, briefBody, packetObj, extractTo }
+// → { files, argv, prompt }. Pure: no I/O, no ambient globals (workflow-determinism).
+export function solWrapperPlan(cfg) {
+  const c = cfg || {}
+  const attempt = c.attempt || 1
+  const base = `${c.councilDir}/${c.phaseTag}-sol-a${attempt}`
+  const files = { prompt: `${base}.prompt`, packet: `${base}.packet`, schema: `${base}.schema`, out: `${base}.out`, stderr: `${base}.stderr` }
+  const argv = `node ${c.pluginRoot}/scripts/kiln-codex-receipt.mjs ${files.prompt} ${c.transportModel} ${c.effort} ${files.packet} ${files.schema} ${files.out} ${files.stderr} ${c.receiptsLedger} ${c.runToken} ${c.keystone} ${c.phaseTag} sol ${attempt}`
+  const label = c.extractLabel || 'plan'
+  const field = c.extractField || 'plan_markdown'
+  const extractStep = c.extractTo
+    ? `3. Extract the ${label} MECHANICALLY from the ATTESTED output — run this EXACT command, verbatim (never retype ${label} content; the path arguments stay quoted):\n   node -e 'const fs=require("fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));fs.writeFileSync(process.argv[2],p.${field})' "${files.out}" "${c.extractTo}"\n`
+    : `3. (No extraction — the attested payload IS the deliverable.)\n`
+  const prompt =
+    `You are the Sol transport wrapper — MECHANICS ONLY. You never author plan content or a verdict; you TRANSLATE a fixed brief into a codex prompt (per the codex-guide 4-part shape), run the receipt-bearing transport, and relay the attested result. You do not know the peer seat's identity.\n\n` +
+    `<task>\n` +
+    `1. Bash 'mkdir -p ${c.councilDir}'. Then WRITE three files (file tools):\n` +
+    `   - ${files.prompt} — the codex prompt: TRANSLATE the fixed brief below into Goal / Context / Constraints / Done-when, instruction-first, plain markdown, no persona padding, reasoning-first per the schema. Demand the final message be ONE JSON object matching the schema. Include NONE of: a run token, a seed, a session id, the peer seat's identity — codex sees ONLY this prompt + packet.\n` +
+    `   - ${files.packet} — this JSON, verbatim: ${JSON.stringify(c.packetObj)}\n` +
+    `   - ${files.schema} — this payload schema, verbatim: ${JSON.stringify(c.payloadSchema)}\n` +
+    `2. Run EXACTLY (Bash, foreground, generous timeout) — the raw run token belongs ONLY in this argv (a trusted process boundary), NEVER in a prompt or packet:\n   ${argv}\n   Exit 0 ⇒ its stdout IS the verified receipt JSON.\n` +
+    extractStep +
+    `4. Emit the envelope (StructuredOutput): payload = the ${files.out} JSON verbatim, codex_receipt = the transport's stdout receipt verbatim, raw_artifact_refs = { "stderr": "${files.stderr}", "output": "${files.out}" }. On ANY failure (nonzero exit, missing files), report the failure honestly with NO codex_receipt key — a dead Sol seat is never faked.\n` +
+    `</task>\n\n` +
+    `<fixed-brief>\n${c.taskText}\n\n${c.briefBody || ''}\n</fixed-brief>`
+  return { files, argv, prompt }
+}
+
+// crossCheckOk(cc, binding) — the pure verification predicate inside runSolCrossCheck: gate.mjs
+// validated the receipt STRUCTURE via the provenance sink; this binds the whole INVOCATION-EXACT chain
+// (Sol F1): reservation ↔ verified (same invocation_id), reservation ↔ THIS seat (keystone/phase/seat/
+// attempt/run_token/prompt hash), verified ↔ sink (output/session/model/tokens/exit), payload ↔
+// canonical hash. Any miss is a DEAD Sol seat — a stale or replayed row of the right shape can never be
+// blessed. Every LEDGER-PROMOTED field is SHAPE-VALIDATED before promotion (the receipt hash rides
+// forward into checkpoints and the return). binding: { relayedOutputHash, canonicalHash, sink, keystone,
+// phaseTag, seat, attempt, runToken } → { ok, codex_receipt_hash, invocation_id, reason }. Inline WITH SHA64_RE.
+export function crossCheckOk(cc, binding) {
+  const b = binding || {}
+  const relayed = b.relayedOutputHash
+  const canon = b.canonicalHash
+  const sink = b.sink || {}
+  const V = cc && cc.ledger ? cc.ledger.verified : null
+  const R = cc && cc.ledger ? cc.ledger.reservation : null
+  const ok =
+    cc && cc.output_sha256_disk === relayed &&
+    cc.output_canonical_sha256 === canon &&
+    V && R &&
+    V.status === 'verified' && V.receipt_verified === true &&
+    V.output_sha256 === relayed &&
+    V.session_id === (sink && sink.session_id) &&
+    V.reported_model === (sink && sink.actual_transport_model) &&
+    V.tokens_used === (sink && sink.tokens_used) &&
+    V.exit_code === 0 &&
+    typeof V.invocation_id === 'string' && SHA64_RE.test(V.invocation_id) &&
+    typeof V.receipt_sha256 === 'string' && SHA64_RE.test(V.receipt_sha256) &&
+    V.invocation_id === R.invocation_id &&
+    R.keystone === b.keystone &&
+    R.phase === b.phaseTag &&
+    R.seat === b.seat &&
+    R.attempt === b.attempt &&
+    R.run_token === b.runToken &&
+    R.prompt_sha256 === (sink && sink.prompt_hash)
+  return ok
+    ? { ok: true, codex_receipt_hash: V.receipt_sha256, invocation_id: V.invocation_id }
+    : { ok: false, invocation_id: V && typeof V.invocation_id === 'string' && SHA64_RE.test(V.invocation_id) ? V.invocation_id : null, reason: 'invocation-exact cross-check mismatch — the ledger reservation/verified chain disagrees with this seat, the relayed receipt, or the payload' }
+}
+
+// assembleRatifyCertificate({ rF, rS, provF, provS, context }) — the pure part of sealRatified: build
+// the two head signatures via councilSignature, EACH carrying its own head's seat_provenance (provF /
+// provS), then twinRatified over the SHARED context whose seat_provenance is null (the sealed idiom,
+// architecture.js:726; twinRatified verifies each signature against { ...ctx, seat_provenance:
+// s.seat_provenance }). context carries the five bound fields (bundle_hash, renderer_version, plan_hash,
+// evidence_manifest_hash, protocol_version); the six-keys-present / three-non-null contract is
+// twinRatified's (council.mjs:935-940). Returns { ok:true, certificate } | { ok:false, reason } — a
+// binding defect DEGRADES, never crashes. Inline WITH councilSignature, twinRatified (+ verifySignature,
+// sha256Hex, canonicalJson).
+export function assembleRatifyCertificate(parts) {
+  const p = parts || {}
+  const ctx = p.context || {}
+  const bound = {
+    bundle_hash: ctx.bundle_hash != null ? ctx.bundle_hash : null,
+    renderer_version: ctx.renderer_version != null ? ctx.renderer_version : null,
+    plan_hash: ctx.plan_hash != null ? ctx.plan_hash : null,
+    evidence_manifest_hash: ctx.evidence_manifest_hash != null ? ctx.evidence_manifest_hash : null,
+    protocol_version: ctx.protocol_version != null ? ctx.protocol_version : null,
+  }
+  const sigF = councilSignature({ ...bound, seat_provenance: p.provF })
+  const sigS = councilSignature({ ...bound, seat_provenance: p.provS })
+  try {
+    const certificate = twinRatified({ signatures: [sigF, sigS], context: { ...bound, seat_provenance: null }, ratifications: [p.rF, p.rS], open_divergence_ids: [] })
+    return { ok: true, certificate }
+  } catch (e) {
+    return { ok: false, reason: e && e.message ? e.message : String(e) }
+  }
+}

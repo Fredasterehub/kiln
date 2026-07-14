@@ -113,6 +113,9 @@ const evidenceManifestHash = (() => { const m = {}; for (const f of ANCHOR_FILES
 const bundleFor = (planHash) => buildDecisionBundle({ common_trunk: { master_plan_file: masterPlanFile, plan_sha256: planHash, milestones: synthResult.milestones }, settled_decisions: {}, open_divergences: [], renderer_version: 'v301-plato/1', evidence_manifest_hash: evidenceManifestHash }).hash
 const PLAN_HASH_1 = shaBytes(Buffer.from('fixture:plan-r1')), PLAN_HASH_2 = shaBytes(Buffer.from('fixture:plan-r2'))
 const BUNDLE_1 = bundleFor(PLAN_HASH_1), BUNDLE_2 = bundleFor(PLAN_HASH_2)
+// B4-2 D7: on the LITE path the plan artifact IS the bundle (no decision bundle) — bundle_hash =
+// plan_hash = the plan-file sha, so the lite ratify verdicts echo THIS hash as artifact_hash.
+const LITE_HASH = shaBytes(Buffer.from('fixture:lite-plan'))
 
 const rat = (bundleH, over = {}) => ({ reasoning: 'r', artifact_hash: bundleH, verdict: 'APPROVE', divergence_selections: [], findings: [], changed_evidence: [], ...over })
 
@@ -121,18 +124,23 @@ const t4Args = (extra = {}) => ({ kilnDir: KILN, projectPath: PROJECT, pluginRoo
 // makeResponder(cfg) — a label→result mock. Sol legs return envelopes whose receipts derive from the
 // leg's payload; the matching cross-checks are AUTO-DERIVED from the same payload + phase tag, so a
 // test that overrides a Sol payload gets a coherent invocation-exact ledger for free.
-const PHASE_OF = { 'sol:draft': 'DRAFTS', 'sol:ratify:r1': 'RATIFY_1', 'sol:answer': 'ANSWER_EXCHANGE', 'sol:ratify:r2': 'RATIFY_2' }
+const PHASE_OF = { 'sol:draft': 'DRAFTS', 'sol:ratify:r1': 'RATIFY_1', 'sol:answer': 'ANSWER_EXCHANGE', 'sol:ratify:r2': 'RATIFY_2', 'sol:ratify:lite': 'LITE_RATIFY' }
 function makeResponder(cfg = {}) {
   const solPayloads = {
     'sol:draft': cfg.solDraftPayload !== undefined ? cfg.solDraftPayload : solDraftPayload,
     'sol:ratify:r1': cfg.rS1 !== undefined ? cfg.rS1 : rat(BUNDLE_1),
     'sol:answer': cfg.solAnswer !== undefined ? cfg.solAnswer : { answers: [] },
     'sol:ratify:r2': cfg.rS2 !== undefined ? cfg.rS2 : rat(BUNDLE_2),
+    'sol:ratify:lite': cfg.rSlite !== undefined ? cfg.rSlite : rat(LITE_HASH),
   }
   return (label) => {
     if (label === 'thoth:research-check') return { reasoning: 'ls', missing: [] }
     if (label === 'numerobis:foundation') return foundation(cfg.scope || 'standard')
     if (label === 'thoth:council-anchor') return cfg.anchor !== undefined ? cfg.anchor : { reasoning: 'a', files: ANCHOR_FILES, initial_ledger_seq: 5 }
+    if (label === 'thoth:lite-council-anchor') return cfg.liteAnchor !== undefined ? cfg.liteAnchor : { reasoning: 'a', files: ANCHOR_FILES, initial_ledger_seq: 5 }
+    if (label === 'thoth:lite-ratify-anchor') return cfg.liteRatifyAnchor !== undefined ? cfg.liteRatifyAnchor : { plan_sha256: LITE_HASH }
+    if (label === 'fable:ratify:lite') return cfg.rFlite !== undefined ? cfg.rFlite : rat(LITE_HASH)
+    if (label === 'sol:ratify:lite') return cfg.sRlite !== undefined ? cfg.sRlite : solEnvelope(solPayloads['sol:ratify:lite'])
     if (label === 'confucius:plan') return planResult('a')
     if (label === 'sun-tzu:plan' || label === 'miyamoto:plan') return planResult('b')
     if (label === 'fable:draft') return cfg.fableDraft !== undefined ? cfg.fableDraft : planResult('a')
@@ -181,13 +189,14 @@ function parseCheckpoints(calls) {
 // v3.0.1 PRESERVATION
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
 // NOTE (scope ruling item 6): a full-path T4 launch missing its runToken is NO LONGER a v301 route —
-// it rules DEGRADED (dedicated test below). Lite and sub-T4 stay v301, token or not.
+// it rules DEGRADED (dedicated test below). NOTE (B4-2 D7): T4-lite is NO LONGER a v301 route either —
+// the lite plan now takes the blind required pair (dedicated section below). Only SUB-T4 (incl. sub-T4
+// lite) stays v301, token or not.
 const v301Cases = [
   ['no capabilityTier', { kilnDir: KILN, projectPath: PROJECT, codexAvailable: false, planning: 'dual' }, 'sub-T4 tier'],
   ['T3 tier', { kilnDir: KILN, projectPath: PROJECT, codexAvailable: true, capabilityTier: 'T3', runToken: RUNTOKEN, planning: 'dual' }, 'sub-T4 tier'],
   ['T4 but codexAvailable:false', { kilnDir: KILN, projectPath: PROJECT, codexAvailable: false, capabilityTier: 'T4', runToken: RUNTOKEN, planning: 'dual' }, 'sub-T4 tier'],
-  ['T4 lite path', { kilnDir: KILN, projectPath: PROJECT, codexAvailable: true, capabilityTier: 'T4', runToken: RUNTOKEN, planning: 'single' }, 'lite path'],
-  ['T4 lite path, runToken absent', { kilnDir: KILN, projectPath: PROJECT, codexAvailable: true, capabilityTier: 'T4', planning: 'single' }, 'lite path'],
+  ['sub-T4 lite (T3 + planning single)', { kilnDir: KILN, projectPath: PROJECT, codexAvailable: true, capabilityTier: 'T3', runToken: RUNTOKEN, planning: 'single' }, 'sub-T4 tier'],
 ]
 for (const [name, args, reason] of v301Cases) {
   test(`v3.0.1 preservation: ${name} ⇒ path:'v301' (${reason}), no council legs`, async () => {
@@ -307,6 +316,110 @@ test('T4 checkpoint accounting (F10): unconfirmed appends are NOT counted', asyn
   assert.equal(result.council.terminal, 'RATIFIED', 'a mute scribe never fails the stage')
   assert.ok(countLabel(calls, 'thoth:council-ledger') >= 3, 'the append legs were attempted')
   assert.equal(result.council.checkpoints, 0, 'a mute/unconfirmed append is never counted')
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════
+// T4-LITE RATIFICATION (B4-2 D7) — the deferred-hardening lite pair over the SINGLE lite master plan
+// ══════════════════════════════════════════════════════════════════════════════════════════════════
+// The two former v301 lite rows move HERE: T4-lite is now a council path. planning:'single' forces the
+// lite fork; a token-bearing run takes ONE blind required round (no drafts, no divergence, no exchange).
+const liteArgs = (extra = {}) => ({ kilnDir: KILN, projectPath: PROJECT, pluginRoot: '/plugin', codexAvailable: true, capabilityTier: 'T4', runToken: RUNTOKEN, planning: 'single', ...extra })
+
+test('T4-lite clean: the single lite plan takes the blind required pair; dual-APPROVE seals a b42-lite/1 twin_ratified certificate', async () => {
+  const { result, calls } = await runWorkflow(ARCHITECTURE, liteArgs(), makeResponder({ scope: 'trivial' }))
+  const labels = labelsIn(calls)
+  // the LITE fork: The Council (drafts/divergence) is SKIPPED — Plato authors alone, then the pair rules
+  assert.ok(!labels.includes('fable:draft') && !labels.includes('sol:draft') && !labels.includes('confucius:plan') && !labels.includes('diogenes:divergence'), 'the lite path skips The Council + divergence')
+  assert.ok(labels.includes('plato:synthesis'), 'Plato authors the single lite plan')
+  // the blind lite pair + its evidence/plan anchors + the Sol cross-check all fire
+  assert.ok(labels.includes('thoth:lite-council-anchor') && labels.includes('thoth:lite-ratify-anchor'), 'the lite evidence + plan anchors fire')
+  assert.ok(labels.includes('fable:ratify:lite') && labels.includes('sol:ratify:lite') && labels.includes('thoth:receipt-check:sol:ratify:lite'), 'the blind lite pair + its cross-check fire')
+  assert.ok(!labels.includes('fable:ratify:r1') && !labels.includes('sol:answer'), 'the lite form runs ONE round — no answer exchange, no r1/r2 legs')
+  assert.equal(result.lite_path, true)
+  assert.equal(result.council.path, 'twin_council', 'T4-lite is a council path (never a v301 downgrade)')
+  assert.equal(result.council.eligible, true)
+  assert.equal(result.council.tier, 'T4')
+  assert.equal(result.council.reason, null)
+  assert.equal(result.council.terminal, 'RATIFIED')
+  assert.equal(result.council.terminal_record, null, 'RATIFIED carries no degraded/block record — the certificate IS the record')
+  const cert = result.council.certificate
+  assert.ok(cert && cert.label === 'twin_ratified', 'a lite twin_ratified certificate seals')
+  assert.equal(cert.signatures.length, 2)
+  assert.notEqual(canonicalJson(cert.signatures[0].seat_provenance), canonicalJson(cert.signatures[1].seat_provenance), 'the two signatures carry DISTINCT seat provenance')
+  // the plan artifact IS the bundle on lite: bundle_hash = plan_hash = the plan-file sha; renderer b42-lite/1
+  assert.equal(cert.artifact_hash, LITE_HASH, 'the certificate binds the lite plan-file sha as the bundle hash')
+  assert.equal(cert.plan_hash, LITE_HASH, 'plan_hash equals the bundle hash on the lite path')
+  assert.equal(cert.signatures[0].renderer_version, 'b42-lite/1', 'the lite signatures bind renderer b42-lite/1')
+  assert.equal(cert.signatures[0].bundle_hash, LITE_HASH)
+  assert.equal(cert.signatures[0].evidence_manifest_hash, evidenceManifestHash, 'the manifest hash is computed exactly as the full path (never null)')
+  // the LITE_RATIFY_SEALED + RATIFIED checkpoints land; every checkpoint carries buildCheckpoint's field list
+  const ckpts = parseCheckpoints(calls)
+  const phases = ckpts.map((d) => d.phase)
+  for (const p of ['LITE_RATIFY_SEALED', 'RATIFIED']) assert.ok(phases.includes(p), `${p} checkpoint ledgered`)
+  for (const d of ckpts) {
+    assert.equal(d.kind, 'council_state')
+    assert.deepEqual(Object.keys(d).sort(), CKPT_KEYS, 'buildCheckpoint emits its exact field list on the lite path too')
+    assert.equal(d.protocol_version, COUNCIL_PROTOCOL_VERSION)
+  }
+  // the Sol lite receipt is ledger-verified, invocation-exact
+  const rec = result.council.receipts.find((r) => r.leg === 'sol:ratify:lite')
+  assert.ok(rec && rec.receipt_verified === true && rec.ledger_verified === true, 'the sol:ratify:lite receipt is ledger-verified')
+  assert.equal(rec.invocation_id, INV)
+  // the Law compiles behind a valid lite certificate (precondition met)
+  assert.ok(labels.includes('asimov:law'), 'the Law leg runs behind a valid lite certificate')
+})
+
+test('T4-lite tokenless: a PROMISED lite run missing runToken ⇒ council DEGRADED (never a silent v301 downgrade), plan still synthesized, Law blocked', async () => {
+  const { result, calls } = await runWorkflow(ARCHITECTURE, liteArgs({ runToken: undefined }), makeResponder({ scope: 'trivial' }))
+  const labels = labelsIn(calls)
+  assert.equal(result.lite_path, true)
+  assert.equal(result.council.path, 'twin_council', 'a PROMISED lite council is never relabeled v301 by a missing token')
+  assert.equal(result.council.eligible, true)
+  assert.equal(result.council.reason, 'runToken absent')
+  assert.equal(result.council.terminal, 'DEGRADED')
+  assert.equal(result.council.terminal_record.missing, 'both')
+  assert.match(result.council.blocked_reason, /runToken absent/)
+  // a draft lite plan is still authored for the operator; NO council seat convenes without the token
+  assert.ok(labels.includes('plato:synthesis'), 'the lite plan is still synthesized')
+  assert.ok(!labels.includes('fable:ratify:lite') && !labels.includes('sol:ratify:lite') && !labels.includes('thoth:lite-council-anchor'), 'no lite council seat runs without the token')
+  // the DEGRADED checkpoint is ledgered with a NULL run_token_hash (no phantom hash)
+  const deg = parseCheckpoints(calls).find((d) => d.phase === 'DEGRADED')
+  assert.ok(deg && deg.run_token_hash === null, 'the DEGRADED terminal is ledgered with a null run_token_hash')
+  assert.equal(result.law_locked, false)
+  assert.match(result.law_reason, /not council-ratified \(DEGRADED\)/)
+})
+
+test('T4-lite BLOCK: a live, valid seat blocks the lite plan ⇒ terminal BLOCKED (no exchange), certificate null, Law blocked', async () => {
+  const blk = rat(LITE_HASH, { verdict: 'BLOCK', findings: [blockFinding] })
+  const { result, calls } = await runWorkflow(ARCHITECTURE, liteArgs(), makeResponder({ scope: 'trivial', rFlite: blk }))
+  const labels = labelsIn(calls)
+  assert.ok(labels.includes('fable:ratify:lite') && labels.includes('sol:ratify:lite'), 'the blind lite pair ran')
+  assert.equal(result.council.terminal, 'BLOCKED', 'a live valid BLOCK on the single lite plan is BLOCKED (not DEGRADED, not DEADLOCK — the lite form has no re-adjudication ladder)')
+  assert.equal(result.council.certificate, null, 'no certificate on a blocked lite plan')
+  assert.ok(result.council.terminal_record && result.council.terminal_record.label === 'council_blocked', 'the BLOCKED record is retained')
+  assert.ok(result.council.terminal_record.findings.length >= 1, 'the blocking finding rides the record')
+  assert.ok(parseCheckpoints(calls).some((d) => d.phase === 'BLOCKED'), 'the BLOCKED terminal checkpoint is ledgered')
+  assert.equal(result.law_locked, false)
+  assert.match(result.law_reason, /not council-ratified \(BLOCKED\)/)
+})
+
+test('T4-lite F2: an empty BLOCK is a shape-invalid verdict ⇒ DEGRADED (a missing head, never a silent BLOCKED)', async () => {
+  const { result } = await runWorkflow(ARCHITECTURE, liteArgs(), makeResponder({ scope: 'trivial', rFlite: rat(LITE_HASH, { verdict: 'BLOCK' }) }))
+  assert.equal(result.council.terminal, 'DEGRADED')
+  assert.equal(result.council.terminal_record.missing, 'fable')
+  assert.match(result.council.blocked_reason, /no findings/)
+})
+
+test('T4-lite dead Sol seat: an invalid receipt on the lite Sol leg ⇒ DEGRADED, certificate null, Law blocked, never a sonnet stand-in', async () => {
+  const { result, calls } = await runWorkflow(ARCHITECTURE, liteArgs(), makeResponder({ scope: 'trivial', sRlite: solEnvelope(rat(LITE_HASH), { reported_model: 'gpt-5.5' }) }))
+  assert.equal(result.council.terminal, 'DEGRADED')
+  assert.equal(result.council.terminal_record.missing, 'sol')
+  assert.equal(result.council.certificate, null)
+  assert.ok(labelsIn(calls).includes('fable:ratify:lite'), 'the lite pair was attempted')
+  const rec = result.council.receipts.find((r) => r.leg === 'sol:ratify:lite')
+  assert.ok(rec && rec.receipt_verified === false, 'the dead Sol lite seat is receipt_verified:false')
+  assert.equal(result.law_locked, false)
+  assert.match(result.law_reason, /not council-ratified \(DEGRADED\)/)
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════════

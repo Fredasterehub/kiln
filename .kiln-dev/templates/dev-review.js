@@ -118,11 +118,16 @@ async function implement() {
 }
 
 // ── Stage 1 — Snapshot (frozen diff + diff-bound commission) ─────────────────────────────────────
-// The diff is cut only after the implementer's FROZEN reply. Any post-snapshot change VOIDS the
-// snapshot (recut, never reconcile). The leg also renders the review commission from the fixed
-// template with the diff's sha embedded (`Diff-sha256:`) — the ADOPT-5 binding the routing gate later
-// re-verifies against the diff bytes AND the receipt. `void`/`diff_sha256` are typed CLAIMS; the gate
-// is what makes them binding.
+// The diff is cut only after the implementer's FROZEN reply. The void check is DECIDABLE, not a
+// judgement call (VEHICLE-1 ruling): the batch's uncommitted changes ARE the expected work product, so
+// their PRESENCE is normal — a single `git status` can never tell "unchanged since the frozen reply"
+// from "the batch's own expected changes" (the observed void-on-expected-changes, run wf_c166168a). The
+// snapshot voids ONLY when the tree is still MOVING, observed as two `git status --porcelain` reads a
+// few seconds apart that DIFFER (recut, never reconcile). The cut stages every change (`git add -A` —
+// untracked files included) then reads the STAGED diff, so a brand-new file is never dropped; commits
+// stay forbidden. The leg also renders the review commission from the fixed template with the diff's
+// sha embedded (`Diff-sha256:`) — the ADOPT-5 binding the routing gate later re-verifies against the
+// diff bytes AND the receipt. `void`/`diff_sha256` are typed CLAIMS; the gate is what makes them binding.
 const SNAPSHOT_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: { void: { type: 'boolean' }, diff_sha256: { type: 'string' }, commission_path: { type: 'string' } },
@@ -131,9 +136,15 @@ const SNAPSHOT_SCHEMA = {
 async function snapshot() {
   const out = await agent(
     `The implementer for ${A.batchId} reported and FROZE. Do EXACTLY this with the Bash tool:\n` +
-    `1. Confirm the working tree is unchanged since that frozen reply. If ANYTHING changed after the\n` +
-    `   freeze, do NOT reconcile — return void:true and stop (the snapshot is recut).\n` +
-    `2. Cut the scoped diff to ${DIFF} (git diff of the batch's changes — the WHOLE diff, never a summary).\n` +
+    `1. Decide whether the tree is still MOVING. The batch's own uncommitted changes ARE the expected\n` +
+    `   work product — their PRESENCE is normal and is NEVER a void. Run \`git -C ${A.repoPath} status\n` +
+    `   --porcelain\`, wait a few seconds (\`sleep 3\`), then run \`git -C ${A.repoPath} status --porcelain\`\n` +
+    `   again. Return void:true and STOP (the snapshot is recut) ONLY if the two observations DIFFER —\n` +
+    `   the tree is still changing after the freeze. If they are IDENTICAL, continue; do NOT void merely\n` +
+    `   because uncommitted changes exist.\n` +
+    `2. Cut the scoped diff, staging every change first so untracked files are captured (never a summary):\n` +
+    `   \`git -C ${A.repoPath} add -A && git -C ${A.repoPath} diff --cached > ${DIFF}\` (stage, then read the\n` +
+    `   staged diff — do NOT commit).\n` +
     `3. Compute its sha: \`sha256sum ${DIFF}\`.\n` +
     `4. Render the review commission from the fixed template ${A.commissionTemplatePath} into ${COMMISSION},\n` +
     `   filling every {{blank}} — in particular \`Diff-sha256:\` MUST be exactly the sha from step 3, and\n` +

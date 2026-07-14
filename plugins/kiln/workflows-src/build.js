@@ -10,7 +10,7 @@ export const meta = {
   ],
 }
 
-// ── args: { kilnDir, projectPath, codexAvailable, testingRigor, milestoneLimit, uiBuild, pluginRoot, posture, runToken, gateOnly } ──
+// ── args: { kilnDir, projectPath, codexAvailable, testingRigor, milestoneLimit, uiBuild, pluginRoot, posture, runToken, capabilityTier, gateOnly } ──
 // @inline:args:normalizeArgs
 const A = normalizeArgs(args)
 const PAYLOAD_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. Emit the payload properties FIRST; reasoning is the LAST property, OPTIONAL, and under 50 words — put detail in the designated report file or field, never in reasoning. A long leading reasoning string is the observed death mode: the call truncates before the payload lands, the validator rejects it, each rejection burns one of five attempts, and five failures kill this leg.'
@@ -118,6 +118,88 @@ const lawFile = `${kilnDir}/law.json`
 
 // ── Codex model pins (CODEX_MODEL default + CODEX_FALLBACK, inlined from src/models.mjs) ──
 // @models
+
+// ── Twin Council pure core (B4-2 D1) — the SEALED 1b-ii call-site machinery, lifted to src/council.mjs
+//    and inlined here through the SAME @inline:council bundler contract architecture.js uses (helpers,
+//    never copy-paste). Every function that CALLS another travels WITH it in ONE marker (dependency
+//    order: deps first). These power the build keystones' Sol evidence analyst, the milestone-close
+//    ratification pair, and the correction council — INERT on every sub-T4 / no-codex / tokenless path
+//    (councilCapable === false), so those routes are byte-preserved v3.0.1. ──
+// @inline:council:COUNCIL_PROTOCOL_VERSION,sha256Hex,canonicalJson,claimTypeForClass,compareEvidence,validateReversal,councilSignature,verifySignature,validateRatification,twinRatified,buildCheckpoint,degraded,SHA64_RE,RATIFY_SCHEMA,envelopeSchema,CROSS_CHECK_SCHEMA,LEDGER_APPEND_SCHEMA,CANON_HASH_ONELINER,LEDGER_EXTRACT_ONELINER,councilTemplateHash,seatProv,solWrapperPlan,crossCheckOk,assembleRatifyCertificate
+
+// ── Twin Council gating (B4-2 D5; FC-1 tier-gating, 1b-ii precedent). The three build keystones —
+//    the Sol evidence analyst (Ryu bump), the milestone-close ratification pair (Judge Dredd retired),
+//    and the correction council — go council-grade ONLY when the capability record promised BOTH heads
+//    (T4 = fable + codex) AND the conductor minted a runToken. Sub-T4 / no-codex runs keep the v3.0.1
+//    prompt-delegated Ryu, single-Opus Judge Dredd, and unconditional corrective build BYTE-IDENTICAL,
+//    capability-honestly labeled. A PROMISED council missing its runToken is NOT a clean v3.0.1 run:
+//    the affected milestone ruling fails CLOSED (never a silent downgrade to Judge Dredd — scope
+//    ruling item 6). runTokenRaw is the RAW per-run token; it lives ONLY in the receipt-script argv
+//    (a trusted process boundary), never in any head-visible prompt/packet. capabilityTier is
+//    T1|T2|T3|T4 from the freshest capability record; anything else ⇒ null. ──
+const runTokenRaw = (typeof A.runToken === 'string' && A.runToken.length > 0) ? A.runToken : null
+const capabilityTier = (A.capabilityTier === 'T1' || A.capabilityTier === 'T2' || A.capabilityTier === 'T3' || A.capabilityTier === 'T4') ? A.capabilityTier : null
+const councilPromised = capabilityTier === 'T4' && codexAvailable
+const councilCapable = councilPromised && runTokenRaw != null
+// councilMisconfigured — a PROMISED council (T4 + codex) launched WITHOUT the run token: the milestone
+// gate cannot bind its receipts, so every ruling that WOULD have convened a council fails closed
+// (DEGRADED), never a silent v3.0.1 Judge Dredd downgrade.
+const councilMisconfigured = councilPromised && runTokenRaw == null
+if (councilMisconfigured) {
+  log('MISCONFIGURED CONDUCTOR — capability tier T4 with both heads reachable but NO runToken: the build councils cannot bind their receipts/seed. Every promised milestone-close/correction ruling fails CLOSED (QA_FAIL, terminal DEGRADED); the gate never silently downgrades to the v3.0.1 Judge Dredd / prompt-delegated seats. Relaunch with the per-run token to convene the councils.')
+}
+// ONE receipts ledger SHARED with architecture (architecture.js:341-343) so the receipt script's replay
+// rejection spans every council invocation of the run; build council artifacts live under
+// ${councilRootDir}/<m.id>/. runTokenHash rides checkpoints only (never the raw token).
+const councilRootDir = `${kilnDir}/council/build`
+const receiptsLedger = `${kilnDir}/council/receipts.jsonl`
+const runTokenHash = runTokenRaw != null ? sha256Hex(runTokenRaw) : null
+const COUNCIL_RENDERER_CLOSE = 'b42-close/1'
+// COUNCIL_TASK / RUBRIC for the close pair (fixed — NO per-run interpolation, so the template hash is
+// run-independent). CORRECTION_TASK for the correction council. templateHash binds them.
+const CLOSE_RUBRIC =
+  'Rule the milestone CLOSE on whether the integrated milestone genuinely, verifiably meets its acceptance: ' +
+  '(1) every acceptance criterion is met in SPIRIT, not just by a green check; (2) the reconciled analyst + ' +
+  'goal-backward findings carry no unresolved defect; (3) the deterministic evidence (kiln-law exit codes, the ' +
+  'persisted suite + probe artifacts) supports the pass. A council NEVER overturns a red gate — a deterministic ' +
+  'QA_FAIL never reaches you; you rule only an agreed zero-blocking close where the analysts disagreed on the ' +
+  'overall. Every finding MUST be evidence-bound (a file/line, an executable check, or a named evidence artifact).'
+const CLOSE_RATIFY_TASK =
+  'Render one blind verdict — APPROVE, BLOCK, or NEITHER — on the milestone close against the rubric. You do not ' +
+  'know who else is ruling. divergence_selections is [] (no open divergences). Echo artifact_hash EXACTLY as given. ' +
+  'A BLOCK or NEITHER MUST carry at least one evidence-bound finding (finding_id unique, nonempty evidence_refs or a ' +
+  'real executable_check); an evidence-free verdict is invalid. changed_evidence is [] unless you reverse a prior block.'
+const CORRECTION_TASK =
+  'One corrective build cycle is available for this failed milestone gate. Rule the CORRECTION ROUTE: RETRY (the ' +
+  'blocking findings are code defects a single corrective build can fix), ESCALATE (validate should backstop — the ' +
+  'defect is beyond one corrective build, or needs a conductor decision), or REPLAN (the milestone plan itself is ' +
+  'wrong — a conductor/operator re-plan is owed). Emit findings + reasons FIRST, then choice; echo artifact_hash.'
+const councilTemplateHashBuild = councilTemplateHash({ close_rubric: CLOSE_RUBRIC, close_task: CLOSE_RATIFY_TASK, correction_task: CORRECTION_TASK, renderer: COUNCIL_RENDERER_CLOSE })
+// SOL_QA_PAYLOAD_SCHEMA — the Sol evidence analyst (Ryu bump) payload: codex runs --sandbox read-only
+// and CANNOT write qa-report-b.md, so the report content rides report_markdown (extracted by the wrapper
+// via the extractTo pattern) alongside the findings[]/overall the deterministic reconcile reads.
+const SOL_QA_PAYLOAD_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reasoning: { type: 'string', maxLength: 400 },
+    findings: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { text: { type: 'string' }, severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low'] } }, required: ['text', 'severity'] } },
+    overall: { type: 'string', enum: ['pass', 'fail'], description: 'your independent overall verdict — \'fail\' MUST be backed by at least one critical or high finding' },
+    report_markdown: { type: 'string', description: 'the FULL qa-report-b content (the wrapper writes it to qa-report-b.md; codex runs read-only and cannot write files)' },
+  },
+  required: ['findings', 'overall', 'report_markdown'],
+}
+// CORRECTION_SCHEMA — payload-first: findings/reasons BEFORE the choice (B6 evidence-before-commit).
+const CORRECTION_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reasoning: { type: 'string', maxLength: 400 },
+    artifact_hash: { type: 'string' },
+    findings: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { text: { type: 'string' }, severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low'] } }, required: ['text', 'severity'] } },
+    reasons: { type: 'array', items: { type: 'string' } },
+    choice: { type: 'string', enum: ['RETRY', 'ESCALATE', 'REPLAN'] },
+  },
+  required: ['artifact_hash', 'findings', 'reasons', 'choice'],
+}
 
 // ── Lore display layer (NEVER enters a model prompt — labels + log lines only) ──
 // Canonical copy lives in data/duo-pool.json (conductor reads that); the bundler's duo-pool step
@@ -1035,6 +1117,356 @@ const probeArtifactBrief = (runId, failedIds) => {
   const lines = probes.map((id) => `  - ${id}: ${dir}/probe-${id}.json (the result), ${dir}/probe-${id}.log (console/stderr), and the screenshot(s) it names in "screenshots" (under ${dir}/)`).join('\n')
   return `\nA probe check FAILED — READ its captured evidence before you change a line (this is the real DOM/console/screenshot state the live probe recorded; reading artifacts is NOT browser authority — never launch a browser or Playwright yourself):\n${lines}\n`
 }
+// B42-2/B42-3: the NAMED per-milestone/cycle evidence artifacts, derived SCRIPT-SIDE from the last
+// trial's run id (never model-recalled). trialEvidencePaths = the run-dir results.jsonl/run.json,
+// PLUS suite.log/suite.jsonl IFF the build recorded a project suite (AMB-B42-2 ruling): those two
+// files exist only when the runner ran step 3 — the build.js `suite = build.test_command` skip branch
+// (build.js:640). A genuinely suite-less product must not name absent artifacts and spuriously DEGRADE
+// the close; the suiteRecorded flag reuses THAT recorded state (never a file-existence probe by an
+// agent). probeEvidencePaths = the milestone's probe artifacts where a UI probe ran. The close record
+// BINDS these to their sha256 (B42-3 anchor); the Sol evidence analyst packet NAMES them (B42-2).
+const trialEvidencePaths = (runId, suiteRecorded) => (typeof runId === 'string' && runId.trim())
+  ? [`${kilnDir}/evidence/${runId}/results.jsonl`]
+      .concat(suiteRecorded ? [`${kilnDir}/evidence/${runId}/suite.log`, `${kilnDir}/evidence/${runId}/suite.jsonl`] : [])
+      .concat([`${kilnDir}/evidence/${runId}/run.json`])
+  : []
+const probeEvidencePaths = (runId, scIds) => (typeof runId === 'string' && runId.trim())
+  ? (Array.isArray(scIds) ? scIds : []).filter((id) => typeof id === 'string' && probeScIds.has(id)).flatMap((id) => [`${kilnDir}/evidence/${runId}/probe-${id}.json`, `${kilnDir}/evidence/${runId}/probe-${id}.log`])
+  : []
+// PROBE_EXECUTED_ONELINER (B42-2/B42-3) — the SC ids whose probe check EXECUTED, derived from the
+// runner's RECORDED results.jsonl, NEVER from the Law's probe list. kiln-law records an executed check
+// (probe OR shell) as { id, exit, duration_ms, log_sha256 } (kiln-law.mjs:555) and a deferred/unavailable
+// probe as { id, deferred: 'probe_deferred'|'probe_unavailable', … } with NO exit (kiln-law.mjs:518,551).
+// So a row with a numeric exit RAN (green or red); a row carrying `deferred` did NOT — a deferred/spec-less
+// probe leaves no probe-<SC>.json/.log and must be named NOWHERE (a false packet otherwise). This prints
+// (JSON array) the ids of the RAN rows; the SCRIPT intersects with probeScIds to keep only the executed
+// PROBE ids (results.jsonl carries no `kind`). Pattern: the sealed LEDGER_EXTRACT_ONELINER discipline —
+// double-quotes only (NO single quote), so it rides safely inside node -e '…'. Executed once against a
+// fixture results.jsonl before landing (rule 3): green+red rows in, deferred/unavailable dropped, [] on a
+// missing file.
+const PROBE_EXECUTED_ONELINER = `const fs=require("fs");let L=[];try{L=fs.readFileSync(process.argv[1],"utf8").split("\\n").filter(Boolean).map(s=>JSON.parse(s))}catch(e){}const ids=[];for(const e of L){if(e&&typeof e.id==="string"&&e.deferred===undefined&&typeof e.exit==="number")ids.push(e.id)}process.stdout.write(JSON.stringify(ids))`
+const PROBE_EXEC_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: { reasoning: { type: 'string', maxLength: 200 }, executed_ids: { type: 'array', items: { type: 'string' } } },
+  required: ['executed_ids'],
+}
+// probeExecPrompt (thoth:probe-exec) — the ONE Thoth transcription leg that runs PROBE_EXECUTED_ONELINER
+// over a trial's results.jsonl and transcribes the printed array VERBATIM. Its derived id set (∩ probeScIds,
+// SCRIPT-side) is the SINGLE derivation feeding BOTH consumers — the Sol analyst's named evidence_artifacts
+// AND the close anchor's hashed manifest — so the two named lists can never disagree.
+const probeExecPrompt = (resultsPath) =>
+  `You are Thoth, the scribe — run ONE command and transcribe its output, never judge, never fix.\n\n` +
+  `<task>Run EXACTLY (Bash): node -e '${PROBE_EXECUTED_ONELINER}' "${resultsPath}" — it prints a JSON array of SC ids. Transcribe that array VERBATIM into executed_ids (the empty array if it printed [] or the file is absent). Do not add or drop ids, do not read anything else, do not write or fix.</task>`
+// EVIDENCE_ANCHOR_SCHEMA / evidenceAnchorPrompt (B42-3) — the Thoth transcription leg that hashes the
+// named close-evidence artifacts into a {path, sha256} manifest (the architecture anchor pattern,
+// architecture.js:531). A dead/garbled/partial anchor ⇒ the close council DEGRADES (fail-closed) — the
+// certificate must never bind unhashed names.
+const EVIDENCE_ANCHOR_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: { reasoning: { type: 'string', maxLength: 400 }, files: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { path: { type: 'string' }, sha256: { type: 'string' } }, required: ['path', 'sha256'] } } },
+  required: ['files'],
+}
+const evidenceAnchorPrompt = (inputs) =>
+  `You are Thoth, the scribe — transcribe hashes, never judge, never fix.\n\n` +
+  `<task>Run (Bash): 'sha256sum ${inputs.join(' ')}'. Transcribe each input file's sha256 into files[] as {path, sha256} (VERBATIM, lowercase hex, the path exactly as given). Do not read file contents, do not write or fix anything.</task>`
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// ── The build keystones' Twin Council legs (B4-2 D2/D3/D4). Every leg dispatches through the SEALED
+//    1b-ii machinery lifted to src/council.mjs (D1): a receipt-attested Sol codex seat + an
+//    invocation-exact ledger cross-check, blind Fable/Sol RATIFY_SCHEMA verdicts, and the twinRatified
+//    certificate. Failure is FAIL-CLOSED EVIDENCE: a dead/receiptless Sol seat, a failed cross-check,
+//    a split verdict ⇒ the honest degraded route (never a fabricated claim, never a crash). These are
+//    DEFINED unconditionally but CALLED only on the councilCapable path — sub-T4 stays byte-preserved. ──
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+
+// crossCheckPromptB — the receipt-ledger cross-check transcription (thoth:receipt-check); mirrors
+// architecture's crossCheckPrompt. Every path argument is SHELL-QUOTED; neither one-liner carries a
+// single quote, so each rides safely inside node -e '...'.
+const crossCheckPromptB = (outFile, outputSha, sessionId) =>
+  `You are Thoth, the receipt cross-checker — transcribe, never compose, never judge. Run these three EXACT commands (Bash) and transcribe their output.\n\n` +
+  `<task>\n` +
+  `1. run EXACTLY: sha256sum "${outFile}" — output_sha256_disk = the 64-hex digest (the first field only).\n` +
+  `2. run EXACTLY: node -e '${CANON_HASH_ONELINER}' "${outFile}" — output_canonical_sha256 = its stdout (a 64-hex digest).\n` +
+  `3. run EXACTLY: node -e '${LEDGER_EXTRACT_ONELINER}' "${receiptsLedger}" "${outputSha}" "${sessionId}" — ledger = the { verified, reservation } JSON it prints (this leg's verified row + its reservation; nulls where unmatched).\n` +
+  `Emit output_sha256_disk, output_canonical_sha256, and the ledger object. Do not read the files for content, do not write or fix anything.</task>`
+
+// runSolCrossCheckB — the structural→LEDGER-VERIFIED upgrade (Sol F1), parameterized by keystone/phase.
+// A mute/garbled leg gets ONE re-dispatch, then fails closed; crossCheckOk binds the whole chain.
+const runSolCrossCheckB = async (legLabel, keystone, phaseTag, outFile, sink, payload, phaseName) => {
+  const canon = sha256Hex(canonicalJson(payload))
+  const relayed = sink && sink.output_hash
+  const dispatch = () => agent(crossCheckPromptB(outFile, relayed, sink && sink.session_id), { label: `thoth:receipt-check:${legLabel}`, phase: phaseName, model: 'haiku', schema: CROSS_CHECK_SCHEMA })
+  let cc = await dispatch()
+  if (!(cc && cc.ledger)) cc = await dispatch()
+  if (!(cc && cc.ledger)) return { ledger_verified: false, reason: 'cross-check leg produced no ledger extract' }
+  const res = crossCheckOk(cc, { relayedOutputHash: relayed, canonicalHash: canon, sink, keystone, phaseTag, seat: 'sol', attempt: 1, runToken: runTokenRaw })
+  return res.ok
+    ? { ledger_verified: true, codex_receipt_hash: res.codex_receipt_hash, invocation_id: res.invocation_id }
+    : { ledger_verified: false, invocation_id: res.invocation_id, reason: res.reason }
+}
+
+// councilCheckpoint — a buildCheckpoint row via the existing ledger() helper (note{kind:'council_state'});
+// FAIL-OPEN telemetry (an append failure never fails the stage — architecture appendCouncilCheckpoint
+// doctrine). councilRuling emits a note{kind:'council_ruling'} row (plan.md B5 — an EXISTING kind).
+const councilCheckpoint = async (fields, phaseName) => {
+  try { await ledger('note', buildCheckpoint(fields), phaseName) }
+  catch (e) { log(`council checkpoint ${fields && fields.phase} not ledgered (non-fatal): ${e && e.message ? e.message : e}`) }
+}
+const councilRuling = async (data, phaseName) => {
+  try { await ledger('note', { kind: 'council_ruling', ...data }, phaseName) }
+  catch (e) { log(`council ruling not ledgered (non-fatal): ${e && e.message ? e.message : e}`) }
+}
+// pushCouncilReceipt — one honest receipt row per Sol leg (verified or dead) into a per-milestone bucket.
+const pushCouncilReceipt = (bucket, leg, sink, cross) => bucket.push({
+  leg, invocation_id: cross && cross.invocation_id ? cross.invocation_id : null,
+  receipt_verified: !!(sink && sink.receipt_verified), ledger_verified: !!(cross && cross.ledger_verified),
+  session_id: sink && sink.session_id != null ? sink.session_id : null, tokens_used: sink && sink.tokens_used != null ? sink.tokens_used : null,
+})
+// verdictShapeErrorB (F2, mirrored) — an empty/duplicate/evidence-free BLOCK or NEITHER is an INVALID
+// verdict; a head that fails to seal a valid verdict is a missing head. Returns null (valid) or the defect.
+const verdictShapeErrorB = (r) => {
+  if (!(r && (r.verdict === 'BLOCK' || r.verdict === 'NEITHER'))) return null
+  const fs = Array.isArray(r.findings) ? r.findings : []
+  if (!fs.length) return `${r.verdict} with no findings`
+  const seen = new Set()
+  for (const f of fs) {
+    if (!f || typeof f.finding_id !== 'string' || !f.finding_id) return 'a finding without a finding_id'
+    if (seen.has(f.finding_id)) return `duplicate finding_id '${f.finding_id}'`
+    seen.add(f.finding_id)
+    const hasRefs = Array.isArray(f.evidence_refs) && f.evidence_refs.length > 0
+    const hasCheck = typeof f.executable_check === 'string' && f.executable_check.trim() !== ''
+    if (!hasRefs && !hasCheck) return `finding '${f.finding_id}' is evidence-free (no refs, no check)`
+  }
+  return null
+}
+// closeFindingsOf — FREEZE a blocking verdict's findings as the structured close_council_findings record
+// (the RATIFY_SCHEMA finding shape verbatim: finding_id, claim, required_change, evidence_refs,
+// evidence_class) so the SOLE correction is never spent blind to what blocked the close (DSGN-B42-1).
+const closeFindingsOf = (r) => (r && (r.verdict === 'BLOCK' || r.verdict === 'NEITHER') && Array.isArray(r.findings) ? r.findings : []).map((f) => ({
+  finding_id: f && f.finding_id != null ? f.finding_id : null,
+  claim: f && f.claim != null ? f.claim : null,
+  required_change: f && f.required_change != null ? f.required_change : null,
+  evidence_refs: Array.isArray(f && f.evidence_refs) ? f.evidence_refs : [],
+  evidence_class: f && f.evidence_class != null ? f.evidence_class : null,
+}))
+// closeFindingLine — render one frozen finding into a boundary/fixNote line (verbatim IDs + refs).
+const closeFindingLine = (f) => `[close_council] ${f.finding_id || '(no-id)'}: ${f.claim || '(no claim)'} → required_change: ${f.required_change || '(none)'}${f.evidence_refs && f.evidence_refs.length ? ` [evidence: ${f.evidence_refs.join(', ')}]` : ''}`
+// correctionRulingLines (B42-5) — render the correction heads' RETAINED findings + reasons verbatim
+// into boundary lines; they are never discarded and ride qaFindings on ESCALATE/REPLAN.
+const correctionRulingLines = (corr) => [
+  ...((corr && Array.isArray(corr.findings)) ? corr.findings : []).map((f) => `[correction_council] finding: ${f && f.text ? f.text : '(none)'}${f && f.severity ? ` [${f.severity}]` : ''}`),
+  ...((corr && Array.isArray(corr.reasons)) ? corr.reasons : []).map((r) => `[correction_council] reason: ${r}`),
+]
+
+// runBuildBlindPair — the sealed-before-exposed pair: Fable and receipt-attested Sol rule blind, in
+// parallel, over a given schema. Sol death / invalid receipt / failed cross-check ⇒ degraded (a missing
+// head is degradation). Blindness rails: the fable prompt never mentions codex/receipt/session/Sol; the
+// sol packet never mentions fable or the run token. Returns { degraded, missing, rF, rS, sinkF, sinkS, solCross }.
+const runBuildBlindPair = async (cfg) => {
+  const sinkF = {}, sinkS = {}
+  const plan = solWrapperPlan({ councilDir: cfg.mCouncilDir, pluginRoot, receiptsLedger, runToken: runTokenRaw, keystone: cfg.keystone, transportModel: CODEX_MODEL, phaseTag: cfg.phaseTag, attempt: 1, effort: 'xhigh', payloadSchema: cfg.schema, taskText: cfg.solTaskText, briefBody: cfg.solBrief, packetObj: cfg.solPacket })
+  const [rF, rS] = await parallel([
+    () => gateAgent(cfg.fablePrompt, { label: `fable:${cfg.legName}:${cfg.m.id}:c${cfg.c}`, phase: cfg.phaseName, model: 'fable', effort: 'xhigh', twoHeads: 'required', schema: cfg.schema, provenance: sinkF }),
+    () => gateAgent(plan.prompt, { label: `sol:${cfg.legName}:${cfg.m.id}:c${cfg.c}`, phase: cfg.phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(cfg.schema), provenance: sinkS }),
+  ])
+  let solCross = { ledger_verified: false }
+  if (rS != null && sinkS.receipt_verified === true) solCross = await runSolCrossCheckB(`sol:${cfg.legName}:${cfg.m.id}:c${cfg.c}`, cfg.keystone, cfg.phaseTag, plan.files.out, sinkS, rS, cfg.phaseName)
+  pushCouncilReceipt(cfg.receiptsBucket, `sol:${cfg.legName}:${cfg.m.id}:c${cfg.c}`, sinkS, solCross)
+  cfg.gateProv.push({ gate: `${cfg.legName}-fable`, cycle: cfg.c, ...sinkF }, { gate: `${cfg.legName}-sol`, cycle: cfg.c, ...sinkS })
+  const solOk = rS != null && sinkS.receipt_verified === true && solCross.ledger_verified === true
+  if (rF == null || !solOk) {
+    const missing = rF == null && !solOk ? 'both' : (rF == null ? 'fable' : 'sol')
+    return { degraded: true, missing, rF, rS, sinkF, sinkS, solCross }
+  }
+  return { degraded: false, rF, rS, sinkF, sinkS, solCross }
+}
+
+// runCloseCouncil (D3) — the milestone-close ratification pair that RETIRES Judge Dredd at T4, on the
+// EXACT gateDecision(...).judge branch (zero blocking findings AND disagreeing analyst overalls — red
+// monotonicity is STRUCTURAL: a deterministic QA_FAIL never reaches here). The frozen close record IS
+// the rendered artifact — no second render, so bundle_hash = plan_hash. Both APPROVE + valid ⇒ QA_PASS +
+// a twin_ratified certificate; ANY other outcome ⇒ QA_FAIL fail-closed with an honest terminal and the
+// blocking findings FROZEN into close_council_findings (carried into qaFindings, the correction packet,
+// and the corrective fixNote). NO answer exchange in the lite form.
+const runCloseCouncil = async (m, reconciled, overallA, overallB, goalOverall, c, gateProv, mCouncilDir, receiptsBucket, lastTrialRunId, suiteRecorded, executedProbeIds) => {
+  const phaseName = 'Judgment'
+  const keystone = `milestone_close:${m.id}`
+  const phaseTag = `CLOSE_RATIFY_C${c}`
+  // B42-3: the close certificate BINDS its evidence by hash, never by bare name. A Thoth transcription
+  // leg hashes the NAMED artifacts (law.json + the last trial's results/suite files) into a {path,
+  // sha256} manifest (the architecture anchor pattern). A dead/garbled/partial anchor ⇒ the close
+  // council DEGRADES fail-closed — the certificate must NEVER bind unhashed names. The anchor gates
+  // BEFORE the record is frozen; evidence_refs then carry {path, sha256}, never raw path strings.
+  // AMB-B42-2: the suite files are named IFF the build recorded a project suite (suiteRecorded), so a
+  // genuinely suite-less product does not name absent artifacts and spuriously DEGRADE. B42-2/B42-3: the
+  // executed-probe artifacts (probe-<SC>.json/.log) are named for EXACTLY the ids the single derivation
+  // leg found EXECUTED (executedProbeIds, already ∩ probeScIds) — a deferred probe is named NOWHERE and
+  // never enters this manifest, so the certificate binds only artifacts the trial actually recorded.
+  const closeProbeIds = Array.isArray(executedProbeIds) ? executedProbeIds : []
+  const namedEvidence = [lawFile].concat(trialEvidencePaths(lastTrialRunId, suiteRecorded)).concat(probeEvidencePaths(lastTrialRunId, closeProbeIds))
+  const anchor = await agent(evidenceAnchorPrompt(namedEvidence), { label: `thoth:close-anchor:${m.id}:c${c}`, phase: phaseName, model: 'haiku', schema: EVIDENCE_ANCHOR_SCHEMA })
+  const anchorFiles = (anchor && Array.isArray(anchor.files)) ? anchor.files.filter((f) => f && typeof f.path === 'string' && typeof f.sha256 === 'string' && SHA64_RE.test(f.sha256)) : []
+  const anchorPaths = anchorFiles.map((f) => f.path)
+  const anchorExact =
+    anchor && Array.isArray(anchor.files) && anchorFiles.length === anchor.files.length &&
+    anchorFiles.length === namedEvidence.length &&
+    new Set(anchorPaths).size === anchorFiles.length &&
+    namedEvidence.every((p) => anchorPaths.includes(p))
+  if (!anchorExact) {
+    const rec = degraded({ missing: 'evidence', reason: 'close-anchor did not produce an exact evidence manifest (law.json + the last trial results/run files + the suite files when a project suite was recorded + the executed-probe artifacts, each hashed once, 64-hex) — a named-but-unhashed artifact DEGRADES the close' })
+    await councilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: councilTemplateHashBuild, run_token_hash: runTokenHash, initial_ledger_seq: null, keystone_id: keystone, phase: 'DEGRADED', decision_bundle_hash: null, input_artifact_hashes: [], evidence_manifest_hash: null, anonymous_seat_artifact_hashes: {}, seat_provenance: { missing: 'evidence' }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
+    await councilRuling({ keystone, phase: phaseTag, cycle: c, terminal: 'DEGRADED', reason: 'evidence-anchor' }, phaseName)
+    log(`${m.id}: milestone-close evidence anchor DEGRADED — QA_FAIL fail-closed; the certificate must never bind unhashed names`)
+    return { qa: 'QA_FAIL', terminal: 'DEGRADED', certificate: null, terminal_record: rec, findings: [], bundle_hash: null, receipt_verified: false, ledger_verified: false }
+  }
+  const manifest = {}
+  for (const f of anchorFiles) manifest[f.path] = f.sha256
+  const evidenceRefs = Object.keys(manifest).sort().map((p) => ({ path: p, sha256: manifest[p] }))
+  const evidenceManifestHash = sha256Hex(canonicalJson(manifest))
+  const evidenceInputHashes = Object.keys(manifest).sort().map((k) => manifest[k])
+  const closeRecord = {
+    milestone: { id: m.id, title: m.title, acceptance: m.acceptance },
+    reconciled: { summaryLines: reconciled.summaryLines, blocking: reconciled.blocking.length },
+    analyst_overalls: { a: overallA != null ? overallA : null, b: overallB != null ? overallB : null },
+    goal_audit_overall: goalOverall != null ? goalOverall : null,
+    suite_recorded: !!suiteRecorded,
+    // B42-2/B42-3: the transcribed executed-probe id set the close binds (the single derivation's output),
+    // so the frozen record HONESTLY states which probe artifacts its evidence_refs cover — a deferred probe
+    // is absent here and from evidence_refs alike.
+    executed_probe_ids: [...closeProbeIds].sort(),
+    evidence_refs: evidenceRefs,
+  }
+  const bundleHash = sha256Hex(canonicalJson(closeRecord))
+  const ckptBase = { protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: councilTemplateHashBuild, run_token_hash: runTokenHash, initial_ledger_seq: null, keystone_id: keystone, decision_bundle_hash: bundleHash, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash }
+  // BOTH ratification packets carry the COMPLETE frozen closeRecord verbatim (B42-3): the fable prompt
+  // in its inputs, the sol packet as its packetObj — each head ratifies the exact record it signs.
+  const closeRecordJson = JSON.stringify(closeRecord)
+  const ratifyInputs =
+    `<inputs>\n- Milestone ${m.id} "${m.title}" — acceptance: ${m.acceptance}\n` +
+    `- The reconciled analyst + goal-backward findings (deduped, severity-ranked):\n${reconciled.summaryLines.map((l) => '  - ' + l).join('\n') || '  (none)'}\n` +
+    `- The COMPLETE frozen close record you are ratifying (evidence_refs bind each NAMED artifact to its sha256):\n${closeRecordJson}\n` +
+    `- The live repo at ${projectPath}; read each evidence_refs path and confirm it matches its bound hash.\n</inputs>`
+  const bindingLine = `Binding: artifact_hash = "${bundleHash}" (echo it VERBATIM). divergence_selections = [] (no open divergences this round). changed_evidence = [] unless you reverse a prior block.`
+  const fablePrompt =
+    `You are a council ratifier (close:${m.id}) — rule the milestone CLOSE against the fixed rubric, blind and independent. You do not know who else is ruling.\n\n` +
+    `${ratifyInputs}\n\n<rubric>\n${CLOSE_RUBRIC}\n</rubric>\n\n<binding>\n${bindingLine}\n</binding>\n<constraints>\n- ${browserLaw}\n</constraints>\n\n` +
+    `<task>${CLOSE_RATIFY_TASK}\nEmit the evidence-bound findings + changed_evidence + divergence_selections FIRST, then the verdict (evidence-before-commit); reasoning is optional, last, and under 50 words. ${PAYLOAD_FIRST}</task>`
+  const solBrief = `${bindingLine}\nRubric:\n${CLOSE_RUBRIC}\nRule read-only from the repo + the persisted deterministic evidence NAMED in the close record's evidence_refs (each bound to its sha256); NEVER launch a browser.`
+  const pair = await runBuildBlindPair({ m, mCouncilDir, keystone, phaseTag, c, legName: 'close', fablePrompt, solTaskText: CLOSE_RATIFY_TASK, solBrief, solPacket: { close_record: closeRecord, artifact_hash: bundleHash }, schema: RATIFY_SCHEMA, phaseName, gateProv, receiptsBucket })
+  const seatHashes = (rF, rS) => ({ P0: sha256Hex(canonicalJson(rF)), P1: sha256Hex(canonicalJson(rS)) })
+  if (pair.degraded) {
+    const rec = degraded({ missing: pair.missing, reason: `seat death at ${phaseTag} (${pair.missing})` })
+    await councilCheckpoint({ ...ckptBase, phase: 'DEGRADED', anonymous_seat_artifact_hashes: {}, seat_provenance: { missing: pair.missing }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
+    await councilRuling({ keystone, phase: phaseTag, cycle: c, terminal: 'DEGRADED', missing: pair.missing }, phaseName)
+    log(`${m.id}: milestone-close council DEGRADED (${pair.missing}) — QA_FAIL fail-closed, never a judge fallback at T4`)
+    return { qa: 'QA_FAIL', terminal: 'DEGRADED', certificate: null, terminal_record: rec, findings: [], bundle_hash: bundleHash, receipt_verified: !!(pair.sinkS && pair.sinkS.receipt_verified), ledger_verified: !!(pair.solCross && pair.solCross.ledger_verified) }
+  }
+  // B42-7: mirror the architecture LITE path's validity logic EXACTLY — compute vF/vS + shapeF/shapeS
+  // FIRST; ANY invalid/shape-bad ratification (e.g. a dual-APPROVE echoing a wrong artifact_hash) ⇒
+  // DEGRADED naming the head(s) + defect (never BLOCKED, never a frozen-findings carry from an invalid
+  // verdict); ONLY live, VALID BLOCK/NEITHER verdicts ⇒ BLOCKED with frozen findings.
+  const vF = validateRatification(pair.rF, { bundle_hash: bundleHash, open_divergence_ids: [] })
+  const vS = validateRatification(pair.rS, { bundle_hash: bundleHash, open_divergence_ids: [] })
+  const shapeF = verdictShapeErrorB(pair.rF), shapeS = verdictShapeErrorB(pair.rS)
+  const fBad = !vF.valid || !!shapeF, sBad = !vS.valid || !!shapeS
+  if (fBad || sBad) {
+    const missing = fBad && sBad ? 'both' : (fBad ? 'fable' : 'sol')
+    const detail = [fBad ? `fable${shapeF ? `: ${shapeF}` : ''}` : null, sBad ? `sol${shapeS ? `: ${shapeS}` : ''}` : null].filter(Boolean).join('; ')
+    const rec = degraded({ missing, reason: `invalid ratification at ${phaseTag} (${detail})` })
+    await councilCheckpoint({ ...ckptBase, phase: 'DEGRADED', anonymous_seat_artifact_hashes: {}, seat_provenance: { missing, reason: 'invalid ratification' }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
+    await councilRuling({ keystone, phase: phaseTag, cycle: c, terminal: 'DEGRADED', missing, invalid: { fable: fBad, sol: sBad } }, phaseName)
+    log(`${m.id}: milestone-close ratification INVALID (${detail}) — QA_FAIL fail-closed DEGRADED (never mislabeled BLOCKED; an invalid verdict carries no standing findings)`)
+    return { qa: 'QA_FAIL', terminal: 'DEGRADED', certificate: null, terminal_record: rec, findings: [], bundle_hash: bundleHash, receipt_verified: true, ledger_verified: true }
+  }
+  if (pair.rF.verdict === 'APPROVE' && pair.rS.verdict === 'APPROVE') {
+    const cert = assembleRatifyCertificate({ rF: pair.rF, rS: pair.rS, provF: seatProv(pair.sinkF, 'fable'), provS: seatProv(pair.sinkS, 'sol'), context: { bundle_hash: bundleHash, renderer_version: COUNCIL_RENDERER_CLOSE, plan_hash: bundleHash, evidence_manifest_hash: evidenceManifestHash, protocol_version: COUNCIL_PROTOCOL_VERSION, seat_provenance: null } })
+    if (!cert.ok) {
+      const rec = degraded({ missing: 'both', reason: `certificate could not seal: ${cert.reason}` })
+      await councilCheckpoint({ ...ckptBase, phase: 'DEGRADED', anonymous_seat_artifact_hashes: {}, seat_provenance: { reason: 'certificate defect' }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
+      await councilRuling({ keystone, phase: phaseTag, cycle: c, terminal: 'DEGRADED', reason: 'certificate defect' }, phaseName)
+      log(`${m.id}: milestone-close certificate could not seal (${cert.reason}) — QA_FAIL fail-closed`)
+      return { qa: 'QA_FAIL', terminal: 'DEGRADED', certificate: null, terminal_record: rec, findings: [], bundle_hash: bundleHash, receipt_verified: true, ledger_verified: true }
+    }
+    await councilCheckpoint({ ...ckptBase, phase: 'CLOSE_RATIFY_SEALED', anonymous_seat_artifact_hashes: seatHashes(pair.rF, pair.rS), seat_provenance: { P0: seatProv(pair.sinkF, 'fable'), P1: seatProv(pair.sinkS, 'sol') }, codex_receipt_hash: pair.solCross.codex_receipt_hash, status: 'sealed' }, phaseName)
+    await councilCheckpoint({ ...ckptBase, phase: 'RATIFIED', anonymous_seat_artifact_hashes: {}, seat_provenance: {}, codex_receipt_hash: null, status: 'sealed' }, phaseName)
+    await councilRuling({ keystone, phase: phaseTag, cycle: c, terminal: 'RATIFIED', bundle_hash: bundleHash }, phaseName)
+    log(`${m.id}: TWIN COUNCIL RATIFIED the milestone close (bundle ${String(bundleHash).slice(0, 12)}…) — QA_PASS carries two valid head signatures`)
+    return { qa: 'QA_PASS', terminal: 'RATIFIED', certificate: cert.certificate, terminal_record: null, findings: [], bundle_hash: bundleHash, receipt_verified: true, ledger_verified: true }
+  }
+  // Both valid but not dual-APPROVE ⇒ a live, VALID BLOCK/NEITHER ⇒ honest BLOCKED; FREEZE the findings.
+  const frozen = [...closeFindingsOf(pair.rF), ...closeFindingsOf(pair.rS)]
+  await councilCheckpoint({ ...ckptBase, phase: 'CLOSE_RATIFY_SEALED', anonymous_seat_artifact_hashes: seatHashes(pair.rF, pair.rS), seat_provenance: { P0: seatProv(pair.sinkF, 'fable'), P1: seatProv(pair.sinkS, 'sol') }, codex_receipt_hash: pair.solCross.codex_receipt_hash, status: 'sealed' }, phaseName)
+  await councilRuling({ keystone, phase: phaseTag, cycle: c, terminal: 'BLOCKED', verdicts: { fable: pair.rF.verdict, sol: pair.rS.verdict } }, phaseName)
+  log(`${m.id}: milestone-close council BLOCKED (fable ${pair.rF.verdict}, sol ${pair.rS.verdict}) — QA_FAIL fail-closed; ${frozen.length} finding(s) frozen into the correction`)
+  return { qa: 'QA_FAIL', terminal: 'BLOCKED', certificate: null, terminal_record: null, findings: frozen, bundle_hash: bundleHash, receipt_verified: true, ledger_verified: true }
+}
+
+// runCorrectionCouncil (D4) — the REQUIRED blind council over retry | escalate | replan BEFORE the sole
+// corrective build. council_findings carries the frozen close_council_findings when the close pair
+// blocked this cycle (IDs + refs verbatim). Matching choices settle; split/dead/invalid ⇒ fail-closed
+// ESCALATE (never a builder attempt spent on a split council, never a silent RETRY).
+const runCorrectionCouncil = async (m, reconciled, closeFindings, sliceTelemetry, c, gateProv, mCouncilDir, receiptsBucket) => {
+  const phaseName = 'Judgment'
+  const keystone = `correction:${m.id}`
+  const phaseTag = `CORRECTION_C${c}`
+  const correctionRecord = {
+    milestone: { id: m.id, title: m.title, acceptance: m.acceptance },
+    cycle: c, cap: MAX_TRIBUNAL_CORRECTION,
+    reconciled_summary: reconciled.summaryLines,
+    council_findings: Array.isArray(closeFindings) ? closeFindings : [],
+    slice_telemetry: sliceTelemetry,
+    evidence_refs: [lawFile, `${kilnDir}/evidence/`],
+  }
+  const artifactHash = sha256Hex(canonicalJson(correctionRecord))
+  const ckptBase = { protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: councilTemplateHashBuild, run_token_hash: runTokenHash, initial_ledger_seq: null, keystone_id: keystone, decision_bundle_hash: artifactHash, input_artifact_hashes: [], evidence_manifest_hash: sha256Hex(canonicalJson(correctionRecord.evidence_refs)) }
+  const councilFindingsBlock = (correctionRecord.council_findings.length)
+    ? `\n<close-council-findings>\nThe milestone-close pair BLOCKED this cycle on these frozen findings (fix the ROUTE for them):\n${correctionRecord.council_findings.map(closeFindingLine).join('\n')}\n</close-council-findings>\n`
+    : ''
+  const inputs =
+    `<inputs>\n- Milestone ${m.id} "${m.title}" — acceptance: ${m.acceptance}\n` +
+    `- This is correction cycle ${c} of a cap of ${MAX_TRIBUNAL_CORRECTION}: exactly ONE corrective build remains.\n` +
+    `- Reconciled blocking findings:\n${reconciled.summaryLines.map((l) => '  - ' + l).join('\n') || '  (none)'}\n` +
+    `- Slice telemetry: ${JSON.stringify(sliceTelemetry)}\n</inputs>${councilFindingsBlock}`
+  const bindingLine = `Binding: artifact_hash = "${artifactHash}" (echo it VERBATIM).`
+  const fablePrompt =
+    `You are a correction-route council member (${m.id}) — rule the correction ROUTE blind and independent. You do not know who else is ruling.\n\n` +
+    `${inputs}\n\n<binding>\n${bindingLine}\n</binding>\n\n<task>${CORRECTION_TASK}\nEmit findings + reasons FIRST, then choice; reasoning optional, last, under 50 words. ${PAYLOAD_FIRST}</task>`
+  const solBrief = `${bindingLine}\n${councilFindingsBlock}\nRule the correction ROUTE (RETRY | ESCALATE | REPLAN) from the reconciled findings + slice telemetry, read-only.`
+  const pair = await runBuildBlindPair({ m, mCouncilDir, keystone, phaseTag, c, legName: 'correction', fablePrompt, solTaskText: CORRECTION_TASK, solBrief, solPacket: { milestone: correctionRecord.milestone, cycle: c, cap: MAX_TRIBUNAL_CORRECTION, reconciled_summary: reconciled.summaryLines, council_findings: correctionRecord.council_findings, slice_telemetry: sliceTelemetry, artifact_hash: artifactHash }, schema: CORRECTION_SCHEMA, phaseName, gateProv, receiptsBucket })
+  if (pair.degraded) {
+    // B42-5: a dead-seat pair still carries the SURVIVING live head's findings + reasons (never
+    // discarded). runBuildBlindPair marks missing='sol' when only Fable survived (pair.rF) and
+    // missing='fable' when only Sol survived (pair.rS); a both-dead pair carries nothing. Harvest
+    // defensively — arrays only when schema-shaped — into the return, the ruling note, and (via the
+    // call site's correctionRulingLines) the ESCALATE qaFindings.
+    const survivor = pair.missing === 'sol' ? pair.rF : (pair.missing === 'fable' ? pair.rS : null)
+    const survFindings = survivor && Array.isArray(survivor.findings) ? survivor.findings : []
+    const survReasons = survivor && Array.isArray(survivor.reasons) ? survivor.reasons : []
+    await councilCheckpoint({ ...ckptBase, phase: 'CORRECTION_COUNCIL_SEALED', anonymous_seat_artifact_hashes: {}, seat_provenance: { missing: pair.missing }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
+    await councilRuling({ keystone, phase: phaseTag, cycle: c, ruling: 'ESCALATE', terminal: 'DEGRADED', missing: pair.missing, findings: survFindings, reasons: survReasons }, phaseName)
+    log(`${m.id}: correction council DEGRADED (${pair.missing}) — fail-closed ESCALATE (never a builder attempt spent on a split council); ${survFindings.length} surviving-head finding(s) carried`)
+    return { choice: 'ESCALATE', degraded: true, missing: pair.missing, terminal: 'DEGRADED', findings: survFindings, reasons: survReasons, bundle_hash: artifactHash, receipt_verified: !!(pair.sinkS && pair.sinkS.receipt_verified), ledger_verified: !!(pair.solCross && pair.solCross.ledger_verified) }
+  }
+  // B42-5: RETAIN both heads' findings + reasons (never discarded — they ride qaFindings on
+  // ESCALATE/REPLAN AND the council_ruling note). Honest terminal: an invalid echo / illegal payload ⇒
+  // DEGRADED (a head that fails its duty is a missing head — the F2 idiom); a LIVE legal SPLIT ⇒
+  // BLOCKED; matched choices ⇒ RULED. Split/invalid still route the CHOICE fail-closed to ESCALATE.
+  const echoOk = pair.rF.artifact_hash === artifactHash && pair.rS.artifact_hash === artifactHash
+  const legal = (v) => v === 'RETRY' || v === 'ESCALATE' || v === 'REPLAN'
+  const bothLegal = legal(pair.rF.choice) && legal(pair.rS.choice)
+  const invalid = !echoOk || !bothLegal
+  const match = !invalid && pair.rF.choice === pair.rS.choice
+  const choice = match ? pair.rF.choice : 'ESCALATE'
+  const terminal = invalid ? 'DEGRADED' : (match ? 'RULED' : 'BLOCKED')
+  const findings = [...(Array.isArray(pair.rF.findings) ? pair.rF.findings : []), ...(Array.isArray(pair.rS.findings) ? pair.rS.findings : [])]
+  const reasons = [...(Array.isArray(pair.rF.reasons) ? pair.rF.reasons : []), ...(Array.isArray(pair.rS.reasons) ? pair.rS.reasons : [])]
+  await councilCheckpoint({ ...ckptBase, phase: 'CORRECTION_COUNCIL_SEALED', anonymous_seat_artifact_hashes: { P0: sha256Hex(canonicalJson(pair.rF)), P1: sha256Hex(canonicalJson(pair.rS)) }, seat_provenance: { P0: seatProv(pair.sinkF, 'fable'), P1: seatProv(pair.sinkS, 'sol') }, codex_receipt_hash: pair.solCross.codex_receipt_hash, status: 'sealed' }, phaseName)
+  await councilRuling({ keystone, phase: phaseTag, cycle: c, ruling: choice, terminal, matched: match, choices: { fable: pair.rF.choice, sol: pair.rS.choice }, findings, reasons }, phaseName)
+  if (invalid) log(`${m.id}: correction council INVALID (fable ${pair.rF.choice}, sol ${pair.rS.choice}${echoOk ? '' : ', artifact_hash mismatch'}) — fail-closed ESCALATE, terminal DEGRADED`)
+  else if (!match) log(`${m.id}: correction council SPLIT (fable ${pair.rF.choice}, sol ${pair.rS.choice}) — a live legal split, fail-closed ESCALATE, terminal BLOCKED`)
+  else log(`${m.id}: correction council rules ${choice} (both heads agree) — terminal RULED`)
+  return { choice, degraded: false, matched: match, terminal, findings, reasons, bundle_hash: artifactHash, receipt_verified: !!(pair.sinkS && pair.sinkS.receipt_verified), ledger_verified: !!(pair.solCross && pair.solCross.ledger_verified) }
+}
 
 // §3.5 stage bracket (P3.6 T4): the build stage is entered — past both §3.4 floor gates, so the
 // ledger CLI is locatable, and BEFORE any other build-stage ledger activity (the pre-flight sweep
@@ -1099,6 +1531,25 @@ for (const m of milestones) {
   // classification} into a fresh sink; they collect here and ride the EXISTING gate_decision ledger
   // append at the milestone close (no new event type — §B6/§10).
   const gateProv = []
+  // ── Twin Council per-milestone state (B4-2 D3/D4/D6). mCouncilDir holds this milestone's council
+  //    artifacts under the shared per-run tree; the receipts bucket + terminals ride the boundary
+  //    records. All inert on the sub-T4 / no-codex / tokenless paths (councilCapable false). ──
+  const mCouncilDir = `${councilRootDir}/${m.id}`
+  const mCouncilReceipts = []
+  let mCloseTerminal = null      // 'RATIFIED' | 'BLOCKED' | 'DEGRADED' | null (null off the council-judged branch)
+  let mCloseCertificate = null
+  let mCloseFindings = []        // the frozen close_council_findings (carried into correction packet + fixNote)
+  let mCloseBundleHash = null    // B42-6: the COMPUTED close record hash (present for BLOCKED/DEGRADED too — never from the certificate)
+  let mCloseReceiptVerified = false // B42-6: from the close Sol leg's sink
+  let mCloseLedgerVerified = false  // B42-6: from the close Sol leg's cross-check
+  let mCloseSeatConvened = false    // B42-6: the milestone_close seat convened or failed closed this gate
+  let mCorrectionRuling = null   // 'RETRY' | 'ESCALATE' | 'REPLAN' | null
+  let mCorrectionTerminal = null // B42-5: 'RULED' | 'BLOCKED' | 'DEGRADED' | null
+  let mCorrectionBundleHash = null  // B42-6: the COMPUTED correction record hash
+  let mCorrectionReceiptVerified = false // B42-6: from the correction Sol leg's sink
+  let mCorrectionLedgerVerified = false  // B42-6: from the correction Sol leg's cross-check
+  let mCorrectionSeatConvened = false    // B42-6: the correction seat convened or failed closed this gate
+  let mReplanRequired = false
 
   // The milestone's slice of the Law — the contract the batch plan must cover arithmetically.
   const mScs = lawChecks.filter((c) => c.milestone === m.id)
@@ -1378,7 +1829,11 @@ for (const m of milestones) {
     // after the repair (unresolved_assertions names them). Never a plain builder-fixable defect.
     if (environmentBlocked) splitLedger.push({ milestone: m.id, slice: sliceId, sc_ids: slice.sc_ids, class: environmentClass === 'mixed' ? 'mixed' : 'environment', ...(environmentAssertions.length ? { unresolved_assertions: environmentAssertions } : {}) })
     if (approvedOf(mReview)) greenScIds.push(...slice.sc_ids.filter((id) => !greenScIds.includes(id)))
-    slices.push({ id: sliceId, objective: slice.objective, sc_ids: slice.sc_ids, files: slice.files || [], done_when: slice.done_when || '', tests_green: mBuild && mBuild.tests_green, review: mReview && mReview.verdict, approved: approvedOf(mReview), split_required: splitRequired, environment_blocked: environmentBlocked, environment_class: environmentClass, environment_assertions: environmentAssertions, logical_rejections: logicalRejections })
+    // B42-4: the retained fingerprint is the LAST attempt's state that sliceTelemetry forwards to the
+    // correction council. An APPROVED slice's decisive trial was GREEN — no failure signature — so it
+    // records null; only a rejected/blocked/split slice keeps its last (overcome-or-standing) signature.
+    // The loop breaks on approval BEFORE prevFingerprint is cleared, so read approval directly here.
+    slices.push({ id: sliceId, objective: slice.objective, sc_ids: slice.sc_ids, files: slice.files || [], done_when: slice.done_when || '', tests_green: mBuild && mBuild.tests_green, review: mReview && mReview.verdict, approved: approvedOf(mReview), split_required: splitRequired, environment_blocked: environmentBlocked, environment_class: environmentClass, environment_assertions: environmentAssertions, logical_rejections: logicalRejections, fingerprint: approvedOf(mReview) ? null : (prevFingerprint ? prevFingerprint.signature : null), attempts })
     // D5 slice telemetry (§9, note.data.kind — no new event type): DETERMINISTIC fields only. NO
     // elapsed/tokens (Date.now/clocks are forbidden by the runtime determinism guard — timing derives
     // post-hoc from the ledger's own append timestamps). fingerprint = the last attempt's signature.
@@ -1531,13 +1986,78 @@ for (const m of milestones) {
       // gateAgent: a mute analyst degrades to null — denzelReconcile is null-safe and gateDecision
       // reads an unreadable overall as QA_FAIL (fail-closed), never a silent pass.
       const kenProv = {}, ryuProv = {}
+      // D2: at T4 the receipt-attested Sol evidence analyst REPLACES the prompt-delegated Ryu leg
+      // (analyst B) — xhigh, read-only, judging from repo reads + the runner's PERSISTED hashed
+      // evidence (the packet names NO analyst-A artifact — blind independence holds). Sub-T4 keeps the
+      // byte-identical prompt-delegated sonnet Ryu.
+      // B42-2: the Sol evidence analyst judges the NAMED per-milestone/cycle artifacts (derived
+      // SCRIPT-SIDE from the last trial's run id + this milestone's probe SCs — never model-recalled):
+      // law.json, the run dir's results/suite files, and the probe artifacts where a UI probe ran. The
+      // evidence-dir root alone is not a packet — stale or unrelated evidence must not be selectable.
+      // AMB-B42-2: suite.log/suite.jsonl are named IFF the build recorded a project suite — the exact
+      // build.js:640 `suite = build.test_command` skip-branch state (mBuild is the trial's build config),
+      // reused SCRIPT-SIDE so the analyst's named list and the close anchor's named list never disagree.
+      const suiteRecorded = !!(mBuild && mBuild.test_command)
+      // B42-2/B42-3 (recorded-probe derivation): ONE Thoth transcription leg runs PROBE_EXECUTED_ONELINER
+      // over this milestone's last trial results.jsonl; the SCRIPT intersects the printed ids with the
+      // milestone's probe SCs. This is the SINGLE derivation of the executed-probe id set — it feeds BOTH
+      // the Sol analyst's named evidence_artifacts (below) AND the close anchor's hashed manifest (passed to
+      // runCloseCouncil), so the two named lists are the SAME variable and can never disagree. A
+      // deferred/spec-less probe left no artifacts and is named NOWHERE (its results.jsonl row carries
+      // `deferred`, not an exit — kiln-law.mjs:518/551/555). Gated on councilCapable + real milestone probe
+      // SCs, so logic-only milestones and sub-T4 dispatch NO leg (byte-preserved). Fail-closed: a
+      // dead/garbled leg ⇒ [] ⇒ nothing extra named or bound (the honest under-naming direction).
+      const mProbeScIds = mScIds.filter((id) => probeScIds.has(id))
+      let executedProbeIds = []
+      if (councilCapable && mProbeScIds.length && typeof lastRunId === 'string' && lastRunId.trim()) {
+        const probeExec = await agent(probeExecPrompt(`${kilnDir}/evidence/${lastRunId}/results.jsonl`), { label: `thoth:probe-exec:${m.id}:c${c}`, phase: 'Judgment', model: 'haiku', schema: PROBE_EXEC_SCHEMA })
+        const ran = probeExec && Array.isArray(probeExec.executed_ids) ? probeExec.executed_ids : []
+        executedProbeIds = ran.filter((id) => typeof id === 'string' && probeScIds.has(id))
+      }
+      const analystEvidence = [lawFile].concat(trialEvidencePaths(lastRunId, suiteRecorded)).concat(probeEvidencePaths(lastRunId, executedProbeIds))
+      const solAnalyst = councilCapable ? solWrapperPlan({
+        councilDir: mCouncilDir, pluginRoot, receiptsLedger, runToken: runTokenRaw, keystone: `milestone_close:${m.id}`, transportModel: CODEX_MODEL,
+        phaseTag: `QA_EVIDENCE_C${c}`, attempt: 1, effort: 'xhigh', payloadSchema: SOL_QA_PAYLOAD_SCHEMA,
+        taskText: 'You are QA analyst B — an independent, read-only second perspective ruling from the persisted evidence.',
+        briefBody: `Milestone ${m.id} "${m.title}" — acceptance: ${m.acceptance}.\nJudge from (a) repo reads at ${projectPath} (git log/diff, read the files; you run READ-ONLY and cannot run the suite) and (b) the deterministic runner's PERSISTED hashed evidence — the NAMED artifacts for THIS milestone's last trial (read EXACTLY these; do not select stale or unrelated evidence):\n${analystEvidence.map((p) => `  - ${p}`).join('\n')}\nThat is law.json + the last trial's results.jsonl/run.json (plus suite.log/suite.jsonl when a project suite was recorded) + the probe-<SC>.json/.log where a UI probe ran. Hunt "checks pass, goal broken": acceptance met by the letter but broken in spirit, slices that pass alone but never connect, hardcoded/stub behavior behind a green check. Return findings[] (each {text, severity}) and overall ('fail' MUST carry at least one critical|high finding), and report_markdown = the FULL qa-report-b content.`,
+        packetObj: { milestone: { id: m.id, title: m.title, acceptance: m.acceptance }, evidence_artifacts: analystEvidence, project: projectPath },
+        extractTo: `${qaDir}/qa-report-b.md`, extractField: 'report_markdown', extractLabel: 'report',
+      }) : null
       const legs = [
         () => gateAgent(kenPrompt(m), { label: loreLabel('ken', 'qa', `${m.id}:c${c}`), phase: 'Judgment', model: 'opus', schema: QA_FINDINGS_SCHEMA, provenance: kenProv }),
-        () => gateAgent(ryuPrompt(m), { label: loreLabel('ryu', 'qa', `${m.id}:c${c}`), phase: 'Judgment', model: 'sonnet', schema: QA_FINDINGS_SCHEMA, provenance: ryuProv }),
+        councilCapable
+          ? () => gateAgent(solAnalyst.prompt, { label: loreLabel('ryu', 'qa', `${m.id}:c${c}`), phase: 'Judgment', model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(SOL_QA_PAYLOAD_SCHEMA), provenance: ryuProv })
+          : councilMisconfigured
+            // B42-1 (the fail-open catch): promised-but-tokenless ⇒ analyst B is a DEAD SEAT. NEVER
+            // dispatch the legacy receiptless Ryu — reports[1] stays null so the reconcile arithmetic
+            // fails the boundary CLOSED (unreadable overall ⇒ QA_FAIL) BEFORE any computed pass.
+            ? () => null
+            : () => gateAgent(ryuPrompt(m), { label: loreLabel('ryu', 'qa', `${m.id}:c${c}`), phase: 'Judgment', model: 'sonnet', schema: QA_FINDINGS_SCHEMA, provenance: ryuProv }),
       ]
       const goalProvC = {}
       if (goalOn) legs.push(() => goalAudit(`${m.id}:c${c}`, goalProvC))
       const reports = await parallel(legs)
+      // D2 cross-check: the Sol analyst's structural receipt gets the invocation-exact ledger upgrade;
+      // a dead/receiptless seat or a failed cross-check ⇒ null report (fail-closed EVIDENCE — the
+      // null-safe reconcile then reads an unreadable overall as QA_FAIL, never a silent pass).
+      if (councilCapable) {
+        let cross = { ledger_verified: false }
+        if (reports[1] != null && ryuProv.receipt_verified === true) cross = await runSolCrossCheckB(`ryu:${m.id}:c${c}`, `milestone_close:${m.id}`, `QA_EVIDENCE_C${c}`, solAnalyst.files.out, ryuProv, reports[1], 'Judgment')
+        pushCouncilReceipt(mCouncilReceipts, `ryu:${m.id}:c${c}`, ryuProv, cross)
+        if (!(reports[1] != null && ryuProv.receipt_verified === true && cross.ledger_verified === true)) {
+          log(`${m.id}: Sol evidence analyst seat DEAD (receipt/cross-check) — analyst B report is null; the gate fails closed via the reconcile arithmetic`)
+          reports[1] = null
+        }
+      } else if (councilMisconfigured) {
+        // B42-1: analyst B was NOT dispatched (dead seat). Force reports[1] null, mark an honest gateProv
+        // row + the milestone_close seat DEGRADED, and log the misconfiguration. The reconcile then reads
+        // an unreadable overall ⇒ QA_FAIL (fail-closed) BEFORE any computed pass — with ZERO legacy Ryu calls.
+        reports[1] = null
+        mCloseTerminal = 'DEGRADED'
+        mCloseSeatConvened = true
+        Object.assign(ryuProv, { requested_model: 'sonnet', actual_model: null, fallback_reason: 'council_misconfigured_no_token', classification: 'dead_seat' })
+        log(`${m.id}: Sol evidence analyst seat DEAD — councilPromised (T4 + codex) but NO runToken (misconfigured conductor); analyst B is a dead seat (NO legacy Ryu dispatched), the gate fails CLOSED via the reconcile arithmetic`)
+      }
       gateProv.push({ gate: 'ken', cycle: c, ...kenProv }, { gate: 'ryu', cycle: c, ...ryuProv })
       // Goal-audit failure semantics (ORCHESTRATOR RULING): an unusable audit leg is re-asked
       // ONCE; still unusable → QA_FAIL with the blocking 'goal-audit-failure' finding — the
@@ -1565,17 +2085,69 @@ for (const m of milestones) {
       const decision = gateDecision(reconciled, reports[0] && reports[0].overall, reports[1] && reports[1].overall)
       let v
       if (decision.judge) {
-        log(`${m.id}: ${decision.reason} — Judge Dredd is spawned`)
-        const judgeProv = {}
-        const verdict = await gateAgent(judgePrompt(m, reconciled), { label: loreLabel('judge-dredd', 'verdict', `${m.id}:c${c}`), phase: 'Judgment', model: 'opus', schema: VERDICT_SCHEMA, provenance: judgeProv })
-        gateProv.push({ gate: 'judge', cycle: c, ...judgeProv })
-        v = (verdict && verdict.verdict === 'QA_PASS') ? 'QA_PASS' : 'QA_FAIL' // a dead/mute judge fails closed
+        if (councilCapable) {
+          // D3: the milestone-close ratification pair RETIRES Judge Dredd at T4 on this exact ambiguous
+          // branch (zero blocking + disagreeing analyst overalls). Red monotonicity is STRUCTURAL — a
+          // deterministic QA_FAIL never reaches here, so a council cannot green a red gate.
+          const goalOverall = goal && goal.overall != null ? goal.overall : null
+          const close = await runCloseCouncil(m, reconciled, reports[0] && reports[0].overall, reports[1] && reports[1].overall, goalOverall, c, gateProv, mCouncilDir, mCouncilReceipts, lastRunId, suiteRecorded, executedProbeIds)
+          v = close.qa
+          mCloseTerminal = close.terminal
+          mCloseCertificate = close.certificate
+          mCloseFindings = close.terminal === 'BLOCKED' ? close.findings : []
+          mCloseBundleHash = close.bundle_hash
+          mCloseReceiptVerified = close.receipt_verified
+          mCloseLedgerVerified = close.ledger_verified
+          mCloseSeatConvened = true
+          if (v === 'QA_FAIL') qaFindings = [...reconciled.summaryLines, ...mCloseFindings.map(closeFindingLine), ...(close.terminal === 'DEGRADED' ? [`[close_council] milestone-close council DEGRADED (${close.terminal_record && close.terminal_record.missing}) — fail-closed, no judge fallback at T4`] : [])]
+        } else if (councilMisconfigured) {
+          // D5: promised-but-tokenless — the judgment SEAT fails closed (never a silent Judge Dredd
+          // downgrade; scope ruling item 6).
+          v = 'QA_FAIL'
+          mCloseTerminal = 'DEGRADED'
+          qaFindings = [...reconciled.summaryLines, '[close_council] milestone-close council PROMISED (T4 + codex) but the conductor minted no runToken — the ruling fails closed (QA_FAIL, DEGRADED); relaunch with the per-run token']
+          log(`${m.id}: milestone-close judgment seat fails CLOSED — councilPromised but no runToken (misconfigured conductor); no Judge Dredd downgrade`)
+        } else {
+          // Sub-T4 / no-codex: the v3.0.1 single-Opus Judge Dredd, byte-identical.
+          log(`${m.id}: ${decision.reason} — Judge Dredd is spawned`)
+          const judgeProv = {}
+          const verdict = await gateAgent(judgePrompt(m, reconciled), { label: loreLabel('judge-dredd', 'verdict', `${m.id}:c${c}`), phase: 'Judgment', model: 'opus', schema: VERDICT_SCHEMA, provenance: judgeProv })
+          gateProv.push({ gate: 'judge', cycle: c, ...judgeProv })
+          v = (verdict && verdict.verdict === 'QA_PASS') ? 'QA_PASS' : 'QA_FAIL' // a dead/mute judge fails closed
+        }
       } else {
         v = decision.verdict
         log(`${m.id}: ${decision.reason}`)
       }
       if (v === 'QA_PASS') { qa = 'QA_PASS'; qaCycle = c; log(`${m.id}: QA_PASS (milestone gate, cycle ${c})`); break }
       if (c === MAX_TRIBUNAL_CORRECTION) { qa = 'QA_FAIL'; qaCycle = c; log(`${m.id}: QA_FAIL after ${c} correction(s) — escalating to validate`); break }
+      // D4: the REQUIRED correction council over retry | escalate | replan runs BEFORE the sole
+      // corrective build — the routing decision is a council ruling, not an unconditional build. The
+      // frozen close_council_findings ride the packet (DSGN-B42-1). Split/dead/invalid ⇒ fail-closed
+      // ESCALATE. Sub-T4 keeps the v3.0.1 unconditional corrective build byte-identical.
+      if (councilCapable) {
+        // B42-4: the correction packet carries per-slice fingerprints + attempts (retained on the slice
+        // records at their push) alongside logical_rejections/splits/env — the telemetry the route needs.
+        const sliceTelemetry = slices.map((s) => ({ id: s.id, logical_rejections: s.logical_rejections, fingerprint: s.fingerprint != null ? s.fingerprint : null, attempts: s.attempts != null ? s.attempts : null, split_required: !!s.split_required, environment_blocked: !!s.environment_blocked, tests_green: s.tests_green !== false }))
+        const corr = await runCorrectionCouncil(m, reconciled, mCloseFindings, sliceTelemetry, c, gateProv, mCouncilDir, mCouncilReceipts)
+        mCorrectionRuling = corr.choice
+        mCorrectionTerminal = corr.terminal
+        mCorrectionBundleHash = corr.bundle_hash
+        mCorrectionReceiptVerified = corr.receipt_verified
+        mCorrectionLedgerVerified = corr.ledger_verified
+        mCorrectionSeatConvened = true
+        // B42-5: the correction heads' RETAINED findings + reasons ride qaFindings verbatim on ESCALATE/REPLAN.
+        if (corr.choice === 'ESCALATE') { qa = 'QA_FAIL'; qaCycle = c; qaFindings = [...reconciled.summaryLines, ...mCloseFindings.map(closeFindingLine), ...correctionRulingLines(corr), `[correction_council] the correction council ruled ESCALATE${corr.degraded ? ` (fail-closed: ${corr.missing} seat dead — DEGRADED)` : (corr.terminal === 'BLOCKED' ? ' (fail-closed: a live legal split — BLOCKED)' : '')} — validate backstops; the conductor sees the ruling`]; log(`${m.id}: correction council ESCALATE (terminal ${corr.terminal}) — QA_FAIL stands, validate backstops`); break }
+        if (corr.choice === 'REPLAN') { qa = 'QA_FAIL'; qaCycle = c; mReplanRequired = true; qaFindings = [...reconciled.summaryLines, ...mCloseFindings.map(closeFindingLine), ...correctionRulingLines(corr), '[correction_council] the correction council ruled REPLAN — the milestone plan itself is wrong; a conductor/operator re-plan is owed (replan_required)']; log(`${m.id}: correction council REPLAN — QA_FAIL + replan_required marker (never silent)`); break }
+        log(`${m.id}: correction council RETRY — proceeding to the sole corrective build`)
+      } else if (councilMisconfigured) {
+        // D5/B42-1: promised-but-tokenless — the correction ROUTING fails closed to ESCALATE (never a
+        // corrective build spent under a council that could not convene); the seat is honestly DEGRADED.
+        qa = 'QA_FAIL'; qaCycle = c; mCorrectionRuling = 'ESCALATE'; mCorrectionTerminal = 'DEGRADED'; mCorrectionSeatConvened = true
+        qaFindings = [...reconciled.summaryLines, '[correction_council] correction council PROMISED (T4 + codex) but no runToken — fail-closed ESCALATE; relaunch with the per-run token']
+        log(`${m.id}: correction council fails CLOSED (misconfigured conductor) — ESCALATE, no corrective build`)
+        break
+      }
       // One corrective build + the SAME evidence-first trial (runner → gates → cross-family review),
       // then re-gate once. The correction is milestone-wide, so it maps to ALL milestone SCs —
       // and its trial's flip plan covers them all (already-green SCs fold into the regression
@@ -1587,7 +2159,9 @@ for (const m of milestones) {
       // only its FAILED probe SCs; fall back to the milestone's full probe-SC set only when it isn't.
       const lastFp = fpOrNull(mReview && mReview.fingerprint)
       const lastTrialRunId = (mReview && typeof mReview.run_id === 'string' && mReview.run_id) ? mReview.run_id : lastRunId
-      const fixNote = `Milestone gate QA_FAIL. Fix every blocking finding, keep tests green, recommit:\n${reconciled.summaryLines.join('\n')}${probeArtifactBrief(lastTrialRunId, lastFp ? lastFp.failed : mScIds)}`
+      // DSGN-B42-1: the sole corrective build's fixNote carries the frozen close_council_findings
+      // (IDs + refs verbatim) alongside the reconciled summary — never spent blind to what blocked the close.
+      const fixNote = `Milestone gate QA_FAIL. Fix every blocking finding, keep tests green, recommit:\n${[...reconciled.summaryLines, ...mCloseFindings.map(closeFindingLine)].join('\n')}${probeArtifactBrief(lastTrialRunId, lastFp ? lastFp.failed : mScIds)}`
       const correctionSlice = { objective: `Milestone-gate correction for ${m.id} — fix every blocking finding`, files: [], constraints: '', done_when: m.acceptance, sc_ids: mScIds }
       phase('Forging')
       log(`${spin('build', 99)} — ${m.id} gate correction ${c + 1}`)
@@ -1640,7 +2214,17 @@ for (const m of milestones) {
   // F3: the milestone's gate-leg provenance rides the EXISTING gate_decision ledger type (in the
   // enum, previously unemitted by a workflow — no new type minted) so every degradation/substitution
   // on a review, tribunal analyst, judge, or goal-backward leg is recorded durably at the boundary.
-  if (gateProv.length) await ledger('gate_decision', { milestone: m.id, qa, gate_provenance: gateProv }, 'Judgment')
+  // B4-2 D6: a council SUMMARY rides the same event on the T4 path (honest terminals for the
+  // conductor's blocked/degraded hard stop) — omitted entirely off the council path (byte-preserved).
+  // B42-6: the gate_decision council field is an ARRAY of per-seat summaries (one per convened OR
+  // failed-closed seat — milestone_close and correction), each EXACTLY {seat, terminal, bundle_hash,
+  // certificate_present, receipt_verified, ledger_verified}. bundle_hash is the COMPUTED record hash
+  // (present for BLOCKED/DEGRADED rulings too — never derived from the certificate). The receipts list
+  // rides gate_decision as a SEPARATE council_receipts key.
+  const councilSeats = []
+  if (mCloseSeatConvened) councilSeats.push({ seat: 'milestone_close', terminal: mCloseTerminal, bundle_hash: mCloseBundleHash, certificate_present: !!mCloseCertificate, receipt_verified: mCloseReceiptVerified, ledger_verified: mCloseLedgerVerified })
+  if (mCorrectionSeatConvened) councilSeats.push({ seat: 'correction', terminal: mCorrectionTerminal, bundle_hash: mCorrectionBundleHash, certificate_present: false, receipt_verified: mCorrectionReceiptVerified, ledger_verified: mCorrectionLedgerVerified })
+  if (gateProv.length) await ledger('gate_decision', { milestone: m.id, qa, gate_provenance: gateProv, ...(councilPromised && councilSeats.length ? { council: councilSeats } : {}), ...(councilPromised && mCouncilReceipts.length ? { council_receipts: mCouncilReceipts } : {}) }, 'Judgment')
 
   results.push({
     id: m.id, title: m.title, surface: surf,
@@ -1653,6 +2237,9 @@ for (const m of milestones) {
     split_required: splitSlices.map((s) => s.id),
     replanned,
     ...(gateOnly ? { gate_only: true } : {}),
+    // B4-2 D6: the council terminals ride the milestone result so the workflow return + conductor's
+    // blocked/degraded hard stop see honest terminals. Present only on the council-promised path.
+    ...(councilPromised ? { council: { close_terminal: mCloseTerminal, correction_terminal: mCorrectionTerminal, correction_ruling: mCorrectionRuling, replan_required: mReplanRequired, certificate: mCloseCertificate } } : {}),
   })
   // build.milestone_sealed / build.milestone_fail (keystones): the §3.2 boundary verdict.
   const remainingMilestones = milestones.length - 1 - milestoneIndex
