@@ -43,7 +43,10 @@ const MODEL_VOICE = {
 }
 const voice = (m) => (m === 'opus' ? MODEL_VOICE.opus + '\n\n' : '')
 
-const SPIN = ['The ledger holds every word', 'Nothing enters the vision that the operator did not say', 'The compiler reads the session, never the chat', 'A vision is counted before it is trusted']
+// SPIN flattened to the two staged worker-tree lines (C1 §6, called 0/1): 'The ledger holds every
+// word' is promoted to the vision.gate_clean beat and 'A vision is counted before it is trusted' to
+// the vision.sealed keystone's texture, so neither rots behind a dead index.
+const SPIN = ['Nothing enters the vision that the operator did not say', 'The compiler reads the session, never the chat']
 const spin = (i) => SPIN[((i % SPIN.length) + SPIN.length) % SPIN.length]
 
 // ── The run ledger (BLUEPRINT §3.5): stage brackets + vision_compiled land in events.jsonl via
@@ -62,6 +65,20 @@ async function runLedger(type, data, phaseName) {
     { label: 'thoth:ledger', phase: phaseName, model: 'haiku' }
   )
 }
+
+// ── Lore beats (C1 doctrine §4): a dispatch from inside the fire — one line at the moment a fact
+//    becomes true, carried by runLedger to the operator's transcript between the banners (note{kind:
+//    'lore'}; deterministic <stage>.<beat> key; args are short scalars capped at 80 by the caller;
+//    text ≤ 160). PRESENTATION, null-keep: pluginRoot absent ⇒ a plain log() line, never a failure. ──
+const LORE_MAX = 160
+const oneLine = (s, cap = LORE_MAX) => String(s).replace(/[\x00-\x1f\x7f]+/g, ' ').slice(0, cap)
+// args are bound HERE (F-1): every string value is capped at 80 mechanically, so a beat can never
+// leak an unbounded project-controlled string into the ledger even if a call site forgets to cap.
+const boundArgs = (a) => { const o = {}; for (const [k, v] of Object.entries(a)) o[k] = typeof v === 'string' ? oneLine(v, 80) : v; return o }
+const lore = (key, text, args, phaseName) =>
+  pluginRoot
+    ? runLedger('note', { kind: 'lore', key, text: oneLine(text), ...(args ? { args: boundArgs(args) } : {}) }, phaseName)
+    : log(oneLine(text))
 
 // ── the kiln-vision transcript schema — Thoth transcribes the CLI's --json verdict VERBATIM ──────
 // One shape for BOTH commands (the CLI prints the same payload family); every field required so a
@@ -119,14 +136,17 @@ if (!(gate && gate.exit === 0 && gate.valid === true)) {
     ? (gate.violations.length ? `the session ledger is incomplete: ${gate.violations.map((v) => v.code).join(', ')}` : `ledger-gate failed — ${gate.error || `exit ${gate.exit}`}`)
     : 'the gate scribe produced no report'
   log(`THE LEDGER GATE REFUSED — ${why}. No compiler spawns against an incomplete session.`)
+  await lore('vision.gate_refused', `The ledger gate refused — ${oneLine(why, 80)}; no compiler spawns against an incomplete session`, { reason: oneLine(why, 80) }, 'The Gate')
   return { vision_valid: false, vision_file: visionFile, reason: why, violations: (gate && gate.violations) || [] }
 }
 const gateSummary = parseSummary(gate) || {}
 log(`Ledger gate clean: ${gateSummary.events ?? '?'} events, ${gateSummary.ideas ?? '?'} idea(s), tier ${gateSummary.tier ?? 'unknown'}${gateSummary.express ? ' (express)' : ''}`)
+// vision.gate_clean (promoted §6): the ledger held — the mechanical pre-compile floor is clean.
+await lore('vision.gate_clean', `The ledger holds every word — ${gateSummary.events ?? '?'} events, ${gateSummary.ideas ?? '?'} idea(s), tier ${gateSummary.tier ?? 'unknown'}`, { events: gateSummary.events ?? null, ideas: gateSummary.ideas ?? null, tier: gateSummary.tier ?? null }, 'The Gate')
 
 // ═══════════════════════════════════ The Compilation ════════════════════════════════════════════
 phase('The Compilation')
-log(spin(2))
+log(spin(1))
 
 // The compiler brief is the traceability contract (§10 change 5): SOLE source = the session
 // ledger + the format template. It never sees the conversation — an idea absent from the ledger
@@ -202,6 +222,7 @@ for (let round = 0; round < COMPILE_PASSES; round++) {
     return { vision_valid: false, vision_file: visionFile, reason: `invalid after ${COMPILE_PASSES} passes`, violations: verdict.violations }
   }
   log(`Validator: ${verdict.violations.length} violation(s) [${verdict.violations.map((v) => v.code).join(', ')}] — compiler revision ${round + 1}`)
+  await lore('vision.violations', `Vision invalid — ${verdict.violations.length} violation(s) [${oneLine(verdict.violations.map((v) => v.code).join(', '), 80)}]; compiler revision ${round + 1}`, { violations: verdict.violations.length, round: round + 1 }, 'The Compilation')
   compiled = await agent(
     voice('opus') +
     `You are the vision compiler — revising YOUR OWN output. The validator refused ${visionFile}; ` +
@@ -233,6 +254,9 @@ if (!(proof && proof.exists === true)) {
 }
 // Ordering (r1 F5): vision_compiled THEN stage_completed — and ONLY here, on the clean path.
 await runLedger('vision_compiled', { tier: vSummary.tier ?? null, counts: vSummary.counts ?? null, visual_direction: vSummary.visual_direction ?? null, unresolved: vSummary.unresolved ?? null }, 'The Seal')
+// vision.sealed (keystone): the seal succeeded — the vision is counted before it is trusted. Emit
+// BEFORE stage_completed so the beat renders before the telegraph's terminating completion event.
+await lore('vision.sealed', `Counted before trusted — the vision seals at tier ${vSummary.tier ?? 'unknown'}, visual direction ${vSummary.visual_direction === true ? 'present' : 'declined'}`, { tier: vSummary.tier ?? null, visual_direction: vSummary.visual_direction === true ? 'present' : 'declined' }, 'The Seal')
 await runLedger('stage_completed', {}, 'The Seal')
 log(`The vision is compiled and gated: tier ${vSummary.tier ?? 'unknown'}, visual direction ${vSummary.visual_direction === true ? 'present' : 'declined'} — the brainstorm stage completes`)
 

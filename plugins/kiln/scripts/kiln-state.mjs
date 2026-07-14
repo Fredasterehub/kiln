@@ -12,8 +12,13 @@
 //
 // Stage authority (P3.6 T4): state.json.stage is a projection of the stage_started/stage_completed
 // brackets the workflows append. It is stage-accurate at the gauge/research/architecture/build/
-// validate boundaries — those stages bracket their runs (architecture completes only on a locked
-// Law; a failed stage emits no completion). report/mapping brackets ride the C1 lore batch.
+// validate/report boundaries — those stages bracket their runs (architecture completes only on a
+// locked Law; report only on a written artifact; a failed stage emits no completion). mapping is
+// off-table (not in STAGE_ORDER): its brackets are still ledgered — for the telegraph (termination
+// + exact-once) and the audit trail — and the reducer records them verbatim (stage_started sets
+// stage:'mapping'; stage_completed sets last_completed_stage), but NO bump follows, so `stage` rests
+// at 'mapping' until the next on-table stage_started overwrites it. state.json is not
+// stage-authoritative across the mapping window.
 // A conducted run births the ledger at onboarding (kiln-fire SKILL.md §5, `init`); a harness-driven
 // run that skips the conductor still gets correct stage projections wherever the workflows bracket.
 //

@@ -107,12 +107,17 @@ const noWander = NO_WANDER
 // @inline:council:COUNCIL_PROTOCOL_VERSION,sha256Hex,canonicalJson,councilSeed,deriveId,claimTypeForClass,compareEvidence,validateReversal,buildDecisionBundle,bundleHash,validateRatification,councilSignature,verifySignature,buildCheckpoint,twinRatified,councilDeadlock,degraded
 // The wrapper TRANSLATES (Goal/Context/Constraints/Done-when); it never forwards a Claude brief verbatim.
 const codexHowto = `Delegate authoring to ${CODEX_MODEL}: TRANSLATE this brief into a 4-part Codex prompt — Goal (the deliverable in 1-2 sentences), Context (the file paths + summary; no full dumps), Constraints (the arch-constraints + "do X instead of Y"), Done-when (the file written + what it must contain) — write it to a fresh temp file ('TMP="$(mktemp /tmp/kiln-codex.XXXXXX.md)"'; a fixed path collides across concurrent runs) and pipe via stdin: 'codex exec -m ${CODEX_MODEL} -c model_reasoning_effort="high" --sandbox workspace-write --skip-git-repo-check < "$TMP"'. Do NOT forward this brief verbatim. If ${CODEX_MODEL} is unavailable retry with -m ${CODEX_FALLBACK}; if codex errors or yields nothing usable, author the plan yourself.`
+// SPIN flattened per C1 §6 — dead single-shot entries removed and the best writing promoted into the
+// beats below: 'The geometry never lies' → the foundation_laid beat, 'One map of truth emerges' →
+// architecture.plan_synthesized, 'The gates lock before the first brick is laid' →
+// architecture.law_locked. The council row keeps only the fallback-honest ternary (dead behind
+// literal 0 before). Duplicate transition/phase-title and lore.json-fragment lines dropped.
 const SPIN = {
-  foundation: ['Numerobis drafts the constraints', 'Laying the first stone', 'The geometry never lies'],
-  council: ['The committee of geniuses is arguing', 'Confucius contemplates the path forward', codexAvailable ? 'Sun Tzu is flanking the requirements' : 'Miyamoto makes the fallback the plan'],
-  synth: ['Plato weaves the threads together', 'From discord, find harmony', 'One map of truth emerges'],
-  validate: ['Athena weighs the plan on her scales', 'A plan is only as good as its weakest assumption', 'Athena checks the receipts'],
-  law: ['Asimov drafts the Law', 'One check per criterion — coverage is arithmetic', 'The gates lock before the first brick is laid'],
+  foundation: ['Numerobis drafts the constraints'],
+  council: [codexAvailable ? 'Sun Tzu is flanking the requirements' : 'Miyamoto makes the fallback the plan'],
+  synth: ['Plato weaves the threads together'],
+  validate: ['Athena weighs the plan on her scales'],
+  law: ['Asimov drafts the Law'],
 }
 const spin = (k, i) => { const a = SPIN[k] || []; return a.length ? a[((i % a.length) + a.length) % a.length] : '' }
 
@@ -579,8 +584,11 @@ const appendCouncilCheckpoint = async (fields, phaseName) => {
 const degradeCouncil = async (missing, reason, phaseName) => {
   // First terminal wins; the constructor record is RETAINED into the return (Sol F10) — an audit
   // consumer gets the structured twin_degraded record, not just a string.
-  if (councilTerminal === null) { councilTerminal = 'DEGRADED'; councilBlockedReason = reason; councilTerminalRecord = degraded({ missing, reason }) }
+  const firstDegrade = councilTerminal === null
+  if (firstDegrade) { councilTerminal = 'DEGRADED'; councilBlockedReason = reason; councilTerminalRecord = degraded({ missing, reason }) }
   log(`TWIN COUNCIL DEGRADED — missing '${missing}' head (${reason}); the master plan cannot advance as council-ratified. The Law is BLOCKED; the conductor must escalate (gated operator checkpoint).`)
+  // architecture.council_degraded (keystone): a promised head is missing — the Law stays blocked.
+  if (firstDegrade) await lore('architecture.council_degraded', `TWIN COUNCIL DEGRADED — the ${missing} head is missing (${oneLine(reason, 80)}); the Law stays blocked for the operator`, { missing, reason: oneLine(reason, 80) }, phaseName)
   await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'DEGRADED', decision_bundle_hash: null, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: {}, seat_provenance: { missing, reason }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
 }
 
@@ -597,6 +605,8 @@ const deadlockCouncil = async (divergences, phaseName) => {
     councilTerminalRecord = councilDeadlock({ divergences, last_ratified_hash: null })
   }
   log(`TWIN COUNCIL DEADLOCK — persistent disagreement survived RATIFY_2; the Law is BLOCKED, last ratified state preserved, NO stage_completed. Operator resolution required (B3 fresh-round ladder not yet wired).`)
+  // architecture.council_deadlock (keystone): disagreement survived re-ratification — the operator rules.
+  await lore('architecture.council_deadlock', `TWIN COUNCIL DEADLOCK — disagreement survived re-ratification; the Law stays blocked, the operator rules`, null, phaseName)
   await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'COUNCIL_DEADLOCK', decision_bundle_hash: null, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: {}, seat_provenance: {}, codex_receipt_hash: null, status: 'sealed' }, phaseName)
 }
 
@@ -723,6 +733,8 @@ const sealRatified = async (rF, rS, sinkF, sinkS, bH, pH, solCross, ckptPhase, p
   await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: ckptPhase, decision_bundle_hash: bH, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: { P0: sha256Hex(canonicalJson(rF)), P1: sha256Hex(canonicalJson(rS)) }, seat_provenance: { P0: seatProv(sinkF, 'fable'), P1: seatProv(sinkS, 'sol') }, codex_receipt_hash: solCross && solCross.codex_receipt_hash ? solCross.codex_receipt_hash : null, status: 'sealed' }, phaseName)
   await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'RATIFIED', decision_bundle_hash: bH, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: {}, seat_provenance: {}, codex_receipt_hash: null, status: 'sealed' }, phaseName)
   log(`TWIN COUNCIL RATIFIED — the master plan carries two valid head signatures (bundle ${String(bH).slice(0, 12)}…); the Law may lock a council-ratified plan.`)
+  // architecture.council_ratified (keystone): both heads signed — the master plan is sealed.
+  await lore('architecture.council_ratified', `The council rules as one — two signatures seal the master plan (bundle ${String(bH).slice(0, 12)}…)`, { bundle: String(bH).slice(0, 12) }, phaseName)
 }
 
 // ── The run ledger (BLUEPRINT §3.5): stage brackets land in events.jsonl via the kiln-state CLI —
@@ -730,8 +742,8 @@ const sealRatified = async (rF, rS, sinkF, sinkS, bH, pH, solCross, ckptPhase, p
 //    Thoth appends; gated on pluginRoot and degrades to a log line — an append failure never fails
 //    the stage. stage_completed fires ONLY on the genuine-success path: lawLocked === true. An
 //    unlocked Law or blocked council is an ESCALATION, not a completion — no event, per the
-//    telegraph's failed-stages-emit-nothing rule. report/mapping brackets ride the C1 lore batch,
-//    not this one. ──
+//    telegraph's failed-stages-emit-nothing rule. report.js and mapping.js bracket their runs the
+//    same way now (the C1 lore batch closed that deferral). ──
 async function runLedger(type, data, phaseName) {
   if (!pluginRoot) { log(`pluginRoot absent — ${type} not ledgered to events.jsonl`); return }
   const ev = JSON.stringify({ type, stage: 'architecture', data })
@@ -745,6 +757,21 @@ async function runLedger(type, data, phaseName) {
     { label: 'thoth:ledger', phase: phaseName, model: 'haiku' }
   )
 }
+
+// ── Lore beats (C1 doctrine §4): a drafting/council/law dispatch at the moment a fact becomes true,
+//    carried by runLedger to the operator's transcript between the banners (note{kind:'lore'};
+//    deterministic <stage>.<beat> key; args short scalars capped at 80 by the caller; text ≤ 160).
+//    PRESENTATION, null-keep: pluginRoot absent ⇒ a plain log() line, never a stage failure. Rides
+//    runLedger (the general run ledger), NOT appendCouncilCheckpoint (the receipt-attested twin). ──
+const LORE_MAX = 160
+const oneLine = (s, cap = LORE_MAX) => String(s).replace(/[\x00-\x1f\x7f]+/g, ' ').slice(0, cap)
+// args are bound HERE (F-1): every string value is capped at 80 mechanically, so a beat can never
+// leak an unbounded project-controlled string into the ledger even if a call site forgets to cap.
+const boundArgs = (a) => { const o = {}; for (const [k, v] of Object.entries(a)) o[k] = typeof v === 'string' ? oneLine(v, 80) : v; return o }
+const lore = (key, text, args, phaseName) =>
+  pluginRoot
+    ? runLedger('note', { kind: 'lore', key, text: oneLine(text), ...(args ? { args: boundArgs(args) } : {}) }, phaseName)
+    : log(oneLine(text))
 
 // ── Laying Stone: numerobis writes the technical docs the planners build on ──
 phase('Laying Stone')
@@ -806,6 +833,8 @@ const foundation = await agent(
 // raw foundation field, so a threaded arg short-circuits mechanically in the SCRIPT.
 const hasVisualDirection = (typeof visualDirection === 'boolean') ? visualDirection : !!(foundation && foundation.has_visual_direction)
 log(`Foundation docs written; visual direction: ${hasVisualDirection}${visualDirection === null ? '' : ' (conductor-threaded)'}`)
+// architecture.foundation_laid (volume): the technical foundation is set (carries the freed §6 line).
+await lore('architecture.foundation_laid', `The geometry never lies — the foundation is set, visual direction ${hasVisualDirection ? 'present' : 'none'}`, { visual_direction: hasVisualDirection ? 'present' : 'none' }, 'Laying Stone')
 
 // ── Design tokens (conditional — only when VISION has real Visual Direction) ──
 // Velocity lever 6 (§9): design:tokens runs in PARALLEL with The Council. Its only inputs are
@@ -819,6 +848,8 @@ log(`Foundation docs written; visual direction: ${hasVisualDirection}${visualDir
 let designPromise = null
 if (hasVisualDirection) {
   log('Design tokens launching in parallel (visual direction present)')
+  // architecture.tokens_parallel (volume): the design system is drawn alongside the plan (lever 6).
+  await lore('architecture.tokens_parallel', `Design tokens drawn in parallel — visual direction present`, null, 'Laying Stone')
   designPromise = agent(
     voice('opus') +
     `You are Kiln's design lead.\n\n` +
@@ -888,6 +919,8 @@ let synthBrief
 let synthLead
 if (liteScope) {
   log(`${planning !== null ? `Posture planning='${planning}'` : `Scope='trivial' (${foundation && foundation.estimated_milestones} est. milestone(s))`} — lite architecture path: skipping The Council.`)
+  // architecture.lite_path (volume): right-sized to one head — Plato authors directly, no council.
+  await lore('architecture.lite_path', `Lite path — ${(foundation && foundation.estimated_milestones) ?? '?'} est. milestone(s); Plato drafts alone, no council`, { est_milestones: (foundation && foundation.estimated_milestones) ?? null }, 'Laying Stone')
   synthBrief =
     `<inputs>\nRead (${noWander}): ${docsDir}/architecture.md, ${docsDir}/tech-stack.md, ` +
     `${researchInList}${docsDir}/arch-constraints.md. Foundation summary: ${foundation && foundation.summary}\n</inputs>`
@@ -944,6 +977,8 @@ if (liteScope) {
       councilSeedDigest = councilSeed({ protocolVersion: COUNCIL_PROTOCOL_VERSION, runToken, initialSeq: councilInitialSeq, keystoneId, templateHash })
       const solDraft = solWrapperPrompt({ phaseTag: 'DRAFTS', attempt: 1, effort: 'high', payloadSchema: SOL_DRAFT_PAYLOAD_SCHEMA, taskText: DRAFT_TASK, briefBody: planBrief, packetObj: { inputs: frozenInputs, foundation_summary: foundation && foundation.summary, testing_rigor: testingRigor }, extractTo: `${plansDir}/plan-b.md` })
       const sinkS = {}
+      // architecture.council_convened (keystone): the T4 draft pair spawns — two heads draft blind.
+      await lore('architecture.council_convened', `The Twin Council convenes — two heads draft blind; neither sees the other's hand`, null, 'The Council')
       const [fablePlan, solPayload] = await parallel([
         () => agent(fableDraftPrompt(planBrief), { label: 'fable:draft', phase: 'The Council', model: 'fable', effort: 'high', schema: PLAN_SCHEMA }),
         () => gateAgent(solDraft.prompt, { label: 'sol:draft', phase: 'The Council', model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(SOL_DRAFT_PAYLOAD_SCHEMA), provenance: sinkS }),
@@ -1000,6 +1035,8 @@ if (liteScope) {
     plans = (await parallel(planners)).filter(Boolean)
   }
   log(`${plans.length}/2 plans written (${plans.map((p) => p.slot).join(', ')})`)
+  // architecture.plans_drafted (volume): the anonymized plan pair is on the table.
+  await lore('architecture.plans_drafted', `${plans.length}/2 plans drafted (${plans.map((p) => p.slot).join(', ')})`, { plans: plans.length }, 'The Council')
 
   if (plans.length < 2) {
     // Council guard: a dead planner would leave diogenes a nonexistent plan file to read — skip
@@ -1026,6 +1063,10 @@ if (liteScope) {
       { label: 'diogenes:divergence', phase: 'The Lantern', model: 'sonnet', schema: DIVERGENCE_SCHEMA }
     )
     log(`Divergence: ${(divergence && divergence.divergences || []).length} decision points`)
+    // architecture.heads_agree / architecture.divergence_cut (keystones): the divergence set is read.
+    const nDivergences = (divergence && divergence.divergences || []).length
+    if (nDivergences === 0) await lore('architecture.heads_agree', `The heads drew the same map — zero divergences; ratification goes to the vote clean`, null, 'The Lantern')
+    else await lore('architecture.divergence_cut', `Diogenes cuts the divergence set — ${nDivergences} decision point(s) divide the heads`, { divergences: nDivergences }, 'The Lantern')
 
     synthBrief =
       `<inputs>\nRead (${noWander}): ${plansDir}/plan-a.md, ${plansDir}/plan-b.md, ` +
@@ -1048,6 +1089,8 @@ let synth = await agent(
   { label: 'plato:synthesis', phase: 'One From Many', model: 'opus', schema: SYNTH_SCHEMA }
 )
 log(`master-plan.md: ${synth && synth.milestone_count} milestone(s) [${(synth && synth.milestones || []).map((m) => m.id + ':' + m.surface).join(', ')}]`)
+// architecture.plan_synthesized (keystone): one master plan, written from the council's work.
+await lore('architecture.plan_synthesized', `One map of truth — master-plan.md: ${synth && synth.milestone_count} milestone(s) [${oneLine((synth && synth.milestones || []).map((m) => m.id).join(', '), 80)}]`, { milestones: synth && synth.milestone_count }, 'One From Many')
 
 // ── Athena Weighs: validator with a bounded plato-revision loop ──
 phase('Athena Weighs')
@@ -1075,8 +1118,10 @@ for (let round = 0; round < validationPasses; round++) {
     { label: `athena:validate:r${round}`, phase: 'Athena Weighs', model: 'opus', schema: VALIDATION_SCHEMA }
   )) || { verdict: 'FAIL', failed_dimensions: ['validator-failure'], fixes: [] }
   verdict = val
-  if (val.verdict === 'PASS') { log(`Athena: PASS (pass ${round + 1}/${validationPasses})`); break }
-  if (round === validationPasses - 1) { log(`Athena still FAIL after ${validationPasses} pass(es) — escalating`); break }
+  // architecture.athena_pass (volume): the plan validator passed it.
+  if (val.verdict === 'PASS') { log(`Athena: PASS (pass ${round + 1}/${validationPasses})`); await lore('architecture.athena_pass', `Athena nods — PASS, pass ${round + 1}/${validationPasses}`, { pass: round + 1, passes: validationPasses }, 'Athena Weighs'); break }
+  // architecture.athena_fail (volume): the plan failed every validation pass — escalating.
+  if (round === validationPasses - 1) { log(`Athena still FAIL after ${validationPasses} pass(es) — escalating`); await lore('architecture.athena_fail', `Athena weighs FAIL — after ${validationPasses} pass(es) [${oneLine((val.failed_dimensions || []).join(', '), 80)}]; escalating`, { passes: validationPasses }, 'Athena Weighs'); break }
   log(`Athena FAIL [${(val.failed_dimensions || []).join(', ')}] — Plato revision round ${round + 1}`)
   // Null-keep: a crashed reviser must not wipe the last good synthesis.
   synth = (await agent(
@@ -1475,6 +1520,8 @@ if (!(verdict && verdict.verdict === 'PASS')) {
       lawReason = 'pluginRoot absent — the kiln-law CLI cannot be located; the gates were written but never indexed/locked'
     } else {
       log(`Asimov compiled ${lawChecks.length} check(s) (${lawChecks.filter((c) => c.kind === 'probe').length} probe spec(s)) covering ${planScIds.length} SC(s) — dry-run gate before lock`)
+      // architecture.law_compiled (volume): the gates are compiled — one check per SC, dry-run next.
+      await lore('architecture.law_compiled', `Asimov compiles ${lawChecks.length} check(s) over ${planScIds.length} SC(s) — dry-run before the lock`, { checks: lawChecks.length, scs: planScIds.length }, 'The Law')
       // ── The dry-run gate (P3.5 T1, dogfood finding 1): checks are code; they execute before
       // we trust them — reading is not executing. `kiln-law dryrun` is legal PRE-LOCK (no
       // lock_commit, no tamper gate, no git) and leaves ZERO evidence residue: a dry-run is a
@@ -1620,6 +1667,8 @@ if (!(verdict && verdict.verdict === 'PASS')) {
         lawReason = `dry-run gate failed — ${dryrunReason}; the lock is blocked (checks are code: they execute before we trust them)`
       } else {
         log(`Dry-run gate passed — locking`)
+        // architecture.dryrun (volume): the checks ran clean pre-lock (they execute before we trust them).
+        await lore('architecture.dryrun', `The gates run clean pre-lock — ${lawChecks.length} check(s) honest-red${greenLegit.length ? `, ${greenLegit.length} pre-satisfied` : ''}; the Law may lock`, { checks: lawChecks.length, pre_satisfied: greenLegit.length }, 'The Law')
         // Index BEFORE the single lock commit (the §5 sequence): kiln-law index hashes the on-disk
         // gates and records lock_commit = HEAD (the last pre-gate commit — git content-addressing
         // means law.json can never carry the sha of the commit that contains it). The one
@@ -1684,6 +1733,8 @@ if (!(verdict && verdict.verdict === 'PASS')) {
           if (lawProof && lawProof.law_json_exists === true && lawProof.lock_commit_exists === true) {
             lawLocked = true
             log(`The Law is locked: ${lawChecks.length} check(s) committed as "test(law): lock acceptance gates"`)
+            // architecture.law_locked (keystone): the gates lock before the first brick is laid.
+            await lore('architecture.law_locked', `The gates lock before the first brick — ${lawChecks.length} check(s) committed as the Law`, { checks: lawChecks.length }, 'The Law')
           } else {
             lawReason = `lock verification failed — law.json exists: ${!!(lawProof && lawProof.law_json_exists)}, lock commit exists: ${!!(lawProof && lawProof.lock_commit_exists)}`
           }

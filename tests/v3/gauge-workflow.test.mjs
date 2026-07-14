@@ -214,15 +214,25 @@ const eventOf = (cmd) => JSON.parse(cmd.slice(cmd.indexOf("'") + 1, cmd.lastInde
 
 // ── The ledger legs: with pluginRoot present the gauge brackets its run (stage_started at entry,
 //    posture_set in The Ledger, stage_completed on the genuine-completion path) — P3.6 T4 ─────────
-test('T2 ledger: pluginRoot present → Thoth receives THREE kiln-state appends — stage_started, posture_set, stage_completed (in order)', async () => {
+test('T2 ledger: pluginRoot present → Thoth brackets the run (stage_started · posture_set · stage_completed) with the C1 lore beats riding between', async () => {
   const { ledgerCmds } = await runGauge(
     { ...baseArgs, pluginRoot: '/abs/plugin/root' },
     (label) => label === 'alpha:assess' ? { reasoning: 'x', profile: fixtureProfile } : null
   )
-  assert.equal(ledgerCmds.length, 3, 'the stage brackets + posture_set = three ledger appends')
   const evs = ledgerCmds.map(eventOf)
-  assert.deepEqual(evs.map((e) => e.type), ['stage_started', 'posture_set', 'stage_completed'],
+  // The lifecycle brackets in order — lore notes ride BETWEEN them but never displace the brackets.
+  const lifecycle = evs.filter((e) => e.type !== 'note')
+  assert.deepEqual(lifecycle.map((e) => e.type), ['stage_started', 'posture_set', 'stage_completed'],
     'the entry bracket precedes the posture, and the completion bracket follows it')
+  // C1 lore beats: the posture_set keystone + the D8=2 second-scorer beat this fixture triggers.
+  const beats = evs.filter((e) => e.type === 'note' && e.data && e.data.kind === 'lore')
+  const keys = beats.map((b) => b.data.key)
+  assert.ok(keys.includes('gauge.posture_set'), 'the gauge.posture_set keystone rides the ledger')
+  assert.ok(keys.includes('gauge.second_scorer'), 'the D8=2 fixture triggers the second-scorer beat')
+  for (const b of beats) {
+    assert.match(b.data.key, /^[a-z]+\.[a-z_]+$/, 'a lore key is <stage>.<beat_name>')
+    assert.equal(typeof b.data.text, 'string', 'a lore beat carries a text line')
+  }
   for (const cmd of ledgerCmds) {
     assert.match(cmd, /\/abs\/plugin\/root\/scripts\/kiln-state\.mjs append/)
     assert.match(cmd, /\/tmp\/nonexistent-kiln\/\.kiln/)
@@ -232,4 +242,8 @@ test('T2 ledger: pluginRoot present → Thoth receives THREE kiln-state appends 
   const posture = evs.find((e) => e.type === 'posture_set')
   assert.deepEqual(posture.data.posture, referencePosture(fixtureProfile, CONFIG))
   assert.deepEqual(posture.data.profile, fixtureProfile)
+  // the posture_set keystone beat renders BEFORE the stage_completed terminator (telegraph ordering)
+  const beatIdx = evs.findIndex((e) => e.type === 'note' && e.data.key === 'gauge.posture_set')
+  const doneIdx = evs.findIndex((e) => e.type === 'stage_completed')
+  assert.ok(beatIdx > -1 && beatIdx < doneIdx, 'the posture_set beat precedes stage_completed')
 })

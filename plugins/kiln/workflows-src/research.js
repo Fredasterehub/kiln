@@ -114,8 +114,8 @@ const SYNTH_SCHEMA = {
 //    the vision.js runLedger idiom. Thoth appends; gated on pluginRoot and degrades to a log line —
 //    an append failure never fails the stage. stage_completed fires ONLY on the genuine-success
 //    paths (both returns below — the zero-topics route IS a completion); a failed stage emits
-//    nothing, per the telegraph's termination rule. report/mapping brackets ride the C1 lore batch,
-//    not this one. ──
+//    nothing, per the telegraph's termination rule. report.js and mapping.js bracket their runs
+//    the same way now (the C1 lore batch closed that deferral). ──
 async function runLedger(type, data, phaseName) {
   if (!pluginRoot) { log(`pluginRoot absent — ${type} not ledgered to events.jsonl`); return }
   const ev = JSON.stringify({ type, stage: 'research', data })
@@ -129,6 +129,20 @@ async function runLedger(type, data, phaseName) {
     { label: 'thoth:ledger', phase: phaseName, model: 'haiku' }
   )
 }
+
+// ── Lore beats (C1 doctrine §4): a fieldcraft dispatch at the moment a fact becomes true, carried by
+//    runLedger to the operator's transcript (note{kind:'lore'}; deterministic <stage>.<beat> key;
+//    args short scalars capped at 80 by the caller; text ≤ 160). PRESENTATION, null-keep: pluginRoot
+//    absent ⇒ a plain log() line, never a stage failure. ──
+const LORE_MAX = 160
+const oneLine = (s, cap = LORE_MAX) => String(s).replace(/[\x00-\x1f\x7f]+/g, ' ').slice(0, cap)
+// args are bound HERE (F-1): every string value is capped at 80 mechanically, so a beat can never
+// leak an unbounded project-controlled string into the ledger even if a call site forgets to cap.
+const boundArgs = (a) => { const o = {}; for (const [k, v] of Object.entries(a)) o[k] = typeof v === 'string' ? oneLine(v, 80) : v; return o }
+const lore = (key, text, args, phaseName) =>
+  pluginRoot
+    ? runLedger('note', { kind: 'lore', key, text: oneLine(text), ...(args ? { args: boundArgs(args) } : {}) }, phaseName)
+    : log(oneLine(text))
 
 const webHowto =
   'Scope: research THIS topic from the open web only. Do NOT read project files or search the local ' +
@@ -181,10 +195,15 @@ if (topics.length === 0) {
   log('No research topics identified from VISION.md — nothing to research; finishing with empty results (no research.md).')
   // §3.5 stage bracket: the zero-topics route is a GENUINE completion (§3.2 says so), so it closes
   // the stage like any other success.
+  // research.field_quiet (keystone): zero topics cleared the bar — the field team stands down. Emit
+  // BEFORE stage_completed so the beat is rendered before the telegraph's terminating completion event.
+  await lore('research.field_quiet', `No question clears the bar — the field team stands down; the plan grounds in VISION alone`, null, 'The Briefing')
   await runLedger('stage_completed', {}, 'The Briefing')
   return { topics: [], cleared: [], research_file: null, headline_findings: [] }
 }
 log(`${topics.length} research topic(s) scoped`)
+// research.topics_scoped (volume): the field team is briefed — one operative per topic.
+await lore('research.topics_scoped', `${topics.length} operative(s) briefed — ${oneLine(topics.map((t) => t.slug).join(', '), 80)}`, { topics: topics.length, slugs: oneLine(topics.map((t) => t.slug).join(', '), 80) }, 'The Briefing')
 
 // ── Field Work: investigate each topic in parallel, validate + one revision ──
 phase('Field Work')
@@ -204,9 +223,11 @@ const investigated = await pipeline(
     )
   },
   // stage 2 — validate, and revise once if below the firewall bar
-  (find, t, i) => {
+  async (find, t, i) => {
     if (valid(find)) return find
     log(`${codename(i)}:field:${t.slug} below bar (conf=${find && find.confidence}, src=${find && (find.sources || []).length}) — one revision`)
+    // research.below_bar (volume): a topic missed the firewall bar — one revision pass (coalescible).
+    await lore('research.below_bar', `${oneLine(t.slug, 80)} below the bar (conf ${find && find.confidence}, ${find && (find.sources || []).length} source(s)) — one revision`, { slug: oneLine(t.slug, 80) }, 'Field Work')
     return agent(
       `Your prior findings on "${t.title}" failed Kiln's validation firewall ` +
       `(need confidence >= ${MIN_CONFIDENCE}, >= ${MIN_SOURCES} sources with URLs, >= ${MIN_QUOTES} quote).\n\n` +
@@ -239,6 +260,8 @@ const synth = await agent(
 )
 
 log(`research.md written with ${synth ? synth.topics_written : 0} topic(s)`)
+// research.intel_secured (keystone): synthesis landed — the findings are in research.md.
+await lore('research.intel_secured', `Intelligence secured — ${cleared.length} topic(s) cleared the bar; research.md carries the findings`, { cleared: cleared.length }, 'The Debrief')
 // §3.5 stage bracket: the synthesis landed — the stage genuinely completed.
 await runLedger('stage_completed', {}, 'The Debrief')
 return {

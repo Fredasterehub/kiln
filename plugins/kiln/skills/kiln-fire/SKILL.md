@@ -158,7 +158,7 @@ surface and onboarding is cheap. Detect first, then confirm.
    step 5 (written to `project-brief.md` there either way; on `accept`, also into the project's
    `.claude/settings.json`).
 4. **Brownfield only:** run the mapping workflow to understand the existing code before brainstorm:
-   `Workflow({scriptPath: "$PLUGIN_ROOT/workflows/mapping.js", args: {projectPath: "<abs>", kilnDir: "<abs>/.kiln"}})`.
+   `Workflow({scriptPath: "$PLUGIN_ROOT/workflows/mapping.js", args: {projectPath: "<abs>", kilnDir: "<abs>/.kiln", pluginRoot: "<abs $PLUGIN_ROOT>"}})`.
    For brownfield the `project_path` is the existing codebase dir, so both args are known here. The
    workflow **writes the map itself** to `<abs>/.kiln/docs/codebase-map.md` (it `mkdir -p`s the dir)
    and returns a structured summary (`map_file`, `stack`, `entry_points`, `summary`) — you just read
@@ -460,7 +460,7 @@ right-sizing the build to the deliverable — are in workflow-contracts.md.
 
 Launch `report.js` like the other autonomous stages — it reads all `.kiln/` artifacts plus the built
 project and writes `./.kiln/REPORT.md` in Kiln's voice (the Omega persona lives inside the workflow):
-`Workflow({scriptPath: "$PLUGIN_ROOT/workflows/report.js", args: {kilnDir: "<abs>/.kiln", projectPath: "<abs>"}})`.
+`Workflow({scriptPath: "$PLUGIN_ROOT/workflows/report.js", args: {kilnDir: "<abs>/.kiln", projectPath: "<abs>", pluginRoot: "<abs $PLUGIN_ROOT>"}})`.
 Wait for completion, render *"The forge cools. The work remains."* and present the delivery summary.
 
 ## STATE.md discipline
@@ -483,10 +483,14 @@ Wait for completion, render *"The forge cools. The work remains."* and present t
 - **The dual surface (§4).** `STATE.md` is the conductor's human/resume register — the source of
   truth you rewrite here and read on resume. `state.json` is the *ledger's* projection of
   `events.jsonl` (rebuilt by `kiln-state project`), a machine-first mirror you never hand-edit. It is
-  stage-accurate at the **gauge / research / architecture / build / validate** boundaries — those
-  workflows bracket their runs with `stage_started`/`stage_completed` events (architecture completes
-  only on a locked Law; a failed stage emits no completion; report/mapping brackets ride the C1 lore
-  batch). Resume routing keys off `STATE.md`, not `state.json`.
+  stage-accurate at the **gauge / research / architecture / build / validate / report** boundaries —
+  those workflows bracket their runs with `stage_started`/`stage_completed` events (architecture
+  completes only on a locked Law; report only on a written artifact; a failed stage emits no
+  completion). mapping is off-table (not in `STAGE_ORDER`): its brackets are ledgered for the
+  telegraph (termination + exact-once + audit) and recorded verbatim by the reducer (`stage` becomes
+  `mapping` and rests there until the next on-table `stage_started` — no bump follows), so
+  `state.json` is not stage-authoritative across the mapping window.
+  Resume routing keys off `STATE.md`, not `state.json`.
 
 ## Voice discipline
 

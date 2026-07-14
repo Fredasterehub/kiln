@@ -110,12 +110,16 @@ const scope = `${NO_WANDER} Exception: the built project at ${projectPath} is al
 // @inline:voice:MODEL_VOICE,voice
 // ── Codex model pins (CODEX_MODEL default + CODEX_FALLBACK, inlined from src/models.mjs) ──
 // @models
+// SPIN flattened per C1 §6 — dead single-shot entries removed, the best writing promoted into the
+// beats below: 'Intent versus reality' → validate.fanout, 'The traversal sweeps its own ashes' →
+// validate.traversal_done; the duplicate transition/phase-title lines dropped; goal keeps its two
+// staged (0/1) entries, 'The letter passes; does the spirit?' freed into the goal_read beat's texture.
 const SPIN = {
-  drift: ['Measuring the drift', 'Zoxea checks the seams', 'Intent versus reality'],
-  validate: ['Argus watches with a hundred eyes', 'The Law runs fresh — confirmation, not discovery', 'Argus found an edge case. Of course.', 'Install, suite, every criterion — no shortcuts'],
-  traverse: ['One evaluator, one browser, one deadline', 'The browser is a subprocess, never a service', 'Clicking through like a user would', 'The traversal sweeps its own ashes'],
-  goal: ['Working backward from the promise', 'Does the whole thing deliver the goal?', 'The letter passes; does the spirit?'],
-  verdict: ['The evidence rules — exit codes do not negotiate', 'One verdict over all the evidence', 'PASS, PARTIAL, or FAILED — no caveats'],
+  drift: ['Zoxea checks the seams'],
+  validate: ['The Law runs fresh — confirmation, not discovery'],
+  traverse: ['One evaluator, one browser, one deadline'],
+  goal: ['Working backward from the promise', 'Does the whole thing deliver the goal?'],
+  verdict: ['The evidence rules — exit codes do not negotiate'],
 }
 const spin = (k, i) => { const a = SPIN[k] || []; return a.length ? a[((i % a.length) + a.length) % a.length] : '' }
 
@@ -250,6 +254,21 @@ async function ledger(type, data) {
     { label: 'thoth:ledger', phase: 'The Verdict', model: 'haiku' }
   )
 }
+
+// ── Lore beats (C1 doctrine §4): a trial/evidence dispatch at the moment a fact becomes true, carried
+//    by the ledger to the operator's transcript between the banners (note{kind:'lore'}; deterministic
+//    <stage>.<beat> key; args short scalars capped at 80 by the caller; text ≤ 160). PRESENTATION,
+//    null-keep: pluginRoot absent ⇒ a plain log() line, never a stage failure. validate's ledger()
+//    takes no phaseName (its Thoth leg is labeled 'The Verdict'), so lore rides the same two-arg call. ──
+const LORE_MAX = 160
+const oneLine = (s, cap = LORE_MAX) => String(s).replace(/[\x00-\x1f\x7f]+/g, ' ').slice(0, cap)
+// args are bound HERE (F-1): every string value is capped at 80 mechanically, so a beat can never
+// leak an unbounded project-controlled string into the ledger even if a call site forgets to cap.
+const boundArgs = (a) => { const o = {}; for (const [k, v] of Object.entries(a)) o[k] = typeof v === 'string' ? oneLine(v, 80) : v; return o }
+const lore = (key, text, args) =>
+  pluginRoot
+    ? ledger('note', { kind: 'lore', key, text: oneLine(text), ...(args ? { args: boundArgs(args) } : {}) })
+    : log(oneLine(text))
 
 // ── Stage-level browser sweep (BLUEPRINT §7 / discipline-spec lifecycle step 3) — the OUTER bracket
 //    around the Tier-2 traversal. The browser is a subprocess with a deadline, never a service:
@@ -456,10 +475,12 @@ function goalPrompt() {
 
 // ── Measuring Drift — the parallel fan-out (lever 9): zoxea ∥ argus ∥ hephaestus ─────────────────
 phase('Measuring Drift')
-log(`${spin('drift', 0)} — drift ∥ the Law floor ∥ design QA fan out`)
+log(spin('drift', 0))
 // §3.5 stage bracket (P3.6 T4): the validate stage is entered. ledger() gates on pluginRoot itself
 // and degrades to a log line when the CLI is absent — never a stage failure.
 await ledger('stage_started', { stage: 'validate' })
+// validate.fanout (promoted §6): the stage opens — three lenses fan out over the deliverable.
+await lore('validate.fanout', `Intent versus reality — drift ∥ the Law floor ∥ design QA fan out`, null)
 
 // hephaestus runs iff design/ exists on disk (§4 self-validation — the conductor's designPresent is
 // only a hint; a cheap detect probe is authoritative). A no-pluginRoot run still detects via the
@@ -495,7 +516,11 @@ const fan = await parallel(fanLegs)
 const arch = fan[0]
 const argus = fan[1]
 log(`Arch-check: ${(arch && arch.drift || []).length} drift, ${(arch && arch.seam_issues || []).length} seam(s), ${(arch && arch.blocking || []).length} blocking`)
-log(`${spin('validate', 1)} — law_run_exit=${argus && argus.law_run_exit} · suite_exit=${argus && argus.suite_exit} · ${(argus && argus.criteria || []).length} criterion(s) exercised`)
+// validate.drift_read (volume): zoxea returned — drift + seams read.
+await lore('validate.drift_read', `Zoxea reads the seams — ${(arch && arch.drift || []).length} drift, ${(arch && arch.seam_issues || []).length} seam(s), ${(arch && arch.blocking || []).length} blocking`, { drift: (arch && arch.drift || []).length, seams: (arch && arch.seam_issues || []).length, blocking: (arch && arch.blocking || []).length })
+log(`${spin('validate', 0)} — law_run_exit=${argus && argus.law_run_exit} · suite_exit=${argus && argus.suite_exit} · ${(argus && argus.criteria || []).length} criterion(s) exercised`)
+// validate.law_floor (volume): argus returned — the deterministic Law floor ran.
+await lore('validate.law_floor', `The Law runs fresh — exit ${argus && argus.law_run_exit}, suite ${argus && argus.suite_exit}, ${(argus && argus.criteria || []).length} criterion(s) exercised`, { law_run_exit: argus && argus.law_run_exit, suite_exit: argus && argus.suite_exit, criteria: (argus && argus.criteria || []).length })
 if (designPresent) log('Design QA complete (advisory)')
 
 // ui_scope: argus's own determination, OR (fail toward scrutiny) a design/ dir, OR any browser_only
@@ -606,6 +631,8 @@ try {
     const findings = Array.from(new Set(passes.flatMap((t) => (t && Array.isArray(t.findings)) ? t.findings.filter((f) => typeof f === 'string' && f.trim()) : [])))
     traversal = { browser_result: worst, findings, tool: passes[0] && passes[0].tool, criteria: passes.flatMap((t) => (t && Array.isArray(t.criteria)) ? t.criteria : []) }
     log(`Traversal: ${traversal.browser_result}${traversal.tool ? ` via ${traversal.tool}` : ''} — ${findings.length} UI finding(s)${deadlineHit ? ` (deadline hit — ${Math.round(TRAVERSAL_DEADLINE_MS / 1000)}s cap)` : ''}`)
+    // validate.traversal_done (promoted §6): the bounded Tier-2 traversal closed and swept itself.
+    await lore('validate.traversal_done', `The traversal sweeps its own ashes — ${traversal.browser_result}, ${findings.length} UI finding(s)`, { browser_result: traversal.browser_result, findings: findings.length })
     // gate_provenance here is an INTERIM point-in-time snapshot (a late completion of a timed-out pass may
     // still be in flight); validate_verdict below emits the CLOSING record that books any pass still unsettled.
     await ledger('tier2_traversal', { ui_scope: true, tool: traversal.tool || null, browser_result: traversal.browser_result, findings: findings.length, passes_run: passes.length, passes_planned: traversalSuffixes.length, deadline_hit: deadlineHit, deadline_ms: TRAVERSAL_DEADLINE_MS, gate_provenance: traversalProvLog.map((p) => ({ ...p })) })
@@ -632,6 +659,8 @@ try {
   // milestone gate uses (dedupe by normalized text, max severity wins, blocking = any critical|high).
   const goalRec = denzelReconcile(goal, goalSecond)
   log(`${spin('goal', 1)} — goal-backward: ${(goal && goal.overall) || 'no report'}${goalSecond ? ` ∥ ${(goalSecond && goalSecond.overall) || 'no report'}` : ''}, ${goalRec.findings.length} finding(s), ${goalRec.blocking.length} blocking`)
+  // validate.goal_read (volume): the whole deliverable judged backward from the VISION promise.
+  await lore('validate.goal_read', `The letter passes; does the spirit? — ${(goal && goal.overall) || 'no report'}, ${goalRec.findings.length} finding(s), ${goalRec.blocking.length} blocking`, { overall: (goal && goal.overall) || 'no report', findings: goalRec.findings.length, blocking: goalRec.blocking.length })
 
   // ── The Verdict — computed DETERMINISTICALLY (validateVerdict) over all the evidence ───────────
   phase('The Verdict')
@@ -742,6 +771,15 @@ try {
     })
   }
 
+  // validate.degraded (keystone): any degradation — a downgraded verification is recorded, never
+  // silently green (static-only UI verification, a mute gate that never ruled, or a degraded second head).
+  if (v.verification_class !== 'full' || secondFamilyDegraded || unruledGates.length) {
+    const degradeReason = secondFamilyDegraded ? 'the cross-family second head degraded'
+      : unruledGates.length ? `${unruledGates.length} gate(s) never ruled`
+      : `verification_class ${v.verification_class}`
+    await lore('validate.degraded', `Verification DEGRADED — ${degradeReason}; the claim is downgraded, never silently green`, { verification_class: v.verification_class, reason: oneLine(degradeReason, 80) })
+  }
+
   await ledger('validate_verdict', {
     verdict: v.verdict,
     verification_class: v.verification_class,
@@ -773,6 +811,9 @@ try {
       ...(posture.second_family ? [{ gate: 'goal-final:second-family', ...goalSecondProv }] : []),
     ],
   })
+
+  // validate.verdict (keystone): the deterministic verdict is assembled over all the evidence.
+  await lore('validate.verdict', `A hundred eyes rule — ${v.verdict} · ${v.verification_class}${v.blocking.length ? ` · ${v.blocking.length} blocking` : ''}`, { verdict: v.verdict, verification_class: v.verification_class, blocking: v.blocking.length })
 
   // §3.5 stage bracket (P3.6 T4): validate COMPLETES only on a clean VALIDATE_PASS — a PARTIAL/FAILED
   // verdict leaves the projection at 'validate' (accurate: the conductor loops corrections back to

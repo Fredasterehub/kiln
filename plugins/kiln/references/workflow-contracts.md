@@ -131,6 +131,15 @@ whether the tier is `express` or a facilitated tier).
   The **in-loop Tier-2 browser traversal is the v3 repeal of the v2 ban** — it runs INSIDE validate as
   one bounded, swept, lease-gated evaluator (the browser is a subprocess with a deadline, never a
   service); the out-of-loop `visual_qa_checklist` still ships as the optional operator re-check below.
+- **Report** (`report.js`) takes `kilnDir`, `projectPath`, and **`pluginRoot`** — `pluginRoot`
+  locates the kiln-state CLI for the stage brackets (`stage_started` at entry; `stage_completed` on
+  the genuine-success path ONLY — REPORT.md written, confirmed by an existence probe) and the C1 lore
+  beats; absence degrades each to a log line, never a stage failure (the report itself never depends
+  on it). A missing REPORT.md emits NO `stage_completed`, so the projection stays at `report`.
+- **Mapping** (`mapping.js`, brownfield onboarding) takes `projectPath`, `kilnDir`, and
+  **`pluginRoot`** — same shape: `pluginRoot` locates kiln-state for the stage brackets
+  (`stage_started` at entry; `stage_completed` ONLY when `.kiln/docs/codebase-map.md` is on disk) and
+  the lore beats; absence degrades each to a log line. A missing map emits NO `stage_completed`.
 
 ## The run token
 

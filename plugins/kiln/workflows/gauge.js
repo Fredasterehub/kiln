@@ -57,6 +57,22 @@ async function ledger(type, data, phaseName) {
   )
 }
 
+// ── Lore beats (C1 doctrine §4): a dispatch from inside the fire — one line, emitted the moment a
+//    fact becomes true, carried by the ledger to the operator's transcript between the conductor's
+//    banners. Rides the ledger idiom above as note{kind:'lore'} (deterministic <stage>.<beat> key;
+//    the structured `args` are short scalars — project-controlled strings capped at 80 by the caller;
+//    text ≤ 160). PRESENTATION, null-keep: pluginRoot absent ⇒ a plain log() line, never a stage
+//    failure — a beat can never gate, retry, or wedge a run. ──
+const LORE_MAX = 160
+const oneLine = (s, cap = LORE_MAX) => String(s).replace(/[\x00-\x1f\x7f]+/g, ' ').slice(0, cap)
+// args are bound HERE (F-1): every string value is capped at 80 mechanically, so a beat can never
+// leak an unbounded project-controlled string into the ledger even if a call site forgets to cap.
+const boundArgs = (a) => { const o = {}; for (const [k, v] of Object.entries(a)) o[k] = typeof v === 'string' ? oneLine(v, 80) : v; return o }
+const lore = (key, text, args, phaseName) =>
+  pluginRoot
+    ? ledger('note', { kind: 'lore', key, text: oneLine(text), ...(args ? { args: boundArgs(args) } : {}) }, phaseName)
+    : log(oneLine(text))
+
 // ── The Gauge pure core (validateProfile + posture, inlined from src/gauge.mjs) ──
 // The §3.2 non-compensatory mapping runs HERE, in the script — never in an agent (BLUEPRINT §3.2).
 function validateProfile(profile) {
@@ -166,7 +182,9 @@ const voice = (m) => (m === 'opus' ? MODEL_VOICE.opus + '\n\n' : '')
 // Opus prose voice only when the assessor IS opus; other slots get the bare brief.
 const assessorVoice = assessorModel === 'opus' ? voice('opus') : ''
 
-const SPIN = ['Alpha takes the measure of the work', 'The Assessor reads between the lines', 'No dimension hides from the gauge', 'Eight readings, one posture']
+// SPIN flattened to the one intentional worker-tree line (C1 §6): entry 0 duplicated the brand.md
+// gauge transition; 'Eight readings, one posture' is promoted to the gauge.posture_set beat below.
+const SPIN = ['No dimension hides from the gauge']
 const spin = (i) => SPIN[((i % SPIN.length) + SPIN.length) % SPIN.length]
 
 // ── Schemas (additionalProperties:false; payload fields FIRST, reasoning LAST + optional + capped — a long leading reasoning string truncated tool calls before the payload landed and blew the 5-attempt retry cap) ──
@@ -238,6 +256,7 @@ let validation = validateProfile(profile)
 // failure). The profile is schema-forced, so this mainly catches a dropped dimension or a leaked key.
 if (!validation.ok) {
   log(`Alpha's profile failed validation (${validation.errors.length} issue(s)) — one re-ask with the errors`)
+  await lore('gauge.profile_reask', `Profile rejected — ${validation.errors.length} validation issue(s); one re-ask`, { issues: validation.errors.length }, 'The Assessment')
   res = await askAlpha('alpha:assess-retry',
     `\n\n<correction>Your previous profile was rejected: ${validation.errors.map((e) => e.message).join('; ')}. ` +
     `Return EXACTLY D1..D8, each { score: 0|1|2, evidence: nonempty quote } — no extra keys inside the profile object.</correction>`)
@@ -252,6 +271,7 @@ let degraded = false
 if (!validation.ok) {
   degraded = true
   log(`WARNING: Alpha's profile still invalid after a re-ask — falling back to a conservative all-mid profile (posture errs toward more scrutiny).`)
+  await lore('gauge.profile_fallback', `Profile invalid after re-ask — conservative all-mid fallback; the posture errs toward more scrutiny`, null, 'The Assessment')
   profile = {}
   for (const k of DIM_KEYS) profile[k] = { score: 1, evidence: 'CONSERVATIVE DEFAULT — assessor produced no valid profile; scored mid (1) so posture errs toward scrutiny.' }
 }
@@ -271,6 +291,7 @@ if (!degraded && profile.D8.score === 2) {
       : `You score this independently via ${CODEX_MODEL} (cross-family) using 'codex exec': TRANSLATE the brief into a Codex-native prompt (do not forward it verbatim), force the flat shape with the reasoning field FIRST (~50 words) then the profile via --output-schema (this codex ordering OVERRIDES the payload-first note in the brief below), pipe via stdin. If ${CODEX_MODEL} is unavailable retry with -m ${CODEX_FALLBACK}; if codex yields nothing usable, score directly.`)
     : `You are a FRESH, independent second reader — do NOT see or anchor on any prior scoring. Score the profile from the inputs alone.`
   log('Failure penalty is maximal (D8=2) — a second independent scorer cross-checks the profile')
+  await lore('gauge.second_scorer', `Failure penalty maximal (D8=2) — a second scorer takes the measure again (${codexAvailable ? 'cross-family' : 'fresh reader'})`, { d8: 2, scorer: codexAvailable ? 'cross-family' : 'fresh' }, 'The Assessment')
   const second = await agent(
     (codexAvailable ? '' : assessorVoice) +
     `<cross_scoring>${crossHowto}</cross_scoring>\n\n` + assessBrief,
@@ -321,6 +342,8 @@ phase('The Ledger')
 const postureData = { posture: post, profile, override_applied: postureOverride, source: degraded ? 'conservative_default' : (secondScored ? 'two_scorer_max_reconcile' : 'single_scorer') }
 if (pluginRoot) await ledger('posture_set', postureData, 'The Ledger')
 else log(`pluginRoot absent — posture not ledgered to events.jsonl. posture_set data: ${JSON.stringify(postureData)}`)
+// gauge.posture_set (keystone): the posture is ledgered — the whole gauge stage in one dispatch.
+await lore('gauge.posture_set', `Eight readings, one posture — planning=${post.planning} · slices ${post.slice_budget_hours}h · review ${post.review.ui_effort_base}`, { planning: post.planning, slice_budget_hours: post.slice_budget_hours, ui_effort_base: post.review.ui_effort_base }, 'The Ledger')
 // §3.5 stage bracket (P3.6 T4): the gauge stage completes — the posture is set. stage_completed
 // bumps the projection to 'research' (STAGE_ORDER); like the entry bracket it degrades to a log line.
 if (pluginRoot) await ledger('stage_completed', {}, 'The Ledger')

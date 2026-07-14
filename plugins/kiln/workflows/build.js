@@ -1280,6 +1280,21 @@ async function ledger(type, data, phaseName) {
   )
 }
 
+// ── Lore beats (C1 doctrine §4): a forge/anvil dispatch at the moment a fact becomes true, carried by
+//    the ledger to the operator's transcript between the banners (note{kind:'lore'}; deterministic
+//    <stage>.<beat> key; args short scalars capped at 80 by the caller; text ≤ 160). PRESENTATION,
+//    null-keep: pluginRoot absent ⇒ a plain log() line, never a stage failure (build only reaches a
+//    beat past the §3.4 floor gate, so pluginRoot is always present here — the guard is belt). ──
+const LORE_MAX = 160
+const oneLine = (s, cap = LORE_MAX) => String(s).replace(/[\x00-\x1f\x7f]+/g, ' ').slice(0, cap)
+// args are bound HERE (F-1): every string value is capped at 80 mechanically, so a beat can never
+// leak an unbounded project-controlled string into the ledger even if a call site forgets to cap.
+const boundArgs = (a) => { const o = {}; for (const [k, v] of Object.entries(a)) o[k] = typeof v === 'string' ? oneLine(v, 80) : v; return o }
+const lore = (key, text, args, phaseName) =>
+  pluginRoot
+    ? ledger('note', { kind: 'lore', key, text: oneLine(text), ...(args ? { args: boundArgs(args) } : {}) }, phaseName)
+    : log(oneLine(text))
+
 // ── Stage-level browser sweeps (BLUEPRINT §7 / discipline-spec lifecycle step 3, tasks.md T2.3) —
 //    the OUTER bracket around the whole build stage. The browser is a subprocess with a deadline,
 //    never a service: kiln-law already brackets each probe-EXECUTING run with its own per-run
@@ -1424,7 +1439,7 @@ let pipelinedPlan = null
 //    turned green, so regressions are observed, not assumed). Returns the review verdict object
 //    (the workflow's own autoReject/lawRedReject for tamper/stale/red/uncommitted — no reviewer
 //    call is spent on those). ──
-async function evidencedReview(m, surf, slice, sliceId, build, fix, escalated, reviewerName, lawCtx, prov) {
+async function evidencedReview(m, surf, slice, sliceId, build, fix, escalated, reviewerName, lawCtx, prov, beatGuard) {
   // Commit-before-review (unchanged from v2): an uncommitted slice would anchor evidence and
   // review to a stale HEAD. Auto-reject without spending runner or review calls.
   if (build && build.committed === false) {
@@ -1477,6 +1492,14 @@ async function evidencedReview(m, surf, slice, sliceId, build, fix, escalated, r
     // event is LEDGERED, and the fix brief names exactly which locked path was touched.
     log(`${m.id} ${sliceId}: TAMPER — ${gate.reasons.join('; ')} — auto-reject, no reviewer spawned`)
     await ledger('tamper_auto_reject', { milestone: m.id, slice: sliceId, fix, tamper_paths: gate.tamper_paths, reasons: gate.reasons }, 'The Trial')
+    // build.tamper (keystone): the lock does not match the Law — auto-reject, mechanical, no reviewer.
+    // Latched to ONE beat per slice via beatGuard (F-3, grain rule 8: beats fire per OUTCOME, never
+    // per attempt) — the per-attempt tamper_auto_reject LEDGER above still fires every time, so the
+    // audit trail stays complete; only the operator-facing beat coalesces to the slice.
+    if (!(beatGuard && beatGuard.tamperFired)) {
+      if (beatGuard) beatGuard.tamperFired = true
+      await lore('build.tamper', `TAMPER — the lock does not match the Law [${oneLine(gate.reasons.join('; '), 80)}]; auto-reject, no reviewer seated`, { slice: sliceId, reasons: oneLine(gate.reasons.join('; '), 80) }, 'The Trial')
+    }
     const named = gate.tamper_paths.length ? gate.tamper_paths : ['(kiln-law exited 2 without naming paths — run verify manually to identify the lock)']
     return tag(autoReject(named.map((p) => `Locked Law path touched: ${p} — the Law is immutable after lock (§5.1). Revert every change to locked paths and rebuild without touching them; ADD new tests elsewhere instead.`)))
   }
@@ -1512,7 +1535,10 @@ async function evidencedReview(m, surf, slice, sliceId, build, fix, escalated, r
 //    'proceed' refuses the milestone with gate-only-on-red; a clean 'proceed' routes to Judgment. ──
 async function gateOnlyTrial(m, surf, mScIds) {
   phase('The Trial')
-  log(`${spin('law', 0)} — ${m.id} gate-only Law check over ${mScIds.length} SC(s) [${mScIds.join(', ')}]`)
+  // SPIN rotates on the milestone index (C1 §6): milestoneIndex is a module-scope counter set by the
+  // OUTER loop before this call, so the `law` array (which genuinely rotates at the slice trial) does
+  // not sit dead on 0 here either.
+  log(`${spin('law', milestoneIndex)} — ${m.id} gate-only Law check over ${mScIds.length} SC(s) [${mScIds.join(', ')}]`)
   const lawCtx = { gateOnly: true, flips: [], only: mScIds }
   const runner = await agent(runnerPrompt(null, lawCtx, null), { label: loreLabel('asimov', 'runner', `${m.id}:gate-only`), phase: 'The Trial', model: runnerModel, schema: RUNNER_SCHEMA })
   let fresh = null
@@ -1562,6 +1588,8 @@ if (!lawChecks.length) {
   return { built: [], passed: [], all_passed: false, law_gated: false, split_required: [], reason: 'law.json missing or unlocked — the build spine never runs against unlocked gates' }
 }
 log(`The Law: ${lawChecks.length} locked check(s) across ${[...new Set(lawChecks.map((c) => c.milestone))].length} milestone(s)`)
+// build.law_read (volume): the locked Law is loaded — the contract every slice is judged against.
+await lore('build.law_read', `The Law is read — ${lawChecks.length} locked check(s) across ${[...new Set(lawChecks.map((c) => c.milestone))].length} milestone(s)`, { checks: lawChecks.length, milestones: [...new Set(lawChecks.map((c) => c.milestone))].length }, 'The Forge Heats')
 // D2 (§9 velocity): the probe-kind SC ids from the locked Law manifest — a failed probe left real
 // DOM/console/screenshot evidence on disk, and its reject brief names those deterministic paths.
 const probeScIds = new Set(lawChecks.filter((c) => c.kind === 'probe').map((c) => c.id))
@@ -1634,6 +1662,8 @@ for (const m of milestones) {
   const { buildModel: bModel } = routing(surf)
   const [builderName, reviewerName] = pickDuo(surf, milestoneIndex)
   log(`━━ Milestone ${m.id}: ${m.title} [surface=${surf}] — \`${builderName}\` builds, \`${reviewerName}\` reviews ━━`)
+  // build.anvil (keystone): the milestone opens — the duo takes the forge.
+  await lore('build.anvil', `${m.id} takes the anvil — \`${builderName}\` strikes, \`${reviewerName}\` judges`, { milestone: m.id, builder: builderName, reviewer: reviewerName }, 'The Forge Heats')
   // F3 provenance collector: every gate leg in this milestone (slice reviews, the tribunal analysts,
   // the judge, the goal-backward audit) records {requested_model, actual_model, fallback_reason,
   // classification} into a fresh sink; they collect here and ride the EXISTING gate_decision ledger
@@ -1683,6 +1713,8 @@ for (const m of milestones) {
       continue
     }
     log(`${m.id}: gate-only Law GREEN over the completed build — routing to the FULL tribunal (conservative; prior slice count unknown to a fresh session)`)
+    // build.gate_only (volume): a starved gate re-ran green over the completed build.
+    await lore('build.gate_only', `${m.id} — gate-only Law green over the completed build; routing to the full tribunal`, { milestone: m.id }, 'The Trial')
     gateOnlyGreen = true
     forceTribunal = true
   } else {
@@ -1726,6 +1758,8 @@ for (const m of milestones) {
   }
   let queue = firstPlan.planned
   log(`${m.id}: ${queue.length} slice(s) planned${usedPipeline ? ' (pipelined)' : ''} — [${queue.map((s) => s.sc_ids.join('+')).join(' | ')}]`)
+  // build.cut_scored (volume): the milestone's whole slice list is planned in one take.
+  await lore('build.cut_scored', `${m.id}: the cut is scored — ${queue.length} slice(s)${usedPipeline ? ' (pipelined)' : ''} [${oneLine(queue.map((s) => s.sc_ids.join('+')).join(' | '), 80)}]`, { milestone: m.id, slices: queue.length }, 'Scoring the Cut')
 
   // ── INNER loop over the planned queue (slices/mBuild/mReview/replanned/planAborted/cappedOut are
   //    the hoisted milestone-scope state; greenScIds + qi are local to this Forging branch) ──
@@ -1745,6 +1779,8 @@ for (const m of milestones) {
         // ONE fresh slice-plan call for the remainder (ledgered) — the milestone's single replan.
         replanned = true
         log(`${m.id} s${qi}: confirm says REPLAN (${conf.reason || 'state drift'}) — ONE fresh slice plan for the remainder`)
+        // build.replan (volume): live state drifted from the plan — one fresh cut of the remainder.
+        await lore('build.replan', `${m.id} s${qi} — state drift (${oneLine(conf.reason || 'unspecified', 80)}); one fresh slice plan for the remainder`, { milestone: m.id, slice: `${m.id}:s${qi}` }, 'Scoring the Cut')
         const flipped = slices.flatMap((s) => s.sc_ids)
         const remainingScs = mScs.filter((c) => !flipped.includes(c.id))
         await ledger('slice_plan_replanned', { milestone: m.id, at_slice: qi, reason: conf.reason || 'state drift', remaining_sc_ids: remainingScs.map((c) => c.id) }, 'Scoring the Cut')
@@ -1790,8 +1826,9 @@ for (const m of milestones) {
     let firstPassGreen = false
     const rejectionClasses = []      // D5 telemetry: the class of each rejection, in order
     const sliceReviewProv = {} // the DECISIVE (last) review's provenance for this slice
+    const tamperGuard = { tamperFired: false } // F-3: latch build.tamper to ONE beat per slice across all fix attempts + the repair re-trial
     for (let fix = 0; fix <= MAX_REVIEW_FIXES + (repairCapExtension ? 1 : 0); fix++) {
-      mReview = await evidencedReview(m, surf, slice, sliceId, mBuild, fix, escalated, reviewerName, lawCtx, sliceReviewProv)
+      mReview = await evidencedReview(m, surf, slice, sliceId, mBuild, fix, escalated, reviewerName, lawCtx, sliceReviewProv, tamperGuard)
       if (approvedOf(mReview)) { if (fix === 0) firstPassGreen = true; break }
       // The master signal (§3.3): only LOGICAL rejections move the ratchet; mechanical/process
       // failures (tamper, stale evidence, uncommitted, hygiene findings) never escalate, and the
@@ -1821,7 +1858,7 @@ for (const m of milestones) {
         const repeatKind = curFingerprint.class === 'mixed' ? 'mixed (infra+assertion)' : 'infra'
         log(`${m.id} ${sliceId}: identical ${repeatKind} failure twice [${curFingerprint.signature}] — environment repeat; re-running the trial ONCE with NO builder change (repairing the environment, never burning a builder attempt into an unchanged broken environment)`)
         await ledger('posture_escalated', { milestone: m.id, slice: sliceId, signal: 'environment_repeat', action: 'environment_repair', changes: [], fingerprint: curFingerprint.signature, fingerprint_class: curFingerprint.class, rejections: logicalRejections }, 'The Trial')
-        mReview = await evidencedReview(m, surf, slice, sliceId, mBuild, fix, escalated, reviewerName, lawCtx, sliceReviewProv)
+        mReview = await evidencedReview(m, surf, slice, sliceId, mBuild, fix, escalated, reviewerName, lawCtx, sliceReviewProv, tamperGuard)
         if (approvedOf(mReview)) break // the repeat CLEARED with no code change — it WAS environmental noise
         const repairFp = fpOrNull(mReview && mReview.fingerprint)
         prevFingerprint = repairFp
@@ -1841,6 +1878,11 @@ for (const m of milestones) {
             log(`${m.id} ${sliceId}: the environment-repair trial reproduced the identical infra failure — closing the slice BLOCKED (class environment); the conductor/operator repairs the ENVIRONMENT, not the code`)
           }
           await ledger('posture_escalated', { milestone: m.id, slice: sliceId, signal: 'environment_repeat', action: 'environment_blocked', changes: [], fingerprint: curFingerprint.signature, fingerprint_class: environmentClass, unresolved_assertions: environmentAssertions, rejections: logicalRejections }, 'The Trial')
+          // build.slice_blocked (keystone): an environment/mixed failure reproduced with no code change.
+          await lore('build.slice_blocked', environmentClass === 'mixed'
+            ? `${m.id} s${qi} BLOCKED (class=mixed) — environment repair owed AND assertions unresolved; code work remains`
+            : `${m.id} s${qi} BLOCKED (class=environment) — repair the environment, not the code`,
+            { slice: sliceId, class: environmentClass === 'mixed' ? 'mixed' : 'environment' }, 'The Trial')
           break
         }
         // The fingerprint MOVED (or the Law cleared and the reviewer rejected on fresh grounds) —
@@ -1865,12 +1907,16 @@ for (const m of milestones) {
         splitRequired = true
         log(`${m.id} ${sliceId}: ${logicalRejections} logical rejection(s) — SPLIT REQUIRED; stopping this slice and moving on (the conductor/operator decides the split).`)
         await ledger('posture_escalated', { milestone: m.id, slice: sliceId, signal: esc.reason.signal, action: esc.reason.action, changes: esc.reason.changes, rejections: logicalRejections }, 'The Trial')
+        // build.split_required (keystone): the split threshold — an operator decision, never silent.
+        await lore('build.split_required', `${m.id} s${qi} stops — ${logicalRejections} logical rejections; SPLIT REQUIRED, the operator decides`, { slice: sliceId, rejections: logicalRejections }, 'The Trial')
         break
       }
       if (esc.reason.action === 'escalate_feedback_source' && !escalated) {
         escalated = true
         log(`${m.id} ${sliceId}: ${logicalRejections} logical rejection(s) — escalating the FEEDBACK SOURCE (${codexAvailable ? 'reviewer family swap' : 'fresh-context stronger effort'}), not the retry count`)
         await ledger('posture_escalated', { milestone: m.id, slice: sliceId, signal: esc.reason.signal, action: esc.reason.action, changes: esc.reason.changes, rejections: logicalRejections }, 'The Trial')
+        // build.escalated (volume): the stuck loop gets different eyes — the feedback source escalates.
+        await lore('build.escalated', `${m.id} s${qi} — ${logicalRejections} logical rejection(s); escalating the feedback source (${codexAvailable ? 'family swap' : 'stronger effort'})`, { slice: sliceId, rejections: logicalRejections }, 'The Trial')
       }
       // The fix cap — with the WSD-r2 f2 exception: a moved repair observation at the cap still
       // admits its ONE promised correction (the observation consumed no builder attempt, so the
@@ -1912,6 +1958,8 @@ for (const m of milestones) {
       fingerprint: prevFingerprint ? prevFingerprint.signature : null,
       first_pass_green: firstPassGreen, environment_blocked: environmentBlocked, split: splitRequired,
     }, 'The Trial')
+    // build.slice_sealed (keystone — the heartbeat): the slice committed, gate green, review approved.
+    if (approvedOf(mReview)) await lore('build.slice_sealed', `${m.id} s${qi} sealed — flips [${oneLine(slice.sc_ids.join(', '), 80)}] · ${firstPassGreen ? 'first strike true' : `${attempts - 1} fix(es)`}`, { slice: sliceId, flips: oneLine(slice.sc_ids.join(', '), 80), first_pass: firstPassGreen }, 'The Trial')
     qi++
   }
   if (cappedOut) log(`${m.id}: hit the ${MAX_SLICES_PER_MILESTONE}-slice cap — building stopped; validate.js backstops the remainder.`)
@@ -1938,6 +1986,8 @@ for (const m of milestones) {
   phase('Judgment')
   let qa = 'QA_PASS'
   let qaFindings = []
+  let qaCycle = 0 // the correction cycle the gate resolved on (tribunal path); 0 on the single-slice/gate-only path — feeds the milestone-close beats
+
   const splitSlices = slices.filter((s) => s.split_required)
   // D1: an environment-blocked slice is a mechanical QA_FAIL exactly like a split — the milestone
   // cannot pass with an untrustworthy slice, and it must never spend the tribunal on a broken
@@ -2055,6 +2105,7 @@ for (const m of milestones) {
         goal = await auditOrNull(`${m.id}:c${c}`, reports[2], goalProvC)
         if (!goal) {
           qa = 'QA_FAIL'
+          qaCycle = c
           qaFindings = [GOAL_AUDIT_FAILURE, ...denzelReconcile(reports[0], reports[1]).summaryLines]
           log(`${m.id}: QA_FAIL — ${GOAL_AUDIT_FAILURE}`)
           break
@@ -2080,8 +2131,8 @@ for (const m of milestones) {
         v = decision.verdict
         log(`${m.id}: ${decision.reason}`)
       }
-      if (v === 'QA_PASS') { qa = 'QA_PASS'; log(`${m.id}: QA_PASS (milestone gate, cycle ${c})`); break }
-      if (c === MAX_TRIBUNAL_CORRECTION) { qa = 'QA_FAIL'; log(`${m.id}: QA_FAIL after ${c} correction(s) — escalating to validate`); break }
+      if (v === 'QA_PASS') { qa = 'QA_PASS'; qaCycle = c; log(`${m.id}: QA_PASS (milestone gate, cycle ${c})`); break }
+      if (c === MAX_TRIBUNAL_CORRECTION) { qa = 'QA_FAIL'; qaCycle = c; log(`${m.id}: QA_FAIL after ${c} correction(s) — escalating to validate`); break }
       // One corrective build + the SAME evidence-first trial (runner → gates → cross-family review),
       // then re-gate once. The correction is milestone-wide, so it maps to ALL milestone SCs —
       // and its trial's flip plan covers them all (already-green SCs fold into the regression
@@ -2099,7 +2150,7 @@ for (const m of milestones) {
       log(`${spin('build', 99)} — ${m.id} gate correction ${c + 1}`)
       mBuild = await agent(buildPrompt(m, surf, correctionSlice, `${m.id}:correct${c + 1}`, fixNote), { label: loreLabel(builderName, 'build', `${m.id}:correct${c + 1}`), phase: 'Forging', model: bModel, schema: BUILD_SCHEMA })
       const correctReviewProv = {}
-      mReview = (await evidencedReview(m, surf, correctionSlice, `${m.id}:correct${c + 1}`, mBuild, 0, false, reviewerName, { flips: mScIds, only: mScIds }, correctReviewProv)) || mReview
+      mReview = (await evidencedReview(m, surf, correctionSlice, `${m.id}:correct${c + 1}`, mBuild, 0, false, reviewerName, { flips: mScIds, only: mScIds }, correctReviewProv, { tamperFired: false })) || mReview
       gateProv.push({ gate: 'review', slice: `${m.id}:correct${c + 1}`, ...correctReviewProv })
       phase('Judgment')
     }
@@ -2160,6 +2211,10 @@ for (const m of milestones) {
     replanned,
     ...(gateOnly ? { gate_only: true } : {}),
   })
+  // build.milestone_sealed / build.milestone_fail (keystones): the §3.2 boundary verdict.
+  const remainingMilestones = milestones.length - 1 - milestoneIndex
+  if (qa === 'QA_PASS') await lore('build.milestone_sealed', `${m.id} falls — QA_PASS, cycle ${qaCycle}; ${remainingMilestones} milestone(s) stand`, { milestone: m.id, cycle: qaCycle, remaining: remainingMilestones }, 'Judgment')
+  else await lore('build.milestone_fail', `${m.id} holds the gate — QA_FAIL after ${qaCycle} correction(s); validate backstops`, { milestone: m.id, cycle: qaCycle }, 'Judgment')
 }
 
   const passed = results.filter((r) => r.qa === 'QA_PASS' && r.tests_green)
@@ -2171,6 +2226,8 @@ for (const m of milestones) {
   const envBlocks = splitLedger.filter((e) => e.class === 'environment')
   const mixedBlocks = splitLedger.filter((e) => e.class === 'mixed')
   log(`The orchestra takes a bow — ${passed.length}/${results.length} milestone(s) passed QA${codeSplits.length ? ` · ${codeSplits.length} slice(s) await an operator split decision` : ''}${envBlocks.length ? ` · ${envBlocks.length} slice(s) blocked on ENVIRONMENT repair (not code)` : ''}${mixedBlocks.length ? ` · ${mixedBlocks.length} slice(s) blocked MIXED (environment repair + unresolved assertions still owed code work)` : ''}`)
+  // build.bow (keystone): the forge stage closes — the honest tally, with straight tails.
+  await lore('build.bow', `The orchestra takes a bow — ${passed.length}/${results.length} milestone(s) passed QA${codeSplits.length ? ` · ${codeSplits.length} split(s) await the operator` : ''}${envBlocks.length ? ` · ${envBlocks.length} env-blocked` : ''}${mixedBlocks.length ? ` · ${mixedBlocks.length} mixed-blocked` : ''}`, { passed: passed.length, total: results.length, splits: codeSplits.length, env_blocked: envBlocks.length, mixed_blocked: mixedBlocks.length }, 'Judgment')
   // §3.5 stage bracket (P3.6 T4): the build stage COMPLETES only when every milestone passed its
   // gate. A QA_FAIL / refusal / gate-only-on-red leaves the projection at 'build' (accurate — the
   // conductor re-enters via the correction loop or a gate-only retry). Fail-open like every ledger leg.

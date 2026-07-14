@@ -165,3 +165,73 @@ test('D5 slice telemetry: build emits note{kind:slice_telemetry} with the requir
     assert.ok(!/Date\.now|Math\.random|elapsed|tokens/.test(block), `${dir}: telemetry carries NO clock/token fields (workflow determinism forbids clocks)`)
   }
 })
+
+// ── C1 lore beats (doctrine §4/§5): the sixth register — note{kind:'lore'} dispatches carried to the
+//    operator's transcript. The event TYPE is the pre-existing CORE 'note' (WORKFLOW_TYPES unchanged);
+//    this guards the BEAT layer the same way :155 guards slice_telemetry (regex over the workflow
+//    files) so the catalog can't silently rot: every workflow emits ≥1 beat, keys are the plan's
+//    deterministic <stage>.<beat_name>, src and generated agree, and NO clock/entropy leaks into a
+//    beat. NOTE (per the doctrine) the determinism guard is Date.now|Math.random ONLY — NOT
+//    elapsed|tokens, because beats legitimately say "design tokens". ──
+const WORKFLOW_FILES = ['gauge.js', 'vision.js', 'research.js', 'architecture.js', 'build.js', 'validate.js', 'report.js', 'mapping.js']
+// the lore() CALL keys — robust to nested parens/strings (it only reads up to the first quoted key).
+const loreKeys = (text) => {
+  const re = /\blore\(\s*'([^']*)'/g
+  const out = []
+  let m
+  while ((m = re.exec(text)) !== null) out.push(m[1])
+  return out
+}
+// each lore(...) call, extracted by BALANCED parens (handles `${oneLine(x, 80)}` interpolations and
+// the nested `${a ? 'x' : `y`}` template in build.slice_sealed) so the determinism scan is precise.
+const loreCalls = (text) => {
+  const calls = []
+  const re = /\blore\(/g
+  let m
+  while ((m = re.exec(text)) !== null) {
+    let i = m.index + m[0].length, depth = 1, inStr = null, esc = false
+    for (; i < text.length && depth > 0; i++) {
+      const c = text[i]
+      if (esc) { esc = false; continue }
+      if (inStr) {
+        if (c === '\\') esc = true
+        else if (c === inStr) inStr = null
+      } else if (c === "'" || c === '"' || c === '`') inStr = c
+      else if (c === '(') depth++
+      else if (c === ')') depth--
+    }
+    calls.push(text.slice(m.index, i))
+  }
+  return calls
+}
+
+test('C1 lore beats: every workflow emits ≥1 beat, keys are <stage>.<beat_name>, src and generated agree', () => {
+  for (const f of WORKFLOW_FILES) {
+    const srcKeys = loreKeys(readFileSync(join(SRC_DIR, f), 'utf8'))
+    const genKeys = loreKeys(readFileSync(join(GEN_DIR, f), 'utf8'))
+    assert.ok(srcKeys.length >= 1, `${f}: at least one lore() beat must exist — the catalog cannot silently rot`)
+    for (const k of srcKeys) assert.match(k, /^[a-z]+\.[a-z_]+$/, `${f}: lore key '${k}' must be <stage>.<beat_name>`)
+    assert.deepEqual([...new Set(srcKeys)].sort(), [...new Set(genKeys)].sort(), `${f}: src and generated lore keys must agree (re-bundle)`)
+  }
+})
+
+test('C1 lore beats: the note{kind:lore} helper carries key + text, and NO clock/entropy leaks into any beat — src AND generated', () => {
+  for (const dir of [SRC_DIR, GEN_DIR]) {
+    for (const f of WORKFLOW_FILES) {
+      const src = readFileSync(join(dir, f), 'utf8')
+      // the helper payload (mirrors :155's shape): the note{kind:'lore', key, text: …} object. The
+      // trailing comma after 'lore' is load-bearing — it skips the doc-comment's `note{kind:'lore'}`.
+      const m = src.match(/kind:\s*'lore',[\s\S]{0,160}?\}/)
+      assert.ok(m, `${dir}/${f}: a note{kind:'lore', …} payload is present`)
+      assert.ok(/\bkey\b/.test(m[0]) && /\btext\b/.test(m[0]), `${dir}/${f}: the lore payload carries key + text`)
+      // F-1: the helper bounds args itself — the boundArgs fn is defined and applied to the payload,
+      // so a beat can never leak an unbounded project-controlled string even if a call site forgets.
+      assert.match(src, /const boundArgs = /, `${dir}/${f}: the boundArgs helper is defined (F-1)`)
+      assert.match(src, /args:\s*boundArgs\(args\)/, `${dir}/${f}: the lore helper applies boundArgs to args (F-1)`)
+      // determinism: no clocks/entropy in any composed beat (Date.now|Math.random ONLY — beats may say "design tokens").
+      for (const call of loreCalls(src)) {
+        assert.ok(!/Date\.now|Math\.random/.test(call), `${dir}/${f}: a lore beat must carry no clock/entropy — ${call.slice(0, 70)}`)
+      }
+    }
+  }
+})

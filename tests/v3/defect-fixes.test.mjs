@@ -54,9 +54,14 @@ test('fix 6 — research.js zero-topics path returns early with empty results an
 test('fix 7 — mapping + architecture verify claimed artifacts with a haiku checker and return missing[]', () => {
   for (const txt of [mapping, arch]) {
     assert.ok(txt.includes("model: 'haiku', schema: MISSING_SCHEMA"))
-    assert.ok(txt.includes('const missing = (existence && existence.missing) || []'))
     assert.ok(txt.includes('MISSING claimed artifact(s)'))
   }
+  // architecture keeps the v2 coalesce (its existence check is out of C1's scope).
+  assert.ok(arch.includes('const missing = (existence && existence.missing) || []'))
+  // mapping (C1 F-2): a mute/malformed existence report is NOT verification — the honest gate
+  // (mirroring report.js) withholds the completion rather than coalescing null to an empty verdict.
+  assert.ok(mapping.includes('const verified = existence && Array.isArray(existence.missing)'))
+  assert.ok(mapping.includes('const missing = verified ? existence.missing : []'))
   assert.ok(mapping.includes(', missing }'))
   // architecture returns missing[] as a top-level return key. v3.0.2 B4-1b-ii appends ONE additive
   // `council` field AFTER it (brief §h), so missing is no longer the return's last line — assert it is
