@@ -41,11 +41,21 @@ whether the tier is `express` or a facilitated tier).
 
 ## Per-stage arg contracts
 
-- **Brainstorm→VISION** (`vision.js`, launched from the Brainstorm handler) takes ONLY `kilnDir`,
+- **Brainstorm→VISION** (`vision.js`, launched from the Brainstorm handler) takes `kilnDir`,
   `projectPath`, and **`pluginRoot`** — `pluginRoot` is LOAD-BEARING here (it locates the `kiln-vision`
   gate CLI, this leg's floor and verdict; absence fails CLOSED with a named reason, never a gateless
   compile). It returns `{vision_valid, tier, counts, unresolved, visual_direction, …}`; you thread the
-  returned **`visual_direction`** into the Architecture launch as `visualDirection` (below).
+  returned **`visual_direction`** into the Architecture launch as `visualDirection` (below). It also
+  takes a **`runToken`** and a **`capabilityTier`** (`T1`|`T2`|`T3`|`T4` = the freshest capability
+  record's `tier`; see [The run token](#the-run-token)). When `capabilityTier === 'T4'` AND `codexAvailable`
+  AND a `runToken` is present, the compile is sealed by the **fidelity council** (B4-3 D4): a blind
+  Fable/Sol required pair rules whether `VISION.md` is a FAITHFUL compile of the brainstorm ledger
+  (nothing invented, nothing dropped) — dual-APPROVE ⇒ `vision_compiled` THEN `stage_completed` fire +
+  a `b43-vision/1` certificate rides the return; ANY other outcome ⇒ NEITHER seal event, the conductor
+  escalates with the honest terminal. Sub-T4 / `codexAvailable:false` / a missing `runToken` are
+  byte-preserved — except a **PROMISED** council (T4 + codex) launched WITHOUT a `runToken`, a
+  misconfigured conductor: the seal fails CLOSED (terminal DEGRADED, NEITHER seal event — never a silent
+  v3.0.1 compile).
 - **Gauge** takes `postureOverride`, `assessorModel`, `pluginRoot` (see the Gauge stage in the
   conductor). It is the source of the posture-derived args every downstream stage reads.
 - **Research** also takes **`topicsMax`** = `posture.research_topics_max` (always a
@@ -148,11 +158,38 @@ whether the tier is `express` or a facilitated tier).
   The **in-loop Tier-2 browser traversal is the v3 repeal of the v2 ban** — it runs INSIDE validate as
   one bounded, swept, lease-gated evaluator (the browser is a subprocess with a deadline, never a
   service); the out-of-loop `visual_qa_checklist` still ships as the optional operator re-check below.
+  Validate also takes a **`capabilityTier`** (`T1`|`T2`|`T3`|`T4`, same as Build/Architecture). When
+  `capabilityTier === 'T4'` AND `codexAvailable` AND a `runToken` is present, the **final ruling** goes
+  council-grade (B4-3 D2): a blind Fable/Sol required pair CONFIRMS or BLOCKS the assembled deterministic
+  verdict for EVERY computed verdict (PASS incl. prospective, PARTIAL, FAILED) — the monotonicity rail is
+  absolute (the council never alters `verdict`/`blocking`/`correction_tasks`; a deterministic red is
+  never greened). It gates ONE thing: `stage_completed` fires only on `VALIDATE_PASS` AND a RATIFIED
+  ruling (a PASS whose council BLOCKED/DEGRADED leaves the projection at `validate` — the deterministic
+  verdict STANDS, but completion is council-gated). The terminal + `b43-validate/1` certificate ride the
+  `validate_verdict` event's additive `council` field and the return. Also (B4-3 D3) `second_family_verified`
+  is now **receipt-based**: the posture-required second-family goal leg becomes a receipt-attested envelope
+  leg (gated on `codexAvailable` + `runToken`, NOT the tier) with an invocation-exact ledger cross-check;
+  the claim is `verified` only when `receipt_verified && ledger_verified` on top of the existing model
+  checks — codex-but-no-`runToken` keeps the prompt-delegated form with `verified:false` + a
+  `no_run_token_no_attestation` reason (honest, never an unattested claim), and `codexAvailable:false` is
+  never verified. Sub-T4 is byte-preserved; a **PROMISED** council (T4 + codex) with no `runToken` fails
+  CLOSED (terminal DEGRADED, no `stage_completed` even on a PASS — never a silent v3.0.1 completion).
 - **Report** (`report.js`) takes `kilnDir`, `projectPath`, and **`pluginRoot`** — `pluginRoot`
   locates the kiln-state CLI for the stage brackets (`stage_started` at entry; `stage_completed` on
   the genuine-success path ONLY — REPORT.md written, confirmed by an existence probe) and the C1 lore
-  beats; absence degrades each to a log line, never a stage failure (the report itself never depends
-  on it). A missing REPORT.md emits NO `stage_completed`, so the projection stays at `report`.
+  beats, AND (at T4) the `kiln-codex-receipt` CLI the signoff council binds its receipts through;
+  absence degrades the ledger legs to log lines, never a stage failure. A missing REPORT.md emits NO
+  `stage_completed`, so the projection stays at `report`. Report also takes a **`runToken`** and a
+  **`capabilityTier`**. When `capabilityTier === 'T4'` AND `codexAvailable` AND a `runToken` is present,
+  the **signoff** goes council-grade (B4-3 D5): Omega still AUTHORS the report (creative seat, unchanged),
+  then after the existence gate a blind Fable/Sol required pair rules whether REPORT.md tells the TRUTH
+  about the run's delivered vs outstanding artifacts — dual-APPROVE ⇒ `signed_off: true` + a `b43-report/1`
+  certificate in the return AND ONLY THEN `stage_completed` fires (the existence-gated completion is
+  council-gated at T4); ANY other outcome ⇒ `signed_off: false` + the honest terminal + frozen findings in
+  the return, the UNSIGNED report still returned, and NO `stage_completed` (the conductor's gated checkpoint
+  owns the block). Sub-T4 omits `signed_off` entirely (never a false claim) and the existence-gated
+  completion is byte-preserved; a **PROMISED** council with no `runToken` fails CLOSED (terminal DEGRADED,
+  `signed_off: false`, no completion).
 - **Mapping** (`mapping.js`, brownfield onboarding) takes `projectPath`, `kilnDir`, and
   **`pluginRoot`** — same shape: `pluginRoot` locates kiln-state for the stage brackets
   (`stage_started` at entry; `stage_completed` ONLY when `.kiln/docs/codebase-map.md` is on disk) and

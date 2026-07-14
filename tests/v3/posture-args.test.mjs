@@ -396,6 +396,20 @@ test('B4-2 D5: the generated build.js validates capabilityTier to T1..T4 (the ex
   assert.match(src, /councilMisconfigured = councilPromised && runTokenRaw == null/)
 })
 
+test('B4-3 D6: the generated validate/vision/report each validate capabilityTier to T1..T4 (the exact architecture.js:69 idiom) and gate their keystone council on it + codexAvailable + runToken', () => {
+  for (const name of ['validate', 'vision', 'report']) {
+    const src = readFileSync(fileURLToPath(new URL(`../../plugins/kiln/workflows/${name}.js`, import.meta.url)), 'utf8')
+    assert.match(src, /const capabilityTier = \(A\.capabilityTier === 'T1' \|\| A\.capabilityTier === 'T2' \|\| A\.capabilityTier === 'T3' \|\| A\.capabilityTier === 'T4'\) \? A\.capabilityTier : null/, `${name}: the T1..T4 validation idiom`)
+    assert.match(src, /const runTokenRaw = \(typeof A\.runToken === 'string' && A\.runToken\.length > 0\) \? A\.runToken : null/, `${name}: threads runTokenRaw`)
+    assert.match(src, /councilPromised = capabilityTier === 'T4' && codexAvailable/, `${name}: councilPromised = T4 + codex`)
+    assert.match(src, /councilCapable = councilPromised && runTokenRaw != null/, `${name}: councilCapable adds the runToken`)
+    assert.match(src, /councilMisconfigured = councilPromised && runTokenRaw == null/, `${name}: promised-but-tokenless is misconfigured`)
+    // the shared per-run receipts ledger + the b43 renderer are wired
+    assert.match(src, /const receiptsLedger = `\$\{kilnDir\}\/council\/receipts\.jsonl`/, `${name}: the shared receipts ledger`)
+    assert.ok(src.includes(`b43-${name}/1`), `${name}: the b43-${name}/1 renderer version`)
+  }
+})
+
 test('P6 T1: the load-bearing pluginRoot gates carry the FIX in their message (vision + build)', async () => {
   const VISION = fileURLToPath(new URL('../../plugins/kiln/workflows/vision.js', import.meta.url))
   const v = await runWorkflow(VISION, { kilnDir: '/tmp/nonexistent-kiln/.kiln', projectPath: '/tmp/nonexistent-kiln' }, () => null)

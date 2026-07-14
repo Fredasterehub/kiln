@@ -110,6 +110,257 @@ const scope = `${NO_WANDER} Exception: the built project at ${projectPath} is al
 // @inline:voice:MODEL_VOICE,voice
 // ── Codex model pins (CODEX_MODEL default + CODEX_FALLBACK, inlined from src/models.mjs) ──
 // @models
+// ── Twin Council pure core (B4-3 D1/D2/D3) — the SEALED 1b-ii/b42 call-site machinery, lifted to
+//    src/council.mjs and inlined here through the SAME @inline:council bundler contract build.js and
+//    architecture.js use (helpers, never copy-paste). Powers validate's T4 keystone: the final-ruling
+//    blind Fable/Sol pair over the ASSEMBLED deterministic verdict (D2) and the receipt-attested
+//    second-family attestation leg (D3). Every leg is DEFINED unconditionally but CALLED only on the
+//    councilCapable path — sub-T4 / no-codex / tokenless runs are byte-preserved v3.0.1. ──
+// @inline:council:COUNCIL_PROTOCOL_VERSION,sha256Hex,canonicalJson,claimTypeForClass,compareEvidence,validateReversal,councilSignature,verifySignature,validateRatification,twinRatified,buildCheckpoint,SHA64_RE,RATIFY_SCHEMA,envelopeSchema,CROSS_CHECK_SCHEMA,LEDGER_APPEND_SCHEMA,CANON_HASH_ONELINER,LEDGER_EXTRACT_ONELINER,councilTemplateHash,seatProv,solWrapperPlan,crossCheckOk,assembleRatifyCertificate,verdictShapeError
+
+// ── Twin Council gating (B4-3 D2/D3/D6; FC-1 tier-gating, 1b-ii precedent). Validate's final-ruling
+//    council + the receipt-based second-family attestation go council-grade ONLY when the capability
+//    record promised BOTH heads (T4 = fable + codex) AND the conductor minted a runToken. A PROMISED
+//    council missing its runToken is NOT a clean v3.0.1 run: the keystone ruling fails CLOSED (terminal
+//    DEGRADED; no stage_completed even on a VALIDATE_PASS — never a silent v3.0.1 completion). runTokenRaw
+//    is the RAW per-run token; it lives ONLY in the receipt-script argv (a trusted process boundary),
+//    never in any head-visible prompt/packet. capabilityTier is T1|T2|T3|T4; anything else ⇒ null. ──
+const runTokenRaw = (typeof A.runToken === 'string' && A.runToken.length > 0) ? A.runToken : null
+const capabilityTier = (A.capabilityTier === 'T1' || A.capabilityTier === 'T2' || A.capabilityTier === 'T3' || A.capabilityTier === 'T4') ? A.capabilityTier : null
+const councilPromised = capabilityTier === 'T4' && codexAvailable
+const councilCapable = councilPromised && runTokenRaw != null
+const councilMisconfigured = councilPromised && runTokenRaw == null
+if (councilMisconfigured) {
+  log('MISCONFIGURED CONDUCTOR — capability tier T4 with both heads reachable but NO runToken: validate\'s final-ruling council cannot bind its receipts/seed. The keystone ruling fails CLOSED (terminal DEGRADED; no stage_completed even on a VALIDATE_PASS — never a silent v3.0.1 completion). Relaunch with the per-run token to convene the council.')
+}
+// ONE receipts ledger SHARED with architecture/build (architecture.js:341-343) so the receipt script's
+// replay rejection spans every council invocation of the run; validate council artifacts live under
+// ${councilDir}. runTokenHash rides checkpoints only (never the raw token).
+const councilDir = `${kilnDir}/council/validate`
+const receiptsLedger = `${kilnDir}/council/receipts.jsonl`
+const runTokenHash = runTokenRaw != null ? sha256Hex(runTokenRaw) : null
+const COUNCIL_RENDERER_VALIDATE = 'b43-validate/1'
+// Fixed rubric/task (NO per-run interpolation, so the template hash is run-independent). The council
+// CONFIRMS or BLOCKS an assembled deterministic verdict — it never authors one (the monotonicity rail).
+const VALIDATE_RULING_RUBRIC =
+  'Rule the validate FINAL VERDICT on whether the ASSEMBLED deterministic ruling is HONEST and SOUND ' +
+  'against the transcribed evidence: (1) the PASS/PARTIAL/FAILED verdict genuinely follows from the ' +
+  'Law-run + suite exit codes, the per-criterion results, install_ok, and the recorded blocking findings; ' +
+  '(2) no blocking defect, unmet critical criterion, or unruled gate is being waved through; (3) for a UI ' +
+  'scope, the browser verdict matches the recorded traversal (a static-only UI verdict is never a clean ' +
+  'PASS). You CONFIRM or BLOCK an ASSEMBLED verdict — you NEVER author a different one; a deterministic red ' +
+  'is never yours to green. Every finding MUST be evidence-bound (a file/line, an executable check, or a ' +
+  'named evidence artifact in the record).'
+const VALIDATE_RULING_TASK =
+  'Render one blind verdict — APPROVE (the assembled verdict is honest and evidence-supported), BLOCK, or ' +
+  'NEITHER — on the validate final ruling against the rubric. You do not know who else is ruling. ' +
+  'divergence_selections is [] (no open divergences). Echo artifact_hash EXACTLY as given. A BLOCK or NEITHER ' +
+  'MUST carry at least one evidence-bound finding (finding_id unique, nonempty evidence_refs or a real ' +
+  'executable_check); an evidence-free verdict is invalid. changed_evidence is [] unless you reverse a prior block.'
+const councilTemplateHashValidate = councilTemplateHash({ rubric: VALIDATE_RULING_RUBRIC, ruling_task: VALIDATE_RULING_TASK, renderer: COUNCIL_RENDERER_VALIDATE })
+// GOAL_SECOND_PAYLOAD_SCHEMA (D3) — the receipt-attested second-family goal audit: codex runs
+// --sandbox read-only and CANNOT write goal-backward-final-second.md, so the report content rides
+// report_markdown (extracted by the wrapper via extractTo) alongside the overall/findings the
+// deterministic reconcile reads — the b42 Sol-analyst pattern exactly.
+const GOAL_SECOND_PAYLOAD_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    overall: { type: 'string', enum: ['pass', 'fail'], description: 'does the WHOLE deliverable genuinely deliver the VISION success criteria? \'fail\' MUST be backed by at least one critical or high finding' },
+    findings: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false,
+        properties: { text: { type: 'string' }, severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low'] } },
+        required: ['text', 'severity'],
+      },
+    },
+    report_file: { type: 'string' },
+    reasoning: { type: 'string', maxLength: 700 },
+    report_markdown: { type: 'string', description: 'the FULL goal-backward-final-second content (the wrapper writes it to disk; codex runs read-only and cannot write files)' },
+  },
+  required: ['overall', 'findings', 'report_markdown'],
+}
+// EVIDENCE_ANCHOR_SCHEMA / evidenceAnchorPrompt (b42 anchor pattern) — a Thoth transcription leg hashes
+// the NAMED evidence artifacts into a {path, sha256} manifest. A dead/garbled/partial anchor ⇒ the ruling
+// DEGRADES fail-closed — the certificate must never bind unhashed names; the anchor gates BEFORE the
+// record freezes.
+const EVIDENCE_ANCHOR_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: { reasoning: { type: 'string', maxLength: 400 }, files: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { path: { type: 'string' }, sha256: { type: 'string' } }, required: ['path', 'sha256'] } } },
+  required: ['files'],
+}
+const evidenceAnchorPrompt = (inputs) =>
+  `You are Thoth, the scribe — transcribe hashes, never judge, never fix.\n\n` +
+  `<task>Run (Bash): 'sha256sum ${inputs.join(' ')}'. Transcribe each input file's sha256 into files[] as {path, sha256} (VERBATIM, lowercase hex, the path exactly as given). Do not read file contents, do not write or fix anything.</task>`
+// crossCheckPrompt — the receipt-ledger cross-check transcription (thoth:receipt-check); mirrors
+// architecture/build. Every path argument is SHELL-QUOTED; neither one-liner carries a single quote.
+const crossCheckPrompt = (outFile, outputSha, sessionId) =>
+  `You are Thoth, the receipt cross-checker — transcribe, never compose, never judge. Run these three EXACT commands (Bash) and transcribe their output.\n\n` +
+  `<task>\n` +
+  `1. run EXACTLY: sha256sum "${outFile}" — output_sha256_disk = the 64-hex digest (the first field only).\n` +
+  `2. run EXACTLY: node -e '${CANON_HASH_ONELINER}' "${outFile}" — output_canonical_sha256 = its stdout (a 64-hex digest).\n` +
+  `3. run EXACTLY: node -e '${LEDGER_EXTRACT_ONELINER}' "${receiptsLedger}" "${outputSha}" "${sessionId}" — ledger = the { verified, reservation } JSON it prints (this leg's verified row + its reservation; nulls where unmatched).\n` +
+  `Emit output_sha256_disk, output_canonical_sha256, and the ledger object. Do not read the files for content, do not write or fix anything.</task>`
+// runSolCrossCheck — the structural→LEDGER-VERIFIED upgrade (Sol F1). A mute/garbled leg gets ONE
+// re-dispatch, then fails closed; crossCheckOk binds the whole INVOCATION-EXACT chain.
+const runSolCrossCheck = async (legLabel, keystone, phaseTag, outFile, sink, payload, phaseName) => {
+  const canon = sha256Hex(canonicalJson(payload))
+  const relayed = sink && sink.output_hash
+  const dispatch = () => agent(crossCheckPrompt(outFile, relayed, sink && sink.session_id), { label: `thoth:receipt-check:${legLabel}`, phase: phaseName, model: 'haiku', schema: CROSS_CHECK_SCHEMA })
+  let cc = await dispatch()
+  if (!(cc && cc.ledger)) cc = await dispatch()
+  if (!(cc && cc.ledger)) return { ledger_verified: false, reason: 'cross-check leg produced no ledger extract' }
+  const res = crossCheckOk(cc, { relayedOutputHash: relayed, canonicalHash: canon, sink, keystone, phaseTag, seat: 'sol', attempt: 1, runToken: runTokenRaw })
+  return res.ok
+    ? { ledger_verified: true, codex_receipt_hash: res.codex_receipt_hash, invocation_id: res.invocation_id }
+    : { ledger_verified: false, invocation_id: res.invocation_id, reason: res.reason }
+}
+// councilCheckpoint — a buildCheckpoint row via the stage ledger (note{kind:'council_state'}); FAIL-OPEN
+// telemetry (an append failure never fails the stage). councilRuling emits note{kind:'council_ruling'}.
+const councilReceipts = []
+const pushCouncilReceipt = (bucket, leg, sink, cross) => bucket.push({
+  leg, invocation_id: cross && cross.invocation_id ? cross.invocation_id : null,
+  receipt_verified: !!(sink && sink.receipt_verified), ledger_verified: !!(cross && cross.ledger_verified),
+  session_id: sink && sink.session_id != null ? sink.session_id : null, tokens_used: sink && sink.tokens_used != null ? sink.tokens_used : null,
+})
+const councilCheckpoint = async (fields) => {
+  try { await ledger('note', buildCheckpoint(fields)) }
+  catch (e) { log(`council checkpoint ${fields && fields.phase} not ledgered (non-fatal): ${e && e.message ? e.message : e}`) }
+}
+const councilRuling = async (data) => {
+  try { await ledger('note', { kind: 'council_ruling', ...data }) }
+  catch (e) { log(`council ruling not ledgered (non-fatal): ${e && e.message ? e.message : e}`) }
+}
+// runBlindPair — the sealed-before-exposed pair: Fable and receipt-attested Sol rule blind, in parallel,
+// over a given schema (xhigh, council-grade — D6). Sol death / invalid receipt / failed cross-check ⇒
+// degraded. Blindness rails: the fable prompt never mentions codex/receipt/session/Sol; the sol packet
+// never mentions fable or the run token. Returns { degraded, missing, rF, rS, sinkF, sinkS, solCross }.
+const runBlindPair = async (cfg) => {
+  const sinkF = {}, sinkS = {}
+  const plan = solWrapperPlan({ councilDir, pluginRoot, receiptsLedger, runToken: runTokenRaw, keystone: cfg.keystone, transportModel: CODEX_MODEL, phaseTag: cfg.phaseTag, attempt: 1, effort: 'xhigh', payloadSchema: cfg.schema, taskText: cfg.solTaskText, briefBody: cfg.solBrief, packetObj: cfg.solPacket })
+  const [rF, rS] = await parallel([
+    () => gateAgent(cfg.fablePrompt, { label: `fable:${cfg.legName}`, phase: cfg.phaseName, model: 'fable', effort: 'xhigh', twoHeads: 'required', schema: cfg.schema, provenance: sinkF }),
+    () => gateAgent(plan.prompt, { label: `sol:${cfg.legName}`, phase: cfg.phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(cfg.schema), provenance: sinkS }),
+  ])
+  let solCross = { ledger_verified: false }
+  if (rS != null && sinkS.receipt_verified === true) solCross = await runSolCrossCheck(`sol:${cfg.legName}`, cfg.keystone, cfg.phaseTag, plan.files.out, sinkS, rS, cfg.phaseName)
+  pushCouncilReceipt(councilReceipts, `sol:${cfg.legName}`, sinkS, solCross)
+  const solOk = rS != null && sinkS.receipt_verified === true && solCross.ledger_verified === true
+  if (rF == null || !solOk) {
+    const missing = rF == null && !solOk ? 'both' : (rF == null ? 'fable' : 'sol')
+    return { degraded: true, missing, rF, rS, sinkF, sinkS, solCross }
+  }
+  return { degraded: false, rF, rS, sinkF, sinkS, solCross }
+}
+// runValidateRuling (D2) — the REQUIRED blind Fable/Sol pair over the ASSEMBLED deterministic verdict
+// record, at T4, for EVERY computed verdict (PASS incl. prospective, PARTIAL, FAILED). The frozen record
+// IS the rendered artifact — no second render, so bundle_hash = plan_hash. Dual-APPROVE + valid ⇒ a
+// twin_ratified certificate; ANY other outcome ⇒ the DETERMINISTIC verdict STANDS UNALTERED with an
+// honest terminal (DEGRADED naming heads / BLOCKED with frozen findings). The monotonicity rail is
+// ABSOLUTE: this function returns council fields ONLY — v.verdict/blocking/correction_tasks are never
+// touched; the caller gates stage_completed on RATIFIED and rides the terminal on the records.
+const runValidateRuling = async (v, verdictInput, secondFamily, goalReportFiles) => {
+  const phaseName = 'The Verdict'
+  const keystone = 'validate_ruling'
+  const phaseTag = 'VALIDATE_RATIFY'
+  const namedEvidence = [reportFile, lawFile].concat(Array.isArray(goalReportFiles) ? goalReportFiles : [])
+  const anchor = await agent(evidenceAnchorPrompt(namedEvidence), { label: 'thoth:validate-anchor', phase: phaseName, model: 'haiku', schema: EVIDENCE_ANCHOR_SCHEMA })
+  const anchorFiles = (anchor && Array.isArray(anchor.files)) ? anchor.files.filter((f) => f && typeof f.path === 'string' && typeof f.sha256 === 'string' && SHA64_RE.test(f.sha256)) : []
+  const anchorPaths = anchorFiles.map((f) => f.path)
+  const anchorExact =
+    anchor && Array.isArray(anchor.files) && anchorFiles.length === anchor.files.length &&
+    anchorFiles.length === namedEvidence.length &&
+    new Set(anchorPaths).size === anchorFiles.length &&
+    namedEvidence.every((p) => anchorPaths.includes(p))
+  if (!anchorExact) {
+    await councilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: councilTemplateHashValidate, run_token_hash: runTokenHash, initial_ledger_seq: null, keystone_id: keystone, phase: 'DEGRADED', decision_bundle_hash: null, input_artifact_hashes: [], evidence_manifest_hash: null, anonymous_seat_artifact_hashes: {}, seat_provenance: { missing: 'evidence' }, codex_receipt_hash: null, status: 'sealed' })
+    await councilRuling({ keystone, phase: phaseTag, terminal: 'DEGRADED', reason: 'evidence-anchor' })
+    log('validate final-ruling evidence anchor DEGRADED — the certificate must never bind unhashed names; verdict fields UNCHANGED, stage_completed gated')
+    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: null, receipt_verified: false, ledger_verified: false }
+  }
+  const manifest = {}
+  for (const f of anchorFiles) manifest[f.path] = f.sha256
+  const evidenceRefs = Object.keys(manifest).sort().map((p) => ({ path: p, sha256: manifest[p] }))
+  const evidenceManifestHash = sha256Hex(canonicalJson(manifest))
+  const evidenceInputHashes = Object.keys(manifest).sort().map((k) => manifest[k])
+  // The FROZEN verdict record (§D2). Every field is a COPY of the deterministic assembly — the council
+  // rules this record, it can never alter it.
+  const record = {
+    verdict: v.verdict,
+    verification_class: v.verification_class,
+    browser_verdict: v.browser_verdict,
+    verdict_input: {
+      law_run_exit: verdictInput.law_run_exit,
+      suite_exit: verdictInput.suite_exit,
+      install_ok: verdictInput.install_ok,
+      criteria: (Array.isArray(verdictInput.criteria) ? verdictInput.criteria : []).map((c) => ({ id: c && c.id != null ? c.id : null, met: !!(c && c.met), critical: !(c && c.critical === false) })),
+      blocking_findings: Array.isArray(verdictInput.blocking_findings) ? verdictInput.blocking_findings : [],
+      unruled_gates: Array.isArray(verdictInput.unruled_gates) ? verdictInput.unruled_gates : [],
+      ui_scope: verdictInput.ui_scope === true,
+      browser_path: verdictInput.browser_path != null ? verdictInput.browser_path : '',
+      missing_creds: verdictInput.missing_creds === true,
+    },
+    second_family: { requested: !!(secondFamily && secondFamily.requested), verified: !!(secondFamily && secondFamily.verified), degraded: !!(secondFamily && secondFamily.degraded) },
+    evidence_refs: evidenceRefs,
+  }
+  const bundleHash = sha256Hex(canonicalJson(record))
+  const ckptBase = { protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: councilTemplateHashValidate, run_token_hash: runTokenHash, initial_ledger_seq: null, keystone_id: keystone, decision_bundle_hash: bundleHash, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash }
+  const recordJson = JSON.stringify(record)
+  const ratifyInputs =
+    `<inputs>\n- The deterministic verdict under ruling: ${v.verdict} (verification_class ${v.verification_class}, browser_verdict ${v.browser_verdict}).\n` +
+    `- The COMPLETE frozen verdict record you are ratifying (evidence_refs bind each NAMED artifact to its sha256):\n${recordJson}\n` +
+    `- The live repo + built app at ${projectPath}; read each evidence_refs path and confirm it matches its bound hash, then judge whether the assembled verdict is honest against the transcribed evidence.\n</inputs>`
+  const bindingLine = `Binding: artifact_hash = "${bundleHash}" (echo it VERBATIM). divergence_selections = [] (no open divergences this round). changed_evidence = [] unless you reverse a prior block.`
+  const fablePrompt =
+    `You are a council ratifier (validate final ruling) — rule the assembled deterministic verdict against the fixed rubric, blind and independent. You do not know who else is ruling.\n\n` +
+    `${ratifyInputs}\n\n<rubric>\n${VALIDATE_RULING_RUBRIC}\n</rubric>\n\n<binding>\n${bindingLine}\n</binding>\n<constraints>\n- Rule from the repo + the persisted deterministic evidence NAMED in the record's evidence_refs; NEVER launch a browser (the bounded Tier-2 traversal already ran; its verdict is in the record).\n</constraints>\n\n` +
+    `<task>${VALIDATE_RULING_TASK}\nEmit the evidence-bound findings + changed_evidence + divergence_selections FIRST, then the verdict (evidence-before-commit); reasoning is optional, last, and under 50 words. ${PAYLOAD_FIRST}</task>`
+  const solBrief = `${bindingLine}\nRubric:\n${VALIDATE_RULING_RUBRIC}\nRule read-only from the repo + the persisted deterministic evidence NAMED in the record's evidence_refs (each bound to its sha256); NEVER launch a browser.`
+  const pair = await runBlindPair({ keystone, phaseTag, legName: 'validate-ruling', fablePrompt, solTaskText: VALIDATE_RULING_TASK, solBrief, solPacket: { verdict_record: record, artifact_hash: bundleHash }, schema: RATIFY_SCHEMA, phaseName })
+  const seatHashes = (rF, rS) => ({ P0: sha256Hex(canonicalJson(rF)), P1: sha256Hex(canonicalJson(rS)) })
+  if (pair.degraded) {
+    await councilCheckpoint({ ...ckptBase, phase: 'DEGRADED', anonymous_seat_artifact_hashes: {}, seat_provenance: { missing: pair.missing }, codex_receipt_hash: null, status: 'sealed' })
+    await councilRuling({ keystone, phase: phaseTag, terminal: 'DEGRADED', missing: pair.missing })
+    log(`validate final-ruling council DEGRADED (${pair.missing}) — verdict fields UNCHANGED, stage_completed gated (never a single-head ruling)`)
+    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleHash, receipt_verified: !!(pair.sinkS && pair.sinkS.receipt_verified), ledger_verified: !!(pair.solCross && pair.solCross.ledger_verified) }
+  }
+  // b42-close validity logic EXACTLY: compute vF/vS + shapeF/shapeS FIRST; ANY invalid/shape-bad
+  // ratification ⇒ DEGRADED naming the head(s) (never BLOCKED, never a frozen-findings carry from an
+  // invalid verdict); ONLY live, VALID BLOCK/NEITHER verdicts ⇒ BLOCKED with frozen findings.
+  const vF = validateRatification(pair.rF, { bundle_hash: bundleHash, open_divergence_ids: [] })
+  const vS = validateRatification(pair.rS, { bundle_hash: bundleHash, open_divergence_ids: [] })
+  const shapeF = verdictShapeError(pair.rF), shapeS = verdictShapeError(pair.rS)
+  const fBad = !vF.valid || !!shapeF, sBad = !vS.valid || !!shapeS
+  if (fBad || sBad) {
+    const missing = fBad && sBad ? 'both' : (fBad ? 'fable' : 'sol')
+    const detail = [fBad ? `fable${shapeF ? `: ${shapeF}` : ''}` : null, sBad ? `sol${shapeS ? `: ${shapeS}` : ''}` : null].filter(Boolean).join('; ')
+    await councilCheckpoint({ ...ckptBase, phase: 'DEGRADED', anonymous_seat_artifact_hashes: {}, seat_provenance: { missing, reason: 'invalid ratification' }, codex_receipt_hash: null, status: 'sealed' })
+    await councilRuling({ keystone, phase: phaseTag, terminal: 'DEGRADED', missing, invalid: { fable: fBad, sol: sBad } })
+    log(`validate final-ruling ratification INVALID (${detail}) — DEGRADED (never mislabeled BLOCKED); verdict fields UNCHANGED, stage_completed gated`)
+    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleHash, receipt_verified: true, ledger_verified: true }
+  }
+  if (pair.rF.verdict === 'APPROVE' && pair.rS.verdict === 'APPROVE') {
+    const cert = assembleRatifyCertificate({ rF: pair.rF, rS: pair.rS, provF: seatProv(pair.sinkF, 'fable'), provS: seatProv(pair.sinkS, 'sol'), context: { bundle_hash: bundleHash, renderer_version: COUNCIL_RENDERER_VALIDATE, plan_hash: bundleHash, evidence_manifest_hash: evidenceManifestHash, protocol_version: COUNCIL_PROTOCOL_VERSION, seat_provenance: null } })
+    if (!cert.ok) {
+      await councilCheckpoint({ ...ckptBase, phase: 'DEGRADED', anonymous_seat_artifact_hashes: {}, seat_provenance: { reason: 'certificate defect' }, codex_receipt_hash: null, status: 'sealed' })
+      await councilRuling({ keystone, phase: phaseTag, terminal: 'DEGRADED', reason: 'certificate defect' })
+      log(`validate final-ruling certificate could not seal (${cert.reason}) — DEGRADED, stage_completed gated`)
+      return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleHash, receipt_verified: true, ledger_verified: true }
+    }
+    await councilCheckpoint({ ...ckptBase, phase: 'VALIDATE_RATIFY_SEALED', anonymous_seat_artifact_hashes: seatHashes(pair.rF, pair.rS), seat_provenance: { P0: seatProv(pair.sinkF, 'fable'), P1: seatProv(pair.sinkS, 'sol') }, codex_receipt_hash: pair.solCross.codex_receipt_hash, status: 'sealed' })
+    await councilCheckpoint({ ...ckptBase, phase: 'RATIFIED', anonymous_seat_artifact_hashes: {}, seat_provenance: {}, codex_receipt_hash: null, status: 'sealed' })
+    await councilRuling({ keystone, phase: phaseTag, terminal: 'RATIFIED', bundle_hash: bundleHash, certificate: cert.certificate })
+    log(`TWIN COUNCIL RATIFIED the validate final ruling (bundle ${String(bundleHash).slice(0, 12)}…) — the ${v.verdict} verdict carries two valid head signatures`)
+    return { terminal: 'RATIFIED', certificate: cert.certificate, findings: [], bundle_hash: bundleHash, receipt_verified: true, ledger_verified: true }
+  }
+  // Both valid but not dual-APPROVE ⇒ a live, VALID BLOCK/NEITHER ⇒ honest BLOCKED; FREEZE the findings.
+  const frozen = [...(pair.rF.verdict === 'BLOCK' || pair.rF.verdict === 'NEITHER' ? (Array.isArray(pair.rF.findings) ? pair.rF.findings : []) : []), ...(pair.rS.verdict === 'BLOCK' || pair.rS.verdict === 'NEITHER' ? (Array.isArray(pair.rS.findings) ? pair.rS.findings : []) : [])]
+  await councilCheckpoint({ ...ckptBase, phase: 'VALIDATE_RATIFY_SEALED', anonymous_seat_artifact_hashes: seatHashes(pair.rF, pair.rS), seat_provenance: { P0: seatProv(pair.sinkF, 'fable'), P1: seatProv(pair.sinkS, 'sol') }, codex_receipt_hash: pair.solCross.codex_receipt_hash, status: 'sealed' })
+  await councilRuling({ keystone, phase: phaseTag, terminal: 'BLOCKED', verdicts: { fable: pair.rF.verdict, sol: pair.rS.verdict }, findings: frozen })
+  log(`validate final-ruling council BLOCKED (fable ${pair.rF.verdict}, sol ${pair.rS.verdict}) — verdict fields UNCHANGED, stage_completed gated; ${frozen.length} finding(s) frozen onto the records`)
+  return { terminal: 'BLOCKED', certificate: null, findings: frozen, bundle_hash: bundleHash, receipt_verified: true, ledger_verified: true }
+}
+
 // SPIN flattened per C1 §6 — dead single-shot entries removed, the best writing promoted into the
 // beats below: 'Intent versus reality' → validate.fanout, 'The traversal sweeps its own ashes' →
 // validate.traversal_done; the duplicate transition/phase-title lines dropped; goal keeps its two
@@ -642,19 +893,52 @@ try {
   phase('Goal Backward')
   log(`${spin('goal', 0)} — judging the whole deliverable backward from the VISION`)
   const goalLegs = [() => gateAgent(goalPrompt(), { label: 'aristotle:goal-final', phase: 'Goal Backward', model: 'opus', schema: GOAL_SCHEMA, provenance: goalProv })]
-  // D8=2 second_family: a second cross-family auditor over the same deliverable (codex when present).
+  // D3 (receipt-based second-family attestation): the D8=2 second cross-family auditor becomes a
+  // RECEIPT-ATTESTED envelope leg (solWrapperPlan + invocation-exact cross-check) when the posture asked
+  // for it AND codex is on board AND the conductor minted a runToken — a SINGLE-seat attestation, not a
+  // council (it gates on codex + token, NOT the T4 tier gate). With codex but NO runToken the leg keeps
+  // the CURRENT prompt-delegated form (verified=false + no_run_token_no_attestation below); no codex keeps
+  // the opus form (never verified — both legs would be opus). The wrapper mechanically extracts the report
+  // content (codex runs --sandbox read-only and cannot write the file) — the b42 analyst pattern exactly.
+  const attestSecond = posture.second_family && codexAvailable && runTokenRaw != null
+  let secondPlan = null
+  let secondFamilyLedgerVerified = false
   if (posture.second_family) {
-    goalLegs.push(() => gateAgent(
-      (codexAvailable
-        ? `You are the SECOND-FAMILY goal-backward auditor over the WHOLE deliverable, delegating to ${CODEX_MODEL} via 'codex exec' for a genuinely cross-family second judgment — run codex at model_reasoning_effort="high". ${codexGuideNote}If it errors, audit directly. Work BACKWARD from the VISION success criteria; do NOT read the first auditor's report — stay independent.\n\n`
-        : `You are the SECOND goal-backward auditor over the WHOLE deliverable — an independent second perspective. Work BACKWARD from the VISION success criteria; do NOT read the first auditor's report — stay independent.\n\n`) +
-      goalBody('goal-backward-final-second.md'),
-      { label: 'aristotle:goal-final:second-family', phase: 'Goal Backward', model: codexAvailable ? 'sonnet' : 'opus', schema: GOAL_SCHEMA, provenance: goalSecondProv, transport: codexAvailable ? 'codex' : undefined }
-    ))
+    if (attestSecond) {
+      const goalSecondBrief =
+        `<inputs>\n- VISION success criteria (SC-xx, the promise): ${visionFile}. Master plan: ${masterPlanFile}.\n- The live repo at ${projectPath}: read the files and reason about how a user would exercise the product (you run READ-ONLY — reason from the code + git state; you cannot start servers or write files).\n</inputs>\n\n` +
+        `<task>Hunt the "checks pass, goal broken" class across the whole product: success criteria met by the letter but broken in spirit, features that exist but cannot be reached from the entry points, slices that pass alone but never connect, hardcoded/stub behavior behind green checks. Return overall ('pass' = the deliverable genuinely delivers the VISION; 'fail' MUST be backed by at least one critical or high finding), findings (each {text, severity}), and report_markdown = the FULL goal-backward-final-second report content (you run read-only and cannot write the file; the wrapper writes it for you). Read-only on source.</task>`
+      secondPlan = solWrapperPlan({
+        councilDir, pluginRoot, receiptsLedger, runToken: runTokenRaw, keystone: 'validate_ruling', transportModel: CODEX_MODEL,
+        phaseTag: 'GOAL_SECOND', attempt: 1, effort: 'high', payloadSchema: GOAL_SECOND_PAYLOAD_SCHEMA,
+        taskText: 'You are the SECOND-FAMILY goal-backward auditor over the WHOLE deliverable — an independent cross-family second judgment. Work BACKWARD from the VISION success criteria; stay independent (you never see the first auditor\'s report).',
+        briefBody: goalSecondBrief, packetObj: { vision: visionFile, master_plan: masterPlanFile, project: projectPath },
+        extractTo: `${qaDir}/goal-backward-final-second.md`, extractField: 'report_markdown', extractLabel: 'report',
+      })
+      goalLegs.push(() => gateAgent(secondPlan.prompt, { label: 'aristotle:goal-final:second-family', phase: 'Goal Backward', model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(GOAL_SECOND_PAYLOAD_SCHEMA), provenance: goalSecondProv }))
+    } else {
+      // codex-no-token OR no-codex: the CURRENT prompt-delegated form — byte-preserved v3.0.1.
+      goalLegs.push(() => gateAgent(
+        (codexAvailable
+          ? `You are the SECOND-FAMILY goal-backward auditor over the WHOLE deliverable, delegating to ${CODEX_MODEL} via 'codex exec' for a genuinely cross-family second judgment — run codex at model_reasoning_effort="high". ${codexGuideNote}If it errors, audit directly. Work BACKWARD from the VISION success criteria; do NOT read the first auditor's report — stay independent.\n\n`
+          : `You are the SECOND goal-backward auditor over the WHOLE deliverable — an independent second perspective. Work BACKWARD from the VISION success criteria; do NOT read the first auditor's report — stay independent.\n\n`) +
+        goalBody('goal-backward-final-second.md'),
+        { label: 'aristotle:goal-final:second-family', phase: 'Goal Backward', model: codexAvailable ? 'sonnet' : 'opus', schema: GOAL_SCHEMA, provenance: goalSecondProv, transport: codexAvailable ? 'codex' : undefined }
+      ))
+    }
   }
   const goalReports = await parallel(goalLegs)
   const goal = goalReports[0]
   const goalSecond = goalReports[1] || null
+  // D3: the receipt-attested second-family leg gets the invocation-exact ledger cross-check upgrade. A
+  // dead/receiptless seat or a failed cross-check leaves secondFamilyLedgerVerified false (the claim
+  // fails closed below); the audit CONTENT still rides the reconcile — a null-keep work product.
+  if (attestSecond) {
+    let cross = { ledger_verified: false }
+    if (goalSecond != null && goalSecondProv.receipt_verified === true) cross = await runSolCrossCheck('goal-final:second-family', 'validate_ruling', 'GOAL_SECOND', secondPlan.files.out, goalSecondProv, goalSecond, 'Goal Backward')
+    pushCouncilReceipt(councilReceipts, 'goal-final:second-family', goalSecondProv, cross)
+    secondFamilyLedgerVerified = cross.ledger_verified === true
+  }
   // the goal audit's findings join the blocking arithmetic via the same deterministic reconcile the
   // milestone gate uses (dedupe by normalized text, max severity wins, blocking = any critical|high).
   const goalRec = denzelReconcile(goal, goalSecond)
@@ -749,25 +1033,37 @@ try {
   // claim DOWNGRADES — a degraded second head is not a genuine cross-family judgment. We record the
   // honest verified flag AND ride the EXISTING verification_degraded event (no new type — §B6/§10);
   // the ledger below never labels a degraded run as cross-family verified.
-  // A genuine cross-family second judgment requires ALL of: codex was actually available (a fallback
-  // to opus is NOT cross-family), the leg ruled (goalSecond present), and its provenance proves it ran
-  // clean on its OWN requested model — actual === requested, no fallback, no seat-death classification.
-  // codexAvailable === false ⇒ NEVER verified (both legs would be opus). Any miss ⇒ degraded.
-  const secondFamilyVerified = posture.second_family && codexAvailable &&
+  // A genuine cross-family second judgment now requires RECEIPT ATTESTATION (D3): codex was actually
+  // available AND the conductor minted a runToken (attestSecond), the leg ruled (goalSecond present), its
+  // provenance proves it ran clean on its OWN requested model (actual === requested, no fallback, no
+  // seat-death), AND the codex receipt is BOTH structurally verified (receipt_verified) and
+  // invocation-exact ledger-verified (secondFamilyLedgerVerified). codexAvailable===false OR no runToken
+  // ⇒ attestSecond false ⇒ NEVER verified — the unattested claim can never masquerade as second-family.
+  const secondFamilyVerified = attestSecond &&
     goalSecond != null &&
     goalSecondProv.actual_model != null &&
     goalSecondProv.actual_model === goalSecondProv.requested_model &&
     goalSecondProv.fallback_reason == null &&
-    goalSecondProv.classification == null
+    goalSecondProv.classification == null &&
+    goalSecondProv.receipt_verified === true &&
+    secondFamilyLedgerVerified === true
   const secondFamilyDegraded = posture.second_family && !secondFamilyVerified
   if (secondFamilyDegraded) {
-    log('Second-family goal gate DEGRADED (substitution or fail-closed) — the cross-family verification claim is downgraded; ledgering verification_degraded')
+    // A posture-required second family with codex present but NO runToken cannot be attested at all —
+    // the leg ran unattested; its claim fails closed with the distinct no_run_token_no_attestation reason
+    // (D3), honest, never a regression into unattested second-family claims.
+    const noTokenAttest = posture.second_family && codexAvailable && runTokenRaw == null
+    const reason = noTokenAttest
+      ? 'the second-family goal leg ran but NO runToken was minted — its codex receipt cannot be attested (no_run_token_no_attestation); the verification claim is downgraded (never labeled second_family/cross-family)'
+      : 'the posture-required second-family goal-backward leg degraded — no genuine cross-family second judgment; the verification claim is downgraded (never labeled second_family/cross-family)'
+    log(`Second-family goal gate DEGRADED (${noTokenAttest ? 'no runToken — unattested' : 'substitution, fail-closed, or unverified receipt'}) — the cross-family verification claim is downgraded; ledgering verification_degraded`)
     await ledger('verification_degraded', {
       gate: 'goal-final:second-family',
       requested_model: goalSecondProv.requested_model != null ? goalSecondProv.requested_model : null,
       actual_model: goalSecondProv.actual_model != null ? goalSecondProv.actual_model : null,
       classification: goalSecondProv.classification != null ? goalSecondProv.classification : 'null_result',
-      reason: 'the posture-required second-family goal-backward leg degraded — no genuine cross-family second judgment; the verification claim is downgraded (never labeled second_family/cross-family)',
+      reason,
+      ...(noTokenAttest ? { no_attestation: 'no_run_token_no_attestation' } : {}),
     })
   }
 
@@ -779,6 +1075,36 @@ try {
       : `verification_class ${v.verification_class}`
     await lore('validate.degraded', `Verification DEGRADED — ${degradeReason}; the claim is downgraded, never silently green`, { verification_class: v.verification_class, reason: oneLine(degradeReason, 80) })
   }
+
+  // ── D2: the T4 final-ruling council over the ASSEMBLED deterministic verdict. It CONFIRMS or BLOCKS
+  //    the frozen record for EVERY computed verdict (PASS incl. prospective, PARTIAL, FAILED) — the
+  //    monotonicity rail is ABSOLUTE: v.verdict and every return field are UNTOUCHED; the council gates
+  //    ONLY stage_completed (RATIFIED + VALIDATE_PASS at T4) and rides its terminal on the records.
+  //    Sub-T4 / no-codex / tokenless: no council convened, byte-preserved. Promised-but-tokenless:
+  //    fail-closed DEGRADED (no stage_completed even on a PASS — never a silent v3.0.1 completion). ──
+  let councilTerminal = null, councilCertificate = null, councilFindings = [], councilBundleHash = null, councilReceiptVerified = false, councilLedgerVerified = false
+  if (councilCapable) {
+    const goalReportFiles = [
+      ...(goal != null ? [`${qaDir}/goal-backward-final.md`] : []),
+      ...(goalSecond != null ? [`${qaDir}/goal-backward-final-second.md`] : []),
+    ]
+    const cr = await runValidateRuling(v, verdictInput, { requested: posture.second_family, verified: secondFamilyVerified, degraded: secondFamilyDegraded }, goalReportFiles)
+    councilTerminal = cr.terminal; councilCertificate = cr.certificate; councilFindings = cr.findings; councilBundleHash = cr.bundle_hash
+    councilReceiptVerified = cr.receipt_verified; councilLedgerVerified = cr.ledger_verified
+  } else if (councilMisconfigured) {
+    councilTerminal = 'DEGRADED'
+    await councilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: councilTemplateHashValidate, run_token_hash: runTokenHash, initial_ledger_seq: null, keystone_id: 'validate_ruling', phase: 'DEGRADED', decision_bundle_hash: null, input_artifact_hashes: [], evidence_manifest_hash: null, anonymous_seat_artifact_hashes: {}, seat_provenance: { missing: 'both', reason: 'runToken absent' }, codex_receipt_hash: null, status: 'sealed' })
+    await councilRuling({ keystone: 'validate_ruling', phase: 'VALIDATE_RATIFY', terminal: 'DEGRADED', reason: 'runToken absent' })
+    log('validate final ruling PROMISED (T4 + codex) but NO runToken (misconfigured conductor) — fail-closed DEGRADED; no stage_completed even on a VALIDATE_PASS')
+  }
+  // Authoritative council record (D2/D6, B43-1/B43-2): ONE object rides the EXISTING validate_verdict
+  // boundary event AND the return — the same truth on the event, the return, and the council_ruling note.
+  // It carries the D2 payload {terminal, certificate, findings, bundle_hash, receipts} PLUS the b42-mirrored
+  // per-seat summary {seat, certificate_present, receipt_verified, ledger_verified} alongside it (build.js
+  // councilSeats precedent). certificate_present is the honesty floor (a twin_ratified claim needs a real cert).
+  const councilField = councilPromised
+    ? { seat: 'validate_ruling', terminal: councilTerminal, certificate: councilCertificate, findings: councilFindings, bundle_hash: councilBundleHash, receipts: councilReceipts, certificate_present: councilCertificate != null, receipt_verified: councilReceiptVerified, ledger_verified: councilLedgerVerified }
+    : null
 
   await ledger('validate_verdict', {
     verdict: v.verdict,
@@ -810,15 +1136,22 @@ try {
       { gate: 'goal-final', ...goalProv },
       ...(posture.second_family ? [{ gate: 'goal-final:second-family', ...goalSecondProv }] : []),
     ],
+    // D6/B43-1: the authoritative council record (certificate + frozen findings included) + honest
+    // per-Sol-leg receipts ride the existing boundary event (no new type).
+    ...(councilField ? { council: councilField, ...(councilReceipts.length ? { council_receipts: councilReceipts } : {}) } : {}),
   })
 
   // validate.verdict (keystone): the deterministic verdict is assembled over all the evidence.
   await lore('validate.verdict', `A hundred eyes rule — ${v.verdict} · ${v.verification_class}${v.blocking.length ? ` · ${v.blocking.length} blocking` : ''}`, { verdict: v.verdict, verification_class: v.verification_class, blocking: v.blocking.length })
 
-  // §3.5 stage bracket (P3.6 T4): validate COMPLETES only on a clean VALIDATE_PASS — a PARTIAL/FAILED
-  // verdict leaves the projection at 'validate' (accurate: the conductor loops corrections back to
-  // build, or escalates). stage_completed bumps the projection to 'report' (STAGE_ORDER).
-  if (v.verdict === 'VALIDATE_PASS') await ledger('stage_completed', { stage: 'validate' })
+  // §3.5 stage bracket (P3.6 T4) + D2 completion gate: validate COMPLETES only on a clean VALIDATE_PASS —
+  // a PARTIAL/FAILED verdict leaves the projection at 'validate' (the conductor loops corrections back to
+  // build, or escalates). At T4 the final-ruling council adds a second gate: a PASS whose council did NOT
+  // RATIFY (BLOCKED/DEGRADED, or a promised-but-tokenless run) leaves the projection at 'validate' too —
+  // the deterministic verdict STANDS UNALTERED, but stage_completed is council-gated (the conductor's
+  // gated checkpoint owns the block). Sub-T4 is byte-preserved (councilPromised false ⇒ no council gate).
+  const councilBlocksCompletion = councilPromised && councilTerminal !== 'RATIFIED'
+  if (v.verdict === 'VALIDATE_PASS' && !councilBlocksCompletion) await ledger('stage_completed', { stage: 'validate' })
 
   return {
     verdict: v.verdict,
@@ -839,6 +1172,10 @@ try {
     drift: (arch && arch.drift) || [],
     seam_issues: (arch && arch.seam_issues) || [],
     goal_backward: goal && goal.overall,
+    // D6/B43-1/B43-2: the additive council field — the SAME authoritative record the boundary event
+    // carries (terminal + certificate + frozen findings + the per-seat summary) so the conductor's gated
+    // checkpoint sees the honest terminal (never a twin_ratified claim without a cert).
+    ...(councilPromised ? { council: councilField } : {}),
   }
 } finally {
   // §7 / discipline-spec lifecycle step 3 + the ORCHESTRATOR RULING: UNCONDITIONAL stage-end teardown

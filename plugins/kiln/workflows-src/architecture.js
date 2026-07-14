@@ -104,7 +104,7 @@ const noWander = NO_WANDER
 // ── Twin Council pure core (constitution twin-council.md; sol-b34-design §B3) — the deterministic
 //    council machinery inlined from src/council.mjs. Every function that CALLS another travels WITH it
 //    in ONE marker (buildDivergenceSet is B3, not inlined here). ──
-// @inline:council:COUNCIL_PROTOCOL_VERSION,sha256Hex,canonicalJson,councilSeed,deriveId,claimTypeForClass,compareEvidence,validateReversal,buildDecisionBundle,bundleHash,validateRatification,councilSignature,verifySignature,buildCheckpoint,twinRatified,councilDeadlock,degraded,SHA64_RE,RATIFY_SCHEMA,ANSWER_SCHEMA,envelopeSchema,CROSS_CHECK_SCHEMA,LEDGER_APPEND_SCHEMA,CANON_HASH_ONELINER,LEDGER_EXTRACT_ONELINER,councilTemplateHash,seatProv,solWrapperPlan,crossCheckOk,assembleRatifyCertificate
+// @inline:council:COUNCIL_PROTOCOL_VERSION,sha256Hex,canonicalJson,councilSeed,deriveId,claimTypeForClass,compareEvidence,validateReversal,buildDecisionBundle,bundleHash,validateRatification,councilSignature,verifySignature,buildCheckpoint,twinRatified,councilDeadlock,degraded,SHA64_RE,RATIFY_SCHEMA,ANSWER_SCHEMA,envelopeSchema,CROSS_CHECK_SCHEMA,LEDGER_APPEND_SCHEMA,CANON_HASH_ONELINER,LEDGER_EXTRACT_ONELINER,councilTemplateHash,seatProv,solWrapperPlan,crossCheckOk,assembleRatifyCertificate,verdictShapeError
 // The wrapper TRANSLATES (Goal/Context/Constraints/Done-when); it never forwards a Claude brief verbatim.
 const codexHowto = `Delegate authoring to ${CODEX_MODEL}: TRANSLATE this brief into a 4-part Codex prompt — Goal (the deliverable in 1-2 sentences), Context (the file paths + summary; no full dumps), Constraints (the arch-constraints + "do X instead of Y"), Done-when (the file written + what it must contain) — write it to a fresh temp file ('TMP="$(mktemp /tmp/kiln-codex.XXXXXX.md)"'; a fixed path collides across concurrent runs) and pipe via stdin: 'codex exec -m ${CODEX_MODEL} -c model_reasoning_effort="high" --sandbox workspace-write --skip-git-repo-check < "$TMP"'. Do NOT forward this brief verbatim. If ${CODEX_MODEL} is unavailable retry with -m ${CODEX_FALLBACK}; if codex errors or yields nothing usable, author the plan yourself.`
 // SPIN flattened per C1 §6 — dead single-shot entries removed and the best writing promoted into the
@@ -1002,25 +1002,8 @@ for (let round = 0; round < validationPasses; round++) {
   )) || synth
 }
 
-// verdictShapeError(r) — F2: an empty/duplicate/evidence-free BLOCK or NEITHER is an INVALID verdict —
-// a head that fails to seal a valid verdict is a missing head (constitution §8) ⇒ DEGRADED, never a
-// silent standing-free block that a bare round-two APPROVE could clear. Returns null (valid) or the
-// defect string. LIFTED to stage scope (B4-2 D7) so the full ratify AND the lite ratify share ONE copy.
-const verdictShapeError = (r) => {
-  if (!(r.verdict === 'BLOCK' || r.verdict === 'NEITHER')) return null
-  const fs = Array.isArray(r.findings) ? r.findings : []
-  if (!fs.length) return `${r.verdict} with no findings`
-  const seen = new Set()
-  for (const f of fs) {
-    if (!f || typeof f.finding_id !== 'string' || !f.finding_id) return 'a finding without a finding_id'
-    if (seen.has(f.finding_id)) return `duplicate finding_id '${f.finding_id}'`
-    seen.add(f.finding_id)
-    const hasRefs = Array.isArray(f.evidence_refs) && f.evidence_refs.length > 0
-    const hasCheck = typeof f.executable_check === 'string' && f.executable_check.trim() !== ''
-    if (!hasRefs && !hasCheck) return `finding '${f.finding_id}' is evidence-free (no refs, no check)`
-  }
-  return null
-}
+// verdictShapeError(r) — F2: LIFTED to src/council.mjs (B4-3 D1) and inlined via the @inline:council
+// marker above; the full ratify AND the lite ratify share the one copy build + the B4-3 keystones use.
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 // ── The Twin Council: blind dual ratification of the master plan (constitution §1–4; sol-b34-design

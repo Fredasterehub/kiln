@@ -29,6 +29,201 @@ const visionFile = `${docsDir}/VISION.md`
 
 // ── MODEL_VOICE shell (Opus only; inlined from src/voice.mjs by the bundler) ──
 // @inline:voice:MODEL_VOICE,voice
+// ── The single gateAgent (+ receipt attestation), whole src/gate.mjs inlined — the D4 fidelity pair's
+//    Sol seat is a Sonnet wrapper over transport:'codex'; gateAgent STRUCTURALLY validates the receipt. ──
+// @gate
+// ── Codex model pins (CODEX_MODEL default + CODEX_FALLBACK, inlined from src/models.mjs) ──
+// @models
+// ── Twin Council pure core (B4-3 D1/D4) — the SEALED b42 call-site machinery, lifted to src/council.mjs
+//    and inlined through the SAME @inline:council bundler contract build/validate use (helpers, never
+//    copy-paste). Powers vision's T4 keystone: the fidelity pair between the mechanical checks and the
+//    seal events. INERT on every sub-T4 / no-codex / tokenless path (councilCapable === false). ──
+// @inline:council:COUNCIL_PROTOCOL_VERSION,sha256Hex,canonicalJson,claimTypeForClass,compareEvidence,validateReversal,councilSignature,verifySignature,validateRatification,twinRatified,buildCheckpoint,SHA64_RE,RATIFY_SCHEMA,envelopeSchema,CROSS_CHECK_SCHEMA,LEDGER_APPEND_SCHEMA,CANON_HASH_ONELINER,LEDGER_EXTRACT_ONELINER,councilTemplateHash,seatProv,solWrapperPlan,crossCheckOk,assembleRatifyCertificate,verdictShapeError
+
+// ── Twin Council gating (B4-3 D4/D6). Vision's fidelity council goes council-grade ONLY when the
+//    capability record promised BOTH heads (T4 = fable + codex) AND the conductor minted a runToken.
+//    codexAvailable defaults true (tier T4 definitionally carries codex; normalizeArgs passes it through
+//    when the conductor sends it). A PROMISED council missing its runToken fails CLOSED (terminal DEGRADED;
+//    NEITHER seal event — never a silent v3.0.1 compile). runTokenRaw lives ONLY in the receipt-script argv. ──
+const codexAvailable = A.codexAvailable !== false
+const runTokenRaw = (typeof A.runToken === 'string' && A.runToken.length > 0) ? A.runToken : null
+const capabilityTier = (A.capabilityTier === 'T1' || A.capabilityTier === 'T2' || A.capabilityTier === 'T3' || A.capabilityTier === 'T4') ? A.capabilityTier : null
+const councilPromised = capabilityTier === 'T4' && codexAvailable
+const councilCapable = councilPromised && runTokenRaw != null
+const councilMisconfigured = councilPromised && runTokenRaw == null
+if (councilMisconfigured) {
+  log('MISCONFIGURED CONDUCTOR — capability tier T4 with both heads reachable but NO runToken: vision\'s fidelity council cannot bind its receipts/seed. The compile fidelity seal fails CLOSED (terminal DEGRADED; NEITHER vision_compiled nor stage_completed — never a silent v3.0.1 compile). Relaunch with the per-run token to convene the council.')
+}
+const councilDir = `${kilnDir}/council/vision`
+const receiptsLedger = `${kilnDir}/council/receipts.jsonl`
+const runTokenHash = runTokenRaw != null ? sha256Hex(runTokenRaw) : null
+const COUNCIL_RENDERER_VISION = 'b43-vision/1'
+// Fixed rubric/task (run-independent template hash). The pair rules COMPILE FIDELITY — never a quality
+// re-review of the product idea.
+const VISION_FIDELITY_RUBRIC =
+  'Rule VISION FIDELITY: is VISION.md a FAITHFUL compile of the brainstorm session ledger — nothing ' +
+  'INVENTED (no requirement, success criterion, or claim that is absent from the ledger), nothing DROPPED ' +
+  '(every operator-attributed idea/theme/decision the ledger carries is represented), operator meaning ' +
+  'preserved? This is the COMPILE-FIDELITY question ONLY — NOT a quality/ambition re-review of the product ' +
+  'idea; you rule the compile, not the vision\'s merit. Every finding MUST cite the ledger entry (or the ' +
+  'exact invented line) it turns on.'
+const VISION_FIDELITY_TASK =
+  'Render one blind verdict — APPROVE (VISION.md is a faithful compile of the ledger), BLOCK, or NEITHER — ' +
+  'on the vision fidelity against the rubric. You do not know who else is ruling. divergence_selections is ' +
+  '[] (no open divergences). Echo artifact_hash EXACTLY as given. A BLOCK or NEITHER MUST carry at least one ' +
+  'evidence-bound finding (finding_id unique, nonempty evidence_refs or a real executable_check); an ' +
+  'evidence-free verdict is invalid. changed_evidence is [] unless you reverse a prior block.'
+const councilTemplateHashVision = councilTemplateHash({ rubric: VISION_FIDELITY_RUBRIC, ruling_task: VISION_FIDELITY_TASK, renderer: COUNCIL_RENDERER_VISION })
+// EVIDENCE_ANCHOR_SCHEMA / evidenceAnchorPrompt — the b42 anchor: hash the NAMED artifacts into a
+// {path, sha256} manifest; a dead/partial anchor ⇒ DEGRADED (the certificate never binds unhashed names).
+const EVIDENCE_ANCHOR_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: { reasoning: { type: 'string', maxLength: 400 }, files: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { path: { type: 'string' }, sha256: { type: 'string' } }, required: ['path', 'sha256'] } } },
+  required: ['files'],
+}
+const evidenceAnchorPrompt = (inputs) =>
+  `You are Thoth, the scribe — transcribe hashes, never judge, never fix.\n\n` +
+  `<task>Run (Bash): 'sha256sum ${inputs.join(' ')}'. Transcribe each input file's sha256 into files[] as {path, sha256} (VERBATIM, lowercase hex, the path exactly as given). Do not read file contents, do not write or fix anything.</task>`
+const crossCheckPrompt = (outFile, outputSha, sessionId) =>
+  `You are Thoth, the receipt cross-checker — transcribe, never compose, never judge. Run these three EXACT commands (Bash) and transcribe their output.\n\n` +
+  `<task>\n` +
+  `1. run EXACTLY: sha256sum "${outFile}" — output_sha256_disk = the 64-hex digest (the first field only).\n` +
+  `2. run EXACTLY: node -e '${CANON_HASH_ONELINER}' "${outFile}" — output_canonical_sha256 = its stdout (a 64-hex digest).\n` +
+  `3. run EXACTLY: node -e '${LEDGER_EXTRACT_ONELINER}' "${receiptsLedger}" "${outputSha}" "${sessionId}" — ledger = the { verified, reservation } JSON it prints.\n` +
+  `Emit output_sha256_disk, output_canonical_sha256, and the ledger object. Do not read the files for content, do not write or fix anything.</task>`
+const runSolCrossCheck = async (legLabel, keystone, phaseTag, outFile, sink, payload, phaseName) => {
+  const canon = sha256Hex(canonicalJson(payload))
+  const relayed = sink && sink.output_hash
+  const dispatch = () => agent(crossCheckPrompt(outFile, relayed, sink && sink.session_id), { label: `thoth:receipt-check:${legLabel}`, phase: phaseName, model: 'haiku', schema: CROSS_CHECK_SCHEMA })
+  let cc = await dispatch()
+  if (!(cc && cc.ledger)) cc = await dispatch()
+  if (!(cc && cc.ledger)) return { ledger_verified: false, reason: 'cross-check leg produced no ledger extract' }
+  const res = crossCheckOk(cc, { relayedOutputHash: relayed, canonicalHash: canon, sink, keystone, phaseTag, seat: 'sol', attempt: 1, runToken: runTokenRaw })
+  return res.ok
+    ? { ledger_verified: true, codex_receipt_hash: res.codex_receipt_hash, invocation_id: res.invocation_id }
+    : { ledger_verified: false, invocation_id: res.invocation_id, reason: res.reason }
+}
+const councilReceipts = []
+const pushCouncilReceipt = (bucket, leg, sink, cross) => bucket.push({
+  leg, invocation_id: cross && cross.invocation_id ? cross.invocation_id : null,
+  receipt_verified: !!(sink && sink.receipt_verified), ledger_verified: !!(cross && cross.ledger_verified),
+  session_id: sink && sink.session_id != null ? sink.session_id : null, tokens_used: sink && sink.tokens_used != null ? sink.tokens_used : null,
+})
+const councilCheckpoint = async (fields, phaseName) => {
+  try { await runLedger('note', buildCheckpoint(fields), phaseName) }
+  catch (e) { log(`council checkpoint ${fields && fields.phase} not ledgered (non-fatal): ${e && e.message ? e.message : e}`) }
+}
+const councilRuling = async (data, phaseName) => {
+  try { await runLedger('note', { kind: 'council_ruling', ...data }, phaseName) }
+  catch (e) { log(`council ruling not ledgered (non-fatal): ${e && e.message ? e.message : e}`) }
+}
+// runBlindPair — Fable ∥ receipt-attested Sol rule blind over a schema (xhigh, council-grade — D6).
+const runBlindPair = async (cfg) => {
+  const sinkF = {}, sinkS = {}
+  const plan = solWrapperPlan({ councilDir, pluginRoot, receiptsLedger, runToken: runTokenRaw, keystone: cfg.keystone, transportModel: CODEX_MODEL, phaseTag: cfg.phaseTag, attempt: 1, effort: 'xhigh', payloadSchema: cfg.schema, taskText: cfg.solTaskText, briefBody: cfg.solBrief, packetObj: cfg.solPacket })
+  const [rF, rS] = await parallel([
+    () => gateAgent(cfg.fablePrompt, { label: `fable:${cfg.legName}`, phase: cfg.phaseName, model: 'fable', effort: 'xhigh', twoHeads: 'required', schema: cfg.schema, provenance: sinkF }),
+    () => gateAgent(plan.prompt, { label: `sol:${cfg.legName}`, phase: cfg.phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(cfg.schema), provenance: sinkS }),
+  ])
+  let solCross = { ledger_verified: false }
+  if (rS != null && sinkS.receipt_verified === true) solCross = await runSolCrossCheck(`sol:${cfg.legName}`, cfg.keystone, cfg.phaseTag, plan.files.out, sinkS, rS, cfg.phaseName)
+  pushCouncilReceipt(councilReceipts, `sol:${cfg.legName}`, sinkS, solCross)
+  const solOk = rS != null && sinkS.receipt_verified === true && solCross.ledger_verified === true
+  if (rF == null || !solOk) {
+    const missing = rF == null && !solOk ? 'both' : (rF == null ? 'fable' : 'sol')
+    return { degraded: true, missing, rF, rS, sinkF, sinkS, solCross }
+  }
+  return { degraded: false, rF, rS, sinkF, sinkS, solCross }
+}
+// runVisionFidelity (D4) — the REQUIRED blind fidelity pair over {VISION.md hash, ledger hash, validator
+// verdict}. Dual-APPROVE ⇒ RATIFIED (the caller fires both seal events + rides the certificate); ANY other
+// outcome ⇒ a non-RATIFIED terminal and the caller fires NEITHER seal event (the existing invalid-VISION
+// escalation shape). The compile is FROZEN — the council rules it, never re-authors VISION.md.
+const runVisionFidelity = async (vSummary) => {
+  const phaseName = 'The Seal'
+  const keystone = 'vision_fidelity'
+  const phaseTag = 'VISION_RATIFY'
+  const namedEvidence = [visionFile, ledgerFile]
+  const anchor = await agent(evidenceAnchorPrompt(namedEvidence), { label: 'thoth:vision-anchor', phase: phaseName, model: 'haiku', schema: EVIDENCE_ANCHOR_SCHEMA })
+  const anchorFiles = (anchor && Array.isArray(anchor.files)) ? anchor.files.filter((f) => f && typeof f.path === 'string' && typeof f.sha256 === 'string' && SHA64_RE.test(f.sha256)) : []
+  const anchorPaths = anchorFiles.map((f) => f.path)
+  const anchorExact =
+    anchor && Array.isArray(anchor.files) && anchorFiles.length === anchor.files.length &&
+    anchorFiles.length === namedEvidence.length &&
+    new Set(anchorPaths).size === anchorFiles.length &&
+    namedEvidence.every((p) => anchorPaths.includes(p))
+  if (!anchorExact) {
+    await councilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: councilTemplateHashVision, run_token_hash: runTokenHash, initial_ledger_seq: null, keystone_id: keystone, phase: 'DEGRADED', decision_bundle_hash: null, input_artifact_hashes: [], evidence_manifest_hash: null, anonymous_seat_artifact_hashes: {}, seat_provenance: { missing: 'evidence' }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
+    await councilRuling({ keystone, phase: phaseTag, terminal: 'DEGRADED', reason: 'evidence-anchor' }, phaseName)
+    log('vision fidelity evidence anchor DEGRADED — NEITHER seal event fires (the certificate must never bind unhashed names)')
+    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: null, receipt_verified: false, ledger_verified: false }
+  }
+  const manifest = {}
+  for (const f of anchorFiles) manifest[f.path] = f.sha256
+  const evidenceRefs = Object.keys(manifest).sort().map((p) => ({ path: p, sha256: manifest[p] }))
+  const evidenceManifestHash = sha256Hex(canonicalJson(manifest))
+  const evidenceInputHashes = Object.keys(manifest).sort().map((k) => manifest[k])
+  const s = vSummary || {}
+  const record = {
+    vision_sha256: manifest[visionFile] != null ? manifest[visionFile] : null,
+    ledger_sha256: manifest[ledgerFile] != null ? manifest[ledgerFile] : null,
+    validator: { tier: s.tier != null ? s.tier : null, counts: s.counts != null ? s.counts : null, unresolved: s.unresolved != null ? s.unresolved : null },
+    evidence_refs: evidenceRefs,
+  }
+  const bundleHash = sha256Hex(canonicalJson(record))
+  const ckptBase = { protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: councilTemplateHashVision, run_token_hash: runTokenHash, initial_ledger_seq: null, keystone_id: keystone, decision_bundle_hash: bundleHash, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash }
+  const recordJson = JSON.stringify(record)
+  const ratifyInputs =
+    `<inputs>\n- VISION.md (the compiled artifact under fidelity ruling): ${visionFile}.\n` +
+    `- The brainstorm session ledger (the SOLE source VISION.md must faithfully compile): ${ledgerFile}.\n` +
+    `- The COMPLETE frozen fidelity record you are ratifying (evidence_refs bind VISION.md + the ledger to their sha256):\n${recordJson}\n` +
+    `- Read both files (read-only), confirm each evidence_refs path matches its bound hash, then rule whether VISION.md is a faithful compile of the ledger.\n</inputs>`
+  const bindingLine = `Binding: artifact_hash = "${bundleHash}" (echo it VERBATIM). divergence_selections = [] (no open divergences this round). changed_evidence = [] unless you reverse a prior block.`
+  const fablePrompt =
+    `You are a council ratifier (vision fidelity) — rule whether VISION.md faithfully compiles the session ledger against the fixed rubric, blind and independent. You do not know who else is ruling.\n\n` +
+    `${ratifyInputs}\n\n<rubric>\n${VISION_FIDELITY_RUBRIC}\n</rubric>\n\n<binding>\n${bindingLine}\n</binding>\n\n` +
+    `<task>${VISION_FIDELITY_TASK}\nEmit the evidence-bound findings + changed_evidence + divergence_selections FIRST, then the verdict (evidence-before-commit); reasoning is optional, last, and under 50 words. ${PAYLOAD_FIRST}</task>`
+  const solBrief = `${bindingLine}\nRubric:\n${VISION_FIDELITY_RUBRIC}\nRule read-only: compare ${visionFile} against the session ledger NAMED in the record's evidence_refs (each bound to its sha256). Rule COMPILE FIDELITY only, never the product's merit.`
+  const pair = await runBlindPair({ keystone, phaseTag, legName: 'vision-fidelity', fablePrompt, solTaskText: VISION_FIDELITY_TASK, solBrief, solPacket: { fidelity_record: record, artifact_hash: bundleHash }, schema: RATIFY_SCHEMA, phaseName })
+  const seatHashes = (rF, rS) => ({ P0: sha256Hex(canonicalJson(rF)), P1: sha256Hex(canonicalJson(rS)) })
+  if (pair.degraded) {
+    await councilCheckpoint({ ...ckptBase, phase: 'DEGRADED', anonymous_seat_artifact_hashes: {}, seat_provenance: { missing: pair.missing }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
+    await councilRuling({ keystone, phase: phaseTag, terminal: 'DEGRADED', missing: pair.missing }, phaseName)
+    log(`vision fidelity council DEGRADED (${pair.missing}) — NEITHER seal event fires (never a single-head ruling)`)
+    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleHash, receipt_verified: !!(pair.sinkS && pair.sinkS.receipt_verified), ledger_verified: !!(pair.solCross && pair.solCross.ledger_verified) }
+  }
+  const vF = validateRatification(pair.rF, { bundle_hash: bundleHash, open_divergence_ids: [] })
+  const vS = validateRatification(pair.rS, { bundle_hash: bundleHash, open_divergence_ids: [] })
+  const shapeF = verdictShapeError(pair.rF), shapeS = verdictShapeError(pair.rS)
+  const fBad = !vF.valid || !!shapeF, sBad = !vS.valid || !!shapeS
+  if (fBad || sBad) {
+    const missing = fBad && sBad ? 'both' : (fBad ? 'fable' : 'sol')
+    const detail = [fBad ? `fable${shapeF ? `: ${shapeF}` : ''}` : null, sBad ? `sol${shapeS ? `: ${shapeS}` : ''}` : null].filter(Boolean).join('; ')
+    await councilCheckpoint({ ...ckptBase, phase: 'DEGRADED', anonymous_seat_artifact_hashes: {}, seat_provenance: { missing, reason: 'invalid ratification' }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
+    await councilRuling({ keystone, phase: phaseTag, terminal: 'DEGRADED', missing, invalid: { fable: fBad, sol: sBad } }, phaseName)
+    log(`vision fidelity ratification INVALID (${detail}) — DEGRADED (never mislabeled BLOCKED); NEITHER seal event fires`)
+    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleHash, receipt_verified: true, ledger_verified: true }
+  }
+  if (pair.rF.verdict === 'APPROVE' && pair.rS.verdict === 'APPROVE') {
+    const cert = assembleRatifyCertificate({ rF: pair.rF, rS: pair.rS, provF: seatProv(pair.sinkF, 'fable'), provS: seatProv(pair.sinkS, 'sol'), context: { bundle_hash: bundleHash, renderer_version: COUNCIL_RENDERER_VISION, plan_hash: bundleHash, evidence_manifest_hash: evidenceManifestHash, protocol_version: COUNCIL_PROTOCOL_VERSION, seat_provenance: null } })
+    if (!cert.ok) {
+      await councilCheckpoint({ ...ckptBase, phase: 'DEGRADED', anonymous_seat_artifact_hashes: {}, seat_provenance: { reason: 'certificate defect' }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
+      await councilRuling({ keystone, phase: phaseTag, terminal: 'DEGRADED', reason: 'certificate defect' }, phaseName)
+      log(`vision fidelity certificate could not seal (${cert.reason}) — DEGRADED; NEITHER seal event fires`)
+      return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleHash, receipt_verified: true, ledger_verified: true }
+    }
+    await councilCheckpoint({ ...ckptBase, phase: 'VISION_RATIFY_SEALED', anonymous_seat_artifact_hashes: seatHashes(pair.rF, pair.rS), seat_provenance: { P0: seatProv(pair.sinkF, 'fable'), P1: seatProv(pair.sinkS, 'sol') }, codex_receipt_hash: pair.solCross.codex_receipt_hash, status: 'sealed' }, phaseName)
+    await councilCheckpoint({ ...ckptBase, phase: 'RATIFIED', anonymous_seat_artifact_hashes: {}, seat_provenance: {}, codex_receipt_hash: null, status: 'sealed' }, phaseName)
+    await councilRuling({ keystone, phase: phaseTag, terminal: 'RATIFIED', bundle_hash: bundleHash }, phaseName)
+    log(`TWIN COUNCIL RATIFIED the vision fidelity (bundle ${String(bundleHash).slice(0, 12)}…) — the compile carries two valid head signatures`)
+    return { terminal: 'RATIFIED', certificate: cert.certificate, findings: [], bundle_hash: bundleHash, receipt_verified: true, ledger_verified: true }
+  }
+  const frozen = [...(pair.rF.verdict === 'BLOCK' || pair.rF.verdict === 'NEITHER' ? (Array.isArray(pair.rF.findings) ? pair.rF.findings : []) : []), ...(pair.rS.verdict === 'BLOCK' || pair.rS.verdict === 'NEITHER' ? (Array.isArray(pair.rS.findings) ? pair.rS.findings : []) : [])]
+  await councilCheckpoint({ ...ckptBase, phase: 'VISION_RATIFY_SEALED', anonymous_seat_artifact_hashes: seatHashes(pair.rF, pair.rS), seat_provenance: { P0: seatProv(pair.sinkF, 'fable'), P1: seatProv(pair.sinkS, 'sol') }, codex_receipt_hash: pair.solCross.codex_receipt_hash, status: 'sealed' }, phaseName)
+  await councilRuling({ keystone, phase: phaseTag, terminal: 'BLOCKED', verdicts: { fable: pair.rF.verdict, sol: pair.rS.verdict } }, phaseName)
+  log(`vision fidelity council BLOCKED (fable ${pair.rF.verdict}, sol ${pair.rS.verdict}) — NEITHER seal event fires; ${frozen.length} finding(s) frozen onto the records`)
+  return { terminal: 'BLOCKED', certificate: null, findings: frozen, bundle_hash: bundleHash, receipt_verified: true, ledger_verified: true }
+}
 
 // SPIN flattened to the two staged worker-tree lines (C1 §6, called 0/1): 'The ledger holds every
 // word' is promoted to the vision.gate_clean beat and 'A vision is counted before it is trusted' to
@@ -239,7 +434,34 @@ if (!(proof && proof.exists === true)) {
   log('THE SEAL FAILED — the validated VISION is not on disk (a vanished artifact is a failed compile).')
   return { vision_valid: false, vision_file: visionFile, reason: 'validated but missing on disk', violations: [] }
 }
-// Ordering (r1 F5): vision_compiled THEN stage_completed — and ONLY here, on the clean path.
+
+// ── D4: the T4 fidelity pair — between the mechanical existence/validator checks and the seal events.
+//    Dual-APPROVE ⇒ vision_compiled THEN stage_completed fire (order preserved) + the certificate rides
+//    the return; ANY other outcome ⇒ NEITHER event (the existing invalid-VISION escalation shape — the
+//    conductor escalates with the honest terminal). Sub-T4 / no-codex / tokenless: byte-preserved (no
+//    council convened). Promised-but-tokenless: fail-closed DEGRADED, NEITHER seal event. ──
+let visionCouncilTerminal = null, visionCouncilCertificate = null, visionCouncilBundleHash = null, visionCouncilReceiptVerified = false, visionCouncilLedgerVerified = false
+if (councilCapable) {
+  const cr = await runVisionFidelity(vSummary)
+  visionCouncilTerminal = cr.terminal; visionCouncilCertificate = cr.certificate; visionCouncilBundleHash = cr.bundle_hash
+  visionCouncilReceiptVerified = cr.receipt_verified; visionCouncilLedgerVerified = cr.ledger_verified
+  if (cr.terminal !== 'RATIFIED') {
+    log(`VISION FIDELITY ${cr.terminal} — neither vision_compiled nor stage_completed is ledgered; the conductor escalates with the honest terminal (required-mode uniformity).`)
+    await lore('vision.violations', `Vision fidelity ${cr.terminal} — the compile is not sealed as faithful; ${cr.findings.length} finding(s), the conductor escalates`, { terminal: cr.terminal, findings: cr.findings.length }, 'The Seal')
+    // B43-2: the return IS the boundary record for vision — the b42-mirrored per-seat summary rides it
+    // alongside the terminal/certificate/findings fields (build.js councilSeats precedent).
+    return { vision_valid: false, vision_file: visionFile, reason: `vision fidelity council ${cr.terminal}`, violations: [], council: { seat: 'vision_fidelity', terminal: cr.terminal, certificate: null, findings: cr.findings, bundle_hash: cr.bundle_hash, receipts: councilReceipts, certificate_present: false, receipt_verified: cr.receipt_verified, ledger_verified: cr.ledger_verified } }
+  }
+} else if (councilMisconfigured) {
+  visionCouncilTerminal = 'DEGRADED'
+  await councilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: councilTemplateHashVision, run_token_hash: runTokenHash, initial_ledger_seq: null, keystone_id: 'vision_fidelity', phase: 'DEGRADED', decision_bundle_hash: null, input_artifact_hashes: [], evidence_manifest_hash: null, anonymous_seat_artifact_hashes: {}, seat_provenance: { missing: 'both', reason: 'runToken absent' }, codex_receipt_hash: null, status: 'sealed' }, 'The Seal')
+  await councilRuling({ keystone: 'vision_fidelity', phase: 'VISION_RATIFY', terminal: 'DEGRADED', reason: 'runToken absent' }, 'The Seal')
+  log('VISION FIDELITY PROMISED (T4 + codex) but NO runToken (misconfigured conductor) — fail-closed DEGRADED; NEITHER vision_compiled nor stage_completed. Relaunch with the per-run token.')
+  await lore('vision.violations', 'Vision fidelity DEGRADED — promised council with no runToken; the compile is not sealed, the conductor escalates', { terminal: 'DEGRADED', findings: 0 }, 'The Seal')
+  return { vision_valid: false, vision_file: visionFile, reason: 'vision fidelity council PROMISED but no runToken — fail-closed DEGRADED', violations: [], council: { seat: 'vision_fidelity', terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: null, receipts: councilReceipts, certificate_present: false, receipt_verified: false, ledger_verified: false } }
+}
+
+// Ordering (r1 F5): vision_compiled THEN stage_completed — and ONLY here, on the clean (T4: RATIFIED) path.
 await runLedger('vision_compiled', { tier: vSummary.tier ?? null, counts: vSummary.counts ?? null, visual_direction: vSummary.visual_direction ?? null, unresolved: vSummary.unresolved ?? null }, 'The Seal')
 // vision.sealed (keystone): the seal succeeded — the vision is counted before it is trusted. Emit
 // BEFORE stage_completed so the beat renders before the telegraph's terminating completion event.
@@ -256,4 +478,7 @@ return {
   // The conductor threads this into the architecture launch args (P4 r1 F6) — the mechanical
   // visual-direction path end-to-end; the foundation agent's judgment is only the pre-v3 fallback.
   visual_direction: vSummary.visual_direction ?? null,
+  // D6/B43-2: the additive council field — the T4 fidelity terminal + certificate (twin_ratified only with
+  // a cert) PLUS the b42-mirrored per-seat summary {seat, certificate_present, receipt_verified, ledger_verified}.
+  ...(councilPromised ? { council: { seat: 'vision_fidelity', terminal: visionCouncilTerminal, certificate: visionCouncilCertificate, findings: [], bundle_hash: visionCouncilBundleHash, receipts: councilReceipts, certificate_present: visionCouncilCertificate != null, receipt_verified: visionCouncilReceiptVerified, ledger_verified: visionCouncilLedgerVerified } } : {}),
 }

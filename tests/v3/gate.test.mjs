@@ -364,17 +364,28 @@ test('R4: validate.js traversal leg rides gateAgent with a per-pass provenance s
     'the append-only traversal provenance array must feed validate_verdict.gate_provenance (every pass, no collapse)')
 })
 
-test('R4: validate.js second_family_verified carries the three-condition honesty guard', () => {
-  assert.match(VALIDATE_SRC, /secondFamilyVerified = posture\.second_family && codexAvailable &&/,
-    'verification requires codexAvailable === true')
+test('R4 (B4-3 D3): validate.js second_family_verified is RECEIPT-BASED — the model guard AND receipt/ledger attestation', () => {
+  // B4-3 D3 replaces the outer-model provenance check with receipt attestation. The verification now
+  // gates on attestSecond (posture.second_family && codexAvailable && a runToken) and requires the codex
+  // receipt to be BOTH structurally verified and invocation-exact ledger-verified, on top of the model checks.
+  assert.match(VALIDATE_SRC, /const attestSecond = posture\.second_family && codexAvailable && runTokenRaw != null/,
+    'the attestation seat gates on codex + a runToken (a single-seat attestation, not the tier gate)')
+  assert.match(VALIDATE_SRC, /const secondFamilyVerified = attestSecond &&/,
+    'verification requires the attested seat (codex + token) — never an unattested claim')
   assert.match(VALIDATE_SRC, /goalSecondProv\.actual_model === goalSecondProv\.requested_model/,
-    'verification requires actual === requested')
+    'verification still requires actual === requested')
   assert.match(VALIDATE_SRC, /goalSecondProv\.fallback_reason == null/,
-    'verification requires no fallback')
+    'verification still requires no fallback')
   assert.match(VALIDATE_SRC, /goalSecondProv\.classification == null/,
-    'verification requires no seat-death classification')
+    'verification still requires no seat-death classification')
+  assert.match(VALIDATE_SRC, /goalSecondProv\.receipt_verified === true/,
+    'verification requires a STRUCTURALLY verified codex receipt')
+  assert.match(VALIDATE_SRC, /secondFamilyLedgerVerified === true/,
+    'verification requires the invocation-exact ledger cross-check to pass')
   assert.match(VALIDATE_SRC, /second_family_verified: secondFamilyVerified/,
     'the ledgered flag must be the guarded value, not the naive equality check')
+  assert.match(VALIDATE_SRC, /no_run_token_no_attestation/,
+    'codex-but-tokenless degrades honestly with the distinct no-attestation reason (never an unattested claim)')
 })
 
 // ── N2/N3/N4 executed coverage: the traversal provenance sink is APPEND-ONLY, gateAgent's 'other' rethrow

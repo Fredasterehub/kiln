@@ -1246,3 +1246,26 @@ export function assembleRatifyCertificate(parts) {
     return { ok: false, reason: e && e.message ? e.message : String(e) }
   }
 }
+
+// verdictShapeError(r) — F2: an empty/duplicate/evidence-free BLOCK or NEITHER is an INVALID verdict —
+// a head that fails to seal a valid verdict is a MISSING head (constitution §8) ⇒ DEGRADED, never a
+// silent standing-free block a bare round-two APPROVE could clear. Returns null (valid) or the defect
+// string. LIFTED to src/council.mjs (B4-3 D1) so architecture (full + lite ratify), build's close +
+// correction councils, and the three B4-3 keystones (validate/vision/report) share ONE copy instead of
+// the five stage-scoped copies B4-3 would otherwise create. Null-safe (a null r is not a BLOCK/NEITHER
+// ⇒ null): behavior-identical to both prior copies on every real call path, safer on a dead seat.
+export function verdictShapeError(r) {
+  if (!(r && (r.verdict === 'BLOCK' || r.verdict === 'NEITHER'))) return null
+  const fs = Array.isArray(r.findings) ? r.findings : []
+  if (!fs.length) return `${r.verdict} with no findings`
+  const seen = new Set()
+  for (const f of fs) {
+    if (!f || typeof f.finding_id !== 'string' || !f.finding_id) return 'a finding without a finding_id'
+    if (seen.has(f.finding_id)) return `duplicate finding_id '${f.finding_id}'`
+    seen.add(f.finding_id)
+    const hasRefs = Array.isArray(f.evidence_refs) && f.evidence_refs.length > 0
+    const hasCheck = typeof f.executable_check === 'string' && f.executable_check.trim() !== ''
+    if (!hasRefs && !hasCheck) return `finding '${f.finding_id}' is evidence-free (no refs, no check)`
+  }
+  return null
+}

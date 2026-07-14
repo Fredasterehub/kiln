@@ -125,7 +125,7 @@ const lawFile = `${kilnDir}/law.json`
 //    order: deps first). These power the build keystones' Sol evidence analyst, the milestone-close
 //    ratification pair, and the correction council — INERT on every sub-T4 / no-codex / tokenless path
 //    (councilCapable === false), so those routes are byte-preserved v3.0.1. ──
-// @inline:council:COUNCIL_PROTOCOL_VERSION,sha256Hex,canonicalJson,claimTypeForClass,compareEvidence,validateReversal,councilSignature,verifySignature,validateRatification,twinRatified,buildCheckpoint,degraded,SHA64_RE,RATIFY_SCHEMA,envelopeSchema,CROSS_CHECK_SCHEMA,LEDGER_APPEND_SCHEMA,CANON_HASH_ONELINER,LEDGER_EXTRACT_ONELINER,councilTemplateHash,seatProv,solWrapperPlan,crossCheckOk,assembleRatifyCertificate
+// @inline:council:COUNCIL_PROTOCOL_VERSION,sha256Hex,canonicalJson,claimTypeForClass,compareEvidence,validateReversal,councilSignature,verifySignature,validateRatification,twinRatified,buildCheckpoint,degraded,SHA64_RE,RATIFY_SCHEMA,envelopeSchema,CROSS_CHECK_SCHEMA,LEDGER_APPEND_SCHEMA,CANON_HASH_ONELINER,LEDGER_EXTRACT_ONELINER,councilTemplateHash,seatProv,solWrapperPlan,crossCheckOk,assembleRatifyCertificate,verdictShapeError
 
 // ── Twin Council gating (B4-2 D5; FC-1 tier-gating, 1b-ii precedent). The three build keystones —
 //    the Sol evidence analyst (Ryu bump), the milestone-close ratification pair (Judge Dredd retired),
@@ -1222,23 +1222,9 @@ const pushCouncilReceipt = (bucket, leg, sink, cross) => bucket.push({
   receipt_verified: !!(sink && sink.receipt_verified), ledger_verified: !!(cross && cross.ledger_verified),
   session_id: sink && sink.session_id != null ? sink.session_id : null, tokens_used: sink && sink.tokens_used != null ? sink.tokens_used : null,
 })
-// verdictShapeErrorB (F2, mirrored) — an empty/duplicate/evidence-free BLOCK or NEITHER is an INVALID
-// verdict; a head that fails to seal a valid verdict is a missing head. Returns null (valid) or the defect.
-const verdictShapeErrorB = (r) => {
-  if (!(r && (r.verdict === 'BLOCK' || r.verdict === 'NEITHER'))) return null
-  const fs = Array.isArray(r.findings) ? r.findings : []
-  if (!fs.length) return `${r.verdict} with no findings`
-  const seen = new Set()
-  for (const f of fs) {
-    if (!f || typeof f.finding_id !== 'string' || !f.finding_id) return 'a finding without a finding_id'
-    if (seen.has(f.finding_id)) return `duplicate finding_id '${f.finding_id}'`
-    seen.add(f.finding_id)
-    const hasRefs = Array.isArray(f.evidence_refs) && f.evidence_refs.length > 0
-    const hasCheck = typeof f.executable_check === 'string' && f.executable_check.trim() !== ''
-    if (!hasRefs && !hasCheck) return `finding '${f.finding_id}' is evidence-free (no refs, no check)`
-  }
-  return null
-}
+// verdictShapeError (F2) — LIFTED to src/council.mjs (B4-3 D1) and inlined via the @inline:council
+// marker above; build's close pair, the correction council, architecture, and the B4-3 keystones share
+// the one copy (the prior local verdictShapeErrorB is retired — same null-safe semantics).
 // closeFindingsOf — FREEZE a blocking verdict's findings as the structured close_council_findings record
 // (the RATIFY_SCHEMA finding shape verbatim: finding_id, claim, required_change, evidence_refs,
 // evidence_class) so the SOLE correction is never spent blind to what blocked the close (DSGN-B42-1).
@@ -1367,7 +1353,7 @@ const runCloseCouncil = async (m, reconciled, overallA, overallB, goalOverall, c
   // verdict); ONLY live, VALID BLOCK/NEITHER verdicts ⇒ BLOCKED with frozen findings.
   const vF = validateRatification(pair.rF, { bundle_hash: bundleHash, open_divergence_ids: [] })
   const vS = validateRatification(pair.rS, { bundle_hash: bundleHash, open_divergence_ids: [] })
-  const shapeF = verdictShapeErrorB(pair.rF), shapeS = verdictShapeErrorB(pair.rS)
+  const shapeF = verdictShapeError(pair.rF), shapeS = verdictShapeError(pair.rS)
   const fBad = !vF.valid || !!shapeF, sBad = !vS.valid || !!shapeS
   if (fBad || sBad) {
     const missing = fBad && sBad ? 'both' : (fBad ? 'fable' : 'sol')

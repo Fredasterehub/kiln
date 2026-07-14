@@ -11,6 +11,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { createHash } from 'node:crypto'
+import { sha256Hex, canonicalJson } from '../../plugins/kiln/src/council.mjs'
 
 const WORKFLOW = fileURLToPath(new URL('../../plugins/kiln/workflows/vision.js', import.meta.url))
 const AsyncFunction = (async () => {}).constructor
@@ -183,4 +185,102 @@ test('vision.js GATE_SCHEMA discipline: every evidence field REQUIRED — a sche
   assert.deepEqual([...schema.required].sort(), ['error', 'exit', 'summary', 'valid', 'violations'])
   assert.deepEqual([...schema.properties.violations.items.required].sort(), ['code', 'message', 'path'])
   assert.equal(schema.additionalProperties, false)
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════
+// ── B4-3 D4: vision at capability tier T4 — the fidelity pair between the mechanical checks and the
+//    seal events. Dual-APPROVE ⇒ vision_compiled THEN stage_completed (order preserved) + certificate;
+//    ANY other outcome ⇒ NEITHER seal event (the existing invalid-VISION escalation shape). Every Sol
+//    leg rides a receipt-attested codex envelope + an invocation-exact ledger cross-check.
+// ══════════════════════════════════════════════════════════════════════════════════════════════════
+const CODEX_MODEL = 'gpt-5.6-sol'
+const T4TOKEN = 'VIS-RUNTOKEN-xyz'
+const t4args = (extra = {}) => ({ ...baseArgs, codexAvailable: true, capabilityTier: 'T4', runToken: T4TOKEN, ...extra })
+const shaB = (buf) => createHash('sha256').update(buf).digest('hex')
+const oshaOf = (p) => shaB(Buffer.from(JSON.stringify(p)))
+const rshaOf = (r) => shaB(Buffer.from(JSON.stringify(r)))
+const SESSION = '019f5a46-fc83-7181-8303-f516494485ac', INV = '3'.repeat(64), PSHA = '1'.repeat(64), XSHA = '5'.repeat(64)
+const validReceipt = (payload, over = {}) => ({
+  receipt_version: 1, parser_version: 'kiln-codex-receipt/1', transport: 'codex_exec', invocation_id: INV,
+  prompt_sha256: PSHA, packet_sha256: XSHA, cli_version: '0.144.1', requested_model: CODEX_MODEL,
+  reported_model: CODEX_MODEL, session_id: SESSION, exit_code: 0, tokens_used: 18747,
+  output_sha256: oshaOf(payload), stderr_sha256: XSHA, ...over,
+})
+const solEnv = (payload, rOver) => ({ payload, codex_receipt: validReceipt(payload, rOver || {}), raw_artifact_refs: { stderr: 's', output: 'o' } })
+const crossOk = (payload, keystone, phaseTag, over = {}) => ({
+  output_sha256_disk: over.disk !== undefined ? over.disk : oshaOf(payload),
+  output_canonical_sha256: over.canon !== undefined ? over.canon : sha256Hex(canonicalJson(payload)),
+  ledger: {
+    verified: over.verified === null ? null : { status: 'verified', invocation_id: INV, receipt_sha256: rshaOf(validReceipt(payload)), output_sha256: oshaOf(payload), session_id: SESSION, reported_model: CODEX_MODEL, tokens_used: 18747, exit_code: 0, receipt_verified: true, ...(over.verified || {}) },
+    reservation: over.reservation === null ? null : { invocation_id: INV, keystone, phase: phaseTag, seat: 'sol', attempt: 1, run_token: T4TOKEN, prompt_sha256: PSHA, packet_sha256: XSHA, ...(over.reservation || {}) },
+  },
+})
+const rat = (h, over = {}) => ({ reasoning: 'r', artifact_hash: h, verdict: 'APPROVE', divergence_selections: [], findings: [], changed_evidence: [], ...over })
+const FID_FINDING = { finding_id: 'VF-1', claim: 'VISION.md invented a requirement absent from the ledger', required_change: 'drop the invented FR', evidence_refs: ['brainstorm-ledger.jsonl'], evidence_class: 'repo_state', executable_check: null }
+const anchorFilesFromPrompt = (prompt) => { const m = prompt.match(/sha256sum ([^\n']+)/); const paths = m ? m[1].trim().split(/\s+/).filter(Boolean) : []; return paths.map((p) => ({ path: p, sha256: sha256Hex(p) })) }
+
+// t4Respond layers the fidelity legs over the clean-compile respond().
+function t4Respond(cfg = {}, over = {}) {
+  const base = respond(over)
+  let fidHash = null
+  return (label, prompt) => {
+    if (label === 'thoth:vision-anchor') return cfg.anchor !== undefined ? cfg.anchor : { reasoning: 'a', files: anchorFilesFromPrompt(prompt) }
+    if (label === 'fable:vision-fidelity') { const m = prompt.match(/artifact_hash = "([0-9a-f]{64})"/); if (m) fidHash = m[1]; return cfg.fableFid ? cfg.fableFid(fidHash) : rat(fidHash) }
+    if (label === 'sol:vision-fidelity') { const m = prompt.match(/"artifact_hash":"([0-9a-f]{64})"/); if (m) fidHash = m[1]; if (cfg.solFid === 'dead') return {}; return cfg.solFid ? solEnv(cfg.solFid(fidHash)) : solEnv(rat(fidHash)) }
+    if (label === 'thoth:receipt-check:sol:vision-fidelity') return crossOk(cfg.solFid && cfg.solFid !== 'dead' ? cfg.solFid(fidHash) : rat(fidHash), 'vision_fidelity', 'VISION_RATIFY')
+    return base(label, prompt)
+  }
+}
+
+test('B4-3 D4 vision fidelity: at T4 a clean compile convenes the blind Fable/Sol fidelity pair; dual-APPROVE ⇒ vision_compiled THEN stage_completed + a b43-vision/1 certificate', async () => {
+  const { result, calls } = await runVision(t4args(), t4Respond())
+  assert.equal(result.vision_valid, true)
+  assert.equal(calls.filter((c) => c.label === 'fable:vision-fidelity').length, 1)
+  assert.equal(calls.filter((c) => c.label === 'sol:vision-fidelity').length, 1)
+  assert.equal(calls.filter((c) => c.label === 'thoth:receipt-check:sol:vision-fidelity').length, 1)
+  assert.equal(result.council.terminal, 'RATIFIED')
+  assert.equal(result.council.seat, 'vision_fidelity', 'B43-2: the b42-mirrored per-seat summary rides the return (the boundary record for vision)')
+  assert.equal(result.council.certificate.label, 'twin_ratified')
+  assert.equal(result.council.certificate.signatures[0].renderer_version, 'b43-vision/1')
+  const sealed = ledgersOf(calls, 'vision_compiled'), completed = ledgersOf(calls, 'stage_completed')
+  assert.equal(sealed.length, 1); assert.equal(completed.length, 1)
+  assert.ok(calls.indexOf(sealed[0]) < calls.indexOf(completed[0]), 'vision_compiled precedes stage_completed (order preserved)')
+  const l = labels(calls)
+  assert.ok(l.indexOf('thoth:validate:r0') < l.indexOf('fable:vision-fidelity'), 'the fidelity pair runs AFTER the mechanical validator')
+  assert.ok(l.indexOf('fable:vision-fidelity') < calls.indexOf(sealed[0]), 'the fidelity pair runs BEFORE the seal events')
+})
+
+test('B4-3 D4 vision fidelity: a BLOCK ⇒ NEITHER seal event, vision_valid:false, honest BLOCKED terminal (required-mode uniformity)', async () => {
+  const { result, calls } = await runVision(t4args(), t4Respond({ fableFid: (h) => ({ ...rat(h), verdict: 'BLOCK', findings: [FID_FINDING] }) }))
+  assert.equal(result.vision_valid, false)
+  assert.equal(result.council.terminal, 'BLOCKED')
+  assert.match(result.reason, /vision fidelity council BLOCKED/)
+  assert.equal(ledgersOf(calls, 'vision_compiled').length, 0, 'NEITHER seal event fires on a BLOCK')
+  assert.equal(ledgersOf(calls, 'stage_completed').length, 0)
+})
+
+test('B4-3 D4 vision fidelity: a DEAD Sol seat (no receipt) ⇒ DEGRADED, NEITHER seal event (never a single-head ruling)', async () => {
+  const { result, calls } = await runVision(t4args(), t4Respond({ solFid: 'dead' }))
+  assert.equal(result.vision_valid, false)
+  assert.equal(result.council.terminal, 'DEGRADED')
+  assert.equal(ledgersOf(calls, 'vision_compiled').length, 0)
+  assert.equal(ledgersOf(calls, 'stage_completed').length, 0)
+})
+
+test('B4-3 D4 vision fidelity promised-but-tokenless: T4 + codex but NO runToken ⇒ DEGRADED, NO pair, NEITHER seal event (never a silent v3.0.1 compile)', async () => {
+  const { result, calls } = await runVision({ ...baseArgs, codexAvailable: true, capabilityTier: 'T4' }, t4Respond())
+  assert.equal(result.vision_valid, false)
+  assert.equal(calls.filter((c) => c.label === 'fable:vision-fidelity').length, 0, 'no council convenes without a runToken')
+  assert.equal(result.council.terminal, 'DEGRADED')
+  assert.equal(ledgersOf(calls, 'vision_compiled').length, 0)
+  assert.equal(ledgersOf(calls, 'stage_completed').length, 0)
+})
+
+test('B4-3 D4 vision fidelity sub-T4 byte-preservation: at T3 (no council) a clean compile seals normally with NO fidelity pair and NO council field', async () => {
+  const { result, calls } = await runVision({ ...baseArgs, codexAvailable: true, capabilityTier: 'T3' }, t4Respond())
+  assert.equal(result.vision_valid, true)
+  assert.equal(calls.filter((c) => c.label === 'fable:vision-fidelity').length, 0)
+  assert.equal(result.council, undefined, 'sub-T4 adds no council field (byte-preserved)')
+  assert.equal(ledgersOf(calls, 'vision_compiled').length, 1)
+  assert.equal(ledgersOf(calls, 'stage_completed').length, 1)
 })

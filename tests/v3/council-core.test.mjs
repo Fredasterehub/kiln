@@ -22,7 +22,7 @@ import {
   twinRatified, twinDeadlockResolved, councilDeadlock, degraded,
   SHA64_RE, RATIFY_SCHEMA, ANSWER_SCHEMA, envelopeSchema, CROSS_CHECK_SCHEMA, LEDGER_APPEND_SCHEMA,
   CANON_HASH_ONELINER, LEDGER_EXTRACT_ONELINER, councilTemplateHash, seatProv, solWrapperPlan,
-  crossCheckOk, assembleRatifyCertificate,
+  crossCheckOk, assembleRatifyCertificate, verdictShapeError,
 } from '../../plugins/kiln/src/council.mjs'
 
 const COUNCIL_SRC = readFileSync(new URL('../../plugins/kiln/src/council.mjs', import.meta.url), 'utf8')
@@ -858,6 +858,42 @@ test('D1 bundled artifacts: architecture.js AND build.js inline the lifted call-
   }
   // architecture's solWrapperPrompt is now a THIN adapter over the lifted solWrapperPlan
   assert.match(archSrc, /const solWrapperPrompt = \(opts\) => solWrapperPlan\(/)
+})
+
+// ── B4-3 D1: the verdictShapeError lift — one pure export, five consumers, zero local copies ─────────
+test('D1 verdictShapeError: a non-BLOCK/NEITHER verdict (or null) is always valid (null); the F2 validity semantics are exact', () => {
+  assert.equal(verdictShapeError({ verdict: 'APPROVE' }), null)
+  assert.equal(verdictShapeError(null), null, 'null-safe: a dead seat is not a BLOCK/NEITHER — never throws')
+  assert.equal(verdictShapeError(undefined), null)
+  // a BLOCK/NEITHER with no findings is invalid
+  assert.equal(verdictShapeError({ verdict: 'BLOCK', findings: [] }), 'BLOCK with no findings')
+  assert.equal(verdictShapeError({ verdict: 'NEITHER', findings: [] }), 'NEITHER with no findings')
+  // a finding without a finding_id, a duplicate id, and an evidence-free finding are each invalid
+  assert.equal(verdictShapeError({ verdict: 'BLOCK', findings: [{ finding_id: '', evidence_refs: ['x'] }] }), 'a finding without a finding_id')
+  assert.match(verdictShapeError({ verdict: 'BLOCK', findings: [{ finding_id: 'F1', evidence_refs: ['x'] }, { finding_id: 'F1', evidence_refs: ['y'] }] }), /duplicate finding_id 'F1'/)
+  assert.match(verdictShapeError({ verdict: 'BLOCK', findings: [{ finding_id: 'F1', evidence_refs: [] }] }), /evidence-free/)
+  // a valid evidence-bound BLOCK (refs OR a real executable_check) passes
+  assert.equal(verdictShapeError({ verdict: 'BLOCK', findings: [{ finding_id: 'F1', evidence_refs: ['src/a.js:1'] }] }), null)
+  assert.equal(verdictShapeError({ verdict: 'NEITHER', findings: [{ finding_id: 'F1', evidence_refs: [], executable_check: 'test -f x' }] }), null)
+})
+
+test('D1 bundled artifacts: verdictShapeError is lifted to council.mjs, listed in every consumer @inline:council marker, and NO local verdictShapeError/verdictShapeErrorB definition survives in any workflow source', () => {
+  // one exported definition in the pure core
+  const coreDefs = COUNCIL_SRC.split('\n').filter((l) => /^export function verdictShapeError\b/.test(l.trim()))
+  assert.equal(coreDefs.length, 1, 'council.mjs exports verdictShapeError exactly once')
+  const consumers = ['architecture', 'build', 'validate', 'vision', 'report']
+  for (const stage of consumers) {
+    const src = readFileSync(new URL(`../../plugins/kiln/workflows-src/${stage}.js`, import.meta.url), 'utf8')
+    const gen = readFileSync(new URL(`../../plugins/kiln/workflows/${stage}.js`, import.meta.url), 'utf8')
+    const marker = src.split('\n').find((l) => l.startsWith('// @inline:council:'))
+    assert.ok(marker && marker.includes('verdictShapeError'), `${stage}.js @inline:council must list verdictShapeError`)
+    // NO local (re)definition in source — the lift retired every stage-scoped copy (incl. verdictShapeErrorB)
+    const localDefs = src.split('\n').filter((l) => /^(const|function|export function) verdictShapeError(B)?\b/.test(l.trim()))
+    assert.equal(localDefs.length, 0, `${stage}.js must NOT keep a local verdictShapeError/verdictShapeErrorB definition`)
+    assert.ok(!/verdictShapeErrorB/.test(gen.replace(/\/\/.*$/gm, '')), `${stage}.js generated: no verdictShapeErrorB identifier survives in code`)
+    // the generated file inlines the one function definition
+    assert.ok(/function verdictShapeError\s*\(/.test(gen), `${stage}.js must inline the verdictShapeError definition`)
+  }
 })
 
 test('D1 assembleRatifyCertificate: each signature verifies against its OWN seat_provenance (the shared context is seat-null)', () => {

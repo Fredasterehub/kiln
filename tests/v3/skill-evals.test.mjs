@@ -202,6 +202,46 @@ test('B4-2: workflow-contracts.md Build bullet documents the capabilityTier mile
   assert.match(contracts, /misconfigured conductor|fails CLOSED/i, 'the Build bullet must state the promised-but-tokenless fail-closed rule')
 })
 
+// ── B4-3 D6/D7: the three keystone routing rows thread the council args, and the Da Vinci spawn
+//    instruction pins the Fable creative seat on the Agent-tool call. ──────────────────────────────
+test('B4-3 D6: the Validate routing row carries capabilityTier (the final-ruling council tier gate); vision + report rows carry runToken + capabilityTier', () => {
+  const validateRow = fireSrc.split('\n').find((l) => l.startsWith('| Validate |'))
+  assert.ok(validateRow, 'the Validate routing row is gone')
+  assert.match(validateRow, /capabilityTier/, 'the Validate row must thread capabilityTier (T4 final-ruling council)')
+  assert.match(validateRow, /runToken/, 'the Validate row still threads runToken')
+  const visionRow = fireSrc.split('\n').find((l) => l.startsWith('| Brainstorm→VISION |'))
+  assert.ok(visionRow, 'the Brainstorm→VISION routing row is gone')
+  assert.match(visionRow, /runToken/, 'the vision row must thread runToken (the fidelity council receipt binding)')
+  assert.match(visionRow, /capabilityTier/, 'the vision row must thread capabilityTier')
+  const reportRow = fireSrc.split('\n').find((l) => l.startsWith('| Report |'))
+  assert.ok(reportRow, 'the Report routing row is gone')
+  assert.match(reportRow, /runToken/, 'the Report row must thread runToken (the signoff council receipt binding)')
+  assert.match(reportRow, /capabilityTier/, 'the Report row must thread capabilityTier')
+})
+
+test('B4-3 D6: workflow-contracts.md documents the vision fidelity / validate final-ruling / report signoff council semantics', () => {
+  const contracts = readFileSync(join(SKILLS, '..', 'references', 'workflow-contracts.md'), 'utf8')
+  assert.match(contracts, /fidelity council/i, 'the vision bullet must name the fidelity council')
+  assert.match(contracts, /final ruling/i, 'the validate bullet must name the final-ruling council')
+  assert.match(contracts, /receipt-based/i, 'the validate bullet must state second_family_verified is receipt-based')
+  assert.match(contracts, /no_run_token_no_attestation/, 'the validate bullet must name the honest no-token attestation reason')
+  assert.match(contracts, /signoff/i, 'the report bullet must name the signoff council')
+  assert.match(contracts, /signed_off/i, 'the report bullet must state signed_off is an honest, cert-gated claim')
+})
+
+test('B4-3 D7: the Da Vinci spawn instruction pins model: "fable" on the Agent-tool call; the-creator.md frontmatter carries NO fable claim', () => {
+  // the conductor's brainstorm spawn instruction names the Fable creative seat on the Agent tool
+  assert.match(fireSrc, /model:\s*"fable"/, 'the Da Vinci Agent-tool spawn must pin model: "fable"')
+  // and it is on the Da Vinci / Agent-tool spawn (co-located with the-creator + the Agent tool)
+  const spawnBlock = fireSrc.slice(fireSrc.indexOf('Spawn **Da Vinci**'), fireSrc.indexOf('Spawn **Da Vinci**') + 900)
+  assert.match(spawnBlock, /model:\s*"fable"/, 'the fable pin sits on the Da Vinci Agent-tool spawn instruction')
+  assert.match(spawnBlock, /Agent tool/, 'the pin is on the Agent-tool spawn')
+  // the-creator.md frontmatter is left as-is — it must NOT claim fable (undocumented for frontmatter)
+  const creator = readFileSync(join(SKILLS, '..', 'agents', 'the-creator.md'), 'utf8')
+  const fm = creator.startsWith('---') ? creator.slice(3, creator.indexOf('\n---', 3)) : ''
+  assert.ok(!/fable/i.test(fm), 'the-creator.md frontmatter must carry NO fable claim (the tool param is authoritative)')
+})
+
 test('scenario 2: the plan-approval gate and STATE.md discipline sections survive', () => {
   assert.match(fireSrc, /^##[^\n]*plan-approval gate/mi, 'the plan-approval gate section is gone')
   assert.match(fireSrc, /^##\s*STATE\.md discipline/mi, 'the STATE.md discipline section is gone')

@@ -247,7 +247,9 @@ the VISION traces to a logged operator turn.
 2. Spawn **Da Vinci** (agent `kiln:the-creator`) directly with the **Agent tool**, passing a
    `name` (e.g. `da-vinci`) so he is SendMessage-addressable — on current binaries every session
    has one implicit team and there is NO team-setup step (the setup tool was removed in 2.1.178;
-   `team_name` is ignored). His spawn prompt carries:
+   `team_name` is ignored) — and pinning **`model: "fable"`** on the Agent-tool call (Da Vinci is a
+   Fable creative seat; the tool's `model` param is authoritative and overrides the agent frontmatter,
+   which is left as-is — `fable` is undocumented for frontmatter). His spawn prompt carries:
    - the absolute `project_path` — he reads `<project_path>/.kiln/docs/project-brief.md` (and, for a
      brownfield run, `codebase-map.md`) and writes ONLY `brainstorm-ledger.jsonl`, never `VISION.md`.
    - the **intake mode** — the express offer you made at onboarding (see the Express intake note in
@@ -265,7 +267,7 @@ the VISION traces to a logged operator turn.
 4. On the teammate's terminal **`BRAINSTORM_COMPLETE. Ledger at <abs path>, <N> entries.`** message:
    Da Vinci's work is finished — spawn nothing further for this stage. The ledger is sealed; now
    **compile and gate it** with the vision-compile leg:
-   `Workflow({scriptPath: "$PLUGIN_ROOT/workflows/vision.js", args: {kilnDir: "<abs>/.kiln", projectPath: "<abs>", pluginRoot: "<abs $PLUGIN_ROOT>"}})`.
+   `Workflow({scriptPath: "$PLUGIN_ROOT/workflows/vision.js", args: {kilnDir: "<abs>/.kiln", projectPath: "<abs>", pluginRoot: "<abs $PLUGIN_ROOT>", runToken, capabilityTier}})` — thread `runToken` (the per-run token) and `capabilityTier` (`state.json.capability.tier`) so the T4 fidelity council can bind its receipts; omit them on a sub-T4 run (the compile is byte-preserved).
    It runs the mechanical `kiln-vision ledger-gate` (an incomplete session can never compile), then ONE
    fresh-context compiler writes `<project_path>/.kiln/docs/VISION.md` from the ledger, then the
    deterministic `kiln-vision validate` gate (≤2 revise passes). It returns
@@ -351,13 +353,13 @@ pause voice — *"The fire banks for the night…"* — then resume the chain ne
 
 | Stage | Launch | Args (minimal + options) | Reads | Writes |
 |---|---|---|---|---|
-| Brainstorm→VISION | `workflows/vision.js` | `kilnDir`, `projectPath`, **`pluginRoot`** (load-bearing) | brainstorm-ledger.jsonl | `.kiln/docs/VISION.md` (compiled + gated; the brainstorm-stage compile leg — launched from the Brainstorm handler above, not a top-level stage) |
+| Brainstorm→VISION | `workflows/vision.js` | `kilnDir`, `projectPath`, **`pluginRoot`** (load-bearing) (+`runToken`, `capabilityTier` — the T4 fidelity council) | brainstorm-ledger.jsonl | `.kiln/docs/VISION.md` (compiled + gated; the brainstorm-stage compile leg — launched from the Brainstorm handler above, not a top-level stage) |
 | Gauge | `workflows/gauge.js` | `kilnDir`, `projectPath`, `pluginRoot` (+`postureOverride`, `assessorModel`, `codexAvailable`) | VISION.md (+codebase-map.md) | `state.json.posture` / STATE `posture:`, ledger `posture_set` |
 | Research | `workflows/research.js` | `kilnDir`, `projectPath` (+`mode`, `testingRigor`, `topicsMax`, `pluginRoot` — locates kiln-state for the stage brackets; absence degrades them to log lines) | VISION.md | `.kiln/docs/research.md` (only when topics > 0; the §3.2 zero-topics route writes none and returns `research_file: null`) |
 | Architecture | `workflows/architecture.js` | `kilnDir`, `projectPath` (+`mode`, `testingRigor`, `codexAvailable`, `planning`, `validationRounds`, `lawModel`, `pluginRoot`, `runToken`, `capabilityTier`) | research.md (if present), VISION.md | `.kiln/master-plan.md`, architecture docs |
 | Build | `workflows/build.js` | `kilnDir`, `projectPath`, **`pluginRoot`** (load-bearing), `posture`, `runToken` (+`codexAvailable`, `capabilityTier`, `testingRigor`, `milestoneLimit`, `uiBuild`, `gateOnly`) | master-plan.md | source code, living docs, tests |
-| Validate | `workflows/validate.js` | `kilnDir`, `projectPath`, `pluginRoot`, `posture`, `runToken` (+`testingRigor`, `codexAvailable`, `designPresent` hint) | master-plan.md, built app | `.kiln/validation/report.md` |
-| Report | `workflows/report.js` | `kilnDir`, `projectPath` | all .kiln artifacts + built project | `.kiln/REPORT.md` |
+| Validate | `workflows/validate.js` | `kilnDir`, `projectPath`, `pluginRoot`, `posture`, `runToken` (+`testingRigor`, `codexAvailable`, `capabilityTier`, `designPresent` hint) | master-plan.md, built app | `.kiln/validation/report.md` |
+| Report | `workflows/report.js` | `kilnDir`, `projectPath`, **`pluginRoot`** (+`runToken`, `capabilityTier` — the T4 signoff council) | all .kiln artifacts + built project | `.kiln/REPORT.md` |
 
 **The per-stage arg contract lives in `$PLUGIN_ROOT/references/workflow-contracts.md` — read it before
 launching any autonomous stage.** The routing-table row names each arg; that file says what it MEANS:
@@ -460,7 +462,7 @@ right-sizing the build to the deliverable — are in workflow-contracts.md.
 
 Launch `report.js` like the other autonomous stages — it reads all `.kiln/` artifacts plus the built
 project and writes `./.kiln/REPORT.md` in Kiln's voice (the Omega persona lives inside the workflow):
-`Workflow({scriptPath: "$PLUGIN_ROOT/workflows/report.js", args: {kilnDir: "<abs>/.kiln", projectPath: "<abs>", pluginRoot: "<abs $PLUGIN_ROOT>"}})`.
+`Workflow({scriptPath: "$PLUGIN_ROOT/workflows/report.js", args: {kilnDir: "<abs>/.kiln", projectPath: "<abs>", pluginRoot: "<abs $PLUGIN_ROOT>", runToken, capabilityTier}})` — thread `runToken` + `capabilityTier` (`state.json.capability.tier`) so the T4 signoff council can bind its receipts and gate completion; omit them on a sub-T4 run (the existence-gated completion is byte-preserved, `signed_off` absent).
 Wait for completion, render *"The forge cools. The work remains."* and present the delivery summary.
 
 ## STATE.md discipline
