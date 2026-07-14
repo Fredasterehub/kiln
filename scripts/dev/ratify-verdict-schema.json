@@ -1,0 +1,37 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "verdict": { "type": "string", "enum": ["RATIFY", "RATIFY_WITH_CHANGES", "REJECT"] },
+    "amendments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "section": { "type": "string" },
+          "change": { "type": "string" },
+          "rationale": { "type": "string" },
+          "blocking": { "type": "boolean" }
+        },
+        "required": ["id", "section", "change", "rationale", "blocking"]
+      }
+    },
+    "inheritance_rulings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "item": { "type": "string" },
+          "disposition": { "type": "string", "enum": ["AGREE", "REASSIGN"] },
+          "correct_disposition": { "type": "string" }
+        },
+        "required": ["item", "disposition", "correct_disposition"]
+      }
+    },
+    "notes": { "type": "string" }
+  },
+  "required": ["verdict", "amendments", "inheritance_rulings", "notes"]
+}
