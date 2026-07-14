@@ -17,7 +17,7 @@ never a summary.
 Read your brief FIRST: {{brief_path}}. Then the ratified spec it binds to: {{spec_path}}.
 
 ## Standing rules
-- Work only in {{repo_path}} (branch {{branch}}). NEVER touch /DEV/ghostundo.
+- Work only in {{repo_path}} (branch {{branch}}).
 - Never commit or run any git mutation.
 - Stay inside the brief's boundary file list.
 - Every new mechanism you rely on is EXECUTED once with the receipt captured (rule 3) before it is

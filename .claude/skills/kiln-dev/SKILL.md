@@ -20,8 +20,10 @@ versioned and dual-keyed on change. Authority: `.kiln-dev/v302/dev-protocol-draf
   tree. Opus is the default Claude-lane implementer; the mirrored Codex-authored lane is the stated
   exception. Codex-authored ⇒ Fable reviews.
 - Creative: Fable directs / Opus produces / Sol mechanics-only-blocking (taste advisory).
-- Workflows never auto-commit. /DEV/ghostundo is untouchable. One writer per task — reviewers and
-  designers rule but never touch the tree.
+- Workflows never auto-commit. Operator-private paths and live runs are out of every worker's scope —
+  worker surfaces carry POSITIVE boundaries only (repo path + file allowlist); the operator's
+  DO-NOT-TOUCH list lives at main-session level (memory/HANDOFF), never in worker prompts. One writer
+  per task — reviewers and designers rule but never touch the tree.
 - **Workflows, not teammates (A11 — operator ruling 2026-07-14):** workflows carry ALL autonomous
   LLM calls; named/team agents exist ONLY for operator-interactive work (dev batches have none).
   Implement and review are workflow stages — every round a FRESH agent() context fed a
@@ -119,9 +121,9 @@ output format · allowed tools/inputs · boundaries · effort) + the failure-idi
 ## Inheritance (before building dev-side, check product-already-has first — one codebase of trust)
 - **product-inherits:** the verified codex facts → the shared receipt transport + codex-prompt-guide;
   receipts-for-claims + executed-before-written as authoring discipline; the five-field brief contract;
-  generic v3.0.1 in-flight resume/migration + its ghostundo-SHAPED fixture.
+  generic v3.0.1 in-flight resume/migration + its synthetic in-flight-run fixture.
 - **product-already-has:** kiln-codex-receipt.mjs attestation; commit-before-review; schema-forced
   payloads; fixed workflow prompts; lease-on-capability deadlines; content-based failure fingerprints;
   B3's closed debate state machine (the convergence oracle does NOT ride into B3).
-- **dev-only / personal:** two-trailer dual-key; operator box/paths/subscriptions; the /DEV/ghostundo
-  path + untouchable rule; memory/HANDOFF conventions; the review-cycle convergence oracle.
+- **dev-only / personal:** two-trailer dual-key; operator box/paths/subscriptions; the operator's
+  live-run DO-NOT-TOUCH list; memory/HANDOFF conventions; the review-cycle convergence oracle.

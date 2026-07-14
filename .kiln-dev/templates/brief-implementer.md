@@ -26,8 +26,8 @@ reads it. Fill every `{{blank}}`; delete nothing.
 ## Boundaries (what NOT to touch)
 {{boundaries}}
 
-<!-- The exact file/dir allowlist. Everything else is untouched. /DEV/ghostundo is NEVER touched.
-     The worker never commits or runs any git mutation. -->
+<!-- The exact file/dir allowlist. Everything else is untouched. The worker never commits or runs any
+     git mutation. -->
 
 ## Effort tier · failure idiom
 - Effort: {{effort}}  <!-- low | medium | high | xhigh -->
