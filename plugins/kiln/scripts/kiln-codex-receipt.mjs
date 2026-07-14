@@ -15,11 +15,11 @@
 
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmdirSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmdirSync, rmSync, writeFileSync, writeSync } from 'node:fs'
 import { userInfo } from 'node:os'
 import { basename, delimiter, dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { CODEX_MODEL } from '../src/models.mjs'
+import { CODEX_FALLBACK, CODEX_MODEL } from '../src/models.mjs'
 
 const RECEIPT_VERSION = 1
 const PARSER_VERSION = 'kiln-codex-receipt/1'
@@ -75,21 +75,24 @@ export function parseCodexStderr(stderrBytes) {
   return { cliVersion, reportedModel, sessionId, tokensUsed }
 }
 
-function containsErrorEvent(value) {
-  if (Array.isArray(value)) return value.some(containsErrorEvent)
-  if (!isObj(value)) return false
-  if (value.type === 'error') return true
-  return Object.values(value).some(containsErrorEvent)
+function collectErrorObjects(value, acc = []) {
+  if (Array.isArray(value)) { for (const item of value) collectErrorObjects(item, acc); return acc }
+  if (!isObj(value)) return acc
+  if (value.type === 'error') acc.push(value)
+  for (const item of Object.values(value)) collectErrorObjects(item, acc)
+  return acc
 }
 
-export function parseCodexJsonl(jsonlBytes) {
+export function parseCodexJsonl(jsonlBytes, options = {}) {
+  const allowError = options.allowError ?? (() => false)
   const raw = decodeUtf8(jsonlBytes, 'JSONL capture')
   const lines = raw.split(/\r?\n/).filter((line) => line !== '')
   if (!lines.length) throw new Error('JSONL capture is empty')
   const events = lines.map((line, i) => {
     try { return JSON.parse(line) } catch { throw new Error(`JSONL line ${i + 1} is malformed`) }
   })
-  if (events.some(containsErrorEvent)) throw new Error('JSONL capture contains an error event')
+  const disallowed = collectErrorObjects(events).filter((item) => !allowError(item?.message))
+  if (disallowed.length) throw new Error('JSONL capture contains an error event')
   const terminals = events.filter((event) => event?.type === 'turn.completed' && isObj(event.usage))
   if (terminals.length !== 1) throw new Error(`JSONL capture must contain exactly one terminal usage object, found ${terminals.length}`)
   const usage = terminals[0].usage
@@ -546,6 +549,774 @@ function stripStdoutTerminator(bytes) {
   return bytes
 }
 
+// ── The dev bridge (Kiln Dev Protocol Piece 3, A4/A5/A6/A7) ────────────────────────────────────
+// A second entry point over the SAME trust base. Where main() attests the plain-stderr council
+// surface, the bridge attests the `--json` surface (thread_id + usage + terminal events) and runs
+// the A5 VALIDATED OUTCOME STATE MACHINE. It reuses the crypto, ledger lock, schema validator, and
+// invocation-id derivation, so there is one codebase of trust in both directions. sol-review.sh is
+// a thin policy wrapper over this subcommand; no verdict authority lives in bash.
+const BRIDGE_VERSION = 1
+const BRIDGE_TRANSPORT = 'codex_exec_bridge'
+const BRIDGE_SANDBOXES = ['read-only', 'workspace-write', 'danger-full-access']
+const BRIDGE_EFFORTS = ['low', 'medium', 'high', 'xhigh'] // sol rejects 'minimal'; 'ultra' never existed (probe P4)
+const BRIDGE_OUTCOMES = ['VERDICT', 'SUPPRESSED', 'FAILED_TURN', 'WALLCLOCK_TIMEOUT', 'TRANSPORT']
+const BRIDGE_EXIT = { VERDICT: 0, SUPPRESSED: 10, FAILED_TURN: 11, TRANSPORT: 12, WALLCLOCK_TIMEOUT: 124 }
+const BRIDGE_USAGE = 'usage: kiln-codex-receipt.mjs bridge --prompt <f> --out <prefix> --schema <f> --run-token <t> --keystone <k> --phase <p> --seat <s> --attempt <n> [--model id] [--effort low|medium|high|xhigh] [--sandbox read-only|workspace-write|danger-full-access] [--network] [--web] [--ephemeral] [--resume <thread_id>] [--wallclock <seconds>] [--ledger <f>] [--no-fallback]'
+// The operator's broken ~/.codex/hooks.json injects one item-level error on every run; --ignore-user-config
+// skips config.toml ONLY, never hooks.json (probe P2b). This is the SOLE tolerated error fingerprint.
+const HOOKS_CONFIG_ERROR_RE = /^failed to parse hooks config .*\/hooks\.json:/
+// A turn.failed whose model-scoped error matches this — and is NOT a reasoning.effort rejection — is the
+// exact model-unavailable/entitlement fingerprint that admits the one gpt-5.5 fallback rung (probe MU).
+const MODEL_UNAVAILABLE_RE = /\bmodel\b[^.]{0,80}?\b(is not supported when using|not found|not available|is unavailable|does not exist)\b/i
+const EFFORT_ERROR_RE = /Unsupported value:|reasoning\.effort/
+
+export function isAllowlistedCodexError(message) {
+  return typeof message === 'string' && HOOKS_CONFIG_ERROR_RE.test(message)
+}
+
+// Structural read of the --json event stream: no I/O, no verdict authority — just the terminal shape
+// the A5 state machine needs. `disallowedErrorCount` counts error items that are NOT allowlisted.
+export function inspectBridgeEvents(events, options = {}) {
+  const allowError = options.allowError ?? isAllowlistedCodexError
+  const errorObjects = collectErrorObjects(events)
+  const started = events.find((event) => event?.type === 'thread.started')
+  const completed = events.filter((event) => event?.type === 'turn.completed' && isObj(event.usage))
+  const failed = events.filter((event) => event?.type === 'turn.failed')
+  return {
+    threadId: typeof started?.thread_id === 'string' ? started.thread_id : null,
+    completedCount: completed.length,
+    failedCount: failed.length,
+    disallowedErrorCount: errorObjects.filter((item) => !allowError(item?.message)).length,
+    usage: completed.length === 1 ? completed[0].usage : null,
+    failureMessages: failed.map((event) => event?.error?.message).filter((m) => typeof m === 'string'),
+  }
+}
+
+// The A5 VALIDATED OUTCOME STATE MACHINE — pure. A VERDICT-shaped run still needs attestation
+// (schema-valid output + usage) before it is a VERDICT; the orchestrator downgrades to TRANSPORT
+// on any attestation failure. Everything that is not one of the four defined shapes is TRANSPORT,
+// which consumes no review rejection.
+export function classifyBridgeOutcome(input) {
+  if (input.timedOut) return { status: 'WALLCLOCK_TIMEOUT' }
+  if (input.parseError) return { status: 'TRANSPORT', reason: `event stream did not parse: ${input.parseError}` }
+  const ins = input.inspect
+  if (input.exitCode === 0) {
+    if (ins.disallowedErrorCount > 0) return { status: 'TRANSPORT', reason: 'exit 0 but the stream carried a non-allowlisted error item' }
+    if (ins.completedCount !== 1 || ins.failedCount !== 0) return { status: 'TRANSPORT', reason: `exit 0 with missing/conflicting terminals (completed=${ins.completedCount} failed=${ins.failedCount})` }
+    if (!input.verdictExists) return { status: 'TRANSPORT', reason: 'exit 0 but the verdict artifact is absent' }
+    if (input.verdictEmpty) return { status: 'SUPPRESSED' }
+    return { status: 'VERDICT', needsAttestation: true }
+  }
+  if (input.exitCode === 1) {
+    if (ins.completedCount === 0 && ins.failedCount === 1 && !input.verdictExists) return { status: 'FAILED_TURN' }
+    return { status: 'TRANSPORT', reason: `exit 1 without a clean turn.failed (completed=${ins.completedCount} failed=${ins.failedCount} verdict=${input.verdictExists})` }
+  }
+  return { status: 'TRANSPORT', reason: `unexpected codex exit ${input.exitCode}` }
+}
+
+function extractCodexError(raw) {
+  if (typeof raw !== 'string') return null
+  try {
+    const parsed = JSON.parse(raw)
+    if (isObj(parsed?.error)) return parsed.error
+    if (isObj(parsed)) return parsed
+  } catch { /* not a JSON envelope — treat the raw string as the message below */ }
+  return { message: raw }
+}
+
+// EXACT fingerprint (amendment A5): fires the fallback ONLY on a model-unavailable/entitlement
+// turn.failure, and NEVER on the reasoning.effort rejection that the old `grep -q model` admitted.
+export function isModelUnavailableFingerprint(inspect) {
+  for (const raw of inspect.failureMessages || []) {
+    const err = extractCodexError(raw)
+    const text = err && typeof err.message === 'string' ? err.message : (typeof raw === 'string' ? raw : '')
+    const param = err && typeof err.param === 'string' ? err.param : ''
+    if (param === 'reasoning.effort' || EFFORT_ERROR_RE.test(text)) continue
+    if (MODEL_UNAVAILABLE_RE.test(text)) return true
+  }
+  return false
+}
+
+// Render the codex argv. Pure and total, so the sandbox/network/resume invariants are held by a
+// helper, not by caller discipline (rule 2). Resume cannot carry -s or --ephemeral (probe P3 + A6).
+export function bridgeCodexArgs({ model, effort, schemaFile, verdictFile, sandbox, ephemeral, web, network, resumeThread }) {
+  if (!BRIDGE_EFFORTS.includes(effort)) throw new Error(`bridge: unsupported effort '${effort}' (use ${BRIDGE_EFFORTS.join('|')})`)
+  const tail = [
+    '-c', `model_reasoning_effort=${JSON.stringify(effort)}`,
+    '--ignore-user-config', '--skip-git-repo-check', '--color', 'never',
+    '--json', '-o', verdictFile, '--output-schema', schemaFile,
+  ]
+  if (resumeThread) {
+    if (ephemeral) throw new Error('bridge: --resume cannot combine with --ephemeral (recovery is not a fresh one-shot)')
+    if (sandbox) throw new Error('bridge: --resume cannot set a sandbox; codex resume inherits the recorded posture (probe P3)')
+    if (network) throw new Error('bridge: --resume cannot add a network capability; it inherits the recorded posture (probe P3)')
+    // web is a posture capability too: resume inherits the recorded posture, so the whole tuple
+    // (sandbox, network, web) rides on the thread — the caller renders none of it (cmdBridge enforces
+    // the recorded tuple and records it in the receipt).
+    return ['exec', 'resume', resumeThread, ...tail, '-']
+  }
+  if (!BRIDGE_SANDBOXES.includes(sandbox)) throw new Error(`bridge: unknown sandbox '${sandbox}' (use ${BRIDGE_SANDBOXES.join('|')})`)
+  if (network && sandbox !== 'workspace-write') throw new Error('bridge: --network requires --sandbox workspace-write')
+  const head = ['exec', '-m', model, '--sandbox', sandbox]
+  if (network) head.push('-c', 'sandbox_workspace_write.network_access=true')
+  if (web) tail.push('-c', 'tools.web_search=true')
+  if (ephemeral) tail.push('--ephemeral')
+  return [...head, ...tail, '-']
+}
+
+// The A2 review-verdict validator: structural (against the supplied output schema) + the cross-field
+// arithmetic the ladder depends on, then STAMPS the invocation-supplied round (never model-supplied).
+export function validateReviewVerdict(verdictBytes, options = {}) {
+  const round = options.round
+  if (!Number.isInteger(round) || round < 1) throw new Error('review verdict: invocation round must be an integer >= 1')
+  const { exactValue: schema } = parseJsonFile(options.schemaBytes, 'review schema', true)
+  const { value, exactValue } = parseJsonFile(verdictBytes, 'review verdict', true)
+  const violations = schemaErrors(exactValue, schema)
+  if (violations.length) throw new Error(`review verdict violates schema:\n  ${violations.join('\n  ')}`)
+  if (!Array.isArray(value.findings)) throw new Error('review verdict: findings must be an array')
+  const ids = value.findings.map((finding) => finding.id)
+  if (ids.some((id) => typeof id !== 'string' || id === '')) throw new Error('review verdict: every finding needs a nonempty id')
+  if (new Set(ids).size !== ids.length) throw new Error('review verdict: finding ids must be unique')
+  const blocking = value.findings.filter((finding) => finding.class === 'BLOCKING')
+  if (value.verdict === 'APPROVED' && blocking.length) throw new Error('review verdict: APPROVED cannot carry a BLOCKING finding')
+  if (value.verdict === 'REJECTED' && !blocking.length) throw new Error('review verdict: REJECTED must carry at least one BLOCKING finding')
+  return { ...value, round }
+}
+
+// The ladder's SUBSTANTIVE oracle (A2): script-decidable, no prose judgment.
+export function isSubstantiveRejection(verdict) {
+  return isObj(verdict) && verdict.verdict === 'REJECTED' && Array.isArray(verdict.findings)
+    && verdict.findings.some((finding) => finding.class === 'BLOCKING' && finding.remedy_class === 'NEW_DECISION')
+}
+
+function canonicalBridgeInput(promptSha256, schemaSha256) {
+  return sha256(Buffer.from(JSON.stringify({ parser_version: PARSER_VERSION, transport: BRIDGE_TRANSPORT, prompt_sha256: promptSha256, schema_sha256: schemaSha256 })))
+}
+
+function bridgeReplayGuard(file, invocationId) {
+  withLedgerLock(file, () => {
+    if (readLedger(file).some((entry) => entry.invocation_id === invocationId && entry.status === 'VERDICT')) {
+      throw new Error(`bridge replay rejected: ${invocationId} already produced a VERDICT`)
+    }
+  })
+}
+
+// ADOPT-2: a resume must bind to a SPECIFIC recorded row — the recoverable row's thread_id must equal
+// the caller's --resume <thread_id> AND the prompt+schema input must match. The recorded row alone
+// carries the resumed turn's model + eligibility (codex resume takes no -m); opts.model never does.
+function bridgeRecoverable(file, invocationInput, threadId) {
+  if (typeof threadId !== 'string' || threadId === '') return null
+  let match = null
+  withLedgerLock(file, () => {
+    for (const entry of readLedger(file)) {
+      if (entry.input_sha256 === invocationInput && entry.thread_id === threadId && (entry.status === 'SUPPRESSED' || entry.status === 'FAILED_TURN')) match = entry
+    }
+  })
+  return match
+}
+
+function parseBridgeArgs(argv) {
+  const opts = {
+    model: CODEX_MODEL, effort: 'high', sandbox: 'read-only', wallclock: 1800,
+    ephemeral: false, web: false, network: false, resume: '', fallback: true,
+  }
+  const need = (i) => { if (i + 1 >= argv.length) die(BRIDGE_USAGE, 2); return argv[i + 1] }
+  for (let i = 0; i < argv.length; i += 1) {
+    switch (argv[i]) {
+      case '--prompt': opts.prompt = need(i); i += 1; break
+      case '--out': opts.out = need(i); i += 1; break
+      case '--schema': opts.schema = need(i); i += 1; break
+      case '--ledger': opts.ledger = need(i); i += 1; break
+      case '--model': opts.model = need(i); i += 1; break
+      case '--effort': opts.effort = need(i); i += 1; break
+      case '--sandbox': opts.sandbox = need(i); opts.sandboxExplicit = true; i += 1; break
+      case '--resume': opts.resume = need(i); i += 1; break
+      case '--wallclock': opts.wallclock = Number(need(i)); i += 1; break
+      case '--run-token': opts.runToken = need(i); i += 1; break
+      case '--keystone': opts.keystone = need(i); i += 1; break
+      case '--phase': opts.phase = need(i); i += 1; break
+      case '--seat': opts.seat = need(i); i += 1; break
+      case '--attempt': opts.attempt = Number(need(i)); i += 1; break
+      case '--ephemeral': opts.ephemeral = true; break
+      case '--web': opts.web = true; break
+      case '--network': opts.network = true; break
+      case '--no-fallback': opts.fallback = false; break
+      default: die(`${BRIDGE_USAGE}\nbridge: unknown arg '${argv[i]}'`, 2)
+    }
+  }
+  for (const key of ['prompt', 'out', 'schema', 'runToken', 'keystone', 'phase', 'seat']) {
+    if (typeof opts[key] !== 'string' || opts[key] === '') die(`${BRIDGE_USAGE}\nbridge: --${key.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())} is required`, 2)
+  }
+  if (!MODEL_RE.test(opts.model)) die(`${BRIDGE_USAGE}\nbridge: invalid --model`, 2)
+  if (!Number.isInteger(opts.attempt) || opts.attempt < 1) die(`${BRIDGE_USAGE}\nbridge: --attempt must be an integer >= 1`, 2)
+  if (!Number.isFinite(opts.wallclock) || opts.wallclock <= 0) die(`${BRIDGE_USAGE}\nbridge: --wallclock must be a positive number of seconds`, 2)
+  return opts
+}
+
+function runBridgeCodex({ codexExecutable, promptBytes, argv, wallMs, verdictFile, eventsFile, stderrFile }) {
+  rmSync(verdictFile, { force: true })
+  const child = spawnSync(codexExecutable, argv, { input: promptBytes, encoding: null, maxBuffer: 64 * 1024 * 1024, timeout: wallMs, killSignal: 'SIGKILL' })
+  const stdoutBytes = Buffer.isBuffer(child.stdout) ? child.stdout : Buffer.alloc(0)
+  const stderrBytes = Buffer.isBuffer(child.stderr) ? child.stderr : Buffer.alloc(0)
+  atomicWrite(eventsFile, stdoutBytes)
+  atomicWrite(stderrFile, stderrBytes)
+  const timedOut = child.error?.code === 'ETIMEDOUT' || child.signal === 'SIGKILL'
+  const exitCode = Number.isInteger(child.status) ? child.status : -1
+  let events = null
+  let parseError = null
+  try {
+    events = decodeUtf8(stdoutBytes, 'event stream').split(/\r?\n/).filter((line) => line !== '').map((line) => JSON.parse(line))
+  } catch (e) { parseError = e.message }
+  if (child.error && !timedOut) parseError = parseError ?? `could not spawn codex: ${child.error.message}`
+  return { stdoutBytes, stderrBytes, timedOut, exitCode, events, parseError }
+}
+
+function bridgeVerdictState(verdictFile) {
+  if (!existsSync(verdictFile)) return { exists: false, empty: true, bytes: Buffer.alloc(0) }
+  const bytes = readFileSync(verdictFile)
+  return { exists: true, empty: decodeUtf8(bytes, 'verdict').trim() === '', bytes }
+}
+
+function attestBridgeVerdict({ run, verdict, schemaBytes }) {
+  // A VERDICT requires non-empty schema-valid output AND a clean --json attestation.
+  const violations = schemaErrors(parseJsonFile(verdict.bytes, 'bridge verdict', true).exactValue, parseJsonFile(schemaBytes, 'output schema', true).exactValue)
+  if (violations.length) throw new Error(`verdict violates the output schema:\n  ${violations.join('\n  ')}`)
+  const jsonl = parseCodexJsonl(run.stdoutBytes, { allowError: isAllowlistedCodexError })
+  return { tokensUsed: jsonl.tokensUsed, usage: jsonl.usage }
+}
+
+// DSGN-3: every attempt's raw artifacts survive AND its ledger row binds to immutable bytes. After
+// an attempt is classified, its stable verdict/events/stderr/receipt files are ARCHIVE-COPIED to
+// <prefix>.attempt<K>.* (K = 1 + count of existing ledger rows for this outprefix — deterministic,
+// no clock) and the row records raw_artifact_refs pointing at those attempt-scoped paths together
+// with a per-artifact sha256 map. The stable <prefix>.* paths remain the LATEST attempt's copy only;
+// nothing authoritative points at them. Counting + archive + append happen under one ledger lock so
+// K is race-free and the row's bytes are never reused or overwritten by a later attempt.
+function finalizeBridgeAttempt(ledgerFile, outPrefix, files, hasReceipt, row) {
+  withLedgerLock(ledgerFile, (assertOwned) => {
+    const K = readLedger(ledgerFile).filter((e) => e.out_prefix === outPrefix).length + 1
+    const refs = {}
+    const shas = {}
+    for (const [name, src, suffix] of [
+      ['verdict', files.verdictFile, 'verdict'],
+      ['events', files.eventsFile, 'events.jsonl'],
+      ['stderr', files.stderrFile, 'stderr.log'],
+      ['receipt', hasReceipt ? files.receiptFile : null, 'receipt.json'],
+    ]) {
+      if (src && existsSync(src)) {
+        const dest = `${outPrefix}.attempt${K}.${suffix}`
+        const bytes = readFileSync(src)
+        atomicWrite(dest, bytes)
+        refs[name] = dest
+        shas[name] = sha256(bytes)
+      } else {
+        refs[name] = null
+      }
+    }
+    assertOwned()
+    appendFileSync(ledgerFile, JSON.stringify({ ...row, out_prefix: outPrefix, attempt_index: K, raw_artifact_refs: refs, raw_artifact_sha256: shas }) + '\n')
+  })
+}
+
+function cmdBridge(argv) {
+  const opts = parseBridgeArgs(argv)
+  const promptFile = canonicalFile(resolve(opts.prompt))
+  const schemaFile = canonicalFile(resolve(opts.schema))
+  const outPrefix = resolve(opts.out)
+  const verdictFile = canonicalFile(`${outPrefix}.verdict`)
+  const eventsFile = canonicalFile(`${outPrefix}.events.jsonl`)
+  const stderrFile = canonicalFile(`${outPrefix}.stderr.log`)
+  const receiptFile = canonicalFile(`${outPrefix}.receipt.json`)
+  const ledgerFile = canonicalFile(resolve(opts.ledger ?? `${outPrefix}.ledger.jsonl`))
+  requireDistinctFiles({ promptFile, schemaFile, verdictFile, eventsFile, stderrFile, receiptFile, ledgerFile })
+
+  const promptBytes = readFileSync(promptFile)
+  const schemaBytes = readFileSync(schemaFile)
+  if (!promptBytes.length) throw new Error('bridge: prompt file is empty')
+  parseJsonFile(schemaBytes, 'output schema')
+  const promptSha256 = sha256(promptBytes)
+  const schemaSha256 = sha256(schemaBytes)
+  const inputSha256 = canonicalBridgeInput(promptSha256, schemaSha256)
+  const binding = { runToken: opts.runToken, keystone: opts.keystone, phase: opts.phase, seat: opts.seat, attempt: opts.attempt }
+  const invocationId = deriveInvocationId({ ...binding, inputSha256 })
+  const wallMs = Math.round(opts.wallclock * 1000)
+  const files = { verdictFile, eventsFile, stderrFile, receiptFile }
+  const resumed = Boolean(opts.resume)
+
+  // ── Posture + model resolution (ADOPT-2/-6): on resume the RECORDED row governs the whole posture
+  // tuple (sandbox, network, web) and the resumed turn's model + eligibility — never opts.model. ──
+  let recordedSandbox = opts.sandbox
+  let recordedNetwork = opts.network
+  let recordedWeb = opts.web
+  let usedModel = opts.model
+  let solSeatEligible = opts.model === CODEX_MODEL
+
+  if (resumed) {
+    const prior = bridgeRecoverable(ledgerFile, inputSha256, opts.resume)
+    if (!prior) throw new Error(`bridge: --resume <thread_id> '${opts.resume}' has no recoverable SUPPRESSED/FAILED_TURN row matching this prompt+schema in ${ledgerFile}`)
+    recordedSandbox = prior.sandbox
+    recordedNetwork = prior.network === true
+    recordedWeb = prior.web === true
+    if (opts.sandboxExplicit && opts.sandbox !== recordedSandbox) {
+      throw new Error(`bridge: --resume must keep the recorded sandbox posture '${recordedSandbox}', not '${opts.sandbox}' — refusing (start a fresh turn to change posture)`)
+    }
+    if (opts.network && !recordedNetwork) throw new Error('bridge: --resume cannot add a network capability the recorded turn did not have (start a fresh turn)')
+    if (opts.web && !recordedWeb) throw new Error('bridge: --resume cannot add web the recorded turn did not have (start a fresh turn)')
+    usedModel = typeof prior.requested_model === 'string' ? prior.requested_model : opts.model
+    solSeatEligible = prior.sol_seat_eligible === true
+  } else {
+    bridgeReplayGuard(ledgerFile, invocationId)
+  }
+
+  const codexExecutable = resolveCodexExecutable()
+
+  // One attempt: render argv, run codex, classify, and (on VERDICT) attest + write the stable receipt.
+  const runAttempt = ({ model, solEligible, sandbox, network, web }) => {
+    rmSync(receiptFile, { force: true })
+    const argvCodex = bridgeCodexArgs({
+      model, effort: opts.effort, schemaFile, verdictFile,
+      sandbox: resumed ? '' : sandbox, ephemeral: opts.ephemeral,
+      web: resumed ? false : web, network: resumed ? false : network,
+      resumeThread: resumed ? opts.resume : undefined,
+    })
+    const run = runBridgeCodex({ codexExecutable, promptBytes, argv: argvCodex, wallMs, verdictFile, eventsFile, stderrFile })
+    const inspect = run.events ? inspectBridgeEvents(run.events) : { threadId: null, completedCount: 0, failedCount: 0, disallowedErrorCount: 0, usage: null, failureMessages: [] }
+    const verdict = bridgeVerdictState(verdictFile)
+    let decision = classifyBridgeOutcome({ timedOut: run.timedOut, exitCode: run.exitCode, parseError: run.parseError, inspect, verdictExists: verdict.exists, verdictEmpty: verdict.empty })
+    let receipt = null
+    if (decision.status === 'VERDICT') {
+      try {
+        const attest = attestBridgeVerdict({ run, verdict, schemaBytes })
+        receipt = {
+          bridge_version: BRIDGE_VERSION,
+          parser_version: PARSER_VERSION,
+          transport: BRIDGE_TRANSPORT,
+          invocation_id: invocationId,
+          prompt_sha256: promptSha256,
+          schema_sha256: schemaSha256,
+          output_sha256: sha256(verdict.bytes),
+          events_sha256: sha256(run.stdoutBytes),
+          stderr_sha256: sha256(run.stderrBytes),
+          cli_version: CLI_VERSION,
+          requested_model: model,
+          sol_seat_eligible: solEligible,
+          sandbox,
+          network,
+          web,
+          ephemeral: opts.ephemeral,
+          resumed,
+          thread_id: inspect.threadId,
+          exit_code: 0,
+          tokens_used: attest.tokensUsed,
+        }
+        atomicWrite(receiptFile, Buffer.from(JSON.stringify(receipt) + '\n'))
+      } catch (e) {
+        decision = { status: 'TRANSPORT', reason: `verdict shape failed attestation: ${e.message}` }
+      }
+    }
+    return { run, inspect, verdict, decision, receipt }
+  }
+
+  const ledgerRow = (model, solEligible, sandbox, network, web, inspect, decision, receipt) => ({
+    parser_version: PARSER_VERSION,
+    transport: BRIDGE_TRANSPORT,
+    status: decision.status,
+    invocation_id: invocationId,
+    input_sha256: inputSha256,
+    prompt_sha256: promptSha256,
+    schema_sha256: schemaSha256,
+    sandbox,
+    network,
+    web,
+    requested_model: model,
+    sol_seat_eligible: solEligible,
+    resumed,
+    thread_id: inspect.threadId,
+    tokens_used: inspect.usage ? inspect.usage.input_tokens + inspect.usage.output_tokens : null,
+    receipt_sha256: receipt ? sha256(Buffer.from(JSON.stringify(receipt))) : null,
+    reason: decision.reason ?? null,
+  })
+
+  // ── PRIMARY attempt — archived + ledgered before any fallback overwrites the stable files ──
+  let attempt = runAttempt({ model: usedModel, solEligible: solSeatEligible, sandbox: recordedSandbox, network: recordedNetwork, web: recordedWeb })
+  const doFallback = attempt.decision.status === 'FAILED_TURN' && opts.fallback && !resumed && usedModel === CODEX_MODEL && isModelUnavailableFingerprint(attempt.inspect)
+  finalizeBridgeAttempt(ledgerFile, outPrefix, files, Boolean(attempt.receipt),
+    ledgerRow(usedModel, solSeatEligible, recordedSandbox, recordedNetwork, recordedWeb, attempt.inspect, attempt.decision, attempt.receipt))
+
+  let finalModel = usedModel
+  let finalEligible = solSeatEligible
+  if (doFallback) {
+    // The single fallback rung: fresh turn only, exact model-unavailable fingerprint only, the primary
+    // attempt already preserved under attempt1.*, and the fallback verdict is INELIGIBLE for a Sol seat.
+    attempt = runAttempt({ model: CODEX_FALLBACK, solEligible: false, sandbox: recordedSandbox, network: recordedNetwork, web: recordedWeb })
+    finalModel = CODEX_FALLBACK
+    finalEligible = false
+    finalizeBridgeAttempt(ledgerFile, outPrefix, files, Boolean(attempt.receipt),
+      ledgerRow(CODEX_FALLBACK, false, recordedSandbox, recordedNetwork, recordedWeb, attempt.inspect, attempt.decision, attempt.receipt))
+  }
+
+  const { decision, inspect, run } = attempt
+  const line = `STATUS:${decision.status} MODEL:${finalModel} SOL_ELIGIBLE:${finalEligible} THREAD:${inspect.threadId ?? 'none'} EXIT:${run.exitCode} VERDICT_FILE:${verdictFile}${decision.reason ? ` REASON:${decision.reason}` : ''}`
+  process.stdout.write(line + '\n')
+  process.exit(BRIDGE_EXIT[decision.status])
+}
+
+// ── The routing gate (Kiln Dev Protocol D2) ─────────────────────────────────────────────────────
+// The routing AUTHORITY: deterministic, no model input. It verifies the verdict chain, requires a
+// green floor receipt, binds the reviewed diff to the receipt, validates+stamps the verdict, owns
+// the ladder arithmetic from ARTIFACTS (manifest + append-only route-ledger — never caller args),
+// appends the route row, writes <prefix>.decision.json, and exits with the decision code. The
+// workflow relays the code; the files are the authority (DSGN-1b: the return is a courtesy copy).
+const GATE_STAGES = ['plan-design', 'implementation', 'release', 'report-signoff', 'correction-escalation']
+const GATE_KEYSTONE_STAGES = new Set(['plan-design', 'release', 'report-signoff', 'correction-escalation'])
+const GATE_LANES = ['logic', 'ui-creative', 'codex-authored', 'micro-fix', 'qa-audit']
+const GATE_EXIT = { seal: 0, 'implement-r2': 20, 'microfix-r3': 21, 'confirm-each-or-escalate': 22, 'twin-council': 30 }
+const GATE_FAIL = 12
+const GATE_USAGE = 'usage: kiln-codex-receipt.mjs gate --out <prefix> --schema <f> --round <n> --manifest <f> --route-ledger <f> --diff <f> --floor-receipt <f> [--commission <f>] [--scope-artifact <f>] [--bridge-ledger <f>] [--fable-verdict <f>]\n   or: kiln-codex-receipt.mjs gate --floor --repo <path> --diff <f> --out <receipt.json>'
+const FLOOR_VERSION = 1
+
+// A gate failure is TRANSPORT-class: it consumes no rung. Print and exit 12 — never a review verdict.
+function gateFail(msg) { writeSync(2, `kiln-codex-receipt gate: GATE-FAIL ${msg}\n`); process.exit(GATE_FAIL) }
+
+function parseGateArgs(argv) {
+  const opts = { floor: false }
+  const need = (i) => { if (i + 1 >= argv.length) die(GATE_USAGE, 2); return argv[i + 1] }
+  for (let i = 0; i < argv.length; i += 1) {
+    switch (argv[i]) {
+      case '--floor': opts.floor = true; break
+      case '--repo': opts.repo = need(i); i += 1; break
+      case '--out': opts.out = need(i); i += 1; break
+      case '--diff': opts.diff = need(i); i += 1; break
+      case '--schema': opts.schema = need(i); i += 1; break
+      case '--round': opts.round = Number(need(i)); i += 1; break
+      case '--manifest': opts.manifest = need(i); i += 1; break
+      case '--route-ledger': opts.routeLedger = need(i); i += 1; break
+      case '--commission': opts.commission = need(i); i += 1; break
+      case '--scope-artifact': opts.scopeArtifact = need(i); i += 1; break
+      case '--floor-receipt': opts.floorReceipt = need(i); i += 1; break
+      case '--bridge-ledger': opts.bridgeLedger = need(i); i += 1; break
+      case '--fable-verdict': opts.fableVerdict = need(i); i += 1; break
+      default: die(`${GATE_USAGE}\ngate: unknown arg '${argv[i]}'`, 2)
+    }
+  }
+  if (opts.floor) {
+    for (const k of [['repo', '--repo'], ['diff', '--diff'], ['out', '--out']]) if (!opts[k[0]]) die(`${GATE_USAGE}\ngate --floor: ${k[1]} is required`, 2)
+  } else {
+    for (const k of [['out', '--out'], ['schema', '--schema'], ['manifest', '--manifest'], ['routeLedger', '--route-ledger'], ['diff', '--diff'], ['floorReceipt', '--floor-receipt']]) if (!opts[k[0]]) die(`${GATE_USAGE}\ngate: ${k[1]} is required`, 2)
+    if (!Number.isInteger(opts.round) || opts.round < 1) die(`${GATE_USAGE}\ngate: --round must be an integer >= 1`, 2)
+  }
+  return opts
+}
+
+// The node --test TAP tally footer: `# tests N`, `# pass N`, `# fail N`, `# skipped N`.
+function parseTapTally(tap) {
+  const g = (re) => { const m = tap.match(re); return m ? Number(m[1]) : null }
+  return { tests: g(/^# tests (\d+)$/m) ?? 0, pass: g(/^# pass (\d+)$/m) ?? 0, fail: g(/^# fail (\d+)$/m) ?? 0, skip: g(/^# skipped (\d+)$/m) ?? 0 }
+}
+
+// DSGN-1a: the floor is a trusted-CLI mode, not a relayed claim. `gate --floor` itself spawns the
+// harness + bundler, parses the TAP tally, and writes a floor receipt bound to the reviewed diff's
+// sha. The routing gate later REQUIRES a floor receipt whose pass===true and whose diff_sha256 equals
+// the reviewed diff's — a mis-relayed floor claim is caught mechanically at the gate.
+function cmdGateFloor(opts) {
+  const repo = resolve(opts.repo)
+  const diffFile = canonicalFile(resolve(opts.diff))
+  if (!existsSync(diffFile)) gateFail(`--floor: diff ${diffFile} is absent`)
+  const diffBytes = readFileSync(diffFile)
+  const harness = spawnSync('bash', ['tests/v3/run.sh'], { cwd: repo, encoding: 'utf8', maxBuffer: 128 * 1024 * 1024 })
+  const tap = `${harness.stdout ?? ''}${harness.stderr ?? ''}`
+  const tally = parseTapTally(tap)
+  const harnessPass = harness.status === 0
+  const bundle = spawnSync('node', ['scripts/bundle-workflows.mjs', '--check'], { cwd: repo, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 })
+  const bundlePass = bundle.status === 0
+  const pass = harnessPass && bundlePass && tally.fail === 0 && tally.tests > 0
+  const receipt = { floor_version: FLOOR_VERSION, pass, tally, diff_sha256: sha256(diffBytes), tap_sha256: sha256(Buffer.from(tap)), bundle_check_pass: bundlePass }
+  atomicWrite(canonicalFile(resolve(opts.out)), Buffer.from(JSON.stringify(receipt) + '\n'))
+  process.stdout.write(`FLOOR:${pass ? 'PASS' : 'FAIL'} tests=${tally.tests} pass=${tally.pass} fail=${tally.fail} skip=${tally.skip} bundle=${bundlePass}\n`)
+  process.exit(pass ? 0 : 1)
+}
+
+// D3: the head supplies FACTS; the gate holds the CLASSIFICATION. keystone is derived from the pinned
+// stage taxonomy (unforgeable by the caller); required_terminal must be consistent with the lane.
+function classifyManifest(manifest) {
+  if (!isObj(manifest)) gateFail('manifest is not an object')
+  const batchId = manifest.batch_id
+  if (typeof batchId !== 'string' || batchId === '') gateFail('manifest.batch_id must be a nonempty string (route rows and the ladder are keyed on it)')
+  const stage = manifest.stage
+  if (!GATE_STAGES.includes(stage)) gateFail(`manifest.stage '${stage}' is not in the pinned taxonomy ${GATE_STAGES.join('|')}`)
+  const requiredTerminal = manifest.required_terminal
+  if (requiredTerminal !== 'sol' && requiredTerminal !== 'fable') gateFail("manifest.required_terminal must be 'sol' or 'fable'")
+  const lane = manifest.lane
+  if (!GATE_LANES.includes(lane)) gateFail(`manifest.lane '${lane}' is not in the pinned lane enum ${GATE_LANES.join('|')}`)
+  const expectedTerminal = lane === 'codex-authored' ? 'fable' : 'sol'
+  if (requiredTerminal !== expectedTerminal) gateFail(`manifest.required_terminal '${requiredTerminal}' is inconsistent with lane '${lane}' (codex-authored ⇒ fable, every other lane ⇒ sol; expected '${expectedTerminal}')`)
+  return { keystone: GATE_KEYSTONE_STAGES.has(stage), requiredTerminal, stage, lane, batchId }
+}
+
+// ADOPT-1 ⟨DSGN-4⟩ sol lane: a codex receipt is the ONLY admissible proof. verdict non-empty; receipt
+// present; receipt output/schema hashes match the reviewed bytes; the LAST bridge-ledger row for this
+// outprefix is a VERDICT whose invocation_id matches the receipt; and the receipt is Sol-seat eligible
+// (a fallback or non-pinned model can NEVER sign a Sol seat).
+function verifySolChain(outPrefix, schemaBytes, bridgeLedgerFile, commissionBytes) {
+  const verdictFile = `${outPrefix}.verdict`
+  const receiptFile = `${outPrefix}.receipt.json`
+  if (!existsSync(verdictFile)) gateFail(`sol lane: ${verdictFile} is absent`)
+  const verdictBytes = readFileSync(verdictFile)
+  if (decodeUtf8(verdictBytes, 'verdict').trim() === '') gateFail('sol lane: verdict artifact is empty')
+  if (!existsSync(receiptFile)) gateFail(`sol lane: ${receiptFile} is absent`)
+  const receipt = parseJsonFile(readFileSync(receiptFile), 'bridge receipt')
+  if (!isObj(receipt)) gateFail('sol lane: receipt is not an object')
+  if (receipt.output_sha256 !== sha256(verdictBytes)) gateFail('sol lane: receipt.output_sha256 does not match the verdict bytes')
+  if (receipt.schema_sha256 !== sha256(schemaBytes)) gateFail('sol lane: receipt.schema_sha256 does not match the gate schema')
+  if (!existsSync(bridgeLedgerFile)) gateFail(`sol lane: bridge ledger ${bridgeLedgerFile} is absent`)
+  const rows = readLedger(bridgeLedgerFile).filter((r) => r.out_prefix === outPrefix)
+  const last = rows.at(-1)
+  if (!last || last.status !== 'VERDICT') gateFail('sol lane: the last bridge-ledger row for this outprefix is not a VERDICT')
+  if (last.invocation_id !== receipt.invocation_id) gateFail('sol lane: bridge-ledger invocation_id does not match the receipt')
+  if (receipt.sol_seat_eligible !== true) gateFail('sol lane: receipt is not Sol-seat eligible (fallback or non-pinned model) — cannot sign a Sol seat')
+  // ADOPT-1 current-attempt freshness: the last VERDICT row's input MUST equal canonicalBridgeInput of
+  // THIS commission + THIS schema — the chain was produced by the review being routed now, not a stale,
+  // fallback, or replayed chain the runner mis-relayed as success. Historical validity is not freshness.
+  const expectedInput = canonicalBridgeInput(sha256(commissionBytes), sha256(schemaBytes))
+  if (last.input_sha256 !== expectedInput) gateFail('sol lane: the last bridge-ledger VERDICT row was not produced by THIS commission+schema (input_sha256 mismatch — stale/foreign/replayed chain, not the current attempt)')
+  return { verdictBytes, receipt }
+}
+
+// ⟨DSGN-4⟩ fable lane (mirrored Codex-authored): the terminal is a FABLE-AUTHORED A2 verdict file at
+// the manifest-named path — validated by the SAME validateReviewVerdict, recorded with provenance
+// fable_main_session. A codex receipt can NEVER stand in for a Fable seat (no cross-labeling).
+// ADOPT-12 (Fable ruling): the Fable-terminal instrument is a BOUND WRAPPER file
+// `{"verdict": <A2 envelope>, "diff_sha256", "batch_id", "round"}`. The gate validates the inner
+// envelope (via validateReviewVerdict in the common path) and requires diff_sha256 == the reviewed
+// diff's sha, batch_id == the manifest's, and round == the invocation round — any miss ⇒ exit 12. This
+// binds the terminal ruling to the current diff/batch/round so stale or foreign schema-valid bytes can
+// never masquerade as the current Fable-authored ruling. (Cryptographic authorship attestation is
+// parked to deferred-hardening.md per the ratified single-operator threat model.)
+function verifyFableChain(fableVerdictPath, { diffSha, batchId, round }) {
+  if (!fableVerdictPath) gateFail('fable lane: manifest.fable_verdict_path (or --fable-verdict) is required')
+  const p = canonicalFile(resolve(fableVerdictPath))
+  if (!existsSync(p)) gateFail(`fable lane: fable terminal wrapper ${p} is absent`)
+  const wrapper = parseJsonFile(readFileSync(p), 'fable terminal wrapper')
+  if (!isObj(wrapper)) gateFail('fable lane: terminal wrapper is not an object')
+  if (!isObj(wrapper.verdict)) gateFail('fable lane: wrapper.verdict (the inner A2 envelope) is missing')
+  if (wrapper.diff_sha256 !== diffSha) gateFail('fable lane: wrapper.diff_sha256 does not match the reviewed diff')
+  if (wrapper.batch_id !== batchId) gateFail('fable lane: wrapper.batch_id does not match the manifest batch_id')
+  if (wrapper.round !== round) gateFail('fable lane: wrapper.round does not match the invocation round')
+  return { verdictBytes: Buffer.from(JSON.stringify(wrapper.verdict)) }
+}
+
+function requireFloorReceipt(floorReceiptFile, diffSha) {
+  if (!floorReceiptFile || !existsSync(floorReceiptFile)) gateFail('floor receipt is absent (run gate --floor first)')
+  const fr = parseJsonFile(readFileSync(floorReceiptFile), 'floor receipt')
+  if (!isObj(fr)) gateFail('floor receipt is not an object')
+  if (fr.pass !== true) gateFail('floor receipt is not green (pass !== true)')
+  if (fr.bundle_check_pass !== true) gateFail('floor receipt bundle_check_pass !== true')
+  if (fr.diff_sha256 !== diffSha) gateFail('floor receipt diff_sha256 does not match the reviewed diff — the floor was measured against different bytes')
+}
+
+// ADOPT-5: bind the reviewed diff to the receipt. The commission must carry `Diff-sha256: <hex>`
+// equal to the diff bytes, and the receipt.prompt_sha256 must equal the commission bytes — so the
+// reviewer demonstrably ruled on THIS diff; a snapshot agent that lied about the sha is caught here.
+function bindDiff(commissionBytes, diffBytes, receipt) {
+  // Tolerate the rendered template's markdown list-item form (`- Diff-sha256: <hex>`) as well as a
+  // bare line — the real commission-review.md carries it as a Scope bullet.
+  const m = decodeUtf8(commissionBytes, 'commission').match(/^\s*(?:[-*]\s*)?Diff-sha256:\s*([0-9a-f]{64})\s*$/m)
+  if (!m) gateFail('diff binding: the commission has no `Diff-sha256: <hex>` line')
+  if (m[1] !== sha256(diffBytes)) gateFail('diff binding: the commission Diff-sha256 does not match the reviewed diff bytes')
+  if (receipt.prompt_sha256 !== sha256(commissionBytes)) gateFail('diff binding: receipt.prompt_sha256 does not match the commission bytes (the reviewer ruled on a different prompt)')
+}
+
+// ADOPT-6: the posture the commission DECLARES must equal the posture the transport actually ran under
+// (the receipt tuple). The `Sandbox posture:` line is script-supplied by the workflow (never
+// agent-chosen) and encodes the whole tuple as `<sandbox> network=<0|1> web=<0|1>`; the gate parses it
+// and requires consistency with receipt.{sandbox, network, web} — any disagreement ⇒ exit 12. Without
+// this a commission could declare workspace-write while the transport ran read-only (or vice versa) and
+// the gate would never notice.
+function bindPosture(commissionBytes, receipt) {
+  const m = decodeUtf8(commissionBytes, 'commission').match(/^\s*(?:[-*]\s*)?Sandbox posture:\s*(\S+)\s+network=([01])\s+web=([01])\s*$/m)
+  if (!m) gateFail('posture binding: the commission has no `Sandbox posture: <sandbox> network=<0|1> web=<0|1>` line')
+  const [, sandbox, net, web] = m
+  if (receipt.sandbox !== sandbox) gateFail(`posture binding: commission sandbox '${sandbox}' does not match receipt.sandbox '${receipt.sandbox}'`)
+  if (receipt.network !== (net === '1')) gateFail(`posture binding: commission network=${net} does not match receipt.network ${receipt.network}`)
+  if (receipt.web !== (web === '1')) gateFail(`posture binding: commission web=${web} does not match receipt.web ${receipt.web}`)
+}
+
+function readRouteLedger(file) {
+  if (!existsSync(file)) return []
+  return readFileSync(file, 'utf8').split('\n').filter(Boolean).map((line, i) => {
+    try { return JSON.parse(line) } catch { throw new Error(`route ledger line ${i + 1} is corrupt`) }
+  })
+}
+
+// The joint-heads scope artifact (A2): a written SINGLETON naming exactly one surviving blocking id,
+// with Fable concurrence on record. Route authority comes from THIS file, never a caller count.
+function readScopeArtifact(file, schemaBytes) {
+  if (!file || !existsSync(file)) return null
+  let obj
+  try { obj = parseJsonFile(readFileSync(file), 'scope artifact') } catch { return null }
+  if (!isObj(obj)) return null
+  if (typeof obj.surviving_blocking_id !== 'string' || obj.surviving_blocking_id === '') return null
+  if (obj.fable_concurrence !== true) return null
+  if (typeof obj.sol_verdict_path !== 'string' || obj.sol_verdict_path === '') return null
+  // ADOPT-8(a): sol_verdict_path is not a bare string to be discarded — it MUST exist, parse as a
+  // schema-valid A2 verdict, and actually carry the surviving id as a BLOCKING finding. The scope's
+  // authority is thereby bound to a real Sol verdict, not a caller-asserted id.
+  let solVerdict
+  try {
+    const vp = canonicalFile(resolve(obj.sol_verdict_path))
+    if (!existsSync(vp)) return null
+    solVerdict = validateReviewVerdict(readFileSync(vp), { round: 1, schemaBytes })
+  } catch { return null }
+  if (!solVerdict.findings.some((f) => f.class === 'BLOCKING' && f.id === obj.surviving_blocking_id)) return null
+  return { survivingId: obj.surviving_blocking_id }
+}
+
+function findingSetKey(verdict) {
+  return JSON.stringify(verdict.findings.map((f) => [f.id, f.class, f.remedy_class]).sort())
+}
+
+// The ladder arithmetic (ADOPT-7, -8), derived from artifacts. Decision order per D2: keystone ⇒
+// council FIRST; then the convergence oracle (unchanged finding set OR unchanged diff vs the prior
+// row — REGARDLESS of verdict, so it precedes the APPROVED seal); then APPROVED ⇒ seal; then the
+// substantive count and rung legality. The r3 rung is legal ONLY with a valid singleton scope artifact.
+function routeGate({ round, diffSha, keystone, ledgerRows, scopeArtifactFile, verdict, batchId, schemaBytes }) {
+  const key = findingSetKey(verdict)
+  // ADOPT-8(b): the ladder is per-batch. Prior rounds are the route-ledger rows FOR THIS batch_id —
+  // never a foreign batch's rows (a cross-batch row with the same diff hash used to trip the oracle).
+  const priorRows = ledgerRows.filter((r) => r.batch_id === batchId)
+  // ADOPT-1: route-ledger uniqueness — exactly one row per (batch_id, round). A duplicate is a
+  // non-idempotent gate re-run (e.g. a replay the runner mis-relayed as success) and is refused before
+  // any routing decision, so a stale chain can never be routed twice. The read, this check, the route
+  // computation, and the append run under ONE ledger lock in cmdGate, so two concurrent same-round
+  // invocations cannot both observe no row and serialize two appends. Refusals THROW (never gateFail)
+  // so the finally releases the lock; cmdGate's catch converts the throw to a GATE-FAIL exit 12.
+  if (priorRows.some((r) => r.round === round)) throw new Error(`route ledger already carries a row for batch '${batchId}' round ${round} — duplicate route (non-idempotent re-run), refusing`)
+  const priorLast = priorRows.at(-1)
+  const substantive = isSubstantiveRejection(verdict)
+  const substantiveCount = priorRows.filter((r) => r.substantive === true).length + (substantive ? 1 : 0)
+
+  // ADOPT-8(d): round >= 3 is legal ONLY as a scoped one-item confirmation. It REQUIRES a valid
+  // singleton scope artifact, and (when it carries blocking findings) the current verdict's blocking
+  // set MUST be ⊆ {surviving_blocking_id}. This is a legality precondition of any r3 invocation —
+  // checked before any routing decision, absent/invalid ⇒ exit 12.
+  let scope = null
+  if (round >= 3) {
+    scope = readScopeArtifact(scopeArtifactFile, schemaBytes)
+    if (!scope) throw new Error('round >= 3 requires a valid joint-heads scope artifact (present, Fable-concurred, naming one surviving blocking id whose sol_verdict_path is a schema-valid A2 verdict carrying that id) — absent or invalid, refusing')
+    const blockingIds = verdict.findings.filter((f) => f.class === 'BLOCKING').map((f) => f.id)
+    if (!blockingIds.every((id) => id === scope.survivingId)) throw new Error(`round >= 3 verdict blocking set is not a subset of {${scope.survivingId}} — the one-item confirmation admits only the surviving finding, refusing`)
+  }
+
+  let next, why
+  if (keystone) { next = 'twin-council'; why = 'keystone — council path from the start' }
+  else if (priorLast && (priorLast.finding_set_key === key || priorLast.diff_sha256 === diffSha)) {
+    next = 'twin-council'; why = 'convergence oracle (unchanged finding set or unchanged diff vs the prior round)'
+  } else if (verdict.verdict === 'APPROVED') { next = 'seal'; why = 'APPROVED — dual-key and seal' }
+  else if (substantiveCount >= 3) { next = 'twin-council'; why = '3rd SUBSTANTIVE rejection — correction escalation' }
+  else if (round === 1) { next = 'implement-r2'; why = 'r1 REJECTED — author the self-contained r2 fix brief' }
+  // ADOPT-8(c): round-2 REJECTED (non-oracle, non-3rd-substantive) ALWAYS routes to the joint-heads
+  // rule — concurrence cannot pre-exist the verdict being routed, so the microfix-r3 decision is NEVER
+  // emitted at r2-time. The heads write the scope artifact AFTER this ruling; r3 then confirms it.
+  else if (round === 2) { next = 'confirm-each-or-escalate'; why = 'rejection 2 — joint-heads scope rule next (concurrence cannot pre-exist the verdict being routed; microfix-r3 is never emitted at r2)' }
+  else { next = 'microfix-r3'; why = `round >= 3 REJECTED on the one surviving item (${scope.survivingId}) — microfix and re-confirm` }
+  return { next, why, key, substantive, substantiveCount }
+}
+
+function cmdGate(argv) {
+  const opts = parseGateArgs(argv)
+  if (opts.floor) return cmdGateFloor(opts)
+  try {
+    const outPrefix = resolve(opts.out)
+    const schemaBytes = readFileSync(canonicalFile(resolve(opts.schema)))
+    parseJsonFile(schemaBytes, 'gate schema')
+    const round = opts.round
+    const manifest = parseJsonFile(readFileSync(canonicalFile(resolve(opts.manifest))), 'batch manifest')
+    const cls = classifyManifest(manifest)
+
+    const diffFile = canonicalFile(resolve(opts.diff))
+    if (!existsSync(diffFile)) gateFail(`diff ${diffFile} is absent`)
+    const diffBytes = readFileSync(diffFile)
+    const diffSha = sha256(diffBytes)
+
+    requireFloorReceipt(canonicalFile(resolve(opts.floorReceipt)), diffSha)
+
+    const batchId = cls.batchId
+    let verdictBytes
+    let terminalProvenance
+    if (cls.requiredTerminal === 'sol') {
+      if (!opts.commission) gateFail('sol lane: --commission is required for diff + posture binding')
+      const commissionBytes = readFileSync(canonicalFile(resolve(opts.commission)))
+      const bridgeLedger = canonicalFile(resolve(opts.bridgeLedger ?? `${outPrefix}.ledger.jsonl`))
+      const chain = verifySolChain(outPrefix, schemaBytes, bridgeLedger, commissionBytes)
+      verdictBytes = chain.verdictBytes
+      bindDiff(commissionBytes, diffBytes, chain.receipt)
+      bindPosture(commissionBytes, chain.receipt)
+      terminalProvenance = 'codex_receipt'
+    } else {
+      verdictBytes = verifyFableChain(opts.fableVerdict ?? manifest.fable_verdict_path, { diffSha, batchId, round }).verdictBytes
+      terminalProvenance = 'fable_main_session'
+    }
+
+    const verdict = validateReviewVerdict(verdictBytes, { round, schemaBytes })
+    const routeLedgerFile = canonicalFile(resolve(opts.routeLedger))
+    const scopeArtifactFile = opts.scopeArtifact ? canonicalFile(resolve(opts.scopeArtifact)) : null
+
+    // ADOPT-1: the duplicate (batch_id, round) check, the route computation, and the append are ONE
+    // locked critical section — a concurrent same-round invocation cannot observe no row, decide, and
+    // then serialize a second append. routeGate throws on any refusal so the finally releases the lock;
+    // the catch below converts the throw to gateFail (exit 12) only AFTER the lock is gone.
+    let r
+    withLedgerLock(routeLedgerFile, (assertOwned) => {
+      const ledgerRows = readRouteLedger(routeLedgerFile)
+      r = routeGate({ round, diffSha, keystone: cls.keystone, ledgerRows, scopeArtifactFile, verdict, batchId, schemaBytes })
+      assertOwned()
+      appendFileSync(routeLedgerFile, JSON.stringify({ batch_id: batchId, round, verdict: verdict.verdict, finding_set_key: r.key, diff_sha256: diffSha, substantive: r.substantive, decision: r.next, terminal_provenance: terminalProvenance }) + '\n')
+    })
+
+    const decision = {
+      batch_id: batchId,
+      round, verdict: verdict.verdict, decision: r.next, why: r.why, finding_set_key: r.key,
+      diff_sha256: diffSha, substantive: r.substantive, substantive_count: r.substantiveCount,
+      terminal_provenance: terminalProvenance, keystone: cls.keystone, exit_code: GATE_EXIT[r.next],
+    }
+    atomicWrite(`${outPrefix}.decision.json`, Buffer.from(JSON.stringify(decision) + '\n'))
+    process.stdout.write(`DECISION:${r.next} VERDICT:${verdict.verdict} ROUND:${round} SUBSTANTIVE:${r.substantive} COUNT:${r.substantiveCount} PROVENANCE:${terminalProvenance} WHY:${r.why}\n`)
+    process.exit(GATE_EXIT[r.next])
+  } catch (e) {
+    gateFail(e.message)
+  }
+}
+
+// ── The handoff bounce (Kiln Dev Protocol D5) ───────────────────────────────────────────────────
+// ADOPT-9: the mechanical pre-model gate. A handoff missing a required section is bounced BEFORE any
+// model reads it. Verified by heading match (normalized prefix), exit 0 clean / 1 bounce.
+const HANDOFF_REQUIRED = {
+  brief: ['objective', 'output format', 'allowed tools / inputs', 'boundaries', 'effort tier'],
+  microfix: ['objective', 'output format', 'allowed tools / inputs', 'boundaries', 'effort tier'],
+  commission: ['seat', 'scope', 'round discipline', 'how to rule', 'payload-first'],
+  confirm: ['seat', 'the one item', 'scope', 'how to rule', 'payload-first'],
+}
+const CHECK_USAGE = 'usage: kiln-codex-receipt.mjs check-handoff <file> --kind brief|microfix|commission|confirm'
+
+function cmdCheckHandoff(argv) {
+  let file = null
+  let kind = null
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] === '--kind') { kind = argv[i + 1]; i += 1 }
+    else if (file === null) file = argv[i]
+    else die(CHECK_USAGE, 2)
+  }
+  if (!file || !kind || !Object.hasOwn(HANDOFF_REQUIRED, kind)) die(CHECK_USAGE, 2)
+  const path = canonicalFile(resolve(file))
+  if (!existsSync(path)) { process.stdout.write(`HANDOFF-BOUNCE kind=${kind} missing=["file-not-found"]\n`); process.exit(1) }
+  const headings = decodeUtf8(readFileSync(path), 'handoff').split(/\r?\n/)
+    .filter((l) => /^#{1,6}\s/.test(l)).map((l) => l.replace(/^#{1,6}\s+/, '').trim().toLowerCase())
+  const missing = HANDOFF_REQUIRED[kind].filter((req) => !headings.some((h) => h.startsWith(req)))
+  if (missing.length) { process.stdout.write(`HANDOFF-BOUNCE kind=${kind} missing=${JSON.stringify(missing)}\n`); process.exit(1) }
+  process.stdout.write(`HANDOFF-OK kind=${kind}\n`)
+  process.exit(0)
+}
+
 function main(argv) {
   if (argv.length !== 13) die(USAGE, 2)
   const [promptArg, requestedModel, effort, packetArg, schemaArg, outputArg, stderrArg, ledgerArg, runToken, keystone, phase, seat, attemptArg] = argv
@@ -666,6 +1437,12 @@ if (import.meta.url === invokedPath) {
     if (argv[0] === 'unlock') {
       if (argv.length !== 2) die(USAGE, 2)
       cmdUnlock(argv[1])
+    } else if (argv[0] === 'bridge') {
+      cmdBridge(argv.slice(1))
+    } else if (argv[0] === 'gate') {
+      cmdGate(argv.slice(1))
+    } else if (argv[0] === 'check-handoff') {
+      cmdCheckHandoff(argv.slice(1))
     } else main(argv)
   } catch (e) { die(e.message) }
 }

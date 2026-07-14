@@ -1,67 +1,77 @@
 #!/usr/bin/env bash
-# sol-review.sh — the trusted codex bridge for Kiln dev reviews (dev-protocol piece 3).
-# No agent couriers: launch, wait, capture — one process, files as truth.
+# sol-review.sh — the Kiln Dev Protocol codex bridge (Piece 3). A THIN POLICY WRAPPER over the
+# shared receipt-bearing transport: `kiln-codex-receipt.mjs bridge` owns EVERY trust decision
+# (spawn, capture, the A5 outcome state machine, receipt attestation, the allowlist, the fallback
+# rung). This wrapper owns only ergonomics: defaults, flag translation, paths, the auth preflight,
+# and a coreutils `timeout(1)` hard backstop. No verdict authority lives in bash.
 #
 # Usage: sol-review.sh <promptfile> <outprefix>
-#          [--schema <schema.json>] [--effort low|medium|high|xhigh] [--resume <thread_id>]
-#          [--ephemeral] [--sandbox read-only|workspace-write|danger-full-access]
-#          [--web] [--wallclock <seconds>] [--model <id>]
+#          [--schema <schema.json>] [--effort low|medium|high|xhigh] [--model <id>]
+#          [--sandbox read-only|workspace-write|danger-full-access] [--network] [--web]
+#          [--ephemeral] [--resume <thread_id>] [--wallclock <seconds>] [--ledger <file>]
+#          [--no-fallback]
+#          [--run-token <t>] [--keystone <k>] [--phase <p>] [--seat <s>] [--attempt <n>]
 #
-# Artifacts: <outprefix>.verdict (final message — THE authoritative channel, codex -o),
-#            <outprefix>.events.jsonl (--json stream: thread_id, usage, turn outcome),
-#            <outprefix>.stderr.log (progress; never parsed for verdicts).
-# Outcome contract (receipts: .kiln-dev/v302/probes/probe-receipts.log, live on codex-cli 0.144.1):
-#   exit 0 + verdict non-empty  → VERDICT (parse the file; schema-conforming when --schema given)
-#   exit 0 + verdict empty      → SUPPRESSED (model finished, message withheld — resend/resume)
-#   exit 1 / verdict absent     → FAILED_TURN (inspect turn.failed in events)
-#   exit 124 wrapper timeout    → WALLCLOCK_TIMEOUT (codex has NO wall-clock config of its own)
-# Notes from receipts: --ignore-user-config skips config.toml ONLY (hooks.json still parsed — the
-# stream may carry item-level type:"error" entries; tolerate them, gate on turn.* events only).
-# `exec resume` accepts -m/-c/-o/--json but NOT -s/--sandbox/-C (parse exit 2) — sandbox rides
-# round-1 only. Sol-family efforts: low|medium|high|xhigh ("minimal" 400s; "ultra" never existed).
+# Artifacts (written by the transport): <outprefix>.verdict (the -o final message — parse ONLY on
+# STATUS:VERDICT), <outprefix>.events.jsonl (the --json stream), <outprefix>.stderr.log (progress;
+# never parsed for a verdict), <outprefix>.receipt.json (bridge receipt, only on VERDICT),
+# <outprefix>.ledger.jsonl (append-only outcome ledger; override with --ledger).
+#
+# Exit: 0 VERDICT · 10 SUPPRESSED · 11 FAILED_TURN · 12 TRANSPORT · 124 WALLCLOCK_TIMEOUT ·
+#       3 AUTH_MISSING (auth-expired is not a model failure — hygiene).
 set -u
-PROMPT=${1:?usage: sol-review.sh <promptfile> <outprefix> [flags]}; OUT=${2:?outprefix required}; shift 2
-EFFORT=high; SCHEMA=""; RESUME=""; EPHEMERAL=0; SANDBOX=read-only; WEB=0; WALL=1800
-MODEL=gpt-5.6-sol; FALLBACK=gpt-5.5
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+CLI="$SCRIPT_DIR/../../plugins/kiln/scripts/kiln-codex-receipt.mjs"
+DEFAULT_SCHEMA="$SCRIPT_DIR/review-verdict-schema.json"
+
+PROMPT=${1:?usage: sol-review.sh <promptfile> <outprefix> [flags]}
+OUT=${2:?outprefix required}
+shift 2
+
+SCHEMA="$DEFAULT_SCHEMA"; EFFORT=high; MODEL=gpt-5.6-sol; SANDBOX=read-only; WALL=1800
+NETWORK=0; WEB=0; EPHEMERAL=0; RESUME=""; LEDGER=""; FALLBACK=1
+RUN_TOKEN=""; KEYSTONE=dev-review; PHASE=""; SEAT=sol; ATTEMPT=1
 while [ $# -gt 0 ]; do case $1 in
-  --schema) SCHEMA=$2; shift 2 ;;
-  --effort) EFFORT=$2; shift 2 ;;
-  --resume) RESUME=$2; shift 2 ;;
-  --ephemeral) EPHEMERAL=1; shift ;;
-  --sandbox) SANDBOX=$2; shift 2 ;;
-  --web) WEB=1; shift ;;
-  --wallclock) WALL=$2; shift 2 ;;
-  --model) MODEL=$2; shift 2 ;;
+  --schema)     SCHEMA=$2; shift 2 ;;
+  --effort)     EFFORT=$2; shift 2 ;;
+  --model)      MODEL=$2; shift 2 ;;
+  --sandbox)    SANDBOX=$2; shift 2 ;;
+  --network)    NETWORK=1; shift ;;
+  --web)        WEB=1; shift ;;
+  --ephemeral)  EPHEMERAL=1; shift ;;
+  --resume)     RESUME=$2; shift 2 ;;
+  --wallclock)  WALL=$2; shift 2 ;;
+  --ledger)     LEDGER=$2; shift 2 ;;
+  --no-fallback) FALLBACK=0; shift ;;
+  --run-token)  RUN_TOKEN=$2; shift 2 ;;
+  --keystone)   KEYSTONE=$2; shift 2 ;;
+  --phase)      PHASE=$2; shift 2 ;;
+  --seat)       SEAT=$2; shift 2 ;;
+  --attempt)    ATTEMPT=$2; shift 2 ;;
   *) echo "sol-review.sh: unknown arg: $1" >&2; exit 2 ;;
 esac; done
 
-codex login status >/dev/null 2>&1 || { echo "STATUS:AUTH_MISSING"; exit 3; }
+# Ergonomic defaults for the binding fields the transport requires (the dev-review workflow passes
+# them explicitly; these keep manual invocation usable and each outprefix distinct).
+BASE=$(basename "$OUT")
+[ -n "$RUN_TOKEN" ] || RUN_TOKEN="$BASE"
+[ -n "$PHASE" ] || PHASE="$BASE"
 
-run_codex() { # $1 = model ('' when resuming)
-  local args=(-c "model_reasoning_effort=\"$EFFORT\"" --ignore-user-config --skip-git-repo-check --json -o "$OUT.verdict")
-  [ -n "$SCHEMA" ] && args+=(--output-schema "$SCHEMA")
-  [ "$EPHEMERAL" = 1 ] && args+=(--ephemeral)
-  [ "$WEB" = 1 ] && args+=(-c 'tools.web_search=true')
-  rm -f "$OUT.verdict"
-  if [ -n "$RESUME" ]; then
-    timeout "$WALL" codex exec resume "$RESUME" "${args[@]}" - < "$PROMPT" > "$OUT.events.jsonl" 2> "$OUT.stderr.log"
-  else
-    timeout "$WALL" codex exec -m "$1" --sandbox "$SANDBOX" "${args[@]}" - < "$PROMPT" > "$OUT.events.jsonl" 2> "$OUT.stderr.log"
-  fi
-}
+codex login status >/dev/null 2>&1 || { echo "STATUS:AUTH_MISSING MODEL:$MODEL VERDICT_FILE:$OUT.verdict"; exit 3; }
 
-run_codex "$MODEL"; EXIT=$?
-# One fallback rung on a failed turn (never on timeout/suppression), fresh sessions only.
-if [ $EXIT -ne 0 ] && [ $EXIT -ne 124 ] && [ -z "$RESUME" ] && grep -q 'model' "$OUT.stderr.log" 2>/dev/null && [ "$MODEL" != "$FALLBACK" ]; then
-  run_codex "$FALLBACK"; EXIT=$?; MODEL=$FALLBACK
-fi
+ARGS=(bridge --prompt "$PROMPT" --out "$OUT" --schema "$SCHEMA"
+  --model "$MODEL" --effort "$EFFORT" --sandbox "$SANDBOX" --wallclock "$WALL"
+  --run-token "$RUN_TOKEN" --keystone "$KEYSTONE" --phase "$PHASE" --seat "$SEAT" --attempt "$ATTEMPT")
+[ "$NETWORK" = 1 ] && ARGS+=(--network)
+[ "$WEB" = 1 ] && ARGS+=(--web)
+[ "$EPHEMERAL" = 1 ] && ARGS+=(--ephemeral)
+[ "$FALLBACK" = 0 ] && ARGS+=(--no-fallback)
+[ -n "$RESUME" ] && ARGS+=(--resume "$RESUME")
+[ -n "$LEDGER" ] && ARGS+=(--ledger "$LEDGER")
 
-THREAD=$(grep -m1 '"type":"thread.started"' "$OUT.events.jsonl" 2>/dev/null | sed 's/.*"thread_id":"\([^"]*\)".*/\1/')
-USAGE=$(grep -m1 '"type":"turn.completed"' "$OUT.events.jsonl" 2>/dev/null | grep -o '"usage":{[^}]*}' || true)
-if   [ $EXIT -eq 0 ] && [ -s "$OUT.verdict" ]; then STATUS=VERDICT
-elif [ $EXIT -eq 0 ];                          then STATUS=SUPPRESSED
-elif [ $EXIT -eq 124 ];                        then STATUS=WALLCLOCK_TIMEOUT
-else                                                STATUS=FAILED_TURN
-fi
-echo "STATUS:$STATUS MODEL:$MODEL THREAD:${THREAD:-none} EXIT:$EXIT ${USAGE:-} VERDICT_FILE:$OUT.verdict"
-[ "$STATUS" = VERDICT ]
+# node owns the inner wall-clock (fail-closed classification); this coreutils bound is the hard
+# backstop if node itself wedges. Both surface as exit 124 = WALLCLOCK_TIMEOUT.
+OUTER=$((WALL + 30))
+timeout "$OUTER" node "$CLI" "${ARGS[@]}"
+exit $?

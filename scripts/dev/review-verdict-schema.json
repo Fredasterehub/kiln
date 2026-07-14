@@ -2,7 +2,6 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "verdict": { "type": "string", "enum": ["APPROVED", "REJECTED"] },
     "findings": {
       "type": "array",
       "items": {
@@ -11,15 +10,16 @@
         "properties": {
           "id": { "type": "string" },
           "class": { "type": "string", "enum": ["BLOCKING", "ADVISORY"] },
+          "remedy_class": { "type": "string", "enum": ["VERBATIM", "EXACT_CHECK", "EXISTING_RECEIPT", "NEW_DECISION"] },
           "location": { "type": "string" },
           "defect": { "type": "string" },
           "evidence": { "type": "string" }
         },
-        "required": ["id", "class", "location", "defect", "evidence"]
+        "required": ["id", "class", "remedy_class", "location", "defect", "evidence"]
       }
     },
-    "round": { "type": "integer" },
+    "verdict": { "type": "string", "enum": ["APPROVED", "REJECTED"] },
     "notes": { "type": "string" }
   },
-  "required": ["verdict", "findings", "round", "notes"]
+  "required": ["findings", "verdict", "notes"]
 }
