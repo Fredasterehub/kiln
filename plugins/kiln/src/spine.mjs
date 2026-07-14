@@ -437,6 +437,49 @@ export function pipelineInvalidated(baseSha, headShaArg) {
   return { invalidated: false, reason: '' }
 }
 
+// admitSpeculation(slices) — the D3 churn-aware speculation gate (plan WS-D). Velocity lever 3
+// launches the NEXT milestone's slice plan IN PARALLEL with THIS milestone's gate; but when this
+// milestone churned, the gate will likely commit corrections, HEAD moves, and pipelineInvalidated
+// discards the speculative plan anyway — so cutting it burns a krs-one call for nothing. This
+// predicate answers ONLY "is speculation worth it?", never correctness: pipelineInvalidated stays
+// the rail that keeps a stale plan from ever being trusted. NULL-KEEP failure idiom — a wrong
+// admission costs one wasted overlap or one missed overlap, never a correctness fault, so the helper
+// is TOTAL: it never throws, and a malformed entry reads as its falsy/0 value (advisory
+// waste-avoidance, never a gate).
+//
+// `slices` is the just-built milestone's slice-summary array (the objects pushed at the slice-loop
+// tail): each carries logical_rejections (number) plus the split_required / environment_blocked /
+// approved booleans. HOT (admit:false) iff ANY of, in this precedence (most specific reason first;
+// a split slice is also unapproved, so split_or_blocked must rule before unapproved_slice):
+//   · any slice split_required OR environment_blocked → 'split_or_blocked' (the milestone did not
+//     cleanly close — the gate cannot pass it, so a corrective commit is coming),
+//   · any slice approved !== true → 'unapproved_slice' (an un-approved slice fails the milestone
+//     gate; a correction is coming),
+//   · Σ logical_rejections ≥ ceil(sliceCount / 2) → 'correction_rate' (this milestone churned hard
+//     enough that the gate's corrections are likely; ≥ is exact — 2 rejections over 4 slices is HOT).
+// Zero slices (or a non-array) ⇒ calm (admit:true, reason null): nothing churned. Re-enabling is
+// automatic — the admission is computed FRESH per milestone from THAT milestone's slices, so a calm
+// milestone speculates again with zero extra machinery. Returns { admit, reason, corrections, slices }.
+export function admitSpeculation(slices) {
+  const list = Array.isArray(slices) ? slices : []
+  const sliceCount = list.length
+  let corrections = 0
+  let splitOrBlocked = false
+  let unapproved = false
+  for (const s of list) {
+    const row = (s && typeof s === 'object' && !Array.isArray(s)) ? s : {}
+    if (row.split_required === true || row.environment_blocked === true) splitOrBlocked = true
+    if (row.approved !== true) unapproved = true
+    const lr = row.logical_rejections
+    if (typeof lr === 'number' && Number.isFinite(lr) && lr > 0) corrections += lr
+  }
+  if (sliceCount === 0) return { admit: true, reason: null, corrections: 0, slices: 0 }
+  if (splitOrBlocked) return { admit: false, reason: 'split_or_blocked', corrections, slices: sliceCount }
+  if (unapproved) return { admit: false, reason: 'unapproved_slice', corrections, slices: sliceCount }
+  if (corrections >= Math.ceil(sliceCount / 2)) return { admit: false, reason: 'correction_rate', corrections, slices: sliceCount }
+  return { admit: true, reason: null, corrections, slices: sliceCount }
+}
+
 // validateVerdict(ev) — the §3.2/§5 validate-stage verdict, computed DETERMINISTICALLY FIRST
 // (tasks.md T3.5: "Verdict computation deterministic-first") instead of trusting an agent's
 // self-assigned verdict. The validate stage is the real L3 backstop, so its PASS/PARTIAL/FAILED

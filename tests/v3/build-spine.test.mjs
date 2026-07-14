@@ -37,6 +37,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { admitSpeculation } from '../../plugins/kiln/src/spine.mjs'
 
 const WORKFLOW = fileURLToPath(new URL('../../plugins/kiln/workflows/build.js', import.meta.url))
 
@@ -810,6 +811,87 @@ test('lever 3: a blank base_sha (the HEAD probe failed when anchoring) never sta
   assert.equal(labelsOf(calls, 'krs-one:slice-plan:M2').length, 1, 'M2 planned exactly once — synchronously, the pipeline never started')
   assert.equal(labelsOf(calls, 'thoth:head:M2:pipeline-check').length, 0, 'no consume-time check — there was no pipelined plan to consume')
   assert.equal(invalidatedLedger, false, 'a never-started pipeline produces no invalidation ledger')
+})
+
+// ── D3 (plan WS-D): churn-aware speculation — admitSpeculation self-disables lever 3 when this ─────
+//    milestone ran hot; re-enables automatically when calm. NULL-KEEP: a wrong admission costs one
+//    wasted or one missed overlap, never correctness (pipelineInvalidated stays the rail). ──
+const specSlice = (over = {}) => ({ approved: true, split_required: false, environment_blocked: false, logical_rejections: 0, ...over })
+
+test('D3 admitSpeculation calm: an all-approved zero-rejection milestone speculates (admit, reason null, counts reported)', () => {
+  assert.deepEqual(admitSpeculation([specSlice(), specSlice()]), { admit: true, reason: null, corrections: 0, slices: 2 })
+})
+
+test('D3 admitSpeculation zero-slices: nothing churned ⇒ calm — an empty array AND every non-array both admit (totality)', () => {
+  assert.deepEqual(admitSpeculation([]), { admit: true, reason: null, corrections: 0, slices: 0 })
+  for (const bad of [undefined, null, 'x', {}, 42, NaN]) {
+    assert.deepEqual(admitSpeculation(bad), { admit: true, reason: null, corrections: 0, slices: 0 }, `non-array ${String(bad)} reads as zero slices`)
+  }
+})
+
+test('D3 admitSpeculation split_or_blocked: any split_required OR environment_blocked ⇒ HOT — precedence over unapproved/correction_rate (a split slice is also unapproved)', () => {
+  const rSplit = admitSpeculation([specSlice(), specSlice({ split_required: true, approved: false })])
+  assert.equal(rSplit.admit, false)
+  assert.equal(rSplit.reason, 'split_or_blocked')
+  assert.equal(rSplit.slices, 2)
+  const rBlocked = admitSpeculation([specSlice({ environment_blocked: true, approved: false })])
+  assert.equal(rBlocked.reason, 'split_or_blocked')
+  // split precedence even when the correction rate is also hot
+  assert.equal(admitSpeculation([specSlice({ split_required: true, approved: false, logical_rejections: 5 })]).reason, 'split_or_blocked')
+})
+
+test('D3 admitSpeculation unapproved_slice: any approved !== true ⇒ HOT (when nothing split/blocked); approved must be STRICTLY true', () => {
+  const r = admitSpeculation([specSlice(), specSlice({ approved: false })])
+  assert.equal(r.admit, false)
+  assert.equal(r.reason, 'unapproved_slice')
+  assert.equal(admitSpeculation([specSlice({ approved: undefined })]).reason, 'unapproved_slice', 'a missing approved is not strictly true ⇒ unapproved')
+})
+
+test('D3 admitSpeculation correction_rate: Σ logical_rejections ≥ ceil(sliceCount/2) ⇒ HOT — the ≥ boundary is pinned exactly', () => {
+  // 4 slices: ceil(4/2)=2 — EXACTLY 2 rejections is HOT (≥, not >)
+  const at = admitSpeculation([specSlice({ logical_rejections: 2 }), specSlice(), specSlice(), specSlice()])
+  assert.deepEqual(at, { admit: false, reason: 'correction_rate', corrections: 2, slices: 4 })
+  // one below (1 over 4) is CALM
+  assert.deepEqual(admitSpeculation([specSlice({ logical_rejections: 1 }), specSlice(), specSlice(), specSlice()]), { admit: true, reason: null, corrections: 1, slices: 4 })
+  // odd count: 3 slices, ceil(3/2)=2 — 2 HOT, 1 calm
+  assert.equal(admitSpeculation([specSlice({ logical_rejections: 2 }), specSlice(), specSlice()]).reason, 'correction_rate')
+  assert.equal(admitSpeculation([specSlice({ logical_rejections: 1 }), specSlice(), specSlice()]).admit, true)
+  // single slice: ceil(1/2)=1 — one rejection is HOT; the sum may spread across slices
+  assert.equal(admitSpeculation([specSlice({ logical_rejections: 1 })]).reason, 'correction_rate')
+  assert.equal(admitSpeculation([specSlice({ logical_rejections: 1 }), specSlice({ logical_rejections: 1 }), specSlice(), specSlice()]).reason, 'correction_rate', 'Σ=2 over 4 slices spread across two slices is HOT')
+})
+
+test('D3 admitSpeculation totality: malformed entries read as their falsy/0 value and never throw (advisory, never a gate)', () => {
+  const r = admitSpeculation([null, 'x', 42, { logical_rejections: 'NaN' }])
+  assert.equal(r.admit, false, 'every malformed row is approved!==true ⇒ HOT via unapproved_slice')
+  assert.equal(r.reason, 'unapproved_slice')
+  assert.equal(r.corrections, 0, 'a non-numeric logical_rejections reads as 0')
+  assert.equal(admitSpeculation([specSlice({ logical_rejections: -5 })]).corrections, 0, 'a negative logical_rejections contributes 0, never a negative')
+})
+
+test('D3 wiring (bundled artifact): a HOT milestone HOLDS the next milestone\'s speculative slice plan — speculation_disabled ledgered, build.speculation_held beat fires, NO M2 speculative cut during M1\'s gate; proves admitSpeculation is inlined + wired', async () => {
+  // M1 churns: its one slice takes ONE logical rejection then approves → logical_rejections=1,
+  // ceil(1/2)=1 ⇒ HOT (correction_rate). The gate would likely invalidate a speculative plan, so
+  // the pipeline never launches — M2 plans ONCE, synchronously, at its own head. HEAD is stable so
+  // the calm control (the lever-3 tests above) would otherwise speculate.
+  let disabled = null
+  const { calls, log } = await runBuild(baseArgs, mkPipeline(() => 'HEAD_STABLE', (label, prompt) => {
+    if (label.includes(':review:M1:s0:f0')) return rejectLogical // one logical rejection on M1's slice, then default reviewOk approves
+    if (label === 'thoth:ledger' && /speculation_disabled/.test(prompt)) { disabled = prompt; return { ok: true } }
+  }))
+  assert.ok(disabled, 'the held speculation is ledgered (speculation_disabled) — proves admitSpeculation is inlined and the hold branch ran')
+  assert.match(disabled, /"reason":"correction_rate"/, 'the ledgered reason is the churn class')
+  assert.match(disabled, /"next_milestone":"M2"/)
+  assert.match(disabled, /"milestone":"M1"/)
+  // the speculative M2 plan was NEVER cut during M1's gate — M2 plans exactly once, at its own head
+  assert.equal(labelsOf(calls, 'krs-one:slice-plan:M2').length, 1, 'M2 planned exactly once — synchronously; no speculative cut was burned')
+  assert.equal(labelsOf(calls, 'thoth:head:M1:pipeline-base').length, 0, 'the base anchor never fired — the hold skips headSha entirely')
+  assert.equal(labelsOf(calls, 'thoth:head:M2:pipeline-check').length, 0, 'no consume-time check — there was no pipelined plan to consume')
+  // the beat rode the ledger, verbatim tail
+  const beats = labelsOf(calls, 'thoth:ledger').filter((l) => /build\.speculation_held/.test(l.prompt))
+  assert.equal(beats.length, 1, 'the build.speculation_held lore beat fires once')
+  assert.match(beats[0].prompt, /the next cut waits for a settled anvil/)
+  assert.ok(log.some((l) => /Holding M2's speculative slice plan/.test(l)))
 })
 
 // ── P3 T2: ui-slice probe gating (§7 default-fail / honest-degrade) ──────────────────────────────

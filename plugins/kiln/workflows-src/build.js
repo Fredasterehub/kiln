@@ -328,7 +328,7 @@ const VERDICT_SCHEMA = {
 //    inlined pure logic, unit-tested in src/spine.mjs and src/gauge.mjs. The coverage arithmetic,
 //    the tamper/freshness gate, the milestone-gate judge-spawn decision, and the escalation
 //    policy run IN THE SCRIPT, never in an agent. ──
-// @inline:spine:validateSlicePlan,runnerGate,gateOnlyRefusal,probeGate,rejectionClass,failureFingerprint,admitRetry,tribunalThreshold,gateDecision,goalAuditUsable,pipelineInvalidated
+// @inline:spine:validateSlicePlan,runnerGate,gateOnlyRefusal,probeGate,rejectionClass,failureFingerprint,admitRetry,tribunalThreshold,gateDecision,goalAuditUsable,pipelineInvalidated,admitSpeculation
 // @inline:gauge:escalate
 
 // ── Routing: builder family != reviewer family, derived in ONE place ──
@@ -1440,15 +1440,28 @@ for (const m of milestones) {
   if (!gateOnly && nextM) {
     const nextScs = lawChecks.filter((c) => c.milestone === nextM.id)
     if (nextScs.length) {
-      const base_sha = await headSha(`${m.id}:pipeline-base`)
-      if (base_sha) {
-        const nextSurf = surfaceOf(nextM)
-        log(`Pipelining ${nextM.id}'s slice plan in parallel with ${m.id}'s gate (base_sha ${base_sha})`)
-        pipelinedPlan = {
-          milestoneId: nextM.id,
-          base_sha,
-          cutDuring: m.id,
-          promise: planMilestone(nextM, nextSurf, nextScs).catch(() => null),
+      // D3 (plan WS-D): churn-aware speculation. If THIS milestone ran hot, its gate will likely
+      // commit corrections, move HEAD, and pipelineInvalidated would discard a speculative plan
+      // anyway — so hold the next cut instead of burning a krs-one call for nothing. Waste-avoidance
+      // ONLY: pipelineInvalidated stays the correctness rail. Re-enables automatically — a calm
+      // milestone recomputes admitSpeculation over ITS slices and speculates again with no machinery.
+      const spec = admitSpeculation(slices)
+      if (!spec.admit) {
+        log(`Holding ${nextM.id}'s speculative slice plan — ${m.id} ran hot (${spec.reason}: ${spec.corrections} correction(s) across ${spec.slices} slice(s)); the gate would likely invalidate it`)
+        await ledger('note', { kind: 'speculation_disabled', milestone: m.id, next_milestone: nextM.id, reason: spec.reason, corrections: spec.corrections, slices: spec.slices }, 'Judgment')
+        // build.speculation_held (Fable-authored, verbatim): the next blade waits for a settled anvil.
+        await lore('build.speculation_held', `The forge holds ${nextM.id}'s blade — ${m.id} ran hot (${spec.corrections} correction${spec.corrections === 1 ? '' : 's'} across ${spec.slices} slice${spec.slices === 1 ? '' : 's'}); the next cut waits for a settled anvil.`, { milestone: m.id, next: nextM.id, reason: spec.reason }, 'Judgment')
+      } else {
+        const base_sha = await headSha(`${m.id}:pipeline-base`)
+        if (base_sha) {
+          const nextSurf = surfaceOf(nextM)
+          log(`Pipelining ${nextM.id}'s slice plan in parallel with ${m.id}'s gate (base_sha ${base_sha})`)
+          pipelinedPlan = {
+            milestoneId: nextM.id,
+            base_sha,
+            cutDuring: m.id,
+            promise: planMilestone(nextM, nextSurf, nextScs).catch(() => null),
+          }
         }
       }
     }

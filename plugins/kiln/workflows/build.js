@@ -568,6 +568,25 @@ function pipelineInvalidated(baseSha, headShaArg) {
   if (base !== head) return { invalidated: true, reason: `a corrective commit moved the milestone HEAD since the pipelined plan was cut (base_sha ${base}, current HEAD ${head}) — the speculative plan is stale; re-slice against the new HEAD` }
   return { invalidated: false, reason: '' }
 }
+function admitSpeculation(slices) {
+  const list = Array.isArray(slices) ? slices : []
+  const sliceCount = list.length
+  let corrections = 0
+  let splitOrBlocked = false
+  let unapproved = false
+  for (const s of list) {
+    const row = (s && typeof s === 'object' && !Array.isArray(s)) ? s : {}
+    if (row.split_required === true || row.environment_blocked === true) splitOrBlocked = true
+    if (row.approved !== true) unapproved = true
+    const lr = row.logical_rejections
+    if (typeof lr === 'number' && Number.isFinite(lr) && lr > 0) corrections += lr
+  }
+  if (sliceCount === 0) return { admit: true, reason: null, corrections: 0, slices: 0 }
+  if (splitOrBlocked) return { admit: false, reason: 'split_or_blocked', corrections, slices: sliceCount }
+  if (unapproved) return { admit: false, reason: 'unapproved_slice', corrections, slices: sliceCount }
+  if (corrections >= Math.ceil(sliceCount / 2)) return { admit: false, reason: 'correction_rate', corrections, slices: sliceCount }
+  return { admit: true, reason: null, corrections, slices: sliceCount }
+}
 function escalate(posture, signal, config) {
   // §3.3 signal shapes, ranked by evidence strength:
   //   { type: 'review_rejection', finding_class: 'logical'|'mechanical', rejections: n }
@@ -2010,15 +2029,28 @@ for (const m of milestones) {
   if (!gateOnly && nextM) {
     const nextScs = lawChecks.filter((c) => c.milestone === nextM.id)
     if (nextScs.length) {
-      const base_sha = await headSha(`${m.id}:pipeline-base`)
-      if (base_sha) {
-        const nextSurf = surfaceOf(nextM)
-        log(`Pipelining ${nextM.id}'s slice plan in parallel with ${m.id}'s gate (base_sha ${base_sha})`)
-        pipelinedPlan = {
-          milestoneId: nextM.id,
-          base_sha,
-          cutDuring: m.id,
-          promise: planMilestone(nextM, nextSurf, nextScs).catch(() => null),
+      // D3 (plan WS-D): churn-aware speculation. If THIS milestone ran hot, its gate will likely
+      // commit corrections, move HEAD, and pipelineInvalidated would discard a speculative plan
+      // anyway — so hold the next cut instead of burning a krs-one call for nothing. Waste-avoidance
+      // ONLY: pipelineInvalidated stays the correctness rail. Re-enables automatically — a calm
+      // milestone recomputes admitSpeculation over ITS slices and speculates again with no machinery.
+      const spec = admitSpeculation(slices)
+      if (!spec.admit) {
+        log(`Holding ${nextM.id}'s speculative slice plan — ${m.id} ran hot (${spec.reason}: ${spec.corrections} correction(s) across ${spec.slices} slice(s)); the gate would likely invalidate it`)
+        await ledger('note', { kind: 'speculation_disabled', milestone: m.id, next_milestone: nextM.id, reason: spec.reason, corrections: spec.corrections, slices: spec.slices }, 'Judgment')
+        // build.speculation_held (Fable-authored, verbatim): the next blade waits for a settled anvil.
+        await lore('build.speculation_held', `The forge holds ${nextM.id}'s blade — ${m.id} ran hot (${spec.corrections} correction${spec.corrections === 1 ? '' : 's'} across ${spec.slices} slice${spec.slices === 1 ? '' : 's'}); the next cut waits for a settled anvil.`, { milestone: m.id, next: nextM.id, reason: spec.reason }, 'Judgment')
+      } else {
+        const base_sha = await headSha(`${m.id}:pipeline-base`)
+        if (base_sha) {
+          const nextSurf = surfaceOf(nextM)
+          log(`Pipelining ${nextM.id}'s slice plan in parallel with ${m.id}'s gate (base_sha ${base_sha})`)
+          pipelinedPlan = {
+            milestoneId: nextM.id,
+            base_sha,
+            cutDuring: m.id,
+            promise: planMilestone(nextM, nextSurf, nextScs).catch(() => null),
+          }
         }
       }
     }
