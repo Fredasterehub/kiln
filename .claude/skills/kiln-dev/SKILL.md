@@ -30,6 +30,17 @@ versioned and dual-keyed on change. Authority: `.kiln-dev/v302/dev-protocol-draf
   SELF-CONTAINED brief (files-as-truth carries continuity); reviewers additionally get the written
   prior verdict; Fable rules between invocations (the conductor pattern). The v1-era
   boss/implementer/transport teammates are retired.
+- **Claude-head succession (A12 — operator ruling 2026-07-15):** the Claude head is Fable 5. When
+  Fable 5 is unavailable to the session (model not offered / access lost), Opus 4.8 succeeds to
+  EVERY Claude-head seat — the second key, rulings between invocations, joint-heads scope rulings,
+  creative direction, keystone blind Claude halves, and the fable-lane terminal verdict.
+  `fable_main_session` names the SEAT (the Claude head ruling in the main session), not the
+  engine: a succeeded terminal wrapper adds a `model` field recording the actual model (legal —
+  the gate binds only verdict/diff_sha256/batch_id/round: verifyFableChain,
+  kiln-codex-receipt.mjs:1116), and commit trailers name the actual model (e.g. `Reviewed-by:
+  Claude Opus 4.8 (second key, APPROVED)`). Succession changes no other rule: cross-family
+  verification, Sol seats, the ladder, and the gate stand as written. A succeeded session declares
+  the succession in its first operator status update.
 
 Default lane: unlisted engineering work (docs, config, tooling, workflows, schemas, migrations,
 dependencies, security, refactors) = Logic full review, or the mirrored Codex-authored lane by writer
