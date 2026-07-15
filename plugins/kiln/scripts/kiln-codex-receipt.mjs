@@ -1014,6 +1014,25 @@ function parseTapTally(tap) {
   return { tests: g(/^# tests (\d+)$/m) ?? 0, pass: g(/^# pass (\d+)$/m) ?? 0, fail: g(/^# fail (\d+)$/m) ?? 0, skip: g(/^# skipped (\d+)$/m) ?? 0 }
 }
 
+// WS-F: a red floor must record WHICH tests failed. The node --test TAP failing lines are
+// `not ok <N> - <name>` (possibly indented for nested subtests). Collect the names only — bounded to
+// the first 20 so a runaway red floor can't bloat the receipt. A `not ok` line carrying a TODO or
+// SKIP directive is NOT a genuine failure — node tallies it under `# todo`/`# skipped`, never
+// `# fail` — so exclude it entirely (never a failing name). Returns [] when nothing failed
+// (schema-stable).
+export function parseFailingTests(tap) {
+  const names = []
+  const re = /^[ \t]*not ok \d+ - (.+?)[ \t]*$/gm
+  let m
+  while ((m = re.exec(tap)) !== null) {
+    const name = m[1]
+    if (/\s#\s+(TODO|SKIP)\b/i.test(name)) continue
+    names.push(name.trim())
+    if (names.length >= 20) break
+  }
+  return names
+}
+
 // DSGN-1a: the floor is a trusted-CLI mode, not a relayed claim. `gate --floor` itself spawns the
 // harness + bundler, parses the TAP tally, and writes a floor receipt bound to the reviewed diff's
 // sha. The routing gate later REQUIRES a floor receipt whose pass===true and whose diff_sha256 equals
@@ -1030,9 +1049,11 @@ function cmdGateFloor(opts) {
   const bundle = spawnSync('node', ['scripts/bundle-workflows.mjs', '--check'], { cwd: repo, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 })
   const bundlePass = bundle.status === 0
   const pass = harnessPass && bundlePass && tally.fail === 0 && tally.tests > 0
-  const receipt = { floor_version: FLOOR_VERSION, pass, tally, diff_sha256: sha256(diffBytes), tap_sha256: sha256(Buffer.from(tap)), bundle_check_pass: bundlePass }
+  const failingTests = pass ? [] : parseFailingTests(tap)
+  const receipt = { floor_version: FLOOR_VERSION, pass, tally, failing_tests: failingTests, diff_sha256: sha256(diffBytes), tap_sha256: sha256(Buffer.from(tap)), bundle_check_pass: bundlePass }
   atomicWrite(canonicalFile(resolve(opts.out)), Buffer.from(JSON.stringify(receipt) + '\n'))
-  process.stdout.write(`FLOOR:${pass ? 'PASS' : 'FAIL'} tests=${tally.tests} pass=${tally.pass} fail=${tally.fail} skip=${tally.skip} bundle=${bundlePass}\n`)
+  const failingTail = failingTests.length ? ` failing=${failingTests.slice(0, 3).join(' | ')}` : ''
+  writeSync(1, `FLOOR:${pass ? 'PASS' : 'FAIL'} tests=${tally.tests} pass=${tally.pass} fail=${tally.fail} skip=${tally.skip} bundle=${bundlePass}${failingTail}\n`)
   process.exit(pass ? 0 : 1)
 }
 

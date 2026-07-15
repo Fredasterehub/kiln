@@ -744,3 +744,74 @@ test('check-handoff: the real templates pass their kind (incl. microfix now carr
     assert.match(bounced.stdout, /scope/)
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
+
+// ── WS-F: the floor receipt records FAILING TEST NAMES ────────────────────────────────────────────
+
+// Build a stub repo whose `tests/v3/run.sh` emits the given TAP and exit code, with a stub
+// `scripts/bundle-workflows.mjs` that always passes, then run the real `gate --floor` over it.
+function floorRepo(tap, exitCode) {
+  const dir = mkdtempSync(join(tmpdir(), 'kiln-floor-'))
+  mkdirSync(join(dir, 'tests', 'v3'), { recursive: true })
+  mkdirSync(join(dir, 'scripts'), { recursive: true })
+  const runSh = join(dir, 'tests', 'v3', 'run.sh')
+  writeFileSync(runSh, `#!/usr/bin/env bash\ncat <<'TAP'\n${tap}\nTAP\nexit ${exitCode}\n`)
+  chmodSync(runSh, 0o755)
+  writeFileSync(join(dir, 'scripts', 'bundle-workflows.mjs'), 'process.exit(0)\n')
+  const diff = join(dir, 'x.diff')
+  writeFileSync(diff, 'diff --git a b\n')
+  return { dir, diff, out: join(dir, 'floor.json') }
+}
+
+function runFloor(fx) {
+  return spawnSync(process.execPath, [CLI, 'gate', '--floor', '--repo', fx.dir, '--diff', fx.diff, '--out', fx.out], { encoding: 'utf8' })
+}
+
+test('gate --floor: a red floor receipt carries the failing test names, and the FLOOR:FAIL line names them', () => {
+  const tap = [
+    'TAP version 13',
+    'ok 1 - alpha stays green',
+    'not ok 2 - beta broke the seam',
+    'not ok 3 - gamma regressed # TODO flaky',
+    '1..3',
+    '# tests 3',
+    '# pass 1',
+    '# fail 1',
+    '# todo 1',
+    '# skipped 0',
+  ].join('\n')
+  const fx = floorRepo(tap, 1)
+  try {
+    const r = runFloor(fx)
+    assert.equal(r.status, 1, r.stderr)
+    assert.match(r.stdout, /^FLOOR:FAIL /m)
+    // the `# TODO` line is not a genuine failure — node tallies it under # todo, so it is
+    // excluded and only the real failure's name reaches the receipt and the FLOOR line
+    assert.match(r.stdout, /failing=beta broke the seam$/m)
+    const receipt = JSON.parse(readFileSync(fx.out, 'utf8'))
+    assert.equal(receipt.pass, false)
+    assert.deepEqual(receipt.failing_tests, ['beta broke the seam'])
+  } finally { rmSync(fx.dir, { recursive: true, force: true }) }
+})
+
+test('gate --floor: a green floor receipt carries failing_tests: [] (schema-stable)', () => {
+  const tap = [
+    'TAP version 13',
+    'ok 1 - alpha',
+    'ok 2 - beta',
+    '1..2',
+    '# tests 2',
+    '# pass 2',
+    '# fail 0',
+    '# skipped 0',
+  ].join('\n')
+  const fx = floorRepo(tap, 0)
+  try {
+    const r = runFloor(fx)
+    assert.equal(r.status, 0, r.stderr)
+    assert.match(r.stdout, /^FLOOR:PASS /m)
+    assert.doesNotMatch(r.stdout, /failing=/)
+    const receipt = JSON.parse(readFileSync(fx.out, 'utf8'))
+    assert.equal(receipt.pass, true)
+    assert.deepEqual(receipt.failing_tests, [])
+  } finally { rmSync(fx.dir, { recursive: true, force: true }) }
+})

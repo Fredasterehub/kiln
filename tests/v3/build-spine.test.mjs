@@ -35,11 +35,12 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, rmSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { admitSpeculation } from '../../plugins/kiln/src/spine.mjs'
 import { createHash } from 'node:crypto'
 import { sha256Hex, canonicalJson } from '../../plugins/kiln/src/council.mjs'
+import { writeInflightV301, detectSealedCouncil, readEventsText } from './migration-inflight.test.mjs'
 
 const WORKFLOW = fileURLToPath(new URL('../../plugins/kiln/workflows/build.js', import.meta.url))
 const BUILD_SRC = fileURLToPath(new URL('../../plugins/kiln/workflows-src/build.js', import.meta.url))
@@ -2098,6 +2099,38 @@ test('B3d legacy hook: sub-T4 (no codex) NEVER reads council state and NEVER run
   const noToken = await runBuild({ ...baseArgs, capabilityTier: 'T4' }, mkRespond({}, (label) => (label.startsWith('ryu:qa') ? qaClean : undefined)))
   assert.equal(count(noToken.calls, 'thoth:council-legacy'), 0, 'a tokenless promised council reads no council state — the hook needs a live receipt-attesting seat')
   assert.equal(count(noToken.calls, 'fable:legacy-ratify:master_plan:c0'), 0)
+})
+
+// WS-F end-to-end migration: the SAME detection contract the thoth:council-legacy agent implements
+// (build.js:1278) runs over the REAL fixture events.jsonl BYTES — the historically-faithful v3.0.1
+// ledger written by writeInflightV301 (migration-inflight.test.mjs), not a hand-coded literal — and
+// its extraction is fed into the mocked build harness, closing the detection→hook loop over a genuine
+// pre-council ledger. A v3.0.1 ledger ⇒ [] ⇒ legacy_authority; the v3.0.2-native ledger carrying a
+// sealed master_plan RATIFIED note ⇒ non-empty ⇒ the hook does NOT fire.
+
+test('WS-F migration end-to-end: the detection contract over the REAL v3.0.1 fixture BYTES yields [], and feeding that extraction into the build harness detects legacy_authority + RATIFIES the unchanged plan (a genuine pre-council resume routes honestly)', async () => {
+  const { dir, kilnDir } = writeInflightV301()
+  try {
+    const checkpoints = detectSealedCouncil(readEventsText(kilnDir))
+    assert.deepEqual(checkpoints, [], 'the v3.0.1 fixture extraction is empty — the legacy trigger, straight off the real ledger bytes')
+    const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council({ checkpoints })))
+    assert.equal(count(calls, 'fable:legacy-ratify:master_plan:c0'), 1, 'the extraction drove the retrospective ratifier — detection fired off the real ledger shape')
+    assert.equal(result.council.authority, 'legacy_authority', 'a v3.0.1 in-flight resume advances under legacy_authority, never relabeled twin_ratified')
+    assert.equal(result.council.terminal, 'RATIFIED')
+    assert.equal(result.built[0].qa, 'QA_PASS', 'the retrospectively-ratified v3.0.1 plan advances to its milestones')
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('WS-F migration end-to-end: the v3.0.2-native fixture BYTES (a sealed master_plan RATIFIED note on the same run) extract a non-empty checkpoint ⇒ the hook does NOT fire (the migration path never mis-fires on a native run)', async () => {
+  const { dir, kilnDir } = writeInflightV301({ sealCouncil: true })
+  try {
+    const checkpoints = detectSealedCouncil(readEventsText(kilnDir))
+    assert.equal(checkpoints.length, 1, 'the native fixture yields the sealed master_plan checkpoint')
+    const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council({ checkpoints })))
+    assert.equal(count(calls, 'fable:legacy-ratify:master_plan:c0'), 0, 'a council-ratified plan runs NO retrospective ratification')
+    assert.equal(result.council, undefined, 'no legacy council rides the return on the native path')
+    assert.equal(result.built[0].qa, 'QA_PASS')
+  } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
 // ── bundled-artifact presence: the extended @inline:council name list ships into workflows/build.js ──

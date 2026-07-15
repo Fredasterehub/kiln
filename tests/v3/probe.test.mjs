@@ -646,6 +646,36 @@ test('kiln-probe lease: writes the {token, expires_at, watchdog_pid} lease + a l
   }
 })
 
+// WSF-1 regression: lease-release must reap the watchdog's whole GROUP. A leader-only kill orphans
+// the watchdog's `sleep`+`rm` child, which — after the short lease is released and a LONGER
+// replacement is taken for the SAME runId — fires its `rm` past the ORIGINAL deadline and deletes
+// the live replacement lease. Group-kill (-pid) reaps the child too, so the replacement survives.
+test('kiln-probe lease-release kills the watchdog GROUP: a released short lease\'s surviving child can no longer delete a LONGER replacement lease for the same runId', async () => {
+  const { proj, kiln } = makeProbeFixture()
+  const tok = `kvalGRP${process.pid}${Date.now().toString(36)}`
+  try {
+    // a SHORT (2s) lease, then release it — the group-kill must reap the watchdog's sleep+rm child too
+    const short = probeCli(['lease', kiln, tok, tok, '2'])
+    assert.equal(short.status, 0, short.stderr)
+    const rel = probeCli(['lease-release', kiln, tok])
+    assert.equal(rel.status, 0, rel.stderr)
+    assert.ok(!existsSync(join(kiln, 'evidence', tok, 'browser.lease')), 'release deleted the short lease')
+    // immediately take a LONGER (600s) replacement lease for the SAME runId — same lease file path
+    const long = probeCli(['lease', kiln, tok, tok, '600'])
+    assert.equal(long.status, 0, long.stderr)
+    assert.ok(existsSync(join(kiln, 'evidence', tok, 'browser.lease')), 'the replacement lease exists')
+    // wait PAST the SHORT lease's original 2s deadline — a surviving orphan child of the released
+    // watchdog would run its `rm <leaseFile>` here and delete the replacement (the WSF-1 bug)
+    await new Promise((r) => setTimeout(r, 4000))
+    assert.ok(existsSync(join(kiln, 'evidence', tok, 'browser.lease')), 'the replacement lease SURVIVES — the released watchdog group was fully reaped, no orphan child deleted it')
+    assert.equal(leaseOf(kiln, tok).token, tok, 'the surviving lease is the LONGER replacement, untouched')
+  } finally {
+    spawnSync('pkill', ['-9', '-f', `kiln-pw-${tok}`], { stdio: 'ignore' })
+    probeCli(['lease-release', kiln, tok])
+    rmSync(proj, { recursive: true, force: true })
+  }
+})
+
 test('kiln-probe run --lease: a VALID lease lets the leased probe run (exit 0); an ABSENT/MISMATCHED lease REFUSES with exit 77 LEASE_EXPIRED — no browser is launched', () => {
   const { proj, kiln } = makeProbeFixture()
   const tok = `kvalB${process.pid}${Date.now().toString(36)}`
@@ -725,22 +755,32 @@ test('kiln-probe run: the Tier-1 build path (NO lease demanded, no lease file) i
 test('kiln-probe run: the "lease file exists for the runId" trigger — a browser.lease in the probe\'s OWN runId dir enforces the lease even without --lease/env', () => {
   const { proj, kiln } = makeProbeFixture()
   const tok = `kvalD${process.pid}${Date.now().toString(36)}`
-  let origWatchdog = null // captured before the hand-overwrite so the finally never orphans it
+  let origWatchdog = null // captured so it is REAPED before the hand-overwrite (its trailing rm must never race)
   try {
-    // take a SHORT lease keyed by the exact runId the probe will use — no --lease flag passed to run
-    const take = probeCli(['lease', kiln, tok, tok, '3'])
+    // A LONG lease keyed by the exact runId the probe will use — no --lease flag passed to run. Long,
+    // not short: RUN (a)'s validity must not depend on wall-clock (a short lease can itself expire
+    // mid-run under load), and the watchdog must not fire on its own during the test. Expiry below is
+    // simulated deterministically by overwriting the file, NOT by racing the clock.
+    const take = probeCli(['lease', kiln, tok, tok, '600'])
     assert.equal(take.status, 0, take.stderr)
     origWatchdog = leaseOf(kiln, tok).watchdog_pid
     const ok = probeCli(['run', proj, kiln, 'SC-001', tok], { KILN_FAKE_PW_MODE: 'pass' }) // runId === leaseRunId, no --lease
     assert.equal(ok.status, 0, `a probe under its own valid lease runs: ${ok.stderr}${ok.stdout}`)
+    // REAP the watchdog process GROUP before simulating expiry. The watchdog is `timeout … bash -c
+    // 'sleep N; kiln-probe sweep <tok>; rm -f <lease>'`; its trailing rm deletes the lease at the
+    // deadline (correct product behavior). If it is alive when we hand-write the expired lease, that
+    // rm can land AFTER the overwrite and delete it — RUN (b) then finds no lease, runs unleased, and
+    // returns 0 instead of the expected 77 (the pre-fix flake, reproduced under load). Group-killing
+    // it (detached ⇒ the pid is its group leader) makes the overwrite genuinely deterministic.
+    if (Number.isInteger(origWatchdog) && origWatchdog > 1) { try { process.kill(-origWatchdog, 'SIGKILL') } catch { /* already gone */ } }
+    origWatchdog = null
     // now expire it by hand-writing a past expiry, then run again under the same runId → refused, no flag.
-    // (the original watchdog is killed in the finally so this deterministic overwrite leaks nothing.)
     writeFileSync(join(kiln, 'evidence', tok, 'browser.lease'), JSON.stringify({ token: tok, expires_at: 1, watchdog_pid: null }) + '\n')
     const refused = probeCli(['run', proj, kiln, 'SC-001', tok], { KILN_FAKE_PW_MODE: 'pass' })
     assert.equal(refused.status, 77, 'an in-dir lease that has expired refuses without any flag')
     assert.match(refused.stderr, /LEASE_EXPIRED/)
   } finally {
-    if (Number.isInteger(origWatchdog) && origWatchdog > 1) { try { process.kill(origWatchdog, 'SIGKILL') } catch { /* already gone */ } }
+    if (Number.isInteger(origWatchdog) && origWatchdog > 1) { try { process.kill(-origWatchdog, 'SIGKILL') } catch { /* already gone */ } }
     spawnSync('pkill', ['-9', '-f', `kiln-pw-${tok}`], { stdio: 'ignore' })
     probeCli(['lease-release', kiln, tok])
     rmSync(proj, { recursive: true, force: true })

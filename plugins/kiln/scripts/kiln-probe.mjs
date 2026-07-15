@@ -356,7 +356,15 @@ function cmdLeaseRelease(kilnDir, leaseRunId) {
   const l = readLease(kilnDir, leaseRunId)
   if (!l) { console.log(`LEASE_RELEASE ${leaseRunId} — no lease present (no-op)`); return }
   const wd = Number(l.watchdog_pid)
-  if (Number.isInteger(wd) && wd > 1) { try { process.kill(wd, 'SIGKILL') } catch { /* watchdog already self-terminated at expiry */ } }
+  // Kill the watchdog's whole process GROUP, not just its leader: the watchdog was spawned detached,
+  // so it is its own group leader (pgid == pid) and its `sleep`/`bash` children share that group. A
+  // leader-only kill leaves those children orphaned but alive — the surviving `sleep` completes and
+  // its `rm` deletes a REPLACEMENT lease taken for the same runId after release. `-wd` reaps the tree
+  // in one shot; the leader-kill fallback covers any ancient row whose watchdog was not a group leader.
+  if (Number.isInteger(wd) && wd > 1) {
+    try { process.kill(-wd, 'SIGKILL') }
+    catch { try { process.kill(wd, 'SIGKILL') } catch { /* watchdog already self-terminated at expiry */ } }
+  }
   // sweep() builds the kill pattern as `kiln-pw-<arg>`; the lease token IS the bare runId prefix the
   // evaluator's probes namespaced their browsers under (kiln-pw-<token>-<SC>-…), so the token passes
   // straight through as the sweep prefix — reaping exactly this lease's browser trees, never blanket.
