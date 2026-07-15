@@ -1606,9 +1606,21 @@ const anchorFilesFromPrompt = (prompt) => {
 // defaults). Captures the close/correction artifact hashes from the fable/sol prompts so the ratify
 // payloads + their cross-checks echo whatever hash the workflow computed (robust to closeRecord drift).
 function t4Council(cfg = {}) {
-  let closeHash = null, corrHash = null
+  let closeHash = null, corrHash = null, legacyHash = null
   const analystB = cfg.solAnalyst !== undefined ? cfg.solAnalyst : { findings: [], overall: 'fail', report_markdown: '# b' }
+  // ⟨DSGN-B3-4⟩(b): the detection read. DEFAULT = a RATIFIED master_plan checkpoint (the COMMON case — a
+  // council-ratified plan), so the legacy hook does NOT fire and every existing T4 row is byte-preserved.
+  // cfg.checkpoints overrides (e.g. [] ⇒ a legacy plan, or a master_plan_legacy RATIFIED ⇒ resume-reuse).
+  const detectCheckpoints = cfg.checkpoints !== undefined ? cfg.checkpoints : [{ kind: 'council_state', keystone_id: 'master_plan', phase: 'RATIFIED', status: 'sealed' }]
   return (label, prompt) => {
+    if (label === 'thoth:council-legacy') return { checkpoints: detectCheckpoints }
+    // B3R2-1: build re-anchors the CURRENT plan + reloads the persisted DEADLOCK_RESOLVED certificate.
+    if (label === 'thoth:deadlock-plan-anchor') return cfg.deadlockPlanAnchor !== undefined ? cfg.deadlockPlanAnchor : { reasoning: 'a', files: anchorFilesFromPrompt(prompt) }
+    if (label === 'thoth:deadlock-cert-reload') return cfg.deadlockCert !== undefined ? cfg.deadlockCert : { content: '', sha256: null }
+    if (label === 'thoth:legacy-anchor') return cfg.legacyAnchor !== undefined ? cfg.legacyAnchor : { reasoning: 'a', files: anchorFilesFromPrompt(prompt) }
+    if (label.startsWith('fable:legacy-ratify')) { const m = prompt.match(/artifact_hash = "([0-9a-f]{64})"/); if (m) legacyHash = m[1]; return cfg.fableLegacy ? cfg.fableLegacy(legacyHash) : rat(legacyHash) }
+    if (label.startsWith('sol:legacy-ratify')) { const m = prompt.match(/"artifact_hash":"([0-9a-f]{64})"/); if (m) legacyHash = m[1]; if (cfg.solLegacy === 'dead') return {}; return cfg.solLegacy ? solEnv(cfg.solLegacy(legacyHash)) : solEnv(rat(legacyHash)) }
+    if (label.startsWith('thoth:receipt-check:sol:legacy-ratify')) return crossOkB(cfg.solLegacy && cfg.solLegacy !== 'dead' ? cfg.solLegacy(legacyHash) : rat(legacyHash), 'master_plan_legacy', 'LEGACY_RATIFY')
     if (label.startsWith('thoth:probe-exec')) return cfg.probeExec !== undefined ? cfg.probeExec : { executed_ids: [] }
     if (label.startsWith('thoth:close-anchor')) return cfg.closeAnchor !== undefined ? cfg.closeAnchor : { reasoning: 'a', files: anchorFilesFromPrompt(prompt) }
     if (label.startsWith('ken:qa')) return cfg.ken !== undefined ? cfg.ken : { reasoning: 'r', overall: 'pass', findings: [] }
@@ -1951,6 +1963,143 @@ test('B42-6 boundary records: the gate_decision ledger append carries a council 
   assert.match(gd, /"council_receipts":\[/, 'the receipts list rides gate_decision as a SEPARATE council_receipts key')
   assert.equal(result.built[0].council.close_terminal, 'RATIFIED')
   assert.equal(result.built[0].council.replan_required, false)
+})
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// ── ⟨DSGN-B3-4⟩(b) THE LEGACY-PLAN HOOK (ruling AMB-B3-3): a run already past architecture whose master
+//    plan predates the twin council — detected by the ABSENCE of a RATIFIED/DEADLOCK_RESOLVED master_plan
+//    council checkpoint in the run ledger (the SAME council_state surface build's milestone gate appends,
+//    architecture.js:944/2235) — is marked legacy_authority; ONE retrospective blind dual ratification of
+//    the UNCHANGED plan runs BEFORE the first milestone close (the b42 D7 lite-pair idiom reused, renderer
+//    b3-legacy/1). Dual-APPROVE ⇒ the plan advances with the retrospective certificate on the build return
+//    council field + a note{kind:'council_ruling'}; anything else ⇒ the honest BLOCKED/DEGRADED terminal
+//    gates the keystone (build's existing council rails). Idempotent on resume; sub-T4 byte-preserved. ──
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+const RATIFIED_CKPT = { kind: 'council_state', keystone_id: 'master_plan', phase: 'RATIFIED', status: 'sealed' }
+
+test('B3d legacy hook: a master plan with NO council checkpoint ⇒ detected legacy_authority + ONE retrospective blind dual ratification BEFORE the first milestone close; dual-APPROVE ⇒ the plan advances with a b3-legacy/1 certificate on the build return council field', async () => {
+  const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council({ checkpoints: [] })))
+  const idx = (label) => calls.findIndex((c) => c.label === label)
+  assert.equal(count(calls, 'thoth:council-legacy'), 1, 'the detection read fires once at build start')
+  const exact = (label) => calls.filter((c) => c.label === label).length
+  assert.equal(exact('fable:legacy-ratify:master_plan:c0'), 1, 'the blind Fable retrospective ratifier is dispatched once')
+  assert.equal(exact('sol:legacy-ratify:master_plan:c0'), 1, 'the receipt-attested Sol retrospective ratifier is dispatched once')
+  assert.equal(count(calls, 'thoth:receipt-check:sol:legacy-ratify:master_plan:c0'), 1, 'the Sol leg is cross-checked invocation-exact')
+  assert.ok(idx('fable:legacy-ratify:master_plan:c0') > -1 && idx('fable:legacy-ratify:master_plan:c0') < idx('fable:close:M1:c0'), 'the retrospective ratification runs BEFORE the first milestone close')
+  assert.equal(result.council.authority, 'legacy_authority', 'the plan stays legacy_authority in provenance (never relabeled twin_ratified)')
+  assert.equal(result.council.terminal, 'RATIFIED')
+  assert.equal(result.council.certificate.label, 'twin_ratified')
+  assert.equal(result.council.certificate.terminal, 'RATIFIED')
+  assert.equal(result.council.certificate.signatures[0].renderer_version, 'b3-legacy/1', 'the retrospective certificate is stamped b3-legacy/1 (its own record)')
+  assert.equal(result.council.certificate.plan_hash, result.council.certificate.decision_bundle_hash, 'the plan IS the artifact — plan_hash = bundle_hash')
+  assert.equal(result.built[0].qa, 'QA_PASS', 'the plan advanced ⇒ the milestone built and passed')
+  assert.equal(result.all_passed, true)
+  const led = ledgerPrompts(calls)
+  assert.ok(led.some((p) => /"kind":"council_state".*"keystone_id":"master_plan_legacy".*"phase":"RATIFIED"/.test(p)), 'a master_plan_legacy RATIFIED checkpoint is sealed (keystone master_plan_legacy)')
+  assert.ok(led.some((p) => /"kind":"council_ruling".*"keystone":"master_plan_legacy".*"terminal":"RATIFIED"/.test(p)), 'the council_ruling note records the retrospective terminal')
+  assert.ok(led.some((p) => /"kind":"council_ruling".*"marking":"legacy_authority"/.test(p)), 'detection marks the plan legacy_authority — a NEW note, never a rewrite of a historical event')
+})
+
+test('B3d legacy hook: a legacy plan + a live valid BLOCK ⇒ the honest BLOCKED terminal GATES the build — NO milestone builds, the first milestone close never convenes, the frozen finding surfaced', async () => {
+  const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council({ checkpoints: [], fableLegacy: (h) => ({ ...rat(h), verdict: 'BLOCK', findings: [CLOSE_FINDING] }) })))
+  assert.equal(result.council.terminal, 'BLOCKED')
+  assert.equal(result.council.authority, 'legacy_authority')
+  assert.equal(result.council.certificate, null, 'a retrospective certificate seals ONLY on dual-APPROVE')
+  assert.equal(result.all_passed, false)
+  assert.deepEqual(result.built, [], 'the build never proceeds to a milestone under an unratified legacy plan')
+  assert.equal(count(calls, 'fable:close:M1:c0'), 0, 'the first milestone close never convenes — the keystone is gated')
+  assert.equal(count(calls, ':build:'), 0, 'no milestone is built')
+  assert.ok(result.findings.some((f) => /CF-1/.test(f)), 'the frozen legacy finding is surfaced on the gate return')
+})
+
+test('B3d legacy hook: a legacy plan + a SPLIT (fable APPROVE, sol BLOCK) ⇒ BLOCKED, the build gated', async () => {
+  const { result } = await runBuild(t4args(), mkRespond({}, t4Council({ checkpoints: [], solLegacy: (h) => ({ ...rat(h), verdict: 'BLOCK', findings: [CLOSE_FINDING] }) })))
+  assert.equal(result.council.terminal, 'BLOCKED')
+  assert.deepEqual(result.built, [])
+})
+
+test('B3d legacy hook: a legacy plan + a DEAD Sol seat ⇒ DEGRADED (a missing head is never twin_ratified), the build gated', async () => {
+  const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council({ checkpoints: [], solLegacy: 'dead' })))
+  assert.equal(result.council.terminal, 'DEGRADED')
+  assert.equal(result.council.certificate, null)
+  assert.equal(result.all_passed, false)
+  assert.deepEqual(result.built, [])
+  assert.equal(count(calls, 'fable:close:M1:c0'), 0)
+})
+
+test('B3d legacy hook: a dual-APPROVE echoing a WRONG artifact_hash ⇒ DEGRADED (an invalid verdict carries no standing findings, never mislabeled BLOCKED)', async () => {
+  const badHash = 'e'.repeat(64)
+  const { result } = await runBuild(t4args(), mkRespond({}, t4Council({ checkpoints: [], fableLegacy: () => rat(badHash), solLegacy: () => rat(badHash) })))
+  assert.equal(result.council.terminal, 'DEGRADED')
+  assert.equal(result.council.certificate, null)
+  assert.deepEqual(result.built, [])
+})
+
+test('B3d legacy hook: a dead evidence anchor (no exact manifest) ⇒ DEGRADED before any ratifier — the retrospective certificate must never bind unhashed names', async () => {
+  const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council({ checkpoints: [], legacyAnchor: { reasoning: 'a', files: [] } })))
+  assert.equal(count(calls, 'fable:legacy-ratify:master_plan:c0'), 0, 'a failed anchor DEGRADES before any ratifier is dispatched')
+  assert.equal(result.council.terminal, 'DEGRADED')
+  assert.deepEqual(result.built, [])
+})
+
+test('B3d legacy hook: a run WITH a recorded master_plan RATIFIED checkpoint ⇒ the hook does NOT fire (the common case) — no retrospective ratification, the build proceeds normally', async () => {
+  const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council())) // default detection = master_plan RATIFIED
+  assert.equal(count(calls, 'thoth:council-legacy'), 1, 'the detection read still fires (one cheap haiku read)')
+  assert.equal(count(calls, 'fable:legacy-ratify:master_plan:c0'), 0, 'a council-ratified plan runs NO retrospective ratification')
+  assert.equal(result.council, undefined, 'no legacy council rides the return on the common path')
+  assert.equal(result.built[0].qa, 'QA_PASS')
+})
+
+// B3R2-1: a DEADLOCK_RESOLVED master_plan row is trusted ONLY when its certificate reloads and the CURRENT
+// plan re-anchors to the bound bindings. The fixture builds a certificate + a row whose certificate_hash /
+// plan / bundle / template / run-token all agree; the plan anchor's sha of the plan PATH is the current hash.
+const MASTER_PLAN_PATH = `${baseArgs.kilnDir}/master-plan.md`
+const CURRENT_PLAN_HASH = sha256Hex(MASTER_PLAN_PATH)
+const mkDeadlockFixture = (planHash) => {
+  const cert = { renderer_version: 'b3-bundle/1', bundle_hash: 'b'.repeat(64), plan_hash: planHash, template_hash: 'c'.repeat(64), run_token_hash: sha256Hex(T4TOKEN), adopted_divergence: 'DV-1', adopted_side: 'P0', door: 'two_way', adopted: [{ divergence_id: 'DV-1', side: 'P0', door: 'two_way' }], mel: { auto_summon_operator: true } }
+  const certBytes = canonicalJson(cert)
+  const certHash = sha256Hex(certBytes)
+  const row = { kind: 'council_state', keystone_id: 'master_plan', phase: 'DEADLOCK_RESOLVED', status: 'sealed', decision_bundle_hash: cert.bundle_hash, template_hash: cert.template_hash, run_token_hash: cert.run_token_hash, seat_provenance: { resolution: 'reversibility_rule', plan_hash: planHash, certificate_hash: certHash, adopted: cert.adopted } }
+  return { certBytes, certHash, row }
+}
+
+test('B3R2-1 DEADLOCK_RESOLVED detection: a row whose certificate reloads AND whose bindings re-anchor the CURRENT plan satisfies detection ⇒ the legacy hook does NOT fire', async () => {
+  const fx = mkDeadlockFixture(CURRENT_PLAN_HASH) // plan_hash = the CURRENT plan (the anchor's sha of the path)
+  const { calls, result } = await runBuild(t4args(), mkRespond({}, t4Council({ checkpoints: [fx.row], deadlockCert: { content: fx.certBytes, sha256: fx.certHash } })))
+  assert.equal(count(calls, 'thoth:deadlock-plan-anchor'), 1, 'the CURRENT plan is re-anchored (never trusted on the label alone)')
+  assert.equal(count(calls, 'thoth:deadlock-cert-reload'), 1, 'the persisted certificate is reloaded')
+  assert.equal(count(calls, 'fable:legacy-ratify:master_plan:c0'), 0, 'all five bindings match ⇒ the twin_deadlock_resolved terminal advances (no legacy ratification)')
+  assert.equal(result.council, undefined)
+})
+
+test('B3R2-1 stale DEADLOCK_RESOLVED row: master-plan.md CHANGED after provisional sealing (the bound plan hash no longer matches the current plan) ⇒ the row is VOID and the legacy re-ratification path runs over the CURRENT plan (never a stale advance)', async () => {
+  const fx = mkDeadlockFixture('d'.repeat(64)) // the row binds a plan hash that does NOT match the current plan
+  const { calls, result } = await runBuild(t4args(), mkRespond({}, t4Council({ checkpoints: [fx.row], deadlockCert: { content: fx.certBytes, sha256: fx.certHash } })))
+  assert.equal(count(calls, 'thoth:deadlock-plan-anchor'), 1, 'the current plan is re-anchored')
+  assert.equal(count(calls, 'fable:legacy-ratify:master_plan:c0'), 1, 'the plan changed since sealing ⇒ the stale row is void and the pair RE-RATIFIES over the current plan')
+  assert.equal(result.council.authority, 'legacy_authority', 'a stale DEADLOCK_RESOLVED row never authorizes the advance — the plan re-ratifies from scratch')
+  assert.ok(result.built[0].qa === 'QA_PASS', 'the re-ratified current plan advances to the milestones')
+})
+
+test('B3R1-15 legacy resume verifies the binding: a prior master_plan_legacy RATIFIED row does NOT authorize a stale advance — the pair RE-anchors + RE-ratifies over the CURRENT plan and returns a FRESH real certificate (a stub row whose binding does not match ⇒ prior_binding_verified:false)', async () => {
+  const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council({ checkpoints: [{ kind: 'council_state', keystone_id: 'master_plan_legacy', phase: 'RATIFIED', status: 'sealed' }] })))
+  assert.equal(count(calls, 'fable:legacy-ratify:master_plan:c0'), 1, 'the retrospective pair RE-RUNS — a stale row never advances without re-verification (the old certificate:null trust is gone)')
+  assert.equal(count(calls, 'thoth:legacy-anchor'), 1, 'the plan is RE-anchored over the current bytes')
+  assert.equal(result.council.terminal, 'RATIFIED')
+  assert.equal(result.council.certificate.label, 'twin_ratified', 'a FRESH real certificate is returned, never certificate:null on a stale label')
+  assert.equal(result.council.prior_binding_verified, false, 'the stub prior row (no matching template/token/plan hash) did NOT verify — the plan advances under the fresh signatures, not the stale row')
+  assert.equal(result.built[0].qa, 'QA_PASS', 'the plan advances to the milestones')
+})
+
+test('B3d legacy hook: sub-T4 (no codex) NEVER reads council state and NEVER runs the hook — byte-preserved (a legacy plan advances exactly as v3.0.1); a tokenless promised council is gated on councilCapable too', async () => {
+  const noCodex = await runBuild({ ...baseArgs, codexAvailable: false, capabilityTier: 'T4', runToken: T4TOKEN }, mkRespond())
+  assert.equal(count(noCodex.calls, 'thoth:council-legacy'), 0, 'sub-T4 reads no council state')
+  assert.equal(count(noCodex.calls, 'fable:legacy-ratify:master_plan:c0'), 0)
+  assert.equal(noCodex.result.council, undefined)
+  // T4 + codex but NO runToken (councilMisconfigured): the pair cannot attest without the token, so the hook is gated on councilCapable
+  const noToken = await runBuild({ ...baseArgs, capabilityTier: 'T4' }, mkRespond({}, (label) => (label.startsWith('ryu:qa') ? qaClean : undefined)))
+  assert.equal(count(noToken.calls, 'thoth:council-legacy'), 0, 'a tokenless promised council reads no council state — the hook needs a live receipt-attesting seat')
+  assert.equal(count(noToken.calls, 'fable:legacy-ratify:master_plan:c0'), 0)
 })
 
 // ── bundled-artifact presence: the extended @inline:council name list ships into workflows/build.js ──

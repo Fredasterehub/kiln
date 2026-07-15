@@ -268,6 +268,56 @@ export function canonicalizeFindings(critiques) {
   })
 }
 
+// canonicalizeRatifyFindings(round, bySlot) — b3-design A1 ⟨B3W4-1 fold⟩. RATIFY findings do NOT flow
+// through canonicalizeFindings (that keys critique findings by target decision id). A ratify finding is a
+// WHOLE-PLAN verdict finding; the SCRIPT assigns `R-<round>-<slot>-<nnn>` where slot is the RULING head's
+// script-assigned anonymous slot and nnn is a per-slot 1-based ordinal over the canonical sort of the
+// COMPLETE authoritative finding payload — canonicalJson over normalized claim, required_change,
+// evidence_refs, evidence_class, executable_check, EXCLUDING the model-supplied finding_id (a label, never
+// authority). EXACT duplicate payloads sort adjacently and therefore take successive multiplicity ordinals,
+// so the map is TOTAL over materially-distinct findings and model array order can never swap keys. bySlot:
+// { <slot>: [finding, ...] } (the ruling head's findings under its anonymous slot). Returns the flat list
+// in canonical (slot, payload, original-ordinal) order, each entry the finding spread under its R-key `id`
+// (the model's finding_id, if any, is preserved as a non-authoritative label). Inline WITH canonicalJson.
+export function canonicalizeRatifyFindings(round, bySlot) {
+  const norm = (s) => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()
+  const pad3 = (n) => String(n).padStart(3, '0')
+  const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0)
+  const roundTag = String(round == null ? '' : round)
+  const slots = bySlot && typeof bySlot === 'object' && !Array.isArray(bySlot) ? bySlot : {}
+  const items = []
+  for (const slot of Object.keys(slots).sort()) {
+    const fs = Array.isArray(slots[slot]) ? slots[slot] : []
+    fs.forEach((f, ordinal) => {
+      const payload = {
+        claim: norm(f && f.claim),
+        required_change: norm(f && f.required_change),
+        evidence_refs: Array.isArray(f && f.evidence_refs) ? f.evidence_refs.map((r) => String(r == null ? '' : r)) : [],
+        evidence_class: f && f.evidence_class != null ? String(f.evidence_class) : null,
+        executable_check: f && f.executable_check != null ? String(f.executable_check) : null,
+        // B3R1-2: the AUTHORITATIVE typed correction descriptor (AMB-CLOSER-1.iii) is part of a ratify
+        // finding's identity — an ACCEPT binds the R-key to a SPECIFIC { target_kind, key, replacement }
+        // amendment. Two findings that differ ONLY in their descriptor are materially distinct, so it
+        // rides the canonical sort (replacement by canonicalJson). Only the model-supplied identity labels
+        // (finding_id/id/slot) are excluded — never the correction the ACCEPT will apply.
+        target_kind: f && f.target_kind != null ? String(f.target_kind) : null,
+        key: f && f.key != null ? String(f.key) : null,
+        replacement: f && Object.prototype.hasOwnProperty.call(f, 'replacement') ? canonicalJson(f.replacement) : null,
+      }
+      items.push({ slot: String(slot), _key: canonicalJson(payload), _ordinal: ordinal, finding: f })
+    })
+  }
+  items.sort((a, b) => cmp(a.slot, b.slot) || cmp(a._key, b._key) || (a._ordinal - b._ordinal))
+  const counterBySlot = new Map()
+  return items.map((it) => {
+    counterBySlot.set(it.slot, (counterBySlot.get(it.slot) || 0) + 1)
+    // The SCRIPT-assigned R-key `id` (and `slot`) are AUTHORITATIVE — they are spread LAST so a
+    // same-named key in the model finding payload can never overwrite them (second-key hardening: the
+    // model's `finding_id`/`id` labels are non-authoritative). The finding fields spread FIRST.
+    return { ...(it.finding && typeof it.finding === 'object' && !Array.isArray(it.finding) ? it.finding : {}), id: `R-${roundTag}-${it.slot}-${pad3(counterBySlot.get(it.slot))}`, slot: it.slot }
+  })
+}
+
 // validateDispositions(frozenFindings, dispositions) — sol-b34-design section 3. Each disposition is
 // { finding_id, disposition: accepted|rejected_with_evidence|unresolved, evidence_refs,
 // incorporated_at, reason }. Every frozen finding ID must appear EXACTLY once — unknown, duplicate,
@@ -575,12 +625,17 @@ export function validateRatification(ratification, ctx) {
     if (!Object.prototype.hasOwnProperty.call(f, 'executable_check')) errors.push({ code: 'malformed_finding', at, message: 'executable_check must be present (null allowed)' })
   })
 
-  // anti-capitulation: an APPROVE reversing a standing block needs equal-or-stronger changed_evidence
+  // anti-capitulation (I9 one-finding-key rail): an APPROVE reversing a standing block needs
+  // equal-or-stronger changed_evidence KEYED to that block's finding_id. changed_evidence is filtered
+  // per block by finding_id BEFORE validateReversal, so one evidence item can never clear two blocks —
+  // an item with no finding_id (or a non-matching one) contributes to no block's reversal.
   const standing = Array.isArray(c.standing_blocks) ? c.standing_blocks : []
   if (r.verdict === 'APPROVE' && standing.length) {
+    const allEvidence = Array.isArray(r.changed_evidence) ? r.changed_evidence : []
     for (const block of standing) {
-      const rev = validateReversal(block, { changed_evidence: r.changed_evidence, claim_type: block && block.claim_type })
-      if (!rev.valid) errors.push({ code: 'unevidenced_reversal', at: block && block.finding_id, message: 'APPROVE reverses a standing block without equal-or-stronger changed_evidence — the block stands' })
+      const keyed = allEvidence.filter((ev) => ev && ev.finding_id === (block && block.finding_id))
+      const rev = validateReversal(block, { changed_evidence: keyed, claim_type: block && block.claim_type })
+      if (!rev.valid) errors.push({ code: 'unevidenced_reversal', at: block && block.finding_id, message: 'APPROVE reverses a standing block without equal-or-stronger changed_evidence keyed to its finding_id — the block stands' })
     }
   }
 
@@ -1041,11 +1096,14 @@ export const RATIFY_SCHEMA = {
           evidence_refs: { type: 'array', items: { type: 'string' } },
           evidence_class: { type: 'string', enum: ['executed_check', 'proposed_check', 'repo_state', 'test_output', 'primary_source', 'scenario'], description: 'the HONEST class of this finding\'s evidence — the claim-scoped partial order rules reversals by it' },
           executable_check: { type: ['string', 'null'], description: 'a bounded shell command (EXIT 0 iff the defect is present) or null' },
+          target_kind: { type: 'string', enum: ['settled_decision', 'trunk_field'], description: 'OPTIONAL (AMB-CLOSER-1.iii): the STRUCTURAL correction descriptor — an ACCEPTED BLOCK finding carrying { target_kind, key, replacement } amends the bundle mechanically; an ACCEPTED finding WITHOUT one is a gated escalation (no free rewrite)' },
+          key: { type: 'string', description: 'OPTIONAL: an existing settled-decision topic or an amendable trunk field (present iff target_kind is)' },
+          replacement: { description: 'OPTIONAL: the new value — must match the shape of the target\'s current value (present iff target_kind is)' },
         },
         required: ['finding_id', 'claim', 'required_change', 'evidence_refs', 'evidence_class', 'executable_check'],
       },
     },
-    changed_evidence: { type: 'array', items: { type: 'object', additionalProperties: true, properties: { class: { type: 'string' }, refs: { type: 'array', items: { type: 'string' } } }, required: ['class'] } },
+    changed_evidence: { type: 'array', items: { type: 'object', additionalProperties: true, properties: { finding_id: { type: 'string', description: 'the standing block this evidence retires — I9 one-finding-key rail: one evidence item can never clear two blocks' }, class: { type: 'string' }, refs: { type: 'array', items: { type: 'string' } } }, required: ['finding_id', 'class'] } },
     divergence_selections: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { divergence_id: { type: 'string' }, selection: { type: 'string', enum: ['P0', 'P1', 'MERGED', 'NEITHER'] }, evidence_refs: { type: 'array', items: { type: 'string' } } }, required: ['divergence_id', 'selection'] } },
     verdict: { type: 'string', enum: ['APPROVE', 'BLOCK', 'NEITHER'] },
   },
@@ -1268,4 +1326,424 @@ export function verdictShapeError(r) {
     if (!hasRefs && !hasCheck) return `finding '${f.finding_id}' is evidence-free (no refs, no check)`
   }
   return null
+}
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// ── B3b2-i: the W4 STRUCTURED-PLAN machine (A5 items 2–5, ⟨DSGN-A5-1/2/3⟩). Four pure, total,
+//    side-effect-free legs the B3b2-ii architecture wiring consumes. A head authors STRUCTURED draft
+//    content (milestones + acceptance rows); the SCRIPT projects it into the ONE settlement algebra,
+//    joins cross-slot identity ONLY by exact canonical equivalence, checks post-settlement closure,
+//    and renders the authoritative master plan deterministically. NO model prose enters any of these
+//    (A3): the plan IS the renderer's output. These stay UNCONSUMED by any workflow this sub-round —
+//    B3b2-ii wires them. ──
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+
+// projectStructuredPlan({ slot, milestones, decisions, visionScIds }) — A5 items 2–3 + the
+// ⟨DSGN-A5-2⟩ pre-projection validation. The SCRIPT owns the reserved-topic projection (mechanism over
+// discipline): each head's STRUCTURED milestone/acceptance content projects into slot-namespaced
+// registry entries in the single settlement algebra. slot = the head's anonymous slot ('P0'|'P1');
+// milestones = [{ id, title, summary, order, surface, confidence, acceptance:[{sc_id, criterion,
+// executable_check}] }]; decisions = the head-emitted ORGANIC decisions [{id, topic, value}] (already
+// registryFor-deduped by the caller) — validated here, never re-emitted; visionScIds = the VISION
+// Success-Criteria id set (array of strings — the CALLER extracts it; this function never reads VISION).
+// FAIL-CLOSED validation FIRST (typed throw naming the offense AND the slot — the workflow maps it to
+// DEGRADED naming the head; NEVER a silent dedupe/drop, unlike registryFor's seen-skip): a duplicate
+// milestone id within the slot; a duplicate sc_id across the slot's milestones; any organic decision
+// whose id OR topic carries a reserved prefix (`milestone:`/`sc:` — the script owns those); any
+// projected-topic collision (a projected reserved topic equal to another projected topic or an organic
+// topic). Projection: each milestone → entry topic `milestone:<slot>:<id>`, value
+// {title, summary, order, surface, confidence}; each acceptance row → an SC entry whose topic is the
+// SHARED `sc:<sc_id>` when sc_id ∈ visionScIds (adoption — the cross-head id-join is intended) else the
+// slot-namespaced `sc:<slot>:<sc_id>` (minted — a collision can never forge a false two-sided pairing),
+// with value {milestone_key:<the PROJECTED parent topic>, criterion, executable_check}. Emits one
+// `requires` row {sc_topic, milestone_topic} per SC entry (the dependency data validatePlanClosure +
+// the settlement consume — an SC-present/milestone-absent combination is ILLEGAL at settlement).
+// Returns { entries:[{id, topic, value, value_hash}], requires:[...] } — registryFor-compatible
+// (id === topic for projected entries; value_hash = sha256Hex(canonicalJson(value))). Inline WITH
+// canonicalJson, sha256Hex.
+export function projectStructuredPlan(input) {
+  const inp = input || {}
+  const slot = String(inp.slot != null ? inp.slot : '')
+  const milestones = Array.isArray(inp.milestones) ? inp.milestones : []
+  const decisions = Array.isArray(inp.decisions) ? inp.decisions : []
+  const visionScIds = new Set((Array.isArray(inp.visionScIds) ? inp.visionScIds : []).map((s) => String(s)))
+  const RESERVED = ['milestone:', 'sc:']
+  const isReserved = (s) => RESERVED.some((p) => String(s).startsWith(p))
+
+  // organic decisions may never carry a reserved prefix — the script owns those topics.
+  for (const d of decisions) {
+    const id = d && d.id != null ? String(d.id) : ''
+    const topic = d && d.topic != null ? String(d.topic) : ''
+    if (isReserved(id)) throw new Error(`projectStructuredPlan[${slot}]: organic decision id '${id}' carries a reserved prefix — the script owns milestone:/sc: topics`)
+    if (isReserved(topic)) throw new Error(`projectStructuredPlan[${slot}]: organic decision topic '${topic}' carries a reserved prefix — the script owns milestone:/sc: topics`)
+  }
+
+  // duplicate milestone id within the slot; duplicate sc_id across the slot's milestones — fail CLOSED.
+  const seenMilestone = new Set()
+  const seenSc = new Set()
+  for (const m of milestones) {
+    const mid = m && m.id != null ? String(m.id) : ''
+    if (seenMilestone.has(mid)) throw new Error(`projectStructuredPlan[${slot}]: duplicate milestone id '${mid}' — a slot's milestone ids must be unique`)
+    seenMilestone.add(mid)
+    for (const a of (Array.isArray(m && m.acceptance) ? m.acceptance : [])) {
+      const scId = a && a.sc_id != null ? String(a.sc_id) : ''
+      if (seenSc.has(scId)) throw new Error(`projectStructuredPlan[${slot}]: duplicate sc_id '${scId}' across the slot's milestones — an sc_id maps to exactly one acceptance row`)
+      seenSc.add(scId)
+    }
+  }
+
+  const entries = []
+  const requires = []
+  const topics = new Set(decisions.map((d) => (d && d.topic != null ? String(d.topic) : '')))
+  // The FIFTH fail-closed branch (AMB-B3b2i-1, RULED — both): two same-kind projected entries with
+  // IDENTICAL canonical value inside ONE slot are degenerate authoring — the same locus as the other
+  // per-head validations, BEFORE any cross-head interaction. It fails CLOSED (typed throw naming the
+  // slot) so the workflow maps it to DEGRADED naming the head; joinExactEquivalents KEEPS its join-time
+  // guard as defense-in-depth on the seam. valueByKind: `<kind>` → Map(canonicalValue → topic).
+  const valueByKind = new Map()
+  const addEntry = (topic, value) => {
+    if (topics.has(topic)) throw new Error(`projectStructuredPlan[${slot}]: projected topic '${topic}' collides with an existing topic — the projection must be collision-free`)
+    const kind = topic.startsWith('milestone:') ? 'milestone' : 'sc'
+    if (!valueByKind.has(kind)) valueByKind.set(kind, new Map())
+    const seen = valueByKind.get(kind)
+    const key = canonicalJson(value)
+    if (seen.has(key)) throw new Error(`projectStructuredPlan[${slot}]: two ${kind} entries with identical canonical value inside one slot ('${seen.get(key)}' and '${topic}') — a slot's ${kind} values must be distinct (an ambiguous equivalence class)`)
+    seen.set(key, topic)
+    topics.add(topic)
+    entries.push({ id: topic, topic, value, value_hash: sha256Hex(canonicalJson(value)) })
+  }
+  for (const m of milestones) {
+    const mid = String(m && m.id != null ? m.id : '')
+    const milestoneTopic = `milestone:${slot}:${mid}`
+    addEntry(milestoneTopic, {
+      title: m && m.title != null ? m.title : null,
+      summary: m && m.summary != null ? m.summary : null,
+      order: m && m.order != null ? m.order : null,
+      surface: m && m.surface != null ? m.surface : null,
+      confidence: m && m.confidence != null ? m.confidence : null,
+    })
+    for (const a of (Array.isArray(m && m.acceptance) ? m.acceptance : [])) {
+      const scId = String(a && a.sc_id != null ? a.sc_id : '')
+      const scTopic = visionScIds.has(scId) ? `sc:${scId}` : `sc:${slot}:${scId}`
+      addEntry(scTopic, {
+        milestone_key: milestoneTopic,
+        criterion: a && a.criterion != null ? a.criterion : null,
+        executable_check: a && a.executable_check != null ? a.executable_check : null,
+      })
+      requires.push({ sc_topic: scTopic, milestone_topic: milestoneTopic })
+    }
+  }
+  return { entries, requires }
+}
+
+// joinExactEquivalents(projP0, projP1) — the ⟨DSGN-A5-1⟩ join. projP0/projP1 are the two slots'
+// projectStructuredPlan results { entries, requires }. Cross-slot identity is established ONLY by
+// script-proven EXACT canonical equivalence: a P0 entry and a P1 entry of the same KIND (milestone/sc),
+// both slot-namespaced (`<kind>:P0:...` / `<kind>:P1:...`), whose canonical VALUE bytes are EXACTLY
+// equal, rewrite onto the shared deterministic topic `<kind>:eq:<first 16 hex of
+// sha256Hex(canonicalJson(value))>`. Every other entry keeps its slot-namespaced topic (⇒ a one-sided
+// A2 card downstream). Shared-namespace `sc:SC-NNN` entries (VISION adoptions) are ALREADY joined and
+// pass through untouched. A milestone join rewrites BOTH milestone entries' topic AND every SC entry's
+// value.milestone_key AND every `requires` milestone_topic that pointed at either original topic;
+// milestones are joined FIRST so an SC's rewritten milestone_key (its parent) is settled before SC
+// value-equality is computed (two cross-slot SCs can match only once their slot-namespaced parents were
+// joined). An SC join then rewrites the SC entries' topic AND every `requires` sc_topic. One P0 entry
+// joins AT MOST one P1 entry — byte-equality is an equivalence class, and >1 slot-namespaced entries of
+// one kind with IDENTICAL canonical value inside a single slot fail CLOSED (typed throw: the projection
+// must not have produced an ambiguous class). Diogenes aliases NEVER enter this function — aliases inform
+// compatibility edges only, never identity. Returns { regP0, regP1, requires, accounting }: regP0/regP1
+// are the rewritten PROJECTED entry arrays (registryFor-compatible — buildDivergenceSet consumes them as
+// decisions.{P0,P1}); requires is the merged + rewritten + deduped constraint list; accounting lists
+// every join {kind, p0_topic, p1_topic, joined_topic} (the divergence note carries it). Inline WITH
+// canonicalJson, sha256Hex.
+export function joinExactEquivalents(projP0, projP1) {
+  const p0 = projP0 || {}, p1 = projP1 || {}
+  const entriesP0 = (Array.isArray(p0.entries) ? p0.entries : []).map((e) => ({ id: e.id, topic: e.topic, value: e.value, value_hash: e.value_hash }))
+  const entriesP1 = (Array.isArray(p1.entries) ? p1.entries : []).map((e) => ({ id: e.id, topic: e.topic, value: e.value, value_hash: e.value_hash }))
+  const requires = [
+    ...(Array.isArray(p0.requires) ? p0.requires : []),
+    ...(Array.isArray(p1.requires) ? p1.requires : []),
+  ].map((r) => ({ sc_topic: String(r && r.sc_topic != null ? r.sc_topic : ''), milestone_topic: String(r && r.milestone_topic != null ? r.milestone_topic : '') }))
+  const accounting = []
+
+  // kindOf: a topic's kind by prefix; slotNamespaced: `<kind>:P0:` or `<kind>:P1:` (a join candidate).
+  const kindOf = (topic) => (String(topic).startsWith('milestone:') ? 'milestone' : String(topic).startsWith('sc:') ? 'sc' : null)
+  const slotNamespaced = (topic) => /^(milestone|sc):(P0|P1):/.test(String(topic))
+  const rewriteRefs = (fromTopic, toTopic) => {
+    for (const e of [...entriesP0, ...entriesP1]) {
+      if (kindOf(e.topic) === 'sc' && e.value && typeof e.value === 'object' && e.value.milestone_key === fromTopic) {
+        e.value = { ...e.value, milestone_key: toTopic }
+        e.value_hash = sha256Hex(canonicalJson(e.value))
+      }
+    }
+    for (const r of requires) if (r.milestone_topic === fromTopic) r.milestone_topic = toTopic
+  }
+
+  // join one KIND: group each slot's slot-namespaced entries of that kind by canonical value; a class
+  // present in BOTH slots collapses onto the shared `<kind>:eq:<hash16>` topic. rewriteScRefs (milestones
+  // only) fires per class so SC parents follow before SC value-equality is computed.
+  const joinKind = (kind, rewriteParent) => {
+    const byValue = (entries) => {
+      const m = new Map()
+      for (const e of entries) {
+        if (kindOf(e.topic) !== kind || !slotNamespaced(e.topic)) continue
+        const key = canonicalJson(e.value)
+        if (m.has(key)) throw new Error(`joinExactEquivalents: two ${kind} entries with identical canonical value inside one slot ('${m.get(key).topic}' and '${e.topic}') — projection must not produce an ambiguous equivalence class`)
+        m.set(key, e)
+      }
+      return m
+    }
+    const m0 = byValue(entriesP0)
+    const m1 = byValue(entriesP1)
+    const classes = []
+    for (const key of m0.keys()) if (m1.has(key)) classes.push({ key, e0: m0.get(key), e1: m1.get(key) })
+    classes.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
+    for (const { e0, e1 } of classes) {
+      const joinedTopic = `${kind}:eq:${sha256Hex(canonicalJson(e0.value)).slice(0, 16)}`
+      const p0Topic = e0.topic, p1Topic = e1.topic
+      if (rewriteParent) { rewriteRefs(p0Topic, joinedTopic); rewriteRefs(p1Topic, joinedTopic) }
+      else {
+        for (const r of requires) { if (r.sc_topic === p0Topic) r.sc_topic = joinedTopic; if (r.sc_topic === p1Topic) r.sc_topic = joinedTopic }
+      }
+      e0.id = e0.topic = joinedTopic
+      e1.id = e1.topic = joinedTopic
+      accounting.push({ kind, p0_topic: p0Topic, p1_topic: p1Topic, joined_topic: joinedTopic })
+    }
+  }
+
+  joinKind('milestone', true) // parents first — SC milestone_keys + requires follow
+  joinKind('sc', false)
+
+  accounting.sort((a, b) => (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : a.joined_topic < b.joined_topic ? -1 : a.joined_topic > b.joined_topic ? 1 : 0))
+  const seenReq = new Set()
+  const dedupRequires = []
+  for (const r of requires) {
+    const k = canonicalJson(r)
+    if (seenReq.has(k)) continue
+    seenReq.add(k)
+    dedupRequires.push(r)
+  }
+  return { regP0: entriesP0, regP1: entriesP1, requires: dedupRequires, accounting }
+}
+
+// validatePlanClosure({ settled, requires }) — the ⟨DSGN-A5-2⟩ POST-settlement closure. Over the
+// settled entry set: every settled SC entry's required milestone is itself settled (else orphan_sc);
+// every settled milestone retains ≥1 settled SC (else empty_milestone). settled = the settled entries
+// (each {topic, ...}, or a bare topic string); requires = the {sc_topic, milestone_topic} constraint
+// rows (from projection, rewritten by the join). Returns { ok:true } or { ok:false, violations:
+// [{kind:'orphan_sc'|'empty_milestone', topic, detail}] } — a closure violation is REPORTED, never
+// thrown (the caller chooses DEGRADED vs the gated escalation). A malformed INPUT (settled/requires not
+// arrays, a requires row missing sc_topic/milestone_topic) still typed-throws (fail closed). Inline
+// WITH canonicalJson.
+export function validatePlanClosure(input) {
+  const inp = input || {}
+  if (!Array.isArray(inp.settled)) throw new Error('validatePlanClosure: settled must be an array of settled entries')
+  if (!Array.isArray(inp.requires)) throw new Error('validatePlanClosure: requires must be an array of {sc_topic, milestone_topic} rows')
+  const topicOf = (e) => (typeof e === 'string' ? e : (e && e.topic != null ? String(e.topic) : ''))
+  // B3R1-4: CONFLICTING duplicate requires rows (two DIFFERENT parents for one sc_topic) are a malformed
+  // input — a typed throw (fail closed). Identical rows are harmless (deduped here). This mirrors the
+  // renderer, which reads exactly one parent per SC.
+  const requiresParent = new Map()
+  for (const r of inp.requires) {
+    if (!r || r.sc_topic == null || r.milestone_topic == null) throw new Error('validatePlanClosure: a requires row is missing sc_topic or milestone_topic')
+    const sc = String(r.sc_topic), mi = String(r.milestone_topic)
+    if (requiresParent.has(sc) && requiresParent.get(sc) !== mi) throw new Error(`validatePlanClosure: conflicting requires rows for '${sc}' (parents '${requiresParent.get(sc)}' and '${mi}') — an SC maps to exactly one milestone`)
+    requiresParent.set(sc, mi)
+  }
+  const settledTopics = new Set(inp.settled.map(topicOf))
+  // B3R1-4: the parent must resolve in the settled MILESTONE subset — a topic-PREFIX check, not membership
+  // in the whole settled-topic set. A parent that resolves to a settled ORGANIC decision (or any non-milestone
+  // topic) is an orphan, exactly as the renderer emits an '(unsettled)' parent for it.
+  const settledMilestoneSet = new Set([...settledTopics].filter((t) => t.startsWith('milestone:')))
+  const settledScEntries = inp.settled.filter((e) => topicOf(e).startsWith('sc:'))
+  const violations = []
+  const milestoneHasSc = new Set()
+  // B3R1-4: each settled SC's parent is derived from the SC VALUE's milestone_key — the AUTHORITATIVE
+  // source the renderer uses to emit the manifest — NOT the requires rows alone (which could overwrite and
+  // let closure validate the WRONG parent). A bare-topic entry (no value) falls back to its requires row.
+  // Where BOTH sources name a parent they MUST AGREE: a value.milestone_key that disagrees with the SC's
+  // requires row is a malformed input (a typed throw, fail closed — mirroring the conflicting-requires guard
+  // above), never a silent preference. Closure then AGREES with the renderer: a milestone_key pointing at a
+  // non-settled-milestone topic is an orphan_sc here, exactly as the renderer would emit '(unsettled)'.
+  for (const e of settledScEntries) {
+    const sc = topicOf(e)
+    const fromValue = (e && typeof e === 'object' && e.value && typeof e.value === 'object' && e.value.milestone_key != null) ? String(e.value.milestone_key) : null
+    const fromRequires = requiresParent.has(sc) ? requiresParent.get(sc) : null
+    if (fromValue != null && fromRequires != null && fromValue !== fromRequires) throw new Error(`validatePlanClosure: settled SC '${sc}' value.milestone_key '${fromValue}' disagrees with its requires row parent '${fromRequires}' — the authoritative SC value and its requires row must name the SAME milestone`)
+    const parent = fromValue != null ? fromValue : fromRequires
+    if (parent == null) { violations.push({ kind: 'orphan_sc', topic: sc, detail: `settled SC '${sc}' names no parent milestone (no value.milestone_key, no requires row)` }); continue }
+    if (!settledMilestoneSet.has(parent)) { violations.push({ kind: 'orphan_sc', topic: sc, detail: `settled SC '${sc}' names parent '${parent}', which is not a settled milestone` }); continue }
+    milestoneHasSc.add(parent)
+  }
+  for (const m of settledMilestoneSet) {
+    if (!milestoneHasSc.has(m)) violations.push({ kind: 'empty_milestone', topic: m, detail: `settled milestone '${m}' retains no settled SC` })
+  }
+  violations.sort((a, b) => (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : a.topic < b.topic ? -1 : a.topic > b.topic ? 1 : 0))
+  return violations.length ? { ok: false, violations } : { ok: true }
+}
+
+// renderMasterPlan(bundle, { visionScIds }) — A5 item 5 COMPLETE: the deterministic renderer. TOTAL over
+// legal bundles and byte-deterministic (same bundle ⇒ identical markdown). NO model input — a pure
+// function of the settled bundle. bundle.settled = the settled entries (milestones `milestone:...`, SCs
+// `sc:...`, organic decisions otherwise — partitioned by topic prefix); each SC value carries
+// {milestone_key, criterion, executable_check}; bundle.open_divergences = [{divergence_id, position_0,
+// position_1}] where a position is a value or the {absent:true} A2 marker. visionScIds = the VISION SC id
+// set (final allocation authority). Final milestone ids: settled milestones sort by (numeric order,
+// canonical topic) and take M1, M2, … in that sequence; every SC parent reference rewrites to the final
+// id. Total SC allocation: VISION-adopted ids (topic minus `sc:` ∈ visionScIds) render VERBATIM; minted
+// criteria sort by canonicalJson over the COMPLETE authoritative payload (normalized criterion,
+// executable_check, final parent id) with (slot, original-ordinal, topic) tie-break, and number after the
+// GREATEST numeric VISION id, SKIPPING occupied numbers (numeric), zero-padded to three digits (`SC-NNN`).
+// Renders in order: a deterministic structural header → ordered milestone blocks (title, surface,
+// confidence, summary, SC-id REFERENCES only) → the global SC/acceptance table (THE authoritative
+// rendering — each row EXACTLY once: final SC id, final milestone id, criterion, executable check) →
+// settled-decision blocks (organic: id, topic, canonical value) → one OPEN block per open divergence
+// naming BOTH A2 positions (an {absent:true} side renders as the explicit ABSENT marker). Returns
+// { markdown, manifest, milestone_ids, sc_ids, milestones } — manifest = the exact SC-id→final-milestone-id
+// map; milestones = the ordered milestone records {final_id, title, summary, order, surface, confidence} in
+// render order (ruling AMB-iiB-B: the workflow reads these instead of re-deriving the sort).
+// Inline WITH canonicalJson, sha256Hex.
+export function renderMasterPlan(bundle, opts) {
+  const b = bundle || {}
+  const o = opts || {}
+  const norm = (s) => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()
+  const cmp = (a, b2) => (a < b2 ? -1 : a > b2 ? 1 : 0)
+  const numOf = (id) => { const m = String(id).match(/(\d+)/g); return m ? parseInt(m[m.length - 1], 10) : NaN }
+  const visionScIds = new Set((Array.isArray(o.visionScIds) ? o.visionScIds : []).map((s) => String(s)))
+
+  const settled = Array.isArray(b.settled) ? b.settled : []
+  const milestones = settled.filter((e) => e && typeof e.topic === 'string' && e.topic.startsWith('milestone:'))
+  const scs = settled.filter((e) => e && typeof e.topic === 'string' && e.topic.startsWith('sc:'))
+  const organic = settled.filter((e) => e && typeof e.topic === 'string' && !e.topic.startsWith('milestone:') && !e.topic.startsWith('sc:'))
+
+  // final milestone ids: (numeric order, canonical topic) → M1, M2, …
+  const orderVal = (e) => { const v = e && e.value ? e.value.order : null; return Number.isFinite(v) ? v : Number.POSITIVE_INFINITY }
+  const milestonesSorted = milestones.slice().sort((x, y) => (orderVal(x) - orderVal(y)) || cmp(String(x.topic), String(y.topic)))
+  const milestoneFinalId = new Map()
+  milestonesSorted.forEach((m, i) => milestoneFinalId.set(String(m.topic), `M${i + 1}`))
+
+  // classify SCs: adopted (topic minus `sc:` ∈ visionScIds) render verbatim; else minted.
+  const scRecords = scs.map((e, idx) => {
+    const topic = String(e.topic)
+    const bare = topic.slice('sc:'.length)
+    const adopted = visionScIds.has(bare)
+    const val = e.value && typeof e.value === 'object' ? e.value : {}
+    const parentTopic = val.milestone_key != null ? String(val.milestone_key) : null
+    const parentFinal = parentTopic != null && milestoneFinalId.has(parentTopic) ? milestoneFinalId.get(parentTopic) : null
+    const slotMatch = topic.match(/^sc:(P0|P1|eq):/)
+    return {
+      topic, adopted,
+      verbatim_id: adopted ? bare : null,
+      criterion: val.criterion != null ? val.criterion : null,
+      executable_check: val.executable_check != null ? val.executable_check : null,
+      parent_final: parentFinal,
+      slot: e.slot != null ? String(e.slot) : (slotMatch ? slotMatch[1] : ''),
+      ordinal: Number.isInteger(e.ordinal) ? e.ordinal : idx,
+    }
+  })
+
+  // total minted allocation: number after max VISION id, skip occupied.
+  const occupied = new Set()
+  let maxVision = 0
+  for (const id of visionScIds) { const n = numOf(id); if (Number.isFinite(n)) { occupied.add(n); if (n > maxVision) maxVision = n } }
+  const finalIdOf = new Map()
+  for (const r of scRecords) if (r.adopted) finalIdOf.set(r.topic, r.verbatim_id)
+  const minted = scRecords.filter((r) => !r.adopted)
+  minted.sort((x, y) => {
+    const px = canonicalJson({ criterion: norm(x.criterion), executable_check: x.executable_check == null ? null : String(x.executable_check), parent: x.parent_final })
+    const py = canonicalJson({ criterion: norm(y.criterion), executable_check: y.executable_check == null ? null : String(y.executable_check), parent: y.parent_final })
+    return cmp(px, py) || cmp(x.slot, y.slot) || (x.ordinal - y.ordinal) || cmp(x.topic, y.topic)
+  })
+  let candidate = maxVision + 1
+  for (const r of minted) {
+    while (occupied.has(candidate)) candidate++
+    const finalId = `SC-${String(candidate).padStart(3, '0')}`
+    occupied.add(candidate)
+    candidate++
+    finalIdOf.set(r.topic, finalId)
+  }
+
+  const manifest = {}
+  for (const r of scRecords) manifest[finalIdOf.get(r.topic)] = r.parent_final
+  // milestones: the ordered milestone records in render order (the same (numeric order, canonical topic)
+  // sort). The workflow reads these instead of replicating the sort (ruling AMB-iiB-B). order = the raw
+  // numeric order field (null when unset); final_id = the assigned M-id.
+  const milestoneRecords = milestonesSorted.map((m) => {
+    const v = m.value && typeof m.value === 'object' ? m.value : {}
+    return {
+      final_id: milestoneFinalId.get(String(m.topic)),
+      title: v.title != null ? String(v.title) : '',
+      summary: v.summary != null ? String(v.summary) : '',
+      order: Number.isFinite(v.order) ? v.order : null,
+      surface: v.surface != null ? String(v.surface) : '',
+      confidence: v.confidence != null ? String(v.confidence) : '',
+    }
+  })
+  const milestone_ids = milestonesSorted.map((m) => milestoneFinalId.get(String(m.topic)))
+  const sc_ids = scRecords.map((r) => finalIdOf.get(r.topic)).sort(cmp)
+
+  // SCs per milestone (final-id references, sorted) for the milestone blocks.
+  const scByMilestone = new Map()
+  for (const r of scRecords) {
+    const p = r.parent_final != null ? r.parent_final : '(unsettled)'
+    if (!scByMilestone.has(p)) scByMilestone.set(p, [])
+    scByMilestone.get(p).push(finalIdOf.get(r.topic))
+  }
+  for (const arr of scByMilestone.values()) arr.sort(cmp)
+
+  const L = []
+  L.push('# Master Plan (b3-bundle/1)')
+  L.push('')
+  L.push(`renderer_version: ${b.renderer_version != null ? String(b.renderer_version) : 'b3-bundle/1'}`)
+  L.push(`evidence_manifest_hash: ${b.evidence_manifest_hash != null ? String(b.evidence_manifest_hash) : 'null'}`)
+  L.push(`milestones: ${milestonesSorted.length}`)
+  L.push(`success_criteria: ${scRecords.length}`)
+  L.push(`open_divergences: ${Array.isArray(b.open_divergences) ? b.open_divergences.length : 0}`)
+  L.push('')
+  L.push('## Milestones')
+  for (const m of milestonesSorted) {
+    const fid = milestoneFinalId.get(String(m.topic))
+    const v = m.value && typeof m.value === 'object' ? m.value : {}
+    L.push('')
+    L.push(`### ${fid}: ${v.title != null ? String(v.title) : ''}`)
+    L.push(`- surface: ${v.surface != null ? String(v.surface) : ''}`)
+    L.push(`- confidence: ${v.confidence != null ? String(v.confidence) : ''}`)
+    L.push(`- summary: ${v.summary != null ? String(v.summary) : ''}`)
+    const refs = scByMilestone.get(fid) || []
+    L.push(`- success_criteria: ${refs.join(', ')}`)
+  }
+  L.push('')
+  L.push('## Success Criteria')
+  L.push('')
+  L.push('| SC | Milestone | Criterion | Executable Check |')
+  L.push('| --- | --- | --- | --- |')
+  const tableRows = scRecords.map((r) => ({
+    sc: finalIdOf.get(r.topic),
+    milestone: r.parent_final != null ? r.parent_final : '(unsettled)',
+    criterion: r.criterion != null ? String(r.criterion) : '',
+    check: r.executable_check != null ? String(r.executable_check) : '',
+  }))
+  tableRows.sort((a, c) => cmp(a.milestone, c.milestone) || cmp(a.sc, c.sc))
+  for (const row of tableRows) L.push(`| ${row.sc} | ${row.milestone} | ${row.criterion} | ${row.check} |`)
+  L.push('')
+  L.push('## Settled Decisions')
+  const organicSorted = organic.slice().sort((x, y) => cmp(String(x.topic), String(y.topic)))
+  for (const d of organicSorted) {
+    L.push('')
+    L.push(`### ${d.id != null ? String(d.id) : String(d.topic)}`)
+    L.push(`- topic: ${String(d.topic)}`)
+    L.push(`- value: ${canonicalJson(d.value != null ? d.value : null)}`)
+  }
+  L.push('')
+  L.push('## Open Divergences')
+  const opens = (Array.isArray(b.open_divergences) ? b.open_divergences : []).slice().sort((x, y) => cmp(String(x && x.divergence_id), String(y && y.divergence_id)))
+  const posStr = (pos) => (pos && typeof pos === 'object' && pos.absent === true ? 'ABSENT — this decision does not belong in the plan' : canonicalJson(pos != null ? pos : null))
+  for (const dv of opens) {
+    L.push('')
+    L.push(`### ${dv && dv.divergence_id != null ? String(dv.divergence_id) : ''}`)
+    L.push(`- position_0: ${posStr(dv && dv.position_0)}`)
+    L.push(`- position_1: ${posStr(dv && dv.position_1)}`)
+  }
+  const markdown = L.join('\n') + '\n'
+  return { markdown, manifest, milestone_ids, sc_ids, milestones: milestoneRecords }
 }

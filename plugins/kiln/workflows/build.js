@@ -114,6 +114,9 @@ const docsDir = `${kilnDir}/docs`
 const qaDir = `${kilnDir}/tmp/qa`
 const designDir = `${kilnDir}/design`
 const masterPlanFile = `${kilnDir}/master-plan.md`
+// B3R2-1: the architecture council persists the DEADLOCK_RESOLVED certificate here (canonical bytes whose
+// sha equals the terminal row's certificate_hash) — build reloads it to re-anchor the CURRENT plan.
+const deadlockCertFile = `${kilnDir}/council/master_plan/deadlock-certificate.json`
 const handoffFile = `${kilnDir}/architecture-handoff.md`
 const codebaseStateFile = `${docsDir}/codebase-state.md`
 const codebaseMapFile = `${docsDir}/codebase-map.md`
@@ -329,12 +332,17 @@ function validateRatification(ratification, ctx) {
     if (!Object.prototype.hasOwnProperty.call(f, 'executable_check')) errors.push({ code: 'malformed_finding', at, message: 'executable_check must be present (null allowed)' })
   })
 
-  // anti-capitulation: an APPROVE reversing a standing block needs equal-or-stronger changed_evidence
+  // anti-capitulation (I9 one-finding-key rail): an APPROVE reversing a standing block needs
+  // equal-or-stronger changed_evidence KEYED to that block's finding_id. changed_evidence is filtered
+  // per block by finding_id BEFORE validateReversal, so one evidence item can never clear two blocks —
+  // an item with no finding_id (or a non-matching one) contributes to no block's reversal.
   const standing = Array.isArray(c.standing_blocks) ? c.standing_blocks : []
   if (r.verdict === 'APPROVE' && standing.length) {
+    const allEvidence = Array.isArray(r.changed_evidence) ? r.changed_evidence : []
     for (const block of standing) {
-      const rev = validateReversal(block, { changed_evidence: r.changed_evidence, claim_type: block && block.claim_type })
-      if (!rev.valid) errors.push({ code: 'unevidenced_reversal', at: block && block.finding_id, message: 'APPROVE reverses a standing block without equal-or-stronger changed_evidence — the block stands' })
+      const keyed = allEvidence.filter((ev) => ev && ev.finding_id === (block && block.finding_id))
+      const rev = validateReversal(block, { changed_evidence: keyed, claim_type: block && block.claim_type })
+      if (!rev.valid) errors.push({ code: 'unevidenced_reversal', at: block && block.finding_id, message: 'APPROVE reverses a standing block without equal-or-stronger changed_evidence keyed to its finding_id — the block stands' })
     }
   }
 
@@ -458,11 +466,14 @@ const RATIFY_SCHEMA = {
           evidence_refs: { type: 'array', items: { type: 'string' } },
           evidence_class: { type: 'string', enum: ['executed_check', 'proposed_check', 'repo_state', 'test_output', 'primary_source', 'scenario'], description: 'the HONEST class of this finding\'s evidence — the claim-scoped partial order rules reversals by it' },
           executable_check: { type: ['string', 'null'], description: 'a bounded shell command (EXIT 0 iff the defect is present) or null' },
+          target_kind: { type: 'string', enum: ['settled_decision', 'trunk_field'], description: 'OPTIONAL (AMB-CLOSER-1.iii): the STRUCTURAL correction descriptor — an ACCEPTED BLOCK finding carrying { target_kind, key, replacement } amends the bundle mechanically; an ACCEPTED finding WITHOUT one is a gated escalation (no free rewrite)' },
+          key: { type: 'string', description: 'OPTIONAL: an existing settled-decision topic or an amendable trunk field (present iff target_kind is)' },
+          replacement: { description: 'OPTIONAL: the new value — must match the shape of the target\'s current value (present iff target_kind is)' },
         },
         required: ['finding_id', 'claim', 'required_change', 'evidence_refs', 'evidence_class', 'executable_check'],
       },
     },
-    changed_evidence: { type: 'array', items: { type: 'object', additionalProperties: true, properties: { class: { type: 'string' }, refs: { type: 'array', items: { type: 'string' } } }, required: ['class'] } },
+    changed_evidence: { type: 'array', items: { type: 'object', additionalProperties: true, properties: { finding_id: { type: 'string', description: 'the standing block this evidence retires — I9 one-finding-key rail: one evidence item can never clear two blocks' }, class: { type: 'string' }, refs: { type: 'array', items: { type: 'string' } } }, required: ['finding_id', 'class'] } },
     divergence_selections: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { divergence_id: { type: 'string' }, selection: { type: 'string', enum: ['P0', 'P1', 'MERGED', 'NEITHER'] }, evidence_refs: { type: 'array', items: { type: 'string' } } }, required: ['divergence_id', 'selection'] } },
     verdict: { type: 'string', enum: ['APPROVE', 'BLOCK', 'NEITHER'] },
   },
@@ -663,6 +674,31 @@ const CORRECTION_TASK =
   'defect is beyond one corrective build, or needs a conductor decision), or REPLAN (the milestone plan itself is ' +
   'wrong — a conductor/operator re-plan is owed). Emit findings + reasons FIRST, then choice; echo artifact_hash.'
 const councilTemplateHashBuild = councilTemplateHash({ close_rubric: CLOSE_RUBRIC, close_task: CLOSE_RATIFY_TASK, correction_task: CORRECTION_TASK, renderer: COUNCIL_RENDERER_CLOSE })
+// ── ⟨DSGN-B3-4⟩(b) legacy-plan hook constants (fixed — NO per-run interpolation, run-independent
+//    template hash). A run already past architecture whose master plan predates the twin council gets
+//    ONE retrospective blind dual ratification of the UNCHANGED plan (the b42 D7 lite-pair idiom reused
+//    at this second call site; renderer b3-legacy/1). The plan is NOT edited — the pair ratifies it as
+//    sound or blocks it; a retrospective certificate is its OWN record, the plan stays legacy_authority. ──
+const COUNCIL_RENDERER_LEGACY = 'b3-legacy/1'
+const LEGACY_RUBRIC =
+  'Rule the EXISTING master plan — unchanged, ratified retrospectively — on five axes: (1) VISION fidelity — ' +
+  'every success criterion in the plan traces to a VISION goal, none invented, none dropped; (2) constraint ' +
+  'adherence — no decision violates the architecture constraints; (3) milestone soundness — ordering and ' +
+  'dependencies are buildable and separately verifiable; (4) SC/AC executability — every acceptance criterion ' +
+  'is an executable check (shell/pytest/HTTP/probe), not prose; (5) feasibility risk — no milestone hides an ' +
+  'unbounded unknown. This ruling NEVER edits the plan; you ratify it as sound or you block it. Every finding ' +
+  'MUST be evidence-bound: a file/line, an executable check, a research fact, or a concrete failure scenario — ' +
+  'never a taste assertion.'
+const LEGACY_RATIFY_TASK =
+  'Render one blind verdict — APPROVE, BLOCK, or NEITHER — on the UNCHANGED master plan against the rubric. You ' +
+  'do not know how the plan was authored or who else is ruling. Each finding: finding_id, claim, required_change, ' +
+  'evidence_refs, evidence_class, and executable_check (a bounded shell command returning EXIT 0 iff the defect ' +
+  'is present, or null). A BLOCK or NEITHER MUST carry at least one finding, every finding_id unique, and every ' +
+  'finding evidence-bound (nonempty evidence_refs or a real executable_check) — an evidence-free verdict is ' +
+  'invalid. divergence_selections is [] (no open divergences — the plan is the single artifact). changed_evidence ' +
+  'is [] unless you reverse a prior block. Echo artifact_hash EXACTLY as given.'
+const councilTemplateHashLegacy = councilTemplateHash({ legacy_rubric: LEGACY_RUBRIC, legacy_task: LEGACY_RATIFY_TASK, renderer: COUNCIL_RENDERER_LEGACY })
+const legacyVisionFile = `${docsDir}/VISION.md`
 // SOL_QA_PAYLOAD_SCHEMA — the Sol evidence analyst (Ryu bump) payload: codex runs --sandbox read-only
 // and CANNOT write qa-report-b.md, so the report content rides report_markdown (extracted by the wrapper
 // via the extractTo pattern) alongside the findings[]/overall the deterministic reconcile reads.
@@ -2227,6 +2263,17 @@ const evidenceAnchorPrompt = (inputs) =>
   `You are Thoth, the scribe — transcribe hashes, never judge, never fix.\n\n` +
   `<task>Run (Bash): 'sha256sum ${inputs.join(' ')}'. Transcribe each input file's sha256 into files[] as {path, sha256} (VERBATIM, lowercase hex, the path exactly as given). Do not read file contents, do not write or fix anything.</task>`
 
+// B3R2-1: read a persisted council JSON file back (content + sha) for the DEADLOCK_RESOLVED certificate
+// reload — the same cat+sha idiom architecture uses to rehydrate its persisted bundle.
+const READ_COUNCIL_FILE_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: { reasoning: { type: 'string', maxLength: 400 }, content: { type: 'string' }, sha256: { type: ['string', 'null'] } },
+  required: ['content'],
+}
+const readCouncilFilePrompt = (file) =>
+  `You are Thoth, the ledger reader — transcribe, never judge, never fix.\n\n` +
+  `<task>Run (Bash): 'cat ${file} 2>/dev/null' and 'sha256sum ${file} 2>/dev/null'. Report content = the cat output's raw bytes VERBATIM (empty string if the file does not exist) and sha256 = the sha256sum digest (lowercase hex, or null if absent). Do not write or fix anything.</task>`
+
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 // ── The build keystones' Twin Council legs (B4-2 D2/D3/D4). Every leg dispatches through the SEALED
 //    1b-ii machinery lifted to src/council.mjs (D1): a receipt-attested Sol codex seat + an
@@ -2272,6 +2319,31 @@ const councilCheckpoint = async (fields, phaseName) => {
 const councilRuling = async (data, phaseName) => {
   try { await ledger('note', { kind: 'council_ruling', ...data }, phaseName) }
   catch (e) { log(`council ruling not ledgered (non-fatal): ${e && e.message ? e.message : e}`) }
+}
+// ── ⟨DSGN-B3-4⟩(b) detection reader — a haiku Thoth reads events.jsonl and returns the prior SEALED
+//    council_state checkpoints: the SAME ledger surface architecture's council appends (buildCheckpoint
+//    → note{kind:'council_state', status:'sealed'}, architecture.js:798-800/944) and the SAME surface
+//    build's own close/correction councils write here. Detection = the ABSENCE of a RATIFIED/DEADLOCK_
+//    RESOLVED master_plan row (the deterministic signal; a missing row is a FACT). Gated on pluginRoot;
+//    absence/mute ⇒ [] ⇒ a legacy plan is detected (fail TOWARD re-ratification, never a false advance). ──
+const LEGACY_CHECKPOINT_SCHEMA = {
+  type: 'object', additionalProperties: true,
+  properties: { kind: { type: 'string' }, keystone_id: { type: ['string', 'null'] }, phase: { type: 'string' }, status: { type: 'string' } },
+  required: ['phase', 'status'],
+}
+const LEGACY_RESUME_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  properties: { reasoning: { type: 'string', maxLength: 400 }, checkpoints: { type: 'array', items: LEGACY_CHECKPOINT_SCHEMA } },
+  required: ['checkpoints'],
+}
+const readCouncilCheckpointsB = async (phaseName) => {
+  if (!pluginRoot) return []
+  const res = await agent(
+    `You are Thoth, the ledger reader — transcribe, never judge, never fix.\n\n` +
+    `<task>Read ${kilnDir}/events.jsonl (Bash: 'cat ${kilnDir}/events.jsonl 2>/dev/null'). If it does not exist or is empty, report checkpoints: []. Otherwise each line is a JSON event: collect EVERY event whose type is "note" AND data.kind is "council_state" AND data.status is "sealed", and return checkpoints = the array of those data objects VERBATIM (each full council_state payload). Do not write or fix anything.</task>`,
+    { label: 'thoth:council-legacy', phase: phaseName, model: 'haiku', schema: LEGACY_RESUME_SCHEMA }
+  )
+  return (res && Array.isArray(res.checkpoints)) ? res.checkpoints : []
 }
 // pushCouncilReceipt — one honest receipt row per Sol leg (verified or dead) into a per-milestone bucket.
 const pushCouncilReceipt = (bucket, leg, sink, cross) => bucket.push({
@@ -2511,6 +2583,97 @@ const runCorrectionCouncil = async (m, reconciled, closeFindings, sliceTelemetry
   return { choice, degraded: false, matched: match, terminal, findings, reasons, bundle_hash: artifactHash, receipt_verified: !!(pair.sinkS && pair.sinkS.receipt_verified), ledger_verified: !!(pair.solCross && pair.solCross.ledger_verified) }
 }
 
+// runLegacyPlanRatify (⟨DSGN-B3-4⟩(b)) — ONE retrospective blind dual ratification of the UNCHANGED
+// master plan (the b42 D7 lite-pair idiom reused: the plan IS the artifact, no decision bundle exists,
+// so bundle_hash = plan_hash = the master plan's own sha256). A Thoth anchor hashes the plan + the
+// architecture evidence into a {path, sha256} manifest — a dead/garbled/partial anchor ⇒ DEGRADED (the
+// certificate must never bind unhashed names). Then the blind Fable ∥ receipt-attested Sol pair rules
+// once over the plan bytes (runBuildBlindPair, RATIFY_SCHEMA). Dual-APPROVE + valid ⇒ a retrospective
+// twin_ratified certificate (renderer b3-legacy/1, each signature its own seatProv); a live valid
+// BLOCK/NEITHER ⇒ BLOCKED (frozen findings); a dead seat / invalid-or-shape-bad verdict / certificate
+// defect ⇒ DEGRADED (never twin_ratified, never a silent v3.0.1 advance). The plan is never edited —
+// the retrospective certificate is its OWN record; the plan stays legacy_authority in provenance.
+const runLegacyPlanRatify = async (gateProv, receiptsBucket) => {
+  const phaseName = 'The Forge Heats'
+  const keystone = 'master_plan_legacy'
+  const phaseTag = 'LEGACY_RATIFY'
+  const legacyCouncilDir = `${councilRootDir}/legacy`
+  const m = { id: 'master_plan' } // synthetic — runBuildBlindPair labels off m.id (fable/sol:legacy-ratify:master_plan:c0)
+  const namedEvidence = [masterPlanFile, `${docsDir}/architecture.md`, `${docsDir}/tech-stack.md`, `${docsDir}/arch-constraints.md`, legacyVisionFile]
+  const anchor = await agent(evidenceAnchorPrompt(namedEvidence), { label: 'thoth:legacy-anchor', phase: phaseName, model: 'haiku', schema: EVIDENCE_ANCHOR_SCHEMA })
+  const anchorFiles = (anchor && Array.isArray(anchor.files)) ? anchor.files.filter((f) => f && typeof f.path === 'string' && typeof f.sha256 === 'string' && SHA64_RE.test(f.sha256)) : []
+  const anchorPaths = anchorFiles.map((f) => f.path)
+  const anchorExact =
+    anchor && Array.isArray(anchor.files) && anchorFiles.length === anchor.files.length &&
+    anchorFiles.length === namedEvidence.length &&
+    new Set(anchorPaths).size === anchorFiles.length &&
+    namedEvidence.every((p) => anchorPaths.includes(p))
+  const legacyCkptBase = (bundleHash, evidenceManifestHash, evidenceInputHashes) => ({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: councilTemplateHashLegacy, run_token_hash: runTokenHash, initial_ledger_seq: null, keystone_id: keystone, decision_bundle_hash: bundleHash, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash })
+  if (!anchorExact) {
+    await councilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: councilTemplateHashLegacy, run_token_hash: runTokenHash, initial_ledger_seq: null, keystone_id: keystone, phase: 'DEGRADED', decision_bundle_hash: null, input_artifact_hashes: [], evidence_manifest_hash: null, anonymous_seat_artifact_hashes: {}, seat_provenance: { missing: 'evidence' }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
+    await councilRuling({ keystone, phase: phaseTag, terminal: 'DEGRADED', reason: 'evidence-anchor' }, phaseName)
+    log('legacy-plan evidence anchor DEGRADED — the retrospective certificate must never bind unhashed names (fail-closed)')
+    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: null, receipt_verified: false, ledger_verified: false }
+  }
+  const manifest = {}
+  for (const f of anchorFiles) manifest[f.path] = f.sha256
+  const evidenceManifestHash = sha256Hex(canonicalJson(manifest))
+  const evidenceInputHashes = Object.keys(manifest).sort().map((k) => manifest[k])
+  // The plan IS the artifact: bundle_hash = plan_hash = the master plan's OWN sha256 (its manifest entry).
+  const planHash = manifest[masterPlanFile]
+  const bundleH = planHash
+  const ckptBase = legacyCkptBase(bundleH, evidenceManifestHash, evidenceInputHashes)
+  const bindingLine = `Binding: artifact_hash = "${bundleH}" (echo it VERBATIM). plan_sha256 = ${planHash}. evidence_manifest_hash = ${evidenceManifestHash}. divergence_selections = [] (no open divergences — the plan is the single artifact). changed_evidence = [] unless you reverse a prior block.`
+  const ratifyInputs =
+    `<inputs>\n- The UNCHANGED master plan: ${masterPlanFile} (bound to its sha256 in the binding line).\n` +
+    `- Evidence docs: ${namedEvidence.join(', ')}.\n- The live repo at ${projectPath}.\n</inputs>`
+  const fablePrompt =
+    `You are a council ratifier (legacy master plan) — rule the UNCHANGED master plan against the fixed rubric, blind and independent. You do not know how the plan was authored or who else is ruling.\n\n` +
+    `${ratifyInputs}\n\n<rubric>\n${LEGACY_RUBRIC}\n</rubric>\n\n<binding>\n${bindingLine}\n</binding>\n<constraints>\n- ${browserLaw}\n</constraints>\n\n` +
+    `<task>${LEGACY_RATIFY_TASK}\nEmit the evidence-bound findings + changed_evidence + divergence_selections FIRST, then the verdict (evidence-before-commit); reasoning is optional, last, and under 50 words. ${PAYLOAD_FIRST}</task>`
+  const solBrief = `${bindingLine}\nRubric:\n${LEGACY_RUBRIC}\nRule the UNCHANGED master plan read-only from the plan + the evidence docs; NEVER launch a browser.`
+  const pair = await runBuildBlindPair({ m, mCouncilDir: legacyCouncilDir, keystone, phaseTag, c: 0, legName: 'legacy-ratify', fablePrompt, solTaskText: LEGACY_RATIFY_TASK, solBrief, solPacket: { master_plan: masterPlanFile, evidence: namedEvidence, artifact_hash: bundleH, plan_sha256: planHash, evidence_manifest_hash: evidenceManifestHash }, schema: RATIFY_SCHEMA, phaseName, gateProv, receiptsBucket })
+  const seatHashes = (rF, rS) => ({ P0: sha256Hex(canonicalJson(rF)), P1: sha256Hex(canonicalJson(rS)) })
+  if (pair.degraded) {
+    await councilCheckpoint({ ...ckptBase, phase: 'DEGRADED', anonymous_seat_artifact_hashes: {}, seat_provenance: { missing: pair.missing }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
+    await councilRuling({ keystone, phase: phaseTag, terminal: 'DEGRADED', missing: pair.missing }, phaseName)
+    log(`legacy-plan retrospective ratification DEGRADED (${pair.missing}) — a dead seat is a missing head, never twin_ratified`)
+    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleH, receipt_verified: !!(pair.sinkS && pair.sinkS.receipt_verified), ledger_verified: !!(pair.solCross && pair.solCross.ledger_verified) }
+  }
+  const vF = validateRatification(pair.rF, { bundle_hash: bundleH, open_divergence_ids: [] })
+  const vS = validateRatification(pair.rS, { bundle_hash: bundleH, open_divergence_ids: [] })
+  const shapeF = verdictShapeError(pair.rF), shapeS = verdictShapeError(pair.rS)
+  const fBad = !vF.valid || !!shapeF, sBad = !vS.valid || !!shapeS
+  if (fBad || sBad) {
+    const missing = fBad && sBad ? 'both' : (fBad ? 'fable' : 'sol')
+    const detail = [fBad ? `fable${shapeF ? `: ${shapeF}` : ''}` : null, sBad ? `sol${shapeS ? `: ${shapeS}` : ''}` : null].filter(Boolean).join('; ')
+    await councilCheckpoint({ ...ckptBase, phase: 'DEGRADED', anonymous_seat_artifact_hashes: {}, seat_provenance: { missing, reason: 'invalid ratification' }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
+    await councilRuling({ keystone, phase: phaseTag, terminal: 'DEGRADED', missing, invalid: { fable: fBad, sol: sBad } }, phaseName)
+    log(`legacy-plan retrospective ratification INVALID (${detail}) — DEGRADED (an invalid verdict carries no standing findings; never mislabeled BLOCKED)`)
+    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleH, receipt_verified: true, ledger_verified: true }
+  }
+  if (pair.rF.verdict === 'APPROVE' && pair.rS.verdict === 'APPROVE') {
+    const cert = assembleRatifyCertificate({ rF: pair.rF, rS: pair.rS, provF: seatProv(pair.sinkF, 'fable'), provS: seatProv(pair.sinkS, 'sol'), context: { bundle_hash: bundleH, renderer_version: COUNCIL_RENDERER_LEGACY, plan_hash: bundleH, evidence_manifest_hash: evidenceManifestHash, protocol_version: COUNCIL_PROTOCOL_VERSION, seat_provenance: null } })
+    if (!cert.ok) {
+      await councilCheckpoint({ ...ckptBase, phase: 'DEGRADED', anonymous_seat_artifact_hashes: {}, seat_provenance: { reason: 'certificate defect' }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
+      await councilRuling({ keystone, phase: phaseTag, terminal: 'DEGRADED', reason: 'certificate defect' }, phaseName)
+      log(`legacy-plan retrospective certificate could not seal (${cert.reason}) — DEGRADED`)
+      return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleH, receipt_verified: true, ledger_verified: true }
+    }
+    await councilCheckpoint({ ...ckptBase, phase: 'LEGACY_RATIFY_SEALED', anonymous_seat_artifact_hashes: seatHashes(pair.rF, pair.rS), seat_provenance: { P0: seatProv(pair.sinkF, 'fable'), P1: seatProv(pair.sinkS, 'sol') }, codex_receipt_hash: pair.solCross.codex_receipt_hash, status: 'sealed' }, phaseName)
+    await councilCheckpoint({ ...ckptBase, phase: 'RATIFIED', anonymous_seat_artifact_hashes: {}, seat_provenance: {}, codex_receipt_hash: null, status: 'sealed' }, phaseName)
+    await councilRuling({ keystone, phase: phaseTag, terminal: 'RATIFIED', bundle_hash: bundleH }, phaseName)
+    log(`legacy master plan RETROSPECTIVELY RATIFIED (bundle ${String(bundleH).slice(0, 12)}…) — two valid head signatures over the UNCHANGED plan; the plan advances with a retrospective certificate`)
+    return { terminal: 'RATIFIED', certificate: cert.certificate, findings: [], bundle_hash: bundleH, receipt_verified: true, ledger_verified: true }
+  }
+  // Both valid but not dual-APPROVE ⇒ a live, VALID BLOCK/NEITHER ⇒ honest BLOCKED; freeze the findings.
+  const frozen = [...closeFindingsOf(pair.rF), ...closeFindingsOf(pair.rS)]
+  await councilCheckpoint({ ...ckptBase, phase: 'LEGACY_RATIFY_SEALED', anonymous_seat_artifact_hashes: seatHashes(pair.rF, pair.rS), seat_provenance: { P0: seatProv(pair.sinkF, 'fable'), P1: seatProv(pair.sinkS, 'sol') }, codex_receipt_hash: pair.solCross.codex_receipt_hash, status: 'sealed' }, phaseName)
+  await councilRuling({ keystone, phase: phaseTag, terminal: 'BLOCKED', verdicts: { fable: pair.rF.verdict, sol: pair.rS.verdict } }, phaseName)
+  log(`legacy master plan BLOCKED (fable ${pair.rF.verdict}, sol ${pair.rS.verdict}) — a live valid BLOCK/NEITHER; ${frozen.length} finding(s) frozen, the build is gated`)
+  return { terminal: 'BLOCKED', certificate: null, findings: frozen, bundle_hash: bundleH, receipt_verified: true, ledger_verified: true }
+}
+
 // §3.5 stage bracket (P3.6 T4): the build stage is entered — past both §3.4 floor gates, so the
 // ledger CLI is locatable, and BEFORE any other build-stage ledger activity (the pre-flight sweep
 // below appends browser_sweep at stage:'build'; a projection read must never see build events
@@ -2557,6 +2720,81 @@ let milestoneIndex = -1
 // agent()/parse error included (a crash mid-probe is exactly when leaks must be swept). The sweep
 // sits in finally, not after the loop, so no throw can skip it.
 try {
+
+// ── ⟨DSGN-B3-4⟩(b) THE LEGACY-PLAN HOOK — runs ONCE, BEFORE the first milestone's close council, ONLY
+//    where build's council rails are live (councilCapable = T4 + codex + runToken). Sub-T4 / no-codex /
+//    tokenless runs keep their EXISTING byte-preserved behavior — no hook, no detection read, no new
+//    labels: a legacy plan there advances exactly as in v3.0.1. A run whose master plan carries a
+//    RATIFIED / DEADLOCK_RESOLVED master_plan council checkpoint (the COMMON case — a plan the twin
+//    council already ratified) skips the hook entirely. ──
+let legacyCouncil = null
+if (councilCapable) {
+  const checkpoints = await readCouncilCheckpointsB('The Forge Heats')
+  const hasTerminal = (kid, ...phases) => checkpoints.some((c) => c && c.keystone_id === kid && c.status === 'sealed' && phases.includes(c.phase))
+  // Detection (AMB-B3-3): the ABSENCE of a RATIFIED / DEADLOCK_RESOLVED master_plan checkpoint — the
+  // terminal rows a completed architecture council leaves behind (architecture.js:944 RATIFIED /
+  // :2235 DEADLOCK_RESOLVED, appended via buildCheckpoint → note{kind:'council_state'}). A missing row
+  // is a FACT, deterministic — never a guess.
+  // B3R2-1: a DEADLOCK_RESOLVED master_plan row is NOT trusted on its label alone — the provisional seal
+  // could predate a CHANGED master-plan.md. Its certificate is reloaded and the CURRENT plan re-anchored;
+  // only when the row's plan/bundle/certificate/template/run-token bindings ALL match does it authorize the
+  // advance. Any mismatch ⇒ the row is void here and the legacy re-ratification path runs over the current
+  // plan (never a stale advance). A plain RATIFIED master_plan row keeps its existing authority.
+  const deadlockRow = checkpoints.find((c) => c && c.keystone_id === 'master_plan' && c.status === 'sealed' && c.phase === 'DEADLOCK_RESOLVED')
+  const verifyDeadlockResolvedRow = async (row, phaseName) => {
+    const prov = row && row.seat_provenance && typeof row.seat_provenance === 'object' ? row.seat_provenance : {}
+    const rowPlan = prov.plan_hash, rowCert = prov.certificate_hash, rowBundle = row.decision_bundle_hash
+    const rowTemplate = row.template_hash, rowToken = row.run_token_hash
+    if (!(SHA64_RE.test(String(rowPlan)) && SHA64_RE.test(String(rowCert)) && SHA64_RE.test(String(rowBundle)) && SHA64_RE.test(String(rowTemplate)))) { log('B3R2-1: the DEADLOCK_RESOLVED row lacks the plan/certificate/bundle/template bindings — the row is VOID (re-ratifying the current plan)'); return false }
+    if (rowToken !== runTokenHash) { log('B3R2-1: the DEADLOCK_RESOLVED row binds a different run-token hash — the row is VOID (re-ratifying the current plan)'); return false }
+    const anchor = await agent(evidenceAnchorPrompt([masterPlanFile]), { label: 'thoth:deadlock-plan-anchor', phase: phaseName, model: 'haiku', schema: EVIDENCE_ANCHOR_SCHEMA })
+    const af = (anchor && Array.isArray(anchor.files)) ? anchor.files.find((f) => f && f.path === masterPlanFile && typeof f.sha256 === 'string' && SHA64_RE.test(f.sha256)) : null
+    const currentPlanHash = af ? af.sha256 : null
+    if (currentPlanHash == null || currentPlanHash !== rowPlan) { log(`B3R2-1: the CURRENT master-plan.md hash (${currentPlanHash ? String(currentPlanHash).slice(0, 12) + '…' : 'unreadable'}) does not match the row's bound plan hash — the plan CHANGED after provisional sealing; the row is VOID (re-ratifying the current plan)`); return false }
+    const rd = await agent(readCouncilFilePrompt(deadlockCertFile), { label: 'thoth:deadlock-cert-reload', phase: phaseName, model: 'haiku', schema: READ_COUNCIL_FILE_SCHEMA })
+    const content = rd && typeof rd.content === 'string' ? rd.content : null
+    const fileSha = rd && typeof rd.sha256 === 'string' && SHA64_RE.test(rd.sha256) ? rd.sha256 : null
+    if (!(content && fileSha === rowCert && sha256Hex(content) === rowCert)) { log('B3R2-1: the persisted DEADLOCK_RESOLVED certificate did not reload (missing/sha-drift) — the row is VOID (re-ratifying the current plan)'); return false }
+    let cert = null
+    try { cert = JSON.parse(content) } catch { cert = null }
+    if (!(cert && typeof cert === 'object' && sha256Hex(canonicalJson(cert)) === rowCert)) { log('B3R2-1: the reloaded certificate does not re-canonicalize to the bound hash — the row is VOID (re-ratifying the current plan)'); return false }
+    if (!(cert.plan_hash === rowPlan && cert.bundle_hash === rowBundle && cert.template_hash === rowTemplate && cert.run_token_hash === rowToken)) { log('B3R2-1: the reloaded certificate\'s bindings disagree with the row — the row is VOID (re-ratifying the current plan)'); return false }
+    log(`B3R2-1: the DEADLOCK_RESOLVED master_plan row VERIFIED — the CURRENT plan, bundle, certificate, template, and run-token bindings all match; the twin_deadlock_resolved terminal advances`)
+    return true
+  }
+  const deadlockVerified = deadlockRow ? await verifyDeadlockResolvedRow(deadlockRow, 'The Forge Heats') : false
+  const masterRatified = hasTerminal('master_plan', 'RATIFIED') || deadlockVerified
+  // B3R1-15: a prior master_plan_legacy RATIFIED row is NOT a licence to advance — its certificate is not
+  // ledgered reloadably, and the master plan may have CHANGED since it was signed. So a resume NEVER trusts
+  // the stale label (the old certificate:null fast-advance); it re-anchors + RE-RATIFIES over the CURRENT
+  // plan bytes (the heads sign the ACTUAL content, a fresh real certificate is minted) and verifies the
+  // prior binding (template hash, run-token hash, and the recorded plan hash EQUAL to the current plan's
+  // sha) for the audit record — a changed plan / template / token drift never advances under the old row.
+  const priorLegacyRow = checkpoints.find((c) => c && c.keystone_id === 'master_plan_legacy' && c.status === 'sealed' && c.phase === 'RATIFIED')
+  if (!masterRatified) {
+    // The plan predates the council: mark legacy_authority (never relabeled twin_ratified, no historical
+    // event rewritten — the marking is a NEW note, not an edit of any prior row).
+    await councilRuling({ keystone: 'master_plan_legacy', phase: 'DETECT', marking: 'legacy_authority', reason: 'no RATIFIED/DEADLOCK_RESOLVED master_plan council checkpoint in the run ledger — the master plan predates the twin council' }, 'The Forge Heats')
+    if (priorLegacyRow) log('a prior master_plan_legacy RATIFIED row exists — RE-anchoring + RE-verifying it against the CURRENT plan (never a stale certificate:null advance)')
+    else log('LEGACY MASTER PLAN detected (no council certificate in the run ledger) — marked legacy_authority; running ONE retrospective blind dual ratification of the UNCHANGED plan before the first milestone close')
+    const legacyProv = []
+    const legacyReceipts = []
+    const lr = await runLegacyPlanRatify(legacyProv, legacyReceipts)
+    const priorBindingVerified = !!(priorLegacyRow && priorLegacyRow.template_hash === councilTemplateHashLegacy && priorLegacyRow.run_token_hash === runTokenHash && lr.bundle_hash != null && priorLegacyRow.decision_bundle_hash === lr.bundle_hash)
+    legacyCouncil = { authority: 'legacy_authority', terminal: lr.terminal, certificate: lr.certificate, bundle_hash: lr.bundle_hash, ...(priorLegacyRow ? { prior_binding_verified: priorBindingVerified } : {}), receipt_verified: lr.receipt_verified, ledger_verified: lr.ledger_verified, ...(legacyReceipts.length ? { receipts: legacyReceipts } : {}) }
+    if (lr.terminal !== 'RATIFIED') {
+      // Non-APPROVE ⇒ the honest BLOCKED/DEGRADED terminal GATES the keystone: the build never proceeds
+      // to the first milestone under an unratified legacy plan (build's EXISTING council-rail honesty —
+      // reuse, don't invent). No milestone close convenes; validate/the conductor sees the terminal.
+      const legacyFindings = (Array.isArray(lr.findings) ? lr.findings : []).map(closeFindingLine)
+      await ledger('gate_decision', { milestone: null, qa: 'QA_FAIL', legacy_council: legacyCouncil, ...(legacyProv.length ? { gate_provenance: legacyProv } : {}), ...(legacyReceipts.length ? { council_receipts: legacyReceipts } : {}) }, 'The Forge Heats')
+      log(`legacy master plan ${lr.terminal} — the retrospective ratification did not dual-APPROVE; the build is GATED before the first milestone (no milestone close convenes)`)
+      return { built: [], passed: [], all_passed: false, law_gated: true, split_required: [], council: legacyCouncil, findings: legacyFindings }
+    }
+    log(`legacy master plan RATIFIED retrospectively${priorLegacyRow ? ` (prior binding ${priorBindingVerified ? 'verified — plan unchanged' : 'DID NOT match — the prior row is void; a fresh certificate now signs the CURRENT plan'})` : ''} — the plan advances with a real certificate; the build proceeds to the milestones`)
+  }
+}
+
 for (const m of milestones) {
   milestoneIndex++
   if (typeof budget !== 'undefined' && budget && budget.total && budget.remaining() <= 0) {
@@ -3305,7 +3543,10 @@ for (const m of milestones) {
   // gate. A QA_FAIL / refusal / gate-only-on-red leaves the projection at 'build' (accurate — the
   // conductor re-enters via the correction loop or a gate-only retry). Fail-open like every ledger leg.
   if (allPassed) await ledger('stage_completed', { stage: 'build', milestones: results.length, passed: passed.length }, 'Judgment')
-  return { built: results, passed: passed.map((r) => r.id), all_passed: allPassed, law_gated: true, split_required: splitLedger }
+  // ⟨DSGN-B3-4⟩(b): a dual-APPROVE legacy retrospective ratification rides the build return's council
+  // field (the retrospective certificate + the legacy_authority marking) — the plan advanced BECAUSE the
+  // council ratified it; the conductor sees the honest terminal. Absent off the legacy path.
+  return { built: results, passed: passed.map((r) => r.id), all_passed: allPassed, law_gated: true, split_required: splitLedger, ...(legacyCouncil ? { council: legacyCouncil } : {}) }
 } finally {
   // §7 / T2.3 stage-end sweep: UNCONDITIONAL at build end — reaps THIS build's browser survivors
   // (an outer-deadline SIGKILL of a probe wrapper, a crashed run mid-probe) before the stage hands

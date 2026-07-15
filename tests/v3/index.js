@@ -9,6 +9,7 @@
 // never index.mjs. Zero dependencies, like everything else in the harness.
 import './src-modules.test.mjs'
 import './council-core.test.mjs'
+import './council-resume.test.mjs'
 import './gate.test.mjs'
 import './gauge.test.mjs'
 import './spine.test.mjs'

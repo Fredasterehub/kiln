@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto'
 import {
   COUNCIL_PROTOCOL_VERSION, COUNCIL_PHASES, COUNCIL_TERMINALS, COUNCIL_PHASE_TRANSITIONS, COUNCIL_HEADS,
   canTransition, sha256Hex, canonicalJson, councilSeed, deriveId, parityTieBreak,
-  canonicalizeFindings, validateDispositions, claimTypeForClass, compareEvidence, validateReversal,
+  canonicalizeFindings, canonicalizeRatifyFindings, validateDispositions, claimTypeForClass, compareEvidence, validateReversal,
   buildDivergenceSet, buildDecisionBundle, bundleHash, validateRatification, councilSignature, verifySignature,
   FRESH_CELLS, freshRoundSchedule, normalizeCellVerdict, aggregateHead, aggregateCouncil,
   sealReversibility, buildMelRecord, buildCheckpoint, matchCheckpoint,
@@ -23,6 +23,7 @@ import {
   SHA64_RE, RATIFY_SCHEMA, ANSWER_SCHEMA, envelopeSchema, CROSS_CHECK_SCHEMA, LEDGER_APPEND_SCHEMA,
   CANON_HASH_ONELINER, LEDGER_EXTRACT_ONELINER, councilTemplateHash, seatProv, solWrapperPlan,
   crossCheckOk, assembleRatifyCertificate, verdictShapeError,
+  projectStructuredPlan, joinExactEquivalents, validatePlanClosure, renderMasterPlan,
 } from '../../plugins/kiln/src/council.mjs'
 
 const COUNCIL_SRC = readFileSync(new URL('../../plugins/kiln/src/council.mjs', import.meta.url), 'utf8')
@@ -146,6 +147,67 @@ test('canonicalizeFindings: two findings against the same decision get distinct 
   ] }
   const ids = canonicalizeFindings([c]).map((x) => x.id)
   assert.deepEqual(ids, ['F-001-P0-001', 'F-001-P0-002'])
+})
+
+// ── canonicalizeRatifyFindings — b3-design A1: R-<round>-<slot>-<nnn>, total over materially-distinct
+//    findings, model array order can never swap keys, exact duplicates take multiplicity ordinals ─────
+// each ratify finding carries a MODEL-supplied finding_id (a non-authoritative label the SCRIPT excludes
+// from the canonical payload) — so a model that reorders or relabels its findings cannot change the keys.
+const rf = (claim, required_change, evidence_class, evidence_refs = ['ref'], executable_check = null, finding_id = 'MODEL') =>
+  ({ finding_id, claim, required_change, evidence_refs, evidence_class, executable_check })
+
+test('canonicalizeRatifyFindings: keys are R-<round>-<slot>-<nnn> in canonical payload order, per slot', () => {
+  const out = canonicalizeRatifyFindings(1, { P1: [rf('zeta risk', 'z', 'scenario'), rf('alpha gap', 'a', 'repo_state')], P0: [rf('mid', 'm', 'test_output')] })
+  // slots sort P0 before P1; within P1 'alpha gap' sorts before 'zeta risk' by canonical payload
+  assert.deepEqual(out.map((f) => f.id), ['R-1-P0-001', 'R-1-P1-001', 'R-1-P1-002'])
+  const p1 = out.filter((f) => f.slot === 'P1')
+  assert.equal(p1[0].claim, 'alpha gap', 'the canonical sort orders by payload, not array position')
+  assert.equal(p1[1].claim, 'zeta risk')
+  // the model-supplied finding_id survives as a non-authoritative label; the R-key is the authority
+  assert.ok(out.every((f) => f.finding_id === 'MODEL'), 'the model finding_id is preserved as a label')
+})
+
+test('canonicalizeRatifyFindings: model array order (and finding_id labels) can never swap the assigned keys', () => {
+  const a = { P0: [rf('beta', 'fb', 'scenario', ['x'], null, 'M1'), rf('alpha', 'fa', 'repo_state', ['y'], null, 'M2')] }
+  const b = { P0: [rf('alpha', 'fa', 'repo_state', ['y'], null, 'Z9'), rf('beta', 'fb', 'scenario', ['x'], null, 'Z8')] } // reversed + relabeled
+  const byClaim = (out) => Object.fromEntries(out.map((f) => [f.claim, f.id]))
+  assert.deepEqual(byClaim(canonicalizeRatifyFindings(1, a)), byClaim(canonicalizeRatifyFindings(1, b)), 'the same finding content gets the same R-key regardless of array order or model label')
+})
+
+test('canonicalizeRatifyFindings: EXACT duplicate payloads take successive multiplicity ordinals (total map)', () => {
+  const dup = rf('same defect', 'same fix', 'scenario', ['x'])
+  const out = canonicalizeRatifyFindings(2, { P0: [{ ...dup, finding_id: 'A' }, { ...dup, finding_id: 'B' }] })
+  assert.deepEqual(out.map((f) => f.id), ['R-2-P0-001', 'R-2-P0-002'], 'two identical findings get distinct successive ordinals')
+})
+
+test('B3R1-2 canonicalizeRatifyFindings: the typed correction descriptor discriminates keys, and array-order swap cannot rebind an ACCEPT to a different correction', () => {
+  // two findings identical in every non-descriptor field but carrying DIFFERENT typed corrections
+  // { target_kind, key, replacement } (AMB-CLOSER-1.iii) are MATERIALLY DISTINCT — the descriptor rides
+  // the canonical payload, so each keeps a stable R-key regardless of the model's array order. Before the
+  // fix both sorted identically and the key bound to whichever the model listed first.
+  const base = { claim: 'the palette decision is wrong', required_change: 'change the palette', evidence_class: 'scenario', evidence_refs: ['x'], executable_check: null }
+  const alpha = { ...base, finding_id: 'MA', target_kind: 'settled_decision', key: 'palette', replacement: { choice: 'dark' } }
+  const beta = { ...base, finding_id: 'MB', target_kind: 'settled_decision', key: 'palette', replacement: { choice: 'light' } }
+  const keyOfReplacement = (out, choice) => (out.find((f) => f.replacement && f.replacement.choice === choice) || {}).id
+  const forward = canonicalizeRatifyFindings(1, { P0: [alpha, beta] })
+  const swapped = canonicalizeRatifyFindings(1, { P0: [beta, alpha] })
+  assert.equal(keyOfReplacement(forward, 'dark'), keyOfReplacement(swapped, 'dark'), 'the dark-replacement correction keeps its R-key across an array-order swap')
+  assert.equal(keyOfReplacement(forward, 'light'), keyOfReplacement(swapped, 'light'), 'the light-replacement correction keeps its R-key across an array-order swap')
+  assert.notEqual(keyOfReplacement(forward, 'dark'), keyOfReplacement(forward, 'light'), 'two corrections differing ONLY in replacement get DISTINCT keys (materially distinct)')
+})
+
+test('canonicalizeRatifyFindings: the round label and slot both ride the key; empty/absent input is empty', () => {
+  assert.deepEqual(canonicalizeRatifyFindings('RATIFY_1', { P1: [rf('x', 'x', 'scenario')] }).map((f) => f.id), ['R-RATIFY_1-P1-001'])
+  assert.deepEqual(canonicalizeRatifyFindings(1, {}), [])
+  assert.deepEqual(canonicalizeRatifyFindings(1, null), [])
+})
+
+test('canonicalizeRatifyFindings: the script-assigned R-key id (and slot) WIN over same-named keys in the finding payload (second-key hardening)', () => {
+  // a model that smuggles its own `id`/`slot` into the finding must NOT be able to overwrite the
+  // authoritative R-key — the spread precedes the assignment.
+  const out = canonicalizeRatifyFindings(1, { P0: [{ id: 'FORGED', slot: 'P9', claim: 'c', required_change: 'r', evidence_class: 'scenario', evidence_refs: ['x'] }] })
+  assert.equal(out[0].id, 'R-1-P0-001', 'the R-key id is authoritative, never the forged one')
+  assert.equal(out[0].slot, 'P0', 'the script-assigned slot is authoritative, never the forged one')
 })
 
 // ── validateDispositions — exact coverage, all invalidation cases, the unevidenced demotion ─────────
@@ -366,10 +428,15 @@ test('validateRatification: findings[] entries are shape-checked (finding_id/cla
 test('validateRatification: an APPROVE reversing a standing block without equal-or-stronger changed_evidence is INVALID', () => {
   const block = { finding_id: 'F-9', evidence: { class: 'executed_check' }, claim_type: 'executable' }
   const ctx = { bundle_hash: 'BH', open_divergence_ids: [], standing_blocks: [block] }
-  const weak = { verdict: 'APPROVE', artifact_hash: 'BH', divergence_selections: [], changed_evidence: [{ class: 'proposed_check' }] }
+  // I9 one-finding-key rail: changed_evidence is KEYED to the block's finding_id — a weak keyed item
+  // leaves the block standing; an equal-or-stronger keyed item clears it.
+  const weak = { verdict: 'APPROVE', artifact_hash: 'BH', divergence_selections: [], changed_evidence: [{ finding_id: 'F-9', class: 'proposed_check' }] }
   assert.ok(validateRatification(weak, ctx).errors.some((e) => e.code === 'unevidenced_reversal'), 'a concession cannot clear the block')
-  const strong = { verdict: 'APPROVE', artifact_hash: 'BH', divergence_selections: [], changed_evidence: [{ class: 'executed_check' }] }
+  const strong = { verdict: 'APPROVE', artifact_hash: 'BH', divergence_selections: [], changed_evidence: [{ finding_id: 'F-9', class: 'executed_check' }] }
   assert.ok(validateRatification(strong, ctx).valid, 'equal-or-stronger changed_evidence clears the standing block')
+  // I9: evidence keyed to a DIFFERENT finding cannot clear this block (one evidence item, one block).
+  const misdirected = { verdict: 'APPROVE', artifact_hash: 'BH', divergence_selections: [], changed_evidence: [{ finding_id: 'F-OTHER', class: 'executed_check' }] }
+  assert.ok(validateRatification(misdirected, ctx).errors.some((e) => e.code === 'unevidenced_reversal'), 'evidence keyed to another finding cannot clear this block')
 })
 
 test('validateRatification: an incompatible selection combination is rejected (atomic compatibility, spec §7)', () => {
@@ -698,6 +765,9 @@ test('D1 schema consts export intact — RATIFY/ANSWER/envelope/CROSS_CHECK/LEDG
   assert.deepEqual(RATIFY_SCHEMA.required, ['artifact_hash', 'verdict', 'divergence_selections', 'findings', 'changed_evidence'])
   assert.equal(RATIFY_SCHEMA.properties.verdict.enum.join(','), 'APPROVE,BLOCK,NEITHER')
   assert.deepEqual(RATIFY_SCHEMA.properties.findings.items.properties.executable_check.type, ['string', 'null'])
+  // I9: changed_evidence items carry a REQUIRED finding_id (the one-finding-key rail) alongside class.
+  assert.deepEqual(RATIFY_SCHEMA.properties.changed_evidence.items.required, ['finding_id', 'class'])
+  assert.equal(RATIFY_SCHEMA.properties.changed_evidence.items.properties.finding_id.type, 'string')
   assert.deepEqual(ANSWER_SCHEMA.required, ['answers'])
   // envelopeSchema wraps a payload with a bare codex_receipt object (gate.mjs is the sole receipt authority)
   const env = envelopeSchema({ type: 'object' })
@@ -709,6 +779,38 @@ test('D1 schema consts export intact — RATIFY/ANSWER/envelope/CROSS_CHECK/LEDG
   assert.deepEqual(CROSS_CHECK_SCHEMA.properties.ledger.required, ['verified', 'reservation'])
   assert.deepEqual(LEDGER_APPEND_SCHEMA.required, ['appended'])
   assert.ok(SHA64_RE.test('a'.repeat(64)) && !SHA64_RE.test('a'.repeat(63)) && !SHA64_RE.test('A'.repeat(64)))
+})
+
+test('B3b2-iiB deliverable 2 — RATIFY_SCHEMA findings items gain the OPTIONAL structural-correction descriptor (AMB-CLOSER-1.iii)', () => {
+  const p = RATIFY_SCHEMA.properties.findings.items.properties
+  // the descriptor triple is additive + OPTIONAL — present for an accepted BLOCK correction, absent everywhere else
+  assert.deepEqual(p.target_kind.enum, ['settled_decision', 'trunk_field'])
+  assert.equal(p.key.type, 'string')
+  assert.ok(Object.prototype.hasOwnProperty.call(p, 'replacement'), 'replacement (any-typed) is a declared optional property')
+  // OPTIONAL: none of the three is in the item required set (additionalProperties:false still holds)
+  assert.equal(RATIFY_SCHEMA.properties.findings.items.additionalProperties, false)
+  for (const k of ['target_kind', 'key', 'replacement']) assert.ok(!RATIFY_SCHEMA.properties.findings.items.required.includes(k), `${k} is optional`)
+})
+
+test('B3b2-iiB deliverable 1 — renderMasterPlan returns the ordered milestone records + is byte-DETERMINISTIC (AMB-iiB-B)', () => {
+  const bundle = {
+    common_trunk: { vision_sc_ids: ['SC-01'] }, renderer_version: 'b3-bundle/1', evidence_manifest_hash: 'e'.repeat(64), open_divergences: [],
+    settled: [
+      { topic: 'milestone:eq:core', value: { title: 'Core', summary: 's', order: 1, surface: 'logic', confidence: 'high' }, slot: 'eq', ordinal: 0 },
+      { topic: 'sc:SC-01', value: { milestone_key: 'milestone:eq:core', criterion: 'boots', executable_check: 'run' }, slot: 'eq', ordinal: 1 },
+    ],
+  }
+  const r1 = renderMasterPlan(bundle, { visionScIds: ['SC-01'] })
+  // milestones = the ordered {final_id,title,summary,order,surface,confidence} records in render order
+  assert.deepEqual(r1.milestones, [{ final_id: 'M1', title: 'Core', summary: 's', order: 1, surface: 'logic', confidence: 'high' }])
+  assert.deepEqual(r1.manifest, { 'SC-01': 'M1' }, 'the adopted VISION SC allocates verbatim, parented to M1')
+  // determinism: the same bundle renders byte-identical markdown
+  const r2 = renderMasterPlan(bundle, { visionScIds: ['SC-01'] })
+  assert.equal(r1.markdown, r2.markdown, 'a pure function of the settled bundle — identical bytes')
+  // trunk-bound vision_sc_ids: the allocator reads the SC-id set out of the OPTS (the caller passes the
+  // bundle's own common_trunk.vision_sc_ids) — an EMPTY set mints SC-01 as SC-001 (not adopted verbatim)
+  const minted = renderMasterPlan(bundle, { visionScIds: [] })
+  assert.deepEqual(Object.keys(minted.manifest), ['SC-001'], 'with no VISION ids the SC is MINTED (SC-001), not adopted')
 })
 
 test('D1 the cross-check one-liners are single-quote-free (ride safely inside node -e \'...\') and CANON reproduces canonicalJson', () => {
@@ -907,4 +1009,272 @@ test('D1 assembleRatifyCertificate: each signature verifies against its OWN seat
   assert.equal(canonicalJson(sigF.seat_provenance), canonicalJson(provF))
   assert.equal(canonicalJson(sigS.seat_provenance), canonicalJson(provS))
   assert.notEqual(canonicalJson(sigF.seat_provenance), canonicalJson(sigS.seat_provenance))
+})
+
+// ── B3b2-i: the W4 structured-plan machine (A5 items 2–5) ────────────────────────────────────────────
+// projectStructuredPlan — A5 items 2–3 + the ⟨DSGN-A5-2⟩ pre-projection validation.
+test('projectStructuredPlan: projects milestones + acceptance into slot-namespaced registry entries (adoption vs minted), id===topic, value_hash exact, requires per SC', () => {
+  const vision = ['SC-001']
+  const r = projectStructuredPlan({
+    slot: 'P0',
+    milestones: [{
+      id: 'm1', title: 'Auth', summary: 'auth flow', order: 1, surface: 'logic', confidence: 'high',
+      acceptance: [
+        { sc_id: 'SC-001', criterion: 'login works', executable_check: 'test -x login' }, // ∈ vision → adopted (shared)
+        { sc_id: 'fast', criterion: 'fast', executable_check: 'bench' },                    // ∉ vision → minted (slot-namespaced)
+      ],
+    }],
+    decisions: [{ id: 'd-lang', topic: 'language', value: { lang: 'ts' } }],
+    visionScIds: vision,
+  })
+  const byTopic = new Map(r.entries.map((e) => [e.topic, e]))
+  assert.ok(byTopic.has('milestone:P0:m1'))
+  assert.ok(byTopic.has('sc:SC-001'), 'a VISION sc_id adopts the SHARED namespace sc:SC-001')
+  assert.ok(byTopic.has('sc:P0:fast'), 'a minted sc_id is slot-namespaced sc:P0:fast')
+  for (const e of r.entries) {
+    assert.equal(e.id, e.topic, 'projected entries carry id === topic')
+    assert.equal(e.value_hash, sha256Hex(canonicalJson(e.value)), 'value_hash = sha256Hex(canonicalJson(value))')
+  }
+  assert.deepEqual(byTopic.get('milestone:P0:m1').value, { title: 'Auth', summary: 'auth flow', order: 1, surface: 'logic', confidence: 'high' })
+  assert.equal(byTopic.get('sc:SC-001').value.milestone_key, 'milestone:P0:m1', 'the SC value carries the PROJECTED parent topic')
+  // one requires row per SC, naming its sc_topic + parent milestone_topic
+  assert.deepEqual(r.requires.slice().sort((a, b) => (a.sc_topic < b.sc_topic ? -1 : 1)), [
+    { sc_topic: 'sc:P0:fast', milestone_topic: 'milestone:P0:m1' },
+    { sc_topic: 'sc:SC-001', milestone_topic: 'milestone:P0:m1' },
+  ])
+})
+
+test('projectStructuredPlan: an sc_id that LOOKS like SC-NNN but is NOT in visionScIds mints slot-namespaced (no false adoption)', () => {
+  const r = projectStructuredPlan({ slot: 'P1', milestones: [{ id: 'm', acceptance: [{ sc_id: 'SC-999', criterion: 'c' }] }], decisions: [], visionScIds: ['SC-001'] })
+  assert.ok(r.entries.some((e) => e.topic === 'sc:P1:SC-999'), 'SC-999 ∉ vision → minted sc:P1:SC-999, never the shared sc:SC-999')
+  assert.ok(!r.entries.some((e) => e.topic === 'sc:SC-999'))
+})
+
+test('projectStructuredPlan: fail-closed — duplicate milestone id, duplicate sc_id, reserved-prefix emission, projected-topic collision all THROW (naming the slot)', () => {
+  assert.throws(() => projectStructuredPlan({ slot: 'P0', milestones: [{ id: 'm', acceptance: [] }, { id: 'm', acceptance: [] }], decisions: [], visionScIds: [] }), /duplicate milestone id 'm'/)
+  assert.throws(() => projectStructuredPlan({ slot: 'P0', milestones: [{ id: 'm1', acceptance: [{ sc_id: 'x' }] }, { id: 'm2', acceptance: [{ sc_id: 'x' }] }], decisions: [], visionScIds: [] }), /duplicate sc_id 'x'/)
+  assert.throws(() => projectStructuredPlan({ slot: 'P0', milestones: [], decisions: [{ id: 'sc:foo', topic: 't', value: 1 }], visionScIds: [] }), /reserved prefix/)
+  assert.throws(() => projectStructuredPlan({ slot: 'P0', milestones: [], decisions: [{ id: 'd', topic: 'milestone:foo', value: 1 }], visionScIds: [] }), /reserved prefix/)
+  // a VISION id 'P0:x' adopts sc:P0:x; a minted 'x' in slot P0 also projects sc:P0:x → collision
+  assert.throws(() => projectStructuredPlan({ slot: 'P0', milestones: [{ id: 'm1', acceptance: [{ sc_id: 'P0:x', criterion: 'a' }, { sc_id: 'x', criterion: 'b' }] }], decisions: [], visionScIds: ['P0:x'] }), /collides with an existing topic/)
+  // the throw names the slot (the workflow maps it to DEGRADED naming the head)
+  assert.throws(() => projectStructuredPlan({ slot: 'P1', milestones: [{ id: 'm', acceptance: [] }, { id: 'm', acceptance: [] }], decisions: [], visionScIds: [] }), /projectStructuredPlan\[P1\]/)
+})
+
+// The FIFTH validation branch (AMB-B3b2i-1, RULED — both): duplicate canonical VALUES per kind within
+// ONE slot are degenerate authoring; projectStructuredPlan fails CLOSED naming the slot (the same locus
+// as the other per-head validations, before any cross-head interaction). joinExactEquivalents KEEPS its
+// join-time guard as defense-in-depth (the row below builds the ambiguous class manually to hit it).
+test('projectStructuredPlan: FIFTH branch — two same-kind entries with IDENTICAL canonical value inside one slot fail closed naming the slot (milestone AND sc)', () => {
+  // two milestones, distinct ids, IDENTICAL structured value ⇒ ambiguous equivalence class
+  assert.throws(() => projectStructuredPlan({ slot: 'P0', milestones: [
+    { id: 'm1', title: 'T', summary: 'S', order: 1, surface: 'logic', confidence: 'high', acceptance: [] },
+    { id: 'm2', title: 'T', summary: 'S', order: 1, surface: 'logic', confidence: 'high', acceptance: [] },
+  ], decisions: [], visionScIds: [] }), /projectStructuredPlan\[P0\]: two milestone entries with identical canonical value inside one slot/)
+  // two SCs under the SAME milestone, distinct minted ids, IDENTICAL criterion+check ⇒ identical value
+  assert.throws(() => projectStructuredPlan({ slot: 'P1', milestones: [
+    { id: 'm1', title: 'A', summary: 'a', order: 1, surface: 'logic', confidence: 'high', acceptance: [
+      { sc_id: 'x', criterion: 'c', executable_check: 'k' },
+      { sc_id: 'y', criterion: 'c', executable_check: 'k' },
+    ] },
+  ], decisions: [], visionScIds: [] }), /projectStructuredPlan\[P1\]: two sc entries with identical canonical value inside one slot/)
+  // two milestones with a one-byte value difference project cleanly (identity is exact-canonical only)
+  const ok = projectStructuredPlan({ slot: 'P0', milestones: [
+    { id: 'm1', title: 'T', summary: 'S', order: 1, surface: 'logic', confidence: 'high', acceptance: [] },
+    { id: 'm2', title: 'T', summary: 'S', order: 2, surface: 'logic', confidence: 'high', acceptance: [] },
+  ], decisions: [], visionScIds: [] })
+  assert.equal(ok.entries.length, 2)
+})
+
+// joinExactEquivalents — the ⟨DSGN-A5-1⟩ exact-canonical-equivalence join.
+test('joinExactEquivalents: exact-equal cross-slot milestone joins onto <kind>:eq:<hash16>; its identical child SC then joins too (parent-first), with requires + milestone_key rewritten and accounting recorded', () => {
+  const vision = []
+  const p0 = projectStructuredPlan({ slot: 'P0', milestones: [{ id: 'm1', title: 'Auth', summary: 'a', order: 1, surface: 'logic', confidence: 'high', acceptance: [{ sc_id: 'fast', criterion: 'quick', executable_check: 'bench' }] }], decisions: [], visionScIds: vision })
+  const p1 = projectStructuredPlan({ slot: 'P1', milestones: [{ id: 'n1', title: 'Auth', summary: 'a', order: 1, surface: 'logic', confidence: 'high', acceptance: [{ sc_id: 'speedy', criterion: 'quick', executable_check: 'bench' }] }], decisions: [], visionScIds: vision })
+  const j = joinExactEquivalents(p0, p1)
+  const mHash = sha256Hex(canonicalJson({ title: 'Auth', summary: 'a', order: 1, surface: 'logic', confidence: 'high' })).slice(0, 16)
+  const joinedMilestone = `milestone:eq:${mHash}`
+  assert.ok(j.regP0.some((e) => e.topic === joinedMilestone), 'P0 milestone rewritten to the shared eq topic')
+  assert.ok(j.regP1.some((e) => e.topic === joinedMilestone), 'P1 milestone rewritten to the SAME shared eq topic')
+  // the joined milestone keeps id === topic
+  assert.ok(j.regP0.every((e) => e.id === e.topic) && j.regP1.every((e) => e.id === e.topic))
+  // the SC values' milestone_key followed the parent rewrite, so the SCs became value-equal and joined
+  const scEq = j.regP0.find((e) => e.topic.startsWith('sc:eq:'))
+  assert.ok(scEq, 'the child SC joined once its parent milestone_key was rewritten (parent-first)')
+  assert.ok(j.regP1.some((e) => e.topic === scEq.topic), 'both slots share the joined SC topic')
+  assert.equal(scEq.value.milestone_key, joinedMilestone, 'the joined SC value.milestone_key points at the joined milestone')
+  // requires rewritten to the joined topics + deduped to one row
+  assert.deepEqual(j.requires, [{ sc_topic: scEq.topic, milestone_topic: joinedMilestone }])
+  // accounting sorted (milestone before sc), original topics recorded
+  assert.deepEqual(j.accounting.map((a) => a.kind), ['milestone', 'sc'])
+  assert.deepEqual(j.accounting[0], { kind: 'milestone', p0_topic: 'milestone:P0:m1', p1_topic: 'milestone:P1:n1', joined_topic: joinedMilestone })
+})
+
+test('joinExactEquivalents: a one-byte value difference does NOT join (identity is exact-canonical only); each entry keeps its slot-namespaced topic', () => {
+  const p0 = projectStructuredPlan({ slot: 'P0', milestones: [{ id: 'm1', title: 'A', summary: 'x', order: 1, surface: 'logic', confidence: 'high', acceptance: [] }], decisions: [], visionScIds: [] })
+  const p1 = projectStructuredPlan({ slot: 'P1', milestones: [{ id: 'n1', title: 'A', summary: 'y', order: 1, surface: 'logic', confidence: 'high', acceptance: [] }], decisions: [], visionScIds: [] })
+  const j = joinExactEquivalents(p0, p1)
+  assert.deepEqual(j.accounting, [])
+  assert.deepEqual(j.regP0.map((e) => e.topic), ['milestone:P0:m1'])
+  assert.deepEqual(j.regP1.map((e) => e.topic), ['milestone:P1:n1'])
+})
+
+test('joinExactEquivalents: a shared VISION-adopted sc:SC-NNN entry passes through untouched (already joined by adoption, never re-joined by value)', () => {
+  const p0 = projectStructuredPlan({ slot: 'P0', milestones: [{ id: 'm1', title: 'A', summary: 'a', order: 1, surface: 'logic', confidence: 'high', acceptance: [{ sc_id: 'SC-001', criterion: 'c', executable_check: 'k' }] }], decisions: [], visionScIds: ['SC-001'] })
+  const p1 = projectStructuredPlan({ slot: 'P1', milestones: [{ id: 'n1', title: 'B', summary: 'b', order: 2, surface: 'ui', confidence: 'low', acceptance: [{ sc_id: 'SC-001', criterion: 'c', executable_check: 'k' }] }], decisions: [], visionScIds: ['SC-001'] })
+  const j = joinExactEquivalents(p0, p1)
+  // milestones differ (no milestone join); the sc:SC-001 shared entry stays sc:SC-001 in BOTH, never rewritten to sc:eq:
+  assert.ok(j.regP0.some((e) => e.topic === 'sc:SC-001') && j.regP1.some((e) => e.topic === 'sc:SC-001'))
+  assert.ok(!j.accounting.some((a) => a.kind === 'sc'), 'no minted SC join happened; the shared adoption is not a value-join')
+})
+
+test('joinExactEquivalents: two same-kind entries with IDENTICAL canonical value inside one slot fail closed (ambiguous equivalence class — defense-in-depth on the seam)', () => {
+  // The FIFTH branch now rejects this at projection; joinExactEquivalents KEEPS its guard as
+  // defense-in-depth, so the ambiguous class is built MANUALLY here (projection-shaped entries) to
+  // exercise the seam guard directly (AMB-B3b2i-1: the projection fifth branch + this join-time guard).
+  const val = { title: 'T', summary: 'S', order: 1, surface: 'logic', confidence: 'high' }
+  const ent = (topic) => ({ id: topic, topic, value: val, value_hash: sha256Hex(canonicalJson(val)) })
+  const p0 = { entries: [ent('milestone:P0:m1'), ent('milestone:P0:m2')], requires: [] }
+  const p1 = { entries: [ent('milestone:P1:n1')], requires: [] }
+  assert.throws(() => joinExactEquivalents(p0, p1), /identical canonical value inside one slot/)
+})
+
+// validatePlanClosure — the ⟨DSGN-A5-2⟩ post-settlement closure.
+test('validatePlanClosure: a clean settled set is ok; an orphan SC and an empty milestone are BOTH reported (never thrown)', () => {
+  const requires = [
+    { sc_topic: 'sc:P0:a', milestone_topic: 'milestone:P0:m1' },
+    { sc_topic: 'sc:P0:b', milestone_topic: 'milestone:P0:m2' },
+  ]
+  // clean: both milestones settled with ≥1 settled SC each
+  const clean = validatePlanClosure({ settled: [{ topic: 'milestone:P0:m1' }, { topic: 'sc:P0:a' }, { topic: 'milestone:P0:m2' }, { topic: 'sc:P0:b' }], requires })
+  assert.deepEqual(clean, { ok: true })
+  // orphan_sc: sc:P0:b settled but its milestone m2 is NOT settled; empty_milestone: m3 settled with no SC
+  const bad = validatePlanClosure({ settled: [{ topic: 'milestone:P0:m1' }, { topic: 'sc:P0:a' }, { topic: 'sc:P0:b' }, { topic: 'milestone:P0:m3' }], requires })
+  assert.equal(bad.ok, false)
+  assert.deepEqual(bad.violations, [
+    { kind: 'empty_milestone', topic: 'milestone:P0:m3', detail: "settled milestone 'milestone:P0:m3' retains no settled SC" },
+    { kind: 'orphan_sc', topic: 'sc:P0:b', detail: "settled SC 'sc:P0:b' names parent 'milestone:P0:m2', which is not a settled milestone" },
+  ])
+})
+
+test('validatePlanClosure: accepts bare topic strings; a settled SC with no requires row is an orphan_sc; malformed INPUT throws', () => {
+  const r = validatePlanClosure({ settled: ['milestone:P0:m1', 'sc:P0:a'], requires: [] })
+  assert.equal(r.ok, false)
+  assert.deepEqual(r.violations, [
+    { kind: 'empty_milestone', topic: 'milestone:P0:m1', detail: "settled milestone 'milestone:P0:m1' retains no settled SC" },
+    { kind: 'orphan_sc', topic: 'sc:P0:a', detail: "settled SC 'sc:P0:a' names no parent milestone (no value.milestone_key, no requires row)" },
+  ])
+  assert.throws(() => validatePlanClosure({ settled: 'x', requires: [] }), /settled must be an array/)
+  assert.throws(() => validatePlanClosure({ settled: [], requires: 'x' }), /requires must be an array/)
+  assert.throws(() => validatePlanClosure({ settled: [], requires: [{ sc_topic: 'sc:P0:a' }] }), /missing sc_topic or milestone_topic/)
+})
+
+test('B3R1-4 validatePlanClosure: the parent must resolve in the settled MILESTONE set, and any requires row must AGREE (disagreement ⇒ fail-closed throw)', () => {
+  // (a) a settled SC whose value.milestone_key points at an UNSETTLED milestone is an orphan_sc (the renderer
+  //     emits '(unsettled)' for exactly this SC) — the requires row here AGREES with the value, so no throw.
+  const settled = [
+    { topic: 'milestone:P0:m1', value: { title: 'A' } },
+    { topic: 'sc:P0:a', value: { milestone_key: 'milestone:P0:m1', criterion: 'c' } },
+    { topic: 'sc:P0:b', value: { milestone_key: 'milestone:P0:MISSING', criterion: 'c' } },
+  ]
+  const r = validatePlanClosure({ settled, requires: [{ sc_topic: 'sc:P0:b', milestone_topic: 'milestone:P0:MISSING' }] })
+  assert.equal(r.ok, false)
+  assert.ok(r.violations.some((v) => v.kind === 'orphan_sc' && v.topic === 'sc:P0:b' && /milestone:P0:MISSING/.test(v.detail) && /not a settled milestone/.test(v.detail)), 'the orphan is reported against the value parent — which is not a settled milestone')
+  // (b) a parent that resolves to a settled ORGANIC decision (not a milestone) is an orphan — the parent must
+  //     be in the settled MILESTONE subset, NOT merely any settled topic (the r2 bug: settledTopics.has).
+  const toOrganic = validatePlanClosure({ settled: [{ topic: 'milestone:P0:m1', value: {} }, { topic: 'sc:P0:a', value: { milestone_key: 'milestone:P0:m1' } }, { topic: 'db:engine', value: { pick: 'pg' } }, { topic: 'sc:P0:c', value: { milestone_key: 'db:engine' } }], requires: [] })
+  assert.ok(toOrganic.violations.some((v) => v.kind === 'orphan_sc' && v.topic === 'sc:P0:c' && /db:engine/.test(v.detail)), 'an SC parented to a settled ORGANIC decision is an orphan (a non-milestone parent never closes)')
+  // (c) value.milestone_key vs a requires row that DISAGREE ⇒ fail-closed THROW (never a silent preference),
+  //     even when BOTH parents are settled milestones (the disagreement itself is the malformed input).
+  assert.throws(() => validatePlanClosure({ settled: [{ topic: 'milestone:P0:m1', value: {} }, { topic: 'milestone:P0:m2', value: {} }, { topic: 'sc:P0:a', value: { milestone_key: 'milestone:P0:m1' } }], requires: [{ sc_topic: 'sc:P0:a', milestone_topic: 'milestone:P0:m2' }] }), /disagrees with its requires row/)
+  // conflicting duplicate requires rows (two different parents for one SC) are malformed input ⇒ typed throw
+  assert.throws(() => validatePlanClosure({ settled: [], requires: [{ sc_topic: 'sc:P0:a', milestone_topic: 'milestone:P0:m1' }, { sc_topic: 'sc:P0:a', milestone_topic: 'milestone:P0:m2' }] }), /conflicting requires rows for 'sc:P0:a'/)
+  // identical duplicate requires rows are harmless (deduped); an AGREEING value + requires closes clean
+  const ok = validatePlanClosure({ settled: [{ topic: 'milestone:P0:m1', value: {} }, { topic: 'sc:P0:a', value: { milestone_key: 'milestone:P0:m1' } }], requires: [{ sc_topic: 'sc:P0:a', milestone_topic: 'milestone:P0:m1' }, { sc_topic: 'sc:P0:a', milestone_topic: 'milestone:P0:m1' }] })
+  assert.deepEqual(ok, { ok: true }, 'identical requires rows do not throw; an agreeing value + requires closes')
+})
+
+// renderMasterPlan — A5 item 5 complete.
+const renderBundle = () => ({
+  renderer_version: 'b3-bundle/1',
+  evidence_manifest_hash: sha256Hex('evid'),
+  settled: [
+    { id: 'milestone:P0:m2', topic: 'milestone:P0:m2', value: { title: 'UI', summary: 'ui', order: 2, surface: 'ui', confidence: 'medium' } },
+    { id: 'milestone:P0:m1', topic: 'milestone:P0:m1', value: { title: 'Auth', summary: 'auth', order: 1, surface: 'logic', confidence: 'high' } },
+    { id: 'sc:SC-001', topic: 'sc:SC-001', value: { milestone_key: 'milestone:P0:m1', criterion: 'login works', executable_check: 'test -x login' } },
+    { id: 'sc:P0:zeta', topic: 'sc:P0:zeta', value: { milestone_key: 'milestone:P0:m1', criterion: 'zeta crit', executable_check: 'chk-z' } },
+    { id: 'sc:P0:alpha', topic: 'sc:P0:alpha', value: { milestone_key: 'milestone:P0:m2', criterion: 'alpha crit', executable_check: 'chk-a' } },
+    { id: 'language', topic: 'language', value: { lang: 'ts' } },
+  ],
+  open_divergences: [
+    { divergence_id: 'DV-002', position_0: { pick: 'B' }, position_1: { pick: 'C' } },
+    { divergence_id: 'DV-001', position_0: { pick: 'A' }, position_1: { absent: true } },
+  ],
+})
+
+test('renderMasterPlan: deterministic (double render byte-equal); returns markdown/manifest/milestone_ids/sc_ids', () => {
+  const b = renderBundle()
+  const r1 = renderMasterPlan(b, { visionScIds: ['SC-001'] })
+  const r2 = renderMasterPlan(b, { visionScIds: ['SC-001'] })
+  assert.equal(r1.markdown, r2.markdown, 'same bundle ⇒ byte-identical markdown')
+  assert.ok(r1.markdown.endsWith('\n'))
+})
+
+test('renderMasterPlan: final milestone ids assigned by (numeric order, canonical topic) → M1, M2; SC parents rewritten to final ids', () => {
+  const r = renderMasterPlan(renderBundle(), { visionScIds: ['SC-001'] })
+  assert.deepEqual(r.milestone_ids, ['M1', 'M2'])
+  // m1 (order 1) → M1, m2 (order 2) → M2
+  assert.equal(r.manifest['SC-001'], 'M1')
+  // adopted SC-001 renders verbatim and parents to M1
+  assert.ok(r.sc_ids.includes('SC-001'))
+})
+
+test('renderMasterPlan: total SC allocation — VISION-adopted verbatim; minted numbered after max VISION id, zero-padded SC-NNN, canonical-payload order with (slot, ordinal) tie-break; each SC rendered EXACTLY once', () => {
+  const r = renderMasterPlan(renderBundle(), { visionScIds: ['SC-001'] })
+  // SC-001 adopted verbatim; two minted (zeta, alpha) numbered after max(1) → SC-002, SC-003
+  assert.deepEqual(r.sc_ids, ['SC-001', 'SC-002', 'SC-003'])
+  // minted sort by canonicalJson({criterion, executable_check, parent}): 'alpha crit'@M2 < 'zeta crit'@M1
+  assert.equal(r.manifest['SC-002'], 'M2', 'alpha (M2) sorts first → SC-002')
+  assert.equal(r.manifest['SC-003'], 'M1', 'zeta (M1) sorts after → SC-003')
+  // each SC appears EXACTLY once in the authoritative table; milestone blocks carry references only
+  const table = r.markdown.split('## Success Criteria')[1]
+  for (const id of r.sc_ids) {
+    const rows = table.split('\n').filter((l) => l.startsWith(`| ${id} |`))
+    assert.equal(rows.length, 1, `SC ${id} appears exactly once in the authoritative table`)
+  }
+  // the criterion/check land in the table verbatim
+  assert.match(table, /\| SC-001 \| M1 \| login works \| test -x login \|/)
+})
+
+test('renderMasterPlan: minted numbering starts after the GREATEST numeric VISION id (skip-occupied guard) and never collides with a VISION-reserved id', () => {
+  const b = {
+    settled: [
+      { id: 'milestone:P0:m1', topic: 'milestone:P0:m1', value: { title: 'A', summary: 's', order: 1, surface: 'logic', confidence: 'high' } },
+      { id: 'sc:P0:x', topic: 'sc:P0:x', value: { milestone_key: 'milestone:P0:m1', criterion: 'cx', executable_check: 'kx' } },
+      { id: 'sc:P0:y', topic: 'sc:P0:y', value: { milestone_key: 'milestone:P0:m1', criterion: 'cy', executable_check: 'ky' } },
+    ],
+    open_divergences: [],
+  }
+  const r = renderMasterPlan(b, { visionScIds: ['SC-002', 'SC-005'] }) // max = 5 → minted start at 006
+  assert.deepEqual(r.sc_ids, ['SC-006', 'SC-007'])
+  // no minted id collides with any VISION-reserved number
+  for (const id of r.sc_ids) assert.ok(!['SC-002', 'SC-005'].includes(id))
+})
+
+test('renderMasterPlan: an {absent:true} A2 position renders the explicit ABSENT marker; both divergence positions are named; open blocks sort by divergence_id', () => {
+  const r = renderMasterPlan(renderBundle(), { visionScIds: ['SC-001'] })
+  const opens = r.markdown.split('## Open Divergences')[1]
+  // DV-001 sorts before DV-002
+  assert.ok(opens.indexOf('DV-001') < opens.indexOf('DV-002'))
+  assert.match(opens, /ABSENT — this decision does not belong in the plan/)
+  assert.match(opens, /position_0: \{"pick":"A"\}/)
+})
+
+test('renderMasterPlan: organic settled decisions render as blocks (id, topic, canonical value); NOT in the SC table', () => {
+  const r = renderMasterPlan(renderBundle(), { visionScIds: ['SC-001'] })
+  const decs = r.markdown.split('## Settled Decisions')[1].split('## Open Divergences')[0]
+  assert.match(decs, /### language/)
+  assert.match(decs, /- value: \{"lang":"ts"\}/)
+  // 'language' is not an SC id
+  assert.ok(!r.sc_ids.includes('language'))
 })
