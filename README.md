@@ -41,7 +41,7 @@
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
   <td><sub>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</sub></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-July_4,_2026_·_v3.0.1-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-July_15,_2026_·_v3.0.2-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
@@ -51,7 +51,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Multi--Model-Opus_4.8_·_GPT--5.5-D4A574?style=for-the-badge" alt="Multi-Model">&nbsp;
+  <img src="https://img.shields.io/badge/Multi--Model-Opus_4.8_·_GPT--5.6-D4A574?style=for-the-badge" alt="Multi-Model">&nbsp;
   <img src="https://img.shields.io/badge/Engine-Dynamic_Workflows-C1666B?style=for-the-badge" alt="Engine">&nbsp;
   <img src="https://img.shields.io/badge/Runtime-zero-4A403A?style=for-the-badge" alt="Runtime">&nbsp;
   <a href="https://docs.anthropic.com/en/docs/claude-code/overview"><img src="https://img.shields.io/badge/Claude_Code-Plugin-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code Plugin"></a>
@@ -99,25 +99,43 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 ## 🧭 The Method
 
-The difference is not the model. It is the discipline around the model.
+The difference is not the model. It is the discipline around the model. And in v3 the discipline grew teeth: **nobody's word is law here anymore. Not even mine.**
+
+Picture two master smiths sharing one forge. Both brilliant. Both &mdash; like every mind, carbon or arithmetic &mdash; occasionally, *confidently* wrong. The old way to handle that is hierarchy: one works, the other judges. Better than nothing. Also quietly broken &mdash; a judge who reads a finished draft starts from that draft, anchored and half-agreeing before the reading is done. And two minds from the same family miss the same things, which is exactly why this forge houses two model families.
+
+So the decisions that lock something &mdash; the master plan, a milestone's close, the validation verdict &mdash; now run on five rules:
+
+**Both smiths draft blind.** Each head answers without seeing the other's answer &mdash; no anchoring, no politeness, no "yes, and". The drafts are even assigned anonymous slots, so neither knows which is whose.
+
+**Disagreements are argued with evidence, not authority.** When the answers differ, a *script* &mdash; not a smith &mdash; lists the exact points of disagreement, and every listed point must be accounted for: settled or escalated, never quietly dropped. Each head answers the other's findings point by point, and wherever a disagreement can be settled by running something, it is run &mdash; **the exit code settles it.** Seniority is not an argument here. Eloquence is not an argument here.
+
+**The final blueprint is assembled by the shop's rules, not either smith's pen.** Once the disagreements settle, deterministic code renders the master plan from the settled record, and a scribe copies it byte-for-byte &mdash; the script checks the bytes. Nobody "writes the final version", because whoever writes last can smuggle things in. Here, *last* is a pure function.
+
+**Every claim carries a receipt.** When the GPT head rules, the ruling is bound to a receipt &mdash; the exact prompt bytes, the seat, the attempt, the run, hashed and cross-checked against an append-only ledger that refuses replays. "The model says it ran" is worth nothing here. The receipt is worth everything.
+
+**A deadlock stops the forge honestly.** If the heads still disagree after the evidence, fresh eyes re-judge the disagreement exactly once &mdash; in a counterbalanced round, so neither presentation order nor labels tip the scale. If it *still* stands, I do not guess and I do not ship: I stop, keep the last ratified state, and hand you the ledger.
+
+That is the **Twin Council**. Why go to this much trouble? Because the failure mode of capable models is not incompetence &mdash; it is confident, plausible error, and same-family review shares the blind spots of the author. Two families, forced to sign the same blueprint, argued on runnable evidence, with the assembly done by code &mdash; that is the cheapest structure I know that makes *confident error* expensive.
+
+Everything else I do exists to feed that council honest evidence:
 
 | | |
 |:--|:--|
-| **The Gauge measures first** | Before anything burns, I size the job. A small script gets a lean pipeline; a real product gets the full ceremony. How much rigor you get is computed from the work itself &mdash; never vibed. |
-| **The Law locks before the build** | Your definition of "done" becomes runnable checks before any code exists &mdash; then it's frozen. The code must satisfy the checks. The checks can never be quietly edited to satisfy the code. |
-| **Vertical slices, just in time** | I build one runnable behavior at a time, scoped from the code as it actually is &mdash; not as the plan imagined it. A test proves it broken, the build turns it green, then it's committed. Exit codes decide. Not promises. |
-| **Two families, always adversarial** | Nothing ships on one model's word. What Claude writes, GPT judges &mdash; and vice versa. Two model families make *different* mistakes, so the blind spots they share with themselves don't survive each other. |
-| **A real browser, on a leash** | If I claim your UI works, it's because a real browser opened it, walked the screens, and took the screenshots &mdash; then died on a timer. Verified, then gone. No zombie browsers, no "trust me." |
-| **The goal-backward audit** | Every test can pass while the product is unusable. So a final auditor starts from your *goal* and walks in through the front door, the way a user arrives. "All green, app dead" does not ship. |
-| **Written down, or it never happened** | Every stage leaves a written record, and verdicts are computed from that evidence &mdash; I never grade my own homework. Interrupt me anywhere; `/kiln-fire` resumes exactly there. |
+| **The Gauge measures first** | Before anything burns, I size the job. A small script gets a lean pipeline; a real product gets the full ceremony. The rigor you get is computed from an eight-dimension complexity profile by a deterministic mapping &mdash; never vibed. |
+| **The Law locks before the build** | Your definition of "done" becomes runnable checks before any code exists &mdash; then it's frozen and committed. The code must satisfy the checks. Touch a locked check and a tamper gate halts the run mechanically, before any reviewer wastes a breath. |
+| **Slices planned whole, confirmed live** | Each milestone's vertical slices are planned as one ordered list, checked *arithmetically* against the Law &mdash; every acceptance criterion in exactly one slice, none missing, none twice. Before each slice builds, a cheap live check confirms the plan still matches the code as it actually is. A test proves it broken, the build turns it green. Exit codes decide. Not promises. |
+| **A real browser, on a leash** | If I claim your UI works, a real browser opened it &mdash; one bounded process per check, hard-killed on a timer. The whole traversal runs under a browser *lease*: when the lease expires, the capability itself refuses, and a watchdog sweeps whatever survived. Verified, then gone. |
+| **The goal-backward audit** | Every test can pass while the product is unusable. So at *every* milestone boundary an auditor starts from your goal and walks in through the front door, the way a user arrives. "All green, app dead" does not ship. |
+| **Honest at every strength** | No GPT installed? I run end-to-end on Claude alone, complete at its own tier &mdash; and the record says so plainly. A missing capability degrades the *label*, never silently: nothing I cannot verify is ever called verified. |
+| **Written down, or it never happened** | Every stage appends to a run ledger; verdicts are computed from that recorded evidence &mdash; I never grade my own homework. Interrupt me anywhere; `/kiln-fire` resumes exactly there. |
 
 <br>
 
 ## 🔥 Fresh from the Kiln
 
-**v3.0.1 &mdash; payload-first structured output** &nbsp;<sub>July 4, 2026</sub>
+**v3.0.2 &mdash; the Twin Council Forge** &nbsp;<sub>July 15, 2026</sub>
 
-Every worker in my pipeline files a structured report when it finishes. Those reports used to open with the reasoning essay and end with the verdict. When a long report got clipped mid-essay, the verdict never arrived &mdash; and one silenced reviewer could kill a five-hour build over a formatting technicality. Fixed, everywhere: the verdict now comes first, the commentary last, and the commentary is optional. And a reviewer that goes mute twice no longer detonates the run &mdash; the result is honestly downgraded instead. Never silently passed, never falsely failed. [<sub>→ release notes</sub>](https://github.com/Fredasterehub/kiln/releases/tag/v3.0.1)
+For two major versions my quality gates ended with a judge &mdash; one model, one gavel. This release retires the gavel at full strength. The master plan, each milestone's close, the validation verdict &mdash; *including a passing one* &mdash; the vision compile, and the final report now each require **two signatures from two model families**: drafted blind, argued on evidence, every GPT ruling receipt-attested, and the final texts assembled by deterministic code instead of anyone's last word. True deadlocks get one fresh-context, counterbalanced re-judging &mdash; then the forge stops honestly rather than ship an unsigned blueprint. The browser leash also got shorter: the traversal cap now lives on the browser capability itself, so an overrunning check loses the browser, not the plot. [<sub>→ release notes</sub>](https://github.com/Fredasterehub/kiln/releases/tag/v3.0.2)
 
 <sub>Older firings live in [The Arc](#-the-arc) and the full [release history](https://github.com/Fredasterehub/kiln/releases).</sub>
 
@@ -148,9 +166,9 @@ I keep my state in `./.kiln/`. Run `/kiln-fire` again and I pick up exactly wher
 | Command | What it does |
 |:--|:--|
 | `/kiln-fire` | Launch the pipeline. Auto-detects state and resumes where it left off. |
-| `/kiln-doctor` | Pre-flight check &mdash; Claude Code version, optional Codex, plugin files, pipeline state. |
+| `/kiln-doctor` | Pre-flight check &mdash; Claude Code version, optional Codex, plugin files, capability tier, pipeline state. |
 
-Everything else happens through conversation. Brainstorm is a real dialogue with Da Vinci; the rest of the pipeline reports back as it works.
+Everything else happens through conversation. Brainstorm is a real dialogue with Da Vinci; the autonomous stages report back as they work &mdash; story beats relayed live between banners, one notification per finished stage, and the run chains itself overnight. It stops and waits for *you* in exactly four cases: a plan you asked to approve, three failed correction cycles, a blocked or degraded stage, or your own interrupt.
 
 <details>
 <summary>⚙️ <strong>Prerequisites</strong></summary>
@@ -161,10 +179,10 @@ Everything else happens through conversation. Brainstorm is a real dialogue with
 | Claude Code &ge; 2.1.198 | `npm i -g @anthropic-ai/claude-code` &mdash; Dynamic Workflows must be enabled |
 | git | [git-scm.com](https://git-scm.com) |
 | node | [nodejs.org](https://nodejs.org) |
-| Codex CLI | Optional: `npm i -g @openai/codex` &mdash; the GPT-5.6 build path |
-| Playwright MCP | Optional: browser-based validation |
+| Codex CLI | Optional: `npm i -g @openai/codex` &mdash; the GPT-5.6 build path and the council's second head |
+| Playwright | Optional: browser-based validation |
 
-Kiln runs end-to-end on Claude alone. Codex and the MCP server are additive &mdash; they only make me sharper.
+Kiln runs end-to-end on Claude alone. Codex and the browser are additive &mdash; they only make me sharper.
 
 Run Claude Code with `--dangerously-skip-permissions`. I spawn workflows, write files, and run tests constantly. Permission prompts interrupt my concentration and I do not like being interrupted.
 
@@ -209,18 +227,19 @@ The pipeline wears faces. Each one has a single job, a single voice, a single ob
 
 | | Persona | Role |
 |:--|:--|:--|
-| 📐 | **Alpha** | The Assessor &mdash; takes the measure of the work before a line is written, scoring its complexity so the forge sets the right heat. |
+| 📐 | **Alpha** | The Assessor &mdash; takes the measure of the work before a line is written, scoring the eight-dimension profile so the forge sets the right heat. |
+| 🗺️ | **Mnemosyne & the scouts** | Brownfield cartography &mdash; Maiev, Curie, and Medivh survey an existing codebase's anatomy, health, and nervous system in parallel; Mnemosyne draws the map. |
 | 🎨 | **Da Vinci** | Brainstorm facilitator &mdash; sees what you meant, not just what you said. The one teammate you actually converse with. |
-| 🗂️ | **Aristotle** | The systematizer &mdash; compiles the loose sketch of your conversation into an ordered vision, and won't sign off until it holds together. |
-| 🔍 | **MI6 & the field operative** | Research &mdash; the detective desk gathers intelligence on your stack, domain, and open questions. Two seats here; the detective codenames you'll see in the logs (Sherlock, Poirot, and company) are the same desk in different hats, not extra personas. |
-| 🏛️ | **Confucius · Plato · Athena · Numerobis · Asimov** | Architecture &mdash; the philosophers argue so your design doesn't have to, and Asimov the Lawgiver pins the acceptance criteria into law. |
-| 🥋 | **Miyamoto** | Graceful degradation &mdash; the Claude-side planner who steps in when Codex isn't installed. Every tier is a complete instrument, not a lesser one. |
-| 🎤 | **KRS-One** | Slicing &mdash; breaks the work into vertical, runnable pieces, one at a time. |
-| ⚙️ | **The build pool** | Builders and reviewers, paired by model family. One writes, the other judges &mdash; never the same family. |
-| 🛡️ | **Sentinel** | The Observer &mdash; the quiet watch through build and validate that catches a browser left open before it leaks into the next slice. |
-| ⚖️ | **Ken · Ryu · Denzel · Judge Dredd** | The tribunal &mdash; Ken and Ryu review across families, Denzel the Negotiator reconciles their two reports into one by pure arithmetic, and Judge Dredd hands down the binary verdict. |
-| 👁️ | **Argus** | Validation &mdash; runs the app and believes nothing it cannot see. |
-| 🪶 | **Thoth** | The Scribe &mdash; keeps the run ledger across every stage. Write it down or it never happened. |
+| 🗂️ | **Aristotle** | The systematizer &mdash; compiles your conversation's ledger into an ordered vision, and later walks every milestone backward from your goal. Won't sign what doesn't hold together. |
+| 🔍 | **MI6 & the field operative** | Research &mdash; the detective desk gathers intelligence on your stack, domain, and open questions. The codenames in the logs (Sherlock, Poirot, and company) are one seat in different hats. |
+| 🏛️ | **The planners** | Confucius and Sun Tzu draft from two model families, Diogenes holds the lantern to their differences, Plato chairs the synthesis, Athena weighs it, Numerobis grounds it, and Asimov the Lawgiver pins the acceptance criteria into Law. At full strength the Twin Council supersedes the chairman: two heads draft blind and deterministic code renders the plan. |
+| 🥋 | **Miyamoto** | Graceful degradation &mdash; the Claude-side planner who steps in when Codex isn't installed. Every tier is a complete instrument, not a degraded one. |
+| 🎤 | **KRS-One & Rakim** | Slicing &mdash; KRS-One plans each milestone's vertical slices as one Law-covering list; Rakim keeps the plan honest against the code as it actually is. |
+| ⚙️ | **The build duos** | Builders and reviewers paired across model families &mdash; one writes, the other judges, never the same family. The rotation names you'll see (Tintin, Mario, Clair, Sphinx, and friends) are these seats' working aliases. |
+| 🛡️ | **Sentinel** | The Observer &mdash; the quiet watch through build and validate that catches a leaked browser and ratchets scrutiny when reviews keep finding real defects. |
+| ⚖️ | **Ken · Ryu · Denzel · Judge Dredd** | The tribunal &mdash; Ken and Ryu analyze across families, Denzel reconciles their reports by pure arithmetic, Judge Dredd hands down the binary verdict. At full strength the council takes the bench: Ryu's chair seats a receipt-attested GPT evidence analyst, and the gavel becomes two blind signatures. |
+| 👁️ | **Argus · Zoxea · Hephaestus** | Validation &mdash; Argus runs the app and believes nothing it cannot see, Zoxea checks the built shape against the ratified design, Hephaestus reads the visual craft. |
+| 🪶 | **Thoth** | The Scribe &mdash; keeps the run ledger across every stage, and transcribes the council's rendered plan byte-for-byte. Write it down or it never happened. |
 | 📋 | **Omega** | The report &mdash; tells you the truth, even when it's partial. |
 
 <br>
@@ -231,6 +250,7 @@ A curated timeline. Not every commit &mdash; just the ones that changed the shap
 
 | | Milestone | What happened |
 |:--|:--|:--|
+| **v3.0.2** | **The Twin Council Forge** | The gavel became two signatures. Every decision that locks something &mdash; master plan, milestone close, validation verdict, vision, report &mdash; now needs both model families to sign, blind, with disagreements argued on runnable evidence, every cross-family ruling receipt-attested against an append-only ledger, and the final texts rendered by deterministic code instead of anyone's pen. The judge and the chairman keep their seats at lower strength; at full strength, the council rules. |
 | **v3.0** | **The Reserved Seven Return** | v2 shelved seven names to travel light. v3 gave each of them a seat that actually runs. The Assessor got a Gauge to size the work, the Lawgiver got a Law to pin the acceptance criteria, the Scribe got a ledger that makes "write it down or it never happened" literal, the Observer got the watch that catches a leaked browser, the systematizer got the vision it compiles from your conversation, and the fallback planner got his ladder &mdash; every tier a complete instrument, not a lesser one. The Negotiator won every argument at last, by becoming the arithmetic that reconciles two reviews into one. The roster reads 34 again, and every name is a seat the engine fills. |
 | **v2.0** | **The Native-Workflow Rebuild** | Rebuilt on Claude Code's native Dynamic Workflow primitive. Persistent teams, ordered SendMessage, and a wall of PreToolUse hooks &mdash; gone. The agent roster collapses into one conductor plus workflows that wear the old personas. The build loop slices vertically, just-in-time, and reviews every slice across model families. Lighter. Quieter. Still honest. |
 | **v1.x** | **The Teams Era** | The first working forge. A seven-step pipeline driven by hooks and per-step teams. It proved the idea: a sentence in, a repository out. |
@@ -248,42 +268,59 @@ See [GitHub Releases](https://github.com/Fredasterehub/kiln/releases) for the fu
 
 ### Architecture
 
-I am a Claude Code plugin. Pure native &mdash; no daemon, no server, no npm package, and zero hooks. The autonomous stages are native [Dynamic Workflows](https://code.claude.com/docs/en/workflows): deterministic orchestration scripts that walk the pipeline &mdash; from the gauge through research, architecture, build, and validate to the report &mdash; in order, the same way every time.
+I am a Claude Code plugin. Pure native &mdash; no daemon, no server, no npm package, and zero hooks. The autonomous stages are native [Dynamic Workflows](https://code.claude.com/docs/en/workflows): deterministic orchestration scripts that walk the pipeline in order, the same way every time. A thin conductor skill in your own session detects state, renders the story, launches each stage, and reads the artifacts &mdash; it never does the heavy work itself.
 
 | | |
 |:--|:--|
 | **Dynamic Workflows** | The engine. Deterministic orchestration &mdash; steps run in order, outputs don't skip review, the session never goes idle. |
 | **One interactive teammate** | Brainstorm is a real conversation with Da Vinci. The heavy creative dialogue stays in their context, not yours. |
-| **Inline personas** | Every other face is worn *inline* by a workflow `agent()` call &mdash; not a standalone agent file. One conductor skill drives them all. |
-| **Minds are files** | Architecture, decisions, and patterns live as markdown. Workers read them. I consult them on demand. |
-| **Multi-model by design** | Opus 4.8 reasons and reviews. GPT-5.6, via Codex CLI, writes code. A Claude-only path covers you when Codex isn't installed. |
+| **Inline personas** | Every other face is worn *inline* by a workflow `agent()` call &mdash; not a standalone agent file. Every call pins its model explicitly. |
+| **Minds are files** | Vision, research, architecture, and state live as markdown and an append-only ledger in `./.kiln/`. Workers read them; resume is anchored on them, never on conversation memory. |
+| **Multi-model by design** | Opus reasons, reviews, and builds UI. GPT-5.6, via Codex CLI, writes logic and sits as the council's second head &mdash; with a recorded fallback, never a silent one. A Claude-only path covers you when Codex isn't installed. |
+| **Capability tiers** | The doctor resolves what's actually reachable &mdash; from T1 (Sonnet-only) through T2 (+Opus) and T3 (+Codex, the full-craft default) to T4 (the bonus tier, when Fable is available) &mdash; and the run's record states its tier honestly. Browser verification is a separate axis: full when Playwright is present, static-only when not. Nothing unverifiable is ever labeled verified. |
+
+### The Twin Council, mechanically
+
+The five rules above are not prose &mdash; each is a mechanism:
+
+- **Blind drafts:** the two heads answer in parallel with anonymous slot labels assigned from a hidden seed, only after both return alive and the GPT side's receipt validates. Neither prompt ever names the other head.
+- **Receipts:** every Codex invocation is captured by a deterministic process boundary that hashes the prompt, the frozen packet, the output, and the invocation identity (run, seat, phase, attempt) into a receipt, then cross-checks it against an append-only reservation ledger with a replay guard. A courier that altered one byte kills the seat.
+- **The divergence set is script-built:** every finding and decision either settles or escalates &mdash; the builder *proves* each id is accounted for exactly once, and an empty set legally skips the negotiation. At most one bounded negotiation runs; an over-limit packet escalates whole, never truncated.
+- **Deterministic rendering:** the settled record is projected into one plan by exact byte-equivalence joins, closure-checked (no orphan criterion, no empty milestone), rendered by a pure function, and transcribed by the Scribe &mdash; the script compares the file's hash against its own rendering. Validator objections apply as *typed amendments* to the bundle, mechanically, then the render repeats.
+- **Ratification:** both heads rule APPROVE or BLOCK, blind, over the populated bundle. Blocks trigger exactly one evidence exchange where runnable checks are settled by exit code. The only jointly-ratified terminal requires two valid signatures from distinct heads, each binding the bundle hash, the renderer version, and the resulting plan hash &mdash; and the Law locks *only* a ratified plan.
+- **Deadlock and honesty:** persistent disagreement gets one fresh-context 2×2 re-adjudication (order and labels counterbalanced, capped in size), then a terminal cascade ending in an honest stop. The four terminals &mdash; ratified, deadlock-resolved, council-deadlock, degraded &mdash; are never interchangeable, and a dead head yields *degraded*, never a quiet single-head ruling.
 
 ### The build loop
 
-Build is where the work is. Two nested loops.
+Build is where the work is. Two nested loops over the locked Law.
 
-The **outer loop** walks the master plan milestone by milestone, in dependency order. Each milestone builds on the last; commits are cumulative.
+The **outer loop** walks the master plan milestone by milestone, in dependency order. Commits are cumulative.
 
-The **inner loop** is just-in-time. KRS-One scopes one vertical slice at a time from the live codebase &mdash; one independently-runnable, user-facing behavior. A multi-command CLI gets a slice per command: add, list, done, delete.
+The **inner loop** is slice by slice. KRS-One plans the milestone's entire ordered slice list in one call, mapped one-to-one onto the Law's acceptance criteria and checked arithmetically &mdash; every criterion in exactly one slice. Before each slice builds, a cheap live check confirms the plan still matches the code; the builder implements and commits; then the deterministic trial runs.
 
 | | |
 |:--|:--|
-| **Outer loop** | Milestones, in dependency order. Cumulative commits. |
-| **Inner loop** | Vertical slices, scoped just-in-time from the live code. |
-| **Cross-family review** | Builder and reviewer never share a model family. Opus builds UI / GPT reviews; GPT builds logic / Opus reviews. Up to three fix cycles before commit. |
-| **Milestone tribunal** | Once the slices integrate: Ken (Opus) and Ryu (GPT-5.6) review independently, a deterministic reconcile dedupes and severity-ranks, and Judge Dredd delivers a binary verdict. |
+| **Exit codes are the verdict** | The Law runner executes the slice's mapped checks: declared flips must go red→green, and any previously-green check that regresses is fatal. The project's own test suite runs beside it, captured as hashed evidence. |
+| **Tamper is mechanical** | The tamper gate re-verifies every locked path before every check batch &mdash; and again before each check &mdash; so not even a check's own command can rewrite the Law. A touched lock, stale evidence, or a red gate auto-rejects with **no reviewer spawned**. |
+| **Cross-family review** | Builder and reviewer never share a family: Opus builds UI, GPT reviews; GPT builds logic, Opus reviews. The reviewer must re-run the mapped checks itself &mdash; approval on the diff's word alone doesn't count. Up to three fix cycles, each rebuilt, recommitted, and re-tried. |
+| **Failures are fingerprinted** | Infrastructure failures and assertion failures route differently: a repeated infra signature triggers one environment-repair trial instead of burning retries, and a blocked slice is labeled honestly &mdash; *fix the environment* vs *code work still owed*. |
+| **The milestone gate** | Enough slices convene the tribunal: two analysts plus the goal-backward audit, reconciled by pure arithmetic. At full strength the second analyst is a receipt-attested GPT evidence analyst judging the recorded, hashed evidence, and ambiguous outcomes go to a blind two-family close pair &mdash; both sign or it fails closed. A failed gate consults a correction council first: retry the code, escalate to validation, or replan the milestone. |
 
-The tribunal is skipped for single-slice milestones &mdash; there, the cross-family slice review already *is* the milestone QA. No ceremony for ceremony's sake. The heavy end-to-end gate is Validate, not per-slice review.
+The Sentinel watches the whole loop: only *logical* rejections ratchet its escalation (mechanical failures don't), and repeated logical rejections swap the feedback source before scrutiny rises. The next milestone's slice plan is cut speculatively in parallel, anchored to the exact commit it was cut at &mdash; any corrective commit invalidates it.
 
 ### Validate &amp; Report
 
-Argus installs and builds the app the way a user would, then exercises every acceptance criterion by actually running it. The verdict is PASS, PARTIAL, or FAILED &mdash; and failures loop back to Build for up to three correction cycles.
+Three legs run in parallel: Zoxea checks the built shape against the ratified design, Argus runs the deterministic Law floor &mdash; fresh install, the full Law over every criterion, the project suite &mdash; and Hephaestus (when a design exists) reads the visual craft, advisory only.
 
-Then Omega writes the delivery report into `REPORT.md`. Honest about what works. Honest about what's partial. Honest about what failed.
+For a UI scope, one cross-family evaluator walks every acceptance criterion through a scripted one-shot browser probe: one process per check, launch→assert→close, hard-killed on a timer. The whole traversal runs under a browser **lease** &mdash; the ten-minute cap lives on the capability itself, so once the lease expires every further probe refuses, and a detached watchdog sweeps whatever survived. No persistent browser service ever runs in the loop.
+
+The verdict &mdash; PASS, PARTIAL, or FAILED &mdash; is computed by a pure function over the transcribed evidence, never self-graded. A gate that never ruled caps the verdict at PARTIAL: absence of evidence is not evidence of health. At full strength a blind two-family pair rules over *every* verdict &mdash; including a passing one &mdash; and can only confirm or block it, never rewrite it. Failures loop back to Build for up to three correction cycles, then escalate to you.
+
+Then Omega writes the delivery report into `REPORT.md` &mdash; honest about what works, what's partial, what failed &mdash; and at full strength a final signoff pair checks the report against the run's own recorded artifacts before the stage may complete. The vision compile is guarded the same way: a fidelity pair confirms nothing was invented and nothing was dropped between your words and the written vision.
 
 ### Deep Brainstorm
 
-Adapted from the [BMAD Method](https://github.com/bmad-code-org/BMAD-METHOD)'s structured brainstorming approach. Da Vinci facilitates with **62 techniques across 10 categories** and 50 elicitation methods. Anti-bias protocols compensate for the fact that humans are walking confirmation biases. The output is a `VISION.md` &mdash; problem, users, goals, constraints, stack, success criteria. Everything that matters. Nothing that doesn't.
+Adapted from the [BMAD Method](https://github.com/bmad-code-org/BMAD-METHOD)'s structured brainstorming approach. Da Vinci facilitates with **62 techniques across 10 categories** and 50 elicitation methods. Anti-bias protocols compensate for the fact that humans are walking confirmation biases. Da Vinci never writes the vision himself: every turn lands in an append-only session ledger, and a fresh-context compiler &mdash; whose only source is that ledger &mdash; writes `VISION.md`. What you meant, provably separated from what anyone wished you meant.
 
 ### What's in the box
 
@@ -293,6 +330,7 @@ Adapted from the [BMAD Method](https://github.com/bmad-code-org/BMAD-METHOD)'s s
 | **8 Dynamic Workflows** | Gauge, mapping, research, architecture, vision, build, validate, report. |
 | **1 interactive agent** | `the-creator` (Da Vinci) &mdash; the brainstorm teammate. |
 | **2 commands** | `/kiln-fire`, `/kiln-doctor`. |
+| **5 deterministic CLIs** | The state ledger, the Law runner, the browser probe, the vision gate, and the receipt verifier &mdash; small trusted tools that hold the run's evidence so no model has to be believed. |
 
 No npm. No build step. Just markdown and a handful of `.js` conductors in a folder, distributed as a native Claude Code plugin. Entropy is a choice.
 
