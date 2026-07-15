@@ -3445,7 +3445,7 @@ for (const m of milestones) {
       const fixNote = `Milestone gate QA_FAIL. Fix every blocking finding, keep tests green, recommit:\n${[...reconciled.summaryLines, ...mCloseFindings.map(closeFindingLine)].join('\n')}${probeArtifactBrief(lastTrialRunId, lastFp ? lastFp.failed : mScIds)}`
       const correctionSlice = { objective: `Milestone-gate correction for ${m.id} — fix every blocking finding`, files: [], constraints: '', done_when: m.acceptance, sc_ids: mScIds }
       phase('Forging')
-      log(`${spin('build', 99)} — ${m.id} gate correction ${c + 1}`)
+      log(`${spin('build', c)} — ${m.id} gate correction ${c + 1}`)
       mBuild = await agent(buildPrompt(m, surf, correctionSlice, `${m.id}:correct${c + 1}`, fixNote), { label: loreLabel(builderName, 'build', `${m.id}:correct${c + 1}`), phase: 'Forging', model: bModel, schema: BUILD_SCHEMA })
       const correctReviewProv = {}
       mReview = (await evidencedReview(m, surf, correctionSlice, `${m.id}:correct${c + 1}`, mBuild, 0, false, reviewerName, { flips: mScIds, only: mScIds }, correctReviewProv, { tamperFired: false })) || mReview

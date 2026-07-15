@@ -13,7 +13,7 @@ export const meta = {
 // ── args: { kilnDir, projectPath, codexAvailable, testingRigor, milestoneLimit, uiBuild, pluginRoot, posture, runToken, capabilityTier, gateOnly } ──
 // @inline:args:normalizeArgs
 const A = normalizeArgs(args)
-const PAYLOAD_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. Emit the payload properties FIRST; reasoning is the LAST property, OPTIONAL, and under 50 words — put detail in the designated report file or field, never in reasoning. A long leading reasoning string is the observed death mode: the call truncates before the payload lands, the validator rejects it, each rejection burns one of five attempts, and five failures kill this leg.'
+// @inline:doctrine:PAYLOAD_FIRST
 const kilnDir = A.kilnDir
 const projectPath = A.projectPath
 if (!kilnDir || !projectPath) throw new Error('build.js requires args.kilnDir and args.projectPath (absolute paths — the conductor resolves them; never launch with relative paths). Received args of type ' + typeof args)
@@ -2380,7 +2380,7 @@ for (const m of milestones) {
       const fixNote = `Milestone gate QA_FAIL. Fix every blocking finding, keep tests green, recommit:\n${[...reconciled.summaryLines, ...mCloseFindings.map(closeFindingLine)].join('\n')}${probeArtifactBrief(lastTrialRunId, lastFp ? lastFp.failed : mScIds)}`
       const correctionSlice = { objective: `Milestone-gate correction for ${m.id} — fix every blocking finding`, files: [], constraints: '', done_when: m.acceptance, sc_ids: mScIds }
       phase('Forging')
-      log(`${spin('build', 99)} — ${m.id} gate correction ${c + 1}`)
+      log(`${spin('build', c)} — ${m.id} gate correction ${c + 1}`)
       mBuild = await agent(buildPrompt(m, surf, correctionSlice, `${m.id}:correct${c + 1}`, fixNote), { label: loreLabel(builderName, 'build', `${m.id}:correct${c + 1}`), phase: 'Forging', model: bModel, schema: BUILD_SCHEMA })
       const correctReviewProv = {}
       mReview = (await evidencedReview(m, surf, correctionSlice, `${m.id}:correct${c + 1}`, mBuild, 0, false, reviewerName, { flips: mScIds, only: mScIds }, correctReviewProv, { tamperFired: false })) || mReview

@@ -16,7 +16,7 @@ const A = normalizeArgs(args)
 // the env var). It locates the kiln-state CLI for the stage brackets below; absence degrades each
 // bracket to a log line — never a stage failure.
 const pluginRoot = A.pluginRoot
-const PAYLOAD_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. Emit the payload properties FIRST; reasoning is the LAST property, OPTIONAL, and under 50 words — put detail in the designated report file or field, never in reasoning. A long leading reasoning string is the observed death mode: the call truncates before the payload lands, the validator rejects it, each rejection burns one of five attempts, and five failures kill this leg.'
+// @inline:doctrine:PAYLOAD_FIRST
 const kilnDir = A.kilnDir
 if (!kilnDir) throw new Error('research.js requires args.kilnDir (absolute path to .kiln). Received args of type ' + typeof args)
 const docsDir = `${kilnDir}/docs`

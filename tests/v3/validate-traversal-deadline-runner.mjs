@@ -17,8 +17,7 @@
 // Exit contract: 0 + a `RESULT <json>` line on a clean resolve; 1 + `{"name","message"}` on any throw.
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 
 const [file, dir] = process.argv.slice(2)
 if (!file || !dir) { process.stderr.write('usage: node validate-traversal-deadline-runner.mjs <generated-validate.js> <sandbox-dir>\n'); process.exit(2) }

@@ -1647,7 +1647,6 @@ test('iiB populated ratify: a head that leaves an open divergence UNCOVERED ⇒ 
 // APPROVE but opposed selections ⇒ the ladder rules the still-open divergence.
 const ladderCfg = (over = {}) => openDivergeCfg({ ratSelFable: 'P0', ratSel: 'P1', ...over })
 const P0_ADD = [{ topic: 'palette', value: { choice: 'dark' }, slot: 'P0', ordinal: null }]
-const P1_ADD = [{ topic: 'palette', value: { choice: 'light' }, slot: 'P1', ordinal: null }]
 
 test('W5 stable fresh agreement: both heads decisively adopt P0 ⇒ bundle amendment → a FRESH RATIFY round over the amended bundle → RATIFIED (the certificate binds the AMENDED hashes)', async () => {
   const { result, calls } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder(ladderCfg({ freshPrefer: { choice: 'dark' } })))

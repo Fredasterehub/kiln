@@ -930,7 +930,6 @@ const runReportSignoff = async (res) => {
   }
   const manifest = {}
   for (const f of anchorFiles) manifest[f.path] = f.sha256
-  const evidenceRefs = Object.keys(manifest).sort().map((p) => ({ path: p, sha256: manifest[p] }))
   const evidenceManifestHash = sha256Hex(canonicalJson(manifest))
   const evidenceInputHashes = Object.keys(manifest).sort().map((k) => manifest[k])
   const record = {

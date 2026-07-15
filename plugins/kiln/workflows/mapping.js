@@ -137,6 +137,15 @@ log(`${scouts.length}/3 scouts reported`)
 // mapping.scouts_back (volume): the recon party returns (straight when a scout fell silent).
 await lore('mapping.scouts_back', `${scouts.length}/3 scouts reported${scouts.length < 3 ? ' — a scout fell silent' : ''}`, { scouts: scouts.length }, 'Reconnaissance')
 
+// Zero-scout floor: every scout fell silent — there is no reconnaissance to synthesize. Never let
+// Mnemosyne fabricate a map from nothing (the v2 silent empty-map). Return the honest failure shape,
+// mirroring the missing-artifact idiom below: NO stage_completed, an explicit reason, map_file null.
+if (scouts.length === 0) {
+  const reason = 'all three scouts fell silent — no reconnaissance to synthesize; the map was not drawn'
+  log(reason)
+  return { map_file: null, stack: [], entry_points: [], summary: null, missing: [mapFile], reason }
+}
+
 phase('The Map')
 log('Mnemosyne catalogues everything')
 const map = await agent(

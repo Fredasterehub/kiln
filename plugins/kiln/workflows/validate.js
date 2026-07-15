@@ -1937,10 +1937,25 @@ try {
   //    fail-closed DEGRADED (no stage_completed even on a PASS — never a silent v3.0.1 completion). ──
   let councilTerminal = null, councilCertificate = null, councilFindings = [], councilBundleHash = null, councilReceiptVerified = false, councilLedgerVerified = false
   if (councilCapable) {
-    const goalReportFiles = [
+    // The certificate binds only goal narratives CONFIRMED on disk: a goal auditor can return a
+    // valid {overall,findings} object yet skip its heredoc write, so anchoring a path from
+    // return-object presence alone would let a missing advisory file wedge a correct VALIDATE_PASS
+    // into DEGRADED (the anchor's sha256sum misses, anchorExact fails). Existence-gate each path —
+    // the goal FINDINGS are already frozen in the record (verdict_input.blocking_findings); this
+    // binds the narrative only when it is truly present (the vision.js existence-gate discipline).
+    const goalCandidates = [
       ...(goal != null ? [`${qaDir}/goal-backward-final.md`] : []),
       ...(goalSecond != null ? [`${qaDir}/goal-backward-final-second.md`] : []),
     ]
+    const goalReportFiles = []
+    for (const p of goalCandidates) {
+      const proof = await agent(
+        `You are the artifact existence verifier.\n\n` +
+        `<task>Run 'ls ${p}' (Bash). Return exists = true iff the file exists. Do not read, write, or fix anything.</task>`,
+        { label: 'thoth:goal-anchor-verify', phase: 'The Verdict', model: 'haiku', schema: { type: 'object', additionalProperties: false, properties: { exists: { type: 'boolean' }, reasoning: { type: 'string', maxLength: 700 } }, required: ['exists'] } }
+      )
+      if (proof && proof.exists === true) goalReportFiles.push(p)
+    }
     const cr = await runValidateRuling(v, verdictInput, { requested: posture.second_family, verified: secondFamilyVerified, degraded: secondFamilyDegraded }, goalReportFiles)
     councilTerminal = cr.terminal; councilCertificate = cr.certificate; councilFindings = cr.findings; councilBundleHash = cr.bundle_hash
     councilReceiptVerified = cr.receipt_verified; councilLedgerVerified = cr.ledger_verified

@@ -10,7 +10,7 @@ export const meta = {
 // ── args: { projectPath, kilnDir } ──
 // @inline:args:normalizeArgs
 const A = normalizeArgs(args)
-const PAYLOAD_FIRST = 'Your ENTIRE final message is ONE StructuredOutput tool call — no prose before or after it. Emit the payload properties FIRST; reasoning is the LAST property, OPTIONAL, and under 50 words — put detail in the designated report file or field, never in reasoning. A long leading reasoning string is the observed death mode: the call truncates before the payload lands, the validator rejects it, each rejection burns one of five attempts, and five failures kill this leg.'
+// @inline:doctrine:PAYLOAD_FIRST
 const projectPath = A.projectPath
 const kilnDir = A.kilnDir
 if (!projectPath || !kilnDir) throw new Error('mapping.js requires args.projectPath and args.kilnDir (absolute paths — the conductor resolves them; never launch with relative paths). Received args of type ' + typeof args)
@@ -123,6 +123,15 @@ const scouts = (await parallel([
 log(`${scouts.length}/3 scouts reported`)
 // mapping.scouts_back (volume): the recon party returns (straight when a scout fell silent).
 await lore('mapping.scouts_back', `${scouts.length}/3 scouts reported${scouts.length < 3 ? ' — a scout fell silent' : ''}`, { scouts: scouts.length }, 'Reconnaissance')
+
+// Zero-scout floor: every scout fell silent — there is no reconnaissance to synthesize. Never let
+// Mnemosyne fabricate a map from nothing (the v2 silent empty-map). Return the honest failure shape,
+// mirroring the missing-artifact idiom below: NO stage_completed, an explicit reason, map_file null.
+if (scouts.length === 0) {
+  const reason = 'all three scouts fell silent — no reconnaissance to synthesize; the map was not drawn'
+  log(reason)
+  return { map_file: null, stack: [], entry_points: [], summary: null, missing: [mapFile], reason }
+}
 
 phase('The Map')
 log('Mnemosyne catalogues everything')

@@ -11,7 +11,7 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { sha256Hex, canonicalJson, buildDecisionBundle, buildCheckpoint, matchCheckpoint, renderMasterPlan } from '../../plugins/kiln/src/council.mjs'
+import { sha256Hex, canonicalJson, buildDecisionBundle, buildCheckpoint, matchCheckpoint } from '../../plugins/kiln/src/council.mjs'
 
 const ARCHITECTURE = fileURLToPath(new URL('../../plugins/kiln/workflows/architecture.js', import.meta.url))
 const AsyncFunction = (async () => {}).constructor
@@ -82,7 +82,6 @@ const evidenceManifestHash = (() => { const m = {}; for (const f of ANCHOR_FILES
 // fresh run AND a reuse (the renderer authors master-plan.md; ratify binds the real b3-bundle/1 bundle) —
 // the mock is render-aware. The converged front-half settles nothing ⇒ the EMPTY bundle.
 const t4BundleOf = (over = {}) => buildDecisionBundle({ common_trunk: { vision_sc_ids: over.visionScIds || [] }, settled_decisions: over.settled || [], open_divergences: over.open || [], renderer_version: 'b3-bundle/1', evidence_manifest_hash: evidenceManifestHash })
-const renderedPlanHashOf = (over = {}) => sha256Hex(renderMasterPlan({ ...t4BundleOf(over).bundle, settled: over.settled || [] }, { visionScIds: over.visionScIds || [] }).markdown)
 const T4_BUNDLE = t4BundleOf().hash
 const rat = (bundleH) => ({ reasoning: 'r', artifact_hash: bundleH, verdict: 'APPROVE', divergence_selections: [], findings: [], changed_evidence: [] })
 

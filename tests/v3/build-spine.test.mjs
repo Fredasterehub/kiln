@@ -1219,7 +1219,7 @@ test('gateOnly routes CONSERVATIVELY to the FULL tribunal regardless of min_slic
 })
 
 test('gateOnly milestone gate: a blocking goal-backward finding still fails the gate (the §3.2 gate is unchanged under gate-only — only the build legs are skipped)', async () => {
-  const { result, calls } = await runBuild(gateOnlyArgs, mkRespond({}, (label) => {
+  const { result } = await runBuild(gateOnlyArgs, mkRespond({}, (label) => {
     if (label.startsWith('aristotle:goal-backward')) return { reasoning: 'r', overall: 'fail', findings: [{ text: 'the milestone goal is unreachable from the entry point', severity: 'critical' }] }
   }))
   assert.equal(result.built[0].qa, 'QA_FAIL')
@@ -1975,8 +1975,6 @@ test('B42-6 boundary records: the gate_decision ledger append carries a council 
 //    council field + a note{kind:'council_ruling'}; anything else ⇒ the honest BLOCKED/DEGRADED terminal
 //    gates the keystone (build's existing council rails). Idempotent on resume; sub-T4 byte-preserved. ──
 // ════════════════════════════════════════════════════════════════════════════════════════════════
-const RATIFIED_CKPT = { kind: 'council_state', keystone_id: 'master_plan', phase: 'RATIFIED', status: 'sealed' }
-
 test('B3d legacy hook: a master plan with NO council checkpoint ⇒ detected legacy_authority + ONE retrospective blind dual ratification BEFORE the first milestone close; dual-APPROVE ⇒ the plan advances with a b3-legacy/1 certificate on the build return council field', async () => {
   const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council({ checkpoints: [] })))
   const idx = (label) => calls.findIndex((c) => c.label === label)

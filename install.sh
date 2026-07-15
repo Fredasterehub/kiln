@@ -47,7 +47,7 @@ fi
 
 # 4. Codex CLI (Optional)
 if command -v codex &>/dev/null; then
-  printf "  ${GREEN}✓${RESET} Codex CLI (GPT-5 (Codex) build path enabled)\n"
+  printf "  ${GREEN}✓${RESET} Codex CLI (GPT-5.6 (Codex) build path enabled)\n"
 else
   printf "  ${YELLOW}○${RESET} Codex CLI not found — Claude-only fallback enabled\n"
   printf "    ${DIM}For dual-model mode: npm i -g @openai/codex${RESET}\n"
