@@ -49,17 +49,26 @@ const argusResult = {
 }
 
 // pull the `node …` command(s) out of a fenced ``` block in a sentinel prompt and run each as Bash,
-// in order. The sweep leg now embeds TWO commands (owned sweep, then the READ-ONLY leak-scan); the
-// lease legs embed one. Returns the LAST command's result (the LEASE line lives on the lease-take leg's
-// single command).
+// in order. Both the sweep leg (owned sweep + READ-ONLY leak-scan) AND the lease legs (kiln-probe
+// lease/lease-release + a folded best-effort `kiln-state append`) now embed TWO commands. Accumulate
+// stdout/stderr ACROSS all embedded commands and return the combined result, so the 'LEASE …' line is
+// found no matter which command printed it (the folded append prints none and exits 1 on the
+// events.jsonl-less sandbox — harmless; we never assert on its status here).
 function runEmbeddedCommand(prompt) {
   const fence = prompt.match(/```\n([\s\S]*?)\n```/)
   if (!fence) return null
   const cmds = fence[1].split('\n').map((l) => l.trim()).filter((l) => l.startsWith('node '))
   if (!cmds.length) return null
-  let last = null
-  for (const c of cmds) last = spawnSync('bash', ['-c', c], { encoding: 'utf8' })
-  return last
+  let stdout = ''
+  let stderr = ''
+  let status = null
+  for (const c of cmds) {
+    const r = spawnSync('bash', ['-c', c], { encoding: 'utf8' })
+    stdout += (r.stdout || '')
+    stderr += (r.stderr || '')
+    status = r.status
+  }
+  return { status, stdout, stderr }
 }
 
 // the VALIDATE_RUN_TOKEN is minted inside the workflow; we recover it from the lease-take command line.

@@ -136,6 +136,42 @@ test('validate: a [ui-traversal] correction task carries CONCRETE probe artifact
   assert.match(uiTask, /not browser authority/, 'reading artifacts is not browser authority')
 })
 
+// ── ledger fold (situation-map §6 item 10): the two browser_lease appends fold into the lease legs
+//    that already run a kiln-probe command — one haiku runs BOTH, and no standalone thoth:ledger
+//    spawn emits browser_lease. The sweep appends stay OUT of scope (agent-authored data). ──
+test('validate ledger fold: the browser_lease appends are FOLDED into the sentinel lease spawns — one haiku runs BOTH the kiln-probe command and the byte-identical kiln-state append; NO standalone thoth:ledger emits browser_lease', async () => {
+  const { calls } = await runValidate(baseArgs, (label) => {
+    if (label === 'thoth:ledger') return { ok: true }
+    if (label === 'hephaestus:detect') return { reasoning: 'r', design_present: false }
+    if (label === 'zoxea:arch-check') return { reasoning: 'r', check_file: 'ac.md', summary: 's', drift: [], seam_issues: [], blocking: [] }
+    if (label === 'argus:validate') return argusUi
+    if (label.startsWith('argus:traversal')) return traversalFail
+    if (label === 'aristotle:goal-final') return { reasoning: 'r', overall: 'pass', findings: [] }
+    return null // sentinel lease/sweep legs degrade gracefully
+  })
+  const take = calls.find((c) => c.label === 'sentinel:lease-take')
+  const release = calls.find((c) => c.label === 'sentinel:lease-release')
+  assert.ok(take && release, 'both lease legs spawned on a UI scope')
+  // each lease prompt embeds BOTH the kiln-probe command AND the folded kiln-state append
+  assert.match(take.prompt, /kiln-probe\.mjs lease /, 'lease-take still runs the kiln-probe lease command')
+  assert.match(take.prompt, /kiln-state\.mjs append \/tmp\/val-x\/\.kiln '/, 'lease-take folds the kiln-state append into the same spawn')
+  assert.match(release.prompt, /kiln-probe\.mjs lease-release /, 'lease-release still runs the kiln-probe release command')
+  assert.match(release.prompt, /kiln-state\.mjs append \/tmp\/val-x\/\.kiln '/, 'lease-release folds the kiln-state append into the same spawn')
+  // the folded append is the byte-identical workflow-minted event — it round-trips via the SAME
+  // parseLedgerEvent regex the standalone ledger path uses, and carries the exact browser_lease shape
+  const takeEv = parseLedgerEvent(take)
+  assert.equal(takeEv.type, 'browser_lease')
+  assert.equal(takeEv.stage, 'validate')
+  assert.equal(takeEv.data.action, 'take')
+  assert.equal(typeof takeEv.data.seconds, 'number')
+  const relEv = parseLedgerEvent(release)
+  assert.equal(relEv.type, 'browser_lease')
+  assert.equal(relEv.data.action, 'release')
+  assert.equal(takeEv.data.token, relEv.data.token, 'both lease events carry the same VALIDATE_RUN_TOKEN')
+  // THE FOLD PROOF: no standalone thoth:ledger spawn carries browser_lease anymore
+  assert.equal(ledgersOf(calls, 'browser_lease').length, 0, 'browser_lease is no longer a separate thoth:ledger spawn — it folded into the lease legs')
+})
+
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
 // ── validate at capability tier T4 — the final-ruling council over the ASSEMBLED verdict
 //    (every computed verdict; monotonicity both directions; completion gating) + the receipt-based

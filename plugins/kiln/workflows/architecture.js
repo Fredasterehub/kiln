@@ -96,6 +96,14 @@ const visionFile = `${docsDir}/VISION.md`
 const researchFile = `${docsDir}/research.md`
 const masterPlanFile = `${kilnDir}/master-plan.md`
 const handoffFile = `${kilnDir}/architecture-handoff.md`
+// ── The two Law-compiler probe invariants, unified into single-source consts (situation-map §6
+//    item 8). ACCESSIBLE_NAME_RULE = the strongest (schema-violation) form; it rides site A (initial
+//    compile), site B (law-revision), and site C (check-revision — the gap it closes: a probe-spec
+//    edit on the check-revision path now carries the name invariant). TWIN_SYNC_RULE unifies B's
+//    "matching on-disk twin" with C's "flagged for twin desync" trigger; it rides B and C only —
+//    site A WRITES both copies, so there is nothing to regenerate there and it carries no twin-sync. ──
+const ACCESSIBLE_NAME_RULE = 'Every probe landmark needs an ACCESSIBLE NAME — role AND name, both nonempty: use the plan\'s name verbatim where it names the element, and where it does not, derive a stable user-visible name from the SC text (the named landmark becomes part of the locked contract the build must expose — an unnamed landmark is a schema violation that blocks the lock)'
+const TWIN_SYNC_RULE = `When a fix changes an embedded probe "spec" (or the check was flagged for twin desync), regenerate the matching on-disk twin ${projectPath}/tests/acceptance/<sc-id>.probe.json (lowercase id) so the two deep-equal — kiln-probe executes the embedded spec, the lock attests the twin; they must never diverge.`
 // Athena validation-PASS counts (a "round" is one validation pass, not one revision): the full
 // path runs 3 passes / ≤2 revisions, the lite path 2 passes / ≤1 revision; these hold exactly when
 // no posture arg is given.
@@ -4563,10 +4571,7 @@ if (!(verdict && verdict.verdict === 'PASS')) {
     `bounded browser subprocess; builders never write, edit, or run probes. Write NO browser code of any ` +
     `kind — no Playwright scripts, no test runners; the spec is pure JSON authored from the SC text: ` +
     `{"url": <path to load, starting with '/'>, "landmarks": [{"role", "name"}, …] — the SC's key UI ` +
-    `elements by role+name (never CSS selectors); EVERY landmark needs an ACCESSIBLE NAME — role AND name, ` +
-    `both nonempty: use the plan's name verbatim where it names the element, and where it does not, derive ` +
-    `a stable user-visible name from the SC text (the named landmark becomes part of the locked contract ` +
-    `the build must expose — an unnamed landmark is a schema violation that blocks the lock), "interactions": ` +
+    `elements by role+name (never CSS selectors); ${ACCESSIBLE_NAME_RULE}, "interactions": ` +
     `[{"action": "click|fill|press|expect", "role", "name", "value", "key"}, …] in user order ONLY when ` +
     `the SC declares a behavior (click/expect need role+name; fill adds value; press needs key), optional ` +
     `"viewports": [{"width", "height"}] (default 1440×900), and ONLY when the stack needs its own server: ` +
@@ -4692,14 +4697,8 @@ if (!(verdict && verdict.verdict === 'PASS')) {
             `<inputs>\nSchema violations (typed, verbatim from kiln-law):\n` +
             lawViolations.map((v) => `- [${v.code}] ${v.path}: ${v.message}`).join('\n') + `\n` +
             `The Law: ${lawFile}. Check code and probe twins live under ${projectPath}/tests/acceptance/.\n</inputs>\n\n` +
-            `<task>Fix EXACTLY the named defects in ${lawFile} so it satisfies law schema 1. When a fix ` +
-            `changes a probe's embedded "spec", regenerate the matching on-disk twin ` +
-            `${projectPath}/tests/acceptance/<sc-id>.probe.json (lowercase id) so the two deep-equal — ` +
-            `kiln-probe executes the embedded spec, the lock attests the twin; they must never diverge. ` +
-            `Every probe landmark needs an ACCESSIBLE NAME — role AND name, both nonempty: use the plan's ` +
-            `name verbatim where it names the element; where it does not, derive a stable user-visible name ` +
-            `from the SC text (the named landmark becomes part of the locked contract the build must ` +
-            `expose). Keep lock_commit null and every sha256 map EMPTY (do NOT run kiln-law index, do NOT ` +
+            `<task>Fix EXACTLY the named defects in ${lawFile} so it satisfies law schema 1. ${TWIN_SYNC_RULE} ` +
+            `${ACCESSIBLE_NAME_RULE}. Keep lock_commit null and every sha256 map EMPTY (do NOT run kiln-law index, do NOT ` +
             `commit). Never weaken a check to dodge a defect; never touch product code.</task>`,
             { label: `asimov:law-revise:r${round + 1}`, phase: 'The Law', model: lawModel }
           )
@@ -4772,10 +4771,8 @@ if (!(verdict && verdict.verdict === 'PASS')) {
           `<task>Fix EXACTLY the named checks' own code so each one RUNS and fails honestly on the missing ` +
           `feature (or passes only when its criterion is genuinely met — never trivially). Update the ` +
           `matching law.json entries (cmd/files/timeout_s/spec) when the fix changes them — keep lock_commit ` +
-          `null and every sha256 map EMPTY (do NOT run kiln-law index, do NOT commit). When an embedded ` +
-          `probe "spec" changes (or the check was flagged for twin desync), regenerate the on-disk twin ` +
-          `${projectPath}/tests/acceptance/<sc-id>.probe.json (lowercase id) so the two deep-equal — ` +
-          `kiln-probe executes the embedded spec, the lock attests the twin; they must never diverge. ` +
+          `null and every sha256 map EMPTY (do NOT run kiln-law index, do NOT commit). ${TWIN_SYNC_RULE} ` +
+          `${ACCESSIBLE_NAME_RULE}. ` +
           `Never weaken a check to dodge its defect; never touch product code or any other check.</task>`,
           { label: `asimov:check-revise:r${round + 1}`, phase: 'The Law', model: lawModel }
         )

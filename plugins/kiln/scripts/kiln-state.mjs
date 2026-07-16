@@ -24,6 +24,7 @@
 //
 // Usage:
 //   kiln-state.mjs init <kilnDir> --project-path <abs> [--name <s>] [--type <s>] [--greenfield true|false]
+//   kiln-state.mjs onboard <kilnDir> --project-path <abs> [--name <s>] [--type <s>] [--greenfield true|false] [--tier <s>] [--verification-class <s>] [--probes <json>] [--claude-head fable|opus]   init + the capability note in ONE atomic birth leg
 //   kiln-state.mjs append <kilnDir> '<event-json>'   event-json: {type, stage, data?, git?} — seq + ts assigned here
 //   kiln-state.mjs project <kilnDir>                 rebuild state.json from the ledger
 //   kiln-state.mjs validate <kilnDir>                schema + seq contiguity + projection sync; exit 1 on violation
@@ -31,10 +32,12 @@
 //   kiln-state.mjs since <kilnDir> <afterSeq> [--kind <k>[,<k>...]] [--limit <n>]   read-only tail: events seq > afterSeq as one JSON line (NO lock)
 //   kiln-state.mjs since <kilnDir> tail              cursor bootstrap: {events:[], last_seq:<true ledger tail>, truncated:false} — no flags
 //   kiln-state.mjs unlock <kilnDir>                  clear a stale append lock (refuses while the holder is alive)
+//   kiln-state.mjs killstreak --build-iteration <n> --correction-cycle <n>   emit the kill-streak name for the ladder position (NO kilnDir; pure arithmetic over references/kill-streaks.md)
 // Exit codes: 0 ok · 1 violation/error · 2 usage.
 
 import { readFileSync, writeFileSync, appendFileSync, renameSync, mkdirSync, rmdirSync, rmSync, existsSync } from 'node:fs'
-import { join, resolve, isAbsolute, basename } from 'node:path'
+import { join, resolve, isAbsolute, basename, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const EVENT_TYPES = ['run_init', 'stage_started', 'stage_completed', 'gate_decision', 'posture_set', 'posture_escalated', 'check_result', 'commit', 'evidence', 'escalation', 'note', 'browser_leak_suspect', 'browser_lease', 'browser_sweep', 'gate_only_refused', 'gate_skipped', 'goal_audit_failure', 'law_red_auto_reject', 'probe_unavailable', 'slice_plan_invalid', 'slice_plan_invalidated', 'slice_plan_replanned', 'tamper_auto_reject', 'tier2_traversal', 'validate_verdict', 'verification_degraded', 'vision_compiled']
 const STAGE_ORDER = ['onboarding', 'brainstorm', 'gauge', 'research', 'architecture', 'build', 'validate', 'report']
@@ -315,6 +318,51 @@ function cmdInit(kilnDir, flags) {
   console.log(`kiln-state: initialized ${kilnDir} (run_init seq 1)`)
 }
 
+// onboard = init + the capability note in ONE atomic birth leg. Folds the two onboarding LEDGER
+// writes (run_init + the capability note) and assembles the nested data.capability JSON INSIDE the
+// CLI — killing the twice-gotcha'd hand-built nested JSON + the two-call sequencing the conductor
+// used to do by hand. Birth-only (the file must not pre-exist), so no append lock is needed. The
+// capability note it emits is BYTE-IDENTICAL to what the resume re-probe / succession retry still
+// hand-write, so the latest-wins projection folds them interchangeably.
+function cmdOnboard(kilnDir, flags) {
+  const KNOWN = ['project-path', 'name', 'type', 'greenfield', 'tier', 'verification-class', 'probes', 'claude-head']
+  for (const k of Object.keys(flags)) if (!KNOWN.includes(k)) die(`onboard: unknown flag --${k}`, 2)
+  const projectPath = flags['project-path']
+  if (!projectPath || !isAbsolute(projectPath)) die('onboard requires --project-path <absolute path>', 2)
+  if (flags.greenfield !== undefined && flags.greenfield !== 'true' && flags.greenfield !== 'false') die('onboard: --greenfield takes true or false', 2)
+  if (flags['claude-head'] !== undefined && flags['claude-head'] !== 'fable' && flags['claude-head'] !== 'opus') die('onboard: --claude-head takes fable or opus', 2)
+  let probes = {}
+  if (flags.probes !== undefined) {
+    try { probes = JSON.parse(flags.probes) } catch (e) { die(`onboard: --probes is not valid JSON — ${e.message}`, 2) }
+    if (!isObj(probes)) die('onboard: --probes must be a JSON object', 2)
+  }
+  const file = join(kilnDir, 'events.jsonl')
+  if (existsSync(file)) die(`${file} already exists — refusing to onboard over a live ledger`)
+  const now = new Date().toISOString()
+  const runInit = {
+    seq: 1, ts: now, type: 'run_init', stage: 'onboarding',
+    data: { project: { name: flags.name || basename(projectPath), path: projectPath, type: flags.type || 'unknown', greenfield: flags.greenfield !== 'false' } },
+    git: null,
+  }
+  // key order (tier, verification_class, probes, [claude_head]) matches the SKILL's documented shape
+  const capability = { tier: flags.tier || 'unknown', verification_class: flags['verification-class'] || 'unknown', probes }
+  if (flags['claude-head'] !== undefined) capability.claude_head = flags['claude-head']
+  const capNote = { seq: 2, ts: now, type: 'note', stage: 'onboarding', data: { kind: 'capability', capability }, git: null }
+  for (const [ev, label] of [[runInit, 'run_init'], [capNote, 'capability note']]) {
+    const viol = validateEvent(ev, label)
+    if (viol.length) die(`onboard: invalid ${label}:\n  ${viol.join('\n  ')}`)
+  }
+  mkdirSync(kilnDir, { recursive: true })
+  appendFileSync(file, JSON.stringify(runInit) + '\n' + JSON.stringify(capNote) + '\n')
+  writeState(kilnDir, projectState([runInit, capNote]))
+  // Observable-contract parity: onboard folds init + append, so it emits EXACTLY what running those
+  // two legs separately would — init's initialized-confirmation line, then append's assigned-event
+  // JSON for seq 2 (byte-shape identical to `append`'s stdout). No novel 'onboarded' line: a consumer
+  // reading either the folded or the unfolded path sees the same bytes.
+  console.log(`kiln-state: initialized ${kilnDir} (run_init seq 1)`)
+  console.log(JSON.stringify(capNote))
+}
+
 function cmdAppend(kilnDir, json) {
   let input
   try { input = JSON.parse(json) } catch (e) { die(`append: event is not valid JSON — ${e.message}`) }
@@ -472,8 +520,26 @@ function cmdUnlock(kilnDir) {
   console.log(`kiln-state: cleared stale lock ${lockDir} — was ${isObj(owner) ? `pid ${owner.pid} (ts ${owner.ts})` : 'a tokenless/unreadable owner'}`)
 }
 
+// ── kill-streak name (the build narration ladder): pure arithmetic over the byte-stable counters,
+//    the modulo + 40-row table-index the conductor used to hand-compute now lives HERE. Consumes NO
+//    kilnDir, reads NO STATE.md/state.json (counters ride in as flags — they live in the
+//    conductor-owned STATE.md bullets, not the ledger). Fails SOFT to first-blood if the ladder file
+//    is unreadable — narration must never crash a 20-hour run. ──
+function cmdKillstreak(flags) {
+  for (const k of Object.keys(flags)) if (!['build-iteration', 'correction-cycle'].includes(k)) die(`killstreak: unknown flag --${k}`, 2)
+  const coerce = (raw) => (raw !== undefined && /^-?\d+$/.test(raw)) ? Number(raw) : 0 // absent/pending/non-integer ⇒ 0
+  const pos = Math.max(coerce(flags['build-iteration']) + coerce(flags['correction-cycle']), 1)
+  let ladder = []
+  try {
+    const md = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'references', 'kill-streaks.md'), 'utf8')
+    ladder = [...md.matchAll(/^\|\s*(\d+)\s*\|\s*([a-z0-9-]+)\s*\|/gm)].map((m) => [Number(m[1]), m[2]]).sort((a, b) => a[0] - b[0]).map((r) => r[1])
+  } catch { /* unreadable ⇒ fail soft below */ }
+  if (!ladder.length) { warn('kill-streaks.md unreadable or empty — narration fails soft to first-blood'); console.log('first-blood'); return }
+  console.log(ladder[(pos - 1) % ladder.length])
+}
+
 // ── Dispatch ─────────────────────────────────────────────────────────────────────────────────────
-const USAGE = `usage: kiln-state.mjs <init|append|project|validate|summary|since|unlock> <kilnDir> [args]   (header comment has the full forms)`
+const USAGE = `usage: kiln-state.mjs <init|onboard|append|project|validate|summary|since|unlock> <kilnDir> [args] | killstreak --build-iteration <n> --correction-cycle <n>   (header comment has the full forms)`
 function parseFlags(argv) {
   const flags = {}
   for (let i = 0; i < argv.length; i += 2) {
@@ -483,16 +549,25 @@ function parseFlags(argv) {
   return flags
 }
 
-const [cmd, kilnDirArg, ...rest] = process.argv.slice(2)
-if (!cmd || !kilnDirArg) die(USAGE, 2)
-const kilnDir = resolve(kilnDirArg)
+const [cmd, ...tail] = process.argv.slice(2)
+if (!cmd) die(USAGE, 2)
 try {
-  if (cmd === 'init') cmdInit(kilnDir, parseFlags(rest))
-  else if (cmd === 'append') { if (rest.length !== 1) die(USAGE, 2); cmdAppend(kilnDir, rest[0]) }
-  else if (cmd === 'project') cmdProject(kilnDir)
-  else if (cmd === 'validate') cmdValidate(kilnDir)
-  else if (cmd === 'summary') cmdSummary(kilnDir)
-  else if (cmd === 'since') { if (rest.length < 1) die(USAGE, 2); cmdSince(kilnDir, rest[0], parseFlags(rest.slice(1))) }
-  else if (cmd === 'unlock') cmdUnlock(kilnDir)
-  else die(USAGE, 2)
+  // killstreak stands WITHOUT a kilnDir positional (pure arithmetic) — intercept it before the
+  // kilnDir requirement every other subcommand shares.
+  if (cmd === 'killstreak') cmdKillstreak(parseFlags(tail))
+  else {
+    const kilnDirArg = tail[0]
+    if (!kilnDirArg) die(USAGE, 2)
+    const kilnDir = resolve(kilnDirArg)
+    const rest = tail.slice(1)
+    if (cmd === 'init') cmdInit(kilnDir, parseFlags(rest))
+    else if (cmd === 'onboard') cmdOnboard(kilnDir, parseFlags(rest))
+    else if (cmd === 'append') { if (rest.length !== 1) die(USAGE, 2); cmdAppend(kilnDir, rest[0]) }
+    else if (cmd === 'project') cmdProject(kilnDir)
+    else if (cmd === 'validate') cmdValidate(kilnDir)
+    else if (cmd === 'summary') cmdSummary(kilnDir)
+    else if (cmd === 'since') { if (rest.length < 1) die(USAGE, 2); cmdSince(kilnDir, rest[0], parseFlags(rest.slice(1))) }
+    else if (cmd === 'unlock') cmdUnlock(kilnDir)
+    else die(USAGE, 2)
+  }
 } catch (e) { die(e.message) }

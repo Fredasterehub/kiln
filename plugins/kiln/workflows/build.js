@@ -2001,24 +2001,22 @@ async function stageSweep(when) {
 //    flip plan; tamper/stale runs never anchor — their evidence is untrusted by definition). ──
 let lastRunId = null
 
-// ── HEAD probe (the pipelining base-SHA anchor): one cheap haiku reads the project HEAD so the
-//    in-script pipelineInvalidated predicate can compare the SHA a speculative slice plan was cut
-//    against (its base_sha) with the SHA after the milestone gate completes. Returns '' on any
-//    failure — pipelineInvalidated fails closed on a blank HEAD (an unreadable HEAD forces a
-//    re-slice, never a stale-plan reuse). ──
-const HEAD_SCHEMA = {
-  type: 'object', additionalProperties: false,
-  properties: { head: { type: 'string', description: 'git rev-parse HEAD — the full sha, or "" if git failed' }, reasoning: { type: 'string', maxLength: 700 } },
-  required: ['head'],
-}
-async function headSha(suffix) {
-  const r = await agent(
-    `You are the HEAD probe — you read one git fact and report it; you never write or fix anything.\n\n` +
-    `<task>Run 'git -C ${projectPath} rev-parse HEAD' (Bash). Report head = the full sha it prints, or "" if the command fails. Do not read anything else.</task>`,
-    { label: loreLabel('thoth', 'head', suffix), phase: 'Scoring the Cut', model: 'haiku', schema: HEAD_SCHEMA }
-  )
-  return (r && typeof r.head === 'string') ? r.head.trim() : ''
-}
+// ── HEAD carry (the pipelining base-SHA anchor): NO dedicated probe — the freshness leg already
+//    runs 'git rev-parse HEAD' on every trial (freshPrompt step 4 → FRESHNESS_SCHEMA.head), and
+//    runnerGate cross-checks that head against the runner's own anchor, so on any proceed/red verdict
+//    fresh.head IS the actual repo HEAD. lastHead mirrors it: advanced by EVERY freshness probe that
+//    reports a non-empty head, REGARDLESS of gate verdict — intentionally UNLIKE lastRunId's
+//    trust-gated (proceed/red) advance, because HEAD is a repo FACT, not an evidence-trust judgment.
+//    The '' default is fail-closed: pipelineInvalidated re-slices on a blank base and the `if
+//    (base_sha)` guard skips speculation. DO NOT harmonize noteHead to the verdict-gated form — a
+//    lagging lastHead would let a speculative plan reuse against a pre-correction codebase (a real
+//    correctness bug: the next milestone built against a stale slice plan). noteHead is FAIL-CLOSED
+//    on a blank/unreadable reported head: it CLEARS lastHead rather than retaining the pre-correction
+//    SHA, so a freshness leg that cannot read HEAD after a corrective commit forces the NEXT consumer
+//    to invalidate (re-slice against an unproven HEAD) instead of reusing a plan cut against a
+//    codebase that has since moved. A missing report (no run_id ⇒ no probe) is unreadable too. ──
+let lastHead = ''
+const noteHead = (fresh) => { lastHead = (fresh && typeof fresh.head === 'string') ? fresh.head.trim() : '' }
 
 // ── planMilestone(targetM, targetSurf, targetScs) — the batch slice plan for ONE milestone,
 //    parameterized so it can run for the CURRENT milestone synchronously OR for the NEXT milestone
@@ -2065,6 +2063,10 @@ async function runTrialLegs(build, lawCtx, priorRunId, tag) {
   if (runner && typeof runner.run_id === 'string' && runner.run_id) {
     fresh = await agent(freshPrompt(runner.run_id), { label: loreLabel('thoth', 'freshness', tag), phase: 'The Trial', model: 'haiku', schema: FRESHNESS_SCHEMA })
   }
+  // The freshness leg is also the pipelining HEAD source — transcribe its head into lastHead so
+  // pipelineInvalidated compares a speculative plan's base_sha against the real repo HEAD (both
+  // trial callers route through here, so this one call covers the slice and gate-only paths).
+  noteHead(fresh)
   return { runner, gate: runnerGate(runner, fresh) }
 }
 
@@ -2920,7 +2922,7 @@ for (const m of milestones) {
   let usedPipeline = false
   if (pipelinedPlan && pipelinedPlan.milestoneId === m.id) {
     const speculative = await pipelinedPlan.promise // resolve the plan launched during the prior gate
-    const curHead = await headSha(`${m.id}:pipeline-check`)
+    const curHead = lastHead
     const inval = pipelineInvalidated(pipelinedPlan.base_sha, curHead)
     if (!inval.invalidated && speculative && speculative.ok) {
       firstPlan = speculative
@@ -3214,7 +3216,7 @@ for (const m of milestones) {
         // build.speculation_held (Fable-authored, verbatim): the next blade waits for a settled anvil.
         await lore('build.speculation_held', `The forge holds ${nextM.id}'s blade — ${m.id} ran hot (${spec.corrections} correction${spec.corrections === 1 ? '' : 's'} across ${spec.slices} slice${spec.slices === 1 ? '' : 's'}); the next cut waits for a settled anvil.`, { milestone: m.id, next: nextM.id, reason: spec.reason }, 'Judgment')
       } else {
-        const base_sha = await headSha(`${m.id}:pipeline-base`)
+        const base_sha = lastHead
         if (base_sha) {
           const nextSurf = surfaceOf(nextM)
           log(`Pipelining ${nextM.id}'s slice plan in parallel with ${m.id}'s gate (base_sha ${base_sha})`)

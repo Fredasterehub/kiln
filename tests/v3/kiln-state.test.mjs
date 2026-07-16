@@ -61,6 +61,94 @@ test('init: rejects a relative --project-path (usage, exit 2) and refuses to re-
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
+// ── onboard: init + the capability note in ONE atomic birth leg (situation-map §6 item 13, NARROW) ──
+const onboard = (kilnDir, ...extra) => run('onboard', kilnDir, '--project-path', '/srv/demo', '--name', 'demo', '--type', 'node', '--tier', 'T4', '--verification-class', 'full', '--probes', '{"codex":true,"playwright":true}', ...extra)
+
+test('onboard: writes seq 1 run_init + seq 2 capability note atomically and projects the capability (incl. claude_head)', () => {
+  const dir = sandbox(); const kilnDir = join(dir, '.kiln')
+  try {
+    assert.equal(onboard(kilnDir, '--claude-head', 'fable').status, 0)
+    const events = readEvents(kilnDir)
+    assert.equal(events.length, 2)
+    assert.equal(events[0].seq, 1); assert.equal(events[0].type, 'run_init'); assert.equal(events[0].stage, 'onboarding')
+    assert.deepEqual(events[0].data.project, { name: 'demo', path: '/srv/demo', type: 'node', greenfield: true })
+    assert.equal(events[1].seq, 2); assert.equal(events[1].type, 'note'); assert.equal(events[1].stage, 'onboarding')
+    assert.equal(events[1].data.kind, 'capability')
+    assert.deepEqual(events[1].data.capability, { tier: 'T4', verification_class: 'full', probes: { codex: true, playwright: true }, claude_head: 'fable' })
+    const st = readState(kilnDir)
+    assert.deepEqual(st.project, { name: 'demo', path: '/srv/demo', type: 'node', greenfield: true })
+    assert.deepEqual(st.capability, { tier: 'T4', verification_class: 'full', probes: { codex: true, playwright: true }, claude_head: 'fable' })
+    assert.equal(st.last_event_seq, 2)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('onboard: --claude-head OMITTED ⇒ the capability note carries NO claude_head key and the ledger still validates (byte-compat)', () => {
+  const dir = sandbox(); const kilnDir = join(dir, '.kiln')
+  try {
+    assert.equal(onboard(kilnDir).status, 0)
+    const cap = readEvents(kilnDir)[1].data.capability
+    assert.ok(!('claude_head' in cap), 'no claude_head key when the flag is absent')
+    assert.deepEqual(cap, { tier: 'T4', verification_class: 'full', probes: { codex: true, playwright: true } })
+    assert.equal(run('validate', kilnDir).status, 0)
+    assert.equal(readState(kilnDir).capability.claude_head, undefined)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('onboard: the ledger passes validate (seq contiguity 1..2, projection in sync)', () => {
+  const dir = sandbox(); const kilnDir = join(dir, '.kiln')
+  try {
+    assert.equal(onboard(kilnDir, '--claude-head', 'opus').status, 0)
+    const res = run('validate', kilnDir)
+    assert.equal(res.status, 0)
+    assert.match(res.stdout, /seq 1\.\.2/)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('onboard: refuses over a live events.jsonl (exit 1); usage errors on relative/missing project-path and malformed --probes (exit 2); unknown flag (exit 2)', () => {
+  const dir = sandbox(); const kilnDir = join(dir, '.kiln')
+  try {
+    assert.equal(onboard(kilnDir).status, 0)
+    const again = onboard(kilnDir)
+    assert.equal(again.status, 1, 'a second onboard over a live ledger refuses')
+    assert.match(again.stderr, /refusing to onboard over a live ledger/)
+    const d2 = sandbox()
+    assert.equal(run('onboard', join(d2, '.kiln'), '--project-path', 'rel/path').status, 2, 'relative project-path is a usage error')
+    assert.equal(run('onboard', join(d2, '.kiln')).status, 2, 'missing project-path is a usage error')
+    assert.equal(run('onboard', join(d2, '.kiln'), '--project-path', '/srv/x', '--probes', '{bad').status, 2, 'malformed --probes is a usage error')
+    assert.equal(run('onboard', join(d2, '.kiln'), '--project-path', '/srv/x', '--claude-head', 'gpt').status, 2, '--claude-head takes fable|opus only')
+    assert.equal(run('onboard', join(d2, '.kiln'), '--project-path', '/srv/x', '--bogus', '1').status, 2, 'an unknown flag is a usage error')
+    rmSync(d2, { recursive: true, force: true })
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('onboard GOLDEN: the seq-2 note AND stdout are BYTE-SHAPE identical to running init + append separately (observable-contract parity; resume/succession consistency)', () => {
+  const a = sandbox(); const b = sandbox()
+  const aKiln = join(a, '.kiln'); const bKiln = join(b, '.kiln')
+  try {
+    // onboard's atomic leg
+    const onb = run('onboard', aKiln, '--project-path', '/srv/demo', '--name', 'demo', '--type', 'node', '--greenfield', 'true', '--tier', 'T4', '--verification-class', 'full', '--probes', '{"codex":true,"playwright":true}', '--claude-head', 'fable')
+    assert.equal(onb.status, 0)
+    // the SKILL's documented hand path: init, then append the literal capability JSON the SKILL:71/:381 write
+    const ini = run('init', bKiln, '--project-path', '/srv/demo', '--name', 'demo', '--type', 'node', '--greenfield', 'true')
+    assert.equal(ini.status, 0)
+    const app = run('append', bKiln, '{"type":"note","stage":"onboarding","data":{"kind":"capability","capability":{"tier":"T4","verification_class":"full","probes":{"codex":true,"playwright":true},"claude_head":"fable"}}}')
+    assert.equal(app.status, 0)
+    const onboardData = readEvents(aKiln)[1].data
+    const skillData = readEvents(bKiln)[1].data
+    assert.equal(JSON.stringify(onboardData), JSON.stringify(skillData), 'the folded onboard note must be byte-identical to the SKILL hand-written note — the latest-wins projection folds them interchangeably')
+    // STDOUT parity: onboard emits EXACTLY init's confirmation line + append's echoed event JSON — no
+    // novel 'onboarded' line. Normalize the kilnDir path (line 1) and the self-assigned ts (line 2),
+    // then the folded and unfolded stdout must be byte-identical.
+    const onbLines = onb.stdout.split('\n').filter(Boolean)
+    assert.equal(onbLines.length, 2, 'onboard emits two lines — the init confirmation and the append event JSON')
+    const stripTs = (s) => s.replace(/"ts":"[^"]*"/, '"ts":"TS"')
+    const stripDir = (s, dir) => s.split(dir).join('KILN')
+    assert.equal(stripDir(onbLines[0], aKiln), stripDir(ini.stdout.trim(), bKiln), 'onboard line 1 is init\'s initialized-confirmation line verbatim (byte-shape parity)')
+    assert.equal(stripTs(onbLines[1]), stripTs(app.stdout.trim()), 'onboard line 2 is append\'s assigned-event JSON verbatim (byte-shape parity)')
+    assert.doesNotMatch(onb.stdout, /onboarded/, 'no novel "onboarded" line — the folded legs preserve the unfolded observable contract')
+  } finally { rmSync(a, { recursive: true, force: true }); rmSync(b, { recursive: true, force: true }) }
+})
+
 test('append: assigns seq + ts, echoes the event, and the projection folds it', () => {
   const dir = sandbox(); const kilnDir = join(dir, '.kiln')
   try {

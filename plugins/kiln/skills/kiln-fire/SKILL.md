@@ -50,9 +50,8 @@ advance. The operator session must stay pristine for the whole run.
    the weight system, Tier-1 banners, status symbols, transition lines, and idle voice).
 2. Read `$PLUGIN_ROOT/data/lore.json` (greetings + per-transition quotes) and
    `$PLUGIN_ROOT/data/spinner-verbs.json` (per-stage flavor for transition preambles and idle voice).
-   Read `$PLUGIN_ROOT/data/agents.json` (persona aliases + quotes), `$PLUGIN_ROOT/references/kill-streaks.md`
-   (build kill-streak names), and `$PLUGIN_ROOT/data/duo-pool.json` (the build builder/reviewer name matrix)
-   on demand when you reach the stage that needs them — not up front.
+   Read `$PLUGIN_ROOT/data/agents.json` (persona aliases + quotes) and `$PLUGIN_ROOT/data/duo-pool.json`
+   (the build builder/reviewer name matrix) on demand when you reach the stage that needs them — not up front.
 3. **Locate the run, then decide fresh-vs-resume.** Resolve the run directory in this order:
    - If the operator passed a **path argument** (`/kiln-fire <path>`), that is the run dir.
    - Else use the **session working directory** (where `claude` was launched).
@@ -175,25 +174,24 @@ surface and onboarding is cheap. Detect first, then confirm.
      anything now, but to **continue this run in a future session**, launch `claude` from inside that
      folder, or run `/kiln-fire <abs path>` from anywhere."*
 
-   Create `<project_path>/.kiln/` and `<project_path>/.kiln/docs/`. **Birth the run ledger** the
-   moment `.kiln/` exists (Bash):
-   `node $PLUGIN_ROOT/scripts/kiln-state.mjs init <project_path>/.kiln --project-path <project_path> --name <project_name> --type <project_type> --greenfield <true|false>`.
-   This writes `events.jsonl` (seq 1 = `run_init`) and its `state.json` projection — the
-   machine-first state bus the autonomous stages append to. It runs ONCE, here, at onboarding;
-   `init` REFUSES over a live `events.jsonl`, so a **resume never re-inits** — the resume path (the
-   *orient* section above) gates on the file already existing and routes to a stage handler, it does
-   not touch `init`. If the ledger append can't reach the CLI later, the stages degrade to log lines,
-   never a stage failure. Right after the init, **resolve the Claude council head** and append the
-   capability record. The head is resolved by a LIVE probe, not the bash doctor's config read (which is
-   REPORTING only): spawn ONE minimal **Fable-pinned Agent** (the `model: "fable"` param on the Agent
-   tool, exactly as the Da Vinci spawn below pins it) with a trivial echo task — a clean return proves
-   Fable is reachable ⇒ `claude_head: "fable"`; ANY spawn failure, model-unavailable error, or refusal ⇒
+   Create `<project_path>/.kiln/` and `<project_path>/.kiln/docs/`. First **resolve the Claude council
+   head** — resolved by a LIVE probe, not the bash doctor's config read (which is REPORTING only):
+   spawn ONE minimal **Fable-pinned Agent** (the `model: "fable"` param on the Agent tool, exactly as
+   the Da Vinci spawn below pins it) with a trivial echo task — a clean return proves Fable is
+   reachable ⇒ `claude_head: "fable"`; ANY spawn failure, model-unavailable error, or refusal ⇒
    `claude_head: "opus"` (the recorded succession — Opus 4.8 holds the council seat when Fable 5 is
-   unreachable, never silently). Then append the doctor capability record (the
-   `{tier, verification_class, probes, claude_head}` shape) via
-   `node $PLUGIN_ROOT/scripts/kiln-state.mjs append <project_path>/.kiln '{"type":"note","stage":"onboarding","data":{"kind":"capability","capability":{"tier":"<tier>","verification_class":"<class>","probes":{...},"claude_head":"<fable|opus>"}}}'`
-   — the record nests under `data.capability` (the projection reads `data.capability`, not the
-   flattened fields; `claude_head` is optional and validated ∈ {`fable`,`opus`}). Degrade to a log line if the CLI is unreachable, never a failure. For a **greenfield** project
+   unreachable, never silently). Then **birth the run ledger AND record the capability in ONE atomic
+   leg** the moment `.kiln/` exists (Bash):
+   `node $PLUGIN_ROOT/scripts/kiln-state.mjs onboard <project_path>/.kiln --project-path <project_path> --name <project_name> --type <project_type> --greenfield <true|false> --tier <tier> --verification-class <class> --probes '{...}' --claude-head <fable|opus>`.
+   This writes `events.jsonl` (seq 1 = `run_init`, seq 2 = the `capability` note) and its `state.json`
+   projection — the machine-first state bus the autonomous stages append to — assembling the nested
+   `data.capability` record INSIDE the CLI (no more hand-built nested JSON, no two-call sequencing).
+   `--claude-head` is OPTIONAL: omit it ⇒ no `claude_head` key (byte-compatible with pre-succession
+   ledgers); present ⇒ validated ∈ {`fable`,`opus`}. `--name` defaults to the path basename and
+   `--greenfield` to true. It runs ONCE, here, at onboarding; `onboard` REFUSES over a live
+   `events.jsonl`, so a **resume never re-onboards** — the resume path (the *orient* section above)
+   gates on the file already existing and routes to a stage handler, it does not touch `onboard`. If the
+   ledger append can't reach the CLI later, the stages degrade to log lines, never a stage failure. For a **greenfield** project
    with no `.git`, also run `git init -q` in `<project_path>` with a local identity fallback
    (`git config user.name >/dev/null || git config user.name "Kiln"`; `user.email` → `kiln@localhost`
    likewise) so every later codex call runs in-repo (the architecture-stage Law pre-flight stays as
@@ -514,12 +512,12 @@ Wait for completion, render *"The forge cools. The work remains."* and present t
   `kiln-state since <kilnDir> tail` at first capture (see the telegraph). The template now ships
   `schema_version: 3`; a pre-v3 STATE without the field is likewise uncaptured and is written forward
   as v3 on the next rewrite.
-- `build_iteration` increments per build milestone and `correction_cycle` per validation loop;
-  together they drive the kill-streak name off the 40-name ladder in
-  `$PLUGIN_ROOT/references/kill-streaks.md`: `ladder_position = max(build_iteration + correction_cycle, 1)`,
-  `kill_streak_index = (ladder_position - 1) % 40`. Read both from their `- **build_iteration**: N`
-  and `- **correction_cycle**: N` bullets; a missing/`pending`/non-integer field reads as 0, so a
-  fresh STATE fails soft to `first-blood`.
+- `build_iteration` increments per build milestone and `correction_cycle` per validation loop; they
+  drive the kill-streak name. Read both from their `- **build_iteration**: N` and
+  `- **correction_cycle**: N` bullets, then derive the name from the CLI —
+  `node $PLUGIN_ROOT/scripts/kiln-state.mjs killstreak --build-iteration <v> --correction-cycle <v>`
+  emits it (a missing/`pending`/non-integer value fails soft to 0, so a fresh STATE yields
+  `first-blood`). The 40-name ladder and the arithmetic live in `$PLUGIN_ROOT/references/kill-streaks.md`.
 - **The dual surface.** `STATE.md` is the conductor's human/resume register — the source of
   truth you rewrite here and read on resume. `state.json` is the *ledger's* projection of
   `events.jsonl` (rebuilt by `kiln-state project`), a machine-first mirror you never hand-edit. It is

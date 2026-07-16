@@ -748,13 +748,21 @@ test('runner downshift: the transcription seat is haiku at trivial posture and s
 // ── lever 3: pipelined next-milestone slicing + base_sha invalidation ─────────────────────────
 
 // Two single-slice logic milestones, each owning one Law SC. mkTwoMilestone keeps both lite-gate
-// (single-slice) so the gate is cheap; `headFn(label)` decides each thoth:head probe's sha.
+// (single-slice) so the gate is cheap. HEAD is no longer a dedicated thoth:head probe — the
+// pipelining base_sha/curHead come from lastHead, which the FRESHNESS leg advances on every trial;
+// `headFn(suffix)` decides the head reported by both the runner AND its freshness probe for a given
+// label suffix (they must agree or runnerGate rejects STALE), so a corrective commit's freshness is
+// what actually moves lastHead.
 const lawM1M2 = [{ id: 'SC-001', milestone: 'M1', kind: 'shell' }, { id: 'SC-002', milestone: 'M2', kind: 'shell' }]
 const twoMilestones = [milestone({ id: 'M1', surface: 'logic' }), milestone({ id: 'M2', title: 'Next', surface: 'logic' })]
+// the label suffix after the seat:beat prefix, e.g. 'asimov:runner:M1:s0:f0' → 'M1:s0:f0'
+const trialSuffix = (label) => label.split(':').slice(2).join(':')
 const mkPipeline = (headFn, extra) => mkRespond({}, (label, prompt, model) => {
   if (label.startsWith('asimov:law-read')) return { reasoning: 'r', locked: true, checks: lawM1M2 }
   if (label === 'confucius:parse') return { reasoning: 'r', milestones: twoMilestones }
-  if (label.startsWith('thoth:head')) return { reasoning: 'r', head: headFn(label) }
+  // runner + freshness heads must MATCH (runnerGate cross-checks fresh.head === runner.head)
+  if (label.startsWith('asimov:runner')) { const h = headFn(trialSuffix(label)); return { ...runnerOk, head: h } }
+  if (label.startsWith('thoth:freshness')) { const h = headFn(trialSuffix(label)); return { ...freshOk, head: h, manifest_head: h } }
   if (label.startsWith('krs-one:slice-plan')) {
     // each milestone's plan flips exactly its own SC
     return { reasoning: 'r', slices: [{ objective: label.includes(':M2') ? 'm2 work' : 'm1 work', files: [], constraints: '', done_when: 'works', sc_ids: label.includes(':M2') ? ['SC-002'] : ['SC-001'] }] }
@@ -763,16 +771,18 @@ const mkPipeline = (headFn, extra) => mkRespond({}, (label, prompt, model) => {
 })
 
 test('lever 3: M2\'s slice plan is cut SPECULATIVELY during M1\'s gate (a krs-one:slice-plan:M2 call fires before M2\'s own Scoring), and reused when HEAD never moved', async () => {
-  // HEAD constant across the run — no corrective commit — so the pipelined plan stays valid.
+  // HEAD constant across the run — no corrective commit — so the freshness heads stay equal and the
+  // pipelined plan stays valid. base_sha and curHead both read lastHead, which the freshness leg fed.
   const { calls, log } = await runBuild(baseArgs, mkPipeline(() => 'HEAD_STABLE'))
   const planLabels = labelsOf(calls, 'krs-one:slice-plan').map((c) => c.label)
   // exactly one M1 plan and one M2 plan — the M2 plan was the SPECULATIVE one, REUSED (not re-cut)
   assert.equal(planLabels.filter((l) => l.includes(':M1')).length, 1, 'one M1 slice plan')
   assert.equal(planLabels.filter((l) => l.includes(':M2')).length, 1, 'M2 planned exactly once — the speculative plan, reused')
-  // the base probe fires during M1's gate, the check probe at M2's head
-  assert.ok(labelsOf(calls, 'thoth:head:M1:pipeline-base').length === 1, 'base_sha anchored during M1\'s gate')
-  assert.ok(labelsOf(calls, 'thoth:head:M2:pipeline-check').length === 1, 'HEAD re-checked when M2 consumes the plan')
-  assert.ok(log.some((l) => /reusing the PIPELINED slice plan/.test(l)), 'M2 reused the pipelined plan')
+  // the dedicated HEAD probe is GONE — no thoth:head spawn survives, and the freshness spawn count
+  // is unchanged (one per trial: M1 + M2 = 2), so HEAD rode the probe that already ran.
+  assert.equal(labelsOf(calls, 'thoth:head').length, 0, 'the dedicated HEAD probe is eliminated — HEAD comes from the freshness leg')
+  assert.equal(count(calls, 'thoth:freshness'), 2, 'one freshness probe per trial — no extra spawns introduced')
+  assert.ok(log.some((l) => /reusing the PIPELINED slice plan \(cut during M1's gate; HEAD unchanged at HEAD_STABLE\)/.test(l)), 'M2 reused the pipelined plan against the HEAD the freshness leg reported')
   // ordering proof: the speculative M2 plan was issued BEFORE M2\'s own Scoring phase began
   const allLabels = calls.map((c) => c.label)
   const m2Plan = allLabels.indexOf('krs-one:slice-plan:M2')
@@ -780,40 +790,99 @@ test('lever 3: M2\'s slice plan is cut SPECULATIVELY during M1\'s gate (a krs-on
   assert.ok(m2Plan > -1 && m2Plan < m2Confirm, 'the M2 plan was cut speculatively, before M2\'s slice confirm')
 })
 
-test('lever 3 invalidation: a corrective commit moves HEAD between base_sha and consume → the pipelined plan is invalidated, M2 RE-SLICES, and slice_plan_invalidated is LEDGERED', async () => {
-  // base probe (during M1's gate) sees HEAD_BEFORE; the consume-time check sees HEAD_AFTER — a
-  // corrective commit moved it. M2 must re-slice and ledger the invalidation.
-  const headFn = (label) => label.includes('pipeline-base') ? 'HEAD_BEFORE' : 'HEAD_AFTER'
+// The invalidation drive needs a REAL corrective commit on M1 (the old test faked it via a
+// head-probe label). Give M1 two SCs so it reaches the tribunal; a blocking analyst on cycle 0 then
+// a clean re-gate on cycle 1 fires exactly one corrective build, whose freshness reports HEAD_AFTER
+// while M1's slice trials reported HEAD_BEFORE — so lastHead genuinely advances across a commit.
+const lawInval = [{ id: 'SC-001', milestone: 'M1', kind: 'shell' }, { id: 'SC-002', milestone: 'M1', kind: 'shell' }, { id: 'SC-003', milestone: 'M2', kind: 'shell' }]
+test('lever 3 invalidation: a real corrective commit on M1 advances lastHead through the freshness leg → base_sha≠curHead, the pipelined plan is invalidated, M2 RE-SLICES, slice_plan_invalidated LEDGERED', async () => {
+  // M1's slice trials + the tribunal cycle-0 gate see HEAD_BEFORE; the corrective build's trial sees
+  // HEAD_AFTER (the commit moved HEAD). M2's own trial also sees HEAD_AFTER.
+  const headFn = (sfx) => (sfx.includes('correct') || sfx.startsWith('M2')) ? 'HEAD_AFTER' : 'HEAD_BEFORE'
+  let kenCalls = 0
   let ledgered = null
-  const { calls, log } = await runBuild(baseArgs, mkPipeline(headFn, (label, prompt) => {
+  const blocking = { reasoning: 'r', overall: 'fail', findings: [{ text: 'M1 goal not met on the first pass', severity: 'critical' }] }
+  const { calls, log } = await runBuild(baseArgs, mkRespond({}, (label, prompt, model) => {
+    if (label.startsWith('asimov:law-read')) return { reasoning: 'r', locked: true, checks: lawInval }
+    if (label === 'confucius:parse') return { reasoning: 'r', milestones: twoMilestones }
+    if (label.startsWith('asimov:runner')) { const h = headFn(trialSuffix(label)); return { ...runnerOk, head: h } }
+    if (label.startsWith('thoth:freshness')) { const h = headFn(trialSuffix(label)); return { ...freshOk, head: h, manifest_head: h } }
+    if (label.startsWith('krs-one:slice-plan')) {
+      return label.includes(':M2')
+        ? { reasoning: 'r', slices: [{ objective: 'm2 work', files: [], constraints: '', done_when: 'works', sc_ids: ['SC-003'] }] }
+        : { reasoning: 'r', slices: [
+            { objective: 'm1 a', files: [], constraints: '', done_when: 'works', sc_ids: ['SC-001'] },
+            { objective: 'm1 b', files: [], constraints: '', done_when: 'works', sc_ids: ['SC-002'] },
+          ] }
+    }
+    if (label.startsWith('ken:qa')) { kenCalls++; return kenCalls === 1 ? blocking : qaClean }
     if (label === 'thoth:ledger' && /slice_plan_invalidated/.test(prompt)) { ledgered = prompt; return { ok: true } }
   }))
-  assert.ok(log.some((l) => /PIPELINED plan invalidated/.test(l)), 'M2 detected the moved HEAD')
+  // the corrective build fired (proves a real commit moved HEAD through the freshness leg)
+  assert.ok(calls.find((c) => c.label.includes(':build:M1:correct1')), 'one corrective build fired on M1')
+  assert.ok(labelsOf(calls, 'thoth:freshness:M1:correct1').length === 1, 'the corrective build ran its own trial + freshness — the head-advance source')
+  assert.equal(labelsOf(calls, 'thoth:head').length, 0, 'no dedicated HEAD probe anywhere')
+  assert.ok(log.some((l) => /PIPELINED plan invalidated/.test(l)), 'M2 detected the moved HEAD via lastHead')
   assert.ok(ledgered, 'slice_plan_invalidated was ledgered')
   assert.match(ledgered, /HEAD_BEFORE/)
   assert.match(ledgered, /HEAD_AFTER/)
   // M2 was planned TWICE: the (discarded) speculative cut + the fresh re-slice against the new HEAD
-  const m2Plans = labelsOf(calls, 'krs-one:slice-plan:M2')
-  assert.equal(m2Plans.length, 2, 'M2 re-sliced against the new HEAD after invalidation')
+  assert.equal(labelsOf(calls, 'krs-one:slice-plan:M2').length, 2, 'M2 re-sliced against the new HEAD after invalidation')
 })
 
-test('lever 3 fail-closed: an unreadable HEAD at consume time invalidates the pipelined plan (freshness cannot be proven → re-slice)', async () => {
-  // base probe returns a sha; the consume-time check returns '' (git failed) — fail closed.
-  const headFn = (label) => label.includes('pipeline-base') ? 'HEAD_X' : ''
-  const { calls, log } = await runBuild(baseArgs, mkPipeline(headFn))
-  assert.ok(log.some((l) => /PIPELINED plan invalidated/.test(l)), 'an unreadable HEAD forces a re-slice')
-  assert.equal(labelsOf(calls, 'krs-one:slice-plan:M2').length, 2, 'M2 re-sliced (fail-closed on the blank HEAD)')
+// The spec's fail-closed regression: nonempty base → a corrective commit whose freshness reports a
+// BLANK head ⇒ lastHead must CLEAR (not retain the pre-correction SHA), so M2's consume sees a blank
+// curHead and INVALIDATES the speculative plan. M1's slices report HEAD_BEFORE (so base_sha is the
+// nonempty HEAD_BEFORE and M2 IS speculated), then a real corrective commit fires whose freshness
+// cannot read HEAD (head:''). Under the buggy retain-on-blank rule curHead would stay HEAD_BEFORE ==
+// base ⇒ the stale plan is REUSED; under the fail-closed clear it invalidates. The corrective trial's
+// own reject does not gate the close (the analysts do — ken:qa clean at cycle 1), so M1 still closes
+// and M2 consumes: the exact distinguishing path.
+test('lever 3 fail-closed regression: a corrective commit whose freshness reports a BLANK head CLEARS lastHead → M2 consume sees a blank curHead ≠ nonempty base_sha, the pipelined plan is INVALIDATED (never reused), M2 RE-SLICES', async () => {
+  // M1 slices report HEAD_BEFORE; the corrective build's freshness (and runner) report '' (git
+  // unreadable after the commit); M2's own trial reports HEAD_AFTER. base_sha was cut at HEAD_BEFORE.
+  const headFn = (sfx) => sfx.includes('correct') ? '' : (sfx.startsWith('M2') ? 'HEAD_AFTER' : 'HEAD_BEFORE')
+  let kenCalls = 0
+  let ledgered = null
+  const blocking = { reasoning: 'r', overall: 'fail', findings: [{ text: 'M1 goal not met on the first pass', severity: 'critical' }] }
+  const { calls, log } = await runBuild(baseArgs, mkRespond({}, (label, prompt, model) => {
+    if (label.startsWith('asimov:law-read')) return { reasoning: 'r', locked: true, checks: lawInval }
+    if (label === 'confucius:parse') return { reasoning: 'r', milestones: twoMilestones }
+    if (label.startsWith('asimov:runner')) { const h = headFn(trialSuffix(label)); return { ...runnerOk, head: h } }
+    if (label.startsWith('thoth:freshness')) { const h = headFn(trialSuffix(label)); return { ...freshOk, head: h, manifest_head: h } }
+    if (label.startsWith('krs-one:slice-plan')) {
+      return label.includes(':M2')
+        ? { reasoning: 'r', slices: [{ objective: 'm2 work', files: [], constraints: '', done_when: 'works', sc_ids: ['SC-003'] }] }
+        : { reasoning: 'r', slices: [
+            { objective: 'm1 a', files: [], constraints: '', done_when: 'works', sc_ids: ['SC-001'] },
+            { objective: 'm1 b', files: [], constraints: '', done_when: 'works', sc_ids: ['SC-002'] },
+          ] }
+    }
+    if (label.startsWith('ken:qa')) { kenCalls++; return kenCalls === 1 ? blocking : qaClean }
+    if (label === 'thoth:ledger' && /slice_plan_invalidated/.test(prompt)) { ledgered = prompt; return { ok: true } }
+  }))
+  // the corrective build fired but its freshness was blank — lastHead must have CLEARED, not retained
+  assert.ok(calls.find((c) => c.label.includes(':build:M1:correct1')), 'one corrective build fired on M1')
+  assert.ok(labelsOf(calls, 'thoth:freshness:M1:correct1').length === 1, 'the corrective build ran its own freshness — the blank-head source')
+  assert.equal(labelsOf(calls, 'thoth:head').length, 0, 'no dedicated HEAD probe anywhere')
+  assert.ok(log.some((l) => /PIPELINED plan invalidated/.test(l)), 'M2 detected the unreadable HEAD via the CLEARED lastHead — a retained pre-correction SHA would have silently reused')
+  assert.ok(ledgered, 'slice_plan_invalidated was ledgered')
+  assert.match(ledgered, /HEAD_BEFORE/)
+  // M2 was planned TWICE: the (discarded) speculative cut + the fresh re-slice against the current HEAD
+  assert.equal(labelsOf(calls, 'krs-one:slice-plan:M2').length, 2, 'M2 re-sliced after the blank-head invalidation — the stale plan was NOT reused')
 })
 
-test('lever 3: a blank base_sha (the HEAD probe failed when anchoring) never starts the pipeline — M2 plans normally, once, no invalidation ledger', async () => {
-  // every head probe returns '' — the base anchor is blank, so the pipeline is never launched.
+test('lever 3 fail-closed: a blank HEAD from the freshness leg never starts the pipeline — lastHead stays \'\', base_sha is blank, speculation is skipped, M2 plans once, no invalidation ledger', async () => {
+  // every trial's freshness reports head:'' (git unreadable) — noteHead never advances lastHead off
+  // its '' default, so the base anchor is blank and the `if (base_sha)` guard skips speculation.
+  // (Under the shared-lastHead model, base_sha and curHead read the same variable, so a blank HEAD
+  // can only fail-close at the base capture — it never falsely reuses across an unproven HEAD.)
   let invalidatedLedger = false
   const { calls } = await runBuild(baseArgs, mkPipeline(() => '', (label, prompt) => {
     if (label === 'thoth:ledger' && /slice_plan_invalidated/.test(prompt)) { invalidatedLedger = true; return { ok: true } }
   }))
-  // the base probe ran (and returned blank), so NO speculative M2 plan was launched during M1's gate
   assert.equal(labelsOf(calls, 'krs-one:slice-plan:M2').length, 1, 'M2 planned exactly once — synchronously, the pipeline never started')
-  assert.equal(labelsOf(calls, 'thoth:head:M2:pipeline-check').length, 0, 'no consume-time check — there was no pipelined plan to consume')
+  assert.equal(labelsOf(calls, 'thoth:head').length, 0, 'no dedicated HEAD probe — the freshness leg is the only HEAD source')
   assert.equal(invalidatedLedger, false, 'a never-started pipeline produces no invalidation ledger')
 })
 
@@ -889,8 +958,7 @@ test('D3 wiring (bundled artifact): a HOT milestone HOLDS the next milestone\'s 
   assert.match(disabled, /"milestone":"M1"/)
   // the speculative M2 plan was NEVER cut during M1's gate — M2 plans exactly once, at its own head
   assert.equal(labelsOf(calls, 'krs-one:slice-plan:M2').length, 1, 'M2 planned exactly once — synchronously; no speculative cut was burned')
-  assert.equal(labelsOf(calls, 'thoth:head:M1:pipeline-base').length, 0, 'the base anchor never fired — the hold skips headSha entirely')
-  assert.equal(labelsOf(calls, 'thoth:head:M2:pipeline-check').length, 0, 'no consume-time check — there was no pipelined plan to consume')
+  assert.equal(labelsOf(calls, 'thoth:head').length, 0, 'the dedicated HEAD probe is gone — the hold skips the base capture entirely (lastHead read only if speculation admits)')
   // the beat rode the ledger, verbatim tail
   const beats = labelsOf(calls, 'thoth:ledger').filter((l) => /build\.speculation_held/.test(l.prompt))
   assert.equal(beats.length, 1, 'the build.speculation_held lore beat fires once')

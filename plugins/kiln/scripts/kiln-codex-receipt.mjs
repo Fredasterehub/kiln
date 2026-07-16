@@ -1207,9 +1207,11 @@ function findingSetKey(verdict) {
 }
 
 // The ladder arithmetic, derived from artifacts. Decision order: keystone ⇒
-// council FIRST; then the convergence oracle (unchanged finding set OR unchanged diff vs the prior
-// row — REGARDLESS of verdict, so it precedes the APPROVED seal); then APPROVED ⇒ seal; then the
-// substantive count and rung legality. The r3 rung is legal ONLY with a valid singleton scope artifact.
+// council FIRST; then APPROVED ⇒ seal; then the convergence oracle (a REJECTED round whose finding set
+// OR diff repeats the prior row). The APPROVED seal precedes the oracle so a chain-verified APPROVED
+// always seals — the oracle fires only on a genuinely stuck REJECTION loop, never on a multi-confirm
+// that converges over one frozen diff (the b42 false-fire class). Then the substantive count and rung
+// legality. The r3 rung is legal ONLY with a valid singleton scope artifact.
 function routeGate({ round, diffSha, keystone, ledgerRows, scopeArtifactFile, verdict, batchId, schemaBytes }) {
   const key = findingSetKey(verdict)
   // the ladder is per-batch. Prior rounds are the route-ledger rows FOR THIS batch_id —
@@ -1240,9 +1242,22 @@ function routeGate({ round, diffSha, keystone, ledgerRows, scopeArtifactFile, ve
 
   let next, why
   if (keystone) { next = 'twin-council'; why = 'keystone — council path from the start' }
-  else if (priorLast && (priorLast.finding_set_key === key || priorLast.diff_sha256 === diffSha)) {
-    next = 'twin-council'; why = 'convergence oracle (unchanged finding set or unchanged diff vs the prior round)'
-  } else if (verdict.verdict === 'APPROVED') { next = 'seal'; why = 'APPROVED — dual-key and seal' }
+  // APPROVED seals FIRST — a chain-verified APPROVED is a CONVERGED round, never a stuck loop, so it
+  // must never be diverted to council by the oracle even when its (empty) finding set or its diff
+  // repeats a prior confirm round (the b42 multi-confirm-over-one-frozen-diff false-fire).
+  else if (verdict.verdict === 'APPROVED') { next = 'seal'; why = 'APPROVED — dual-key and seal' }
+  // The convergence oracle fires only on TWO CONSECUTIVE REJECTED rounds (A13) whose finding set OR
+  // diff repeats — the anti-loop rail for a rejection that is not making progress. The current round
+  // is already REJECTED here (the APPROVED branch sealed above), so the guard adds the prior round:
+  // priorLast.verdict must ALSO be REJECTED AND priorLast.round must be round - 1 (round adjacency).
+  // "Consecutive" is a claim about ROUNDS, not merely about the last recorded row — an r1 REJECTED
+  // with the r2 row absent and the current round r3 is NOT two consecutive rejections, so the oracle
+  // must not fire on it. A prior APPROVED followed by a REJECTED over the same key/diff is likewise
+  // NOT a stuck loop — it is a regression the ladder must route as a fresh rejection, not divert to
+  // council.
+  else if (priorLast && priorLast.verdict === 'REJECTED' && priorLast.round === round - 1 && (priorLast.finding_set_key === key || priorLast.diff_sha256 === diffSha)) {
+    next = 'twin-council'; why = 'convergence oracle (two consecutive REJECTED rounds; unchanged finding set or unchanged diff vs the prior round)'
+  }
   else if (substantiveCount >= 3) { next = 'twin-council'; why = '3rd SUBSTANTIVE rejection — correction escalation' }
   else if (round === 1) { next = 'implement-r2'; why = 'r1 REJECTED — author the self-contained r2 fix brief' }
   // round-2 REJECTED (non-oracle, non-3rd-substantive) ALWAYS routes to the joint-heads

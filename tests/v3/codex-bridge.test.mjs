@@ -623,15 +623,91 @@ test('gate: a keystone stage takes the council path from the start (exit 30) reg
   } finally { rmSync(fx.dir, { recursive: true, force: true }) }
 })
 
-test('gate: the convergence oracle precedes the APPROVED seal — an unchanged finding set escalates even on APPROVED', () => {
+test('gate: the APPROVED seal precedes the convergence oracle — a chain-verified APPROVED with a repeated key/diff SEALS, not escalates (the b42 multi-confirm regression)', () => {
   const fx = gateFixture({ mode: 'approved' })
   try {
     // an APPROVED verdict has empty findings → finding_set_key '[]'. Seed a prior round (same batch_id)
-    // with the same key.
-    writeFileSync(fx.routeLedger, JSON.stringify({ batch_id: 'batch-x', round: 1, verdict: 'APPROVED', finding_set_key: JSON.stringify([]), diff_sha256: 'other-sha', substantive: false, decision: 'implement-r2' }) + '\n')
+    // carrying the SAME empty key AND the SAME diff — the pre-Fix-A oracle diverted exactly this to
+    // council even though every round was a chain-verified APPROVED (the b42 CONVERGED-SUCCESSFULLY case).
+    writeFileSync(fx.routeLedger, JSON.stringify({ batch_id: 'batch-x', round: 1, verdict: 'APPROVED', finding_set_key: JSON.stringify([]), diff_sha256: fx.diffSha, substantive: false, decision: 'implement-r2' }) + '\n')
     const g = runGate(fx, writeManifest(fx.dir), { round: '2' })
-    assert.equal(g.status, 30, g.stderr) // twin-council, NOT seal — the oracle runs regardless of verdict
+    assert.equal(g.status, 0, g.stderr) // seal, NOT twin-council — a converged APPROVED seals FIRST
+    assert.match(g.stdout, /DECISION:seal/)
+  } finally { rmSync(fx.dir, { recursive: true, force: true }) }
+})
+
+test('gate G1: the convergence oracle STILL fires on a repeated REJECTED finding set — a round-2 rejection whose blocking set repeats the prior row escalates to twin-council (exit 30)', () => {
+  const fx = gateFixture() // default REJECTED (F-1 BLOCKING NEW_DECISION)
+  try {
+    const key = JSON.stringify([['F-1', 'BLOCKING', 'NEW_DECISION']]) // findingSetKey of the default rejection
+    writeFileSync(fx.routeLedger, JSON.stringify({ batch_id: 'batch-x', round: 1, verdict: 'REJECTED', finding_set_key: key, diff_sha256: 'other-sha', substantive: true, decision: 'implement-r2' }) + '\n')
+    const g = runGate(fx, writeManifest(fx.dir), { round: '2' })
+    assert.equal(g.status, 30, g.stderr) // the anti-loop rail is intact for a stuck rejection
     assert.match(g.stdout, /DECISION:twin-council/)
+  } finally { rmSync(fx.dir, { recursive: true, force: true }) }
+})
+
+test('gate G2 (Fix A): the oracle still fires on a repeated DIFF even when the finding set changed — a REJECTED round 2 over the same diff escalates (exit 30)', () => {
+  const fx = gateFixture() // default REJECTED
+  try {
+    // prior row: DIFFERENT finding set, but the SAME diff_sha256 — Fix A keeps the unchanged-diff clause.
+    writeFileSync(fx.routeLedger, JSON.stringify({ batch_id: 'batch-x', round: 1, verdict: 'REJECTED', finding_set_key: JSON.stringify([['F-OTHER', 'BLOCKING', 'NEW_DECISION']]), diff_sha256: fx.diffSha, substantive: true, decision: 'implement-r2' }) + '\n')
+    const g = runGate(fx, writeManifest(fx.dir), { round: '2' })
+    assert.equal(g.status, 30, g.stderr)
+    assert.match(g.stdout, /DECISION:twin-council/)
+  } finally { rmSync(fx.dir, { recursive: true, force: true }) }
+})
+
+test('gate G3 (A13): the oracle does NOT fire when the prior round was APPROVED — an APPROVED→REJECTED over the SAME diff is a regression, not a stuck loop, so r2 routes to confirm-each-or-escalate (exit 22), never twin-council', () => {
+  const fx = gateFixture() // default REJECTED (F-1 BLOCKING NEW_DECISION)
+  try {
+    // prior row is APPROVED over the SAME diff_sha256 as the current REJECTED round. Absent the
+    // priorLast.verdict==='REJECTED' guard, the unchanged-diff clause would divert this to council;
+    // A13 requires BOTH consecutive rounds REJECTED, so the oracle stays silent and the ladder routes
+    // the round-2 rejection normally.
+    writeFileSync(fx.routeLedger, JSON.stringify({ batch_id: 'batch-x', round: 1, verdict: 'APPROVED', finding_set_key: JSON.stringify([]), diff_sha256: fx.diffSha, substantive: false, decision: 'implement-r2' }) + '\n')
+    const g = runGate(fx, writeManifest(fx.dir), { round: '2' })
+    assert.equal(g.status, 22, g.stderr) // confirm-each-or-escalate — NOT the twin-council (30) the oracle would force
+    assert.match(g.stdout, /DECISION:confirm-each-or-escalate/)
+  } finally { rmSync(fx.dir, { recursive: true, force: true }) }
+})
+
+test('gate G4: the exact b42 shape — a round-3 APPROVED (empty findings) over a frozen diff, with a valid singleton scope artifact and a prior same-batch row carrying the same key/diff, SEALS (exit 0)', () => {
+  const fx = gateFixture({ mode: 'approved' })
+  try {
+    // r3 legality needs a valid singleton scope whose sol_verdict_path is a schema-valid A2 verdict
+    // carrying the surviving id as BLOCKING; the CURRENT APPROVED verdict has an EMPTY blocking set, so
+    // the ⊆ {F-1} precondition is vacuously satisfied.
+    const solV = join(fx.dir, 'f1.verdict')
+    writeFileSync(solV, JSON.stringify({ findings: [{ id: 'F-1', class: 'BLOCKING', remedy_class: 'NEW_DECISION', location: 'l', defect: 'd', evidence: 'e' }], verdict: 'REJECTED', notes: 'n' }))
+    const scope = join(fx.dir, 'scope.json')
+    writeFileSync(scope, JSON.stringify({ surviving_blocking_id: 'F-1', sol_verdict_path: solV, fable_concurrence: true }))
+    writeFileSync(fx.routeLedger, JSON.stringify({ batch_id: 'batch-x', round: 1, verdict: 'APPROVED', finding_set_key: JSON.stringify([]), diff_sha256: fx.diffSha, substantive: false, decision: 'implement-r2' }) + '\n')
+    const g = runGate(fx, writeManifest(fx.dir), { round: '3', extra: ['--scope-artifact', scope] })
+    assert.equal(g.status, 0, g.stderr) // APPROVED seals first, even at r3 over a repeated key/diff
+    assert.match(g.stdout, /DECISION:seal/)
+  } finally { rmSync(fx.dir, { recursive: true, force: true }) }
+})
+
+test('gate G5 (A13 round adjacency): the oracle does NOT fire on a round GAP — a current r3 REJECTED with a matching r1 REJECTED row but NO r2 row is not two CONSECUTIVE rejections, so it routes to microfix-r3 (exit 21), never twin-council (Sol\'s r1→r3 counterexample)', () => {
+  const fx = gateFixture() // default REJECTED (F-1 BLOCKING NEW_DECISION)
+  try {
+    // Sol's exact counterexample: only a matching r1 REJECTED row on the ledger — the r2 row is ABSENT.
+    // priorLast is the r1 row, its verdict is REJECTED and its finding_set_key/diff match the current r3
+    // verdict, so absent the priorLast.round===round-1 guard the oracle would (wrongly) divert this to
+    // council despite the missing r2. With round adjacency enforced, priorLast.round (1) !== round-1 (2),
+    // so the oracle stays silent and the ladder routes the r3 rejection on its surviving item.
+    const key = JSON.stringify([['F-1', 'BLOCKING', 'NEW_DECISION']]) // findingSetKey of the default rejection
+    writeFileSync(fx.routeLedger, JSON.stringify({ batch_id: 'batch-x', round: 1, verdict: 'REJECTED', finding_set_key: key, diff_sha256: fx.diffSha, substantive: true, decision: 'implement-r2' }) + '\n')
+    // r3 legality needs a valid singleton scope whose sol_verdict_path is a schema-valid A2 verdict
+    // carrying the surviving id as BLOCKING; the current REJECTED blocking set {F-1} ⊆ {F-1}.
+    const solV = join(fx.dir, 'f1.verdict')
+    writeFileSync(solV, JSON.stringify({ findings: [{ id: 'F-1', class: 'BLOCKING', remedy_class: 'NEW_DECISION', location: 'l', defect: 'd', evidence: 'e' }], verdict: 'REJECTED', notes: 'n' }))
+    const scope = join(fx.dir, 'scope.json')
+    writeFileSync(scope, JSON.stringify({ surviving_blocking_id: 'F-1', sol_verdict_path: solV, fable_concurrence: true }))
+    const g = runGate(fx, writeManifest(fx.dir), { round: '3', extra: ['--scope-artifact', scope] })
+    assert.equal(g.status, 21, g.stderr) // microfix-r3 — NOT the twin-council (30) the gap-blind oracle forced
+    assert.match(g.stdout, /DECISION:microfix-r3/)
   } finally { rmSync(fx.dir, { recursive: true, force: true }) }
 })
 

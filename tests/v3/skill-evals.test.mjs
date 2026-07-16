@@ -252,8 +252,9 @@ test('scenario 2: the plan-approval gate and STATE.md discipline sections surviv
 })
 
 test('scenario 3: onboarding still births the ledger, the two-world rule holds, and the reference is pointed to once', () => {
-  // The ledger-init step (kiln-state.mjs init) is the machine-first state bus birth — it must survive.
-  assert.match(fireSrc, /kiln-state\.mjs init/, 'the ledger-init (kiln-state.mjs init) step is gone')
+  // The ledger-birth step is the machine-first state bus birth — it must survive. Onboarding now
+  // births the ledger + the capability note in ONE atomic leg (kiln-state.mjs onboard, item 13).
+  assert.match(fireSrc, /kiln-state\.mjs onboard/, 'the ledger-birth step (kiln-state.mjs onboard) is gone')
   // The two-world rule / files-are-the-bus contract.
   assert.match(fireSrc, /Files are the bus/i, 'the "files are the bus" rule is gone')
   // The per-stage arg prose moved to a single one-level-deep reference the body points to.

@@ -1361,14 +1361,25 @@ function denzelReconcile(repA, repB) {
 // ── Ledger: posture + sweep + verdict events into events.jsonl via the kiln-state
 //    CLI. Only called when pluginRoot is known (the CLI path is resolvable); absence degrades the
 //    append to a no-op log line, never a thrown stage. ──
-async function ledger(type, data) {
-  if (!pluginRoot) { log(`(ledger skipped — pluginRoot absent) ${type}`); return }
+// appendCommand mints the EXACT workflow-authored `kiln-state append` command (never agent-authored
+// JSON) — so both the standalone ledger spawn and a folded lease leg emit a BYTE-IDENTICAL command.
+const appendCommand = (type, data) => {
+  if (!pluginRoot) return null
   const ev = JSON.stringify({ type, stage: 'validate', data })
+  return `node ${pluginRoot}/scripts/kiln-state.mjs append ${kilnDir} '${ev.replace(/'/g, `'\\''`)}'`
+}
+// opts.defer ⇒ RETURN the minted command (or null when pluginRoot is absent) instead of spawning a
+// thoth:ledger agent — the lease legs fold that command into their OWN kiln-probe spawn, saving one
+// haiku spawn per event while keeping the event content + ordering identical.
+async function ledger(type, data, opts = {}) {
+  if (!pluginRoot) { if (opts.defer) return null; log(`(ledger skipped — pluginRoot absent) ${type}`); return }
+  const cmd = appendCommand(type, data)
+  if (opts.defer) return cmd
   await agent(
     `You are Thoth, the scribe — "write it down or it never happened". Append ONE event to the Kiln run ledger.\n\n` +
     `<task>Run this exact command (Bash), substituting the JSON verbatim — do not edit it:\n` +
     '```\n' +
-    `node ${pluginRoot}/scripts/kiln-state.mjs append ${kilnDir} '${ev.replace(/'/g, `'\\''`)}'\n` +
+    `${cmd}\n` +
     '```\n' +
     `If it exits non-zero (e.g. no events.jsonl yet — the run was not initialised), report the error in your summary; do NOT create or repair any file. Report only whether the append succeeded.</task>`,
     { label: 'thoth:ledger', phase: 'The Verdict', model: 'haiku' }
@@ -1474,29 +1485,33 @@ async function stageSweep(when) {
 async function leaseTake() {
   if (!pluginRoot) { log('(browser lease skipped — pluginRoot absent; no scripted oracle to lease)'); return }
   const seconds = Math.max(1, Math.ceil(TRAVERSAL_DEADLINE_MS / 1000))
+  // Fold the browser_lease ledger append into THIS spawn: one haiku runs the lease + the append.
+  const appendCmd = await ledger('browser_lease', { stage: 'validate', action: 'take', token: VALIDATE_RUN_TOKEN, seconds }, { defer: true })
   await agent(
     `You are the lease-taker — you authorize the Tier-2 browser capability for a bounded window, then report. You never launch a browser, never edit, never judge.\n\n` +
-    `<task>Run this exact command (Bash):\n` +
+    `<task>Run these TWO exact commands in order (Bash):\n` +
     '```\n' +
     `node ${pluginRoot}/scripts/kiln-probe.mjs lease ${kilnDir} ${VALIDATE_RUN_TOKEN} ${VALIDATE_RUN_TOKEN} ${seconds}\n` +
+    `${appendCmd}\n` +
     '```\n' +
-    `It writes the browser lease (token '${VALIDATE_RUN_TOKEN}', a ${seconds}s expiry) and spawns a detached self-terminating watchdog that sweeps the token + deletes the lease at expiry. The Tier-2 evaluator's scripted probes run with '--lease ${VALIDATE_RUN_TOKEN}' and refuse (exit 77) once it expires — that is how the ≤10-min cap is enforced on the capability. It ALWAYS exits 0. Transcribe the 'LEASE …' line it prints. Do not run anything else.</task>`,
+    `The FIRST writes the browser lease (token '${VALIDATE_RUN_TOKEN}', a ${seconds}s expiry) and spawns a detached self-terminating watchdog that sweeps the token + deletes the lease at expiry. The Tier-2 evaluator's scripted probes run with '--lease ${VALIDATE_RUN_TOKEN}' and refuse (exit 77) once it expires — that is how the ≤10-min cap is enforced on the capability. It ALWAYS exits 0. Transcribe the 'LEASE …' line it prints. The SECOND appends one ledger event best-effort — if it exits non-zero, report it and do not repair. Do not run anything else.</task>`,
     { label: 'sentinel:lease-take', phase: 'The Traversal', model: 'haiku' }
   )
-  await ledger('browser_lease', { stage: 'validate', action: 'take', token: VALIDATE_RUN_TOKEN, seconds })
 }
 async function leaseRelease() {
   if (!pluginRoot) { log('(browser lease-release skipped — pluginRoot absent)'); return }
+  // Fold the browser_lease release append into THIS spawn: one haiku runs the release + the append.
+  const appendCmd = await ledger('browser_lease', { stage: 'validate', action: 'release', token: VALIDATE_RUN_TOKEN }, { defer: true })
   await agent(
-    `You are the lease-releaser — the stage-end teardown of the bounded-browser capability. You run the cleanup command below and report; you never launch a browser, never edit, never judge.\n\n` +
-    `<task>Run this exact command (Bash):\n` +
+    `You are the lease-releaser — the stage-end teardown of the bounded-browser capability. You run the cleanup commands below and report; you never launch a browser, never edit, never judge.\n\n` +
+    `<task>Run these TWO exact commands in order (Bash):\n` +
     '```\n' +
     `node ${pluginRoot}/scripts/kiln-probe.mjs lease-release ${kilnDir} ${VALIDATE_RUN_TOKEN}\n` +
+    `${appendCmd}\n` +
     '```\n' +
-    `It kills the lease watchdog (teardown is now, not at the deadline), sweeps the '${VALIDATE_RUN_TOKEN}' browser trees, and deletes the lease file — so no Tier-2 browser outlives this stage and no stale lease blocks a later run. It ALWAYS exits 0. Transcribe the 'LEASE_RELEASE …' line it prints. Do not run anything else.</task>`,
+    `The FIRST kills the lease watchdog (teardown is now, not at the deadline), sweeps the '${VALIDATE_RUN_TOKEN}' browser trees, and deletes the lease file — so no Tier-2 browser outlives this stage and no stale lease blocks a later run. It ALWAYS exits 0. Transcribe the 'LEASE_RELEASE …' line it prints. The SECOND appends one ledger event best-effort — if it exits non-zero, report it and do not repair. Do not run anything else.</task>`,
     { label: 'sentinel:lease-release', phase: 'The Traversal', model: 'haiku' }
   )
-  await ledger('browser_lease', { stage: 'validate', action: 'release', token: VALIDATE_RUN_TOKEN })
 }
 
 // ── Prompt builders ──

@@ -535,9 +535,12 @@ test('arch dry-run drill: a crashing check is BLOCKED from lock — fix cycles e
   assert.match(revise, /SC-001: KeyError-class crash/)
   assert.match(revise, /never touch product code/)
   assert.match(revise, /keep lock_commit\s+null and every sha256 map EMPTY/)
-  // the revise brief carries the twin-sync duty — a spec edit regenerates the on-disk twin
-  assert.match(revise, /regenerate the on-disk twin/)
+  // the revise brief carries the unified twin-sync duty — a spec edit regenerates the matching on-disk twin
+  assert.match(revise, /regenerate the matching on-disk twin/)
   assert.match(revise, /<sc-id>\.probe\.json/)
+  // item 8: the check-revision path now ALSO carries the accessible-name rule (the gap it closes — a
+  // probe-spec edit via the twin-desync path must keep the role+name invariant)
+  assert.match(revise, /ACCESSIBLE NAME — role AND name, both nonempty/)
 })
 
 test('arch dry-run fix cycle: broken on pass 1, clean on pass 2 — revision then re-dryrun then lock', async () => {
@@ -695,4 +698,19 @@ test('arch law-revise drill: a scribe reporting violations WITH a transcript rou
   assert.equal(result.law_locked, true, 'the normal gate ran')
   assert.ok(labels(calls).includes('athena:dryrun:r0'), 'Athena rules the executed transcript')
   assert.ok(!labels(calls).some((x) => x.startsWith('asimov:law-revise')), 'no law-revise when checks actually executed')
+})
+
+// ── probe-twin prompt unification (situation-map §6 item 8): the two Law-compiler invariants live in
+//    single-source consts, spliced per each site's genuine semantics — A carries the accessible-name
+//    rule only (initial authoring writes both twins, nothing to regenerate), B and C carry BOTH (C
+//    gaining the name rule closes the prior gap). This static guard pins the de-duplication AND the
+//    intended asymmetry so a future edit that re-copies or mis-places a rule fails CI. ──
+test('probe-twin unification: ACCESSIBLE_NAME_RULE + TWIN_SYNC_RULE are single-source consts, spliced with the intended site asymmetry', () => {
+  const SRC = readFileSync(fileURLToPath(new URL('../../plugins/kiln/workflows-src/architecture.js', import.meta.url)), 'utf8')
+  assert.equal((SRC.match(/const ACCESSIBLE_NAME_RULE =/g) || []).length, 1, 'ACCESSIBLE_NAME_RULE defined exactly once')
+  assert.equal((SRC.match(/const TWIN_SYNC_RULE =/g) || []).length, 1, 'TWIN_SYNC_RULE defined exactly once')
+  assert.equal((SRC.match(/\$\{ACCESSIBLE_NAME_RULE\}/g) || []).length, 3, 'the accessible-name rule rides all three compile sites (A, B, C)')
+  assert.equal((SRC.match(/\$\{TWIN_SYNC_RULE\}/g) || []).length, 2, 'the twin-sync rule rides B and C only — never site A')
+  assert.equal((SRC.match(/a schema violation that blocks the lock/g) || []).length, 1, 'the schema-violation clause survives once — only inside the const')
+  assert.equal((SRC.match(/the lock attests the twin; they must never diverge/g) || []).length, 1, 'the twin-sync invariant tail survives once — only inside the const')
 })

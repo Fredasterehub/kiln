@@ -11,6 +11,8 @@ Read `build_iteration` from STATE.md's `- **build_iteration**: N` bullet and `co
 
 Past position 40 the sequence wraps back to `first-blood` (#1) and the arc begins again — exactly what the formula yields.
 
+`kiln-state killstreak --build-iteration <n> --correction-cycle <n>` applies exactly this arithmetic over this ladder and emits the name — this doc explains it, the CLI executes it.
+
 ## Chapter I — Ignition (1-5)
 
 | # | Name | Source |
