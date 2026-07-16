@@ -179,6 +179,65 @@ module.exports = {
 }
 `
 
+// FETCHING_FAKE_PLAYWRIGHT — the deadlock-class variant. The default fake above returns 200 from
+// goto() WITHOUT touching the network, so it never exercises the parent's in-process static server
+// — which is exactly why the suite never caught the event-loop deadlock. THIS fake's goto() does a
+// REAL fetch against the served base URL and reports the true HTTP status: if the wrapper blocks its
+// own event loop while the template runs (the old spawnSync), the parent server can never answer and
+// the child's nav fails — a re-introduced block turns this from a pass into a red, never a false pass.
+const FETCHING_FAKE_PLAYWRIGHT = `'use strict'
+const { writeFileSync, mkdirSync } = require('fs')
+module.exports = {
+  chromium: {
+    async launchPersistentContext(dir, opts) {
+      mkdirSync(dir, { recursive: true })
+      const locator = {
+        first() { return this },
+        async waitFor() {},
+        async click() {},
+        async fill() {},
+        async press() {},
+      }
+      const page = {
+        setDefaultTimeout() {},
+        on() {},
+        async goto(url) {
+          const resp = await fetch(url, { signal: AbortSignal.timeout(5000) })
+          return { status: () => resp.status }
+        },
+        getByRole() { return locator },
+        keyboard: { async press() {} },
+        async addScriptTag() {},
+        async evaluate() { return [] },
+        async screenshot({ path }) { writeFileSync(path, 'FAKEPNG') },
+      }
+      return { pages() { return [page] }, async newPage() { return page }, async close() {} }
+    },
+  },
+}
+`
+
+// FLOODING_FAKE_PLAYWRIGHT — the maxBuffer-overflow variant (SOL-R1-MAXBUFFER-PARITY). Its
+// launchPersistentContext floods 20 MiB to the template's OWN process.stdout, overrunning the parent
+// execFile's 16 MiB maxBuffer. execFile then SIGKILLs the child and rejects with
+// e.code=ERR_CHILD_PROCESS_STDIO_MAXBUFFER and NO signal (e.signal/e.killed undefined — verified live
+// on Node v22.21.0), the exact fingerprint legacy spawnSync surfaced as signal=SIGKILL. It hangs after
+// the flood, so the OVERFLOW is the sole terminator — with a generous deadline the wall-clock never
+// fires, and the run's sub-deadline duration proves the overflow, not the deadline, killed it.
+const FLOODING_FAKE_PLAYWRIGHT = `'use strict'
+const { mkdirSync } = require('fs')
+module.exports = {
+  chromium: {
+    async launchPersistentContext(dir) {
+      mkdirSync(dir, { recursive: true })
+      const chunk = 'x'.repeat(1024 * 1024)
+      for (let i = 0; i < 20; i++) process.stdout.write(chunk) // 20 MiB > the 16 MiB maxBuffer
+      await new Promise(() => { setInterval(() => {}, 60000) }) // hang: ONLY the overflow kill ends this
+    },
+  },
+}
+`
+
 // makeProbeFixture — a tmp project with an index.html, a probe-carrying law.json (pre-lock is
 // schema-valid — kiln-probe run does not require a lock; the TAMPER anchoring lives in kiln-law,
 // the gated path), the locked-artifact spec file, and (by default) the fake playwright installed
@@ -349,6 +408,66 @@ test('kiln-probe run (serve_cmd never ready): bounded readiness window, mapped f
     spawnSync('pkill', ['-9', '-f', tag], { stdio: 'ignore' })
     rmSync(proj, { recursive: true, force: true })
   }
+})
+
+test('kiln-probe run (static serve, real page fetch): the in-process node:http server answers the child WHILE the template runs — no event-loop deadlock (exit 0, mapped pass)', () => {
+  // REGRESSION (probe-static-deadlock, operator live-run): on the STATIC path kiln-probe starts an
+  // IN-PROCESS node:http server, then runs the probe template. If that template invocation blocks the
+  // parent's own event loop (the old spawnSync), the server can never accept/answer the child's page
+  // request — every static-served probe hangs to the SIGKILL deadline (exit 79). The default fake
+  // returns 200 WITHOUT fetching, so it never exercised the server; this fake's goto() does a REAL
+  // fetch against the served URL, so a re-introduced block makes the nav fail (never a false pass).
+  // KILN_PROBE_TIMEOUT_S=8 so a regression fails in seconds, not 90.
+  const spec = baseSpec({ serve_dir: 'public' })
+  const { proj, kiln } = makeProbeFixture({ fakePw: false, spec })
+  mkdirSync(join(proj, 'public'), { recursive: true })
+  writeFileSync(join(proj, 'public', 'index.html'), '<!doctype html><html><body><h1>Hello Kiln</h1><button>Add</button></body></html>\n')
+  const pwDir = join(proj, 'node_modules', 'playwright')
+  mkdirSync(pwDir, { recursive: true })
+  writeFileSync(join(pwDir, 'package.json'), JSON.stringify({ name: 'playwright', version: '0.0.0-kiln-fake', main: 'index.js' }) + '\n')
+  writeFileSync(join(pwDir, 'index.js'), FETCHING_FAKE_PLAYWRIGHT)
+  try {
+    const t0 = Date.now()
+    const res = probeCli(['run', proj, kiln, 'SC-001', 'run1'], { KILN_FAKE_PW_MODE: 'pass', KILN_PROBE_TIMEOUT_S: '8' })
+    assert.equal(res.status, 0, `a static-served probe must PASS, not deadlock on the frozen server: exit ${res.status}\n${res.stdout}${res.stderr}`)
+    assert.ok(Date.now() - t0 < 8000, 'the live event loop answered the child fetch — the run did not ride the timeout deadline')
+    assert.match(res.stdout, /^PROBE SC-001 exit=0 mapped=pass/m)
+    const ev = probeEvidence(kiln, 'run1')
+    assert.equal(ev.served, 'static')
+    assert.equal(ev.mapped, 'pass')
+    assert.equal(ev.exit, 0)
+    assert.equal(ev.template_exit, 0, 'a clean template exit maps to 0 through the async execFile path exactly as spawnSync did')
+    assert.equal(ev.result.ok, true, 'the child actually reached the served page and asserted against a real 200')
+  } finally { rmSync(proj, { recursive: true, force: true }) }
+})
+
+test('kiln-probe run (stdout overflow): a template flooding past the 16 MiB maxBuffer is SIGKILLed by execFile (code ERR_CHILD_PROCESS_STDIO_MAXBUFFER, no signal) and mapped to exit 79 timeout / template_exit null — legacy spawnSync parity, never a false exit 1/fail (SOL-R1-MAXBUFFER-PARITY)', () => {
+  // REGRESSION (Sol r1): async execFile reports OUTPUT OVERFLOW as e.code=ERR_CHILD_PROCESS_STDIO_
+  // MAXBUFFER WITHOUT a signal (verified live on Node v22.21.0: e.signal/e.killed undefined), so a
+  // predicate keyed only on signal===SIGKILL||code===ETIMEDOUT misroutes the overflow kill to exit
+  // 1/fail. spawnSync exposed signal=SIGKILL for the very same overflow, so the honest mapping is the
+  // 79/infra timeout class. KILN_PROBE_TIMEOUT_S=20 is generous so the OVERFLOW — not the deadline —
+  // is the terminator; the sub-deadline duration asserted below is what proves it (a re-introduced
+  // misclassification that let the fake ride the 20s deadline would still read 79, so duration is the
+  // load-bearing witness that OVERFLOW, not the wall-clock, produced the 79).
+  const { proj, kiln } = makeProbeFixture({ fakePw: false })
+  const pwDir = join(proj, 'node_modules', 'playwright')
+  mkdirSync(pwDir, { recursive: true })
+  writeFileSync(join(pwDir, 'package.json'), JSON.stringify({ name: 'playwright', version: '0.0.0-kiln-fake', main: 'index.js' }) + '\n')
+  writeFileSync(join(pwDir, 'index.js'), FLOODING_FAKE_PLAYWRIGHT)
+  try {
+    const t0 = Date.now()
+    const res = probeCli(['run', proj, kiln, 'SC-001', 'run1'], { KILN_FAKE_PW_MODE: 'pass', KILN_PROBE_TIMEOUT_S: '20' })
+    const elapsed = Date.now() - t0
+    assert.equal(res.status, 79, `an output-overflow kill must map to 79, not a false exit 1/fail: exit ${res.status}\n${res.stdout}${res.stderr}`)
+    assert.ok(elapsed < 10000, `the OVERFLOW terminated the run, not the 20s deadline — the honest witness that this exercises the maxBuffer path: ${elapsed}ms`)
+    assert.match(res.stdout, /^PROBE_TIMEOUT SC-001 — hard-killed at \d+s/m)
+    assert.match(res.stdout, /^PROBE SC-001 exit=79 mapped=timeout/m)
+    const ev = probeEvidence(kiln, 'run1')
+    assert.equal(ev.mapped, 'timeout', 'overflow rides the 79/infra timeout class, not exit 1/fail')
+    assert.equal(ev.exit, 79)
+    assert.equal(ev.template_exit, null, 'the overflow SIGKILL leaves no exit status — recorded null, exactly as legacy spawnSync\'s res.status was')
+  } finally { rmSync(proj, { recursive: true, force: true }) }
 })
 
 test('kiln-probe run: usage and spec errors die with exit 1 — unknown SC, non-probe SC, spec-less template, relative projectPath', () => {

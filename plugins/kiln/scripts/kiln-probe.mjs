@@ -97,7 +97,8 @@
 // fake-browser drills prove timeout-kill without waiting 90 real seconds); never set it in a run.
 
 import { createHash } from 'node:crypto'
-import { spawn, spawnSync } from 'node:child_process'
+import { spawn, spawnSync, execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync, existsSync, statSync, openSync, closeSync } from 'node:fs'
 import { join, resolve, normalize, extname, dirname, isAbsolute } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -105,6 +106,7 @@ import { createServer } from 'node:http'
 
 import { validateLaw } from '../src/law.mjs'
 
+const execFileP = promisify(execFile) // async form of the template spawn — the event loop stays live so the in-process static server can answer the child (spawnSync froze it: the static-serve deadlock)
 const TEMPLATE = join(dirname(fileURLToPath(import.meta.url)), 'probe-template.mjs')
 const PROBE_TIMEOUT_S = (() => {
   const v = Number(process.env.KILN_PROBE_TIMEOUT_S)
@@ -483,13 +485,23 @@ async function cmdRun(projectPath, kilnDir, scId, runId, leaseDemand = null) {
 
     if (!serveFailed) {
       // 2. the one-shot probe under the hard deadline — timeout --kill-after=10 90 semantics:
-      // spawnSync's timeout fires SIGKILL on the template; surviving browser children (SIGKILL
-      // skips the template's finally) are exactly what the token sweep below is for.
-      const res = spawnSync(process.execPath, [TEMPLATE, projectPath, specFile, baseUrl, runDir, `probe-${scId}`, token], {
-        encoding: 'utf8', timeout: PROBE_TIMEOUT_S * 1000, killSignal: 'SIGKILL', maxBuffer: 16 * 1024 * 1024,
-      })
-      timedOut = res.signal === 'SIGKILL' || (res.error && res.error.code === 'ETIMEDOUT')
-      templateExit = res.status
+      // execFile's timeout fires SIGKILL on the template; surviving browser children (SIGKILL
+      // skips the template's finally) are exactly what the token sweep below is for. ASYNC execFile
+      // (not spawnSync): this wrapper's event loop stays LIVE while the child runs, so the in-process
+      // node:http static server can accept and answer the child's page request — spawnSync froze the
+      // loop and every static-served probe deadlocked to the SIGKILL. Bounds are byte-identical.
+      let res
+      try {
+        res = await execFileP(process.execPath, [TEMPLATE, projectPath, specFile, baseUrl, runDir, `probe-${scId}`, token], {
+          encoding: 'utf8', timeout: PROBE_TIMEOUT_S * 1000, killSignal: 'SIGKILL', maxBuffer: 16 * 1024 * 1024,
+        })
+        templateExit = 0 // execFile resolves ONLY on a clean exit 0
+      } catch (e) {
+        // execFile rejects on non-zero exit, timeout-kill, or spawn error; stdout/stderr are attached.
+        timedOut = e.signal === 'SIGKILL' || e.code === 'ETIMEDOUT' || e.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' // ANY SIGKILL death, timeout, or output-overflow kill counts (legacy spawnSync parity: spawnSync exposed signal=SIGKILL for maxBuffer too; execFile hides the signal and reports only this code) — the 79/infra class is the honest mapping for all of them
+        templateExit = timedOut ? null : (typeof e.code === 'number' ? e.code : null) // numeric code = exit status; killed = null, as spawnSync's res.status was
+        res = { stdout: e.stdout || '', stderr: e.stderr || '' }
+      }
       logContent = `$ probe-template ${scId} → ${baseUrl}${spec.url}\n--- stdout ---\n${res.stdout || ''}\n--- stderr ---\n${res.stderr || ''}\n` +
         `--- template exit ${templateExit === null ? 'killed' : templateExit}${timedOut ? ` TIMEOUT after ${PROBE_TIMEOUT_S}s` : ''} ---\n`
       const m = (res.stdout || '').match(/^PROBE_RESULT (.*)$/m)
