@@ -33,8 +33,16 @@ advance. The operator session must stay pristine for the whole run.
    plugin and confirms itself on the `kiln-fire` skill that only v2+ ships, so it never picks a stale
    v1.5.x cache. **Never `find /` for your own files.**
    ```bash
-   PLUGIN_ROOT="$(for d in "${CLAUDE_PLUGIN_ROOT:-}" "$HOME"/.claude/plugins/cache/*/kiln/[0-9]*/; do
-     [ -x "${d%/}/scripts/resolve-plugin-root.sh" ] && exec "${d%/}/scripts/resolve-plugin-root.sh"; done)"
+   PLUGIN_ROOT="$(
+     cpr="${CLAUDE_PLUGIN_ROOT:-}"
+     [ -n "$cpr" ] && [ -x "${cpr%/}/scripts/resolve-plugin-root.sh" ] && exec "${cpr%/}/scripts/resolve-plugin-root.sh"
+     # Several versions can be cached at once — exec the NEWEST cached resolver, never the first glob
+     # match (the lexically OLDEST). Collect candidates with an executable resolver, version-sort on
+     # the version basename, exec the highest.
+     newest="$(for d in "$HOME"/.claude/plugins/cache/*/kiln/[0-9]*/; do
+       [ -x "${d%/}/scripts/resolve-plugin-root.sh" ] && printf '%s\n' "${d%/}"
+     done | awk -F/ '{print $NF "\t" $0}' | sort -k1,1V | tail -1 | cut -f2)"
+     [ -n "$newest" ] && exec "$newest/scripts/resolve-plugin-root.sh")"
    [ -n "$PLUGIN_ROOT" ] || { echo "Kiln plugin root unresolved — the plugin isn't installed/enabled." >&2; exit 1; }
    echo "$PLUGIN_ROOT"
    ```

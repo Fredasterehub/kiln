@@ -12,9 +12,11 @@ read your own instructions. Run exactly this, then read the SKILL.md it points t
 ```bash
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
 if [ -z "$PLUGIN_ROOT" ] || [ ! -f "$PLUGIN_ROOT/skills/kiln-fire/SKILL.md" ]; then
-  for d in "$HOME"/.claude/plugins/cache/*/kiln/[0-9]*/; do
-    [ -f "$d/skills/kiln-fire/SKILL.md" ] && { PLUGIN_ROOT="${d%/}"; break; }
-  done
+  # Several versions can be cached at once — pick the NEWEST valid candidate, never the first glob
+  # match (the lexically OLDEST): collect dirs with the marker, version-sort on the version basename.
+  PLUGIN_ROOT="$(for d in "$HOME"/.claude/plugins/cache/*/kiln/[0-9]*/; do
+    [ -f "$d/skills/kiln-fire/SKILL.md" ] && printf '%s\n' "${d%/}"
+  done | awk -F/ '{print $NF "\t" $0}' | sort -k1,1V | tail -1 | cut -f2)"
 fi
 echo "$PLUGIN_ROOT/skills/kiln-fire/SKILL.md"
 ```

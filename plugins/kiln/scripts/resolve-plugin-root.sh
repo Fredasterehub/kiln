@@ -28,10 +28,17 @@ if valid "$self"; then printf '%s\n' "$self"; exit 0; fi
 if valid "${CLAUDE_PLUGIN_ROOT:-}"; then printf '%s\n' "${CLAUDE_PLUGIN_ROOT%/}"; exit 0; fi
 
 # 3. The versioned cache glob. nullglob so an unmatched pattern yields nothing, not a literal.
+#    Several versions can be cached at once, so pick the NEWEST valid candidate, never the first
+#    glob match (which is the lexically OLDEST). Collect every dir passing valid(), then select the
+#    highest by version-sorting on the version basename. .in_use is unreliable (it accumulates on
+#    stale versions), so selection is by version alone.
 shopt -s nullglob
-for d in "$HOME"/.claude/plugins/cache/*/kiln/[0-9]*/; do
-  if valid "$d"; then printf '%s\n' "${d%/}"; exit 0; fi
-done
+newest="$(
+  for d in "$HOME"/.claude/plugins/cache/*/kiln/[0-9]*/; do
+    if valid "$d"; then printf '%s\n' "${d%/}"; fi
+  done | awk -F/ '{print $NF "\t" $0}' | sort -k1,1V | tail -1 | cut -f2
+)"
+if [ -n "$newest" ]; then printf '%s\n' "$newest"; exit 0; fi
 
 echo "resolve-plugin-root.sh: Kiln plugin root not found — no '$marker' under this script, \$CLAUDE_PLUGIN_ROOT, or the plugin cache. Is the Kiln plugin installed and enabled?" >&2
 exit 1
