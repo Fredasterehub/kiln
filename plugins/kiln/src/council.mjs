@@ -27,7 +27,7 @@
 // COUNCIL_PROTOCOL_VERSION — bumped whenever any schema, ID rule, or aggregation changes; a bump
 // invalidates every reusable phase cache (matchCheckpoint compares it), so a model-pin/template
 // change can never silently reuse a phase judged under the old rules.
-export const COUNCIL_PROTOCOL_VERSION = 'twin-council/3'
+export const COUNCIL_PROTOCOL_VERSION = 'twin-council/4'
 
 // COUNCIL_PHASES — the ordered barrier phases. Each commits only after its
 // entire SYMMETRIC barrier completes; NEGOTIATION_{SEALED,SKIPPED} are the two exits of the same

@@ -168,7 +168,7 @@ async function noteClaudeHeadSuccession(phaseName) {
 //    order: deps first). These power the build keystones' Sol evidence analyst, the milestone-close
 //    ratification pair, and the correction council — INERT on every sub-T4 / no-codex / tokenless path
 //    (councilCapable === false), so those routes are byte-preserved v3.0.1. ──
-const COUNCIL_PROTOCOL_VERSION = 'twin-council/3'
+const COUNCIL_PROTOCOL_VERSION = 'twin-council/4'
 function sha256Hex(input) {
   let bytes
   if (typeof input === 'string') {

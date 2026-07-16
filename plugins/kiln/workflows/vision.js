@@ -349,7 +349,7 @@ async function noteClaudeHeadSuccession(phaseName) {
 //    and inlined through the SAME @inline:council bundler contract build/validate use (helpers, never
 //    copy-paste). Powers vision's T4 keystone: the fidelity pair between the mechanical checks and the
 //    seal events. INERT on every sub-T4 / no-codex / tokenless path (councilCapable === false). ──
-const COUNCIL_PROTOCOL_VERSION = 'twin-council/3'
+const COUNCIL_PROTOCOL_VERSION = 'twin-council/4'
 function sha256Hex(input) {
   let bytes
   if (typeof input === 'string') {

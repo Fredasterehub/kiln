@@ -426,7 +426,7 @@ async function noteClaudeHeadSuccession() {
 //    blind Fable/Sol pair over the ASSEMBLED deterministic verdict and the receipt-attested
 //    second-family attestation leg. Every leg is DEFINED unconditionally but CALLED only on the
 //    councilCapable path — sub-T4 / no-codex / tokenless runs are byte-preserved. ──
-const COUNCIL_PROTOCOL_VERSION = 'twin-council/3'
+const COUNCIL_PROTOCOL_VERSION = 'twin-council/4'
 function sha256Hex(input) {
   let bytes
   if (typeof input === 'string') {

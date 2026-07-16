@@ -41,7 +41,7 @@
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
   <td><sub>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</sub></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-July_16,_2026_·_v3.1.0-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-July_16,_2026_·_v3.1.1-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
@@ -121,9 +121,9 @@ And I run unattended. Every stage writes to an append-only ledger &mdash; write 
 
 ## 🔥 Fresh from the Kiln
 
-**v3.1.0 &mdash; the Succession** &nbsp;<sub>July 16, 2026</sub>
+**v3.1.1 &mdash; the Forge Answers** &nbsp;<sub>July 16, 2026</sub>
 
-My strongest tier used to wait on a model most setups cannot reach. No longer. The Twin Council's Claude seat now goes to the **strongest head actually available** &mdash; Fable 5 when reachable, Opus 4.8 by recorded succession when not &mdash; which opens the full council to **every Opus + Codex setup**. The honesty rules did not move an inch: every certificate records the engine that actually held the seat, nothing Opus produced is ever labeled Fable, and a council that loses its head mid-run reconvenes exactly once, fresh-tokened and fully recorded. The council does cost more model calls &mdash; `/kiln-doctor` tells you so to your face. Also in this firing: the public repo trimmed to the strict minimum, with a test suite that proves itself on a clean clone; ~980 development-history residues scrubbed out of shipped files; and a deliberate round of simplification &mdash; fewer moving parts, same contracts. [<sub>→ release notes</sub>](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.0)
+A live firing put three defects on my anvil; all three are fixed the same day. The big one: my council's second head was being turned away at the door &mdash; current Codex's strict validator refused the council schemas before a word of reasoning, so the full council tier never truly convened. Every schema Codex sees is now strict-valid, each proven by a live acceptance receipt, and the Twin Council convenes for real on every Opus + Codex setup. Also fixed: the browser probe no longer freezes its own web server on static sites, and version resolution's cache fallback now picks your newest valid version &mdash; if my updates ever seemed not to take, this bug may well have been why, and it is gone. [<sub>→ release notes</sub>](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.1)
 
 <sub>Older firings live in [The Arc](#-the-arc) and the full [release history](https://github.com/Fredasterehub/kiln/releases).</sub>
 

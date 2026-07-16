@@ -429,7 +429,7 @@ function withDeadline(thunk, ms, onLate) {
 // ── Twin Council pure core — the deterministic council machinery inlined from src/council.mjs.
 //    Every function that CALLS another travels WITH it in ONE marker (buildDivergenceSet is defined
 //    locally, not inlined here). ──
-const COUNCIL_PROTOCOL_VERSION = 'twin-council/3'
+const COUNCIL_PROTOCOL_VERSION = 'twin-council/4'
 function sha256Hex(input) {
   let bytes
   if (typeof input === 'string') {

@@ -629,6 +629,15 @@ test('matchCheckpoint: identical sealed checkpoints match; each mismatching hash
   }
 })
 
+test('matchCheckpoint: an old-generation checkpoint (twin-council/3) never crosses the schema-change invalidation boundary', () => {
+  // COUNCIL_PROTOCOL_VERSION advanced past the schema generation that stamped 'twin-council/3'; a
+  // checkpoint sealed under the old protocol must never reuse against the current generation, PURELY on
+  // the protocol field, even when every other field is byte-identical.
+  assert.notEqual(COUNCIL_PROTOCOL_VERSION, 'twin-council/3', 'the current protocol must have advanced past twin-council/3')
+  const oldGen = { ...cpFields, protocol_version: 'twin-council/3' }
+  assert.equal(matchCheckpoint(buildCheckpoint(oldGen), buildCheckpoint(cpFields)), false, 'a twin-council/3 checkpoint is not reusable against the current generation')
+})
+
 test('matchCheckpoint: seat expectations are PHASE-AWARE — half-pair, zero-seat-paired, and non-sealed are all non-reusable', () => {
   assert.equal(matchCheckpoint(buildCheckpoint({ ...cpFields, anonymous_seat_artifact_hashes: { P0: 'h0' } }), buildCheckpoint(cpFields)), false, 'half-pair never reused')
   assert.equal(matchCheckpoint(buildCheckpoint({ ...cpFields, status: 'pending' }), buildCheckpoint(cpFields)), false, 'a non-sealed prior never reused')
