@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run.sh — the v3 harness entry point (BLUEPRINT §13). Plain `node --test`, zero dependencies.
+# run.sh — the v3 harness entry point. Plain `node --test`, zero dependencies.
 # Non-zero exit on any failing test. Run standalone from anywhere; resolves the repo root via git.
 set -euo pipefail
 

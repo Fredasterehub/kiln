@@ -1,5 +1,5 @@
 // codex-receipt.test.mjs — transport-attestation floor for codex-cli 0.144.1.
-// REAL_* constants are verbatim local read-only captures from 2026-07-13. SYNTHETIC_* constants
+// REAL_* constants are verbatim local read-only captures. SYNTHETIC_* constants
 // are labeled derivations used only where distinct plain and JSON invocations must agree in a test.
 
 import { test } from 'node:test'

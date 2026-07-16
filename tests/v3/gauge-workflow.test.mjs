@@ -1,6 +1,6 @@
 // gauge-workflow.test.mjs — T2 acceptance: the GENERATED workflows/gauge.js drives an end-to-end
 // posture through its INLINED pure core (validateProfile + posture + GAUGE_CONFIG) from a fixture
-// VISION, with the Alpha assessor MOCKED. This proves the §3.2 mapping runs IN THE SCRIPT (not in
+// VISION, with the Alpha assessor MOCKED. This proves the mapping runs IN THE SCRIPT (not in
 // an agent): the test feeds the workflow a profile via the mocked agent and asserts the returned
 // posture equals posture(profile, CONFIG) computed independently from the shipped config — if the
 // mapping had leaked into the agent, this script would have nothing to compute and the assertion
@@ -76,7 +76,7 @@ const baseArgs = { kilnDir: '/tmp/nonexistent-kiln/.kiln', projectPath: '/tmp/no
 const fixtureProfile = prof({ D1: 1, D2: 1, D3: 0, D4: 1, D5: 2, D6: 1, D7: 1, D8: 2 })
 
 // ── End-to-end: the fixture VISION drives a posture through the inlined mapping ──
-test('T2 e2e: a mocked Alpha profile from the fixture VISION yields posture(profile, CONFIG) — the §3.2 mapping ran IN-SCRIPT', async () => {
+test('T2 e2e: a mocked Alpha profile from the fixture VISION yields posture(profile, CONFIG) — the mapping ran IN-SCRIPT', async () => {
   // Sanity: the fixture exists and the intended profile is itself valid.
   assert.match(readFileSync(FIXTURE, 'utf8'), /Team Expense Tracker/)
   assert.equal(validateProfile(fixtureProfile).ok, true)
@@ -91,7 +91,7 @@ test('T2 e2e: a mocked Alpha profile from the fixture VISION yields posture(prof
   assert.deepEqual(result.profile, fixtureProfile)
   assert.deepEqual(result.posture, referencePosture(fixtureProfile, CONFIG))
   assert.equal(result.override_applied, null)
-  // Concrete expectations from the §3.2 table for THIS profile (proves real mapping, not echo):
+  // Concrete expectations from the table for THIS profile (proves real mapping, not echo):
   assert.equal(result.posture.planning, 'single+redteam')         // D4=1 ∨ D8≥1, dual not triggered
   assert.equal(result.posture.research_topics_max, 4)              // base 2 + D3 0 + D5 2
   assert.equal(result.posture.plan_validation_rounds, 3)          // 1 + (D2≥1) + (D8=2)
@@ -213,7 +213,7 @@ test('T2 high-stakes: a flaky second scorer (invalid profile) is discarded; the 
 const eventOf = (cmd) => JSON.parse(cmd.slice(cmd.indexOf("'") + 1, cmd.lastIndexOf("'")).replace(/'\\''/g, "'"))
 
 // ── The ledger legs: with pluginRoot present the gauge brackets its run (stage_started at entry,
-//    posture_set in The Ledger, stage_completed on the genuine-completion path) — P3.6 T4 ─────────
+// posture_set in The Ledger, stage_completed on the genuine-completion path) — ─────────
 test('T2 ledger: pluginRoot present → Thoth brackets the run (stage_started · posture_set · stage_completed) with the C1 lore beats riding between', async () => {
   const { ledgerCmds } = await runGauge(
     { ...baseArgs, pluginRoot: '/abs/plugin/root' },

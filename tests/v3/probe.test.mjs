@@ -1,4 +1,4 @@
-// probe.test.mjs — P3 T1 acceptance: Tier-1 probe infrastructure (BLUEPRINT §7; the discipline
+// probe.test.mjs — acceptance: Tier-1 probe infrastructure (the discipline
 // spec's RECOMMENDED DISCIPLINE SPEC is contract-grade). THE LAW OF THIS PHASE: the browser is a
 // subprocess with a deadline, never a service. Four floors in one file:
 //   1. The probe spec contract — validateLaw's `spec` arm (mirrors schemas/law.schema.json):
@@ -16,7 +16,7 @@
 //      green); spec-less templates and --skip-probes still defer (probe_deferred); any deferral
 //      marks verification_class: static-only in the finalized run.json (and a VERIFICATION_CLASS
 //      stdout line); an outer-timeout-killed probe is swept by runId; stage-level sweeps bracket
-//      every probe-executing run, each scoped BY TOKEN (BLUEPRINT §7: never blanket) — pre-flight
+// every probe-executing run, each scoped BY TOKEN — pre-flight
 //      scoped to the stage's --run-prefix (else the run's own full runId) BEFORE any probe spawns,
 //      runId-scoped end sweep on EVERY exit path (gate-failed exits included) — so a concurrent
 //      Kiln run under a different prefix is NEVER reaped, and a run with no executable probe fires
@@ -221,7 +221,7 @@ function detectRealPlaywright() {
 const realPw = detectRealPlaywright()
 
 // ── 2. kiln-probe lifecycle with the FAKE playwright ────────────────────────────────────────────
-test('kiln-probe run (pass): exit 0, §7 launch contract honored, full evidence written, decoy + profile dir swept — leaks reaped even on the happy path', () => {
+test('kiln-probe run (pass): exit 0, launch contract honored, full evidence written, decoy + profile dir swept — leaks reaped even on the happy path', () => {
   const { proj, kiln } = makeProbeFixture()
   const pwLog = join(proj, 'launch-opts.json')
   try {
@@ -229,7 +229,7 @@ test('kiln-probe run (pass): exit 0, §7 launch contract honored, full evidence 
     assert.equal(res.status, 0, res.stderr + res.stdout)
     assert.match(res.stdout, /^PROBE SC-001 exit=0 mapped=pass \(\d+ms\)$/m)
     assert.match(res.stdout, /^SWEEP pattern=kiln-pw-/m, 'the per-spawn token sweep ALWAYS runs')
-    // evidence: the §7 contract files in .kiln/evidence/<runId>/
+    // evidence: the contract files in .kiln/evidence/<runId>/
     const ev = probeEvidence(kiln, 'run1')
     assert.equal(ev.schema, 1)
     assert.equal(ev.mapped, 'pass')
@@ -247,7 +247,7 @@ test('kiln-probe run (pass): exit 0, §7 launch contract honored, full evidence 
     const shot = join(kiln, 'evidence', 'run1', 'probe-SC-001-1440x900.png')
     assert.ok(existsSync(shot), 'screenshot evidence at the default 1440x900 viewport')
     assert.equal(readFileSync(shot, 'utf8'), 'FAKEPNG')
-    // the §7 launch contract, recorded by the fake from the real call (launchPersistentContext:
+    // the launch contract, recorded by the fake from the real call (launchPersistentContext:
     // the user-data-dir is the POSITIONAL dir — token-prefixed, one per viewport — never a flag)
     const opts = JSON.parse(readFileSync(pwLog, 'utf8'))
     assert.equal(opts.headless, true)
@@ -431,7 +431,7 @@ test('kiln-probe mcp-sweep: reaps ONLY the orphaned MCP browser (browser-binary 
   //     (the arg0 gate — this is exactly the over-reach a naive `pkill -f ms-playwright/mcp-` would cause).
   // (e) chrome_crashpad_handler under the mcp- profile — the crash-reporter HELPER, NOT a browser, so it
   //     is NOT in the documented browser set (chrome / chromium / chrome-headless-shell / headless_shell)
-  //     → spared (review cycle 3, finding 2: the arg0 gate must not be widened past the stated set).
+  //     → spared (the arg0 gate must not be widened past the stated set).
   const mcpProfile = `/tmp/ms-playwright/mcp-${tag}`
   const operatorProfile = `/tmp/kiln-test-operator-chrome-${tag}`
   const oracleProfile = `/tmp/kiln-pw-mcptest-${tag}`
@@ -458,7 +458,7 @@ test('kiln-probe mcp-sweep: reaps ONLY the orphaned MCP browser (browser-binary 
     assert.ok(leaderCmdlineLive(decoyOperator.pid), "the operator's own Chrome (non-mcp profile) is UNTOUCHED — never a blanket chrome kill")
     assert.ok(leaderCmdlineLive(decoyOracle.pid), "the kiln-pw- scripted oracle is UNTOUCHED — that namespace is the token sweep's job")
     assert.ok(leaderCmdlineLive(decoyShell.pid), 'the non-browser process that merely NAMES the mcp- path is UNTOUCHED — the arg0 gate prevents the naive-pkill over-reach')
-    assert.ok(leaderCmdlineLive(decoyCrashpad.pid), 'chrome_crashpad_handler under the mcp- profile is UNTOUCHED — the crash-reporter helper is NOT in the documented browser set (finding 2: the gate is not widened past chrome/chromium/chrome-headless-shell/headless_shell)')
+    assert.ok(leaderCmdlineLive(decoyCrashpad.pid), 'chrome_crashpad_handler under the mcp- profile is UNTOUCHED — the crash-reporter helper is NOT in the documented browser set (the gate is not widened past chrome/chromium/chrome-headless-shell/headless_shell)')
 
     // idempotent: with the one browser gone, a clean re-sweep is a no-op, still exit 0
     const again = probeCli(['mcp-sweep'])
@@ -476,7 +476,7 @@ test('kiln-probe mcp-sweep: reaps ONLY the orphaned MCP browser (browser-binary 
 })
 
 test('kiln-probe leak-scan: READ-ONLY — names a FOREIGN browser in BOTH watched namespaces and lists abandoned temp-profile dirs, and every suspect is STILL ALIVE after the scan (the never-kill drill); excludes the owned kiln-pw- namespace and an args-only shell; exits 0, takes no args', async () => {
-  // RUN-B FINDING 3b: a tribunal analyst drove the host's Playwright-MCP browser mid-build, in a
+  // The leak class: a foreign Playwright-MCP browser can appear mid-build, in a
   // namespace no kiln sweep watches (`playwright_chromiumdev_profile-*` temp profiles + `ms-playwright/
   // mcp-`). leak-scan is the READ-ONLY eye for exactly that — it must NAME the foreign browser and NEVER
   // kill it: the operator's MCP servers and browsers survive every scan by construction (operator law).
@@ -595,7 +595,7 @@ test('kiln-probe sweep: the server-pidfile arm — kills the recorded process GR
   }
 })
 
-// ── 2b. the browser LEASE — the §7 CAPABILITY deadline (ORCHESTRATOR RULING, p3/tasks.md) ─────────
+// ── 2b. the browser LEASE — the CAPABILITY deadline (ORCHESTRATOR RULING) ─────────
 // A workflow cannot CANCEL a spawned agent, so the Tier-2 ≤10-min cap is enforced on the CAPABILITY:
 // `kiln-probe lease` writes a token-keyed lease + a detached self-terminating watchdog; `kiln-probe
 // run --lease <token>` REFUSES (exit 77) once the lease is absent/expired/mismatched; `lease-release`
@@ -801,7 +801,7 @@ test('kiln-probe lease/lease-release: usage + charset validation — the token/r
 })
 
 // ── 3. kiln-law run — probes execute through kiln-probe with the same evidence contract ─────────
-// A git-locked fixture (the §5 sequence) with one green shell check, one spec-carrying probe,
+// A git-locked fixture (the sequence) with one green shell check, one spec-carrying probe,
 // and one spec-less template — the three probe postures a real Law can hold at once.
 function makeLawFixture({ fakePw = true, probeTimeoutS = 120, spec = baseSpec() } = {}) {
   const { proj, kiln } = makeProbeFixture({ fakePw, git: false })
@@ -814,8 +814,8 @@ function makeLawFixture({ fakePw = true, probeTimeoutS = 120, spec = baseSpec() 
     probeCheck({ id: 'SC-002', files: ['tests/acceptance/sc-002.probe.json'], timeout_s: probeTimeoutS, spec }),
     template,
   )
-  // P3.6 T2 twin contract: a spec'd probe locks ONLY with its on-disk twin listed and deep-equal
-  // (kiln-law index refuses a desynced pair) — the fixture follows the §5 shape Asimov writes.
+  // twin contract: a spec'd probe locks ONLY with its on-disk twin listed and deep-equal
+  // (kiln-law index refuses a desynced pair) — the fixture follows the shape Asimov writes.
   writeFileSync(join(proj, 'tests/acceptance/sc-002.probe.json'), JSON.stringify(spec, null, 2) + '\n')
   writeFileSync(join(kiln, 'law.json'), JSON.stringify(law, null, 2) + '\n')
   writeFileSync(join(proj, '.gitignore'), 'node_modules/\n')

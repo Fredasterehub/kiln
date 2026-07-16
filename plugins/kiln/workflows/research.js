@@ -29,21 +29,21 @@ const docsDir = `${kilnDir}/docs`
 const researchDir = `${docsDir}/research`
 const visionFile = `${docsDir}/VISION.md`
 
-// ── validation thresholds (ported from v1 MI6 firewall) ──
+// ── validation thresholds (the MI6 firewall) ──
 const MIN_CONFIDENCE = 0.7
 const MIN_SOURCES = 3
 const MIN_QUOTES = 1
-// topicsMax is the Gauge's posture.research_topics_max — the §3.2 research-row CAP (2 + D3 + D5),
+// topicsMax is the Gauge's posture.research_topics_max — the research-row CAP (2 + D3 + D5),
 // which gauge.mjs always computes as a positive integer (research_topics_base ≥ 2 + non-negative
 // dims). Its PRESENCE is the signal that the Gauge ran: it is what makes this a posture-driven run.
 //
-// Two regimes, switched on that presence — so T3's "no behavior change when the arg is absent"
-// (tasks.md §T3) holds AND the BLUEPRINT §3.2 research row is encoded when a posture IS supplied:
-//   • POSTURE ABSENT (no valid topicsMax) ⇒ v2 behavior, byte-for-byte: scope from the OQs PLUS
+// Two regimes, switched on that presence — so "no behavior change when the arg is absent"
+// holds AND the research row is encoded when a posture IS supplied:
+//   • POSTURE ABSENT (no valid topicsMax) ⇒ the historical behavior, byte-for-byte: scope from the OQs PLUS
 //     load-bearing unknowns (Tech Stack / Constraints / Risks), floor of 2, cap of 5, and the
 //     zero-topics branch is unreachable (the floor guarantees ≥ 2). A run without the Gauge is
-//     identical to v2 — the contract default equals current behavior.
-//   • POSTURE PRESENT (valid topicsMax) ⇒ the §3.2 rule the Gauge delegates here:
+//     the historical path — the contract default equals the pre-posture behavior.
+//   • POSTURE PRESENT (valid topicsMax) ⇒ the rule the Gauge delegates here:
 //     `topics = 0 if no high-priority before-build OQs; else min(OQ-count, cap)`. OQs are the SOLE
 //     topic source, there is NO lower floor (a floor would force topics the formula forbids and
 //     would zero out the 0-if-no-OQs branch), and zero qualifying OQs ⇒ zero topics. The Gauge
@@ -62,7 +62,7 @@ const MODEL_VOICE = {
   ].join('\n'),
 }
 const voice = (m) => (m === 'opus' ? MODEL_VOICE.opus + '\n\n' : '')
-// Field operatives get detective codenames (the v1 "unit-deployed" Sherlock lineage) — display only.
+// Field operatives get detective codenames — display only.
 const FIELD_CODENAMES = ['sherlock', 'poirot', 'marple', 'dupin', 'holmes']
 const codename = (i) => FIELD_CODENAMES[((i % FIELD_CODENAMES.length) + FIELD_CODENAMES.length) % FIELD_CODENAMES.length]
 const SPIN = ['MI6 deploys another field operative', 'The field operatives are on the trail', 'Data, data — no bricks without clay', 'Eliminating the impossible', 'MI6 cross-references the findings']
@@ -123,12 +123,12 @@ const SYNTH_SCHEMA = {
   required: ['research_file', 'topics_written', 'headline_findings'],
 }
 
-// ── The run ledger (BLUEPRINT §3.5): stage brackets land in events.jsonl via the kiln-state CLI —
+// ── The run ledger: stage brackets land in events.jsonl via the kiln-state CLI —
 //    the vision.js runLedger idiom. Thoth appends; gated on pluginRoot and degrades to a log line —
 //    an append failure never fails the stage. stage_completed fires ONLY on the genuine-success
 //    paths (both returns below — the zero-topics route IS a completion); a failed stage emits
 //    nothing, per the telegraph's termination rule. report.js and mapping.js bracket their runs
-//    the same way now (the C1 lore batch closed that deferral). ──
+//    the same way. ──
 async function runLedger(type, data, phaseName) {
   if (!pluginRoot) { log(`pluginRoot absent — ${type} not ledgered to events.jsonl`); return }
   const ev = JSON.stringify({ type, stage: 'research', data })
@@ -143,13 +143,13 @@ async function runLedger(type, data, phaseName) {
   )
 }
 
-// ── Lore beats (C1 doctrine §4): a fieldcraft dispatch at the moment a fact becomes true, carried by
+// ── Lore beats: a fieldcraft dispatch at the moment a fact becomes true, carried by
 //    runLedger to the operator's transcript (note{kind:'lore'}; deterministic <stage>.<beat> key;
 //    args short scalars capped at 80 by the caller; text ≤ 160). PRESENTATION, null-keep: pluginRoot
 //    absent ⇒ a plain log() line, never a stage failure. ──
 const LORE_MAX = 160
 const oneLine = (s, cap = LORE_MAX) => String(s).replace(/[\x00-\x1f\x7f]+/g, ' ').slice(0, cap)
-// args are bound HERE (F-1): every string value is capped at 80 mechanically, so a beat can never
+// args are bound HERE: every string value is capped at 80 mechanically, so a beat can never
 // leak an unbounded project-controlled string into the ledger even if a call site forgets to cap.
 const boundArgs = (a) => { const o = {}; for (const [k, v] of Object.entries(a)) o[k] = typeof v === 'string' ? oneLine(v, 80) : v; return o }
 const lore = (key, text, args, phaseName) =>
@@ -174,10 +174,10 @@ const valid = (f) =>
 // ── The Briefing: identify topics (MI6) ──
 phase('The Briefing')
 log('MI6 deploys the field team')
-// §3.5 stage bracket: stage_started on every entry — a re-run is the stage still in progress.
+// Stage bracket: stage_started on every entry — a re-run is the stage still in progress.
 await runLedger('stage_started', {}, 'The Briefing')
-// The scoping brief switches on the same posture-presence gate (see MAX_TOPICS above): the §3.2
-// OQ-only rule when the Gauge supplied a cap, the verbatim v2 brief otherwise.
+// The scoping brief switches on the same posture-presence gate (see MAX_TOPICS above): the
+// OQ-only rule when the Gauge supplied a cap, the historical brief otherwise.
 const postureBrief =
   `<task>The research scope is set by the project's high-priority before-build Open Questions, capped. ` +
   `First, identify the QUALIFYING OQs: every "OQ-{N}" line (or YAML frontmatter OQ entry) with Priority: high ` +
@@ -206,7 +206,7 @@ if (topics.length === 0) {
   // Zero topics → nothing to research. Return early with empty results — no research.md is
   // written; the conductor reads this return/state, never the file blindly.
   log('No research topics identified from VISION.md — nothing to research; finishing with empty results (no research.md).')
-  // §3.5 stage bracket: the zero-topics route is a GENUINE completion (§3.2 says so), so it closes
+  // Stage bracket: the zero-topics route is a GENUINE completion, so it closes
   // the stage like any other success.
   // research.field_quiet (keystone): zero topics cleared the bar — the field team stands down. Emit
   // BEFORE stage_completed so the beat is rendered before the telegraph's terminating completion event.
@@ -275,7 +275,7 @@ const synth = await agent(
 log(`research.md written with ${synth ? synth.topics_written : 0} topic(s)`)
 // research.intel_secured (keystone): synthesis landed — the findings are in research.md.
 await lore('research.intel_secured', `Intelligence secured — ${cleared.length} topic(s) cleared the bar; research.md carries the findings`, { cleared: cleared.length }, 'The Debrief')
-// §3.5 stage bracket: the synthesis landed — the stage genuinely completed.
+// Stage bracket: the synthesis landed — the stage genuinely completed.
 await runLedger('stage_completed', {}, 'The Debrief')
 return {
   topics: topics.map((t) => t.slug),

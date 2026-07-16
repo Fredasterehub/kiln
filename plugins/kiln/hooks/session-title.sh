@@ -2,7 +2,7 @@
 # Kiln SessionStart hook — names the session "kiln: <project> — <stage>", but ONLY inside a
 # Kiln project (one holding .kiln/STATE.md) AND only when it would not overwrite a title the
 # operator set by hand. Any other repo is untouched: the hook prints nothing and exits 0, so it
-# never renames a session it does not own (platform-surfaces §3). Reads the stage and name from
+# never renames a session it does not own. Reads the stage and name from
 # STATE.md's byte-stable bullet lines. No node, no jq.
 
 # The current binary hands SessionStart the existing title in the `session_title` input field

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// kiln-vision.mjs — the VISION v3 gate CLI (BLUEPRINT §10, P4 T1). Zero dependencies, node ≥18.
+// kiln-vision.mjs — the VISION v3 gate CLI. Zero dependencies, node ≥18.
 //
 // .kiln/docs/VISION.md is a DERIVED artifact: compiled from the append-only brainstorm session
 // ledger (.kiln/docs/brainstorm-ledger.jsonl) by a fresh-context agent whose sole source is the
@@ -137,7 +137,7 @@ function cmdValidate(visionFile, flags) {
     err('gate_blocked', 'frontmatter.status', `status '${fm.status}' demands zero unresolved clarifications — the body carries ${unresolved} (resolve them, or the operator acknowledges each into the Assumptions Ledger)`)
   }
 
-  // visual_direction, BOTH ways (review r1 F2): the boolean is authoritative and may not lie.
+  // visual_direction, BOTH ways: the boolean is authoritative and may not lie.
   const vd = (sections['Visual Direction'] || '').trim()
   if (fm && fm.visual_direction === false && vd !== DECLINE_LINE) {
     err('visual_direction_mismatch', 'frontmatter.visual_direction', `visual_direction: false requires the Visual Direction section to be exactly the decline line — it is not`)
@@ -162,7 +162,7 @@ function cmdLedgerGate(ledgerFile, flags) {
   const err = (code, path, message) => violations.push({ code, path, message })
   if (!existsSync(ledgerFile)) die(`no ledger at ${ledgerFile} — the brainstorm session never wrote one`)
   // Every PHYSICAL line must parse — an interior blank line is corruption evidence in an
-  // append-only JSONL (T1 review r1); only the single trailing newline is legal.
+  // append-only JSONL; only the single trailing newline is legal.
   const rawLines = readFileSync(ledgerFile, 'utf8').split('\n')
   if (rawLines[rawLines.length - 1] === '') rawLines.pop()
   const lines = rawLines
@@ -181,7 +181,7 @@ function cmdLedgerGate(ledgerFile, flags) {
       err('missing_authorship', `ledger[${i + 1}].data.by`, `line ${i + 1}: every idea carries authorship by: operator|coach — the stance contract's audit trail`)
     }
     if (ev.type === 'clarification' && !(ev.data && typeof ev.data.marker === 'string' && ev.data.marker !== '')) {
-      err('invalid_value', `ledger[${i + 1}].data.marker`, `line ${i + 1}: every clarification carries a nonempty marker string — a marker-less clarification would evade the resolved-or-acknowledged rule (T1 review r1)`)
+      err('invalid_value', `ledger[${i + 1}].data.marker`, `line ${i + 1}: every clarification carries a nonempty marker string — a marker-less clarification would evade the resolved-or-acknowledged rule`)
     }
     events.push(ev)
   })

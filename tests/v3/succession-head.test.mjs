@@ -64,7 +64,7 @@ test('the head LABELS are preserved: every council workflow still names the fabl
   }
 })
 
-// ── R2 F2 (R1-RETRY-CAUSE-NOT-EXPOSED): every council workflow threads the failed-Claude-head
+// ── every council workflow threads the failed-Claude-head
 //    discriminator `council_missing_head` onto its DEGRADED boundary return, so the conductor's
 //    succession retry keys on the return shape, never a prose scan of missing/reason. ──
 test('(F2) boundary discriminator: each of the five council workflows exposes council_missing_head on its DEGRADED return path', () => {
@@ -86,7 +86,7 @@ test('(F2) the shipped mirrors carry council_missing_head (the bytes the sandbox
   }
 })
 
-// ── R2 F1/F2/F3: the SKILL.md Claude-head succession-retry rule. The conductor keys the retry on the
+// ── the SKILL.md Claude-head succession-retry rule. The conductor keys the retry on the
 //    boundary discriminator, appends the demotion BEFORE relaunch, and mints a FRESH runToken (the dead
 //    convening's token replay-collides with its already-verified Sol legs). ──
 const skillPath = join(root, 'plugins/kiln/skills/kiln-fire/SKILL.md')
@@ -118,7 +118,7 @@ test('(F3) SKILL retry rule appends the nested claude_head:"opus" capability not
     'the capability demotion append must come BEFORE the relaunch (probe → append → mint fresh runToken → relaunch)')
 })
 
-// ── R2 F4 (R1-PUBLISHED-STATE-SCHEMA-DRIFT): the published state schema documents the OPTIONAL
+// ── the published state schema documents the OPTIONAL
 //    claude_head field — the validator↔schema contract. capability is a oneOf(null | object), so the
 //    object branch is where the property lives (the brief's properties.capability.properties path). ──
 test('(F4) state.schema.json capability object documents claude_head as an OPTIONAL {fable, opus} enum', () => {

@@ -1,13 +1,13 @@
 // GENERATED from workflows-src/build.js — edit the source, run scripts/bundle-workflows.mjs
 export const meta = {
   name: 'kiln-build',
-  description: 'Kiln build stage — two nested loops over the locked Law. OUTER: each master-plan milestone in dependency order (sequential, cumulative commits). INNER: the batch slice spine — KRS-One plans the milestone\'s ENTIRE ordered slice list in ONE call, mapped 1:1 to law.json SC ids (coverage is arithmetic, validated in-script); a haiku confirm checks each slice against live state before its build; a builder implements the slice (Opus builds ui/mixed, Codex builds logic) and commits it; the deterministic runner then executes kiln-law (verify = tamper gate; run --only/--flips = the §5.1 red/green lifecycle where the EXIT CODE is the verdict — expected flips computed from the recorded prior status via --before, previously-GREEN regressions fatal) and persists the project suite as hashed evidence (kiln-law suite → suite.log + suite.jsonl in the evidence dir), and the workflow gates tamper + evidence freshness + the lifecycle exit MECHANICALLY — a touched lock, stale evidence, or a failed flip auto-REJECTS with no reviewer spawned. A cross-FAMILY reviewer rules on diff + evidence with mechanical|logical finding classes and must re-run the mapped checks itself; the Sentinel escalates the feedback source after repeated logical rejections and stops a slice as split_required at the split threshold (a conductor/operator decision, never silent). After the slices integrate, the §3.2 milestone gate rules: Aristotle\'s goal-backward audit hunts "checks pass but the goal is broken" at EVERY milestone boundary — split/plan-abort failures included, where its findings merge into the failure record — and an unusable audit is re-asked ONCE, then fails the boundary closed (QA_FAIL, blocking finding goal-audit-failure; the judge NEVER spawns on missing inputs); milestones at the tribunal threshold add dual analysts (Ken/Opus ∥ Ryu/Codex) whose findings the deterministic reconcile folds with the audit\'s, and the judge is spawned ONLY on an ambiguous reconcile (zero blocking findings AND the analysts\' overall verdicts disagree) — otherwise the verdict is computed; below the threshold the slice review + the audit IS the gate. Velocity lever 3 (§9): the next milestone\'s slice plan is cut SPECULATIVELY in parallel with the current milestone\'s gate, anchored on its base_sha — any corrective commit on the current milestone (tribunal correction / validate loop) moves HEAD and invalidates it (ledgered slice_plan_invalidated), forcing a re-slice against the new HEAD. The heavy end-to-end gate is validate, not per-slice ceremony.',
+  description: 'Kiln build stage — two nested loops over the locked Law. OUTER: each master-plan milestone in dependency order (sequential, cumulative commits). INNER: the batch slice spine — KRS-One plans the milestone\'s ENTIRE ordered slice list in ONE call, mapped 1:1 to law.json SC ids (coverage is arithmetic, validated in-script); a haiku confirm checks each slice against live state before its build; a builder implements the slice (Opus builds ui/mixed, Codex builds logic) and commits it; the deterministic runner then executes kiln-law (verify = tamper gate; run --only/--flips = the red/green lifecycle where the EXIT CODE is the verdict — expected flips computed from the recorded prior status via --before, previously-GREEN regressions fatal) and persists the project suite as hashed evidence (kiln-law suite → suite.log + suite.jsonl in the evidence dir), and the workflow gates tamper + evidence freshness + the lifecycle exit MECHANICALLY — a touched lock, stale evidence, or a failed flip auto-REJECTS with no reviewer spawned. A cross-FAMILY reviewer rules on diff + evidence with mechanical|logical finding classes and must re-run the mapped checks itself; the Sentinel escalates the feedback source after repeated logical rejections and stops a slice as split_required at the split threshold (a conductor/operator decision, never silent). After the slices integrate, the milestone gate rules: Aristotle\'s goal-backward audit hunts "checks pass but the goal is broken" at EVERY milestone boundary — split/plan-abort failures included, where its findings merge into the failure record — and an unusable audit is re-asked ONCE, then fails the boundary closed (QA_FAIL, blocking finding goal-audit-failure; the judge NEVER spawns on missing inputs); milestones at the tribunal threshold add dual analysts (Ken/Opus ∥ Ryu/Codex) whose findings the deterministic reconcile folds with the audit\'s, and the judge is spawned ONLY on an ambiguous reconcile (zero blocking findings AND the analysts\' overall verdicts disagree) — otherwise the verdict is computed; below the threshold the slice review + the audit IS the gate. The next milestone\'s slice plan is cut SPECULATIVELY in parallel with the current milestone\'s gate, anchored on its base_sha — any corrective commit on the current milestone (tribunal correction / validate loop) moves HEAD and invalidates it (ledgered slice_plan_invalidated), forcing a re-slice against the new HEAD. The heavy end-to-end gate is validate, not per-slice ceremony.',
   phases: [
     { title: 'The Forge Heats', detail: 'read the locked Law; rakim ensures the git repo + seeds codebase-state; parse the master plan into milestones' },
     { title: 'Scoring the Cut', detail: 'KRS-One plans the milestone\'s entire ordered slice list in ONE call, mapped to the Law\'s SC ids (reusing a valid pipelined plan from the prior gate when HEAD has not moved); a haiku confirm checks each slice against live state (proceed | replan)' },
     { title: 'Forging', detail: 'builder implements the slice (Opus for ui/mixed, Codex for logic) and commits it' },
     { title: 'The Trial', detail: 'the deterministic runner executes the Law — the exit code is the lifecycle verdict (declared flips + regressions) — and persists the project suite as hashed evidence; the workflow gates tamper + freshness + the flip plan mechanically; a cross-family reviewer re-runs the mapped checks and rules with classed findings; the Sentinel escalates on logical rejections' },
-    { title: 'Judgment', detail: 'the §3.2 milestone gate — goal-backward audit at EVERY boundary (split/abort included; an unusable audit is re-asked once, then fails closed); dual analysts + deterministic reconcile at the tribunal threshold, the judge spawned only on an ambiguous reconcile; below it, slice review + the audit IS the gate. The next milestone\'s slice plan is pipelined in parallel here, anchored on base_sha and invalidated by any corrective commit' },
+    { title: 'Judgment', detail: 'the milestone gate — goal-backward audit at EVERY boundary (split/abort included; an unusable audit is re-asked once, then fails closed); dual analysts + deterministic reconcile at the tribunal threshold, the judge spawned only on an ambiguous reconcile; below it, slice review + the audit IS the gate. The next milestone\'s slice plan is pipelined in parallel here, anchored on base_sha and invalidated by any corrective commit' },
   ],
 }
 
@@ -28,12 +28,12 @@ const testingRigor = ['tdd', 'standard', 'minimal'].includes(String(A.testingRig
 const milestoneLimit = typeof A.milestoneLimit === 'number' ? A.milestoneLimit : Infinity
 // uiBuild forces every milestone onto the ui surface (Opus builds, Codex reviews) — an optional override.
 const uiBuild = A.uiBuild === true
-// gateOnly is the P3.5 T3 (dogfood finding 4) STARVED-GATE retry path: re-run a milestone gate
+// gateOnly is the STARVED-GATE retry path: re-run a milestone gate
 // that was starved (session death mid-Judgment) over an ALREADY-COMPLETED build, without the
 // 40-minute full re-build the v3 slicer otherwise forces (validateSlicePlan rejects a zero-slice
 // plan while SCs remain uncovered, so a completed build re-enters through builder/confirm churn it
 // does not need). Under gateOnly, Scoring the Cut and Forging are SKIPPED entirely — no slicer, no
-// confirm, no builders. Per milestone: the same §3.4 floor gates, then ONE deterministic
+// confirm, no builders. Per milestone: the same floor gates, then ONE deterministic
 // trial-shaped pass over ALL the milestone's SCs (kiln-law verify + run --only/--expect-green over
 // every milestone SC — NO --flips: nothing is flipped, every SC must already be GREEN over the
 // completed build) + the freshness probe + runnerGate. If the Law is not fully green the milestone
@@ -43,11 +43,11 @@ const uiBuild = A.uiBuild === true
 // the gate). The tribunal correction loop stays available and runs the NORMAL build+trial path.
 const gateOnly = A.gateOnly === true
 // pluginRoot is the conductor-resolved absolute $PLUGIN_ROOT (a launched Workflow can't see
-// ${CLAUDE_PLUGIN_ROOT}). In v3 it is LOAD-BEARING: the kiln-law CLI (the §3.4 Law floor) and the
+// ${CLAUDE_PLUGIN_ROOT}). In v3 it is LOAD-BEARING: the kiln-law CLI (the Law floor) and the
 // kiln-state ledger live under it. Its absence is gated below — never a silent v2-style build.
 const pluginRoot = A.pluginRoot
 
-// ── BUILD_RUN_TOKEN (BLUEPRINT §7 / discipline-spec lifecycle step 3) — this build stage's own,
+// ── BUILD_RUN_TOKEN — this build stage's own,
 //    stage-scoped browser kill token. The discipline-spec post-check cleanup is RUN-TOKEN scoped:
 //    a sweep must reap only THIS stage's browser survivors, never a concurrent Kiln run's (a
 //    validate-stage Tier-2 traversal, a parallel build in another project). So the stage mints one
@@ -63,9 +63,9 @@ const pluginRoot = A.pluginRoot
 const tokenHash = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; return h.toString(36) }
 const BUILD_RUN_TOKEN = `kbuild-${String(A.runToken || tokenHash(String(projectPath))).replace(/[^A-Za-z0-9._-]/g, '-')}`
 
-// ── The Gauge posture (BLUEPRINT §3.2/§3.3) — passed by the conductor from state.json. Accepts an
+// ── The Gauge posture — passed by the conductor from state.json. Accepts an
 //    object or a JSON-encoded string; anything else ⇒ null ⇒ every dial below falls back to its
-//    v2-equivalent default, so a run without a posture behaves exactly like v2 plus the §3.4 Law
+//    v2-equivalent default, so a run without a posture behaves exactly like v2 plus the Law
 //    floor (which is unconditional). ──
 const postureArg = (() => {
   let p = A.posture
@@ -76,22 +76,22 @@ const postureArg = (() => {
 //    scripts cannot import JSON; --check guards the inline copy against drift). The Sentinel
 //    thresholds (rejections_to_feedback_escalation / rejections_to_split) live here. ──
 const GAUGE_CONFIG = {"h80_human_hours":2,"messiness_discount":0.5,"churn_flips_threshold":2,"rejections_to_feedback_escalation":2,"rejections_to_split":3,"deescalation_clean_window":1,"research_topics_base":2,"planning_dual_d4_min":2,"planning_dual_d3_min":1,"planning_dual_d1_min":1,"planning_redteam_d4_min":1,"planning_redteam_d8_min":1,"plan_validation_rounds_base":1,"plan_validation_d2_min":1,"plan_validation_d8_min":2,"slice_budget_d7_min":1,"d7_slice_budget_factor":0.5,"review_high_d8_min":1,"min_slices_for_tribunal":2,"trivial_tier_dim_max":0,"trivial_tier_soft_dims":["D6"],"trivial_tier_soft_dim_max":1,"tribunal_threshold_trivial_bump":1,"browser_tier2_d7_min":1,"browser_tier2_d8_min":1,"validate_adversarial_d8_min":2,"validate_second_family_d8_min":2,"effort_bias_dims":["D3","D4","D8"]}
-// livePosture is the Sentinel's MUTABLE working copy (§3.3): escalate() raises dials mid-milestone
+// livePosture is the Sentinel's MUTABLE working copy: escalate() raises dials mid-milestone
 // and NOTHING in this script ever lowers one — builder self-confidence included. De-escalation
 // needs the profile + clean-window evidence (a boundary move owned by the conductor in a later
 // phase), so raised dials carry forward across milestones: strictly MORE scrutiny, never less.
-// Defaults are v2-equivalent: review effort 'medium' baseline (the §3.2 row's base — D8 raises it
-// via the posture arg), the §3.3 slice budget, floor values everywhere else (the ratchet can only
+// Defaults are v2-equivalent: review effort 'medium' baseline (D8 raises it via the posture arg),
+// the slice budget, floor values everywhere else (the ratchet can only
 // raise them). The milestone_gate dials are CONSUMED by the Judgment gate below:
 // min_slices_for_tribunal decides dual-analysts-vs-slice-review-as-gate, and goal_backward
-// (default ON) is the operator's only way to skip the boundary audit — a skip is ledgered (§3.5).
+// (default ON) is the operator's only way to skip the boundary audit — a skip is ledgered.
 const P0 = postureArg || {}
 const PR = (P0.review && typeof P0.review === 'object') ? P0.review : {}
 const PG = (P0.milestone_gate && typeof P0.milestone_gate === 'object') ? P0.milestone_gate : {}
 const PB = (P0.browser && typeof P0.browser === 'object') ? P0.browser : {}
 const PV = (P0.validate && typeof P0.validate === 'object') ? P0.validate : {}
 let livePosture = {
-  // P5.5: the scope tier the trivial-tier levers key on. Fail-soft to 'standard' — an absent
+  // The scope tier the trivial-tier levers key on. Fail-soft to 'standard' — an absent
   // or unknown tier means NO lever fires (false-standard costs minutes, false-trivial costs gates).
   scope_tier: P0.scope_tier === 'trivial' ? 'trivial' : 'standard',
   research_topics_max: typeof P0.research_topics_max === 'number' ? P0.research_topics_max : GAUGE_CONFIG.research_topics_base,
@@ -114,7 +114,7 @@ const docsDir = `${kilnDir}/docs`
 const qaDir = `${kilnDir}/tmp/qa`
 const designDir = `${kilnDir}/design`
 const masterPlanFile = `${kilnDir}/master-plan.md`
-// B3R2-1: the architecture council persists the DEADLOCK_RESOLVED certificate here (canonical bytes whose
+// The architecture council persists the DEADLOCK_RESOLVED certificate here (canonical bytes whose
 // sha equals the terminal row's certificate_hash) — build reloads it to re-anchor the CURRENT plan.
 const deadlockCertFile = `${kilnDir}/council/master_plan/deadlock-certificate.json`
 const handoffFile = `${kilnDir}/architecture-handoff.md`
@@ -133,7 +133,7 @@ const MODEL_VOICE = {
 const voice = (m) => (m === 'opus' ? MODEL_VOICE.opus + '\n\n' : '')
 
 // ── Codex model pins (CODEX_MODEL default + CODEX_FALLBACK, inlined from src/models.mjs) ──
-// models.mjs — the codex model pins, single source of truth (BLUEPRINT WS-B2). Inlined verbatim
+// models.mjs — the codex model pins, single source of truth. Inlined verbatim
 // into every GPT-pinning workflow by the `// @models` bundler marker (like @gate pulls the whole
 // module), so the model id can never drift across build/gauge/architecture/validate.
 // DOCTRINE (references/codex-prompt-guide.md): the fallback is RECORDED when used, never silent — a
@@ -161,7 +161,7 @@ async function noteClaudeHeadSuccession(phaseName) {
   try { await ledger('note', { kind: 'capability', event: 'claude_head_demoted', head: 'fable', claude_head: CLAUDE_HEAD_MODEL }, phaseName) } catch { /* best-effort beat */ }
 }
 
-// ── Twin Council pure core (B4-2 D1) — the SEALED 1b-ii call-site machinery, lifted to src/council.mjs
+// ── Twin Council pure core — the sealed call-site machinery, lifted to src/council.mjs
 //    and inlined here through the SAME @inline:council bundler contract architecture.js uses (helpers,
 //    never copy-paste). Every function that CALLS another travels WITH it in ONE marker (dependency
 //    order: deps first). These power the build keystones' Sol evidence analyst, the milestone-close
@@ -334,11 +334,11 @@ function validateRatification(ratification, ctx) {
   }
   for (const id of open) if (!seen.includes(id)) errors.push({ code: 'uncovered_divergence', at: id, message: `open divergence '${id}' has no selection` })
 
-  // findings[] entry shape (§6 schema): finding_id, claim, required_change, evidence_refs[], executable_check
+  // findings[] entry shape: finding_id, claim, required_change, evidence_refs[], executable_check
   // present. A PRESENT-but-non-array findings field is itself malformed — only ABSENT defaults to empty.
   let findings = []
   if (r.findings !== undefined) {
-    if (!Array.isArray(r.findings)) errors.push({ code: 'malformed_findings', message: 'findings must be an array (the §6 schema) when present' })
+    if (!Array.isArray(r.findings)) errors.push({ code: 'malformed_findings', message: 'findings must be an array when present' })
     else findings = r.findings
   }
   findings.forEach((f, i) => {
@@ -351,7 +351,7 @@ function validateRatification(ratification, ctx) {
     if (!Object.prototype.hasOwnProperty.call(f, 'executable_check')) errors.push({ code: 'malformed_finding', at, message: 'executable_check must be present (null allowed)' })
   })
 
-  // anti-capitulation (I9 one-finding-key rail): an APPROVE reversing a standing block needs
+  // anti-capitulation (the one-finding-key rail): an APPROVE reversing a standing block needs
   // equal-or-stronger changed_evidence KEYED to that block's finding_id. changed_evidence is filtered
   // per block by finding_id BEFORE validateReversal, so one evidence item can never clear two blocks —
   // an item with no finding_id (or a non-matching one) contributes to no block's reversal.
@@ -365,7 +365,7 @@ function validateRatification(ratification, ctx) {
     }
   }
 
-  // atomic compatibility: the adopted selection combination must satisfy every compatibility edge (§7).
+  // atomic compatibility: the adopted selection combination must satisfy every compatibility edge.
   // Every edge is SHAPE-CHECKED first — exactly two members, each { divergence_id, selection } with a
   // legal selection; a malformed edge is a validation error (never silently skipped), and an edge whose
   // two members name the SAME divergence is a context programming error (self_edge).
@@ -397,7 +397,7 @@ function validateRatification(ratification, ctx) {
 function twinRatified(parts) {
   const p = parts || {}
   const sigs = Array.isArray(p.signatures) ? p.signatures : null
-  if (!sigs || sigs.length !== 2) throw new Error('twinRatified: exactly two head signatures are required (constitution §8)')
+  if (!sigs || sigs.length !== 2) throw new Error('twinRatified: exactly two head signatures are required')
   const ctx = p.context != null ? p.context : (p.current_context != null ? p.current_context : null)
   if (ctx == null || typeof ctx !== 'object') throw new Error('twinRatified: a current context is required to bind both signatures')
   for (const k of ['bundle_hash', 'renderer_version', 'plan_hash', 'evidence_manifest_hash', 'protocol_version', 'seat_provenance']) {
@@ -485,14 +485,14 @@ const RATIFY_SCHEMA = {
           evidence_refs: { type: 'array', items: { type: 'string' } },
           evidence_class: { type: 'string', enum: ['executed_check', 'proposed_check', 'repo_state', 'test_output', 'primary_source', 'scenario'], description: 'the HONEST class of this finding\'s evidence — the claim-scoped partial order rules reversals by it' },
           executable_check: { type: ['string', 'null'], description: 'a bounded shell command (EXIT 0 iff the defect is present) or null' },
-          target_kind: { type: 'string', enum: ['settled_decision', 'trunk_field'], description: 'OPTIONAL (AMB-CLOSER-1.iii): the STRUCTURAL correction descriptor — an ACCEPTED BLOCK finding carrying { target_kind, key, replacement } amends the bundle mechanically; an ACCEPTED finding WITHOUT one is a gated escalation (no free rewrite)' },
+          target_kind: { type: 'string', enum: ['settled_decision', 'trunk_field'], description: 'OPTIONAL: the STRUCTURAL correction descriptor — an ACCEPTED BLOCK finding carrying { target_kind, key, replacement } amends the bundle mechanically; an ACCEPTED finding WITHOUT one is a gated escalation (no free rewrite)' },
           key: { type: 'string', description: 'OPTIONAL: an existing settled-decision topic or an amendable trunk field (present iff target_kind is)' },
           replacement: { description: 'OPTIONAL: the new value — must match the shape of the target\'s current value (present iff target_kind is)' },
         },
         required: ['finding_id', 'claim', 'required_change', 'evidence_refs', 'evidence_class', 'executable_check'],
       },
     },
-    changed_evidence: { type: 'array', items: { type: 'object', additionalProperties: true, properties: { finding_id: { type: 'string', description: 'the standing block this evidence retires — I9 one-finding-key rail: one evidence item can never clear two blocks' }, class: { type: 'string' }, refs: { type: 'array', items: { type: 'string' } } }, required: ['finding_id', 'class'] } },
+    changed_evidence: { type: 'array', items: { type: 'object', additionalProperties: true, properties: { finding_id: { type: 'string', description: 'the standing block this evidence retires — the one-finding-key rail: one evidence item can never clear two blocks' }, class: { type: 'string' }, refs: { type: 'array', items: { type: 'string' } } }, required: ['finding_id', 'class'] } },
     divergence_selections: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { divergence_id: { type: 'string' }, selection: { type: 'string', enum: ['P0', 'P1', 'MERGED', 'NEITHER'] }, evidence_refs: { type: 'array', items: { type: 'string' } } }, required: ['divergence_id', 'selection'] } },
     verdict: { type: 'string', enum: ['APPROVE', 'BLOCK', 'NEITHER'] },
   },
@@ -645,14 +645,14 @@ function verdictShapeError(r) {
   return null
 }
 
-// ── Twin Council gating (B4-2 D5; FC-1 tier-gating, 1b-ii precedent). The three build keystones —
+// ── Twin Council gating. The three build keystones —
 //    the Sol evidence analyst (Ryu bump), the milestone-close ratification pair (Judge Dredd retired),
 //    and the correction council — go council-grade ONLY when the capability record promised BOTH heads
 //    (T4 = fable + codex) AND the conductor minted a runToken. Sub-T4 / no-codex runs keep the v3.0.1
 //    prompt-delegated Ryu, single-Opus Judge Dredd, and unconditional corrective build BYTE-IDENTICAL,
 //    capability-honestly labeled. A PROMISED council missing its runToken is NOT a clean v3.0.1 run:
-//    the affected milestone ruling fails CLOSED (never a silent downgrade to Judge Dredd — scope
-//    ruling item 6). runTokenRaw is the RAW per-run token; it lives ONLY in the receipt-script argv
+//    the affected milestone ruling fails CLOSED (never a silent downgrade to Judge Dredd). runTokenRaw
+//    is the RAW per-run token; it lives ONLY in the receipt-script argv
 //    (a trusted process boundary), never in any head-visible prompt/packet. capabilityTier is
 //    T1|T2|T3|T4 from the freshest capability record; anything else ⇒ null. ──
 const runTokenRaw = (typeof A.runToken === 'string' && A.runToken.length > 0) ? A.runToken : null
@@ -666,7 +666,7 @@ const councilMisconfigured = councilPromised && runTokenRaw == null
 if (councilMisconfigured) {
   log('MISCONFIGURED CONDUCTOR — capability tier T4 with both heads reachable but NO runToken: the build councils cannot bind their receipts/seed. Every promised milestone-close/correction ruling fails CLOSED (QA_FAIL, terminal DEGRADED); the gate never silently downgrades to the v3.0.1 Judge Dredd / prompt-delegated seats. Relaunch with the per-run token to convene the councils.')
 }
-// ONE receipts ledger SHARED with architecture (architecture.js:341-343) so the receipt script's replay
+// ONE receipts ledger SHARED with architecture so the receipt script's replay
 // rejection spans every council invocation of the run; build council artifacts live under
 // ${councilRootDir}/<m.id>/. runTokenHash rides checkpoints only (never the raw token).
 const councilRootDir = `${kilnDir}/council/build`
@@ -693,9 +693,9 @@ const CORRECTION_TASK =
   'defect is beyond one corrective build, or needs a conductor decision), or REPLAN (the milestone plan itself is ' +
   'wrong — a conductor/operator re-plan is owed). Emit findings + reasons FIRST, then choice; echo artifact_hash.'
 const councilTemplateHashBuild = councilTemplateHash({ close_rubric: CLOSE_RUBRIC, close_task: CLOSE_RATIFY_TASK, correction_task: CORRECTION_TASK, renderer: COUNCIL_RENDERER_CLOSE })
-// ── ⟨DSGN-B3-4⟩(b) legacy-plan hook constants (fixed — NO per-run interpolation, run-independent
+// ── Legacy-plan hook constants (fixed — NO per-run interpolation, run-independent
 //    template hash). A run already past architecture whose master plan predates the twin council gets
-//    ONE retrospective blind dual ratification of the UNCHANGED plan (the b42 D7 lite-pair idiom reused
+//    ONE retrospective blind dual ratification of the UNCHANGED plan (the lite-pair idiom reused
 //    at this second call site; renderer b3-legacy/1). The plan is NOT edited — the pair ratifies it as
 //    sound or blocks it; a retrospective certificate is its OWN record, the plan stays legacy_authority. ──
 const COUNCIL_RENDERER_LEGACY = 'b3-legacy/1'
@@ -731,7 +731,7 @@ const SOL_QA_PAYLOAD_SCHEMA = {
   },
   required: ['findings', 'overall', 'report_markdown'],
 }
-// CORRECTION_SCHEMA — payload-first: findings/reasons BEFORE the choice (B6 evidence-before-commit).
+// CORRECTION_SCHEMA — payload-first: findings/reasons BEFORE the choice (evidence-before-commit).
 const CORRECTION_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
@@ -852,14 +852,14 @@ const RUNNER_SCHEMA = {
   properties: {
     verify_exit: { type: 'number', description: 'exit code of kiln-law verify (step 1)' },
     tamper_paths: { type: 'array', items: { type: 'string' }, description: 'every path from a TAMPER: line, any step (empty if none)' },
-    law_run_exit: { type: 'number', description: 'exit code of kiln-law run (step 2) — the §5.1 lifecycle verdict the workflow gates on mechanically' },
+    law_run_exit: { type: 'number', description: 'exit code of kiln-law run (step 2) — the lifecycle verdict the workflow gates on mechanically' },
     flip_unmet: { type: 'array', items: { type: 'string' }, description: 'every id from a FLIP_UNMET line of step 2, verbatim (empty if none or step 2 never ran)' },
     regressed: { type: 'array', items: { type: 'string' }, description: 'every id from a REGRESSION line of step 2, verbatim (empty if none or step 2 never ran)' },
     run_id: { type: 'string', description: 'verbatim from the RUN <runId> HEAD <head> line' },
     head: { type: 'string', description: 'verbatim HEAD sha from the RUN line' },
     suite_cmd: { type: 'string', description: 'the project suite command kiln-law suite ran (step 3)' },
     suite_exit: { type: 'number', description: 'the REAL suite exit from step 3\'s SUITE line (its output is persisted as suite.log + suite.jsonl in the evidence dir)' },
-    // D1 failure-fingerprint signal (§9 velocity): the per-check exits kiln-law recorded in
+    // Failure-fingerprint signal: the per-check exits kiln-law recorded in
     // evidence/<runId>/results.jsonl, transcribed VERBATIM — the infra-vs-assertion split the retry
     // router keys on. OPTIONAL by design: an absent/garbled array yields NO fingerprint, so the
     // admission behaves exactly as v3.0.1 (the Sentinel alone). Never inferred — only transcribed.
@@ -881,7 +881,7 @@ const RUNNER_SCHEMA = {
   required: ['verify_exit', 'tamper_paths', 'flip_unmet', 'regressed'],
 }
 const FRESHNESS_SCHEMA = {
-  // The §6 freshness transcript: current HEAD (sha + commit epoch) and the evidence's OWN anchors
+  // The freshness transcript: current HEAD (sha + commit epoch) and the evidence's OWN anchors
   // (run.json, written by kiln-law itself) + a re-hash of results.jsonl. Absence sentinels are ''
   // (strings) and -1 (epochs) — runnerGate fails closed on them; transcribe, never infer.
   type: 'object', additionalProperties: false,
@@ -929,7 +929,7 @@ const QA_FINDINGS_SCHEMA = {
         required: ['text', 'severity'],
       },
     },
-    // §3.2 judge-spawn condition input: the gate computes analyst DISAGREEMENT from this field —
+    // Judge-spawn condition input: the gate computes analyst DISAGREEMENT from this field —
     // a 'fail' MUST be backed by at least one critical|high finding, or the deterministic
     // reconcile (blocking = any critical|high) reads it as noise.
     overall: { type: 'string', enum: ['pass', 'fail'], description: 'your independent overall verdict on the milestone — \'fail\' MUST be backed by at least one critical or high finding' },
@@ -967,7 +967,7 @@ function denzelReconcile(repA, repB) {
   return { findings: merged, blocking, hasBlocking: blocking.length > 0, summaryLines: merged.map((f) => `[${f.severity}] ${f.text}`) }
 }
 
-// ── The build-spine mechanical core (BLUEPRINT §5.1/§6/§3.2) + the Sentinel ratchet (§3.3) —
+// ── The build-spine mechanical core + the Sentinel ratchet —
 //    inlined pure logic, unit-tested in src/spine.mjs and src/gauge.mjs. The coverage arithmetic,
 //    the tamper/freshness gate, the milestone-gate judge-spawn decision, and the escalation
 //    policy run IN THE SCRIPT, never in an agent. ──
@@ -1028,23 +1028,23 @@ function runnerGate(runner, probe) {
     else if (r && str(r.head) && cur !== str(r.head)) {
       reasons.push(`HEAD moved since the runner anchored its evidence (runner ${str(r.head)}, current ${cur})`)
     }
-    // §6 HEAD-anchor arm: run.json's head is written by kiln-law itself at run time — the
+    // HEAD-anchor arm: run.json's head is written by kiln-law itself at run time — the
     // evidence names the commit it was produced at, and that commit must BE the current HEAD.
     const manifestHead = str(p.manifest_head)
     if (!manifestHead) reasons.push('the evidence carries no manifest HEAD anchor (run.json missing or unfinalized)')
     else if (cur && manifestHead !== cur) reasons.push(`the evidence was produced at HEAD ${manifestHead}, not the current HEAD ${cur} — stale by commit`)
-    // §6 hash arm: a COMPLETE run records sha256(results.jsonl) in its manifest; the probe
+    // hash arm: a COMPLETE run records sha256(results.jsonl) in its manifest; the probe
     // re-hashes the file. Divergence ⇒ altered or partial evidence; absence ⇒ never finalized.
     const recorded = str(p.manifest_results_sha256)
     const rehashed = str(p.results_sha256)
     if (!recorded || !rehashed) reasons.push('the evidence hash cannot be verified (manifest results_sha256 or the probe rehash is missing — an aborted run never finalizes)')
     else if (recorded !== rehashed) reasons.push(`results.jsonl re-hashes to ${rehashed} but the manifest recorded ${recorded} — the evidence was altered or partially written`)
-    // §6 timestamp arm: evidence must postdate the commit it claims to verify.
+    // timestamp arm: evidence must postdate the commit it claims to verify.
     const completed = (typeof p.manifest_completed_epoch === 'number' && Number.isFinite(p.manifest_completed_epoch)) ? p.manifest_completed_epoch : -1
     const committed = (typeof p.head_committed_epoch === 'number' && Number.isFinite(p.head_committed_epoch)) ? p.head_committed_epoch : -1
     if (completed < 0 || committed < 0) reasons.push('the evidence/HEAD timestamps are unavailable — freshness cannot be proven')
     else if (completed < committed) reasons.push(`the evidence completed at epoch ${completed}, before HEAD was committed at epoch ${committed} — stale by time`)
-    // §7 honesty arm: every finalized run.json carries verification_class ('full' when every
+    // honesty arm: every finalized run.json carries verification_class ('full' when every
     // selected probe EXECUTED, 'static-only' the moment any probe deferred — uninstantiated
     // template, --skip-probes, or playwright absent). A deferred probe folds into a law_run_exit
     // of 0, so the exit code alone CANNOT distinguish a fully-verified run from a degraded one —
@@ -1056,7 +1056,7 @@ function runnerGate(runner, probe) {
     }
   }
   if (reasons.length) return { verdict: 'stale', tamper_paths: [], reasons }
-  // The lifecycle verdict (T2-fix ruling, §5.1 red/green): the evidence is complete and fresh —
+  // The lifecycle verdict (red/green): the evidence is complete and fresh —
   // kiln-law finalizes run.json BEFORE its expectation gates, so a flip/regression failure still
   // carries trustworthy evidence — and the exit code IS the verdict. Non-zero ⇒ 'red', mechanical.
   if (r.law_run_exit !== 0) {
@@ -1148,14 +1148,14 @@ function gateDecision(reconciled, overallA, overallB) {
   if (!known(overallA) || !known(overallB)) {
     const a = known(overallA) ? overallA : 'unreadable'
     const b = known(overallB) ? overallB : 'unreadable'
-    return { judge: false, verdict: 'QA_FAIL', reason: `an analyst overall verdict is missing/unreadable (A: ${a}, B: ${b}) — the §3.2 judge-spawn condition needs two readable, disagreeing verdicts; missing evidence fails the boundary closed (QA_FAIL), the judge never spawns on missing inputs` }
+    return { judge: false, verdict: 'QA_FAIL', reason: `an analyst overall verdict is missing/unreadable (A: ${a}, B: ${b}) — the judge-spawn condition needs two readable, disagreeing verdicts; missing evidence fails the boundary closed (QA_FAIL), the judge never spawns on missing inputs` }
   }
   if (overallA === overallB) {
     return {
       judge: false, verdict: 'QA_PASS',
       reason: overallA === 'pass'
         ? 'zero blocking findings and the analysts agree (pass) — the verdict is computed; no judge'
-        : 'the analysts agree (fail) yet produced zero blocking findings — an unbacked fail is noise to the deterministic reconcile; the §3.2 computed rule (no blocking ⇒ QA_PASS) applies and an agreed verdict is not ambiguous, so no judge',
+        : 'the analysts agree (fail) yet produced zero blocking findings — an unbacked fail is noise to the deterministic reconcile; the computed rule (no blocking ⇒ QA_PASS) applies and an agreed verdict is not ambiguous, so no judge',
     }
   }
   return { judge: true, verdict: null, reason: `zero blocking findings and the analyst overall verdicts disagree (A: ${overallA}, B: ${overallB}) — ambiguous reconcile, the judge rules` }
@@ -1193,12 +1193,12 @@ function admitSpeculation(slices) {
   return { admit: true, reason: null, corrections, slices: sliceCount }
 }
 function escalate(posture, signal, config) {
-  // §3.3 signal shapes, ranked by evidence strength:
+  // signal shapes, ranked by evidence strength:
   //   { type: 'review_rejection', finding_class: 'logical'|'mechanical', rejections: n }
   //     the master signal; escalation keys on LOGICAL findings only. At
   //     rejections_to_feedback_escalation: escalate the FEEDBACK SOURCE (stronger or
   //     different-family reviewer), not the retry count. At rejections_to_split:
-  //     split-and-rebuild (genesis 3.4).
+  //     split-and-rebuild.
   //   { type: 'test_churn', flips: n }      — same check flipping pass<->fail across fix cycles
   //   { type: 'diff_size_exceeded' }        — diff size beyond the slicer estimate
   //   { type: 'slice_growth' }              — slice count grows beyond the estimate
@@ -1264,10 +1264,10 @@ function routing(surf) {
     ? { buildModel: 'opus', reviewModel: 'sonnet' }   // Opus builds, Codex reviews
     : { buildModel: 'sonnet', reviewModel: 'opus' }   // Codex builds, Opus reviews
 }
-// reviewLeg(surf, escalated) — §3.3 feedback-source escalation: after
+// reviewLeg(surf, escalated) — feedback-source escalation: after
 // rejections_to_feedback_escalation LOGICAL rejections, the feedback source changes. T1..T4 name
-// the §8 CAPABILITY-LADDER tiers (T1 Sonnet-only / T2 +Opus / T3 +Codex / T4 +Fable), and
-// codexAvailable is the one observable tier discriminant this workflow receives (§12 doctor
+// the CAPABILITY-LADDER tiers (T1 Sonnet-only / T2 +Opus / T3 +Codex / T4 +Fable), and
+// codexAvailable is the one observable tier discriminant this workflow receives (doctor
 // probe): true ⟺ T3+. T3+ swaps the reviewer FAMILY — the stuck loop gets genuinely different
 // eyes, and codex is the only second family on board. T1/T2 has NO second family, so escalation
 // is a fresh-context stronger-effort reviewer instead (Opus, the strongest seat available;
@@ -1281,46 +1281,45 @@ function reviewLeg(surf, escalated) {
   }
   return { model: 'opus', viaCodex: false, escalated: true }
 }
-// Codex review effort (§3.2 slice-review row): 'medium' baseline; 'high' iff the posture says so
+// Codex review effort: 'medium' baseline; 'high' iff the posture says so
 // (D8≥1 → ui_effort_base 'high', and the Sentinel ratchet can raise it mid-run) OR fix-cycle>0
 // (posture.review.escalate_on) OR the feedback source was escalated.
 const reviewEffort = (fix, escalated) => (livePosture.review.ui_effort_base === 'high' || fix > 0 || escalated) ? 'high' : 'medium'
 
-// P5.5 lever 2 (§9, run-a-report.md): the deterministic runner EXECUTES kiln-law and TRANSCRIBES
+// The deterministic runner EXECUTES kiln-law and TRANSCRIBES
 // its output — the gate arithmetic is downstream and deterministic (kiln-law exit codes + evidence
 // hashes), so a weaker transcription seat cannot weaken the gate; it can only fail more visibly,
 // which the fail-closed tamper/stale/red paths already catch. At trivial scope the seat downshifts
 // to haiku; at standard it stays sonnet. Keyed on scope_tier ONLY — the effort dial is a per-call
-// reasoning signal, never a scope signal (the r1 finding). Both trial call sites route through it.
+// reasoning signal, never a scope signal. Both trial call sites route through it.
 const runnerModel = livePosture.scope_tier === 'trivial' ? 'haiku' : 'sonnet'
 
 // Review verdict helpers. approvedOf is the ONE approval predicate: verdict, the reviewer's own
-// suite re-run, AND the reviewer's own kiln-law re-run (§6 independent-rerun floor) must all hold.
+// suite re-run, AND the reviewer's own kiln-law re-run (independent-rerun floor) must all hold.
 const approvedOf = (rev) => !!(rev && rev.verdict === 'APPROVED' && rev.tests_green !== false && rev.law_green !== false)
 const findingLines = (rev) => ((rev && rev.findings) || []).map((f) => f && f.text).filter(Boolean)
-// fpOrNull — normalize a tagged fingerprint: only a REAL signature counts (Sol WSD-r1 finding 4 —
-// the truthy NULL-fingerprint object must never leak '' into telemetry or the router's prev slot).
+// fpOrNull — normalize a tagged fingerprint: only a REAL signature counts (the truthy
+// NULL-fingerprint object must never leak '' into telemetry or the router's prev slot).
 const fpOrNull = (fp) => (fp && typeof fp === 'object' && !Array.isArray(fp) && typeof fp.signature === 'string' && fp.signature) ? fp : null
 // autoReject — the workflow's own REJECTED verdict (commit-before-review, tamper, stale evidence).
 // Always 'mechanical': these are process failures, not defect signals — they must not push the
-// Sentinel toward feedback escalation or a split (§3.3 keys on logical findings only).
+// Sentinel toward feedback escalation or a split (the ratchet keys on logical findings only).
 const autoReject = (texts) => ({ verdict: 'REJECTED', law_green: false, tests_green: false, findings: texts.map((t) => ({ text: t, finding_class: 'mechanical' })) })
 // lawRedReject — the workflow's REJECTED verdict for a RED lifecycle gate (kiln-law run --flips
 // exited non-zero: a declared flip did not go RED→GREEN, or a previously-GREEN check regressed).
 // Classed 'logical' deliberately, in contrast with autoReject: a failed check is the finding
 // taxonomy's own definition of logical ("wrong behavior, failed check") and a GENUINE defect
-// signal — a slice that repeatedly cannot flip its Law should march the §3.3 ratchet toward
+// signal — a slice that repeatedly cannot flip its Law should march the ratchet toward
 // split_required exactly like reviewer-caught wrong behavior (scrutiny may only rise).
 const lawRedReject = (texts) => ({ verdict: 'REJECTED', law_green: false, tests_green: false, findings: texts.map((t) => ({ text: t, finding_class: 'logical' })) })
-// The ORCHESTRATOR RULING's blocking finding (p2/tasks.md "Gate failure semantics"): a
-// goal-backward audit still unusable after its ONE re-ask fails the milestone boundary closed.
-const GOAL_AUDIT_FAILURE = `[goal-audit-failure] the goal-backward audit returned no usable report after one re-ask — the boundary fails closed (QA_FAIL; orchestrator ruling 2026-06-11)`
+// A goal-backward audit still unusable after its ONE re-ask fails the milestone boundary closed.
+const GOAL_AUDIT_FAILURE = `[goal-audit-failure] the goal-backward audit returned no usable report after one re-ask — the boundary fails closed (QA_FAIL)`
 
 // ── Gate hardening: the single gateAgent (+ isStructuredOutputFailure / classifyGateFailure),
 //    inlined from src/gate.mjs — a mute gate leg DEGRADES to null, never detonates the run. ──
-// gate.mjs — the single gateAgent for every gate/judgment leg (BLUEPRINT WS-B1). ONE source of
-// truth: inlined verbatim into build/validate/report by the `// @gate` bundler marker, so the
-// v3.0.1 drift (build's copy matched 'retry cap', validate's did not) can never recur again.
+// gate.mjs — the single gateAgent for every gate/judgment leg. ONE source of
+// truth: inlined verbatim into build/validate/report by the `// @gate` bundler marker, so divergent
+// copies can never drift again.
 // Kept SEPARATE from spine.mjs on purpose — spine.mjs is pure-functions-only by its header
 // contract; gateAgent awaits the ambient agent() and speaks through the ambient log(), so it does
 // not belong in the pure module. Every gate-bearing workflow already carries both globals.
@@ -1347,14 +1346,14 @@ const GOAL_AUDIT_FAILURE = `[goal-audit-failure] the goal-backward audit returne
 // error "StructuredOutput retry cap (5) exceeded" matches 'StructuredOutput'; a bare 'retry cap' is
 // deliberately NOT matched (it false-positives unrelated errors like an "HTTP retry cap exceeded").
 //
-// RECEIPT PROVENANCE (twin-council; sol-b34-design "Codex transport receipt"). A Sol council seat runs
+// RECEIPT PROVENANCE (twin-council). A Sol council seat runs
 // a Sonnet wrapper over `transport:'codex'`, and a Sonnet's WORD that it invoked Codex is worthless: the
 // deterministic kiln-codex-receipt.mjs boundary owns process capture + hashing + verification. So a
 // codex-transport wrapped agent() returns an ENVELOPE { payload, codex_receipt, raw_artifact_refs }, and
 // gateAgent STRUCTURALLY validates the relayed receipt — all 14 receipt keys present and well-formed,
 // exit 0, and reported_model === requested_model === the pinned transportModel. gate.mjs can NEVER hash
 // (it validates shape + equality, never recomputes — the deterministic ledger cross-check is the call
-// site's leg, batch 1b-ii). A valid receipt returns envelope.payload and records the transport
+// site's leg). A valid receipt returns envelope.payload and records the transport
 // attestation. `receiptRequired` + a missing/invalid receipt is a DEAD Sol seat: two_heads:required
 // fails closed to null (Sonnet's own answer NEVER substitutes for Sol); best_effort may retain the
 // wrapper answer as honest Sonnet provenance that can never later claim second-family verification. All
@@ -1403,7 +1402,7 @@ function classifyGateFailure(e) {
 //   opts.provenance optional sink object. gateAgent writes {requested_model, actual_model,
 //                     fallback_reason, classification} onto it so a caller that ALREADY ledgers can
 //                     ride the record into its EXISTING note/evidence data payload — no new event
-//                     type is minted (BLUEPRINT §B6/§10). actual_model is ALWAYS the model that
+//                     type is minted. actual_model is ALWAYS the model that
 //                     actually produced the returned result — the requested model on a clean call or
 //                     a same-model re-dispatch, 'opus' after a fable→opus substitution, and null on a
 //                     fail-closed null. classification is the seat-death class that forced the
@@ -1502,7 +1501,7 @@ async function gateAgent(prompt, opts) {
     }
   }
   // settleCodex(env, history) — a codex dispatch returned a usable envelope. STRUCTURALLY validate the
-  // relayed receipt (gate.mjs never hashes; the deterministic ledger cross-check is the 1b-ii call-site
+  // relayed receipt (gate.mjs never hashes; the deterministic ledger cross-check is the call-site
   // leg). A verified receipt requires a NON-NULL payload (a receipt with no answer is not a verification —
   // provenance never lies); it returns envelope.payload + the full attestation, carrying the dispatch
   // history (fallback_reason/classification of the path that led here, e.g. a best-effort redispatch after
@@ -1566,7 +1565,7 @@ async function gateAgent(prompt, opts) {
   return null
 }
 
-// withDeadline(thunk, ms, onLate) — the await-bound for a Tier-2 traversal leg (BLUEPRINT §7). Lives
+// withDeadline(thunk, ms, onLate) — the await-bound for a Tier-2 traversal leg. Lives
 // here (one implementation, imported by the unit tests, inlined into validate by the @gate marker) so
 // the tested wrapper and the shipped wrapper can never drift. Resolves to the thunk's value, the
 // sentinel TRAVERSAL_TIMEOUT ({ __kiln_timeout: true }) if ms elapses first, or the sentinel
@@ -1618,10 +1617,10 @@ const codexGuideNote = codexGuide
   : ``
 
 // ── Prompt builders (functional role+stance only; persona names live in labels, never here) ──
-// The §5 Law block every builder receives: outcome-phrased (done = the SC checks pass), with the
+// The Law block every builder receives: outcome-phrased (done = the SC checks pass), with the
 // immutability warning — the tamper gate auto-rejects mechanically, so the warning is real.
 // The builder's kiln-law run is stage-tokened (--run-prefix BUILD_RUN_TOKEN) so the stage-end sweep
-// can reap a hard-killed builder's probe tree — kiln-law's per-run bracket covers normal exits only (DOGFOOD FINDING 6).
+// can reap a hard-killed builder's probe tree — kiln-law's per-run bracket covers normal exits only.
 function lawLines(slice) {
   const ids = slice.sc_ids.join(',')
   return `- THE LAW (locked acceptance gates): this slice is DONE only when its mapped checks pass — ${slice.sc_ids.join(', ')}. ` +
@@ -1646,9 +1645,8 @@ function slicePlanPrompt(m, surf, scs, built, note) {
     `<constraints>\n` +
     `- ${scope}\n` +
     `- A slice = ONE distinct, independently-runnable user-facing behavior that can be invoked and verified on its own by a single runnable check (a CLI subcommand, an API call, a rendered-and-exercised page, one pure function). ` +
-    // P5.5 lever 1: at trivial tier the slice BUDGET rules the grouping (Run A: 16 SCs went into
-    // 5 slices where 2-3 carried identical verification value — the per-slice fixed cost is where
-    // the trivial tier bleeds). At standard, the pre-P5.5 text rides byte-identical.
+    // At trivial tier the slice BUDGET rules the grouping (the per-slice fixed cost is where
+    // the trivial tier bleeds). At standard, the standard text rides byte-identical.
     (livePosture.scope_tier === 'trivial'
       ? `Decompose the milestone by such behaviors in dependency order — then GROUP toward the budget: at trivial scope (the Gauge's ruling) the slice budget is the sizing authority, not behavior count. Group ADJACENT behaviors on the same seam (same file cluster, same runnable check family) into one slice up to the budget — the trial runs the cumulative SC set and regressions are observed per-trial, so grouping loses no verification value; a multi-command CLI is two or three grouped slices, not one per command.\n`
       : `Decompose the milestone by such behaviors, in dependency order: a multi-command CLI gives a slice per command (add / list / done / rm), a CRUD resource a slice per operation.\n`) +
@@ -1730,12 +1728,12 @@ function buildPrompt(m, surf, slice, sliceId, fixNote) {
 }
 
 function runnerPrompt(build, lawCtx, beforeRunId) {
-  // The §5.1 lifecycle invocation (T2-fix ruling: the exit code IS the verdict): --flips declares
+  // The lifecycle invocation (the exit code IS the verdict): --flips declares
   // the slice's expected RED→GREEN set, --only also re-runs every SC this milestone already
   // turned green (so regressions are OBSERVED, not assumed), and --before anchors statusBefore in
   // the recorded evidence of the previous complete run — kiln-law computes the flip plan itself
   // (src/law.mjs flipPlan); no agent arithmetic, no prose state.
-  //   The gateOnly variant (P3.5 T3, dogfood finding 4) re-runs a STARVED gate over an
+  //   The gateOnly variant re-runs a STARVED gate over an
   //   already-completed build: it asserts every milestone SC is GREEN NOW (--expect-green over the
   //   full --only scope, kiln-law's hard-greenness gate) and declares NO --flips — nothing is being
   //   flipped, so there is no RED→GREEN lifecycle and no statusBefore to anchor (--before is
@@ -1770,7 +1768,7 @@ function freshPrompt(runId) {
     `<task>Run (Bash) and transcribe EXACTLY:\n` +
     `1. 'ls ${dir}/results.jsonl' — results_jsonl_exists = true iff the file exists.\n` +
     `2. 'sha256sum ${dir}/results.jsonl' (or 'shasum -a 256' where sha256sum is unavailable) — results_sha256 = the hex digest, '' if the file is missing.\n` +
-    `3. 'cat ${dir}/run.json' — the manifest kiln-law itself wrote into the evidence: manifest_head = its "head", manifest_results_sha256 = its "results_sha256", manifest_completed_epoch = its "completed_at", manifest_verification_class = its "verification_class" (sentinels '' / '' / -1 / '' when the file or a field is missing — an unfinalized manifest means the run never completed; verification_class is the §7 degradation record: 'full' = every probe executed, 'static-only' = some probe deferred).\n` +
+    `3. 'cat ${dir}/run.json' — the manifest kiln-law itself wrote into the evidence: manifest_head = its "head", manifest_results_sha256 = its "results_sha256", manifest_completed_epoch = its "completed_at", manifest_verification_class = its "verification_class" (sentinels '' / '' / -1 / '' when the file or a field is missing — an unfinalized manifest means the run never completed; verification_class is the degradation record: 'full' = every probe executed, 'static-only' = some probe deferred).\n` +
     `4. 'git -C ${projectPath} rev-parse HEAD' — head = the full sha.\n` +
     `5. 'git -C ${projectPath} show -s --format=%ct HEAD' — head_committed_epoch = the number (-1 if git failed).\n` +
     `Do not read anything else, do not write or fix anything. Report the seven fields.</task>`
@@ -1795,10 +1793,10 @@ function reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort, vclas
     const how = leg.viaCodex
       ? `<how>${codexGuideNote}Delegate this review to ${CODEX_MODEL} via 'codex exec' at model_reasoning_effort="${effort}" — you are the thin wrapper and the cross-model check; if codex errors, review directly as the independent reviewer.</how>\n\n`
       : ''
-    // §7 screenshot rule (tasks.md T2.2): the reviewer judges the probe SCREENSHOT by a BINARY
+    // Screenshot rule: the reviewer judges the probe SCREENSHOT by a BINARY
     // RUBRIC only — pass/fail visibility questions ("is the nav visible? is text clipped? does it
     // match the stated design language?") — NEVER a free-form aesthetic score. VLMs rank reliably
-    // and SCORE unreliably [R:playwright-discipline §4]; numeric taste scores are out of scope and
+    // and SCORE unreliably; numeric taste scores are out of scope and
     // judged separately from a live render at validate. When the run is static-only there is no
     // screenshot to judge — that arm is gated below.
     const screenshotRubric = vclass === 'static-only'
@@ -1843,18 +1841,16 @@ function reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort, vclas
     `<task>Verdict APPROVED only if the mapped checks and the suite are green from YOUR OWN runs AND the implementation is real AND on-spec; else REJECTED with specific [file:line] findings. Set law_green and tests_green from your own runs. ${classRule} Emit verdict, law_green, tests_green, and findings first; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`
 }
 
-// The analyst overall-verdict rule (§3.2): the gate computes judge-spawn from analyst
+// The analyst overall-verdict rule: the gate computes judge-spawn from analyst
 // DISAGREEMENT, and the deterministic reconcile blocks on critical|high findings only — so an
 // overall 'fail' carrying no such finding is structurally noise. Stated in both analyst prompts.
 const overallRule = `Also return overall — your independent verdict on the whole milestone ('pass' | 'fail'); a 'fail' MUST be backed by at least one critical or high finding, or the deterministic reconcile reads it as noise.`
-// THE BROWSER LAW for the gate legs (RUN-B F3 ruling, 2026-06-13): the tribunal analyst and the
-// judge were the ONLY browser-capable prompts WITHOUT a browser-law line, and the field run proved
-// it — Ken drove the Playwright-MCP browser_* tools on two milestone gates (superb adversarial QA
-// through a forbidden channel) and leaked an MCP chrome the token sweep structurally cannot reap
-// (an MCP browser is a persistent SERVICE, the exact class §7 forbids in-loop). Every prompt that
-// carried any browser-law line held; the two without it did not. The law names all three channels
-// and re-channels the analyst's hunger to the probe evidence — the value is redirected, not lost.
-const browserLaw = `NEVER launch a browser, NEVER drive Playwright yourself, and NEVER use Playwright-MCP browser_* tools (an MCP browser is a persistent service outside this stage's kill-token sweep — the exact leak class §7 forbids). Every browser observation you need already exists as probe evidence under ${kilnDir}/evidence/ (screenshots, console/net logs, probe-<SC>.json results) — judge UI behavior from that evidence and static inspection; live UI verification beyond it belongs to validate's bounded Tier-2 traversal, not to you.`
+// THE BROWSER LAW for the gate legs: the tribunal analyst and the judge are browser-capable prompts
+// that MUST carry the browser-law line — without it an analyst can drive the Playwright-MCP browser_*
+// tools and leak an MCP chrome the token sweep structurally cannot reap (an MCP browser is a
+// persistent SERVICE that in-loop browser discipline forbids). The law names all three channels and
+// re-channels the analyst's hunger to the probe evidence — the value is redirected, not lost.
+const browserLaw = `NEVER launch a browser, NEVER drive Playwright yourself, and NEVER use Playwright-MCP browser_* tools (an MCP browser is a persistent service outside this stage's kill-token sweep — the exact leak class in-loop discipline forbids). Every browser observation you need already exists as probe evidence under ${kilnDir}/evidence/ (screenshots, console/net logs, probe-<SC>.json results) — judge UI behavior from that evidence and static inspection; live UI verification beyond it belongs to validate's bounded Tier-2 traversal, not to you.`
 function kenPrompt(m) {
   return voice('opus') +
     `You are QA analyst A. Adversarially verify the INTEGRATED milestone — run the tests, confirm each acceptance criterion is genuinely met (not faked), and hunt integration gaps and edge cases across the slices.\n\n` +
@@ -1870,7 +1866,7 @@ function ryuPrompt(m) {
     `<inputs>\n- Milestone ${m.id} "${m.title}" — acceptance: ${m.acceptance}\n- Inspect the repo at ${projectPath}: git log/diff, read files, RUN the tests.\n</inputs>\n\n` +
     `<task>Write findings to ${qaDir}/qa-report-b.md — persist it via a Bash heredoc (mkdir -p the dir, then cat with a quoted heredoc into the file) — NEVER the Write tool: a platform guardrail rejects subagent Write calls on report files, and the rejection poisons the structured-output attempts that follow (an observed death mode). Return findings[] (each {text, severity}) and overall FIRST, then report_file. ${overallRule} Do NOT read analyst A's report — stay independent. Put ALL detail in the report file; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`
 }
-// goalBackwardPrompt — the §3.2 boundary auditor: works BACKWARD from the milestone goal (GSD
+// goalBackwardPrompt — the boundary auditor: works BACKWARD from the milestone goal (GSD
 // discipline), explicitly hunting "all checks pass but the goal is broken" before validate.
 function goalBackwardPrompt(m) {
   return voice('opus') +
@@ -1888,7 +1884,7 @@ function judgePrompt(m, reconciled) {
     `<task>RUN the tests yourself at ${projectPath}. Issue QA_PASS only if the milestone genuinely meets its acceptance with green tests and no critical/high findings; else QA_FAIL with the blocking findings. Emit verdict FIRST, then findings and severity as their own properties; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`
 }
 
-// ── Ledger (BLUEPRINT §3.5): every posture move and slice-plan event lands in events.jsonl via
+// ── Ledger: every posture move and slice-plan event lands in events.jsonl via
 //    the kiln-state CLI — silent posture changes are a documented operator-trust killer. Only
 //    called past the pluginRoot floor gate, so the CLI path is always resolvable. ──
 async function ledger(type, data, phaseName) {
@@ -1904,14 +1900,14 @@ async function ledger(type, data, phaseName) {
   )
 }
 
-// ── Lore beats (C1 doctrine §4): a forge/anvil dispatch at the moment a fact becomes true, carried by
+// ── Lore beats: a forge/anvil dispatch at the moment a fact becomes true, carried by
 //    the ledger to the operator's transcript between the banners (note{kind:'lore'}; deterministic
 //    <stage>.<beat> key; args short scalars capped at 80 by the caller; text ≤ 160). PRESENTATION,
 //    null-keep: pluginRoot absent ⇒ a plain log() line, never a stage failure (build only reaches a
-//    beat past the §3.4 floor gate, so pluginRoot is always present here — the guard is belt). ──
+//    beat past the floor gate, so pluginRoot is always present here — the guard is belt). ──
 const LORE_MAX = 160
 const oneLine = (s, cap = LORE_MAX) => String(s).replace(/[\x00-\x1f\x7f]+/g, ' ').slice(0, cap)
-// args are bound HERE (F-1): every string value is capped at 80 mechanically, so a beat can never
+// args are bound HERE: every string value is capped at 80 mechanically, so a beat can never
 // leak an unbounded project-controlled string into the ledger even if a call site forgets to cap.
 const boundArgs = (a) => { const o = {}; for (const [k, v] of Object.entries(a)) o[k] = typeof v === 'string' ? oneLine(v, 80) : v; return o }
 const lore = (key, text, args, phaseName) =>
@@ -1919,7 +1915,7 @@ const lore = (key, text, args, phaseName) =>
     ? ledger('note', { kind: 'lore', key, text: oneLine(text), ...(args ? { args: boundArgs(args) } : {}) }, phaseName)
     : log(oneLine(text))
 
-// ── Stage-level browser sweeps (BLUEPRINT §7 / discipline-spec lifecycle step 3, tasks.md T2.3) —
+// ── Stage-level browser sweeps —
 //    the OUTER bracket around the whole build stage. The browser is a subprocess with a deadline,
 //    never a service: kiln-law already brackets each probe-EXECUTING run with its own per-run
 //    `kiln-probe sweep <runId>` (registered on process 'exit' + on timeout SIGKILL), but a
@@ -1927,21 +1923,21 @@ const lore = (key, text, args, phaseName) =>
 //    leaving an orphaned chrome-headless-shell / managed server tree behind. THIS stage bracket is
 //    the backstop for that — a PRE-FLIGHT sweep at build start and an UNCONDITIONAL sweep at build
 //    end (the latter in the finally below, so any throw still reaps).
-//    Scope is RUN-TOKEN, not the whole namespace (the reviewer's MAJOR / the discipline-spec
-//    "post-check cleanup is run-token scoped"): both sweeps target THIS build's BUILD_RUN_TOKEN —
+//    Scope is RUN-TOKEN, not the whole namespace (post-check cleanup is run-token scoped):
+//    both sweeps target THIS build's BUILD_RUN_TOKEN —
 //    every probe this stage spawned runs under a runId prefixed with it (--run-prefix on each
 //    kiln-law run), so `kiln-probe sweep <BUILD_RUN_TOKEN>` reaps exactly this stage's survivors
 //    and CANNOT touch a concurrent Kiln run (a validate Tier-2 traversal, a parallel build) — let
 //    alone the operator's own browser (blanket `pkill -f chrome` stays forbidden). The old
-//    whole-namespace pre-flight "stale-SingletonLock" defense (#1311) is unnecessary here: that
+//    whole-namespace pre-flight "stale-SingletonLock" defense is unnecessary here: that
 //    failure mode requires a REUSED --user-data-dir, and Kiln gives every probe a unique
 //    /tmp/kiln-pw-<token> profile dir (kiln-probe.mjs), so a prior crashed run's stale lock lives
-//    in a dir this build never reuses and can never block it. Both sweeps are ledgered (§3.5) and
+//    in a dir this build never reuses and can never block it. Both sweeps are ledgered and
 //    the sweep CLI always exits 0 so cleanup never fails a stage. Only called past the pluginRoot
 //    floor gate (the CLI is locatable) via a haiku leg — a mechanical `pkill`/`rm` cleanup. ──
 // SWEEP_SCAN_SCHEMA — the sweep leg now runs TWO commands (sweep, then the READ-ONLY leak-scan) and
 // reports both: the SWEEP line (owned-namespace cleanup, as before) and the LEAK_SCAN json (a foreign
-// browser we do not own — the eye Run B lacked, RUN-B FINDING 3b). leak_suspects rides the baseline
+// browser we do not own). leak_suspects rides the baseline
 // browser_sweep event on EVERY bracket; the suspect/profile-dir detail rides a separate
 // browser_leak_suspect event ONLY when count>0 (a lean ledger — zero-suspect scans ride the count).
 const SWEEP_SCAN_SCHEMA = {
@@ -1986,7 +1982,7 @@ async function stageSweep(when) {
   const leakSuspects = (r && Number.isInteger(r.leak_suspects)) ? r.leak_suspects : 0
   const suspects = (r && Array.isArray(r.suspects)) ? r.suspects : []
   const profileDirs = (r && Array.isArray(r.profile_dirs)) ? r.profile_dirs : []
-  // Baseline proof for BOTH arms on every bracket (T3 review r1 ruling): leak_suspects AND
+  // Baseline proof for BOTH arms on every bracket: leak_suspects AND
   // leak_profile_dirs ride browser_sweep, so the ledger records that disk evidence existed
   // even when no foreign browser is alive. The detail event stays gated on LIVE suspects —
   // stale /tmp profile dirs from unrelated work would make a dirs-only alarm cry wolf; their
@@ -1997,14 +1993,14 @@ async function stageSweep(when) {
   }
 }
 
-// ── The status anchor (§5.1 statusBefore, T2-fix ruling): statusBefore lives in the EVIDENCE —
+// ── The status anchor: statusBefore lives in the EVIDENCE —
 //    the anchored run's results.jsonl, folded by kiln-law itself via --before — never in prose.
 //    The workflow carries only this run-id pointer, advanced on every COMPLETE freshness-verified
 //    run (green OR red: a red run's fold is the truthful current status for the next fix cycle's
 //    flip plan; tamper/stale runs never anchor — their evidence is untrusted by definition). ──
 let lastRunId = null
 
-// ── HEAD probe (the §9 pipelining base-SHA anchor): one cheap haiku reads the project HEAD so the
+// ── HEAD probe (the pipelining base-SHA anchor): one cheap haiku reads the project HEAD so the
 //    in-script pipelineInvalidated predicate can compare the SHA a speculative slice plan was cut
 //    against (its base_sha) with the SHA after the milestone gate completes. Returns '' on any
 //    failure — pipelineInvalidated fails closed on a blank HEAD (an unreadable HEAD forces a
@@ -2023,9 +2019,9 @@ async function headSha(suffix) {
   return (r && typeof r.head === 'string') ? r.head.trim() : ''
 }
 
-// ── planMilestone(targetM, targetSurf, targetScs) — the §5 batch slice plan for ONE milestone,
+// ── planMilestone(targetM, targetSurf, targetScs) — the batch slice plan for ONE milestone,
 //    parameterized so it can run for the CURRENT milestone synchronously OR for the NEXT milestone
-//    SPECULATIVELY (velocity lever 3, §9 pipelining). ONE batch krs-one:slice-plan call, coverage
+//    SPECULATIVELY (pipelining). ONE batch krs-one:slice-plan call, coverage
 //    validated in-script, ONE re-ask on gaps. Returns { ok, planned, errors }. The pipelined call
 //    runs against an EMPTY built-list (nothing of the next milestone exists yet) — exactly the cold
 //    plan the synchronous path computes; if the gate's corrective commit moves HEAD, the speculative
@@ -2049,7 +2045,7 @@ async function planMilestone(targetM, targetSurf, scs, built = [], note = null, 
   return { planned, ok: v.ok, errors: v.errors }
 }
 
-// ── The pipeline carry (§9 lever 3): a speculative slice plan launched DURING the previous
+// ── The pipeline carry: a speculative slice plan launched DURING the previous
 //    milestone's gate, against the HEAD it was cut at (base_sha). { milestoneId, base_sha, promise }.
 //    Consumed at the head of the next milestone iteration: a corrective commit on the prior
 //    milestone (tribunal correction / validate loop) that moved HEAD off base_sha invalidates it
@@ -2057,7 +2053,7 @@ async function planMilestone(targetM, targetSurf, scs, built = [], note = null, 
 //    plan keeps the speculation bounded (the next milestone only). ──
 let pipelinedPlan = null
 
-// ── The Trial, mechanized (§5.1/§6): commit gate → deterministic runner → freshness probe →
+// ── The Trial, mechanized: commit gate → deterministic runner → freshness probe →
 //    in-script runnerGate → reviewer ONLY on 'proceed'. lawCtx = { flips, only }: the SC ids this
 //    trial must flip RED→GREEN, and the run scope (the flips plus every SC the milestone already
 //    turned green, so regressions are observed, not assumed). Returns the review verdict object
@@ -2078,10 +2074,10 @@ async function evidencedReview(m, surf, slice, sliceId, build, fix, escalated, r
     fresh = await agent(freshPrompt(runner.run_id), { label: loreLabel('thoth', 'freshness', `${sliceId}:f${fix}`), phase: 'The Trial', model: 'haiku', schema: FRESHNESS_SCHEMA })
   }
   const gate = runnerGate(runner, fresh)
-  // D1 (§9 velocity): fingerprint THIS trial's failure and ride it out on the returned verdict so the
+  // Fingerprint THIS trial's failure and ride it out on the returned verdict so the
   // retry loop can route the NEXT admission (failureFingerprint emits only on a 'red' gate — a
   // check-level lifecycle failure; everything else is the NULL fingerprint, admitted as v3.0.1). The
-  // run id rides too, so a reject brief can name that run's on-disk probe artifacts (D2). tag() is
+  // run id rides too, so a reject brief can name that run's on-disk probe artifacts. tag() is
   // additive — every return object gains .fingerprint + .run_id without changing its verdict shape.
   const fp = failureFingerprint(runner && runner.check_results, gate)
   const runId = (runner && typeof runner.run_id === 'string') ? runner.run_id : null
@@ -2089,11 +2085,11 @@ async function evidencedReview(m, surf, slice, sliceId, build, fix, escalated, r
   // Advance the status anchor on every complete, fresh run — 'proceed' AND 'red' both carry a
   // finalized manifest the probe just verified; the next trial's --before folds this run.
   if (gate.verdict === 'proceed' || gate.verdict === 'red') lastRunId = runner.run_id
-  // §7 honesty (tasks.md T2.1): a static-only run (a mapped probe deferred — playwright absent →
+  // Verification honesty: a static-only run (a mapped probe deferred — playwright absent →
   // exit 78, an un-instantiated template, or --skip-probes) folds to law_run_exit 0, so the
   // degradation must be LEDGERED the moment the gate sees it — recorded end-to-end, never silently
   // green. The probeGate pure predicate (src/spine.mjs) makes the decision surface-aware: a
-  // ui/mixed slice that lost its browser-probe evidence ledgers 'probe_unavailable' (the §7
+  // ui/mixed slice that lost its browser-probe evidence ledgers 'probe_unavailable' (the
   // capability-tier event) and the ui review falls back to the v2 static checks; a logic slice has
   // no browser path so probeGate passes it through (a static-only class there means a mapped probe
   // SC the slicer attached to logic-adjacent work — still surfaced as the generic degradation so
@@ -2112,12 +2108,12 @@ async function evidencedReview(m, surf, slice, sliceId, build, fix, escalated, r
     }
   }
   if (gate.verdict === 'tamper') {
-    // §5.1 tamper model: the slice is auto-REJECTED by the WORKFLOW (not an agent judgment), the
+    // Tamper model: the slice is auto-REJECTED by the WORKFLOW (not an agent judgment), the
     // event is LEDGERED, and the fix brief names exactly which locked path was touched.
     log(`${m.id} ${sliceId}: TAMPER — ${gate.reasons.join('; ')} — auto-reject, no reviewer spawned`)
     await ledger('tamper_auto_reject', { milestone: m.id, slice: sliceId, fix, tamper_paths: gate.tamper_paths, reasons: gate.reasons }, 'The Trial')
     // build.tamper (keystone): the lock does not match the Law — auto-reject, mechanical, no reviewer.
-    // Latched to ONE beat per slice via beatGuard (F-3, grain rule 8: beats fire per OUTCOME, never
+    // Latched to ONE beat per slice via beatGuard (beats fire per OUTCOME, never
     // per attempt) — the per-attempt tamper_auto_reject LEDGER above still fires every time, so the
     // audit trail stays complete; only the operator-facing beat coalesces to the slice.
     if (!(beatGuard && beatGuard.tamperFired)) {
@@ -2125,15 +2121,15 @@ async function evidencedReview(m, surf, slice, sliceId, build, fix, escalated, r
       await lore('build.tamper', `TAMPER — the lock does not match the Law [${oneLine(gate.reasons.join('; '), 80)}]; auto-reject, no reviewer seated`, { slice: sliceId, reasons: oneLine(gate.reasons.join('; '), 80) }, 'The Trial')
     }
     const named = gate.tamper_paths.length ? gate.tamper_paths : ['(kiln-law exited 2 without naming paths — run verify manually to identify the lock)']
-    return tag(autoReject(named.map((p) => `Locked Law path touched: ${p} — the Law is immutable after lock (§5.1). Revert every change to locked paths and rebuild without touching them; ADD new tests elsewhere instead.`)))
+    return tag(autoReject(named.map((p) => `Locked Law path touched: ${p} — the Law is immutable after lock. Revert every change to locked paths and rebuild without touching them; ADD new tests elsewhere instead.`)))
   }
   if (gate.verdict === 'stale') {
-    // §6: stale or missing evidence is structurally impossible to approve — no reviewer spawned.
+    // Stale or missing evidence is structurally impossible to approve — no reviewer spawned.
     log(`${m.id} ${sliceId}: evidence gate failed [${gate.reasons.join('; ')}] — auto-reject, no reviewer spawned`)
     return tag(autoReject(gate.reasons.map((r) => `Evidence gate failed — ${r}. Ensure the work is committed at HEAD and the checks can execute; the runner re-fires on the next cycle.`)))
   }
   if (gate.verdict === 'red') {
-    // T2-fix ruling: the exit code IS the verdict. A red lifecycle gate (flip unmet / regression)
+    // The exit code IS the verdict. A red lifecycle gate (flip unmet / regression)
     // is REJECTED by the WORKFLOW — no reviewer is spent on a slice that mechanically failed its
     // Law; the fix brief names the exact ids. Classed 'logical' (see lawRedReject): a failed
     // check is a genuine defect signal the Sentinel must see.
@@ -2149,17 +2145,17 @@ async function evidencedReview(m, surf, slice, sliceId, build, fix, escalated, r
   return tag(await gateAgent(reviewPrompt(m, surf, slice, sliceId, build, runner, leg, effort, gate.verification_class), { label: loreLabel(reviewerName, 'review', `${sliceId}:f${fix}${leg.escalated ? ':esc' : ''}`), phase: 'The Trial', model: leg.model, schema: REVIEW_SCHEMA, provenance: prov }))
 }
 
-// ── gateOnlyTrial (P3.5 T3, dogfood finding 4) — the STARVED-GATE deterministic Law check over an
+// ── gateOnlyTrial — the STARVED-GATE deterministic Law check over an
 //    already-completed build. SAME trial legs as evidencedReview (the deterministic runner → the
 //    freshness probe → the in-script runnerGate), but in gateOnly law context — verify + run
 //    --only/--expect-green over ALL the milestone's SCs, NO --flips, NO --before — and it spawns NO
-//    builder, NO reviewer: a starved gate is re-run, never re-built. The §7 degradation channel is
+//    builder, NO reviewer: a starved gate is re-run, never re-built. The degradation channel is
 //    preserved (a static-only run is ledgered, never silently green). Returns the runnerGate
 //    verdict object so the caller applies the pure gateOnlyRefusal predicate: any verdict but
 //    'proceed' refuses the milestone with gate-only-on-red; a clean 'proceed' routes to Judgment. ──
 async function gateOnlyTrial(m, surf, mScIds) {
   phase('The Trial')
-  // SPIN rotates on the milestone index (C1 §6): milestoneIndex is a module-scope counter set by the
+  // SPIN rotates on the milestone index: milestoneIndex is a module-scope counter set by the
   // OUTER loop before this call, so the `law` array (which genuinely rotates at the slice trial) does
   // not sit dead on 0 here either.
   log(`${spin('law', milestoneIndex)} — ${m.id} gate-only Law check over ${mScIds.length} SC(s) [${mScIds.join(', ')}]`)
@@ -2174,7 +2170,7 @@ async function gateOnlyTrial(m, surf, mScIds) {
   // fresh, finalized run, so a subsequent tribunal-correction trial can fold it via --before and
   // expect the milestone's SCs to STAY green (regression guard) rather than re-flip from the lock.
   if (gate.verdict === 'proceed') lastRunId = runner.run_id
-  // §7 honesty: a static-only run (a mapped probe deferred) must be LEDGERED the moment the gate
+  // Verification honesty: a static-only run (a mapped probe deferred) must be LEDGERED the moment the gate
   // sees it — recorded end-to-end, never silently green — exactly as the slice trial does.
   if (gate.verdict === 'proceed') {
     const pg = probeGate(surf, gate)
@@ -2189,14 +2185,14 @@ async function gateOnlyTrial(m, surf, mScIds) {
   return gate
 }
 
-// ── The Forge Heats — the §3.4 floor gates, then git baseline + codebase-state + milestone parse ──
+// ── The Forge Heats — the floor gates, then git baseline + codebase-state + milestone parse ──
 phase('The Forge Heats')
 log('The kiln grows hotter')
 // Floor gate 1: without pluginRoot the kiln-law CLI is unlocatable — the tamper gate and the
-// deterministic check runs (BLUEPRINT §3.4 floors) cannot execute. Building anyway would be a
+// deterministic check runs (the floor gates) cannot execute. Building anyway would be a
 // silent v2 regression; the conductor must relaunch with pluginRoot.
 if (!pluginRoot) {
-  log('BUILD CANNOT START — pluginRoot absent: the kiln-law CLI cannot be located, so the §3.4 Law floor (tamper gate + deterministic check runs) cannot execute. Fix: relaunch with args.pluginRoot = the absolute $PLUGIN_ROOT the conductor resolved at onboarding (${CLAUDE_PLUGIN_ROOT} is unset inside a launched Workflow). Never start an ungated build.')
+  log('BUILD CANNOT START — pluginRoot absent: the kiln-law CLI cannot be located, so the Law floor (tamper gate + deterministic check runs) cannot execute. Fix: relaunch with args.pluginRoot = the absolute $PLUGIN_ROOT the conductor resolved at onboarding (${CLAUDE_PLUGIN_ROOT} is unset inside a launched Workflow). Never start an ungated build.')
   return { built: [], passed: [], all_passed: false, law_gated: false, split_required: [], reason: 'pluginRoot absent — the kiln-law CLI cannot be located' }
 }
 // Floor gate 2: the Law must be locked. One haiku reads law.json and transcribes the check index;
@@ -2214,12 +2210,12 @@ if (!lawChecks.length) {
 log(`The Law: ${lawChecks.length} locked check(s) across ${[...new Set(lawChecks.map((c) => c.milestone))].length} milestone(s)`)
 // build.law_read (volume): the locked Law is loaded — the contract every slice is judged against.
 await lore('build.law_read', `The Law is read — ${lawChecks.length} locked check(s) across ${[...new Set(lawChecks.map((c) => c.milestone))].length} milestone(s)`, { checks: lawChecks.length, milestones: [...new Set(lawChecks.map((c) => c.milestone))].length }, 'The Forge Heats')
-// D2 (§9 velocity): the probe-kind SC ids from the locked Law manifest — a failed probe left real
+// The probe-kind SC ids from the locked Law manifest — a failed probe left real
 // DOM/console/screenshot evidence on disk, and its reject brief names those deterministic paths.
 const probeScIds = new Set(lawChecks.filter((c) => c.kind === 'probe').map((c) => c.id))
-// probeArtifactBrief(runId, failedIds) — the D2 appendix: for each FAILED probe id, the script-
+// probeArtifactBrief(runId, failedIds) — the appendix: for each FAILED probe id, the script-
 // assembled artifact paths under the run's evidence dir (never model-recalled). Reading these is
-// NOT browser authority — the builder still never spawns a browser (amendment 7 intact). Empty
+// NOT browser authority — the builder still never spawns a browser. Empty
 // string when there is no run id or no failed probe among the ids (fail toward the plain brief).
 const probeArtifactBrief = (runId, failedIds) => {
   if (typeof runId !== 'string' || !runId.trim()) return ''
@@ -2229,14 +2225,14 @@ const probeArtifactBrief = (runId, failedIds) => {
   const lines = probes.map((id) => `  - ${id}: ${dir}/probe-${id}.json (the result), ${dir}/probe-${id}.log (console/stderr), and the screenshot(s) it names in "screenshots" (under ${dir}/)`).join('\n')
   return `\nA probe check FAILED — READ its captured evidence before you change a line (this is the real DOM/console/screenshot state the live probe recorded; reading artifacts is NOT browser authority — never launch a browser or Playwright yourself):\n${lines}\n`
 }
-// B42-2/B42-3: the NAMED per-milestone/cycle evidence artifacts, derived SCRIPT-SIDE from the last
+// The NAMED per-milestone/cycle evidence artifacts, derived SCRIPT-SIDE from the last
 // trial's run id (never model-recalled). trialEvidencePaths = the run-dir results.jsonl/run.json,
-// PLUS suite.log/suite.jsonl IFF the build recorded a project suite (AMB-B42-2 ruling): those two
-// files exist only when the runner ran step 3 — the build.js `suite = build.test_command` skip branch
-// (build.js:640). A genuinely suite-less product must not name absent artifacts and spuriously DEGRADE
+// PLUS suite.log/suite.jsonl IFF the build recorded a project suite: those two
+// files exist only when the runner ran step 3 — the build.js `suite = build.test_command` skip branch.
+// A genuinely suite-less product must not name absent artifacts and spuriously DEGRADE
 // the close; the suiteRecorded flag reuses THAT recorded state (never a file-existence probe by an
 // agent). probeEvidencePaths = the milestone's probe artifacts where a UI probe ran. The close record
-// BINDS these to their sha256 (B42-3 anchor); the Sol evidence analyst packet NAMES them (B42-2).
+// BINDS these to their sha256; the Sol evidence analyst packet NAMES them.
 const trialEvidencePaths = (runId, suiteRecorded) => (typeof runId === 'string' && runId.trim())
   ? [`${kilnDir}/evidence/${runId}/results.jsonl`]
       .concat(suiteRecorded ? [`${kilnDir}/evidence/${runId}/suite.log`, `${kilnDir}/evidence/${runId}/suite.jsonl`] : [])
@@ -2245,10 +2241,10 @@ const trialEvidencePaths = (runId, suiteRecorded) => (typeof runId === 'string' 
 const probeEvidencePaths = (runId, scIds) => (typeof runId === 'string' && runId.trim())
   ? (Array.isArray(scIds) ? scIds : []).filter((id) => typeof id === 'string' && probeScIds.has(id)).flatMap((id) => [`${kilnDir}/evidence/${runId}/probe-${id}.json`, `${kilnDir}/evidence/${runId}/probe-${id}.log`])
   : []
-// PROBE_EXECUTED_ONELINER (B42-2/B42-3) — the SC ids whose probe check EXECUTED, derived from the
+// PROBE_EXECUTED_ONELINER — the SC ids whose probe check EXECUTED, derived from the
 // runner's RECORDED results.jsonl, NEVER from the Law's probe list. kiln-law records an executed check
-// (probe OR shell) as { id, exit, duration_ms, log_sha256 } (kiln-law.mjs:555) and a deferred/unavailable
-// probe as { id, deferred: 'probe_deferred'|'probe_unavailable', … } with NO exit (kiln-law.mjs:518,551).
+// (probe OR shell) as { id, exit, duration_ms, log_sha256 } and a deferred/unavailable
+// probe as { id, deferred: 'probe_deferred'|'probe_unavailable', … } with NO exit.
 // So a row with a numeric exit RAN (green or red); a row carrying `deferred` did NOT — a deferred/spec-less
 // probe leaves no probe-<SC>.json/.log and must be named NOWHERE (a false packet otherwise). This prints
 // (JSON array) the ids of the RAN rows; the SCRIPT intersects with probeScIds to keep only the executed
@@ -2269,9 +2265,9 @@ const PROBE_EXEC_SCHEMA = {
 const probeExecPrompt = (resultsPath) =>
   `You are Thoth, the scribe — run ONE command and transcribe its output, never judge, never fix.\n\n` +
   `<task>Run EXACTLY (Bash): node -e '${PROBE_EXECUTED_ONELINER}' "${resultsPath}" — it prints a JSON array of SC ids. Transcribe that array VERBATIM into executed_ids (the empty array if it printed [] or the file is absent). Do not add or drop ids, do not read anything else, do not write or fix.</task>`
-// EVIDENCE_ANCHOR_SCHEMA / evidenceAnchorPrompt (B42-3) — the Thoth transcription leg that hashes the
-// named close-evidence artifacts into a {path, sha256} manifest (the architecture anchor pattern,
-// architecture.js:531). A dead/garbled/partial anchor ⇒ the close council DEGRADES (fail-closed) — the
+// EVIDENCE_ANCHOR_SCHEMA / evidenceAnchorPrompt — the Thoth transcription leg that hashes the
+// named close-evidence artifacts into a {path, sha256} manifest (the architecture anchor pattern).
+// A dead/garbled/partial anchor ⇒ the close council DEGRADES (fail-closed) — the
 // certificate must never bind unhashed names.
 const EVIDENCE_ANCHOR_SCHEMA = {
   type: 'object', additionalProperties: false,
@@ -2282,7 +2278,7 @@ const evidenceAnchorPrompt = (inputs) =>
   `You are Thoth, the scribe — transcribe hashes, never judge, never fix.\n\n` +
   `<task>Run (Bash): 'sha256sum ${inputs.join(' ')}'. Transcribe each input file's sha256 into files[] as {path, sha256} (VERBATIM, lowercase hex, the path exactly as given). Do not read file contents, do not write or fix anything.</task>`
 
-// B3R2-1: read a persisted council JSON file back (content + sha) for the DEADLOCK_RESOLVED certificate
+// Read a persisted council JSON file back (content + sha) for the DEADLOCK_RESOLVED certificate
 // reload — the same cat+sha idiom architecture uses to rehydrate its persisted bundle.
 const READ_COUNCIL_FILE_SCHEMA = {
   type: 'object', additionalProperties: false,
@@ -2294,8 +2290,8 @@ const readCouncilFilePrompt = (file) =>
   `<task>Run (Bash): 'cat ${file} 2>/dev/null' and 'sha256sum ${file} 2>/dev/null'. Report content = the cat output's raw bytes VERBATIM (empty string if the file does not exist) and sha256 = the sha256sum digest (lowercase hex, or null if absent). Do not write or fix anything.</task>`
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════
-// ── The build keystones' Twin Council legs (B4-2 D2/D3/D4). Every leg dispatches through the SEALED
-//    1b-ii machinery lifted to src/council.mjs (D1): a receipt-attested Sol codex seat + an
+// ── The build keystones' Twin Council legs. Every leg dispatches through the sealed
+//    machinery lifted to src/council.mjs: a receipt-attested Sol codex seat + an
 //    invocation-exact ledger cross-check, blind Fable/Sol RATIFY_SCHEMA verdicts, and the twinRatified
 //    certificate. Failure is FAIL-CLOSED EVIDENCE: a dead/receiptless Sol seat, a failed cross-check,
 //    a split verdict ⇒ the honest degraded route (never a fabricated claim, never a crash). These are
@@ -2313,7 +2309,7 @@ const crossCheckPromptB = (outFile, outputSha, sessionId) =>
   `3. run EXACTLY: node -e '${LEDGER_EXTRACT_ONELINER}' "${receiptsLedger}" "${outputSha}" "${sessionId}" — ledger = the { verified, reservation } JSON it prints (this leg's verified row + its reservation; nulls where unmatched).\n` +
   `Emit output_sha256_disk, output_canonical_sha256, and the ledger object. Do not read the files for content, do not write or fix anything.</task>`
 
-// runSolCrossCheckB — the structural→LEDGER-VERIFIED upgrade (Sol F1), parameterized by keystone/phase.
+// runSolCrossCheckB — the structural→LEDGER-VERIFIED upgrade, parameterized by keystone/phase.
 // A mute/garbled leg gets ONE re-dispatch, then fails closed; crossCheckOk binds the whole chain.
 const runSolCrossCheckB = async (legLabel, keystone, phaseTag, outFile, sink, payload, phaseName) => {
   const canon = sha256Hex(canonicalJson(payload))
@@ -2330,7 +2326,7 @@ const runSolCrossCheckB = async (legLabel, keystone, phaseTag, outFile, sink, pa
 
 // councilCheckpoint — a buildCheckpoint row via the existing ledger() helper (note{kind:'council_state'});
 // FAIL-OPEN telemetry (an append failure never fails the stage — architecture appendCouncilCheckpoint
-// doctrine). councilRuling emits a note{kind:'council_ruling'} row (plan.md B5 — an EXISTING kind).
+// doctrine). councilRuling emits a note{kind:'council_ruling'} row (an EXISTING kind).
 const councilCheckpoint = async (fields, phaseName) => {
   try { await ledger('note', buildCheckpoint(fields), phaseName) }
   catch (e) { log(`council checkpoint ${fields && fields.phase} not ledgered (non-fatal): ${e && e.message ? e.message : e}`) }
@@ -2339,9 +2335,9 @@ const councilRuling = async (data, phaseName) => {
   try { await ledger('note', { kind: 'council_ruling', ...data }, phaseName) }
   catch (e) { log(`council ruling not ledgered (non-fatal): ${e && e.message ? e.message : e}`) }
 }
-// ── ⟨DSGN-B3-4⟩(b) detection reader — a haiku Thoth reads events.jsonl and returns the prior SEALED
+// ── Legacy-plan detection reader — a haiku Thoth reads events.jsonl and returns the prior SEALED
 //    council_state checkpoints: the SAME ledger surface architecture's council appends (buildCheckpoint
-//    → note{kind:'council_state', status:'sealed'}, architecture.js:798-800/944) and the SAME surface
+//    → note{kind:'council_state', status:'sealed'}) and the SAME surface
 //    build's own close/correction councils write here. Detection = the ABSENCE of a RATIFIED/DEADLOCK_
 //    RESOLVED master_plan row (the deterministic signal; a missing row is a FACT). Gated on pluginRoot;
 //    absence/mute ⇒ [] ⇒ a legacy plan is detected (fail TOWARD re-ratification, never a false advance). ──
@@ -2370,12 +2366,12 @@ const pushCouncilReceipt = (bucket, leg, sink, cross) => bucket.push({
   receipt_verified: !!(sink && sink.receipt_verified), ledger_verified: !!(cross && cross.ledger_verified),
   session_id: sink && sink.session_id != null ? sink.session_id : null, tokens_used: sink && sink.tokens_used != null ? sink.tokens_used : null,
 })
-// verdictShapeError (F2) — LIFTED to src/council.mjs (B4-3 D1) and inlined via the @inline:council
-// marker above; build's close pair, the correction council, architecture, and the B4-3 keystones share
+// verdictShapeError — LIFTED to src/council.mjs and inlined via the @inline:council
+// marker above; build's close pair, the correction council, architecture, and the keystones share
 // the one copy (the prior local verdictShapeErrorB is retired — same null-safe semantics).
 // closeFindingsOf — FREEZE a blocking verdict's findings as the structured close_council_findings record
 // (the RATIFY_SCHEMA finding shape verbatim: finding_id, claim, required_change, evidence_refs,
-// evidence_class) so the SOLE correction is never spent blind to what blocked the close (DSGN-B42-1).
+// evidence_class) so the SOLE correction is never spent blind to what blocked the close.
 const closeFindingsOf = (r) => (r && (r.verdict === 'BLOCK' || r.verdict === 'NEITHER') && Array.isArray(r.findings) ? r.findings : []).map((f) => ({
   finding_id: f && f.finding_id != null ? f.finding_id : null,
   claim: f && f.claim != null ? f.claim : null,
@@ -2385,7 +2381,7 @@ const closeFindingsOf = (r) => (r && (r.verdict === 'BLOCK' || r.verdict === 'NE
 }))
 // closeFindingLine — render one frozen finding into a boundary/fixNote line (verbatim IDs + refs).
 const closeFindingLine = (f) => `[close_council] ${f.finding_id || '(no-id)'}: ${f.claim || '(no claim)'} → required_change: ${f.required_change || '(none)'}${f.evidence_refs && f.evidence_refs.length ? ` [evidence: ${f.evidence_refs.join(', ')}]` : ''}`
-// correctionRulingLines (B42-5) — render the correction heads' RETAINED findings + reasons verbatim
+// correctionRulingLines — render the correction heads' RETAINED findings + reasons verbatim
 // into boundary lines; they are never discarded and ride qaFindings on ESCALATE/REPLAN.
 const correctionRulingLines = (corr) => [
   ...((corr && Array.isArray(corr.findings)) ? corr.findings : []).map((f) => `[correction_council] finding: ${f && f.text ? f.text : '(none)'}${f && f.severity ? ` [${f.severity}]` : ''}`),
@@ -2416,7 +2412,7 @@ const runBuildBlindPair = async (cfg) => {
   return { degraded: false, rF, rS, sinkF, sinkS, solCross }
 }
 
-// runCloseCouncil (D3) — the milestone-close ratification pair that RETIRES Judge Dredd at T4, on the
+// runCloseCouncil — the milestone-close ratification pair that RETIRES Judge Dredd at T4, on the
 // EXACT gateDecision(...).judge branch (zero blocking findings AND disagreeing analyst overalls — red
 // monotonicity is STRUCTURAL: a deterministic QA_FAIL never reaches here). The frozen close record IS
 // the rendered artifact — no second render, so bundle_hash = plan_hash. Both APPROVE + valid ⇒ QA_PASS +
@@ -2427,13 +2423,13 @@ const runCloseCouncil = async (m, reconciled, overallA, overallB, goalOverall, c
   const phaseName = 'Judgment'
   const keystone = `milestone_close:${m.id}`
   const phaseTag = `CLOSE_RATIFY_C${c}`
-  // B42-3: the close certificate BINDS its evidence by hash, never by bare name. A Thoth transcription
+  // The close certificate BINDS its evidence by hash, never by bare name. A Thoth transcription
   // leg hashes the NAMED artifacts (law.json + the last trial's results/suite files) into a {path,
   // sha256} manifest (the architecture anchor pattern). A dead/garbled/partial anchor ⇒ the close
   // council DEGRADES fail-closed — the certificate must NEVER bind unhashed names. The anchor gates
   // BEFORE the record is frozen; evidence_refs then carry {path, sha256}, never raw path strings.
-  // AMB-B42-2: the suite files are named IFF the build recorded a project suite (suiteRecorded), so a
-  // genuinely suite-less product does not name absent artifacts and spuriously DEGRADE. B42-2/B42-3: the
+  // The suite files are named IFF the build recorded a project suite (suiteRecorded), so a
+  // genuinely suite-less product does not name absent artifacts and spuriously DEGRADE. The
   // executed-probe artifacts (probe-<SC>.json/.log) are named for EXACTLY the ids the single derivation
   // leg found EXECUTED (executedProbeIds, already ∩ probeScIds) — a deferred probe is named NOWHERE and
   // never enters this manifest, so the certificate binds only artifacts the trial actually recorded.
@@ -2465,7 +2461,7 @@ const runCloseCouncil = async (m, reconciled, overallA, overallB, goalOverall, c
     analyst_overalls: { a: overallA != null ? overallA : null, b: overallB != null ? overallB : null },
     goal_audit_overall: goalOverall != null ? goalOverall : null,
     suite_recorded: !!suiteRecorded,
-    // B42-2/B42-3: the transcribed executed-probe id set the close binds (the single derivation's output),
+    // The transcribed executed-probe id set the close binds (the single derivation's output),
     // so the frozen record HONESTLY states which probe artifacts its evidence_refs cover — a deferred probe
     // is absent here and from evidence_refs alike.
     executed_probe_ids: [...closeProbeIds].sort(),
@@ -2473,7 +2469,7 @@ const runCloseCouncil = async (m, reconciled, overallA, overallB, goalOverall, c
   }
   const bundleHash = sha256Hex(canonicalJson(closeRecord))
   const ckptBase = { protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: councilTemplateHashBuild, run_token_hash: runTokenHash, initial_ledger_seq: null, keystone_id: keystone, decision_bundle_hash: bundleHash, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash }
-  // BOTH ratification packets carry the COMPLETE frozen closeRecord verbatim (B42-3): the fable prompt
+  // BOTH ratification packets carry the COMPLETE frozen closeRecord verbatim: the fable prompt
   // in its inputs, the sol packet as its packetObj — each head ratifies the exact record it signs.
   const closeRecordJson = JSON.stringify(closeRecord)
   const ratifyInputs =
@@ -2496,7 +2492,7 @@ const runCloseCouncil = async (m, reconciled, overallA, overallB, goalOverall, c
     log(`${m.id}: milestone-close council DEGRADED (${pair.missing}) — QA_FAIL fail-closed, never a judge fallback at T4`)
     return { qa: 'QA_FAIL', terminal: 'DEGRADED', certificate: null, terminal_record: rec, findings: [], bundle_hash: bundleHash, receipt_verified: !!(pair.sinkS && pair.sinkS.receipt_verified), ledger_verified: !!(pair.solCross && pair.solCross.ledger_verified) }
   }
-  // B42-7: mirror the architecture LITE path's validity logic EXACTLY — compute vF/vS + shapeF/shapeS
+  // Mirror the architecture LITE path's validity logic EXACTLY — compute vF/vS + shapeF/shapeS
   // FIRST; ANY invalid/shape-bad ratification (e.g. a dual-APPROVE echoing a wrong artifact_hash) ⇒
   // DEGRADED naming the head(s) + defect (never BLOCKED, never a frozen-findings carry from an invalid
   // verdict); ONLY live, VALID BLOCK/NEITHER verdicts ⇒ BLOCKED with frozen findings.
@@ -2536,7 +2532,7 @@ const runCloseCouncil = async (m, reconciled, overallA, overallB, goalOverall, c
   return { qa: 'QA_FAIL', terminal: 'BLOCKED', certificate: null, terminal_record: null, findings: frozen, bundle_hash: bundleHash, receipt_verified: true, ledger_verified: true }
 }
 
-// runCorrectionCouncil (D4) — the REQUIRED blind council over retry | escalate | replan BEFORE the sole
+// runCorrectionCouncil — the REQUIRED blind council over retry | escalate | replan BEFORE the sole
 // corrective build. council_findings carries the frozen close_council_findings when the close pair
 // blocked this cycle (IDs + refs verbatim). Matching choices settle; split/dead/invalid ⇒ fail-closed
 // ESCALATE (never a builder attempt spent on a split council, never a silent RETRY).
@@ -2569,7 +2565,7 @@ const runCorrectionCouncil = async (m, reconciled, closeFindings, sliceTelemetry
   const solBrief = `${bindingLine}\n${councilFindingsBlock}\nRule the correction ROUTE (RETRY | ESCALATE | REPLAN) from the reconciled findings + slice telemetry, read-only.`
   const pair = await runBuildBlindPair({ m, mCouncilDir, keystone, phaseTag, c, legName: 'correction', fablePrompt, solTaskText: CORRECTION_TASK, solBrief, solPacket: { milestone: correctionRecord.milestone, cycle: c, cap: MAX_TRIBUNAL_CORRECTION, reconciled_summary: reconciled.summaryLines, council_findings: correctionRecord.council_findings, slice_telemetry: sliceTelemetry, artifact_hash: artifactHash }, schema: CORRECTION_SCHEMA, phaseName, gateProv, receiptsBucket })
   if (pair.degraded) {
-    // B42-5: a dead-seat pair still carries the SURVIVING live head's findings + reasons (never
+    // A dead-seat pair still carries the SURVIVING live head's findings + reasons (never
     // discarded). runBuildBlindPair marks missing='sol' when only Fable survived (pair.rF) and
     // missing='fable' when only Sol survived (pair.rS); a both-dead pair carries nothing. Harvest
     // defensively — arrays only when schema-shaped — into the return, the ruling note, and (via the
@@ -2582,9 +2578,9 @@ const runCorrectionCouncil = async (m, reconciled, closeFindings, sliceTelemetry
     log(`${m.id}: correction council DEGRADED (${pair.missing}) — fail-closed ESCALATE (never a builder attempt spent on a split council); ${survFindings.length} surviving-head finding(s) carried`)
     return { choice: 'ESCALATE', degraded: true, missing: pair.missing, terminal: 'DEGRADED', findings: survFindings, reasons: survReasons, bundle_hash: artifactHash, receipt_verified: !!(pair.sinkS && pair.sinkS.receipt_verified), ledger_verified: !!(pair.solCross && pair.solCross.ledger_verified) }
   }
-  // B42-5: RETAIN both heads' findings + reasons (never discarded — they ride qaFindings on
+  // RETAIN both heads' findings + reasons (never discarded — they ride qaFindings on
   // ESCALATE/REPLAN AND the council_ruling note). Honest terminal: an invalid echo / illegal payload ⇒
-  // DEGRADED (a head that fails its duty is a missing head — the F2 idiom); a LIVE legal SPLIT ⇒
+  // DEGRADED (a head that fails its duty is a missing head — the missing-head idiom); a LIVE legal SPLIT ⇒
   // BLOCKED; matched choices ⇒ RULED. Split/invalid still route the CHOICE fail-closed to ESCALATE.
   const echoOk = pair.rF.artifact_hash === artifactHash && pair.rS.artifact_hash === artifactHash
   const legal = (v) => v === 'RETRY' || v === 'ESCALATE' || v === 'REPLAN'
@@ -2603,8 +2599,8 @@ const runCorrectionCouncil = async (m, reconciled, closeFindings, sliceTelemetry
   return { choice, degraded: false, matched: match, terminal, findings, reasons, bundle_hash: artifactHash, receipt_verified: !!(pair.sinkS && pair.sinkS.receipt_verified), ledger_verified: !!(pair.solCross && pair.solCross.ledger_verified) }
 }
 
-// runLegacyPlanRatify (⟨DSGN-B3-4⟩(b)) — ONE retrospective blind dual ratification of the UNCHANGED
-// master plan (the b42 D7 lite-pair idiom reused: the plan IS the artifact, no decision bundle exists,
+// runLegacyPlanRatify — ONE retrospective blind dual ratification of the UNCHANGED
+// master plan (the lite-pair idiom reused: the plan IS the artifact, no decision bundle exists,
 // so bundle_hash = plan_hash = the master plan's own sha256). A Thoth anchor hashes the plan + the
 // architecture evidence into a {path, sha256} manifest — a dead/garbled/partial anchor ⇒ DEGRADED (the
 // certificate must never bind unhashed names). Then the blind Fable ∥ receipt-attested Sol pair rules
@@ -2694,21 +2690,21 @@ const runLegacyPlanRatify = async (gateProv, receiptsBucket) => {
   return { terminal: 'BLOCKED', certificate: null, findings: frozen, bundle_hash: bundleH, receipt_verified: true, ledger_verified: true }
 }
 
-// §3.5 stage bracket (P3.6 T4): the build stage is entered — past both §3.4 floor gates, so the
+// Stage bracket: the build stage is entered — past both floor gates, so the
 // ledger CLI is locatable, and BEFORE any other build-stage ledger activity (the pre-flight sweep
 // below appends browser_sweep at stage:'build'; a projection read must never see build events
-// while stage still reads the prior projection — T4 review r1). gateOnly re-enters the stage too
+// while stage still reads the prior projection). gateOnly re-enters the stage too
 // (accurate), so this fires either way; stage_completed only lands on the genuine
 // all-milestones-passed return below (a QA_FAIL/refusal leaves the projection at 'build', which
 // is the truthful state for the correction loop).
 await ledger('stage_started', { stage: 'build', gate_only: gateOnly }, 'The Forge Heats')
 
-// §7 / T2.3 pre-flight sweep: clear any orphaned browser tree from a prior crashed run BEFORE the
-// first probe could spawn (the discipline-spec defense against #1311's stale SingletonLock). Past
+// Pre-flight sweep: clear any orphaned browser tree from a prior crashed run BEFORE the
+// first probe could spawn (defense against a prior run's stale SingletonLock). Past
 // the floor gates, so pluginRoot + the ledger are usable.
 await stageSweep('pre-flight')
 
-// Velocity lever 3 (§9): rakim:setup ∥ confucius:parse — independent legs run in PARALLEL. rakim
+// rakim:setup ∥ confucius:parse — independent legs run in PARALLEL. rakim
 // initializes the git baseline + writes codebase-state.md (the slicer/builders read it); confucius
 // parses the already-written master-plan.md into the milestone list. Neither reads the other's
 // output, so concurrency is free. Both downshift to haiku: a git-init + TL;DR doc, and a
@@ -2734,14 +2730,14 @@ log(`Building ${milestones.length} milestone(s): ${milestones.map((m) => `${m.id
 const results = []
 const splitLedger = [] // top-level surfacing: split-and-rebuild is a conductor/operator decision
 let milestoneIndex = -1
-// §7 / T2.3: the milestone loop + return live inside a try whose finally runs the UNCONDITIONAL
+// The milestone loop + return live inside a try whose finally runs the UNCONDITIONAL
 // stage-end sweep. The browser is a subprocess with a deadline, never a service — so the stage's
 // closing bracket must reap this build's browser survivors on EVERY exit path, a thrown
 // agent()/parse error included (a crash mid-probe is exactly when leaks must be swept). The sweep
 // sits in finally, not after the loop, so no throw can skip it.
 try {
 
-// ── ⟨DSGN-B3-4⟩(b) THE LEGACY-PLAN HOOK — runs ONCE, BEFORE the first milestone's close council, ONLY
+// ── THE LEGACY-PLAN HOOK — runs ONCE, BEFORE the first milestone's close council, ONLY
 //    where build's council rails are live (councilCapable = T4 + codex + runToken). Sub-T4 / no-codex /
 //    tokenless runs keep their EXISTING byte-preserved behavior — no hook, no detection read, no new
 //    labels: a legacy plan there advances exactly as in v3.0.1. A run whose master plan carries a
@@ -2751,11 +2747,11 @@ let legacyCouncil = null
 if (councilCapable) {
   const checkpoints = await readCouncilCheckpointsB('The Forge Heats')
   const hasTerminal = (kid, ...phases) => checkpoints.some((c) => c && c.keystone_id === kid && c.status === 'sealed' && phases.includes(c.phase))
-  // Detection (AMB-B3-3): the ABSENCE of a RATIFIED / DEADLOCK_RESOLVED master_plan checkpoint — the
-  // terminal rows a completed architecture council leaves behind (architecture.js:944 RATIFIED /
-  // :2235 DEADLOCK_RESOLVED, appended via buildCheckpoint → note{kind:'council_state'}). A missing row
+  // Detection: the ABSENCE of a RATIFIED / DEADLOCK_RESOLVED master_plan checkpoint — the
+  // terminal rows a completed architecture council leaves behind (RATIFIED / DEADLOCK_RESOLVED,
+  // appended via buildCheckpoint → note{kind:'council_state'}). A missing row
   // is a FACT, deterministic — never a guess.
-  // B3R2-1: a DEADLOCK_RESOLVED master_plan row is NOT trusted on its label alone — the provisional seal
+  // A DEADLOCK_RESOLVED master_plan row is NOT trusted on its label alone — the provisional seal
   // could predate a CHANGED master-plan.md. Its certificate is reloaded and the CURRENT plan re-anchored;
   // only when the row's plan/bundle/certificate/template/run-token bindings ALL match does it authorize the
   // advance. Any mismatch ⇒ the row is void here and the legacy re-ratification path runs over the current
@@ -2765,26 +2761,26 @@ if (councilCapable) {
     const prov = row && row.seat_provenance && typeof row.seat_provenance === 'object' ? row.seat_provenance : {}
     const rowPlan = prov.plan_hash, rowCert = prov.certificate_hash, rowBundle = row.decision_bundle_hash
     const rowTemplate = row.template_hash, rowToken = row.run_token_hash
-    if (!(SHA64_RE.test(String(rowPlan)) && SHA64_RE.test(String(rowCert)) && SHA64_RE.test(String(rowBundle)) && SHA64_RE.test(String(rowTemplate)))) { log('B3R2-1: the DEADLOCK_RESOLVED row lacks the plan/certificate/bundle/template bindings — the row is VOID (re-ratifying the current plan)'); return false }
-    if (rowToken !== runTokenHash) { log('B3R2-1: the DEADLOCK_RESOLVED row binds a different run-token hash — the row is VOID (re-ratifying the current plan)'); return false }
+    if (!(SHA64_RE.test(String(rowPlan)) && SHA64_RE.test(String(rowCert)) && SHA64_RE.test(String(rowBundle)) && SHA64_RE.test(String(rowTemplate)))) { log('the DEADLOCK_RESOLVED row lacks the plan/certificate/bundle/template bindings — the row is VOID (re-ratifying the current plan)'); return false }
+    if (rowToken !== runTokenHash) { log('the DEADLOCK_RESOLVED row binds a different run-token hash — the row is VOID (re-ratifying the current plan)'); return false }
     const anchor = await agent(evidenceAnchorPrompt([masterPlanFile]), { label: 'thoth:deadlock-plan-anchor', phase: phaseName, model: 'haiku', schema: EVIDENCE_ANCHOR_SCHEMA })
     const af = (anchor && Array.isArray(anchor.files)) ? anchor.files.find((f) => f && f.path === masterPlanFile && typeof f.sha256 === 'string' && SHA64_RE.test(f.sha256)) : null
     const currentPlanHash = af ? af.sha256 : null
-    if (currentPlanHash == null || currentPlanHash !== rowPlan) { log(`B3R2-1: the CURRENT master-plan.md hash (${currentPlanHash ? String(currentPlanHash).slice(0, 12) + '…' : 'unreadable'}) does not match the row's bound plan hash — the plan CHANGED after provisional sealing; the row is VOID (re-ratifying the current plan)`); return false }
+    if (currentPlanHash == null || currentPlanHash !== rowPlan) { log(`the CURRENT master-plan.md hash (${currentPlanHash ? String(currentPlanHash).slice(0, 12) + '…' : 'unreadable'}) does not match the row's bound plan hash — the plan CHANGED after provisional sealing; the row is VOID (re-ratifying the current plan)`); return false }
     const rd = await agent(readCouncilFilePrompt(deadlockCertFile), { label: 'thoth:deadlock-cert-reload', phase: phaseName, model: 'haiku', schema: READ_COUNCIL_FILE_SCHEMA })
     const content = rd && typeof rd.content === 'string' ? rd.content : null
     const fileSha = rd && typeof rd.sha256 === 'string' && SHA64_RE.test(rd.sha256) ? rd.sha256 : null
-    if (!(content && fileSha === rowCert && sha256Hex(content) === rowCert)) { log('B3R2-1: the persisted DEADLOCK_RESOLVED certificate did not reload (missing/sha-drift) — the row is VOID (re-ratifying the current plan)'); return false }
+    if (!(content && fileSha === rowCert && sha256Hex(content) === rowCert)) { log('the persisted DEADLOCK_RESOLVED certificate did not reload (missing/sha-drift) — the row is VOID (re-ratifying the current plan)'); return false }
     let cert = null
     try { cert = JSON.parse(content) } catch { cert = null }
-    if (!(cert && typeof cert === 'object' && sha256Hex(canonicalJson(cert)) === rowCert)) { log('B3R2-1: the reloaded certificate does not re-canonicalize to the bound hash — the row is VOID (re-ratifying the current plan)'); return false }
-    if (!(cert.plan_hash === rowPlan && cert.bundle_hash === rowBundle && cert.template_hash === rowTemplate && cert.run_token_hash === rowToken)) { log('B3R2-1: the reloaded certificate\'s bindings disagree with the row — the row is VOID (re-ratifying the current plan)'); return false }
-    log(`B3R2-1: the DEADLOCK_RESOLVED master_plan row VERIFIED — the CURRENT plan, bundle, certificate, template, and run-token bindings all match; the twin_deadlock_resolved terminal advances`)
+    if (!(cert && typeof cert === 'object' && sha256Hex(canonicalJson(cert)) === rowCert)) { log('the reloaded certificate does not re-canonicalize to the bound hash — the row is VOID (re-ratifying the current plan)'); return false }
+    if (!(cert.plan_hash === rowPlan && cert.bundle_hash === rowBundle && cert.template_hash === rowTemplate && cert.run_token_hash === rowToken)) { log('the reloaded certificate\'s bindings disagree with the row — the row is VOID (re-ratifying the current plan)'); return false }
+    log(`the DEADLOCK_RESOLVED master_plan row VERIFIED — the CURRENT plan, bundle, certificate, template, and run-token bindings all match; the twin_deadlock_resolved terminal advances`)
     return true
   }
   const deadlockVerified = deadlockRow ? await verifyDeadlockResolvedRow(deadlockRow, 'The Forge Heats') : false
   const masterRatified = hasTerminal('master_plan', 'RATIFIED') || deadlockVerified
-  // B3R1-15: a prior master_plan_legacy RATIFIED row is NOT a licence to advance — its certificate is not
+  // A prior master_plan_legacy RATIFIED row is NOT a licence to advance — its certificate is not
   // ledgered reloadably, and the master plan may have CHANGED since it was signed. So a resume NEVER trusts
   // the stale label (the old certificate:null fast-advance); it re-anchors + RE-RATIFIES over the CURRENT
   // plan bytes (the heads sign the ACTUAL content, a fresh real certificate is minted) and verifies the
@@ -2827,12 +2823,12 @@ for (const m of milestones) {
   log(`━━ Milestone ${m.id}: ${m.title} [surface=${surf}] — \`${builderName}\` builds, \`${reviewerName}\` reviews ━━`)
   // build.anvil (keystone): the milestone opens — the duo takes the forge.
   await lore('build.anvil', `${m.id} takes the anvil — \`${builderName}\` strikes, \`${reviewerName}\` judges`, { milestone: m.id, builder: builderName, reviewer: reviewerName }, 'The Forge Heats')
-  // F3 provenance collector: every gate leg in this milestone (slice reviews, the tribunal analysts,
+  // Provenance collector: every gate leg in this milestone (slice reviews, the tribunal analysts,
   // the judge, the goal-backward audit) records {requested_model, actual_model, fallback_reason,
   // classification} into a fresh sink; they collect here and ride the EXISTING gate_decision ledger
-  // append at the milestone close (no new event type — §B6/§10).
+  // append at the milestone close (no new event type).
   const gateProv = []
-  // ── Twin Council per-milestone state (B4-2 D3/D4/D6). mCouncilDir holds this milestone's council
+  // ── Twin Council per-milestone state. mCouncilDir holds this milestone's council
   //    artifacts under the shared per-run tree; the receipts bucket + terminals ride the boundary
   //    records. All inert on the sub-T4 / no-codex / tokenless paths (councilCapable false). ──
   const mCouncilDir = `${councilRootDir}/${m.id}`
@@ -2840,17 +2836,17 @@ for (const m of milestones) {
   let mCloseTerminal = null      // 'RATIFIED' | 'BLOCKED' | 'DEGRADED' | null (null off the council-judged branch)
   let mCloseCertificate = null
   let mCloseFindings = []        // the frozen close_council_findings (carried into correction packet + fixNote)
-  let mCloseBundleHash = null    // B42-6: the COMPUTED close record hash (present for BLOCKED/DEGRADED too — never from the certificate)
-  let mCloseReceiptVerified = false // B42-6: from the close Sol leg's sink
-  let mCloseLedgerVerified = false  // B42-6: from the close Sol leg's cross-check
-  let mCloseSeatConvened = false    // B42-6: the milestone_close seat convened or failed closed this gate
+  let mCloseBundleHash = null    // the COMPUTED close record hash (present for BLOCKED/DEGRADED too — never from the certificate)
+  let mCloseReceiptVerified = false // from the close Sol leg's sink
+  let mCloseLedgerVerified = false  // from the close Sol leg's cross-check
+  let mCloseSeatConvened = false    // the milestone_close seat convened or failed closed this gate
   let mCorrectionRuling = null   // 'RETRY' | 'ESCALATE' | 'REPLAN' | null
-  let mCorrectionTerminal = null // B42-5: 'RULED' | 'BLOCKED' | 'DEGRADED' | null
-  let mCorrectionBundleHash = null  // B42-6: the COMPUTED correction record hash
-  let mCorrectionReceiptVerified = false // B42-6: from the correction Sol leg's sink
-  let mCorrectionLedgerVerified = false  // B42-6: from the correction Sol leg's cross-check
-  let mCorrectionSeatConvened = false    // B42-6: the correction seat convened or failed closed this gate
-  // F2 (R1-RETRY-CAUSE-NOT-EXPOSED): the failed-Claude-head discriminator this milestone's councils
+  let mCorrectionTerminal = null // 'RULED' | 'BLOCKED' | 'DEGRADED' | null
+  let mCorrectionBundleHash = null  // the COMPUTED correction record hash
+  let mCorrectionReceiptVerified = false // from the correction Sol leg's sink
+  let mCorrectionLedgerVerified = false  // from the correction Sol leg's cross-check
+  let mCorrectionSeatConvened = false    // the correction seat convened or failed closed this gate
+  // The failed-Claude-head discriminator this milestone's councils
   // surface — 'fable' | 'sol' | null. Set on a close/correction DEGRADED that names a single head (a
   // 'both'/evidence DEGRADED folds to null); once a real head death is booked it is not overwritten by a
   // later clean council. Rides the milestone result's council field so the conductor's succession retry keys on it.
@@ -2867,7 +2863,7 @@ for (const m of milestones) {
     continue
   }
 
-  // ── Milestone-scoped state read by Judgment below — hoisted because gateOnly (P3.5 T3) bypasses
+  // ── Milestone-scoped state read by Judgment below — hoisted because gateOnly bypasses
   //    Scoring + Forging entirely and the gate must still see them. Under gateOnly the slice list is
   //    EMPTY (nothing was sliced or built — a starved gate is re-run, never re-built), there is no
   //    replan/plan-abort/cap, and forceTribunal routes the gate to the FULL tribunal regardless of
@@ -2884,7 +2880,7 @@ for (const m of milestones) {
   let gateOnlyGreen = false
 
   if (gateOnly) {
-    // ── P3.5 T3 (dogfood finding 4) STARVED-GATE retry: skip Scoring + Forging entirely. ONE
+    // ── STARVED-GATE retry: skip Scoring + Forging entirely. ONE
     //    deterministic trial-shaped pass over ALL the milestone's SCs (verify + run
     //    --only/--expect-green, NO --flips) + freshness + runnerGate. The pure gateOnlyRefusal
     //    predicate rules: any verdict but a clean 'proceed' REFUSES the milestone (QA_FAIL, reason
@@ -2906,7 +2902,7 @@ for (const m of milestones) {
     forceTribunal = true
   } else {
 
-  // ── Scoring the Cut: the §5 batch slice plan (velocity lever 1) — but lever 3 (§9 pipelining)
+  // ── Scoring the Cut: the batch slice plan — but pipelining
   //    may have ALREADY cut this milestone's plan speculatively during the previous milestone's
   //    gate. Consume that plan iff it survives the invalidation predicate: its base_sha (the HEAD
   //    it was cut at) must still equal the current HEAD — any corrective commit on the prior
@@ -2985,8 +2981,8 @@ for (const m of milestones) {
       log(`${m.id} s${qi}: confirm says replan again — the one fresh plan per milestone is spent; proceeding with the planned slice (the trial gates correctness).`)
     }
 
-    // Phase-6 speed fix: pre-process heavy assets ONCE before the first ui/mixed slice builds.
-    // Velocity lever 3 (§9): a haiku probe — recompress-if-present-else-no-op is mechanical leg
+    // Pre-process heavy assets ONCE before the first ui/mixed slice builds. A haiku probe —
+    // recompress-if-present-else-no-op is mechanical leg
     // work, not a reasoning task; the build leg downstream owns the design effort.
     if ((surf === 'ui' || surf === 'mixed') && slices.length === 0) {
       phase('Forging')
@@ -2997,50 +2993,50 @@ for (const m of milestones) {
     log(`${spin('build', qi)} — ${m.id} ${sliceId} [flips ${slice.sc_ids.join(', ')}]`)
     mBuild = await agent(buildPrompt(m, surf, slice, sliceId), { label: loreLabel(builderName, 'build', sliceId), phase: 'Forging', model: bModel, schema: BUILD_SCHEMA })
 
-    // ── The Trial: evidence-first review with a bounded fix loop; the Sentinel watches (§3.3) ──
+    // ── The Trial: evidence-first review with a bounded fix loop; the Sentinel watches ──
     // The trial's Law scope: this slice's declared flips, run together with every SC the
-    // milestone already turned green (regressions observed, not assumed — §5.1).
+    // milestone already turned green (regressions observed, not assumed).
     const lawCtx = { flips: slice.sc_ids, only: [...new Set([...greenScIds, ...slice.sc_ids])] }
     let logicalRejections = 0
     let escalated = false
     let splitRequired = false
-    let environmentBlocked = false   // D1: the same infra-bearing failure reproduced with no code change
-    let environmentClass = null      // 'infra' | 'mixed' when blocked — Sol WSD-r1 f5: mixed is honest about its assertions
+    let environmentBlocked = false   // the same infra-bearing failure reproduced with no code change
+    let environmentClass = null      // 'infra' | 'mixed' when blocked — mixed is honest about its assertions
     let environmentAssertions = []   // the unresolved product-assertion SCs inside a mixed block
-    let prevFingerprint = null       // D1: the prior attempt's failure fingerprint (router state)
-    let repairCapExtension = false   // Sol WSD-r2 f2: one-shot cap stretch — a moved repair at the cap still admits its ONE promised correction
-    let attempts = 1                 // D5 telemetry: build attempts spent (the initial build is #1)
+    let prevFingerprint = null       // the prior attempt's failure fingerprint (router state)
+    let repairCapExtension = false   // one-shot cap stretch — a moved repair at the cap still admits its ONE promised correction
+    let attempts = 1                 // telemetry: build attempts spent (the initial build is #1)
     let firstPassGreen = false
-    const rejectionClasses = []      // D5 telemetry: the class of each rejection, in order
+    const rejectionClasses = []      // telemetry: the class of each rejection, in order
     const sliceReviewProv = {} // the DECISIVE (last) review's provenance for this slice
-    const tamperGuard = { tamperFired: false } // F-3: latch build.tamper to ONE beat per slice across all fix attempts + the repair re-trial
+    const tamperGuard = { tamperFired: false } // latch build.tamper to ONE beat per slice across all fix attempts + the repair re-trial
     for (let fix = 0; fix <= MAX_REVIEW_FIXES + (repairCapExtension ? 1 : 0); fix++) {
       mReview = await evidencedReview(m, surf, slice, sliceId, mBuild, fix, escalated, reviewerName, lawCtx, sliceReviewProv, tamperGuard)
       if (approvedOf(mReview)) { if (fix === 0) firstPassGreen = true; break }
-      // The master signal (§3.3): only LOGICAL rejections move the ratchet; mechanical/process
+      // The master signal: only LOGICAL rejections move the ratchet; mechanical/process
       // failures (tamper, stale evidence, uncommitted, hygiene findings) never escalate, and the
       // builder's own confidence never lowers anything (escalate() encodes both).
       let cls = rejectionClass(mReview)
       if (cls === 'logical') logicalRejections++
       rejectionClasses.push(cls)
-      // ── D1 fingerprint router (§9 velocity): decide the NEXT builder attempt's admission BEFORE
+      // ── Fingerprint router: decide the NEXT builder attempt's admission BEFORE
       //    spending it. Fail toward v3.0.1 — a null/first/changed fingerprint admits exactly as the
       //    old unconditional respawn; only an IDENTICAL repeat diverts. ──
       const curFingerprint = fpOrNull(mReview && mReview.fingerprint)
       const admission = admitRetry(prevFingerprint, curFingerprint)
       prevFingerprint = curFingerprint
-      // Sol WSD-r1 f1 + WSD-r2 f1: the environment-repair trial is an OBSERVATION, not a builder
+      // The environment-repair trial is an OBSERVATION, not a builder
       // rejection. When its fingerprint MOVES (or the Law clears but the reviewer rejects), its
       // outcome is never counted toward logicalRejections and never reclassifies cls — no builder
       // attempt was spent, so the ratchet has no NEW rejection to record. The GENUINE outer
       // rejection that triggered the repair (already counted above) still walks the Sentinel
       // section at its incremented count, so feedback escalation fires on schedule and the
       // admitted correction is reviewed by the ESCALATED source. repairObserved marks the cycle
-      // only so the fix cap can honor the router's promised ONE correction (WSD-r2 f2).
+      // only so the fix cap can honor the router's promised ONE correction.
       let repairObserved = false
       if (admission.reason === 'environment_repeat') {
         // The exact same INFRA-bearing failure twice — splitting or re-building an unchanged broken
-        // environment just makes two failing slices (plan D1). STOP builder retries: re-run the
+        // environment just makes two failing slices. STOP builder retries: re-run the
         // trial ONCE over the SAME commit (no builder change) — an environment-repair probe.
         const repeatKind = curFingerprint.class === 'mixed' ? 'mixed (infra+assertion)' : 'infra'
         log(`${m.id} ${sliceId}: identical ${repeatKind} failure twice [${curFingerprint.signature}] — environment repeat; re-running the trial ONCE with NO builder change (repairing the environment, never burning a builder attempt into an unchanged broken environment)`)
@@ -3050,7 +3046,7 @@ for (const m of milestones) {
         const repairFp = fpOrNull(mReview && mReview.fingerprint)
         prevFingerprint = repairFp
         if (repairFp && repairFp.signature === curFingerprint.signature) {
-          // Reproduced identically with no code change. Honesty per class (Sol WSD-r1 finding 5):
+          // Reproduced identically with no code change. Honesty per class:
           // a PURE-infra repeat means the ENVIRONMENT is broken, not the code; a MIXED repeat may
           // NOT say that — it carries product assertion(s) that remain unresolved and still need
           // code work after the environment is repaired.
@@ -3074,18 +3070,18 @@ for (const m of milestones) {
         }
         // The fingerprint MOVED (or the Law cleared and the reviewer rejected on fresh grounds) —
         // the repeat was environmental noise, and the repair run is an OBSERVATION: admit ONE
-        // normal correction off its findings without touching the ratchet (Sol WSD-r1 finding 1).
+        // normal correction off its findings without touching the ratchet.
         repairObserved = true
         log(`${m.id} ${sliceId}: the environment-repair trial ${repairFp ? `moved the failure [${repairFp.signature}]` : 'cleared the Law (the reviewer rejected on fresh grounds)'} — environmental noise; admitting ONE normal correction (the repair observation never counts as a builder rejection)`)
       } else if (admission.escalate_diagnosis) {
         // identical ASSERTION failure twice — the retry is admitted, but the Sentinel signal
-        // strengthens (+1 logical rejection) so escalation/split arrive one cycle sooner (plan D1).
+        // strengthens (+1 logical rejection) so escalation/split arrive one cycle sooner.
         logicalRejections++
         log(`${m.id} ${sliceId}: identical assertion failure twice [${curFingerprint.signature}] — escalating diagnosis (+1 logical rejection; the Sentinel reaches escalation/split one cycle sooner)`)
       }
       // The Sentinel section processes the GENUINE outer rejection — on a repair-observed cycle
       // cls/logicalRejections still describe that outer rejection, untouched by the observation
-      // (Sol WSD-r2 f1: suppressing this call left the admitted correction reviewed by the
+      // (suppressing this call left the admitted correction reviewed by the
       // un-escalated source).
       const esc = escalate(livePosture, { type: 'review_rejection', finding_class: cls, rejections: logicalRejections }, GAUGE_CONFIG)
       livePosture = esc.posture
@@ -3105,7 +3101,7 @@ for (const m of milestones) {
         // build.escalated (volume): the stuck loop gets different eyes — the feedback source escalates.
         await lore('build.escalated', `${m.id} s${qi} — ${logicalRejections} logical rejection(s); escalating the feedback source (${codexAvailable ? 'family swap' : 'stronger effort'})`, { slice: sliceId, rejections: logicalRejections }, 'The Trial')
       }
-      // The fix cap — with the WSD-r2 f2 exception: a moved repair observation at the cap still
+      // The fix cap — with one exception: a moved repair observation at the cap still
       // admits its ONE promised correction (the observation consumed no builder attempt, so the
       // router's admission takes precedence over the cap for exactly this case). The extension is
       // one-shot: the loop bound stretches by exactly one cycle, never again.
@@ -3120,27 +3116,27 @@ for (const m of milestones) {
       }
       log(`${m.id} ${sliceId} REJECTED [${findingLines(mReview).join('; ')}] — fix ${fix + 1}`)
       phase('Forging')
-      // D2: a failed probe left real artifacts on disk — the reject brief NAMES them (script-assembled
+      // A failed probe left real artifacts on disk — the reject brief NAMES them (script-assembled
       // from the trial's run id + failed ids) so the builder READS the DOM/console/screenshot evidence
-      // before re-attempting (reading artifacts is not browser authority — amendment 7 intact).
+      // before re-attempting (reading artifacts is not browser authority).
       const fixBrief = `Reviewer REJECTED the prior attempt: ${findingLines(mReview).join(' | ') || '(no findings reported — re-verify the mapped checks, recommit, and report honestly)'}. Fix these specifically.${probeArtifactBrief(mReview && mReview.run_id, mReview && mReview.fingerprint && mReview.fingerprint.failed)}`
       mBuild = await agent(buildPrompt(m, surf, slice, sliceId, fixBrief), { label: loreLabel(builderName, 'build', `${sliceId}:fix${fix + 1}`), phase: 'Forging', model: bModel, schema: BUILD_SCHEMA })
       attempts++
     }
     gateProv.push({ gate: 'review', slice: sliceId, ...sliceReviewProv })
     if (splitRequired) splitLedger.push({ milestone: m.id, slice: sliceId, sc_ids: slice.sc_ids })
-    // D1: a blocked slice rides the splitLedger too, with a DISTINCT class marker (Sol WSD-r1 f5):
+    // A blocked slice rides the splitLedger too, with a DISTINCT class marker:
     // 'environment' = pure infra, the conductor repairs the ENVIRONMENT, not the code;
     // 'mixed' = an infra fault PLUS unresolved product assertion(s) — code work is still owed
     // after the repair (unresolved_assertions names them). Never a plain builder-fixable defect.
     if (environmentBlocked) splitLedger.push({ milestone: m.id, slice: sliceId, sc_ids: slice.sc_ids, class: environmentClass === 'mixed' ? 'mixed' : 'environment', ...(environmentAssertions.length ? { unresolved_assertions: environmentAssertions } : {}) })
     if (approvedOf(mReview)) greenScIds.push(...slice.sc_ids.filter((id) => !greenScIds.includes(id)))
-    // B42-4: the retained fingerprint is the LAST attempt's state that sliceTelemetry forwards to the
+    // The retained fingerprint is the LAST attempt's state that sliceTelemetry forwards to the
     // correction council. An APPROVED slice's decisive trial was GREEN — no failure signature — so it
     // records null; only a rejected/blocked/split slice keeps its last (overcome-or-standing) signature.
     // The loop breaks on approval BEFORE prevFingerprint is cleared, so read approval directly here.
     slices.push({ id: sliceId, objective: slice.objective, sc_ids: slice.sc_ids, files: slice.files || [], done_when: slice.done_when || '', tests_green: mBuild && mBuild.tests_green, review: mReview && mReview.verdict, approved: approvedOf(mReview), split_required: splitRequired, environment_blocked: environmentBlocked, environment_class: environmentClass, environment_assertions: environmentAssertions, logical_rejections: logicalRejections, fingerprint: approvedOf(mReview) ? null : (prevFingerprint ? prevFingerprint.signature : null), attempts })
-    // D5 slice telemetry (§9, note.data.kind — no new event type): DETERMINISTIC fields only. NO
+    // Slice telemetry (note.data.kind — no new event type): DETERMINISTIC fields only. NO
     // elapsed/tokens (Date.now/clocks are forbidden by the runtime determinism guard — timing derives
     // post-hoc from the ledger's own append timestamps). fingerprint = the last attempt's signature.
     await ledger('note', {
@@ -3156,8 +3152,8 @@ for (const m of milestones) {
   if (cappedOut) log(`${m.id}: hit the ${MAX_SLICES_PER_MILESTONE}-slice cap — building stopped; validate.js backstops the remainder.`)
   } // end !gateOnly Scoring + Forging
 
-  // ── Judgment — the §3.2 milestone gate, exact. Aristotle's goal-backward audit runs at EVERY
-  //    milestone boundary (T2-fix ruling) — split/plan-abort branches included, where the verdict
+  // ── Judgment — the milestone gate, exact. Aristotle's goal-backward audit runs at EVERY
+  //    milestone boundary — split/plan-abort branches included, where the verdict
   //    is already mechanical QA_FAIL (the gate must not silently absorb a split the operator
   //    owns) but the audit's findings still MERGE into the failure record, so the conductor's
   //    split/replan decision starts from the full goal picture, not just process state:
@@ -3168,25 +3164,25 @@ for (const m of milestones) {
   //        QA_FAIL, else QA_PASS). Correction-loop semantics kept (≤ MAX_TRIBUNAL_CORRECTION),
   //        with the audit re-run each cycle — a corrective commit moves the boundary it audits.
   //      · below the threshold (the single-slice row) — slice review + goal-backward IS the gate.
-  //    Goal-audit failure semantics (ORCHESTRATOR RULING, p2/tasks.md): a null/unusable audit is
+  //    Goal-audit failure semantics: a null/unusable audit is
   //    re-asked ONCE; still unusable → the boundary verdict is QA_FAIL with the blocking finding
   //    'goal-audit-failure' (ledgered) — the judge NEVER spawns on missing inputs, and no
   //    corrective build is spent on an infrastructure failure (nothing in the CODE was found
   //    wrong; the conductor sees the ledger + finding and decides).
-  //    The goal_backward posture dial defaults ON; an operator-forced skip is LEDGERED (§3.5). ──
+  //    The goal_backward posture dial defaults ON; an operator-forced skip is LEDGERED. ──
   phase('Judgment')
   let qa = 'QA_PASS'
   let qaFindings = []
   let qaCycle = 0 // the correction cycle the gate resolved on (tribunal path); 0 on the single-slice/gate-only path — feeds the milestone-close beats
 
   const splitSlices = slices.filter((s) => s.split_required)
-  // D1: an environment-blocked slice is a mechanical QA_FAIL exactly like a split — the milestone
+  // An environment-blocked slice is a mechanical QA_FAIL exactly like a split — the milestone
   // cannot pass with an untrustworthy slice, and it must never spend the tribunal on a broken
   // environment. It fails toward v3.0.1: with no fingerprints no slice is ever environment_blocked.
   const envBlockedSlices = slices.filter((s) => s.environment_blocked)
   const goalOn = livePosture.milestone_gate.goal_backward !== false
 
-  // ── Velocity lever 3 (§9 pipelining): launch the NEXT milestone's slice-plan IN PARALLEL with
+  // ── Pipelining: launch the NEXT milestone's slice-plan IN PARALLEL with
   //    THIS milestone's gate. The gate is expensive (dual analysts + goal-backward + maybe a judge
   //    + a correction loop) and its agent calls are I/O-bound — the speculative slice-plan call
   //    overlaps that wall-clock for free. We anchor it on base_sha = the HEAD it is cut against;
@@ -3195,13 +3191,13 @@ for (const m of milestones) {
   //    owns Law checks (a no-SC milestone is skipped before it would consume a plan). The launched
   //    promise resolves to planMilestone's { ok, planned, errors }; per-item fault isolation keeps
   //    a thrown speculation from breaking the gate (the consumer falls back to a fresh plan).
-  //    NEVER under gateOnly (P3.5 T3): the gate-only path slices NO milestone, so nothing would
+  //    NEVER under gateOnly: the gate-only path slices NO milestone, so nothing would
   //    ever consume a speculative plan — launching one would burn a krs-one call for nothing. ──
   const nextM = milestones[milestoneIndex + 1]
   if (!gateOnly && nextM) {
     const nextScs = lawChecks.filter((c) => c.milestone === nextM.id)
     if (nextScs.length) {
-      // D3 (plan WS-D): churn-aware speculation. If THIS milestone ran hot, its gate will likely
+      // Churn-aware speculation. If THIS milestone ran hot, its gate will likely
       // commit corrections, move HEAD, and pipelineInvalidated would discard a speculative plan
       // anyway — so hold the next cut instead of burning a krs-one call for nothing. Waste-avoidance
       // ONLY: pipelineInvalidated stays the correctness rail. Re-enables automatically — a calm
@@ -3237,7 +3233,7 @@ for (const m of milestones) {
   // auditOrNull — returns a USABLE report, or null (ledgered goal_audit_failure); the caller fails the
   // boundary closed on null. The ONE re-ask fires when the first attempt is unusable (a null seat-death
   // OR a non-binary report). A RECOVERED first failure records the first attempt's class + recovered:true,
-  // NEVER classification:null (finding 3) — an unusable-but-non-seat-death first attempt proxies to
+  // NEVER classification:null — an unusable-but-non-seat-death first attempt proxies to
   // 'null_result' (there is no usable report to trust either way).
   const auditOrNull = async (suffix, first, firstProv) => {
     const p1 = firstProv || {}
@@ -3245,7 +3241,7 @@ for (const m of milestones) {
     let retried = false
     let p = p1
     if (!goalAuditUsable(g)) {
-      log(`${m.id}: the goal-backward audit returned no usable report — re-asking ONCE (orchestrator ruling)`)
+      log(`${m.id}: the goal-backward audit returned no usable report — re-asking ONCE`)
       const p2 = {}
       g = await goalAudit(`${suffix}:retry`, p2)
       retried = true
@@ -3268,7 +3264,7 @@ for (const m of milestones) {
     qa = 'QA_FAIL'
     qaFindings = [
       ...splitSlices.map((s) => `[split_required] ${s.id} "${s.objective}" stopped after ${s.logical_rejections} logical rejections — split-and-rebuild is a conductor/operator decision (SCs not trustworthy: ${s.sc_ids.join(', ')})`),
-      // Sol WSD-r1 f5 honesty: only a PURE-infra block may claim "not the code"; a MIXED block names
+      // Honesty: only a PURE-infra block may claim "not the code"; a MIXED block names
       // its unresolved product assertions — code work is still owed after the environment repair.
       ...envBlockedSlices.map((s) => s.environment_class === 'mixed'
         ? `[environment_blocked] ${s.id} "${s.objective}" — a MIXED failure reproduced identically with no code change: the infra fault needs ENVIRONMENT repair, and product assertion(s) remain UNRESOLVED beneath it${s.environment_assertions && s.environment_assertions.length ? ` (${s.environment_assertions.join(', ')})` : ''} — code work is still owed after the repair (SCs not trustworthy: ${s.sc_ids.join(', ')}) — a conductor/operator decision`
@@ -3276,7 +3272,7 @@ for (const m of milestones) {
       ...(planAborted ? ['[slice_plan] the replanned remainder failed SC coverage — the milestone is incomplete'] : []),
     ]
     log(`${m.id}: QA_FAIL determined mechanically (${splitSlices.length} split-required slice(s)${envBlockedSlices.length ? `, ${envBlockedSlices.length} environment-blocked slice(s)` : ''}${planAborted ? ', aborted slice plan' : ''}) — no tribunal spend (nothing on this branch can pass); the conductor decides.`)
-    // T2-fix ruling: the boundary audit still runs on this failed boundary — its findings merge
+    // The boundary audit still runs on this failed boundary — its findings merge
     // into the failure record (the verdict stays the mechanical QA_FAIL above).
     if (goalOn) {
       const goal = await auditOrNull(`${m.id}:failed`)
@@ -3284,7 +3280,7 @@ for (const m of milestones) {
       else qaFindings.push(GOAL_AUDIT_FAILURE)
     } else await skipAudit()
   } else if (forceTribunal || tribunalThreshold(slices.length, livePosture.milestone_gate.min_slices_for_tribunal)) {
-    // forceTribunal (gateOnly, P3.5 T3): the historical slice count is unknown to a fresh session,
+    // forceTribunal (gateOnly): the historical slice count is unknown to a fresh session,
     // so route CONSERVATIVELY to the FULL tribunal regardless of min_slices_for_tribunal — fail
     // toward scrutiny, gate-only never lowers the gate.
     if (!goalOn) await skipAudit()
@@ -3292,25 +3288,25 @@ for (const m of milestones) {
       // gateAgent: a mute analyst degrades to null — denzelReconcile is null-safe and gateDecision
       // reads an unreadable overall as QA_FAIL (fail-closed), never a silent pass.
       const kenProv = {}, ryuProv = {}
-      // D2: at T4 the receipt-attested Sol evidence analyst REPLACES the prompt-delegated Ryu leg
+      // At T4 the receipt-attested Sol evidence analyst REPLACES the prompt-delegated Ryu leg
       // (analyst B) — xhigh, read-only, judging from repo reads + the runner's PERSISTED hashed
       // evidence (the packet names NO analyst-A artifact — blind independence holds). Sub-T4 keeps the
       // byte-identical prompt-delegated sonnet Ryu.
-      // B42-2: the Sol evidence analyst judges the NAMED per-milestone/cycle artifacts (derived
+      // The Sol evidence analyst judges the NAMED per-milestone/cycle artifacts (derived
       // SCRIPT-SIDE from the last trial's run id + this milestone's probe SCs — never model-recalled):
       // law.json, the run dir's results/suite files, and the probe artifacts where a UI probe ran. The
       // evidence-dir root alone is not a packet — stale or unrelated evidence must not be selectable.
-      // AMB-B42-2: suite.log/suite.jsonl are named IFF the build recorded a project suite — the exact
-      // build.js:640 `suite = build.test_command` skip-branch state (mBuild is the trial's build config),
+      // suite.log/suite.jsonl are named IFF the build recorded a project suite — the exact
+      // `suite = build.test_command` skip-branch state (mBuild is the trial's build config),
       // reused SCRIPT-SIDE so the analyst's named list and the close anchor's named list never disagree.
       const suiteRecorded = !!(mBuild && mBuild.test_command)
-      // B42-2/B42-3 (recorded-probe derivation): ONE Thoth transcription leg runs PROBE_EXECUTED_ONELINER
+      // Recorded-probe derivation: ONE Thoth transcription leg runs PROBE_EXECUTED_ONELINER
       // over this milestone's last trial results.jsonl; the SCRIPT intersects the printed ids with the
       // milestone's probe SCs. This is the SINGLE derivation of the executed-probe id set — it feeds BOTH
       // the Sol analyst's named evidence_artifacts (below) AND the close anchor's hashed manifest (passed to
       // runCloseCouncil), so the two named lists are the SAME variable and can never disagree. A
       // deferred/spec-less probe left no artifacts and is named NOWHERE (its results.jsonl row carries
-      // `deferred`, not an exit — kiln-law.mjs:518/551/555). Gated on councilCapable + real milestone probe
+      // `deferred`, not an exit). Gated on councilCapable + real milestone probe
       // SCs, so logic-only milestones and sub-T4 dispatch NO leg (byte-preserved). Fail-closed: a
       // dead/garbled leg ⇒ [] ⇒ nothing extra named or bound (the honest under-naming direction).
       const mProbeScIds = mScIds.filter((id) => probeScIds.has(id))
@@ -3334,7 +3330,7 @@ for (const m of milestones) {
         councilCapable
           ? () => gateAgent(solAnalyst.prompt, { label: loreLabel('ryu', 'qa', `${m.id}:c${c}`), phase: 'Judgment', model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(SOL_QA_PAYLOAD_SCHEMA), provenance: ryuProv })
           : councilMisconfigured
-            // B42-1 (the fail-open catch): promised-but-tokenless ⇒ analyst B is a DEAD SEAT. NEVER
+            // The fail-open catch: promised-but-tokenless ⇒ analyst B is a DEAD SEAT. NEVER
             // dispatch the legacy receiptless Ryu — reports[1] stays null so the reconcile arithmetic
             // fails the boundary CLOSED (unreadable overall ⇒ QA_FAIL) BEFORE any computed pass.
             ? () => null
@@ -3343,7 +3339,7 @@ for (const m of milestones) {
       const goalProvC = {}
       if (goalOn) legs.push(() => goalAudit(`${m.id}:c${c}`, goalProvC))
       const reports = await parallel(legs)
-      // D2 cross-check: the Sol analyst's structural receipt gets the invocation-exact ledger upgrade;
+      // Cross-check: the Sol analyst's structural receipt gets the invocation-exact ledger upgrade;
       // a dead/receiptless seat or a failed cross-check ⇒ null report (fail-closed EVIDENCE — the
       // null-safe reconcile then reads an unreadable overall as QA_FAIL, never a silent pass).
       if (councilCapable) {
@@ -3355,7 +3351,7 @@ for (const m of milestones) {
           reports[1] = null
         }
       } else if (councilMisconfigured) {
-        // B42-1: analyst B was NOT dispatched (dead seat). Force reports[1] null, mark an honest gateProv
+        // Analyst B was NOT dispatched (dead seat). Force reports[1] null, mark an honest gateProv
         // row + the milestone_close seat DEGRADED, and log the misconfiguration. The reconcile then reads
         // an unreadable overall ⇒ QA_FAIL (fail-closed) BEFORE any computed pass — with ZERO legacy Ryu calls.
         reports[1] = null
@@ -3365,7 +3361,7 @@ for (const m of milestones) {
         log(`${m.id}: Sol evidence analyst seat DEAD — councilPromised (T4 + codex) but NO runToken (misconfigured conductor); analyst B is a dead seat (NO legacy Ryu dispatched), the gate fails CLOSED via the reconcile arithmetic`)
       }
       gateProv.push({ gate: 'ken', cycle: c, ...kenProv }, { gate: 'ryu', cycle: c, ...ryuProv })
-      // Goal-audit failure semantics (ORCHESTRATOR RULING): an unusable audit leg is re-asked
+      // Goal-audit failure semantics: an unusable audit leg is re-asked
       // ONCE; still unusable → QA_FAIL with the blocking 'goal-audit-failure' finding — the
       // judge NEVER spawns on missing inputs, and the correction loop ends (an infrastructure
       // failure is not a code defect a corrective build can fix).
@@ -3380,19 +3376,19 @@ for (const m of milestones) {
           break
         }
       }
-      // The audit's findings JOIN the reconcile (§3.2) — denzelReconcile is a pure associative
+      // The audit's findings JOIN the reconcile — denzelReconcile is a pure associative
       // merge (dedupe by normalized text, max severity wins), so folding the third report
       // through a second pass is exact, not approximate.
       const reconciled = denzelReconcile(denzelReconcile(reports[0], reports[1]), goal)
       qaFindings = reconciled.summaryLines
       log(`${spin('qa', c)} — ${m.id}: Denzel reconciles — ${reconciled.findings.length} finding(s), ${reconciled.blocking.length} blocking${goalOn ? ' (goal-backward joined the reconcile)' : ''}`)
-      // §3.2 judge-spawn condition, computed in-script (gateDecision) over USABLE inputs only —
+      // Judge-spawn condition, computed in-script (gateDecision) over USABLE inputs only —
       // the unusable-audit branch above already failed closed without reaching here.
       const decision = gateDecision(reconciled, reports[0] && reports[0].overall, reports[1] && reports[1].overall)
       let v
       if (decision.judge) {
         if (councilCapable) {
-          // D3: the milestone-close ratification pair RETIRES Judge Dredd at T4 on this exact ambiguous
+          // The milestone-close ratification pair RETIRES Judge Dredd at T4 on this exact ambiguous
           // branch (zero blocking + disagreeing analyst overalls). Red monotonicity is STRUCTURAL — a
           // deterministic QA_FAIL never reaches here, so a council cannot green a red gate.
           const goalOverall = goal && goal.overall != null ? goal.overall : null
@@ -3408,8 +3404,8 @@ for (const m of milestones) {
           if (close.terminal === 'DEGRADED' && close.terminal_record && (close.terminal_record.missing === 'fable' || close.terminal_record.missing === 'sol')) mCouncilMissingHead = close.terminal_record.missing
           if (v === 'QA_FAIL') qaFindings = [...reconciled.summaryLines, ...mCloseFindings.map(closeFindingLine), ...(close.terminal === 'DEGRADED' ? [`[close_council] milestone-close council DEGRADED (${close.terminal_record && close.terminal_record.missing}) — fail-closed, no judge fallback at T4`] : [])]
         } else if (councilMisconfigured) {
-          // D5: promised-but-tokenless — the judgment SEAT fails closed (never a silent Judge Dredd
-          // downgrade; scope ruling item 6).
+          // Promised-but-tokenless — the judgment SEAT fails closed (never a silent Judge Dredd
+          // downgrade).
           v = 'QA_FAIL'
           mCloseTerminal = 'DEGRADED'
           qaFindings = [...reconciled.summaryLines, '[close_council] milestone-close council PROMISED (T4 + codex) but the conductor minted no runToken — the ruling fails closed (QA_FAIL, DEGRADED); relaunch with the per-run token']
@@ -3428,12 +3424,12 @@ for (const m of milestones) {
       }
       if (v === 'QA_PASS') { qa = 'QA_PASS'; qaCycle = c; log(`${m.id}: QA_PASS (milestone gate, cycle ${c})`); break }
       if (c === MAX_TRIBUNAL_CORRECTION) { qa = 'QA_FAIL'; qaCycle = c; log(`${m.id}: QA_FAIL after ${c} correction(s) — escalating to validate`); break }
-      // D4: the REQUIRED correction council over retry | escalate | replan runs BEFORE the sole
+      // The REQUIRED correction council over retry | escalate | replan runs BEFORE the sole
       // corrective build — the routing decision is a council ruling, not an unconditional build. The
-      // frozen close_council_findings ride the packet (DSGN-B42-1). Split/dead/invalid ⇒ fail-closed
+      // frozen close_council_findings ride the packet. Split/dead/invalid ⇒ fail-closed
       // ESCALATE. Sub-T4 keeps the v3.0.1 unconditional corrective build byte-identical.
       if (councilCapable) {
-        // B42-4: the correction packet carries per-slice fingerprints + attempts (retained on the slice
+        // The correction packet carries per-slice fingerprints + attempts (retained on the slice
         // records at their push) alongside logical_rejections/splits/env — the telemetry the route needs.
         const sliceTelemetry = slices.map((s) => ({ id: s.id, logical_rejections: s.logical_rejections, fingerprint: s.fingerprint != null ? s.fingerprint : null, attempts: s.attempts != null ? s.attempts : null, split_required: !!s.split_required, environment_blocked: !!s.environment_blocked, tests_green: s.tests_green !== false }))
         const corr = await runCorrectionCouncil(m, reconciled, mCloseFindings, sliceTelemetry, c, gateProv, mCouncilDir, mCouncilReceipts)
@@ -3444,12 +3440,12 @@ for (const m of milestones) {
         mCorrectionLedgerVerified = corr.ledger_verified
         mCorrectionSeatConvened = true
         if (corr.degraded && (corr.missing === 'fable' || corr.missing === 'sol')) mCouncilMissingHead = corr.missing
-        // B42-5: the correction heads' RETAINED findings + reasons ride qaFindings verbatim on ESCALATE/REPLAN.
+        // The correction heads' RETAINED findings + reasons ride qaFindings verbatim on ESCALATE/REPLAN.
         if (corr.choice === 'ESCALATE') { qa = 'QA_FAIL'; qaCycle = c; qaFindings = [...reconciled.summaryLines, ...mCloseFindings.map(closeFindingLine), ...correctionRulingLines(corr), `[correction_council] the correction council ruled ESCALATE${corr.degraded ? ` (fail-closed: ${corr.missing} seat dead — DEGRADED)` : (corr.terminal === 'BLOCKED' ? ' (fail-closed: a live legal split — BLOCKED)' : '')} — validate backstops; the conductor sees the ruling`]; log(`${m.id}: correction council ESCALATE (terminal ${corr.terminal}) — QA_FAIL stands, validate backstops`); break }
         if (corr.choice === 'REPLAN') { qa = 'QA_FAIL'; qaCycle = c; mReplanRequired = true; qaFindings = [...reconciled.summaryLines, ...mCloseFindings.map(closeFindingLine), ...correctionRulingLines(corr), '[correction_council] the correction council ruled REPLAN — the milestone plan itself is wrong; a conductor/operator re-plan is owed (replan_required)']; log(`${m.id}: correction council REPLAN — QA_FAIL + replan_required marker (never silent)`); break }
         log(`${m.id}: correction council RETRY — proceeding to the sole corrective build`)
       } else if (councilMisconfigured) {
-        // D5/B42-1: promised-but-tokenless — the correction ROUTING fails closed to ESCALATE (never a
+        // Promised-but-tokenless — the correction ROUTING fails closed to ESCALATE (never a
         // corrective build spent under a council that could not convene); the seat is honestly DEGRADED.
         qa = 'QA_FAIL'; qaCycle = c; mCorrectionRuling = 'ESCALATE'; mCorrectionTerminal = 'DEGRADED'; mCorrectionSeatConvened = true
         qaFindings = [...reconciled.summaryLines, '[correction_council] correction council PROMISED (T4 + codex) but no runToken — fail-closed ESCALATE; relaunch with the per-run token']
@@ -3460,14 +3456,14 @@ for (const m of milestones) {
       // then re-gate once. The correction is milestone-wide, so it maps to ALL milestone SCs —
       // and its trial's flip plan covers them all (already-green SCs fold into the regression
       // guard, red ones into the expected flips; statusBefore is the recorded last run).
-      // D2: a milestone-gate correction over probe-covered SCs inherits the last complete trial's
+      // A milestone-gate correction over probe-covered SCs inherits the last complete trial's
       // on-disk probe artifacts (script-assembled, never model-recalled), so the correction builder
-      // reads the real DOM/console/screenshot evidence before re-attempting. Scope (r1 advisory):
+      // reads the real DOM/console/screenshot evidence before re-attempting. Scope:
       // when the decisive trial's failure set is KNOWN (mReview carries a real fingerprint), name
       // only its FAILED probe SCs; fall back to the milestone's full probe-SC set only when it isn't.
       const lastFp = fpOrNull(mReview && mReview.fingerprint)
       const lastTrialRunId = (mReview && typeof mReview.run_id === 'string' && mReview.run_id) ? mReview.run_id : lastRunId
-      // DSGN-B42-1: the sole corrective build's fixNote carries the frozen close_council_findings
+      // The sole corrective build's fixNote carries the frozen close_council_findings
       // (IDs + refs verbatim) alongside the reconciled summary — never spent blind to what blocked the close.
       const fixNote = `Milestone gate QA_FAIL. Fix every blocking finding, keep tests green, recommit:\n${[...reconciled.summaryLines, ...mCloseFindings.map(closeFindingLine)].join('\n')}${probeArtifactBrief(lastTrialRunId, lastFp ? lastFp.failed : mScIds)}`
       const correctionSlice = { objective: `Milestone-gate correction for ${m.id} — fix every blocking finding`, files: [], constraints: '', done_when: m.acceptance, sc_ids: mScIds }
@@ -3480,9 +3476,9 @@ for (const m of milestones) {
       phase('Judgment')
     }
   } else if (slices.length >= 1) {
-    // §3.2 single-slice row (and any posture-raised threshold): the cross-family slice review +
+    // Single-slice row (and any posture-raised threshold): the cross-family slice review +
     // the goal-backward audit IS the gate — tribunal redundancy skip, never an unaudited pass.
-    // Fail closed per the orchestrator ruling: an unusable audit is re-asked ONCE, then the gate
+    // Fail closed: an unusable audit is re-asked ONCE, then the gate
     // is QA_FAIL with the blocking 'goal-audit-failure' finding (validate backstops; the
     // conductor sees why). An operator-forced skip is ledgered and gates on the slice review alone.
     let goal = null
@@ -3508,7 +3504,7 @@ for (const m of milestones) {
   }
 
   // Update living docs so the next milestone's slicer/builder has current context. SKIPPED under
-  // gateOnly (P3.5 T3): nothing was sliced or built — "was just built" would be a lie, and there is
+  // gateOnly: nothing was sliced or built — "was just built" would be a lie, and there is
   // no next-milestone slicer to feed (gate-only re-runs a gate over an already-complete build).
   if (!gateOnly) {
     phase('The Forge Heats')
@@ -3519,12 +3515,12 @@ for (const m of milestones) {
     )
   }
 
-  // F3: the milestone's gate-leg provenance rides the EXISTING gate_decision ledger type (in the
+  // The milestone's gate-leg provenance rides the EXISTING gate_decision ledger type (in the
   // enum, previously unemitted by a workflow — no new type minted) so every degradation/substitution
   // on a review, tribunal analyst, judge, or goal-backward leg is recorded durably at the boundary.
-  // B4-2 D6: a council SUMMARY rides the same event on the T4 path (honest terminals for the
+  // A council SUMMARY rides the same event on the T4 path (honest terminals for the
   // conductor's blocked/degraded hard stop) — omitted entirely off the council path (byte-preserved).
-  // B42-6: the gate_decision council field is an ARRAY of per-seat summaries (one per convened OR
+  // The gate_decision council field is an ARRAY of per-seat summaries (one per convened OR
   // failed-closed seat — milestone_close and correction), each EXACTLY {seat, terminal, bundle_hash,
   // certificate_present, receipt_verified, ledger_verified}. bundle_hash is the COMPUTED record hash
   // (present for BLOCKED/DEGRADED rulings too — never derived from the certificate). The receipts list
@@ -3545,11 +3541,11 @@ for (const m of milestones) {
     split_required: splitSlices.map((s) => s.id),
     replanned,
     ...(gateOnly ? { gate_only: true } : {}),
-    // B4-2 D6: the council terminals ride the milestone result so the workflow return + conductor's
+    // The council terminals ride the milestone result so the workflow return + conductor's
     // blocked/degraded hard stop see honest terminals. Present only on the council-promised path.
     ...(councilPromised ? { council: { close_terminal: mCloseTerminal, correction_terminal: mCorrectionTerminal, correction_ruling: mCorrectionRuling, replan_required: mReplanRequired, certificate: mCloseCertificate, council_missing_head: mCouncilMissingHead } } : {}),
   })
-  // build.milestone_sealed / build.milestone_fail (keystones): the §3.2 boundary verdict.
+  // build.milestone_sealed / build.milestone_fail (keystones): the boundary verdict.
   const remainingMilestones = milestones.length - 1 - milestoneIndex
   if (qa === 'QA_PASS') await lore('build.milestone_sealed', `${m.id} falls — QA_PASS, cycle ${qaCycle}; ${remainingMilestones} milestone(s) stand`, { milestone: m.id, cycle: qaCycle, remaining: remainingMilestones }, 'Judgment')
   else await lore('build.milestone_fail', `${m.id} holds the gate — QA_FAIL after ${qaCycle} correction(s); validate backstops`, { milestone: m.id, cycle: qaCycle }, 'Judgment')
@@ -3557,7 +3553,7 @@ for (const m of milestones) {
 
   const passed = results.filter((r) => r.qa === 'QA_PASS' && r.tests_green)
   const allPassed = passed.length === results.length && results.length > 0
-  // Sol WSD-r1 f5: the closing bow distinguishes the three splitLedger classes — a code split awaits
+  // The closing bow distinguishes the three splitLedger classes — a code split awaits
   // an operator SPLIT decision; a pure-infra block awaits ENVIRONMENT repair (not code); a mixed
   // block awaits both (environment repair + the unresolved assertions still need code work).
   const codeSplits = splitLedger.filter((e) => !e.class)
@@ -3566,16 +3562,16 @@ for (const m of milestones) {
   log(`The orchestra takes a bow — ${passed.length}/${results.length} milestone(s) passed QA${codeSplits.length ? ` · ${codeSplits.length} slice(s) await an operator split decision` : ''}${envBlocks.length ? ` · ${envBlocks.length} slice(s) blocked on ENVIRONMENT repair (not code)` : ''}${mixedBlocks.length ? ` · ${mixedBlocks.length} slice(s) blocked MIXED (environment repair + unresolved assertions still owed code work)` : ''}`)
   // build.bow (keystone): the forge stage closes — the honest tally, with straight tails.
   await lore('build.bow', `The orchestra takes a bow — ${passed.length}/${results.length} milestone(s) passed QA${codeSplits.length ? ` · ${codeSplits.length} split(s) await the operator` : ''}${envBlocks.length ? ` · ${envBlocks.length} env-blocked` : ''}${mixedBlocks.length ? ` · ${mixedBlocks.length} mixed-blocked` : ''}`, { passed: passed.length, total: results.length, splits: codeSplits.length, env_blocked: envBlocks.length, mixed_blocked: mixedBlocks.length }, 'Judgment')
-  // §3.5 stage bracket (P3.6 T4): the build stage COMPLETES only when every milestone passed its
+  // Stage bracket: the build stage COMPLETES only when every milestone passed its
   // gate. A QA_FAIL / refusal / gate-only-on-red leaves the projection at 'build' (accurate — the
   // conductor re-enters via the correction loop or a gate-only retry). Fail-open like every ledger leg.
   if (allPassed) await ledger('stage_completed', { stage: 'build', milestones: results.length, passed: passed.length }, 'Judgment')
-  // ⟨DSGN-B3-4⟩(b): a dual-APPROVE legacy retrospective ratification rides the build return's council
+  // A dual-APPROVE legacy retrospective ratification rides the build return's council
   // field (the retrospective certificate + the legacy_authority marking) — the plan advanced BECAUSE the
   // council ratified it; the conductor sees the honest terminal. Absent off the legacy path.
   return { built: results, passed: passed.map((r) => r.id), all_passed: allPassed, law_gated: true, split_required: splitLedger, ...(legacyCouncil ? { council: legacyCouncil } : {}) }
 } finally {
-  // §7 / T2.3 stage-end sweep: UNCONDITIONAL at build end — reaps THIS build's browser survivors
+  // Stage-end sweep: UNCONDITIONAL at build end — reaps THIS build's browser survivors
   // (an outer-deadline SIGKILL of a probe wrapper, a crashed run mid-probe) before the stage hands
   // off. kiln-law's per-run brackets are the inner defense; this is the OUTER one, run-token
   // scoped to BUILD_RUN_TOKEN. The sweep is itself try/guarded so a cleanup failure can never mask

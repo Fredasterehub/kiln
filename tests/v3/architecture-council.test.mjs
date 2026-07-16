@@ -1,4 +1,4 @@
-// architecture-council.test.mjs — B4-1b-ii acceptance: the GENERATED workflows/architecture.js wires
+// architecture-council.test.mjs — acceptance: the GENERATED workflows/architecture.js wires
 // the Twin Council at capability tier T4 on the FULL path (fable ∥ receipt-attested Sol drafts →
 // blind dual ratification → one bounded answer exchange → blind re-verdict → honest terminal), and
 // BYTE-PRESERVES the v3.0.1 paths everywhere else (lite, T1–T3, no-runToken). Same runWorkflow idiom
@@ -95,7 +95,7 @@ const crossOk = (payload, phaseTag, over = {}) => ({
   },
 })
 
-// ── byte-owned Sol leg helpers (⟨DSGN-B3-2⟩, B3a): the workflow RENDERS the codex prompt + packet and
+// ── byte-owned Sol leg helpers: the workflow RENDERS the codex prompt + packet and
 // the courier writes them VERBATIM. The stateful responder pulls those exact bytes back out of the
 // wrapper prompt (each embedded as a JSON string after "the JSON-decoded text of: ") and DERIVES the
 // receipt + reservation hashes from them (Sol F11 discipline) — so the happy path passes byte-ownership
@@ -121,11 +121,11 @@ const validateResult = (v) => ({ reasoning: 'v', verdict: v, failed_dimensions: 
 const FROZEN = [`${KILN}/docs/VISION.md`, `${KILN}/docs/architecture.md`, `${KILN}/docs/tech-stack.md`, `${KILN}/docs/arch-constraints.md`, `${KILN}/docs/research.md`]
 const ANCHOR_FILES = FROZEN.map((path) => ({ path, sha256: shaBytes(Buffer.from(`fixture:${path}`)) }))
 const evidenceManifestHash = (() => { const m = {}; for (const f of ANCHOR_FILES) m[f.path] = f.sha256; return sha256Hex(canonicalJson(m)) })()
-// B3b2-iiB SWAP: the ratify authority is now the REAL front-half decision bundle (renderer b3-bundle/1),
+// SWAP: the ratify authority is now the REAL front-half decision bundle (renderer b3-bundle/1),
 // not a plato stand-in. t4BundleOf reconstructs it EXACTLY as finalizeFrontHalf does — a settled-entry
 // array + common_trunk:{vision_sc_ids} + open cards; renderedPlanHashOf mirrors renderScribeCompare
 // (renderMasterPlan over the same view → sha of the markdown), so a mock row answers the file-hash scribe
-// leg deterministically (AMB-iiB-C). The DEFAULT converged front-half settles nothing ⇒ the empty bundle.
+// leg deterministically. The DEFAULT converged front-half settles nothing ⇒ the empty bundle.
 const t4BundleOf = (over = {}) => buildDecisionBundle({ common_trunk: { vision_sc_ids: over.visionScIds || [] }, settled_decisions: over.settled || [], open_divergences: over.open || [], renderer_version: 'b3-bundle/1', evidence_manifest_hash: evidenceManifestHash })
 const renderedPlanHashOf = (over = {}) => sha256Hex(renderMasterPlan({ ...t4BundleOf(over).bundle, settled: over.settled || [] }, { visionScIds: over.visionScIds || [] }).markdown)
 const T4_BUNDLE = t4BundleOf().hash
@@ -133,7 +133,7 @@ const T4_BUNDLE = t4BundleOf().hash
 // the render hash is the rendered-bytes sha (the scribe fidelity anchor). Rows that settle/amend override.
 const PLAN_HASH_1 = renderedPlanHashOf()
 const BUNDLE_1 = T4_BUNDLE
-// B4-2 D7: on the LITE path the plan artifact IS the bundle (no decision bundle) — bundle_hash =
+// on the LITE path the plan artifact IS the bundle (no decision bundle) — bundle_hash =
 // plan_hash = the plan-file sha, so the lite ratify verdicts echo THIS hash as artifact_hash.
 const LITE_HASH = shaBytes(Buffer.from('fixture:lite-plan'))
 
@@ -145,7 +145,7 @@ const t4Args = (extra = {}) => ({ kilnDir: KILN, projectPath: PROJECT, pluginRoo
 // leg's payload; the matching cross-checks are AUTO-DERIVED from the same payload + phase tag, so a
 // test that overrides a Sol payload gets a coherent invocation-exact ledger for free.
 const PHASE_OF = { 'sol:draft': 'DRAFTS', 'sol:critique': 'CRITIQUE', 'sol:revise': 'REVISION', 'sol:negotiate': 'NEGOTIATION', 'sol:ratify:r1': 'RATIFY_1', 'sol:answer': 'ANSWER_EXCHANGE', 'sol:ratify:r2': 'RATIFY_2', 'sol:ratify:rFresh': 'RATIFY_FRESH', 'sol:ratify:lite': 'LITE_RATIFY' }
-// B3b2-iiA negotiation helpers: the workflow embeds the A2 cards VERBATIM in both heads' prompts (the
+// negotiation helpers: the workflow embeds the A2 cards VERBATIM in both heads' prompts (the
 // fable prompt inside <cards>…</cards>, the sol codex prompt after "Open divergence cards: "). The
 // responder parses those exact cards back out and returns one selection per DV id (a deterministic
 // strategy → both heads agree → settle; a cfg.negotiate(card, leg) override drives disagreement/absent).
@@ -167,7 +167,7 @@ function makeResponder(cfg = {}) {
     'sol:ratify:r2': cfg.rS2 !== undefined ? cfg.rS2 : rat(null),
     'sol:ratify:lite': cfg.rSlite !== undefined ? cfg.rSlite : rat(LITE_HASH),
   }
-  // B3a debate default payloads — a converged debate (no findings ⇒ empty dispositions ⇒ empty
+  // debate default payloads — a converged debate (no findings ⇒ empty dispositions ⇒ empty
   // divergence set ⇒ NEGOTIATION_SKIPPED), so every inherited T4 full-path row proceeds to ratify.
   const solCritiquePayload = cfg.solCritique !== undefined ? cfg.solCritique : { findings: [] }
   const solRevisePayload = cfg.solRevise !== undefined ? cfg.solRevise : { dispositions: [], decisions: [], revised_plan_markdown: '# revised plan b\n' }
@@ -177,10 +177,10 @@ function makeResponder(cfg = {}) {
   // prompt (scribePlanPrompt) — so the in-script byte-compare always proves fidelity for any front-half.
   let renderedHash = null, renderHashCount = 0, athenaCallN = 0, persistedBundleBytes = null
   const captureScribe = (prompt) => { const m = prompt.match(/\n("(?:[^"\\]|\\.)*")\nReport written = true/); if (m) renderedHash = sha256Hex(JSON.parse(m[1])) }
-  // B3R1-7: capture the persisted decision-bundle bytes (thoth:bundle-scribe) so the persist-hash / reload
+  // capture the persisted decision-bundle bytes (thoth:bundle-scribe) so the persist-hash / reload
   // legs answer deterministically (the front-half barrier now persists the bundle for resume rehydration).
   const captureBundleScribe = (prompt) => { const m = prompt.match(/\n("(?:[^"\\]|\\.)*")\nReport written = true/); if (m) persistedBundleBytes = JSON.parse(m[1]) }
-  // B3R2-1: the DEADLOCK_RESOLVED certificate is persisted reloadably (scribe + persist-hash) — capture the
+  // the DEADLOCK_RESOLVED certificate is persisted reloadably (scribe + persist-hash) — capture the
   // scribed bytes so the persist-hash leg answers with their sha (else sealProvisional escalates fail-closed).
   let persistedCertBytes = null
   const captureCertScribe = (prompt) => { const m = prompt.match(/\n("(?:[^"\\]|\\.)*")\nReport written = true/); if (m) persistedCertBytes = JSON.parse(m[1]) }
@@ -312,7 +312,7 @@ function parseCheckpoints(calls) {
   return out
 }
 
-// B3R1-1: the anonymous P0/P1 slots are SEED-ASSIGNED (parity of councilSeedDigest), never seat identity.
+// the anonymous P0/P1 slots are SEED-ASSIGNED (parity of councilSeedDigest), never seat identity.
 // A template edit shifts templateHash → the seed → potentially the slot, so the finding-id rows below
 // DISCOVER which slot fable drew for THIS run's fixed inputs instead of hardcoding it. The DRAFTS_SEALED
 // checkpoint's seat_provenance records head-per-slot (audit) — fableSlotOf reads it back.
@@ -321,10 +321,10 @@ const _slotProbe = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder())
 const FSLOT = fableSlotOf(_slotProbe.calls)
 const SSLOT = FSLOT === 'P0' ? 'P1' : 'P0'
 
-// B3R1-1 proving row: the slot assignment VARIES with the seed (not seat identity), and provenance still
+// proving row: the slot assignment VARIES with the seed (not seat identity), and provenance still
 // audits head-per-slot on every run. Across a spread of runTokens both P0 and P1 appear as fable's slot,
 // yet every run maps exactly one slot→fable and the other→sol (blind to peers, honest to the ledger).
-test('B3R1-1 slot blindness: P0/P1 are seed-assigned (vary with the seed), never seat identity; provenance still audits head-per-slot', async () => {
+test('slot blindness: P0/P1 are seed-assigned (vary with the seed), never seat identity; provenance still audits head-per-slot', async () => {
   const seen = new Set()
   // The seed folds the initial ledger seq (a real seed input the receipt mock tolerates — unlike the run
   // token, which the cross-check binds). Across seqs the parity flips, so fable draws BOTH slots.
@@ -344,8 +344,8 @@ test('B3R1-1 slot blindness: P0/P1 are seed-assigned (vary with the seed), never
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
 // v3.0.1 PRESERVATION
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
-// NOTE (scope ruling item 6): a full-path T4 launch missing its runToken is NO LONGER a v301 route —
-// it rules DEGRADED (dedicated test below). NOTE (B4-2 D7): T4-lite is NO LONGER a v301 route either —
+// NOTE: a full-path T4 launch missing its runToken is NO LONGER a v301 route —
+// it rules DEGRADED (dedicated test below). NOTE: T4-lite is NO LONGER a v301 route either —
 // the lite plan now takes the blind required pair (dedicated section below). Only SUB-T4 (incl. sub-T4
 // lite) stays v301, token or not.
 const v301Cases = [
@@ -475,7 +475,7 @@ test('T4 checkpoint accounting (F10): unconfirmed appends are NOT counted', asyn
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
-// T4-LITE RATIFICATION (B4-2 D7) — the deferred-hardening lite pair over the SINGLE lite master plan
+// T4-LITE RATIFICATION — the lite pair over the SINGLE lite master plan
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
 // The two former v301 lite rows move HERE: T4-lite is now a council path. planning:'single' forces the
 // lite fork; a token-bearing run takes ONE blind required round (no drafts, no divergence, no exchange).
@@ -583,14 +583,14 @@ test('T4-lite dead Sol seat: an invalid receipt on the lite Sol leg ⇒ DEGRADED
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
 const blockFinding = { finding_id: 'F-001-P1-001', claim: 'milestone M1 hides an unbounded unknown', required_change: 'split M1 into two verifiable slices', evidence_refs: ['master-plan.md'], evidence_class: 'scenario', executable_check: null }
 const solBlockFinding = { finding_id: 'F-010-P0-001', claim: 'a decision violates the constraints', required_change: 'align M1 with the constraint doc', evidence_refs: ['arch-constraints.md'], evidence_class: 'repo_state', executable_check: null }
-// A1 ⟨DSGN-B3-3⟩: the SCRIPT re-keys ratify findings to canonical R-<round>-<slot>-<nnn> (slot P0 = fable,
+// the SCRIPT re-keys ratify findings to canonical R-<round>-<slot>-<nnn> (slot P0 = fable,
 // P1 = sol) — the identity through the exchange/exec-check/standing-block/RATIFY_2. The model finding_id is
-// a label. A single fable block ⇒ R-1-<fableSlot>-001, a single sol block ⇒ R-1-<solSlot>-001 (B3R1-1:
-// the slots are seed-assigned — discovered as FSLOT/SSLOT above, never hardcoded to seat identity).
+// a label. A single fable block ⇒ R-1-<fableSlot>-001, a single sol block ⇒ R-1-<solSlot>-001 (the
+// slots are seed-assigned — discovered as FSLOT/SSLOT above, never hardcoded to seat identity).
 const R1P0 = `R-1-${FSLOT}-001`, R1P1 = `R-1-${SSLOT}-001`
 // execCheck echoing the R-key the runner leg was asked to report (label = thoth:exec-check:<R-key>).
 const execExit = (exit) => (label) => ({ finding_id: label.slice('thoth:exec-check:'.length), exit, stdout_tail: '', stderr_tail: '' })
-// AMB-CLOSER-1.iii amend fixtures: an ACCEPTED ratify-exchange correction amends the BUNDLE structurally
+// amend fixtures: an ACCEPTED ratify-exchange correction amends the BUNDLE structurally
 // via its typed { target_kind, key, replacement } descriptor (plato is retired). A converged front-half
 // SETTLES one organic decision ('palette') both heads authored identically — the target the correction
 // amends. The re-render (render-scribe/render-hash) rehashes the amended bundle; RATIFY_2 rules the new hash.
@@ -671,7 +671,7 @@ test('T4 FABLE-origin BLOCK→exchange→re-verdict: an ACCEPTED correction amen
   assert.equal(ex.anonymous_seat_artifact_hashes.P1, sha256Hex(canonicalJson(solAnswerPayload)), 'P1 = the sol answer payload hash')
   assert.equal(ex.codex_receipt_hash, rshaOf(validReceipt(solAnswerPayload)), 'the Sol answer leg\'s LEDGER receipt hash rides the checkpoint')
   assert.equal(ex.seat_provenance.P1.head, 'sol', 'the sol answer-leg provenance rides the checkpoint')
-  // item 3 (scope ruling): the exchange barrier is bound to the PRE-amendment bundle and seals BEFORE the
+  // the exchange barrier is bound to the PRE-amendment bundle and seals BEFORE the
   // correction amends + rehashes (the sealed record never absorbs a post-hoc amendment).
   const sealIdx = calls.findIndex((c) => c.label === 'thoth:council-ledger' && c.prompt.includes('ANSWER_EXCHANGE_SEALED'))
   const scribeIdxs = calls.map((c, i) => c.label === 'thoth:render-scribe' ? i : -1).filter((i) => i !== -1)
@@ -798,7 +798,7 @@ test('T4 exec-check floor: exit 0 CONFIRMS the finding — it stands as executed
   const { result, calls } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder(cfg))
   assert.ok(labelsIn(calls).includes('sol:answer'), 'a confirmed finding is answered by the OTHER head')
   assert.equal(result.council.terminal, 'COUNCIL_DEADLOCK', 'a confirmed block not reversed with evidence deadlocks')
-  // item 5 (scope ruling): the round-two head sees its OWN finding (claim/required_change/refs/class),
+  // the round-two head sees its OWN finding (claim/required_change/refs/class),
   // the peer's answer, and the TYPED check state (state + exit code ONLY) — raw tails NEVER enter any
   // head prompt (they stay on disk / in the runner leg's transcript).
   const fr2 = promptOf(calls, 'fable:ratify:r2')
@@ -1072,7 +1072,7 @@ test('T4 Law gating: a RATIFIED plan passes the Law precondition; sub-T4 keeps t
 test('T4 Athena FAIL ⇒ ratification never runs and the Law precondition is unchanged (Athena, not the council)', async () => {
   const { result, calls } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder({ athena: 'FAIL' }))
   assert.ok(!labelsIn(calls).includes('fable:ratify:r1'), 'no ratification without an Athena PASS')
-  // ⟨DSGN-B3-1⟩ + A4: on the T4-full RENDERED path an Athena FAIL that carries NO typed bundle amendment
+  // on the T4-full RENDERED path an Athena FAIL that carries NO typed bundle amendment
   // cannot be expressed structurally ⇒ GATED_ESCALATION (the honest terminal — never a free plato rewrite);
   // the council never reaches ratify (Athena, not the council, blocked it) and the Law precondition holds.
   assert.equal(result.council.terminal, 'GATED_ESCALATION', 'an Athena FAIL with no typed amendment gates the escalation, before ratify')
@@ -1080,18 +1080,18 @@ test('T4 Athena FAIL ⇒ ratification never runs and the Law precondition is unc
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
-// B3a DEBATE FRONT-HALF — W1 critique · W2 revision · W3 mechanical divergence (+ byte-ownership)
+// DEBATE FRONT-HALF — W1 critique · W2 revision · W3 mechanical divergence (+ byte-ownership)
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
 // A P0-targeting critique (sol critiques P0 = fable's draft), keyed F-001-P0-001 by canonicalizeFindings.
 const critFindingP0 = { target_decision_id: 'M1', claim: 'milestone M1 hides an unbounded unknown', required_change: 'split M1 into two verifiable slices', severity: 'blocking', evidence: { class: 'scenario', refs: ['vision'] } }
 
-test('B3a clean: the critique→revision→divergence front-half runs before The Lantern; a converged debate ⇒ NEGOTIATION_SKIPPED, then ratify (RATIFIED)', async () => {
+test('clean: the critique→revision→divergence front-half runs before The Lantern; a converged debate ⇒ NEGOTIATION_SKIPPED, then ratify (RATIFIED)', async () => {
   const { result, calls } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder())
   const labels = labelsIn(calls)
   for (const l of ['thoth:council-resume', 'fable:critique', 'sol:critique', 'thoth:receipt-check:sol:critique', 'fable:revise', 'sol:revise', 'thoth:receipt-check:sol:revise']) {
     assert.ok(labels.includes(l), `${l} runs on the T4 full path`)
   }
-  // the debate revises the drafts BEFORE the deterministic renderer authors master-plan.md (the B3b swap:
+  // the debate revises the drafts BEFORE the deterministic renderer authors master-plan.md (the swap:
   // the renderer replaced plato on the T4-full path — no plato:synthesis leg runs here anymore)
   assert.ok(calls.findIndex((c) => c.label === 'sol:revise') < calls.findIndex((c) => c.label === 'diogenes:divergence'), 'the revision seals before The Lantern reads the plans')
   assert.ok(!labels.includes('plato:synthesis'), 'plato is retired on the T4-full path — the renderer authors the plan')
@@ -1099,14 +1099,14 @@ test('B3a clean: the critique→revision→divergence front-half runs before The
   const ck = parseCheckpoints(calls).map((d) => d.phase)
   for (const p of ['DRAFTS_SEALED', 'CRITIQUES_SEALED', 'REVISIONS_SEALED', 'NEGOTIATION_SKIPPED']) assert.ok(ck.includes(p), `${p} checkpoint ledgered`)
   assert.ok(!ck.includes('DIVERGENCES_BUILT'), 'a converged debate early-stops (empty divergence set) — no DIVERGENCES_BUILT')
-  assert.equal(result.council.terminal, 'RATIFIED', 'B3a rejoins the existing ratify flow unchanged')
+  assert.equal(result.council.terminal, 'RATIFIED', 'rejoins the existing ratify flow unchanged')
   // the two new byte-owned Sol legs each carry a ledger-verified receipt
   assert.ok(result.council.receipts.find((r) => r.leg === 'sol:critique' && r.receipt_verified === true && r.ledger_verified === true), 'sol:critique is ledger-verified')
   assert.ok(result.council.receipts.find((r) => r.leg === 'sol:revise' && r.receipt_verified === true && r.ledger_verified === true), 'sol:revise is ledger-verified')
   for (const d of parseCheckpoints(calls)) assert.deepEqual(Object.keys(d).sort(), CKPT_KEYS, 'every debate checkpoint emits buildCheckpoint\'s exact field list')
 })
 
-test('B3a W1: findings are SCRIPT-canonicalized (F-<seq>-<slot>-<NNN>); each head disposes ONLY its own-slot findings', async () => {
+test('W1: findings are SCRIPT-canonicalized (F-<seq>-<slot>-<NNN>); each head disposes ONLY its own-slot findings', async () => {
   const F1 = `F-001-${FSLOT}-001`
   const cfg = { solCritique: { findings: [critFindingP0] }, fableRevise: { dispositions: [{ finding_id: F1, disposition: 'accepted', incorporated_at: ['M1a'] }], decisions: [] } }
   const { result, calls } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder(cfg))
@@ -1118,7 +1118,7 @@ test('B3a W1: findings are SCRIPT-canonicalized (F-<seq>-<slot>-<NNN>); each hea
   assert.equal(result.council.terminal, 'RATIFIED')
 })
 
-test('B3a W3: an UNRESOLVED finding builds a mechanical divergence set ⇒ DIVERGENCES_BUILT + note{kind:divergence} carrying a seed-bound DV id', async () => {
+test('W3: an UNRESOLVED finding builds a mechanical divergence set ⇒ DIVERGENCES_BUILT + note{kind:divergence} carrying a seed-bound DV id', async () => {
   const cfg = { solCritique: { findings: [critFindingP0] }, fableRevise: { dispositions: [{ finding_id: `F-001-${FSLOT}-001`, disposition: 'unresolved' }], decisions: [] } }
   const { result, calls } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder(cfg))
   const ck = parseCheckpoints(calls).map((d) => d.phase)
@@ -1130,10 +1130,10 @@ test('B3a W3: an UNRESOLVED finding builds a mechanical divergence set ⇒ DIVER
   assert.equal(divNotes.length, 1, 'exactly one note{kind:divergence} is emitted')
   assert.match(divNotes[0].prompt, /DV-[0-9a-f]{12}/, 'the divergence carries a seed-bound DV-<12hex> id')
   assert.match(divNotes[0].prompt, /join_accounting/, 'the divergence note carries the join accounting')
-  assert.equal(result.council.terminal, 'RATIFIED', 'iiA rejoins ratify unchanged (the populated bundle is iiB\'s to consume)')
+  assert.equal(result.council.terminal, 'RATIFIED', 'rejoins ratify unchanged (the populated bundle is ratify\'s to consume)')
 })
 
-test('B3a W2: an invalid disposition set (a frozen finding left uncovered) ⇒ DEGRADED naming the head', async () => {
+test('W2: an invalid disposition set (a frozen finding left uncovered) ⇒ DEGRADED naming the head', async () => {
   // fable must dispose F-001-<fableSlot>-001 but returns an EMPTY set ⇒ missing coverage ⇒ invalid ⇒ DEGRADED fable
   const cfg = { solCritique: { findings: [critFindingP0] }, fableRevise: { dispositions: [], decisions: [] } }
   const { result, calls } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder(cfg))
@@ -1144,7 +1144,7 @@ test('B3a W2: an invalid disposition set (a frozen finding left uncovered) ⇒ D
   assert.equal(result.law_locked, false)
 })
 
-test('B3a byte-ownership: a wrapper-altered codex-prompt byte fails the reservation-hash check ⇒ DEGRADED sol (a dead seat)', async () => {
+test('byte-ownership: a wrapper-altered codex-prompt byte fails the reservation-hash check ⇒ DEGRADED sol (a dead seat)', async () => {
   const { result, calls } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder({ byteAlter: { 'sol:critique': '9'.repeat(64) } }))
   assert.equal(result.council.terminal, 'DEGRADED', 'a byte-disowned Sol leg is a dead seat even with a consistent (altered) receipt+reservation')
   assert.equal(result.council.terminal_record.missing, 'sol')
@@ -1153,7 +1153,7 @@ test('B3a byte-ownership: a wrapper-altered codex-prompt byte fails the reservat
   assert.ok(!labelsIn(calls).includes('fable:ratify:r1'), 'no ratification after the debate degrade')
 })
 
-test('B3a required-head failure fires at EACH new phase (fable/sol × critique/revision)', async () => {
+test('required-head failure fires at EACH new phase (fable/sol × critique/revision)', async () => {
   const cases = [
     ['CRITIQUE fable', { fableCritique: null }, 'fable', /CRITIQUE/],
     ['CRITIQUE sol', { cross: { 'sol:critique': null } }, 'sol', /CRITIQUE/],
@@ -1168,7 +1168,7 @@ test('B3a required-head failure fires at EACH new phase (fable/sol × critique/r
   }
 })
 
-test('B3a blindness: the debate legs hide codex/receipt/session and the peer; the seed leaves the script for no head; the run token rides only the receipt argv', async () => {
+test('blindness: the debate legs hide codex/receipt/session and the peer; the seed leaves the script for no head; the run token rides only the receipt argv', async () => {
   const { calls } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder({ solCritique: { findings: [critFindingP0] } }))
   for (const l of ['fable:critique', 'fable:revise']) {
     const p = promptOf(calls, l)
@@ -1186,7 +1186,7 @@ test('B3a blindness: the debate legs hide codex/receipt/session and the peer; th
   }
 })
 
-test('B3a preservation: neither the T4-lite path nor sub-T4 runs the debate front-half or the resume read', async () => {
+test('preservation: neither the T4-lite path nor sub-T4 runs the debate front-half or the resume read', async () => {
   const lite = await runWorkflow(ARCHITECTURE, liteArgs(), makeResponder({ scope: 'trivial' }))
   const sub = await runWorkflow(ARCHITECTURE, { kilnDir: KILN, projectPath: PROJECT, codexAvailable: false, planning: 'dual' }, makeResponder())
   for (const r of [lite, sub]) {
@@ -1198,7 +1198,7 @@ test('B3a preservation: neither the T4-lite path nor sub-T4 runs the debate fron
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
-// B3b2-iiA — structured authorship · projection/join · negotiation · settlement · bundle (the DISCLOSED
+// structured authorship · projection/join · negotiation · settlement · bundle (the DISCLOSED
 // intermediate: plato/Athena/ratify still run unchanged; the populated bundle rides council.front_half)
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
 const M_CORE = { title: 'Core', summary: 's', order: 1, surface: 'logic', confidence: 'high' }
@@ -1212,7 +1212,7 @@ const convergedRevise = () => ({
 // a P0-only unresolved finding keeps the mechanical divergence set NON-empty (so the negotiation runs).
 const divergeCfg = (over = {}) => ({ solCritique: { findings: [critFindingP0] }, fableRevise: { dispositions: [{ finding_id: `F-001-${FSLOT}-001`, disposition: 'unresolved' }], decisions: [], milestones: [], ...over.fableRevise }, solRevise: { dispositions: [], decisions: [], milestones: [], revised_plan_markdown: '# b\n', ...over.solRevise }, ...over.rest })
 
-test('iiA projection/join happy path: structured revisions project + join (milestone→eq, adopted SC→sc:SC-01), the note carries join accounting, NEGOTIATION_SKIPPED ⇒ RATIFIED', async () => {
+test('projection/join happy path: structured revisions project + join (milestone→eq, adopted SC→sc:SC-01), the note carries join accounting, NEGOTIATION_SKIPPED ⇒ RATIFIED', async () => {
   const { result, calls } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder(convergedRevise()))
   const labels = labelsIn(calls)
   assert.ok(labels.includes('thoth:vision-scids'), 'the VISION SC-id extraction leg fires on the T4 full path')
@@ -1231,7 +1231,7 @@ test('iiA projection/join happy path: structured revisions project + join (miles
   assert.deepEqual(fh.open_divergences, [], 'a converged run opens no divergences')
 })
 
-test('iiA projection typed-throw: a head\'s duplicate milestone id ⇒ DEGRADED naming the head (a per-head validation before any cross-head interaction)', async () => {
+test('projection typed-throw: a head\'s duplicate milestone id ⇒ DEGRADED naming the head (a per-head validation before any cross-head interaction)', async () => {
   const dupMil = [{ id: 'M1', ...M_CORE, acceptance: [] }, { id: 'M1', ...M_CORE, acceptance: [] }]
   const { result, calls } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder({ fableRevise: { dispositions: [], decisions: [], milestones: dupMil } }))
   assert.equal(result.council.terminal, 'DEGRADED')
@@ -1240,7 +1240,7 @@ test('iiA projection typed-throw: a head\'s duplicate milestone id ⇒ DEGRADED 
   assert.ok(!labelsIn(calls).includes('fable:ratify:r1'), 'no ratification after a projection degrade')
 })
 
-test('iiA negotiation gate: a converged (empty divergence) run runs NO negotiation legs (skip), a non-empty set runs exactly ONE (no loop)', async () => {
+test('negotiation gate: a converged (empty divergence) run runs NO negotiation legs (skip), a non-empty set runs exactly ONE (no loop)', async () => {
   const converged = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder())
   assert.ok(!labelsIn(converged.calls).includes('fable:negotiate') && !labelsIn(converged.calls).includes('sol:negotiate'), 'a converged run skips the negotiation entirely')
   const oneSided = { id: 'M1', title: 'Solo', summary: 's', order: 1, surface: 'logic', confidence: 'high', acceptance: [{ sc_id: 'X9', criterion: 'c', executable_check: 'e' }] }
@@ -1261,7 +1261,7 @@ test('iiA negotiation gate: a converged (empty divergence) run runs NO negotiati
   assert.ok(sp.includes(RUNTOKEN) && sp.includes('kiln-codex-receipt.mjs'), 'the sol negotiation token rides only the receipt-script argv (the trusted boundary)')
 })
 
-test('iiA A2 one-sided round-trip + agreed-absent settlement: a P0-only milestone renders a {absent:true} card; both heads pick the absent side ⇒ the entry LEAVES the settled array', async () => {
+test('A2 one-sided round-trip + agreed-absent settlement: a P0-only milestone renders a {absent:true} card; both heads pick the absent side ⇒ the entry LEAVES the settled array', async () => {
   const solo = { id: 'M2', title: 'Leaves', summary: 's', order: 2, surface: 'ui', confidence: 'low', acceptance: [] }
   const cfg = divergeCfg({ fableRevise: { milestones: [solo] }, rest: { negotiate: (card) => ({ divergence_id: card.divergence_id, selection: 'P1' }) } })
   const { result, calls } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder(cfg))
@@ -1273,7 +1273,7 @@ test('iiA A2 one-sided round-trip + agreed-absent settlement: a P0-only mileston
   assert.equal(fh.settled_decisions.length, 0, 'nothing else settled (the finding is not a registry entry)')
 })
 
-test('iiA packet preflight: an over-limit negotiation packet (25 cards > the 24 ceiling) ⇒ GATED_ESCALATION before dispatch (never truncated), Law blocked', async () => {
+test('packet preflight: an over-limit negotiation packet (25 cards > the 24 ceiling) ⇒ GATED_ESCALATION before dispatch (never truncated), Law blocked', async () => {
   const many = Array.from({ length: 25 }, (_, i) => ({ id: 'M' + i, title: 'T' + i, summary: 's', order: i, surface: 'logic', confidence: 'high', acceptance: [] }))
   const { result, calls } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder(divergeCfg({ fableRevise: { milestones: many } })))
   assert.equal(result.council.terminal, 'GATED_ESCALATION', 'over-limit escalates honestly (not DEGRADED, not a truncated packet)')
@@ -1284,7 +1284,7 @@ test('iiA packet preflight: an over-limit negotiation packet (25 cards > the 24 
   assert.match(result.law_reason, /not council-ratified \(GATED_ESCALATION\)/)
 })
 
-test('iiA negotiation seat-death: a dead fable negotiation seat ⇒ DEGRADED naming fable, Law blocked', async () => {
+test('negotiation seat-death: a dead fable negotiation seat ⇒ DEGRADED naming fable, Law blocked', async () => {
   const { result, calls } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder(divergeCfg({ rest: { fableNegotiate: null } })))
   assert.equal(result.council.terminal, 'DEGRADED')
   assert.equal(result.council.terminal_record.missing, 'fable')
@@ -1293,7 +1293,7 @@ test('iiA negotiation seat-death: a dead fable negotiation seat ⇒ DEGRADED nam
   assert.equal(result.law_locked, false)
 })
 
-test('iiA closure(a) violation: settling an SC whose parent milestone was ruled absent ⇒ orphan_sc ⇒ DEGRADED loud', async () => {
+test('closure(a) violation: settling an SC whose parent milestone was ruled absent ⇒ orphan_sc ⇒ DEGRADED loud', async () => {
   const milWithSc = { id: 'M1', title: 'Solo', summary: 's', order: 1, surface: 'logic', confidence: 'high', acceptance: [{ sc_id: 'X9', criterion: 'c', executable_check: 'e' }] }
   const cfg = divergeCfg({ fableRevise: { milestones: [milWithSc] }, rest: { negotiate: (card) => ({ divergence_id: card.divergence_id, selection: card.topic.startsWith('milestone:') ? 'P1' : 'P0' }) } })
   const { result } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder(cfg))
@@ -1302,7 +1302,7 @@ test('iiA closure(a) violation: settling an SC whose parent milestone was ruled 
   assert.match(result.council.blocked_reason, /closure violated/)
 })
 
-test('iiA bundle determinism: the same settlement ⇒ the same bundle hash; settled_decisions IS the entries array; the front-half barrier carries the hash', async () => {
+test('bundle determinism: the same settlement ⇒ the same bundle hash; settled_decisions IS the entries array; the front-half barrier carries the hash', async () => {
   const r1 = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder(convergedRevise()))
   const r2 = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder(convergedRevise()))
   const fh1 = r1.result.council.front_half, fh2 = r2.result.council.front_half
@@ -1313,7 +1313,7 @@ test('iiA bundle determinism: the same settlement ⇒ the same bundle hash; sett
   assert.equal(skip.decision_bundle_hash, fh1.bundle_hash, 'the front-half barrier carries the decision_bundle_hash')
 })
 
-test('B3R1-3 dup organic decision id: a head\'s duplicate revised decision id ⇒ DEGRADED naming the head (no silent dedupe on the T4 path)', async () => {
+test('dup organic decision id: a head\'s duplicate revised decision id ⇒ DEGRADED naming the head (no silent dedupe on the T4 path)', async () => {
   const cfg = { fableRevise: { dispositions: [], decisions: [{ id: 'D1', topic: 't', value: 1 }, { id: 'D1', topic: 't2', value: 2 }], milestones: [] } }
   const { result, calls } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder(cfg))
   assert.equal(result.council.terminal, 'DEGRADED')
@@ -1322,7 +1322,7 @@ test('B3R1-3 dup organic decision id: a head\'s duplicate revised decision id �
   assert.ok(!labelsIn(calls).includes('fable:ratify:r1'), 'no ratification after a dup-id degrade — the divergence/projection never runs on a silent dedupe')
 })
 
-test('B3R1-6 agreed NEITHER stays OPEN: both heads NEITHER a card ⇒ it rides open_divergences (never a silent deletion); an agreed absent side still rules an entry out', async () => {
+test('agreed NEITHER stays OPEN: both heads NEITHER a card ⇒ it rides open_divergences (never a silent deletion); an agreed absent side still rules an entry out', async () => {
   // a real two-sided card (palette dark vs light): both heads select NEITHER at the negotiation ⇒ the card
   // stays OPEN in the front-half bundle (ratify then resolves it). Before the fix NEITHER silently dropped it.
   const cfg = {
@@ -1336,14 +1336,14 @@ test('B3R1-6 agreed NEITHER stays OPEN: both heads NEITHER a card ⇒ it rides o
   assert.ok(fh && fh.open_divergences.length >= 1, 'an agreed NEITHER keeps the card OPEN — it rides open_divergences to ratification')
 })
 
-test('B3R1-8 cardinality-neutral RATIFY_TASK: the ratify task no longer hardcodes "[]" — it covers EXACTLY the bound open set', async () => {
+test('cardinality-neutral RATIFY_TASK: the ratify task no longer hardcodes "[]" — it covers EXACTLY the bound open set', async () => {
   const { calls } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder())
   const p = promptOf(calls, 'fable:ratify:r1')
   assert.match(p, /divergence_selections must cover EXACTLY the open divergences named in the binding/, 'the ratify task is cardinality-neutral')
   assert.doesNotMatch(p, /divergence_selections is \[\] \(no open divergences this round\)/, 'the old contradictory hardcoded-[] text is gone')
 })
 
-test('B3R1-9 zero-adds final render: cards existed but every ratify selection is NEITHER (zero adds) ⇒ the bundle rebuilds open_divergences:[] + RE-RENDERS (no OPEN blocks in the certified plan)', async () => {
+test('zero-adds final render: cards existed but every ratify selection is NEITHER (zero adds) ⇒ the bundle rebuilds open_divergences:[] + RE-RENDERS (no OPEN blocks in the certified plan)', async () => {
   const cfg = {
     fableRevise: { dispositions: [], decisions: [{ id: 'd1', topic: 'palette', value: { c: 'dark' } }], milestones: [] },
     solRevise: { dispositions: [], decisions: [{ id: 'd1', topic: 'palette', value: { c: 'light' } }], milestones: [], revised_plan_markdown: '# b\n' },
@@ -1355,7 +1355,7 @@ test('B3R1-9 zero-adds final render: cards existed but every ratify selection is
   assert.ok(countLabel(calls, 'thoth:render-scribe') >= 2, 'the FINAL plan is re-rendered (open_divergences:[]) even with zero adds — a second render-scribe fires, so no OPEN block survives into the certificate')
 })
 
-test('B3R1-16 schema bounds: an organic decision value over the per-value projection ceiling ⇒ DEGRADED (never truncated/summarized)', async () => {
+test('schema bounds: an organic decision value over the per-value projection ceiling ⇒ DEGRADED (never truncated/summarized)', async () => {
   const big = 'x'.repeat(9000) // > the 8 KiB per-value ceiling
   const cfg = { fableRevise: { dispositions: [], decisions: [{ id: 'D1', topic: 't', value: { pad: big } }], milestones: [] } }
   const { result } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder(cfg))
@@ -1363,7 +1363,7 @@ test('B3R1-16 schema bounds: an organic decision value over the per-value projec
   assert.match(result.council.blocked_reason, /over the .* per-value ceiling/)
 })
 
-test('B3R1-13 per-sample probe framing (high tier): the three samples of a cell get DISTINCT prompts (framing varies + rides the frozen packet)', async () => {
+test('per-sample probe framing (high tier): the three samples of a cell get DISTINCT prompts (framing varies + rides the frozen packet)', async () => {
   const { calls } = await runWorkflow(ARCHITECTURE, t4Args({ freshRoundTier: 'high' }), makeResponder(ladderCfg({ freshPrefer: { choice: 'dark' } })))
   const fableFresh = calls.filter((c) => c.label.startsWith('fable:fresh:'))
   assert.equal(fableFresh.length, 12, 'high tier: 3 samples × 4 cells = 12 fable cells')
@@ -1374,7 +1374,7 @@ test('B3R1-13 per-sample probe framing (high tier): the three samples of a cell 
   assert.notEqual(s0[0].prompt, s2[0].prompt, 'the samples of a cell are byte-distinct')
 })
 
-test('B3R1-11 rubric rung: the Sol rubric-amend leg is byte-owned (cross-checked), the dual-signed clarification rides every RERULE cell + its hash is frozen in RUBRIC_CHECK', async () => {
+test('rubric rung: the Sol rubric-amend leg is byte-owned (cross-checked), the dual-signed clarification rides every RERULE cell + its hash is frozen in RUBRIC_CHECK', async () => {
   const clar = 'axis 4 ranks executable checks above prose'
   let ruleN = 0
   const cfg = ladderCfg({
@@ -1392,7 +1392,7 @@ test('B3R1-11 rubric rung: the Sol rubric-amend leg is byte-owned (cross-checked
   assert.equal(result.council.terminal, 'RATIFIED')
 })
 
-test('B3R1-14 provisional resolution exposes a certificate + seals a DEADLOCK_RESOLVED master_plan row (build detects exactly this row)', async () => {
+test('provisional resolution exposes a certificate + seals a DEADLOCK_RESOLVED master_plan row (build detects exactly this row)', async () => {
   const cfg = ladderCfg({
     freshCell: (head, K, M) => { const dark = canonicalJson(K) === canonicalJson({ choice: 'dark' }); return head === 'fable' ? { choice: dark ? 'K' : 'M' } : { choice: dark ? 'M' : 'K' } },
     referenceReduction: () => ({ settles: false, adopt: null, reference: null, executable_check: null }),
@@ -1406,7 +1406,7 @@ test('B3R1-14 provisional resolution exposes a certificate + seals a DEADLOCK_RE
   assert.ok(dr && dr.status === 'sealed', 'a sealed DEADLOCK_RESOLVED master_plan checkpoint is emitted (build\'s legacy-detection reads exactly this row — no misclassification as legacy)')
 })
 
-test('B3R1-12 ladder partition: EVERY reference-unsettled card proceeds through reversibility (loop, not [0]); TWO opposed divergences both adopt provisionally ⇒ ONE twin_deadlock_resolved over the FULL combination (neither dropped)', async () => {
+test('ladder partition: EVERY reference-unsettled card proceeds through reversibility (loop, not [0]); TWO opposed divergences both adopt provisionally ⇒ ONE twin_deadlock_resolved over the FULL combination (neither dropped)', async () => {
   // two two-sided decisions, both opposed at negotiation AND ratify AND the fresh round (stable opposition);
   // reference fails, rubric unsigned, reversibility one-reversible on BOTH ⇒ both must reach reversibility.
   const cfg = ladderCfg({
@@ -1425,7 +1425,7 @@ test('B3R1-12 ladder partition: EVERY reference-unsettled card proceeds through 
   assert.equal(result.council.terminal_record.certificate.mel.open_issues.length, 4, 'the combined MEL carries two open issues per provisional card')
 })
 
-test('B3R1-10 fresh-ratify rails: a live BLOCK at RATIFY_FRESH ⇒ honest COUNCIL_DEADLOCK (never a certificate); a shape-invalid verdict ⇒ DEGRADED', async () => {
+test('fresh-ratify rails: a live BLOCK at RATIFY_FRESH ⇒ honest COUNCIL_DEADLOCK (never a certificate); a shape-invalid verdict ⇒ DEGRADED', async () => {
   const liveBlock = rat(null, { verdict: 'BLOCK', findings: [{ finding_id: 'x', claim: 'the adopted plan is still broken', required_change: 'reconsider', evidence_refs: ['e'], evidence_class: 'scenario', executable_check: null }] })
   const { result } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder(ladderCfg({ freshPrefer: { choice: 'dark' }, rFfresh: liveBlock, rSfresh: liveBlock })))
   assert.equal(result.council.terminal, 'COUNCIL_DEADLOCK', 'a valid live BLOCK at the fresh ratify is an honest deadlock — never certificate degradation')
@@ -1436,9 +1436,9 @@ test('B3R1-10 fresh-ratify rails: a live BLOCK at RATIFY_FRESH ⇒ honest COUNCI
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
-// B3 ROUND 3 MICRO-FIX proving rows (the six scope-ruled survivors)
+// Slot-assignment timing and divergence-card invariants
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
-test('B3R1-1 slot timing: the P0/P1 parity is assigned AFTER both drafts + the Sol receipt/cross-check validate, BEFORE the first slot-keyed checkpoint (full + lite) — a source-order invariant', () => {
+test('slot timing: the P0/P1 parity is assigned AFTER both drafts + the Sol receipt/cross-check validate, BEFORE the first slot-keyed checkpoint (full + lite) — a source-order invariant', () => {
   const src = readFileSync(ARCH_SRC, 'utf8')
   // full path: the assignment lands inside the both-alive else branch (after the solAlive check), before DRAFTS_SEALED
   const fullAssign = src.indexOf("fableSlot = (parseInt(councilSeedDigest.slice(0, 8), 16) % 2 === 0)")
@@ -1446,7 +1446,7 @@ test('B3R1-1 slot timing: the P0/P1 parity is assigned AFTER both drafts + the S
   const draftsSealed = src.indexOf("phase: 'DRAFTS_SEALED'")
   assert.ok(solAliveCheck > -1 && fullAssign > solAliveCheck && fullAssign < draftsSealed, 'full path: fableSlot is assigned after the Sol receipt/cross-check validate and before DRAFTS_SEALED')
   // the bare seed mint no longer assigns the slot (the old pre-dispatch assignment is gone)
-  assert.doesNotMatch(src, /councilSeed\(\{ protocolVersion: COUNCIL_PROTOCOL_VERSION, runToken, initialSeq: councilInitialSeq, keystoneId, templateHash \}\)\n\s*\/\/ B3R1-1: assign/, 'the pre-dispatch (seed-mint) slot assignment is removed')
+  assert.doesNotMatch(src, /councilSeed\(\{ protocolVersion: COUNCIL_PROTOCOL_VERSION, runToken, initialSeq: councilInitialSeq, keystoneId, templateHash \}\)\n\s*fableSlot = /, 'the pre-dispatch (seed-mint) slot assignment is removed')
   // lite path: the assignment lands after the fBad/sBad ratification-validity gate, before LITE_RATIFY_SEALED
   const liteAssign = src.lastIndexOf("fableSlot = (parseInt(councilSeedDigest.slice(0, 8), 16) % 2 === 0)")
   const liteValid = src.indexOf('invalid ratification at LITE_RATIFY')
@@ -1454,7 +1454,7 @@ test('B3R1-1 slot timing: the P0/P1 parity is assigned AFTER both drafts + the S
   assert.ok(liteAssign > liteValid && liteAssign < liteSealed && liteAssign !== fullAssign, 'lite path: fableSlot is assigned after the LITE_RATIFY validity gate and before LITE_RATIFY_SEALED')
 })
 
-test('B3R1-5 no topic suppression: TWO unresolved findings against ONE decision surface TWO DISTINCT negotiation cards (neither authoritative divergence vanishes)', async () => {
+test('no topic suppression: TWO unresolved findings against ONE decision surface TWO DISTINCT negotiation cards (neither authoritative divergence vanishes)', async () => {
   const cf1 = { target_decision_id: 'M1', claim: 'M1 hides an unbounded unknown', required_change: 'split M1', severity: 'blocking', evidence: { class: 'scenario', refs: ['r1'] } }
   const cf2 = { target_decision_id: 'M1', claim: 'M1 lacks a rollback path', required_change: 'add a rollback', severity: 'blocking', evidence: { class: 'scenario', refs: ['r2'] } }
   const cfg = { solCritique: { findings: [cf1, cf2] }, fableRevise: { dispositions: [{ finding_id: `F-001-${FSLOT}-001`, disposition: 'unresolved' }, { finding_id: `F-001-${FSLOT}-002`, disposition: 'unresolved' }], decisions: [], milestones: [] }, solRevise: { dispositions: [], decisions: [], milestones: [], revised_plan_markdown: '# b\n' } }
@@ -1466,7 +1466,7 @@ test('B3R1-5 no topic suppression: TWO unresolved findings against ONE decision 
   assert.equal(result.council.terminal, 'RATIFIED', 'both cards settle present-side ⇒ the diverged front-half seals')
 })
 
-test('B3R1-11 exact-byte dual-sign: clarifications that differ ONLY by case/whitespace are NOT dual-signed (no norm()) ⇒ no rerule under a clarification; the RUBRIC_CHECK records dual_signed:false', async () => {
+test('exact-byte dual-sign: clarifications that differ ONLY by case/whitespace are NOT dual-signed (no norm()) ⇒ no rerule under a clarification; the RUBRIC_CHECK records dual_signed:false', async () => {
   const cfg = ladderCfg({
     freshCell: (head, K, M) => { const dark = canonicalJson(K) === canonicalJson({ choice: 'dark' }); return head === 'fable' ? { choice: dark ? 'K' : 'M' } : { choice: dark ? 'M' : 'K' } },
     referenceReduction: () => ({ settles: false, adopt: null, reference: null, executable_check: null }),
@@ -1482,14 +1482,14 @@ test('B3R1-11 exact-byte dual-sign: clarifications that differ ONLY by case/whit
   assert.equal(result.council.terminal, 'DEADLOCK_RESOLVED', 'the cascade falls through to reversibility ⇒ provisional adoption (never a false dual-sign)')
 })
 
-test('B3R1-12 combination map: the ladder is threaded the ratify-agreed selection identities + ALL edges of the complete open-card partition (a source-order invariant — the atomic check spans agreed AND laddered)', () => {
+test('combination map: the ladder is threaded the ratify-agreed selection identities + ALL edges of the complete open-card partition (a source-order invariant — the atomic check spans agreed AND laddered)', () => {
   const src = readFileSync(ARCH_SRC, 'utf8')
   assert.match(src, /await runFreshRoundLadder\(disagreed, adds, agreedSel, edgesOf\(cards\), ph\)/, 'the ladder is called with the agreed selection identities AND the edges of the WHOLE open-card partition')
   assert.match(src, /const comboSel = \[\.\.\.\(Array\.isArray\(agreedSel\) \? agreedSel : \[\]\)\]/, 'the combination selection map STARTS with the ratify-agreed selections (not an empty list)')
   assert.match(src, /const edges = Array\.isArray\(allEdges\) \? allEdges : \[\]/, 'the final atomic check reads ALL edges of the partition, not just the disagreed subset')
   assert.doesNotMatch(src, /await runFreshRoundLadder\(disagreed, adds, ph\)/, 'the old 3-arg ladder call (agreed selections dropped) is gone')
   assert.doesNotMatch(src, /const edges = cards\.flatMap\(\(c\) => Array\.isArray\(c\.compatibility_edges\)/, 'the old disagreed-only edge gather is gone')
-  // B3R1-12 residual: EVERY agreed card's identity joins agreedSel BEFORE the value-specific continues, so a
+  // residual: EVERY agreed card's identity joins agreedSel BEFORE the value-specific continues, so a
   // NEITHER agreement and an agreed-absent selection are BOTH in the final selection map the ladder validates.
   const merged = src.indexOf('an agreed MERGED selection at ratify has no value channel')
   const push = src.indexOf('agreedSel.push({ divergence_id: String(card.divergence_id), selection: a })')
@@ -1501,7 +1501,7 @@ test('B3R1-12 combination map: the ladder is threaded the ratify-agreed selectio
   assert.ok(push < absent, 'an agreed-absent selection is pushed to agreedSel BEFORE the absent-value continue (its identity is in the final map)')
 })
 
-test('B3R2-1 architecture side: the DEADLOCK_RESOLVED certificate is PERSISTED reloadably (scribe + persist-hash) and binds template+run-token; the row records the certificate_hash', async () => {
+test('architecture side: the DEADLOCK_RESOLVED certificate is PERSISTED reloadably (scribe + persist-hash) and binds template+run-token; the row records the certificate_hash', async () => {
   const cfg = ladderCfg({
     freshCell: (head, K, M) => { const dark = canonicalJson(K) === canonicalJson({ choice: 'dark' }); return head === 'fable' ? { choice: dark ? 'K' : 'M' } : { choice: dark ? 'M' : 'K' } },
     referenceReduction: () => ({ settles: false, adopt: null, reference: null, executable_check: null }),
@@ -1530,9 +1530,9 @@ test('determinism: workflows-src/architecture.js has no Date.now / Math.random /
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
-// B3b2-iiB SWAP — the renderer/scribe, typed amendments, populated-bundle ratify (deliverable 7)
+// SWAP — the renderer/scribe, typed amendments, populated-bundle ratify (deliverable 7)
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
-test('iiB renderer swap: on the T4-full path the deterministic renderer + Thoth scribe author master-plan.md — plato:synthesis is retired, the render legs run', async () => {
+test('renderer swap: on the T4-full path the deterministic renderer + Thoth scribe author master-plan.md — plato:synthesis is retired, the render legs run', async () => {
   const { result, calls } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder())
   const labels = labelsIn(calls)
   assert.ok(labels.includes('thoth:render-scribe') && labels.includes('thoth:render-hash'), 'the render + file-hash legs run')
@@ -1543,14 +1543,14 @@ test('iiB renderer swap: on the T4-full path the deterministic renderer + Thoth 
   assert.equal(result.council.certificate.artifact_hash, T4_BUNDLE, 'the cert binds the front-half bundle hash')
 })
 
-test('iiB scribe fidelity: a render-hash that disagrees with the rendered bytes ⇒ DEGRADED scribe-write failure (never a plan the scribe did not faithfully write)', async () => {
+test('scribe fidelity: a render-hash that disagrees with the rendered bytes ⇒ DEGRADED scribe-write failure (never a plan the scribe did not faithfully write)', async () => {
   const { result, calls } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder({ renderHash: { plan_sha256: 'a'.repeat(64) } }))
   assert.equal(result.council.terminal, 'DEGRADED')
   assert.match(result.council.blocked_reason, /scribe-write failure/)
   assert.ok(!labelsIn(calls).includes('fable:ratify:r1'), 'a failed scribe never reaches ratification')
 })
 
-test('iiB typed-amendment happy path: an Athena FAIL with a valid descriptor amends the bundle, rerenders, and re-validates PASS ⇒ RATIFIED over the AMENDED bundle', async () => {
+test('typed-amendment happy path: an Athena FAIL with a valid descriptor amends the bundle, rerenders, and re-validates PASS ⇒ RATIFIED over the AMENDED bundle', async () => {
   const cfg = { ...amendRevise, athenaFailFirst: [{ target_kind: 'settled_decision', key: 'palette', replacement: { choice: 'light' } }] }
   const { result, calls } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder(cfg))
   assert.equal(result.council.terminal, 'RATIFIED')
@@ -1565,7 +1565,7 @@ for (const [name, amendments, re] of [
   ['illegal replacement shape', [{ target_kind: 'settled_decision', key: 'palette', replacement: 'a bare string' }], /illegal replacement shape/],
   ['conflicting duplicate', [{ target_kind: 'settled_decision', key: 'palette', replacement: { choice: 'x' } }, { target_kind: 'settled_decision', key: 'palette', replacement: { choice: 'y' } }], /conflicting duplicate/],
 ]) {
-  test(`iiB typed-amendment gated branch: ${name} ⇒ GATED_ESCALATION (never a free rewrite)`, async () => {
+  test(`typed-amendment gated branch: ${name} ⇒ GATED_ESCALATION (never a free rewrite)`, async () => {
     const cfg = { ...amendRevise, athenaFailFirst: amendments }
     const { result } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder(cfg))
     assert.equal(result.council.terminal, 'GATED_ESCALATION', `${name} gates the escalation`)
@@ -1573,7 +1573,7 @@ for (const [name, amendments, re] of [
   })
 }
 
-test('iiB descriptor-less ACCEPTED correction ⇒ GATED_ESCALATION (an accepted BLOCK finding with no structural descriptor cannot be a free rewrite)', async () => {
+test('descriptor-less ACCEPTED correction ⇒ GATED_ESCALATION (an accepted BLOCK finding with no structural descriptor cannot be a free rewrite)', async () => {
   const cfg = {
     ...amendRevise,
     rF1: rat(null, { verdict: 'BLOCK', findings: [blockFinding] }), // blockFinding carries NO descriptor
@@ -1584,7 +1584,7 @@ test('iiB descriptor-less ACCEPTED correction ⇒ GATED_ESCALATION (an accepted 
   assert.match(result.council.blocked_reason, /no typed \{ target_kind, key, replacement \} descriptor/)
 })
 
-test('iiB manifest-vs-Law: Asimov may not MINT an SC absent from the rendered manifest ⇒ the Law is BLOCKED before the lock (DEGRADED loud)', async () => {
+test('manifest-vs-Law: Asimov may not MINT an SC absent from the rendered manifest ⇒ the Law is BLOCKED before the lock (DEGRADED loud)', async () => {
   const cfg = { ...convergedRevise(), asimov: { law_file: `${KILN}/law.json`, checks: [{ id: 'SC-01', milestone: 'M1', kind: 'shell' }, { id: 'SC-99', milestone: 'M1', kind: 'shell' }], plan_sc_ids: ['SC-01', 'SC-99'] } }
   const { result } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder(cfg))
   assert.equal(result.council.terminal, 'RATIFIED', 'the plan itself ratified — the Law mismatch is Asimov\'s, caught before the lock')
@@ -1592,7 +1592,7 @@ test('iiB manifest-vs-Law: Asimov may not MINT an SC absent from the rendered ma
   assert.match(result.law_reason, /manifest-vs-Law mismatch/)
 })
 
-test('iiB manifest-vs-Law: Asimov may not OMIT a rendered SC ⇒ the Law is BLOCKED before the lock', async () => {
+test('manifest-vs-Law: Asimov may not OMIT a rendered SC ⇒ the Law is BLOCKED before the lock', async () => {
   const cfg = { ...convergedRevise(), asimov: { law_file: `${KILN}/law.json`, checks: [], plan_sc_ids: [] } }
   const { result } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder(cfg))
   assert.equal(result.council.terminal, 'RATIFIED')
@@ -1601,7 +1601,7 @@ test('iiB manifest-vs-Law: Asimov may not OMIT a rendered SC ⇒ the Law is BLOC
   assert.match(result.law_reason, /no check manifest|manifest-vs-Law/)
 })
 
-test('iiB manifest-vs-Law happy: Asimov\'s inventory matching the rendered manifest passes the render gate (SC-01 → M1)', async () => {
+test('manifest-vs-Law happy: Asimov\'s inventory matching the rendered manifest passes the render gate (SC-01 → M1)', async () => {
   const cfg = { ...convergedRevise(), asimov: { law_file: `${KILN}/law.json`, checks: [{ id: 'SC-01', milestone: 'M1', kind: 'shell', cmd: 'true', files: [], timeout_s: 30 }], plan_sc_ids: ['SC-01'] } }
   const { result } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder(cfg))
   assert.equal(result.council.terminal, 'RATIFIED')
@@ -1617,7 +1617,7 @@ const openDivergeCfg = (over = {}) => ({
   ...over,
 })
 
-test('iiB populated ratify: an OPEN divergence resolved by AGREED selections settles the bundle → FINAL render → the certificate binds the RESULTING plan hash (AMB-CLOSER-1.i)', async () => {
+test('populated ratify: an OPEN divergence resolved by AGREED selections settles the bundle → FINAL render → the certificate binds the RESULTING plan hash', async () => {
   const { result, calls } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder(openDivergeCfg({ ratSel: 'P0' })))
   const ck = parseCheckpoints(calls).map((d) => d.phase)
   assert.ok(ck.includes('NEGOTIATION_SEALED'), 'the disagreement produced a negotiated (open-carrying) bundle')
@@ -1628,20 +1628,20 @@ test('iiB populated ratify: an OPEN divergence resolved by AGREED selections set
   assert.match(result.council.certificate.artifact_hash, /^[0-9a-f]{64}$/, 'the certificate binds the input bundle hash the heads signed over')
 })
 
-test('iiB populated ratify: an AGREED MERGED selection at ratify ⇒ GATED_ESCALATION (no value channel — the negotiation was the merging venue)', async () => {
+test('populated ratify: an AGREED MERGED selection at ratify ⇒ GATED_ESCALATION (no value channel — the negotiation was the merging venue)', async () => {
   const { result } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder(openDivergeCfg({ ratSel: 'MERGED' })))
   assert.equal(result.council.terminal, 'GATED_ESCALATION')
   assert.match(result.council.blocked_reason, /MERGED selection at ratify/)
 })
 
-test('iiB populated ratify: a head that leaves an open divergence UNCOVERED ⇒ DEGRADED (an incomplete selection set is a missing head)', async () => {
+test('populated ratify: a head that leaves an open divergence UNCOVERED ⇒ DEGRADED (an incomplete selection set is a missing head)', async () => {
   const { result } = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder(openDivergeCfg({ ratSelFable: 'omit', ratSel: 'P0' })))
   assert.equal(result.council.terminal, 'DEGRADED')
   assert.match(result.council.blocked_reason, /invalid ratification at RATIFY_1/)
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
-// B3c — the W5 fresh-context re-adjudication ladder (§7)
+// — the W5 fresh-context re-adjudication ladder
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
 // The heads DISAGREE on the open card's resolution at ratify (fable P0=dark / sol P1=light) — dual
 // APPROVE but opposed selections ⇒ the ladder rules the still-open divergence.
@@ -1796,7 +1796,7 @@ test('W5 divergence cap: more than 4 still-open opposed divergences ⇒ GATED_ES
 })
 
 test('W5 oversize card ⇒ rejected before dispatch (never summarized by any model) ⇒ GATED_ESCALATION', async () => {
-  // each value stays UNDER the per-value projection cap (B3R1-16, 8 KiB) but the CARD (two positions) blows
+  // each value stays UNDER the per-value projection cap (8 KiB) but the CARD (two positions) blows
   // the per-card ladder ceiling (8 KiB) — the ladder's own oversize rail must reject it before dispatch.
   const big = 'x'.repeat(7500)
   const cfg = ladderCfg({

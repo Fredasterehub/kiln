@@ -1,6 +1,6 @@
 #!/bin/sh
 # Kiln Notification hook — one branded ping at a human-needed moment (or a backgrounded run's
-# finish). Side-effect only: it cannot modify or block the notification (platform-surfaces §1.6).
+# finish). Side-effect only: it cannot modify or block the notification.
 # Zero decision power, no node startup, well under the <50ms budget. Always exits 0. It tolerates
 # any payload type — an unrecognized notification just falls through to the default line.
 input=$(cat 2>/dev/null)

@@ -96,7 +96,7 @@ echo "── existing run? ──"
   head with a live Fable-pinned probe at onboarding/resume (recorded as `claude_head`), which is the
   authority. Do not claim a tier the environment cannot reach.
 
-**Resolve the capability tier** (§8 ladder) from the probes:
+**Resolve the capability tier** from the probes:
 - **T3 (+Codex, full)** — codex preflight OK **and** Opus available. The default full-craft tier.
 - **T4 (the council tier)** — as T3, plus a resolved **Claude council head**: Fable 5 when reachable
   (preferred), else Opus 4.8 by **succession** (recorded, never silent). Codex+Opus setups that used to

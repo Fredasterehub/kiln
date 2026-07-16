@@ -4,7 +4,7 @@ Visual vocabulary for all Kiln pipeline output. The engine and all agents refere
 
 ## Sanctioned Surfaces
 
-Kiln's voice appears ONLY on surfaces the platform sanctions and the operator consented to. The ratified set (BLUEPRINT §11, minus the dropped statusline):
+Kiln's voice appears ONLY on surfaces the platform sanctions and the operator consented to. The sanctioned set:
 
 - **The `/workflows` progress tree** — lore phase titles, persona/duo agent labels, and spinner-verb log lines; each autonomous workflow renders its own, and the conductor never duplicates it.
 - **Step banners** — the Tier-1 transition banners and their quotes (this document's core).

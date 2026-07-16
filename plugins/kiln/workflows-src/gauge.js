@@ -1,6 +1,6 @@
 export const meta = {
   name: 'kiln-gauge',
-  description: 'Kiln gauge stage (BLUEPRINT §3): Alpha the Assessor scores the 8-dimension complexity profile from VISION (+ codebase-map), the deterministic non-compensatory mapping runs IN THE SCRIPT, and the posture is ledgered. The profile sets posture; this stage never builds.',
+  description: 'Kiln gauge stage: Alpha the Assessor scores the 8-dimension complexity profile from VISION (+ codebase-map), the deterministic non-compensatory mapping runs IN THE SCRIPT, and the posture is ledgered. The profile sets posture; this stage never builds.',
   phases: [
     { title: 'The Assessment', detail: 'Alpha scores the 8-dimension profile from VISION (+ codebase-map) with per-dimension evidence' },
     { title: 'The Mapping', detail: 'the deterministic posture() mapping runs in-script — never in an agent' },
@@ -17,10 +17,10 @@ const kilnDir = A.kilnDir
 if (!kilnDir) throw new Error('gauge.js requires args.kilnDir (absolute path to .kiln). Received args of type ' + typeof args)
 const projectPath = A.projectPath
 // postureOverride: 'max' forces every dial to its ceiling, 'fast' to the leanest posture the
-// mapping yields; both still respect the §3.4 floors (posture() only governs ABOVE the floor).
+// mapping yields; both still respect the floors (posture() only governs ABOVE the floor).
 // null/absent ⇒ the Gauge decides from the assessed profile. Anything else is treated as null.
 const postureOverride = (A.postureOverride === 'max' || A.postureOverride === 'fast') ? A.postureOverride : null
-// The model that scores the profile (§8 Assessor slot, resolved by the conductor per capability
+// The model that scores the profile (the Assessor slot, resolved by the conductor per capability
 // tier). Default 'opus' — the workhorse; a Sonnet-only run passes 'sonnet'.
 const assessorModel = A.assessorModel || 'opus'
 const codexAvailable = A.codexAvailable !== false // default true; conductor passes kiln-doctor's probe result
@@ -33,10 +33,10 @@ const docsDir = `${kilnDir}/docs`
 const visionFile = `${docsDir}/VISION.md`
 const mapFile = `${docsDir}/codebase-map.md`
 
-// ── The ledger (BLUEPRINT §3.5): the gauge stage brackets + the posture_set event land in
+// ── The ledger: the gauge stage brackets + the posture_set event land in
 //    events.jsonl via the kiln-state CLI. Thoth appends; every caller gates on pluginRoot (a
 //    launched Workflow can't see ${CLAUDE_PLUGIN_ROOT}) and degrades to a log line when it is
-//    absent — a missing CLI never fails the gauge (the §3 floors run regardless; the posture still
+//    absent — a missing CLI never fails the gauge (the floors run regardless; the posture still
 //    returns to the conductor, which persists it to STATE.md). ──
 async function ledger(type, data, phaseName) {
   const ev = JSON.stringify({ type, stage: 'gauge', data })
@@ -51,7 +51,7 @@ async function ledger(type, data, phaseName) {
   )
 }
 
-// ── Lore beats (C1 doctrine §4): a dispatch from inside the fire — one line, emitted the moment a
+// ── Lore beats: a dispatch from inside the fire — one line, emitted the moment a
 //    fact becomes true, carried by the ledger to the operator's transcript between the conductor's
 //    banners. Rides the ledger idiom above as note{kind:'lore'} (deterministic <stage>.<beat> key;
 //    the structured `args` are short scalars — project-controlled strings capped at 80 by the caller;
@@ -59,7 +59,7 @@ async function ledger(type, data, phaseName) {
 //    failure — a beat can never gate, retry, or wedge a run. ──
 const LORE_MAX = 160
 const oneLine = (s, cap = LORE_MAX) => String(s).replace(/[\x00-\x1f\x7f]+/g, ' ').slice(0, cap)
-// args are bound HERE (F-1): every string value is capped at 80 mechanically, so a beat can never
+// args are bound HERE: every string value is capped at 80 mechanically, so a beat can never
 // leak an unbounded project-controlled string into the ledger even if a call site forgets to cap.
 const boundArgs = (a) => { const o = {}; for (const [k, v] of Object.entries(a)) o[k] = typeof v === 'string' ? oneLine(v, 80) : v; return o }
 const lore = (key, text, args, phaseName) =>
@@ -68,7 +68,7 @@ const lore = (key, text, args, phaseName) =>
     : log(oneLine(text))
 
 // ── The Gauge pure core (validateProfile + posture, inlined from src/gauge.mjs) ──
-// The §3.2 non-compensatory mapping runs HERE, in the script — never in an agent (BLUEPRINT §3.2).
+// The non-compensatory mapping runs HERE, in the script — never in an agent.
 // @inline:gauge:validateProfile,posture
 // ── The Gauge config (GAUGE_CONFIG, inlined from gauge-config.json by the bundler — workflow
 //    scripts cannot import JSON; the canonical file stays the single source of truth, --check
@@ -83,8 +83,8 @@ const lore = (key, text, args, phaseName) =>
 // Opus prose voice only when the assessor IS opus; other slots get the bare brief.
 const assessorVoice = assessorModel === 'opus' ? voice('opus') : ''
 
-// SPIN flattened to the one intentional worker-tree line (C1 §6): entry 0 duplicated the brand.md
-// gauge transition; 'Eight readings, one posture' is promoted to the gauge.posture_set beat below.
+// SPIN carries the one intentional worker-tree line; 'Eight readings, one posture' rides the
+// gauge.posture_set beat below.
 const SPIN = ['No dimension hides from the gauge']
 const spin = (i) => SPIN[((i % SPIN.length) + SPIN.length) % SPIN.length]
 
@@ -120,16 +120,16 @@ const PROFILE_SCHEMA = {
   required: ['profile'],
 }
 
-// The brief the Assessor scores against. Names BOTH VISION formats explicitly: the P4 YAML
-// frontmatter OQ fields and the v2 §9 'Open Questions' prose — the agent handles whichever exists.
+// The brief the Assessor scores against. Names BOTH VISION formats explicitly: the YAML
+// frontmatter OQ fields and the 'Open Questions' prose — the agent handles whichever exists.
 const assessBrief =
-  `You are Alpha, the Assessor (BLUEPRINT §3.1). You SCORE the work's complexity; you never build, and you ` +
+  `You are Alpha, the Assessor. You SCORE the work's complexity; you never build, and you ` +
   `never decide the pipeline's posture — a deterministic function does that from your scores.\n\n` +
   `<inputs>\nRead the vision at ${visionFile} (use your Read tool).` +
   (projectPath ? ` If ${mapFile} exists (brownfield codebase map), read it too — 'ls ${mapFile}' first.` : '') +
   `\nVISION may carry Open Questions in EITHER form — handle both: a YAML frontmatter block with ` +
-  `structured OQ entries (priority/timing fields — the P4 format), OR a §9 'Open Questions' prose section ` +
-  `with 'OQ-{N}' lines (the v2 format). Treat them as the same signal for ambiguity (D2) and novelty (D3).\n</inputs>\n\n` +
+  `structured OQ entries (priority/timing fields — the newer format), OR an 'Open Questions' prose section ` +
+  `with 'OQ-{N}' lines (the older format). Treat them as the same signal for ambiguity (D2) and novelty (D3).\n</inputs>\n\n` +
   `<rubric>\nScore each of the 8 dimensions 0, 1 or 2 against these anchors:\n` +
   DIM_KEYS.map((k) => `- ${k}: ${DIM_LABELS[k]}`).join('\n') + `\n</rubric>\n\n` +
   `<task>For EVERY dimension D1..D8 return { score, evidence } where evidence is ONE verbatim quote from ` +
@@ -140,7 +140,7 @@ const assessBrief =
 // ── The Assessment: ONE Alpha agent scores the profile ──
 phase('The Assessment')
 log(spin(0))
-// §3.5 stage bracket (P3.6 T4): the gauge stage is entered — mark it in the ledger so state.json's
+// Stage bracket: the gauge stage is entered — mark it in the ledger so state.json's
 // projection is stage-accurate from the gauge boundary onward. Gated on pluginRoot like every ledger
 // leg; absence degrades to a log line, never a stage failure.
 if (pluginRoot) await ledger('stage_started', {}, 'The Assessment')
@@ -167,7 +167,7 @@ if (!validation.ok) {
 
 // Still invalid → conservative default profile (all dims at mid, 1) with a ledgered warning. The
 // posture from an all-1 profile sits one notch up from the floor on the optional dials — never
-// fail the stage on assessor flakiness (BLUEPRINT §3: floors always run regardless).
+// fail the stage on assessor flakiness (the floors always run regardless).
 let degraded = false
 if (!validation.ok) {
   degraded = true
@@ -215,11 +215,11 @@ if (!degraded && profile.D8.score === 2) {
   }
 }
 
-// ── The Mapping: the deterministic §3.2 posture runs IN-SCRIPT (never an agent) ──
+// ── The Mapping: the deterministic posture runs IN-SCRIPT (never an agent) ──
 phase('The Mapping')
-// Override semantics (T2.1): 'max' maps an all-ceiling profile (every optional dial at its top),
+// Override semantics: 'max' maps an all-ceiling profile (every optional dial at its top),
 // 'fast' an all-floor profile (the leanest posture the mapping yields). Both still respect the
-// §3.4 floors — posture() only governs ABOVE the floor, so an all-zero profile is exactly the
+// floors — posture() only governs ABOVE the floor, so an all-zero profile is exactly the
 // always-run floor posture, never below it. null ⇒ the Gauge's assessed profile decides.
 const mappingProfile = postureOverride === 'max' ? overrideProfile(2)
   : postureOverride === 'fast' ? overrideProfile(0)
@@ -237,7 +237,7 @@ function overrideProfile(score) {
 }
 
 // ── The Ledger: Thoth appends posture_set + the stage-completed bracket to events.jsonl via the
-//    kiln-state CLI (BLUEPRINT §3.5). Each append is gated on pluginRoot; absence degrades it to a
+//    kiln-state CLI. Each append is gated on pluginRoot; absence degrades it to a
 //    log line, never a stage failure. ──
 phase('The Ledger')
 const postureData = { posture: post, profile, override_applied: postureOverride, source: degraded ? 'conservative_default' : (secondScored ? 'two_scorer_max_reconcile' : 'single_scorer') }
@@ -245,7 +245,7 @@ if (pluginRoot) await ledger('posture_set', postureData, 'The Ledger')
 else log(`pluginRoot absent — posture not ledgered to events.jsonl. posture_set data: ${JSON.stringify(postureData)}`)
 // gauge.posture_set (keystone): the posture is ledgered — the whole gauge stage in one dispatch.
 await lore('gauge.posture_set', `Eight readings, one posture — planning=${post.planning} · slices ${post.slice_budget_hours}h · review ${post.review.ui_effort_base}`, { planning: post.planning, slice_budget_hours: post.slice_budget_hours, ui_effort_base: post.review.ui_effort_base }, 'The Ledger')
-// §3.5 stage bracket (P3.6 T4): the gauge stage completes — the posture is set. stage_completed
+// Stage bracket: the gauge stage completes — the posture is set. stage_completed
 // bumps the projection to 'research' (STAGE_ORDER); like the entry bracket it degrades to a log line.
 if (pluginRoot) await ledger('stage_completed', {}, 'The Ledger')
 else log('pluginRoot absent — gauge stage_completed not ledgered')

@@ -60,7 +60,7 @@ advance. The operator session must stay pristine for the whole run.
    - **Present** → resume. Read it, render the *"The fire reignites…"* transition line, show a
      Tier-1 banner for the current `stage`, summarize `next_action`. **Before routing, refresh the
      capability record** (a changed environment must never ride the stale onboarding record): re-run
-     the same §12 capability probes `/kiln-doctor` uses — codex binary + the `timeout 15 codex exec
+     the same capability probes `/kiln-doctor` uses — codex binary + the `timeout 15 codex exec
      --skip-git-repo-check "echo ok"` preflight, the playwright probe (`@playwright/mcp` configured OR
      `npx --no-install playwright --version` succeeds) that sets `verification_class` (`full` present /
      `static-only` absent), and the `── configured model ──` line — resolve the
@@ -105,7 +105,7 @@ the file tools resolve relative paths. So **never trust `./` for durable state.*
   launched `claude` from a parent dir and onboarding created a fresh sub-directory** — no exit, no relaunch.
 - **Cross-session resume convention: launch `claude` from inside the project folder** (so cwd ==
   `project_path` and `./.kiln/STATE.md` resolves), or pass `/kiln-fire <project_path>` from anywhere.
-  State that convention to the operator when onboarding creates a new directory (see Onboarding §5).
+  State that convention to the operator when onboarding creates a new directory.
 
 This skill keeps **no out-of-band run registry** — `STATE.md` under the project is the only source of
 truth. Resume is *anchored* (cwd or explicit path), never *discovered* by scanning.
@@ -178,7 +178,7 @@ surface and onboarding is cheap. Detect first, then confirm.
    Create `<project_path>/.kiln/` and `<project_path>/.kiln/docs/`. **Birth the run ledger** the
    moment `.kiln/` exists (Bash):
    `node $PLUGIN_ROOT/scripts/kiln-state.mjs init <project_path>/.kiln --project-path <project_path> --name <project_name> --type <project_type> --greenfield <true|false>`.
-   This writes `events.jsonl` (seq 1 = `run_init`) and its `state.json` projection — the §4
+   This writes `events.jsonl` (seq 1 = `run_init`) and its `state.json` projection — the
    machine-first state bus the autonomous stages append to. It runs ONCE, here, at onboarding;
    `init` REFUSES over a live `events.jsonl`, so a **resume never re-inits** — the resume path (the
    *orient* section above) gates on the file already existing and routes to a stage handler, it does
@@ -287,7 +287,7 @@ the VISION traces to a logged operator turn.
    - **`vision_valid: true`** → render *"The vision crystallizes…"*, update STATE (`stage: gauge`,
      `last_completed_stage: brainstorm`, stamp `step_brainstorm_completed_at`), **and hold the returned
      `visual_direction`** for this run — you thread it into the Architecture launch as `visualDirection`
-     (see workflow-contracts.md; the mechanical path r1 F6). Proceed to the **Gauge** stage (it
+     (see workflow-contracts.md). Proceed to the **Gauge** stage (it
      reads the fresh VISION before any autonomous stage runs).
    - **`vision_valid: false`** → do NOT advance. The return's typed `violations` (+ `reason`) name
      exactly what the session still owes. Judge: re-enter Da Vinci with the named gaps (re-spawn — the
@@ -320,10 +320,10 @@ stage never builds.
      `null` lets the Gauge decide; `'max'`/`'fast'` force the ceiling/floor (still above the floors).
      When the operator skipped the Rigor card, the plugin setting is the default: `${user_config.posture}`
      (`auto` ⇒ `null` — the Gauge decides; `max`/`fast` ⇒ that override).
-   - `assessorModel` is the §8 Assessor slot for this capability tier (default `'opus'`; a
+   - `assessorModel` is the Assessor slot for this capability tier (default `'opus'`; a
      Sonnet-only run passes `'sonnet'`).
    - `codexAvailable` is the kiln-doctor probe result (drives the cross-family second scorer at the
-     high-stakes D8=2 path). `pluginRoot` is the same absolute `$PLUGIN_ROOT` you resolved in §0 — a
+     high-stakes D8=2 path). `pluginRoot` is the same absolute `$PLUGIN_ROOT` you resolved at launch — a
      launched Workflow cannot see `${CLAUDE_PLUGIN_ROOT}`, and the Gauge needs it to ledger the
      `posture_set` event via the kiln-state CLI (absence degrades the append to a log line, never a
      stage failure).
@@ -352,7 +352,7 @@ Each is one shipped workflow script. You launch it, **tail its story telegraph w
 *The story telegraph* below), read the artifact summary it wrote to `.kiln/` on completion, update
 STATE, render the transition, and — on a clean finish — launch the next stage in the same turn.
 
-**Unattended chaining (D4).** A stage's CLEAN completion (a `stage_completed` beat for THAT stage AND
+**Unattended chaining.** A stage's CLEAN completion (a `stage_completed` beat for THAT stage AND
 a healthy workflow return; when the ledger degraded to log lines the healthy return alone rules — the
 telegraph never stalls the chain) auto-advances the run: update STATE, render the transition, and
 LAUNCH the next stage in the same turn — no idle gap, so the overnight hours keep forging. The chain
@@ -393,7 +393,7 @@ genuinely gone — succeed the seat to Opus in this exact order:
 |---|---|---|---|---|
 | Brainstorm→VISION | `workflows/vision.js` | `kilnDir`, `projectPath`, **`pluginRoot`** (load-bearing) (+`runToken`, `capabilityTier`, `claudeHead` — the T4 fidelity council) | brainstorm-ledger.jsonl | `.kiln/docs/VISION.md` (compiled + gated; the brainstorm-stage compile leg — launched from the Brainstorm handler above, not a top-level stage) |
 | Gauge | `workflows/gauge.js` | `kilnDir`, `projectPath`, `pluginRoot` (+`postureOverride`, `assessorModel`, `codexAvailable`) | VISION.md (+codebase-map.md) | `state.json.posture` / STATE `posture:`, ledger `posture_set` |
-| Research | `workflows/research.js` | `kilnDir`, `projectPath` (+`mode`, `testingRigor`, `topicsMax`, `pluginRoot` — locates kiln-state for the stage brackets; absence degrades them to log lines) | VISION.md | `.kiln/docs/research.md` (only when topics > 0; the §3.2 zero-topics route writes none and returns `research_file: null`) |
+| Research | `workflows/research.js` | `kilnDir`, `projectPath` (+`mode`, `testingRigor`, `topicsMax`, `pluginRoot` — locates kiln-state for the stage brackets; absence degrades them to log lines) | VISION.md | `.kiln/docs/research.md` (only when topics > 0; the zero-topics route writes none and returns `research_file: null`) |
 | Architecture | `workflows/architecture.js` | `kilnDir`, `projectPath` (+`mode`, `testingRigor`, `codexAvailable`, `planning`, `validationRounds`, `lawModel`, `pluginRoot`, `runToken`, `capabilityTier`, `claudeHead`) | research.md (if present), VISION.md | `.kiln/master-plan.md`, architecture docs |
 | Build | `workflows/build.js` | `kilnDir`, `projectPath`, **`pluginRoot`** (load-bearing), `posture`, `runToken` (+`codexAvailable`, `capabilityTier`, `claudeHead`, `testingRigor`, `milestoneLimit`, `uiBuild`, `gateOnly`) | master-plan.md | source code, living docs, tests |
 | Validate | `workflows/validate.js` | `kilnDir`, `projectPath`, `pluginRoot`, `posture`, `runToken` (+`testingRigor`, `codexAvailable`, `capabilityTier`, `claudeHead`, `designPresent` hint) | master-plan.md, built app | `.kiln/validation/report.md` |
@@ -416,7 +416,7 @@ for the codex receipt-invocation binding + the council seed): same mint, same re
 token per run. **An architecture RE-RUN mints a FRESH runToken** (mirrors the gate-only-retry rule —
 the receipt ledger's replay rejection is invocation-bound, so a stale token would collide with the
 aborted run's reservations). Also thread **`capabilityTier`** (= `state.json.capability.tier`, the freshest capability
-record — the §3 resume re-probe keeps it fresh) into the Architecture launch; absent or unknown ⇒ omit
+record — the resume re-probe keeps it fresh) into the Architecture launch; absent or unknown ⇒ omit
 the arg and the workflow runs the v3.0.1 path, honestly labeled. Full recipe + gate-only routing:
 workflow-contracts.md.
 
@@ -489,7 +489,7 @@ stage has completed, the hint has been given. No new STATE field; a resume mid-f
 it correctly.
 
 **Browser discipline (load-bearing — a leaked browser OOM'd the box once).** The browser is a
-subprocess with a deadline, never a service (BLUEPRINT §7): no browser outlives the check that spawned
+subprocess with a deadline, never a service: no browser outlives the check that spawned
 it, every spawn carries a unique kill token, token-scoped sweeps bracket every browser stage (blanket
 `pkill -f chrome` stays forbidden), and builders/reviewers read evidence files rather than driving
 Chromium. The full mechanics — the lease/watchdog, the in-loop Tier-2 evaluator, the honest
@@ -520,7 +520,7 @@ Wait for completion, render *"The forge cools. The work remains."* and present t
   `kill_streak_index = (ladder_position - 1) % 40`. Read both from their `- **build_iteration**: N`
   and `- **correction_cycle**: N` bullets; a missing/`pending`/non-integer field reads as 0, so a
   fresh STATE fails soft to `first-blood`.
-- **The dual surface (§4).** `STATE.md` is the conductor's human/resume register — the source of
+- **The dual surface.** `STATE.md` is the conductor's human/resume register — the source of
   truth you rewrite here and read on resume. `state.json` is the *ledger's* projection of
   `events.jsonl` (rebuilt by `kiln-state project`), a machine-first mirror you never hand-edit. It is
   stage-accurate at the **gauge / research / architecture / build / validate / report** boundaries —

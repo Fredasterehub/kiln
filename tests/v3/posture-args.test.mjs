@@ -4,7 +4,7 @@
 // EXACTLY as before (no behavior change without a posture). This is the "unit-test the arg
 // plumbing where extractable" half of the T3 contract; the conductor SKILL.md changes (the Gauge
 // stage, the Rigor card, the stage-table arg notes) are prose, asserted by the bundler/harness
-// staying green and by review against the §3.2 table.
+// staying green and by review against the table.
 //
 // Each workflow is executed exactly as the runtime evaluates it (and as dry-run-runner.mjs /
 // gauge-workflow.test.mjs do): the leading `export ` is stripped off `export const meta`, the body
@@ -91,9 +91,9 @@ test('T3 research: topicsMax caps the investigated topic count below the histori
 })
 
 test('T3 research: topicsMax absent ⇒ the VERBATIM v2 brief + behavior (no behavior change without a posture)', async () => {
-  // T3 contract (tasks.md): an absent optional arg must default to CURRENT behavior. Without a
+  // T3 contract: an absent optional arg must default to CURRENT behavior. Without a
   // posture, research must run the v2 scoping model byte-for-byte — "between 2 and 5 topics" sourced
-  // from OQs PLUS load-bearing unknowns — NOT the §3.2 OQ-only/zero-floor model the posture switches
+  // from OQs PLUS load-bearing unknowns — NOT the OQ-only/zero-floor model the posture switches
   // on. This is the guard against the cycle-1 over-reach (the topic-sourcing model had changed
   // unconditionally; it must change only when the Gauge supplied a cap).
   const { result, calls } = await runWorkflow(RESEARCH, { ...baseArgs }, researchRespond(nTopics(7)))
@@ -102,10 +102,10 @@ test('T3 research: topicsMax absent ⇒ the VERBATIM v2 brief + behavior (no beh
   // The v2 brief: "Return between 2 and 5 topics" + the load-bearing-unknowns instruction.
   assert.match(brief, /Return between 2 and 5 topics/, 'the no-posture brief must be the verbatim v2 "between 2 and 5 topics" brief')
   assert.match(brief, /load-bearing unknowns in Tech Stack, Constraints, and Risks/, 'the no-posture brief must keep the v2 load-bearing-unknowns topic source')
-  // P4 T4 (a): the historical brief now carries the frontmatter-OQ alternative the posture brief has
+  // (a): the historical brief now carries the frontmatter-OQ alternative the posture brief has
   // always had — the two briefs agree on BOTH OQ encodings (a "OQ-N" body line OR a frontmatter entry).
-  assert.match(brief, /or YAML frontmatter OQ entry/, 'the historical brief must accept the frontmatter OQ encoding too (P4 T4 (a))')
-  // And it must NOT carry the posture-only §3.2 instructions (those would change v2 behavior).
+  assert.match(brief, /or YAML frontmatter OQ entry/, 'the historical brief must accept the frontmatter OQ encoding too')
+  // And it must NOT carry the posture-only instructions (those would change v2 behavior).
   assert.doesNotMatch(brief, /EMPTY topics list/, 'no-posture brief must NOT instruct the zero-topics branch (that is posture-only)')
   assert.doesNotMatch(brief, /hard ceiling/, 'no-posture brief must NOT use the posture cap wording')
 })
@@ -124,8 +124,8 @@ test('T3 research: a garbage topicsMax is ignored (falls back to the historical 
   }
 })
 
-test('T3 research: WITH a posture, zero qualifying OQs ⇒ zero topics (the §3.2 0-if-no-OQs branch)', async () => {
-  // BLUEPRINT §3.2 research row: `topics = 0 if no high-priority before-build OQs`. This branch is
+test('T3 research: WITH a posture, zero qualifying OQs ⇒ zero topics (the 0-if-no-OQs branch)', async () => {
+  // research row: `topics = 0 if no high-priority before-build OQs`. This branch is
   // POSTURE-GATED — it is reachable only because a topicsMax cap was supplied (the Gauge ran). The
   // director returns an empty topic list when none qualify; the stage must finish with empty results,
   // write no research.md, and never floor the count back up to a spurious minimum.
@@ -152,7 +152,7 @@ const synthResult = { reasoning: 's', master_plan_file: '/x/master-plan.md', mil
 const validateResult = (verdict) => ({ reasoning: 'v', verdict, failed_dimensions: verdict === 'FAIL' ? ['x'] : [], fixes: [] })
 
 // archRespond — drive a full architecture run. `athenaVerdict` lets a test force FAIL to count rounds.
-// `researchMissing` lets a test simulate the §3.2 zero-topics route (no research.md on disk). The
+// `researchMissing` lets a test simulate the zero-topics route (no research.md on disk). The
 // thoth:research-check probe runs an `ls` and returns missing=[] when present, [path] when absent;
 // default here is PRESENT (the normal route most tests exercise).
 const archRespond = (scope, athenaVerdict = 'PASS', researchMissing = false) => (label) => {
@@ -206,7 +206,7 @@ test('T3 architecture: planning absent ⇒ foundation scope decides (historical 
 })
 
 test('T3 architecture: validationRounds is the Athena VALIDATION-PASS count, not a revision count', async () => {
-  // BLUEPRINT §3.2: plan_validation_rounds = `1 + (D2>=1) + (D8=2)` is the number of Athena passes.
+  // plan_validation_rounds = `1 + (D2>=1) + (D8=2)` is the number of Athena passes.
   // athena always FAILs → the loop runs exactly `validationRounds` passes (round 0..rounds-1) and
   // `validationRounds - 1` plato revisions. posture rounds=3 ⇒ 3 passes / 2 revisions (NOT 4/3).
   const forced = await runWorkflow(ARCHITECTURE, { ...baseArgs, planning: 'dual', validationRounds: 3 }, archRespond('standard', 'FAIL'))
@@ -218,7 +218,7 @@ test('T3 architecture: validationRounds is the Athena VALIDATION-PASS count, not
 })
 
 test('T3 architecture: validationRounds=1 runs exactly one pass and zero revisions', async () => {
-  // The minimum the §3.2 formula yields (D2=0, D8<2) is plan_validation_rounds=1: ONE validation
+  // The minimum the formula yields (D2=0, D8<2) is plan_validation_rounds=1: ONE validation
   // pass, NO plato revision. The old off-by-one would have run 2 passes here.
   const one = await runWorkflow(ARCHITECTURE, { ...baseArgs, planning: 'single', validationRounds: 1 }, archRespond('trivial', 'FAIL'))
   const athenaPasses = labelsIn(one.calls).filter((l) => l.startsWith('athena:validate')).length
@@ -252,8 +252,8 @@ test('T3 architecture: an unrecognised planning value is treated as null (scope 
   assert.equal(result.lite_path, true)
 })
 
-// ── ARCHITECTURE: research.md is OPTIONAL (the §3.2 zero-topics route writes none) ───────────────
-// Finding-1 guard: research can scope to zero topics and write no research.md (research_file: null).
+// ── ARCHITECTURE: research.md is OPTIONAL (the zero-topics route writes none) ───────────────
+// Guard: research can scope to zero topics and write no research.md (research_file: null).
 // Architecture must self-detect that (thoth:research-check `ls` probe) and never point an agent at a
 // phantom file. We assert on the prompts the agents receive.
 const researchPath = '/tmp/nonexistent-kiln/.kiln/docs/research.md'
@@ -268,7 +268,7 @@ test('T3 architecture: research.md PRESENT ⇒ agents are pointed at it (normal 
   assert.ok(planPrompt.includes(researchPath), 'the planner brief names research.md when present')
 })
 
-test('T3 architecture: research.md ABSENT ⇒ no phantom path; agents grounded in VISION (Finding-1 fix)', async () => {
+test('T3 architecture: research.md ABSENT ⇒ no phantom path; agents grounded in VISION', async () => {
   const { calls, log } = await runWorkflow(ARCHITECTURE, { ...baseArgs, planning: 'dual' }, archRespond('standard', 'PASS', true))
   // The probe must have run and the stage must have logged the no-research grounding.
   assert.ok(labelsIn(calls).includes('thoth:research-check'), 'architecture must probe for research.md existence')
@@ -333,7 +333,7 @@ test('T3 lever 5: the FULL (council) path KEEPS the dedicated numerobis:handoff 
   assert.doesNotMatch(synth, /architecture-handoff\.md/, 'full path: Plato does NOT fold the handoff (the dedicated agent owns it)')
 })
 
-// ── P4 T4 consumer alignment: the visualDirection thread (d) + athena reads VISION (c) ───────────
+// ── consumer alignment: the visualDirection thread (d) + athena reads VISION (c) ───────────
 const visionPath = '/tmp/nonexistent-kiln/.kiln/docs/VISION.md'
 
 test('T4 (c): athena:validate reads VISION for the completeness-vs-goals ruling', async () => {
@@ -366,11 +366,11 @@ test('T4 (d): absent visualDirection ⇒ the foundation agent judges, given the 
 })
 
 
-// ── P6 T1: required-arg validation — every workflow refuses an empty launch VERBOSELY ────────────
+// ── required-arg validation — every workflow refuses an empty launch VERBOSELY ────────────
 
 const ALL_WORKFLOWS = ['mapping', 'gauge', 'research', 'architecture', 'vision', 'build', 'validate', 'report']
 
-test('P6 T1: every workflow throws a verbose required-arg error on an empty launch (absolute-path guidance + type diagnostic)', async () => {
+test('every workflow throws a verbose required-arg error on an empty launch (absolute-path guidance + type diagnostic)', async () => {
   for (const name of ALL_WORKFLOWS) {
     const file = fileURLToPath(new URL(`../../plugins/kiln/workflows/${name}.js`, import.meta.url))
     await assert.rejects(
@@ -386,7 +386,7 @@ test('P6 T1: every workflow throws a verbose required-arg error on an empty laun
   }
 })
 
-test('B4-2 D5: the generated build.js validates capabilityTier to T1..T4 (the exact architecture.js:69 idiom) and gates the councils on it + codexAvailable + runToken', () => {
+test('the generated build.js validates capabilityTier to T1..T4 (the exact architecture.js:69 idiom) and gates the councils on it + codexAvailable + runToken', () => {
   const src = readFileSync(fileURLToPath(new URL('../../plugins/kiln/workflows/build.js', import.meta.url)), 'utf8')
   // the T1..T4 validation idiom, verbatim from architecture.js:69
   assert.match(src, /const capabilityTier = \(A\.capabilityTier === 'T1' \|\| A\.capabilityTier === 'T2' \|\| A\.capabilityTier === 'T3' \|\| A\.capabilityTier === 'T4'\) \? A\.capabilityTier : null/)
@@ -396,7 +396,7 @@ test('B4-2 D5: the generated build.js validates capabilityTier to T1..T4 (the ex
   assert.match(src, /councilMisconfigured = councilPromised && runTokenRaw == null/)
 })
 
-test('B4-3 D6: the generated validate/vision/report each validate capabilityTier to T1..T4 (the exact architecture.js:69 idiom) and gate their keystone council on it + codexAvailable + runToken', () => {
+test('the generated validate/vision/report each validate capabilityTier to T1..T4 (the exact architecture.js:69 idiom) and gate their keystone council on it + codexAvailable + runToken', () => {
   for (const name of ['validate', 'vision', 'report']) {
     const src = readFileSync(fileURLToPath(new URL(`../../plugins/kiln/workflows/${name}.js`, import.meta.url)), 'utf8')
     assert.match(src, /const capabilityTier = \(A\.capabilityTier === 'T1' \|\| A\.capabilityTier === 'T2' \|\| A\.capabilityTier === 'T3' \|\| A\.capabilityTier === 'T4'\) \? A\.capabilityTier : null/, `${name}: the T1..T4 validation idiom`)
@@ -410,7 +410,7 @@ test('B4-3 D6: the generated validate/vision/report each validate capabilityTier
   }
 })
 
-test('P6 T1: the load-bearing pluginRoot gates carry the FIX in their message (vision + build)', async () => {
+test('the load-bearing pluginRoot gates carry the FIX in their message (vision + build)', async () => {
   const VISION = fileURLToPath(new URL('../../plugins/kiln/workflows/vision.js', import.meta.url))
   const v = await runWorkflow(VISION, { kilnDir: '/tmp/nonexistent-kiln/.kiln', projectPath: '/tmp/nonexistent-kiln' }, () => null)
   assert.match(v.result.reason, /pluginRoot absent/)

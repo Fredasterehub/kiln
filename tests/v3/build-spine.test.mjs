@@ -1,29 +1,29 @@
-// build-spine.test.mjs — P2 T2 acceptance: the GENERATED workflows/build.js drives the batch
+// build-spine.test.mjs — acceptance: the GENERATED workflows/build.js drives the batch
 // slice spine through its INLINED pure core (validateSlicePlan + runnerGate + rejectionClass +
 // escalate + GAUGE_CONFIG) with every agent MOCKED. Exercises the contract's load-bearing wiring:
-//   · the §3.4 floor gates (no pluginRoot / unlocked Law → escalation return, zero ungated builds)
+// · the floor gates (no pluginRoot / unlocked Law → escalation return, zero ungated builds)
 //   · ONE batch krs-one:slice-plan call per milestone, coverage re-asked once on gaps, then escalated
 //   · the haiku krs-one:confirm and the single ledgered replan-for-the-remainder
 //   · the TAMPER drill: kiln-law exit 2 → slice auto-REJECTED, NO reviewer spawned, the tamper
-//     event LEDGERED (§5.1), fix brief names the touched lock
-//   · the FRESHNESS gate (§6): evidence hashes/timestamps compared against HEAD in-script — HEAD
+// event LEDGERED, fix brief names the touched lock
+// · the FRESHNESS gate: evidence hashes/timestamps compared against HEAD in-script — HEAD
 //     moved, results.jsonl missing, manifest from another commit, hash mismatch, unfinalized run,
 //     evidence predating HEAD → auto-REJECTED, NO reviewer spawned
-//   · the §6 evidence-first review (independent kiln-law rerun in the prompt) + codex effort dial
+// · the evidence-first review (independent kiln-law rerun in the prompt) + codex effort dial
 //     (medium baseline, high on posture D8 / fix-cycle>0)
-//   · the RED lifecycle gate (T2-fix: exit code is the verdict): kiln-law run --flips exit 1 →
+// · the RED lifecycle gate (exit code is the verdict): kiln-law run --flips exit 1 →
 //     slice auto-REJECTED as 'logical' with NO reviewer spawned, ledgered law_red_auto_reject,
 //     fix brief naming the FLIP_UNMET/REGRESSION ids; --flips/--only/--before threaded through
 //     the runner prompt with statusBefore anchored in recorded evidence (lastRunId), and the
 //     project suite persisted via 'kiln-law suite' (suite.log + suite.jsonl in the evidence dir)
-//   · the §3.2 milestone gate: goal-backward audit at EVERY boundary (single-slice AND the
+// · the milestone gate: goal-backward audit at EVERY boundary (single-slice AND the
 //     split/plan-abort failure branches, where findings merge into the failure record), judge
 //     spawned ONLY on an ambiguous reconcile (zero blocking findings + analyst overall verdicts
 //     disagree), verdict computed otherwise; the ORCHESTRATOR RULING on unusable audits — ONE
 //     re-ask, then QA_FAIL with the blocking 'goal-audit-failure' finding, ledgered, and the
 //     judge NEVER spawned on missing inputs; min_slices_for_tribunal + goal_backward posture
 //     dials, ledgered gate_skipped on override
-//   · the §3.3 Sentinel: feedback-source escalation at 2 logical rejections — per the §8
+// · the Sentinel: feedback-source escalation at 2 logical rejections — per the
 //     capability ladder, T3+ (codexAvailable ⟺ codex on board) swaps the reviewer FAMILY while
 //     T1/T2 (no second family) goes fresh-context stronger effort — ledgered posture_escalated;
 //     split_required STOP at 3 (surfaced in the milestone gate + return value)
@@ -149,7 +149,7 @@ test('floor gate: unlocked/unreadable Law → escalation return after the law-re
 
 // ── the happy path ───────────────────────────────────────────────────────────────────────────────
 
-test('happy path: ONE batch slice-plan, per-slice confirm→build→runner→probe→review, gate computed QA_PASS — analysts ∥ goal-backward, NO judge spawned on an unambiguous reconcile (§3.2)', async () => {
+test('happy path: ONE batch slice-plan, per-slice confirm→build→runner→probe→review, gate computed QA_PASS — analysts ∥ goal-backward, NO judge spawned on an unambiguous reconcile', async () => {
   const { result, calls } = await runBuild(baseArgs, mkRespond())
   assert.equal(count(calls, 'krs-one:slice-plan'), 1, 'exactly ONE batch slice-plan call per milestone')
   assert.equal(count(calls, 'krs-one:confirm'), 2)
@@ -159,8 +159,8 @@ test('happy path: ONE batch slice-plan, per-slice confirm→build→runner→pro
   assert.equal(count(calls, ':review:'), 2)
   assert.equal(count(calls, 'ken:qa'), 1)
   assert.equal(count(calls, 'ryu:qa'), 1)
-  assert.equal(count(calls, 'aristotle:goal-backward'), 1, '§3.2: the goal-backward audit runs at the milestone boundary')
-  assert.equal(count(calls, 'judge-dredd:verdict'), 0, '§3.2: zero blocking findings + agreeing analysts ⇒ the verdict is COMPUTED — no judge spend')
+  assert.equal(count(calls, 'aristotle:goal-backward'), 1, 'the goal-backward audit runs at the milestone boundary')
+  assert.equal(count(calls, 'judge-dredd:verdict'), 0, 'zero blocking findings + agreeing analysts ⇒ the verdict is COMPUTED — no judge spend')
   // cross-family on a logic slice with codex: Opus reviews the codex build
   assert.ok(labelsOf(calls, ':review:').every((c) => c.model === 'opus'))
   assert.equal(result.law_gated, true)
@@ -185,7 +185,7 @@ test('evidence-first review: the reviewer prompt carries the SC mapping, the evi
   assert.match(build, /NEVER edit, move, or delete/)
 })
 
-// ── the §5.1 lifecycle wiring (T2-fix): flipPlan expectations + statusBefore + suite evidence ───
+// ── the lifecycle wiring: flipPlan expectations + statusBefore + suite evidence ───
 
 test('flip wiring: every runner step declares --flips; later slices re-run the milestone\'s green SCs (--only cumulative) and anchor statusBefore via --before <recorded runId> — state in evidence, never prose', async () => {
   const { calls } = await runBuild(baseArgs, mkRespond())
@@ -203,7 +203,7 @@ test('flip wiring: every runner step declares --flips; later slices re-run the m
   assert.match(runners[1], /REGRESSION/)
 })
 
-test('suite evidence (T2-fix #4): the runner persists the project suite via kiln-law suite INTO the evidence dir (suite.log + sha256\'d suite.jsonl); no recorded suite command → step skipped; reviewer pointed at the persisted log', async () => {
+test('suite evidence: the runner persists the project suite via kiln-law suite INTO the evidence dir (suite.log + sha256\'d suite.jsonl); no recorded suite command → step skipped; reviewer pointed at the persisted log', async () => {
   const { calls } = await runBuild(baseArgs, mkRespond())
   const runner = labelsOf(calls, 'asimov:runner')[0].prompt
   assert.match(runner, /kiln-law\.mjs suite \/tmp\/kiln-x \/tmp\/kiln-x\/\.kiln <runId> --cmd 'npm test'/)
@@ -220,7 +220,7 @@ test('suite evidence (T2-fix #4): the runner persists the project suite via kiln
   assert.doesNotMatch(r2, /kiln-law\.mjs suite/)
 })
 
-test('RED lifecycle gate (T2-fix #2): kiln-law run exit 1 → slice auto-REJECTED as LOGICAL with NO reviewer spawned, ledgered law_red_auto_reject, fix brief naming the unmet flip; the Sentinel marches to split_required', async () => {
+test('RED lifecycle gate: kiln-law run exit 1 → slice auto-REJECTED as LOGICAL with NO reviewer spawned, ledgered law_red_auto_reject, fix brief naming the unmet flip; the Sentinel marches to split_required', async () => {
   const { result, calls } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
     if (label.startsWith('asimov:runner')) return { ...runnerOk, law_run_exit: 1, flip_unmet: ['SC-001'] }
   }))
@@ -228,7 +228,7 @@ test('RED lifecycle gate (T2-fix #2): kiln-law run exit 1 → slice auto-REJECTE
   const reds = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('law_red_auto_reject'))
   assert.equal(reds.length, 3, 'every red trial is ledgered — f0, f1, f2 (the split stops the slice)')
   assert.match(reds[0].prompt, /SC-001/, 'the ledger event names the unmet flip')
-  // logical classing drives the §3.3 ladder: 2 rejections escalate the feedback source, 3 split
+  // logical classing drives the ladder: 2 rejections escalate the feedback source, 3 split
   const led = labelsOf(calls, 'thoth:ledger').map((l) => l.prompt)
   assert.ok(led.some((p) => p.includes('escalate_feedback_source')), 'red rejections are LOGICAL — the ratchet moves')
   assert.ok(led.some((p) => p.includes('split_and_rebuild')))
@@ -259,14 +259,14 @@ test('RED lifecycle gate: a regression of a previously-GREEN check rejects mecha
 
 // ── the tamper drill ─────────────────────────────────────────────────────────────────────────────
 
-test('tamper drill: kiln-law exit 2 → slice auto-REJECTED with NO reviewer spawned; every tamper LEDGERED (§5.1) naming the touched lock; no Sentinel escalation (mechanical)', async () => {
+test('tamper drill: kiln-law exit 2 → slice auto-REJECTED with NO reviewer spawned; every tamper LEDGERED naming the touched lock; no Sentinel escalation (mechanical)', async () => {
   const { result, calls } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
     if (label.startsWith('asimov:runner')) return { reasoning: 'r', verify_exit: 2, tamper_paths: ['tests/acceptance/sc-001.sh'] }
   }))
   assert.equal(count(calls, ':review:'), 0, 'a tampered slice must never reach a reviewer')
   assert.equal(count(calls, 'thoth:freshness'), 0, 'verify stopped the runner — no run_id, no probe')
   const led = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('tamper_auto_reject'))
-  assert.equal(led.length, 4, '§5.1: every locked-path mismatch is ledgered — one event per trial cycle f0..f3')
+  assert.equal(led.length, 4, 'every locked-path mismatch is ledgered — one event per trial cycle f0..f3')
   for (const l of led) {
     assert.match(l.prompt, /tamper_auto_reject/, 'the ledger event records the workflow auto-reject, not an agent judgment')
     assert.match(l.prompt, /tests\/acceptance\/sc-001\.sh/, 'the ledger event names the touched lock')
@@ -280,9 +280,9 @@ test('tamper drill: kiln-law exit 2 → slice auto-REJECTED with NO reviewer spa
   assert.equal(result.built[0].qa, 'QA_FAIL')
 })
 
-// ── the freshness gate (§6: evidence timestamps/hashes compared against HEAD, in-script) ────────
+// ── the freshness gate (evidence timestamps/hashes compared against HEAD, in-script) ────────
 
-test('freshness gate: stale evidence on ANY §6 arm → auto-REJECTED, no reviewer — HEAD moved, results.jsonl missing, manifest from another commit, hash mismatch, unfinalized run, evidence predating HEAD, unreadable verification_class', async () => {
+test('freshness gate: stale evidence on ANY arm → auto-REJECTED, no reviewer — HEAD moved, results.jsonl missing, manifest from another commit, hash mismatch, unfinalized run, evidence predating HEAD, unreadable verification_class', async () => {
   const staleProbes = [
     { ...freshOk, head: 'def456' },                      // HEAD moved since the runner anchored
     { ...freshOk, results_jsonl_exists: false },         // no evidence file at all
@@ -290,7 +290,7 @@ test('freshness gate: stale evidence on ANY §6 arm → auto-REJECTED, no review
     { ...freshOk, results_sha256: 'beef02' },            // results.jsonl altered after the run
     { ...freshOk, manifest_results_sha256: '' },         // run never finalized (aborted mid-run)
     { ...freshOk, manifest_completed_epoch: 999 },       // evidence predates the HEAD commit
-    { ...freshOk, manifest_verification_class: '' },     // §7: degradation unprovable — fail closed
+    { ...freshOk, manifest_verification_class: '' },     // degradation unprovable — fail closed
   ]
   for (const probe of staleProbes) {
     const { result, calls } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
@@ -303,7 +303,7 @@ test('freshness gate: stale evidence on ANY §6 arm → auto-REJECTED, no review
   }
 })
 
-test('freshness probe prompt: mechanical transcription of the §6 anchors — run.json manifest, results.jsonl rehash, HEAD sha + commit epoch, §7 verification_class', async () => {
+test('freshness probe prompt: mechanical transcription of the anchors — run.json manifest, results.jsonl rehash, HEAD sha + commit epoch, verification_class', async () => {
   const { calls } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }))
   const probe = labelsOf(calls, 'thoth:freshness')[0]
   assert.equal(probe.model, 'haiku')
@@ -315,9 +315,9 @@ test('freshness probe prompt: mechanical transcription of the §6 anchors — ru
   assert.match(probe.prompt, /trust nothing the runner reported/)
 })
 
-// ── the §7 honesty channel: a static-only run proceeds HONESTLY degraded — ledgered + surfaced ──
+// ── the honesty channel: a static-only run proceeds HONESTLY degraded — ledgered + surfaced ──
 
-test('verification degraded (§7): a static-only manifest with law exit 0 still reaches the reviewer, but the degradation is LEDGERED and NAMED in the review prompt — never silently green', async () => {
+test('verification degraded: a static-only manifest with law exit 0 still reaches the reviewer, but the degradation is LEDGERED and NAMED in the review prompt — never silently green', async () => {
   const { result, calls } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
     if (label.startsWith('thoth:freshness')) return { ...freshOk, manifest_verification_class: 'static-only' }
   }))
@@ -331,7 +331,7 @@ test('verification degraded (§7): a static-only manifest with law exit 0 still 
   assert.match(review, /A deferral is never green/)
 })
 
-test('verification full (§7): a fully-verified run tells the reviewer the probe evidence EXISTS and must be read — no stale "later phase" language anywhere', async () => {
+test('verification full: a fully-verified run tells the reviewer the probe evidence EXISTS and must be read — no stale "later phase" language anywhere', async () => {
   const { calls } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }))
   assert.equal(labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('verification_degraded')).length, 0, 'a full-verification run ledgers no degradation')
   const review = labelsOf(calls, ':review:')[0].prompt
@@ -395,13 +395,13 @@ test('replan: confirm says replan → ONE ledgered fresh slice-plan for the rema
 
 // ── the Sentinel: feedback escalation + split_required ──────────────────────────────────────────
 
-test('Sentinel ladder (§8 T3+ capability tier — codex on board): 2 logical rejections escalate the FEEDBACK SOURCE by swapping the reviewer FAMILY (:esc label + ledger); 3 STOP the slice as split_required, surfaced in gate + return', async () => {
+test('Sentinel ladder (T3+ capability tier — codex on board): 2 logical rejections escalate the FEEDBACK SOURCE by swapping the reviewer FAMILY (esc label + ledger); 3 STOP the slice as split_required, surfaced in gate + return', async () => {
   const { result, calls } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
     if (label.includes(':review:')) return rejectLogical
   }))
   const reviews = labelsOf(calls, ':review:')
   assert.equal(reviews.length, 3, 'f0 reject, f1 reject (escalates), f2 escalated reject (splits)')
-  assert.deepEqual(reviews.map((c) => c.model), ['opus', 'opus', 'sonnet'], 'the 3rd review is the SWAPPED family (codex wrapper) — the §8 T3+ arm of the tasks.md T2.4 contract')
+  assert.deepEqual(reviews.map((c) => c.model), ['opus', 'opus', 'sonnet'], 'the 3rd review is the SWAPPED family (codex wrapper) — the T3+ arm of the contract')
   assert.ok(reviews[2].label.endsWith(':esc'))
   assert.match(reviews[2].prompt, /<escalated>/)
   assert.match(reviews[2].prompt, /model_reasoning_effort="high"/, 'the escalated codex leg runs at high effort')
@@ -412,7 +412,7 @@ test('Sentinel ladder (§8 T3+ capability tier — codex on board): 2 logical re
   assert.match(ledger[1].prompt, /split_and_rebuild/)
   assert.equal(count(calls, ':build:'), 3, 'initial + 2 fix builds — the split STOPS the slice before a 4th')
   assert.equal(count(calls, 'ken:qa') + count(calls, 'ryu:qa') + count(calls, 'judge-dredd:verdict'), 0, 'the gate verdict is mechanical on a split — no tribunal spend (nothing on this branch can pass)')
-  assert.equal(count(calls, 'aristotle:goal-backward'), 1, 'T2-fix #3: the goal-backward audit runs at EVERY boundary — split included; its findings merge into the failure record')
+  assert.equal(count(calls, 'aristotle:goal-backward'), 1, 'the goal-backward audit runs at EVERY boundary — split included; its findings merge into the failure record')
   assert.deepEqual(result.split_required, [{ milestone: 'M1', slice: 'M1:s0', sc_ids: ['SC-001'] }])
   assert.deepEqual(result.built[0].split_required, ['M1:s0'])
   assert.equal(result.built[0].qa, 'QA_FAIL')
@@ -430,13 +430,13 @@ test('boundary audit on a FAILED boundary: a blocking goal-backward finding on t
   assert.match(result.built[0].findings.join(' '), /unreachable from the entry point/, 'the audit finding joined it')
 })
 
-test('Sentinel ladder (§8 T1/T2 capability tiers — no codex): escalation is a FRESH-CONTEXT stronger-effort Opus leg, NEVER a family swap; ledger + split semantics unchanged', async () => {
+test('Sentinel ladder (T1/T2 capability tiers — no codex): escalation is a FRESH-CONTEXT stronger-effort Opus leg, NEVER a family swap; ledger + split semantics unchanged', async () => {
   const { result, calls } = await runBuild({ ...baseArgs, codexAvailable: false }, mkRespond({ law: lawOne, plan: planOne }, (label) => {
     if (label.includes(':review:')) return rejectLogical
   }))
   const reviews = labelsOf(calls, ':review:')
   assert.equal(reviews.length, 3, 'f0 reject, f1 reject (escalates), f2 escalated reject (splits)')
-  assert.deepEqual(reviews.map((c) => c.model), ['opus', 'opus', 'opus'], 'no second family on board — every review leg stays Opus (the T1/T2 arm of the tasks.md T2.4 contract)')
+  assert.deepEqual(reviews.map((c) => c.model), ['opus', 'opus', 'opus'], 'no second family on board — every review leg stays Opus (the T1/T2 arm of the contract)')
   assert.ok(reviews[2].label.endsWith(':esc'), 'the escalated leg is still a distinct fresh-context feedback source')
   assert.match(reviews[2].prompt, /<escalated>/)
   assert.ok(!reviews[2].prompt.includes('codex exec'), 'the swap arm must not fire below T3 — no codex delegation')
@@ -456,9 +456,9 @@ test('Sentinel: mechanical rejections never escalate — full fix cycles, no led
   assert.ok(labelsOf(calls, ':review:').every((c) => c.model === 'opus' && !c.label.endsWith(':esc')))
 })
 
-// ── the §3.2 milestone gate: goal-backward at the boundary, judge ONLY on ambiguous reconcile ────
+// ── the milestone gate: goal-backward at the boundary, judge ONLY on ambiguous reconcile ────
 
-test('milestone gate (§3.2): blocking findings → computed QA_FAIL with NO judge spawned; the correction loop fires, then escalates to validate', async () => {
+test('milestone gate: blocking findings → computed QA_FAIL with NO judge spawned; the correction loop fires, then escalates to validate', async () => {
   const blocking = { reasoning: 'r', overall: 'fail', findings: [{ text: 'list renders nothing — the store is never read', severity: 'critical' }] }
   const { result, calls } = await runBuild(baseArgs, mkRespond({}, (label) => {
     if (label.startsWith('ken:qa')) return blocking
@@ -473,7 +473,7 @@ test('milestone gate (§3.2): blocking findings → computed QA_FAIL with NO jud
   assert.match(result.built[0].findings.join(' '), /list renders nothing/)
 })
 
-test('milestone gate (§3.2): zero blocking findings + analyst overall verdicts DISAGREE → the judge is spawned and rules; agreement never spawns one', async () => {
+test('milestone gate: zero blocking findings + analyst overall verdicts DISAGREE → the judge is spawned and rules; agreement never spawns one', async () => {
   // disagree: ken pass, ryu fail (fail unbacked by a blocking finding — ambiguous reconcile)
   const a = await runBuild(baseArgs, mkRespond({}, (label) => {
     if (label.startsWith('ryu:qa')) return { reasoning: 'r', overall: 'fail', findings: [{ text: 'naming nit', severity: 'low' }] }
@@ -493,11 +493,11 @@ test('milestone gate (§3.2): zero blocking findings + analyst overall verdicts 
   assert.match(ken.prompt, /'fail' MUST be backed by at least one critical or high finding/)
 })
 
-test('milestone gate (§3.2): a dead analyst at the tribunal threshold fails the boundary closed (QA_FAIL) — the judge NEVER spawns on a missing overall verdict, mirroring the goal-audit ruling', async () => {
-  // ken dies (null) → reports[0] is null → gateDecision cannot read its overall. The §3.2
+test('milestone gate: a dead analyst at the tribunal threshold fails the boundary closed (QA_FAIL) — the judge NEVER spawns on a missing overall verdict, mirroring the goal-audit ruling', async () => {
+  // ken dies (null) → reports[0] is null → gateDecision cannot read its overall. The
   // judge-spawn condition presupposes TWO readable, disagreeing verdicts; a missing one is not
-  // disagreement, it is absent evidence → fail closed, no judge (operator ruling: "the judge
-  // NEVER spawns on missing inputs").
+  // disagreement, it is absent evidence → fail closed, no judge (the judge
+  // NEVER spawns on missing inputs).
   const { result, calls } = await runBuild(baseArgs, mkRespond({}, (label) => {
     if (label.startsWith('ken:qa')) return null
   }))
@@ -505,7 +505,7 @@ test('milestone gate (§3.2): a dead analyst at the tribunal threshold fails the
   assert.equal(result.built[0].qa, 'QA_FAIL', 'absent analyst evidence fails the milestone boundary closed')
 })
 
-test('milestone gate (§3.2): goal-backward findings JOIN the reconcile — a critical audit finding blocks the milestone without any judge', async () => {
+test('milestone gate: goal-backward findings JOIN the reconcile — a critical audit finding blocks the milestone without any judge', async () => {
   const { result, calls } = await runBuild(baseArgs, mkRespond({}, (label) => {
     if (label.startsWith('aristotle:goal-backward')) return { reasoning: 'r', overall: 'fail', findings: [{ text: 'checks pass but the feature is unreachable from the CLI entry point', severity: 'critical' }] }
   }))
@@ -521,7 +521,7 @@ test('ORCHESTRATOR RULING at the tribunal: a null/unusable goal-backward audit i
   const audits = labelsOf(calls, 'aristotle:goal-backward')
   assert.equal(audits.length, 2, 'the first ask + exactly ONE re-ask')
   assert.ok(audits[1].label.endsWith(':retry'), 'the re-ask is labeled :retry')
-  assert.equal(count(calls, 'judge-dredd:verdict'), 0, 'the judge NEVER spawns on missing inputs (§3.2 condition is exhaustive; absent evidence is fail-closed)')
+  assert.equal(count(calls, 'judge-dredd:verdict'), 0, 'the judge NEVER spawns on missing inputs (condition is exhaustive; absent evidence is fail-closed)')
   assert.equal(count(calls, ':build:'), 2, 'no corrective build — an infrastructure failure is not a code defect a builder can fix')
   const led = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('goal_audit_failure'))
   assert.equal(led.length, 1)
@@ -545,7 +545,7 @@ test('ORCHESTRATOR RULING at the tribunal: an audit that is unusable once but US
   assert.doesNotMatch(result.built[0].findings.join(' '), /goal-audit-failure/)
 })
 
-test('milestone gate single-slice row (§3.2): slice review + goal-backward IS the gate — clean audit passes, a blocking audit finding fails it, NO tribunal or judge either way', async () => {
+test('milestone gate single-slice row: slice review + goal-backward IS the gate — clean audit passes, a blocking audit finding fails it, NO tribunal or judge either way', async () => {
   // clean: approved slice + clean audit → QA_PASS
   const a = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }))
   assert.equal(count(a.calls, 'aristotle:goal-backward'), 1, 'the audit runs at EVERY boundary that can pass — single-slice included')
@@ -572,7 +572,7 @@ test('milestone gate single-slice row (§3.2): slice review + goal-backward IS t
   assert.match(led[0].prompt, /goal_audit_failure/)
 })
 
-test('boundary audit on a plan-abort (T2-fix #3): a failed replanned remainder still gets the goal-backward audit at its boundary — findings merge into the QA_FAIL record', async () => {
+test('boundary audit on a plan-abort: a failed replanned remainder still gets the goal-backward audit at its boundary — findings merge into the QA_FAIL record', async () => {
   let confirms = 0
   const { result, calls } = await runBuild(baseArgs, mkRespond({}, (label) => {
     if (label.startsWith('krs-one:confirm')) {
@@ -590,7 +590,7 @@ test('boundary audit on a plan-abort (T2-fix #3): a failed replanned remainder s
   assert.match(result.built[0].findings.join(' '), /half the milestone is unplanned/)
 })
 
-test('milestone gate: the goal_backward posture dial OFF skips the audit with a LEDGERED gate_skipped (§3.5) — single-slice gates on the slice review alone', async () => {
+test('milestone gate: the goal_backward posture dial OFF skips the audit with a LEDGERED gate_skipped — single-slice gates on the slice review alone', async () => {
   const posture = { milestone_gate: { goal_backward: false } }
   const { result, calls } = await runBuild({ ...baseArgs, posture }, mkRespond({ law: lawOne, plan: planOne }))
   assert.equal(count(calls, 'aristotle:goal-backward'), 0)
@@ -609,7 +609,7 @@ test('milestone gate: min_slices_for_tribunal is the posture dial — raised to 
   assert.equal(result.built[0].qa, 'QA_PASS')
 })
 
-test('slicer consolidation (P5.5): trivial posture briefs the budget-grouping directive; standard keeps the pre-P5.5 text byte-identical; the high-dims/effort-0 trap reads standard', async () => {
+test('slicer consolidation: trivial posture briefs the budget-grouping directive; standard keeps the pre- text byte-identical; the high-dims/effort-0 trap reads standard', async () => {
   const { posture: gaugePosture } = await import('../../plugins/kiln/src/gauge.mjs')
   const gaugeConfig = JSON.parse(readFileSync(new URL('../../plugins/kiln/gauge-config.json', import.meta.url), 'utf8'))
   const mkProf = (over = {}) => Object.fromEntries(['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'].map((d) => [d, { score: over[d] || 0, evidence: 'e' }]))
@@ -622,9 +622,9 @@ test('slicer consolidation (P5.5): trivial posture briefs the budget-grouping di
   assert.ok(sliceBrief(triv.calls).includes(DIRECTIVE), 'trivial tier briefs the budget-grouping directive')
   assert.ok(!sliceBrief(triv.calls).includes(PRE_P55_TEXT), 'the per-command fragmentation example dies at trivial tier')
 
-  // standard (one elevated dim) => byte-identical pre-P5.5 sentence, no directive
+  // standard (one elevated dim) => byte-identical decomposition sentence, no directive
   const std = await runBuild({ ...baseArgs, posture: gaugePosture(mkProf({ D1: 1 }), gaugeConfig) }, mkRespond())
-  assert.ok(sliceBrief(std.calls).includes(PRE_P55_TEXT), 'standard tier keeps the pre-P5.5 decomposition text verbatim')
+  assert.ok(sliceBrief(std.calls).includes(PRE_P55_TEXT), 'standard tier keeps the decomposition text verbatim')
   assert.ok(!sliceBrief(std.calls).includes(DIRECTIVE), 'no directive at standard')
 
   // the r1 trap: high dims, effort 0 => standard behavior
@@ -636,7 +636,7 @@ test('slicer consolidation (P5.5): trivial posture briefs the budget-grouping di
   assert.ok(sliceBrief(bare.calls).includes(PRE_P55_TEXT) && !sliceBrief(bare.calls).includes(DIRECTIVE), 'absent posture fails soft to standard')
 })
 
-test('milestone gate chain (P5.5): the REAL posture() at an all-zero (trivial) profile routes a 2-slice milestone to the skip path with goal-backward still run', async () => {
+test('milestone gate chain: the REAL posture() at an all-zero (trivial) profile routes a 2-slice milestone to the skip path with goal-backward still run', async () => {
   const { posture: gaugePosture } = await import('../../plugins/kiln/src/gauge.mjs')
   const gaugeConfig = JSON.parse(readFileSync(new URL('../../plugins/kiln/gauge-config.json', import.meta.url), 'utf8'))
   const allZero = Object.fromEntries(['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'].map((d) => [d, { score: 0, evidence: 'quiet' }]))
@@ -691,7 +691,7 @@ test('commit-before-review: an uncommitted build is auto-rejected with NO runner
   assert.match(fixBuild, /was not committed/)
 })
 
-// ── velocity levers (§9 lever 3 + the model downshifts) ─────────────────────────────────────────
+// ── velocity levers (lever 3 + the model downshifts) ─────────────────────────────────────────
 
 test('velocity levers: rakim:setup ∥ confucius:parse are both haiku; assetPrep is haiku; ryu QA runs at effort "high" not "xhigh"', async () => {
   const uiState = { milestones: [milestone({ surface: 'ui' })], law: lawOne, plan: planOne }
@@ -706,10 +706,10 @@ test('velocity levers: rakim:setup ∥ confucius:parse are both haiku; assetPrep
   const ryu = twoSlice.calls.find((c) => c.label.startsWith('ryu:qa'))
   assert.ok(ryu, 'ryu runs at the 2-slice tribunal threshold')
   assert.match(ryu.prompt, /model_reasoning_effort="high"/)
-  assert.doesNotMatch(ryu.prompt, /xhigh/, 'ryu QA dropped from xhigh to high (BLUEPRINT §8 / lever 4)')
+  assert.doesNotMatch(ryu.prompt, /xhigh/, 'ryu QA dropped from xhigh to high')
 })
 
-test('runner downshift (P5.5 T3): the transcription seat is haiku at trivial posture and sonnet at standard — at BOTH the per-slice and gate-only call sites (the high-dims/effort-0 trap reads standard)', async () => {
+test('runner downshift: the transcription seat is haiku at trivial posture and sonnet at standard — at BOTH the per-slice and gate-only call sites (the high-dims/effort-0 trap reads standard)', async () => {
   const { posture: gaugePosture } = await import('../../plugins/kiln/src/gauge.mjs')
   const gaugeConfig = JSON.parse(readFileSync(new URL('../../plugins/kiln/gauge-config.json', import.meta.url), 'utf8'))
   const mkProf = (over = {}) => Object.fromEntries(['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'].map((d) => [d, { score: over[d] || 0, evidence: 'e' }]))
@@ -745,7 +745,7 @@ test('runner downshift (P5.5 T3): the transcription seat is haiku at trivial pos
   assert.deepEqual(runnerModels(gTrap.calls), ['sonnet'], 'the high-dims/effort-0 profile keeps the gate-only runner at sonnet')
 })
 
-// ── §9 lever 3: pipelined next-milestone slicing + base_sha invalidation ─────────────────────────
+// ── lever 3: pipelined next-milestone slicing + base_sha invalidation ─────────────────────────
 
 // Two single-slice logic milestones, each owning one Law SC. mkTwoMilestone keeps both lite-gate
 // (single-slice) so the gate is cheap; `headFn(label)` decides each thoth:head probe's sha.
@@ -780,7 +780,7 @@ test('lever 3: M2\'s slice plan is cut SPECULATIVELY during M1\'s gate (a krs-on
   assert.ok(m2Plan > -1 && m2Plan < m2Confirm, 'the M2 plan was cut speculatively, before M2\'s slice confirm')
 })
 
-test('lever 3 invalidation (§9 finding #8): a corrective commit moves HEAD between base_sha and consume → the pipelined plan is invalidated, M2 RE-SLICES, and slice_plan_invalidated is LEDGERED', async () => {
+test('lever 3 invalidation: a corrective commit moves HEAD between base_sha and consume → the pipelined plan is invalidated, M2 RE-SLICES, and slice_plan_invalidated is LEDGERED', async () => {
   // base probe (during M1's gate) sees HEAD_BEFORE; the consume-time check sees HEAD_AFTER — a
   // corrective commit moved it. M2 must re-slice and ledger the invalidation.
   const headFn = (label) => label.includes('pipeline-base') ? 'HEAD_BEFORE' : 'HEAD_AFTER'
@@ -817,7 +817,7 @@ test('lever 3: a blank base_sha (the HEAD probe failed when anchoring) never sta
   assert.equal(invalidatedLedger, false, 'a never-started pipeline produces no invalidation ledger')
 })
 
-// ── D3 (plan WS-D): churn-aware speculation — admitSpeculation self-disables lever 3 when this ─────
+// ── churn-aware speculation — admitSpeculation self-disables lever 3 when this ─────
 //    milestone ran hot; re-enables automatically when calm. NULL-KEEP: a wrong admission costs one
 //    wasted or one missed overlap, never correctness (pipelineInvalidated stays the rail). ──
 const specSlice = (over = {}) => ({ approved: true, split_required: false, environment_blocked: false, logical_rejections: 0, ...over })
@@ -898,7 +898,7 @@ test('D3 wiring (bundled artifact): a HOT milestone HOLDS the next milestone\'s 
   assert.ok(log.some((l) => /Holding M2's speculative slice plan/.test(l)))
 })
 
-// ── P3 T2: ui-slice probe gating (§7 default-fail / honest-degrade) ──────────────────────────────
+// ── ui-slice probe gating (default-fail / honest-degrade) ──────────────────────────────
 // A ui milestone so surfaceOf() ⇒ 'ui'; one probe-kind SC mapped to the one slice. The ui review
 // leg is the codex wrapper (sonnet) — Opus builds, Codex reviews — so :review: calls are sonnet.
 const uiMilestone = (over = {}) => milestone({ surface: 'ui', ...over })
@@ -906,7 +906,7 @@ const lawProbe = [{ id: 'SC-001', milestone: 'M1', kind: 'probe' }]
 const planProbe = [{ objective: 'render the hero page', files: ['index.html'], constraints: '', done_when: 'the probe SC passes', sc_ids: ['SC-001'] }]
 const uiProbeState = { milestones: [uiMilestone()], law: lawProbe, plan: planProbe }
 
-test('T2.1 ui probe gating — FULL: every mapped probe EXECUTED (verification_class full) → the slice proceeds, NO probe_unavailable ledger, and the ui reviewer is told the probe evidence exists and must be read', async () => {
+test('ui probe gating — FULL: every mapped probe EXECUTED (verification_class full) → the slice proceeds, NO probe_unavailable ledger, and the ui reviewer is told the probe evidence exists and must be read', async () => {
   const { result, calls } = await runBuild(baseArgs, mkRespond(uiProbeState))
   assert.equal(count(calls, ':review:'), 1, 'a fully-verified ui slice reaches the reviewer')
   assert.equal(labelsOf(calls, ':review:')[0].model, 'sonnet', 'ui review is the cross-family codex (sonnet wrapper) leg')
@@ -916,7 +916,7 @@ test('T2.1 ui probe gating — FULL: every mapped probe EXECUTED (verification_c
   assert.match(review, /verification_class is 'full': every mapped probe EXECUTED/)
 })
 
-test('T2.1 ui probe gating — DEGRADE (exit 78 / deferred → static-only): the slice proceeds HONESTLY DEGRADED, ledgers probe_unavailable (the §7 capability event, surface recorded), and the ui review falls back to the static checks — never silently green', async () => {
+test('ui probe gating — DEGRADE (exit 78 / deferred → static-only): the slice proceeds HONESTLY DEGRADED, ledgers probe_unavailable (the capability event, surface recorded), and the ui review falls back to the static checks — never silently green', async () => {
   const { result, calls } = await runBuild(baseArgs, mkRespond(uiProbeState, (label) => {
     if (label.startsWith('thoth:freshness')) return { ...freshOk, manifest_verification_class: 'static-only' }
   }))
@@ -933,7 +933,7 @@ test('T2.1 ui probe gating — DEGRADE (exit 78 / deferred → static-only): the
   assert.equal(result.built[0].qa, 'QA_PASS')
 })
 
-test('T2.1 probe exit 1/79 (assert-fail / timeout) folds to RED upstream → slice auto-REJECTED before any reviewer (the exit code is the verdict — probeGate is never consulted on a red gate)', async () => {
+test('probe exit 1/79 (assert-fail / timeout) folds to RED upstream → slice auto-REJECTED before any reviewer (the exit code is the verdict — probeGate is never consulted on a red gate)', async () => {
   // kiln-law folds a probe exit 1/79 to a red check ⇒ its declared flip is UNMET ⇒ kiln-law run
   // exits non-zero ⇒ runnerGate returns 'red'. The runner agent transcribes the FLIP_UNMET id.
   const { result, calls } = await runBuild(baseArgs, mkRespond(uiProbeState, (label) => {
@@ -945,7 +945,7 @@ test('T2.1 probe exit 1/79 (assert-fail / timeout) folds to RED upstream → sli
   assert.equal(result.built[0].qa, 'QA_FAIL')
 })
 
-test('T2.1 missing/stale probe evidence → stale gate → slice auto-REJECTED before any reviewer (default-fail; probeGate never reached)', async () => {
+test('missing/stale probe evidence → stale gate → slice auto-REJECTED before any reviewer (default-fail; probeGate never reached)', async () => {
   const { result, calls } = await runBuild(baseArgs, mkRespond(uiProbeState, (label) => {
     if (label.startsWith('thoth:freshness')) return { ...freshOk, results_jsonl_exists: false } // no probe evidence file at all
   }))
@@ -955,13 +955,13 @@ test('T2.1 missing/stale probe evidence → stale gate → slice auto-REJECTED b
   assert.match(fixBuild, /Evidence gate failed/)
 })
 
-test('T2.2 ui reviewer brief: probe evidence paths + SCREENSHOT judged by BINARY RUBRIC only (no numeric aesthetic score), and the reviewer RE-RUNS the slice\'s mapped probe SCs itself (independent-rerun floor)', async () => {
+test('ui reviewer brief: probe evidence paths + SCREENSHOT judged by BINARY RUBRIC only (no numeric aesthetic score), and the reviewer RE-RUNS the slice\'s mapped probe SCs itself (independent-rerun floor)', async () => {
   const { calls } = await runBuild(baseArgs, mkRespond(uiProbeState))
   const review = labelsOf(calls, ':review:')[0].prompt
   // probe evidence paths
   assert.match(review, /\/tmp\/kiln-x\/\.kiln\/evidence\/RUN1\//, 'the evidence dir is named')
   assert.match(review, /probe-<SC>\.json/, 'the probe result file is named')
-  // screenshot binary rubric (the §7 rule)
+  // screenshot binary rubric (the rule)
   assert.match(review, /Screenshot rubric \(binary ONLY\)/)
   assert.match(review, /NEVER assign a numeric or aesthetic score/)
   assert.match(review, /VLMs rank reliably but score unreliably/)
@@ -973,16 +973,16 @@ test('T2.2 ui reviewer brief: probe evidence paths + SCREENSHOT judged by BINARY
   assert.match(review, /a subprocess with a deadline, never a service/)
 })
 
-// ── P3 T2.3: stage-level browser sweeps (the OUTER bracket — pre-flight + unconditional end) ──────
+// ── .3: stage-level browser sweeps (the OUTER bracket — pre-flight + unconditional end) ──────
 
 // The build's stage-scoped browser kill token — kbuild-<args.runToken | projectPath-hash>
 // (build.js BUILD_RUN_TOKEN; Date.now/Math.random are forbidden in workflow scripts, so the
 // conductor mints cross-run uniqueness via args.runToken). Both stage sweeps and every kiln-law
 // --run-prefix carry it, so a sweep reaps ONLY this build's browser trees, never a concurrent
-// Kiln run's (the reviewer's MAJOR / discipline-spec "post-check cleanup is run-token scoped").
+// Kiln run's.
 const BUILD_TOKEN_RE = /kbuild-[A-Za-z0-9._-]+/
 
-test('T2.3 stage sweeps: a PRE-FLIGHT sweep fires at build start and an UNCONDITIONAL sweep at build end — both run kiln-probe sweep scoped to THIS build\'s run token (never the whole namespace, never blanket pkill), both LEDGERED browser_sweep with the token', async () => {
+test('stage sweeps: a PRE-FLIGHT sweep fires at build start and an UNCONDITIONAL sweep at build end — both run kiln-probe sweep scoped to THIS build\'s run token (never the whole namespace, never blanket pkill), both LEDGERED browser_sweep with the token', async () => {
   const { calls } = await runBuild(baseArgs, mkRespond())
   const sweeps = labelsOf(calls, 'sentinel:sweep')
   assert.equal(sweeps.length, 2, 'exactly two stage sweeps: pre-flight + stage-end')
@@ -1000,18 +1000,18 @@ test('T2.3 stage sweeps: a PRE-FLIGHT sweep fires at build start and an UNCONDIT
     assert.match(s.prompt, /blanket 'pkill -f chrome' is forbidden/)
   }
   const led = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('browser_sweep'))
-  assert.equal(led.length, 2, 'both sweeps are ledgered (§3.5 — every browser-lifecycle action is an event)')
+  assert.equal(led.length, 2, 'both sweeps are ledgered (every browser-lifecycle action is an event)')
   assert.match(led[0].prompt, /"when":"pre-flight"/)
   assert.match(led[0].prompt, new RegExp(`"token":"${token}"`), 'the ledger records the scoping token')
   assert.match(led[1].prompt, /"when":"stage-end"/)
 })
 
-// ── P3.6 T3: each sweep leg ALSO runs the READ-ONLY leak-scan (RUN-B FINDING 3b) ─────────────────
+// ── each sweep leg ALSO runs the READ-ONLY leak-scan ───────────────────────────────────
 // The sweep bracket learns to SEE a foreign browser it does not own — a stray Playwright temp-profile
 // or Playwright-MCP browser, in a namespace no sweep reaps. browser_sweep now carries leak_suspects
 // on EVERY bracket (baseline proof); the suspect/profile-dir detail rides a SEPARATE browser_leak_
 // suspect event ONLY when count>0 (a lean ledger — zero-suspect scans ride the count).
-test('T2.3 leak-scan: each sweep leg runs the READ-ONLY leak-scan right after the owned sweep; browser_sweep gains leak_suspects on every bracket; browser_leak_suspect rides ONLY when a foreign browser is seen', async () => {
+test('leak-scan: each sweep leg runs the READ-ONLY leak-scan right after the owned sweep; browser_sweep gains leak_suspects on every bracket; browser_leak_suspect rides ONLY when a foreign browser is seen', async () => {
   let sweepN = 0
   const { calls } = await runBuild(baseArgs, mkRespond({}, (label) => {
     if (label.startsWith('sentinel:sweep')) {
@@ -1029,7 +1029,7 @@ test('T2.3 leak-scan: each sweep leg runs the READ-ONLY leak-scan right after th
     assert.match(s.prompt, /node \/plug\/scripts\/kiln-probe\.mjs leak-scan\b/, 'the READ-ONLY foreign-browser scan runs right after')
     assert.match(s.prompt, /kills NOTHING, removes NOTHING/, 'the leg states the read-only contract to the scribe')
   }
-  // the evidence-schema discipline (review r1 ruling): every field the ledger event carries is
+  // the evidence-schema discipline: every field the ledger event carries is
   // REQUIRED — a schema-legal scribe can never report leak_suspects>0 while dropping the detail
   const sweepSchema = sweeps[0].schema
   assert.deepEqual([...sweepSchema.required].sort(), ['leak_scan_line', 'leak_suspects', 'profile_dirs', 'suspects', 'sweep_line'])
@@ -1039,7 +1039,7 @@ test('T2.3 leak-scan: each sweep leg runs the READ-ONLY leak-scan right after th
   const sweepLedgers = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('"browser_sweep"'))
   assert.equal(sweepLedgers.length, 2, 'browser_sweep is ledgered on every bracket')
   for (const l of sweepLedgers) assert.match(l.prompt, /"leak_suspects":\d+/, 'browser_sweep data gains leak_suspects on every bracket (baseline proof)')
-  assert.match(sweepLedgers[0].prompt, /"leak_profile_dirs":1/, 'the disk arm rides the baseline too — dirs-only evidence is never silently dropped (review r1 ruling)')
+  assert.match(sweepLedgers[0].prompt, /"leak_profile_dirs":1/, 'the disk arm rides the baseline too — dirs-only evidence is never silently dropped')
   assert.match(sweepLedgers[1].prompt, /"leak_profile_dirs":0/, 'a clean box records zero, honestly')
   // detail: browser_leak_suspect rides ONLY the pre-flight bracket (2 suspects), NOT the clean stage-end
   const suspectLedgers = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('"browser_leak_suspect"'))
@@ -1049,7 +1049,7 @@ test('T2.3 leak-scan: each sweep leg runs the READ-ONLY leak-scan right after th
   assert.match(suspectLedgers[0].prompt, /"profile_dirs":\[/, 'the abandoned-profile detail rides too')
 })
 
-test('T2.3 run-token scoping: every kiln-law run (the runner AND the reviewer rerun) threads the SAME --run-prefix as the sweeps — so every probe this build spawns falls under the token the sweep reaps', async () => {
+test('run-token scoping: every kiln-law run (the runner AND the reviewer rerun) threads the SAME --run-prefix as the sweeps — so every probe this build spawns falls under the token the sweep reaps', async () => {
   const { calls } = await runBuild(baseArgs, mkRespond(uiProbeState))
   const token = labelsOf(calls, 'sentinel:sweep')[0].prompt.match(BUILD_TOKEN_RE)[0]
   const runner = labelsOf(calls, 'asimov:runner')[0].prompt
@@ -1058,7 +1058,7 @@ test('T2.3 run-token scoping: every kiln-law run (the runner AND the reviewer re
   assert.match(review, new RegExp(`kiln-law\\.mjs run [^\\n]*--run-prefix ${token}\\b`), 'the reviewer\'s independent rerun threads the SAME token, so its probe trees are swept by the same stage bracket')
 })
 
-test('T2.3 ordering: the pre-flight sweep precedes the first builder, and the stage-end sweep is the FINAL agent call (the OUTER bracket around every probe spawn)', async () => {
+test('ordering: the pre-flight sweep precedes the first builder, and the stage-end sweep is the FINAL agent call (the OUTER bracket around every probe spawn)', async () => {
   const { calls } = await runBuild(baseArgs, mkRespond())
   const labels = calls.map((c) => c.label)
   const preFlight = labels.indexOf('sentinel:sweep:pre-flight')
@@ -1069,7 +1069,7 @@ test('T2.3 ordering: the pre-flight sweep precedes the first builder, and the st
   assert.ok(stageEnd > -1 && lastGate > -1 && stageEnd > lastGate, 'the stage-end sweep runs after the last milestone gate')
 })
 
-test('T2.3 the stage-end sweep is UNCONDITIONAL — it still fires when the build ends in QA_FAIL (a crashed/aborted probe run is exactly when leaked browsers must be reaped)', async () => {
+test('the stage-end sweep is UNCONDITIONAL — it still fires when the build ends in QA_FAIL (a crashed/aborted probe run is exactly when leaked browsers must be reaped)', async () => {
   // drive a QA_FAIL via a split (logical rejections) on a single-slice ui milestone
   const { result, calls } = await runBuild(baseArgs, mkRespond(uiProbeState, (label) => {
     if (label.includes(':review:')) return rejectLogical
@@ -1079,13 +1079,13 @@ test('T2.3 the stage-end sweep is UNCONDITIONAL — it still fires when the buil
   assert.equal(labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('browser_sweep')).length, 2, 'both sweeps ledgered regardless of verdict')
 })
 
-test('T2.3 floor gates skip the sweep — an ungated early return (no pluginRoot) spawns no agent at all, so there is no browser stage to bracket', async () => {
+test('floor gates skip the sweep — an ungated early return (no pluginRoot) spawns no agent at all, so there is no browser stage to bracket', async () => {
   const { calls } = await runBuild({ kilnDir: '/tmp/k/.kiln', projectPath: '/tmp/k' }, mkRespond())
   assert.equal(calls.length, 0, 'the pluginRoot floor returns before any agent — including the sweeper (the CLI would be unlocatable)')
 })
 
 // runBuildCapturing — like runBuild but it surfaces the recorded calls EVEN WHEN the workflow body
-// throws. The reviewer's CRITICAL: the stage-end sweep must be in the cleanup/finally so any throw
+// throws. CRITICAL: the stage-end sweep must be in the cleanup/finally so any throw
 // after pre-flight still reaps this build's browsers (a crash mid-probe is exactly when leaks
 // survive). Returns { thrown, calls }.
 async function runBuildCapturing(args, respond) {
@@ -1108,7 +1108,7 @@ async function runBuildCapturing(args, respond) {
   return { thrown, calls }
 }
 
-test('T2.3 CRITICAL: a throw AFTER pre-flight (a post-preflight parse/agent crash) still runs the stage-end sweep — it lives in finally, never after the loop, so no throw can skip the OUTER browser bracket', async () => {
+test('CRITICAL: a throw AFTER pre-flight (a post-preflight parse/agent crash) still runs the stage-end sweep — it lives in finally, never after the loop, so no throw can skip the OUTER browser bracket', async () => {
   // crash the build mid-milestone: the runner step throws on its first call (a post-preflight
   // parse crash, exactly the reviewer's synthetic). The pre-flight sweep has already run; the
   // milestone loop then throws; the finally MUST still fire the stage-end sweep.
@@ -1125,7 +1125,7 @@ test('T2.3 CRITICAL: a throw AFTER pre-flight (a post-preflight parse/agent cras
   assert.match(end.prompt, new RegExp(`kiln-probe\\.mjs sweep ${BUILD_TOKEN_RE.source}\\b`), 'the finally sweep is still run-token scoped')
 })
 
-test('T2.3 the stage-end sweep failing in finally never masks the real build error (cleanup is itself guarded)', async () => {
+test('the stage-end sweep failing in finally never masks the real build error (cleanup is itself guarded)', async () => {
   const boom = new Error('the real build crash')
   // the build crashes mid-milestone AND the stage-end sweeper itself rejects — the ORIGINAL crash
   // must still be what propagates (a swallowed primary error is a debugging nightmare).
@@ -1136,7 +1136,7 @@ test('T2.3 the stage-end sweep failing in finally never masks the real build err
   assert.equal(thrown, boom, 'the finally guards the sweep so the primary error survives unmasked')
 })
 
-// ── P3.5 T3: gate-only retry path (dogfood finding 4) — re-run a STARVED milestone gate over an
+// ── gate-only retry path — re-run a STARVED milestone gate over an
 //    already-COMPLETED build. Scoring + Forging are SKIPPED; ONE deterministic Law check over ALL
 //    the milestone's SCs (verify + run --only/--expect-green, NO --flips) gates the milestone, then
 //    the FULL tribunal (conservative — the prior slice count is unknown to a fresh session). Refuses
@@ -1219,7 +1219,7 @@ test('gateOnly routes CONSERVATIVELY to the FULL tribunal regardless of min_slic
   assert.equal(result.built[0].qa, 'QA_PASS')
 })
 
-test('gateOnly milestone gate: a blocking goal-backward finding still fails the gate (the §3.2 gate is unchanged under gate-only — only the build legs are skipped)', async () => {
+test('gateOnly milestone gate: a blocking goal-backward finding still fails the gate (the gate is unchanged under gate-only — only the build legs are skipped)', async () => {
   const { result } = await runBuild(gateOnlyArgs, mkRespond({}, (label) => {
     if (label.startsWith('aristotle:goal-backward')) return { reasoning: 'r', overall: 'fail', findings: [{ text: 'the milestone goal is unreachable from the entry point', severity: 'critical' }] }
   }))
@@ -1256,12 +1256,12 @@ test('gateOnly skips the per-milestone codebase-state doc update (nothing was bu
   assert.equal(count(calls, 'rakim:state'), 0, 'no living-docs update under gate-only')
 })
 
-// ── P3.6 T4: the build stage brackets (RUN-B FINDING 2) — stage_started at the pre-flight bracket,
+// ── the build stage brackets — stage_started at the pre-flight bracket,
 //    stage_completed ONLY on the genuine all-milestones-passed return. A QA_FAIL leaves the stage
 //    current, so the projection reads 'build' and the conductor re-enters via the correction loop. ──
 const stageLedgers = (calls, type) => labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes(`"type":"${type}"`))
 
-test('P3.6 T4 stage brackets: the success path emits stage_started once and exactly one stage_completed; a QA_FAIL emits stage_started but NO stage_completed (the stage stays current)', async () => {
+test('stage brackets: the success path emits stage_started once and exactly one stage_completed; a QA_FAIL emits stage_started but NO stage_completed (the stage stays current)', async () => {
   // success: the happy path — every milestone passes its gate → all_passed
   const ok = await runBuild(baseArgs, mkRespond())
   assert.equal(ok.result.all_passed, true)
@@ -1273,7 +1273,7 @@ test('P3.6 T4 stage brackets: the success path emits stage_started once and exac
   assert.match(okCompleted[0].prompt, /"stage":"build"/, 'stage_completed carries stage:build so the projection bumps to validate')
   // ordering: stage_started precedes EVERY other build-stage ledger event — the pre-flight sweep
   // appends browser_sweep at stage:'build', and a projection read must never see build events while
-  // stage still reads the prior projection (T4 review r1) — and stage_completed follows the gate
+  // stage still reads the prior projection — and stage_completed follows the gate
   const labels = ok.calls.map((c) => c.label)
   const firstBuild = labels.findIndex((l) => l.includes(':build:'))
   const startedIdx = ok.calls.indexOf(okStarted[0])
@@ -1294,13 +1294,13 @@ test('P3.6 T4 stage brackets: the success path emits stage_started once and exac
   assert.equal(stageLedgers(fail.calls, 'stage_completed').length, 0, 'a QA_FAIL never emits stage_completed — the projection stays at build')
 })
 
-test('P3.6 T4 stage brackets: a floor-gate refusal (no pluginRoot) emits NEITHER bracket — the stage was never entered', async () => {
+test('stage brackets: a floor-gate refusal (no pluginRoot) emits NEITHER bracket — the stage was never entered', async () => {
   const { calls } = await runBuild({ kilnDir: '/tmp/k/.kiln', projectPath: '/tmp/k' }, mkRespond())
   assert.equal(stageLedgers(calls, 'stage_started').length, 0)
   assert.equal(stageLedgers(calls, 'stage_completed').length, 0)
 })
 
-test('P3.6 T4 stage brackets: a gateOnly retry that ends green completes the stage (stage_started fires as a re-entry, stage_completed on the all-passed return)', async () => {
+test('stage brackets: a gateOnly retry that ends green completes the stage (stage_started fires as a re-entry, stage_completed on the all-passed return)', async () => {
   const { result, calls } = await runBuild(gateOnlyArgs, mkRespond())
   assert.equal(result.all_passed, true)
   const started = stageLedgers(calls, 'stage_started')
@@ -1309,7 +1309,7 @@ test('P3.6 T4 stage brackets: a gateOnly retry that ends green completes the sta
   assert.equal(stageLedgers(calls, 'stage_completed').length, 1, 'a green gate-only pass completes the stage')
 })
 
-// ── D1 failure-fingerprint retry router + D2 probe reject briefs + D5 slice telemetry (§9) ────────
+// ── D1 failure-fingerprint retry router + D2 probe reject briefs + D5 slice telemetry ────────
 // The RUNNER now transcribes evidence/<runId>/results.jsonl into check_results; the in-script
 // admitRetry routes the NEXT builder attempt off the failure fingerprint. FAIL TOWARD v3.0.1: every
 // existing test above passes a runner WITHOUT check_results, so the fingerprint is null and the
@@ -1370,7 +1370,7 @@ test('D1 progress: CHANGING failure signatures admit exactly as v3.0.1 — the c
   assert.deepEqual(withFp.result.split_required, noFp.result.split_required)
 })
 
-test('D1 fail-safe: garbled/missing check_results → NO fingerprint → v3.0.1 admission exactly (3 builds, split at 3, no repair trial) — a PARTIAL garble beside a valid infra row included (Sol r1-3 atomicity)', async () => {
+test('fail-safe: garbled/missing check_results → NO fingerprint → v3.0.1 admission exactly (3 builds, split at 3, no repair trial) — a PARTIAL garble beside a valid infra row included', async () => {
   for (const bad of [undefined, 'garbage', [{ id: '', exit: 'x' }], [{ nope: 1 }], [{ id: 'SC-001', exit: 124, timeout: true }, { nope: 1 }]]) {
     const { result, calls } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
       if (label.startsWith('asimov:runner')) return { ...runnerOk, law_run_exit: 1, flip_unmet: ['SC-001'], check_results: bad }
@@ -1447,9 +1447,9 @@ test('D5 slice telemetry: an environment-blocked slice records environment_block
   assert.match(note, /"split":false/)
 })
 
-// ── Sol WSD-r1 round-2 fixes: the repair trial is an OBSERVATION; mixed honesty; telemetry null ──
+// ── the repair trial is an OBSERVATION; mixed honesty; telemetry null ──
 
-test('D1 repair observation (Sol r1-1 + r2-1): identical infra ×2, the repair trial fails RED with a CHANGED signature → the observation never counts, but the GENUINE outer rejection still escalates the Sentinel — the admitted correction is reviewed by the ESCALATED source and the slice RECOVERS (no split)', async () => {
+test('repair observation: identical infra ×2, the repair trial fails RED with a CHANGED signature → the observation never counts, but the GENUINE outer rejection still escalates the Sentinel — the admitted correction is reviewed by the ESCALATED source and the slice RECOVERS (no split)', async () => {
   let trials = 0
   const { result, calls, log } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
     if (label.startsWith('asimov:runner')) {
@@ -1463,19 +1463,19 @@ test('D1 repair observation (Sol r1-1 + r2-1): identical infra ×2, the repair t
   assert.equal(count(calls, ':build:'), 3, 'initial + fix1 + the ONE admitted correction — the repair itself spends no builder')
   const reviews = labelsOf(calls, ':review:')
   assert.equal(reviews.length, 1, 'only the recovered green trial reaches a reviewer')
-  assert.equal(reviews[0].model, 'sonnet', 'Sol r2-1: the correction is reviewed by the ESCALATED source — the outer rejection reached the feedback threshold, so the family swapped')
+  assert.equal(reviews[0].model, 'sonnet', 'the correction is reviewed by the ESCALATED source — the outer rejection reached the feedback threshold, so the family swapped')
   assert.ok(reviews[0].label.endsWith(':esc'), 'the correction review rides the escalated leg')
-  assert.equal(result.built[0].qa, 'QA_PASS', 'the promised correction was admitted and the slice recovered — round-1 wrongly split here (2 rejections + the observation reached the split threshold)')
+  assert.equal(result.built[0].qa, 'QA_PASS', 'the promised correction was admitted and the slice recovered — a naive count (2 rejections + the observation) would hit the split threshold, but the observation spends nothing so the slice does NOT split')
   assert.deepEqual(result.split_required, [], 'no split, no environment block')
   assert.ok(log.some((l) => /moved the failure/.test(l)), 'the moved-fingerprint observation is logged')
   const pe = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('posture_escalated'))
   assert.equal(pe.length, 2, 'the environment-repair probe AND the outer rejection\'s feedback escalation are each ledgered — the observation itself spends nothing')
   assert.ok(pe.some((l) => l.prompt.includes('environment_repair')))
-  assert.ok(pe.some((l) => l.prompt.includes('escalate_feedback_source')), 'Sol r2-1: escalate() still runs for the genuine outer rejection at its already-incremented count')
+  assert.ok(pe.some((l) => l.prompt.includes('escalate_feedback_source')), 'escalate() still runs for the genuine outer rejection at its already-incremented count')
   assert.ok(!pe.some((l) => l.prompt.includes('split_and_rebuild')), 'the observation never pushes the count to the split threshold')
 })
 
-test('D1 repair observation (Sol r1-1 + r2-1): the repair trial clears the Law but the REVIEWER rejects → observation not counted, the outer rejection still escalates — the admitted correction is reviewed by the ESCALATED source, recovery to QA_PASS (no split)', async () => {
+test('repair observation: the repair trial clears the Law but the REVIEWER rejects → observation not counted, the outer rejection still escalates — the admitted correction is reviewed by the ESCALATED source, recovery to QA_PASS (no split)', async () => {
   let trials = 0
   let revN = 0
   const { result, calls } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
@@ -1486,10 +1486,10 @@ test('D1 repair observation (Sol r1-1 + r2-1): the repair trial clears the Law b
   const reviews = labelsOf(calls, ':review:')
   assert.equal(reviews.length, 2, 'the repair\'s green trial reached a reviewer (rejected), then the correction\'s (approved)')
   assert.equal(reviews[0].model, 'opus', 'the repair observation itself is reviewed by the not-yet-escalated source (the outer rejection\'s escalation follows the observation)')
-  assert.equal(reviews[1].model, 'sonnet', 'Sol r2-1: the admitted correction is reviewed by the ESCALATED (swapped-family) source')
+  assert.equal(reviews[1].model, 'sonnet', 'the admitted correction is reviewed by the ESCALATED (swapped-family) source')
   assert.ok(reviews[1].label.endsWith(':esc'))
   assert.equal(count(calls, ':build:'), 3, 'initial + fix1 + the ONE admitted correction')
-  assert.equal(result.built[0].qa, 'QA_PASS', 'round-1 wrongly split here: 2 environmental rejections + the observation\'s reviewer rejection reached the split threshold')
+  assert.equal(result.built[0].qa, 'QA_PASS', 'a naive count (2 environmental rejections + the observation\'s reviewer rejection) would hit the split threshold, but the observation is not counted so the slice does NOT split')
   assert.deepEqual(result.split_required, [])
   const correction = calls.find((c) => c.label.includes(':build:M1:s0:fix2'))
   assert.ok(correction, 'the admitted correction is the fix2 build')
@@ -1501,7 +1501,7 @@ test('D1 repair observation (Sol r1-1 + r2-1): the repair trial clears the Law b
   assert.ok(!pe.some((l) => l.prompt.includes('split_and_rebuild')))
 })
 
-test('D1 cap extension (Sol r2-2): a moved repair at fix === MAX_REVIEW_FIXES still admits its ONE promised correction — the observation consumed no builder attempt, the extension is one-shot, and the correction is reviewed by the escalated source', async () => {
+test('cap extension: a moved repair at fix === MAX_REVIEW_FIXES still admits its ONE promised correction — the observation consumed no builder attempt, the extension is one-shot, and the correction is reviewed by the escalated source', async () => {
   // Sol's reachable sequence: two mechanical rejections, a first infra fingerprint at fix2, the
   // identical infra fingerprint at fix3 (the cap), then a CHANGED repair fingerprint.
   let trials = 0
@@ -1518,7 +1518,7 @@ test('D1 cap extension (Sol r2-2): a moved repair at fix === MAX_REVIEW_FIXES st
     if (label.includes(':review:')) { revN++; return revN <= 2 ? mechReject : reviewOk }
   }))
   const fix4 = calls.find((c) => c.label.includes(':build:M1:s0:fix4'))
-  assert.ok(fix4, 'Sol r2-2: the promised correction is admitted DESPITE the cap — round 2 broke on the cap before it')
+  assert.ok(fix4, 'the promised correction is admitted DESPITE the cap — round 2 broke on the cap before it')
   assert.equal(count(calls, ':build:'), 5, 'initial + fix1..fix3 + the ONE extension correction — never more than one extension')
   assert.equal(count(calls, 'asimov:runner'), 6, 'four cycle trials + the repair trial + the extension correction\'s trial')
   const reviews = labelsOf(calls, ':review:')
@@ -1529,7 +1529,7 @@ test('D1 cap extension (Sol r2-2): a moved repair at fix === MAX_REVIEW_FIXES st
   assert.ok(log.some((l) => /promised correction is still admitted/.test(l)), 'the one-shot cap extension is logged')
 })
 
-test('D1 mixed honesty (Sol r1-5): an identical MIXED repeat closes blocked with class \'mixed\' naming the unresolved assertion(s) — never the pure-infra "not the code" claim', async () => {
+test('mixed honesty: an identical MIXED repeat closes blocked with class \'mixed\' naming the unresolved assertion(s) — never the pure-infra "not the code" claim', async () => {
   const lawBoth = [{ id: 'SC-001', milestone: 'M1', kind: 'shell' }, { id: 'SC-002', milestone: 'M1', kind: 'shell' }]
   const planBoth = [{ objective: 'both', files: [], constraints: '', done_when: 'both work', sc_ids: ['SC-001', 'SC-002'] }]
   const redMixed = { ...runnerOk, law_run_exit: 1, flip_unmet: ['SC-001', 'SC-002'], check_results: [{ id: 'SC-001', exit: 124, timeout: true }, { id: 'SC-002', exit: 1, timeout: false }] }
@@ -1552,19 +1552,19 @@ test('D1 mixed honesty (Sol r1-5): an identical MIXED repeat closes blocked with
   assert.match(blocked[0].prompt, /"unresolved_assertions":\["SC-002"\]/)
 })
 
-test('D5 telemetry (Sol r1-4): a rejected NO-fingerprint slice emits fingerprint:null — never the empty string of a truthy null-fingerprint object', async () => {
+test('telemetry: a rejected NO-fingerprint slice emits fingerprint:null — never the empty string of a truthy null-fingerprint object', async () => {
   const { calls } = await runBuild(baseArgs, mkRespond({ law: lawOne, plan: planOne }, (label) => {
     if (label.includes(':review:')) return { reasoning: 'r', verdict: 'REJECTED', law_green: true, tests_green: true, findings: [{ text: 'stray debug print', finding_class: 'mechanical' }] }
   }))
   const note = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('slice_telemetry'))[0].prompt
   assert.ok(note.includes('"fingerprint":null'), 'a reviewer-rejected (green-Law) slice has NO fingerprint — telemetry must carry null')
-  assert.ok(!note.includes('"fingerprint":""'), 'the truthy null-fingerprint object must not leak "" (Sol r1-4)')
+  assert.ok(!note.includes('"fingerprint":""'), 'the truthy null-fingerprint object must not leak ""')
   assert.match(note, /"first_pass_green":false/)
   assert.match(note, /"attempts":4/)
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
-// ── B4-2 build keystones at capability tier T4 (D2/D3/D4/D5/D6): the Sol evidence analyst (Ryu bump),
+// ── build keystones at capability tier T4 (D2/D3/D4/D5/D6): the Sol evidence analyst (Ryu bump),
 //    the milestone-close ratification pair (Judge Dredd retired), and the correction council. Every
 //    Sol leg rides a receipt-attested codex envelope + an invocation-exact ledger cross-check (the
 //    inlined gate.mjs + council.mjs machinery, driven by the same programmable mock). Fixtures derive
@@ -1594,7 +1594,7 @@ const crossOkB = (payload, keystone, phaseTag, over = {}) => ({
 const rat = (h, over = {}) => ({ reasoning: 'r', artifact_hash: h, verdict: 'APPROVE', divergence_selections: [], findings: [], changed_evidence: [], ...over })
 const corr = (h, choice, over = {}) => ({ reasoning: 'r', artifact_hash: h, findings: [], reasons: ['route'], choice, ...over })
 const CLOSE_FINDING = { finding_id: 'CF-1', claim: 'the goal is not reachable from the entry point', required_change: 'wire the entry point', evidence_refs: ['src/app.js:10'], evidence_class: 'repo_state', executable_check: null }
-// anchorFilesFromPrompt (B42-3) — mirror the Thoth close-anchor: parse the paths from the
+// anchorFilesFromPrompt — mirror the Thoth close-anchor: parse the paths from the
 // 'sha256sum <paths>' one-liner and return one {path, sha256} per named artifact (a real 64-hex
 // digest of the path bytes, so the in-script evidence_manifest_hash is deterministic + exact-coverage).
 const anchorFilesFromPrompt = (prompt) => {
@@ -1609,13 +1609,13 @@ const anchorFilesFromPrompt = (prompt) => {
 function t4Council(cfg = {}) {
   let closeHash = null, corrHash = null, legacyHash = null
   const analystB = cfg.solAnalyst !== undefined ? cfg.solAnalyst : { findings: [], overall: 'fail', report_markdown: '# b' }
-  // ⟨DSGN-B3-4⟩(b): the detection read. DEFAULT = a RATIFIED master_plan checkpoint (the COMMON case — a
+  // the detection read. DEFAULT = a RATIFIED master_plan checkpoint (the COMMON case — a
   // council-ratified plan), so the legacy hook does NOT fire and every existing T4 row is byte-preserved.
   // cfg.checkpoints overrides (e.g. [] ⇒ a legacy plan, or a master_plan_legacy RATIFIED ⇒ resume-reuse).
   const detectCheckpoints = cfg.checkpoints !== undefined ? cfg.checkpoints : [{ kind: 'council_state', keystone_id: 'master_plan', phase: 'RATIFIED', status: 'sealed' }]
   return (label, prompt) => {
     if (label === 'thoth:council-legacy') return { checkpoints: detectCheckpoints }
-    // B3R2-1: build re-anchors the CURRENT plan + reloads the persisted DEADLOCK_RESOLVED certificate.
+    // build re-anchors the CURRENT plan + reloads the persisted DEADLOCK_RESOLVED certificate.
     if (label === 'thoth:deadlock-plan-anchor') return cfg.deadlockPlanAnchor !== undefined ? cfg.deadlockPlanAnchor : { reasoning: 'a', files: anchorFilesFromPrompt(prompt) }
     if (label === 'thoth:deadlock-cert-reload') return cfg.deadlockCert !== undefined ? cfg.deadlockCert : { content: '', sha256: null }
     if (label === 'thoth:legacy-anchor') return cfg.legacyAnchor !== undefined ? cfg.legacyAnchor : { reasoning: 'a', files: anchorFilesFromPrompt(prompt) }
@@ -1653,8 +1653,8 @@ test('D3 milestone close: an ambiguous reconcile at T4 spawns the blind Fable/So
   assert.equal(result.built[0].council.certificate.terminal, 'RATIFIED')
 })
 
-// ── DSGN-B42-2: certificate context exactness — deterministic non-null evidence_manifest_hash, per-sig provenance ──
-test('DSGN-B42-2 certificate context: bundle_hash = plan_hash (the close record IS the artifact), evidence_manifest_hash is non-null + 64-hex, per-signature seat_provenance is distinct', async () => {
+// ── certificate context exactness — deterministic non-null evidence_manifest_hash, per-sig provenance ──
+test('certificate context: bundle_hash = plan_hash (the close record IS the artifact), evidence_manifest_hash is non-null + 64-hex, per-signature seat_provenance is distinct', async () => {
   const { result } = await runBuild(t4args(), mkRespond({}, t4Council()))
   const cert = result.built[0].council.certificate
   assert.equal(cert.plan_hash, cert.decision_bundle_hash, 'no second render on the close pair — plan_hash = bundle_hash')
@@ -1705,7 +1705,7 @@ test('D4 correction council: RETRY ⇒ the sole corrective build fires; ESCALATE
   assert.equal(count(retry.calls, 'fable:correction:M1:c0'), 1, 'the correction council runs BEFORE the corrective build')
   assert.ok(labelsOf(retry.calls, ':build:').some((c) => /correct1/.test(c.label)), 'RETRY ⇒ the sole corrective build fires')
   assert.equal(retry.result.built[0].council.correction_ruling, 'RETRY')
-  assert.equal(retry.result.built[0].council.correction_terminal, 'RULED', 'B42-5: matched choices ⇒ an honest RULED terminal')
+  assert.equal(retry.result.built[0].council.correction_terminal, 'RULED', 'matched choices ⇒ an honest RULED terminal')
 
   const escalate = await runBuild(t4args(), mkRespond({}, t4Council({ ken: blockingKen, fableCorr: 'ESCALATE', solCorr: 'ESCALATE' })))
   assert.ok(!labelsOf(escalate.calls, ':build:').some((c) => /correct1/.test(c.label)), 'ESCALATE ⇒ NO corrective build spent')
@@ -1722,15 +1722,15 @@ test('D4 correction council: a SPLIT (fable RETRY, sol ESCALATE) ⇒ fail-closed
   const blockingKen = { reasoning: 'r', overall: 'fail', findings: [{ text: 'broken', severity: 'high' }] }
   const split = await runBuild(t4args(), mkRespond({}, t4Council({ ken: blockingKen, fableCorr: 'RETRY', solCorr: 'ESCALATE' })))
   assert.equal(split.result.built[0].council.correction_ruling, 'ESCALATE', 'a split correction routes fail-closed to ESCALATE')
-  assert.equal(split.result.built[0].council.correction_terminal, 'BLOCKED', 'B42-5: a LIVE legal split is an honest BLOCKED terminal (not silently unlabeled)')
+  assert.equal(split.result.built[0].council.correction_terminal, 'BLOCKED', 'a LIVE legal split is an honest BLOCKED terminal (not silently unlabeled)')
   assert.ok(!labelsOf(split.calls, ':build:').some((c) => /correct1/.test(c.label)))
   const dead = await runBuild(t4args(), mkRespond({}, t4Council({ ken: blockingKen, solCorr: 'dead' })))
   assert.equal(dead.result.built[0].council.correction_ruling, 'ESCALATE', 'a dead correction seat routes fail-closed to ESCALATE')
-  assert.equal(dead.result.built[0].council.correction_terminal, 'DEGRADED', 'B42-5: a dead correction seat is an honest DEGRADED terminal')
+  assert.equal(dead.result.built[0].council.correction_terminal, 'DEGRADED', 'a dead correction seat is an honest DEGRADED terminal')
 })
 
-// ── DSGN-B42-1: the frozen close_council_findings reach the correction packet AND the corrective fixNote ──
-test('DSGN-B42-1 council-findings carriage: a blocked close freezes its findings into qaFindings, the correction-council packet, AND the corrective build fixNote (verbatim IDs)', async () => {
+// ── the frozen close_council_findings reach the correction packet AND the corrective fixNote ──
+test('council-findings carriage: a blocked close freezes its findings into qaFindings, the correction-council packet, AND the corrective build fixNote (verbatim IDs)', async () => {
   const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council({ fableClose: (h) => ({ ...rat(h), verdict: 'BLOCK', findings: [CLOSE_FINDING] }), fableCorr: 'RETRY', solCorr: 'RETRY' })))
   assert.equal(result.built[0].council.close_terminal, 'BLOCKED')
   const corrFable = calls.find((c) => c.label === 'fable:correction:M1:c0').prompt
@@ -1740,8 +1740,8 @@ test('DSGN-B42-1 council-findings carriage: a blocked close freezes its findings
   assert.match(correctBuild, /CF-1/, 'the corrective build fixNote carries the frozen finding id — never spent blind to what blocked the close')
 })
 
-// ── B42-2: the Sol evidence analyst packet NAMES the per-milestone/cycle artifacts (script-derived) ──
-test('B42-2 analyst packet names the artifacts: the Sol evidence analyst packet + brief name law.json + the last trial\'s results/suite/run files (from lastRunId), not just the evidence-dir root', async () => {
+// ── the Sol evidence analyst packet NAMES the per-milestone/cycle artifacts (script-derived) ──
+test('analyst packet names the artifacts: the Sol evidence analyst packet + brief name law.json + the last trial\'s results/suite/run files (from lastRunId), not just the evidence-dir root', async () => {
   const { calls } = await runBuild(t4args(), mkRespond({}, t4Council()))
   const ryu = calls.find((c) => c.label === 'ryu:qa:M1:c0').prompt
   assert.match(ryu, /\/tmp\/kiln-x\/\.kiln\/law\.json/, 'law.json is named')
@@ -1749,15 +1749,15 @@ test('B42-2 analyst packet names the artifacts: the Sol evidence analyst packet 
   assert.match(ryu, /evidence\/RUN1\/suite\.log/, 'the last trial suite log is named')
   assert.match(ryu, /evidence\/RUN1\/run\.json/, 'the run manifest is named')
   assert.match(ryu, /"evidence_artifacts":\[/, 'the packet carries the NAMED evidence_artifacts, not the bare dir root')
-  // B42-2 derived-probe semantics: a shell-only milestone has no probe SCs ⇒ NO derivation leg is
+  // derived-probe semantics: a shell-only milestone has no probe SCs ⇒ NO derivation leg is
   // dispatched and NO probe artifact is named (the analyst list derives from executed state, never the Law).
   assert.equal(count(calls, 'thoth:probe-exec'), 0, 'no probe SCs ⇒ no derivation leg dispatched (logic milestone byte-preserved)')
   const ryuArtifacts = (ryu.match(/"evidence_artifacts":\[([^\]]*)\]/) || [])[1] || ''
   assert.doesNotMatch(ryuArtifacts, /probe/, 'a shell-only milestone names NO probe artifact in the evidence_artifacts list')
 })
 
-// ── B42-3: the close record BINDS names to hashes (a Thoth anchor); a dead/partial anchor ⇒ DEGRADED ──
-test('B42-3 evidence-bound close: a Thoth transcription leg binds each NAMED artifact to its sha256, both packets carry the COMPLETE closeRecord, and a dead/partial anchor ⇒ DEGRADED (the certificate never binds unhashed names)', async () => {
+// ── the close record BINDS names to hashes (a Thoth anchor); a dead/partial anchor ⇒ DEGRADED ──
+test('evidence-bound close: a Thoth transcription leg binds each NAMED artifact to its sha256, both packets carry the COMPLETE closeRecord, and a dead/partial anchor ⇒ DEGRADED (the certificate never binds unhashed names)', async () => {
   // a dead/partial anchor fails the close CLOSED — the certificate must never bind unhashed names
   const deadAnchor = await runBuild(t4args(), mkRespond({}, t4Council({ closeAnchor: { reasoning: 'a', files: [] }, fableCorr: 'ESCALATE', solCorr: 'ESCALATE' })))
   assert.equal(deadAnchor.result.built[0].council.close_terminal, 'DEGRADED', 'a dead/partial anchor fails the close CLOSED')
@@ -1773,22 +1773,22 @@ test('B42-3 evidence-bound close: a Thoth transcription leg binds each NAMED art
   const fableClose = calls.find((c) => c.label === 'fable:close:M1:c0').prompt
   assert.match(fableClose, /evidence_refs/, 'the fable prompt carries the complete frozen closeRecord')
   assert.match(fableClose, /results\.jsonl/, 'the last trial results are bound')
-  // AMB-B42-2: a suite-recorded build (buildOk.test_command = 'npm test') names the FULL five-artifact
+  // a suite-recorded build (buildOk.test_command = 'npm test') names the FULL five-artifact
   // manifest — law.json + results.jsonl + suite.log + suite.jsonl + run.json — and states it honestly.
   assert.match(solClose, /suite\.log/, 'a suite-recorded build binds suite.log')
   assert.match(solClose, /suite\.jsonl/, 'and suite.jsonl')
   assert.match(solClose, /"suite_recorded":true/, 'the close record honestly states the full manifest it binds')
   const anchor = calls.find((c) => c.label === 'thoth:close-anchor:M1:c0').prompt
   assert.equal(anchorFilesFromPrompt(anchor).length, 5, 'the full five-artifact manifest (law + results + suite.log + suite.jsonl + run)')
-  // B42-3 derived-probe semantics: a shell-only milestone binds NO probe artifact — the close manifest
+  // derived-probe semantics: a shell-only milestone binds NO probe artifact — the close manifest
   // never names probe-<SC> files that the trial did not record (derived from executed state, not the Law).
   assert.doesNotMatch(anchor, /probe-/, 'a shell-only milestone binds NO probe artifact into the close manifest')
   assert.match(solClose, /"executed_probe_ids":\[\]/, 'the close record honestly states an empty executed-probe set when the milestone has no probe SCs')
 })
 
-// ── AMB-B42-2: a genuinely suite-less product at the ambiguous close names the REDUCED manifest — no
+// ── a genuinely suite-less product at the ambiguous close names the REDUCED manifest — no
 //    absent suite file is named, so the pair CONVENES (suite_recorded:false) instead of DEGRADING ──
-test('AMB-B42-2 suite-less close: a build that recorded NO project suite names only law.json + results.jsonl + run.json — the pair CONVENES over the reduced hashed manifest (suite_recorded:false), never a spurious DEGRADE', async () => {
+test('suite-less close: a build that recorded NO project suite names only law.json + results.jsonl + run.json — the pair CONVENES over the reduced hashed manifest (suite_recorded:false), never a spurious DEGRADE', async () => {
   const council = t4Council()
   const suiteless = (label, prompt, model) => {
     if (label.includes(':build:')) return { ...buildOk, test_command: undefined }
@@ -1807,7 +1807,7 @@ test('AMB-B42-2 suite-less close: a build that recorded NO project suite names o
   const solClose = calls.find((c) => c.label === 'sol:close:M1:c0').prompt
   assert.match(solClose, /"suite_recorded":false/, 'the close record honestly states the reduced manifest it binds')
   assert.doesNotMatch(solClose, /suite\.log/, 'the reduced evidence_refs bind no absent suite file')
-  // B42-2 fix (brief point 4): the Sol analyst's NAMED list (the packet's evidence_artifacts) gets the
+  // fix (brief point 4): the Sol analyst's NAMED list (the packet's evidence_artifacts) gets the
   // SAME script-side conditioning, so the analyst list and the close-anchor list never disagree.
   const ryu = calls.find((c) => c.label === 'ryu:qa:M1:c0').prompt
   const ryuArtifacts = (ryu.match(/"evidence_artifacts":\[([^\]]*)\]/) || [])[1] || ''
@@ -1815,26 +1815,26 @@ test('AMB-B42-2 suite-less close: a build that recorded NO project suite names o
   assert.match(ryuArtifacts, /results\.jsonl/, 'results.jsonl stays named in the analyst list')
 })
 
-// ── B42-2/B42-3 (derived-probe semantics): probe artifacts derive from the trial's RECORDED execution
+// ── (derived-probe semantics): probe artifacts derive from the trial's RECORDED execution
 //    state — a DEFERRED probe is named NOWHERE; an EXECUTED probe is named in the analyst packet AND the
 //    close manifest AND hash-bound in evidence_refs. ONE derivation leg feeds both named lists. ──
-test('B42-2/B42-3 derived-probe close: a DEFERRED probe SC is named nowhere (analyst packet + close manifest both omit it) while an EXECUTED probe SC is named in BOTH and hash-bound in evidence_refs (single derivation leg)', async () => {
+test('derived-probe close: a DEFERRED probe SC is named nowhere (analyst packet + close manifest both omit it) while an EXECUTED probe SC is named in BOTH and hash-bound in evidence_refs (single derivation leg)', async () => {
   const lawProbeTwo = [{ id: 'SC-001', milestone: 'M1', kind: 'probe' }, { id: 'SC-002', milestone: 'M1', kind: 'probe' }]
   const state = { milestones: [uiMilestone()], law: lawProbeTwo, plan: planTwo }
   // the single derivation leg reports SC-001 EXECUTED (a recorded exit row) and SC-002 NOT (deferred → no artifacts)
   const { result, calls } = await runBuild(t4args(), mkRespond(state, t4Council({ probeExec: { executed_ids: ['SC-001'] } })))
   assert.equal(count(calls, 'thoth:probe-exec:M1:c0'), 1, 'the single probe-execution derivation leg runs once per gate cycle')
-  // (B42-2) the analyst packet NAMES the executed probe artifacts and OMITS the deferred one
+  // the analyst packet NAMES the executed probe artifacts and OMITS the deferred one
   const ryu = calls.find((c) => c.label === 'ryu:qa:M1:c0').prompt
   assert.match(ryu, /evidence\/RUN1\/probe-SC-001\.json/, 'the executed probe result is named in the analyst packet')
   assert.match(ryu, /evidence\/RUN1\/probe-SC-001\.log/, 'the executed probe log is named in the analyst packet')
   assert.doesNotMatch(ryu, /probe-SC-002/, 'a DEFERRED probe left no artifacts — the analyst packet names it NOWHERE (never the Law probe list)')
-  // (B42-3) the close anchor HASHES the executed probe artifacts and OMITS the deferred one
+  // the close anchor HASHES the executed probe artifacts and OMITS the deferred one
   const anchor = calls.find((c) => c.label === 'thoth:close-anchor:M1:c0').prompt
   assert.match(anchor, /probe-SC-001\.json/, 'the close anchor hashes the executed probe result')
   assert.match(anchor, /probe-SC-001\.log/, 'and the executed probe log')
   assert.doesNotMatch(anchor, /probe-SC-002/, 'the close anchor never hashes a deferred probe artifact')
-  // (B42-3) the executed probe artifacts ENTER closeRecord.evidence_refs (hash-bound) + executed_probe_ids
+  // the executed probe artifacts ENTER closeRecord.evidence_refs (hash-bound) + executed_probe_ids
   const solClose = calls.find((c) => c.label === 'sol:close:M1:c0').prompt
   assert.match(solClose, /"path":"[^"]*probe-SC-001\.json","sha256":"[0-9a-f]{64}"/, 'the executed probe result is hash-bound in evidence_refs (never a bare path)')
   assert.match(solClose, /"executed_probe_ids":\["SC-001"\]/, 'the close record states exactly the executed probe id it binds')
@@ -1844,8 +1844,8 @@ test('B42-2/B42-3 derived-probe close: a DEFERRED probe SC is named nowhere (ana
   assert.equal(result.built[0].council.close_terminal, 'RATIFIED')
 })
 
-// ── B42-4: per-slice fingerprint + attempts ride the correction packet (retained on the slice records) ──
-test('B42-4 correction telemetry: the correction packet carries per-slice fingerprint + attempts (retained on the slice records, passed through sliceTelemetry)', async () => {
+// ── per-slice fingerprint + attempts ride the correction packet (retained on the slice records) ──
+test('correction telemetry: the correction packet carries per-slice fingerprint + attempts (retained on the slice records, passed through sliceTelemetry)', async () => {
   const blockingKen = { reasoning: 'r', overall: 'fail', findings: [{ text: 'list renders nothing', severity: 'critical' }] }
   const { calls } = await runBuild(t4args(), mkRespond({}, t4Council({ ken: blockingKen, fableCorr: 'RETRY', solCorr: 'RETRY' })))
   const corrFable = calls.find((c) => c.label === 'fable:correction:M1:c0').prompt
@@ -1856,7 +1856,7 @@ test('B42-4 correction telemetry: the correction packet carries per-slice finger
   assert.match(corrSol, /"attempts":/)
 })
 
-test('B42-4 correction telemetry VALUE: a reject-then-green slice records fingerprint:null — the last attempt was green, never the overcome failure signature (Sol r2 seed: the value, not just the key)', async () => {
+test('correction telemetry VALUE: a reject-then-green slice records fingerprint:null — the last attempt was green, never the overcome failure signature', async () => {
   const blockingKen = { reasoning: 'r', overall: 'fail', findings: [{ text: 'x', severity: 'critical' }] }
   const council = t4Council({ ken: blockingKen, fableCorr: 'RETRY', solCorr: 'RETRY' })
   let trials = 0
@@ -1869,13 +1869,13 @@ test('B42-4 correction telemetry VALUE: a reject-then-green slice records finger
   const corrFable = calls.find((c) => c.label === 'fable:correction:M1:c0').prompt
   const tel = JSON.parse(corrFable.match(/Slice telemetry: (\[[^\n]*\])/)[1])
   const s0 = tel.find((s) => s.id === 'M1:s0')
-  assert.equal(s0.fingerprint, null, 'B42-4: an APPROVED (reject-then-green) slice carries fingerprint:null — the decisive trial was green, no failure signature')
+  assert.equal(s0.fingerprint, null, 'an APPROVED (reject-then-green) slice carries fingerprint:null — the decisive trial was green, no failure signature')
   assert.ok(s0.attempts >= 2, 'the slice really did retry (fix0 red → fix1 green) before approval — the null is earned, not vacuous')
   assert.ok(!/assertion\|SC-001/.test(corrFable), 'the overcome assertion signature never leaks into the correction telemetry')
 })
 
-// ── B42-5: the correction heads' findings + reasons are RETAINED and ride qaFindings verbatim ──
-test('B42-5 correction findings carried: ESCALATE rides the heads\' retained findings + reasons verbatim into qaFindings (never generic synthesized prose), with an honest RULED terminal', async () => {
+// ── the correction heads' findings + reasons are RETAINED and ride qaFindings verbatim ──
+test('correction findings carried: ESCALATE rides the heads\' retained findings + reasons verbatim into qaFindings (never generic synthesized prose), with an honest RULED terminal', async () => {
   const blockingKen = { reasoning: 'r', overall: 'fail', findings: [{ text: 'broken', severity: 'high' }] }
   const { result } = await runBuild(t4args(), mkRespond({}, t4Council({ ken: blockingKen, fableCorr: 'ESCALATE', solCorr: 'ESCALATE', corrOver: { findings: [{ text: 'the route needs a conductor decision', severity: 'high' }], reasons: ['beyond one corrective build'] } })))
   assert.equal(result.built[0].council.correction_ruling, 'ESCALATE')
@@ -1884,7 +1884,7 @@ test('B42-5 correction findings carried: ESCALATE rides the heads\' retained fin
   assert.ok(result.built[0].findings.some((f) => /beyond one corrective build/.test(f)), 'the correction reason rides qaFindings verbatim')
 })
 
-test('B42-5 dead-seat carriage: a DEAD Sol correction seat still carries the SURVIVING Fable head\'s findings + reasons verbatim into qaFindings AND the council_ruling note (never discarded on a degraded pair)', async () => {
+test('dead-seat carriage: a DEAD Sol correction seat still carries the SURVIVING Fable head\'s findings + reasons verbatim into qaFindings AND the council_ruling note (never discarded on a degraded pair)', async () => {
   const blockingKen = { reasoning: 'r', overall: 'fail', findings: [{ text: 'broken', severity: 'high' }] }
   // sol correction seat is DEAD (no receipt); the fable head survives with its own findings + reasons.
   const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council({ ken: blockingKen, solCorr: 'dead', corrOver: { findings: [{ text: 'the surviving head still ruled the route', severity: 'high' }], reasons: ['the fable seat reasoning survives the dead sol seat'] } })))
@@ -1896,8 +1896,8 @@ test('B42-5 dead-seat carriage: a DEAD Sol correction seat still carries the SUR
   assert.ok(ruling && /the surviving head still ruled the route/.test(ruling), 'the council_ruling note carries the surviving head\'s finding')
 })
 
-// ── B42-7: an invalid close ratification degrades honestly — never mislabeled BLOCKED ──
-test('B42-7 invalid close ratification: dual APPROVE echoing a WRONG artifact_hash ⇒ DEGRADED (never mislabeled BLOCKED, never a frozen-findings carry from an invalid verdict)', async () => {
+// ── an invalid close ratification degrades honestly — never mislabeled BLOCKED ──
+test('invalid close ratification: dual APPROVE echoing a WRONG artifact_hash ⇒ DEGRADED (never mislabeled BLOCKED, never a frozen-findings carry from an invalid verdict)', async () => {
   const badHash = '9'.repeat(64)
   const { result } = await runBuild(t4args(), mkRespond({}, t4Council({ fableClose: () => rat(badHash), solClose: () => rat(badHash), fableCorr: 'ESCALATE', solCorr: 'ESCALATE' })))
   assert.equal(result.built[0].qa, 'QA_FAIL')
@@ -1914,9 +1914,9 @@ test('red-findings monotonicity: a blocking reconcile ⇒ computed QA_FAIL with 
   assert.equal(result.built[0].qa, 'QA_FAIL')
 })
 
-// ── B42-1 (the fail-open catch): promised-but-tokenless ⇒ analyst B is a DEAD SEAT (zero legacy Ryu),
+// ── (the fail-open catch): promised-but-tokenless ⇒ analyst B is a DEAD SEAT (zero legacy Ryu),
 //    QA_FAIL before any computed pass, never a silent Judge Dredd downgrade; sub-T4 byte-preserved ──
-test('B42-1 promised-but-tokenless: T4 + codex but NO runToken, AGREEING zero-blocking analysts ⇒ QA_FAIL DEGRADED with ZERO legacy Ryu dispatches (never a computed QA_PASS, never a Judge Dredd downgrade)', async () => {
+test('promised-but-tokenless: T4 + codex but NO runToken, AGREEING zero-blocking analysts ⇒ QA_FAIL DEGRADED with ZERO legacy Ryu dispatches (never a computed QA_PASS, never a Judge Dredd downgrade)', async () => {
   // The exact fail-open seed (Sol's probe): both analysts would agree with zero blocking. Under the OLD
   // code this computed QA_PASS via the legacy receiptless Ryu. Now analyst B is a DEAD SEAT — no Ryu leg
   // is dispatched, and the reconcile arithmetic (unreadable overall B) fails the boundary CLOSED first.
@@ -1926,7 +1926,7 @@ test('B42-1 promised-but-tokenless: T4 + codex but NO runToken, AGREEING zero-bl
     if (label.startsWith('aristotle:goal-backward')) return { reasoning: 'r', overall: 'pass', findings: [] }
     return undefined
   }))
-  assert.equal(count(calls, 'ryu:qa'), 0, 'B42-1: analyst B is a DEAD SEAT under misconfiguration — NO legacy receiptless Ryu is ever dispatched (zero legacy_ryu_calls)')
+  assert.equal(count(calls, 'ryu:qa'), 0, 'analyst B is a DEAD SEAT under misconfiguration — NO legacy receiptless Ryu is ever dispatched (zero legacy_ryu_calls)')
   assert.equal(count(calls, 'judge-dredd:verdict'), 0, 'no silent downgrade to Judge Dredd')
   assert.equal(count(calls, 'fable:close:M1:c0'), 0, 'the close pair cannot convene without a runToken')
   assert.equal(result.built[0].qa, 'QA_FAIL', 'agreeing zero-blocking analysts no longer compute QA_PASS — the boundary fails CLOSED before any computed pass')
@@ -1949,8 +1949,8 @@ test('D5 sub-T4 byte-preservation: at T3 (no council) an ambiguous reconcile spa
   assert.equal(result.built[0].council, undefined, 'sub-T4 results carry NO council field (byte-preserved)')
 })
 
-// ── B42-6: boundary records — the gate_decision council seat-summary ARRAY + the results[].council fields ──
-test('B42-6 boundary records: the gate_decision ledger append carries a council seat-summary ARRAY (exact shape, COMPUTED bundle_hash), receipts ride a separate council_receipts key, and results[].council carries the honest terminals', async () => {
+// ── boundary records — the gate_decision council seat-summary ARRAY + the results[].council fields ──
+test('boundary records: the gate_decision ledger append carries a council seat-summary ARRAY (exact shape, COMPUTED bundle_hash), receipts ride a separate council_receipts key, and results[].council carries the honest terminals', async () => {
   const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council()))
   const gd = ledgerPrompts(calls).find((p) => p.includes('"type":"gate_decision"'))
   assert.ok(gd, 'a gate_decision event is appended')
@@ -1967,7 +1967,7 @@ test('B42-6 boundary records: the gate_decision ledger append carries a council 
 })
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════
-// ── ⟨DSGN-B3-4⟩(b) THE LEGACY-PLAN HOOK (ruling AMB-B3-3): a run already past architecture whose master
+// ── THE LEGACY-PLAN HOOK (ruling): a run already past architecture whose master
 //    plan predates the twin council — detected by the ABSENCE of a RATIFIED/DEADLOCK_RESOLVED master_plan
 //    council checkpoint in the run ledger (the SAME council_state surface build's milestone gate appends,
 //    architecture.js:944/2235) — is marked legacy_authority; ONE retrospective blind dual ratification of
@@ -1976,7 +1976,7 @@ test('B42-6 boundary records: the gate_decision ledger append carries a council 
 //    council field + a note{kind:'council_ruling'}; anything else ⇒ the honest BLOCKED/DEGRADED terminal
 //    gates the keystone (build's existing council rails). Idempotent on resume; sub-T4 byte-preserved. ──
 // ════════════════════════════════════════════════════════════════════════════════════════════════
-test('B3d legacy hook: a master plan with NO council checkpoint ⇒ detected legacy_authority + ONE retrospective blind dual ratification BEFORE the first milestone close; dual-APPROVE ⇒ the plan advances with a b3-legacy/1 certificate on the build return council field', async () => {
+test('legacy master-plan hook: a master plan with NO council checkpoint ⇒ detected legacy_authority + ONE retrospective blind dual ratification BEFORE the first milestone close; dual-APPROVE ⇒ the plan advances with a b3-legacy/1 certificate on the build return council field', async () => {
   const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council({ checkpoints: [] })))
   const idx = (label) => calls.findIndex((c) => c.label === label)
   assert.equal(count(calls, 'thoth:council-legacy'), 1, 'the detection read fires once at build start')
@@ -1999,7 +1999,7 @@ test('B3d legacy hook: a master plan with NO council checkpoint ⇒ detected leg
   assert.ok(led.some((p) => /"kind":"council_ruling".*"marking":"legacy_authority"/.test(p)), 'detection marks the plan legacy_authority — a NEW note, never a rewrite of a historical event')
 })
 
-test('B3d legacy hook: a legacy plan + a live valid BLOCK ⇒ the honest BLOCKED terminal GATES the build — NO milestone builds, the first milestone close never convenes, the frozen finding surfaced', async () => {
+test('legacy master-plan hook: a legacy plan + a live valid BLOCK ⇒ the honest BLOCKED terminal GATES the build — NO milestone builds, the first milestone close never convenes, the frozen finding surfaced', async () => {
   const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council({ checkpoints: [], fableLegacy: (h) => ({ ...rat(h), verdict: 'BLOCK', findings: [CLOSE_FINDING] }) })))
   assert.equal(result.council.terminal, 'BLOCKED')
   assert.equal(result.council.authority, 'legacy_authority')
@@ -2011,13 +2011,13 @@ test('B3d legacy hook: a legacy plan + a live valid BLOCK ⇒ the honest BLOCKED
   assert.ok(result.findings.some((f) => /CF-1/.test(f)), 'the frozen legacy finding is surfaced on the gate return')
 })
 
-test('B3d legacy hook: a legacy plan + a SPLIT (fable APPROVE, sol BLOCK) ⇒ BLOCKED, the build gated', async () => {
+test('legacy master-plan hook: a legacy plan + a SPLIT (fable APPROVE, sol BLOCK) ⇒ BLOCKED, the build gated', async () => {
   const { result } = await runBuild(t4args(), mkRespond({}, t4Council({ checkpoints: [], solLegacy: (h) => ({ ...rat(h), verdict: 'BLOCK', findings: [CLOSE_FINDING] }) })))
   assert.equal(result.council.terminal, 'BLOCKED')
   assert.deepEqual(result.built, [])
 })
 
-test('B3d legacy hook: a legacy plan + a DEAD Sol seat ⇒ DEGRADED (a missing head is never twin_ratified), the build gated', async () => {
+test('legacy master-plan hook: a legacy plan + a DEAD Sol seat ⇒ DEGRADED (a missing head is never twin_ratified), the build gated', async () => {
   const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council({ checkpoints: [], solLegacy: 'dead' })))
   assert.equal(result.council.terminal, 'DEGRADED')
   assert.equal(result.council.certificate, null)
@@ -2026,7 +2026,7 @@ test('B3d legacy hook: a legacy plan + a DEAD Sol seat ⇒ DEGRADED (a missing h
   assert.equal(count(calls, 'fable:close:M1:c0'), 0)
 })
 
-test('B3d legacy hook: a dual-APPROVE echoing a WRONG artifact_hash ⇒ DEGRADED (an invalid verdict carries no standing findings, never mislabeled BLOCKED)', async () => {
+test('legacy master-plan hook: a dual-APPROVE echoing a WRONG artifact_hash ⇒ DEGRADED (an invalid verdict carries no standing findings, never mislabeled BLOCKED)', async () => {
   const badHash = 'e'.repeat(64)
   const { result } = await runBuild(t4args(), mkRespond({}, t4Council({ checkpoints: [], fableLegacy: () => rat(badHash), solLegacy: () => rat(badHash) })))
   assert.equal(result.council.terminal, 'DEGRADED')
@@ -2034,14 +2034,14 @@ test('B3d legacy hook: a dual-APPROVE echoing a WRONG artifact_hash ⇒ DEGRADED
   assert.deepEqual(result.built, [])
 })
 
-test('B3d legacy hook: a dead evidence anchor (no exact manifest) ⇒ DEGRADED before any ratifier — the retrospective certificate must never bind unhashed names', async () => {
+test('legacy master-plan hook: a dead evidence anchor (no exact manifest) ⇒ DEGRADED before any ratifier — the retrospective certificate must never bind unhashed names', async () => {
   const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council({ checkpoints: [], legacyAnchor: { reasoning: 'a', files: [] } })))
   assert.equal(count(calls, 'fable:legacy-ratify:master_plan:c0'), 0, 'a failed anchor DEGRADES before any ratifier is dispatched')
   assert.equal(result.council.terminal, 'DEGRADED')
   assert.deepEqual(result.built, [])
 })
 
-test('B3d legacy hook: a run WITH a recorded master_plan RATIFIED checkpoint ⇒ the hook does NOT fire (the common case) — no retrospective ratification, the build proceeds normally', async () => {
+test('legacy master-plan hook: a run WITH a recorded master_plan RATIFIED checkpoint ⇒ the hook does NOT fire (the common case) — no retrospective ratification, the build proceeds normally', async () => {
   const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council())) // default detection = master_plan RATIFIED
   assert.equal(count(calls, 'thoth:council-legacy'), 1, 'the detection read still fires (one cheap haiku read)')
   assert.equal(count(calls, 'fable:legacy-ratify:master_plan:c0'), 0, 'a council-ratified plan runs NO retrospective ratification')
@@ -2049,7 +2049,7 @@ test('B3d legacy hook: a run WITH a recorded master_plan RATIFIED checkpoint ⇒
   assert.equal(result.built[0].qa, 'QA_PASS')
 })
 
-// B3R2-1: a DEADLOCK_RESOLVED master_plan row is trusted ONLY when its certificate reloads and the CURRENT
+// a DEADLOCK_RESOLVED master_plan row is trusted ONLY when its certificate reloads and the CURRENT
 // plan re-anchors to the bound bindings. The fixture builds a certificate + a row whose certificate_hash /
 // plan / bundle / template / run-token all agree; the plan anchor's sha of the plan PATH is the current hash.
 const MASTER_PLAN_PATH = `${baseArgs.kilnDir}/master-plan.md`
@@ -2062,7 +2062,7 @@ const mkDeadlockFixture = (planHash) => {
   return { certBytes, certHash, row }
 }
 
-test('B3R2-1 DEADLOCK_RESOLVED detection: a row whose certificate reloads AND whose bindings re-anchor the CURRENT plan satisfies detection ⇒ the legacy hook does NOT fire', async () => {
+test('DEADLOCK_RESOLVED detection: a row whose certificate reloads AND whose bindings re-anchor the CURRENT plan satisfies detection ⇒ the legacy hook does NOT fire', async () => {
   const fx = mkDeadlockFixture(CURRENT_PLAN_HASH) // plan_hash = the CURRENT plan (the anchor's sha of the path)
   const { calls, result } = await runBuild(t4args(), mkRespond({}, t4Council({ checkpoints: [fx.row], deadlockCert: { content: fx.certBytes, sha256: fx.certHash } })))
   assert.equal(count(calls, 'thoth:deadlock-plan-anchor'), 1, 'the CURRENT plan is re-anchored (never trusted on the label alone)')
@@ -2071,7 +2071,7 @@ test('B3R2-1 DEADLOCK_RESOLVED detection: a row whose certificate reloads AND wh
   assert.equal(result.council, undefined)
 })
 
-test('B3R2-1 stale DEADLOCK_RESOLVED row: master-plan.md CHANGED after provisional sealing (the bound plan hash no longer matches the current plan) ⇒ the row is VOID and the legacy re-ratification path runs over the CURRENT plan (never a stale advance)', async () => {
+test('stale DEADLOCK_RESOLVED row: master-plan.md CHANGED after provisional sealing (the bound plan hash no longer matches the current plan) ⇒ the row is VOID and the legacy re-ratification path runs over the CURRENT plan (never a stale advance)', async () => {
   const fx = mkDeadlockFixture('d'.repeat(64)) // the row binds a plan hash that does NOT match the current plan
   const { calls, result } = await runBuild(t4args(), mkRespond({}, t4Council({ checkpoints: [fx.row], deadlockCert: { content: fx.certBytes, sha256: fx.certHash } })))
   assert.equal(count(calls, 'thoth:deadlock-plan-anchor'), 1, 'the current plan is re-anchored')
@@ -2080,7 +2080,7 @@ test('B3R2-1 stale DEADLOCK_RESOLVED row: master-plan.md CHANGED after provision
   assert.ok(result.built[0].qa === 'QA_PASS', 'the re-ratified current plan advances to the milestones')
 })
 
-test('B3R1-15 legacy resume verifies the binding: a prior master_plan_legacy RATIFIED row does NOT authorize a stale advance — the pair RE-anchors + RE-ratifies over the CURRENT plan and returns a FRESH real certificate (a stub row whose binding does not match ⇒ prior_binding_verified:false)', async () => {
+test('legacy resume verifies the binding: a prior master_plan_legacy RATIFIED row does NOT authorize a stale advance — the pair RE-anchors + RE-ratifies over the CURRENT plan and returns a FRESH real certificate (a stub row whose binding does not match ⇒ prior_binding_verified:false)', async () => {
   const { result, calls } = await runBuild(t4args(), mkRespond({}, t4Council({ checkpoints: [{ kind: 'council_state', keystone_id: 'master_plan_legacy', phase: 'RATIFIED', status: 'sealed' }] })))
   assert.equal(count(calls, 'fable:legacy-ratify:master_plan:c0'), 1, 'the retrospective pair RE-RUNS — a stale row never advances without re-verification (the old certificate:null trust is gone)')
   assert.equal(count(calls, 'thoth:legacy-anchor'), 1, 'the plan is RE-anchored over the current bytes')
@@ -2090,7 +2090,7 @@ test('B3R1-15 legacy resume verifies the binding: a prior master_plan_legacy RAT
   assert.equal(result.built[0].qa, 'QA_PASS', 'the plan advances to the milestones')
 })
 
-test('B3d legacy hook: sub-T4 (no codex) NEVER reads council state and NEVER runs the hook — byte-preserved (a legacy plan advances exactly as v3.0.1); a tokenless promised council is gated on councilCapable too', async () => {
+test('legacy master-plan hook: sub-T4 (no codex) NEVER reads council state and NEVER runs the hook — byte-preserved (a legacy plan advances exactly as v3.0.1); a tokenless promised council is gated on councilCapable too', async () => {
   const noCodex = await runBuild({ ...baseArgs, codexAvailable: false, capabilityTier: 'T4', runToken: T4TOKEN }, mkRespond())
   assert.equal(count(noCodex.calls, 'thoth:council-legacy'), 0, 'sub-T4 reads no council state')
   assert.equal(count(noCodex.calls, 'fable:legacy-ratify:master_plan:c0'), 0)
@@ -2101,14 +2101,14 @@ test('B3d legacy hook: sub-T4 (no codex) NEVER reads council state and NEVER run
   assert.equal(count(noToken.calls, 'fable:legacy-ratify:master_plan:c0'), 0)
 })
 
-// WS-F end-to-end migration: the SAME detection contract the thoth:council-legacy agent implements
+// end-to-end migration: the SAME detection contract the thoth:council-legacy agent implements
 // (build.js:1278) runs over the REAL fixture events.jsonl BYTES — the historically-faithful v3.0.1
 // ledger written by writeInflightV301 (migration-inflight.test.mjs), not a hand-coded literal — and
 // its extraction is fed into the mocked build harness, closing the detection→hook loop over a genuine
 // pre-council ledger. A v3.0.1 ledger ⇒ [] ⇒ legacy_authority; the v3.0.2-native ledger carrying a
 // sealed master_plan RATIFIED note ⇒ non-empty ⇒ the hook does NOT fire.
 
-test('WS-F migration end-to-end: the detection contract over the REAL v3.0.1 fixture BYTES yields [], and feeding that extraction into the build harness detects legacy_authority + RATIFIES the unchanged plan (a genuine pre-council resume routes honestly)', async () => {
+test('migration end-to-end: the detection contract over the REAL v3.0.1 fixture BYTES yields [], and feeding that extraction into the build harness detects legacy_authority + RATIFIES the unchanged plan (a genuine pre-council resume routes honestly)', async () => {
   const { dir, kilnDir } = writeInflightV301()
   try {
     const checkpoints = detectSealedCouncil(readEventsText(kilnDir))
@@ -2121,7 +2121,7 @@ test('WS-F migration end-to-end: the detection contract over the REAL v3.0.1 fix
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
-test('WS-F migration end-to-end: the v3.0.2-native fixture BYTES (a sealed master_plan RATIFIED note on the same run) extract a non-empty checkpoint ⇒ the hook does NOT fire (the migration path never mis-fires on a native run)', async () => {
+test('migration end-to-end: the v3.0.2-native fixture BYTES (a sealed master_plan RATIFIED note on the same run) extract a non-empty checkpoint ⇒ the hook does NOT fire (the migration path never mis-fires on a native run)', async () => {
   const { dir, kilnDir } = writeInflightV301({ sealCouncil: true })
   try {
     const checkpoints = detectSealedCouncil(readEventsText(kilnDir))

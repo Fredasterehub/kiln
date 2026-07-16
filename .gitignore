@@ -33,18 +33,18 @@ KILNDEV-MIGRATION.md
 phase3_potentiel.md
 
 # Local dev agents, skills, and IDE state — nothing under .claude/ ships. The kiln-dev process
-# constitution is now local-only (untracked-in-place, operator mandate 2026-07-15).
+# constitution is local-only by design (untracked-in-place).
 .claude/*
 
 # Internal dev working docs (not shipped)
 /SIMPLIFY-v1.4.0.md
 /PLUMBING-AUDIT-*.md
 
-# SIMPLIFY-v1.4.0 Pass 1 dev work tree (briefs, task lists, diffs, handoffs, run log) — the whole
-# dev work tree, dev-protocol templates included, is now local-only (operator mandate 2026-07-15).
+# The dev work tree — briefs, task lists, diffs, handoffs, run logs, dev-protocol templates —
+# is local-only by design (not shipped).
 /.kiln-dev/*
 
-# Dev review tooling — codex bridge + verdict schemas; local-only (operator mandate 2026-07-15)
+# Dev review tooling — codex bridge + verdict schemas; local-only by design
 scripts/dev/
 
 # Smoke test directories
@@ -61,7 +61,7 @@ state/
 /.codex
 /AGENTS.md
 
-# Dev artifacts and untrack-and-keep assets (v2.0.1 repo hygiene)
+# Dev artifacts and untrack-and-keep assets
 brainstorm/
 run-data/
 # Dead v1 test harness — untracked, kept on disk as seed; the live v3 harness at tests/v3/ ships

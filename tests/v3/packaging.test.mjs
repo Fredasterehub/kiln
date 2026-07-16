@@ -1,7 +1,7 @@
-// packaging.test.mjs — P6 T3 acceptance: the honest shopfront (BLUEPRINT §12 + the stale-string
+// packaging.test.mjs — acceptance: the honest shopfront (+ the stale-string
 // riders). Static guards over the manifest, the doctor command, the two READMEs, agents.json's
 // model-tag audit, and .gitignore. These lock the shapes a future edit could silently un-modernize
-// or re-introduce a lying count into — the doctor's probe semantics are §12 letter-for-letter, the
+// or re-introduce a lying count into — the doctor's probe semantics are letter-for-letter, the
 // manifest carries the userConfig surface, and the root README FOOTER is byte-stable (operator-only).
 
 import { test } from 'node:test'
@@ -20,7 +20,7 @@ const agents = JSON.parse(readFileSync(join(PLUGIN, 'data', 'agents.json'), 'utf
 const gitignore = readFileSync(join(ROOT, '.gitignore'), 'utf8')
 const BARE_GPT5 = /GPT-5(?!\.6)/ // "GPT-5" not followed by ".6" — the stale-model string (bare GPT-5 or the retired GPT-5.5)
 
-// ── plugin.json modernization (§12) ─────────────────────────────────────────────────────────────
+// ── plugin.json modernization ─────────────────────────────────────────────────────────────
 test('manifest: $schema + displayName + keeps its identity', () => {
   assert.equal(manifest.$schema, 'https://anthropic.com/claude-code/plugin.schema.json')
   assert.equal(manifest.displayName, 'Kiln')
@@ -47,13 +47,13 @@ test('manifest: description is the 8-stage / GPT-5.6 truth — no lying count', 
   assert.doesNotMatch(manifest.description, BARE_GPT5)
 })
 
-// ── kiln-doctor v3: §12 probe semantics, letter-for-letter ────────────────────────────────────────
+// ── kiln-doctor v3: probe semantics, letter-for-letter ────────────────────────────────────────
 test('doctor: version floor require >= 2.1.198, recommend latest', () => {
   assert.match(doctor, /2\.1\.198/)
   assert.match(doctor, /RECOMMEND latest/)
 })
 
-test('doctor: the §12 capability probes are present verbatim', () => {
+test('doctor: the capability probes are present verbatim', () => {
   assert.match(doctor, /codex exec --skip-git-repo-check "echo ok"/) // codex functional preflight (fresh dirs never false-FAIL)
   assert.match(doctor, /timeout 15 codex exec/)     // the 15s bound
   assert.match(doctor, /@playwright\/mcp/)          // playwright arm 1
@@ -66,15 +66,15 @@ test('doctor: renders resolved tier + verification class into the capability rec
   assert.match(doctor, /T1[\s\S]*T2[\s\S]*T3[\s\S]*T4/)
   assert.match(doctor, /static-only/)
   assert.match(doctor, /state\.json\.capability\b/)
-  assert.doesNotMatch(doctor, /state\.json\.capabilities/) // the plural §12 typo never ships
+  assert.doesNotMatch(doctor, /state\.json\.capabilities/) // the plural typo never ships
 })
 
-test('doctor: Miyamoto ladder credit survives verbatim (P5 T4)', () => {
+test('doctor: Miyamoto ladder credit survives verbatim', () => {
   assert.match(doctor, /the ladder is Miyamoto's design/)
   assert.match(doctor, /is a complete instrument, not a degraded one\./)
 })
 
-test('doctor: documents the sandbox-first + power-user stance (§12)', () => {
+test('doctor: documents the sandbox-first + power-user stance', () => {
   assert.match(doctor, /sandbox-first/)
   assert.match(doctor, /--dangerously-skip-permissions/)
 })
@@ -125,7 +125,7 @@ test('root README: the footer is untouched — byte-identical (operator law)', (
   assert.ok(rootReadme.includes(mitFooter), 'the MIT sub-footer is byte-stable')
 })
 
-// ── agents.json model-tag audit (P5 T4 flag 6): every tag verified true against a live v3 seat ────
+// ── agents.json model-tag audit (flag 6): every tag verified true against a live v3 seat ────
 test('agents.json: audited model tags are TRUE against live v3 seats (all stay)', () => {
   const byName = agents
   // Sphinx reviews logic slices → routing().reviewModel = 'opus'

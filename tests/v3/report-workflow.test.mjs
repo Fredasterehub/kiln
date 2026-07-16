@@ -88,7 +88,7 @@ test('report.js pluginRoot absent: brackets + beats degrade to log lines — no 
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
-// ── B4-3 D5 (+ ⟨DSGN-B43-1⟩): report at capability tier T4 — the signoff pair after the existence gate.
+// ── (+): report at capability tier T4 — the signoff pair after the existence gate.
 //    Omega still AUTHORS. Dual-APPROVE ⇒ signed_off:true + certificate AND ONLY THEN stage_completed;
 //    ANY other outcome ⇒ signed_off:false + honest terminal + the UNSIGNED report returned + NO
 //    stage_completed. Sub-T4 omits signed_off (never a false claim) and keeps the existence-gated
@@ -134,12 +134,12 @@ function t4Respond(cfg = {}) {
   }
 }
 
-test('B4-3 D5 report signoff: at T4 a written REPORT.md convenes the blind Fable/Sol signoff pair; dual-APPROVE ⇒ signed_off:true + a b43-report/1 certificate AND stage_completed (⟨DSGN-B43-1⟩)', async () => {
+test('report signoff: at T4 a written REPORT.md convenes the blind Fable/Sol signoff pair; dual-APPROVE ⇒ signed_off:true + a b43-report/1 certificate AND stage_completed', async () => {
   const { result, ledgerCmds } = await runReport(t4args(), t4Respond())
   const evs = ledgerCmds.map(eventOf)
   assert.equal(result.signed_off, true)
   assert.equal(result.council.terminal, 'RATIFIED')
-  assert.equal(result.council.seat, 'report_signoff', 'B43-2: the b42-mirrored per-seat summary rides the return (the boundary record for report)')
+  assert.equal(result.council.seat, 'report_signoff', 'the b42-mirrored per-seat summary rides the return (the boundary record for report)')
   assert.equal(result.council.certificate.label, 'twin_ratified')
   assert.equal(result.council.certificate.signatures[0].renderer_version, 'b43-report/1')
   assert.equal(evs.filter((e) => e.type === 'stage_completed').length, 1, 'stage_completed fires ONLY after a dual valid APPROVE + certificate')
@@ -147,7 +147,7 @@ test('B4-3 D5 report signoff: at T4 a written REPORT.md convenes the blind Fable
   assert.ok(keys.includes('report.signed'), 'the signed beat rides on a RATIFIED signoff')
 })
 
-test('B4-3 D5 report signoff ⟨DSGN-B43-1⟩: a BLOCK ⇒ signed_off:false, the UNSIGNED report still returned, NO stage_completed (completion is council-gated at T4)', async () => {
+test('report signoff: a BLOCK ⇒ signed_off:false, the UNSIGNED report still returned, NO stage_completed (completion is council-gated at T4)', async () => {
   const { result, ledgerCmds } = await runReport(t4args(), t4Respond({ fableSig: (h) => ({ ...rat(h), verdict: 'BLOCK', findings: [SIGN_FINDING] }) }))
   const evs = ledgerCmds.map(eventOf)
   assert.equal(result.signed_off, false)
@@ -157,21 +157,21 @@ test('B4-3 D5 report signoff ⟨DSGN-B43-1⟩: a BLOCK ⇒ signed_off:false, the
   assert.equal(evs.filter((e) => e.type === 'stage_completed').length, 0, 'a BLOCKED signoff withholds completion — the projection stays at report')
 })
 
-test('B4-3 D5 report signoff: a DEAD Sol seat (no receipt) ⇒ DEGRADED, signed_off:false, NO stage_completed', async () => {
+test('report signoff: a DEAD Sol seat (no receipt) ⇒ DEGRADED, signed_off:false, NO stage_completed', async () => {
   const { result, ledgerCmds } = await runReport(t4args(), t4Respond({ solSig: 'dead' }))
   assert.equal(result.signed_off, false)
   assert.equal(result.council.terminal, 'DEGRADED')
   assert.equal(ledgerCmds.map(eventOf).filter((e) => e.type === 'stage_completed').length, 0)
 })
 
-test('B4-3 D5 report signoff promised-but-tokenless: T4 + codex but NO runToken ⇒ signed_off:false + DEGRADED + NO stage_completed', async () => {
+test('report signoff promised-but-tokenless: T4 + codex but NO runToken ⇒ signed_off:false + DEGRADED + NO stage_completed', async () => {
   const { result, ledgerCmds } = await runReport({ ...baseArgs, codexAvailable: true, capabilityTier: 'T4' }, t4Respond())
   assert.equal(result.signed_off, false)
   assert.equal(result.council.terminal, 'DEGRADED')
   assert.equal(ledgerCmds.map(eventOf).filter((e) => e.type === 'stage_completed').length, 0)
 })
 
-test('B4-3 D5 report signoff sub-T4 byte-preservation: at T3 (no council) a written REPORT.md keeps the existence-gated completion, signed_off ABSENT (never a false claim)', async () => {
+test('report signoff sub-T4 byte-preservation: at T3 (no council) a written REPORT.md keeps the existence-gated completion, signed_off ABSENT (never a false claim)', async () => {
   const { result, ledgerCmds } = await runReport({ ...baseArgs, codexAvailable: true, capabilityTier: 'T3' }, t4Respond())
   const evs = ledgerCmds.map(eventOf)
   assert.equal(result.signed_off, undefined, 'sub-T4 never claims signed_off')
@@ -180,7 +180,7 @@ test('B4-3 D5 report signoff sub-T4 byte-preservation: at T3 (no council) a writ
   assert.ok(evs.filter((e) => e.type === 'note').map((e) => e.data.key).includes('report.signed'))
 })
 
-test('B4-3 D5 report signoff: a missing REPORT.md never reaches the council — signed_off:false, terminal null, NO completion', async () => {
+test('report signoff: a missing REPORT.md never reaches the council — signed_off:false, terminal null, NO completion', async () => {
   const { result, ledgerCmds } = await runReport(t4args(), t4Respond({ verify: { exists: false } }))
   assert.equal(result.signed_off, false)
   assert.equal(result.council.terminal, null, 'the existence gate precedes the council — a missing artifact never convenes it')

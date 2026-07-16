@@ -1,4 +1,4 @@
-// index.js — the directory entry that keeps `node --test tests/v3/` green (BLUEPRINT §13).
+// index.js — the directory entry that keeps `node --test tests/v3/` green.
 // Modern node (observed on the 22.x line) treats positional --test arguments as literal entry
 // paths, not scan roots: the directory itself is loaded as a module, so without an entry the
 // canonical command dies with "Cannot find module .../tests/v3". This entry statically imports

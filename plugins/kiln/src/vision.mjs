@@ -1,4 +1,4 @@
-// vision.mjs — the VISION v3 pure core (BLUEPRINT §10, P4 T1): the format constants and the
+// vision.mjs — the VISION v3 pure core: the format constants and the
 // frontmatter contract. Consumed by scripts/kiln-vision.mjs (the gate CLI) and importable by the
 // harness; inlinable into workflows by scripts/bundle-workflows.mjs where a script needs the
 // constants. Pure: no I/O, no clocks — workflow determinism rules apply here.
@@ -43,7 +43,7 @@ export const LEDGER_TYPES = [
 // ({code, path, message}); returns the parsed object or null when no block exists.
 export function parseVisionFrontmatter(text, err) {
   if (!text.startsWith('---\n')) { err('missing_frontmatter', 'frontmatter', 'VISION must open with a --- frontmatter block (the authoritative machine surface)'); return null }
-  // The terminator is a line that is EXACTLY --- (T1 review r1: '\n---' alone would accept
+  // The terminator is a line that is EXACTLY --- ('\n---' alone would accept
   // '---not-a-terminator' as a closing fence).
   const all = text.slice(4).split('\n')
   const endIdx = all.findIndex((l) => l === '---')

@@ -1,5 +1,5 @@
-// vision.test.mjs — P4 T1 acceptance: the VISION v3 format contract + the deterministic gate
-// (BLUEPRINT §10 change 6 + the P4 contract review rulings). Two floors:
+// vision.test.mjs — acceptance: the VISION v3 format contract + the deterministic gate
+//. Two floors:
 //   1. scripts/kiln-vision.mjs validate — the POST-COMPILE gate: frontmatter schema mirror,
 //      closed section universe, line-grammar counts vs frontmatter counts (a lying count is a
 //      broken artifact), marker arithmetic + the gated-status zero rule, frontmatter↔section OQ
@@ -112,7 +112,7 @@ test('validate: a missing section and an unknown section are both violations —
   })
 })
 
-test('validate: the frontmatter terminator is a line that is EXACTLY --- (r1: a ---suffix line is not a fence)', () => {
+test('validate: the frontmatter terminator is a line that is EXACTLY --- (a ---suffix line is not a fence)', () => {
   const broken = makeVision().replace(/\n---\n/, '\n---not-a-terminator\n')
   withVision(broken, (f) => {
     assert.ok(codesOf(cli('validate', f, '--json')).includes('missing_frontmatter'))
@@ -281,7 +281,7 @@ test('ledger-gate: append-only discipline — seq must strictly increase, lines 
   withLedger(makeLedger((evs) => evs.map((e) => (e.type === 'idea' ? { ...e, data: { text: e.data.text } } : e))), (f) => {
     assert.ok(codesOf(cli('ledger-gate', f, '--json')).includes('missing_authorship'))
   })
-  // r1: an interior blank line is corruption evidence; only the trailing newline is legal
+  // an interior blank line is corruption evidence; only the trailing newline is legal
   withLedger(makeLedger().replace('\n{"seq":2', '\n\n{"seq":2'), (f) => {
     const codes = codesOf(cli('ledger-gate', f, '--json'))
     assert.ok(codes.includes('invalid_line'), 'interior blank line flagged')
@@ -289,7 +289,7 @@ test('ledger-gate: append-only discipline — seq must strictly increase, lines 
   withLedger(makeLedger(), (f) => {
     assert.equal(cli('ledger-gate', f, '--json').status, 0, 'the single trailing newline stays legal')
   })
-  // r1: a marker-less clarification cannot evade the resolved-or-acknowledged rule
+  // a marker-less clarification cannot evade the resolved-or-acknowledged rule
   withLedger(makeLedger((evs) => evs.map((e) => (e.type === 'clarification' ? { ...e, data: { resolved: false, acknowledged: false } } : e))), (f) => {
     const codes = codesOf(cli('ledger-gate', f, '--json'))
     assert.ok(codes.includes('invalid_value'), `a clarification without a marker is itself a typed defect — got [${codes.join(', ')}]`)

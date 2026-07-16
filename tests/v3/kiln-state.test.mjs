@@ -1,4 +1,4 @@
-// kiln-state.test.mjs — end-to-end floor for plugins/kiln/scripts/kiln-state.mjs (BLUEPRINT §4, §13).
+// kiln-state.test.mjs — end-to-end floor for plugins/kiln/scripts/kiln-state.mjs.
 // Spawns the real CLI against throwaway dirs: the contract under test is the command surface —
 // exit codes included — exactly as agents drive it via Bash. Covers init/append/project/validate/
 // summary, truncated-final-line recovery, corruption detection, and projection determinism.
@@ -92,7 +92,7 @@ test('append: stage_completed sets last_completed_stage and bumps stage per the 
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
-test('append: the workflow stage brackets fold per the order table — gauge→research, build→validate, validate→report (P3.6 T4)', () => {
+test('append: the workflow stage brackets fold per the order table — gauge→research, build→validate, validate→report', () => {
   const dir = sandbox(); const kilnDir = join(dir, '.kiln')
   try {
     init(kilnDir)
@@ -320,7 +320,7 @@ test('summary: renders the human view to stdout and writes NO file', () => {
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
-// ── since: the read-only story-telegraph tail (WS-C/C3) ────────────────────────────────────────
+// ── since: the read-only story-telegraph tail ────────────────────────────────────────
 
 test('since: missing events.jsonl ⇒ exit 0 with {events:[],last_seq:null,truncated:false}, no write', () => {
   const dir = sandbox(); const kilnDir = join(dir, '.kiln')
@@ -419,7 +419,7 @@ test('since: bad usage — missing afterSeq, non-integer cursor, unknown flag, b
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
-// ── since tail: the cursor-bootstrap form (r2 finding 1) ───────────────────────────────────────
+// ── since tail: the cursor-bootstrap form ───────────────────────────────────────
 
 test('since tail: delivers nothing and returns the TRUE ledger tail — never a truncated first seq', () => {
   const dir = sandbox(); const kilnDir = join(dir, '.kiln')

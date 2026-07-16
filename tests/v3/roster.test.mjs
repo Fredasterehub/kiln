@@ -1,4 +1,4 @@
-// roster.test.mjs — P5 T1 acceptance: the Reserved Seven return (BLUEPRINT §11 item 6).
+// roster.test.mjs — acceptance: the Reserved Seven return.
 // The counting fragility gets a harness guard: the roster is 34, the seven rehired personas
 // carry their v3 seat in the role string, lore.json counts 34 wherever it counts personas,
 // and the engine labels the lore event credits actually exist in the shipped bundles

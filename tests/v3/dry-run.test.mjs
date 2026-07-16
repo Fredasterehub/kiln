@@ -106,7 +106,7 @@ test('timeout proof: an infinite async microtask loop is killed and reported as 
   })
 })
 
-test('determinism-poison proof: Date.now() / Math.random() / argless new Date() fail the dry-run exactly like the Workflow runtime (DOGFOOD FINDING 3)', async () => {
+test('determinism-poison proof: Date.now() / Math.random() / argless new Date() fail the dry-run exactly like the Workflow runtime', async () => {
   await inSandbox(async (dir) => {
     // The exact blind spot the live dogfood hit: plain node allows Date.now, the runtime forbids
     // it — build.js crashed in 27ms in the real engine after a green smoke. Each violation class
@@ -134,7 +134,7 @@ test('determinism-poison proof: Date.now() / Math.random() / argless new Date() 
   })
 })
 
-test('gateOnly smoke (P3.5 T3): build.js executes its gateOnly:true branch under the runtime poison stubs — no exception escapes, no clock/host-global slips into the gate-only legs (DOGFOOD FINDING 3 holds)', async () => {
+test('gateOnly smoke: build.js executes its gateOnly:true branch under the runtime poison stubs — no exception escapes, no clock/host-global slips into the gate-only legs (the determinism poison holds)', async () => {
   // The gateOnly path takes a structurally different route (skips Scoring + Forging, runs the
   // gate-only trial + the forced tribunal) — node --check is blind to it, so it must execute under
   // the exact runtime poison the engine enforces. agent() resolves null throughout, exactly as the

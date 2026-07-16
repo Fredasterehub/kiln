@@ -93,7 +93,7 @@ Done when: `npm test src/auth/session` exits 0 and tsc reports no errors.
 | logic builder | gpt-5.6-sol | high | (default) | one slice per call; Done-when = test cmd + exit 0 |
 | UI reviewer / cross-model reviewer | gpt-5.6-sol | high | low (schema) | judge code + static only; read-only |
 | slot-B planner / architect | gpt-5.6-sol | high | low (schema) | outcome-first; no step prescription |
-| Ryu / QA analyst / judge | gpt-5.6-sol | high | low (schema) | adversarial; quote evidence (BLUEPRINT §8 seats Ryu at high; build.js runs it as sonnet transport at model_reasoning_effort="high") |
+| Ryu / QA analyst / judge | gpt-5.6-sol | high | low (schema) | adversarial; quote evidence (build.js runs it as sonnet transport at model_reasoning_effort="high") |
 | pure transform / formatting | gpt-5.6-sol | low or none | low | no reasoning budget needed |
 
 ## Schema & reasoning rules

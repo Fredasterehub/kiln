@@ -1,6 +1,6 @@
 export const meta = {
   name: 'kiln-vision',
-  description: 'Kiln vision-compile leg (BLUEPRINT §10, P4): the tail of the brainstorm stage. The append-only session ledger (.kiln/docs/brainstorm-ledger.jsonl) is the canonical artifact; this workflow gates it mechanically (kiln-vision ledger-gate — an incomplete session can never compile), then ONE fresh-context compiler agent whose SOLE source is the ledger writes .kiln/docs/VISION.md (traceability is structural: the compiler never saw the chat), then the deterministic post-compile gate (kiln-vision validate) rules — with a bounded revise loop (≤2) on typed violations. VISION.md is a DERIVED artifact: regenerable from the ledger at any time, never hand-edited; a re-run recompiles from scratch. On a validator-clean VISION the run ledger gets vision_compiled THEN stage_completed (brainstorm); on exhaustion, neither — vision_valid:false with the typed violations is the conductor\'s escalation payload.',
+  description: 'Kiln vision-compile leg: the tail of the brainstorm stage. The append-only session ledger (.kiln/docs/brainstorm-ledger.jsonl) is the canonical artifact; this workflow gates it mechanically (kiln-vision ledger-gate — an incomplete session can never compile), then ONE fresh-context compiler agent whose SOLE source is the ledger writes .kiln/docs/VISION.md (traceability is structural: the compiler never saw the chat), then the deterministic post-compile gate (kiln-vision validate) rules — with a bounded revise loop (≤2) on typed violations. VISION.md is a DERIVED artifact: regenerable from the ledger at any time, never hand-edited; a re-run recompiles from scratch. On a validator-clean VISION the run ledger gets vision_compiled THEN stage_completed (brainstorm); on exhaustion, neither — vision_valid:false with the typed violations is the conductor\'s escalation payload.',
   phases: [
     { title: 'The Gate', detail: 'kiln-vision ledger-gate — the mechanical pre-compile floor: session_complete terminal, approved section intents, clarify pass, the idea floor' },
     { title: 'The Compilation', detail: 'one fresh-context compiler writes VISION.md from the ledger alone; the validator rules; typed violations drive a bounded revise loop (≤2)' },
@@ -19,7 +19,7 @@ if (!kilnDir || !projectPath) throw new Error('vision.js requires args.kilnDir a
 // pluginRoot is the conductor-resolved absolute $CLAUDE_PLUGIN_ROOT (a launched Workflow can't see
 // ${CLAUDE_PLUGIN_ROOT}). LOAD-BEARING here — unlike an optional ledger append, the kiln-vision CLI
 // IS this workflow's floor and verdict: without it there is no mechanical gate, and a compile
-// without a gate would be exactly the self-graded homework §10 retires. Absence fails CLOSED with a
+// without a gate would be exactly the self-graded homework this leg retires. Absence fails CLOSED with a
 // named reason (the conductor escalates); it never degrades to a gateless compile.
 const pluginRoot = A.pluginRoot
 
@@ -29,7 +29,7 @@ const visionFile = `${docsDir}/VISION.md`
 
 // ── MODEL_VOICE shell (Opus only; inlined from src/voice.mjs by the bundler) ──
 // @inline:voice:MODEL_VOICE,voice
-// ── The single gateAgent (+ receipt attestation), whole src/gate.mjs inlined — the D4 fidelity pair's
+// ── The single gateAgent (+ receipt attestation), whole src/gate.mjs inlined — the fidelity pair's
 //    Sol seat is a Sonnet wrapper over transport:'codex'; gateAgent STRUCTURALLY validates the receipt. ──
 // @gate
 // ── Codex model pins (CODEX_MODEL default + CODEX_FALLBACK, inlined from src/models.mjs) ──
@@ -50,17 +50,17 @@ async function noteClaudeHeadSuccession(phaseName) {
   claudeHeadSuccessionNoted = true
   try { await runLedger('note', { kind: 'capability', event: 'claude_head_demoted', head: 'fable', claude_head: CLAUDE_HEAD_MODEL }, phaseName) } catch { /* best-effort beat */ }
 }
-// ── Twin Council pure core (B4-3 D1/D4) — the SEALED b42 call-site machinery, lifted to src/council.mjs
+// ── Twin Council pure core — the SEALED call-site machinery, lifted to src/council.mjs
 //    and inlined through the SAME @inline:council bundler contract build/validate use (helpers, never
 //    copy-paste). Powers vision's T4 keystone: the fidelity pair between the mechanical checks and the
 //    seal events. INERT on every sub-T4 / no-codex / tokenless path (councilCapable === false). ──
 // @inline:council:COUNCIL_PROTOCOL_VERSION,sha256Hex,canonicalJson,claimTypeForClass,compareEvidence,validateReversal,councilSignature,verifySignature,validateRatification,twinRatified,buildCheckpoint,SHA64_RE,RATIFY_SCHEMA,envelopeSchema,CROSS_CHECK_SCHEMA,LEDGER_APPEND_SCHEMA,CANON_HASH_ONELINER,LEDGER_EXTRACT_ONELINER,councilTemplateHash,seatProv,solWrapperPlan,crossCheckOk,assembleRatifyCertificate,verdictShapeError
 
-// ── Twin Council gating (B4-3 D4/D6). Vision's fidelity council goes council-grade ONLY when the
+// ── Twin Council gating. Vision's fidelity council goes council-grade ONLY when the
 //    capability record promised BOTH heads (T4 = fable + codex) AND the conductor minted a runToken.
 //    codexAvailable defaults true (tier T4 definitionally carries codex; normalizeArgs passes it through
 //    when the conductor sends it). A PROMISED council missing its runToken fails CLOSED (terminal DEGRADED;
-//    NEITHER seal event — never a silent v3.0.1 compile). runTokenRaw lives ONLY in the receipt-script argv. ──
+//    NEITHER seal event — never a silent compile). runTokenRaw lives ONLY in the receipt-script argv. ──
 const codexAvailable = A.codexAvailable !== false
 const runTokenRaw = (typeof A.runToken === 'string' && A.runToken.length > 0) ? A.runToken : null
 const capabilityTier = (A.capabilityTier === 'T1' || A.capabilityTier === 'T2' || A.capabilityTier === 'T3' || A.capabilityTier === 'T4') ? A.capabilityTier : null
@@ -68,7 +68,7 @@ const councilPromised = capabilityTier === 'T4' && codexAvailable
 const councilCapable = councilPromised && runTokenRaw != null
 const councilMisconfigured = councilPromised && runTokenRaw == null
 if (councilMisconfigured) {
-  log('MISCONFIGURED CONDUCTOR — capability tier T4 with both heads reachable but NO runToken: vision\'s fidelity council cannot bind its receipts/seed. The compile fidelity seal fails CLOSED (terminal DEGRADED; NEITHER vision_compiled nor stage_completed — never a silent v3.0.1 compile). Relaunch with the per-run token to convene the council.')
+  log('MISCONFIGURED CONDUCTOR — capability tier T4 with both heads reachable but NO runToken: vision\'s fidelity council cannot bind its receipts/seed. The compile fidelity seal fails CLOSED (terminal DEGRADED; NEITHER vision_compiled nor stage_completed — never a silent compile). Relaunch with the per-run token to convene the council.')
 }
 const councilDir = `${kilnDir}/council/vision`
 const receiptsLedger = `${kilnDir}/council/receipts.jsonl`
@@ -90,7 +90,7 @@ const VISION_FIDELITY_TASK =
   'evidence-bound finding (finding_id unique, nonempty evidence_refs or a real executable_check); an ' +
   'evidence-free verdict is invalid. changed_evidence is [] unless you reverse a prior block.'
 const councilTemplateHashVision = councilTemplateHash({ rubric: VISION_FIDELITY_RUBRIC, ruling_task: VISION_FIDELITY_TASK, renderer: COUNCIL_RENDERER_VISION })
-// EVIDENCE_ANCHOR_SCHEMA / evidenceAnchorPrompt — the b42 anchor: hash the NAMED artifacts into a
+// EVIDENCE_ANCHOR_SCHEMA / evidenceAnchorPrompt — the anchor: hash the NAMED artifacts into a
 // {path, sha256} manifest; a dead/partial anchor ⇒ DEGRADED (the certificate never binds unhashed names).
 const EVIDENCE_ANCHOR_SCHEMA = {
   type: 'object', additionalProperties: false,
@@ -133,7 +133,7 @@ const councilRuling = async (data, phaseName) => {
   try { await runLedger('note', { kind: 'council_ruling', ...data }, phaseName) }
   catch (e) { log(`council ruling not ledgered (non-fatal): ${e && e.message ? e.message : e}`) }
 }
-// runBlindPair — Fable ∥ receipt-attested Sol rule blind over a schema (xhigh, council-grade — D6).
+// runBlindPair — Fable ∥ receipt-attested Sol rule blind over a schema (xhigh, council-grade).
 const runBlindPair = async (cfg) => {
   const sinkF = {}, sinkS = {}
   const plan = solWrapperPlan({ councilDir, pluginRoot, receiptsLedger, runToken: runTokenRaw, keystone: cfg.keystone, transportModel: CODEX_MODEL, phaseTag: cfg.phaseTag, attempt: 1, effort: 'xhigh', payloadSchema: cfg.schema, taskText: cfg.solTaskText, briefBody: cfg.solBrief, packetObj: cfg.solPacket })
@@ -151,7 +151,7 @@ const runBlindPair = async (cfg) => {
   }
   return { degraded: false, rF, rS, sinkF, sinkS, solCross }
 }
-// runVisionFidelity (D4) — the REQUIRED blind fidelity pair over {VISION.md hash, ledger hash, validator
+// runVisionFidelity — the REQUIRED blind fidelity pair over {VISION.md hash, ledger hash, validator
 // verdict}. Dual-APPROVE ⇒ RATIFIED (the caller fires both seal events + rides the certificate); ANY other
 // outcome ⇒ a non-RATIFIED terminal and the caller fires NEITHER seal event (the existing invalid-VISION
 // escalation shape). The compile is FROZEN — the council rules it, never re-authors VISION.md.
@@ -241,13 +241,13 @@ const runVisionFidelity = async (vSummary) => {
   return { terminal: 'BLOCKED', certificate: null, findings: frozen, bundle_hash: bundleHash, receipt_verified: true, ledger_verified: true }
 }
 
-// SPIN flattened to the two staged worker-tree lines (C1 §6, called 0/1): 'The ledger holds every
-// word' is promoted to the vision.gate_clean beat and 'A vision is counted before it is trusted' to
-// the vision.sealed keystone's texture, so neither rots behind a dead index.
+// SPIN carries the two staged worker-tree lines; 'The ledger holds every word' rides the
+// vision.gate_clean beat and 'A vision is counted before it is trusted' the vision.sealed
+// keystone's texture.
 const SPIN = ['Nothing enters the vision that the operator did not say', 'The compiler reads the session, never the chat']
 const spin = (i) => SPIN[((i % SPIN.length) + SPIN.length) % SPIN.length]
 
-// ── The run ledger (BLUEPRINT §3.5): stage brackets + vision_compiled land in events.jsonl via
+// ── The run ledger: stage brackets + vision_compiled land in events.jsonl via
 //    the kiln-state CLI. Thoth appends; gated on pluginRoot and degrades to a log line — an
 //    append failure never fails the stage (unlike the VISION gate itself, which is load-bearing). ──
 async function runLedger(type, data, phaseName) {
@@ -264,13 +264,13 @@ async function runLedger(type, data, phaseName) {
   )
 }
 
-// ── Lore beats (C1 doctrine §4): a dispatch from inside the fire — one line at the moment a fact
+// ── Lore beats: a dispatch from inside the fire — one line at the moment a fact
 //    becomes true, carried by runLedger to the operator's transcript between the banners (note{kind:
 //    'lore'}; deterministic <stage>.<beat> key; args are short scalars capped at 80 by the caller;
 //    text ≤ 160). PRESENTATION, null-keep: pluginRoot absent ⇒ a plain log() line, never a failure. ──
 const LORE_MAX = 160
 const oneLine = (s, cap = LORE_MAX) => String(s).replace(/[\x00-\x1f\x7f]+/g, ' ').slice(0, cap)
-// args are bound HERE (F-1): every string value is capped at 80 mechanically, so a beat can never
+// args are bound HERE: every string value is capped at 80 mechanically, so a beat can never
 // leak an unbounded project-controlled string into the ledger even if a call site forgets to cap.
 const boundArgs = (a) => { const o = {}; for (const [k, v] of Object.entries(a)) o[k] = typeof v === 'string' ? oneLine(v, 80) : v; return o }
 const lore = (key, text, args, phaseName) =>
@@ -280,7 +280,7 @@ const lore = (key, text, args, phaseName) =>
 
 // ── the kiln-vision transcript schema — Thoth transcribes the CLI's --json verdict VERBATIM ──────
 // One shape for BOTH commands (the CLI prints the same payload family); every field required so a
-// schema-legal scribe can never drop the violations the revise loop feeds on (the P3.6 discipline).
+// schema-legal scribe can never drop the violations the revise loop feeds on.
 const GATE_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
@@ -316,7 +316,7 @@ phase('The Gate')
 log(spin(0))
 
 // stage_started on EVERY entry — re-entry is accurate (the compile leg is the brainstorm stage's
-// tail; a re-run after a failed gate is the stage still in progress). Ordering (P4 r1 F5): this
+// tail; a re-run after a failed gate is the stage still in progress). Ordering: this
 // bracket precedes every other event this workflow appends.
 await runLedger('stage_started', { leg: 'vision-compile' }, 'The Gate')
 
@@ -339,14 +339,14 @@ if (!(gate && gate.exit === 0 && gate.valid === true)) {
 }
 const gateSummary = parseSummary(gate) || {}
 log(`Ledger gate clean: ${gateSummary.events ?? '?'} events, ${gateSummary.ideas ?? '?'} idea(s), tier ${gateSummary.tier ?? 'unknown'}${gateSummary.express ? ' (express)' : ''}`)
-// vision.gate_clean (promoted §6): the ledger held — the mechanical pre-compile floor is clean.
+// vision.gate_clean: the ledger held — the mechanical pre-compile floor is clean.
 await lore('vision.gate_clean', `The ledger holds every word — ${gateSummary.events ?? '?'} events, ${gateSummary.ideas ?? '?'} idea(s), tier ${gateSummary.tier ?? 'unknown'}`, { events: gateSummary.events ?? null, ideas: gateSummary.ideas ?? null, tier: gateSummary.tier ?? null }, 'The Gate')
 
 // ═══════════════════════════════════ The Compilation ════════════════════════════════════════════
 phase('The Compilation')
 log(spin(1))
 
-// The compiler brief is the traceability contract (§10 change 5): SOLE source = the session
+// The compiler brief is the traceability contract: SOLE source = the session
 // ledger + the format template. It never sees the conversation — an idea absent from the ledger
 // cannot reach the vision, which turns "every idea traces to the operator" from a vibe into a
 // structural property. Opus seat: the VISION is the cross-stage contract every downstream stage
@@ -367,7 +367,7 @@ const compileBrief =
   `question-shaped decisions (each an OQ entry in BOTH the frontmatter list — with priority/` +
   `timing/context — and the body mirror), Assumptions Ledger from assumption events (- **A-N**: ` +
   `entries), Elicitation Log from the DISTINCT data.method fields across the theme/decision/` +
-  `style_probe/clarify_pass events plus the style_probe/clarify_pass trail (T3 ruling 2 — the ` +
+  `style_probe/clarify_pass events plus the style_probe/clarify_pass trail (the ` +
   `methods the session actually used; an unlogged method never happened).\n` +
   `2. The frontmatter is arithmetic you compute from what you write: status: gated (the ledger ` +
   `passed its gate; zero [NEEDS CLARIFICATION markers may remain — acknowledged unknowns are ` +
@@ -391,7 +391,7 @@ const COMPILE_SCHEMA = {
 }
 
 // Bounded like the Law's revise loop: 3 validator passes / ≤2 compiler revisions. VISION.md is
-// DERIVED (r1 F5): a re-run recompiles from scratch; a partial or invalid file left on disk is
+// DERIVED: a re-run recompiles from scratch; a partial or invalid file left on disk is
 // harmless — the next pass overwrites it, and nothing downstream reads an ungated VISION.
 const COMPILE_PASSES = 3
 let verdict = null
@@ -407,8 +407,8 @@ for (let round = 0; round < COMPILE_PASSES; round++) {
     return { vision_valid: false, vision_file: visionFile, reason: 'the validate scribe produced no report', violations: [] }
   }
   // An INFRA-failed validate (the command died: nonzero exit, NO typed violations) is not a
-  // fixable artifact defect — revising against no violations is wasted work and a lying reason
-  // (T2 review r1). A genuine invalid artifact always carries typed violations at exit 1; a dead
+  // fixable artifact defect — revising against no violations is wasted work and a lying reason.
+  // A genuine invalid artifact always carries typed violations at exit 1; a dead
   // command carries none. Fail CLOSED with the command's own error.
   if (verdict.exit !== 0 && verdict.violations.length === 0) {
     log(`THE VALIDATE COMMAND ITSELF FAILED — ${verdict.error || `exit ${verdict.exit}`}; vision_valid:false (an infra failure is never a revise trigger).`)
@@ -451,7 +451,7 @@ if (!(proof && proof.exists === true)) {
   return { vision_valid: false, vision_file: visionFile, reason: 'validated but missing on disk', violations: [] }
 }
 
-// ── D4: the T4 fidelity pair — between the mechanical existence/validator checks and the seal events.
+// ── The fidelity pair — between the mechanical existence/validator checks and the seal events.
 //    Dual-APPROVE ⇒ vision_compiled THEN stage_completed fire (order preserved) + the certificate rides
 //    the return; ANY other outcome ⇒ NEITHER event (the existing invalid-VISION escalation shape — the
 //    conductor escalates with the honest terminal). Sub-T4 / no-codex / tokenless: byte-preserved (no
@@ -465,8 +465,8 @@ if (councilCapable) {
   if (cr.terminal !== 'RATIFIED') {
     log(`VISION FIDELITY ${cr.terminal} — neither vision_compiled nor stage_completed is ledgered; the conductor escalates with the honest terminal (required-mode uniformity).`)
     await lore('vision.violations', `Vision fidelity ${cr.terminal} — the compile is not sealed as faithful; ${cr.findings.length} finding(s), the conductor escalates`, { terminal: cr.terminal, findings: cr.findings.length }, 'The Seal')
-    // B43-2: the return IS the boundary record for vision — the b42-mirrored per-seat summary rides it
-    // alongside the terminal/certificate/findings fields (build.js councilSeats precedent).
+    // The return IS the boundary record for vision — the mirrored per-seat summary rides it
+    // alongside the terminal/certificate/findings fields.
     return { vision_valid: false, vision_file: visionFile, reason: `vision fidelity council ${cr.terminal}`, violations: [], council: { seat: 'vision_fidelity', terminal: cr.terminal, certificate: null, findings: cr.findings, bundle_hash: cr.bundle_hash, receipts: councilReceipts, certificate_present: false, receipt_verified: cr.receipt_verified, ledger_verified: cr.ledger_verified, council_missing_head: (cr.missing === 'fable' || cr.missing === 'sol') ? cr.missing : null } }
   }
 } else if (councilMisconfigured) {
@@ -478,7 +478,7 @@ if (councilCapable) {
   return { vision_valid: false, vision_file: visionFile, reason: 'vision fidelity council PROMISED but no runToken — fail-closed DEGRADED', violations: [], council: { seat: 'vision_fidelity', terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: null, receipts: councilReceipts, certificate_present: false, receipt_verified: false, ledger_verified: false, council_missing_head: null } }
 }
 
-// Ordering (r1 F5): vision_compiled THEN stage_completed — and ONLY here, on the clean (T4: RATIFIED) path.
+// Ordering: vision_compiled THEN stage_completed — and ONLY here, on the clean (T4: RATIFIED) path.
 await runLedger('vision_compiled', { tier: vSummary.tier ?? null, counts: vSummary.counts ?? null, visual_direction: vSummary.visual_direction ?? null, unresolved: vSummary.unresolved ?? null }, 'The Seal')
 // vision.sealed (keystone): the seal succeeded — the vision is counted before it is trusted. Emit
 // BEFORE stage_completed so the beat renders before the telegraph's terminating completion event.
@@ -492,10 +492,10 @@ return {
   tier: vSummary.tier ?? null,
   counts: vSummary.counts ?? null,
   unresolved: vSummary.unresolved ?? 0,
-  // The conductor threads this into the architecture launch args (P4 r1 F6) — the mechanical
-  // visual-direction path end-to-end; the foundation agent's judgment is only the pre-v3 fallback.
+  // The conductor threads this into the architecture launch args — the mechanical
+  // visual-direction path end-to-end; the foundation agent's judgment is only the legacy fallback.
   visual_direction: vSummary.visual_direction ?? null,
-  // D6/B43-2: the additive council field — the T4 fidelity terminal + certificate (twin_ratified only with
-  // a cert) PLUS the b42-mirrored per-seat summary {seat, certificate_present, receipt_verified, ledger_verified}.
+  // The additive council field — the T4 fidelity terminal + certificate (twin_ratified only with
+  // a cert) PLUS the mirrored per-seat summary {seat, certificate_present, receipt_verified, ledger_verified}.
   ...(councilPromised ? { council: { seat: 'vision_fidelity', terminal: visionCouncilTerminal, certificate: visionCouncilCertificate, findings: [], bundle_hash: visionCouncilBundleHash, receipts: councilReceipts, certificate_present: visionCouncilCertificate != null, receipt_verified: visionCouncilReceiptVerified, ledger_verified: visionCouncilLedgerVerified } } : {}),
 }

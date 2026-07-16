@@ -1,5 +1,4 @@
-// council.mjs — THE TWIN COUNCIL pure core (constitution twin-council.md; design sol-b34-design.md
-// section "B3 — Debate state machine"). Everything a keystone council decision needs that must be a
+// council.mjs — THE TWIN COUNCIL pure core. Everything a keystone council decision needs that must be a
 // DETERMINISTIC SCRIPT rather than model prose: a pure-JS SHA-256 (workflow scripts have no
 // node:crypto), canonical hashing, the deterministic seed/ID derivation, script-assigned finding
 // canonicalization, disposition + reversal validation, the claim-scoped evidence partial order, the
@@ -10,14 +9,14 @@
 // synthesis — no model here selects between unresolved positions; the script does the accounting and
 // the heads only rule.
 //
-// PURITY CONTRACT (workflow-determinism, sol-b34-design "State and checkpoint model"): no I/O, no
+// PURITY CONTRACT (workflow-determinism): no I/O, no
 // node: imports, no ambient globals, and NO Date.now()/Math.random()/new Date() ANYWHERE — every
 // protocol decision (IDs, fresh-round schedule, tie-break) derives exclusively from the spec's
 // SHA-256 seed. The unhashed seed preimage AND the seed digest stay out of every peer-visible packet
 // until terminalization (anonymity + tie-break-unpredictability rails).
 //
 // BUNDLER CONTRACT (scripts/bundle-workflows.mjs parseModule): every declaration is a top-level
-// `export const` / `export function` block so architecture.js (batch 1b-ii) can inline any subset
+// `export const` / `export function` block so architecture.js can inline any subset
 // via the generic `// @inline:council:<name>[,<name>...]` marker with ZERO bundler changes. A block
 // that calls another export (higher functions call sha256Hex / canonicalJson / deriveId / the phase
 // tables / compareEvidence) must be inlined WITH the exports it names — list them together in one
@@ -30,7 +29,7 @@
 // change can never silently reuse a phase judged under the old rules.
 export const COUNCIL_PROTOCOL_VERSION = 'twin-council/3'
 
-// COUNCIL_PHASES — the ordered barrier phases (sol-b34-design table). Each commits only after its
+// COUNCIL_PHASES — the ordered barrier phases. Each commits only after its
 // entire SYMMETRIC barrier completes; NEGOTIATION_{SEALED,SKIPPED} are the two exits of the same
 // slot (empty divergence set -> SKIPPED); ANSWER_EXCHANGE_SEALED is reached only when RATIFY_1 blocked.
 export const COUNCIL_PHASES = Object.freeze([
@@ -51,7 +50,7 @@ export const COUNCIL_PHASES = Object.freeze([
 
 // COUNCIL_TERMINALS — the four terminal states. Only RATIFIED is joint ratification;
 // DEADLOCK_RESOLVED is exceptional authority; COUNCIL_DEADLOCK is an honest fail; DEGRADED is a
-// missing/dead head. They are never interchangeable (constitution section 8) — see the terminal constructors.
+// missing/dead head. They are never interchangeable — see the terminal constructors.
 export const COUNCIL_TERMINALS = Object.freeze(['RATIFIED', 'DEADLOCK_RESOLVED', 'COUNCIL_DEADLOCK', 'DEGRADED'])
 
 // COUNCIL_PHASE_TRANSITIONS — the legal successor set for each barrier phase. DEGRADED is reachable
@@ -59,7 +58,7 @@ export const COUNCIL_TERMINALS = Object.freeze(['RATIFIED', 'DEADLOCK_RESOLVED',
 // APPROVE) or opens the one answer exchange; RATIFY_2 either ratifies or enters the deadlock ladder.
 // After the fresh round, BOTH routes — ambiguity (unstable / no_decision) AND structural (opposed) —
 // must pass through reference-reduction and the rubric-indeterminacy check before ANY terminal other
-// than RATIFIED or DEGRADED (constitution twin-council.md §5; fable-deadlock-design.md §4.1 steps 1–5).
+// than RATIFIED or DEGRADED.
 // So FRESH_CELLS_SETTLED and REFERENCE_REDUCTION can only re-ratify (RATIFIED) or degrade before the
 // cascade completes; DEADLOCK_RESOLVED / COUNCIL_DEADLOCK are reachable ONLY out of RUBRIC_CHECK
 // (cascade steps 3–5: reversibility commit / tie-break / gated-or-auto-fail).
@@ -199,13 +198,13 @@ export function deriveId(seed, parts) {
 }
 
 // parityTieBreak(seed) — 0 or 1 from the hidden seed's low nibble. Deterministic yet unpredictable
-// while the seed stays out of prompts (constitution deadlock ladder step 4 tie-break).
+// while the seed stays out of prompts (the deadlock ladder tie-break).
 export function parityTieBreak(seed) {
   const s = String(seed)
   return parseInt(s.charAt(s.length - 1) || '0', 16) & 1
 }
 
-// canonicalizeFindings(critiques) — sol-b34-design section 2. Models never author authoritative
+// canonicalizeFindings(critiques). Models never author authoritative
 // finding IDs. Given the two critiques (each { target_slot, findings:[{target_decision_id, claim,
 // required_change, severity, evidence}] }), the SCRIPT assigns stable IDs
 //   F-<decision-seq>-<target-slot>-<NNN>
@@ -268,7 +267,7 @@ export function canonicalizeFindings(critiques) {
   })
 }
 
-// canonicalizeRatifyFindings(round, bySlot) — b3-design A1 ⟨B3W4-1 fold⟩. RATIFY findings do NOT flow
+// canonicalizeRatifyFindings(round, bySlot). RATIFY findings do NOT flow
 // through canonicalizeFindings (that keys critique findings by target decision id). A ratify finding is a
 // WHOLE-PLAN verdict finding; the SCRIPT assigns `R-<round>-<slot>-<nnn>` where slot is the RULING head's
 // script-assigned anonymous slot and nnn is a per-slot 1-based ordinal over the canonical sort of the
@@ -295,7 +294,7 @@ export function canonicalizeRatifyFindings(round, bySlot) {
         evidence_refs: Array.isArray(f && f.evidence_refs) ? f.evidence_refs.map((r) => String(r == null ? '' : r)) : [],
         evidence_class: f && f.evidence_class != null ? String(f.evidence_class) : null,
         executable_check: f && f.executable_check != null ? String(f.executable_check) : null,
-        // B3R1-2: the AUTHORITATIVE typed correction descriptor (AMB-CLOSER-1.iii) is part of a ratify
+        // the AUTHORITATIVE typed correction descriptor is part of a ratify
         // finding's identity — an ACCEPT binds the R-key to a SPECIFIC { target_kind, key, replacement }
         // amendment. Two findings that differ ONLY in their descriptor are materially distinct, so it
         // rides the canonical sort (replacement by canonicalJson). Only the model-supplied identity labels
@@ -318,7 +317,7 @@ export function canonicalizeRatifyFindings(round, bySlot) {
   })
 }
 
-// validateDispositions(frozenFindings, dispositions) — sol-b34-design section 3. Each disposition is
+// validateDispositions(frozenFindings, dispositions). Each disposition is
 // { finding_id, disposition: accepted|rejected_with_evidence|unresolved, evidence_refs,
 // incorporated_at, reason }. Every frozen finding ID must appear EXACTLY once — unknown, duplicate,
 // or missing IDs invalidate the whole response. accepted requires a mechanically detectable
@@ -353,8 +352,8 @@ export function validateDispositions(frozenFindings, dispositions) {
   return { valid: errors.length === 0, errors, dispositions: effective }
 }
 
-// claimTypeForClass(evidenceClass) — the claim scope an evidence class belongs to (sol-b34-design
-// section 4). Evidence is compared ONLY within a claim scope; an unrecognized class has no scope
+// claimTypeForClass(evidenceClass) — the claim scope an evidence class belongs to. Evidence is
+// compared ONLY within a claim scope; an unrecognized class has no scope
 // (-> incomparable).
 export function claimTypeForClass(evidenceClass) {
   const c = String(evidenceClass || '')
@@ -365,8 +364,8 @@ export function claimTypeForClass(evidenceClass) {
   return null
 }
 
-// compareEvidence(a, b, claimType) — the claim-scoped evidence PARTIAL order (sol-b34-design section
-// 4), NOT a universal score. Returns 'stronger' | 'equal' | 'weaker' | 'incomparable' for a relative
+// compareEvidence(a, b, claimType) — the claim-scoped evidence PARTIAL order, NOT a universal
+// score. Returns 'stronger' | 'equal' | 'weaker' | 'incomparable' for a relative
 // to b. Ranks are scoped: executable claims rank executed_check above proposed_check; repo claims
 // treat repo_state and test_output as comparable (equal); external claims compare primary_source;
 // risk claims compare scenario. A class outside the claim's scope is INCOMPARABLE — and incomparable
@@ -387,12 +386,12 @@ export function compareEvidence(a, b, claimType) {
   return ra > rb ? 'stronger' : ra < rb ? 'weaker' : 'equal'
 }
 
-// validateReversal(prior, reversal) — the constitution section 6 anti-capitulation
+// validateReversal(prior, reversal) — the anti-capitulation
 // signature-validity rule. An approval that reverses a standing block is a valid signature ONLY when
 // its changed_evidence is present and at least as strong (claim-scoped) as the blocking evidence it
 // retires. An invalid reversal leaves the prior block STANDING — a peer-pressure flip cannot supply
 // the second signature. prior: { evidence, claim_type? }; reversal: { changed_evidence, claim_type? }.
-// changed_evidence MUST be an ARRAY (the §6 ratification schema's changed_evidence[]): a bare object is
+// changed_evidence MUST be an ARRAY (the ratification schema's changed_evidence[]): a bare object is
 // invalid and is NEVER coerced — the reversal stands iff AT LEAST ONE array element is equal-or-stronger
 // (claim-scoped). An absent, non-array, or empty changed_evidence leaves the block standing. Inline WITH
 // compareEvidence, claimTypeForClass.
@@ -413,7 +412,7 @@ export function validateReversal(prior, reversal) {
   return { valid: ok, block_stands: !ok, relation: best, reason: ok ? null : `no changed_evidence element is equal-or-stronger (best: ${best}) — a concession cannot clear a block` }
 }
 
-// buildDivergenceSet(input) — sol-b34-design section 4. Diogenes may NORMALIZE (alias topics, add
+// buildDivergenceSet(input). Diogenes may NORMALIZE (alias topics, add
 // incompatibility edges) but may never decide a finding away; the SCRIPT constructs the divergence
 // set from the six triggers and PROVES every finding and decision id is accounted for exactly once.
 // input:
@@ -426,7 +425,7 @@ export function validateReversal(prior, reversal) {
 //   normalizer:      optional { findingIds:[...], decisionIds:[...] } — MUST cover every original id
 //   seed:            the hidden run seed (councilSeed) — MANDATORY. Divergence ids derive from it via
 //                    deriveId, so DV ids are bound to run token / keystone / template / initial
-//                    sequence (sol-b34-design §49). The bound-ID rule is constitutional: an
+//                    sequence. The bound-ID rule is constitutional: an
 //                    absent/empty seed THROWS (fail closed — never a run-unbound ordinal).
 // The six triggers: (1) unresolved finding; (2) rejected_with_evidence whose rebuttal is weaker/
 // incomparable; (3) accepted-but-not-incorporated; (4) same normalized topic across >=2 slots with
@@ -437,7 +436,7 @@ export function validateReversal(prior, reversal) {
 // canonicalJson, sha256Hex.
 export function buildDivergenceSet(input) {
   const inp = input || {}
-  if (typeof inp.seed !== 'string' || inp.seed === '') throw new Error('buildDivergenceSet: a non-empty run seed is required — divergence ids are constitutionally run-bound (sol-b34-design §49)')
+  if (typeof inp.seed !== 'string' || inp.seed === '') throw new Error('buildDivergenceSet: a non-empty run seed is required — divergence ids are constitutionally run-bound')
   const findings = Array.isArray(inp.findings) ? inp.findings : []
   const dispositions = Array.isArray(inp.dispositions) ? inp.dispositions : []
   const decisions = inp.decisions && typeof inp.decisions === 'object' ? inp.decisions : {}
@@ -526,7 +525,7 @@ export function buildDivergenceSet(input) {
   // topics, members). Using the FULL card as the sort key means two distinct cards can never tie (so
   // the output order — and thus the set hash — is input-order-independent), and it guarantees two
   // distinct divergences never share an id (e.g. a P0- vs P1-opposed NEITHER on the same topic). The id
-  // is seed-bound (sol-b34-design §49): DV-<12 hex derived from the hidden seed and that same card.
+  // is seed-bound: DV-<12 hex derived from the hidden seed and that same card.
   const cardKey = (dv) => { const d = { ...dv }; delete d.divergence_id; return canonicalJson(d) }
   divergences.sort((x, y) => { const kx = cardKey(x), ky = cardKey(y); return kx < ky ? -1 : kx > ky ? 1 : 0 })
   divergences.forEach((dv) => {
@@ -550,7 +549,7 @@ export function buildDivergenceSet(input) {
   return { divergences, accounting, hash: sha256Hex(canonicalJson({ divergences, accounting })), empty: divergences.length === 0 }
 }
 
-// buildDecisionBundle(parts) — sol-b34-design section 5. The authoritative post-negotiation object is
+// buildDecisionBundle(parts). The authoritative post-negotiation object is
 // a STRUCTURED bundle, never model synthesis. Each open divergence must carry
 // { divergence_id, position_0, position_1, compatibility_edges, evidence_refs }. Returns
 // { bundle, valid, errors, hash }. Inline WITH canonicalJson, sha256Hex.
@@ -578,14 +577,14 @@ export function bundleHash(bundle) {
   return sha256Hex(canonicalJson(bundle))
 }
 
-// validateRatification(ratification, ctx) — sol-b34-design section 6 blind-ratification schema.
+// validateRatification(ratification, ctx) — the blind-ratification schema.
 // verdict is APPROVE|BLOCK|NEITHER; divergence_selections must cover EXACTLY the open divergence ids
 // (each P0|P1|MERGED|NEITHER, none unknown/duplicated/missing); artifact_hash must equal the bundle
 // hash; every findings[] entry is shape-checked ({finding_id, claim, required_change, evidence_refs[],
 // executable_check present}). ctx: { bundle_hash, open_divergence_ids, standing_blocks?,
-// compatibility_edges? }. Constitution section 6: an APPROVE that reverses a standing block is INVALID
+// compatibility_edges? }. An APPROVE that reverses a standing block is INVALID
 // unless its changed_evidence[] equal-or-stronger clears EACH block (the block stands otherwise).
-// spec section 7: the selected combination is checked against compatibility_edges — an incompatible
+// The selected combination is checked against compatibility_edges — an incompatible
 // pair of adopted selections is rejected before the ratification validates. Returns { valid, errors }.
 // Inline WITH validateReversal, compareEvidence, claimTypeForClass.
 export function validateRatification(ratification, ctx) {
@@ -608,11 +607,11 @@ export function validateRatification(ratification, ctx) {
   }
   for (const id of open) if (!seen.includes(id)) errors.push({ code: 'uncovered_divergence', at: id, message: `open divergence '${id}' has no selection` })
 
-  // findings[] entry shape (§6 schema): finding_id, claim, required_change, evidence_refs[], executable_check
+  // findings[] entry shape: finding_id, claim, required_change, evidence_refs[], executable_check
   // present. A PRESENT-but-non-array findings field is itself malformed — only ABSENT defaults to empty.
   let findings = []
   if (r.findings !== undefined) {
-    if (!Array.isArray(r.findings)) errors.push({ code: 'malformed_findings', message: 'findings must be an array (the §6 schema) when present' })
+    if (!Array.isArray(r.findings)) errors.push({ code: 'malformed_findings', message: 'findings must be an array when present' })
     else findings = r.findings
   }
   findings.forEach((f, i) => {
@@ -625,7 +624,7 @@ export function validateRatification(ratification, ctx) {
     if (!Object.prototype.hasOwnProperty.call(f, 'executable_check')) errors.push({ code: 'malformed_finding', at, message: 'executable_check must be present (null allowed)' })
   })
 
-  // anti-capitulation (I9 one-finding-key rail): an APPROVE reversing a standing block needs
+  // anti-capitulation (the one-finding-key rail): an APPROVE reversing a standing block needs
   // equal-or-stronger changed_evidence KEYED to that block's finding_id. changed_evidence is filtered
   // per block by finding_id BEFORE validateReversal, so one evidence item can never clear two blocks —
   // an item with no finding_id (or a non-matching one) contributes to no block's reversal.
@@ -639,7 +638,7 @@ export function validateRatification(ratification, ctx) {
     }
   }
 
-  // atomic compatibility: the adopted selection combination must satisfy every compatibility edge (§7).
+  // atomic compatibility: the adopted selection combination must satisfy every compatibility edge.
   // Every edge is SHAPE-CHECKED first — exactly two members, each { divergence_id, selection } with a
   // legal selection; a malformed edge is a validation error (never silently skipped), and an edge whose
   // two members name the SAME divergence is a context programming error (self_edge).
@@ -672,7 +671,7 @@ export function validateRatification(ratification, ctx) {
 // councilSignature(fields) — a head's binding signature. It binds the bundle hash, renderer version,
 // resulting plan hash, evidence manifest hash, protocol version, and seat provenance; ANY
 // post-signature revision to a bound field changes signature_hash, so verifySignature then fails
-// (sol-b34-design section 6 "any post-signature revision invalidates both"). Inline WITH sha256Hex,
+// (any post-signature revision invalidates both). Inline WITH sha256Hex,
 // canonicalJson.
 export function councilSignature(fields) {
   const f = fields || {}
@@ -714,7 +713,7 @@ export function verifySignature(signature, currentContext) {
   return true
 }
 
-// FRESH_CELLS — the 2x2 order-by-label counterbalanced cell table (sol-b34-design section 7). Each
+// FRESH_CELLS — the 2x2 order-by-label counterbalanced cell table. Each
 // position appears twice first / twice second and twice as K / twice as M. presentation_order fixes
 // which candidate is shown first; label_mapping fixes K/M to P0/P1 (canonical: K=P0, M=P1; swapped:
 // K=P1, M=P0).
@@ -728,7 +727,7 @@ export const FRESH_CELLS = Object.freeze([
 // COUNCIL_HEADS — the two co-equal heads. Fresh-round calls fan out across both.
 export const COUNCIL_HEADS = Object.freeze(['fable', 'sol'])
 
-// freshRoundSchedule({ seed, divergenceId, tier }) — sol-b34-design section 7 scheduling. Base tier:
+// freshRoundSchedule({ seed, divergenceId, tier }) — the fresh-round scheduling. Base tier:
 // one T=0 sample per cell -> 8 calls per divergence across both heads. High tier: three samples per
 // cell (two low-temperature probes + one moderate-temperature ambiguity probe) -> 24 calls. Per-cell
 // card ids derive deterministically from the hidden seed. Inline WITH FRESH_CELLS, deriveId
@@ -758,10 +757,10 @@ export function freshRoundSchedule(opts) {
 }
 
 // normalizeCellVerdict(choice, labelMapping) — map a fresh instance's K/M choice back to canonical
-// P0/P1 per the cell's label mapping BEFORE aggregation (sol-b34-design section 7). The constitution's
-// verdict enum (twin-council.md:40) is position_1 | position_2 | no_decision | NEITHER, so `no_decision`
+// P0/P1 per the cell's label mapping BEFORE aggregation. The council's
+// verdict enum is position_1 | position_2 | no_decision | NEITHER, so `no_decision`
 // is a DELIBERATE ABSTENTION — a legal verdict that maps to NO_DECISION. `INSUFFICIENT_EVIDENCE` is a
-// FAILURE TO RULE (sol-deadlock-design:214) — never a verdict; it passes through so aggregateHead can
+// FAILURE TO RULE — never a verdict; it passes through so aggregateHead can
 // route it to instability. Any unknown choice becomes INVALID (never a silent vote).
 export function normalizeCellVerdict(choice, labelMapping) {
   const c = String(choice)
@@ -773,13 +772,13 @@ export function normalizeCellVerdict(choice, labelMapping) {
   return 'INVALID'
 }
 
-// aggregateHead(instances, opts) — collapse one head's fresh cell instances into a single aggregate
-// (sol-b34-design section 7 / sol-deadlock-design section 3). instances is [{ cell, outcome, defects? }]
+// aggregateHead(instances, opts) — collapse one head's fresh cell instances into a single aggregate.
+// instances is [{ cell, outcome, defects? }]
 // where outcome is ALREADY normalized (via normalizeCellVerdict) and defects (for a NEITHER) is
 // { P0:[...], P1:[...] }. COMPLETENESS is proven against the schedule FIRST: base tier = 4 distinct
 // cells x1 sample; high tier = 12 instances (4 cells x 3). A missing, duplicated, or unknown cell is
 // instability, never a vote — a head cannot be decisive off an incomplete round. A NEITHER without a
-// named blocking defect for EACH position is INVALID (sol-deadlock-design:212). A head is DECISIVE
+// named blocking defect for EACH position is INVALID. A head is DECISIVE
 // only if every valid instance selects the same P0/P1/NEITHER; a unanimous deliberate NO_DECISION is a
 // stable abstention; ANY INSUFFICIENT_EVIDENCE (even unanimous), any INVALID, or any split is UNSTABLE.
 export function aggregateHead(instances, opts) {
@@ -811,7 +810,7 @@ export function aggregateHead(instances, opts) {
   if (first === 'P0' || first === 'P1') return { aggregate: 'DECISIVE', outcome: first }
   if (first === 'NEITHER') {
     // a decisive NEITHER also requires the defect sets to be CONSISTENT across instances
-    // (sol-deadlock-design:240 — inconsistent NEITHER defects are instability, not a shared verdict).
+    // (inconsistent NEITHER defects are instability, not a shared verdict).
     const canon = canonicalJson(list[0].defects)
     if (!list.every((it) => canonicalJson(it.defects) === canon)) return { aggregate: 'UNSTABLE', reason: 'inconsistent_defects' }
     return { aggregate: 'DECISIVE', outcome: 'NEITHER' }
@@ -821,8 +820,8 @@ export function aggregateHead(instances, opts) {
   return { aggregate: 'UNSTABLE', reason: 'invalid' }
 }
 
-// aggregateCouncil(fableAgg, solAgg) — the joint classification (sol-b34-design section 7 /
-// sol-deadlock-design section 3). Route: 'agreement' (both decisive on the same position), 'ambiguity'
+// aggregateCouncil(fableAgg, solAgg) — the joint classification. Route: 'agreement' (both decisive
+// on the same position), 'ambiguity'
 // (any instability, decisive-vs-no_decision, or both-abstain — never a unilateral adoption),
 // 'structural' (stable opposition, stable NEITHER on one side, or two NEITHERs), or 'degraded' (a
 // missing/invalid head aggregate — required-mode failure, not deadlock). `class` carries the
@@ -865,7 +864,7 @@ export function sealReversibility(fableCard, solCard, seed) {
   return { resolution: 'gated', adopt: null, door: 'both_one_way', mel_required: false }
 }
 
-// buildMelRecord(parts) — the mandated exception ledger (fable-deadlock-design section 4.2, the
+// buildMelRecord(parts) — the mandated exception ledger (the
 // MEL-adapted risk ledger): dissent VERBATIM, the operating limitation, a TIME-BOXED re-review trigger,
 // and the open issues in the affected subsystem. openIssues are [{ subsystem, ... }]; the operator is
 // auto-summoned ONLY when >=2 OPEN dissents touch the SAME subsystem (the compounding guard — two
@@ -902,7 +901,7 @@ export function buildMelRecord(parts) {
 }
 
 // buildCheckpoint(fields) — the exact checkpoint field list shaped as a note{kind:'council_state'}
-// data payload (sol-b34-design "State and checkpoint model"). The event enum is untouched — this is
+// data payload. The event enum is untouched — this is
 // the DATA of an existing `note` event. Large packets stay immutable artifacts; the checkpoint holds
 // paths and hashes. status marks whether the paired barrier is 'sealed'.
 export function buildCheckpoint(fields) {
@@ -925,7 +924,7 @@ export function buildCheckpoint(fields) {
   }
 }
 
-// matchCheckpoint(prev, cur) — sol-b34-design "State and checkpoint model": on restart, reuse a
+// matchCheckpoint(prev, cur) — on restart, reuse a
 // phase ONLY when protocol, template (which binds the response schema), input, evidence, artifact,
 // provenance, and receipt hashes ALL match — otherwise the whole paired phase reruns. Seat expectations
 // are PHASE-AWARE: a PAIRED barrier (both heads seal an anonymous artifact) requires EXACTLY two seat
@@ -966,7 +965,7 @@ export function matchCheckpoint(prev, cur) {
 }
 
 // twinRatified({ signatures, context, ratifications, open_divergence_ids }) — the ONLY jointly-ratified
-// terminal (constitution section 8). It throws (a blocked ratification, never a ratified one) unless ALL:
+// terminal. It throws (a blocked ratification, never a ratified one) unless ALL:
 //   · exactly TWO head signatures, each verifying against the current context;
 //   · the context is COMPLETE — all six bound keys present AND its binding hashes (bundle_hash,
 //     protocol_version, evidence_manifest_hash) are NON-NULL (a certificate bound to nulls is no
@@ -974,7 +973,7 @@ export function matchCheckpoint(prev, cur) {
 //   · the two signatures come from DISTINCT heads (distinct, non-null seat_provenance — the same
 //     signature twice can never supply the second signature);
 //   · exactly TWO ratifications, both verdict APPROVE, that COVER every open divergence id with a LEGAL
-//     selection (P0|P1|MERGED|NEITHER) and AGREE on every one (sol-b34-design:240 — "matching selections
+//     selection (P0|P1|MERGED|NEITHER) and AGREE on every one ("matching selections
 //     plus dual APPROVE settle the bundle"; an uncovered, illegally-selected, OR mismatched divergence is
 //     a blocked ratification — a mapped-but-illegal selection is NOT coverage);
 //   · open_divergence_ids is MANDATORY (pass [] for a bundle with no open divergences) — an absent set is
@@ -984,7 +983,7 @@ export function matchCheckpoint(prev, cur) {
 export function twinRatified(parts) {
   const p = parts || {}
   const sigs = Array.isArray(p.signatures) ? p.signatures : null
-  if (!sigs || sigs.length !== 2) throw new Error('twinRatified: exactly two head signatures are required (constitution §8)')
+  if (!sigs || sigs.length !== 2) throw new Error('twinRatified: exactly two head signatures are required')
   const ctx = p.context != null ? p.context : (p.current_context != null ? p.current_context : null)
   if (ctx == null || typeof ctx !== 'object') throw new Error('twinRatified: a current context is required to bind both signatures')
   for (const k of ['bundle_hash', 'renderer_version', 'plan_hash', 'evidence_manifest_hash', 'protocol_version', 'seat_provenance']) {
@@ -1036,7 +1035,7 @@ export function twinRatified(parts) {
 }
 
 // twinDeadlockResolved({ resolution, certificate, artifact_hash }) — the EXCEPTIONAL authority
-// terminal (constitution section 8), NEVER relabeled as joint ratification. resolution must be
+// terminal, NEVER relabeled as joint ratification. resolution must be
 // 'operator' or 'reversibility_rule'; a certificate is mandatory.
 export function twinDeadlockResolved(parts) {
   const p = parts || {}
@@ -1045,8 +1044,8 @@ export function twinDeadlockResolved(parts) {
   return { terminal: 'DEADLOCK_RESOLVED', label: 'twin_deadlock_resolved', resolution: p.resolution, certificate: p.certificate, artifact_hash: p.artifact_hash != null ? p.artifact_hash : null }
 }
 
-// councilDeadlock(parts) — the honest auto-mode fail (constitution section 8 / sol-deadlock-design
-// section 4): fail the keystone, preserve the last ratified state, emit NO stage_completed, adopt
+// councilDeadlock(parts) — the honest auto-mode fail: fail the keystone, preserve the last ratified
+// state, emit NO stage_completed, adopt
 // neither position.
 export function councilDeadlock(parts) {
   const p = parts || {}
@@ -1059,7 +1058,7 @@ export function councilDeadlock(parts) {
   }
 }
 
-// degraded(parts) — a missing/dead required head (constitution Degradation): NOT a deadlock. Blocks
+// degraded(parts) — a missing/dead required head: NOT a deadlock. Blocks
 // the keystone -> gated operator checkpoint; never a single-head ruling.
 export function degraded(parts) {
   const p = parts || {}
@@ -1067,20 +1066,17 @@ export function degraded(parts) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════
-// ── B4-1b-ii CALL-SITE CORE, lifted to pure exports (B4-2 D1). The sealed 1b-ii ratification
-//    machinery had a call-site-AGNOSTIC core living inside architecture.js; B4-2 lifts it here as
-//    dependency-closed pure exports so build.js reuses it through the SAME `@inline:council` bundler
-//    contract — helpers, never copy-paste (the T4-lite carry-forward). Semantics are VERBATIM the
-//    architecture.js originals (design note §D1 receipts); the only change is parameterization over
-//    the per-keystone binding (councilDir/keystone/phaseTag/seat/attempt/runToken) the caller supplies.
-//    The raw runToken appears ONLY in the rendered argv (architecture.js:344-346 trusted-boundary
-//    doctrine); no head-visible string here carries it. ──
+// ── The CALL-SITE CORE as dependency-closed pure exports: architecture.js and build.js both reuse
+//    this ratification machinery through the SAME `@inline:council` bundler contract — helpers, never
+//    copy-paste. The exports are parameterized over the per-keystone binding the caller supplies
+//    (councilDir/keystone/phaseTag/seat/attempt/runToken). The raw runToken appears ONLY in the
+//    rendered argv (a trusted process boundary); no head-visible string here carries it. ──
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 
 // SHA64_RE — the lowercase-hex-64 shape gate every ledger-promoted receipt/invocation hash passes.
 export const SHA64_RE = /^[0-9a-f]{64}$/
 
-// RATIFY_SCHEMA (§6 verbatim): evidence fields BEFORE the verdict field (B6 ordering — Claude legs keep
+// RATIFY_SCHEMA: evidence fields BEFORE the verdict field (Claude legs keep
 // PAYLOAD_FIRST, codex legs follow the reasoning-first guide). executable_check present, null allowed.
 export const RATIFY_SCHEMA = {
   type: 'object', additionalProperties: false,
@@ -1096,21 +1092,21 @@ export const RATIFY_SCHEMA = {
           evidence_refs: { type: 'array', items: { type: 'string' } },
           evidence_class: { type: 'string', enum: ['executed_check', 'proposed_check', 'repo_state', 'test_output', 'primary_source', 'scenario'], description: 'the HONEST class of this finding\'s evidence — the claim-scoped partial order rules reversals by it' },
           executable_check: { type: ['string', 'null'], description: 'a bounded shell command (EXIT 0 iff the defect is present) or null' },
-          target_kind: { type: 'string', enum: ['settled_decision', 'trunk_field'], description: 'OPTIONAL (AMB-CLOSER-1.iii): the STRUCTURAL correction descriptor — an ACCEPTED BLOCK finding carrying { target_kind, key, replacement } amends the bundle mechanically; an ACCEPTED finding WITHOUT one is a gated escalation (no free rewrite)' },
+          target_kind: { type: 'string', enum: ['settled_decision', 'trunk_field'], description: 'OPTIONAL: the STRUCTURAL correction descriptor — an ACCEPTED BLOCK finding carrying { target_kind, key, replacement } amends the bundle mechanically; an ACCEPTED finding WITHOUT one is a gated escalation (no free rewrite)' },
           key: { type: 'string', description: 'OPTIONAL: an existing settled-decision topic or an amendable trunk field (present iff target_kind is)' },
           replacement: { description: 'OPTIONAL: the new value — must match the shape of the target\'s current value (present iff target_kind is)' },
         },
         required: ['finding_id', 'claim', 'required_change', 'evidence_refs', 'evidence_class', 'executable_check'],
       },
     },
-    changed_evidence: { type: 'array', items: { type: 'object', additionalProperties: true, properties: { finding_id: { type: 'string', description: 'the standing block this evidence retires — I9 one-finding-key rail: one evidence item can never clear two blocks' }, class: { type: 'string' }, refs: { type: 'array', items: { type: 'string' } } }, required: ['finding_id', 'class'] } },
+    changed_evidence: { type: 'array', items: { type: 'object', additionalProperties: true, properties: { finding_id: { type: 'string', description: 'the standing block this evidence retires — the one-finding-key rail: one evidence item can never clear two blocks' }, class: { type: 'string' }, refs: { type: 'array', items: { type: 'string' } } }, required: ['finding_id', 'class'] } },
     divergence_selections: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { divergence_id: { type: 'string' }, selection: { type: 'string', enum: ['P0', 'P1', 'MERGED', 'NEITHER'] }, evidence_refs: { type: 'array', items: { type: 'string' } } }, required: ['divergence_id', 'selection'] } },
     verdict: { type: 'string', enum: ['APPROVE', 'BLOCK', 'NEITHER'] },
   },
   required: ['artifact_hash', 'verdict', 'divergence_selections', 'findings', 'changed_evidence'],
 }
 
-// ANSWER_SCHEMA — the §3 answer-exchange payload (one ACCEPT/REFUTE per finding).
+// ANSWER_SCHEMA — the answer-exchange payload (one ACCEPT/REFUTE per finding).
 export const ANSWER_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
@@ -1130,8 +1126,8 @@ export const envelopeSchema = (payload) => ({
   additionalProperties: true,
 })
 
-// CROSS_CHECK_SCHEMA — the receipt-ledger CROSS-CHECK transcription (thoth:receipt-check). INVOCATION-
-// EXACT (Sol F1): the extract selects the LAST verified row matching THIS leg's output hash + session
+// CROSS_CHECK_SCHEMA — the receipt-ledger CROSS-CHECK transcription. INVOCATION-
+// EXACT: the extract selects the LAST verified row matching THIS leg's output hash + session
 // id, then that row's 'started' RESERVATION by invocation_id — the SCRIPT (crossCheckOk) then binds
 // reservation ↔ verified ↔ sink ↔ payload, so a run-global stale/replayed row can never be blessed.
 export const CROSS_CHECK_SCHEMA = {
@@ -1168,7 +1164,7 @@ export const CROSS_CHECK_SCHEMA = {
   required: ['output_sha256_disk', 'output_canonical_sha256', 'ledger'],
 }
 
-// LEDGER_APPEND_SCHEMA — the council-ledger append confirmation (Sol F10): the checkpoint counter
+// LEDGER_APPEND_SCHEMA — the council-ledger append confirmation: the checkpoint counter
 // increments ONLY on a confirmed append — a mute/failed scribe is logged, never counted.
 export const LEDGER_APPEND_SCHEMA = {
   type: 'object', additionalProperties: false,
@@ -1178,7 +1174,7 @@ export const LEDGER_APPEND_SCHEMA = {
 
 // The pinned cross-check one-liners (written ONCE as consts). CANON reproduces canonicalJson EXACTLY —
 // recursive key-sort + JSON.stringify semantics over UTF-8 bytes — so its digest equals
-// sha256Hex(canonicalJson(payload)). LEDGER is INVOCATION-EXACT (Sol F1): argv carries the leg's output
+// sha256Hex(canonicalJson(payload)). LEDGER is INVOCATION-EXACT: argv carries the leg's output
 // sha + session id; it selects the LAST verified row matching BOTH, then that row's 'started'
 // RESERVATION by invocation_id, and prints { verified, reservation } (nulls unmatched) — the SCRIPT
 // (crossCheckOk) does every comparison. Neither one-liner contains a single quote, so each rides safely
@@ -1186,7 +1182,7 @@ export const LEDGER_APPEND_SCHEMA = {
 export const CANON_HASH_ONELINER = `const fs=require("fs"),crypto=require("crypto");const c=v=>v===null||typeof v!=="object"?JSON.stringify(v===undefined?null:v):Array.isArray(v)?"["+v.map(c).join(",")+"]":"{"+Object.keys(v).sort().map(k=>JSON.stringify(k)+":"+c(v[k])).join(",")+"}";const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.stdout.write(crypto.createHash("sha256").update(Buffer.from(c(p),"utf8")).digest("hex"))`
 export const LEDGER_EXTRACT_ONELINER = `const fs=require("fs");let L=[];try{L=fs.readFileSync(process.argv[1],"utf8").split("\\n").filter(Boolean).map(s=>JSON.parse(s))}catch(e){}const O=process.argv[2],S=process.argv[3];const pick=(o,ks)=>{const x={};for(const k of ks)x[k]=(o&&o[k]!==undefined)?o[k]:null;return x};const vs=L.filter(e=>e&&e.status==="verified"&&e.output_sha256===O&&e.session_id===S);const v=vs.length?vs[vs.length-1]:null;const rs=v?L.filter(e=>e&&e.status==="started"&&e.invocation_id===v.invocation_id):[];const r=rs.length?rs[rs.length-1]:null;process.stdout.write(JSON.stringify({verified:v?pick(v,["status","invocation_id","receipt_sha256","output_sha256","session_id","reported_model","tokens_used","exit_code","receipt_verified"]):null,reservation:r?pick(r,["invocation_id","keystone","phase","seat","attempt","run_token","prompt_sha256","packet_sha256"]):null}))`
 
-// councilTemplateHash(parts) — pins the recipe sha256Hex(canonicalJson(parts)) (architecture.js:385) so
+// councilTemplateHash(parts) — pins the recipe sha256Hex(canonicalJson(parts)) so
 // a keystone's template hash cannot drift in construction. Inline WITH sha256Hex, canonicalJson.
 export function councilTemplateHash(parts) {
   return sha256Hex(canonicalJson(parts))
@@ -1238,8 +1234,8 @@ export function solWrapperPlan(cfg) {
 }
 
 // crossCheckOk(cc, binding) — the pure verification predicate inside runSolCrossCheck: gate.mjs
-// validated the receipt STRUCTURE via the provenance sink; this binds the whole INVOCATION-EXACT chain
-// (Sol F1): reservation ↔ verified (same invocation_id), reservation ↔ THIS seat (keystone/phase/seat/
+// validated the receipt STRUCTURE via the provenance sink; this binds the whole INVOCATION-EXACT
+// chain: reservation ↔ verified (same invocation_id), reservation ↔ THIS seat (keystone/phase/seat/
 // attempt/run_token/prompt hash), verified ↔ sink (output/session/model/tokens/exit), payload ↔
 // canonical hash. Any miss is a DEAD Sol seat — a stale or replayed row of the right shape can never be
 // blessed. Every LEDGER-PROMOTED field is SHAPE-VALIDATED before promotion (the receipt hash rides
@@ -1278,11 +1274,11 @@ export function crossCheckOk(cc, binding) {
 
 // assembleRatifyCertificate({ rF, rS, provF, provS, context }) — the pure part of sealRatified: build
 // the two head signatures via councilSignature, EACH carrying its own head's seat_provenance (provF /
-// provS), then twinRatified over the SHARED context whose seat_provenance is null (the sealed idiom,
-// architecture.js:726; twinRatified verifies each signature against { ...ctx, seat_provenance:
+// provS), then twinRatified over the SHARED context whose seat_provenance is null (the sealed idiom);
+// twinRatified verifies each signature against { ...ctx, seat_provenance:
 // s.seat_provenance }). context carries the five bound fields (bundle_hash, renderer_version, plan_hash,
 // evidence_manifest_hash, protocol_version); the six-keys-present / three-non-null contract is
-// twinRatified's (council.mjs:935-940). Returns { ok:true, certificate } | { ok:false, reason } — a
+// twinRatified's. Returns { ok:true, certificate } | { ok:false, reason } — a
 // binding defect DEGRADES, never crashes. Inline WITH councilSignature, twinRatified (+ verifySignature,
 // sha256Hex, canonicalJson).
 export function assembleRatifyCertificate(parts) {
@@ -1305,13 +1301,13 @@ export function assembleRatifyCertificate(parts) {
   }
 }
 
-// verdictShapeError(r) — F2: an empty/duplicate/evidence-free BLOCK or NEITHER is an INVALID verdict —
-// a head that fails to seal a valid verdict is a MISSING head (constitution §8) ⇒ DEGRADED, never a
+// verdictShapeError(r) — an empty/duplicate/evidence-free BLOCK or NEITHER is an INVALID verdict —
+// a head that fails to seal a valid verdict is a MISSING head ⇒ DEGRADED, never a
 // silent standing-free block a bare round-two APPROVE could clear. Returns null (valid) or the defect
-// string. LIFTED to src/council.mjs (B4-3 D1) so architecture (full + lite ratify), build's close +
-// correction councils, and the three B4-3 keystones (validate/vision/report) share ONE copy instead of
-// the five stage-scoped copies B4-3 would otherwise create. Null-safe (a null r is not a BLOCK/NEITHER
-// ⇒ null): behavior-identical to both prior copies on every real call path, safer on a dead seat.
+// string. It lives in src/council.mjs so architecture (full + lite ratify), build's close + correction
+// councils, and the validate/vision/report keystones share ONE copy instead of a stage-scoped copy in
+// each. Null-safe (a null r is not a BLOCK/NEITHER ⇒ null): behavior-identical to the per-stage copies
+// on every real call path, safer on a dead seat.
 export function verdictShapeError(r) {
   if (!(r && (r.verdict === 'BLOCK' || r.verdict === 'NEITHER'))) return null
   const fs = Array.isArray(r.findings) ? r.findings : []
@@ -1329,17 +1325,15 @@ export function verdictShapeError(r) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════
-// ── B3b2-i: the W4 STRUCTURED-PLAN machine (A5 items 2–5, ⟨DSGN-A5-1/2/3⟩). Four pure, total,
-//    side-effect-free legs the B3b2-ii architecture wiring consumes. A head authors STRUCTURED draft
-//    content (milestones + acceptance rows); the SCRIPT projects it into the ONE settlement algebra,
-//    joins cross-slot identity ONLY by exact canonical equivalence, checks post-settlement closure,
-//    and renders the authoritative master plan deterministically. NO model prose enters any of these
-//    (A3): the plan IS the renderer's output. These stay UNCONSUMED by any workflow this sub-round —
-//    B3b2-ii wires them. ──
+// ── The STRUCTURED-PLAN machine: four pure, total, side-effect-free legs the architecture wiring
+//    consumes. A head authors STRUCTURED draft content (milestones + acceptance rows); the SCRIPT
+//    projects it into the ONE settlement algebra, joins cross-slot identity ONLY by exact canonical
+//    equivalence, checks post-settlement closure, and renders the authoritative master plan
+//    deterministically. NO model prose enters any of these: the plan IS the renderer's output. ──
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 
-// projectStructuredPlan({ slot, milestones, decisions, visionScIds }) — A5 items 2–3 + the
-// ⟨DSGN-A5-2⟩ pre-projection validation. The SCRIPT owns the reserved-topic projection (mechanism over
+// projectStructuredPlan({ slot, milestones, decisions, visionScIds }) — the pre-projection
+// validation. The SCRIPT owns the reserved-topic projection (mechanism over
 // discipline): each head's STRUCTURED milestone/acceptance content projects into slot-namespaced
 // registry entries in the single settlement algebra. slot = the head's anonymous slot ('P0'|'P1');
 // milestones = [{ id, title, summary, order, surface, confidence, acceptance:[{sc_id, criterion,
@@ -1395,7 +1389,7 @@ export function projectStructuredPlan(input) {
   const entries = []
   const requires = []
   const topics = new Set(decisions.map((d) => (d && d.topic != null ? String(d.topic) : '')))
-  // The FIFTH fail-closed branch (AMB-B3b2i-1, RULED — both): two same-kind projected entries with
+  // The FIFTH fail-closed branch: two same-kind projected entries with
   // IDENTICAL canonical value inside ONE slot are degenerate authoring — the same locus as the other
   // per-head validations, BEFORE any cross-head interaction. It fails CLOSED (typed throw naming the
   // slot) so the workflow maps it to DEGRADED naming the head; joinExactEquivalents KEEPS its join-time
@@ -1436,7 +1430,7 @@ export function projectStructuredPlan(input) {
   return { entries, requires }
 }
 
-// joinExactEquivalents(projP0, projP1) — the ⟨DSGN-A5-1⟩ join. projP0/projP1 are the two slots'
+// joinExactEquivalents(projP0, projP1) — the exact-equivalence join. projP0/projP1 are the two slots'
 // projectStructuredPlan results { entries, requires }. Cross-slot identity is established ONLY by
 // script-proven EXACT canonical equivalence: a P0 entry and a P1 entry of the same KIND (milestone/sc),
 // both slot-namespaced (`<kind>:P0:...` / `<kind>:P1:...`), whose canonical VALUE bytes are EXACTLY
@@ -1526,7 +1520,7 @@ export function joinExactEquivalents(projP0, projP1) {
   return { regP0: entriesP0, regP1: entriesP1, requires: dedupRequires, accounting }
 }
 
-// validatePlanClosure({ settled, requires }) — the ⟨DSGN-A5-2⟩ POST-settlement closure. Over the
+// validatePlanClosure({ settled, requires }) — the POST-settlement closure. Over the
 // settled entry set: every settled SC entry's required milestone is itself settled (else orphan_sc);
 // every settled milestone retains ≥1 settled SC (else empty_milestone). settled = the settled entries
 // (each {topic, ...}, or a bare topic string); requires = the {sc_topic, milestone_topic} constraint
@@ -1540,7 +1534,7 @@ export function validatePlanClosure(input) {
   if (!Array.isArray(inp.settled)) throw new Error('validatePlanClosure: settled must be an array of settled entries')
   if (!Array.isArray(inp.requires)) throw new Error('validatePlanClosure: requires must be an array of {sc_topic, milestone_topic} rows')
   const topicOf = (e) => (typeof e === 'string' ? e : (e && e.topic != null ? String(e.topic) : ''))
-  // B3R1-4: CONFLICTING duplicate requires rows (two DIFFERENT parents for one sc_topic) are a malformed
+  // CONFLICTING duplicate requires rows (two DIFFERENT parents for one sc_topic) are a malformed
   // input — a typed throw (fail closed). Identical rows are harmless (deduped here). This mirrors the
   // renderer, which reads exactly one parent per SC.
   const requiresParent = new Map()
@@ -1551,14 +1545,14 @@ export function validatePlanClosure(input) {
     requiresParent.set(sc, mi)
   }
   const settledTopics = new Set(inp.settled.map(topicOf))
-  // B3R1-4: the parent must resolve in the settled MILESTONE subset — a topic-PREFIX check, not membership
+  // the parent must resolve in the settled MILESTONE subset — a topic-PREFIX check, not membership
   // in the whole settled-topic set. A parent that resolves to a settled ORGANIC decision (or any non-milestone
   // topic) is an orphan, exactly as the renderer emits an '(unsettled)' parent for it.
   const settledMilestoneSet = new Set([...settledTopics].filter((t) => t.startsWith('milestone:')))
   const settledScEntries = inp.settled.filter((e) => topicOf(e).startsWith('sc:'))
   const violations = []
   const milestoneHasSc = new Set()
-  // B3R1-4: each settled SC's parent is derived from the SC VALUE's milestone_key — the AUTHORITATIVE
+  // each settled SC's parent is derived from the SC VALUE's milestone_key — the AUTHORITATIVE
   // source the renderer uses to emit the manifest — NOT the requires rows alone (which could overwrite and
   // let closure validate the WRONG parent). A bare-topic entry (no value) falls back to its requires row.
   // Where BOTH sources name a parent they MUST AGREE: a value.milestone_key that disagrees with the SC's
@@ -1582,7 +1576,7 @@ export function validatePlanClosure(input) {
   return violations.length ? { ok: false, violations } : { ok: true }
 }
 
-// renderMasterPlan(bundle, { visionScIds }) — A5 item 5 COMPLETE: the deterministic renderer. TOTAL over
+// renderMasterPlan(bundle, { visionScIds }) — the deterministic renderer. TOTAL over
 // legal bundles and byte-deterministic (same bundle ⇒ identical markdown). NO model input — a pure
 // function of the settled bundle. bundle.settled = the settled entries (milestones `milestone:...`, SCs
 // `sc:...`, organic decisions otherwise — partitioned by topic prefix); each SC value carries
@@ -1601,7 +1595,7 @@ export function validatePlanClosure(input) {
 // naming BOTH A2 positions (an {absent:true} side renders as the explicit ABSENT marker). Returns
 // { markdown, manifest, milestone_ids, sc_ids, milestones } — manifest = the exact SC-id→final-milestone-id
 // map; milestones = the ordered milestone records {final_id, title, summary, order, surface, confidence} in
-// render order (ruling AMB-iiB-B: the workflow reads these instead of re-deriving the sort).
+// render order (the workflow reads these instead of re-deriving the sort).
 // Inline WITH canonicalJson, sha256Hex.
 export function renderMasterPlan(bundle, opts) {
   const b = bundle || {}
@@ -1666,7 +1660,7 @@ export function renderMasterPlan(bundle, opts) {
   const manifest = {}
   for (const r of scRecords) manifest[finalIdOf.get(r.topic)] = r.parent_final
   // milestones: the ordered milestone records in render order (the same (numeric order, canonical topic)
-  // sort). The workflow reads these instead of replicating the sort (ruling AMB-iiB-B). order = the raw
+  // sort). The workflow reads these instead of replicating the sort. order = the raw
   // numeric order field (null when unset); final_id = the assigned M-id.
   const milestoneRecords = milestonesSorted.map((m) => {
     const v = m.value && typeof m.value === 'object' ? m.value : {}

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Kiln run event — one line of .kiln/events.jsonl",
-  "description": "Append-only write-ahead source of truth for a Kiln run (BLUEPRINT §4). state.json is a deterministic projection of these events. Cross-line invariants enforced by kiln-state.mjs validate, not expressible here: seq is contiguous starting at 1; events appear in seq order. A truncated final line is structural partial-write recovery — dropped with a warning, never a violation.",
+  "description": "Append-only write-ahead source of truth for a Kiln run. state.json is a deterministic projection of these events. Cross-line invariants enforced by kiln-state.mjs validate, not expressible here: seq is contiguous starting at 1; events appear in seq order. A truncated final line is structural partial-write recovery — dropped with a warning, never a violation.",
   "type": "object",
   "additionalProperties": false,
   "required": ["seq", "ts", "type", "stage", "data", "git"],

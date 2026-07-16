@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// kiln-law.mjs — the Kiln Law CLI (BLUEPRINT §5/§5.1). Zero dependencies, plain node ≥18.
+// kiln-law.mjs — the Kiln Law CLI. Zero dependencies, plain node ≥18.
 //
 // .kiln/law.json is the locked acceptance-check index — the test-lock spine. Asimov writes it
 // pre-lock (lock_commit null, sha256 maps empty); this CLI locks, guards, and executes it.
-// The §5 lock sequence is: `kiln-law index`, THEN one commit —
+// The lock sequence is: `kiln-law index`, THEN one commit —
 // `git add tests/acceptance .kiln/law.json && git commit -m "test(law): lock acceptance gates"`.
 //   index  — sha256 every file in checks[].files (on disk — the gates are typically still
 //            uncommitted at this point) + record lock_commit (current HEAD, the last pre-gate
@@ -11,19 +11,19 @@
 //            sha of the commit that contains it, so the locked content lands in lock_commit's
 //            FIRST DESCENDANT that touches it (the lock commit) — verify anchors its git arm
 //            there. Refuses to re-index when the live law is locked OR a committed locked Law
-//            already exists — the Law is immutable after lock (§5.1); nulling the live
+//            already exists — the Law is immutable after lock; nulling the live
 //            lock_commit cannot re-open it. Refuses a projectPath with no HEAD to record (not a
 //            git repo, or a repo with no commits) with a NAMED reason — creating the greenfield
 //            baseline ("chore: kiln build baseline") is the architecture lock sequence's
-//            pre-flight (P3.5 T2), never this CLI's job. Refuses a probe whose EMBEDDED spec
+//            pre-flight, never this CLI's job. Refuses a probe whose EMBEDDED spec
 //            does not deep-equal its on-disk tests/acceptance/<id>.probe.json twin (or whose
-//            twin is missing/unlisted/unparseable) — RUN-B F1: kiln-probe executes the embedded
+//            twin is missing/unlisted/unparseable) — kiln-probe executes the embedded
 //            spec, the index attests the twin, and the Law is immutable after lock, so a
 //            desynced pair can never be allowed to lock.
-//   verify — the tamper gate. TRUST ROOT (§5.1 immutable-Law model): the live .kiln/law.json is
+//   verify — the tamper gate. TRUST ROOT (the immutable-Law model): the live .kiln/law.json is
 //            mutable by anything with disk access — a tamperer can launder a hash AND move
 //            lock_commit in one edit — so once a locked law.json exists in git history (oldest
-//            locked, schema-valid version wins; by §5 construction that is the lock commit's),
+//            locked, schema-valid version wins; by construction that is the lock commit's),
 //            the gate anchors EVERYTHING on that COMMITTED Law and never trusts the live file
 //            again. Three arms, ANY offender → exit 2 with one machine-readable `TAMPER: <path>`
 //            line per offender; exit 0 clean:
@@ -39,8 +39,8 @@
 //            alone guards the still-untracked gates. The workflow closes that window immediately
 //            with the lock commit, and the build spine never runs inside it (architecture's
 //            verifier requires the lock commit to exist before law_locked is true).
-//   run    — the deterministic runner (§5.1). The tamper gate (same three arms as verify) fires
-//            before EVERY check run (§5.1 tamper model), twice over:
+//   run    — the deterministic runner. The tamper gate (same three arms as verify) fires
+//            before EVERY check run (the tamper model), twice over:
 //              · once up front, before flags are even resolved against the Law — offenders print
 //                their TAMPER lines and exit 2 with NOTHING executed and no evidence written;
 //              · again before EACH selected check — a check's own cmd can tamper a locked path
@@ -52,7 +52,7 @@
 //            and the per-check timeout_s, capture stdout+stderr to
 //            .kiln/evidence/<runId>/checks/<SC>.log, append {id, exit, duration_ms, log_sha256}
 //            per check to .kiln/evidence/<runId>/results.jsonl, print one summary line per
-//            check. The run also writes .kiln/evidence/<runId>/run.json — the §6 freshness
+//            check. The run also writes .kiln/evidence/<runId>/run.json — the freshness
 //            anchor, CLI-written (never agent-transcribed): {schema, run_id, head, started_at}
 //            up front, plus {results_sha256, completed_at} ONLY when the run completes — the
 //            build spine's freshness gate compares these against the current HEAD before any
@@ -61,7 +61,7 @@
 //            that:
 //              --expect-green SC-001,SC-002 — those checks must be green NOW (hard greenness; a
 //                deferred probe never satisfies it).
-//              --flips SC-001,SC-002 — the §5.1 red/green LIFECYCLE gate: the declared slice
+//              --flips SC-001,SC-002 — the red/green LIFECYCLE gate: the declared slice
 //                flips must go RED→GREEN from the recorded prior status, and every
 //                previously-GREEN check that ran must STAY green (regression → exit 1 with a
 //                `REGRESSION <id>` line). Prior status comes from --before <runId> (the folded
@@ -72,7 +72,7 @@
 //                for full coverage. A flip whose check folds 'deferred' (a spec-less probe
 //                template, --skip-probes, or playwright absent) is exempt from flip accounting —
 //                deferred is honest degradation, NEVER green.
-//            P3 probe stance (BLUEPRINT §7): kind:"probe" checks with a `spec` EXECUTE via
+//            probe stance: kind:"probe" checks with a `spec` EXECUTE via
 //            kiln-probe.mjs — one bounded subprocess per probe (the browser is a subprocess with
 //            a deadline, never a service; kiln-probe owns serve/deadline/sweep/evidence). The
 //            probe's stdout lands in checks/<SC>.log and its exit maps mechanically:
@@ -92,8 +92,8 @@
 //            process group via the wrapper's /tmp/kiln-pw-<runId>-….server.pid record (the
 //            server's own cmdline carries no token — lifecycle step 4: no server outlives the
 //            check that spawned it).
-//            STAGE-LEVEL SWEEPS (discipline-spec lifecycle step 3) bracket every probe-executing
-//            run, each scoped BY TOKEN (BLUEPRINT §7: "pre- and post-stage sweeps by token, never
+//            STAGE-LEVEL SWEEPS (lifecycle step 3) bracket every probe-executing
+//            run, each scoped BY TOKEN ("pre- and post-stage sweeps by token, never
 //            blanket pkill"): a pre-flight `kiln-probe sweep <runPrefix||runId>` fires before the
 //            first check runs (it reaps THIS stage's own prior crashed runs — a sibling run under
 //            the same --run-prefix that died leaving stale profiles/SingletonLocks/orphaned trees;
@@ -107,12 +107,12 @@
 //            contains an executable probe (spec'd, not --skip-probes): a run that launches no
 //            browser HAS no browser stage to sweep. The workflow-boundary pair (build start
 //            pre-flight + build-end cleanup, both ledgered, both scoped to the build's own
-//            BUILD_RUN_TOKEN) is build.js's own (P3 T2), layered above these.
-//   dryrun — the PRE-LOCK check executor (P3.5 T1, dogfood finding 1): checks are code; they
+//            BUILD_RUN_TOKEN) is build.js's own, layered above these.
+//   dryrun — the PRE-LOCK check executor: checks are code; they
 //            execute before we trust them — reading is not executing. Legal PRE-LOCK by design:
 //            reads the LIVE law.json (schema-validated), requires NO lock_commit, fires NO
 //            tamper gate, touches NO git. Executes every check with cwd=projectPath and the
-//            per-check timeout_s (probes stay DEFERRED — never executed here; §7's exit-78
+//            per-check timeout_s (probes stay DEFERRED — never executed here; the exit-78
 //            semantics belong to the locked runner and are untouched), captures a ~25-line
 //            stdout/stderr tail per check, and classifies deterministically where the exit code
 //            carries it (classifyDryrun, ../src/law.mjs): pytest 1 = honest-red; pytest 2/3/4/5
@@ -121,12 +121,12 @@
 //            green (pre-satisfied candidate); any other nonzero = ambiguous (transcribed,
 //            judged downstream — the architecture stage feeds the transcript to Athena).
 //            A dry-run is a TRANSCRIPT, never a run record: no evidence dir, no run.json, no
-//            results.jsonl — zero disk residue. Probe twins ARE checked here (RUN-B F1 tail):
+//            results.jsonl — zero disk residue. Probe twins ARE checked here:
 //            a spec'd probe whose on-disk tests/acceptance twin is missing/unlisted/
 //            unparseable/not-deep-equal classifies broken-check (a pure file comparison — no
 //            browser), so the revise loop routes the desync to its author pre-lock. A
 //            PRESENT-but-invalid law.json (bad JSON, schema violations) is itself a
-//            transcribable report — RUN-B FINDING 1: {transcript: [], law_violations: [typed
+//            transcribable report: {transcript: [], law_violations: [typed
 //            errors], summary: zeros}, exit 0 — so the architecture loop can route Asimov's own
 //            compilation defects into the same bounded revise cycle instead of dead-ending the
 //            gate; a MISSING law.json still dies (nothing to revise), and every other command
@@ -138,14 +138,14 @@
 //            gating is the architecture stage's job); 1 only on usage/infra errors.
 //   status — fold one run's results.jsonl → {green, red, deferred} JSON on stdout (green = exit
 //            matched the check's expected 'exit0'; last line wins per id; law.json check order).
-//   suite  — persist the PROJECT suite as hashed evidence beside a recorded Law run (§6): the
+//   suite  — persist the PROJECT suite as hashed evidence beside a recorded Law run: the
 //            same tamper gate fires first (offenders → TAMPER lines + exit 2, nothing executed),
 //            then --cmd runs with cwd=projectPath under --timeout-s (default 600), stdout+stderr
 //            captured to .kiln/evidence/<runId>/suite.log and one
 //            {cmd, exit, duration_ms, log_sha256} line appended to
 //            .kiln/evidence/<runId>/suite.jsonl. suite.jsonl is a SIBLING of results.jsonl on
 //            purpose: run.json finalizes sha256(results.jsonl) when the Law run completes, so
-//            suite evidence appended afterwards must never touch the hashed file (the §6 hash
+//            suite evidence appended afterwards must never touch the hashed file (the hash
 //            arm would read it as altered evidence). Prints `SUITE <runId> exit=<n> …` with the
 //            suite's REAL exit code; the CLI itself exits 0 (suite green) / 1 (suite red or
 //            infra error) — exit 2 stays reserved for tamper.
@@ -183,7 +183,7 @@ import { fileURLToPath } from 'node:url'
 
 import { validateLaw, flipPlan, classifyDryrun, probeTwinRel, probeTwinIssues } from '../src/law.mjs'
 
-// kiln-probe.mjs lives beside this CLI — the §7 Tier-1 probe wrapper kind:'probe' checks run through
+// kiln-probe.mjs lives beside this CLI — the Tier-1 probe wrapper kind:'probe' checks run through
 const KILN_PROBE = join(dirname(fileURLToPath(import.meta.url)), 'kiln-probe.mjs')
 
 const die = (msg, code = 1) => { console.error(`kiln-law: ${msg}`); process.exit(code) }
@@ -230,11 +230,11 @@ function foldResults(resultsFile) {
   return { byId, order }
 }
 
-// ── the committed Law — the §5.1 trust root ──────────────────────────────────────────────────────
+// ── the committed Law — the trust root ───────────────────────────────────────────────────────────
 // The live .kiln/law.json is mutable by anything with disk access: one edit can launder a hash
 // AND move lock_commit to the tamper commit, blinding any gate that reads it. The Law that
 // counts is therefore the COMMITTED one — the oldest locked, schema-valid version of law.json
-// in git history, which by construction of the §5 sequence (index, then ONE lock commit) is the
+// in git history, which by construction of the lock sequence (index, then ONE lock commit) is the
 // lock commit's. Pre-lock versions (lock_commit null), deleted blobs, and unparseable/invalid
 // candidates never qualify. History rewriting is outside the threat model: builders make
 // ordinary commits; the workflow owns the repo.
@@ -259,9 +259,9 @@ function findCommittedLaw(projectPath, lawRel) {
   return null
 }
 
-// ── the §5.1 tamper-gate arms 1+2 — driven by tamperGate, NEVER by the live law directly ────────
+// ── the tamper-gate arms 1+2 — driven by tamperGate, NEVER by the live law directly ─────────────
 // Arm 1: re-hash every locked path against the recorded sha256 — catches worktree edits/deletes.
-// Arm 2 (anti-laundering): git-diff each locked path against the commit that LOCKED it. The §5
+// Arm 2 (anti-laundering): git-diff each locked path against the commit that LOCKED it. The lock
 // sequence (index, THEN one "test(law): lock acceptance gates" commit) means lock_commit is the
 // last PRE-gate commit: paths already in lock_commit anchor there (brownfield); paths the lock
 // commit introduced anchor on the FIRST commit after lock_commit that touches them — which is
@@ -306,7 +306,7 @@ function tamperGate(projectPath, kilnDir) {
   const committed = findCommittedLaw(projectPath, lawRel)
   if (committed === null) {
     // No committed Law yet: the live law.json is the only reference (schema-validated by
-    // readLaw). This is the §5 index→lock-commit window — the re-hash arm guards the untracked
+    // readLaw). This is the index→lock-commit window — the re-hash arm guards the untracked
     // gates alone, the workflow closes the window immediately, and the build spine never runs
     // here (architecture's verifier requires the lock commit before law_locked is true).
     const { law } = readLaw(kilnDir)
@@ -326,7 +326,7 @@ function tamperGate(projectPath, kilnDir) {
 function cmdIndex(projectPath, kilnDir) {
   const { file, law } = readLaw(kilnDir)
   if (law.lock_commit !== null) die(`index: law.json is already locked (lock_commit ${law.lock_commit}) — the Law is immutable after lock`)
-  // P3.5 T2 (dogfood finding 2): index NEEDS a HEAD — it records lock_commit = HEAD. A repo-less
+  // index NEEDS a HEAD — it records lock_commit = HEAD. A repo-less
   // projectPath (greenfield before the lock sequence's pre-flight ran) or an unborn HEAD used to
   // die deep inside findCommittedLaw with a misleading "tamper gate: git log failed"; refuse with
   // the REAL reason and the remedy instead — the named reason flows verbatim into the lock leg's
@@ -336,8 +336,8 @@ function cmdIndex(projectPath, kilnDir) {
     die(`index: ${projectPath} has no git HEAD to record as lock_commit (not a git repository, or a repo with no commits) — the Law anchors in git; the lock sequence's greenfield pre-flight creates the baseline first (git init -q, then git add -A && git commit -m "chore: kiln build baseline")`)
   }
   const committed = findCommittedLaw(projectPath, lawRelPath(projectPath, kilnDir))
-  if (committed) die(`index: the Law is already locked and committed (${committed.lockedBy}) — immutable after lock (§5.1); a pre-lock live law.json cannot re-open it`)
-  // RUN-B F1 tail — the lock's twin floor, checked BEFORE the generic missing-file guard so a
+  if (committed) die(`index: the Law is already locked and committed (${committed.lockedBy}) — immutable after lock; a pre-lock live law.json cannot re-open it`)
+  // the lock's twin floor, checked BEFORE the generic missing-file guard so a
   // listed-but-missing twin gets the NAMED twin refusal (which teaches the regenerate-to-
   // deep-equal fix), never the generic message: kiln-probe executes the EMBEDDED spec while
   // this index hashes the on-disk twin; the Law is immutable after lock, so a desynced pair
@@ -378,13 +378,13 @@ function cmdVerify(projectPath, kilnDir) {
   console.log(`kiln-law: verify clean — ${allFiles(gate.law).length} locked file(s) @ ${gate.law.lock_commit}${gate.lockedBy ? ` (Law committed in ${gate.lockedBy.slice(0, 7)})` : ' (lock commit pending)'}`)
 }
 
-// ── run — the deterministic runner (§5.1): tamper gate before EVERY check, fixed cwd, per-check
+// ── run — the deterministic runner: tamper gate before EVERY check, fixed cwd, per-check
 //    timeout, hashed evidence, then the expectation + red/green lifecycle gates ──────────────────
 function cmdRun(projectPath, kilnDir, flags) {
   for (const k of Object.keys(flags)) if (!['only', 'skip-probes', 'expect-green', 'flips', 'before', 'run-prefix'].includes(k)) die(`run: unknown flag --${k}`)
   const gate = tamperGate(projectPath, kilnDir)
   if (!gate.locked) die(`run: law.json is not locked — evidence must anchor to a locked Law; run 'index' first`)
-  // §5.1 tamper model: "before EVERY check run … the runner re-hashes the locked paths against
+  // the tamper model: "before EVERY check run … the runner re-hashes the locked paths against
   // law.json and diffs them against lock_commit." This first firing happens before flags are even
   // resolved against the Law — offenders ⇒ exit 2, NOTHING executed, no evidence written; the
   // build spine keys on exit 2 mechanically (slice auto-REJECTED). The gate then RE-FIRES before
@@ -443,7 +443,7 @@ function cmdRun(projectPath, kilnDir, flags) {
   const runDir = join(kilnDir, 'evidence', runId)
   mkdirSync(join(runDir, 'checks'), { recursive: true })
   const resultsFile = join(runDir, 'results.jsonl')
-  // run.json — the §6 freshness anchor the build spine's gate keys on, written by THIS CLI so
+  // run.json — the freshness anchor the build spine's gate keys on, written by THIS CLI so
   // the evidence carries its own HEAD/hash/timestamp anchors (agents only transcribe them).
   // Written unfinalized up front (head + started_at), finalized with sha256(results.jsonl) +
   // completed_at only when every selected check ran — a mid-run abort (tamper, crash) leaves no
@@ -462,7 +462,7 @@ function cmdRun(projectPath, kilnDir, flags) {
   console.log(`RUN ${runId} HEAD ${head}`)
   if (plan) console.log(`PLAN flip=${plan.flip.join(',')} regression=${plan.regression.join(',')} pre_satisfied=${plan.pre_satisfied.join(',')} deferred=${plan.deferred.join(',')} (before: ${beforeSrc})`)
 
-  // assertGateBefore — the §5.1 "before EVERY check run" re-fire. A check's own cmd can tamper a
+  // assertGateBefore — the "before EVERY check run" re-fire. A check's own cmd can tamper a
   // locked path mid-batch (the cycle-3 reviewer attack: SC-001 rewrites locked SC-002, then
   // SC-002 runs green against tampered content), so the SAME three-arm gate resolves fresh
   // before each check. Offenders ⇒ TAMPER lines + exit 2 with the next check never executed;
@@ -476,23 +476,23 @@ function cmdRun(projectPath, kilnDir, flags) {
     die(`run: tamper gate failed before ${id} — locked path(s) changed mid-run; run ${runId} aborted, its evidence is partial and untrusted`, 2)
   }
 
-  // §7 stage-level sweeps (discipline-spec lifecycle step 3): when this run will EXECUTE any
+  // stage-level sweeps (lifecycle step 3): when this run will EXECUTE any
   // probe — a spec'd kind:'probe' in the selection, not opted out by --skip-probes — the
-  // browser-verification stage exists and gets BOTH brackets, each scoped BY TOKEN (BLUEPRINT §7:
+  // browser-verification stage exists and gets BOTH brackets, each scoped BY TOKEN (
   // "pre- and post-stage sweeps by token, never blanket pkill"). A whole-kiln-pw- namespace sweep
   // is forbidden HERE: this run cannot tell its own prior litter from a CONCURRENT Kiln run's
   // in-flight browsers (a parallel build, a validate Tier-2 traversal), and reaping the latter is
-  // exactly the cross-run kill the discipline spec bans. Both brackets therefore scope to this
+  // exactly the cross-run kill that is banned. Both brackets therefore scope to this
   // run's spawn namespace. Pre-flight: the runId PREFIX (the --run-prefix the stage owns when one
   // is threaded, else the full runId) — fired before any probe spawns, it reaps THIS stage's own
-  // prior crashed runs (#1311's stale SingletonLock / orphaned trees: a sibling run sharing the
+  // prior crashed runs (a stale SingletonLock / orphaned trees: a sibling run sharing the
   // stage prefix), never a concurrent run under a different prefix. The stage that owns a token is
   // the right place for any broader sweep, and the build stage does exactly that via its own
   // BUILD_RUN_TOKEN pre-flight bracket. An unprefixed direct run scopes pre-flight to its full
   // runId (unique per invocation) — a near-no-op by construction: an unprefixed run cannot claim
   // ownership of shared-namespace litter, so it honestly sweeps only what it will spawn. The
   // belt-and-suspenders truth (per build.js): every probe gets a UNIQUE /tmp/kiln-pw-<token>
-  // profile dir, so the reused-user-data-dir failure #1311 needs cannot reproduce across runs
+  // profile dir, so a reused-user-data-dir failure cannot reproduce across runs
   // anyway — the pre-flight is defense-in-depth, not a correctness load-bearer. Run-end: this
   // run's full token prefix (runId), registered on process 'exit' so it fires on EVERY path out —
   // clean completion, unmet gates (exit 1), the mid-run tamper abort (exit 2) — die() is
@@ -520,7 +520,7 @@ function cmdRun(projectPath, kilnDir, flags) {
       continue
     }
     const started = Date.now()
-    // §7: a probe check executes via kiln-probe — one bounded browser subprocess with its own
+    // a probe check executes via kiln-probe — one bounded browser subprocess with its own
     // serve/deadline/sweep/evidence lifecycle; every other kind runs its exact locked cmd.
     const res = c.kind === 'probe'
       ? spawnSync(process.execPath, [KILN_PROBE, 'run', projectPath, kilnDir, c.id, runId], {
@@ -560,7 +560,7 @@ function cmdRun(projectPath, kilnDir, flags) {
   // expectation is a verdict about the work, not about the evidence: the evidence is complete).
   // verification_class is part of the finalized evidence: 'static-only' the moment ANY probe
   // deferred in THIS run (spec-less template, --skip-probes, or playwright absent) — degraded
-  // verification is recorded in the §6 anchor itself, never inferred from prose.
+  // verification is recorded in the freshness anchor itself, never inferred from prose.
   const verificationClass = anyProbeDeferred ? 'static-only' : 'full'
   writeManifest({ results_sha256: sha256(readFileSync(resultsFile)), completed_at: Math.floor(Date.now() / 1000), verification_class: verificationClass })
   console.log(`RESULT ${runId} green=${green} red=${red} deferred=${deferredN}`)
@@ -568,7 +568,7 @@ function cmdRun(projectPath, kilnDir, flags) {
 
   // The gates, evaluated together so every failure is reported in one pass:
   // --expect-green is hard greenness (a deferred probe can never satisfy it); --flips is the
-  // §5.1 lifecycle — declared flips must be green NOW (RED→GREEN from statusBefore; deferred
+  // lifecycle — declared flips must be green NOW (RED→GREEN from statusBefore; deferred
   // probes exempt), and no previously-GREEN check that ran may have gone red.
   const failures = []
   const unmetExpect = expectGreen.filter((id) => byId[id] !== 'green')
@@ -590,10 +590,10 @@ function cmdRun(projectPath, kilnDir, flags) {
   if (failures.length) die(`run: ${failures.join('; ')}`)
 }
 
-// ── dryrun — the PRE-LOCK check executor (P3.5 T1, dogfood finding 1): checks are code; they
+// ── dryrun — the PRE-LOCK check executor: checks are code; they
 //    execute before we trust them. A dry-run is a transcript, never a run record ───────────────────
 // Legality is the point: pre-lock there is nothing locked to tamper and often no git history to
-// anchor (greenfield — the lock sequence itself owns the baseline, T2), so this command reads the
+// anchor (greenfield — the lock sequence itself owns the baseline), so this command reads the
 // LIVE law.json (schema-validated by readLaw), requires no lock_commit, fires no tamper gate, and
 // runs no git command at all. It also writes NOTHING: no evidence dir, no run.json, no
 // results.jsonl — folding a pre-lock execution into evidence would let an unlocked, unanchored
@@ -603,7 +603,7 @@ function cmdRun(projectPath, kilnDir, flags) {
 // carries the verdict; ambiguous entries ship their tails for the downstream judge.
 function cmdDryrun(projectPath, kilnDir, flags) {
   for (const k of Object.keys(flags)) if (k !== 'json') die(`dryrun: unknown flag --${k}`)
-  // RUN-B FINDING 1: pre-lock, a DEFECTIVE Law is Asimov's own artifact, and the dry-run gate
+  // pre-lock, a DEFECTIVE Law is Asimov's own artifact, and the dry-run gate
   // exists to route authored defects back to their author. So dryrun ALONE treats a
   // present-but-invalid law.json (bad JSON, schema violations) as a TRANSCRIBABLE report —
   // law_violations carried in the output, exit 0 — never a crash: the architecture loop routes
@@ -641,9 +641,9 @@ function cmdDryrun(projectPath, kilnDir, flags) {
   for (const c of law.checks) {
     if (c.kind === 'probe') {
       // probes stay deferred at dry-run: there is no built product to probe pre-lock, and the
-      // §7 probe lifecycle (exit 78/79, sweeps, evidence) belongs to the locked runner — a
+      // probe lifecycle (exit 78/79, sweeps, evidence) belongs to the locked runner — a
       // dry-run executes no browser and leaves those semantics untouched. But the TWIN contract
-      // is checked where checks are checked (RUN-B F1 tail): kiln-probe executes the EMBEDDED
+      // is checked where checks are checked: kiln-probe executes the EMBEDDED
       // spec while the lock attests the on-disk tests/acceptance twin — a desynced pair
       // pre-lock is Asimov's own defect, classified broken-check so the existing revise loop
       // routes it to its author. No browser runs; the twin check is a pure file comparison.
@@ -682,7 +682,7 @@ function cmdDryrun(projectPath, kilnDir, flags) {
   else console.log(`DRYRUN_RESULT checks=${transcript.length} green=${summary.green} honest-red=${summary['honest-red']} broken-check=${summary['broken-check']} ambiguous=${summary.ambiguous} deferred=${summary.deferred}`)
 }
 
-// ── suite — persist the project suite as hashed evidence beside a recorded Law run (§6) ─────────
+// ── suite — persist the project suite as hashed evidence beside a recorded Law run ──────────────
 // The suite command is the project's own (recorded by the builder); its output is evidence the
 // reviewer reads, so it lands in the SAME evidence dir as the Law run it accompanies — log +
 // sha256'd result line, never prose. Written to suite.jsonl, a sibling of results.jsonl: the

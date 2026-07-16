@@ -549,24 +549,24 @@ function stripStdoutTerminator(bytes) {
   return bytes
 }
 
-// ── The dev bridge (Kiln Dev Protocol Piece 3, A4/A5/A6/A7) ────────────────────────────────────
+// ── The dev bridge ──────────────────────────────────────────────────────────────────────────────
 // A second entry point over the SAME trust base. Where main() attests the plain-stderr council
 // surface, the bridge attests the `--json` surface (thread_id + usage + terminal events) and runs
-// the A5 VALIDATED OUTCOME STATE MACHINE. It reuses the crypto, ledger lock, schema validator, and
+// the VALIDATED OUTCOME STATE MACHINE. It reuses the crypto, ledger lock, schema validator, and
 // invocation-id derivation, so there is one codebase of trust in both directions. sol-review.sh is
 // a thin policy wrapper over this subcommand; no verdict authority lives in bash.
 const BRIDGE_VERSION = 1
 const BRIDGE_TRANSPORT = 'codex_exec_bridge'
 const BRIDGE_SANDBOXES = ['read-only', 'workspace-write', 'danger-full-access']
-const BRIDGE_EFFORTS = ['low', 'medium', 'high', 'xhigh'] // sol rejects 'minimal'; 'ultra' never existed (probe P4)
+const BRIDGE_EFFORTS = ['low', 'medium', 'high', 'xhigh'] // sol rejects 'minimal'; 'ultra' never existed
 const BRIDGE_OUTCOMES = ['VERDICT', 'SUPPRESSED', 'FAILED_TURN', 'WALLCLOCK_TIMEOUT', 'TRANSPORT']
 const BRIDGE_EXIT = { VERDICT: 0, SUPPRESSED: 10, FAILED_TURN: 11, TRANSPORT: 12, WALLCLOCK_TIMEOUT: 124 }
 const BRIDGE_USAGE = 'usage: kiln-codex-receipt.mjs bridge --prompt <f> --out <prefix> --schema <f> --run-token <t> --keystone <k> --phase <p> --seat <s> --attempt <n> [--model id] [--effort low|medium|high|xhigh] [--sandbox read-only|workspace-write|danger-full-access] [--network] [--web] [--ephemeral] [--resume <thread_id>] [--wallclock <seconds>] [--ledger <f>] [--no-fallback]'
-// The operator's broken ~/.codex/hooks.json injects one item-level error on every run; --ignore-user-config
-// skips config.toml ONLY, never hooks.json (probe P2b). This is the SOLE tolerated error fingerprint.
+// A broken ~/.codex/hooks.json injects one item-level error on every run; --ignore-user-config
+// skips config.toml ONLY, never hooks.json. This is the SOLE tolerated error fingerprint.
 const HOOKS_CONFIG_ERROR_RE = /^failed to parse hooks config .*\/hooks\.json:/
 // A turn.failed whose model-scoped error matches this — and is NOT a reasoning.effort rejection — is the
-// exact model-unavailable/entitlement fingerprint that admits the one gpt-5.5 fallback rung (probe MU).
+// exact model-unavailable/entitlement fingerprint that admits the one gpt-5.5 fallback rung.
 const MODEL_UNAVAILABLE_RE = /\bmodel\b[^.]{0,80}?\b(is not supported when using|not found|not available|is unavailable|does not exist)\b/i
 const EFFORT_ERROR_RE = /Unsupported value:|reasoning\.effort/
 
@@ -575,7 +575,7 @@ export function isAllowlistedCodexError(message) {
 }
 
 // Structural read of the --json event stream: no I/O, no verdict authority — just the terminal shape
-// the A5 state machine needs. `disallowedErrorCount` counts error items that are NOT allowlisted.
+// the state machine needs. `disallowedErrorCount` counts error items that are NOT allowlisted.
 export function inspectBridgeEvents(events, options = {}) {
   const allowError = options.allowError ?? isAllowlistedCodexError
   const errorObjects = collectErrorObjects(events)
@@ -592,7 +592,7 @@ export function inspectBridgeEvents(events, options = {}) {
   }
 }
 
-// The A5 VALIDATED OUTCOME STATE MACHINE — pure. A VERDICT-shaped run still needs attestation
+// The VALIDATED OUTCOME STATE MACHINE — pure. A VERDICT-shaped run still needs attestation
 // (schema-valid output + usage) before it is a VERDICT; the orchestrator downgrades to TRANSPORT
 // on any attestation failure. Everything that is not one of the four defined shapes is TRANSPORT,
 // which consumes no review rejection.
@@ -624,7 +624,7 @@ function extractCodexError(raw) {
   return { message: raw }
 }
 
-// EXACT fingerprint (amendment A5): fires the fallback ONLY on a model-unavailable/entitlement
+// EXACT fingerprint: fires the fallback ONLY on a model-unavailable/entitlement
 // turn.failure, and NEVER on the reasoning.effort rejection that the old `grep -q model` admitted.
 export function isModelUnavailableFingerprint(inspect) {
   for (const raw of inspect.failureMessages || []) {
@@ -638,7 +638,7 @@ export function isModelUnavailableFingerprint(inspect) {
 }
 
 // Render the codex argv. Pure and total, so the sandbox/network/resume invariants are held by a
-// helper, not by caller discipline (rule 2). Resume cannot carry -s or --ephemeral (probe P3 + A6).
+// helper, not by caller discipline. Resume cannot carry -s or --ephemeral.
 export function bridgeCodexArgs({ model, effort, schemaFile, verdictFile, sandbox, ephemeral, web, network, resumeThread }) {
   if (!BRIDGE_EFFORTS.includes(effort)) throw new Error(`bridge: unsupported effort '${effort}' (use ${BRIDGE_EFFORTS.join('|')})`)
   const tail = [
@@ -648,8 +648,8 @@ export function bridgeCodexArgs({ model, effort, schemaFile, verdictFile, sandbo
   ]
   if (resumeThread) {
     if (ephemeral) throw new Error('bridge: --resume cannot combine with --ephemeral (recovery is not a fresh one-shot)')
-    if (sandbox) throw new Error('bridge: --resume cannot set a sandbox; codex resume inherits the recorded posture (probe P3)')
-    if (network) throw new Error('bridge: --resume cannot add a network capability; it inherits the recorded posture (probe P3)')
+    if (sandbox) throw new Error('bridge: --resume cannot set a sandbox; codex resume inherits the recorded posture')
+    if (network) throw new Error('bridge: --resume cannot add a network capability; it inherits the recorded posture')
     // web is a posture capability too: resume inherits the recorded posture, so the whole tuple
     // (sandbox, network, web) rides on the thread — the caller renders none of it (cmdBridge enforces
     // the recorded tuple and records it in the receipt).
@@ -701,7 +701,7 @@ function bridgeReplayGuard(file, invocationId) {
   })
 }
 
-// ADOPT-2: a resume must bind to a SPECIFIC recorded row — the recoverable row's thread_id must equal
+// a resume must bind to a SPECIFIC recorded row — the recoverable row's thread_id must equal
 // the caller's --resume <thread_id> AND the prompt+schema input must match. The recorded row alone
 // carries the resumed turn's model + eligibility (codex resume takes no -m); opts.model never does.
 function bridgeRecoverable(file, invocationInput, threadId) {
@@ -785,7 +785,7 @@ function attestBridgeVerdict({ run, verdict, schemaBytes }) {
   return { tokensUsed: jsonl.tokensUsed, usage: jsonl.usage }
 }
 
-// DSGN-3: every attempt's raw artifacts survive AND its ledger row binds to immutable bytes. After
+// every attempt's raw artifacts survive AND its ledger row binds to immutable bytes. After
 // an attempt is classified, its stable verdict/events/stderr/receipt files are ARCHIVE-COPIED to
 // <prefix>.attempt<K>.* (K = 1 + count of existing ledger rows for this outprefix — deterministic,
 // no clock) and the row records raw_artifact_refs pointing at those attempt-scoped paths together
@@ -843,7 +843,7 @@ function cmdBridge(argv) {
   const files = { verdictFile, eventsFile, stderrFile, receiptFile }
   const resumed = Boolean(opts.resume)
 
-  // ── Posture + model resolution (ADOPT-2/-6): on resume the RECORDED row governs the whole posture
+  // ── Posture + model resolution: on resume the RECORDED row governs the whole posture
   // tuple (sandbox, network, web) and the resumed turn's model + eligibility — never opts.model. ──
   let recordedSandbox = opts.sandbox
   let recordedNetwork = opts.network
@@ -961,12 +961,12 @@ function cmdBridge(argv) {
   process.exit(BRIDGE_EXIT[decision.status])
 }
 
-// ── The routing gate (Kiln Dev Protocol D2) ─────────────────────────────────────────────────────
+// ── The routing gate ────────────────────────────────────────────────────────────────────────────
 // The routing AUTHORITY: deterministic, no model input. It verifies the verdict chain, requires a
 // green floor receipt, binds the reviewed diff to the receipt, validates+stamps the verdict, owns
 // the ladder arithmetic from ARTIFACTS (manifest + append-only route-ledger — never caller args),
 // appends the route row, writes <prefix>.decision.json, and exits with the decision code. The
-// workflow relays the code; the files are the authority (DSGN-1b: the return is a courtesy copy).
+// workflow relays the code; the files are the authority (the return is a courtesy copy).
 const GATE_STAGES = ['plan-design', 'implementation', 'release', 'report-signoff', 'correction-escalation']
 const GATE_KEYSTONE_STAGES = new Set(['plan-design', 'release', 'report-signoff', 'correction-escalation'])
 const GATE_LANES = ['logic', 'ui-creative', 'codex-authored', 'micro-fix', 'qa-audit']
@@ -1014,7 +1014,7 @@ function parseTapTally(tap) {
   return { tests: g(/^# tests (\d+)$/m) ?? 0, pass: g(/^# pass (\d+)$/m) ?? 0, fail: g(/^# fail (\d+)$/m) ?? 0, skip: g(/^# skipped (\d+)$/m) ?? 0 }
 }
 
-// WS-F: a red floor must record WHICH tests failed. The node --test TAP failing lines are
+// A red floor must record WHICH tests failed. The node --test TAP failing lines are
 // `not ok <N> - <name>` (possibly indented for nested subtests). Collect the names only — bounded to
 // the first 20 so a runaway red floor can't bloat the receipt. A `not ok` line carrying a TODO or
 // SKIP directive is NOT a genuine failure — node tallies it under `# todo`/`# skipped`, never
@@ -1033,7 +1033,7 @@ export function parseFailingTests(tap) {
   return names
 }
 
-// DSGN-1a: the floor is a trusted-CLI mode, not a relayed claim. `gate --floor` itself spawns the
+// The floor is a trusted-CLI mode, not a relayed claim. `gate --floor` itself spawns the
 // harness + bundler, parses the TAP tally, and writes a floor receipt bound to the reviewed diff's
 // sha. The routing gate later REQUIRES a floor receipt whose pass===true and whose diff_sha256 equals
 // the reviewed diff's — a mis-relayed floor claim is caught mechanically at the gate.
@@ -1057,7 +1057,7 @@ function cmdGateFloor(opts) {
   process.exit(pass ? 0 : 1)
 }
 
-// D3: the head supplies FACTS; the gate holds the CLASSIFICATION. keystone is derived from the pinned
+// the head supplies FACTS; the gate holds the CLASSIFICATION. keystone is derived from the pinned
 // stage taxonomy (unforgeable by the caller); required_terminal must be consistent with the lane.
 function classifyManifest(manifest) {
   if (!isObj(manifest)) gateFail('manifest is not an object')
@@ -1074,7 +1074,7 @@ function classifyManifest(manifest) {
   return { keystone: GATE_KEYSTONE_STAGES.has(stage), requiredTerminal, stage, lane, batchId }
 }
 
-// ADOPT-1 ⟨DSGN-4⟩ sol lane: a codex receipt is the ONLY admissible proof. verdict non-empty; receipt
+// sol lane: a codex receipt is the ONLY admissible proof. verdict non-empty; receipt
 // present; receipt output/schema hashes match the reviewed bytes; the LAST bridge-ledger row for this
 // outprefix is a VERDICT whose invocation_id matches the receipt; and the receipt is Sol-seat eligible
 // (a fallback or non-pinned model can NEVER sign a Sol seat).
@@ -1095,7 +1095,7 @@ function verifySolChain(outPrefix, schemaBytes, bridgeLedgerFile, commissionByte
   if (!last || last.status !== 'VERDICT') gateFail('sol lane: the last bridge-ledger row for this outprefix is not a VERDICT')
   if (last.invocation_id !== receipt.invocation_id) gateFail('sol lane: bridge-ledger invocation_id does not match the receipt')
   if (receipt.sol_seat_eligible !== true) gateFail('sol lane: receipt is not Sol-seat eligible (fallback or non-pinned model) — cannot sign a Sol seat')
-  // ADOPT-1 current-attempt freshness: the last VERDICT row's input MUST equal canonicalBridgeInput of
+  // current-attempt freshness: the last VERDICT row's input MUST equal canonicalBridgeInput of
   // THIS commission + THIS schema — the chain was produced by the review being routed now, not a stale,
   // fallback, or replayed chain the runner mis-relayed as success. Historical validity is not freshness.
   const expectedInput = canonicalBridgeInput(sha256(commissionBytes), sha256(schemaBytes))
@@ -1103,16 +1103,15 @@ function verifySolChain(outPrefix, schemaBytes, bridgeLedgerFile, commissionByte
   return { verdictBytes, receipt }
 }
 
-// ⟨DSGN-4⟩ fable lane (mirrored Codex-authored): the terminal is a FABLE-AUTHORED A2 verdict file at
+// fable lane (mirrored Codex-authored): the terminal is a FABLE-AUTHORED A2 verdict file at
 // the manifest-named path — validated by the SAME validateReviewVerdict, recorded with provenance
 // fable_main_session. A codex receipt can NEVER stand in for a Fable seat (no cross-labeling).
-// ADOPT-12 (Fable ruling): the Fable-terminal instrument is a BOUND WRAPPER file
+// The Fable-terminal instrument is a BOUND WRAPPER file
 // `{"verdict": <A2 envelope>, "diff_sha256", "batch_id", "round"}`. The gate validates the inner
 // envelope (via validateReviewVerdict in the common path) and requires diff_sha256 == the reviewed
 // diff's sha, batch_id == the manifest's, and round == the invocation round — any miss ⇒ exit 12. This
 // binds the terminal ruling to the current diff/batch/round so stale or foreign schema-valid bytes can
-// never masquerade as the current Fable-authored ruling. (Cryptographic authorship attestation is
-// parked to deferred-hardening.md per the ratified single-operator threat model.)
+// never masquerade as the current Fable-authored ruling.
 function verifyFableChain(fableVerdictPath, { diffSha, batchId, round }) {
   if (!fableVerdictPath) gateFail('fable lane: manifest.fable_verdict_path (or --fable-verdict) is required')
   const p = canonicalFile(resolve(fableVerdictPath))
@@ -1135,7 +1134,7 @@ function requireFloorReceipt(floorReceiptFile, diffSha) {
   if (fr.diff_sha256 !== diffSha) gateFail('floor receipt diff_sha256 does not match the reviewed diff — the floor was measured against different bytes')
 }
 
-// ADOPT-5: bind the reviewed diff to the receipt. The commission must carry `Diff-sha256: <hex>`
+// Bind the reviewed diff to the receipt. The commission must carry `Diff-sha256: <hex>`
 // equal to the diff bytes, and the receipt.prompt_sha256 must equal the commission bytes — so the
 // reviewer demonstrably ruled on THIS diff; a snapshot agent that lied about the sha is caught here.
 function bindDiff(commissionBytes, diffBytes, receipt) {
@@ -1147,7 +1146,7 @@ function bindDiff(commissionBytes, diffBytes, receipt) {
   if (receipt.prompt_sha256 !== sha256(commissionBytes)) gateFail('diff binding: receipt.prompt_sha256 does not match the commission bytes (the reviewer ruled on a different prompt)')
 }
 
-// ADOPT-6: the posture the commission DECLARES must equal the posture the transport actually ran under
+// The posture the commission DECLARES must equal the posture the transport actually ran under
 // (the receipt tuple). The `Sandbox posture:` line is script-supplied by the workflow (never
 // agent-chosen) and encodes the whole tuple as `<sandbox> network=<0|1> web=<0|1>`; the gate parses it
 // and requires consistency with receipt.{sandbox, network, web} — any disagreement ⇒ exit 12. Without
@@ -1179,7 +1178,7 @@ function readScopeArtifact(file, schemaBytes) {
   if (typeof obj.surviving_blocking_id !== 'string' || obj.surviving_blocking_id === '') return null
   if (obj.fable_concurrence !== true) return null
   if (typeof obj.sol_verdict_path !== 'string' || obj.sol_verdict_path === '') return null
-  // ADOPT-8(a): sol_verdict_path is not a bare string to be discarded — it MUST exist, parse as a
+  // sol_verdict_path is not a bare string to be discarded — it MUST exist, parse as a
   // schema-valid A2 verdict, and actually carry the surviving id as a BLOCKING finding. The scope's
   // authority is thereby bound to a real Sol verdict, not a caller-asserted id.
   let solVerdict
@@ -1196,16 +1195,16 @@ function findingSetKey(verdict) {
   return JSON.stringify(verdict.findings.map((f) => [f.id, f.class, f.remedy_class]).sort())
 }
 
-// The ladder arithmetic (ADOPT-7, -8), derived from artifacts. Decision order per D2: keystone ⇒
+// The ladder arithmetic, derived from artifacts. Decision order: keystone ⇒
 // council FIRST; then the convergence oracle (unchanged finding set OR unchanged diff vs the prior
 // row — REGARDLESS of verdict, so it precedes the APPROVED seal); then APPROVED ⇒ seal; then the
 // substantive count and rung legality. The r3 rung is legal ONLY with a valid singleton scope artifact.
 function routeGate({ round, diffSha, keystone, ledgerRows, scopeArtifactFile, verdict, batchId, schemaBytes }) {
   const key = findingSetKey(verdict)
-  // ADOPT-8(b): the ladder is per-batch. Prior rounds are the route-ledger rows FOR THIS batch_id —
+  // the ladder is per-batch. Prior rounds are the route-ledger rows FOR THIS batch_id —
   // never a foreign batch's rows (a cross-batch row with the same diff hash used to trip the oracle).
   const priorRows = ledgerRows.filter((r) => r.batch_id === batchId)
-  // ADOPT-1: route-ledger uniqueness — exactly one row per (batch_id, round). A duplicate is a
+  // route-ledger uniqueness — exactly one row per (batch_id, round). A duplicate is a
   // non-idempotent gate re-run (e.g. a replay the runner mis-relayed as success) and is refused before
   // any routing decision, so a stale chain can never be routed twice. The read, this check, the route
   // computation, and the append run under ONE ledger lock in cmdGate, so two concurrent same-round
@@ -1216,7 +1215,7 @@ function routeGate({ round, diffSha, keystone, ledgerRows, scopeArtifactFile, ve
   const substantive = isSubstantiveRejection(verdict)
   const substantiveCount = priorRows.filter((r) => r.substantive === true).length + (substantive ? 1 : 0)
 
-  // ADOPT-8(d): round >= 3 is legal ONLY as a scoped one-item confirmation. It REQUIRES a valid
+  // round >= 3 is legal ONLY as a scoped one-item confirmation. It REQUIRES a valid
   // singleton scope artifact, and (when it carries blocking findings) the current verdict's blocking
   // set MUST be ⊆ {surviving_blocking_id}. This is a legality precondition of any r3 invocation —
   // checked before any routing decision, absent/invalid ⇒ exit 12.
@@ -1235,7 +1234,7 @@ function routeGate({ round, diffSha, keystone, ledgerRows, scopeArtifactFile, ve
   } else if (verdict.verdict === 'APPROVED') { next = 'seal'; why = 'APPROVED — dual-key and seal' }
   else if (substantiveCount >= 3) { next = 'twin-council'; why = '3rd SUBSTANTIVE rejection — correction escalation' }
   else if (round === 1) { next = 'implement-r2'; why = 'r1 REJECTED — author the self-contained r2 fix brief' }
-  // ADOPT-8(c): round-2 REJECTED (non-oracle, non-3rd-substantive) ALWAYS routes to the joint-heads
+  // round-2 REJECTED (non-oracle, non-3rd-substantive) ALWAYS routes to the joint-heads
   // rule — concurrence cannot pre-exist the verdict being routed, so the microfix-r3 decision is NEVER
   // emitted at r2-time. The heads write the scope artifact AFTER this ruling; r3 then confirms it.
   else if (round === 2) { next = 'confirm-each-or-escalate'; why = 'rejection 2 — joint-heads scope rule next (concurrence cannot pre-exist the verdict being routed; microfix-r3 is never emitted at r2)' }
@@ -1282,7 +1281,7 @@ function cmdGate(argv) {
     const routeLedgerFile = canonicalFile(resolve(opts.routeLedger))
     const scopeArtifactFile = opts.scopeArtifact ? canonicalFile(resolve(opts.scopeArtifact)) : null
 
-    // ADOPT-1: the duplicate (batch_id, round) check, the route computation, and the append are ONE
+    // the duplicate (batch_id, round) check, the route computation, and the append are ONE
     // locked critical section — a concurrent same-round invocation cannot observe no row, decide, and
     // then serialize a second append. routeGate throws on any refusal so the finally releases the lock;
     // the catch below converts the throw to gateFail (exit 12) only AFTER the lock is gone.
@@ -1308,8 +1307,8 @@ function cmdGate(argv) {
   }
 }
 
-// ── The handoff bounce (Kiln Dev Protocol D5) ───────────────────────────────────────────────────
-// ADOPT-9: the mechanical pre-model gate. A handoff missing a required section is bounced BEFORE any
+// ── The handoff bounce ──────────────────────────────────────────────────────────────────────────
+// The mechanical pre-model gate. A handoff missing a required section is bounced BEFORE any
 // model reads it. Verified by heading match (normalized prefix), exit 0 clean / 1 bounce.
 const HANDOFF_REQUIRED = {
   brief: ['objective', 'output format', 'allowed tools / inputs', 'boundaries', 'effort tier'],

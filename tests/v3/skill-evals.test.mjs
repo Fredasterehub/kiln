@@ -1,5 +1,5 @@
-// skill-evals.test.mjs — P6 T2: the trigger + scenario eval set, written BEFORE the body rewrite
-// (skill-craft §4 "build evaluations first"). skill-craft's trigger-eval methodology is 20 realistic
+// skill-evals.test.mjs — the trigger + scenario eval set, written BEFORE the body rewrite
+// (skill-craft "build evaluations first"). skill-craft's trigger-eval methodology is 20 realistic
 // queries (should-fire + near-miss negatives) run against a model; the T2 contract renders it as
 // DETERMINISTIC string/structure assertions over the two SKILL descriptions and the conductor's
 // routing table (no model calls). So each "should-fire" eval asserts the description carries the
@@ -30,7 +30,7 @@ function description(src) {
 const fireDesc = description(fireSrc)
 const brainDesc = description(brainSrc)
 
-// The pushier-trigger sentence skill-craft §4 recommends, once it lands. End at a true sentence
+// The pushier-trigger sentence skill-craft recommends, once it lands. End at a true sentence
 // boundary (a period followed by whitespace+capital, or end of string) so the internal period in
 // ".kiln/" does not truncate the clause.
 function pushySentence(desc) {
@@ -186,25 +186,25 @@ test('scenario 1: the stage routing table survives — 7 workflow rows + an Args
   assert.match(fireSrc, /pluginRoot/, 'pluginRoot dropped from the routing table')
 })
 
-// ── B4-2 D5: the Build routing row + workflow-contracts thread capabilityTier (the milestone-council
-//    tier gate), the exact 1b-ii runToken-threading precedent Architecture set. ─────────────────────
-test('B4-2: the Build routing row carries capabilityTier (the milestone-council tier gate)', () => {
+// ── the Build routing row + workflow-contracts thread capabilityTier (the milestone-council
+// tier gate), the exact runToken-threading precedent Architecture set. ─────────────────────
+test('the Build routing row carries capabilityTier (the milestone-council tier gate)', () => {
   const buildRow = fireSrc.split('\n').find((l) => l.startsWith('| Build |'))
   assert.ok(buildRow, 'the Build routing row is gone')
   assert.match(buildRow, /capabilityTier/, 'the Build row must thread capabilityTier (T4 milestone-council gate)')
   assert.match(buildRow, /runToken/, 'the Build row still threads runToken (the council receipt binding)')
 })
 
-test('B4-2: workflow-contracts.md Build bullet documents the capabilityTier milestone-council semantics', () => {
+test('workflow-contracts.md Build bullet documents the capabilityTier milestone-council semantics', () => {
   const contracts = readFileSync(join(SKILLS, '..', 'references', 'workflow-contracts.md'), 'utf8')
   assert.match(contracts, /Build also takes a \*\*`capabilityTier`\*\*|Build also takes.*capabilityTier/, 'the Build bullet must name capabilityTier')
   assert.match(contracts, /twin_ratified|close-ratification pair|milestone gate's three judgment seats/i, 'the Build bullet must describe the T4 council behavior')
   assert.match(contracts, /misconfigured conductor|fails CLOSED/i, 'the Build bullet must state the promised-but-tokenless fail-closed rule')
 })
 
-// ── B4-3 D6/D7: the three keystone routing rows thread the council args, and the Da Vinci spawn
+// ── the three keystone routing rows thread the council args, and the Da Vinci spawn
 //    instruction pins the Fable creative seat on the Agent-tool call. ──────────────────────────────
-test('B4-3 D6: the Validate routing row carries capabilityTier (the final-ruling council tier gate); vision + report rows carry runToken + capabilityTier', () => {
+test('the Validate routing row carries capabilityTier (the final-ruling council tier gate); vision + report rows carry runToken + capabilityTier', () => {
   const validateRow = fireSrc.split('\n').find((l) => l.startsWith('| Validate |'))
   assert.ok(validateRow, 'the Validate routing row is gone')
   assert.match(validateRow, /capabilityTier/, 'the Validate row must thread capabilityTier (T4 final-ruling council)')
@@ -219,7 +219,7 @@ test('B4-3 D6: the Validate routing row carries capabilityTier (the final-ruling
   assert.match(reportRow, /capabilityTier/, 'the Report row must thread capabilityTier')
 })
 
-test('B4-3 D6: workflow-contracts.md documents the vision fidelity / validate final-ruling / report signoff council semantics', () => {
+test('workflow-contracts.md documents the vision fidelity / validate final-ruling / report signoff council semantics', () => {
   const contracts = readFileSync(join(SKILLS, '..', 'references', 'workflow-contracts.md'), 'utf8')
   assert.match(contracts, /fidelity council/i, 'the vision bullet must name the fidelity council')
   assert.match(contracts, /final ruling/i, 'the validate bullet must name the final-ruling council')
@@ -229,7 +229,7 @@ test('B4-3 D6: workflow-contracts.md documents the vision fidelity / validate fi
   assert.match(contracts, /signed_off/i, 'the report bullet must state signed_off is an honest, cert-gated claim')
 })
 
-test('B4-3 D7: the Da Vinci spawn instruction pins model: "fable" on the Agent-tool call; the-creator.md frontmatter carries NO fable claim', () => {
+test('the Da Vinci spawn instruction pins model: "fable" on the Agent-tool call; the-creator.md frontmatter carries NO fable claim', () => {
   // the conductor's brainstorm spawn instruction names the Fable creative seat on the Agent tool
   assert.match(fireSrc, /model:\s*"fable"/, 'the Da Vinci Agent-tool spawn must pin model: "fable"')
   // and it is on the Da Vinci / Agent-tool spawn (co-located with the-creator + the Agent tool)
@@ -261,22 +261,22 @@ test('scenario 3: onboarding still births the ledger, the two-world rule holds, 
 })
 
 
-// ── P6.1 T1: platform currency — the conductor speaks the current binary's spawn semantics ──────
+// ── platform currency — the conductor speaks the current binary's spawn semantics ──────
 
-test('P6.1: zero TeamCreate/TeamDelete anywhere in the conductor; the Agent-tool spawn is named', () => {
+test('zero TeamCreate/TeamDelete anywhere in the conductor; the Agent-tool spawn is named', () => {
   const fire = readFileSync(join(SKILLS, 'kiln-fire', 'SKILL.md'), 'utf8')
   assert.ok(!/TeamCreate|TeamDelete/.test(fire), 'the removed team-setup tools must not be instructed')
   assert.match(fire, /Agent tool/, 'the implicit-team Agent-tool spawn is the documented path')
   assert.match(fire, /`name`/, 'the spawn names Da Vinci for SendMessage addressability')
 })
 
-test('P6.1: the version floor reads 2.1.198 in the doctor and nothing still says 2.1.154', () => {
+test('the version floor reads 2.1.198 in the doctor and nothing still says 2.1.154', () => {
   const doctor = readFileSync(join(SKILLS, '..', 'commands', 'kiln-doctor.md'), 'utf8')
   assert.match(doctor, /2\.1\.198/)
   assert.ok(!doctor.includes('2.1.154'), 'the old floor must be gone from the doctor')
 })
 
-// ── WS-C/C3 + C4: the story telegraph tail contract lives in the conductor ──────────────────────
+// ── the story telegraph tail contract lives in the conductor ──────────────────────
 
 test('telegraph: the tail captures a sequence cursor before launch', () => {
   assert.match(fireSrc, /Capture the cursor BEFORE launch/i, 'cursor-capture step is missing')
@@ -331,10 +331,10 @@ test('telegraph: one PushNotification per stage completion + a one-time /workflo
   assert.match(fireSrc, /FIRST autonomous stage only/i, 'the one-time /workflows hint is missing')
 })
 
-// ── WS-D/D4: the unattended-chaining hard-stop list survives ────────────────────────────────────
+// ── the unattended-chaining hard-stop list survives ────────────────────────────────────
 
 test('chaining: clean completion auto-advances in the same turn', () => {
-  assert.match(fireSrc, /Unattended chaining \(D4\)/, 'the D4 chaining doctrine paragraph is missing')
+  assert.match(fireSrc, /Unattended chaining\./, 'the unattended-chaining doctrine paragraph is missing')
   assert.match(fireSrc, /auto-advances/i)
 })
 
@@ -346,7 +346,7 @@ test('chaining: every hard stop is enumerated and plan_approval:auto chains thro
   assert.match(fireSrc, /plan_approval: auto/, 'the auto-chains-through-architecture rule is missing')
 })
 
-// ── WS-C deliverable 3: the STATE template carries the cursor field at schema_version 3 ──────────
+// ── deliverable 3: the STATE template carries the cursor field at schema_version 3 ──────────
 
 test('STATE template: last_rendered_seq bullet + schema_version 3', () => {
   const stateSrc = readFileSync(join(SKILLS, '..', 'templates', 'STATE.md'), 'utf8')
@@ -354,9 +354,9 @@ test('STATE template: last_rendered_seq bullet + schema_version 3', () => {
   assert.match(stateSrc, /\*\*last_rendered_seq\*\*:\s*0/, 'the last_rendered_seq cursor bullet is missing')
 })
 
-// ── WS-C r2 (Sol round 1) — cursor bootstrap, matching termination, drain, hint derivation ──────
+// ── cursor bootstrap, matching termination, drain, hint derivation ──────
 
-test('r2 bootstrap: 0/absent/non-integer all read UNCAPTURED and resolve via the since-tail form', () => {
+test('cursor bootstrap: 0/absent/non-integer all read UNCAPTURED and resolve via the since-tail form', () => {
   assert.match(fireSrc, /UNCAPTURED/, 'the uncaptured-cursor rule is missing')
   assert.match(fireSrc, /since\s*\n?\s*<abs>\/\.kiln tail/, 'the explicit since-tail bootstrap call is missing')
   assert.match(fireSrc, /`0`[^.]*uncaptured\s+sentinel/i, 'the 0-as-sentinel rule is not stated')
@@ -364,12 +364,12 @@ test('r2 bootstrap: 0/absent/non-integer all read UNCAPTURED and resolve via the
   assert.doesNotMatch(fireSrc, /since <abs>\/\.kiln 0 --limit 1/, 'the truncating bootstrap query must be gone')
 })
 
-test('r2 termination: only a stage_completed MATCHING the active stage terminates; others render as beats', () => {
+test('termination: only a stage_completed MATCHING the active stage terminates; others render as beats', () => {
   assert.match(fireSrc, /`stage` field MATCHES the\s*\n?\s*active stage/, 'the matching-stage termination rule is missing')
   assert.match(fireSrc, /any OTHER stage is rendered\/coalesced/i, 'a foreign stage_completed must degrade to a beat')
 })
 
-test('r3 drain loop: notification-first closure drains to the tail — loop while truncated + completion unconsumed', () => {
+test('drain loop: notification-first closure drains to the tail — loop while truncated + completion unconsumed', () => {
   assert.match(fireSrc, /REPEAT `since <cursor> --kind lore` WHILE/, 'the drain loop is missing')
   assert.match(fireSrc, /`truncated: true` AND the active stage's `stage_completed` has not yet been consumed/, 'the loop condition is not stated')
   assert.match(fireSrc, /NOT part of the 6[–-]8 in-stage wake budget/, 'close-out fetches must be excluded from the wake budget')
@@ -380,20 +380,20 @@ test('r3 drain loop: notification-first closure drains to the tail — loop whil
   assert.doesNotMatch(fireSrc, /ONE\s*\n?\s*bounded final `since` drain/i, 'the r2 single-drain wording must be gone')
 })
 
-test('r2 hint: the /workflows hint is derived from last_completed_stage, no new state field', () => {
+test('hint: the /workflows hint is derived from last_completed_stage, no new state field', () => {
   const m = fireSrc.match(/shows the forge in motion[\s\S]{0,400}/)
   assert.ok(m, 'the /workflows hint line is missing')
   assert.match(m[0], /last_completed_stage/, 'the hint must derive "first" from last_completed_stage')
   assert.match(m[0], /No new STATE field/i, 'the no-new-state-field rule is not stated')
 })
 
-test('r2 mirror: the workflow-contracts cadence line carries the full hard-stop list incl. operator interrupt', () => {
+test('mirror: the workflow-contracts cadence line carries the full hard-stop list incl. operator interrupt', () => {
   const contracts = readFileSync(join(SKILLS, '..', 'references', 'workflow-contracts.md'), 'utf8')
-  const m = contracts.match(/\*\*Launch cadence \(D4\)\.\*\*[\s\S]*?operator interrupt/)
+  const m = contracts.match(/\*\*Launch cadence\.\*\*[\s\S]*?operator interrupt/)
   assert.ok(m, 'the cadence line is missing the operator-interrupt hard stop')
 })
 
-// ── WS-C r2 finding 2 — research/architecture emit honest stage brackets (the D4 chain predicate) ──
+// ── research/architecture emit honest stage brackets (the chain predicate) ──
 
 const WORKFLOWS_SRC = join(ROOT, 'plugins', 'kiln', 'workflows-src')
 const researchSrc = readFileSync(join(WORKFLOWS_SRC, 'research.js'), 'utf8')

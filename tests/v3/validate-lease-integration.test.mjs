@@ -1,5 +1,5 @@
-// validate-lease-integration.test.mjs — the §7 CAPABILITY-deadline integration drill (ORCHESTRATOR
-// RULING, p3/tasks.md): the extended validate deadline drill proving an OVER-DEADLINE evaluator's
+// validate-lease-integration.test.mjs — the CAPABILITY-deadline integration drill (ORCHESTRATOR
+// RULING): the extended validate deadline drill proving an OVER-DEADLINE evaluator's
 // subsequent kiln-probe attempt is REFUSED. The reviewer's MAJOR on T3: withDeadline() resolves a
 // timeout sentinel but cannot CANCEL the live evaluator, so over-deadline browser work could outlive
 // the stage. The fix enforces the deadline on the CAPABILITY: the workflow takes a real kiln-probe

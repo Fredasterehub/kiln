@@ -19,7 +19,7 @@ const projectPath = A.projectPath
 if (!kilnDir || !projectPath) throw new Error('report.js requires args.kilnDir and args.projectPath (absolute paths — the conductor resolves them; never launch with relative paths). Received args of type ' + typeof args)
 // pluginRoot is the conductor-resolved absolute $PLUGIN_ROOT (a launched Workflow can't see
 // ${CLAUDE_PLUGIN_ROOT}). It locates the kiln-state CLI for this stage's ledger brackets + lore
-// beats (report.js's first ledger legs — the C1 batch); absence degrades each to a log line, never
+// beats (report.js's first ledger legs); absence degrades each to a log line, never
 // a stage failure (the report itself never depended on it).
 const pluginRoot = A.pluginRoot
 
@@ -40,11 +40,11 @@ const voice = (m) => (m === 'opus' ? MODEL_VOICE.opus + '\n\n' : '')
 // ── gateAgent (inlined from src/gate.mjs) — Omega's closing report is a gate leg too: a
 //    structured-output retry-cap death here used to detonate the whole report stage. Behind
 //    gateAgent it degrades to null (one re-dispatch first), and the null-safe return below still
-//    ships a REPORT.md pointer instead of failing the pipeline's final step. The D5 signoff pair's
+//    ships a REPORT.md pointer instead of failing the pipeline's final step. The signoff pair's
 //    Sol seat is a Sonnet wrapper over transport:'codex'; gateAgent STRUCTURALLY validates the receipt. ──
-// gate.mjs — the single gateAgent for every gate/judgment leg (BLUEPRINT WS-B1). ONE source of
-// truth: inlined verbatim into build/validate/report by the `// @gate` bundler marker, so the
-// v3.0.1 drift (build's copy matched 'retry cap', validate's did not) can never recur again.
+// gate.mjs — the single gateAgent for every gate/judgment leg. ONE source of
+// truth: inlined verbatim into build/validate/report by the `// @gate` bundler marker, so divergent
+// copies can never drift again.
 // Kept SEPARATE from spine.mjs on purpose — spine.mjs is pure-functions-only by its header
 // contract; gateAgent awaits the ambient agent() and speaks through the ambient log(), so it does
 // not belong in the pure module. Every gate-bearing workflow already carries both globals.
@@ -71,14 +71,14 @@ const voice = (m) => (m === 'opus' ? MODEL_VOICE.opus + '\n\n' : '')
 // error "StructuredOutput retry cap (5) exceeded" matches 'StructuredOutput'; a bare 'retry cap' is
 // deliberately NOT matched (it false-positives unrelated errors like an "HTTP retry cap exceeded").
 //
-// RECEIPT PROVENANCE (twin-council; sol-b34-design "Codex transport receipt"). A Sol council seat runs
+// RECEIPT PROVENANCE (twin-council). A Sol council seat runs
 // a Sonnet wrapper over `transport:'codex'`, and a Sonnet's WORD that it invoked Codex is worthless: the
 // deterministic kiln-codex-receipt.mjs boundary owns process capture + hashing + verification. So a
 // codex-transport wrapped agent() returns an ENVELOPE { payload, codex_receipt, raw_artifact_refs }, and
 // gateAgent STRUCTURALLY validates the relayed receipt — all 14 receipt keys present and well-formed,
 // exit 0, and reported_model === requested_model === the pinned transportModel. gate.mjs can NEVER hash
 // (it validates shape + equality, never recomputes — the deterministic ledger cross-check is the call
-// site's leg, batch 1b-ii). A valid receipt returns envelope.payload and records the transport
+// site's leg). A valid receipt returns envelope.payload and records the transport
 // attestation. `receiptRequired` + a missing/invalid receipt is a DEAD Sol seat: two_heads:required
 // fails closed to null (Sonnet's own answer NEVER substitutes for Sol); best_effort may retain the
 // wrapper answer as honest Sonnet provenance that can never later claim second-family verification. All
@@ -127,7 +127,7 @@ function classifyGateFailure(e) {
 //   opts.provenance optional sink object. gateAgent writes {requested_model, actual_model,
 //                     fallback_reason, classification} onto it so a caller that ALREADY ledgers can
 //                     ride the record into its EXISTING note/evidence data payload — no new event
-//                     type is minted (BLUEPRINT §B6/§10). actual_model is ALWAYS the model that
+//                     type is minted. actual_model is ALWAYS the model that
 //                     actually produced the returned result — the requested model on a clean call or
 //                     a same-model re-dispatch, 'opus' after a fable→opus substitution, and null on a
 //                     fail-closed null. classification is the seat-death class that forced the
@@ -226,7 +226,7 @@ async function gateAgent(prompt, opts) {
     }
   }
   // settleCodex(env, history) — a codex dispatch returned a usable envelope. STRUCTURALLY validate the
-  // relayed receipt (gate.mjs never hashes; the deterministic ledger cross-check is the 1b-ii call-site
+  // relayed receipt (gate.mjs never hashes; the deterministic ledger cross-check is the call-site
   // leg). A verified receipt requires a NON-NULL payload (a receipt with no answer is not a verification —
   // provenance never lies); it returns envelope.payload + the full attestation, carrying the dispatch
   // history (fallback_reason/classification of the path that led here, e.g. a best-effort redispatch after
@@ -290,7 +290,7 @@ async function gateAgent(prompt, opts) {
   return null
 }
 
-// withDeadline(thunk, ms, onLate) — the await-bound for a Tier-2 traversal leg (BLUEPRINT §7). Lives
+// withDeadline(thunk, ms, onLate) — the await-bound for a Tier-2 traversal leg. Lives
 // here (one implementation, imported by the unit tests, inlined into validate by the @gate marker) so
 // the tested wrapper and the shipped wrapper can never drift. Resolves to the thunk's value, the
 // sentinel TRAVERSAL_TIMEOUT ({ __kiln_timeout: true }) if ms elapses first, or the sentinel
@@ -317,7 +317,7 @@ function withDeadline(thunk, ms, onLate) {
   })
 }
 // ── Codex model pins (CODEX_MODEL default + CODEX_FALLBACK, inlined from src/models.mjs) ──
-// models.mjs — the codex model pins, single source of truth (BLUEPRINT WS-B2). Inlined verbatim
+// models.mjs — the codex model pins, single source of truth. Inlined verbatim
 // into every GPT-pinning workflow by the `// @models` bundler marker (like @gate pulls the whole
 // module), so the model id can never drift across build/gauge/architecture/validate.
 // DOCTRINE (references/codex-prompt-guide.md): the fallback is RECORDED when used, never silent — a
@@ -343,7 +343,7 @@ async function noteClaudeHeadSuccession(phaseName) {
   claudeHeadSuccessionNoted = true
   try { await runLedger('note', { kind: 'capability', event: 'claude_head_demoted', head: 'fable', claude_head: CLAUDE_HEAD_MODEL }, phaseName) } catch { /* best-effort beat */ }
 }
-// ── Twin Council pure core (B4-3 D1/D5) — the SEALED b42 call-site machinery, lifted to src/council.mjs
+// ── Twin Council pure core — the SEALED call-site machinery, lifted to src/council.mjs
 //    and inlined through the SAME @inline:council bundler contract build/validate/vision use (helpers,
 //    never copy-paste). Powers report's T4 keystone: the signoff pair after the existence gate. INERT on
 //    every sub-T4 / no-codex / tokenless path (councilCapable === false). ──
@@ -514,11 +514,11 @@ function validateRatification(ratification, ctx) {
   }
   for (const id of open) if (!seen.includes(id)) errors.push({ code: 'uncovered_divergence', at: id, message: `open divergence '${id}' has no selection` })
 
-  // findings[] entry shape (§6 schema): finding_id, claim, required_change, evidence_refs[], executable_check
+  // findings[] entry shape: finding_id, claim, required_change, evidence_refs[], executable_check
   // present. A PRESENT-but-non-array findings field is itself malformed — only ABSENT defaults to empty.
   let findings = []
   if (r.findings !== undefined) {
-    if (!Array.isArray(r.findings)) errors.push({ code: 'malformed_findings', message: 'findings must be an array (the §6 schema) when present' })
+    if (!Array.isArray(r.findings)) errors.push({ code: 'malformed_findings', message: 'findings must be an array when present' })
     else findings = r.findings
   }
   findings.forEach((f, i) => {
@@ -531,7 +531,7 @@ function validateRatification(ratification, ctx) {
     if (!Object.prototype.hasOwnProperty.call(f, 'executable_check')) errors.push({ code: 'malformed_finding', at, message: 'executable_check must be present (null allowed)' })
   })
 
-  // anti-capitulation (I9 one-finding-key rail): an APPROVE reversing a standing block needs
+  // anti-capitulation (the one-finding-key rail): an APPROVE reversing a standing block needs
   // equal-or-stronger changed_evidence KEYED to that block's finding_id. changed_evidence is filtered
   // per block by finding_id BEFORE validateReversal, so one evidence item can never clear two blocks —
   // an item with no finding_id (or a non-matching one) contributes to no block's reversal.
@@ -545,7 +545,7 @@ function validateRatification(ratification, ctx) {
     }
   }
 
-  // atomic compatibility: the adopted selection combination must satisfy every compatibility edge (§7).
+  // atomic compatibility: the adopted selection combination must satisfy every compatibility edge.
   // Every edge is SHAPE-CHECKED first — exactly two members, each { divergence_id, selection } with a
   // legal selection; a malformed edge is a validation error (never silently skipped), and an edge whose
   // two members name the SAME divergence is a context programming error (self_edge).
@@ -577,7 +577,7 @@ function validateRatification(ratification, ctx) {
 function twinRatified(parts) {
   const p = parts || {}
   const sigs = Array.isArray(p.signatures) ? p.signatures : null
-  if (!sigs || sigs.length !== 2) throw new Error('twinRatified: exactly two head signatures are required (constitution §8)')
+  if (!sigs || sigs.length !== 2) throw new Error('twinRatified: exactly two head signatures are required')
   const ctx = p.context != null ? p.context : (p.current_context != null ? p.current_context : null)
   if (ctx == null || typeof ctx !== 'object') throw new Error('twinRatified: a current context is required to bind both signatures')
   for (const k of ['bundle_hash', 'renderer_version', 'plan_hash', 'evidence_manifest_hash', 'protocol_version', 'seat_provenance']) {
@@ -661,14 +661,14 @@ const RATIFY_SCHEMA = {
           evidence_refs: { type: 'array', items: { type: 'string' } },
           evidence_class: { type: 'string', enum: ['executed_check', 'proposed_check', 'repo_state', 'test_output', 'primary_source', 'scenario'], description: 'the HONEST class of this finding\'s evidence — the claim-scoped partial order rules reversals by it' },
           executable_check: { type: ['string', 'null'], description: 'a bounded shell command (EXIT 0 iff the defect is present) or null' },
-          target_kind: { type: 'string', enum: ['settled_decision', 'trunk_field'], description: 'OPTIONAL (AMB-CLOSER-1.iii): the STRUCTURAL correction descriptor — an ACCEPTED BLOCK finding carrying { target_kind, key, replacement } amends the bundle mechanically; an ACCEPTED finding WITHOUT one is a gated escalation (no free rewrite)' },
+          target_kind: { type: 'string', enum: ['settled_decision', 'trunk_field'], description: 'OPTIONAL: the STRUCTURAL correction descriptor — an ACCEPTED BLOCK finding carrying { target_kind, key, replacement } amends the bundle mechanically; an ACCEPTED finding WITHOUT one is a gated escalation (no free rewrite)' },
           key: { type: 'string', description: 'OPTIONAL: an existing settled-decision topic or an amendable trunk field (present iff target_kind is)' },
           replacement: { description: 'OPTIONAL: the new value — must match the shape of the target\'s current value (present iff target_kind is)' },
         },
         required: ['finding_id', 'claim', 'required_change', 'evidence_refs', 'evidence_class', 'executable_check'],
       },
     },
-    changed_evidence: { type: 'array', items: { type: 'object', additionalProperties: true, properties: { finding_id: { type: 'string', description: 'the standing block this evidence retires — I9 one-finding-key rail: one evidence item can never clear two blocks' }, class: { type: 'string' }, refs: { type: 'array', items: { type: 'string' } } }, required: ['finding_id', 'class'] } },
+    changed_evidence: { type: 'array', items: { type: 'object', additionalProperties: true, properties: { finding_id: { type: 'string', description: 'the standing block this evidence retires — the one-finding-key rail: one evidence item can never clear two blocks' }, class: { type: 'string' }, refs: { type: 'array', items: { type: 'string' } } }, required: ['finding_id', 'class'] } },
     divergence_selections: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { divergence_id: { type: 'string' }, selection: { type: 'string', enum: ['P0', 'P1', 'MERGED', 'NEITHER'] }, evidence_refs: { type: 'array', items: { type: 'string' } } }, required: ['divergence_id', 'selection'] } },
     verdict: { type: 'string', enum: ['APPROVE', 'BLOCK', 'NEITHER'] },
   },
@@ -821,12 +821,12 @@ function verdictShapeError(r) {
   return null
 }
 
-// ── Twin Council gating (B4-3 D5/D6). Report's signoff council goes council-grade ONLY when the
+// ── Twin Council gating. Report's signoff council goes council-grade ONLY when the
 //    capability record promised BOTH heads (T4 = fable + codex) AND the conductor minted a runToken.
 //    codexAvailable defaults true (tier T4 definitionally carries codex; normalizeArgs passes it through
 //    when the conductor sends it). A PROMISED council missing its runToken fails CLOSED (terminal
 //    DEGRADED; signed_off:false; NO stage_completed even on a written REPORT.md — the existence-gated
-//    completion is council-gated at T4, ⟨DSGN-B43-1⟩). runTokenRaw lives ONLY in the receipt-script argv. ──
+//    completion is council-gated at T4). runTokenRaw lives ONLY in the receipt-script argv. ──
 const codexAvailable = A.codexAvailable !== false
 const runTokenRaw = (typeof A.runToken === 'string' && A.runToken.length > 0) ? A.runToken : null
 const capabilityTier = (A.capabilityTier === 'T1' || A.capabilityTier === 'T2' || A.capabilityTier === 'T3' || A.capabilityTier === 'T4') ? A.capabilityTier : null
@@ -834,7 +834,7 @@ const councilPromised = capabilityTier === 'T4' && codexAvailable
 const councilCapable = councilPromised && runTokenRaw != null
 const councilMisconfigured = councilPromised && runTokenRaw == null
 if (councilMisconfigured) {
-  log('MISCONFIGURED CONDUCTOR — capability tier T4 with both heads reachable but NO runToken: report\'s signoff council cannot bind its receipts/seed. The report ships UNSIGNED (signed_off:false, terminal DEGRADED) and NO stage_completed fires even on a written REPORT.md — never a silent v3.0.1 completion. Relaunch with the per-run token to convene the council.')
+  log('MISCONFIGURED CONDUCTOR — capability tier T4 with both heads reachable but NO runToken: report\'s signoff council cannot bind its receipts/seed. The report ships UNSIGNED (signed_off:false, terminal DEGRADED) and NO stage_completed fires even on a written REPORT.md — never a silent completion. Relaunch with the per-run token to convene the council.')
 }
 const councilDir = `${kilnDir}/council/report`
 const receiptsLedger = `${kilnDir}/council/receipts.jsonl`
@@ -843,7 +843,7 @@ const COUNCIL_RENDERER_REPORT = 'b43-report/1'
 // The .kiln source artifacts Omega was pointed at — names known to the stage (the record's artifact_refs
 // manifest). NAMES only (not hashed): several are conditional (research.md on the zero-topics route,
 // validation/report.md when validate ran), so hashing them would spuriously DEGRADE a legitimately
-// artifact-lean run (AMB-B42-2 doctrine — name what the stage knows, hash only the guaranteed artifact).
+// artifact-lean run (name what the stage knows, hash only the guaranteed artifact).
 const reportSourceArtifacts = [
   `${kilnDir}/STATE.md`, `${kilnDir}/docs/project-brief.md`, `${kilnDir}/docs/VISION.md`, `${kilnDir}/docs/research.md`,
   `${kilnDir}/master-plan.md`, `${kilnDir}/validation/report.md`, `${kilnDir}/docs/codebase-state.md`,
@@ -922,9 +922,9 @@ const runBlindPair = async (cfg) => {
   }
   return { degraded: false, rF, rS, sinkF, sinkS, solCross }
 }
-// runReportSignoff (D5) — the REQUIRED blind signoff pair over the WRITTEN report + an anchored evidence
+// runReportSignoff — the REQUIRED blind signoff pair over the WRITTEN report + an anchored evidence
 // manifest, AFTER the existence gate. Dual-APPROVE ⇒ RATIFIED (the caller sets signed_off:true, rides the
-// certificate, and ONLY THEN fires stage_completed ⟨DSGN-B43-1⟩); ANY other outcome ⇒ a non-RATIFIED
+// certificate, and ONLY THEN fires stage_completed); ANY other outcome ⇒ a non-RATIFIED
 // terminal, signed_off:false, the unsigned report still returned, NO completion event. Omega's report is
 // FROZEN — the council rules it, never re-authors REPORT.md.
 const runReportSignoff = async (res) => {
@@ -1023,8 +1023,7 @@ const REPORT_SCHEMA = {
   required: ['report_file', 'headline'],
 }
 
-// ── The run ledger (BLUEPRINT §3.5) — report.js's FIRST ledger legs (the C1 lore batch closed the
-//    "report brackets ride the C1 lore batch" deferral). The vision.js runLedger idiom: Thoth
+// ── The run ledger — report.js's ledger legs. The vision.js runLedger idiom: Thoth
 //    appends; gated on pluginRoot and degrades to a log line — an append failure never fails the
 //    stage. stage_completed fires ONLY on the genuine-success path: REPORT.md written (existence-
 //    verified below); a missing-artifact path emits NOTHING, per the telegraph's termination rule. ──
@@ -1042,12 +1041,12 @@ async function runLedger(type, data, phaseName) {
   )
 }
 
-// ── Lore beats (C1 doctrine §4): the pen — one dispatch at the moment a fact becomes true, carried by
+// ── Lore beats: the pen — one dispatch at the moment a fact becomes true, carried by
 //    runLedger to the operator's transcript (note{kind:'lore'}; deterministic <stage>.<beat> key; args
 //    short scalars capped at 80 by the caller; text ≤ 160). PRESENTATION, null-keep. ──
 const LORE_MAX = 160
 const oneLine = (s, cap = LORE_MAX) => String(s).replace(/[\x00-\x1f\x7f]+/g, ' ').slice(0, cap)
-// args are bound HERE (F-1): every string value is capped at 80 mechanically, so a beat can never
+// args are bound HERE: every string value is capped at 80 mechanically, so a beat can never
 // leak an unbounded project-controlled string into the ledger even if a call site forgets to cap.
 const boundArgs = (a) => { const o = {}; for (const [k, v] of Object.entries(a)) o[k] = typeof v === 'string' ? oneLine(v, 80) : v; return o }
 const lore = (key, text, args, phaseName) =>
@@ -1059,11 +1058,11 @@ const EXISTS_SCHEMA = { type: 'object', additionalProperties: false, properties:
 
 phase('The Final Word')
 log('Omega picks up the pen')
-// §3.5 stage bracket: stage_started on entry — a re-run is the stage still in progress.
+// Stage bracket: stage_started on entry — a re-run is the stage still in progress.
 await runLedger('stage_started', {}, 'The Final Word')
 // report.pen_up (volume): Omega opens the stage — reading every artifact the run left behind.
 await lore('report.pen_up', `Omega reads everything the run left behind — every artifact, every verdict`, null, 'The Final Word')
-// F3 provenance: Omega's gate leg records {requested_model, actual_model, fallback_reason,
+// Provenance: Omega's gate leg records {requested_model, actual_model, fallback_reason,
 // classification} onto this sink; there is no report-stage ledger, so it rides the returned summary.
 const omegaProv = {}
 const res = await gateAgent(
@@ -1088,7 +1087,7 @@ const proof = await agent(
   `<task>Run 'ls ${reportFile}' (Bash). Return exists = true iff the file exists. Do not read, write, or fix anything.</task>`,
   { label: 'thoth:verify', phase: 'The Final Word', model: 'haiku', schema: EXISTS_SCHEMA }
 )
-// ── D5 (+ ⟨DSGN-B43-1⟩ fold): the existence gate stays; at T4 the signoff pair is a SECOND gate on
+// ── The completion gate: the existence gate stays; at T4 the signoff pair is a SECOND gate on
 //    completion. Dual-APPROVE ⇒ signed_off:true + the certificate in the return AND ONLY THEN
 //    stage_completed fires; ANY other outcome ⇒ signed_off:false + the honest terminal + frozen findings
 //    in the return, the UNSIGNED report still returned, and NO completion event (the projection stays at
@@ -1112,7 +1111,7 @@ if (proof && proof.exists === true) {
     await councilRuling({ keystone: 'report_signoff', phase: 'REPORT_RATIFY', terminal: 'DEGRADED', reason: 'runToken absent' }, 'The Final Word')
     log('REPORT SIGNOFF PROMISED (T4 + codex) but NO runToken (misconfigured conductor) — the report ships UNSIGNED (signed_off:false), NO stage_completed. Relaunch with the per-run token.')
   } else {
-    // Sub-T4 / no-codex / tokenless: byte-preserved v3.0.1 existence-gated completion.
+    // Sub-T4 / no-codex / tokenless: byte-preserved existence-gated completion.
     await lore('report.signed', `The final word is written — ${oneLine((res && res.headline) || 'delivery report complete', 80)}`, { headline: oneLine((res && res.headline) || 'delivery report complete', 80) }, 'The Final Word')
     await runLedger('stage_completed', {}, 'The Final Word')
   }
@@ -1121,9 +1120,9 @@ if (proof && proof.exists === true) {
 }
 return {
   report_file: reportFile, headline: res && res.headline, delivered: (res && res.delivered) || [], outstanding: (res && res.outstanding) || [], gate_provenance: omegaProv,
-  // D6/⟨DSGN-B43-1⟩/B43-2: at T4 the signoff outcome rides the return (the boundary record for report) —
+  // At T4 the signoff outcome rides the return (the boundary record for report) —
   // signed_off is a HONEST claim (true only with a valid dual certificate), the council terminal drives the
-  // conductor's gated checkpoint, and the b42-mirrored per-seat summary {seat, certificate_present,
+  // conductor's gated checkpoint, and the mirrored per-seat summary {seat, certificate_present,
   // receipt_verified, ledger_verified} rides alongside. Sub-T4 omits signed_off entirely (never a false claim).
   ...(councilPromised ? { signed_off: !!(reportCouncil && reportCouncil.terminal === 'RATIFIED'), council: { seat: 'report_signoff', terminal: reportCouncil ? reportCouncil.terminal : null, certificate: reportCouncil ? reportCouncil.certificate : null, findings: reportCouncil ? reportCouncil.findings : [], bundle_hash: reportCouncil ? reportCouncil.bundle_hash : null, receipts: councilReceipts, certificate_present: !!(reportCouncil && reportCouncil.certificate), receipt_verified: !!(reportCouncil && reportCouncil.receipt_verified), ledger_verified: !!(reportCouncil && reportCouncil.ledger_verified), council_missing_head: (reportCouncil && (reportCouncil.missing === 'fable' || reportCouncil.missing === 'sol')) ? reportCouncil.missing : null } } : {}),
 }

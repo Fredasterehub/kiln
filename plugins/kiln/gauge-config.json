@@ -1,87 +1,87 @@
 {
-  "_doc": "The Gauge's ONE versioned config (BLUEPRINT 3.3 normative block + the 3.2 mapping thresholds). Every threshold the posture mapping and the Sentinel ratchet consume lives here, unit-tested with posture() — never inline in workflow code. Dimension thresholds are min-thresholds: the rule fires at score >= value, and on the 0|1|2 ordinal domain a min of 2 is exactly the table's '=2'. Keys prefixed _doc_ are commentary only (JSON has no comments); consumers ignore them.",
+  "_doc": "The Gauge's ONE versioned config: the mapping thresholds. Every threshold the posture mapping and the Sentinel ratchet consume lives here, unit-tested with posture() — never inline in workflow code. Dimension thresholds are min-thresholds: the rule fires at score >= value, and on the 0|1|2 ordinal domain a min of 2 is exactly the '=2' rule. Keys prefixed _doc_ are commentary only (JSON has no comments); consumers ignore them.",
 
-  "_doc_h80_human_hours": "Horizon anchor: the human-equivalent hours a current-generation model completes at ~80% success. Re-derived per model generation, not tuned ad hoc [R:complexity-assessment 5]. Derivation record 2026-07-02 (P5.5 T4): value HOLDS at 2 — the builder seats (Opus 4.8 / GPT-5.5) did not change generation; Sonnet 5 filled transport/analyst sonnet seats only, which the anchor does not key on. Re-derive when a BUILDER seat changes generation.",
+  "_doc_h80_human_hours": "Horizon anchor: the human-equivalent hours a current-generation model completes at ~80% success. Re-derived per model generation, not tuned ad hoc. The value holds at 2 for the current builder seats; re-derive when a BUILDER seat changes generation.",
   "h80_human_hours": 2,
 
   "_doc_messiness_discount": "Real-repo discount on the H80 horizon — benchmark tasks are cleaner than live codebases. Slice budget = h80_human_hours x messiness_discount human-equivalent.",
   "messiness_discount": 0.5,
 
-  "_doc_churn_flips_threshold": "Test-failure churn = the same check flipping pass<->fail at least this many times across fix cycles (Sentinel signal 2).",
+  "_doc_churn_flips_threshold": "Test-failure churn = the same check flipping pass<->fail at least this many times across fix cycles (the Sentinel churn signal).",
   "churn_flips_threshold": 2,
 
-  "_doc_rejections_to_feedback_escalation": "After this many review rejections on LOGICAL findings, escalate the feedback source (stronger or different-family reviewer) — not the retry count (Sentinel signal 1, the master signal).",
+  "_doc_rejections_to_feedback_escalation": "After this many review rejections on LOGICAL findings, escalate the feedback source (stronger or different-family reviewer) — not the retry count (the Sentinel master signal).",
   "rejections_to_feedback_escalation": 2,
 
-  "_doc_rejections_to_split": "After this many logical-finding rejections, stop retrying: split-and-rebuild the slice (genesis 3.4).",
+  "_doc_rejections_to_split": "After this many logical-finding rejections, stop retrying: split-and-rebuild the slice.",
   "rejections_to_split": 3,
 
   "_doc_deescalation_clean_window": "Consecutive clean units (zero rejections AND a first-pass green gate) required before posture returns to the Gauge baseline at a unit boundary (hysteresis — K8s/Redwood pattern).",
   "deescalation_clean_window": 1,
 
-  "_doc_research_topics_base": "3.2 research row: the cap on research topics is research_topics_base + D3 + D5. The research stage applies min(OQ-count, cap), and 0 when no high-priority before-build OQs exist — OQ data is runtime input, not a profile dimension.",
+  "_doc_research_topics_base": "research row: the cap on research topics is research_topics_base + D3 + D5. The research stage applies min(OQ-count, cap), and 0 when no high-priority before-build OQs exist — OQ data is runtime input, not a profile dimension.",
   "research_topics_base": 2,
 
-  "_doc_planning_dual_d4_min": "3.2 planning row, dual trigger 1: dual-plan + chairman when D4 (fork risk) >= this. Table: D4=2.",
+  "_doc_planning_dual_d4_min": "planning row, dual trigger 1: dual-plan + chairman when D4 (fork risk) >= this. Canonical: D4=2.",
   "planning_dual_d4_min": 2,
 
-  "_doc_planning_dual_d3_min": "3.2 planning row, dual trigger 2, first conjunct: D3 (novelty) >= this AND D1 >= planning_dual_d1_min. Table: D3>=1 AND D1>=1.",
+  "_doc_planning_dual_d3_min": "planning row, dual trigger 2, first conjunct: D3 (novelty) >= this AND D1 >= planning_dual_d1_min. Canonical: D3>=1 AND D1>=1.",
   "planning_dual_d3_min": 1,
 
-  "_doc_planning_dual_d1_min": "3.2 planning row, dual trigger 2, second conjunct: D1 (scope size) >= this.",
+  "_doc_planning_dual_d1_min": "planning row, dual trigger 2, second conjunct: D1 (scope size) >= this.",
   "planning_dual_d1_min": 1,
 
-  "_doc_planning_redteam_d4_min": "3.2 planning row, red-team tier: D4 >= this OR D8 >= planning_redteam_d8_min. Checked only after dual declined, so with the default dual threshold this >= is exactly the table's D4=1.",
+  "_doc_planning_redteam_d4_min": "planning row, red-team tier: D4 >= this OR D8 >= planning_redteam_d8_min. Checked only after dual declined, so with the default dual threshold this >= is exactly the D4=1 rule.",
   "planning_redteam_d4_min": 1,
 
-  "_doc_planning_redteam_d8_min": "3.2 planning row, red-team tier's other disjunct: D8 (failure penalty) >= this. Table: D8>=1.",
+  "_doc_planning_redteam_d8_min": "planning row, red-team tier's other disjunct: D8 (failure penalty) >= this. Canonical: D8>=1.",
   "planning_redteam_d8_min": 1,
 
-  "_doc_plan_validation_rounds_base": "3.2 plan-validation row: rounds = base + 1 when D2 >= plan_validation_d2_min + 1 when D8 >= plan_validation_d8_min.",
+  "_doc_plan_validation_rounds_base": "plan-validation row: rounds = base + 1 when D2 >= plan_validation_d2_min + 1 when D8 >= plan_validation_d8_min.",
   "plan_validation_rounds_base": 1,
 
-  "_doc_plan_validation_d2_min": "3.2 plan-validation row: +1 round when D2 (ambiguity) >= this. Table: D2>=1.",
+  "_doc_plan_validation_d2_min": "plan-validation row: +1 round when D2 (ambiguity) >= this. Canonical: D2>=1.",
   "plan_validation_d2_min": 1,
 
-  "_doc_plan_validation_d8_min": "3.2 plan-validation row: +1 round when D8 >= this. Table: D8=2 (maximum failure penalty).",
+  "_doc_plan_validation_d8_min": "plan-validation row: +1 round when D8 >= this. Canonical: D8=2 (maximum failure penalty).",
   "plan_validation_d8_min": 2,
 
-  "_doc_slice_budget_d7_min": "3.2/3.3 slice-budget rule: apply d7_slice_budget_factor when D7 (verifiability) >= this. Table: D7>=1.",
+  "_doc_slice_budget_d7_min": "slice-budget rule: apply d7_slice_budget_factor when D7 (verifiability) >= this. Canonical: D7>=1.",
   "slice_budget_d7_min": 1,
 
-  "_doc_d7_slice_budget_factor": "3.2/3.3 slice-budget rule: the budget is multiplied by this (halved) when verifiability is weak (D7 >= slice_budget_d7_min) — harder-to-verify work ships in smaller slices.",
+  "_doc_d7_slice_budget_factor": "slice-budget rule: the budget is multiplied by this (halved) when verifiability is weak (D7 >= slice_budget_d7_min) — harder-to-verify work ships in smaller slices.",
   "d7_slice_budget_factor": 0.5,
 
-  "_doc_review_high_d8_min": "3.2 slice-review row: ui codex review effort flips medium->high when D8 >= this. Table: D8>=1. The fix-cycle>0 half of the trigger is runtime — posture names it via review.escalate_on.",
+  "_doc_review_high_d8_min": "slice-review row: ui codex review effort flips medium->high when D8 >= this. Canonical: D8>=1. The fix-cycle>0 half of the trigger is runtime — posture names it via review.escalate_on.",
   "review_high_d8_min": 1,
 
-  "_doc_min_slices_for_tribunal": "3.2 milestone-gate row: the dual-analyst tribunal runs only when a milestone has at least this many slices; a single-slice milestone's gate is slice review + goal-backward (tribunal redundancy skip, proven safe class [R:adaptive-orchestration 4]).",
+  "_doc_min_slices_for_tribunal": "milestone-gate row: the dual-analyst tribunal runs only when a milestone has at least this many slices; a single-slice milestone's gate is slice review + goal-backward (tribunal redundancy skip, a proven-safe class).",
   "min_slices_for_tribunal": 2,
 
-  "_doc_trivial_tier_dim_max": "P5.5 scope-tier predicate, recalibrated at the P6 T4 benchmark (Bench Finding 1): the ceiling for every dimension NOT in trivial_tier_soft_dims. Non-compensatory — no sums; a lone D8=1 or D4=1 must never read trivial (D4/D8 are structurally outside the soft set). Field anchors: bench-a profile (D6=1 alone, the rubric's own 'single store, simple schema' example) => trivial; Run B's D1=1,D2=1,D6=1,D7=1 => standard; the high-dims/effort-0 trap => standard.",
+  "_doc_trivial_tier_dim_max": "scope-tier predicate: the ceiling for every dimension NOT in trivial_tier_soft_dims. Non-compensatory — no sums; a lone D8=1 or D4=1 must never read trivial (D4/D8 are structurally outside the soft set). A profile with D6=1 alone (the rubric's own 'single store, simple schema' example) reads trivial; D1=1,D2=1,D6=1,D7=1 reads standard; a high-dims/effort-0 trap reads standard.",
   "trivial_tier_dim_max": 0,
 
-  "_doc_trivial_tier_soft_dims": "The NAMED benign dimensions allowed up to trivial_tier_soft_dim_max while the tier still reads trivial. Field-derived, one entry per ledger-proven case: D6 (data & state) — the canonical trivial fixture (todo CLI, one flat JSON file) honestly scores D6=1 because ANY persistent store does; demanding D6=0 made the trivial tier empty in practice (P6 T4 benchmark, gauge r1). Extend only with ledger evidence.",
+  "_doc_trivial_tier_soft_dims": "The NAMED benign dimensions allowed up to trivial_tier_soft_dim_max while the tier still reads trivial. One entry per proven case: D6 (data & state) — the canonical trivial fixture (todo CLI, one flat JSON file) honestly scores D6=1 because ANY persistent store does; demanding D6=0 made the trivial tier empty in practice. Extend only with evidence.",
   "trivial_tier_soft_dims": ["D6"],
 
   "_doc_trivial_tier_soft_dim_max": "The ceiling for the soft dimensions above. 1 = the rubric's 'single store, simple schema'; 2 (migrations/concurrency/multi-tenant) is never trivial.",
   "trivial_tier_soft_dim_max": 1,
 
-  "_doc_tribunal_threshold_trivial_bump": "P5.5 tribunal-vs-posture lever: at scope_tier 'trivial' the effective tribunal threshold is min_slices_for_tribunal + this bump (2->3 at defaults); at 'standard', unchanged. Field evidence: Run A (trivial) tribunal marginal — one MEDIUM beyond the slice reviews; Run B (standard) decisive — the M2 path-traversal catch. Goal-backward NEVER skips at any tier.",
+  "_doc_tribunal_threshold_trivial_bump": "tribunal-vs-posture lever: at scope_tier 'trivial' the effective tribunal threshold is min_slices_for_tribunal + this bump (2->3 at defaults); at 'standard', unchanged. At trivial scope the tribunal is marginal — one MEDIUM beyond the slice reviews; at standard scope it is decisive. Goal-backward NEVER skips at any tier.",
   "tribunal_threshold_trivial_bump": 1,
 
-  "_doc_browser_tier2_d7_min": "3.2 browser row: Tier-2 traversal per ui milestone when D7 >= this OR D8 >= browser_tier2_d8_min. Table: D7>=1.",
+  "_doc_browser_tier2_d7_min": "browser row: Tier-2 traversal per ui milestone when D7 >= this OR D8 >= browser_tier2_d8_min. Canonical: D7>=1.",
   "browser_tier2_d7_min": 1,
 
-  "_doc_browser_tier2_d8_min": "3.2 browser row's other disjunct: D8 >= this. Table: D8>=1.",
+  "_doc_browser_tier2_d8_min": "browser row's other disjunct: D8 >= this. Canonical: D8>=1.",
   "browser_tier2_d8_min": 1,
 
-  "_doc_validate_adversarial_d8_min": "3.2 validate row: the adversarial probe pass switches on when D8 >= this. Table: D8=2.",
+  "_doc_validate_adversarial_d8_min": "validate row: the adversarial probe pass switches on when D8 >= this. Canonical: D8=2.",
   "validate_adversarial_d8_min": 2,
 
-  "_doc_validate_second_family_d8_min": "3.2 validate row: a second validator family switches on when D8 >= this. Table: D8=2 — its own knob so the two extras stay independently overridable.",
+  "_doc_validate_second_family_d8_min": "validate row: a second validator family switches on when D8 >= this. Canonical: D8=2 — its own knob so the two extras stay independently overridable.",
   "validate_second_family_d8_min": 2,
 
-  "_doc_effort_bias_dims": "3.2 model/effort row: the effort dial is the MAX of these dimensions' scores (non-compensatory, per call class — 8). Table: max(D3, D4, D8).",
+  "_doc_effort_bias_dims": "model/effort row: the effort dial is the MAX of these dimensions' scores (non-compensatory, per call class). Canonical: max(D3, D4, D8).",
   "effort_bias_dims": ["D3", "D4", "D8"]
 }

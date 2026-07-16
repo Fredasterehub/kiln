@@ -1,5 +1,5 @@
 // state-concurrency.test.mjs — the inter-process append lock for plugins/kiln/scripts/kiln-state.mjs
-// (WS-C, Sol finding 8). cmdAppend reads the tail, derives next seq, heals, appends, and projects;
+//. cmdAppend reads the tail, derives next seq, heals, appends, and projects;
 // with many workflow agents (and the lore beats) firing at once, an unlocked critical section
 // duplicates seqs or loses the heal-rewrite. These spawn the REAL CLI concurrently and prove the
 // mkdir lock serializes them. There is NO steal in the hot path (Sol rejected it twice): a wedged

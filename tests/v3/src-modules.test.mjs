@@ -1,4 +1,4 @@
-// src-modules.test.mjs — unit floor for plugins/kiln/src/*.mjs (BLUEPRINT §13).
+// src-modules.test.mjs — unit floor for plugins/kiln/src/*.mjs.
 // These are the pure blocks the bundler inlines into every workflow: tested ONCE here, trusted
 // everywhere they land. denzelReconcile expectations are ported from the v2 build.js behavior
 // (the lift is verbatim — these tests pin that truth against future edits).

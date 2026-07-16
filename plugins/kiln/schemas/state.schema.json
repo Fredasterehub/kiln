@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Kiln run state — .kiln/state.json",
-  "description": "Deterministic PROJECTION of events.jsonl (BLUEPRINT §4) — never a source of truth. Rebuilt from the ledger by kiln-state.mjs project; on any mismatch the ledger wins. updated_at is the ts of the last folded event (not the wall clock), so projection is byte-deterministic: same events, same bytes.",
+  "description": "Deterministic PROJECTION of events.jsonl — never a source of truth. Rebuilt from the ledger by kiln-state.mjs project; on any mismatch the ledger wins. updated_at is the ts of the last folded event (not the wall clock), so projection is byte-deterministic: same events, same bytes.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "stage", "last_completed_stage", "posture", "capability", "project", "milestones", "counters", "paths", "started_at", "updated_at", "last_event_seq"],

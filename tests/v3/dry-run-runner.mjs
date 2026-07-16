@@ -24,7 +24,7 @@ if (!file || !dir) {
   process.exit(2)
 }
 // Optional third arg: a JSON object merged over the base args (e.g. '{"gateOnly":true}') so the
-// harness can smoke a workflow's argument-gated branch (P3.5 T3: the gateOnly path) under the exact
+// harness can smoke a workflow's argument-gated branch (the gateOnly path) under the exact
 // runtime poison stubs. A malformed overlay is a usage error (exit 2) — never a silent no-op.
 let argsOverlay = {}
 if (argsOverlayRaw) {
@@ -55,7 +55,7 @@ function makeStubs(sandbox) {
     },
     budget: undefined,
     workflow: async () => null,
-    // Determinism poison — mirrors the Workflow runtime's guard (DOGFOOD FINDING 3: plain node
+    // Determinism poison — mirrors the Workflow runtime's guard (plain node
     // allows Date.now/Math.random, so the smoke test passed scripts the real runtime rejects).
     // Shadowed via the same parameter mechanism as the other globals: Date.now(), Math.random(),
     // and argless `new Date()` throw exactly like the engine; new Date(value) stays legal.
@@ -73,9 +73,9 @@ function makeStubs(sandbox) {
     Math: Object.freeze(Object.assign(Object.create(Math), {
       random: () => { throw new Error('Math.random() is unavailable in workflow scripts (breaks resume)') },
     })),
-    // Host-global poison — mirrors the Workflow runtime's ACTUAL surface (DOGFOOD FINDING 7: the
-    // runtime has no `process`, so validate.js's bare process.env read crashed at module scope while
-    // the plain-node smoke sailed through). Probed empirically 2026-06-12: setTimeout/clearTimeout
+    // Host-global poison — mirrors the Workflow runtime's ACTUAL surface (the runtime has no
+    // `process`, so validate.js's bare process.env read crashed at module scope while
+    // the plain-node smoke sailed through). setTimeout/clearTimeout
     // and console EXIST in the runtime (so they stay native here); everything below is undefined
     // there and is therefore shadowed to undefined here — a script touching one fails the smoke
     // exactly as it would fail the engine. typeof-guards (the sanctioned escape-hatch pattern)

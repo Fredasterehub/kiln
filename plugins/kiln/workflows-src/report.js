@@ -13,7 +13,7 @@ const projectPath = A.projectPath
 if (!kilnDir || !projectPath) throw new Error('report.js requires args.kilnDir and args.projectPath (absolute paths — the conductor resolves them; never launch with relative paths). Received args of type ' + typeof args)
 // pluginRoot is the conductor-resolved absolute $PLUGIN_ROOT (a launched Workflow can't see
 // ${CLAUDE_PLUGIN_ROOT}). It locates the kiln-state CLI for this stage's ledger brackets + lore
-// beats (report.js's first ledger legs — the C1 batch); absence degrades each to a log line, never
+// beats (report.js's first ledger legs); absence degrades each to a log line, never
 // a stage failure (the report itself never depended on it).
 const pluginRoot = A.pluginRoot
 
@@ -27,7 +27,7 @@ const reportFile = `${kilnDir}/REPORT.md`
 // ── gateAgent (inlined from src/gate.mjs) — Omega's closing report is a gate leg too: a
 //    structured-output retry-cap death here used to detonate the whole report stage. Behind
 //    gateAgent it degrades to null (one re-dispatch first), and the null-safe return below still
-//    ships a REPORT.md pointer instead of failing the pipeline's final step. The D5 signoff pair's
+//    ships a REPORT.md pointer instead of failing the pipeline's final step. The signoff pair's
 //    Sol seat is a Sonnet wrapper over transport:'codex'; gateAgent STRUCTURALLY validates the receipt. ──
 // @gate
 // ── Codex model pins (CODEX_MODEL default + CODEX_FALLBACK, inlined from src/models.mjs) ──
@@ -48,18 +48,18 @@ async function noteClaudeHeadSuccession(phaseName) {
   claudeHeadSuccessionNoted = true
   try { await runLedger('note', { kind: 'capability', event: 'claude_head_demoted', head: 'fable', claude_head: CLAUDE_HEAD_MODEL }, phaseName) } catch { /* best-effort beat */ }
 }
-// ── Twin Council pure core (B4-3 D1/D5) — the SEALED b42 call-site machinery, lifted to src/council.mjs
+// ── Twin Council pure core — the SEALED call-site machinery, lifted to src/council.mjs
 //    and inlined through the SAME @inline:council bundler contract build/validate/vision use (helpers,
 //    never copy-paste). Powers report's T4 keystone: the signoff pair after the existence gate. INERT on
 //    every sub-T4 / no-codex / tokenless path (councilCapable === false). ──
 // @inline:council:COUNCIL_PROTOCOL_VERSION,sha256Hex,canonicalJson,claimTypeForClass,compareEvidence,validateReversal,councilSignature,verifySignature,validateRatification,twinRatified,buildCheckpoint,SHA64_RE,RATIFY_SCHEMA,envelopeSchema,CROSS_CHECK_SCHEMA,LEDGER_APPEND_SCHEMA,CANON_HASH_ONELINER,LEDGER_EXTRACT_ONELINER,councilTemplateHash,seatProv,solWrapperPlan,crossCheckOk,assembleRatifyCertificate,verdictShapeError
 
-// ── Twin Council gating (B4-3 D5/D6). Report's signoff council goes council-grade ONLY when the
+// ── Twin Council gating. Report's signoff council goes council-grade ONLY when the
 //    capability record promised BOTH heads (T4 = fable + codex) AND the conductor minted a runToken.
 //    codexAvailable defaults true (tier T4 definitionally carries codex; normalizeArgs passes it through
 //    when the conductor sends it). A PROMISED council missing its runToken fails CLOSED (terminal
 //    DEGRADED; signed_off:false; NO stage_completed even on a written REPORT.md — the existence-gated
-//    completion is council-gated at T4, ⟨DSGN-B43-1⟩). runTokenRaw lives ONLY in the receipt-script argv. ──
+//    completion is council-gated at T4). runTokenRaw lives ONLY in the receipt-script argv. ──
 const codexAvailable = A.codexAvailable !== false
 const runTokenRaw = (typeof A.runToken === 'string' && A.runToken.length > 0) ? A.runToken : null
 const capabilityTier = (A.capabilityTier === 'T1' || A.capabilityTier === 'T2' || A.capabilityTier === 'T3' || A.capabilityTier === 'T4') ? A.capabilityTier : null
@@ -67,7 +67,7 @@ const councilPromised = capabilityTier === 'T4' && codexAvailable
 const councilCapable = councilPromised && runTokenRaw != null
 const councilMisconfigured = councilPromised && runTokenRaw == null
 if (councilMisconfigured) {
-  log('MISCONFIGURED CONDUCTOR — capability tier T4 with both heads reachable but NO runToken: report\'s signoff council cannot bind its receipts/seed. The report ships UNSIGNED (signed_off:false, terminal DEGRADED) and NO stage_completed fires even on a written REPORT.md — never a silent v3.0.1 completion. Relaunch with the per-run token to convene the council.')
+  log('MISCONFIGURED CONDUCTOR — capability tier T4 with both heads reachable but NO runToken: report\'s signoff council cannot bind its receipts/seed. The report ships UNSIGNED (signed_off:false, terminal DEGRADED) and NO stage_completed fires even on a written REPORT.md — never a silent completion. Relaunch with the per-run token to convene the council.')
 }
 const councilDir = `${kilnDir}/council/report`
 const receiptsLedger = `${kilnDir}/council/receipts.jsonl`
@@ -76,7 +76,7 @@ const COUNCIL_RENDERER_REPORT = 'b43-report/1'
 // The .kiln source artifacts Omega was pointed at — names known to the stage (the record's artifact_refs
 // manifest). NAMES only (not hashed): several are conditional (research.md on the zero-topics route,
 // validation/report.md when validate ran), so hashing them would spuriously DEGRADE a legitimately
-// artifact-lean run (AMB-B42-2 doctrine — name what the stage knows, hash only the guaranteed artifact).
+// artifact-lean run (name what the stage knows, hash only the guaranteed artifact).
 const reportSourceArtifacts = [
   `${kilnDir}/STATE.md`, `${kilnDir}/docs/project-brief.md`, `${kilnDir}/docs/VISION.md`, `${kilnDir}/docs/research.md`,
   `${kilnDir}/master-plan.md`, `${kilnDir}/validation/report.md`, `${kilnDir}/docs/codebase-state.md`,
@@ -155,9 +155,9 @@ const runBlindPair = async (cfg) => {
   }
   return { degraded: false, rF, rS, sinkF, sinkS, solCross }
 }
-// runReportSignoff (D5) — the REQUIRED blind signoff pair over the WRITTEN report + an anchored evidence
+// runReportSignoff — the REQUIRED blind signoff pair over the WRITTEN report + an anchored evidence
 // manifest, AFTER the existence gate. Dual-APPROVE ⇒ RATIFIED (the caller sets signed_off:true, rides the
-// certificate, and ONLY THEN fires stage_completed ⟨DSGN-B43-1⟩); ANY other outcome ⇒ a non-RATIFIED
+// certificate, and ONLY THEN fires stage_completed); ANY other outcome ⇒ a non-RATIFIED
 // terminal, signed_off:false, the unsigned report still returned, NO completion event. Omega's report is
 // FROZEN — the council rules it, never re-authors REPORT.md.
 const runReportSignoff = async (res) => {
@@ -256,8 +256,7 @@ const REPORT_SCHEMA = {
   required: ['report_file', 'headline'],
 }
 
-// ── The run ledger (BLUEPRINT §3.5) — report.js's FIRST ledger legs (the C1 lore batch closed the
-//    "report brackets ride the C1 lore batch" deferral). The vision.js runLedger idiom: Thoth
+// ── The run ledger — report.js's ledger legs. The vision.js runLedger idiom: Thoth
 //    appends; gated on pluginRoot and degrades to a log line — an append failure never fails the
 //    stage. stage_completed fires ONLY on the genuine-success path: REPORT.md written (existence-
 //    verified below); a missing-artifact path emits NOTHING, per the telegraph's termination rule. ──
@@ -275,12 +274,12 @@ async function runLedger(type, data, phaseName) {
   )
 }
 
-// ── Lore beats (C1 doctrine §4): the pen — one dispatch at the moment a fact becomes true, carried by
+// ── Lore beats: the pen — one dispatch at the moment a fact becomes true, carried by
 //    runLedger to the operator's transcript (note{kind:'lore'}; deterministic <stage>.<beat> key; args
 //    short scalars capped at 80 by the caller; text ≤ 160). PRESENTATION, null-keep. ──
 const LORE_MAX = 160
 const oneLine = (s, cap = LORE_MAX) => String(s).replace(/[\x00-\x1f\x7f]+/g, ' ').slice(0, cap)
-// args are bound HERE (F-1): every string value is capped at 80 mechanically, so a beat can never
+// args are bound HERE: every string value is capped at 80 mechanically, so a beat can never
 // leak an unbounded project-controlled string into the ledger even if a call site forgets to cap.
 const boundArgs = (a) => { const o = {}; for (const [k, v] of Object.entries(a)) o[k] = typeof v === 'string' ? oneLine(v, 80) : v; return o }
 const lore = (key, text, args, phaseName) =>
@@ -292,11 +291,11 @@ const EXISTS_SCHEMA = { type: 'object', additionalProperties: false, properties:
 
 phase('The Final Word')
 log('Omega picks up the pen')
-// §3.5 stage bracket: stage_started on entry — a re-run is the stage still in progress.
+// Stage bracket: stage_started on entry — a re-run is the stage still in progress.
 await runLedger('stage_started', {}, 'The Final Word')
 // report.pen_up (volume): Omega opens the stage — reading every artifact the run left behind.
 await lore('report.pen_up', `Omega reads everything the run left behind — every artifact, every verdict`, null, 'The Final Word')
-// F3 provenance: Omega's gate leg records {requested_model, actual_model, fallback_reason,
+// Provenance: Omega's gate leg records {requested_model, actual_model, fallback_reason,
 // classification} onto this sink; there is no report-stage ledger, so it rides the returned summary.
 const omegaProv = {}
 const res = await gateAgent(
@@ -321,7 +320,7 @@ const proof = await agent(
   `<task>Run 'ls ${reportFile}' (Bash). Return exists = true iff the file exists. Do not read, write, or fix anything.</task>`,
   { label: 'thoth:verify', phase: 'The Final Word', model: 'haiku', schema: EXISTS_SCHEMA }
 )
-// ── D5 (+ ⟨DSGN-B43-1⟩ fold): the existence gate stays; at T4 the signoff pair is a SECOND gate on
+// ── The completion gate: the existence gate stays; at T4 the signoff pair is a SECOND gate on
 //    completion. Dual-APPROVE ⇒ signed_off:true + the certificate in the return AND ONLY THEN
 //    stage_completed fires; ANY other outcome ⇒ signed_off:false + the honest terminal + frozen findings
 //    in the return, the UNSIGNED report still returned, and NO completion event (the projection stays at
@@ -345,7 +344,7 @@ if (proof && proof.exists === true) {
     await councilRuling({ keystone: 'report_signoff', phase: 'REPORT_RATIFY', terminal: 'DEGRADED', reason: 'runToken absent' }, 'The Final Word')
     log('REPORT SIGNOFF PROMISED (T4 + codex) but NO runToken (misconfigured conductor) — the report ships UNSIGNED (signed_off:false), NO stage_completed. Relaunch with the per-run token.')
   } else {
-    // Sub-T4 / no-codex / tokenless: byte-preserved v3.0.1 existence-gated completion.
+    // Sub-T4 / no-codex / tokenless: byte-preserved existence-gated completion.
     await lore('report.signed', `The final word is written — ${oneLine((res && res.headline) || 'delivery report complete', 80)}`, { headline: oneLine((res && res.headline) || 'delivery report complete', 80) }, 'The Final Word')
     await runLedger('stage_completed', {}, 'The Final Word')
   }
@@ -354,9 +353,9 @@ if (proof && proof.exists === true) {
 }
 return {
   report_file: reportFile, headline: res && res.headline, delivered: (res && res.delivered) || [], outstanding: (res && res.outstanding) || [], gate_provenance: omegaProv,
-  // D6/⟨DSGN-B43-1⟩/B43-2: at T4 the signoff outcome rides the return (the boundary record for report) —
+  // At T4 the signoff outcome rides the return (the boundary record for report) —
   // signed_off is a HONEST claim (true only with a valid dual certificate), the council terminal drives the
-  // conductor's gated checkpoint, and the b42-mirrored per-seat summary {seat, certificate_present,
+  // conductor's gated checkpoint, and the mirrored per-seat summary {seat, certificate_present,
   // receipt_verified, ledger_verified} rides alongside. Sub-T4 omits signed_off entirely (never a false claim).
   ...(councilPromised ? { signed_off: !!(reportCouncil && reportCouncil.terminal === 'RATIFIED'), council: { seat: 'report_signoff', terminal: reportCouncil ? reportCouncil.terminal : null, certificate: reportCouncil ? reportCouncil.certificate : null, findings: reportCouncil ? reportCouncil.findings : [], bundle_hash: reportCouncil ? reportCouncil.bundle_hash : null, receipts: councilReceipts, certificate_present: !!(reportCouncil && reportCouncil.certificate), receipt_verified: !!(reportCouncil && reportCouncil.receipt_verified), ledger_verified: !!(reportCouncil && reportCouncil.ledger_verified), council_missing_head: (reportCouncil && (reportCouncil.missing === 'fable' || reportCouncil.missing === 'sol')) ? reportCouncil.missing : null } } : {}),
 }

@@ -1,7 +1,7 @@
 // registry.test.mjs — the registry guards itself. tests/v3/index.js is a STATIC import list
 // (modern node loads the directory via this entry; an unregistered *.test.mjs silently never
-// runs in the suite). This has bitten twice (roster.test.mjs at P5 T1, packaging.test.mjs at
-// P6 T3 — the latter hid 13 guards incl. the README footer byte-locks for a full phase).
+// runs in the suite). This has bitten twice (roster.test.mjs at, packaging.test.mjs at
+// the latter hid 13 guards incl. the README footer byte-locks for a full phase).
 // This drill makes the class impossible: every *.test.mjs on disk must be imported.
 
 import { test } from 'node:test'

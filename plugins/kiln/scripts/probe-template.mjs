@@ -1,19 +1,19 @@
 #!/usr/bin/env node
-// probe-template.mjs — the canonical Tier-1 one-shot browser probe (BLUEPRINT §7; the discipline
-// spec's launch→assert→close shape). Zero npm dependencies IN KILN: playwright is the USER'S
+// probe-template.mjs — the canonical Tier-1 one-shot browser probe (the launch→assert→close
+// shape). Zero npm dependencies IN KILN: playwright is the USER'S
 // capability — resolved from the project's node_modules, then the invoking cwd, then the global
-// npm root; never installed, absence degrades honestly (exit 78). THE LAW OF THIS PHASE: the
+// npm root; never installed, absence degrades honestly (exit 78). THE LAW: the
 // browser is a subprocess with a deadline, never a service — this script is that subprocess. It
 // is spawned by kiln-probe.mjs under hard-kill timeout semantics, does ALL its work in a single
 // process (launch → assert → close), and its `finally { browser.close() }` plus the wrapper's
-// token sweep make leaks structurally impossible (every 2026 leak bug requires a long-lived
+// token sweep make leaks structurally impossible (every known leak bug requires a long-lived
 // holder process; there is none here).
 //
 // Usage (internal — kiln-probe.mjs is the caller):
 //   probe-template.mjs <projectPath> <specFile> <baseUrl> <evidenceDir> <prefix> <token>
 //
 //   projectPath — playwright/axe-core resolution root (the USER's install)
-//   specFile    — the §7 probe spec JSON (url, landmarks, interactions, viewports — written by
+//   specFile    — the probe spec JSON (url, landmarks, interactions, viewports — written by
 //                 kiln-probe from law.json's locked spec; this script never reads law.json)
 //   baseUrl     — where the app is served (kiln-probe owns the server lifecycle, not this script)
 //   evidenceDir — screenshots land here as <prefix>-<W>x<H>.png
@@ -24,7 +24,7 @@
 //                 process's argv, so a template orphaned by the wrapper's hard kill matches the
 //                 same sweep and dies with its browsers
 //
-// Assertion set, in the §7 priority order: doc loads <400 with no nav timeout → key roles
+// Assertion set, in priority order: doc loads <400 with no nav timeout → key roles
 // visible (role+name, never CSS) → slice-specific interaction asserts → 0 console errors →
 // 0 first-party 4xx/5xx → axe-core critical/serious = 0 (ONLY if axe-core is resolvable, else
 // axe:"skipped" — honestly degraded, never silently green) → screenshot per viewport.
@@ -39,8 +39,8 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const NAV_TIMEOUT_MS = 15000 // §7 hard bound: nav timeout 15 s
-const ACTION_TIMEOUT_MS = 5000 // §7 hard bound: action timeout 5 s
+const NAV_TIMEOUT_MS = 15000 // hard bound: nav timeout 15 s
+const ACTION_TIMEOUT_MS = 5000 // hard bound: action timeout 5 s
 
 const [projectPath, specFile, baseUrl, evidenceDir, prefix, token] = process.argv.slice(2)
 if (!projectPath || !specFile || !baseUrl || !evidenceDir || !prefix || !token) {
@@ -48,7 +48,7 @@ if (!projectPath || !specFile || !baseUrl || !evidenceDir || !prefix || !token) 
   process.exit(1)
 }
 
-// resolveUser(name) — resolve one of the USER's packages: project node_modules first (the §7
+// resolveUser(name) — resolve one of the USER's packages: project node_modules first (the probe
 // contract), then the invoking cwd, then the global npm root (best-effort — a missing npm binary
 // just skips the global arm). Returns a require() bound to wherever it resolved, or null.
 function resolveUser(name) {

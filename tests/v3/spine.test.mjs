@@ -1,18 +1,18 @@
-// spine.test.mjs — unit floor for src/spine.mjs (P2 T2 acceptance: "slice-plan SC-coverage
+// spine.test.mjs — unit floor for src/spine.mjs (acceptance: "slice-plan SC-coverage
 // validation + tamper-gate + freshness-gate logic extracted into src/ and unit-tested"). These
-// are the pure blocks build.js inlines: the §5 coverage arithmetic the batch slicer is validated
-// against, the §5.1/§6 mechanical runner gate (tamper + HEAD-anchor/hash/timestamp freshness +
+// are the pure blocks build.js inlines: the coverage arithmetic the batch slicer is validated
+// against, the mechanical runner gate (tamper + HEAD-anchor/hash/timestamp freshness +
 // the red lifecycle verdict where kiln-law's exit code IS the verdict) that decides whether a
-// reviewer may even be spawned, the §3.2 milestone-gate judge-spawn decision with its
+// reviewer may even be spawned, the milestone-gate judge-spawn decision with its
 // goal-audit usability predicate (orchestrator ruling: the judge NEVER spawns on missing
-// inputs), and the §3.3 Sentinel rejection classifier.
+// inputs), and the Sentinel rejection classifier.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { validateSlicePlan, runnerGate, gateOnlyRefusal, probeGate, rejectionClass, failureFingerprint, admitRetry, tribunalThreshold, gateDecision, goalAuditUsable, pipelineInvalidated, validateVerdict } from '../../plugins/kiln/src/spine.mjs'
 
-// ── validateSlicePlan — §5 coverage is arithmetic, not judgment ─────────────────────────────────
+// ── validateSlicePlan — coverage is arithmetic, not judgment ─────────────────────────────────
 const slice = (objective, scIds, extra = {}) => ({ objective, done_when: `${objective} works`, sc_ids: scIds, ...extra })
 const codes = (v) => v.errors.map((e) => e.code)
 
@@ -73,7 +73,7 @@ test('validateSlicePlan: an empty plan with NOTHING left to cover is ok (the rep
   assert.deepEqual(validateSlicePlan([], []), { ok: true, errors: [] })
 })
 
-// ── runnerGate — the §5.1 tamper arm + the §6 freshness arms (HEAD anchor, evidence hash,
+// ── runnerGate — the tamper arm + the freshness arms (HEAD anchor, evidence hash,
 //    timestamp) + the red lifecycle verdict (exit code is the verdict), fail-closed ──────────────
 const runnerOk = { verify_exit: 0, tamper_paths: [], law_run_exit: 0, flip_unmet: [], regressed: [], run_id: 'RUN1', head: 'abc123' }
 const probeOk = {
@@ -123,7 +123,7 @@ test('runnerGate: kiln-law verify nonzero, or kiln-law run\'s exit UNREPORTED, i
   }
 })
 
-test('runnerGate red verdict (T2-fix: the exit code IS the verdict): fresh, complete evidence + kiln-law run exit 1 → red, naming the transcribed FLIP_UNMET/REGRESSION ids', () => {
+test('runnerGate red verdict (the exit code IS the verdict): fresh, complete evidence + kiln-law run exit 1 → red, naming the transcribed FLIP_UNMET/REGRESSION ids', () => {
   const v = runnerGate({ ...runnerOk, law_run_exit: 1, flip_unmet: ['SC-002'], regressed: ['SC-001'] }, probeOk)
   assert.equal(v.verdict, 'red')
   assert.match(v.reasons.join(' '), /declared RED→GREEN flip\(s\) still not green: SC-002/)
@@ -169,7 +169,7 @@ test('runnerGate: a missing/failed probe or absent results.jsonl is stale (fresh
   for (const v of [v1, v2, v3]) assert.equal(v.verdict, 'stale')
 })
 
-test('runnerGate: HEAD moved between the runner and the probe is stale, naming both shas (§6: stale evidence is unapprovable)', () => {
+test('runnerGate: HEAD moved between the runner and the probe is stale, naming both shas (stale evidence is unapprovable)', () => {
   const v = runnerGate(runnerOk, { ...probeOk, head: 'def456' })
   assert.equal(v.verdict, 'stale')
   assert.match(v.reasons.join(' '), /HEAD moved.*runner abc123.*current def456/)
@@ -177,7 +177,7 @@ test('runnerGate: HEAD moved between the runner and the probe is stale, naming b
   assert.match(v.reasons.join(' '), /produced at HEAD abc123, not the current HEAD def456/)
 })
 
-test('runnerGate §6 HEAD-anchor arm: a missing or mismatched manifest head is stale — the evidence must name the CURRENT commit itself', () => {
+test('runnerGate HEAD-anchor arm: a missing or mismatched manifest head is stale — the evidence must name the CURRENT commit itself', () => {
   const missing = runnerGate(runnerOk, { ...probeOk, manifest_head: '' })
   assert.equal(missing.verdict, 'stale')
   assert.match(missing.reasons.join(' '), /no manifest HEAD anchor.*run\.json missing or unfinalized/)
@@ -188,7 +188,7 @@ test('runnerGate §6 HEAD-anchor arm: a missing or mismatched manifest head is s
   assert.match(recycled.reasons.join(' '), /produced at HEAD old999, not the current HEAD abc123 — stale by commit/)
 })
 
-test('runnerGate §6 hash arm: results.jsonl must re-hash to the manifest\'s recorded sha256 — altered/partial evidence and unfinalized runs are stale', () => {
+test('runnerGate hash arm: results.jsonl must re-hash to the manifest\'s recorded sha256 — altered/partial evidence and unfinalized runs are stale', () => {
   const altered = runnerGate(runnerOk, { ...probeOk, results_sha256: 'beef02' })
   assert.equal(altered.verdict, 'stale')
   assert.match(altered.reasons.join(' '), /re-hashes to beef02 but the manifest recorded feed01/)
@@ -199,7 +199,7 @@ test('runnerGate §6 hash arm: results.jsonl must re-hash to the manifest\'s rec
   assert.equal(noRehash.verdict, 'stale')
 })
 
-test('runnerGate §6 timestamp arm: evidence completed before HEAD was committed is stale; missing epochs fail closed', () => {
+test('runnerGate timestamp arm: evidence completed before HEAD was committed is stale; missing epochs fail closed', () => {
   const old = runnerGate(runnerOk, { ...probeOk, manifest_completed_epoch: 999 })
   assert.equal(old.verdict, 'stale')
   assert.match(old.reasons.join(' '), /completed at epoch 999, before HEAD was committed at epoch 1000 — stale by time/)
@@ -212,20 +212,20 @@ test('runnerGate §6 timestamp arm: evidence completed before HEAD was committed
   }
 })
 
-test('runnerGate §7 honesty arm: a static-only manifest still proceeds, but the gate CARRIES the degradation — never silently green', () => {
+test('runnerGate honesty arm: a static-only manifest still proceeds, but the gate CARRIES the degradation — never silently green', () => {
   const v = runnerGate(runnerOk, { ...probeOk, manifest_verification_class: 'static-only' })
   assert.equal(v.verdict, 'proceed', 'degradation is the capability tier, not an error — the run proceeds')
   assert.equal(v.verification_class, 'static-only', 'the gate transcribes the degradation mechanically — the workflow ledgers it and the reviewer sees it')
 })
 
-test('runnerGate §7 honesty arm: the red verdict carries verification_class too — a degraded red is still a fully-recorded red', () => {
+test('runnerGate honesty arm: the red verdict carries verification_class too — a degraded red is still a fully-recorded red', () => {
   const v = runnerGate({ ...runnerOk, law_run_exit: 1, flip_unmet: ['SC-002'] }, { ...probeOk, manifest_verification_class: 'static-only' })
   assert.equal(v.verdict, 'red')
   assert.equal(v.verification_class, 'static-only')
   assert.equal(runnerGate({ ...runnerOk, law_run_exit: 1 }, probeOk).verification_class, 'full')
 })
 
-test('runnerGate §7 honesty arm: a missing/unreadable verification_class is STALE, fail-closed — a probe_unavailable deferral exits 0, so an evidence manifest that cannot prove its class could proceed silently green', () => {
+test('runnerGate honesty arm: a missing/unreadable verification_class is STALE, fail-closed — a probe_unavailable deferral exits 0, so an evidence manifest that cannot prove its class could proceed silently green', () => {
   for (const bad of [{ manifest_verification_class: '' }, { manifest_verification_class: 'partial' }, { manifest_verification_class: 42 }, { manifest_verification_class: undefined }]) {
     const v = runnerGate(runnerOk, { ...probeOk, ...bad })
     assert.equal(v.verdict, 'stale', `verification_class=${JSON.stringify(bad.manifest_verification_class)} must be stale`)
@@ -240,7 +240,7 @@ test('runnerGate: every stale reason accumulates — one pass reports them all',
   assert.ok(v.reasons.length >= 4, `expected all gaps reported, got: ${JSON.stringify(v.reasons)}`)
 })
 
-// ── gateOnlyRefusal — the P3.5 T3 refuse-on-red predicate (dogfood finding 4): gate-only re-runs
+// ── gateOnlyRefusal — the refuse-on-red predicate: gate-only re-runs
 //    a STARVED milestone gate over an already-COMPLETED build and may proceed ONLY when the Law is
 //    fully green over tamper-clean, fresh, complete evidence. Every other runnerGate verdict
 //    refuses with the single contract reason `gate-only-on-red`. ───────────────────────────────────
@@ -281,7 +281,7 @@ test('gateOnlyRefusal: a malformed/absent gate refuses fail-closed (no verdict �
   assert.equal(gateOnlyRefusal({ verdict: 'proceed' }).refuse, false)
 })
 
-// ── tribunalThreshold — the §3.2 milestone-gate ROUTING predicate (multi-slice tribunal vs ──────
+// ── tribunalThreshold — the milestone-gate ROUTING predicate (multi-slice tribunal vs ──────
 //    single-slice slice-review-as-gate; the inclusive `slices_built ≥ min_slices_for_tribunal` row)
 test('tribunalThreshold: inclusive boundary — the tribunal fires AT and ABOVE the threshold, the single-slice gate is below it', () => {
   assert.equal(tribunalThreshold(1, 2), false, '1 slice, threshold 2 → below → slice-review-as-gate')
@@ -302,7 +302,7 @@ test('tribunalThreshold: a non-positive or non-finite sliceCount never reaches a
   }
 })
 
-// ── gateDecision — the §3.2 judge-spawn condition (judge ONLY on ambiguous reconcile) ───────────
+// ── gateDecision — the judge-spawn condition (judge ONLY on ambiguous reconcile) ───────────
 const rec = (hasBlocking) => ({ hasBlocking, findings: [], blocking: [], summaryLines: [] })
 
 test('gateDecision: blocking findings → computed QA_FAIL, NO judge — the deterministic gate cannot be softened', () => {
@@ -317,7 +317,7 @@ test('gateDecision: zero blocking + analysts agree (pass) → computed QA_PASS, 
   assert.deepEqual({ judge: d.judge, verdict: d.verdict }, { judge: false, verdict: 'QA_PASS' })
 })
 
-test('gateDecision: zero blocking + analysts agree (fail) is NOT ambiguous — the §3.2 computed rule applies (an unbacked fail is noise to the reconcile)', () => {
+test('gateDecision: zero blocking + analysts agree (fail) is NOT ambiguous — the computed rule applies (an unbacked fail is noise to the reconcile)', () => {
   const d = gateDecision(rec(false), 'fail', 'fail')
   assert.equal(d.judge, false)
   assert.equal(d.verdict, 'QA_PASS')
@@ -332,7 +332,7 @@ test('gateDecision: zero blocking + verdicts DISAGREE → the judge is spawned (
   }
 })
 
-test('gateDecision: a missing/unreadable analyst verdict fails the boundary closed (QA_FAIL), the judge NEVER spawns on missing inputs — §3.2 + operator ruling', () => {
+test('gateDecision: a missing/unreadable analyst verdict fails the boundary closed (QA_FAIL), the judge NEVER spawns on missing inputs', () => {
   for (const [a, b] of [[undefined, 'pass'], ['fail', null], ['PASS', 'pass'], [undefined, undefined], [null, null], ['pass', 'crash']]) {
     const d = gateDecision(rec(false), a, b)
     assert.deepEqual({ judge: d.judge, verdict: d.verdict }, { judge: false, verdict: 'QA_FAIL' }, `overalls=${JSON.stringify([a, b])} must fail closed without a judge`)
@@ -340,7 +340,7 @@ test('gateDecision: a missing/unreadable analyst verdict fails the boundary clos
   }
 })
 
-test('gateDecision: the §3.2 judge-spawn predicate over ALL FOUR input combinations — the judge spawns ONLY at (zero blocking ∧ disagree)', () => {
+test('gateDecision: the judge-spawn predicate over ALL FOUR input combinations — the judge spawns ONLY at (zero blocking ∧ disagree)', () => {
   const matrix = [
     // [hasBlocking, overallA, overallB, judge, verdict]
     [true, 'pass', 'pass', false, 'QA_FAIL'],  // blocking ∧ agree    → computed QA_FAIL
@@ -373,7 +373,7 @@ test('goalAuditUsable: null/dead agents, wrong types, missing or non-binary over
   for (const r of unusable) assert.equal(goalAuditUsable(r), false, `must be unusable: ${JSON.stringify(r)}`)
 })
 
-// ── rejectionClass — the §3.3 master-signal classifier ──────────────────────────────────────────
+// ── rejectionClass — the master-signal classifier ──────────────────────────────────────────
 test('rejectionClass: any logical finding makes the rejection logical', () => {
   assert.equal(rejectionClass({ verdict: 'REJECTED', findings: [{ text: 'x', finding_class: 'mechanical' }, { text: 'y', finding_class: 'logical' }] }), 'logical')
 })
@@ -391,13 +391,13 @@ test('rejectionClass: a real verdict with NO findings errs toward scrutiny — l
   assert.equal(rejectionClass({ verdict: 'REJECTED' }), 'logical')
 })
 
-// ── pipelineInvalidated — the §9 next-milestone pipelining invalidation predicate (finding #8) ───
+// ── pipelineInvalidated — the next-milestone pipelining invalidation predicate ───
 test('pipelineInvalidated: HEAD unchanged since the pipelined plan launched → still good, no re-slice', () => {
   const v = pipelineInvalidated('abc123', 'abc123')
   assert.deepEqual(v, { invalidated: false, reason: '' })
 })
 
-test('pipelineInvalidated: a corrective commit advanced HEAD → invalidated, naming both shas (the §9 rule)', () => {
+test('pipelineInvalidated: a corrective commit advanced HEAD → invalidated, naming both shas (the rule)', () => {
   const v = pipelineInvalidated('abc123', 'def456')
   assert.equal(v.invalidated, true)
   assert.match(v.reason, /base_sha abc123, current HEAD def456/)
@@ -424,7 +424,7 @@ test('pipelineInvalidated: trimming — surrounding whitespace never makes equal
   assert.equal(pipelineInvalidated('  abc123  ', 'abc123').invalidated, false)
 })
 
-// ── probeGate — the §7 ui-slice probe gating predicate (tasks.md T2.1: probe exit → reject /
+// ── probeGate — the ui-slice probe gating predicate (probe exit → reject /
 //    degrade / pass). It runs on the TRUSTWORTHY runnerGate verdicts only (reject/stale/tamper are
 //    disposed mechanically upstream), so its input is { verification_class } off a proceed/red gate.
 const gateFull = { verdict: 'proceed', verification_class: 'full' }
@@ -470,7 +470,7 @@ test('probeGate: the predicate is total and PURE — same input, same output; th
   assert.equal(a.action, 'degrade')
 })
 
-// ── validateVerdict — §3.2/§5 deterministic-first validate verdict (tasks.md T3.5) ──────────────
+// ── validateVerdict — deterministic-first validate verdict ──────────────
 // A green non-UI floor: install ok, Law run + suite exit 0, every criterion met, zero blocking.
 const greenLogic = {
   install_ok: true, law_run_exit: 0, suite_exit: 0, tests_passed: 12, tests_failed: 0,
@@ -525,7 +525,7 @@ test('validateVerdict: a red suite with no counts is PARTIAL (counts unavailable
   assert.ok(v.reasons.some((r) => /counts unavailable/.test(r)))
 })
 
-test('validateVerdict: a MISSING/un-transcribed suite exit FAILS CLOSED — never falls through to PASS (§3.2/§5.1)', () => {
+test('validateVerdict: a MISSING/un-transcribed suite exit FAILS CLOSED — never falls through to PASS', () => {
   for (const missing of [undefined, null, 'x', NaN]) {
     const v = validateVerdict({ ...greenLogic, suite_exit: missing })
     assert.equal(v.verdict, 'VALIDATE_FAILED', `suite_exit=${JSON.stringify(missing)} must fail closed, never PASS`)
@@ -540,7 +540,7 @@ test('validateVerdict: a degraded suite_exit=-1 (no-pluginRoot path) is PARTIAL,
   assert.ok(v.reasons.some((r) => /suite is red/.test(r) && /counts unavailable/.test(r)))
 })
 
-test('validateVerdict: the FULL no-pluginRoot path (law_run_exit=-1 AND suite_exit=-1) is PARTIAL, not FAILED — the degraded floor degrades honestly (review cycle 3, finding 1: -1 must NOT collapse to VALIDATE_FAILED)', () => {
+test('validateVerdict: the FULL no-pluginRoot path (law_run_exit=-1 AND suite_exit=-1) is PARTIAL, not FAILED — the degraded floor degrades honestly (-1 must NOT collapse to VALIDATE_FAILED)', () => {
   // The actual no-pluginRoot branch (validate.js argusPrompt) transcribes BOTH as -1: the kiln-law CLI
   // lives under pluginRoot, so its absence makes the deterministic floor un-runnable. -1 is the agreed
   // "not run because the oracle was unavailable" sentinel — symmetric with the suite arm, it caps the
@@ -562,7 +562,7 @@ test('validateVerdict: law_run_exit=-1 caps at PARTIAL even when the agent ran i
   assert.ok(v.reasons.some((r) => /deterministic Law floor did not run/.test(r)))
 })
 
-test('validateVerdict: a mute gate (unruled_gates) caps at PARTIAL, never PASS and never FAILED — epistemic absence is not proven breakage (the 2026-07-04 cross-family ruling)', () => {
+test('validateVerdict: a mute gate (unruled_gates) caps at PARTIAL, never PASS and never FAILED — epistemic absence is not proven breakage', () => {
   // The gate agent and its one fresh re-dispatch both died on the structured-output retry cap: its
   // coverage is UNKNOWN. The Law-floor doctrine applies — PASS impossible, but a dead reporter proves
   // nothing about the product, so it must NOT ride blocking_findings into VALIDATE_FAILED (which would
@@ -628,7 +628,7 @@ test('validateVerdict: missing creds caps at VALIDATE_PARTIAL — never FAILED o
   assert.ok(v.reasons.some((r) => /missing credentials/.test(r)))
 })
 
-// ── UI scope + the browser path (§3.2: a UI scope maxes at PARTIAL unless Tier-2 is clean) ──
+// ── UI scope + the browser path (a UI scope maxes at PARTIAL unless Tier-2 is clean) ──
 const greenUi = { ...greenLogic, ui_scope: true }
 
 test('validateVerdict: UI scope + a CLEAN Tier-2 traversal → VALIDATE_PASS, full, FULL_BROWSER_VALIDATION', () => {
@@ -682,7 +682,7 @@ test('validateVerdict: PURE — same input, same output', () => {
   assert.deepEqual(validateVerdict(input), validateVerdict(input))
 })
 
-// ── failureFingerprint — the D1 retry-router signature (§9 velocity) ─────────────────────────────
+// ── failureFingerprint — the D1 retry-router signature (velocity) ─────────────────────────────
 const red = { verdict: 'red' } // failureFingerprint emits ONLY on a check-level 'red' gate
 const cr = (id, exit, timeout = false) => ({ id, exit, timeout })
 
@@ -732,7 +732,7 @@ test('failureFingerprint: green (exit 0) rows are NOT failures — only the reds
   assert.equal(fp.class, 'assertion')
 })
 
-test('failureFingerprint: ATOMIC (Sol r1-3) — ANY malformed entry poisons the WHOLE transcription; valid rows never survive a partial garble into a fingerprint', () => {
+test('failureFingerprint: ATOMIC — ANY malformed entry poisons the WHOLE transcription; valid rows never survive a partial garble into a fingerprint', () => {
   const valid = cr('SC-001', 124, true) // alone, this row is an infra fingerprint
   assert.equal(failureFingerprint([valid], red).class, 'infra', 'sanity: the valid row alone fingerprints')
   const garbles = [

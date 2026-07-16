@@ -1,12 +1,12 @@
-// law-greenfield.test.mjs — P3.5 T2 acceptance: the greenfield lock sequence OWNS its git
-// baseline (dogfood finding 2: Run A's lock failed honestly on a bare greenfield dir because
-// architecture runs before build's rakim git-init; the conductor recovered manually — that
-// recovery is now the contract). Two floors:
+// law-greenfield.test.mjs — acceptance: the greenfield lock sequence OWNS its git
+// baseline: the lock leg can meet a bare greenfield dir with no git repo, because
+// architecture runs before build's rakim git-init; the conductor's manual recovery
+// is now the contract. Two floors:
 //   1. scripts/kiln-law.mjs on fixtures — `index` refuses a projectPath with no git HEAD with a
 //      NAMED reason (never the old misleading "tamper gate: git log failed" surface); the
 //      greenfield drill executes the brief's EXACT pre-flight command (disk probe ⇒ init ⇒ local
 //      identity only-where-unset ⇒ `git add -A` baseline commit) on a bare dir under a scrubbed
-//      git identity, then the UNCHANGED §5 sequence on top — baseline + lock commits both land,
+// git identity, then the UNCHANGED sequence on top — baseline + lock commits both land,
 //      lock_commit anchors on the baseline, `kiln-law verify` exits clean, the locked runner
 //      works; the brownfield drill proves an existing history gets NO init, NO baseline, and the
 //      lock commit lands on top of it.
@@ -27,7 +27,7 @@ import { fileURLToPath } from 'node:url'
 const CLI = fileURLToPath(new URL('../../plugins/kiln/scripts/kiln-law.mjs', import.meta.url))
 const cli = (...args) => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8' })
 
-// The brief's pre-flight, VERBATIM: one self-contained command (the same idiom as the §5
+// The brief's pre-flight, VERBATIM: one self-contained command (the same idiom as the
 // lock-commit step — no cwd carry-over between agent Bash calls), with projectPath DOUBLE-QUOTED
 // (review fix cycle: the unquoted interpolation broke mechanically on a path containing
 // whitespace — `cd: too many arguments`). Floor 2 asserts the generated workflow quotes EXACTLY
@@ -60,7 +60,7 @@ const fixtureLaw = () => ({
   ],
 })
 
-// makeBareFixture — the Run A shape: gates + pre-lock law.json on disk, NO git repo at all.
+// makeBareFixture — the bare shape: gates + pre-lock law.json on disk, NO git repo at all.
 // Asimov has compiled (he runs no git); the lock leg is the first git touch of the stage.
 function makeBareFixture(prefix = 'kiln-greenfield-test-') {
   const proj = mkdtempSync(join(tmpdir(), prefix))
@@ -84,7 +84,7 @@ const gitIn = (dir, ...args) => {
 test('CLI index: a projectPath with no git HEAD refuses with the NAMED reason — never a misleading deep-gate error; law.json untouched', () => {
   const { proj, kiln } = makeBareFixture()
   try {
-    // no .git at all — the Run A failure shape, pre-flight skipped
+    // no .git at all — the bare failure shape, pre-flight skipped
     const bare = cli('index', proj, kiln)
     assert.equal(bare.status, 1)
     assert.match(bare.stderr, /index: .* has no git HEAD to record as lock_commit/)
@@ -120,7 +120,7 @@ test('CLI greenfield lock drill: bare dir → the brief\'s exact pre-flight (scr
     for (const p of ['app.txt', 'tests/acceptance/sc-001.sh', 'tests/acceptance/sc-002.sh', '.kiln/law.json']) {
       assert.ok(inBaseline.includes(p), `${p} must be in the baseline commit`)
     }
-    // the UNCHANGED §5 sequence on top — no manual recovery anywhere
+    // the UNCHANGED sequence on top — no manual recovery anywhere
     const idx = cli('index', proj, kiln)
     assert.equal(idx.status, 0, idx.stderr)
     assert.equal(readLawNow(kiln).lock_commit, baseline, 'lock_commit anchors on the baseline — the last pre-gate commit')
@@ -128,7 +128,7 @@ test('CLI greenfield lock drill: bare dir → the brief\'s exact pre-flight (scr
     assert.equal(lc.status, 0, `lock commit failed: ${lc.stderr}`)
     assert.deepEqual(gitOut('log', '--format=%s').split('\n'),
       ['test(law): lock acceptance gates', 'chore: kiln build baseline'],
-      'baseline commit AND lock commit both present, in §5 order')
+      'baseline commit AND lock commit both present, in order')
     const ver = cli('verify', proj, kiln)
     assert.equal(ver.status, 0, `verify must be clean on a self-baselined greenfield lock: ${ver.stdout}${ver.stderr}`)
     assert.match(ver.stdout, /verify clean/)
@@ -285,7 +285,7 @@ test('arch lock brief: carries the greenfield pre-flight VERBATIM — the probe 
   assert.match(p, /never on an existing repo/)
   assert.ok(p.indexOf('PRE-FLIGHT') < p.indexOf('kiln-law.mjs index'), 'baseline before index — index records lock_commit = HEAD')
   assert.match(p, /If a step fails \(the pre-flight included\), STOP/, 'a failed pre-flight reports verbatim in error — fail closed')
-  // the §5 sequence itself is byte-unchanged
+  // the sequence itself is byte-unchanged
   assert.match(p, /git add tests\/acceptance \.kiln\/law\.json && git commit -m "test\(law\): lock acceptance gates"/)
 })
 

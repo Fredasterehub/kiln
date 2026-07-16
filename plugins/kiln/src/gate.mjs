@@ -1,6 +1,6 @@
-// gate.mjs — the single gateAgent for every gate/judgment leg (BLUEPRINT WS-B1). ONE source of
-// truth: inlined verbatim into build/validate/report by the `// @gate` bundler marker, so the
-// v3.0.1 drift (build's copy matched 'retry cap', validate's did not) can never recur again.
+// gate.mjs — the single gateAgent for every gate/judgment leg. ONE source of
+// truth: inlined verbatim into build/validate/report by the `// @gate` bundler marker, so divergent
+// copies can never drift again.
 // Kept SEPARATE from spine.mjs on purpose — spine.mjs is pure-functions-only by its header
 // contract; gateAgent awaits the ambient agent() and speaks through the ambient log(), so it does
 // not belong in the pure module. Every gate-bearing workflow already carries both globals.
@@ -27,14 +27,14 @@
 // error "StructuredOutput retry cap (5) exceeded" matches 'StructuredOutput'; a bare 'retry cap' is
 // deliberately NOT matched (it false-positives unrelated errors like an "HTTP retry cap exceeded").
 //
-// RECEIPT PROVENANCE (twin-council; sol-b34-design "Codex transport receipt"). A Sol council seat runs
+// RECEIPT PROVENANCE (twin-council). A Sol council seat runs
 // a Sonnet wrapper over `transport:'codex'`, and a Sonnet's WORD that it invoked Codex is worthless: the
 // deterministic kiln-codex-receipt.mjs boundary owns process capture + hashing + verification. So a
 // codex-transport wrapped agent() returns an ENVELOPE { payload, codex_receipt, raw_artifact_refs }, and
 // gateAgent STRUCTURALLY validates the relayed receipt — all 14 receipt keys present and well-formed,
 // exit 0, and reported_model === requested_model === the pinned transportModel. gate.mjs can NEVER hash
 // (it validates shape + equality, never recomputes — the deterministic ledger cross-check is the call
-// site's leg, batch 1b-ii). A valid receipt returns envelope.payload and records the transport
+// site's leg). A valid receipt returns envelope.payload and records the transport
 // attestation. `receiptRequired` + a missing/invalid receipt is a DEAD Sol seat: two_heads:required
 // fails closed to null (Sonnet's own answer NEVER substitutes for Sol); best_effort may retain the
 // wrapper answer as honest Sonnet provenance that can never later claim second-family verification. All
@@ -83,7 +83,7 @@ export function classifyGateFailure(e) {
 //   opts.provenance optional sink object. gateAgent writes {requested_model, actual_model,
 //                     fallback_reason, classification} onto it so a caller that ALREADY ledgers can
 //                     ride the record into its EXISTING note/evidence data payload — no new event
-//                     type is minted (BLUEPRINT §B6/§10). actual_model is ALWAYS the model that
+//                     type is minted. actual_model is ALWAYS the model that
 //                     actually produced the returned result — the requested model on a clean call or
 //                     a same-model re-dispatch, 'opus' after a fable→opus substitution, and null on a
 //                     fail-closed null. classification is the seat-death class that forced the
@@ -182,7 +182,7 @@ export async function gateAgent(prompt, opts) {
     }
   }
   // settleCodex(env, history) — a codex dispatch returned a usable envelope. STRUCTURALLY validate the
-  // relayed receipt (gate.mjs never hashes; the deterministic ledger cross-check is the 1b-ii call-site
+  // relayed receipt (gate.mjs never hashes; the deterministic ledger cross-check is the call-site
   // leg). A verified receipt requires a NON-NULL payload (a receipt with no answer is not a verification —
   // provenance never lies); it returns envelope.payload + the full attestation, carrying the dispatch
   // history (fallback_reason/classification of the path that led here, e.g. a best-effort redispatch after
@@ -246,7 +246,7 @@ export async function gateAgent(prompt, opts) {
   return null
 }
 
-// withDeadline(thunk, ms, onLate) — the await-bound for a Tier-2 traversal leg (BLUEPRINT §7). Lives
+// withDeadline(thunk, ms, onLate) — the await-bound for a Tier-2 traversal leg. Lives
 // here (one implementation, imported by the unit tests, inlined into validate by the @gate marker) so
 // the tested wrapper and the shipped wrapper can never drift. Resolves to the thunk's value, the
 // sentinel TRAVERSAL_TIMEOUT ({ __kiln_timeout: true }) if ms elapses first, or the sentinel

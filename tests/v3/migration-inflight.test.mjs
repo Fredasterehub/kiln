@@ -1,9 +1,9 @@
-// migration-inflight.test.mjs — WS-F: the GENERIC v3.0.1 in-flight run resume/migration fixture
-// (plan.md WS-F line 95; the Sol blind-spot adopted at plan.md:35 — "resume under v3.0.2 must be
-// explicitly safe or explicitly refused with guidance"). A run authored under v3.0.1 is mid-build.
+// migration-inflight.test.mjs — the GENERIC v3.0.1 in-flight run resume/migration fixture.
+// The invariant: resume under v3.0.2 must be explicitly safe or explicitly refused with
+// guidance. A run authored under v3.0.1 is mid-build.
 //
 // The fixture is HISTORICALLY FAITHFUL to what a v3.0.1 run actually leaves on disk:
-//   · STATE.md — the conductor's control plane and the RESUME AUTHORITY (SKILL §4: "Resume routing
+// · STATE.md — the conductor's control plane and the RESUME AUTHORITY (SKILL "Resume routing
 //     keys off STATE.md"). The v3.0.1 conductor rewrote it at every transition; mid-build it records
 //     stage: build, last_completed_stage: architecture — the human-facing progression.
 //   · events.jsonl — the ledger's own projection surface, rebuilt as the EXACT sequence the v3.0.1
@@ -143,7 +143,7 @@ export const parseStateField = (md, field) => {
   const m = md.match(new RegExp(`^- \\*\\*${field}\\*\\*: (.+)$`, 'm'))
   return m ? m[1].trim() : null
 }
-// the STATE.md routing contract (SKILL §4): resume routing keys off STATE.md — the conductor resumes
+// the STATE.md routing contract (SKILL): resume routing keys off STATE.md — the conductor resumes
 // INTO the stage STATE.md names; a completed stage is never re-opened, so the resume target IS `stage`.
 export const resumeTargetFromStateMd = (md) => parseStateField(md, 'stage')
 
@@ -194,10 +194,10 @@ export function writeInflightV301(over = {}) {
   // architecture wrote NO ledger events (their stage brackets arrived in v3.0.2).
   const profile = {}
   for (const k of ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8']) profile[k] = { score: 1, evidence: `${k} scored mid (1) from VISION` }
-  assert.ok(validateProfile(profile).ok, 'the all-mid gauge profile is a legal §3.1 input to posture()')
+  assert.ok(validateProfile(profile).ok, 'the all-mid gauge profile is a legal input to posture()')
   // The posture is COMPUTED by the v3.0.1 mapping itself (src/gauge.mjs posture() + gauge-config.json,
   // both byte-for-byte identical to the v3.0.1 tag) — nothing hand-invented. The all-mid profile
-  // deterministically yields the §3.2 posture: scope_tier 'standard', planning 'dual' (D3>=1 AND
+  // deterministically yields the posture: scope_tier 'standard', planning 'dual' (D3>=1 AND
   // D1>=1), research_topics_max 4 (2+D3+D5), plan_validation_rounds 2 (1 + D2>=1), slice_budget_hours
   // 0.5 (2·0.5·0.5, D7>=1 halves it), review.ui_effort_base 'high' (D8>=1), browser Tier-2 enabled
   // (D7>=1), with milestone_gate and validate present. gauge.js:217 wraps it as the posture_set data.
@@ -217,7 +217,7 @@ export function writeInflightV301(over = {}) {
 }
 
 // ── the STATE.md routing contract: STATE.md is the resume authority; stage build ⇒ resume into build ──
-test('v3.0.1 in-flight migration — the STATE.md routing contract: STATE.md (SKILL §4 resume authority) records stage: build, so the v3.0.2 conductor resumes INTO build and never re-opens the completed architecture stage; the AUTHENTIC v3.0.1 ledger validates clean under v3.0.2', () => {
+test('v3.0.1 in-flight migration — the STATE.md routing contract: STATE.md (SKILL resume authority) records stage: build, so the v3.0.2 conductor resumes INTO build and never re-opens the completed architecture stage; the AUTHENTIC v3.0.1 ledger validates clean under v3.0.2', () => {
   const { dir, kilnDir, stateMd } = writeInflightV301()
   try {
     // the resume authority is STATE.md — the conductor register — not the state.json projection

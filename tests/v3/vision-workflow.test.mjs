@@ -1,4 +1,4 @@
-// vision-workflow.test.mjs — P4 T2 acceptance: the vision-compile leg (BLUEPRINT §10 change 5).
+// vision-workflow.test.mjs — acceptance: the vision-compile leg.
 // The GENERATED workflows/vision.js is driven with every agent MOCKED (the validate-workflow
 // harness idiom). The contract under test: the MECHANICAL ledger-gate floor runs before any
 // compiler spawn (an incomplete session can never compile); the compiler's typed-violation revise
@@ -95,7 +95,7 @@ test('vision.js clean path: gate → ONE fresh compiler → validator clean → 
   assert.match(brief, /brainstorm-ledger\.jsonl/)
   assert.match(brief, /templates\/VISION\.md/)
   assert.doesNotMatch(brief, /conversation history|chat transcript/, 'no chat context reaches the compiler')
-  // P4 T4 item 5 (T3 ruling 2): the Elicitation Log source is named concretely — the distinct
+  // item 5 (T3 ruling 2): the Elicitation Log source is named concretely — the distinct
   // data.method fields across theme/decision/style_probe/clarify_pass events plus that trail.
   assert.match(brief, /DISTINCT data\.method fields across the theme\/decision\/style_probe\/clarify_pass events/, 'the compiler is told exactly where the Elicitation Log comes from')
 })
@@ -188,7 +188,7 @@ test('vision.js GATE_SCHEMA discipline: every evidence field REQUIRED — a sche
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
-// ── B4-3 D4: vision at capability tier T4 — the fidelity pair between the mechanical checks and the
+// ── vision at capability tier T4 — the fidelity pair between the mechanical checks and the
 //    seal events. Dual-APPROVE ⇒ vision_compiled THEN stage_completed (order preserved) + certificate;
 //    ANY other outcome ⇒ NEITHER seal event (the existing invalid-VISION escalation shape). Every Sol
 //    leg rides a receipt-attested codex envelope + an invocation-exact ledger cross-check.
@@ -232,14 +232,14 @@ function t4Respond(cfg = {}, over = {}) {
   }
 }
 
-test('B4-3 D4 vision fidelity: at T4 a clean compile convenes the blind Fable/Sol fidelity pair; dual-APPROVE ⇒ vision_compiled THEN stage_completed + a b43-vision/1 certificate', async () => {
+test('vision fidelity: at T4 a clean compile convenes the blind Fable/Sol fidelity pair; dual-APPROVE ⇒ vision_compiled THEN stage_completed + a b43-vision/1 certificate', async () => {
   const { result, calls } = await runVision(t4args(), t4Respond())
   assert.equal(result.vision_valid, true)
   assert.equal(calls.filter((c) => c.label === 'fable:vision-fidelity').length, 1)
   assert.equal(calls.filter((c) => c.label === 'sol:vision-fidelity').length, 1)
   assert.equal(calls.filter((c) => c.label === 'thoth:receipt-check:sol:vision-fidelity').length, 1)
   assert.equal(result.council.terminal, 'RATIFIED')
-  assert.equal(result.council.seat, 'vision_fidelity', 'B43-2: the b42-mirrored per-seat summary rides the return (the boundary record for vision)')
+  assert.equal(result.council.seat, 'vision_fidelity', 'the b42-mirrored per-seat summary rides the return (the boundary record for vision)')
   assert.equal(result.council.certificate.label, 'twin_ratified')
   assert.equal(result.council.certificate.signatures[0].renderer_version, 'b43-vision/1')
   const sealed = ledgersOf(calls, 'vision_compiled'), completed = ledgersOf(calls, 'stage_completed')
@@ -250,7 +250,7 @@ test('B4-3 D4 vision fidelity: at T4 a clean compile convenes the blind Fable/So
   assert.ok(l.indexOf('fable:vision-fidelity') < calls.indexOf(sealed[0]), 'the fidelity pair runs BEFORE the seal events')
 })
 
-test('B4-3 D4 vision fidelity: a BLOCK ⇒ NEITHER seal event, vision_valid:false, honest BLOCKED terminal (required-mode uniformity)', async () => {
+test('vision fidelity: a BLOCK ⇒ NEITHER seal event, vision_valid:false, honest BLOCKED terminal (required-mode uniformity)', async () => {
   const { result, calls } = await runVision(t4args(), t4Respond({ fableFid: (h) => ({ ...rat(h), verdict: 'BLOCK', findings: [FID_FINDING] }) }))
   assert.equal(result.vision_valid, false)
   assert.equal(result.council.terminal, 'BLOCKED')
@@ -259,7 +259,7 @@ test('B4-3 D4 vision fidelity: a BLOCK ⇒ NEITHER seal event, vision_valid:fals
   assert.equal(ledgersOf(calls, 'stage_completed').length, 0)
 })
 
-test('B4-3 D4 vision fidelity: a DEAD Sol seat (no receipt) ⇒ DEGRADED, NEITHER seal event (never a single-head ruling)', async () => {
+test('vision fidelity: a DEAD Sol seat (no receipt) ⇒ DEGRADED, NEITHER seal event (never a single-head ruling)', async () => {
   const { result, calls } = await runVision(t4args(), t4Respond({ solFid: 'dead' }))
   assert.equal(result.vision_valid, false)
   assert.equal(result.council.terminal, 'DEGRADED')
@@ -267,7 +267,7 @@ test('B4-3 D4 vision fidelity: a DEAD Sol seat (no receipt) ⇒ DEGRADED, NEITHE
   assert.equal(ledgersOf(calls, 'stage_completed').length, 0)
 })
 
-test('B4-3 D4 vision fidelity promised-but-tokenless: T4 + codex but NO runToken ⇒ DEGRADED, NO pair, NEITHER seal event (never a silent v3.0.1 compile)', async () => {
+test('vision fidelity promised-but-tokenless: T4 + codex but NO runToken ⇒ DEGRADED, NO pair, NEITHER seal event (never a silent v3.0.1 compile)', async () => {
   const { result, calls } = await runVision({ ...baseArgs, codexAvailable: true, capabilityTier: 'T4' }, t4Respond())
   assert.equal(result.vision_valid, false)
   assert.equal(calls.filter((c) => c.label === 'fable:vision-fidelity').length, 0, 'no council convenes without a runToken')
@@ -276,7 +276,7 @@ test('B4-3 D4 vision fidelity promised-but-tokenless: T4 + codex but NO runToken
   assert.equal(ledgersOf(calls, 'stage_completed').length, 0)
 })
 
-test('B4-3 D4 vision fidelity sub-T4 byte-preservation: at T3 (no council) a clean compile seals normally with NO fidelity pair and NO council field', async () => {
+test('vision fidelity sub-T4 byte-preservation: at T3 (no council) a clean compile seals normally with NO fidelity pair and NO council field', async () => {
   const { result, calls } = await runVision({ ...baseArgs, codexAvailable: true, capabilityTier: 'T3' }, t4Respond())
   assert.equal(result.vision_valid, true)
   assert.equal(calls.filter((c) => c.label === 'fable:vision-fidelity').length, 0)

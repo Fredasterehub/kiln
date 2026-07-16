@@ -1,4 +1,4 @@
-// kill-streaks.test.mjs — P5 T3 guard: the re-keyed kill-streak selector (BLUEPRINT §11 item 7).
+// kill-streaks.test.mjs — guard: the re-keyed kill-streak selector.
 // The selection is prose-driven (the conductor reads the ladder + the arithmetic from markdown),
 // so this guards two things: (1) kill-streaks.md AND the kiln-fire SKILL both name the exact
 // arithmetic verbatim — they must not drift apart; (2) a faithful reference implementation of

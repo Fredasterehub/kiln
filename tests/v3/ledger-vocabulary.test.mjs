@@ -1,8 +1,8 @@
-// ledger-vocabulary.test.mjs — the event-vocabulary drift guard (P3.5 T4, DOGFOOD FINDING 5).
+// ledger-vocabulary.test.mjs — the event-vocabulary drift guard.
 //
-// Run A froze events.jsonl at seq 2: kiln-state's closed EVENT_TYPES enum rejected the workflow
+// A closed EVENT_TYPES enum once froze events.jsonl: kiln-state's enum rejected the workflow
 // event types Thoth tried to append, every append died exit 1 in his hands, and the ledger-
-// completeness measure failed — Run A could not be reconstructed from events.jsonl alone. The fix
+// completeness measure failed — the run could not be reconstructed from events.jsonl alone. The fix
 // widened the enum; THIS test is the compile-time defense that keeps it honest. A new workflow
 // `ledger('<type>')` call without a matching enum entry is now a RED harness, never a silent hole.
 //
@@ -109,7 +109,7 @@ test('drift guard NEGATIVE self-test: the extractor surfaces a planted unknown t
 })
 
 // ── Round-trip: kiln-state append accepts every workflow event type, then validate + project pass. ──
-// gate_only_refused joined in P3.5 T3 (the gateOnly refuse path) — the guard caught its absence
+// gate_only_refused joined in (the gateOnly refuse path) — the guard caught its absence
 // the same session it shipped; this fixture updates CONSCIOUSLY with every vocabulary change.
 const WORKFLOW_TYPES = [
   'browser_leak_suspect', 'browser_lease', 'browser_sweep', 'gate_only_refused', 'gate_skipped', 'goal_audit_failure',
@@ -148,7 +148,7 @@ test('round-trip: every WORKFLOW_TYPES entry is one of the widened workflow type
   assert.deepEqual([...WORKFLOW_TYPES].sort(), widened.sort())
 })
 
-// ── D5 slice telemetry (§9, note.data.kind — no new event type): the build workflow's first `note`
+// ── D5 slice telemetry (note.data.kind — no new event type): the build workflow's first `note`
 //    emission. The event TYPE is the pre-existing 'note' (a CORE type, so WORKFLOW_TYPES is
 //    unchanged); this test guards the PAYLOAD shape at the source, the ledger-vocabulary idiom
 //    (regex over the workflow files), so a dropped telemetry key is a red harness. ──
@@ -166,7 +166,7 @@ test('D5 slice telemetry: build emits note{kind:slice_telemetry} with the requir
   }
 })
 
-// ── C1 lore beats (doctrine §4/§5): the sixth register — note{kind:'lore'} dispatches carried to the
+// ── C1 lore beats (doctrine): the sixth register — note{kind:'lore'} dispatches carried to the
 //    operator's transcript. The event TYPE is the pre-existing CORE 'note' (WORKFLOW_TYPES unchanged);
 //    this guards the BEAT layer the same way :155 guards slice_telemetry (regex over the workflow
 //    files) so the catalog can't silently rot: every workflow emits ≥1 beat, keys are the plan's

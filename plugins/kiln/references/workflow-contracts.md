@@ -26,7 +26,7 @@ Pass the absolute `$PLUGIN_ROOT`-resolved paths, the operator's `testing_rigor` 
 every stage, and a workflow simply ignores base args it doesn't read; the per-stage notes below are
 the authoritative consumption contract. Each stage adds the args it actually reads.
 
-**Launch cadence (D4).** A stage's CLEAN completion auto-advances the run — the conductor launches the
+**Launch cadence.** A stage's CLEAN completion auto-advances the run — the conductor launches the
 next stage in the same turn (see *The story telegraph* / unattended chaining in the conductor), bounded
 by the hard stops: the `plan_approval: gated` checkpoint, the `correction_cycle >= 3` escalation, any
 blocked / degraded / law-unlocked return, and any operator interrupt.
@@ -52,7 +52,7 @@ whether the tier is `express` or a facilitated tier).
   Claude-head council seat resolves its engine through it, so an Opus-headed council seals with Opus in
   the seat and records the succession in the checkpoints' `seat_provenance`; **omit it (or any value but
   `'opus'`) ⇒ the Fable head, byte-compatible with every pre-succession launch.** When `capabilityTier === 'T4'` AND `codexAvailable`
-  AND a `runToken` is present, the compile is sealed by the **fidelity council** (B4-3 D4): a blind
+  AND a `runToken` is present, the compile is sealed by the **fidelity council**: a blind
   Fable/Sol required pair rules whether `VISION.md` is a FAITHFUL compile of the brainstorm ledger
   (nothing invented, nothing dropped) — dual-APPROVE ⇒ `vision_compiled` THEN `stage_completed` fire +
   a `b43-vision/1` certificate rides the return; ANY other outcome ⇒ NEITHER seal event, the conductor
@@ -63,8 +63,8 @@ whether the tier is `express` or a facilitated tier).
 - **Gauge** takes `postureOverride`, `assessorModel`, `pluginRoot` (see the Gauge stage in the
   conductor). It is the source of the posture-derived args every downstream stage reads.
 - **Research** also takes **`topicsMax`** = `posture.research_topics_max` (always a
-  positive integer — the §3.2 cap `2 + D3 + D5`). Passing it is the signal that the Gauge ran and
-  switches research to the §3.2 rule: topics come ONLY from high-priority before-build OQs, capped at
+  positive integer — the cap `2 + D3 + D5`). Passing it is the signal that the Gauge ran and
+  switches research to the posture rule: topics come ONLY from high-priority before-build OQs, capped at
   `topicsMax`, with NO lower floor — so **zero qualifying OQs ⇒ zero topics ⇒ no research.md is
   written** and the stage returns `research_file: null`. **Omit it** (or pass nothing) and research.js
   runs the verbatim v2 behavior instead: OQs plus load-bearing unknowns, a floor of 2 and a cap of 5,
@@ -76,26 +76,26 @@ whether the tier is `express` or a facilitated tier).
   (`'dual'`/`'single+redteam'`/`'single'`) and **`validationRounds`** = `posture.plan_validation_rounds`.
   `planning` decides whether The Council (dual anonymized plans + divergence) runs: `'dual'` runs it,
   `'single'`/`'single+redteam'` take the lite single-plan path (the cross-family red-team critique
-  `'single+redteam'` names is build-spine machinery scheduled for a later phase — BLUEPRINT §16 — so
-  in this phase it routes like `'single'`). `validationRounds` is the number of Athena VALIDATION
-  PASSES to run (BLUEPRINT §3.2 `plan_validation_rounds`, NOT a revision count): `1` ⇒ one pass / zero
+  `'single+redteam'` names is build-spine machinery not yet wired — so
+  it routes like `'single'`). `validationRounds` is the number of Athena VALIDATION
+  PASSES to run (`plan_validation_rounds`, NOT a revision count): `1` ⇒ one pass / zero
   revisions, `3` ⇒ three passes / ≤2 revisions. **Omit both** and architecture.js falls back to its
   historical behavior (the foundation's `scope === 'trivial'` decides lite-vs-dual; 2 passes lite /
   3 passes full) — a run without a posture is unchanged. Architecture also reads **`lawModel`** and
-  **`pluginRoot`**. `lawModel` is the §8 slot for Asimov the Lawgiver (compiles and revises the Law's
+  **`pluginRoot`**. `lawModel` is the slot for Asimov the Lawgiver (compiles and revises the Law's
   checks; default `'opus'` — pass another slot per capability tier). `pluginRoot` is the same absolute
-  `$PLUGIN_ROOT` from §0 — it locates the `kiln-law` CLI for the Law's dryrun and index/lock step;
+  `$PLUGIN_ROOT` you resolved at launch — it locates the `kiln-law` CLI for the Law's dryrun and index/lock step;
   omit it and the lock degrades to `law_locked: false` with a recorded reason — never a silent
   proceed, never a stage crash. Architecture also takes an **optional `visualDirection`** — the boolean
-  `vision.js` returned at brainstorm (the mechanical path r1 F6: a workflow cannot read a file
+  `vision.js` returned at brainstorm (a workflow cannot read a file
   in-script, so arg-threading is the only mechanical route). When you pass it, it **IS**
   `has_visual_direction` — the decline-byte check lives in the vision gate now, so architecture's
   foundation agent is NOT asked to re-judge it and design-token generation gates on your threaded value.
   **Omit it** (a pre-v3 VISION, a harness run, or a cross-session resume that starts at architecture
   without the brainstorm return in hand) and the foundation agent judges it from the VISION as the
   pre-v3 fallback — a run without the thread is unchanged. Architecture self-detects whether research.md
-  exists (a cheap `ls` probe, the §4 self-validation discipline) and grounds in VISION.md directly when
-  the §3.2 zero-topics route wrote none — it never points an agent at a phantom research file.
+  exists (a cheap `ls` probe, the self-validation discipline) and grounds in VISION.md directly when
+  the zero-topics route wrote none — it never points an agent at a phantom research file.
   Architecture also takes a **`runToken`** (council receipt binding + council seed at T4 — NOT a browser
   token; see [The run token](#the-run-token)) and a **`capabilityTier`** (`T1`|`T2`|`T3`|`T4` = the
   freshest capability record's `tier`), plus the optional **`claudeHead`** (`'fable'`|`'opus'` =
@@ -103,7 +103,7 @@ whether the tier is `express` or a facilitated tier).
   council seat's engine on BOTH the FULL and LITE paths. When `capabilityTier === 'T4'` AND `codexAvailable` AND a
   `runToken` is present, BOTH the FULL and the LITE paths become the **twin council**: the FULL path
   runs the anonymized Fable ∥ receipt-attested-Sol draft pair + a divergence-aware blind ratification
-  ladder; the LITE path (B4-2 D7) runs the blind required ratification pair ALONE over the single lite
+  ladder; the LITE path runs the blind required ratification pair ALONE over the single lite
   master plan — ONE round, no answer exchange, renderer `b42-lite/1`. Sub-T4 and `codexAvailable:false`
   run the v3.0.1 path BYTE-IDENTICAL, labeled `council.path:'v301'` with an honest reason (never
   `twin_ratified`, never second-family verification). The return grows ONE additive field: `council: {
@@ -121,7 +121,7 @@ whether the tier is `express` or a facilitated tier).
   deliverable (no backend). `uiBuild===true` forces build.js's `surfaceOf()` to route *every*
   milestone to the UI builder, overriding each milestone's own `surface` tag, so a normal app left
   at `false` lets architecture's per-milestone `surface` route backend/logic milestones correctly.
-  `pluginRoot` is the same absolute `$PLUGIN_ROOT` you resolved in §0 — a launched Workflow cannot
+  `pluginRoot` is the same absolute `$PLUGIN_ROOT` you resolved at launch — a launched Workflow cannot
   see `${CLAUDE_PLUGIN_ROOT}` (it is unset there), so build.js workers need the resolved path passed
   in to Read plugin reference files by absolute path. Pass the **whole `posture` object**
   (`state.json.posture`) — build.js reads its Gauge dials (`review.ui_effort_base`,
@@ -151,14 +151,14 @@ whether the tier is `express` or a facilitated tier).
   token from it, with the same non-unique per-project hash fallback when omitted).
   `designPresent` is `true` if the architecture stage wrote a `design/` directory (a HINT only —
   validate.js self-detects `design/` from disk, so a wrong/absent hint never mis-routes the design
-  QA leg). `pluginRoot` is the same absolute `$PLUGIN_ROOT` from §0 — LOAD-BEARING here: it locates
+  QA leg). `pluginRoot` is the same absolute `$PLUGIN_ROOT` you resolved at launch — LOAD-BEARING here: it locates
   the `kiln-law` CLI (the deterministic Law floor — fresh install, then `verify` + `run` FULL +
   `suite` as the real backstop) and `kiln-probe` (the Tier-2 scripted browser path + the token sweeps
   + the browser lease). Pass the **whole `posture` object** (`state.json.posture`) — validate.js reads
   its `validate.adversarial_pass` / `validate.second_family` dials (the D8=2 extras: a second
   adversarial traversal pass and a second cross-family goal-backward auditor); omit it and validate
   runs the floor without the extras. **Playwright MCP is NOT driven by autonomous validate** (an MCP
-  server is a persistent browser service, which §7 forbids in-loop) — there is no `playwrightMcp` arg.
+  server is a persistent browser service, forbidden in-loop) — there is no `playwrightMcp` arg.
   The Tier-2 traversal uses the scripted, lease-gated, one-shot `kiln-probe` ORACLE only; if playwright
   is absent on disk the UI criteria degrade honestly to `PARTIAL_PASS_STATIC_ONLY` (verification_class
   recorded), never silently green. MCP stays a doctor-detected capability for the operator's
@@ -170,13 +170,13 @@ whether the tier is `express` or a facilitated tier).
   optional **`claudeHead`** (`'fable'`|`'opus'` = `state.json.capability.claude_head`; absent ⇒ `'fable'`,
   byte-compatible) that resolves the final-ruling council's Claude seat engine. When
   `capabilityTier === 'T4'` AND `codexAvailable` AND a `runToken` is present, the **final ruling** goes
-  council-grade (B4-3 D2): a blind Fable/Sol required pair CONFIRMS or BLOCKS the assembled deterministic
+  council-grade: a blind Fable/Sol required pair CONFIRMS or BLOCKS the assembled deterministic
   verdict for EVERY computed verdict (PASS incl. prospective, PARTIAL, FAILED) — the monotonicity rail is
   absolute (the council never alters `verdict`/`blocking`/`correction_tasks`; a deterministic red is
   never greened). It gates ONE thing: `stage_completed` fires only on `VALIDATE_PASS` AND a RATIFIED
   ruling (a PASS whose council BLOCKED/DEGRADED leaves the projection at `validate` — the deterministic
   verdict STANDS, but completion is council-gated). The terminal + `b43-validate/1` certificate ride the
-  `validate_verdict` event's additive `council` field and the return. Also (B4-3 D3) `second_family_verified`
+  `validate_verdict` event's additive `council` field and the return. Also, `second_family_verified`
   is now **receipt-based**: the posture-required second-family goal leg becomes a receipt-attested envelope
   leg (gated on `codexAvailable` + `runToken`, NOT the tier) with an invocation-exact ledger cross-check;
   the claim is `verified` only when `receipt_verified && ledger_verified` on top of the existing model
@@ -186,14 +186,14 @@ whether the tier is `express` or a facilitated tier).
   CLOSED (terminal DEGRADED, no `stage_completed` even on a PASS — never a silent v3.0.1 completion).
 - **Report** (`report.js`) takes `kilnDir`, `projectPath`, and **`pluginRoot`** — `pluginRoot`
   locates the kiln-state CLI for the stage brackets (`stage_started` at entry; `stage_completed` on
-  the genuine-success path ONLY — REPORT.md written, confirmed by an existence probe) and the C1 lore
+  the genuine-success path ONLY — REPORT.md written, confirmed by an existence probe) and the lore
   beats, AND (at T4) the `kiln-codex-receipt` CLI the signoff council binds its receipts through;
   absence degrades the ledger legs to log lines, never a stage failure. A missing REPORT.md emits NO
   `stage_completed`, so the projection stays at `report`. Report also takes a **`runToken`**, a
   **`capabilityTier`**, and the optional **`claudeHead`** (`'fable'`|`'opus'` =
   `state.json.capability.claude_head`; absent ⇒ `'fable'`, byte-compatible) that resolves the signoff
   council's Claude seat engine. When `capabilityTier === 'T4'` AND `codexAvailable` AND a `runToken` is present,
-  the **signoff** goes council-grade (B4-3 D5): Omega still AUTHORS the report (creative seat, unchanged),
+  the **signoff** goes council-grade: Omega still AUTHORS the report (creative seat, unchanged),
   then after the existence gate a blind Fable/Sol required pair rules whether REPORT.md tells the TRUTH
   about the run's delivered vs outstanding artifacts — dual-APPROVE ⇒ `signed_off: true` + a `b43-report/1`
   certificate in the return AND ONLY THEN `stage_completed` fires (the existence-gated completion is
@@ -231,7 +231,7 @@ was visibly *starved* (session death mid-Judgment with the slices already built 
 not pay for a full re-run. The slicer cannot legally cut zero slices over a completed build, so a full
 re-run churns through builder/confirm work it doesn't need. Instead relaunch build with
 `{gateOnly: true, …same args, fresh runToken}`: it skips Scoring the Cut and Forging entirely and
-re-runs only the §3.2 milestone gate (Law verify + full run + the tribunal) over the finished build.
+re-runs only the milestone gate (Law verify + full run + the tribunal) over the finished build.
 `gateOnly` REFUSES on a red Law (`gate-only-on-red`) — it re-runs a starved gate, it never skips
 building. Any other `QA_FAIL` (real red checks, failed flips) is a genuine build failure: route it back
 through the correction loop above, not gate-only.
@@ -252,7 +252,7 @@ in the build transition.
 
 *(load-bearing — a leaked browser OOM'd the box once)*
 
-- **The browser is a subprocess with a deadline, never a service (BLUEPRINT §7).** The v2 blanket
+- **The browser is a subprocess with a deadline, never a service.** The v2 blanket
   ban is repealed, but the discipline is absolute: no browser process may outlive the check that
   spawned it; every spawn carries a unique kill token; pre/post **token-scoped** sweeps bracket every
   stage that can spawn one (blanket `pkill -f chrome` stays forbidden — it would reap the operator's
@@ -274,7 +274,7 @@ in the build transition.
   immediate token sweep). The scripted one-shot `kiln-probe` is the BOUNDED ORACLE (each criterion =
   one launch→assert→close process, hard-killed at 90s, swept by the `kval-…` token) and is the ONLY
   browser path autonomous validate takes — **Playwright MCP is NOT driven in-loop** (an MCP server is a
-  persistent browser service §7 forbids inside the loop); it stays a doctor-detected capability for the
+  persistent browser service forbidden inside the loop); it stays a doctor-detected capability for the
   operator's INTERACTIVE/manual visual QA (named in the `visual_qa_checklist`). No scripted oracle on
   disk ⇒ honest degradation to `PARTIAL_PASS_STATIC_ONLY` (verification_class recorded), never silently green.
 - **The out-of-loop one-shot pass still ships as an OPTIONAL operator re-check.** `validate.js`

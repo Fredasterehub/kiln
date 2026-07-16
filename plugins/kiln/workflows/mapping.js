@@ -22,7 +22,7 @@ const kilnDir = A.kilnDir
 if (!projectPath || !kilnDir) throw new Error('mapping.js requires args.projectPath and args.kilnDir (absolute paths — the conductor resolves them; never launch with relative paths). Received args of type ' + typeof args)
 // pluginRoot is the conductor-resolved absolute $PLUGIN_ROOT (a launched Workflow can't see
 // ${CLAUDE_PLUGIN_ROOT}). It locates the kiln-state CLI for this stage's ledger brackets + lore beats
-// (mapping.js's first ledger legs — the C1 batch); absence degrades each to a log line, never a failure.
+// (mapping.js's first ledger legs); absence degrades each to a log line, never a failure.
 const pluginRoot = A.pluginRoot
 const mapFile = `${kilnDir}/docs/codebase-map.md`
 
@@ -75,8 +75,7 @@ const MISSING_SCHEMA = {
   required: ['missing'],
 }
 
-// ── The run ledger (BLUEPRINT §3.5) — mapping.js's FIRST ledger legs (the C1 lore batch closed the
-//    "mapping brackets ride the C1 lore batch" deferral). The vision.js runLedger idiom: Thoth
+// ── The run ledger — mapping.js's ledger legs. The vision.js runLedger idiom: Thoth
 //    appends; gated on pluginRoot and degrades to a log line — an append failure never fails the
 //    stage. stage_completed fires ONLY on the genuine-success path: codebase-map.md written (the
 //    existence probe below confirms it); a missing-artifact path emits NOTHING. ──
@@ -94,12 +93,12 @@ async function runLedger(type, data, phaseName) {
   )
 }
 
-// ── Lore beats (C1 doctrine §4): cartography — one dispatch at the moment a fact becomes true, carried
+// ── Lore beats: cartography — one dispatch at the moment a fact becomes true, carried
 //    by runLedger to the operator's transcript (note{kind:'lore'}; deterministic <stage>.<beat> key;
 //    args short scalars capped at 80 by the caller; text ≤ 160). PRESENTATION, null-keep. ──
 const LORE_MAX = 160
 const oneLine = (s, cap = LORE_MAX) => String(s).replace(/[\x00-\x1f\x7f]+/g, ' ').slice(0, cap)
-// args are bound HERE (F-1): every string value is capped at 80 mechanically, so a beat can never
+// args are bound HERE: every string value is capped at 80 mechanically, so a beat can never
 // leak an unbounded project-controlled string into the ledger even if a call site forgets to cap.
 const boundArgs = (a) => { const o = {}; for (const [k, v] of Object.entries(a)) o[k] = typeof v === 'string' ? oneLine(v, 80) : v; return o }
 const lore = (key, text, args, phaseName) =>
@@ -109,7 +108,7 @@ const lore = (key, text, args, phaseName) =>
 
 phase('Reconnaissance')
 log('The scouts spread out')
-// §3.5 stage bracket: stage_started on entry — a re-run is the stage still in progress.
+// Stage bracket: stage_started on entry — a re-run is the stage still in progress.
 await runLedger('stage_started', {}, 'Reconnaissance')
 // mapping.scouts_out (volume): three scouts spread across the codebase.
 await lore('mapping.scouts_out', `Three scouts cross the territory — anatomy, health, nervous system`, null, 'Reconnaissance')
@@ -138,7 +137,7 @@ log(`${scouts.length}/3 scouts reported`)
 await lore('mapping.scouts_back', `${scouts.length}/3 scouts reported${scouts.length < 3 ? ' — a scout fell silent' : ''}`, { scouts: scouts.length }, 'Reconnaissance')
 
 // Zero-scout floor: every scout fell silent — there is no reconnaissance to synthesize. Never let
-// Mnemosyne fabricate a map from nothing (the v2 silent empty-map). Return the honest failure shape,
+// Mnemosyne fabricate a map from nothing. Return the honest failure shape,
 // mirroring the missing-artifact idiom below: NO stage_completed, an explicit reason, map_file null.
 if (scouts.length === 0) {
   const reason = 'all three scouts fell silent — no reconnaissance to synthesize; the map was not drawn'
@@ -159,20 +158,20 @@ const map = await agent(
 )
 log(`codebase-map.md written: ${map && (map.stack || []).join(', ')}`)
 
-// Artifact existence check: v2 returned the constructed map path without confirming the write
-// landed. One cheap haiku verifier ls-es the claimed file; a miss surfaces in the log + return value.
+// Artifact existence check: confirm the write actually landed rather than trusting the returned
+// path. One cheap haiku verifier ls-es the claimed file; a miss surfaces in the log + return value.
 const existence = await agent(
   `You are the artifact existence verifier.\n\n` +
   `<task>Run 'ls ${mapFile}' (Bash). Return missing = ["${mapFile}"] if it does not exist, else []. Do not read, write, or fix anything.</task>`,
   { label: 'thoth:verify', phase: 'The Map', model: 'haiku', schema: MISSING_SCHEMA }
 )
-// F-2: a null/malformed existence report is NOT verification (mirror report.js's honest gate). Only
+// A null/malformed existence report is NOT verification (mirror report.js's honest gate). Only
 // a real {missing:[...]} array counts as a verdict; a mute verifier withholds the completion.
 const verified = existence && Array.isArray(existence.missing)
 const missing = verified ? existence.missing : []
 if (missing.length) log(`MISSING claimed artifact(s): ${missing.join(', ')}`)
 
-// §3.5 stage bracket: mapping.map_drawn + stage_completed fire ONLY on a POSITIVE verification
+// Stage bracket: mapping.map_drawn + stage_completed fire ONLY on a POSITIVE verification
 // (verified AND nothing missing) — the genuine-success criterion. A mute verifier is not proof of a
 // written map: withhold both, log the mute, and let the honest return (missing:[], completion
 // withheld) be the signal — matching report.js. mapping is off-table, so the ledgered completion is

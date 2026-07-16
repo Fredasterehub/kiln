@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // kiln-state.mjs — the Kiln run-state CLI. Zero dependencies, plain node ≥18.
 //
-// BLUEPRINT §4: .kiln/events.jsonl is the append-only WRITE-AHEAD source of truth; state.json is
+// .kiln/events.jsonl is the append-only WRITE-AHEAD source of truth; state.json is
 // a deterministic PROJECTION of it — rebuilt from the ledger, never trusted over it. STATE.md is
 // dead as a machine surface: `summary` renders the human view to stdout and writes nothing.
 // Schemas live in plugins/kiln/schemas/{event,state}.schema.json; validation here is hand-rolled
@@ -10,7 +10,7 @@
 // `ts` assignment. Projection itself IS fully deterministic: updated_at is the ts of the last
 // event (never the wall clock), so the same ledger always projects byte-identical state.json.
 //
-// Stage authority (P3.6 T4): state.json.stage is a projection of the stage_started/stage_completed
+// Stage authority: state.json.stage is a projection of the stage_started/stage_completed
 // brackets the workflows append. It is stage-accurate at the gauge/research/architecture/build/
 // validate/report boundaries — those stages bracket their runs (architecture completes only on a
 // locked Law; report only on a written artifact; a failed stage emits no completion). mapping is
@@ -19,7 +19,7 @@
 // stage:'mapping'; stage_completed sets last_completed_stage), but NO bump follows, so `stage` rests
 // at 'mapping' until the next on-table stage_started overwrites it. state.json is not
 // stage-authoritative across the mapping window.
-// A conducted run births the ledger at onboarding (kiln-fire SKILL.md §5, `init`); a harness-driven
+// A conducted run births the ledger at onboarding (the conductor's `init`); a harness-driven
 // run that skips the conductor still gets correct stage projections wherever the workflows bracket.
 //
 // Usage:
@@ -108,7 +108,7 @@ function validateState(st) {
 // Truncation vs corruption is decided by the trailing newline: append always writes '<json>\n',
 // so a healthy ledger ends with '\n' and every line in it is COMPLETE. Only when that final
 // newline is missing — the signature of an interrupted append — may an unparseable last line be
-// dropped with a warning; partial-write recovery is structural (BLUEPRINT §4). A COMPLETE line
+// dropped with a warning; partial-write recovery is structural. A COMPLETE line
 // that fails to parse is real corruption wherever it sits, final line included, and throws:
 // kiln-state never guesses past garbage that was fully written.
 function readLedger(kilnDir) {
@@ -204,7 +204,7 @@ function releaseAppendLock(lockDir, token) {
   try { rmdirSync(lockDir) } catch { /* already released */ }
 }
 
-// ── Projection — the only producer of state.json content (tasks.md T2.4, encoded exactly) ───────
+// ── Projection — the only producer of state.json content ─────────────────────────────────────────
 // Events fold in seq order. Per-type rules:
 //   run_init          → project ← data.project, started_at = ts, stage = event.stage
 //   stage_started     → stage = event.stage
@@ -407,7 +407,7 @@ function cmdSummary(kilnDir) {
   ].join('\n') + '\n')
 }
 
-// Read-only ledger tail (WS-C/C3): events with seq > afterSeq as ONE JSON line, for the conductor's
+// Read-only ledger tail: events with seq > afterSeq as ONE JSON line, for the conductor's
 // story-telegraph loop. Takes NO lock and writes nothing — pure read. Tolerant of a torn final line
 // (an interrupted append): readLedger drops an unterminated unparseable tail with a warning, so the
 // telegraph never errors on the very tail it is chasing. --kind filters NOTE events by data.kind
@@ -417,7 +417,7 @@ function cmdSummary(kilnDir) {
 // last delivered event means "call again from there"; otherwise last_seq is the ledger tail (so the
 // cursor advances past filtered-out events too). Missing file ⇒ {events:[],last_seq:null,truncated:false}, exit 0.
 //
-// `since <kilnDir> tail` is the CURSOR BOOTSTRAP form (r2 finding 1): it delivers NOTHING and
+// `since <kilnDir> tail` is the CURSOR BOOTSTRAP form: it delivers NOTHING and
 // returns the TRUE ledger tail as last_seq — the one non-truncating way to capture a first cursor
 // (a capped numeric query returns the first delivered seq when truncated, which would replay
 // history). No flags: the form answers exactly one question.

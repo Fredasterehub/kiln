@@ -1,6 +1,6 @@
-// council-core.test.mjs — unit floor for src/council.mjs (Twin Council pure core; sol-b34-design
-// section "B3 — Debate state machine"). These are the deterministic blocks architecture.js (batch
-// 1b-ii) inlines: the pure-JS SHA-256 + canonical hashing, the seed/ID derivation, script-assigned
+// council-core.test.mjs — unit floor for src/council.mjs (Twin Council pure core; the Debate state
+// machine). These are the deterministic blocks architecture.js
+// inlines: the pure-JS SHA-256 + canonical hashing, the seed/ID derivation, script-assigned
 // finding canonicalization, disposition + reversal + evidence rules, the mechanical divergence set
 // with its every-ID-accounted proof, decision bundles + blind-ratification + binding signatures, the
 // 2x2 fresh-round machinery, reversibility sealing, the MEL record, checkpoint match/resume, and the
@@ -99,7 +99,7 @@ test('canTransition: the barrier graph — legal successors pass, illegal jumps 
   for (const from of Object.keys(COUNCIL_PHASE_TRANSITIONS)) assert.ok(canTransition(from, 'DEGRADED'), `${from} can always DEGRADE`)
 })
 
-test('canTransition: the deadlock cascade cannot skip reference-reduction/rubric (constitution §5)', () => {
+test('canTransition: the deadlock cascade cannot skip reference-reduction/rubric (constitution)', () => {
   // FRESH_CELLS_SETTLED and REFERENCE_REDUCTION may only re-ratify or degrade before the cascade
   // completes; DEADLOCK_RESOLVED / COUNCIL_DEADLOCK are reachable ONLY out of RUBRIC_CHECK.
   assert.equal(canTransition('FRESH_CELLS_SETTLED', 'COUNCIL_DEADLOCK'), false, 'no direct terminal from fresh cells')
@@ -149,7 +149,7 @@ test('canonicalizeFindings: two findings against the same decision get distinct 
   assert.deepEqual(ids, ['F-001-P0-001', 'F-001-P0-002'])
 })
 
-// ── canonicalizeRatifyFindings — b3-design A1: R-<round>-<slot>-<nnn>, total over materially-distinct
+// ── canonicalizeRatifyFindings — R-<round>-<slot>-<nnn>, total over materially-distinct
 //    findings, model array order can never swap keys, exact duplicates take multiplicity ordinals ─────
 // each ratify finding carries a MODEL-supplied finding_id (a non-authoritative label the SCRIPT excludes
 // from the canonical payload) — so a model that reorders or relabels its findings cannot change the keys.
@@ -180,9 +180,9 @@ test('canonicalizeRatifyFindings: EXACT duplicate payloads take successive multi
   assert.deepEqual(out.map((f) => f.id), ['R-2-P0-001', 'R-2-P0-002'], 'two identical findings get distinct successive ordinals')
 })
 
-test('B3R1-2 canonicalizeRatifyFindings: the typed correction descriptor discriminates keys, and array-order swap cannot rebind an ACCEPT to a different correction', () => {
+test('canonicalizeRatifyFindings: the typed correction descriptor discriminates keys, and array-order swap cannot rebind an ACCEPT to a different correction', () => {
   // two findings identical in every non-descriptor field but carrying DIFFERENT typed corrections
-  // { target_kind, key, replacement } (AMB-CLOSER-1.iii) are MATERIALLY DISTINCT — the descriptor rides
+  // { target_kind, key, replacement } are MATERIALLY DISTINCT — the descriptor rides
   // the canonical payload, so each keeps a stable R-key regardless of the model's array order. Before the
   // fix both sorted identically and the key bound to whichever the model listed first.
   const base = { claim: 'the palette decision is wrong', required_change: 'change the palette', evidence_class: 'scenario', evidence_refs: ['x'], executable_check: null }
@@ -266,7 +266,7 @@ test('compareEvidence: a class outside the claim scope is incomparable — it ca
 test('validateReversal: a weaker/absent/non-array changed_evidence leaves the prior block STANDING', () => {
   assert.equal(validateReversal({ evidence: { class: 'executed_check' }, claim_type: 'executable' }, { changed_evidence: [{ class: 'proposed_check' }] }).block_stands, true)
   assert.equal(validateReversal({ evidence: { class: 'executed_check' } }, {}).block_stands, true, 'absent changed_evidence never clears a block')
-  // the §6 schema is an ARRAY — a bare object is invalid and is NEVER coerced
+  // the schema is an ARRAY — a bare object is invalid and is NEVER coerced
   const bare = validateReversal({ evidence: { class: 'executed_check' }, claim_type: 'executable' }, { changed_evidence: { class: 'executed_check' } })
   assert.equal(bare.block_stands, true)
   assert.equal(bare.reason, 'changed_evidence_not_array')
@@ -439,7 +439,7 @@ test('validateRatification: an APPROVE reversing a standing block without equal-
   assert.ok(validateRatification(misdirected, ctx).errors.some((e) => e.code === 'unevidenced_reversal'), 'evidence keyed to another finding cannot clear this block')
 })
 
-test('validateRatification: an incompatible selection combination is rejected (atomic compatibility, spec §7)', () => {
+test('validateRatification: an incompatible selection combination is rejected (atomic compatibility, spec)', () => {
   const ctx = { bundle_hash: 'BH', open_divergence_ids: ['DV-a', 'DV-b'], compatibility_edges: [[{ divergence_id: 'DV-a', selection: 'P0' }, { divergence_id: 'DV-b', selection: 'P0' }]] }
   const bad = validateRatification({ verdict: 'APPROVE', artifact_hash: 'BH', divergence_selections: [{ divergence_id: 'DV-a', selection: 'P0' }, { divergence_id: 'DV-b', selection: 'P0' }] }, ctx)
   assert.ok(bad.errors.some((e) => e.code === 'incompatible_selection'), 'two mutually-incompatible P0 selections must not validate')
@@ -675,7 +675,7 @@ test('terminal constructors: the four labels are distinct and never confusable',
 })
 
 test('twinRatified: requires two DISTINCT-head signatures, a COMPLETE context, APPROVE, and MATCHING selections', () => {
-  assert.throws(() => twinRatified({}), /two head signatures/, 'zero signatures cannot ratify (constitution §8)')
+  assert.throws(() => twinRatified({}), /two head signatures/, 'zero signatures cannot ratify (constitution)')
   assert.throws(() => twinRatified({ signatures: [sigFable], context: CTX6, ratifications: [ratA, ratB] }), /two head signatures/)
   // an empty/partial context is an error, not a skip — it cannot bind signatures over another artifact
   assert.throws(() => twinRatified({ signatures: [sigFable, sigSol], context: {}, ratifications: [ratA, ratB] }), /incomplete/)
@@ -749,7 +749,7 @@ test('determinism: the module source uses no Date.now / Math.random / new Date p
   assert.doesNotMatch(code, /Date\.now|Math\.random|new Date/, 'protocol decisions must derive from the SHA-256 seed alone')
 })
 
-// ── B4-2 D1: the lifted call-site core (schemas, cross-check strings, and the pure helpers build.js
+// ── the lifted call-site core (schemas, cross-check strings, and the pure helpers build.js
 //    and architecture.js now SHARE via the @inline:council marker — helpers, never copy-paste) ────────
 
 test('D1 councilTemplateHash pins the recipe sha256Hex(canonicalJson(parts)) — key-order insensitive', () => {
@@ -781,7 +781,7 @@ test('D1 schema consts export intact — RATIFY/ANSWER/envelope/CROSS_CHECK/LEDG
   assert.ok(SHA64_RE.test('a'.repeat(64)) && !SHA64_RE.test('a'.repeat(63)) && !SHA64_RE.test('A'.repeat(64)))
 })
 
-test('B3b2-iiB deliverable 2 — RATIFY_SCHEMA findings items gain the OPTIONAL structural-correction descriptor (AMB-CLOSER-1.iii)', () => {
+test('deliverable 2 — RATIFY_SCHEMA findings items gain the OPTIONAL structural-correction descriptor', () => {
   const p = RATIFY_SCHEMA.properties.findings.items.properties
   // the descriptor triple is additive + OPTIONAL — present for an accepted BLOCK correction, absent everywhere else
   assert.deepEqual(p.target_kind.enum, ['settled_decision', 'trunk_field'])
@@ -792,7 +792,7 @@ test('B3b2-iiB deliverable 2 — RATIFY_SCHEMA findings items gain the OPTIONAL 
   for (const k of ['target_kind', 'key', 'replacement']) assert.ok(!RATIFY_SCHEMA.properties.findings.items.required.includes(k), `${k} is optional`)
 })
 
-test('B3b2-iiB deliverable 1 — renderMasterPlan returns the ordered milestone records + is byte-DETERMINISTIC (AMB-iiB-B)', () => {
+test('deliverable 1 — renderMasterPlan returns the ordered milestone records + is byte-DETERMINISTIC', () => {
   const bundle = {
     common_trunk: { vision_sc_ids: ['SC-01'] }, renderer_version: 'b3-bundle/1', evidence_manifest_hash: 'e'.repeat(64), open_divergences: [],
     settled: [
@@ -962,7 +962,7 @@ test('D1 bundled artifacts: architecture.js AND build.js inline the lifted call-
   assert.match(archSrc, /const solWrapperPrompt = \(opts\) => solWrapperPlan\(/)
 })
 
-// ── B4-3 D1: the verdictShapeError lift — one pure export, five consumers, zero local copies ─────────
+// ── the verdictShapeError lift — one pure export, five consumers, zero local copies ─────────
 test('D1 verdictShapeError: a non-BLOCK/NEITHER verdict (or null) is always valid (null); the F2 validity semantics are exact', () => {
   assert.equal(verdictShapeError({ verdict: 'APPROVE' }), null)
   assert.equal(verdictShapeError(null), null, 'null-safe: a dead seat is not a BLOCK/NEITHER — never throws')
@@ -1011,8 +1011,8 @@ test('D1 assembleRatifyCertificate: each signature verifies against its OWN seat
   assert.notEqual(canonicalJson(sigF.seat_provenance), canonicalJson(sigS.seat_provenance))
 })
 
-// ── B3b2-i: the W4 structured-plan machine (A5 items 2–5) ────────────────────────────────────────────
-// projectStructuredPlan — A5 items 2–3 + the ⟨DSGN-A5-2⟩ pre-projection validation.
+// ── the W4 structured-plan machine (items 2–5) ────────────────────────────────────────────
+// projectStructuredPlan — items 2–3 + the pre-projection validation.
 test('projectStructuredPlan: projects milestones + acceptance into slot-namespaced registry entries (adoption vs minted), id===topic, value_hash exact, requires per SC', () => {
   const vision = ['SC-001']
   const r = projectStructuredPlan({
@@ -1061,7 +1061,7 @@ test('projectStructuredPlan: fail-closed — duplicate milestone id, duplicate s
   assert.throws(() => projectStructuredPlan({ slot: 'P1', milestones: [{ id: 'm', acceptance: [] }, { id: 'm', acceptance: [] }], decisions: [], visionScIds: [] }), /projectStructuredPlan\[P1\]/)
 })
 
-// The FIFTH validation branch (AMB-B3b2i-1, RULED — both): duplicate canonical VALUES per kind within
+// The FIFTH validation branch (RULED — both): duplicate canonical VALUES per kind within
 // ONE slot are degenerate authoring; projectStructuredPlan fails CLOSED naming the slot (the same locus
 // as the other per-head validations, before any cross-head interaction). joinExactEquivalents KEEPS its
 // join-time guard as defense-in-depth (the row below builds the ambiguous class manually to hit it).
@@ -1086,7 +1086,7 @@ test('projectStructuredPlan: FIFTH branch — two same-kind entries with IDENTIC
   assert.equal(ok.entries.length, 2)
 })
 
-// joinExactEquivalents — the ⟨DSGN-A5-1⟩ exact-canonical-equivalence join.
+// joinExactEquivalents — the exact-canonical-equivalence join.
 test('joinExactEquivalents: exact-equal cross-slot milestone joins onto <kind>:eq:<hash16>; its identical child SC then joins too (parent-first), with requires + milestone_key rewritten and accounting recorded', () => {
   const vision = []
   const p0 = projectStructuredPlan({ slot: 'P0', milestones: [{ id: 'm1', title: 'Auth', summary: 'a', order: 1, surface: 'logic', confidence: 'high', acceptance: [{ sc_id: 'fast', criterion: 'quick', executable_check: 'bench' }] }], decisions: [], visionScIds: vision })
@@ -1131,7 +1131,7 @@ test('joinExactEquivalents: a shared VISION-adopted sc:SC-NNN entry passes throu
 test('joinExactEquivalents: two same-kind entries with IDENTICAL canonical value inside one slot fail closed (ambiguous equivalence class — defense-in-depth on the seam)', () => {
   // The FIFTH branch now rejects this at projection; joinExactEquivalents KEEPS its guard as
   // defense-in-depth, so the ambiguous class is built MANUALLY here (projection-shaped entries) to
-  // exercise the seam guard directly (AMB-B3b2i-1: the projection fifth branch + this join-time guard).
+  // exercise the seam guard directly (the projection fifth branch + this join-time guard).
   const val = { title: 'T', summary: 'S', order: 1, surface: 'logic', confidence: 'high' }
   const ent = (topic) => ({ id: topic, topic, value: val, value_hash: sha256Hex(canonicalJson(val)) })
   const p0 = { entries: [ent('milestone:P0:m1'), ent('milestone:P0:m2')], requires: [] }
@@ -1139,7 +1139,7 @@ test('joinExactEquivalents: two same-kind entries with IDENTICAL canonical value
   assert.throws(() => joinExactEquivalents(p0, p1), /identical canonical value inside one slot/)
 })
 
-// validatePlanClosure — the ⟨DSGN-A5-2⟩ post-settlement closure.
+// validatePlanClosure — the post-settlement closure.
 test('validatePlanClosure: a clean settled set is ok; an orphan SC and an empty milestone are BOTH reported (never thrown)', () => {
   const requires = [
     { sc_topic: 'sc:P0:a', milestone_topic: 'milestone:P0:m1' },
@@ -1169,7 +1169,7 @@ test('validatePlanClosure: accepts bare topic strings; a settled SC with no requ
   assert.throws(() => validatePlanClosure({ settled: [], requires: [{ sc_topic: 'sc:P0:a' }] }), /missing sc_topic or milestone_topic/)
 })
 
-test('B3R1-4 validatePlanClosure: the parent must resolve in the settled MILESTONE set, and any requires row must AGREE (disagreement ⇒ fail-closed throw)', () => {
+test('validatePlanClosure: the parent must resolve in the settled MILESTONE set, and any requires row must AGREE (disagreement ⇒ fail-closed throw)', () => {
   // (a) a settled SC whose value.milestone_key points at an UNSETTLED milestone is an orphan_sc (the renderer
   //     emits '(unsettled)' for exactly this SC) — the requires row here AGREES with the value, so no throw.
   const settled = [
@@ -1194,7 +1194,7 @@ test('B3R1-4 validatePlanClosure: the parent must resolve in the settled MILESTO
   assert.deepEqual(ok, { ok: true }, 'identical requires rows do not throw; an agreeing value + requires closes')
 })
 
-// renderMasterPlan — A5 item 5 complete.
+// renderMasterPlan — item 5 complete.
 const renderBundle = () => ({
   renderer_version: 'b3-bundle/1',
   evidence_manifest_hash: sha256Hex('evid'),

@@ -29,41 +29,37 @@ const testingRigor = A.testingRigor || 'standard'
 // project-native, the gates ship with the product) and the lock commit lands there. Absent ⇒ the
 // Law cannot be compiled; the stage returns law_locked:false + reason (conductor escalates).
 const projectPath = A.projectPath
-// lawModel: the §8 slot for Asimov the Lawgiver (default 'opus' — the workhorse; the conductor
+// lawModel: Asimov the Lawgiver's model slot (default 'opus' — the workhorse; the conductor
 // may pass another slot per capability tier).
 const lawModel = A.lawModel || 'opus'
 // pluginRoot is the conductor-resolved absolute $CLAUDE_PLUGIN_ROOT (a launched Workflow cannot
 // see the env var). It locates the kiln-law CLI for the index/lock step; absence degrades to
 // law_locked:false + reason — never a silent proceed, never a stage crash.
 const pluginRoot = A.pluginRoot
-// planning is the Gauge's posture.planning (BLUEPRINT §3.2 planning row): 'dual' | 'single+redteam'
+// planning is the Gauge's posture.planning: 'dual' | 'single+redteam'
 // | 'single', passed by the conductor. It decides whether The Council (two anonymized plans +
 // divergence) runs or the single-plan chairman path is taken. Absent ⇒ null ⇒ the historical
 // decider (foundation.scope === 'trivial') stands unchanged, so a run without a posture behaves
 // exactly as before. 'dual' ⇒ run the council; 'single' ⇒ single-plan chairman path.
 //
-// SCOPE NOTE — 'single+redteam' routes like 'single' here, BY DESIGN, in P1. T3 is the minimal
-// conductor-wiring task ("full skill rewrite is P6", tasks.md §T3); the cross-family red-team
-// critique that the posture names is build-spine machinery scheduled by BLUEPRINT §16 for a later
-// phase (P2/P6), not a P1 deliverable. The arg is recognised, carried, and routed to the correct
-// (single-plan) base path now; the critique LANDS in its scheduled phase. Implementing an
-// un-reviewed cross-family critique inside P1 would be re-architecting outside the task contract,
-// which the operator mandate forbids — so the deferral is deliberate and recorded, not an omission.
+// SCOPE NOTE — 'single+redteam' currently routes like 'single', BY DESIGN. The arg is recognised,
+// carried, and routed to the single-plan base path; the cross-family red-team critique the posture
+// names is not yet wired in.
 const planning = (A.planning === 'dual' || A.planning === 'single+redteam' || A.planning === 'single') ? A.planning : null
-// validationRounds is the Gauge's posture.plan_validation_rounds (BLUEPRINT §3.2 plan-validation
-// row, `1 + (D2>=1) + (D8=2)`). The BLUEPRINT names it the count of Athena VALIDATION PASSES — NOT
+// validationRounds is the Gauge's posture.plan_validation_rounds (`1 + (D2>=1) + (D8=2)`). It is
+// the count of Athena VALIDATION PASSES — NOT
 // the revision count: posture rounds=1 means exactly ONE athena pass (zero plato revisions),
 // rounds=2 means two passes (≤1 revision), etc. Absent ⇒ null ⇒ the historical pass count below
 // (2 on the lite path, 3 otherwise, matching v2). A positive integer arg overrides it; garbage is
 // ignored.
 const validationRoundsArg = (Number.isInteger(A.validationRounds) && A.validationRounds > 0) ? A.validationRounds : null
-// visualDirection (P4 T4 / r1 F6): the conductor threads vision.js's validator-parsed
+// visualDirection: the conductor threads vision.js's validator-parsed
 // visual_direction. When boolean it IS has_visual_direction — the decline-byte check lives in the
 // vision gate now, so the foundation agent is NOT consulted for it. Absent (pre-v3 VISION, harness
 // runs, a resume without the return) ⇒ null ⇒ the foundation agent judges it as the fallback, given
 // the EXACT decline bytes (src/vision.mjs DECLINE_LINE, quoted — a workflow cannot import it).
 const visualDirection = (typeof A.visualDirection === 'boolean') ? A.visualDirection : null
-// ── Twin Council args (v3.0.2 B4-1b-ii; FC-1 tier-gating). The council path REPLACES the v3.0.1
+// ── Twin Council args. The council path REPLACES the v3.0.1
 // draft/ratify machinery ONLY when the capability record promised BOTH heads (T4 = fable + codex)
 // AND the conductor minted a runToken. Lite path and T1–T3 run the v3.0.1 machinery BYTE-IDENTICAL,
 // capability-honestly labeled (never twin_ratified, never a council claim). A PROMISED council
@@ -76,21 +72,21 @@ const capabilityTier = (A.capabilityTier === 'T1' || A.capabilityTier === 'T2' |
 // attended — is a human present to rule the gated operator checkpoint? Kiln runs UNATTENDED by default
 // (the README doctrine), so the fresh-round ladder's ambiguity / both-one-way / cost-overflow rungs
 // terminate as the honest COUNCIL_DEADLOCK; an operator-attended launch (A.attended === true) gets the
-// gated checkpoint instead (twin-council.md §8 auto-vs-attended). It never changes a substantive verdict —
+// gated checkpoint instead. It never changes a substantive verdict —
 // only which HONEST no-adopt terminal (GATED_ESCALATION vs COUNCIL_DEADLOCK) records the operator hand-off.
 const attended = A.attended === true
-// freshRoundTier — the W5 fresh-round sampling depth (Deviation 2): 'base' = 1 sample/cell (8 calls per
+// freshRoundTier — the fresh-round sampling depth: 'base' = 1 sample/cell (8 calls per
 // divergence), 'high' = 3 prompt-varied samples/cell (24 calls) for a per-posture instability hunt. Base
 // unless the conductor pins high; garbage ⇒ base.
 const freshRoundTier = A.freshRoundTier === 'high' ? 'high' : 'base'
 // councilPromised = the capability record PROMISED both heads (T4 + codex); councilCapable adds the
 // conductor-minted runToken. A PROMISED council missing its token is a MISCONFIGURED conductor — on
-// the FULL path the council rules DEGRADED and the Law is BLOCKED (scope ruling item 6: a promised
+// the FULL path the council rules DEGRADED and the Law is BLOCKED (a promised
 // guarantee never silently downgrades to a clean v3.0.1 label); lite and sub-T4 routes are untouched.
 const councilPromised = capabilityTier === 'T4' && codexAvailable
 const councilCapable = councilPromised && typeof A.runToken === 'string' && A.runToken.length > 0
 if (councilPromised && !runToken) {
-  log('MISCONFIGURED CONDUCTOR — capability tier T4 with both heads reachable but NO runToken: the twin council cannot bind its receipts/seed. On the twin-council path (full OR lite, B4-2 D7) the council terminal is DEGRADED and the Law is BLOCKED (never a silent v3.0.1 downgrade). Relaunch with the per-run token to convene the council.')
+  log('MISCONFIGURED CONDUCTOR — capability tier T4 with both heads reachable but NO runToken: the twin council cannot bind its receipts/seed. On the twin-council path (full or lite) the council terminal is DEGRADED and the Law is BLOCKED (never a silent v3.0.1 downgrade). Relaunch with the per-run token to convene the council.')
 }
 
 const docsDir = `${kilnDir}/docs`
@@ -100,9 +96,9 @@ const visionFile = `${docsDir}/VISION.md`
 const researchFile = `${docsDir}/research.md`
 const masterPlanFile = `${kilnDir}/master-plan.md`
 const handoffFile = `${kilnDir}/architecture-handoff.md`
-// Historical Athena validation-PASS counts (BLUEPRINT §3.2 — a "round" is one validation pass,
-// not one revision). v2 ran `round 0..2` on the full path (3 passes / ≤2 revisions) and `round 0..1`
-// on the lite path (2 passes / ≤1 revision); these preserve that exactly when no posture arg is given.
+// Athena validation-PASS counts (a "round" is one validation pass, not one revision): the full
+// path runs 3 passes / ≤2 revisions, the lite path 2 passes / ≤1 revision; these hold exactly when
+// no posture arg is given.
 const FULL_VALIDATION_PASSES = 3
 const LITE_VALIDATION_PASSES = 2
 
@@ -119,7 +115,7 @@ const MODEL_VOICE = {
 }
 const voice = (m) => (m === 'opus' ? MODEL_VOICE.opus + '\n\n' : '')
 // ── Codex model pins (CODEX_MODEL default + CODEX_FALLBACK, inlined from src/models.mjs) ──
-// models.mjs — the codex model pins, single source of truth (BLUEPRINT WS-B2). Inlined verbatim
+// models.mjs — the codex model pins, single source of truth. Inlined verbatim
 // into every GPT-pinning workflow by the `// @models` bundler marker (like @gate pulls the whole
 // module), so the model id can never drift across build/gauge/architecture/validate.
 // DOCTRINE (references/codex-prompt-guide.md): the fallback is RECORDED when used, never silent — a
@@ -148,9 +144,9 @@ async function noteClaudeHeadSuccession(phaseName) {
 // ── The single gateAgent (+ receipt attestation) — whole src/gate.mjs inlined verbatim (like build/
 //    validate). The Twin Council's Sol seats are Sonnet wrappers over transport:'codex'; gateAgent
 //    STRUCTURALLY validates the relayed receipt and fails a dead Sol seat closed to null. ──
-// gate.mjs — the single gateAgent for every gate/judgment leg (BLUEPRINT WS-B1). ONE source of
-// truth: inlined verbatim into build/validate/report by the `// @gate` bundler marker, so the
-// v3.0.1 drift (build's copy matched 'retry cap', validate's did not) can never recur again.
+// gate.mjs — the single gateAgent for every gate/judgment leg. ONE source of
+// truth: inlined verbatim into build/validate/report by the `// @gate` bundler marker, so divergent
+// copies can never drift again.
 // Kept SEPARATE from spine.mjs on purpose — spine.mjs is pure-functions-only by its header
 // contract; gateAgent awaits the ambient agent() and speaks through the ambient log(), so it does
 // not belong in the pure module. Every gate-bearing workflow already carries both globals.
@@ -177,14 +173,14 @@ async function noteClaudeHeadSuccession(phaseName) {
 // error "StructuredOutput retry cap (5) exceeded" matches 'StructuredOutput'; a bare 'retry cap' is
 // deliberately NOT matched (it false-positives unrelated errors like an "HTTP retry cap exceeded").
 //
-// RECEIPT PROVENANCE (twin-council; sol-b34-design "Codex transport receipt"). A Sol council seat runs
+// RECEIPT PROVENANCE (twin-council). A Sol council seat runs
 // a Sonnet wrapper over `transport:'codex'`, and a Sonnet's WORD that it invoked Codex is worthless: the
 // deterministic kiln-codex-receipt.mjs boundary owns process capture + hashing + verification. So a
 // codex-transport wrapped agent() returns an ENVELOPE { payload, codex_receipt, raw_artifact_refs }, and
 // gateAgent STRUCTURALLY validates the relayed receipt — all 14 receipt keys present and well-formed,
 // exit 0, and reported_model === requested_model === the pinned transportModel. gate.mjs can NEVER hash
 // (it validates shape + equality, never recomputes — the deterministic ledger cross-check is the call
-// site's leg, batch 1b-ii). A valid receipt returns envelope.payload and records the transport
+// site's leg). A valid receipt returns envelope.payload and records the transport
 // attestation. `receiptRequired` + a missing/invalid receipt is a DEAD Sol seat: two_heads:required
 // fails closed to null (Sonnet's own answer NEVER substitutes for Sol); best_effort may retain the
 // wrapper answer as honest Sonnet provenance that can never later claim second-family verification. All
@@ -233,7 +229,7 @@ function classifyGateFailure(e) {
 //   opts.provenance optional sink object. gateAgent writes {requested_model, actual_model,
 //                     fallback_reason, classification} onto it so a caller that ALREADY ledgers can
 //                     ride the record into its EXISTING note/evidence data payload — no new event
-//                     type is minted (BLUEPRINT §B6/§10). actual_model is ALWAYS the model that
+//                     type is minted. actual_model is ALWAYS the model that
 //                     actually produced the returned result — the requested model on a clean call or
 //                     a same-model re-dispatch, 'opus' after a fable→opus substitution, and null on a
 //                     fail-closed null. classification is the seat-death class that forced the
@@ -332,7 +328,7 @@ async function gateAgent(prompt, opts) {
     }
   }
   // settleCodex(env, history) — a codex dispatch returned a usable envelope. STRUCTURALLY validate the
-  // relayed receipt (gate.mjs never hashes; the deterministic ledger cross-check is the 1b-ii call-site
+  // relayed receipt (gate.mjs never hashes; the deterministic ledger cross-check is the call-site
   // leg). A verified receipt requires a NON-NULL payload (a receipt with no answer is not a verification —
   // provenance never lies); it returns envelope.payload + the full attestation, carrying the dispatch
   // history (fallback_reason/classification of the path that led here, e.g. a best-effort redispatch after
@@ -396,7 +392,7 @@ async function gateAgent(prompt, opts) {
   return null
 }
 
-// withDeadline(thunk, ms, onLate) — the await-bound for a Tier-2 traversal leg (BLUEPRINT §7). Lives
+// withDeadline(thunk, ms, onLate) — the await-bound for a Tier-2 traversal leg. Lives
 // here (one implementation, imported by the unit tests, inlined into validate by the @gate marker) so
 // the tested wrapper and the shipped wrapper can never drift. Resolves to the thunk's value, the
 // sentinel TRAVERSAL_TIMEOUT ({ __kiln_timeout: true }) if ms elapses first, or the sentinel
@@ -422,9 +418,9 @@ function withDeadline(thunk, ms, onLate) {
     )
   })
 }
-// ── Twin Council pure core (constitution twin-council.md; sol-b34-design §B3) — the deterministic
-//    council machinery inlined from src/council.mjs. Every function that CALLS another travels WITH it
-//    in ONE marker (buildDivergenceSet is B3, not inlined here). ──
+// ── Twin Council pure core — the deterministic council machinery inlined from src/council.mjs.
+//    Every function that CALLS another travels WITH it in ONE marker (buildDivergenceSet is defined
+//    locally, not inlined here). ──
 const COUNCIL_PROTOCOL_VERSION = 'twin-council/3'
 function sha256Hex(input) {
   let bytes
@@ -629,7 +625,7 @@ function canonicalizeRatifyFindings(round, bySlot) {
         evidence_refs: Array.isArray(f && f.evidence_refs) ? f.evidence_refs.map((r) => String(r == null ? '' : r)) : [],
         evidence_class: f && f.evidence_class != null ? String(f.evidence_class) : null,
         executable_check: f && f.executable_check != null ? String(f.executable_check) : null,
-        // B3R1-2: the AUTHORITATIVE typed correction descriptor (AMB-CLOSER-1.iii) is part of a ratify
+        // the AUTHORITATIVE typed correction descriptor is part of a ratify
         // finding's identity — an ACCEPT binds the R-key to a SPECIFIC { target_kind, key, replacement }
         // amendment. Two findings that differ ONLY in their descriptor are materially distinct, so it
         // rides the canonical sort (replacement by canonicalJson). Only the model-supplied identity labels
@@ -680,7 +676,7 @@ function validateDispositions(frozenFindings, dispositions) {
 }
 function buildDivergenceSet(input) {
   const inp = input || {}
-  if (typeof inp.seed !== 'string' || inp.seed === '') throw new Error('buildDivergenceSet: a non-empty run seed is required — divergence ids are constitutionally run-bound (sol-b34-design §49)')
+  if (typeof inp.seed !== 'string' || inp.seed === '') throw new Error('buildDivergenceSet: a non-empty run seed is required — divergence ids are constitutionally run-bound')
   const findings = Array.isArray(inp.findings) ? inp.findings : []
   const dispositions = Array.isArray(inp.dispositions) ? inp.dispositions : []
   const decisions = inp.decisions && typeof inp.decisions === 'object' ? inp.decisions : {}
@@ -769,7 +765,7 @@ function buildDivergenceSet(input) {
   // topics, members). Using the FULL card as the sort key means two distinct cards can never tie (so
   // the output order — and thus the set hash — is input-order-independent), and it guarantees two
   // distinct divergences never share an id (e.g. a P0- vs P1-opposed NEITHER on the same topic). The id
-  // is seed-bound (sol-b34-design §49): DV-<12 hex derived from the hidden seed and that same card.
+  // is seed-bound: DV-<12 hex derived from the hidden seed and that same card.
   const cardKey = (dv) => { const d = { ...dv }; delete d.divergence_id; return canonicalJson(d) }
   divergences.sort((x, y) => { const kx = cardKey(x), ky = cardKey(y); return kx < ky ? -1 : kx > ky ? 1 : 0 })
   divergences.forEach((dv) => {
@@ -826,7 +822,7 @@ function projectStructuredPlan(input) {
   const entries = []
   const requires = []
   const topics = new Set(decisions.map((d) => (d && d.topic != null ? String(d.topic) : '')))
-  // The FIFTH fail-closed branch (AMB-B3b2i-1, RULED — both): two same-kind projected entries with
+  // The FIFTH fail-closed branch: two same-kind projected entries with
   // IDENTICAL canonical value inside ONE slot are degenerate authoring — the same locus as the other
   // per-head validations, BEFORE any cross-head interaction. It fails CLOSED (typed throw naming the
   // slot) so the workflow maps it to DEGRADED naming the head; joinExactEquivalents KEEPS its join-time
@@ -940,7 +936,7 @@ function validatePlanClosure(input) {
   if (!Array.isArray(inp.settled)) throw new Error('validatePlanClosure: settled must be an array of settled entries')
   if (!Array.isArray(inp.requires)) throw new Error('validatePlanClosure: requires must be an array of {sc_topic, milestone_topic} rows')
   const topicOf = (e) => (typeof e === 'string' ? e : (e && e.topic != null ? String(e.topic) : ''))
-  // B3R1-4: CONFLICTING duplicate requires rows (two DIFFERENT parents for one sc_topic) are a malformed
+  // CONFLICTING duplicate requires rows (two DIFFERENT parents for one sc_topic) are a malformed
   // input — a typed throw (fail closed). Identical rows are harmless (deduped here). This mirrors the
   // renderer, which reads exactly one parent per SC.
   const requiresParent = new Map()
@@ -951,14 +947,14 @@ function validatePlanClosure(input) {
     requiresParent.set(sc, mi)
   }
   const settledTopics = new Set(inp.settled.map(topicOf))
-  // B3R1-4: the parent must resolve in the settled MILESTONE subset — a topic-PREFIX check, not membership
+  // the parent must resolve in the settled MILESTONE subset — a topic-PREFIX check, not membership
   // in the whole settled-topic set. A parent that resolves to a settled ORGANIC decision (or any non-milestone
   // topic) is an orphan, exactly as the renderer emits an '(unsettled)' parent for it.
   const settledMilestoneSet = new Set([...settledTopics].filter((t) => t.startsWith('milestone:')))
   const settledScEntries = inp.settled.filter((e) => topicOf(e).startsWith('sc:'))
   const violations = []
   const milestoneHasSc = new Set()
-  // B3R1-4: each settled SC's parent is derived from the SC VALUE's milestone_key — the AUTHORITATIVE
+  // each settled SC's parent is derived from the SC VALUE's milestone_key — the AUTHORITATIVE
   // source the renderer uses to emit the manifest — NOT the requires rows alone (which could overwrite and
   // let closure validate the WRONG parent). A bare-topic entry (no value) falls back to its requires row.
   // Where BOTH sources name a parent they MUST AGREE: a value.milestone_key that disagrees with the SC's
@@ -1065,7 +1061,7 @@ function renderMasterPlan(bundle, opts) {
   const manifest = {}
   for (const r of scRecords) manifest[finalIdOf.get(r.topic)] = r.parent_final
   // milestones: the ordered milestone records in render order (the same (numeric order, canonical topic)
-  // sort). The workflow reads these instead of replicating the sort (ruling AMB-iiB-B). order = the raw
+  // sort). The workflow reads these instead of replicating the sort. order = the raw
   // numeric order field (null when unset); final_id = the assigned M-id.
   const milestoneRecords = milestonesSorted.map((m) => {
     const v = m.value && typeof m.value === 'object' ? m.value : {}
@@ -1166,11 +1162,11 @@ function validateRatification(ratification, ctx) {
   }
   for (const id of open) if (!seen.includes(id)) errors.push({ code: 'uncovered_divergence', at: id, message: `open divergence '${id}' has no selection` })
 
-  // findings[] entry shape (§6 schema): finding_id, claim, required_change, evidence_refs[], executable_check
+  // findings[] entry shape: finding_id, claim, required_change, evidence_refs[], executable_check
   // present. A PRESENT-but-non-array findings field is itself malformed — only ABSENT defaults to empty.
   let findings = []
   if (r.findings !== undefined) {
-    if (!Array.isArray(r.findings)) errors.push({ code: 'malformed_findings', message: 'findings must be an array (the §6 schema) when present' })
+    if (!Array.isArray(r.findings)) errors.push({ code: 'malformed_findings', message: 'findings must be an array when present' })
     else findings = r.findings
   }
   findings.forEach((f, i) => {
@@ -1183,7 +1179,7 @@ function validateRatification(ratification, ctx) {
     if (!Object.prototype.hasOwnProperty.call(f, 'executable_check')) errors.push({ code: 'malformed_finding', at, message: 'executable_check must be present (null allowed)' })
   })
 
-  // anti-capitulation (I9 one-finding-key rail): an APPROVE reversing a standing block needs
+  // anti-capitulation (the one-finding-key rail): an APPROVE reversing a standing block needs
   // equal-or-stronger changed_evidence KEYED to that block's finding_id. changed_evidence is filtered
   // per block by finding_id BEFORE validateReversal, so one evidence item can never clear two blocks —
   // an item with no finding_id (or a non-matching one) contributes to no block's reversal.
@@ -1197,7 +1193,7 @@ function validateRatification(ratification, ctx) {
     }
   }
 
-  // atomic compatibility: the adopted selection combination must satisfy every compatibility edge (§7).
+  // atomic compatibility: the adopted selection combination must satisfy every compatibility edge.
   // Every edge is SHAPE-CHECKED first — exactly two members, each { divergence_id, selection } with a
   // legal selection; a malformed edge is a validation error (never silently skipped), and an edge whose
   // two members name the SAME divergence is a context programming error (self_edge).
@@ -1311,7 +1307,7 @@ function matchCheckpoint(prev, cur) {
 function twinRatified(parts) {
   const p = parts || {}
   const sigs = Array.isArray(p.signatures) ? p.signatures : null
-  if (!sigs || sigs.length !== 2) throw new Error('twinRatified: exactly two head signatures are required (constitution §8)')
+  if (!sigs || sigs.length !== 2) throw new Error('twinRatified: exactly two head signatures are required')
   const ctx = p.context != null ? p.context : (p.current_context != null ? p.current_context : null)
   if (ctx == null || typeof ctx !== 'object') throw new Error('twinRatified: a current context is required to bind both signatures')
   for (const k of ['bundle_hash', 'renderer_version', 'plan_hash', 'evidence_manifest_hash', 'protocol_version', 'seat_provenance']) {
@@ -1448,7 +1444,7 @@ function aggregateHead(instances, opts) {
   if (first === 'P0' || first === 'P1') return { aggregate: 'DECISIVE', outcome: first }
   if (first === 'NEITHER') {
     // a decisive NEITHER also requires the defect sets to be CONSISTENT across instances
-    // (sol-deadlock-design:240 — inconsistent NEITHER defects are instability, not a shared verdict).
+    // (inconsistent NEITHER defects are instability, not a shared verdict).
     const canon = canonicalJson(list[0].defects)
     if (!list.every((it) => canonicalJson(it.defects) === canon)) return { aggregate: 'UNSTABLE', reason: 'inconsistent_defects' }
     return { aggregate: 'DECISIVE', outcome: 'NEITHER' }
@@ -1529,14 +1525,14 @@ const RATIFY_SCHEMA = {
           evidence_refs: { type: 'array', items: { type: 'string' } },
           evidence_class: { type: 'string', enum: ['executed_check', 'proposed_check', 'repo_state', 'test_output', 'primary_source', 'scenario'], description: 'the HONEST class of this finding\'s evidence — the claim-scoped partial order rules reversals by it' },
           executable_check: { type: ['string', 'null'], description: 'a bounded shell command (EXIT 0 iff the defect is present) or null' },
-          target_kind: { type: 'string', enum: ['settled_decision', 'trunk_field'], description: 'OPTIONAL (AMB-CLOSER-1.iii): the STRUCTURAL correction descriptor — an ACCEPTED BLOCK finding carrying { target_kind, key, replacement } amends the bundle mechanically; an ACCEPTED finding WITHOUT one is a gated escalation (no free rewrite)' },
+          target_kind: { type: 'string', enum: ['settled_decision', 'trunk_field'], description: 'OPTIONAL: the STRUCTURAL correction descriptor — an ACCEPTED BLOCK finding carrying { target_kind, key, replacement } amends the bundle mechanically; an ACCEPTED finding WITHOUT one is a gated escalation (no free rewrite)' },
           key: { type: 'string', description: 'OPTIONAL: an existing settled-decision topic or an amendable trunk field (present iff target_kind is)' },
           replacement: { description: 'OPTIONAL: the new value — must match the shape of the target\'s current value (present iff target_kind is)' },
         },
         required: ['finding_id', 'claim', 'required_change', 'evidence_refs', 'evidence_class', 'executable_check'],
       },
     },
-    changed_evidence: { type: 'array', items: { type: 'object', additionalProperties: true, properties: { finding_id: { type: 'string', description: 'the standing block this evidence retires — I9 one-finding-key rail: one evidence item can never clear two blocks' }, class: { type: 'string' }, refs: { type: 'array', items: { type: 'string' } } }, required: ['finding_id', 'class'] } },
+    changed_evidence: { type: 'array', items: { type: 'object', additionalProperties: true, properties: { finding_id: { type: 'string', description: 'the standing block this evidence retires — the one-finding-key rail: one evidence item can never clear two blocks' }, class: { type: 'string' }, refs: { type: 'array', items: { type: 'string' } } }, required: ['finding_id', 'class'] } },
     divergence_selections: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { divergence_id: { type: 'string' }, selection: { type: 'string', enum: ['P0', 'P1', 'MERGED', 'NEITHER'] }, evidence_refs: { type: 'array', items: { type: 'string' } } }, required: ['divergence_id', 'selection'] } },
     verdict: { type: 'string', enum: ['APPROVE', 'BLOCK', 'NEITHER'] },
   },
@@ -1698,11 +1694,6 @@ function verdictShapeError(r) {
 }
 // The wrapper TRANSLATES (Goal/Context/Constraints/Done-when); it never forwards a Claude brief verbatim.
 const codexHowto = `Delegate authoring to ${CODEX_MODEL}: TRANSLATE this brief into a 4-part Codex prompt — Goal (the deliverable in 1-2 sentences), Context (the file paths + summary; no full dumps), Constraints (the arch-constraints + "do X instead of Y"), Done-when (the file written + what it must contain) — write it to a fresh temp file ('TMP="$(mktemp /tmp/kiln-codex.XXXXXX.md)"'; a fixed path collides across concurrent runs) and pipe via stdin: 'codex exec -m ${CODEX_MODEL} -c model_reasoning_effort="high" --sandbox workspace-write --skip-git-repo-check < "$TMP"'. Do NOT forward this brief verbatim. If ${CODEX_MODEL} is unavailable retry with -m ${CODEX_FALLBACK}; if codex errors or yields nothing usable, author the plan yourself.`
-// SPIN flattened per C1 §6 — dead single-shot entries removed and the best writing promoted into the
-// beats below: 'The geometry never lies' → the foundation_laid beat, 'One map of truth emerges' →
-// architecture.plan_synthesized, 'The gates lock before the first brick is laid' →
-// architecture.law_locked. The council row keeps only the fallback-honest ternary (dead behind
-// literal 0 before). Duplicate transition/phase-title and lore.json-fragment lines dropped.
 const SPIN = {
   foundation: ['Numerobis drafts the constraints'],
   council: [codexAvailable ? 'Sun Tzu is flanking the requirements' : 'Miyamoto makes the fallback the plan'],
@@ -1747,8 +1738,8 @@ const PLAN_SCHEMA = {
   required: ['slot', 'plan_file', 'approach_summary', 'milestones'],
 }
 
-// ── B3b2-iiA structured authorship (A5 item 1 ⟨DSGN-A5-4⟩). The T4-FULL council path authors the
-//    milestone content the settlement algebra projects: order/surface/confidence + acceptance rows with
+// ── Structured authorship: the T4-FULL council path authors the milestone content the settlement
+//    algebra projects: order/surface/confidence + acceptance rows with
 //    Success-Criterion ids. Every field/collection is BOUNDED (packet-bound rail): title ≤120, summary
 //    ≤600, criterion ≤400, executable_check ≤400, milestones ≤12, acceptance ≤8. additionalProperties
 //    false throughout. PLAN_SCHEMA (above) stays byte-identical — sub-T4/lite planners share it. ──
@@ -1839,7 +1830,7 @@ const VALIDATION_SCHEMA = {
   },
   required: ['verdict', 'failed_dimensions'],
 }
-// VALIDATION_SCHEMA_T4 (⟨DSGN-B3-1⟩ + A4) — the T4-full Athena schema: the shared VALIDATION_SCHEMA plus
+// VALIDATION_SCHEMA_T4 — the T4-full Athena schema: the shared VALIDATION_SCHEMA plus
 // the TYPED amendment channel. An Athena FAIL's accepted fixes carry structured amendment descriptors —
 // { target_kind: 'settled_decision'|'trunk_field', key, replacement } — applied MECHANICALLY to the bundle
 // (free-text `fixes` stay advisory on this path; the plato-revision arm is retired). Sub-T4/lite keep the
@@ -1877,8 +1868,8 @@ const MISSING_SCHEMA = {
   required: ['missing'],
 }
 
-// Asimov's compile report — the inventory the in-script coverage arithmetic runs on (§5:
-// "coverage is arithmetic, not judgment").
+// Asimov's compile report — the inventory the in-script coverage arithmetic runs on
+// (coverage is arithmetic, not judgment).
 const LAW_COMPILE_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
@@ -1901,10 +1892,10 @@ const LAW_COMPILE_SCHEMA = {
   required: ['law_file', 'checks', 'plan_sc_ids'],
 }
 
-// The pre-lock dry-run transcript (P3.5 T1, dogfood finding 1) — Thoth transcribes the
+// The pre-lock dry-run transcript — Thoth transcribes the
 // `kiln-law dryrun --json` output verbatim; the workflow feeds the FULL transcript to Athena's
 // ruling pass. The classification field is the CLI's deterministic exit-code table, never the
-// scribe's opinion. law_violations (RUN-B FINDING 1) carries the CLI's typed law.json defects
+// scribe's opinion. law_violations carries the CLI's typed law.json defects
 // verbatim — a present-but-invalid Law is a report the loop routes to Asimov, never a dead end.
 const DRYRUN_SCHEMA = {
   type: 'object', additionalProperties: false,
@@ -1960,7 +1951,7 @@ const DRYRUN_RULING_SCHEMA = {
       },
       description: 'checks that crashed on their own code (or pass trivially) — each goes back to Asimov',
     },
-    green_legitimate: { type: 'array', items: { type: 'string' }, description: 'green check ids whose criterion is GENUINELY already met (brownfield) — recorded pre_satisfied at lock (§5.1)' },
+    green_legitimate: { type: 'array', items: { type: 'string' }, description: 'green check ids whose criterion is GENUINELY already met (brownfield) — recorded pre_satisfied at lock' },
     reasoning: { type: 'string', maxLength: 700 },
   },
   required: ['verdict', 'broken', 'green_legitimate'],
@@ -1988,13 +1979,11 @@ const LAW_VERIFY_SCHEMA = {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════
-// ── TWIN COUNCIL scaffolding (v3.0.2 B4-1b-ii) — all deterministic, script-side. Everything here is
+// ── TWIN COUNCIL scaffolding — all deterministic, script-side. Everything here is
 //    INERT on the v3.0.1 paths (councilCapable === false): consts compute cheaply, functions are only
 //    DEFINED, never called. It runs ONLY when councilCapable && !liteScope, so posture-args behavior
-//    is byte-preserved. The B3 debate middle (critiques→negotiation→divergence machine) and the
-//    fresh-round re-adjudication ladder are NOT here — 1b-ii ledgers DRAFTS_SEALED + the RATIFY_*
-//    barriers only, so the checkpoint chain has a DOCUMENTED gap (it is telemetry/audit, not yet a
-//    resume anchor; matchCheckpoint reuse arrives with B3, an interrupted architecture reruns whole).
+//    is byte-preserved. The debate middle (critiques → negotiation → divergence machine) and the
+//    fresh-round re-adjudication ladder are defined further below.
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 const COUNCIL_TEMPLATE_VERSION = 'arch-council/1'
 const RENDERER_VERSION = 'v301-plato/1'
@@ -2004,10 +1993,10 @@ const keystoneId = 'master_plan'
 // per run: the receipt script's replay rejection then spans every council invocation of the run.
 const councilDir = `${kilnDir}/council/master_plan`
 const receiptsLedger = `${kilnDir}/council/receipts.jsonl`
-// B3R1-7: the sealed front-half decision bundle is persisted here (canonical bytes whose sha equals the
+// The sealed front-half decision bundle is persisted here (canonical bytes whose sha equals the
 // barrier's decision_bundle_hash) so a resume rehydrates councilBundle/councilBundleHash/councilFrontHalf.
 const decisionBundleFile = `${councilDir}/decision-bundle.json`
-// B3R2-1: the DEADLOCK_RESOLVED certificate is persisted here (canonical bytes whose sha equals the
+// The DEADLOCK_RESOLVED certificate is persisted here (canonical bytes whose sha equals the
 // terminal row's bound certificate_hash) so build can RELOAD it and re-anchor the current plan against it
 // before advancing — a stale row over a changed plan never authorizes.
 const deadlockCertFile = `${councilDir}/deadlock-certificate.json`
@@ -2054,7 +2043,7 @@ const DRAFT_TASK =
   'read-only and cannot write files; the plan rides entirely in plan_markdown. Honor the architecture ' +
   'constraints and right-size the milestone count to the real scope. Make no mention of who authored the ' +
   'plan or of any peer — it is compared anonymously.'
-// ── B3 debate task templates (W1 critique / W2 revision). Bound into templateHash so a debate-template
+// ── Debate task templates (critique / revision). Bound into templateHash so a debate-template
 //    edit invalidates phase comparability (matchCheckpoint reuse doctrine). ──
 const CRITIQUE_TASK =
   'Critique the OTHER head\'s anonymous implementation plan against the rubric — find the defects it hides, ' +
@@ -2072,13 +2061,12 @@ const REVISION_TASK =
   'unresolved. An unevidenced rejection is demoted to unresolved. Emit dispositions[] (one per finding_id), ' +
   'decisions[] (your revised decision registry: id, topic, value — the settled positions the divergence ' +
   'accounting reads), and the revised plan. Make no mention of authorship or of any peer.'
-// ── B3b2-iiA T4-full authorship + negotiation templates (A5 items 1/3). FIXED and PATH-FREE (no per-run
+// ── T4-full authorship + negotiation templates. FIXED and PATH-FREE (no per-run
 //    interpolation, so templateHash stays run-independent): the per-run file references are call-time
 //    <inputs>, never baked in. T4_AUTHORSHIP_RULE is the structured-content template both heads' T4 draft
 //    AND revision prompts carry (the original rightSizeRule/surfaceRule/executableAcRule consts below stay
 //    UNTOUCHED — plato's sub-T4/lite paths keep consuming them verbatim). Binding both into templateHash
-//    invalidates comparability with pre-A5 checkpoints BY DESIGN (⟨DSGN-B3-4⟩(a): interrupted runs restart
-//    from frozen inputs). ──
+//    invalidates checkpoint comparability BY DESIGN (interrupted runs restart from frozen inputs). ──
 const T4_AUTHORSHIP_RULE =
   `Right-size the milestone count to the deliverable's ACTUAL scope — a single small artifact is ONE ` +
   `milestone; reserve multiple milestones ONLY for genuinely independent, separately-buildable-and-verifiable ` +
@@ -2100,7 +2088,7 @@ const NEGOTIATION_TASK =
   `merged_value), or 'NEITHER' (both readings are defective). Selecting an {absent:true} side rules the ` +
   `decision OUT. Introduce NO new decisions and respect the compatibility/requires constraints. Emit exactly ` +
   `one selection per divergence_id; make no mention of authorship or of any peer.`
-// ── W5 fresh-context re-adjudication ladder task templates (§7). FIXED + PATH-FREE (bound into
+// ── Fresh-context re-adjudication ladder task templates. FIXED + PATH-FREE (bound into
 //    templateHash so a ladder-template edit invalidates FRESH_CARDS comparability, matchCheckpoint
 //    doctrine). Each fresh cell is a CONTEXT-FREE adjudicator: it sees ONLY two options K/M, evidence,
 //    the rubric — no debate history, no authorship, no peer, no seed. ──
@@ -2129,7 +2117,7 @@ const REVERSIBILITY_TASK =
   'is a two-way door — cheaply undone later if wrong), "costly" (undoing it is expensive), or "irreversible" ' +
   '(a one-way door). Report P0 and P1 classifications HONESTLY; only options BOTH heads independently call ' +
   '"reversible" count as two-way doors. Make no mention of authorship or of any peer.'
-// B3R1-13 (Deviation 2): the Workflow host pins no temperature on agent(), so the high tier's "two
+// The Workflow host pins no temperature on agent(), so the high tier's "two
 // low-temperature + one moderate probe" is realized as three samples per cell whose PROMPTS genuinely
 // VARY — a FIXED per-sample framing text (bound into templateHash below) + the honest sample index. Sample
 // 0/1 are independent low-variance reads; sample 2 is the deliberate moderate-variance instability probe.
@@ -2156,7 +2144,7 @@ const SOL_DRAFT_PAYLOAD_SCHEMA = {
   required: ['approach_summary', 'milestones', 'plan_markdown'],
 }
 // RATIFY_SCHEMA / ANSWER_SCHEMA / envelopeSchema / CROSS_CHECK_SCHEMA / LEDGER_APPEND_SCHEMA are the
-// call-site-AGNOSTIC council schemas, LIFTED to src/council.mjs (B4-2 D1) and inlined via the
+// call-site-AGNOSTIC council schemas, LIFTED to src/council.mjs and inlined via the
 // @inline:council marker above — this stage and build.js now share ONE copy (helpers, not copy-paste).
 const ANCHOR_SCHEMA = {
   type: 'object', additionalProperties: false,
@@ -2177,7 +2165,7 @@ const PLAN_HASH_SCHEMA = {
   properties: { reasoning: { type: 'string', maxLength: 400 }, plan_sha256: { type: 'string' } },
   required: ['plan_sha256'],
 }
-// SCRIBE_SCHEMA — the Thoth verbatim-bytes scribe reply (AMB-iiB-A): a workflow script cannot write files,
+// SCRIBE_SCHEMA — the Thoth verbatim-bytes scribe reply: a workflow script cannot write files,
 // so the renderer's markdown is written by a courier Thoth (the solByteOwnedPlan idiom). The reply is
 // advisory — the SCRIPT's byte-compare (renderHash vs the file-read hash) is the real fidelity gate.
 const SCRIBE_SCHEMA = {
@@ -2190,7 +2178,7 @@ const EXEC_CHECK_SCHEMA = {
   properties: { reasoning: { type: 'string', maxLength: 400 }, finding_id: { type: 'string' }, exit: { type: 'number' }, stdout_tail: { type: 'string' }, stderr_tail: { type: 'string' } },
   required: ['finding_id', 'exit', 'stdout_tail', 'stderr_tail'],
 }
-// ── W5 fresh-round ladder schemas (§7). Each fresh cell returns ONE choice + (for a NEITHER) a named
+// ── Fresh-round ladder schemas. Each fresh cell returns ONE choice + (for a NEITHER) a named
 //    blocking defect per option; the SCRIPT normalizes K/M back to canonical P0/P1 (normalizeCellVerdict)
 //    and aggregates (aggregateHead — never majority-washed). ──
 const FRESH_CELL_SCHEMA = {
@@ -2228,9 +2216,9 @@ const REVERSIBILITY_SCHEMA = {
   required: ['P0', 'P1'],
 }
 
-// ── B3a debate schemas (W1 critique / W2 revision). A head never sees a slot label (anonymity): the
-//    SCRIPT assigns target_slot when it canonicalizes the findings. §2/§3 shapes. ──
-// B3R1-16 ⟨DSGN-A5-5⟩: every card-bearing field and collection carries a deterministic bound (an
+// ── Debate schemas (critique / revision). A head never sees a slot label (anonymity): the
+//    SCRIPT assigns target_slot when it canonicalizes the findings. ──
+// Every card-bearing field and collection carries a deterministic bound (an
 // over-limit payload gated-escalates or degrades WITHOUT truncation — never summarized by a model). The
 // ceilings, stated for the record: findings/dispositions ≤ 24; decisions ≤ 32; evidence_refs/incorporated_at
 // ≤ 24 items, each ≤ 400; claim/required_change/reason ≤ 600; target_decision_id/finding_id/id ≤ 200;
@@ -2266,7 +2254,7 @@ const CRITIQUE_PAYLOAD_SCHEMA = {
   },
   required: ['findings'],
 }
-// The disposition + revised-registry payload (§3). value is a free JSON node — the script hashes it into
+// The disposition + revised-registry payload. value is a free JSON node — the script hashes it into
 // the registry's value_hash (buildDivergenceSet compares by canonical value, never by prose). fable
 // writes its revised plan-a.md itself (file tools), so revised_plan_markdown is OPTIONAL here; the Sol
 // variant below makes it REQUIRED (codex runs read-only, so the plan rides the attested payload).
@@ -2297,15 +2285,15 @@ const REVISION_PAYLOAD_SCHEMA = {
         required: ['id', 'topic'],
       },
     },
-    // B3b2-iiA (A5 item 1): a T4 revision RE-EMITS the full revised structured milestone content — the
-    // projection source is the REVISION payload (ruling AMB-ii-A), never the original draft.
+    // A T4 revision RE-EMITS the full revised structured milestone content — the
+    // projection source is the REVISION payload, never the original draft.
     milestones: T4_MILESTONES_SCHEMA,
     revised_plan_markdown: { type: 'string' },
   },
   required: ['dispositions', 'decisions', 'milestones'],
 }
 const SOL_REVISION_PAYLOAD_SCHEMA = { ...REVISION_PAYLOAD_SCHEMA, required: ['dispositions', 'decisions', 'milestones', 'revised_plan_markdown'] }
-// NEGOTIATION_PAYLOAD_SCHEMA (A2 + ⟨DSGN-A5-5⟩) — one selection per open divergence card. merged_value is
+// NEGOTIATION_PAYLOAD_SCHEMA — one selection per open divergence card. merged_value is
 // a free JSON node (present when selection is MERGED). Bounded (≤24 selections — the card ceiling).
 const NEGOTIATION_PAYLOAD_SCHEMA = {
   type: 'object', additionalProperties: false,
@@ -2327,7 +2315,7 @@ const NEGOTIATION_PAYLOAD_SCHEMA = {
   },
   required: ['selections'],
 }
-// VISION_SCIDS_SCHEMA (A5 item 3) — a haiku greps VISION's Success-Criteria ids; the SCRIPT re-extracts
+// VISION_SCIDS_SCHEMA — a haiku greps VISION's Success-Criteria ids; the SCRIPT re-extracts
 // them from the raw grep output with the fixed deterministic regex (extractVisionScIds) so the id set is
 // script-owned, never model-judged.
 const VISION_SCIDS_SCHEMA = {
@@ -2335,7 +2323,7 @@ const VISION_SCIDS_SCHEMA = {
   properties: { reasoning: { type: 'string', maxLength: 400 }, sc_text: { type: 'string' } },
   required: ['sc_text'],
 }
-// RESUME_SCHEMA (W6) — the prior SEALED council_state checkpoints a resume reads back. Permissive on
+// RESUME_SCHEMA — the prior SEALED council_state checkpoints a resume reads back. Permissive on
 // each checkpoint (matchCheckpoint reads objects it canonicalizes), so a real ledgered checkpoint is
 // never schema-rejected; only phase + status are demanded.
 const RESUME_CHECKPOINT_SCHEMA = {
@@ -2358,8 +2346,8 @@ const RESUME_SCHEMA = {
 
 // ── Council STATE (hoisted): the draft flow binds the evidence; the ratify flow, the Law gate, and
 //    the return envelope read it. councilSeedDigest is the run-bound entropy (councilSeed) reserved
-//    for B3 divergence-id derivation; it NEVER appears in any prompt (anonymity + tie-break rails).
-//    SHA64_RE is lifted to src/council.mjs (B4-2 D1) and inlined via the @inline:council marker. ──
+//    for divergence-id derivation; it NEVER appears in any prompt (anonymity + tie-break rails).
+//    SHA64_RE is lifted to src/council.mjs and inlined via the @inline:council marker. ──
 let councilTerminal = null           // 'RATIFIED' | 'DEADLOCK_RESOLVED' | 'COUNCIL_DEADLOCK' | 'GATED_ESCALATION' | 'BLOCKED' | 'DEGRADED' | null
 let councilCertificate = null        // twinRatified output or null
 let councilTerminalRecord = null     // the degraded()/councilDeadlock() constructor record (null when RATIFIED — the certificate IS that record)
@@ -2370,19 +2358,19 @@ let evidenceManifestHash = null
 let evidenceInputHashes = []
 let councilInitialSeq = null
 let councilSeedDigest = null
-// B3b2-iiA: the sealed front-half decision bundle (settled_decisions array + open_divergences + hash).
+// The sealed front-half decision bundle (settled_decisions array + open_divergences + hash).
 // It is the DISCLOSED intermediate — NON-authoritative this freeze (plato/Athena/ratify run unchanged);
-// iiB swaps the authority to consume it. Null off the T4 full path / before the front-half seals.
+// the authority swap consumes it. Null off the T4 full path / before the front-half seals.
 let councilFrontHalf = null
-// B3b2-iiB: the AUTHORITATIVE decision bundle consumed by the renderer/ratify swap (T4 full path only).
+// The AUTHORITATIVE decision bundle consumed by the renderer/ratify swap (T4 full path only).
 // councilBundle/councilBundleHash are the CURRENT bundle + hash (mutated by every accepted amendment —
 // Athena's typed amendments and the ratify agreed-selection resolutions rebuild them); renderManifest is
 // the SC-id→final-milestone-id map of the last render (the manifest-vs-Law comparison reads it);
 // renderMilestones is the ordered milestone records (the return envelope populates from it — no sort
 // replication). All null off the T4-full path / before the front-half seals (councilFrontHalf remains the
-// pre-swap disclosed record — AMB-iiA-3).
+// pre-swap disclosed record).
 let councilBundle = null, councilBundleHash = null, renderManifest = null, renderMilestones = null
-// B3R1-1: the anonymous P0/P1 slots are assigned by SCRIPT from the hidden seed parity (run-bound,
+// The anonymous P0/P1 slots are assigned by SCRIPT from the hidden seed parity (run-bound,
 // deterministic, never in a prompt) AFTER the draft receipts freeze — NOT by seat identity. The plan
 // files stay seat-bound (plan-a = fable, plan-b = sol); ONLY the SLOT LABELS decouple. Provenance still
 // records head-per-slot (audit, not exposure). fableSlot/solSlot are assigned AFTER both required heads
@@ -2396,7 +2384,7 @@ let fableSlot = null, solSlot = null
 const slotOf = (head) => head === 'fable' ? fableSlot : solSlot
 
 // The pinned cross-check one-liners (CANON_HASH_ONELINER / LEDGER_EXTRACT_ONELINER) and seatProv are
-// lifted to src/council.mjs (B4-2 D1) and inlined via the @inline:council marker — this stage and
+// lifted to src/council.mjs and inlined via the @inline:council marker — this stage and
 // build.js share ONE copy of the cross-check transcription strings + the per-head provenance snapshot.
 
 // pushSolReceipt — one receipt row per Sol leg (verified or dead), so the return's `receipts` array is
@@ -2425,17 +2413,17 @@ const appendCouncilCheckpoint = async (fields, phaseName) => {
     `If it exits non-zero (e.g. no events.jsonl yet), report the error; do NOT create or repair any file. Report appended = true iff the command exited 0, false otherwise.</task>`,
     { label: 'thoth:council-ledger', phase: phaseName, model: 'haiku', schema: LEDGER_APPEND_SCHEMA }
   )
-  // Count ONLY confirmed appends (Sol F10) — the return's checkpoint count is an audit figure, and an
+  // Count ONLY confirmed appends — the return's checkpoint count is an audit figure, and an
   // unconfirmed append must not inflate it. Degrade-to-log, never a stage failure.
   if (res && res.appended === true) councilCheckpointCount++
   else log(`council checkpoint ${fields.phase} append NOT confirmed — not counted (scribe ${res ? 'reported failure' : 'was mute'})`)
 }
 
-// degradeCouncil — a promised head died / a receipt failed (constitution Degradation, NOT deadlock):
-// mark DEGRADED, ledger the terminal checkpoint, log loudly. The Law is BLOCKED (h) and the stage still
+// degradeCouncil — a promised head died / a receipt failed (Degradation, NOT deadlock):
+// mark DEGRADED, ledger the terminal checkpoint, log loudly. The Law is BLOCKED and the stage still
 // returns. Idempotent: a first terminal wins.
 const degradeCouncil = async (missing, reason, phaseName) => {
-  // First terminal wins; the constructor record is RETAINED into the return (Sol F10) — an audit
+  // First terminal wins; the constructor record is RETAINED into the return — an audit
   // consumer gets the structured twin_degraded record, not just a string.
   const firstDegrade = councilTerminal === null
   if (firstDegrade) { councilTerminal = 'DEGRADED'; councilBlockedReason = reason; councilTerminalRecord = degraded({ missing, reason }) }
@@ -2445,15 +2433,15 @@ const degradeCouncil = async (missing, reason, phaseName) => {
   await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'DEGRADED', decision_bundle_hash: null, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: {}, seat_provenance: { missing, reason }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
 }
 
-// deadlockCouncil — persistent disagreement after two valid receipt-complete rounds (constitution §8):
-// an HONEST fail. The fresh-context re-adjudication ladder (twin-council.md §5 / W5) rules DIVERGENCES
+// deadlockCouncil — persistent disagreement after two valid receipt-complete rounds:
+// an HONEST fail. The fresh-context re-adjudication ladder rules DIVERGENCES
 // between RATIFY_2 and this terminal; a CARD-LESS verdict deadlock, or the ladder's own unattended
 // exhaustion, lands HERE — the existing deadlock honesty is now the TERMINAL rung, not the only rung.
 // Never synthesize, never pick a winner, never demote to v3.0.1. `reason` overrides the default wording
 // when the ladder terminates here (unattended ambiguity / both-one-way).
 const deadlockCouncil = async (divergences, phaseName, reason) => {
   // First terminal wins; the structured councilDeadlock record (the disagreement cards) is RETAINED
-  // into the return (Sol F10) — the operator rules from the full artifact, not a log line.
+  // into the return — the operator rules from the full artifact, not a log line.
   if (councilTerminal === null) {
     councilTerminal = 'COUNCIL_DEADLOCK'
     councilBlockedReason = reason != null ? reason : 'twin council deadlock — persistent disagreement survived the ratification rounds; the operator resolves with the full structured disagreement artifact'
@@ -2465,7 +2453,7 @@ const deadlockCouncil = async (divergences, phaseName, reason) => {
   await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'COUNCIL_DEADLOCK', decision_bundle_hash: null, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: {}, seat_provenance: {}, codex_receipt_hash: null, status: 'sealed' }, phaseName)
 }
 
-// blockCouncil — a LIVE, valid head returned a BLOCK/NEITHER on the single lite plan (B4-2 D7). The
+// blockCouncil — a LIVE, valid head returned a BLOCK/NEITHER on the single lite plan. The
 // lite form runs ONE blind round (no answer exchange, no re-adjudication ladder), so this is neither a
 // DEGRADED (no head died) nor a COUNCIL_DEADLOCK (nothing survived RATIFY_2 — the lite path has no
 // RATIFY_2): it is an HONEST block. Mark BLOCKED, retain the blocking findings, ledger the terminal,
@@ -2493,7 +2481,7 @@ const seatHashPrompt = (a, b) =>
 const planHashPrompt = (file) =>
   `You are Thoth, the scribe — transcribe hashes, never judge.\n\n` +
   `<task>Run (Bash): 'sha256sum ${file}'. Report plan_sha256 = its digest (lowercase hex, VERBATIM). Do not read contents, do not write or fix anything.</task>`
-// B3R1-7: the sealed decision-bundle bytes are PERSISTED at the front-half barrier so a resume can
+// The sealed decision-bundle bytes are PERSISTED at the front-half barrier so a resume can
 // REHYDRATE the structured authority (not merely log). scribeBytesPrompt writes a JSON string's literal
 // text verbatim to a file (hash-checked); readBundlePrompt reads it back (content + sha) for verify + parse.
 const scribeBytesPrompt = (file, text) =>
@@ -2509,7 +2497,7 @@ const READ_BUNDLE_SCHEMA = {
 const readBundlePrompt = (file) =>
   `You are Thoth, the ledger reader — transcribe, never judge, never fix.\n\n` +
   `<task>Run (Bash): 'cat ${file} 2>/dev/null' and 'sha256sum ${file} 2>/dev/null'. Report content = the cat output's raw bytes VERBATIM (empty string if the file does not exist) and sha256 = the sha256sum digest (lowercase hex, or null if absent). Do not write or fix anything.</task>`
-// Pinned commands carry every path argument SHELL-QUOTED (scope ruling item 4) — a space or glob
+// Pinned commands carry every path argument SHELL-QUOTED — a space or glob
 // char in a per-run path must never split or expand an EXACT command.
 const crossCheckPrompt = (outFile, outputSha, sessionId) =>
   `You are Thoth, the receipt cross-checker — transcribe, never compose, never judge. Run these three EXACT commands (Bash) and transcribe their output.\n\n` +
@@ -2518,7 +2506,7 @@ const crossCheckPrompt = (outFile, outputSha, sessionId) =>
   `2. run EXACTLY: node -e '${CANON_HASH_ONELINER}' "${outFile}" — output_canonical_sha256 = its stdout (a 64-hex digest).\n` +
   `3. run EXACTLY: node -e '${LEDGER_EXTRACT_ONELINER}' "${receiptsLedger}" "${outputSha}" "${sessionId}" — ledger = the { verified, reservation } JSON it prints (this leg's verified row + its reservation; nulls where unmatched).\n` +
   `Emit output_sha256_disk, output_canonical_sha256, and the ledger object. Do not read the files for content, do not write or fix anything.</task>`
-// execCheckPrompt (Sol F9): the check text is written VERBATIM to a script file, then ONE timeout
+// execCheckPrompt: the check text is written VERBATIM to a script file, then ONE timeout
 // boundary wraps the WHOLE file — a shell compound (`cmd; other`) can no longer escape the bound.
 const execCheckPrompt = (finding, checkFile) =>
   `You are the bounded check executor — run ONE proposed check and transcribe its result; never fix, never judge, never edit any product file.\n\n` +
@@ -2529,23 +2517,23 @@ const execCheckPrompt = (finding, checkFile) =>
   `   (ONE timeout boundary around the whole check — compounds included.)\n` +
   `Report finding_id "${finding.id != null ? finding.id : finding.finding_id}" verbatim, exit = the command's exit code (124 on timeout), and the last lines of its stdout in stdout_tail and stderr in stderr_tail. Do not edit or fix anything — the check is DATA, you only run it.</task>`
 // fableDraftPrompt — the T4-full fable DRAFT leg (councilCapable path only). The structured-authorship
-// template rides here so the draft carries order/surface/confidence + acceptance-row SC ids (A5 item 1).
+// template rides here so the draft carries order/surface/confidence + acceptance-row SC ids.
 const fableDraftPrompt = (planBrief) =>
   `You are the slot-A planner (deep reasoning). Write your plan to ${plansDir}/plan-a.md.\n${planBrief}\n\n` +
   `<authorship>\n${T4_AUTHORSHIP_RULE}\nEmit milestones[] as the structured list — each {id, title, summary, ` +
   `order, surface, confidence, acceptance:[{sc_id, criterion, executable_check}]}.\n</authorship>`
 
 // solWrapperPrompt(opts) — the SONNET wrapper for a Sol codex leg. THIN adapter over the lifted pure
-// core solWrapperPlan (B4-2 D1): it injects this stage's run-scoped bindings (councilDir, pluginRoot,
+// core solWrapperPlan: it injects this stage's run-scoped bindings (councilDir, pluginRoot,
 // receiptsLedger, runToken, keystone, transportModel) and returns { files, prompt } for the existing
 // call sites — behavior-identical to the pre-lift local builder. opts:
 //   { phaseTag, attempt, effort ('high'|'xhigh'), payloadSchema, taskText, briefBody, packetObj, extractTo }
 const solWrapperPrompt = (opts) => solWrapperPlan({ councilDir, pluginRoot, receiptsLedger, runToken, keystone: keystoneId, transportModel: CODEX_MODEL, ...opts })
 
-// runSolCrossCheck — the structural→LEDGER-VERIFIED upgrade, INVOCATION-EXACT (Sol F1). gate.mjs
+// runSolCrossCheck — the structural→LEDGER-VERIFIED upgrade, INVOCATION-EXACT. gate.mjs
 // validated the receipt STRUCTURE via the provenance sink; this deterministic haiku leg extracts the
 // verified ledger row matching THIS leg's output hash + session id AND its 'started' reservation, and
-// the pure predicate crossCheckOk (lifted, B4-2 D1) binds the whole chain: reservation ↔ verified,
+// the pure predicate crossCheckOk (lifted) binds the whole chain: reservation ↔ verified,
 // reservation ↔ THIS seat, verified ↔ sink, payload ↔ canonical hash. Any miss is a DEAD Sol seat. A
 // mute/garbled leg gets ONE re-dispatch, then fails closed.
 const runSolCrossCheck = async (legLabel, phaseTag, outFile, sink, payload, phaseName) => {
@@ -2562,7 +2550,7 @@ const runSolCrossCheck = async (legLabel, phaseTag, outFile, sink, payload, phas
 }
 
 // sealRatified — both heads APPROVE and valid: bind two DISTINCT-head signatures into the twinRatified
-// certificate over the (possibly amended) bundle (via the lifted assembleRatifyCertificate, B4-2 D1),
+// certificate over the (possibly amended) bundle (via the lifted assembleRatifyCertificate),
 // then ledger the RATIFY_*_SEALED barrier + the RATIFIED terminal. assembleRatifyCertificate returns
 // ok:false on any binding defect (a blocked ratification, never a ratified one) → DEGRADED (fail-closed).
 const sealRatified = async (rF, rS, sinkF, sinkS, bH, pH, solCross, ckptPhase, phaseName, rendererVersion) => {
@@ -2581,13 +2569,13 @@ const sealRatified = async (rF, rS, sinkF, sinkS, bH, pH, solCross, ckptPhase, p
   await lore('architecture.council_ratified', `The council rules as one — two signatures seal the master plan (bundle ${String(bH).slice(0, 12)}…)`, { bundle: String(bH).slice(0, 12) }, phaseName)
 }
 
-// ── The run ledger (BLUEPRINT §3.5): stage brackets land in events.jsonl via the kiln-state CLI —
+// ── The run ledger: stage brackets land in events.jsonl via the kiln-state CLI —
 //    the vision.js runLedger idiom (appendCouncilCheckpoint above is the council's specialized twin).
 //    Thoth appends; gated on pluginRoot and degrades to a log line — an append failure never fails
 //    the stage. stage_completed fires ONLY on the genuine-success path: lawLocked === true. An
 //    unlocked Law or blocked council is an ESCALATION, not a completion — no event, per the
 //    telegraph's failed-stages-emit-nothing rule. report.js and mapping.js bracket their runs the
-//    same way now (the C1 lore batch closed that deferral). ──
+//    same way now. ──
 async function runLedger(type, data, phaseName) {
   if (!pluginRoot) { log(`pluginRoot absent — ${type} not ledgered to events.jsonl`); return }
   const ev = JSON.stringify({ type, stage: 'architecture', data })
@@ -2602,14 +2590,14 @@ async function runLedger(type, data, phaseName) {
   )
 }
 
-// ── Lore beats (C1 doctrine §4): a drafting/council/law dispatch at the moment a fact becomes true,
+// ── Lore beats: a drafting/council/law dispatch at the moment a fact becomes true,
 //    carried by runLedger to the operator's transcript between the banners (note{kind:'lore'};
 //    deterministic <stage>.<beat> key; args short scalars capped at 80 by the caller; text ≤ 160).
 //    PRESENTATION, null-keep: pluginRoot absent ⇒ a plain log() line, never a stage failure. Rides
 //    runLedger (the general run ledger), NOT appendCouncilCheckpoint (the receipt-attested twin). ──
 const LORE_MAX = 160
 const oneLine = (s, cap = LORE_MAX) => String(s).replace(/[\x00-\x1f\x7f]+/g, ' ').slice(0, cap)
-// args are bound HERE (F-1): every string value is capped at 80 mechanically, so a beat can never
+// args are bound HERE: every string value is capped at 80 mechanically, so a beat can never
 // leak an unbounded project-controlled string into the ledger even if a call site forgets to cap.
 const boundArgs = (a) => { const o = {}; for (const [k, v] of Object.entries(a)) o[k] = typeof v === 'string' ? oneLine(v, 80) : v; return o }
 const lore = (key, text, args, phaseName) =>
@@ -2618,13 +2606,13 @@ const lore = (key, text, args, phaseName) =>
     : log(oneLine(text))
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════
-// ── The B3 debate front-half (W1 critique · W2 revision · W3 mechanical divergence) + its byte-owned
-//    Sol transport (⟨DSGN-B3-2⟩) and W6 resume machinery. All of it is DEFINED here but runs ONLY on
+// ── The debate front-half (critique · revision · mechanical divergence) + its byte-owned
+//    Sol transport and resume machinery. All of it is DEFINED here but runs ONLY on
 //    the T4 FULL path (councilCapable && !liteScope) after DRAFTS_SEALED with both drafts alive; sub-T4
 //    and lite never reach it. INERT on every v3.0.1 path. ──
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 
-// solByteOwnedPlan(cfg) — the BYTE-OWNED Sol codex leg for the NEW B3 phases (⟨DSGN-B3-2⟩). Unlike
+// solByteOwnedPlan(cfg) — the BYTE-OWNED Sol codex leg for the debate phases. Unlike
 // solWrapperPlan (whose wrapper TRANSLATES a brief into the codex prompt), here the SCRIPT renders the
 // COMPLETE codex prompt/packet/schema BYTES; the wrapper writes them VERBATIM and runs the argv
 // (invocation + relay only, no authorship). The returned promptSha/packetSha are sha256Hex of the
@@ -2662,7 +2650,7 @@ const solByteOwnedPlan = (cfg) => {
 }
 
 // runSolByteOwnedCrossCheck — runSolCrossCheck's byte-owned sibling. It binds the whole invocation-exact
-// chain via crossCheckOk (reservation ↔ verified ↔ sink ↔ payload) AND then ⟨DSGN-B3-2⟩ byte-ownership:
+// chain via crossCheckOk (reservation ↔ verified ↔ sink ↔ payload) AND then byte-ownership:
 // the ledger reservation's prompt/packet hash MUST equal the SCRIPT-rendered promptSha/packetSha, or a
 // courier disowned the bytes and the seat dies. A mute/garbled cross-check leg gets ONE re-dispatch.
 const runSolByteOwnedCrossCheck = async (legLabel, phaseTag, attempt, outFile, sink, payload, promptSha, packetSha, phaseName) => {
@@ -2681,7 +2669,7 @@ const runSolByteOwnedCrossCheck = async (legLabel, phaseTag, attempt, outFile, s
   return { ledger_verified: true, codex_receipt_hash: res.codex_receipt_hash, invocation_id: res.invocation_id }
 }
 
-// readCouncilCheckpoints (W6) — a haiku Thoth reads events.jsonl and returns the prior SEALED
+// readCouncilCheckpoints — a haiku Thoth reads events.jsonl and returns the prior SEALED
 // council_state checkpoints (the matchCheckpoint-comparable records). Gated on pluginRoot; absence or a
 // mute leg ⇒ [] (nothing to reuse, the whole front-half reruns — fail toward rerun, never a false reuse).
 const readCouncilCheckpoints = async (phaseName) => {
@@ -2693,8 +2681,8 @@ const readCouncilCheckpoints = async (phaseName) => {
   )
   return (res && Array.isArray(res.checkpoints)) ? res.checkpoints : []
 }
-// priorInitialSeq — the FROZEN initial ledger seq: the earliest prior council checkpoint's value (W6 —
-// a capability refresh appends events but must NOT reschedule; the seed + every checkpoint stay bound to
+// priorInitialSeq — the FROZEN initial ledger seq: the earliest prior council checkpoint's value (a
+// capability refresh appends events but must NOT reschedule; the seed + every checkpoint stay bound to
 // the ORIGINAL anchor's seq). undefined ⇒ a fresh run (no prior checkpoint), keep the anchor's value.
 const priorInitialSeq = (checkpoints) => {
   for (const c of (Array.isArray(checkpoints) ? checkpoints : [])) if (c && Number.isInteger(c.initial_ledger_seq)) return c.initial_ledger_seq
@@ -2702,15 +2690,15 @@ const priorInitialSeq = (checkpoints) => {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════
-// ── B3b2-iiA front-half machinery (A5 items 1–4; ruling AMB-B3b2ii-CAP) — VISION SC-id extraction, the
-//    A2 negotiation-card topic-join, negotiation-set validation, the settlement, the gated-escalation
+// ── Front-half machinery — VISION SC-id extraction, the
+//    negotiation-card topic-join, negotiation-set validation, the settlement, the gated-escalation
 //    terminal, and a pure UTF-8 byte counter (the sandbox has no Buffer). All DEFINED here; called ONLY
 //    on the T4 FULL path inside runDebateFrontHalf. ──
 // ════════════════════════════════════════════════════════════════════════════════════════════════
-// The negotiation-packet ceiling (⟨DSGN-A5-5⟩ — advisory adopted as binding): 24 cards / 96 KiB canonical.
+// The negotiation-packet ceiling: 24 cards / 96 KiB canonical.
 const NEG_MAX_CARDS = 24
 const NEG_MAX_BYTES = 98304
-// B3R1-16: the per-organic-decision-value canonical-bytes cap validated at projection (registryFor) — the
+// The per-organic-decision-value canonical-bytes cap validated at projection (registryFor) — the
 // one card-bearing bound a JSON-schema `value: {}` node cannot express. 8 KiB per value (the per-card idiom).
 const DECISION_VALUE_MAX_BYTES = 8192
 // utf8ByteLength(s) — WHATWG UTF-8 byte count without Buffer/TextEncoder (workflow scripts cannot import
@@ -2741,7 +2729,7 @@ const escalateCouncil = async (reason, phaseName) => {
   await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'GATED_ESCALATION', decision_bundle_hash: null, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: {}, seat_provenance: { reason: oneLine(reason, 80) }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
 }
 
-// buildNegotiationCards(divSet, fullP0, fullP1, findingsById, seed) — B3R1-5: the W4 cards derive FROM the
+// buildNegotiationCards(divSet, fullP0, fullP1, findingsById, seed) — the cards derive FROM the
 // AUTHORITATIVE mechanical divergence set (divSet.divergences), NOT a second independent registry-only
 // algebra. CORRESPONDENCE RULE: a card corresponds to a divSet POSITION divergence — finding-based
 // (unresolved / accepted-not-incorporated / rejected-weak-evidence), incompatible_topic_values, or
@@ -2751,11 +2739,11 @@ const escalateCouncil = async (reason, phaseName) => {
 // their two divSet ids and their own evidence refs (the authoritative divergence can never DISAPPEAR).
 // Positions read from the two FULL registries by the divergence's decision refs (a finding-based one maps
 // its target_decision_id to the holder slot's registry entry; a target absent from a registry renders the
-// {absent:true} A2 marker); evidence_refs read from the frozen finding behind it. (1b) An atomic_incompat-
+// {absent:true} marker); evidence_refs read from the frozen finding behind it. (1b) An atomic_incompat-
 // ibility divergence is a CONSTRAINT, not a position card: it carries the authoritative compatibility edge
 // (from buildDivergenceSet's atomic edge inputs) threaded onto the topic_a/topic_b cards — its FULL topics
 // are preserved (never reduced to the first). (2) The one-sided topic-join entries (a topic held by only
-// one slot — an A2 {absent:true} card per AMB-iiA-1) and agreements SUPPLEMENT the set for ONLY the topics
+// one slot — an {absent:true} card) and agreements SUPPLEMENT the set for ONLY the topics
 // divSet does not cover (never replacing a divSet card); their card ids are seed-derived. Each card carries
 // a private _ordinal for provenance.
 const buildNegotiationCards = (divSet, fullP0, fullP1, findingsById, seed) => {
@@ -2798,7 +2786,7 @@ const buildNegotiationCards = (divSet, fullP0, fullP1, findingsById, seed) => {
     cards.push(card)
     ownTopic(topic, card)
   }
-  // (2) the one-sided A2 entries + agreements over every registry topic divSet does NOT cover. An
+  // (2) the one-sided entries + agreements over every registry topic divSet does NOT cover. An
   //     atomic-constraint topic is FORCED to a card (an edge endpoint must exist) even when it would agree.
   const allTopics = [...new Set([...p0ByTopic.keys(), ...p1ByTopic.keys()])].sort()
   for (const topic of allTopics) {
@@ -2856,7 +2844,7 @@ const settleNegotiation = (cards, fableSel, solSel) => {
     const a = fableSel.get(card.divergence_id) || null, b = solSel.get(card.divergence_id) || null
     const sa = a && a.selection, sb = b && b.selection
     if (sa && sa === sb) {
-      // B3R1-6: an agreed NEITHER means BOTH readings are defective — the card stays OPEN (it rides
+      // An agreed NEITHER means BOTH readings are defective — the card stays OPEN (it rides
       // open_divergences to ratification / the deadlock ladder), never a silent deletion. ONLY an agreed
       // explicit {absent:true} selection (below) rules an entry out of the plan.
       if (sa === 'NEITHER') { open.push(card); continue }
@@ -2872,19 +2860,17 @@ const settleNegotiation = (cards, fableSel, solSel) => {
   return { settled, open }
 }
 
-// runDebateFrontHalf(planAFile, planBFile, evidenceDocs, phaseName) — W1→W2→W3. P0 = fable's draft
-// (plan-a.md), P1 = sol's draft (plan-b.md); each head critiques the OTHER draft, then revises its OWN
-// against the frozen findings raised on it. A dead/invalid required head ⇒ DEGRADED naming it (returns
-// null); an empty mechanical divergence set early-stops to NEGOTIATION_SKIPPED. Returns
-// { divSet, frozenFindings, dispositions, revisedRegistries } on a sealed front-half (b3-design "B3b
-// prerequisite") — W4 consumes it. B3b SEAM: the divergence set is BUILT + ledgered here (note{kind:'divergence'}); its
-// CONSUMPTION — the one negotiation, the decision bundle, and the clerical renderer that replaces
-// plato-as-chairman (§5) — is W4/B3b. For THIS sub-round the revised drafts feed the EXISTING Lantern +
-// plato synthesis UNCHANGED, so diogenes is authority-demoted (buildDivergenceSet is now the source of
-// truth for the divergence set) while still writing divergence-analysis.md for the surviving chairman.
+// runDebateFrontHalf(planAFile, planBFile, evidenceDocs, phaseName) — critique → revision → mechanical
+// divergence. P0 = fable's draft (plan-a.md), P1 = sol's draft (plan-b.md); each head critiques the OTHER
+// draft, then revises its OWN against the frozen findings raised on it. A dead/invalid required head ⇒
+// DEGRADED naming it (returns null); an empty mechanical divergence set early-stops to NEGOTIATION_SKIPPED.
+// Returns { divSet, frozenFindings, dispositions, revisedRegistries } on a sealed front-half — the
+// negotiation, decision bundle, and renderer consume it. The divergence set is BUILT + ledgered here
+// (note{kind:'divergence'}), so buildDivergenceSet is the source of truth for it; diogenes still writes
+// divergence-analysis.md for the chairman.
 const runDebateFrontHalf = async (planAFile, planBFile, evidenceDocs, phaseName) => {
   const evLine = evidenceDocs.join(', ')
-  // ── W1: the blind critique exchange (§2). Fable critiques P1 (plan-b.md); byte-owned Sol critiques
+  // ── The blind critique exchange. Fable critiques P1 (plan-b.md); byte-owned Sol critiques
   //    P0 (plan-a.md). Each sees ONLY the other draft + the evidence + the frozen rubric — no identity. ──
   await lore('architecture.debate_convened', `The debate opens — each head critiques the other's plan blind; findings are script-keyed`, null, phaseName)
   const fableCritiquePrompt =
@@ -2912,7 +2898,7 @@ const runDebateFrontHalf = async (planAFile, planBFile, evidenceDocs, phaseName)
     return null
   }
   // The SCRIPT assigns the target slot (anonymity: neither head ever saw a slot label) and canonicalizes
-  // — model finding ids are non-authoritative (§2). B3R1-1: the target slot is the OTHER head's
+  // — model finding ids are non-authoritative. The target slot is the OTHER head's
   // seed-assigned slot (fable critiqued plan-b = sol's draft ⇒ target slotOf('sol'); sol critiqued plan-a
   // = fable's draft ⇒ target slotOf('fable')). The seat artifact hash belongs to the AUTHOR head's slot.
   const frozenFindings = canonicalizeFindings([
@@ -2921,14 +2907,14 @@ const runDebateFrontHalf = async (planAFile, planBFile, evidenceDocs, phaseName)
   ])
   await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'CRITIQUES_SEALED', decision_bundle_hash: null, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: { [slotOf('fable')]: sha256Hex(canonicalJson(fableCritique)), [slotOf('sol')]: sha256Hex(canonicalJson(solCritEnv)) }, seat_provenance: { [slotOf('fable')]: { head: 'fable', model: CLAUDE_HEAD_MODEL }, [slotOf('sol')]: seatProv(sinkSC, 'sol') }, codex_receipt_hash: solCritCross.codex_receipt_hash, status: 'sealed' }, phaseName)
 
-  // ── W2: self-revision with exact dispositions (§3). Each head sees ITS OWN draft + ONLY the frozen
+  // ── Self-revision with exact dispositions. Each head sees ITS OWN draft + ONLY the frozen
   //    findings against it. validateDispositions enforces exact coverage; invalid ⇒ DEGRADED. Fable
   //    rewrites plan-a.md itself; byte-owned Sol's revised_plan_markdown is extracted to plan-b.md. ──
   const findingsForP0 = frozenFindings.filter((f) => f.target_slot === slotOf('fable')) // sol's critique of fable's draft
   const findingsForP1 = frozenFindings.filter((f) => f.target_slot === slotOf('sol')) // fable's critique of sol's draft
   const findingLine = (fs) => fs.map((f) => `- ${f.id}: ${f.claim} → required_change: ${f.required_change}`).join('\n') || '(none — the plan drew no findings; dispositions[] is empty)'
-  // The revision RE-EMITS the full revised structured milestones[] (A5 item 1; the projection source per
-  // ruling AMB-ii-A) — the path-free T4_AUTHORSHIP_RULE rides both heads' revision prompts, paths as inputs.
+  // The revision RE-EMITS the full revised structured milestones[] (the projection source) — the
+  // path-free T4_AUTHORSHIP_RULE rides both heads' revision prompts, paths as inputs.
   const fableRevisePrompt =
     `You are revising YOUR OWN plan (${planAFile}) in light of the council's frozen findings against it, blind and independent.\n\n` +
     `<inputs>\n- Your plan: ${planAFile}\n- VISION (for Success-Criteria ids): ${visionFile}\n- The frozen findings against it:\n${findingLine(findingsForP0)}\n</inputs>\n\n` +
@@ -2955,8 +2941,8 @@ const runDebateFrontHalf = async (planAFile, planBFile, evidenceDocs, phaseName)
     await degradeCouncil(!fRevAlive && !sRevAlive ? 'both' : (!fRevAlive ? 'fable' : 'sol'), `head death at REVISION (${!fRevAlive && !sRevAlive ? 'both' : (!fRevAlive ? 'fable' : 'sol')})`, phaseName)
     return null
   }
-  // Exact coverage (§3): each head disposes EXACTLY the frozen findings against its OWN draft. An invalid
-  // set is a failed revision duty by that head (constitution §8: a missing head) ⇒ DEGRADED naming it.
+  // Exact coverage: each head disposes EXACTLY the frozen findings against its OWN draft. An invalid
+  // set is a failed revision duty by that head (a missing head) ⇒ DEGRADED naming it.
   const vFable = validateDispositions(findingsForP0, Array.isArray(fableRevision.dispositions) ? fableRevision.dispositions : [])
   const vSol = validateDispositions(findingsForP1, Array.isArray(solRevEnv.dispositions) ? solRevEnv.dispositions : [])
   if (!vFable.valid || !vSol.valid) {
@@ -2966,15 +2952,13 @@ const runDebateFrontHalf = async (planAFile, planBFile, evidenceDocs, phaseName)
   }
   await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'REVISIONS_SEALED', decision_bundle_hash: null, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: { [slotOf('fable')]: sha256Hex(canonicalJson(fableRevision)), [slotOf('sol')]: sha256Hex(canonicalJson(solRevEnv)) }, seat_provenance: { [slotOf('fable')]: { head: 'fable', model: CLAUDE_HEAD_MODEL }, [slotOf('sol')]: seatProv(sinkSR, 'sol') }, codex_receipt_hash: solRevCross.codex_receipt_hash, status: 'sealed' }, phaseName)
 
-  // ── W3: the mechanical divergence set (§4) + B3b2-iiA projection/join → negotiation → settlement →
-  //    bundle (A5 items 1–4; ruling AMB-B3b2ii-CAP). buildDivergenceSet PROVES every finding + decision is
+  // ── The mechanical divergence set + projection/join → negotiation → settlement →
+  //    bundle. buildDivergenceSet PROVES every finding + decision is
   //    accounted for exactly once, seeded by the RESERVED councilSeedDigest (never in any prompt). A head's
   //    malformed registry / a projection typed-throw ⇒ DEGRADED naming the head (deterministic script leg —
   //    never a crash, never a silent skip). Empty set ⇒ NEGOTIATION_SKIPPED; a non-empty set runs ONE
-  //    negotiation. EXPLICIT INTERMEDIATE (ruling AMB-B3b2ii-CAP): plato synthesis STILL authors
-  //    master-plan.md and Athena/ratify/Law run UNCHANGED this freeze (ratify's open_divergence_ids stay []);
-  //    the populated bundle rides the return for iiB, which swaps the authority (renderer replaces plato,
-  //    ratify binds the populated bundle). Do NOT wire the renderer / typed amendments / populated ratify here. ──
+  //    negotiation. The populated bundle rides the return; the renderer authors master-plan.md from it and
+  //    ratify binds it. ──
   const classByFinding = new Map()
   for (const d of [...(Array.isArray(fableRevision.dispositions) ? fableRevision.dispositions : []), ...(Array.isArray(solRevEnv.dispositions) ? solRevEnv.dispositions : [])]) {
     if (d && typeof d.finding_id === 'string') classByFinding.set(d.finding_id, d.evidence_class)
@@ -2987,8 +2971,8 @@ const runDebateFrontHalf = async (planAFile, planBFile, evidenceDocs, phaseName)
     incorporated: d.disposition === 'accepted' ? (Array.isArray(d.incorporated_at) && d.incorporated_at.length > 0) : undefined,
   }))
   // registryFor keeps the ORGANIC decision VALUE alongside its hash — the projection consumes it to reject
-  // reserved-prefix ids + detect projected-topic collisions; A2 positions render from the value.
-  // B3R1-3: it VALIDATES the raw revised registry and THROWS (typed) on a duplicate organic decision id —
+  // reserved-prefix ids + detect projected-topic collisions; positions render from the value.
+  // It VALIDATES the raw revised registry and THROWS (typed) on a duplicate organic decision id —
   // the T4 path then DEGRADES the emitting head (the same locus as projectStructuredPlan's throws), never
   // the silent seen-skip dedupe that let a duplicate slip past projection + divergence.
   const registryFor = (rev) => {
@@ -2998,7 +2982,7 @@ const runDebateFrontHalf = async (planAFile, planBFile, evidenceDocs, phaseName)
       if (seen.has(d.id)) throw new Error(`duplicate organic decision id '${d.id}' — a head's revised decision ids must be unique (the T4 path never silently dedupes)`)
       seen.add(d.id)
       const value = d.value != null ? d.value : null
-      // B3R1-16: cap the organic decision VALUE's canonical bytes at projection (never truncated/summarized).
+      // Cap the organic decision VALUE's canonical bytes at projection (never truncated/summarized).
       const valueBytes = utf8ByteLength(canonicalJson(value))
       if (valueBytes > DECISION_VALUE_MAX_BYTES) throw new Error(`organic decision '${d.id}' value is ${valueBytes} canonical bytes, over the ${DECISION_VALUE_MAX_BYTES}-byte per-value ceiling (never truncated)`)
       out.push({ id: d.id, topic: String(d.topic != null ? d.topic : ''), value, value_hash: sha256Hex(canonicalJson(value)) })
@@ -3008,7 +2992,7 @@ const runDebateFrontHalf = async (planAFile, planBFile, evidenceDocs, phaseName)
   let regFable, regSol
   try { regFable = registryFor(fableRevision) } catch (e) { await degradeCouncil('fable', `revised registry invalid: ${e && e.message ? e.message : String(e)}`, phaseName); return null }
   try { regSol = registryFor(solRevEnv) } catch (e) { await degradeCouncil('sol', `revised registry invalid: ${e && e.message ? e.message : String(e)}`, phaseName); return null }
-  // A5 item 3: the VISION Success-Criteria id set — a haiku greps VISION, the SCRIPT re-extracts with the
+  // The VISION Success-Criteria id set — a haiku greps VISION, the SCRIPT re-extracts with the
   // fixed regex (adoption-vs-minted namespacing is script-owned). A mute leg ⇒ [] (minted-only, no false join).
   const scidsRes = await agent(
     `You are Thoth, the scribe — transcribe, never judge, never fix.\n\n` +
@@ -3017,10 +3001,10 @@ const runDebateFrontHalf = async (planAFile, planBFile, evidenceDocs, phaseName)
     { label: 'thoth:vision-scids', phase: phaseName, model: 'haiku', schema: VISION_SCIDS_SCHEMA }
   )
   const visionScIds = extractVisionScIds(scidsRes && scidsRes.sc_text)
-  // A5 items 2–4 projection: the source is the REVISED structured milestones (ruling AMB-ii-A). A typed
+  // The projection source is the REVISED structured milestones. A typed
   // throw (duplicate id, reserved prefix, projected-topic collision, degenerate value class) ⇒ DEGRADED
   // naming the head — a per-head validation, before any cross-head interaction.
-  // B3R1-1: each head projects under ITS seed-assigned slot (slotOf('fable')/slotOf('sol')); the
+  // Each head projects under ITS seed-assigned slot (slotOf('fable')/slotOf('sol')); the
   // settlement algebra is then keyed by P0/P1, so a P0/P1-ORDERED view routes the head registries onto the
   // slot the seed chose — position_0 in every card is the P0-slot head's value (never seat identity).
   let projFable, projSol
@@ -3046,30 +3030,30 @@ const runDebateFrontHalf = async (planAFile, planBFile, evidenceDocs, phaseName)
   }
   await runLedger('note', { kind: 'divergence', hash: divSet.hash, empty: divSet.empty, count: divSet.divergences.length, divergences: divSet.divergences, accounting: divSet.accounting, join_accounting: joined.accounting }, phaseName)
 
-  // B3R1-5: the A2 negotiation cards derive FROM the authoritative divSet (finding-based + topic-based
+  // The negotiation cards derive FROM the authoritative divSet (finding-based + topic-based
   // divergences) with the one-sided topic entries joining them + the agreements. findingsById supplies
   // each finding-based card's evidence_refs.
   const findingsById = new Map(frozenFindings.map((f) => [f.id, f]))
   const { agreed, cards } = buildNegotiationCards(divSet, fullP0, fullP1, findingsById, councilSeedDigest)
-  // finalizeFrontHalf — closure(a) over settled ∪ open, then the bundle, then the front-half barrier
+  // finalizeFrontHalf — closure over settled ∪ open, then the bundle, then the front-half barrier
   // (carrying decision_bundle_hash). A closure violation or an invalid bundle ⇒ DEGRADED loud. Returns
-  // { bundle, hash } (rides the return for iiB) or null on a degrade.
+  // { bundle, hash } (rides the return) or null on a degrade.
   const finalizeFrontHalf = async (settled, open, ckpt) => {
     const cmpKey = (e) => canonicalJson({ t: e.topic, v: e.value })
     const settledSorted = settled.slice().sort((a, b) => { const ka = cmpKey(a), kb = cmpKey(b); return ka < kb ? -1 : ka > kb ? 1 : 0 })
-    // B3R1-4: closure derives its requires from the SETTLED SC entries' own milestone_key (the renderer's
+    // Closure derives its requires from the SETTLED SC entries' own milestone_key (the renderer's
     // authority) — the joined.requires list carries UNSETTLED-card rows too, which could conflict on a
     // two-sided SC and is not the closure's concern. Parent = the settled SC value's milestone_key.
     const closureRequires = settledSorted.filter((e) => e && typeof e.topic === 'string' && e.topic.startsWith('sc:') && e.value && e.value.milestone_key != null).map((e) => ({ sc_topic: e.topic, milestone_topic: String(e.value.milestone_key) }))
     const closure = validatePlanClosure({ settled: settledSorted, requires: closureRequires })
     if (!closure.ok) { await degradeCouncil('both', `plan closure violated after settlement: ${closure.violations.map((v) => `${v.kind}@${v.topic}`).join(', ')}`, phaseName); return null }
     const openClean = open.map(({ _ordinal, ...c }) => c)
-    // ruling AMB-iiA-2 (RULED for iiB): common_trunk carries { vision_sc_ids } so the bundle HASH binds
+    // common_trunk carries { vision_sc_ids } so the bundle HASH binds
     // the renderer's allocator input — a downstream renderer reads the SC-id set out of the bundle, never
     // an outer variable, and the re-render byte-compare derives from the hashed bundle ALONE.
     const bd = buildDecisionBundle({ common_trunk: { vision_sc_ids: visionScIds }, settled_decisions: settledSorted, open_divergences: openClean, renderer_version: 'b3-bundle/1', evidence_manifest_hash: evidenceManifestHash })
     if (!bd.valid) { await degradeCouncil('both', `decision bundle invalid: ${bd.errors.map((e) => e.code).join(', ')}`, phaseName); return null }
-    // B3R1-7: PERSIST the sealed bundle bytes (canonicalJson, whose sha equals bd.hash) BEFORE the barrier
+    // PERSIST the sealed bundle bytes (canonicalJson, whose sha equals bd.hash) BEFORE the barrier
     // seals — a Thoth verbatim-bytes scribe writes them, the SCRIPT hashes the file and verifies it equals
     // the bundle hash (the render idiom). A scribe-write mismatch is a persist failure ⇒ DEGRADED loud (a
     // barrier a resume could not rehydrate must never seal as reusable).
@@ -3130,32 +3114,32 @@ const runDebateFrontHalf = async (planAFile, planBFile, evidenceDocs, phaseName)
 
   let frontBundle = null
   if (divSet.empty) {
-    log('B3a: mechanical divergence set is EMPTY — negotiation skipped; the revised drafts feed synthesis directly (iiA intermediate)')
+    log('mechanical divergence set is EMPTY — negotiation skipped; the revised drafts feed synthesis directly')
     await lore('architecture.divergences_none', `The debate converges — zero mechanical divergences; negotiation skipped`, null, phaseName)
     frontBundle = await finalizeFrontHalf([...agreed, ...settleAllPresent(cards)], [], { phase: 'NEGOTIATION_SKIPPED', seat_provenance: { divergence_hash: divSet.hash } })
     if (frontBundle === null) return null
   } else {
-    log(`B3a: mechanical divergence set has ${divSet.divergences.length} card(s) [${divSet.divergences.map((d) => d.divergence_id).join(', ')}] — carried to the negotiation`)
+    log(`mechanical divergence set has ${divSet.divergences.length} card(s) [${divSet.divergences.map((d) => d.divergence_id).join(', ')}] — carried to the negotiation`)
     await lore('architecture.divergences_built', `Diogenes yields to the ledger — ${divSet.divergences.length} mechanical divergence(s) built and sealed`, { divergences: divSet.divergences.length }, phaseName)
     await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'DIVERGENCES_BUILT', decision_bundle_hash: null, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: {}, seat_provenance: { divergence_hash: divSet.hash }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
     frontBundle = await runNegotiation()
     if (frontBundle === null) return null // a degrade / gated-escalation terminal is already set
   }
-  // B3b prerequisite + iiB seam (ruling AMB-B3b2ii-CAP): surface the sealed front-half — the divergence
+  // Surface the sealed front-half — the divergence
   // set, the frozen findings, the dispositions, the revised registries WITH values, the requires/join
-  // accounting, the projections, and the populated bundle + hash ride the return so iiB can swap the
-  // authority. THIS freeze DISCARDS the return (plato/Athena/ratify run unchanged).
+  // accounting, the projections, and the populated bundle + hash ride the return so the renderer/ratify
+  // consume the populated bundle.
   return { divSet, frozenFindings, dispositions: [...vFable.dispositions, ...vSol.dispositions], revisedRegistries: { P0: orgP0, P1: orgP1 }, requires: joined.requires, accounting: joined.accounting, projections: { P0: projP0, P1: projP1 }, bundle: frontBundle && frontBundle.bundle, bundle_hash: frontBundle && frontBundle.hash }
 }
 
 // ── Laying Stone: numerobis writes the technical docs the planners build on ──
 phase('Laying Stone')
-// §3.5 stage bracket: stage_started on every entry — a re-run is the stage still in progress.
+// Stage bracket: stage_started on every entry — a re-run is the stage still in progress.
 await runLedger('stage_started', {}, 'Laying Stone')
-// research.md is OPTIONAL on a normative path: BLUEPRINT §3.2 lets research scope to zero topics
+// research.md is OPTIONAL on a normative path: research can scope to zero topics
 // (no high-priority before-build OQs), in which case the research stage writes NO research.md and
 // returns research_file: null. Architecture must not point its agents at a phantom file. Per the
-// §4 self-validation discipline (workflows verify their own inputs exist — "validate.js detects
+// self-validation discipline (workflows verify their own inputs exist — "validate.js detects
 // design/ itself"), one cheap haiku `ls` probe (the same idiom as thoth:verify below) detects it;
 // every downstream prompt references research through researchRef(), which is honest about absence.
 const researchProbe = await agent(
@@ -3185,7 +3169,7 @@ const researchInList = researchPresent ? `${researchFile}, ` : ''
 // researchSummaryClause — trailing prose ("...and the research") used in two single-plan leads.
 const researchSummaryClause = researchPresent ? ' and the research' : ''
 log(`${spin('foundation', 0)}`)
-// (d) Visual-direction authority (P4 T4): the conductor threads vision.js's visual_direction as the
+// Visual-direction authority: the conductor threads vision.js's visual_direction as the
 // visualDirection arg — when present it IS has_visual_direction and the foundation agent is not asked
 // to re-judge it (the byte-check moved INTO the vision gate). Absent ⇒ the agent judges it here, given
 // the EXACT decline bytes (not the elided quote the consumer scout flagged).
@@ -3203,16 +3187,16 @@ const foundation = await agent(
   `${researchGrounding} Then report a tight technical summary the planners will build on, ${vdAsk}. Finally, classify the deliverable's scope honestly: 'trivial' = ONE cohesive artifact (a single page, script, or small CLI) with one obvious approach and no competing architectures worth comparing; 'standard' = a handful of independent components; 'complex' = many interacting parts or genuine architectural forks. Give estimated_milestones = the count of genuinely independent, separately-buildable-and-verifiable milestones (a single cohesive artifact is 1). Emit the three doc paths, has_visual_direction, scope, estimated_milestones, and summary first; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}\n</task>`,
   { label: 'numerobis:foundation', phase: 'Laying Stone', model: 'opus', schema: FOUNDATION_SCHEMA }
 )
-// (d) The authoritative visual-direction boolean: the conductor-threaded arg wins; else the
+// The authoritative visual-direction boolean: the conductor-threaded arg wins; else the
 // foundation agent's judgment (the pre-v3 fallback). Everything downstream reads THIS, not the
 // raw foundation field, so a threaded arg short-circuits mechanically in the SCRIPT.
 const hasVisualDirection = (typeof visualDirection === 'boolean') ? visualDirection : !!(foundation && foundation.has_visual_direction)
 log(`Foundation docs written; visual direction: ${hasVisualDirection}${visualDirection === null ? '' : ' (conductor-threaded)'}`)
-// architecture.foundation_laid (volume): the technical foundation is set (carries the freed §6 line).
+// architecture.foundation_laid (volume): the technical foundation is set.
 await lore('architecture.foundation_laid', `The geometry never lies — the foundation is set, visual direction ${hasVisualDirection ? 'present' : 'none'}`, { visual_direction: hasVisualDirection ? 'present' : 'none' }, 'Laying Stone')
 
 // ── Design tokens (conditional — only when VISION has real Visual Direction) ──
-// Velocity lever 6 (§9): design:tokens runs in PARALLEL with The Council. Its only inputs are
+// Design tokens run in PARALLEL with The Council. Their only inputs are
 // VISION's Visual Direction section + tech-stack.md (both already on disk after foundation), and NO downstream
 // architecture agent reads the design system — it is consumed by the BUILD stage's UI builder —
 // so the write only needs to land before this stage returns. We launch it here as a detached
@@ -3223,7 +3207,7 @@ await lore('architecture.foundation_laid', `The geometry never lies — the foun
 let designPromise = null
 if (hasVisualDirection) {
   log('Design tokens launching in parallel (visual direction present)')
-  // architecture.tokens_parallel (volume): the design system is drawn alongside the plan (lever 6).
+  // architecture.tokens_parallel (volume): the design system is drawn alongside the plan.
   await lore('architecture.tokens_parallel', `Design tokens drawn in parallel — visual direction present`, null, 'Laying Stone')
   designPromise = agent(
     voice('opus') +
@@ -3263,7 +3247,7 @@ const executableAcRule =
   `criterion traces to one (read the Success Criteria section of ${visionFile}), and MINT a new ` +
   `sequential SC id only for a criterion the plan itself adds — so VISION, the plan, the Law, and ` +
   `validate's goal-backward all share ONE identifier space. Ids stay globally unique across ALL ` +
-  `milestones: the Law (BLUEPRINT §5) compiles exactly ONE locked check per SC, so coverage stays ` +
+  `milestones: the Law compiles exactly ONE locked check per SC, so coverage stays ` +
   `arithmetic, never judgment.`
 
 // The single-vs-dual fork. The Gauge posture (planning) is the authoritative upstream decider when
@@ -3273,19 +3257,18 @@ const executableAcRule =
 const liteScope = planning !== null
   ? planning !== 'dual'
   : !!(foundation && foundation.scope === 'trivial')
-// Validation-pass count: the number of Athena passes to run (BLUEPRINT §3.2 — plan_validation_rounds
+// Validation-pass count: the number of Athena passes to run (plan_validation_rounds
 // IS a pass count, not a revision count). The posture arg overrides when present; else the historical
-// default expressed directly as passes — 2 on the lite path, 3 on the full path, byte-identical to v2
-// (v2's `round 0..MAX_VALIDATION_ROUNDS` was 3 passes full / 2 passes lite). The number of plato
+// default expressed directly as passes — 2 on the lite path, 3 on the full path. The number of plato
 // revisions is validationPasses - 1 (a revision happens only between two passes).
 const validationPasses = validationRoundsArg !== null ? validationRoundsArg : (liteScope ? LITE_VALIDATION_PASSES : FULL_VALIDATION_PASSES)
 
-// Velocity lever 5 (§9, partial): on the LITE path, Plato folds the build-stage handoff INTO its
+// On the LITE path, Plato folds the build-stage handoff INTO its
 // synthesis output — one Opus call writes both master-plan.md and architecture-handoff.md — and
 // the dedicated numerobis:handoff agent is skipped. The fold rides EVERY Plato write (synthesis
 // AND each revision) so the handoff always matches the FINAL plan, never a pre-revision stale one.
 // Standard/complex keep the separate handoff agent: a non-trivial handoff is its own deliverable
-// worth a dedicated pass (lever 5 is "partial" by contract). The clause is empty off the lite path.
+// worth a dedicated pass. The clause is empty off the lite path.
 const handoffFoldClause = liteScope
   ? ` Then ALSO write ${handoffFile}: a concise build-stage handoff — the ordered milestone list, the tech stack, the non-negotiable constraints, and any low-confidence areas the build should watch (this is what the build stage reads first). Rewrite it whenever you rewrite the plan so the two never drift.`
   : ``
@@ -3293,9 +3276,9 @@ const handoffFoldClause = liteScope
 let synthBrief
 let synthLead
 if (liteScope) {
-  log(`${planning !== null ? `Posture planning='${planning}'` : `Scope='trivial' (${foundation && foundation.estimated_milestones} est. milestone(s))`} — lite architecture path: Plato authors the single plan directly (no draft pair, no divergence set); at T4 the blind required ratification pair still convenes (B4-2 D7).`)
+  log(`${planning !== null ? `Posture planning='${planning}'` : `Scope='trivial' (${foundation && foundation.estimated_milestones} est. milestone(s))`} — lite architecture path: Plato authors the single plan directly (no draft pair, no divergence set); at T4 the blind required ratification pair still convenes.`)
   // architecture.lite_path (volume): right-sized to one authored plan — no draft pair to compare; the
-  // T4 ratification pair still rules (B4-2 D7). The lite fork skips the DRAFTS/divergence machinery, not the council.
+  // T4 ratification pair still rules. The lite fork skips the DRAFTS/divergence machinery, not the council.
   await lore('architecture.lite_path', `Lite path — ${(foundation && foundation.estimated_milestones) ?? '?'} est. milestone(s); Plato drafts the single plan alone, no draft pair to compare (the T4 ratification pair still rules)`, { est_milestones: (foundation && foundation.estimated_milestones) ?? null }, 'Laying Stone')
   synthBrief =
     `<inputs>\nRead (${noWander}): ${docsDir}/architecture.md, ${docsDir}/tech-stack.md, ` +
@@ -3323,13 +3306,13 @@ if (liteScope) {
     // ═══ Twin Council draft pair (T4, FULL path): Fable drafts plan-a itself; the receipt-attested Sol
     //     wrapper drafts plan-b (codex read-only, plan rides the attested payload). Both see the SAME
     //     frozen evidence + rubric; neither sees the peer's identity, model, receipt, or the run
-    //     token/seed. A promised head that dies at DRAFTS ⇒ FC-1 promised-head rule: DEGRADED, but we
+    //     token/seed. A promised head that dies at DRAFTS ⇒ the promised-head rule: DEGRADED, but we
     //     still produce a DRAFT master plan from the survivor (the v3.0.1 single-plan guard) — the plan
     //     exists for the operator yet never advances as authoritative (Law BLOCKED, council terminal
     //     DEGRADED). No fable→opus substitution, no sonnet stand-in for Sol (twoHeads:'required'). ═══
     const frozenInputs = [visionFile, `${docsDir}/architecture.md`, `${docsDir}/tech-stack.md`, `${docsDir}/arch-constraints.md`].concat(researchPresent ? [researchFile] : [])
     const anchor = await agent(anchorPrompt(frozenInputs), { label: 'thoth:council-anchor', phase: 'The Council', model: 'haiku', schema: ANCHOR_SCHEMA })
-    // EXACT coverage (Sol F6): every frozen input present exactly once with a real 64-hex digest and NO
+    // EXACT coverage: every frozen input present exactly once with a real 64-hex digest and NO
     // extra paths — a certificate must never bind a manifest missing VISION or the constraints.
     const anchorFiles = (anchor && Array.isArray(anchor.files)) ? anchor.files.filter((f) => f && typeof f.path === 'string' && typeof f.sha256 === 'string' && SHA64_RE.test(f.sha256)) : []
     const anchorPaths = anchorFiles.map((f) => f.path)
@@ -3348,18 +3331,18 @@ if (liteScope) {
       evidenceManifestHash = sha256Hex(canonicalJson(manifest))
       evidenceInputHashes = Object.keys(manifest).sort().map((k) => manifest[k])
       councilInitialSeq = (anchor.initial_ledger_seq === null || Number.isInteger(anchor.initial_ledger_seq)) ? anchor.initial_ledger_seq : null
-      // ── W6 resume: read prior SEALED council checkpoints; FREEZE the initial ledger seq from the
+      // ── Resume: read prior SEALED council checkpoints; FREEZE the initial ledger seq from the
       //    ORIGINAL anchor across a capability refresh (a refresh appends events but must NEVER
       //    reschedule — the seed + every checkpoint stay bound to the original seq). A fresh run has no
       //    prior checkpoint ⇒ the anchor's own seq stands. ──
       const priorCheckpoints = await readCouncilCheckpoints('The Council')
       const frozenSeq = priorInitialSeq(priorCheckpoints)
-      if (frozenSeq !== undefined) { councilInitialSeq = frozenSeq; log(`B3a resume: initial ledger seq FROZEN at ${frozenSeq} from a prior council checkpoint (a capability refresh never reschedules)`) }
-      // seed — run-bound entropy (councilSeed). Reserved for B3 divergence-id derivation; it NEVER
+      if (frozenSeq !== undefined) { councilInitialSeq = frozenSeq; log(`resume: initial ledger seq FROZEN at ${frozenSeq} from a prior council checkpoint (a capability refresh never reschedules)`) }
+      // seed — run-bound entropy (councilSeed). Reserved for divergence-id derivation; it NEVER
       // appears in any prompt (anonymity + tie-break-unpredictability rails). Bound here so the
       // checkpoint chain and the blindness rails bind against the REAL seed.
       councilSeedDigest = councilSeed({ protocolVersion: COUNCIL_PROTOCOL_VERSION, runToken, initialSeq: councilInitialSeq, keystoneId, templateHash })
-      // B3R1-1: the P0/P1 parity is NOT assigned here — it fires only AFTER both drafts return alive AND
+      // The P0/P1 parity is NOT assigned here — it fires only AFTER both drafts return alive AND
       // the Sol receipt/cross-check validate (below), before the first slot-keyed checkpoint (DRAFTS_SEALED).
       const solDraft = solWrapperPrompt({ phaseTag: 'DRAFTS', attempt: 1, effort: 'high', payloadSchema: SOL_DRAFT_PAYLOAD_SCHEMA, taskText: DRAFT_TASK, briefBody: `${planBrief}\n\nAuthorship:\n${T4_AUTHORSHIP_RULE}\nEmit milestones[] as the structured list — each {id, title, summary, order, surface, confidence, acceptance:[{sc_id, criterion, executable_check}]}.`, packetObj: { inputs: frozenInputs, foundation_summary: foundation && foundation.summary, testing_rigor: testingRigor }, extractTo: `${plansDir}/plan-b.md` })
       const sinkS = {}
@@ -3377,7 +3360,7 @@ if (liteScope) {
       if (!fableAlive || !solAlive) {
         const missing = !fableAlive && !solAlive ? 'both' : (!fableAlive ? 'fable' : 'sol')
         await degradeCouncil(missing, `head death at DRAFTS (${missing})`, 'The Council')
-        // Draft-death SYMMETRY (Fable second key F13): the Sol plan is UNTRUSTED on any Sol-seat death,
+        // Draft-death SYMMETRY: the Sol plan is UNTRUSTED on any Sol-seat death,
         // but a FABLE death with a fully-verified Sol (payload + structural receipt + ledger-verified
         // cross-check) keeps the ATTESTED plan-b as the single-plan survivor — the terminal is still
         // DEGRADED and the Law still blocks; only the DRAFT source material changes.
@@ -3385,7 +3368,7 @@ if (liteScope) {
         if (fableAlive) plans.push({ ...fablePlan, slot: 'a' })
         else if (solAlive) plans.push({ slot: 'b', plan_file: `${plansDir}/plan-b.md`, approach_summary: solPayload.approach_summary, milestones: solPayload.milestones })
       } else {
-        // B3R1-1: assign the P0/P1 slots from the hidden seed parity HERE — after BOTH drafts returned
+        // Assign the P0/P1 slots from the hidden seed parity HERE — after BOTH drafts returned
         // alive AND the Sol receipt + invocation-exact cross-check validated (the checks just above), and
         // BEFORE the first slot-keyed checkpoint (DRAFTS_SEALED) or consumer. Seed parity is run-bound,
         // deterministic, never seat identity, never a prompt; the plan files stay seat-bound (the SLOT
@@ -3393,7 +3376,7 @@ if (liteScope) {
         fableSlot = (parseInt(councilSeedDigest.slice(0, 8), 16) % 2 === 0) ? 'P0' : 'P1'
         solSlot = fableSlot === 'P0' ? 'P1' : 'P0'
         const seatHashes = await agent(seatHashPrompt(`${plansDir}/plan-a.md`, `${plansDir}/plan-b.md`), { label: 'thoth:seat-hashes', phase: 'The Council', model: 'haiku', schema: SEAT_HASH_SCHEMA })
-        // B3R1-1: seat hashes + provenance are keyed by the seed-assigned slot (plan-a = fable's, plan-b
+        // Seat hashes + provenance are keyed by the seed-assigned slot (plan-a = fable's, plan-b
         // = sol's — the plan files stay seat-bound; the SLOT labels route through slotOf). Provenance still
         // records head-per-slot (audit).
         await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'DRAFTS_SEALED', decision_bundle_hash: null, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: { [slotOf('fable')]: seatHashes && seatHashes.plan_a_sha256 ? seatHashes.plan_a_sha256 : null, [slotOf('sol')]: seatHashes && seatHashes.plan_b_sha256 ? seatHashes.plan_b_sha256 : null }, seat_provenance: { [slotOf('fable')]: { head: 'fable', model: CLAUDE_HEAD_MODEL }, [slotOf('sol')]: seatProv(sinkS, 'sol') }, codex_receipt_hash: solCross.codex_receipt_hash, status: 'sealed' }, 'The Council')
@@ -3404,19 +3387,19 @@ if (liteScope) {
           { ...fablePlan, slot: 'a' },
           { slot: 'b', plan_file: `${plansDir}/plan-b.md`, approach_summary: solPayload.approach_summary, milestones: solPayload.milestones },
         ]
-        // ── B3a/iiA debate front-half (W1 critique · W2 revision · W3 divergence → negotiation →
-        //    settlement → bundle) with W6 reuse. Both drafts sealed and alive ⇒ the heads
-        //    critique/revise/diverge/negotiate; the REVISED plan-a.md/plan-b.md then feed the EXISTING
-        //    Lantern + plato synthesis UNCHANGED (the iiA intermediate). The front-half TERMINAL barrier is
-        //    now NEGOTIATION_SEALED (negotiated) or NEGOTIATION_SKIPPED (converged) — DIVERGENCES_BUILT is an
-        //    INTERMEDIATE (negotiation follows it), so a run that crashed after DIVERGENCES_BUILT but before
-        //    the negotiation seal has no reusable terminal and the WHOLE front-half reruns (a half-pair has
-        //    no partial-output authority). A template/pin change also fails the match. A debate degrade sets
-        //    councilTerminal and leaves the plans as the operator's DRAFT (Law blocks; the rest skipped). ──
+        // ── The debate front-half (critique · revision · divergence → negotiation →
+        //    settlement → bundle) with resume reuse. Both drafts sealed and alive ⇒ the heads
+        //    critique/revise/diverge/negotiate; the populated bundle feeds the renderer/ratify. The
+        //    front-half TERMINAL barrier is NEGOTIATION_SEALED (negotiated) or NEGOTIATION_SKIPPED
+        //    (converged) — DIVERGENCES_BUILT is an INTERMEDIATE (negotiation follows it), so a run that
+        //    crashed after DIVERGENCES_BUILT but before the negotiation seal has no reusable terminal and
+        //    the WHOLE front-half reruns (a half-pair has no partial-output authority). A template/pin
+        //    change also fails the match. A debate degrade sets councilTerminal and leaves the plans as
+        //    the operator's DRAFT (Law blocks; the rest skipped). ──
         if (councilTerminal === null) {
           const priorFrontHalf = priorCheckpoints.find((c) => c && (c.phase === 'NEGOTIATION_SEALED' || c.phase === 'NEGOTIATION_SKIPPED') && c.status === 'sealed')
           const frontHalfReusable = !!(priorFrontHalf && matchCheckpoint(buildCheckpoint(priorFrontHalf), buildCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: priorFrontHalf.phase, decision_bundle_hash: priorFrontHalf.decision_bundle_hash, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: priorFrontHalf.anonymous_seat_artifact_hashes, seat_provenance: priorFrontHalf.seat_provenance, codex_receipt_hash: priorFrontHalf.codex_receipt_hash, status: 'sealed' })))
-          // B3R1-7: a sealed matching front-half barrier is REUSED only if its persisted bundle bytes
+          // A sealed matching front-half barrier is REUSED only if its persisted bundle bytes
           // REHYDRATE the structured authority. Reload decision-bundle.json, verify its sha equals the
           // barrier's decision_bundle_hash AND re-canonicalizing the parsed bundle reproduces that hash
           // (the checkpoint binding), then hydrate councilFrontHalf/councilBundle/councilBundleHash — so the
@@ -3437,17 +3420,17 @@ if (liteScope) {
                 councilBundle = parsed
                 councilBundleHash = priorHash
                 rehydrated = true
-                log(`B3a resume: a sealed matching ${priorFrontHalf.phase} barrier stands and its persisted bundle REHYDRATED (${String(priorHash).slice(0, 12)}…) — the debate front-half is REUSED, the render path stays ACTIVE`)
+                log(`resume: a sealed matching ${priorFrontHalf.phase} barrier stands and its persisted bundle REHYDRATED (${String(priorHash).slice(0, 12)}…) — the debate front-half is REUSED, the render path stays ACTIVE`)
                 await lore('architecture.debate_reused', `The debate barrier holds — the sealed front-half bundle is rehydrated and reused, not re-run`, null, 'The Council')
               }
             }
-            if (!rehydrated) log(`B3a resume: the matching ${priorFrontHalf.phase} barrier's persisted bundle did NOT rehydrate (missing/sha-drift/parse/hash mismatch) — rerunning the whole front half`)
+            if (!rehydrated) log(`resume: the matching ${priorFrontHalf.phase} barrier's persisted bundle did NOT rehydrate (missing/sha-drift/parse/hash mismatch) — rerunning the whole front half`)
           }
           if (!rehydrated) {
             const fh = await runDebateFrontHalf(`${plansDir}/plan-a.md`, `${plansDir}/plan-b.md`, frozenInputs, 'The Council')
             if (fh && fh.bundle) {
               councilFrontHalf = { bundle_hash: fh.bundle_hash, settled_decisions: fh.bundle.settled_decisions, open_divergences: fh.bundle.open_divergences }
-              // iiB swap: the sealed front-half bundle becomes the AUTHORITATIVE artifact the renderer,
+              // The sealed front-half bundle becomes the AUTHORITATIVE artifact the renderer,
               // Athena amendments, and ratification consume (councilFrontHalf stays the pre-swap record).
               councilBundle = fh.bundle
               councilBundleHash = fh.bundle_hash
@@ -3457,7 +3440,7 @@ if (liteScope) {
       }
     }
   } else {
-    // Scope ruling item 6: a PROMISED council (T4 + codex) launched without the run token reaches
+    // A PROMISED council (T4 + codex) launched without the run token reaches
     // here (councilCapable false) on the FULL path — the promise never silently downgrades to a
     // clean v3.0.1 label. The v3.0.1 pair still drafts (a DRAFT plan for the operator), but the
     // council terminal is DEGRADED and the Law is BLOCKED. Lite and sub-T4 routes are untouched.
@@ -3523,10 +3506,10 @@ if (liteScope) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════
-// ── B3b2-iiB THE AUTHORITY SWAP: on the T4 FULL path the deterministic renderer (renderMasterPlan)
-//    AUTHORS master-plan.md from the settled bundle — plato is retired from the authoritative flow
-//    (⟨DSGN-A3⟩/A5-3). A workflow script cannot write files, so a Thoth VERBATIM-BYTES scribe writes
-//    the rendered markdown (the solByteOwnedPlan courier idiom, AMB-iiB-A) and the SCRIPT byte-compares
+// ── THE AUTHORITY SWAP: on the T4 FULL path the deterministic renderer (renderMasterPlan)
+//    AUTHORS master-plan.md from the settled bundle — plato is retired from the authoritative flow.
+//    A workflow script cannot write files, so a Thoth VERBATIM-BYTES scribe writes
+//    the rendered markdown (the solByteOwnedPlan courier idiom) and the SCRIPT byte-compares
 //    (in-script sha of the rendered bytes vs the file-read sha) — a mismatch is a "scribe-write failure",
 //    DEGRADED loud. Sub-T4 and lite keep plato byte-identical. ──
 // ════════════════════════════════════════════════════════════════════════════════════════════════
@@ -3538,8 +3521,8 @@ const t4RenderPath = () => councilCapable && !liteScope && councilBundle !== nul
 const requiresFromSettled = (settled) => settled
   .filter((e) => e && typeof e.topic === 'string' && e.topic.startsWith('sc:') && e.value && e.value.milestone_key != null)
   .map((e) => ({ sc_topic: e.topic, milestone_topic: String(e.value.milestone_key) }))
-// shapeOf/sameShape — an amendment's replacement must match the SHAPE of the target's current value (A4;
-// AMB-CLOSER-3 TIGHTENED). Shape = null | array | object (identical key set, recursively) | the primitive
+// shapeOf/sameShape — an amendment's replacement must match the SHAPE of the target's current value.
+// Shape = null | array | object (identical key set, recursively) | the primitive
 // typeof. Arrays: count is free, but each replacement element must match the target's element ARCHETYPE
 // (the first element's recursive shape) when the target array is NON-EMPTY (an empty target is element-
 // free) — this closes the garbage-element hole. A replacement that changes the structural class, an
@@ -3581,8 +3564,8 @@ const synthFromRender = () => ({ master_plan_file: masterPlanFile, milestone_cou
 // NON_AMENDABLE_TRUNK — the trunk fields a typed amendment may NEVER touch (they bind the renderer/hash
 // identity): renderer_version / evidence_manifest_hash are bundle identity, vision_sc_ids is the allocator input.
 const NON_AMENDABLE_TRUNK = new Set(['renderer_version', 'evidence_manifest_hash', 'vision_sc_ids'])
-// applyAmendmentsToBundle — validate + apply the TYPED amendments (A4) structurally to councilBundle, then
-// closure(a) → rebuild bundle → rerender + scribe-write + byte-compare. ANY non-descriptor / unknown-key /
+// applyAmendmentsToBundle — validate + apply the TYPED amendments structurally to councilBundle, then
+// closure → rebuild bundle → rerender + scribe-write + byte-compare. ANY non-descriptor / unknown-key /
 // illegal-shape / conflicting-duplicate / closure violation ⇒ GATED_ESCALATION (never a free rewrite).
 // Returns { plan_hash } (bundle + hash mutated) or null (a terminal is set).
 const applyAmendmentsToBundle = async (amendments, phaseName) => {
@@ -3626,7 +3609,7 @@ phase('One From Many')
 log(`${spin('synth', 0)}`)
 let synth
 if (t4RenderPath()) {
-  // ⟨DSGN-A3⟩: the deterministic renderer AUTHORS master-plan.md from the settled bundle. NO plato call,
+  // The deterministic renderer AUTHORS master-plan.md from the settled bundle. NO plato call,
   // NO companion artifact on this branch. renderScribeCompare sets renderManifest/renderMilestones; a
   // scribe byte-mismatch degrades (the return still carries the shaped rendered milestones).
   log('One From Many: the renderer authors master-plan.md from the settled bundle (Plato retired on the T4-full path)')
@@ -3654,12 +3637,12 @@ if (t4RenderPath()) {
 phase('Athena Weighs')
 log(`${spin('validate', 0)}`)
 let verdict = null
-// validationPasses is the number of Athena validation passes to run (BLUEPRINT §3.2 — NOT a revision
+// validationPasses is the number of Athena validation passes to run (NOT a revision
 // count). The loop runs exactly validationPasses passes (round 0..validationPasses-1) and at most
 // validationPasses-1 plato revisions (a revision happens only between two passes, after a non-final
 // FAIL). So posture rounds=1 ⇒ one pass / zero revisions; rounds=3 ⇒ three passes / ≤2 revisions.
 for (let round = 0; round < validationPasses; round++) {
-  // ⟨DSGN-B3-1⟩: on the T4-full path Athena validates the RENDERED snapshot and her accepted fixes apply
+  // On the T4-full path Athena validates the RENDERED snapshot and her accepted fixes apply
   // as MECHANICAL bundle amendments (VALIDATION_SCHEMA_T4); the plato-revision arm survives ONLY on
   // sub-T4/lite (byte-identical). t4 is re-read each round — an amendment escalation flips councilTerminal.
   const t4 = t4RenderPath()
@@ -3685,7 +3668,7 @@ for (let round = 0; round < validationPasses; round++) {
   // architecture.athena_fail (volume): the plan failed every validation pass — escalating.
   if (round === validationPasses - 1) { log(`Athena still FAIL after ${validationPasses} pass(es) — escalating`); await lore('architecture.athena_fail', `Athena weighs FAIL — after ${validationPasses} pass(es) [${oneLine((val.failed_dimensions || []).join(', '), 80)}]; escalating`, { passes: validationPasses }, 'Athena Weighs'); break }
   if (t4) {
-    // ⟨DSGN-B3-1⟩ + A4: apply the typed amendments to the bundle, rerender, re-validate next pass. A FAIL
+    // Apply the typed amendments to the bundle, rerender, re-validate next pass. A FAIL
     // with no typed amendment cannot be expressed structurally ⇒ GATED_ESCALATION (never a free rewrite).
     const amendments = Array.isArray(val.amendments) ? val.amendments : []
     if (!amendments.length) { log(`Athena FAIL [${(val.failed_dimensions || []).join(', ')}] — no typed bundle amendment; gated escalation`); await escalateCouncil('Athena FAIL carries no typed bundle amendment — the fix cannot be expressed structurally (free-text fixes are advisory on the T4-full path)', 'Athena Weighs'); break }
@@ -3706,20 +3689,20 @@ for (let round = 0; round < validationPasses; round++) {
   )) || synth
 }
 
-// verdictShapeError(r) — F2: LIFTED to src/council.mjs (B4-3 D1) and inlined via the @inline:council
-// marker above; the full ratify AND the lite ratify share the one copy build + the B4-3 keystones use.
+// verdictShapeError(r) — LIFTED to src/council.mjs and inlined via the @inline:council
+// marker above; the full ratify AND the lite ratify share the one copy the build keystones use.
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════
-// ── The Twin Council: blind dual ratification of the master plan (constitution §1–4; sol-b34-design
-//    §6). Runs at T4 on the FULL path once Athena PASSes and the draft pair sealed (no prior degrade).
+// ── The Twin Council: blind dual ratification of the master plan.
+//    Runs at T4 on the FULL path once Athena PASSes and the draft pair sealed (no prior degrade).
 //    Blind simultaneous verdicts → one bounded answer exchange on any BLOCK (executable checks settled
 //    by exit code) → one blind re-verdict → an HONEST terminal (RATIFIED certificate / COUNCIL_DEADLOCK
-//    / DEGRADED). The B3 fresh-context re-adjudication ladder slots between RATIFY_2 and the deadlock
+//    / DEGRADED). The fresh-context re-adjudication ladder slots between RATIFY_2 and the deadlock
 //    terminal; until then the conductor's gated operator checkpoint is the resolution authority. ──
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 const runTwinCouncilRatify = async () => {
   const phaseName = 'Athena Weighs'
-  // ⟨DSGN-B3-3⟩/AMB-CLOSER-1: the heads ratify the POPULATED front-half bundle. The open divergences are
+  // The heads ratify the POPULATED front-half bundle. The open divergences are
   // the cards each head must resolve with one divergence_selection; matching selections + dual APPROVE
   // SETTLE the bundle deterministically (the script renders the FINAL plan, the certificate binds the
   // resulting plan hash). A fully-settled bundle carries no open cards ⇒ selections = []. When councilBundle
@@ -3736,7 +3719,7 @@ const runTwinCouncilRatify = async () => {
   const ratifyInputs = `<inputs>\n- The master plan: ${masterPlanFile}\n- Evidence docs: ${evidenceDocs.join(', ')}\n</inputs>`
   const bindingLine = (bH, pH, cards) => `Binding: artifact_hash = "${bH}" (echo it VERBATIM). plan_sha256 = ${pH}. evidence_manifest_hash = ${evidenceManifestHash}. ` +
     ((cards && cards.length) ? `Resolve EACH open divergence with one divergence_selection (P0|P1|MERGED|NEITHER) — the open cards:\n${JSON.stringify(cards)}` : `divergence_selections = [] (the bundle is fully settled — no open divergences remain).`)
-  // F7: the round-two prompt carries THAT head's exchange evidence — the other head's answers to its
+  // The round-two prompt carries THAT head's exchange evidence — the other head's answers to its
   // OWN standing findings, the executable-check transcripts where one ran, and the changes Plato
   // already applied. Attribution is only ever "the other head" — no identity, receipt, model, or
   // token rides in (the blindness rails extend here, test-asserted).
@@ -3753,7 +3736,7 @@ const runTwinCouncilRatify = async () => {
     `You are the OTHER head, answering blocking findings raised against the master plan, blind and independent.\n\n` +
     `${ratifyInputs}\n\n<findings-to-answer>\n${findings.map((f) => `- ${f.id}: ${f.claim} → required_change: ${f.required_change}`).join('\n')}\n</findings-to-answer>\n\n` +
     `<task>${ANSWER_TASK} Emit answers first; reasoning is optional and under 50 words. ${PAYLOAD_FIRST}</task>`
-  // F8: an answer set is RELATIONALLY validated — exactly one answer per requested finding, no unknown
+  // An answer set is RELATIONALLY validated — exactly one answer per requested finding, no unknown
   // or duplicate ids, enum-legal, a REFUTE evidence-bound. An invalid set is a failed exchange duty by
   // the ANSWERING head ⇒ DEGRADED naming it (a schema-valid-but-empty set no longer sails through).
   // Identity is the SCRIPT-assigned R-key (canonicalizeRatifyFindings) — the model's finding_id is a label.
@@ -3773,14 +3756,14 @@ const runTwinCouncilRatify = async () => {
     return null
   }
   // runBlindVerdict — the sealed-before-exposed pair: Fable and receipt-attested Sol rule blind, in
-  // parallel. Sol death / invalid receipt / failed cross-check ⇒ DEGRADED (constitution §8: a missing
+  // parallel. Sol death / invalid receipt / failed cross-check ⇒ DEGRADED (a missing
   // head is degradation, not deadlock). BLINDNESS RAILS: the fable prompt never mentions
   // codex/receipt/session/Sol; the sol packet never mentions fable; neither reveals the plan's
   // authorship path or the run token/seed.
   const runBlindVerdict = async (phaseTag, suffix, bH, pH, exchange, cards) => {
     const sinkF = {}, sinkS = {}
     const ex = exchange || {}
-    // Sol-side exchange evidence (F7) rides the packet + one briefBody line; the fable-side rides the
+    // Sol-side exchange evidence rides the packet + one briefBody line; the fable-side rides the
     // <exchange-evidence> prompt block. Both carry ONLY that head's own-finding answers/transcripts.
     const solBrief = `${bindingLine(bH, pH, cards)}\nRubric:\n${COUNCIL_RUBRIC}` +
       (ex.sol ? `\nExchange evidence for YOUR prior blocking findings (the other head's answers, the executable-check transcripts, the applied changes) rides in the packet's exchange field; the plan file is the AMENDED artifact.` : '')
@@ -3801,7 +3784,7 @@ const runTwinCouncilRatify = async () => {
     return { degraded: false, rF, rS, sinkF, sinkS, solCross }
   }
   // runSolAnswerLeg — the Sol side of the answer exchange (receipt-attested, phase ANSWER_EXCHANGE).
-  // Returns sink + cross so the ANSWER_EXCHANGE_SEALED checkpoint can carry provenance + receipt (F10).
+  // Returns sink + cross so the ANSWER_EXCHANGE_SEALED checkpoint can carry provenance + receipt.
   const runSolAnswerLeg = async (findings) => {
     const sink = {}
     const sol = solWrapperPrompt({ phaseTag: 'ANSWER_EXCHANGE', attempt: 1, effort: 'high', payloadSchema: ANSWER_SCHEMA, taskText: ANSWER_TASK, briefBody: `Findings to answer:\n${findings.map((f) => `- ${f.id}: ${f.claim} → required_change: ${f.required_change}`).join('\n')}`, packetObj: { master_plan: masterPlanFile, evidence: evidenceDocs, findings } })
@@ -3814,11 +3797,11 @@ const runTwinCouncilRatify = async () => {
   }
 
   // ── ratify-anchor r1: hash the (possibly Plato-revised) master plan — the binding plan_sha256.
-  //    F3: ONLY a real 64-hex digest binds; anything else degrades — never a guessed/stale hash. ──
+  //    ONLY a real 64-hex digest binds; anything else degrades — never a guessed/stale hash. ──
   const ra = await agent(planHashPrompt(masterPlanFile), { label: 'thoth:ratify-anchor:r1', phase: phaseName, model: 'haiku', schema: PLAN_HASH_SCHEMA })
   const planHash = ra && typeof ra.plan_sha256 === 'string' && SHA64_RE.test(ra.plan_sha256) ? ra.plan_sha256 : null
   if (!planHash) { await degradeCouncil('evidence', 'ratify-anchor produced no valid plan hash', phaseName); return }
-  // AMB-CLOSER-1: on the render path bundleH is the REAL councilBundleHash (the bundle the signatures bind);
+  // On the render path bundleH is the REAL councilBundleHash (the bundle the signatures bind);
   // off it (councilBundle null) the legacy empty bundle binds the plato-synthesized plan (resume-reuse).
   const bundleH = renderPath ? councilBundleHash : buildDecisionBundle({ common_trunk: { master_plan_file: masterPlanFile, plan_sha256: planHash, milestones: (synth && synth.milestones) || [] }, settled_decisions: {}, open_divergences: [], renderer_version: RENDERER_VERSION, evidence_manifest_hash: evidenceManifestHash }).hash
   const r1Cards = openCardsAt()
@@ -3826,24 +3809,24 @@ const runTwinCouncilRatify = async () => {
   // sealFromSelections — dual APPROVE: SETTLE the bundle from the AGREED divergence_selections (the
   // settleNegotiation idiom; agreed-absent leaves; agreed MERGED ⇒ gated escalation, no value channel;
   // a selection disagreement is persistent divergence ⇒ deadlock), rebuild + FINAL render, then bind the
-  // certificate to { input bundle hash, renderer_version, RESULTING plan hash } (AMB-CLOSER-1.i). A
+  // certificate to { input bundle hash, renderer_version, RESULTING plan hash }. A
   // fully-settled bundle (no open cards) seals directly over the already-rendered plan.
   const sealFromSelections = async (rv, bH, pH, cards, ckptPhase, ph, laddered) => {
     const mF = selMapOf(rv.rF), mS = selMapOf(rv.rS)
     const adds = []
-    const agreedSel = [] // B3R1-12: the ratify-agreed cards' SELECTION IDENTITIES (id + chosen side) — part
+    const agreedSel = [] // the ratify-agreed cards' SELECTION IDENTITIES (id + chosen side) — part
     const disagreed = [] //           of the final selection map, threaded whole into the ladder so the atomic
     for (const card of cards) { //     combination check spans agreed AND laddered selections against ALL edges.
       const a = mF.get(String(card.divergence_id)), b = mS.get(String(card.divergence_id))
       if (a !== b) { disagreed.push(card); continue } // a still-open divergence the heads resolved differently
       if (a === 'MERGED') { await escalateCouncil(`an agreed MERGED selection at ratify has no value channel (the negotiation was the merging venue) — '${card.divergence_id}'`, ph); return }
-      agreedSel.push({ divergence_id: String(card.divergence_id), selection: a }) // B3R1-12: EVERY agreed card's identity joins the final selection map — before the value-specific continues (NEITHER + agreed-absent), so the ladder's atomic check spans the COMPLETE agreed selection set against all edges.
+      agreedSel.push({ divergence_id: String(card.divergence_id), selection: a }) // EVERY agreed card's identity joins the final selection map — before the value-specific continues (NEITHER + agreed-absent), so the ladder's atomic check spans the COMPLETE agreed selection set against all edges.
       if (a === 'NEITHER') continue
       const v = a === 'P0' ? card.position_0 : card.position_1
       if (v && typeof v === 'object' && v.absent === true) continue
       adds.push({ topic: card.topic, value: v, slot: a, ordinal: null })
     }
-    // W5: a still-open-divergence disagreement is NOT a certificate and NOT (yet) a deadlock — the
+    // A still-open-divergence disagreement is NOT a certificate and NOT (yet) a deadlock — the
     // fresh-context re-adjudication ladder rules the opposed DIVERGENCES. A disagreement that survives a
     // fresh round (laddered) IS the honest COUNCIL_DEADLOCK terminal (the ladder never runs twice).
     if (disagreed.length) {
@@ -3852,7 +3835,7 @@ const runTwinCouncilRatify = async () => {
       return
     }
     let resultingPlanHash = pH
-    // B3R1-9: whenever cards EXISTED this round and the selections agree, ALWAYS rebuild the bundle with
+    // Whenever cards EXISTED this round and the selections agree, ALWAYS rebuild the bundle with
     // open_divergences:[] and RE-RENDER — even with zero adds (every selection NEITHER/absent) — so the
     // certified plan is the deterministic FINAL plan with NO OPEN blocks. Off-card rounds (cards.length 0)
     // seal directly over the already-rendered plan.
@@ -3872,18 +3855,18 @@ const runTwinCouncilRatify = async () => {
   }
 
   // ════════════════════════════════════════════════════════════════════════════════════════════════
-  // ── W5: the fresh-context re-adjudication ladder (§7 / b3-design §W5). It fires ONLY on a receipt-
+  // ── The fresh-context re-adjudication ladder. It fires ONLY on a receipt-
   //    complete dual-APPROVE whose divergence_selections OPPOSE on still-open cards — a card-less verdict
   //    deadlock stays COUNCIL_DEADLOCK (the ladder rules DIVERGENCES only). For each opposed divergence it
   //    runs the 2×2 counterbalanced fresh cells (freshRoundSchedule → normalizeCellVerdict → aggregateHead
   //    → aggregateCouncil, never majority-washed). Outcomes: dual-decisive-agreement ⇒ adopt as a bundle
   //    amendment → a FRESH RATIFY round (never a direct certificate); instability / decisive-vs-no_decision
-  //    ⇒ the honest ambiguity terminal (Deviation 1 — no fresh drafting cycle in B3); stable opposition ⇒
+  //    ⇒ the honest ambiguity terminal (no fresh drafting cycle); stable opposition ⇒
   //    the cascade (reference reduction → one dual-signed rubric amendment + rerule → sealReversibility ⇒
   //    provisional adoption + MEL ⇒ twin_deadlock_resolved, or the gated/deadlock terminal). ──
   // ════════════════════════════════════════════════════════════════════════════════════════════════
   const FRESH_MAX_DIVERGENCES = 4
-  const FRESH_CARD_MAX_BYTES = 8192 // the iiA canonical-packet bound idiom, per-card
+  const FRESH_CARD_MAX_BYTES = 8192 // the canonical-packet bound idiom, per-card
   // gatedOrDeadlock — the mode-honest no-adopt terminal: an operator-attended run gets the gated
   // checkpoint (GATED_ESCALATION), an unattended run the honest COUNCIL_DEADLOCK (NO stage_completed,
   // last ratified artifact preserved). Neither changes a substantive verdict; both keep the Law blocked.
@@ -3897,10 +3880,10 @@ const runTwinCouncilRatify = async () => {
   const freshCellPacket = (call, card, clarification) => {
     const byLetter = call.label_mapping === 'swapped' ? { K: card.position_1, M: card.position_0 } : { K: card.position_0, M: card.position_1 }
     const order = call.presentation_order === 'M_then_K' ? ['M', 'K'] : ['K', 'M']
-    // B3R1-13: the sample index + its FIXED probe framing ride the FROZEN packet, so the three high-tier
+    // The sample index + its FIXED probe framing ride the FROZEN packet, so the three high-tier
     // samples of a cell are genuinely distinct (and the FRESH_CARDS_SEALED seat hash BINDS the sample
     // indexes). temperature is recorded honestly (the host does not apply it; the framing carries the intent).
-    // B3R1-11: a dual-signed rubric clarification (rerule ONLY) rides the FROZEN packet so every rerule cell
+    // A dual-signed rubric clarification (rerule ONLY) rides the FROZEN packet so every rerule cell
     // rules under COUNCIL_RUBRIC + the identical signed clarification (null on a normal round).
     return {
       card_id: call.card_id,
@@ -4000,8 +3983,8 @@ const runTwinCouncilRatify = async () => {
     if (!rr) return
     const rv = await runBlindVerdict('RATIFY_FRESH', 'rFresh', councilBundleHash, rr.plan_hash, null, [])
     if (rv.degraded) return
-    // B3R1-10: the RATIFY_FRESH verdicts pass the SAME ratification rails as RATIFY_1/2 —
-    // validateRatification over the current ctx, the F2 verdict-shape rail, the artifact-hash echo, and the
+    // The RATIFY_FRESH verdicts pass the SAME ratification rails as RATIFY_1/2 —
+    // validateRatification over the current ctx, the verdict-shape rail, the artifact-hash echo, and the
     // dual-APPROVE gate. A malformed/wrong-hash verdict is a missing head ⇒ DEGRADED; a VALID substantive
     // BLOCK/NEITHER is a live block ⇒ the honest COUNCIL_DEADLOCK terminal (never 'certificate degradation').
     const ctx = { bundle_hash: councilBundleHash, open_divergence_ids: [], compatibility_edges: [] }
@@ -4020,10 +4003,10 @@ const runTwinCouncilRatify = async () => {
     const freshCards = [...blk(rv.rF), ...blk(rv.rS)].map((f) => ({ finding_id: f.finding_id, claim: f.claim, required_change: f.required_change }))
     await deadlockCouncil(freshCards.length ? freshCards : [{ finding_id: 'ratify-fresh', claim: 'the fresh ratify round did not dual-APPROVE', required_change: 'operator resolution' }], ph, 'the fresh-round adoption re-entered ratification and drew a live BLOCK/NEITHER from a valid seat — an honest deadlock, operator resolution required (a live block is never certificate degradation)')
   }
-  // B3R1-12/14: sealProvisional — ONE twin_deadlock_resolved terminal over the FULL accumulated settlement
+  // sealProvisional — ONE twin_deadlock_resolved terminal over the FULL accumulated settlement
   // (settled adds + EVERY provisionally-adopted two-way door). The open divergences clear only because every
   // card reached a resolution (settled or provisional); a combined MEL NAMES every provisional adoption. It
-  // exposes the canonical certificate (B3R1-14) and seals the DEADLOCK_RESOLVED master_plan row build reads.
+  // exposes the canonical certificate and seals the DEADLOCK_RESOLVED master_plan row build reads.
   // NEVER twin_ratified.
   const sealProvisional = async (adds, provisionalList, ph) => {
     const provAdds = provisionalList.map((p) => p.add).filter(Boolean)
@@ -4041,10 +4024,10 @@ const runTwinCouncilRatify = async () => {
     const mel = provisionalList.length === 1
       ? primary.mel
       : buildMelRecord({ dissent: provisionalList.map((p) => `'${p.card.topic}' adopted ${p.side} by the reversibility rule`).join('; '), limitation: `${provisionalList.length} decisions adopted PROVISIONALLY (reversible two-way doors) — revisit if any assumption breaks`, reviewTrigger: { at_milestone: 'the milestone(s) that consume these decisions' }, openIssues: provisionalList.flatMap((p) => [{ subsystem: p.card.topic, note: 'provisional reversibility adoption — validate the choice in build' }, { subsystem: p.card.topic, note: 'the losing side remains a viable fallback' }]) })
-    // B3R2-1: the certificate binds template_hash + run_token_hash (alongside bundle_hash + plan_hash) so
+    // The certificate binds template_hash + run_token_hash (alongside bundle_hash + plan_hash) so
     // the single certificate hash pins ALL FIVE bindings build re-verifies before it trusts this terminal.
     const certificate = { renderer_version: rendererVer, bundle_hash: councilBundleHash, plan_hash: rr.plan_hash, template_hash: templateHash, run_token_hash: runTokenHash, adopted_divergence: primary.card.divergence_id, adopted_side: primary.side, door: primary.door, adopted: provisionalList.map((p) => ({ divergence_id: p.card.divergence_id, side: p.side, door: p.door })), mel }
-    // B3R2-1: PERSIST the certificate reloadably (the B3R1-7 scribe+hash idiom) — a councilDir file whose
+    // PERSIST the certificate reloadably (the scribe+hash idiom) — a councilDir file whose
     // sha equals the certificate_hash bound into the terminal row. Build RELOADS it, re-anchors the CURRENT
     // plan, and verifies plan/bundle/certificate/template/run-token before advancing; a terminal build
     // cannot rehydrate must never seal, so a persist mismatch is a gated escalation (never a stale advance).
@@ -4066,7 +4049,7 @@ const runTwinCouncilRatify = async () => {
   }
   // resolveReversibility — classify ONE opposed card's reversibility (blind pair, byte-owned Sol). Returns
   // { provisional: {card, side, mel, door, add, sel} } (a two-way door) or { gated: true } (both one-way / a
-  // dead classification seat). It NEVER terminates — the ladder aggregates and seals once (B3R1-12).
+  // dead classification seat). It NEVER terminates — the ladder aggregates and seals once.
   const resolveReversibility = async (card, ph) => {
     const fSink = {}
     const revPrompt =
@@ -4089,8 +4072,8 @@ const runTwinCouncilRatify = async () => {
     return { provisional: { card, side: seal.adopt, mel, door: seal.door, add: adoptAddFor(card, seal.adopt), sel: { divergence_id: String(card.divergence_id), selection: seal.adopt } } }
   }
   // resolveRubricThenReversibility — ONE reference-unsettled card through the rubric rung (dual-signed
-  // clarification + rerule, B3R1-11) then reversibility. Returns { settled:{add,sel} } | { provisional } |
-  // { ambiguity } | { gated }. It NEVER terminates the ladder (B3R1-12 — the ladder aggregates + seals once).
+  // clarification + rerule) then reversibility. Returns { settled:{add,sel} } | { provisional } |
+  // { ambiguity } | { gated }. It NEVER terminates the ladder (the ladder aggregates + seals once).
   const resolveRubricThenReversibility = async (card, ph) => {
     const rubricPrompt =
       `A council divergence over the decision '${card.topic}' is deadlocked and the RUBRIC may be indeterminate.\n` +
@@ -4101,18 +4084,18 @@ const runTwinCouncilRatify = async () => {
       () => gateAgent(rubricPrompt, { label: `fable:rubric-amend:${card.divergence_id}`, phase: ph, model: CLAUDE_HEAD_MODEL, effort: 'high', twoHeads: 'required', schema: RUBRIC_AMEND_SCHEMA, provenance: {} }),
       () => gateAgent(rubricSol.prompt, { label: `sol:rubric-amend:${card.divergence_id}`, phase: ph, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(RUBRIC_AMEND_SCHEMA), provenance: rSink })
     ])
-    // B3R1-11: the Sol rubric leg is BYTE-OWNED — the invocation-exact cross-check must ledger_verify it.
+    // The Sol rubric leg is BYTE-OWNED — the invocation-exact cross-check must ledger_verify it.
     let sRubCross = { ledger_verified: false }
     if (sRubEnv != null && rSink.receipt_verified === true) sRubCross = await runSolByteOwnedCrossCheck(`sol:rubric-amend:${card.divergence_id}`, `RUBRIC-${card.divergence_id}`, 1, rubricSol.files.out, rSink, sRubEnv, rubricSol.promptSha, rubricSol.packetSha, ph)
     pushSolReceipt(`sol:rubric-amend:${card.divergence_id}`, rSink, sRubCross)
     const solRub = (sRubEnv != null && rSink.receipt_verified === true && sRubCross.ledger_verified === true) ? sRubEnv : null
-    // B3R1-11: dual-sign requires EXACT byte equality of the two clarification strings — NO normalization
+    // Dual-sign requires EXACT byte equality of the two clarification strings — NO normalization
     // (no lowercase, no whitespace collapse). 'Use P0' and 'use   p0' are DIFFERENT bytes ⇒ NOT dual-signed.
     // (The trim()!=='' guard only rejects an empty/whitespace-only clarification; it is not part of the
     // equality comparison — both sides are already byte-identical when it runs.)
     const exactClar = !!(fRub && solRub && typeof fRub.clarification === 'string' && typeof solRub.clarification === 'string' && fRub.clarification === solRub.clarification && fRub.clarification.trim() !== '')
     const bothSign = !!(fRub && solRub && fRub.sign === true && solRub.sign === true && exactClar)
-    // B3R1-11: FREEZE the EXACT dual-signed clarification bytes — sha256 of the raw string bytes (not
+    // FREEZE the EXACT dual-signed clarification bytes — sha256 of the raw string bytes (not
     // canonicalJson) into the RUBRIC_CHECK checkpoint — and supply ONLY these exact bytes to the rerule so
     // every rerule cell rules under COUNCIL_RUBRIC + the identical text BOTH heads signed.
     const signedClarification = bothSign ? String(fRub.clarification) : null
@@ -4129,13 +4112,13 @@ const runTwinCouncilRatify = async () => {
   }
   // runFreshRoundLadder — the ladder over the opposed still-open divergence cards (+ the already-AGREED
   // adds the seal round settled). Cost ceilings BEFORE dispatch; then the 2×2 rounds, the checkpoints,
-  // atomic compatibility, and the outcome routing. B3R1-12: agreedSel = the ratify-agreed cards' selection
+  // atomic compatibility, and the outcome routing. agreedSel = the ratify-agreed cards' selection
   // identities (id + side) and allEdges = the compatibility edges of the COMPLETE open-card partition
   // (agreed + disagreed) — both threaded whole so the final atomic-combination check validates the ENTIRE
   // final selection map (agreed AND laddered) against ALL edges before the single seal, never just the
   // disagreed subset (an incompatibility joining an agreed selection to a ladder-resolved one is caught).
   const runFreshRoundLadder = async (cards, agreedAdds, agreedSel, allEdges, ph) => {
-    // Deliverable 1 — cost ceilings BEFORE any dispatch (a flood/oversize is a DECISION, never summarized).
+    // Cost ceilings BEFORE any dispatch (a flood/oversize is a DECISION, never summarized).
     if (cards.length > FRESH_MAX_DIVERGENCES) { await escalateCouncil(`the fresh-round ladder would carry ${cards.length} still-open divergences, over the cap of ${FRESH_MAX_DIVERGENCES} — a divergence flood is a gated operator checkpoint, never a budget explosion`, ph); return }
     for (const card of cards) {
       const bytes = utf8ByteLength(canonicalJson({ position_0: card.position_0, position_1: card.position_1, evidence_refs: card.evidence_refs || [], compatibility_edges: card.compatibility_edges || [] }))
@@ -4155,20 +4138,20 @@ const runTwinCouncilRatify = async () => {
     // FRESH_CELLS_SETTLED — the script-only aggregation barrier (0 seats).
     await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'FRESH_CELLS_SETTLED', decision_bundle_hash: councilBundleHash, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: {}, seat_provenance: { routes: routes.map((c, i) => ({ divergence_id: cards[i].divergence_id, route: c.route, class: c.class })) }, codex_receipt_hash: null, status: 'sealed' }, ph)
     log(`FRESH ROUND: ${cards.length} divergence(s) re-adjudicated — ${routes.map((c, i) => `${cards[i].divergence_id}:${c.route}`).join(', ')}`)
-    // Outcome routing (§7 aggregation rules + Deviation 1).
+    // Outcome routing (aggregation rules).
     if (routes.some((c) => c.route === 'ambiguity')) {
       const amb = routes.map((c, i) => `${cards[i].divergence_id}:${c.class}`).join(', ')
-      await gatedOrDeadlock(`the fresh round is AMBIGUOUS (${amb}) — instability or a decisive-vs-no_decision split; B3 records the ambiguity and terminates honestly (a fresh drafting cycle is v3.1 scope, never a silent adoption)`, cards, ph)
+      await gatedOrDeadlock(`the fresh round is AMBIGUOUS (${amb}) — instability or a decisive-vs-no_decision split; the council records the ambiguity and terminates honestly (a fresh drafting cycle is v3.1 scope, never a silent adoption)`, cards, ph)
       return
     }
-    // B3R1-12: EXPLICIT settled/open partition — thread EVERY card to a resolution. Agreement cards settle;
+    // EXPLICIT settled/open partition — thread EVERY card to a resolution. Agreement cards settle;
     // structural cards flow reference → rubric → reversibility (a LOOP over ALL of them, never just [0]);
     // fresh agreements + reference resolutions + rerule agreements accumulate as adds; provisional (two-way
     // door) adoptions accumulate; an unresolved card reaches a terminal that NAMES it. The final combination
     // validates atomically (compatibility edges) before ONE freshReRatify / sealProvisional, and the open set
     // clears only for entries actually settled — nothing is silently dropped.
     const adds = [...agreedAdds]
-    // B3R1-12: the combination selection map STARTS with the ratify-agreed selection identities so the final
+    // The combination selection map STARTS with the ratify-agreed selection identities so the final
     // atomic check spans agreed AND laddered selections (a value-only add carries no selection identity).
     const comboSel = [...(Array.isArray(agreedSel) ? agreedSel : [])] // { divergence_id, selection }
     const structural = []
@@ -4196,15 +4179,15 @@ const runTwinCouncilRatify = async () => {
       const res = await resolveRubricThenReversibility(card, ph)
       if (councilTerminal !== null) return
       if (res.terminal) return
-      if (res.ambiguity) { await gatedOrDeadlock(`the rubric rerule for '${card.divergence_id}' is AMBIGUOUS — B3 records it and terminates honestly`, [card], ph); return }
+      if (res.ambiguity) { await gatedOrDeadlock(`the rubric rerule for '${card.divergence_id}' is AMBIGUOUS — the stage records it and terminates honestly`, [card], ph); return }
       if (res.gated) { await gatedOrDeadlock(`the fresh-round cascade found NO two-way door for '${card.divergence_id}' (both options one-way, or a reversibility seat died) — reference reduction and the rubric amendment did not settle it either`, [card], ph); return }
       if (res.settled) { if (res.settled.add) adds.push(res.settled.add); comboSel.push(res.settled.sel) }
       else if (res.provisional) { provisionalList.push(res.provisional); comboSel.push(res.provisional.sel) }
     }
     // (d) the FINAL combination validates atomically (compatibility edges) before the ONE seal — an
-    // incompatible combination is never adopted (§7).
+    // incompatible combination is never adopted.
     const selOf = new Map(comboSel.map((s) => [s.divergence_id, s.selection]))
-    // B3R1-12: check against ALL edges of the complete open-card partition (agreed + disagreed), not just
+    // Check against ALL edges of the complete open-card partition (agreed + disagreed), not just
     // the disagreed subset — an edge joining an agreed selection to a ladder-resolved one is now detectable.
     const edges = Array.isArray(allEdges) ? allEdges : []
     const incompatible = edges.some((edge) => { const pair = Array.isArray(edge) ? edge : [edge && edge.left, edge && edge.right]; return Array.isArray(pair) && pair.length === 2 && pair.every((m) => m && selOf.get(String(m.divergence_id)) === m.selection) })
@@ -4220,39 +4203,39 @@ const runTwinCouncilRatify = async () => {
   const r1Ctx = { bundle_hash: bundleH, open_divergence_ids: openIdsOf(r1Cards), compatibility_edges: edgesOf(r1Cards) }
   const vF1 = validateRatification(r1.rF, r1Ctx)
   const vS1 = validateRatification(r1.rS, r1Ctx)
-  // F2 rail: an empty, duplicate-id, or evidence-free BLOCK/NEITHER is ALSO an invalid verdict — a
+  // The verdict-shape rail: an empty, duplicate-id, or evidence-free BLOCK/NEITHER is ALSO an invalid verdict — a
   // standing-free block would otherwise be clearable by a bare round-two APPROVE.
   const shapeF1 = verdictShapeError(r1.rF), shapeS1 = verdictShapeError(r1.rS)
   if (!vF1.valid || !vS1.valid || shapeF1 || shapeS1) {
     // A head that failed to seal a VALID verdict (bad echo / malformed / evidence-free findings / a
-    // selection that misses or over-covers the open set) is a missing head (constitution §8) — fail closed.
+    // selection that misses or over-covers the open set) is a missing head — fail closed.
     const fBad = !vF1.valid || !!shapeF1, sBad = !vS1.valid || !!shapeS1
     await degradeCouncil(fBad && sBad ? 'both' : (fBad ? 'fable' : 'sol'), `invalid ratification at RATIFY_1 (${[fBad ? `fable${shapeF1 ? `: ${shapeF1}` : ''}` : null, sBad ? `sol${shapeS1 ? `: ${shapeS1}` : ''}` : null].filter(Boolean).join('; ')})`, phaseName)
     return
   }
   if (r1.rF.verdict === 'APPROVE' && r1.rS.verdict === 'APPROVE') { await sealFromSelections(r1, bundleH, planHash, r1Cards, 'RATIFY_1_SEALED', phaseName); return }
 
-  // ── Any BLOCK/NEITHER ⇒ exactly ONE answer exchange (constitution §3). A NEITHER is a legal verdict
-  //    (§7): its findings name the defects, so it is treated like a BLOCK for the exchange. ──
+  // ── Any BLOCK/NEITHER ⇒ exactly ONE answer exchange. A NEITHER is a legal verdict:
+  //    its findings name the defects, so it is treated like a BLOCK for the exchange. ──
   await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'RATIFY_1_SEALED', decision_bundle_hash: bundleH, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: { [slotOf('fable')]: sha256Hex(canonicalJson(r1.rF)), [slotOf('sol')]: sha256Hex(canonicalJson(r1.rS)) }, seat_provenance: { [slotOf('fable')]: seatProv(r1.sinkF, 'fable'), [slotOf('sol')]: seatProv(r1.sinkS, 'sol') }, codex_receipt_hash: r1.solCross.codex_receipt_hash, status: 'sealed' }, phaseName)
   const standingFindings = (r) => (r.verdict === 'BLOCK' || r.verdict === 'NEITHER') ? (Array.isArray(r.findings) ? r.findings : []) : []
-  // A1 ⟨DSGN-B3-3⟩: after RATIFY_1 freezes, the SCRIPT assigns canonical R-<round>-<slot>-<nnn> keys
+  // After RATIFY_1 freezes, the SCRIPT assigns canonical R-<round>-<slot>-<nnn> keys
   // (canonicalizeRatifyFindings) — the identity through the ENTIRE answer-exchange / exec-check /
   // standing-block / RATIFY_2 section. The model's finding_id is a NON-authoritative label; a model-order
-  // swap can never move a key. B3R1-1: each head's blocks key under ITS seed-assigned slot (slotOf).
+  // swap can never move a key. Each head's blocks key under ITS seed-assigned slot (slotOf).
   const fableBlocks = canonicalizeRatifyFindings('1', { [slotOf('fable')]: standingFindings(r1.rF) })
   const solBlocks = canonicalizeRatifyFindings('1', { [slotOf('sol')]: standingFindings(r1.rS) })
   // ── Executable-check floor FIRST: a check is DATA until the bounded executor runs it — never let a
-  //    head run its own check. Identity is SEAT-SCOPED (F4: `head|finding_id` — a same-string id from
+  //    head run its own check. Identity is SEAT-SCOPED (`head|finding_id` — a same-string id from
   //    the other head can never alias; the scoping lives in the SCRIPT's keys, never in a prompt).
-  //    Execution is FILE-BOUND (F9): the check text lands verbatim in a script file and ONE timeout
+  //    Execution is FILE-BOUND: the check text lands verbatim in a script file and ONE timeout
   //    wraps the whole thing. Three states: 'confirmed' (exit 0, id-matched — the defect is
   //    demonstrably present, class executed_check), 'refuted' (clean nonzero, id-matched — retired
   //    MECHANICALLY), 'unrun' (no projectPath / mute / garbled / id-mismatched transcript, OR the
   //    infrastructure exits 124/126/127 — timeout / not-executable / not-found mean the check never
-  //    truly RAN, so it can neither confirm nor refute; the block STANDS as proposed_check. Scope
-  //    ruling item 2 — the residual misclassification risk of a dependency failure deep in a compound
-  //    is ACCEPTED and recorded; the blocking head re-rules at RATIFY_2 with the state visible). ──
+  //    truly RAN, so it can neither confirm nor refute; the block STANDS as proposed_check. The
+  //    residual misclassification risk of a dependency failure deep in a compound is ACCEPTED and
+  //    recorded; the blocking head re-rules at RATIFY_2 with the state visible). ──
   const seatKey = (head, id) => `${head}|${id}`
   const checkState = new Map() // seatKey → 'confirmed' | 'refuted' | 'unrun'
   const checkExit = new Map()  // seatKey → the id-matched exit code (null when the check never ran) — the TYPED evidence heads see
@@ -4280,7 +4263,7 @@ const runTwinCouncilRatify = async () => {
   if (remainingFable.length) {
     const ans = await runSolAnswerLeg(remainingFable)
     if (ans.degraded) return
-    // F8: relational validation — a schema-valid-but-incomplete answer set is a FAILED exchange duty
+    // Relational validation — a schema-valid-but-incomplete answer set is a FAILED exchange duty
     // by the ANSWERING head (here Sol) ⇒ DEGRADED naming it.
     const err = answerSetError(remainingFable, ans.payload)
     if (err) { await degradeCouncil('sol', `invalid answer set from the Sol head (${err})`, phaseName); return }
@@ -4296,13 +4279,13 @@ const runTwinCouncilRatify = async () => {
     if (err) { await degradeCouncil('fable', `invalid answer set from the Fable head (${err})`, phaseName); return }
     fableAnswers = fa
   }
-  // ── Seal the exchange barrier FIRST (scope ruling item 3): ANSWER_EXCHANGE_SEALED is bound to
+  // ── Seal the exchange barrier FIRST: ANSWER_EXCHANGE_SEALED is bound to
   //    bundle₁ — the artifact the answers were RENDERED AGAINST — and lands BEFORE Plato consumes the
   //    answers and BEFORE the rehash, so the sealed record can never absorb a post-hoc amendment.
   //    It carries the paired answer artifacts + both answer-leg provenances + the Sol answer leg's
-  //    receipt hash (F10) — an unanswered side hashes its empty {answers:[]} honestly. ──
+  //    receipt hash — an unanswered side hashes its empty {answers:[]} honestly. ──
   await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'ANSWER_EXCHANGE_SEALED', decision_bundle_hash: bundleH, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: { [slotOf('fable')]: sha256Hex(canonicalJson(fableAnswers)), [slotOf('sol')]: sha256Hex(canonicalJson(solAnswers)) }, seat_provenance: { [slotOf('fable')]: fableAnswerSink ? seatProv(fableAnswerSink, 'fable') : null, [slotOf('sol')]: solAnswerSink ? seatProv(solAnswerSink, 'sol') : null }, codex_receipt_hash: solAnswerCross && solAnswerCross.codex_receipt_hash ? solAnswerCross.codex_receipt_hash : null, status: 'sealed' }, phaseName)
-  // ACCEPTED findings amend the BUNDLE structurally (AMB-CLOSER-1.iii). Acceptance is SEAT-SCOPED (F4):
+  // ACCEPTED findings amend the BUNDLE structurally. Acceptance is SEAT-SCOPED:
   // Sol answers fable-raised findings, Fable answers sol-raised ones (a same-string R-key across heads
   // never aliases — the seat prefix scopes it). REFUTE answers retire NOTHING by themselves — the blocking
   // head re-rules having seen them (peer refutation is re-verdict input, never a script-side retirement).
@@ -4314,9 +4297,9 @@ const runTwinCouncilRatify = async () => {
     ...remainingSol.filter((f) => acceptedKeys.has(seatKey('sol', f.id))),
   ]
   const appliedChanges = acceptedFindings.map((f) => f.required_change)
-  // ── The BLOCK path (AMB-CLOSER-1.ii/iii): jointly-compatible ACCEPTED corrections apply ONCE as STRUCTURAL
+  // ── The BLOCK path: jointly-compatible ACCEPTED corrections apply ONCE as STRUCTURAL
   //    bundle amendments (each finding's typed { target_kind, key, replacement } descriptor; an ACCEPTED
-  //    finding WITHOUT one ⇒ GATED_ESCALATION — no free rewrite, plato is retired) → closure(a) → rebuild
+  //    finding WITHOUT one ⇒ GATED_ESCALATION — no free rewrite, plato is retired) → closure → rebuild
   //    → rerender+scribe → rehash. The FINAL blind re-verdict (RATIFY_2) rules over the NEW hashes; when
   //    nothing was accepted the bundle is unchanged and RATIFY_2 rules over the SAME hashes. ──
   let bundleH2 = bundleH, planHash2 = planHash
@@ -4336,7 +4319,7 @@ const runTwinCouncilRatify = async () => {
     synth = synthFromRender()
   }
   // Standing blocks per head (own prior blocking findings minus the check-refuted), with HONEST
-  // evidence classes (F5): a runner-CONFIRMED check is executed_check (a real execution happened); a
+  // evidence classes: a runner-CONFIRMED check is executed_check (a real execution happened); a
   // checked-but-unrun finding is proposed_check; an unchecked finding keeps its DECLARED class with
   // claim_type derived via claimTypeForClass — an unrecognized class stays as-is so compareEvidence
   // rules it INCOMPARABLE and the block stands (fail-closed; never coerce to scenario). At RATIFY_2
@@ -4352,7 +4335,7 @@ const runTwinCouncilRatify = async () => {
   }
   const fableStanding = remainingFable.map(standingBlockOf('fable'))
   const solStanding = remainingSol.map(standingBlockOf('sol'))
-  // F7 as bounded by scope ruling item 5: each round-two head sees, for its OWN standing findings
+  // Each round-two head sees, for its OWN standing findings
   // only — the finding itself (claim, required_change, evidence_refs, evidence_class), the other
   // head's answer (attributed ONLY as "the other head"), and the TYPED check state (state + exit
   // code ONLY — raw stdout/stderr tails NEVER enter any head prompt; they live on disk and in the
@@ -4387,7 +4370,7 @@ const runTwinCouncilRatify = async () => {
   const r2Ctx = (standing) => ({ bundle_hash: bundleH2, open_divergence_ids: openIdsOf(r2Cards), compatibility_edges: edgesOf(r2Cards), standing_blocks: standing })
   const vF2 = validateRatification(r2.rF, r2Ctx(fableStanding))
   const vS2 = validateRatification(r2.rS, r2Ctx(solStanding))
-  // A STRUCTURAL invalidity (bad echo / malformed / evidence-free findings — the F2 rail again) is a
+  // A STRUCTURAL invalidity (bad echo / malformed / evidence-free findings — the verdict-shape rail again) is a
   // missing head ⇒ DEGRADED; an unevidenced reversal is NOT structural — it leaves the prior block
   // standing (the anti-capitulation rail), which is persistent disagreement ⇒ COUNCIL_DEADLOCK below.
   const structuralErr = (v) => v.errors.some((e) => e.code !== 'unevidenced_reversal')
@@ -4399,7 +4382,7 @@ const runTwinCouncilRatify = async () => {
     return
   }
   // Persistent disagreement after RATIFY_2 (any surviving BLOCK/NEITHER, incl. dual NEITHER, or an
-  // unevidenced-reversal block that STANDS). F10: round two is a completed paired barrier — seal
+  // unevidenced-reversal block that STANDS). Round two is a completed paired barrier — seal
   // RATIFY_2_SEALED (verdict hashes + provenance + receipt) BEFORE the honest COUNCIL_DEADLOCK
   // terminal. Never synthesize, never pick a winner, never demote to a v3.0.1 label.
   await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'RATIFY_2_SEALED', decision_bundle_hash: bundleH2, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: { [slotOf('fable')]: sha256Hex(canonicalJson(r2.rF)), [slotOf('sol')]: sha256Hex(canonicalJson(r2.rS)) }, seat_provenance: { [slotOf('fable')]: seatProv(r2.sinkF, 'fable'), [slotOf('sol')]: seatProv(r2.sinkS, 'sol') }, codex_receipt_hash: r2.solCross.codex_receipt_hash, status: 'sealed' }, phaseName)
@@ -4408,15 +4391,15 @@ const runTwinCouncilRatify = async () => {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════
-// ── The Twin Council, LITE FORM (B4-2 D7): blind dual ratification of the SINGLE lite master plan.
-//    Runs at T4 on the LITE path once Athena PASSes (the deferred-hardening B4-2 target). No drafts,
+// ── The Twin Council, LITE FORM: blind dual ratification of the SINGLE lite master plan.
+//    Runs at T4 on the LITE path once Athena PASSes. No drafts,
 //    no divergence set, no answer exchange — the lite plan IS the artifact (no decision bundle exists):
-//    ONE blind required round, both heads at xhigh, Sol receipt-attested through the SAME lifted D1
+//    ONE blind required round, both heads at xhigh, Sol receipt-attested through the SAME lifted
 //    machinery (solWrapperPlan + invocation-exact cross-check). Dual-APPROVE ⇒ a lite twin_ratified
 //    certificate (renderer b42-lite/1). A BLOCK/NEITHER from a live valid seat ⇒ BLOCKED; a dead/
 //    receiptless/cross-check-failed seat or a shape-invalid/hash-mismatched verdict ⇒ DEGRADED (a
 //    missing head). Any non-RATIFIED terminal keeps the Law BLOCKED — the plan never advances as
-//    council-ratified (required-mode uniformity, plan.md r2-2). The full path's degrade idiom mirrored:
+//    council-ratified (required-mode uniformity). The full path's degrade idiom mirrored:
 //    honest labels, never a silent v3.0.1 downgrade. ──
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 const runLiteCouncilRatify = async () => {
@@ -4440,13 +4423,13 @@ const runLiteCouncilRatify = async () => {
   evidenceManifestHash = sha256Hex(canonicalJson(manifest))
   evidenceInputHashes = Object.keys(manifest).sort().map((k) => manifest[k])
   councilInitialSeq = (anchor.initial_ledger_seq === null || Number.isInteger(anchor.initial_ledger_seq)) ? anchor.initial_ledger_seq : null
-  // seed — run-bound entropy, reserved for B3 divergence-id derivation; NEVER interpolated into a prompt.
+  // seed — run-bound entropy, reserved for divergence-id derivation; NEVER interpolated into a prompt.
   councilSeedDigest = councilSeed({ protocolVersion: COUNCIL_PROTOCOL_VERSION, runToken, initialSeq: councilInitialSeq, keystoneId, templateHash })
-  // B3R1-1: the lite ratify pair also carries seed-assigned slots, but the parity is assigned only AFTER
+  // The lite ratify pair also carries seed-assigned slots, but the parity is assigned only AFTER
   // the pair validates (below), before the first slot-keyed checkpoint (LITE_RATIFY_SEALED).
 
   // The lite plan artifact IS the bundle (no decision bundle exists on lite): bundle_hash = plan_hash =
-  // sha256 of the master-plan.md bytes. F3: only a real 64-hex digest binds; a mute/invalid anchor
+  // sha256 of the master-plan.md bytes. Only a real 64-hex digest binds; a mute/invalid anchor
   // degrades — never a guessed or stale hash.
   const ra = await agent(planHashPrompt(masterPlanFile), { label: 'thoth:lite-ratify-anchor', phase: phaseName, model: 'haiku', schema: PLAN_HASH_SCHEMA })
   const planHash = ra && typeof ra.plan_sha256 === 'string' && SHA64_RE.test(ra.plan_sha256) ? ra.plan_sha256 : null
@@ -4485,14 +4468,14 @@ const runLiteCouncilRatify = async () => {
   const vF = validateRatification(rF, { bundle_hash: bundleH, open_divergence_ids: [] })
   const vS = validateRatification(rS, { bundle_hash: bundleH, open_divergence_ids: [] })
   const shapeF = verdictShapeError(rF), shapeS = verdictShapeError(rS)
-  // A shape-invalid or hash-mismatched verdict is a missing head (constitution §8) ⇒ DEGRADED (fail
+  // A shape-invalid or hash-mismatched verdict is a missing head ⇒ DEGRADED (fail
   // closed) — a malformed/standing-free block can never advance and is never a silent v3.0.1 label.
   const fBad = !vF.valid || !!shapeF, sBad = !vS.valid || !!shapeS
   if (fBad || sBad) {
     await degradeCouncil(fBad && sBad ? 'both' : (fBad ? 'fable' : 'sol'), `invalid ratification at LITE_RATIFY (${[fBad ? `fable${shapeF ? `: ${shapeF}` : ''}` : null, sBad ? `sol${shapeS ? `: ${shapeS}` : ''}` : null].filter(Boolean).join('; ')})`, phaseName)
     return
   }
-  // B3R1-1: assign the P0/P1 parity HERE — after BOTH heads returned alive AND the Sol receipt/cross-check
+  // Assign the P0/P1 parity HERE — after BOTH heads returned alive AND the Sol receipt/cross-check
   // validated AND both verdicts passed the ratification rails (the checks just above), before the first
   // slot-keyed checkpoint (LITE_RATIFY_SEALED). Seed parity is run-bound, never seat identity, never a prompt.
   fableSlot = (parseInt(councilSeedDigest.slice(0, 8), 16) % 2 === 0) ? 'P0' : 'P1'
@@ -4522,7 +4505,7 @@ const runLiteCouncilRatify = async () => {
 if (councilCapable && !liteScope && verdict && verdict.verdict === 'PASS' && councilTerminal === null) {
   await runTwinCouncilRatify()
 }
-// B4-2 D7: the T4-lite architecture ratification pair. At T4 on the LITE path the single lite plan
+// The T4-lite architecture ratification pair. At T4 on the LITE path the single lite plan
 // gains the SAME blind required pair. A PROMISED-but-tokenless conductor fails closed DEGRADED (the
 // misconfigured doctrine — never a silent v3.0.1 label, mirroring the full path's councilMisconfigured
 // branch); a token-bearing run ratifies once Athena PASSes.
@@ -4534,8 +4517,8 @@ if (councilPromised && liteScope && councilTerminal === null) {
   }
 }
 
-// ── The Law: Asimov compiles the locked acceptance gates (BLUEPRINT §5/§5.1) ──
-// A §3.4 FLOOR: the Law compiles + locks at ANY posture, lite path included. Runs only after
+// ── The Law: Asimov compiles the locked acceptance gates ──
+// A FLOOR: the Law compiles + locks at ANY posture, lite path included. Runs only after
 // Athena PASS (locking gates compiled from an unvalidated plan would lock the wrong law); every
 // failure path returns law_locked:false + reason so the conductor escalates — never a silent
 // proceed, never an unguarded build.
@@ -4548,8 +4531,8 @@ let lawChecks = [] // hoisted: the return derives law_check_count from it on eve
 if (!(verdict && verdict.verdict === 'PASS')) {
   lawReason = 'master plan never reached Athena PASS — the Law locks only a validated plan'
 } else if (councilPromised && councilTerminal !== 'RATIFIED' && councilTerminal !== 'DEADLOCK_RESOLVED') {
-  // On the twin-council path — FULL or LITE (B4-2 D7), PROMISED — a missing runToken cannot buy the way
-  // out (scope ruling item 6): the Law's precondition is Athena PASS AND either a RATIFIED certificate OR
+  // On the twin-council path — FULL or LITE, PROMISED — a missing runToken cannot buy the way
+  // out: the Law's precondition is Athena PASS AND either a RATIFIED certificate OR
   // a twin_deadlock_resolved provisional adoption (the reversibility rule's exceptional authority — an
   // MEL time-boxes its review); a DEGRADED, COUNCIL_DEADLOCK, GATED_ESCALATION, BLOCKED, or absent
   // terminal locks nothing. Sub-T4 keeps the v3.0.1 precondition.
@@ -4560,7 +4543,7 @@ if (!(verdict && verdict.verdict === 'PASS')) {
   const lawVoice = lawModel === 'opus' ? voice('opus') : ''
   const asimov = await agent(
     lawVoice +
-    `You are Asimov, the Lawgiver (BLUEPRINT §5). You compile the validated master plan's acceptance criteria ` +
+    `You are Asimov, the Lawgiver. You compile the validated master plan's acceptance criteria ` +
     `into THE LAW: one locked, executable check per SC — the gates every build slice is judged against. ` +
     `You write checks only; you never implement the product.\n\n` +
     `<inputs>\nRead (${noWander}): ${masterPlanFile}, ${docsDir}/architecture.md, ${docsDir}/tech-stack.md, ` +
@@ -4604,7 +4587,7 @@ if (!(verdict && verdict.verdict === 'PASS')) {
   )
   lawChecks = (asimov && Array.isArray(asimov.checks)) ? asimov.checks : []
   const planScIds = (asimov && Array.isArray(asimov.plan_sc_ids)) ? asimov.plan_sc_ids : []
-  // ── Deliverable 5 (AMB-CLOSER-2 + A5): on the T4-full RENDERED path the plan's SC/milestone identity is
+  // ── On the T4-full RENDERED path the plan's SC/milestone identity is
   //    the renderer's manifest — the Law is compiled FROM it and may neither MINT nor OMIT. (a) closure(b):
   //    re-validate the FINAL adopted settled set (a violation ⇒ GATED_ESCALATION, loud). (b) manifest-vs-Law:
   //    Asimov's reported plan_sc_ids AND the compiled check ids must match the rendered manifest EXACTLY
@@ -4637,7 +4620,7 @@ if (!(verdict && verdict.verdict === 'PASS')) {
   } else if (!lawChecks.length) {
     lawReason = 'Asimov produced no check manifest'
   } else {
-    // §5 coverage is ARITHMETIC, not judgment: every SC exactly one check entry. Duplicates,
+    // Coverage is ARITHMETIC, not judgment: every SC exactly one check entry. Duplicates,
     // uncovered SCs, and orphan checks all block the lock — locking a partial law would gate the
     // build against the wrong contract.
     const checkIds = lawChecks.map((c) => c.id)
@@ -4656,14 +4639,14 @@ if (!(verdict && verdict.verdict === 'PASS')) {
       log(`Asimov compiled ${lawChecks.length} check(s) (${lawChecks.filter((c) => c.kind === 'probe').length} probe spec(s)) covering ${planScIds.length} SC(s) — dry-run gate before lock`)
       // architecture.law_compiled (volume): the gates are compiled — one check per SC, dry-run next.
       await lore('architecture.law_compiled', `Asimov compiles ${lawChecks.length} check(s) over ${planScIds.length} SC(s) — dry-run before the lock`, { checks: lawChecks.length, scs: planScIds.length }, 'The Law')
-      // ── The dry-run gate (P3.5 T1, dogfood finding 1): checks are code; they execute before
+      // ── The dry-run gate: checks are code; they execute before
       // we trust them — reading is not executing. `kiln-law dryrun` is legal PRE-LOCK (no
       // lock_commit, no tamper gate, no git) and leaves ZERO evidence residue: a dry-run is a
-      // transcript, never a run record; probes stay deferred (§7's exit-78 semantics untouched).
+      // transcript, never a run record; probes stay deferred (exit-78 semantics untouched).
       // Athena's testability duty moves onto EXECUTED evidence: per check she rules honest-red
       // (ran, failed on the missing feature — the greenfield expectation) vs broken-check
       // (crashed on its own code: traceback class, usage error, missing interpreter) vs
-      // legitimately green (brownfield pre-satisfaction, recorded pre_satisfied at lock — §5.1).
+      // legitimately green (brownfield pre-satisfaction, recorded pre_satisfied at lock).
       // Where the exit code carries the verdict the CLI's classification is mechanical and
       // non-relitigable — the deterministic floor below enforces it past any sloppy PASS;
       // Athena judges only what the code cannot (ambiguous tails, green legitimacy). Broken
@@ -4688,7 +4671,7 @@ if (!(verdict && verdict.verdict === 'PASS')) {
         )
         // Fail CLOSED: a dead scribe or a failed dry-run is a blocked lock, never a shrug.
         const transcript = (dry && dry.exit === 0 && Array.isArray(dry.transcript)) ? dry.transcript : []
-        // RUN-B FINDING 1: a present-but-schema-invalid law.json is Asimov's OWN compilation
+        // A present-but-schema-invalid law.json is Asimov's OWN compilation
         // defect — the CLI transcribes it (exit 0, typed law_violations, empty transcript)
         // instead of dying, and THIS branch routes it to its author through the same bounded
         // revise cycle as a broken check. Athena is skipped for the round: the violations are
@@ -4803,19 +4786,18 @@ if (!(verdict && verdict.verdict === 'PASS')) {
         log(`Dry-run gate passed — locking`)
         // architecture.dryrun (volume): the checks ran clean pre-lock (they execute before we trust them).
         await lore('architecture.dryrun', `The gates run clean pre-lock — ${lawChecks.length} check(s) honest-red${greenLegit.length ? `, ${greenLegit.length} pre-satisfied` : ''}; the Law may lock`, { checks: lawChecks.length, pre_satisfied: greenLegit.length }, 'The Law')
-        // Index BEFORE the single lock commit (the §5 sequence): kiln-law index hashes the on-disk
+        // Index BEFORE the single lock commit: kiln-law index hashes the on-disk
         // gates and records lock_commit = HEAD (the last pre-gate commit — git content-addressing
         // means law.json can never carry the sha of the commit that contains it). The one
         // "test(law): lock acceptance gates" commit that follows carries the gates + the indexed
         // law.json; the tamper gate's git arm anchors on that commit (lock_commit's first
         // descendant touching the locked paths), so laundering is caught from the moment the
         // gates land in history. Checks the dry-run gate ruled legitimately green are recorded
-        // pre_satisfied IN the Law before index hashes it (§5.1 brownfield GREEN-at-lock — the
+        // pre_satisfied IN the Law before index hashes it (brownfield GREEN-at-lock — the
         // flip arithmetic excludes them and guards them as regressions instead).
-        // Greenfield pre-flight (P3.5 T2, dogfood finding 2): architecture runs BEFORE build's
-        // rakim git-init, so a greenfield projectPath has no repo when this leg fires — Run A's
-        // lock failed honestly on exactly that and the conductor recovered by hand. The recovery
-        // is now the contract: the lock sequence OWNS its git baseline. The branch is decided
+        // Greenfield pre-flight: architecture runs BEFORE build's
+        // rakim git-init, so a greenfield projectPath has no repo when this leg fires. The
+        // lock sequence OWNS its git baseline. The branch is decided
         // MECHANICALLY from disk (one `ls .git` probe at run time) — the greenfield flag
         // describes intent, the disk states fact — so a brownfield repo is untouched
         // byte-for-byte and build's rakim init (already idempotent: "if not a git repo") never
@@ -4835,7 +4817,7 @@ if (!(verdict && verdict.verdict === 'PASS')) {
           `(the config pairs set a LOCAL identity only where none resolves — never overwrite an existing ` +
           `one; the baseline commit is created here exactly once, never on an existing repo.)\n`
         const preSatStep = greenLegit.length
-          ? `0. FIRST edit ${lawFile} (file tools): set "pre_satisfied": true on exactly the check entr${greenLegit.length === 1 ? 'y' : 'ies'} ${greenLegit.join(', ')} — ruled legitimately green at the pre-lock dry-run (brownfield, §5.1). Change NOTHING else in the file.\n`
+          ? `0. FIRST edit ${lawFile} (file tools): set "pre_satisfied": true on exactly the check entr${greenLegit.length === 1 ? 'y' : 'ies'} ${greenLegit.join(', ')} — ruled legitimately green at the pre-lock dry-run (brownfield). Change NOTHING else in the file.\n`
           : ''
         const lock = await agent(
           `You are Thoth, the scribe — a law is only law once indexed and committed.\n\n` +
@@ -4879,7 +4861,7 @@ if (!(verdict && verdict.verdict === 'PASS')) {
 }
 if (!lawLocked) log(`THE LAW IS NOT LOCKED — ${lawReason}. The conductor must escalate; build must not start without locked gates.`)
 
-// Await the parallel design:tokens leg (lever 6) before the stage closes — no architecture agent
+// Await the parallel design:tokens leg before the stage closes — no architecture agent
 // reads the design system, so this is the convergence point; the existence check below then sees
 // the landed writes. Null on a crashed leg (already caught) — the existence verifier surfaces a
 // genuinely missing artifact in the return value, never a phantom green.
@@ -4897,7 +4879,7 @@ if (!liteScope) {
     { label: 'numerobis:handoff', phase: 'The Law', model: 'sonnet' }
   )
 } else {
-  log('Handoff folded into Plato\'s synthesis (lever 5, lite path) — no separate handoff pass')
+  log('Handoff folded into Plato\'s synthesis (lite path) — no separate handoff pass')
 }
 
 // Artifact existence check: v2 returned constructed paths without confirming the writes landed.
@@ -4913,22 +4895,22 @@ const missing = (existence && existence.missing) || []
 if (missing.length) log(`MISSING claimed artifact(s): ${missing.join(', ')}`)
 
 // The council path label + honest reason (a consumer can NEVER derive twin_ratified or second-family
-// verification from a non-council run). The PROMISED path — FULL or LITE (B4-2 D7) — is 'twin_council'
-// even when the runToken was missing (scope ruling item 6 — that run carries terminal DEGRADED, reason
+// verification from a non-council run). The PROMISED path — FULL or LITE — is 'twin_council'
+// even when the runToken was missing (that run carries terminal DEGRADED, reason
 // 'runToken absent', never a clean v301 label). Only sub-T4 (including sub-T4 lite) stays 'v301'.
 let councilPathReason = null
 if (councilPromised) councilPathReason = councilCapable ? null : 'runToken absent'
 else councilPathReason = 'sub-T4 tier'
 
-// §3.5 stage bracket: stage_completed ONLY when the Law locked — the stage's one genuine-success
+// Stage bracket: stage_completed ONLY when the Law locked — the stage's one genuine-success
 // criterion. law_locked:false (unlocked Law, blocked council, missing pluginRoot) is the conductor's
 // escalation signal, never a completion: no event.
 if (lawLocked) await runLedger('stage_completed', {}, 'The Law')
 
 return {
   master_plan_file: masterPlanFile,
-  // A5 item 6: on the T4-full path the milestone_count / surfaces / milestone list populate from
-  // renderMilestones (the renderer's ordered records — no sort replication, ruling AMB-iiB-B); every
+  // On the T4-full path the milestone_count / surfaces / milestone list populate from
+  // renderMilestones (the renderer's ordered records — no sort replication); every
   // other path reads plato's synth. renderMilestones records carry final_id (the assigned M-id).
   milestone_count: renderMilestones !== null ? renderMilestones.length : (synth && synth.milestone_count),
   validation: verdict && verdict.verdict,
@@ -4937,14 +4919,14 @@ return {
   scope: foundation && foundation.scope,
   lite_path: liteScope,
   surfaces: renderMilestones !== null ? renderMilestones.map((m) => ({ id: m.final_id, surface: m.surface })) : (synth && synth.milestones || []).map((m) => ({ id: m.id, surface: m.surface })),
-  // The Law (§5): law_locked:false + law_reason is the conductor's escalation signal — the
+  // The Law: law_locked:false + law_reason is the conductor's escalation signal — the
   // build stage must never start against unlocked gates.
   law_locked: lawLocked,
   law_reason: lawLocked ? null : lawReason,
   law_file: lawFile,
   law_check_count: lawChecks.length,
   missing,
-  // Twin Council (v3.0.2 B4-1b-ii) — ONE additive field. On every v3.0.1 route path:'v301' with an
+  // Twin Council — ONE additive field. On every v3.0.1 route path:'v301' with an
   // honest reason; on the council path the terminal + certificate + receipts tell the true story.
   council: {
     eligible: councilPromised,
@@ -4952,10 +4934,10 @@ return {
     path: councilPromised ? 'twin_council' : 'v301',
     terminal: councilTerminal,
     certificate: councilCertificate,
-    // the RETAINED constructor record (F10): twin_degraded / council_deadlock (with its disagreement
+    // the RETAINED constructor record: twin_degraded / council_deadlock (with its disagreement
     // cards) — null when RATIFIED (the certificate IS that record) and on every v3.0.1 route.
     terminal_record: councilTerminalRecord,
-    // F2 (R1-RETRY-CAUSE-NOT-EXPOSED): the failed-Claude-head discriminator, extracted from the
+    // The failed-Claude-head discriminator, extracted from the
     // retained terminal_record for conductor uniformity with the four other council workflows —
     // 'fable' | 'sol' | null (a 'both'/evidence/deadlock DEGRADED is no single head death, folds to null).
     council_missing_head: (councilTerminalRecord && (councilTerminalRecord.missing === 'fable' || councilTerminalRecord.missing === 'sol')) ? councilTerminalRecord.missing : null,
@@ -4963,8 +4945,8 @@ return {
     receipts: councilReceipts,
     checkpoints: councilCheckpointCount,
     reason: councilPathReason,
-    // B3b2-iiA disclosed intermediate: the sealed front-half decision bundle (settled_decisions array +
-    // open_divergences + hash), or null. NON-authoritative this freeze — iiB swaps the authority to it.
+    // The disclosed intermediate: the sealed front-half decision bundle (settled_decisions array +
+    // open_divergences + hash), or null. NON-authoritative — the authority swap consumes it.
     front_half: councilFrontHalf,
   },
 }

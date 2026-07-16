@@ -1,4 +1,4 @@
-// validate-traversal-deadline.test.mjs — proves the §7 Tier-2 traversal ≤10-min cap is a
+// validate-traversal-deadline.test.mjs — proves the Tier-2 traversal ≤10-min cap is a
 // WORKFLOW-ENFORCED deadline (a real in-process timer in the SHIPPED workflows/validate.js), not the
 // prompt's goodwill. The reviewer's high finding: the traversal ran as a plain `await agent(...)` so a
 // hung evaluator (a wedged MCP retry-loop, a stuck codex subprocess) could run past the cap with only

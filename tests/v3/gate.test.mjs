@@ -1,4 +1,4 @@
-// gate.test.mjs — unit test for plugins/kiln/src/gate.mjs (WS-B1, Sol findings F1/F2). gateAgent is
+// gate.test.mjs — unit test for plugins/kiln/src/gate.mjs. gateAgent is
 // the single gate/judgment wrapper the bundler inlines into build/validate/report; this suite drives
 // the MODULE directly. gate.mjs speaks through the ambient `agent()` / `log()` globals (it is inlined
 // into workflows that already carry both), so each test installs globalThis.agent / globalThis.log
@@ -147,7 +147,7 @@ test('gate: ultra effort on a codex-transport seat throws at call time (never-ul
   assert.equal(agent.calls.length, 0, 'the guard throws BEFORE any dispatch')
 })
 
-// ── Codex transport receipt provenance (sol-b34-design "Codex transport receipt"). A Sol council seat is
+// ── Codex transport receipt provenance. A Sol council seat is
 // a Sonnet wrapper over transport:'codex' whose wrapped agent() returns an ENVELOPE
 // { payload, codex_receipt, raw_artifact_refs }; gateAgent STRUCTURALLY validates the relayed receipt
 // (never hashes) and records the transport attestation. A missing/invalid/model-mismatched receipt is a
@@ -318,7 +318,7 @@ test('gate/codex: a successful best-effort redispatch after a refusal carries th
   assert.equal(prov.actual_transport_model, 'gpt-5.6-sol')
 })
 
-// ── R1 classifier precision (Sol finding 4): the narrow 'other' boundary rethrows unrelated errors ──
+// ── R1 classifier precision: the narrow 'other' boundary rethrows unrelated errors ──
 // Each of these is a REAL error that must NOT be mistaken for a seat-death: an "HTTP retry cap" is not
 // the platform's StructuredOutput cap; ECONNREFUSED contains the substring 'refus' but is a transport
 // error, not a seat refusal; "Cannot read properties of null" contains 'null' but null_result is
@@ -364,8 +364,8 @@ test('R4: validate.js traversal leg rides gateAgent with a per-pass provenance s
     'the append-only traversal provenance array must feed validate_verdict.gate_provenance (every pass, no collapse)')
 })
 
-test('R4 (B4-3 D3): validate.js second_family_verified is RECEIPT-BASED — the model guard AND receipt/ledger attestation', () => {
-  // B4-3 D3 replaces the outer-model provenance check with receipt attestation. The verification now
+test('validate.js second_family_verified is RECEIPT-BASED — the model guard AND receipt/ledger attestation', () => {
+  // replaces the outer-model provenance check with receipt attestation. The verification now
   // gates on attestSecond (posture.second_family && codexAvailable && a runToken) and requires the codex
   // receipt to be BOTH structurally verified and invocation-exact ledger-verified, on top of the model checks.
   assert.match(VALIDATE_SRC, /const attestSecond = posture\.second_family && codexAvailable && runTokenRaw != null/,

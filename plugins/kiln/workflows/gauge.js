@@ -1,7 +1,7 @@
 // GENERATED from workflows-src/gauge.js — edit the source, run scripts/bundle-workflows.mjs
 export const meta = {
   name: 'kiln-gauge',
-  description: 'Kiln gauge stage (BLUEPRINT §3): Alpha the Assessor scores the 8-dimension complexity profile from VISION (+ codebase-map), the deterministic non-compensatory mapping runs IN THE SCRIPT, and the posture is ledgered. The profile sets posture; this stage never builds.',
+  description: 'Kiln gauge stage: Alpha the Assessor scores the 8-dimension complexity profile from VISION (+ codebase-map), the deterministic non-compensatory mapping runs IN THE SCRIPT, and the posture is ledgered. The profile sets posture; this stage never builds.',
   phases: [
     { title: 'The Assessment', detail: 'Alpha scores the 8-dimension profile from VISION (+ codebase-map) with per-dimension evidence' },
     { title: 'The Mapping', detail: 'the deterministic posture() mapping runs in-script — never in an agent' },
@@ -23,10 +23,10 @@ const kilnDir = A.kilnDir
 if (!kilnDir) throw new Error('gauge.js requires args.kilnDir (absolute path to .kiln). Received args of type ' + typeof args)
 const projectPath = A.projectPath
 // postureOverride: 'max' forces every dial to its ceiling, 'fast' to the leanest posture the
-// mapping yields; both still respect the §3.4 floors (posture() only governs ABOVE the floor).
+// mapping yields; both still respect the floors (posture() only governs ABOVE the floor).
 // null/absent ⇒ the Gauge decides from the assessed profile. Anything else is treated as null.
 const postureOverride = (A.postureOverride === 'max' || A.postureOverride === 'fast') ? A.postureOverride : null
-// The model that scores the profile (§8 Assessor slot, resolved by the conductor per capability
+// The model that scores the profile (the Assessor slot, resolved by the conductor per capability
 // tier). Default 'opus' — the workhorse; a Sonnet-only run passes 'sonnet'.
 const assessorModel = A.assessorModel || 'opus'
 const codexAvailable = A.codexAvailable !== false // default true; conductor passes kiln-doctor's probe result
@@ -39,10 +39,10 @@ const docsDir = `${kilnDir}/docs`
 const visionFile = `${docsDir}/VISION.md`
 const mapFile = `${docsDir}/codebase-map.md`
 
-// ── The ledger (BLUEPRINT §3.5): the gauge stage brackets + the posture_set event land in
+// ── The ledger: the gauge stage brackets + the posture_set event land in
 //    events.jsonl via the kiln-state CLI. Thoth appends; every caller gates on pluginRoot (a
 //    launched Workflow can't see ${CLAUDE_PLUGIN_ROOT}) and degrades to a log line when it is
-//    absent — a missing CLI never fails the gauge (the §3 floors run regardless; the posture still
+//    absent — a missing CLI never fails the gauge (the floors run regardless; the posture still
 //    returns to the conductor, which persists it to STATE.md). ──
 async function ledger(type, data, phaseName) {
   const ev = JSON.stringify({ type, stage: 'gauge', data })
@@ -57,7 +57,7 @@ async function ledger(type, data, phaseName) {
   )
 }
 
-// ── Lore beats (C1 doctrine §4): a dispatch from inside the fire — one line, emitted the moment a
+// ── Lore beats: a dispatch from inside the fire — one line, emitted the moment a
 //    fact becomes true, carried by the ledger to the operator's transcript between the conductor's
 //    banners. Rides the ledger idiom above as note{kind:'lore'} (deterministic <stage>.<beat> key;
 //    the structured `args` are short scalars — project-controlled strings capped at 80 by the caller;
@@ -65,7 +65,7 @@ async function ledger(type, data, phaseName) {
 //    failure — a beat can never gate, retry, or wedge a run. ──
 const LORE_MAX = 160
 const oneLine = (s, cap = LORE_MAX) => String(s).replace(/[\x00-\x1f\x7f]+/g, ' ').slice(0, cap)
-// args are bound HERE (F-1): every string value is capped at 80 mechanically, so a beat can never
+// args are bound HERE: every string value is capped at 80 mechanically, so a beat can never
 // leak an unbounded project-controlled string into the ledger even if a call site forgets to cap.
 const boundArgs = (a) => { const o = {}; for (const [k, v] of Object.entries(a)) o[k] = typeof v === 'string' ? oneLine(v, 80) : v; return o }
 const lore = (key, text, args, phaseName) =>
@@ -74,7 +74,7 @@ const lore = (key, text, args, phaseName) =>
     : log(oneLine(text))
 
 // ── The Gauge pure core (validateProfile + posture, inlined from src/gauge.mjs) ──
-// The §3.2 non-compensatory mapping runs HERE, in the script — never in an agent (BLUEPRINT §3.2).
+// The non-compensatory mapping runs HERE, in the script — never in an agent.
 function validateProfile(profile) {
   // codes: not_object | unknown_key | missing_dimension | invalid_dimension | invalid_score | missing_evidence
   if (!profile || typeof profile !== 'object' || Array.isArray(profile)) {
@@ -99,7 +99,7 @@ function validateProfile(profile) {
 }
 function posture(profile, config) {
   const D = (k) => profile[k].score
-  // P5.5 scope-tier predicate, recalibrated at the P6 T4 benchmark: trivial iff every
+  // scope-tier predicate: trivial iff every
   // dimension sits at trivial_tier_dim_max (default 0) — except the NAMED soft dimensions
   // (default ["D6"]), which may reach trivial_tier_soft_dim_max (default 1): any persistent
   // store scores D6=1 under honest rubric reading, so an all-zeros demand made the trivial
@@ -110,49 +110,49 @@ function posture(profile, config) {
     (k) => D(k) <= (config.trivial_tier_soft_dims.includes(k) ? config.trivial_tier_soft_dim_max : config.trivial_tier_dim_max)
   ) ? 'trivial' : 'standard'
   return {
-    // P5.5: the tier the trivial-tier levers key on (slice consolidation, runner seat,
+    // the tier the trivial-tier levers key on (slice consolidation, runner seat,
     // tribunal bump) — never re-derived inline in workflow code.
     scope_tier,
-    // §3.2 research row — the CAP only: base + D3 (novelty) + D5 (integration surface). The
+    // research row — the CAP only: base + D3 (novelty) + D5 (integration surface). The
     // research stage applies min(OQ-count, cap) and drops to 0 when no high-priority
     // before-build OQs exist — OQ data is runtime input, not a profile dimension.
     research_topics_max: config.research_topics_base + D('D3') + D('D5'),
-    // §3.2 planning row — dual-plan + chairman iff D4=2 OR (D3>=1 AND D1>=1); else single plan
+    // planning row — dual-plan + chairman iff D4=2 OR (D3>=1 AND D1>=1); else single plan
     // + cross-family red-team critique iff D4=1 OR D8>=1; else a single, self-checked plan.
     // The red-team D4 check runs only after dual declined, so '>= 1' is exactly the table's '=1'.
     planning: (D('D4') >= config.planning_dual_d4_min || (D('D3') >= config.planning_dual_d3_min && D('D1') >= config.planning_dual_d1_min)) ? 'dual'
       : (D('D4') >= config.planning_redteam_d4_min || D('D8') >= config.planning_redteam_d8_min) ? 'single+redteam'
         : 'single',
-    // §3.2 plan-validation row — rounds = base + 1 when ambiguity present (D2>=1) + 1 at
+    // plan-validation row — rounds = base + 1 when ambiguity present (D2>=1) + 1 at
     // maximum failure penalty (D8=2).
     plan_validation_rounds: config.plan_validation_rounds_base
       + (D('D2') >= config.plan_validation_d2_min ? 1 : 0)
       + (D('D8') >= config.plan_validation_d8_min ? 1 : 0),
-    // §3.2 slice-budget row (§3.3 definition) — horizon-anchored: h80_human_hours x
+    // slice-budget row — horizon-anchored: h80_human_hours x
     // messiness_discount human-equivalent per slice, x d7_slice_budget_factor (halved) when
     // verifiability is weak (D7>=1).
     slice_budget_hours: config.h80_human_hours * config.messiness_discount * (D('D7') >= config.slice_budget_d7_min ? config.d7_slice_budget_factor : 1),
-    // §3.2 slice-review row — logic slices are ALWAYS cross-family on evidence (a floor, not a
+    // slice-review row — logic slices are ALWAYS cross-family on evidence (a floor, not a
     // dial; nothing to encode). ui: Tier-1 probe always; codex review effort 'high' iff D8>=1,
     // else 'medium' baseline. escalate_on names the runtime trigger that raises a 'medium'
     // review to 'high' (fix-cycle > 0) — build.js keys on posture, not on a hardcoded rule.
     review: { ui_effort_base: D('D8') >= config.review_high_d8_min ? 'high' : 'medium', escalate_on: 'fix_cycle' },
-    // §3.2 milestone-gate row — the goal-backward audit runs at EVERY milestone boundary
+    // milestone-gate row — the goal-backward audit runs at EVERY milestone boundary
     // regardless of slice count; the dual-analyst tribunal only when the milestone has >=
     // min_slices_for_tribunal slices (single-slice: slice review + goal-backward IS the gate).
-    // P5.5: at trivial tier the threshold gains tribunal_threshold_trivial_bump (2->3 at
-    // defaults) — Run A's tribunal was marginal at trivial scope; goal_backward never moves.
+    // at trivial tier the threshold gains tribunal_threshold_trivial_bump (2->3 at
+    // defaults) — the tribunal is marginal at trivial scope; goal_backward never moves.
     milestone_gate: { min_slices_for_tribunal: config.min_slices_for_tribunal + (scope_tier === 'trivial' ? config.tribunal_threshold_trivial_bump : 0), goal_backward: true },
-    // §3.2 browser row — Tier-2 traversal per ui milestone iff D7>=1 OR D8>=1; else matrix-only.
+    // browser row — Tier-2 traversal per ui milestone iff D7>=1 OR D8>=1; else matrix-only.
     browser: { tier2_per_milestone: D('D7') >= config.browser_tier2_d7_min || D('D8') >= config.browser_tier2_d8_min },
-    // §3.2 validate row — the validate floor always runs (§3.4); the adversarial probe pass and
+    // validate row — the validate floor always runs; the adversarial probe pass and
     // a second validator family both switch on only at maximum failure penalty (D8=2).
     validate: { adversarial_pass: D('D8') >= config.validate_adversarial_d8_min, second_family: D('D8') >= config.validate_second_family_d8_min },
-    // §3.2 model/effort row — the effort dial scales with max over effort_bias_dims (default
-    // D3, D4, D8) per call class (§8).
+    // model/effort row — the effort dial scales with max over effort_bias_dims (default
+    // D3, D4, D8) per call class.
     effort_bias: Math.max(...config.effort_bias_dims.map(D)),
-    // §3.2 consistency-gate row (Aristotle) is deliberately ABSENT: it always runs (a floor,
-    // §3.4) — adaptivity only modulates above the floor.
+    // consistency-gate row (Aristotle) is deliberately ABSENT: it always runs (a floor) —
+    // adaptivity only modulates above the floor.
   }
 }
 // ── The Gauge config (GAUGE_CONFIG, inlined from gauge-config.json by the bundler — workflow
@@ -161,7 +161,7 @@ function posture(profile, config) {
 const GAUGE_CONFIG = {"h80_human_hours":2,"messiness_discount":0.5,"churn_flips_threshold":2,"rejections_to_feedback_escalation":2,"rejections_to_split":3,"deescalation_clean_window":1,"research_topics_base":2,"planning_dual_d4_min":2,"planning_dual_d3_min":1,"planning_dual_d1_min":1,"planning_redteam_d4_min":1,"planning_redteam_d8_min":1,"plan_validation_rounds_base":1,"plan_validation_d2_min":1,"plan_validation_d8_min":2,"slice_budget_d7_min":1,"d7_slice_budget_factor":0.5,"review_high_d8_min":1,"min_slices_for_tribunal":2,"trivial_tier_dim_max":0,"trivial_tier_soft_dims":["D6"],"trivial_tier_soft_dim_max":1,"tribunal_threshold_trivial_bump":1,"browser_tier2_d7_min":1,"browser_tier2_d8_min":1,"validate_adversarial_d8_min":2,"validate_second_family_d8_min":2,"effort_bias_dims":["D3","D4","D8"]}
 
 // ── Codex model pins (CODEX_MODEL default + CODEX_FALLBACK, inlined from src/models.mjs) ──
-// models.mjs — the codex model pins, single source of truth (BLUEPRINT WS-B2). Inlined verbatim
+// models.mjs — the codex model pins, single source of truth. Inlined verbatim
 // into every GPT-pinning workflow by the `// @models` bundler marker (like @gate pulls the whole
 // module), so the model id can never drift across build/gauge/architecture/validate.
 // DOCTRINE (references/codex-prompt-guide.md): the fallback is RECORDED when used, never silent — a
@@ -184,8 +184,8 @@ const voice = (m) => (m === 'opus' ? MODEL_VOICE.opus + '\n\n' : '')
 // Opus prose voice only when the assessor IS opus; other slots get the bare brief.
 const assessorVoice = assessorModel === 'opus' ? voice('opus') : ''
 
-// SPIN flattened to the one intentional worker-tree line (C1 §6): entry 0 duplicated the brand.md
-// gauge transition; 'Eight readings, one posture' is promoted to the gauge.posture_set beat below.
+// SPIN carries the one intentional worker-tree line; 'Eight readings, one posture' rides the
+// gauge.posture_set beat below.
 const SPIN = ['No dimension hides from the gauge']
 const spin = (i) => SPIN[((i % SPIN.length) + SPIN.length) % SPIN.length]
 
@@ -221,16 +221,16 @@ const PROFILE_SCHEMA = {
   required: ['profile'],
 }
 
-// The brief the Assessor scores against. Names BOTH VISION formats explicitly: the P4 YAML
-// frontmatter OQ fields and the v2 §9 'Open Questions' prose — the agent handles whichever exists.
+// The brief the Assessor scores against. Names BOTH VISION formats explicitly: the YAML
+// frontmatter OQ fields and the 'Open Questions' prose — the agent handles whichever exists.
 const assessBrief =
-  `You are Alpha, the Assessor (BLUEPRINT §3.1). You SCORE the work's complexity; you never build, and you ` +
+  `You are Alpha, the Assessor. You SCORE the work's complexity; you never build, and you ` +
   `never decide the pipeline's posture — a deterministic function does that from your scores.\n\n` +
   `<inputs>\nRead the vision at ${visionFile} (use your Read tool).` +
   (projectPath ? ` If ${mapFile} exists (brownfield codebase map), read it too — 'ls ${mapFile}' first.` : '') +
   `\nVISION may carry Open Questions in EITHER form — handle both: a YAML frontmatter block with ` +
-  `structured OQ entries (priority/timing fields — the P4 format), OR a §9 'Open Questions' prose section ` +
-  `with 'OQ-{N}' lines (the v2 format). Treat them as the same signal for ambiguity (D2) and novelty (D3).\n</inputs>\n\n` +
+  `structured OQ entries (priority/timing fields — the newer format), OR an 'Open Questions' prose section ` +
+  `with 'OQ-{N}' lines (the older format). Treat them as the same signal for ambiguity (D2) and novelty (D3).\n</inputs>\n\n` +
   `<rubric>\nScore each of the 8 dimensions 0, 1 or 2 against these anchors:\n` +
   DIM_KEYS.map((k) => `- ${k}: ${DIM_LABELS[k]}`).join('\n') + `\n</rubric>\n\n` +
   `<task>For EVERY dimension D1..D8 return { score, evidence } where evidence is ONE verbatim quote from ` +
@@ -241,7 +241,7 @@ const assessBrief =
 // ── The Assessment: ONE Alpha agent scores the profile ──
 phase('The Assessment')
 log(spin(0))
-// §3.5 stage bracket (P3.6 T4): the gauge stage is entered — mark it in the ledger so state.json's
+// Stage bracket: the gauge stage is entered — mark it in the ledger so state.json's
 // projection is stage-accurate from the gauge boundary onward. Gated on pluginRoot like every ledger
 // leg; absence degrades to a log line, never a stage failure.
 if (pluginRoot) await ledger('stage_started', {}, 'The Assessment')
@@ -268,7 +268,7 @@ if (!validation.ok) {
 
 // Still invalid → conservative default profile (all dims at mid, 1) with a ledgered warning. The
 // posture from an all-1 profile sits one notch up from the floor on the optional dials — never
-// fail the stage on assessor flakiness (BLUEPRINT §3: floors always run regardless).
+// fail the stage on assessor flakiness (the floors always run regardless).
 let degraded = false
 if (!validation.ok) {
   degraded = true
@@ -316,11 +316,11 @@ if (!degraded && profile.D8.score === 2) {
   }
 }
 
-// ── The Mapping: the deterministic §3.2 posture runs IN-SCRIPT (never an agent) ──
+// ── The Mapping: the deterministic posture runs IN-SCRIPT (never an agent) ──
 phase('The Mapping')
-// Override semantics (T2.1): 'max' maps an all-ceiling profile (every optional dial at its top),
+// Override semantics: 'max' maps an all-ceiling profile (every optional dial at its top),
 // 'fast' an all-floor profile (the leanest posture the mapping yields). Both still respect the
-// §3.4 floors — posture() only governs ABOVE the floor, so an all-zero profile is exactly the
+// floors — posture() only governs ABOVE the floor, so an all-zero profile is exactly the
 // always-run floor posture, never below it. null ⇒ the Gauge's assessed profile decides.
 const mappingProfile = postureOverride === 'max' ? overrideProfile(2)
   : postureOverride === 'fast' ? overrideProfile(0)
@@ -338,7 +338,7 @@ function overrideProfile(score) {
 }
 
 // ── The Ledger: Thoth appends posture_set + the stage-completed bracket to events.jsonl via the
-//    kiln-state CLI (BLUEPRINT §3.5). Each append is gated on pluginRoot; absence degrades it to a
+//    kiln-state CLI. Each append is gated on pluginRoot; absence degrades it to a
 //    log line, never a stage failure. ──
 phase('The Ledger')
 const postureData = { posture: post, profile, override_applied: postureOverride, source: degraded ? 'conservative_default' : (secondScored ? 'two_scorer_max_reconcile' : 'single_scorer') }
@@ -346,7 +346,7 @@ if (pluginRoot) await ledger('posture_set', postureData, 'The Ledger')
 else log(`pluginRoot absent — posture not ledgered to events.jsonl. posture_set data: ${JSON.stringify(postureData)}`)
 // gauge.posture_set (keystone): the posture is ledgered — the whole gauge stage in one dispatch.
 await lore('gauge.posture_set', `Eight readings, one posture — planning=${post.planning} · slices ${post.slice_budget_hours}h · review ${post.review.ui_effort_base}`, { planning: post.planning, slice_budget_hours: post.slice_budget_hours, ui_effort_base: post.review.ui_effort_base }, 'The Ledger')
-// §3.5 stage bracket (P3.6 T4): the gauge stage completes — the posture is set. stage_completed
+// Stage bracket: the gauge stage completes — the posture is set. stage_completed
 // bumps the projection to 'research' (STAGE_ORDER); like the entry bracket it degrades to a log line.
 if (pluginRoot) await ledger('stage_completed', {}, 'The Ledger')
 else log('pluginRoot absent — gauge stage_completed not ledgered')

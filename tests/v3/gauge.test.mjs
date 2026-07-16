@@ -1,8 +1,8 @@
-// gauge.test.mjs — unit floor for the Gauge pure core (BLUEPRINT §3, task T1). Every §3.2
+// gauge.test.mjs — unit floor for the Gauge pure core. Every
 // mapping rule is hit from BOTH sides of its threshold; ANY-trigger non-compensation is proven;
 // the Sentinel ratchet's monotonicity and the boundary-only de-escalation are property-tested;
 // the shipped gauge-config.json round-trips through posture() so no knob is shadowed by a
-// hardcoded default. The §3.2 table + §3.3 normative block ARE the contract here.
+// hardcoded default. The table + normative block ARE the contract here.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -89,7 +89,7 @@ test('posture: the returned shape is EXACTLY the T1 contract (consistency gate a
   assert.deepEqual(Object.keys(p.validate), ['adversarial_pass', 'second_family'])
 })
 
-// ── posture: §3.2 research row — cap = base + D3 + D5 ───────────────────────────────────────────
+// ── posture: research row — cap = base + D3 + D5 ───────────────────────────────────────────
 test('posture: research cap is base + D3 + D5 — each dimension moves it, others never do', () => {
   assert.equal(posture(prof(), CONFIG).research_topics_max, 2)
   assert.equal(posture(prof({ D3: 1 }), CONFIG).research_topics_max, 3)
@@ -98,7 +98,7 @@ test('posture: research cap is base + D3 + D5 — each dimension moves it, other
   assert.equal(posture(prof({ D1: 2, D2: 2, D4: 2, D6: 2, D7: 2, D8: 2 }), CONFIG).research_topics_max, 2)
 })
 
-// ── posture: §3.2 planning row — both sides of every trigger ─────────────────────────────────────
+// ── posture: planning row — both sides of every trigger ─────────────────────────────────────
 test('posture: planning — dual iff D4=2 OR (D3>=1 AND D1>=1)', () => {
   assert.equal(posture(prof({ D4: 2 }), CONFIG).planning, 'dual')             // D4 spike alone
   assert.equal(posture(prof({ D3: 1, D1: 1 }), CONFIG).planning, 'dual')      // conjunct met at 1/1
@@ -119,7 +119,7 @@ test('posture: ANY-trigger non-compensation — D4=2 ALONE forces dual-plan desp
   assert.equal(posture(p, CONFIG).planning, 'dual')
 })
 
-// ── posture: §3.2 plan-validation row — rounds = 1 + (D2>=1) + (D8=2) ───────────────────────────
+// ── posture: plan-validation row — rounds = 1 + (D2>=1) + (D8=2) ───────────────────────────
 test('posture: plan_validation_rounds — D2 adds at >=1, D8 adds only at 2', () => {
   assert.equal(posture(prof(), CONFIG).plan_validation_rounds, 1)
   assert.equal(posture(prof({ D2: 1 }), CONFIG).plan_validation_rounds, 2)
@@ -129,25 +129,25 @@ test('posture: plan_validation_rounds — D2 adds at >=1, D8 adds only at 2', ()
   assert.equal(posture(prof({ D2: 2, D8: 2 }), CONFIG).plan_validation_rounds, 3)
 })
 
-// ── posture: §3.2 slice-budget row — h80 x discount, halved when D7>=1 ───────────────────────────
+// ── posture: slice-budget row — h80 x discount, halved when D7>=1 ───────────────────────────
 test('posture: slice_budget_hours — 2 x 0.5 = 1h baseline, halved to 0.5h when D7>=1', () => {
   assert.equal(posture(prof(), CONFIG).slice_budget_hours, 1)
   assert.equal(posture(prof({ D7: 1 }), CONFIG).slice_budget_hours, 0.5)
   assert.equal(posture(prof({ D7: 2 }), CONFIG).slice_budget_hours, 0.5)
 })
 
-// ── posture: §3.2 slice-review row — ui effort medium baseline, high iff D8>=1 ───────────────────
+// ── posture: slice-review row — ui effort medium baseline, high iff D8>=1 ───────────────────
 test('posture: review — ui_effort_base flips medium->high at D8>=1; escalate_on names fix_cycle', () => {
   assert.deepEqual(posture(prof(), CONFIG).review, { ui_effort_base: 'medium', escalate_on: 'fix_cycle' })
   assert.equal(posture(prof({ D8: 1 }), CONFIG).review.ui_effort_base, 'high')
   assert.equal(posture(prof({ D8: 2 }), CONFIG).review.ui_effort_base, 'high')
 })
 
-// ── posture: §3.2 milestone-gate row + the P5.5 trivial bump ─────────────────────────────────────
+// ── posture: milestone-gate row + the trivial bump ─────────────────────────────────────
 test('posture: milestone_gate — goal-backward ALWAYS true; tribunal threshold 3 at trivial tier, 2 at standard', () => {
-  // trivial (all-zero profile): the P5.5 bump raises the threshold 2->3; goal-backward untouched
+  // trivial (all-zero profile): the bump raises the threshold 2->3; goal-backward untouched
   assert.deepEqual(posture(prof(), CONFIG).milestone_gate, { min_slices_for_tribunal: 3, goal_backward: true })
-  // the soft dimension at 1 stays trivial => still the bumped 3 (Bench Finding 1)
+  // the soft dimension at 1 stays trivial => still the bumped 3
   assert.deepEqual(posture(prof({ D6: 1 }), CONFIG).milestone_gate, { min_slices_for_tribunal: 3, goal_backward: true })
   // any elevated NON-soft dimension => standard => the table's 2
   assert.deepEqual(posture(prof({ D1: 1 }), CONFIG).milestone_gate, { min_slices_for_tribunal: 2, goal_backward: true })
@@ -156,8 +156,8 @@ test('posture: milestone_gate — goal-backward ALWAYS true; tribunal threshold 
   assert.equal(posture(prof(), { ...CONFIG, tribunal_threshold_trivial_bump: 2 }).milestone_gate.min_slices_for_tribunal, 4)
 })
 
-// ── posture: the P5.5 scope-tier predicate (the trivial-tier levers key on THIS, never effort) ───
-test('posture: scope_tier — soft-dims predicate (Bench Finding 1): D6 may sit at 1, everything else at 0', () => {
+// ── posture: the scope-tier predicate (the trivial-tier levers key on THIS, never effort) ───
+test('posture: scope_tier — soft-dims predicate: D6 may sit at 1, everything else at 0', () => {
   assert.equal(posture(prof(), CONFIG).scope_tier, 'trivial')
   // the bench-a field profile: D6=1 alone (any persistent store) => TRIVIAL — the canonical case
   assert.equal(posture(prof({ D6: 1 }), CONFIG).scope_tier, 'trivial')
@@ -178,7 +178,7 @@ test('posture: scope_tier — soft-dims predicate (Bench Finding 1): D6 may sit 
   assert.equal(posture(prof({ D1: 1, D2: 1, D6: 1, D7: 1 }), { ...CONFIG, trivial_tier_dim_max: 1 }).scope_tier, 'trivial')
 })
 
-// ── posture: §3.2 browser row — tier2 iff D7>=1 OR D8>=1 ─────────────────────────────────────────
+// ── posture: browser row — tier2 iff D7>=1 OR D8>=1 ─────────────────────────────────────────
 test('posture: browser.tier2_per_milestone — off at D7=0,D8=0; either dimension at 1 turns it on', () => {
   assert.equal(posture(prof(), CONFIG).browser.tier2_per_milestone, false)
   assert.equal(posture(prof({ D7: 1 }), CONFIG).browser.tier2_per_milestone, true)
@@ -186,13 +186,13 @@ test('posture: browser.tier2_per_milestone — off at D7=0,D8=0; either dimensio
   assert.equal(posture(prof({ D7: 2, D8: 2 }), CONFIG).browser.tier2_per_milestone, true)
 })
 
-// ── posture: §3.2 validate row — adversarial + second family only at D8=2 ────────────────────────
+// ── posture: validate row — adversarial + second family only at D8=2 ────────────────────────
 test('posture: validate — D8=1 stays floor-only; D8=2 switches on adversarial pass AND second family', () => {
   assert.deepEqual(posture(prof({ D8: 1 }), CONFIG).validate, { adversarial_pass: false, second_family: false })
   assert.deepEqual(posture(prof({ D8: 2 }), CONFIG).validate, { adversarial_pass: true, second_family: true })
 })
 
-// ── posture: §3.2 model/effort row — effort_bias = max(D3, D4, D8) ───────────────────────────────
+// ── posture: model/effort row — effort_bias = max(D3, D4, D8) ───────────────────────────────
 test('posture: effort_bias is max(D3,D4,D8) — non-compensatory, other dimensions never move it', () => {
   assert.equal(posture(prof(), CONFIG).effort_bias, 0)
   assert.equal(posture(prof({ D4: 1 }), CONFIG).effort_bias, 1)
@@ -201,7 +201,7 @@ test('posture: effort_bias is max(D3,D4,D8) — non-compensatory, other dimensio
   assert.equal(posture(prof({ D1: 2, D2: 2, D5: 2, D6: 2, D7: 2 }), CONFIG).effort_bias, 0)
 })
 
-// ── escalate: threshold semantics (§3.3 signal 1, the master signal) ─────────────────────────────
+// ── escalate: threshold semantics (signal 1, the master signal) ─────────────────────────────
 test('escalate: logical rejections — below threshold no-op, at 2 escalate_feedback_source, at 3 split_and_rebuild', () => {
   const base = posture(prof(), CONFIG)
   const r1 = escalate(base, { type: 'review_rejection', finding_class: 'logical', rejections: 1 }, CONFIG)
@@ -371,14 +371,14 @@ test('deescalate: clean_streak must reach deescalation_clean_window before the r
   assert.deepEqual(reset.posture, posture(profile, wide))
 })
 
-// ── gauge-config.json: the §3.3 normative block round-trips through the mapping ──────────────────
-test('gauge-config.json: every §3.3 normative constant ships at its normative value', () => {
+// ── gauge-config.json: the normative block round-trips through the mapping ──────────────────
+test('gauge-config.json: every normative constant ships at its normative value', () => {
   const normative = {
     h80_human_hours: 2, messiness_discount: 0.5, churn_flips_threshold: 2,
     rejections_to_feedback_escalation: 2, rejections_to_split: 3, deescalation_clean_window: 1,
   }
   for (const [k, v] of Object.entries(normative)) assert.equal(CONFIG[k], v, k)
-  // the §3.2 mapping thresholds live in the same ONE file, at the table's default values
+  // the mapping thresholds live in the same ONE file, at the table's default values
   const mapping = {
     research_topics_base: 2,
     planning_dual_d4_min: 2, planning_dual_d3_min: 1, planning_dual_d1_min: 1,
@@ -412,7 +412,7 @@ test('gauge-config.json: knobs are LIVE — changing a config value changes the 
 
 test('gauge-config.json: mapping THRESHOLD knobs are LIVE — moving each one flips its rule vs the default', () => {
   // each case tweaks exactly ONE threshold; the asserted posture differs from the shipped-config
-  // outcome for the same profile (proving the comparison reads config, not a hardcoded §3.2 value)
+  // outcome for the same profile (proving the comparison reads config, not a hardcoded value)
   assert.equal(posture(prof({ D4: 1 }), { ...CONFIG, planning_dual_d4_min: 1 }).planning, 'dual')
   assert.equal(posture(prof({ D3: 1, D1: 1 }), { ...CONFIG, planning_dual_d3_min: 2 }).planning, 'single')
   assert.equal(posture(prof({ D3: 1, D1: 1 }), { ...CONFIG, planning_dual_d1_min: 2 }).planning, 'single')

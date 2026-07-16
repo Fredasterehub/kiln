@@ -1,4 +1,4 @@
-// law.mjs — THE LAW pure core (BLUEPRINT §5/§5.1): law.json shape validation, the per-slice
+// law.mjs — THE LAW pure core: law.json shape validation, the per-slice
 // flip plan (expected RED→GREEN set + regression set), and the law summary. Consumed two ways:
 // imported by scripts/kiln-law.mjs (which validates .kiln/law.json against the schema on every
 // command — validateLaw mirrors schemas/law.schema.json field-for-field, no ajv, no deps), and
@@ -8,13 +8,13 @@
 // Bundler discipline: each export is a self-contained block (no shared module-level helpers —
 // they would not survive inlining).
 
-// validateLaw(law) — the .kiln/law.json contract (BLUEPRINT §5.1), mirroring
+// validateLaw(law) — the .kiln/law.json contract, mirroring
 // schemas/law.schema.json plus the cross-field invariants a JSON schema cannot express:
 // duplicate check ids are rejected, and the document must sit in one of its two legal states —
 // pre-lock (lock_commit null, every sha256 map EMPTY — as Asimov writes it) or locked
 // (lock_commit a git sha, every check's sha256 map covering EXACTLY its files — as kiln-law
 // index rewrites it). kind:'probe' checks may carry a `spec` — the declarative browser-probe
-// contract (BLUEPRINT §7 Tier-1) that kiln-probe executes: url path, landmarks by role+name,
+// contract that kiln-probe executes: url path, landmarks by role+name,
 // interaction steps, viewports, and the serve arrangement; spec is legal ONLY on probes, and a
 // spec-less probe is an un-instantiated template (the runner defers it, never errors). Returns
 // { ok, errors } with typed errors ({ code, path, message }) so callers can report precisely.
@@ -38,12 +38,12 @@ export function validateLaw(law) {
   }
   const KEYS = ['id', 'milestone', 'kind', 'cmd', 'files', 'sha256', 'expected', 'timeout_s', 'pre_satisfied', 'spec']
   const KINDS = ['shell', 'pytest', 'http', 'probe']
-  // the probe spec contract (§7 Tier-1) — declarative assertions only, never browser code
+  // the probe spec contract — declarative assertions only, never browser code
   const SPEC_KEYS = ['url', 'landmarks', 'interactions', 'viewports', 'serve_cmd', 'base_url', 'serve_dir']
   const ACTIONS = ['click', 'fill', 'press', 'expect']
   const nonempty = (v) => typeof v === 'string' && v !== ''
   const validateSpec = (s, at) => {
-    if (!s || typeof s !== 'object' || Array.isArray(s)) { err('invalid_value', at, `${at} must be an object (the §7 probe spec)`); return }
+    if (!s || typeof s !== 'object' || Array.isArray(s)) { err('invalid_value', at, `${at} must be an object (the probe spec)`); return }
     for (const k of Object.keys(s)) if (!SPEC_KEYS.includes(k)) err('unknown_key', `${at}.${k}`, `${at}: unknown spec key '${k}'`)
     if (!nonempty(s.url) || !s.url.startsWith('/')) err('invalid_value', `${at}.url`, `${at}: url must be a path starting with '/' (joined to the served base URL)`)
     if (!Array.isArray(s.landmarks) || s.landmarks.length === 0) err('invalid_value', `${at}.landmarks`, `${at}: landmarks must be a non-empty array of {role, name} — the SC's key UI elements by role+name`)
@@ -112,7 +112,7 @@ export function validateLaw(law) {
         if (!files.includes(p)) err('invalid_value', `${at}.sha256`, `${at}: sha256 has key '${p}' which is not in files`)
         if (typeof h !== 'string' || !/^[0-9a-f]{64}$/.test(h)) err('invalid_value', `${at}.sha256`, `${at}: sha256['${p}'] must be a 64-char hex digest`)
       }
-      // the two legal states (§5.1): pre-lock ⇒ EMPTY map; locked ⇒ every file hashed.
+      // the two legal states: pre-lock ⇒ EMPTY map; locked ⇒ every file hashed.
       if (locked) {
         for (const p of files) if (typeof p === 'string' && !(p in c.sha256)) err('lock_state', `${at}.sha256`, `${at}: locked law must hash every file — '${p}' missing from sha256`)
       } else if (Object.keys(c.sha256).length) {
@@ -123,14 +123,14 @@ export function validateLaw(law) {
     if (!Number.isInteger(c.timeout_s) || c.timeout_s < 1) err('invalid_value', `${at}.timeout_s`, `${at}: timeout_s must be an integer ≥ 1`)
     if ('pre_satisfied' in c && typeof c.pre_satisfied !== 'boolean') err('invalid_value', `${at}.pre_satisfied`, `${at}: pre_satisfied must be a boolean when present`)
     if ('spec' in c) {
-      if (c.kind !== 'probe') err('invalid_value', `${at}.spec`, `${at}: spec is legal only on kind 'probe' (the §7 Tier-1 browser-probe contract)`)
+      if (c.kind !== 'probe') err('invalid_value', `${at}.spec`, `${at}: spec is legal only on kind 'probe' (the Tier-1 browser-probe contract)`)
       else validateSpec(c.spec, `${at}.spec`)
     }
   })
   return { ok: errors.length === 0, errors }
 }
 
-// flipPlan(law, sliceScIds, statusBefore) — the §5.1 red/green lifecycle arithmetic for ONE
+// flipPlan(law, sliceScIds, statusBefore) — the red/green lifecycle arithmetic for ONE
 // slice. sliceScIds are the SC ids the slice declares it flips; statusBefore maps check id →
 // 'green'|'red'|'deferred' (the kiln-law status fold of the last run before the slice; a
 // missing entry reads as 'red' — every check is expected RED at lock). Returns, all in law.json
@@ -138,9 +138,9 @@ export function validateLaw(law) {
 //   flip          — ids that must go RED→GREEN for the slice to be DONE
 //   regression    — ids GREEN before the slice (status green, or pre_satisfied at lock) that
 //                   must STAY GREEN — no previously-GREEN check may regress
-//   pre_satisfied — slice ids excluded from flip accounting (§5.1: GREEN-at-lock / already
+//   pre_satisfied — slice ids excluded from flip accounting (GREEN-at-lock / already
 //                   green before the slice); they also appear in regression
-//   deferred      — slice ids whose check cannot run yet (probe templates in P2) — neither
+//   deferred      — slice ids whose check cannot run yet (probe templates) — neither
 //                   flip nor regression accounting applies
 //   unknown       — slice ids with NO law.json entry: coverage is arithmetic, not judgment —
 //                   returned, never thrown; the caller escalates
@@ -169,7 +169,7 @@ export function flipPlan(law, sliceScIds, statusBefore) {
   return { flip, regression, pre_satisfied: preSatisfied, deferred, unknown }
 }
 
-// probeTwinRel(check) — the on-disk twin convention for a probe check (RUN-B F1 tail): Asimov
+// probeTwinRel(check) — the on-disk twin convention for a probe check: Asimov
 // writes every probe spec TWICE — embedded as the check's `spec` (the copy kiln-probe EXECUTES)
 // and as tests/acceptance/<id lowercase>.probe.json (the copy the lock hashes and the product
 // ships). This one-liner is the single source of that path convention for both CLI arms.
@@ -177,8 +177,8 @@ export function probeTwinRel(check) {
   return `tests/acceptance/${String((check && check.id) || '').toLowerCase()}.probe.json`
 }
 
-// probeTwinIssues(check, twinRaw) — the twin-sync contract for ONE probe check (RUN-B F1 tail,
-// the M2 QA integrity-chain finding): kiln-probe executes the EMBEDDED spec while the lock
+// probeTwinIssues(check, twinRaw) — the twin-sync contract for ONE probe check: kiln-probe
+// executes the EMBEDDED spec while the lock
 // attests the ON-DISK twin, and nothing else ever compares them — a desynced pair locks
 // permanently desynced, certifying an artifact that is not the spec that gated the build.
 // twinRaw is the on-disk twin's raw content (string) or null when the file is unreadable —
@@ -217,8 +217,8 @@ export function probeTwinIssues(check, twinRaw) {
   return issues
 }
 
-// classifyDryrun(kind, exit, signal, timedOut) — the P3.5 T1 deterministic PRE-LOCK dry-run
-// classification (dogfood finding 1: checks are code; they execute before we trust them —
+// classifyDryrun(kind, exit, signal, timedOut) — the deterministic PRE-LOCK dry-run
+// classification (checks are code; they execute before we trust them —
 // reading is not executing). This table is the verdict the EXIT CODE carries mechanically,
 // before any judgment; the downstream judge (Athena, over the transcript tails) rules only
 // what the code cannot:
@@ -235,8 +235,8 @@ export function probeTwinIssues(check, twinRaw) {
 //                    a missing exit code with no recorded signal.
 //   'ambiguous'    — every other nonzero exit (shell exit 1, http failures): the exit code
 //                    does not say WHY — transcribed with its tails, judged downstream.
-// Pure: no I/O, no clocks. Probes never reach this table — the dry-run defers them (§7 owns
-// probe exit semantics, exit-78 included; a dry-run executes no browser).
+// Pure: no I/O, no clocks. Probes never reach this table — the dry-run defers them (the probe
+// stage owns probe exit semantics, exit-78 included; a dry-run executes no browser).
 export function classifyDryrun(kind, exit, signal, timedOut) {
   if (timedOut === true || (typeof signal === 'string' && signal !== '')) return 'broken-check'
   if (exit === 0) return 'green'

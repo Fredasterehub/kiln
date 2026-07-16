@@ -1,5 +1,5 @@
 // validate-traversal-deadline-runner.mjs — child executor that drives the SHIPPED workflows/validate.js
-// to prove the §7 Tier-2 traversal deadline is WORKFLOW-ENFORCED (a real in-process timer), not prompt
+// to prove the Tier-2 traversal deadline is WORKFLOW-ENFORCED (a real in-process timer), not prompt
 // text. Spawned by validate-traversal-deadline.test.mjs (never the test runner directly — no .test. in
 // the name, and index.js does not import it). It loads the generated validate.js exactly as the Workflow
 // engine would (strip `export const meta`, wrap the body in an AsyncFunction whose params are the

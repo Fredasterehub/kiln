@@ -1,6 +1,6 @@
-// spine.mjs — THE BUILD SPINE pure core (BLUEPRINT §5.1/§6/§3.2/§3.3): the batch slice-plan
+// spine.mjs — THE BUILD SPINE pure core: the batch slice-plan
 // SC-coverage arithmetic, the mechanical runner gate (tamper + evidence freshness) that decides
-// whether a reviewer may even be spawned, the §3.2 milestone-gate decision (judge spawned ONLY
+// whether a reviewer may even be spawned, the milestone-gate decision (judge spawned ONLY
 // on an ambiguous reconcile), and the Sentinel rejection classifier. Inlined into build.js by
 // scripts/bundle-workflows.mjs (// @inline:spine:validateSlicePlan,runnerGate,rejectionClass,
 // gateDecision). Pure functions only: no I/O, no Date.now/Math.random — workflow determinism
@@ -9,7 +9,7 @@
 // Bundler discipline: each export is a self-contained block (no shared module-level helpers —
 // they would not survive inlining).
 
-// validateSlicePlan(slices, milestoneScIds) — §5 "coverage is arithmetic, not judgment": the
+// validateSlicePlan(slices, milestoneScIds) — "coverage is arithmetic, not judgment": the
 // batch slicer's plan for ONE milestone must map every one of the milestone's law.json SC ids
 // into EXACTLY ONE slice's sc_ids (none missing, none twice), and every slice must flip at least
 // one. An empty plan is legal only when nothing is left to cover (the replan-remainder edge).
@@ -45,7 +45,7 @@ export function validateSlicePlan(slices, milestoneScIds) {
   return { ok: errors.length === 0, errors }
 }
 
-// runnerGate(runner, probe) — the §5.1/§6 MECHANICAL gate the workflow applies before spawning
+// runnerGate(runner, probe) — the MECHANICAL gate the workflow applies before spawning
 // any reviewer. `runner` is the runner agent's schema-forced report ({ verify_exit, tamper_paths,
 // law_run_exit, flip_unmet, regressed, run_id, head, … }); `probe` is the independent freshness
 // probe's report — a fresh pair of eyes over the evidence ON DISK ({ results_jsonl_exists, head,
@@ -55,7 +55,7 @@ export function validateSlicePlan(slices, milestoneScIds) {
 // only on a complete run) — the evidence carries its own anchors; the agents only transcribe
 // them. Returns { verdict: 'tamper' | 'stale' | 'red' | 'proceed', tamper_paths, reasons }, and
 // on the trustworthy-evidence verdicts ('red' | 'proceed') also verification_class
-// ('full' | 'static-only', from the finalized manifest) — the §7 honesty channel: a
+// ('full' | 'static-only', from the finalized manifest) — the honesty channel: a
 // probe-deferred run (uninstantiated template, --skip-probes, playwright absent) can exit 0,
 // so the GATE must carry the degradation mechanically or a static-only run proceeds silently
 // green. A finalized manifest whose verification_class is missing or unreadable is foreign or
@@ -64,7 +64,7 @@ export function validateSlicePlan(slices, milestoneScIds) {
 //             touched. The slice is auto-REJECTED by the WORKFLOW (no agent judgment, no reviewer
 //             spawned) and the fix brief names the touched lock(s). Checked FIRST — tamper
 //             outranks every other concern, including a missing probe.
-//   stale   — the evidence cannot be trusted fresh (§6: "the workflow compares evidence
+//   stale   — the evidence cannot be trusted fresh ("the workflow compares evidence
 //             timestamps/hashes against HEAD and auto-rejects mismatches before any reviewer is
 //             spawned" — stale evidence is structurally impossible to approve):
 //               · missing/malformed runner or probe report, kiln-law verify not cleanly exit 0,
@@ -79,8 +79,8 @@ export function validateSlicePlan(slices, milestoneScIds) {
 //                 epoch (evidence produced before the commit it claims to verify is stale).
 //             Auto-REJECT, no reviewer spawned. Staleness outranks 'red': a red verdict is only
 //             trustworthy over evidence proven complete and fresh.
-//   red     — the §5.1 red/green LIFECYCLE verdict, mechanical (T2-fix ruling: "the exit code is
-//             the verdict"): the evidence is tamper-clean, complete, and fresh, but `kiln-law run
+//   red     — the red/green LIFECYCLE verdict, mechanical (the exit code is
+//             the verdict): the evidence is tamper-clean, complete, and fresh, but `kiln-law run
 //             --flips` exited non-zero — a declared RED→GREEN flip did not flip, or a
 //             previously-GREEN check regressed. Auto-REJECT, no reviewer spawned (a reviewer
 //             cannot soften an exit code); reasons name the FLIP_UNMET/REGRESSION ids the runner
@@ -117,23 +117,23 @@ export function runnerGate(runner, probe) {
     else if (r && str(r.head) && cur !== str(r.head)) {
       reasons.push(`HEAD moved since the runner anchored its evidence (runner ${str(r.head)}, current ${cur})`)
     }
-    // §6 HEAD-anchor arm: run.json's head is written by kiln-law itself at run time — the
+    // HEAD-anchor arm: run.json's head is written by kiln-law itself at run time — the
     // evidence names the commit it was produced at, and that commit must BE the current HEAD.
     const manifestHead = str(p.manifest_head)
     if (!manifestHead) reasons.push('the evidence carries no manifest HEAD anchor (run.json missing or unfinalized)')
     else if (cur && manifestHead !== cur) reasons.push(`the evidence was produced at HEAD ${manifestHead}, not the current HEAD ${cur} — stale by commit`)
-    // §6 hash arm: a COMPLETE run records sha256(results.jsonl) in its manifest; the probe
+    // hash arm: a COMPLETE run records sha256(results.jsonl) in its manifest; the probe
     // re-hashes the file. Divergence ⇒ altered or partial evidence; absence ⇒ never finalized.
     const recorded = str(p.manifest_results_sha256)
     const rehashed = str(p.results_sha256)
     if (!recorded || !rehashed) reasons.push('the evidence hash cannot be verified (manifest results_sha256 or the probe rehash is missing — an aborted run never finalizes)')
     else if (recorded !== rehashed) reasons.push(`results.jsonl re-hashes to ${rehashed} but the manifest recorded ${recorded} — the evidence was altered or partially written`)
-    // §6 timestamp arm: evidence must postdate the commit it claims to verify.
+    // timestamp arm: evidence must postdate the commit it claims to verify.
     const completed = (typeof p.manifest_completed_epoch === 'number' && Number.isFinite(p.manifest_completed_epoch)) ? p.manifest_completed_epoch : -1
     const committed = (typeof p.head_committed_epoch === 'number' && Number.isFinite(p.head_committed_epoch)) ? p.head_committed_epoch : -1
     if (completed < 0 || committed < 0) reasons.push('the evidence/HEAD timestamps are unavailable — freshness cannot be proven')
     else if (completed < committed) reasons.push(`the evidence completed at epoch ${completed}, before HEAD was committed at epoch ${committed} — stale by time`)
-    // §7 honesty arm: every finalized run.json carries verification_class ('full' when every
+    // honesty arm: every finalized run.json carries verification_class ('full' when every
     // selected probe EXECUTED, 'static-only' the moment any probe deferred — uninstantiated
     // template, --skip-probes, or playwright absent). A deferred probe folds into a law_run_exit
     // of 0, so the exit code alone CANNOT distinguish a fully-verified run from a degraded one —
@@ -145,7 +145,7 @@ export function runnerGate(runner, probe) {
     }
   }
   if (reasons.length) return { verdict: 'stale', tamper_paths: [], reasons }
-  // The lifecycle verdict (T2-fix ruling, §5.1 red/green): the evidence is complete and fresh —
+  // The lifecycle verdict (red/green): the evidence is complete and fresh —
   // kiln-law finalizes run.json BEFORE its expectation gates, so a flip/regression failure still
   // carries trustworthy evidence — and the exit code IS the verdict. Non-zero ⇒ 'red', mechanical.
   if (r.law_run_exit !== 0) {
@@ -161,7 +161,7 @@ export function runnerGate(runner, probe) {
   return { verdict: 'proceed', tamper_paths: [], reasons: [], verification_class: verificationClass }
 }
 
-// gateOnlyRefusal(gate) — the P3.5 T3 (dogfood finding 4) refuse-on-red predicate for the
+// gateOnlyRefusal(gate) — the refuse-on-red predicate for the
 // gate-only retry path. gateOnly re-runs a STARVED milestone gate over an ALREADY-COMPLETED build:
 // no slicer, no builder — just ONE deterministic trial-shaped pass over ALL the milestone's SCs
 // (kiln-law verify + run --only <all milestone SCs> --expect-green <all milestone SCs>, no --flips
@@ -189,26 +189,26 @@ export function gateOnlyRefusal(gate) {
 }
 
 // goalAuditUsable(report) — the milestone gate's usability predicate for the goal-backward
-// audit report (ORCHESTRATOR RULING, p2/tasks.md "Gate failure semantics"): the §3.2 judge-spawn
+// audit report: the judge-spawn
 // condition is exhaustive over USABLE inputs, and the judge NEVER spawns on missing ones — a
 // null/unusable report is re-asked once by the workflow, then fails the boundary closed
 // (QA_FAIL, blocking finding 'goal-audit-failure'). Usable = a plain object carrying a binary
 // overall verdict ('pass'|'fail') and a findings array (the QA_FINDINGS shape the reconcile
 // folds). Anything else — a dead agent (null), a wrong type, a missing/unknown overall, missing
-// findings — is unusable; absent evidence is fail-closed, mirroring the P0 Athena ruling.
+// findings — is unusable; absent evidence is fail-closed.
 export function goalAuditUsable(report) {
   return !!(report && typeof report === 'object' && !Array.isArray(report)
     && (report.overall === 'pass' || report.overall === 'fail')
     && Array.isArray(report.findings))
 }
 
-// tribunalThreshold(sliceCount, minSlices) — the §3.2 milestone-gate ROUTING predicate (the row's
+// tribunalThreshold(sliceCount, minSlices) — the milestone-gate ROUTING predicate (the row's
 // "multi-slice → dual analysts ∥ … judge" vs "single-slice → slice review + goal-backward IS the
-// gate", tasks.md T3.1: "slices_built ≥ min_slices_for_tribunal"), computed IN-SCRIPT (never an
+// gate", "slices_built ≥ min_slices_for_tribunal"), computed IN-SCRIPT (never an
 // agent). Returns true ⇒ the milestone runs the dual-analyst tribunal; false ⇒ the slice review +
-// goal-backward audit IS the gate (the tribunal redundancy skip, proven safe class
-// [R:adaptive-orchestration §4]). The boundary is inclusive: at EXACTLY the threshold the tribunal
-// fires. Fail toward scrutiny (§3.3 "scrutiny may only rise"): a non-positive sliceCount can never
+// goal-backward audit IS the gate (the tribunal redundancy skip, a proven-safe class). The
+// boundary is inclusive: at EXACTLY the threshold the tribunal
+// fires. Fail toward scrutiny ("scrutiny may only rise"): a non-positive sliceCount can never
 // reach a positive threshold (false — caught upstream by the "no slices built" branch), and an
 // absent/non-finite/non-positive minSlices is treated as the most conservative threshold of 1, so
 // every built milestone runs the tribunal rather than silently downgrading to the lighter gate.
@@ -218,24 +218,23 @@ export function tribunalThreshold(sliceCount, minSlices) {
   return n >= min
 }
 
-// gateDecision(reconciled, overallA, overallB) — the §3.2 milestone-gate judge-spawn condition,
+// gateDecision(reconciled, overallA, overallB) — the milestone-gate judge-spawn condition,
 // computed IN-SCRIPT (never an agent): the judge is spawned ONLY on an AMBIGUOUS reconcile —
 // zero blocking findings AND the two analysts' overall verdicts disagree. Everything else is
-// COMPUTED (§3.2: "else verdict is computed" — hasBlocking → QA_FAIL, else QA_PASS):
+// COMPUTED ("else verdict is computed" — hasBlocking → QA_FAIL, else QA_PASS):
 //   · blocking findings → QA_FAIL, no judge — the deterministic reconcile decides and a judge
 //     could only soften it away;
-//   · a missing/unreadable analyst verdict → QA_FAIL, no judge. The §3.2 judge-spawn condition is
+//   · a missing/unreadable analyst verdict → QA_FAIL, no judge. The judge-spawn condition is
 //     EXHAUSTIVE over usable inputs ("the two analysts' overall verdicts disagree" presupposes two
-//     readable verdicts), and the operator ruling (p2/tasks.md "Gate failure semantics") is
-//     explicit: "The judge NEVER spawns on missing inputs … absent evidence is fail-closed,
-//     mirroring the P0 Athena ruling." An absent analyst verdict is not "two disagreeing verdicts";
+//     readable verdicts): the judge NEVER spawns on missing inputs — absent evidence is
+//     fail-closed. An absent analyst verdict is not "two disagreeing verdicts";
 //     it is missing evidence, so the boundary fails closed. (The judge can only SOFTEN a gate, so
-//     spawning it on a missing input would lower scrutiny, not raise it — §3.3.)
+//     spawning it on a missing input would lower scrutiny, not raise it.)
 //   · zero blocking + BOTH verdicts readable AND they agree → QA_PASS, no judge. This holds even
 //     for an agreed 'fail': an overall 'fail' unbacked by any critical|high finding is noise to the
-//     deterministic reconcile (the analyst prompts demand a fail be backed by one) — the §3.2
+//     deterministic reconcile (the analyst prompts demand a fail be backed by one) — the
 //     computed rule is exact, and an agreed verdict is by definition not ambiguous;
-//   · zero blocking + BOTH verdicts readable AND they disagree → the judge rules (the sole §3.2
+//   · zero blocking + BOTH verdicts readable AND they disagree → the judge rules (the sole
 //     ambiguous reconcile).
 // Returns { judge, verdict, reason }: judge=true ⇒ verdict null (the judge rules);
 // judge=false ⇒ verdict is the computed 'QA_PASS' | 'QA_FAIL'.
@@ -247,20 +246,20 @@ export function gateDecision(reconciled, overallA, overallB) {
   if (!known(overallA) || !known(overallB)) {
     const a = known(overallA) ? overallA : 'unreadable'
     const b = known(overallB) ? overallB : 'unreadable'
-    return { judge: false, verdict: 'QA_FAIL', reason: `an analyst overall verdict is missing/unreadable (A: ${a}, B: ${b}) — the §3.2 judge-spawn condition needs two readable, disagreeing verdicts; missing evidence fails the boundary closed (QA_FAIL), the judge never spawns on missing inputs` }
+    return { judge: false, verdict: 'QA_FAIL', reason: `an analyst overall verdict is missing/unreadable (A: ${a}, B: ${b}) — the judge-spawn condition needs two readable, disagreeing verdicts; missing evidence fails the boundary closed (QA_FAIL), the judge never spawns on missing inputs` }
   }
   if (overallA === overallB) {
     return {
       judge: false, verdict: 'QA_PASS',
       reason: overallA === 'pass'
         ? 'zero blocking findings and the analysts agree (pass) — the verdict is computed; no judge'
-        : 'the analysts agree (fail) yet produced zero blocking findings — an unbacked fail is noise to the deterministic reconcile; the §3.2 computed rule (no blocking ⇒ QA_PASS) applies and an agreed verdict is not ambiguous, so no judge',
+        : 'the analysts agree (fail) yet produced zero blocking findings — an unbacked fail is noise to the deterministic reconcile; the computed rule (no blocking ⇒ QA_PASS) applies and an agreed verdict is not ambiguous, so no judge',
     }
   }
   return { judge: true, verdict: null, reason: `zero blocking findings and the analyst overall verdicts disagree (A: ${overallA}, B: ${overallB}) — ambiguous reconcile, the judge rules` }
 }
 
-// probeGate(surface, gate) — the §7 ui-slice probe gating predicate (tasks.md T2.1), a PURE
+// probeGate(surface, gate) — the ui-slice probe gating predicate, a PURE
 // classifier the build spine consults AFTER the mechanical runnerGate has already disposed of the
 // reject paths a probe shares with every other check. The browser is a subprocess with a deadline,
 // never a service, and "the builder NEVER gets a browser" — so probe outcomes reach the spine ONLY
@@ -270,11 +269,11 @@ export function gateDecision(reconciled, overallA, overallB) {
 // folding and runnerGate's verdict.
 //
 // The exit-code mapping is already MECHANICAL upstream and must not be second-guessed here
-// (re-deriving it from prose would be exactly the v2 mistake this phase repeals):
+// (re-deriving it from prose would be exactly the v2 mistake):
 //   · probe exit 1 (assert-fail) or 79 (timeout) → kiln-law folds the check 'red' → its declared
 //     flip is UNMET → kiln-law run exits non-zero → runnerGate returns 'red' → the spine
 //     auto-REJECTS before any reviewer (lawRedReject). probeGate is never consulted on 'red'.
-//   · missing/stale probe evidence → the §6 freshness arms fail → runnerGate returns 'stale' → the
+//   · missing/stale probe evidence → the freshness arms fail → runnerGate returns 'stale' → the
 //     spine auto-REJECTS before any reviewer. probeGate is never consulted on 'stale'/'tamper'.
 //   · probe exit 78 (playwright absent) → kiln-law folds the check 'deferred' (exempt from flip
 //     accounting — deferred is NEVER green), the run can exit 0, and run.json is finalized
@@ -291,7 +290,7 @@ export function gateDecision(reconciled, overallA, overallB) {
 //     deferred (playwright absent → exit 78, an un-instantiated template, or --skip-probes). The
 //     run proceeds HONESTLY DEGRADED: the spine ledgers 'probe_unavailable', the ui review falls
 //     back to the v2 static checks, and verification_class is recorded end-to-end. A capability
-//     tier, NEVER an error, and NEVER silently green (the §7 honesty law).
+//     tier, NEVER an error, and NEVER silently green (the honesty law).
 //   · ui/mixed + an unreadable/absent verification_class → { action:'reject' } — fail-closed: a
 //     trustworthy-looking run whose degradation cannot be PROVEN must not pass a ui gate as 'full'.
 //     (runnerGate already routes a missing class to 'stale', so the spine never reaches probeGate
@@ -308,8 +307,8 @@ export function probeGate(surface, gate) {
   return { action: 'reject', verification_class: vc, reason: `the ui slice carries no readable verification_class (${JSON.stringify(vc)}) — whether probe verification was degraded cannot be proven; fail closed rather than pass a ui gate as fully verified` }
 }
 
-// rejectionClass(review) — the §3.3 master-signal classifier: Sentinel escalation keys on
-// LOGICAL findings only (genesis 3.3 semantics — a required mechanical|logical enum on every
+// rejectionClass(review) — the master-signal classifier: Sentinel escalation keys on
+// LOGICAL findings only (a required mechanical|logical enum on every
 // reviewer finding). Classification of one REJECTED verdict:
 //   · null/absent review (the agent died) → 'mechanical' — an infrastructure failure carries no
 //     defect signal; it must not push the slice toward feedback escalation or a split.
@@ -324,8 +323,8 @@ export function rejectionClass(review) {
   return findings.length ? 'mechanical' : 'logical'
 }
 
-// failureFingerprint(checkResults, gate) — the D1 retry-router signature (BLUEPRINT §9 velocity;
-// plan D1, Sol amendment 8). Before another builder attempt is admitted, the failure is
+// failureFingerprint(checkResults, gate) — the retry-router signature (velocity). Before another
+// builder attempt is admitted, the failure is
 // fingerprinted so an IDENTICAL repeat can be caught (splitting or re-building an unchanged broken
 // environment just makes two failing slices). `checkResults` is the runner's VERBATIM transcription
 // of the run's evidence/<runId>/results.jsonl — one { id, exit, timeout } per check kiln-law ran
@@ -346,7 +345,7 @@ export function rejectionClass(review) {
 // is an INFRA fault — the environment, not the code. Every other nonzero exit is an ASSERTION fault —
 // wrong behavior. A green check (exit 0, no timeout) is not a failure; a deferred probe records no
 // exit and the runner skips its line entirely, so it never reaches this function.
-// ATOMIC transcription validation (Sol WSD-r1 finding 3): the transcription is trusted WHOLE or not
+// ATOMIC transcription validation: the transcription is trusted WHOLE or not
 // at all — ANY malformed entry (non-object, blank id, non-finite exit, non-boolean timeout) yields
 // the NULL fingerprint. A partially-garbled results.jsonl must read as NO fingerprint (the v3.0.1
 // admission), never as a confident partial signature that could route environment_repeat off half
@@ -379,8 +378,8 @@ export function failureFingerprint(checkResults, gate) {
   return { class: klass, failed: failed.map((f) => f.id), signature: `${klass}|${failed.map((f) => `${f.id}:${f.cls}`).join(',')}` }
 }
 
-// admitRetry(prevFp, curFp) — the D1 admission decision over two consecutive failure fingerprints
-// (plan D1). curFp is THIS attempt's fingerprint, prevFp the prior attempt's. FAIL TOWARD v3.0.1:
+// admitRetry(prevFp, curFp) — the admission decision over two consecutive failure fingerprints.
+// curFp is THIS attempt's fingerprint, prevFp the prior attempt's. FAIL TOWARD v3.0.1:
 // anything but an identical repeat admits the next builder attempt exactly as before.
 //   · no comparable current fingerprint (green Law / reviewer judgment / stale / garbled) → admit,
 //     reason 'no_fingerprint' — the Sentinel alone governs, as in v3.0.1.
@@ -408,13 +407,13 @@ export function admitRetry(prevFp, curFp) {
   return { admit: true, escalate_diagnosis: true, reason: 'assertion_repeat' }
 }
 
-// pipelineInvalidated(baseSha, headSha) — the §9 next-milestone pipelining invalidation predicate
-// (review finding #8, BLUEPRINT §9). Velocity lever 3 launches M(i+1)'s slice-plan IN PARALLEL with
+// pipelineInvalidated(baseSha, headSha) — the next-milestone pipelining invalidation predicate.
+// Velocity lever 3 launches M(i+1)'s slice-plan IN PARALLEL with
 // M(i)'s milestone gate, against the HEAD that existed when the pipeline launched (its recorded
 // `base_sha`). But M(i)'s gate may mutate that HEAD: a tribunal correction commit (and later a
 // validate-loop fix) lands new work on M(i), so a slice plan computed against the pre-correction
 // codebase is now stale — it may re-cut work the correction already did, or miss state the
-// correction introduced. The rule (normative §9): "the pipelined slice plan records its base
+// correction introduced. The rule: "the pipelined slice plan records its base
 // commit SHA; any corrective commit on the current milestone (tribunal correction, validate loop)
 // invalidates it and forces a re-slice against the new HEAD."
 //
@@ -437,7 +436,7 @@ export function pipelineInvalidated(baseSha, headShaArg) {
   return { invalidated: false, reason: '' }
 }
 
-// admitSpeculation(slices) — the D3 churn-aware speculation gate (plan WS-D). Velocity lever 3
+// admitSpeculation(slices) — the churn-aware speculation gate. Velocity lever 3
 // launches the NEXT milestone's slice plan IN PARALLEL with THIS milestone's gate; but when this
 // milestone churned, the gate will likely commit corrections, HEAD moves, and pipelineInvalidated
 // discards the speculative plan anyway — so cutting it burns a krs-one call for nothing. This
@@ -480,8 +479,8 @@ export function admitSpeculation(slices) {
   return { admit: true, reason: null, corrections, slices: sliceCount }
 }
 
-// validateVerdict(ev) — the §3.2/§5 validate-stage verdict, computed DETERMINISTICALLY FIRST
-// (tasks.md T3.5: "Verdict computation deterministic-first") instead of trusting an agent's
+// validateVerdict(ev) — the validate-stage verdict, computed DETERMINISTICALLY FIRST
+// ("Verdict computation deterministic-first") instead of trusting an agent's
 // self-assigned verdict. The validate stage is the real L3 backstop, so its PASS/PARTIAL/FAILED
 // ruling is mechanical over the EVIDENCE FILES — the deterministic Law floor (kiln-law verify +
 // run FULL + suite), the per-criterion results, the Tier-2 browser path, and the goal-backward
@@ -490,7 +489,7 @@ export function admitSpeculation(slices) {
 // passes a gate. Inlined into validate.js by the bundler (// @inline:spine:validateVerdict).
 //
 // `ev` is the validate stage's assembled evidence (every field fail-closed on absence):
-//   { law_run_exit, suite_exit         — the §5.1 Law floor exit codes (numbers; non-0 = the Law
+//   { law_run_exit, suite_exit         — the Law floor exit codes (numbers; non-0 = the Law
 //                                         is red / the project suite failed; non-number ⇒ null =
 //                                         the command was not run or its exit was not transcribed,
 //                                         which FAILS CLOSED — a PASS requires BOTH at exit 0, so a
@@ -501,7 +500,7 @@ export function admitSpeculation(slices) {
 //                                         validate.js argusPrompt transcribes -1 for both). -1 is an
 //                                         HONEST "not run because the oracle was unavailable" — it
 //                                         caps the verdict at PARTIAL, never PASS, never a hard
-//                                         FAILED on this alone, per the §1.6/§7 honest-degradation
+//                                         FAILED on this alone, per the honest-degradation
 //                                         contract. null vs -1 is the load-bearing distinction:
 //                                         null = oracle present, exit dropped ⇒ FAILED; -1 = oracle
 //                                         absent, honestly marked ⇒ degraded PARTIAL.)
@@ -531,7 +530,7 @@ export function admitSpeculation(slices) {
 //
 // Returns { verdict, verification_class, browser_verdict, blocking, reasons }:
 //   · verdict ∈ 'VALIDATE_PASS' | 'VALIDATE_PARTIAL' | 'VALIDATE_FAILED'
-//   · verification_class ∈ 'full' | 'static-only' — the §1.6/§7 honesty channel, recorded
+//   · verification_class ∈ 'full' | 'static-only' — the honesty channel, recorded
 //     end-to-end: 'static-only' the moment a UI scope ran without a browser path (degraded but
 //     honest), else 'full'. A non-UI deliverable is always 'full' (no browser gap exists).
 //   · browser_verdict — the v2 enum, preserved: NOT_APPLICABLE (no UI scope) ·
@@ -545,7 +544,7 @@ export function admitSpeculation(slices) {
 //   FAILED iff  install failed · the Law run is red OR un-transcribed (law_run_exit ≠ 0, null
 //               included — EXCEPT the -1 degraded-floor sentinel, which is PARTIAL below) · the
 //               suite exit is MISSING/un-transcribed (suite_exit = null — a PASS requires the suite
-//               at exit 0 per §3.2/§5.1, so an unproven suite fails closed exactly like an
+//               at exit 0, so an unproven suite fails closed exactly like an
 //               un-transcribed Law run; suite_exit=-1 is likewise the degraded sentinel, PARTIAL) ·
 //               the suite ran red AND >50% of its tests failed · any CRITICAL criterion unmet · any
 //               blocking finding · the Tier-2 traversal ran and FAILED (a real UI defect). These
@@ -556,7 +555,7 @@ export function admitSpeculation(slices) {
 //               failed (incl. suite_exit=-1) · any NON-critical criterion unmet · missing creds · a
 //               UI scope with no clean browser path (static-only — the v2 "UI behavior pending the
 //               out-of-loop pass" ceiling, now satisfiable in-loop only by a clean Tier-2
-//               traversal). The §3.2 rule: a UI scope maxes at PARTIAL unless its browser traversal
+//               traversal). The rule: a UI scope maxes at PARTIAL unless its browser traversal
 //               is clean.
 //   PASS    otherwise: install ok, Law run + suite both exit 0, every critical criterion met,
 //               zero blocking findings, and (no UI scope OR the Tier-2 traversal ran clean).
@@ -584,7 +583,7 @@ export function validateVerdict(ev) {
   // pluginRoot is absent the deterministic floor cannot run and Argus is told (validate.js argusPrompt)
   // to transcribe law_run_exit=-1 / suite_exit=-1 — an HONEST "not run because the oracle was
   // structurally unavailable", distinct from null ("the oracle was available but its exit was dropped").
-  // §1.6/§7 + the validate.js L30-31 contract: pluginRoot absence DEGRADES to the v2 static path —
+  // The validate.js contract: pluginRoot absence DEGRADES to the v2 static path —
   // honestly, never a silent skip and never a clean green. So -1 is a degradation (→ PARTIAL ceiling
   // below), not a hard FAILED: it can never PASS (the floor never proved exit 0), but the run is honestly
   // degraded, not declared broken. It is symmetric with the suite arm, where -1 already lands in PARTIAL.
@@ -593,11 +592,11 @@ export function validateVerdict(ev) {
   const failedReasons = []
   if (!installOk) failedReasons.push('install/build failed — the app could not be installed or built (the runner reported install_ok ≠ true)')
   if (lawExit !== 0 && !lawFloorUnavailable) failedReasons.push(`the Law run is RED — kiln-law run (FULL) ${lawExit === null ? 'was not run or its exit was not transcribed' : `exited ${lawExit}`}; the verdict is mechanical (no agent softens an exit code)`)
-  // suite: a MISSING/un-transcribed exit fails CLOSED (§5.1 — exit codes are transcribed exactly and
-  // the verdict rules over them; §3.2 — PASS requires the suite at exit 0, so an unproven suite is
+  // suite: a MISSING/un-transcribed exit fails CLOSED (exit codes are transcribed exactly and
+  // the verdict rules over them; PASS requires the suite at exit 0, so an unproven suite is
   // never PASS, exactly as the Law run above). >50% failed is FAILED; a red suite that RAN with ≤50%
   // failed (or ran red with counts unavailable) is the softer PARTIAL arm below. null ⇒ FAILED here.
-  if (suiteExit === null) failedReasons.push('the project suite exit was not run or not transcribed — kiln-law suite produced no exit code; a PASS requires the suite at exit 0 (§5.1/§3.2), so a missing suite oracle fails closed (no agent softens a missing exit code)')
+  if (suiteExit === null) failedReasons.push('the project suite exit was not run or not transcribed — kiln-law suite produced no exit code; a PASS requires the suite at exit 0, so a missing suite oracle fails closed (no agent softens a missing exit code)')
   let suiteMajorityFailed = false
   if (suiteExit !== null && suiteExit !== 0 && passed !== null && failed !== null && (passed + failed) > 0) {
     suiteMajorityFailed = failed > (passed + failed) / 2
@@ -612,8 +611,8 @@ export function validateVerdict(ev) {
   // absent), so a clean green can never be PROVEN — but the run is honestly degraded, not FAILED. This
   // is the load-bearing arm when Argus ran its own suite to a clean exit 0: without it the verdict would
   // fall through to a silent PASS the missing floor never earned (the mandate's "never silently green").
-  if (lawFloorUnavailable) partialReasons.push('the deterministic Law floor did not run — kiln-law was unavailable (pluginRoot absent), so law_run_exit=-1; the run is honestly degraded to the v2 static path (the floor never proved a clean exit 0), capped at PARTIAL, never a silent PASS (§1.6/§7)')
-  // a MUTE GATE is epistemic ABSENCE, not proven breakage (the 2026-07-04 cross-family ruling): the
+  if (lawFloorUnavailable) partialReasons.push('the deterministic Law floor did not run — kiln-law was unavailable (pluginRoot absent), so law_run_exit=-1; the run is honestly degraded to the v2 static path (the floor never proved a clean exit 0), capped at PARTIAL, never a silent PASS')
+  // a MUTE GATE is epistemic ABSENCE, not proven breakage: the
   // gate agent AND its one fresh re-dispatch both died on the structured-output retry cap, so that
   // gate's coverage is UNKNOWN — the Law-floor doctrine above applies verbatim: PASS is impossible,
   // but a dead reporter proves nothing about the product, so the run is honestly degraded, never
@@ -623,7 +622,7 @@ export function validateVerdict(ev) {
   if (suiteExit !== null && suiteExit !== 0 && !suiteMajorityFailed) partialReasons.push(`the project suite is red (exit ${suiteExit}) but ≤50% of tests failed${passed !== null && failed !== null ? ` (${failed}/${passed + failed})` : ' (counts unavailable)'}`)
   for (const c of nonCriticalUnmet) partialReasons.push(`a non-critical acceptance criterion is unmet: ${c.id || '(unnamed)'}${c.note ? ` — ${c.note}` : ''}`)
   if (missingCreds) partialReasons.push('missing credentials/env — never a FAILED on its own (v2 rule), capped at PARTIAL')
-  if (uiScope && browserPath === 'static-only') partialReasons.push('UI scope with no clean browser path — static-only (playwright/MCP absent or the traversal did not run clean); the §3.2 ceiling is PARTIAL until a clean Tier-2 traversal, honestly degraded, never silently green')
+  if (uiScope && browserPath === 'static-only') partialReasons.push('UI scope with no clean browser path — static-only (playwright/MCP absent or the traversal did not run clean); the ceiling is PARTIAL until a clean Tier-2 traversal, honestly degraded, never silently green')
 
   const verification_class = (uiScope && browserPath !== 'full') ? 'static-only' : 'full'
   const browser_verdict = !uiScope ? 'NOT_APPLICABLE'

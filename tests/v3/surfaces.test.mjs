@@ -1,5 +1,5 @@
-// surfaces.test.mjs — P5 T2 acceptance: the sanctioned surfaces (BLUEPRINT §11 items 2/4/5),
-// carried to platform currency in P6.1 T2. The theater lives in labels and lazy-loaded data,
+// surfaces.test.mjs — acceptance: the sanctioned surfaces,
+// carried to platform currency in. The theater lives in labels and lazy-loaded data,
 // never in always-loaded context — so this guard is static + behavioral legs per hook. It locks
 // the shapes a future edit could silently break: the theme palette, the output-style frontmatter,
 // the hooks.json wrapper, the exec-form command shape, the Notification matchers (incl. the 2.1.198

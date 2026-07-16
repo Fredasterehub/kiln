@@ -1,16 +1,16 @@
-// law.test.mjs — T1 acceptance: THE LAW (BLUEPRINT §5/§5.1). Three floors in one file:
+// law.test.mjs — T1 acceptance: THE LAW. Three floors in one file:
 //   1. src/law.mjs pure fns — validateLaw (mirrors schemas/law.schema.json), flipPlan (the
 //      red/green lifecycle arithmetic), lawSummary.
-//   2. scripts/kiln-law.mjs end-to-end in a tmp GIT REPO fixture — the §5 lock sequence (index,
+// 2. scripts/kiln-law.mjs end-to-end in a tmp GIT REPO fixture — the lock sequence (index,
 //      THEN the single "test(law): lock acceptance gates" commit) and the tamper drill exactly
 //      as specified: index → lock commit → verify clean → tamper a locked file → verify exits 2
 //      with TAMPER lines → run a trivially-green + a red check (+ an inert probe) → status folds
 //      correctly. The trust root is exercised hard: once the Law is committed, the COMMITTED
 //      version is canonical and the live law.json is never trusted — the laundering drill
 //      (tamper + update the recorded hash, even committed), the anchor-move drill (launder AND
-//      move lock_commit to the tamper commit — review cycle 2's attack), the unlock drill
+//      move lock_commit to the tamper commit — the anchor-move attack), the unlock drill
 //      (reset/delete the live law), run's tamper gate firing pre-execution AND re-firing before
-//      EACH check (§5.1: before EVERY check run — the mid-run tamper drill, cycle 3), and the
+// EACH check (before EVERY check run — the mid-run tamper drill), and the
 //      --flips/--before red/green lifecycle gates.
 //   3. The GENERATED workflows/architecture.js Law phase, mock-driven — Asimov after Athena
 //      PASS and before handoff, in-script SC↔check coverage arithmetic, fail-closed
@@ -110,7 +110,7 @@ test('flipPlan: red slice ids flip; green non-slice ids are the regression set',
   assert.deepEqual(out.unknown, [])
 })
 
-test('flipPlan: already-green and pre_satisfied slice ids are excluded from flip accounting and guarded as regressions (§5.1)', () => {
+test('flipPlan: already-green and pre_satisfied slice ids are excluded from flip accounting and guarded as regressions', () => {
   const law = flipLaw()
   law.checks[2].pre_satisfied = true // SC-003 GREEN at lock (brownfield)
   const out = flipPlan(law, ['SC-001', 'SC-002', 'SC-003'], { 'SC-001': 'green', 'SC-002': 'red' })
@@ -174,7 +174,7 @@ const fixtureLaw = () => ({
   ],
 })
 
-// makeFixture — a tmp git repo at the §5 starting point: one committed product file (the
+// makeFixture — a tmp git repo at the starting point: one committed product file (the
 // pre-gate HEAD that index records as lock_commit), plus the gates — one trivially-green shell
 // check, one red, one inert probe template — and the pre-lock law.json on disk, UNCOMMITTED.
 // The contract sequence is index FIRST, then the single lock commit (lockFixture).
@@ -193,7 +193,7 @@ function makeFixture(law = fixtureLaw()) {
   writeFileSync(join(kiln, 'law.json'), JSON.stringify(law, null, 2) + '\n')
   return { proj, kiln }
 }
-// lockFixture — the EXACT §5 sequence the workflow's locksmith runs: kiln-law index, then ONE
+// lockFixture — the EXACT sequence the workflow's locksmith runs: kiln-law index, then ONE
 // "test(law): lock acceptance gates" commit carrying the gates + the indexed law.json.
 function lockFixture(proj, kiln) {
   const res = cli('index', proj, kiln)
@@ -211,10 +211,10 @@ test('CLI index: hashes the on-disk (still uncommitted) gates, records HEAD as l
     const res = cli('index', proj, kiln)
     assert.equal(res.status, 0, res.stderr)
     assert.match(res.stdout, /locked 3 check\(s\), 3 file\(s\) @ [0-9a-f]{40}/)
-    assert.match(res.stdout, /git add tests\/acceptance \.kiln\/law\.json && git commit -m "test\(law\): lock acceptance gates"/, 'index hands the agent the exact §5 lock-commit command')
+    assert.match(res.stdout, /git add tests\/acceptance \.kiln\/law\.json && git commit -m "test\(law\): lock acceptance gates"/, 'index hands the agent the exact lock-commit command')
     const law = readLawFile(kiln)
     // lock_commit is the last PRE-gate commit — the gates were uncommitted at index time
-    // (the §5 sequence: index, THEN the single lock commit; git content-addressing means
+    // (the sequence: index, THEN the single lock commit; git content-addressing means
     // law.json can never carry the sha of the commit that contains it).
     assert.equal(law.lock_commit, preGateHead)
     assert.equal(law.checks[0].sha256['tests/acceptance/sc-001.sh'], sha256('grep -q hello app.txt\n'))
@@ -237,7 +237,7 @@ test('CLI verify: the index→lock-commit window — re-hash arm guards alone; t
     const tampered = cli('verify', proj, kiln)
     assert.equal(tampered.status, 2)
     assert.match(tampered.stdout, /^TAMPER: tests\/acceptance\/sc-002\.sh$/m)
-    // restore, then close the window with the single §5 lock commit → clean
+    // restore, then close the window with the single lock commit → clean
     writeFileSync(join(proj, 'tests/acceptance/sc-002.sh'), 'exit 1\n')
     gitIn(proj, 'add', 'tests/acceptance', '.kiln/law.json')
     gitIn(proj, 'commit', '-qm', 'test(law): lock acceptance gates')
@@ -299,7 +299,7 @@ test('CLI laundering drill: tamper a file AND update its recorded hash — the l
   } finally { rmSync(proj, { recursive: true, force: true }) }
 })
 
-test('CLI anchor-move drill (review cycle 2): tamper + launder the hash + COMMIT + move lock_commit to the tamper commit — the COMMITTED Law is canonical, verify and run still exit 2', () => {
+test('CLI anchor-move drill: tamper + launder the hash + COMMIT + move lock_commit to the tamper commit — the COMMITTED Law is canonical, verify and run still exit 2', () => {
   const { proj, kiln } = makeFixture()
   try {
     lockFixture(proj, kiln)
@@ -380,7 +380,7 @@ test('CLI verify brownfield: a locked path already IN lock_commit anchors on loc
   } finally { rmSync(proj, { recursive: true, force: true }) }
 })
 
-test('CLI run: the §5.1 tamper gate runs BEFORE any check — a tampered lock exits 2 with TAMPER lines, nothing executed, no evidence written', () => {
+test('CLI run: the tamper gate runs BEFORE any check — a tampered lock exits 2 with TAMPER lines, nothing executed, no evidence written', () => {
   const { proj, kiln } = makeFixture()
   try {
     lockFixture(proj, kiln)
@@ -401,7 +401,7 @@ test('CLI run: the §5.1 tamper gate runs BEFORE any check — a tampered lock e
   } finally { rmSync(proj, { recursive: true, force: true }) }
 })
 
-test('CLI run mid-run tamper drill (review cycle 3): the gate re-fires before EVERY check — a check whose cmd rewrites another locked file aborts the run with exit 2 before the tampered check executes', () => {
+test('CLI run mid-run tamper drill: the gate re-fires before EVERY check — a check whose cmd rewrites another locked file aborts the run with exit 2 before the tampered check executes', () => {
   const { proj, kiln } = makeFixture()
   try {
     // the cycle-3 attack: locked SC-001 itself rewrites locked SC-002 red→green, then exits 0;
@@ -421,7 +421,7 @@ test('CLI run mid-run tamper drill (review cycle 3): the gate re-fires before EV
     const lines = readFileSync(join(kiln, 'evidence', runId, 'results.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
     assert.deepEqual(lines.map((l) => l.id), ['SC-001'])
     assert.ok(!existsSync(join(kiln, 'evidence', runId, 'checks', 'SC-002.log')), 'no log for a never-executed check')
-    // §6 fail-closed: the aborted run never finalizes its manifest — no results_sha256, no
+    // fail-closed: the aborted run never finalizes its manifest — no results_sha256, no
     // completed_at — so the build spine's freshness gate reads the partial evidence as stale.
     const manifest = JSON.parse(readFileSync(join(kiln, 'evidence', runId, 'run.json'), 'utf8'))
     assert.equal(manifest.results_sha256, undefined, 'an aborted run must NOT finalize results_sha256')
@@ -463,7 +463,7 @@ test('CLI run mid-run tamper drill, index→lock-commit window: un-locking the l
   } finally { rmSync(proj, { recursive: true, force: true }) }
 })
 
-// ── run --flips/--before — the §5.1 red/green lifecycle gates ────────────────────────────────────
+// ── run --flips/--before — the red/green lifecycle gates ────────────────────────────────────
 const lifecycleLaw = () => {
   const law = fixtureLaw()
   law.checks[0].pre_satisfied = true // SC-001 GREEN at lock (brownfield)
@@ -488,7 +488,7 @@ test('CLI run --flips: declared flips must go RED→GREEN from the lock-time rec
     const flipped = cli('run', proj, kiln, '--flips', 'SC-002')
     assert.equal(flipped.status, 0, flipped.stderr)
     assert.match(flipped.stdout, /GREEN SC-002/)
-    // a pre_satisfied id declared as a flip demands nothing (it was never RED — §5.1)
+    // a pre_satisfied id declared as a flip demands nothing (it was never RED —)
     const pre = cli('run', proj, kiln, '--flips', 'SC-001')
     assert.equal(pre.status, 0, pre.stderr)
     assert.match(pre.stdout, /^PLAN flip= regression=SC-001 pre_satisfied=SC-001 deferred= \(before: lock\)$/m)
@@ -598,7 +598,7 @@ test('CLI run: report-only — green + red + PROBE_DEFERRED summary lines, hashe
     assert.match(res.stdout, /^RED SC-002 exit 1 \(\d+ms\)$/m)
     assert.match(res.stdout, /^PROBE_DEFERRED SC-003$/m)
     assert.match(res.stdout, /^RESULT \S+ green=1 red=1 deferred=1$/m)
-    // evidence contract (§5.1): per-check log + {id, exit, duration_ms, log_sha256} lines
+    // evidence contract: per-check log + {id, exit, duration_ms, log_sha256} lines
     const runDir = join(kiln, 'evidence', runId[1])
     const lines = readFileSync(join(runDir, 'results.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
     assert.equal(lines.length, 3)
@@ -609,7 +609,7 @@ test('CLI run: report-only — green + red + PROBE_DEFERRED summary lines, hashe
     assert.equal(r1.log_sha256, sha256(logContent), 'log_sha256 must hash the log file content')
     assert.deepEqual(lines.find((l) => l.id === 'SC-003'), { id: 'SC-003', deferred: 'probe_deferred' })
     assert.ok(!existsSync(join(runDir, 'checks', 'SC-003.log')), 'a deferred probe executes nothing and logs nothing')
-    // run.json — the §6 freshness anchor, CLI-written and FINALIZED on a complete run: head +
+    // run.json — the freshness anchor, CLI-written and FINALIZED on a complete run: head +
     // sha256(results.jsonl) + epochs are what the build spine's gate compares against HEAD.
     const manifest = JSON.parse(readFileSync(join(runDir, 'run.json'), 'utf8'))
     assert.equal(manifest.schema, 1)
@@ -721,7 +721,7 @@ test('CLI: a corrupted live law.json is a schema refusal where the live file is 
     lockFixture(proj, kiln)
     const run = cli('run', proj, kiln, '--only', 'SC-001')
     const runId = run.stdout.match(/^RUN (\S+) /m)[1]
-    // corrupt the live law: duplicate ids violate the §5.1 one-check-per-SC contract
+    // corrupt the live law: duplicate ids violate the one-check-per-SC contract
     const law = readLawFile(kiln)
     law.checks[1].id = 'SC-001'
     writeFileSync(join(kiln, 'law.json'), JSON.stringify(law, null, 2) + '\n')
@@ -793,7 +793,7 @@ const asimovResult = {
 }
 const lockResult = { reasoning: 'l', indexed: true, committed: true, error: '' }
 const lawProofResult = { reasoning: 'v', law_json_exists: true, lock_commit_exists: true }
-// The P3.5 T1 dry-run gate legs (between Asimov's compile and the lock): a clean default
+// The dry-run gate legs (between Asimov's compile and the lock): a clean default
 // transcript — one honest shell red (ambiguous by exit code, ruled honest downstream) + the
 // deferred probe — and a PASS ruling with nothing broken and nothing green. Schema-faithful:
 // every entry carries all eight evidence fields, nulls included (DRYRUN_SCHEMA requires them).
@@ -844,10 +844,10 @@ test('T1 Law phase: happy path — Asimov runs after Athena PASS, before handoff
   assert.match(asimovPrompt, /tests\/acceptance/)
   assert.match(asimovPrompt, /NO browser code/)
   assert.match(asimovPrompt, /"lock_commit": null/)
-  // the lock brief is the EXACT T1/§5 sequence: kiln-law index FIRST, then the ONE lock commit
+  // the lock brief is the EXACT T1/ sequence: kiln-law index FIRST, then the ONE lock commit
   const lockPrompt = calls.find((c) => c.label === 'thoth:law-lock').prompt
   assert.match(lockPrompt, /git add tests\/acceptance \.kiln\/law\.json && git commit -m "test\(law\): lock acceptance gates"/)
-  assert.ok(lockPrompt.indexOf('kiln-law.mjs index') < lockPrompt.indexOf('git commit -m "test(law): lock acceptance gates"'), 'index-then-commit: the §5 sequence is index first, then the single lock commit')
+  assert.ok(lockPrompt.indexOf('kiln-law.mjs index') < lockPrompt.indexOf('git commit -m "test(law): lock acceptance gates"'), 'index-then-commit: the sequence is index first, then the single lock commit')
   assert.match(lockPrompt, /\/opt\/kiln-plugin\/scripts\/kiln-law\.mjs index/)
   assert.doesNotMatch(lockPrompt, /index the lock/, 'no second commit — the lock is ONE commit')
 })
@@ -902,12 +902,12 @@ test('T1 Law phase: every degraded leg fails CLOSED with a reason — null Asimo
   assert.match(proofFail.result.law_reason, /lock verification failed — law\.json exists: true, lock commit exists: false/)
 })
 
-test('T1 Law phase: Athena gains the SC-to-Law dimension; Plato ADOPTS VISION SC ids (P4 T4 (b))', async () => {
+test('T1 Law phase: Athena gains the SC-to-Law dimension; Plato ADOPTS VISION SC ids', async () => {
   const { calls } = await runArch(lawArgs, lawRespond())
   const athenaPrompt = calls.find((c) => c.label === 'athena:validate:r0').prompt
   assert.match(athenaPrompt, /every SC has exactly one law\.json check entry/)
   const platoPrompt = calls.find((c) => c.label === 'plato:synthesis').prompt
-  // P4 T4 (b): Plato no longer MINTS all ids — he adopts VISION's SC-NNN ids and mints only for
+  // (b): Plato no longer MINTS all ids — he adopts VISION's SC-NNN ids and mints only for
   // plan-added criteria, so VISION→plan→Law→goal-backward is ONE identifier space.
   assert.match(platoPrompt, /ADOPT VISION's SC-NNN ids VERBATIM where a criterion traces to one/)
   assert.match(platoPrompt, /one identifier space/i)

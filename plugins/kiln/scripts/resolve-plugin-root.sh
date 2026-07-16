@@ -2,7 +2,7 @@
 # resolve-plugin-root.sh — print the absolute Kiln plugin root to stdout, or fail loud.
 #
 # The single source for the root-resolution the two SKILLs and the-creator agent used to inline
-# three times over (skill-craft §4: one executed resolver, never three copied globs — reliable,
+# three times over (one executed resolver, never three copied globs — reliable,
 # token-free, consistent). Every candidate is confirmed by the marker skill only v2+ ships
 # (kiln-fire), so a stale v1.5.x cache install — which ships kiln-pipeline/kiln-protocol, not
 # kiln-fire — is never mistaken for this plugin. Resolution order:

@@ -1,4 +1,4 @@
-// defect-fixes.test.mjs — regression pins for the v2 defect fixes (BLUEPRINT §15 / P0 T4).
+// defect-fixes.test.mjs — regression pins for the v2 defect fixes.
 // The fixes are content-targeted edits inside generated workflows and reference docs — none is a
 // reusable pure block worth extracting into src/ (each lives in exactly one branch of one file),
 // so each pin reads the SHIPPED file and asserts the fix's fingerprint is present and the
@@ -63,7 +63,7 @@ test('fix 7 — mapping + architecture verify claimed artifacts with a haiku che
   assert.ok(mapping.includes('const verified = existence && Array.isArray(existence.missing)'))
   assert.ok(mapping.includes('const missing = verified ? existence.missing : []'))
   assert.ok(mapping.includes(', missing }'))
-  // architecture returns missing[] as a top-level return key. v3.0.2 B4-1b-ii appends ONE additive
+  // architecture returns missing[] as a top-level return key. v3.0.2 appends ONE additive
   // `council` field AFTER it (brief §h), so missing is no longer the return's last line — assert it is
   // a standalone return key (the fix-7 intent) and that the additive council field follows it.
   assert.ok(arch.includes('\n  missing,\n'))

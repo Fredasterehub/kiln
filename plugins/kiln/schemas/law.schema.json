@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Kiln Law — .kiln/law.json, the locked acceptance-check index",
-  "description": "The test-lock spine (BLUEPRINT §5/§5.1). Asimov writes it pre-lock (lock_commit null, every sha256 map empty); kiln-law index locks it (lock_commit = HEAD at index time, every check's sha256 map covering exactly its files); immutable after. The §5 sequence is index FIRST, then one 'test(law): lock acceptance gates' commit carrying the gates + this file. Cross-field invariants a JSON schema cannot express — duplicate check ids rejected, sha256 maps EMPTY pre-lock and covering EXACTLY files when locked — are enforced by validateLaw in src/law.mjs, which mirrors this schema field-for-field and runs on every kiln-law command (no ajv, no deps). Tamper model: kiln-law verify — and kiln-law run, BEFORE executing any check — re-hashes every locked path against sha256 AND git-diffs it against the commit that locked it (lock_commit for paths already in it; the first descendant commit that introduced the gates otherwise); ANY mismatch exits 2 with a machine-readable 'TAMPER: <path>' line per offender.",
+  "description": "The test-lock spine. Asimov writes it pre-lock (lock_commit null, every sha256 map empty); kiln-law index locks it (lock_commit = HEAD at index time, every check's sha256 map covering exactly its files); immutable after. The lock sequence is index FIRST, then one 'test(law): lock acceptance gates' commit carrying the gates + this file. Cross-field invariants a JSON schema cannot express — duplicate check ids rejected, sha256 maps EMPTY pre-lock and covering EXACTLY files when locked — are enforced by validateLaw in src/law.mjs, which mirrors this schema field-for-field and runs on every kiln-law command (no ajv, no deps). Tamper model: kiln-law verify — and kiln-law run, BEFORE executing any check — re-hashes every locked path against sha256 AND git-diffs it against the commit that locked it (lock_commit for paths already in it; the first descendant commit that introduced the gates otherwise); ANY mismatch exits 2 with a machine-readable 'TAMPER: <path>' line per offender.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "lock_commit", "checks"],
@@ -38,7 +38,7 @@
           },
           "kind": {
             "enum": ["shell", "pytest", "http", "probe"],
-            "description": "Check class; 'probe' entries carry a declarative `spec` (BLUEPRINT §7 Tier-1) that the runner executes via kiln-probe — a one-shot browser subprocess with a deadline, never a service. A spec-less probe is an un-instantiated template: the runner defers it (PROBE_DEFERRED), never errors"
+            "description": "Check class; 'probe' entries carry a declarative `spec` (Tier-1) that the runner executes via kiln-probe — a one-shot browser subprocess with a deadline, never a service. A spec-less probe is an un-instantiated template: the runner defers it (PROBE_DEFERRED), never errors"
           },
           "cmd": {
             "type": "string",
@@ -66,13 +66,13 @@
           },
           "pre_satisfied": {
             "type": "boolean",
-            "description": "§5.1 brownfield lifecycle: GREEN at lock time — excluded from flip accounting, guarded as a regression instead"
+            "description": "Brownfield lifecycle: GREEN at lock time — excluded from flip accounting, guarded as a regression instead"
           },
           "spec": {
             "type": "object",
             "additionalProperties": false,
             "required": ["url", "landmarks"],
-            "description": "The §7 Tier-1 probe spec — declarative assertions only, never browser code; legal ONLY on kind 'probe' (cross-field, enforced by validateLaw). Authored by Asimov at Law time from the SC text; executed by kiln-probe as a one-shot subprocess under a hard deadline; the builder never writes or edits it",
+            "description": "The Tier-1 probe spec — declarative assertions only, never browser code; legal ONLY on kind 'probe' (cross-field, enforced by validateLaw). Authored by Asimov at Law time from the SC text; executed by kiln-probe as a one-shot subprocess under a hard deadline; the builder never writes or edits it",
             "properties": {
               "url": {
                 "type": "string",

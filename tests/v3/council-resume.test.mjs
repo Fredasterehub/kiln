@@ -1,4 +1,4 @@
-// council-resume.test.mjs — B3a acceptance for W6 (resume barriers). The GENERATED architecture.js
+// council-resume.test.mjs — acceptance for W6 (resume barriers). The GENERATED architecture.js
 // makes the council checkpoint chain LOAD-BEARING for resume: a haiku reads prior SEALED council_state
 // checkpoints, the initial ledger seq is FROZEN from the original anchor (a capability refresh never
 // reschedules), and matchCheckpoint decides whether a sealed matching front-half barrier
@@ -33,7 +33,7 @@ async function runWorkflow(file, args, respond) {
 }
 
 const labelsIn = (calls) => calls.map((c) => c.label)
-// B3R1-7: the persisted decision-bundle bytes a fresh run wrote (thoth:bundle-scribe) — fed to a resumed
+// the persisted decision-bundle bytes a fresh run wrote (thoth:bundle-scribe) — fed to a resumed
 // run so its reload leg rehydrates the SAME bundle whose sha equals the reused barrier's decision_bundle_hash.
 const persistedBytesOf = (calls) => { const c = calls.find((x) => x.label === 'thoth:bundle-scribe'); if (!c) return null; const m = c.prompt.match(/\n("(?:[^"\\]|\\.)*")\nReport written = true/); return m ? JSON.parse(m[1]) : null }
 const KILN = '/tmp/nonexistent-kiln/.kiln'
@@ -59,7 +59,7 @@ const crossOk = (payload, phaseTag, over = {}) => ({
     reservation: { invocation_id: INV, keystone: 'master_plan', phase: phaseTag, seat: 'sol', attempt: 1, run_token: RUNTOKEN, prompt_sha256: PSHA, packet_sha256: XSHA, ...(over.reservation || {}) },
   },
 })
-// byte-owned Sol helpers (⟨DSGN-B3-2⟩): extract the exact codex prompt + packet the workflow rendered
+// byte-owned Sol helpers: extract the exact codex prompt + packet the workflow rendered
 // out of the wrapper prompt and derive the matching receipt/reservation hashes, so the happy path
 // passes the byte-ownership check.
 const extractByteOwn = (wrapperPrompt) => {
@@ -78,7 +78,7 @@ const divergenceResult = { reasoning: 'd', analysis_file: `${KILN}/plans/div.md`
 const FROZEN = [`${KILN}/docs/VISION.md`, `${KILN}/docs/architecture.md`, `${KILN}/docs/tech-stack.md`, `${KILN}/docs/arch-constraints.md`, `${KILN}/docs/research.md`]
 const ANCHOR_FILES = FROZEN.map((path) => ({ path, sha256: shaBytes(Buffer.from(`fixture:${path}`)) }))
 const evidenceManifestHash = (() => { const m = {}; for (const f of ANCHOR_FILES) m[f.path] = f.sha256; return sha256Hex(canonicalJson(m)) })()
-// B3R1-7: the resume path now REHYDRATES the structured bundle, so the T4 RENDER path is ACTIVE on both a
+// the resume path now REHYDRATES the structured bundle, so the T4 RENDER path is ACTIVE on both a
 // fresh run AND a reuse (the renderer authors master-plan.md; ratify binds the real b3-bundle/1 bundle) —
 // the mock is render-aware. The converged front-half settles nothing ⇒ the EMPTY bundle.
 const t4BundleOf = (over = {}) => buildDecisionBundle({ common_trunk: { vision_sc_ids: over.visionScIds || [] }, settled_decisions: over.settled || [], open_divergences: over.open || [], renderer_version: 'b3-bundle/1', evidence_manifest_hash: evidenceManifestHash })
@@ -87,7 +87,7 @@ const rat = (bundleH) => ({ reasoning: 'r', artifact_hash: bundleH, verdict: 'AP
 
 const t4Args = (extra = {}) => ({ kilnDir: KILN, projectPath: PROJECT, pluginRoot: '/plugin', codexAvailable: true, capabilityTier: 'T4', runToken: RUNTOKEN, planning: 'dual', ...extra })
 const PHASE_OF = { 'sol:critique': 'CRITIQUE', 'sol:revise': 'REVISION', 'sol:negotiate': 'NEGOTIATION' }
-// B3R1-5: a finding-based divergence now surfaces a negotiation card (the authoritative divergence can
+// a finding-based divergence now surfaces a negotiation card (the authoritative divergence can
 // never disappear), so the negotiate legs must SELECT each card. The cards ride the prompts verbatim (the
 // fable prompt inside <cards>…</cards>, the sol codex prompt after "Open divergence cards: "); both heads
 // pick the PRESENT side (both agree ⇒ settle/leave) so the diverged front-half still seals cleanly.
@@ -96,7 +96,7 @@ const cardsFromSolCodex = (cp) => { const m = cp.match(/Open divergence cards: (
 const presentSide = (card) => (card.position_0 && typeof card.position_0 === 'object' && card.position_0.absent === true) ? 'P1' : 'P0'
 const negSelections = (cards) => ({ selections: cards.map((c) => ({ divergence_id: c.divergence_id, selection: presentSide(c) })) })
 // a one-sided unresolved finding keeps the mechanical divergence set NON-empty ⇒ the negotiation runs and
-// seals NEGOTIATION_SEALED (the negotiated front-half terminal barrier). B3R1-5: the finding-based
+// seals NEGOTIATION_SEALED (the negotiated front-half terminal barrier).: the finding-based
 // divergence now surfaces a NEGOTIATION CARD (the authoritative divergence can never disappear), which the
 // heads select present-side (⇒ settle/leave), so the diverged front-half still seals cleanly.
 const critFinding = { target_decision_id: 'M1', claim: 'M1 hides an unbounded unknown', required_change: 'split M1', severity: 'blocking', evidence: { class: 'scenario', refs: ['vision'] } }
@@ -108,7 +108,7 @@ function makeResponder(cfg = {}) {
   const solCritiquePayload = cfg.diverge ? { findings: [critFinding] } : { findings: [] }
   const solRevisePayload = { dispositions: [], decisions: [], milestones: [], revised_plan_markdown: '# revised plan b\n' }
   const payloadFor = (label, prompt) => label === 'sol:critique' ? solCritiquePayload : label === 'sol:revise' ? solRevisePayload : negSelections(cardsFromSolCodex(prompt))
-  // B3R1-7: capture the rendered master-plan bytes (render-scribe) + the persisted bundle bytes
+  // capture the rendered master-plan bytes (render-scribe) + the persisted bundle bytes
   // (bundle-scribe) so the file-hash / persist-hash / reload legs answer deterministically.
   let renderedHash = null, persistedBundleBytes = null
   const captureScribe = (prompt) => { const m = prompt.match(/\n("(?:[^"\\]|\\.)*")\nReport written = true/); if (m) renderedHash = sha256Hex(JSON.parse(m[1])) }
@@ -124,7 +124,7 @@ function makeResponder(cfg = {}) {
     if (label === 'sol:draft') return solEnvelope(solDraftPayload)
     if (label === 'fable:critique') return { findings: [] }
     if (label === 'fable:revise') {
-      // B3R1-1: the slot is seed-assigned, so dispose EXACTLY the finding ids the prompt lists (parse
+      // the slot is seed-assigned, so dispose EXACTLY the finding ids the prompt lists (parse
       // `- F-<seq>-<slot>-<nnn>: …`) instead of hardcoding a slot label.
       const ids = [...prompt.matchAll(/- (F-\d+-P[01]-\d+):/g)].map((m) => m[1])
       return { dispositions: ids.map((id) => ({ finding_id: id, disposition: 'unresolved' })), decisions: [], milestones: [] }
@@ -141,7 +141,7 @@ function makeResponder(cfg = {}) {
     if (label === 'diogenes:divergence') return divergenceResult
     if (label === 'plato:synthesis' || label.startsWith('plato:revise')) return synthResult
     if (label.startsWith('athena:validate')) return { reasoning: 'v', verdict: 'PASS', failed_dimensions: [], fixes: [] }
-    // B3R1-7: the render leg (One From Many) + the persist leg (front-half barrier) + the reload leg (reuse).
+    // the render leg (One From Many) + the persist leg (front-half barrier) + the reload leg (reuse).
     if (label === 'thoth:render-scribe') { captureScribe(prompt); return { written: true } }
     if (label === 'thoth:render-hash') return { plan_sha256: renderedHash }
     if (label === 'thoth:bundle-scribe') { captureBundleScribe(prompt); return { written: true } }
@@ -194,7 +194,7 @@ test('W6 baseline: a fresh converged T4 run seals NEGOTIATION_SKIPPED and runs t
   assert.equal(barrier.status, 'sealed')
 })
 
-test('W6 post-barrier REUSE: a prior SEALED matching front-half barrier + its persisted bundle ⇒ the debate is skipped, the bundle REHYDRATES, the render path stays ACTIVE (B3R1-7)', async () => {
+test('W6 post-barrier REUSE: a prior SEALED matching front-half barrier + its persisted bundle ⇒ the debate is skipped, the bundle REHYDRATES, the render path stays ACTIVE', async () => {
   const fresh = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder())
   const barrier = frontHalfBarrierOf(fresh.calls)
   const resumed = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder({ priorCheckpoints: [barrier], persistedBundle: persistedBytesOf(fresh.calls) }))
@@ -202,7 +202,7 @@ test('W6 post-barrier REUSE: a prior SEALED matching front-half barrier + its pe
   assert.ok(!ranDebate(resumed.calls), 'the debate front-half is REUSED — none of the critique/revision legs re-run')
   assert.ok(labelsIn(resumed.calls).includes('thoth:bundle-reload'), 'the persisted bundle is reloaded on reuse')
   assert.ok(resumed.log.some((l) => /rehydrated|render path stays ACTIVE/.test(l)), 'the rehydration is logged')
-  // B3R1-7: the render path is ACTIVE after reuse (the renderer authors, NOT plato) — councilBundle rehydrated
+  // the render path is ACTIVE after reuse (the renderer authors, NOT plato) — councilBundle rehydrated
   assert.ok(labelsIn(resumed.calls).includes('thoth:render-scribe'), 'the deterministic renderer authors master-plan.md after reuse (T4 rendering enabled)')
   assert.ok(!labelsIn(resumed.calls).includes('plato:synthesis'), 'plato never authors after a rehydrated reuse')
   assert.equal(resumed.result.council.terminal, 'RATIFIED')
@@ -253,14 +253,14 @@ test('W6 fresh run keeps the anchor seq: with no prior checkpoint the anchor seq
   for (const d of parseCheckpoints(calls)) assert.equal(d.initial_ledger_seq, 7, `${d.phase} uses the anchor's own seq on a fresh run`)
 })
 
-// ── B3b2-iiA: the negotiated front-half terminal barrier (NEGOTIATION_SEALED) joins the resume algebra
+// ── the negotiated front-half terminal barrier (NEGOTIATION_SEALED) joins the resume algebra
 //    exactly like the converged NEGOTIATION_SKIPPED barrier (a paired phase — 2 seat hashes). ──
 test('W6 NEGOTIATION_SEALED REUSE: a prior SEALED negotiated barrier ⇒ the whole debate front-half is reused (not re-run)', async () => {
   const fresh = await runWorkflow(ARCHITECTURE, t4Args(), makeResponder({ diverge: true }))
   const barrier = frontHalfBarrierOf(fresh.calls)
   assert.ok(barrier && barrier.phase === 'NEGOTIATION_SEALED', 'a non-empty divergence set runs the negotiation and seals NEGOTIATION_SEALED')
   assert.equal(barrier.status, 'sealed')
-  // B3R1-5: the finding-based divergence surfaces a real negotiation card (never zero cards) — the
+  // the finding-based divergence surfaces a real negotiation card (never zero cards) — the
   // fable:negotiate prompt carries at least one DV card built FROM divSet, so the divergence can't vanish.
   const negPrompt = fresh.calls.find((c) => c.label === 'fable:negotiate')
   assert.ok(negPrompt && cardsFromFable(negPrompt.prompt).length >= 1, 'the authoritative finding divergence yields a negotiation card (derived from divSet, not the registry-only join)')
@@ -280,7 +280,7 @@ test('W6 DIVERGENCES_BUILT half-pair ⇒ RERUN: a prior sealed DIVERGENCES_BUILT
   assert.ok(ranDebate(resumed.calls), 'DIVERGENCES_BUILT is an intermediate, not a terminal barrier — the whole front half reruns (no partial authority)')
 })
 
-// ── B3c: the W5 fresh-round ladder barriers join the matchCheckpoint resume algebra. FRESH_CARDS_SEALED
+// ──: the W5 fresh-round ladder barriers join the matchCheckpoint resume algebra. FRESH_CARDS_SEALED
 //    is a PAIRED barrier (both heads' frozen 2×2 card sets — exactly 2 seat hashes, a half-pair never
 //    resumes); FRESH_CELLS_SETTLED / REFERENCE_REDUCTION / RUBRIC_CHECK are SCRIPT-only (0 seat hashes). ──
 const freshCards = (over = {}) => ({ kind: 'council_state', protocol_version: 'twin-council/3', template_hash: 'th', run_token_hash: 'rth', initial_ledger_seq: 5, keystone_id: 'master_plan', phase: 'FRESH_CARDS_SEALED', decision_bundle_hash: 'bh', input_artifact_hashes: [], evidence_manifest_hash: 'emh', anonymous_seat_artifact_hashes: { P0: 'a', P1: 'b' }, seat_provenance: { P0: { head: 'fable' }, P1: { head: 'sol' } }, codex_receipt_hash: null, status: 'sealed', ...over })

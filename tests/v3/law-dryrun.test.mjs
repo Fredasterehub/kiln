@@ -1,6 +1,6 @@
-// law-dryrun.test.mjs — P3.5 T1 acceptance: the pre-lock Law check dry-run gate (dogfood
-// finding 1: Athena caught argv-KeyError crashes, a broken marker assert, and a broken exit-code
-// chain INSIDE check code by READING it — checks are code; they execute before we trust them).
+// law-dryrun.test.mjs — acceptance: the pre-lock Law check dry-run gate guards
+// against argv-KeyError crashes, a broken marker assert, and a broken exit-code
+// chain INSIDE check code by READING it — checks are code; they execute before we trust them.
 // Three floors:
 //   1. src/law.mjs classifyDryrun — the deterministic exit-code table (pytest 1 = honest-red;
 //      pytest 2-5 / exit 126-127 / timeout / signal = broken-check; 0 = green; rest = ambiguous).
@@ -15,7 +15,7 @@
 //      broken check is BLOCKED from lock (the drill); the bounded Asimov check-revision cycle
 //      re-dryruns; the deterministic floor overrides a sloppy PASS; legitimately-green checks
 //      are recorded pre_satisfied at lock; every degraded leg fails CLOSED.
-// P3.6 T2 (RUN-B FINDING 1) extends all three floors: a PRESENT-but-schema-invalid law.json is
+// The schema-invalid floor extends all three: a PRESENT-but-schema-invalid law.json is
 // a TRANSCRIPT (exit 0, typed law_violations), never a crash — the workflow routes it to an
 // asimov:law-revise pass (Athena skipped: validator output needs no judge) through the same
 // bounded cycle; a MISSING law.json still dies. And the probe TWINS (embedded spec — the copy
@@ -54,7 +54,7 @@ test('classifyDryrun: timeout and signal-death are broken-check — no verdict w
   assert.equal(classifyDryrun('shell', null, null, false), 'broken-check', 'neither exit nor signal recorded — broken, never silently ambiguous')
 })
 
-// ── 1b. probeTwinRel / probeTwinIssues — the twin-sync pure core (P3.6 T2, RUN-B F1 tail) ───────
+// ── 1b. probeTwinRel / probeTwinIssues — the twin-sync pure core ───────────────────────
 test('probeTwinRel: the on-disk twin convention — tests/acceptance/<id lowercase>.probe.json', () => {
   assert.equal(probeTwinRel({ id: 'SC-006' }), 'tests/acceptance/sc-006.probe.json')
   assert.equal(probeTwinRel({}), 'tests/acceptance/.probe.json', 'a malformed check degrades, never throws')
@@ -95,7 +95,7 @@ const NODE = JSON.stringify(process.execPath) // quoted for the bash -c cmd line
 const dryFixtureLaw = () => ({
   schema: 1, lock_commit: null,
   checks: [
-    // the dogfood finding-1 crash class: a config/argv lookup crashes before any assertion runs
+    // the crash class: a config/argv lookup crashes before any assertion runs
     { id: 'SC-001', milestone: 'M1', kind: 'shell', cmd: `${NODE} tests/acceptance/sc-001-crash.cjs`, files: ['tests/acceptance/sc-001-crash.cjs'], sha256: {}, expected: 'exit0', timeout_s: 30 },
     { id: 'SC-002', milestone: 'M1', kind: 'shell', cmd: 'kiln-no-such-command-t1-drill --flag', files: ['tests/acceptance/sc-002.sh'], sha256: {}, expected: 'exit0', timeout_s: 10 },
     { id: 'SC-003', milestone: 'M1', kind: 'pytest', cmd: 'bash tests/acceptance/sc-003-usage.sh', files: ['tests/acceptance/sc-003-usage.sh'], sha256: {}, expected: 'exit0', timeout_s: 10 },
@@ -245,7 +245,7 @@ test('CLI dryrun: NO tamper gate — a locked Law with a tampered locked file st
 })
 
 test('CLI back-compat: the lock path is unaffected by dryrun — skipped entirely OR run pre-lock, index/verify/run behave identically', () => {
-  // (a) dryrun never invoked: the §5 sequence works as before — dryrun is the architecture
+  // (a) dryrun never invoked: the sequence works as before — dryrun is the architecture
   // stage's gate, not a kiln-law run dependency.
   const a = makeGitFixture()
   try {
@@ -282,10 +282,10 @@ test('CLI dryrun usage: relative projectPath, missing kilnDir, unknown flag, MIS
   } finally { rmSync(proj, { recursive: true, force: true }) }
 })
 
-// ── RUN-B FINDING 1 (P3.6 T2): a defective Law is a TRANSCRIPT, not a crash — dryrun only ────────
+// ── a defective Law is a TRANSCRIPT, not a crash — dryrun only ──────────────────────────
 test('CLI dryrun: a PRESENT but schema-invalid law.json transcribes — exit 0, typed law_violations verbatim, zero checks executed, zero residue', () => {
   const law = dryFixtureLaw()
-  // the FIELD shape: Run B's Asimov emitted probe landmarks {role:"list", name:""} — six of them
+  // the FIELD shape: Asimov may emit probe landmarks {role:"list", name:""} — six of them
   law.checks[5].spec = { url: '/', landmarks: [{ role: 'list', name: '' }] }
   const { proj, kiln } = makeDryFixture(law)
   try {
@@ -339,7 +339,7 @@ test('CLI dryrun: every OTHER command keeps the fail-closed die on an invalid La
   } finally { rmSync(proj, { recursive: true, force: true }) }
 })
 
-// ── RUN-B F1 tail (P3.6 T2): the probe twins — embedded executes, on-disk attests, both in sync ──
+// ── the probe twins — embedded executes, on-disk attests, both in sync ──────────────────
 const twinSpec = () => ({ url: '/', landmarks: [{ role: 'list', name: 'Bookmarks' }] })
 const twinLaw = (spec = twinSpec()) => ({
   schema: 1, lock_commit: null,
@@ -354,7 +354,7 @@ test('CLI dryrun twin arm: desynced / missing / unlisted / unparseable twins are
     let t = dry()
     assert.equal(t.classification, 'broken-check')
     assert.match(t.stderr_tail, /missing on disk/)
-    // desynced twin (the Run-B manual-recovery shape: embedded strengthened, on-disk stale)
+    // desynced twin (the manual-recovery shape: embedded strengthened, on-disk stale)
     writeFileSync(join(proj, 'tests/acceptance/sc-006.probe.json'), JSON.stringify({ url: '/', landmarks: [{ role: 'list', name: 'OldWeakName' }] }))
     t = dry()
     assert.equal(t.classification, 'broken-check')
@@ -462,7 +462,7 @@ const asimovResult = {
 }
 // schema-faithful mock: every entry carries all EIGHT evidence fields, nulls included — exactly
 // what the CLI emits and what DRYRUN_SCHEMA requires (a legal scribe cannot drop the tails).
-// law_violations rides on every dry-run report since P3.6 T2 (empty on the normal path).
+// law_violations rides on every dry-run report since (empty on the normal path).
 const cleanDry = {
   reasoning: 'd', exit: 0, error: '', law_violations: [],
   transcript: [
@@ -535,7 +535,7 @@ test('arch dry-run drill: a crashing check is BLOCKED from lock — fix cycles e
   assert.match(revise, /SC-001: KeyError-class crash/)
   assert.match(revise, /never touch product code/)
   assert.match(revise, /keep lock_commit\s+null and every sha256 map EMPTY/)
-  // P3.6 T2: the revise brief carries the twin-sync duty — a spec edit regenerates the on-disk twin
+  // the revise brief carries the twin-sync duty — a spec edit regenerates the on-disk twin
   assert.match(revise, /regenerate the on-disk twin/)
   assert.match(revise, /<sc-id>\.probe\.json/)
 })
@@ -600,7 +600,7 @@ test('arch DRYRUN_SCHEMA: every transcript-entry evidence field is REQUIRED — 
   assert.deepEqual(entry.properties.exit.type, ['number', 'null'])
   assert.deepEqual(entry.properties.signal.type, ['string', 'null'])
   assert.equal(entry.additionalProperties, false)
-  // P3.6 T2: law_violations is REQUIRED top-level (empty on the normal path) with the typed shape
+  // law_violations is REQUIRED top-level (empty on the normal path) with the typed shape
   assert.deepEqual([...schema.required].sort(), ['exit', 'law_violations', 'transcript'])
   const viol = schema.properties.law_violations.items
   assert.deepEqual([...viol.required].sort(), ['code', 'message', 'path'], 'the typed validator error passes through whole')
@@ -649,7 +649,7 @@ test('arch dry-run gate fails CLOSED: dead scribe, failed dryrun command, dead r
   assert.ok(!labels(noRuling.calls).includes('thoth:law-lock'))
 })
 
-// ── RUN-B FINDING 1 (P3.6 T2): the law-revise routing — the author fixes his own Law ────────────
+// ── the law-revise routing — the author fixes his own Law ───────────────────────────────
 const violationsDry = {
   reasoning: 'd', exit: 0, error: '', transcript: [],
   law_violations: [{ code: 'invalid_value', path: 'checks[1].spec.landmarks[0]', message: 'checks[1].spec.landmarks[0]: role and name must be nonempty strings (selectors by role+name, never CSS)' }],

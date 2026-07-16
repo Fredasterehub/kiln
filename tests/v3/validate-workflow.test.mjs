@@ -1,4 +1,4 @@
-// validate-workflow.test.mjs — P3.6 T4 acceptance for validate's stage brackets (RUN-B FINDING 2).
+// validate-workflow.test.mjs — acceptance for validate's stage brackets.
 // The GENERATED workflows/validate.js is driven through its INLINED deterministic verdict
 // (validateVerdict) with every agent MOCKED, over a NON-UI scope (so the Tier-2 traversal / lease /
 // sweep legs are skipped and the path is the lean drift ∥ Law-floor ∥ goal-backward → verdict one).
@@ -61,7 +61,7 @@ const respondPass = (label) => {
   return null
 }
 
-test('P3.6 T4 validate brackets: stage_started fires on entry; a clean VALIDATE_PASS emits exactly one stage_completed', async () => {
+test('validate brackets: stage_started fires on entry; a clean VALIDATE_PASS emits exactly one stage_completed', async () => {
   const { result, calls } = await runValidate(baseArgs, respondPass)
   assert.equal(result.verdict, 'VALIDATE_PASS')
   const started = ledgersOf(calls, 'stage_started')
@@ -79,7 +79,7 @@ test('P3.6 T4 validate brackets: stage_started fires on entry; a clean VALIDATE_
   assert.ok(completedIdx > verdictIdx, 'stage_completed lands after the verdict is computed and ledgered')
 })
 
-test('P3.6 T4 validate brackets: a non-PASS verdict (red Law) emits stage_started but NO stage_completed — the stage stays current', async () => {
+test('validate brackets: a non-PASS verdict (red Law) emits stage_started but NO stage_completed — the stage stays current', async () => {
   const { result, calls } = await runValidate(baseArgs, (label) => {
     if (label === 'argus:validate') return { ...argusPass, law_run_exit: 1 } // the Law is RED → VALIDATE_FAILED
     return respondPass(label)
@@ -89,7 +89,7 @@ test('P3.6 T4 validate brackets: a non-PASS verdict (red Law) emits stage_starte
   assert.equal(ledgersOf(calls, 'stage_completed').length, 0, 'a non-PASS verdict never completes the stage')
 })
 
-test('P3.6 T4 validate brackets: a PARTIAL verdict (missing creds) also withholds stage_completed', async () => {
+test('validate brackets: a PARTIAL verdict (missing creds) also withholds stage_completed', async () => {
   const { result, calls } = await runValidate(baseArgs, (label) => {
     if (label === 'argus:validate') return { ...argusPass, missing_creds: true } // caps at PARTIAL
     return respondPass(label)
@@ -111,7 +111,7 @@ const argusUi = {
 }
 const traversalFail = { reasoning: 'r', tool: 'kiln-probe', browser_result: 'failed', criteria: [{ id: 'SC-UI-1', met: false, verified: true }], findings: ['the primary nav is clipped below 400px'] }
 
-test('D2 validate (Sol r1-2): a [ui-traversal] correction task carries CONCRETE probe artifact paths — the traversal run id is SCRIPT-ASSIGNED, and no placeholder survives into the build re-entry brief', async () => {
+test('validate: a [ui-traversal] correction task carries CONCRETE probe artifact paths — the traversal run id is SCRIPT-ASSIGNED, and no placeholder survives into the build re-entry brief', async () => {
   const { result, calls } = await runValidate(baseArgs, (label) => {
     if (label === 'thoth:ledger') return { ok: true }
     if (label === 'hephaestus:detect') return { reasoning: 'r', design_present: false }
@@ -129,7 +129,7 @@ test('D2 validate (Sol r1-2): a [ui-traversal] correction task carries CONCRETE 
   assert.match(tp.prompt, /script-assigned, never your own/)
   const uiTask = result.correction_tasks.find((t) => t.includes('[ui-traversal]'))
   assert.ok(uiTask, 'the traversal defect became a correction task')
-  assert.doesNotMatch(uiTask, /<runId>|<SC>/, 'a placeholder path is useless to a build re-entry — every path must be concrete (Sol r1-2)')
+  assert.doesNotMatch(uiTask, /<runId>|<SC>/, 'a placeholder path is useless to a build re-entry — every path must be concrete')
   assert.match(uiTask, /\/tmp\/val-x\/\.kiln\/evidence\/kval-[A-Za-z0-9._-]+-traversal\/probe-SC-UI-1\.json/, 'the per-SC result path is fully resolved: evidence dir + script-assigned runId + SC id')
   assert.match(uiTask, /probe-SC-UI-1\.log/, 'the console/stderr log path is fully resolved too')
   assert.match(uiTask, /screenshot/)
@@ -137,7 +137,7 @@ test('D2 validate (Sol r1-2): a [ui-traversal] correction task carries CONCRETE 
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
-// ── B4-3 D2/D3: validate at capability tier T4 — the final-ruling council over the ASSEMBLED verdict
+// ── validate at capability tier T4 — the final-ruling council over the ASSEMBLED verdict
 //    (every computed verdict; monotonicity both directions; completion gating) + the receipt-based
 //    second-family attestation. Every Sol leg rides a receipt-attested codex envelope + an
 //    invocation-exact ledger cross-check (the inlined gate.mjs + council.mjs machinery). Fixtures derive
@@ -168,7 +168,7 @@ const crossOk = (payload, keystone, phaseTag, over = {}) => ({
 const rat = (h, over = {}) => ({ reasoning: 'r', artifact_hash: h, verdict: 'APPROVE', divergence_selections: [], findings: [], changed_evidence: [], ...over })
 const RULE_FINDING = { finding_id: 'VR-1', claim: 'the PASS is not supported by the exit codes', required_change: 'fix the failing check', evidence_refs: ['law.json'], evidence_class: 'test_output', executable_check: null }
 const anchorFilesFromPrompt = (prompt) => { const m = prompt.match(/sha256sum ([^\n']+)/); const paths = m ? m[1].trim().split(/\s+/).filter(Boolean) : []; return paths.map((p) => ({ path: p, sha256: sha256Hex(p) })) }
-// B43-3: GOAL_SECOND_PAYLOAD_SCHEMA = GOAL_SCHEMA fields verbatim (overall/findings/report_file/reasoning
+// GOAL_SECOND_PAYLOAD_SCHEMA = GOAL_SCHEMA fields verbatim (overall/findings/report_file/reasoning
 // maxLength 700) + report_markdown — the fixture exercises the full shape (report_file present).
 const secondPayloadDefault = { reasoning: 'r', overall: 'pass', findings: [], report_file: 'goal-backward-final-second.md', report_markdown: '# second' }
 
@@ -193,7 +193,7 @@ const verdictEventOf = (calls) => calls.find((c) => c.label === 'thoth:ledger' &
 const parseLedgerEvent = (call) => JSON.parse(call.prompt.match(/kiln-state\.mjs append \S+ '(.+)'/)[1])
 const postureSecond = JSON.stringify({ validate: { second_family: true } })
 
-test('B4-3 D2 validate ruling: at T4 a VALIDATE_PASS convenes the blind Fable/Sol final-ruling pair; dual-APPROVE ⇒ RATIFIED + stage_completed + a b43-validate/1 certificate', async () => {
+test('validate ruling: at T4 a VALIDATE_PASS convenes the blind Fable/Sol final-ruling pair; dual-APPROVE ⇒ RATIFIED + stage_completed + a b43-validate/1 certificate', async () => {
   const { result, calls } = await runValidate(t4args(), t4Respond())
   const exact = (l) => calls.filter((c) => c.label === l).length
   assert.equal(result.verdict, 'VALIDATE_PASS')
@@ -201,36 +201,36 @@ test('B4-3 D2 validate ruling: at T4 a VALIDATE_PASS convenes the blind Fable/So
   assert.equal(exact('sol:validate-ruling'), 1, 'the receipt-attested Sol ruling seat is dispatched once')
   assert.equal(exact('thoth:receipt-check:sol:validate-ruling'), 1, 'the Sol ruling leg is cross-checked invocation-exact')
   assert.equal(result.council.terminal, 'RATIFIED')
-  assert.equal(result.council.seat, 'validate_ruling', 'B43-2: the b42-mirrored seat rides the return council field')
+  assert.equal(result.council.seat, 'validate_ruling', 'the b42-mirrored seat rides the return council field')
   assert.equal(result.council.certificate.label, 'twin_ratified')
   assert.equal(result.council.certificate.signatures[0].renderer_version, 'b43-validate/1')
   assert.equal(ledgersOf(calls, 'stage_completed').length, 1, 'a RATIFIED PASS completes the stage')
   // the authoritative council record rides the existing validate_verdict boundary event (no new type)
   const evCouncil = parseLedgerEvent(verdictEventOf(calls)).data.council
-  assert.equal(evCouncil.seat, 'validate_ruling', 'B43-2: the per-seat summary (seat) rides the boundary event')
+  assert.equal(evCouncil.seat, 'validate_ruling', 'the per-seat summary (seat) rides the boundary event')
   assert.equal(evCouncil.terminal, 'RATIFIED')
-  // B43-1: the certificate + frozen findings ride the EVENT payload too — the same truth on event + return
-  assert.equal(evCouncil.certificate.label, 'twin_ratified', 'B43-1: the RATIFIED certificate rides the boundary event')
-  assert.deepEqual(evCouncil.findings, [], 'B43-1: the frozen findings ride the boundary event (empty on RATIFIED)')
+  // the certificate + frozen findings ride the EVENT payload too — the same truth on event + return
+  assert.equal(evCouncil.certificate.label, 'twin_ratified', 'the RATIFIED certificate rides the boundary event')
+  assert.deepEqual(evCouncil.findings, [], 'the frozen findings ride the boundary event (empty on RATIFIED)')
   assert.equal(evCouncil.terminal, result.council.terminal, 'the event council and the return council carry the same truth')
   assert.equal(evCouncil.certificate.label, result.council.certificate.label)
 })
 
-test('B4-3 D2 validate ruling: a BLOCK on a prospective VALIDATE_PASS leaves the verdict UNALTERED but gates stage_completed (red monotonicity + completion gate)', async () => {
+test('validate ruling: a BLOCK on a prospective VALIDATE_PASS leaves the verdict UNALTERED but gates stage_completed (red monotonicity + completion gate)', async () => {
   const { result, calls } = await runValidate(t4args(), t4Respond({ fableRuling: (h) => ({ ...rat(h), verdict: 'BLOCK', findings: [RULE_FINDING] }) }))
   assert.equal(result.verdict, 'VALIDATE_PASS', 'the deterministic verdict STANDS — a council BLOCK never softens it to PARTIAL')
   assert.equal(result.council.terminal, 'BLOCKED')
   assert.equal(result.council.certificate, null, 'twin_ratified appears ONLY with a valid certificate')
   assert.ok(result.council.findings.some((f) => f && f.finding_id === 'VR-1'), 'the frozen BLOCK finding rides the return')
-  // B43-1: the frozen findings ride the EVENT payload too (the same truth on event + return)
+  // the frozen findings ride the EVENT payload too (the same truth on event + return)
   const evCouncil = parseLedgerEvent(verdictEventOf(calls)).data.council
   assert.equal(evCouncil.terminal, 'BLOCKED')
-  assert.equal(evCouncil.certificate, null, 'B43-1: a BLOCKED event carries no certificate')
-  assert.ok(evCouncil.findings.some((f) => f && f.finding_id === 'VR-1'), 'B43-1: the frozen BLOCK finding rides the boundary event')
+  assert.equal(evCouncil.certificate, null, 'a BLOCKED event carries no certificate')
+  assert.ok(evCouncil.findings.some((f) => f && f.finding_id === 'VR-1'), 'the frozen BLOCK finding rides the boundary event')
   assert.equal(ledgersOf(calls, 'stage_completed').length, 0, 'a BLOCKED PASS does NOT complete the stage — the projection stays at validate')
 })
 
-test('B4-3 D2 validate ruling: the council convenes on a FAILED verdict too (every computed verdict), and a dual-APPROVE cannot LIFT a deterministic red — verdict stays VALIDATE_FAILED, no stage_completed', async () => {
+test('validate ruling: the council convenes on a FAILED verdict too (every computed verdict), and a dual-APPROVE cannot LIFT a deterministic red — verdict stays VALIDATE_FAILED, no stage_completed', async () => {
   const base = t4Respond()
   const { result, calls } = await runValidate(t4args(), (label, prompt) => {
     if (label === 'argus:validate') return { ...argusPass, law_run_exit: 1 } // red Law → VALIDATE_FAILED
@@ -242,7 +242,7 @@ test('B4-3 D2 validate ruling: the council convenes on a FAILED verdict too (eve
   assert.equal(ledgersOf(calls, 'stage_completed').length, 0, 'a FAILED verdict never completes the stage, RATIFIED or not')
 })
 
-test('B4-3 D2 validate ruling (B43-4a): the council convenes on a PARTIAL verdict too — it rules the assembly, the verdict stays VALIDATE_PARTIAL (untouched), and PARTIAL never completes the stage', async () => {
+test('validate ruling: the council convenes on a PARTIAL verdict too — it rules the assembly, the verdict stays VALIDATE_PARTIAL (untouched), and PARTIAL never completes the stage', async () => {
   const base = t4Respond()
   const { result, calls } = await runValidate(t4args(), (label, prompt) => {
     if (label === 'argus:validate') return { ...argusPass, missing_creds: true } // caps at PARTIAL
@@ -251,20 +251,20 @@ test('B4-3 D2 validate ruling (B43-4a): the council convenes on a PARTIAL verdic
   assert.equal(result.verdict, 'VALIDATE_PARTIAL', 'the deterministic verdict STANDS — the council never authors PARTIAL up or down')
   assert.equal(calls.filter((c) => c.label === 'fable:validate-ruling').length, 1, 'the pair convenes on a PARTIAL verdict too (every computed verdict)')
   assert.equal(result.council.terminal, 'RATIFIED', 'the pair ruled the assembled PARTIAL record')
-  assert.equal(result.council.seat, 'validate_ruling', 'B43-2: the per-seat summary rides the return')
+  assert.equal(result.council.seat, 'validate_ruling', 'the per-seat summary rides the return')
   const evCouncil = parseLedgerEvent(verdictEventOf(calls)).data.council
   assert.equal(evCouncil.terminal, 'RATIFIED', 'the council record rides the boundary event on a PARTIAL verdict too')
   assert.equal(ledgersOf(calls, 'stage_completed').length, 0, 'PARTIAL is not completion, RATIFIED or not — the conductor still owns the next move')
 })
 
-test('B4-3 D2 validate ruling: a DEAD Sol ruling seat (no receipt) ⇒ DEGRADED, verdict UNCHANGED, NO stage_completed (never a single-head ruling)', async () => {
+test('validate ruling: a DEAD Sol ruling seat (no receipt) ⇒ DEGRADED, verdict UNCHANGED, NO stage_completed (never a single-head ruling)', async () => {
   const { result, calls } = await runValidate(t4args(), t4Respond({ solRuling: 'dead' }))
   assert.equal(result.verdict, 'VALIDATE_PASS')
   assert.equal(result.council.terminal, 'DEGRADED')
   assert.equal(ledgersOf(calls, 'stage_completed').length, 0)
 })
 
-test('B4-3 D2 promised-but-tokenless: T4 + codex but NO runToken ⇒ the ruling fails CLOSED (DEGRADED), NO pair dispatched, NO stage_completed even on a PASS', async () => {
+test('promised-but-tokenless: T4 + codex but NO runToken ⇒ the ruling fails CLOSED (DEGRADED), NO pair dispatched, NO stage_completed even on a PASS', async () => {
   const { result, calls } = await runValidate({ ...baseArgs, codexAvailable: true, capabilityTier: 'T4' }, t4Respond())
   assert.equal(result.verdict, 'VALIDATE_PASS')
   assert.equal(calls.filter((c) => c.label === 'fable:validate-ruling').length, 0, 'no council convenes without a runToken')
@@ -272,7 +272,7 @@ test('B4-3 D2 promised-but-tokenless: T4 + codex but NO runToken ⇒ the ruling 
   assert.equal(ledgersOf(calls, 'stage_completed').length, 0, 'a promised-but-tokenless PASS never completes — no silent v3.0.1 completion')
 })
 
-test('B4-3 D2 sub-T4 byte-preservation: at T3 (no council) a VALIDATE_PASS completes the stage with NO council pair and NO council return field', async () => {
+test('sub-T4 byte-preservation: at T3 (no council) a VALIDATE_PASS completes the stage with NO council pair and NO council return field', async () => {
   const { result, calls } = await runValidate({ ...baseArgs, codexAvailable: true, capabilityTier: 'T3' }, t4Respond())
   assert.equal(result.verdict, 'VALIDATE_PASS')
   assert.equal(calls.filter((c) => c.label === 'fable:validate-ruling').length, 0)
@@ -280,7 +280,7 @@ test('B4-3 D2 sub-T4 byte-preservation: at T3 (no council) a VALIDATE_PASS compl
   assert.equal(ledgersOf(calls, 'stage_completed').length, 1, 'byte-preserved: a PASS completes the stage')
 })
 
-test('B4-3 D3 second-family: a receipt-attested second-family goal leg with a clean cross-check ⇒ second_family_verified in the validate_verdict event', async () => {
+test('second-family: a receipt-attested second-family goal leg with a clean cross-check ⇒ second_family_verified in the validate_verdict event', async () => {
   const { calls } = await runValidate(t4args({ posture: postureSecond }), t4Respond())
   assert.equal(calls.filter((c) => c.label === 'aristotle:goal-final:second-family').length, 1)
   assert.equal(calls.filter((c) => c.label === 'thoth:receipt-check:goal-final:second-family').length, 1, 'the second-family receipt is cross-checked invocation-exact')
@@ -289,7 +289,7 @@ test('B4-3 D3 second-family: a receipt-attested second-family goal leg with a cl
   assert.match(vv.prompt, /"second_family_degraded":false/)
 })
 
-test('B4-3 D3 second-family: a FAILED cross-check ⇒ second_family_verified false + verification_degraded (the audit content still rides the reconcile — null-keep)', async () => {
+test('second-family: a FAILED cross-check ⇒ second_family_verified false + verification_degraded (the audit content still rides the reconcile — null-keep)', async () => {
   const { calls } = await runValidate(t4args({ posture: postureSecond }), t4Respond({ secondBadCross: true }))
   const vv = verdictEventOf(calls)
   assert.match(vv.prompt, /"second_family_verified":false/)
@@ -297,7 +297,7 @@ test('B4-3 D3 second-family: a FAILED cross-check ⇒ second_family_verified fal
   assert.ok(calls.some((c) => c.label === 'thoth:ledger' && c.prompt.includes('"type":"verification_degraded"')), 'the degraded second family rides the existing verification_degraded event')
 })
 
-test('B4-3 D3 second-family (B43-4b): a MISSING-RECEIPT envelope (receiptRequired ⇒ dead Sol seat) ⇒ second_family_verified false + verification_degraded — distinct from the failed-cross-check row (no cross-check leg even runs)', async () => {
+test('second-family: a MISSING-RECEIPT envelope (receiptRequired ⇒ dead Sol seat) ⇒ second_family_verified false + verification_degraded — distinct from the failed-cross-check row (no cross-check leg even runs)', async () => {
   const { calls } = await runValidate(t4args({ posture: postureSecond }), t4Respond({ secondNoReceipt: true }))
   const vv = verdictEventOf(calls)
   assert.match(vv.prompt, /"second_family_verified":false/)
@@ -308,7 +308,7 @@ test('B4-3 D3 second-family (B43-4b): a MISSING-RECEIPT envelope (receiptRequire
   assert.equal(calls.filter((c) => c.label === 'thoth:receipt-check:goal-final:second-family').length, 0, 'the leg fell CLOSED at the missing receipt — no cross-check runs (distinct from the failed-cross-check row)')
 })
 
-test('B4-3 D3 second-family: codex present but NO runToken ⇒ second_family NOT verified, degraded with no_run_token_no_attestation (never an unattested claim)', async () => {
+test('second-family: codex present but NO runToken ⇒ second_family NOT verified, degraded with no_run_token_no_attestation (never an unattested claim)', async () => {
   const { calls } = await runValidate({ ...baseArgs, codexAvailable: true, capabilityTier: 'T4', posture: postureSecond }, t4Respond())
   const vv = verdictEventOf(calls)
   assert.match(vv.prompt, /"second_family_verified":false/)
@@ -317,7 +317,7 @@ test('B4-3 D3 second-family: codex present but NO runToken ⇒ second_family NOT
   assert.match(degraded.prompt, /no_run_token_no_attestation/)
 })
 
-test('B4-3 D3 second-family: codexAvailable=false ⇒ NEVER verified (both legs opus) — second_family_degraded, and no ruling council convenes', async () => {
+test('second-family: codexAvailable=false ⇒ NEVER verified (both legs opus) — second_family_degraded, and no ruling council convenes', async () => {
   const { calls } = await runValidate({ ...baseArgs, codexAvailable: false, capabilityTier: 'T4', runToken: T4TOKEN, posture: postureSecond }, t4Respond())
   const vv = verdictEventOf(calls)
   assert.match(vv.prompt, /"second_family_verified":false/)

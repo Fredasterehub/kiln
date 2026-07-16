@@ -1,5 +1,5 @@
 // validate-lease-integration-runner.mjs — child executor that drives the SHIPPED workflows/validate.js
-// with a REAL pluginRoot so leaseTake()/leaseRelease() run the actual kiln-probe CLI, proving the §7
+// with a REAL pluginRoot so leaseTake()/leaseRelease() run the actual kiln-probe CLI, proving the
 // CAPABILITY deadline end-to-end (ORCHESTRATOR RULING): a workflow cannot cancel a spawned agent, so
 // the Tier-2 ≤10-min cap is enforced on the TOOL — once the lease expires every kiln-probe run REFUSES
 // (exit 77). Spawned by validate-lease-integration.test.mjs (never the test runner directly — no

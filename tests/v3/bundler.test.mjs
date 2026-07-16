@@ -1,4 +1,4 @@
-// bundler.test.mjs — golden test for scripts/bundle-workflows.mjs (BLUEPRINT §13).
+// bundler.test.mjs — golden test for scripts/bundle-workflows.mjs.
 // The bundler resolves its tree from its own file location (dirname/..), so each test clones it
 // into a throwaway sandbox mirroring the repo layout — scripts/ + plugins/kiln/{src,workflows-src,
 // workflows} — and drives it there. One test runs --check against the REAL repo so the harness
@@ -225,7 +225,7 @@ test('gauge-config step: --check fails when gauge-config.json drifts from the ge
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
-// ── The gate step (WS-B1): `// @gate` inlines the WHOLE src/gate.mjs body (the single gateAgent),
+// ── The gate step: `// @gate` inlines the WHOLE src/gate.mjs body (the single gateAgent),
 //    `export ` stripped from each declaration, doctrine comments carried through verbatim. Unlike
 //    @inline it names no exports — it pulls the module as one unit so build/validate/report share
 //    one gateAgent and cannot drift. Same --check drift discipline as duo-pool/gauge-config. ──
@@ -292,7 +292,7 @@ test('gate step: --check fails when src/gate.mjs drifts from the generated inlin
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
-// ── The models step (WS-B2): `// @models` inlines the WHOLE src/models.mjs body (the codex model
+// ── The models step: `// @models` inlines the WHOLE src/models.mjs body (the codex model
 //    pins CODEX_MODEL + CODEX_FALLBACK), `export ` stripped from each declaration, doctrine comments
 //    carried through verbatim. Like @gate it names no exports — it pulls the module as one unit so
 //    every GPT-pinning workflow shares one model id and cannot drift. Same --check drift discipline. ──

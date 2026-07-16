@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// kiln-probe.mjs — the Tier-1 probe wrapper CLI (BLUEPRINT §7). Zero dependencies, plain node ≥18.
+// kiln-probe.mjs — the Tier-1 probe wrapper CLI. Zero dependencies, plain node ≥18.
 //
-// THE LAW OF THIS PHASE: the browser is a subprocess with a deadline, never a service. This CLI
+// THE LAW: the browser is a subprocess with a deadline, never a service. This CLI
 // owns the WHOLE lifecycle around one probe-template spawn — serve, deadline, evidence, teardown —
 // so no browser process can outlive the check that spawned it: every spawn carries a unique kill
 // token (`kiln-pw-<token>` in the chromium cmdline via --user-data-dir; the managed server's
@@ -44,7 +44,7 @@
 //       chrome` is forbidden). No prefix sweeps the whole kiln-pw- namespace (the pre-flight
 //       defense against prior crashed runs). Always exits 0 — cleanup never fails a stage.
 //   lease <kilnDir> <runId> <token> <seconds>
-//       TAKE the validate Tier-2 browser lease — the §7 CAPABILITY deadline (ORCHESTRATOR RULING).
+//       TAKE the validate Tier-2 browser lease — the CAPABILITY deadline.
 //       A workflow cannot CANCEL a spawned agent, so the ≤10-min Tier-2 cap is enforced on the
 //       capability: writes <kilnDir>/evidence/<runId>/browser.lease {token, expires_at, watchdog_pid}
 //       and spawns a DETACHED, timeout-wrapped, self-terminating watchdog that at expiry sweeps the
@@ -58,12 +58,12 @@
 //       Always exits 0 — release is cleanup, never a verdict.
 //   mcp-sweep
 //       The backstop for the ONE browser the kiln-pw- token cannot tag: a HOST-configured Playwright
-//       MCP browser. Autonomous validate NO LONGER drives MCP (the ORCHESTRATOR RULING removed the
-//       MCP traversal path — an MCP server is a persistent browser service §7 forbids in-loop), so
+//       MCP browser. Autonomous validate NO LONGER drives MCP (the MCP traversal path was removed —
+//       an MCP server is a persistent browser service forbidden in-loop), so
 //       this is now a CAPABILITY for the operator's INTERACTIVE/manual visual QA: an interactive MCP
 //       session (launched without our --isolated/--user-data-dir, PID unkillable by us, no kiln token
-//       in its browser) is told to browser_close, but prompt text is not a teardown guarantee (#1311
-//       strands a Chrome on a SingletonLock; codex#17832/claude-code#15861 orphan MCP browser
+//       in its browser) is told to browser_close, but prompt text is not a teardown guarantee (it can
+//       strand a Chrome on a SingletonLock, or leave orphaned MCP browser
 //       children). Run this by hand after such a session to reap a leaked orphan. This SIGKILLs an
 //       orphaned MCP browser under a DOUBLE gate so it can never over-reach: a target must have BOTH
 //       (a) a browser-binary arg0 (chrome / chromium / chrome-headless-shell / headless_shell) AND (b)
@@ -75,8 +75,8 @@
 //       correction-cycle evaluator may reuse it) — only the orphaned browser. No args. Always exits 0 —
 //       cleanup never fails a stage.
 //   leak-scan
-//       STRICTLY READ-ONLY detection of a browser we do NOT own — the eye the sweeps lack (RUN-B
-//       FINDING 3b: a tribunal analyst drove the host's Playwright-MCP browser mid-build, in a namespace
+//       STRICTLY READ-ONLY detection of a browser we do NOT own — the eye the sweeps lack (a
+//       tribunal analyst can drive the host's Playwright-MCP browser mid-build, in a namespace
 //       NO kiln sweep watches). Kills NOTHING, removes NOTHING, by construction — the operator's MCP
 //       servers and browsers survive every scan (operator law). Two arms:
 //       (a) process arm — pgrep candidates over the two FOREIGN namespaces (the Playwright temp-profile
@@ -108,7 +108,7 @@ import { validateLaw } from '../src/law.mjs'
 const TEMPLATE = join(dirname(fileURLToPath(import.meta.url)), 'probe-template.mjs')
 const PROBE_TIMEOUT_S = (() => {
   const v = Number(process.env.KILN_PROBE_TIMEOUT_S)
-  return Number.isInteger(v) && v >= 1 ? v : 90 // §7 hard bound: wall-clock 90 s/probe
+  return Number.isInteger(v) && v >= 1 ? v : 90 // hard bound: wall-clock 90 s/probe
 })()
 const SERVER_TIMEOUT_S = PROBE_TIMEOUT_S + 90 // the managed server's own deadline — outlives the probe, never the stage
 const SERVER_READY_TIMEOUT_MS = (() => {
@@ -173,11 +173,11 @@ function sweep(prefix) {
 // exception — its server is the session host's (Claude Code's) shared stdio child, launched without
 // our flags, so we can neither pass it --isolated/--user-data-dir nor kill its PID (it belongs to the
 // session running Kiln itself) nor ride a kiln token into its browser. Autonomous validate NO LONGER
-// drives MCP (the ORCHESTRATOR RULING removed the MCP traversal path: an MCP server is a persistent
-// browser service §7 forbids in-loop). MCP is now a CAPABILITY for the operator's INTERACTIVE/manual
+// drives MCP (the MCP traversal path was removed: an MCP server is a persistent
+// browser service forbidden in-loop). MCP is now a CAPABILITY for the operator's INTERACTIVE/manual
 // visual QA — an interactive session is told to browser_close, but prompt text is not a teardown
-// guarantee (microsoft/playwright-mcp#1311: a client that dies without browser_close strands a Chrome
-// holding a SingletonLock; codex#17832 / claude-code#15861: hosts demonstrably orphan MCP browser
+// guarantee (a client that dies without browser_close strands a Chrome
+// holding a SingletonLock; hosts can orphan MCP browser
 // children). THIS is the process-level backstop the operator runs by hand after an interactive session.
 //
 // What it reaps — ONLY MCP-managed browser processes, by their PROFILE NAMESPACE, never blanket: a
@@ -193,7 +193,7 @@ function sweep(prefix) {
 // The shared browser-identity gates — the two-factor discipline mcp-sweep and leak-scan both apply to a
 // pgrep candidate before acting on it (KILL for mcp-sweep, REPORT for leak-scan): a real target has a
 // browser-binary arg0 AND a --user-data-dir into a watched profile namespace. PW_TMP_PROFILE is the
-// extra Playwright temp-profile family leak-scan watches (the namespace Run B's real leak rode).
+// extra Playwright temp-profile family leak-scan watches (the namespace an observed real leak rode).
 const BROWSER_BIN = /(?:^|\/)(?:chrom(?:e|ium)(?:-headless-shell)?|headless_shell)\b/i // the documented browser set ONLY (chrome / chromium / chrome-headless-shell / headless_shell) — NOT chrome_crashpad_handler (the crash-reporter helper, not a browser; killing it would not reap a browser and widens the gate past the stated arg0 set)
 const MCP_PROFILE = /--user-data-dir=\S*ms-playwright\/mcp-/ // the Playwright-MCP profile-namespace half of the two-factor gate
 const PW_TMP_PROFILE = /playwright_[a-z]+dev_profile-/ // the Playwright temp-profile family (chromium/firefox/webkit) — leak-scan's disk-arm dir-name gate and the profile half of its process two-factor
@@ -220,10 +220,10 @@ function mcpSweep() {
   console.log(`MCP_SWEEP pattern=${pattern} killed=${killed}`)
 }
 
-// ── leak-scan — READ-ONLY: name the foreign browser, never kill it (RUN-B FINDING 3b) ─────────────
+// ── leak-scan — READ-ONLY: name the foreign browser, never kill it ────────────────────────────────
 // The one gap the sweeps above cannot see. sweep() reaps only the OWNED `kiln-pw-` namespace; mcp-sweep
 // is the operator's MANUAL kill of an orphaned MCP browser. Neither is an EYE the autonomous path can
-// use to say "a browser I do not own is alive right now" — which is exactly what Run B needed when a
+// use to say "a browser I do not own is alive right now" — which is exactly what is needed when a
 // tribunal analyst drove the host's Playwright-MCP browser mid-build, in the `playwright_chromiumdev_
 // profile-*` / `ms-playwright/mcp-` namespaces no sweep watches. leak-scan is that eye and ONLY an eye:
 // it NEVER kills, NEVER removes — the operator's MCP servers and browsers survive every scan by
@@ -272,7 +272,7 @@ function leakScan() {
   console.log(`LEAK_SCAN ${JSON.stringify(result)}`)
 }
 
-// ── the browser lease — the §7 CAPABILITY deadline (ORCHESTRATOR RULING, p3/tasks.md) ────────────
+// ── the browser lease — the CAPABILITY deadline ─────────────────────────────────────────────────
 // A workflow script cannot CANCEL a spawned agent, so the Tier-2 deadline is enforced on the
 // CAPABILITY, not the agent: an evaluator alive past the cap is harmless because every browser
 // action it can take goes through a one-shot `kiln-probe run`, and `run` REFUSES once the lease has
@@ -400,8 +400,8 @@ function startStaticServer(rootDir) {
 
 // ── run — one probe, full lifecycle ──────────────────────────────────────────────────────────────
 // leaseDemand: the explicit --lease <token> / KILN_PROBE_LEASE token, or null. When null, the lease
-// is enforced ONLY if a browser.lease already sits in this probe's OWN runId dir (the §7 ruling's "a
-// lease file exists for the runId" trigger); otherwise this is an UNLEASED probe (a Tier-1 build
+// is enforced ONLY if a browser.lease already sits in this probe's OWN runId dir (the "a lease
+// file exists for the runId" trigger); otherwise this is an UNLEASED probe (a Tier-1 build
 // probe) and runs unchanged. When a lease IS in force and it is absent/expired/token-mismatched/
 // out-of-namespace, run REFUSES with exit 77 LEASE_EXPIRED — the capability deadline, not the agent.
 async function cmdRun(projectPath, kilnDir, scId, runId, leaseDemand = null) {
@@ -532,7 +532,7 @@ const [cmd, ...rest] = process.argv.slice(2)
 try {
   if (cmd === 'run') {
     // run takes the 4 positionals and an OPTIONAL trailing --lease <token>; KILN_PROBE_LEASE is the
-    // env-form demand (the §7 ruling's "an env/flag demands it"). The Tier-2 evaluator passes the
+    // env-form demand (the "an env/flag demands it" trigger). The Tier-2 evaluator passes the
     // VALIDATE_RUN_TOKEN as the lease so its probes refuse once the stage deadline has expired; a
     // Tier-1 build probe passes neither and writes none, so it runs unchanged.
     let leaseDemand = process.env.KILN_PROBE_LEASE ? String(process.env.KILN_PROBE_LEASE) : null
