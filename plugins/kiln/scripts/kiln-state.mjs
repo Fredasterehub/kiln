@@ -71,10 +71,13 @@ function validateState(st) {
   if (st.capability !== null) {
     if (!isObj(st.capability)) v.push('state.json: capability must be an object or null')
     else {
-      for (const k of Object.keys(st.capability)) if (!['tier', 'verification_class', 'probes'].includes(k)) v.push(`state.json: capability has unknown key '${k}'`)
+      for (const k of Object.keys(st.capability)) if (!['tier', 'verification_class', 'probes', 'claude_head'].includes(k)) v.push(`state.json: capability has unknown key '${k}'`)
       if (typeof st.capability.tier !== 'string') v.push('state.json: capability.tier must be a string')
       if (typeof st.capability.verification_class !== 'string') v.push('state.json: capability.verification_class must be a string')
       if (!isObj(st.capability.probes)) v.push('state.json: capability.probes must be an object')
+      // claude_head is OPTIONAL — a record without it is valid (every pre-succession ledger); present, it
+      // names the resolved Claude council head and must be one of the two engines the seat can hold.
+      if ('claude_head' in st.capability && st.capability.claude_head !== 'fable' && st.capability.claude_head !== 'opus') v.push("state.json: capability.claude_head must be 'fable' or 'opus'")
     }
   }
   if (!isObj(st.project)) v.push('state.json: project must be an object')
@@ -241,6 +244,10 @@ function projectState(events) {
           verification_class: typeof d.capability.verification_class === 'string' ? d.capability.verification_class : '',
           probes: isObj(d.capability.probes) ? d.capability.probes : {},
         }
+        // Optional claude_head projects latest-wins ONLY when the capability note carries it — a note
+        // without the key adds none, so every pre-succession record stays byte-identical. The value is
+        // passed through as-written; validate is the enum gate.
+        if ('claude_head' in d.capability) st.capability.claude_head = d.capability.claude_head
       }
       if (isObj(d.milestones)) for (const k of ['count', 'complete', 'current']) { if (k in d.milestones) st.milestones[k] = d.milestones[k] }
       if (isObj(d.counters)) for (const k of ['correction_cycle', 'build_iteration']) { if (k in d.counters) st.counters[k] = d.counters[k] }

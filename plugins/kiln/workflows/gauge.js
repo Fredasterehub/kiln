@@ -169,6 +169,8 @@ const GAUGE_CONFIG = {"h80_human_hours":2,"messiness_discount":0.5,"churn_flips_
 // downgrade invisibly.
 const CODEX_MODEL = 'gpt-5.6-sol' // GPT-5.6 Sol, GA 2026-07-09 — the codex CLI model id
 const CODEX_FALLBACK = 'gpt-5.5'  // recorded rollout fallback (5.4 dropped — two rungs suffice)
+const CLAUDE_HEAD = 'fable'          // the Claude council head — the strongest available
+const CLAUDE_HEAD_FALLBACK = 'opus'  // recorded succession when the head is unreachable — never silent
 
 // ── MODEL_VOICE shell (Opus only; inlined from src/voice.mjs by the bundler) ──
 const MODEL_VOICE = {

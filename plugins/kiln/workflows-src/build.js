@@ -122,6 +122,23 @@ const lawFile = `${kilnDir}/law.json`
 // ── Codex model pins (CODEX_MODEL default + CODEX_FALLBACK, inlined from src/models.mjs) ──
 // @models
 
+// ── The Claude council head, resolved once per run. The conductor threads args.claudeHead from the
+//    run's capability record; only the fallback engine id (CLAUDE_HEAD_FALLBACK) demotes the seat —
+//    absent, 'fable', or any other value keeps the preferred head (CLAUDE_HEAD), byte-compatible with a
+//    launch that threads no head. Every Claude-head SEAT model and the model field of each Claude-half
+//    seat_provenance resolves through this ONE constant; the head LABELS (head:'fable', slot keys) are
+//    seat names and never move — CLAUDE_HEAD_MODEL names the engine, 'fable' names the seat. ──
+const CLAUDE_HEAD_MODEL = A.claudeHead === CLAUDE_HEAD_FALLBACK ? CLAUDE_HEAD_FALLBACK : CLAUDE_HEAD
+// When the head is held by the fallback engine, record the succession ONCE at council convening so the
+// demotion is never silent — the checkpoints carry the resolved model in seat_provenance; this is the
+// human-readable ledger beat beside them. Best-effort: a failed append never blocks the council.
+let claudeHeadSuccessionNoted = false
+async function noteClaudeHeadSuccession(phaseName) {
+  if (CLAUDE_HEAD_MODEL !== CLAUDE_HEAD_FALLBACK || claudeHeadSuccessionNoted) return
+  claudeHeadSuccessionNoted = true
+  try { await ledger('note', { kind: 'capability', event: 'claude_head_demoted', head: 'fable', claude_head: CLAUDE_HEAD_MODEL }, phaseName) } catch { /* best-effort beat */ }
+}
+
 // ── Twin Council pure core (B4-2 D1) — the SEALED 1b-ii call-site machinery, lifted to src/council.mjs
 //    and inlined here through the SAME @inline:council bundler contract architecture.js uses (helpers,
 //    never copy-paste). Every function that CALLS another travels WITH it in ONE marker (dependency
@@ -1313,10 +1330,11 @@ const correctionRulingLines = (corr) => [
 // head is degradation). Blindness rails: the fable prompt never mentions codex/receipt/session/Sol; the
 // sol packet never mentions fable or the run token. Returns { degraded, missing, rF, rS, sinkF, sinkS, solCross }.
 const runBuildBlindPair = async (cfg) => {
+  await noteClaudeHeadSuccession(cfg.phaseName)
   const sinkF = {}, sinkS = {}
   const plan = solWrapperPlan({ councilDir: cfg.mCouncilDir, pluginRoot, receiptsLedger, runToken: runTokenRaw, keystone: cfg.keystone, transportModel: CODEX_MODEL, phaseTag: cfg.phaseTag, attempt: 1, effort: 'xhigh', payloadSchema: cfg.schema, taskText: cfg.solTaskText, briefBody: cfg.solBrief, packetObj: cfg.solPacket })
   const [rF, rS] = await parallel([
-    () => gateAgent(cfg.fablePrompt, { label: `fable:${cfg.legName}:${cfg.m.id}:c${cfg.c}`, phase: cfg.phaseName, model: 'fable', effort: 'xhigh', twoHeads: 'required', schema: cfg.schema, provenance: sinkF }),
+    () => gateAgent(cfg.fablePrompt, { label: `fable:${cfg.legName}:${cfg.m.id}:c${cfg.c}`, phase: cfg.phaseName, model: CLAUDE_HEAD_MODEL, effort: 'xhigh', twoHeads: 'required', schema: cfg.schema, provenance: sinkF }),
     () => gateAgent(plan.prompt, { label: `sol:${cfg.legName}:${cfg.m.id}:c${cfg.c}`, phase: cfg.phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(cfg.schema), provenance: sinkS }),
   ])
   let solCross = { ledger_verified: false }
@@ -1573,7 +1591,7 @@ const runLegacyPlanRatify = async (gateProv, receiptsBucket) => {
     await councilCheckpoint({ ...ckptBase, phase: 'DEGRADED', anonymous_seat_artifact_hashes: {}, seat_provenance: { missing: pair.missing }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
     await councilRuling({ keystone, phase: phaseTag, terminal: 'DEGRADED', missing: pair.missing }, phaseName)
     log(`legacy-plan retrospective ratification DEGRADED (${pair.missing}) — a dead seat is a missing head, never twin_ratified`)
-    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleH, receipt_verified: !!(pair.sinkS && pair.sinkS.receipt_verified), ledger_verified: !!(pair.solCross && pair.solCross.ledger_verified) }
+    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleH, missing: pair.missing, receipt_verified: !!(pair.sinkS && pair.sinkS.receipt_verified), ledger_verified: !!(pair.solCross && pair.solCross.ledger_verified) }
   }
   const vF = validateRatification(pair.rF, { bundle_hash: bundleH, open_divergence_ids: [] })
   const vS = validateRatification(pair.rS, { bundle_hash: bundleH, open_divergence_ids: [] })
@@ -1585,7 +1603,7 @@ const runLegacyPlanRatify = async (gateProv, receiptsBucket) => {
     await councilCheckpoint({ ...ckptBase, phase: 'DEGRADED', anonymous_seat_artifact_hashes: {}, seat_provenance: { missing, reason: 'invalid ratification' }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
     await councilRuling({ keystone, phase: phaseTag, terminal: 'DEGRADED', missing, invalid: { fable: fBad, sol: sBad } }, phaseName)
     log(`legacy-plan retrospective ratification INVALID (${detail}) — DEGRADED (an invalid verdict carries no standing findings; never mislabeled BLOCKED)`)
-    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleH, receipt_verified: true, ledger_verified: true }
+    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleH, missing, receipt_verified: true, ledger_verified: true }
   }
   if (pair.rF.verdict === 'APPROVE' && pair.rS.verdict === 'APPROVE') {
     const cert = assembleRatifyCertificate({ rF: pair.rF, rS: pair.rS, provF: seatProv(pair.sinkF, 'fable'), provS: seatProv(pair.sinkS, 'sol'), context: { bundle_hash: bundleH, renderer_version: COUNCIL_RENDERER_LEGACY, plan_hash: bundleH, evidence_manifest_hash: evidenceManifestHash, protocol_version: COUNCIL_PROTOCOL_VERSION, seat_provenance: null } })
@@ -1716,7 +1734,7 @@ if (councilCapable) {
     const legacyReceipts = []
     const lr = await runLegacyPlanRatify(legacyProv, legacyReceipts)
     const priorBindingVerified = !!(priorLegacyRow && priorLegacyRow.template_hash === councilTemplateHashLegacy && priorLegacyRow.run_token_hash === runTokenHash && lr.bundle_hash != null && priorLegacyRow.decision_bundle_hash === lr.bundle_hash)
-    legacyCouncil = { authority: 'legacy_authority', terminal: lr.terminal, certificate: lr.certificate, bundle_hash: lr.bundle_hash, ...(priorLegacyRow ? { prior_binding_verified: priorBindingVerified } : {}), receipt_verified: lr.receipt_verified, ledger_verified: lr.ledger_verified, ...(legacyReceipts.length ? { receipts: legacyReceipts } : {}) }
+    legacyCouncil = { authority: 'legacy_authority', terminal: lr.terminal, certificate: lr.certificate, bundle_hash: lr.bundle_hash, ...(priorLegacyRow ? { prior_binding_verified: priorBindingVerified } : {}), receipt_verified: lr.receipt_verified, ledger_verified: lr.ledger_verified, council_missing_head: (lr.missing === 'fable' || lr.missing === 'sol') ? lr.missing : null, ...(legacyReceipts.length ? { receipts: legacyReceipts } : {}) }
     if (lr.terminal !== 'RATIFIED') {
       // Non-APPROVE ⇒ the honest BLOCKED/DEGRADED terminal GATES the keystone: the build never proceeds
       // to the first milestone under an unratified legacy plan (build's EXISTING council-rail honesty —
@@ -1765,6 +1783,11 @@ for (const m of milestones) {
   let mCorrectionReceiptVerified = false // B42-6: from the correction Sol leg's sink
   let mCorrectionLedgerVerified = false  // B42-6: from the correction Sol leg's cross-check
   let mCorrectionSeatConvened = false    // B42-6: the correction seat convened or failed closed this gate
+  // F2 (R1-RETRY-CAUSE-NOT-EXPOSED): the failed-Claude-head discriminator this milestone's councils
+  // surface — 'fable' | 'sol' | null. Set on a close/correction DEGRADED that names a single head (a
+  // 'both'/evidence DEGRADED folds to null); once a real head death is booked it is not overwritten by a
+  // later clean council. Rides the milestone result's council field so the conductor's succession retry keys on it.
+  let mCouncilMissingHead = null
   let mReplanRequired = false
 
   // The milestone's slice of the Law — the contract the batch plan must cover arithmetically.
@@ -2315,6 +2338,7 @@ for (const m of milestones) {
           mCloseReceiptVerified = close.receipt_verified
           mCloseLedgerVerified = close.ledger_verified
           mCloseSeatConvened = true
+          if (close.terminal === 'DEGRADED' && close.terminal_record && (close.terminal_record.missing === 'fable' || close.terminal_record.missing === 'sol')) mCouncilMissingHead = close.terminal_record.missing
           if (v === 'QA_FAIL') qaFindings = [...reconciled.summaryLines, ...mCloseFindings.map(closeFindingLine), ...(close.terminal === 'DEGRADED' ? [`[close_council] milestone-close council DEGRADED (${close.terminal_record && close.terminal_record.missing}) — fail-closed, no judge fallback at T4`] : [])]
         } else if (councilMisconfigured) {
           // D5: promised-but-tokenless — the judgment SEAT fails closed (never a silent Judge Dredd
@@ -2352,6 +2376,7 @@ for (const m of milestones) {
         mCorrectionReceiptVerified = corr.receipt_verified
         mCorrectionLedgerVerified = corr.ledger_verified
         mCorrectionSeatConvened = true
+        if (corr.degraded && (corr.missing === 'fable' || corr.missing === 'sol')) mCouncilMissingHead = corr.missing
         // B42-5: the correction heads' RETAINED findings + reasons ride qaFindings verbatim on ESCALATE/REPLAN.
         if (corr.choice === 'ESCALATE') { qa = 'QA_FAIL'; qaCycle = c; qaFindings = [...reconciled.summaryLines, ...mCloseFindings.map(closeFindingLine), ...correctionRulingLines(corr), `[correction_council] the correction council ruled ESCALATE${corr.degraded ? ` (fail-closed: ${corr.missing} seat dead — DEGRADED)` : (corr.terminal === 'BLOCKED' ? ' (fail-closed: a live legal split — BLOCKED)' : '')} — validate backstops; the conductor sees the ruling`]; log(`${m.id}: correction council ESCALATE (terminal ${corr.terminal}) — QA_FAIL stands, validate backstops`); break }
         if (corr.choice === 'REPLAN') { qa = 'QA_FAIL'; qaCycle = c; mReplanRequired = true; qaFindings = [...reconciled.summaryLines, ...mCloseFindings.map(closeFindingLine), ...correctionRulingLines(corr), '[correction_council] the correction council ruled REPLAN — the milestone plan itself is wrong; a conductor/operator re-plan is owed (replan_required)']; log(`${m.id}: correction council REPLAN — QA_FAIL + replan_required marker (never silent)`); break }
@@ -2455,7 +2480,7 @@ for (const m of milestones) {
     ...(gateOnly ? { gate_only: true } : {}),
     // B4-2 D6: the council terminals ride the milestone result so the workflow return + conductor's
     // blocked/degraded hard stop see honest terminals. Present only on the council-promised path.
-    ...(councilPromised ? { council: { close_terminal: mCloseTerminal, correction_terminal: mCorrectionTerminal, correction_ruling: mCorrectionRuling, replan_required: mReplanRequired, certificate: mCloseCertificate } } : {}),
+    ...(councilPromised ? { council: { close_terminal: mCloseTerminal, correction_terminal: mCorrectionTerminal, correction_ruling: mCorrectionRuling, replan_required: mReplanRequired, certificate: mCloseCertificate, council_missing_head: mCouncilMissingHead } } : {}),
   })
   // build.milestone_sealed / build.milestone_fail (keystones): the §3.2 boundary verdict.
   const remainingMilestones = milestones.length - 1 - milestoneIndex

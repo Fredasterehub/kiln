@@ -277,7 +277,7 @@ I am a Claude Code plugin. Pure native &mdash; no daemon, no server, no npm pack
 | **Inline personas** | Every other face is worn *inline* by a workflow `agent()` call &mdash; not a standalone agent file. Every call pins its model explicitly. |
 | **Minds are files** | Vision, research, architecture, and state live as markdown and an append-only ledger in `./.kiln/`. Workers read them; resume is anchored on them, never on conversation memory. |
 | **Multi-model by design** | Opus reasons, reviews, and builds UI. GPT-5.6, via Codex CLI, writes logic and sits as the council's second head &mdash; with a recorded fallback, never a silent one. A Claude-only path covers you when Codex isn't installed. |
-| **Capability tiers** | The doctor resolves what's actually reachable &mdash; from T1 (Sonnet-only) through T2 (+Opus) and T3 (+Codex, the full-craft default) to T4 (the bonus tier, when Fable is available) &mdash; and the run's record states its tier honestly. Browser verification is a separate axis: full when Playwright is present, static-only when not. Nothing unverifiable is ever labeled verified. |
+| **Capability tiers** | The doctor resolves what's actually reachable &mdash; from T1 (Sonnet-only) through T2 (+Opus) and T3 (+Codex, the full-craft default) to T4 (the council tier &mdash; the strongest available Claude head: Fable 5 when reachable, Opus 4.8 succession otherwise, always recorded) &mdash; and the run's record states its tier honestly. Browser verification is a separate axis: full when Playwright is present, static-only when not. Nothing unverifiable is ever labeled verified. |
 
 ### The Twin Council, mechanically
 

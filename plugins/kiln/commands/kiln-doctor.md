@@ -87,15 +87,25 @@ echo "── existing run? ──"
   research stage's cross-source firewall degrades — note it).
 - **opus/fable** (model availability from the session/config): the model you are running as proves
   its own tier is reachable. Read the `── configured model ──` line: treat **Opus as available**
-  unless the config pins a Sonnet-only model; treat **Fable (the T4 bonus tier) as available** only
-  when the session or config shows Fable access. Fable seats need a ONE-TIME interactive consent
-  (`/model fable` run once in an interactive session) that bash cannot probe — report whether the
-  session/config shows Fable access, and remind that an unconsented account must run `/model fable`
-  once before a Fable-gated run. Do not claim a tier the environment cannot reach.
+  unless the config pins a Sonnet-only model; treat **Fable (the preferred Claude council head at T4)
+  as available** only when the session or config shows Fable access. Fable seats need a ONE-TIME
+  interactive consent (`/model fable` run once in an interactive session) that bash cannot probe —
+  report whether the session/config shows Fable access, and remind that an unconsented account must run
+  `/model fable` once to seat Fable as the head (without it the council still convenes at T4, Opus-headed
+  by succession — the tier is not lost). This doctor read is **advisory**: the conductor resolves the
+  head with a live Fable-pinned probe at onboarding/resume (recorded as `claude_head`), which is the
+  authority. Do not claim a tier the environment cannot reach.
 
 **Resolve the capability tier** (§8 ladder) from the probes:
 - **T3 (+Codex, full)** — codex preflight OK **and** Opus available. The default full-craft tier.
-- **T4 (+Fable, bonus)** — as T3, plus Fable available.
+- **T4 (the council tier)** — as T3, plus a resolved **Claude council head**: Fable 5 when reachable
+  (preferred), else Opus 4.8 by **succession** (recorded, never silent). Codex+Opus setups that used to
+  cap at T3-no-councils now reach the council tier, Opus-headed — that is more model calls, more
+  latency/tokens, and new fail-closed completion gates, kept by design (the ladder runs the strongest
+  available instruments, and the tier label moves so the change is visible). The bash
+  `── configured model ──` / Fable read here is **ADVISORY only**; the conductor's live Fable-pinned
+  probe at onboarding/resume is the **authoritative** resolution, recorded as `claude_head` in the run's
+  capability record.
 - **T2 (+Opus)** — Opus available, codex absent/non-functional (Sonnet builds logic, Opus reviews).
 - **T1 (Sonnet-only)** — no Opus (Sonnet across every slot).
 **Verification class**: `full` when playwright is present (browser probes execute); `static-only`

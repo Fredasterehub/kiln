@@ -32,6 +32,22 @@ const reportFile = `${kilnDir}/REPORT.md`
 // @gate
 // ── Codex model pins (CODEX_MODEL default + CODEX_FALLBACK, inlined from src/models.mjs) ──
 // @models
+// ── The Claude council head, resolved once per run. The conductor threads args.claudeHead from the
+//    run's capability record; only the fallback engine id (CLAUDE_HEAD_FALLBACK) demotes the seat —
+//    absent, 'fable', or any other value keeps the preferred head (CLAUDE_HEAD), byte-compatible with a
+//    launch that threads no head. Every Claude-head SEAT model and the model field of each Claude-half
+//    seat_provenance resolves through this ONE constant; the head LABELS (head:'fable', slot keys) are
+//    seat names and never move — CLAUDE_HEAD_MODEL names the engine, 'fable' names the seat. ──
+const CLAUDE_HEAD_MODEL = A.claudeHead === CLAUDE_HEAD_FALLBACK ? CLAUDE_HEAD_FALLBACK : CLAUDE_HEAD
+// When the head is held by the fallback engine, record the succession ONCE at council convening so the
+// demotion is never silent — the checkpoints carry the resolved model in seat_provenance; this is the
+// human-readable ledger beat beside them. Best-effort: a failed append never blocks the council.
+let claudeHeadSuccessionNoted = false
+async function noteClaudeHeadSuccession(phaseName) {
+  if (CLAUDE_HEAD_MODEL !== CLAUDE_HEAD_FALLBACK || claudeHeadSuccessionNoted) return
+  claudeHeadSuccessionNoted = true
+  try { await runLedger('note', { kind: 'capability', event: 'claude_head_demoted', head: 'fable', claude_head: CLAUDE_HEAD_MODEL }, phaseName) } catch { /* best-effort beat */ }
+}
 // ── Twin Council pure core (B4-3 D1/D5) — the SEALED b42 call-site machinery, lifted to src/council.mjs
 //    and inlined through the SAME @inline:council bundler contract build/validate/vision use (helpers,
 //    never copy-paste). Powers report's T4 keystone: the signoff pair after the existence gate. INERT on
@@ -126,7 +142,7 @@ const runBlindPair = async (cfg) => {
   const sinkF = {}, sinkS = {}
   const plan = solWrapperPlan({ councilDir, pluginRoot, receiptsLedger, runToken: runTokenRaw, keystone: cfg.keystone, transportModel: CODEX_MODEL, phaseTag: cfg.phaseTag, attempt: 1, effort: 'xhigh', payloadSchema: cfg.schema, taskText: cfg.solTaskText, briefBody: cfg.solBrief, packetObj: cfg.solPacket })
   const [rF, rS] = await parallel([
-    () => gateAgent(cfg.fablePrompt, { label: `fable:${cfg.legName}`, phase: cfg.phaseName, model: 'fable', effort: 'xhigh', twoHeads: 'required', schema: cfg.schema, provenance: sinkF }),
+    () => gateAgent(cfg.fablePrompt, { label: `fable:${cfg.legName}`, phase: cfg.phaseName, model: CLAUDE_HEAD_MODEL, effort: 'xhigh', twoHeads: 'required', schema: cfg.schema, provenance: sinkF }),
     () => gateAgent(plan.prompt, { label: `sol:${cfg.legName}`, phase: cfg.phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(cfg.schema), provenance: sinkS }),
   ])
   let solCross = { ledger_verified: false }
@@ -193,7 +209,7 @@ const runReportSignoff = async (res) => {
     await councilCheckpoint({ ...ckptBase, phase: 'DEGRADED', anonymous_seat_artifact_hashes: {}, seat_provenance: { missing: pair.missing }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
     await councilRuling({ keystone, phase: phaseTag, terminal: 'DEGRADED', missing: pair.missing }, phaseName)
     log(`report signoff council DEGRADED (${pair.missing}) — the report ships UNSIGNED, NO stage_completed (never a single-head signoff)`)
-    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleHash, receipt_verified: !!(pair.sinkS && pair.sinkS.receipt_verified), ledger_verified: !!(pair.solCross && pair.solCross.ledger_verified) }
+    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleHash, missing: pair.missing, receipt_verified: !!(pair.sinkS && pair.sinkS.receipt_verified), ledger_verified: !!(pair.solCross && pair.solCross.ledger_verified) }
   }
   const vF = validateRatification(pair.rF, { bundle_hash: bundleHash, open_divergence_ids: [] })
   const vS = validateRatification(pair.rS, { bundle_hash: bundleHash, open_divergence_ids: [] })
@@ -205,7 +221,7 @@ const runReportSignoff = async (res) => {
     await councilCheckpoint({ ...ckptBase, phase: 'DEGRADED', anonymous_seat_artifact_hashes: {}, seat_provenance: { missing, reason: 'invalid ratification' }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
     await councilRuling({ keystone, phase: phaseTag, terminal: 'DEGRADED', missing, invalid: { fable: fBad, sol: sBad } }, phaseName)
     log(`report signoff ratification INVALID (${detail}) — DEGRADED (never mislabeled BLOCKED); the report ships UNSIGNED, NO stage_completed`)
-    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleHash, receipt_verified: true, ledger_verified: true }
+    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleHash, missing, receipt_verified: true, ledger_verified: true }
   }
   if (pair.rF.verdict === 'APPROVE' && pair.rS.verdict === 'APPROVE') {
     const cert = assembleRatifyCertificate({ rF: pair.rF, rS: pair.rS, provF: seatProv(pair.sinkF, 'fable'), provS: seatProv(pair.sinkS, 'sol'), context: { bundle_hash: bundleHash, renderer_version: COUNCIL_RENDERER_REPORT, plan_hash: bundleHash, evidence_manifest_hash: evidenceManifestHash, protocol_version: COUNCIL_PROTOCOL_VERSION, seat_provenance: null } })
@@ -315,6 +331,7 @@ const proof = await agent(
 let reportCouncil = null
 if (proof && proof.exists === true) {
   if (councilCapable) {
+    await noteClaudeHeadSuccession('The Final Word')
     reportCouncil = await runReportSignoff(res)
     if (reportCouncil.terminal === 'RATIFIED') {
       await lore('report.signed', `The final word is written and signed — ${oneLine((res && res.headline) || 'delivery report complete', 80)}`, { headline: oneLine((res && res.headline) || 'delivery report complete', 80) }, 'The Final Word')
@@ -341,5 +358,5 @@ return {
   // signed_off is a HONEST claim (true only with a valid dual certificate), the council terminal drives the
   // conductor's gated checkpoint, and the b42-mirrored per-seat summary {seat, certificate_present,
   // receipt_verified, ledger_verified} rides alongside. Sub-T4 omits signed_off entirely (never a false claim).
-  ...(councilPromised ? { signed_off: !!(reportCouncil && reportCouncil.terminal === 'RATIFIED'), council: { seat: 'report_signoff', terminal: reportCouncil ? reportCouncil.terminal : null, certificate: reportCouncil ? reportCouncil.certificate : null, findings: reportCouncil ? reportCouncil.findings : [], bundle_hash: reportCouncil ? reportCouncil.bundle_hash : null, receipts: councilReceipts, certificate_present: !!(reportCouncil && reportCouncil.certificate), receipt_verified: !!(reportCouncil && reportCouncil.receipt_verified), ledger_verified: !!(reportCouncil && reportCouncil.ledger_verified) } } : {}),
+  ...(councilPromised ? { signed_off: !!(reportCouncil && reportCouncil.terminal === 'RATIFIED'), council: { seat: 'report_signoff', terminal: reportCouncil ? reportCouncil.terminal : null, certificate: reportCouncil ? reportCouncil.certificate : null, findings: reportCouncil ? reportCouncil.findings : [], bundle_hash: reportCouncil ? reportCouncil.bundle_hash : null, receipts: councilReceipts, certificate_present: !!(reportCouncil && reportCouncil.certificate), receipt_verified: !!(reportCouncil && reportCouncil.receipt_verified), ledger_verified: !!(reportCouncil && reportCouncil.ledger_verified), council_missing_head: (reportCouncil && (reportCouncil.missing === 'fable' || reportCouncil.missing === 'sol')) ? reportCouncil.missing : null } } : {}),
 }

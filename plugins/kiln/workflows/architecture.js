@@ -127,6 +127,24 @@ const voice = (m) => (m === 'opus' ? MODEL_VOICE.opus + '\n\n' : '')
 // downgrade invisibly.
 const CODEX_MODEL = 'gpt-5.6-sol' // GPT-5.6 Sol, GA 2026-07-09 — the codex CLI model id
 const CODEX_FALLBACK = 'gpt-5.5'  // recorded rollout fallback (5.4 dropped — two rungs suffice)
+const CLAUDE_HEAD = 'fable'          // the Claude council head — the strongest available
+const CLAUDE_HEAD_FALLBACK = 'opus'  // recorded succession when the head is unreachable — never silent
+// ── The Claude council head, resolved once per run. The conductor threads args.claudeHead from the
+//    run's capability record; only the fallback engine id (CLAUDE_HEAD_FALLBACK) demotes the seat —
+//    absent, 'fable', or any other value keeps the preferred head (CLAUDE_HEAD), byte-compatible with a
+//    launch that threads no head. Every Claude-head SEAT model and the model field of each Claude-half
+//    seat_provenance resolves through this ONE constant; the head LABELS (head:'fable', slot keys) are
+//    seat names and never move — CLAUDE_HEAD_MODEL names the engine, 'fable' names the seat. ──
+const CLAUDE_HEAD_MODEL = A.claudeHead === CLAUDE_HEAD_FALLBACK ? CLAUDE_HEAD_FALLBACK : CLAUDE_HEAD
+// When the head is held by the fallback engine, record the succession ONCE at council convening so the
+// demotion is never silent — the checkpoints carry the resolved model in seat_provenance; this is the
+// human-readable ledger beat beside them. Best-effort: a failed append never blocks the council.
+let claudeHeadSuccessionNoted = false
+async function noteClaudeHeadSuccession(phaseName) {
+  if (CLAUDE_HEAD_MODEL !== CLAUDE_HEAD_FALLBACK || claudeHeadSuccessionNoted) return
+  claudeHeadSuccessionNoted = true
+  try { await runLedger('note', { kind: 'capability', event: 'claude_head_demoted', head: 'fable', claude_head: CLAUDE_HEAD_MODEL }, phaseName) } catch { /* best-effort beat */ }
+}
 // ── The single gateAgent (+ receipt attestation) — whole src/gate.mjs inlined verbatim (like build/
 //    validate). The Twin Council's Sol seats are Sonnet wrappers over transport:'codex'; gateAgent
 //    STRUCTURALLY validates the relayed receipt and fails a dead Sol seat closed to null. ──
@@ -2881,7 +2899,7 @@ const runDebateFrontHalf = async (planAFile, planBFile, evidenceDocs, phaseName)
   const solCrit = solByteOwnedPlan({ phaseTag: 'CRITIQUE', attempt: 1, effort: 'xhigh', codexPrompt: solCritiqueCodexPrompt, packetObj: { plan: planAFile, evidence: evidenceDocs, evidence_manifest_hash: evidenceManifestHash }, payloadSchema: CRITIQUE_PAYLOAD_SCHEMA })
   const sinkFC = {}, sinkSC = {}
   const [fableCritique, solCritEnv] = await parallel([
-    () => gateAgent(fableCritiquePrompt, { label: 'fable:critique', phase: phaseName, model: 'fable', effort: 'xhigh', twoHeads: 'required', schema: CRITIQUE_PAYLOAD_SCHEMA, provenance: sinkFC }),
+    () => gateAgent(fableCritiquePrompt, { label: 'fable:critique', phase: phaseName, model: CLAUDE_HEAD_MODEL, effort: 'xhigh', twoHeads: 'required', schema: CRITIQUE_PAYLOAD_SCHEMA, provenance: sinkFC }),
     () => gateAgent(solCrit.prompt, { label: 'sol:critique', phase: phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(CRITIQUE_PAYLOAD_SCHEMA), provenance: sinkSC }),
   ])
   let solCritCross = { ledger_verified: false }
@@ -2901,7 +2919,7 @@ const runDebateFrontHalf = async (planAFile, planBFile, evidenceDocs, phaseName)
     { target_slot: slotOf('sol'), findings: Array.isArray(fableCritique.findings) ? fableCritique.findings : [] },
     { target_slot: slotOf('fable'), findings: Array.isArray(solCritEnv.findings) ? solCritEnv.findings : [] },
   ])
-  await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'CRITIQUES_SEALED', decision_bundle_hash: null, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: { [slotOf('fable')]: sha256Hex(canonicalJson(fableCritique)), [slotOf('sol')]: sha256Hex(canonicalJson(solCritEnv)) }, seat_provenance: { [slotOf('fable')]: { head: 'fable', model: 'fable' }, [slotOf('sol')]: seatProv(sinkSC, 'sol') }, codex_receipt_hash: solCritCross.codex_receipt_hash, status: 'sealed' }, phaseName)
+  await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'CRITIQUES_SEALED', decision_bundle_hash: null, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: { [slotOf('fable')]: sha256Hex(canonicalJson(fableCritique)), [slotOf('sol')]: sha256Hex(canonicalJson(solCritEnv)) }, seat_provenance: { [slotOf('fable')]: { head: 'fable', model: CLAUDE_HEAD_MODEL }, [slotOf('sol')]: seatProv(sinkSC, 'sol') }, codex_receipt_hash: solCritCross.codex_receipt_hash, status: 'sealed' }, phaseName)
 
   // ── W2: self-revision with exact dispositions (§3). Each head sees ITS OWN draft + ONLY the frozen
   //    findings against it. validateDispositions enforces exact coverage; invalid ⇒ DEGRADED. Fable
@@ -2925,7 +2943,7 @@ const runDebateFrontHalf = async (planAFile, planBFile, evidenceDocs, phaseName)
   const solRev = solByteOwnedPlan({ phaseTag: 'REVISION', attempt: 1, effort: 'xhigh', codexPrompt: solReviseCodexPrompt, packetObj: { plan: planBFile, findings: findingsForP1, evidence_manifest_hash: evidenceManifestHash }, payloadSchema: SOL_REVISION_PAYLOAD_SCHEMA, extractTo: planBFile, extractField: 'revised_plan_markdown', extractLabel: 'revised plan' })
   const sinkSR = {}
   const [fableRevision, solRevEnv] = await parallel([
-    () => gateAgent(fableRevisePrompt, { label: 'fable:revise', phase: phaseName, model: 'fable', effort: 'xhigh', twoHeads: 'required', schema: REVISION_PAYLOAD_SCHEMA, provenance: {} }),
+    () => gateAgent(fableRevisePrompt, { label: 'fable:revise', phase: phaseName, model: CLAUDE_HEAD_MODEL, effort: 'xhigh', twoHeads: 'required', schema: REVISION_PAYLOAD_SCHEMA, provenance: {} }),
     () => gateAgent(solRev.prompt, { label: 'sol:revise', phase: phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(SOL_REVISION_PAYLOAD_SCHEMA), provenance: sinkSR }),
   ])
   let solRevCross = { ledger_verified: false }
@@ -2946,7 +2964,7 @@ const runDebateFrontHalf = async (planAFile, planBFile, evidenceDocs, phaseName)
     await degradeCouncil(!vFable.valid && !vSol.valid ? 'both' : (!vFable.valid ? 'fable' : 'sol'), `invalid disposition set at REVISION (${detail})`, phaseName)
     return null
   }
-  await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'REVISIONS_SEALED', decision_bundle_hash: null, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: { [slotOf('fable')]: sha256Hex(canonicalJson(fableRevision)), [slotOf('sol')]: sha256Hex(canonicalJson(solRevEnv)) }, seat_provenance: { [slotOf('fable')]: { head: 'fable', model: 'fable' }, [slotOf('sol')]: seatProv(sinkSR, 'sol') }, codex_receipt_hash: solRevCross.codex_receipt_hash, status: 'sealed' }, phaseName)
+  await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'REVISIONS_SEALED', decision_bundle_hash: null, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: { [slotOf('fable')]: sha256Hex(canonicalJson(fableRevision)), [slotOf('sol')]: sha256Hex(canonicalJson(solRevEnv)) }, seat_provenance: { [slotOf('fable')]: { head: 'fable', model: CLAUDE_HEAD_MODEL }, [slotOf('sol')]: seatProv(sinkSR, 'sol') }, codex_receipt_hash: solRevCross.codex_receipt_hash, status: 'sealed' }, phaseName)
 
   // ── W3: the mechanical divergence set (§4) + B3b2-iiA projection/join → negotiation → settlement →
   //    bundle (A5 items 1–4; ruling AMB-B3b2ii-CAP). buildDivergenceSet PROVES every finding + decision is
@@ -3088,7 +3106,7 @@ const runDebateFrontHalf = async (planAFile, planBFile, evidenceDocs, phaseName)
     const solNeg = solByteOwnedPlan({ phaseTag: 'NEGOTIATION', attempt: 1, effort: 'xhigh', codexPrompt: solNegotiateCodexPrompt, packetObj: { common_trunk: agreed, cards: cardsForPacket, requires: joined.requires }, payloadSchema: NEGOTIATION_PAYLOAD_SCHEMA })
     const sinkFN = {}, sinkSN = {}
     const [fableNeg, solNegEnv] = await parallel([
-      () => gateAgent(fableNegotiatePrompt, { label: 'fable:negotiate', phase: phaseName, model: 'fable', effort: 'xhigh', twoHeads: 'required', schema: NEGOTIATION_PAYLOAD_SCHEMA, provenance: sinkFN }),
+      () => gateAgent(fableNegotiatePrompt, { label: 'fable:negotiate', phase: phaseName, model: CLAUDE_HEAD_MODEL, effort: 'xhigh', twoHeads: 'required', schema: NEGOTIATION_PAYLOAD_SCHEMA, provenance: sinkFN }),
       () => gateAgent(solNeg.prompt, { label: 'sol:negotiate', phase: phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(NEGOTIATION_PAYLOAD_SCHEMA), provenance: sinkSN }),
     ])
     let solNegCross = { ledger_verified: false }
@@ -3107,7 +3125,7 @@ const runDebateFrontHalf = async (planAFile, planBFile, evidenceDocs, phaseName)
     for (const s of solNegEnv.selections) solSel.set(String(s.divergence_id), s)
     const { settled, open } = settleNegotiation(cards, fableSel, solSel)
     const seatHashes = { [slotOf('fable')]: sha256Hex(canonicalJson(fableNeg)), [slotOf('sol')]: sha256Hex(canonicalJson(solNegEnv)) }
-    return await finalizeFrontHalf([...agreed, ...settled], open, { phase: 'NEGOTIATION_SEALED', anonymous_seat_artifact_hashes: seatHashes, seat_provenance: { [slotOf('fable')]: { head: 'fable', model: 'fable' }, [slotOf('sol')]: seatProv(sinkSN, 'sol') }, codex_receipt_hash: solNegCross.codex_receipt_hash })
+    return await finalizeFrontHalf([...agreed, ...settled], open, { phase: 'NEGOTIATION_SEALED', anonymous_seat_artifact_hashes: seatHashes, seat_provenance: { [slotOf('fable')]: { head: 'fable', model: CLAUDE_HEAD_MODEL }, [slotOf('sol')]: seatProv(sinkSN, 'sol') }, codex_receipt_hash: solNegCross.codex_receipt_hash })
   }
 
   let frontBundle = null
@@ -3301,6 +3319,7 @@ if (liteScope) {
   log(`${spin('council', 0)}`)
   let plans
   if (councilCapable) {
+    await noteClaudeHeadSuccession('The Council')
     // ═══ Twin Council draft pair (T4, FULL path): Fable drafts plan-a itself; the receipt-attested Sol
     //     wrapper drafts plan-b (codex read-only, plan rides the attested payload). Both see the SAME
     //     frozen evidence + rubric; neither sees the peer's identity, model, receipt, or the run
@@ -3347,7 +3366,7 @@ if (liteScope) {
       // architecture.council_convened (keystone): the T4 draft pair spawns — two heads draft blind.
       await lore('architecture.council_convened', `The Twin Council convenes — two heads draft blind; neither sees the other's hand`, null, 'The Council')
       const [fablePlan, solPayload] = await parallel([
-        () => agent(fableDraftPrompt(planBrief), { label: 'fable:draft', phase: 'The Council', model: 'fable', effort: 'high', schema: PLAN_SCHEMA_T4 }),
+        () => agent(fableDraftPrompt(planBrief), { label: 'fable:draft', phase: 'The Council', model: CLAUDE_HEAD_MODEL, effort: 'high', schema: PLAN_SCHEMA_T4 }),
         () => gateAgent(solDraft.prompt, { label: 'sol:draft', phase: 'The Council', model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(SOL_DRAFT_PAYLOAD_SCHEMA), provenance: sinkS }),
       ])
       let solCross = { ledger_verified: false }
@@ -3377,7 +3396,7 @@ if (liteScope) {
         // B3R1-1: seat hashes + provenance are keyed by the seed-assigned slot (plan-a = fable's, plan-b
         // = sol's — the plan files stay seat-bound; the SLOT labels route through slotOf). Provenance still
         // records head-per-slot (audit).
-        await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'DRAFTS_SEALED', decision_bundle_hash: null, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: { [slotOf('fable')]: seatHashes && seatHashes.plan_a_sha256 ? seatHashes.plan_a_sha256 : null, [slotOf('sol')]: seatHashes && seatHashes.plan_b_sha256 ? seatHashes.plan_b_sha256 : null }, seat_provenance: { [slotOf('fable')]: { head: 'fable', model: 'fable' }, [slotOf('sol')]: seatProv(sinkS, 'sol') }, codex_receipt_hash: solCross.codex_receipt_hash, status: 'sealed' }, 'The Council')
+        await appendCouncilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: templateHash, run_token_hash: runTokenHash, initial_ledger_seq: councilInitialSeq, keystone_id: keystoneId, phase: 'DRAFTS_SEALED', decision_bundle_hash: null, input_artifact_hashes: evidenceInputHashes, evidence_manifest_hash: evidenceManifestHash, anonymous_seat_artifact_hashes: { [slotOf('fable')]: seatHashes && seatHashes.plan_a_sha256 ? seatHashes.plan_a_sha256 : null, [slotOf('sol')]: seatHashes && seatHashes.plan_b_sha256 ? seatHashes.plan_b_sha256 : null }, seat_provenance: { [slotOf('fable')]: { head: 'fable', model: CLAUDE_HEAD_MODEL }, [slotOf('sol')]: seatProv(sinkS, 'sol') }, codex_receipt_hash: solCross.codex_receipt_hash, status: 'sealed' }, 'The Council')
         // The plans shim: the payload carries approach_summary/milestones; the lantern/plato read
         // plan-a.md / plan-b.md from disk (both written), UNCHANGED — anonymity preserved (no receipt/
         // model/token leaks in any lantern or plato prompt).
@@ -3767,7 +3786,7 @@ const runTwinCouncilRatify = async () => {
       (ex.sol ? `\nExchange evidence for YOUR prior blocking findings (the other head's answers, the executable-check transcripts, the applied changes) rides in the packet's exchange field; the plan file is the AMENDED artifact.` : '')
     const solR = solWrapperPrompt({ phaseTag, attempt: 1, effort: 'xhigh', payloadSchema: RATIFY_SCHEMA, taskText: RATIFY_TASK, briefBody: solBrief, packetObj: { master_plan: masterPlanFile, evidence: evidenceDocs, artifact_hash: bH, plan_sha256: pH, evidence_manifest_hash: evidenceManifestHash, open_divergences: cards || [], exchange: ex.sol != null ? ex.sol : null } })
     const [rF, rS] = await parallel([
-      () => gateAgent(fableRatifyPrompt(suffix, bH, pH, ex.fable != null ? ex.fable : null, cards), { label: `fable:ratify:${suffix}`, phase: phaseName, model: 'fable', effort: 'xhigh', twoHeads: 'required', schema: RATIFY_SCHEMA, provenance: sinkF }),
+      () => gateAgent(fableRatifyPrompt(suffix, bH, pH, ex.fable != null ? ex.fable : null, cards), { label: `fable:ratify:${suffix}`, phase: phaseName, model: CLAUDE_HEAD_MODEL, effort: 'xhigh', twoHeads: 'required', schema: RATIFY_SCHEMA, provenance: sinkF }),
       () => gateAgent(solR.prompt, { label: `sol:ratify:${suffix}`, phase: phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(RATIFY_SCHEMA), provenance: sinkS }),
     ])
     let solCross = { ledger_verified: false }
@@ -3920,7 +3939,7 @@ const runTwinCouncilRatify = async () => {
     const prompt = freshCellPrompt(packet)
     if (call.head === 'fable') {
       const sink = {}
-      const r = await gateAgent(prompt, { label: `fable:fresh:${call.card_id}`, phase: ph, model: 'fable', effort: 'high', twoHeads: 'required', schema: FRESH_CELL_SCHEMA, provenance: sink })
+      const r = await gateAgent(prompt, { label: `fable:fresh:${call.card_id}`, phase: ph, model: CLAUDE_HEAD_MODEL, effort: 'high', twoHeads: 'required', schema: FRESH_CELL_SCHEMA, provenance: sink })
       if (r == null) return null
       return normFreshInstance(call, r)
     }
@@ -4056,7 +4075,7 @@ const runTwinCouncilRatify = async () => {
     const solPlan = solByteOwnedPlan({ phaseTag: `REVERSIBILITY-${card.divergence_id}`, attempt: 1, effort: 'high', codexPrompt: revPrompt, packetObj: { divergence_id: card.divergence_id, topic: card.topic, position_0: card.position_0, position_1: card.position_1 }, payloadSchema: REVERSIBILITY_SCHEMA })
     const sSink = {}
     const [fRev, sRevEnv] = await parallel([
-      () => gateAgent(revPrompt, { label: `fable:reversibility:${card.divergence_id}`, phase: ph, model: 'fable', effort: 'high', twoHeads: 'required', schema: REVERSIBILITY_SCHEMA, provenance: fSink }),
+      () => gateAgent(revPrompt, { label: `fable:reversibility:${card.divergence_id}`, phase: ph, model: CLAUDE_HEAD_MODEL, effort: 'high', twoHeads: 'required', schema: REVERSIBILITY_SCHEMA, provenance: fSink }),
       () => gateAgent(solPlan.prompt, { label: `sol:reversibility:${card.divergence_id}`, phase: ph, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(REVERSIBILITY_SCHEMA), provenance: sSink }),
     ])
     let sCross = { ledger_verified: false }
@@ -4079,7 +4098,7 @@ const runTwinCouncilRatify = async () => {
     const rSink = {}
     const rubricSol = solByteOwnedPlan({ phaseTag: `RUBRIC-${card.divergence_id}`, attempt: 1, effort: 'high', codexPrompt: rubricPrompt, packetObj: { divergence_id: card.divergence_id, topic: card.topic, position_0: card.position_0, position_1: card.position_1 }, payloadSchema: RUBRIC_AMEND_SCHEMA })
     const [fRub, sRubEnv] = await parallel([
-      () => gateAgent(rubricPrompt, { label: `fable:rubric-amend:${card.divergence_id}`, phase: ph, model: 'fable', effort: 'high', twoHeads: 'required', schema: RUBRIC_AMEND_SCHEMA, provenance: {} }),
+      () => gateAgent(rubricPrompt, { label: `fable:rubric-amend:${card.divergence_id}`, phase: ph, model: CLAUDE_HEAD_MODEL, effort: 'high', twoHeads: 'required', schema: RUBRIC_AMEND_SCHEMA, provenance: {} }),
       () => gateAgent(rubricSol.prompt, { label: `sol:rubric-amend:${card.divergence_id}`, phase: ph, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(RUBRIC_AMEND_SCHEMA), provenance: rSink })
     ])
     // B3R1-11: the Sol rubric leg is BYTE-OWNED — the invocation-exact cross-check must ledger_verify it.
@@ -4271,7 +4290,7 @@ const runTwinCouncilRatify = async () => {
   }
   if (remainingSol.length) {
     fableAnswerSink = {}
-    const fa = await gateAgent(fableAnswerPrompt(remainingSol), { label: 'fable:answer', phase: phaseName, model: 'fable', effort: 'high', twoHeads: 'required', schema: ANSWER_SCHEMA, provenance: fableAnswerSink })
+    const fa = await gateAgent(fableAnswerPrompt(remainingSol), { label: 'fable:answer', phase: phaseName, model: CLAUDE_HEAD_MODEL, effort: 'high', twoHeads: 'required', schema: ANSWER_SCHEMA, provenance: fableAnswerSink })
     if (fa == null) { await degradeCouncil('fable', 'Fable seat death during the answer exchange', phaseName); return }
     const err = answerSetError(remainingSol, fa)
     if (err) { await degradeCouncil('fable', `invalid answer set from the Fable head (${err})`, phaseName); return }
@@ -4402,6 +4421,7 @@ const runTwinCouncilRatify = async () => {
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 const runLiteCouncilRatify = async () => {
   const phaseName = 'Athena Weighs'
+  await noteClaudeHeadSuccession(phaseName)
   // Evidence manifest — computed EXACTLY as the full path's evidenceManifestHash: a haiku anchor over
   // the frozen inputs (VISION + the arch docs + research when present). A dead/garbled/partial anchor
   // cannot bind the council's evidence ⇒ DEGRADED (never a certificate missing VISION/constraints).
@@ -4450,7 +4470,7 @@ const runLiteCouncilRatify = async () => {
   // architecture.council_convened (keystone): the T4-lite pair spawns — two heads rule blind, no drafts.
   await lore('architecture.council_convened', `The Twin Council convenes on the lite plan — two heads rule blind, no drafts to compare`, null, phaseName)
   const [rF, rS] = await parallel([
-    () => gateAgent(fableRatifyPrompt, { label: 'fable:ratify:lite', phase: phaseName, model: 'fable', effort: 'xhigh', twoHeads: 'required', schema: RATIFY_SCHEMA, provenance: sinkF }),
+    () => gateAgent(fableRatifyPrompt, { label: 'fable:ratify:lite', phase: phaseName, model: CLAUDE_HEAD_MODEL, effort: 'xhigh', twoHeads: 'required', schema: RATIFY_SCHEMA, provenance: sinkF }),
     () => gateAgent(solR.prompt, { label: 'sol:ratify:lite', phase: phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(RATIFY_SCHEMA), provenance: sinkS }),
   ])
   let solCross = { ledger_verified: false }
@@ -4935,6 +4955,10 @@ return {
     // the RETAINED constructor record (F10): twin_degraded / council_deadlock (with its disagreement
     // cards) — null when RATIFIED (the certificate IS that record) and on every v3.0.1 route.
     terminal_record: councilTerminalRecord,
+    // F2 (R1-RETRY-CAUSE-NOT-EXPOSED): the failed-Claude-head discriminator, extracted from the
+    // retained terminal_record for conductor uniformity with the four other council workflows —
+    // 'fable' | 'sol' | null (a 'both'/evidence/deadlock DEGRADED is no single head death, folds to null).
+    council_missing_head: (councilTerminalRecord && (councilTerminalRecord.missing === 'fable' || councilTerminalRecord.missing === 'sol')) ? councilTerminalRecord.missing : null,
     blocked_reason: councilBlockedReason,
     receipts: councilReceipts,
     checkpoints: councilCheckpointCount,

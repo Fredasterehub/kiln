@@ -47,7 +47,11 @@ whether the tier is `express` or a facilitated tier).
   compile). It returns `{vision_valid, tier, counts, unresolved, visual_direction, …}`; you thread the
   returned **`visual_direction`** into the Architecture launch as `visualDirection` (below). It also
   takes a **`runToken`** and a **`capabilityTier`** (`T1`|`T2`|`T3`|`T4` = the freshest capability
-  record's `tier`; see [The run token](#the-run-token)). When `capabilityTier === 'T4'` AND `codexAvailable`
+  record's `tier`; see [The run token](#the-run-token)). It also takes an optional **`claudeHead`**
+  (`'fable'`|`'opus'` = `state.json.capability.claude_head`, the resolved Claude council head) — every
+  Claude-head council seat resolves its engine through it, so an Opus-headed council seals with Opus in
+  the seat and records the succession in the checkpoints' `seat_provenance`; **omit it (or any value but
+  `'opus'`) ⇒ the Fable head, byte-compatible with every pre-succession launch.** When `capabilityTier === 'T4'` AND `codexAvailable`
   AND a `runToken` is present, the compile is sealed by the **fidelity council** (B4-3 D4): a blind
   Fable/Sol required pair rules whether `VISION.md` is a FAITHFUL compile of the brainstorm ledger
   (nothing invented, nothing dropped) — dual-APPROVE ⇒ `vision_compiled` THEN `stage_completed` fire +
@@ -94,7 +98,9 @@ whether the tier is `express` or a facilitated tier).
   the §3.2 zero-topics route wrote none — it never points an agent at a phantom research file.
   Architecture also takes a **`runToken`** (council receipt binding + council seed at T4 — NOT a browser
   token; see [The run token](#the-run-token)) and a **`capabilityTier`** (`T1`|`T2`|`T3`|`T4` = the
-  freshest capability record's `tier`). When `capabilityTier === 'T4'` AND `codexAvailable` AND a
+  freshest capability record's `tier`), plus the optional **`claudeHead`** (`'fable'`|`'opus'` =
+  `state.json.capability.claude_head`; absent ⇒ `'fable'`, byte-compatible) that resolves the Claude
+  council seat's engine on BOTH the FULL and LITE paths. When `capabilityTier === 'T4'` AND `codexAvailable` AND a
   `runToken` is present, BOTH the FULL and the LITE paths become the **twin council**: the FULL path
   runs the anonymized Fable ∥ receipt-attested-Sol draft pair + a divergence-aware blind ratification
   ladder; the LITE path (B4-2 D7) runs the blind required ratification pair ALONE over the single lite
@@ -124,7 +130,9 @@ whether the tier is `express` or a facilitated tier).
   conductor-minted per run (see [The run token](#the-run-token)) — build.js derives its `kbuild-…`
   browser-kill token from it AND (at capability tier T4) binds its milestone-council receipt-invocation
   IDs to the SAME per-run token. Build also takes a **`capabilityTier`** (`T1`|`T2`|`T3`|`T4` = the
-  freshest capability record's `tier`, same as Architecture). When `capabilityTier === 'T4'` AND
+  freshest capability record's `tier`, same as Architecture) and the optional **`claudeHead`**
+  (`'fable'`|`'opus'` = `state.json.capability.claude_head`; absent ⇒ `'fable'`, byte-compatible) that
+  resolves the milestone council's Claude seat engine. When `capabilityTier === 'T4'` AND
   `codexAvailable` AND a `runToken` is present, the milestone gate's three judgment seats go
   council-grade: the Ryu analyst becomes a receipt-attested Sol evidence analyst (xhigh, read-only,
   judging from the runner's persisted hashed evidence), Judge Dredd is retired in favor of a blind
@@ -158,7 +166,9 @@ whether the tier is `express` or a facilitated tier).
   The **in-loop Tier-2 browser traversal is the v3 repeal of the v2 ban** — it runs INSIDE validate as
   one bounded, swept, lease-gated evaluator (the browser is a subprocess with a deadline, never a
   service); the out-of-loop `visual_qa_checklist` still ships as the optional operator re-check below.
-  Validate also takes a **`capabilityTier`** (`T1`|`T2`|`T3`|`T4`, same as Build/Architecture). When
+  Validate also takes a **`capabilityTier`** (`T1`|`T2`|`T3`|`T4`, same as Build/Architecture) and the
+  optional **`claudeHead`** (`'fable'`|`'opus'` = `state.json.capability.claude_head`; absent ⇒ `'fable'`,
+  byte-compatible) that resolves the final-ruling council's Claude seat engine. When
   `capabilityTier === 'T4'` AND `codexAvailable` AND a `runToken` is present, the **final ruling** goes
   council-grade (B4-3 D2): a blind Fable/Sol required pair CONFIRMS or BLOCKS the assembled deterministic
   verdict for EVERY computed verdict (PASS incl. prospective, PARTIAL, FAILED) — the monotonicity rail is
@@ -179,8 +189,10 @@ whether the tier is `express` or a facilitated tier).
   the genuine-success path ONLY — REPORT.md written, confirmed by an existence probe) and the C1 lore
   beats, AND (at T4) the `kiln-codex-receipt` CLI the signoff council binds its receipts through;
   absence degrades the ledger legs to log lines, never a stage failure. A missing REPORT.md emits NO
-  `stage_completed`, so the projection stays at `report`. Report also takes a **`runToken`** and a
-  **`capabilityTier`**. When `capabilityTier === 'T4'` AND `codexAvailable` AND a `runToken` is present,
+  `stage_completed`, so the projection stays at `report`. Report also takes a **`runToken`**, a
+  **`capabilityTier`**, and the optional **`claudeHead`** (`'fable'`|`'opus'` =
+  `state.json.capability.claude_head`; absent ⇒ `'fable'`, byte-compatible) that resolves the signoff
+  council's Claude seat engine. When `capabilityTier === 'T4'` AND `codexAvailable` AND a `runToken` is present,
   the **signoff** goes council-grade (B4-3 D5): Omega still AUTHORS the report (creative seat, unchanged),
   then after the existence gate a blind Fable/Sol required pair rules whether REPORT.md tells the TRUTH
   about the run's delivered vs outstanding artifacts — dual-APPROVE ⇒ `signed_off: true` + a `b43-report/1`

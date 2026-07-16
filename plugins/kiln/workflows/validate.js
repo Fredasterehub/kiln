@@ -403,6 +403,24 @@ const voice = (m) => (m === 'opus' ? MODEL_VOICE.opus + '\n\n' : '')
 // downgrade invisibly.
 const CODEX_MODEL = 'gpt-5.6-sol' // GPT-5.6 Sol, GA 2026-07-09 — the codex CLI model id
 const CODEX_FALLBACK = 'gpt-5.5'  // recorded rollout fallback (5.4 dropped — two rungs suffice)
+const CLAUDE_HEAD = 'fable'          // the Claude council head — the strongest available
+const CLAUDE_HEAD_FALLBACK = 'opus'  // recorded succession when the head is unreachable — never silent
+// ── The Claude council head, resolved once per run. The conductor threads args.claudeHead from the
+//    run's capability record; only the fallback engine id (CLAUDE_HEAD_FALLBACK) demotes the seat —
+//    absent, 'fable', or any other value keeps the preferred head (CLAUDE_HEAD), byte-compatible with a
+//    launch that threads no head. Every Claude-head SEAT model and the model field of each Claude-half
+//    seat_provenance resolves through this ONE constant; the head LABELS (head:'fable', slot keys) are
+//    seat names and never move — CLAUDE_HEAD_MODEL names the engine, 'fable' names the seat. ──
+const CLAUDE_HEAD_MODEL = A.claudeHead === CLAUDE_HEAD_FALLBACK ? CLAUDE_HEAD_FALLBACK : CLAUDE_HEAD
+// When the head is held by the fallback engine, record the succession ONCE at council convening so the
+// demotion is never silent — the checkpoints carry the resolved model in seat_provenance; this is the
+// human-readable ledger beat beside them. Best-effort: a failed append never blocks the council.
+let claudeHeadSuccessionNoted = false
+async function noteClaudeHeadSuccession() {
+  if (CLAUDE_HEAD_MODEL !== CLAUDE_HEAD_FALLBACK || claudeHeadSuccessionNoted) return
+  claudeHeadSuccessionNoted = true
+  try { await ledger('note', { kind: 'capability', event: 'claude_head_demoted', head: 'fable', claude_head: CLAUDE_HEAD_MODEL }) } catch { /* best-effort beat */ }
+}
 // ── Twin Council pure core (B4-3 D1/D2/D3) — the SEALED 1b-ii/b42 call-site machinery, lifted to
 //    src/council.mjs and inlined here through the SAME @inline:council bundler contract build.js and
 //    architecture.js use (helpers, never copy-paste). Powers validate's T4 keystone: the final-ruling
@@ -1004,7 +1022,7 @@ const runBlindPair = async (cfg) => {
   const sinkF = {}, sinkS = {}
   const plan = solWrapperPlan({ councilDir, pluginRoot, receiptsLedger, runToken: runTokenRaw, keystone: cfg.keystone, transportModel: CODEX_MODEL, phaseTag: cfg.phaseTag, attempt: 1, effort: 'xhigh', payloadSchema: cfg.schema, taskText: cfg.solTaskText, briefBody: cfg.solBrief, packetObj: cfg.solPacket })
   const [rF, rS] = await parallel([
-    () => gateAgent(cfg.fablePrompt, { label: `fable:${cfg.legName}`, phase: cfg.phaseName, model: 'fable', effort: 'xhigh', twoHeads: 'required', schema: cfg.schema, provenance: sinkF }),
+    () => gateAgent(cfg.fablePrompt, { label: `fable:${cfg.legName}`, phase: cfg.phaseName, model: CLAUDE_HEAD_MODEL, effort: 'xhigh', twoHeads: 'required', schema: cfg.schema, provenance: sinkF }),
     () => gateAgent(plan.prompt, { label: `sol:${cfg.legName}`, phase: cfg.phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(cfg.schema), provenance: sinkS }),
   ])
   let solCross = { ledger_verified: false }
@@ -1087,7 +1105,7 @@ const runValidateRuling = async (v, verdictInput, secondFamily, goalReportFiles)
     await councilCheckpoint({ ...ckptBase, phase: 'DEGRADED', anonymous_seat_artifact_hashes: {}, seat_provenance: { missing: pair.missing }, codex_receipt_hash: null, status: 'sealed' })
     await councilRuling({ keystone, phase: phaseTag, terminal: 'DEGRADED', missing: pair.missing })
     log(`validate final-ruling council DEGRADED (${pair.missing}) — verdict fields UNCHANGED, stage_completed gated (never a single-head ruling)`)
-    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleHash, receipt_verified: !!(pair.sinkS && pair.sinkS.receipt_verified), ledger_verified: !!(pair.solCross && pair.solCross.ledger_verified) }
+    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleHash, missing: pair.missing, receipt_verified: !!(pair.sinkS && pair.sinkS.receipt_verified), ledger_verified: !!(pair.solCross && pair.solCross.ledger_verified) }
   }
   // b42-close validity logic EXACTLY: compute vF/vS + shapeF/shapeS FIRST; ANY invalid/shape-bad
   // ratification ⇒ DEGRADED naming the head(s) (never BLOCKED, never a frozen-findings carry from an
@@ -1102,7 +1120,7 @@ const runValidateRuling = async (v, verdictInput, secondFamily, goalReportFiles)
     await councilCheckpoint({ ...ckptBase, phase: 'DEGRADED', anonymous_seat_artifact_hashes: {}, seat_provenance: { missing, reason: 'invalid ratification' }, codex_receipt_hash: null, status: 'sealed' })
     await councilRuling({ keystone, phase: phaseTag, terminal: 'DEGRADED', missing, invalid: { fable: fBad, sol: sBad } })
     log(`validate final-ruling ratification INVALID (${detail}) — DEGRADED (never mislabeled BLOCKED); verdict fields UNCHANGED, stage_completed gated`)
-    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleHash, receipt_verified: true, ledger_verified: true }
+    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleHash, missing, receipt_verified: true, ledger_verified: true }
   }
   if (pair.rF.verdict === 'APPROVE' && pair.rS.verdict === 'APPROVE') {
     const cert = assembleRatifyCertificate({ rF: pair.rF, rS: pair.rS, provF: seatProv(pair.sinkF, 'fable'), provS: seatProv(pair.sinkS, 'sol'), context: { bundle_hash: bundleHash, renderer_version: COUNCIL_RENDERER_VALIDATE, plan_hash: bundleHash, evidence_manifest_hash: evidenceManifestHash, protocol_version: COUNCIL_PROTOCOL_VERSION, seat_provenance: null } })
@@ -1936,7 +1954,12 @@ try {
   //    Sub-T4 / no-codex / tokenless: no council convened, byte-preserved. Promised-but-tokenless:
   //    fail-closed DEGRADED (no stage_completed even on a PASS — never a silent v3.0.1 completion). ──
   let councilTerminal = null, councilCertificate = null, councilFindings = [], councilBundleHash = null, councilReceiptVerified = false, councilLedgerVerified = false
+  // F2 (R1-RETRY-CAUSE-NOT-EXPOSED): the failed-Claude-head discriminator the conductor keys the
+  // succession retry on — 'fable' | 'sol' | null (a 'both'/evidence/certificate DEGRADED is no single
+  // head death and folds to null; runToken-absent leaves it null). Rides the authoritative councilField.
+  let councilMissingHead = null
   if (councilCapable) {
+    await noteClaudeHeadSuccession()
     // The certificate binds only goal narratives CONFIRMED on disk: a goal auditor can return a
     // valid {overall,findings} object yet skip its heredoc write, so anchoring a path from
     // return-object presence alone would let a missing advisory file wedge a correct VALIDATE_PASS
@@ -1959,6 +1982,7 @@ try {
     const cr = await runValidateRuling(v, verdictInput, { requested: posture.second_family, verified: secondFamilyVerified, degraded: secondFamilyDegraded }, goalReportFiles)
     councilTerminal = cr.terminal; councilCertificate = cr.certificate; councilFindings = cr.findings; councilBundleHash = cr.bundle_hash
     councilReceiptVerified = cr.receipt_verified; councilLedgerVerified = cr.ledger_verified
+    councilMissingHead = (cr.missing === 'fable' || cr.missing === 'sol') ? cr.missing : null
   } else if (councilMisconfigured) {
     councilTerminal = 'DEGRADED'
     await councilCheckpoint({ protocol_version: COUNCIL_PROTOCOL_VERSION, template_hash: councilTemplateHashValidate, run_token_hash: runTokenHash, initial_ledger_seq: null, keystone_id: 'validate_ruling', phase: 'DEGRADED', decision_bundle_hash: null, input_artifact_hashes: [], evidence_manifest_hash: null, anonymous_seat_artifact_hashes: {}, seat_provenance: { missing: 'both', reason: 'runToken absent' }, codex_receipt_hash: null, status: 'sealed' })
@@ -1971,7 +1995,7 @@ try {
   // per-seat summary {seat, certificate_present, receipt_verified, ledger_verified} alongside it (build.js
   // councilSeats precedent). certificate_present is the honesty floor (a twin_ratified claim needs a real cert).
   const councilField = councilPromised
-    ? { seat: 'validate_ruling', terminal: councilTerminal, certificate: councilCertificate, findings: councilFindings, bundle_hash: councilBundleHash, receipts: councilReceipts, certificate_present: councilCertificate != null, receipt_verified: councilReceiptVerified, ledger_verified: councilLedgerVerified }
+    ? { seat: 'validate_ruling', terminal: councilTerminal, certificate: councilCertificate, findings: councilFindings, bundle_hash: councilBundleHash, receipts: councilReceipts, certificate_present: councilCertificate != null, receipt_verified: councilReceiptVerified, ledger_verified: councilLedgerVerified, council_missing_head: councilMissingHead }
     : null
 
   await ledger('validate_verdict', {

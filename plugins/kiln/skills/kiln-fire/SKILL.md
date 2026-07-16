@@ -64,8 +64,11 @@ advance. The operator session must stay pristine for the whole run.
      --skip-git-repo-check "echo ok"` preflight, the playwright probe (`@playwright/mcp` configured OR
      `npx --no-install playwright --version` succeeds) that sets `verification_class` (`full` present /
      `static-only` absent), and the `── configured model ──` line — resolve the
-     `{tier, verification_class, probes}` from them, and append a fresh capability note via
-     `node $PLUGIN_ROOT/scripts/kiln-state.mjs append <project_path>/.kiln '{"type":"note","stage":"<current_stage>","data":{"kind":"capability","capability":{"tier":"<tier>","verification_class":"<class>","probes":{...}}}}'`
+     `{tier, verification_class, probes}` from them, **re-resolve `claude_head` by the same live
+     Fable-pinned Agent echo probe onboarding runs** (Fable reachable ⇒ `fable`; any failure / model
+     error / refusal ⇒ `opus`, the recorded succession — so a Fable that went away between sessions is
+     picked up here), and append a fresh capability note via
+     `node $PLUGIN_ROOT/scripts/kiln-state.mjs append <project_path>/.kiln '{"type":"note","stage":"<current_stage>","data":{"kind":"capability","capability":{"tier":"<tier>","verification_class":"<class>","probes":{...},"claude_head":"<fable|opus>"}}}'`
      (nested under `data.capability`, exactly as onboarding writes it; the projection folds the latest
      capability note, so the replacement supersedes the onboarding record). Degrade to a log line if
      the CLI is unreachable, never a failure. **Also read `last_rendered_seq`** — the story-telegraph
@@ -180,11 +183,17 @@ surface and onboarding is cheap. Detect first, then confirm.
    `init` REFUSES over a live `events.jsonl`, so a **resume never re-inits** — the resume path (the
    *orient* section above) gates on the file already existing and routes to a stage handler, it does
    not touch `init`. If the ledger append can't reach the CLI later, the stages degrade to log lines,
-   never a stage failure. Right after the init, append the doctor capability record (the
-   `{tier, verification_class, probes}` `/kiln-doctor` rendered) via
-   `node $PLUGIN_ROOT/scripts/kiln-state.mjs append <project_path>/.kiln '{"type":"note","stage":"onboarding","data":{"kind":"capability","capability":{"tier":"<tier>","verification_class":"<class>","probes":{...}}}}'`
+   never a stage failure. Right after the init, **resolve the Claude council head** and append the
+   capability record. The head is resolved by a LIVE probe, not the bash doctor's config read (which is
+   REPORTING only): spawn ONE minimal **Fable-pinned Agent** (the `model: "fable"` param on the Agent
+   tool, exactly as the Da Vinci spawn below pins it) with a trivial echo task — a clean return proves
+   Fable is reachable ⇒ `claude_head: "fable"`; ANY spawn failure, model-unavailable error, or refusal ⇒
+   `claude_head: "opus"` (the recorded succession — Opus 4.8 holds the council seat when Fable 5 is
+   unreachable, never silently). Then append the doctor capability record (the
+   `{tier, verification_class, probes, claude_head}` shape) via
+   `node $PLUGIN_ROOT/scripts/kiln-state.mjs append <project_path>/.kiln '{"type":"note","stage":"onboarding","data":{"kind":"capability","capability":{"tier":"<tier>","verification_class":"<class>","probes":{...},"claude_head":"<fable|opus>"}}}'`
    — the record nests under `data.capability` (the projection reads `data.capability`, not the
-   flattened fields). Degrade to a log line if the CLI is unreachable, never a failure. For a **greenfield** project
+   flattened fields; `claude_head` is optional and validated ∈ {`fable`,`opus`}). Degrade to a log line if the CLI is unreachable, never a failure. For a **greenfield** project
    with no `.git`, also run `git init -q` in `<project_path>` with a local identity fallback
    (`git config user.name >/dev/null || git config user.name "Kiln"`; `user.email` → `kiln@localhost`
    likewise) so every later codex call runs in-repo (the architecture-stage Law pre-flight stays as
@@ -247,9 +256,12 @@ the VISION traces to a logged operator turn.
 2. Spawn **Da Vinci** (agent `kiln:the-creator`) directly with the **Agent tool**, passing a
    `name` (e.g. `da-vinci`) so he is SendMessage-addressable — on current binaries every session
    has one implicit team and there is NO team-setup step (the setup tool was removed in 2.1.178;
-   `team_name` is ignored) — and pinning **`model: "fable"`** on the Agent-tool call (Da Vinci is a
-   Fable creative seat; the tool's `model` param is authoritative and overrides the agent frontmatter,
-   which is left as-is — `fable` is undocumented for frontmatter). His spawn prompt carries:
+   `team_name` is ignored) — and pinning the Agent-tool **`model`** to the run's **resolved Claude
+   head** from `state.json.capability.claude_head`: **`model: "fable"`** when Fable holds the seat (and
+   the default when the capability record predates the field), or `model: "opus"` under succession — on
+   the Agent-tool call (Da Vinci is the Claude creative seat; the tool's `model` param is authoritative
+   and overrides the agent frontmatter, which is left as-is — neither `fable` nor the succession is set
+   in frontmatter). His spawn prompt carries:
    - the absolute `project_path` — he reads `<project_path>/.kiln/docs/project-brief.md` (and, for a
      brownfield run, `codebase-map.md`) and writes ONLY `brainstorm-ledger.jsonl`, never `VISION.md`.
    - the **intake mode** — the express offer you made at onboarding (see the Express intake note in
@@ -267,7 +279,7 @@ the VISION traces to a logged operator turn.
 4. On the teammate's terminal **`BRAINSTORM_COMPLETE. Ledger at <abs path>, <N> entries.`** message:
    Da Vinci's work is finished — spawn nothing further for this stage. The ledger is sealed; now
    **compile and gate it** with the vision-compile leg:
-   `Workflow({scriptPath: "$PLUGIN_ROOT/workflows/vision.js", args: {kilnDir: "<abs>/.kiln", projectPath: "<abs>", pluginRoot: "<abs $PLUGIN_ROOT>", runToken, capabilityTier}})` — thread `runToken` (the per-run token) and `capabilityTier` (`state.json.capability.tier`) so the T4 fidelity council can bind its receipts; omit them on a sub-T4 run (the compile is byte-preserved).
+   `Workflow({scriptPath: "$PLUGIN_ROOT/workflows/vision.js", args: {kilnDir: "<abs>/.kiln", projectPath: "<abs>", pluginRoot: "<abs $PLUGIN_ROOT>", runToken, capabilityTier, claudeHead}})` — thread `runToken` (the per-run token), `capabilityTier` (`state.json.capability.tier`), and `claudeHead` (`state.json.capability.claude_head` — the resolved Claude council head; absent ⇒ `fable`, byte-compatible) so the T4 fidelity council can bind its receipts and seal with the resolved head; omit them on a sub-T4 run (the compile is byte-preserved).
    It runs the mechanical `kiln-vision ledger-gate` (an incomplete session can never compile), then ONE
    fresh-context compiler writes `<project_path>/.kiln/docs/VISION.md` from the ledger, then the
    deterministic `kiln-vision validate` gate (≤2 revise passes). It returns
@@ -351,15 +363,41 @@ escalation at `correction_cycle >= 3` (below), any stage that returns blocked / 
 straight through architecture per the gate rule above. At a genuine overnight break, keep the existing
 pause voice — *"The fire banks for the night…"* — then resume the chain next session.
 
+**Claude-head succession retry (the council survives Fable's absence).** One DEGRADED terminal is
+refined before it becomes a hard stop, keyed on the boundary return's failed-seat discriminator (never a
+prose scan). The retry path fires on: a council return that is **DEGRADED** AND whose
+`council_missing_head === 'fable'` AND this run's `capability.claude_head === 'fable'`. That field — the
+one the five council workflows (vision, validate, report, build, architecture) thread onto their DEGRADED
+returns — names the dead Claude head (`null` for a `both`/evidence/certificate DEGRADED that no succession
+can heal); together the two conditions prove the Claude head, not codex or the evidence anchor, is what
+died. **Re-run the capability head probe** (the same Fable-pinned Agent echo onboarding used). If the
+probe **SUCCEEDS** (a transient blip — Fable is
+back), take the existing hard stop and escalate to the operator. If the probe **FAILS** — Fable is
+genuinely gone — succeed the seat to Opus in this exact order:
+1. **Append the demotion FIRST** (before the relaunch, so every subsequent stage reads the demoted head,
+   never the proven-dead Fable): write a fresh capability note carrying the refreshed probes and
+   `claude_head: "opus"`, nested under `data.capability` **exactly as onboarding writes it** (the
+   projection folds the latest capability note, so this replacement supersedes the onboarding record):
+   `node $PLUGIN_ROOT/scripts/kiln-state.mjs append <project_path>/.kiln '{"type":"note","stage":"<current_stage>","data":{"kind":"capability","capability":{"tier":"<tier>","verification_class":"<class>","probes":{...},"claude_head":"opus"}}}'`.
+2. **Mint a FRESH `runToken`** for the relaunch — the relaunch is a NEWLY BOUND convening. Receipts derive
+   invocation identity from the run binding, so reusing the dead convening's token would replay-collide
+   with the already-verified Sol legs of that convening and the ledger would reject the relaunch. Mint it
+   per the run-token recipe above.
+3. **Relaunch that ONE stage once** — same stage, the fresh `runToken`, `claudeHead: 'opus'`: a fresh,
+   fully-recorded Opus-headed convening (its checkpoints carry Opus in `seat_provenance`; the run records
+   the succession). If it returns DEGRADED **again**, take the existing hard stop and escalate to the
+   operator. This is a resolution-time succession — a whole new convening — **never an in-round seat
+   substitution** (a `twoHeads:'required'` seat that dies mid-council stays DEGRADED per the constitution).
+
 | Stage | Launch | Args (minimal + options) | Reads | Writes |
 |---|---|---|---|---|
-| Brainstorm→VISION | `workflows/vision.js` | `kilnDir`, `projectPath`, **`pluginRoot`** (load-bearing) (+`runToken`, `capabilityTier` — the T4 fidelity council) | brainstorm-ledger.jsonl | `.kiln/docs/VISION.md` (compiled + gated; the brainstorm-stage compile leg — launched from the Brainstorm handler above, not a top-level stage) |
+| Brainstorm→VISION | `workflows/vision.js` | `kilnDir`, `projectPath`, **`pluginRoot`** (load-bearing) (+`runToken`, `capabilityTier`, `claudeHead` — the T4 fidelity council) | brainstorm-ledger.jsonl | `.kiln/docs/VISION.md` (compiled + gated; the brainstorm-stage compile leg — launched from the Brainstorm handler above, not a top-level stage) |
 | Gauge | `workflows/gauge.js` | `kilnDir`, `projectPath`, `pluginRoot` (+`postureOverride`, `assessorModel`, `codexAvailable`) | VISION.md (+codebase-map.md) | `state.json.posture` / STATE `posture:`, ledger `posture_set` |
 | Research | `workflows/research.js` | `kilnDir`, `projectPath` (+`mode`, `testingRigor`, `topicsMax`, `pluginRoot` — locates kiln-state for the stage brackets; absence degrades them to log lines) | VISION.md | `.kiln/docs/research.md` (only when topics > 0; the §3.2 zero-topics route writes none and returns `research_file: null`) |
-| Architecture | `workflows/architecture.js` | `kilnDir`, `projectPath` (+`mode`, `testingRigor`, `codexAvailable`, `planning`, `validationRounds`, `lawModel`, `pluginRoot`, `runToken`, `capabilityTier`) | research.md (if present), VISION.md | `.kiln/master-plan.md`, architecture docs |
-| Build | `workflows/build.js` | `kilnDir`, `projectPath`, **`pluginRoot`** (load-bearing), `posture`, `runToken` (+`codexAvailable`, `capabilityTier`, `testingRigor`, `milestoneLimit`, `uiBuild`, `gateOnly`) | master-plan.md | source code, living docs, tests |
-| Validate | `workflows/validate.js` | `kilnDir`, `projectPath`, `pluginRoot`, `posture`, `runToken` (+`testingRigor`, `codexAvailable`, `capabilityTier`, `designPresent` hint) | master-plan.md, built app | `.kiln/validation/report.md` |
-| Report | `workflows/report.js` | `kilnDir`, `projectPath`, **`pluginRoot`** (+`runToken`, `capabilityTier` — the T4 signoff council) | all .kiln artifacts + built project | `.kiln/REPORT.md` |
+| Architecture | `workflows/architecture.js` | `kilnDir`, `projectPath` (+`mode`, `testingRigor`, `codexAvailable`, `planning`, `validationRounds`, `lawModel`, `pluginRoot`, `runToken`, `capabilityTier`, `claudeHead`) | research.md (if present), VISION.md | `.kiln/master-plan.md`, architecture docs |
+| Build | `workflows/build.js` | `kilnDir`, `projectPath`, **`pluginRoot`** (load-bearing), `posture`, `runToken` (+`codexAvailable`, `capabilityTier`, `claudeHead`, `testingRigor`, `milestoneLimit`, `uiBuild`, `gateOnly`) | master-plan.md | source code, living docs, tests |
+| Validate | `workflows/validate.js` | `kilnDir`, `projectPath`, `pluginRoot`, `posture`, `runToken` (+`testingRigor`, `codexAvailable`, `capabilityTier`, `claudeHead`, `designPresent` hint) | master-plan.md, built app | `.kiln/validation/report.md` |
+| Report | `workflows/report.js` | `kilnDir`, `projectPath`, **`pluginRoot`** (+`runToken`, `capabilityTier`, `claudeHead` — the T4 signoff council) | all .kiln artifacts + built project | `.kiln/REPORT.md` |
 
 **The per-stage arg contract lives in `$PLUGIN_ROOT/references/workflow-contracts.md` — read it before
 launching any autonomous stage.** The routing-table row names each arg; that file says what it MEANS:
@@ -462,7 +500,7 @@ right-sizing the build to the deliverable — are in workflow-contracts.md.
 
 Launch `report.js` like the other autonomous stages — it reads all `.kiln/` artifacts plus the built
 project and writes `./.kiln/REPORT.md` in Kiln's voice (the Omega persona lives inside the workflow):
-`Workflow({scriptPath: "$PLUGIN_ROOT/workflows/report.js", args: {kilnDir: "<abs>/.kiln", projectPath: "<abs>", pluginRoot: "<abs $PLUGIN_ROOT>", runToken, capabilityTier}})` — thread `runToken` + `capabilityTier` (`state.json.capability.tier`) so the T4 signoff council can bind its receipts and gate completion; omit them on a sub-T4 run (the existence-gated completion is byte-preserved, `signed_off` absent).
+`Workflow({scriptPath: "$PLUGIN_ROOT/workflows/report.js", args: {kilnDir: "<abs>/.kiln", projectPath: "<abs>", pluginRoot: "<abs $PLUGIN_ROOT>", runToken, capabilityTier, claudeHead}})` — thread `runToken`, `capabilityTier` (`state.json.capability.tier`), and `claudeHead` (`state.json.capability.claude_head` — the resolved Claude council head; absent ⇒ `fable`, byte-compatible) so the T4 signoff council can bind its receipts, seal with the resolved head, and gate completion; omit them on a sub-T4 run (the existence-gated completion is byte-preserved, `signed_off` absent).
 Wait for completion, render *"The forge cools. The work remains."* and present the delivery summary.
 
 ## STATE.md discipline

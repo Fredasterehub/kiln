@@ -162,6 +162,42 @@ test('projection: generic folds — capability replaces; milestones/counters mer
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
+test('capability.claude_head: persists and projects latest-wins when the note carries it; validate accepts it', () => {
+  const dir = sandbox(); const kilnDir = join(dir, '.kiln')
+  try {
+    init(kilnDir)
+    run('append', kilnDir, '{"type":"note","stage":"onboarding","data":{"kind":"capability","capability":{"tier":"T4","verification_class":"full","probes":{"codex":true},"claude_head":"opus"}}}')
+    assert.deepEqual(readState(kilnDir).capability, { tier: 'T4', verification_class: 'full', probes: { codex: true }, claude_head: 'opus' })
+    // latest-wins: a fresh capability note supersedes the head
+    run('append', kilnDir, '{"type":"note","stage":"gauge","data":{"kind":"capability","capability":{"tier":"T4","verification_class":"full","probes":{"codex":true},"claude_head":"fable"}}}')
+    assert.equal(readState(kilnDir).capability.claude_head, 'fable')
+    assert.equal(run('validate', kilnDir).status, 0)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('capability.claude_head: a record WITHOUT it stays valid and adds no key (byte-compatible with every pre-succession ledger)', () => {
+  const dir = sandbox(); const kilnDir = join(dir, '.kiln')
+  try {
+    init(kilnDir)
+    run('append', kilnDir, '{"type":"note","stage":"onboarding","data":{"kind":"capability","capability":{"tier":"T3","verification_class":"full","probes":{"codex":true}}}}')
+    const cap = readState(kilnDir).capability
+    assert.deepEqual(cap, { tier: 'T3', verification_class: 'full', probes: { codex: true } })
+    assert.equal('claude_head' in cap, false)
+    assert.equal(run('validate', kilnDir).status, 0)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('capability.claude_head: an illegal value is rejected by validate (exit 1, named)', () => {
+  const dir = sandbox(); const kilnDir = join(dir, '.kiln')
+  try {
+    init(kilnDir)
+    run('append', kilnDir, '{"type":"note","stage":"onboarding","data":{"kind":"capability","capability":{"tier":"T4","verification_class":"full","probes":{},"claude_head":"sonnet"}}}')
+    const res = run('validate', kilnDir)
+    assert.equal(res.status, 1)
+    assert.match(res.stderr, /capability\.claude_head must be 'fable' or 'opus'/)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
 test('project: deterministic — projecting twice yields byte-identical state.json', () => {
   const dir = sandbox(); const kilnDir = join(dir, '.kiln')
   try {

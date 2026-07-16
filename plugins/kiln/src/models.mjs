@@ -6,3 +6,5 @@
 // downgrade invisibly.
 export const CODEX_MODEL = 'gpt-5.6-sol' // GPT-5.6 Sol, GA 2026-07-09 — the codex CLI model id
 export const CODEX_FALLBACK = 'gpt-5.5'  // recorded rollout fallback (5.4 dropped — two rungs suffice)
+export const CLAUDE_HEAD = 'fable'          // the Claude council head — the strongest available
+export const CLAUDE_HEAD_FALLBACK = 'opus'  // recorded succession when the head is unreachable — never silent

@@ -327,6 +327,24 @@ function withDeadline(thunk, ms, onLate) {
 // downgrade invisibly.
 const CODEX_MODEL = 'gpt-5.6-sol' // GPT-5.6 Sol, GA 2026-07-09 — the codex CLI model id
 const CODEX_FALLBACK = 'gpt-5.5'  // recorded rollout fallback (5.4 dropped — two rungs suffice)
+const CLAUDE_HEAD = 'fable'          // the Claude council head — the strongest available
+const CLAUDE_HEAD_FALLBACK = 'opus'  // recorded succession when the head is unreachable — never silent
+// ── The Claude council head, resolved once per run. The conductor threads args.claudeHead from the
+//    run's capability record; only the fallback engine id (CLAUDE_HEAD_FALLBACK) demotes the seat —
+//    absent, 'fable', or any other value keeps the preferred head (CLAUDE_HEAD), byte-compatible with a
+//    launch that threads no head. Every Claude-head SEAT model and the model field of each Claude-half
+//    seat_provenance resolves through this ONE constant; the head LABELS (head:'fable', slot keys) are
+//    seat names and never move — CLAUDE_HEAD_MODEL names the engine, 'fable' names the seat. ──
+const CLAUDE_HEAD_MODEL = A.claudeHead === CLAUDE_HEAD_FALLBACK ? CLAUDE_HEAD_FALLBACK : CLAUDE_HEAD
+// When the head is held by the fallback engine, record the succession ONCE at council convening so the
+// demotion is never silent — the checkpoints carry the resolved model in seat_provenance; this is the
+// human-readable ledger beat beside them. Best-effort: a failed append never blocks the council.
+let claudeHeadSuccessionNoted = false
+async function noteClaudeHeadSuccession(phaseName) {
+  if (CLAUDE_HEAD_MODEL !== CLAUDE_HEAD_FALLBACK || claudeHeadSuccessionNoted) return
+  claudeHeadSuccessionNoted = true
+  try { await runLedger('note', { kind: 'capability', event: 'claude_head_demoted', head: 'fable', claude_head: CLAUDE_HEAD_MODEL }, phaseName) } catch { /* best-effort beat */ }
+}
 // ── Twin Council pure core (B4-3 D1/D4) — the SEALED b42 call-site machinery, lifted to src/council.mjs
 //    and inlined through the SAME @inline:council bundler contract build/validate use (helpers, never
 //    copy-paste). Powers vision's T4 keystone: the fidelity pair between the mechanical checks and the
@@ -887,7 +905,7 @@ const runBlindPair = async (cfg) => {
   const sinkF = {}, sinkS = {}
   const plan = solWrapperPlan({ councilDir, pluginRoot, receiptsLedger, runToken: runTokenRaw, keystone: cfg.keystone, transportModel: CODEX_MODEL, phaseTag: cfg.phaseTag, attempt: 1, effort: 'xhigh', payloadSchema: cfg.schema, taskText: cfg.solTaskText, briefBody: cfg.solBrief, packetObj: cfg.solPacket })
   const [rF, rS] = await parallel([
-    () => gateAgent(cfg.fablePrompt, { label: `fable:${cfg.legName}`, phase: cfg.phaseName, model: 'fable', effort: 'xhigh', twoHeads: 'required', schema: cfg.schema, provenance: sinkF }),
+    () => gateAgent(cfg.fablePrompt, { label: `fable:${cfg.legName}`, phase: cfg.phaseName, model: CLAUDE_HEAD_MODEL, effort: 'xhigh', twoHeads: 'required', schema: cfg.schema, provenance: sinkF }),
     () => gateAgent(plan.prompt, { label: `sol:${cfg.legName}`, phase: cfg.phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(cfg.schema), provenance: sinkS }),
   ])
   let solCross = { ledger_verified: false }
@@ -955,7 +973,7 @@ const runVisionFidelity = async (vSummary) => {
     await councilCheckpoint({ ...ckptBase, phase: 'DEGRADED', anonymous_seat_artifact_hashes: {}, seat_provenance: { missing: pair.missing }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
     await councilRuling({ keystone, phase: phaseTag, terminal: 'DEGRADED', missing: pair.missing }, phaseName)
     log(`vision fidelity council DEGRADED (${pair.missing}) — NEITHER seal event fires (never a single-head ruling)`)
-    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleHash, receipt_verified: !!(pair.sinkS && pair.sinkS.receipt_verified), ledger_verified: !!(pair.solCross && pair.solCross.ledger_verified) }
+    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleHash, missing: pair.missing, receipt_verified: !!(pair.sinkS && pair.sinkS.receipt_verified), ledger_verified: !!(pair.solCross && pair.solCross.ledger_verified) }
   }
   const vF = validateRatification(pair.rF, { bundle_hash: bundleHash, open_divergence_ids: [] })
   const vS = validateRatification(pair.rS, { bundle_hash: bundleHash, open_divergence_ids: [] })
@@ -967,7 +985,7 @@ const runVisionFidelity = async (vSummary) => {
     await councilCheckpoint({ ...ckptBase, phase: 'DEGRADED', anonymous_seat_artifact_hashes: {}, seat_provenance: { missing, reason: 'invalid ratification' }, codex_receipt_hash: null, status: 'sealed' }, phaseName)
     await councilRuling({ keystone, phase: phaseTag, terminal: 'DEGRADED', missing, invalid: { fable: fBad, sol: sBad } }, phaseName)
     log(`vision fidelity ratification INVALID (${detail}) — DEGRADED (never mislabeled BLOCKED); NEITHER seal event fires`)
-    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleHash, receipt_verified: true, ledger_verified: true }
+    return { terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: bundleHash, missing, receipt_verified: true, ledger_verified: true }
   }
   if (pair.rF.verdict === 'APPROVE' && pair.rS.verdict === 'APPROVE') {
     const cert = assembleRatifyCertificate({ rF: pair.rF, rS: pair.rS, provF: seatProv(pair.sinkF, 'fable'), provS: seatProv(pair.sinkS, 'sol'), context: { bundle_hash: bundleHash, renderer_version: COUNCIL_RENDERER_VISION, plan_hash: bundleHash, evidence_manifest_hash: evidenceManifestHash, protocol_version: COUNCIL_PROTOCOL_VERSION, seat_provenance: null } })
@@ -1207,6 +1225,7 @@ if (!(proof && proof.exists === true)) {
 //    council convened). Promised-but-tokenless: fail-closed DEGRADED, NEITHER seal event. ──
 let visionCouncilTerminal = null, visionCouncilCertificate = null, visionCouncilBundleHash = null, visionCouncilReceiptVerified = false, visionCouncilLedgerVerified = false
 if (councilCapable) {
+  await noteClaudeHeadSuccession('The Seal')
   const cr = await runVisionFidelity(vSummary)
   visionCouncilTerminal = cr.terminal; visionCouncilCertificate = cr.certificate; visionCouncilBundleHash = cr.bundle_hash
   visionCouncilReceiptVerified = cr.receipt_verified; visionCouncilLedgerVerified = cr.ledger_verified
@@ -1215,7 +1234,7 @@ if (councilCapable) {
     await lore('vision.violations', `Vision fidelity ${cr.terminal} — the compile is not sealed as faithful; ${cr.findings.length} finding(s), the conductor escalates`, { terminal: cr.terminal, findings: cr.findings.length }, 'The Seal')
     // B43-2: the return IS the boundary record for vision — the b42-mirrored per-seat summary rides it
     // alongside the terminal/certificate/findings fields (build.js councilSeats precedent).
-    return { vision_valid: false, vision_file: visionFile, reason: `vision fidelity council ${cr.terminal}`, violations: [], council: { seat: 'vision_fidelity', terminal: cr.terminal, certificate: null, findings: cr.findings, bundle_hash: cr.bundle_hash, receipts: councilReceipts, certificate_present: false, receipt_verified: cr.receipt_verified, ledger_verified: cr.ledger_verified } }
+    return { vision_valid: false, vision_file: visionFile, reason: `vision fidelity council ${cr.terminal}`, violations: [], council: { seat: 'vision_fidelity', terminal: cr.terminal, certificate: null, findings: cr.findings, bundle_hash: cr.bundle_hash, receipts: councilReceipts, certificate_present: false, receipt_verified: cr.receipt_verified, ledger_verified: cr.ledger_verified, council_missing_head: (cr.missing === 'fable' || cr.missing === 'sol') ? cr.missing : null } }
   }
 } else if (councilMisconfigured) {
   visionCouncilTerminal = 'DEGRADED'
@@ -1223,7 +1242,7 @@ if (councilCapable) {
   await councilRuling({ keystone: 'vision_fidelity', phase: 'VISION_RATIFY', terminal: 'DEGRADED', reason: 'runToken absent' }, 'The Seal')
   log('VISION FIDELITY PROMISED (T4 + codex) but NO runToken (misconfigured conductor) — fail-closed DEGRADED; NEITHER vision_compiled nor stage_completed. Relaunch with the per-run token.')
   await lore('vision.violations', 'Vision fidelity DEGRADED — promised council with no runToken; the compile is not sealed, the conductor escalates', { terminal: 'DEGRADED', findings: 0 }, 'The Seal')
-  return { vision_valid: false, vision_file: visionFile, reason: 'vision fidelity council PROMISED but no runToken — fail-closed DEGRADED', violations: [], council: { seat: 'vision_fidelity', terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: null, receipts: councilReceipts, certificate_present: false, receipt_verified: false, ledger_verified: false } }
+  return { vision_valid: false, vision_file: visionFile, reason: 'vision fidelity council PROMISED but no runToken — fail-closed DEGRADED', violations: [], council: { seat: 'vision_fidelity', terminal: 'DEGRADED', certificate: null, findings: [], bundle_hash: null, receipts: councilReceipts, certificate_present: false, receipt_verified: false, ledger_verified: false, council_missing_head: null } }
 }
 
 // Ordering (r1 F5): vision_compiled THEN stage_completed — and ONLY here, on the clean (T4: RATIFIED) path.

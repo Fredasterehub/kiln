@@ -32,7 +32,8 @@
           "properties": {
             "tier": { "type": "string" },
             "verification_class": { "type": "string" },
-            "probes": { "type": "object" }
+            "probes": { "type": "object" },
+            "claude_head": { "enum": ["fable", "opus"], "description": "Resolved Claude council head — the SEAT engine (Fable 5 preferred, Opus 4.8 succession). OPTIONAL: absent on every pre-succession ledger (kiln-state.mjs validateState accepts a record without it); present, it is 'fable' or 'opus'. Not in required." }
           }
         }
       ]
