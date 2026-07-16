@@ -2192,6 +2192,27 @@ async function gateOnlyTrial(m, surf, mScIds) {
   return gate
 }
 
+// ── gateOnlyPregate — the STARVED-GATE retry pre-gate arm, extracted whole (item 19 Tier A).
+//    Runs ONE deterministic trial over ALL the milestone's SCs (gateOnlyTrial), applies the pure
+//    gateOnlyRefusal predicate, and does its OWN log/ledger/lore. Returns { refused:true, result }
+//    (the QA_FAIL row the caller pushes) on any verdict but a clean 'proceed'; { refused:false } on a
+//    green Law — the caller then flips gateOnlyGreen/forceTribunal. It NEVER touches `results` or the
+//    milestone-scope flags itself, so the guard-early caller keeps the !gateOnly arm byte-identical. ──
+async function gateOnlyPregate(m, surf, mScIds) {
+  log(`${m.id}: GATE-ONLY retry — Scoring + Forging SKIPPED; re-running the milestone gate over the completed build`)
+  const gate = await gateOnlyTrial(m, surf, mScIds)
+  const refusal = gateOnlyRefusal(gate)
+  if (refusal.refuse) {
+    log(`${m.id}: gate-only REFUSES — ${refusal.detail}`)
+    await ledger('gate_only_refused', { milestone: m.id, sc_ids: mScIds, verdict: gate && gate.verdict, reason: refusal.reason, detail: refusal.detail }, 'The Trial')
+    return { refused: true, result: { id: m.id, title: m.title, surface: surf, slices: 0, sc_ids: mScIds, tests_green: false, qa: 'QA_FAIL', findings: [`[${refusal.reason}] ${refusal.detail}`], split_required: [], replanned: false, gate_only: true } }
+  }
+  log(`${m.id}: gate-only Law GREEN over the completed build — routing to the FULL tribunal (conservative; prior slice count unknown to a fresh session)`)
+  // build.gate_only (volume): a starved gate re-ran green over the completed build.
+  await lore('build.gate_only', `${m.id} — gate-only Law green over the completed build; routing to the full tribunal`, { milestone: m.id }, 'The Trial')
+  return { refused: false }
+}
+
 // ── The Forge Heats — the floor gates, then git baseline + codebase-state + milestone parse ──
 phase('The Forge Heats')
 log('The kiln grows hotter')
@@ -2887,24 +2908,15 @@ for (const m of milestones) {
   let gateOnlyGreen = false
 
   if (gateOnly) {
-    // ── STARVED-GATE retry: skip Scoring + Forging entirely. ONE
-    //    deterministic trial-shaped pass over ALL the milestone's SCs (verify + run
-    //    --only/--expect-green, NO --flips) + freshness + runnerGate. The pure gateOnlyRefusal
-    //    predicate rules: any verdict but a clean 'proceed' REFUSES the milestone (QA_FAIL, reason
-    //    gate-only-on-red — never gating a red Law, never skipping a build); a green Law routes to
-    //    the FULL tribunal (forceTribunal — fail toward scrutiny: the prior slice count is unknown). ──
-    log(`${m.id}: GATE-ONLY retry — Scoring + Forging SKIPPED; re-running the milestone gate over the completed build`)
-    const gate = await gateOnlyTrial(m, surf, mScIds)
-    const refusal = gateOnlyRefusal(gate)
-    if (refusal.refuse) {
-      log(`${m.id}: gate-only REFUSES — ${refusal.detail}`)
-      await ledger('gate_only_refused', { milestone: m.id, sc_ids: mScIds, verdict: gate && gate.verdict, reason: refusal.reason, detail: refusal.detail }, 'The Trial')
-      results.push({ id: m.id, title: m.title, surface: surf, slices: 0, sc_ids: mScIds, tests_green: false, qa: 'QA_FAIL', findings: [`[${refusal.reason}] ${refusal.detail}`], split_required: [], replanned: false, gate_only: true })
-      continue
-    }
-    log(`${m.id}: gate-only Law GREEN over the completed build — routing to the FULL tribunal (conservative; prior slice count unknown to a fresh session)`)
-    // build.gate_only (volume): a starved gate re-ran green over the completed build.
-    await lore('build.gate_only', `${m.id} — gate-only Law green over the completed build; routing to the full tribunal`, { milestone: m.id }, 'The Trial')
+    // ── STARVED-GATE retry: skip Scoring + Forging entirely (item 19 Tier A — the pre-gate arm is
+    //    gateOnlyPregate, extracted whole). ONE deterministic trial-shaped pass over ALL the
+    //    milestone's SCs (verify + run --only/--expect-green, NO --flips) + freshness + runnerGate;
+    //    the pure gateOnlyRefusal predicate rules: any verdict but a clean 'proceed' REFUSES the
+    //    milestone (QA_FAIL, reason gate-only-on-red — never gating a red Law, never skipping a
+    //    build); a green Law routes to the FULL tribunal (forceTribunal — fail toward scrutiny: the
+    //    prior slice count is unknown). The guard-early caller owns results/flags. ──
+    const pg = await gateOnlyPregate(m, surf, mScIds)
+    if (pg.refused) { results.push(pg.result); continue }
     gateOnlyGreen = true
     forceTribunal = true
   } else {

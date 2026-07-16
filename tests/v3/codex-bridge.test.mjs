@@ -61,11 +61,16 @@ const VALID_VERDICT = JSON.stringify({
 
 // ── pure functions ────────────────────────────────────────────────────────────────────────────
 
-test('the hooks-config warning is the sole allowlisted error fingerprint', () => {
+test('the hooks-config warning is an allowlisted error fingerprint', () => {
   assert.equal(isAllowlistedCodexError('failed to parse hooks config /home/dev/.codex/hooks.json: unknown field `state`'), true)
   assert.equal(isAllowlistedCodexError('`[features].codex_hooks` is deprecated. Use `[features].hooks` instead.'), false)
   assert.equal(isAllowlistedCodexError('The model is not supported when using Codex'), false)
   assert.equal(isAllowlistedCodexError(undefined), false)
+})
+
+test('the stream-lag housekeeping item is allowlisted and a near-miss stays non-allowlisted', () => {
+  assert.equal(isAllowlistedCodexError('in-process app-server event stream lagged; dropped 920 events'), true)
+  assert.equal(isAllowlistedCodexError('in-process app-server event stream lagged; dropped some events'), false)
 })
 
 test('the exact fallback fingerprint fires on model-unavailability and never on invalid effort', () => {

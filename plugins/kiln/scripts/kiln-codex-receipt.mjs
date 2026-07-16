@@ -574,15 +574,19 @@ const BRIDGE_EFFORTS = ['low', 'medium', 'high', 'xhigh'] // sol rejects 'minima
 const BRIDGE_EXIT = { VERDICT: 0, SUPPRESSED: 10, FAILED_TURN: 11, TRANSPORT: 12, WALLCLOCK_TIMEOUT: 124 }
 const BRIDGE_USAGE = 'usage: kiln-codex-receipt.mjs bridge --prompt <f> --out <prefix> --schema <f> --run-token <t> --keystone <k> --phase <p> --seat <s> --attempt <n> [--model id] [--effort low|medium|high|xhigh] [--sandbox read-only|workspace-write|danger-full-access] [--network] [--web] [--ephemeral] [--resume <thread_id>] [--wallclock <seconds>] [--ledger <f>] [--no-fallback]'
 // A broken ~/.codex/hooks.json injects one item-level error on every run; --ignore-user-config
-// skips config.toml ONLY, never hooks.json. This is the SOLE tolerated error fingerprint.
+// skips config.toml ONLY, never hooks.json. This is one of the tolerated error fingerprints.
 const HOOKS_CONFIG_ERROR_RE = /^failed to parse hooks config .*\/hooks\.json:/
+// Large reviews emit this benign housekeeping item when the in-process event queue overflows.
+// It cannot corrupt a verdict: the verdict channel is the -o schema-forced FILE, never the event
+// stream, so a dropped stream event is environment noise exactly like the hooks warning above.
+const STREAM_LAG_ERROR_RE = /^in-process app-server event stream lagged; dropped [0-9]+ events$/
 // A turn.failed whose model-scoped error matches this — and is NOT a reasoning.effort rejection — is the
 // exact model-unavailable/entitlement fingerprint that admits the one gpt-5.5 fallback rung.
 const MODEL_UNAVAILABLE_RE = /\bmodel\b[^.]{0,80}?\b(is not supported when using|not found|not available|is unavailable|does not exist)\b/i
 const EFFORT_ERROR_RE = /Unsupported value:|reasoning\.effort/
 
 export function isAllowlistedCodexError(message) {
-  return typeof message === 'string' && HOOKS_CONFIG_ERROR_RE.test(message)
+  return typeof message === 'string' && (HOOKS_CONFIG_ERROR_RE.test(message) || STREAM_LAG_ERROR_RE.test(message))
 }
 
 // Structural read of the --json event stream: no I/O, no verdict authority — just the terminal shape
