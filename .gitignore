@@ -32,21 +32,20 @@ plan_v1.md
 KILNDEV-MIGRATION.md
 phase3_potentiel.md
 
-# Local dev agents + IDE state (nothing under .claude/ ships except the kiln-dev process
-# constitution — AMB-5 ruling 2026-07-14: "versioned and dual-keyed" requires git tracking)
+# Local dev agents, skills, and IDE state — nothing under .claude/ ships. The kiln-dev process
+# constitution is now local-only (untracked-in-place, operator mandate 2026-07-15).
 .claude/*
-!.claude/skills/
-.claude/skills/*
-!.claude/skills/kiln-dev/
 
 # Internal dev working docs (not shipped)
 /SIMPLIFY-v1.4.0.md
 /PLUMBING-AUDIT-*.md
 
-# SIMPLIFY-v1.4.0 Pass 1 dev work tree (briefs, task lists, diffs, handoffs, run log) — except
-# the dev-protocol templates, which are versioned and dual-keyed (AMB-5 ruling 2026-07-14)
+# SIMPLIFY-v1.4.0 Pass 1 dev work tree (briefs, task lists, diffs, handoffs, run log) — the whole
+# dev work tree, dev-protocol templates included, is now local-only (operator mandate 2026-07-15).
 /.kiln-dev/*
-!/.kiln-dev/templates/
+
+# Dev review tooling — codex bridge + verdict schemas; local-only (operator mandate 2026-07-15)
+scripts/dev/
 
 # Smoke test directories
 undokiln1/

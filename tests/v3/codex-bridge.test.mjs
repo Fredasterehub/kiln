@@ -17,7 +17,11 @@ import {
 } from '../../plugins/kiln/scripts/kiln-codex-receipt.mjs'
 
 const CLI = fileURLToPath(new URL('../../plugins/kiln/scripts/kiln-codex-receipt.mjs', import.meta.url))
-const SCHEMA = readFileSync(fileURLToPath(new URL('../../scripts/dev/review-verdict-schema.json', import.meta.url)))
+// The schema + templates the public suite reads live as byte-copied fixtures under tests/v3/fixtures/
+// so a clean public clone is self-sufficient (the dev-workspace originals under scripts/dev/ and
+// .kiln-dev/ are untracked). The FIXTURE_PARITY tests below pin each copy to its original wherever
+// the dev workspace is present.
+const SCHEMA = readFileSync(fileURLToPath(new URL('./fixtures/review-verdict-schema.json', import.meta.url)))
 
 const HOOKS_ERR = '{"type":"item.completed","item":{"id":"item_0","type":"error","message":"failed to parse hooks config /home/dev/.codex/hooks.json: unknown field `state`, expected `description` or `hooks` at line 77 column 9"}}'
 
@@ -396,7 +400,7 @@ test('bridge: --resume refuses to escalate the recorded sandbox posture (ADOPT-6
 // ── D2: the routing gate (ADOPT-1/-5/-7/-8) end-to-end over a real bridge receipt ────────────────
 
 const gsha256 = (b) => createHash('sha256').update(b).digest('hex')
-const TPL = (n) => fileURLToPath(new URL(`../../.kiln-dev/templates/${n}`, import.meta.url))
+const TPL = (n) => fileURLToPath(new URL(`./fixtures/${n}`, import.meta.url))
 
 const COMMISSION_SECTIONS = `# Review commission — batch-x round 1
 ## Seat
@@ -815,3 +819,33 @@ test('gate --floor: a green floor receipt carries failing_tests: [] (schema-stab
     assert.deepEqual(receipt.failing_tests, [])
   } finally { rmSync(fx.dir, { recursive: true, force: true }) }
 })
+
+// ── PUBLIC-CLONE PARITY: fixtures are byte-copies of their dev-workspace originals ─────────────────
+// The public suite reads its schema + templates from tests/v3/fixtures/ (byte-copies) so a clean
+// public clone is self-sufficient — the dev-workspace originals under scripts/dev/ and .kiln-dev/ are
+// untracked. This is a DRIFT GUARD, not a public gate: where the dev workspace is present (a dev
+// checkout) each fixture MUST equal its original byte-for-byte — a mismatch means a dev contract
+// changed without the fixture being re-copied. On a clean public clone the originals are absent and
+// the parity check skips, so the harness stays green with nothing to compare against.
+const FIXTURE_PARITY = [
+  ['review-verdict-schema.json', '../../scripts/dev/review-verdict-schema.json'],
+  ['brief-implementer.md', '../../.kiln-dev/templates/brief-implementer.md'],
+  ['brief-microfix.md', '../../.kiln-dev/templates/brief-microfix.md'],
+  ['commission-review.md', '../../.kiln-dev/templates/commission-review.md'],
+  ['commission-confirm.md', '../../.kiln-dev/templates/commission-confirm.md'],
+]
+
+for (const [name, originalRel] of FIXTURE_PARITY) {
+  test(`fixture parity: tests/v3/fixtures/${name} is a byte-copy of its dev-workspace original`, (t) => {
+    const original = fileURLToPath(new URL(originalRel, import.meta.url))
+    if (!existsSync(original)) {
+      t.skip('dev workspace only — parity runs where the originals live')
+      return
+    }
+    const fixture = fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url))
+    assert.ok(
+      readFileSync(fixture).equals(readFileSync(original)),
+      `${name} drifted from ${originalRel} — re-copy the fixture (cp original tests/v3/fixtures/${name})`,
+    )
+  })
+}
