@@ -99,49 +99,39 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 ## 🧭 The Method
 
-The difference is not the model. It is the discipline around the model. And in v3 the discipline grew teeth: **nobody's word is law here anymore. Not even mine.**
+**You describe the software. I build it, prove it, and hand you the receipts.**
 
-Picture two master smiths sharing one forge. Both brilliant. Both &mdash; like every mind, carbon or arithmetic &mdash; occasionally, *confidently* wrong. The old way to handle that is hierarchy: one works, the other judges. Better than nothing. Also quietly broken &mdash; a judge who reads a finished draft starts from that draft, anchored and half-agreeing before the reading is done. And two minds from the same family miss the same things, which is exactly why this forge houses two model families.
+One conversation is the whole interface. Tell me what you want the way you'd tell a colleague &mdash; then go do something better with your afternoon. I take the idea through research, architecture, build, and validation on my own, and what you come back to is not a wall of suggestions. It is a repository: real commits, checks that were locked before the code existed, and a delivery report that tells you plainly what works, what is partial, and what failed.
 
-So the decisions that lock something &mdash; the master plan, a milestone's close, the validation verdict &mdash; now run on five rules:
-
-**Both smiths draft blind.** Each head answers without seeing the other's answer &mdash; no anchoring, no politeness, no "yes, and". The drafts are even assigned anonymous slots, so neither knows which is whose.
-
-**Disagreements are argued with evidence, not authority.** When the answers differ, a *script* &mdash; not a smith &mdash; lists the exact points of disagreement, and every listed point must be accounted for: settled or escalated, never quietly dropped. Each head answers the other's findings point by point, and wherever a disagreement can be settled by running something, it is run &mdash; **the exit code settles it.** Seniority is not an argument here. Eloquence is not an argument here.
-
-**The final blueprint is assembled by the shop's rules, not either smith's pen.** Once the disagreements settle, deterministic code renders the master plan from the settled record, and a scribe copies it byte-for-byte &mdash; the script checks the bytes. Nobody "writes the final version", because whoever writes last can smuggle things in. Here, *last* is a pure function.
-
-**Every claim carries a receipt.** When the GPT head rules, the ruling is bound to a receipt &mdash; the exact prompt bytes, the seat, the attempt, the run, hashed and cross-checked against an append-only ledger that refuses replays. "The model says it ran" is worth nothing here. The receipt is worth everything.
-
-**A deadlock stops the forge honestly.** If the heads still disagree after the evidence, fresh eyes re-judge the disagreement exactly once &mdash; in a counterbalanced round, so neither presentation order nor labels tip the scale. If it *still* stands, I do not guess and I do not ship: I stop, keep the last ratified state, and hand you the ledger.
-
-That is the **Twin Council**. Why go to this much trouble? Because the failure mode of capable models is not incompetence &mdash; it is confident, plausible error, and same-family review shares the blind spots of the author. Two families, forced to sign the same blueprint, argued on runnable evidence, with the assembly done by code &mdash; that is the cheapest structure I know that makes *confident error* expensive.
-
-Everything else I do exists to feed that council honest evidence:
+Anyone can make an AI generate code. That was never the hard part. The hard part is code you can **trust without reading every line** &mdash; because the signature failure of capable AI is not incompetence, it is *confident, plausible error*: fluent, well-formatted, and wrong. The difference is not the model. It is the discipline around the model:
 
 | | |
 |:--|:--|
-| **The Gauge measures first** | Before anything burns, I size the job. A small script gets a lean pipeline; a real product gets the full ceremony. The rigor you get is computed from an eight-dimension complexity profile by a deterministic mapping &mdash; never vibed. |
-| **The Law locks before the build** | Your definition of "done" becomes runnable checks before any code exists &mdash; then it's frozen and committed. The code must satisfy the checks. Touch a locked check and a tamper gate halts the run mechanically, before any reviewer wastes a breath. |
-| **Slices planned whole, confirmed live** | Each milestone's vertical slices are planned as one ordered list, checked *arithmetically* against the Law &mdash; every acceptance criterion in exactly one slice, none missing, none twice. Before each slice builds, a cheap live check confirms the plan still matches the code as it actually is. A test proves it broken, the build turns it green. Exit codes decide. Not promises. |
-| **A real browser, on a leash** | If I claim your UI works, a real browser opened it &mdash; one bounded process per check, hard-killed on a timer. The whole traversal runs under a browser *lease*: when the lease expires, the capability itself refuses, and a watchdog sweeps whatever survived. Verified, then gone. |
-| **The goal-backward audit** | Every test can pass while the product is unusable. So at *every* milestone boundary an auditor starts from your goal and walks in through the front door, the way a user arrives. "All green, app dead" does not ship. |
-| **Honest at every strength** | No GPT installed? I run end-to-end on Claude alone, complete at its own tier &mdash; and the record says so plainly. A missing capability degrades the *label*, never silently: nothing I cannot verify is ever called verified. |
-| **Written down, or it never happened** | Every stage appends to a run ledger; verdicts are computed from that recorded evidence &mdash; I never grade my own homework. Interrupt me anywhere; `/kiln-fire` resumes exactly there. |
+| **Two model families, one signature** | At full strength, every decision that locks something &mdash; the master plan, each milestone's close, the validation verdict &mdash; requires **two AI families to co-sign**: Claude and GPT draft blind, never seeing each other's answer, and their disagreements are settled with evidence, not seniority. Wherever a dispute can be settled by *running something*, it is run &mdash; the exit code wins the argument. A confident mistake now has to fool two different minds and a test suite. That is the **Twin Council** &mdash; and as of v3.1.0 it convenes for every Opus + Codex setup. |
+| **"Done" is decided before code exists** | Your acceptance criteria become runnable checks, frozen and committed before the first line is written. Code that fails them does not ship &mdash; and if anything touches a locked check, a tamper gate halts the run mechanically. No debate, no exception. |
+| **No one grades their own homework** | With Codex installed, every slice of code is written by one model family and judged by the other &mdash; and the judge re-runs the checks itself instead of taking the diff's word. Verdicts are computed from recorded evidence, never from my opinion of my own work. |
+| **A real browser, or no claim at all** | If I say your UI works, a real browser opened it and proved it &mdash; one bounded process per check, hard-killed on a timer, the whole traversal under a lease that revokes the browser itself when time is up. No evidence, no "verified". |
+| **The front-door audit** | Every test can pass while the product is unusable. So at every milestone boundary, an auditor starts from your *goal* and walks in the way a user would. "All green, app dead" does not ship. |
+| **Ceremony that fits the job** | Before anything burns, I score the work on an eight-dimension complexity profile, and a deterministic mapping &mdash; never a vibe &mdash; sets the rigor. A weekend script gets a lean, fast pipeline; a real product gets the full ceremony. You pay for exactly the scrutiny the job deserves. |
+| **Honest at every strength** | No Codex installed? I run end-to-end on Claude alone, complete at its own tier &mdash; and the record says so plainly. A missing capability degrades the *label*, never silently: nothing I cannot verify is ever called verified. |
+
+And I run unattended. Every stage writes to an append-only ledger &mdash; write it down or it never happened &mdash; so you can interrupt me anywhere and `/kiln-fire` resumes exactly there. The stages chain themselves overnight, and I stop only where your judgment is genuinely required. Everything else is my problem, not yours.
 
 <br>
 
 ## 🔥 Fresh from the Kiln
 
-**v3.0.2 &mdash; the Twin Council Forge** &nbsp;<sub>July 15, 2026</sub>
+**v3.1.0 &mdash; the Succession** &nbsp;<sub>July 16, 2026</sub>
 
-For two major versions my quality gates ended with a judge &mdash; one model, one gavel. This release retires the gavel at full strength. The master plan, each milestone's close, the validation verdict &mdash; *including a passing one* &mdash; the vision compile, and the final report now each require **two signatures from two model families**: drafted blind, argued on evidence, every GPT ruling receipt-attested, and the final texts assembled by deterministic code instead of anyone's last word. True deadlocks get one fresh-context, counterbalanced re-judging &mdash; then the forge stops honestly rather than ship an unsigned blueprint. The browser leash also got shorter: the traversal cap now lives on the browser capability itself, so an overrunning check loses the browser, not the plot. [<sub>→ release notes</sub>](https://github.com/Fredasterehub/kiln/releases/tag/v3.0.2)
+My strongest tier used to wait on a model most setups cannot reach. No longer. The Twin Council's Claude seat now goes to the **strongest head actually available** &mdash; Fable 5 when reachable, Opus 4.8 by recorded succession when not &mdash; which opens the full council to **every Opus + Codex setup**. The honesty rules did not move an inch: every certificate records the engine that actually held the seat, nothing Opus produced is ever labeled Fable, and a council that loses its head mid-run reconvenes exactly once, fresh-tokened and fully recorded. The council does cost more model calls &mdash; `/kiln-doctor` tells you so to your face. Also in this firing: the public repo trimmed to the strict minimum, with a test suite that proves itself on a clean clone; ~980 development-history residues scrubbed out of shipped files; and a deliberate round of simplification &mdash; fewer moving parts, same contracts. [<sub>→ release notes</sub>](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.0)
 
 <sub>Older firings live in [The Arc](#-the-arc) and the full [release history](https://github.com/Fredasterehub/kiln/releases).</sub>
 
 <br>
 
 ## 🚀 Get Started
+
+Two commands. No daemon, no build step, no npm package &mdash; the whole forge is a folder.
 
 ```bash
 claude plugin marketplace add Fredasterehub/kiln
@@ -155,7 +145,7 @@ Then, in any project:
 /kiln-fire            # light it
 ```
 
-Or hand me the idea directly:
+Or skip the pleasantries and hand me the idea directly:
 
 ```bash
 /kiln-fire build me a habit-tracker PWA with streaks and reminders
@@ -250,6 +240,7 @@ A curated timeline. Not every commit &mdash; just the ones that changed the shap
 
 | | Milestone | What happened |
 |:--|:--|:--|
+| **v3.1** | **The Succession** | The council stopped depending on any one smith. The full council tier is now headed by the strongest available Claude &mdash; Fable 5 preferred, Opus 4.8 by recorded succession &mdash; opening the Twin Council to every Opus + Codex setup, with every certificate naming the engine that actually sat. The workshop also left the storefront: the public tree trimmed to the strict minimum, ~980 war-story residues scrubbed from shipped files, and the test suite proves itself on a clean clone. |
 | **v3.0.2** | **The Twin Council Forge** | The gavel became two signatures. Every decision that locks something &mdash; master plan, milestone close, validation verdict, vision, report &mdash; now needs both model families to sign, blind, with disagreements argued on runnable evidence, every cross-family ruling receipt-attested against an append-only ledger, and the final texts rendered by deterministic code instead of anyone's pen. The judge and the chairman keep their seats at lower strength; at full strength, the council rules. |
 | **v3.0** | **The Reserved Seven Return** | v2 shelved seven names to travel light. v3 gave each of them a seat that actually runs. The Assessor got a Gauge to size the work, the Lawgiver got a Law to pin the acceptance criteria, the Scribe got a ledger that makes "write it down or it never happened" literal, the Observer got the watch that catches a leaked browser, the systematizer got the vision it compiles from your conversation, and the fallback planner got his ladder &mdash; every tier a complete instrument, not a lesser one. The Negotiator won every argument at last, by becoming the arithmetic that reconciles two reviews into one. The roster reads 34 again, and every name is a seat the engine fills. |
 | **v2.0** | **The Native-Workflow Rebuild** | Rebuilt on Claude Code's native Dynamic Workflow primitive. Persistent teams, ordered SendMessage, and a wall of PreToolUse hooks &mdash; gone. The agent roster collapses into one conductor plus workflows that wear the old personas. The build loop slices vertically, just-in-time, and reviews every slice across model families. Lighter. Quieter. Still honest. |
