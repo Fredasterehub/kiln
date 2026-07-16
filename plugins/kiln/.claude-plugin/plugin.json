@@ -2,7 +2,7 @@
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "kiln",
   "displayName": "Kiln",
-  "version": "3.0.2",
+  "version": "3.1.0",
   "description": "Multi-model software creation pipeline. From a conversation to deployed code in 8 stages — an interactive brainstorm, then autonomous gauge, research, architecture, build, and validation orchestrated as native Claude Code workflows with Claude and GPT-5.6.",
   "author": {
     "name": "Fredastere",
