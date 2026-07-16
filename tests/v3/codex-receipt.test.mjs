@@ -10,7 +10,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSy
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { deriveInvocationId, parseCodexJsonl, parseCodexStderr, resolveCodexExecutable, verifyReceipt } from '../../plugins/kiln/scripts/kiln-codex-receipt.mjs'
+import { deriveInvocationId, parseCodexJsonl, parseCodexStderr, parseLockDeadlineMs, resolveCodexExecutable, verifyReceipt } from '../../plugins/kiln/scripts/kiln-codex-receipt.mjs'
 
 const CLI = fileURLToPath(new URL('../../plugins/kiln/scripts/kiln-codex-receipt.mjs', import.meta.url))
 const MODEL = 'gpt-5.6-sol'
@@ -149,6 +149,10 @@ function runCli(files, overrides = {}) {
   return spawnSync(process.execPath, cliArgs(files, overrides), { encoding: 'utf8', env: overrides.env })
 }
 
+// Hermetic default-path env: a copy of process.env with the deadline key EXPLICITLY deleted, so the
+// default-5000ms path is proven against a KNOWN-unset variable, never an inherited ambient value.
+const envWithoutDeadline = () => { const e = { ...process.env }; delete e.KILN_RECEIPT_LOCK_DEADLINE_MS; return e }
+
 function runCliAsync(files, overrides = {}) {
   return new Promise((resolveResult) => {
     const child = spawn(process.execPath, cliArgs(files, overrides), { env: overrides.env })
@@ -275,7 +279,11 @@ test('duplicate invocation IDs replay-reject before Codex can spawn; attempt is 
 
 test('two concurrent receipt reservations on one ledger retry the lock and both verify', async () => withAsyncSandbox(async (files) => {
   const mock = mockCodex(join(files.dir, 'valid-codex'), { runnable: true })
-  const env = { ...process.env, PATH: `${mock.pathBin}${delimiter}${process.env.PATH ?? ''}` }
+  // Widen the child lock deadline far past the 150ms parent-held hold: under the saturated
+  // nested-floor harness the parent's release can slip well beyond the default 5000ms, which is
+  // the sole source of this test's historical flake. Both children still enter the retry loop
+  // (the contention this test exercises), they just never hit a deadline the parent already met.
+  const env = { ...process.env, PATH: `${mock.pathBin}${delimiter}${process.env.PATH ?? ''}`, KILN_RECEIPT_LOCK_DEADLINE_MS: '120000' }
   const lockDir = `${files.ledger}.lock`
   mkdirSync(lockDir)
   writeFileSync(join(lockDir, 'owner.json'), JSON.stringify({ pid: process.pid, ts: new Date().toISOString(), token: 'test-gate' }))
@@ -312,7 +320,9 @@ test('wedged receipt lock reports dead owner and safe out-of-band recovery', () 
   writeFileSync(join(lockDir, 'owner.json'), JSON.stringify({ pid: deadPid, ts: ownerTs, token: 'dead-holder' }))
 
   const started = Date.now()
-  const blocked = runCli(files)
+  // hermetic default-path: the deadline var is EXPLICITLY unset, so this pins the 5000ms default
+  // against a known-empty env, not whatever the ambient process happened to inherit.
+  const blocked = runCli(files, { env: envWithoutDeadline() })
   const waited = Date.now() - started
   assert.equal(blocked.status, 1, blocked.stdout)
   assert.ok(waited >= 4500, `must hold the lock deadline, waited ${waited}ms`)
@@ -333,6 +343,49 @@ test('wedged receipt lock reports dead owner and safe out-of-band recovery', () 
   assert.equal(refused.status, 1)
   assert.match(refused.stderr, /LIVE process/)
   assert.ok(existsSync(lockDir))
+}))
+
+test('KILN_RECEIPT_LOCK_DEADLINE_MS drives the lock deadline — a short override fails fast', () => withSandbox((files) => {
+  const lockDir = `${files.ledger}.lock`
+  mkdirSync(lockDir)
+  const deadPid = spawnSync(process.execPath, ['-e', 'process.exit(0)']).pid
+  writeFileSync(join(lockDir, 'owner.json'), JSON.stringify({ pid: deadPid, ts: new Date().toISOString(), token: 'dead-holder' }))
+
+  const started = Date.now()
+  const blocked = runCli(files, { env: { ...process.env, KILN_RECEIPT_LOCK_DEADLINE_MS: '300' } })
+  const waited = Date.now() - started
+  assert.equal(blocked.status, 1, blocked.stdout)
+  // the seam is LIVE: a 300ms deadline gives up far short of the default-5000ms floor the
+  // untouched wedged-lock test above pins at >=4500ms — proving the env var is not dead config.
+  assert.ok(waited < 4500, `short deadline must give up early, waited ${waited}ms`)
+  assert.match(blocked.stderr, /could not acquire receipt ledger lock/)
+  assert.match(blocked.stderr, /within 300ms/)
+}))
+
+test('parseLockDeadlineMs accepts ONLY a strict positive-integer string; every malformed value preserves the 5000 default', () => {
+  assert.equal(parseLockDeadlineMs('300'), 300)
+  assert.equal(parseLockDeadlineMs('1'), 1)
+  assert.equal(parseLockDeadlineMs('5000'), 5000)
+  // the malformed prefixes Number.parseInt would have silently accepted, plus the empty/NaN/absent cases
+  for (const bad of ['300ms', '3.5', '1e3', '', ' ', '  300  ', '0', '-5', '+5', '0x10', 'NaN', 'abc', undefined, null]) {
+    assert.equal(parseLockDeadlineMs(bad), 5000, `malformed ${JSON.stringify(bad)} must preserve the 5000 default`)
+  }
+})
+
+test('KILN_RECEIPT_LOCK_DEADLINE_MS malformed prefix (300ms) preserves the 5000ms default END-TO-END — the CLI honors the strict parse, not just the pure fn', () => withSandbox((files) => {
+  const lockDir = `${files.ledger}.lock`
+  mkdirSync(lockDir)
+  const deadPid = spawnSync(process.execPath, ['-e', 'process.exit(0)']).pid
+  writeFileSync(join(lockDir, 'owner.json'), JSON.stringify({ pid: deadPid, ts: new Date().toISOString(), token: 'dead-holder' }))
+
+  const started = Date.now()
+  const blocked = runCli(files, { env: { ...process.env, KILN_RECEIPT_LOCK_DEADLINE_MS: '300ms' } })
+  const waited = Date.now() - started
+  assert.equal(blocked.status, 1, blocked.stdout)
+  // '300ms' is NOT a strict integer, so it falls back to the 5000ms floor — the untouched wedged
+  // test's >=4500ms pin applies here too, and the error names 5000ms, not the malformed 300.
+  assert.ok(waited >= 4500, `a malformed prefix must fall back to the 5000ms floor, waited ${waited}ms`)
+  assert.match(blocked.stderr, /within 5000ms/)
 }))
 
 test('PATH Codex discovery accepts only a verified package name and version', () => withSandbox((files) => {

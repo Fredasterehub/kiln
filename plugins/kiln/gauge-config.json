@@ -16,9 +16,6 @@
   "_doc_rejections_to_split": "After this many logical-finding rejections, stop retrying: split-and-rebuild the slice.",
   "rejections_to_split": 3,
 
-  "_doc_deescalation_clean_window": "Consecutive clean units (zero rejections AND a first-pass green gate) required before posture returns to the Gauge baseline at a unit boundary (hysteresis — K8s/Redwood pattern).",
-  "deescalation_clean_window": 1,
-
   "_doc_research_topics_base": "research row: the cap on research topics is research_topics_base + D3 + D5. The research stage applies min(OQ-count, cap), and 0 when no high-priority before-build OQs exist — OQ data is runtime input, not a profile dimension.",
   "research_topics_base": 2,
 

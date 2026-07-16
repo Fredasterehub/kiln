@@ -1256,6 +1256,112 @@ test('gateOnly skips the per-milestone codebase-state doc update (nothing was bu
   assert.equal(count(calls, 'rakim:state'), 0, 'no living-docs update under gate-only')
 })
 
+// ── runTrialLegs shared-preamble net — the gate-only side. evidencedReview and gateOnlyTrial now
+//    share ONE preamble (runner → run_id-guarded freshness → runnerGate); these pin the shared
+//    wiring on the gate-only caller AND prove the helper did NOT absorb the caller-side divergence
+//    (the degrade block + the lastRunId advance), the reason this dedupe was deferred. ───────────
+
+test('gateOnly trial preamble: the freshness leg fires exactly once and carries the shared gate-only tag (thoth:freshness endsWith :M1:gate-only, twinning the runner label)', async () => {
+  const { calls } = await runBuild(gateOnlyArgs, mkRespond())
+  assert.equal(count(calls, 'thoth:freshness'), 1, 'one freshness probe per gate-only trial')
+  assert.ok(labelsOf(calls, 'thoth:freshness')[0].label.endsWith(':M1:gate-only'), 'the freshness label shares the runner\'s gate-only tag — the helper threads ONE tag to both legs')
+})
+
+test('gateOnly trial preamble: the freshness leg is SKIPPED when the runner returns no run_id (the guard clause inside runTrialLegs, exercised on the gate-only caller)', async () => {
+  const { calls } = await runBuild(gateOnlyArgs, mkRespond({}, (label) => {
+    if (label.startsWith('asimov:runner')) { const noId = { ...runnerOk }; delete noId.run_id; return noId }
+  }))
+  assert.equal(count(calls, 'thoth:freshness'), 0, 'no run_id ⇒ no freshness probe — the helper\'s guard holds for gate-only')
+})
+
+test('gateOnly DEGRADE parity: a static-only gate-only run ledgers its OWN degrade event — verification_degraded (logic) / probe_unavailable (ui) — carrying fix:0 and slice M1:gate-only, proving runTrialLegs did NOT absorb the caller-side degrade block', async () => {
+  const logic = await runBuild(gateOnlyArgs, mkRespond({}, (label) => {
+    if (label.startsWith('thoth:freshness')) return { ...freshOk, manifest_verification_class: 'static-only' }
+  }))
+  const vd = labelsOf(logic.calls, 'thoth:ledger').filter((l) => l.prompt.includes('verification_degraded'))
+  assert.equal(vd.length, 1, 'the gate-only logic path ledgers verification_degraded itself')
+  assert.match(vd[0].prompt, /"verification_class":"static-only"/)
+  assert.match(vd[0].prompt, /"slice":"M1:gate-only"/, 'the gate-only degrade carries the gate-only slice tag, not a sliceId')
+  assert.match(vd[0].prompt, /"fix":0/, 'the gate-only degrade ledgers fix:0, not the slice-path fix counter')
+  assert.equal(labelsOf(logic.calls, 'thoth:ledger').filter((l) => l.prompt.includes('probe_unavailable')).length, 0)
+
+  const ui = await runBuild(gateOnlyArgs, mkRespond(uiProbeState, (label) => {
+    if (label.startsWith('thoth:freshness')) return { ...freshOk, manifest_verification_class: 'static-only' }
+  }))
+  const pu = labelsOf(ui.calls, 'thoth:ledger').filter((l) => l.prompt.includes('probe_unavailable'))
+  assert.equal(pu.length, 1, 'the gate-only ui path ledgers probe_unavailable itself')
+  assert.match(pu[0].prompt, /"surface":"ui"/)
+  assert.match(pu[0].prompt, /"slice":"M1:gate-only"/)
+  assert.match(pu[0].prompt, /"fix":0/)
+  assert.equal(labelsOf(ui.calls, 'thoth:ledger').filter((l) => l.prompt.includes('verification_degraded')).length, 0)
+})
+
+test('gateOnly lastRunId advance stays caller-side: a gate-only PROCEED advances the anchor (its RUN1 threads --before into the corrective trial), a gate-only RED refuses terminally — the proceed-only advance runTrialLegs must never absorb', async () => {
+  const blocking = { reasoning: 'r', overall: 'fail', findings: [{ text: 'integration gap between slices', severity: 'critical' }] }
+  const { calls } = await runBuild(gateOnlyArgs, mkRespond({}, (label) => {
+    if (label.startsWith('ken:qa')) return blocking
+  }))
+  const correctionRunner = calls.find((c) => c.label.startsWith('asimov:runner') && c.label.includes('correct1'))
+  assert.ok(correctionRunner, 'the gate-only proceed routes a corrective trial')
+  assert.match(correctionRunner.prompt, /--before RUN1/, 'the gate-only proceed advanced lastRunId caller-side, so the corrective trial anchors --before RUN1')
+
+  const red = await runBuild(gateOnlyArgs, mkRespond({}, (label) => {
+    if (label.startsWith('asimov:runner')) return { ...runnerOk, law_run_exit: 1 }
+  }))
+  assert.equal(count(red.calls, 'asimov:runner'), 1, 'a gate-only red refuses terminally — no second trial to carry an advanced anchor (its proceed-only non-advance cannot leak)')
+})
+
+test('gateOnly RED non-advance, subsequent-trial observation: a RED gate-only trial\'s run_id reaches NO later --before — the anchor threaded into a downstream corrective trial is that milestone\'s OWN proceed, never the earlier red run (guards runTrialLegs from a proceed||red widening)', async () => {
+  // The subsequent-observation proof the proceed-only advance demands. Two gate-only milestones:
+  // M1's gate-only trial goes RED with a DISTINCT run_id (RUNRED) and refuses (continue) — the
+  // gate-only advance is proceed-ONLY, so RUNRED must NEVER become lastRunId. M2 then proceeds and
+  // its tribunal QA_FAILs, routing a corrective (normal-path) trial whose --before is the sole
+  // downstream read of the anchor: it must carry M2's own proceed run_id (RUN1), and RUNRED must
+  // appear as a --before in NO runner prompt across the whole run — the red run anchored nothing.
+  const blocking = { reasoning: 'r', overall: 'fail', findings: [{ text: 'integration gap between slices', severity: 'critical' }] }
+  const { calls } = await runBuild(gateOnlyArgs, mkRespond({ law: lawM1M2, milestones: twoMilestones }, (label) => {
+    if (label.startsWith('asimov:runner') && label.includes(':M1:gate-only')) return { ...runnerOk, law_run_exit: 1, run_id: 'RUNRED' }
+    if (label.startsWith('ken:qa')) return blocking
+  }))
+  const correctionRunner = calls.find((c) => c.label.startsWith('asimov:runner') && c.label.includes('correct1'))
+  assert.ok(correctionRunner, 'M2 proceeds past its gate-only trial and its tribunal QA_FAIL routes a corrective trial')
+  assert.match(correctionRunner.prompt, /--before RUN1/, 'the corrective trial anchors on M2\'s OWN proceed run_id, the only advance the gate-only path makes')
+  const anchoredOnRed = labelsOf(calls, 'asimov:runner').filter((c) => /--before RUNRED/.test(c.prompt))
+  assert.equal(anchoredOnRed.length, 0, 'the RED gate-only run_id anchors NO subsequent trial — a red gate-only trial did not advance lastRunId')
+})
+
+test('gateOnly source-shape guard: the GENERATED gateOnlyTrial advances lastRunId on the proceed-ONLY shape and carries NO proceed||red widening — falsifies the mutation the behavioral proof cannot reach', () => {
+  // The behavioral subsequent-observation test above cannot distinguish proceed-only from proceed||red
+  // (a RED gate-only trial refuses terminally, so its non-advance never surfaces downstream). This
+  // source-shape assert reads the bytes the sandbox runs and pins the advance condition directly: it
+  // must be the proceed-only assignment, and it must NOT copy the evidenced slice path's proceed||red
+  // widening (build.js: `gate.verdict === 'proceed' || gate.verdict === 'red'`), which the gate-only
+  // trial forbids because its non-advance on red is a load-bearing invariant.
+  const start = wfBody.indexOf('async function gateOnlyTrial(')
+  assert.ok(start > -1, 'the generated build.js must define gateOnlyTrial')
+  const end = wfBody.indexOf('\n}', start)
+  assert.ok(end > start, 'gateOnlyTrial must have a delimited body')
+  const body = wfBody.slice(start, end)
+  assert.match(body, /if \(gate\.verdict === 'proceed'\) lastRunId = runner\.run_id/,
+    "gateOnlyTrial's lastRunId advance must be the proceed-only shape")
+  assert.doesNotMatch(body, /gate\.verdict === 'red'/,
+    "gateOnlyTrial must NOT widen its lastRunId advance to the proceed||red form the evidenced slice path uses — a RED gate-only trial never advances the anchor")
+  assert.equal((body.match(/lastRunId = runner\.run_id/g) || []).length, 1,
+    'gateOnlyTrial advances lastRunId in exactly ONE place (the proceed-only guard)')
+})
+
+test('degrade-block divergence twin: the SLICE path (evidencedReview) ledgers probe_unavailable with the SLICE shape (a concrete sliceId) and surfaces the fallback to the reviewer — distinct from the gate-only twin, so runTrialLegs demonstrably owns NEITHER degrade block', async () => {
+  const { calls } = await runBuild(baseArgs, mkRespond(uiProbeState, (label) => {
+    if (label.startsWith('thoth:freshness')) return { ...freshOk, manifest_verification_class: 'static-only' }
+  }))
+  const pu = labelsOf(calls, 'thoth:ledger').filter((l) => l.prompt.includes('probe_unavailable'))
+  assert.equal(pu.length, 1)
+  assert.doesNotMatch(pu[0].prompt, /"slice":"M1:gate-only"/, 'the slice path never carries the gate-only slice tag')
+  assert.match(pu[0].prompt, /"slice":"M1:s0"/, 'the slice path ledgers the concrete sliceId')
+  const review = labelsOf(calls, ':review:')[0].prompt
+  assert.match(review, /VERIFICATION DEGRADED \(verification_class: static-only\)/, 'the slice-path reviewer is surfaced the degradation (the caller-side block, not the helper)')
+})
+
 // ── the build stage brackets — stage_started at the pre-flight bracket,
 //    stage_completed ONLY on the genuine all-milestones-passed return. A QA_FAIL leaves the stage
 //    current, so the projection reads 'build' and the conductor re-enters via the correction loop. ──

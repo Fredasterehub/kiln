@@ -232,6 +232,35 @@ else process.exit(2)
   return { pathBin }
 }
 
+// A genuine bridge outcome always leaves a marker: every state-machine verdict prints a
+// `STATUS:<outcome>` line, and a replay-reject prints `replay rejected` on stderr. The ABSENCE of
+// both means the process never reached the bridge state machine — a transient spawn failure
+// (fork-storm EAGAIN/ENOMEM, slow node boot) under the nested-floor harness, the sole environmental
+// cause of this file's historical flake — which is safe to re-spawn without weakening any assertion.
+// Marker presence is TERMINAL independently of any spawn error: a result that reached the state
+// machine is a real outcome and is never retried, error or not — only a marker-absent transient is.
+const reachedBridgeStateMachine = (r) => /STATUS:/.test(r.stdout ?? '') || /replay rejected/.test(r.stderr ?? '')
+
+// The retry loop, extracted so its COMPLETE terminal predicate is unit-testable in isolation
+// (see the branch test below). The terminal condition is `reachedBridgeStateMachine(r)` ALONE — a
+// STATUS: line or a replay-reject terminates even when the spawn result also carries a truthy
+// `r.error`; only a result that reached NEITHER marker re-spawns, capped at `attempts`. Returns
+// { r, spawns } so a probe can assert the exact spawn count.
+function retrySpawn(spawnOnce, attempts = 3) {
+  let r
+  let spawns = 0
+  for (let i = 0; i < attempts; i++) {
+    r = spawnOnce()
+    spawns++
+    if (reachedBridgeStateMachine(r)) return { r, spawns }
+  }
+  return { r, spawns }
+}
+
+function spawnBridge(args, env, attempts = 3) {
+  return retrySpawn(() => spawnSync(process.execPath, args, { encoding: 'utf8', env }), attempts).r
+}
+
 function runBridge(files, mode, extraArgs = []) {
   const mock = mockCodex(join(files.dir, `mock-${mode}`), mode)
   const env = { ...process.env, PATH: `${mock.pathBin}${delimiter}${process.env.PATH ?? ''}` }
@@ -240,7 +269,7 @@ function runBridge(files, mode, extraArgs = []) {
     '--run-token', 'batch-x', '--keystone', 'dev-review', '--phase', 'p1', '--seat', 'sol', '--attempt', '1',
     ...extraArgs,
   ]
-  return spawnSync(process.execPath, args, { encoding: 'utf8', env })
+  return spawnBridge(args, env)
 }
 
 const readLedger = (out) => readFileSync(`${out}.ledger.jsonl`, 'utf8').trim().split('\n').map((line) => JSON.parse(line))
@@ -332,6 +361,31 @@ test('bridge subcommand: a duplicate invocation replay-rejects after a VERDICT i
     assert.notEqual(replay.status, 0)
     assert.match(replay.stderr, /replay rejected/)
   } finally { rmSync(files.dir, { recursive: true, force: true }) }
+})
+
+test('bridge spawn retry: real outcomes are terminal, only a never-reached transient re-spawns', () => {
+  // Pure branch test over the retry gate. A STATUS: line (any outcome, TRANSPORT included) and a
+  // replay-reject are genuine results — terminal, never retried, so no verdict/replay assertion is
+  // ever weakened. Only a process that printed NEITHER marker is treated as a transient to re-spawn.
+  assert.equal(reachedBridgeStateMachine({ stdout: 'STATUS:VERDICT\n', stderr: '' }), true)
+  assert.equal(reachedBridgeStateMachine({ stdout: 'STATUS:TRANSPORT\n', stderr: '' }), true)
+  assert.equal(reachedBridgeStateMachine({ stdout: '', stderr: 'bridge replay rejected: prior VERDICT on the ledger' }), true)
+  assert.equal(reachedBridgeStateMachine({ stdout: '', stderr: 'spawn EAGAIN' }), false)
+  assert.equal(reachedBridgeStateMachine({ stdout: '', stderr: '' }), false)
+})
+
+test('bridge spawn retry (complete predicate): a marker terminates after ONE spawn even with a truthy spawn error; only a marker-absent transient re-spawns to the cap', () => {
+  // The COMPLETE loop predicate, driven through the extracted retrySpawn with a fake spawn so the
+  // spawn count is exact. This is the marker-terminal invariant the classifier test alone cannot
+  // prove: a genuine outcome that ALSO carried a spawn error must NOT be retried.
+  const markerWithError = retrySpawn(() => ({ error: new Error('spawn EAGAIN'), stdout: 'STATUS:VERDICT\n', stderr: '' }))
+  assert.equal(markerWithError.spawns, 1, 'a STATUS: marker is terminal even when r.error is truthy — exactly one spawn')
+  const replayWithError = retrySpawn(() => ({ error: new Error('spawn EAGAIN'), stdout: '', stderr: 'bridge replay rejected: prior VERDICT on the ledger' }))
+  assert.equal(replayWithError.spawns, 1, 'a replay-reject marker is terminal even when r.error is truthy — exactly one spawn')
+  let n = 0
+  const transient = retrySpawn(() => { n++; return { error: new Error('spawn EAGAIN'), stdout: '', stderr: '' } })
+  assert.equal(transient.spawns, 3, 'a marker-absent transient re-spawns to the 3-spawn cap')
+  assert.equal(n, 3, 'the fake spawn was invoked exactly cap times')
 })
 
 // ── resume record-binding + posture recording (/) ────────────────────────────

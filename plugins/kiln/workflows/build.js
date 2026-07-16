@@ -1,7 +1,7 @@
 // GENERATED from workflows-src/build.js — edit the source, run scripts/bundle-workflows.mjs
 export const meta = {
   name: 'kiln-build',
-  description: 'Kiln build stage — two nested loops over the locked Law. OUTER: each master-plan milestone in dependency order (sequential, cumulative commits). INNER: the batch slice spine — KRS-One plans the milestone\'s ENTIRE ordered slice list in ONE call, mapped 1:1 to law.json SC ids (coverage is arithmetic, validated in-script); a haiku confirm checks each slice against live state before its build; a builder implements the slice (Opus builds ui/mixed, Codex builds logic) and commits it; the deterministic runner then executes kiln-law (verify = tamper gate; run --only/--flips = the red/green lifecycle where the EXIT CODE is the verdict — expected flips computed from the recorded prior status via --before, previously-GREEN regressions fatal) and persists the project suite as hashed evidence (kiln-law suite → suite.log + suite.jsonl in the evidence dir), and the workflow gates tamper + evidence freshness + the lifecycle exit MECHANICALLY — a touched lock, stale evidence, or a failed flip auto-REJECTS with no reviewer spawned. A cross-FAMILY reviewer rules on diff + evidence with mechanical|logical finding classes and must re-run the mapped checks itself; the Sentinel escalates the feedback source after repeated logical rejections and stops a slice as split_required at the split threshold (a conductor/operator decision, never silent). After the slices integrate, the milestone gate rules: Aristotle\'s goal-backward audit hunts "checks pass but the goal is broken" at EVERY milestone boundary — split/plan-abort failures included, where its findings merge into the failure record — and an unusable audit is re-asked ONCE, then fails the boundary closed (QA_FAIL, blocking finding goal-audit-failure; the judge NEVER spawns on missing inputs); milestones at the tribunal threshold add dual analysts (Ken/Opus ∥ Ryu/Codex) whose findings the deterministic reconcile folds with the audit\'s, and the judge is spawned ONLY on an ambiguous reconcile (zero blocking findings AND the analysts\' overall verdicts disagree) — otherwise the verdict is computed; below the threshold the slice review + the audit IS the gate. The next milestone\'s slice plan is cut SPECULATIVELY in parallel with the current milestone\'s gate, anchored on its base_sha — any corrective commit on the current milestone (tribunal correction / validate loop) moves HEAD and invalidates it (ledgered slice_plan_invalidated), forcing a re-slice against the new HEAD. The heavy end-to-end gate is validate, not per-slice ceremony.',
+  description: 'Kiln build stage — two nested loops over the locked Law: the outer walks milestones, the inner builds each slice per law.json SC. Surface routes the builder — ui/mixed → Opus, logic → GPT builds, never the reviewer\'s family. kiln-law\'s exit code is the red/green verdict; tamper, stale evidence, or a failed flip auto-rejects, else a cross-family reviewer rules. Boundaries run goal-backward audit + tribunal; validate is the heavy end-to-end gate.',
   phases: [
     { title: 'The Forge Heats', detail: 'read the locked Law; rakim ensures the git repo + seeds codebase-state; parse the master plan into milestones' },
     { title: 'Scoring the Cut', detail: 'KRS-One plans the milestone\'s entire ordered slice list in ONE call, mapped to the Law\'s SC ids (reusing a valid pipelined plan from the prior gate when HEAD has not moved); a haiku confirm checks each slice against live state (proceed | replan)' },
@@ -75,11 +75,12 @@ const postureArg = (() => {
 // ── The Gauge config (GAUGE_CONFIG, inlined from gauge-config.json by the bundler — workflow
 //    scripts cannot import JSON; --check guards the inline copy against drift). The Sentinel
 //    thresholds (rejections_to_feedback_escalation / rejections_to_split) live here. ──
-const GAUGE_CONFIG = {"h80_human_hours":2,"messiness_discount":0.5,"churn_flips_threshold":2,"rejections_to_feedback_escalation":2,"rejections_to_split":3,"deescalation_clean_window":1,"research_topics_base":2,"planning_dual_d4_min":2,"planning_dual_d3_min":1,"planning_dual_d1_min":1,"planning_redteam_d4_min":1,"planning_redteam_d8_min":1,"plan_validation_rounds_base":1,"plan_validation_d2_min":1,"plan_validation_d8_min":2,"slice_budget_d7_min":1,"d7_slice_budget_factor":0.5,"review_high_d8_min":1,"min_slices_for_tribunal":2,"trivial_tier_dim_max":0,"trivial_tier_soft_dims":["D6"],"trivial_tier_soft_dim_max":1,"tribunal_threshold_trivial_bump":1,"browser_tier2_d7_min":1,"browser_tier2_d8_min":1,"validate_adversarial_d8_min":2,"validate_second_family_d8_min":2,"effort_bias_dims":["D3","D4","D8"]}
+const GAUGE_CONFIG = {"h80_human_hours":2,"messiness_discount":0.5,"churn_flips_threshold":2,"rejections_to_feedback_escalation":2,"rejections_to_split":3,"research_topics_base":2,"planning_dual_d4_min":2,"planning_dual_d3_min":1,"planning_dual_d1_min":1,"planning_redteam_d4_min":1,"planning_redteam_d8_min":1,"plan_validation_rounds_base":1,"plan_validation_d2_min":1,"plan_validation_d8_min":2,"slice_budget_d7_min":1,"d7_slice_budget_factor":0.5,"review_high_d8_min":1,"min_slices_for_tribunal":2,"trivial_tier_dim_max":0,"trivial_tier_soft_dims":["D6"],"trivial_tier_soft_dim_max":1,"tribunal_threshold_trivial_bump":1,"browser_tier2_d7_min":1,"browser_tier2_d8_min":1,"validate_adversarial_d8_min":2,"validate_second_family_d8_min":2,"effort_bias_dims":["D3","D4","D8"]}
 // livePosture is the Sentinel's MUTABLE working copy: escalate() raises dials mid-milestone
-// and NOTHING in this script ever lowers one — builder self-confidence included. De-escalation
-// needs the profile + clean-window evidence (a boundary move owned by the conductor in a later
-// phase), so raised dials carry forward across milestones: strictly MORE scrutiny, never less.
+// and NOTHING in this script ever lowers one — builder self-confidence included. Scrutiny is
+// MONOTONIC within a run: it rises on repeated logical rejections and never falls — there is no
+// de-escalation phase and no clean-window boundary move — so raised dials carry forward across
+// milestones: strictly MORE scrutiny, never less.
 // Defaults are v2-equivalent: review effort 'medium' baseline (D8 raises it via the posture arg),
 // the slice budget, floor values everywhere else (the ratchet can only
 // raise them). The milestone_gate dials are CONSUMED by the Judgment gate below:
@@ -2053,6 +2054,20 @@ async function planMilestone(targetM, targetSurf, scs, built = [], note = null, 
 //    plan keeps the speculation bounded (the next milestone only). ──
 let pipelinedPlan = null
 
+// ── runTrialLegs — the shared trial preamble: dispatch the deterministic runner, run the
+//    freshness probe iff the runner returned a run_id, and apply runnerGate. Returns { runner,
+//    gate } for the caller to route. This helper is DELIBERATELY inert past the gate — it carries
+//    NO lastRunId advance, NO degrade ledgering, NO tamper/stale/red routing — because the
+//    evidenced and gate-only paths diverge there on purpose. `tag` is the shared label suffix. ──
+async function runTrialLegs(build, lawCtx, priorRunId, tag) {
+  const runner = await agent(runnerPrompt(build, lawCtx, priorRunId), { label: loreLabel('asimov', 'runner', tag), phase: 'The Trial', model: runnerModel, schema: RUNNER_SCHEMA })
+  let fresh = null
+  if (runner && typeof runner.run_id === 'string' && runner.run_id) {
+    fresh = await agent(freshPrompt(runner.run_id), { label: loreLabel('thoth', 'freshness', tag), phase: 'The Trial', model: 'haiku', schema: FRESHNESS_SCHEMA })
+  }
+  return { runner, gate: runnerGate(runner, fresh) }
+}
+
 // ── The Trial, mechanized: commit gate → deterministic runner → freshness probe →
 //    in-script runnerGate → reviewer ONLY on 'proceed'. lawCtx = { flips, only }: the SC ids this
 //    trial must flip RED→GREEN, and the run scope (the flips plus every SC the milestone already
@@ -2068,12 +2083,7 @@ async function evidencedReview(m, surf, slice, sliceId, build, fix, escalated, r
   }
   phase('The Trial')
   log(`${spin('law', fix)} — ${m.id} ${sliceId} f${fix}`)
-  const runner = await agent(runnerPrompt(build, lawCtx, lastRunId), { label: loreLabel('asimov', 'runner', `${sliceId}:f${fix}`), phase: 'The Trial', model: runnerModel, schema: RUNNER_SCHEMA })
-  let fresh = null
-  if (runner && typeof runner.run_id === 'string' && runner.run_id) {
-    fresh = await agent(freshPrompt(runner.run_id), { label: loreLabel('thoth', 'freshness', `${sliceId}:f${fix}`), phase: 'The Trial', model: 'haiku', schema: FRESHNESS_SCHEMA })
-  }
-  const gate = runnerGate(runner, fresh)
+  const { runner, gate } = await runTrialLegs(build, lawCtx, lastRunId, `${sliceId}:f${fix}`)
   // Fingerprint THIS trial's failure and ride it out on the returned verdict so the
   // retry loop can route the NEXT admission (failureFingerprint emits only on a 'red' gate — a
   // check-level lifecycle failure; everything else is the NULL fingerprint, admitted as v3.0.1). The
@@ -2160,12 +2170,7 @@ async function gateOnlyTrial(m, surf, mScIds) {
   // not sit dead on 0 here either.
   log(`${spin('law', milestoneIndex)} — ${m.id} gate-only Law check over ${mScIds.length} SC(s) [${mScIds.join(', ')}]`)
   const lawCtx = { gateOnly: true, flips: [], only: mScIds }
-  const runner = await agent(runnerPrompt(null, lawCtx, null), { label: loreLabel('asimov', 'runner', `${m.id}:gate-only`), phase: 'The Trial', model: runnerModel, schema: RUNNER_SCHEMA })
-  let fresh = null
-  if (runner && typeof runner.run_id === 'string' && runner.run_id) {
-    fresh = await agent(freshPrompt(runner.run_id), { label: loreLabel('thoth', 'freshness', `${m.id}:gate-only`), phase: 'The Trial', model: 'haiku', schema: FRESHNESS_SCHEMA })
-  }
-  const gate = runnerGate(runner, fresh)
+  const { runner, gate } = await runTrialLegs(null, lawCtx, null, `${m.id}:gate-only`)
   // Advance the status anchor on a trustworthy verdict (proceed) — the gate-only run is a complete,
   // fresh, finalized run, so a subsequent tribunal-correction trial can fold it via --before and
   // expect the milestone's SCs to STAY green (regression guard) rather than re-flip from the lock.

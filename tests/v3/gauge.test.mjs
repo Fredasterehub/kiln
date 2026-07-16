@@ -1,14 +1,15 @@
 // gauge.test.mjs — unit floor for the Gauge pure core. Every
 // mapping rule is hit from BOTH sides of its threshold; ANY-trigger non-compensation is proven;
-// the Sentinel ratchet's monotonicity and the boundary-only de-escalation are property-tested;
-// the shipped gauge-config.json round-trips through posture() so no knob is shadowed by a
-// hardcoded default. The table + normative block ARE the contract here.
+// the Sentinel ratchet's monotonicity is property-tested — scrutiny only ever rises, no signal on
+// any posture lowers a dial, and there is no de-escalation; the shipped gauge-config.json
+// round-trips through posture() so no knob is shadowed by a hardcoded default. The table +
+// normative block ARE the contract here.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-import { validateProfile, posture, escalate, deescalate } from '../../plugins/kiln/src/gauge.mjs'
+import { validateProfile, posture, escalate } from '../../plugins/kiln/src/gauge.mjs'
 
 const CONFIG = JSON.parse(readFileSync(new URL('../../plugins/kiln/gauge-config.json', import.meta.url), 'utf8'))
 
@@ -321,61 +322,11 @@ test('escalate: effort_bias is capped at 2 and plan-time dials never move at run
   }
 })
 
-// ── deescalate: boundary-only, baseline-exact, never below ───────────────────────────────────────
-const CLEAN = { rejections: 0, first_pass_green: true }
-
-test('deescalate: a clean unit restores the recomputed Gauge baseline EXACTLY', () => {
-  const profile = prof({ D8: 1 }) // baseline already carries review=high — restore must keep it
-  const baseline = posture(profile, CONFIG)
-  let cur = escalate(baseline, { type: 'validate_coverage_gap' }, CONFIG).posture
-  cur = escalate(cur, { type: 'slice_growth' }, CONFIG).posture
-  const out = deescalate(cur, { profile, ...CLEAN }, CONFIG)
-  assert.equal(out.reason.event, 'posture_deescalate')
-  assert.deepEqual(out.posture, baseline)
-  // the ledger records exactly the dials that came back down — tier2 is absent because D8=1
-  // already had it on at BASELINE (the gap signal's raise was a no-op there, never re-lowered)
-  assert.deepEqual(out.reason.changes.map((c) => c.dial).sort(), ['effort_bias', 'validate.adversarial_pass'])
-})
-
-test('deescalate: a dirty unit holds the escalated posture — rejections>0 or a non-first-pass gate', () => {
-  const profile = prof()
-  const cur = escalate(posture(profile, CONFIG), { type: 'analyst_disagreement' }, CONFIG).posture
-  for (const outcome of [
-    { profile, rejections: 1, first_pass_green: true },
-    { profile, rejections: 0, first_pass_green: false },
-  ]) {
-    const out = deescalate(cur, outcome, CONFIG)
-    assert.equal(out.reason.event, 'posture_hold')
-    assert.deepEqual(out.posture, cur)
-    assert.deepEqual(out.reason.changes, [])
-  }
-})
-
-test('deescalate: never below baseline — de-escalating an unescalated posture is an exact no-op', () => {
-  const profile = prof({ D7: 1, D8: 2 })
-  const baseline = posture(profile, CONFIG)
-  const out = deescalate(baseline, { profile, ...CLEAN }, CONFIG)
-  assert.deepEqual(out.posture, baseline)
-  assert.deepEqual(out.reason.changes, [])
-})
-
-test('deescalate: clean_streak must reach deescalation_clean_window before the reset fires', () => {
-  const profile = prof()
-  const wide = { ...CONFIG, deescalation_clean_window: 2 }
-  const cur = escalate(posture(profile, wide), { type: 'diff_size_exceeded' }, wide).posture
-  const held = deescalate(cur, { profile, ...CLEAN, clean_streak: 1 }, wide)
-  assert.equal(held.reason.event, 'posture_hold')
-  assert.deepEqual(held.posture, cur)
-  const reset = deescalate(cur, { profile, ...CLEAN, clean_streak: 2 }, wide)
-  assert.equal(reset.reason.event, 'posture_deescalate')
-  assert.deepEqual(reset.posture, posture(profile, wide))
-})
-
 // ── gauge-config.json: the normative block round-trips through the mapping ──────────────────
 test('gauge-config.json: every normative constant ships at its normative value', () => {
   const normative = {
     h80_human_hours: 2, messiness_discount: 0.5, churn_flips_threshold: 2,
-    rejections_to_feedback_escalation: 2, rejections_to_split: 3, deescalation_clean_window: 1,
+    rejections_to_feedback_escalation: 2, rejections_to_split: 3,
   }
   for (const [k, v] of Object.entries(normative)) assert.equal(CONFIG[k], v, k)
   // the mapping thresholds live in the same ONE file, at the table's default values

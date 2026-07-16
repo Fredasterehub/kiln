@@ -411,8 +411,20 @@ function readLedger(file) {
 }
 
 // mkdir is the atomic gate. There is NO hot-path steal: contenders retry for five seconds, while
-// a crashed holder is cleared only by the PID-gated `unlock` command below.
-const LOCK_DEADLINE_MS = 5000
+// a crashed holder is cleared only by the PID-gated `unlock` command below. The five-second
+// deadline is the shipped default; KILN_RECEIPT_LOCK_DEADLINE_MS overrides it with a STRICT
+// positive-integer string of milliseconds (/^[0-9]+$/ and > 0) so integration tests can widen or
+// shorten the retry window. Anything else preserves the 5000 default — absent, empty, NaN, a
+// decimal (3.5), an exponent (1e3), or a unit-suffixed prefix (300ms) — because Number.parseInt
+// would silently accept those malformed prefixes; production behavior is unchanged.
+export function parseLockDeadlineMs(raw) {
+  if (typeof raw === 'string' && /^[0-9]+$/.test(raw)) {
+    const n = Number(raw)
+    if (n > 0) return n
+  }
+  return 5000
+}
+const LOCK_DEADLINE_MS = parseLockDeadlineMs(process.env.KILN_RECEIPT_LOCK_DEADLINE_MS)
 const LOCK_RETRY_MS = 25
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
 let lockCounter = 0
@@ -559,7 +571,6 @@ const BRIDGE_VERSION = 1
 const BRIDGE_TRANSPORT = 'codex_exec_bridge'
 const BRIDGE_SANDBOXES = ['read-only', 'workspace-write', 'danger-full-access']
 const BRIDGE_EFFORTS = ['low', 'medium', 'high', 'xhigh'] // sol rejects 'minimal'; 'ultra' never existed
-const BRIDGE_OUTCOMES = ['VERDICT', 'SUPPRESSED', 'FAILED_TURN', 'WALLCLOCK_TIMEOUT', 'TRANSPORT']
 const BRIDGE_EXIT = { VERDICT: 0, SUPPRESSED: 10, FAILED_TURN: 11, TRANSPORT: 12, WALLCLOCK_TIMEOUT: 124 }
 const BRIDGE_USAGE = 'usage: kiln-codex-receipt.mjs bridge --prompt <f> --out <prefix> --schema <f> --run-token <t> --keystone <k> --phase <p> --seat <s> --attempt <n> [--model id] [--effort low|medium|high|xhigh] [--sandbox read-only|workspace-write|danger-full-access] [--network] [--web] [--ephemeral] [--resume <thread_id>] [--wallclock <seconds>] [--ledger <f>] [--no-fallback]'
 // A broken ~/.codex/hooks.json injects one item-level error on every run; --ignore-user-config

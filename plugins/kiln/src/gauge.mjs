@@ -1,13 +1,12 @@
 // gauge.mjs — THE GAUGE pure core: profile validation, the deterministic
-// non-compensatory posture mapping, and the Sentinel ratchet (escalate / de-escalate).
+// non-compensatory posture mapping, and the Sentinel ratchet (escalate).
 // validateProfile + posture are inlined into gauge.js by scripts/bundle-workflows.mjs
 // (// @inline:gauge:validateProfile,posture). Pure functions only: no I/O, no
 // Date.now/Math.random. Every threshold arrives via the config param — the parsed
 // plugins/kiln/gauge-config.json — never hardcoded here.
 //
 // Bundler discipline: each export is a self-contained block (no shared module-level helpers —
-// they would not survive inlining). ONE exception: deescalate calls posture to recompute the
-// baseline; any future @inline of deescalate must inline posture alongside it.
+// they would not survive inlining).
 
 // validateProfile(profile) — the 8-dimension profile contract: keys D1..D8,
 // each { score: 0|1|2, evidence: nonempty string }. Returns { ok, errors } with typed errors
@@ -101,8 +100,8 @@ export function posture(profile, config) {
 }
 
 // escalate(posture, signal, config) — the Sentinel ratchet: runtime signals
-// RAISE posture dials within a slice/milestone unit; nothing here ever lowers one (monotonic —
-// de-escalation is a separate, boundary-only move). Returns { posture, reason } with a
+// RAISE posture dials within a slice/milestone unit; nothing here ever lowers one (monotonic).
+// Returns { posture, reason } with a
 // ledger-ready reason (drops straight into an events.jsonl `data` field). Plan-time dials
 // (research_topics_max, planning, plan_validation_rounds, slice_budget_hours, milestone_gate)
 // never move at runtime — only the dials governing work still ahead: review effort, browser
@@ -164,43 +163,4 @@ export function escalate(posture, signal, config) {
     action = 'raise_scrutiny'; raiseReview()
   }
   return { posture: next, reason: { event: 'posture_escalate', signal: t, action, changes } }
-}
-
-// deescalate(current, unitOutcome, config) — the hysteresis half of the ratchet: escalation is
-// monotonic WITHIN a unit; de-escalation happens ONLY at a unit (milestone) boundary, and only
-// back to the Gauge baseline — never below it. Returns { posture, reason }, reason ledger-ready.
-export function deescalate(current, unitOutcome, config) {
-  // First param is the contract's `posture` (renamed: it must not shadow posture(), which this
-  // function calls — the baseline is RECOMPUTED from the profile, never cached, so there is one
-  // source of truth and config changes propagate). unitOutcome carries the boundary evidence:
-  //   { profile, rejections, first_pass_green, clean_streak? }
-  // a unit is clean iff it closed with ZERO rejections AND a first-pass green
-  // gate; the streak of consecutive clean units (this one included — defaults to 1 when clean)
-  // must reach deescalation_clean_window before the reset fires.
-  const clean = unitOutcome.rejections === 0 && unitOutcome.first_pass_green === true
-  const streak = clean ? (unitOutcome.clean_streak === undefined ? 1 : unitOutcome.clean_streak) : 0
-  if (streak < config.deescalation_clean_window) {
-    return { posture: current, reason: { event: 'posture_hold', clean, streak, changes: [] } }
-  }
-  const baseline = posture(unitOutcome.profile, config)
-  // diff the dials for the ledger — restoring an unescalated posture records zero changes
-  const flat = (p) => ({
-    scope_tier: p.scope_tier,
-    research_topics_max: p.research_topics_max,
-    planning: p.planning,
-    plan_validation_rounds: p.plan_validation_rounds,
-    slice_budget_hours: p.slice_budget_hours,
-    'review.ui_effort_base': p.review.ui_effort_base,
-    'review.escalate_on': p.review.escalate_on,
-    'milestone_gate.min_slices_for_tribunal': p.milestone_gate.min_slices_for_tribunal,
-    'milestone_gate.goal_backward': p.milestone_gate.goal_backward,
-    'browser.tier2_per_milestone': p.browser.tier2_per_milestone,
-    'validate.adversarial_pass': p.validate.adversarial_pass,
-    'validate.second_family': p.validate.second_family,
-    effort_bias: p.effort_bias,
-  })
-  const cur = flat(current)
-  const base = flat(baseline)
-  const changes = Object.keys(base).filter((k) => cur[k] !== base[k]).map((k) => ({ dial: k, from: cur[k], to: base[k] }))
-  return { posture: baseline, reason: { event: 'posture_deescalate', clean, streak, changes } }
 }
