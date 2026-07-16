@@ -134,7 +134,7 @@ async function noteClaudeHeadSuccession(phaseName) {
 // ── Twin Council pure core — the deterministic council machinery inlined from src/council.mjs.
 //    Every function that CALLS another travels WITH it in ONE marker (buildDivergenceSet is defined
 //    locally, not inlined here). ──
-// @inline:council:COUNCIL_PROTOCOL_VERSION,sha256Hex,canonicalJson,councilSeed,deriveId,parityTieBreak,claimTypeForClass,compareEvidence,validateReversal,canonicalizeFindings,canonicalizeRatifyFindings,validateDispositions,buildDivergenceSet,projectStructuredPlan,joinExactEquivalents,validatePlanClosure,buildDecisionBundle,bundleHash,renderMasterPlan,validateRatification,councilSignature,verifySignature,buildCheckpoint,matchCheckpoint,twinRatified,twinDeadlockResolved,councilDeadlock,degraded,FRESH_CELLS,freshRoundSchedule,normalizeCellVerdict,aggregateHead,aggregateCouncil,sealReversibility,buildMelRecord,SHA64_RE,RATIFY_SCHEMA,ANSWER_SCHEMA,envelopeSchema,CROSS_CHECK_SCHEMA,LEDGER_APPEND_SCHEMA,CANON_HASH_ONELINER,LEDGER_EXTRACT_ONELINER,councilTemplateHash,seatProv,solWrapperPlan,crossCheckOk,assembleRatifyCertificate,verdictShapeError
+// @inline:council:COUNCIL_PROTOCOL_VERSION,sha256Hex,canonicalJson,councilSeed,deriveId,parityTieBreak,claimTypeForClass,compareEvidence,validateReversal,canonicalizeFindings,canonicalizeRatifyFindings,validateDispositions,buildDivergenceSet,projectStructuredPlan,joinExactEquivalents,validatePlanClosure,buildDecisionBundle,bundleHash,renderMasterPlan,validateRatification,councilSignature,verifySignature,buildCheckpoint,matchCheckpoint,twinRatified,twinDeadlockResolved,councilDeadlock,degraded,FRESH_CELLS,freshRoundSchedule,normalizeCellVerdict,aggregateHead,aggregateCouncil,sealReversibility,buildMelRecord,SHA64_RE,RATIFY_SCHEMA,ANSWER_SCHEMA,envelopeSchema,CROSS_CHECK_SCHEMA,LEDGER_APPEND_SCHEMA,CANON_HASH_ONELINER,LEDGER_EXTRACT_ONELINER,councilTemplateHash,seatProv,solWrapperPlan,crossCheckOk,assembleRatifyCertificate,verdictShapeError,RATIFY_DESCRIPTOR,ANSWER_DESCRIPTOR,normalizeStrictPayload
 // The wrapper TRANSLATES (Goal/Context/Constraints/Done-when); it never forwards a Claude brief verbatim.
 const codexHowto = `Delegate authoring to ${CODEX_MODEL}: TRANSLATE this brief into a 4-part Codex prompt — Goal (the deliverable in 1-2 sentences), Context (the file paths + summary; no full dumps), Constraints (the arch-constraints + "do X instead of Y"), Done-when (the file written + what it must contain) — write it to a fresh temp file ('TMP="$(mktemp /tmp/kiln-codex.XXXXXX.md)"'; a fixed path collides across concurrent runs) and pipe via stdin: 'codex exec -m ${CODEX_MODEL} -c model_reasoning_effort="high" --sandbox workspace-write --skip-git-repo-check < "$TMP"'. Do NOT forward this brief verbatim. If ${CODEX_MODEL} is unavailable retry with -m ${CODEX_FALLBACK}; if codex errors or yields nothing usable, author the plan yourself.`
 const SPIN = {
@@ -502,8 +502,9 @@ const REVISION_TASK =
   'section/decision ids where it landed), rejected_with_evidence (give evidence_refs AND evidence_class — ' +
   'a REJECTION is valid only when its rebuttal evidence is equal-or-stronger than the finding\'s), or ' +
   'unresolved. An unevidenced rejection is demoted to unresolved. Emit dispositions[] (one per finding_id), ' +
-  'decisions[] (your revised decision registry: id, topic, value — the settled positions the divergence ' +
-  'accounting reads), and the revised plan. Make no mention of authorship or of any peer.'
+  'decisions[] (your revised decision registry: id, topic, value_json — the decision value JSON-ENCODED ' +
+  'as a string — the settled positions the divergence accounting reads), and the revised plan. Make no ' +
+  'mention of authorship or of any peer.'
 // ── T4-full authorship + negotiation templates. FIXED and PATH-FREE (no per-run
 //    interpolation, so templateHash stays run-independent): the per-run file references are call-time
 //    <inputs>, never baked in. T4_AUTHORSHIP_RULE is the structured-content template both heads' T4 draft
@@ -528,7 +529,8 @@ const NEGOTIATION_TASK =
   `and position_1 — where a position is a concrete plan value or the marker {absent:true} meaning "this ` +
   `decision does not belong in the plan". For EACH card return exactly one selection: 'P0' (adopt position_0), ` +
   `'P1' (adopt position_1), 'MERGED' (one reconciled value grounded in the cited evidence — supply it as ` +
-  `merged_value), or 'NEITHER' (both readings are defective). Selecting an {absent:true} side rules the ` +
+  `merged_value_json, the reconciled value JSON-ENCODED as a string), or 'NEITHER' (both readings are ` +
+  `defective). Selecting an {absent:true} side rules the ` +
   `decision OUT. Introduce NO new decisions and respect the compatibility/requires constraints. Emit exactly ` +
   `one selection per divergence_id; make no mention of authorship or of any peer.`
 // ── Fresh-context re-adjudication ladder task templates. FIXED + PATH-FREE (bound into
@@ -578,14 +580,15 @@ const templateHash = councilTemplateHash({ template_version: COUNCIL_TEMPLATE_VE
 const SOL_DRAFT_PAYLOAD_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string', maxLength: 700 },
+    reasoning: { type: ['string', 'null'], maxLength: 700 },
     approach_summary: { type: 'string' },
     milestones: T4_MILESTONES_SCHEMA,
-    key_decisions: { type: 'array', items: { type: 'string' } },
+    key_decisions: { type: ['array', 'null'], items: { type: 'string' } },
     plan_markdown: { type: 'string' },
   },
-  required: ['approach_summary', 'milestones', 'plan_markdown'],
+  required: ['reasoning', 'approach_summary', 'milestones', 'key_decisions', 'plan_markdown'],
 }
+const SOL_DRAFT_PAYLOAD_DESCRIPTOR = { schema: SOL_DRAFT_PAYLOAD_SCHEMA, stripNullPaths: ['reasoning', 'key_decisions'], jsonPaths: [] }
 // RATIFY_SCHEMA / ANSWER_SCHEMA / envelopeSchema / CROSS_CHECK_SCHEMA / LEDGER_APPEND_SCHEMA are the
 // call-site-AGNOSTIC council schemas, LIFTED to src/council.mjs and inlined via the
 // @inline:council marker above — this stage and build.js now share ONE copy (helpers, not copy-paste).
@@ -627,12 +630,13 @@ const EXEC_CHECK_SCHEMA = {
 const FRESH_CELL_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string', maxLength: 400 },
+    reasoning: { type: ['string', 'null'], maxLength: 400 },
     choice: { type: 'string', enum: ['K', 'M', 'no_decision', 'NEITHER'] },
-    defects: { type: 'object', additionalProperties: false, properties: { K: { type: 'array', items: { type: 'string' } }, M: { type: 'array', items: { type: 'string' } } } },
+    defects: { type: ['object', 'null'], additionalProperties: false, properties: { K: { type: 'array', items: { type: 'string' } }, M: { type: 'array', items: { type: 'string' } } }, required: ['K', 'M'] },
   },
-  required: ['choice'],
+  required: ['reasoning', 'choice', 'defects'],
 }
+const FRESH_CELL_DESCRIPTOR = { schema: FRESH_CELL_SCHEMA, stripNullPaths: ['reasoning', 'defects'], jsonPaths: [] }
 const REFERENCE_REDUCTION_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
@@ -646,18 +650,20 @@ const REFERENCE_REDUCTION_SCHEMA = {
 }
 const RUBRIC_AMEND_SCHEMA = {
   type: 'object', additionalProperties: false,
-  properties: { reasoning: { type: 'string', maxLength: 400 }, sign: { type: 'boolean' }, clarification: { type: ['string', 'null'] } },
-  required: ['sign'],
+  properties: { reasoning: { type: ['string', 'null'], maxLength: 400 }, sign: { type: 'boolean' }, clarification: { type: ['string', 'null'] } },
+  required: ['reasoning', 'sign', 'clarification'],
 }
+const RUBRIC_AMEND_DESCRIPTOR = { schema: RUBRIC_AMEND_SCHEMA, stripNullPaths: ['reasoning', 'clarification'], jsonPaths: [] }
 const REVERSIBILITY_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string', maxLength: 400 },
+    reasoning: { type: ['string', 'null'], maxLength: 400 },
     P0: { type: 'string', enum: ['reversible', 'costly', 'irreversible'] },
     P1: { type: 'string', enum: ['reversible', 'costly', 'irreversible'] },
   },
-  required: ['P0', 'P1'],
+  required: ['reasoning', 'P0', 'P1'],
 }
+const REVERSIBILITY_DESCRIPTOR = { schema: REVERSIBILITY_SCHEMA, stripNullPaths: ['reasoning'], jsonPaths: [] }
 
 // ── Debate schemas (critique / revision). A head never sees a slot label (anonymity): the
 //    SCRIPT assigns target_slot when it canonicalizes the findings. ──
@@ -674,12 +680,12 @@ const CRITIQUE_EVIDENCE_SCHEMA = {
     refs: { type: 'array', maxItems: 24, items: { type: 'string', maxLength: 400 } },
     executable_check: { type: ['string', 'null'], maxLength: 400 },
   },
-  required: ['class', 'refs'],
+  required: ['class', 'refs', 'executable_check'],
 }
 const CRITIQUE_PAYLOAD_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string', maxLength: 400 },
+    reasoning: { type: ['string', 'null'], maxLength: 400 },
     findings: {
       type: 'array', maxItems: 24,
       items: {
@@ -695,8 +701,13 @@ const CRITIQUE_PAYLOAD_SCHEMA = {
       },
     },
   },
-  required: ['findings'],
+  required: ['reasoning', 'findings'],
 }
+// CRITIQUE has no consumer that requires a present-null (unlike RATIFY's validateRatification): the
+// critique-finding F-key (canonicalizeFindings) keys on slot/decision/claim/required_change, never
+// evidence.executable_check, so a null nested check is legacy-optional-absent (stripped), matching the
+// pre-strict wire where it could be absent OR null.
+const CRITIQUE_PAYLOAD_DESCRIPTOR = { schema: CRITIQUE_PAYLOAD_SCHEMA, stripNullPaths: ['reasoning', 'findings[].evidence.executable_check'], jsonPaths: [] }
 // The disposition + revised-registry payload. value is a free JSON node — the script hashes it into
 // the registry's value_hash (buildDivergenceSet compares by canonical value, never by prose). fable
 // writes its revised plan-a.md itself (file tools), so revised_plan_markdown is OPTIONAL here; the Sol
@@ -704,7 +715,7 @@ const CRITIQUE_PAYLOAD_SCHEMA = {
 const REVISION_PAYLOAD_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string', maxLength: 400 },
+    reasoning: { type: ['string', 'null'], maxLength: 400 },
     dispositions: {
       type: 'array', maxItems: 24,
       items: {
@@ -712,36 +723,50 @@ const REVISION_PAYLOAD_SCHEMA = {
         properties: {
           finding_id: { type: 'string', maxLength: 200 },
           disposition: { type: 'string', enum: ['accepted', 'rejected_with_evidence', 'unresolved'] },
-          evidence_refs: { type: 'array', maxItems: 24, items: { type: 'string', maxLength: 400 } },
-          evidence_class: { type: 'string', enum: ['executed_check', 'proposed_check', 'repo_state', 'test_output', 'primary_source', 'scenario'] },
-          incorporated_at: { type: 'array', maxItems: 24, items: { type: 'string', maxLength: 200 } },
-          reason: { type: 'string', maxLength: 600 },
+          evidence_refs: { type: ['array', 'null'], maxItems: 24, items: { type: 'string', maxLength: 400 } },
+          evidence_class: { type: ['string', 'null'], enum: ['executed_check', 'proposed_check', 'repo_state', 'test_output', 'primary_source', 'scenario', null] },
+          incorporated_at: { type: ['array', 'null'], maxItems: 24, items: { type: 'string', maxLength: 200 } },
+          reason: { type: ['string', 'null'], maxLength: 600 },
         },
-        required: ['finding_id', 'disposition'],
+        required: ['finding_id', 'disposition', 'evidence_refs', 'evidence_class', 'incorporated_at', 'reason'],
       },
     },
     decisions: {
       type: 'array', maxItems: 32,
       items: {
         type: 'object', additionalProperties: false,
-        properties: { id: { type: 'string', maxLength: 200 }, topic: { type: 'string', maxLength: 200 }, value: {} },
-        required: ['id', 'topic'],
+        // value rides as value_json (a JSON-ENCODED STRING) — the free-JSON node a JSON schema `type`
+        // could not express. The registry byte rail (registryFor, DECISION_VALUE_MAX_BYTES) remains the
+        // authority on the DECODED value; maxLength is only the coarse wire ceiling (NF-001).
+        properties: { id: { type: 'string', maxLength: 200 }, topic: { type: 'string', maxLength: 200 }, value_json: { type: ['string', 'null'], maxLength: 65536 } },
+        required: ['id', 'topic', 'value_json'],
       },
     },
     // A T4 revision RE-EMITS the full revised structured milestone content — the
     // projection source is the REVISION payload, never the original draft.
     milestones: T4_MILESTONES_SCHEMA,
-    revised_plan_markdown: { type: 'string' },
+    revised_plan_markdown: { type: ['string', 'null'] },
   },
-  required: ['dispositions', 'decisions', 'milestones'],
+  required: ['reasoning', 'dispositions', 'decisions', 'milestones', 'revised_plan_markdown'],
 }
-const SOL_REVISION_PAYLOAD_SCHEMA = { ...REVISION_PAYLOAD_SCHEMA, required: ['dispositions', 'decisions', 'milestones', 'revised_plan_markdown'] }
+// The Fable revision head writes plan-a.md itself, so revised_plan_markdown is legacy-optional-absent
+// (stripped when null). decisions[].value_json decodes to decisions[].value for registryFor.
+const REVISION_PAYLOAD_DESCRIPTOR = { schema: REVISION_PAYLOAD_SCHEMA, stripNullPaths: ['reasoning', 'dispositions[].evidence_refs', 'dispositions[].evidence_class', 'dispositions[].incorporated_at', 'dispositions[].reason', 'decisions[].value_json', 'revised_plan_markdown'], jsonPaths: ['decisions[].value_json'] }
+// The Sol revision head runs read-only and CANNOT write the plan file, so revised_plan_markdown rides the
+// attested payload as a REQUIRED non-null string (the ONE property where the two heads' schemas legitimately
+// differ); everything else is identical to the Fable revision schema.
+const SOL_REVISION_PAYLOAD_SCHEMA = {
+  ...REVISION_PAYLOAD_SCHEMA,
+  properties: { ...REVISION_PAYLOAD_SCHEMA.properties, revised_plan_markdown: { type: 'string' } },
+  required: ['reasoning', 'dispositions', 'decisions', 'milestones', 'revised_plan_markdown'],
+}
+const SOL_REVISION_PAYLOAD_DESCRIPTOR = { schema: SOL_REVISION_PAYLOAD_SCHEMA, stripNullPaths: ['reasoning', 'dispositions[].evidence_refs', 'dispositions[].evidence_class', 'dispositions[].incorporated_at', 'dispositions[].reason', 'decisions[].value_json'], jsonPaths: ['decisions[].value_json'] }
 // NEGOTIATION_PAYLOAD_SCHEMA — one selection per open divergence card. merged_value is
 // a free JSON node (present when selection is MERGED). Bounded (≤24 selections — the card ceiling).
 const NEGOTIATION_PAYLOAD_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string', maxLength: 400 },
+    reasoning: { type: ['string', 'null'], maxLength: 400 },
     selections: {
       type: 'array', maxItems: 24,
       items: {
@@ -749,15 +774,17 @@ const NEGOTIATION_PAYLOAD_SCHEMA = {
         properties: {
           divergence_id: { type: 'string' },
           selection: { type: 'string', enum: ['P0', 'P1', 'MERGED', 'NEITHER'] },
-          merged_value: {},
-          rationale: { type: 'string', maxLength: 400 },
+          // merged_value rides as merged_value_json (a JSON-ENCODED STRING; present iff selection is MERGED).
+          merged_value_json: { type: ['string', 'null'], maxLength: 65536 },
+          rationale: { type: ['string', 'null'], maxLength: 400 },
         },
-        required: ['divergence_id', 'selection'],
+        required: ['divergence_id', 'selection', 'merged_value_json', 'rationale'],
       },
     },
   },
-  required: ['selections'],
+  required: ['reasoning', 'selections'],
 }
+const NEGOTIATION_PAYLOAD_DESCRIPTOR = { schema: NEGOTIATION_PAYLOAD_SCHEMA, stripNullPaths: ['reasoning', 'selections[].merged_value_json', 'selections[].rationale'], jsonPaths: ['selections[].merged_value_json'] }
 // VISION_SCIDS_SCHEMA — a haiku greps VISION's Success-Criteria ids; the SCRIPT re-extracts
 // them from the raw grep output with the fixed deterministic regex (extractVisionScIds) so the id set is
 // script-owned, never model-judged.
@@ -972,6 +999,17 @@ const fableDraftPrompt = (planBrief) =>
 // call sites — behavior-identical to the pre-lift local builder. opts:
 //   { phaseTag, attempt, effort ('high'|'xhigh'), payloadSchema, taskText, briefBody, packetObj, extractTo }
 const solWrapperPrompt = (opts) => solWrapperPlan({ councilDir, pluginRoot, receiptsLedger, runToken, keystone: keystoneId, transportModel: CODEX_MODEL, ...opts })
+
+// normCouncilPayload(raw, descriptor) — the ONE strict-wire → consumer-view boundary (D2), applied at a
+// head-return seam AFTER the raw-wire receipt attestation + cross-check have bound the exact attested bytes
+// (never before — the cross-check hashes the RAW payload, so the wire shape must reach it untouched). A null
+// head is a dead seat (null in, null out); an unparsable encoded wire field (a shape error) also fails CLOSED
+// to a dead seat here so the existing liveness gate degrades the offending head — never a silent null field.
+const normCouncilPayload = (raw, descriptor) => {
+  if (raw == null) return null
+  try { return normalizeStrictPayload(raw, descriptor) }
+  catch (e) { log(`council payload shape error (${e && e.message ? e.message : e}) — treating the seat as dead`); return null }
+}
 
 // runSolCrossCheck — the structural→LEDGER-VERIFIED upgrade, INVOCATION-EXACT. gate.mjs
 // validated the receipt STRUCTURE via the provenance sink; this deterministic haiku leg extracts the
@@ -1327,13 +1365,16 @@ const runDebateFrontHalf = async (planAFile, planBFile, evidenceDocs, phaseName)
     `# Done-when\nThe final message is ONE JSON object matching the output schema: findings[] (each target_decision_id, claim, required_change, severity, evidence{class,refs,executable_check}); reasoning optional, last, ≤50 words.`
   const solCrit = solByteOwnedPlan({ phaseTag: 'CRITIQUE', attempt: 1, effort: 'xhigh', codexPrompt: solCritiqueCodexPrompt, packetObj: { plan: planAFile, evidence: evidenceDocs, evidence_manifest_hash: evidenceManifestHash }, payloadSchema: CRITIQUE_PAYLOAD_SCHEMA })
   const sinkFC = {}, sinkSC = {}
-  const [fableCritique, solCritEnv] = await parallel([
+  const [fableCritiqueRaw, solCritEnvRaw] = await parallel([
     () => gateAgent(fableCritiquePrompt, { label: 'fable:critique', phase: phaseName, model: CLAUDE_HEAD_MODEL, effort: 'xhigh', twoHeads: 'required', schema: CRITIQUE_PAYLOAD_SCHEMA, provenance: sinkFC }),
     () => gateAgent(solCrit.prompt, { label: 'sol:critique', phase: phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(CRITIQUE_PAYLOAD_SCHEMA), provenance: sinkSC }),
   ])
   let solCritCross = { ledger_verified: false }
-  if (solCritEnv != null && sinkSC.receipt_verified === true) solCritCross = await runSolByteOwnedCrossCheck('sol:critique', 'CRITIQUE', 1, solCrit.files.out, sinkSC, solCritEnv, solCrit.promptSha, solCrit.packetSha, phaseName)
+  if (solCritEnvRaw != null && sinkSC.receipt_verified === true) solCritCross = await runSolByteOwnedCrossCheck('sol:critique', 'CRITIQUE', 1, solCrit.files.out, sinkSC, solCritEnvRaw, solCrit.promptSha, solCrit.packetSha, phaseName)
   pushSolReceipt('sol:critique', sinkSC, solCritCross)
+  // D2 boundary: raw-wire cross-check done → produce the consumer view for canonicalizeFindings + checkpoint.
+  const fableCritique = normCouncilPayload(fableCritiqueRaw, CRITIQUE_PAYLOAD_DESCRIPTOR)
+  const solCritEnv = normCouncilPayload(solCritEnvRaw, CRITIQUE_PAYLOAD_DESCRIPTOR)
   const fCritAlive = fableCritique != null
   const sCritAlive = solCritEnv != null && sinkSC.receipt_verified === true && solCritCross.ledger_verified === true
   if (!fCritAlive || !sCritAlive) {
@@ -1368,16 +1409,20 @@ const runDebateFrontHalf = async (planAFile, planBFile, evidenceDocs, phaseName)
     `# Context\nYour plan: ${planBFile} (read it). VISION (for Success-Criteria ids): ${visionFile}. Frozen findings against it:\n${findingLine(findingsForP1)}\n\n` +
     `# Authorship\n${T4_AUTHORSHIP_RULE}\n\n` +
     `# Constraints\n${REVISION_TASK}\n\n` +
-    `# Done-when\nONE JSON object matching the output schema: dispositions[] (one per finding_id above — none ⇒ []), decisions[] (id, topic, value), milestones[] (the FULL revised structured list — each {id, title, summary, order, surface, confidence, acceptance:[{sc_id, criterion, executable_check}]}), revised_plan_markdown (the FULL revised plan); reasoning optional, last, ≤50 words.`
+    `# Done-when\nONE JSON object matching the output schema: dispositions[] (one per finding_id above — none ⇒ []), decisions[] (id, topic, value_json — the decision value JSON-ENCODED as a string), milestones[] (the FULL revised structured list — each {id, title, summary, order, surface, confidence, acceptance:[{sc_id, criterion, executable_check}]}), revised_plan_markdown (the FULL revised plan); reasoning optional, last, ≤50 words.`
   const solRev = solByteOwnedPlan({ phaseTag: 'REVISION', attempt: 1, effort: 'xhigh', codexPrompt: solReviseCodexPrompt, packetObj: { plan: planBFile, findings: findingsForP1, evidence_manifest_hash: evidenceManifestHash }, payloadSchema: SOL_REVISION_PAYLOAD_SCHEMA, extractTo: planBFile, extractField: 'revised_plan_markdown', extractLabel: 'revised plan' })
   const sinkSR = {}
-  const [fableRevision, solRevEnv] = await parallel([
+  const [fableRevisionRaw, solRevEnvRaw] = await parallel([
     () => gateAgent(fableRevisePrompt, { label: 'fable:revise', phase: phaseName, model: CLAUDE_HEAD_MODEL, effort: 'xhigh', twoHeads: 'required', schema: REVISION_PAYLOAD_SCHEMA, provenance: {} }),
     () => gateAgent(solRev.prompt, { label: 'sol:revise', phase: phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(SOL_REVISION_PAYLOAD_SCHEMA), provenance: sinkSR }),
   ])
   let solRevCross = { ledger_verified: false }
-  if (solRevEnv != null && sinkSR.receipt_verified === true) solRevCross = await runSolByteOwnedCrossCheck('sol:revise', 'REVISION', 1, solRev.files.out, sinkSR, solRevEnv, solRev.promptSha, solRev.packetSha, phaseName)
+  if (solRevEnvRaw != null && sinkSR.receipt_verified === true) solRevCross = await runSolByteOwnedCrossCheck('sol:revise', 'REVISION', 1, solRev.files.out, sinkSR, solRevEnvRaw, solRev.promptSha, solRev.packetSha, phaseName)
   pushSolReceipt('sol:revise', sinkSR, solRevCross)
+  // D2 boundary: raw-wire cross-check done → the consumer view (value_json decoded to value for registryFor,
+  // dispositions/reasoning legacy-absent stripped) drives validateDispositions, registryFor + the checkpoint.
+  const fableRevision = normCouncilPayload(fableRevisionRaw, REVISION_PAYLOAD_DESCRIPTOR)
+  const solRevEnv = normCouncilPayload(solRevEnvRaw, SOL_REVISION_PAYLOAD_DESCRIPTOR)
   const fRevAlive = fableRevision != null
   const sRevAlive = solRevEnv != null && sinkSR.receipt_verified === true && solRevCross.ledger_verified === true
   if (!fRevAlive || !sRevAlive) {
@@ -1532,13 +1577,17 @@ const runDebateFrontHalf = async (planAFile, planBFile, evidenceDocs, phaseName)
       `# Done-when\nONE JSON object matching the output schema: selections[] (one per divergence_id); reasoning optional, last, ≤50 words.`
     const solNeg = solByteOwnedPlan({ phaseTag: 'NEGOTIATION', attempt: 1, effort: 'xhigh', codexPrompt: solNegotiateCodexPrompt, packetObj: { common_trunk: agreed, cards: cardsForPacket, requires: joined.requires }, payloadSchema: NEGOTIATION_PAYLOAD_SCHEMA })
     const sinkFN = {}, sinkSN = {}
-    const [fableNeg, solNegEnv] = await parallel([
+    const [fableNegRaw, solNegEnvRaw] = await parallel([
       () => gateAgent(fableNegotiatePrompt, { label: 'fable:negotiate', phase: phaseName, model: CLAUDE_HEAD_MODEL, effort: 'xhigh', twoHeads: 'required', schema: NEGOTIATION_PAYLOAD_SCHEMA, provenance: sinkFN }),
       () => gateAgent(solNeg.prompt, { label: 'sol:negotiate', phase: phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(NEGOTIATION_PAYLOAD_SCHEMA), provenance: sinkSN }),
     ])
     let solNegCross = { ledger_verified: false }
-    if (solNegEnv != null && sinkSN.receipt_verified === true) solNegCross = await runSolByteOwnedCrossCheck('sol:negotiate', 'NEGOTIATION', 1, solNeg.files.out, sinkSN, solNegEnv, solNeg.promptSha, solNeg.packetSha, phaseName)
+    if (solNegEnvRaw != null && sinkSN.receipt_verified === true) solNegCross = await runSolByteOwnedCrossCheck('sol:negotiate', 'NEGOTIATION', 1, solNeg.files.out, sinkSN, solNegEnvRaw, solNeg.promptSha, solNeg.packetSha, phaseName)
     pushSolReceipt('sol:negotiate', sinkSN, solNegCross)
+    // D2 boundary: raw-wire cross-check done → the consumer view (merged_value_json decoded to merged_value
+    // for settleNegotiation) drives selection settlement + the checkpoint.
+    const fableNeg = normCouncilPayload(fableNegRaw, NEGOTIATION_PAYLOAD_DESCRIPTOR)
+    const solNegEnv = normCouncilPayload(solNegEnvRaw, NEGOTIATION_PAYLOAD_DESCRIPTOR)
     const fNegAlive = fableNeg != null
     const sNegAlive = solNegEnv != null && sinkSN.receipt_verified === true && solNegCross.ledger_verified === true
     if (!fNegAlive || !sNegAlive) {
@@ -1791,13 +1840,15 @@ if (liteScope) {
       const sinkS = {}
       // architecture.council_convened (keystone): the T4 draft pair spawns — two heads draft blind.
       await lore('architecture.council_convened', `The Twin Council convenes — two heads draft blind; neither sees the other's hand`, null, 'The Council')
-      const [fablePlan, solPayload] = await parallel([
+      const [fablePlan, solPayloadRaw] = await parallel([
         () => agent(fableDraftPrompt(planBrief), { label: 'fable:draft', phase: 'The Council', model: CLAUDE_HEAD_MODEL, effort: 'high', schema: PLAN_SCHEMA_T4 }),
         () => gateAgent(solDraft.prompt, { label: 'sol:draft', phase: 'The Council', model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(SOL_DRAFT_PAYLOAD_SCHEMA), provenance: sinkS }),
       ])
       let solCross = { ledger_verified: false }
-      if (solPayload != null && sinkS.receipt_verified === true) solCross = await runSolCrossCheck('sol:draft', 'DRAFTS', solDraft.files.out, sinkS, solPayload, 'The Council')
+      if (solPayloadRaw != null && sinkS.receipt_verified === true) solCross = await runSolCrossCheck('sol:draft', 'DRAFTS', solDraft.files.out, sinkS, solPayloadRaw, 'The Council')
       pushSolReceipt('sol:draft', sinkS, solCross)
+      // D2 boundary: raw-wire cross-check done → the consumer view (reasoning/key_decisions legacy-absent stripped).
+      const solPayload = normCouncilPayload(solPayloadRaw, SOL_DRAFT_PAYLOAD_DESCRIPTOR)
       const fableAlive = fablePlan != null
       const solAlive = solPayload != null && sinkS.receipt_verified === true && solCross.ledger_verified === true
       if (!fableAlive || !solAlive) {
@@ -2211,13 +2262,18 @@ const runTwinCouncilRatify = async () => {
     const solBrief = `${bindingLine(bH, pH, cards)}\nRubric:\n${COUNCIL_RUBRIC}` +
       (ex.sol ? `\nExchange evidence for YOUR prior blocking findings (the other head's answers, the executable-check transcripts, the applied changes) rides in the packet's exchange field; the plan file is the AMENDED artifact.` : '')
     const solR = solWrapperPrompt({ phaseTag, attempt: 1, effort: 'xhigh', payloadSchema: RATIFY_SCHEMA, taskText: RATIFY_TASK, briefBody: solBrief, packetObj: { master_plan: masterPlanFile, evidence: evidenceDocs, artifact_hash: bH, plan_sha256: pH, evidence_manifest_hash: evidenceManifestHash, open_divergences: cards || [], exchange: ex.sol != null ? ex.sol : null } })
-    const [rF, rS] = await parallel([
+    const [rFraw, rSraw] = await parallel([
       () => gateAgent(fableRatifyPrompt(suffix, bH, pH, ex.fable != null ? ex.fable : null, cards), { label: `fable:ratify:${suffix}`, phase: phaseName, model: CLAUDE_HEAD_MODEL, effort: 'xhigh', twoHeads: 'required', schema: RATIFY_SCHEMA, provenance: sinkF }),
       () => gateAgent(solR.prompt, { label: `sol:ratify:${suffix}`, phase: phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(RATIFY_SCHEMA), provenance: sinkS }),
     ])
     let solCross = { ledger_verified: false }
-    if (rS != null && sinkS.receipt_verified === true) solCross = await runSolCrossCheck(`sol:ratify:${suffix}`, phaseTag, solR.files.out, sinkS, rS, phaseName)
+    if (rSraw != null && sinkS.receipt_verified === true) solCross = await runSolCrossCheck(`sol:ratify:${suffix}`, phaseTag, solR.files.out, sinkS, rSraw, phaseName)
     pushSolReceipt(`sol:ratify:${suffix}`, sinkS, solCross)
+    // D2 boundary: raw-wire cross-check done → the consumer view (replacement_json decoded, target_kind/key
+    // legacy-absent stripped, executable_check retained-null) drives canonicalizeRatifyFindings, selMapOf,
+    // validateRatification, amendment detection + the checkpoint.
+    const rF = normCouncilPayload(rFraw, RATIFY_DESCRIPTOR)
+    const rS = normCouncilPayload(rSraw, RATIFY_DESCRIPTOR)
     const solOk = rS != null && sinkS.receipt_verified === true && solCross.ledger_verified === true
     if (rF == null || !solOk) {
       const missing = rF == null && !solOk ? 'both' : (rF == null ? 'fable' : 'sol')
@@ -2231,10 +2287,12 @@ const runTwinCouncilRatify = async () => {
   const runSolAnswerLeg = async (findings) => {
     const sink = {}
     const sol = solWrapperPrompt({ phaseTag: 'ANSWER_EXCHANGE', attempt: 1, effort: 'high', payloadSchema: ANSWER_SCHEMA, taskText: ANSWER_TASK, briefBody: `Findings to answer:\n${findings.map((f) => `- ${f.id}: ${f.claim} → required_change: ${f.required_change}`).join('\n')}`, packetObj: { master_plan: masterPlanFile, evidence: evidenceDocs, findings } })
-    const payload = await gateAgent(sol.prompt, { label: 'sol:answer', phase: phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(ANSWER_SCHEMA), provenance: sink })
+    const payloadRaw = await gateAgent(sol.prompt, { label: 'sol:answer', phase: phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(ANSWER_SCHEMA), provenance: sink })
     let cross = { ledger_verified: false }
-    if (payload != null && sink.receipt_verified === true) cross = await runSolCrossCheck('sol:answer', 'ANSWER_EXCHANGE', sol.files.out, sink, payload, phaseName)
+    if (payloadRaw != null && sink.receipt_verified === true) cross = await runSolCrossCheck('sol:answer', 'ANSWER_EXCHANGE', sol.files.out, sink, payloadRaw, phaseName)
     pushSolReceipt('sol:answer', sink, cross)
+    // D2 boundary: raw-wire cross-check done → the consumer view (reasoning/evidence_class legacy-absent stripped).
+    const payload = normCouncilPayload(payloadRaw, ANSWER_DESCRIPTOR)
     if (!(payload != null && sink.receipt_verified === true && cross.ledger_verified === true)) { await degradeCouncil('sol', 'Sol seat death during the answer exchange', phaseName); return { degraded: true } }
     return { degraded: false, payload, sink, cross }
   }
@@ -2366,17 +2424,21 @@ const runTwinCouncilRatify = async () => {
     if (call.head === 'fable') {
       const sink = {}
       const r = await gateAgent(prompt, { label: `fable:fresh:${call.card_id}`, phase: ph, model: CLAUDE_HEAD_MODEL, effort: 'high', twoHeads: 'required', schema: FRESH_CELL_SCHEMA, provenance: sink })
-      if (r == null) return null
-      return normFreshInstance(call, r)
+      const rn = normCouncilPayload(r, FRESH_CELL_DESCRIPTOR)
+      if (rn == null) return null
+      return normFreshInstance(call, rn)
     }
     const phaseTag = `FRESH-${call.cell}-s${call.sample}-${card.divergence_id}`
     const plan = solByteOwnedPlan({ phaseTag, attempt: 1, effort: 'high', codexPrompt: prompt, packetObj: packet, payloadSchema: FRESH_CELL_SCHEMA })
     const sink = {}
-    const payload = await gateAgent(plan.prompt, { label: `sol:fresh:${call.card_id}`, phase: ph, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(FRESH_CELL_SCHEMA), provenance: sink })
+    const payloadRaw = await gateAgent(plan.prompt, { label: `sol:fresh:${call.card_id}`, phase: ph, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(FRESH_CELL_SCHEMA), provenance: sink })
     let cross = { ledger_verified: false }
-    if (payload != null && sink.receipt_verified === true) cross = await runSolByteOwnedCrossCheck(`sol:fresh:${call.card_id}`, phaseTag, 1, plan.files.out, sink, payload, plan.promptSha, plan.packetSha, ph)
+    if (payloadRaw != null && sink.receipt_verified === true) cross = await runSolByteOwnedCrossCheck(`sol:fresh:${call.card_id}`, phaseTag, 1, plan.files.out, sink, payloadRaw, plan.promptSha, plan.packetSha, ph)
     pushSolReceipt(`sol:fresh:${call.card_id}`, sink, cross)
-    if (!(payload != null && sink.receipt_verified === true && cross.ledger_verified === true)) return null // a folded sol cell — not a seat death
+    if (!(payloadRaw != null && sink.receipt_verified === true && cross.ledger_verified === true)) return null // a folded sol cell — not a seat death
+    // D2 boundary: raw-wire cross-check done → the consumer view (reasoning/defects legacy-absent stripped).
+    const payload = normCouncilPayload(payloadRaw, FRESH_CELL_DESCRIPTOR)
+    if (payload == null) return null
     return normFreshInstance(call, payload)
   }
   // freshPlanFor — the FROZEN 2×2 schedule + the two head-side frozen packet sets for one divergence
@@ -2500,14 +2562,17 @@ const runTwinCouncilRatify = async () => {
       `- P0: ${JSON.stringify(card.position_0)}\n- P1: ${JSON.stringify(card.position_1)}\n\n<task>${REVERSIBILITY_TASK} ${PAYLOAD_FIRST}</task>`
     const solPlan = solByteOwnedPlan({ phaseTag: `REVERSIBILITY-${card.divergence_id}`, attempt: 1, effort: 'high', codexPrompt: revPrompt, packetObj: { divergence_id: card.divergence_id, topic: card.topic, position_0: card.position_0, position_1: card.position_1 }, payloadSchema: REVERSIBILITY_SCHEMA })
     const sSink = {}
-    const [fRev, sRevEnv] = await parallel([
+    const [fRevRaw, sRevEnvRaw] = await parallel([
       () => gateAgent(revPrompt, { label: `fable:reversibility:${card.divergence_id}`, phase: ph, model: CLAUDE_HEAD_MODEL, effort: 'high', twoHeads: 'required', schema: REVERSIBILITY_SCHEMA, provenance: fSink }),
       () => gateAgent(solPlan.prompt, { label: `sol:reversibility:${card.divergence_id}`, phase: ph, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(REVERSIBILITY_SCHEMA), provenance: sSink }),
     ])
     let sCross = { ledger_verified: false }
-    if (sRevEnv != null && sSink.receipt_verified === true) sCross = await runSolByteOwnedCrossCheck(`sol:reversibility:${card.divergence_id}`, `REVERSIBILITY-${card.divergence_id}`, 1, solPlan.files.out, sSink, sRevEnv, solPlan.promptSha, solPlan.packetSha, ph)
+    if (sRevEnvRaw != null && sSink.receipt_verified === true) sCross = await runSolByteOwnedCrossCheck(`sol:reversibility:${card.divergence_id}`, `REVERSIBILITY-${card.divergence_id}`, 1, solPlan.files.out, sSink, sRevEnvRaw, solPlan.promptSha, solPlan.packetSha, ph)
     pushSolReceipt(`sol:reversibility:${card.divergence_id}`, sSink, sCross)
-    const solOk = sRevEnv != null && sSink.receipt_verified === true && sCross.ledger_verified === true
+    const solOk = sRevEnvRaw != null && sSink.receipt_verified === true && sCross.ledger_verified === true
+    // D2 boundary: raw-wire cross-check done → the consumer view (reasoning legacy-absent stripped).
+    const fRev = normCouncilPayload(fRevRaw, REVERSIBILITY_DESCRIPTOR)
+    const sRevEnv = normCouncilPayload(sRevEnvRaw, REVERSIBILITY_DESCRIPTOR)
     // a missing/dead classification card is a one-way door for that option (never a silent two-way adopt)
     const seal = sealReversibility(fRev || {}, solOk ? sRevEnv : {}, councilSeedDigest)
     if (seal.resolution === 'gated') return { gated: true }
@@ -2523,15 +2588,18 @@ const runTwinCouncilRatify = async () => {
       `- P0: ${JSON.stringify(card.position_0)}\n- P1: ${JSON.stringify(card.position_1)}\n\n<rubric>\n${COUNCIL_RUBRIC}\n</rubric>\n\n<task>${RUBRIC_AMEND_TASK} ${PAYLOAD_FIRST}</task>`
     const rSink = {}
     const rubricSol = solByteOwnedPlan({ phaseTag: `RUBRIC-${card.divergence_id}`, attempt: 1, effort: 'high', codexPrompt: rubricPrompt, packetObj: { divergence_id: card.divergence_id, topic: card.topic, position_0: card.position_0, position_1: card.position_1 }, payloadSchema: RUBRIC_AMEND_SCHEMA })
-    const [fRub, sRubEnv] = await parallel([
+    const [fRubRaw, sRubEnvRaw] = await parallel([
       () => gateAgent(rubricPrompt, { label: `fable:rubric-amend:${card.divergence_id}`, phase: ph, model: CLAUDE_HEAD_MODEL, effort: 'high', twoHeads: 'required', schema: RUBRIC_AMEND_SCHEMA, provenance: {} }),
       () => gateAgent(rubricSol.prompt, { label: `sol:rubric-amend:${card.divergence_id}`, phase: ph, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(RUBRIC_AMEND_SCHEMA), provenance: rSink })
     ])
     // The Sol rubric leg is BYTE-OWNED — the invocation-exact cross-check must ledger_verify it.
     let sRubCross = { ledger_verified: false }
-    if (sRubEnv != null && rSink.receipt_verified === true) sRubCross = await runSolByteOwnedCrossCheck(`sol:rubric-amend:${card.divergence_id}`, `RUBRIC-${card.divergence_id}`, 1, rubricSol.files.out, rSink, sRubEnv, rubricSol.promptSha, rubricSol.packetSha, ph)
+    if (sRubEnvRaw != null && rSink.receipt_verified === true) sRubCross = await runSolByteOwnedCrossCheck(`sol:rubric-amend:${card.divergence_id}`, `RUBRIC-${card.divergence_id}`, 1, rubricSol.files.out, rSink, sRubEnvRaw, rubricSol.promptSha, rubricSol.packetSha, ph)
     pushSolReceipt(`sol:rubric-amend:${card.divergence_id}`, rSink, sRubCross)
-    const solRub = (sRubEnv != null && rSink.receipt_verified === true && sRubCross.ledger_verified === true) ? sRubEnv : null
+    // D2 boundary: raw-wire cross-check done → the consumer view (reasoning/clarification legacy-absent stripped).
+    const fRub = normCouncilPayload(fRubRaw, RUBRIC_AMEND_DESCRIPTOR)
+    const sRubEnv = normCouncilPayload(sRubEnvRaw, RUBRIC_AMEND_DESCRIPTOR)
+    const solRub = (sRubEnvRaw != null && rSink.receipt_verified === true && sRubCross.ledger_verified === true) ? sRubEnv : null
     // Dual-sign requires EXACT byte equality of the two clarification strings — NO normalization
     // (no lowercase, no whitespace collapse). 'Use P0' and 'use   p0' are DIFFERENT bytes ⇒ NOT dual-signed.
     // (The trim()!=='' guard only rejects an empty/whitespace-only clarification; it is not part of the
@@ -2716,8 +2784,9 @@ const runTwinCouncilRatify = async () => {
   }
   if (remainingSol.length) {
     fableAnswerSink = {}
-    const fa = await gateAgent(fableAnswerPrompt(remainingSol), { label: 'fable:answer', phase: phaseName, model: CLAUDE_HEAD_MODEL, effort: 'high', twoHeads: 'required', schema: ANSWER_SCHEMA, provenance: fableAnswerSink })
-    if (fa == null) { await degradeCouncil('fable', 'Fable seat death during the answer exchange', phaseName); return }
+    const faRaw = await gateAgent(fableAnswerPrompt(remainingSol), { label: 'fable:answer', phase: phaseName, model: CLAUDE_HEAD_MODEL, effort: 'high', twoHeads: 'required', schema: ANSWER_SCHEMA, provenance: fableAnswerSink })
+    if (faRaw == null) { await degradeCouncil('fable', 'Fable seat death during the answer exchange', phaseName); return }
+    const fa = normCouncilPayload(faRaw, ANSWER_DESCRIPTOR)
     const err = answerSetError(remainingSol, fa)
     if (err) { await degradeCouncil('fable', `invalid answer set from the Fable head (${err})`, phaseName); return }
     fableAnswers = fa
@@ -2895,13 +2964,16 @@ const runLiteCouncilRatify = async () => {
   const sinkF = {}, sinkS = {}
   // architecture.council_convened (keystone): the T4-lite pair spawns — two heads rule blind, no drafts.
   await lore('architecture.council_convened', `The Twin Council convenes on the lite plan — two heads rule blind, no drafts to compare`, null, phaseName)
-  const [rF, rS] = await parallel([
+  const [rFraw, rSraw] = await parallel([
     () => gateAgent(fableRatifyPrompt, { label: 'fable:ratify:lite', phase: phaseName, model: CLAUDE_HEAD_MODEL, effort: 'xhigh', twoHeads: 'required', schema: RATIFY_SCHEMA, provenance: sinkF }),
     () => gateAgent(solR.prompt, { label: 'sol:ratify:lite', phase: phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(RATIFY_SCHEMA), provenance: sinkS }),
   ])
   let solCross = { ledger_verified: false }
-  if (rS != null && sinkS.receipt_verified === true) solCross = await runSolCrossCheck('sol:ratify:lite', 'LITE_RATIFY', solR.files.out, sinkS, rS, phaseName)
+  if (rSraw != null && sinkS.receipt_verified === true) solCross = await runSolCrossCheck('sol:ratify:lite', 'LITE_RATIFY', solR.files.out, sinkS, rSraw, phaseName)
   pushSolReceipt('sol:ratify:lite', sinkS, solCross)
+  // D2 boundary: raw-wire cross-check done → the consumer view drives validateRatification + the checkpoint.
+  const rF = normCouncilPayload(rFraw, RATIFY_DESCRIPTOR)
+  const rS = normCouncilPayload(rSraw, RATIFY_DESCRIPTOR)
   const solOk = rS != null && sinkS.receipt_verified === true && solCross.ledger_verified === true
   if (rF == null || !solOk) {
     const missing = rF == null && !solOk ? 'both' : (rF == null ? 'fable' : 'sol')

@@ -1076,12 +1076,26 @@ export function degraded(parts) {
 // SHA64_RE — the lowercase-hex-64 shape gate every ledger-promoted receipt/invocation hash passes.
 export const SHA64_RE = /^[0-9a-f]{64}$/
 
-// RATIFY_SCHEMA: evidence fields BEFORE the verdict field (Claude legs keep
-// PAYLOAD_FIRST, codex legs follow the reasoning-first guide). executable_check present, null allowed.
+// STRICT_JSON_WIRE_MAX — the coarse WIRE ceiling (character count) on a JSON-ENCODED wire field
+// (replacement_json / value_json / merged_value_json). It is NOT the value authority: the deterministic
+// registry byte rail (utf8ByteLength(canonicalJson(decodedValue)) <= DECISION_VALUE_MAX_BYTES, architecture.js)
+// remains the authority on decoded values (NF-001). This ceiling is set safely ABOVE the byte rail — a
+// character count is never fewer bytes than the same UTF-8 string, so a value inside the byte rail always
+// fits here, and a pathological megabyte string is still refused at the wire before any parse.
+export const STRICT_JSON_WIRE_MAX = 65536
+
+// RATIFY_SCHEMA (STRICT structured-output safe — codex 0.144.x): every node has an explicit type
+// (R1), every object carries additionalProperties:false (R2), every property is required (R3), and
+// optionality is expressed as nullability (R4: type ['X','null']); the normalizer boundary
+// (normalizeStrictPayload + RATIFY_DESCRIPTOR) restores the legacy consumer view (absent == null for the
+// legacy-optional paths, retained-null for executable_check, and the encoded replacement_json decoded
+// to `replacement`) AFTER the raw-wire receipt/cross-check verification. The one arbitrary-JSON field
+// (replacement) rides as replacement_json (a JSON-ENCODED STRING) — the one node a JSON-schema `type`
+// could not express is now expressible and strict-safe.
 export const RATIFY_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string', maxLength: 400, description: 'optional, ≤50 words' },
+    reasoning: { type: ['string', 'null'], maxLength: 400, description: 'optional, ≤50 words (null when omitted)' },
     artifact_hash: { type: 'string' },
     findings: {
       type: 'array',
@@ -1091,29 +1105,157 @@ export const RATIFY_SCHEMA = {
           finding_id: { type: 'string' }, claim: { type: 'string' }, required_change: { type: 'string' },
           evidence_refs: { type: 'array', items: { type: 'string' } },
           evidence_class: { type: 'string', enum: ['executed_check', 'proposed_check', 'repo_state', 'test_output', 'primary_source', 'scenario'], description: 'the HONEST class of this finding\'s evidence — the claim-scoped partial order rules reversals by it' },
-          executable_check: { type: ['string', 'null'], description: 'a bounded shell command (EXIT 0 iff the defect is present) or null' },
-          target_kind: { type: 'string', enum: ['settled_decision', 'trunk_field'], description: 'OPTIONAL: the STRUCTURAL correction descriptor — an ACCEPTED BLOCK finding carrying { target_kind, key, replacement } amends the bundle mechanically; an ACCEPTED finding WITHOUT one is a gated escalation (no free rewrite)' },
-          key: { type: 'string', description: 'OPTIONAL: an existing settled-decision topic or an amendable trunk field (present iff target_kind is)' },
-          replacement: { description: 'OPTIONAL: the new value — must match the shape of the target\'s current value (present iff target_kind is)' },
+          executable_check: { type: ['string', 'null'], description: 'a bounded shell command (EXIT 0 iff the defect is present) or null (RETAINED null — present even when null)' },
+          target_kind: { type: ['string', 'null'], enum: ['settled_decision', 'trunk_field', null], description: 'the STRUCTURAL correction descriptor kind, or null when absent — an ACCEPTED BLOCK finding carrying { target_kind, key, replacement_json } amends the bundle mechanically; an ACCEPTED finding WITHOUT one is a gated escalation (no free rewrite)' },
+          key: { type: ['string', 'null'], description: 'an existing settled-decision topic or an amendable trunk field, or null when absent (present iff target_kind is)' },
+          replacement_json: { type: ['string', 'null'], maxLength: 65536, description: 'the new value JSON-ENCODED as a string, or null when absent — must decode to a value matching the shape of the target\'s current value (present iff target_kind is)' },
         },
-        required: ['finding_id', 'claim', 'required_change', 'evidence_refs', 'evidence_class', 'executable_check'],
+        required: ['finding_id', 'claim', 'required_change', 'evidence_refs', 'evidence_class', 'executable_check', 'target_kind', 'key', 'replacement_json'],
       },
     },
-    changed_evidence: { type: 'array', items: { type: 'object', additionalProperties: true, properties: { finding_id: { type: 'string', description: 'the standing block this evidence retires — the one-finding-key rail: one evidence item can never clear two blocks' }, class: { type: 'string' }, refs: { type: 'array', items: { type: 'string' } } }, required: ['finding_id', 'class'] } },
-    divergence_selections: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { divergence_id: { type: 'string' }, selection: { type: 'string', enum: ['P0', 'P1', 'MERGED', 'NEITHER'] }, evidence_refs: { type: 'array', items: { type: 'string' } } }, required: ['divergence_id', 'selection'] } },
+    changed_evidence: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { finding_id: { type: 'string', description: 'the standing block this evidence retires — the one-finding-key rail: one evidence item can never clear two blocks' }, class: { type: 'string' }, refs: { type: ['array', 'null'], items: { type: 'string' } } }, required: ['finding_id', 'class', 'refs'] } },
+    divergence_selections: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { divergence_id: { type: 'string' }, selection: { type: 'string', enum: ['P0', 'P1', 'MERGED', 'NEITHER'] }, evidence_refs: { type: ['array', 'null'], items: { type: 'string' } } }, required: ['divergence_id', 'selection', 'evidence_refs'] } },
     verdict: { type: 'string', enum: ['APPROVE', 'BLOCK', 'NEITHER'] },
   },
-  required: ['artifact_hash', 'verdict', 'divergence_selections', 'findings', 'changed_evidence'],
+  required: ['reasoning', 'artifact_hash', 'findings', 'changed_evidence', 'divergence_selections', 'verdict'],
+}
+// RATIFY_DESCRIPTOR — the co-located strict descriptor { schema, stripNullPaths, jsonPaths }. stripNullPaths
+// are the legacy-optional-absent nullable paths (null => the key is DELETED from the consumer view); every
+// OTHER nullable path (findings[].executable_check) is legacy-required-nullable (null RETAINED).
+// jsonPaths are the JSON-encoded wire fields the normalizer decodes (replacement_json -> replacement).
+export const RATIFY_DESCRIPTOR = {
+  schema: RATIFY_SCHEMA,
+  stripNullPaths: ['reasoning', 'findings[].target_kind', 'findings[].key', 'findings[].replacement_json', 'changed_evidence[].refs', 'divergence_selections[].evidence_refs'],
+  jsonPaths: ['findings[].replacement_json'],
 }
 
-// ANSWER_SCHEMA — the answer-exchange payload (one ACCEPT/REFUTE per finding).
+// ANSWER_SCHEMA — the answer-exchange payload (one ACCEPT/REFUTE per finding). STRICT-safe.
 export const ANSWER_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string', maxLength: 400 },
-    answers: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { finding_id: { type: 'string' }, answer: { type: 'string', enum: ['ACCEPT', 'REFUTE'] }, evidence_refs: { type: 'array', items: { type: 'string' } }, evidence_class: { type: 'string' } }, required: ['finding_id', 'answer', 'evidence_refs'] } },
+    reasoning: { type: ['string', 'null'], maxLength: 400 },
+    answers: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { finding_id: { type: 'string' }, answer: { type: 'string', enum: ['ACCEPT', 'REFUTE'] }, evidence_refs: { type: 'array', items: { type: 'string' } }, evidence_class: { type: ['string', 'null'] } }, required: ['finding_id', 'answer', 'evidence_refs', 'evidence_class'] } },
   },
-  required: ['answers'],
+  required: ['reasoning', 'answers'],
+}
+export const ANSWER_DESCRIPTOR = {
+  schema: ANSWER_SCHEMA,
+  stripNullPaths: ['reasoning', 'answers[].evidence_class'],
+  jsonPaths: [],
+}
+
+// normalizeStrictPayload(payload, descriptor) — the ONE strict-wire → consumer-view boundary (D2 step 3).
+// It runs ONLY AFTER the raw-wire receipt attestation + cross-check have bound the exact attested bytes
+// (D2 step 2 — never before). It returns a DEEP COPY (the raw wire object is never mutated, so the
+// cross-check hash it already bound stays valid) in which: (1) every jsonPaths field is decoded — a null
+// encoded field means legacy-absent (the encoded key is dropped, the decoded key stays absent); a string
+// is JSON.parse'd under the parse rail (an unparsable string THROWS a shape error, never a silent null)
+// and stored under the decoded key (replacement_json -> replacement); (2) every stripNullPaths field whose
+// value is null is DELETED (legacy-absent), so a downstream hasOwnProperty test sees it absent exactly as
+// the pre-strict wire did. Every OTHER nullable path is left untouched (legacy-required-nullable, null
+// retained). TOLERANT by construction: a field already in decoded/absent form (an old fixture that never
+// carried the encoded/nullable wire shape) passes through unchanged. Pure: no I/O, no ambient globals.
+// Inline WITH nothing (self-contained).
+export function normalizeStrictPayload(payload, descriptor) {
+  if (payload === null || typeof payload !== 'object') return payload
+  const desc = descriptor || {}
+  const out = JSON.parse(JSON.stringify(payload))
+  // collectParents — walk a dot-path (segments may end in '[]' to iterate an array) to the PARENT nodes
+  // that hold the terminal key. Returns [{ parent, key }] for every present parent object.
+  const collectParents = (root, path) => {
+    const segs = String(path).split('.')
+    const key = segs[segs.length - 1].replace(/\[\]$/, '')
+    let nodes = [root]
+    for (let i = 0; i < segs.length - 1; i++) {
+      const seg = segs[i]
+      const isArr = seg.endsWith('[]')
+      const name = isArr ? seg.slice(0, -2) : seg
+      const next = []
+      for (const n of nodes) {
+        if (n === null || typeof n !== 'object') continue
+        const v = n[name]
+        if (isArr) { if (Array.isArray(v)) for (const el of v) next.push(el) }
+        else next.push(v)
+      }
+      nodes = next
+    }
+    return nodes.filter((n) => n !== null && typeof n === 'object' && !Array.isArray(n)).map((n) => ({ parent: n, key }))
+  }
+  for (const path of (Array.isArray(desc.jsonPaths) ? desc.jsonPaths : [])) {
+    const encodedKey = String(path).split('.').pop()
+    const decodedKey = encodedKey.replace(/_json$/, '')
+    for (const { parent, key } of collectParents(out, path)) {
+      if (!Object.prototype.hasOwnProperty.call(parent, key)) continue
+      const v = parent[key]
+      if (v === null) { delete parent[key]; continue }
+      if (typeof v === 'string') {
+        let parsed
+        try { parsed = JSON.parse(v) } catch (e) { throw new Error(`normalizeStrictPayload: unparsable JSON at '${path}' — an encoded wire field must decode (a shape error, never a silent null)`) }
+        parent[decodedKey] = parsed
+        delete parent[key]
+      }
+    }
+  }
+  for (const path of (Array.isArray(desc.stripNullPaths) ? desc.stripNullPaths : [])) {
+    for (const { parent, key } of collectParents(out, path)) {
+      if (Object.prototype.hasOwnProperty.call(parent, key) && parent[key] === null) delete parent[key]
+    }
+  }
+  return out
+}
+
+// strictLintSchema(descriptor) — the R1–R5 strict-mode lint over a codex-bound descriptor. Returns a
+// (possibly empty) array of violation strings. R1: every schema node has an explicit `type`. R2: every
+// object node carries additionalProperties:false. R3: every property of every object appears in required.
+// R4/R5: only the allowlisted keywords appear; the root is type object; and every NULLABLE path is
+// classified — it is either a stripNullPaths member (legacy-absent) or retained-by-default; a stripNullPaths
+// or jsonPaths entry that does not correspond to a real nullable (resp. nullable-string ending in `_json`)
+// schema node is a stale-descriptor failure, so the lint holds the descriptor ↔ schema sync mechanically.
+// TEST-ONLY (not inlined into any workflow). Inline WITH nothing.
+export function strictLintSchema(descriptor) {
+  const errors = []
+  const desc = descriptor || {}
+  const schema = desc.schema
+  const ALLOWED = ['type', 'properties', 'required', 'additionalProperties', 'items', 'enum', 'description', 'maxLength', 'maxItems', 'minItems']
+  const nullablePaths = []
+  const jsonEncodableNullablePaths = []
+  const walk = (node, path, isRoot) => {
+    if (node === null || typeof node !== 'object' || Array.isArray(node)) { errors.push(`${path}: not a schema object`); return }
+    for (const k of Object.keys(node)) if (!ALLOWED.includes(k)) errors.push(`${path}: disallowed keyword '${k}' (R5 allowlist)`)
+    if (!Object.prototype.hasOwnProperty.call(node, 'type')) { errors.push(`${path}: missing 'type' (R1)`); return }
+    const types = Array.isArray(node.type) ? node.type : [node.type]
+    if (isRoot && node.type !== 'object') errors.push(`${path}: root schema must be type 'object'`)
+    if (types.includes('null')) {
+      nullablePaths.push(path)
+      if (types.includes('string')) jsonEncodableNullablePaths.push(path)
+    }
+    if (types.includes('object')) {
+      if (node.additionalProperties !== false) errors.push(`${path}: object missing additionalProperties:false (R2)`)
+      const props = node.properties && typeof node.properties === 'object' ? node.properties : {}
+      const req = Array.isArray(node.required) ? node.required : []
+      for (const p of Object.keys(props)) if (!req.includes(p)) errors.push(`${path}.${p}: property not in required (R3)`)
+      for (const r of req) if (!Object.prototype.hasOwnProperty.call(props, r)) errors.push(`${path}: required '${r}' has no property`)
+      for (const p of Object.keys(props)) walk(props[p], `${path === '$' ? '$' : path}.${p}`, false)
+    }
+    if (types.includes('array') && node.items) walk(node.items, `${path}[]`, false)
+  }
+  walk(schema, '$', true)
+  // Descriptor ↔ schema sync. Path form here is the DESCRIPTOR path form (e.g. `findings[].target_kind`),
+  // which the lint mirrors from the walk by stripping the leading `$.`.
+  const nullableSet = new Set(nullablePaths.map((p) => p.replace(/^\$\./, '')))
+  const jsonNullableSet = new Set(jsonEncodableNullablePaths.map((p) => p.replace(/^\$\./, '')))
+  const strip = Array.isArray(desc.stripNullPaths) ? desc.stripNullPaths : []
+  const jsonp = Array.isArray(desc.jsonPaths) ? desc.jsonPaths : []
+  for (const p of strip) if (!nullableSet.has(p)) errors.push(`descriptor.stripNullPaths '${p}' is not a nullable schema path (stale descriptor)`)
+  for (const p of jsonp) {
+    if (!jsonNullableSet.has(p)) errors.push(`descriptor.jsonPaths '${p}' is not a nullable-string schema path (stale descriptor)`)
+    if (!/_json$/.test(p)) errors.push(`descriptor.jsonPaths '${p}' must name a *_json encoded field`)
+  }
+  // The no-ambiguity teeth: a jsonPaths field carries its own legacy-absent semantics via decode, so it
+  // must ALSO be a stripNullPaths member (null => absent). Any nullable path that is neither a
+  // stripNullPaths member nor an acknowledged retained path is flagged for explicit classification.
+  for (const p of jsonp) if (!strip.includes(p)) errors.push(`descriptor.jsonPaths '${p}' must also be a stripNullPaths member (a null encoded field is legacy-absent)`)
+  return errors
 }
 
 // envelopeSchema(payload) — permissive on the receipt BY DESIGN: gateAgent's validateCodexReceipt is

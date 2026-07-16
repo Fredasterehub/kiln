@@ -52,7 +52,7 @@ async function noteClaudeHeadSuccession(phaseName) {
 //    and inlined through the SAME @inline:council bundler contract build/validate/vision use (helpers,
 //    never copy-paste). Powers report's T4 keystone: the signoff pair after the existence gate. INERT on
 //    every sub-T4 / no-codex / tokenless path (councilCapable === false). ──
-// @inline:council:COUNCIL_PROTOCOL_VERSION,sha256Hex,canonicalJson,claimTypeForClass,compareEvidence,validateReversal,councilSignature,verifySignature,validateRatification,twinRatified,buildCheckpoint,SHA64_RE,RATIFY_SCHEMA,envelopeSchema,CROSS_CHECK_SCHEMA,LEDGER_APPEND_SCHEMA,CANON_HASH_ONELINER,LEDGER_EXTRACT_ONELINER,councilTemplateHash,seatProv,solWrapperPlan,crossCheckOk,assembleRatifyCertificate,verdictShapeError
+// @inline:council:COUNCIL_PROTOCOL_VERSION,sha256Hex,canonicalJson,claimTypeForClass,compareEvidence,validateReversal,councilSignature,verifySignature,validateRatification,twinRatified,buildCheckpoint,SHA64_RE,RATIFY_SCHEMA,envelopeSchema,CROSS_CHECK_SCHEMA,LEDGER_APPEND_SCHEMA,CANON_HASH_ONELINER,LEDGER_EXTRACT_ONELINER,councilTemplateHash,seatProv,solWrapperPlan,crossCheckOk,assembleRatifyCertificate,verdictShapeError,RATIFY_DESCRIPTOR,normalizeStrictPayload
 
 // ── Twin Council gating. Report's signoff council goes council-grade ONLY when the
 //    capability record promised BOTH heads (T4 = fable + codex) AND the conductor minted a runToken.
@@ -138,16 +138,28 @@ const councilRuling = async (data, phaseName) => {
   try { await runLedger('note', { kind: 'council_ruling', ...data }, phaseName) }
   catch (e) { log(`council ruling not ledgered (non-fatal): ${e && e.message ? e.message : e}`) }
 }
+// normCouncilPayload(raw, descriptor) — the ONE strict-wire → consumer-view boundary (D2), applied at a
+// head-return seam AFTER the raw-wire receipt attestation + cross-check have bound the attested bytes. A
+// null head is a dead seat; an unparsable encoded wire field fails CLOSED to a dead seat.
+const normCouncilPayload = (raw, descriptor) => {
+  if (raw == null) return null
+  if (descriptor == null) return raw
+  try { return normalizeStrictPayload(raw, descriptor) }
+  catch (e) { log(`council payload shape error (${e && e.message ? e.message : e}) — treating the seat as dead`); return null }
+}
 const runBlindPair = async (cfg) => {
   const sinkF = {}, sinkS = {}
   const plan = solWrapperPlan({ councilDir, pluginRoot, receiptsLedger, runToken: runTokenRaw, keystone: cfg.keystone, transportModel: CODEX_MODEL, phaseTag: cfg.phaseTag, attempt: 1, effort: 'xhigh', payloadSchema: cfg.schema, taskText: cfg.solTaskText, briefBody: cfg.solBrief, packetObj: cfg.solPacket })
-  const [rF, rS] = await parallel([
+  const [rFraw, rSraw] = await parallel([
     () => gateAgent(cfg.fablePrompt, { label: `fable:${cfg.legName}`, phase: cfg.phaseName, model: CLAUDE_HEAD_MODEL, effort: 'xhigh', twoHeads: 'required', schema: cfg.schema, provenance: sinkF }),
     () => gateAgent(plan.prompt, { label: `sol:${cfg.legName}`, phase: cfg.phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(cfg.schema), provenance: sinkS }),
   ])
   let solCross = { ledger_verified: false }
-  if (rS != null && sinkS.receipt_verified === true) solCross = await runSolCrossCheck(`sol:${cfg.legName}`, cfg.keystone, cfg.phaseTag, plan.files.out, sinkS, rS, cfg.phaseName)
+  if (rSraw != null && sinkS.receipt_verified === true) solCross = await runSolCrossCheck(`sol:${cfg.legName}`, cfg.keystone, cfg.phaseTag, plan.files.out, sinkS, rSraw, cfg.phaseName)
   pushCouncilReceipt(councilReceipts, `sol:${cfg.legName}`, sinkS, solCross)
+  // D2 boundary: raw-wire cross-check done → the consumer view for both heads.
+  const rF = normCouncilPayload(rFraw, cfg.descriptor)
+  const rS = normCouncilPayload(rSraw, cfg.descriptor)
   const solOk = rS != null && sinkS.receipt_verified === true && solCross.ledger_verified === true
   if (rF == null || !solOk) {
     const missing = rF == null && !solOk ? 'both' : (rF == null ? 'fable' : 'sol')
@@ -203,7 +215,7 @@ const runReportSignoff = async (res) => {
     `${ratifyInputs}\n\n<rubric>\n${REPORT_SIGNOFF_RUBRIC}\n</rubric>\n\n<binding>\n${bindingLine}\n</binding>\n\n` +
     `<task>${REPORT_SIGNOFF_TASK}\nEmit the evidence-bound findings + changed_evidence + divergence_selections FIRST, then the verdict (evidence-before-commit); reasoning is optional, last, and under 50 words. ${PAYLOAD_FIRST}</task>`
   const solBrief = `${bindingLine}\nRubric:\n${REPORT_SIGNOFF_RUBRIC}\nRule read-only: compare ${reportFile} against the .kiln source artifacts NAMED in the record's artifact_refs. Rule HONESTY (delivered vs outstanding) only, never prose polish.`
-  const pair = await runBlindPair({ keystone, phaseTag, legName: 'report-signoff', fablePrompt, solTaskText: REPORT_SIGNOFF_TASK, solBrief, solPacket: { signoff_record: record, artifact_hash: bundleHash }, schema: RATIFY_SCHEMA, phaseName })
+  const pair = await runBlindPair({ keystone, phaseTag, legName: 'report-signoff', fablePrompt, solTaskText: REPORT_SIGNOFF_TASK, solBrief, solPacket: { signoff_record: record, artifact_hash: bundleHash }, schema: RATIFY_SCHEMA, descriptor: RATIFY_DESCRIPTOR, phaseName })
   const seatHashes = (rF, rS) => ({ P0: sha256Hex(canonicalJson(rF)), P1: sha256Hex(canonicalJson(rS)) })
   if (pair.degraded) {
     await councilCheckpoint({ ...ckptBase, phase: 'DEGRADED', anonymous_seat_artifact_hashes: {}, seat_provenance: { missing: pair.missing }, codex_receipt_hash: null, status: 'sealed' }, phaseName)

@@ -23,6 +23,7 @@ import {
   SHA64_RE, RATIFY_SCHEMA, ANSWER_SCHEMA, envelopeSchema, CROSS_CHECK_SCHEMA, LEDGER_APPEND_SCHEMA,
   CANON_HASH_ONELINER, LEDGER_EXTRACT_ONELINER, councilTemplateHash, seatProv, solWrapperPlan,
   crossCheckOk, assembleRatifyCertificate, verdictShapeError,
+  RATIFY_DESCRIPTOR, ANSWER_DESCRIPTOR, normalizeStrictPayload, strictLintSchema,
   projectStructuredPlan, joinExactEquivalents, validatePlanClosure, renderMasterPlan,
 } from '../../plugins/kiln/src/council.mjs'
 
@@ -760,15 +761,19 @@ test('D1 councilTemplateHash pins the recipe sha256Hex(canonicalJson(parts)) —
   assert.notEqual(councilTemplateHash({ ...parts, task: 'T2' }), councilTemplateHash(parts))
 })
 
-test('D1 schema consts export intact — RATIFY/ANSWER/envelope/CROSS_CHECK/LEDGER_APPEND shapes + evidence-before-verdict ordering', () => {
-  // RATIFY_SCHEMA: evidence fields required BEFORE verdict; executable_check present, null allowed.
-  assert.deepEqual(RATIFY_SCHEMA.required, ['artifact_hash', 'verdict', 'divergence_selections', 'findings', 'changed_evidence'])
+test('D1 schema consts export intact — RATIFY/ANSWER/envelope/CROSS_CHECK/LEDGER_APPEND shapes (STRICT R3: every property required)', () => {
+  // RATIFY_SCHEMA is now STRICT-safe (codex 0.144.x): R3 makes every property required; the payload-first
+  // evidence-before-verdict ORDER is preserved by the properties declaration order (findings/changed_evidence/
+  // divergence_selections before verdict); optionality now rides the descriptor, not a short required[].
+  assert.deepEqual(RATIFY_SCHEMA.required, ['reasoning', 'artifact_hash', 'findings', 'changed_evidence', 'divergence_selections', 'verdict'])
   assert.equal(RATIFY_SCHEMA.properties.verdict.enum.join(','), 'APPROVE,BLOCK,NEITHER')
   assert.deepEqual(RATIFY_SCHEMA.properties.findings.items.properties.executable_check.type, ['string', 'null'])
-  // I9: changed_evidence items carry a REQUIRED finding_id (the one-finding-key rail) alongside class.
-  assert.deepEqual(RATIFY_SCHEMA.properties.changed_evidence.items.required, ['finding_id', 'class'])
+  // I9: changed_evidence items carry a REQUIRED finding_id (the one-finding-key rail) alongside class; strict
+  // R2/R3 make the items object additionalProperties:false with refs also required (nullable → descriptor strip).
+  assert.deepEqual(RATIFY_SCHEMA.properties.changed_evidence.items.required, ['finding_id', 'class', 'refs'])
+  assert.equal(RATIFY_SCHEMA.properties.changed_evidence.items.additionalProperties, false)
   assert.equal(RATIFY_SCHEMA.properties.changed_evidence.items.properties.finding_id.type, 'string')
-  assert.deepEqual(ANSWER_SCHEMA.required, ['answers'])
+  assert.deepEqual(ANSWER_SCHEMA.required, ['reasoning', 'answers'])
   // envelopeSchema wraps a payload with a bare codex_receipt object (gate.mjs is the sole receipt authority)
   const env = envelopeSchema({ type: 'object' })
   assert.deepEqual(env.required, ['payload', 'codex_receipt'])
@@ -781,15 +786,22 @@ test('D1 schema consts export intact — RATIFY/ANSWER/envelope/CROSS_CHECK/LEDG
   assert.ok(SHA64_RE.test('a'.repeat(64)) && !SHA64_RE.test('a'.repeat(63)) && !SHA64_RE.test('A'.repeat(64)))
 })
 
-test('deliverable 2 — RATIFY_SCHEMA findings items gain the OPTIONAL structural-correction descriptor', () => {
+test('deliverable 2 — RATIFY_SCHEMA findings items carry the STRICT structural-correction descriptor (target_kind/key/replacement_json, R3-required + descriptor-stripped)', () => {
   const p = RATIFY_SCHEMA.properties.findings.items.properties
-  // the descriptor triple is additive + OPTIONAL — present for an accepted BLOCK correction, absent everywhere else
-  assert.deepEqual(p.target_kind.enum, ['settled_decision', 'trunk_field'])
-  assert.equal(p.key.type, 'string')
-  assert.ok(Object.prototype.hasOwnProperty.call(p, 'replacement'), 'replacement (any-typed) is a declared optional property')
-  // OPTIONAL: none of the three is in the item required set (additionalProperties:false still holds)
+  // R4: the correction triple is nullable; the arbitrary-JSON replacement rides as the encoded replacement_json.
+  assert.deepEqual(p.target_kind.enum, ['settled_decision', 'trunk_field', null])
+  assert.deepEqual(p.target_kind.type, ['string', 'null'])
+  assert.deepEqual(p.key.type, ['string', 'null'])
+  assert.ok(Object.prototype.hasOwnProperty.call(p, 'replacement_json'), 'replacement rides as the JSON-encoded replacement_json')
+  assert.deepEqual(p.replacement_json.type, ['string', 'null'])
+  assert.ok(!Object.prototype.hasOwnProperty.call(p, 'replacement'), 'the raw arbitrary-JSON replacement node is gone (strict-invalid)')
+  // R2/R3: additionalProperties:false and every property required — the legacy-absent semantics move to the descriptor.
   assert.equal(RATIFY_SCHEMA.properties.findings.items.additionalProperties, false)
-  for (const k of ['target_kind', 'key', 'replacement']) assert.ok(!RATIFY_SCHEMA.properties.findings.items.required.includes(k), `${k} is optional`)
+  for (const k of ['target_kind', 'key', 'replacement_json']) {
+    assert.ok(RATIFY_SCHEMA.properties.findings.items.required.includes(k), `${k} is R3-required`)
+    assert.ok(RATIFY_DESCRIPTOR.stripNullPaths.includes(`findings[].${k}`), `${k} is legacy-absent (descriptor strip)`)
+  }
+  assert.ok(RATIFY_DESCRIPTOR.jsonPaths.includes('findings[].replacement_json'), 'replacement_json is decoded to replacement by the normalizer')
 })
 
 test('deliverable 1 — renderMasterPlan returns the ordered milestone records + is byte-DETERMINISTIC', () => {

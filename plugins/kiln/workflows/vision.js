@@ -652,7 +652,7 @@ const SHA64_RE = /^[0-9a-f]{64}$/
 const RATIFY_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
-    reasoning: { type: 'string', maxLength: 400, description: 'optional, ≤50 words' },
+    reasoning: { type: ['string', 'null'], maxLength: 400, description: 'optional, ≤50 words (null when omitted)' },
     artifact_hash: { type: 'string' },
     findings: {
       type: 'array',
@@ -662,19 +662,19 @@ const RATIFY_SCHEMA = {
           finding_id: { type: 'string' }, claim: { type: 'string' }, required_change: { type: 'string' },
           evidence_refs: { type: 'array', items: { type: 'string' } },
           evidence_class: { type: 'string', enum: ['executed_check', 'proposed_check', 'repo_state', 'test_output', 'primary_source', 'scenario'], description: 'the HONEST class of this finding\'s evidence — the claim-scoped partial order rules reversals by it' },
-          executable_check: { type: ['string', 'null'], description: 'a bounded shell command (EXIT 0 iff the defect is present) or null' },
-          target_kind: { type: 'string', enum: ['settled_decision', 'trunk_field'], description: 'OPTIONAL: the STRUCTURAL correction descriptor — an ACCEPTED BLOCK finding carrying { target_kind, key, replacement } amends the bundle mechanically; an ACCEPTED finding WITHOUT one is a gated escalation (no free rewrite)' },
-          key: { type: 'string', description: 'OPTIONAL: an existing settled-decision topic or an amendable trunk field (present iff target_kind is)' },
-          replacement: { description: 'OPTIONAL: the new value — must match the shape of the target\'s current value (present iff target_kind is)' },
+          executable_check: { type: ['string', 'null'], description: 'a bounded shell command (EXIT 0 iff the defect is present) or null (RETAINED null — present even when null)' },
+          target_kind: { type: ['string', 'null'], enum: ['settled_decision', 'trunk_field', null], description: 'the STRUCTURAL correction descriptor kind, or null when absent — an ACCEPTED BLOCK finding carrying { target_kind, key, replacement_json } amends the bundle mechanically; an ACCEPTED finding WITHOUT one is a gated escalation (no free rewrite)' },
+          key: { type: ['string', 'null'], description: 'an existing settled-decision topic or an amendable trunk field, or null when absent (present iff target_kind is)' },
+          replacement_json: { type: ['string', 'null'], maxLength: 65536, description: 'the new value JSON-ENCODED as a string, or null when absent — must decode to a value matching the shape of the target\'s current value (present iff target_kind is)' },
         },
-        required: ['finding_id', 'claim', 'required_change', 'evidence_refs', 'evidence_class', 'executable_check'],
+        required: ['finding_id', 'claim', 'required_change', 'evidence_refs', 'evidence_class', 'executable_check', 'target_kind', 'key', 'replacement_json'],
       },
     },
-    changed_evidence: { type: 'array', items: { type: 'object', additionalProperties: true, properties: { finding_id: { type: 'string', description: 'the standing block this evidence retires — the one-finding-key rail: one evidence item can never clear two blocks' }, class: { type: 'string' }, refs: { type: 'array', items: { type: 'string' } } }, required: ['finding_id', 'class'] } },
-    divergence_selections: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { divergence_id: { type: 'string' }, selection: { type: 'string', enum: ['P0', 'P1', 'MERGED', 'NEITHER'] }, evidence_refs: { type: 'array', items: { type: 'string' } } }, required: ['divergence_id', 'selection'] } },
+    changed_evidence: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { finding_id: { type: 'string', description: 'the standing block this evidence retires — the one-finding-key rail: one evidence item can never clear two blocks' }, class: { type: 'string' }, refs: { type: ['array', 'null'], items: { type: 'string' } } }, required: ['finding_id', 'class', 'refs'] } },
+    divergence_selections: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { divergence_id: { type: 'string' }, selection: { type: 'string', enum: ['P0', 'P1', 'MERGED', 'NEITHER'] }, evidence_refs: { type: ['array', 'null'], items: { type: 'string' } } }, required: ['divergence_id', 'selection', 'evidence_refs'] } },
     verdict: { type: 'string', enum: ['APPROVE', 'BLOCK', 'NEITHER'] },
   },
-  required: ['artifact_hash', 'verdict', 'divergence_selections', 'findings', 'changed_evidence'],
+  required: ['reasoning', 'artifact_hash', 'findings', 'changed_evidence', 'divergence_selections', 'verdict'],
 }
 const envelopeSchema = (payload) => ({
   type: 'object',
@@ -822,6 +822,58 @@ function verdictShapeError(r) {
   }
   return null
 }
+const RATIFY_DESCRIPTOR = {
+  schema: RATIFY_SCHEMA,
+  stripNullPaths: ['reasoning', 'findings[].target_kind', 'findings[].key', 'findings[].replacement_json', 'changed_evidence[].refs', 'divergence_selections[].evidence_refs'],
+  jsonPaths: ['findings[].replacement_json'],
+}
+function normalizeStrictPayload(payload, descriptor) {
+  if (payload === null || typeof payload !== 'object') return payload
+  const desc = descriptor || {}
+  const out = JSON.parse(JSON.stringify(payload))
+  // collectParents — walk a dot-path (segments may end in '[]' to iterate an array) to the PARENT nodes
+  // that hold the terminal key. Returns [{ parent, key }] for every present parent object.
+  const collectParents = (root, path) => {
+    const segs = String(path).split('.')
+    const key = segs[segs.length - 1].replace(/\[\]$/, '')
+    let nodes = [root]
+    for (let i = 0; i < segs.length - 1; i++) {
+      const seg = segs[i]
+      const isArr = seg.endsWith('[]')
+      const name = isArr ? seg.slice(0, -2) : seg
+      const next = []
+      for (const n of nodes) {
+        if (n === null || typeof n !== 'object') continue
+        const v = n[name]
+        if (isArr) { if (Array.isArray(v)) for (const el of v) next.push(el) }
+        else next.push(v)
+      }
+      nodes = next
+    }
+    return nodes.filter((n) => n !== null && typeof n === 'object' && !Array.isArray(n)).map((n) => ({ parent: n, key }))
+  }
+  for (const path of (Array.isArray(desc.jsonPaths) ? desc.jsonPaths : [])) {
+    const encodedKey = String(path).split('.').pop()
+    const decodedKey = encodedKey.replace(/_json$/, '')
+    for (const { parent, key } of collectParents(out, path)) {
+      if (!Object.prototype.hasOwnProperty.call(parent, key)) continue
+      const v = parent[key]
+      if (v === null) { delete parent[key]; continue }
+      if (typeof v === 'string') {
+        let parsed
+        try { parsed = JSON.parse(v) } catch (e) { throw new Error(`normalizeStrictPayload: unparsable JSON at '${path}' — an encoded wire field must decode (a shape error, never a silent null)`) }
+        parent[decodedKey] = parsed
+        delete parent[key]
+      }
+    }
+  }
+  for (const path of (Array.isArray(desc.stripNullPaths) ? desc.stripNullPaths : [])) {
+    for (const { parent, key } of collectParents(out, path)) {
+      if (Object.prototype.hasOwnProperty.call(parent, key) && parent[key] === null) delete parent[key]
+    }
+  }
+  return out
+}
 
 // ── Twin Council gating. Vision's fidelity council goes council-grade ONLY when the
 //    capability record promised BOTH heads (T4 = fable + codex) AND the conductor minted a runToken.
@@ -900,17 +952,29 @@ const councilRuling = async (data, phaseName) => {
   try { await runLedger('note', { kind: 'council_ruling', ...data }, phaseName) }
   catch (e) { log(`council ruling not ledgered (non-fatal): ${e && e.message ? e.message : e}`) }
 }
+// normCouncilPayload(raw, descriptor) — the ONE strict-wire → consumer-view boundary (D2), applied at a
+// head-return seam AFTER the raw-wire receipt attestation + cross-check have bound the attested bytes. A
+// null head is a dead seat; an unparsable encoded wire field fails CLOSED to a dead seat.
+const normCouncilPayload = (raw, descriptor) => {
+  if (raw == null) return null
+  if (descriptor == null) return raw
+  try { return normalizeStrictPayload(raw, descriptor) }
+  catch (e) { log(`council payload shape error (${e && e.message ? e.message : e}) — treating the seat as dead`); return null }
+}
 // runBlindPair — Fable ∥ receipt-attested Sol rule blind over a schema (xhigh, council-grade).
 const runBlindPair = async (cfg) => {
   const sinkF = {}, sinkS = {}
   const plan = solWrapperPlan({ councilDir, pluginRoot, receiptsLedger, runToken: runTokenRaw, keystone: cfg.keystone, transportModel: CODEX_MODEL, phaseTag: cfg.phaseTag, attempt: 1, effort: 'xhigh', payloadSchema: cfg.schema, taskText: cfg.solTaskText, briefBody: cfg.solBrief, packetObj: cfg.solPacket })
-  const [rF, rS] = await parallel([
+  const [rFraw, rSraw] = await parallel([
     () => gateAgent(cfg.fablePrompt, { label: `fable:${cfg.legName}`, phase: cfg.phaseName, model: CLAUDE_HEAD_MODEL, effort: 'xhigh', twoHeads: 'required', schema: cfg.schema, provenance: sinkF }),
     () => gateAgent(plan.prompt, { label: `sol:${cfg.legName}`, phase: cfg.phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(cfg.schema), provenance: sinkS }),
   ])
   let solCross = { ledger_verified: false }
-  if (rS != null && sinkS.receipt_verified === true) solCross = await runSolCrossCheck(`sol:${cfg.legName}`, cfg.keystone, cfg.phaseTag, plan.files.out, sinkS, rS, cfg.phaseName)
+  if (rSraw != null && sinkS.receipt_verified === true) solCross = await runSolCrossCheck(`sol:${cfg.legName}`, cfg.keystone, cfg.phaseTag, plan.files.out, sinkS, rSraw, cfg.phaseName)
   pushCouncilReceipt(councilReceipts, `sol:${cfg.legName}`, sinkS, solCross)
+  // D2 boundary: raw-wire cross-check done → the consumer view for both heads.
+  const rF = normCouncilPayload(rFraw, cfg.descriptor)
+  const rS = normCouncilPayload(rSraw, cfg.descriptor)
   const solOk = rS != null && sinkS.receipt_verified === true && solCross.ledger_verified === true
   if (rF == null || !solOk) {
     const missing = rF == null && !solOk ? 'both' : (rF == null ? 'fable' : 'sol')
@@ -967,7 +1031,7 @@ const runVisionFidelity = async (vSummary) => {
     `${ratifyInputs}\n\n<rubric>\n${VISION_FIDELITY_RUBRIC}\n</rubric>\n\n<binding>\n${bindingLine}\n</binding>\n\n` +
     `<task>${VISION_FIDELITY_TASK}\nEmit the evidence-bound findings + changed_evidence + divergence_selections FIRST, then the verdict (evidence-before-commit); reasoning is optional, last, and under 50 words. ${PAYLOAD_FIRST}</task>`
   const solBrief = `${bindingLine}\nRubric:\n${VISION_FIDELITY_RUBRIC}\nRule read-only: compare ${visionFile} against the session ledger NAMED in the record's evidence_refs (each bound to its sha256). Rule COMPILE FIDELITY only, never the product's merit.`
-  const pair = await runBlindPair({ keystone, phaseTag, legName: 'vision-fidelity', fablePrompt, solTaskText: VISION_FIDELITY_TASK, solBrief, solPacket: { fidelity_record: record, artifact_hash: bundleHash }, schema: RATIFY_SCHEMA, phaseName })
+  const pair = await runBlindPair({ keystone, phaseTag, legName: 'vision-fidelity', fablePrompt, solTaskText: VISION_FIDELITY_TASK, solBrief, solPacket: { fidelity_record: record, artifact_hash: bundleHash }, schema: RATIFY_SCHEMA, descriptor: RATIFY_DESCRIPTOR, phaseName })
   const seatHashes = (rF, rS) => ({ P0: sha256Hex(canonicalJson(rF)), P1: sha256Hex(canonicalJson(rS)) })
   if (pair.degraded) {
     await councilCheckpoint({ ...ckptBase, phase: 'DEGRADED', anonymous_seat_artifact_hashes: {}, seat_provenance: { missing: pair.missing }, codex_receipt_hash: null, status: 'sealed' }, phaseName)

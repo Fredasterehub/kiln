@@ -131,7 +131,7 @@ async function noteClaudeHeadSuccession() {
 //    blind Fable/Sol pair over the ASSEMBLED deterministic verdict and the receipt-attested
 //    second-family attestation leg. Every leg is DEFINED unconditionally but CALLED only on the
 //    councilCapable path — sub-T4 / no-codex / tokenless runs are byte-preserved. ──
-// @inline:council:COUNCIL_PROTOCOL_VERSION,sha256Hex,canonicalJson,claimTypeForClass,compareEvidence,validateReversal,councilSignature,verifySignature,validateRatification,twinRatified,buildCheckpoint,SHA64_RE,RATIFY_SCHEMA,envelopeSchema,CROSS_CHECK_SCHEMA,LEDGER_APPEND_SCHEMA,CANON_HASH_ONELINER,LEDGER_EXTRACT_ONELINER,councilTemplateHash,seatProv,solWrapperPlan,crossCheckOk,assembleRatifyCertificate,verdictShapeError
+// @inline:council:COUNCIL_PROTOCOL_VERSION,sha256Hex,canonicalJson,claimTypeForClass,compareEvidence,validateReversal,councilSignature,verifySignature,validateRatification,twinRatified,buildCheckpoint,SHA64_RE,RATIFY_SCHEMA,envelopeSchema,CROSS_CHECK_SCHEMA,LEDGER_APPEND_SCHEMA,CANON_HASH_ONELINER,LEDGER_EXTRACT_ONELINER,councilTemplateHash,seatProv,solWrapperPlan,crossCheckOk,assembleRatifyCertificate,verdictShapeError,RATIFY_DESCRIPTOR,normalizeStrictPayload
 
 // ── Twin Council gating. Validate's final-ruling
 //    council + the receipt-based second-family attestation go council-grade ONLY when the capability
@@ -189,12 +189,13 @@ const GOAL_SECOND_PAYLOAD_SCHEMA = {
         required: ['text', 'severity'],
       },
     },
-    report_file: { type: 'string' },
-    reasoning: { type: 'string', maxLength: 700 },
+    report_file: { type: ['string', 'null'] },
+    reasoning: { type: ['string', 'null'], maxLength: 700 },
     report_markdown: { type: 'string', description: 'the FULL goal-backward-final-second content (the wrapper writes it to disk; codex runs read-only and cannot write files)' },
   },
-  required: ['overall', 'findings', 'report_markdown'],
+  required: ['overall', 'findings', 'report_file', 'reasoning', 'report_markdown'],
 }
+const GOAL_SECOND_PAYLOAD_DESCRIPTOR = { schema: GOAL_SECOND_PAYLOAD_SCHEMA, stripNullPaths: ['report_file', 'reasoning'], jsonPaths: [] }
 // EVIDENCE_ANCHOR_SCHEMA / evidenceAnchorPrompt — a Thoth transcription leg hashes
 // the NAMED evidence artifacts into a {path, sha256} manifest. A dead/garbled/partial anchor ⇒ the ruling
 // DEGRADES fail-closed — the certificate must never bind unhashed names; the anchor gates BEFORE the
@@ -250,16 +251,28 @@ const councilRuling = async (data) => {
 // over a given schema (xhigh, council-grade). Sol death / invalid receipt / failed cross-check ⇒
 // degraded. Blindness rails: the fable prompt never mentions codex/receipt/session/Sol; the sol packet
 // never mentions fable or the run token. Returns { degraded, missing, rF, rS, sinkF, sinkS, solCross }.
+// normCouncilPayload(raw, descriptor) — the ONE strict-wire → consumer-view boundary (D2), applied at a
+// head-return seam AFTER the raw-wire receipt attestation + cross-check have bound the attested bytes. A
+// null head is a dead seat; an unparsable encoded wire field fails CLOSED to a dead seat.
+const normCouncilPayload = (raw, descriptor) => {
+  if (raw == null) return null
+  if (descriptor == null) return raw
+  try { return normalizeStrictPayload(raw, descriptor) }
+  catch (e) { log(`council payload shape error (${e && e.message ? e.message : e}) — treating the seat as dead`); return null }
+}
 const runBlindPair = async (cfg) => {
   const sinkF = {}, sinkS = {}
   const plan = solWrapperPlan({ councilDir, pluginRoot, receiptsLedger, runToken: runTokenRaw, keystone: cfg.keystone, transportModel: CODEX_MODEL, phaseTag: cfg.phaseTag, attempt: 1, effort: 'xhigh', payloadSchema: cfg.schema, taskText: cfg.solTaskText, briefBody: cfg.solBrief, packetObj: cfg.solPacket })
-  const [rF, rS] = await parallel([
+  const [rFraw, rSraw] = await parallel([
     () => gateAgent(cfg.fablePrompt, { label: `fable:${cfg.legName}`, phase: cfg.phaseName, model: CLAUDE_HEAD_MODEL, effort: 'xhigh', twoHeads: 'required', schema: cfg.schema, provenance: sinkF }),
     () => gateAgent(plan.prompt, { label: `sol:${cfg.legName}`, phase: cfg.phaseName, model: 'sonnet', transport: 'codex', transportModel: CODEX_MODEL, receiptRequired: true, twoHeads: 'required', schema: envelopeSchema(cfg.schema), provenance: sinkS }),
   ])
   let solCross = { ledger_verified: false }
-  if (rS != null && sinkS.receipt_verified === true) solCross = await runSolCrossCheck(`sol:${cfg.legName}`, cfg.keystone, cfg.phaseTag, plan.files.out, sinkS, rS, cfg.phaseName)
+  if (rSraw != null && sinkS.receipt_verified === true) solCross = await runSolCrossCheck(`sol:${cfg.legName}`, cfg.keystone, cfg.phaseTag, plan.files.out, sinkS, rSraw, cfg.phaseName)
   pushCouncilReceipt(councilReceipts, `sol:${cfg.legName}`, sinkS, solCross)
+  // D2 boundary: raw-wire cross-check done → the consumer view for both heads.
+  const rF = normCouncilPayload(rFraw, cfg.descriptor)
+  const rS = normCouncilPayload(rSraw, cfg.descriptor)
   const solOk = rS != null && sinkS.receipt_verified === true && solCross.ledger_verified === true
   if (rF == null || !solOk) {
     const missing = rF == null && !solOk ? 'both' : (rF == null ? 'fable' : 'sol')
@@ -331,7 +344,7 @@ const runValidateRuling = async (v, verdictInput, secondFamily, goalReportFiles)
     `${ratifyInputs}\n\n<rubric>\n${VALIDATE_RULING_RUBRIC}\n</rubric>\n\n<binding>\n${bindingLine}\n</binding>\n<constraints>\n- Rule from the repo + the persisted deterministic evidence NAMED in the record's evidence_refs; NEVER launch a browser (the bounded Tier-2 traversal already ran; its verdict is in the record).\n</constraints>\n\n` +
     `<task>${VALIDATE_RULING_TASK}\nEmit the evidence-bound findings + changed_evidence + divergence_selections FIRST, then the verdict (evidence-before-commit); reasoning is optional, last, and under 50 words. ${PAYLOAD_FIRST}</task>`
   const solBrief = `${bindingLine}\nRubric:\n${VALIDATE_RULING_RUBRIC}\nRule read-only from the repo + the persisted deterministic evidence NAMED in the record's evidence_refs (each bound to its sha256); NEVER launch a browser.`
-  const pair = await runBlindPair({ keystone, phaseTag, legName: 'validate-ruling', fablePrompt, solTaskText: VALIDATE_RULING_TASK, solBrief, solPacket: { verdict_record: record, artifact_hash: bundleHash }, schema: RATIFY_SCHEMA, phaseName })
+  const pair = await runBlindPair({ keystone, phaseTag, legName: 'validate-ruling', fablePrompt, solTaskText: VALIDATE_RULING_TASK, solBrief, solPacket: { verdict_record: record, artifact_hash: bundleHash }, schema: RATIFY_SCHEMA, descriptor: RATIFY_DESCRIPTOR, phaseName })
   const seatHashes = (rF, rS) => ({ P0: sha256Hex(canonicalJson(rF)), P1: sha256Hex(canonicalJson(rS)) })
   if (pair.degraded) {
     await councilCheckpoint({ ...ckptBase, phase: 'DEGRADED', anonymous_seat_artifact_hashes: {}, seat_provenance: { missing: pair.missing }, codex_receipt_hash: null, status: 'sealed' })
@@ -958,7 +971,7 @@ try {
   }
   const goalReports = await parallel(goalLegs)
   const goal = goalReports[0]
-  const goalSecond = goalReports[1] || null
+  let goalSecond = goalReports[1] || null
   // The receipt-attested second-family leg gets the invocation-exact ledger cross-check upgrade. A
   // dead/receiptless seat or a failed cross-check leaves secondFamilyLedgerVerified false (the claim
   // fails closed below); the audit CONTENT still rides the reconcile — a null-keep work product.
@@ -967,6 +980,8 @@ try {
     if (goalSecond != null && goalSecondProv.receipt_verified === true) cross = await runSolCrossCheck('goal-final:second-family', 'validate_ruling', 'GOAL_SECOND', secondPlan.files.out, goalSecondProv, goalSecond, 'Goal Backward')
     pushCouncilReceipt(councilReceipts, 'goal-final:second-family', goalSecondProv, cross)
     secondFamilyLedgerVerified = cross.ledger_verified === true
+    // D2 boundary: raw-wire cross-check done → the consumer view (report_file/reasoning legacy-absent stripped).
+    goalSecond = normCouncilPayload(goalSecond, GOAL_SECOND_PAYLOAD_DESCRIPTOR)
   }
   // the goal audit's findings join the blocking arithmetic via the same deterministic reconcile the
   // milestone gate uses (dedupe by normalized text, max severity wins, blocking = any critical|high).
