@@ -33,6 +33,16 @@ beats are the conductor's entire interface. Beats arrive in the return, drawn fr
 
 Mode rides the invocation. Never ask which mode.
 
+Greet FIRST, always: the greeting beat is emitted before any launch, spawn, read, or stage
+work, in every mode — no tool call precedes it.
+
+On the `BRAINSTORM_COMPLETE` envelope (single-line JSON: `ledger`, `entries`, `essence`):
+launch the one-shot vision compiler per `cards/brainstorm.md` — a fresh-context agent, the
+sealed ledger path its only input, writing `.kiln/docs/vision.md`, returning
+`{ok, beat, pointers}`; speak its beat verbatim; then launch the kernel
+`{stage: "law", projectDir, idea: <essence>}`. Launches and tiny returns only — no dialogue
+or ledger content ever reaches this window.
+
 ## The four hard stops — the only questions
 
 1. **User plan gate** — optional, default OFF. Ask only if the user enabled it.
