@@ -75,7 +75,10 @@
 
 > Make sure to run `claude plugin update kiln@kiln` often! Claude code skills and plugin dont have automatic push functions. 
 >
-> I'm keeping it yellow — lots of growing pain with the new fable way - it will iron out and it still works well, your claude will be able to fix any hiccups but i will definately be ironing things out. Hope it helps anyone, give inspiration!
+> I'm keeping it yellow — lots of growing pain with the new fable he literally vomited the most insane ai slop, drifted us away from our original objectives and themes, although I did gave it full "carte blanche" to take the project - Its was a disaster.
+> We are going back to a much more lightweight as originally designed.
+>
+> > Hope it helps anyone, give inspiration!
 
 ---
 
