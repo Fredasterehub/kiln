@@ -28,7 +28,16 @@ const {
 
 // ── Mocked runtime: run the whole kernel body with scripted agents ──────────
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
+// Every real conductor launch carries an absolute plugin root; the harness
+// supplies one by default so object scenarios model the real launch envelope.
+// A scenario overrides it — to a relative or explicitly-undefined value — by
+// naming `plugin` in its own launch args; that is how the plugin-guard cases
+// force the missing/relative paths. String launches pass through untouched.
+const PLUGIN = '/abs/plugins/kiln'
 async function runKernel(kargs, script) {
+  const launch = (kargs && typeof kargs === 'object' && !Array.isArray(kargs))
+    ? { plugin: PLUGIN, ...kargs }
+    : kargs
   const calls = []
   const agentMock = async (prompt, opts = {}) => {
     calls.push({ label: opts.label, prompt })
@@ -38,7 +47,7 @@ async function runKernel(kargs, script) {
   }
   const body = src.replace('export const meta', 'const meta')
   const fn = new AsyncFunction('agent', 'pipeline', 'parallel', 'log', 'phase', 'args', 'budget', 'workflow', body)
-  const ret = await fn(agentMock, null, null, () => {}, () => {}, kargs, null, null)
+  const ret = await fn(agentMock, null, null, () => {}, () => {}, launch, null, null)
   // W-03: every kernel return carries a real beat — asserted on every scenario.
   assert.ok(typeof ret.beat === 'string' && ret.beat.length > 0,
     `W-03: empty beat on status "${ret.status}"`)
@@ -114,6 +123,9 @@ test('gate wiring: the transport exit table maps to closed outcomes, unknown fai
   assert.equal(gateOutcome(20), 'transport_failure')
   assert.equal(gateOutcome(1), 'transport_failure')
   assert.equal(gateOutcome(139), 'transport_failure')
+  // 126/127 name the gate tool itself as unreachable — not a transport failure.
+  assert.equal(gateOutcome(127), 'gate_unreachable', 'not found → the tool is unreachable')
+  assert.equal(gateOutcome(126), 'gate_unreachable', 'not executable → the tool is unreachable')
 })
 
 test('review loop: bounded at two repair passes, then blocked — never a third', async () => {
@@ -150,6 +162,8 @@ test('review loop: blocked, degradation, and transport failure short-circuit wit
   assert.equal((await reviewLoop(mk(11))).result, 'blocked')
   assert.equal((await reviewLoop(mk(21))).result, 'degraded')
   assert.equal((await reviewLoop(mk(20))).result, 'transport-failure')
+  assert.equal((await reviewLoop(mk(127))).result, 'gate-unreachable')
+  assert.equal((await reviewLoop(mk(126))).result, 'gate-unreachable')
   assert.equal(repaired, false)
 })
 
@@ -198,7 +212,7 @@ test('gate command: review and recheck route paths per the sealed transport cont
 // ── K-09/W-01/W-03: the mocked-runtime suite ────────────────────────────────
 
 test('runtime (W-01): string-encoded args parse and run — the walker case', async () => {
-  const { ret } = await runKernel(JSON.stringify({ stage: 'validate', projectDir: '/p' }), {
+  const { ret } = await runKernel(JSON.stringify({ stage: 'validate', projectDir: '/p', plugin: PLUGIN }), {
     ...VOICE,
     'law:preflight': GREEN,
     'stage:validate': { ok: true, beat: 'validating', pointers: [] },
@@ -213,6 +227,51 @@ test('runtime (W-01): malformed string args are a closed-fact error, never the b
   assert.equal(ret.status, 'bad-args')
   assert.notEqual(ret.status, 'needs-brainstorm', 'malformed input must not read as a bare launch')
   assert.equal(calls.length, 0, 'no agent runs on malformed args')
+})
+
+test('runtime: a missing plugin root halts honestly — no relative fallback, no work', async () => {
+  const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p', plugin: undefined }, {})
+  assert.equal(ret.status, 'bad-args')
+  assert.ok(ret.beat.includes('absolute'), 'the halt names the absolute-path contract')
+  assert.ok(ret.beat.includes('plugin root'), 'and names exactly what is wrong')
+  assert.equal(calls.length, 0, 'nothing runs without a plugin root — no silent relative fallback')
+})
+
+test('runtime: a relative plugin root halts the same way — a relative root is never guessed at', async () => {
+  const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p', plugin: 'plugins/kiln' }, {})
+  assert.equal(ret.status, 'bad-args')
+  assert.ok(ret.beat.includes('absolute'))
+  assert.equal(calls.length, 0)
+})
+
+test('runtime: an absolute plugin root proceeds — existing behavior preserved', async () => {
+  const { ret } = await runKernel({ stage: 'validate', projectDir: '/p', plugin: '/opt/kiln/plugins/kiln' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'stage:validate': { ok: true, beat: 'validating', pointers: [] },
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'ok', 'a valid absolute root runs exactly as before')
+})
+
+test('runtime: an unreachable gate tool halts distinctly — names the tool path, not the transport', async () => {
+  const { ret } = await runKernel({ stage: 'build', projectDir: '/p', plugin: '/opt/kiln/plugins/kiln' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['s1'] },
+    'ladder:fetch': LADDER,
+    'seal:check': { exit: 1 },
+    'slice:s1': { ok: true, beat: 'forging', pointers: [] },
+    'law:pre-seal': GREEN,
+    'degraded:check': { exit: 1 },
+    'gate:review': { exit: 127 },
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'gate-unreachable')
+  assert.ok(ret.beat.includes('/opt/kiln/plugins/kiln/scripts/kiln-review'), 'the halt names the gate tool at its path')
+  assert.ok(ret.beat.includes('unreachable'), 'and calls it unreachable')
+  assert.ok(!ret.beat.toLowerCase().includes('transport failed'), 'distinct from the transport-failure wording')
 })
 
 test('runtime (W-03): a genuine bare launch returns needs-brainstorm with a real beat', async () => {

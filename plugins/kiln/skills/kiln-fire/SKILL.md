@@ -16,9 +16,11 @@ Per stage: launch the kernel → receive its tiny return `{status, beat, pointer
 resume.
 
 Launch the kernel with the Workflow tool, always by path:
-`{scriptPath: "${CLAUDE_PLUGIN_ROOT}/workflows/kernel.js", args: {stage, projectDir, idea}}` —
+`{scriptPath: "${CLAUDE_PLUGIN_ROOT}/workflows/kernel.js", args: {stage, projectDir, idea, plugin: "${CLAUDE_PLUGIN_ROOT}"}}` —
 background, never inline; pass `args` as a literal JSON object, never a stringified blob (the
-kernel tolerates the string shape only as fallback). Never inspect the kernel or any plugin
+kernel tolerates the string shape only as fallback). `plugin` is the absolute plugin root the
+kernel reads its gate tool, cards, and voice from — required, since kernel legs run with cwd =
+the project dir. Never inspect the kernel or any plugin
 file before or after launch — no reads, no probes; the fixed scriptPath and the returned
 beats are the conductor's entire interface. Beats arrive in the return, drawn from
 `data/voice.json`; do not re-read lore files here.
@@ -40,7 +42,7 @@ On the `BRAINSTORM_COMPLETE` envelope (single-line JSON: `ledger`, `entries`, `e
 launch the one-shot vision compiler per `cards/brainstorm.md` — a fresh-context agent, the
 sealed ledger path its only input, writing `.kiln/docs/vision.md`, returning
 `{ok, beat, pointers}`; speak its beat verbatim; then launch the kernel
-`{stage: "law", projectDir, idea: <essence>}`. Launches and tiny returns only — no dialogue
+`{stage: "law", projectDir, idea: <essence>, plugin: "${CLAUDE_PLUGIN_ROOT}"}`. Launches and tiny returns only — no dialogue
 or ledger content ever reaches this window.
 
 ## The four hard stops — the only questions

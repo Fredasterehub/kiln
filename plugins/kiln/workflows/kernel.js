@@ -34,8 +34,11 @@ function nextStage(s) {
 }
 
 function gateOutcome(exit) {
-  return { 0: 'accept', 10: 'reject', 11: 'blocked', 21: 'codex_unavailable' }[exit]
-    ?? 'transport_failure' // 20 and anything unrecognized fail closed
+  // 126/127 are the shell codes for not-executable / not-found: the gate tool
+  // itself was unreachable — distinct from a transport failure (codex never
+  // reached, 20) or codex-unavailable (21). 20 and anything unrecognized fail closed.
+  return { 0: 'accept', 10: 'reject', 11: 'blocked', 21: 'codex_unavailable', 126: 'gate_unreachable', 127: 'gate_unreachable' }[exit]
+    ?? 'transport_failure'
 }
 
 // The repair/recheck loop over injected closures. gate(mode, pass) → exit int;
@@ -50,6 +53,7 @@ async function reviewLoop(deps, maxRepairs = 2) {
     if (o === 'accept') return { result: 'sealed', repairs }
     if (o === 'blocked') return { result: 'blocked', repairs }
     if (o === 'codex_unavailable') return { result: 'degraded', repairs }
+    if (o === 'gate_unreachable') return { result: 'gate-unreachable', repairs }
     if (o === 'transport_failure') return { result: 'transport-failure', repairs }
     if (repairs >= maxRepairs) return { result: 'blocked', repairs }
     repairs += 1
@@ -134,7 +138,14 @@ if (!parsed.ok) {
 const A = parsed.value
 
 const projectDir = A.projectDir
-const plugin = A.plugin ?? 'plugins/kiln'
+// The plugin root is a REQUIRED absolute path. Kernel legs run with cwd =
+// projectDir, so a relative root silently misreads the gate tool, the stage
+// cards, and voice.json from wherever the leg happens to stand. A missing or
+// relative root is a conductor contract violation, not a path to guess at.
+const plugin = A.plugin
+if (!plugin || plugin[0] !== '/') {
+  return { status: 'bad-args', beat: 'The conductor must pass the plugin root as an absolute path — the kernel resolves its gate tool, stage cards, and voice from it while running with cwd = the project dir.', pointers: {} }
+}
 const P = {
   state: '.kiln/STATE.md', law: '.kiln/LAW.md', gate: '.kiln/gate-review.json',
   request: '.kiln/review-request.json', delta: '.kiln/repair-delta.md',
@@ -324,6 +335,7 @@ for (const slice of list.ids) {
       beats.push(await voiceBeat('blocked', { passes: loop.repairs, ids: found.ids.join(', '), count: found.ids.length }, 'The gate held after ' + loop.repairs + ' repair passes — the ruling is yours.'))
       return stop('blocked', { stage, active_slice: slice, next_action: 'Operator ruling: gate blocked for slice ' + slice }, { gate: P.gate, finding_ids: found.ids, passes: loop.repairs })
     }
+    if (loop.result === 'gate-unreachable') return failStop('gate-unreachable', { stage, active_slice: slice, next_action: 'Rerun stage build after restoring the gate tool at ' + plugin + '/scripts/kiln-review' }, 'The gate tool at ' + plugin + '/scripts/kiln-review is unreachable — not found or not executable; codex was never reached, so no verdict was possible.', { gate: P.gate })
     if (loop.result === 'transport-failure') return failStop('transport-failure', { stage, active_slice: slice, next_action: 'Rerun stage build after fixing the transport' }, 'The review transport failed for slice ' + slice + ' — no verdict was published.', { gate: P.gate })
     if (loop.result === 'repair-failed') return failStop('repair-failed', { stage, active_slice: slice, next_action: 'Rerun stage build: repair pass failed for slice ' + slice }, 'The repair pass did not land for slice ' + slice + ' — the run holds.', { gate: P.gate })
     if (loop.result === 'degraded') {
