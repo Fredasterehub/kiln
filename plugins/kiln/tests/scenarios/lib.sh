@@ -14,9 +14,10 @@
 #   receipted settings-level alternative.
 # - Anchors match per-turn assistant beat events IN ORDER, never a
 #   whole-transcript regex (run3/run4 receipt: generic words in early prose).
-# - Driver meter (R2): per-turn `result` events carry usage; driver tokens per
-#   transition = input_tokens + output_tokens (cache reads excluded). The
-#   FIELD definition is a slice-8 ruling input; it lives only here.
+# - Driver meter (RATIFIED — heads ruling 2026-07-17, meter-ruling.sol.md +
+#   recheck CONFIRMED): driver tokens = input_tokens + output_tokens per `result`
+#   window, cache excluded; the product meter is kiln-meter.mjs over the session's
+#   own transcript; the runner recovers `metered` per R-6' (see T-02).
 set -u
 
 KILN_PLUGIN_DIR="${KILN_PLUGIN_DIR:-/DEV/kiln/plugins/kiln}"
@@ -72,23 +73,61 @@ assert_anchor_order() { # $1=transcript $2=workdir — annex N1..N7 in order
     [ -n "$cand" ] || { rm -f "$b"; fail "no single seal beat names every sealed slice (missing: $id)"; }
   done < "$wd/.kiln/seals.log"
   n6=$(printf '%s\n' "$cand" | head -1 | cut -d: -f1)
-  # T-02: N7's spoken integer must EQUAL the computed full-run driver total.
-  local n7line spoken total
-  n7line=$(grep -inE 'driver' "$b" | grep -E '[0-9]+' | head -1)
+  # T-02: N7 speaks the METERED driver total. `metered` is recovered from the
+  # kiln-meter tool_use↔tool_result the completion beat immediately follows
+  # (R-6'); the spoken integer is anchored AT/AFTER the driver keyword, never the
+  # line's first integer (run4: "Stage 4 of 4 … Driver spend" ⇒ the driver
+  # number, not 4). N7 = the run's final /driver/i beat.
+  local n7line spoken metered total_all total_but_last
+  n7line=$(grep -inE 'driver' "$b" | tail -1)
   n7=$(echo "$n7line" | cut -d: -f1)
-  spoken=$(echo "$n7line" | cut -d: -f2- | grep -oE '[0-9][0-9,]*' | head -1 | tr -d ',')
-  total=$(driver_total "$t")
+  spoken=$(echo "$n7line" | cut -d: -f2- | grep -ioE 'driver.*' | grep -oE '[0-9][0-9,]*' | head -1 | tr -d ',')
   rm -f "$b"
   for v in n1 n2 n3 n4 n5 n6 n7; do [ -n "${!v}" ] || fail "anchor $v absent"; done
-  [ "$spoken" = "$total" ] || fail "N7 speaks $spoken driver tokens; the transcript computes $total — the completion line must state the measured number"
+  metered=$(meter_reading "$t") || exit 1
+  total_all=$(driver_total "$t")
+  total_but_last=$(driver_total "$t" --drop-last)
+  [ "$spoken" = "$metered" ] || fail "N7 speaks $spoken driver tokens; the meter recovered $metered — the completion line must state the metered number"
+  [ "$total_but_last" -le "$metered" ] && [ "$metered" -le "$total_all" ] \
+    || fail "metered $metered outside the independent truth bound [$total_but_last, $total_all]"
   [ "$n1" -le "$n2" ] && [ "$n2" -le "$n3" ] && [ "$n3" -le "$n4" ] && \
   [ "$n4" -le "$n5" ] && [ "$n5" -le "$n7" ] || fail "stage anchors out of order ($n1,$n2,$n3,$n4,$n5,$n7)"
   [ "$n6" -ge "$n3" ] && [ "$n6" -le "$n7" ] || fail "seal anchor out of position ($n6)"
 }
 
-driver_total() { # $1=transcript — the computed full-run driver-token total
+driver_total() { # $1=transcript [--drop-last] — Σ driver tokens over result windows;
+  # --drop-last excludes the final window (the lower Σ of R-6's independent bound)
+  local drop=0; [ "${2:-}" = --drop-last ] && drop=1
   jq -r 'select(.type=="result") | ((.usage.input_tokens // 0) + (.usage.output_tokens // 0))' "$1" \
-    | awk '{ t+=$1 } END { print t+0 }'
+    | awk -v d="$drop" '{ a[NR]=$1 } END { n=NR-d; for (i=1;i<=n;i++) t+=a[i]; print t+0 }'
+}
+
+meter_reading() { # $1=transcript — `metered` per R-6': the FINAL successful kiln-meter
+  # tool_use, matched to its tool_result by id, immediately preceding the completion beat
+  local t="$1" mid rline nx last reading
+  mid=$(jq -r 'select(.type=="assistant") | .message.content[]?
+    | select(.type=="tool_use" and .name=="Bash"
+        and ((.input.command? // "") | test("\\bnode\\b[^\\n]*scripts/kiln-meter\\.mjs")))
+    | .id' "$t" | tail -1)
+  [ -n "$mid" ] || { echo "FAIL: T-02 no canonical kiln-meter invocation in capture — the completion line must state a metered number" >&2; return 1; }
+  rline=$(jq -r --arg id "$mid" 'select(.type=="user")
+    | select(any(.message.content[]?; .type=="tool_result" and .tool_use_id==$id and (.is_error!=true)))
+    | input_line_number' "$t" | head -1)
+  [ -n "$rline" ] || { echo "FAIL: T-02 kiln-meter tool_use $mid has no successful tool_result" >&2; return 1; }
+  nx=$(jq -r --argjson r "$rline" 'select(.type=="assistant")
+    | select(any(.message.content[]?; .type=="text" and (.text|test("driver";"i"))))
+    | input_line_number | select(. > $r)' "$t" | head -1)
+  last=$(jq -r 'select(.type=="assistant")
+    | select(any(.message.content[]?; .type=="text" and (.text|test("driver";"i"))))
+    | input_line_number' "$t" | tail -1)
+  [ -n "$nx" ] || { echo "FAIL: T-02 no completion beat follows the kiln-meter result" >&2; return 1; }
+  [ "$nx" = "$last" ] || { echo "FAIL: T-02 kiln-meter result does not immediately precede the completion beat (/driver/i beat intervenes at line $nx)" >&2; return 1; }
+  reading=$(jq -r --arg id "$mid" 'select(.type=="user") | .message.content[]?
+    | select(.type=="tool_result" and .tool_use_id==$id and (.is_error!=true)) | (.content // "" | tostring)' "$t")
+  printf '%s' "$reading" | grep -qzE '^[[:space:]]*[0-9]+[[:space:]]*$' \
+    || { echo "FAIL: T-02 kiln-meter tool_result is not a lone integer (stdout must carry exactly one integer per R-5')" >&2; return 1; }
+  reading=$(printf '%s' "$reading" | tr -cd '0-9')
+  echo "$reading"
 }
 
 driver_meter() { # $1=transcript — prints per-turn tokens, asserts ceilings + no upward trend

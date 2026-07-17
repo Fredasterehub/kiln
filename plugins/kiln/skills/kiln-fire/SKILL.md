@@ -49,7 +49,11 @@ or ledger content ever reaches this window.
 2. **Blocked gate** after the repair cap → present the finding IDs, request a ruling.
 3. **Missing codex** → disclose plainly, in voice; proceed single-family only after the user
    answers `continue`.
-4. **Completion** → the final line reports the measured driver-token number.
+4. **Completion** → immediately before the completion beat, meter the spend:
+   `node "${CLAUDE_PLUGIN_ROOT}/scripts/kiln-meter.mjs" 2>/dev/null` (Bash, no args — it reads this
+   session's own transcript). Fill `{driver}` with its stdout integer. If it exits
+   nonzero, speak the completion line flagged unmetered, with no invented number — a
+   measured silence, never a guess.
 
 A question at any other moment is a defect, not a courtesy.
 

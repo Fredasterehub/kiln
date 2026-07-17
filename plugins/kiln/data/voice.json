@@ -7,9 +7,9 @@
     "stages": "compose line + banner for their own transitions; prefill every semantic slot; pull one lore.json quote per Tier-1 banner, keyed to the event, never repeated within a run"
   },
   "slots": {
-    "kernel": ["{STAGE}", "{i}", "{n}", "{s}", "{t}", "{slice}", "{label}", "{driver}", "{passes}", "{count}", "{ids}", "{streak}", "{STREAK}"],
+    "kernel": ["{STAGE}", "{i}", "{n}", "{s}", "{t}", "{slice}", "{label}", "{passes}", "{count}", "{ids}", "{streak}", "{STREAK}"],
     "stage": ["{quote}", "{source}", "{progress}", "{title_row}", "{content}", "{prompt}", "{gerund}", "{what}", "{name}", "{alias}", "{line}", "{result}"],
-    "rule": "the kernel fills only closed machine facts and counters (stage/slice identity, indices, counts, seal labels, the driver counter, the streak arithmetic); every semantic slot arrives stage-prefilled; a beat carrying an unfilled semantic slot never reaches the driver"
+    "rule": "the kernel fills only closed machine facts and counters (stage/slice identity, indices, counts, seal labels, the streak arithmetic); {driver} alone is DRIVER-filled at completion from kiln-meter stdout — the kernel is transcript-blind and cannot measure the session's own token spend; every semantic slot arrives stage-prefilled; a beat carrying an unfilled semantic slot never reaches the driver"
   },
   "discipline": {
     "tense": "gerund while working, past tense when done",
