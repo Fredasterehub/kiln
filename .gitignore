@@ -62,7 +62,7 @@ state/
 /AGENTS.md
 
 # Dev artifacts and untrack-and-keep assets
-brainstorm/
+/brainstorm/
 run-data/
 # Dead v1 test harness — untracked, kept on disk as seed; the live v3 harness at tests/v3/ ships
 tests/*
