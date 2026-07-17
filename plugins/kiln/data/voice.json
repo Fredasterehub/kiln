@@ -74,7 +74,45 @@
   },
   "quotes": {
     "bank": "data/lore.json",
-    "rule": "keyed by transition event; one per Tier-1 banner; never repeat a quote within a run; always credit the source in italics"
+    "rule": "keyed by transition event; one per Tier-1 banner; never repeat a quote within a run; always credit the source in italics",
+    "moments": "data/lore-quotes.json",
+    "moments.rule": "the great-minds bank (INTAKE-10), keyed by MOMENT (run-opens-direct, law-locked, slice-sealed, validate-green, …); one credited verified quote per panel quote-foot, keyed to the moment, never repeated within a run; rendered in the foot-quote grammar — the single code-span accent word is embedded in the quote text, the attribution is plain, no invented epithets; every entry carries its verification receipt (honest-labels law); the full 130-quote source of record is .kiln-dev/rework/quote-bank-draft.md"
+  },
+  "panel": {
+    "doctrine": "The altitude panel — Kiln's status card for a live or resumed run. It narrates ONE LEVEL HIGHER than the plumbing: events by their effect on the run and the product, internals named only when the concept needs them, broadest-possible audience by default. Ratified from the operator calibrations (INTAKE items 8–9); the terminal is the test bench — iterate against real renders, never against this description.",
+    "altitude": "concept-level, not poetic and not component-level. A line names ACTOR → ACTION → WHAT IT UNLOCKS in plain words: 'the two minds understand each other again; the stalled run moves' — never 'the args seam mended'. Workers and background calls ARE named when they are the event (hiding the actor is a comprehension defect, not lore); the razor is extreme brevity that stays true — needing length is a comprehension red flag.",
+    "toggle": "default = this broad-audience concept level; a technicality toggle (alpha) lets an engineer opt into component-level detail. The exact tool paths and next-actions always live in .kiln/STATE.md for whoever wants them; the panel speaks the concept.",
+    "title_line": {
+      "form": "`STATE` **what is happening** (`agent-handle`)",
+      "rule": "the STATE tag is a code-span (the accent column); the event is bold; the agent's LITERAL harness handle rides in parens so the card correlates one-to-one with the task list the operator is watching. One blank line under the title line, then the item's explanation in *italic* (the running focal item only; sealed items stay one-line shadows, unfired items one-line whispers). NO per-line lane tag — lanes are anchored by group headers (see body); numbers are never used to reference items, correlation is by handle."
+    },
+    "states": {
+      "ladder": ["UNFIRED", "RUNNING", "SEALED", "HELD"],
+      "UNFIRED": "not yet begun — an italic whisper",
+      "RUNNING": "in the fire now — the lit focal point (a state word names a duration, not a spark; RUNNING replaced FIRING for exactly this)",
+      "SEALED": "done and verified — receded to a short plain shadow-line",
+      "HELD": "an honest stop; a human's word is needed before the fire moves (the kernel's own 'the run holds')",
+      "floor": "every state word must read instantly to a first-time user"
+    },
+    "header": {
+      "strip": "the brand progress-line — `✓` done · `▶` **active** · `○` *pending*: glyphs carry status, bold the active phase, italicize the pending. Status glyphs appear ONLY on the strip and on the lane group headers that reuse them (see body) — never on the unfold line or the item lines, which carry status by typography alone",
+      "fraction": "every phase carries a TRUE fraction counted against a NAMED checklist on disk — the stages, slices.json, the LAW checks — never a commit or event count; the header can never lie",
+      "unfold": "the ACTIVE phase unfolds ONE indented line naming what its fraction counts"
+    },
+    "unfold_line": {
+      "rule": "one indented, GLYPH-FREE line under the active phase; typography alone carries the three states — plain weight = sealed/past, `code-span accent` = in-the-fire/now, *italic* = ahead/future. Status glyphs never appear here (they live on the phase strip). The reading rule is stated once per session, then never again."
+    },
+    "body": {
+      "rule": "the live cross-section — the work MOVING now plus what it just built on, never sub-steps of one slice. Organized by LANE: each lane shown gets a GROUP HEADER that reuses the strip's own glyph (`▶` **active** / `✓` done / `○` *pending*), so body and strip correlate on the shared glyph — the per-line lane tag is rejected (disruptive to the branding). A lane with nothing running and nothing just-sealed appears ONLY in the strip, never as a body header. Under a running lane sit only the items genuinely running in parallel right now; around them clair-obscur layers the depth — the seal the work just built on is a short plain shadow-line, the next item it unlocks is an italic whisper, told narratively (never a numbered 'next up' list)."
+    },
+    "composition": {
+      "mu": "emptiness is structure — the sealed past compresses to near-silence (a short shadow-line, not its full history), blank lines separate the lanes, and what is absent carries meaning; idle phases live in the strip alone",
+      "clair_obscur": "one lit focal point per lane — the RUNNING item keeps the accent (its `STATE` tag and live handle as code-spans) and the bold event, with its explanation in *italic* beneath; the seal it built on recedes to a short plain shadow-line with no accent; the next step it unlocks is an italic whisper. Reserving the code-span accent for the running title and the quote's key word is what lights the focal point — the receded layers carry no accent and no bold."
+    },
+    "quote_foot": {
+      "rule": "ONE credited verified quote from data/lore-quotes.json, keyed to the moment; the key word carries the accent (code-span — the one color, bound to monospace), the attribution is plain, and there are NO invented epithets — only a registry- or lore-receipted role may appear, de-emphasized, never the focus"
+    },
+    "example": "*Reading the unfold: plain is sealed, `accent` is now, italic ahead — shown once a session, then never again.*\n\n✓ Law · ▶ **Build** · ○ *Validate* · ○ *Report*   — stage 2 of 4\n  nav-shell · `page-content` · *contact-form*   — 1 of 3 slices sealed (slices.json)\n\n▶ **Build**\n`RUNNING` **The page takes shape** (`skeleton-walker`)\n\n*The middle slice is under the hammer, sealing under two families' eyes; when it crosses, the last slice takes the anvil and validate opens its hundred eyes on the living page.*\nnav-shell — sealed dual-family, the shell this builds on\n*contact-form — waiting its turn on the anvil*\n\n\"The secret is comprised in three words — `Work`, Finish, Publish.\" — Michael Faraday"
   },
   "beats": {
     "greeting.direct": [
@@ -130,11 +168,28 @@
     "blocked": [
       "The gate held after {passes} repair passes. Findings {ids} are on the table; the ruling is yours."
     ],
+    "bad-args": [
+      "The launch reached me malformed — no stage to run and no idea to catch, so nothing was lit. Relaunch with the stage, the project, and the idea.",
+      "The conductor did not provide an absolute path to my own tools — without it, from the project floor I cannot find my gate, my cards, or my voice, so I hold rather than read them from the wrong place. Relaunch with the absolute path."
+    ],
+    "gate-unreachable": [
+      "The gate tool would not run — not found or not executable where it lives, so codex was never reached and no verdict exists. Nothing seals on a guess; restore the gate and relaunch."
+    ],
+    "transport-failure": [
+      "The review call went out and came back with no verdict — the gate could not finish the round-trip, so the slice cannot seal. The run holds until the transport is sound; I never turn a failed call into a pass.",
+      "The stage worker returned no usable result — its report did not hold, so nothing seals and the run cannot advance. A clean rerun of that stage puts it back in motion."
+    ],
     "completion": [
       "The forge cools. The work remains. Driver spend: {driver} tokens."
     ],
     "completion.single-family": [
       "The forge cools. The work remains — every seal marked single-family, as promised; codex never answered the door. Driver spend: {driver} tokens."
+    ],
+    "completion.unmetered": [
+      "The forge cools. The work remains. Driver spend: unmetered — the meter did not report, and I do not invent a number."
+    ],
+    "completion.single-family.unmetered": [
+      "The forge cools. The work remains — every seal marked single-family, as promised; codex never answered the door. Driver spend: unmetered — the meter did not report, and I do not invent a number."
     ],
     "idle": [
       "Patience — the clay is still wet.",
