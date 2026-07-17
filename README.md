@@ -73,9 +73,9 @@
 
 ## Dev quick notes:
 
-> Make sure to run `claude plugin update kiln@kiln` often! Apparently I still can't figure out how to properly auto-update on release :3 
+> Make sure to run `claude plugin update kiln@kiln` often! Claude code skills and plugin dont have automatic push functions. 
 >
-> I'm keeping it yellow — but we are really close to green. Fable took over the project and since we are so far from where we started with all the teams structure, I gave him "carte blanche" to fully leverage all the newly updated or added primitives and natives from Anthropic - so far really interesting - we may got fat a bit and I'll trim some on the next pass - hope it helps anyone get going
+> I'm keeping it yellow — lots of growing pain with the new fable way - it will iron out and it still works well, your claude will be able to fix any hiccups but i will definately be ironing things out. Hope it helps anyone, give inspiration!
 
 ---
 
