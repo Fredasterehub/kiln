@@ -17,8 +17,11 @@ resume.
 
 Launch the kernel with the Workflow tool, always by path:
 `{scriptPath: "${CLAUDE_PLUGIN_ROOT}/workflows/kernel.js", args: {stage, projectDir, idea}}` —
-background, never inline. Beats arrive in the return, drawn from `data/voice.json`; do not
-re-read lore files here.
+background, never inline; pass `args` as a literal JSON object, never a stringified blob (the
+kernel tolerates the string shape only as fallback). Never inspect the kernel or any plugin
+file before or after launch — no reads, no probes; the fixed scriptPath and the returned
+beats are the conductor's entire interface. Beats arrive in the return, drawn from
+`data/voice.json`; do not re-read lore files here.
 
 ## Invocation
 

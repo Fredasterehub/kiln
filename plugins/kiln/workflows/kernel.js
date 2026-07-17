@@ -9,6 +9,20 @@ const SPINE = ['law', 'build', 'validate', 'report']
 // brainstorm precedes the spine but lives in the Da Vinci teammate (conductor-side);
 // the kernel sees it only as the needs-brainstorm status below.
 
+// Parse-and-hop: the Workflow tool may deliver args as a JSON-encoded STRING
+// (platform behavior, v3 precedent). Envelope mechanics, not content — the one
+// sanctioned parse call in this file. Malformed input never silently takes
+// the bare path.
+function parseArgs(a) {
+  if (a === undefined || a === null) return { ok: true, value: {} }
+  if (typeof a === 'object' && !Array.isArray(a)) return { ok: true, value: a }
+  if (typeof a !== 'string') return { ok: false }
+  try {
+    const v = JSON.parse(a)
+    return v && typeof v === 'object' && !Array.isArray(v) ? { ok: true, value: v } : { ok: false }
+  } catch { return { ok: false } }
+}
+
 function resolveStage(a) {
   if (a && a.stage) return SPINE.includes(a.stage) ? a.stage : null
   return a && a.idea ? 'law' : 'needs-brainstorm'
@@ -110,8 +124,17 @@ const LAW_GUARD = 'if test -f .kiln/law/check.sh; then ' + LAW_CHECK + '; fi'
 // KERNEL_CORE_END
 // KERNEL_RUNTIME_BEGIN — evaluated as an async function body by the workflow runtime
 
-const projectDir = args.projectDir
-const plugin = args.plugin ?? 'plugins/kiln'
+// W-01: accept args in both shapes; malformed input is a closed-fact error,
+// never a silent bare path. No trusted paths exist here, so the beat is a
+// kernel-owned honest line (no sealed key covers transport errors).
+const parsed = parseArgs(args)
+if (!parsed.ok) {
+  return { status: 'bad-args', beat: 'Malformed launch args reached the kernel — relaunch with stage, projectDir, and idea.', pointers: {} }
+}
+const A = parsed.value
+
+const projectDir = A.projectDir
+const plugin = A.plugin ?? 'plugins/kiln'
 const P = {
   state: '.kiln/STATE.md', law: '.kiln/LAW.md', gate: '.kiln/gate-review.json',
   request: '.kiln/review-request.json', delta: '.kiln/repair-delta.md',
@@ -142,18 +165,38 @@ const idsFetch = (cmd, label, when) => agent(
 // arrive schema-forced — closed facts, never prose).
 const lawBeat = (cmd, label) => idsFetch(cmd, label, 'the owning slice ids the check printed on stdout when exit != 0, else []')
 
+// W-03: every kernel return carries a real beat. Sealed voice templates are
+// fetched as opaque strings (the kernel carries beats, never parses them) and
+// kernel-owned slots fill as ever; the fallback line fires only when the
+// voice file is unreachable.
+const voiceBeat = (key, facts, fallback) => idsFetch(
+  "node -p 'JSON.stringify(require(" + JSON.stringify(plugin + '/data/voice.json') + ').beats[' + JSON.stringify(key) + "])'",
+  'voice:' + key, 'the printed JSON array of beat templates, [] if exit != 0',
+).then(v => fillClosed(v.ids[0] ?? fallback, facts))
+
 const act = (prompt, label) => agent(prompt, { label, effort: 'medium', schema: STAGE_RESULT })
   .then(r => (r ?? { ok: false, beat: '', pointers: [] }))
 
-const stage = resolveStage(args)
-if (stage === 'needs-brainstorm') return { status: 'needs-brainstorm', beat: '', pointers: { state: P.state } }
-if (!stage) return { status: 'transport-failure', beat: '', pointers: { state: P.state } }
+const stage = resolveStage(A)
+if (stage === 'needs-brainstorm') {
+  const nb = projectDir
+    ? await voiceBeat('stage.brainstorm', {}, 'The anvil is empty — brainstorm first.')
+    : 'The anvil is empty — brainstorm first.'
+  return { status: 'needs-brainstorm', beat: nb, pointers: { state: P.state } }
+}
+if (!stage) {
+  return { status: 'bad-args', beat: 'Unknown stage in the launch args — the spine knows law, build, validate, report.', pointers: { state: P.state } }
+}
 
 const beats = []
 const routes = new Set([P.state, P.law, P.gate])
 const point = { state: P.state, next_stage: nextStage(stage) }
 const done = (status, extra) => ({ status, beat: beats.join('\n'), pointers: { ...point, routes: [...routes], ...extra } })
-const persistFail = (what) => ({ status: 'persist-failed', beat: '', pointers: { ...point, failed: what } })
+const persistFail = (what) => ({
+  status: 'persist-failed',
+  beat: 'The ledger would not take the write (' + what + ') — nothing advanced.',
+  pointers: { ...point, failed: what },
+})
 // Every boundary, hard-stop, and success status returns only after STATE
 // persistence is confirmed; a failed write surfaces explicitly.
 const stop = async (status, fields, extra) => {
@@ -162,9 +205,16 @@ const stop = async (status, fields, extra) => {
   return done(status, extra)
 }
 const nextAct = (s) => (s ? 'Relaunch the kernel workflow with stage=' + s : 'Run complete')
-const reopen = (owner, beatName) => stop('law-red', {
-  stage, active_slice: owner, next_action: 'Reopen slice ' + owner + ': LAW is red at ' + beatName,
-})
+const reopen = async (owner, beatName) => {
+  beats.push(await voiceBeat('reopen', { slice: owner }, 'Slice ' + owner + ' reopened — a law check went red at ' + beatName + '.'))
+  return stop('law-red', {
+    stage, active_slice: owner, next_action: 'Reopen slice ' + owner + ': LAW is red at ' + beatName,
+  })
+}
+const failStop = (status, fields, line, extra) => {
+  beats.push(line)
+  return stop(status, fields, extra)
+}
 
 const cardPrompt = (extra) => [
   'You are a Kiln stage agent. Read and follow the stage card at ' + P.card(stage) + ' exactly.',
@@ -180,8 +230,8 @@ if (pre.exit !== 0) return reopen(pre.ids[0] ?? 'unknown', 'resume')
 
 if (stage !== 'build') {
   const stageFacts = { STAGE: stage.toUpperCase(), i: SPINE.indexOf(stage) + 1, n: SPINE.length }
-  const r = await act(cardPrompt(args.idea ? 'Operator idea (verbatim): ' + args.idea : ''), 'stage:' + stage)
-  if (!r.ok) return stop('transport-failure', { stage, next_action: 'Rerun stage ' + stage })
+  const r = await act(cardPrompt(A.idea ? 'Operator idea (verbatim): ' + A.idea : ''), 'stage:' + stage)
+  if (!r.ok) return failStop('transport-failure', { stage, next_action: 'Rerun stage ' + stage }, 'The ' + stage + ' stage did not return sound work — the run holds.')
   for (const p of r.pointers) routes.add(p)
   // LAW rerun beat: stage end (report is a stage, so this also guards completion).
   const post = await lawBeat(LAW_GUARD, 'law:stage-end')
@@ -193,7 +243,7 @@ if (stage !== 'build') {
 // build: gate every slice per the locked review invariant.
 const list = await idsFetch('cat ' + P.slices, 'slices:fetch', 'the slice ids in the file parsed as a JSON array of strings, [] if exit != 0')
 if (list.exit !== 0 || list.ids.length === 0) {
-  return stop('transport-failure', { stage, next_action: 'Rerun stage law: no slice list at ' + P.slices })
+  return failStop('transport-failure', { stage, next_action: 'Rerun stage law: no slice list at ' + P.slices }, 'No slice list on the ledger — the law stage must run again.')
 }
 const ladder = await idsFetch(
   "node -p 'JSON.stringify(require(" + JSON.stringify(plugin + '/data/voice.json') + ").killstreak.ladder)'",
@@ -211,7 +261,7 @@ for (const slice of list.ids) {
     passes: 0, count: 0, ids: '',
   }
   const r = await act(cardPrompt('Build exactly slice ' + slice + '. Write ' + P.request + ' per the card before returning.'), 'slice:' + slice)
-  if (!r.ok) return stop('transport-failure', { stage, active_slice: slice, next_action: 'Rerun stage build' })
+  if (!r.ok) return failStop('transport-failure', { stage, active_slice: slice, next_action: 'Rerun stage build' }, 'Slice ' + slice + ' did not return sound work — the run holds.')
   for (const p of r.pointers) routes.add(p)
   beats.push(fillClosed(r.beat, facts))
   // LAW rerun beat: before any dependent seal. The check must exist by build.
@@ -247,13 +297,16 @@ for (const slice of list.ids) {
         "node -p 'JSON.stringify((require(\"./" + P.gate + "\").findings||[]).map(f=>String(f.id)))'",
         'findings:fetch', 'the printed JSON array of finding ids, [] if exit != 0',
       )
+      beats.push(await voiceBeat('blocked', { passes: loop.repairs, ids: found.ids.join(', '), count: found.ids.length }, 'The gate held after ' + loop.repairs + ' repair passes — the ruling is yours.'))
       return stop('blocked', { stage, active_slice: slice, next_action: 'Operator ruling: gate blocked for slice ' + slice }, { gate: P.gate, finding_ids: found.ids, passes: loop.repairs })
     }
-    if (loop.result === 'transport-failure') return stop('transport-failure', { stage, active_slice: slice, next_action: 'Rerun stage build after fixing the transport' }, { gate: P.gate })
-    if (loop.result === 'repair-failed') return stop('repair-failed', { stage, active_slice: slice, next_action: 'Rerun stage build: repair pass failed for slice ' + slice }, { gate: P.gate })
+    if (loop.result === 'transport-failure') return failStop('transport-failure', { stage, active_slice: slice, next_action: 'Rerun stage build after fixing the transport' }, 'The review transport failed for slice ' + slice + ' — no verdict was published.', { gate: P.gate })
+    if (loop.result === 'repair-failed') return failStop('repair-failed', { stage, active_slice: slice, next_action: 'Rerun stage build: repair pass failed for slice ' + slice }, 'The repair pass did not land for slice ' + slice + ' — the run holds.', { gate: P.gate })
     if (loop.result === 'degraded') {
+      const db = await voiceBeat('degradation', {}, 'Codex is not answering — answer continue to proceed single-family.')
       const m = await hands('touch ' + P.degraded, 'degraded:mark')
       if (m !== 0) return persistFail('degraded-mark')
+      beats.push(db)
       return stop('degraded', { stage, active_slice: slice, next_action: 'Acknowledge single-family degradation, then relaunch stage build' })
     }
     label = 'dual'
@@ -267,4 +320,9 @@ for (const slice of list.ids) {
 // LAW rerun beat: stage end.
 const post = await lawBeat(LAW_CHECK, 'law:stage-end')
 if (post.exit !== 0) return reopen(post.ids[0] ?? 'unknown', 'stage end')
+// W-03 residue: every slice already sealed → the loop pushed nothing; the
+// sealed resume template carries the beat (the ledger holds, we move on).
+if (beats.length === 0) {
+  beats.push(await voiceBeat('resume', {}, 'The ledger holds every seal — nothing left on the anvil; moving on.'))
+}
 return stop('ok', { stage, active_slice: 'none', next_action: nextAct(nextStage(stage)) })

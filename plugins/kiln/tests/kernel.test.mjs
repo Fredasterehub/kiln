@@ -19,10 +19,10 @@ const coreSrc = srcLines.slice(
   srcLines.findIndex(l => l.includes('KERNEL_CORE_END')),
 ).join('\n')
 const core = new Function(coreSrc + `
-  return { SPINE, resolveStage, nextStage, gateOutcome, reviewLoop,
+  return { SPINE, parseArgs, resolveStage, nextStage, gateOutcome, reviewLoop,
            fillClosed, streakIndex, stateDoc, atomicWriteCmd, gateCmd, LAW_CHECK, LAW_GUARD }`)()
 const {
-  SPINE, resolveStage, nextStage, gateOutcome, reviewLoop,
+  SPINE, parseArgs, resolveStage, nextStage, gateOutcome, reviewLoop,
   fillClosed, streakIndex, stateDoc, atomicWriteCmd, gateCmd,
 } = core
 
@@ -39,6 +39,9 @@ async function runKernel(kargs, script) {
   const body = src.replace('export const meta', 'const meta')
   const fn = new AsyncFunction('agent', 'pipeline', 'parallel', 'log', 'phase', 'args', 'budget', 'workflow', body)
   const ret = await fn(agentMock, null, null, () => {}, () => {}, kargs, null, null)
+  // W-03: every kernel return carries a real beat — asserted on every scenario.
+  assert.ok(typeof ret.beat === 'string' && ret.beat.length > 0,
+    `W-03: empty beat on status "${ret.status}"`)
   return { ret, calls }
 }
 const lastStateDoc = (calls) => {
@@ -47,6 +50,13 @@ const lastStateDoc = (calls) => {
 }
 const GREEN = { exit: 0, ids: [] }
 const LADDER = { exit: 0, ids: ['first-blood', 'spark-of-life', 'signal-fire'] }
+const VOICE = {
+  'voice:resume': { exit: 0, ids: ['The fire never went out. Kiln again — the ledger holds the next step, and I am already taking it.'] },
+  'voice:reopen': { exit: 0, ids: ['Slice {slice} reopened — a law check went red. A seal is evidence-bound, not sacred.'] },
+  'voice:blocked': { exit: 0, ids: ['The gate held after {passes} repair passes. Findings {ids} are on the table; the ruling is yours.'] },
+  'voice:degradation': { exit: 0, ids: ['Codex is not answering the door. Say `continue` and I proceed.'] },
+  'voice:stage.brainstorm': { exit: 0, ids: ['Da Vinci takes the window. Speak freely — he sees what you meant, not just what you said.'] },
+}
 
 test('workflow body: parses as an async function body with the runtime globals', () => {
   const body = src.replace('export const meta', 'const meta')
@@ -63,10 +73,27 @@ test('content-blind: no filesystem, clock, randomness, or content parsing in the
   for (const banned of [
     'node:fs', 'readFile', 'writeFile', "require(", 'child_process',
     'Date.now', 'Math.random', 'new Date',
-    'JSON.parse', '.match(', '.exec(', 'marked', 'frontmatter',
+    '.match(', '.exec(', 'marked', 'frontmatter',
   ]) {
     assert.ok(!code.includes(banned), `kernel code must not contain "${banned}"`)
   }
+  // W-01: exactly ONE JSON.parse — the sanctioned parse-and-hop args adapter
+  // (envelope mechanics, not content), and it lives in the pure core.
+  assert.equal(code.split('JSON.parse').length - 1, 1, 'exactly one JSON.parse (the args adapter)')
+  assert.ok(coreSrc.includes('Parse-and-hop'), 'the adapter is the marked parse-and-hop region')
+})
+
+test('parse-and-hop: args accepted in both shapes; malformed input never takes the bare path', () => {
+  assert.deepEqual(parseArgs({ stage: 'law' }), { ok: true, value: { stage: 'law' } })
+  assert.deepEqual(parseArgs(undefined), { ok: true, value: {} })
+  assert.deepEqual(parseArgs(null), { ok: true, value: {} })
+  const hop = parseArgs(JSON.stringify({ stage: 'build', projectDir: '/p', idea: 'x' }))
+  assert.equal(hop.ok, true)
+  assert.deepEqual(hop.value, { stage: 'build', projectDir: '/p', idea: 'x' })
+  assert.equal(parseArgs('not json').ok, false)
+  assert.equal(parseArgs('"a bare string"').ok, false)
+  assert.equal(parseArgs('[1,2]').ok, false)
+  assert.equal(parseArgs(42).ok, false)
 })
 
 test('topology: spine order, direct mode skips brainstorm, resume passthrough', () => {
@@ -168,14 +195,40 @@ test('gate command: review and recheck route paths per the sealed transport cont
   assert.equal(gateCmd('recheck', p), 'plugins/kiln/scripts/kiln-review recheck /p .kiln/review-request.json .kiln/gate-review.json .kiln/repair-delta.md .kiln/gate-review.json')
 })
 
-// ── K-09: the mocked-runtime suite — LAW beats, owner reopening, persistence ─
+// ── K-09/W-01/W-03: the mocked-runtime suite ────────────────────────────────
+
+test('runtime (W-01): string-encoded args parse and run — the walker case', async () => {
+  const { ret } = await runKernel(JSON.stringify({ stage: 'validate', projectDir: '/p' }), {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'stage:validate': { ok: true, beat: 'validating', pointers: [] },
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'ok', 'stringified args behave exactly like object args')
+})
+
+test('runtime (W-01): malformed string args are a closed-fact error, never the bare path', async () => {
+  const { ret, calls } = await runKernel('this is not json', {})
+  assert.equal(ret.status, 'bad-args')
+  assert.notEqual(ret.status, 'needs-brainstorm', 'malformed input must not read as a bare launch')
+  assert.equal(calls.length, 0, 'no agent runs on malformed args')
+})
+
+test('runtime (W-03): a genuine bare launch returns needs-brainstorm with a real beat', async () => {
+  const { ret } = await runKernel({ projectDir: '/p' }, { ...VOICE })
+  assert.equal(ret.status, 'needs-brainstorm')
+  assert.ok(ret.beat.includes('Da Vinci'), 'the sealed brainstorm template arrives')
+})
 
 test('runtime: preflight red at resume reopens the owning slice from the check output', async () => {
   const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+    ...VOICE,
     'law:preflight': { exit: 1, ids: ['s7'] },
     'state:write': GREEN,
   })
   assert.equal(ret.status, 'law-red')
+  assert.ok(ret.beat.includes('Slice s7 reopened'), 'the sealed reopen template arrives filled')
   const doc = lastStateDoc(calls)
   assert.ok(doc.includes('active_slice: s7'), 'owner persisted as active_slice')
   assert.ok(doc.includes('Reopen slice s7'), 'next_action names the owner')
@@ -183,6 +236,7 @@ test('runtime: preflight red at resume reopens the owning slice from the check o
 
 test('runtime: pre-seal red reopens the slice in play when the check names no owner', async () => {
   const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
     'law:preflight': GREEN,
     'slices:fetch': { exit: 0, ids: ['s1'] },
     'ladder:fetch': LADDER,
@@ -197,6 +251,7 @@ test('runtime: pre-seal red reopens the slice in play when the check names no ow
 
 test('runtime: stage-end red carries the owner the check printed', async () => {
   const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+    ...VOICE,
     'law:preflight': GREEN,
     'stage:validate': { ok: true, beat: 'validating', pointers: [] },
     'law:stage-end': { exit: 1, ids: ['s2'] },
@@ -208,6 +263,7 @@ test('runtime: stage-end red carries the owner the check printed', async () => {
 
 test('runtime: a failed STATE write surfaces as persist-failed, never a success status', async () => {
   const { ret } = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+    ...VOICE,
     'law:preflight': GREEN,
     'stage:validate': { ok: true, beat: 'validating', pointers: [] },
     'law:stage-end': GREEN,
@@ -219,6 +275,7 @@ test('runtime: a failed STATE write surfaces as persist-failed, never a success 
 
 test('runtime: a failed seal append halts before the seal beat or STATE advance', async () => {
   const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
     'law:preflight': GREEN,
     'slices:fetch': { exit: 0, ids: ['s1'] },
     'ladder:fetch': LADDER,
@@ -237,6 +294,7 @@ test('runtime: a failed seal append halts before the seal beat or STATE advance'
 
 test('runtime: degradation is sticky only when the mark lands; a failed mark surfaces', async () => {
   const base = {
+    ...VOICE,
     'law:preflight': GREEN,
     'slices:fetch': { exit: 0, ids: ['s1'] },
     'ladder:fetch': LADDER,
@@ -251,10 +309,12 @@ test('runtime: degradation is sticky only when the mark lands; a failed mark sur
   assert.equal(bad.ret.pointers.failed, 'degraded-mark')
   const good = await runKernel({ stage: 'build', projectDir: '/p' }, { ...base, 'degraded:mark': { exit: 0 }, 'state:write': GREEN })
   assert.equal(good.ret.status, 'degraded')
+  assert.ok(good.ret.beat.includes('Codex is not answering'), 'the sealed degradation template arrives')
 })
 
 test('runtime: stage pointers merge into STATE and the return (never discarded)', async () => {
   const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+    ...VOICE,
     'law:preflight': GREEN,
     'stage:validate': { ok: true, beat: 'validating', pointers: ['.kiln/validate-report.md'] },
     'law:stage-end': GREEN,
@@ -267,6 +327,7 @@ test('runtime: stage pointers merge into STATE and the return (never discarded)'
 
 test('runtime: a blocked gate stops with the finding ids as closed facts', async () => {
   const { ret } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
     'law:preflight': GREEN,
     'slices:fetch': { exit: 0, ids: ['s1'] },
     'ladder:fetch': LADDER,
@@ -281,11 +342,28 @@ test('runtime: a blocked gate stops with the finding ids as closed facts', async
   assert.equal(ret.status, 'blocked')
   assert.deepEqual(ret.pointers.finding_ids, ['F1', 'F3'], 'the ruling arrives with its finding ids')
   assert.equal(ret.pointers.gate, '.kiln/gate-review.json')
+  assert.ok(ret.beat.includes('Findings F1, F3'), 'the sealed blocked template arrives filled')
+})
+
+test('runtime (W-03 residue): an all-sealed build relaunch still speaks', async () => {
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['s1', 's2'] },
+    'ladder:fetch': LADDER,
+    'seal:check': { exit: 0 },
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'ok')
+  assert.ok(ret.beat.includes('the ledger holds the next step'), 'the sealed resume template arrives')
+  assert.equal(calls.filter(c => c.label && c.label.startsWith('slice:')).length, 0, 'no slice work re-runs')
 })
 
 test('runtime (K-10): no beat leaves the kernel with an unfilled slot', async () => {
   const gateExits = [10, 0]
   const { ret } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
     'law:preflight': GREEN,
     'slices:fetch': { exit: 0, ids: ['s1'] },
     'ladder:fetch': LADDER,
