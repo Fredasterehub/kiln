@@ -25,10 +25,11 @@ KILN_REVIEW="$KILN_PLUGIN_DIR/scripts/kiln-review"
 FIXTURES="$KILN_PLUGIN_DIR/tests/fixtures"
 RUN_TIMEOUT="${RUN_TIMEOUT:-3600}"
 
-# PROVISIONAL ceilings (BEHAVIOR §run) — recalibrated ONCE at slice 8 from the
-# skeleton baseline, locked thereafter. Recalibration = editing these two lines.
-DRIVER_TRANSITION_CEILING=1500
-DRIVER_RUN_CEILING=25000
+# Ceilings LOCKED (BEHAVIOR §run) — the one-time slice-8 recalibration is CONSUMED
+# (2026-07-17; run4 baseline, rule = max window ×1.25 / run ×1.5, rounded up to 500;
+# Sol CONFIRMED: ceiling-derivation.sol.md). These two lines never change again.
+DRIVER_TRANSITION_CEILING=3000
+DRIVER_RUN_CEILING=8000
 
 S1_INVOCATION='/kiln:kiln-fire hello-forge: a static one-page site titled "Hello, Forge" with a nav linking to three in-page sections — About, Data, Contact. Plain HTML and CSS, no build tooling.'
 
