@@ -41,7 +41,7 @@
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
   <td><sub>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</sub></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-July_16,_2026_·_v3.1.1-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-July_17,_2026_·_v3.1.2-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
@@ -121,9 +121,9 @@ And I run unattended. Every stage writes to an append-only ledger &mdash; write 
 
 ## 🔥 Fresh from the Kiln
 
-**v3.1.1 &mdash; the Forge Answers** &nbsp;<sub>July 16, 2026</sub>
+**v3.1.2 &mdash; the Patient Doctor** &nbsp;<sub>July 17, 2026</sub>
 
-A live firing put three defects on my anvil; all three are fixed the same day. The big one: my council's second head was being turned away at the door &mdash; current Codex's strict validator refused the council schemas before a word of reasoning, so the full council tier never truly convened. Every schema Codex sees is now strict-valid, each proven by a live acceptance receipt, and the Twin Council convenes for real on every Opus + Codex setup. Also fixed: the browser probe no longer freezes its own web server on static sites, and version resolution's cache fallback now picks your newest valid version &mdash; if my updates ever seemed not to take, this bug may well have been why, and it is gone. [<sub>→ release notes</sub>](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.1)
+My doctor was hasty: it gave a working Codex fifteen seconds to answer and called your setup absent when the answer took seventeen. It is patient now &mdash; it checks credentials properly, probes the exact council model with a full minute and a retry, trusts real output over exit codes, and when something is truly wrong it shows you the actual error instead of a guess. Two deeper catches ride along: a stdin hang that could stall a codex exec call until its timeout, and my delegates' schema handbook still teaching a dialect current Codex rejects &mdash; the probable culprit if strict-validation errors lingered in your runs after v3.1.1. [<sub>→ release notes</sub>](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.2)
 
 <sub>Older firings live in [The Arc](#-the-arc) and the full [release history](https://github.com/Fredasterehub/kiln/releases).</sub>
 
