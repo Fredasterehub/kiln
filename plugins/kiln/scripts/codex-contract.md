@@ -19,9 +19,19 @@ The script constructs the packet rather than forwarding the request. It retains 
 
 ## Recheck
 
-A recheck is another fresh ephemeral invocation with the same embedded instructions and caller-held model. The script reads the persisted review ID, LAW hash, and original finding IDs from the prior gate, adds the repair delta, and instructs the reviewer to decide only those IDs. An out-of-scope or newly invented finding ID fails transport validation. Session identity is never used. Actor resume-by-ID is intentionally outside this fresh-review seam and may be added later without changing the gate schema.
+A recheck is another fresh ephemeral invocation with the same embedded instructions and caller-held model. The script reads the persisted review ID, LAW hash, and original finding IDs from the prior gate, adds the repair delta, and instructs the reviewer to decide only those IDs. An out-of-scope or newly invented finding ID fails transport validation. Session identity is never used.
 
 After JSON parsing, the script enforces: `accept` requires exactly empty findings and blockers; `changes_required` requires nonempty findings and empty blockers; `blocked` requires nonempty blockers. It also checks exact review-ID/LAW-hash continuity, unique nonempty finding fields, and schema-exact keys.
+
+## Actor repair resume
+
+Within one task, a repair turn may resume the same actor session to preserve intent and reduce context cost. Capture `thread_id` from the initial actor call’s first `thread.started` event emitted by `codex exec --json`, then target it explicitly with `codex exec resume <thread_id>`. Never use `--last`. Initial actor work, work for another task, and every reviewer invocation use fresh sessions; reviewers remain fresh and ephemeral.
+
+A resumable actor chain must omit `--ephemeral`, because ephemeral sessions have no rollout and cannot be resumed. The task-scoped thread ID must not be reused across tasks.
+
+Because `codex exec resume` rejects `-C/--cd` and `-s/--sandbox`, the transport sets the working root by changing directory before invocation and sets the sandbox with `-c sandbox_mode=<mode>`. Other supported resume flags, including `--model`, `--json`, output options, and configuration overrides, may be supplied normally.
+
+Session resume is a cache; persisted task artifacts remain the truth. If the thread ID is unavailable or resume fails, the transport makes a fresh actor call with the task packet re-primed from those artifacts.
 
 ## Machine facts
 
