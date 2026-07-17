@@ -97,3 +97,17 @@ test('drift-pin: the canonical newest-valid pipeline appears in ALL FOUR resolut
     assert.match(body, PIPELINE, `${name} carries the canonical selection pipeline`)
   }
 })
+
+test('drift-pin: both prose sites carry the canonical codex preflight (credential arm + pinned-model 60s functional arm + output validation + retry, no sub-30s budget)', () => {
+  const sites = {
+    'commands/kiln-doctor.md': readFileSync(join(PLUGIN, 'commands', 'kiln-doctor.md'), 'utf8'),
+    'skills/kiln-fire/SKILL.md': readFileSync(join(PLUGIN, 'skills', 'kiln-fire', 'SKILL.md'), 'utf8'),
+  }
+  for (const [name, body] of Object.entries(sites)) {
+    assert.match(body, /codex login status/, `${name} carries the credential arm`)
+    assert.match(body, /timeout 60 codex exec --skip-git-repo-check --ignore-user-config -m gpt-5\.6-sol/, `${name} carries the pinned-model 60s functional arm`)
+    assert.match(body, /KILN-PREFLIGHT-OK/, `${name} carries the output-validation token`)
+    assert.match(body, /OK on retry/, `${name} reports retry recovery distinctly`)
+    assert.doesNotMatch(body, /timeout [12]?\d codex/, `${name} carries no sub-30s codex budget`)
+  }
+})

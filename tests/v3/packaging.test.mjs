@@ -54,8 +54,14 @@ test('doctor: version floor require >= 2.1.198, recommend latest', () => {
 })
 
 test('doctor: the capability probes are present verbatim', () => {
-  assert.match(doctor, /codex exec --skip-git-repo-check "echo ok"/) // codex functional preflight (fresh dirs never false-FAIL)
-  assert.match(doctor, /timeout 15 codex exec/)     // the 15s bound
+  assert.match(doctor, /codex login status/)                                   // credential-presence arm
+  assert.match(doctor, /not logged in/)                                        // re-auth advice gated on the explicit fingerprint
+  assert.match(doctor, /timeout 60 codex exec --skip-git-repo-check --ignore-user-config -m gpt-5\.6-sol/) // pinned-model functional arm, isolated config, 60s budget
+  assert.match(doctor, /KILN-PREFLIGHT-OK/)                                    // output validation token — the -o file, never exit-0 alone
+  assert.match(doctor, /-o "\$pf"/)                                            // last-message file channel (prompt echo makes stream-grep unsafe)
+  assert.match(doctor, /OK on retry/)                                          // retry recovery reported distinctly
+  assert.match(doctor, /functional pipeline unavailable/)                      // the honest three-state failure label
+  assert.doesNotMatch(doctor, /timeout [12]?\d codex/)                         // no sub-30s codex budget, ever
   assert.match(doctor, /@playwright\/mcp/)          // playwright arm 1
   assert.match(doctor, /npx --no-install playwright --version/) // playwright arm 2
   assert.match(doctor, /ToolSearch/)                // web probe

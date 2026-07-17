@@ -39,13 +39,28 @@ grep -h disableWorkflows ~/.claude/settings.json ~/.claude/settings.local.json 2
 echo "── runtime deps (a MISSING(FAIL) blocks) ──"
 for b in bash git node; do command -v "$b" >/dev/null && echo "OK $b $($b --version 2>&1 | head -1)" || echo "MISSING(FAIL) $b"; done
 for b in python3 jq; do command -v "$b" >/dev/null && echo "OK $b" || echo "MISSING(WARN) $b"; done
-echo "── CAPABILITY codex (the T2→T3 discriminator: binary on PATH + a functional 15s preflight) ──"
+echo "── CAPABILITY codex (the T2→T3 discriminator: binary on PATH + credentials + a pinned-model functional preflight — 60s budget, one retry) ──"
 if command -v codex >/dev/null; then
   echo "codex binary: $(codex --version 2>&1 | head -1)"
-  if timeout 15 codex exec --skip-git-repo-check "echo ok" >/dev/null 2>&1; then
-    echo "codex preflight: OK (functional → T3 Codex build path available)"
+  if ! login_out=$(codex login status 2>&1); then
+    if printf '%s' "$login_out" | grep -qi 'not logged in'; then
+      echo "codex preflight: NOT AUTHENTICATED (codex login status: not logged in → run 'codex login' and re-check)"
+    else
+      echo "codex preflight: login-status FAILED (the actual error, not a guess — credential state unknown):"
+      printf '%s\n' "$login_out" | tail -3 | sed 's/^/  /'
+    fi
   else
-    echo "codex preflight: FAILED (present but non-functional → treated as ABSENT; Sonnet build path)"
+    pf=$(mktemp); perr=$(mktemp)
+    probe() { : >"$pf"; timeout 60 codex exec --skip-git-repo-check --ignore-user-config -m gpt-5.6-sol -o "$pf" "Reply with exactly: KILN-PREFLIGHT-OK" >/dev/null 2>"$perr" && grep -q 'KILN-PREFLIGHT-OK' "$pf"; }
+    if probe; then
+      echo "codex preflight: OK (credentials present + a clean pinned gpt-5.6-sol turn with the expected output → T3 Codex build path available)"
+    elif probe; then
+      echo "codex preflight: OK on retry (first attempt failed transiently; the identical pinned-model check passed → T3 Codex build path available)"
+    else
+      echo "codex preflight: FAILED twice (60s budget each) — installed, credentials present, functional pipeline unavailable → Sonnet build path"
+      echo "codex preflight error tail (the actual error, not a guess):"
+      tail -5 "$perr" | sed 's/^/  /'
+    fi
   fi
   CODEX_V=$(codex --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
   if [ -n "$CODEX_V" ] && printf '0.143.0\n%s\n' "$CODEX_V" | sort -V -C 2>/dev/null; then
