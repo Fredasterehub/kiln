@@ -100,8 +100,23 @@ Done when: `npm test src/auth/session` exits 0 and tsc reports no errors.
 
 1. **Pass the JSON schema via `--output-schema`, never in prose.** Remove every schema description from the prompt body. Test for the MCP silent-ignore bug (codex #15451) — confirm the output actually validates against the schema before trusting it.
 2. **`reasoning` field FIRST in the schema.** Put a `reasoning` (string) field before any verdict/score/decision field so token order forces reason-before-commit. Never place the answer before the reasoning ("broken chain of thought"). **Transport cross-note (do not confuse with Kiln's payload-first doctrine):** this reasoning-FIRST rule is specific to codex `--output-schema` and is the OPPOSITE of Kiln's Claude `StructuredOutput` ordering, which is payload-FIRST (v3.0.1) — a long leading reasoning string truncated the Claude tool call before the payload landed and burned the 5-attempt retry cap. Different transports, different ordering: codex streams schema-constrained JSON where reason-before-commit token order helps and truncation is not the failure mode; Claude's `StructuredOutput` tool call risks truncation, so the payload leads and reasoning is last + optional + capped. Apply reasoning-first ONLY to codex `--output-schema` legs; never carry it back to a Claude schema.
-3. **Keep schemas flat.** Mark only truly-required fields required; avoid deep nesting and premature enums.
-4. **Do not over-engineer.** Skip two-pass free-form→reformat, CRANE-style constrained decoding, and self-reflection-under-constraint loops — those target small open-weight models; marginal-to-zero gain on GPT-5.6.
+3. **Author STRICT-mode schemas — codex 0.144.x validates the schema ITSELF and rejects a loose one (400 invalid_json_schema) before any reasoning happens.** Every schema node carries an explicit `type`; the root is `type: "object"`. Every object node carries `additionalProperties: false`, and its `required` array lists EXACTLY its property names — every property appears, none extra, no dangling names. Optionality is NEVER expressed by omission from `required`: an optional value stays required and takes a nullable type union (`"type": ["string", "null"]`). Keyword allowlist: `type`, `properties`, `required`, `additionalProperties`, `items`, `enum`, `description`, `maxLength`, `maxItems`, `minItems` — nothing else (no `minLength`, no `pattern`, no `format`, no `oneOf`/`anyOf`/`$ref`). Keep shapes flat — avoid deep nesting. Strict rejects: bare/annotation-only nodes, missing types, a non-object root, missing or non-false `additionalProperties`, properties omitted from `required`, dangling `required` names, any non-allowlisted keyword. (Kiln's descriptor machinery — stripNullPaths / jsonPaths — applies ONLY to Kiln-serialized council schemas, never to a schema you author freehand.) The canonical strict-safe verdict shape, live-ACCEPTED on codex-cli 0.144.1 / gpt-5.6-sol:
+
+   ```json
+   {
+     "type": "object",
+     "additionalProperties": false,
+     "required": ["reasoning", "verdict", "notes"],
+     "properties": {
+       "reasoning": { "type": "string" },
+       "verdict": { "type": "string", "enum": ["PASS", "FAIL"] },
+       "notes": { "type": ["string", "null"] }
+     }
+   }
+   ```
+
+4. **Close stdin or feed the prompt through it.** `codex exec` appends stdin to the prompt when stdin is a non-TTY pipe and WAITS FOR EOF — an open stdin hangs the call until your timeout kills it. Pipe the prompt via heredoc/stdin-redirect, or append `</dev/null` when the prompt rides argv.
+5. **Do not over-engineer.** Skip two-pass free-form→reformat, CRANE-style constrained decoding, and self-reflection-under-constraint loops — those target small open-weight models; marginal-to-zero gain on GPT-5.6.
 
 ## Durable conventions
 

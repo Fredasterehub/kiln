@@ -59,6 +59,7 @@ test('doctor: the capability probes are present verbatim', () => {
   assert.match(doctor, /timeout 60 codex exec --skip-git-repo-check --ignore-user-config -m gpt-5\.6-sol/) // pinned-model functional arm, isolated config, 60s budget
   assert.match(doctor, /KILN-PREFLIGHT-OK/)                                    // output validation token — the -o file, never exit-0 alone
   assert.match(doctor, /-o "\$pf"/)                                            // last-message file channel (prompt echo makes stream-grep unsafe)
+  assert.match(doctor, /KILN-PREFLIGHT-OK" <\/dev\/null/)                      // stdin closed — an open non-TTY stdin hangs codex exec (A/B receipt)
   assert.match(doctor, /OK on retry/)                                          // retry recovery reported distinctly
   assert.match(doctor, /functional pipeline unavailable/)                      // the honest three-state failure label
   assert.doesNotMatch(doctor, /timeout [12]?\d codex/)                         // no sub-30s codex budget, ever

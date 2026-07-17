@@ -42,7 +42,7 @@ for b in python3 jq; do command -v "$b" >/dev/null && echo "OK $b" || echo "MISS
 echo "── CAPABILITY codex (the T2→T3 discriminator: binary on PATH + credentials + a pinned-model functional preflight — 60s budget, one retry) ──"
 if command -v codex >/dev/null; then
   echo "codex binary: $(codex --version 2>&1 | head -1)"
-  if ! login_out=$(codex login status 2>&1); then
+  if ! login_out=$(codex login status 2>&1 </dev/null); then
     if printf '%s' "$login_out" | grep -qi 'not logged in'; then
       echo "codex preflight: NOT AUTHENTICATED (codex login status: not logged in → run 'codex login' and re-check)"
     else
@@ -51,7 +51,7 @@ if command -v codex >/dev/null; then
     fi
   else
     pf=$(mktemp); perr=$(mktemp)
-    probe() { : >"$pf"; timeout 60 codex exec --skip-git-repo-check --ignore-user-config -m gpt-5.6-sol -o "$pf" "Reply with exactly: KILN-PREFLIGHT-OK" >/dev/null 2>"$perr" && grep -q 'KILN-PREFLIGHT-OK' "$pf"; }
+    probe() { : >"$pf"; timeout 60 codex exec --skip-git-repo-check --ignore-user-config -m gpt-5.6-sol -o "$pf" "Reply with exactly: KILN-PREFLIGHT-OK" </dev/null >/dev/null 2>"$perr" && grep -q 'KILN-PREFLIGHT-OK' "$pf"; }
     if probe; then
       echo "codex preflight: OK (credentials present + a clean pinned gpt-5.6-sol turn with the expected output → T3 Codex build path available)"
     elif probe; then

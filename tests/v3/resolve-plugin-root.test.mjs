@@ -107,7 +107,19 @@ test('drift-pin: both prose sites carry the canonical codex preflight (credentia
     assert.match(body, /codex login status/, `${name} carries the credential arm`)
     assert.match(body, /timeout 60 codex exec --skip-git-repo-check --ignore-user-config -m gpt-5\.6-sol/, `${name} carries the pinned-model 60s functional arm`)
     assert.match(body, /KILN-PREFLIGHT-OK/, `${name} carries the output-validation token`)
+    assert.match(body, /KILN-PREFLIGHT-OK" <\/dev\/null/, `${name} closes stdin on the functional arm`)
     assert.match(body, /OK on retry/, `${name} reports retry recovery distinctly`)
     assert.doesNotMatch(body, /timeout [12]?\d codex/, `${name} carries no sub-30s codex budget`)
   }
+})
+
+test('drift-pin: the codex prompt guide teaches the strict schema tongue (recursive rules + exact-required + stdin discipline)', () => {
+  const guide = readFileSync(join(PLUGIN, 'references', 'codex-prompt-guide.md'), 'utf8')
+  assert.match(guide, /Every schema node carries an explicit `type`; the root is `type: "object"`/, 'explicit-type rule (R1) present')
+  assert.match(guide, /Every object node carries `additionalProperties: false`/, 'recursive additionalProperties rule (R2) present')
+  assert.match(guide, /`required` array lists EXACTLY its property names — every property appears, none extra, no dangling names/, 'exact bidirectional required rule (R3) present')
+  assert.match(guide, /"type": \["string", "null"\]/, 'nullable-union optionality idiom present')
+  assert.match(guide, /`maxItems`, `minItems` — nothing else/, 'keyword allowlist (R5) closed')
+  assert.match(guide, /<\/dev\/null/, 'stdin discipline present')
+  assert.doesNotMatch(guide, /only truly-required fields required/i, 'the pre-strict requiredness sentence never returns')
 })
