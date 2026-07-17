@@ -205,6 +205,15 @@ const stop = async (status, fields, extra) => {
   return done(status, extra)
 }
 const nextAct = (s) => (s ? 'Relaunch the kernel workflow with stage=' + s : 'Run complete')
+// W-04: rerun-reopen binds to SEALED checks (locked BEHAVIOR). A red owned by
+// an unsealed slice is expected pre-build state — the criteria describe the
+// finished artifact. Only a red whose owner is present in seals.log reopens.
+const firstSealed = async (ids) => {
+  for (const id of ids) {
+    if (await hands('grep -q "^' + id + ' " ' + P.seals + ' 2>/dev/null', 'seal:check') === 0) return id
+  }
+  return null
+}
 const reopen = async (owner, beatName) => {
   beats.push(await voiceBeat('reopen', { slice: owner }, 'Slice ' + owner + ' reopened — a law check went red at ' + beatName + '.'))
   return stop('law-red', {
@@ -224,9 +233,13 @@ const cardPrompt = (extra) => [
   'Return {ok, beat, pointers} — pointers lists every artifact path you wrote.',
 ].filter(Boolean).join('\n')
 
-// LAW rerun beat: at every kernel invocation start (resume), if the check exists.
+// LAW rerun beat: at every kernel invocation start (resume), if the check
+// exists. Red reopens only a sealed owner; otherwise the run proceeds.
 const pre = await lawBeat(LAW_GUARD, 'law:preflight')
-if (pre.exit !== 0) return reopen(pre.ids[0] ?? 'unknown', 'resume')
+if (pre.exit !== 0) {
+  const owner = await firstSealed(pre.ids)
+  if (owner) return reopen(owner, 'resume')
+}
 
 if (stage !== 'build') {
   const stageFacts = { STAGE: stage.toUpperCase(), i: SPINE.indexOf(stage) + 1, n: SPINE.length }
@@ -235,7 +248,10 @@ if (stage !== 'build') {
   for (const p of r.pointers) routes.add(p)
   // LAW rerun beat: stage end (report is a stage, so this also guards completion).
   const post = await lawBeat(LAW_GUARD, 'law:stage-end')
-  if (post.exit !== 0) return reopen(post.ids[0] ?? 'unknown', 'stage end')
+  if (post.exit !== 0) {
+    const owner = await firstSealed(post.ids)
+    if (owner) return reopen(owner, 'stage end')
+  }
   beats.push(fillClosed(r.beat, stageFacts))
   return stop(stage === 'report' ? 'done' : 'ok', { stage, next_action: nextAct(nextStage(stage)) })
 }
@@ -265,8 +281,16 @@ for (const slice of list.ids) {
   for (const p of r.pointers) routes.add(p)
   beats.push(fillClosed(r.beat, facts))
   // LAW rerun beat: before any dependent seal. The check must exist by build.
+  // Boundary ruling (Sol, W-04): ANY pre-seal red blocks the current seal
+  // unless a sealed owner is reopened — full LAW green at every slice boundary.
   const guard = await lawBeat(LAW_CHECK, 'law:pre-seal')
-  if (guard.exit !== 0) return reopen(guard.ids[0] ?? slice, 'pre-seal')
+  if (guard.exit !== 0) {
+    const owner = await firstSealed(guard.ids)
+    if (owner) return reopen(owner, 'pre-seal')
+    return failStop('law-red',
+      { stage, active_slice: slice, next_action: 'Rerun stage build: slice ' + slice + ' LAW is red before seal' },
+      'The law is red at the seal of slice ' + slice + ' — no seal without full green.')
+  }
 
   const wasDegraded = await hands('test -f ' + P.degraded, 'degraded:check') === 0
   let label = 'single-family'
@@ -317,9 +341,12 @@ for (const slice of list.ids) {
   const w = await hands(atomicWriteCmd(stateDoc({ stage, active_slice: slice, next_action: nextAct('build'), pointers: [...routes] })), 'state:write')
   if (w !== 0) return persistFail('state-write')
 }
-// LAW rerun beat: stage end.
+// LAW rerun beat: stage end. Red reopens only a sealed owner.
 const post = await lawBeat(LAW_CHECK, 'law:stage-end')
-if (post.exit !== 0) return reopen(post.ids[0] ?? 'unknown', 'stage end')
+if (post.exit !== 0) {
+  const owner = await firstSealed(post.ids)
+  if (owner) return reopen(owner, 'stage end')
+}
 // W-03 residue: every slice already sealed → the loop pushed nothing; the
 // sealed resume template carries the beat (the ledger holds, we move on).
 if (beats.length === 0) {

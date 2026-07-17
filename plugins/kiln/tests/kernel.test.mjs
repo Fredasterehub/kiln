@@ -221,10 +221,11 @@ test('runtime (W-03): a genuine bare launch returns needs-brainstorm with a real
   assert.ok(ret.beat.includes('Da Vinci'), 'the sealed brainstorm template arrives')
 })
 
-test('runtime: preflight red at resume reopens the owning slice from the check output', async () => {
+test('runtime (W-04): preflight red on a SEALED owner reopens it, owner persisted', async () => {
   const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p' }, {
     ...VOICE,
     'law:preflight': { exit: 1, ids: ['s7'] },
+    'seal:check': { exit: 0 },
     'state:write': GREEN,
   })
   assert.equal(ret.status, 'law-red')
@@ -234,27 +235,57 @@ test('runtime: preflight red at resume reopens the owning slice from the check o
   assert.ok(doc.includes('Reopen slice s7'), 'next_action names the owner')
 })
 
-test('runtime: pre-seal red reopens the slice in play when the check names no owner', async () => {
+test('runtime (W-04): preflight red on an UNSEALED slice is pre-build state — build dispatches', async () => {
   const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': { exit: 1, ids: ['s1'] },
+    'seal:check': { exit: 1 },
+    'slices:fetch': { exit: 0, ids: ['s1'] },
+    'ladder:fetch': LADDER,
+    'slice:s1': { ok: true, beat: 'forging', pointers: [] },
+    'law:pre-seal': GREEN,
+    'law:stage-end': GREEN,
+    'degraded:check': { exit: 1 },
+    'gate:review': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'ok', 'the expected pre-build red never reopens')
+  assert.ok(calls.some(c => c.label === 'slice:s1'), 'the active slice build dispatches')
+  assert.ok(ret.beat.includes('sealed — dual · slice s1'), 'the slice seals normally')
+})
+
+test('runtime: ANY pre-seal red blocks the seal unless a sealed owner reopens', async () => {
+  const base = (preSeal) => ({
     ...VOICE,
     'law:preflight': GREEN,
     'slices:fetch': { exit: 0, ids: ['s1'] },
     'ladder:fetch': LADDER,
     'seal:check': { exit: 1 },
     'slice:s1': { ok: true, beat: '{streak}. Slice `{slice}` takes the anvil.', pointers: ['.kiln/build-notes.md'] },
-    'law:pre-seal': { exit: 1, ids: [] },
+    'law:pre-seal': preSeal,
     'state:write': GREEN,
   })
-  assert.equal(ret.status, 'law-red')
-  assert.ok(lastStateDoc(calls).includes('active_slice: s1'))
+  // Unowned red — fail-closed.
+  const unowned = await runKernel({ stage: 'build', projectDir: '/p' }, base({ exit: 1, ids: [] }))
+  assert.equal(unowned.ret.status, 'law-red')
+  assert.ok(lastStateDoc(unowned.calls).includes('active_slice: s1'))
+  assert.ok(!unowned.ret.beat.includes('sealed —'), 'no seal under an unowned red')
+  // Red owned by ANOTHER unsealed slice — blocks all the same (full LAW green
+  // at every slice boundary, per Sol's boundary ruling).
+  const otherOwned = await runKernel({ stage: 'build', projectDir: '/p' }, base({ exit: 1, ids: ['s2'] }))
+  assert.equal(otherOwned.ret.status, 'law-red')
+  assert.ok(lastStateDoc(otherOwned.calls).includes('active_slice: s1'))
+  assert.ok(!otherOwned.ret.beat.includes('sealed —'), 'no seal under any red at the boundary')
 })
 
-test('runtime: stage-end red carries the owner the check printed', async () => {
+test('runtime: stage-end red on a sealed owner reopens it', async () => {
   const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p' }, {
     ...VOICE,
     'law:preflight': GREEN,
     'stage:validate': { ok: true, beat: 'validating', pointers: [] },
     'law:stage-end': { exit: 1, ids: ['s2'] },
+    'seal:check': { exit: 0 },
     'state:write': GREEN,
   })
   assert.equal(ret.status, 'law-red')
