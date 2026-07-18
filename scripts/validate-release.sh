@@ -31,34 +31,24 @@ if [[ "$PLUGIN_VER" != "$MKT_VER" || "$PLUGIN_VER" != "$MKT_PLUGIN_VER" ]]; then
 fi
 pass "Version consistent across manifests ($PLUGIN_VER)"
 
-# (c) Every workflow parses as JavaScript and matches workflows-src/ (the bundler is the only writer).
+# (c) Every workflow parses as JavaScript.
 for js in plugins/kiln/workflows/*.js; do
   node --check "$js" 2>/dev/null || fail "node --check failed: $js"
 done
-node scripts/bundle-workflows.mjs --check >/dev/null 2>&1 || fail "Generated workflows out of sync — run 'node scripts/bundle-workflows.mjs'"
-pass "Workflows pass node --check and match workflows-src"
+pass "Workflows pass node --check"
 
-# (d) The six data files and the two state schemas exist and parse as JSON.
-for name in agents.json brainstorming-techniques.json duo-pool.json elicitation-methods.json lore.json spinner-verbs.json; do
+# (d) The three data files exist and parse as JSON.
+for name in lore-quotes.json tiers.json voice.json; do
   f="plugins/kiln/data/$name"
   [[ -f "$f" ]] || fail "Missing data file: $f"
   jq empty "$f" 2>/dev/null || fail "Invalid JSON: $f"
 done
-for f in plugins/kiln/schemas/event.schema.json plugins/kiln/schemas/state.schema.json plugins/kiln/schemas/law.schema.json; do
-  [[ -f "$f" ]] || fail "Missing schema file: $f"
-  jq empty "$f" 2>/dev/null || fail "Invalid JSON: $f"
-done
-pass "Data files and schemas present and valid"
+pass "Data files present and valid"
 
-# (e) Sanctioned-hooks invariant: the plugin ships EXACTLY the design-approved micro hook set —
-# hooks.json + the two command scripts. Anything more or less is hook creep or a broken surface;
-# both fail the floor.
-HOOKS="$(git ls-files plugins/kiln/hooks/ | sort)"
-EXPECTED_HOOKS="plugins/kiln/hooks/hooks.json
-plugins/kiln/hooks/notify.sh
-plugins/kiln/hooks/session-title.sh"
-[[ "$HOOKS" == "$EXPECTED_HOOKS" ]] || fail "Sanctioned-hooks invariant broken — expected exactly the sanctioned micro set, got:"$'\n'"$HOOKS"
-pass "Sanctioned-hooks invariant holds (the sanctioned micro set, exactly)"
+# (e) Zero-hooks invariant: hooks are parked until dogfood proves need (CONSTITUTION).
+HOOKS="$(git ls-files plugins/kiln/hooks/)"
+[[ -z "$HOOKS" ]] || fail "Hook creep — hooks are parked until dogfood proves need (CONSTITUTION), got:"$'\n'"$HOOKS"
+pass "Zero-hooks invariant holds"
 
 # (f) No tracked file references the deleted v1 skill paths. git grep searches
 # tracked files only; exclude this script, which contains the patterns literally.

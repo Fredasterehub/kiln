@@ -10,6 +10,8 @@
   },
   "repository": "https://github.com/Fredasterehub/kiln",
   "license": "MIT",
+  "commands": ["./commands/kiln-fire.md"],
+  "agents": ["./agents/da-vinci.md"],
   "keywords": [
     "pipeline",
     "software-creation",

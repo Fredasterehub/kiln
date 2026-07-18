@@ -71,3 +71,4 @@ tests/*
 docs/v7.html
 docs/kiln-pipeline.png
 docs/kiln-planning.png
+/walk.pid
