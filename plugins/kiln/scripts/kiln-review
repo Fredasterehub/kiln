@@ -18,6 +18,7 @@ const REJECT = 10
 const BLOCKED = 11
 const TRANSPORT_FAILURE = 20
 const CODEX_UNAVAILABLE = 21
+const EFFORTS = ['low', 'medium', 'high', 'xhigh']
 const LAW_HASH = /^[0-9a-f]{64}$/
 const BROKEN_CODEX = /(?:unknown|unrecognized|unexpected|invalid).*(?:argument|option|subcommand)|(?:argument|option).*(?:not found|not recognized)/i
 const SCHEMA = join(__dirname, 'review-schema.json')
@@ -60,6 +61,10 @@ function requestFrom(file) {
   if (typeof raw.reviewer_model !== 'string' || raw.reviewer_model.trim() === '') {
     stop('transport_failure', 'request reviewer_model must be a nonempty string', TRANSPORT_FAILURE)
   }
+  const reviewerEffort = raw.reviewer_effort === undefined ? 'high' : raw.reviewer_effort
+  if (!EFFORTS.includes(reviewerEffort)) {
+    stop('reviewer_effort_invalid', `request reviewer_effort must be one of ${EFFORTS.join('|')} (absent defaults to high); ultra and unknown values are rejected`, TRANSPORT_FAILURE)
+  }
   if (typeof raw.criteria !== 'string' || raw.criteria.trim() === '') {
     stop('transport_failure', 'request criteria must be a nonempty string', TRANSPORT_FAILURE)
   }
@@ -68,6 +73,7 @@ function requestFrom(file) {
   }
   return {
     reviewerModel: raw.reviewer_model,
+    reviewerEffort,
     lawHash: raw.law_hash,
     evidence: {
       criteria: raw.criteria,
@@ -153,7 +159,7 @@ function invoke(repo, request, packet, outputFile, allowedFindingIds) {
     '--skip-git-repo-check',
     '-C', repo,
     '--model', request.reviewerModel,
-    '-c', 'model_reasoning_effort="high"',
+    '-c', `model_reasoning_effort="${request.reviewerEffort}"`,
     '--output-schema', SCHEMA,
     '-o', temporary,
     '-',

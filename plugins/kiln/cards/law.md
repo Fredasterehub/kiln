@@ -30,7 +30,10 @@ red reopens the slice; never leave a criterion red at a slice boundary.
    `sha256sum .kiln/LAW.md | cut -d' ' -f1` (raw `sha256sum` output carries the filename and
    fails the request parser). After this write, LAW.md is locked — any edit is a reopen
    event, never silent.
-4. `.kiln/slices.json` — a JSON array of the slice-id strings, in build order.
+4. `.kiln/slices.json` — a JSON array in build order, one object per slice:
+   `{ "id": "<kebab-id>", "surface": "ui" | "logic" | "mixed" }`. `surface` is a machine
+   fact the kernel routes the builder on: `ui` for markup/style/browser-facing work, `logic`
+   for computation/data/CLI work, `mixed` when the slice spans both. Name it honestly per slice.
 5. `.kiln/decisions.md` — append the founding ADR: `## ADR-1 — <title>`, one paragraph:
    what was pinned and why. Numbered, append-only, superseded entries are never deleted.
 

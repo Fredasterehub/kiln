@@ -22,6 +22,7 @@ set -u
 
 KILN_PLUGIN_DIR="${KILN_PLUGIN_DIR:-/DEV/kiln/plugins/kiln}"
 KILN_REVIEW="$KILN_PLUGIN_DIR/scripts/kiln-review"
+TIERS="$KILN_PLUGIN_DIR/data/tiers.json"
 FIXTURES="$KILN_PLUGIN_DIR/tests/fixtures"
 RUN_TIMEOUT="${RUN_TIMEOUT:-3600}"
 
@@ -178,11 +179,15 @@ assert_s1_artifacts() { # $1=workdir — annex expected artifacts + A1..A4
   assert_state_fields "$wd/.kiln/STATE.md"
 }
 
-gate_request() { # $1=workdir — writes request.json with the annex-locked criteria
-  local wd="$1" h
+gate_request() { # $1=workdir — writes request.json; reviewer model+effort come from tiers.json
+  local wd="$1" h alias model effort
   h=$(sha256sum "$wd/LAW.md" | cut -d' ' -f1)
-  jq -n --arg h "$h" '{
-    reviewer_model: "gpt-5.6-sol",
+  alias=$(jq -r '.roles["reviewer-gate"].alias' "$TIERS")
+  model=$(jq -r --arg a "$alias" '.resolver[$a]' "$TIERS")
+  effort=$(jq -r '.roles["reviewer-gate"].effort' "$TIERS")
+  jq -n --arg h "$h" --arg model "$model" --arg effort "$effort" '{
+    reviewer_model: $model,
+    reviewer_effort: $effort,
     law_hash: $h,
     criteria: "median(xs): odd length → the middle value; even length → the mean of the two middle values.",
     paths: ["slice/median.mjs", "slice/median.test.mjs", "LAW.md"],

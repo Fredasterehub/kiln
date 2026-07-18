@@ -125,6 +125,71 @@ const LAW_CHECK = 'bash .kiln/law/check.sh'
 // red check stays nonzero.
 const LAW_GUARD = 'if test -f .kiln/law/check.sh; then ' + LAW_CHECK + '; fi'
 
+// Tier resolution — pure over the validated tier config (data, never content).
+// The tier file is the ONE place models and efforts are named; the kernel carries
+// tier KEYS and resolves them here. validateTiers is the fail-closed BOOT gate: it
+// requires every consumer role key and all three surface routes, so a gap halts at
+// boot with the named fact and never as a later throw. resolveTier is family-aware
+// — a Claude alias is platform-resolved and passes UNCHANGED (the resolver is never
+// consulted for it), a GPT alias MUST map to a concrete id through the resolver
+// (codex -m rejects a bare alias), and inherit omits the model so the leg takes the
+// dispatching session model. routeBuilder maps a validated surface to its builder
+// role. No compiled model or effort value lives in the kernel — every value flows
+// from the file at run time.
+const TIER_EFFORTS = ['low', 'medium', 'high', 'xhigh']
+const TIER_ROLES = ['driver', 'kernel-leg', 'stage-card', 'builder-ui', 'builder-logic', 'reviewer-gate', 'brainstorm-facilitator', 'haiku-migration', 'dev-sol']
+const TIER_ROUTES = ['ui', 'logic', 'mixed']
+function validateTiers(c) {
+  if (!c || typeof c !== 'object') return false
+  if (c.doctrine !== true) return false
+  if (!c.resolver || typeof c.resolver !== 'object') return false
+  if (!c.surface_routing || typeof c.surface_routing !== 'object') return false
+  if (!c.roles || typeof c.roles !== 'object') return false
+  for (const k of Object.keys(c.resolver)) {
+    if (typeof c.resolver[k] !== 'string' || c.resolver[k].length === 0) return false
+  }
+  // every consumer role must be present and well-formed; a GPT alias must resolve
+  for (const key of TIER_ROLES) {
+    const r = c.roles[key]
+    if (!r || typeof r !== 'object') return false
+    if (r.family !== 'claude' && r.family !== 'gpt') return false
+    if (typeof r.alias !== 'string' || r.alias.length === 0) return false
+    if (!TIER_EFFORTS.includes(r.effort)) return false
+    if (r.family === 'gpt' && (r.alias === 'inherit' || !Object.prototype.hasOwnProperty.call(c.resolver, r.alias))) return false
+  }
+  // all three surface routes must be present and point at a defined role
+  for (const route of TIER_ROUTES) {
+    const target = c.surface_routing[route]
+    if (typeof target !== 'string' || !Object.prototype.hasOwnProperty.call(c.roles, target)) return false
+  }
+  return true
+}
+function resolveTier(c, key) {
+  const r = c.roles[key]
+  const opts = { effort: r.effort }
+  if (r.alias === 'inherit') return opts
+  opts.model = r.family === 'gpt' ? c.resolver[r.alias] : r.alias
+  return opts
+}
+function routeBuilder(c, surface) {
+  return resolveTier(c, c.surface_routing[surface])
+}
+// A slices.json entry is either a legacy bare id string (surface defaults to mixed)
+// or the object form encoded as "obj|<id>|<surface>"; an object must carry a nonempty
+// id and a surface in ui|logic|mixed, else it is invalid and the run halts before any
+// builder dispatch. Only the legacy bare form defaults to mixed.
+function parseSliceEntry(entry) {
+  const s = String(entry ?? '')
+  if (s.slice(0, 4) === 'obj|') {
+    const rest = s.slice(4)
+    const bar = rest.indexOf('|')
+    const id = bar < 0 ? rest : rest.slice(0, bar)
+    const surface = bar < 0 ? '' : rest.slice(bar + 1)
+    return { id, surface, valid: id.length > 0 && TIER_ROUTES.indexOf(surface) >= 0 }
+  }
+  return { id: s, surface: 'mixed', valid: s.length > 0 }
+}
+
 // KERNEL_CORE_END
 // KERNEL_RUNTIME_BEGIN — evaluated as an async function body by the workflow runtime
 
@@ -159,17 +224,46 @@ const STAGE_RESULT = {
   properties: { ok: { type: 'boolean' }, beat: { type: 'string' }, pointers: { type: 'array', items: { type: 'string' } } },
   required: ['ok', 'beat', 'pointers'],
 }
+const TIERS = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    exit: { type: 'integer' }, doctrine: { type: 'boolean' },
+    resolver: { type: 'object' }, surface_routing: { type: 'object' }, roles: { type: 'object' },
+  },
+  required: ['exit'],
+}
 
-// Mechanical hands: run one command, report the exit code. Nothing else.
+// Boot (T-02): read the tier file once via an agent leg — the same node -p read
+// surface as the voice beats below, never direct fs (the kernel stays content-
+// blind). The boot leg omits model and effort: no tier value can exist before the
+// file is read. The projection carries machine facts only — doctrine reduced to a
+// presence flag, each role to family/alias/effort — and the pure core validates
+// the whole shape. A missing, unreadable, or malformed tier file fails the run
+// closed with the named configuration fact, the same class as the exit-20 halt.
+const tiersCmd =
+  "node -p 'JSON.stringify(((t)=>({doctrine:t.doctrine!==undefined,resolver:t.resolver,surface_routing:t.surface_routing,roles:Object.fromEntries(Object.keys(t.roles).map((k)=>[k,{family:t.roles[k].family,alias:t.roles[k].alias,effort:t.roles[k].effort}]))}))(require(" +
+  JSON.stringify(plugin + '/data/tiers.json') + ")))'"
+const tiers = await agent(
+  'Run exactly this in ' + projectDir + '. Report {exit, doctrine, resolver, surface_routing, roles}: exit = the exit code; the other four = the fields of the printed JSON object when exit is 0, omitted when exit is nonzero:\n' + tiersCmd,
+  { label: 'tiers:boot', schema: TIERS },
+).then(r => (r ?? { exit: 20 }))
+if (tiers.exit !== 0 || !validateTiers(tiers)) {
+  return { status: 'tiers-config-invalid', beat: 'The tier file at ' + plugin + '/data/tiers.json is missing or malformed — Kiln will not run on unknown model and effort tiers. Restore data/tiers.json to the sealed shape.', pointers: {} }
+}
+const tier = (key) => resolveTier(tiers, key)
+
+// Mechanical hands: run one command, report the exit code. Nothing else. The
+// kernel legs (hands/idsFetch) are model-backed, so they carry the kernel-leg
+// tier (Q1: a model-backed role defaults HIGH); the values come from the file.
 const hands = (cmd, label) => agent(
   'Run exactly this in ' + projectDir + ' and report only the exit code as {exit}:\n' + cmd,
-  { label, effort: 'low', schema: EXIT },
+  { label, ...tier('kernel-leg'), schema: EXIT },
 ).then(r => (r ? r.exit : 20))
 
 // Closed-facts fetch: exit code plus a schema-forced string list.
 const idsFetch = (cmd, label, when) => agent(
   'Run exactly this in ' + projectDir + '. Report {exit, ids}: exit = the exit code; ids = ' + when + ':\n' + cmd,
-  { label, effort: 'low', schema: IDS },
+  { label, ...tier('kernel-leg'), schema: IDS },
 ).then(r => (r ?? { exit: 20, ids: [] }))
 
 // LAW beats report the owning slice ids on red (check.sh prints them; they
@@ -185,8 +279,12 @@ const voiceBeat = (key, facts, fallback) => idsFetch(
   'voice:' + key, 'the printed JSON array of beat templates, [] if exit != 0',
 ).then(v => fillClosed(v.ids[0] ?? fallback, facts))
 
-const act = (prompt, label) => agent(prompt, { label, effort: 'medium', schema: STAGE_RESULT })
+// Stage-card and per-slice builder legs share the {ok, beat, pointers} schema; the
+// caller supplies the resolved tier opts. Stage cards (law/validate/report) run on
+// stage-card; the per-slice builder runs on its surface-routed builder role (T-03).
+const actWith = (prompt, label, opts) => agent(prompt, { label, ...opts, schema: STAGE_RESULT })
   .then(r => (r ?? { ok: false, beat: '', pointers: [] }))
+const act = (prompt, label) => actWith(prompt, label, tier('stage-card'))
 
 const stage = resolveStage(A)
 if (stage === 'needs-brainstorm') {
@@ -267,27 +365,48 @@ if (stage !== 'build') {
   return stop(stage === 'report' ? 'done' : 'ok', { stage, next_action: nextAct(nextStage(stage)) })
 }
 
-// build: gate every slice per the locked review invariant.
-const list = await idsFetch('cat ' + P.slices, 'slices:fetch', 'the slice ids in the file parsed as a JSON array of strings, [] if exit != 0')
+// build: gate every slice per the locked review invariant. Each slice carries a
+// closed surface fact; the fetch emits a legacy bare id string untouched, and the
+// object form as "obj|<id>|<surface>", so parseSliceEntry can tell the two apart
+// and validate the object form (bare strings alone default to mixed).
+const list = await idsFetch(
+  "node -p 'JSON.stringify(require(\"./" + P.slices + "\").map(s=>typeof s===\"string\"?s:\"obj|\"+(s&&s.id||\"\")+\"|\"+(s&&s.surface||\"\")))'",
+  'slices:fetch', 'the printed JSON array of slice descriptor strings (a bare id, or "obj|<id>|<surface>"), [] if exit != 0',
+)
 if (list.exit !== 0 || list.ids.length === 0) {
   return failStop('transport-failure', { stage, next_action: 'Rerun stage law: no slice list at ' + P.slices }, 'No slice list on the ledger — the law stage must run again.')
+}
+const slices = list.ids.map(parseSliceEntry)
+// A malformed slice descriptor (object form missing an id or naming an unknown
+// surface) halts BEFORE any builder dispatch — the law stage must author it right.
+const badSlice = slices.find(x => !x.valid)
+if (badSlice) {
+  return failStop('slices-invalid',
+    { stage, active_slice: badSlice.id || 'none', next_action: 'Rerun stage law: a slice descriptor in ' + P.slices + ' is malformed' },
+    'A slice descriptor is malformed — every slice needs an id and a surface of ui, logic, or mixed. The law stage must run again.')
 }
 const ladder = await idsFetch(
   "node -p 'JSON.stringify(require(" + JSON.stringify(plugin + '/data/voice.json') + ").killstreak.ladder)'",
   'ladder:fetch', 'the printed JSON array of streak names, [] if exit != 0',
 )
 let corrections = 0
-for (const slice of list.ids) {
-  const ordinal = list.ids.indexOf(slice) + 1
+for (const entry of slices) {
+  const slice = entry.id
+  const ordinal = slices.indexOf(entry) + 1
   const sealed = await hands('grep -q "^' + slice + ' " ' + P.seals + ' 2>/dev/null', 'seal:check')
   if (sealed === 0) continue
+  // T-03: the kernel surface-routes the builder leg BEFORE agent() — ui/mixed to
+  // builder-ui, logic to builder-logic — and the build and repair of this slice
+  // both dispatch with the resolved role opts. Only the kernel holds this
+  // pre-dispatch moment; the card never sees it.
+  const builderOpts = routeBuilder(tiers, entry.surface)
   const streak = ladder.ids[streakIndex(ordinal, corrections, ladder.ids.length || 40)] ?? ''
   const facts = {
-    STAGE: stage.toUpperCase(), slice, i: ordinal, n: list.ids.length,
-    s: ordinal, t: list.ids.length, streak, STREAK: streak.toUpperCase(),
+    STAGE: stage.toUpperCase(), slice, i: ordinal, n: slices.length,
+    s: ordinal, t: slices.length, streak, STREAK: streak.toUpperCase(),
     passes: 0, count: 0, ids: '',
   }
-  const r = await act(cardPrompt('Build exactly slice ' + slice + '. Write ' + P.request + ' per the card before returning.'), 'slice:' + slice)
+  const r = await actWith(cardPrompt('Build exactly slice ' + slice + '. Write ' + P.request + ' per the card before returning.'), 'slice:' + slice, builderOpts)
   if (!r.ok) return failStop('transport-failure', { stage, active_slice: slice, next_action: 'Rerun stage build' }, 'Slice ' + slice + ' did not return sound work — the run holds.')
   for (const p of r.pointers) routes.add(p)
   beats.push(fillClosed(r.beat, facts))
@@ -316,7 +435,7 @@ for (const slice of list.ids) {
         facts.passes = pass
         facts.count = found.ids.length
         facts.ids = found.ids.join(', ')
-        const rr = await act(cardPrompt('Repair pass ' + pass + ' for slice ' + slice + ': fix ONLY the findings in ' + P.gate + '; write the repair delta to ' + P.delta + '.'), 'repair:' + slice)
+        const rr = await actWith(cardPrompt('Repair pass ' + pass + ' for slice ' + slice + ': fix ONLY the findings in ' + P.gate + '; write the repair delta to ' + P.delta + '.'), 'repair:' + slice, builderOpts)
         if (!rr.ok) return false
         const d = await hands('test -s ' + P.delta, 'delta:check')
         if (d !== 0) return false

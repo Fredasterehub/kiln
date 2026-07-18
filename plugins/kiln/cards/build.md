@@ -10,10 +10,14 @@ build and evidence; you never invoke the transport, write `gate-review.json`, or
    workspace; control and evidence artifacts live under `.kiln/`.
 2. Build the slice. Then run `bash .kiln/law/check.sh` — return only when it exits `0`.
    The kernel reruns it before the seal; a red reopens your slice.
-3. Write `.kiln/review-request.json` (temp + rename) — the parser requires these six fields
-   with these types (unrecognized fields are ignored):
-   - `reviewer_model` — `"gpt-5.6-sol"` (the skeleton default; changing it later is a card
-     edit, zero kernel changes)
+3. Write `.kiln/review-request.json` (temp + rename). The gate transport's model and effort
+   are named once in `data/tiers.json` (beside `data/voice.json`) — read `roles["reviewer-gate"]`,
+   resolve its `alias` through that file's `resolver` map to a concrete id, and write the pair.
+   The parser requires these fields with these types (unrecognized fields are ignored):
+   - `reviewer_model` — the concrete id at `resolver[roles["reviewer-gate"].alias]` in
+     `data/tiers.json` (tune the gate transport there, never here — zero kernel changes)
+   - `reviewer_effort` — `roles["reviewer-gate"].effort` from the same file, one of
+     `low` | `medium` | `high` | `xhigh`
    - `law_hash` — the digest from `.kiln/law/lock.hash`, verbatim (lowercase sha-256 hex)
    - `criteria` — your slice's LAW criteria, verbatim, one nonempty string
    - `paths` — repo-relative files you touched (string array)
