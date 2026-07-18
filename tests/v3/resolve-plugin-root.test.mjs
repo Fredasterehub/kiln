@@ -1,9 +1,10 @@
 // resolve-plugin-root.test.mjs — acceptance: NEWEST-VALID-WINS plugin-root resolution.
-// With several versions cached at once under ~/.claude/plugins/cache/*/kiln/<version>/, the four
-// resolution sites must pick the HIGHEST version, never the first glob match (which is the lexically
-// OLDEST). One behavioral leg drives the real resolver against a fixture cache; one drift-pin leg
-// locks the canonical selection pipeline string into all four sites so a future edit cannot silently
-// fork the logic at one place.
+// With several versions cached at once under ~/.claude/plugins/cache/*/kiln/<version>/, every
+// resolution site must pick the HIGHEST version, never the first glob match (which is the lexically
+// OLDEST). Two behavioral legs drive the real resolver against fixture caches; the drift-pins lock
+// the canonical selection pipeline into every surviving glob-resolution site, and lock the rework's
+// root discipline downstream of resolution: the conductor passes the ABSOLUTE plugin root into the
+// kernel launch, and the kernel halts on anything else (absolute-or-halt — S1's real catch).
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -86,31 +87,26 @@ test('resolver: empty cache → exit 1 with the loud diagnostic on stderr', () =
   }
 })
 
-test('drift-pin: the canonical newest-valid pipeline appears in ALL FOUR resolution sites', () => {
+test('drift-pin: the canonical newest-valid pipeline appears in EVERY surviving glob-resolution site', () => {
   const sites = {
     'scripts/resolve-plugin-root.sh': readFileSync(RESOLVER, 'utf8'),
-    'skills/kiln-fire/SKILL.md': readFileSync(join(PLUGIN, 'skills', 'kiln-fire', 'SKILL.md'), 'utf8'),
-    'commands/kiln-doctor.md': readFileSync(join(PLUGIN, 'commands', 'kiln-doctor.md'), 'utf8'),
     'commands/kiln-fire.md': readFileSync(join(PLUGIN, 'commands', 'kiln-fire.md'), 'utf8'),
+    'commands/kiln-doctor.md': readFileSync(join(PLUGIN, 'commands', 'kiln-doctor.md'), 'utf8'),
   }
   for (const [name, body] of Object.entries(sites)) {
     assert.match(body, PIPELINE, `${name} carries the canonical selection pipeline`)
   }
 })
 
-test('drift-pin: both prose sites carry the canonical codex preflight (credential arm + pinned-model 60s functional arm + output validation + retry, no sub-30s budget)', () => {
-  const sites = {
-    'commands/kiln-doctor.md': readFileSync(join(PLUGIN, 'commands', 'kiln-doctor.md'), 'utf8'),
-    'skills/kiln-fire/SKILL.md': readFileSync(join(PLUGIN, 'skills', 'kiln-fire', 'SKILL.md'), 'utf8'),
-  }
-  for (const [name, body] of Object.entries(sites)) {
-    assert.match(body, /codex login status/, `${name} carries the credential arm`)
-    assert.match(body, /timeout 60 codex exec --skip-git-repo-check --ignore-user-config -m gpt-5\.6-sol/, `${name} carries the pinned-model 60s functional arm`)
-    assert.match(body, /KILN-PREFLIGHT-OK/, `${name} carries the output-validation token`)
-    assert.match(body, /KILN-PREFLIGHT-OK" <\/dev\/null/, `${name} closes stdin on the functional arm`)
-    assert.match(body, /OK on retry/, `${name} reports retry recovery distinctly`)
-    assert.doesNotMatch(body, /timeout [12]?\d codex/, `${name} carries no sub-30s codex budget`)
-  }
+test('drift-pin: the resolved root travels ABSOLUTE — the SKILL launch contract passes it, the kernel halts without it', () => {
+  const skill = readFileSync(join(PLUGIN, 'skills', 'kiln-fire', 'SKILL.md'), 'utf8')
+  const kernel = readFileSync(join(PLUGIN, 'workflows', 'kernel.js'), 'utf8')
+  // The conductor side: every kernel launch carries the plugin root, and the SKILL names it absolute.
+  assert.match(skill, /plugin: "\$\{CLAUDE_PLUGIN_ROOT\}"/, 'SKILL.md passes the plugin root in the kernel launch args')
+  assert.match(skill, /absolute plugin root/, 'SKILL.md names the root absolute — kernel legs run with cwd = the project dir')
+  // The kernel side: absolute-or-halt (S1's real catch — a relative root broke every plugin read from neutral cwd).
+  assert.match(kernel, /if \(!plugin \|\| plugin\[0\] !== '\/'\)/, 'kernel.js guards missing-or-relative roots')
+  assert.match(kernel, /must pass the plugin root as an absolute path/, 'kernel.js halts with the honest contract-violation beat')
 })
 
 test('drift-pin: the codex prompt guide teaches the strict schema tongue (recursive rules + exact-required + stdin discipline)', () => {

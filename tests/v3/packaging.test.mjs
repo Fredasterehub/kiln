@@ -1,8 +1,10 @@
-// packaging.test.mjs — acceptance: the honest shopfront (+ the stale-string
-// riders). Static guards over the manifest, the doctor command, the two READMEs, agents.json's
-// model-tag audit, and .gitignore. These lock the shapes a future edit could silently un-modernize
-// or re-introduce a lying count into — the doctor's probe semantics are letter-for-letter, the
-// manifest carries the userConfig surface, and the root README FOOTER is byte-stable (operator-only).
+// packaging.test.mjs — acceptance: the honest shopfront (+ the stale-string riders).
+// Static guards over the manifest, the doctor command, the root README, and .gitignore. These lock
+// the shapes a future edit could silently un-modernize or re-introduce a lying count into — the
+// doctor's probe semantics are letter-for-letter, the manifest carries the explicit rework surface
+// (one command, one agent, no userConfig knobs), and the root README FOOTER is byte-stable
+// (operator-only). The shipped plugin carries no README until the SHIP copy pass authors a fresh
+// one — that pass re-adds the README and its pins together.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -14,30 +16,25 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const PLUGIN = join(ROOT, 'plugins', 'kiln')
 const manifest = JSON.parse(readFileSync(join(PLUGIN, '.claude-plugin', 'plugin.json'), 'utf8'))
 const doctor = readFileSync(join(PLUGIN, 'commands', 'kiln-doctor.md'), 'utf8')
-const pluginReadme = readFileSync(join(PLUGIN, 'README.md'), 'utf8')
 const rootReadme = readFileSync(join(ROOT, 'README.md'), 'utf8')
-const agents = JSON.parse(readFileSync(join(PLUGIN, 'data', 'agents.json'), 'utf8'))
 const gitignore = readFileSync(join(ROOT, '.gitignore'), 'utf8')
 const BARE_GPT5 = /GPT-5(?!\.6)/ // "GPT-5" not followed by ".6" — the stale-model string (bare GPT-5 or the retired GPT-5.5)
 
-// ── plugin.json modernization ─────────────────────────────────────────────────────────────
+// ── plugin.json: the rework surface, pinned to content truth ─────────────────────────────────
 test('manifest: $schema + displayName + keeps its identity', () => {
   assert.equal(manifest.$schema, 'https://anthropic.com/claude-code/plugin.schema.json')
   assert.equal(manifest.displayName, 'Kiln')
   assert.equal(manifest.name, 'kiln')
-  assert.equal(typeof manifest.version, 'string') // T4 owns the 3.0.0 bump — T3 leaves it a string
+  assert.equal(typeof manifest.version, 'string') // release.sh owns the number — the harness pins the shape only
 })
 
-test('manifest: the userConfig knobs (posture + theaterIntensity — both consumed by the conductor), each a valid option shape', () => {
-  const uc = manifest.userConfig
-  assert.ok(uc && typeof uc === 'object', 'userConfig present')
-  for (const key of ['posture', 'theaterIntensity']) {
-    const opt = uc[key]
-    assert.ok(opt, `userConfig.${key} present`)
-    assert.ok(['string', 'number', 'boolean', 'directory', 'file'].includes(opt.type), `${key}.type valid`)
-    assert.equal(typeof opt.title, 'string')
-    assert.equal(typeof opt.description, 'string')
-  }
+test('manifest: explicit commands/agents lists — the surviving surface, nothing more', () => {
+  assert.deepEqual(manifest.commands, ['./commands/kiln-fire.md'])
+  assert.deepEqual(manifest.agents, ['./agents/da-vinci.md'])
+})
+
+test('manifest: no userConfig knobs — the rework carries none', () => {
+  assert.equal('userConfig' in manifest, false)
 })
 
 test('manifest: description is the 8-stage / GPT-5.6 truth — no lying count', () => {
@@ -86,24 +83,15 @@ test('doctor: documents the sandbox-first + power-user stance', () => {
   assert.match(doctor, /--dangerously-skip-permissions/)
 })
 
-// ── plugins/kiln/README.md: the v3 pass ───────────────────────────────────────────────────────────
-test('plugin README: v2 framing is gone, v3 + GPT-5.6 are in', () => {
-  assert.doesNotMatch(pluginReadme, /How it's built \(v2\)/)
-  assert.match(pluginReadme, /How it's built \(v3\)/)
-  assert.match(pluginReadme, /GPT-5\.6/)
-  assert.doesNotMatch(pluginReadme, BARE_GPT5)
-  assert.match(pluginReadme, /## Sandbox & permissions/)
-})
-
-// ── root README: counts verified, FOOTER byte-stable (operator-only) ─────────────────────────────
-test('root README: persona/workflow counts are the v3 truth', () => {
+// ── root README: counts verified, FOOTER byte-stable (operator-only) ─────────────────────────
+test('root README: persona/workflow counts are the shipped truth', () => {
   assert.match(rootReadme, /34 personas/)
   assert.match(rootReadme, /8 workflows/)
 })
 
 // The LIVE marketing prose must name the current build model (GPT-5.6), never the retired GPT-5.5 or a
-// bare "GPT-5" — mirrors the plugin README's BARE_GPT5 guard. Changelog/history sections are excluded:
-// "Fresh from the Kiln" and "The Arc" legitimately preserve the model a past release actually shipped.
+// bare "GPT-5". Changelog/history sections are excluded: "Fresh from the Kiln" and "The Arc"
+// legitimately preserve the model a past release actually shipped.
 test('root README: live prose names GPT-5.6 — no stale bare GPT-5.5 outside changelog/history', () => {
   let inHistory = false
   const liveLines = rootReadme.split('\n').filter((line) => {
@@ -132,20 +120,7 @@ test('root README: the footer is untouched — byte-identical (operator law)', (
   assert.ok(rootReadme.includes(mitFooter), 'the MIT sub-footer is byte-stable')
 })
 
-// ── agents.json model-tag audit (flag 6): every tag verified true against a live v3 seat ────
-test('agents.json: audited model tags are TRUE against live v3 seats (all stay)', () => {
-  const byName = agents
-  // Sphinx reviews logic slices → routing().reviewModel = 'opus'
-  assert.match(byName['critical-thinker'].role, /\(opus\)/)
-  // Clair builds ui/mixed → routing().buildModel = 'opus'
-  assert.match(byName['la-peintresse'].role, /\(opus\)/)
-  // Obscur reviews ui/mixed → routing().reviewModel = 'sonnet' (the thin cross-family wrapper)
-  assert.match(byName['the-curator'].role, /\(sonnet\)/)
-  // Kaneda is the fallback logic builder → buildModel 'sonnet'
-  assert.match(byName['backup-coder'].role, /sonnet builder/)
-})
-
-// ── housekeeping ──────────────────────────────────────────────────────────────────────────────────
+// ── housekeeping ─────────────────────────────────────────────────────────────────────────────
 test('.gitignore: .playwright-mcp/ is ignored', () => {
   assert.match(gitignore, /^\.playwright-mcp\/$/m)
 })

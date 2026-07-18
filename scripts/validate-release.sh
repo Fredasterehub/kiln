@@ -57,9 +57,10 @@ if STALE="$(git grep -l -e 'skills/kiln-pipeline/' -e 'skills/kiln-protocol/' --
 fi
 pass "No stale v1 skill-path references"
 
-# (g) The v3 harness is green.
-bash tests/v3/run.sh >/dev/null 2>&1 || fail "v3 harness failed — run 'bash tests/v3/run.sh'"
-pass "v3 harness green (node --test tests/v3/)"
+# (g) The harness is green — run.sh runs BOTH suites: the surviving v3 acceptance guards
+# (node --test tests/v3/) and the locked in-package plugin floor (node --test plugins/kiln/tests/).
+bash tests/v3/run.sh >/dev/null 2>&1 || fail "harness failed — run 'bash tests/v3/run.sh'"
+pass "harness green (node --test tests/v3/ + node --test plugins/kiln/tests/)"
 
 # (h) The plugin manifest passes the platform's own strict validator, when the CLI is present.
 # CI boxes may lack the claude binary — skip with a visible note rather than fail the floor.
