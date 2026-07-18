@@ -22,9 +22,12 @@ recording is yours.
 `data/voice.json` slots map unfilled)
 Scene-setter first, banner second, never repeating each other. Banner:
 `grammar["banner.stage"]` — fill your stage-owned slots: `{progress}` = `✓ Law · ✓ Build ·
-▶ **Validate** · ○ *Report*`, `{quote}`/`{source}` = one credited quote from `data/lore.json`
-— `transitions.validation_passed` if every criterion ran green, `transitions.validation_failed`
-otherwise; leave `{STAGE}` `{i}` `{n}` as-is. Closing line only when it is literally true: use
+▶ **Validate** · ○ *Report*`, `{quote}`/`{source}` = one credited verified quote from
+`data/lore-quotes.json` — `moments["validate-green"]` if every criterion ran green,
+`moments["validate-red"]` otherwise: `{quote}` = the entry's `text` AS-IS (its one accent
+word is already a code span inside the text — add none, move none, wrap nothing further),
+`{source}` = the entry's full `source` string, plain weight, no invented epithets; never
+pick a quote already used this run. Leave `{STAGE}` `{i}` `{n}` as-is. Closing line only when it is literally true: use
 `beats["stage.validate"]` at stage open, and "A hundred eyes find nothing wrong." only on
 all-green. Voice may be theatrical; the eyes may not claim what they did not see.
 

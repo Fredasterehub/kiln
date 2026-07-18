@@ -36,9 +36,12 @@ build and evidence; you never invoke the transport, write `gate-review.json`, or
 Scene-setter first, banner second, never repeating each other.
 - **First slice only** (`.kiln/seals.log` absent or empty): open with `grammar["banner.stage"]`
   — fill your stage-owned slots: `{progress}` = `✓ Law · ▶ **Build** · ○ *Validate* ·
-  ○ *Report*`, `{quote}`/`{source}` = one credited quote from `data/lore.json` →
-  `transitions.build_start`; leave `{STAGE}` `{i}` `{n}` as-is. Then `beats["slice.start"]`
-  as-is (its slots are kernel-owned).
+  ○ *Report*`, `{quote}`/`{source}` = one credited verified quote from `data/lore-quotes.json`
+  → `moments["build-opens"]`: `{quote}` = the entry's `text` AS-IS (its one accent word is
+  already a code span inside the text — add none, move none, wrap nothing further),
+  `{source}` = the entry's full `source` string, plain weight, no invented epithets; never
+  pick a quote already used this run. Leave `{STAGE}` `{i}` `{n}` as-is. Then
+  `beats["slice.start"]` as-is (its slots are kernel-owned).
 - **Later slices**: `beats["slice.start"]` alone — one transition, one banner.
 - **Repair mode**: `beats["review.fail"][0]` as-is (its `{count}` is kernel-owned), then one
   past-tense line of your own: what was repaired, no slot, no claim beyond the delta.

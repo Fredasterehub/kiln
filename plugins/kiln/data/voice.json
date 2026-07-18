@@ -1,10 +1,10 @@
 {
   "version": "voice-1",
-  "doctrine": "One character, many masks. Engine text IS the presentation — Kiln speaks the banners in its own response; the platform renders them. Recover the wiring, not the words: quotes live in data/lore.json, the streak arc in this file, the taste-floor in references/brand.md — verbatim.",
+  "doctrine": "One character, many masks. Engine text IS the presentation — Kiln speaks the banners in its own response; the platform renders them. Recover the wiring, not the words: quotes live in data/lore-quotes.json, the streak arc in this file, the taste-floor in references/brand.md — verbatim.",
   "consumers": {
     "driver": "emits `beat` verbatim from the kernel's return; never opens this file mid-run",
     "kernel": "mechanical template-fill of kernel-owned slots ONLY (see slots) — closed machine facts and counters; it never reads meaning; every semantic slot arrives stage-prefilled",
-    "stages": "compose line + banner for their own transitions; prefill every semantic slot; pull one lore.json quote per Tier-1 banner, keyed to the event, never repeated within a run"
+    "stages": "compose line + banner for their own transitions; prefill every semantic slot; pull one lore-quotes.json quote per Tier-1 banner, keyed to the moment, never repeated within a run"
   },
   "slots": {
     "kernel": ["{STAGE}", "{i}", "{n}", "{s}", "{t}", "{slice}", "{label}", "{passes}", "{count}", "{ids}", "{streak}", "{STREAK}"],
@@ -18,13 +18,13 @@
     "banner": "one transition, one banner; the scene-setter line precedes it and never repeats what the banner says",
     "weight": "the lightest weight that makes the state obvious; exactly one accent — inline code",
     "symbols": "✓ ✗ ▶ ○ ◆ ◇ — status symbols, never emojis, in banners",
-    "quotes": "one short literary quote per Tier-1 banner, credited to its author, drawn from data/lore.json by event key"
+    "quotes": "one short literary quote per Tier-1 banner, credited to its author, drawn from data/lore-quotes.json by moment key"
   },
   "crew": {
     "kiln": { "seat": "the character", "status": "active", "line": "I am not an oven. I have been around considerably longer than your pottery." },
-    "da-vinci": { "seat": "brainstorm", "status": "active", "line": { "ref": "data/lore.json", "event": "brainstorm_complete", "source": "Leonardo da Vinci" } },
+    "da-vinci": { "seat": "brainstorm", "status": "active", "line": { "ref": "data/lore-quotes.json", "moment": "vision-compiled" } },
     "asimov": { "seat": "law", "status": "active", "line": "The Lawgiver — acceptance criteria pinned into executable Law. No poetry survives the pinning." },
-    "krs-one": { "seat": "build", "status": "active", "line": { "ref": "data/lore.json", "event": "build_start", "source": "KRS-One" } },
+    "krs-one": { "seat": "build", "status": "active", "line": { "ref": "data/lore-quotes.json", "moment": "build-opens" } },
     "argus": { "seat": "validate", "status": "active", "line": "A hundred eyes, and every one of them open." },
     "omega": { "seat": "report", "status": "active", "line": "The truth, even when it's partial." },
     "miyamoto": { "seat": "single-family runs", "status": "active when degraded", "line": "Every tier is a complete instrument, not a lesser one." },
@@ -46,7 +46,7 @@
     }
   },
   "grammar": {
-    "banner.stage": "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**{STAGE}** ▸ *Stage {i} of {n}*\n{progress}\n`\"{quote}\"` — *{source}*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    "banner.stage": "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**{STAGE}** ▸ *Stage {i} of {n}*\n{progress}\n\"{quote}\" — {source}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
     "banner.streak": "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n▸ **{STREAK}** · *Iteration {i}* · **Slice {s}/{t}**\n`\"{quote}\"` — *{source}*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
     "panel.checkpoint": "╔══════════════════════════════════════════════════════════════╗\n{title_row}\n╚══════════════════════════════════════════════════════════════╝\n\n{content}\n\n──────────────────────────────────────────────────────────────\n→ {prompt}\n──────────────────────────────────────────────────────────────",
     "panel.title_row": "stage-prefilled, rendered complete: '║' + two spaces + the title + spaces padded to the frame's inner width (62 columns) + '║' — never raw substitution into a fixed-width row",
@@ -73,8 +73,8 @@
     ]
   },
   "quotes": {
-    "bank": "data/lore.json",
-    "rule": "keyed by transition event; one per Tier-1 banner; never repeat a quote within a run; always credit the source in italics",
+    "bank": "data/lore-quotes.json",
+    "rule": "keyed by moment; one per Tier-1 banner; never repeat a quote within a run; the full source string credited, plain",
     "moments": "data/lore-quotes.json",
     "moments.rule": "the great-minds bank (INTAKE-10), keyed by MOMENT (run-opens-direct, law-locked, slice-sealed, validate-green, …); one credited verified quote per panel quote-foot, keyed to the moment, never repeated within a run; rendered in the foot-quote grammar — the single code-span accent word is embedded in the quote text, the attribution is plain, no invented epithets; every entry carries its verification receipt (honest-labels law); the full 130-quote source of record is .kiln-dev/rework/quote-bank-draft.md"
   },

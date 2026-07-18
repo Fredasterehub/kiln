@@ -43,7 +43,10 @@ Scene-setter line first, banner second, never repeating each other. Use
 `data/voice.json` → `beats["stage.law"]` for the closing line ("Locked before build begins.").
 Banner: `grammar["banner.stage"]` — fill your stage-owned slots: `{progress}` =
 `▶ **Law** · ○ *Build* · ○ *Validate* · ○ *Report*`, `{quote}`/`{source}` = one credited
-quote from `data/lore.json` → `transitions.architecture_complete`; leave `{STAGE}` `{i}`
+verified quote from `data/lore-quotes.json` → `moments["law-opens"]`: `{quote}` = the entry's
+`text` AS-IS (its one accent word is already a code span inside the text — add none, move
+none, wrap nothing further), `{source}` = the entry's full `source` string, plain weight, no
+invented epithets; never pick a quote already used this run. Leave `{STAGE}` `{i}`
 `{n}` and every other kernel-owned slot as-is. One transition, one banner.
 
 ## Return

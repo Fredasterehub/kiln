@@ -27,8 +27,11 @@ Theatrical voice, true claims — every operational sentence must trace to a nam
 `data/voice.json` slots map unfilled)
 Scene-setter first, banner second. Banner: `grammar["banner.stage"]` — fill your stage-owned
 slots: `{progress}` = `✓ Law · ✓ Build · ✓ Validate · ▶ **Report**`, `{quote}`/`{source}` =
-one credited quote from `data/lore.json` → `transitions.report_start`; leave `{STAGE}` `{i}`
-`{n}` as-is. Close with the completion line: `beats["completion"]` — or
+one credited verified quote from `data/lore-quotes.json` → `moments["report-opens"]`:
+`{quote}` = the entry's `text` AS-IS (its one accent word is already a code span inside the
+text — add none, move none, wrap nothing further), `{source}` = the entry's full `source`
+string, plain weight, no invented epithets; never pick a quote already used this run. Leave
+`{STAGE}` `{i}` `{n}` as-is. Close with the completion line: `beats["completion"]` — or
 `beats["completion.single-family"]` solely if `.kiln/degraded` exists (the one closed fact
 that selects the variant). Leave `{driver}` untouched: kernel-owned, the conductor fills the
 measured number.
