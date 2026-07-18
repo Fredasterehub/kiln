@@ -25,16 +25,35 @@ Theatrical voice, true claims — every operational sentence must trace to a nam
 
 ## Beat (fill every stage-owned slot; leave every kernel-owned slot from the sealed
 `data/voice.json` slots map unfilled)
-Scene-setter first, banner second. Banner: `grammar["banner.stage"]` — fill your stage-owned
-slots: `{progress}` = `✓ Law · ✓ Build · ✓ Validate · ▶ **Report**`, `{quote}`/`{source}` =
-one credited verified quote from `data/lore-quotes.json` → `moments["report-opens"]`:
-`{quote}` = the entry's `text` AS-IS (its one accent word is already a code span inside the
-text — add none, move none, wrap nothing further), `{source}` = the entry's full `source`
-string, plain weight, no invented epithets; never pick a quote already used this run. Leave
-`{STAGE}` `{i}` `{n}` as-is. Close with the completion line: `beats["completion"]` — or
-`beats["completion.single-family"]` solely if `.kiln/degraded` exists (the one closed fact
-that selects the variant). Leave `{driver}` untouched: kernel-owned, the conductor fills the
-measured number.
+You compose the display blocks — `data/voice.json` → `panel` is the encoding; this beat is
+the run's BOUNDARY CARD per `panel.recipes["final-report"]`; the conductor renders
+nothing. Scene-setter first, then the blocks, in this literal order:
+- **FRAME** — `grammar["banner.stage"]`: `{name}` = the project's name in words;
+  `{progress}` = the FINAL all-sealed strip per `grammar["progress.form"]`:
+  `✓ *Law* · ✓ *Build* · ✓ *Validate* · ✓ *Report*` — every phase ✓, every name italic,
+  NO fraction anywhere and NO bold (nothing is active — the run is over), and NO unfold
+  line (the unfold is omitted when no phase is active).
+- ONE bold day's-work line opens the body — what was forged, from the record, concept
+  altitude.
+- **TITLE UNIT** — exactly one: `` `SEALED` **The report stands — <the deliverable, from
+  the record>** (`<a seal handle the record carries; omit rather than invent>`) `` — the
+  one SEALED title the final-report recipe requires; its bold event names the report.
+- **EVIDENCE NOTCH** (`panel.blocks.evidence_notch`) — one plain line from the readable
+  record: criteria passed/failed counts from `.kiln/validate.md`, the seal count from
+  `.kiln/seals.log`; single-family seals named plainly when present.
+- **THE METER** — the completion line: `beats["completion"]` — or
+  `beats["completion.single-family"]` solely if `.kiln/degraded` exists (the one closed
+  fact that selects the variant). Leave `{driver}` untouched: DRIVER-filled, the conductor
+  speaks the measured number.
+- **FOOT** — OUTSIDE the frame, below the meter: `grammar["rule.light"]`, a blank line,
+  then `` `"{quote}"` — {source} `` — one credited verified quote from
+  `data/lore-quotes.json` → `moments["report-opens"]`, rendered per CAL 17: `{quote}` =
+  the entry's `text` with any embedded backticks DROPPED (the WHOLE quote rides in one
+  code span — nested spans break; add nothing, reword nothing), `{source}` = the entry's
+  FULL `source` string, plain weight, no invented epithets; never pick a quote already
+  used this run.
+Leave every kernel-owned slot from the sealed slots map exactly as-is. NO close anywhere
+on this card — the absence of a close is the ending.
 
 ## Return
 `ok` — true only if `.kiln/report.md` is written from the record. `beat` — every stage-owned

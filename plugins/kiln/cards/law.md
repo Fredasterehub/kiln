@@ -39,15 +39,34 @@ red reopens the slice; never leave a criterion red at a slice boundary.
 
 ## Beat (fill every stage-owned slot; leave every kernel-owned slot from the sealed
 `data/voice.json` slots map unfilled)
-Scene-setter line first, banner second, never repeating each other. Use
-`data/voice.json` → `beats["stage.law"]` for the closing line ("Locked before build begins.").
-Banner: `grammar["banner.stage"]` — fill your stage-owned slots: `{progress}` =
-`▶ **Law** · ○ *Build* · ○ *Validate* · ○ *Report*`, `{quote}`/`{source}` = one credited
-verified quote from `data/lore-quotes.json` → `moments["law-opens"]`: `{quote}` = the entry's
-`text` AS-IS (its one accent word is already a code span inside the text — add none, move
-none, wrap nothing further), `{source}` = the entry's full `source` string, plain weight, no
-invented epithets; never pick a quote already used this run. Leave `{STAGE}` `{i}`
-`{n}` and every other kernel-owned slot as-is. One transition, one banner.
+You compose the display blocks — `data/voice.json` → `panel` is the encoding; this beat is
+THE CARD (`panel.compositions.card`); the conductor renders nothing. Scene-setter first —
+`beats["stage.law"]` ("Locked before build begins.") — then the blocks, in this literal
+order, never repeating each other:
+- **FRAME** — `grammar["banner.stage"]`: `{name}` = the project's name in words (the run's
+  chapter at big boundaries); `{progress}` = the strip per `grammar["progress.form"]`:
+  `▶ **Law N/N** · ○ *Build* · ○ *Validate* · ○ *Report*` — bold only the active phase,
+  the fraction ONLY there: `N/N` is the true slice count, bound to the named on-disk
+  checklist `.kiln/slices.json` you just authored (the Law returns only complete — all N
+  pinned); then a newline and one two-space-indented glyph-free unfold line naming those
+  slices in reader-meaningful subject matter, all *italic* (they are ahead) — never bare
+  process labels; the line never wraps (window past ~8 items with true count-words).
+- **TITLE UNIT** — exactly one: `` `SEALED` **The Law is locked — <what it makes
+  falsifiable, concept altitude>** (`<short digest from .kiln/law/lock.hash>`) `` — the
+  bold event names the Law; the digest stands as the handle on this fresh seal.
+- **WHISPER** — one blank line, then a two-space indent, then ONE tight italic sentence:
+  the simple truth of what the criteria pin. Never fog, never a paragraph.
+- **CLOSE** — one short plain narrative line: what starts when this crosses (the build
+  takes the first slice). Never a numbered list.
+- **FOOT** — OUTSIDE the frame, below the body: `grammar["rule.light"]`, a blank line,
+  then `` `"{quote}"` — {source} `` — one credited verified quote from
+  `data/lore-quotes.json` → `moments["law-opens"]`, rendered per CAL 17: `{quote}` = the
+  entry's `text` with any embedded backticks DROPPED (the WHOLE quote rides in one code
+  span — nested spans break; add nothing, reword nothing), `{source}` = the entry's FULL
+  `source` string, plain weight, no invented epithets; never pick a quote already used
+  this run.
+Leave every kernel-owned slot from the sealed slots map exactly as-is. One transition, one
+card.
 
 ## Return
 `ok` — true only if all five outputs above are written. `beat` — every stage-owned slot

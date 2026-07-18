@@ -87,6 +87,14 @@ const VOICE = {
   'voice:blocked': { exit: 0, ids: ['The gate held after {passes} repair passes. Findings {ids} are on the table; the ruling is yours.'] },
   'voice:degradation': { exit: 0, ids: ['Codex is not answering the door. Say `continue` and I proceed.'] },
   'voice:stage.brainstorm': { exit: 0, ids: ['Da Vinci takes the window. Speak freely — he sees what you meant, not just what you said.'] },
+  // S1 joint ruling: the reachable kernel twin sites read these sealed keys.
+  'voice:seal': { exit: 0, ids: ['Slice {slice} sealed — {label}. The evidence holds.'] },
+  'voice:bad-args': { exit: 0, ids: ['Unknown stage in the launch args — the spine knows law, build, validate, report.'] },
+  'voice:gate-unreachable': { exit: 0, ids: ['The gate tool would not run — not found or not executable where it lives, so codex was never reached and no verdict exists. Nothing seals on a guess; restore the gate and relaunch.'] },
+  'voice:transport-failure': { exit: 0, ids: [
+    'The review call went out and came back with no verdict — the gate could not finish the round-trip, so the slice cannot seal. The run holds until the transport is sound; I never turn a failed call into a pass.',
+    'The stage worker returned no usable result — its report did not hold, so nothing seals and the run cannot advance. A clean rerun of that stage puts it back in motion.',
+  ] },
 }
 
 test('workflow body: parses as an async function body with the runtime globals', () => {
@@ -190,12 +198,14 @@ test('review loop: blocked, degradation, and transport failure short-circuit wit
 })
 
 test('slots: every kernel-owned slot from the sealed map fills; semantic slots pass through', () => {
+  // S2 joint ruling: {driver} is NOT kernel-owned — it is DRIVER-filled at
+  // completion, so fillClosed leaves it even when a stray fact names it.
   const beat = '{STAGE} {i}/{n} slice {slice} [{label}] {s}/{t} {streak}|{STREAK} p{passes} c{count} [{ids}] d{driver} — {quote} {title_row}'
   const out = fillClosed(beat, {
     STAGE: 'BUILD', i: 2, n: 4, slice: 's1', label: 'dual', s: 1, t: 3,
     streak: 'first-blood', STREAK: 'FIRST-BLOOD', passes: 1, count: 2, ids: 'F1, F2', driver: 812,
   })
-  assert.equal(out, 'BUILD 2/4 slice s1 [dual] 1/3 first-blood|FIRST-BLOOD p1 c2 [F1, F2] d812 — {quote} {title_row}')
+  assert.equal(out, 'BUILD 2/4 slice s1 [dual] 1/3 first-blood|FIRST-BLOOD p1 c2 [F1, F2] d{driver} — {quote} {title_row}')
   assert.equal(fillClosed('{STAGE}', {}), '{STAGE}', 'missing facts leave the slot for the owner')
 })
 
@@ -277,8 +287,8 @@ test('runtime: an absolute plugin root proceeds — existing behavior preserved'
   assert.equal(ret.status, 'ok', 'a valid absolute root runs exactly as before')
 })
 
-test('runtime: an unreachable gate tool halts distinctly — names the tool path, not the transport', async () => {
-  const { ret } = await runKernel({ stage: 'build', projectDir: '/p', plugin: '/opt/kiln/plugins/kiln' }, {
+test('runtime: an unreachable gate tool halts distinctly — sealed beat, tool path in next_action', async () => {
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p', plugin: '/opt/kiln/plugins/kiln' }, {
     ...VOICE,
     'law:preflight': GREEN,
     'slices:fetch': { exit: 0, ids: ['s1'] },
@@ -291,9 +301,46 @@ test('runtime: an unreachable gate tool halts distinctly — names the tool path
     'state:write': GREEN,
   })
   assert.equal(ret.status, 'gate-unreachable')
-  assert.ok(ret.beat.includes('/opt/kiln/plugins/kiln/scripts/kiln-review'), 'the halt names the gate tool at its path')
-  assert.ok(ret.beat.includes('unreachable'), 'and calls it unreachable')
+  // S1 wiring: the beat is the sealed gate-unreachable template; the tool
+  // path lives in the persisted next_action, not the sealed line.
+  assert.ok(ret.beat.includes('The gate tool would not run'), 'the sealed gate-unreachable template arrives')
   assert.ok(!ret.beat.toLowerCase().includes('transport failed'), 'distinct from the transport-failure wording')
+  assert.ok(lastStateDoc(calls).includes('/opt/kiln/plugins/kiln/scripts/kiln-review'), 'next_action names the gate tool at its path')
+})
+
+test('runtime (S1): an unknown stage speaks the sealed bad-args template — the site voice-reads post-root', async () => {
+  const { ret, calls } = await runKernel({ stage: 'nonsense', projectDir: '/p' }, { ...VOICE })
+  assert.equal(ret.status, 'bad-args')
+  assert.ok(ret.beat.includes('Unknown stage in the launch args — the spine knows law, build, validate, report.'), 'the sealed bad-args template arrives')
+  assert.ok(calls.some(c => c.label === 'voice:bad-args'), 'the beat came through the voice fetch, not a hardcoded line')
+})
+
+test('runtime (S1): a failed stage worker speaks the sealed stage-worker transport variant', async () => {
+  const { ret } = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'stage:validate': { ok: false, beat: '', pointers: [] },
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'transport-failure')
+  assert.ok(ret.beat.includes('The stage worker returned no usable result'), 'the sealed stage-worker variant (entry 1) arrives')
+})
+
+test('runtime (S1): a review transport failure speaks the sealed review-call variant', async () => {
+  const { ret } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['s1'] },
+    'ladder:fetch': LADDER,
+    'seal:check': { exit: 1 },
+    'slice:s1': { ok: true, beat: 'forging', pointers: [] },
+    'law:pre-seal': GREEN,
+    'degraded:check': { exit: 1 },
+    'gate:review': { exit: 20 },
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'transport-failure')
+  assert.ok(ret.beat.includes('The review call went out and came back with no verdict'), 'the sealed review-call variant (entry 0) arrives')
 })
 
 test('runtime (W-03): a genuine bare launch returns needs-brainstorm with a real beat', async () => {
@@ -333,7 +380,7 @@ test('runtime (W-04): preflight red on an UNSEALED slice is pre-build state — 
   })
   assert.equal(ret.status, 'ok', 'the expected pre-build red never reopens')
   assert.ok(calls.some(c => c.label === 'slice:s1'), 'the active slice build dispatches')
-  assert.ok(ret.beat.includes('sealed — dual · slice s1'), 'the slice seals normally')
+  assert.ok(ret.beat.includes('Slice s1 sealed — dual. The evidence holds.'), 'the sealed seal template arrives filled')
 })
 
 test('runtime: ANY pre-seal red blocks the seal unless a sealed owner reopens', async () => {
@@ -495,7 +542,7 @@ test('runtime (K-10): no beat leaves the kernel with an unfilled slot', async ()
   assert.equal(ret.status, 'ok')
   assert.ok(ret.beat.includes('first-blood. Slice `s1` takes the anvil'), 'streak and slice filled')
   assert.ok(ret.beat.includes('2 findings (F1, F2), pass 1'), 'count, ids, passes filled')
-  assert.ok(ret.beat.includes('sealed — dual · slice s1'), 'seal line filled')
+  assert.ok(ret.beat.includes('Slice s1 sealed — dual. The evidence holds.'), 'seal line filled from the sealed template')
   assert.ok(!/\{[A-Za-z_]+\}/.test(ret.beat), 'no unfilled slot of any kind reaches the driver')
 })
 

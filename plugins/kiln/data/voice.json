@@ -2,9 +2,9 @@
   "version": "voice-1",
   "doctrine": "One character, many masks. Engine text IS the presentation — Kiln speaks the banners in its own response; the platform renders them. Recover the wiring, not the words: quotes live in data/lore-quotes.json, the streak arc in this file, the taste-floor in references/brand.md — verbatim.",
   "consumers": {
-    "driver": "emits `beat` verbatim from the kernel's return; never opens this file mid-run",
-    "kernel": "mechanical template-fill of kernel-owned slots ONLY (see slots) — closed machine facts and counters; it never reads meaning; every semantic slot arrives stage-prefilled",
-    "stages": "compose line + banner for their own transitions; prefill every semantic slot; pull one lore-quotes.json quote per Tier-1 banner, keyed to the moment, never repeated within a run"
+    "driver": "emits `beat` verbatim from the kernel's return; never opens this file mid-run; its own seven conductor beats are inlined verbatim in the skill (this file stays source-of-record — exact-sync test pins hold the copies byte-identical)",
+    "kernel": "mechanical template-fill of kernel-owned slots ONLY (see slots) — closed machine facts and counters; it never reads meaning; every semantic slot arrives stage-prefilled; its failure and seal beats fetch the sealed keys here (bad-args, gate-unreachable, transport-failure, seal), hardcoded lines surviving only as unreachable-voice fallbacks and at the two pre-root sites that fire before a plugin root exists",
+    "stages": "compose line + banner for their own transitions; prefill every semantic slot; compose the panel blocks their scenario recipe names; pull one lore-quotes.json quote per Tier-1 banner, keyed to the moment, never repeated within a run"
   },
   "slots": {
     "kernel": ["{STAGE}", "{i}", "{n}", "{s}", "{t}", "{slice}", "{label}", "{passes}", "{count}", "{ids}", "{streak}", "{STREAK}"],
@@ -46,17 +46,10 @@
     }
   },
   "grammar": {
-    "banner.stage": "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**{STAGE}** ▸ *Stage {i} of {n}*\n{progress}\n\"{quote}\" — {source}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-    "banner.streak": "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n▸ **{STREAK}** · *Iteration {i}* · **Slice {s}/{t}**\n`\"{quote}\"` — *{source}*\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-    "panel.checkpoint": "╔══════════════════════════════════════════════════════════════╗\n{title_row}\n╚══════════════════════════════════════════════════════════════╝\n\n{content}\n\n──────────────────────────────────────────────────────────────\n→ {prompt}\n──────────────────────────────────────────────────────────────",
-    "panel.title_row": "stage-prefilled, rendered complete: '║' + two spaces + the title + spaces padded to the frame's inner width (62 columns) + '║' — never raw substitution into a fixed-width row",
-    "rule.light": "──────────────────────────────────────────────────────────────",
-    "progress.glyphs": { "done": "✓", "active": "▶", "pending": "○" },
-    "progress.form": "✓ Done · ▶ **Active** · ○ *Pending* — bold the active stage, italicize pending, no accent on the progress line",
-    "spawn": "◆ {gerund} {what}...\n  → `{name}` ({alias}) — \"{line}\"",
-    "spawn.done": "✓ `{name}` complete: \"{result}\"",
-    "seal.mark": "✓ Slice sealed: `{slice}` — {label}",
-    "emit": "scene-setter beat line first, banner second, nothing after that repeats the banner; accent goes to the quote, agent names, and identifiers — never to the step label"
+    "banner.stage": "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**KILN** · *{name}*\n{progress}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    "rule.light": "───────────────────────────────",
+    "progress.glyphs": { "done": "✓", "active": "▶", "opened": "◇", "pending": "○" },
+    "progress.form": "✓ *Sealed* · ▶ **Active** · ◇ *Opened, fire elsewhere* · ○ *Pending* — sealed and pending names italic, bold ONLY the active phase, a fraction ONLY on the active phase counted against a NAMED on-disk checklist, no accent anywhere on the strip"
   },
   "killstreak": {
     "formula": "index = (max(iteration + corrections, 1) - 1) % 40",
@@ -76,43 +69,53 @@
     "bank": "data/lore-quotes.json",
     "rule": "keyed by moment; one per Tier-1 banner; never repeat a quote within a run; the full source string credited, plain",
     "moments": "data/lore-quotes.json",
-    "moments.rule": "the great-minds bank (INTAKE-10), keyed by MOMENT (run-opens-direct, law-locked, slice-sealed, validate-green, …); one credited verified quote per panel quote-foot, keyed to the moment, never repeated within a run; rendered in the foot-quote grammar — the single code-span accent word is embedded in the quote text, the attribution is plain, no invented epithets; every entry carries its verification receipt (honest-labels law); the full 130-quote source of record is .kiln-dev/rework/quote-bank-draft.md"
+    "moments.rule": "the great-minds bank (INTAKE-10), keyed by MOMENT (run-opens-direct, law-locked, slice-sealed, validate-green, …); one credited verified quote per quote foot, keyed to the moment, never repeated within a run; rendered per CAL 17 — the WHOLE quote rides in one code span (the accent), any accent backticks embedded in the bank text are DROPPED at render (nested spans break; the bank data is never edited), the attribution renders the entry's FULL source value plain — translation and work provenance included, never name-only — and no invented epithets; every entry carries its verification receipt (honest-labels law); the full source of record is .kiln-dev/rework/quote-bank-draft.md"
   },
   "panel": {
-    "doctrine": "The altitude panel — Kiln's status card for a live or resumed run. It narrates ONE LEVEL HIGHER than the plumbing: events by their effect on the run and the product, internals named only when the concept needs them, broadest-possible audience by default. Ratified from the operator calibrations (INTAKE items 8–9); the terminal is the test bench — iterate against real renders, never against this description.",
-    "altitude": "concept-level, not poetic and not component-level. A line names ACTOR → ACTION → WHAT IT UNLOCKS in plain words: 'the two minds understand each other again; the stalled run moves' — never 'the args seam mended'. Workers and background calls ARE named when they are the event (hiding the actor is a comprehension defect, not lore); the razor is extreme brevity that stays true — needing length is a comprehension red flag.",
-    "toggle": "default = this broad-audience concept level; a technicality toggle (alpha) lets an engineer opt into component-level detail. The exact tool paths and next-actions always live in .kiln/STATE.md for whoever wants them; the panel speaks the concept.",
-    "title_line": {
-      "form": "`STATE` **what is happening** (`agent-handle`)",
-      "rule": "the STATE tag is a code-span (the accent column); the event is bold; the agent's LITERAL harness handle rides in parens so the card correlates one-to-one with the task list the operator is watching. One blank line under the title line, then the item's explanation in *italic* (the running focal item only; sealed items stay one-line shadows, unfired items one-line whispers). NO per-line lane tag — lanes are anchored by group headers (see body); numbers are never used to reference items, correlation is by handle."
-    },
+    "doctrine": "The modular display system (INTAKE-16, ratified) — every Kiln status surface composes the blocks below and nothing else; cards compose, the conductor renders nothing (R2). Modularity is subtraction, not configuration: every scenario is a subset of the same blocks, and every omission is itself a message (the mu lines). This section is the runtime encoding the cards consume; the ratified display-system document remains the design authority. Narrate ONE LEVEL HIGHER than the plumbing: ACTOR → ACTION → WHAT IT UNLOCKS in plain words, internals named only when the concept needs them, broadest audience by default.",
+    "density": "the technicality toggle is a FILL RULE, never a structure: broad (default) fills slots with the simple version of the technical truth; engineer (opt-in) fills the same slots with file paths, ids, and counts. A render at either density must diff against the other as text inside slots only — any structural diff is a defect. .kiln/STATE.md always carries the full plumbing.",
+    "accent": "color ONLY where the grammar defines it — a state word, an agent handle, a short concrete unfold now-segment, the quote span. Colored phrases anywhere else read as random and are banned. No ANSI, no emoji, no progress animation, no second accent system.",
     "states": {
       "ladder": ["UNFIRED", "RUNNING", "SEALED", "HELD"],
       "UNFIRED": "not yet begun — an italic whisper",
-      "RUNNING": "in the fire now — the lit focal point (a state word names a duration, not a spark; RUNNING replaced FIRING for exactly this)",
+      "RUNNING": "in the fire now — the lit focal point (a state word names a duration, not a spark; repair is RUNNING, exhaustion is HELD — no FAILED exists)",
       "SEALED": "done and verified — receded to a short plain shadow-line",
       "HELD": "an honest stop; a human's word is needed before the fire moves (the kernel's own 'the run holds')",
       "floor": "every state word must read instantly to a first-time user"
     },
-    "header": {
-      "strip": "the brand progress-line — `✓` done · `▶` **active** · `○` *pending*: glyphs carry status, bold the active phase, italicize the pending. Status glyphs appear ONLY on the strip and on the lane group headers that reuse them (see body) — never on the unfold line or the item lines, which carry status by typography alone",
-      "fraction": "every phase carries a TRUE fraction counted against a NAMED checklist on disk — the stages, slices.json, the LAW checks — never a commit or event count; the header can never lie",
-      "unfold": "the ACTIVE phase unfolds ONE indented line naming what its fraction counts"
+    "blocks": {
+      "frame": "the heavy bar `━━━…` above and below the header trio (brand line + strip + unfold) — FIXED 36-column run, never resized to the terminal, its own prominent block. Identical at 2 slices or 40. mu: a message with no frame is a beat, not a card — conversational voice, no status claim.",
+      "brand_line": "`**KILN** · *the project's name or the run's chapter*` — KILN bold, one italic context; a chapter suffix at big boundaries. mu: never omitted while the frame exists.",
+      "strip": "the forest — every phase of the run on one line, per grammar['progress.glyphs'] and grammar['progress.form']: ✓ sealed (name italic) · ▶ **active** (the only bold) · ◇ opened-fire-elsewhere (glossed once per session as 'begun, not burning') · ○ pending (italic). The active phase carries its TRUE fraction against a NAMED on-disk checklist; fractions appear on the active phase ONLY. No accent on the strip. Wraps only between phase entries — a glyph is never split from its name. mu: never omitted from a card; a phase absent from the strip does not exist.",
+      "unfold": "ONE indented glyph-free teaching line naming what the active fraction counts, in reader-meaningful subject matter — never bare process-internal labels. Typography alone carries the three states: plain = sealed, `accent` = in the fire, *italic* = ahead; reading rule stated once per session, then never again. Past ~8 items it windows — last sealed, the lit one, next one or two, true counts as words (`…twelve sealed · auth-tokens · `session-store` · *31 ahead*`) — and the line never wraps. The broad default names the checklist IN WORDS; the checklist filename is engineer fill only. mu: omitted when no phase is active — the run is between fires.",
+      "title_unit": "`` `RUNNING` **the event at concept altitude** (`agent-handle`) `` — state code-span, bold event (actor → action → what it unlocks), the LITERAL harness handle in parens. A non-agent actor omits the handle rather than inventing one; a commit hash may stand as the handle on a fresh seal, which wants an em-dash clause. States: UNFIRED / RUNNING / SEALED / HELD only. mu: a card body with zero title units is THE PULSE — time passed, nothing crossed.",
+      "whisper": "one blank line under its title unit, then TWO-SPACE indent, then ONE tight italic sentence — concrete truth, the simple version of the technical event, never fog, never a paragraph. The one-light law: one whisper per lane, ever; with parallel RUNNING items the whisper follows the FOCAL fire — the one that will cross FIRST — and every co-running item stands as a title unit with a short dash-clause only, half-lit. mu: a title unit without a whisper is deliberately half-lit — running, but not the focal point.",
+      "shadow": "shadow decay compresses history so the card never grows: (1) fresh seal — full title unit, SEALED tag, dash-clause, its one moment of light; (2) recent seal — one plain line, no accent, no bold: name + one clause of what it gave the present, single-family seals say so plainly every time; (3) silence — everything older lives only in the strip's ✓ and the unfold's plain names. Decay is the ONLY in-card history; deep history appears solely as the ledger aperture at resume and boundary cards. mu: absence of shadows says the present stands on nothing that needs naming.",
+      "close": "one short plain narrative line — what starts when the running thing crosses; never a numbered next-up list, never a paragraph. mu: the final-report card omits the close — absence of a close says the work is done.",
+      "foot": "grammar['rule.light'], a blank line, then the whole quote in one code span with plain full attribution: `` `\"Whole quote in one code span.\"` — the bank entry's full source value `` (CAL 17 — see quotes['moments.rule']; embedded backticks dropped at render). One verified bank quote keyed to the moment, never repeated in a run; moment keys per the scenario recipes. mu: the PULSE and the HELD card omit the foot — on HELD the moment belongs to the human, not the lore.",
+      "fault_lens": "makes the decisive error more prominent than surrounding progress — ONLY on validate-red, gate-reject, and hard-stop cards. Three plain lines, concept-level at broad fill: `Fault:` the FIRST causal fault · `Blocks:` its blocked outcome · `Evidence:` where the evidence lives, in words (check id + artifact path are engineer fill). Additional findings stay in the evidence artifact. mu: omitted when no red evidence exists; never used for warnings that block nothing.",
+      "evidence_notch": "gives validation and completion facts a compact home: `Evidence: 128 checks passed, none failed · six acceptance paths passed`. Required in validation verdicts and the final report; no provisional result dressed as proof. Its resume/boundary form is THE LEDGER APERTURE — counts + where the full truth lives: `Earlier: 23 seals · four repairs · resumed twice — the full story lives in the run's ledger` (the ledger file path is engineer fill only). mu: omitted while evidence is incomplete or irrelevant; the aperture is omitted when history is short, unchanged, or causally irrelevant."
     },
-    "unfold_line": {
-      "rule": "one indented, GLYPH-FREE line under the active phase; typography alone carries the three states — plain weight = sealed/past, `code-span accent` = in-the-fire/now, *italic* = ahead/future. Status glyphs never appear here (they live on the phase strip). The reading rule is stated once per session, then never again."
+    "compositions": {
+      "pulse": "FRAME (brand + strip + unfold) alone — the heartbeat: minor progress, resume-greeting, idle (sparingly; silence stays the default between beats).",
+      "card": "PULSE + body (title units, whispers, shadows, close) + foot — the default for every state change worth a card.",
+      "boundary_card": "CARD whose body opens with one bold day's-work paragraph + THE METER + the ledger aperture when history is material — milestone seals, stage crossings, completion only.",
+      "lane_header": "`▶ **Build**` / `✓ *Law*` — reuses the strip's own glyph; appears ONLY when two or more lanes carry live body items (a single active lane omits it — it would duplicate the strip's active entry). Parallel work composes ONE card with lane headers, never one card per lane. mu: absence says all light belongs to the strip's one bold phase.",
+      "meter": "one plain line above the foot — bold number, no accent. REQUIRED at completion: the locked driver-token number (T-02). WANTED at boundary cards and the final report: dollars + wall time; the report adds the repair-pass count. Unmetered renders verbatim: `unmetered — the meter did not report, and I do not invent a number`. mu: absence says no boundary has moved the number since it was last told.",
+      "ask": "HELD borrows the checkpoint furniture: the HELD title unit is the card's ONLY lit item and its subject lead carries 'NOT RUNNING'; its whisper; then grammar['rule.light'] · `→ Your word: the smallest exact decision IN WORDS — ` code-span options · grammar['rule.light']. Bounded options only when the evidence genuinely supports them. NO quote foot at HELD."
     },
-    "body": {
-      "rule": "the live cross-section — the work MOVING now plus what it just built on, never sub-steps of one slice. Organized by LANE: each lane shown gets a GROUP HEADER that reuses the strip's own glyph (`▶` **active** / `✓` done / `○` *pending*), so body and strip correlate on the shared glyph — the per-line lane tag is rejected (disruptive to the branding). A lane with nothing running and nothing just-sealed appears ONLY in the strip, never as a body header. Under a running lane sit only the items genuinely running in parallel right now; around them clair-obscur layers the depth — the seal the work just built on is a short plain shadow-line, the next item it unlocks is an italic whisper, told narratively (never a numbered 'next up' list)."
-    },
-    "composition": {
-      "mu": "emptiness is structure — the sealed past compresses to near-silence (a short shadow-line, not its full history), blank lines separate the lanes, and what is absent carries meaning; idle phases live in the strip alone",
-      "clair_obscur": "one lit focal point per lane — the RUNNING item keeps the accent (its `STATE` tag and live handle as code-spans) and the bold event, with its explanation in *italic* beneath; the seal it built on recedes to a short plain shadow-line with no accent; the next step it unlocks is an italic whisper. Reserving the code-span accent for the running title and the quote's key word is what lights the focal point — the receded layers carry no accent and no bold."
-    },
-    "quote_foot": {
-      "rule": "ONE credited verified quote from data/lore-quotes.json, keyed to the moment; the key word carries the accent (code-span — the one color, bound to monospace), the attribution is plain, and there are NO invented epithets — only a registry- or lore-receipted role may appear, de-emphasized, never the focus"
-    },
-    "example": "*Reading the unfold: plain is sealed, `accent` is now, italic ahead — shown once a session, then never again.*\n\n✓ Law · ▶ **Build** · ○ *Validate* · ○ *Report*   — stage 2 of 4\n  nav-shell · `page-content` · *contact-form*   — 1 of 3 slices sealed (slices.json)\n\n▶ **Build**\n`RUNNING` **The page takes shape** (`skeleton-walker`)\n\n*The middle slice is under the hammer, sealing under two families' eyes; when it crosses, the last slice takes the anvil and validate opens its hundred eyes on the living page.*\nnav-shell — sealed dual-family, the shell this builds on\n*contact-form — waiting its turn on the anvil*\n\n\"The secret is comprised in three words — `Work`, Finish, Publish.\" — Michael Faraday"
+    "recipes": {
+      "greenfield-small": "CARD — full unfold (every slice named), one title+whisper, close, foot. Moments: build-opens, slice-sealed",
+      "brownfield-large": "CARD — windowed unfold, shadow decay strict (at most 2 shadows), METER + aperture at boundaries. Moments: slice-opens, gate-accepts",
+      "parallel-builders": "ONE card — lane headers (2+ live lanes), ONE whisper on the FOCAL fire that crosses first, co-running title units carry a short dash-clause only. Moment: slice-opens",
+      "repair-loop": "CARD — `RUNNING` repair pass N of cap (the gate's own counter), findings count in the whisper, FAULT LENS on the reject card; repair IS running, no new state word. Moments: gate-rejects, repair-lands (both stay unwired — repair is mid-fire, not ceremony)",
+      "single-family-degradation": "FIRST an ASK card offering the honest fork (no foot — HELD rule); after acceptance a normal RUNNING card carrying the provenance stamp line `Mode: single-family · opposite-family reviewer unavailable · every affected seal marked`; thereafter every affected seal says single-family plainly. Moment: degradation-continue (the offer card takes none)",
+      "resume-after-kill": "PULSE first (the fire never went out), then CARD — fresh-seal shadow of where it stopped, RUNNING title of what resumes, ledger aperture. Moment: resume",
+      "validation": "CARD — unfold counts the acceptance families (the Law's checks), Argus title unit, whisper names the eye currently open, EVIDENCE NOTCH when evidence lands, FAULT LENS on red. Moments: validate-opens / validate-green / validate-red",
+      "final-report": "BOUNDARY CARD — strip all ✓ no fractions, one SEALED title, EVIDENCE NOTCH, provenance stamp if degraded, METER (the T-02 number required), foot — NO close (its absence is the ending). Moments: completion / completion-single-family",
+      "held-hard-stop": "FRAME + single HELD unit + whisper + THE ASK + FAULT LENS when red evidence exists — no other light, no close, no quote",
+      "idle": "PULSE, sparingly — silence is the default between beats; if the whole run waits on the operator's word, that is an ASK, not idle"
+    }
   },
   "beats": {
     "greeting.direct": [
@@ -132,23 +135,14 @@
     "stage.law": [
       "The law stage. Asimov takes the bench — your acceptance criteria, pinned into executable Law. Locked before build begins."
     ],
-    "stage.build": [
-      "The build stage. KRS-One takes the stage."
-    ],
     "slice.start": [
       "{streak}. Slice `{slice}` takes the anvil."
-    ],
-    "review.pass": [
-      "The reviewer steps aside. The diff holds — evidence, not opinion."
     ],
     "review.fail": [
       "The reviewer blocks the gate — {count} findings, each with its evidence location. Back to the forge."
     ],
     "stage.validate": [
       "The validate stage. Argus opens a hundred eyes — a real run, every eye on your acceptance criteria."
-    ],
-    "stage.report": [
-      "The report stage. Omega picks up the pen."
     ],
     "seal": [
       "Slice {slice} sealed — {label}. The evidence holds."
@@ -169,8 +163,7 @@
       "The gate held after {passes} repair passes. Findings {ids} are on the table; the ruling is yours."
     ],
     "bad-args": [
-      "The launch reached me malformed — no stage to run and no idea to catch, so nothing was lit. Relaunch with the stage, the project, and the idea.",
-      "The conductor did not provide an absolute path to my own tools — without it, from the project floor I cannot find my gate, my cards, or my voice, so I hold rather than read them from the wrong place. Relaunch with the absolute path."
+      "Unknown stage in the launch args — the spine knows law, build, validate, report."
     ],
     "gate-unreachable": [
       "The gate tool would not run — not found or not executable where it lives, so codex was never reached and no verdict exists. Nothing seals on a guess; restore the gate and relaunch."

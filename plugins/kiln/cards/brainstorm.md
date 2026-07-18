@@ -32,11 +32,13 @@ On the `BRAINSTORM_COMPLETE` envelope the conductor runs TWO launches, in order:
    compiles the confirmed intents, user-tagged ideas, and clarifications into
    `.kiln/docs/vision.md` — inventing nothing; every line traces to a ledger event — written
    via temp + rename. Returns the standard tiny envelope `{ok, beat, pointers}`: `beat` one
-   voiced line announcing the vision is on disk, closed by a quote foot — one credited
-   verified quote from `data/lore-quotes.json` → `moments["vision-compiled"]`, its `text`
-   AS-IS (the one accent code span is pre-embedded — add none, move none), the full `source`
-   string plain, no invented epithets, never a quote already used this run — `pointers` the
-   vision path.
+   voiced line announcing the vision is on disk, closed by a quote foot composed per the
+   display encoding (`data/voice.json` → `panel.blocks.foot`, CAL 17) — a light rule
+   (`grammar["rule.light"]`), a blank line, then one credited verified quote from
+   `data/lore-quotes.json` → `moments["vision-compiled"]`: the entry's `text` with any
+   embedded backticks DROPPED, the WHOLE quote wrapped in one code span (nested spans
+   break), the FULL `source` string plain, no invented epithets, never a quote already used
+   this run — `pointers` the vision path.
 2. **The kernel** — `{stage: "law", projectDir, idea: <the essence>}`. The essence is the
    user-authored seed; the vision doc carries the completeness (the sealed law card already
    reads `.kiln/docs/` vision artifacts when present). The essence alone never carries the

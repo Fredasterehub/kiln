@@ -17,19 +17,5 @@
     "workflows",
     "multi-model",
     "orchestration"
-  ],
-  "userConfig": {
-    "posture": {
-      "type": "string",
-      "title": "Default posture override",
-      "description": "How Kiln sizes each run. 'auto' lets the Gauge score complexity per run (recommended); 'max' forces the top-rigor posture (every dial at its ceiling); 'fast' forces the leanest posture. Default: auto.",
-      "default": "auto"
-    },
-    "theaterIntensity": {
-      "type": "string",
-      "title": "Theater intensity",
-      "description": "How much of Kiln's persona theater renders — the lore banners, transition lines, and voice. 'full' is the complete show (default); 'light' keeps the status banners but trims the narration; 'off' is bare functional output.",
-      "default": "full"
-    }
-  }
+  ]
 }

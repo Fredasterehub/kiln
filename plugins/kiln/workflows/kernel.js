@@ -66,7 +66,9 @@ async function reviewLoop(deps, maxRepairs = 2) {
 // The kernel fills every kernel-owned slot from the sealed voice.json slots
 // map — closed machine facts and counters only; every semantic slot arrives
 // stage-prefilled ({quote}, {title_row}, …) and passes through untouched.
-const KERNEL_SLOTS = ['STAGE', 'i', 'n', 's', 't', 'slice', 'label', 'driver', 'passes', 'count', 'ids', 'streak', 'STREAK']
+// {driver} is absent by the sealed twelve-slot map: it is DRIVER-filled at
+// completion from kiln-meter stdout, never a kernel fact.
+const KERNEL_SLOTS = ['STAGE', 'i', 'n', 's', 't', 'slice', 'label', 'passes', 'count', 'ids', 'streak', 'STREAK']
 function fillClosed(beat, facts) {
   let out = String(beat ?? '')
   for (const k of KERNEL_SLOTS) {
@@ -194,8 +196,9 @@ function parseSliceEntry(entry) {
 // KERNEL_RUNTIME_BEGIN — evaluated as an async function body by the workflow runtime
 
 // W-01: accept args in both shapes; malformed input is a closed-fact error,
-// never a silent bare path. No trusted paths exist here, so the beat is a
-// kernel-owned honest line (no sealed key covers transport errors).
+// never a silent bare path. This site and the plugin-root halt below fire
+// BEFORE a trusted plugin root exists, so both speak kernel-owned honest
+// lines by the S1 joint ruling — no voice read is possible pre-root.
 const parsed = parseArgs(args)
 if (!parsed.ok) {
   return { status: 'bad-args', beat: 'Malformed launch args reached the kernel — relaunch with stage, projectDir, and idea.', pointers: {} }
@@ -273,11 +276,13 @@ const lawBeat = (cmd, label) => idsFetch(cmd, label, 'the owning slice ids the c
 // W-03: every kernel return carries a real beat. Sealed voice templates are
 // fetched as opaque strings (the kernel carries beats, never parses them) and
 // kernel-owned slots fill as ever; the fallback line fires only when the
-// voice file is unreachable.
-const voiceBeat = (key, facts, fallback) => idsFetch(
+// voice file is unreachable. idx selects the sealed variant under a key —
+// transport-failure carries a review-call entry (0) and a stage-worker
+// entry (1); every other key reads entry 0.
+const voiceBeat = (key, facts, fallback, idx = 0) => idsFetch(
   "node -p 'JSON.stringify(require(" + JSON.stringify(plugin + '/data/voice.json') + ').beats[' + JSON.stringify(key) + "])'",
   'voice:' + key, 'the printed JSON array of beat templates, [] if exit != 0',
-).then(v => fillClosed(v.ids[0] ?? fallback, facts))
+).then(v => fillClosed(v.ids[idx] ?? fallback, facts))
 
 // Stage-card and per-slice builder legs share the {ok, beat, pointers} schema; the
 // caller supplies the resolved tier opts. Stage cards (law/validate/report) run on
@@ -294,7 +299,9 @@ if (stage === 'needs-brainstorm') {
   return { status: 'needs-brainstorm', beat: nb, pointers: { state: P.state } }
 }
 if (!stage) {
-  return { status: 'bad-args', beat: 'Unknown stage in the launch args — the spine knows law, build, validate, report.', pointers: { state: P.state } }
+  // S1 ruling: this twin site runs after the plugin root is validated, so it
+  // reads the sealed bad-args key; the kernel line survives as the fallback.
+  return { status: 'bad-args', beat: await voiceBeat('bad-args', {}, 'Unknown stage in the launch args — the spine knows law, build, validate, report.'), pointers: { state: P.state } }
 }
 
 const beats = []
@@ -353,7 +360,9 @@ if (pre.exit !== 0) {
 if (stage !== 'build') {
   const stageFacts = { STAGE: stage.toUpperCase(), i: SPINE.indexOf(stage) + 1, n: SPINE.length }
   const r = await act(cardPrompt(A.idea ? 'Operator idea (verbatim): ' + A.idea : ''), 'stage:' + stage)
-  if (!r.ok) return failStop('transport-failure', { stage, next_action: 'Rerun stage ' + stage }, 'The ' + stage + ' stage did not return sound work — the run holds.')
+  // S1 ruling: reachable twin sites read their sealed keys; the kernel lines
+  // below survive only as unreachable-voice fallbacks (W-03).
+  if (!r.ok) return failStop('transport-failure', { stage, next_action: 'Rerun stage ' + stage }, await voiceBeat('transport-failure', {}, 'The ' + stage + ' stage did not return sound work — the run holds.', 1))
   for (const p of r.pointers) routes.add(p)
   // LAW rerun beat: stage end (report is a stage, so this also guards completion).
   const post = await lawBeat(LAW_GUARD, 'law:stage-end')
@@ -374,7 +383,7 @@ const list = await idsFetch(
   'slices:fetch', 'the printed JSON array of slice descriptor strings (a bare id, or "obj|<id>|<surface>"), [] if exit != 0',
 )
 if (list.exit !== 0 || list.ids.length === 0) {
-  return failStop('transport-failure', { stage, next_action: 'Rerun stage law: no slice list at ' + P.slices }, 'No slice list on the ledger — the law stage must run again.')
+  return failStop('transport-failure', { stage, next_action: 'Rerun stage law: no slice list at ' + P.slices }, await voiceBeat('transport-failure', {}, 'No slice list on the ledger — the law stage must run again.', 1))
 }
 const slices = list.ids.map(parseSliceEntry)
 // A malformed slice descriptor (object form missing an id or naming an unknown
@@ -407,7 +416,7 @@ for (const entry of slices) {
     passes: 0, count: 0, ids: '',
   }
   const r = await actWith(cardPrompt('Build exactly slice ' + slice + '. Write ' + P.request + ' per the card before returning.'), 'slice:' + slice, builderOpts)
-  if (!r.ok) return failStop('transport-failure', { stage, active_slice: slice, next_action: 'Rerun stage build' }, 'Slice ' + slice + ' did not return sound work — the run holds.')
+  if (!r.ok) return failStop('transport-failure', { stage, active_slice: slice, next_action: 'Rerun stage build' }, await voiceBeat('transport-failure', {}, 'Slice ' + slice + ' did not return sound work — the run holds.', 1))
   for (const p of r.pointers) routes.add(p)
   beats.push(fillClosed(r.beat, facts))
   // LAW rerun beat: before any dependent seal. The check must exist by build.
@@ -454,8 +463,8 @@ for (const entry of slices) {
       beats.push(await voiceBeat('blocked', { passes: loop.repairs, ids: found.ids.join(', '), count: found.ids.length }, 'The gate held after ' + loop.repairs + ' repair passes — the ruling is yours.'))
       return stop('blocked', { stage, active_slice: slice, next_action: 'Operator ruling: gate blocked for slice ' + slice }, { gate: P.gate, finding_ids: found.ids, passes: loop.repairs })
     }
-    if (loop.result === 'gate-unreachable') return failStop('gate-unreachable', { stage, active_slice: slice, next_action: 'Rerun stage build after restoring the gate tool at ' + plugin + '/scripts/kiln-review' }, 'The gate tool at ' + plugin + '/scripts/kiln-review is unreachable — not found or not executable; codex was never reached, so no verdict was possible.', { gate: P.gate })
-    if (loop.result === 'transport-failure') return failStop('transport-failure', { stage, active_slice: slice, next_action: 'Rerun stage build after fixing the transport' }, 'The review transport failed for slice ' + slice + ' — no verdict was published.', { gate: P.gate })
+    if (loop.result === 'gate-unreachable') return failStop('gate-unreachable', { stage, active_slice: slice, next_action: 'Rerun stage build after restoring the gate tool at ' + plugin + '/scripts/kiln-review' }, await voiceBeat('gate-unreachable', {}, 'The gate tool at ' + plugin + '/scripts/kiln-review is unreachable — not found or not executable; codex was never reached, so no verdict was possible.'), { gate: P.gate })
+    if (loop.result === 'transport-failure') return failStop('transport-failure', { stage, active_slice: slice, next_action: 'Rerun stage build after fixing the transport' }, await voiceBeat('transport-failure', {}, 'The review transport failed for slice ' + slice + ' — no verdict was published.'), { gate: P.gate })
     if (loop.result === 'repair-failed') return failStop('repair-failed', { stage, active_slice: slice, next_action: 'Rerun stage build: repair pass failed for slice ' + slice }, 'The repair pass did not land for slice ' + slice + ' — the run holds.', { gate: P.gate })
     if (loop.result === 'degraded') {
       const db = await voiceBeat('degradation', {}, 'Codex is not answering — answer continue to proceed single-family.')
@@ -468,7 +477,7 @@ for (const entry of slices) {
   }
   const s = await hands('echo "' + slice + ' ' + label + '" >> ' + P.seals, 'seal:append')
   if (s !== 0) return persistFail('seal-append')
-  beats.push(fillClosed('sealed — {label} · slice {slice}', { ...facts, label }))
+  beats.push(await voiceBeat('seal', { ...facts, label }, 'sealed — {label} · slice {slice}'))
   const w = await hands(atomicWriteCmd(stateDoc({ stage, active_slice: slice, next_action: nextAct('build'), pointers: [...routes] })), 'state:write')
   if (w !== 0) return persistFail('state-write')
 }
