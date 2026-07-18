@@ -26,7 +26,7 @@ first — `beats["stage.validate"]` at stage open — then the blocks, in this l
 never repeating each other:
 - **FRAME** — `grammar["banner.stage"]`: `{name}` = the project's name in words;
   `{progress}` = the strip per `grammar["progress.form"]`: `✓ *Law* · ✓ *Build* ·
-  ▶ **Validate M/M** · ○ *Report*` — sealed names italic, bold only the active phase, the
+  ▶ **Validate** M/M · ○ *Report*` — sealed names italic, bold only the active phase, the
   fraction ONLY there: `M/M` is the true count of criteria exercised, bound to the named
   on-disk checklist `.kiln/LAW.md` (ok requires every criterion exercised — the fraction
   counts YOUR rows: exercised, not passed); then a newline and one two-space-indented

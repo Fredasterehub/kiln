@@ -133,13 +133,13 @@ test('plugin.json: the zero-reader userConfig knobs are killed (S15)', () => {
 
 test('cards: Law and Validate carry the truthful active-phase fraction, each bound to its named on-disk checklist', () => {
   const law = cardText('law.md')
-  assert.ok(law.includes('▶ **Law N/N**'), 'the law strip carries the active-phase fraction')
+  assert.ok(law.includes('▶ **Law** N/N'), 'the law strip carries the active-phase fraction — bare bold word, fraction outside the bold (N2)')
   assert.ok(law.includes('checklist `.kiln/slices.json`'), 'the law fraction is bound to the named slice checklist')
   const validate = cardText('validate.md')
-  assert.ok(validate.includes('▶ **Validate M/M**'), 'the validate strip carries the active-phase fraction')
+  assert.ok(validate.includes('▶ **Validate** M/M'), 'the validate strip carries the active-phase fraction — bare bold word, fraction outside the bold (N4)')
   assert.ok(validate.includes('checklist `.kiln/LAW.md`'), 'the validate fraction is bound to the named Law checklist')
   const build = cardText('build.md')
-  assert.ok(build.includes('▶ **Build {s}/{t}**'), 'the build strip keeps the kernel-filled fraction against .kiln/slices.json')
+  assert.ok(build.includes('▶ **Build** {s}/{t}'), 'the build strip keeps the kernel-filled fraction against .kiln/slices.json — bare bold word, fraction outside the bold (N3)')
 })
 
 test('cards: Report renders the FINAL all-sealed strip — every phase ✓, no fraction, no active marker, no unfold', () => {
@@ -154,7 +154,7 @@ test('cards: every stage card pins its title unit and its N2–N5 bold-Stage anc
     'law.md': ['`SEALED` **The Law is locked', '▶ **Law'],
     'build.md': ['`RUNNING` **<this slice at concept altitude', '▶ **Build'],
     'validate.md': ['`SEALED` **Validate — a hundred eyes found nothing wrong', '▶ **Validate'],
-    'report.md': ['`SEALED` **The report stands', '✓ *Report*'],
+    'report.md': ['`SEALED` **Report** — the report stands', '✓ *Report*'],
   }
   for (const [name, pins] of Object.entries(anchors)) {
     const text = cardText(name)

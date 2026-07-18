@@ -45,7 +45,7 @@ THE CARD (`panel.compositions.card`); the conductor renders nothing. Scene-sette
 order, never repeating each other:
 - **FRAME** — `grammar["banner.stage"]`: `{name}` = the project's name in words (the run's
   chapter at big boundaries); `{progress}` = the strip per `grammar["progress.form"]`:
-  `▶ **Law N/N** · ○ *Build* · ○ *Validate* · ○ *Report*` — bold only the active phase,
+  `▶ **Law** N/N · ○ *Build* · ○ *Validate* · ○ *Report*` — bold only the active phase,
   the fraction ONLY there: `N/N` is the true slice count, bound to the named on-disk
   checklist `.kiln/slices.json` you just authored (the Law returns only complete — all N
   pinned); then a newline and one two-space-indented glyph-free unfold line naming those

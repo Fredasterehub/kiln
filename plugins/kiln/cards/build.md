@@ -40,7 +40,7 @@ then the blocks, never repeating each other.
 - **Build mode, every slice** — scene-setter: `beats["slice.start"]` as-is (its slots are
   kernel-owned). Then the blocks, in this literal order:
   - **FRAME** — `grammar["banner.stage"]`: `{name}` = the project's name in words;
-    `{progress}` = the strip per `grammar["progress.form"]`: `✓ *Law* · ▶ **Build {s}/{t}** ·
+    `{progress}` = the strip per `grammar["progress.form"]`: `✓ *Law* · ▶ **Build** {s}/{t} ·
     ○ *Validate* · ○ *Report*` — sealed and pending names italic, bold only the active
     phase, the fraction ONLY there (it counts `.kiln/slices.json`, the named on-disk
     checklist, kernel-filled); then a newline and one two-space-indented glyph-free unfold
@@ -71,7 +71,7 @@ then the blocks, never repeating each other.
   scene-setter: `beats["review.fail"][0]` as-is (its `{count}` is kernel-owned). Then the
   blocks, in this literal order — with NO foot (the repair moments stay unwired; repair is
   mid-fire, not ceremony):
-  - **FRAME** — as in build mode; the strip still reads `▶ **Build {s}/{t}**` — repair IS
+  - **FRAME** — as in build mode; the strip still reads `▶ **Build** {s}/{t}` — repair IS
     running, no new state word.
   - **TITLE UNIT** — exactly one: `` `RUNNING` **Repair pass {passes} — the findings go
     back to the forge** (`<your literal harness handle; omit rather than invent>`) `` —

@@ -35,9 +35,10 @@ nothing. Scene-setter first, then the blocks, in this literal order:
   line (the unfold is omitted when no phase is active).
 - ONE bold day's-work line opens the body — what was forged, from the record, concept
   altitude.
-- **TITLE UNIT** — exactly one: `` `SEALED` **The report stands — <the deliverable, from
-  the record>** (`<a seal handle the record carries; omit rather than invent>`) `` — the
-  one SEALED title the final-report recipe requires; its bold event names the report.
+- **TITLE UNIT** — exactly one: `` `SEALED` **Report** — the report stands: <the
+  deliverable, from the record> (`<a seal handle the record carries; omit rather than
+  invent>`) `` — the one SEALED title the final-report recipe requires; its bold event
+  names the report with the bare stage word, the clause after it carrying what stands.
 - **EVIDENCE NOTCH** (`panel.blocks.evidence_notch`) — one plain line from the readable
   record: criteria passed/failed counts from `.kiln/validate.md`, the seal count from
   `.kiln/seals.log`; single-family seals named plainly when present.
