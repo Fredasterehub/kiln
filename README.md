@@ -34,12 +34,12 @@
   <td><sub>Pipeline is stable. Agents are sharp. Full autonomy &mdash; few edge cases remain.</sub></td>
 </tr>
 <tr>
-  <td align="center"><img src="docs/status/yellow-active.svg" width="18" alt="yellow-active"></td>
-  <td><strong>Functional but evolving. Some rough edges &mdash; you may need to steer where it would normally carry you.</strong></td>
+  <td align="center"><img src="docs/status/yellow-active.svg" width="18" alt="yellow"></td>
+  <td><sub>Functional but evolving. Some rough edges &mdash; you may need to steer where it would normally carry you.</sub></td>
 </tr>
 <tr>
-  <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
-  <td><sub>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</sub></td>
+  <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red-active"></td>
+  <td><strong>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</strong></td>
 </tr>
 <tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-July_19,_2026_·_v3.1.3-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
@@ -75,10 +75,9 @@
 
 > Make sure to run `claude plugin update kiln@kiln` often! Claude code skills and plugin dont have automatic push functions. 
 >
-> I'm keeping it yellow — lots of growing pain with the new fable he literally vomited the most insane ai slop, drifted us away from our original objectives and themes, although I did gave it full "carte blanche" to take the project - Its was a disaster.
-> We are going back to a much more lightweight as originally designed.
+> ooof we are official back in red :3 Lots to fix still - your claude can still totally run it but will have to modify some files on the fly - sorry for inconveniences hopefully ill tackle it all in a timely manner - please standby
 >
-> > Hope it helps anyone, give inspiration!
+
 
 ---
 
