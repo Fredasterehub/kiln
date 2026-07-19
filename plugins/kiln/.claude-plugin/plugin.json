@@ -3,7 +3,7 @@
   "name": "kiln",
   "displayName": "Kiln",
   "version": "3.1.2",
-  "description": "Multi-model software creation pipeline. From a conversation to deployed code in 8 stages — an interactive brainstorm, then autonomous gauge, research, architecture, build, and validation orchestrated as native Claude Code workflows with Claude and GPT-5.6.",
+  "description": "Multi-model software creation pipeline. A conversation becomes running, tested software — an interactive brainstorm, then an autonomous walk from law to build to validation, driven by one content-blind kernel and five stage cards, with Claude building and GPT-5.6 reviewing every seal.",
   "author": {
     "name": "Fredastere",
     "url": "https://github.com/Fredasterehub"

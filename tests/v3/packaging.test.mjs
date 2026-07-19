@@ -5,8 +5,8 @@
 // no v3 vocabulary survives, no script dependencies; the check-by-check shape pins live in
 // plugins/kiln/tests/kiln-doctor.test.mjs), the manifest carries the explicit rework surface
 // (two commands, one agent, no userConfig knobs), and the root README FOOTER is byte-stable
-// (operator-only). The shipped plugin carries no README until the SHIP copy pass authors a fresh
-// one — that pass re-adds the README and its pins together.
+// (operator-only). The SHIP copy pass authored the fresh plugin README — its pin set rides
+// below, beside the root README pins.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -18,6 +18,8 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const PLUGIN = join(ROOT, 'plugins', 'kiln')
 const manifest = JSON.parse(readFileSync(join(PLUGIN, '.claude-plugin', 'plugin.json'), 'utf8'))
 const doctor = readFileSync(join(PLUGIN, 'commands', 'kiln-doctor.md'), 'utf8')
+const pluginReadme = readFileSync(join(PLUGIN, 'README.md'), 'utf8')
+const brand = readFileSync(join(PLUGIN, 'references', 'brand.md'), 'utf8')
 const rootReadme = readFileSync(join(ROOT, 'README.md'), 'utf8')
 const gitignore = readFileSync(join(ROOT, '.gitignore'), 'utf8')
 const BARE_GPT5 = /GPT-5(?!\.6)/ // "GPT-5" not followed by ".6" — the stale-model string (bare GPT-5 or the retired GPT-5.5)
@@ -39,10 +41,11 @@ test('manifest: no userConfig knobs — the rework carries none', () => {
   assert.equal('userConfig' in manifest, false)
 })
 
-test('manifest: description is the 8-stage / GPT-5.6 truth — no lying count', () => {
-  assert.match(manifest.description, /8 stages/)
+test('manifest: description is the one-kernel / GPT-5.6 truth — no lying count', () => {
+  assert.match(manifest.description, /one content-blind kernel/)
+  assert.match(manifest.description, /five stage cards/)
   assert.match(manifest.description, /GPT-5\.6/)
-  assert.doesNotMatch(manifest.description, /in 7 steps/)
+  assert.doesNotMatch(manifest.description, /in 7 steps|8 stages/)
   assert.doesNotMatch(manifest.description, BARE_GPT5)
 })
 
@@ -102,10 +105,30 @@ test('doctor: speaks as Kiln — the first-person PROPERTY holds on every render
   assert.match(doctor, /My forge cannot light/)        // the honest failure verdict
 })
 
+// ── plugin README: the SHIP copy-pass pin set — the fresh shopfront speaks the rework truth ──
+test('plugin README: one kernel, five cards, GPT-5.6 — no retired machinery', () => {
+  assert.match(pluginReadme, /GPT-5\.6/)
+  assert.doesNotMatch(pluginReadme, BARE_GPT5)
+  assert.match(pluginReadme, /[Oo]ne kernel/)
+  assert.match(pluginReadme, /five stage cards/i)
+  assert.doesNotMatch(pluginReadme, /Dynamic Workflows drive|eight stages|duo-pool/)
+})
+
+// ── brand.md: the reference doc speaks the rework truth — the retired machinery stays retired ─
+test('brand.md: one kernel + five cards, no present-tense retired machinery', () => {
+  assert.match(brand, /one (content-blind )?kernel/i)
+  assert.match(brand, /five stage cards/i)
+  assert.doesNotMatch(brand, /eight (Dynamic )?[Ww]orkflows/)
+  assert.doesNotMatch(brand, /hooks?\.json|SessionStart hook/)
+  assert.doesNotMatch(brand, /output-style/)
+  assert.doesNotMatch(brand, /spinner/)
+  assert.doesNotMatch(brand, /duo-pool/)
+})
+
 // ── root README: counts verified, FOOTER byte-stable (operator-only) ─────────────────────────
 test('root README: persona/workflow counts are the shipped truth', () => {
-  assert.match(rootReadme, /34 personas/)
-  assert.match(rootReadme, /8 workflows/)
+  assert.match(rootReadme, /32 personas/)
+  assert.match(rootReadme, /[Oo]ne kernel/)
 })
 
 // The LIVE marketing prose must name the current build model (GPT-5.6), never the retired GPT-5.5 or a

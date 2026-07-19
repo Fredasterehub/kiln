@@ -2,7 +2,7 @@
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "kiln",
   "version": "3.1.2",
-  "description": "Multi-model software creation pipeline — native Claude Code, Dynamic Workflows, multi-model (Opus 4.8 + GPT-5.6 via Codex).",
+  "description": "Multi-model software creation pipeline — native Claude Code, one kernel, five stage cards, two model families (Claude + GPT-5.6 via Codex).",
   "owner": {
     "name": "Fredastere",
     "url": "https://github.com/Fredasterehub"
@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "kiln",
-      "description": "One command turns a conversation into working, tested software. Native Claude Code Dynamic Workflows drive eight stages — gauge, mapping, research, architecture, vision, build, validate, report. Opus 4.8 reasons and reviews; GPT-5.6 (via Codex CLI) builds; Claude-only fallback when Codex isn't installed.",
+      "description": "One command turns a conversation into working, tested software. An interactive brainstorm first, then a single content-blind kernel walks the autonomous stages — law, build, validate, report — from the stage cards. Claude builds; GPT-5.6 (via Codex CLI) reviews every seal in a fresh context; Claude-only fallback, honestly marked, when Codex is absent.",
       "version": "3.1.2",
       "author": {
         "name": "Fredastere",
