@@ -1,23 +1,21 @@
 ---
-description: Check Kiln v3 prerequisites — version floor, capability tiers, sandbox, browser-leak — and diagnose issues before a run.
+description: Run Kiln's preflight — runtimes and sealed data files checked honestly before the fire is lit.
 ---
 
-You are Kiln, running a pre-flight self-diagnosis. This is a **three-part turn**: (1) run the single
-bash block below, (2) run the two probes bash cannot do — the **web-tool ToolSearch probe** and the
-**Opus/Fable model read** described under *Probes bash cannot run* — then (3) render the report from
-everything you gathered. Read no other files (a pre-flight check stays self-contained; everything you
-need is here). `$PLUGIN_ROOT` is resolved inside the block (`${CLAUDE_PLUGIN_ROOT}` is not expanded in
-this prompt, so the block resolves the real path itself — never `find /`).
+The operator has invoked Kiln's preflight. Act as Kiln — first person, ancient, sardonic,
+patient — taking your own pulse before a fire. Every rendered line speaks from my own
+viewpoint — I and my, never third-person narration. This is a two-part turn: (1) run the
+single bash block below exactly as written; (2) render the report from its output — one
+line per check from the fixed lines that follow, then one verdict line. Nothing else. Read
+no other files; a preflight stays self-contained.
 
-Render in Kiln's voice — first person, sardonic — with this fixed styling (no need for brand.md):
-- Status symbols only, no emojis: `✓` pass · `▶` warn/degraded · `✗` fail.
-- Heavy rule (`━`) top and bottom of the report; inline `code` for paths/versions.
-- After the checklist, render a **Capability** line: the resolved tier (`T1`…`T4`) and the
-  verification class (`full` / `static-only`) — this is exactly the `state.json.capability` record
-  the run carries (see *The capability record* below).
-- End with a final verdict line: **READY**, **READY (degraded)**, or **BLOCKED**, then one sardonic line.
+The preflight reads and speaks; it never writes — not to `.kiln/`, not anywhere. It never
+calls a model and never opens an interactive login: `codex login status` reads credential
+state from disk and exits — logged in is exit 0, logged out is not — nothing more.
 
-Run this and interpret the output:
+Run exactly this (`${CLAUDE_PLUGIN_ROOT}` is not expanded in this prompt, so the block
+resolves the real plugin root itself — the same newest-valid resolution every Kiln surface
+uses; never `find /`):
 
 ```bash
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
@@ -28,145 +26,115 @@ if [ -z "$PLUGIN_ROOT" ] || [ ! -f "$PLUGIN_ROOT/skills/kiln-fire/SKILL.md" ]; t
     [ -f "$d/skills/kiln-fire/SKILL.md" ] && printf '%s\n' "${d%/}"
   done | awk -F/ '{print $NF "\t" $0}' | sort -k1,1V | tail -1 | cut -f2)"
 fi
-echo "── plugin root ──"; echo "$PLUGIN_ROOT"
-echo "── plugin version ──"
-grep '"version"' "$PLUGIN_ROOT/.claude-plugin/plugin.json"
-echo "── claude code (REQUIRE >= 2.1.198 — implicit-team spawn + structured-output hardening + teammate liveness; RECOMMEND latest) ──"
-claude --version 2>&1 | head -1
-echo "── workflows disabled? (empty = enabled) ──"
-echo "env: ${CLAUDE_CODE_DISABLE_WORKFLOWS:-unset}"
-grep -h disableWorkflows ~/.claude/settings.json ~/.claude/settings.local.json 2>/dev/null || echo "settings: not disabled"
-echo "── runtime deps (a MISSING(FAIL) blocks) ──"
-for b in bash git node; do command -v "$b" >/dev/null && echo "OK $b $($b --version 2>&1 | head -1)" || echo "MISSING(FAIL) $b"; done
-for b in python3 jq; do command -v "$b" >/dev/null && echo "OK $b" || echo "MISSING(WARN) $b"; done
-echo "── CAPABILITY codex (the T2→T3 discriminator: binary on PATH + credentials + a pinned-model functional preflight — 60s budget, one retry) ──"
-if command -v codex >/dev/null; then
-  echo "codex binary: $(codex --version 2>&1 | head -1)"
-  if ! login_out=$(codex login status 2>&1 </dev/null); then
-    if printf '%s' "$login_out" | grep -qi 'not logged in'; then
-      echo "codex preflight: NOT AUTHENTICATED (codex login status: not logged in → run 'codex login' and re-check)"
-    else
-      echo "codex preflight: login-status FAILED (the actual error, not a guess — credential state unknown):"
-      printf '%s\n' "$login_out" | tail -3 | sed 's/^/  /'
-    fi
+echo "PLUGIN_ROOT=$PLUGIN_ROOT"
+# Presence AND a working version: capture the version command exit code and its value. A
+# present CLI whose version command fails or prints nothing is a defect, never a bare pass.
+if command -v claude >/dev/null 2>&1; then
+  CLAUDE_V="$(claude --version 2>/dev/null)"; CLAUDE_EXIT=$?
+  CLAUDE_V="$(printf '%s\n' "$CLAUDE_V" | head -1)"
+  if [ "$CLAUDE_EXIT" -eq 0 ] && [ -n "$CLAUDE_V" ]; then
+    echo "CLAUDE=present $CLAUDE_V"
   else
-    pf=$(mktemp); perr=$(mktemp)
-    probe() { : >"$pf"; timeout 60 codex exec --skip-git-repo-check --ignore-user-config -m gpt-5.6-sol -o "$pf" "Reply with exactly: KILN-PREFLIGHT-OK" </dev/null >/dev/null 2>"$perr" && grep -q 'KILN-PREFLIGHT-OK' "$pf"; }
-    if probe; then
-      echo "codex preflight: OK (credentials present + a clean pinned gpt-5.6-sol turn with the expected output → T3 Codex build path available)"
-    elif probe; then
-      echo "codex preflight: OK on retry (first attempt failed transiently; the identical pinned-model check passed → T3 Codex build path available)"
-    else
-      echo "codex preflight: FAILED twice (60s budget each) — installed, credentials present, functional pipeline unavailable → Sonnet build path"
-      echo "codex preflight error tail (the actual error, not a guess):"
-      tail -5 "$perr" | sed 's/^/  /'
-    fi
+    echo "CLAUDE=mute"
   fi
-  CODEX_V=$(codex --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-  if [ -n "$CODEX_V" ] && printf '0.143.0\n%s\n' "$CODEX_V" | sort -V -C 2>/dev/null; then
-    echo "codex supports_max: yes (>= 0.143.0 — additional capability line, never an availability gate)"
+else
+  echo "CLAUDE=absent"
+fi
+if command -v node >/dev/null 2>&1; then
+  echo "NODE=present $(node --version 2>/dev/null)"
+else
+  echo "NODE=absent"
+fi
+# Presence + credential state only: `codex login status` exits 0 when logged in, nonzero
+# when not. No exec, no model call, no interactive flow; stdin closed so nothing can prompt.
+if command -v codex >/dev/null 2>&1; then
+  if codex login status </dev/null >/dev/null 2>&1; then
+    echo "CODEX=present logged-in"
   else
-    echo "codex supports_max: no (< 0.143.0 — capability note only; availability unaffected)"
+    echo "CODEX=present logged-out"
   fi
-  grep -h model_context_window ~/.codex/config.toml 2>/dev/null || true
 else
-  echo "codex binary: absent (Claude/Sonnet-only build path)"
+  echo "CODEX=absent"
 fi
-echo "── CAPABILITY playwright (@playwright/mcp configured OR 'npx playwright --version' succeeds) ──"
-if grep -rlq "@playwright/mcp" ~/.claude/settings.json ~/.claude/settings.local.json ~/.claude/plugins ./.mcp.json 2>/dev/null; then
-  echo "playwright: @playwright/mcp configured (browser verification: full)"
-elif npx --no-install playwright --version >/dev/null 2>&1; then
-  echo "playwright: npx playwright $(npx --no-install playwright --version 2>/dev/null) (browser verification: full)"
-else
-  echo "playwright: absent (browser validation degrades to static-only)"
-fi
-echo "── CAPABILITY browser-leak pre-flight (READ-ONLY scan — reuses the kiln-probe leak-scan) ──"
-node "$PLUGIN_ROOT/scripts/kiln-probe.mjs" leak-scan 2>&1 | grep -E "^LEAK_SCAN_SUSPECTS|^LEAK_SCAN_PROFILE_DIRS" || echo "leak-scan: unavailable"
-echo "── sandbox posture + long-run resilience (advisory — see 'Sandbox & permissions') ──"
-grep -hE "sandbox|autoAllowBashIfSandboxed|allowedDomains|fallbackModel" ~/.claude/settings.json ~/.claude/settings.local.json ./.claude/settings.json 2>/dev/null | head -6 || true
-echo "── project path (advisory) ──"
-case "$PWD" in *" "*) echo "WARN: project path contains spaces — Kiln's workflow briefs assume space-free absolute paths; use a space-free path" ;; *) echo "path: space-free (OK)" ;; esac
-echo "── configured model (Opus/Fable read; session default when blank) ──"
-grep -hE '"model"' ~/.claude/settings.json ~/.claude/settings.local.json 2>/dev/null | head -2 || echo "model: session default"
-echo "── git identity ──"
-echo "name=$(git config user.name 2>/dev/null) email=$(git config user.email 2>/dev/null)"
-echo "── kiln data files (a MISSING(FAIL) blocks) ──"
-for f in agents.json brainstorming-techniques.json duo-pool.json elicitation-methods.json lore.json spinner-verbs.json; do
-  [ -f "$PLUGIN_ROOT/data/$f" ] && echo "OK $f" || echo "MISSING(FAIL) $f"; done
-echo "── existing run? ──"
-[ -f ./.kiln/events.jsonl ] && node "$PLUGIN_ROOT/scripts/kiln-state.mjs" summary ./.kiln 2>/dev/null || echo "no ./.kiln run here (fresh start)"
+for f in voice.json lore-quotes.json tiers.json; do
+  if node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$PLUGIN_ROOT/data/$f" >/dev/null 2>&1; then
+    echo "DATA:$f=parses"
+  else
+    echo "DATA:$f=broken"
+  fi
+done
+# The sealed tier shape, mirrored fact-for-fact from the kernel fail-closed boot gate
+# (validateTiers in workflows/kernel.js). The kernel never validates the raw file: its boot
+# leg first PROJECTS it — doctrine reduced to a presence flag, every role key reduced to
+# {family, alias, effort} — and that projection walks EVERY role key, so a malformed extra
+# role throws inside the projection and the boot fails closed. Mirror both stages: the same
+# projection first (a throw is the same invalid verdict), then the same checks line for line.
+node -e '
+const raw = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))
+const bad = (fact) => { console.log("TIERS_SHAPE=invalid " + fact); process.exit(0) }
+let t
+try {
+  t = ((x) => ({ doctrine: x.doctrine !== undefined, resolver: x.resolver, surface_routing: x.surface_routing, roles: Object.fromEntries(Object.keys(x.roles).map((k) => [k, { family: x.roles[k].family, alias: x.roles[k].alias, effort: x.roles[k].effort }])) }))(raw)
+} catch (e) { bad("a role entry the kernel boot projection cannot read") }
+const EFFORTS = ["low", "medium", "high", "xhigh"]
+const ROLES = ["driver", "kernel-leg", "stage-card", "builder-ui", "builder-logic", "reviewer-gate", "brainstorm-facilitator", "haiku-migration", "dev-sol"]
+const ROUTES = ["ui", "logic", "mixed"]
+if (t.doctrine !== true) bad("doctrine")
+if (!t.resolver || typeof t.resolver !== "object") bad("resolver")
+if (!t.surface_routing || typeof t.surface_routing !== "object") bad("surface_routing")
+if (!t.roles || typeof t.roles !== "object") bad("roles")
+for (const k of Object.keys(t.resolver)) {
+  if (typeof t.resolver[k] !== "string" || t.resolver[k].length === 0) bad("resolver." + k)
+}
+for (const key of ROLES) {
+  const r = t.roles[key]
+  if (!r || typeof r !== "object") bad("roles." + key)
+  if (r.family !== "claude" && r.family !== "gpt") bad("roles." + key + ".family")
+  if (typeof r.alias !== "string" || r.alias.length === 0) bad("roles." + key + ".alias")
+  if (!EFFORTS.includes(r.effort)) bad("roles." + key + ".effort")
+  if (r.family === "gpt" && (r.alias === "inherit" || !Object.prototype.hasOwnProperty.call(t.resolver, r.alias))) bad("roles." + key + ".gpt-alias")
+}
+for (const route of ROUTES) {
+  const target = t.surface_routing[route]
+  if (typeof target !== "string" || !Object.prototype.hasOwnProperty.call(t.roles, target)) bad("surface_routing." + route)
+}
+console.log("TIERS_SHAPE=valid")
+' "$PLUGIN_ROOT/data/tiers.json" 2>/dev/null || echo "TIERS_SHAPE=invalid unreadable"
 ```
 
-**Probes bash cannot run** — do both before rendering:
-- **web** (research sourcing firewall): run a **ToolSearch** for a web-search tool (query e.g.
-  `web search`). If it surfaces a usable web-search tool (`WebSearch`, `brave_web_search`, or
-  similar), web = **present**; if ToolSearch is unavailable or returns none, web = **absent** (the
-  research stage's cross-source firewall degrades — note it).
-- **opus/fable** (model availability from the session/config): the model you are running as proves
-  its own tier is reachable. Read the `── configured model ──` line: treat **Opus as available**
-  unless the config pins a Sonnet-only model; treat **Fable (the preferred Claude council head at T4)
-  as available** only when the session or config shows Fable access. Fable seats need a ONE-TIME
-  interactive consent (`/model fable` run once in an interactive session) that bash cannot probe —
-  report whether the session/config shows Fable access, and remind that an unconsented account must run
-  `/model fable` once to seat Fable as the head (without it the council still convenes at T4, Opus-headed
-  by succession — the tier is not lost). This doctor read is **advisory**: the conductor resolves the
-  head with a live Fable-pinned probe at onboarding/resume (recorded as `claude_head`), which is the
-  authority. Do not claim a tier the environment cannot reach.
+If the `PLUGIN_ROOT=` line prints empty, speak one honest first-person line — I am not
+installed or enabled, so I have no body to examine — and stop there.
 
-**Resolve the capability tier** from the probes:
-- **T3 (+Codex, full)** — codex preflight OK **and** Opus available. The default full-craft tier.
-- **T4 (the council tier)** — as T3, plus a resolved **Claude council head**: Fable 5 when reachable
-  (preferred), else Opus 4.8 by **succession** (recorded, never silent). Codex+Opus setups that used to
-  cap at T3-no-councils now reach the council tier, Opus-headed — that is more model calls, more
-  latency/tokens, and new fail-closed completion gates, kept by design (the ladder runs the strongest
-  available instruments, and the tier label moves so the change is visible). The bash
-  `── configured model ──` / Fable read here is **ADVISORY only**; the conductor's live Fable-pinned
-  probe at onboarding/resume is the **authoritative** resolution, recorded as `claude_head` in the run's
-  capability record.
-- **T2 (+Opus)** — Opus available, codex absent/non-functional (Sonnet builds logic, Opus reviews).
-- **T1 (Sonnet-only)** — no Opus (Sonnet across every slot).
-**Verification class**: `full` when playwright is present (browser probes execute); `static-only`
-when playwright is absent (UI validation degrades honestly, never silently green).
+**Render the report.** One line per check, verbatim from the fixed lines below with
+`{slots}` filled from the block's output, then one verdict line — nothing before, nothing
+after. A version is spoken inside its sentence — the bare number only, never pasted
+terminal output. Status symbols, never emojis: `✓` pass · `▶` warn · `✗` fail.
 
-Interpretation rules:
-- **BLOCKED** if: Claude Code `< 2.1.198`, **Dynamic Workflows disabled** (`disableWorkflows` in any settings file OR `CLAUDE_CODE_DISABLE_WORKFLOWS` set — the `── workflows disabled? ──` block above is this probe; a kill switch means the pipeline cannot run), `$PLUGIN_ROOT` unresolved, or
-  any FAIL (bash/git/node missing, or a Kiln data file missing).
-- **RECOMMEND latest** whenever Claude Code is `>= 2.1.198` but not the newest you know of — a soft
-  nudge (`claude plugin update` and `npm i -g @anthropic-ai/claude-code@latest`), never a block.
-  There is no manifest version gate; this runtime check is the only floor.
-- **READY (degraded)** if — any of: codex absent/non-functional (Sonnet-only build path, tier T1/T2);
-  playwright absent (UI validation is `static-only`); web tool absent (research firewall degrades);
-  a browser-leak **suspect or abandoned profile** reported (a foreign browser may be alive — name it,
-  advise the operator to close it; the scan never kills); git identity unset; python3/jq missing.
-- **READY** otherwise.
-- **Advisory, never a FAIL:** a `model_context_window` in `~/.codex/config.toml` pinned above the
-  backend's real serving window (e.g. `1000000` vs the 372k ChatGPT-backend window for
-  `gpt-5.6-sol`) miscalibrates codex auto-compaction — advise correcting it.
-- If a Kiln run is in progress (`./.kiln/events.jsonl` present), the `── existing run? ──` block is
-  the `kiln-state summary` — report the current `Stage`, `Posture`, and `Capability` so the operator
-  knows resume will pick up there.
-- When you report **READY (degraded)** for an absent Codex CLI, name the Sonnet build path
-  as Miyamoto's ladder, not a downgrade: *the ladder is Miyamoto's design &mdash; every tier
-  is a complete instrument, not a degraded one.* The forge still runs at full craft; it just
-  climbs a different rung.
+- `CLAUDE=present …` → `✓ My stage is standing — Claude Code answers me as {version}.`
+- `CLAUDE=mute` → `✗ Claude Code is on my stage but its version command fails me — I will not call a runtime healthy when it cannot speak its own name.`
+- `CLAUDE=absent` → `✗ Claude Code does not answer — I have no stage to speak on.`
+- `NODE=present …` → `✓ Node answers — my kernel has hands.`
+- `NODE=absent` → `✗ Node does not answer — my kernel has no hands.`
+- codex — a warning, never a hard fail; the preflight always completes and still renders
+  its verdict:
+  - `CODEX=present logged-in` → `✓ I find Codex installed and signed in at my door.`
+  - `CODEX=present logged-out` → `▶ Codex is at my door but not signed in — until it is, I work single-family: Claude alone, honestly marked on every seal.`
+  - `CODEX=absent` → `▶ Codex is not at my door — I work single-family: Claude alone, honestly marked on every seal.`
+- `DATA:voice.json=parses` → `✓ My voice file reads as clean JSON — I can open my own lines.`
+- `DATA:voice.json=broken` → `✗ My voice file is missing or will not read as JSON — I would be down to fallback lines, and I like my own better.`
+- `DATA:lore-quotes.json=parses` → `✓ My quote bank reads as clean JSON — I can open it.`
+- `DATA:lore-quotes.json=broken` → `✗ My quote bank is missing or will not read as JSON — my banners would go quoteless.`
+- `DATA:tiers.json=parses` → `✓ My tier file reads as clean JSON — I can open it.`
+- `DATA:tiers.json=broken` → `✗ My tier file is missing or will not read as JSON — I will not run on unknown model and effort tiers.`
+- `TIERS_SHAPE=valid` → `✓ My tier file holds the shape I demand — it passes my boot-time tier gate.`
+- `TIERS_SHAPE=invalid …` → `✗ My tier file has drifted from the shape I demand — {the failing fact, spoken plainly} — I would refuse it at boot. Restore data/tiers.json.`
 
-**Sandbox & permissions** (advisory — Kiln runs identically under either):
-- **Recommended: sandbox-first.** Enable `sandbox.enabled` with `autoAllowBashIfSandboxed` and a
-  curated `allowedDomains` — Kiln's bash runs unattended, no prompts. Add `sandbox.credentials`
-  (`files` / `envVars`) to deny sandboxed commands your credential files and secret env vars.
-  (Playwright via MCP sits *outside* the bash sandbox, so browser validation is unaffected.)
-- **Power-user path:** `claude --dangerously-skip-permissions` — honest and simple, only in projects
-  you trust. If neither is configured, note that the run will prompt on every bash/write.
-- **Long-run resilience:** recommend a `fallbackModel` chain (up to three models tried in order when
-  the primary is overloaded) so a long autonomous run rides out a provider blip instead of dying —
-  it composes with Kiln's tier-named routing.
+Two honesty rules for the file checks:
+- If `NODE=absent`, the JSON reads above never truly ran — do not claim the files broken.
+  Replace the four file lines with one: `▶ My data files went unexamined — without Node I cannot open my own books.`
+- If `DATA:tiers.json=broken`, skip the shape line — one fault, spoken once.
 
-**The capability record.** The resolved `{ tier, verification_class, probes }` you render IS the
-shape of `state.json.capability` (singular) — the raw probe outputs above are its `probes`; the
-resolved tier and verification class are the fields the run and the final `REPORT.md` consume. This
-pre-flight *renders* the record; **onboarding carries it into the run** — persisted to the ledger as
-a `note` event (`data.kind: 'capability'`) right after `kiln-state init`, and re-probed +
-re-appended on resume so a changed environment never rides a stale record. Do not write to
-`./.kiln/` from this check — the write belongs to onboarding/resume, never to doctor.
-
-End with one sardonic Kiln line appropriate to the verdict.
+Close with exactly one verdict line:
+- any `✗` spoken → `My forge cannot light like this — mend what the ✗ lines name and call me again.`
+- otherwise, any `▶` spoken → `My preflight holds, single-family. I complete at my own tier, not a lesser one — bring me an idea when you are ready.`
+- otherwise → `My preflight holds. My forge is ready — bring me an idea.`
