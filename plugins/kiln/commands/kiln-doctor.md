@@ -97,6 +97,7 @@ for (const key of ROLES) {
 for (const route of ROUTES) {
   const target = t.surface_routing[route]
   if (typeof target !== "string" || !Object.prototype.hasOwnProperty.call(t.roles, target)) bad("surface_routing." + route)
+  if (t.roles[target].family !== "claude") bad("surface_routing." + route + ".family")
 }
 console.log("TIERS_SHAPE=valid")
 ' "$PLUGIN_ROOT/data/tiers.json" 2>/dev/null || echo "TIERS_SHAPE=invalid unreadable"

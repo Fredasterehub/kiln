@@ -130,8 +130,9 @@ const LAW_GUARD = 'if test -f .kiln/law/check.sh; then ' + LAW_CHECK + '; fi'
 // Tier resolution — pure over the validated tier config (data, never content).
 // The tier file is the ONE place models and efforts are named; the kernel carries
 // tier KEYS and resolves them here. validateTiers is the fail-closed BOOT gate: it
-// requires every consumer role key and all three surface routes, so a gap halts at
-// boot with the named fact and never as a later throw. resolveTier is family-aware
+// requires every consumer role key and all three surface routes, each targeting a
+// claude-family role, so a gap halts at boot with the named fact and never as a
+// later throw. resolveTier is family-aware
 // — a Claude alias is platform-resolved and passes UNCHANGED (the resolver is never
 // consulted for it), a GPT alias MUST map to a concrete id through the resolver
 // (codex -m rejects a bare alias), and inherit omits the model so the leg takes the
@@ -159,10 +160,17 @@ function validateTiers(c) {
     if (!TIER_EFFORTS.includes(r.effort)) return false
     if (r.family === 'gpt' && (r.alias === 'inherit' || !Object.prototype.hasOwnProperty.call(c.resolver, r.alias))) return false
   }
-  // all three surface routes must be present and point at a defined role
+  // all three surface routes must be present, point at a defined role, and that
+  // role must be claude-family: a routed builder leg dispatches through the
+  // workflow agent spawner, which spawns subagents only on the Anthropic API.
+  // A gpt-family target has no transport there (codex speaks only behind
+  // scripts/kiln-review), so a gpt route halts here at boot with the named
+  // fact — never mid-build as a model-not-found spawn error dressed up as a
+  // transport failure.
   for (const route of TIER_ROUTES) {
     const target = c.surface_routing[route]
     if (typeof target !== 'string' || !Object.prototype.hasOwnProperty.call(c.roles, target)) return false
+    if (c.roles[target].family !== 'claude') return false
   }
   return true
 }

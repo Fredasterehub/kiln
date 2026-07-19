@@ -140,6 +140,7 @@ test('doctor: the inline tiers validator executes — fixture verdicts match the
     ['a GPT alias with no resolver entry', mutate((t) => { t.roles['builder-logic'].alias = 'gpt-ghost' }), 'invalid'],
     ['a GPT alias of inherit', mutate((t) => { t.roles['reviewer-gate'].alias = 'inherit' }), 'invalid'],
     ['a missing surface route', mutate((t) => { delete t.surface_routing.mixed }), 'invalid'],
+    ['a surface route targeting a gpt-family role', mutate((t) => { t.surface_routing.logic = 'builder-logic' }), 'invalid'],
     ['a missing consumer role', mutate((t) => { delete t.roles['dev-sol'] }), 'invalid'],
     ['roles replaced by null', mutate((t) => { t.roles = null }), 'invalid'],
   ]

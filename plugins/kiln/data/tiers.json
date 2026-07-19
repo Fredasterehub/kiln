@@ -9,7 +9,7 @@
   },
   "surface_routing": {
     "ui": "builder-ui",
-    "logic": "builder-logic",
+    "logic": "builder-ui",
     "mixed": "builder-ui"
   },
   "roles": {
@@ -17,7 +17,7 @@
     "kernel-leg":             { "family": "claude", "alias": "inherit", "effort": "high",   "note": "hands/idsFetch: model-backed, so HIGH (Q1 ruling: a model-backed role defaults HIGH; 'mechanical' means NO model). The truly-mechanical alternative — replacing these legs with deterministic harness execution, no model call at all — is a named SHIP-era option, not built in this slice." },
     "stage-card":             { "family": "claude", "alias": "inherit", "effort": "high",   "note": "law/validate/report card agents — the `act` default (kernel.js:188). The build SLICE leg (build + repair) is NOT stage-card: the kernel surface-routes it to builder-ui/builder-logic before agent() (T-03', §2.3). RAISED medium -> high per INTAKE-14 default (kernel.js:188 was the flagged gap)" },
     "builder-ui":             { "family": "claude", "alias": "opus",    "effort": "high",   "note": "CONSUMED via surface_routing at the KERNEL's builder-leg dispatch (T-03'): the kernel selects the role from the slice's surface BEFORE agent(), never the already-dispatched card. Live routing data, not a reserved key" },
-    "builder-logic":          { "family": "gpt",    "alias": "gpt-sol", "effort": "high",   "note": "consumed via surface_routing at the same kernel builder-leg dispatch (T-03')" },
+    "builder-logic":          { "family": "gpt",    "alias": "gpt-sol", "effort": "high",   "note": "PARKED, not routed (2026-07-19 ruling): the kernel builder leg dispatches through the workflow agent() spawner, which reaches only the Anthropic API — a gpt id there is a 404 model_not_found (cleanroom receipt req_011CdBugiPWMovjbvkCV1L9c), and no codex builder transport exists yet (only the reviewer gate, scripts/kiln-review, speaks codex). Boot validation rejects any gpt-family surface-route target, and logic routes to builder-ui until a codex builder transport lands beside kiln-review; this entry stays declared as that transport's landing pad." },
     "reviewer-gate":          { "family": "gpt",    "alias": "gpt-sol", "effort": "high",   "note": "the cross-family terminal gate (scripts/kiln-review transport). INTAKE-14 default HIGH" },
     "brainstorm-facilitator": { "family": "claude", "alias": "inherit", "effort": "high",   "note": "Da Vinci — inherits the session model (agents/da-vinci.md has no model key; stays that way; documented default is inherit per the sub-agents contract)" },
     "haiku-migration":        { "family": "claude", "alias": "sonnet",  "effort": "medium", "note": "STRICTLY the explicit haiku-class migration seat (INTAKE-14c: haiku -> sonnet, medium). Never a justification for LOW on any model-backed role; a truly mechanical job takes no model, not a cheap one. No rework consumer today — the landing pad for any surviving haiku-class seat." },

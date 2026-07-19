@@ -42,7 +42,7 @@ const PLUGIN = '/abs/plugins/kiln'
 const TIERS_OK = {
   exit: 0, doctrine: true,
   resolver: { 'gpt-sol': 'gpt-5.6-sol' },
-  surface_routing: { ui: 'builder-ui', logic: 'builder-logic', mixed: 'builder-ui' },
+  surface_routing: { ui: 'builder-ui', logic: 'builder-ui', mixed: 'builder-ui' },
   roles: {
     'driver': { family: 'claude', alias: 'inherit', effort: 'high' },
     'kernel-leg': { family: 'claude', alias: 'inherit', effort: 'high' },
@@ -565,6 +565,10 @@ test('tiers: validateTiers requires the full consumer role set, all three routes
   const dr = cfg(); dr.surface_routing.ui = 'ghost'; assert.equal(validateTiers(dr), false, 'route targets must be real role keys')
   const gr = cfg(); delete gr.resolver['gpt-sol']; assert.equal(validateTiers(gr), false, 'a gpt alias with no resolver mapping halts at boot')
   const gi = cfg(); gi.roles['builder-logic'].alias = 'inherit'; assert.equal(validateTiers(gi), false, 'a gpt role needs a concrete resolvable alias, not inherit')
+  // The 48e5fed builder-leg defect shape: a surface routed to a gpt-family role.
+  // The agent() spawner is Anthropic-only, so this must halt at boot, never 404 mid-build.
+  const gp = cfg(); gp.surface_routing.logic = 'builder-logic'
+  assert.equal(validateTiers(gp), false, 'a gpt-family surface-route target has no agent transport — rejected at boot')
 })
 
 test('tiers: resolveTier is family-aware — claude passes through, gpt resolves, resolver never rewrites claude', () => {
@@ -579,8 +583,14 @@ test('tiers: resolveTier is family-aware — claude passes through, gpt resolves
 
 test('tiers: routeBuilder maps each validated surface to its builder opts', () => {
   assert.deepEqual(routeBuilder(TIERS_OK, 'ui'), { effort: 'high', model: 'opus' })
-  assert.deepEqual(routeBuilder(TIERS_OK, 'logic'), { effort: 'high', model: 'gpt-5.6-sol' })
+  assert.deepEqual(routeBuilder(TIERS_OK, 'logic'), { effort: 'high', model: 'opus' }, 'logic routes to builder-ui while the codex builder transport is parked')
   assert.deepEqual(routeBuilder(TIERS_OK, 'mixed'), { effort: 'high', model: 'opus' })
+  // Builder-leg 404 pin (48e5fed): routeBuilder feeds agent() directly, and the
+  // agent spawner is Anthropic-only — no routed surface may ever emit the
+  // resolver-concrete codex id as the agent model option.
+  for (const s of ['ui', 'logic', 'mixed']) {
+    assert.notEqual(routeBuilder(TIERS_OK, s).model, 'gpt-5.6-sol', s + ': the concrete codex id must never reach an agent() dispatch')
+  }
 })
 
 test('tiers: parseSliceEntry validates the object form; only legacy bare strings default to mixed', () => {
@@ -609,6 +619,7 @@ test('runtime (T-02): a malformed tier shape fails closed AT BOOT — the boot i
     'missing stage-card role': (c) => { delete c.roles['stage-card'] },
     'missing mixed route': (c) => { delete c.surface_routing.mixed },
     'unresolved gpt alias': (c) => { delete c.resolver['gpt-sol'] },
+    'gpt-routed surface': (c) => { c.surface_routing.logic = 'builder-logic' },
     'no doctrine': (c) => { c.doctrine = undefined },
   }
   for (const [name, mutate] of Object.entries(mut)) {
@@ -640,9 +651,49 @@ test('runtime (T-03): the builder leg is surface-routed — ui→builder-ui, log
   assert.equal(builderOpts(ui.calls).model, 'opus', 'ui routes to builder-ui (opus)')
   assert.equal(builderOpts(ui.calls).effort, 'high')
   const logic = await runKernel({ stage: 'build', projectDir: '/p' }, build('obj|s1|logic'))
-  assert.equal(builderOpts(logic.calls).model, 'gpt-5.6-sol', 'logic routes to builder-logic (resolved gpt id)')
+  assert.equal(builderOpts(logic.calls).model, 'opus', 'logic routes to builder-ui while the codex builder transport is parked')
   const bare = await runKernel({ stage: 'build', projectDir: '/p' }, build('s1'))
   assert.equal(builderOpts(bare.calls).model, 'opus', 'a legacy bare-string slice defaults to mixed → builder-ui')
+  // Builder-leg 404 pin (48e5fed): across every dispatch of every surface run,
+  // the resolver-concrete codex id never appears as an agent model option —
+  // the agent spawner has no codex transport.
+  for (const run of [ui, logic, bare]) {
+    for (const c of run.calls) {
+      assert.notEqual(c.opts && c.opts.model, 'gpt-5.6-sol', (c.label || '?') + ': the concrete codex id must never reach agent()')
+    }
+  }
+})
+
+test('runtime (builder-leg 404 pin): a gpt-routed surface fails closed at boot — the codex id never reaches an agent dispatch', async () => {
+  // The exact 48e5fed defect shape: surface_routing.logic -> builder-logic (family
+  // gpt). Under the defective kernel this config booted, the slice leg dispatched
+  // with model gpt-5.6-sol, and the Anthropic API answered 404 model_not_found
+  // (cleanroom receipt req_011CdBugiPWMovjbvkCV1L9c) — converted to
+  // transport-failure twice, then hard-stop 3. The repaired kernel halts at boot
+  // with the named configuration fact; the full build script below stands ready
+  // so a regression would run it and trip the assertions.
+  const boot = JSON.parse(JSON.stringify(TIERS_OK))
+  boot.surface_routing.logic = 'builder-logic'
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    'tiers:boot': boot,
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
+    'ladder:fetch': LADDER,
+    'seal:check': { exit: 1 },
+    'slice:s1': { ok: true, beat: 'forging', pointers: [] },
+    'law:pre-seal': GREEN,
+    'law:stage-end': GREEN,
+    'degraded:check': { exit: 1 },
+    'gate:review': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'tiers-config-invalid', 'the gpt-routed surface halts at boot, never mid-build')
+  assert.deepEqual(calls.map(c => c.label), ['tiers:boot'], 'nothing dispatches after the failed boot')
+  for (const c of calls) {
+    assert.notEqual(c.opts && c.opts.model, 'gpt-5.6-sol', 'the resolver-concrete codex id must never be an agent model option')
+  }
 })
 
 test('runtime (T-03): an object slice with an unknown or missing surface halts before any builder dispatch', async () => {
