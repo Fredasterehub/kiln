@@ -46,7 +46,10 @@ then the blocks, never repeating each other.
     checklist, kernel-filled); then a newline and one two-space-indented glyph-free unfold
     line naming the slices in reader-meaningful subject matter — plain = sealed, `accent` =
     on the anvil now, *italic* = ahead; never process labels; the line never wraps (window
-    past ~8 items with true count-words).
+    past ~8 items with true count-words). The unfold obeys the run density (the kernel's
+    `Density:` directive): the broad fill (default) names each slice in reader-meaningful
+    words; the engineer fill names each slice by its literal id from the on-disk checklist
+    `.kiln/slices.json`. Same structure at either density — the fill differs, never the shape.
   - **TITLE UNIT** — exactly one: `` `RUNNING` **<this slice at concept altitude — actor →
     action → what it unlocks>** (`<your literal harness handle; omit rather than
     invent>`) `` — the strip already carries the bold Build marker.

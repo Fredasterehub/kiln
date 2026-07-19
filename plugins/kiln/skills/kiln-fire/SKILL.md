@@ -16,7 +16,7 @@ Per stage: launch the kernel → receive its tiny return `{status, beat, pointer
 resume.
 
 Launch the kernel with the Workflow tool, always by path:
-`{scriptPath: "${CLAUDE_PLUGIN_ROOT}/workflows/kernel.js", args: {stage, projectDir, idea, plugin: "${CLAUDE_PLUGIN_ROOT}"}}` —
+`{scriptPath: "${CLAUDE_PLUGIN_ROOT}/workflows/kernel.js", args: {stage, projectDir, idea, detail, plugin: "${CLAUDE_PLUGIN_ROOT}"}}` —
 background, never inline; pass `args` as a literal JSON object, never a stringified blob (the
 kernel tolerates the string shape only as fallback). `plugin` is the absolute plugin root the
 kernel reads its gate tool, cards, and voice from — required, since kernel legs run with cwd =
@@ -35,6 +35,7 @@ beats are the conductor's entire interface. Beats arrive in the return, drawn fr
 - The literal token `--plan-gate` anywhere in the invocation arms the user plan gate for
   this run (hard stop 1). It never reaches the kernel: strip it from the idea before the
   hand-off. Without the token the gate stays OFF — the default.
+- The literal token `--detail` anywhere in the invocation raises this run's render density to engineer; strip `--detail` from the idea before the hand-off exactly as `--plan-gate` is stripped, pass the fact through the `detail` launch arg, and without it the density stays broad — the default.
 
 Mode rides the invocation. Never ask which mode.
 

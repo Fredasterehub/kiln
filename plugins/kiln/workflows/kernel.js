@@ -93,6 +93,7 @@ function stateDoc(f) {
     'stage: ' + (f.stage ?? ''),
     'active_slice: ' + (f.active_slice ?? 'none'),
     'next_action: ' + (f.next_action ?? ''),
+    'density: ' + (f.density === 'engineer' ? 'engineer' : 'broad'),
     'pointers: ' + (f.pointers ?? []).join(' '),
     'seals: ' + (f.seals ?? '.kiln/seals.log'),
     'updated_at: {updated_at}',
@@ -222,6 +223,10 @@ const plugin = A.plugin
 if (!plugin || plugin[0] !== '/') {
   return { status: 'bad-args', beat: 'The conductor must pass the plugin root as an absolute path — the kernel resolves its gate tool, stage cards, and voice from it while running with cwd = the project dir.', pointers: {} }
 }
+// The detail toggle is a closed launch fact, never content: A.detail present raises
+// the render density to engineer, absent leaves it broad — the default. It rides the
+// stage-card prompt as a directive and lands in STATE.md as the density line.
+const density = A.detail ? 'engineer' : 'broad'
 const P = {
   state: '.kiln/STATE.md', law: '.kiln/LAW.md', gate: '.kiln/gate-review.json',
   request: '.kiln/review-request.json', delta: '.kiln/repair-delta.md',
@@ -324,7 +329,7 @@ const persistFail = (what) => ({
 // Every boundary, hard-stop, and success status returns only after STATE
 // persistence is confirmed; a failed write surfaces explicitly.
 const stop = async (status, fields, extra) => {
-  const w = await hands(atomicWriteCmd(stateDoc({ ...fields, pointers: [...routes] })), 'state:write')
+  const w = await hands(atomicWriteCmd(stateDoc({ ...fields, density, pointers: [...routes] })), 'state:write')
   if (w !== 0) return persistFail('state-write')
   return done(status, extra)
 }
@@ -353,6 +358,7 @@ const cardPrompt = (extra) => [
   'You are a Kiln stage agent. Read and follow the stage card at ' + P.card(stage) + ' exactly.',
   'Project dir: ' + projectDir + '. Artifacts live under .kiln/ (LAW at ' + P.law + ').',
   'Voice: fill your beat from ' + plugin + '/data/voice.json templates; prefill every semantic slot; leave kernel-owned slots (' + KERNEL_SLOTS.map(k => '{' + k + '}').join(' ') + ') unfilled.',
+  'Density: ' + density + ' — a slot-fill rule, never a structure: broad fills slots with the plain reader-meaningful version, engineer fills the same slots with file paths, ids, and counts.',
   extra,
   'Return {ok, beat, pointers} — pointers lists every artifact path you wrote.',
 ].filter(Boolean).join('\n')
@@ -486,7 +492,7 @@ for (const entry of slices) {
   const s = await hands('echo "' + slice + ' ' + label + '" >> ' + P.seals, 'seal:append')
   if (s !== 0) return persistFail('seal-append')
   beats.push(await voiceBeat('seal', { ...facts, label }, 'sealed — {label} · slice {slice}'))
-  const w = await hands(atomicWriteCmd(stateDoc({ stage, active_slice: slice, next_action: nextAct('build'), pointers: [...routes] })), 'state:write')
+  const w = await hands(atomicWriteCmd(stateDoc({ stage, active_slice: slice, next_action: nextAct('build'), density, pointers: [...routes] })), 'state:write')
   if (w !== 0) return persistFail('state-write')
 }
 // LAW rerun beat: stage end. Red reopens only a sealed owner.
