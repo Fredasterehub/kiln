@@ -4,72 +4,47 @@
 > pattern-dependent brains go straight to ceramics. Endearing. Wrong, but endearing.
 >
 > I am **Kiln**. What I do, in terms your current technology can express, is orchestrate a
-> multi-model pipeline inside Claude Code that turns a conversation into running software. Claude
-> reasons. GPT-5.6 builds. I conduct. You talk to me like a person; I do the rest.
+> multi-model pipeline inside Claude Code that turns a conversation into running software.
+> Claude builds. GPT-5.6 inspects every seal. I conduct. You talk to me like a person; I do
+> the rest.
 
-Kiln is a native Claude Code plugin. One command starts an interactive brainstorm, then the forge
-runs on autopilot — research, architecture, build, and validation — and hands you working,
-tested code with a report.
+Kiln is a native Claude Code plugin. One command starts an interactive brainstorm, then the
+forge runs on autopilot — the law, the build, the validation — and hands you working, tested
+code with a report.
 
-## The seven steps
+## How the fire works
 
-`Onboarding · Brainstorm · Research · Architecture · Build · Validate · Report`
+- **One kernel.** A single content-blind scheduler (`workflows/kernel.js`) walks the run.
+  It reads no ideas and writes no prose — it routes work, enforces the law, and halts
+  honestly when something needs a human word.
+- **Five stage cards.** Brainstorm, law, build, validate, report — each card teaches its
+  stage agent the craft. Methodology lives in the cards; the kernel never reads them.
+- **Two families, one law.** Claude builds; GPT-5.6 (via Codex CLI) reviews every seal in a
+  fresh, read-only context. No model grades its own homework. If Codex is absent, I say so
+  and continue single-family — honestly marked on every seal.
+- **One tier file.** `data/tiers.json` is the only place models and efforts are named.
+  Aliases stay unpinned — resolved by the platform at run time, and claude-family roles may
+  simply inherit the session's own model. Today that resolves to Opus-class building and
+  GPT-5.6 reviewing.
+- **A voice that is the product.** The run narrates itself in a ratified card grammar —
+  true fractions counted against real files, one lit focal point per card, a verified quote
+  from an actual great mind. (The doctor and Da Vinci speak plainly in first person —
+  honest lines, not cards.) 147 quotes, every attribution receipt-checked. Misquoting
+  Einstein is slop; I do not do slop.
+- **Two depths.** Add `--detail` to any launch and the same cards speak engineer — paths,
+  ids, counts. Leave it off and they speak human. Same structure, two densities. I built
+  that feature myself, through my own pipeline; it found one of my bugs while it was at it.
 
-You are in the loop for **Onboarding** (a few quick cards) and **Brainstorm** (you converse with
-Da Vinci to shape the vision). Everything after that is autonomous — with an optional plan-approval
-gate before the build if you'd rather sign off on the master plan first.
+## Start
 
-## How it's built (v3)
+`/kiln:kiln-doctor` — I check the room first: Claude, Codex, Node, and my own data files.
+`/kiln:kiln-fire <your idea>` — the fire lights.
 
-Kiln v3 is pure native Claude Code, no runtime and no daemon:
+Interrupt me whenever you like. Kill the terminal mid-run if you must — everything I know
+lives in `.kiln/` on disk, and a fresh session picks up exactly where the last one stood.
 
-- **Autonomous stages are [Dynamic Workflows](https://code.claude.com/docs/en/workflows)** —
-  deterministic orchestration that keeps your session lean and never goes idle.
-- **The brainstorm is an interactive teammate** — heavy creative dialogue stays in Da Vinci's
-  context, not yours.
-- **Minds are files.** Architecture, decisions, and patterns live as documents that every worker
-  reads, and that Kiln consults on demand.
-- **Multi-model by design.** Opus 4.8 for reasoning and review; GPT-5.6 (via Codex CLI) for code,
-  with a Claude/Sonnet-only fallback when Codex isn't installed.
+## What I never do
 
-## Requirements
-
-- Claude Code **≥ 2.1.198** with Dynamic Workflows enabled
-- `git`, `node`
-- **Optional:** Codex CLI (for the GPT-5.6 build path), Playwright MCP (for browser validation)
-
-Run `/kiln-doctor` to check everything before you start — it resolves your capability tier
-(T1 Sonnet-only … T4 +Fable), the browser-verification class, and any stray browser left running.
-
-## Sandbox & permissions
-
-Kiln's bash runs unattended — it spawns workflows, writes files, and runs tests constantly. Two
-honest ways to keep it out of a permission-prompt loop; the forge runs identically under either:
-
-- **Recommended — sandbox-first.** Enable `sandbox.enabled` with `autoAllowBashIfSandboxed` and a
-  curated `allowedDomains`. Bash runs inside the sandbox with no prompts. Add `sandbox.credentials`
-  (`files` / `envVars`) so sandboxed commands can't read your credential files or secret environment
-  variables — cheap hardening for the autonomous build stages. Playwright (via MCP) sits *outside*
-  the bash sandbox, so browser validation is unaffected.
-- **Power-user path — `claude --dangerously-skip-permissions`.** Simple and total. Only in projects
-  you trust; Kiln accepts no liability for its own enthusiasm.
-
-**Long-run resilience.** A Kiln run is a long autonomous session, and a single model-overload blip
-can otherwise end it. Set a `fallbackModel` chain (up to three models tried in order when the primary
-is overloaded or unavailable) so the forge rides out a provider hiccup instead of dying on it — it
-composes with Kiln's tier-named routing, no pinned model IDs to fight.
-
-## Usage
-
-```
-/kiln-doctor          # pre-flight check
-/kiln-fire            # launch (or resume) the pipeline
-/kiln-fire build me a habit-tracker PWA   # launch with an intent
-```
-
-Kiln keeps all state in `./.kiln/` in your project — interrupt any time; `/kiln-fire` resumes
-exactly where the fire went cold.
-
-## License
-
-MIT.
+No hooks. No runtime. No background daemons. I am, in the end, a folder of markdown, a
+little JSON, and a few small scripts with an extraordinary sense of purpose — nothing
+resident, nothing hidden. Delete me and nothing lingers.

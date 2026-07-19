@@ -1,0 +1,893 @@
+{
+  "doctrine": "The great-minds quote bank (INTAKE-10), keyed by MOMENT — the vocabulary the voice pack's beats and the panel quote-foot speak. Every quote is verified genuinely attributed; the receipt (and any load-bearing note) rides each entry per the honest-labels law. Rendered in the foot-quote grammar: the whole quote rides in one code span, the embedded accent backticks dropped at render; the attribution is the full source value, plain; no invented epithets. Curated to the sharpest per key (draft-lead order); the full 130-quote source of record is .kiln-dev/rework/quote-bank-draft.md — nothing vanishes quietly.",
+  "provenance": "Curated from quote-bank-draft.md (2026-07-17): 130 unique verified quotes, 25 moment keys, adversarially verified against primary sources / Quote Investigator / citation-bearing Wikiquote. Two DISPUTED intake entries dropped (annex). This file carries the curated per-moment selection; the draft carries every entry, the merge ledger, and the dropped annex.",
+  "moments": {
+    "run-opens-direct": [
+      {
+        "text": "If you are looking for perfect safety, you will do well to sit on a fence and watch the birds; but if you really wish to learn, you must mount a machine and become acquainted with its tricks by actual `trial`.",
+        "source": "Wilbur Wright, 'Some Aeronautical Experiments', address to the Western Society of Engineers, 18 September 1901",
+        "receipt": "Full text of the 1901 address — http://invention.psychology.msstate.edu/i/Wrights/library/Aeronautical.html",
+        "note": "wright-brothers.org blocks automated fetches; the MSU Wright archive copy is the working receipt."
+      },
+      {
+        "text": "The best way to predict the future is to `invent` it.",
+        "source": "Alan Kay, Remark at a 1971 Xerox PARC planning meeting; authorship confirmed by Kay (1998)",
+        "receipt": "https://quoteinvestigator.com/2012/09/27/invent-the-future/ (witnesses incl. Bonnie MacBird + Kay's own account)",
+        "note": "Gabor's 1963 'futures can be invented' is a distinct precursor sentence; this exact phrasing is Kay's."
+      },
+      {
+        "text": "Waste no more time arguing what a good man should be. Be `one`.",
+        "source": "Marcus Aurelius, Meditations 10.16 (c. 170 AD; trans. Maxwell Staniforth, 1964)",
+        "receipt": "Staniforth trans., Meditations 10.16 — https://wist.info/marcus-aureleus/28892/",
+        "note": "TRANSLATOR CORRECTED during verification: this is Staniforth, not Hays (Hays reads 'To stop talking about what the good man is like, and just be one'). The circulating variant inserts 'about'; exact Staniforth wording used here."
+      },
+      {
+        "text": "It is not because things are difficult that we do not `dare`; it is because we do not dare that things are difficult.",
+        "source": "Seneca, Epistulae Morales 104.26, c. AD 65",
+        "receipt": "Loeb — https://www.loebclassics.com/view/seneca_younger-epistles/1917/pb_LCL077.205.xml ('Multa non quia difficilia sunt non audemus, sed quia non audemus difficilia sunt')",
+        "note": "The full Latin sentence opens with 'Multa' ('many things'), commonly omitted in quotation."
+      },
+      {
+        "text": "The `beginning` is the most important part of any work.",
+        "source": "Plato, Republic, Book II, 377a, c. 375 BC (trans. Benjamin Jowett)",
+        "receipt": "Jowett trans. — https://www.gutenberg.org/files/55201/55201-h/55201-h.htm; https://en.wikiquote.org/wiki/Plato",
+        "note": "Jowett's Victorian rendering (Socrates speaking, on education); full sentence continues 'especially in the case of a young and tender thing'."
+      },
+      {
+        "text": "There is one `timeless` way of building. It is thousands of years old, and the same today as it has always been.",
+        "source": "Christopher Alexander, The Timeless Way of Building (1979), opening of chapter 1",
+        "receipt": "Full text — https://archive.org/details/timelesswayofbui0000alex_u9i8; https://en.wikiquote.org/wiki/Christopher_Alexander"
+      }
+    ],
+    "run-opens-brainstorm": [
+      {
+        "text": "If you do not work on an `important` problem, it's unlikely you'll do important work.",
+        "source": "Richard Hamming, 'You and Your Research', Bell Communications Research colloquium, 7 March 1986",
+        "receipt": "Verbatim in the talk transcript — https://www.cs.virginia.edu/~robins/YouAndYourResearch.html"
+      },
+      {
+        "text": "The most dangerous phrase a DP manager can use is 'We've `always` done it that way.'",
+        "source": "Grace Hopper, Interview in Computerworld, 26 January 1976 (earliest documented use; variants repeated through 1987)",
+        "receipt": "https://quoteinvestigator.com/2014/11/27/always-done/ (Computerworld, 26 Jan 1976, p. 9, Esther Surden)",
+        "note": "Reported speech in the 1976 interview, not a mark-for-mark quotation; attribution to Hopper solid, with anonymous precursors of the sentiment (1922, 1975)."
+      },
+      {
+        "text": "In the fields of observation, chance favours only the `prepared` mind.",
+        "source": "Louis Pasteur, Inaugural lecture, Faculty of Sciences, University of Lille, 7 December 1854",
+        "receipt": "Œuvres de Pasteur Vol. 7; 'Dans les champs de l'observation le hasard ne favorise que les esprits préparés' — https://en.wikiquote.org/wiki/Louis_Pasteur",
+        "note": "Said of Ørsted's discovery of electromagnetism; faithful translation of the documented 1854 French."
+      },
+      {
+        "text": "If a man knows not to which `port` he sails, no wind is favorable.",
+        "source": "Seneca, Epistulae Morales 71.3, c. AD 65",
+        "receipt": "Latin 'Ignoranti quem portum petat nullus suus ventus est' confirmed at Ep. 71.3 — https://www.latin.it/autore/seneca/epistulae_morales_ad_lucilium/!08!liber_viii/071.lat; https://en.wikisource.org/wiki/Moral_letters_to_Lucilius/Letter_71",
+        "note": "Standard looser English of the confirmed Latin (Gummere's exact rendering is 'no wind is the right wind'). Two identical intake entries merged."
+      },
+      {
+        "text": "If a man will begin with certainties, he shall end in doubts; but if he will be content to begin with `doubts` he shall end in certainties.",
+        "source": "Francis Bacon, The Advancement of Learning, Book I, v, 8 (1605)",
+        "receipt": "Oxford Essential Quotations — https://www.oxfordreference.com/display/10.1093/acref/9780191843730.001.0001/q-oro-ed5-00000644; also Wikiquote sourced"
+      },
+      {
+        "text": "The best of artists has no conception that a single block of `marble` does not contain within itself.",
+        "source": "Michelangelo Buonarroti, Sonnet 'Non ha l'ottimo artista alcun concetto', Rime 151, c. 1538-1544",
+        "receipt": "Italian original — https://it.wikisource.org/wiki/Rime_(Michelangelo)/151._Non_ha_l%27ottimo_artista_alcun_concetto",
+        "note": "Written for Vittoria Colonna; standard faithful translation of the opening quatrain. The 'angel in the marble' line is apocryphal and stays dropped — this sonnet is the real thing."
+      }
+    ],
+    "brainstorm-opens": [
+      {
+        "text": "ALL THIS IS A DREAM. Still examine it by a few `experiments`. Nothing is too wonderful to be true, if it be consistent with the laws of nature.",
+        "source": "Michael Faraday, Laboratory diary entry 10,040, 19 March 1849 (Faraday's Diary, Vol. V)",
+        "receipt": "Faraday's diary, 19 March 1849; first published in Bence Jones, Life and Letters of Faraday (1870) — https://en.wikiquote.org/wiki/Michael_Faraday",
+        "note": "Primary-source diary entry in Faraday's own hand; the sentence continues '...and in such things as these, experiment is the best test of such consistency' — the quoted words are verbatim."
+      },
+      {
+        "text": "What I cannot `create`, I do not understand.",
+        "source": "Richard Feynman, Written on his Caltech blackboard at his death, February 1988 (Caltech Archives photograph)",
+        "receipt": "Caltech Archives photograph of Feynman's last blackboard (http://archives.caltech.edu/pictures/1.10-29.jpg); reproduced in Gleick, Genius (1992)",
+        "note": "A written artifact, not a spoken quote; attribution uncontested."
+      },
+      {
+        "text": "If you do not work on an `important` problem, it's unlikely you'll do important work.",
+        "source": "Richard Hamming, 'You and Your Research', Bell Communications Research colloquium, 7 March 1986",
+        "receipt": "Verbatim in the talk transcript — https://www.cs.virginia.edu/~robins/YouAndYourResearch.html"
+      },
+      {
+        "text": "The most dangerous phrase a DP manager can use is 'We've `always` done it that way.'",
+        "source": "Grace Hopper, Interview in Computerworld, 26 January 1976 (earliest documented use; variants repeated through 1987)",
+        "receipt": "https://quoteinvestigator.com/2014/11/27/always-done/ (Computerworld, 26 Jan 1976, p. 9, Esther Surden)",
+        "note": "Reported speech in the 1976 interview, not a mark-for-mark quotation; attribution to Hopper solid, with anonymous precursors of the sentiment (1922, 1975)."
+      },
+      {
+        "text": "The best way to predict the future is to `invent` it.",
+        "source": "Alan Kay, Remark at a 1971 Xerox PARC planning meeting; authorship confirmed by Kay (1998)",
+        "receipt": "https://quoteinvestigator.com/2012/09/27/invent-the-future/ (witnesses incl. Bonnie MacBird + Kay's own account)",
+        "note": "Gabor's 1963 'futures can be invented' is a distinct precursor sentence; this exact phrasing is Kay's."
+      },
+      {
+        "text": "If a man knows not to which `port` he sails, no wind is favorable.",
+        "source": "Seneca, Epistulae Morales 71.3, c. AD 65",
+        "receipt": "Latin 'Ignoranti quem portum petat nullus suus ventus est' confirmed at Ep. 71.3 — https://www.latin.it/autore/seneca/epistulae_morales_ad_lucilium/!08!liber_viii/071.lat; https://en.wikisource.org/wiki/Moral_letters_to_Lucilius/Letter_71",
+        "note": "Standard looser English of the confirmed Latin (Gummere's exact rendering is 'no wind is the right wind'). Two identical intake entries merged."
+      }
+    ],
+    "vision-compiled": [
+      {
+        "text": "The purpose of computing is `insight`, not numbers.",
+        "source": "Richard Hamming, Motto of Numerical Methods for Scientists and Engineers (McGraw-Hill, 1962)",
+        "receipt": "Front-matter motto (p. v) of the 1962 book — https://en.wikiquote.org/wiki/Richard_Hamming; contemporaneous MacTutor review quotes it as the book's slogan"
+      },
+      {
+        "text": "`Simplicity` is prerequisite for reliability.",
+        "source": "Edsger W. Dijkstra, EWD498, 'How do we tell truths that might hurt?' (1975; handwritten addition, published version in Selected Writings on Computing, 1982)",
+        "receipt": "EWD498 scan (handwritten annotation in Dijkstra's hand) — https://www.cs.utexas.edu/users/EWD/ewd04xx/EWD498.PDF; incorporated in the 1982 Springer book version",
+        "note": "Adversarial finding: NOT in the typed body of EWD498 (the UT HTML transcription omits it) — it is a handwritten addition Dijkstra kept in the published 1982 version. Cite as 'EWD498 (handwritten addition; Selected Writings on Computing, 1982)'."
+      },
+      {
+        "text": "There are two ways of constructing a software design: one way is to make it so `simple` that there are obviously no deficiencies, and the other way is to make it so complicated that there are no obvious deficiencies. The first method is far more difficult.",
+        "source": "C. A. R. Hoare, 'The Emperor's Old Clothes', 1980 ACM Turing Award lecture; Communications of the ACM 24(2), February 1981, p. 81",
+        "receipt": "CACM 24(2), Feb 1981 — https://dl.acm.org/doi/10.1145/358549.358561"
+      },
+      {
+        "text": "Perfection is finally attained not when there is no longer anything to add, but when there is no longer anything to take `away`.",
+        "source": "Antoine de Saint-Exupéry, Terre des Hommes (1939), ch. III 'L'Avion'; trans. Lewis Galantière, Wind, Sand and Stars — written of aircraft design",
+        "receipt": "French original 'Il semble que la perfection soit atteinte non quand il n'y a plus rien à ajouter, mais quand il n'y a plus rien à retrancher' — https://en.wikiquote.org/wiki/Antoine_de_Saint_Exup%C3%A9ry; Oxford Reference",
+        "note": "Galantière's full sentence opens 'It seems that…'. Intake carried FOUR near-identical entries (including the popular condensation 'Perfection is achieved, not when…'); merged into this canonical entry — see annex merge ledger."
+      },
+      {
+        "text": "If a man knows not to which `port` he sails, no wind is favorable.",
+        "source": "Seneca, Epistulae Morales 71.3, c. AD 65",
+        "receipt": "Latin 'Ignoranti quem portum petat nullus suus ventus est' confirmed at Ep. 71.3 — https://www.latin.it/autore/seneca/epistulae_morales_ad_lucilium/!08!liber_viii/071.lat; https://en.wikisource.org/wiki/Moral_letters_to_Lucilius/Letter_71",
+        "note": "Standard looser English of the confirmed Latin (Gummere's exact rendering is 'no wind is the right wind'). Two identical intake entries merged."
+      },
+      {
+        "text": "First say to yourself what you would `be`; and then do what you have to do.",
+        "source": "Epictetus, Discourses 3.23.1-2, c. AD 108 — this popular wording is Sharon Lebell's rendering (The Art of Living, 1995); Long (1877): 'First say to yourself who you wish to be: then do accordingly what you are doing.'",
+        "receipt": "Underlying passage confirmed — https://en.wikisource.org/wiki/The_Discourses_of_Epictetus;_with_the_Encheiridion_and_Fragments/Book_3/Chapter_23; Wikiquote documents the Lebell provenance",
+        "note": "VERIFIED only WITH the Lebell disclosure kept — the disclosure is load-bearing; without it the wording would be DISPUTED. Two intake entries merged."
+      }
+    ],
+    "law-opens": [
+      {
+        "text": "We should forget about small efficiencies, say about 97% of the time: `premature` optimization is the root of all evil.",
+        "source": "Donald Knuth, 'Structured Programming with go to Statements', ACM Computing Surveys 6(4), 1974, p. 268",
+        "receipt": "Verbatim in the published paper — https://dl.acm.org/doi/10.1145/356635.356640",
+        "note": "Knuth 1974 is the earliest known published occurrence; Hoare disclaimed coinage — attributing the aphorism to Hoare would be the misattribution."
+      },
+      {
+        "text": "There are two ways of constructing a software design: one way is to make it so `simple` that there are obviously no deficiencies, and the other way is to make it so complicated that there are no obvious deficiencies. The first method is far more difficult.",
+        "source": "C. A. R. Hoare, 'The Emperor's Old Clothes', 1980 ACM Turing Award lecture; Communications of the ACM 24(2), February 1981, p. 81",
+        "receipt": "CACM 24(2), Feb 1981 — https://dl.acm.org/doi/10.1145/358549.358561"
+      },
+      {
+        "text": "It is possible to fly without motors, but not without `knowledge` and skill.",
+        "source": "Wilbur Wright, Letter to Octave Chanute, 13 May 1900 (Library of Congress)",
+        "receipt": "https://www.loc.gov/item/mcc.006/ + https://en.wikiquote.org/wiki/Wilbur_Wright",
+        "note": "SOURCE CORRECTED during verification: often cited to the 1901 'Some Aeronautical Experiments' address, but the phrase does not appear anywhere in that speech's full text — it is from the 13 May 1900 Chanute letter."
+      },
+      {
+        "text": "The people must fight for its `law` as for its city wall.",
+        "source": "Heraclitus, Fragment DK 22 B44, c. 500 BC (preserved in Diogenes Laertius 9.2)",
+        "receipt": "Diogenes Laertius, Lives 9.2 — http://penelope.uchicago.edu/Thayer/E/Roman/Texts/Diogenes_Laertius/Lives_of_the_Eminent_Philosophers/9/Heraclitus*.html; catalogued DK B44 (Marcovich fr. 103, Kahn)",
+        "note": "Standard editions treat it as authentic; a minority scholarly aside notes Diogenes is the sole quoter."
+      },
+      {
+        "text": "The `beginning` is the most important part of any work.",
+        "source": "Plato, Republic, Book II, 377a, c. 375 BC (trans. Benjamin Jowett)",
+        "receipt": "Jowett trans. — https://www.gutenberg.org/files/55201/55201-h/55201-h.htm; https://en.wikiquote.org/wiki/Plato",
+        "note": "Jowett's Victorian rendering (Socrates speaking, on education); full sentence continues 'especially in the case of a young and tender thing'."
+      },
+      {
+        "text": "Nature, to be commanded, must be `obeyed`.",
+        "source": "Francis Bacon, Novum Organum, Book I, Aphorism 3 (1620; trans. Spedding)",
+        "receipt": "Spedding text, Aph. III — https://en.wikisource.org/wiki/Novum_Organum/Book_I_(Spedding)",
+        "note": "Latin of I.3 is 'naturae enim non imperatur, nisi parendo'; the tag 'natura non nisi parendo vincitur' belongs to the sibling aphorism I.129 (same doctrine)."
+      }
+    ],
+    "law-locked": [
+      {
+        "text": "`Simplicity` is prerequisite for reliability.",
+        "source": "Edsger W. Dijkstra, EWD498, 'How do we tell truths that might hurt?' (1975; handwritten addition, published version in Selected Writings on Computing, 1982)",
+        "receipt": "EWD498 scan (handwritten annotation in Dijkstra's hand) — https://www.cs.utexas.edu/users/EWD/ewd04xx/EWD498.PDF; incorporated in the 1982 Springer book version",
+        "note": "Adversarial finding: NOT in the typed body of EWD498 (the UT HTML transcription omits it) — it is a handwritten addition Dijkstra kept in the published 1982 version. Cite as 'EWD498 (handwritten addition; Selected Writings on Computing, 1982)'."
+      },
+      {
+        "text": "Perfection is finally attained not when there is no longer anything to add, but when there is no longer anything to take `away`.",
+        "source": "Antoine de Saint-Exupéry, Terre des Hommes (1939), ch. III 'L'Avion'; trans. Lewis Galantière, Wind, Sand and Stars — written of aircraft design",
+        "receipt": "French original 'Il semble que la perfection soit atteinte non quand il n'y a plus rien à ajouter, mais quand il n'y a plus rien à retrancher' — https://en.wikiquote.org/wiki/Antoine_de_Saint_Exup%C3%A9ry; Oxford Reference",
+        "note": "Galantière's full sentence opens 'It seems that…'. Intake carried FOUR near-identical entries (including the popular condensation 'Perfection is achieved, not when…'); merged into this canonical entry — see annex merge ledger."
+      },
+      {
+        "text": "First say to yourself what you would `be`; and then do what you have to do.",
+        "source": "Epictetus, Discourses 3.23.1-2, c. AD 108 — this popular wording is Sharon Lebell's rendering (The Art of Living, 1995); Long (1877): 'First say to yourself who you wish to be: then do accordingly what you are doing.'",
+        "receipt": "Underlying passage confirmed — https://en.wikisource.org/wiki/The_Discourses_of_Epictetus;_with_the_Encheiridion_and_Fragments/Book_3/Chapter_23; Wikiquote documents the Lebell provenance",
+        "note": "VERIFIED only WITH the Lebell disclosure kept — the disclosure is load-bearing; without it the wording would be DISPUTED. Two intake entries merged."
+      },
+      {
+        "text": "The people must fight for its `law` as for its city wall.",
+        "source": "Heraclitus, Fragment DK 22 B44, c. 500 BC (preserved in Diogenes Laertius 9.2)",
+        "receipt": "Diogenes Laertius, Lives 9.2 — http://penelope.uchicago.edu/Thayer/E/Roman/Texts/Diogenes_Laertius/Lives_of_the_Eminent_Philosophers/9/Heraclitus*.html; catalogued DK B44 (Marcovich fr. 103, Kahn)",
+        "note": "Standard editions treat it as authentic; a minority scholarly aside notes Diogenes is the sole quoter."
+      },
+      {
+        "text": "Nature, to be commanded, must be `obeyed`.",
+        "source": "Francis Bacon, Novum Organum, Book I, Aphorism 3 (1620; trans. Spedding)",
+        "receipt": "Spedding text, Aph. III — https://en.wikisource.org/wiki/Novum_Organum/Book_I_(Spedding)",
+        "note": "Latin of I.3 is 'naturae enim non imperatur, nisi parendo'; the tag 'natura non nisi parendo vincitur' belongs to the sibling aphorism I.129 (same doctrine)."
+      },
+      {
+        "text": "`Order` is.",
+        "source": "Louis Kahn, 'Order Is', Perspecta 3 (Yale), 1955, pp. 46-63",
+        "receipt": "Primary publication confirmed; full text reproduced at http://teoriaarchitektury.blogspot.com/2013/03/louis-kahn-order-is-1955.html"
+      }
+    ],
+    "build-opens": [
+      {
+        "text": "The secret is comprised in three words — `Work`, Finish, Publish.",
+        "source": "Michael Faraday, Advice to the young William Crookes; in J. H. Gladstone, Michael Faraday (1874), pp. 122-123",
+        "receipt": "Gladstone, Michael Faraday (1874), pp. 122-123 — https://en.wikiquote.org/wiki/Michael_Faraday",
+        "note": "Reported by Gladstone, a contemporary who knew Faraday — a period source, not a modern fabrication; no dispute found."
+      },
+      {
+        "text": "What I cannot `create`, I do not understand.",
+        "source": "Richard Feynman, Written on his Caltech blackboard at his death, February 1988 (Caltech Archives photograph)",
+        "receipt": "Caltech Archives photograph of Feynman's last blackboard (http://archives.caltech.edu/pictures/1.10-29.jpg); reproduced in Gleick, Genius (1992)",
+        "note": "A written artifact, not a spoken quote; attribution uncontested."
+      },
+      {
+        "text": "We may say most aptly that the Analytical Engine `weaves` algebraical patterns just as the Jacquard-loom weaves flowers and leaves.",
+        "source": "Ada Lovelace, Note A, translator's notes to Menabrea's 'Sketch of the Analytical Engine' (Taylor's Scientific Memoirs, Vol. 3, 1843)",
+        "receipt": "Verified against the Wikisource transcription of Note A — https://en.wikisource.org/wiki/Scientific_Memoirs/3/Sketch_of_the_Analytical_Engine_invented_by_Charles_Babbage,_Esq./Notes_by_the_Translator"
+      },
+      {
+        "text": "It is possible to fly without motors, but not without `knowledge` and skill.",
+        "source": "Wilbur Wright, Letter to Octave Chanute, 13 May 1900 (Library of Congress)",
+        "receipt": "https://www.loc.gov/item/mcc.006/ + https://en.wikiquote.org/wiki/Wilbur_Wright",
+        "note": "SOURCE CORRECTED during verification: often cited to the 1901 'Some Aeronautical Experiments' address, but the phrase does not appear anywhere in that speech's full text — it is from the 13 May 1900 Chanute letter."
+      },
+      {
+        "text": "Genius is one per cent inspiration, ninety-nine per cent `perspiration`.",
+        "source": "Thomas Edison, Credited to Edison in print by May 1901; affirmed by Edison in M. A. Rosanoff, Harper's Magazine (1932)",
+        "receipt": "https://quoteinvestigator.com/2012/12/14/genius-ratio/ (98/2 versions from April 1898; 1/99 form by May 1901; Rosanoff 1932 quotes Edison affirming it)",
+        "note": "Intake's '1927 letter' detail could not be confirmed; cite 1901 + Rosanoff 1932 instead."
+      },
+      {
+        "text": "Waste no more time arguing what a good man should be. Be `one`.",
+        "source": "Marcus Aurelius, Meditations 10.16 (c. 170 AD; trans. Maxwell Staniforth, 1964)",
+        "receipt": "Staniforth trans., Meditations 10.16 — https://wist.info/marcus-aureleus/28892/",
+        "note": "TRANSLATOR CORRECTED during verification: this is Staniforth, not Hays (Hays reads 'To stop talking about what the good man is like, and just be one'). The circulating variant inserts 'about'; exact Staniforth wording used here."
+      }
+    ],
+    "slice-opens": [
+      {
+        "text": "We should forget about small efficiencies, say about 97% of the time: `premature` optimization is the root of all evil.",
+        "source": "Donald Knuth, 'Structured Programming with go to Statements', ACM Computing Surveys 6(4), 1974, p. 268",
+        "receipt": "Verbatim in the published paper — https://dl.acm.org/doi/10.1145/356635.356640",
+        "note": "Knuth 1974 is the earliest known published occurrence; Hoare disclaimed coinage — attributing the aphorism to Hoare would be the misattribution."
+      },
+      {
+        "text": "We may say most aptly that the Analytical Engine `weaves` algebraical patterns just as the Jacquard-loom weaves flowers and leaves.",
+        "source": "Ada Lovelace, Note A, translator's notes to Menabrea's 'Sketch of the Analytical Engine' (Taylor's Scientific Memoirs, Vol. 3, 1843)",
+        "receipt": "Verified against the Wikisource transcription of Note A — https://en.wikisource.org/wiki/Scientific_Memoirs/3/Sketch_of_the_Analytical_Engine_invented_by_Charles_Babbage,_Esq./Notes_by_the_Translator"
+      },
+      {
+        "text": "Genius is one per cent inspiration, ninety-nine per cent `perspiration`.",
+        "source": "Thomas Edison, Credited to Edison in print by May 1901; affirmed by Edison in M. A. Rosanoff, Harper's Magazine (1932)",
+        "receipt": "https://quoteinvestigator.com/2012/12/14/genius-ratio/ (98/2 versions from April 1898; 1/99 form by May 1901; Rosanoff 1932 quotes Edison affirming it)",
+        "note": "Intake's '1927 letter' detail could not be confirmed; cite 1901 + Rosanoff 1932 instead."
+      },
+      {
+        "text": "You have to assemble your life yourself — `action` by action.",
+        "source": "Marcus Aurelius, Meditations 8.32 (c. 170 AD; trans. Gregory Hays, 2002)",
+        "receipt": "Hays 8.32 — https://en.wikisource.org/wiki/The_Meditations_of_the_Emperor_Marcus_Antoninus/Book_8; fuller Hays passage quoted at excellentjourney.net (2016)"
+      },
+      {
+        "text": "No great thing is created suddenly, any more than a bunch of grapes or a fig. If you tell me that you desire a fig, I answer you that there must be `time`. Let it first blossom, then bear fruit, then ripen.",
+        "source": "Epictetus, Discourses 1.15.7-8, c. AD 108 (trans. George Long, 1877)",
+        "receipt": "Long trans., Discourses I.15 — https://en.wikiquote.org/wiki/Epictetus (sourced); Long text at https://standardebooks.org/ebooks/epictetus/discourses/george-long"
+      },
+      {
+        "text": "For the things we have to learn before we can do them, we learn by `doing` them.",
+        "source": "Aristotle, Nicomachean Ethics II.1, 1103a32, c. 340 BC (trans. W. D. Ross)",
+        "receipt": "Ross trans., verbatim — https://classics.mit.edu/Aristotle/nicomachaen.2.ii.html; https://en.wikisource.org/wiki/Nicomachean_Ethics_(Ross)/Book_Two",
+        "note": "Continues 'e.g. men become builders by building and lyre-players by playing the lyre.'"
+      }
+    ],
+    "gate-accepts": [
+      {
+        "text": "When you can `measure` what you are speaking about, and express it in numbers, you know something about it.",
+        "source": "William Thomson, Lord Kelvin, Lecture 'Electrical Units of Measurement', 3 May 1883; Popular Lectures and Addresses, Vol. 1 (1889)",
+        "receipt": "Popular Lectures and Addresses, Vol. 1 (1889), p. 73 — https://archive.org/details/popularlecturesa01kelvuoft",
+        "note": "Exact excerpt of Kelvin's sentence. The popular condensation 'If you cannot measure it, it is not science' IS apocryphal — not used here."
+      },
+      {
+        "text": "Beware of bugs in the above code; I have only `proved` it correct, not tried it.",
+        "source": "Donald Knuth, Memo to Peter van Emde Boas, March 1977; confirmed by Knuth on his Stanford FAQ",
+        "receipt": "Knuth's own FAQ (memo drafted 22 March 1977, sent 29 March) — https://www-cs-faculty.stanford.edu/~knuth/faq.html",
+        "note": "Self-attested by the author, with the memo's title and exact date."
+      },
+      {
+        "text": "Perfection is finally attained not when there is no longer anything to add, but when there is no longer anything to take `away`.",
+        "source": "Antoine de Saint-Exupéry, Terre des Hommes (1939), ch. III 'L'Avion'; trans. Lewis Galantière, Wind, Sand and Stars — written of aircraft design",
+        "receipt": "French original 'Il semble que la perfection soit atteinte non quand il n'y a plus rien à ajouter, mais quand il n'y a plus rien à retrancher' — https://en.wikiquote.org/wiki/Antoine_de_Saint_Exup%C3%A9ry; Oxford Reference",
+        "note": "Galantière's full sentence opens 'It seems that…'. Intake carried FOUR near-identical entries (including the popular condensation 'Perfection is achieved, not when…'); merged into this canonical entry — see annex merge ledger."
+      },
+      {
+        "text": "`Eyes` are more accurate witnesses than ears.",
+        "source": "Heraclitus, Fragment DK 22 B101a, c. 500 BC (preserved in Polybius, Histories 12.27)",
+        "receipt": "Stanford Encyclopedia of Philosophy cites B101a from Polybius 12.27 — https://plato.stanford.edu/entries/heraclitus/"
+      },
+      {
+        "text": "Don't think, but `look`!",
+        "source": "Ludwig Wittgenstein, Philosophical Investigations, §66 (1953; trans. G. E. M. Anscombe)",
+        "receipt": "Anscombe trans., §66 ('To repeat: don't think, but look!') — e.g. https://philarchive.org/archive/LENDTB",
+        "note": "Verbatim fragment of the §66 sentence."
+      },
+      {
+        "text": "Good design is `thorough` down to the last detail.",
+        "source": "Dieter Rams, Ten Principles for Good Design, principle 8 (developed at Braun, late 1970s-1980s)",
+        "receipt": "Vitsoe canonical list — https://www.vitsoe.com/us/about/good-design"
+      }
+    ],
+    "gate-rejects": [
+      {
+        "text": "The first principle is that you must not `fool` yourself — and you are the easiest person to fool.",
+        "source": "Richard Feynman, 'Cargo Cult Science', Caltech commencement address, 1974; Engineering and Science 37:7",
+        "receipt": "Official Caltech transcript — https://calteches.library.caltech.edu/51/2/CargoCult.htm"
+      },
+      {
+        "text": "Everyone knows that debugging is twice as hard as writing a program in the first place. So if you're as clever as you can be when you write it, how will you ever `debug` it?",
+        "source": "Brian Kernighan (with P. J. Plauger), The Elements of Programming Style, 2nd ed. (McGraw-Hill, 1978), ch. 2, p. 10",
+        "receipt": "Kernighan & Plauger, The Elements of Programming Style, 2nd ed. (1978), p. 10 — https://en.wikiquote.org/wiki/Brian_Kernighan",
+        "note": "Known as 'Kernighan's law'; co-author credit kept for precision."
+      },
+      {
+        "text": "Machines take me by `surprise` with great frequency.",
+        "source": "Alan Turing, 'Computing Machinery and Intelligence', Mind 59(236), 1950, section 6",
+        "receipt": "Full text confirmed — https://courses.cs.umbc.edu/471/papers/turing.pdf",
+        "note": "Continues 'This is largely because I do not do sufficient calculation...'."
+      },
+      {
+        "text": "On two occasions I have been asked, 'Pray, Mr. Babbage, if you put into the machine `wrong` figures, will the right answers come out?' … I am not able rightly to apprehend the kind of confusion of ideas that could provoke such a question.",
+        "source": "Charles Babbage, Passages from the Life of a Philosopher (1864), ch. V",
+        "receipt": "Confirmed against the Gutenberg full text — https://www.gutenberg.org/ebooks/57532; Wikisource djvu p.83",
+        "note": "The ellipsis marks ONE omitted sentence — the 1864 original reads '…come out?\" In one case a member of the Upper, and in the other a member of the Lower, House put this question. I am not able rightly…'. Both retained fragments are verbatim; the ellipsis makes the condensation honest."
+      },
+      {
+        "text": "The impediment to action advances action. What stands in the way becomes the `way`.",
+        "source": "Marcus Aurelius, Meditations 5.20 (c. 170 AD; trans. Gregory Hays, 2002)",
+        "receipt": "Hays, Meditations 5.20 (Modern Library, 2002) — https://en.wikiquote.org/wiki/Marcus_Aurelius (sourced section)",
+        "note": "Genuine Hays rendering; popularized by Ryan Holiday but authentically Hays/Aurelius. Two identical intake entries merged."
+      },
+      {
+        "text": "A blazing `fire` makes flame and brightness out of everything that is thrown into it.",
+        "source": "Marcus Aurelius, Meditations 4.1 (c. 170 AD; trans. Maxwell Staniforth, 1964)",
+        "receipt": "Meditations 4.1 (Staniforth, Penguin 1964) — https://modernstoicism.com/a-blazing-fire-by-evan-oakley/"
+      }
+    ],
+    "repair-lands": [
+      {
+        "text": "Everyone knows that debugging is twice as hard as writing a program in the first place. So if you're as clever as you can be when you write it, how will you ever `debug` it?",
+        "source": "Brian Kernighan (with P. J. Plauger), The Elements of Programming Style, 2nd ed. (McGraw-Hill, 1978), ch. 2, p. 10",
+        "receipt": "Kernighan & Plauger, The Elements of Programming Style, 2nd ed. (1978), p. 10 — https://en.wikiquote.org/wiki/Brian_Kernighan",
+        "note": "Known as 'Kernighan's law'; co-author credit kept for precision."
+      },
+      {
+        "text": "The impediment to action advances action. What stands in the way becomes the `way`.",
+        "source": "Marcus Aurelius, Meditations 5.20 (c. 170 AD; trans. Gregory Hays, 2002)",
+        "receipt": "Hays, Meditations 5.20 (Modern Library, 2002) — https://en.wikiquote.org/wiki/Marcus_Aurelius (sourced section)",
+        "note": "Genuine Hays rendering; popularized by Ryan Holiday but authentically Hays/Aurelius. Two identical intake entries merged."
+      },
+      {
+        "text": "A blazing `fire` makes flame and brightness out of everything that is thrown into it.",
+        "source": "Marcus Aurelius, Meditations 4.1 (c. 170 AD; trans. Maxwell Staniforth, 1964)",
+        "receipt": "Meditations 4.1 (Staniforth, Penguin 1964) — https://modernstoicism.com/a-blazing-fire-by-evan-oakley/"
+      },
+      {
+        "text": "Truth will sooner come out from `error` than from confusion.",
+        "source": "Francis Bacon, Novum Organum, Book II, Aphorism 20 (1620; trans. Spedding)",
+        "receipt": "Spedding text, Aph. XX ('citius emergit veritas ex errore quam ex confusione') — https://en.wikisource.org/wiki/Novum_Organum/Book_II_(Spedding)"
+      },
+      {
+        "text": "The architect's most effective tools are the `eraser` in the drafting room and the wrecking bar on the job.",
+        "source": "Frank Lloyd Wright, Recorded by apprentice Edgar Tafel, Apprentice to Genius (1979); QI confirms Wright used the adage on multiple occasions",
+        "receipt": "https://quoteinvestigator.com/2016/01/30/eraser/ (Tafel 1979; Jacobs 1965 variant)",
+        "note": "Secondhand via apprentices, accepted by QI."
+      },
+      {
+        "text": "There is hope in `honest` error; none in the icy perfections of the mere stylist.",
+        "source": "J. D. Sedding (Arts & Crafts architect; popularized by Charles Rennie Mackintosh, who hand-lettered it in 1901), Sedding aphorism, 19th c.; Mackintosh lettering, 1901",
+        "receipt": "https://en.wikiquote.org/wiki/Charles_Rennie_Mackintosh (Sedding origin noted); the 1901 lettering: https://www.oakknoll.com/pages/books/138719/charles-rennie-mackintosh/there-is-hope-in-honest-error",
+        "note": "Commonly misattributed to Mackintosh; one Mackintosh-studies source suggests Mackintosh introduced 'icy' when lettering Sedding's aphorism — the framing given covers this."
+      }
+    ],
+    "slice-sealed": [
+      {
+        "text": "The secret is comprised in three words — `Work`, Finish, Publish.",
+        "source": "Michael Faraday, Advice to the young William Crookes; in J. H. Gladstone, Michael Faraday (1874), pp. 122-123",
+        "receipt": "Gladstone, Michael Faraday (1874), pp. 122-123 — https://en.wikiquote.org/wiki/Michael_Faraday",
+        "note": "Reported by Gladstone, a contemporary who knew Faraday — a period source, not a modern fabrication; no dispute found."
+      },
+      {
+        "text": "Perfection is finally attained not when there is no longer anything to add, but when there is no longer anything to take `away`.",
+        "source": "Antoine de Saint-Exupéry, Terre des Hommes (1939), ch. III 'L'Avion'; trans. Lewis Galantière, Wind, Sand and Stars — written of aircraft design",
+        "receipt": "French original 'Il semble que la perfection soit atteinte non quand il n'y a plus rien à ajouter, mais quand il n'y a plus rien à retrancher' — https://en.wikiquote.org/wiki/Antoine_de_Saint_Exup%C3%A9ry; Oxford Reference",
+        "note": "Galantière's full sentence opens 'It seems that…'. Intake carried FOUR near-identical entries (including the popular condensation 'Perfection is achieved, not when…'); merged into this canonical entry — see annex merge ledger."
+      },
+      {
+        "text": "You have to assemble your life yourself — `action` by action.",
+        "source": "Marcus Aurelius, Meditations 8.32 (c. 170 AD; trans. Gregory Hays, 2002)",
+        "receipt": "Hays 8.32 — https://en.wikisource.org/wiki/The_Meditations_of_the_Emperor_Marcus_Antoninus/Book_8; fuller Hays passage quoted at excellentjourney.net (2016)"
+      },
+      {
+        "text": "We are what we repeatedly do. Excellence, then, is not an act, but a `habit`.",
+        "source": "Will Durant (summarizing Aristotle), The Story of Philosophy (1926), condensing Nicomachean Ethics II — NOT Aristotle's own words; must be credited to Durant",
+        "receipt": "https://www.snopes.com/fact-check/quote-habit-excellence-aristotle/; https://checkyourfact.com/2019/06/26/fact-check-aristotle-excellence-habit-repeatedly-do/",
+        "note": "Durant's own words — famously misattributed to Aristotle himself; the Durant-summarizing-Aristotle credit is the correct one."
+      },
+      {
+        "text": "The craftsman does not aim to create beauty, but `nature` assures that it is done.",
+        "source": "Soetsu Yanagi (founder of the mingei folk-craft movement), 'The Beauty of Miscellaneous Things' (1926), in The Beauty of Everyday Things, trans. Michael Brase (Penguin Classics, 2018)",
+        "receipt": "Verified verbatim against the Brase book text (Penguin PDF of The Beauty of Everyday Things)",
+        "note": "SOURCE CORRECTED during verification: this exact English is Brase's translation, NOT the Leach adaptation The Unknown Craftsman (1972) as intake claimed."
+      },
+      {
+        "text": "I don't want to be interesting. I want to be `good`.",
+        "source": "Ludwig Mies van der Rohe, Reported remark, mid-20th c.; in Conversations with Mies van der Rohe (ed. Moisés Puente, Princeton Architectural Press, 2008), p. 56",
+        "receipt": "Puente 2008, p. 56; Wikiquote sourced section; Paul Rand's contemporaneous crediting of Mies",
+        "note": "Correction to intake: Wikiquote attaches no period-newspaper citation to this quote — the 1959 Herald Tribune citation there belongs to 'God is in the details.'"
+      }
+    ],
+    "slice-reopened": [
+      {
+        "text": "For a successful technology, `reality` must take precedence over public relations, for nature cannot be fooled.",
+        "source": "Richard Feynman, Appendix F, Report of the Presidential Commission on the Space Shuttle Challenger Accident (Rogers Commission), 1986",
+        "receipt": "Appendix F, 'Personal Observations on the Reliability of the Shuttle' — https://history.nasa.gov/rogersrep/v2appf.htm",
+        "note": "Primary government document authored by Feynman himself; the closing sentence of Appendix F, verbatim."
+      },
+      {
+        "text": "Plan to `throw` one away; you will, anyhow.",
+        "source": "Frederick P. Brooks Jr., The Mythical Man-Month (1975), ch. 11, p. 116",
+        "receipt": "The Mythical Man-Month (Addison-Wesley, 1975), p. 116 — https://en.wikiquote.org/wiki/Fred_Brooks",
+        "note": "The chapter TITLE is only 'Plan to Throw One Away'; the full sentence is body text on p. 116. Brooks partially retracted the advice in the 1995 anniversary edition."
+      },
+      {
+        "text": "…embarrass and shackle the progress of improvement to-morrow by recording and registering as `law` the prejudices or errors of to-day.",
+        "source": "Isambard Kingdom Brunel, Letter on the Royal Commission on the Application of Iron to Railway Structures, 13 March 1848; in The Life of Isambard Kingdom Brunel (1870)",
+        "receipt": "Verified verbatim in the primary 1870 text — https://www.gutenberg.org/files/41210/41210-h/41210-h.htm",
+        "note": "The popular one-liner 'I am opposed to the laying down of rules...' is an uncited paraphrase; this passage is the real 1848 text."
+      },
+      {
+        "text": "The impediment to action advances action. What stands in the way becomes the `way`.",
+        "source": "Marcus Aurelius, Meditations 5.20 (c. 170 AD; trans. Gregory Hays, 2002)",
+        "receipt": "Hays, Meditations 5.20 (Modern Library, 2002) — https://en.wikiquote.org/wiki/Marcus_Aurelius (sourced section)",
+        "note": "Genuine Hays rendering; popularized by Ryan Holiday but authentically Hays/Aurelius. Two identical intake entries merged."
+      },
+      {
+        "text": "If any man is able to convince me and show me that I do not think or act right, I will gladly change; for I seek the `truth`, by which no man was ever injured.",
+        "source": "Marcus Aurelius, Meditations 6.21 (c. 170 AD; trans. George Long, 1862)",
+        "receipt": "Long trans., Book 6.21 — https://classics.mit.edu/Antoninus/meditations.6.six.html"
+      },
+      {
+        "text": "It is a bad plan that admits of no `modification`.",
+        "source": "Publilius Syrus, Sententiae M.54, 1st century BC (Latin: Malum est consilium, quod mutari non potest)",
+        "receipt": "Loeb — https://www.loebclassics.com/view/publilius_syrus-sententiae/1934/pb_LCL284.67.xml; quoted as Publilius by Aulus Gellius, Noctes Atticae 17.14"
+      }
+    ],
+    "validate-opens": [
+      {
+        "text": "When you can `measure` what you are speaking about, and express it in numbers, you know something about it.",
+        "source": "William Thomson, Lord Kelvin, Lecture 'Electrical Units of Measurement', 3 May 1883; Popular Lectures and Addresses, Vol. 1 (1889)",
+        "receipt": "Popular Lectures and Addresses, Vol. 1 (1889), p. 73 — https://archive.org/details/popularlecturesa01kelvuoft",
+        "note": "Exact excerpt of Kelvin's sentence. The popular condensation 'If you cannot measure it, it is not science' IS apocryphal — not used here."
+      },
+      {
+        "text": "The first principle is that you must not `fool` yourself — and you are the easiest person to fool.",
+        "source": "Richard Feynman, 'Cargo Cult Science', Caltech commencement address, 1974; Engineering and Science 37:7",
+        "receipt": "Official Caltech transcript — https://calteches.library.caltech.edu/51/2/CargoCult.htm"
+      },
+      {
+        "text": "Beware of bugs in the above code; I have only `proved` it correct, not tried it.",
+        "source": "Donald Knuth, Memo to Peter van Emde Boas, March 1977; confirmed by Knuth on his Stanford FAQ",
+        "receipt": "Knuth's own FAQ (memo drafted 22 March 1977, sent 29 March) — https://www-cs-faculty.stanford.edu/~knuth/faq.html",
+        "note": "Self-attested by the author, with the memo's title and exact date."
+      },
+      {
+        "text": "Program testing can be used to show the `presence` of bugs, but never to show their absence!",
+        "source": "Edsger W. Dijkstra, 'Notes on Structured Programming' (EWD249), 1970, p. 7; earlier stated at the 1969 NATO conference",
+        "receipt": "EWD249, Section 3 'On the Reliability of Mechanisms' — https://www.cs.utexas.edu/users/EWD/ewd02xx/EWD249.PDF; also in Structured Programming (Dahl/Dijkstra/Hoare, 1972)",
+        "note": "The 1969 NATO Rome report carries the earlier 'Testing shows the presence, not the absence of bugs.'"
+      },
+      {
+        "text": "Time discovers `truth`.",
+        "source": "Seneca, De Ira 2.22.3, c. AD 45",
+        "receipt": "Perseus, De Ira 2.22.3 ('veritatem dies aperit') — https://www.perseus.tufts.edu/hopper/text?doc=Perseus%3Atext%3A2007.01.0014%3Abook%3D2%3Achapter%3D22%3Asection%3D3",
+        "note": "Full sentence: 'Dandum semper est tempus; veritatem dies aperit.'"
+      },
+      {
+        "text": "`Eyes` are more accurate witnesses than ears.",
+        "source": "Heraclitus, Fragment DK 22 B101a, c. 500 BC (preserved in Polybius, Histories 12.27)",
+        "receipt": "Stanford Encyclopedia of Philosophy cites B101a from Polybius 12.27 — https://plato.stanford.edu/entries/heraclitus/"
+      }
+    ],
+    "validate-green": [
+      {
+        "text": "ALL THIS IS A DREAM. Still examine it by a few `experiments`. Nothing is too wonderful to be true, if it be consistent with the laws of nature.",
+        "source": "Michael Faraday, Laboratory diary entry 10,040, 19 March 1849 (Faraday's Diary, Vol. V)",
+        "receipt": "Faraday's diary, 19 March 1849; first published in Bence Jones, Life and Letters of Faraday (1870) — https://en.wikiquote.org/wiki/Michael_Faraday",
+        "note": "Primary-source diary entry in Faraday's own hand; the sentence continues '...and in such things as these, experiment is the best test of such consistency' — the quoted words are verbatim."
+      },
+      {
+        "text": "Perfection is finally attained not when there is no longer anything to add, but when there is no longer anything to take `away`.",
+        "source": "Antoine de Saint-Exupéry, Terre des Hommes (1939), ch. III 'L'Avion'; trans. Lewis Galantière, Wind, Sand and Stars — written of aircraft design",
+        "receipt": "French original 'Il semble que la perfection soit atteinte non quand il n'y a plus rien à ajouter, mais quand il n'y a plus rien à retrancher' — https://en.wikiquote.org/wiki/Antoine_de_Saint_Exup%C3%A9ry; Oxford Reference",
+        "note": "Galantière's full sentence opens 'It seems that…'. Intake carried FOUR near-identical entries (including the popular condensation 'Perfection is achieved, not when…'); merged into this canonical entry — see annex merge ledger."
+      },
+      {
+        "text": "Time discovers `truth`.",
+        "source": "Seneca, De Ira 2.22.3, c. AD 45",
+        "receipt": "Perseus, De Ira 2.22.3 ('veritatem dies aperit') — https://www.perseus.tufts.edu/hopper/text?doc=Perseus%3Atext%3A2007.01.0014%3Abook%3D2%3Achapter%3D22%3Asection%3D3",
+        "note": "Full sentence: 'Dandum semper est tempus; veritatem dies aperit.'"
+      },
+      {
+        "text": "`Eyes` are more accurate witnesses than ears.",
+        "source": "Heraclitus, Fragment DK 22 B101a, c. 500 BC (preserved in Polybius, Histories 12.27)",
+        "receipt": "Stanford Encyclopedia of Philosophy cites B101a from Polybius 12.27 — https://plato.stanford.edu/entries/heraclitus/"
+      },
+      {
+        "text": "`Simplicity` and repose are qualities that measure the true value of any work of art.",
+        "source": "Frank Lloyd Wright, 'In the Cause of Architecture', Architectural Record, March 1908",
+        "receipt": "Verbatim in the primary-source reprint — http://projects.mcah.columbia.edu/courses/arch20/pdf/art_hum_reading_51.pdf",
+        "note": "Original capitalizes 'Repose'; proposition I of the essay, restating his propositions of 1894."
+      },
+      {
+        "text": "The craftsman does not aim to create beauty, but `nature` assures that it is done.",
+        "source": "Soetsu Yanagi (founder of the mingei folk-craft movement), 'The Beauty of Miscellaneous Things' (1926), in The Beauty of Everyday Things, trans. Michael Brase (Penguin Classics, 2018)",
+        "receipt": "Verified verbatim against the Brase book text (Penguin PDF of The Beauty of Everyday Things)",
+        "note": "SOURCE CORRECTED during verification: this exact English is Brase's translation, NOT the Leach adaptation The Unknown Craftsman (1972) as intake claimed."
+      }
+    ],
+    "validate-red": [
+      {
+        "text": "For a successful technology, `reality` must take precedence over public relations, for nature cannot be fooled.",
+        "source": "Richard Feynman, Appendix F, Report of the Presidential Commission on the Space Shuttle Challenger Accident (Rogers Commission), 1986",
+        "receipt": "Appendix F, 'Personal Observations on the Reliability of the Shuttle' — https://history.nasa.gov/rogersrep/v2appf.htm",
+        "note": "Primary government document authored by Feynman himself; the closing sentence of Appendix F, verbatim."
+      },
+      {
+        "text": "Machines take me by `surprise` with great frequency.",
+        "source": "Alan Turing, 'Computing Machinery and Intelligence', Mind 59(236), 1950, section 6",
+        "receipt": "Full text confirmed — https://courses.cs.umbc.edu/471/papers/turing.pdf",
+        "note": "Continues 'This is largely because I do not do sufficient calculation...'."
+      },
+      {
+        "text": "The impediment to action advances action. What stands in the way becomes the `way`.",
+        "source": "Marcus Aurelius, Meditations 5.20 (c. 170 AD; trans. Gregory Hays, 2002)",
+        "receipt": "Hays, Meditations 5.20 (Modern Library, 2002) — https://en.wikiquote.org/wiki/Marcus_Aurelius (sourced section)",
+        "note": "Genuine Hays rendering; popularized by Ryan Holiday but authentically Hays/Aurelius. Two identical intake entries merged."
+      },
+      {
+        "text": "If it is not right, do not do it; if it is not `true`, do not say it.",
+        "source": "Marcus Aurelius, Meditations 12.17 (c. 170 AD; trans. George Long, 1862)",
+        "receipt": "Long trans., Meditations XII.17 — https://www.stoicsource.com/aurelius/meditations/12.17/; Wikiquote sourced section",
+        "note": "Two intake entries (punctuation variants of the same Long rendering) merged."
+      },
+      {
+        "text": "`Fire` tests gold, adversity tests brave men. (Ignis aurum probat, miseria fortes viros.)",
+        "source": "Seneca, De Providentia 5.9 (Loeb-aligned; 5.10 also circulates), c. AD 64",
+        "receipt": "Loeb LCL 214 — https://www.loebclassics.com/view/seneca_younger-de_providentia/1928/pb_LCL214.41.xml",
+        "note": "Latin verbatim from the primary text; Basore's Loeb English reads 'misfortune' where 'adversity' is a common faithful rendering."
+      },
+      {
+        "text": "Truth will sooner come out from `error` than from confusion.",
+        "source": "Francis Bacon, Novum Organum, Book II, Aphorism 20 (1620; trans. Spedding)",
+        "receipt": "Spedding text, Aph. XX ('citius emergit veritas ex errore quam ex confusione') — https://en.wikisource.org/wiki/Novum_Organum/Book_II_(Spedding)"
+      }
+    ],
+    "report-opens": [
+      {
+        "text": "The purpose of computing is `insight`, not numbers.",
+        "source": "Richard Hamming, Motto of Numerical Methods for Scientists and Engineers (McGraw-Hill, 1962)",
+        "receipt": "Front-matter motto (p. v) of the 1962 book — https://en.wikiquote.org/wiki/Richard_Hamming; contemporaneous MacTutor review quotes it as the book's slogan"
+      },
+      {
+        "text": "Reading maketh a full man; conference a ready man; and writing an `exact` man.",
+        "source": "Francis Bacon, 'Of Studies', Essays (1625)",
+        "receipt": "Full essay text — http://www.esp.org/books/bacon/essays/contents/essay50.pdf"
+      },
+      {
+        "text": "Whereof one cannot speak, thereof one must be `silent`.",
+        "source": "Ludwig Wittgenstein, Tractatus Logico-Philosophicus, proposition 7 (1921; trans. C. K. Ogden, 1922)",
+        "receipt": "Ogden trans., prop. 7 — https://en.wikisource.org/wiki/Tractatus_Logico-Philosophicus/7",
+        "note": "Ogden rendering of 'Wovon man nicht sprechen kann, darüber muss man schweigen'; Pears/McGuinness render it differently."
+      },
+      {
+        "text": "`Simplicity` and repose are qualities that measure the true value of any work of art.",
+        "source": "Frank Lloyd Wright, 'In the Cause of Architecture', Architectural Record, March 1908",
+        "receipt": "Verbatim in the primary-source reprint — http://projects.mcah.columbia.edu/courses/arch20/pdf/art_hum_reading_51.pdf",
+        "note": "Original capitalizes 'Repose'; proposition I of the essay, restating his propositions of 1894."
+      },
+      {
+        "text": "Have nothing in your houses that you do not know to be `useful`, or believe to be beautiful.",
+        "source": "William Morris, 'The Beauty of Life', lecture to the Birmingham Society of Arts, 19 February 1880; in Hopes and Fears for Art (1882)",
+        "receipt": "Full lecture text — https://www.marxists.org/archive/morris/works/1882/hopes/chapters/chapter3.htm",
+        "note": "Original prefixes 'If you want a golden rule that will fit everybody, this is it:'; 'houses' plural — often misquoted singular."
+      },
+      {
+        "text": "The time to begin writing an article is when you have `finished` it to your satisfaction. By that time you begin to clearly and logically perceive what it is that you really want to say.",
+        "source": "Mark Twain, Mark Twain's Notebook, 1902-1903 (Paine edition, 1935)",
+        "receipt": "http://www.twainquotes.com/Writing.html"
+      }
+    ],
+    "completion": [
+      {
+        "text": "The secret is comprised in three words — `Work`, Finish, Publish.",
+        "source": "Michael Faraday, Advice to the young William Crookes; in J. H. Gladstone, Michael Faraday (1874), pp. 122-123",
+        "receipt": "Gladstone, Michael Faraday (1874), pp. 122-123 — https://en.wikiquote.org/wiki/Michael_Faraday",
+        "note": "Reported by Gladstone, a contemporary who knew Faraday — a period source, not a modern fabrication; no dispute found."
+      },
+      {
+        "text": "We can only see a short distance `ahead`, but we can see plenty there that needs to be done.",
+        "source": "Alan Turing, 'Computing Machinery and Intelligence', Mind 59(236), 1950 — the paper's final sentence",
+        "receipt": "Full text confirmed — https://courses.cs.umbc.edu/471/papers/turing.pdf; canonical https://academic.oup.com/mind/article/LIX/236/433/986238"
+      },
+      {
+        "text": "End thy journey in content, just as an olive falls off when it is `ripe`, blessing nature who produced it, and thanking the tree on which it grew.",
+        "source": "Marcus Aurelius, Meditations 4.48 (c. 170 AD; trans. George Long, 1862)",
+        "receipt": "Long trans., Book 4.48 — https://classics.mit.edu/Antoninus/meditations.4.four.html",
+        "note": "Excerpt starts mid-sentence ('Pass then through this little space of time conformably to nature, and end thy journey in content...')."
+      },
+      {
+        "text": "It is with life as it is with a play — it matters not how long the action is spun out, but how good the `acting` is.",
+        "source": "Seneca, Epistulae Morales 77.20, c. AD 65 (Gummere/Loeb rendering)",
+        "receipt": "Loeb — https://www.loebclassics.com/view/seneca_younger-epistles/1917/pb_LCL076.181.xml ('Quomodo fabula, sic vita: non quam diu, sed quam bene acta sit, refert')"
+      },
+      {
+        "text": "We are what we repeatedly do. Excellence, then, is not an act, but a `habit`.",
+        "source": "Will Durant (summarizing Aristotle), The Story of Philosophy (1926), condensing Nicomachean Ethics II — NOT Aristotle's own words; must be credited to Durant",
+        "receipt": "https://www.snopes.com/fact-check/quote-habit-excellence-aristotle/; https://checkyourfact.com/2019/06/26/fact-check-aristotle-excellence-habit-repeatedly-do/",
+        "note": "Durant's own words — famously misattributed to Aristotle himself; the Durant-summarizing-Aristotle credit is the correct one."
+      },
+      {
+        "text": "Fine art is that in which the hand, the head, and the `heart` of man go together.",
+        "source": "John Ruskin, The Two Paths, Lecture II 'The Unity of Art' (1859)",
+        "receipt": "Full text — https://www.gutenberg.org/files/7291/7291-h/7291-h.htm; Oxford Essential Quotations",
+        "note": "The 'He who works with his hands...' version circulating as St. Francis is a later misattributed paraphrase; this wording is Ruskin's own."
+      }
+    ],
+    "completion-single-family": [
+      {
+        "text": "We can only see a short distance `ahead`, but we can see plenty there that needs to be done.",
+        "source": "Alan Turing, 'Computing Machinery and Intelligence', Mind 59(236), 1950 — the paper's final sentence",
+        "receipt": "Full text confirmed — https://courses.cs.umbc.edu/471/papers/turing.pdf; canonical https://academic.oup.com/mind/article/LIX/236/433/986238"
+      },
+      {
+        "text": "It is with life as it is with a play — it matters not how long the action is spun out, but how good the `acting` is.",
+        "source": "Seneca, Epistulae Morales 77.20, c. AD 65 (Gummere/Loeb rendering)",
+        "receipt": "Loeb — https://www.loebclassics.com/view/seneca_younger-epistles/1917/pb_LCL076.181.xml ('Quomodo fabula, sic vita: non quam diu, sed quam bene acta sit, refert')"
+      },
+      {
+        "text": "Good design is `honest`.",
+        "source": "Dieter Rams, Ten Principles for Good Design, principle 6 (developed at Braun, late 1970s-1980s)",
+        "receipt": "Vitsoe canonical list — https://www.vitsoe.com/us/about/good-design"
+      },
+      {
+        "text": "I don't want to be interesting. I want to be `good`.",
+        "source": "Ludwig Mies van der Rohe, Reported remark, mid-20th c.; in Conversations with Mies van der Rohe (ed. Moisés Puente, Princeton Architectural Press, 2008), p. 56",
+        "receipt": "Puente 2008, p. 56; Wikiquote sourced section; Paul Rand's contemporaneous crediting of Mies",
+        "note": "Correction to intake: Wikiquote attaches no period-newspaper citation to this quote — the 1959 Herald Tribune citation there belongs to 'God is in the details.'"
+      },
+      {
+        "text": "It is good to have an end to journey toward; but it is the `journey` that matters, in the end.",
+        "source": "Ursula K. Le Guin, The Left Hand of Darkness (1969), ch. 15 ('To the Ice')",
+        "receipt": "Spoken by Genly Ai during the ice crossing; p. 220 in common editions",
+        "note": "No misattribution claims surfaced in adversarial search; consciously echoes older journey proverbs but the sentence as worded is hers."
+      },
+      {
+        "text": "By `endurance` we conquer.",
+        "source": "Ernest Shackleton, Shackleton family motto ('Fortitudine vincimus'), adopted by Shackleton; namesake of his ship Endurance (1914)",
+        "receipt": "Library of Congress — https://blogs.loc.gov/inside_adams/2013/02/fortitudine-vincimus/",
+        "note": "Adopted motto, not an original coinage — verified on that honestly-labeled framing."
+      }
+    ],
+    "degradation-offer": [
+      {
+        "text": "If it is not right, do not do it; if it is not `true`, do not say it.",
+        "source": "Marcus Aurelius, Meditations 12.17 (c. 170 AD; trans. George Long, 1862)",
+        "receipt": "Long trans., Meditations XII.17 — https://www.stoicsource.com/aurelius/meditations/12.17/; Wikiquote sourced section",
+        "note": "Two intake entries (punctuation variants of the same Long rendering) merged."
+      },
+      {
+        "text": "Whereof one cannot speak, thereof one must be `silent`.",
+        "source": "Ludwig Wittgenstein, Tractatus Logico-Philosophicus, proposition 7 (1921; trans. C. K. Ogden, 1922)",
+        "receipt": "Ogden trans., prop. 7 — https://en.wikisource.org/wiki/Tractatus_Logico-Philosophicus/7",
+        "note": "Ogden rendering of 'Wovon man nicht sprechen kann, darüber muss man schweigen'; Pears/McGuinness render it differently."
+      },
+      {
+        "text": "Good design is `honest`.",
+        "source": "Dieter Rams, Ten Principles for Good Design, principle 6 (developed at Braun, late 1970s-1980s)",
+        "receipt": "Vitsoe canonical list — https://www.vitsoe.com/us/about/good-design"
+      }
+    ],
+    "degradation-continue": [
+      {
+        "text": "If you are looking for perfect safety, you will do well to sit on a fence and watch the birds; but if you really wish to learn, you must mount a machine and become acquainted with its tricks by actual `trial`.",
+        "source": "Wilbur Wright, 'Some Aeronautical Experiments', address to the Western Society of Engineers, 18 September 1901",
+        "receipt": "Full text of the 1901 address — http://invention.psychology.msstate.edu/i/Wrights/library/Aeronautical.html",
+        "note": "wright-brothers.org blocks automated fetches; the MSU Wright archive copy is the working receipt."
+      },
+      {
+        "text": "For this is your business, to act well the `character` assigned you; to choose it is another's.",
+        "source": "Epictetus, Enchiridion 17, c. AD 125 (trans. Elizabeth Carter, 1758)",
+        "receipt": "Carter trans., Enchiridion 17 — https://classics.mit.edu/Epictetus/epicench.html"
+      },
+      {
+        "text": "The shokunin has a social `obligation` to work his best for the general welfare of the people.",
+        "source": "Toshio Odate, Japanese Woodworking Tools: Their Tradition, Spirit and Use (Taunton Press, 1984)",
+        "receipt": "Scanned book text — https://dokumen.pub/japanese-woodworking-tools-their-tradition-spirit-and-use-0941936465.html",
+        "note": "Continues 'This obligation is both spiritual and material...'."
+      },
+      {
+        "text": "First forget inspiration. `Habit` is more dependable. Habit will sustain you whether you're inspired or not.",
+        "source": "Octavia E. Butler, 'Furor Scribendi' (Writers of the Future Vol. IX, 1993); collected in Bloodchild and Other Stories (1995), p. 141",
+        "receipt": "https://quoteinvestigator.com/2016/06/08/habit-sustain/ (QI, with page citation)"
+      },
+      {
+        "text": "We must always `work`, and a self-respecting artist must not fold his hands on the pretext that he is not in the mood.",
+        "source": "Pyotr Ilyich Tchaikovsky, Letter to Nadezhda von Meck, March 1878; in The Life and Letters of Peter Ilich Tchaikovsky (trans. Rosa Newmarch, 1906)",
+        "receipt": "Verified verbatim against the scanned Newmarch translation — https://archive.org/details/lifelettersofpet0000mode",
+        "note": "Written from Clarens while composing the Violin Concerto; continues 'If we wait for the mood... we easily become indolent and apathetic.'"
+      },
+      {
+        "text": "Do nothing which is of no `use`.",
+        "source": "Miyamoto Musashi, The Book of Five Rings, Ground Book, ninth principle (1645; trans. Victor Harris, 1974)",
+        "receipt": "Go Rin no Sho, Ground Book — https://en.wikiquote.org/wiki/Miyamoto_Musashi; http://musashimiyamoto.com/five%20rings/main_principles.html"
+      }
+    ],
+    "plan-gate": [
+      {
+        "text": "Plan to `throw` one away; you will, anyhow.",
+        "source": "Frederick P. Brooks Jr., The Mythical Man-Month (1975), ch. 11, p. 116",
+        "receipt": "The Mythical Man-Month (Addison-Wesley, 1975), p. 116 — https://en.wikiquote.org/wiki/Fred_Brooks",
+        "note": "The chapter TITLE is only 'Plan to Throw One Away'; the full sentence is body text on p. 116. Brooks partially retracted the advice in the 1995 anniversary edition."
+      },
+      {
+        "text": "If a man knows not to which `port` he sails, no wind is favorable.",
+        "source": "Seneca, Epistulae Morales 71.3, c. AD 65",
+        "receipt": "Latin 'Ignoranti quem portum petat nullus suus ventus est' confirmed at Ep. 71.3 — https://www.latin.it/autore/seneca/epistulae_morales_ad_lucilium/!08!liber_viii/071.lat; https://en.wikisource.org/wiki/Moral_letters_to_Lucilius/Letter_71",
+        "note": "Standard looser English of the confirmed Latin (Gummere's exact rendering is 'no wind is the right wind'). Two identical intake entries merged."
+      },
+      {
+        "text": "For this is your business, to act well the `character` assigned you; to choose it is another's.",
+        "source": "Epictetus, Enchiridion 17, c. AD 125 (trans. Elizabeth Carter, 1758)",
+        "receipt": "Carter trans., Enchiridion 17 — https://classics.mit.edu/Epictetus/epicench.html"
+      },
+      {
+        "text": "It is a bad plan that admits of no `modification`.",
+        "source": "Publilius Syrus, Sententiae M.54, 1st century BC (Latin: Malum est consilium, quod mutari non potest)",
+        "receipt": "Loeb — https://www.loebclassics.com/view/publilius_syrus-sententiae/1934/pb_LCL284.67.xml; quoted as Publilius by Aulus Gellius, Noctes Atticae 17.14"
+      },
+      {
+        "text": "Weniger, aber `besser` — less, but better.",
+        "source": "Dieter Rams, Credo and title of his book Weniger, aber besser (Jo Klatt Design+Design Verlag, 1995)",
+        "receipt": "Rams's own 1995 bilingual monograph title; credo documented by Vitsoe — https://www.vitsoe.com/us/about/good-design"
+      },
+      {
+        "text": "Here is one of the few effective keys to the design problem — the ability of the designer to recognize as many of the `constraints` as possible, his willingness and enthusiasm for working within these constraints.",
+        "source": "Charles Eames, Design Q&A, filmed interview with Mme L. Amic, 1972 (for the Louvre exhibition 'Qu'est-ce que le design?')",
+        "receipt": "Eames Office transcript — https://www.eamesoffice.com/the-work/design-q-a-text/; Herman Miller transcript",
+        "note": "Amic's questions originated with the 1969 exhibition at the Musée des Arts Décoratifs; the filmed Q&A itself is 1972."
+      }
+    ],
+    "hard-stop": [
+      {
+        "text": "For a successful technology, `reality` must take precedence over public relations, for nature cannot be fooled.",
+        "source": "Richard Feynman, Appendix F, Report of the Presidential Commission on the Space Shuttle Challenger Accident (Rogers Commission), 1986",
+        "receipt": "Appendix F, 'Personal Observations on the Reliability of the Shuttle' — https://history.nasa.gov/rogersrep/v2appf.htm",
+        "note": "Primary government document authored by Feynman himself; the closing sentence of Appendix F, verbatim."
+      },
+      {
+        "text": "`Fire` tests gold, adversity tests brave men. (Ignis aurum probat, miseria fortes viros.)",
+        "source": "Seneca, De Providentia 5.9 (Loeb-aligned; 5.10 also circulates), c. AD 64",
+        "receipt": "Loeb LCL 214 — https://www.loebclassics.com/view/seneca_younger-de_providentia/1928/pb_LCL214.41.xml",
+        "note": "Latin verbatim from the primary text; Basore's Loeb English reads 'misfortune' where 'adversity' is a common faithful rendering."
+      },
+      {
+        "text": "For this is your business, to act well the `character` assigned you; to choose it is another's.",
+        "source": "Epictetus, Enchiridion 17, c. AD 125 (trans. Elizabeth Carter, 1758)",
+        "receipt": "Carter trans., Enchiridion 17 — https://classics.mit.edu/Epictetus/epicench.html"
+      },
+      {
+        "text": "The architect's most effective tools are the `eraser` in the drafting room and the wrecking bar on the job.",
+        "source": "Frank Lloyd Wright, Recorded by apprentice Edgar Tafel, Apprentice to Genius (1979); QI confirms Wright used the adage on multiple occasions",
+        "receipt": "https://quoteinvestigator.com/2016/01/30/eraser/ (Tafel 1979; Jacobs 1965 variant)",
+        "note": "Secondhand via apprentices, accepted by QI."
+      },
+      {
+        "text": "Getting the words `right`.",
+        "source": "Ernest Hemingway, On rewriting the ending of A Farewell to Arms thirty-nine times — The Paris Review, 'The Art of Fiction No. 21' (interview by George Plimpton), 1958",
+        "receipt": "https://www.theparisreview.org/interviews/4825/the-art-of-fiction-no-21-ernest-hemingway",
+        "note": "Plimpton edited the published transcript; archivists later counted 47 endings rather than 39 — the published exchange is as cited."
+      },
+      {
+        "text": "Ever tried. Ever failed. No matter. Try again. Fail again. Fail `better`.",
+        "source": "Samuel Beckett, Worstward Ho (1983), opening paragraph",
+        "receipt": "https://en.wikipedia.org/wiki/Worstward_Ho; text at https://wist.info/beckett-samuel/5249/",
+        "note": "In Beckett the line is bleaker than its motivational use — attribution and source solid."
+      }
+    ],
+    "resume": [
+      {
+        "text": "One never notices what has been `done`; one can only see what remains to be done.",
+        "source": "Marie Curie, Letter to her brother Józef, 18 March 1894; in Ève Curie, Madame Curie (1937, trans. Vincent Sheean)",
+        "receipt": "Letter of 1894-03-18, quoted in Ève Curie, Madame Curie (1937) — https://wist.info/curie-marie/64136/; also Oxford Reference",
+        "note": "Ève Curie quoted the family letters directly; consistently accepted, no misattribution claim found."
+      },
+      {
+        "text": "In the fields of observation, chance favours only the `prepared` mind.",
+        "source": "Louis Pasteur, Inaugural lecture, Faculty of Sciences, University of Lille, 7 December 1854",
+        "receipt": "Œuvres de Pasteur Vol. 7; 'Dans les champs de l'observation le hasard ne favorise que les esprits préparés' — https://en.wikiquote.org/wiki/Louis_Pasteur",
+        "note": "Said of Ørsted's discovery of electromagnetism; faithful translation of the documented 1854 French."
+      },
+      {
+        "text": "A blazing `fire` makes flame and brightness out of everything that is thrown into it.",
+        "source": "Marcus Aurelius, Meditations 4.1 (c. 170 AD; trans. Maxwell Staniforth, 1964)",
+        "receipt": "Meditations 4.1 (Staniforth, Penguin 1964) — https://modernstoicism.com/a-blazing-fire-by-evan-oakley/"
+      },
+      {
+        "text": "You have to assemble your life yourself — `action` by action.",
+        "source": "Marcus Aurelius, Meditations 8.32 (c. 170 AD; trans. Gregory Hays, 2002)",
+        "receipt": "Hays 8.32 — https://en.wikisource.org/wiki/The_Meditations_of_the_Emperor_Marcus_Antoninus/Book_8; fuller Hays passage quoted at excellentjourney.net (2016)"
+      },
+      {
+        "text": "At one hundred and ten, every dot and every stroke will be as though `alive`.",
+        "source": "Katsushika Hokusai, Colophon to One Hundred Views of Mount Fuji, vol. 1 (1834), written at age 75",
+        "receipt": "Henry D. Smith II translation of the colophon — https://en.wikipedia.org/wiki/One_Hundred_Views_of_Mount_Fuji; also British Museum and Sotheby's catalogue entries",
+        "note": "Accepted primary source; English renderings vary by translator."
+      },
+      {
+        "text": "Do all your work as though you had a thousand years to live, and as you would if you knew you must die `tomorrow`.",
+        "source": "Ann Lee (founder of the Shakers), Shaker oral tradition, recorded in Charles Nordhoff, The Communistic Societies of the United States (1875)",
+        "receipt": "Nordhoff 1875, sourced at https://en.wikiquote.org/wiki/Ann_Lee (full text at sacred-texts.com)",
+        "note": "Ann Lee (d. 1784) was illiterate — earwitness oral tradition recorded posthumously, exactly as the source line declares; label honest."
+      }
+    ],
+    "idle": [
+      {
+        "text": "One never notices what has been `done`; one can only see what remains to be done.",
+        "source": "Marie Curie, Letter to her brother Józef, 18 March 1894; in Ève Curie, Madame Curie (1937, trans. Vincent Sheean)",
+        "receipt": "Letter of 1894-03-18, quoted in Ève Curie, Madame Curie (1937) — https://wist.info/curie-marie/64136/; also Oxford Reference",
+        "note": "Ève Curie quoted the family letters directly; consistently accepted, no misattribution claim found."
+      },
+      {
+        "text": "No great thing is created suddenly, any more than a bunch of grapes or a fig. If you tell me that you desire a fig, I answer you that there must be `time`. Let it first blossom, then bear fruit, then ripen.",
+        "source": "Epictetus, Discourses 1.15.7-8, c. AD 108 (trans. George Long, 1877)",
+        "receipt": "Long trans., Discourses I.15 — https://en.wikiquote.org/wiki/Epictetus (sourced); Long text at https://standardebooks.org/ebooks/epictetus/discourses/george-long"
+      },
+      {
+        "text": "At one hundred and ten, every dot and every stroke will be as though `alive`.",
+        "source": "Katsushika Hokusai, Colophon to One Hundred Views of Mount Fuji, vol. 1 (1834), written at age 75",
+        "receipt": "Henry D. Smith II translation of the colophon — https://en.wikipedia.org/wiki/One_Hundred_Views_of_Mount_Fuji; also British Museum and Sotheby's catalogue entries",
+        "note": "Accepted primary source; English renderings vary by translator."
+      },
+      {
+        "text": "Once you decide on your occupation, you must `immerse` yourself in your work. … You must dedicate your life to mastering your skill.",
+        "source": "Jiro Ono, Jiro Dreams of Sushi, documentary dir. David Gelb (2011), opening monologue — subtitled translation from the Japanese",
+        "receipt": "https://www.imdb.com/title/tt1772925/quotes/; transcribed at quotes.net",
+        "note": "Ellipsis added — intake elided two middle sentences ('You have to fall in love with your work. Never complain about your job.') without marking."
+      },
+      {
+        "text": "Do all your work as though you had a thousand years to live, and as you would if you knew you must die `tomorrow`.",
+        "source": "Ann Lee (founder of the Shakers), Shaker oral tradition, recorded in Charles Nordhoff, The Communistic Societies of the United States (1875)",
+        "receipt": "Nordhoff 1875, sourced at https://en.wikiquote.org/wiki/Ann_Lee (full text at sacred-texts.com)",
+        "note": "Ann Lee (d. 1784) was illiterate — earwitness oral tradition recorded posthumously, exactly as the source line declares; label honest."
+      },
+      {
+        "text": "The best way is always to `stop` when you are going good and when you know what will happen next.",
+        "source": "Ernest Hemingway, 'Monologue to the Maestro: A High Seas Letter', Esquire, October 1935",
+        "receipt": "Esquire Oct 1935, Hemingway's own byline — text at https://dianedrake.com/wp-content/uploads/2012/06/Hemingway-Monologue-to-the-Maestro1.pdf"
+      }
+    ]
+  }
+}

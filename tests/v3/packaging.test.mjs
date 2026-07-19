@@ -1,8 +1,12 @@
-// packaging.test.mjs — acceptance: the honest shopfront (+ the stale-string
-// riders). Static guards over the manifest, the doctor command, the two READMEs, agents.json's
-// model-tag audit, and .gitignore. These lock the shapes a future edit could silently un-modernize
-// or re-introduce a lying count into — the doctor's probe semantics are letter-for-letter, the
-// manifest carries the userConfig surface, and the root README FOOTER is byte-stable (operator-only).
+// packaging.test.mjs — acceptance: the honest shopfront (+ the stale-string riders).
+// Static guards over the manifest, the doctor command, the root README, and .gitignore. These lock
+// the shapes a future edit could silently un-modernize or re-introduce a lying count into — the
+// doctor is the SHIP-era self-contained preflight (packaging grain here: manifest paths resolve,
+// no v3 vocabulary survives, no script dependencies; the check-by-check shape pins live in
+// plugins/kiln/tests/kiln-doctor.test.mjs), the manifest carries the explicit rework surface
+// (two commands, one agent, no userConfig knobs), and the root README FOOTER is byte-stable
+// (operator-only). The SHIP copy pass authored the fresh plugin README — its pin set rides
+// below, beside the root README pins.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -15,95 +19,121 @@ const PLUGIN = join(ROOT, 'plugins', 'kiln')
 const manifest = JSON.parse(readFileSync(join(PLUGIN, '.claude-plugin', 'plugin.json'), 'utf8'))
 const doctor = readFileSync(join(PLUGIN, 'commands', 'kiln-doctor.md'), 'utf8')
 const pluginReadme = readFileSync(join(PLUGIN, 'README.md'), 'utf8')
+const brand = readFileSync(join(PLUGIN, 'references', 'brand.md'), 'utf8')
 const rootReadme = readFileSync(join(ROOT, 'README.md'), 'utf8')
-const agents = JSON.parse(readFileSync(join(PLUGIN, 'data', 'agents.json'), 'utf8'))
 const gitignore = readFileSync(join(ROOT, '.gitignore'), 'utf8')
 const BARE_GPT5 = /GPT-5(?!\.6)/ // "GPT-5" not followed by ".6" — the stale-model string (bare GPT-5 or the retired GPT-5.5)
 
-// ── plugin.json modernization ─────────────────────────────────────────────────────────────
+// ── plugin.json: the rework surface, pinned to content truth ─────────────────────────────────
 test('manifest: $schema + displayName + keeps its identity', () => {
   assert.equal(manifest.$schema, 'https://anthropic.com/claude-code/plugin.schema.json')
   assert.equal(manifest.displayName, 'Kiln')
   assert.equal(manifest.name, 'kiln')
-  assert.equal(typeof manifest.version, 'string') // T4 owns the 3.0.0 bump — T3 leaves it a string
+  assert.equal(typeof manifest.version, 'string') // release.sh owns the number — the harness pins the shape only
 })
 
-test('manifest: the userConfig knobs (posture + theaterIntensity — both consumed by the conductor), each a valid option shape', () => {
-  const uc = manifest.userConfig
-  assert.ok(uc && typeof uc === 'object', 'userConfig present')
-  for (const key of ['posture', 'theaterIntensity']) {
-    const opt = uc[key]
-    assert.ok(opt, `userConfig.${key} present`)
-    assert.ok(['string', 'number', 'boolean', 'directory', 'file'].includes(opt.type), `${key}.type valid`)
-    assert.equal(typeof opt.title, 'string')
-    assert.equal(typeof opt.description, 'string')
-  }
+test('manifest: explicit commands/agents lists — the surviving surface, nothing more', () => {
+  assert.deepEqual(manifest.commands, ['./commands/kiln-fire.md', './commands/kiln-doctor.md'])
+  assert.deepEqual(manifest.agents, ['./agents/da-vinci.md'])
 })
 
-test('manifest: description is the 8-stage / GPT-5.6 truth — no lying count', () => {
-  assert.match(manifest.description, /8 stages/)
+test('manifest: no userConfig knobs — the rework carries none', () => {
+  assert.equal('userConfig' in manifest, false)
+})
+
+test('manifest: description is the one-kernel / GPT-5.6 truth — no lying count', () => {
+  assert.match(manifest.description, /one content-blind kernel/)
+  assert.match(manifest.description, /five stage cards/)
   assert.match(manifest.description, /GPT-5\.6/)
-  assert.doesNotMatch(manifest.description, /in 7 steps/)
+  assert.doesNotMatch(manifest.description, /in 7 steps|8 stages/)
   assert.doesNotMatch(manifest.description, BARE_GPT5)
 })
 
-// ── kiln-doctor v3: probe semantics, letter-for-letter ────────────────────────────────────────
-test('doctor: version floor require >= 2.1.198, recommend latest', () => {
-  assert.match(doctor, /2\.1\.198/)
-  assert.match(doctor, /RECOMMEND latest/)
+// ── kiln-doctor SHIP-era: packaging grain only — the check-by-check shape pins live in
+// plugins/kiln/tests/kiln-doctor.test.mjs; these guard what packaging can break ─────────────
+test('doctor: every manifest command path resolves to a packaged file with command frontmatter', () => {
+  for (const rel of manifest.commands) {
+    const text = readFileSync(join(PLUGIN, rel), 'utf8')
+    assert.ok(text.startsWith('---\n'), `${rel} opens a frontmatter block`)
+    assert.match(text, /^description:\s*\S/m, `${rel} frontmatter carries a description`)
+  }
 })
 
-test('doctor: the capability probes are present verbatim', () => {
-  assert.match(doctor, /codex login status/)                                   // credential-presence arm
-  assert.match(doctor, /not logged in/)                                        // re-auth advice gated on the explicit fingerprint
-  assert.match(doctor, /timeout 60 codex exec --skip-git-repo-check --ignore-user-config -m gpt-5\.6-sol/) // pinned-model functional arm, isolated config, 60s budget
-  assert.match(doctor, /KILN-PREFLIGHT-OK/)                                    // output validation token — the -o file, never exit-0 alone
-  assert.match(doctor, /-o "\$pf"/)                                            // last-message file channel (prompt echo makes stream-grep unsafe)
-  assert.match(doctor, /KILN-PREFLIGHT-OK" <\/dev\/null/)                      // stdin closed — an open non-TTY stdin hangs codex exec (A/B receipt)
-  assert.match(doctor, /OK on retry/)                                          // retry recovery reported distinctly
-  assert.match(doctor, /functional pipeline unavailable/)                      // the honest three-state failure label
-  assert.doesNotMatch(doctor, /timeout [12]?\d codex/)                         // no sub-30s codex budget, ever
-  assert.match(doctor, /@playwright\/mcp/)          // playwright arm 1
-  assert.match(doctor, /npx --no-install playwright --version/) // playwright arm 2
-  assert.match(doctor, /ToolSearch/)                // web probe
-  assert.match(doctor, /leak-scan/)                 // browser-leak pre-flight (reused, not reinvented)
+test('doctor: self-contained by law — resolves its own plugin root, depends on no packaged script', () => {
+  assert.match(doctor, /skills\/kiln-fire\/SKILL\.md/) // the shipping root-resolution marker, shared with kiln-fire
+  assert.match(doctor, /sort -k1,1V/)                  // newest-valid cache candidate, never the first glob match
+  assert.doesNotMatch(doctor, /scripts\//)             // no script dependency — every check is inline bash / node -e
 })
 
-test('doctor: renders resolved tier + verification class into the capability record (singular)', () => {
-  assert.match(doctor, /T1[\s\S]*T2[\s\S]*T3[\s\S]*T4/)
-  assert.match(doctor, /static-only/)
-  assert.match(doctor, /state\.json\.capability\b/)
-  assert.doesNotMatch(doctor, /state\.json\.capabilities/) // the plural typo never ships
+test('doctor: no v3 vocabulary survives — the retired probes and tiers are poison', () => {
+  assert.doesNotMatch(doctor, /capabilit/i)      // no capability tiers, no capability record
+  assert.doesNotMatch(doctor, /\bT[1-4]\b/)      // no T1–T4 tier ladder
+  assert.doesNotMatch(doctor, /sandbox/i)        // no sandbox stance
+  assert.doesNotMatch(doctor, /playwright/i)     // no browser probes
+  assert.doesNotMatch(doctor, /leak/i)           // no browser-leak scan
+  assert.doesNotMatch(doctor, /kiln-state/)      // no retired CLI reads
+  assert.doesNotMatch(doctor, /ToolSearch/)      // no web-tool probe
+  assert.doesNotMatch(doctor, /2\.1\.198/)       // no version floor — the doctor speaks presence, not gates
+  assert.doesNotMatch(doctor, /codex exec/)      // the preflight never triggers a model call
 })
 
-test('doctor: Miyamoto ladder credit survives verbatim', () => {
-  assert.match(doctor, /the ladder is Miyamoto's design/)
-  assert.match(doctor, /is a complete instrument, not a degraded one\./)
+test('doctor: the codex leg reads credentials and degrades single-family — no v3 hard-fail machinery', () => {
+  assert.match(doctor, /codex login status/)     // credential state by exit code, nothing more
+  assert.match(doctor, /single-family/)          // the honest degradation vocabulary
+  assert.doesNotMatch(doctor, /MISSING\(FAIL\)/) // the v3 blocking labels are gone
+  assert.doesNotMatch(doctor, /BLOCKED/)         // no blocking verdict exists — the preflight always completes
 })
 
-test('doctor: documents the sandbox-first + power-user stance', () => {
-  assert.match(doctor, /sandbox-first/)
-  assert.match(doctor, /--dangerously-skip-permissions/)
+test('doctor: speaks as Kiln — the first-person PROPERTY holds on every rendered fixed line, mapping and verdict alike', () => {
+  for (const symbol of ['`✓` pass', '`▶` warn', '`✗` fail']) assert.ok(doctor.includes(symbol), `the ${symbol} legend`)
+  // The fixed operator lines are the backticked spans the model renders verbatim: every
+  // mapped check line opens with a status symbol; the three closers live in the verdict
+  // section. The pin is on the RENDERED lines themselves, not on any instruction prose —
+  // a third-person line fails here no matter what the instructions claim.
+  const spans = [...doctor.matchAll(/`([^`\n]+)`/g)].map((m) => m[1])
+  const mapped = spans.filter((s) => /^[✓▶✗] /.test(s))
+  assert.ok(mapped.length >= 17, `every fixed mapping line is captured (found ${mapped.length})`)
+  const closeAt = doctor.indexOf('Close with exactly one verdict line')
+  assert.ok(closeAt >= 0, 'the verdict section exists')
+  const verdicts = [...doctor.slice(closeAt).matchAll(/`([^`\n]+)`/g)].map((m) => m[1]).filter((s) => !/^[✓▶✗]$/.test(s))
+  assert.equal(verdicts.length, 3, 'exactly three verdict lines')
+  const firstPerson = /\b(I|My|my|me|mine|myself)\b/
+  for (const line of [...mapped, ...verdicts]) {
+    assert.match(line, firstPerson, `a fixed line slipped out of Kiln's first person: ${line}`)
+  }
+  assert.match(doctor, /My preflight holds/)           // the ready verdicts
+  assert.match(doctor, /My forge cannot light/)        // the honest failure verdict
 })
 
-// ── plugins/kiln/README.md: the v3 pass ───────────────────────────────────────────────────────────
-test('plugin README: v2 framing is gone, v3 + GPT-5.6 are in', () => {
-  assert.doesNotMatch(pluginReadme, /How it's built \(v2\)/)
-  assert.match(pluginReadme, /How it's built \(v3\)/)
+// ── plugin README: the SHIP copy-pass pin set — the fresh shopfront speaks the rework truth ──
+test('plugin README: one kernel, five cards, GPT-5.6 — no retired machinery', () => {
   assert.match(pluginReadme, /GPT-5\.6/)
   assert.doesNotMatch(pluginReadme, BARE_GPT5)
-  assert.match(pluginReadme, /## Sandbox & permissions/)
+  assert.match(pluginReadme, /[Oo]ne kernel/)
+  assert.match(pluginReadme, /five stage cards/i)
+  assert.doesNotMatch(pluginReadme, /Dynamic Workflows drive|eight stages|duo-pool/)
 })
 
-// ── root README: counts verified, FOOTER byte-stable (operator-only) ─────────────────────────────
-test('root README: persona/workflow counts are the v3 truth', () => {
-  assert.match(rootReadme, /34 personas/)
-  assert.match(rootReadme, /8 workflows/)
+// ── brand.md: the reference doc speaks the rework truth — the retired machinery stays retired ─
+test('brand.md: one kernel + five cards, no present-tense retired machinery', () => {
+  assert.match(brand, /one (content-blind )?kernel/i)
+  assert.match(brand, /five stage cards/i)
+  assert.doesNotMatch(brand, /eight (Dynamic )?[Ww]orkflows/)
+  assert.doesNotMatch(brand, /hooks?\.json|SessionStart hook/)
+  assert.doesNotMatch(brand, /output-style/)
+  assert.doesNotMatch(brand, /spinner/)
+  assert.doesNotMatch(brand, /duo-pool/)
+})
+
+// ── root README: counts verified, FOOTER byte-stable (operator-only) ─────────────────────────
+test('root README: persona/workflow counts are the shipped truth', () => {
+  assert.match(rootReadme, /32 personas/)
+  assert.match(rootReadme, /[Oo]ne kernel/)
 })
 
 // The LIVE marketing prose must name the current build model (GPT-5.6), never the retired GPT-5.5 or a
-// bare "GPT-5" — mirrors the plugin README's BARE_GPT5 guard. Changelog/history sections are excluded:
-// "Fresh from the Kiln" and "The Arc" legitimately preserve the model a past release actually shipped.
+// bare "GPT-5". Changelog/history sections are excluded: "Fresh from the Kiln" and "The Arc"
+// legitimately preserve the model a past release actually shipped.
 test('root README: live prose names GPT-5.6 — no stale bare GPT-5.5 outside changelog/history', () => {
   let inHistory = false
   const liveLines = rootReadme.split('\n').filter((line) => {
@@ -132,20 +162,7 @@ test('root README: the footer is untouched — byte-identical (operator law)', (
   assert.ok(rootReadme.includes(mitFooter), 'the MIT sub-footer is byte-stable')
 })
 
-// ── agents.json model-tag audit (flag 6): every tag verified true against a live v3 seat ────
-test('agents.json: audited model tags are TRUE against live v3 seats (all stay)', () => {
-  const byName = agents
-  // Sphinx reviews logic slices → routing().reviewModel = 'opus'
-  assert.match(byName['critical-thinker'].role, /\(opus\)/)
-  // Clair builds ui/mixed → routing().buildModel = 'opus'
-  assert.match(byName['la-peintresse'].role, /\(opus\)/)
-  // Obscur reviews ui/mixed → routing().reviewModel = 'sonnet' (the thin cross-family wrapper)
-  assert.match(byName['the-curator'].role, /\(sonnet\)/)
-  // Kaneda is the fallback logic builder → buildModel 'sonnet'
-  assert.match(byName['backup-coder'].role, /sonnet builder/)
-})
-
-// ── housekeeping ──────────────────────────────────────────────────────────────────────────────────
+// ── housekeeping ─────────────────────────────────────────────────────────────────────────────
 test('.gitignore: .playwright-mcp/ is ignored', () => {
   assert.match(gitignore, /^\.playwright-mcp\/$/m)
 })

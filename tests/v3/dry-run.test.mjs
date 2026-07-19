@@ -1,16 +1,16 @@
-// dry-run.test.mjs — child-process smoke test for the GENERATED workflow scripts (tests/v3 harness).
-// `node --check` only proves syntax: a name mismatch (helper renamed in src/ but the call site not,
-// a typo'd workflow global) survives it and only explodes at runtime inside Claude Code's Workflow
-// engine. This test actually EXECUTES each shipped workflows/*.js by spawning dry-run-runner.mjs
-// per script — strip/wrap/stub semantics live in the runner (see its header). With valid args
-// supplied, ANY exception escaping the workflow — any class — fails the smoke test; a clean
-// resolve is the only pass. Each child runs under a HARD deadline: spawnSync's timeout delivers
-// SIGKILL, which no microtask-starvation loop can outrun (an in-process Promise.race timer would
-// never fire — timers are macrotasks and a `while (true) await Promise.resolve()` loop never
-// drains past the microtask queue). The detector-proof test injects an undefined identifier into
-// a copy of a real workflow, shows node --check still passes it, and asserts the dry-run flags
-// it; the timeout-proof test feeds the harness exactly that starvation loop and asserts the
-// child is killed and reported as a TIMEOUT failure.
+// dry-run.test.mjs — child-process smoke test for the shipped workflow script (tests/v3 harness).
+// `node --check` only proves syntax: a name mismatch (helper renamed in the pure core but the call
+// site not) survives it and only explodes at runtime inside Claude Code's Workflow engine. This
+// test actually EXECUTES the shipped workflows/kernel.js by spawning dry-run-runner.mjs —
+// strip/wrap/stub semantics live in the runner (see its header). With valid args supplied, ANY
+// exception escaping the workflow — any class — fails the smoke test; a clean resolve is the only
+// pass. Each child runs under a HARD deadline: spawnSync's timeout delivers SIGKILL, which no
+// microtask-starvation loop can outrun (an in-process Promise.race timer would never fire — timers
+// are macrotasks and a `while (true) await Promise.resolve()` loop never drains past the microtask
+// queue). The detector-proof test injects an undefined identifier into a copy of kernel.js, shows
+// node --check still passes it, and asserts the dry-run flags it; the timeout-proof test feeds the
+// harness exactly that starvation loop and asserts the child is killed and reported as a TIMEOUT
+// failure.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -21,7 +21,8 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('../..', import.meta.url))
-const WORKFLOWS = join(root, 'plugins/kiln/workflows')
+const PLUGIN = join(root, 'plugins/kiln')
+const WORKFLOWS = join(PLUGIN, 'workflows')
 const RUNNER = fileURLToPath(new URL('./dry-run-runner.mjs', import.meta.url))
 const files = readdirSync(WORKFLOWS).filter((f) => f.endsWith('.js')).sort()
 
@@ -56,29 +57,43 @@ const inSandbox = async (fn) => {
   try { return await fn(dir) } finally { rmSync(dir, { recursive: true, force: true }) }
 }
 
-test('the harness sees all eight shipped workflows', () => {
-  assert.deepEqual(files, ['architecture.js', 'build.js', 'gauge.js', 'mapping.js', 'report.js', 'research.js', 'validate.js', 'vision.js'])
+test('the harness sees exactly one shipped workflow — the hand-authored kernel', () => {
+  assert.deepEqual(files, ['kernel.js'])
 })
 
-for (const file of files) {
-  test(`dry-run: ${file} executes with valid args — no exception escapes`, async () => {
-    await inSandbox(async (dir) => {
-      const r = dryRun(join(WORKFLOWS, file), dir)
-      assert.ok(!r.timedOut, `${file}: TIMEOUT — child killed at the ${TIMEOUT_MS}ms deadline`)
-      assert.equal(r.status, 0,
-        `${file}: ${r.failure && r.failure.name}: ${r.failure && r.failure.message} — with valid args, any escaping exception is a failure`)
-    })
+test('dry-run: kernel.js executes with valid kernel args — no exception escapes', async () => {
+  await inSandbox(async (dir) => {
+    // The real launch shape: stage + projectDir + idea + the ABSOLUTE plugin root. Past the arg
+    // gate the kernel runs its boot leg under the poison stubs (agent resolves null → the tier
+    // read fails closed) — the whole path must resolve cleanly, never throw.
+    const r = dryRun(join(WORKFLOWS, 'kernel.js'), dir, TIMEOUT_MS,
+      { stage: 'law', projectDir: dir, idea: 'smoke', plugin: PLUGIN })
+    assert.ok(!r.timedOut, `kernel.js: TIMEOUT — child killed at the ${TIMEOUT_MS}ms deadline`)
+    assert.equal(r.status, 0,
+      `kernel.js: ${r.failure && r.failure.name}: ${r.failure && r.failure.message} — with valid args, any escaping exception is a failure`)
   })
-}
+})
+
+test('dry-run: kernel.js tolerates conductor-contract violations without throwing — bad args resolve to an honest return, never an exception', async () => {
+  await inSandbox(async (dir) => {
+    // No stage/idea/plugin at all: the kernel must take its bad-args/needs-brainstorm returns
+    // cleanly. A throw here would crash the live engine on the exact malformed-launch class the
+    // parse-and-hop + absolute-or-halt guards exist for.
+    const r = dryRun(join(WORKFLOWS, 'kernel.js'), dir)
+    assert.ok(!r.timedOut, `kernel.js (bare args): TIMEOUT — child killed at the ${TIMEOUT_MS}ms deadline`)
+    assert.equal(r.status, 0,
+      `kernel.js (bare args): ${r.failure && r.failure.name}: ${r.failure && r.failure.message} — contract violations return honestly, never throw`)
+  })
+})
 
 test('detector proof: an undefined identifier passes node --check but the dry-run flags it', async () => {
   await inSandbox(async (dir) => {
     // The exact bug class this test exists for: rename a helper at its call site only. Still
     // perfectly valid syntax; fatal the moment the script runs.
-    const original = readFileSync(join(WORKFLOWS, 'report.js'), 'utf8')
-    const sabotaged = original.replace(/^const A = normalizeArgs\(args\)$/m, 'const A = normalizeArgsRenamed(args)')
-    assert.notEqual(sabotaged, original, 'injection target line not found in report.js')
-    const probeFile = join(dir, 'report-sabotaged.js')
+    const original = readFileSync(join(WORKFLOWS, 'kernel.js'), 'utf8')
+    const sabotaged = original.replace(/^const parsed = parseArgs\(args\)$/m, 'const parsed = parseArgsRenamed(args)')
+    assert.notEqual(sabotaged, original, 'injection target line not found in kernel.js')
+    const probeFile = join(dir, 'kernel-sabotaged.js')
     writeFileSync(probeFile, sabotaged)
     const check = spawnSync(process.execPath, ['--check', probeFile], { encoding: 'utf8' })
     assert.equal(check.status, 0, `node --check should be blind to the name mismatch: ${check.stderr}`)
@@ -86,7 +101,7 @@ test('detector proof: an undefined identifier passes node --check but the dry-ru
     assert.ok(!r.timedOut, 'the sabotaged script must fail, not hang')
     assert.equal(r.failure && r.failure.name, 'ReferenceError',
       `the dry-run must surface the injected ReferenceError, got: ${JSON.stringify(r.failure)}`)
-    assert.match((r.failure && r.failure.message) || '', /normalizeArgsRenamed/)
+    assert.match((r.failure && r.failure.message) || '', /parseArgsRenamed/)
   })
 })
 
@@ -109,7 +124,7 @@ test('timeout proof: an infinite async microtask loop is killed and reported as 
 test('determinism-poison proof: Date.now() / Math.random() / argless new Date() fail the dry-run exactly like the Workflow runtime', async () => {
   await inSandbox(async (dir) => {
     // The exact blind spot the live dogfood hit: plain node allows Date.now, the runtime forbids
-    // it — build.js crashed in 27ms in the real engine after a green smoke. Each violation class
+    // it — a workflow crashed in 27ms in the real engine after a green smoke. Each violation class
     // must now fail in the harness too.
     const cases = [
       ['date-now.js', 'const t = Date.now()', /Date\.now\(\) is unavailable/],
@@ -131,18 +146,5 @@ test('determinism-poison proof: Date.now() / Math.random() / argless new Date() 
     writeFileSync(legalFile, legal)
     const ok = dryRun(legalFile, dir)
     assert.ok(!ok.failure && !ok.timedOut, `new Date(value) must remain legal, got: ${JSON.stringify(ok.failure)}`)
-  })
-})
-
-test('gateOnly smoke: build.js executes its gateOnly:true branch under the runtime poison stubs — no exception escapes, no clock/host-global slips into the gate-only legs (the determinism poison holds)', async () => {
-  // The gateOnly path takes a structurally different route (skips Scoring + Forging, runs the
-  // gate-only trial + the forced tribunal) — node --check is blind to it, so it must execute under
-  // the exact runtime poison the engine enforces. agent() resolves null throughout, exactly as the
-  // base smoke does; with valid args, any escaping exception (any class) is a failure.
-  await inSandbox(async (dir) => {
-    const r = dryRun(join(WORKFLOWS, 'build.js'), dir, TIMEOUT_MS, { gateOnly: true })
-    assert.ok(!r.timedOut, `build.js {gateOnly:true}: TIMEOUT — child killed at the ${TIMEOUT_MS}ms deadline`)
-    assert.equal(r.status, 0,
-      `build.js {gateOnly:true}: ${r.failure && r.failure.name}: ${r.failure && r.failure.message} — the gateOnly branch must execute cleanly under the runtime poison stubs`)
   })
 })

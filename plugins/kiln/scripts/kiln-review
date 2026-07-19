@@ -1,0 +1,258 @@
+#!/usr/bin/env node
+'use strict'
+
+const { randomUUID } = require('node:crypto')
+const {
+  existsSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+} = require('node:fs')
+const { dirname, join, resolve } = require('node:path')
+const { spawnSync } = require('node:child_process')
+
+const ACCEPT = 0
+const REJECT = 10
+const BLOCKED = 11
+const TRANSPORT_FAILURE = 20
+const CODEX_UNAVAILABLE = 21
+const EFFORTS = ['low', 'medium', 'high', 'xhigh']
+const LAW_HASH = /^[0-9a-f]{64}$/
+const BROKEN_CODEX = /(?:unknown|unrecognized|unexpected|invalid).*(?:argument|option|subcommand)|(?:argument|option).*(?:not found|not recognized)/i
+const SCHEMA = join(__dirname, 'review-schema.json')
+
+function stop(fact, message, code) {
+  process.stdout.write(`${fact}\n`)
+  process.stderr.write(`kiln-review: ${message}\n`)
+  process.exit(code)
+}
+
+function discard(file) {
+  try {
+    if (existsSync(file)) unlinkSync(file)
+  } catch {
+    // The original failure remains the machine fact.
+  }
+}
+
+function readJson(file, label, discardOnFailure) {
+  try {
+    return JSON.parse(readFileSync(resolve(file), 'utf8'))
+  } catch (error) {
+    if (discardOnFailure) discard(discardOnFailure)
+    stop('transport_failure', `${label}: ${error.message}`, TRANSPORT_FAILURE)
+  }
+}
+
+function isObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function stringArray(value) {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string')
+}
+
+function requestFrom(file) {
+  const raw = readJson(file, 'invalid request')
+  if (!isObject(raw)) stop('transport_failure', 'request must be a JSON object', TRANSPORT_FAILURE)
+  if (!LAW_HASH.test(raw.law_hash)) stop('transport_failure', 'request law_hash must be a lowercase SHA-256 hex digest', TRANSPORT_FAILURE)
+  if (typeof raw.reviewer_model !== 'string' || raw.reviewer_model.trim() === '') {
+    stop('transport_failure', 'request reviewer_model must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  const reviewerEffort = raw.reviewer_effort === undefined ? 'high' : raw.reviewer_effort
+  if (!EFFORTS.includes(reviewerEffort)) {
+    stop('reviewer_effort_invalid', `request reviewer_effort must be one of ${EFFORTS.join('|')} (absent defaults to high); ultra and unknown values are rejected`, TRANSPORT_FAILURE)
+  }
+  if (typeof raw.criteria !== 'string' || raw.criteria.trim() === '') {
+    stop('transport_failure', 'request criteria must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  for (const field of ['paths', 'failures', 'commands']) {
+    if (!stringArray(raw[field])) stop('transport_failure', `request ${field} must be an array of strings`, TRANSPORT_FAILURE)
+  }
+  return {
+    reviewerModel: raw.reviewer_model,
+    reviewerEffort,
+    lawHash: raw.law_hash,
+    evidence: {
+      criteria: raw.criteria,
+      paths: raw.paths,
+      failures: raw.failures,
+      commands: raw.commands,
+    },
+  }
+}
+
+function validateGate(value, expectedReviewId, expectedLawHash, allowedFindingIds) {
+  if (!isObject(value)) return 'gate output must be a JSON object'
+  const keys = Object.keys(value)
+  const expectedKeys = ['review_id', 'law_hash', 'findings', 'blockers', 'verdict']
+  if (keys.length !== expectedKeys.length || expectedKeys.some((key) => !keys.includes(key))) {
+    return 'gate output fields do not match review-schema.json'
+  }
+  if (typeof value.review_id !== 'string' || value.review_id.trim() === '') return 'review_id must be a nonempty string'
+  if (!LAW_HASH.test(value.law_hash)) return 'law_hash must be a lowercase SHA-256 hex digest'
+  if (value.review_id !== expectedReviewId) return 'review_id does not match the issued review id'
+  if (value.law_hash !== expectedLawHash) return 'law_hash does not match the locked LAW'
+  if (!Array.isArray(value.findings) || !stringArray(value.blockers)) return 'findings and blockers must be arrays'
+  if (value.blockers.some((blocker) => blocker.trim() === '')) return 'blockers must be nonempty strings'
+  if (!['accept', 'changes_required', 'blocked'].includes(value.verdict)) return 'verdict is not recognized'
+
+  const ids = new Set()
+  const findingKeys = ['id', 'criterion', 'location', 'failure_mode', 'evidence', 'minimal_fix']
+  for (const finding of value.findings) {
+    if (!isObject(finding)) return 'each finding must be an object'
+    const keys = Object.keys(finding)
+    if (keys.length !== findingKeys.length || findingKeys.some((key) => !keys.includes(key))) {
+      return 'finding fields do not match review-schema.json'
+    }
+    if (findingKeys.some((key) => typeof finding[key] !== 'string' || finding[key].trim() === '')) {
+      return 'finding fields must be nonempty strings'
+    }
+    if (!/^.+:\d+(?::\d+)?$/.test(finding.location)) return `finding ${finding.id} location must be path:line`
+    if (ids.has(finding.id)) return `duplicate finding id ${finding.id}`
+    if (allowedFindingIds && !allowedFindingIds.has(finding.id)) return `recheck introduced out-of-scope finding id ${finding.id}`
+    ids.add(finding.id)
+  }
+
+  if (value.verdict === 'accept' && (value.findings.length !== 0 || value.blockers.length !== 0)) {
+    return 'accept requires empty findings and blockers'
+  }
+  if (value.verdict === 'changes_required' && (value.findings.length === 0 || value.blockers.length !== 0)) {
+    return 'changes_required requires nonempty findings and empty blockers'
+  }
+  if (value.verdict === 'blocked' && value.blockers.length === 0) {
+    return 'blocked requires nonempty blockers'
+  }
+  return null
+}
+
+function instructions(packet) {
+  return `You are the terminal semantic gate reviewer. Inspect the repository at the working root and return only the schema-forced JSON object.
+
+Review only the locked criteria. Report only substantiated criterion violations, never optional improvements. For each finding, cite an exact repo-relative path:line location, the concrete failure, its evidence, and the smallest repair. Use stable finding IDs. Run the supplied commands and only minimal additional read-only commands needed to decide. Do not infer authorship, persona, or another reviewer's verdict.
+
+Copy review_id and law_hash exactly. Verdict rules: accept only when findings and blockers are both empty; changes_required only for one or more repairable findings with no blockers; blocked only when the review cannot be completed, with one or more blocker reasons.
+${packet.mode === 'recheck' ? '\nRecheck only the listed finding_ids against the repair_delta and current repository. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}
+Evidence packet:
+${JSON.stringify(packet, null, 2)}
+`
+}
+
+function classifyFailure(run) {
+  if (run.error && ['ENOENT', 'EACCES', 'ENOEXEC'].includes(run.error.code)) return CODEX_UNAVAILABLE
+  if (run.error) return TRANSPORT_FAILURE
+  const stderr = run.stderr || ''
+  const incompatibleCli = BROKEN_CODEX.test(stderr) && /Usage:\s+codex(?: exec)?\b/i.test(stderr)
+  if ([126, 127].includes(run.status) || incompatibleCli) return CODEX_UNAVAILABLE
+  return TRANSPORT_FAILURE
+}
+
+function invoke(repo, request, packet, outputFile, allowedFindingIds) {
+  const output = resolve(outputFile)
+  const temporary = join(dirname(output), `.gate-review.tmp-${process.pid}-${randomUUID()}`)
+  const args = [
+    'exec',
+    '--ephemeral',
+    '--sandbox', 'read-only',
+    '--skip-git-repo-check',
+    '-C', repo,
+    '--model', request.reviewerModel,
+    '-c', `model_reasoning_effort="${request.reviewerEffort}"`,
+    '--output-schema', SCHEMA,
+    '-o', temporary,
+    '-',
+  ]
+  const run = spawnSync('codex', args, {
+    cwd: repo,
+    input: instructions(packet),
+    encoding: 'utf8',
+    maxBuffer: 4 * 1024 * 1024,
+  })
+
+  if (run.error || run.status !== 0) {
+    discard(temporary)
+    const code = classifyFailure(run)
+    const detail = run.error ? run.error.message : (run.stderr || `codex exited ${run.status}`).trim().slice(-2000)
+    stop(code === CODEX_UNAVAILABLE ? 'codex_unavailable' : 'transport_failure', detail, code)
+  }
+  if (!existsSync(temporary)) stop('transport_failure', 'codex produced no gate output', TRANSPORT_FAILURE)
+
+  const gate = readJson(temporary, 'invalid codex gate output', temporary)
+  const invalid = validateGate(gate, packet.review_id, packet.law_hash, allowedFindingIds)
+  if (invalid) {
+    discard(temporary)
+    stop('transport_failure', invalid, TRANSPORT_FAILURE)
+  }
+  try {
+    renameSync(temporary, output)
+  } catch (error) {
+    discard(temporary)
+    stop('transport_failure', `could not publish gate output: ${error.message}`, TRANSPORT_FAILURE)
+  }
+
+  const exits = { accept: ACCEPT, changes_required: REJECT, blocked: BLOCKED }
+  const facts = { accept: 'accept', changes_required: 'reject', blocked: 'blocked' }
+  process.stdout.write(`${facts[gate.verdict]}\n`)
+  process.exit(exits[gate.verdict])
+}
+
+function repository(path) {
+  try {
+    const root = realpathSync(resolve(path))
+    if (!statSync(root).isDirectory()) throw new Error('not a directory')
+    return root
+  } catch (error) {
+    stop('transport_failure', `invalid repository: ${error.message}`, TRANSPORT_FAILURE)
+  }
+}
+
+const [mode, ...args] = process.argv.slice(2)
+if (mode === 'review' && args.length === 3) {
+  const [repoPath, requestFile, outputFile] = args
+  const request = requestFrom(requestFile)
+  const packet = {
+    mode: 'review',
+    review_id: randomUUID(),
+    law_hash: request.lawHash,
+    ...request.evidence,
+  }
+  invoke(repository(repoPath), request, packet, outputFile)
+} else if (mode === 'recheck' && args.length === 5) {
+  const [repoPath, requestFile, priorFile, repairDeltaFile, outputFile] = args
+  const request = requestFrom(requestFile)
+  const prior = readJson(priorFile, 'invalid prior gate review')
+  const priorShape = isObject(prior) && typeof prior.review_id === 'string' && typeof prior.law_hash === 'string'
+  const priorError = priorShape ? validateGate(prior, prior.review_id, prior.law_hash) : 'prior gate review is malformed'
+  if (priorError) stop('transport_failure', priorError, TRANSPORT_FAILURE)
+  if (prior.verdict !== 'changes_required') {
+    stop('transport_failure', 'recheck requires a prior changes_required verdict', TRANSPORT_FAILURE)
+  }
+  if (prior.law_hash !== request.lawHash) stop('transport_failure', 'request LAW hash differs from the prior review', TRANSPORT_FAILURE)
+
+  let repairDelta
+  try {
+    repairDelta = readFileSync(resolve(repairDeltaFile), 'utf8')
+  } catch (error) {
+    stop('transport_failure', `invalid repair delta: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  if (repairDelta.trim() === '') stop('transport_failure', 'repair delta must not be empty', TRANSPORT_FAILURE)
+
+  const findingIds = new Set(prior.findings.map((finding) => finding.id))
+  const packet = {
+    mode: 'recheck',
+    review_id: prior.review_id,
+    law_hash: prior.law_hash,
+    ...request.evidence,
+    finding_ids: [...findingIds],
+    repair_delta: repairDelta,
+  }
+  invoke(repository(repoPath), request, packet, outputFile, findingIds)
+} else {
+  stop(
+    'transport_failure',
+    'usage: kiln-review review <repo> <request.json> <gate-review.json> | kiln-review recheck <repo> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json>',
+    TRANSPORT_FAILURE,
+  )
+}

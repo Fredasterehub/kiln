@@ -3,13 +3,15 @@
   "name": "kiln",
   "displayName": "Kiln",
   "version": "3.1.2",
-  "description": "Multi-model software creation pipeline. From a conversation to deployed code in 8 stages — an interactive brainstorm, then autonomous gauge, research, architecture, build, and validation orchestrated as native Claude Code workflows with Claude and GPT-5.6.",
+  "description": "Multi-model software creation pipeline. A conversation becomes running, tested software — an interactive brainstorm, then an autonomous walk from law to build to validation, driven by one content-blind kernel and five stage cards, with Claude building and GPT-5.6 reviewing every seal.",
   "author": {
     "name": "Fredastere",
     "url": "https://github.com/Fredasterehub"
   },
   "repository": "https://github.com/Fredasterehub/kiln",
   "license": "MIT",
+  "commands": ["./commands/kiln-fire.md", "./commands/kiln-doctor.md"],
+  "agents": ["./agents/da-vinci.md"],
   "keywords": [
     "pipeline",
     "software-creation",
@@ -17,19 +19,5 @@
     "workflows",
     "multi-model",
     "orchestration"
-  ],
-  "userConfig": {
-    "posture": {
-      "type": "string",
-      "title": "Default posture override",
-      "description": "How Kiln sizes each run. 'auto' lets the Gauge score complexity per run (recommended); 'max' forces the top-rigor posture (every dial at its ceiling); 'fast' forces the leanest posture. Default: auto.",
-      "default": "auto"
-    },
-    "theaterIntensity": {
-      "type": "string",
-      "title": "Theater intensity",
-      "description": "How much of Kiln's persona theater renders — the lore banners, transition lines, and voice. 'full' is the complete show (default); 'light' keeps the status banners but trims the narration; 'off' is bare functional output.",
-      "default": "full"
-    }
-  }
+  ]
 }

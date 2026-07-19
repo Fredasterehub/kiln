@@ -1,0 +1,68 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "review_id": {
+      "type": "string"
+    },
+    "law_hash": {
+      "type": "string"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "criterion": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "failure_mode": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "minimal_fix": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "criterion",
+          "location",
+          "failure_mode",
+          "evidence",
+          "minimal_fix"
+        ]
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "verdict": {
+      "type": "string",
+      "enum": [
+        "accept",
+        "changes_required",
+        "blocked"
+      ]
+    }
+  },
+  "required": [
+    "review_id",
+    "law_hash",
+    "findings",
+    "blockers",
+    "verdict"
+  ]
+}
