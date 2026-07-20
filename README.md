@@ -30,12 +30,12 @@
 <table align="center">
 <tr><td align="center" colspan="2"><br><strong>CURRENT STATUS</strong><br><br></td></tr>
 <tr>
-  <td align="center" width="50"><img src="docs/status/green-active.svg" width="18" alt="green-active"></td>
-  <td><strong>Pipeline is stable. Agents are sharp. Full autonomy &mdash; few edge cases remain.</strong></td>
+  <td align="center" width="50"><img src="docs/status/green-dim.svg" width="18" alt="green"></td>
+  <td><sub>Pipeline is stable. Agents are sharp. Full autonomy &mdash; few edge cases remain.</sub></td>
 </tr>
 <tr>
-  <td align="center"><img src="docs/status/yellow-dim.svg" width="18" alt="yellow"></td>
-  <td><sub>Functional but evolving. Some rough edges &mdash; you may need to steer where it would normally carry you.</sub></td>
+  <td align="center"><img src="docs/status/yellow-active.svg" width="18" alt="yellow-active"></td>
+  <td><strong>Functional but evolving. Some rough edges &mdash; you may need to steer where it would normally carry you.</strong></td>
 </tr>
 <tr>
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
