@@ -1,16 +1,26 @@
 # BUILD — KRS-One takes the stage *(stage 2 of 4: law → build → validate → report)*
 
 *Stage card: methodology for the stage agent. The kernel never reads this file — it routes
-paths, drives the gate through `scripts/kiln-review`, owns repair dispatch and seals. You
-build and evidence; you never invoke the transport, write `gate-review.json`, or touch
-`seals.log`. Return `{ok, beat, pointers}`.*
+paths and drives the gate: codex through `scripts/kiln-review` for ui slices (you build the
+ui, GPT reviews correctness against the locked criteria only — creative direction and taste
+are yours, never the reviewer's), a fresh claude reviewer for logic and mixed slices (GPT
+coded those — cross-family law); it owns repair dispatch and seals. You build and evidence;
+you never invoke the transport, write `gate-review.json`, or touch `seals.log`. Return
+`{ok, beat, pointers}`.*
 
-## Mode: build *(prompt says "Build exactly slice `<id>`")*
+## Mode: build *(prompt says "Build exactly slice `<id>` (surface `<ui|logic|mixed>`)")*
 1. Read `.kiln/LAW.md` and take ONLY your slice. Working code lives in the project
    workspace; control and evidence artifacts live under `.kiln/`.
-2. Build the slice. Then run `bash .kiln/law/check.sh` — return only when it exits `0`.
-   The kernel reruns it before the seal; a red reopens your slice.
-3. Write `.kiln/review-request.json` (temp + rename). The gate transport's model and effort
+2. Red first, always: write the slice's tests — or confirm the existing ones — FAILING
+   before any implementation exists. A test that never went red proves nothing.
+3. Design just-in-time, inside the slice, against the code as it exists on disk. The Law
+   fixed WHAT at law time — the cut and its criteria; HOW is decided now, never
+   pre-planned beyond the cut.
+4. Build the slice — surfaces `logic` and `mixed` build through the coder call below;
+   surface `ui` builds with your own hands. Then run `bash .kiln/law/check.sh` — return only
+   when it exits `0`. The kernel reruns it before the seal and captures the receipt for
+   the reviewer; a red reopens your slice.
+5. Write `.kiln/review-request.json` (temp + rename). The gate transport's model and effort
    are named once in `data/tiers.json` (beside `data/voice.json`) — read `roles["reviewer-gate"]`,
    resolve its `alias` through that file's `resolver` map to a concrete id, and write the pair.
    The parser requires these fields with these types (unrecognized fields are ignored):
@@ -22,12 +32,50 @@ build and evidence; you never invoke the transport, write `gate-review.json`, or
    - `criteria` — your slice's LAW criteria, verbatim, one nonempty string
    - `paths` — repo-relative files you touched (string array)
    - `failures` — observed failures, `[]` if none (string array)
-   - `commands` — the check commands the reviewer may run, `check.sh` first (string array)
+   - `commands` — the check commands your evidence rests on, `check.sh` first (string
+     array). The kernel executes them and attaches the full output at
+     `.kiln/check-receipt.txt`; the reviewer executes nothing and judges the receipt.
 
-## Mode: repair *(prompt says "Repair pass N for slice `<id>`")*
+## The coder call *(build mode, surfaces `logic` and `mixed`)*
+You are the context-builder, not the coder: GPT-5.6 writes the code through ONE
+`codex exec` call, and you own everything around it — the context, the verification, the
+ledger facts. The whole mechanism is a bash call with a well-built prompt: no bridge, no
+protocol, no ceremony.
+1. Build the full context with your own hands first: your slice from `.kiln/LAW.md`, its
+   law criteria verbatim, the relevant files, and the failing tests from the red-first
+   step.
+2. Compose the four-part prompt — Goal / Context / Constraints / Done-when — per
+   `references/codex-prompt-guide.md`, lean per the 5.6 deltas. Done-when names the exact
+   test command and expected exit `0`.
+3. Make the ONE bash call, the proven recipe: `TMP=$(mktemp /tmp/kiln-codex.XXXXXX.md)` →
+   write the prompt into it → then
+   `codex exec -m <id> -c 'model_reasoning_effort="<effort>"' --sandbox workspace-write
+   --skip-git-repo-check -C <project dir> -o .kiln/codex-reply.md < "$TMP"`
+   where `<id>` is `resolver["gpt-sol"]` from `data/tiers.json` — the one place the coder
+   id is named — and `<effort>` is the coder effort named once in that same file's
+   `builder-logic` note. The `< "$TMP"` redirect feeds the prompt AND closes stdin: an open stdin
+   hangs codex until the timeout. No `--output-schema` — the logic-builder row of the
+   guide takes default verbosity and a free-text reply via `-o`.
+4. Verify with your own hands: run the slice's tests and `bash .kiln/law/check.sh`. Codex
+   can exit `0` having produced nothing usable — the green run is the only proof.
+5. Not green: fold the observed failure into the prompt and call again — at most twice
+   more. Still red after that, return `ok: false` with the facts. Codex unavailable, or
+   `.kiln/degraded` present: you MUST create the degradation marker FIRST — one bash
+   line, `touch .kiln/degraded` — then build the slice yourself and say so in your beat.
+   The kernel reads the marker at seal time, so the seal records the family truth:
+   single-family, never dual. Building it yourself is not skipping review: the kernel
+   still convenes a fresh reviewer over your slice — a different Claude mind (opus) judging
+   your diff against the law, the best split without a second family (the v3 codex-absent
+   fallback) — so build to the full bar. Only the family label changes, never the rigor.
+6. Green: continue at step 5 of build mode — the review request carries the ledger facts
+   (paths, failures, commands) exactly as ever.
+
+## Mode: repair *(prompt says "Repair pass N for slice `<id>` (surface `<ui|logic|mixed>`)")*
 1. Read `.kiln/gate-review.json`. Fix ONLY the listed finding IDs, at their evidence
-   locations — nothing else moves.
-2. Run `bash .kiln/law/check.sh` back to `0`.
+   locations — nothing else moves. Surfaces `logic` and `mixed`: the fix goes through the
+   same ONE-call coder mechanism above — the finding list becomes the Goal.
+2. Run `bash .kiln/law/check.sh > .kiln/check-receipt.txt 2>&1` back to exit `0` — the
+   refreshed receipt is what the recheck reviewer reads instead of executing anything.
 3. Write `.kiln/repair-delta.md` (temp + rename): one entry per finding ID — what changed,
    where, in past tense. The recheck reviewer reads exactly this against its own findings.
 

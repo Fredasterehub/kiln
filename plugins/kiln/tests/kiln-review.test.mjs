@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -53,4 +53,29 @@ test('kiln-review: an absent effort defaults to high and is accepted (not reject
   const r = runReview(undefined)
   assert.notEqual(r.fact, 'reviewer_effort_invalid')
   assert.equal(r.fact, 'transport_failure', 'absent effort defaults to high, then halts on the missing repo')
+})
+
+test('kiln-review: the reviewer never executes — the instructions attach the kernel-side receipt instead', () => {
+  const src = readFileSync(REVIEW, 'utf8')
+  assert.ok(src.includes('Execute nothing'), 'the instructions forbid execution outright')
+  assert.ok(src.includes('check_receipt as the only execution evidence'), 'the receipt is the only execution evidence')
+  assert.ok(!src.includes('Run the supplied commands'), 'the old execute-the-commands instruction is gone')
+  assert.ok(src.includes(`'.kiln', 'check-receipt.txt'`), 'the transport reads the receipt from the reviewed repo')
+  assert.ok(src.includes('packet.check_receipt'), 'the receipt rides the evidence packet verbatim')
+})
+
+test('kiln-review: the ui reviewer rules on correctness only — creative direction and taste are out of remit', () => {
+  // Since the rework routes only ui slices to the codex gate (logic and mixed take
+  // the fresh claude gate in the kernel), this reviewer prompt is exclusively the
+  // GPT reviewer of an Opus-built ui slice. Opus owns the creative direction and
+  // taste (v3 duo-pool ui pool — la-peintresse builds, the-curator reviews static
+  // correctness); GPT rules on correctness against the locked criteria and has no
+  // say in aesthetics.
+  const src = readFileSync(REVIEW, 'utf8')
+  assert.ok(src.includes('Creative direction, visual taste, and aesthetic choices belong to the builder'),
+    'the carve-out names creative direction, visual taste, and aesthetic choices as the builder\'s')
+  assert.ok(src.includes('never raise them as a finding and never let them color a verdict'),
+    'taste is never a finding and never colors the verdict')
+  assert.ok(src.includes('you rule on correctness against the locked criteria alone'),
+    'the reviewer rules on correctness against the locked criteria alone')
 })

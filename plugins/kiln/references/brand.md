@@ -125,7 +125,7 @@ After completion:
 
 ## Agent Personality
 
-The persona is worn in the composed words, never stored as an agent field or a spawn label — only `da-vinci.md` and `the-creator.md` ship as agent files. Banner quotes draw from `data/lore-quotes.json` (147 verified entries, 25 moment keys) under the sealed discipline: never repeat a quote within a run, never invent an attribution.
+The persona is worn in the composed words, never stored as an agent field or a spawn label — only `da-vinci.md` ships as an agent file. Banner quotes draw from `data/lore-quotes.json` (147 verified entries, 25 moment keys) under the sealed discipline: never repeat a quote within a run, never invent an attribution.
 
 ## Idle Voice
 

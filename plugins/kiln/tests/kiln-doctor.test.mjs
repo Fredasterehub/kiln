@@ -69,12 +69,12 @@ test('doctor: each of the three data files is parsed as JSON by name', () => {
   assert.ok(text.includes('JSON.parse'), 'a real parse, not a stat')
 })
 
-test('doctor: the tiers shape check mirrors the kernel boot gate — same nine roles, same efforts, same surface routes', () => {
+test('doctor: the tiers shape check mirrors the kernel boot gate — same eleven roles, same efforts, same surface routes', () => {
   const text = doctor()
   const kernel = readFileSync(at('../workflows/kernel.js'), 'utf8')
   const list = (name) => JSON.parse('[' + kernel.match(new RegExp('const ' + name + ' = \\[([^\\]]+)\\]'))[1].replace(/'/g, '"') + ']')
   const roles = list('TIER_ROLES')
-  assert.equal(roles.length, 9, 'the kernel gate carries nine roles')
+  assert.equal(roles.length, 11, 'the kernel gate carries eleven roles (fallback-reviewer joined — the degraded logic/mixed gate consumes it, so boot must demand it)')
   for (const role of roles) assert.ok(text.includes('"' + role + '"'), 'doctor mirrors role ' + role)
   for (const effort of list('TIER_EFFORTS')) assert.ok(text.includes('"' + effort + '"'), 'doctor mirrors effort ' + effort)
   const routes = list('TIER_ROUTES')
@@ -137,11 +137,14 @@ test('doctor: the inline tiers validator executes — fixture verdicts match the
     ['an extra null role — the projection throw the kernel takes', mutate((t) => { t.roles.extra = null }), 'invalid'],
     ['doctrine deleted', mutate((t) => { delete t.doctrine }), 'invalid'],
     ['an unknown effort', mutate((t) => { t.roles['stage-card'].effort = 'ultra' }), 'invalid'],
-    ['a GPT alias with no resolver entry', mutate((t) => { t.roles['builder-logic'].alias = 'gpt-ghost' }), 'invalid'],
+    ['a GPT alias with no resolver entry', mutate((t) => { t.roles['reviewer-gate'].alias = 'gpt-ghost' }), 'invalid'],
     ['a GPT alias of inherit', mutate((t) => { t.roles['reviewer-gate'].alias = 'inherit' }), 'invalid'],
     ['a missing surface route', mutate((t) => { delete t.surface_routing.mixed }), 'invalid'],
-    ['a surface route targeting a gpt-family role', mutate((t) => { t.surface_routing.logic = 'builder-logic' }), 'invalid'],
+    // simple-fire routed logic to a claude-family builder-logic seat, so the gpt-routed
+    // defect shape is recreated by flipping the routed seat's family back to gpt.
+    ['a surface route targeting a gpt-family role', mutate((t) => { t.roles['builder-logic'] = { family: 'gpt', alias: 'gpt-sol', effort: 'high' } }), 'invalid'],
     ['a missing consumer role', mutate((t) => { delete t.roles['dev-sol'] }), 'invalid'],
+    ['a missing fallback-reviewer role — the degraded gate consumer', mutate((t) => { delete t.roles['fallback-reviewer'] }), 'invalid'],
     ['roles replaced by null', mutate((t) => { t.roles = null }), 'invalid'],
   ]
   for (const [name, fixture, expected] of fixtures) {

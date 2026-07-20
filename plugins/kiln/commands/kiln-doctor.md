@@ -77,7 +77,7 @@ try {
   t = ((x) => ({ doctrine: x.doctrine !== undefined, resolver: x.resolver, surface_routing: x.surface_routing, roles: Object.fromEntries(Object.keys(x.roles).map((k) => [k, { family: x.roles[k].family, alias: x.roles[k].alias, effort: x.roles[k].effort }])) }))(raw)
 } catch (e) { bad("a role entry the kernel boot projection cannot read") }
 const EFFORTS = ["low", "medium", "high", "xhigh"]
-const ROLES = ["driver", "kernel-leg", "stage-card", "builder-ui", "builder-logic", "reviewer-gate", "brainstorm-facilitator", "haiku-migration", "dev-sol"]
+const ROLES = ["driver", "kernel-leg", "stage-card", "stage-law", "builder-ui", "builder-logic", "reviewer-gate", "fallback-reviewer", "brainstorm-facilitator", "haiku-migration", "dev-sol"]
 const ROUTES = ["ui", "logic", "mixed"]
 if (t.doctrine !== true) bad("doctrine")
 if (!t.resolver || typeof t.resolver !== "object") bad("resolver")

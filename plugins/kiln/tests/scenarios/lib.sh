@@ -179,9 +179,14 @@ assert_s1_artifacts() { # $1=workdir — annex expected artifacts + A1..A4
   assert_state_fields "$wd/.kiln/STATE.md"
 }
 
-gate_request() { # $1=workdir — writes request.json; reviewer model+effort come from tiers.json
+gate_request() { # $1=workdir — writes request.json + the kernel-side check receipt;
+  # reviewer model+effort come from tiers.json. The runner is the kernel side here:
+  # it executes the request's check command and captures the output verbatim, so the
+  # reviewer (who executes nothing) judges attached evidence.
   local wd="$1" h alias model effort
   h=$(sha256sum "$wd/LAW.md" | cut -d' ' -f1)
+  mkdir -p "$wd/.kiln"
+  ( cd "$wd" && node --test slice/ > .kiln/check-receipt.txt 2>&1 ) || true
   alias=$(jq -r '.roles["reviewer-gate"].alias' "$TIERS")
   model=$(jq -r --arg a "$alias" '.resolver[$a]' "$TIERS")
   effort=$(jq -r '.roles["reviewer-gate"].effort' "$TIERS")

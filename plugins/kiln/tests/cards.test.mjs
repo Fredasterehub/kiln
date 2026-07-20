@@ -164,6 +164,41 @@ test('cards: every stage card pins its title unit and its N2–N5 bold-Stage anc
   }
 })
 
+// ── Simple-fire: red-first TDD, JIT design, and the one-bash-call GPT coder ──
+
+test('build card: red first, always — tests fail before the build; design is just-in-time inside the slice', () => {
+  const build = cardText('build.md')
+  assert.ok(build.includes('Red first, always'), 'the build opens with failing tests, before any implementation')
+  assert.ok(build.includes('FAILING\n   before any implementation exists'), 'red precedes green — a test that never went red proves nothing')
+  assert.ok(build.includes('just-in-time'), 'implementation design happens JIT inside the slice')
+  assert.ok(build.includes('never\n   pre-planned beyond the cut'), 'law time fixed only the cut — never the HOW')
+})
+
+test('build card: the logic coder is ONE bash codex exec call — the proven recipe, stdin closed, verified by hand', () => {
+  const build = cardText('build.md')
+  assert.ok(build.includes('codex-prompt-guide.md'), 'the prompt is composed per the codex prompt guide')
+  assert.ok(build.includes('Goal / Context / Constraints / Done-when'), 'the four-part prompt discipline rides the card')
+  assert.ok(build.includes('codex exec -m <id>'), 'the mechanism is a bash codex exec call — no bridge, no protocol')
+  assert.ok(build.includes('< "$TMP"'), 'stdin is fed and closed by the prompt redirect — an open stdin hangs codex')
+  assert.ok(build.includes('resolver["gpt-sol"]'), 'the coder id resolves through data/tiers.json — the one place it is named')
+  assert.ok(build.includes('No `--output-schema`'), 'the logic-builder row takes a free-text reply via -o')
+  assert.ok(build.includes('at most twice\n   more'), 'the refine loop is bounded at two more calls')
+  assert.ok(build.includes('the green run is the only proof'), 'the context-builder verifies with its own hands')
+  assert.ok(build.includes('.kiln/check-receipt.txt'), 'the check-receipt contract rides the card')
+})
+
+test('tiers: the logic and mixed surfaces route to the claude context-builder seat whose coder is GPT via one bash call', () => {
+  const tiers = JSON.parse(readFileSync(join(DATA, 'tiers.json'), 'utf8'))
+  assert.equal(tiers.surface_routing.logic, 'builder-logic', 'logic is routed again — the park is over')
+  assert.equal(tiers.surface_routing.mixed, 'builder-logic', 'mixed is GPT-coded too — Claude builds only ui (the operator law)')
+  const seat = tiers.roles['builder-logic']
+  assert.equal(seat.family, 'claude', 'the seat is claude-family — the boot rule holds by design')
+  assert.equal(seat.alias, 'sonnet')
+  assert.equal(seat.effort, 'high', 'the wrapper effort is HIGH per the INTAKE-14b/Q1 default — a model-backed role defaults HIGH')
+  assert.match(seat.note, /codex exec/, 'the note names the bash codex exec coder')
+  assert.equal(tiers.resolver['gpt-sol'], 'gpt-5.6-sol', 'the resolver still names the concrete coder id')
+})
+
 test('cards: composition order is literal per the recipes — and the repair card carries the FAULT LENS with no foot', () => {
   const order = (label, text, markers) => {
     let last = -1

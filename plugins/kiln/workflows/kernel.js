@@ -41,6 +41,60 @@ function gateOutcome(exit) {
     ?? 'transport_failure'
 }
 
+// The claude gate speaks verdicts, not exit codes; this map lands them on the
+// same closed exit table the codex transport uses, and anything unrecognized
+// fails closed as a transport failure.
+function verdictExit(v) {
+  return { accept: 0, changes_required: 10, blocked: 11 }[v] ?? 20
+}
+
+// The locked-law digest shape scripts/kiln-review pins with its LAW_HASH — a
+// lowercase SHA-256 hex string; the claude-gate mirror below applies the same
+// format gate before the equality check.
+const LAW_HASH = /^[0-9a-f]{64}$/
+// S1 mirror: the claude gate verdict passes the SAME semantic validation the
+// codex transport enforces in scripts/kiln-review (validateGate) before any
+// publish — the field set is exactly the five schema keys, review_id is a
+// nonempty string, law_hash is a lowercase 64-hex digest AND equals the locked
+// law hash from the review request, the verdict enum is closed, blockers are
+// nonempty strings, every finding is an object carrying exactly the six schema
+// fields as nonempty strings with a path:line location and a unique id, and the
+// verdict shape holds — accept demands empty findings and blockers,
+// changes_required demands findings with no blockers, blocked demands blockers.
+// The two request-scoped codex checks — review_id equals the issued id, and a
+// recheck introduces no out-of-scope finding id — have no counterpart here: the
+// claude reviewer mints or reuses the review_id itself, and the repair loop
+// reads its finding set from the published gate, so neither an issued id nor an
+// allowed-id set crosses into this function. Returns the named violation, or
+// null when the verdict is sound; any violation is transport-failure exit
+// semantics, never a seal.
+function gateReviewInvalid(g, lawHash) {
+  if (!g || typeof g !== 'object' || Array.isArray(g)) return 'not-an-object'
+  const keys = Object.keys(g)
+  const fields = ['review_id', 'law_hash', 'findings', 'blockers', 'verdict']
+  if (keys.length !== fields.length || fields.some(k => keys.indexOf(k) < 0)) return 'fields-mismatch'
+  if (typeof g.review_id !== 'string' || g.review_id.trim() === '') return 'review-id-empty'
+  if (typeof g.law_hash !== 'string' || !LAW_HASH.test(g.law_hash) || g.law_hash !== lawHash) return 'law-hash-mismatch'
+  if (!Array.isArray(g.findings)) return 'findings-shape'
+  if (!Array.isArray(g.blockers) || g.blockers.some(b => typeof b !== 'string' || b.trim() === '')) return 'blockers-shape'
+  if (['accept', 'changes_required', 'blocked'].indexOf(g.verdict) < 0) return 'verdict-unrecognized'
+  const ids = new Set()
+  const findingFields = ['id', 'criterion', 'location', 'failure_mode', 'evidence', 'minimal_fix']
+  for (const f of g.findings) {
+    if (!f || typeof f !== 'object' || Array.isArray(f)) return 'finding-not-an-object'
+    const fk = Object.keys(f)
+    if (fk.length !== findingFields.length || findingFields.some(k => fk.indexOf(k) < 0)) return 'finding-fields-mismatch'
+    if (findingFields.some(k => typeof f[k] !== 'string' || f[k].trim() === '')) return 'finding-fields-empty'
+    if (!/^.+:\d+(?::\d+)?$/.test(f.location)) return 'finding-location-shape'
+    if (ids.has(f.id)) return 'finding-id-duplicate'
+    ids.add(f.id)
+  }
+  if (g.verdict === 'accept' && (g.findings.length !== 0 || g.blockers.length !== 0)) return 'accept-with-findings'
+  if (g.verdict === 'changes_required' && (g.findings.length === 0 || g.blockers.length !== 0)) return 'changes-required-shape'
+  if (g.verdict === 'blocked' && g.blockers.length === 0) return 'blocked-without-blockers'
+  return null
+}
+
 // The repair/recheck loop over injected closures. gate(mode, pass) → exit int;
 // repair(pass) → true only when the repair result AND its delta are confirmed.
 // Max two repair passes, then blocked (locked BEHAVIOR). A recheck runs only
@@ -116,6 +170,20 @@ function atomicWriteCmd(doc) {
   ].join('\n')
 }
 
+// Exact shell for publishing a claude gate verdict: temp file, rename — the
+// same atomic discipline as the STATE write. The JSON arrives as an opaque
+// string; the kernel never reads it back.
+function gateWriteCmd(json) {
+  return [
+    'set -e',
+    'mkdir -p .kiln',
+    "cat > .kiln/.gate-review.tmp <<'KILN_GATE_EOF'",
+    json,
+    'KILN_GATE_EOF',
+    'mv -f .kiln/.gate-review.tmp .kiln/gate-review.json',
+  ].join('\n')
+}
+
 function gateCmd(mode, p) {
   const bin = p.plugin + '/scripts/kiln-review'
   return mode === 'recheck'
@@ -127,6 +195,11 @@ const LAW_CHECK = 'bash .kiln/law/check.sh'
 // Resume / stage-end / completion guard: a missing check succeeds; a present
 // red check stays nonzero.
 const LAW_GUARD = 'if test -f .kiln/law/check.sh; then ' + LAW_CHECK + '; fi'
+// Pre-gate receipt: the kernel side has the hands, so it executes the law
+// checks itself and preserves the full output verbatim for the reviewer,
+// who executes nothing. Output still reaches stdout for the ids fetch, and
+// the check exit code survives the capture.
+const LAW_CHECK_RECEIPT = 'bash .kiln/law/check.sh > .kiln/check-receipt.txt 2>&1; s=$?; cat .kiln/check-receipt.txt; exit $s'
 
 // Tier resolution — pure over the validated tier config (data, never content).
 // The tier file is the ONE place models and efforts are named; the kernel carries
@@ -141,7 +214,7 @@ const LAW_GUARD = 'if test -f .kiln/law/check.sh; then ' + LAW_CHECK + '; fi'
 // role. No compiled model or effort value lives in the kernel — every value flows
 // from the file at run time.
 const TIER_EFFORTS = ['low', 'medium', 'high', 'xhigh']
-const TIER_ROLES = ['driver', 'kernel-leg', 'stage-card', 'builder-ui', 'builder-logic', 'reviewer-gate', 'brainstorm-facilitator', 'haiku-migration', 'dev-sol']
+const TIER_ROLES = ['driver', 'kernel-leg', 'stage-card', 'stage-law', 'builder-ui', 'builder-logic', 'reviewer-gate', 'fallback-reviewer', 'brainstorm-facilitator', 'haiku-migration', 'dev-sol']
 const TIER_ROUTES = ['ui', 'logic', 'mixed']
 function validateTiers(c) {
   if (!c || typeof c !== 'object') return false
@@ -231,6 +304,7 @@ const P = {
   state: '.kiln/STATE.md', law: '.kiln/LAW.md', gate: '.kiln/gate-review.json',
   request: '.kiln/review-request.json', delta: '.kiln/repair-delta.md',
   slices: '.kiln/slices.json', seals: '.kiln/seals.log', degraded: '.kiln/degraded',
+  ack: '.kiln/degraded-ack', receipt: '.kiln/check-receipt.txt',
   card: (s) => plugin + '/cards/' + s + '.md',
 }
 const EXIT = { type: 'object', additionalProperties: false, properties: { exit: { type: 'integer' } }, required: ['exit'] }
@@ -247,6 +321,31 @@ const TIERS = {
     resolver: { type: 'object' }, surface_routing: { type: 'object' }, roles: { type: 'object' },
   },
   required: ['exit'],
+}
+// The claude gate returns the full verdict object schema-forced — a shape
+// mirror of scripts/review-schema.json. The kernel publishes it to the gate
+// file by hand and maps the verdict onto the closed exit table; the reviewer
+// itself writes nothing and executes nothing.
+const GATE = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    review_id: { type: 'string' },
+    law_hash: { type: 'string' },
+    findings: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          id: { type: 'string' }, criterion: { type: 'string' }, location: { type: 'string' },
+          failure_mode: { type: 'string' }, evidence: { type: 'string' }, minimal_fix: { type: 'string' },
+        },
+        required: ['id', 'criterion', 'location', 'failure_mode', 'evidence', 'minimal_fix'],
+      },
+    },
+    blockers: { type: 'array', items: { type: 'string' } },
+    verdict: { type: 'string', enum: ['accept', 'changes_required', 'blocked'] },
+  },
+  required: ['review_id', 'law_hash', 'findings', 'blockers', 'verdict'],
 }
 
 // Boot (T-02): read the tier file once via an agent leg — the same node -p read
@@ -298,11 +397,13 @@ const voiceBeat = (key, facts, fallback, idx = 0) => idsFetch(
 ).then(v => fillClosed(v.ids[idx] ?? fallback, facts))
 
 // Stage-card and per-slice builder legs share the {ok, beat, pointers} schema; the
-// caller supplies the resolved tier opts. Stage cards (law/validate/report) run on
-// stage-card; the per-slice builder runs on its surface-routed builder role (T-03).
+// caller supplies the resolved tier opts. INTAKE-19 seat law: the LAW stage is a
+// thinking seat — slice creation resolves through the stage-law tier; validate and
+// report stay on stage-card; the per-slice builder runs on its surface-routed
+// builder role (T-03).
 const actWith = (prompt, label, opts) => agent(prompt, { label, ...opts, schema: STAGE_RESULT })
   .then(r => (r ?? { ok: false, beat: '', pointers: [] }))
-const act = (prompt, label) => actWith(prompt, label, tier('stage-card'))
+const act = (prompt, label) => actWith(prompt, label, tier(stage === 'law' ? 'stage-law' : 'stage-card'))
 
 const stage = resolveStage(A)
 if (stage === 'needs-brainstorm') {
@@ -418,8 +519,8 @@ for (const entry of slices) {
   const ordinal = slices.indexOf(entry) + 1
   const sealed = await hands('grep -q "^' + slice + ' " ' + P.seals + ' 2>/dev/null', 'seal:check')
   if (sealed === 0) continue
-  // T-03: the kernel surface-routes the builder leg BEFORE agent() — ui/mixed to
-  // builder-ui, logic to builder-logic — and the build and repair of this slice
+  // T-03: the kernel surface-routes the builder leg BEFORE agent() — ui to
+  // builder-ui, logic and mixed to builder-logic — and the build and repair of this slice
   // both dispatch with the resolved role opts. Only the kernel holds this
   // pre-dispatch moment; the card never sees it.
   const builderOpts = routeBuilder(tiers, entry.surface)
@@ -429,14 +530,17 @@ for (const entry of slices) {
     s: ordinal, t: slices.length, streak, STREAK: streak.toUpperCase(),
     passes: 0, count: 0, ids: '',
   }
-  const r = await actWith(cardPrompt('Build exactly slice ' + slice + '. Write ' + P.request + ' per the card before returning.'), 'slice:' + slice, builderOpts)
+  const r = await actWith(cardPrompt('Build exactly slice ' + slice + ' (surface ' + entry.surface + '). Write ' + P.request + ' per the card before returning.'), 'slice:' + slice, builderOpts)
   if (!r.ok) return failStop('transport-failure', { stage, active_slice: slice, next_action: 'Rerun stage build' }, await voiceBeat('transport-failure', {}, 'Slice ' + slice + ' did not return sound work — the run holds.', 1))
   for (const p of r.pointers) routes.add(p)
   beats.push(fillClosed(r.beat, facts))
   // LAW rerun beat: before any dependent seal. The check must exist by build.
   // Boundary ruling (Sol, W-04): ANY pre-seal red blocks the current seal
   // unless a sealed owner is reopened — full LAW green at every slice boundary.
-  const guard = await lawBeat(LAW_CHECK, 'law:pre-seal')
+  // The pre-seal run doubles as the gate receipt: the full check output lands
+  // verbatim at the receipt path, so the reviewer judges executed evidence
+  // and executes nothing.
+  const guard = await lawBeat(LAW_CHECK_RECEIPT, 'law:pre-seal')
   if (guard.exit !== 0) {
     const owner = await firstSealed(guard.ids)
     if (owner) return reopen(owner, 'pre-seal')
@@ -446,10 +550,91 @@ for (const entry of slices) {
   }
 
   const wasDegraded = await hands('test -f ' + P.degraded, 'degraded:check') === 0
-  let label = 'single-family'
-  if (!wasDegraded) {
+  // S3: a degradation the builder marks on disk takes the SAME acknowledgment
+  // hard-stop the exit-21 path takes. The ack file records that the kernel
+  // stopped and the operator relaunched; a marker discovered pre-gate without
+  // it stops the run here — never a silent ok seal. After acknowledgment the
+  // run continues single-family: a ui slice skips the gate (no cross-family
+  // reviewer without codex), a logic or mixed slice still faces the opus
+  // fallback gate below — the seal reads the marker either way.
+  const degradedStop = async () => {
+    const db = await voiceBeat('degradation', {}, 'Codex is not answering — answer continue to proceed single-family.')
+    const m = await hands('touch ' + P.degraded + ' ' + P.ack, 'degraded:mark')
+    if (m !== 0) return persistFail('degraded-mark')
+    beats.push(db)
+    return stop('degraded', { stage, active_slice: slice, next_action: 'Acknowledge single-family degradation, then relaunch stage build' })
+  }
+  if (wasDegraded && await hands('test -f ' + P.ack, 'degraded-ack:check') !== 0) {
+    return degradedStop()
+  }
+  // The gate decision, on the closed degradation and surface facts:
+  //   - normal run: every surface gates. Coder and reviewer never share a
+  //     family. A logic or mixed slice is GPT-coded (the build card makes one
+  //     bash codex exec call), so its gate is a fresh claude mind on stage-card
+  //     ruling on the law, the diff, and the kernel-side check receipt —
+  //     executing nothing, writing nothing; the kernel publishes the
+  //     schema-forced verdict by hand. The ui surface alone keeps the codex gate.
+  //   - degraded and acknowledged: codex is gone, so a ui slice cannot be gated
+  //     cross-family and keeps its honest skip; but a logic or mixed slice the
+  //     builder coded on sonnet STILL faces a gate — a fresh OPUS mind, a
+  //     different and stronger model than the sonnet builder, same family, fresh
+  //     context. That is the best split without a second family: the v3
+  //     codex-absent fallback restored (retired/v3/data/duo-pool.json:7,
+  //     logic_fallback — sonnet builds, opus reviews cross-context). It runs the
+  //     SAME full validation; the seal-label read below still reads the marker
+  //     at seal time, so it speaks single-family either way. reviewerOpts names
+  //     the fallback-reviewer opus tier when degraded, stage-card (inherit) on
+  //     the normal path.
+  const runGate = !wasDegraded || entry.surface !== 'ui'
+  if (runGate) {
+    const reviewerOpts = wasDegraded ? tier('fallback-reviewer') : tier('stage-card')
+    const claudeGate = async (mode) => {
+      // S1: the locked law hash arrives from the review request as a closed
+      // machine fact through the standard fetch surface — the same source
+      // scripts/kiln-review reads on the codex path. An unreadable request is
+      // a transport failure there, so it is one here.
+      const req = await idsFetch(
+        "node -p 'JSON.stringify([String(require(\"./" + P.request + "\").law_hash)])'",
+        'request:hash', 'a one-element array holding the request law_hash, [] if exit != 0',
+      )
+      if (req.exit !== 0 || req.ids.length !== 1) return 20
+      const g = await agent([
+        'You are the gate reviewer for this slice: a fresh mind judging the diff against the locked law.',
+        'Project dir: ' + projectDir + '. Read the locked law at ' + P.law + ', the review request at ' + P.request + ' (its criteria are the slice criteria; its paths name the diff), and the changed files themselves.',
+        'The law checks were already executed kernel-side; their full output is attached verbatim at ' + P.receipt + '. Execute nothing — no commands, no tests, no builds: judge the diff against the law with the receipt as the only execution evidence.',
+        mode === 'recheck'
+          ? 'Recheck only the finding ids in ' + P.gate + ' against ' + P.delta + ' and the current files. Preserve each unresolved finding id; never add one. Accept only when every listed finding is repaired. Reuse the prior review_id from ' + P.gate + '.'
+          : 'Report only substantiated criterion violations at exact repo-relative path:line locations with stable finding ids. Verdict rules: accept only when findings and blockers are both empty; changes_required only for repairable findings with no blockers; blocked only when the review cannot complete, with blocker reasons. Mint a fresh review_id.',
+        'Fill the verdict object per ' + plugin + '/scripts/review-schema.json; copy law_hash verbatim from the request.',
+      ].join('\n'), { label: 'gate-claude:' + mode, ...reviewerOpts, schema: GATE })
+      if (!g) return 20
+      // S1: the semantic mirror rules BEFORE the kernel publishes or maps the
+      // verdict — a failed validation is transport-failure exit semantics,
+      // never a seal, and nothing lands at the gate file.
+      if (gateReviewInvalid(g, req.ids[0]) !== null) return 20
+      const w = await hands(gateWriteCmd(JSON.stringify(g, null, 2)), 'gate:publish')
+      return w === 0 ? verdictExit(g.verdict) : 20
+    }
+    // S2: a recheck judges executed evidence, so the receipt must be fresh —
+    // before EVERY recheck round, either gate family, the kernel reruns the
+    // full check into the receipt. No gate ever judges a stale pre-repair
+    // receipt. A red rerun takes the same door as any pre-seal red: reopen a
+    // sealed owner, else halt law-red — recorded here, ruled after the loop.
+    let recheckRed = null
+    const freshReceipt = (inner) => async (mode) => {
+      if (mode === 'recheck') {
+        const again = await lawBeat(LAW_CHECK_RECEIPT, 'law:pre-recheck')
+        if (again.exit !== 0) {
+          recheckRed = again.ids
+          return 20
+        }
+      }
+      return inner(mode)
+    }
     const loop = await reviewLoop({
-      gate: (mode) => hands(gateCmd(mode, { plugin, repo: projectDir, request: P.request, gate: P.gate, priorGate: P.gate, delta: P.delta }), 'gate:' + mode),
+      gate: freshReceipt(!wasDegraded && entry.surface === 'ui'
+        ? (mode) => hands(gateCmd(mode, { plugin, repo: projectDir, request: P.request, gate: P.gate, priorGate: P.gate, delta: P.delta }), 'gate:' + mode)
+        : claudeGate),
       repair: async (pass) => {
         const found = await idsFetch(
           "node -p 'JSON.stringify((require(\"./" + P.gate + "\").findings||[]).map(f=>String(f.id)))'",
@@ -458,7 +643,7 @@ for (const entry of slices) {
         facts.passes = pass
         facts.count = found.ids.length
         facts.ids = found.ids.join(', ')
-        const rr = await actWith(cardPrompt('Repair pass ' + pass + ' for slice ' + slice + ': fix ONLY the findings in ' + P.gate + '; write the repair delta to ' + P.delta + '.'), 'repair:' + slice, builderOpts)
+        const rr = await actWith(cardPrompt('Repair pass ' + pass + ' for slice ' + slice + ' (surface ' + entry.surface + '): fix ONLY the findings in ' + P.gate + '; write the repair delta to ' + P.delta + '.'), 'repair:' + slice, builderOpts)
         if (!rr.ok) return false
         const d = await hands('test -s ' + P.delta, 'delta:check')
         if (d !== 0) return false
@@ -469,6 +654,15 @@ for (const entry of slices) {
     })
     corrections += loop.repairs
     facts.passes = loop.repairs
+    // S2 ruling: a red pre-recheck rerun is a law fact, not a transport fact —
+    // it takes the pre-seal door before any transport branch reads the result.
+    if (recheckRed) {
+      const owner = await firstSealed(recheckRed)
+      if (owner) return reopen(owner, 'pre-recheck')
+      return failStop('law-red',
+        { stage, active_slice: slice, next_action: 'Rerun stage build: slice ' + slice + ' LAW went red after a repair pass' },
+        'The law went red after a repair pass on slice ' + slice + ' — no recheck over a red law.')
+    }
     if (loop.result === 'blocked') {
       const found = await idsFetch(
         "node -p 'JSON.stringify((require(\"./" + P.gate + "\").findings||[]).map(f=>String(f.id)))'",
@@ -480,15 +674,14 @@ for (const entry of slices) {
     if (loop.result === 'gate-unreachable') return failStop('gate-unreachable', { stage, active_slice: slice, next_action: 'Rerun stage build after restoring the gate tool at ' + plugin + '/scripts/kiln-review' }, await voiceBeat('gate-unreachable', {}, 'The gate tool at ' + plugin + '/scripts/kiln-review is unreachable — not found or not executable; codex was never reached, so no verdict was possible.'), { gate: P.gate })
     if (loop.result === 'transport-failure') return failStop('transport-failure', { stage, active_slice: slice, next_action: 'Rerun stage build after fixing the transport' }, await voiceBeat('transport-failure', {}, 'The review transport failed for slice ' + slice + ' — no verdict was published.'), { gate: P.gate })
     if (loop.result === 'repair-failed') return failStop('repair-failed', { stage, active_slice: slice, next_action: 'Rerun stage build: repair pass failed for slice ' + slice }, 'The repair pass did not land for slice ' + slice + ' — the run holds.', { gate: P.gate })
-    if (loop.result === 'degraded') {
-      const db = await voiceBeat('degradation', {}, 'Codex is not answering — answer continue to proceed single-family.')
-      const m = await hands('touch ' + P.degraded, 'degraded:mark')
-      if (m !== 0) return persistFail('degraded-mark')
-      beats.push(db)
-      return stop('degraded', { stage, active_slice: slice, next_action: 'Acknowledge single-family degradation, then relaunch stage build' })
-    }
-    label = 'dual'
+    if (loop.result === 'degraded') return degradedStop()
   }
+  // Seal-label law (S2): the label reads the marker AT SEAL TIME, any gate
+  // path. A builder that lost codex mid-run marks .kiln/degraded and builds
+  // the slice itself, so a seal that follows a same-family gate speaks
+  // single-family; dual only when the marker is absent at the moment of the
+  // seal.
+  const label = await hands('test -f ' + P.degraded, 'degraded:check') === 0 ? 'single-family' : 'dual'
   const s = await hands('echo "' + slice + ' ' + label + '" >> ' + P.seals, 'seal:append')
   if (s !== 0) return persistFail('seal-append')
   beats.push(await voiceBeat('seal', { ...facts, label }, 'sealed — {label} · slice {slice}'))

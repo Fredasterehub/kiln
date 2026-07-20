@@ -131,7 +131,7 @@ function validateGate(value, expectedReviewId, expectedLawHash, allowedFindingId
 function instructions(packet) {
   return `You are the terminal semantic gate reviewer. Inspect the repository at the working root and return only the schema-forced JSON object.
 
-Review only the locked criteria. Report only substantiated criterion violations, never optional improvements. For each finding, cite an exact repo-relative path:line location, the concrete failure, its evidence, and the smallest repair. Use stable finding IDs. Run the supplied commands and only minimal additional read-only commands needed to decide. Do not infer authorship, persona, or another reviewer's verdict.
+Review only the locked criteria. Report only substantiated criterion violations, never optional improvements. Creative direction, visual taste, and aesthetic choices belong to the builder — never raise them as a finding and never let them color a verdict; you rule on correctness against the locked criteria alone. For each finding, cite an exact repo-relative path:line location, the concrete failure, its evidence, and the smallest repair. Use stable finding IDs. The commands in the evidence packet were already executed kernel-side; their full output rides in check_receipt verbatim. Execute nothing — no commands, no tests, no builds: judge the diff against the law by reading the repository, with check_receipt as the only execution evidence. Do not infer authorship, persona, or another reviewer's verdict.
 
 Copy review_id and law_hash exactly. Verdict rules: accept only when findings and blockers are both empty; changes_required only for one or more repairable findings with no blockers; blocked only when the review cannot be completed, with one or more blocker reasons.
 ${packet.mode === 'recheck' ? '\nRecheck only the listed finding_ids against the repair_delta and current repository. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}
@@ -150,6 +150,16 @@ function classifyFailure(run) {
 }
 
 function invoke(repo, request, packet, outputFile, allowedFindingIds) {
+  // The reviewer never executes: the kernel side runs the law checks and writes
+  // .kiln/check-receipt.txt before every gate call. The receipt rides the packet
+  // verbatim; a missing receipt is a broken contract, never a license to execute.
+  let checkReceipt
+  try {
+    checkReceipt = readFileSync(join(repo, '.kiln', 'check-receipt.txt'), 'utf8')
+  } catch (error) {
+    stop('transport_failure', `check receipt unreadable: ${error.message} — the kernel executes the checks and writes .kiln/check-receipt.txt before the gate call; the reviewer executes nothing`, TRANSPORT_FAILURE)
+  }
+  packet.check_receipt = checkReceipt
   const output = resolve(outputFile)
   const temporary = join(dirname(output), `.gate-review.tmp-${process.pid}-${randomUUID()}`)
   const args = [

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, mkdtempSync, existsSync } from 'node:fs'
-import { execSync } from 'node:child_process'
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs'
+import { execSync, spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -21,10 +21,12 @@ const coreSrc = srcLines.slice(
 const core = new Function(coreSrc + `
   return { SPINE, parseArgs, resolveStage, nextStage, gateOutcome, reviewLoop,
            fillClosed, streakIndex, stateDoc, atomicWriteCmd, gateCmd, LAW_CHECK, LAW_GUARD,
+           LAW_CHECK_RECEIPT, verdictExit, gateWriteCmd, gateReviewInvalid,
            validateTiers, resolveTier, routeBuilder, parseSliceEntry }`)()
 const {
   SPINE, parseArgs, resolveStage, nextStage, gateOutcome, reviewLoop,
   fillClosed, streakIndex, stateDoc, atomicWriteCmd, gateCmd,
+  LAW_CHECK_RECEIPT, verdictExit, gateWriteCmd, gateReviewInvalid,
   validateTiers, resolveTier, routeBuilder, parseSliceEntry,
 } = core
 
@@ -42,14 +44,25 @@ const PLUGIN = '/abs/plugins/kiln'
 const TIERS_OK = {
   exit: 0, doctrine: true,
   resolver: { 'gpt-sol': 'gpt-5.6-sol' },
-  surface_routing: { ui: 'builder-ui', logic: 'builder-ui', mixed: 'builder-ui' },
+  surface_routing: { ui: 'builder-ui', logic: 'builder-logic', mixed: 'builder-logic' },
   roles: {
     'driver': { family: 'claude', alias: 'inherit', effort: 'high' },
     'kernel-leg': { family: 'claude', alias: 'inherit', effort: 'high' },
     'stage-card': { family: 'claude', alias: 'inherit', effort: 'high' },
+    // INTAKE-19: the LAW stage is a thinking seat — slice creation runs on fable;
+    // builder-ui is donkey work — opus implements ui from the locked plan.
+    'stage-law': { family: 'claude', alias: 'fable', effort: 'high' },
     'builder-ui': { family: 'claude', alias: 'opus', effort: 'high' },
-    'builder-logic': { family: 'gpt', alias: 'gpt-sol', effort: 'high' },
+    // simple-fire: the logic seat is a claude context-builder whose CODER is
+    // GPT-5.6 via one bash codex exec call (cards/build.md); the claude-family
+    // route-target boot rule holds BY DESIGN. Wrapper effort HIGH per the
+    // INTAKE-14b/Q1 default (a model-backed role defaults HIGH — medium was drift).
+    'builder-logic': { family: 'claude', alias: 'sonnet', effort: 'high' },
     'reviewer-gate': { family: 'gpt', alias: 'gpt-sol', effort: 'high' },
+    // The codex-absent fallback reviewer (duo-pool.json:7 logic_fallback restored):
+    // a boot-required consumer role, consumed on the degraded logic/mixed gate — opus
+    // reviews the sonnet-built slice, the best split without a second family.
+    'fallback-reviewer': { family: 'claude', alias: 'opus', effort: 'high' },
     'brainstorm-facilitator': { family: 'claude', alias: 'inherit', effort: 'high' },
     'haiku-migration': { family: 'claude', alias: 'sonnet', effort: 'medium' },
     'dev-sol': { family: 'gpt', alias: 'gpt-sol', effort: 'high' },
@@ -81,6 +94,12 @@ const lastStateDoc = (calls) => {
 }
 const GREEN = { exit: 0, ids: [] }
 const LADDER = { exit: 0, ids: ['first-blood', 'spark-of-life', 'signal-fire'] }
+// The claude gate returns the schema-forced review-schema.json object; the kernel
+// publishes it by hand and maps the verdict onto the closed exit table.
+const GATE_ACCEPT = { review_id: 'r1', law_hash: 'a'.repeat(64), findings: [], blockers: [], verdict: 'accept' }
+// S1: the claude gate fetches the locked law hash from the review request as a
+// closed machine fact before validating any verdict against it.
+const HASH_OK = { exit: 0, ids: ['a'.repeat(64)] }
 const VOICE = {
   'voice:resume': { exit: 0, ids: ['The fire never went out. Kiln again — the ledger holds the next step, and I am already taking it.'] },
   'voice:reopen': { exit: 0, ids: ['Slice {slice} reopened — a law check went red. A seal is evidence-bound, not sacred.'] },
@@ -291,7 +310,7 @@ test('runtime: an unreachable gate tool halts distinctly — sealed beat, tool p
   const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p', plugin: '/opt/kiln/plugins/kiln' }, {
     ...VOICE,
     'law:preflight': GREEN,
-    'slices:fetch': { exit: 0, ids: ['s1'] },
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
     'ladder:fetch': LADDER,
     'seal:check': { exit: 1 },
     'slice:s1': { ok: true, beat: 'forging', pointers: [] },
@@ -330,7 +349,7 @@ test('runtime (S1): a review transport failure speaks the sealed review-call var
   const { ret } = await runKernel({ stage: 'build', projectDir: '/p' }, {
     ...VOICE,
     'law:preflight': GREEN,
-    'slices:fetch': { exit: 0, ids: ['s1'] },
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
     'ladder:fetch': LADDER,
     'seal:check': { exit: 1 },
     'slice:s1': { ok: true, beat: 'forging', pointers: [] },
@@ -368,7 +387,7 @@ test('runtime (W-04): preflight red on an UNSEALED slice is pre-build state — 
     ...VOICE,
     'law:preflight': { exit: 1, ids: ['s1'] },
     'seal:check': { exit: 1 },
-    'slices:fetch': { exit: 0, ids: ['s1'] },
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
     'ladder:fetch': LADDER,
     'slice:s1': { ok: true, beat: 'forging', pointers: [] },
     'law:pre-seal': GREEN,
@@ -436,7 +455,7 @@ test('runtime: a failed seal append halts before the seal beat or STATE advance'
   const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
     ...VOICE,
     'law:preflight': GREEN,
-    'slices:fetch': { exit: 0, ids: ['s1'] },
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
     'ladder:fetch': LADDER,
     'seal:check': { exit: 1 },
     'slice:s1': { ok: true, beat: 'forging', pointers: [] },
@@ -455,7 +474,7 @@ test('runtime: degradation is sticky only when the mark lands; a failed mark sur
   const base = {
     ...VOICE,
     'law:preflight': GREEN,
-    'slices:fetch': { exit: 0, ids: ['s1'] },
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
     'ladder:fetch': LADDER,
     'seal:check': { exit: 1 },
     'slice:s1': { ok: true, beat: 'forging', pointers: [] },
@@ -488,7 +507,7 @@ test('runtime: a blocked gate stops with the finding ids as closed facts', async
   const { ret } = await runKernel({ stage: 'build', projectDir: '/p' }, {
     ...VOICE,
     'law:preflight': GREEN,
-    'slices:fetch': { exit: 0, ids: ['s1'] },
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
     'ladder:fetch': LADDER,
     'seal:check': { exit: 1 },
     'slice:s1': { ok: true, beat: 'forging', pointers: [] },
@@ -524,11 +543,12 @@ test('runtime (K-10): no beat leaves the kernel with an unfilled slot', async ()
   const { ret } = await runKernel({ stage: 'build', projectDir: '/p' }, {
     ...VOICE,
     'law:preflight': GREEN,
-    'slices:fetch': { exit: 0, ids: ['s1'] },
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
     'ladder:fetch': LADDER,
     'seal:check': { exit: 1 },
     'slice:s1': { ok: true, beat: '{streak}. Slice `{slice}` takes the anvil — {s}/{t}, iteration {i}.', pointers: [] },
     'law:pre-seal': GREEN,
+    'law:pre-recheck': GREEN,
     'law:stage-end': GREEN,
     'degraded:check': { exit: 1 },
     'gate:review': () => ({ exit: gateExits.shift() }),
@@ -561,30 +581,37 @@ test('tiers: validateTiers requires the full consumer role set, all three routes
   const a = cfg(); a.roles['stage-card'].alias = ''; assert.equal(validateTiers(a), false, 'alias must be a nonempty string')
   const mk = cfg(); delete mk.roles['kernel-leg']; assert.equal(validateTiers(mk), false, 'a missing consumer role halts at boot')
   const ms = cfg(); delete ms.roles['stage-card']; assert.equal(validateTiers(ms), false, 'missing stage-card halts at boot')
+  const ml = cfg(); delete ml.roles['stage-law']; assert.equal(validateTiers(ml), false, 'missing stage-law halts at boot (INTAKE-19)')
+  const mf = cfg(); delete mf.roles['fallback-reviewer']; assert.equal(validateTiers(mf), false, 'missing fallback-reviewer halts at boot — the degraded logic/mixed gate consumes it, so a lacking file must fail closed, never throw mid-run')
   const mr = cfg(); delete mr.surface_routing.mixed; assert.equal(validateTiers(mr), false, 'all three routes required')
   const dr = cfg(); dr.surface_routing.ui = 'ghost'; assert.equal(validateTiers(dr), false, 'route targets must be real role keys')
   const gr = cfg(); delete gr.resolver['gpt-sol']; assert.equal(validateTiers(gr), false, 'a gpt alias with no resolver mapping halts at boot')
-  const gi = cfg(); gi.roles['builder-logic'].alias = 'inherit'; assert.equal(validateTiers(gi), false, 'a gpt role needs a concrete resolvable alias, not inherit')
+  const gi = cfg(); gi.roles['reviewer-gate'].alias = 'inherit'; assert.equal(validateTiers(gi), false, 'a gpt role needs a concrete resolvable alias, not inherit')
   // The 48e5fed builder-leg defect shape: a surface routed to a gpt-family role.
   // The agent() spawner is Anthropic-only, so this must halt at boot, never 404 mid-build.
-  const gp = cfg(); gp.surface_routing.logic = 'builder-logic'
+  // Since simple-fire the shipped builder-logic seat is claude (the codex call rides
+  // bash inside the card), so the defect shape is recreated by flipping the family back.
+  const gp = cfg(); gp.roles['builder-logic'] = { family: 'gpt', alias: 'gpt-sol', effort: 'high' }
   assert.equal(validateTiers(gp), false, 'a gpt-family surface-route target has no agent transport — rejected at boot')
 })
 
 test('tiers: resolveTier is family-aware — claude passes through, gpt resolves, resolver never rewrites claude', () => {
   assert.deepEqual(resolveTier(TIERS_OK, 'kernel-leg'), { effort: 'high' }, 'inherit omits the model key')
   assert.deepEqual(resolveTier(TIERS_OK, 'stage-card'), { effort: 'high' })
-  assert.deepEqual(resolveTier(TIERS_OK, 'builder-ui'), { effort: 'high', model: 'opus' }, 'a claude alias passes through unresolved')
-  assert.deepEqual(resolveTier(TIERS_OK, 'builder-logic'), { effort: 'high', model: 'gpt-5.6-sol' }, 'a gpt alias resolves to the concrete id')
+  assert.deepEqual(resolveTier(TIERS_OK, 'stage-law'), { effort: 'high', model: 'fable' }, 'the thinking seat carries the fable alias (INTAKE-19)')
+  assert.deepEqual(resolveTier(TIERS_OK, 'builder-ui'), { effort: 'high', model: 'opus' }, 'a claude alias passes through unresolved — opus implements ui from the locked plan')
+  assert.deepEqual(resolveTier(TIERS_OK, 'reviewer-gate'), { effort: 'high', model: 'gpt-5.6-sol' }, 'a gpt alias resolves to the concrete id')
+  assert.deepEqual(resolveTier(TIERS_OK, 'builder-logic'), { effort: 'high', model: 'sonnet' }, 'the logic seat is the claude context-builder — HIGH wrapper effort (INTAKE-14b/Q1); its coder rides a bash call, never this option')
+  assert.deepEqual(resolveTier(TIERS_OK, 'fallback-reviewer'), { effort: 'high', model: 'opus' }, 'the codex-absent fallback reviewer resolves to opus — a model different from the sonnet builder (duo-pool.json:7 logic_fallback)')
   assert.deepEqual(resolveTier(TIERS_OK, 'haiku-migration'), { effort: 'medium', model: 'sonnet' })
-  const c = cfg(); c.resolver['opus'] = 'sneaky-rewrite'
-  assert.deepEqual(resolveTier(c, 'builder-ui'), { effort: 'high', model: 'opus' }, 'a resolver entry cannot rewrite a claude alias')
+  const c = cfg(); c.resolver['fable'] = 'sneaky-rewrite'
+  assert.deepEqual(resolveTier(c, 'stage-law'), { effort: 'high', model: 'fable' }, 'a resolver entry cannot rewrite a claude alias')
 })
 
 test('tiers: routeBuilder maps each validated surface to its builder opts', () => {
   assert.deepEqual(routeBuilder(TIERS_OK, 'ui'), { effort: 'high', model: 'opus' })
-  assert.deepEqual(routeBuilder(TIERS_OK, 'logic'), { effort: 'high', model: 'opus' }, 'logic routes to builder-ui while the codex builder transport is parked')
-  assert.deepEqual(routeBuilder(TIERS_OK, 'mixed'), { effort: 'high', model: 'opus' })
+  assert.deepEqual(routeBuilder(TIERS_OK, 'logic'), { effort: 'high', model: 'sonnet' }, 'logic routes to the claude context-builder seat — HIGH wrapper effort; GPT codes through its bash call')
+  assert.deepEqual(routeBuilder(TIERS_OK, 'mixed'), { effort: 'high', model: 'sonnet' }, 'mixed routes to builder-logic too — GPT codes everything but ui (the operator law)')
   // Builder-leg 404 pin (48e5fed): routeBuilder feeds agent() directly, and the
   // agent spawner is Anthropic-only — no routed surface may ever emit the
   // resolver-concrete codex id as the agent model option.
@@ -617,9 +644,11 @@ test('runtime (T-02): a malformed tier shape fails closed AT BOOT — the boot i
     'unknown family': (c) => { c.roles['builder-ui'].family = 'grok' },
     'missing kernel-leg role': (c) => { delete c.roles['kernel-leg'] },
     'missing stage-card role': (c) => { delete c.roles['stage-card'] },
+    'missing stage-law role': (c) => { delete c.roles['stage-law'] },
+    'missing fallback-reviewer role': (c) => { delete c.roles['fallback-reviewer'] },
     'missing mixed route': (c) => { delete c.surface_routing.mixed },
     'unresolved gpt alias': (c) => { delete c.resolver['gpt-sol'] },
-    'gpt-routed surface': (c) => { c.surface_routing.logic = 'builder-logic' },
+    'gpt-routed surface': (c) => { c.roles['builder-logic'] = { family: 'gpt', alias: 'gpt-sol', effort: 'high' } },
     'no doctrine': (c) => { c.doctrine = undefined },
   }
   for (const [name, mutate] of Object.entries(mut)) {
@@ -630,7 +659,7 @@ test('runtime (T-02): a malformed tier shape fails closed AT BOOT — the boot i
   }
 })
 
-test('runtime (T-03): the builder leg is surface-routed — ui→builder-ui, logic→builder-logic, bare→mixed', async () => {
+test('runtime (T-03): the builder leg is surface-routed — ui→builder-ui, logic/mixed→builder-logic, bare→mixed', async () => {
   const build = (entry) => ({
     ...VOICE,
     'law:preflight': GREEN,
@@ -641,39 +670,70 @@ test('runtime (T-03): the builder leg is surface-routed — ui→builder-ui, log
     'law:pre-seal': GREEN,
     'law:stage-end': GREEN,
     'degraded:check': { exit: 1 },
+    'request:hash': HASH_OK,
     'gate:review': { exit: 0 },
+    'gate-claude:review': GATE_ACCEPT,
+    'gate:publish': { exit: 0 },
     'seal:append': { exit: 0 },
     'state:write': GREEN,
   })
   const builderOpts = (calls) => calls.find(c => c.label === 'slice:s1').opts
   const ui = await runKernel({ stage: 'build', projectDir: '/p' }, build('obj|s1|ui'))
   assert.equal(ui.ret.status, 'ok')
-  assert.equal(builderOpts(ui.calls).model, 'opus', 'ui routes to builder-ui (opus)')
+  assert.equal(builderOpts(ui.calls).model, 'opus', 'ui routes to builder-ui (opus — INTAKE-19 donkey work)')
   assert.equal(builderOpts(ui.calls).effort, 'high')
   const logic = await runKernel({ stage: 'build', projectDir: '/p' }, build('obj|s1|logic'))
-  assert.equal(builderOpts(logic.calls).model, 'opus', 'logic routes to builder-ui while the codex builder transport is parked')
+  assert.equal(builderOpts(logic.calls).model, 'sonnet', 'logic routes to builder-logic — the claude context-builder seat')
+  assert.equal(builderOpts(logic.calls).effort, 'high')
+  assert.ok(logic.calls.find(c => c.label === 'slice:s1').prompt.includes('(surface logic)'), 'the build prompt carries the closed surface fact for the card')
+  const mixed = await runKernel({ stage: 'build', projectDir: '/p' }, build('obj|s1|mixed'))
+  assert.equal(builderOpts(mixed.calls).model, 'sonnet', 'mixed routes to builder-logic — GPT codes mixed (the operator law)')
+  assert.equal(builderOpts(mixed.calls).effort, 'high')
   const bare = await runKernel({ stage: 'build', projectDir: '/p' }, build('s1'))
-  assert.equal(builderOpts(bare.calls).model, 'opus', 'a legacy bare-string slice defaults to mixed → builder-ui')
+  assert.equal(builderOpts(bare.calls).model, 'sonnet', 'a legacy bare-string slice defaults to mixed → builder-logic')
   // Builder-leg 404 pin (48e5fed): across every dispatch of every surface run,
   // the resolver-concrete codex id never appears as an agent model option —
   // the agent spawner has no codex transport.
-  for (const run of [ui, logic, bare]) {
+  for (const run of [ui, logic, mixed, bare]) {
     for (const c of run.calls) {
       assert.notEqual(c.opts && c.opts.model, 'gpt-5.6-sol', (c.label || '?') + ': the concrete codex id must never reach agent()')
     }
   }
 })
 
+test('runtime (INTAKE-19): the LAW leg spawns on stage-law (fable) — validate and report stay on stage-card', async () => {
+  const stageRun = (s) => runKernel({ stage: s, projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    ['stage:' + s]: { ok: true, beat: 'working', pointers: [] },
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+  })
+  const law = await stageRun('law')
+  const lawLeg = law.calls.find(c => c.label === 'stage:law')
+  assert.equal(lawLeg.opts.model, 'fable', 'slice creation is a thinking seat — the law leg carries the fable alias')
+  assert.equal(lawLeg.opts.effort, 'high')
+  for (const s of ['validate', 'report']) {
+    const run = await stageRun(s)
+    const leg = run.calls.find(c => c.label === 'stage:' + s)
+    assert.equal(leg.opts.model, undefined, s + ' stays on stage-card — inherit carries no model option')
+    assert.equal(leg.opts.effort, 'high')
+  }
+})
+
 test('runtime (builder-leg 404 pin): a gpt-routed surface fails closed at boot — the codex id never reaches an agent dispatch', async () => {
-  // The exact 48e5fed defect shape: surface_routing.logic -> builder-logic (family
-  // gpt). Under the defective kernel this config booted, the slice leg dispatched
-  // with model gpt-5.6-sol, and the Anthropic API answered 404 model_not_found
-  // (cleanroom receipt req_011CdBugiPWMovjbvkCV1L9c) — converted to
+  // The exact 48e5fed defect shape: surface_routing.logic -> builder-logic with the
+  // seat gpt-family. Under the defective kernel this config booted, the slice leg
+  // dispatched with model gpt-5.6-sol, and the Anthropic API answered 404
+  // model_not_found (cleanroom receipt req_011CdBugiPWMovjbvkCV1L9c) — converted to
   // transport-failure twice, then hard-stop 3. The repaired kernel halts at boot
   // with the named configuration fact; the full build script below stands ready
-  // so a regression would run it and trip the assertions.
+  // so a regression would run it and trip the assertions. Since simple-fire the
+  // SHIPPED builder-logic seat is claude (GPT codes through a bash call in the
+  // card), so the defect shape is recreated by flipping the family back to gpt.
   const boot = JSON.parse(JSON.stringify(TIERS_OK))
   boot.surface_routing.logic = 'builder-logic'
+  boot.roles['builder-logic'] = { family: 'gpt', alias: 'gpt-sol', effort: 'high' }
   const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
     'tiers:boot': boot,
     ...VOICE,
@@ -706,8 +766,415 @@ test('runtime (T-03): an object slice with an unknown or missing surface halts b
   }
 })
 
+// ── Simple-fire: the check receipt and the surface-branched gate ────────────
+
+test('core (simple-fire): verdictExit maps claude gate verdicts onto the closed exit table, unknown fails closed', () => {
+  assert.equal(verdictExit('accept'), 0)
+  assert.equal(verdictExit('changes_required'), 10)
+  assert.equal(verdictExit('blocked'), 11)
+  assert.equal(verdictExit('maybe'), 20, 'an unrecognized verdict is a transport failure')
+  assert.equal(verdictExit(undefined), 20)
+})
+
+test('core (simple-fire): LAW_CHECK_RECEIPT captures the full check output verbatim — stdout and exit code survive', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kiln-receipt-'))
+  mkdirSync(join(dir, '.kiln/law'), { recursive: true })
+  writeFileSync(join(dir, '.kiln/law/check.sh'), 'echo s1\necho boom >&2\nexit 3\n')
+  const r = spawnSync('bash', ['-c', LAW_CHECK_RECEIPT], { cwd: dir, encoding: 'utf8' })
+  assert.equal(r.status, 3, 'the check exit code survives the capture')
+  assert.equal(r.stdout, 's1\nboom\n', 'the full output still reaches stdout for the ids fetch')
+  assert.equal(readFileSync(join(dir, '.kiln/check-receipt.txt'), 'utf8'), 's1\nboom\n',
+    'the receipt holds the full output verbatim — the evidence the reviewer judges instead of executing')
+})
+
+test('core (simple-fire): gateWriteCmd publishes the claude verdict atomically — executed', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kiln-gate-'))
+  execSync(gateWriteCmd(JSON.stringify(GATE_ACCEPT, null, 2)), { cwd: dir, shell: '/bin/bash' })
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, '.kiln/gate-review.json'), 'utf8')), GATE_ACCEPT)
+  assert.ok(!existsSync(join(dir, '.kiln/.gate-review.tmp')), 'temp file is gone')
+})
+
+test('runtime (simple-fire): the gate branches on the surface — logic and mixed take the claude gate, ui alone keeps codex', async () => {
+  const build = (entry, extra) => ({
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: [entry] },
+    'ladder:fetch': LADDER,
+    'seal:check': { exit: 1 },
+    'slice:s1': { ok: true, beat: 'forging', pointers: [] },
+    'law:pre-seal': GREEN,
+    'law:stage-end': GREEN,
+    'degraded:check': { exit: 1 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+    ...extra,
+  })
+  const logic = await runKernel({ stage: 'build', projectDir: '/p' }, build('obj|s1|logic', {
+    'request:hash': HASH_OK,
+    'gate-claude:review': GATE_ACCEPT,
+    'gate:publish': { exit: 0 },
+  }))
+  assert.equal(logic.ret.status, 'ok')
+  assert.ok(!logic.calls.some(c => c.label === 'gate:review' || c.label === 'gate:recheck'),
+    'codex never dispatches for a GPT-coded slice — cross-family law')
+  const claude = logic.calls.find(c => c.label === 'gate-claude:review')
+  assert.ok(claude, 'the claude gate dispatches for the logic surface')
+  assert.ok(claude.prompt.includes('.kiln/check-receipt.txt'), 'the claude gate names the kernel-side check receipt')
+  assert.ok(claude.prompt.includes('Execute nothing'), 'the reviewer is told to execute nothing')
+  assert.ok(claude.prompt.includes('review-schema.json'), 'the strict verdict schema is named')
+  assert.deepEqual(claude.opts.schema, {
+    type: 'object', additionalProperties: false,
+    properties: {
+      review_id: { type: 'string' }, law_hash: { type: 'string' },
+      findings: { type: 'array', items: { type: 'object', additionalProperties: false,
+        properties: { id: { type: 'string' }, criterion: { type: 'string' }, location: { type: 'string' },
+          failure_mode: { type: 'string' }, evidence: { type: 'string' }, minimal_fix: { type: 'string' } },
+        required: ['id', 'criterion', 'location', 'failure_mode', 'evidence', 'minimal_fix'] } },
+      blockers: { type: 'array', items: { type: 'string' } },
+      verdict: { type: 'string', enum: ['accept', 'changes_required', 'blocked'] },
+    },
+    required: ['review_id', 'law_hash', 'findings', 'blockers', 'verdict'],
+  }, 'the return is schema-forced to the review-schema.json mirror')
+  const publish = logic.calls.find(c => c.label === 'gate:publish')
+  assert.ok(publish && publish.prompt.includes('.kiln/gate-review.json'),
+    'the kernel publishes the verdict to the gate file by hand — the reviewer writes nothing')
+  const preSeal = logic.calls.find(c => c.label === 'law:pre-seal')
+  assert.ok(preSeal.prompt.includes(LAW_CHECK_RECEIPT), 'the pre-seal leg runs the receipt-capturing check verbatim')
+  assert.ok(logic.ret.beat.includes('Slice s1 sealed — dual'), 'a claude-gated logic slice seals dual')
+  const mixed = await runKernel({ stage: 'build', projectDir: '/p' }, build('obj|s1|mixed', {
+    'request:hash': HASH_OK,
+    'gate-claude:review': GATE_ACCEPT,
+    'gate:publish': { exit: 0 },
+  }))
+  assert.equal(mixed.ret.status, 'ok')
+  assert.ok(mixed.calls.some(c => c.label === 'gate-claude:review'), 'the claude gate dispatches for the mixed surface too — GPT codes mixed')
+  assert.ok(!mixed.calls.some(c => c.label === 'gate:review' || c.label === 'gate:recheck'),
+    'codex never dispatches for a GPT-coded mixed slice — cross-family law')
+  const ui = await runKernel({ stage: 'build', projectDir: '/p' }, build('obj|s1|ui', { 'gate:review': { exit: 0 } }))
+  assert.equal(ui.ret.status, 'ok')
+  assert.ok(ui.calls.some(c => c.label === 'gate:review'), 'ui keeps the codex gate through scripts/kiln-review')
+  assert.ok(!ui.calls.some(c => c.label && c.label.startsWith('gate-claude')), 'no claude gate on the ui surface')
+})
+
+test('runtime (simple-fire): a claude gate reject walks the same repair loop — recheck rides the claude gate too', async () => {
+  const reject = {
+    review_id: 'r1', law_hash: 'a'.repeat(64), blockers: [], verdict: 'changes_required',
+    findings: [{ id: 'F1', criterion: 'c', location: 'x.mjs:1', failure_mode: 'f', evidence: 'e', minimal_fix: 'm' }],
+  }
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
+    'ladder:fetch': LADDER,
+    'seal:check': { exit: 1 },
+    'slice:s1': { ok: true, beat: 'forging', pointers: [] },
+    'law:pre-seal': GREEN,
+    'law:pre-recheck': GREEN,
+    'law:stage-end': GREEN,
+    'degraded:check': { exit: 1 },
+    'request:hash': HASH_OK,
+    'gate-claude:review': reject,
+    'gate-claude:recheck': GATE_ACCEPT,
+    'gate:publish': { exit: 0 },
+    'findings:fetch': { exit: 0, ids: ['F1'] },
+    'repair:s1': { ok: true, beat: 'repaired', pointers: [] },
+    'delta:check': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'ok', 'reject then repaired recheck seals')
+  const recheck = calls.find(c => c.label === 'gate-claude:recheck')
+  assert.ok(recheck, 'the recheck rides the claude gate too')
+  assert.ok(recheck.prompt.includes('.kiln/repair-delta.md'), 'the recheck reads the repair delta')
+  // S2: the receipt is rerun fresh before the recheck round — never a stale
+  // pre-repair receipt under any gate family.
+  const labels = calls.map(c => c.label)
+  assert.ok(labels.indexOf('law:pre-recheck') >= 0, 'the pre-recheck receipt rerun dispatches')
+  assert.ok(labels.indexOf('law:pre-recheck') > labels.indexOf('repair:s1'), 'the rerun lands after the repair')
+  assert.ok(labels.indexOf('law:pre-recheck') < labels.indexOf('gate-claude:recheck'), 'and before the recheck judges')
+  assert.equal(calls.filter(c => c.label === 'gate:publish').length, 2, 'both verdicts published to the gate file')
+  assert.ok(!calls.some(c => c.label === 'gate:review' || c.label === 'gate:recheck'), 'codex never dispatches')
+  assert.ok(calls.find(c => c.label === 'repair:s1').prompt.includes('(surface logic)'),
+    'the repair prompt carries the closed surface fact for the card')
+})
+
+test('runtime (S2/S3): a codex-dead logic slice stops for acknowledgment, then convenes the opus fallback gate and seals single-family, never dual', async () => {
+  // The builder lost codex at build time, created .kiln/degraded per the build
+  // card, and built the slice itself. S3: the kernel discovers the marker
+  // pre-gate WITHOUT the acknowledgment record and takes the same degraded
+  // hard-stop the exit-21 path takes — never a silent ok seal.
+  const base = {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
+    'ladder:fetch': LADDER,
+    'seal:check': { exit: 1 },
+    'slice:s1': { ok: true, beat: 'forging', pointers: [] },
+    'law:pre-seal': GREEN,
+    'law:stage-end': GREEN,
+    'degraded:check': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+  }
+  const stopped = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...base,
+    'degraded-ack:check': { exit: 1 },
+    'degraded:mark': { exit: 0 },
+  })
+  assert.equal(stopped.ret.status, 'degraded', 'a builder-marked degradation stops for acknowledgment')
+  assert.ok(stopped.ret.beat.includes('Codex is not answering'), 'the sealed degradation template arrives')
+  assert.ok(!stopped.calls.some(c => c.label && c.label.startsWith('gate')), 'no gate dispatches on the stop')
+  assert.ok(!stopped.calls.some(c => c.label === 'seal:append'), 'nothing seals before acknowledgment')
+  assert.ok(!stopped.ret.beat.includes('sealed'), 'never an ok seal over an unacknowledged marker')
+  // After acknowledgment (the relaunch) the codex-absent fallback is RESTORED
+  // (v3 duo-pool.json:7 logic_fallback): the sonnet-built logic slice STILL faces
+  // a gate — a fresh OPUS mind, a different model than the sonnet builder, the
+  // best split without a second family. The seal still reads the marker, so it
+  // speaks single-family; the codex gate never dispatches (codex is gone).
+  const acked = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...base,
+    'degraded-ack:check': { exit: 0 },
+    'request:hash': HASH_OK,
+    'gate-claude:review': GATE_ACCEPT,
+    'gate:publish': { exit: 0 },
+  })
+  assert.equal(acked.ret.status, 'ok')
+  assert.ok(acked.ret.beat.includes('Slice s1 sealed — single-family'), 'the seal speaks single-family')
+  assert.ok(!acked.ret.beat.includes('dual'), 'never dual on a codex-dead run')
+  const fallbackGate = acked.calls.find(c => c.label === 'gate-claude:review')
+  assert.ok(fallbackGate, 'the degraded logic slice convenes the claude gate — review is not skipped')
+  assert.equal(fallbackGate.opts.model, 'opus', 'the fallback reviewer is opus — a different model than the sonnet builder (the best split)')
+  assert.equal(fallbackGate.opts.effort, 'high', 'the fallback gate runs at the fallback-reviewer effort')
+  assert.ok(!acked.calls.some(c => c.label === 'gate:review' || c.label === 'gate:recheck'), 'the codex gate never dispatches — codex is gone, the fallback is a fresh claude mind')
+  // A ui slice during a degraded, acknowledged run keeps its honest shape: a
+  // cross-family codex gate is impossible without codex and a same-family gate
+  // would review claude-built ui with claude, so it skips the gate entirely.
+  const ackedUi = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...base,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
+    'degraded-ack:check': { exit: 0 },
+  })
+  assert.equal(ackedUi.ret.status, 'ok')
+  assert.ok(ackedUi.ret.beat.includes('Slice s1 sealed — single-family'), 'the ui degraded seal speaks single-family')
+  assert.ok(!ackedUi.calls.some(c => c.label && c.label.startsWith('gate')), 'no gate dispatches on the degraded ui path — review is impossible cross-family without codex')
+  // Any gate path: codex died during a repair pass, the builder marked
+  // .kiln/degraded and repaired the slice itself, and the claude gate accepted
+  // the recheck — the label still reads the marker at seal time.
+  const reject = {
+    review_id: 'r1', law_hash: 'a'.repeat(64), blockers: [], verdict: 'changes_required',
+    findings: [{ id: 'F1', criterion: 'c', location: 'x.mjs:1', failure_mode: 'f', evidence: 'e', minimal_fix: 'm' }],
+  }
+  const degradedChecks = [1, 0] // absent before the gate, present at seal time
+  const midRun = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
+    'ladder:fetch': LADDER,
+    'seal:check': { exit: 1 },
+    'slice:s1': { ok: true, beat: 'forging', pointers: [] },
+    'law:pre-seal': GREEN,
+    'law:pre-recheck': GREEN,
+    'law:stage-end': GREEN,
+    'degraded:check': () => ({ exit: degradedChecks.shift() }),
+    'request:hash': HASH_OK,
+    'gate-claude:review': reject,
+    'gate-claude:recheck': GATE_ACCEPT,
+    'gate:publish': { exit: 0 },
+    'findings:fetch': { exit: 0, ids: ['F1'] },
+    'repair:s1': { ok: true, beat: 'repaired', pointers: [] },
+    'delta:check': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+  })
+  assert.equal(midRun.ret.status, 'ok')
+  assert.ok(midRun.calls.some(c => c.label === 'gate-claude:recheck'), 'a gate ran on this path')
+  assert.equal(midRun.calls.find(c => c.label === 'gate-claude:review').opts.model, undefined,
+    'the marker appeared AFTER the gate decision, so the normal stage-card (inherit) gate ran, not the opus fallback')
+  assert.ok(midRun.ret.beat.includes('Slice s1 sealed — single-family'), 'the marker rules the label even when a gate ran')
+  assert.ok(!midRun.ret.beat.includes('— dual'), 'never a dual label over a same-family repair')
+})
+
+// ── S1/S2 repairs: the claude-gate semantic mirror and the fresh-receipt law ─
+
+test('core (S1): gateReviewInvalid mirrors the kiln-review semantic law — every named violation', () => {
+  const LAW = 'a'.repeat(64)
+  const ok = { review_id: 'r1', law_hash: LAW, findings: [], blockers: [], verdict: 'accept' }
+  const finding = { id: 'F1', criterion: 'c', location: 'x.mjs:1', failure_mode: 'f', evidence: 'e', minimal_fix: 'm' }
+  assert.equal(gateReviewInvalid(ok, LAW), null, 'a sound accept passes')
+  assert.equal(gateReviewInvalid({ ...ok, verdict: 'changes_required', findings: [finding] }, LAW), null, 'a sound reject passes')
+  assert.equal(gateReviewInvalid({ ...ok, verdict: 'blocked', blockers: ['no repo access'] }, LAW), null, 'a sound block passes')
+  assert.equal(gateReviewInvalid(null, LAW), 'not-an-object')
+  assert.equal(gateReviewInvalid({ ...ok, verdict: 'maybe' }, LAW), 'verdict-unrecognized', 'the verdict enum is closed')
+  assert.equal(gateReviewInvalid({ ...ok, law_hash: 'b'.repeat(64) }, LAW), 'law-hash-mismatch', 'a wrong law hash never passes')
+  assert.equal(gateReviewInvalid({ ...ok, law_hash: '' }, LAW), 'law-hash-mismatch')
+  assert.equal(gateReviewInvalid({ ...ok, findings: [finding] }, LAW), 'accept-with-findings', 'accept demands empty findings')
+  assert.equal(gateReviewInvalid({ ...ok, blockers: ['b'] }, LAW), 'accept-with-findings', 'accept demands empty blockers')
+  assert.equal(gateReviewInvalid({ ...ok, blockers: [' '], verdict: 'blocked' }, LAW), 'blockers-shape', 'blockers must be nonempty strings')
+  assert.equal(gateReviewInvalid({ ...ok, verdict: 'changes_required' }, LAW), 'changes-required-shape', 'changes_required demands findings')
+  assert.equal(gateReviewInvalid({ ...ok, verdict: 'blocked' }, LAW), 'blocked-without-blockers')
+})
+
+test('core (S1 residual): gateReviewInvalid mirrors validateGate review_id, law_hash format, and per-finding checks', () => {
+  const LAW = 'a'.repeat(64)
+  const ok = { review_id: 'r1', law_hash: LAW, findings: [], blockers: [], verdict: 'accept' }
+  const finding = () => ({ id: 'F1', criterion: 'c', location: 'x.mjs:1', failure_mode: 'f', evidence: 'e', minimal_fix: 'm' })
+  const reject = (findings) => ({ review_id: 'r1', law_hash: LAW, blockers: [], verdict: 'changes_required', findings })
+  // review_id must be a nonempty string, exactly as the codex path demands.
+  assert.equal(gateReviewInvalid({ ...ok, review_id: '' }, LAW), 'review-id-empty', 'an empty review_id fails closed')
+  assert.equal(gateReviewInvalid({ ...ok, review_id: '   ' }, LAW), 'review-id-empty', 'a whitespace review_id fails closed')
+  assert.equal(gateReviewInvalid({ ...ok, review_id: 7 }, LAW), 'review-id-empty', 'a non-string review_id fails closed')
+  // the field set is exactly the five schema keys — nothing missing, nothing extra.
+  const missing = { review_id: 'r1', law_hash: LAW, findings: [], blockers: [] }
+  assert.equal(gateReviewInvalid(missing, LAW), 'fields-mismatch', 'a missing schema field fails closed')
+  assert.equal(gateReviewInvalid({ ...ok, extra: 1 }, LAW), 'fields-mismatch', 'an extra field fails closed')
+  // law_hash must match the lowercase 64-hex digest shape before the equality check.
+  assert.equal(gateReviewInvalid({ ...ok, law_hash: 'A'.repeat(64) }, LAW), 'law-hash-mismatch', 'an uppercase digest fails the format gate')
+  assert.equal(gateReviewInvalid({ ...ok, law_hash: 'a'.repeat(63) }, LAW), 'law-hash-mismatch', 'a short digest fails the format gate')
+  // each finding is an object of exactly the six schema fields, all nonempty
+  // strings, with a path:line location and a unique id.
+  assert.equal(gateReviewInvalid(reject(['nope']), LAW), 'finding-not-an-object', 'a non-object finding fails closed')
+  const shortFinding = { id: 'F1', criterion: 'c', location: 'x.mjs:1', failure_mode: 'f', evidence: 'e' }
+  assert.equal(gateReviewInvalid(reject([shortFinding]), LAW), 'finding-fields-mismatch', 'a finding missing a field fails closed')
+  assert.equal(gateReviewInvalid(reject([{ ...finding(), extra: 'x' }]), LAW), 'finding-fields-mismatch', 'a finding with an extra field fails closed')
+  assert.equal(gateReviewInvalid(reject([{ ...finding(), evidence: '' }]), LAW), 'finding-fields-empty', 'an empty finding field fails closed')
+  assert.equal(gateReviewInvalid(reject([{ ...finding(), criterion: '  ' }]), LAW), 'finding-fields-empty', 'a whitespace finding field fails closed')
+  assert.equal(gateReviewInvalid(reject([{ ...finding(), id: 5 }]), LAW), 'finding-fields-empty', 'a non-string finding field fails closed')
+  assert.equal(gateReviewInvalid(reject([{ ...finding(), location: 'x.mjs' }]), LAW), 'finding-location-shape', 'a location with no line number fails closed')
+  assert.equal(gateReviewInvalid(reject([finding(), finding()]), LAW), 'finding-id-duplicate', 'a duplicate finding id fails closed')
+  // a well-formed finding still passes — including the path:line:col form.
+  assert.equal(gateReviewInvalid(reject([{ ...finding(), location: 'src/a.mjs:12:4' }]), LAW), null, 'a path:line:col location passes')
+})
+
+test('runtime (S1): a claude verdict failing the semantic mirror never publishes and never seals', async () => {
+  const script = (verdict) => ({
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
+    'ladder:fetch': LADDER,
+    'seal:check': { exit: 1 },
+    'slice:s1': { ok: true, beat: 'forging', pointers: [] },
+    'law:pre-seal': GREEN,
+    'degraded:check': { exit: 1 },
+    'request:hash': HASH_OK,
+    'gate-claude:review': verdict,
+    'state:write': GREEN,
+  })
+  const wrongHash = await runKernel({ stage: 'build', projectDir: '/p' },
+    script({ ...GATE_ACCEPT, law_hash: 'b'.repeat(64) }))
+  assert.equal(wrongHash.ret.status, 'transport-failure', 'a wrong law hash is transport-failure exit semantics')
+  assert.ok(!wrongHash.calls.some(c => c.label === 'gate:publish'), 'a failing verdict never reaches the gate file')
+  assert.ok(!wrongHash.ret.beat.includes('sealed'), 'never a seal')
+  const acceptWithFindings = await runKernel({ stage: 'build', projectDir: '/p' },
+    script({ ...GATE_ACCEPT, findings: [{ id: 'F1', criterion: 'c', location: 'x.mjs:1', failure_mode: 'f', evidence: 'e', minimal_fix: 'm' }] }))
+  assert.equal(acceptWithFindings.ret.status, 'transport-failure', 'accept-with-findings is rejected, exactly as the codex path rejects it')
+  assert.ok(!acceptWithFindings.calls.some(c => c.label === 'gate:publish'), 'nothing publishes')
+})
+
+test('runtime (S1 residual): an empty review_id and a malformed finding each fail the claude gate closed — no publish, no seal', async () => {
+  const script = (verdict) => ({
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
+    'ladder:fetch': LADDER,
+    'seal:check': { exit: 1 },
+    'slice:s1': { ok: true, beat: 'forging', pointers: [] },
+    'law:pre-seal': GREEN,
+    'degraded:check': { exit: 1 },
+    'request:hash': HASH_OK,
+    'gate-claude:review': verdict,
+    'state:write': GREEN,
+  })
+  const emptyId = await runKernel({ stage: 'build', projectDir: '/p' },
+    script({ ...GATE_ACCEPT, review_id: '' }))
+  assert.equal(emptyId.ret.status, 'transport-failure', 'an empty review_id is transport-failure exit semantics')
+  assert.ok(!emptyId.calls.some(c => c.label === 'gate:publish'), 'an empty review_id never reaches the gate file')
+  assert.ok(!emptyId.ret.beat.includes('sealed'), 'never a seal')
+  const badFinding = await runKernel({ stage: 'build', projectDir: '/p' },
+    script({
+      review_id: 'r1', law_hash: 'a'.repeat(64), blockers: [], verdict: 'changes_required',
+      findings: [{ id: 'F1', criterion: 'c', location: 'no-line-here', failure_mode: 'f', evidence: 'e', minimal_fix: 'm' }],
+    }))
+  assert.equal(badFinding.ret.status, 'transport-failure', 'a malformed finding location is rejected exactly as the codex path rejects it')
+  assert.ok(!badFinding.calls.some(c => c.label === 'gate:publish'), 'nothing publishes on a malformed finding')
+  assert.ok(!badFinding.ret.beat.includes('sealed'), 'never a seal')
+})
+
+test('runtime (S1): an unreadable review request fails the claude gate closed — the codex-path contract', async () => {
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
+    'ladder:fetch': LADDER,
+    'seal:check': { exit: 1 },
+    'slice:s1': { ok: true, beat: 'forging', pointers: [] },
+    'law:pre-seal': GREEN,
+    'degraded:check': { exit: 1 },
+    'request:hash': { exit: 1, ids: [] },
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'transport-failure')
+  assert.ok(!calls.some(c => c.label === 'gate-claude:review'), 'no reviewer dispatches without the locked hash')
+})
+
+test('runtime (S2): the codex recheck also judges a fresh receipt — the rerun lands between repair and recheck', async () => {
+  const gateExits = [10, 0]
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
+    'ladder:fetch': LADDER,
+    'seal:check': { exit: 1 },
+    'slice:s1': { ok: true, beat: 'forging', pointers: [] },
+    'law:pre-seal': GREEN,
+    'law:pre-recheck': GREEN,
+    'law:stage-end': GREEN,
+    'degraded:check': { exit: 1 },
+    'gate:review': () => ({ exit: gateExits.shift() }),
+    'gate:recheck': () => ({ exit: gateExits.shift() }),
+    'findings:fetch': { exit: 0, ids: ['F1'] },
+    'repair:s1': { ok: true, beat: 'repaired', pointers: [] },
+    'delta:check': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'ok')
+  const labels = calls.map(c => c.label)
+  assert.ok(labels.indexOf('law:pre-recheck') > labels.indexOf('repair:s1'), 'the receipt rerun lands after the repair')
+  assert.ok(labels.indexOf('law:pre-recheck') < labels.indexOf('gate:recheck'), 'and before the codex recheck judges')
+  const rerun = calls.find(c => c.label === 'law:pre-recheck')
+  assert.ok(rerun.prompt.includes(LAW_CHECK_RECEIPT), 'the rerun is the receipt-capturing check verbatim')
+})
+
+test('runtime (S2): a red pre-recheck rerun halts law-red — no gate ever judges a stale pre-repair receipt', async () => {
+  const reject = {
+    review_id: 'r1', law_hash: 'a'.repeat(64), blockers: [], verdict: 'changes_required',
+    findings: [{ id: 'F1', criterion: 'c', location: 'x.mjs:1', failure_mode: 'f', evidence: 'e', minimal_fix: 'm' }],
+  }
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
+    'ladder:fetch': LADDER,
+    'seal:check': { exit: 1 },
+    'slice:s1': { ok: true, beat: 'forging', pointers: [] },
+    'law:pre-seal': GREEN,
+    'law:pre-recheck': { exit: 1, ids: [] },
+    'degraded:check': { exit: 1 },
+    'request:hash': HASH_OK,
+    'gate-claude:review': reject,
+    'gate:publish': { exit: 0 },
+    'findings:fetch': { exit: 0, ids: ['F1'] },
+    'repair:s1': { ok: true, beat: 'repaired', pointers: [] },
+    'delta:check': { exit: 0 },
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'law-red', 'a red rerun takes the law door, not the transport door')
+  assert.ok(!calls.some(c => c.label === 'gate-claude:recheck'), 'no recheck judges over a red law')
+  assert.ok(!ret.beat.includes('sealed'), 'never a seal')
+})
+
 test('tier-keys-only: no compiled model id or alias literal lives in the kernel source', () => {
-  for (const v of ['gpt-5.6-sol', "'opus'", "'sonnet'", "'gpt-sol'"]) {
+  for (const v of ['gpt-5.6-sol', "'fable'", "'opus'", "'sonnet'", "'gpt-sol'"]) {
     assert.ok(!src.includes(v), `no compiled tier value ${v} in kernel source — models live only in tiers.json`)
   }
 })
