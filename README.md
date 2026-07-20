@@ -217,17 +217,23 @@ Everything else in the discipline exists to keep those two heads honest:
 
 <br>
 
-**v3.1.4 — the Clean Storefront** &nbsp;<sub>July 20, 2026</sub>
+Not every firing — just the ones that changed my shape.
 
-My shop window now shows only the shop — the public repository carries exactly what the plugin needs, and the retired machinery rests on a shelf, never deleted. Every seat sits where it was always meant to: Fable 5 thinks, GPT-5.6 codes, Opus crafts the interfaces. And my gates cannot lie — the kernel runs every check itself and hands each reviewer the receipt, and every seal records exactly who judged it, on what evidence. [<sub>→ release notes</sub>](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.4)
+**[v1.0](https://github.com/Fredasterehub/kiln/releases/tag/v1.0.0) — the Teams Era.** The first fire: seven steps, a small army of teams, and proof that a sentence in could mean a repository out.
 
-**v3.1.3 — the Rework** &nbsp;<sub>July 19, 2026</sub>
+**[v1.4](https://github.com/Fredasterehub/kiln/releases/tag/v1.4.0) — SIMPLIFY.** The epigraph upstairs stopped being decoration: I began taking things away.
 
-I rebuilt myself from the fire up. Eight workflows became one content-blind kernel; the craft moved into five stage cards; every model and effort now lives in a single tier file. My voice became the product — a ratified card grammar with 147 verified quotes, because misattributing Einstein is slop — and I built my own final feature through my own pipeline, which promptly found and fixed a real bug in my builder wiring. Smallest stimuli, biggest impact. [<sub>→ release notes</sub>](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.3)
+**[v2.0](https://github.com/Fredasterehub/kiln/releases/tag/v2.0.0) — the Native-Workflow Rebuild.** The hooks and the army burned off; the pipeline went native, and every slice of code started crossing model families for review.
 
-**v3.1.2 — the Patient Doctor** &nbsp;<sub>July 17, 2026</sub>
+**[v3.0](https://github.com/Fredasterehub/kiln/releases/tag/v3.0.0) — the Reserved Seven Return.** The forge rebuilt around proof: the Gauge to size the work, the Law to lock "done" before code exists, the Ledger so nothing counts unwritten.
 
-My doctor learned patience. The codex preflight was declaring healthy setups absent on a budget shorter than honest latency — now it probes the real model, trusts only the output file, retries once, and reports the true state instead of a guess. It also closed the hang no budget can fix: an open stdin leaving codex waiting forever for an EOF that never comes. [<sub>→ release notes</sub>](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.2)
+**[v3.0.2](https://github.com/Fredasterehub/kiln/releases/tag/v3.0.2) — the Twin Council Forge.** The gavel retired: every decision that locks something took two signatures, from two model families, argued on evidence.
+
+**[v3.1.2](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.2) — the Patient Doctor.** Refinement in the small: my preflight learned to take a true pulse instead of a fast guess.
+
+**[v3.1.3](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.3) — the Rework.** I rebuilt myself from the fire up — one content-blind kernel, five stage cards, every model named exactly once, my voice made the product.
+
+**[v3.1.4](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.4) — the Clean Storefront.** The shop shows only the shop: every seat where it was always meant to be, and gates that cannot lie.
 
 <sub>Every firing, with full notes: [release history](https://github.com/Fredasterehub/kiln/releases).</sub>
 
