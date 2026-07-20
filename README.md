@@ -58,11 +58,13 @@
 </p>
 
 <p align="center">
-  <a href="#install"><strong>Install</strong></a> &nbsp;&middot;&nbsp;
-  <a href="#what-happens-when-the-fire-lights"><strong>What happens</strong></a> &nbsp;&middot;&nbsp;
-  <a href="#the-two-minds"><strong>The two minds</strong></a> &nbsp;&middot;&nbsp;
-  <a href="#what-you-need"><strong>What you need</strong></a> &nbsp;&middot;&nbsp;
-  <a href="#-fresh-from-the-kiln"><strong>Release notes</strong></a>
+  <a href="#the-promise"><strong>The Promise</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#the-kindling"><strong>The Kindling</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#strike-the-match"><strong>Strike the Match</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#the-firing"><strong>The Firing</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#the-receipts"><strong>The Receipts</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#the-discipline"><strong>The Discipline</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#fresh-from-the-kiln"><strong>Fresh from the Kiln</strong></a>
 </p>
 
 <br>
@@ -99,7 +101,10 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 <br>
 
-# Kiln
+<a id="the-promise"></a>
+<h3 align="center">🔏 The Promise</h3>
+
+<br>
 
 **One command in Claude Code. A real conversation about your idea. Working, tested software out the other side.**
 
@@ -107,7 +112,27 @@ Kiln is a Claude Code plugin that builds software with you. You describe what yo
 
 You never review code unless you want to. The two AIs keep each other honest so you do not have to.
 
-## Install
+<br>
+
+<a id="the-kindling"></a>
+<h3 align="center">🪵 The Kindling</h3>
+
+<br>
+
+| | |
+|:--|:--|
+| **Claude Code** | required — Kiln lives inside it |
+| **Node 18+** | required — Kiln's small scripts run on it |
+| **Codex CLI** | required for the full fire — GPT-5.6 is the main coder; without it Kiln runs Claude-only and says so |
+
+`/kiln:kiln-doctor` checks all of this for you and says exactly what is missing, if anything.
+
+<br>
+
+<a id="strike-the-match"></a>
+<h3 align="center">⚡ Strike the Match</h3>
+
+<br>
 
 ```
 claude plugin marketplace add Fredasterehub/kiln
@@ -121,7 +146,12 @@ Then, inside Claude Code:
 /kiln:kiln-fire <idea>     — the fire lights
 ```
 
-## What happens when the fire lights
+<br>
+
+<a id="the-firing"></a>
+<h3 align="center">🧭 The Firing</h3>
+
+<br>
 
 1. **The conversation.** Da Vinci — the one voice you actually talk with — interviews you about your idea, as deep or as quick as you like.
 2. **The law.** What you meant becomes a written checklist where every line can be checked by a machine. This is the contract for everything that follows.
@@ -131,7 +161,12 @@ Then, inside Claude Code:
 
 You can stop or lose the terminal at any point. The opening conversation restarts fresh if interrupted; everything after it resumes exactly where it stood, from the files on disk.
 
-## What a run leaves in your project
+<br>
+
+<a id="the-receipts"></a>
+<h3 align="center">🧾 The Receipts</h3>
+
+<br>
 
 Whatever you asked for — an app, an API, a game, a tool — when the fire cools, your project looks like this:
 
@@ -157,28 +192,46 @@ Start with `report.md` — it tells you everything. A few small bookkeeping file
 
 Delete `.kiln/` after a run if you like — your software does not need it. Keep it and Kiln can pick the work back up any time.
 
-## The two minds
+<br>
 
-- **GPT-5.6 writes the code.** The main coder, working through the Codex program — one well-prepared call per piece, composed by Claude — with Claude inspecting every piece it builds.
-- **Claude thinks and designs.** Fable 5 — the strongest mind available — leads the conversations, the plans, and the cut of the work; Opus implements the interfaces and creative pieces from that plan. GPT-5.6 inspects what Claude builds.
-- **Nothing counts until the other family has inspected it.** No AI grades its own homework.
-- **No Codex?** Kiln says so plainly and continues with Claude alone — every such piece honestly labeled in the run record.
+<a id="the-discipline"></a>
+<h3 align="center">⚖️ The Discipline</h3>
 
-One small file (`plugins/kiln/data/tiers.json`) names every seat — change any of it in one place.
+<br>
 
-## What you need
+The difference is not the model — it is the discipline around the model. Anyone can get an AI to write code; the hard part is code you can trust without reading every line. Kiln does not ask for that trust. It manufactures it:
 
 | | |
 |:--|:--|
-| **Claude Code** | required — Kiln lives inside it |
-| **Node 18+** | required — Kiln's small scripts run on it |
-| **Codex CLI** | required for the full fire — GPT-5.6 is the main coder; without it Kiln runs Claude-only and says so |
+| **Two minds, never one** | GPT-5.6 writes the code — one well-prepared call per piece, composed by Claude. Claude — Fable 5, the strongest mind available — leads the conversations, the plans, and the cut of the work, with Opus building the interfaces and creative pieces from that plan. |
+| **No one grades their own homework** | Nothing counts until the other family has inspected it. Every piece, every time. A confident mistake has to survive a second mind from a different company before it ever reaches you. |
+| **"Done" is decided before code exists** | Your idea becomes a written checklist before the first line is written — then it is locked. Code that fails the checklist does not ship, and the checklist cannot be quietly edited to fit the code. |
+| **Proof, not promises** | At the end, the whole checklist is re-checked fresh against your actually-running software. Nothing is "verified" from memory — and nothing that could not be verified is ever labeled verified. |
+| **Written down, or it never happened** | Every choice, every inspection, every seal lands in the run's paper trail the moment it happens. Stop anywhere, lose the terminal, come back tomorrow — the fire resumes exactly where it stood. |
+| **Honest at every strength** | No Codex installed? Kiln says so plainly and builds with Claude alone — and every such piece is labeled single-family in the record. Missing muscle changes the label, never the truth. |
 
-`/kiln:kiln-doctor` checks all of this for you and says exactly what is missing, if anything.
+One small file (`plugins/kiln/data/tiers.json`) names every seat at this table — change any of it in one place.
 
-## 🔥 Fresh from the Kiln
+<br>
 
-Every firing, with full notes: [release history](https://github.com/Fredasterehub/kiln/releases).
+<a id="fresh-from-the-kiln"></a>
+<h3 align="center">🔥 Fresh from the Kiln</h3>
+
+<br>
+
+**v3.1.4 — the Clean Storefront** &nbsp;<sub>July 20, 2026</sub>
+
+My shop window now shows only the shop — the public repository carries exactly what the plugin needs, and the retired machinery rests on a shelf, never deleted. Every seat sits where it was always meant to: Fable 5 thinks, GPT-5.6 codes, Opus crafts the interfaces. And my gates cannot lie — the kernel runs every check itself and hands each reviewer the receipt, and every seal records exactly who judged it, on what evidence. [<sub>→ release notes</sub>](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.4)
+
+**v3.1.3 — the Rework** &nbsp;<sub>July 19, 2026</sub>
+
+I rebuilt myself from the fire up. Eight workflows became one content-blind kernel; the craft moved into five stage cards; every model and effort now lives in a single tier file. My voice became the product — a ratified card grammar with 147 verified quotes, because misattributing Einstein is slop — and I built my own final feature through my own pipeline, which promptly found and fixed a real bug in my builder wiring. Smallest stimuli, biggest impact. [<sub>→ release notes</sub>](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.3)
+
+**v3.1.2 — the Patient Doctor** &nbsp;<sub>July 17, 2026</sub>
+
+My doctor learned patience. The codex preflight was declaring healthy setups absent on a budget shorter than honest latency — now it probes the real model, trusts only the output file, retries once, and reports the true state instead of a guess. It also closed the hang no budget can fix: an open stdin leaving codex waiting forever for an EOF that never comes. [<sub>→ release notes</sub>](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.2)
+
+<sub>Every firing, with full notes: [release history](https://github.com/Fredasterehub/kiln/releases).</sub>
 
 <br>
 
