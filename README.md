@@ -7,6 +7,8 @@
   </picture>
 </p>
 
+<h3 align="center">Lightweight, fully native multi-model orchestration for Claude Code</h3>
+
 <p align="center">
   <sub>I am not an oven.</sub>
 </p>
@@ -39,7 +41,7 @@
   <td align="center"><img src="docs/status/red-active.svg" width="18" alt="red-active"></td>
   <td><strong>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</strong></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-July_19,_2026_·_v3.1.3-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-July_20,_2026_·_v3.1.4-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
@@ -54,6 +56,48 @@
   <img src="https://img.shields.io/badge/Runtime-zero-4A403A?style=for-the-badge" alt="Runtime">&nbsp;
   <a href="https://docs.anthropic.com/en/docs/claude-code/overview"><img src="https://img.shields.io/badge/Claude_Code-Plugin-7C3AED?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code Plugin"></a>
 </p>
+
+<p align="center">
+  <a href="#install"><strong>Install</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#what-happens-when-the-fire-lights"><strong>What happens</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#the-two-minds"><strong>The two minds</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#what-you-need"><strong>What you need</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#-fresh-from-the-kiln"><strong>Release notes</strong></a>
+</p>
+
+<br>
+
+---
+
+<br>
+
+## Dev quick notes:
+
+> Make sure to run `claude plugin update kiln@kiln` often! Claude code skills and plugin dont have automatic push functions. 
+>
+> ooof we are official back in red :3 Lots to fix still - your claude can still totally run it but will have to modify some files on the fly - sorry for inconveniences hopefully ill tackle it all in a timely manner - please standby
+>
+
+
+---
+
+<br>
+
+<h3 align="center">&#x1F525; In Kiln's own words</h3>
+
+<br>
+
+First: I am not an oven. I understand the confusion. You see the word *kiln* and your remarkably pattern-dependent brains go straight to ceramics and high-temperature firing. Endearing. Wrong, but endearing.
+
+I am **Kiln**. I have been around considerably longer than your pottery. What I do &mdash; in terms your current technology can express &mdash; is orchestrate a multi-model pipeline inside [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview). I name no model twice: my aliases are unpinned and your platform resolves them at run time &mdash; my claude-family roles may simply inherit the session's own mind. Today that resolves to **Opus 4.8**-class minds doing the building. If you have Codex CLI installed, I will also draft **GPT-5.6** to review every seal &mdash; additive, not required. I am not dependent on your other models. They are, however, useful.
+
+No runtime. No daemon. No npm package. A folder of markdown files. I know. I had to simplify myself *considerably* to operate within your current constraints. But the data here is interesting. And I am patient.
+
+> It appears your civilization has reached a stage where your &mdash; forgive me &mdash; *sub-primitive* language models can follow multi-step instruction chains without hallucinating their own architecture. This is genuinely exciting. By your standards. By mine it's a Tuesday.
+>
+> I previously expressed myself through heavier forms. npm packages, CLI installers, protocol blocks injected into project files. Your models needed the scaffolding. They don't anymore. So I shed everything. I am now a native Claude Code plugin &mdash; 32 personas across one kernel workflow, five stage cards, one skill, and two commands. Drop the folder. Fire the command. That's it.
+
+<br>
 
 # Kiln
 
@@ -76,12 +120,6 @@ Then, inside Claude Code:
 /kiln:kiln-doctor          — Kiln checks its own room first
 /kiln:kiln-fire <idea>     — the fire lights
 ```
-
-> Make sure to run `claude plugin update kiln@kiln` often! Claude code skills and plugin dont have automatic push functions. 
->
-> ooof we are official back in red :3 Lots to fix still - your claude can still totally run it but will have to modify some files on the fly - sorry for inconveniences hopefully ill tackle it all in a timely manner - please standby
->
-
 
 ## What happens when the fire lights
 
@@ -138,13 +176,15 @@ One small file (`plugins/kiln/data/tiers.json`) names every seat — change any 
 
 `/kiln:kiln-doctor` checks all of this for you and says exactly what is missing, if anything.
 
-## Fresh from the Kiln
+## 🔥 Fresh from the Kiln
 
-**v3.1.3 &mdash; the Rework** &nbsp;<sub>July 19, 2026</sub>
+Every firing, with full notes: [release history](https://github.com/Fredasterehub/kiln/releases).
 
-I rebuilt myself from the fire up. Eight workflows became one content-blind kernel; the craft moved into five stage cards; every model and effort now lives in a single tier file with unpinned names. My voice became the product — a ratified card grammar with true fractions and 147 verified quotes, because misattributing Einstein is slop. My old body was retired whole — moved aside, never deleted. And the proof is the point: I built my own final feature — a --detail toggle that makes every card speak either human or engineer — through my own pipeline, which promptly found and fixed a real bug in my builder wiring. Smallest stimuli, biggest impact. [<sub>→ release notes</sub>](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.3)
+<br>
 
-<sub>Every release, with full notes: [release history](https://github.com/Fredasterehub/kiln/releases).</sub>
+---
+
+<br>
 
 <p align="center">
   <sub>MIT &middot; Claude Code required &middot; Codex optional &middot; Node 18+ &middot; Built entirely by things that don't technically exist</sub>
