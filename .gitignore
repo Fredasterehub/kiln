@@ -13,6 +13,7 @@ tracks/
 prompts/
 plugins/kiln/prompts/
 plugins/kiln/agents/promote_output.md
+/plugins/kiln/agents/the-creator.md
 
 # Codex Kiln local runtime
 codex/kiln/home/auth.json
@@ -64,11 +65,15 @@ state/
 # Dev artifacts and untrack-and-keep assets
 /brainstorm/
 run-data/
-# Dead v1 test harness — untracked, kept on disk as seed; the live v3 harness at tests/v3/ ships
-tests/*
-!tests/v3/
-# Stale v1 docs assets — untracked, kept on disk
-docs/v7.html
-docs/kiln-pipeline.png
-docs/kiln-planning.png
 /walk.pid
+
+# Public-storefront strip (INTAKE-17) — untracked, kept on disk; the public tree holds only
+# README.md, LICENSE, .gitignore, .claude-plugin/marketplace.json, plugins/kiln/**, and the
+# docs/ storefront images (logo + status lights)
+/retired/
+/tests/
+/scripts/
+
+# One-README ruling (S4): the root README is the single public truth — the plugin README
+# stays on disk, untracked
+/plugins/kiln/README.md
