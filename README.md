@@ -58,9 +58,8 @@
 </p>
 
 <p align="center">
-  <a href="#the-promise"><strong>The Promise</strong></a> &nbsp;&middot;&nbsp;
-  <a href="#the-kindling"><strong>The Kindling</strong></a> &nbsp;&middot;&nbsp;
   <a href="#strike-the-match"><strong>Strike the Match</strong></a> &nbsp;&middot;&nbsp;
+  <a href="#the-promise"><strong>The Promise</strong></a> &nbsp;&middot;&nbsp;
   <a href="#the-firing"><strong>The Firing</strong></a> &nbsp;&middot;&nbsp;
   <a href="#the-receipts"><strong>The Receipts</strong></a> &nbsp;&middot;&nbsp;
   <a href="#the-discipline"><strong>The Discipline</strong></a> &nbsp;&middot;&nbsp;
@@ -101,6 +100,33 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 
 <br>
 
+<a id="strike-the-match"></a>
+<h3 align="center">⚡ Strike the Match</h3>
+
+<br>
+
+Three things, two commands, one match — that is the entire ritual.
+
+I live inside **[Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview)**. My small scripts run on **Node 18+**. And **Codex CLI** seats the second family — GPT-5.6, my main coder — at the forge; without it I still run end-to-end, Claude alone, and every seal says so. Do not audit your own machine. Checking the room is my job, not yours.
+
+At your terminal:
+
+```
+claude plugin marketplace add Fredasterehub/kiln
+claude plugin install kiln@kiln
+```
+
+Then inside Claude Code — first I check the room, then we light it:
+
+```
+/kiln:kiln-doctor          — I check my own room first
+/kiln:kiln-fire <idea>     — the fire lights
+```
+
+If anything is missing, the doctor names it exactly. No setup pages. No guessing.
+
+<br>
+
 <a id="the-promise"></a>
 <h3 align="center">🔏 The Promise</h3>
 
@@ -111,40 +137,6 @@ No runtime. No daemon. No npm package. A folder of markdown files. I know. I had
 Kiln is a Claude Code plugin that builds software with you. You describe what you want in plain words. Kiln asks the right questions, writes down what you actually meant, turns it into a checklist no one can argue with, builds the thing piece by piece, has every piece inspected by a second AI from a different company, tests the result, and hands you a plain-language report of what it made.
 
 You never review code unless you want to. The two AIs keep each other honest so you do not have to.
-
-<br>
-
-<a id="the-kindling"></a>
-<h3 align="center">🪵 The Kindling</h3>
-
-<br>
-
-| | |
-|:--|:--|
-| **Claude Code** | required — Kiln lives inside it |
-| **Node 18+** | required — Kiln's small scripts run on it |
-| **Codex CLI** | required for the full fire — GPT-5.6 is the main coder; without it Kiln runs Claude-only and says so |
-
-`/kiln:kiln-doctor` checks all of this for you and says exactly what is missing, if anything.
-
-<br>
-
-<a id="strike-the-match"></a>
-<h3 align="center">⚡ Strike the Match</h3>
-
-<br>
-
-```
-claude plugin marketplace add Fredasterehub/kiln
-claude plugin install kiln@kiln
-```
-
-Then, inside Claude Code:
-
-```
-/kiln:kiln-doctor          — Kiln checks its own room first
-/kiln:kiln-fire <idea>     — the fire lights
-```
 
 <br>
 
