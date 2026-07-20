@@ -153,11 +153,15 @@ Then, inside Claude Code:
 
 <br>
 
-1. **The conversation.** Da Vinci — the one voice you actually talk with — interviews you about your idea, as deep or as quick as you like.
-2. **The law.** What you meant becomes a written checklist where every line can be checked by a machine. This is the contract for everything that follows.
-3. **The build.** The work is cut into small pieces. Each piece is built, then inspected by the second AI family before it counts as done.
-4. **The validation.** At the end, every line of the law is checked again, fresh, against the real running result.
-5. **The report.** Kiln tells you what it built, what the checks said, and what it cost — in plain words, from the written record only.
+It begins with **the conversation**. Da Vinci — the one voice you actually talk with — interviews you about your idea, as deep or as quick as you like.
+
+What you meant then becomes **the law**: a written checklist where every line can be checked by a machine. This is the contract for everything that follows.
+
+Then **the build**. The work is cut into small pieces, and each piece is built, then inspected by the second AI family before it counts as done.
+
+When the last piece cools comes **the validation** — every line of the law checked again, fresh, against the real running result.
+
+And at the end, **the report**: Kiln tells you what it built, what the checks said, and what it cost — in plain words, from the written record only.
 
 You can stop or lose the terminal at any point. The opening conversation restarts fresh if interrupted; everything after it resumes exactly where it stood, from the files on disk.
 
@@ -199,18 +203,19 @@ Delete `.kiln/` after a run if you like — your software does not need it. Keep
 
 <br>
 
-The difference is not the model — it is the discipline around the model. Anyone can get an AI to write code; the hard part is code you can trust without reading every line. Kiln does not ask for that trust. It manufactures it:
+The difference is not the model — it is the discipline around the model. Anyone can get an AI to write code; the hard part is code you can trust without reading every line. Kiln does not ask for that trust. It manufactures it.
+
+Picture two master smiths sharing one forge — one mind from Claude, one from GPT. Both brilliant. Both — like every mind, carbon or arithmetic — occasionally, *confidently* wrong. And minds from the same family miss the same things, which is exactly why this forge keeps two. So it runs on one law neither smith can bend: **whoever builds a piece, the other family judges it.** GPT-5.6 writes the code — a fresh Claude mind rules on it. Opus crafts the interfaces — GPT-5.6 rules on those, on correctness alone; taste belongs to the builder. No piece is sealed on its maker's word, and the judge never takes the diff's word either: the kernel runs the checks itself and hands the judge the receipt.
+
+Everything else in the discipline exists to keep those two heads honest:
 
 | | |
 |:--|:--|
-| **Two minds, never one** | GPT-5.6 writes the code — one well-prepared call per piece, composed by Claude. Claude — Fable 5, the strongest mind available — leads the conversations, the plans, and the cut of the work, with Opus building the interfaces and creative pieces from that plan. |
-| **No one grades their own homework** | Nothing counts until the other family has inspected it. Every piece, every time. A confident mistake has to survive a second mind from a different company before it ever reaches you. |
+| **The seats are named, once** | Fable 5 — the strongest mind available — holds the thinking seats: the conversations, the plans, the cut of the work. GPT-5.6 is the main coder, one well-prepared call per piece, composed by Claude. Opus builds the interfaces and creative pieces from that plan. One small file (`plugins/kiln/data/tiers.json`) names every seat — change any of it in one place. |
 | **"Done" is decided before code exists** | Your idea becomes a written checklist before the first line is written — then it is locked. Code that fails the checklist does not ship, and the checklist cannot be quietly edited to fit the code. |
 | **Proof, not promises** | At the end, the whole checklist is re-checked fresh against your actually-running software. Nothing is "verified" from memory — and nothing that could not be verified is ever labeled verified. |
 | **Written down, or it never happened** | Every choice, every inspection, every seal lands in the run's paper trail the moment it happens. Stop anywhere, lose the terminal, come back tomorrow — the fire resumes exactly where it stood. |
-| **Honest at every strength** | No Codex installed? Kiln says so plainly and builds with Claude alone — and every such piece is labeled single-family in the record. Missing muscle changes the label, never the truth. |
-
-One small file (`plugins/kiln/data/tiers.json`) names every seat at this table — change any of it in one place.
+| **Honest at every strength** | No Codex installed? Kiln says so plainly and builds with Claude alone — a fresh second mind still judges every piece, and every such seal is labeled single-family in the record. Missing muscle changes the label, never the truth. |
 
 <br>
 
