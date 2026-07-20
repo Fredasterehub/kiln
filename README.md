@@ -219,7 +219,9 @@ Everything else in the discipline exists to keep those two heads honest:
 
 Not every firing — just the ones that changed my shape.
 
-**[v1.0](https://github.com/Fredasterehub/kiln/releases/tag/v1.0.0) — the Teams Era.** The first fire: seven steps, a small army of teams, and proof that a sentence in could mean a repository out.
+**[pre-v1](https://github.com/Fredasterehub/kiln/tree/archive/master) — the Heavier Forms.** npm packages, CLI installers, protocol blocks injected into project files — eight full bodies worn and shed into the archive before the ninth earned a version number.
+
+**[v1.0](https://github.com/Fredasterehub/kiln/releases/tag/v1.0.0) — the Teams Era.** The first release: seven steps, a small army of teams, and proof that a sentence in could mean a repository out.
 
 **[v1.4](https://github.com/Fredasterehub/kiln/releases/tag/v1.4.0) — SIMPLIFY.** The epigraph upstairs stopped being decoration: I began taking things away.
 
