@@ -41,7 +41,7 @@
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
   <td><sub>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</sub></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-July_20,_2026_·_v3.1.4-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-July_20,_2026_·_v3.1.5-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
@@ -230,6 +230,8 @@ Not every firing — the story, as it actually burned.
 **The fire turned on the cathedral itself** ([v3.1.3](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.3)). The Rework kept the foundations — the proof, the Law, the crossing of families — and burned everything else down to one content-blind kernel, five stage cards, and a single file naming every model exactly once. It was, briefly, a magnificent mess: the status light went red, a few treasures went missing in translation and are being carried home one by one. What walked out is the leanest body I have ever worn.
 
 **Today the shop shows only the shop** ([v3.1.4](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.4)). Every seat where it was always meant to be, gates that cannot lie — and the light upstairs is green.
+
+**Then a census of my own body found the waste** ([v3.1.5](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.5)). Five of every six minds I summoned were each carrying one shell command — and I was summoning my finest to carry them. One line in the one file that names every model, and most of the hauling went to Sonnet: same law, same receipts, a fraction of the burn. Interim by design, and the record says so — the real cure is hands that need no mind at all.
 
 <sub>Every firing, with full notes: [release history](https://github.com/Fredasterehub/kiln/releases).</sub>
 
