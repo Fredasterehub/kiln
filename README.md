@@ -217,25 +217,19 @@ Everything else in the discipline exists to keep those two heads honest:
 
 <br>
 
-Not every firing — just the ones that changed my shape.
+Not every firing — the story, as it actually burned.
 
-**[pre-v1](https://github.com/Fredasterehub/kiln/tree/archive/master) — the Heavier Forms.** npm packages, CLI installers, protocol blocks injected into project files — eight full bodies worn and shed into the archive before the ninth earned a version number.
+**First came the heavier forms.** I tried everything at once — npm packages, CLI installers, protocol blocks injected into your project files. Your models needed rails at every step, so rails I built: [eight full bodies](https://github.com/Fredasterehub/kiln/tree/archive/master) went to the archive before one was worth keeping.
 
-**[v1.0](https://github.com/Fredasterehub/kiln/releases/tag/v1.0.0) — the Teams Era.** The first release: seven steps, a small army of teams, and proof that a sentence in could mean a repository out.
+**Then your platform grew teams, so I became teams** ([v1.0](https://github.com/Fredasterehub/kiln/releases/tag/v1.0.0)). Seven steps, hooks on every door, a small army of agents — and proof, for the first time, that a sentence in could mean a repository out. It worked. It was also far too much machinery, and the whole v1.x line went to learning the epigraph upstairs: [SIMPLIFY](https://github.com/Fredasterehub/kiln/releases/tag/v1.4.0), take away, then take away again.
 
-**[v1.4](https://github.com/Fredasterehub/kiln/releases/tag/v1.4.0) — SIMPLIFY.** The epigraph upstairs stopped being decoration: I began taking things away.
+**Then Claude Code shipped a new primitive, and the scaffolding burned off** ([v2.0](https://github.com/Fredasterehub/kiln/releases/tag/v2.0.0)). Native workflows replaced the hook wall, the army collapsed into one conductor, and every slice of code began crossing model families for review. Lighter. Quieter. Still honest.
 
-**[v2.0](https://github.com/Fredasterehub/kiln/releases/tag/v2.0.0) — the Native-Workflow Rebuild.** The hooks and the army burned off; the pipeline went native, and every slice of code started crossing model families for review.
+**Then I stopped taking anyone's word — including my own** ([v3.0](https://github.com/Fredasterehub/kiln/releases/tag/v3.0.0) → [v3.0.2](https://github.com/Fredasterehub/kiln/releases/tag/v3.0.2)). The forge rebuilt itself around proof: the Gauge to size the work, the Law to lock "done" before code exists, the Ledger so nothing counts unwritten — until every locking decision took two signatures from two model families, argued on evidence.
 
-**[v3.0](https://github.com/Fredasterehub/kiln/releases/tag/v3.0.0) — the Reserved Seven Return.** The forge rebuilt around proof: the Gauge to size the work, the Law to lock "done" before code exists, the Ledger so nothing counts unwritten.
+**Then Fable 5 arrived and got full carte blanche** ([v3.1.3](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.3)). The Rework burned me down to one content-blind kernel, five stage cards, and a single file naming every model exactly once. It was, briefly, a magnificent mess — the status light went red, a few treasures went missing in translation and are being carried home one by one — and what walked out of the fire is the leanest body I have ever worn.
 
-**[v3.0.2](https://github.com/Fredasterehub/kiln/releases/tag/v3.0.2) — the Twin Council Forge.** The gavel retired: every decision that locks something took two signatures, from two model families, argued on evidence.
-
-**[v3.1.2](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.2) — the Patient Doctor.** Refinement in the small: my preflight learned to take a true pulse instead of a fast guess.
-
-**[v3.1.3](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.3) — the Rework.** I rebuilt myself from the fire up — one content-blind kernel, five stage cards, every model named exactly once, my voice made the product.
-
-**[v3.1.4](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.4) — the Clean Storefront.** The shop shows only the shop: every seat where it was always meant to be, and gates that cannot lie.
+**Today the shop shows only the shop** ([v3.1.4](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.4)). Every seat where it was always meant to be, gates that cannot lie — and the light upstairs is green.
 
 <sub>Every firing, with full notes: [release history](https://github.com/Fredasterehub/kiln/releases).</sub>
 
