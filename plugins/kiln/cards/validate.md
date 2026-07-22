@@ -79,3 +79,19 @@ YOUR work being complete, not about the criteria being green — the exit code c
 that), else an honest failure string. `facts.pointers` — `.kiln/validate.md`.
 `facts.schema_valid` — true iff your declared outputs are well-formed. `narration_beat` — every
 stage-owned slot filled; kernel-owned slots left as-is.
+
+## Perceptual addendum (act 2)
+A second, bounded act the kernel dispatches only when a perceptual verdict is PUBLISHED at
+`.kiln/screen-review.json` — run it only when the kernel launches it, never on your own,
+never on a dormant run.
+1. Read the published verdict and the sealed `## Perceptual` table in `.kiln/LAW.md`.
+2. Append one row per perceptual criterion to `.kiln/validate.md` (temp + rename):
+   `criterion id` · `dim` · the proxy exit already recorded above · grade. Grades are
+   `PASS` and `PARTIAL` ONLY — `FAIL` belongs to the deterministic proxies (check.sh /
+   the law-red door), never to a grade row. Accepted verdict: every row grades `PASS`.
+   Held verdict (`changes_required`): the surviving criterion ids named by the verdict's
+   findings grade `PARTIAL`; the rest grade `PASS`.
+3. Re-emit the truthful stage beat per the Beat section, the perceptual rows counted in —
+   on a hold the TITLE UNIT speaks the held truth, never `SEALED`.
+Return the ordinary `{facts:{status, pointers, schema_valid}, narration_beat}` —
+`facts.status` `'ok'` only if the rows landed and the beat is truthful.

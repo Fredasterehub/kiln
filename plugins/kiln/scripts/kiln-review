@@ -557,7 +557,7 @@ function screenInstructions(packet) {
 Judge ONLY the perceptual criteria rows in the packet, each on its named rubric dim per the shipped rubric's anchors — never any other dimension, and never general taste beyond what a row's requirement pins. Report only substantiated criterion violations. For each finding, pin criterion = the row's LAW perceptual criterion id and location = an evidence path with an optional :frame (for example viewport-mobile.png or film.webm:3), with the concrete failure, its visual evidence, and the smallest repair. Use stable finding IDs. Insufficient evidence on a dim is a finding citing the rubric's insufficient_evidence line as its evidence — never a blocker. Execute nothing and install nothing: rule from the attached images and the packet text alone.
 
 Copy review_id and law_hash exactly — law_hash is the sha256 digest of the graded generation's manifest.json and binds this verdict to that evidence. Verdict rules: accept only when findings and blockers are both empty; changes_required for one or more repairable findings. Never return blocked and never write a blocker: hard failure belongs to the law's deterministic proxies, not to this grade.
-${packet.mode === 'screen-recheck' ? '\nRecheck only the listed finding_ids against the fresh evidence generation. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}
+${packet.mode === 'screen-recheck' ? '\nRecheck only the listed finding_ids against the fresh evidence generation. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}${packet.mode === 'screen-escalate' ? '\nThis is a bounded second-family escalation of a held verdict: the packet carries ONLY the surviving criteria — grade them alone, on the same evidence generation; a finding on any other criterion invalidates the verdict.\n' : ''}
 Evidence packet:
 ${JSON.stringify(packet, null, 2)}
 `
@@ -1009,10 +1009,52 @@ if (mode === 'review' && args.length === 3) {
     if (gate.law_hash !== generation.digest) return 'law_hash does not match the graded generation manifest digest'
     return screenShapeInvalid(gate, criterionIds)
   }, evidence.images)
+} else if (mode === 'screen-escalate' && args.length === 6) {
+  // W8-S3 (ONLY-survivors): the bounded second-family escalation of a HELD screen
+  // verdict. The held verdict rides argv as a closed path; the verb re-validates it
+  // with the FULL screen-family shape (an artifact invalid for the family names no
+  // survivors), derives the surviving criterion ids from its findings, and packets
+  // ONLY the surviving rows — the grader never sees the rest of the table. A fresh
+  // review_id: this is a second mind's scoped grade, not a lineage recheck. Scope is
+  // enforced pre-publish exactly as table membership is on screen: a finding outside
+  // the survivors is exit 20, and the off-scope verdict is never published.
+  const [repoPath, kilnDir, model, effort, heldFile, outputFile] = args
+  const request = auditRequest(model, effort, 'screen')
+  const repo = repository(repoPath)
+  const facts = screenLawFacts(kilnDir)
+  const criterionIds = new Set(facts.rows.map((row) => row.criterion))
+  const held = readJson(heldFile, 'invalid held screen review')
+  const heldShape = isObject(held) && typeof held.review_id === 'string' && typeof held.law_hash === 'string'
+  const heldError = heldShape
+    ? (validateShape(held, held.review_id, held.law_hash, undefined, SCREEN_LOCATION) || screenShapeInvalid(held, criterionIds))
+    : 'held screen review is malformed'
+  if (heldError) stop('transport_failure', heldError, TRANSPORT_FAILURE)
+  if (held.verdict !== 'changes_required') {
+    stop('transport_failure', 'screen-escalate requires a held changes_required verdict', TRANSPORT_FAILURE)
+  }
+  const survivors = new Set(held.findings.map((finding) => finding.criterion))
+  const generation = currentGeneration(kilnDir)
+  const evidence = screenEvidence(generation)
+  const packet = {
+    mode: 'screen-escalate',
+    review_id: randomUUID(),
+    law_hash: generation.digest,
+    ...screenPacket({ ...facts, rows: facts.rows.filter((row) => survivors.has(row.criterion)) }, generation, evidence),
+  }
+  runGate(repo, request, screenInstructions(packet), outputFile, (gate) => {
+    const shape = validateShape(gate, packet.review_id, undefined, undefined, SCREEN_LOCATION)
+    if (shape) return shape
+    if (gate.law_hash !== generation.digest) return 'law_hash does not match the graded generation manifest digest'
+    const family = screenShapeInvalid(gate, criterionIds)
+    if (family) return family
+    const off = gate.findings.find((finding) => !survivors.has(finding.criterion))
+    if (off !== undefined) return `finding ${off.id} criterion ${off.criterion} is outside the surviving escalation scope`
+    return null
+  }, evidence.images)
 } else {
   stop(
     'transport_failure',
-    'usage: kiln-review review <repo> <request.json> <gate-review.json> | kiln-review recheck <repo> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir> | kiln-review ratify <repo> <request.json> <gate-review.json> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json> | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> | kiln-review screen <repo> <kilnDir> <model> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json>',
+    'usage: kiln-review review <repo> <request.json> <gate-review.json> | kiln-review recheck <repo> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir> | kiln-review ratify <repo> <request.json> <gate-review.json> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json> | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> | kiln-review screen <repo> <kilnDir> <model> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <effort> <held-screen-review.json> <gate-review.json>',
     TRANSPORT_FAILURE,
   )
 }

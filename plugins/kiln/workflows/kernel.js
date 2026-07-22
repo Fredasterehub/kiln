@@ -69,9 +69,13 @@ const LAW_HASH = /^[0-9a-f]{64}$/
 // published prior gate before a recheck and passes the cohort), the review_id must
 // equal the issued id and every finding must fall inside the prior allowed-id set —
 // the SAME allowed-id rule the transport enforces (scripts/kiln-review validateShape),
-// so kernel and transport agree. Returns the named violation, or null when the verdict
+// so kernel and transport agree. W8-S3: the OPTIONAL locationRule mirrors the
+// validateShape relaxation the screen family carries in scripts/kiln-review — a screen
+// finding pins an evidence path with an optional :frame, where a line number does not
+// exist. Absent, the default path:line pattern preserves the baseline byte-for-byte.
+// Returns the named violation, or null when the verdict
 // is sound; any violation is transport-failure exit semantics, never a seal.
-function gateReviewInvalid(g, lawHash, expectedReviewId, allowedFindingIds) {
+function gateReviewInvalid(g, lawHash, expectedReviewId, allowedFindingIds, locationRule) {
   if (!g || typeof g !== 'object' || Array.isArray(g)) return 'not-an-object'
   const keys = Object.keys(g)
   const fields = ['review_id', 'law_hash', 'findings', 'blockers', 'verdict']
@@ -89,7 +93,7 @@ function gateReviewInvalid(g, lawHash, expectedReviewId, allowedFindingIds) {
     const fk = Object.keys(f)
     if (fk.length !== findingFields.length || findingFields.some(k => fk.indexOf(k) < 0)) return 'finding-fields-mismatch'
     if (findingFields.some(k => typeof f[k] !== 'string' || f[k].trim() === '')) return 'finding-fields-empty'
-    if (!/^.+:\d+(?::\d+)?$/.test(f.location)) return 'finding-location-shape'
+    if (!(locationRule || /^.+:\d+(?::\d+)?$/).test(f.location)) return 'finding-location-shape'
     if (ids.has(f.id)) return 'finding-id-duplicate'
     if (allowedFindingIds && !allowedFindingIds.has(f.id)) return 'finding-id-out-of-cohort'
     ids.add(f.id)
@@ -600,6 +604,11 @@ const P = {
   candidate: '.kiln/.gate-review.reviewer.tmp',
   // W7-S2: the published milestone audit verdict — the audit-family gate file.
   audit: '.kiln/audit-review.json',
+  // W8-S3: the screening-room artifacts — the published perceptual verdict (the
+  // audit gate-file precedent), the bounded second-family escalation verdict, its
+  // closed one-line record, and the semantic-hold marker the report stage reads.
+  screen: '.kiln/screen-review.json', screenEscalation: '.kiln/screen-escalation.json',
+  screenRecord: '.kiln/screen-escalation.txt', perceptualPartial: '.kiln/perceptual-partial',
   // Wave 3: the onboarding outputs the LAW input gate verifies before planning.
   brief: '.kiln/docs/project-brief.md', posture: '.kiln/posture.json',
   // Wave 3 (brownfield arm): the closed-fact marker the onboarding preflight drops
@@ -666,6 +675,8 @@ const POSTURE_LEG = {
 // never does. additionalProperties stays true so the other dials pass through harmlessly. W6-F:
 // the same leg also carries recovery_cap, so one dial read serves both the WIDE branch and the
 // reversibility-keyed recovery cap; the build stage reuses this schema for its own cap read.
+// W8-S3: the validate perceptual dial leg rides the same shape — additionalProperties carries
+// the perceptual field through untyped, and the kernel branches on it as a closed string fact.
 const WIDTH = { type: 'object', additionalProperties: true, properties: { exit: { type: 'integer' }, width: { type: 'string' }, recovery_cap: { type: 'integer' } }, required: ['exit'] }
 // W5-S2 (W5-01): a WIDE adjust leg returns the ordinary stage envelope plus the closed
 // `converged` self-report the content-blind skip-adjudication gate reads alongside byte-equality.
@@ -883,12 +894,121 @@ const wideAdjudicatePrompt = [
   'Return {facts:{status, pointers, schema_valid}, narration_beat} — facts.status is "ok" only if the complete four-output canonical LAW is written.',
 ].join('\n')
 
+// ── W8-S3: the screening room — closed commands and helpers for the validate seat ──
+// Presence only: a GFM `## Perceptual` heading in the SEALED LAW.md — S1 already
+// validated the full table shape at LAW time, pre-seal, so this exit fact feeds the
+// gauge-dial --visual flag and nothing else. Any read failure reads as absent; the
+// dial fail-up doctrine still outranks the flag on a malformed posture.
+const PERCEPTUAL_PRESENCE =
+  "node -e 'const fs=require(\"fs\");let f=false;" +
+  "try{for(const ln of fs.readFileSync(\"./.kiln/LAW.md\",\"utf8\").split(\"\\n\")){const t=ln.trim();" +
+  "if(t.slice(0,3)===\"## \"&&t.slice(3).trim().toLowerCase()===\"perceptual\"){f=true;break;}}}catch(e){}" +
+  "process.exit(f?0:1);'"
+// CURRENT generation = the highest .kiln/evidence/gen-<n> dir containing a valid
+// manifest.json (the Sol r3 rule scripts/kiln-review currentGeneration applies),
+// printed as the manifest path — the one closed handle every screening leg shares.
+// A manifest-less dir is crash residue: it occupies its number and is never selected.
+const CURRENT_MANIFEST =
+  "node -e 'try{const fs=require(\"fs\");const root=\".kiln/evidence\";let best=-1;" +
+  "for(const n of fs.readdirSync(root)){const m=/^gen-(\\d+)$/.exec(n);if(!m)continue;const g=Number(m[1]);if(g<=best)continue;" +
+  "try{const b=JSON.parse(fs.readFileSync(root+\"/gen-\"+g+\"/manifest.json\",\"utf8\"));if(b&&typeof b===\"object\"&&!Array.isArray(b))best=g;}catch(e){}}" +
+  "if(best<0)process.exit(1);console.log(root+\"/gen-\"+best+\"/manifest.json\");process.exit(0);}catch(e){process.exit(1)}'"
+// The fetched manifest path rides prompts and further commands, so it is shape-gated
+// to the exact closed form the allocator produces before it rides anywhere.
+const MANIFEST_PATH = /^\.kiln\/evidence\/gen-\d+\/manifest\.json$/
+// The family rule (plan F), a closed three-way exit fact: 0 = some perceptual owner
+// carries surface ui (Opus-built pixels — the GPT screen verbs grade), 1 = PROVEN
+// all-logic/mixed owners (GPT-coded rendering — the Claude leg grades), anything else
+// is an untrusted answer and holds transport-class. Owners come from the sealed LAW
+// Perceptual table (S1 validated shape and membership pre-seal, so the header and
+// delimiter rows are skipped without re-validation); surfaces come from slices.json,
+// a legacy bare id defaulting to mixed exactly as parseSliceEntry rules.
+const PERCEPTUAL_FAMILY =
+  "node -e 'try{const fs=require(\"fs\");" +
+  "const surf={};for(const s of require(\"./.kiln/slices.json\")){if(typeof s===\"string\")surf[s.trim()]=\"mixed\";else surf[String((s&&s.id)||\"\").trim()]=String((s&&s.surface)||\"\").trim();}" +
+  "const cells=s=>s.split(/(?<!\\\\)\\|/).slice(1,-1).map(x=>x.replace(/\\\\\\|/g,\"|\").trim());" +
+  "const lines=fs.readFileSync(\"./.kiln/LAW.md\",\"utf8\").split(\"\\n\");" +
+  "let owners=[],state=0;" +
+  "for(const ln of lines){const t=ln.trim();const row=t.slice(0,1)===\"|\";" +
+  "if(state===0){if(t.slice(0,3)===\"## \"&&t.slice(3).trim().toLowerCase()===\"perceptual\")state=1;continue;}" +
+  "if(state===1){if(t.slice(0,1)===\"#\")break;if(!row)continue;state=2;continue;}" +
+  "if(state===2){state=3;continue;}" +
+  "if(!row)break;const c=cells(t);if(c.length===7)owners.push(c[1]);}" +
+  "process.exit(owners.some(o=>surf[o]===\"ui\")?0:1);}catch(e){process.exit(2)}'"
+// The criterion ids of the sealed Perceptual table — the ownership key the kernel
+// enforces on the Claude path (findings criterion membership), fetched as closed ids
+// with the same parser discipline as the family read above.
+const SCREEN_CRITERIA =
+  "node -e 'try{const fs=require(\"fs\");" +
+  "const cells=s=>s.split(/(?<!\\\\)\\|/).slice(1,-1).map(x=>x.replace(/\\\\\\|/g,\"|\").trim());" +
+  "const lines=fs.readFileSync(\"./.kiln/LAW.md\",\"utf8\").split(\"\\n\");" +
+  "let ids=[],state=0;" +
+  "for(const ln of lines){const t=ln.trim();const row=t.slice(0,1)===\"|\";" +
+  "if(state===0){if(t.slice(0,3)===\"## \"&&t.slice(3).trim().toLowerCase()===\"perceptual\")state=1;continue;}" +
+  "if(state===1){if(t.slice(0,1)===\"#\")break;if(!row)continue;state=2;continue;}" +
+  "if(state===2){state=3;continue;}" +
+  "if(!row)break;const c=cells(t);if(c.length===7)ids.push(c[0]);}" +
+  "console.log(JSON.stringify(ids));process.exit(0);}catch(e){process.exit(1)}'"
+// The pre-spawn BELT (plan G): a deterministic completeness check over the CURRENT
+// manifest — required classes, keyframe/reference/image bounds, matching counts,
+// recorded runtimes, gen number equal to its dir, every named file a REGULAR file
+// whose realpath stays inside the generation dir (the scripts/kiln-review
+// screenEvidence rule: a symlink pointing out is an outside path wearing an inside
+// name — realpath containment keeps both family paths on the same admissible
+// evidence boundary). The act contract (plan E) makes a violation unreachable; when
+// one fires anyway the gate holds transport-class before any grader spawns. The
+// manifest path rides argv, shape-gated by MANIFEST_PATH above.
+const PERCEPTUAL_BELT =
+  "node -e 'try{const fs=require(\"fs\"),path=require(\"path\");" +
+  "const mf=process.argv[1];const dir=path.dirname(mf);" +
+  "const m=JSON.parse(fs.readFileSync(mf,\"utf8\"));" +
+  "if(!m||typeof m!==\"object\"||Array.isArray(m))process.exit(1);" +
+  "if(m.generation!==Number((/^gen-(\\d+)$/.exec(path.basename(dir))||[])[1]))process.exit(1);" +
+  "const rt=m.runtimes||{};if([\"playwright\",\"ffmpeg\"].some(k=>typeof rt[k]!==\"string\"||rt[k].trim()===\"\"))process.exit(1);" +
+  "const f=m.files||{};const ent=n=>typeof f[n]===\"string\"&&f[n].trim()!==\"\"?f[n]:null;" +
+  "const list=n=>Array.isArray(f[n])&&f[n].every(p=>typeof p===\"string\"&&p.trim()!==\"\")?f[n]:null;" +
+  "const req=[\"meta\",\"dom\",\"console\",\"viewport_desktop\",\"viewport_mobile\",\"film\"].map(ent);" +
+  "if(req.some(x=>x===null))process.exit(1);" +
+  "const kf=list(\"keyframes\");if(!kf||kf.length<1||kf.length>6)process.exit(1);" +
+  "const refs=f.references===undefined?[]:list(\"references\");if(!refs||refs.length>2)process.exit(1);" +
+  "const imgs=2+kf.length+refs.length;if(imgs>10)process.exit(1);" +
+  "const c=m.counts||{};if(c.keyframes!==kf.length||c.references!==refs.length||c.images!==imgs)process.exit(1);" +
+  "const droot=path.resolve(dir);const dreal=fs.realpathSync(droot);" +
+  "for(const p of req.concat(kf,refs)){const a=path.resolve(dir,p);" +
+  "if(a.slice(0,droot.length+1)!==droot+path.sep)process.exit(1);" +
+  "const r=fs.realpathSync(a);if(!fs.statSync(r).isFile())process.exit(1);" +
+  "if(r.slice(0,dreal.length+1)!==dreal+path.sep)process.exit(1);}" +
+  "process.exit(0);}catch(e){process.exit(1)}'"
+// The screen-family location relaxation, mirrored byte-for-byte from the
+// scripts/kiln-review SCREEN_LOCATION pattern: a screen finding pins an evidence path
+// with an OPTIONAL :frame — a viewport capture has no line number.
+const SCREEN_LOCATION_RULE = /^[^:]+(?::\d+)?$/
+// Marker lifecycle (plan I, the Sol r3 rule adopted verbatim): .kiln/perceptual-partial
+// is written ONLY on a semantic perceptual hold and REMOVED on every terminal
+// nonsemantic validate path — ok (dormant or live-accept), the law-red reopen doors
+// (preflight and stage-end), capture-act failure, primary-transport and degraded
+// holds, addendum failure. A marker never outlives the conclusion it describes. A
+// failed removal surfaces as persist-failed, never a silent stale marker.
+const clearPerceptualMarker = async () => {
+  if (await hands('rm -f ' + P.perceptualPartial, 'perceptual:marker-clear') !== 0) return persistFail('perceptual-marker-clear')
+  return null
+}
+
 // LAW rerun beat: at every kernel invocation start (resume), if the check
 // exists. Red reopens only a sealed owner; otherwise the run proceeds.
 const pre = await lawBeat(LAW_GUARD, 'law:preflight')
 if (pre.exit !== 0) {
   const owner = await firstSealed(pre.ids)
-  if (owner) return reopen(owner, 'resume')
+  if (owner) {
+    // W8-S3 (DELTA-10): a law-red reopen concludes a validate invocation, and it is
+    // nonsemantic — the marker clears BEFORE the reopen lands, at this door and at
+    // stage end, so a stale hold marker never outlives a later validate conclusion.
+    if (stage === 'validate') {
+      const pf = await clearPerceptualMarker()
+      if (pf) return pf
+    }
+    return reopen(owner, 'resume')
+  }
 }
 
 if (stage !== 'build') {
@@ -955,9 +1075,26 @@ if (stage !== 'build') {
   // closed facts, never on plan content.
   let r
   // W6-F: the reversibility-keyed recovery cap, threaded into the LAW-ratify loop below. It stays
-  // 1 on every non-law path (unused there) and is set from the single dial read this law
+  // 1 on the report path (unused there) and is set from the single dial read a law or validate
   // invocation makes. Width never raises it — a wide plan widens the plan table, not the budget.
   let cap = 1
+  // W8-S3 (plan C): the validate activation — one closed table-presence check over the
+  // SEALED LAW.md feeds the gauge-dial --visual flag, and ONE dial leg (the build capLeg
+  // WIDTH-schema shape) returns perceptual + recovery_cap — one read, two facts. Dormant
+  // is the SOLE skip result — exit 0 AND perceptual dormant — and keeps the single-act
+  // validate byte-identical; every other value or a transport failure fails UP to the
+  // live screening machinery (the width-read fail-up doctrine; the gauge-dial
+  // malformed-posture fail-up arrives through the same door).
+  let perceptual = false
+  if (stage === 'validate') {
+    const visual = await hands(PERCEPTUAL_PRESENCE, 'perceptual:presence') === 0
+    const dialLeg = await agent(
+      'Run exactly this in ' + projectDir + '. Report {exit, perceptual, recovery_cap}: exit = the exit code; perceptual = the value of the "perceptual" field and recovery_cap = the value of the "recovery_cap" field in the printed JSON dials object when exit is 0, both omitted when exit is nonzero:\n' + 'node ' + plugin + '/scripts/gauge-dial.mjs --visual ' + (visual ? 'true' : 'false'),
+      { label: 'perceptual:dial', ...tier('kernel-leg'), schema: WIDTH },
+    ).then(x => (x ?? { exit: 20 }))
+    perceptual = !(dialLeg.exit === 0 && dialLeg.perceptual === 'dormant')
+    cap = capFromDial(dialLeg)
+  }
   if (stage === 'law') {
     const widthLeg = await agent(
       'Run exactly this in ' + projectDir + '. Report {exit, width, recovery_cap}: exit = the exit code; width = the value of the "width" field and recovery_cap = the value of the "recovery_cap" field in the printed JSON dials object when exit is 0, both omitted when exit is nonzero:\n' + 'node ' + plugin + '/scripts/gauge-dial.mjs',
@@ -1034,8 +1171,16 @@ if (stage !== 'build') {
     r = await act(cardPrompt(A.idea ? 'Operator idea (verbatim): ' + A.idea : ''), 'stage:' + stage)
   }
   // S1 ruling: reachable twin sites read their sealed keys; the kernel lines
-  // below survive only as unreachable-voice fallbacks (W-03).
-  if (r.facts.status !== 'ok') return failStop('transport-failure', { stage, next_action: 'Rerun stage ' + stage }, await voiceBeat('transport-failure', {}, 'The ' + stage + ' stage did not return sound work — the run holds.', 1))
+  // below survive only as unreachable-voice fallbacks (W-03). W8-S3: on validate this
+  // door is also the capture-act failure (the act contract is a COMPLETE manifest or
+  // an honest not-ok) — a terminal nonsemantic path, so the marker is removed first.
+  if (r.facts.status !== 'ok') {
+    if (stage === 'validate') {
+      const pf = await clearPerceptualMarker()
+      if (pf) return pf
+    }
+    return failStop('transport-failure', { stage, next_action: 'Rerun stage ' + stage }, await voiceBeat('transport-failure', {}, 'The ' + stage + ' stage did not return sound work — the run holds.', 1))
+  }
   for (const p of r.facts.pointers) routes.add(p)
   // Wave 1 (the Second Key): the LAW stage is content-blind-gated before it can
   // lock. The card produced the candidate LAW; a fresh OPPOSITE-family mind now
@@ -1163,11 +1308,309 @@ if (stage !== 'build') {
         { gate: P.gate })
     }
   }
+  // ── W8-S3: the screening room — the perceptual gate seated in validate (plans F/G/H/I).
+  // Live only: the dormant run never reaches this block and stays byte-identical. Act 1
+  // already held a COMPLETE manifest or took the act-failure door above; the loop below
+  // is the 4th reviewLoop wiring — reviewLoop, recoveryDecision and strictSubsetProgress
+  // are consumed UNTOUCHED, and the kernel writes no files (trusted CLI + hands legs).
+  if (stage === 'validate' && perceptual) {
+    // The CURRENT manifest — the one closed handle: the belt checks it, the digest
+    // binds to it, the recheck delta names it, and the recapture repair refreshes it.
+    const mf0 = await idsFetch(CURRENT_MANIFEST, 'perceptual:manifest', 'a one-element array holding the CURRENT generation manifest path printed on stdout, [] if exit != 0')
+    if (mf0.exit !== 0 || mf0.ids.length !== 1 || !MANIFEST_PATH.test(mf0.ids[0])) {
+      const pf = await clearPerceptualMarker()
+      if (pf) return pf
+      return failStop('transport-failure',
+        { stage, next_action: 'Rerun stage validate: no CURRENT evidence generation manifest under .kiln/evidence' },
+        await voiceBeat('transport-failure', {}, 'The capture step published no readable CURRENT evidence manifest — the perceptual gate cannot grade, so the run holds.'),
+        { gate: P.screen })
+    }
+    let manifest = mf0.ids[0]
+    // The family rule (plan F), read once per run: 0 routes the GPT screen verbs,
+    // 1 the Claude leg, anything else is untrusted and holds — the audit:check law.
+    const fam = await hands(PERCEPTUAL_FAMILY, 'perceptual:family')
+    if (fam !== 0 && fam !== 1) {
+      const pf = await clearPerceptualMarker()
+      if (pf) return pf
+      return failStop('transport-failure',
+        { stage, next_action: 'Rerun stage validate after fixing the transport: the perceptual family read did not answer' },
+        await voiceBeat('transport-failure', {}, 'The perceptual family read returned no trustworthy answer — the run holds.'),
+        { gate: P.screen })
+    }
+    const primaryScreen = fam === 0
+    const screenOpts = tier('reviewer-gate')
+    // The pre-leg digest: the kernel computes the current-manifest sha256 through a
+    // mechanical hand, so the Claude verdict binds to the evidence exactly as the CLI
+    // binds the screen verdict — law_hash = the manifest digest, byte-symmetric.
+    const screenDigest = async () => {
+      const d = await idsFetch('sha256sum ' + manifest + ' | cut -d" " -f1', 'screen:digest', 'a one-element array holding the 64-hex digest printed on stdout, [] if exit != 0')
+      return d.exit === 0 && d.ids.length === 1 && LAW_HASH.test(d.ids[0]) ? d.ids[0] : null
+    }
+    const screenCriteria = async () => {
+      const c = await idsFetch(SCREEN_CRITERIA, 'screen:criteria', 'the printed JSON array of the LAW Perceptual criterion ids, [] if exit != 0')
+      return c.exit === 0 && c.ids.length > 0 ? new Set(c.ids) : null
+    }
+    // The Claude multimodal leg (the claudeGate pattern): a STATIC prompt of closed
+    // interpolations only — the manifest path, the pre-leg digest, the rubric and LAW
+    // paths, the candidate path. The leg reads the evidence itself via Read and writes
+    // the candidate; the kernel reads the bytes back through the shared mirror read,
+    // recomputes ALL the S2 verb rules (gateReviewInvalid with law_hash = the pre-leg
+    // digest and the screen location rule, the verdict enum, empty blockers, criterion
+    // membership) and promotes content-free.
+    const screenLegPrompt = (mode, mf, digest) => [
+      'You are the perceptual grading reviewer: a fresh mind grading the rendered surface against the locked law.',
+      'Project dir: ' + projectDir + '. Read the locked law at ' + P.law + ' (its Perceptual table rows are the criteria), the shipped rubric at ' + plugin + '/data/perceptual-rubric.json, and the evidence manifest at ' + mf + '.',
+      'Read the evidence yourself with the Read tool: the manifest names every file of its generation — read the two viewports, the labeled keyframes, and any reference images directly, plus meta, console, and the DOM snapshot as text.',
+      'Judge ONLY the Perceptual table rows, each on its named rubric dim per the shipped anchors — never any other dimension, and never general taste beyond what a row pins. For each finding set criterion = the row criterion id and location = an evidence path with an optional :frame (for example viewport-mobile.png or film.webm:3). Insufficient evidence on a dim is a finding citing the rubric insufficient_evidence line as its evidence — never a blocker. Execute nothing and install nothing.',
+      'Set law_hash to exactly ' + digest + ' — the sha256 of the graded evidence manifest; it binds this verdict to that evidence. Verdict rules: accept only when findings and blockers are both empty; changes_required for one or more repairable findings. Never return blocked and never write a blocker: hard failure belongs to the law proxies.',
+      mode === 'recheck'
+        ? 'Read and reuse the prior review_id from ' + P.screen + ' first. Recheck only the finding ids in ' + P.screen + ' against the fresh evidence generation. Preserve each unresolved finding id; never add one. Accept only when every listed finding is repaired.'
+        : mode === 'escalate'
+          ? 'This is a bounded second-family escalation of a held verdict: re-grade ONLY the surviving criterion ids named by the findings in the published verdict at ' + P.screen + ', on the same evidence generation. Mint a fresh review_id.'
+          : 'Mint a fresh review_id.',
+      'Compose the verdict object per ' + plugin + '/scripts/review-schema.json, and as the FINAL act of your turn write it as JSON to ' + P.candidate + '. Then return { ok: true } — the ack carries no verdict; the kernel reads and validates the file you wrote.',
+    ].join('\n')
+    // The shared screen mirror read — the ONE sanctioned W8-S3 parse site (the
+    // gate-file mirror precedent): the Claude candidate, the escalation candidate,
+    // and the recheck prior lineage all ride this single site; the kernel parses
+    // only the gate envelopes it validates, never content.
+    const readScreenJson = async (path, label, when) => {
+      const raw = await idsFetch('cat ' + path, label, when)
+      if (raw.exit !== 0 || raw.ids.length !== 1) return null
+      try { return JSON.parse(raw.ids[0]) } catch { return null }
+    }
+    // W8S3-ESC-SCOPE (plan H, ONLY-survivors): the OPTIONAL scope set narrows the
+    // admissible finding criteria below the full table — an escalation may speak
+    // ONLY to the surviving criterion ids, and an off-scope finding invalidates the
+    // whole candidate exactly as an off-table criterion does: exit 20, never published.
+    const claudeScreen = async (mode, target, expectedReviewId, allowedFindingIds, priorDigest, scope) => {
+      const digest = await screenDigest()
+      if (digest === null) return 20
+      // Digest freshness on the Claude path, byte-symmetric with the CLI screen-recheck
+      // rule: a regrade over the very evidence bytes that already failed never runs.
+      if (priorDigest !== undefined && digest === priorDigest) return 20
+      const criteria = await screenCriteria()
+      if (criteria === null) return 20
+      // Producer-self-publish: invalidate any prior candidate BEFORE the reviewer runs.
+      if (await hands('rm -f ' + P.candidate, 'screen:invalidate') !== 0) return 20
+      const ack = await agent(screenLegPrompt(mode, manifest, digest), { label: 'screen-claude:' + mode, ...tier('fallback-reviewer'), schema: ACK })
+      if (!ack || ack.ok !== true) return 20
+      const g = await readScreenJson(P.candidate, 'screen:read', 'a one-element array holding the exact candidate file contents printed on stdout, [] if exit != 0')
+      if (g === null) return 20
+      if (gateReviewInvalid(g, digest, expectedReviewId, allowedFindingIds, SCREEN_LOCATION_RULE) !== null) return 20
+      // The screen verb rules, kernel-side: a perceptual grade never blocks (hard
+      // failure belongs to the law proxies) and every finding pins a table criterion.
+      if (g.verdict === 'blocked' || g.blockers.length !== 0) return 20
+      if (g.findings.some(f => !criteria.has(f.criterion))) return 20
+      if (scope && g.findings.some(f => !scope.has(f.criterion))) return 20
+      if (await hands('mv -f ' + P.candidate + ' ' + target, 'screen:publish') !== 0) return 20
+      return verdictExit(g.verdict)
+    }
+    // W8S3-ADDENDUM-IFF bookkeeping: true the moment THIS run publishes a verdict to
+    // the screen gate file, either family — the addendum-iff rule below keys on it.
+    let published = false
+    const gate = async (mode) => {
+      // Pre-spawn BELT (plan G): deterministic manifest completeness before ANY primary
+      // spawn, either family — should be unreachable given the act contract; a
+      // violation is transport-class, never a grade.
+      if (await hands(PERCEPTUAL_BELT + ' ' + manifest, 'perceptual:belt') !== 0) return 20
+      if (primaryScreen) {
+        // The GPT primary through the trusted verbs. The recheck hands the published
+        // prior verdict as its own pre-recheck snapshot (the CLI reads it fully before
+        // writing the output) plus the CURRENT manifest as the digest-bound delta —
+        // the CLI enforces digest-inequality on this path. Direct-path call preserves
+        // 126/127 as gate-unreachable exactly as the build gate does.
+        const exit = await hands(
+          mode === 'recheck'
+            ? plugin + '/scripts/kiln-review screen-recheck . .kiln ' + screenOpts.model + ' ' + screenOpts.effort + ' ' + P.screen + ' ' + manifest + ' ' + P.screen
+            : plugin + '/scripts/kiln-review screen . .kiln ' + screenOpts.model + ' ' + screenOpts.effort + ' ' + P.screen,
+          'screen:' + mode)
+        if (exit === 0 || exit === 10) published = true
+        return exit
+      }
+      // The Claude primary: a recheck establishes lineage from the prior published
+      // verdict HERE, and NOTHING WEAKER than the CLI screen-recheck path — the FULL
+      // prior screen shape is recomputed before any lineage fact is trusted:
+      // gateReviewInvalid over the five fields, the screen location rule, unique ids
+      // and the verdict-consistency rules (self-anchored, exactly as the CLI validates
+      // the prior against its own review_id and law_hash), then the screen verb rules
+      // (a changes_required prior with every criterion on the sealed table). The
+      // KERNEL then enforces the digest-inequality the CLI enforces on the screen
+      // path. Byte-symmetric rules, two transports.
+      let expectedReviewId, allowedFindingIds, priorDigest
+      if (mode === 'recheck') {
+        const prior = await readScreenJson(P.screen, 'screen:prior', 'a one-element array holding the exact published screen verdict bytes printed on stdout, [] if exit != 0')
+        if (prior === null) return 20
+        if (gateReviewInvalid(prior, prior.law_hash, prior.review_id, undefined, SCREEN_LOCATION_RULE) !== null) return 20
+        if (prior.verdict !== 'changes_required') return 20
+        const pc = await screenCriteria()
+        if (pc === null || prior.findings.some(f => !pc.has(f.criterion))) return 20
+        expectedReviewId = prior.review_id
+        priorDigest = prior.law_hash
+        allowedFindingIds = new Set(prior.findings.map(f => String(f.id)))
+      }
+      const exit = await claudeScreen(mode, P.screen, expectedReviewId, allowedFindingIds, priorDigest)
+      if (exit === 0 || exit === 10) published = true
+      return exit
+    }
+    const loop = await reviewLoop({
+      gate,
+      // The pinned prior cohort: the finding ids the published screen verdict carries.
+      cohort: async () => {
+        const c = await idsFetch(
+          "node -p 'JSON.stringify((require(\"./" + P.screen + "\").findings||[]).map(f=>String(f.id)))'",
+          'screen:findings', 'the printed JSON array of the current screen finding ids, [] if exit != 0',
+        )
+        return c.exit === 0 ? c.ids : null
+      },
+      // The RECAPTURE act leg (plan G): a fresh card act scoped to the capture step —
+      // fresh generation per the S2 allocator; the confirmed delta is the NEW manifest
+      // path, test -s. The digest-inequality at recheck rules the freshness either way.
+      repair: async (pass) => {
+        const rr = await act(cardPrompt('Recapture pass ' + pass + ': the perceptual gate needs fresh evidence. Execute ONLY the capture step of the card (step 4) — reserve a fresh evidence generation with the recipe allocator, capture the full required set, and publish its complete manifest.json LAST. Touch nothing else.'), 'perceptual:recapture')
+        if (rr.facts.status !== 'ok') return false
+        for (const p of rr.facts.pointers) routes.add(p)
+        beats.push(fillClosed(rr.narration_beat, stageFacts))
+        const mf = await idsFetch(CURRENT_MANIFEST, 'perceptual:manifest', 'a one-element array holding the CURRENT generation manifest path printed on stdout, [] if exit != 0')
+        if (mf.exit !== 0 || mf.ids.length !== 1 || !MANIFEST_PATH.test(mf.ids[0])) return false
+        if (await hands('test -s ' + mf.ids[0], 'perceptual:delta-check') !== 0) return false
+        manifest = mf.ids[0]
+        return true
+      },
+    }, cap)
+    // The ADDENDUM act (plan I, act 2): runs iff a PUBLISHED verdict exists — the loop
+    // advance (rows grade PASS) or the semantic hold (survivors grade PARTIAL). Its
+    // failure is the existing act transport hold, which removes the marker.
+    const addendum = async (extra) => {
+      const add = await act(cardPrompt(extra), 'perceptual:addendum')
+      if (add.facts.status !== 'ok') return null
+      for (const p of add.facts.pointers) routes.add(p)
+      return add
+    }
+    const addendumHold = async () => {
+      const pf = await clearPerceptualMarker()
+      if (pf) return pf
+      return failStop('transport-failure', { stage, next_action: 'Rerun stage ' + stage }, await voiceBeat('transport-failure', {}, 'The ' + stage + ' stage did not return sound work — the run holds.', 1))
+    }
+    // W8S3-ADDENDUM-IFF (criterion 6): a published verdict and the act-2 addendum
+    // are one. The sealed and blocked branches below carry their own; when THIS run
+    // published a changes_required verdict and then stranded on a nonsemantic hold —
+    // a dead recapture, a downed recheck transport, a degraded or unreachable gate —
+    // the rows still land before the hold returns. Only no-verdict paths skip act 2.
+    if (published && loop.result !== 'sealed' && loop.result !== 'blocked') {
+      const add = await addendum('Perceptual addendum: the published perceptual verdict at ' + P.screen + ' stands changes_required while the run holds. Follow the Perceptual addendum section of the card: append the perceptual rows to .kiln/validate.md — grade PARTIAL for the surviving criterion ids named by the findings in the published verdict at ' + P.screen + ', grade PASS for the rest — and re-emit the truthful stage beat.')
+      if (add === null) return addendumHold()
+      beats.push(fillClosed(add.narration_beat, stageFacts))
+    }
+    if (loop.result === 'sealed') {
+      const add = await addendum('Perceptual addendum: the published perceptual verdict at ' + P.screen + ' accepted this evidence generation. Follow the Perceptual addendum section of the card: append the perceptual rows to .kiln/validate.md with every grade PASS, and re-emit the truthful stage beat.')
+      if (add === null) return addendumHold()
+      // The truthful re-emitted beat replaces the act-1 beat on the common ok path.
+      r = { facts: r.facts, narration_beat: add.narration_beat }
+    } else if (loop.result === 'blocked') {
+      // The SEMANTIC hold (plan H): exhaustion or no-progress with nonempty survivors.
+      // Order is law: marker FIRST, then ONE bounded opposite-family escalation, the
+      // closed outcome recorded, the PARTIAL addendum, then the static held return.
+      // The escalation can never change status, marker, or outcome.
+      if (await hands('touch ' + P.perceptualPartial, 'perceptual:marker') !== 0) return persistFail('perceptual-marker')
+      const surv = await idsFetch(
+        "node -p 'JSON.stringify([...new Set((require(\"./" + P.screen + "\").findings||[]).map(f=>String(f.criterion)))])'",
+        'screen:survivors', 'the printed JSON array of the surviving criterion ids the published verdict pins, [] if exit != 0',
+      )
+      const survivors = surv.exit === 0 && surv.ids.length > 0 ? surv.ids : null
+      let outcome = 'escalation unavailable'
+      if (survivors !== null) {
+        // ONLY-survivors (plan H): the second family speaks to the surviving
+        // criterion ids ALONE, and BOTH transports enforce the scope PRE-PUBLISH —
+        // the Claude leg through its scope set, the GPT path through the
+        // survivor-scoped screen-escalate verb — so an out-of-scope answer is
+        // never published, and the closed outcome set stays closed.
+        if (primaryScreen) {
+          // Primary GPT — the OTHER transport is the Claude leg, published to the
+          // separate escalation artifact; the held verdict is never overwritten.
+          const esc = await claudeScreen('escalate', P.screenEscalation, undefined, undefined, undefined, new Set(survivors))
+          if (esc === 0) outcome = 'CONTESTED'
+          // A scope-valid changes_required carries survivor findings by construction.
+          else if (esc === 10) outcome = 'CORROBORATED'
+        } else {
+          // Primary Claude — the OTHER transport is the GPT screen-escalate verb:
+          // the held verdict rides argv, the verb re-derives the survivors itself,
+          // packets ONLY the surviving rows, and refuses any off-survivor finding
+          // pre-publish — same generation, separate output artifact.
+          const esc = await hands(plugin + '/scripts/kiln-review screen-escalate . .kiln ' + screenOpts.model + ' ' + screenOpts.effort + ' ' + P.screen + ' ' + P.screenEscalation, 'escalate:screen')
+          if (esc === 0) outcome = 'CONTESTED'
+          // A scope-valid changes_required carries survivor findings by construction.
+          else if (esc === 10) outcome = 'CORROBORATED'
+        }
+      }
+      // One closed line into the held record — outcome and count only, closed values.
+      const recordWrite = [
+        'set -e', 'mkdir -p .kiln',
+        "cat > .kiln/.screen-escalation.tmp <<'KILN_ESC_EOF'",
+        outcome + (survivors === null ? '' : ' — ' + survivors.length + ' surviving criteria'),
+        'KILN_ESC_EOF',
+        'mv -f .kiln/.screen-escalation.tmp ' + P.screenRecord,
+      ].join('\n')
+      if (await hands(recordWrite, 'escalate:record') !== 0) return persistFail('escalation-record')
+      const add = await addendum('Perceptual addendum: a semantic perceptual hold stands. Follow the Perceptual addendum section of the card: append the perceptual rows to .kiln/validate.md — grade PARTIAL for the surviving criterion ids named by the findings in the published verdict at ' + P.screen + ', grade PASS for the rest — and re-emit the truthful stage beat.')
+      if (add === null) return addendumHold()
+      beats.push(fillClosed(add.narration_beat, stageFacts))
+      const found = await idsFetch(
+        "node -p 'JSON.stringify((require(\"./" + P.screen + "\").findings||[]).map(f=>String(f.id)))'",
+        'screen:findings', 'the printed JSON array of the current screen finding ids, [] if exit != 0',
+      )
+      beats.push(await voiceBeat('blocked', { passes: loop.repairs, ids: found.ids.join(', '), count: found.ids.length }, 'The gate held after ' + loop.repairs + ' repair passes — the ruling is yours.'))
+      return stop('blocked',
+        { stage, next_action: 'Operator ruling: the perceptual screen held ' + (survivors === null ? found.ids.length : survivors.length) + ' criteria (' + outcome + ') after ' + loop.repairs + ' repair passes — the verdict is at ' + P.screen + ' and the evidence manifest at ' + manifest },
+        { gate: P.screen, finding_ids: found.ids, passes: loop.repairs, escalation: outcome })
+    } else if (loop.result === 'degraded') {
+      // PRIMARY transport unavailable — the degraded-class hold: no semantic ruling
+      // happened, so NO marker and NO escalation; a stale marker is cleared. The
+      // LAW-ratify held precedent: a stage-level hold naming the codex restore.
+      const pf = await clearPerceptualMarker()
+      if (pf) return pf
+      return failStop('held',
+        { stage, next_action: 'Restore codex, then rerun stage validate: the perceptual screen needs the second family' },
+        'The perceptual screen would not grade: codex is not answering, and the family rule names it the primary. The hold is honest — restore codex and rerun the validate stage.',
+        { gate: P.screen })
+    } else if (loop.result === 'gate-unreachable') {
+      const pf = await clearPerceptualMarker()
+      if (pf) return pf
+      return failStop('gate-unreachable',
+        { stage, next_action: 'Rerun stage validate after restoring the gate tool at ' + plugin + '/scripts/kiln-review' },
+        await voiceBeat('gate-unreachable', {}, 'The gate tool at ' + plugin + '/scripts/kiln-review is unreachable — not found or not executable; codex was never reached, so no verdict was possible.'),
+        { gate: P.screen })
+    } else if (loop.result === 'repair-failed') {
+      // A failed recapture is capture-class — nonsemantic, marker removed.
+      const pf = await clearPerceptualMarker()
+      if (pf) return pf
+      return failStop('repair-failed',
+        { stage, next_action: 'Rerun stage validate: the recapture pass did not land a fresh evidence generation' },
+        'The recapture pass did not land a fresh evidence generation — the run holds.',
+        { gate: P.screen })
+    } else {
+      // transport-failure — the Claude leg failure and the missing-oracle hold
+      // included: nonsemantic, no marker, no escalation.
+      const pf = await clearPerceptualMarker()
+      if (pf) return pf
+      return failStop('transport-failure',
+        { stage, next_action: 'Rerun stage validate after fixing the transport: the perceptual screen published no usable verdict' },
+        await voiceBeat('transport-failure', {}, 'The perceptual screen call returned no verdict — the run holds.'),
+        { gate: P.screen })
+    }
+  }
   // LAW rerun beat: stage end (report is a stage, so this also guards completion).
   const post = await lawBeat(LAW_GUARD, 'law:stage-end')
   if (post.exit !== 0) {
     const owner = await firstSealed(post.ids)
-    if (owner) return reopen(owner, 'stage end')
+    if (owner) {
+      // W8-S3 (DELTA-10): the stage-end law-red door is a terminal validate path too.
+      if (stage === 'validate') {
+        const pf = await clearPerceptualMarker()
+        if (pf) return pf
+      }
+      return reopen(owner, 'stage end')
+    }
   }
   // The deterministic completion gate: a report card may claim status ok yet leave
   // .kiln/report.md empty or missing — content-blind, that is the report stage failing
@@ -1179,6 +1622,12 @@ if (stage !== 'build') {
       { stage, next_action: 'Rerun stage report: ' + P.report + ' is empty or missing' },
       await voiceBeat('transport-failure', {}, 'The report stage returned but ' + P.report + ' is empty or missing — the run holds.', 1),
       { report: P.report })
+  }
+  // W8-S3: the ok terminal — dormant or live-accept — is a nonsemantic conclusion; a
+  // stale marker from a prior semantic hold is removed before the run advances.
+  if (stage === 'validate') {
+    const pf = await clearPerceptualMarker()
+    if (pf) return pf
   }
   if (stage !== 'law') beats.push(fillClosed(r.narration_beat, stageFacts))
   return stop(stage === 'report' ? 'done' : 'ok', { stage, next_action: nextAct(nextStage(stage)) })

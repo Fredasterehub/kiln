@@ -272,6 +272,18 @@ test('validate card (W8-S2/E): the conditional capture step — the screening-ro
     'facts.status ok requires the published complete manifest when the capture was live')
 })
 
+test('validate card (W8-S3/I): the Perceptual addendum section — kernel-launched only, PASS/PARTIAL grades only, the truthful re-emitted beat', () => {
+  const validate = cardText('validate.md')
+  const flat = validate.replace(/\s+/g, ' ')
+  assert.ok(validate.includes('## Perceptual addendum'), 'the addendum section exists as act 2')
+  assert.ok(flat.includes('only when the kernel launches it'), 'act 2 is kernel-launched, never self-started')
+  assert.ok(flat.includes('.kiln/screen-review.json'), 'it reads the published perceptual verdict')
+  assert.ok(flat.includes('`PASS` and `PARTIAL` ONLY'), 'grades are the closed pair')
+  assert.ok(flat.includes('`FAIL` belongs to the deterministic proxies'), 'FAIL stays with check.sh and the law-red door')
+  assert.ok(flat.includes('Re-emit the truthful stage beat'), 'the addendum re-emits the stage beat truthfully')
+  assert.ok(flat.includes('never `SEALED`'), 'a held run never wears the sealed title')
+})
+
 test('tiers (W8-S1/J): the remits gain the screening-room duties — models, efforts, and the twelve roles unchanged', () => {
   const tiers = JSON.parse(readFileSync(join(DATA, 'tiers.json'), 'utf8'))
   assert.equal(Object.keys(tiers.roles).length, 12, 'TIER_ROLES stays twelve — the screening room adds duties, never a seat')

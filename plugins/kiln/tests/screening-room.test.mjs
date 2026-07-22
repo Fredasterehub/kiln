@@ -422,3 +422,56 @@ test('screen-recheck: delta is PATH-BOUND to the fresh CURRENT manifest — a mi
   assert.equal(r3.status, 20)
   assert.ok(r3.stderr.includes('CURRENT generation manifest path'), 'the path binding is named')
 })
+
+// ── screen-escalate: the survivor-scoped second-family escalation (W8-S3) ─────
+// ONLY-survivors, enforced at the transport: the held verdict rides argv, the verb
+// derives the survivors itself, the packet carries the surviving rows ALONE, and an
+// off-survivor finding never publishes — byte-symmetric with the Claude leg's scope.
+
+function runScreenEscalate(fx, { model = 'gpt-5.6-sol', effort = 'high', held, gate, brokenCodex, promptOut } = {}) {
+  const heldFile = join(fx.repo, 'held-screen.json')
+  writeFileSync(heldFile, JSON.stringify(held))
+  const out = join(fx.repo, 'screen-escalation.json')
+  const r = spawnSync('node', [REVIEW, 'screen-escalate', fx.repo, fx.kiln, model, effort, heldFile, out],
+    { encoding: 'utf8', env: fakeEnv({ gate, brokenCodex, promptOut }) })
+  return { fact: (r.stdout || '').trim(), status: r.status, stderr: r.stderr || '', out }
+}
+
+test('screen-escalate: the packet carries ONLY the surviving rows — a fresh review_id, the scope instruction, and both in-scope verdicts publish', () => {
+  const held = priorScreenGate([screenFinding('p1'), screenFinding('p2', { criterion: 'perc-motion', location: 'film.webm:2' })])
+  const accept = screenRepo()
+  const promptOut = join(accept.repo, 'captured-prompt.txt')
+  const r1 = runScreenEscalate(accept, { held, gate: { review_id: '__ECHO__', law_hash: accept.digest, findings: [], blockers: [], verdict: 'accept' }, promptOut })
+  assert.equal(r1.fact, 'accept')
+  assert.equal(r1.status, 0, 'an in-scope accept publishes — the survivors are contested')
+  const { prompt, packet } = capturedPacket(promptOut)
+  assert.equal(packet.mode, 'screen-escalate')
+  assert.deepEqual(packet.perceptual_criteria.map((row) => row.criterion), ['perc-hero', 'perc-motion'],
+    'the packet rows are the surviving criteria ALONE — the grader never sees the rest of the table')
+  assert.notEqual(packet.review_id, held.review_id, 'the escalation mints a fresh review_id — a second mind, not a lineage recheck')
+  assert.ok(prompt.includes('the packet carries ONLY the surviving criteria'), 'the scope instruction rides the prompt')
+  assert.equal(JSON.parse(readFileSync(r1.out, 'utf8')).law_hash, accept.digest, 'the verdict binds the same graded generation manifest digest')
+  const reject = screenRepo()
+  const r2 = runScreenEscalate(reject, { held, gate: { review_id: '__ECHO__', law_hash: reject.digest, findings: [screenFinding('e1')], blockers: [], verdict: 'changes_required' } })
+  assert.equal(r2.fact, 'reject')
+  assert.equal(r2.status, 10, 'a survivor-scoped changes_required publishes — corroboration by construction')
+})
+
+test('screen-escalate: an off-survivor finding — on the table, outside the scope — is exit 20, never published; and only a held changes_required opens the verb', () => {
+  const held = priorScreenGate([screenFinding('p1')]) // survivors: perc-hero alone
+  const off = screenRepo()
+  const r1 = runScreenEscalate(off, { held, gate: { review_id: '__ECHO__', law_hash: off.digest, findings: [screenFinding('e1', { criterion: 'perc-type' })], blockers: [], verdict: 'changes_required' } })
+  assert.equal(r1.fact, 'transport_failure', 'perc-type is on the table but outside the surviving scope')
+  assert.equal(r1.status, 20)
+  assert.ok(r1.stderr.includes('outside the surviving escalation scope'), 'the scope rule is named')
+  assert.ok(!existsSync(r1.out), 'the off-scope verdict never publishes')
+  const accepted = screenRepo()
+  const r2 = runScreenEscalate(accepted, { held: priorScreenGate([], { verdict: 'accept' }), brokenCodex: true })
+  assert.equal(r2.fact, 'transport_failure', 'a held accept names no survivors — nothing to escalate')
+  assert.equal(r2.status, 20, 'the invalid held halts before any spawn')
+  const offTable = screenRepo()
+  const r3 = runScreenEscalate(offTable, { held: priorScreenGate([screenFinding('p1', { criterion: 'not-a-row' })]), brokenCodex: true })
+  assert.equal(r3.fact, 'transport_failure', 'an off-table held artifact was never a publishable screen verdict — it names no survivors')
+  assert.equal(r3.status, 20)
+  assert.ok(!existsSync(r3.out))
+})

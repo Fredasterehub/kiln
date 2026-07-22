@@ -83,7 +83,17 @@ async function runKernel(kargs, script) {
   // consults on every build that reaches it; the harness answers already-logged
   // by default so pre-W7 scenarios stay on their own subject. Audit scenarios
   // override audit:check to open the seam gate.
-  const full = { 'tiers:boot': TIERS_OK, 'audit:check': { exit: 0 }, ...script }
+  // W8-S3: every validate run consults the screening-room activation (the table
+  // presence check + the dial leg) and clears the semantic marker on its
+  // nonsemantic terminals; the harness answers dormant-and-clear by default so
+  // pre-W8 scenarios stay on their own subject. Screening scenarios override.
+  const full = {
+    'tiers:boot': TIERS_OK, 'audit:check': { exit: 0 },
+    'perceptual:presence': { exit: 1 },
+    'perceptual:dial': { exit: 0, perceptual: 'dormant', recovery_cap: 1 },
+    'perceptual:marker-clear': { exit: 0 },
+    ...script,
+  }
   const calls = []
   const agentMock = async (prompt, opts = {}) => {
     calls.push({ label: opts.label, prompt, opts })
@@ -169,13 +179,15 @@ test('content-blind: no filesystem, clock, randomness, or content parsing in the
   ]) {
     assert.ok(!code.includes(banned), `kernel code must not contain "${banned}"`)
   }
-  // W-01: exactly THREE JSON.parse calls — the sanctioned parse-and-hop args
+  // W-01: exactly FOUR JSON.parse calls — the sanctioned parse-and-hop args
   // adapter in the pure core (envelope mechanics), the gate-file mirror in the
   // workflow runtime (the kernel parses the raw candidate bytes it validates
-  // and publishes), and the W7-S2 audit-verdict mirror (the kernel parses the
-  // published audit bytes it rederives through reconcileAudit). All are
-  // sanctioned envelope reads, never content parsing.
-  assert.equal(code.split('JSON.parse').length - 1, 3, 'exactly three JSON.parse (the args adapter + the gate-file mirror + the audit-verdict mirror)')
+  // and publishes), the W7-S2 audit-verdict mirror (the kernel parses the
+  // published audit bytes it rederives through reconcileAudit), and the W8-S3
+  // shared screen mirror (one read site serves the Claude candidate, the Claude
+  // escalation, and the recheck prior lineage). All are sanctioned envelope
+  // reads, never content parsing.
+  assert.equal(code.split('JSON.parse').length - 1, 4, 'exactly four JSON.parse (the args adapter + the gate-file mirror + the audit-verdict mirror + the shared screen mirror)')
   assert.ok(coreSrc.includes('Parse-and-hop'), 'the adapter is the marked parse-and-hop region')
 })
 
@@ -3496,4 +3508,492 @@ test('dogfood (W7-S3): ratify, build, and audit gates coexist across one project
   assert.equal(run.calls.filter(c => c.label === 'audit:repair').length, 1)
   assert.equal(auditsLog(dir), '', 'a held audit never reaches audits.log')
   assert.ok(lastStateDoc(run.calls).includes('Operator ruling: the milestone audit held for slice s1 after 1 repair passes — the verdict is at ' + AUDIT))
+})
+
+// ── W8-S3: the screening room — the perceptual gate seated in validate ──────
+const SCREEN = '.kiln/screen-review.json'
+const SCREEN_ESC = '.kiln/screen-escalation.json'
+const MF = (n) => '.kiln/evidence/gen-' + n + '/manifest.json'
+const screenFinding = (id, criterion) => ({ id, criterion, location: 'viewport-mobile.png', failure_mode: 'clipped hero', evidence: 'secret-screen-prose', minimal_fix: 'unclip it' })
+const screenVerdict = (verdict, findings = [], hash = 'b'.repeat(64)) => ({ review_id: 'scr-1', law_hash: hash, findings, blockers: [], verdict })
+const validateAct = () => ({ facts: { status: 'ok', pointers: ['.kiln/validate.md'], schema_valid: true }, narration_beat: 'a hundred eyes' })
+const DIGEST_B = { exit: 0, ids: ['b'.repeat(64)] }
+const ADDENDUM_OK = { 'perceptual:addendum': { facts: { status: 'ok', pointers: ['.kiln/validate.md'], schema_valid: true }, narration_beat: 'rows appended' } }
+// A live validate run: table present, the dial says on, the act publishes a complete
+// manifest, the belt agrees. Family and grader legs ride per scenario.
+const LIVE = {
+  ...VOICE,
+  'law:preflight': GREEN,
+  'perceptual:presence': { exit: 0 },
+  'perceptual:dial': { exit: 0, perceptual: 'on', recovery_cap: 2 },
+  'stage:validate': validateAct(),
+  'perceptual:manifest': { exit: 0, ids: [MF(1)] },
+  'perceptual:belt': { exit: 0 },
+  'law:stage-end': GREEN,
+  'state:write': GREEN,
+}
+const GPT_LIVE = { ...LIVE, 'perceptual:family': { exit: 0 } }
+const CLAUDE_LIVE = {
+  ...LIVE,
+  'perceptual:family': { exit: 1 },
+  'screen:digest': DIGEST_B,
+  'screen:criteria': { exit: 0, ids: ['P-1', 'P-2'] },
+  'screen:invalidate': { exit: 0 },
+  'screen-claude:review': OK_ACK,
+  'screen:read': readCandidate(screenVerdict('accept')),
+  'screen:publish': { exit: 0 },
+}
+
+test('runtime (W8-S3/C): dormant — no table, the dial says dormant, the single-act validate stands and a stale marker is cleared', async () => {
+  const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'stage:validate': validateAct(),
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'ok')
+  const presence = calls.find(c => c.label === 'perceptual:presence')
+  assert.ok(presence && presence.prompt.includes('LAW.md'), 'the activation is a closed table-presence check over the sealed LAW')
+  const dial = calls.find(c => c.label === 'perceptual:dial')
+  assert.ok(dial.prompt.includes('gauge-dial.mjs --visual false'), 'an absent table feeds --visual false')
+  assert.ok(dial.prompt.includes('"perceptual"') && dial.prompt.includes('"recovery_cap"'), 'one dial leg carries both facts')
+  for (const label of ['perceptual:manifest', 'perceptual:family', 'perceptual:belt', 'screen:review', 'perceptual:addendum', 'perceptual:marker']) {
+    assert.ok(!calls.some(c => c.label === label), 'dormant skips the machinery: ' + label)
+  }
+  const clear = calls.find(c => c.label === 'perceptual:marker-clear')
+  assert.ok(clear && clear.prompt.includes('rm -f .kiln/perceptual-partial'), 'a stale marker from a prior hold is removed by the dormant ok terminal')
+  assert.ok(ret.beat.includes('a hundred eyes'), 'the single-act beat is unchanged')
+})
+
+test('runtime (W8-S3/C): a present table feeds --visual true — and a failed dial read fails UP to the live machinery, never a silent skip', async () => {
+  const live = await runKernel({ stage: 'validate', projectDir: '/p' }, { ...GPT_LIVE, 'screen:review': { exit: 0 }, ...ADDENDUM_OK })
+  assert.equal(live.ret.status, 'ok')
+  assert.ok(live.calls.find(c => c.label === 'perceptual:dial').prompt.includes('--visual true'), 'a present table feeds --visual true')
+  const failed = await runKernel({ stage: 'validate', projectDir: '/p' }, { ...GPT_LIVE, 'perceptual:dial': { exit: 20 }, 'screen:review': { exit: 0 }, ...ADDENDUM_OK })
+  assert.equal(failed.ret.status, 'ok')
+  assert.ok(failed.calls.some(c => c.label === 'perceptual:manifest'), 'a dial transport failure never reads as dormant — the machinery engages')
+})
+
+test('runtime (W8-S3/F-G): live PASS on a ui-owner table — the GPT screen verb grades, the addendum appends PASS rows, no marker', async () => {
+  const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p' }, { ...GPT_LIVE, 'screen:review': { exit: 0 }, ...ADDENDUM_OK })
+  assert.equal(ret.status, 'ok')
+  const family = calls.find(c => c.label === 'perceptual:family')
+  assert.ok(family.prompt.includes('slices.json') && family.prompt.includes('LAW.md'), 'the family rule derives owners deterministically from the table and the slices')
+  const review = calls.find(c => c.label === 'screen:review')
+  assert.ok(review.prompt.includes('kiln-review screen . .kiln gpt-5.6-sol high ' + SCREEN),
+    'closed argv only — repo `.`, the kiln dir, the reviewer-gate tier, the output path')
+  const beltAt = calls.findIndex(c => c.label === 'perceptual:belt')
+  const reviewAt = calls.findIndex(c => c.label === 'screen:review')
+  assert.ok(beltAt >= 0 && beltAt < reviewAt, 'the deterministic belt runs pre-spawn')
+  assert.ok(calls[beltAt].prompt.includes(MF(1)), 'the belt checks the CURRENT manifest')
+  const add = calls.find(c => c.label === 'perceptual:addendum')
+  assert.ok(add.prompt.includes('PASS') && add.prompt.includes(SCREEN), 'the addendum act names grade PASS and the published verdict')
+  assert.ok(!calls.some(c => c.label === 'perceptual:marker'), 'no marker on an accept')
+  assert.ok(calls.some(c => c.label === 'perceptual:marker-clear'), 'the ok terminal clears any stale marker')
+  assert.ok(ret.beat.includes('rows appended'), 'the addendum re-emits the truthful stage beat')
+})
+
+test('runtime (W8-S3/F): an all-logic/mixed table takes the Claude leg — fallback-reviewer tier, closed interpolations, content-free promote', async () => {
+  const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p' }, { ...CLAUDE_LIVE, ...ADDENDUM_OK })
+  assert.equal(ret.status, 'ok')
+  assert.ok(!calls.some(c => c.label === 'screen:review'), 'no codex spawn on the Claude family path')
+  const leg = calls.find(c => c.label === 'screen-claude:review')
+  assert.equal(leg.opts.model, 'opus', 'the primary Claude grader is the fallback-reviewer tier')
+  assert.ok(leg.prompt.includes(MF(1)) && leg.prompt.includes('b'.repeat(64)), 'the static prompt carries the manifest path and the pre-leg digest')
+  assert.ok(leg.prompt.includes('perceptual-rubric.json') && leg.prompt.includes('.kiln/LAW.md') && leg.prompt.includes('.kiln/.gate-review.reviewer.tmp'),
+    'closed interpolations only: the rubric, LAW, and candidate paths')
+  const digest = calls.find(c => c.label === 'screen:digest')
+  assert.ok(digest.prompt.includes('sha256sum ' + MF(1)), 'the kernel computes the manifest digest pre-leg via a hands sha256sum leg')
+  const publish = calls.find(c => c.label === 'screen:publish')
+  assert.ok(publish.prompt.includes('mv -f .kiln/.gate-review.reviewer.tmp ' + SCREEN), 'the validated candidate promotes content-free to the screen gate file')
+})
+
+test('runtime (W8-S3/F): the kernel recomputes the screen verb rules — a blocked verdict, an off-table criterion, and a digest mismatch each hold transport-class', async () => {
+  for (const [name, candidate] of [
+    ['blocked verdict', { review_id: 'scr-1', law_hash: 'b'.repeat(64), findings: [], blockers: ['cannot see'], verdict: 'blocked' }],
+    ['off-table criterion', screenVerdict('changes_required', [screenFinding('F1', 'P-9')])],
+    ['digest mismatch', screenVerdict('accept', [], 'c'.repeat(64))],
+  ]) {
+    const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p' }, { ...CLAUDE_LIVE, 'screen:read': readCandidate(candidate) })
+    assert.equal(ret.status, 'transport-failure', name + ' holds transport-class')
+    assert.ok(!calls.some(c => c.label === 'screen:publish'), name + ' never publishes')
+    assert.ok(!calls.some(c => c.label === 'perceptual:marker'), name + ': no marker on a nonsemantic hold')
+    assert.ok(calls.some(c => c.label === 'perceptual:marker-clear'), name + ': the nonsemantic hold clears the marker')
+  }
+})
+
+test('runtime (W8-S3/F-G): the Claude recheck is digest-fresh — the kernel snapshots the prior verdict and refuses a regrade over the same evidence bytes', async () => {
+  const priorVerdict = screenVerdict('changes_required', [screenFinding('F1', 'P-1')])
+  const mfSeq = () => { const seq = [{ exit: 0, ids: [MF(1)] }, { exit: 0, ids: [MF(2)] }]; return () => seq.shift() ?? { exit: 0, ids: [MF(2)] } }
+  const stale = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+    ...CLAUDE_LIVE,
+    'perceptual:manifest': mfSeq(),
+    'screen:read': readCandidate(priorVerdict),
+    'screen:findings': { exit: 0, ids: ['F1'] },
+    'perceptual:recapture': validateAct(),
+    'perceptual:delta-check': { exit: 0 },
+    'screen:prior': readCandidate(priorVerdict),
+    ...ADDENDUM_OK,
+  })
+  assert.equal(stale.ret.status, 'transport-failure', 'digest equality never regrades — the hold is transport-class')
+  assert.ok(!stale.calls.some(c => c.label === 'screen-claude:recheck'), 'no recheck leg ever spawns over stale evidence bytes')
+  assert.ok(stale.calls.find(c => c.label === 'perceptual:addendum').prompt.includes('PARTIAL'),
+    'the published verdict stranded by the stale-digest hold still lands its PARTIAL rows (the iff)')
+  const digests = [DIGEST_B, { exit: 0, ids: ['d'.repeat(64)] }]
+  const reads = [readCandidate(priorVerdict), readCandidate(screenVerdict('accept', [], 'd'.repeat(64)))]
+  const fresh = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+    ...CLAUDE_LIVE,
+    'perceptual:manifest': mfSeq(),
+    'screen:digest': () => digests.shift(),
+    'screen-claude:recheck': OK_ACK,
+    'screen:read': () => reads.shift(),
+    'screen:findings': { exit: 0, ids: ['F1'] },
+    'perceptual:recapture': validateAct(),
+    'perceptual:delta-check': { exit: 0 },
+    'screen:prior': readCandidate(priorVerdict),
+    ...ADDENDUM_OK,
+  })
+  assert.equal(fresh.ret.status, 'ok', 'a fresh digest regrades and the accepted recheck advances')
+  const recheckLeg = fresh.calls.find(c => c.label === 'screen-claude:recheck')
+  assert.ok(recheckLeg.prompt.includes('d'.repeat(64)) && recheckLeg.prompt.includes(MF(2)), 'the recheck leg binds to the fresh digest and the new manifest')
+})
+
+test('runtime (W8-S3/F): the Claude recheck recomputes the FULL prior screen shape — nothing weaker than the CLI lineage rules', async () => {
+  for (const [name, prior] of [
+    ['accept prior', screenVerdict('accept')],
+    ['blocked prior', { review_id: 'scr-1', law_hash: 'b'.repeat(64), findings: [], blockers: ['cannot see'], verdict: 'blocked' }],
+    ['off-table prior criterion', screenVerdict('changes_required', [screenFinding('F1', 'P-9')])],
+    ['six-field prior', { ...screenVerdict('changes_required', [screenFinding('F1', 'P-1')]), stray: 'x' }],
+  ]) {
+    const seq = [{ exit: 0, ids: [MF(1)] }, { exit: 0, ids: [MF(2)] }]
+    const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+      ...CLAUDE_LIVE,
+      'perceptual:manifest': () => seq.shift() ?? { exit: 0, ids: [MF(2)] },
+      'screen:read': readCandidate(screenVerdict('changes_required', [screenFinding('F1', 'P-1')])),
+      'screen:findings': { exit: 0, ids: ['F1'] },
+      'perceptual:recapture': validateAct(),
+      'perceptual:delta-check': { exit: 0 },
+      'screen:prior': readCandidate(prior),
+      ...ADDENDUM_OK,
+    })
+    assert.equal(ret.status, 'transport-failure', name + ': prior lineage never trusts a weaker shape than the CLI recomputes')
+    assert.ok(!calls.some(c => c.label === 'screen-claude:recheck'), name + ': no recheck leg spawns over an invalid prior')
+  }
+})
+
+test('runtime (W8-S3/G): the GPT loop recaptures on a reject — fresh generation delta, closed recheck argv, the accepted recheck advances', async () => {
+  const seq = [{ exit: 0, ids: [MF(1)] }, { exit: 0, ids: [MF(2)] }]
+  const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+    ...GPT_LIVE,
+    'perceptual:manifest': () => seq.shift() ?? { exit: 0, ids: [MF(2)] },
+    'screen:review': { exit: 10 },
+    'screen:findings': { exit: 0, ids: ['F1'] },
+    'perceptual:recapture': validateAct(),
+    'perceptual:delta-check': { exit: 0 },
+    'screen:recheck': { exit: 0 },
+    ...ADDENDUM_OK,
+  })
+  assert.equal(ret.status, 'ok')
+  const recap = calls.find(c => c.label === 'perceptual:recapture')
+  assert.ok(recap.prompt.includes('capture step'), 'the repair edge is the recapture act, scoped to the capture step')
+  const delta = calls.find(c => c.label === 'perceptual:delta-check')
+  assert.ok(delta.prompt.includes('test -s ' + MF(2)), 'the confirmed delta is the NEW manifest path')
+  const recheck = calls.find(c => c.label === 'screen:recheck')
+  assert.ok(recheck.prompt.includes('kiln-review screen-recheck . .kiln gpt-5.6-sol high ' + SCREEN + ' ' + MF(2) + ' ' + SCREEN),
+    'the recheck hands the prior published verdict and the fresh manifest as the digest-bound delta')
+})
+
+test('runtime (W8-S3/H-I): a no-progress recheck is the semantic hold — marker FIRST, one bounded Claude escalation, the closed outcome recorded, PARTIAL addendum, static surfaces', async () => {
+  const scenario = (escalateAck, escRead) => {
+    const seq = [{ exit: 0, ids: [MF(1)] }, { exit: 0, ids: [MF(2)] }]
+    return {
+      ...GPT_LIVE,
+      'perceptual:manifest': () => seq.shift() ?? { exit: 0, ids: [MF(2)] },
+      'screen:review': { exit: 10 },
+      'screen:recheck': { exit: 10 },
+      'screen:findings': { exit: 0, ids: ['F1'] },
+      'screen:survivors': { exit: 0, ids: ['P-1'] },
+      'perceptual:recapture': validateAct(),
+      'perceptual:delta-check': { exit: 0 },
+      'perceptual:marker': { exit: 0 },
+      'screen:digest': DIGEST_B,
+      'screen:criteria': { exit: 0, ids: ['P-1', 'P-2'] },
+      'screen:invalidate': { exit: 0 },
+      'screen-claude:escalate': escalateAck,
+      'screen:read': escRead,
+      'screen:publish': { exit: 0 },
+      'escalate:record': { exit: 0 },
+      ...ADDENDUM_OK,
+    }
+  }
+  for (const [outcome, escRead] of [
+    ['CORROBORATED', readCandidate(screenVerdict('changes_required', [screenFinding('E1', 'P-1')]))],
+    ['CONTESTED', readCandidate(screenVerdict('accept'))],
+  ]) {
+    const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p' }, scenario(OK_ACK, escRead))
+    assert.equal(ret.status, 'blocked', outcome + ': the semantic hold lands the operator-ruling shape')
+    const markerAt = calls.findIndex(c => c.label === 'perceptual:marker')
+    const escAt = calls.findIndex(c => c.label === 'screen-claude:escalate')
+    assert.ok(markerAt >= 0 && markerAt < escAt, outcome + ': the marker is written FIRST, before the escalation')
+    assert.ok(calls[markerAt].prompt.includes('touch .kiln/perceptual-partial'), outcome + ': the marker is the closed touch leg')
+    assert.ok(calls.find(c => c.label === 'screen:publish').prompt.includes(SCREEN_ESC), outcome + ': the escalation publishes to its own artifact, never the held verdict')
+    assert.ok(calls.find(c => c.label === 'escalate:record').prompt.includes(outcome), outcome + ': the closed outcome lands in the record')
+    const addAt = calls.findIndex(c => c.label === 'perceptual:addendum')
+    assert.ok(escAt < addAt, outcome + ': the escalation precedes the addendum; the held return fires last')
+    assert.ok(calls[addAt].prompt.includes('PARTIAL'), outcome + ': the addendum grades PARTIAL for the survivors')
+    assert.ok(!calls.some(c => c.label === 'perceptual:marker-clear'), outcome + ': the semantic hold preserves the marker')
+    const doc = lastStateDoc(calls)
+    assert.ok(doc.includes('Operator ruling: the perceptual screen held 1 criteria (' + outcome + ') after 1 repair passes'),
+      outcome + ': the static next_action interpolates only counts and the closed outcome')
+    assert.ok(doc.includes(SCREEN) && doc.includes(MF(2)), outcome + ': and the artifact and manifest paths')
+    assert.ok(!doc.includes('secret-screen-prose'), outcome + ': no verdict prose enters STATE')
+    assert.equal(ret.pointers.escalation, outcome)
+    assert.deepEqual(ret.pointers.finding_ids, ['F1'])
+  }
+  const dead = await runKernel({ stage: 'validate', projectDir: '/p' }, scenario({ ok: false }, readCandidate(screenVerdict('accept'))))
+  assert.equal(dead.ret.status, 'blocked', 'a transport-dead escalation changes nothing — the hold proceeds identically')
+  assert.ok(dead.calls.find(c => c.label === 'escalate:record').prompt.includes('escalation unavailable'), 'the closed unavailable line lands in the record')
+  assert.ok(dead.calls.some(c => c.label === 'perceptual:marker'), 'the marker stands')
+})
+
+test('runtime (W8-S3/H): a Claude-primary semantic hold escalates through the OTHER transport — the GPT screen verb over a separate output', async () => {
+  const seq = [{ exit: 0, ids: [MF(1)] }, { exit: 0, ids: [MF(2)] }]
+  const digests = [DIGEST_B, { exit: 0, ids: ['d'.repeat(64)] }]
+  const reads = [
+    readCandidate(screenVerdict('changes_required', [screenFinding('F1', 'P-1')])),
+    readCandidate(screenVerdict('changes_required', [screenFinding('F1', 'P-1')], 'd'.repeat(64))),
+  ]
+  const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+    ...CLAUDE_LIVE,
+    'perceptual:manifest': () => seq.shift() ?? { exit: 0, ids: [MF(2)] },
+    'screen:digest': () => digests.shift(),
+    'screen-claude:recheck': OK_ACK,
+    'screen:read': () => reads.shift(),
+    'screen:findings': { exit: 0, ids: ['F1'] },
+    'screen:survivors': { exit: 0, ids: ['P-1'] },
+    'perceptual:recapture': validateAct(),
+    'perceptual:delta-check': { exit: 0 },
+    'screen:prior': readCandidate(screenVerdict('changes_required', [screenFinding('F1', 'P-1')])),
+    'perceptual:marker': { exit: 0 },
+    'escalate:screen': { exit: 10 },
+    'escalate:record': { exit: 0 },
+    ...ADDENDUM_OK,
+  })
+  assert.equal(ret.status, 'blocked')
+  const esc = calls.find(c => c.label === 'escalate:screen')
+  assert.ok(esc.prompt.includes('kiln-review screen-escalate . .kiln gpt-5.6-sol high ' + SCREEN + ' ' + SCREEN_ESC),
+    'the escalation rides the survivor-scoped verb — the held verdict on argv, its own output artifact, never the held verdict overwritten')
+  assert.ok(calls.find(c => c.label === 'escalate:record').prompt.includes('CORROBORATED'),
+    'a scope-valid changes_required corroborates by construction — no post-publication filter')
+})
+
+test('runtime (W8-S3/H): the escalation is survivors-scoped ONLY — an off-survivor answer publishes nothing and rules nothing, both families', async () => {
+  // Primary GPT, Claude escalation: an off-survivor finding (on-table P-2, outside
+  // the surviving {P-1}) invalidates the candidate pre-publish — exit 20, no
+  // escalation artifact, the closed outcome stays `escalation unavailable`.
+  const seq1 = [{ exit: 0, ids: [MF(1)] }, { exit: 0, ids: [MF(2)] }]
+  const offClaude = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+    ...GPT_LIVE,
+    'perceptual:manifest': () => seq1.shift() ?? { exit: 0, ids: [MF(2)] },
+    'screen:review': { exit: 10 },
+    'screen:recheck': { exit: 10 },
+    'screen:findings': { exit: 0, ids: ['F1'] },
+    'screen:survivors': { exit: 0, ids: ['P-1'] },
+    'perceptual:recapture': validateAct(),
+    'perceptual:delta-check': { exit: 0 },
+    'perceptual:marker': { exit: 0 },
+    'screen:digest': DIGEST_B,
+    'screen:criteria': { exit: 0, ids: ['P-1', 'P-2'] },
+    'screen:invalidate': { exit: 0 },
+    'screen-claude:escalate': OK_ACK,
+    'screen:read': readCandidate(screenVerdict('changes_required', [screenFinding('E1', 'P-2')])),
+    'escalate:record': { exit: 0 },
+    ...ADDENDUM_OK,
+  })
+  assert.equal(offClaude.ret.status, 'blocked', 'the hold stands — the out-of-scope answer changes nothing')
+  assert.ok(!offClaude.calls.some(c => c.label === 'screen:publish'), 'an off-survivor Claude escalation verdict is invalid and never published')
+  assert.ok(offClaude.calls.find(c => c.label === 'escalate:record').prompt.includes('escalation unavailable'),
+    'an out-of-scope answer is no usable escalation — the closed outcome set stays closed')
+  // Primary Claude, GPT escalation: the survivor-scoped screen-escalate verb packets
+  // ONLY the surviving rows and refuses an off-survivor finding PRE-PUBLISH — exit
+  // 20, no escalation artifact (the verb contract holds this in the screening-room
+  // suite); the kernel maps the refusal to the closed unavailable outcome.
+  const seq2 = [{ exit: 0, ids: [MF(1)] }, { exit: 0, ids: [MF(2)] }]
+  const digests = [DIGEST_B, { exit: 0, ids: ['d'.repeat(64)] }]
+  const reads = [
+    readCandidate(screenVerdict('changes_required', [screenFinding('F1', 'P-1')])),
+    readCandidate(screenVerdict('changes_required', [screenFinding('F1', 'P-1')], 'd'.repeat(64))),
+  ]
+  const offGpt = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+    ...CLAUDE_LIVE,
+    'perceptual:manifest': () => seq2.shift() ?? { exit: 0, ids: [MF(2)] },
+    'screen:digest': () => digests.shift(),
+    'screen-claude:recheck': OK_ACK,
+    'screen:read': () => reads.shift(),
+    'screen:findings': { exit: 0, ids: ['F1'] },
+    'screen:survivors': { exit: 0, ids: ['P-1'] },
+    'perceptual:recapture': validateAct(),
+    'perceptual:delta-check': { exit: 0 },
+    'screen:prior': readCandidate(screenVerdict('changes_required', [screenFinding('F1', 'P-1')])),
+    'perceptual:marker': { exit: 0 },
+    'escalate:screen': { exit: 20 },
+    'escalate:record': { exit: 0 },
+    ...ADDENDUM_OK,
+  })
+  assert.equal(offGpt.ret.status, 'blocked')
+  assert.ok(offGpt.calls.find(c => c.label === 'escalate:record').prompt.includes('escalation unavailable'),
+    'an off-survivor GPT escalation publishes nothing at the verb — no usable escalation, the closed outcome set stays closed')
+})
+
+test('runtime (W8-S3/H): primary transport unavailable is the degraded-class hold — no marker, no escalation, the stale marker cleared', async () => {
+  const degraded = await runKernel({ stage: 'validate', projectDir: '/p' }, { ...GPT_LIVE, 'screen:review': { exit: 21 } })
+  assert.equal(degraded.ret.status, 'held')
+  assert.ok(lastStateDoc(degraded.calls).includes('Restore codex, then rerun stage validate'), 'the held next_action names the codex restore')
+  const unreachable = await runKernel({ stage: 'validate', projectDir: '/p' }, { ...GPT_LIVE, 'screen:review': { exit: 127 } })
+  assert.equal(unreachable.ret.status, 'gate-unreachable')
+  const claudeDead = await runKernel({ stage: 'validate', projectDir: '/p' }, { ...CLAUDE_LIVE, 'screen-claude:review': { ok: false } })
+  assert.equal(claudeDead.ret.status, 'transport-failure', 'a Claude leg failure is the same nonsemantic class')
+  for (const r of [degraded, unreachable, claudeDead]) {
+    assert.ok(!r.calls.some(c => c.label === 'perceptual:marker'), 'no marker without a semantic ruling')
+    assert.ok(!r.calls.some(c => c.label === 'screen-claude:escalate' || c.label === 'escalate:screen'), 'no escalation without a semantic ruling')
+    assert.ok(r.calls.some(c => c.label === 'perceptual:marker-clear'), 'the nonsemantic hold clears any stale marker')
+    assert.ok(!r.calls.some(c => c.label === 'perceptual:addendum'), 'no verdict published — no addendum (the iff)')
+  }
+})
+
+test('runtime (W8-S3/I): the act doors — capture-act failure, a failed recapture, and addendum failure all clear the marker on their existing holds', async () => {
+  const captureFail = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+    ...GPT_LIVE,
+    'stage:validate': { facts: { status: 'no complete manifest', pointers: [], schema_valid: false }, narration_beat: '' },
+  })
+  assert.equal(captureFail.ret.status, 'transport-failure')
+  assert.ok(captureFail.calls.some(c => c.label === 'perceptual:marker-clear'), 'capture-act failure clears the marker')
+  assert.ok(!captureFail.calls.some(c => c.label === 'perceptual:manifest'), 'the act hold fires before any grader machinery')
+  assert.ok(!captureFail.calls.some(c => c.label === 'perceptual:addendum'), 'no verdict published — no addendum (the iff)')
+  const recapFail = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+    ...GPT_LIVE,
+    'screen:review': { exit: 10 },
+    'screen:findings': { exit: 0, ids: ['F1'] },
+    'perceptual:recapture': { facts: { status: 'no runtime', pointers: [], schema_valid: false }, narration_beat: '' },
+    ...ADDENDUM_OK,
+  })
+  assert.equal(recapFail.ret.status, 'repair-failed')
+  assert.ok(recapFail.calls.some(c => c.label === 'perceptual:marker-clear'), 'a failed recapture is capture-class — cleared, never marked')
+  assert.ok(!recapFail.calls.some(c => c.label === 'perceptual:marker'))
+  assert.ok(recapFail.calls.find(c => c.label === 'perceptual:addendum').prompt.includes('PARTIAL'),
+    'the published changes_required verdict still lands its PARTIAL rows on repair-failed (the iff)')
+  const addFail = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+    ...GPT_LIVE,
+    'screen:review': { exit: 0 },
+    'perceptual:addendum': { facts: { status: 'rows did not land', pointers: [], schema_valid: false }, narration_beat: '' },
+  })
+  assert.equal(addFail.ret.status, 'transport-failure')
+  assert.ok(addFail.calls.some(c => c.label === 'perceptual:marker-clear'), 'addendum failure takes the act transport hold and clears the marker')
+})
+
+test('runtime (W8-S3/I): published verdict iff addendum — a recheck transport death after the publish still lands the rows on the degraded hold', async () => {
+  const seq = [{ exit: 0, ids: [MF(1)] }, { exit: 0, ids: [MF(2)] }]
+  const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+    ...GPT_LIVE,
+    'perceptual:manifest': () => seq.shift() ?? { exit: 0, ids: [MF(2)] },
+    'screen:review': { exit: 10 },
+    'screen:recheck': { exit: 21 },
+    'screen:findings': { exit: 0, ids: ['F1'] },
+    'perceptual:recapture': validateAct(),
+    'perceptual:delta-check': { exit: 0 },
+    ...ADDENDUM_OK,
+  })
+  assert.equal(ret.status, 'held', 'the degraded recheck stays the degraded-class hold')
+  assert.ok(calls.find(c => c.label === 'perceptual:addendum').prompt.includes('PARTIAL'),
+    'the published changes_required verdict remains — its PARTIAL rows land before the hold returns')
+  assert.ok(calls.some(c => c.label === 'perceptual:marker-clear'), 'still nonsemantic — the marker clears')
+})
+
+test('runtime (W8-S3/G): the dial recovery_cap parameterizes the screening loop — cap 1 exhausts where cap 2 recovers', async () => {
+  const script = (cap, rechecks, cohorts, mfList) => {
+    const seq = mfList.map(p => ({ exit: 0, ids: [p] }))
+    const rc = [...rechecks]
+    const co = cohorts.map(ids => ({ exit: 0, ids }))
+    return {
+      ...GPT_LIVE,
+      'perceptual:dial': { exit: 0, perceptual: 'on', recovery_cap: cap },
+      'perceptual:manifest': () => seq.shift() ?? seq[seq.length - 1],
+      'screen:review': { exit: 10 },
+      'screen:recheck': () => rc.shift(),
+      'screen:findings': () => co.shift() ?? { exit: 0, ids: ['F1'] },
+      'perceptual:recapture': validateAct(),
+      'perceptual:delta-check': { exit: 0 },
+      'perceptual:marker': { exit: 0 },
+      'screen:survivors': { exit: 0, ids: ['P-1'] },
+      'screen:digest': DIGEST_B,
+      'screen:criteria': { exit: 0, ids: ['P-1'] },
+      'screen:invalidate': { exit: 0 },
+      'screen-claude:escalate': OK_ACK,
+      'screen:read': readCandidate(screenVerdict('accept')),
+      'screen:publish': { exit: 0 },
+      'escalate:record': { exit: 0 },
+      ...ADDENDUM_OK,
+    }
+  }
+  const exhausted = await runKernel({ stage: 'validate', projectDir: '/p' },
+    script(1, [{ exit: 10 }], [['F1', 'F2'], ['F1'], ['F1']], [MF(1), MF(2)]))
+  assert.equal(exhausted.ret.status, 'blocked', 'cap 1: a strictly shrinking recheck still exhausts the budget')
+  assert.equal(exhausted.ret.pointers.passes, 1)
+  const recovered = await runKernel({ stage: 'validate', projectDir: '/p' },
+    script(2, [{ exit: 10 }, { exit: 0 }], [['F1', 'F2'], ['F1']], [MF(1), MF(2), MF(3)]))
+  assert.equal(recovered.ret.status, 'ok', 'cap 2: the same trajectory recovers')
+  assert.equal(recovered.calls.filter(c => c.label === 'perceptual:recapture').length, 2, 'two recapture edges under cap 2')
+})
+
+test('runtime (W8-S3/G): the belt — an incomplete CURRENT manifest at gate() holds transport-class before any spawn', async () => {
+  const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p' }, { ...GPT_LIVE, 'perceptual:belt': { exit: 1 } })
+  assert.equal(ret.status, 'transport-failure')
+  assert.ok(!calls.some(c => c.label === 'screen:review'), 'no grader spawns past a failed belt')
+  assert.ok(!calls.some(c => c.label === 'perceptual:marker'), 'a belt violation is transport-class, never semantic')
+  const belt = calls.find(c => c.label === 'perceptual:belt')
+  assert.ok(belt.prompt.includes('realpathSync') && belt.prompt.includes('isFile()'),
+    'the belt admits only regular files realpath-contained in the generation dir — the CLI screenEvidence boundary, byte-symmetric families')
+})
+
+test('runtime (W8-S3): a missing CURRENT manifest and an untrusted family answer each hold honestly before the loop', async () => {
+  const noManifest = await runKernel({ stage: 'validate', projectDir: '/p' }, { ...GPT_LIVE, 'perceptual:manifest': { exit: 1, ids: [] } })
+  assert.equal(noManifest.ret.status, 'transport-failure')
+  assert.ok(!noManifest.calls.some(c => c.label === 'perceptual:family'), 'no family read without a CURRENT manifest')
+  const badFamily = await runKernel({ stage: 'validate', projectDir: '/p' }, { ...LIVE, 'perceptual:family': { exit: 2 } })
+  assert.equal(badFamily.ret.status, 'transport-failure', 'an untrusted family answer holds — never a guessed transport')
+})
+
+test('runtime (W8-S3): the law-red doors — a validate reopen at preflight or stage end clears the stale marker before the reopen lands (DELTA-10)', async () => {
+  const preRed = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': { exit: 1, ids: ['s1'] },
+    'seal:check': { exit: 0 },
+    'state:write': GREEN,
+  })
+  assert.equal(preRed.ret.status, 'law-red')
+  const preOrder = preRed.calls.map(c => c.label)
+  assert.ok(preOrder.indexOf('perceptual:marker-clear') >= 0 && preOrder.indexOf('perceptual:marker-clear') < preOrder.indexOf('state:write'),
+    'the preflight reopen removes the marker before the law-red ledger write')
+  assert.ok(!preOrder.includes('perceptual:presence'), 'the preflight door fires before any screening machinery')
+  const postRed = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+    ...GPT_LIVE,
+    'screen:review': { exit: 0 },
+    ...ADDENDUM_OK,
+    'law:stage-end': { exit: 1, ids: ['s1'] },
+    'seal:check': { exit: 0 },
+  })
+  assert.equal(postRed.ret.status, 'law-red')
+  const postOrder = postRed.calls.map(c => c.label)
+  assert.ok(postOrder.indexOf('perceptual:marker-clear') >= 0 && postOrder.indexOf('perceptual:marker-clear') < postOrder.indexOf('state:write'),
+    'the stage-end reopen removes the marker before the law-red ledger write')
+  assert.ok(postOrder.indexOf('perceptual:addendum') < postOrder.indexOf('perceptual:marker-clear'),
+    'the live-accept addendum already ran — the clear guards the reopen conclusion itself')
+})
+
+test('drift (W8-S3): the kernel screen location rule mirrors the CLI SCREEN_LOCATION pattern', () => {
+  const cli = readFileSync(fileURLToPath(new URL('../scripts/kiln-review', import.meta.url)), 'utf8')
+  const cliPattern = /const SCREEN_LOCATION = \{ pattern: (\/[^,]+\/),/.exec(cli)[1]
+  const kernelPattern = /const SCREEN_LOCATION_RULE = (\/[^\n]+\/)\n/.exec(src)[1]
+  assert.equal(kernelPattern, cliPattern, 'the Claude path relaxes location byte-symmetrically with the screen family')
 })
