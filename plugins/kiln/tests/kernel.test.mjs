@@ -3053,3 +3053,307 @@ test('runtime (W7-S2): the audit repair edge confirms its delta — an {ok:true}
   assert.ok(!calls.some(c => c.label === 'audit:append'), 'nothing promotes')
   assert.ok(lastStateDoc(calls).includes('the milestone audit repair pass did not land for slice s1'), 'the static repair-failed next_action names the seam slice')
 })
+
+// ── W7-S3: dogfood — the wave proven whole, the audit fact on real disk ──────
+// Cross-gate integration: full build-branch scenarios on the mocked runtime with
+// the audits.log legs executing for REAL. The launch names the actual repo
+// plugin root, and the audit:check / audit:append handlers run their exact
+// issued commands — the trusted append-audit CLI verb included — inside a real
+// temp project dir. The audits.log each run leaves behind is asserted
+// byte-exact: the durable fact the wave ships, produced only by the machinery
+// that ships it, with every other leg scripted as the scenarios above script it.
+const REAL_PLUGIN = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '')
+const runReal = (prompt, dir) => ({ exit: spawnSync('sh', ['-c', prompt.split('\n').pop()], { cwd: dir }).status })
+const realAuditDisk = (dir) => ({
+  'audit:check': (p) => runReal(p, dir),
+  'audit:append': (p) => runReal(p, dir),
+})
+const auditsLog = (dir) => existsSync(join(dir, '.kiln/audits.log')) ? readFileSync(join(dir, '.kiln/audits.log'), 'utf8') : ''
+const mkProject = () => { const dir = mkdtempSync(join(tmpdir(), 'kiln-dogfood-')); mkdirSync(join(dir, '.kiln')); return dir }
+// The all-passing build scaffold every dogfood scenario starts from; scenarios
+// override the legs their subject exercises.
+const dogfoodBase = (dir) => ({
+  ...VOICE,
+  'law:preflight': GREEN,
+  'ladder:fetch': LADDER,
+  'cap:read': { exit: 0, recovery_cap: 2 },
+  'seal:check': { exit: 1 },
+  'law:pre-seal': GREEN,
+  'law:stage-end': GREEN,
+  'degraded:check': { exit: 1 },
+  'gate:review': { exit: 0 },
+  'seal:append': { exit: 0 },
+  'state:write': GREEN,
+  'law:pre-audit': GREEN,
+  ...realAuditDisk(dir),
+})
+
+test('dogfood (W7-S3): a labeled two-milestone plan runs the whole build branch — per-slice gates pass, both seams audit in order, and the real audits.log carries exactly the two seam ids', async () => {
+  const dir = mkProject()
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: dir, plugin: REAL_PLUGIN }, {
+    ...dogfoodBase(dir),
+    // Spaced labels are legal — they live in slices.json and the prompt file,
+    // never argv, never a log line.
+    'slices:fetch': { exit: 0, ids: ['obj|c1|ui|core engine', 'obj|c2|ui|core engine', 'obj|p1|ui|polish pass', 'obj|p2|ui|polish pass'] },
+    'slice:c1': auditSlice(), 'slice:c2': auditSlice(), 'slice:p1': auditSlice(), 'slice:p2': auditSlice(),
+    'audit:review': { exit: 0 },
+    'audit:read': readAudit(auditVerdict('accept')),
+  })
+  assert.equal(ret.status, 'ok', 'the labeled plan builds, gates, audits, and advances')
+  assert.equal(calls.filter(c => c.label === 'gate:review').length, 4, 'every slice still takes its per-slice gate — the audit adds a seam gate, never replaces one')
+  const audits = calls.filter(c => c.label === 'audit:review')
+  assert.equal(audits.length, 2, 'exactly two seams audit — the label change after c2 and the final p2')
+  assert.ok(audits[0].prompt.includes('kiln-review audit . .kiln c2 gpt-5.6-sol high ' + AUDIT), 'the first seam is c2, closed argv only')
+  assert.ok(audits[1].prompt.includes('kiln-review audit . .kiln p2 gpt-5.6-sol high ' + AUDIT), 'the second seam is the final p2')
+  for (const a of audits) {
+    assert.ok(!a.prompt.includes('core engine') && !a.prompt.includes('polish pass'),
+      'the spaced labels never ride the audit argv — the CLI derives the closing block from slices.json')
+  }
+  const c2seal = calls.findIndex(c => c.label === 'seal:append' && c.prompt.includes('append-seal .kiln c2'))
+  assert.ok(c2seal >= 0 && c2seal < calls.indexOf(audits[0]), 'the mid-plan seam audits only after its slice sealed')
+  assert.ok(calls.indexOf(audits[0]) < calls.findIndex(c => c.label === 'slice:p1'), 'the seam gate rules mid-loop — p1 builds only past the accepted c2 audit')
+  assert.equal(auditsLog(dir), 'c2 accept\np2 accept\n',
+    'the on-disk audits.log carries exactly the two seam slice ids, one line per seam, written only by append-audit')
+  assert.ok(ret.beat.includes('Slice c2 sealed — dual') && ret.beat.includes('Slice p2 sealed — dual'), 'the seal beats speak for the seam slices')
+  assert.ok(lastStateDoc(calls).includes('Relaunch the kernel workflow with stage=validate'), 'the stage returns ok and advances to validate')
+})
+
+test('dogfood (W7-S3): a changes_required audit drives repair → recheck-accept → append-audit → advance — cohort lineage, delta pointer, and receipt refresh in strict order', async () => {
+  const dir = mkProject()
+  const reads = [readAudit(auditVerdict('changes_required', [auditFinding('F1'), auditFinding('F2')])), readAudit(auditVerdict('accept'))]
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: dir, plugin: REAL_PLUGIN }, {
+    ...dogfoodBase(dir),
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui|m one'] },
+    'slice:s1': auditSlice(),
+    'law:pre-audit-recheck': GREEN,
+    'audit:review': { exit: 10 },
+    'audit:recheck': { exit: 0 },
+    'audit:read': () => reads.shift(),
+    'audit:findings': { exit: 0, ids: ['F1', 'F2'] },
+    'audit:repair': OK_ACK,
+    'delta:check': { exit: 0 },
+  })
+  assert.equal(ret.status, 'ok', 'the repaired seam advances')
+  // The whole recovery cycle, strictly ordered on the wire.
+  const at = (label) => calls.findIndex(c => c.label === label)
+  const seq = ['law:pre-audit', 'audit:review', 'audit:findings', 'audit:repair', 'delta:check', 'law:pre-audit-recheck', 'audit:recheck', 'audit:append']
+  for (let i = 1; i < seq.length; i++) {
+    assert.ok(at(seq[i - 1]) >= 0 && at(seq[i - 1]) < at(seq[i]), seq[i - 1] + ' precedes ' + seq[i])
+  }
+  // Cohort lineage: the pinned prior is read from the published verdict, and the
+  // recheck argv hands that same file as its pre-recheck snapshot plus the delta.
+  assert.ok(calls[at('audit:findings')].prompt.includes(AUDIT), 'the cohort is read from the published audit verdict')
+  assert.ok(calls[at('audit:recheck')].prompt.includes('kiln-review audit-recheck . .kiln s1 gpt-5.6-sol high ' + AUDIT + ' .kiln/repair-delta.md ' + AUDIT),
+    'the recheck carries prior + delta + output — the lineage the CLI cohort rule enforces')
+  assert.ok(calls[at('delta:check')].prompt.includes('test -s .kiln/repair-delta.md'), 'the delta pointer is confirmed on disk before any recheck')
+  assert.ok(calls[at('law:pre-audit-recheck')].prompt.includes('check-receipt.txt'), 'the recheck judges a refreshed receipt')
+  assert.equal(auditsLog(dir), 's1 accept\n', 'the recovered seam leaves its one-line outcome fact on disk')
+})
+
+test('dogfood (W7-S3): a blocked audit reopens through the repair cycle and recovers — and a cap-exhausted seam holds on the existing blocked shape with a static next_action', async () => {
+  // Blocked is the reopen edge: referential blockers ride their findings, the
+  // Claude leg repairs the owning slices, the recheck accepts.
+  const recovered = mkProject()
+  const reads = [readAudit(auditVerdict('blocked', [auditFinding('F1'), auditFinding('F2')], ['F1', 'F2'])), readAudit(auditVerdict('accept'))]
+  const ok = await runKernel({ stage: 'build', projectDir: recovered, plugin: REAL_PLUGIN }, {
+    ...dogfoodBase(recovered),
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui|m1'] },
+    'slice:s1': auditSlice(),
+    'law:pre-audit-recheck': GREEN,
+    'audit:review': { exit: 11 },
+    'audit:recheck': { exit: 0 },
+    'audit:read': () => reads.shift(),
+    'audit:findings': { exit: 0, ids: ['F1', 'F2'] },
+    'audit:repair': OK_ACK,
+    'delta:check': { exit: 0 },
+  })
+  assert.equal(ok.ret.status, 'ok', 'blockers reopen their owning slices and the repaired seam advances')
+  assert.equal(ok.calls.filter(c => c.label === 'audit:repair').length, 1, 'one repair edge spent on the blocked verdict')
+  assert.equal(auditsLog(recovered), 's1 accept\n', 'the recovered blocked seam still promotes exactly one line')
+  // The cap-exhausted variant: cap 1, the recheck still blocked over a strictly
+  // shrunk cohort — genuine progress, but the budget is spent, so the seam holds.
+  const held = mkProject()
+  const heldReads = [
+    readAudit(auditVerdict('blocked', [auditFinding('F1'), auditFinding('F2')], ['F1', 'F2'])),
+    readAudit(auditVerdict('blocked', [auditFinding('F1')], ['F1'])),
+  ]
+  const cohorts = [['F1', 'F2'], ['F1'], ['F1']]
+  const blocked = await runKernel({ stage: 'build', projectDir: held, plugin: REAL_PLUGIN }, {
+    ...dogfoodBase(held),
+    'cap:read': { exit: 0, recovery_cap: 1 },
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui|m1'] },
+    'slice:s1': auditSlice(),
+    'law:pre-audit-recheck': GREEN,
+    'audit:review': { exit: 11 },
+    'audit:recheck': { exit: 11 },
+    'audit:read': () => heldReads.shift(),
+    'audit:findings': () => ({ exit: 0, ids: cohorts.shift() }),
+    'audit:repair': OK_ACK,
+    'delta:check': { exit: 0 },
+  })
+  assert.equal(blocked.ret.status, 'blocked', 'cap exhaustion is the existing operator-ruling hold')
+  assert.equal(blocked.ret.pointers.passes, 1)
+  assert.deepEqual(blocked.ret.pointers.finding_ids, ['F1'], 'the blocked shape carries the closed finding ids')
+  assert.equal(blocked.ret.pointers.gate, AUDIT, 'the blocked shape points at the audit artifact')
+  assert.ok(blocked.ret.beat.includes('The gate held after 1 repair passes. Findings F1 are on the table'), 'the sealed blocked beat speaks with the closed facts filled')
+  assert.ok(lastStateDoc(blocked.calls).includes('Operator ruling: the milestone audit held for slice s1 after 1 repair passes — the verdict is at ' + AUDIT),
+    'the static next_action interpolates only the seam id, the pass count, and the audit path')
+  assert.equal(auditsLog(held), '', 'a held seam leaves NO on-disk audit fact — audits.log stays unwritten')
+})
+
+test('dogfood (W7-S3): a run interrupted between the seam seal and its audit resumes on the skip path — the receipt refreshes, the audit re-fires, and audits.log completes', async () => {
+  const dir = mkProject()
+  const plan = { exit: 0, ids: ['obj|s1|ui|alpha', 'obj|s2|ui|beta'] }
+  // Run 1: s1 seals and audits clean; s2 seals, then its audit transport dies —
+  // the interrupt lands exactly after the seal, before the audit fact.
+  const first = await runKernel({ stage: 'build', projectDir: dir, plugin: REAL_PLUGIN }, {
+    ...dogfoodBase(dir),
+    'slices:fetch': plan,
+    'slice:s1': auditSlice(), 'slice:s2': auditSlice(),
+    'audit:review': (p) => ({ exit: p.includes(' s1 ') ? 0 : 20 }),
+    'audit:read': readAudit(auditVerdict('accept')),
+  })
+  assert.equal(first.ret.status, 'transport-failure', 'the dead audit transport holds the run honestly')
+  const s2seal = first.calls.findIndex(c => c.label === 'seal:append' && c.prompt.includes('append-seal .kiln s2'))
+  const s2audit = first.calls.findIndex(c => c.label === 'audit:review' && c.prompt.includes(' s2 '))
+  assert.ok(s2seal >= 0 && s2seal < s2audit, 'the seam slice sealed BEFORE its audit was attempted — the re-fire window')
+  assert.equal(auditsLog(dir), 's1 accept\n', 'only the accepted seam left its outcome fact — the interrupted one still owes its audit')
+  // Run 2 (resume): every slice sealed; the REAL grep-skip consults the same
+  // disk — s1 is logged and skips, s2 re-fires with the receipt refreshed first.
+  const resumed = await runKernel({ stage: 'build', projectDir: dir, plugin: REAL_PLUGIN }, {
+    ...dogfoodBase(dir),
+    'slices:fetch': plan,
+    'seal:check': { exit: 0 },
+    'audit:review': { exit: 0 },
+    'audit:read': readAudit(auditVerdict('accept')),
+  })
+  assert.equal(resumed.ret.status, 'ok', 'the resume completes the wave')
+  assert.equal(resumed.calls.filter(c => c.label && c.label.startsWith('slice:')).length, 0, 'no slice rebuilds on the resume')
+  const audits = resumed.calls.filter(c => c.label === 'audit:review')
+  assert.equal(audits.length, 1, 'only the owed seam re-audits — the logged one skips on the real grep')
+  assert.ok(audits[0].prompt.includes(' s2 '), 'the re-fire targets the interrupted seam')
+  const receiptAt = resumed.calls.findIndex(c => c.label === 'law:pre-audit')
+  assert.ok(receiptAt >= 0 && receiptAt < resumed.calls.indexOf(audits[0]) && resumed.calls[receiptAt].prompt.includes('check-receipt.txt'),
+    'the LAW receipt refreshes on the skip path before the re-fired audit')
+  assert.equal(auditsLog(dir), 's1 accept\ns2 accept\n', 'audits.log completes — one outcome fact per seam, in seam order')
+  assert.ok(lastStateDoc(resumed.calls).includes('Relaunch the kernel workflow with stage=validate'), 'the completed build advances to validate')
+})
+
+test('dogfood (W7-S3): non-contiguous repeated labels are legal — a|b|a raises three seams, and the two a-seams each audit their own closing block', async () => {
+  const dir = mkProject()
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: dir, plugin: REAL_PLUGIN }, {
+    ...dogfoodBase(dir),
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui|a', 'obj|s2|ui|b', 'obj|s3|ui|a'] },
+    'slice:s1': auditSlice(), 'slice:s2': auditSlice(), 'slice:s3': auditSlice(),
+    'audit:review': { exit: 0 },
+    'audit:read': readAudit(auditVerdict('accept')),
+  })
+  assert.equal(ret.status, 'ok')
+  const audits = calls.filter(c => c.label === 'audit:review')
+  assert.equal(audits.length, 3, 'every adjacency change is a seam — a|b, b|a, and the final')
+  assert.ok(audits[0].prompt.includes('.kiln s1 '), 'the first a-block closes at s1 and audits itself')
+  assert.ok(audits[1].prompt.includes('.kiln s2 '), 'the b block closes at s2')
+  assert.ok(audits[2].prompt.includes('.kiln s3 '), 'the second a-block closes at s3 — its own audit, never merged with s1')
+  assert.equal(auditsLog(dir), 's1 accept\ns2 accept\ns3 accept\n', 'both a-seams are logged, each under its own closing slice id')
+})
+
+test('dogfood (W7-S3): an unlabeled plan pays one final audit on disk — and an all-sealed resume missing that final audit fires it', async () => {
+  const fresh = mkProject()
+  const plan = { exit: 0, ids: ['obj|u1|ui', 'obj|u2|ui'] }
+  const built = await runKernel({ stage: 'build', projectDir: fresh, plugin: REAL_PLUGIN }, {
+    ...dogfoodBase(fresh),
+    'slices:fetch': plan,
+    'slice:u1': auditSlice(), 'slice:u2': auditSlice(),
+    'audit:review': { exit: 0 },
+    'audit:read': readAudit(auditVerdict('accept')),
+  })
+  assert.equal(built.ret.status, 'ok')
+  assert.equal(built.calls.filter(c => c.label === 'audit:review').length, 1, 'exactly one audit — the implicit whole-build seam')
+  assert.equal(auditsLog(fresh), 'u2 accept\n', 'the single final-slice fact on disk')
+  // The all-sealed resume with that final audit missing: every seal in place,
+  // an empty audits.log — the final audit fires on the skip path and writes it.
+  const resumeDir = mkProject()
+  const resumed = await runKernel({ stage: 'build', projectDir: resumeDir, plugin: REAL_PLUGIN }, {
+    ...dogfoodBase(resumeDir),
+    'slices:fetch': plan,
+    'seal:check': { exit: 0 },
+    'audit:review': { exit: 0 },
+    'audit:read': readAudit(auditVerdict('accept')),
+  })
+  assert.equal(resumed.ret.status, 'ok')
+  const audits = resumed.calls.filter(c => c.label === 'audit:review')
+  assert.equal(audits.length, 1, 'the missing final audit fires on the all-sealed resume')
+  assert.ok(audits[0].prompt.includes(' u2 '), 'it targets the final slice')
+  assert.equal(auditsLog(resumeDir), 'u2 accept\n', 'the resume leaves the same one-line fact')
+})
+
+test('dogfood (W7-S3): ratify, build, and audit gates coexist across one project run — the audit consumes the SAME one-read cap as the build gate, and the recovery machinery elsewhere is untouched', async () => {
+  // One project, two sequential launches over the SAME directory — the law
+  // stage seals it, then the build stage takes it: the relaunch handoff the
+  // STATE next_action names. The law launch first: the unchanged ratify loop
+  // rejects once, repairs, rechecks, and seals — recoveryDecision as W6 left it.
+  const dir = mkProject()
+  const ratifyExits = [10, 0]
+  const law = await runKernel({ stage: 'law', projectDir: dir }, {
+    ...VOICE,
+    ...ONBOARDING_OK,
+    'width:read': { exit: 0, width: 'floor', recovery_cap: 1 },
+    'law:preflight': GREEN,
+    'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law, pinned' },
+    'ratify:request': GREEN,
+    'ratify:gate': () => ({ exit: ratifyExits.shift() }),
+    'ratify:cohort': { exit: 0, ids: ['R1'] },
+    'ratify:repair': { facts: { status: 'ok', pointers: ['.kiln/LAW.md'], schema_valid: true }, narration_beat: 'the law, revised' },
+    'law:milestone-projection': { exit: 0 },
+    'law:seal': { exit: 0 },
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+  })
+  assert.equal(law.ret.status, 'ok', 'the ratify gate is unperturbed — reject, one repair, recheck, seal')
+  assert.equal(law.calls.filter(c => c.label === 'ratify:repair').length, 1)
+  assert.ok(law.ret.beat.includes('the law, revised'), 'the buffered repaired-candidate beat speaks only after ratify AND seal')
+  assert.ok(lastStateDoc(law.calls).includes('Relaunch the kernel workflow with stage=build'),
+    'the sealed law hands THIS project to the build launch that follows — the cross-stage transition')
+  // The build launch over the same project: ONE dial read (cap 1) serves the
+  // slice gate and the seam audit alike. The slice gate spends its one edge and
+  // seals — untouched; the audit spends ITS one edge on genuine strict progress
+  // and still holds at the same cap, proving both gates drink from the same reading.
+  const auditReads = [
+    readAudit(auditVerdict('changes_required', [auditFinding('F1'), auditFinding('F2')])),
+    readAudit(auditVerdict('changes_required', [auditFinding('F1')])),
+  ]
+  const auditCohorts = [['F1', 'F2'], ['F1'], ['F1']]
+  const run = await runKernel({ stage: 'build', projectDir: dir, plugin: REAL_PLUGIN }, {
+    ...dogfoodBase(dir),
+    'cap:read': { exit: 0, recovery_cap: 1 },
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui|m1'] },
+    'slice:s1': auditSlice(),
+    'gate:review': { exit: 10 },
+    'law:pre-recheck': GREEN,
+    'gate:recheck': { exit: 0 },
+    'findings:fetch': { exit: 0, ids: ['G1', 'G2'] },
+    'repair:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'mended' },
+    'delta:check': { exit: 0 },
+    'law:pre-audit-recheck': GREEN,
+    'audit:review': { exit: 10 },
+    'audit:recheck': { exit: 10 },
+    'audit:read': () => auditReads.shift(),
+    'audit:findings': () => ({ exit: 0, ids: auditCohorts.shift() }),
+    'audit:repair': OK_ACK,
+  })
+  assert.equal(run.calls.filter(c => c.label === 'cap:read').length, 1, 'ONE dial read per build invocation — both gates consume it')
+  assert.ok(!run.calls.some(c => c.label === 'width:read'), 'the build branch never takes a second dial read')
+  // The slice gate, untouched W6 behavior: one repair edge under cap 1, then the seal.
+  assert.equal(run.calls.filter(c => c.label === 'repair:s1').length, 1, 'the slice gate spent its one edge and recovered')
+  const recheckAt = run.calls.findIndex(c => c.label === 'gate:recheck')
+  const sealAt = run.calls.findIndex(c => c.label === 'seal:append')
+  assert.ok(recheckAt >= 0 && recheckAt < sealAt, 'recheck-accept preceded the seal — the W6 cycle exactly')
+  assert.ok(run.calls[sealAt].prompt.includes('append-seal .kiln s1'), 'the repaired slice sealed as ever')
+  // The audit gate at the same cap: one repair edge, strict progress, held anyway.
+  assert.equal(run.ret.status, 'blocked', 'the audit holds at the same cap value the slice gate ran under')
+  assert.equal(run.ret.pointers.passes, 1, 'exactly the one edge the dial granted')
+  assert.deepEqual(run.ret.pointers.finding_ids, ['F1'], 'held over genuine strict progress — the cap ruled, not the cohort')
+  assert.equal(run.calls.filter(c => c.label === 'audit:repair').length, 1)
+  assert.equal(auditsLog(dir), '', 'a held audit never reaches audits.log')
+  assert.ok(lastStateDoc(run.calls).includes('Operator ruling: the milestone audit held for slice s1 after 1 repair passes — the verdict is at ' + AUDIT))
+})

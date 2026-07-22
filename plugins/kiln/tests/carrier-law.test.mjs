@@ -30,7 +30,7 @@ test('carrier-law: enumerates all seven hops with their real seams', () => {
   // The seam a hop maps to: the file (or schema) that actually carries it.
   names('hop seams', [
     'SKILL.md', 'kernel.js', 'STATE.md', 'gate-review.json', 'review-schema.json',
-    'vision.md', 'brainstorm-ledger.jsonl',
+    'vision.md', 'brainstorm-ledger.jsonl', 'audit-review.json', 'audits.log', 'append-audit',
   ])
 })
 
