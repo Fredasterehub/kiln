@@ -1083,6 +1083,32 @@ const WIDE_PROMOTE_RUN = {
   'state:write': GREEN,
 }
 
+// ── W5-S3 (the fresh Q-F adjudicator): a residual divergence is adjudicated, not held ──
+// The adjudicate happy path (byte-mismatch → residual divergence), reused by the adjudicate pin and
+// the content-blind pin. Both authors valid and converged, but the two adjusted LAW.md differ, so
+// the cmp is nonzero: the fresh Q-F adjudicator authors the complete canonical LAW and the ordinary
+// opposite-family ratify+seal still runs — replacing S2's temporary hold-on-mismatch.
+const WIDE_ADJUDICATE_RUN = {
+  ...VOICE,
+  ...ONBOARDING_OK,
+  'law:preflight': GREEN,
+  'width:read': { exit: 0, width: 'wide' },
+  'wide:prep': { exit: 0 },
+  'wide:draft-a': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'a' },
+  'wide:draft-b': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'b' },
+  'wide:adjust-a': { facts: { status: 'ok', pointers: ['.kiln/.wide/a-adjusted/LAW.md'], schema_valid: true }, narration_beat: 'a2', converged: true },
+  'wide:adjust-b': { facts: { status: 'ok', pointers: ['.kiln/.wide/b-adjusted/LAW.md'], schema_valid: true }, narration_beat: 'b2', converged: true },
+  'wide:byte-equal': { exit: 1 }, // the two adjusted LAW.md differ — a residual divergence
+  'wide:adjudicate': { facts: { status: 'ok', pointers: ['.kiln/LAW.md', '.kiln/law/check.sh', '.kiln/slices.json', '.kiln/decisions.md'], schema_valid: true }, narration_beat: 'The law is locked — the residual divergences were adjudicated.' },
+  'wide:adjudicate-check': { exit: 0 }, // the four canonical outputs are all present and nonempty
+  'ratify:request': GREEN,
+  'ratify:gate': { exit: 0 },
+  'law:milestone-projection': { exit: 0 },
+  'law:seal': { exit: 0 },
+  'law:stage-end': GREEN,
+  'state:write': GREEN,
+}
+
 test('runtime (W5-S2, W5-04): the floor width keeps the single act producer — no WIDE legs, ratify+seal as ever', async () => {
   const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
     ...VOICE,
@@ -1114,6 +1140,7 @@ test('runtime (W5-S2, W5-01/04): a WIDE width runs two blind authors; both-conve
   for (const l of ['wide:draft-a', 'wide:draft-b', 'wide:adjust-a', 'wide:adjust-b', 'wide:byte-equal', 'wide:promote']) {
     assert.ok(calls.some(c => c.label === l), 'the WIDE leg ran: ' + l)
   }
+  assert.ok(!calls.some(c => c.label === 'wide:adjudicate'), 'the byte-equal skip does NOT run the adjudicator (S3): a converged, byte-equal pair promotes without adjudication')
   // No role #13 (W5-05): the authors are fresh stage-law (fable) legs.
   for (const l of ['wide:draft-a', 'wide:draft-b', 'wide:adjust-a', 'wide:adjust-b']) {
     assert.equal(calls.find(c => c.label === l).opts.model, 'fable', l + ' is a fresh stage-law (fable) leg — no new tier role')
@@ -1138,50 +1165,81 @@ test('runtime (W5-S2, W5-01/04): a WIDE width runs two blind authors; both-conve
   assert.ok(lastStateDoc(calls).includes('stage=build'), 'a promoted+ratified WIDE law advances to build')
 })
 
-test('runtime (W5-S2, W5-01): a WIDE byte-mismatch HOLDS safely — law not sealed, not promoted, pending the S3 adjudicator', async () => {
-  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
-    ...VOICE,
-    ...ONBOARDING_OK,
-    'law:preflight': GREEN,
-    'width:read': { exit: 0, width: 'wide' },
-    'wide:prep': { exit: 0 },
-    'wide:draft-a': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'a' },
-    'wide:draft-b': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'b' },
-    'wide:adjust-a': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'a2', converged: true },
-    'wide:adjust-b': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'b2', converged: true },
-    'wide:byte-equal': { exit: 1 }, // the two adjusted LAW.md differ
-    'state:write': GREEN,
-  })
-  assert.equal(ret.status, 'held', 'a residual divergence holds — never a silent seal or advance')
+test('runtime (W5-S3, W5-05): a WIDE byte-mismatch runs the fresh Q-F adjudicator → complete canonical LAW + ADRs → ratify+seal (no hold)', async () => {
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, WIDE_ADJUDICATE_RUN)
+  assert.equal(ret.status, 'ok', 'a residual divergence is adjudicated, ratified, sealed, and advances — S2\'s hold is gone')
   assert.ok(calls.some(c => c.label === 'wide:byte-equal'), 'the byte-equality cmp ran (both legs valid and converged)')
-  assert.ok(!calls.some(c => c.label === 'wide:promote'), 'nothing is promoted on a byte-mismatch')
-  assert.ok(!calls.some(c => c.label === 'ratify:gate'), 'ratify never runs on a held WIDE divergence')
-  assert.ok(!calls.some(c => c.label === 'law:seal'), 'the law never seals on a mismatch')
-  assert.ok(!ret.beat.toLowerCase().includes('sealed') && !ret.beat.includes('locked'), 'no SEALED/locked narration on a hold')
-  const doc = lastStateDoc(calls)
-  assert.ok(doc.includes('stage: law') && !doc.includes('stage=build'), 'the run holds at the law stage')
+  assert.ok(!calls.some(c => c.label === 'wide:promote'), 'a residual divergence never promotes a candidate unchanged')
+  const adj = calls.find(c => c.label === 'wide:adjudicate')
+  assert.ok(adj, 'the fresh Q-F adjudicator runs on a residual divergence, replacing S2\'s hold-on-mismatch')
+  // A fresh stage-law (fable) leg, labeled distinctly — NO role #13, no new tier role.
+  assert.equal(adj.opts.model, 'fable', 'the adjudicator is a fresh stage-law (fable) leg — decorrelated by freshness, not a new tier role')
+  for (const l of ['wide:draft-a', 'wide:draft-b', 'wide:adjust-a', 'wide:adjust-b'])
+    assert.notEqual(adj.label, l, 'the adjudicator is labeled distinctly from the two author legs')
+  // Residual-only: consolidate the agreed, rule ONLY the divergences, never a silent whole-new plan.
+  assert.ok(/consolidat/i.test(adj.prompt) && /rule only the surviving divergences/i.test(adj.prompt),
+    'the adjudicator scaffold binds consolidate-agreed + rule-only-residuals')
+  assert.ok(/never synthesize a wholly new plan/i.test(adj.prompt),
+    'the adjudicator is forbidden from silently synthesizing a wholly new plan (ADR A11)')
+  // It authors the COMPLETE four-output canonical LAW and records adjudication ADRs in decisions.md.
+  for (const out of ['.kiln/LAW.md', '.kiln/law/check.sh', '.kiln/slices.json', '.kiln/decisions.md'])
+    assert.ok(adj.prompt.includes(out), 'the adjudicator writes the complete canonical output: ' + out)
+  assert.ok(/ADR/.test(adj.prompt) && adj.prompt.includes('.kiln/decisions.md'),
+    'the adjudicator appends adjudication ADRs to decisions.md (card/agent-authored — the kernel never writes it)')
+  // The ordinary opposite-family ratify STILL runs, rejoined unchanged, and the seal follows accept.
+  const gate = calls.find(c => c.label === 'ratify:gate')
+  const seal = calls.find(c => c.label === 'law:seal')
+  assert.ok(gate && seal, 'the adjudicated LAW still takes the ordinary opposite-family ratify + seal')
+  const req = calls.find(c => c.label === 'ratify:request')
+  assert.ok(req.prompt.includes('gpt-5.6-sol'), 'the ratify request still names the opposite-family gpt reviewer — the ratify block is unchanged')
+  assert.ok(calls.indexOf(adj) < calls.indexOf(gate) && calls.indexOf(gate) < calls.indexOf(seal),
+    'adjudicate → ratify → seal: the ratify block is rejoined unchanged')
+  // W5-S3-02: the kernel GATES the adjudicated canon before ratify — a test -s on each of the four
+  // canonical outputs, mirroring WIDE_PROMOTE. A status-'ok' self-report alone never reaches ratify.
+  const canon = calls.find(c => c.label === 'wide:adjudicate-check')
+  assert.ok(canon, 'the adjudicated canon passes a completeness gate before ratify')
+  for (const out of ['.kiln/LAW.md', '.kiln/law/check.sh', '.kiln/slices.json', '.kiln/decisions.md'])
+    assert.ok(canon.prompt.includes('test -s ' + out), 'the completeness gate tests the canonical output nonempty: ' + out)
+  assert.ok(calls.indexOf(adj) < calls.indexOf(canon) && calls.indexOf(canon) < calls.indexOf(gate),
+    'the completeness gate runs after adjudicate and before ratify — an incomplete adjudicated LAW never ratifies')
+  assert.ok(ret.beat.includes('The law is locked'), 'the adjudicated candidate beat speaks only after ratify+seal')
+  assert.ok(lastStateDoc(calls).includes('stage=build'), 'an adjudicated+ratified WIDE law advances to build')
 })
 
-test('runtime (W5-S2, W5-01): a non-converged WIDE report HOLDS even when byte-equal — an honest divergence is never skip-adjudicated', async () => {
+test('runtime (W5-S3-02): an adjudicator that returns status ok but schema_valid false HOLDS — status ok alone never proves a valid canonical LAW', async () => {
   const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
-    ...VOICE,
-    ...ONBOARDING_OK,
-    'law:preflight': GREEN,
-    'width:read': { exit: 0, width: 'wide' },
-    'wide:prep': { exit: 0 },
-    'wide:draft-a': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'a' },
-    'wide:draft-b': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'b' },
-    'wide:adjust-a': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'a2', converged: false }, // one author still sees a divergence
-    'wide:adjust-b': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'b2', converged: true },
-    'state:write': GREEN,
+    ...WIDE_ADJUDICATE_RUN,
+    'wide:adjudicate': { facts: { status: 'ok', pointers: ['.kiln/LAW.md'], schema_valid: false }, narration_beat: 'x' },
   })
-  assert.equal(ret.status, 'held', 'a converged:false report holds regardless of byte-equality')
-  assert.ok(!calls.some(c => c.label === 'wide:byte-equal'), 'the byte-equality cmp is short-circuited on a non-converged report — the kernel never guesses convergence')
-  assert.ok(!calls.some(c => c.label === 'wide:promote'), 'a non-converged report never promotes')
-  assert.ok(!calls.some(c => c.label === 'law:seal'), 'never seals')
+  assert.equal(ret.status, 'transport-failure', 'a status-ok but schema-invalid adjudication holds as a transport failure')
+  assert.ok(!calls.some(c => c.label === 'wide:adjudicate-check'), 'the completeness gate is short-circuited when the adjudicator declares its own output invalid')
+  assert.ok(!calls.some(c => c.label === 'ratify:gate'), 'an unsound adjudicated LAW never reaches ratify')
+  assert.ok(!calls.some(c => c.label === 'law:seal'), 'an unsound adjudicated LAW never seals')
 })
 
-test('runtime (W5-S2): a WIDE author that returns unsound work HOLDS — an invalid leg is never promoted', async () => {
+test('runtime (W5-S3-02): an adjudicated canon that is incomplete on disk FAILS CLOSED — the four test -s gate blocks ratify, mirroring WIDE_PROMOTE', async () => {
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...WIDE_ADJUDICATE_RUN,
+    'wide:adjudicate-check': { exit: 1 }, // a canonical output is missing or empty
+  })
+  assert.equal(ret.status, 'persist-failed', 'an incomplete adjudicated canon fails closed — the completeness floor WIDE_PROMOTE enforces on the skip path')
+  assert.ok(calls.some(c => c.label === 'wide:adjudicate-check'), 'the completeness gate ran on a schema-valid adjudication')
+  assert.ok(!calls.some(c => c.label === 'ratify:gate'), 'an incomplete adjudicated LAW never reaches ratify')
+  assert.ok(!calls.some(c => c.label === 'law:seal'), 'an incomplete adjudicated LAW never seals')
+})
+
+test('runtime (W5-S3, W5-05): a non-converged WIDE report is adjudicated with the byte-equality cmp short-circuited — the kernel never guesses convergence', async () => {
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...WIDE_ADJUDICATE_RUN,
+    'wide:adjust-a': { facts: { status: 'ok', pointers: ['.kiln/.wide/a-adjusted/LAW.md'], schema_valid: true }, narration_beat: 'a2', converged: false }, // one author still sees a divergence
+  })
+  assert.equal(ret.status, 'ok', 'a converged:false report is adjudicated regardless of byte-equality')
+  assert.ok(!calls.some(c => c.label === 'wide:byte-equal'), 'the byte-equality cmp is short-circuited on a non-converged report — the kernel never guesses convergence')
+  assert.ok(calls.some(c => c.label === 'wide:adjudicate'), 'the fresh adjudicator resolves the honest divergence instead of holding')
+  assert.ok(calls.some(c => c.label === 'law:seal'), 'the adjudicated law still ratifies and seals')
+})
+
+test('runtime (W5-S3): a WIDE author that returns unsound work HOLDS — an invalid leg is never promoted OR adjudicated', async () => {
   const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
     ...VOICE,
     ...ONBOARDING_OK,
@@ -1194,9 +1252,32 @@ test('runtime (W5-S2): a WIDE author that returns unsound work HOLDS — an inva
     'wide:adjust-b': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'b2', converged: true },
     'state:write': GREEN,
   })
-  assert.equal(ret.status, 'held', 'an invalid author leg holds — no promote')
+  assert.equal(ret.status, 'transport-failure', 'an invalid author leg holds as a transport failure — not a residual divergence to adjudicate')
   assert.ok(!calls.some(c => c.label === 'wide:byte-equal'), 'the cmp is short-circuited when a leg is invalid')
   assert.ok(!calls.some(c => c.label === 'wide:promote'), 'an invalid leg is never promoted')
+  assert.ok(!calls.some(c => c.label === 'wide:adjudicate'), 'an invalid leg is never adjudicated — there is no valid candidate pair')
+  assert.ok(!calls.some(c => c.label === 'law:seal'), 'the law never seals on an invalid leg')
+})
+
+test('runtime (W5-S3, content-blind): the adjudication is the AGENT\'s call recorded in ADRs — the kernel branches only on the width, converged, and byte-equality closed facts', async () => {
+  const { calls } = await runKernel({ stage: 'law', projectDir: '/p' }, WIDE_ADJUDICATE_RUN)
+  // The kernel's only reads around the divergence are closed facts, never plan content: the width
+  // dial and the byte-equality cmp -s. The adjudicator (an agent stage leg) rules and records ADRs.
+  const cmp = calls.find(c => c.label === 'wide:byte-equal')
+  assert.ok(cmp.prompt.includes('cmp -s') && cmp.prompt.includes('/LAW.md'), 'the divergence signal is a closed cmp -s fact — the kernel never opens the plan to decide')
+  // W5-S3-01: the byte gate compares the COMPLETE four-output set — equal LAW.md with a divergent
+  // check.sh/slices.json/decisions.md is a residual divergence that adjudicates, never a silent skip.
+  for (const out of ['LAW.md', 'law/check.sh', 'slices.json', 'decisions.md'])
+    assert.ok(cmp.prompt.includes('.kiln/.wide/a-adjusted/' + out) && cmp.prompt.includes('.kiln/.wide/b-adjusted/' + out),
+      'the byte gate compares the full canonical set across both adjusted candidates: ' + out)
+  const adj = calls.find(c => c.label === 'wide:adjudicate')
+  assert.ok(adj.opts.schema && adj.opts.schema.properties && adj.opts.schema.properties.facts,
+    'adjudication is dispatched as an agent stage leg (the kernel reads no plan content to adjudicate)')
+  assert.ok(adj.prompt.includes('.kiln/decisions.md') && /ADR/.test(adj.prompt),
+    'the residual calls are recorded in decisions.md by the agent — never a kernel content-read')
+  // No orchestration family/persona/model token rides the adjudicator scaffold (prompt-level anonymity).
+  for (const token of ['fable', 'gpt', 'opus', 'sonnet', 'codex', 'sol'])
+    assert.ok(!new RegExp('\\b' + token + '\\b', 'i').test(adj.prompt), 'no orchestration token "' + token + '" in the adjudicator scaffold')
 })
 
 test('runtime (W5-S2, W5-06): the two WIDE author scaffolds are isomorphic modulo the A/B paths — cross-read carries no author metadata, no orchestration family token', async () => {
@@ -1210,6 +1291,9 @@ test('runtime (W5-S2, W5-06): the two WIDE author scaffolds are isomorphic modul
     'wide:draft-b': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'b' },
     'wide:adjust-a': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'a2', converged: false },
     'wide:adjust-b': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'b2', converged: false },
+    // A non-converged pair now runs the adjudicator (S3); this test only inspects the two author
+    // scaffolds already captured above, so a held adjudicator leg suffices — no ratify/seal needed.
+    'wide:adjudicate': { facts: { status: 'transport-failure', pointers: [], schema_valid: false }, narration_beat: '' },
     'state:write': GREEN,
   })
   // Normalize ONLY the neutral A/B candidate paths; scaffolds that differ solely there are isomorphic.

@@ -636,16 +636,29 @@ const WIDE_PROMOTE = [
   'mv -f ' + WIDE.aAdj + '/decisions.md .kiln/decisions.md',
   'trap - ERR', 'rm -rf "$bak"',
 ].join('\n')
-// The SYMMETRIC author scaffolds — isomorphic modulo the neutral A/B candidate dir (W5-06): no
-// orchestration-supplied peer provenance, no family/persona/model token. The operator idea rides
-// verbatim (it MAY name a family — blindness is about ORCHESTRATION metadata, not idea content).
-const wideCommon = [
-  'You are a Kiln WIDE LAW author: one of two independent minds planning the same idea, working apart. Read and follow the stage card at ' + plugin + '/cards/wide-plan.md exactly.',
+// The COMPLETE canonical LAW output set, relative to .kiln/. Two closed-fact gates read it so no
+// residual difference is ever silently discarded: the skip-adjudication byte gate compares all four
+// across the two adjusted candidates (equal LAW.md with a divergent check.sh/slices.json/decisions.md
+// is a residual divergence, not an identical pair), and the adjudicate completeness gate tests each
+// canonical output nonempty — the same four test -s floor WIDE_PROMOTE enforces on the skip path.
+const WIDE_OUTPUTS = ['LAW.md', 'law/check.sh', 'slices.json', 'decisions.md']
+const WIDE_BYTE_EQUAL = WIDE_OUTPUTS.map(o => 'cmp -s ' + WIDE.aAdj + '/' + o + ' ' + WIDE.bAdj + '/' + o).join(' && ')
+const WIDE_CANON_CHECK = WIDE_OUTPUTS.map(o => 'test -s .kiln/' + o).join(' && ')
+// The shared WIDE context — project dir, voice, density, and the verbatim operator idea (which MAY
+// name a family; blindness is about ORCHESTRATION metadata, not idea content). Reused by the two
+// symmetric author scaffolds and the fresh adjudicator, none of which carry a family/persona/model token.
+const wideCtx = [
   'Project dir: ' + projectDir + '. Artifacts live under .kiln/.',
   'Voice: fill your beat from ' + plugin + '/data/voice.json templates; prefill every semantic slot; leave kernel-owned slots (' + KERNEL_SLOTS.map(k => '{' + k + '}').join(' ') + ') unfilled.',
   'Density: ' + density + ' — a slot-fill rule, never a structure: broad fills slots with the plain reader-meaningful version, engineer fills the same slots with file paths, ids, and counts.',
   A.idea ? 'Operator idea (verbatim): ' + A.idea : '',
 ].filter(Boolean)
+// The SYMMETRIC author scaffolds — isomorphic modulo the neutral A/B candidate dir (W5-06): no
+// orchestration-supplied peer provenance, no family/persona/model token.
+const wideCommon = [
+  'You are a Kiln WIDE LAW author: one of two independent minds planning the same idea, working apart. Read and follow the stage card at ' + plugin + '/cards/wide-plan.md exactly.',
+  ...wideCtx,
+]
 const wideDraftPrompt = (dir) => [
   ...wideCommon,
   'Write your DRAFT — the full LAW output set (LAW.md, law/check.sh, slices.json, decisions.md) — into your candidate directory ' + dir + ', never the canonical .kiln/LAW.md. This draft is IMMUTABLE: once written you do not edit it.',
@@ -659,6 +672,21 @@ const wideAdjustPrompt = (own, peer, adj) => [
 ].join('\n')
 const wideAdjust = (prompt, label) => agent(prompt, { label, ...tier('stage-law'), schema: WIDE_ADJUST })
   .then(r => (r ?? { facts: { status: 'transport-failure', pointers: [], schema_valid: false }, narration_beat: '', converged: false }))
+// W5-S3 (W5-05 / ADR A11): the fresh Q-F adjudicator scaffold. A fresh leg — not one of the two
+// authors, decorrelated by freshness, still the stage-law/fable rung (NO role #13) — anonymized
+// like the cross-read: it reads the two ADJUSTED candidates as neutral A/B artifacts, consolidates
+// what they already agree on, and rules ONLY the surviving divergences into the COMPLETE four-output
+// canonical LAW, appending one ADR per residual call to .kiln/decisions.md — never a silent
+// whole-new plan. Because it authors canonical directly, its result rejoins the UNCHANGED ratify
+// block exactly as the floor act would.
+const wideAdjudicatePrompt = [
+  'You are a Kiln WIDE LAW adjudicator: a fresh mind resolving the residual divergence between two independent plans of the same idea. Read and follow the stage card at ' + plugin + '/cards/wide-adjudicate.md exactly.',
+  ...wideCtx,
+  'Two ADJUSTED candidate plans of the same idea sit at ' + WIDE.aAdj + ' and ' + WIDE.bAdj + ' — read ONLY their plan artifacts (LAW.md, law/check.sh, slices.json, decisions.md); neither carries an author identity and you supply none.',
+  'Consolidate everything the two candidates already agree on and carry it unchanged; rule ONLY the surviving divergences — the parts where they still differ. Never synthesize a wholly new plan: every criterion and slice you emit is one the two candidates already share, or your ruling on a specific divergence between them.',
+  'Write the COMPLETE canonical LAW — .kiln/LAW.md, .kiln/law/check.sh, .kiln/slices.json, .kiln/decisions.md — and APPEND one "## ADR-N" entry to .kiln/decisions.md per residual divergence you ruled, each recording the call and its rationale.',
+  'Return {facts:{status, pointers, schema_valid}, narration_beat} — facts.status is "ok" only if the complete four-output canonical LAW is written.',
+].join('\n')
 
 // LAW rerun beat: at every kernel invocation start (resume), if the check
 // exists. Red reopens only a sealed owner; otherwise the run proceeds.
@@ -752,19 +780,28 @@ if (stage !== 'build') {
       // ADJUSTED full-output candidate to its own isolated path, returning converged.
       const adjA = await wideAdjust(wideAdjustPrompt(WIDE.aDraft, WIDE.bDraft, WIDE.aAdj), 'wide:adjust-a')
       const adjB = await wideAdjust(wideAdjustPrompt(WIDE.bDraft, WIDE.aDraft, WIDE.bAdj), 'wide:adjust-b')
-      // The content-blind skip-adjudication gate (W5-01): promote directly ONLY when all four legs
-      // are valid — status 'ok' AND self-attested schema_valid, so a leg that declares malformed
-      // outputs never reaches comparison, promotion, ratification, or sealing — AND both report
-      // converged AND the two adjusted LAW.md candidates are BYTE-EQUAL — a closed cmp fact the
-      // kernel reads without ever opening the plan (the cmp is short-circuited when a leg failed or
-      // a divergence remains, so a residual divergence never fabricates one).
+      // The content-blind skip-adjudication gate (W5-01): all four legs must be valid — status 'ok'
+      // AND self-attested schema_valid — before any comparison, promotion, or adjudication. A leg
+      // that declares malformed or missing outputs is a transport failure, not a residual
+      // divergence: there is no valid candidate PAIR to adjudicate, so the run holds honestly and
+      // an invalid leg is never promoted or adjudicated.
       const bothValid = draftA.facts.status === 'ok' && draftA.facts.schema_valid === true &&
         draftB.facts.status === 'ok' && draftB.facts.schema_valid === true &&
         adjA.facts.status === 'ok' && adjA.facts.schema_valid === true &&
         adjB.facts.status === 'ok' && adjB.facts.schema_valid === true
+      if (!bothValid) return failStop('transport-failure',
+        { stage, next_action: 'Rerun stage ' + stage },
+        await voiceBeat('transport-failure', {}, 'A wide plan author did not return sound work — the run holds.', 1))
+      // Both authors report converged AND all four adjusted outputs are BYTE-EQUAL → promote the
+      // identical candidate directly. The cmp spans the COMPLETE four-output set (WIDE_BYTE_EQUAL):
+      // equal LAW.md files with a divergent check.sh/slices.json/decisions.md are a residual
+      // divergence that adjudicates, never a skip that silently discards the difference. The cmp is a
+      // closed fact the kernel reads without ever opening the plan, short-circuited unless both
+      // converged — so a non-converged report never fabricates a byte-equality, and a residual
+      // divergence never skip-adjudicates.
       const bothConverged = adjA.converged === true && adjB.converged === true
-      const skipAdjudication = bothValid && bothConverged &&
-        await hands('cmp -s ' + WIDE.aAdj + '/LAW.md ' + WIDE.bAdj + '/LAW.md', 'wide:byte-equal') === 0
+      const skipAdjudication = bothConverged &&
+        await hands(WIDE_BYTE_EQUAL, 'wide:byte-equal') === 0
       if (skipAdjudication) {
         // Atomic promotion of the identical adjusted candidate, its COMPLETE four-output set, to the
         // canonical LAW paths — a test -s per output makes an incomplete WIDE result fail closed, so
@@ -772,13 +809,24 @@ if (stage !== 'build') {
         if (await hands(WIDE_PROMOTE, 'wide:promote') !== 0) return persistFail('wide-promote')
         r = { facts: { status: 'ok', pointers: [P.law, '.kiln/law/check.sh', P.slices, '.kiln/decisions.md'], schema_valid: true }, narration_beat: adjA.narration_beat }
       } else {
-        // SAFE HOLD (S2 only): a non-converged report OR a byte-mismatch is an unadjudicated
-        // divergence — the law is NOT sealed and NOT promoted. Never proceed with an unresolved
-        // divergence; the S3 adjudicator (a later slice) replaces this hold with adjudication.
-        return failStop('held',
-          { stage, active_slice: 'none', next_action: 'The two blind plans did not converge to one law — rerun stage law (the adjudicator that resolves a residual divergence lands in a later wave)' },
-          'The wide idea drew two independent plans and they did not converge to a single law — I will not seal a plan the two authors never agreed on, and the adjudicator that would resolve a residual divergence is not yet in place. The law stays open; rerun the law stage.',
-          { wide: WIDE.root })
+        // W5-S3 (W5-05 / ADR A11): a residual divergence between two VALID candidates — a
+        // non-converged report OR a byte-mismatch. A fresh Q-F adjudicator (a fresh stage-law/fable
+        // leg, decorrelated by freshness, NO role #13) reads both adjusted candidates anonymized,
+        // consolidates what they already agree on, and rules ONLY the surviving divergences into the
+        // complete four-output canonical LAW, appending its adjudication ADRs to .kiln/decisions.md
+        // — never a silent whole-new plan. Its result rejoins the UNCHANGED ratify block below and
+        // still takes the ordinary opposite-family ratify key; this replaces the S2 temporary hold.
+        r = await actWith(wideAdjudicatePrompt, 'wide:adjudicate', tier('stage-law'))
+        // The adjudicator authors canonical directly, so it earns the SAME completeness floor
+        // WIDE_PROMOTE enforces on the skip path: a self-attested schema_valid AND a test -s on each
+        // of the four canonical outputs (WIDE_CANON_CHECK) must hold, or the run fails closed HERE —
+        // status 'ok' alone never proves a complete, valid four-output LAW reached canon to ratify
+        // and seal. An unsound self-report holds as a transport failure; an incomplete canon on disk
+        // fails closed like a failed promote.
+        if (r.facts.schema_valid !== true) return failStop('transport-failure',
+          { stage, next_action: 'Rerun stage ' + stage },
+          await voiceBeat('transport-failure', {}, 'The wide adjudicator did not return sound work — the run holds.', 1))
+        if (await hands(WIDE_CANON_CHECK, 'wide:adjudicate-check') !== 0) return persistFail('wide-adjudicate')
       }
     }
   } else {
