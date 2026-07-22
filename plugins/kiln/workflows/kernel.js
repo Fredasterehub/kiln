@@ -468,6 +468,17 @@ const POSTURE_LEG = {
   },
   required: ['exit'],
 }
+// W5-S2 (W5-04): the Gauge WIDTH dial read — the same boot-style projection shape research-sweep
+// reads the research dial through. The leg parses the JSON gauge-dial prints; the kernel body
+// never does. additionalProperties stays true so the other dials pass through harmlessly.
+const WIDTH = { type: 'object', additionalProperties: true, properties: { exit: { type: 'integer' }, width: { type: 'string' } }, required: ['exit'] }
+// W5-S2 (W5-01): a WIDE adjust leg returns the ordinary stage envelope plus the closed
+// `converged` self-report the content-blind skip-adjudication gate reads alongside byte-equality.
+const WIDE_ADJUST = {
+  type: 'object', additionalProperties: false,
+  properties: { facts: STAGE_RESULT.properties.facts, narration_beat: { type: 'string' }, converged: { type: 'boolean' } },
+  required: ['facts', 'narration_beat', 'converged'],
+}
 
 // Boot (T-02): read the tier file once via an agent leg — the same node -p read
 // surface as the voice beats below, never direct fs (the kernel stays content-
@@ -585,6 +596,70 @@ const cardPrompt = (extra) => [
   'Return {facts:{status, pointers, schema_valid}, narration_beat} — facts.status is "ok" when the stage succeeded, facts.pointers lists every artifact path you wrote, facts.schema_valid is true when your declared outputs are well-formed, and narration_beat is your one-line beat.',
 ].filter(Boolean).join('\n')
 
+// ── W5-S2 (W5-01/02/06): the WIDE blind-dual branch helpers ─────────────────
+// Isolated candidate paths — a WIDE author never writes the canonical .kiln/LAW.md (avoids the
+// W5-02 collision two authors racing the same path would cause). Each dir holds the FULL LAW
+// output set; the adjusted dirs hold each post-cross-read candidate.
+const WIDE = { root: '.kiln/.wide', aDraft: '.kiln/.wide/a', bDraft: '.kiln/.wide/b', aAdj: '.kiln/.wide/a-adjusted', bAdj: '.kiln/.wide/b-adjusted' }
+// Promote the identical adjusted candidate, its COMPLETE four-output set, to the canonical LAW
+// paths as ONE all-or-nothing transaction. A test -s per output fails closed on an incomplete
+// candidate before canon is touched; then an ERR-trap unwinds any partial promote so a
+// mid-sequence mv fault leaves canon ALL-old (or all-absent), never a LAW.md-changed /
+// slices-stale mix — the command re-exits nonzero, the run fails closed, and it never ratifies
+// or seals (W5-02). The `phase` gate scopes the unwind: while staging the prior canon aside a
+// fault leaves the originals in place (nothing to undo); once promoting, a fault restores each
+// slot from its backup or removes the freshly-moved file. Kiln runs one pipeline over its own
+// .kiln/ with no concurrent writer, so the moves carry no time-of-check/use window (the same
+// binding the research sweep promote uses). The a-side is chosen by convention: the skip gate
+// proved the two byte-equal.
+const WIDE_PROMOTE = [
+  'set -e', 'mkdir -p .kiln/law',
+  'test -s ' + WIDE.aAdj + '/LAW.md', 'test -s ' + WIDE.aAdj + '/law/check.sh',
+  'test -s ' + WIDE.aAdj + '/slices.json', 'test -s ' + WIDE.aAdj + '/decisions.md',
+  'bak=' + WIDE.root + '/.promote-bak; phase=stage',
+  'rm -rf "$bak"; mkdir -p "$bak/law"',
+  'rollback(){ trap - ERR; set +e;'
+    + ' if [ -e "$bak/LAW.md" ]; then mv -f "$bak/LAW.md" .kiln/LAW.md; elif [ "$phase" = promote ]; then rm -f .kiln/LAW.md; fi;'
+    + ' if [ -e "$bak/law/check.sh" ]; then mv -f "$bak/law/check.sh" .kiln/law/check.sh; elif [ "$phase" = promote ]; then rm -f .kiln/law/check.sh; fi;'
+    + ' if [ -e "$bak/slices.json" ]; then mv -f "$bak/slices.json" .kiln/slices.json; elif [ "$phase" = promote ]; then rm -f .kiln/slices.json; fi;'
+    + ' if [ -e "$bak/decisions.md" ]; then mv -f "$bak/decisions.md" .kiln/decisions.md; elif [ "$phase" = promote ]; then rm -f .kiln/decisions.md; fi;'
+    + ' exit 1; }',
+  'trap rollback ERR',
+  'if [ -e .kiln/LAW.md ]; then mv -f .kiln/LAW.md "$bak/LAW.md"; fi',
+  'if [ -e .kiln/law/check.sh ]; then mv -f .kiln/law/check.sh "$bak/law/check.sh"; fi',
+  'if [ -e .kiln/slices.json ]; then mv -f .kiln/slices.json "$bak/slices.json"; fi',
+  'if [ -e .kiln/decisions.md ]; then mv -f .kiln/decisions.md "$bak/decisions.md"; fi',
+  'phase=promote',
+  'mv -f ' + WIDE.aAdj + '/LAW.md .kiln/LAW.md',
+  'mv -f ' + WIDE.aAdj + '/law/check.sh .kiln/law/check.sh',
+  'mv -f ' + WIDE.aAdj + '/slices.json .kiln/slices.json',
+  'mv -f ' + WIDE.aAdj + '/decisions.md .kiln/decisions.md',
+  'trap - ERR', 'rm -rf "$bak"',
+].join('\n')
+// The SYMMETRIC author scaffolds — isomorphic modulo the neutral A/B candidate dir (W5-06): no
+// orchestration-supplied peer provenance, no family/persona/model token. The operator idea rides
+// verbatim (it MAY name a family — blindness is about ORCHESTRATION metadata, not idea content).
+const wideCommon = [
+  'You are a Kiln WIDE LAW author: one of two independent minds planning the same idea, working apart. Read and follow the stage card at ' + plugin + '/cards/wide-plan.md exactly.',
+  'Project dir: ' + projectDir + '. Artifacts live under .kiln/.',
+  'Voice: fill your beat from ' + plugin + '/data/voice.json templates; prefill every semantic slot; leave kernel-owned slots (' + KERNEL_SLOTS.map(k => '{' + k + '}').join(' ') + ') unfilled.',
+  'Density: ' + density + ' — a slot-fill rule, never a structure: broad fills slots with the plain reader-meaningful version, engineer fills the same slots with file paths, ids, and counts.',
+  A.idea ? 'Operator idea (verbatim): ' + A.idea : '',
+].filter(Boolean)
+const wideDraftPrompt = (dir) => [
+  ...wideCommon,
+  'Write your DRAFT — the full LAW output set (LAW.md, law/check.sh, slices.json, decisions.md) — into your candidate directory ' + dir + ', never the canonical .kiln/LAW.md. This draft is IMMUTABLE: once written you do not edit it.',
+  'Return {facts:{status, pointers, schema_valid}, narration_beat} — facts.status is "ok" only if all four outputs are written under ' + dir + '.',
+].join('\n')
+const wideAdjustPrompt = (own, peer, adj) => [
+  ...wideCommon,
+  'You already wrote a draft plan at ' + own + '. A second, independent plan of the SAME idea sits at ' + peer + ' — read ONLY its plan artifacts (LAW.md, law/check.sh, slices.json, decisions.md); it carries no author identity and you supply none.',
+  'Weigh the two plans and write your ADJUSTED full LAW output set to ' + adj + ' (never the canonical .kiln/LAW.md). Return converged:true ONLY if the two plans have genuinely converged to the same law (you adopted the shared plan); converged:false if a real divergence remains — never a convergence you do not see.',
+  'Return {facts:{status, pointers, schema_valid}, narration_beat, converged} — facts.status is "ok" only if all four adjusted outputs are written under ' + adj + '.',
+].join('\n')
+const wideAdjust = (prompt, label) => agent(prompt, { label, ...tier('stage-law'), schema: WIDE_ADJUST })
+  .then(r => (r ?? { facts: { status: 'transport-failure', pointers: [], schema_valid: false }, narration_beat: '', converged: false }))
+
 // LAW rerun beat: at every kernel invocation start (resume), if the check
 // exists. Red reopens only a sealed owner; otherwise the run proceeds.
 const pre = await lawBeat(LAW_GUARD, 'law:preflight')
@@ -647,7 +722,68 @@ if (stage !== 'build') {
         { brief: P.brief, posture: P.posture, codebaseMap: P.codebaseMap })
     }
   }
-  const r = await act(cardPrompt(A.idea ? 'Operator idea (verbatim): ' + A.idea : ''), 'stage:' + stage)
+  // W5-S2 (W5-04): the LAW producer branches on the Gauge WIDTH dial (mirroring the research-
+  // sweep dial read). floor is the SOLE narrow result — exit 0 AND width 'floor' — and keeps the
+  // EXISTING single act producer, untouched; every other value or a transport failure fails UP to
+  // the WIDE blind-dual branch. validate and report never read width — they keep the single act.
+  // Both LAW branches leave the full four-output LAW set on disk and rejoin the UNCHANGED ratify
+  // block below; a WIDE divergence holds safely before it (S3 lands the adjudicator that resolves
+  // it). The kernel stays content-blind — it branches on the width, converged, and byte-equality
+  // closed facts, never on plan content.
+  let r
+  if (stage === 'law') {
+    const widthLeg = await agent(
+      'Run exactly this in ' + projectDir + '. Report {exit, width}: exit = the exit code; width = the value of the "width" field in the printed JSON dials object when exit is 0, omitted when exit is nonzero:\n' + 'node ' + plugin + '/scripts/gauge-dial.mjs',
+      { label: 'width:read', ...tier('kernel-leg'), schema: WIDTH },
+    ).then(x => (x ?? { exit: 20 }))
+    if (widthLeg.exit === 0 && widthLeg.width === 'floor') {
+      r = await act(cardPrompt(A.idea ? 'Operator idea (verbatim): ' + A.idea : ''), 'stage:law')
+    } else {
+      // The blind-dual dance (W5-01/02/06). Freshness first: clear any stale wide workspace so a
+      // stale prior candidate can never ride a false byte-equality or promote.
+      if (await hands('rm -rf ' + WIDE.root, 'wide:prep') !== 0) return persistFail('wide-prep')
+      // Two BLIND authors, SYMMETRIC scaffolding (the draft prompts isomorphic modulo the neutral
+      // A/B candidate dir — no orchestration peer provenance), each writing an IMMUTABLE full-output
+      // draft to an ISOLATED dir, never the canonical .kiln/LAW.md.
+      const draftA = await actWith(wideDraftPrompt(WIDE.aDraft), 'wide:draft-a', tier('stage-law'))
+      const draftB = await actWith(wideDraftPrompt(WIDE.bDraft), 'wide:draft-b', tier('stage-law'))
+      // Symmetric cross-read + ONE adjustment: each reads the OTHER immutable draft (its plan
+      // artifacts only — no author identity, no runtime label/persona/model metadata) and writes an
+      // ADJUSTED full-output candidate to its own isolated path, returning converged.
+      const adjA = await wideAdjust(wideAdjustPrompt(WIDE.aDraft, WIDE.bDraft, WIDE.aAdj), 'wide:adjust-a')
+      const adjB = await wideAdjust(wideAdjustPrompt(WIDE.bDraft, WIDE.aDraft, WIDE.bAdj), 'wide:adjust-b')
+      // The content-blind skip-adjudication gate (W5-01): promote directly ONLY when all four legs
+      // are valid — status 'ok' AND self-attested schema_valid, so a leg that declares malformed
+      // outputs never reaches comparison, promotion, ratification, or sealing — AND both report
+      // converged AND the two adjusted LAW.md candidates are BYTE-EQUAL — a closed cmp fact the
+      // kernel reads without ever opening the plan (the cmp is short-circuited when a leg failed or
+      // a divergence remains, so a residual divergence never fabricates one).
+      const bothValid = draftA.facts.status === 'ok' && draftA.facts.schema_valid === true &&
+        draftB.facts.status === 'ok' && draftB.facts.schema_valid === true &&
+        adjA.facts.status === 'ok' && adjA.facts.schema_valid === true &&
+        adjB.facts.status === 'ok' && adjB.facts.schema_valid === true
+      const bothConverged = adjA.converged === true && adjB.converged === true
+      const skipAdjudication = bothValid && bothConverged &&
+        await hands('cmp -s ' + WIDE.aAdj + '/LAW.md ' + WIDE.bAdj + '/LAW.md', 'wide:byte-equal') === 0
+      if (skipAdjudication) {
+        // Atomic promotion of the identical adjusted candidate, its COMPLETE four-output set, to the
+        // canonical LAW paths — a test -s per output makes an incomplete WIDE result fail closed, so
+        // it never ratifies or seals (W5-02). r rejoins the UNCHANGED ratify block as the floor act would.
+        if (await hands(WIDE_PROMOTE, 'wide:promote') !== 0) return persistFail('wide-promote')
+        r = { facts: { status: 'ok', pointers: [P.law, '.kiln/law/check.sh', P.slices, '.kiln/decisions.md'], schema_valid: true }, narration_beat: adjA.narration_beat }
+      } else {
+        // SAFE HOLD (S2 only): a non-converged report OR a byte-mismatch is an unadjudicated
+        // divergence — the law is NOT sealed and NOT promoted. Never proceed with an unresolved
+        // divergence; the S3 adjudicator (a later slice) replaces this hold with adjudication.
+        return failStop('held',
+          { stage, active_slice: 'none', next_action: 'The two blind plans did not converge to one law — rerun stage law (the adjudicator that resolves a residual divergence lands in a later wave)' },
+          'The wide idea drew two independent plans and they did not converge to a single law — I will not seal a plan the two authors never agreed on, and the adjudicator that would resolve a residual divergence is not yet in place. The law stays open; rerun the law stage.',
+          { wide: WIDE.root })
+      }
+    }
+  } else {
+    r = await act(cardPrompt(A.idea ? 'Operator idea (verbatim): ' + A.idea : ''), 'stage:' + stage)
+  }
   // S1 ruling: reachable twin sites read their sealed keys; the kernel lines
   // below survive only as unreachable-voice fallbacks (W-03).
   if (r.facts.status !== 'ok') return failStop('transport-failure', { stage, next_action: 'Rerun stage ' + stage }, await voiceBeat('transport-failure', {}, 'The ' + stage + ' stage did not return sound work — the run holds.', 1))

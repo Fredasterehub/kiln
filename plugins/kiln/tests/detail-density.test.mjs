@@ -56,6 +56,8 @@ async function runLaw(detail) {
     'onboarding:posture': { exit: 0, scope: 'small', novelty: 'familiar', reversibility: 'reversible' },
     // Wave 3 (brownfield arm): greenfield here — no marker, so the map-check never runs.
     'onboarding:brownfield-check': { exit: 1 },
+    // W5-S2: the floor width keeps the single act producer — the density path is unchanged.
+    'width:read': { exit: 0, width: 'floor' },
     'stage:law': { facts: { status: 'ok', pointers: ['.kiln/LAW.md'], schema_valid: true }, narration_beat: 'law beat' },
     // Wave 1: the law stage ratifies before advancing — accept, seal, advance.
     'ratify:request': { exit: 0 },
