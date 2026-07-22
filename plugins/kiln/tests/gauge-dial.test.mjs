@@ -111,13 +111,13 @@ test('gauge-dial: the projector enums agree with the kernel POSTURE_* enums — 
 // exits 0. A valid posture projects its dials (visual flag defaults false → perceptual dormant);
 // a missing or malformed posture falls through to the fail-up default. This is the fact
 // research-sweep.js reads for the research dial.
-function runScript(posture) {
+function runScript(posture, args = []) {
   const dir = mkdtempSync(join(tmpdir(), 'kiln-gauge-'))
   if (posture !== undefined) {
     mkdirSync(join(dir, '.kiln'), { recursive: true })
     writeFileSync(join(dir, '.kiln/posture.json'), typeof posture === 'string' ? posture : JSON.stringify(posture))
   }
-  const r = spawnSync(process.execPath, [SCRIPT], { cwd: dir, encoding: 'utf8' })
+  const r = spawnSync(process.execPath, [SCRIPT, ...args], { cwd: dir, encoding: 'utf8' })
   return r
 }
 
@@ -141,5 +141,41 @@ test('gauge-dial: a missing, unreadable, or malformed posture fails UP to max sc
     assert.equal(r.status, 0, 'the projector always exits 0 — it never fails the caller closed')
     assert.deepEqual(JSON.parse(r.stdout), { width: 'wide', research: 'on', perceptual: 'on', recovery_cap: 1, xhigh_permit: true },
       'an untrustworthy posture projects the max-scrutiny profile — research on')
+  }
+})
+
+// W8-C: the --visual argv flag replaces the entry's hardcoded false. `--visual true` is the
+// one spelling that turns the visual fact on; every other spelling — and its absence — is
+// false, so a flagless call keeps the pre-flag output byte-for-byte. postureToDials itself
+// is untouched: the flag only selects which value rides its second argument.
+test('gauge-dial (W8-C): --visual true turns perceptual on over a valid posture — every other spelling stays dormant', () => {
+  const posture = { scope: 'small', novelty: 'familiar', reversibility: 'reversible' }
+  const on = runScript(posture, ['--visual', 'true'])
+  assert.equal(on.status, 0, 'the flagged projector still exits 0')
+  assert.deepEqual(JSON.parse(on.stdout), postureToDials(posture, true), 'the flag rides the pure projection as visual=true')
+  assert.equal(JSON.parse(on.stdout).perceptual, 'on', 'the visual fact wakes the perceptual dial')
+  // W8-S1-05: the flagless call is the byte baseline — raw stdout, not a parsed object, so
+  // key order, whitespace, and the trailing newline are locked, not just the projected values.
+  const flagless = runScript(posture, [])
+  assert.equal(flagless.status, 0)
+  assert.equal(flagless.stdout,
+    '{"width":"floor","research":"off","perceptual":"dormant","recovery_cap":2,"xhigh_permit":false}\n',
+    'the flagless bytes ARE the pre-flag bytes — pinned to the literal, not to the entry\'s own output')
+  assert.deepEqual(JSON.parse(flagless.stdout), postureToDials(posture, false), 'the flagless entry is the default-false projection')
+  for (const args of [['--visual'], ['--visual', 'false'], ['--visual', 'yes'], ['--visual', 'TRUE']]) {
+    const r = runScript(posture, args)
+    assert.equal(r.status, 0)
+    assert.equal(r.stdout, flagless.stdout,
+      JSON.stringify(args) + ' is not `--visual true` — stdout byte-equal to the flagless entry')
+    assert.equal(JSON.parse(r.stdout).perceptual, 'dormant')
+  }
+})
+
+test('gauge-dial (W8-C): fail-up outranks the flag — an untrustworthy posture is max scrutiny with or without --visual', () => {
+  const MAX = { width: 'wide', research: 'on', perceptual: 'on', recovery_cap: 1, xhigh_permit: true }
+  for (const args of [['--visual', 'true'], ['--visual', 'false']]) {
+    const r = runScript('not json', args)
+    assert.equal(r.status, 0)
+    assert.deepEqual(JSON.parse(r.stdout), MAX, 'the fail-up profile is untouched by the flag — max scrutiny either way')
   }
 })

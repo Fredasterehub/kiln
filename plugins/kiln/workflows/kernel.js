@@ -306,6 +306,57 @@ const MILESTONE_PROJECTION_CHECK =
   "const c=t.split(\"|\").slice(1,-1).map(x=>x.trim());if(c.length!==2){ok=false;break;}auth.push([c[0],c[1]]);}" +
   "process.exit(ok&&JSON.stringify(proj)===JSON.stringify(auth)?0:1);'"
 
+// S1 (W8-B): the perceptual-table gate. The Perceptual table rides INSIDE LAW.md under a
+// GFM `## Perceptual` heading — `| criterion id | owning slice | dim | requirement |
+// proxy command | expected | reference |`, the reference cell optional per row. This
+// deterministic command reads LAW.md + slices.json and exits 0 iff the closed facts
+// agree, with the same parser discipline as MILESTONE_PROJECTION_CHECK above (heading
+// anchor, section boundary, exact header, GFM delimiter row of at least three hyphens
+// per cell, exactly seven cells per row — split on UNESCAPED `|` only, so a lawful
+// proxy command carries a pipe as GFM `\|` and unescapes to the real operator; the
+// milestone parser above keeps its raw split because labels forbid `|` by law).
+// Table present: every required cell nonempty
+// after trim; criterion ids unique; each owning slice a slices.json id; each dim a
+// shipped perceptual-rubric id (the FIXED six, duplicated here because a const command
+// cannot read the plugin path — the kernel.test.mjs drift guard pins the two lists
+// together); DISTINCT dims 4-6; a nonempty reference cell names an existing path INSIDE
+// the project root (resolve-containment before fs.existsSync — an absolute or
+// parent-escaping path that exists elsewhere never rides; the card demands an existing
+// repo path). COVERAGE: every slices.json entry with surface
+// ui or mixed owns at least one row. CONSISTENCY: any ui/mixed surface REQUIRES the
+// table, and a `## Perceptual` heading with no well-formed table under it fails closed.
+// Absent table with no ui/mixed surfaces agrees (exit 0) — the dormant run never pays.
+const PERCEPTUAL_TABLE_CHECK =
+  "node -e 'const fs=require(\"fs\");" +
+  "const slices=require(\"./.kiln/slices.json\");" +
+  "const ids=slices.map(s=>String((s&&s.id)||\"\").trim());" +
+  "const vis=slices.filter(s=>[\"ui\",\"mixed\"].indexOf(String((s&&s.surface)||\"\").trim())>=0).map(s=>String((s&&s.id)||\"\").trim());" +
+  "const dims=[\"composition-hierarchy\",\"typography\",\"color-contrast\",\"interaction-feedback\",\"motion-continuity\",\"fidelity-to-requirement\"];" +
+  "const head=[\"criterion id\",\"owning slice\",\"dim\",\"requirement\",\"proxy command\",\"expected\",\"reference\"];" +
+  "const path=require(\"path\");const root=path.resolve(\".\");" +
+  "const cells=s=>s.split(/(?<!\\\\)\\|/).slice(1,-1).map(x=>x.replace(/\\\\\\|/g,\"|\").trim());" +
+  "const lines=fs.readFileSync(\"./.kiln/LAW.md\",\"utf8\").split(\"\\n\");" +
+  "let rows=[],state=0,ok=true,found=false;" +
+  "for(const ln of lines){const t=ln.trim();const row=t.slice(0,1)===\"|\";" +
+  "if(state===0){if(t.slice(0,3)===\"## \"&&t.slice(3).trim().toLowerCase()===\"perceptual\"){state=1;found=true;}continue;}" +
+  "if(state===1){if(t.slice(0,1)===\"#\"){ok=false;break;}if(!row)continue;const c=cells(t);" +
+  "if(c.length===7&&c.every((x,i)=>x.toLowerCase()===head[i])){state=2;continue;}ok=false;break;}" +
+  "if(state===2){const c=t.split(\"|\").slice(1,-1).map(x=>x.trim());" +
+  "if(row&&c.length===7&&c.every(x=>/^:?-{3,}:?$/.test(x))){state=3;continue;}ok=false;break;}" +
+  "if(!row)break;" +
+  "const c=cells(t);if(c.length!==7){ok=false;break;}rows.push(c);}" +
+  "if(found){if(state!==3)ok=false;" +
+  "const seen=new Set(),dset=new Set(),owned=new Set();" +
+  "for(const c of rows){for(let i=0;i<6;i++)if(!c[i])ok=false;" +
+  "if(seen.has(c[0]))ok=false;seen.add(c[0]);" +
+  "if(ids.indexOf(c[1])<0)ok=false;owned.add(c[1]);" +
+  "if(dims.indexOf(c[2])<0)ok=false;dset.add(c[2]);" +
+  "if(c[6]){const a=path.resolve(c[6]);if(!(a===root||a.slice(0,root.length+1)===root+path.sep)||!fs.existsSync(a))ok=false;}}" +
+  "if(dset.size<4||dset.size>6)ok=false;" +
+  "for(const v of vis)if(!owned.has(v))ok=false;" +
+  "}else{ok=vis.length===0;}" +
+  "process.exit(ok?0:1);'"
+
 // Tier resolution — pure over the validated tier config (data, never content).
 // The tier file is the ONE place models and efforts are named; the kernel carries
 // tier KEYS and resolves them here. validateTiers is the fail-closed BOOT gate: it
@@ -1064,6 +1115,20 @@ if (stage !== 'build') {
         return failStop('transport-failure',
           { stage, active_slice: 'none', next_action: 'Rerun stage law: the slices.json milestone projection disagrees with the LAW plan table' },
           await voiceBeat('transport-failure', {}, 'The slice milestones do not match the LAW plan table — the projection and its authoritative table must agree before the law locks, so the run holds.', 1),
+          { law: P.law, slices: P.slices })
+      }
+      // S1 (W8-B): the perceptual table earns the SAME deterministic pre-seal agreement
+      // the milestone projection above earns — the kernel branches on the exit code alone
+      // (content-blind, never the table prose). Full lawful rows (nonempty cells, unique
+      // ids, owners in slices.json, shipped-rubric dims 4-6 distinct, existing references),
+      // COVERAGE of every ui/mixed slice, and the CONSISTENCY rule (any ui/mixed surface
+      // requires the table) must all hold, or the run holds honestly (reused
+      // transport-failure) — never a silent seal. Absent table with no ui/mixed surfaces
+      // agrees, so a non-visual run seals exactly as before.
+      if (await hands(PERCEPTUAL_TABLE_CHECK, 'law:perceptual-table') !== 0) {
+        return failStop('transport-failure',
+          { stage, active_slice: 'none', next_action: 'Rerun stage law: the LAW perceptual table does not agree with the slices and the shipped perceptual rubric' },
+          await voiceBeat('transport-failure', {}, 'The perceptual table does not hold — its rows, owners and dims must agree with the slices and the shipped rubric before the law locks, so the run holds.', 1),
           { law: P.law, slices: P.slices })
       }
       // seal-law is the only sealer on the kernel side: it digests LAW.md and

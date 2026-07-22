@@ -17,7 +17,10 @@ is your working root; all control artifacts go under `.kiln/`.
 ## Method
 Turn the idea into **executable acceptance criteria only**. A criterion is an owning slice, a
 locked behavioral requirement, a command, and its expected outcome — never rationale prose.
-If it cannot run, it is not law. A one-page static site pins
+If it cannot run, it is not law. A perceptual criterion is lawful because its proxy runs; its
+subjective residue is graded, not executed — the proxy command runs in `check.sh`'s
+every-criterion loop like any other, and a red prints its owning slice ids as ever. A
+one-page static site pins
 naturally: `test -f index.html`; `grep -qF "<title string>" index.html`; a link-resolution
 loop. Prefer the smallest criterion set that makes the idea falsifiable.
 
@@ -35,6 +38,20 @@ it, and a red owned only by a later, still-unbuilt planned slice is expected pre
    groups the slices that ship one milestone). This table is the single source of truth for
    the labels — a label carries no `|` and no control characters — and `.kiln/slices.json`
    (output 3) is its checked projection: the kernel refuses to seal unless the two agree.
+   Then, whenever the project brief declares a visual deliverable, under a `## Perceptual`
+   heading, the Perceptual table — a GitHub table
+   `| criterion id | owning slice | dim | requirement | proxy command | expected | reference |`
+   (reference optional), one row per perceptual criterion. These are ordinary lawful
+   criteria: the proxy command joins `check.sh`'s every-criterion loop (output 2), so a
+   proxy red is a law red that prints its owning slice like any other. Every cell but
+   `reference` is required nonempty; criterion ids are unique; the owning slice is a
+   `.kiln/slices.json` id, and every `ui` or `mixed` slice owns at least one row; `dim`
+   selects from the shipped rubric `data/perceptual-rubric.json`, and the rows together
+   use 4–6 DISTINCT dims — the graded subjective residue the requirement pins. A filled
+   `reference` cell names an existing repo path (a mockup, a comparison image) — the
+   kernel resolves it against the project root and refuses any path that escapes it. The
+   kernel checks the table — validity, coverage, consistency — before it seals; a brief
+   with no visual deliverable authors no table.
 2. `.kiln/law/check.sh` — bash, no dependencies, runs from the project root, runs every
    criterion, exits `0` iff all green; on any red it prints to stdout the owning slice IDs of
    every failed criterion as a JSON array of strings, so the kernel receives the closed

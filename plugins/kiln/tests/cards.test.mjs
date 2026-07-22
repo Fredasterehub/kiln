@@ -215,6 +215,53 @@ test('law card (S1, A9/W5-03): the milestone label is authoritative in the LAW p
     'the milestone label rides outputs 1 and 3 — still exactly four numbered outputs, in order')
 })
 
+test('law card (W8-S1/A): the Perceptual table — full lawful criteria whose subjective residue is graded, authored on a declared visual deliverable', () => {
+  const law = cardText('law.md')
+  const flatAll = law.replace(/\s+/g, ' ')
+  // The doctrine STANDS and gains its one sentence: the proxy is the law, the residue is graded.
+  assert.ok(flatAll.includes('If it cannot run, it is not law'), 'the executable-law doctrine stands untouched')
+  assert.ok(flatAll.includes('A perceptual criterion is lawful because its proxy runs; its subjective residue is graded, not executed'),
+    'the perceptual doctrine sentence rides the Method')
+  assert.ok(flatAll.includes("the proxy command runs in `check.sh`'s every-criterion loop"),
+    'the proxy joins the every-criterion loop — proxy red is law red, owning slice ids printed as ever')
+  // Output 1 authors the table under its own heading, mirroring how the Plan table is specified.
+  const outputs = law.slice(law.indexOf('## Outputs'), law.indexOf('## Beat'))
+  const flat = outputs.replace(/\s+/g, ' ')
+  assert.ok(flat.includes('## Perceptual'), 'the table rides INSIDE LAW.md under a `## Perceptual` heading')
+  assert.ok(flat.includes('| criterion id | owning slice | dim | requirement | proxy command | expected | reference |'),
+    'the seven-column table spec, verbatim')
+  assert.ok(flat.includes('(reference optional)'), 'the reference cell is the one optional cell')
+  assert.ok(flat.includes('whenever the project brief declares a visual deliverable'),
+    'the authoring rule keys on the brief declaring a visual deliverable')
+  assert.ok(flat.includes('4–6 DISTINCT dims') && flat.includes('data/perceptual-rubric.json'),
+    'dims select 4-6 distinct dimensions from the shipped rubric')
+  assert.ok(flat.includes('every `ui` or `mixed` slice owns at least one row'),
+    'the coverage rule is stated where the table is authored')
+  assert.ok(flat.includes('the table — validity, coverage, consistency — before it seals'),
+    'the card states the kernel checks the table before the seal')
+  // No fifth numbered output — the Perceptual table rides output 1 like the Plan table.
+  const numbered = [...outputs.matchAll(/^\d+\.\s+`([^`]+)`/gm)].map((m) => m[1])
+  assert.deepEqual(numbered,
+    ['.kiln/LAW.md', '.kiln/law/check.sh', '.kiln/slices.json', '.kiln/decisions.md'],
+    'the Perceptual table rides output 1 — still exactly four numbered outputs, in order')
+})
+
+test('tiers (W8-S1/J): the remits gain the screening-room duties — models, efforts, and the twelve roles unchanged', () => {
+  const tiers = JSON.parse(readFileSync(join(DATA, 'tiers.json'), 'utf8'))
+  assert.equal(Object.keys(tiers.roles).length, 12, 'TIER_ROLES stays twelve — the screening room adds duties, never a seat')
+  const gate = tiers.roles['reviewer-gate']
+  assert.equal(gate.family, 'gpt'); assert.equal(gate.alias, 'gpt-sol'); assert.equal(gate.effort, 'high')
+  assert.match(gate.note, /at the BUILD gate/, 'the taste exclusion is rescoped to the build-gate context')
+  assert.match(gate.note, /out of the build-gate remit/, 'taste stays the builder\'s at the build gate — never a build finding')
+  assert.match(gate.note, /SCREENING ROOM \(W8\)/, 'the seat gains the screening-room perceptual-grading duty')
+  assert.match(gate.note, /perceptual-rubric\.json/, 'it grades against the shipped instrument')
+  assert.match(gate.note, /does not reach the screening room/, 'the exclusion is scoped, not extended — graded residue is the duty there')
+  const fb = tiers.roles['fallback-reviewer']
+  assert.equal(fb.family, 'claude'); assert.equal(fb.alias, 'opus'); assert.equal(fb.effort, 'high')
+  assert.match(fb.note, /SECOND grader/, 'the claude seat is the perceptual second grader on escalation')
+  assert.match(fb.note, /PRIMARY grader when every perceptual owner is GPT-coded/, 'and the primary for GPT-coded surfaces — the fresh-mind family rule')
+})
+
 // ── Simple-fire: red-first TDD, JIT design, and the one-bash-call GPT coder ──
 
 test('build card: red first, always — tests fail before the build; design is just-in-time inside the slice', () => {

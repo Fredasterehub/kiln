@@ -1,0 +1,96 @@
+{
+  "rubric": "perceptual-rubric",
+  "criteria": [
+    {
+      "id": "composition-hierarchy",
+      "requirement": "The layout establishes one clear visual hierarchy: the primary content dominates, secondary elements support it, and spacing groups related things together.",
+      "pass": "A first glance lands on the element the brief names as primary; groups read as groups, with consistent alignment and deliberate breathing room between sections.",
+      "fail": "Elements compete for the same first glance, alignment drifts between sections, or unrelated items sit closer together than related ones.",
+      "positive_anchors": [
+        "The dominant element on each required viewport is the one the brief names as primary.",
+        "Consistent gutters and margins hold across sections at both required viewports.",
+        "Whitespace separates concerns — nothing important is crowded against an edge or a neighbor."
+      ],
+      "negative_anchors": [
+        "Two blocks of equal visual weight fight over the top of the page.",
+        "A label or caption sits nearer to the wrong element than to its own."
+      ],
+      "insufficient_evidence": "Both required viewport captures are needed; a single cropped screenshot cannot show hierarchy across the whole surface."
+    },
+    {
+      "id": "typography",
+      "requirement": "Type is legible and deliberately scaled: one recognizable typographic scale, readable sizes and line lengths, no clipped or overflowing text.",
+      "pass": "Headings, body and labels sit on one consistent scale; every line of text is readable at both required viewports with no unintended truncation or wrap.",
+      "fail": "Text clips, overflows its container, or wraps mid-word; sizes vary without pattern; body copy is too small or its lines too long to read comfortably.",
+      "positive_anchors": [
+        "Heading levels step down a visible, consistent scale.",
+        "Body text holds a comfortable measure on both the desktop and the mobile capture."
+      ],
+      "negative_anchors": [
+        "A heading or button label is cut off by its container at either viewport.",
+        "Two elements of the same rank carry visibly different sizes for no stated reason."
+      ],
+      "insufficient_evidence": "Captures at both required viewports plus the DOM text are needed to distinguish a rendering clip from an authored abbreviation."
+    },
+    {
+      "id": "color-contrast",
+      "requirement": "The palette is coherent and text stays readable against its background: sufficient contrast for content, deliberate use of accent color, no unreadable overlays.",
+      "pass": "Content text is plainly readable against every background it sits on, and accent color marks the same class of thing wherever it appears.",
+      "fail": "Text blends into its background, an overlay makes content beneath it illegible, or accent color is scattered without a discernible rule.",
+      "positive_anchors": [
+        "Body and heading text read clearly on every panel of both viewport captures.",
+        "Interactive elements share one accent treatment that inert elements never borrow."
+      ],
+      "negative_anchors": [
+        "Light text over a light image region with no scrim behind it.",
+        "The same accent color marks a link in one section and plain decoration in another."
+      ],
+      "insufficient_evidence": "Full-color viewport captures are required; a grayscale or heavily compressed image cannot substantiate a contrast grade."
+    },
+    {
+      "id": "interaction-feedback",
+      "requirement": "Interactive elements are discoverable and answer the user: controls look actionable, and an action produces a visible response.",
+      "pass": "What is clickable looks clickable, and the film shows each exercised control responding — state change, navigation, or visible acknowledgment.",
+      "fail": "Controls are indistinguishable from inert content, or an exercised action produces no visible response in the film or keyframes.",
+      "positive_anchors": [
+        "The interaction film shows a control visibly acknowledging the exercised action.",
+        "Actionable elements share an affordance the inert content does not."
+      ],
+      "negative_anchors": [
+        "A click in the film lands and nothing on the surface changes.",
+        "The console log records an error at the moment an interaction was exercised."
+      ],
+      "insufficient_evidence": "The interaction film and the console log are needed; static screenshots alone cannot show a response to an action."
+    },
+    {
+      "id": "motion-continuity",
+      "requirement": "Motion is purposeful and continuous: transitions read as one movement, nothing flashes, jumps or reflows without cause.",
+      "pass": "Across the film and its labeled keyframes, transitions carry the eye from one state to the next; content settles without flicker or layout jumps.",
+      "fail": "The film shows a flash of unstyled or shifting content, an animation that stutters or strands mid-state, or a scroll that tears the layout.",
+      "positive_anchors": [
+        "Adjacent keyframes read as moments of one continuous movement.",
+        "The surface reaches its settled state in the film without visible reflow."
+      ],
+      "negative_anchors": [
+        "Content visibly jumps as late elements land and push the layout around.",
+        "A transition begins in one keyframe and never completes in any later one."
+      ],
+      "insufficient_evidence": "The film and its labeled keyframes are needed; motion cannot be graded from still viewport captures alone."
+    },
+    {
+      "id": "fidelity-to-requirement",
+      "requirement": "The rendered surface delivers what the criterion row demands: the named content, structure and reference intent are visibly present, not approximated.",
+      "pass": "Everything the row requires is visible in the evidence, where the row says it belongs, matching any named reference in intent.",
+      "fail": "A required element is missing, placeholder content stands where real content was promised, or the surface visibly contradicts a named reference.",
+      "positive_anchors": [
+        "Each element the row names can be pointed to in a capture.",
+        "The surface agrees with the named reference on layout intent, not just on rough content."
+      ],
+      "negative_anchors": [
+        "Lorem-ipsum or template filler where the row promised real content.",
+        "The reference shows a structure the rendered surface never attempts."
+      ],
+      "insufficient_evidence": "The criterion row, both viewport captures, and any named reference file are needed to compare the promise against the pixels."
+    }
+  ]
+}

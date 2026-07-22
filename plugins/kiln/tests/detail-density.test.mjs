@@ -64,6 +64,8 @@ async function runLaw(detail) {
     'ratify:gate': { exit: 0 },
     // S1: the milestone projection is confirmed before the seal.
     'law:milestone-projection': { exit: 0 },
+    // W8-S1: the perceptual table earns the same pre-seal check.
+    'law:perceptual-table': { exit: 0 },
     'law:seal': { exit: 0 },
     'state:write': { exit: 0 },
   }

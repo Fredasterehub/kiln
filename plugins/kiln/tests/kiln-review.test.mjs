@@ -373,6 +373,39 @@ test('kiln-review: a bridge-down reviewer over the feasibility ratify path halts
   assert.ok(!existsSync(r.out), 'a bridge-down run publishes no gate')
 })
 
+// W8-S1 (D): the shipped perceptual instrument — the FIXED six dimensions the LAW perceptual
+// table selects its dims from. rubricFrom checks only {id, requirement, pass, fail}; the
+// anchor and insufficient-evidence fields ride as unrejected extras, so the graders read
+// them from the same file with zero parse change. The generic ratify verb proves the parse
+// path live over the shipped bytes — no live codex, the fake stands in.
+const PERCEPTUAL_RUBRIC = fileURLToPath(new URL('../data/perceptual-rubric.json', import.meta.url))
+
+test('kiln-review: the shipped perceptual-rubric.json carries exactly the six fixed dims, each with the four required strings plus anchors and an insufficient-evidence line', () => {
+  const rubric = JSON.parse(readFileSync(PERCEPTUAL_RUBRIC, 'utf8'))
+  assert.deepEqual(rubric.criteria.map((c) => c.id),
+    ['composition-hierarchy', 'typography', 'color-contrast', 'interaction-feedback', 'motion-continuity', 'fidelity-to-requirement'],
+    'exactly the six fixed dimensions, in order — the instrument never varies per run')
+  for (const c of rubric.criteria) {
+    for (const key of ['id', 'requirement', 'pass', 'fail']) {
+      assert.equal(typeof c[key], 'string', `criterion ${c.id} carries a ${key}`)
+      assert.ok(c[key].trim() !== '', `criterion ${c.id} ${key} is not blank`)
+    }
+    for (const key of ['positive_anchors', 'negative_anchors']) {
+      assert.ok(Array.isArray(c[key]) && c[key].length >= 2 && c[key].length <= 3, `criterion ${c.id} carries 2-3 ${key}`)
+      for (const a of c[key]) assert.ok(typeof a === 'string' && a.trim() !== '', `criterion ${c.id} ${key} entries are nonempty strings`)
+    }
+    assert.equal(typeof c.insufficient_evidence, 'string', `criterion ${c.id} states its evidence bar`)
+    assert.ok(c.insufficient_evidence.trim() !== '', `criterion ${c.id} names what evidence would be needed`)
+  }
+})
+
+test('kiln-review: rubricFrom accepts the perceptual rubric — the extra fields ride unrejected through a ratify dry run (exit 0)', () => {
+  const artifact = 'the rendered surface under perceptual grading\n'
+  const r = ratify({ artifact, rubric: PERCEPTUAL_RUBRIC, gate: ratifyGate('accept', digestOf(artifact)) })
+  assert.equal(r.fact, 'accept', 'the anchor and insufficient-evidence extras never trip rubricFrom — the live parse path, not a bare JSON.parse')
+  assert.equal(r.status, 0, 'the dry validation over the shipped instrument reaches the verdict')
+})
+
 // ratify-recheck (W6-02): the cohort lineage the ratify verb previously lacked. A recheck
 // reuses the prior review_id and constrains the reviewer to the prior finding cohort — the
 // SAME allowedFindingIds + prior-changes_required discipline the build recheck enforces —

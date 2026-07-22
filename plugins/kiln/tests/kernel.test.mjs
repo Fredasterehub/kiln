@@ -21,13 +21,13 @@ const coreSrc = srcLines.slice(
 const core = new Function(coreSrc + `
   return { SPINE, parseArgs, resolveStage, nextStage, gateOutcome, reviewLoop,
            fillClosed, streakIndex, stateDoc, atomicWriteCmd, gateCmd, LAW_CHECK, LAW_GUARD,
-           LAW_CHECK_RECEIPT, MILESTONE_PROJECTION_CHECK, verdictExit, redSetIsFuture, gateReviewInvalid,
+           LAW_CHECK_RECEIPT, MILESTONE_PROJECTION_CHECK, PERCEPTUAL_TABLE_CHECK, verdictExit, redSetIsFuture, gateReviewInvalid,
            validateTiers, resolveTier, routeBuilder, parseSliceEntry, milestoneSeamAfter,
            validatePosture, recoveryDecision, strictSubsetProgress, capFromDial, reconcileAudit }`)()
 const {
   SPINE, parseArgs, resolveStage, nextStage, gateOutcome, reviewLoop,
   fillClosed, streakIndex, stateDoc, atomicWriteCmd, gateCmd,
-  LAW_CHECK_RECEIPT, MILESTONE_PROJECTION_CHECK, verdictExit, redSetIsFuture, gateReviewInvalid,
+  LAW_CHECK_RECEIPT, MILESTONE_PROJECTION_CHECK, PERCEPTUAL_TABLE_CHECK, verdictExit, redSetIsFuture, gateReviewInvalid,
   validateTiers, resolveTier, routeBuilder, parseSliceEntry, milestoneSeamAfter,
   validatePosture, recoveryDecision, strictSubsetProgress, capFromDial, reconcileAudit,
 } = core
@@ -867,6 +867,88 @@ test('S1 (A9/W5-03): MILESTONE_PROJECTION_CHECK is the deterministic agreement l
   assert.equal(run(THIN_DELIM_2, [{ id: 'a', surface: 'ui', milestone: 'x' }]), 1, 'a two-hyphen delimiter is malformed — halt')
 })
 
+test('S1 (W8-B): PERCEPTUAL_TABLE_CHECK is the deterministic perceptual gate — validity, coverage, and consistency, or the honest disagree', () => {
+  const run = (law, slices, files = {}) => {
+    const dir = mkdtempSync(join(tmpdir(), 'kiln-perc-'))
+    mkdirSync(join(dir, '.kiln'))
+    writeFileSync(join(dir, '.kiln', 'LAW.md'), law)
+    writeFileSync(join(dir, '.kiln', 'slices.json'), JSON.stringify(slices))
+    for (const [p, body] of Object.entries(files)) writeFileSync(join(dir, p), body)
+    return spawnSync('bash', ['-c', PERCEPTUAL_TABLE_CHECK], { cwd: dir }).status
+  }
+  const HEAD = '# LAW\ncrit-1 · home · behaviour · cmd · outcome\n\n## Perceptual\n' +
+    '| criterion id | owning slice | dim | requirement | proxy command | expected | reference |\n' +
+    '| --- | --- | --- | --- | --- | --- | --- |\n'
+  const row = (id, owner, dim, req = 'the hero panel reads first', cmd = 'test -f index.html', exp = 'exit 0', ref = '') =>
+    `| ${id} | ${owner} | ${dim} | ${req} | ${cmd} | ${exp} | ${ref} |\n`
+  const UI = [{ id: 'home', surface: 'ui', milestone: '' }, { id: 'api', surface: 'logic', milestone: '' }]
+  const LOGIC = [{ id: 'api', surface: 'logic', milestone: '' }]
+  const BARE = '# LAW\ncrit-1 · api · behaviour · cmd · outcome\n'
+  const four = HEAD + row('p1', 'home', 'composition-hierarchy') + row('p2', 'home', 'typography') +
+    row('p3', 'home', 'color-contrast') + row('p4', 'home', 'fidelity-to-requirement')
+  // Absent table, no ui/mixed surface — the dormant run agrees.
+  assert.equal(run(BARE, LOGIC), 0, 'absent table with no ui/mixed surfaces agrees — dormant')
+  // CONSISTENCY: a ui surface with no table never seals.
+  assert.equal(run(BARE, UI), 1, 'a ui slice REQUIRES the perceptual table — absent is a disagree')
+  // A well-formed table over its ui owner agrees.
+  assert.equal(run(four, UI), 0, 'a valid four-dim table covering the ui slice agrees')
+  // COVERAGE: a ui/mixed slice owning no row halts.
+  const MIXED = [...UI, { id: 'shell', surface: 'mixed', milestone: '' }]
+  assert.equal(run(four, MIXED), 1, 'a mixed slice owning no perceptual row is uncovered — halt')
+  // Required cells nonempty after trim.
+  assert.equal(run(four + row('', 'home', 'motion-continuity'), UI), 1, 'a blank criterion id halts')
+  assert.equal(run(four + row('p5', 'home', 'motion-continuity', ' '), UI), 1, 'a blank requirement halts')
+  assert.equal(run(four + row('p5', 'home', 'motion-continuity', 'motion settles', 'test -f index.html', ''), UI), 1, 'a blank expected halts')
+  // W8-S1-04: c[4] has no other guard (a blank owner or dim also fails membership), so this
+  // negative alone pins the nonempty enforcement on the proxy command.
+  assert.equal(run(four + row('p5', 'home', 'motion-continuity', 'motion settles', ' '), UI), 1, 'a blank proxy command halts')
+  // Unique criterion ids.
+  assert.equal(run(four + row('p1', 'home', 'motion-continuity'), UI), 1, 'a duplicate criterion id halts')
+  // Owner membership.
+  assert.equal(run(four + row('p5', 'ghost', 'motion-continuity'), UI), 1, 'an owner outside slices.json halts')
+  // Dim membership against the shipped rubric ids.
+  assert.equal(run(four + row('p5', 'home', 'vibes'), UI), 1, 'a dim outside the shipped rubric halts')
+  // DISTINCT dims 4-6: three is too few, seven is too many (a seventh is necessarily unknown).
+  const three = HEAD + row('p1', 'home', 'composition-hierarchy') + row('p2', 'home', 'typography') + row('p3', 'home', 'color-contrast')
+  assert.equal(run(three, UI), 1, 'three distinct dims are too few — halt')
+  const seven = four + row('p5', 'home', 'interaction-feedback') + row('p6', 'home', 'motion-continuity') + row('p7', 'home', 'a-seventh-dim')
+  assert.equal(run(seven, UI), 1, 'seven distinct dims are too many — halt')
+  // Reference: named but missing halts; named and existing rides.
+  const withRef = four + row('p5', 'home', 'motion-continuity', 'the fold settles without reflow', 'grep -q settled film.log', 'exit 0', 'mock.png')
+  assert.equal(run(withRef, UI), 1, 'a named reference that does not exist halts — test -e class')
+  assert.equal(run(withRef, UI, { 'mock.png': 'bytes' }), 0,
+    'the full table — spaced requirement and command cells, an existing reference — agrees')
+  // W8-S1-01: cells split on UNESCAPED `|` only — a lawful proxy command carries its pipe as
+  // GFM `\|`, stays a seven-cell row, and unescapes to the real operator; a raw pipe still
+  // splits the row into eight cells and halts (the escape is the one spelling).
+  const piped = four + row('p5', 'home', 'motion-continuity', 'the list holds three items', 'grep -c item list.txt \\| grep -q 3')
+  assert.equal(run(piped, UI), 0, 'a GFM-escaped pipe rides inside the proxy command cell')
+  const rawPipe = four + row('p5', 'home', 'motion-continuity', 'the list holds three items', 'grep -c item list.txt | grep -q 3')
+  assert.equal(run(rawPipe, UI), 1, 'an unescaped pipe splits the row — malformed, halt')
+  // W8-S1-03: the reference is CONTAINED in the repo — existence outside the root is no license.
+  assert.equal(run(four + row('p5', 'home', 'motion-continuity', 'the fold settles', 'test -f index.html', 'exit 0', '/etc/passwd'), UI), 1,
+    'an existing absolute path outside the root halts — containment, not mere existence')
+  assert.equal(run(four + row('p5', 'home', 'motion-continuity', 'the fold settles', 'test -f index.html', 'exit 0', '../'.repeat(40) + 'etc/passwd'), UI), 1,
+    'a parent-traversal to an existing outside file halts the same way')
+  // A declared perceptual section with no well-formed table under it fails closed.
+  assert.equal(run('# LAW\n\n## Perceptual\nno table here\n', LOGIC), 1, 'a bare ## Perceptual heading with no table is malformed — halt')
+})
+
+test('S1 (W8-B/D): the check dims and the FIXED shipped instrument cannot drift — six ids, byte-equal in order', () => {
+  // The const command cannot read the plugin path, so it duplicates the six rubric ids;
+  // this guard pins the duplication to data/perceptual-rubric.json the way the gauge-dial
+  // enum guard pins the kernel POSTURE_* copies.
+  const rubric = JSON.parse(readFileSync(fileURLToPath(new URL('../data/perceptual-rubric.json', import.meta.url)), 'utf8'))
+  const ids = rubric.criteria.map((c) => c.id)
+  assert.deepEqual(ids,
+    ['composition-hierarchy', 'typography', 'color-contrast', 'interaction-feedback', 'motion-continuity', 'fidelity-to-requirement'],
+    'the shipped instrument carries exactly the six fixed dims, in order')
+  const m = PERCEPTUAL_TABLE_CHECK.match(/const dims=\[([^\]]+)\]/)
+  assert.ok(m, 'the check carries its dims list')
+  assert.deepEqual(m[1].split(',').map((s) => s.trim().replace(/"/g, '')), ids,
+    'the check dims equal the shipped rubric ids — the duplication cannot drift')
+})
+
 test('runtime (T-02): a nonzero tiers boot fails the run closed — no stage work runs', async () => {
   const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, { 'tiers:boot': { exit: 20 } })
   assert.equal(ret.status, 'tiers-config-invalid')
@@ -952,6 +1034,7 @@ test('runtime (INTAKE-19): the LAW leg spawns on stage-law (fable) — validate 
     'ratify:request': GREEN,
     'ratify:gate': { exit: 0 },
     'law:milestone-projection': { exit: 0 },
+    'law:perceptual-table': { exit: 0 },
     'law:seal': { exit: 0 },
     'law:stage-end': GREEN,
     // Wave 2: the report run reaches the completion existence gate (law/validate never do).
@@ -981,6 +1064,7 @@ test('runtime (Wave 1): the LAW ratifies, seal-law locks it, and the run advance
     'ratify:request': GREEN,
     'ratify:gate': { exit: 0 },
     'law:milestone-projection': { exit: 0 },
+    'law:perceptual-table': { exit: 0 },
     'law:seal': { exit: 0 },
     'law:stage-end': GREEN,
     'state:write': GREEN,
@@ -1013,6 +1097,7 @@ test('runtime (S1, A9/W5-03): the milestone projection is checked BEFORE the sea
     'ratify:request': GREEN,
     'ratify:gate': { exit: 0 },
     'law:milestone-projection': { exit: 0 },
+    'law:perceptual-table': { exit: 0 },
     'law:seal': { exit: 0 },
     'law:stage-end': GREEN,
     'state:write': GREEN,
@@ -1047,6 +1132,51 @@ test('runtime (S1, A9/W5-03): a milestone projection that disagrees with the LAW
   assert.ok(doc.includes('stage: law') && !doc.includes('stage=build'), 'the run holds at law — never advances to build')
 })
 
+test('runtime (S1, W8-B): the perceptual table is checked BEFORE the seal — beside the milestone projection, then the seal follows', async () => {
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE,
+    ...ONBOARDING_OK,
+    'law:preflight': GREEN,
+    'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law, pinned' },
+    'ratify:request': GREEN,
+    'ratify:gate': { exit: 0 },
+    'law:milestone-projection': { exit: 0 },
+    'law:perceptual-table': { exit: 0 },
+    'law:seal': { exit: 0 },
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'ok', 'a ratified LAW whose perceptual table agrees seals and advances')
+  const perc = calls.find(c => c.label === 'law:perceptual-table')
+  assert.ok(perc, 'the perceptual-table leg runs on the sealed branch')
+  assert.ok(perc.prompt.includes('slices.json') && perc.prompt.includes('LAW.md') && perc.prompt.includes('perceptual'),
+    'the leg reads the LAW.md perceptual table against slices.json')
+  const proj = calls.find(c => c.label === 'law:milestone-projection')
+  const seal = calls.find(c => c.label === 'law:seal')
+  assert.ok(calls.indexOf(proj) < calls.indexOf(perc) && calls.indexOf(perc) < calls.indexOf(seal),
+    'the perceptual check runs after the milestone projection and before the seal — an unlawful table never locks')
+})
+
+test('runtime (S1, W8-B): a perceptual table that disagrees holds — never a silent seal', async () => {
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE,
+    ...ONBOARDING_OK,
+    'law:preflight': GREEN,
+    'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law, pinned' },
+    'ratify:request': GREEN,
+    'ratify:gate': { exit: 0 },
+    'law:milestone-projection': { exit: 0 },
+    'law:perceptual-table': { exit: 1 }, // an invalid, uncovered, or missing-but-required table
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'transport-failure', 'a perceptual-table disagree is an honest hold — a reused status, no new beat')
+  assert.ok(!calls.some(c => c.label === 'law:seal'), 'the LAW never seals over a perceptual table that does not hold')
+  assert.ok(!ret.beat.includes('locked') && !ret.beat.toLowerCase().includes('sealed'),
+    'no SEALED / locked narration on a perceptual-table hold')
+  const doc = lastStateDoc(calls)
+  assert.ok(doc.includes('stage: law') && !doc.includes('stage=build'), 'the run holds at law — never advances to build')
+})
+
 test('runtime (Wave 1): a LAW ratify reject repairs the law, rechecks, and seals within the cap', async () => {
   const gateExits = [10, 0] // review reject, then recheck accept after one repair
   const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
@@ -1060,6 +1190,7 @@ test('runtime (Wave 1): a LAW ratify reject repairs the law, rechecks, and seals
     'ratify:cohort': { exit: 0, ids: ['f1'] },
     'ratify:repair': { facts: { status: 'ok', pointers: ['.kiln/LAW.md'], schema_valid: true }, narration_beat: 'the law, revised' },
     'law:milestone-projection': { exit: 0 },
+    'law:perceptual-table': { exit: 0 },
     'law:seal': { exit: 0 },
     'law:stage-end': GREEN,
     'state:write': GREEN,
@@ -1213,6 +1344,7 @@ test('runtime (Wave 1, A2): the SEALED-claiming LAW card beat speaks only after 
     'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: LAW_SEALED_BEAT },
     'ratify:request': GREEN,
     'law:milestone-projection': { exit: 0 },
+    'law:perceptual-table': { exit: 0 },
     'state:write': GREEN,
   }
   // HELD (codex down): the sealed narration is ABSENT — only the honest hold line.
@@ -1244,6 +1376,7 @@ test('runtime (Wave 1, A9): a project path with a space ratifies — the mandato
     'ratify:request': GREEN,
     'ratify:gate': { exit: 0 },
     'law:milestone-projection': { exit: 0 },
+    'law:perceptual-table': { exit: 0 },
     'law:seal': { exit: 0 },
     'law:stage-end': GREEN,
     'state:write': GREEN,
@@ -1275,6 +1408,7 @@ const WIDE_PROMOTE_RUN = {
   'ratify:request': GREEN,
   'ratify:gate': { exit: 0 },
   'law:milestone-projection': { exit: 0 },
+  'law:perceptual-table': { exit: 0 },
   'law:seal': { exit: 0 },
   'law:stage-end': GREEN,
   'state:write': GREEN,
@@ -1301,6 +1435,7 @@ const WIDE_ADJUDICATE_RUN = {
   'ratify:request': GREEN,
   'ratify:gate': { exit: 0 },
   'law:milestone-projection': { exit: 0 },
+  'law:perceptual-table': { exit: 0 },
   'law:seal': { exit: 0 },
   'law:stage-end': GREEN,
   'state:write': GREEN,
@@ -1315,6 +1450,7 @@ test('runtime (W5-S2, W5-04): the floor width keeps the single act producer — 
     'ratify:request': GREEN,
     'ratify:gate': { exit: 0 },
     'law:milestone-projection': { exit: 0 },
+    'law:perceptual-table': { exit: 0 },
     'law:seal': { exit: 0 },
     'law:stage-end': GREEN,
     'state:write': GREEN,
@@ -2466,6 +2602,7 @@ test('runtime (Wave 3): a present brief and a valid posture pass the LAW input g
     'ratify:request': GREEN,
     'ratify:gate': { exit: 0 },
     'law:milestone-projection': { exit: 0 },
+    'law:perceptual-table': { exit: 0 },
     'law:seal': { exit: 0 },
     'law:stage-end': GREEN,
     'state:write': GREEN,
@@ -2567,6 +2704,7 @@ test('runtime (Wave 3, brownfield): a present .kiln/brownfield marker with a non
     'ratify:request': GREEN,
     'ratify:gate': { exit: 0 },
     'law:milestone-projection': { exit: 0 },
+    'law:perceptual-table': { exit: 0 },
     'law:seal': { exit: 0 },
     'law:stage-end': GREEN,
     'state:write': GREEN,
@@ -2611,6 +2749,7 @@ test('runtime (Wave 3, greenfield): no marker means no map is required — the m
     'ratify:request': GREEN,
     'ratify:gate': { exit: 0 },
     'law:milestone-projection': { exit: 0 },
+    'law:perceptual-table': { exit: 0 },
     'law:seal': { exit: 0 },
     'law:stage-end': GREEN,
     'state:write': GREEN,
@@ -3305,6 +3444,7 @@ test('dogfood (W7-S3): ratify, build, and audit gates coexist across one project
     'ratify:cohort': { exit: 0, ids: ['R1'] },
     'ratify:repair': { facts: { status: 'ok', pointers: ['.kiln/LAW.md'], schema_valid: true }, narration_beat: 'the law, revised' },
     'law:milestone-projection': { exit: 0 },
+    'law:perceptual-table': { exit: 0 },
     'law:seal': { exit: 0 },
     'law:stage-end': GREEN,
     'state:write': GREEN,

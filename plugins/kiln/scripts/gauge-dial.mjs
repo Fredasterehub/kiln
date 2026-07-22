@@ -53,9 +53,13 @@ export function postureToDials(posture, visualArtifactPresence) {
 // The executable entry: read .kiln/posture.json from the project cwd and print the projected
 // dials as one line of JSON, exit 0. A missing, unreadable, or malformed posture parses to
 // undefined and falls through the fail-up guard — the same max-scrutiny default the callers
-// want when the posture cannot be trusted. The posture is exactly {scope, novelty,
-// reversibility} and carries no visual-artifact flag, so perceptual projects dormant here; the
-// research dial — the only field the research-sweep caller reads — never depends on it.
+// want when the posture cannot be trusted. The posture stays exactly {scope, novelty,
+// reversibility}; the visual-artifact flag arrives on argv instead (W8): `--visual true` is
+// the ONE spelling that turns it on — any other value, a bare flag, or its absence stays
+// false, so a flagless call keeps the pre-flag output byte-for-byte (perceptual dormant; the
+// research dial research-sweep reads never depends on it). The validate entry supplies
+// `--visual true` from its closed table-presence check over the sealed LAW; fail-up still
+// outranks the flag either way.
 function readPosture() {
   try {
     return JSON.parse(readFileSync(resolve('.kiln/posture.json'), 'utf8'))
@@ -65,6 +69,7 @@ function readPosture() {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
-  process.stdout.write(JSON.stringify(postureToDials(readPosture(), false)) + '\n')
+  const v = process.argv.indexOf('--visual')
+  process.stdout.write(JSON.stringify(postureToDials(readPosture(), v >= 0 && process.argv[v + 1] === 'true')) + '\n')
   process.exit(0)
 }
