@@ -21,12 +21,12 @@ const coreSrc = srcLines.slice(
 const core = new Function(coreSrc + `
   return { SPINE, parseArgs, resolveStage, nextStage, gateOutcome, reviewLoop,
            fillClosed, streakIndex, stateDoc, atomicWriteCmd, gateCmd, LAW_CHECK, LAW_GUARD,
-           LAW_CHECK_RECEIPT, verdictExit, gateWriteCmd, gateReviewInvalid,
+           LAW_CHECK_RECEIPT, verdictExit, redSetIsFuture, gateReviewInvalid,
            validateTiers, resolveTier, routeBuilder, parseSliceEntry }`)()
 const {
   SPINE, parseArgs, resolveStage, nextStage, gateOutcome, reviewLoop,
   fillClosed, streakIndex, stateDoc, atomicWriteCmd, gateCmd,
-  LAW_CHECK_RECEIPT, verdictExit, gateWriteCmd, gateReviewInvalid,
+  LAW_CHECK_RECEIPT, verdictExit, redSetIsFuture, gateReviewInvalid,
   validateTiers, resolveTier, routeBuilder, parseSliceEntry,
 } = core
 
@@ -100,6 +100,12 @@ const GATE_ACCEPT = { review_id: 'r1', law_hash: 'a'.repeat(64), findings: [], b
 // S1: the claude gate fetches the locked law hash from the review request as a
 // closed machine fact before validating any verdict against it.
 const HASH_OK = { exit: 0, ids: ['a'.repeat(64)] }
+// Producer-self-publish (INTAKE-27): the claude reviewer WRITES its verdict to the
+// candidate file and returns only this light {ok} ack; the kernel reads the written
+// bytes back raw (gate:read) and validates them. The mock models the written
+// candidate as the raw file read — a one-element array holding the file contents.
+const OK_ACK = { ok: true }
+const readCandidate = (verdict) => ({ exit: 0, ids: [JSON.stringify(verdict)] })
 const VOICE = {
   'voice:resume': { exit: 0, ids: ['The fire never went out. Kiln again — the ledger holds the next step, and I am already taking it.'] },
   'voice:reopen': { exit: 0, ids: ['Slice {slice} reopened — a law check went red. A seal is evidence-bound, not sacred.'] },
@@ -135,9 +141,11 @@ test('content-blind: no filesystem, clock, randomness, or content parsing in the
   ]) {
     assert.ok(!code.includes(banned), `kernel code must not contain "${banned}"`)
   }
-  // W-01: exactly ONE JSON.parse — the sanctioned parse-and-hop args adapter
-  // (envelope mechanics, not content), and it lives in the pure core.
-  assert.equal(code.split('JSON.parse').length - 1, 1, 'exactly one JSON.parse (the args adapter)')
+  // W-01: exactly TWO JSON.parse calls — the sanctioned parse-and-hop args
+  // adapter in the pure core (envelope mechanics), and the gate-file mirror in
+  // the workflow runtime (the kernel parses the raw candidate bytes it validates
+  // and publishes). Both are sanctioned envelope reads, never content parsing.
+  assert.equal(code.split('JSON.parse').length - 1, 2, 'exactly two JSON.parse (the args adapter + the gate-file mirror)')
   assert.ok(coreSrc.includes('Parse-and-hop'), 'the adapter is the marked parse-and-hop region')
 })
 
@@ -400,6 +408,11 @@ test('runtime (W-04): preflight red on an UNSEALED slice is pre-build state — 
   assert.equal(ret.status, 'ok', 'the expected pre-build red never reopens')
   assert.ok(calls.some(c => c.label === 'slice:s1'), 'the active slice build dispatches')
   assert.ok(ret.beat.includes('Slice s1 sealed — dual. The evidence holds.'), 'the sealed seal template arrives filled')
+  // STRIKE 3: the seal leg passes the cwd-relative `.kiln` dir — never an unquoted
+  // absolute projectDir, which a whitespace path would split into extra args.
+  const sealLeg = calls.find(c => c.label === 'seal:append')
+  assert.ok(sealLeg.prompt.includes('append-seal .kiln '), 'the seal leg passes the cwd-relative .kiln dir')
+  assert.ok(!sealLeg.prompt.includes('/p/.kiln'), 'never the interpolated absolute projectDir path')
 })
 
 test('runtime: ANY pre-seal red blocks the seal unless a sealed owner reopens', async () => {
@@ -672,7 +685,9 @@ test('runtime (T-03): the builder leg is surface-routed — ui→builder-ui, log
     'degraded:check': { exit: 1 },
     'request:hash': HASH_OK,
     'gate:review': { exit: 0 },
-    'gate-claude:review': GATE_ACCEPT,
+    'gate:invalidate': { exit: 0 },
+    'gate-claude:review': OK_ACK,
+    'gate:read': readCandidate(GATE_ACCEPT),
     'gate:publish': { exit: 0 },
     'seal:append': { exit: 0 },
     'state:write': GREEN,
@@ -787,13 +802,6 @@ test('core (simple-fire): LAW_CHECK_RECEIPT captures the full check output verba
     'the receipt holds the full output verbatim — the evidence the reviewer judges instead of executing')
 })
 
-test('core (simple-fire): gateWriteCmd publishes the claude verdict atomically — executed', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'kiln-gate-'))
-  execSync(gateWriteCmd(JSON.stringify(GATE_ACCEPT, null, 2)), { cwd: dir, shell: '/bin/bash' })
-  assert.deepEqual(JSON.parse(readFileSync(join(dir, '.kiln/gate-review.json'), 'utf8')), GATE_ACCEPT)
-  assert.ok(!existsSync(join(dir, '.kiln/.gate-review.tmp')), 'temp file is gone')
-})
-
 test('runtime (simple-fire): the gate branches on the surface — logic and mixed take the claude gate, ui alone keeps codex', async () => {
   const build = (entry, extra) => ({
     ...VOICE,
@@ -811,7 +819,9 @@ test('runtime (simple-fire): the gate branches on the surface — logic and mixe
   })
   const logic = await runKernel({ stage: 'build', projectDir: '/p' }, build('obj|s1|logic', {
     'request:hash': HASH_OK,
-    'gate-claude:review': GATE_ACCEPT,
+    'gate:invalidate': { exit: 0 },
+    'gate-claude:review': OK_ACK,
+    'gate:read': readCandidate(GATE_ACCEPT),
     'gate:publish': { exit: 0 },
   }))
   assert.equal(logic.ret.status, 'ok')
@@ -822,28 +832,31 @@ test('runtime (simple-fire): the gate branches on the surface — logic and mixe
   assert.ok(claude.prompt.includes('.kiln/check-receipt.txt'), 'the claude gate names the kernel-side check receipt')
   assert.ok(claude.prompt.includes('Execute nothing'), 'the reviewer is told to execute nothing')
   assert.ok(claude.prompt.includes('review-schema.json'), 'the strict verdict schema is named')
+  assert.ok(claude.prompt.includes('.kiln/.gate-review.reviewer.tmp'),
+    'the reviewer is told to write its verdict to the candidate file as the final act of its turn')
   assert.deepEqual(claude.opts.schema, {
     type: 'object', additionalProperties: false,
-    properties: {
-      review_id: { type: 'string' }, law_hash: { type: 'string' },
-      findings: { type: 'array', items: { type: 'object', additionalProperties: false,
-        properties: { id: { type: 'string' }, criterion: { type: 'string' }, location: { type: 'string' },
-          failure_mode: { type: 'string' }, evidence: { type: 'string' }, minimal_fix: { type: 'string' } },
-        required: ['id', 'criterion', 'location', 'failure_mode', 'evidence', 'minimal_fix'] } },
-      blockers: { type: 'array', items: { type: 'string' } },
-      verdict: { type: 'string', enum: ['accept', 'changes_required', 'blocked'] },
-    },
-    required: ['review_id', 'law_hash', 'findings', 'blockers', 'verdict'],
-  }, 'the return is schema-forced to the review-schema.json mirror')
+    properties: { ok: { type: 'boolean' } }, required: ['ok'],
+  }, 'the reviewer return is the light {ok} ack — verdict authority lives in the file it writes')
+  const invalidate = logic.calls.find(c => c.label === 'gate:invalidate')
+  assert.ok(invalidate && invalidate.prompt.includes('rm -f') && invalidate.prompt.includes('.kiln/.gate-review.reviewer.tmp'),
+    'the kernel invalidates the candidate before the reviewer runs — stale-candidate prevention')
+  assert.ok(logic.calls.findIndex(c => c.label === 'gate:invalidate') < logic.calls.findIndex(c => c.label === 'gate-claude:review'),
+    'the invalidation lands before the reviewer is invoked')
+  const read = logic.calls.find(c => c.label === 'gate:read')
+  assert.ok(read && read.prompt.includes('cat ') && read.prompt.includes('.kiln/.gate-review.reviewer.tmp'),
+    'the kernel reads the candidate back as raw bytes — never require()+JSON.stringify')
   const publish = logic.calls.find(c => c.label === 'gate:publish')
-  assert.ok(publish && publish.prompt.includes('.kiln/gate-review.json'),
-    'the kernel publishes the verdict to the gate file by hand — the reviewer writes nothing')
+  assert.ok(publish && publish.prompt.includes('mv -f') && publish.prompt.includes('.kiln/.gate-review.reviewer.tmp') && publish.prompt.includes('.kiln/gate-review.json'),
+    'the kernel promotes the reviewer-written candidate content-free — mv tmp → gate file')
   const preSeal = logic.calls.find(c => c.label === 'law:pre-seal')
   assert.ok(preSeal.prompt.includes(LAW_CHECK_RECEIPT), 'the pre-seal leg runs the receipt-capturing check verbatim')
   assert.ok(logic.ret.beat.includes('Slice s1 sealed — dual'), 'a claude-gated logic slice seals dual')
   const mixed = await runKernel({ stage: 'build', projectDir: '/p' }, build('obj|s1|mixed', {
     'request:hash': HASH_OK,
-    'gate-claude:review': GATE_ACCEPT,
+    'gate:invalidate': { exit: 0 },
+    'gate-claude:review': OK_ACK,
+    'gate:read': readCandidate(GATE_ACCEPT),
     'gate:publish': { exit: 0 },
   }))
   assert.equal(mixed.ret.status, 'ok')
@@ -861,6 +874,7 @@ test('runtime (simple-fire): a claude gate reject walks the same repair loop —
     review_id: 'r1', law_hash: 'a'.repeat(64), blockers: [], verdict: 'changes_required',
     findings: [{ id: 'F1', criterion: 'c', location: 'x.mjs:1', failure_mode: 'f', evidence: 'e', minimal_fix: 'm' }],
   }
+  const reads = [reject, GATE_ACCEPT]
   const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
     ...VOICE,
     'law:preflight': GREEN,
@@ -873,8 +887,10 @@ test('runtime (simple-fire): a claude gate reject walks the same repair loop —
     'law:stage-end': GREEN,
     'degraded:check': { exit: 1 },
     'request:hash': HASH_OK,
-    'gate-claude:review': reject,
-    'gate-claude:recheck': GATE_ACCEPT,
+    'gate:invalidate': { exit: 0 },
+    'gate-claude:review': OK_ACK,
+    'gate-claude:recheck': OK_ACK,
+    'gate:read': () => readCandidate(reads.shift()),
     'gate:publish': { exit: 0 },
     'findings:fetch': { exit: 0, ids: ['F1'] },
     'repair:s1': { ok: true, beat: 'repaired', pointers: [] },
@@ -935,7 +951,9 @@ test('runtime (S2/S3): a codex-dead logic slice stops for acknowledgment, then c
     ...base,
     'degraded-ack:check': { exit: 0 },
     'request:hash': HASH_OK,
-    'gate-claude:review': GATE_ACCEPT,
+    'gate:invalidate': { exit: 0 },
+    'gate-claude:review': OK_ACK,
+    'gate:read': readCandidate(GATE_ACCEPT),
     'gate:publish': { exit: 0 },
   })
   assert.equal(acked.ret.status, 'ok')
@@ -965,6 +983,7 @@ test('runtime (S2/S3): a codex-dead logic slice stops for acknowledgment, then c
     findings: [{ id: 'F1', criterion: 'c', location: 'x.mjs:1', failure_mode: 'f', evidence: 'e', minimal_fix: 'm' }],
   }
   const degradedChecks = [1, 0] // absent before the gate, present at seal time
+  const midReads = [reject, GATE_ACCEPT]
   const midRun = await runKernel({ stage: 'build', projectDir: '/p' }, {
     ...VOICE,
     'law:preflight': GREEN,
@@ -977,8 +996,10 @@ test('runtime (S2/S3): a codex-dead logic slice stops for acknowledgment, then c
     'law:stage-end': GREEN,
     'degraded:check': () => ({ exit: degradedChecks.shift() }),
     'request:hash': HASH_OK,
-    'gate-claude:review': reject,
-    'gate-claude:recheck': GATE_ACCEPT,
+    'gate:invalidate': { exit: 0 },
+    'gate-claude:review': OK_ACK,
+    'gate-claude:recheck': OK_ACK,
+    'gate:read': () => readCandidate(midReads.shift()),
     'gate:publish': { exit: 0 },
     'findings:fetch': { exit: 0, ids: ['F1'] },
     'repair:s1': { ok: true, beat: 'repaired', pointers: [] },
@@ -1056,7 +1077,9 @@ test('runtime (S1): a claude verdict failing the semantic mirror never publishes
     'law:pre-seal': GREEN,
     'degraded:check': { exit: 1 },
     'request:hash': HASH_OK,
-    'gate-claude:review': verdict,
+    'gate:invalidate': { exit: 0 },
+    'gate-claude:review': OK_ACK,
+    'gate:read': readCandidate(verdict),
     'state:write': GREEN,
   })
   const wrongHash = await runKernel({ stage: 'build', projectDir: '/p' },
@@ -1081,7 +1104,9 @@ test('runtime (S1 residual): an empty review_id and a malformed finding each fai
     'law:pre-seal': GREEN,
     'degraded:check': { exit: 1 },
     'request:hash': HASH_OK,
-    'gate-claude:review': verdict,
+    'gate:invalidate': { exit: 0 },
+    'gate-claude:review': OK_ACK,
+    'gate:read': readCandidate(verdict),
     'state:write': GREEN,
   })
   const emptyId = await runKernel({ stage: 'build', projectDir: '/p' },
@@ -1161,7 +1186,9 @@ test('runtime (S2): a red pre-recheck rerun halts law-red — no gate ever judge
     'law:pre-recheck': { exit: 1, ids: [] },
     'degraded:check': { exit: 1 },
     'request:hash': HASH_OK,
-    'gate-claude:review': reject,
+    'gate:invalidate': { exit: 0 },
+    'gate-claude:review': OK_ACK,
+    'gate:read': readCandidate(reject),
     'gate:publish': { exit: 0 },
     'findings:fetch': { exit: 0, ids: ['F1'] },
     'repair:s1': { ok: true, beat: 'repaired', pointers: [] },
@@ -1177,4 +1204,186 @@ test('tier-keys-only: no compiled model id or alias literal lives in the kernel 
   for (const v of ['gpt-5.6-sol', "'fable'", "'opus'", "'sonnet'", "'gpt-sol'"]) {
     assert.ok(!src.includes(v), `no compiled tier value ${v} in kernel source — models live only in tiers.json`)
   }
+})
+
+// ── INTAKE-26: the order-aware boundary predicate (multi-new-slice deadlock) ──
+
+test('core (deadlock, INTAKE-26): redSetIsFuture tolerates only unique strictly-later planned owners', () => {
+  const plan = ['s1', 's2', 's3']
+  // future-only: every red owner maps to a UNIQUE strictly-later slice → tolerate.
+  assert.equal(redSetIsFuture(['s2'], 's1', plan), true)
+  assert.equal(redSetIsFuture(['s2', 's3'], 's1', plan), true)
+  assert.equal(redSetIsFuture(['s3'], 's2', plan), true)
+  // unowned (empty / non-array ids) never tolerates.
+  assert.equal(redSetIsFuture([], 's1', plan), false, 'an unowned red never tolerates')
+  assert.equal(redSetIsFuture(undefined, 's1', plan), false, 'a non-array red never tolerates')
+  // the current slice owning the red halts.
+  assert.equal(redSetIsFuture(['s1'], 's1', plan), false, 'the current slice owning the red halts')
+  // an earlier owner halts.
+  assert.equal(redSetIsFuture(['s1'], 's2', plan), false, 'an earlier owner halts')
+  assert.equal(redSetIsFuture(['s2'], 's3', plan), false)
+  // an out-of-plan owner halts.
+  assert.equal(redSetIsFuture(['s9'], 's1', plan), false, 'an out-of-plan owner halts')
+  // a mixed valid/invalid set halts (future+current, future+out-of-plan).
+  assert.equal(redSetIsFuture(['s2', 's1'], 's1', plan), false, 'a mixed future+current set halts')
+  assert.equal(redSetIsFuture(['s3', 's9'], 's1', plan), false, 'a mixed future+out-of-plan set halts')
+  // an ambiguous owner — one that appears more than once in the plan — halts.
+  assert.equal(redSetIsFuture(['s2'], 's1', ['s1', 's2', 's2']), false, 'an ambiguous plan owner halts')
+  // the current slice absent from the plan halts (defensive).
+  assert.equal(redSetIsFuture(['s2'], 'sX', plan), false, 'a current slice absent from the plan halts')
+})
+
+test('runtime (deadlock, INTAKE-26): a later-planned pre-seal red is expected pre-build state — both slices seal', async () => {
+  // s1 seals while the LAW is still red on the unbuilt later slice s2 (the W-04
+  // pre-build state); s2 then builds and its pre-seal is green. The deadlock fix.
+  const preSeals = [{ exit: 1, ids: ['s2'] }, GREEN]
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui', 'obj|s2|ui'] },
+    'ladder:fetch': LADDER,
+    'seal:check': { exit: 1 },
+    'slice:s1': { ok: true, beat: 'forging s1', pointers: [] },
+    'slice:s2': { ok: true, beat: 'forging s2', pointers: [] },
+    'law:pre-seal': () => preSeals.shift(),
+    'law:stage-end': GREEN,
+    'degraded:check': { exit: 1 },
+    'gate:review': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'ok', 'the later-planned red tolerates; s1 seals, then s2 seals green')
+  assert.ok(calls.some(c => c.label === 'slice:s1') && calls.some(c => c.label === 'slice:s2'), 'both slices build')
+  assert.equal(calls.filter(c => c.label === 'seal:append').length, 2, 'both slices seal')
+  assert.ok(ret.beat.includes('Slice s2 sealed — dual'), 'the last slice seals dual')
+})
+
+test('runtime (deadlock, INTAKE-26): a non-future pre-seal red halts law-red — current, out-of-plan, and mixed sets never seal', async () => {
+  const run = (preSealIds) => runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui', 'obj|s2|ui'] },
+    'ladder:fetch': LADDER,
+    'seal:check': { exit: 1 },
+    'slice:s1': { ok: true, beat: 'forging', pointers: [] },
+    'law:pre-seal': { exit: 1, ids: preSealIds },
+    'state:write': GREEN,
+  })
+  const current = await run(['s1'])
+  assert.equal(current.ret.status, 'law-red', 'the current slice owning the red never seals')
+  assert.ok(!current.ret.beat.includes('sealed —'), 'no seal under a current-owner red')
+  assert.ok(lastStateDoc(current.calls).includes('active_slice: s1'), 'the current slice is held')
+  const outOfPlan = await run(['s9'])
+  assert.equal(outOfPlan.ret.status, 'law-red', 'an out-of-plan owner never seals')
+  const mixed = await run(['s2', 's1'])
+  assert.equal(mixed.ret.status, 'law-red', 'a mixed future+current set never seals')
+})
+
+test('runtime (deadlock, INTAKE-26): a later-planned pre-recheck red tolerates — the recheck judges and the slice seals', async () => {
+  const reviewExits = [10, 0]   // s1 review reject, s2 review accept
+  const recheckExits = [0]      // s1 recheck accept
+  const preRecheck = [{ exit: 1, ids: ['s2'] }] // the fresh receipt before s1's recheck reds on the unbuilt s2
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui', 'obj|s2|ui'] },
+    'ladder:fetch': LADDER,
+    'seal:check': { exit: 1 },
+    'slice:s1': { ok: true, beat: 'forging', pointers: [] },
+    'slice:s2': { ok: true, beat: 'forging', pointers: [] },
+    'law:pre-seal': GREEN,
+    'law:pre-recheck': () => preRecheck.shift(),
+    'law:stage-end': GREEN,
+    'degraded:check': { exit: 1 },
+    'gate:review': () => ({ exit: reviewExits.shift() }),
+    'gate:recheck': () => ({ exit: recheckExits.shift() }),
+    'findings:fetch': { exit: 0, ids: ['F1'] },
+    'repair:s1': { ok: true, beat: 'repaired', pointers: [] },
+    'delta:check': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'ok', 'the later-planned pre-recheck red tolerates; the recheck judges and both slices seal')
+  assert.ok(calls.some(c => c.label === 'gate:recheck'), 'the recheck ran over the tolerated later-planned red')
+  assert.equal(calls.filter(c => c.label === 'seal:append').length, 2, 'both slices seal')
+})
+
+test('runtime (STRIKE 2): a pre-recheck red owned by an already-SEALED later slice reopens it — future-tolerance never masks a sealed regression', async () => {
+  // s1 is on the anvil and reject→repairs; the fresh pre-recheck receipt goes red
+  // owned by s2 — a LATER planned slice that is already SEALED (a regression). The
+  // pre-recheck must mirror the pre-seal gate: firstSealed is consulted FIRST, so
+  // the sealed owner reopens and the recheck never judges a masked regression.
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui', 'obj|s2|ui'] },
+    'ladder:fetch': LADDER,
+    // s2 is sealed on disk, s1 is not — the per-id grep is routed on the command.
+    'seal:check': (prompt) => ({ exit: prompt.includes('^s2 ') ? 0 : 1 }),
+    'slice:s1': { ok: true, beat: 'forging', pointers: [] },
+    'law:pre-seal': GREEN,
+    'law:pre-recheck': { exit: 1, ids: ['s2'] },
+    'degraded:check': { exit: 1 },
+    'gate:review': { exit: 10 },
+    'findings:fetch': { exit: 0, ids: ['F1'] },
+    'repair:s1': { ok: true, beat: 'repaired', pointers: [] },
+    'delta:check': { exit: 0 },
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'law-red', 'the sealed later owner reopens instead of being tolerated')
+  assert.ok(ret.beat.includes('Slice s2 reopened'), 'the sealed owner s2 is reopened, not masked')
+  const doc = lastStateDoc(calls)
+  assert.ok(doc.includes('active_slice: s2'), 'the reopened sealed owner is persisted as active_slice')
+  assert.ok(doc.includes('Reopen slice s2'), 'next_action names the reopened owner')
+  assert.ok(!calls.some(c => c.label === 'gate:recheck'), 'the recheck never runs over the masked-then-reopened red')
+})
+
+// ── INTAKE-27: producer-self-publish — invalid / stale / missing candidate ──
+
+test('runtime (INTAKE-27): an unparseable candidate halts the claude gate — nothing promotes, nothing seals', async () => {
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
+    'ladder:fetch': LADDER,
+    'seal:check': { exit: 1 },
+    'slice:s1': { ok: true, beat: 'forging', pointers: [] },
+    'law:pre-seal': GREEN,
+    'degraded:check': { exit: 1 },
+    'request:hash': HASH_OK,
+    'gate:invalidate': { exit: 0 },
+    'gate-claude:review': OK_ACK,
+    'gate:read': { exit: 0, ids: ['this is not json at all'] },
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'transport-failure', 'an unparseable candidate is transport-failure exit semantics')
+  assert.ok(!calls.some(c => c.label === 'gate:publish'), 'nothing promotes when the candidate will not parse')
+  assert.ok(!ret.beat.includes('sealed'), 'never a seal')
+})
+
+test('runtime (INTAKE-27): a stale or missing candidate never promotes — the {ok} ack alone cannot seal', async () => {
+  const base = {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
+    'ladder:fetch': LADDER,
+    'seal:check': { exit: 1 },
+    'slice:s1': { ok: true, beat: 'forging', pointers: [] },
+    'law:pre-seal': GREEN,
+    'degraded:check': { exit: 1 },
+    'request:hash': HASH_OK,
+    'gate:invalidate': { exit: 0 },
+    'state:write': GREEN,
+  }
+  // (a) the reviewer returns a false ack — the kernel never reads a candidate.
+  const falseAck = await runKernel({ stage: 'build', projectDir: '/p' }, { ...base, 'gate-claude:review': { ok: false } })
+  assert.equal(falseAck.ret.status, 'transport-failure', 'a false ack seals nothing')
+  assert.ok(!falseAck.calls.some(c => c.label === 'gate:read'), 'a false ack short-circuits before the raw read')
+  assert.ok(!falseAck.calls.some(c => c.label === 'gate:publish'), 'nothing promotes on a false ack')
+  // (b) the reviewer acks ok but wrote no candidate — the invalidated file cannot
+  // be read back, so no stale verdict survives to promote.
+  const missing = await runKernel({ stage: 'build', projectDir: '/p' }, { ...base, 'gate-claude:review': OK_ACK, 'gate:read': { exit: 1, ids: [] } })
+  assert.equal(missing.ret.status, 'transport-failure', 'a missing candidate seals nothing')
+  assert.ok(!missing.calls.some(c => c.label === 'gate:publish'), 'nothing promotes over a missing candidate')
+  assert.ok(!missing.ret.beat.includes('sealed'), 'never a seal')
 })

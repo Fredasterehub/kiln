@@ -187,6 +187,20 @@ test('build card: the logic coder is ONE bash codex exec call — the proven rec
   assert.ok(build.includes('.kiln/check-receipt.txt'), 'the check-receipt contract rides the card')
 })
 
+test('build card (STRIKE 1): step 4 is order-aware — green through your own slice, later unbuilt reds never deadlock the builder', () => {
+  const flat = cardText('build.md').replace(/\s+/g, ' ')
+  // The bare full-green stop is gone: in a multi-slice milestone check.sh is red on
+  // later unbuilt slices, so "return only when it exits 0" loops the builder forever.
+  assert.ok(!flat.includes('return only when it exits `0`'),
+    'the bare full-green stop is gone — it deadlocks a multi-slice check.sh red on later unbuilt slices')
+  assert.ok(flat.includes('green THROUGH your own slice'),
+    'the builder returns when its own slice criteria pass')
+  assert.ok(flat.includes('a nonzero exit is acceptable ONLY when every remaining red is owned by a later, still-unbuilt planned slice'),
+    'a nonzero exit is acceptable only when every remaining red is a later unbuilt planned slice')
+  assert.ok(flat.includes("never return with your own or an earlier slice's criterion red"),
+    'never return with your own or an earlier slice criterion red')
+})
+
 test('tiers: the logic and mixed surfaces route to the claude context-builder seat whose coder is GPT via one bash call', () => {
   const tiers = JSON.parse(readFileSync(join(DATA, 'tiers.json'), 'utf8'))
   assert.equal(tiers.surface_routing.logic, 'builder-logic', 'logic is routed again — the park is over')

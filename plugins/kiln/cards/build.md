@@ -17,9 +17,13 @@ you never invoke the transport, write `gate-review.json`, or touch `seals.log`. 
    fixed WHAT at law time — the cut and its criteria; HOW is decided now, never
    pre-planned beyond the cut.
 4. Build the slice — surfaces `logic` and `mixed` build through the coder call below;
-   surface `ui` builds with your own hands. Then run `bash .kiln/law/check.sh` — return only
-   when it exits `0`. The kernel reruns it before the seal and captures the receipt for
-   the reviewer; a red reopens your slice.
+   surface `ui` builds with your own hands. Then run `bash .kiln/law/check.sh` — return when
+   it is green THROUGH your own slice (every one of your slice's criteria passes); a nonzero
+   exit is acceptable ONLY when every remaining red is owned by a later, still-unbuilt planned
+   slice — never return with your own or an earlier slice's criterion red. The kernel reruns
+   it before the seal and captures the receipt for the reviewer; a red owned by your slice
+   (or an earlier one) reopens it, while a red owned only by a later, still-unbuilt planned
+   slice is expected pre-build state and does not block.
 5. Write `.kiln/review-request.json` (temp + rename). The gate transport's model and effort
    are named once in `data/tiers.json` (beside `data/voice.json`) — read `roles["reviewer-gate"]`,
    resolve its `alias` through that file's `resolver` map to a concrete id, and write the pair.

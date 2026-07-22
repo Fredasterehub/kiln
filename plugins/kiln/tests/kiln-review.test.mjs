@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -62,6 +62,37 @@ test('kiln-review: the reviewer never executes — the instructions attach the k
   assert.ok(!src.includes('Run the supplied commands'), 'the old execute-the-commands instruction is gone')
   assert.ok(src.includes(`'.kiln', 'check-receipt.txt'`), 'the transport reads the receipt from the reviewed repo')
   assert.ok(src.includes('packet.check_receipt'), 'the receipt rides the evidence packet verbatim')
+})
+
+test('kiln-review: append-seal writes a valid seal line, is append-only, and rejects a bad label or empty slice', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kiln-seal-'))
+  const seals = join(dir, 'seals.log')
+  // A valid dual seal creates the log and lands exactly "<slice> <label>\n".
+  const first = spawnSync('node', [REVIEW, 'append-seal', dir, 's1', 'dual'], { encoding: 'utf8' })
+  assert.equal(first.status, 0, 'a valid dual append exits 0')
+  assert.equal(readFileSync(seals, 'utf8'), 's1 dual\n', 'the log is created with the exact line')
+  // A second valid append is append-only — the prior line survives.
+  const second = spawnSync('node', [REVIEW, 'append-seal', dir, 's2', 'single-family'], { encoding: 'utf8' })
+  assert.equal(second.status, 0, 'a valid single-family append exits 0')
+  assert.equal(readFileSync(seals, 'utf8'), 's1 dual\ns2 single-family\n', 'the append is append-only')
+  // A bad label is rejected non-zero and appends nothing.
+  const badLabel = spawnSync('node', [REVIEW, 'append-seal', dir, 's3', 'triple'], { encoding: 'utf8' })
+  assert.notEqual(badLabel.status, 0, 'a label outside {dual, single-family} is rejected')
+  // An empty slice id is rejected non-zero and appends nothing.
+  const emptySlice = spawnSync('node', [REVIEW, 'append-seal', dir, '', 'dual'], { encoding: 'utf8' })
+  assert.notEqual(emptySlice.status, 0, 'an empty slice id is rejected')
+  assert.equal(readFileSync(seals, 'utf8'), 's1 dual\ns2 single-family\n', 'no rejected call ever appended')
+})
+
+test('kiln-review: append-seal resolves .kiln/seals.log against cwd when given the relative kilnDir the kernel passes', () => {
+  // The kernel runs the seal leg with cwd = projectDir and passes the cwd-relative
+  // `.kiln` (never an unquoted absolute projectDir, which a whitespace path would
+  // split into extra args). The CLI must resolve `.kiln/seals.log` against cwd.
+  const proj = mkdtempSync(join(tmpdir(), 'kiln-proj dir-')) // a space in the path, on purpose
+  mkdirSync(join(proj, '.kiln'), { recursive: true })
+  const r = spawnSync('node', [REVIEW, 'append-seal', '.kiln', 's1', 'dual'], { cwd: proj, encoding: 'utf8' })
+  assert.equal(r.status, 0, 'a relative .kiln resolves against the process cwd, even when projectDir has a space')
+  assert.equal(readFileSync(join(proj, '.kiln', 'seals.log'), 'utf8'), 's1 dual\n', 'the seal lands at projectDir/.kiln/seals.log')
 })
 
 test('kiln-review: the ui reviewer rules on correctness only — creative direction and taste are out of remit', () => {

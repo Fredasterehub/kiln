@@ -170,20 +170,6 @@ function atomicWriteCmd(doc) {
   ].join('\n')
 }
 
-// Exact shell for publishing a claude gate verdict: temp file, rename — the
-// same atomic discipline as the STATE write. The JSON arrives as an opaque
-// string; the kernel never reads it back.
-function gateWriteCmd(json) {
-  return [
-    'set -e',
-    'mkdir -p .kiln',
-    "cat > .kiln/.gate-review.tmp <<'KILN_GATE_EOF'",
-    json,
-    'KILN_GATE_EOF',
-    'mv -f .kiln/.gate-review.tmp .kiln/gate-review.json',
-  ].join('\n')
-}
-
 function gateCmd(mode, p) {
   const bin = p.plugin + '/scripts/kiln-review'
   return mode === 'recheck'
@@ -274,6 +260,27 @@ function parseSliceEntry(entry) {
   return { id: s, surface: 'mixed', valid: s.length > 0 }
 }
 
+// Order-aware boundary predicate (INTAKE-26): a pre-seal / pre-recheck red set is
+// TOLERABLE only when it is nonempty and every red owner resolves UNIQUELY to a
+// strictly-later entry in the ordered slice list than the current slice — an
+// unbuilt, still-planned, later slice (the W-04 expected pre-build state). The
+// current slice id itself, an earlier owner, an owner that appears more than once
+// in the plan (ambiguous), an unowned red (empty ids), an out-of-plan owner, or a
+// mixed valid/invalid set all fail closed here. Sealed owners are ruled first by
+// firstSealed → reopen in the runtime, before this predicate is ever consulted.
+function redSetIsFuture(ids, sliceId, sliceIds) {
+  if (!Array.isArray(ids) || ids.length === 0) return false
+  const cur = sliceIds.indexOf(sliceId)
+  if (cur < 0) return false
+  for (const id of ids) {
+    const at = sliceIds.indexOf(id)
+    if (at < 0) return false
+    if (at !== sliceIds.lastIndexOf(id)) return false
+    if (at <= cur) return false
+  }
+  return true
+}
+
 // KERNEL_CORE_END
 // KERNEL_RUNTIME_BEGIN — evaluated as an async function body by the workflow runtime
 
@@ -305,6 +312,7 @@ const P = {
   request: '.kiln/review-request.json', delta: '.kiln/repair-delta.md',
   slices: '.kiln/slices.json', seals: '.kiln/seals.log', degraded: '.kiln/degraded',
   ack: '.kiln/degraded-ack', receipt: '.kiln/check-receipt.txt',
+  candidate: '.kiln/.gate-review.reviewer.tmp',
   card: (s) => plugin + '/cards/' + s + '.md',
 }
 const EXIT = { type: 'object', additionalProperties: false, properties: { exit: { type: 'integer' } }, required: ['exit'] }
@@ -322,31 +330,13 @@ const TIERS = {
   },
   required: ['exit'],
 }
-// The claude gate returns the full verdict object schema-forced — a shape
-// mirror of scripts/review-schema.json. The kernel publishes it to the gate
-// file by hand and maps the verdict onto the closed exit table; the reviewer
-// itself writes nothing and executes nothing.
-const GATE = {
-  type: 'object', additionalProperties: false,
-  properties: {
-    review_id: { type: 'string' },
-    law_hash: { type: 'string' },
-    findings: {
-      type: 'array',
-      items: {
-        type: 'object', additionalProperties: false,
-        properties: {
-          id: { type: 'string' }, criterion: { type: 'string' }, location: { type: 'string' },
-          failure_mode: { type: 'string' }, evidence: { type: 'string' }, minimal_fix: { type: 'string' },
-        },
-        required: ['id', 'criterion', 'location', 'failure_mode', 'evidence', 'minimal_fix'],
-      },
-    },
-    blockers: { type: 'array', items: { type: 'string' } },
-    verdict: { type: 'string', enum: ['accept', 'changes_required', 'blocked'] },
-  },
-  required: ['review_id', 'law_hash', 'findings', 'blockers', 'verdict'],
-}
+// The claude gate reviewer WRITES its verdict object (per scripts/review-schema.json)
+// to the fixed candidate file .kiln/.gate-review.reviewer.tmp as the final act of its
+// turn, and returns only this light ack — the return carries no verdict authority.
+// The kernel invalidates the candidate before the reviewer runs, reads the written
+// bytes back raw, validates them, and promotes them content-free; a stale or missing
+// candidate can never seal.
+const ACK = { type: 'object', additionalProperties: false, properties: { ok: { type: 'boolean' } }, required: ['ok'] }
 
 // Boot (T-02): read the tier file once via an agent leg — the same node -p read
 // surface as the voice beats below, never direct fs (the kernel stays content-
@@ -509,6 +499,8 @@ if (badSlice) {
     { stage, active_slice: badSlice.id || 'none', next_action: 'Rerun stage law: a slice descriptor in ' + P.slices + ' is malformed' },
     'A slice descriptor is malformed — every slice needs an id and a surface of ui, logic, or mixed. The law stage must run again.')
 }
+// The ordered slice-id list backs the order-aware boundary predicate (INTAKE-26).
+const sliceIds = slices.map(x => x.id)
 const ladder = await idsFetch(
   "node -p 'JSON.stringify(require(" + JSON.stringify(plugin + '/data/voice.json') + ").killstreak.ladder)'",
   'ladder:fetch', 'the printed JSON array of streak names, [] if exit != 0',
@@ -535,18 +527,23 @@ for (const entry of slices) {
   for (const p of r.pointers) routes.add(p)
   beats.push(fillClosed(r.beat, facts))
   // LAW rerun beat: before any dependent seal. The check must exist by build.
-  // Boundary ruling (Sol, W-04): ANY pre-seal red blocks the current seal
-  // unless a sealed owner is reopened — full LAW green at every slice boundary.
-  // The pre-seal run doubles as the gate receipt: the full check output lands
-  // verbatim at the receipt path, so the reviewer judges executed evidence
-  // and executes nothing.
+  // Boundary ruling (INTAKE-26, order-aware): a pre-seal red blocks the current
+  // seal unless a sealed owner reopens OR every red owner is a strictly-later
+  // planned slice (expected pre-build state) — green THROUGH the current slice,
+  // later planned owners may remain red. The pre-seal run doubles as the gate
+  // receipt: the full check output lands verbatim at the receipt path, so the
+  // reviewer judges executed evidence and executes nothing.
   const guard = await lawBeat(LAW_CHECK_RECEIPT, 'law:pre-seal')
   if (guard.exit !== 0) {
     const owner = await firstSealed(guard.ids)
     if (owner) return reopen(owner, 'pre-seal')
-    return failStop('law-red',
-      { stage, active_slice: slice, next_action: 'Rerun stage build: slice ' + slice + ' LAW is red before seal' },
-      'The law is red at the seal of slice ' + slice + ' — no seal without full green.')
+    // Tolerate a red owned entirely by strictly-later planned slices; any other
+    // red — current, earlier, unowned, out-of-plan, duplicate, or mixed — halts.
+    if (!redSetIsFuture(guard.ids, slice, sliceIds)) {
+      return failStop('law-red',
+        { stage, active_slice: slice, next_action: 'Rerun stage build: slice ' + slice + ' LAW is red before seal' },
+        'The law is red at the seal of slice ' + slice + ' — no seal without green through the current slice.')
+    }
   }
 
   const wasDegraded = await hands('test -f ' + P.degraded, 'degraded:check') === 0
@@ -572,8 +569,9 @@ for (const entry of slices) {
   //     family. A logic or mixed slice is GPT-coded (the build card makes one
   //     bash codex exec call), so its gate is a fresh claude mind on stage-card
   //     ruling on the law, the diff, and the kernel-side check receipt —
-  //     executing nothing, writing nothing; the kernel publishes the
-  //     schema-forced verdict by hand. The ui surface alone keeps the codex gate.
+  //     executing nothing; it writes its verdict to the candidate file and the
+  //     kernel validates those bytes and promotes them content-free. The ui
+  //     surface alone keeps the codex gate.
   //   - degraded and acknowledged: codex is gone, so a ui slice cannot be gated
   //     cross-family and keeps its honest skip; but a logic or mixed slice the
   //     builder coded on sonnet STILL faces a gate — a fresh OPUS mind, a
@@ -598,21 +596,35 @@ for (const entry of slices) {
         'request:hash', 'a one-element array holding the request law_hash, [] if exit != 0',
       )
       if (req.exit !== 0 || req.ids.length !== 1) return 20
-      const g = await agent([
+      // Producer-self-publish: invalidate any prior candidate BEFORE the reviewer
+      // runs, so an {ok} ack with no fresh write can never promote a stale verdict.
+      if (await hands('rm -f ' + P.candidate, 'gate:invalidate') !== 0) return 20
+      // The reviewer WRITES its verdict object to the candidate file as the final
+      // act of its turn and returns only a light {ok} ack — the return carries no
+      // verdict authority; the kernel reads and validates the bytes it will publish.
+      const reviewerAck = await agent([
         'You are the gate reviewer for this slice: a fresh mind judging the diff against the locked law.',
         'Project dir: ' + projectDir + '. Read the locked law at ' + P.law + ', the review request at ' + P.request + ' (its criteria are the slice criteria; its paths name the diff), and the changed files themselves.',
         'The law checks were already executed kernel-side; their full output is attached verbatim at ' + P.receipt + '. Execute nothing — no commands, no tests, no builds: judge the diff against the law with the receipt as the only execution evidence.',
+        'Receipt rows owned by slices not yet built in this run are expected pre-build evidence — judge only this slice\'s criteria from the review request; never treat them as findings, and never filter or rewrite the receipt.',
         mode === 'recheck'
-          ? 'Recheck only the finding ids in ' + P.gate + ' against ' + P.delta + ' and the current files. Preserve each unresolved finding id; never add one. Accept only when every listed finding is repaired. Reuse the prior review_id from ' + P.gate + '.'
+          ? 'Read and reuse the prior review_id from ' + P.gate + ' first. Recheck only the finding ids in ' + P.gate + ' against ' + P.delta + ' and the current files. Preserve each unresolved finding id; never add one. Accept only when every listed finding is repaired.'
           : 'Report only substantiated criterion violations at exact repo-relative path:line locations with stable finding ids. Verdict rules: accept only when findings and blockers are both empty; changes_required only for repairable findings with no blockers; blocked only when the review cannot complete, with blocker reasons. Mint a fresh review_id.',
-        'Fill the verdict object per ' + plugin + '/scripts/review-schema.json; copy law_hash verbatim from the request.',
-      ].join('\n'), { label: 'gate-claude:' + mode, ...reviewerOpts, schema: GATE })
-      if (!g) return 20
-      // S1: the semantic mirror rules BEFORE the kernel publishes or maps the
-      // verdict — a failed validation is transport-failure exit semantics,
-      // never a seal, and nothing lands at the gate file.
+        'Compose the verdict object per ' + plugin + '/scripts/review-schema.json (copy law_hash verbatim from the request), and as the FINAL act of your turn write it as JSON to ' + P.candidate + '. Then return { ok: true } — the ack carries no verdict; the kernel reads and validates the file you wrote.',
+      ].join('\n'), { label: 'gate-claude:' + mode, ...reviewerOpts, schema: ACK })
+      if (!reviewerAck || reviewerAck.ok !== true) return 20
+      // Read the candidate back as raw UTF-8 and run the ONE sanctioned gate-file
+      // parse (the mirror of the parse-and-hop args adapter). The kernel validates
+      // exactly the bytes it will publish, never the returned ack.
+      const raw = await idsFetch('cat ' + P.candidate, 'gate:read', 'a one-element array holding the exact candidate file contents printed on stdout, [] if exit != 0')
+      if (raw.exit !== 0 || raw.ids.length !== 1) return 20
+      let g
+      try { g = JSON.parse(raw.ids[0]) } catch { return 20 }
+      // S1: the semantic mirror rules BEFORE the kernel promotes — a failed
+      // validation is transport-failure exit semantics, never a seal.
       if (gateReviewInvalid(g, req.ids[0]) !== null) return 20
-      const w = await hands(gateWriteCmd(JSON.stringify(g, null, 2)), 'gate:publish')
+      // Content-free promotion: the validated candidate becomes the gate file.
+      const w = await hands('mv -f ' + P.candidate + ' ' + P.gate, 'gate:publish')
       return w === 0 ? verdictExit(g.verdict) : 20
     }
     // S2: a recheck judges executed evidence, so the receipt must be fresh —
@@ -624,9 +636,17 @@ for (const entry of slices) {
     const freshReceipt = (inner) => async (mode) => {
       if (mode === 'recheck') {
         const again = await lawBeat(LAW_CHECK_RECEIPT, 'law:pre-recheck')
+        // Mirror the pre-seal gate exactly: firstSealed is consulted FIRST, so a
+        // regression in an already-SEALED later slice reopens (never masked by
+        // future-tolerance); only a future, non-sealed red proceeds to the recheck.
+        // A sealed or non-future red stashes for the after-loop firstSealed →
+        // reopen / law-red ruling.
         if (again.exit !== 0) {
-          recheckRed = again.ids
-          return 20
+          const owner = await firstSealed(again.ids)
+          if (owner || !redSetIsFuture(again.ids, slice, sliceIds)) {
+            recheckRed = again.ids
+            return 20
+          }
         }
       }
       return inner(mode)
@@ -682,7 +702,14 @@ for (const entry of slices) {
   // single-family; dual only when the marker is absent at the moment of the
   // seal.
   const label = await hands('test -f ' + P.degraded, 'degraded:check') === 0 ? 'single-family' : 'dual'
-  const s = await hands('echo "' + slice + ' ' + label + '" >> ' + P.seals, 'seal:append')
+  // Branch verb (INTAKE-28): the seal append rides the trusted kiln-review CLI as
+  // an opaque `append-seal` verb. A Sonnet kernel leg refuses a bare
+  // `echo >> seals.log` — it reads seals.log as a dual-key attestation ledger and
+  // declines to scribe an append it cannot verify. The seals.log semantics live
+  // inside the CLI; the courier sees only the verb and neutral args. The kiln dir
+  // is the cwd-relative `.kiln` (hands runs with cwd = projectDir): a bare projectDir
+  // interpolation would split a whitespace path into extra args and fail every seal.
+  const s = await hands('node ' + plugin + '/scripts/kiln-review append-seal .kiln ' + slice + ' ' + label, 'seal:append')
   if (s !== 0) return persistFail('seal-append')
   beats.push(await voiceBeat('seal', { ...facts, label }, 'sealed — {label} · slice {slice}'))
   const w = await hands(atomicWriteCmd(stateDoc({ stage, active_slice: slice, next_action: nextAct('build'), density, pointers: [...routes] })), 'state:write')

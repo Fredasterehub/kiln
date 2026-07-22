@@ -16,8 +16,9 @@ naturally: `test -f index.html`; `grep -qF "<title string>" index.html`; a link-
 loop. Prefer the smallest criterion set that makes the idea falsifiable.
 
 Slice the work: the fewest ordered slices that cover the law, kebab-case ids. **Slice so the
-full LAW is green after every slice** — the kernel reruns every check before each seal and a
-red reopens the slice; never leave a criterion red at a slice boundary.
+LAW is green through the current slice; later planned owners may remain red** — the kernel
+reruns every check before each seal, a red owned by the current (or an earlier) slice reopens
+it, and a red owned only by a later, still-unbuilt planned slice is expected pre-build state.
 
 ## Outputs (write via temp + rename: `.kiln/.<name>.tmp` → `mv -f`; append-only files append)
 1. `.kiln/LAW.md` — one entry per criterion: `id` · owning slice · the locked behavioral
