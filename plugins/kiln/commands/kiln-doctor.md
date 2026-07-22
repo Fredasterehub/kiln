@@ -76,7 +76,7 @@ let t
 try {
   t = ((x) => ({ doctrine: x.doctrine !== undefined, resolver: x.resolver, surface_routing: x.surface_routing, roles: Object.fromEntries(Object.keys(x.roles).map((k) => [k, { family: x.roles[k].family, alias: x.roles[k].alias, effort: x.roles[k].effort }])) }))(raw)
 } catch (e) { bad("a role entry the kernel boot projection cannot read") }
-const EFFORTS = ["low", "medium", "high", "xhigh"]
+const EFFORTS = ["high", "xhigh"] // Wave 3 HIGH floor: only high/xhigh pass, mirroring the kernel TIER_EFFORTS
 const ROLES = ["driver", "kernel-leg", "stage-card", "stage-law", "builder-ui", "builder-logic", "reviewer-gate", "fallback-reviewer", "ratify-reviewer", "brainstorm-facilitator", "haiku-migration", "dev-sol"]
 const ROUTES = ["ui", "logic", "mixed"]
 if (t.doctrine !== true) bad("doctrine")
@@ -98,6 +98,9 @@ for (const route of ROUTES) {
   const target = t.surface_routing[route]
   if (typeof target !== "string" || !Object.prototype.hasOwnProperty.call(t.roles, target)) bad("surface_routing." + route)
   if (t.roles[target].family !== "claude") bad("surface_routing." + route + ".family")
+  // The HIGH floor binds route targets too: a route may name a role outside ROLES, which the
+  // per-role effort check above never reaches — a sub-HIGH target is the same effort-down bypass.
+  if (!EFFORTS.includes(t.roles[target].effort)) bad("surface_routing." + route + ".effort")
 }
 console.log("TIERS_SHAPE=valid")
 ' "$PLUGIN_ROOT/data/tiers.json" 2>/dev/null || echo "TIERS_SHAPE=invalid unreadable"

@@ -143,6 +143,9 @@ test('doctor: the inline tiers validator executes — fixture verdicts match the
     // simple-fire routed logic to a claude-family builder-logic seat, so the gpt-routed
     // defect shape is recreated by flipping the routed seat's family back to gpt.
     ['a surface route targeting a gpt-family role', mutate((t) => { t.roles['builder-logic'] = { family: 'gpt', alias: 'gpt-sol', effort: 'high' } }), 'invalid'],
+    // A route may name a role OUTSIDE the twelve — the per-role effort loop never reaches it, so
+    // the route-target HIGH floor is the only guard against a sub-HIGH routed seat (W3-S1-DELTA-1).
+    ['a surface route targeting a sub-HIGH role outside the twelve', mutate((t) => { t.roles.extra = { family: 'claude', alias: 'sonnet', effort: 'medium' }; t.surface_routing.mixed = 'extra' }), 'invalid'],
     ['a missing consumer role', mutate((t) => { delete t.roles['dev-sol'] }), 'invalid'],
     ['a missing fallback-reviewer role — the degraded gate consumer', mutate((t) => { delete t.roles['fallback-reviewer'] }), 'invalid'],
     ['roles replaced by null', mutate((t) => { t.roles = null }), 'invalid'],

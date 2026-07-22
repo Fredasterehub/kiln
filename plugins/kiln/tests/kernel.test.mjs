@@ -22,12 +22,12 @@ const core = new Function(coreSrc + `
   return { SPINE, parseArgs, resolveStage, nextStage, gateOutcome, reviewLoop,
            fillClosed, streakIndex, stateDoc, atomicWriteCmd, gateCmd, LAW_CHECK, LAW_GUARD,
            LAW_CHECK_RECEIPT, verdictExit, redSetIsFuture, gateReviewInvalid,
-           validateTiers, resolveTier, routeBuilder, parseSliceEntry }`)()
+           validateTiers, resolveTier, routeBuilder, parseSliceEntry, postureToDials }`)()
 const {
   SPINE, parseArgs, resolveStage, nextStage, gateOutcome, reviewLoop,
   fillClosed, streakIndex, stateDoc, atomicWriteCmd, gateCmd,
   LAW_CHECK_RECEIPT, verdictExit, redSetIsFuture, gateReviewInvalid,
-  validateTiers, resolveTier, routeBuilder, parseSliceEntry,
+  validateTiers, resolveTier, routeBuilder, parseSliceEntry, postureToDials,
 } = core
 
 // ── Mocked runtime: run the whole kernel body with scripted agents ──────────
@@ -68,7 +68,8 @@ const TIERS_OK = {
     // boot-required consumer role the kernel resolves at the law stage.
     'ratify-reviewer': { family: 'gpt', alias: 'gpt-sol', effort: 'high' },
     'brainstorm-facilitator': { family: 'claude', alias: 'inherit', effort: 'high' },
-    'haiku-migration': { family: 'claude', alias: 'sonnet', effort: 'medium' },
+    // Wave 3: raised medium -> high — every role now sits on the HIGH-effort floor.
+    'haiku-migration': { family: 'claude', alias: 'sonnet', effort: 'high' },
     'dev-sol': { family: 'gpt', alias: 'gpt-sol', effort: 'high' },
   },
 }
@@ -622,7 +623,7 @@ test('tiers: resolveTier is family-aware — claude passes through, gpt resolves
   assert.deepEqual(resolveTier(TIERS_OK, 'builder-logic'), { effort: 'high', model: 'sonnet' }, 'the logic seat is the claude context-builder — HIGH wrapper effort (INTAKE-14b/Q1); its coder rides a bash call, never this option')
   assert.deepEqual(resolveTier(TIERS_OK, 'fallback-reviewer'), { effort: 'high', model: 'opus' }, 'the codex-absent fallback reviewer resolves to opus — a model different from the sonnet builder (duo-pool.json:7 logic_fallback)')
   assert.deepEqual(resolveTier(TIERS_OK, 'ratify-reviewer'), { effort: 'high', model: 'gpt-5.6-sol' }, 'the LAW-ratify reviewer resolves to the concrete codex id — opposite-family to the claude/fable stage-law producer (Wave 1)')
-  assert.deepEqual(resolveTier(TIERS_OK, 'haiku-migration'), { effort: 'medium', model: 'sonnet' })
+  assert.deepEqual(resolveTier(TIERS_OK, 'haiku-migration'), { effort: 'high', model: 'sonnet' }, 'raised to the HIGH floor (Wave 3)')
   const c = cfg(); c.resolver['fable'] = 'sneaky-rewrite'
   assert.deepEqual(resolveTier(c, 'stage-law'), { effort: 'high', model: 'fable' }, 'a resolver entry cannot rewrite a claude alias')
 })
@@ -1590,4 +1591,102 @@ test('runtime (Wave 2): report status ok BUT .kiln/report.md empty or missing ne
   const doc = lastStateDoc(calls)
   assert.ok(doc.includes('Rerun stage report'), 'next_action names the report-specific rerun')
   assert.ok(doc.includes('.kiln/report.md is empty or missing'), 'and says exactly what is wrong')
+})
+
+// ── Wave 3 (the Gauge foundation): postureToDials + the HIGH-effort floor ────
+
+test('core (Wave 3): postureToDials — each monotone predicate toggles on both branches', () => {
+  // small + familiar + reversible, no visual → every dial at its floor
+  assert.deepEqual(
+    postureToDials({ scope: 'small', novelty: 'familiar', reversibility: 'reversible' }, false),
+    { width: 'floor', research: 'off', perceptual: 'dormant', recovery_cap: 2, xhigh_permit: false },
+  )
+  // novel (small, reversible) + visual → width/research/xhigh open via novelty, perceptual on, cap stays 2
+  assert.deepEqual(
+    postureToDials({ scope: 'small', novelty: 'novel', reversibility: 'reversible' }, true),
+    { width: 'wide', research: 'on', perceptual: 'on', recovery_cap: 2, xhigh_permit: true },
+  )
+  // large + familiar + risky → width opens via scope, research via risky, cap 1, xhigh still shut
+  assert.deepEqual(
+    postureToDials({ scope: 'large', novelty: 'familiar', reversibility: 'risky' }, false),
+    { width: 'wide', research: 'on', perceptual: 'dormant', recovery_cap: 1, xhigh_permit: false },
+  )
+  // small + familiar + irreversible → width stays floor, research + xhigh open via irreversible, cap 1
+  assert.deepEqual(
+    postureToDials({ scope: 'small', novelty: 'familiar', reversibility: 'irreversible' }, false),
+    { width: 'floor', research: 'on', perceptual: 'dormant', recovery_cap: 1, xhigh_permit: true },
+  )
+  // perceptual keys on strict === true — a truthy non-boolean stays dormant on a valid posture
+  const valid = { scope: 'small', novelty: 'familiar', reversibility: 'reversible' }
+  assert.equal(postureToDials(valid, 1).perceptual, 'dormant', 'a truthy non-boolean is not true — perceptual stays dormant')
+  assert.equal(postureToDials(valid, 'yes').perceptual, 'dormant')
+  assert.equal(postureToDials(valid, undefined).perceptual, 'dormant')
+})
+
+test('core (Wave 3): postureToDials fails UPWARD to max scrutiny on any untrustworthy posture — never throws', () => {
+  const MAX = { width: 'wide', research: 'on', perceptual: 'on', recovery_cap: 1, xhigh_permit: true }
+  const good = { scope: 'small', novelty: 'familiar', reversibility: 'reversible' }
+  // missing / null / non-object / array
+  assert.deepEqual(postureToDials(undefined, false), MAX, 'a missing posture → max scrutiny')
+  assert.deepEqual(postureToDials(null, false), MAX)
+  assert.deepEqual(postureToDials('small', false), MAX, 'a non-object posture → max scrutiny')
+  assert.deepEqual(postureToDials(['small', 'familiar', 'reversible'], false), MAX, 'an array posture → max scrutiny')
+  // missing a field / extra field — enumerable, non-enumerable, and Symbol own
+  // fields all count: Object.keys would drop the last two and take the low path.
+  assert.deepEqual(postureToDials({ scope: 'small', novelty: 'novel' }, false), MAX, 'a missing field → max scrutiny')
+  assert.deepEqual(postureToDials({ ...good, extra: 1 }, false), MAX, 'an extra enumerable field → max scrutiny')
+  const nonEnum = { ...good }; Object.defineProperty(nonEnum, 'extra', { enumerable: false, value: 1 })
+  assert.deepEqual(postureToDials(nonEnum, false), MAX, 'a non-enumerable extra own field → max scrutiny (Reflect.ownKeys sees it)')
+  assert.deepEqual(postureToDials({ ...good, [Symbol('extra')]: 1 }, false), MAX, 'a Symbol own field → max scrutiny')
+  // any field out of its frozen enum
+  assert.deepEqual(postureToDials({ ...good, scope: 'medium' }, false), MAX, 'an unknown scope → max scrutiny')
+  assert.deepEqual(postureToDials({ ...good, novelty: 'weird' }, false), MAX, 'an unknown novelty → max scrutiny')
+  assert.deepEqual(postureToDials({ ...good, reversibility: 'maybe' }, false), MAX, 'an unknown reversibility → max scrutiny')
+  // the fail-up profile overrides the visual predicate — perceptual stays 'on' even with visual false
+  assert.equal(postureToDials(null, false).perceptual, 'on', 'max scrutiny regardless of the visual flag')
+  // never throws — even on adversarial input for either argument
+  assert.doesNotThrow(() => postureToDials(Symbol('x'), Symbol('y')))
+  // and it must survive the reflective step (Reflect.ownKeys) and property reads
+  // (destructuring getters), not just the typeof short-circuit a Symbol takes: a
+  // throwing ownKeys trap, a throwing getter on a well-shaped posture, and a
+  // revoked proxy all fail UP to max scrutiny rather than propagate.
+  const ownKeysBomb = new Proxy({}, { ownKeys() { throw new Error('ownKeys boom') } })
+  assert.deepEqual(postureToDials(ownKeysBomb, false), MAX, 'a throwing ownKeys trap fails up, never throws')
+  const getterBomb = { novelty: 'novel', reversibility: 'reversible' }
+  Object.defineProperty(getterBomb, 'scope', { enumerable: true, get() { throw new Error('getter boom') } })
+  assert.deepEqual(postureToDials(getterBomb, false), MAX, 'a throwing getter (past the field-count check) fails up, never throws')
+  const rev = Proxy.revocable({}, {}); rev.revoke()
+  assert.deepEqual(postureToDials(rev.proxy, false), MAX, 'a revoked proxy fails up, never throws')
+})
+
+test('core (Wave 3): postureToDials names no effort tier — it toggles organs, never low/medium/high/xhigh', () => {
+  const dials = postureToDials({ scope: 'large', novelty: 'novel', reversibility: 'irreversible' }, true)
+  assert.deepEqual(Object.keys(dials).sort(), ['perceptual', 'recovery_cap', 'research', 'width', 'xhigh_permit'])
+  assert.ok(!('effort' in dials), 'the dial profile carries no effort field')
+  for (const v of Object.values(dials)) {
+    assert.ok(!['low', 'medium', 'high', 'xhigh'].includes(v), 'no dial value is an effort tier — effort stays the tier file\'s job')
+  }
+})
+
+test('tiers (Wave 3): validateTiers enforces the HIGH-effort floor — a sub-HIGH role fails, the all-HIGH config passes', () => {
+  assert.equal(validateTiers(cfg()), true, 'the sealed all-HIGH config passes (haiku-migration raised to high)')
+  for (const role of ['haiku-migration', 'kernel-leg', 'driver']) {
+    for (const sub of ['low', 'medium']) {
+      const c = cfg(); c.roles[role].effort = sub
+      assert.equal(validateTiers(c), false, role + ' at ' + sub + ' fails the HIGH floor closed — no effort-down route')
+    }
+  }
+  const x = cfg(); x.roles['driver'].effort = 'xhigh'
+  assert.equal(validateTiers(x), true, 'xhigh is on the floor — permitted')
+  assert.ok(Object.values(cfg().roles).every(r => r.effort === 'high' || r.effort === 'xhigh'),
+    'the shipped tier data is now all HIGH/XHIGH')
+  // The floor binds route targets too, not just the manual TIER_ROLES list: an
+  // ADDITIONAL claude role at a sub-HIGH tier, reached through a surface route, is
+  // the same effort-down bypass and must fail closed (else routeBuilder emits a
+  // sub-HIGH leg). This role is absent from TIER_ROLES, so only the route check catches it.
+  const rt = cfg()
+  rt.roles['sub-high-route'] = { family: 'claude', alias: 'sonnet', effort: 'medium' }
+  rt.surface_routing.ui = 'sub-high-route'
+  assert.equal(validateTiers(rt), false, 'a surface route targeting a sub-HIGH extra role fails the floor — no effort-down route past the manual role list')
+  assert.deepEqual(routeBuilder(cfg(), 'ui'), { effort: 'high', model: 'opus' }, 'the sealed ui route stays on the HIGH floor')
 })

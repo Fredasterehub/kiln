@@ -199,7 +199,11 @@ const LAW_CHECK_RECEIPT = 'bash .kiln/law/check.sh > .kiln/check-receipt.txt 2>&
 // dispatching session model. routeBuilder maps a validated surface to its builder
 // role. No compiled model or effort value lives in the kernel — every value flows
 // from the file at run time.
-const TIER_EFFORTS = ['low', 'medium', 'high', 'xhigh']
+// Wave 3: TIER_EFFORTS is the permitted effort FLOOR — Kiln runs only at high or
+// xhigh, so the per-role membership check below rejects any role at a sub-HIGH tier
+// and structurally forbids an effort-down route (the same fail-closed class as a
+// missing role — a boot halt with the named fact, never a later throw).
+const TIER_EFFORTS = ['high', 'xhigh']
 const TIER_ROLES = ['driver', 'kernel-leg', 'stage-card', 'stage-law', 'builder-ui', 'builder-logic', 'reviewer-gate', 'fallback-reviewer', 'ratify-reviewer', 'brainstorm-facilitator', 'haiku-migration', 'dev-sol']
 const TIER_ROUTES = ['ui', 'logic', 'mixed']
 function validateTiers(c) {
@@ -230,7 +234,12 @@ function validateTiers(c) {
   for (const route of TIER_ROUTES) {
     const target = c.surface_routing[route]
     if (typeof target !== 'string' || !Object.prototype.hasOwnProperty.call(c.roles, target)) return false
-    if (c.roles[target].family !== 'claude') return false
+    const t = c.roles[target]
+    if (t.family !== 'claude') return false
+    // The HIGH floor binds route targets too: a route may name a role outside
+    // TIER_ROLES, which the per-role effort check above never reaches — so an
+    // additional sub-HIGH target is the same effort-down bypass and fails closed here.
+    if (!TIER_EFFORTS.includes(t.effort)) return false
   }
   return true
 }
@@ -279,6 +288,44 @@ function redSetIsFuture(ids, sliceId, sliceIds) {
     if (at <= cur) return false
   }
   return true
+}
+
+// postureToDials — the pure Gauge dial function (Wave 3). Maps a closed posture
+// {scope, novelty, reversibility} plus a visual-artifact presence flag to five
+// scrutiny organs. Each dial is an INDEPENDENT monotone predicate (never a lookup
+// matrix), so a later posture field adds one predicate, not a combinatorial table.
+// It names NO effort tier — it toggles organs and permits xhigh only; effort stays
+// in the tier file, never here. FAIL-UPWARD: a missing, non-object, extra-field, or
+// out-of-enum posture returns the max-scrutiny profile with recovery_cap 1 (the safe
+// autonomy bound) — the most scrutiny exactly when the posture is least trustworthy,
+// regardless of the visual flag. Deterministic; never throws.
+const POSTURE_SCOPE = ['small', 'large']
+const POSTURE_NOVELTY = ['familiar', 'novel']
+const POSTURE_REVERSIBILITY = ['reversible', 'risky', 'irreversible']
+function postureToDials(posture, visualArtifactPresence) {
+  const failUp = { width: 'wide', research: 'on', perceptual: 'on', recovery_cap: 1, xhigh_permit: true }
+  // Reflective reads (Reflect.ownKeys) and property access (destructuring getters)
+  // can throw on adversarial input — a throwing ownKeys trap, a throwing getter, a
+  // revoked proxy (Array.isArray itself throws on one). The whole body is guarded
+  // so "never throws" is unconditional: any throw fails UP to max scrutiny, the
+  // least-trustworthy posture treated most severely. Reflect.ownKeys — not
+  // Object.keys — also counts non-enumerable and Symbol own fields, so a malformed
+  // posture cannot smuggle an extra field past the exact-field count.
+  try {
+    if (!posture || typeof posture !== 'object' || Array.isArray(posture)) return failUp
+    const keys = Reflect.ownKeys(posture)
+    const fields = ['scope', 'novelty', 'reversibility']
+    if (keys.length !== fields.length || fields.some(k => keys.indexOf(k) < 0)) return failUp
+    const { scope, novelty, reversibility } = posture
+    if (POSTURE_SCOPE.indexOf(scope) < 0 || POSTURE_NOVELTY.indexOf(novelty) < 0 || POSTURE_REVERSIBILITY.indexOf(reversibility) < 0) return failUp
+    return {
+      width: (novelty === 'novel' || scope === 'large') ? 'wide' : 'floor',
+      research: (novelty === 'novel' || reversibility === 'risky' || reversibility === 'irreversible') ? 'on' : 'off',
+      perceptual: visualArtifactPresence === true ? 'on' : 'dormant',
+      recovery_cap: reversibility === 'reversible' ? 2 : 1,
+      xhigh_permit: novelty === 'novel' || reversibility === 'irreversible',
+    }
+  } catch { return failUp }
 }
 
 // KERNEL_CORE_END

@@ -36,7 +36,8 @@ const TIERS_OK = {
     'fallback-reviewer': { family: 'claude', alias: 'opus', effort: 'high' },
     'ratify-reviewer': { family: 'gpt', alias: 'gpt-sol', effort: 'high' },
     'brainstorm-facilitator': { family: 'claude', alias: 'inherit', effort: 'high' },
-    'haiku-migration': { family: 'claude', alias: 'sonnet', effort: 'medium' },
+    // Wave 3: the HIGH-effort floor — the kernel boot gate now rejects any sub-HIGH role.
+    'haiku-migration': { family: 'claude', alias: 'sonnet', effort: 'high' },
     'dev-sol': { family: 'gpt', alias: 'gpt-sol', effort: 'high' },
   },
 }
