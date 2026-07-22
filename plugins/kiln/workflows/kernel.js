@@ -187,6 +187,34 @@ const LAW_GUARD = 'if test -f .kiln/law/check.sh; then ' + LAW_CHECK + '; fi'
 // the check exit code survives the capture.
 const LAW_CHECK_RECEIPT = 'bash .kiln/law/check.sh > .kiln/check-receipt.txt 2>&1; s=$?; cat .kiln/check-receipt.txt; exit $s'
 
+// S1 (A9 / W5-03): the projection-agreement leg. Milestone labels are AUTHORITATIVE in
+// the LAW plan table (a `| slice | milestone |` GitHub table in LAW.md); slices.json is
+// their checked projection. This deterministic command compares the two ordered
+// [id, label] lists and exits 0 iff they agree — the kernel branches on that exit code
+// alone and never reads the plan prose. It anchors on a GFM `## Plan` heading (a literal
+// `## ` prefix — `##Plan` is prose, not a heading), stops at the next section heading so a
+// table under a later heading cannot masquerade as the plan, requires the
+// `| slice | milestone |` header and a GFM delimiter row of at least three hyphens per cell,
+// reads exactly two cells per data row (a longer row is malformed), and normalizes an empty
+// cell / absent field to ''.
+// A missing/unanchored/malformed table or any divergence exits nonzero, so a mismatched
+// plan never seals (W7 audits the seams
+// off this same projection, so they must match).
+const MILESTONE_PROJECTION_CHECK =
+  "node -e 'const fs=require(\"fs\");" +
+  "const proj=require(\"./.kiln/slices.json\").map(s=>[String((s&&s.id)||\"\").trim(),String((s&&s.milestone)||\"\").trim()]);" +
+  "const lines=fs.readFileSync(\"./.kiln/LAW.md\",\"utf8\").split(\"\\n\");" +
+  "let auth=[],state=0,ok=true;" +
+  "for(const ln of lines){const t=ln.trim();const row=t.slice(0,1)===\"|\";" +
+  "if(state===0){if(t.slice(0,3)===\"## \"&&t.slice(3).trim().toLowerCase()===\"plan\")state=1;continue;}" +
+  "if(state===1){if(t.slice(0,1)===\"#\"){ok=false;break;}if(!row)continue;const c=t.split(\"|\").slice(1,-1).map(x=>x.trim());" +
+  "if(c.length===2&&c[0].toLowerCase()===\"slice\"&&c[1].toLowerCase()===\"milestone\"){state=2;continue;}ok=false;break;}" +
+  "if(state===2){const c=t.split(\"|\").slice(1,-1).map(x=>x.trim());" +
+  "if(row&&c.length===2&&c.every(x=>/^:?-{3,}:?$/.test(x))){state=3;continue;}ok=false;break;}" +
+  "if(!row)break;" +
+  "const c=t.split(\"|\").slice(1,-1).map(x=>x.trim());if(c.length!==2){ok=false;break;}auth.push([c[0],c[1]]);}" +
+  "process.exit(ok&&JSON.stringify(proj)===JSON.stringify(auth)?0:1);'"
+
 // Tier resolution — pure over the validated tier config (data, never content).
 // The tier file is the ONE place models and efforts are named; the kernel carries
 // tier KEYS and resolves them here. validateTiers is the fail-closed BOOT gate: it
@@ -253,20 +281,47 @@ function resolveTier(c, key) {
 function routeBuilder(c, surface) {
   return resolveTier(c, c.surface_routing[surface])
 }
-// A slices.json entry is either a legacy bare id string (surface defaults to mixed)
-// or the object form encoded as "obj|<id>|<surface>"; an object must carry a nonempty
-// id and a surface in ui|logic|mixed, else it is invalid and the run halts before any
-// builder dispatch. Only the legacy bare form defaults to mixed.
+// A slices.json entry is either a legacy bare id string (surface mixed, no label)
+// or the object form encoded as EXACTLY four wire slots — "obj|<id>|<surface>|<label>"
+// — where the trailing milestone <label> is OPTIONAL (S1, A9): a legacy three-slot
+// "obj|<id>|<surface>" reads as an absent label. An object must carry a nonempty id
+// and a surface in ui|logic|mixed. The milestone normalizes to '' when absent and is
+// REJECTED (entry invalid, run halts before any builder dispatch) when it smuggles the
+// '|' descriptor separator — which would split into extra slots — or a control
+// character, which cannot survive the descriptor transport. Only the legacy bare form
+// defaults to mixed.
 function parseSliceEntry(entry) {
   const s = String(entry ?? '')
   if (s.slice(0, 4) === 'obj|') {
-    const rest = s.slice(4)
-    const bar = rest.indexOf('|')
-    const id = bar < 0 ? rest : rest.slice(0, bar)
-    const surface = bar < 0 ? '' : rest.slice(bar + 1)
-    return { id, surface, valid: id.length > 0 && TIER_ROUTES.indexOf(surface) >= 0 }
+    const parts = s.slice(4).split('|')
+    const id = parts[0] ?? ''
+    const surface = parts[1] ?? ''
+    const rawMilestone = parts.length > 2 ? parts[2] : ''
+    // Two slots (legacy, absent label) or three (id|surface|label) only; a fourth
+    // slot means a raw '|' rode inside a field — reject rather than guess.
+    const shaped = parts.length === 2 || parts.length === 3
+    // The full control-free invariant (C0, DEL, and C1 U+0080–U+009F) checked on the RAW
+    // bytes: C1 is not whitespace, so it would survive the trim below and cannot ride the
+    // descriptor transport — the range is explicit so it is rejected, not normalized away.
+    const cleanLabel = !/[\x00-\x1f\x7f\x80-\x9f]/.test(rawMilestone)
+    // Normalize to the trimmed label — the SAME normalization MILESTONE_PROJECTION_CHECK
+    // applies — so the seam fact and the W7 audit read identical bytes and a padded cell
+    // that passes projection agreement can never fabricate a spurious milestone seam.
+    const milestone = rawMilestone.trim()
+    return { id, surface, milestone, valid: shaped && cleanLabel && id.length > 0 && TIER_ROUTES.indexOf(surface) >= 0 }
   }
-  return { id: s, surface: 'mixed', valid: s.length > 0 }
+  return { id: s, surface: 'mixed', milestone: '', valid: s.length > 0 }
+}
+
+// S1 (A9, W5-07): the milestone SEAM closed fact, carried for the W7 goal-backward
+// audit — W5 computes it but never audits. `labels` is the normalized milestone per
+// slice in build order (parseSliceEntry trimmed each and normalized an absent label to the empty string); a seam
+// falls AFTER slice i when i is the FINAL slice, or when its label differs from that of
+// the NEXT slice — the point a milestone completes. An unlabeled run (every label
+// empty) carries a single whole-build seam at the final slice, the A9 implicit final.
+function milestoneSeamAfter(labels, i) {
+  if (!Array.isArray(labels) || i < 0 || i >= labels.length) return false
+  return i === labels.length - 1 || labels[i] !== labels[i + 1]
 }
 
 // Order-aware boundary predicate (INTAKE-26): a pre-seal / pre-recheck red set is
@@ -649,6 +704,19 @@ if (stage !== 'build') {
       },
     })
     if (ratifyLoop.result === 'sealed') {
+      // S1 (A9 / W5-03): before the seal, a deterministic leg confirms the slices.json
+      // milestone projection AGREES with the authoritative LAW plan table — the kernel
+      // branches on the exit code alone (content-blind, never the plan prose). W7 audits
+      // the seams off the slices projection, so a table/projection divergence must never
+      // lock; a disagreement is an honest hold (reused transport-failure), not a silent
+      // seal. This precedes the seal, so the SEALED-claiming card beat still speaks only
+      // after both the projection and the seal land.
+      if (await hands(MILESTONE_PROJECTION_CHECK, 'law:milestone-projection') !== 0) {
+        return failStop('transport-failure',
+          { stage, active_slice: 'none', next_action: 'Rerun stage law: the slices.json milestone projection disagrees with the LAW plan table' },
+          await voiceBeat('transport-failure', {}, 'The slice milestones do not match the LAW plan table — the projection and its authoritative table must agree before the law locks, so the run holds.', 1),
+          { law: P.law, slices: P.slices })
+      }
       // seal-law is the only sealer on the kernel side: it digests LAW.md and
       // writes law/lock.hash, so the LAW locks only after cross-family ratification.
       if (await hands('node ' + plugin + '/scripts/kiln-review seal-law .kiln', 'law:seal') !== 0) return persistFail('law-seal')
@@ -703,12 +771,14 @@ if (stage !== 'build') {
 }
 
 // build: gate every slice per the locked review invariant. Each slice carries a
-// closed surface fact; the fetch emits a legacy bare id string untouched, and the
-// object form as "obj|<id>|<surface>", so parseSliceEntry can tell the two apart
-// and validate the object form (bare strings alone default to mixed).
+// closed surface fact and an OPTIONAL milestone label (S1); the fetch emits a legacy
+// bare id string untouched, and the object form as "obj|<id>|<surface>|<milestone>"
+// (the milestone slot rides in LOCKSTEP with the parseSliceEntry four-slot parse — an
+// absent label projects to the empty trailing slot), so parseSliceEntry can tell the
+// forms apart and validate the object form (bare strings alone default to mixed).
 const list = await idsFetch(
-  "node -p 'JSON.stringify(require(\"./" + P.slices + "\").map(s=>typeof s===\"string\"?s:\"obj|\"+(s&&s.id||\"\")+\"|\"+(s&&s.surface||\"\")))'",
-  'slices:fetch', 'the printed JSON array of slice descriptor strings (a bare id, or "obj|<id>|<surface>"), [] if exit != 0',
+  "node -p 'JSON.stringify(require(\"./" + P.slices + "\").map(s=>typeof s===\"string\"?s:\"obj|\"+(s&&s.id||\"\")+\"|\"+(s&&s.surface||\"\")+\"|\"+(s&&s.milestone||\"\")))'",
+  'slices:fetch', 'the printed JSON array of slice descriptor strings (a bare id, or "obj|<id>|<surface>|<milestone>"), [] if exit != 0',
 )
 if (list.exit !== 0 || list.ids.length === 0) {
   return failStop('transport-failure', { stage, next_action: 'Rerun stage law: no slice list at ' + P.slices }, await voiceBeat('transport-failure', {}, 'No slice list on the ledger — the law stage must run again.', 1))
@@ -724,6 +794,9 @@ if (badSlice) {
 }
 // The ordered slice-id list backs the order-aware boundary predicate (INTAKE-26).
 const sliceIds = slices.map(x => x.id)
+// S1 (A9): the milestone labels projected into each slice, in build order — the seam
+// closed fact rides the facts of each slice below, carried for the W7 goal-backward audit.
+const milestones = slices.map(x => x.milestone)
 const ladder = await idsFetch(
   "node -p 'JSON.stringify(require(" + JSON.stringify(plugin + '/data/voice.json') + ").killstreak.ladder)'",
   'ladder:fetch', 'the printed JSON array of streak names, [] if exit != 0',
@@ -744,6 +817,9 @@ for (const entry of slices) {
     STAGE: stage.toUpperCase(), slice, i: ordinal, n: slices.length,
     s: ordinal, t: slices.length, streak, STREAK: streak.toUpperCase(),
     passes: 0, count: 0, ids: '',
+    // S1 (A9): the milestone seam closed fact — true when this slice ends a milestone.
+    // Carried with the slice for the W7 goal-backward audit; W5 does not audit here.
+    seam: milestoneSeamAfter(milestones, ordinal - 1),
   }
   const r = await actWith(cardPrompt('Build exactly slice ' + slice + ' (surface ' + entry.surface + '). Write ' + P.request + ' per the card before returning.'), 'slice:' + slice, builderOpts)
   if (r.facts.status !== 'ok') return failStop('transport-failure', { stage, active_slice: slice, next_action: 'Rerun stage build' }, await voiceBeat('transport-failure', {}, 'Slice ' + slice + ' did not return sound work — the run holds.', 1))

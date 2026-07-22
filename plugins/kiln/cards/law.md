@@ -27,16 +27,26 @@ reruns every check before each seal, a red owned by the current (or an earlier) 
 it, and a red owned only by a later, still-unbuilt planned slice is expected pre-build state.
 
 ## Outputs (write via temp + rename: `.kiln/.<name>.tmp` → `mv -f`; append-only files append)
-1. `.kiln/LAW.md` — one entry per criterion: `id` · owning slice · the locked behavioral
-   requirement · the exact command · expected outcome. No rationale prose.
+1. `.kiln/LAW.md` — the acceptance criteria, one entry per criterion: `id` · owning slice ·
+   the locked behavioral requirement · the exact command · expected outcome (no rationale
+   prose); then, under a `## Plan` heading, the AUTHORITATIVE plan table — a GitHub table
+   `| slice | milestone |`, one row per slice in build order, carrying an OPTIONAL milestone
+   label per slice (leave the milestone cell empty for an unlabeled slice; a shared label
+   groups the slices that ship one milestone). This table is the single source of truth for
+   the labels — a label carries no `|` and no control characters — and `.kiln/slices.json`
+   (output 3) is its checked projection: the kernel refuses to seal unless the two agree.
 2. `.kiln/law/check.sh` — bash, no dependencies, runs from the project root, runs every
    criterion, exits `0` iff all green; on any red it prints to stdout the owning slice IDs of
    every failed criterion as a JSON array of strings, so the kernel receives the closed
    `{exit, ids}` facts and reopens the true owner (`bash .kiln/law/check.sh`).
 3. `.kiln/slices.json` — a JSON array in build order, one object per slice:
-   `{ "id": "<kebab-id>", "surface": "ui" | "logic" | "mixed" }`. `surface` is a machine
-   fact the kernel routes the builder on: `ui` for markup/style/browser-facing work, `logic`
-   for computation/data/CLI work, `mixed` when the slice spans both. Name it honestly per slice.
+   `{ "id": "<kebab-id>", "surface": "ui" | "logic" | "mixed", "milestone": "<label>" }`.
+   `surface` is a machine fact the kernel routes the builder on: `ui` for
+   markup/style/browser-facing work, `logic` for computation/data/CLI work, `mixed` when the
+   slice spans both. Name it honestly per slice. `milestone` is the OPTIONAL label PROJECTED
+   from the LAW plan table (output 1) — the SAME label the table gives that slice, or `""`
+   (or omitted) when the slice is unlabeled. The projection must match the authoritative
+   table exactly, in build order: the kernel checks agreement before it seals.
 4. `.kiln/decisions.md` — append the founding ADR: `## ADR-1 — <title>`, one paragraph:
    what was pinned and why. Numbered, append-only, superseded entries are never deleted.
 

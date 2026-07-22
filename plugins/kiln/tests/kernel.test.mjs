@@ -21,14 +21,14 @@ const coreSrc = srcLines.slice(
 const core = new Function(coreSrc + `
   return { SPINE, parseArgs, resolveStage, nextStage, gateOutcome, reviewLoop,
            fillClosed, streakIndex, stateDoc, atomicWriteCmd, gateCmd, LAW_CHECK, LAW_GUARD,
-           LAW_CHECK_RECEIPT, verdictExit, redSetIsFuture, gateReviewInvalid,
-           validateTiers, resolveTier, routeBuilder, parseSliceEntry,
+           LAW_CHECK_RECEIPT, MILESTONE_PROJECTION_CHECK, verdictExit, redSetIsFuture, gateReviewInvalid,
+           validateTiers, resolveTier, routeBuilder, parseSliceEntry, milestoneSeamAfter,
            validatePosture }`)()
 const {
   SPINE, parseArgs, resolveStage, nextStage, gateOutcome, reviewLoop,
   fillClosed, streakIndex, stateDoc, atomicWriteCmd, gateCmd,
-  LAW_CHECK_RECEIPT, verdictExit, redSetIsFuture, gateReviewInvalid,
-  validateTiers, resolveTier, routeBuilder, parseSliceEntry,
+  LAW_CHECK_RECEIPT, MILESTONE_PROJECTION_CHECK, verdictExit, redSetIsFuture, gateReviewInvalid,
+  validateTiers, resolveTier, routeBuilder, parseSliceEntry, milestoneSeamAfter,
   validatePosture,
 } = core
 
@@ -653,14 +653,107 @@ test('tiers: routeBuilder maps each validated surface to its builder opts', () =
 })
 
 test('tiers: parseSliceEntry validates the object form; only legacy bare strings default to mixed', () => {
-  assert.deepEqual(parseSliceEntry('obj|hello-page|ui'), { id: 'hello-page', surface: 'ui', valid: true })
-  assert.deepEqual(parseSliceEntry('obj|logic-core|logic'), { id: 'logic-core', surface: 'logic', valid: true })
-  assert.deepEqual(parseSliceEntry('obj|m|mixed'), { id: 'm', surface: 'mixed', valid: true })
+  assert.deepEqual(parseSliceEntry('obj|hello-page|ui'), { id: 'hello-page', surface: 'ui', milestone: '', valid: true })
+  assert.deepEqual(parseSliceEntry('obj|logic-core|logic'), { id: 'logic-core', surface: 'logic', milestone: '', valid: true })
+  assert.deepEqual(parseSliceEntry('obj|m|mixed'), { id: 'm', surface: 'mixed', milestone: '', valid: true })
   assert.equal(parseSliceEntry('obj|s1|bogus').valid, false, 'an unknown object surface is invalid — never silently mixed')
   assert.equal(parseSliceEntry('obj|s1|').valid, false, 'a missing object surface is invalid')
   assert.equal(parseSliceEntry('obj||ui').valid, false, 'a missing object id is invalid')
-  assert.deepEqual(parseSliceEntry('bare-legacy'), { id: 'bare-legacy', surface: 'mixed', valid: true }, 'a legacy bare string defaults to mixed')
+  assert.deepEqual(parseSliceEntry('bare-legacy'), { id: 'bare-legacy', surface: 'mixed', milestone: '', valid: true }, 'a legacy bare string defaults to mixed')
   assert.equal(parseSliceEntry('').valid, false, 'an empty descriptor is invalid')
+})
+
+test('S1 (A9/W5-07): parseSliceEntry parses the optional four-slot milestone label — legacy forms stay valid, a smuggled separator or control char is rejected', () => {
+  // 4-slot object: the trailing label is carried.
+  assert.deepEqual(parseSliceEntry('obj|scaffold|logic|foundation'),
+    { id: 'scaffold', surface: 'logic', milestone: 'foundation', valid: true }, 'the fourth slot is the milestone label')
+  assert.deepEqual(parseSliceEntry('obj|home|ui|the shipping table'),
+    { id: 'home', surface: 'ui', milestone: 'the shipping table', valid: true }, 'a label may carry spaces')
+  // Legacy 3-slot object and bare string: an absent label normalizes to ''.
+  assert.deepEqual(parseSliceEntry('obj|s1|ui'),
+    { id: 's1', surface: 'ui', milestone: '', valid: true }, 'a legacy 3-slot object reads an absent label as ""')
+  assert.equal(parseSliceEntry('bare').milestone, '', 'a legacy bare string carries an absent label')
+  // Separator safety: a raw '|' in the label splits into a fifth slot — rejected, never guessed.
+  assert.equal(parseSliceEntry('obj|s1|ui|a|b').valid, false, 'a | in the label smuggles the descriptor separator — rejected')
+  // Control-char safety: a label cannot smuggle a char that breaks the descriptor transport.
+  assert.equal(parseSliceEntry('obj|s1|ui|bad').valid, false, 'a control char in the label is rejected')
+  assert.equal(parseSliceEntry('obj|s1|ui|bad\nlabel').valid, false, 'a newline in the label is rejected')
+  // An empty fourth slot is a present-but-unlabeled slice — valid, milestone ''.
+  assert.deepEqual(parseSliceEntry('obj|s1|ui|'),
+    { id: 's1', surface: 'ui', milestone: '', valid: true }, 'an empty trailing slot is an unlabeled slice')
+  // W5-S1-01: the label is trimmed to the SAME bytes MILESTONE_PROJECTION_CHECK compares, so a
+  // padded cell that passes projection agreement cannot fabricate a spurious seam downstream.
+  assert.deepEqual(parseSliceEntry('obj|s1|ui| alpha '),
+    { id: 's1', surface: 'ui', milestone: 'alpha', valid: true }, 'a padded label is normalized to its trimmed bytes')
+  // W5-S1-03: the control-free invariant covers C1 (U+0080–U+009F), which survives a whitespace trim.
+  assert.equal(parseSliceEntry('obj|s1|ui|bad' + String.fromCharCode(0x9f)).valid, false, 'a C1 control char (U+009F) in the label is rejected')
+  assert.equal(parseSliceEntry('obj|s1|ui|bad' + String.fromCharCode(0x80)).valid, false, 'a C1 control char (U+0080) in the label is rejected')
+})
+
+test('S1 (A9/W5-07): milestoneSeamAfter is the pure seam closed fact — final slice or a label change, never mid-run', () => {
+  // Seam after the FINAL slice, always — the last milestone completes at the end.
+  assert.equal(milestoneSeamAfter(['a', 'a'], 1), true, 'the final slice always closes a seam')
+  assert.equal(milestoneSeamAfter(['solo'], 0), true, 'a single-slice run seams at its one slice')
+  // Seam on an ADJACENT label change.
+  assert.equal(milestoneSeamAfter(['a', 'b'], 0), true, 'a label change places the seam after the completing milestone')
+  // NO seam mid-run of the same label.
+  assert.equal(milestoneSeamAfter(['a', 'a', 'a'], 1), false, 'no seam inside a run of one label')
+  // NO spurious seam after the first slice when the next slice shares the label.
+  assert.equal(milestoneSeamAfter(['a', 'a'], 0), false, 'no seam after the first slice of a continuing milestone')
+  // An unlabeled run ('' everywhere) is one whole-build seam at the final slice (A9 implicit final).
+  assert.equal(milestoneSeamAfter(['', '', ''], 0), false, 'unlabeled: no early seam')
+  assert.equal(milestoneSeamAfter(['', '', ''], 1), false, 'unlabeled: no mid seam')
+  assert.equal(milestoneSeamAfter(['', '', ''], 2), true, 'unlabeled: the single whole-build seam is the final slice')
+  // Out-of-range / non-array indices never fabricate a seam.
+  assert.equal(milestoneSeamAfter(['a'], 5), false, 'an out-of-range index is no seam')
+  assert.equal(milestoneSeamAfter(['a'], -1), false, 'a negative index is no seam')
+  assert.equal(milestoneSeamAfter([], 0), false, 'an empty label list is no seam')
+  assert.equal(milestoneSeamAfter(undefined, 0), false, 'a non-array is no seam')
+})
+
+test('S1 (A9/W5-03): MILESTONE_PROJECTION_CHECK is the deterministic agreement leg — matching table/projection pass, any divergence or missing table fails', () => {
+  const run = (law, slices) => {
+    const dir = mkdtempSync(join(tmpdir(), 'kiln-proj-'))
+    mkdirSync(join(dir, '.kiln'))
+    writeFileSync(join(dir, '.kiln', 'LAW.md'), law)
+    writeFileSync(join(dir, '.kiln', 'slices.json'), JSON.stringify(slices))
+    return spawnSync('bash', ['-c', MILESTONE_PROJECTION_CHECK], { cwd: dir }).status
+  }
+  const PLAN = '# LAW\nfoo · scaffold · runs\n\n## Plan\n| slice | milestone |\n| --- | --- |\n| scaffold | foundation |\n| render | foundation |\n| ship |  |\n'
+  const MATCH = [{ id: 'scaffold', surface: 'mixed', milestone: 'foundation' }, { id: 'render', surface: 'ui', milestone: 'foundation' }, { id: 'ship', surface: 'logic' }]
+  assert.equal(run(PLAN, MATCH), 0, 'the projection agrees with the authoritative table — proceed')
+  // A label divergence halts.
+  const badLabel = [{ id: 'scaffold', surface: 'mixed', milestone: 'foundation' }, { id: 'render', surface: 'ui', milestone: 'delivery' }, { id: 'ship', surface: 'logic' }]
+  assert.equal(run(PLAN, badLabel), 1, 'a projected label that differs from the table halts')
+  // An order/id divergence halts.
+  const badOrder = [{ id: 'render', surface: 'ui', milestone: 'foundation' }, { id: 'scaffold', surface: 'mixed', milestone: 'foundation' }, { id: 'ship', surface: 'logic' }]
+  assert.equal(run(PLAN, badOrder), 1, 'a projection out of table order halts')
+  // A missing authoritative table halts — the projection has nothing to agree with.
+  assert.equal(run('# LAW\nno plan table here\n', MATCH), 1, 'a missing plan table halts — the labels have no authority')
+  // An all-unlabeled run agrees when both carry empty labels in order.
+  const UNLABELED = '## Plan\n| slice | milestone |\n| --- | --- |\n| a |  |\n| b |  |\n'
+  assert.equal(run(UNLABELED, [{ id: 'a', surface: 'ui' }, { id: 'b', surface: 'logic', milestone: '' }]), 0, 'an unlabeled table and projection agree')
+  // W5-S1-02: the parser is anchored to `## Plan` — an otherwise-matching table with no `## Plan`
+  // heading carries no authority and halts.
+  const NO_HEADING = '# LAW\n| slice | milestone |\n| --- | --- |\n| a | x |\n'
+  assert.equal(run(NO_HEADING, [{ id: 'a', surface: 'ui', milestone: 'x' }]), 1, 'a table not under `## Plan` has no authority — halt')
+  // W5-S1-02: a missing GFM delimiter row halts — its first data row is not silently discarded.
+  const NO_DELIM = '## Plan\n| slice | milestone |\n| a | x |\n'
+  assert.equal(run(NO_DELIM, [{ id: 'a', surface: 'ui', milestone: 'x' }]), 1, 'a missing delimiter row is malformed — halt')
+  // W5-S1-02: an extra data cell is malformed — the parser reads exactly two, never the first two.
+  const EXTRA_CELL = '## Plan\n| slice | milestone |\n| --- | --- |\n| a | x | injected |\n'
+  assert.equal(run(EXTRA_CELL, [{ id: 'a', surface: 'ui', milestone: 'x' }]), 1, 'a row with a third cell is malformed — halt, never truncated to two')
+  // W5-S1-02: `##Plan` has no space after the hashes — not a GFM ATX heading, so it is prose and carries no authority.
+  const TIGHT_HASH = '##Plan\n| slice | milestone |\n| --- | --- |\n| a | x |\n'
+  assert.equal(run(TIGHT_HASH, [{ id: 'a', surface: 'ui', milestone: 'x' }]), 1, '`##Plan` is prose not a heading — the anchor requires `## Plan`, halt')
+  // W5-S1-02: an empty `## Plan` section does not bleed into a later `## Other` table — the section boundary holds.
+  const SECTION_BLEED = '## Plan\n\n## Other\n| slice | milestone |\n| --- | --- |\n| a | x |\n'
+  assert.equal(run(SECTION_BLEED, [{ id: 'a', surface: 'ui', milestone: 'x' }]), 1, 'a table under a later heading is outside the Plan section — halt')
+  // W5-S1-02: a GFM delimiter needs at least three hyphens per cell — one- or two-hyphen rows are malformed.
+  const THIN_DELIM_1 = '## Plan\n| slice | milestone |\n| - | - |\n| a | x |\n'
+  assert.equal(run(THIN_DELIM_1, [{ id: 'a', surface: 'ui', milestone: 'x' }]), 1, 'a single-hyphen delimiter is malformed — halt')
+  const THIN_DELIM_2 = '## Plan\n| slice | milestone |\n| -- | -- |\n| a | x |\n'
+  assert.equal(run(THIN_DELIM_2, [{ id: 'a', surface: 'ui', milestone: 'x' }]), 1, 'a two-hyphen delimiter is malformed — halt')
 })
 
 test('runtime (T-02): a nonzero tiers boot fails the run closed — no stage work runs', async () => {
@@ -746,6 +839,7 @@ test('runtime (INTAKE-19): the LAW leg spawns on stage-law (fable) — validate 
     // validate/report runs never reach these labels (the ratify gate is law-only).
     'ratify:request': GREEN,
     'ratify:gate': { exit: 0 },
+    'law:milestone-projection': { exit: 0 },
     'law:seal': { exit: 0 },
     'law:stage-end': GREEN,
     // Wave 2: the report run reaches the completion existence gate (law/validate never do).
@@ -774,6 +868,7 @@ test('runtime (Wave 1): the LAW ratifies, seal-law locks it, and the run advance
     'stage:law': { facts: { status: 'ok', pointers: ['.kiln/LAW.md', '.kiln/slices.json'], schema_valid: true }, narration_beat: 'the law, pinned' },
     'ratify:request': GREEN,
     'ratify:gate': { exit: 0 },
+    'law:milestone-projection': { exit: 0 },
     'law:seal': { exit: 0 },
     'law:stage-end': GREEN,
     'state:write': GREEN,
@@ -797,6 +892,49 @@ test('runtime (Wave 1): the LAW ratifies, seal-law locks it, and the run advance
   assert.ok(lastStateDoc(calls).includes('Relaunch the kernel workflow with stage=build'), 'next_action advances to build')
 })
 
+test('runtime (S1, A9/W5-03): the milestone projection is checked BEFORE the seal — it agrees, then the seal follows', async () => {
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE,
+    ...ONBOARDING_OK,
+    'law:preflight': GREEN,
+    'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law, pinned' },
+    'ratify:request': GREEN,
+    'ratify:gate': { exit: 0 },
+    'law:milestone-projection': { exit: 0 },
+    'law:seal': { exit: 0 },
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'ok', 'a ratified LAW whose projection agrees seals and advances')
+  const proj = calls.find(c => c.label === 'law:milestone-projection')
+  assert.ok(proj, 'the projection-agreement leg runs on the sealed branch')
+  assert.ok(proj.prompt.includes('slices.json') && proj.prompt.includes('LAW.md'),
+    'the leg compares slices.json against the LAW plan table')
+  const gate = calls.find(c => c.label === 'ratify:gate')
+  const seal = calls.find(c => c.label === 'law:seal')
+  assert.ok(calls.indexOf(gate) < calls.indexOf(proj) && calls.indexOf(proj) < calls.indexOf(seal),
+    'the projection is checked after the ratify accept and before the seal — a mismatched plan never locks')
+})
+
+test('runtime (S1, A9/W5-03): a milestone projection that disagrees with the LAW plan table holds — never a silent seal', async () => {
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE,
+    ...ONBOARDING_OK,
+    'law:preflight': GREEN,
+    'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law, pinned' },
+    'ratify:request': GREEN,
+    'ratify:gate': { exit: 0 },
+    'law:milestone-projection': { exit: 1 }, // slices.json disagrees with the authoritative plan table
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'transport-failure', 'a projection mismatch is an honest hold — a reused status, no new beat')
+  assert.ok(!calls.some(c => c.label === 'law:seal'), 'the LAW never seals while the projection disagrees with its table')
+  assert.ok(!ret.beat.includes('locked') && !ret.beat.toLowerCase().includes('sealed'),
+    'no SEALED / locked narration on a projection-mismatch hold')
+  const doc = lastStateDoc(calls)
+  assert.ok(doc.includes('stage: law') && !doc.includes('stage=build'), 'the run holds at law — never advances to build')
+})
+
 test('runtime (Wave 1): a LAW ratify reject repairs the law, rechecks, and seals within the cap', async () => {
   const gateExits = [10, 0] // review reject, then recheck accept after one repair
   const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
@@ -807,6 +945,7 @@ test('runtime (Wave 1): a LAW ratify reject repairs the law, rechecks, and seals
     'ratify:request': GREEN,
     'ratify:gate': () => ({ exit: gateExits.shift() }),
     'ratify:repair': { facts: { status: 'ok', pointers: ['.kiln/LAW.md'], schema_valid: true }, narration_beat: 'the law, revised' },
+    'law:milestone-projection': { exit: 0 },
     'law:seal': { exit: 0 },
     'law:stage-end': GREEN,
     'state:write': GREEN,
@@ -871,6 +1010,7 @@ test('runtime (Wave 1, A2): the SEALED-claiming LAW card beat speaks only after 
     'law:preflight': GREEN,
     'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: LAW_SEALED_BEAT },
     'ratify:request': GREEN,
+    'law:milestone-projection': { exit: 0 },
     'state:write': GREEN,
   }
   // HELD (codex down): the sealed narration is ABSENT — only the honest hold line.
@@ -901,6 +1041,7 @@ test('runtime (Wave 1, A9): a project path with a space ratifies — the mandato
     'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law' },
     'ratify:request': GREEN,
     'ratify:gate': { exit: 0 },
+    'law:milestone-projection': { exit: 0 },
     'law:seal': { exit: 0 },
     'law:stage-end': GREEN,
     'state:write': GREEN,
@@ -1652,6 +1793,7 @@ test('runtime (Wave 3): a present brief and a valid posture pass the LAW input g
     'stage:law': { facts: { status: 'ok', pointers: ['.kiln/LAW.md'], schema_valid: true }, narration_beat: 'the law' },
     'ratify:request': GREEN,
     'ratify:gate': { exit: 0 },
+    'law:milestone-projection': { exit: 0 },
     'law:seal': { exit: 0 },
     'law:stage-end': GREEN,
     'state:write': GREEN,
@@ -1751,6 +1893,7 @@ test('runtime (Wave 3, brownfield): a present .kiln/brownfield marker with a non
     'stage:law': { facts: { status: 'ok', pointers: ['.kiln/LAW.md'], schema_valid: true }, narration_beat: 'the law' },
     'ratify:request': GREEN,
     'ratify:gate': { exit: 0 },
+    'law:milestone-projection': { exit: 0 },
     'law:seal': { exit: 0 },
     'law:stage-end': GREEN,
     'state:write': GREEN,
@@ -1793,6 +1936,7 @@ test('runtime (Wave 3, greenfield): no marker means no map is required — the m
     'stage:law': { facts: { status: 'ok', pointers: ['.kiln/LAW.md'], schema_valid: true }, narration_beat: 'the law' },
     'ratify:request': GREEN,
     'ratify:gate': { exit: 0 },
+    'law:milestone-projection': { exit: 0 },
     'law:seal': { exit: 0 },
     'law:stage-end': GREEN,
     'state:write': GREEN,

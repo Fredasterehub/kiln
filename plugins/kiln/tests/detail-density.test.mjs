@@ -60,6 +60,8 @@ async function runLaw(detail) {
     // Wave 1: the law stage ratifies before advancing — accept, seal, advance.
     'ratify:request': { exit: 0 },
     'ratify:gate': { exit: 0 },
+    // S1: the milestone projection is confirmed before the seal.
+    'law:milestone-projection': { exit: 0 },
     'law:seal': { exit: 0 },
     'state:write': { exit: 0 },
   }

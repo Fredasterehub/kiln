@@ -190,6 +190,31 @@ test('law card (W1-S4): exactly four numbered outputs, the card never seals lock
     'the beat no longer reads the digest FROM lock.hash — that file is sealed later by the kernel')
 })
 
+test('law card (S1, A9/W5-03): the milestone label is authoritative in the LAW plan table, and slices.json is its checked projection', () => {
+  const law = cardText('law.md')
+  const outputs = law.slice(law.indexOf('## Outputs'), law.indexOf('## Beat'))
+  const flat = outputs.replace(/\s+/g, ' ') // prose wraps across lines; flatten for phrase checks
+  // Output 1 authors the AUTHORITATIVE plan table carrying the OPTIONAL milestone label.
+  assert.ok(flat.includes('## Plan'), 'the LAW carries a `## Plan` table')
+  assert.ok(flat.includes('| slice | milestone |'), 'the plan table columns are the slice and its milestone')
+  assert.ok(flat.includes('OPTIONAL milestone label per slice'), 'the milestone label is optional, one per slice')
+  assert.ok(flat.includes('AUTHORITATIVE plan table'), 'the plan table is the authoritative source of the labels')
+  // The label wire safety is stated where the label is authored.
+  assert.ok(flat.includes('a label carries no `|` and no control characters'),
+    'a label carries no separator and no control characters')
+  // Output 3 makes slices.json the CHECKED PROJECTION of the table, checked before the seal.
+  assert.ok(flat.includes('"milestone": "<label>"'), 'slices.json carries the optional milestone field')
+  assert.ok(flat.includes('checked projection'), 'slices.json is the table\'s checked projection')
+  assert.ok(flat.includes('PROJECTED from the LAW plan table'), 'the slices milestone is projected from the authoritative table')
+  assert.ok(flat.includes('the kernel refuses to seal unless the two agree') || flat.includes('the kernel checks agreement before it seals'),
+    'the card states the kernel validates projection agreement before sealing')
+  // The optional-label change adds no fifth numbered output — the four-output contract holds.
+  const numbered = [...outputs.matchAll(/^\d+\.\s+`([^`]+)`/gm)].map((m) => m[1])
+  assert.deepEqual(numbered,
+    ['.kiln/LAW.md', '.kiln/law/check.sh', '.kiln/slices.json', '.kiln/decisions.md'],
+    'the milestone label rides outputs 1 and 3 — still exactly four numbered outputs, in order')
+})
+
 // ── Simple-fire: red-first TDD, JIT design, and the one-bash-call GPT coder ──
 
 test('build card: red first, always — tests fail before the build; design is just-in-time inside the slice', () => {
