@@ -164,6 +164,32 @@ test('cards: every stage card pins its title unit and its N2–N5 bold-Stage anc
   }
 })
 
+test('law card (W1-S4): exactly four numbered outputs, the card never seals lock.hash, and the beat digest is a DISPLAY sha256 of LAW.md', () => {
+  const law = cardText('law.md')
+  // Exactly four numbered card outputs, in order — parse the Outputs section and deep-equal,
+  // so a fifth numbered output (or a reinstated lock.hash) fails, not just passes silently.
+  const outputs = law.slice(law.indexOf('## Outputs'), law.indexOf('## Beat'))
+  const numbered = [...outputs.matchAll(/^\d+\.\s+`([^`]+)`/gm)].map((m) => m[1])
+  assert.deepEqual(numbered,
+    ['.kiln/LAW.md', '.kiln/law/check.sh', '.kiln/slices.json', '.kiln/decisions.md'],
+    'exactly these four numbered outputs, in order — no fifth, and lock.hash is not among them')
+  // Seal vs display is the real invariant: the card MAY compute a sha256 of LAW.md for the
+  // beat digest, but it never writes/seals lock.hash — the kernel does that after ratify.
+  assert.ok(!/>\s*`?\.kiln\/law\/lock\.hash/.test(law),
+    'the card never redirects a write into lock.hash — the kernel seals it authoritatively')
+  assert.ok(law.includes('the kernel seals'), 'the seal is re-attributed to the kernel post-ratify')
+  assert.ok(law.includes('all four outputs'), 'the Return succeeds only on the four card-owned outputs')
+  assert.ok(law.includes('reopen event, never') && law.includes('silent'), 'the reopen doctrine is preserved')
+  // The TITLE UNIT digest is computed from the LAW.md the card just wrote — NOT read from
+  // lock.hash, which the kernel has not sealed yet at beat-compose time (buffering delays
+  // EMISSION, not composition; a compose-time read would embed an empty or stale digest).
+  const titleUnit = law.slice(law.indexOf('**TITLE UNIT**'), law.indexOf('**WHISPER**'))
+  assert.ok(titleUnit.includes('sha256sum .kiln/LAW.md'),
+    'the beat digest is computed from the LAW.md bytes the card just wrote (display only)')
+  assert.ok(!law.includes('digest from .kiln/law/lock.hash'),
+    'the beat no longer reads the digest FROM lock.hash — that file is sealed later by the kernel')
+})
+
 // ── Simple-fire: red-first TDD, JIT design, and the one-bash-call GPT coder ──
 
 test('build card: red first, always — tests fail before the build; design is just-in-time inside the slice', () => {

@@ -27,16 +27,17 @@ it, and a red owned only by a later, still-unbuilt planned slice is expected pre
    criterion, exits `0` iff all green; on any red it prints to stdout the owning slice IDs of
    every failed criterion as a JSON array of strings, so the kernel receives the closed
    `{exit, ids}` facts and reopens the true owner (`bash .kiln/law/check.sh`).
-3. `.kiln/law/lock.hash` — the lock: the digest alone, extracted —
-   `sha256sum .kiln/LAW.md | cut -d' ' -f1` (raw `sha256sum` output carries the filename and
-   fails the request parser). After this write, LAW.md is locked — any edit is a reopen
-   event, never silent.
-4. `.kiln/slices.json` — a JSON array in build order, one object per slice:
+3. `.kiln/slices.json` — a JSON array in build order, one object per slice:
    `{ "id": "<kebab-id>", "surface": "ui" | "logic" | "mixed" }`. `surface` is a machine
    fact the kernel routes the builder on: `ui` for markup/style/browser-facing work, `logic`
    for computation/data/CLI work, `mixed` when the slice spans both. Name it honestly per slice.
-5. `.kiln/decisions.md` — append the founding ADR: `## ADR-1 — <title>`, one paragraph:
+4. `.kiln/decisions.md` — append the founding ADR: `## ADR-1 — <title>`, one paragraph:
    what was pinned and why. Numbered, append-only, superseded entries are never deleted.
+
+You do not seal the LAW — you leave it a candidate. After you return it is cross-family
+ratified; on accept the kernel seals it, writing the digest of `.kiln/LAW.md` to
+`.kiln/law/lock.hash` — and from that seal on, any edit to LAW.md is a reopen event, never
+silent.
 
 ## Beat (fill every stage-owned slot; leave every kernel-owned slot from the sealed
 `data/voice.json` slots map unfilled)
@@ -53,8 +54,11 @@ order, never repeating each other:
   slices in reader-meaningful subject matter, all *italic* (they are ahead) — never bare
   process labels; the line never wraps (window past ~8 items with true count-words).
 - **TITLE UNIT** — exactly one: `` `SEALED` **The Law is locked — <what it makes
-  falsifiable, concept altitude>** (`<short digest from .kiln/law/lock.hash>`) `` — the
-  bold event names the Law; the digest stands as the handle on this fresh seal.
+  falsifiable, concept altitude>** (`<short digest — the first N chars of
+  sha256sum .kiln/LAW.md | cut -d' ' -f1>`) `` — the bold event names the Law; the digest is
+  the handle on the LAW you just wrote. You show it but do not seal it: the kernel seals
+  `.kiln/law/lock.hash` after ratification, and since that seal is the sha256 of these same
+  `.kiln/LAW.md` bytes, your short digest is deterministically a prefix of it.
 - **WHISPER** — one blank line, then a two-space indent, then ONE tight italic sentence:
   the simple truth of what the criteria pin. Never fog, never a paragraph.
 - **CLOSE** — one short plain narrative line: what starts when this crosses (the build
@@ -70,5 +74,5 @@ Leave every kernel-owned slot from the sealed slots map exactly as-is. One trans
 card.
 
 ## Return
-`ok` — true only if all five outputs above are written. `beat` — every stage-owned slot
+`ok` — true only if all four outputs above are written. `beat` — every stage-owned slot
 filled; kernel-owned slots left as-is. `pointers` — the repo-relative paths you wrote.
