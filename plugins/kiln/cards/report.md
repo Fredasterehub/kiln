@@ -6,7 +6,10 @@ this stage proves the files suffice. Return `{facts:{status, pointers, schema_va
 
 ## Inputs — the readable record, nothing else
 `.kiln/STATE.md` · `.kiln/LAW.md` · `.kiln/decisions.md` · `.kiln/seals.log` ·
-`.kiln/validate.md` · `.kiln/degraded` (presence = the run degraded single-family). The
+`.kiln/validate.md` · `.kiln/degraded` (presence = the run degraded single-family) ·
+`.kiln/perceptual-partial` (presence = a semantic perceptual hold stands — the one closed
+fact that selects the held-run variant below) · `.kiln/screen-escalation.txt` (the one-line
+escalation record, read only when the marker is present). The
 report derives EXCLUSIVELY from this readable record — no workspace reads. If a fact is not
 in the record, it is not in the report.
 
@@ -20,6 +23,12 @@ sanctioned voice surface (references/brand.md). Sections, lean:
    or `single-family`). If `.kiln/degraded` exists, say so plainly: codex never answered;
    every affected seal says single-family; nothing was impersonated.
 4. **The ledger** — the ADR count and `decisions.md` pointer; cite decisions by number.
+5. **The screen's doubt** — ONLY when `.kiln/perceptual-partial` is present: the perceptual
+   rows verbatim from `.kiln/validate.md` (criterion id · dim · proxy exit · grade), the
+   surviving `PARTIAL` criteria named plainly, and the escalation record line from
+   `.kiln/screen-escalation.txt` verbatim when it exists (`CORROBORATED` — the second family
+   failed them too; `CONTESTED` — it accepted them; the hold stood either way). When the
+   marker is absent this section does not exist and the report is unchanged.
 
 Theatrical voice, true claims — every operational sentence must trace to a named artifact.
 
@@ -53,6 +62,28 @@ nothing. Scene-setter first, then the blocks, in this literal order:
   code span — nested spans break; add nothing, reword nothing), `{source}` = the entry's
   FULL `source` string, plain weight, no invented epithets; never pick a quote already
   used this run.
+
+**The held-run variant** — selected by ONE closed input fact: `.kiln/perceptual-partial`
+exists. The blocks above compose a sealed run; a held run tells the hold instead — same
+literal order, these honest substitutions, and when the marker is absent none of this
+applies:
+- **FRAME** — `{progress}` = the honest held strip: `✓ *Law* · ✓ *Build* · ▶ **Validate** ·
+  ○ *Report*` — the run stands AT validate, nothing past it is sealed; NO all-sealed strip,
+  NO fraction (the counting is over — the hold is the fact).
+- **TITLE UNIT** — exactly one, and NEVER `SEALED`: `` `HELD` **Report — the run stands
+  held at validate: the screen kept its doubts** `` — the clause after the bold event names
+  what survived, from the record.
+- **THE SCREEN'S DOUBT** — between the EVIDENCE NOTCH and THE METER: one plain line per
+  perceptual row of `.kiln/validate.md` (criterion id · dim · proxy exit · grade verbatim,
+  the `PARTIAL` survivors plainly named), then the escalation record line from
+  `.kiln/screen-escalation.txt` verbatim when it exists.
+- **THE METER** — the meter reflects the hold: first one plain line — `Held: N perceptual
+  criteria stand PARTIAL — the ruling is the operator's.` (N counted from the rows) — then
+  the completion line exactly as above, `{driver}` untouched: the spend is measured even
+  when the work is held.
+- **NO FOOT** — the sealed foot law: a HELD card omits the quote foot; the moment belongs
+  to the operator, not the lore.
+
 Leave every kernel-owned slot from the sealed slots map exactly as-is. NO close anywhere
 on this card — the absence of a close is the ending.
 

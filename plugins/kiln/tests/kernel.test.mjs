@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs'
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, appendFileSync } from 'node:fs'
 import { execSync, spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -3996,4 +3996,268 @@ test('drift (W8-S3): the kernel screen location rule mirrors the CLI SCREEN_LOCA
   const cliPattern = /const SCREEN_LOCATION = \{ pattern: (\/[^,]+\/),/.exec(cli)[1]
   const kernelPattern = /const SCREEN_LOCATION_RULE = (\/[^\n]+\/)\n/.exec(src)[1]
   assert.equal(kernelPattern, cliPattern, 'the Claude path relaxes location byte-symmetrically with the screen family')
+})
+
+// ── W8-S4: dogfood — the screening room proven whole, the truth on real disk ──
+// The W7-S3 pattern extended to the wave's reading surfaces: full validate → report
+// scenarios on the mocked runtime with the DURABLE-FACT legs executing their exact
+// issued commands for REAL — the activation presence check reads a real sealed LAW.md,
+// the marker legs touch and remove the real .kiln/perceptual-partial, the escalation
+// record heredoc lands its real one-line file, the cohort/survivor/criteria fetches read
+// the really-published verdict and law, and the addendum + report acts are obedient
+// card-followers writing the real .kiln/validate.md rows and the real .kiln/report.md
+// variant from the real record. Grader transports stay scripted as W8-S3 scripts them —
+// no live codex, no live browser.
+const runRealBlock = (prompt, dir) => ({ exit: spawnSync('sh', ['-c', prompt.slice(prompt.indexOf('\n') + 1)], { cwd: dir }).status })
+const runRealIds = (prompt, dir) => {
+  const r = spawnSync('sh', ['-c', prompt.slice(prompt.indexOf('\n') + 1)], { cwd: dir, encoding: 'utf8' })
+  const out = (r.stdout ?? '').trim()
+  return { exit: r.status, ids: out.startsWith('[') ? JSON.parse(out) : (out === '' ? [] : [out]) }
+}
+const LAW_VISUAL = [
+  '# LAW', '', '## Perceptual', '',
+  '| criterion id | owning slice | dim | requirement | proxy command | expected | reference |',
+  '| --- | --- | --- | --- | --- | --- | --- |',
+  '| P-1 | s1 | fidelity-to-requirement | the hero renders | test -f index.html | exit 0 | |',
+  '| P-2 | s1 | typography | headings hold their scale | test -f index.html | exit 0 | |', '',
+].join('\n')
+const LAW_PLAIN = '# LAW\n\nexecutable criteria only — no perceptual table\n'
+const mkVisual = (law) => { const dir = mkProject(); writeFileSync(join(dir, '.kiln/LAW.md'), law); return dir }
+const marker = (dir) => join(dir, '.kiln/perceptual-partial')
+// The durable-fact legs, real: activation presence, marker touch/clear, the record heredoc.
+const realScreenDisk = (dir) => ({
+  'perceptual:presence': (p) => runRealBlock(p, dir),
+  'perceptual:marker': (p) => runRealBlock(p, dir),
+  'perceptual:marker-clear': (p) => runRealBlock(p, dir),
+  'escalate:record': (p) => runRealBlock(p, dir),
+})
+// The screen verbs publish their verdict file exactly as the CLI would — real bytes on
+// disk, the scripted wire exit.
+const publishScreen = (dir, verdict, exit) => () => {
+  writeFileSync(join(dir, SCREEN), JSON.stringify(verdict))
+  return { exit }
+}
+// Act 1, the capture-inclusive validate act: writes the real base validate.md.
+const captureAct = (dir) => () => {
+  writeFileSync(join(dir, '.kiln/validate.md'), '# validate — check.sh exit 0\nC-1 · test -f index.html · ran · ✓\n')
+  return { facts: { status: 'ok', pointers: ['.kiln/validate.md'], schema_valid: true }, narration_beat: 'a hundred eyes' }
+}
+// Act 2, the obedient addendum: grades per the kernel's issued instruction, survivors
+// from the REALLY-published verdict, rows appended to the real validate.md.
+const addendumAct = (dir) => (prompt) => {
+  const held = prompt.includes('grade PARTIAL')
+  const survivors = held ? [...new Set(JSON.parse(readFileSync(join(dir, SCREEN), 'utf8')).findings.map((f) => f.criterion))] : []
+  const dims = { 'P-1': 'fidelity-to-requirement', 'P-2': 'typography' }
+  const rows = Object.keys(dims).map((id) => id + ' · ' + dims[id] + ' · proxy exit 0 · ' + (survivors.includes(id) ? 'PARTIAL' : 'PASS'))
+  appendFileSync(join(dir, '.kiln/validate.md'), rows.join('\n') + '\n')
+  return { facts: { status: 'ok', pointers: ['.kiln/validate.md'], schema_valid: true }, narration_beat: held ? 'the rows land — the screen kept its doubts' : 'the rows land — the screen agreed' }
+}
+// The obedient report act: cards/report.md's variant rule over the REAL record — the
+// marker presence selects held; the disclosure is the real rows + the real record line;
+// the meter closes both variants (`beats["completion"]`, `{driver}` left DRIVER-filled),
+// and the held meter opens with the card's counted Held line before the completion beat.
+const METER_LINE = 'The forge cools. The work remains. Driver spend: {driver} tokens.'
+const reportAct = (dir) => () => {
+  const held = existsSync(marker(dir))
+  const rows = readFileSync(join(dir, '.kiln/validate.md'), 'utf8').split('\n').filter((l) => / · (PASS|PARTIAL)$/.test(l))
+  const esc = existsSync(join(dir, '.kiln/screen-escalation.txt')) ? readFileSync(join(dir, '.kiln/screen-escalation.txt'), 'utf8').trim() : ''
+  const report = held
+    ? ['✓ *Law* · ✓ *Build* · ▶ **Validate** · ○ *Report*',
+        '`HELD` **Report — the run stands held at validate: the screen kept its doubts**',
+        "## The screen's doubt", ...rows, esc,
+        'Held: ' + rows.filter((l) => l.endsWith('PARTIAL')).length + " perceptual criteria stand PARTIAL — the ruling is the operator's.",
+        METER_LINE].filter(Boolean).join('\n')
+    : ['✓ *Law* · ✓ *Build* · ✓ *Validate* · ✓ *Report*',
+        '`SEALED` **Report** — the report stands', ...rows, METER_LINE].join('\n')
+  writeFileSync(join(dir, '.kiln/report.md'), report + '\n')
+  return { facts: { status: 'ok', pointers: ['.kiln/report.md'], schema_valid: true }, narration_beat: held ? 'held, and told honestly' : 'the report stands' }
+}
+const runReport = (dir) => runKernel({ stage: 'report', projectDir: dir, plugin: REAL_PLUGIN }, {
+  ...VOICE,
+  'law:preflight': GREEN,
+  'stage:report': reportAct(dir),
+  'law:stage-end': GREEN,
+  'report:check': (p) => runRealBlock(p, dir),
+  'state:write': GREEN,
+})
+// The live visual validate scaffold; scenarios wire the grader legs.
+const visualBase = (dir) => ({
+  ...VOICE,
+  'law:preflight': GREEN,
+  ...realScreenDisk(dir),
+  'perceptual:dial': { exit: 0, perceptual: 'on', recovery_cap: 2 },
+  'stage:validate': captureAct(dir),
+  'perceptual:manifest': { exit: 0, ids: [MF(1)] },
+  'perceptual:family': { exit: 0 },
+  'perceptual:belt': { exit: 0 },
+  'perceptual:addendum': addendumAct(dir),
+  'law:stage-end': GREEN,
+  'state:write': GREEN,
+})
+// The no-progress semantic-hold trajectory: reject, recapture, an identical recheck
+// cohort, then the blocked branch — the Claude escalation corroborating the survivor.
+const noProgressHold = (dir) => {
+  const seq = [{ exit: 0, ids: [MF(1)] }, { exit: 0, ids: [MF(2)] }]
+  return {
+    ...visualBase(dir),
+    'perceptual:manifest': () => seq.shift() ?? { exit: 0, ids: [MF(2)] },
+    'screen:review': publishScreen(dir, screenVerdict('changes_required', [screenFinding('F1', 'P-1')]), 10),
+    'screen:recheck': publishScreen(dir, screenVerdict('changes_required', [screenFinding('F1', 'P-1')]), 10),
+    'screen:findings': (p) => runRealIds(p, dir),
+    'screen:survivors': (p) => runRealIds(p, dir),
+    'perceptual:recapture': validateAct(),
+    'perceptual:delta-check': { exit: 0 },
+    'screen:digest': DIGEST_B,
+    'screen:criteria': (p) => runRealIds(p, dir),
+    'screen:invalidate': { exit: 0 },
+    'screen-claude:escalate': OK_ACK,
+    'screen:read': readCandidate(screenVerdict('changes_required', [screenFinding('E1', 'P-1')])),
+    'screen:publish': { exit: 0 },
+  }
+}
+
+test('dogfood (W8-S4): a visual run passes end-to-end — real table presence, capture act, screen accept, PASS rows on real disk, and the report tells a sealed run', async () => {
+  const dir = mkVisual(LAW_VISUAL)
+  const v = await runKernel({ stage: 'validate', projectDir: dir, plugin: REAL_PLUGIN }, {
+    ...visualBase(dir),
+    'screen:review': publishScreen(dir, screenVerdict('accept'), 0),
+  })
+  assert.equal(v.ret.status, 'ok')
+  assert.ok(v.calls.find(c => c.label === 'perceptual:dial').prompt.includes('--visual true'),
+    'the REAL presence read over the sealed LAW feeds --visual true')
+  assert.ok(v.ret.beat.includes('the rows land — the screen agreed'), 'the addendum re-emits the truthful stage beat')
+  const rows = readFileSync(join(dir, '.kiln/validate.md'), 'utf8')
+  assert.ok(rows.includes('P-1 · fidelity-to-requirement · proxy exit 0 · PASS') && rows.includes('P-2 · typography · proxy exit 0 · PASS'),
+    'the addendum landed real PASS rows for every table criterion')
+  assert.ok(!rows.includes('PARTIAL'), 'no PARTIAL on an accepted run')
+  assert.ok(!existsSync(marker(dir)), 'the REAL marker-clear leg left no marker — the ok terminal is nonsemantic')
+  assert.ok(lastStateDoc(v.calls).includes('Relaunch the kernel workflow with stage=report'), 'validate advances to report')
+  const r = await runReport(dir)
+  assert.equal(r.ret.status, 'done')
+  assert.ok(r.calls.find(c => c.label === 'stage:report').prompt.includes('cards/report.md'), 'the report act follows the shipped card')
+  const report = readFileSync(join(dir, '.kiln/report.md'), 'utf8')
+  assert.ok(report.includes('`SEALED` **Report**') && report.includes('✓ *Law* · ✓ *Build* · ✓ *Validate* · ✓ *Report*'),
+    'the sealed-run variant: the SEALED title and the all-sealed strip')
+  assert.ok(!report.includes('HELD') && !report.includes("The screen's doubt"), 'no held banner and no disclosure on a clean run')
+})
+
+test('dogfood (W8-S4): a PARTIAL hold lands every durable fact on real disk — marker, escalation record, PARTIAL rows — and the operator-launched report tells the held-run variant', async () => {
+  const dir = mkVisual(LAW_VISUAL)
+  const v = await runKernel({ stage: 'validate', projectDir: dir, plugin: REAL_PLUGIN }, noProgressHold(dir))
+  assert.equal(v.ret.status, 'blocked', 'no strict progress is the semantic hold — the operator-ruling shape')
+  assert.equal(v.ret.pointers.escalation, 'CORROBORATED')
+  assert.ok(existsSync(marker(dir)), 'the REAL marker stands on disk — written by the semantic hold alone')
+  assert.equal(readFileSync(join(dir, '.kiln/screen-escalation.txt'), 'utf8'), 'CORROBORATED — 1 surviving criteria\n',
+    'the REAL one-line escalation record')
+  const rows = readFileSync(join(dir, '.kiln/validate.md'), 'utf8')
+  assert.ok(rows.includes('P-1 · fidelity-to-requirement · proxy exit 0 · PARTIAL'),
+    'the surviving criterion grades PARTIAL — a real row, derived from the really-published verdict')
+  assert.ok(rows.includes('P-2 · typography · proxy exit 0 · PASS'), 'the rest grade PASS')
+  assert.ok(lastStateDoc(v.calls).includes('Operator ruling: the perceptual screen held 1 criteria (CORROBORATED) after 1 repair passes'))
+  // The operator launches report ON the held state: the run reports, honestly.
+  const r = await runReport(dir)
+  assert.equal(r.ret.status, 'done', 'kernel report semantics unchanged — done means the report act completed; the CONTENT tells the truth')
+  const report = readFileSync(join(dir, '.kiln/report.md'), 'utf8')
+  assert.ok(report.includes('`HELD` **Report — the run stands held at validate'), 'the held banner — never SEALED')
+  assert.ok(report.includes('✓ *Law* · ✓ *Build* · ▶ **Validate** · ○ *Report*'), 'the honest held strip — nothing past validate is sealed')
+  assert.ok(!report.includes('SEALED') && !report.includes('✓ *Validate* · ✓ *Report*'),
+    'no sealed title and no all-sealed strip anywhere on the held variant')
+  assert.ok(report.includes("The screen's doubt") && report.includes('P-1 · fidelity-to-requirement · proxy exit 0 · PARTIAL'),
+    'the disclosure carries the PARTIAL row verbatim from the record')
+  assert.ok(report.includes('CORROBORATED — 1 surviving criteria'), 'the corroborated line rides the disclosure — the record carries it')
+  assert.ok(report.includes("Held: 1 perceptual criteria stand PARTIAL — the ruling is the operator's."),
+    "the held meter opens with the card's counted Held line — N from the PARTIAL rows")
+  assert.ok(report.includes(METER_LINE) && report.indexOf('Held: 1 perceptual criteria') < report.indexOf(METER_LINE),
+    'the completion meter follows the Held line, {driver} left DRIVER-filled — the spend is measured even when the work is held')
+  assert.ok(existsSync(marker(dir)) && !r.calls.some(c => c.label === 'perceptual:marker-clear'),
+    'the report run never touches the marker — only a validate conclusion may remove it')
+})
+
+test('dogfood (W8-S4): a dormant run is byte-identical — the REAL presence read finds no table, no screening leg wakes, and the report carries no variant', async () => {
+  const dir = mkVisual(LAW_PLAIN)
+  const { ret, calls } = await runKernel({ stage: 'validate', projectDir: dir, plugin: REAL_PLUGIN }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    ...realScreenDisk(dir),
+    'perceptual:dial': { exit: 0, perceptual: 'dormant', recovery_cap: 1 },
+    'stage:validate': captureAct(dir),
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'ok')
+  assert.ok(calls.find(c => c.label === 'perceptual:dial').prompt.includes('--visual false'),
+    'the REAL presence read over a table-less LAW feeds --visual false')
+  for (const label of ['perceptual:manifest', 'perceptual:family', 'perceptual:belt', 'screen:review', 'perceptual:addendum', 'perceptual:marker', 'escalate:record']) {
+    assert.ok(!calls.some(c => c.label === label), 'dormant skips the machinery: ' + label)
+  }
+  assert.equal(ret.beat, 'a hundred eyes', 'the single-act beat crosses unchanged — no addendum re-emit, no variant')
+  // Byte identity is claimed, so byte identity is asserted: both complete outputs equal
+  // the no-screening baseline bytes — any residue anywhere (rows, notch, meter, foot)
+  // fails, not just the substrings a variant would add.
+  assert.equal(readFileSync(join(dir, '.kiln/validate.md'), 'utf8'),
+    '# validate — check.sh exit 0\nC-1 · test -f index.html · ran · ✓\n',
+    "the dormant validate.md is the capture act's exact bytes — no addendum rows, no residue")
+  const r = await runReport(dir)
+  assert.equal(r.ret.status, 'done')
+  assert.equal(readFileSync(join(dir, '.kiln/report.md'), 'utf8'),
+    '✓ *Law* · ✓ *Build* · ✓ *Validate* · ✓ *Report*\n`SEALED` **Report** — the report stands\n' + METER_LINE + '\n',
+    'the dormant report equals the sealed baseline whole — the variant machinery leaves no byte behind')
+  assert.ok(!existsSync(marker(dir)))
+})
+
+test('dogfood (W8-S4): relaunch-after-hold reaching accept — the REAL marker is removed by the ok terminal and the report returns to the sealed variant', async () => {
+  const dir = mkVisual(LAW_VISUAL)
+  const held = await runKernel({ stage: 'validate', projectDir: dir, plugin: REAL_PLUGIN }, noProgressHold(dir))
+  assert.equal(held.ret.status, 'blocked')
+  assert.ok(existsSync(marker(dir)), 'the hold left its marker')
+  // The relaunch: fresh evidence satisfies the screen — the accept clears the doubt.
+  const again = await runKernel({ stage: 'validate', projectDir: dir, plugin: REAL_PLUGIN }, {
+    ...visualBase(dir),
+    'screen:review': publishScreen(dir, screenVerdict('accept'), 0),
+  })
+  assert.equal(again.ret.status, 'ok', 'the relaunch reaches accept')
+  assert.ok(!existsSync(marker(dir)), 'the REAL ok-terminal clear removed the marker — it never outlives the conclusion it describes')
+  await runReport(dir)
+  const report = readFileSync(join(dir, '.kiln/report.md'), 'utf8')
+  assert.ok(report.includes('`SEALED` **Report**') && report.includes('✓ *Law* · ✓ *Build* · ✓ *Validate* · ✓ *Report*'),
+    'the sealed-run variant returns')
+  assert.ok(!report.includes('HELD') && !report.includes("The screen's doubt"),
+    "no held banner, no disclosure — yesterday's doubt does not haunt today's clean run")
+})
+
+test('dogfood (W8-S4): the milestone eye and the screening room coexist across one build → validate arc — each gate in its stage, each on its own dial read, no interference', async () => {
+  const dir = mkVisual(LAW_VISUAL)
+  // The build launch: the W7 seam audit fires and leaves its REAL fact.
+  const build = await runKernel({ stage: 'build', projectDir: dir, plugin: REAL_PLUGIN }, {
+    ...dogfoodBase(dir),
+    'cap:read': { exit: 0, recovery_cap: 1 },
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui|m1'] },
+    'slice:s1': auditSlice(),
+    'audit:review': { exit: 0 },
+    'audit:read': readAudit(auditVerdict('accept')),
+  })
+  assert.equal(build.ret.status, 'ok')
+  assert.equal(auditsLog(dir), 's1 accept\n', 'the milestone eye left its real audits.log fact')
+  assert.equal(build.calls.filter(c => c.label === 'cap:read').length, 1, 'the build gates drink from the cap:read dial leg')
+  for (const label of ['perceptual:presence', 'perceptual:dial', 'perceptual:family', 'screen:review', 'perceptual:addendum']) {
+    assert.ok(!build.calls.some(c => c.label === label), 'the screening room never wakes at build: ' + label)
+  }
+  // The validate launch over the SAME project: the screening loop recovers a reject
+  // under ITS OWN dial read — the build cap leg is never consulted here.
+  const seq = [{ exit: 0, ids: [MF(1)] }, { exit: 0, ids: [MF(2)] }]
+  const v = await runKernel({ stage: 'validate', projectDir: dir, plugin: REAL_PLUGIN }, {
+    ...visualBase(dir),
+    'perceptual:manifest': () => seq.shift() ?? { exit: 0, ids: [MF(2)] },
+    'screen:review': publishScreen(dir, screenVerdict('changes_required', [screenFinding('F1', 'P-1')]), 10),
+    'screen:findings': (p) => runRealIds(p, dir),
+    'perceptual:recapture': validateAct(),
+    'perceptual:delta-check': { exit: 0 },
+    'screen:recheck': publishScreen(dir, screenVerdict('accept'), 0),
+  })
+  assert.equal(v.ret.status, 'ok', 'the same project validates past a recapture — the room recovered in its own stage')
+  assert.equal(v.calls.filter(c => c.label === 'perceptual:dial').length, 1, 'the screening loop drinks from the perceptual dial leg')
+  assert.equal(v.calls.filter(c => c.label === 'cap:read').length, 0, 'the caps are independent — validate never reads the build cap leg')
+  assert.ok(!v.calls.some(c => c.label && c.label.startsWith('audit:')), 'the milestone eye never wakes at validate')
+  assert.equal(auditsLog(dir), 's1 accept\n', 'the audit fact survives the screening room untouched')
+  assert.ok(!existsSync(marker(dir)), 'the recovered run leaves no marker')
 })

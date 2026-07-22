@@ -53,6 +53,45 @@ test('doctor: the codex check reads presence + login state, never calls a model,
   }
 })
 
+test('doctor (W8-S4/J): the perceptual capture probes are advisory — no-install, versions recorded, never a fail, never the verdict', () => {
+  const text = doctor()
+  assert.ok(text.includes('npx --no-install playwright --version'), 'the playwright probe is no-install')
+  assert.ok(text.includes('ffmpeg -version'), 'the ffmpeg probe runs what the machine already has')
+  assert.ok(text.includes('PLAYWRIGHT=present $PW_V') && text.includes('FFMPEG=present $FF_V'),
+    'the probed versions are recorded in the output tokens, not discarded')
+  for (const state of ['`PLAYWRIGHT=absent`', '`FFMPEG=absent`']) {
+    const line = text.split('\n').find((l) => l.includes(state) && l.includes('→'))
+    assert.ok(line && line.includes('▶'), state + ' maps to an advisory line, never a fail')
+    assert.ok(line.includes('perceptual capture will hold honestly if a visual run needs it'),
+      state + ' phrases absence as the honest hold')
+  }
+  for (const line of text.split('\n')) {
+    if (line.includes('✗')) assert.ok(!/playwright|ffmpeg/i.test(line), 'no capture-runtime state maps to a hard-fail line')
+  }
+  assert.ok(text.includes('a codex `▶`'),
+    'the single-family verdict keys on the codex warn alone — the capture advisories never enter the verdict')
+})
+
+test('doctor (W8-S4/J): the capture probes execute — the probe\'s own exit gates the token, never head\'s', () => {
+  // The source-text pins above cannot see pipeline exit semantics; this runs the shipped
+  // probe block against fake runtimes that print a line and then fail — the branch where
+  // `cmd | head -1` would launder the failure into a present token.
+  const block = doctor().match(/# Perceptual capture runtimes[\s\S]*?FFMPEG=absent"\nfi/)[0]
+  const bin = mkdtempSync(join(tmpdir(), 'kiln-doctor-probes-'))
+  const fake = (name, exit) =>
+    writeFileSync(join(bin, name), '#!/bin/sh\necho "bogus ' + name + ' version"\nexit ' + exit + '\n', { mode: 0o755 })
+  const run = () => spawnSync('sh', ['-c', block], { encoding: 'utf8', env: { ...process.env, PATH: bin + ':' + process.env.PATH } }).stdout
+  fake('npx', 42); fake('ffmpeg', 42)
+  const failing = run()
+  assert.ok(failing.includes('PLAYWRIGHT=absent') && failing.includes('FFMPEG=absent'),
+    'a probe that prints but exits nonzero reads absent')
+  assert.ok(!failing.includes('present'), 'no present token survives a failing probe')
+  fake('npx', 0); fake('ffmpeg', 0)
+  const passing = run()
+  assert.ok(passing.includes('PLAYWRIGHT=present bogus npx version') && passing.includes('FFMPEG=present bogus ffmpeg version'),
+    'a clean exit with output reads present, the probed version recorded')
+})
+
 test('doctor: the node-absent branch survives — four data lines suppressed, one unexamined warning', () => {
   const text = doctor()
   assert.ok(text.includes('command -v node'), 'presence probe')

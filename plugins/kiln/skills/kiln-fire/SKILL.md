@@ -135,7 +135,11 @@ for the single completion — a probe informs the sketch, it never gates it. At 
 2. **Blocked gate** after the repair cap → present the finding IDs, request a ruling. The
    build stage's milestone audit rides these same stop statuses: a build stop's `next_action`
    may name the audit artifact path (`.kiln/audit-review.json`) — the operator's detail
-   surface, never read here.
+   surface, never read here. The validate stage's perceptual screen rides them too: a
+   validate stop's `next_action` may name the screen verdict (`.kiln/screen-review.json`)
+   and the evidence manifest path — the same detail surface, never read here. A run held
+   there leaves `.kiln/perceptual-partial` on disk; launching the report stage on it is
+   truthful — the report card tells a held run as held, never sealed.
 3. **Missing codex** → disclose plainly, in voice; proceed single-family only after the user
    answers `continue`. On that word, speak, verbatim:
    "Single-family, then. Miyamoto steps in — complete at its own tier, and every seal will say so. I do not impersonate a second head."

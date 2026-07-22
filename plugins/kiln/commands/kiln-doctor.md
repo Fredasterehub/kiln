@@ -56,6 +56,26 @@ if command -v codex >/dev/null 2>&1; then
 else
   echo "CODEX=absent"
 fi
+# Perceptual capture runtimes — an ADVISORY probe, never a fail and never the verdict:
+# the screening room runs only what the machine already has (no-install law), so absence
+# means a visual run holds honestly — nothing degrades today, nothing is installed. The
+# probe's OWN exit gates the token (the claude-probe pattern — never a trailing pipe,
+# whose last command would launder the failure): a command that prints a line and then
+# fails must read absent, never present.
+PW_V="$(npx --no-install playwright --version </dev/null 2>/dev/null)"; PW_EXIT=$?
+PW_V="$(printf '%s\n' "$PW_V" | head -1)"
+if [ "$PW_EXIT" -eq 0 ] && [ -n "$PW_V" ]; then
+  echo "PLAYWRIGHT=present $PW_V"
+else
+  echo "PLAYWRIGHT=absent"
+fi
+FF_V="$(ffmpeg -version </dev/null 2>/dev/null)"; FF_EXIT=$?
+FF_V="$(printf '%s\n' "$FF_V" | head -1)"
+if [ "$FF_EXIT" -eq 0 ] && [ -n "$FF_V" ]; then
+  echo "FFMPEG=present $FF_V"
+else
+  echo "FFMPEG=absent"
+fi
 for f in voice.json lore-quotes.json tiers.json; do
   if node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$PLUGIN_ROOT/data/$f" >/dev/null 2>&1; then
     echo "DATA:$f=parses"
@@ -124,6 +144,12 @@ terminal output. Status symbols, never emojis: `✓` pass · `▶` warn · `✗`
   - `CODEX=present logged-in` → `✓ I find Codex installed and signed in at my door.`
   - `CODEX=present logged-out` → `▶ Codex is at my door but not signed in — until it is, I work single-family: Claude alone, honestly marked on every seal.`
   - `CODEX=absent` → `▶ Codex is not at my door — I work single-family: Claude alone, honestly marked on every seal.`
+- perceptual capture — an advisory, never a hard fail and never part of the verdict; the
+  preflight always completes:
+  - `PLAYWRIGHT=present …` → `✓ Playwright answers me as {version} — the capture runtime stands at my door.`
+  - `PLAYWRIGHT=absent` → `▶ Playwright is not at my door — perceptual capture will hold honestly if a visual run needs it; I install nothing.`
+  - `FFMPEG=present …` → `✓ ffmpeg answers me as {version} — my screening room can cut film and keyframes.`
+  - `FFMPEG=absent` → `▶ ffmpeg is not at my door — perceptual capture will hold honestly if a visual run needs it; I install nothing.`
 - `DATA:voice.json=parses` → `✓ My voice file reads as clean JSON — I can open my own lines.`
 - `DATA:voice.json=broken` → `✗ My voice file is missing or will not read as JSON — I would be down to fallback lines, and I like my own better.`
 - `DATA:lore-quotes.json=parses` → `✓ My quote bank reads as clean JSON — I can open it.`
@@ -140,5 +166,5 @@ Two honesty rules for the file checks:
 
 Close with exactly one verdict line:
 - any `✗` spoken → `My forge cannot light like this — mend what the ✗ lines name and call me again.`
-- otherwise, any `▶` spoken → `My preflight holds, single-family. I complete at my own tier, not a lesser one — bring me an idea when you are ready.`
+- otherwise, a codex `▶` spoken → `My preflight holds, single-family. I complete at my own tier, not a lesser one — bring me an idea when you are ready.` (the perceptual capture advisories never select this line — they advise, they do not verdict)
 - otherwise → `My preflight holds. My forge is ready — bring me an idea.`

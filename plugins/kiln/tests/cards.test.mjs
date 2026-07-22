@@ -142,11 +142,16 @@ test('cards: Law and Validate carry the truthful active-phase fraction, each bou
   assert.ok(build.includes('▶ **Build** {s}/{t}'), 'the build strip keeps the kernel-filled fraction against .kiln/slices.json — bare bold word, fraction outside the bold (N3)')
 })
 
-test('cards: Report renders the FINAL all-sealed strip — every phase ✓, no fraction, no active marker, no unfold', () => {
+test('cards: Report renders the FINAL all-sealed strip on a sealed run — and the held-run variant refuses it (W8-S4)', () => {
   const report = cardText('report.md')
-  assert.ok(report.includes('✓ *Law* · ✓ *Build* · ✓ *Validate* · ✓ *Report*'), 'the final strip seals every phase — the run is over')
+  assert.ok(report.includes('✓ *Law* · ✓ *Build* · ✓ *Validate* · ✓ *Report*'), 'the final strip seals every phase — the sealed-run composition')
   assert.ok(!report.includes('▶ **Report'), 'no active Report marker and no fraction — nothing is being counted any more')
   assert.ok(report.includes('NO unfold'), 'the unfold is omitted — no phase is active')
+  // Variant-aware: the all-sealed strip and the SEALED title belong to the sealed run
+  // ONLY — the held-run variant substitutes the honest held strip and the HELD title.
+  assert.ok(report.includes('✓ *Law* · ✓ *Build* · ▶ **Validate** ·'), 'the held strip: the run stands AT validate, nothing past it sealed')
+  assert.ok(report.includes('NO all-sealed strip'), 'the held variant refuses the all-sealed strip by name')
+  assert.ok(report.includes('NEVER `SEALED`'), 'the held variant refuses the SEALED title by name')
 })
 
 test('cards: every stage card pins its title unit and its N2–N5 bold-Stage anchor', () => {
@@ -284,6 +289,30 @@ test('validate card (W8-S3/I): the Perceptual addendum section — kernel-launch
   assert.ok(flat.includes('never `SEALED`'), 'a held run never wears the sealed title')
 })
 
+test('report card (W8-S4/I): the held-run variant — marker-selected, the honest held banner, the disclosure from the record, unchanged when absent', () => {
+  const report = cardText('report.md')
+  const flat = report.replace(/\s+/g, ' ')
+  // The marker is a named INPUT, the .kiln/degraded precedent — one closed presence fact.
+  const inputs = report.slice(report.indexOf('## Inputs'), report.indexOf('## Method')).replace(/\s+/g, ' ')
+  assert.ok(inputs.includes('`.kiln/perceptual-partial` (presence = a semantic perceptual hold stands'),
+    'the marker rides Inputs as a presence fact')
+  assert.ok(inputs.includes('`.kiln/screen-escalation.txt`') && inputs.includes('read only when the marker is present'),
+    'the escalation record is an input read only on the held variant')
+  // The held banner: HELD title, never SEALED; the meter reflects the hold; no quote foot.
+  assert.ok(flat.includes('`HELD` **Report — the run stands held at validate'), 'the held title unit names the hold')
+  assert.ok(flat.includes('the meter reflects the hold'), 'the meter block tells the hold before the measured line')
+  assert.ok(flat.includes('`{driver}` untouched'), '{driver} stays DRIVER-filled on both variants')
+  assert.ok(flat.includes('a HELD card omits the quote foot'), 'the sealed foot law: no foot on the held variant')
+  // The disclosure derives from the record alone: the validate.md rows and the record line.
+  assert.ok(flat.includes("THE SCREEN'S DOUBT"), 'the disclosure block exists on the held variant')
+  assert.ok(flat.includes('criterion id · dim · proxy exit · grade verbatim'),
+    'the rows ride verbatim from .kiln/validate.md — all four fields of the canonical producer shape, the proxy exit included')
+  assert.ok(flat.includes('CORROBORATED') && flat.includes('CONTESTED'), 'the corroborated/contested line rides when the record carries it')
+  // Absent marker: the card is unchanged.
+  assert.ok(flat.includes('When the marker is absent this section does not exist and the report is unchanged'),
+    'no marker, no variant — the sealed composition stands untouched')
+})
+
 test('tiers (W8-S1/J): the remits gain the screening-room duties — models, efforts, and the twelve roles unchanged', () => {
   const tiers = JSON.parse(readFileSync(join(DATA, 'tiers.json'), 'utf8'))
   assert.equal(Object.keys(tiers.roles).length, 12, 'TIER_ROLES stays twelve — the screening room adds duties, never a seat')
@@ -387,7 +416,7 @@ test('cards: composition order is literal per the recipes — and the repair car
 test('cards (T5): the report Inputs name the durable narration substrate — the run reconstructs from persisted artifacts alone', () => {
   const report = cardText('report.md')
   const inputs = report.slice(report.indexOf('## Inputs'), report.indexOf('## Method'))
-  for (const artifact of ['.kiln/STATE.md', '.kiln/LAW.md', '.kiln/decisions.md', '.kiln/seals.log', '.kiln/validate.md', '.kiln/degraded']) {
+  for (const artifact of ['.kiln/STATE.md', '.kiln/LAW.md', '.kiln/decisions.md', '.kiln/seals.log', '.kiln/validate.md', '.kiln/degraded', '.kiln/perceptual-partial', '.kiln/screen-escalation.txt']) {
     assert.ok(inputs.includes(artifact), `the report Inputs must name the durable substrate ${artifact}`)
   }
   assert.ok(report.includes('reconstruct from files') && report.includes('this stage proves the files suffice'),

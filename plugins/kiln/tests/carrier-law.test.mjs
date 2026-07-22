@@ -31,6 +31,8 @@ test('carrier-law: enumerates all seven hops with their real seams', () => {
   names('hop seams', [
     'SKILL.md', 'kernel.js', 'STATE.md', 'gate-review.json', 'review-schema.json',
     'vision.md', 'brainstorm-ledger.jsonl', 'audit-review.json', 'audits.log', 'append-audit',
+    'screen-review.json', '.kiln/evidence/gen-', 'manifest.json', 'perceptual-partial',
+    'screen-escalation.txt',
   ])
 })
 

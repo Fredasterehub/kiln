@@ -118,11 +118,24 @@ Each hop, mapped to its real seam by file and structure name:
    `review_id`, `law_hash`, `findings[]` (each with a `criterion` and a finding `id`),
    `blockers[]`, `verdict`; plus the repair-delta pointer at `.kiln/repair-delta.md`. The
    `reviewLoop` in `workflows/kernel.js` carries this across gate → repair → recheck. It runs
-   for exactly three seams — LAW ratification, build-slice repair, and the build stage's
-   milestone audit (same schema, published at `.kiln/audit-review.json`); validate and report
-   have no review loop (report gates only on the report file existing). An accepted audit
+   for exactly four seams — LAW ratification, build-slice repair, the build stage's
+   milestone audit (same schema, published at `.kiln/audit-review.json`), and the validate
+   stage's perceptual screen (same schema with the evidence-location relaxation, published
+   at `.kiln/screen-review.json`); report has no review loop (it gates only on the report
+   file existing). An accepted audit
    leaves one durable fact behind: `.kiln/audits.log`, a one-line-per-seam outcome published
    only by the `append-audit` verb of `scripts/kiln-review` — the mirror of `seals.log`.
+   The screen seam carries two facts of its own. Its evidence lives in GENERATIONS under
+   `.kiln/evidence/gen-<n>/`: ALLOCATION reserves max(all existing `gen-*` names) + 1 via
+   exclusive mkdir — a manifest-less crash-residue dir still occupies its number — while
+   CURRENT is the highest generation containing a valid `manifest.json`, published LAST via
+   temp + rename; the verdict binds to that evidence by digest — its `law_hash` is the
+   sha256 of the graded manifest's bytes, so a verdict can never outlive the pixels it
+   judged. And a SEMANTIC perceptual hold leaves one durable fact behind: the marker
+   `.kiln/perceptual-partial` (beside the one-line escalation record
+   `.kiln/screen-escalation.txt`), written only by that hold and removed by every terminal
+   nonsemantic validate conclusion — the report stage reads its presence, exactly as it
+   reads `.kiln/degraded`, to tell a held run as held.
 
 7. **facilitator→orchestrator** — Da Vinci (`agents/da-vinci.md`) seals the append-only
    `.kiln/brainstorm-ledger.jsonl`, then sends the conductor a single `BRAINSTORM_COMPLETE`
