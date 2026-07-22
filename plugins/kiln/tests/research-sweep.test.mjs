@@ -238,6 +238,8 @@ test('runtime: a reject then a repaired re-ratify accepts and promotes — exact
   const { ret, calls } = await runSweep({ projectDir: '/p' }, {
     ...ACCEPT_RUN,
     'ratify:gate': () => ({ exit: gateExits.shift() }),
+    // S3: the reject establishes the cohort; the recheck then accepts (the empty subset).
+    'ratify:cohort': { exit: 0, ids: ['f1'] },
     'producer:repair': PRODUCER_CANDIDATE,
     'candidate:recheck': OK,
   })
@@ -250,15 +252,21 @@ test('runtime: a reject then a repaired re-ratify accepts and promotes — exact
   assert.equal(repair.opts.model, 'fable', 'the repair re-runs the producer on the stage-law thinking seat')
 })
 
-test('runtime: a rejected candidate NEVER reaches .kiln/docs/feasibility.md — a 2nd reject holds the law', async () => {
+test('runtime: a rejected candidate NEVER reaches .kiln/docs/feasibility.md — equality holds strictly before the cap, distinct from cap exhaustion', async () => {
   const { ret, calls } = await runSweep({ projectDir: '/p' }, {
     ...ACCEPT_RUN,
+    // S3: cap 2 (a reversible posture) — so equality must hold BEFORE the cap is reached. A cap-1
+    // default would make equality and cap exhaustion both stop after one repair, indistinguishable.
+    'dial:read': { exit: 0, research: 'on', recovery_cap: 2 },
     'ratify:gate': { exit: 10 }, // always changes_required
+    // The re-grade clears nothing (a constant, non-shrinking cohort) — no progress, held.
+    'ratify:cohort': { exit: 0, ids: ['f1'] },
     'producer:repair': PRODUCER_CANDIDATE,
     'candidate:recheck': OK,
   })
   assert.equal(ret.status, 'held', 'a non-converging feasibility read holds the law')
-  assert.equal(calls.filter(c => c.label === 'ratify:gate').length, 2, 'grade plus one re-grade — the cap-1 bounded loop, never a 3rd')
+  assert.equal(calls.filter(c => c.label === 'producer:repair').length, 1, 'equality holds after exactly one edge — well under the cap of 2, so the hold is the stall, never cap exhaustion (which would spend both edges)')
+  assert.equal(calls.filter(c => c.label === 'ratify:gate').length, 2, 'grade plus one re-grade — the equality stall stops the loop before the cap-2 third gate')
   assert.ok(!calls.some(c => c.label === 'promote'), 'a rejected candidate is never promoted to the canonical path')
 })
 
@@ -267,6 +275,9 @@ test('runtime (W6-F): a reversible posture keys the ratify cap to 2 — the dial
     ...ACCEPT_RUN,
     'dial:read': { exit: 0, research: 'on', recovery_cap: 2 }, // reversible → cap 2
     'ratify:gate': { exit: 10 }, // always changes_required
+    // S3: each re-grade strictly shrinks the cohort (a scoped-move earned), but the cap of 2 still
+    // exhausts before it empties → held.
+    'ratify:cohort': (() => { const seq = [['f1', 'f2', 'f3'], ['f1', 'f2'], ['f1']]; return () => ({ exit: 0, ids: seq.shift() }) })(),
     'producer:repair': PRODUCER_CANDIDATE,
     'candidate:recheck': OK,
   })
@@ -275,6 +286,43 @@ test('runtime (W6-F): a reversible posture keys the ratify cap to 2 — the dial
   assert.equal(calls.filter(c => c.label === 'producer:repair').length, 2, 'exactly two regenerate-candidate traversals — the keyed cap')
   assert.equal(calls.filter(c => c.label === 'dial:read').length, 1, 'one dial read per invocation carries both the research gate and the cap')
   assert.ok(!calls.some(c => c.label === 'promote'), 'a rejected candidate is never promoted')
+})
+
+test('runtime (W6-S3 dogfood): a re-grade introducing a new finding id is rejected by the ratify-recheck transport and holds before the subset — the cohort is read only on the establishing grade', async () => {
+  // The establishing grade pins cohort {f1}. A repaired candidate's re-grade is checked against that
+  // pinned cohort by the ratify-recheck verb (allowedFindingIds, scripts/kiln-review): a re-grade
+  // finding id OUTSIDE {f1} is rejected closed (exit 20 — the tamper the verb enforces, proven in
+  // kiln-review.test.mjs), a re-grade WITHIN it re-grades as an ordinary reject (exit 10). The mock
+  // gate computes its recheck exit from that rule, so the exit is a function of the smuggled id, not
+  // the recheck mode. Running both re-grades proves the causal link: an out-of-cohort re-grade holds
+  // before any second cohort read (the {f1,f2} escape is never reached), whereas the same re-grade
+  // confined to {f1} is an ordinary reject that DOES read the cohort a second time for the subset
+  // eval — so the single-read hold is caused by the smuggled id, not the recheck itself.
+  const establishingCohort = ['f1']
+  const run = (regradeCohort) => {
+    const escapes = regradeCohort.some(id => !establishingCohort.includes(id))
+    return runSweep({ projectDir: '/p' }, {
+      ...ACCEPT_RUN,
+      'ratify:gate': (prompt) => ({ exit: prompt.includes('ratify-recheck') ? (escapes ? 20 : 10) : 10 }),
+      'ratify:cohort': { exit: 0, ids: establishingCohort },
+      'producer:repair': PRODUCER_CANDIDATE,
+      'candidate:recheck': OK,
+    })
+  }
+  // Smuggle: the re-grade introduces f2, an id outside {f1} → the ratify-recheck transport rejects.
+  const { ret, calls } = await run(['f1', 'f2'])
+  assert.equal(ret.status, 'held', 'the out-of-cohort re-grade holds the law')
+  const recheck = calls.find(c => c.label === 'ratify:gate' && c.prompt.includes('ratify-recheck'))
+  assert.ok(recheck, 'the re-grade is routed through the cohort-enforcing ratify-recheck verb — the transport that rejects the escape')
+  assert.equal(calls.filter(c => c.label === 'ratify:cohort').length, 1, 'the cohort is read only on the establishing grade — the failed re-grade holds before any subset eval')
+  assert.ok(!calls.some(c => c.label === 'promote'), 'a rejected feasibility read is never promoted')
+  // Control: an otherwise-identical re-grade confined to {f1} routes through the SAME ratify-recheck
+  // verb, but as an ordinary reject it re-reads the cohort for the subset eval — the second read the
+  // smuggle run never reaches. The introduced id is the sole cause of the transport hold.
+  const control = await run(['f1'])
+  assert.ok(control.calls.some(c => c.label === 'ratify:gate' && c.prompt.includes('ratify-recheck')), 'the control still routes the re-grade through the ratify-recheck verb — the only difference from the smuggle run is the introduced id')
+  assert.equal(control.calls.filter(c => c.label === 'ratify:cohort').length, 2, 'a within-cohort re-grade is an ordinary reject that reads the cohort a second time — so the single-read hold above is caused by the smuggled id, not the recheck itself')
+  assert.ok(!control.calls.some(c => c.label === 'promote'), 'the within-cohort re-grade still never promotes')
 })
 
 test('runtime: blocked, transport, gate-unreachable, and codex-unavailable each HOLD the law — never a promotion', async () => {
@@ -416,6 +464,8 @@ test('fs: a twice-rejected candidate never lands at the canonical path — and a
   const { ret, calls, files } = await runSweepFs({
     'dial:read': DIAL_ON, 'producer': producerWriting(cand),
     'producer:repair': producerWriting(cand), 'ratify:gate': gateWriting(10),
+    // The re-grade clears nothing (a non-shrinking cohort) — no progress, held after one repair.
+    'ratify:cohort': { exit: 0, ids: ['f1'] },
   }, { seedFeasibility: '# Feasibility\nprior-run advice\n' })
   assert.equal(ret.status, 'held')
   assert.equal(calls.filter(c => c.label === 'ratify:gate').length, 2, 'grade then one re-grade — the bounded loop, never a 3rd')
@@ -428,6 +478,8 @@ test('fs: a repair that reports ok without rewriting the candidate cannot re-rat
     'dial:read': DIAL_ON, 'producer': producerWriting('# Feasibility\nrejected first-round bytes\n'),
     'producer:repair': PRODUCER_CANDIDATE, // claims ok, writes NOTHING
     'ratify:gate': (p) => gateWriting(gateExits.shift())(p),
+    // The first reject establishes the cohort; the empty repair halts before any re-grade.
+    'ratify:cohort': { exit: 0, ids: ['f1'] },
   })
   assert.equal(ret.status, 'held', 'a repair that writes no fresh candidate halts the loop — the stale rejected bytes never re-ratify')
   assert.equal(calls.filter(c => c.label === 'ratify:gate').length, 1, 'the empty repair never reaches the would-be accept — only the first grade ran')

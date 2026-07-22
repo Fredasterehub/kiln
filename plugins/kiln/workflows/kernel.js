@@ -100,28 +100,48 @@ function gateReviewInvalid(g, lawHash, expectedReviewId, allowedFindingIds) {
   return null
 }
 
-// The repair/recheck loop over injected closures. gate(mode, pass) → exit int;
-// repair(pass) → true only when the repair result AND its delta are confirmed.
-// W6-F: the repair edge is traversable UP TO the reversibility-keyed cap (an omitted/invalid cap fails up to 1, never the pre-W6 hardcoded 2) —
-// each confirmed repair spends one edgeUses, and an exhausted cap holds (locked BEHAVIOR). A
-// recheck runs only after a confirmed repair; an unconfirmed repair halts visibly. edgeUses and
-// cap are the recoveryDecision facts, named here so S3 wires that decision in cleanly. The return
-// carries the count as repairs, the caller-facing name the beats and counters already speak.
+// The repair/recheck loop over injected closures. gate(mode, pass) → exit int; repair(pass) → true
+// only when the repair result AND its delta are confirmed; cohort() → the current blocking-finding
+// id array when an oracle is wired (the kernel snapshots the published gate), absent for a pure
+// control-flow caller.
+// W6-S3: the TRANSITION is the single-source recoveryDecision — advance seals, scoped-move spends
+// one repair edge then rechecks, held ends the loop. The edge stays the repair each organ already
+// owns; only the decision is shared, and EVERY transition from a closed fact flows through it — the
+// loop short-circuits nothing above it. A recheck cohort must STRICTLY shrink the pinned prior
+// (clear one blocking finding, introduce none) or it is no progress and holds — the edge is spent
+// either way. The contract carries two closed facts the loop no longer rules on its own:
+// cohortEstablished (a prior cohort is pinned — a measured recheck; its ABSENCE is the establishing
+// reject a first review or a no-oracle caller makes, a scoped-move up to the reversibility-keyed
+// cap, an omitted/invalid cap failing up to 1) and oracleMissing (a wired oracle that read no
+// cohort is a missing verdict, held before any subset eval). The actual cohorts pass through — never
+// a fabricated sentinel. A held maps onto the caller-facing terminal the beats already speak — a
+// reject held is the operator-ruling blocked, the missing-oracle hold the transport terminal. The
+// return carries edgeUses as repairs, the name the counters already speak.
 async function reviewLoop(deps, cap) {
   cap = Number.isInteger(cap) && cap >= 1 ? cap : 1
+  const heldAs = { codex_unavailable: 'degraded', gate_unreachable: 'gate-unreachable', transport_failure: 'transport-failure' }
   let edgeUses = 0
+  let prior = null
   let exit = await deps.gate('review', 0)
   for (;;) {
     const o = gateOutcome(exit)
-    if (o === 'accept') return { result: 'sealed', repairs: edgeUses }
-    if (o === 'blocked') return { result: 'blocked', repairs: edgeUses }
-    if (o === 'codex_unavailable') return { result: 'degraded', repairs: edgeUses }
-    if (o === 'gate_unreachable') return { result: 'gate-unreachable', repairs: edgeUses }
-    if (o === 'transport_failure') return { result: 'transport-failure', repairs: edgeUses }
-    if (edgeUses >= cap) return { result: 'blocked', repairs: edgeUses }
+    // The cohort oracle reads the current blocking set on a reject; a pure control-flow caller wires none.
+    const curr = (o === 'reject' && deps.cohort) ? await deps.cohort() : null
+    // recoveryDecision owns the transition off every closed fact below — the unreadable cohort and
+    // the establishing reject are facts it weighs (oracleMissing / cohortEstablished), not branches
+    // the loop takes above it, and the real prior/current cohorts pass through unfabricated.
+    const decision = recoveryDecision({
+      gateOutcome: o, edgeUses, cap, schemaValid: true, transport: o !== 'transport_failure',
+      oracleMissing: o === 'reject' && !!deps.cohort && curr === null,
+      cohortEstablished: prior !== null,
+      priorBlockingIds: prior, currBlockingIds: curr,
+    })
+    if (decision.action === 'advance') return { result: 'sealed', repairs: edgeUses }
+    if (decision.action === 'held') return { result: decision.reason === 'oracle-missing' ? 'transport-failure' : (heldAs[o] || 'blocked'), repairs: edgeUses }
     edgeUses += 1
     const confirmed = await deps.repair(edgeUses)
     if (confirmed !== true) return { result: 'repair-failed', repairs: edgeUses }
+    prior = curr
     exit = await deps.gate('recheck', edgeUses)
   }
 }
@@ -144,28 +164,34 @@ function strictSubsetProgress(prior, curr) {
   return currSet.size < priorSet.size
 }
 
-// W6-01/B: the ONE pure recovery decision — the single source of the repair to
+// W6-01/B/S3: the ONE pure recovery decision — the single source of the repair to
 // recheck transition policy both the LAW/build reviewLoop and the research-sweep
 // ratifyLoop route through (today each embeds the policy in its own control flow with
 // a different vocabulary). Facts are all closed machine facts: gateOutcome (the
 // gateOutcome return string), edgeUses/cap (the repair-edge budget for this run),
 // prior/currBlockingIds (the prior and current blocking finding cohorts), schemaValid
-// (the recheck verdict was well-formed), transport (the bridge delivered a verdict).
+// (the recheck verdict was well-formed), transport (the bridge delivered a verdict),
+// oracleMissing (a wired cohort oracle read no verdict), cohortEstablished (a prior
+// cohort is pinned, so this is a measured recheck rather than the establishing reject).
 // A machine fault rules FIRST, before progress is weighed: a downed transport or a
 // malformed verdict is the ABSENCE of a usable verdict, not evidence of progress, so
-// the run holds rather than spend an edge on a fiction. Then accept advances; a
-// reject with strict-subset progress and an edge left is a scoped-move;
-// everything else — equality, a non-shrinking cohort, an exhausted cap, or a block —
-// holds. Deterministic, never throws.
+// the run holds rather than spend an edge on a fiction. Then accept advances. On a
+// reject an unreadable oracle holds before any subset eval (a missing verdict is not
+// progress); with a cohort established the current must be a strict subset of the prior
+// or it holds; the establishing reject (no prior pinned, or no oracle) has nothing to
+// disprove and is progress by definition. Either way an exhausted cap holds; otherwise
+// the edge is a scoped-move. Everything else — equality, a non-shrinking cohort, a
+// block — holds. Deterministic, never throws.
 function recoveryDecision(facts) {
   const f = facts || {}
   if (f.transport === false) return { action: 'held', reason: 'transport-failure' }
   if (f.schemaValid === false) return { action: 'held', reason: 'schema-invalid' }
   if (f.gateOutcome === 'accept') return { action: 'advance', reason: 'accept' }
   if (f.gateOutcome === 'reject') {
-    if (!strictSubsetProgress(f.priorBlockingIds, f.currBlockingIds)) return { action: 'held', reason: 'no-strict-progress' }
+    if (f.oracleMissing) return { action: 'held', reason: 'oracle-missing' }
+    if (f.cohortEstablished && !strictSubsetProgress(f.priorBlockingIds, f.currBlockingIds)) return { action: 'held', reason: 'no-strict-progress' }
     if (f.edgeUses >= f.cap) return { action: 'held', reason: 'cap-exhausted' }
-    return { action: 'scoped-move', reason: 'strict-subset-progress' }
+    return { action: 'scoped-move', reason: f.cohortEstablished ? 'strict-subset-progress' : 'establishing' }
   }
   return { action: 'held', reason: 'blocked' }
 }
@@ -944,14 +970,29 @@ if (stage !== 'build') {
     ].join('\n')
     if (await hands(writeReq, 'ratify:request') !== 0) return persistFail('ratify-request')
     const ratifyLoop = await reviewLoop({
-      // The ratify verb has no recheck mode — a repair regenerates the whole LAW,
-      // so every round re-grades the fresh artifact (kiln-review recomputes the
-      // candidate digest from the current bytes). The direct-path call preserves
-      // 126/127 → gate-unreachable exactly as the build gate does. A9: the <repo>
-      // arg is the cwd-relative `.` — hands runs in projectDir, and ratify resolves the
-      // .kiln/ request and the artifact against it — never a bare projectDir, which a
-      // whitespace path would split into extra argv and fail this mandatory 3-arg gate.
-      gate: () => hands(plugin + '/scripts/kiln-review ratify . ' + P.ratifyRequest + ' ' + P.gate, 'ratify:gate'),
+      // The review grades the fresh LAW; a recheck re-grades the regenerated LAW through the W6
+      // ratify-recheck verb, which reuses the prior review_id and constrains the reviewer to the
+      // prior finding cohort — the SAME lineage the build recheck carries, so a repair round cannot
+      // introduce a finding id out of nowhere (kiln-review recomputes the candidate digest from the
+      // current bytes). prior and output are both P.gate: ratify-recheck reads the prior into memory
+      // before runGate writes the output. The direct-path call preserves 126/127 → gate-unreachable
+      // exactly as the build gate does. A9: the <repo> arg is the cwd-relative `.` — hands runs in
+      // projectDir and the verb resolves the .kiln/ request and the artifact against it, never a
+      // bare projectDir, which a whitespace path would split into extra argv and fail the gate.
+      gate: (mode) => hands(
+        mode === 'recheck'
+          ? plugin + '/scripts/kiln-review ratify-recheck . ' + P.ratifyRequest + ' ' + P.gate + ' ' + P.gate
+          : plugin + '/scripts/kiln-review ratify . ' + P.ratifyRequest + ' ' + P.gate,
+        'ratify:gate'),
+      // The pinned prior cohort for the strict-subset transition: the finding ids the last published
+      // gate carries. A recheck must strictly shrink it or recoveryDecision holds the LAW.
+      cohort: async () => {
+        const c = await idsFetch(
+          "node -p 'JSON.stringify((require(\"./" + P.gate + "\").findings||[]).map(f=>String(f.id)))'",
+          'ratify:cohort', 'the printed JSON array of the prior ratify finding ids, [] if exit != 0',
+        )
+        return c.exit === 0 ? c.ids : null
+      },
       repair: async (pass) => {
         const rr = await act(cardPrompt('Ratify repair pass ' + pass + ': the LAW did not ratify. Read every finding in ' + P.gate + ' and regenerate ' + P.law + ' to resolve them all, keeping the acceptance criteria and the slice plan sound and complete.'), 'ratify:repair')
         if (rr.facts.status !== 'ok') return false
@@ -1243,6 +1284,18 @@ for (const entry of slices) {
       gate: freshReceipt(!wasDegraded && entry.surface === 'ui'
         ? (mode) => hands(gateCmd(mode, { plugin, repo: '.', request: P.request, gate: P.gate, priorGate: P.gate, delta: P.delta }), 'gate:' + mode)
         : claudeGate),
+      // The pinned prior cohort for the strict-subset transition: the finding ids the freshly
+      // published gate carries — the SAME fetch the repair reads (findings:fetch, the same P.gate
+      // at the same loop phase), reused here as the closed cohort. A recheck must strictly shrink it
+      // or recoveryDecision holds; the S1 recheck:cohort/allowedFindingIds already rejects an
+      // out-of-cohort id at the gate, so this is content-blind over the closed id set alone.
+      cohort: async () => {
+        const c = await idsFetch(
+          "node -p 'JSON.stringify((require(\"./" + P.gate + "\").findings||[]).map(f=>String(f.id)))'",
+          'findings:fetch', 'the printed JSON array of the current gate finding ids, [] if exit != 0',
+        )
+        return c.exit === 0 ? c.ids : null
+      },
       repair: async (pass) => {
         const found = await idsFetch(
           "node -p 'JSON.stringify((require(\"./" + P.gate + "\").findings||[]).map(f=>String(f.id)))'",

@@ -629,25 +629,33 @@ test('runtime (K-10): no beat leaves the kernel with an unfilled slot', async ()
   assert.ok(!/\{[A-Za-z_]+\}/.test(ret.beat), 'no unfilled slot of any kind reaches the driver')
 })
 
-test('runtime (W6-F): the build-gate reviewLoop honors the dial-keyed cap — recovery_cap 2 allows two slice repairs, 1 one, both then block; one dial read per invocation', async () => {
-  const build = (recoveryCap) => ({
-    ...VOICE,
-    'law:preflight': GREEN,
-    'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
-    'ladder:fetch': LADDER,
-    'cap:read': { exit: 0, recovery_cap: recoveryCap },
-    'seal:check': { exit: 1 },
-    'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
-    'law:pre-seal': GREEN,
-    'law:pre-recheck': GREEN,
-    'degraded:check': { exit: 1 },
-    'gate:review': { exit: 10 },
-    'gate:recheck': { exit: 10 },
-    'findings:fetch': { exit: 0, ids: ['F1'] },
-    'repair:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'repairing' },
-    'delta:check': { exit: 0 },
-    'state:write': GREEN,
-  })
+test('runtime (W6-F/S3): the build-gate reviewLoop honors the dial-keyed cap over a STRICTLY-shrinking cohort — recovery_cap 2 allows two slice repairs, 1 one, both then held at the cap; one dial read per invocation', async () => {
+  const build = (recoveryCap) => {
+    // W6-S3: to spend a cap use each round the recheck cohort must strictly shrink; a non-shrinking
+    // cohort holds on the first recheck. findings:fetch serves the cohort read (once per reject), the
+    // repair-beat read (once per repair), and the blocked-beat read (once at the terminal held), so
+    // the sequence pairs each round cohort with the read that follows it — the cohort reads (indices
+    // 0,2,4) walk {F1,F2,F3} → {F1,F2} → {F1}. cap 2 walks all three; cap 1 holds after the first shrink.
+    const findings = [['F1', 'F2', 'F3'], ['F1', 'F2', 'F3'], ['F1', 'F2'], ['F1', 'F2'], ['F1'], ['F1']]
+    return {
+      ...VOICE,
+      'law:preflight': GREEN,
+      'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
+      'ladder:fetch': LADDER,
+      'cap:read': { exit: 0, recovery_cap: recoveryCap },
+      'seal:check': { exit: 1 },
+      'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
+      'law:pre-seal': GREEN,
+      'law:pre-recheck': GREEN,
+      'degraded:check': { exit: 1 },
+      'gate:review': { exit: 10 },
+      'gate:recheck': { exit: 10 },
+      'findings:fetch': () => ({ exit: 0, ids: findings.shift() }),
+      'repair:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'repairing' },
+      'delta:check': { exit: 0 },
+      'state:write': GREEN,
+    }
+  }
   for (const [recoveryCap, repairs, gates] of [[2, 2, 3], [1, 1, 2]]) {
     const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, build(recoveryCap))
     assert.equal(ret.status, 'blocked', 'recovery_cap ' + recoveryCap + ': a non-converging gate blocks at the cap')
@@ -1031,6 +1039,8 @@ test('runtime (Wave 1): a LAW ratify reject repairs the law, rechecks, and seals
     'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law, pinned' },
     'ratify:request': GREEN,
     'ratify:gate': () => ({ exit: gateExits.shift() }),
+    // S3: the review reject establishes the cohort; the recheck then accepts (the empty subset).
+    'ratify:cohort': { exit: 0, ids: ['f1'] },
     'ratify:repair': { facts: { status: 'ok', pointers: ['.kiln/LAW.md'], schema_valid: true }, narration_beat: 'the law, revised' },
     'law:milestone-projection': { exit: 0 },
     'law:seal': { exit: 0 },
@@ -1047,7 +1057,10 @@ test('runtime (Wave 1): a LAW ratify reject repairs the law, rechecks, and seals
   assert.ok(calls.some(c => c.label === 'law:seal'), 'seal-law locks the ratified LAW')
 })
 
-test('runtime (Wave 1): a LAW that will not ratify holds after the repair cap — never a silent advance', async () => {
+test('runtime (Wave 1/S3): a LAW that will not ratify holds after the repair cap over a strictly-shrinking cohort — never a silent advance', async () => {
+  // S3: each recheck clears one finding (a strict shrink, so the edge earns a scoped-move), but the
+  // cap (2, from the reversible onboarding posture) still exhausts before the cohort empties → held.
+  const cohorts = [['f1', 'f2', 'f3'], ['f1', 'f2'], ['f1']]
   const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
     ...VOICE,
     ...ONBOARDING_OK,
@@ -1055,6 +1068,7 @@ test('runtime (Wave 1): a LAW that will not ratify holds after the repair cap �
     'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law' },
     'ratify:request': GREEN,
     'ratify:gate': { exit: 10 }, // always changes_required
+    'ratify:cohort': () => ({ exit: 0, ids: cohorts.shift() }),
     'ratify:repair': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'revised' },
     'state:write': GREEN,
   })
@@ -1079,6 +1093,8 @@ test('runtime (W6-F): a risky posture keys the LAW-ratify cap to 1 — one repai
     'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law' },
     'ratify:request': GREEN,
     'ratify:gate': { exit: 10 }, // always changes_required
+    // S3: the recheck strictly shrinks (a scoped-move earned), but the cap of 1 exhausts after it.
+    'ratify:cohort': (() => { const seq = [['f1', 'f2'], ['f1']]; return () => ({ exit: 0, ids: seq.shift() }) })(),
     'ratify:repair': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'revised' },
     'state:write': GREEN,
   })
@@ -1087,6 +1103,67 @@ test('runtime (W6-F): a risky posture keys the LAW-ratify cap to 1 — one repai
   assert.equal(calls.filter(c => c.label === 'ratify:gate').length, 2, 'review plus one recheck — the cap-1 bounded loop, never a third gate')
   assert.equal(calls.filter(c => c.label === 'width:read').length, 1, 'one dial read per LAW invocation carries both the width and the ratify cap — never re-read for the loop')
   assert.ok(!calls.some(c => c.label === 'law:seal'), 'the LAW never locks unratified')
+})
+
+test('runtime (W6-S3 dogfood, LAW): a LAW recheck that clears nothing holds immediately — no strict progress, well under the cap, the law never locks', async () => {
+  // The recheck re-grade reports the same cohort: nothing cleared, so recoveryDecision holds on the
+  // first recheck even though the cap (2, the reversible posture) has an edge left. The edge was
+  // still spent — one repair pass ran — but equality earns no credit and the LAW never seals.
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE,
+    ...ONBOARDING_OK,
+    'law:preflight': GREEN,
+    'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law' },
+    'ratify:request': GREEN,
+    'ratify:gate': { exit: 10 }, // always changes_required
+    'ratify:cohort': { exit: 0, ids: ['f1'] }, // constant — the recheck clears nothing
+    'ratify:repair': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'revised' },
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'held', 'a non-shrinking LAW recheck holds the law for the operator')
+  assert.equal(calls.filter(c => c.label === 'ratify:repair').length, 1, 'exactly one repair edge spent — the equality holds before the cap of 2')
+  assert.equal(calls.filter(c => c.label === 'ratify:gate').length, 2, 'review plus one recheck, never the cap-2 third gate')
+  assert.ok(!calls.some(c => c.label === 'law:seal'), 'the LAW never locks over a stalled ratify')
+})
+
+test('runtime (W6-S3 dogfood, LAW): a recheck introducing a new finding id is rejected by the ratify-recheck transport and holds before the subset — the cohort is read only on the establishing review', async () => {
+  // The establishing review pins cohort {f1}. A repaired LAW's recheck re-grade is checked against
+  // that pinned cohort by the ratify-recheck verb (allowedFindingIds, scripts/kiln-review): a re-grade
+  // finding id OUTSIDE {f1} is rejected closed (exit 20 — the tamper the verb enforces, proven in
+  // kiln-review.test.mjs), a re-grade WITHIN it re-grades as an ordinary reject (exit 10). The mock
+  // gate computes its recheck exit from that rule, so the exit is a function of the smuggled id, not
+  // the recheck mode. Running both re-grades proves the causal link: the out-of-cohort id — the sole
+  // difference between the two runs — is what turns the recheck into a terminal transport hold, and
+  // the failed recheck holds before any second cohort read (the {f1,f2} escape is never reached).
+  const establishingCohort = ['f1']
+  const run = (regradeCohort) => {
+    const escapes = regradeCohort.some(id => !establishingCohort.includes(id))
+    return runKernel({ stage: 'law', projectDir: '/p' }, {
+      ...VOICE,
+      ...ONBOARDING_OK,
+      'law:preflight': GREEN,
+      'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law' },
+      'ratify:request': GREEN,
+      'ratify:gate': (prompt) => ({ exit: prompt.includes('ratify-recheck') ? (escapes ? 20 : 10) : 10 }),
+      'ratify:cohort': { exit: 0, ids: establishingCohort },
+      'ratify:repair': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'revised' },
+      'state:write': GREEN,
+    })
+  }
+  // Smuggle: the re-grade introduces f2, an id outside {f1} → the ratify-recheck transport rejects.
+  const { ret, calls } = await run(['f1', 'f2'])
+  assert.equal(ret.status, 'transport-failure', 'the out-of-cohort recheck fails the transport — a visible terminal hold, never a seal')
+  const recheck = calls.find(c => c.label === 'ratify:gate' && c.prompt.includes('ratify-recheck'))
+  assert.ok(recheck, 'the recheck is routed through the cohort-enforcing ratify-recheck verb — the transport that rejects the escape')
+  assert.equal(calls.filter(c => c.label === 'ratify:cohort').length, 1, 'the cohort is read only on the establishing review — the failed recheck holds before any subset eval')
+  assert.ok(!calls.some(c => c.label === 'law:seal'), 'the LAW never locks')
+  // Control: an otherwise-identical re-grade confined to {f1} routes through the SAME ratify-recheck
+  // verb yet never trips the transport — so the smuggled out-of-cohort id, not the recheck itself, is
+  // what causes the terminal hold.
+  const control = await run(['f1'])
+  assert.ok(control.calls.some(c => c.label === 'ratify:gate' && c.prompt.includes('ratify-recheck')), 'the control still routes the re-grade through the ratify-recheck verb — the only difference from the smuggle run is the introduced id')
+  assert.notEqual(control.ret.status, 'transport-failure', 'a within-cohort re-grade never trips the transport fault — the introduced id is the sole cause of the terminal hold')
+  assert.ok(!control.calls.some(c => c.label === 'law:seal'), 'the within-cohort re-grade still never seals — it reads as an ordinary held')
 })
 
 test('runtime (Wave 1): codex unavailable at LAW ratify holds — never the build degraded single-family continue', async () => {
@@ -1614,6 +1691,42 @@ test('runtime (simple-fire): a claude gate reject walks the same repair loop —
     'the repair prompt carries the closed surface fact for the card')
 })
 
+test('runtime (W6-S3 dogfood, build): a recheck that clears nothing holds immediately — no strict progress, the edge spent, well under the cap, never a seal', async () => {
+  // The review and the recheck report the SAME cohort {F1}: the repair edge was spent but nothing
+  // cleared, so recoveryDecision holds on the first recheck even though the cap (2) has an edge
+  // left. Equality is no progress — the loop never walks to the cap, and nothing seals over a stall.
+  const finding = { id: 'F1', criterion: 'c', location: 'x.mjs:1', failure_mode: 'f', evidence: 'e', minimal_fix: 'm' }
+  const reject = { review_id: 'r1', law_hash: 'a'.repeat(64), blockers: [], verdict: 'changes_required', findings: [finding] }
+  const reads = [reject, reject] // the recheck clears nothing — an equal cohort
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'seal:check': { exit: 1 },
+    'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
+    'law:pre-seal': GREEN,
+    'law:pre-recheck': GREEN,
+    'degraded:check': { exit: 1 },
+    'request:hash': HASH_OK,
+    'gate:invalidate': { exit: 0 },
+    'gate-claude:review': OK_ACK,
+    'gate-claude:recheck': OK_ACK,
+    'recheck:cohort': { exit: 0, ids: ['r1', 'F1'] },
+    'gate:read': () => readCandidate(reads.shift()),
+    'gate:publish': { exit: 0 },
+    'findings:fetch': { exit: 0, ids: ['F1'] },
+    'repair:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'repaired' },
+    'delta:check': { exit: 0 },
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'blocked', 'a non-shrinking recheck is an operator-ruling hold, not a transport fault')
+  assert.equal(calls.filter(c => c.label === 'repair:s1').length, 1, 'exactly one repair edge spent — the equality holds before the cap of 2')
+  assert.equal(calls.filter(c => c.label === 'gate:publish').length, 2, 'the review and the one recheck each published; no third gate ran')
+  assert.ok(!calls.some(c => c.label === 'seal:append'), 'nothing seals over a stalled gate')
+})
+
 test('runtime (W6-XF-01): the claude recheck is bound to the snapshotted prior cohort — a renamed review_id or a new finding fails closed, never publishes, never seals', async () => {
   const finding = (id) => ({ id, criterion: 'c', location: 'x.mjs:1', failure_mode: 'f', evidence: 'e', minimal_fix: 'm' })
   const reject = { review_id: 'r1', law_hash: 'a'.repeat(64), blockers: [], verdict: 'changes_required', findings: [finding('F1')] }
@@ -1832,8 +1945,9 @@ test('core (W6-B): strictSubsetProgress is true only for a STRICT shrink — equ
   assert.equal(strictSubsetProgress(['f1'], null), false, 'a non-array curr fails to false, never throws')
 })
 
-test('core (W6-01): recoveryDecision is the single transition policy — advance, scoped-move, and every held path', () => {
-  const base = { edgeUses: 0, cap: 2, priorBlockingIds: ['f1', 'f2'], currBlockingIds: ['f1'], schemaValid: true, transport: true }
+test('core (W6-01/S3): recoveryDecision is the single transition policy — advance, scoped-move, establishment, a missing oracle, and every held path', () => {
+  // cohortEstablished true = a measured recheck (a prior cohort is pinned): the base subset case.
+  const base = { edgeUses: 0, cap: 2, cohortEstablished: true, priorBlockingIds: ['f1', 'f2'], currBlockingIds: ['f1'], schemaValid: true, transport: true }
   // a machine fault rules first, before the subset is even considered — even on an accept.
   assert.deepEqual(recoveryDecision({ ...base, transport: false, gateOutcome: 'accept' }), { action: 'held', reason: 'transport-failure' }, 'a downed transport holds before any progress read')
   assert.deepEqual(recoveryDecision({ ...base, schemaValid: false, gateOutcome: 'accept' }), { action: 'held', reason: 'schema-invalid' }, 'a malformed verdict holds before the subset eval')
@@ -1846,6 +1960,12 @@ test('core (W6-01): recoveryDecision is the single transition policy — advance
   assert.deepEqual(recoveryDecision({ ...base, gateOutcome: 'reject', currBlockingIds: ['f1', 'f3'] }), { action: 'held', reason: 'no-strict-progress' }, 'a renamed id (no strict shrink) holds')
   // strict progress but the cap is exhausted holds.
   assert.deepEqual(recoveryDecision({ ...base, gateOutcome: 'reject', edgeUses: 2 }), { action: 'held', reason: 'cap-exhausted' }, 'progress with no edge left holds')
+  // S3: the establishing reject (no prior cohort pinned) has nothing to disprove — progress by
+  // definition, a scoped-move up to the cap with its own reason; the cohort arrays are not consulted.
+  assert.deepEqual(recoveryDecision({ ...base, cohortEstablished: false, gateOutcome: 'reject' }), { action: 'scoped-move', reason: 'establishing' }, 'a reject with no prior cohort establishes — a scoped-move, never a subset test')
+  assert.deepEqual(recoveryDecision({ ...base, cohortEstablished: false, gateOutcome: 'reject', edgeUses: 2 }), { action: 'held', reason: 'cap-exhausted' }, 'an establishing reject with no edge left holds at the cap')
+  // S3: a wired oracle that read no cohort is a missing verdict — held before any subset eval.
+  assert.deepEqual(recoveryDecision({ ...base, gateOutcome: 'reject', oracleMissing: true }), { action: 'held', reason: 'oracle-missing' }, 'a missing cohort oracle holds before the subset is weighed')
   // blocked and any unrecognized outcome fall to the held floor.
   assert.deepEqual(recoveryDecision({ ...base, gateOutcome: 'blocked' }), { action: 'held', reason: 'blocked' }, 'a block holds')
   assert.deepEqual(recoveryDecision({ ...base, gateOutcome: 'transport_failure' }), { action: 'held', reason: 'blocked' }, 'an unrecognized outcome falls to the held floor')
