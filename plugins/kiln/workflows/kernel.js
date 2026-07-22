@@ -319,8 +319,21 @@ const EXIT = { type: 'object', additionalProperties: false, properties: { exit: 
 const IDS = { type: 'object', additionalProperties: false, properties: { exit: { type: 'integer' }, ids: { type: 'array', items: { type: 'string' } } }, required: ['exit', 'ids'] }
 const STAGE_RESULT = {
   type: 'object', additionalProperties: false,
-  properties: { ok: { type: 'boolean' }, beat: { type: 'string' }, pointers: { type: 'array', items: { type: 'string' } } },
-  required: ['ok', 'beat', 'pointers'],
+  properties: {
+    facts: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        status: { type: 'string' },                             // 'ok' iff the stage's success condition holds; any other string is an honest failure
+        pointers: { type: 'array', items: { type: 'string' } }, // every artifact path the stage wrote
+        schema_valid: { type: 'boolean' },                      // the stage's declared outputs are well-formed
+        gate_verdict: { type: 'string' },                       // reserved for later waves — unpopulated now
+        meter: { type: 'object' },                              // reserved for later waves — unpopulated now
+      },
+      required: ['status', 'pointers', 'schema_valid'],
+    },
+    narration_beat: { type: 'string' },                         // the one-line human beat this stage emits
+  },
+  required: ['facts', 'narration_beat'],
 }
 const TIERS = {
   type: 'object', additionalProperties: false,
@@ -386,13 +399,13 @@ const voiceBeat = (key, facts, fallback, idx = 0) => idsFetch(
   'voice:' + key, 'the printed JSON array of beat templates, [] if exit != 0',
 ).then(v => fillClosed(v.ids[idx] ?? fallback, facts))
 
-// Stage-card and per-slice builder legs share the {ok, beat, pointers} schema; the
+// Stage-card and per-slice builder legs share the {facts:{status, pointers, schema_valid}, narration_beat} schema; the
 // caller supplies the resolved tier opts. INTAKE-19 seat law: the LAW stage is a
 // thinking seat — slice creation resolves through the stage-law tier; validate and
 // report stay on stage-card; the per-slice builder runs on its surface-routed
 // builder role (T-03).
 const actWith = (prompt, label, opts) => agent(prompt, { label, ...opts, schema: STAGE_RESULT })
-  .then(r => (r ?? { ok: false, beat: '', pointers: [] }))
+  .then(r => (r ?? { facts: { status: 'transport-failure', pointers: [], schema_valid: false }, narration_beat: '' }))
 const act = (prompt, label) => actWith(prompt, label, tier(stage === 'law' ? 'stage-law' : 'stage-card'))
 
 const stage = resolveStage(A)
@@ -451,7 +464,7 @@ const cardPrompt = (extra) => [
   'Voice: fill your beat from ' + plugin + '/data/voice.json templates; prefill every semantic slot; leave kernel-owned slots (' + KERNEL_SLOTS.map(k => '{' + k + '}').join(' ') + ') unfilled.',
   'Density: ' + density + ' — a slot-fill rule, never a structure: broad fills slots with the plain reader-meaningful version, engineer fills the same slots with file paths, ids, and counts.',
   extra,
-  'Return {ok, beat, pointers} — pointers lists every artifact path you wrote.',
+  'Return {facts:{status, pointers, schema_valid}, narration_beat} — facts.status is "ok" when the stage succeeded, facts.pointers lists every artifact path you wrote, facts.schema_valid is true when your declared outputs are well-formed, and narration_beat is your one-line beat.',
 ].filter(Boolean).join('\n')
 
 // LAW rerun beat: at every kernel invocation start (resume), if the check
@@ -467,8 +480,8 @@ if (stage !== 'build') {
   const r = await act(cardPrompt(A.idea ? 'Operator idea (verbatim): ' + A.idea : ''), 'stage:' + stage)
   // S1 ruling: reachable twin sites read their sealed keys; the kernel lines
   // below survive only as unreachable-voice fallbacks (W-03).
-  if (!r.ok) return failStop('transport-failure', { stage, next_action: 'Rerun stage ' + stage }, await voiceBeat('transport-failure', {}, 'The ' + stage + ' stage did not return sound work — the run holds.', 1))
-  for (const p of r.pointers) routes.add(p)
+  if (r.facts.status !== 'ok') return failStop('transport-failure', { stage, next_action: 'Rerun stage ' + stage }, await voiceBeat('transport-failure', {}, 'The ' + stage + ' stage did not return sound work — the run holds.', 1))
+  for (const p of r.facts.pointers) routes.add(p)
   // Wave 1 (the Second Key): the LAW stage is content-blind-gated before it can
   // lock. The card produced the candidate LAW; a fresh OPPOSITE-family mind now
   // ratifies it against the architecture-feasibility rubric (reviewLoop + the
@@ -483,7 +496,7 @@ if (stage !== 'build') {
     // candidate beat (a repair regenerates the whole LAW, so its beat replaces the prior
     // one) and emit it ONLY after a successful ratify AND seal; every held/halt path
     // emits its own line alone.
-    let candidateBeat = r.beat
+    let candidateBeat = r.narration_beat
     const ratifyOpts = tier('ratify-reviewer')
     // Content-blind request write: the kernel cannot author files, so it ships the
     // ratify request as a heredoc of closed facts through a mechanical hand — the
@@ -514,9 +527,9 @@ if (stage !== 'build') {
       gate: () => hands(plugin + '/scripts/kiln-review ratify . ' + P.ratifyRequest + ' ' + P.gate, 'ratify:gate'),
       repair: async (pass) => {
         const rr = await act(cardPrompt('Ratify repair pass ' + pass + ': the LAW did not ratify. Read every finding in ' + P.gate + ' and regenerate ' + P.law + ' to resolve them all, keeping the acceptance criteria and the slice plan sound and complete.'), 'ratify:repair')
-        if (!rr.ok) return false
-        for (const p of rr.pointers) routes.add(p)
-        candidateBeat = rr.beat // buffer the repaired candidate; the repair card beat also claims SEALED, so it is never emitted mid-loop
+        if (rr.facts.status !== 'ok') return false
+        for (const p of rr.facts.pointers) routes.add(p)
+        candidateBeat = rr.narration_beat // buffer the repaired candidate; the repair card beat also claims SEALED, so it is never emitted mid-loop
         return true
       },
     })
@@ -559,7 +572,7 @@ if (stage !== 'build') {
     const owner = await firstSealed(post.ids)
     if (owner) return reopen(owner, 'stage end')
   }
-  if (stage !== 'law') beats.push(fillClosed(r.beat, stageFacts))
+  if (stage !== 'law') beats.push(fillClosed(r.narration_beat, stageFacts))
   return stop(stage === 'report' ? 'done' : 'ok', { stage, next_action: nextAct(nextStage(stage)) })
 }
 
@@ -607,9 +620,9 @@ for (const entry of slices) {
     passes: 0, count: 0, ids: '',
   }
   const r = await actWith(cardPrompt('Build exactly slice ' + slice + ' (surface ' + entry.surface + '). Write ' + P.request + ' per the card before returning.'), 'slice:' + slice, builderOpts)
-  if (!r.ok) return failStop('transport-failure', { stage, active_slice: slice, next_action: 'Rerun stage build' }, await voiceBeat('transport-failure', {}, 'Slice ' + slice + ' did not return sound work — the run holds.', 1))
-  for (const p of r.pointers) routes.add(p)
-  beats.push(fillClosed(r.beat, facts))
+  if (r.facts.status !== 'ok') return failStop('transport-failure', { stage, active_slice: slice, next_action: 'Rerun stage build' }, await voiceBeat('transport-failure', {}, 'Slice ' + slice + ' did not return sound work — the run holds.', 1))
+  for (const p of r.facts.pointers) routes.add(p)
+  beats.push(fillClosed(r.narration_beat, facts))
   // LAW rerun beat: before any dependent seal. The check must exist by build.
   // Boundary ruling (INTAKE-26, order-aware): a pre-seal red blocks the current
   // seal unless a sealed owner reopens OR every red owner is a strictly-later
@@ -748,11 +761,11 @@ for (const entry of slices) {
         facts.count = found.ids.length
         facts.ids = found.ids.join(', ')
         const rr = await actWith(cardPrompt('Repair pass ' + pass + ' for slice ' + slice + ' (surface ' + entry.surface + '): fix ONLY the findings in ' + P.gate + '; write the repair delta to ' + P.delta + '.'), 'repair:' + slice, builderOpts)
-        if (!rr.ok) return false
+        if (rr.facts.status !== 'ok') return false
         const d = await hands('test -s ' + P.delta, 'delta:check')
         if (d !== 0) return false
-        for (const p of rr.pointers) routes.add(p)
-        beats.push(fillClosed(rr.beat, facts))
+        for (const p of rr.facts.pointers) routes.add(p)
+        beats.push(fillClosed(rr.narration_beat, facts))
         return true
       },
     })

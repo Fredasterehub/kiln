@@ -1,8 +1,8 @@
 # LAW — Asimov takes the bench *(stage 1 of 4: law → build → validate → report)*
 
 *Stage card: methodology for the stage agent. The kernel never reads this file — it routes
-paths and branches on closed facts. You read it, follow it exactly, and return `{ok, beat,
-pointers}`.*
+paths and branches on closed facts. You read it, follow it exactly, and return
+`{facts:{status, pointers, schema_valid}, narration_beat}`.*
 
 ## Inputs
 The operator's idea, verbatim, in your prompt (or `.kiln/docs/` vision artifacts if present).
@@ -74,5 +74,7 @@ Leave every kernel-owned slot from the sealed slots map exactly as-is. One trans
 card.
 
 ## Return
-`ok` — true only if all four outputs above are written. `beat` — every stage-owned slot
-filled; kernel-owned slots left as-is. `pointers` — the repo-relative paths you wrote.
+`facts.status` — `'ok'` only if all four outputs above are written, else an honest failure
+string. `facts.pointers` — the repo-relative paths you wrote. `facts.schema_valid` — true iff
+your declared outputs are well-formed. `narration_beat` — every stage-owned slot filled;
+kernel-owned slots left as-is.

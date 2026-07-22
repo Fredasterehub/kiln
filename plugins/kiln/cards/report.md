@@ -2,7 +2,7 @@
 
 *Stage card: methodology for the stage agent. The kernel never reads this file. The report is
 composed from the run's readable artifacts alone — a dead run must reconstruct from files, and
-this stage proves the files suffice. Return `{ok, beat, pointers}`.*
+this stage proves the files suffice. Return `{facts:{status, pointers, schema_valid}, narration_beat}`.*
 
 ## Inputs — the readable record, nothing else
 `.kiln/STATE.md` · `.kiln/LAW.md` · `.kiln/decisions.md` · `.kiln/seals.log` ·
@@ -57,5 +57,7 @@ Leave every kernel-owned slot from the sealed slots map exactly as-is. NO close 
 on this card — the absence of a close is the ending.
 
 ## Return
-`ok` — true only if `.kiln/report.md` is written from the record. `beat` — every stage-owned
-slot filled; kernel-owned slots left as-is. `pointers` — `.kiln/report.md`.
+`facts.status` — `'ok'` only if `.kiln/report.md` is written from the record, else an honest
+failure string. `facts.pointers` — `.kiln/report.md`. `facts.schema_valid` — true iff your
+declared outputs are well-formed. `narration_beat` — every stage-owned slot filled;
+kernel-owned slots left as-is.

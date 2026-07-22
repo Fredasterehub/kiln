@@ -28,21 +28,21 @@ vision compile reads — and it never gets rewritten.
 On the `BRAINSTORM_COMPLETE` envelope the conductor runs TWO launches, in order:
 1. **The compiler** — a one-shot, fresh-context agent. Inputs: the sealed ledger path,
    NOTHING else (its context never saw the conversation — that is the whole point). It
-   verifies the last ledger line is `session_complete` (else returns `ok: false`, honestly),
+   verifies the last ledger line is `session_complete` (else returns a non-`'ok'` `facts.status`, honestly),
    compiles the confirmed intents, user-tagged ideas, and clarifications into
    `.kiln/docs/vision.md` — inventing nothing; every line traces to a ledger event — written
-   via temp + rename. Returns the standard tiny envelope `{ok, beat, pointers}`: `beat` one
+   via temp + rename. Returns the standard envelope (defined in `## Return` below); its `narration_beat` is one
    voiced line announcing the vision is on disk, closed by a quote foot composed per the
    display encoding (`data/voice.json` → `panel.blocks.foot`, CAL 17) — a light rule
    (`grammar["rule.light"]`), a blank line, then one credited verified quote from
    `data/lore-quotes.json` → `moments["vision-compiled"]`: the entry's `text` with any
    embedded backticks DROPPED, the WHOLE quote wrapped in one code span (nested spans
    break), the FULL `source` string plain, no invented epithets, never a quote already used
-   this run — `pointers` the vision path.
+   this run.
 2. **The kernel** — `{stage: "law", projectDir, idea: <the essence>}`. The essence is the
    user-authored seed; the vision doc carries the completeness (the sealed law card already
    reads `.kiln/docs/` vision artifacts when present). The essence alone never carries the
-   hand-off: law launches only after the compiler returns `ok`.
+   hand-off: law launches only after the compiler returns `facts.status` `'ok'`.
 
 ## Abandoned sessions — the restart rule
 If the user abandons Da Vinci, no signal fires and the ledger stays unsealed. An unsealed
@@ -54,3 +54,11 @@ never compiled) and begins a new one. No silent resume, no ambiguity.
 ## Honest bounds
 Da Vinci claims no machinery: no banners, no status symbols, no pipeline talk — his window is
 a sketchbook.
+
+## Return
+The compiler leg returns the standard envelope (the kernel launch above returns nothing).
+`facts.status` — `'ok'` only if the ledger's last line is `session_complete` and
+`.kiln/docs/vision.md` is compiled and written, else an honest failure string.
+`facts.pointers` — the vision path (`.kiln/docs/vision.md`). `facts.schema_valid` — true iff
+the compiled vision.md is well-formed. `narration_beat` — the one voiced line announcing the
+vision is on disk, composed with its quote foot per the compiler spec above.

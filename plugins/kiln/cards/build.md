@@ -6,7 +6,7 @@ ui, GPT reviews correctness against the locked criteria only — creative direct
 are yours, never the reviewer's), a fresh claude reviewer for logic and mixed slices (GPT
 coded those — cross-family law); it owns repair dispatch and seals. You build and evidence;
 you never invoke the transport, write `gate-review.json`, or touch `seals.log`. Return
-`{ok, beat, pointers}`.*
+`{facts:{status, pointers, schema_valid}, narration_beat}`.*
 
 ## Mode: build *(prompt says "Build exactly slice `<id>` (surface `<ui|logic|mixed>`)")*
 1. Read `.kiln/LAW.md` and take ONLY your slice. Working code lives in the project
@@ -63,7 +63,7 @@ protocol, no ceremony.
 4. Verify with your own hands: run the slice's tests and `bash .kiln/law/check.sh`. Codex
    can exit `0` having produced nothing usable — the green run is the only proof.
 5. Not green: fold the observed failure into the prompt and call again — at most twice
-   more. Still red after that, return `ok: false` with the facts. Codex unavailable, or
+   more. Still red after that, return a non-`'ok'` `facts.status` with the facts. Codex unavailable, or
    `.kiln/degraded` present: you MUST create the degradation marker FIRST — one bash
    line, `touch .kiln/degraded` — then build the slice yourself and say so in your beat.
    The kernel reads the marker at seal time, so the seal records the family truth:
@@ -142,6 +142,8 @@ then the blocks, never repeating each other.
 Leave every kernel-owned slot (`{s}` `{t}` `{passes}` `{count}` among them) exactly as-is.
 
 ## Return
-`ok` — true only if the mode's outputs are written and `check.sh` exits 0. `beat` — every
-stage-owned slot filled; kernel-owned slots left as-is. `pointers` — files touched plus
-`.kiln/review-request.json` (build) or `.kiln/repair-delta.md` (repair).
+`facts.status` — `'ok'` only if the mode's outputs are written and `check.sh` exits 0, else an
+honest failure string. `facts.pointers` — files touched plus `.kiln/review-request.json`
+(build) or `.kiln/repair-delta.md` (repair). `facts.schema_valid` — true iff your declared
+outputs are well-formed. `narration_beat` — every stage-owned slot filled; kernel-owned slots
+left as-is.

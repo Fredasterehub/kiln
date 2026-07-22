@@ -2,7 +2,7 @@
 
 *Stage card: methodology for the stage agent. The kernel never reads this file — it branches
 on `bash .kiln/law/check.sh` alone; your job is the evidence behind that exit code. Return
-`{ok, beat, pointers}`.*
+`{facts:{status, pointers, schema_valid}, narration_beat}`.*
 
 ## Method — closed facts only, no claim beyond what ran
 1. Rerun the full LAW fresh: `bash .kiln/law/check.sh`. Record the exit code.
@@ -61,7 +61,8 @@ never repeating each other:
 Leave every kernel-owned slot from the sealed slots map exactly as-is.
 
 ## Return
-`ok` — true only if every criterion was exercised and `.kiln/validate.md` is written (ok is
-about YOUR work being complete, not about the criteria being green — the exit code carries
-that). `beat` — every stage-owned slot filled; kernel-owned slots left as-is. `pointers` —
-`.kiln/validate.md`.
+`facts.status` — `'ok'` only if every criterion was exercised and `.kiln/validate.md` is
+written (status is about YOUR work being complete, not about the criteria being green — the
+exit code carries that), else an honest failure string. `facts.pointers` — `.kiln/validate.md`.
+`facts.schema_valid` — true iff your declared outputs are well-formed. `narration_beat` — every
+stage-owned slot filled; kernel-owned slots left as-is.

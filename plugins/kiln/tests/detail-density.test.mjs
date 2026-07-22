@@ -50,7 +50,7 @@ async function runLaw(detail) {
     'tiers:boot': TIERS_OK,
     'law:preflight': GREEN,
     'law:stage-end': GREEN,
-    'stage:law': { ok: true, beat: 'law beat', pointers: ['.kiln/LAW.md'] },
+    'stage:law': { facts: { status: 'ok', pointers: ['.kiln/LAW.md'], schema_valid: true }, narration_beat: 'law beat' },
     // Wave 1: the law stage ratifies before advancing — accept, seal, advance.
     'ratify:request': { exit: 0 },
     'ratify:gate': { exit: 0 },
