@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 // kiln-review is an argv-driven CLI, not a module. These unit tests exercise the
@@ -163,21 +163,31 @@ if (gate.review_id === '__ECHO__') gate.review_id = (prompt.match(/"review_id":\
 fs.writeFileSync(args[args.indexOf('-o') + 1], JSON.stringify(gate))
 `
 
-function ratify({ artifact = 'crit-1 · slice-a · behaviour · cmd · outcome\n', gate, effort, drop, rubric = RUBRIC } = {}) {
+// A fake codex that cannot complete the review — the reviewer bridge is down. It exits 127
+// (the not-executable code) and writes no gate, so runGate classifies it codex_unavailable.
+const UNAVAILABLE_CODEX = `#!/usr/bin/env node
+process.exit(127)
+`
+
+// artifactPath places the ratified artifact anywhere under the repo (default the LAW), so the
+// same helper covers both the LAW and a .kiln/docs/feasibility.md candidate. brokenCodex swaps
+// the canned reviewer for one that cannot run, standing in for a downed bridge.
+function ratify({ artifact = 'crit-1 · slice-a · behaviour · cmd · outcome\n', gate, effort, drop, rubric = RUBRIC, artifactPath = '.kiln/LAW.md', brokenCodex } = {}) {
   const repo = mkdtempSync(join(tmpdir(), 'kiln-ratify-'))
-  mkdirSync(join(repo, '.kiln'), { recursive: true })
-  writeFileSync(join(repo, '.kiln', 'LAW.md'), artifact)
-  const req = { review_id: 'ratify-1', reviewer_model: 'gpt-5.6-sol', artifact: '.kiln/LAW.md', rubric }
+  const abs = join(repo, artifactPath)
+  mkdirSync(dirname(abs), { recursive: true })
+  writeFileSync(abs, artifact)
+  const req = { review_id: 'ratify-1', reviewer_model: 'gpt-5.6-sol', artifact: artifactPath, rubric }
   if (effort !== undefined) req.reviewer_effort = effort
   if (drop) delete req[drop]
   const rf = join(repo, 'request.json')
   writeFileSync(rf, JSON.stringify(req))
   const env = { ...process.env }
-  if (gate) {
+  if (gate || brokenCodex) {
     const fake = mkdtempSync(join(tmpdir(), 'kiln-fakecodex-'))
-    writeFileSync(join(fake, 'codex'), FAKE_CODEX, { mode: 0o755 })
+    writeFileSync(join(fake, 'codex'), brokenCodex ? UNAVAILABLE_CODEX : FAKE_CODEX, { mode: 0o755 })
     env.PATH = `${fake}:${process.env.PATH}`
-    env.FAKE_GATE = JSON.stringify(gate)
+    if (gate) env.FAKE_GATE = JSON.stringify(gate)
   }
   const r = spawnSync('node', [REVIEW, 'ratify', repo, rf, join(repo, 'gate.json')], { encoding: 'utf8', env })
   return { repo, fact: (r.stdout || '').trim(), status: r.status, out: join(repo, 'gate.json') }
@@ -299,4 +309,63 @@ test('kiln-review: the slice path enforces locked-LAW equality at its baseline p
     'the locked-LAW equality is reported before any findings-shape complaint')
   assert.ok(!(r.stderr || '').includes('findings and blockers must be arrays'),
     'the equality check short-circuits — the findings-shape check never runs')
+})
+
+// Feasibility ratify coverage — the same generic verb, a different artifact and rubric. This
+// proves ratify is artifact-agnostic: it grades a .kiln/docs/feasibility.md candidate against
+// data/feasibility-rubric.json exactly as it grades the LAW against law-rubric.json. The
+// research-sweep workflow (S2) reuses this verb unchanged; the fake codex stands in for the
+// reviewer here, so no real bridge is crossed.
+const FEASIBILITY_RUBRIC = fileURLToPath(new URL('../data/feasibility-rubric.json', import.meta.url))
+const FEASIBILITY_ARTIFACT = `# Feasibility
+
+## external APIs
+Assumption: the vendor ships a REST endpoint for batch export.
+Evidence: confirmed in their published v2 API reference.
+Reversibility: swapping vendors is a config-only change — low cost.
+`
+
+function feasibilityRatify(overrides = {}) {
+  return ratify({ artifact: FEASIBILITY_ARTIFACT, rubric: FEASIBILITY_RUBRIC, artifactPath: '.kiln/docs/feasibility.md', ...overrides })
+}
+
+function feasibilityGate(verdict, law_hash) {
+  if (verdict === 'accept') return { review_id: 'ratify-1', law_hash, findings: [], blockers: [], verdict }
+  const finding = { id: 'f1', criterion: 'area-coverage', location: '.kiln/docs/feasibility.md:1', failure_mode: 'five canonical areas omitted with no not-applicable marker', evidence: 'only external APIs is addressed; platform, licensing, migrations, integrations and performance/security are neither investigated nor marked n/a', minimal_fix: 'address each remaining canonical area or mark it not-applicable with a reason' }
+  return { review_id: 'ratify-1', law_hash, findings: [finding], blockers: [], verdict }
+}
+
+test('kiln-review: the shipped feasibility-rubric.json parses and every criterion carries id, requirement, pass and fail anchors', () => {
+  const rubric = JSON.parse(readFileSync(FEASIBILITY_RUBRIC, 'utf8'))
+  assert.ok(Array.isArray(rubric.criteria) && rubric.criteria.length >= 4, 'the rubric grades against several criteria')
+  for (const c of rubric.criteria) {
+    for (const key of ['id', 'requirement', 'pass', 'fail']) {
+      assert.equal(typeof c[key], 'string', `criterion ${c.id} carries a ${key}`)
+      assert.ok(c[key].trim() !== '', `criterion ${c.id} ${key} is not blank`)
+    }
+  }
+})
+
+test('kiln-review: the generic ratify verb accepts a feasibility artifact against feasibility-rubric.json (exit 0)', () => {
+  const r = feasibilityRatify({ gate: feasibilityGate('accept', digestOf(FEASIBILITY_ARTIFACT)) })
+  assert.equal(r.fact, 'accept', 'a matching-digest accept over the feasibility rubric rides stdout as accept')
+  assert.equal(r.status, 0, 'accept maps to exit 0')
+  const gate = JSON.parse(readFileSync(r.out, 'utf8'))
+  assert.equal(gate.law_hash, digestOf(FEASIBILITY_ARTIFACT), 'the published gate echoes the feasibility candidate digest')
+})
+
+test('kiln-review: ratify returns changes_required with findings for a deficient feasibility artifact (reject, exit 10)', () => {
+  const r = feasibilityRatify({ gate: feasibilityGate('changes_required', digestOf(FEASIBILITY_ARTIFACT)) })
+  assert.equal(r.fact, 'reject', 'a changes_required verdict over the feasibility rubric rides stdout as reject')
+  assert.equal(r.status, 10, 'changes_required maps to exit 10')
+  const gate = JSON.parse(readFileSync(r.out, 'utf8'))
+  assert.equal(gate.findings.length, 1, 'the published gate carries the reviewer finding')
+  assert.equal(gate.findings[0].criterion, 'area-coverage', 'the finding names the failed feasibility criterion')
+})
+
+test('kiln-review: a bridge-down reviewer over the feasibility ratify path halts codex_unavailable (exit 21) and publishes no gate', () => {
+  const r = feasibilityRatify({ brokenCodex: true })
+  assert.equal(r.fact, 'codex_unavailable', 'an unreachable reviewer is the honest codex_unavailable fact')
+  assert.equal(r.status, 21, 'codex_unavailable maps to exit 21')
+  assert.ok(!existsSync(r.out), 'a bridge-down run publishes no gate')
 })

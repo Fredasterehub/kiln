@@ -1,0 +1,35 @@
+{
+  "rubric": "research-feasibility",
+  "criteria": [
+    {
+      "id": "area-coverage",
+      "requirement": "Every research area that qualifies for this project — platform feasibility, licensing, external APIs, migrations, integrations, and load-bearing performance or security — is addressed; a qualifying area is never silently dropped.",
+      "pass": "Each of the six canonical areas is either investigated or explicitly marked not-applicable, so a reader can confirm nothing was skipped by accident.",
+      "fail": "A qualifying area the build depends on (for example an external API in the deliverable) is absent with no note explaining why it went uninvestigated."
+    },
+    {
+      "id": "assumption-stated",
+      "requirement": "Each addressed area names the concrete assumption the build depends on, stated specifically enough to be right or wrong.",
+      "pass": "Every area carries a falsifiable assumption a reader could confirm or refute ('the target platform ships Node 20', not 'the platform is fine').",
+      "fail": "An area gestures at a topic without stating what is actually assumed, so the assumption cannot be checked."
+    },
+    {
+      "id": "evidence-or-recorded-uncertainty",
+      "requirement": "Each assumption is backed by cited evidence, or — when evidence could not be obtained — the uncertainty is recorded explicitly rather than papered over.",
+      "pass": "Every assumption carries either a concrete source a reader could follow or a plainly labelled unknown; a failed investigation is recorded as an honest gap.",
+      "fail": "An assumption is presented as settled with neither a cited source nor an acknowledgement that it stays unverified."
+    },
+    {
+      "id": "reversibility-cost",
+      "requirement": "Each area states its reversibility cost: what undoing the choice would take if the assumption proves wrong.",
+      "pass": "Every area names the cost of reversing course (a config swap, a schema migration, vendor lock-in), so a decision-maker can weigh the downside.",
+      "fail": "An area commits to a direction without saying how hard it would be to reverse should the assumption fail."
+    },
+    {
+      "id": "no-unfounded-certainty",
+      "requirement": "No claim is asserted with more certainty than its evidence or recorded uncertainty earns.",
+      "pass": "Each claim's confidence matches its backing — verified facts read as facts, open questions read as open.",
+      "fail": "A claim carries a certainty its evidence does not support, or an open question is dressed up as resolved."
+    }
+  ]
+}
