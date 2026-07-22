@@ -1,15 +1,16 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 // A truthfulness anchor for references/recipe-shelf.md — NOT a prose lock. The shelf is the
-// list-of-record for the three recipes and how each launches. Existence is asserted only for
-// what ships now: ratify-artifact's verb in kiln-review. research-sweep (S2) and screening-room
-// (W8) are held to not-yet-shipped through the shelf's own status markers, never by probing for
-// their not-yet-existing files. Zero run cost: bytes on disk.
+// list-of-record for the three recipes and how each launches. Existence is asserted for what
+// ships now: ratify-artifact's verb in kiln-review and research-sweep's workflow file (landed in
+// W4). screening-room (W8) is held to not-yet-shipped through the shelf's own status marker,
+// never by probing for a not-yet-existing file. Zero run cost: bytes on disk.
 const SHELF = fileURLToPath(new URL('../references/recipe-shelf.md', import.meta.url))
 const REVIEW = fileURLToPath(new URL('../scripts/kiln-review', import.meta.url))
+const SWEEP = fileURLToPath(new URL('../workflows/research-sweep.js', import.meta.url))
 const shelf = readFileSync(SHELF, 'utf8')
 const RECIPES = ['research-sweep', 'ratify-artifact', 'screening-room']
 
@@ -36,8 +37,11 @@ test('recipe-shelf: ratify-artifact is marked SHIPPED and its kiln-review verb i
   assert.ok(readFileSync(REVIEW, 'utf8').includes(`mode === 'ratify'`), 'the ratify verb ships in kiln-review')
 })
 
-test('recipe-shelf: research-sweep and screening-room stay unshipped until their wave', () => {
-  for (const recipe of ['research-sweep', 'screening-room']) {
-    assert.ok(!statusOf(recipe).startsWith('shipped'), `${recipe} is not yet marked SHIPPED`)
-  }
+test('recipe-shelf: research-sweep is marked SHIPPED and its workflow file is present', () => {
+  assert.ok(statusOf('research-sweep').startsWith('shipped'), 'the shelf marks research-sweep shipped once its workflow lands')
+  assert.ok(existsSync(SWEEP), 'the research-sweep workflow ships on disk')
+})
+
+test('recipe-shelf: screening-room stays unshipped until its wave', () => {
+  assert.ok(!statusOf('screening-room').startsWith('shipped'), 'screening-room is not yet marked SHIPPED')
 })

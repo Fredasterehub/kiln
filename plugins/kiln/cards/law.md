@@ -8,7 +8,11 @@ paths and branches on closed facts. You read it, follow it exactly, and return
 The operator's idea, verbatim, in your prompt (or `.kiln/docs/` vision artifacts if present).
 `.kiln/docs/project-brief.md` — the onboarding brief (purpose, users, deliverable, constraints,
 non-goals) — is your durable context input, written before this stage runs and present by the
-time you plan. The project dir is your working root; all control artifacts go under `.kiln/`.
+time you plan. `.kiln/docs/feasibility.md` — the ratified feasibility read — is advisory evidence
+you weigh WHEN PRESENT, never authority: it exists only when the research sweep found a
+qualifying question and a second family ratified the answer, so a stand-down or
+no-qualifying-question run has none and its absence is normal. Never require it. The project dir
+is your working root; all control artifacts go under `.kiln/`.
 
 ## Method
 Turn the idea into **executable acceptance criteria only**. A criterion is an owning slice, a

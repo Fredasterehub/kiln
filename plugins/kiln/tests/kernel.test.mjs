@@ -22,13 +22,13 @@ const core = new Function(coreSrc + `
   return { SPINE, parseArgs, resolveStage, nextStage, gateOutcome, reviewLoop,
            fillClosed, streakIndex, stateDoc, atomicWriteCmd, gateCmd, LAW_CHECK, LAW_GUARD,
            LAW_CHECK_RECEIPT, verdictExit, redSetIsFuture, gateReviewInvalid,
-           validateTiers, resolveTier, routeBuilder, parseSliceEntry, postureToDials,
+           validateTiers, resolveTier, routeBuilder, parseSliceEntry,
            validatePosture }`)()
 const {
   SPINE, parseArgs, resolveStage, nextStage, gateOutcome, reviewLoop,
   fillClosed, streakIndex, stateDoc, atomicWriteCmd, gateCmd,
   LAW_CHECK_RECEIPT, verdictExit, redSetIsFuture, gateReviewInvalid,
-  validateTiers, resolveTier, routeBuilder, parseSliceEntry, postureToDials,
+  validateTiers, resolveTier, routeBuilder, parseSliceEntry,
   validatePosture,
 } = core
 
@@ -1612,80 +1612,10 @@ test('runtime (Wave 2): report status ok BUT .kiln/report.md empty or missing ne
   assert.ok(doc.includes('.kiln/report.md is empty or missing'), 'and says exactly what is wrong')
 })
 
-// ── Wave 3 (the Gauge foundation): postureToDials + the HIGH-effort floor ────
-
-test('core (Wave 3): postureToDials — each monotone predicate toggles on both branches', () => {
-  // small + familiar + reversible, no visual → every dial at its floor
-  assert.deepEqual(
-    postureToDials({ scope: 'small', novelty: 'familiar', reversibility: 'reversible' }, false),
-    { width: 'floor', research: 'off', perceptual: 'dormant', recovery_cap: 2, xhigh_permit: false },
-  )
-  // novel (small, reversible) + visual → width/research/xhigh open via novelty, perceptual on, cap stays 2
-  assert.deepEqual(
-    postureToDials({ scope: 'small', novelty: 'novel', reversibility: 'reversible' }, true),
-    { width: 'wide', research: 'on', perceptual: 'on', recovery_cap: 2, xhigh_permit: true },
-  )
-  // large + familiar + risky → width opens via scope, research via risky, cap 1, xhigh still shut
-  assert.deepEqual(
-    postureToDials({ scope: 'large', novelty: 'familiar', reversibility: 'risky' }, false),
-    { width: 'wide', research: 'on', perceptual: 'dormant', recovery_cap: 1, xhigh_permit: false },
-  )
-  // small + familiar + irreversible → width stays floor, research + xhigh open via irreversible, cap 1
-  assert.deepEqual(
-    postureToDials({ scope: 'small', novelty: 'familiar', reversibility: 'irreversible' }, false),
-    { width: 'floor', research: 'on', perceptual: 'dormant', recovery_cap: 1, xhigh_permit: true },
-  )
-  // perceptual keys on strict === true — a truthy non-boolean stays dormant on a valid posture
-  const valid = { scope: 'small', novelty: 'familiar', reversibility: 'reversible' }
-  assert.equal(postureToDials(valid, 1).perceptual, 'dormant', 'a truthy non-boolean is not true — perceptual stays dormant')
-  assert.equal(postureToDials(valid, 'yes').perceptual, 'dormant')
-  assert.equal(postureToDials(valid, undefined).perceptual, 'dormant')
-})
-
-test('core (Wave 3): postureToDials fails UPWARD to max scrutiny on any untrustworthy posture — never throws', () => {
-  const MAX = { width: 'wide', research: 'on', perceptual: 'on', recovery_cap: 1, xhigh_permit: true }
-  const good = { scope: 'small', novelty: 'familiar', reversibility: 'reversible' }
-  // missing / null / non-object / array
-  assert.deepEqual(postureToDials(undefined, false), MAX, 'a missing posture → max scrutiny')
-  assert.deepEqual(postureToDials(null, false), MAX)
-  assert.deepEqual(postureToDials('small', false), MAX, 'a non-object posture → max scrutiny')
-  assert.deepEqual(postureToDials(['small', 'familiar', 'reversible'], false), MAX, 'an array posture → max scrutiny')
-  // missing a field / extra field — enumerable, non-enumerable, and Symbol own
-  // fields all count: Object.keys would drop the last two and take the low path.
-  assert.deepEqual(postureToDials({ scope: 'small', novelty: 'novel' }, false), MAX, 'a missing field → max scrutiny')
-  assert.deepEqual(postureToDials({ ...good, extra: 1 }, false), MAX, 'an extra enumerable field → max scrutiny')
-  const nonEnum = { ...good }; Object.defineProperty(nonEnum, 'extra', { enumerable: false, value: 1 })
-  assert.deepEqual(postureToDials(nonEnum, false), MAX, 'a non-enumerable extra own field → max scrutiny (Reflect.ownKeys sees it)')
-  assert.deepEqual(postureToDials({ ...good, [Symbol('extra')]: 1 }, false), MAX, 'a Symbol own field → max scrutiny')
-  // any field out of its frozen enum
-  assert.deepEqual(postureToDials({ ...good, scope: 'medium' }, false), MAX, 'an unknown scope → max scrutiny')
-  assert.deepEqual(postureToDials({ ...good, novelty: 'weird' }, false), MAX, 'an unknown novelty → max scrutiny')
-  assert.deepEqual(postureToDials({ ...good, reversibility: 'maybe' }, false), MAX, 'an unknown reversibility → max scrutiny')
-  // the fail-up profile overrides the visual predicate — perceptual stays 'on' even with visual false
-  assert.equal(postureToDials(null, false).perceptual, 'on', 'max scrutiny regardless of the visual flag')
-  // never throws — even on adversarial input for either argument
-  assert.doesNotThrow(() => postureToDials(Symbol('x'), Symbol('y')))
-  // and it must survive the reflective step (Reflect.ownKeys) and property reads
-  // (destructuring getters), not just the typeof short-circuit a Symbol takes: a
-  // throwing ownKeys trap, a throwing getter on a well-shaped posture, and a
-  // revoked proxy all fail UP to max scrutiny rather than propagate.
-  const ownKeysBomb = new Proxy({}, { ownKeys() { throw new Error('ownKeys boom') } })
-  assert.deepEqual(postureToDials(ownKeysBomb, false), MAX, 'a throwing ownKeys trap fails up, never throws')
-  const getterBomb = { novelty: 'novel', reversibility: 'reversible' }
-  Object.defineProperty(getterBomb, 'scope', { enumerable: true, get() { throw new Error('getter boom') } })
-  assert.deepEqual(postureToDials(getterBomb, false), MAX, 'a throwing getter (past the field-count check) fails up, never throws')
-  const rev = Proxy.revocable({}, {}); rev.revoke()
-  assert.deepEqual(postureToDials(rev.proxy, false), MAX, 'a revoked proxy fails up, never throws')
-})
-
-test('core (Wave 3): postureToDials names no effort tier — it toggles organs, never low/medium/high/xhigh', () => {
-  const dials = postureToDials({ scope: 'large', novelty: 'novel', reversibility: 'irreversible' }, true)
-  assert.deepEqual(Object.keys(dials).sort(), ['perceptual', 'recovery_cap', 'research', 'width', 'xhigh_permit'])
-  assert.ok(!('effort' in dials), 'the dial profile carries no effort field')
-  for (const v of Object.values(dials)) {
-    assert.ok(!['low', 'medium', 'high', 'xhigh'].includes(v), 'no dial value is an effort tier — effort stays the tier file\'s job')
-  }
-})
+// ── Wave 3 (the Gauge foundation): the LAW input gate. postureToDials (the dial PROJECTOR)
+// moved to scripts/gauge-dial.mjs in W4 — its tests live in tests/gauge-dial.test.mjs, and the
+// enum-agreement test there pins the kernel's frozen enums against the projector's copy. The
+// kernel keeps validatePosture and those frozen enums for the LAW input gate ────
 
 test('core (Wave 3): validatePosture accepts exactly {scope,novelty,reversibility} over the frozen enums', () => {
   assert.equal(validatePosture({ scope: 'small', novelty: 'familiar', reversibility: 'reversible' }), true)

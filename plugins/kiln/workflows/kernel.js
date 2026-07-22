@@ -290,49 +290,21 @@ function redSetIsFuture(ids, sliceId, sliceIds) {
   return true
 }
 
-// postureToDials — the pure Gauge dial function (Wave 3). Maps a closed posture
-// {scope, novelty, reversibility} plus a visual-artifact presence flag to five
-// scrutiny organs. Each dial is an INDEPENDENT monotone predicate (never a lookup
-// matrix), so a later posture field adds one predicate, not a combinatorial table.
-// It names NO effort tier — it toggles organs and permits xhigh only; effort stays
-// in the tier file, never here. FAIL-UPWARD: a missing, non-object, extra-field, or
-// out-of-enum posture returns the max-scrutiny profile with recovery_cap 1 (the safe
-// autonomy bound) — the most scrutiny exactly when the posture is least trustworthy,
-// regardless of the visual flag. Deterministic; never throws.
+// The frozen posture enums (Wave 3). validatePosture below reuses them as the LAW
+// input gate; the Gauge dial PROJECTOR (postureToDials) moved to scripts/gauge-dial.mjs
+// (W4) — it was body-local here with no production consumer and cannot be imported from a
+// Workflow async-body, and research-sweep.js is its first real reader. That script keeps
+// its own copy of these three arrays; tests/gauge-dial.test.mjs asserts the two agree, so
+// the deliberate duplication can never drift.
 const POSTURE_SCOPE = ['small', 'large']
 const POSTURE_NOVELTY = ['familiar', 'novel']
 const POSTURE_REVERSIBILITY = ['reversible', 'risky', 'irreversible']
-function postureToDials(posture, visualArtifactPresence) {
-  const failUp = { width: 'wide', research: 'on', perceptual: 'on', recovery_cap: 1, xhigh_permit: true }
-  // Reflective reads (Reflect.ownKeys) and property access (destructuring getters)
-  // can throw on adversarial input — a throwing ownKeys trap, a throwing getter, a
-  // revoked proxy (Array.isArray itself throws on one). The whole body is guarded
-  // so "never throws" is unconditional: any throw fails UP to max scrutiny, the
-  // least-trustworthy posture treated most severely. Reflect.ownKeys — not
-  // Object.keys — also counts non-enumerable and Symbol own fields, so a malformed
-  // posture cannot smuggle an extra field past the exact-field count.
-  try {
-    if (!posture || typeof posture !== 'object' || Array.isArray(posture)) return failUp
-    const keys = Reflect.ownKeys(posture)
-    const fields = ['scope', 'novelty', 'reversibility']
-    if (keys.length !== fields.length || fields.some(k => keys.indexOf(k) < 0)) return failUp
-    const { scope, novelty, reversibility } = posture
-    if (POSTURE_SCOPE.indexOf(scope) < 0 || POSTURE_NOVELTY.indexOf(novelty) < 0 || POSTURE_REVERSIBILITY.indexOf(reversibility) < 0) return failUp
-    return {
-      width: (novelty === 'novel' || scope === 'large') ? 'wide' : 'floor',
-      research: (novelty === 'novel' || reversibility === 'risky' || reversibility === 'irreversible') ? 'on' : 'off',
-      perceptual: visualArtifactPresence === true ? 'on' : 'dormant',
-      recovery_cap: reversibility === 'reversible' ? 2 : 1,
-      xhigh_permit: novelty === 'novel' || reversibility === 'irreversible',
-    }
-  } catch { return failUp }
-}
 
 // validatePosture — the pure LAW-input-gate predicate (Wave 3). The onboarding
 // producer (direct path) or the vision compiler (brainstorm path) writes
 // .kiln/posture.json as EXACTLY {scope, novelty, reversibility} over the frozen
 // enums; this is the deterministic check the kernel runs before the law stage
-// plans, reusing the same frozen POSTURE_* enums as postureToDials. True iff obj
+// plans, reusing the same frozen POSTURE_* enums the projector does. True iff obj
 // is a plain object carrying exactly those three own fields, each in its enum —
 // the same exact-field guard (Reflect.ownKeys catches non-enumerable and Symbol
 // smuggling) so an ill-formed projection cannot pass the gate. Deterministic;

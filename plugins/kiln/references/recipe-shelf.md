@@ -11,15 +11,16 @@ the conductor hands the launcher an explicit path, exactly the way it launches
 `workflows/kernel.js`. The path is the registration; this doc is how the shelf stays
 discoverable without one.
 
-## research-sweep — status: this wave (W4, slice S2)
+## research-sweep — status: SHIPPED (W4)
 
 A thin, fixed-purpose `workflows/research-sweep.js` beside the kernel, launched by path by the
 conductor between the onboarding/vision ok-gate and the kernel-law launch. It reads the posture
 dial, and when research is on it runs a producer over the six canonical areas, ratifies any
 feasibility candidate against `data/feasibility-rubric.json`, and promotes only an accepted
-result to `.kiln/docs/feasibility.md`. It is one workflow with two modes (sweep and probe), not
-a generic runner. The workflow file lands in S2; this slice ships the rubric and the ratify
-coverage the recipe depends on.
+result to `.kiln/docs/feasibility.md`. No other outcome leaves a canonical read behind: stood-down
+and no-qualifying proceed straight to the law with none, while a rejected or held reviewer holds
+the law. The workflow
+lands in W4 (slice S2), reusing the W1 ratify verb unchanged; no second review family is minted.
 
 ## ratify-artifact — status: SHIPPED (W1)
 

@@ -67,7 +67,8 @@ operator's idea its only CONTENT input, writing `.kiln/docs/project-brief.md` + 
 (plus, on a brownfield target, `.kiln/brownfield` + `.kiln/docs/codebase-map.md`)
 and returning the canonical `{facts:{status, pointers, schema_valid}, narration_beat}` envelope
 (the same tier posture as the vision compiler — a HIGH semantic producer); speak its
-`narration_beat` verbatim; then, only once `facts.status` is `'ok'`, launch the kernel
+`narration_beat` verbatim; then, only once `facts.status` is `'ok'`, run the research sweep
+(below); only when it clears do you launch the kernel
 `{stage: "law", projectDir, idea, plugin: "${CLAUDE_PLUGIN_ROOT}"}`. This is the direct path's
 mirror of the brainstorm path's compiler→kernel-law sequence.
 
@@ -77,9 +78,30 @@ with cwd = `projectDir` and told the plugin root (so it runs the same brownfield
 sealed ledger path its only CONTENT input, writing `.kiln/docs/vision.md`, `.kiln/docs/project-brief.md`,
 and `.kiln/posture.json` (plus, on a brownfield target, `.kiln/brownfield` + `.kiln/docs/codebase-map.md`), returning the canonical
 `{facts:{status, pointers, schema_valid}, narration_beat}` envelope; speak its `narration_beat`
-verbatim; then, only once `facts.status` is `'ok'`, launch the kernel
+verbatim; then, only once `facts.status` is `'ok'`, run the research sweep (below); only when it
+clears do you launch the kernel
 `{stage: "law", projectDir, idea: <essence>, plugin: "${CLAUDE_PLUGIN_ROOT}"}`. Launches and tiny returns only — no dialogue
 or ledger content ever reaches this window.
+
+## The research sweep — before the law, on both paths
+
+Once the onboarding (direct) or vision (brainstorm) compiler returns `facts.status` `'ok'`, and
+BEFORE the kernel law launch, launch the research sweep by path, exactly the way you launch the
+kernel:
+`{scriptPath: "${CLAUDE_PLUGIN_ROOT}/workflows/research-sweep.js", args: {projectDir, plugin: "${CLAUDE_PLUGIN_ROOT}"}}` —
+background, by path, `args` a literal JSON object. It reads the Gauge research dial and, when
+research is on, runs a fresh-context desk over the six feasibility areas and cross-family
+ratifies the result off this window. It returns the same tiny `{status, beat, pointers}` the
+kernel does — emit `beat` verbatim (never paraphrase, never read its artifacts), then branch on
+the closed `status` ONLY:
+
+- `stood-down`, `no-qualifying-question`, `accepted` → proceed to the kernel law launch.
+- `held` → an honest hard stop: the feasibility read did not ratify, or the transport failed, so
+  the law does not plan over unratified research. Speak the returned beat and hold — do not
+  launch law, and do not add a question; a rerun re-enters the sweep.
+
+The sweep is launch-and-branch, nothing more: no orchestration logic in this window, no artifact
+reads, no fifth question.
 
 ## The four hard stops — the only questions
 

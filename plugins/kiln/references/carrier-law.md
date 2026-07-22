@@ -40,11 +40,17 @@ the register already carried by the durable semantic artifacts:
 - `.kiln/LAW.md` — the ratified architecture: acceptance criteria, slice plan, expected
   outcomes.
 - `.kiln/decisions.md` — the ADRs (append-only; superseded entries are never deleted).
+- `.kiln/docs/feasibility.md` — the ratified feasibility read, written by the research sweep
+  (`workflows/research-sweep.js`) only when the Gauge research dial is on AND a second family
+  ratified a qualifying feasibility candidate. CONDITIONAL: a stand-down or
+  no-qualifying-question run has none, so the LAW card weighs it as advisory evidence when
+  present and never requires it.
 
 The Compact is distinct from `.kiln/STATE.md`, the *machine* resume register of closed facts
 the kernel owns (hop 5), and distinct from the kernel envelope above. The project brief is now
 a live carrier (above); a later feasibility digest — or a future projection over these
-artifacts — will manage the bounded semantic view the target describes. Even so, the Compact must never become
+artifacts — will manage the bounded semantic view the target describes. The conditional
+feasibility read is now a live carrier too (above), the research sweep's ratified output. Even so, the Compact must never become
 an append-only event ledger: it is meaning-at-rest, not a running log.
 
 ## The canonical envelope (hop 3)
@@ -97,8 +103,9 @@ Each hop, mapped to its real seam by file and structure name:
 4. **stage→stage** — full filesystem artifacts under `.kiln/`. The kernel routes the paths it
    owns through its path map `P` (`workflows/kernel.js`), but `P` does not mediate the whole
    seam: each stage's CARD names its own inputs directly and reads them from disk. The LAW card
-   reads `.kiln/docs/project-brief.md` (its durable context input, present on both paths) and
-   `.kiln/docs/vision.md` when the brainstorm path produced it; build, validate, and report read `.kiln/LAW.md` and the other
+   reads `.kiln/docs/project-brief.md` (its durable context input, present on both paths),
+   `.kiln/docs/vision.md` when the brainstorm path produced it, and `.kiln/docs/feasibility.md`
+   when the research sweep ratified one (advisory, never required); build, validate, and report read `.kiln/LAW.md` and the other
    prior-stage artifacts named in their cards (`.kiln/decisions.md`, `.kiln/validate.md`), none
    of which `P` enumerates.
 
