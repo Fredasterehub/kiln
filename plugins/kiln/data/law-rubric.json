@@ -1,0 +1,35 @@
+{
+  "rubric": "law-architecture-feasibility",
+  "criteria": [
+    {
+      "id": "acceptance-testable",
+      "requirement": "Every criterion states a testable acceptance condition: an observable behaviour with a command or artifact that would demonstrate it.",
+      "pass": "Each criterion names a concrete, checkable outcome a reviewer could confirm from the built repository.",
+      "fail": "A criterion is aspirational or vague ('works well', 'is robust') with no observable pass condition."
+    },
+    {
+      "id": "slice-traceability",
+      "requirement": "Every planned slice traces to at least one criterion, and every criterion is covered by at least one slice.",
+      "pass": "The slice/criterion mapping is total in both directions — no orphan slice, no uncovered criterion.",
+      "fail": "A slice implements behaviour no criterion demands, or a criterion has no slice that satisfies it."
+    },
+    {
+      "id": "internally-consistent",
+      "requirement": "Requirements are mutually consistent and buildable with the stated interfaces — no criterion contradicts another.",
+      "pass": "The criteria can all hold simultaneously in one implementation.",
+      "fail": "Two criteria demand incompatible behaviour, or a criterion requires an interface another criterion forbids."
+    },
+    {
+      "id": "scope-complete",
+      "requirement": "Scope is coherent and complete: every load-bearing assumption the build depends on is stated in the artifact.",
+      "pass": "A builder could implement the whole scope from the artifact alone, with no unstated dependency.",
+      "fail": "The artifact leans on an assumption — a file, a contract, a precondition — it never states."
+    },
+    {
+      "id": "no-contradiction",
+      "requirement": "Nothing in the artifact contradicts anything else in it — definitions, names, and constraints are used consistently throughout.",
+      "pass": "Every term and constraint carries one meaning across the whole artifact.",
+      "fail": "A term is defined one way and used another, or a constraint is asserted and later violated."
+    }
+  ]
+}

@@ -87,7 +87,52 @@ function requestFrom(file) {
   }
 }
 
-function validateGate(value, expectedReviewId, expectedLawHash, allowedFindingIds) {
+// A ratify request names the readable artifact and the rubric it is graded against,
+// carries its own review_id (the caller issues it — unlike a slice review, which
+// mints one), and picks the reviewer. There is no law_hash to supply: the ratified
+// artifact's own bytes become the digest, computed at dispatch.
+function ratifyRequestFrom(file) {
+  const raw = readJson(file, 'invalid ratify request')
+  if (!isObject(raw)) stop('transport_failure', 'ratify request must be a JSON object', TRANSPORT_FAILURE)
+  if (typeof raw.review_id !== 'string' || raw.review_id.trim() === '') {
+    stop('transport_failure', 'ratify request review_id must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  if (typeof raw.reviewer_model !== 'string' || raw.reviewer_model.trim() === '') {
+    stop('transport_failure', 'ratify request reviewer_model must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  const reviewerEffort = raw.reviewer_effort === undefined ? 'high' : raw.reviewer_effort
+  if (!EFFORTS.includes(reviewerEffort)) {
+    stop('reviewer_effort_invalid', `request reviewer_effort must be one of ${EFFORTS.join('|')} (absent defaults to high); ultra and unknown values are rejected`, TRANSPORT_FAILURE)
+  }
+  if (typeof raw.artifact !== 'string' || raw.artifact.trim() === '') {
+    stop('transport_failure', 'ratify request artifact must be a nonempty path string', TRANSPORT_FAILURE)
+  }
+  if (typeof raw.rubric !== 'string' || raw.rubric.trim() === '') {
+    stop('transport_failure', 'ratify request rubric must be a nonempty path string', TRANSPORT_FAILURE)
+  }
+  return {
+    reviewerModel: raw.reviewer_model,
+    reviewerEffort,
+    reviewId: raw.review_id,
+    artifact: raw.artifact,
+    rubric: raw.rubric,
+  }
+}
+
+function rubricFrom(file) {
+  const raw = readJson(file, 'invalid rubric')
+  if (!isObject(raw) || !Array.isArray(raw.criteria) || raw.criteria.length === 0) {
+    stop('transport_failure', 'rubric must be a JSON object with a nonempty criteria array', TRANSPORT_FAILURE)
+  }
+  for (const criterion of raw.criteria) {
+    if (!isObject(criterion) || ['id', 'requirement', 'pass', 'fail'].some((key) => typeof criterion[key] !== 'string' || criterion[key].trim() === '')) {
+      stop('transport_failure', 'each rubric criterion needs nonempty id, requirement, pass and fail strings', TRANSPORT_FAILURE)
+    }
+  }
+  return raw.criteria
+}
+
+function validateShape(value, expectedReviewId, expectedLawHash, allowedFindingIds) {
   if (!isObject(value)) return 'gate output must be a JSON object'
   const keys = Object.keys(value)
   const expectedKeys = ['review_id', 'law_hash', 'findings', 'blockers', 'verdict']
@@ -97,7 +142,12 @@ function validateGate(value, expectedReviewId, expectedLawHash, allowedFindingId
   if (typeof value.review_id !== 'string' || value.review_id.trim() === '') return 'review_id must be a nonempty string'
   if (!LAW_HASH.test(value.law_hash)) return 'law_hash must be a lowercase SHA-256 hex digest'
   if (value.review_id !== expectedReviewId) return 'review_id does not match the issued review id'
-  if (value.law_hash !== expectedLawHash) return 'law_hash does not match the locked LAW'
+  // Locked-LAW equality holds its baseline precedence — right here, after the
+  // review_id match and before the findings/verdict checks — so the slice and recheck
+  // paths stay byte-for-byte behavior-identical. Ratify grades a not-yet-sealed LAW
+  // and omits expectedLawHash, so this is skipped and ratify asserts the artifact's
+  // own candidate digest instead.
+  if (expectedLawHash !== undefined && value.law_hash !== expectedLawHash) return 'law_hash does not match the locked LAW'
   if (!Array.isArray(value.findings) || !stringArray(value.blockers)) return 'findings and blockers must be arrays'
   if (value.blockers.some((blocker) => blocker.trim() === '')) return 'blockers must be nonempty strings'
   if (!['accept', 'changes_required', 'blocked'].includes(value.verdict)) return 'verdict is not recognized'
@@ -143,6 +193,18 @@ ${JSON.stringify(packet, null, 2)}
 `
 }
 
+function ratifyInstructions(packet) {
+  return `You are the ratification reviewer. Grade the readable artifact below against the rubric and return only the schema-forced JSON object.
+
+Judge the artifact against the rubric criteria alone. Report only substantiated criterion violations, never optional improvements and never matters of taste. For each finding, cite the artifact location as path:line, the concrete failure, evidence quoted from the artifact, and the smallest repair. Use stable finding IDs. Execute nothing: rule by reading the artifact text supplied in full below — do not inspect the repository and do not run any command.
+
+Copy review_id and law_hash exactly into your output. law_hash is the sha256 digest of the artifact bytes; it seals the ratified content, so return it unchanged. Verdict rules: accept only when findings and blockers are both empty; changes_required only for one or more repairable findings with no blockers; blocked only when the review cannot be completed, with one or more blocker reasons.
+
+Ratification packet:
+${JSON.stringify(packet, null, 2)}
+`
+}
+
 function classifyFailure(run) {
   if (run.error && ['ENOENT', 'EACCES', 'ENOEXEC'].includes(run.error.code)) return CODEX_UNAVAILABLE
   if (run.error) return TRANSPORT_FAILURE
@@ -152,17 +214,12 @@ function classifyFailure(run) {
   return TRANSPORT_FAILURE
 }
 
-function invoke(repo, request, packet, outputFile, allowedFindingIds) {
-  // The reviewer never executes: the kernel side runs the law checks and writes
-  // .kiln/check-receipt.txt before every gate call. The receipt rides the packet
-  // verbatim; a missing receipt is a broken contract, never a license to execute.
-  let checkReceipt
-  try {
-    checkReceipt = readFileSync(join(repo, '.kiln', 'check-receipt.txt'), 'utf8')
-  } catch (error) {
-    stop('transport_failure', `check receipt unreadable: ${error.message} — the kernel executes the checks and writes .kiln/check-receipt.txt before the gate call; the reviewer executes nothing`, TRANSPORT_FAILURE)
-  }
-  packet.check_receipt = checkReceipt
+// The shared codex-gate core: spawn the schema-forced reviewer, classify any
+// failure honestly, hand the returned gate to the caller's own validator, then
+// publish it and exit on the verdict. The prompt and the validator are the only
+// things the slice and ratify paths differ on — everything else is identical, so
+// both flows converge here rather than duplicate the spawn and the exit mapping.
+function runGate(repo, request, prompt, outputFile, validate) {
   const output = resolve(outputFile)
   const temporary = join(dirname(output), `.gate-review.tmp-${process.pid}-${randomUUID()}`)
   const args = [
@@ -179,7 +236,7 @@ function invoke(repo, request, packet, outputFile, allowedFindingIds) {
   ]
   const run = spawnSync('codex', args, {
     cwd: repo,
-    input: instructions(packet),
+    input: prompt,
     encoding: 'utf8',
     maxBuffer: 4 * 1024 * 1024,
   })
@@ -193,7 +250,7 @@ function invoke(repo, request, packet, outputFile, allowedFindingIds) {
   if (!existsSync(temporary)) stop('transport_failure', 'codex produced no gate output', TRANSPORT_FAILURE)
 
   const gate = readJson(temporary, 'invalid codex gate output', temporary)
-  const invalid = validateGate(gate, packet.review_id, packet.law_hash, allowedFindingIds)
+  const invalid = validate(gate)
   if (invalid) {
     discard(temporary)
     stop('transport_failure', invalid, TRANSPORT_FAILURE)
@@ -209,6 +266,21 @@ function invoke(repo, request, packet, outputFile, allowedFindingIds) {
   const facts = { accept: 'accept', changes_required: 'reject', blocked: 'blocked' }
   process.stdout.write(`${facts[gate.verdict]}\n`)
   process.exit(exits[gate.verdict])
+}
+
+function invoke(repo, request, packet, outputFile, allowedFindingIds) {
+  // The reviewer never executes: the kernel side runs the law checks and writes
+  // .kiln/check-receipt.txt before every gate call. The receipt rides the packet
+  // verbatim; a missing receipt is a broken contract, never a license to execute.
+  let checkReceipt
+  try {
+    checkReceipt = readFileSync(join(repo, '.kiln', 'check-receipt.txt'), 'utf8')
+  } catch (error) {
+    stop('transport_failure', `check receipt unreadable: ${error.message} — the kernel executes the checks and writes .kiln/check-receipt.txt before the gate call; the reviewer executes nothing`, TRANSPORT_FAILURE)
+  }
+  packet.check_receipt = checkReceipt
+  runGate(repo, request, instructions(packet), outputFile, (gate) =>
+    validateShape(gate, packet.review_id, packet.law_hash, allowedFindingIds))
 }
 
 function repository(path) {
@@ -237,7 +309,7 @@ if (mode === 'review' && args.length === 3) {
   const request = requestFrom(requestFile)
   const prior = readJson(priorFile, 'invalid prior gate review')
   const priorShape = isObject(prior) && typeof prior.review_id === 'string' && typeof prior.law_hash === 'string'
-  const priorError = priorShape ? validateGate(prior, prior.review_id, prior.law_hash) : 'prior gate review is malformed'
+  const priorError = priorShape ? validateShape(prior, prior.review_id, prior.law_hash) : 'prior gate review is malformed'
   if (priorError) stop('transport_failure', priorError, TRANSPORT_FAILURE)
   if (prior.verdict !== 'changes_required') {
     stop('transport_failure', 'recheck requires a prior changes_required verdict', TRANSPORT_FAILURE)
@@ -305,10 +377,40 @@ if (mode === 'review' && args.length === 3) {
     stop('transport_failure', `seal-law could not write lock.hash: ${error.message}`, TRANSPORT_FAILURE)
   }
   process.exit(ACCEPT)
+} else if (mode === 'ratify' && args.length === 3) {
+  // Ratify a readable artifact against a rubric — the reusable "review an artifact
+  // against a rubric" path whose first consumer is the not-yet-sealed LAW. There is
+  // no locked digest to compare against yet (the seal is written only after accept),
+  // so this path never runs the slice's locked-LAW equality; it asserts the echoed
+  // law_hash against the artifact's OWN candidate digest, computed exactly as seal-law
+  // computes lock.hash so the ratified bytes and the sealed digest are byte-identical.
+  const [repoPath, requestFile, outputFile] = args
+  const request = ratifyRequestFrom(requestFile)
+  const repo = repository(repoPath)
+  let artifactBytes
+  try {
+    artifactBytes = readFileSync(resolve(repo, request.artifact))
+  } catch (error) {
+    stop('transport_failure', `ratify artifact unreadable: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  const candidateDigest = createHash('sha256').update(artifactBytes).digest('hex')
+  const packet = {
+    mode: 'ratify',
+    review_id: request.reviewId,
+    law_hash: candidateDigest,
+    rubric: rubricFrom(request.rubric),
+    artifact: artifactBytes.toString('utf8'),
+  }
+  runGate(repo, request, ratifyInstructions(packet), outputFile, (gate) => {
+    const shape = validateShape(gate, packet.review_id)
+    if (shape) return shape
+    if (gate.law_hash !== candidateDigest) return 'law_hash does not match the ratified artifact digest'
+    return null
+  })
 } else {
   stop(
     'transport_failure',
-    'usage: kiln-review review <repo> <request.json> <gate-review.json> | kiln-review recheck <repo> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir>',
+    'usage: kiln-review review <repo> <request.json> <gate-review.json> | kiln-review recheck <repo> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir> | kiln-review ratify <repo> <request.json> <gate-review.json>',
     TRANSPORT_FAILURE,
   )
 }

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
@@ -142,4 +142,161 @@ test('kiln-review: the ui reviewer rules on correctness only — creative direct
     'taste is never a finding and never colors the verdict')
   assert.ok(src.includes('you rule on correctness against the locked criteria alone'),
     'the reviewer rules on correctness against the locked criteria alone')
+})
+
+// ratify reviews a READABLE ARTIFACT against a RUBRIC — the reusable path whose first
+// consumer is the not-yet-sealed LAW. It reuses review-schema.json and validateShape,
+// but never the slice's locked-LAW equality: there is no locked LAW yet. Instead it
+// asserts the reviewer's echoed law_hash against the artifact's OWN candidate digest.
+// A fake `codex` on PATH writes a canned gate to the CLI's -o file, so the whole path
+// — output validation, candidate-digest equality, verdict→exit mapping — runs without
+// ever launching real codex. Bad-request and missing-input cases halt before the spawn.
+const RUBRIC = fileURLToPath(new URL('../data/law-rubric.json', import.meta.url))
+const FAKE_CODEX = `#!/usr/bin/env node
+const fs = require('node:fs')
+const args = process.argv.slice(2)
+const prompt = fs.readFileSync(0, 'utf8')
+const gate = JSON.parse(process.env.FAKE_GATE)
+// The CLI mints a fresh review_id for the slice path; a gate can echo it back with
+// the __ECHO__ sentinel so the review_id check passes and later checks are reachable.
+if (gate.review_id === '__ECHO__') gate.review_id = (prompt.match(/"review_id":\\s*"([^"]+)"/) || [])[1]
+fs.writeFileSync(args[args.indexOf('-o') + 1], JSON.stringify(gate))
+`
+
+function ratify({ artifact = 'crit-1 · slice-a · behaviour · cmd · outcome\n', gate, effort, drop, rubric = RUBRIC } = {}) {
+  const repo = mkdtempSync(join(tmpdir(), 'kiln-ratify-'))
+  mkdirSync(join(repo, '.kiln'), { recursive: true })
+  writeFileSync(join(repo, '.kiln', 'LAW.md'), artifact)
+  const req = { review_id: 'ratify-1', reviewer_model: 'gpt-5.6-sol', artifact: '.kiln/LAW.md', rubric }
+  if (effort !== undefined) req.reviewer_effort = effort
+  if (drop) delete req[drop]
+  const rf = join(repo, 'request.json')
+  writeFileSync(rf, JSON.stringify(req))
+  const env = { ...process.env }
+  if (gate) {
+    const fake = mkdtempSync(join(tmpdir(), 'kiln-fakecodex-'))
+    writeFileSync(join(fake, 'codex'), FAKE_CODEX, { mode: 0o755 })
+    env.PATH = `${fake}:${process.env.PATH}`
+    env.FAKE_GATE = JSON.stringify(gate)
+  }
+  const r = spawnSync('node', [REVIEW, 'ratify', repo, rf, join(repo, 'gate.json')], { encoding: 'utf8', env })
+  return { repo, fact: (r.stdout || '').trim(), status: r.status, out: join(repo, 'gate.json') }
+}
+
+function digestOf(artifact) {
+  return createHash('sha256').update(Buffer.from(artifact)).digest('hex')
+}
+
+function ratifyGate(verdict, law_hash) {
+  if (verdict === 'accept') return { review_id: 'ratify-1', law_hash, findings: [], blockers: [], verdict }
+  if (verdict === 'changes_required') {
+    const finding = { id: 'f1', criterion: 'acceptance-testable', location: '.kiln/LAW.md:3', failure_mode: 'no observable pass condition', evidence: 'crit is vague', minimal_fix: 'state a checkable outcome' }
+    return { review_id: 'ratify-1', law_hash, findings: [finding], blockers: [], verdict }
+  }
+  return { review_id: 'ratify-1', law_hash, findings: [], blockers: ['artifact unreadable by the reviewer'], verdict }
+}
+
+test('kiln-review: the shipped law-rubric.json parses and every criterion carries id, requirement, pass and fail anchors', () => {
+  const rubric = JSON.parse(readFileSync(RUBRIC, 'utf8'))
+  assert.ok(Array.isArray(rubric.criteria) && rubric.criteria.length >= 4, 'the rubric grades against several criteria')
+  for (const c of rubric.criteria) {
+    for (const key of ['id', 'requirement', 'pass', 'fail']) {
+      assert.equal(typeof c[key], 'string', `criterion ${c.id} carries a nonempty ${key}`)
+      assert.ok(c[key].trim() !== '', `criterion ${c.id} ${key} is not blank`)
+    }
+  }
+})
+
+test('kiln-review: a well-formed ratify accept seals with the artifact candidate digest and needs no locked LAW (exit 0)', () => {
+  const artifact = 'a testable, coherent, self-consistent LAW\n'
+  const r = ratify({ artifact, gate: ratifyGate('accept', digestOf(artifact)) })
+  assert.equal(r.fact, 'accept', 'a matching-digest accept rides stdout as accept')
+  assert.equal(r.status, 0, 'accept maps to exit 0')
+  // No lock.hash was ever written or consulted: ratify grades the artifact itself.
+  assert.ok(!existsSync(join(r.repo, '.kiln', 'law', 'lock.hash')), 'ratify requires no already-locked LAW')
+  const gate = JSON.parse(readFileSync(r.out, 'utf8'))
+  assert.equal(gate.law_hash, digestOf(artifact), 'the published gate echoes the candidate digest')
+})
+
+test('kiln-review: ratify maps every verdict to the slice exit codes — accept 0, changes_required 10, blocked 11', () => {
+  const artifact = 'the LAW under ratification\n'
+  const digest = digestOf(artifact)
+  const cases = [['accept', 'accept', 0], ['changes_required', 'reject', 10], ['blocked', 'blocked', 11]]
+  for (const [verdict, fact, code] of cases) {
+    const r = ratify({ artifact, gate: ratifyGate(verdict, digest) })
+    assert.equal(r.fact, fact, `${verdict} rides stdout as ${fact}`)
+    assert.equal(r.status, code, `${verdict} maps to exit ${code}`)
+  }
+})
+
+test('kiln-review: the candidate digest is sha256 of the artifact bytes — a mismatched echoed law_hash is rejected transport_failure (exit 20)', () => {
+  const artifact = 'bytes whose sha256 is the only accepted law_hash\n'
+  // The reviewer echoes a valid-shaped but WRONG digest; only sha256(artifact) is accepted.
+  const wrong = 'b'.repeat(64)
+  assert.notEqual(wrong, digestOf(artifact))
+  const r = ratify({ artifact, gate: ratifyGate('accept', wrong) })
+  assert.equal(r.fact, 'transport_failure', 'a law_hash that is not the candidate digest is a transport failure')
+  assert.equal(r.status, 20)
+  assert.ok(!existsSync(join(r.repo, 'gate.json')), 'a rejected gate is never published')
+})
+
+test('kiln-review: the ratify candidate digest is byte-identical to what seal-law would lock for the same artifact', () => {
+  const artifact = 'crit-1 · slice-a · behaviour · cmd · outcome\n'
+  const sealDir = mkdtempSync(join(tmpdir(), 'kiln-seallaw-'))
+  writeFileSync(join(sealDir, 'LAW.md'), artifact)
+  assert.equal(spawnSync('node', [REVIEW, 'seal-law', sealDir], { encoding: 'utf8' }).status, 0)
+  const locked = readFileSync(join(sealDir, 'law', 'lock.hash'), 'utf8').trim()
+  // ratify accepts iff the reviewer echoes the SAME digest seal-law persisted.
+  const accepted = ratify({ artifact, gate: ratifyGate('accept', locked) })
+  assert.equal(accepted.status, 0, 'ratify accepts the digest seal-law would lock')
+  const flipped = ratify({ artifact, gate: ratifyGate('accept', 'c'.repeat(64)) })
+  assert.equal(flipped.status, 20, 'ratify rejects any other digest')
+})
+
+test('kiln-review: a ratify request with a bad reviewer_effort is rejected before codex with reviewer_effort_invalid (exit 20)', () => {
+  const r = ratify({ effort: 'ultra' })
+  assert.equal(r.fact, 'reviewer_effort_invalid')
+  assert.equal(r.status, 20)
+})
+
+test('kiln-review: a ratify request missing artifact or rubric halts transport_failure before codex (exit 20)', () => {
+  for (const field of ['artifact', 'rubric', 'review_id', 'reviewer_model']) {
+    const r = ratify({ drop: field })
+    assert.equal(r.fact, 'transport_failure', `a request missing ${field} is a transport failure`)
+    assert.equal(r.status, 20)
+  }
+})
+
+test('kiln-review: ratify halts transport_failure when the named artifact file does not exist', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'kiln-ratify-'))
+  const req = { review_id: 'ratify-1', reviewer_model: 'gpt-5.6-sol', artifact: '.kiln/LAW.md', rubric: RUBRIC }
+  const rf = join(repo, 'request.json')
+  writeFileSync(rf, JSON.stringify(req))
+  const r = spawnSync('node', [REVIEW, 'ratify', repo, rf, join(repo, 'gate.json')], { encoding: 'utf8' })
+  assert.equal((r.stdout || '').trim(), 'transport_failure', 'a missing artifact is an honest transport failure')
+  assert.equal(r.status, 20)
+})
+
+test('kiln-review: the slice path enforces locked-LAW equality at its baseline precedence — a wrong law_hash beats malformed findings', () => {
+  // Regression guard for the ratify refactor: sharing the validator with ratify must
+  // NOT reorder the slice checks. A gate that echoes the issued review_id but a
+  // valid-format WRONG law_hash AND malformed findings must report the law_hash
+  // mismatch first — exactly as the pre-ratify baseline did — never the findings shape.
+  const repo = mkdtempSync(join(tmpdir(), 'kiln-review-order-'))
+  mkdirSync(join(repo, '.kiln'), { recursive: true })
+  writeFileSync(join(repo, '.kiln', 'check-receipt.txt'), 'checks ok\n')
+  const req = { reviewer_model: 'gpt-5.6-sol', law_hash: HASH, criteria: 'x', paths: [], failures: [], commands: [] }
+  const rf = join(repo, 'request.json')
+  writeFileSync(rf, JSON.stringify(req))
+  const gate = { review_id: '__ECHO__', law_hash: 'b'.repeat(64), findings: 42, blockers: [], verdict: 'accept' }
+  const fake = mkdtempSync(join(tmpdir(), 'kiln-fakecodex-'))
+  writeFileSync(join(fake, 'codex'), FAKE_CODEX, { mode: 0o755 })
+  const env = { ...process.env, PATH: `${fake}:${process.env.PATH}`, FAKE_GATE: JSON.stringify(gate) }
+  const r = spawnSync('node', [REVIEW, 'review', repo, rf, join(repo, 'gate.json')], { encoding: 'utf8', env })
+  assert.equal((r.stdout || '').trim(), 'transport_failure')
+  assert.equal(r.status, 20)
+  assert.ok((r.stderr || '').includes('law_hash does not match the locked LAW'),
+    'the locked-LAW equality is reported before any findings-shape complaint')
+  assert.ok(!(r.stderr || '').includes('findings and blockers must be arrays'),
+    'the equality check short-circuits — the findings-shape check never runs')
 })
