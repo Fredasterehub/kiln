@@ -132,6 +132,71 @@ function rubricFrom(file) {
   return raw.criteria
 }
 
+// W7-A1: the audit argv contract — closed facts only ride argv. Model and effort arrive
+// as argv words (the kernel resolves them from tiers.json); the effort gate mirrors
+// requestFrom so an unknown effort halts by name before any spawn.
+function auditRequest(model, effort) {
+  if (typeof model !== 'string' || model.trim() === '') {
+    stop('transport_failure', 'audit reviewer model must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  if (!EFFORTS.includes(effort)) {
+    stop('reviewer_effort_invalid', `audit effort must be one of ${EFFORTS.join('|')}; ultra and unknown values are rejected`, TRANSPORT_FAILURE)
+  }
+  return { reviewerModel: model, reviewerEffort: effort }
+}
+
+// The audit CLI reads the CHECKED slices.json projection itself and derives every
+// milestone fact: the closing block is the maximal contiguous run of same-label slices
+// ending at the seam slice; the cumulative prefix is every slice up to and including it.
+// Milestone labels may contain spaces — they ride only inside the composed prompt, so no
+// stop() on this path ever interpolates a label into a log line. law_hash binds to the
+// sealed digest at <kilnDir>/law/lock.hash, required present.
+function auditFacts(kilnDir, seamSliceId) {
+  if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
+    stop('transport_failure', 'audit kilnDir must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  if (typeof seamSliceId !== 'string' || seamSliceId.trim() === '') {
+    stop('transport_failure', 'audit seam slice id must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  const slices = readJson(join(kilnDir, 'slices.json'), 'invalid slices projection')
+  if (!Array.isArray(slices) || slices.length === 0) {
+    stop('transport_failure', 'slices.json must be a nonempty array', TRANSPORT_FAILURE)
+  }
+  // The kernel slice contract (parseSliceEntry), not a stricter one: a legacy bare
+  // string entry is its own id with no label; an object entry carries id + optional
+  // milestone. Ids and labels normalize by trim — the projection-agreement normalization
+  // — so the audit, the kernel seam fact and the checked projection read identical
+  // bytes, and every kernel-valid slices.json can derive its audit facts.
+  const entries = slices.map((slice) => (typeof slice === 'string'
+    ? { id: slice.trim(), milestone: '' }
+    : {
+      id: String((slice && slice.id) || '').trim(),
+      milestone: String((slice && slice.milestone) || '').trim(),
+    }))
+  if (entries.some((entry) => entry.id === '')) {
+    stop('transport_failure', 'every slices.json entry must carry a nonempty id', TRANSPORT_FAILURE)
+  }
+  const seam = entries.findIndex((entry) => entry.id === seamSliceId)
+  if (seam < 0) stop('transport_failure', 'seam slice id not found in slices.json', TRANSPORT_FAILURE)
+  let start = seam
+  while (start > 0 && entries[start - 1].milestone === entries[seam].milestone) start -= 1
+  let lawHash
+  try {
+    lawHash = readFileSync(join(kilnDir, 'law', 'lock.hash'), 'utf8').trim()
+  } catch (error) {
+    stop('transport_failure', `audit requires the sealed law/lock.hash: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  if (!LAW_HASH.test(lawHash)) {
+    stop('transport_failure', 'law/lock.hash must hold a lowercase SHA-256 hex digest', TRANSPORT_FAILURE)
+  }
+  return {
+    lawHash,
+    milestone: entries[seam].milestone,
+    closingBlock: entries.slice(start, seam + 1).map((entry) => entry.id),
+    sealedPrefix: entries.slice(0, seam + 1).map((entry) => entry.id),
+  }
+}
+
 function validateShape(value, expectedReviewId, expectedLawHash, allowedFindingIds) {
   if (!isObject(value)) return 'gate output must be a JSON object'
   const keys = Object.keys(value)
@@ -181,6 +246,22 @@ function validateShape(value, expectedReviewId, expectedLawHash, allowedFindingI
   return null
 }
 
+// W7-02: the audit verb-level shape rules, layered ON TOP of the shared validateShape —
+// review-schema.json stays byte-untouched. Every blockers entry must equal a findings id,
+// so a blocker always carries criterion, location and minimal_fix through its finding; a
+// blocked verdict with empty findings has nothing behind its blockers and is invalid.
+// Violations take the validateShape failure path: transport_failure, exit 20, and the
+// verdict is never published.
+function auditShapeInvalid(gate) {
+  if (gate.verdict === 'blocked' && gate.findings.length === 0) {
+    return 'audit blocked verdict requires findings carrying its blocker ids'
+  }
+  const findingIds = new Set(gate.findings.map((finding) => finding.id))
+  const orphan = gate.blockers.find((blocker) => !findingIds.has(blocker))
+  if (orphan !== undefined) return `audit blocker ${orphan} does not equal any finding id`
+  return null
+}
+
 function instructions(packet) {
   return `You are the terminal semantic gate reviewer. Inspect the repository at the working root and return only the schema-forced JSON object.
 
@@ -201,6 +282,24 @@ Judge the artifact against the rubric criteria alone. Report only substantiated 
 Copy review_id and law_hash exactly into your output. law_hash is the sha256 digest of the artifact bytes; it seals the ratified content, so return it unchanged. Verdict rules: accept only when findings and blockers are both empty; changes_required only for one or more repairable findings with no blockers; blocked only when the review cannot be completed, with one or more blocker reasons.
 ${packet.mode === 'ratify-recheck' ? '\nRecheck only the listed finding_ids against the regenerated artifact. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}
 Ratification packet:
+${JSON.stringify(packet, null, 2)}
+`
+}
+
+// W7-A1: the milestone audit prompt — review()'s prompt discipline, milestone-flavored
+// instead of slice-flavored. The reviewer derives the milestone goal itself from LAW.md
+// and the vision in-repo, judges goal-backward over the cumulative sealed prefix with
+// focus on the closing block, pins LAW criterion ids and path:line locations, and
+// executes nothing — the kernel-side check receipt rides the packet verbatim as the
+// only execution evidence.
+function auditInstructions(packet) {
+  return `You are the milestone audit reviewer. Inspect the repository at the working root and return only the schema-forced JSON object.
+
+Derive the milestone goal from .kiln/LAW.md and the vision documents in the repository, then judge goal-backward: over the cumulative sealed prefix in the audit packet, with focus on the closing block, check integrated reachability, the connections between slices, and delivery of the milestone goal. Report only substantiated criterion violations, never optional improvements. Creative direction, visual taste, and aesthetic choices belong to the builder — never raise them as a finding and never let them color a verdict. For each finding, pin the failed LAW criterion id in criterion and an exact repo-relative path:line in location, with the concrete failure, its evidence, and the smallest repair. Use stable finding IDs. The commands whose output rides in check_receipt were already executed kernel-side. Execute nothing — no commands, no tests, no builds: judge the milestone against the law by reading the repository, with check_receipt as the only execution evidence. Do not infer authorship, persona, or another reviewer's verdict.
+
+Copy review_id and law_hash exactly. Every blockers entry must equal the id of one of your findings, so each blocker carries its criterion, location, and minimal fix through that finding. Verdict rules: accept only when findings and blockers are both empty; changes_required only for one or more repairable findings with no blockers; blocked only when the audit cannot be completed or the milestone goal is undeliverable, with one or more blocker ids naming findings.
+${packet.mode === 'audit-recheck' ? '\nRecheck only the listed finding_ids against the repair_delta and current repository. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}
+Audit packet:
 ${JSON.stringify(packet, null, 2)}
 `
 }
@@ -281,6 +380,25 @@ function invoke(repo, request, packet, outputFile, allowedFindingIds) {
   packet.check_receipt = checkReceipt
   runGate(repo, request, instructions(packet), outputFile, (gate) =>
     validateShape(gate, packet.review_id, packet.law_hash, allowedFindingIds))
+}
+
+// W7-A1: the audit-family invoke — the SAME receipt gate as invoke() (the kernel runs
+// the law checks and writes .kiln/check-receipt.txt before every gate call; the reviewer
+// executes nothing; a missing receipt is a broken contract), then the shared runGate
+// with the audit prompt and the audit verb-level shape rules layered on validateShape.
+function invokeAudit(repo, request, packet, outputFile, allowedFindingIds) {
+  let checkReceipt
+  try {
+    checkReceipt = readFileSync(join(repo, '.kiln', 'check-receipt.txt'), 'utf8')
+  } catch (error) {
+    stop('transport_failure', `check receipt unreadable: ${error.message} — the kernel executes the checks and writes .kiln/check-receipt.txt before the gate call; the reviewer executes nothing`, TRANSPORT_FAILURE)
+  }
+  packet.check_receipt = checkReceipt
+  runGate(repo, request, auditInstructions(packet), outputFile, (gate) => {
+    const shape = validateShape(gate, packet.review_id, packet.law_hash, allowedFindingIds)
+    if (shape) return shape
+    return auditShapeInvalid(gate)
+  })
 }
 
 function repository(path) {
@@ -451,10 +569,102 @@ if (mode === 'review' && args.length === 3) {
     if (gate.law_hash !== candidateDigest) return 'law_hash does not match the ratified artifact digest'
     return null
   })
+} else if (mode === 'audit' && args.length === 6) {
+  // W7-A1: the milestone-seam audit — one fresh goal-backward GPT reviewer over the
+  // cumulative sealed prefix. argv carries closed facts only; every derived fact — the
+  // closing block, the cumulative prefix, the milestone label (which may contain spaces
+  // and rides only inside the composed prompt, never argv, never a log line) — is
+  // computed here from the checked slices.json projection. law_hash binds to the sealed
+  // lock.hash, the review_id is minted fresh exactly as review does, and the transport
+  // is the review verb's: codex, read-only sandbox, schema-forced output, closed exits.
+  const [repoPath, kilnDir, seamSliceId, model, effort, outputFile] = args
+  const request = auditRequest(model, effort)
+  const repo = repository(repoPath)
+  const facts = auditFacts(kilnDir, seamSliceId)
+  const packet = {
+    mode: 'audit',
+    review_id: randomUUID(),
+    law_hash: facts.lawHash,
+    seam_slice: seamSliceId,
+    milestone: facts.milestone,
+    closing_block: facts.closingBlock,
+    sealed_prefix: facts.sealedPrefix,
+  }
+  invokeAudit(repo, request, packet, outputFile)
+} else if (mode === 'audit-recheck' && args.length === 8) {
+  // W7-A1: the audit recheck mirrors recheck with two deliberate widenings: the prior
+  // verdict may be changes_required OR blocked (audit blockers reopen their owning
+  // slices, so a blocked milestone is recoverable at this gate), and the law binding is
+  // the sealed lock.hash rather than a request law_hash. The cohort is the prior finding
+  // ids — reuse-or-clear, no new or renamed ids — and the same audit verb-level shape
+  // rules gate the prior (an artifact invalid for the audit family establishes no
+  // lineage) and the current output.
+  const [repoPath, kilnDir, seamSliceId, model, effort, priorFile, repairDeltaFile, outputFile] = args
+  const request = auditRequest(model, effort)
+  const repo = repository(repoPath)
+  const facts = auditFacts(kilnDir, seamSliceId)
+  const prior = readJson(priorFile, 'invalid prior audit review')
+  const priorShape = isObject(prior) && typeof prior.review_id === 'string' && typeof prior.law_hash === 'string'
+  // The prior must satisfy the FULL audit-family shape — shared validateShape plus the
+  // audit verb-level rules — before it can seed a cohort: a blocked prior with empty
+  // findings or an orphan blocker id was never a publishable audit, so it cannot
+  // establish recheck lineage here either.
+  const priorError = priorShape
+    ? (validateShape(prior, prior.review_id, prior.law_hash) || auditShapeInvalid(prior))
+    : 'prior audit review is malformed'
+  if (priorError) stop('transport_failure', priorError, TRANSPORT_FAILURE)
+  if (prior.verdict !== 'changes_required' && prior.verdict !== 'blocked') {
+    stop('transport_failure', 'audit-recheck requires a prior changes_required or blocked verdict', TRANSPORT_FAILURE)
+  }
+  if (prior.law_hash !== facts.lawHash) {
+    stop('transport_failure', 'prior audit law_hash differs from the sealed law/lock.hash', TRANSPORT_FAILURE)
+  }
+  let repairDelta
+  try {
+    repairDelta = readFileSync(resolve(repairDeltaFile), 'utf8')
+  } catch (error) {
+    stop('transport_failure', `invalid repair delta: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  if (repairDelta.trim() === '') stop('transport_failure', 'repair delta must not be empty', TRANSPORT_FAILURE)
+  const findingIds = new Set(prior.findings.map((finding) => finding.id))
+  const packet = {
+    mode: 'audit-recheck',
+    review_id: prior.review_id,
+    law_hash: facts.lawHash,
+    seam_slice: seamSliceId,
+    milestone: facts.milestone,
+    closing_block: facts.closingBlock,
+    sealed_prefix: facts.sealedPrefix,
+    finding_ids: [...findingIds],
+    repair_delta: repairDelta,
+  }
+  invokeAudit(repo, request, packet, outputFile, findingIds)
+} else if (mode === 'append-audit' && args.length === 2) {
+  // W7: the ONLY writer of audits.log — append-seal's milestone-seam mirror. The kernel
+  // promotes an accepted audit through this trusted verb, never a bare shell append; the
+  // audits.log semantics live here. The outcome label is the fixed `accept`, and the
+  // seam slice id is gated with the SAME slice-id charset the kernel enforces at slice
+  // intake (parseSliceEntry SLICE_ID) — one contract, so every id a build can carry
+  // publishes. The id becomes the grep anchor `^<id> `, where whitespace or control
+  // bytes could forge or split a log line; slash is inside the set (path-like ids such
+  // as feature/ui are anchor-safe).
+  const [kilnDir, seamSliceId] = args
+  if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
+    stop('transport_failure', 'append-audit kilnDir must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  if (typeof seamSliceId !== 'string' || !/^[A-Za-z0-9._/-]+$/.test(seamSliceId)) {
+    stop('transport_failure', 'append-audit seam slice id must be nonempty using only letters, digits, dot, underscore, hyphen or slash', TRANSPORT_FAILURE)
+  }
+  try {
+    appendFileSync(join(kilnDir, 'audits.log'), `${seamSliceId} accept\n`)
+  } catch (error) {
+    stop('transport_failure', `append-audit could not write audits.log: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  process.exit(ACCEPT)
 } else {
   stop(
     'transport_failure',
-    'usage: kiln-review review <repo> <request.json> <gate-review.json> | kiln-review recheck <repo> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir> | kiln-review ratify <repo> <request.json> <gate-review.json> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json>',
+    'usage: kiln-review review <repo> <request.json> <gate-review.json> | kiln-review recheck <repo> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir> | kiln-review ratify <repo> <request.json> <gate-review.json> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json> | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId>',
     TRANSPORT_FAILURE,
   )
 }

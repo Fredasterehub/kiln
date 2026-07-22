@@ -23,13 +23,13 @@ const core = new Function(coreSrc + `
            fillClosed, streakIndex, stateDoc, atomicWriteCmd, gateCmd, LAW_CHECK, LAW_GUARD,
            LAW_CHECK_RECEIPT, MILESTONE_PROJECTION_CHECK, verdictExit, redSetIsFuture, gateReviewInvalid,
            validateTiers, resolveTier, routeBuilder, parseSliceEntry, milestoneSeamAfter,
-           validatePosture, recoveryDecision, strictSubsetProgress, capFromDial }`)()
+           validatePosture, recoveryDecision, strictSubsetProgress, capFromDial, reconcileAudit }`)()
 const {
   SPINE, parseArgs, resolveStage, nextStage, gateOutcome, reviewLoop,
   fillClosed, streakIndex, stateDoc, atomicWriteCmd, gateCmd,
   LAW_CHECK_RECEIPT, MILESTONE_PROJECTION_CHECK, verdictExit, redSetIsFuture, gateReviewInvalid,
   validateTiers, resolveTier, routeBuilder, parseSliceEntry, milestoneSeamAfter,
-  validatePosture, recoveryDecision, strictSubsetProgress, capFromDial,
+  validatePosture, recoveryDecision, strictSubsetProgress, capFromDial, reconcileAudit,
 } = core
 
 // ── Mocked runtime: run the whole kernel body with scripted agents ──────────
@@ -755,6 +755,17 @@ test('tiers: parseSliceEntry validates the object form; only legacy bare strings
   assert.equal(parseSliceEntry('obj||ui').valid, false, 'a missing object id is invalid')
   assert.deepEqual(parseSliceEntry('bare-legacy'), { id: 'bare-legacy', surface: 'mixed', milestone: '', valid: true }, 'a legacy bare string defaults to mixed')
   assert.equal(parseSliceEntry('').valid, false, 'an empty descriptor is invalid')
+})
+
+test('W7-S1: parseSliceEntry pins the ONE slice-id charset shared with append-audit — slash ids pass, whitespace, control and shell-active bytes halt at intake', () => {
+  // The id rides an unquoted shell word at seal:append, the grep anchors over
+  // seals.log/audits.log, and the audit argv — kernel-valid must equal publishable.
+  assert.deepEqual(parseSliceEntry('obj|feature/ui|ui'), { id: 'feature/ui', surface: 'ui', milestone: '', valid: true }, 'a path-like slash id is inside the shared charset')
+  assert.deepEqual(parseSliceEntry('feature/ui'), { id: 'feature/ui', surface: 'mixed', milestone: '', valid: true }, 'a legacy slash id stays valid')
+  assert.equal(parseSliceEntry('obj|has space|ui').valid, false, 'whitespace in an id would split the unquoted seal append — rejected at intake')
+  assert.equal(parseSliceEntry('has space').valid, false, 'a legacy bare id is charset-gated the same way')
+  assert.equal(parseSliceEntry('obj|bad;id|ui').valid, false, 'a shell-active byte in an id never reaches an interpolation')
+  assert.equal(parseSliceEntry('obj|bad\nid|ui').valid, false, 'a control byte in an id could forge or split a log line — rejected')
 })
 
 test('S1 (A9/W5-07): parseSliceEntry parses the optional four-slot milestone label — legacy forms stay valid, a smuggled separator or control char is rejected', () => {
@@ -1990,6 +2001,41 @@ test('core (W6-03): gateReviewInvalid enforces the OPTIONAL cohort — expected 
   assert.equal(gateReviewInvalid(reject([finding('f1'), finding('f3')]), LAW, 'cohort-1', cohort), 'finding-id-out-of-cohort', 'a new/renamed id outside the cohort fails closed')
   // the existing unique-id check still fires ahead of the cohort check.
   assert.equal(gateReviewInvalid(reject([finding('f1'), finding('f1')]), LAW, 'cohort-1', cohort), 'finding-id-duplicate', 'a duplicate id is caught before the cohort check')
+})
+
+test('core (W7-01): reconcileAudit derives the audit verdict from the closed arrays — blockers dominant, then findings, else accept', () => {
+  assert.deepEqual(reconcileAudit([], []), { verdict: 'accept', blockerIds: [], findingIds: [] }, 'no findings and no blockers is accept')
+  assert.deepEqual(reconcileAudit([{ id: 'f1' }, { id: 'f2' }], []),
+    { verdict: 'changes_required', blockerIds: [], findingIds: ['f1', 'f2'] }, 'findings with no blockers is changes_required')
+  assert.deepEqual(reconcileAudit([{ id: 'f1' }, { id: 'f2' }], ['f2']),
+    { verdict: 'blocked', blockerIds: ['f2'], findingIds: ['f1', 'f2'] }, 'any blocker dominates — the verdict is blocked')
+})
+
+test('core (W7-01): reconcileAudit dedups by id in first-seen input order, and a duplicated id with any blocker instance stays a blocker (max severity)', () => {
+  assert.deepEqual(reconcileAudit([{ id: 'b' }, { id: 'a' }, { id: 'b' }, { id: 'c' }], ['c', 'a', 'c']),
+    { verdict: 'blocked', blockerIds: ['c', 'a'], findingIds: ['b', 'a', 'c'] }, 'both arrays dedup preserving first-seen input order')
+  assert.deepEqual(reconcileAudit([{ id: 'f1' }, { id: 'f1' }], ['f1']),
+    { verdict: 'blocked', blockerIds: ['f1'], findingIds: ['f1'] }, 'a duplicated finding id named by a blocker collapses to one blocker — max severity, blockers dominant')
+  assert.deepEqual(reconcileAudit([{ id: 'f1' }, { id: 'f1' }], []),
+    { verdict: 'changes_required', blockerIds: [], findingIds: ['f1'] }, 'a duplicated finding id with no blocker collapses to one finding')
+})
+
+test('core (W7-01): reconcileAudit rules invalid on the referential breach, malformed inputs, and adversarial shapes — never throws', () => {
+  const INVALID = { verdict: 'invalid', blockerIds: [], findingIds: [] }
+  assert.deepEqual(reconcileAudit([{ id: 'f1' }], ['f2']), INVALID, 'a blocker naming no finding id is the referential breach')
+  assert.deepEqual(reconcileAudit([], ['b1']), INVALID, 'a blocked shape with empty findings has nothing behind its blockers — invalid')
+  assert.deepEqual(reconcileAudit([{ id: 'f1' }], ['']), INVALID, 'an empty-string blocker is invalid')
+  assert.deepEqual(reconcileAudit([{ id: 'f1' }], [7]), INVALID, 'a non-string blocker is invalid')
+  assert.deepEqual(reconcileAudit('nope', []), INVALID, 'a non-array findings input is invalid')
+  assert.deepEqual(reconcileAudit([], 'nope'), INVALID, 'a non-array blockers input is invalid')
+  assert.deepEqual(reconcileAudit(undefined, undefined), INVALID, 'absent inputs are invalid, never a throw')
+  assert.deepEqual(reconcileAudit([{}], []), INVALID, 'a finding without an id is invalid')
+  assert.deepEqual(reconcileAudit([{ id: '' }], []), INVALID, 'an empty-string finding id is invalid')
+  assert.deepEqual(reconcileAudit([{ id: '   ' }], []), INVALID, 'a whitespace-only finding id is invalid')
+  assert.deepEqual(reconcileAudit([{ id: 7 }], []), INVALID, 'a non-string finding id is invalid')
+  assert.deepEqual(reconcileAudit(['f1'], []), INVALID, 'a bare-string finding entry is invalid')
+  assert.deepEqual(reconcileAudit([null], []), INVALID, 'a null finding entry is invalid')
+  assert.deepEqual(reconcileAudit([['f1']], []), INVALID, 'an array finding entry is invalid')
 })
 
 test('runtime (S1): a claude verdict failing the semantic mirror never publishes and never seals', async () => {

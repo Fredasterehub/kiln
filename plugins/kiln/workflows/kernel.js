@@ -375,12 +375,20 @@ function routeBuilder(c, surface) {
 // A slices.json entry is either a legacy bare id string (surface mixed, no label)
 // or the object form encoded as EXACTLY four wire slots — "obj|<id>|<surface>|<label>"
 // — where the trailing milestone <label> is OPTIONAL (S1, A9): a legacy three-slot
-// "obj|<id>|<surface>" reads as an absent label. An object must carry a nonempty id
+// "obj|<id>|<surface>" reads as an absent label. An object must carry a SLICE_ID id
 // and a surface in ui|logic|mixed. The milestone normalizes to '' when absent and is
 // REJECTED (entry invalid, run halts before any builder dispatch) when it smuggles the
 // '|' descriptor separator — which would split into extra slots — or a control
 // character, which cannot survive the descriptor transport. Only the legacy bare form
-// defaults to mixed.
+// defaults to mixed; its id is charset-gated the same way.
+// The ONE slice-id contract (W7-S1), shared verbatim with the kiln-review append-audit
+// gate: letters, digits, dot, underscore, hyphen and slash. A slice id rides an
+// UNQUOTED shell word at seal:append, the grep anchors "^<id> " over seals.log and
+// audits.log, and the audit argv — so whitespace, control bytes and shell-active
+// bytes are rejected HERE, before any builder dispatch, never mid-build as a split
+// seal append or an unpublishable audit. Slash is inside the set: path-like ids such
+// as feature/ui are shell-word-safe and anchor-safe.
+const SLICE_ID = /^[A-Za-z0-9._/-]+$/
 function parseSliceEntry(entry) {
   const s = String(entry ?? '')
   if (s.slice(0, 4) === 'obj|') {
@@ -399,9 +407,9 @@ function parseSliceEntry(entry) {
     // applies — so the seam fact and the W7 audit read identical bytes and a padded cell
     // that passes projection agreement can never fabricate a spurious milestone seam.
     const milestone = rawMilestone.trim()
-    return { id, surface, milestone, valid: shaped && cleanLabel && id.length > 0 && TIER_ROUTES.indexOf(surface) >= 0 }
+    return { id, surface, milestone, valid: shaped && cleanLabel && SLICE_ID.test(id) && TIER_ROUTES.indexOf(surface) >= 0 }
   }
-  return { id: s, surface: 'mixed', milestone: '', valid: s.length > 0 }
+  return { id: s, surface: 'mixed', milestone: '', valid: SLICE_ID.test(s) }
 }
 
 // S1 (A9, W5-07): the milestone SEAM closed fact, carried for the W7 goal-backward
@@ -413,6 +421,47 @@ function parseSliceEntry(entry) {
 function milestoneSeamAfter(labels, i) {
   if (!Array.isArray(labels) || i < 0 || i >= labels.length) return false
   return i === labels.length - 1 || labels[i] !== labels[i + 1]
+}
+
+// W7-01 (plan B): the ONE pure milestone-audit reconcile — the derivation rule the
+// kernel branches on over the published closed arrays, never on the wire verdict
+// string. Pinned finding identity is the stable finding id, the SAME key the W6
+// cohort lineage and strictSubsetProgress speak. Dedup by id is defensive (the wire
+// validator enforces uniqueness) and preserves first-seen input order; a duplicated
+// id where any instance is a blocker collapses to a blocker — max severity, blockers
+// dominant. invalid when either input is not an array, a finding lacks a nonempty
+// string id, or a blocker entry is not a nonempty string equal to some finding id —
+// the referential rule, which also rules a blocker set over empty findings invalid.
+// Derivation: deduped blocker ids nonempty is blocked; else deduped finding ids
+// nonempty is changes_required; else accept. Deterministic, never throws.
+function reconcileAudit(findings, blockers) {
+  const invalid = { verdict: 'invalid', blockerIds: [], findingIds: [] }
+  try {
+    if (!Array.isArray(findings) || !Array.isArray(blockers)) return invalid
+    const findingIds = []
+    const seen = new Set()
+    for (const f of findings) {
+      if (!f || typeof f !== 'object' || Array.isArray(f)) return invalid
+      if (typeof f.id !== 'string' || f.id.trim() === '') return invalid
+      if (!seen.has(f.id)) {
+        seen.add(f.id)
+        findingIds.push(f.id)
+      }
+    }
+    const blockerIds = []
+    const chosen = new Set()
+    for (const b of blockers) {
+      if (typeof b !== 'string' || b.trim() === '' || !seen.has(b)) return invalid
+      if (!chosen.has(b)) {
+        chosen.add(b)
+        blockerIds.push(b)
+      }
+    }
+    const verdict = blockerIds.length > 0 ? 'blocked' : findingIds.length > 0 ? 'changes_required' : 'accept'
+    return { verdict, blockerIds, findingIds }
+  } catch {
+    return invalid
+  }
 }
 
 // Order-aware boundary predicate (INTAKE-26): a pre-seal / pre-recheck red set is
@@ -1082,13 +1131,13 @@ if (list.exit !== 0 || list.ids.length === 0) {
   return failStop('transport-failure', { stage, next_action: 'Rerun stage law: no slice list at ' + P.slices }, await voiceBeat('transport-failure', {}, 'No slice list on the ledger — the law stage must run again.', 1))
 }
 const slices = list.ids.map(parseSliceEntry)
-// A malformed slice descriptor (object form missing an id or naming an unknown
-// surface) halts BEFORE any builder dispatch — the law stage must author it right.
+// A malformed slice descriptor (an id outside the shared SLICE_ID charset or an
+// unknown surface) halts BEFORE any builder dispatch — the law stage must author it right.
 const badSlice = slices.find(x => !x.valid)
 if (badSlice) {
   return failStop('slices-invalid',
     { stage, active_slice: badSlice.id || 'none', next_action: 'Rerun stage law: a slice descriptor in ' + P.slices + ' is malformed' },
-    'A slice descriptor is malformed — every slice needs an id and a surface of ui, logic, or mixed. The law stage must run again.')
+    'A slice descriptor is malformed — every slice needs an id of letters, digits, dot, underscore, hyphen or slash, and a surface of ui, logic, or mixed. The law stage must run again.')
 }
 // The ordered slice-id list backs the order-aware boundary predicate (INTAKE-26).
 const sliceIds = slices.map(x => x.id)

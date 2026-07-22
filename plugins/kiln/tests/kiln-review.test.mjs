@@ -160,6 +160,9 @@ const gate = JSON.parse(process.env.FAKE_GATE)
 // The CLI mints a fresh review_id for the slice path; a gate can echo it back with
 // the __ECHO__ sentinel so the review_id check passes and later checks are reachable.
 if (gate.review_id === '__ECHO__') gate.review_id = (prompt.match(/"review_id":\\s*"([^"]+)"/) || [])[1]
+// The audit tests capture the composed prompt to prove derived facts (spaced milestone
+// labels among them) ride the prompt and never argv; unset elsewhere, a no-op.
+if (process.env.FAKE_PROMPT_OUT) fs.writeFileSync(process.env.FAKE_PROMPT_OUT, prompt)
 fs.writeFileSync(args[args.indexOf('-o') + 1], JSON.stringify(gate))
 `
 
@@ -455,4 +458,296 @@ test('kiln-review: ratify-recheck rejects a recheck output that abandons the reu
   const r = ratifyRecheck({ artifact, prior, gate })
   assert.equal(r.fact, 'transport_failure', 'a recheck output with a fresh review_id breaks the lineage and is rejected')
   assert.equal(r.status, 20)
+})
+
+// ── the audit family (W7-A1/A2/02) ──────────────────────────────────────────
+// The audit verbs carry closed facts only on argv: the CLI reads .kiln/slices.json
+// itself, derives the closing milestone block and the cumulative sealed prefix, binds
+// law_hash to the sealed law/lock.hash, and requires the kernel-run check receipt
+// exactly as review does. Milestone labels may contain spaces — they ride only inside
+// the composed prompt (captured here via FAKE_PROMPT_OUT), never argv, never a log
+// line. Verb-level rules layered on the shared validateShape: every blocker must equal
+// a finding id, and a blocked verdict with empty findings never publishes — enforced on
+// the initial audit, on every CURRENT recheck output, and on the recheck PRIOR, so an
+// artifact invalid for the audit family never seeds a cohort. Every no-fake-codex case
+// below halts BEFORE the spawn, so real codex is never launched.
+
+const AUDIT_SLICES = [
+  { id: 's1', surface: 'mixed', milestone: 'ground work' },
+  { id: 's2', surface: 'ui', milestone: 'first light' },
+  { id: 's3', surface: 'logic', milestone: 'first light' },
+]
+
+function auditRepo({ slices = AUDIT_SLICES, law = 'crit-m1 · milestone · behaviour\n', receipt = 'checks ok\n', lock } = {}) {
+  const repo = mkdtempSync(join(tmpdir(), 'kiln-audit-'))
+  const kiln = join(repo, '.kiln')
+  mkdirSync(join(kiln, 'law'), { recursive: true })
+  writeFileSync(join(kiln, 'slices.json'), JSON.stringify(slices))
+  writeFileSync(join(kiln, 'LAW.md'), law)
+  const digest = digestOf(law)
+  if (lock !== null) writeFileSync(join(kiln, 'law', 'lock.hash'), `${lock ?? digest}\n`)
+  if (receipt !== null) writeFileSync(join(kiln, 'check-receipt.txt'), receipt)
+  return { repo, kiln, digest }
+}
+
+function fakeCodexEnv({ gate, brokenCodex, promptOut } = {}) {
+  const env = { ...process.env }
+  if (gate || brokenCodex) {
+    const fake = mkdtempSync(join(tmpdir(), 'kiln-fakecodex-'))
+    writeFileSync(join(fake, 'codex'), brokenCodex ? UNAVAILABLE_CODEX : FAKE_CODEX, { mode: 0o755 })
+    env.PATH = `${fake}:${process.env.PATH}`
+    if (gate) env.FAKE_GATE = JSON.stringify(gate)
+  }
+  if (promptOut) env.FAKE_PROMPT_OUT = promptOut
+  return env
+}
+
+function runAudit(fixture, { seam = 's3', model = 'gpt-5.6-sol', effort = 'high', gate, brokenCodex, promptOut } = {}) {
+  const out = join(fixture.repo, 'audit-gate.json')
+  const env = fakeCodexEnv({ gate, brokenCodex, promptOut })
+  const r = spawnSync('node', [REVIEW, 'audit', fixture.repo, fixture.kiln, seam, model, effort, out], { encoding: 'utf8', env })
+  return { fact: (r.stdout || '').trim(), status: r.status, stderr: r.stderr || '', out }
+}
+
+function auditFinding(id) {
+  return { id, criterion: 'crit-m1', location: 'src/app.js:12', failure_mode: 'goal unreachable', evidence: 'the milestone flow dead-ends', minimal_fix: 'wire the handoff' }
+}
+
+function capturedPacket(promptFile) {
+  const prompt = readFileSync(promptFile, 'utf8')
+  const anchor = 'Audit packet:\n'
+  return { prompt, packet: JSON.parse(prompt.slice(prompt.indexOf(anchor) + anchor.length)) }
+}
+
+test('kiln-review: audit maps every verdict to the closed exits — accept 0, changes_required 10, blocked 11 — and publishes the schema gate', () => {
+  const cases = [
+    [{ findings: [], blockers: [], verdict: 'accept' }, 'accept', 0],
+    [{ findings: [auditFinding('m1')], blockers: [], verdict: 'changes_required' }, 'reject', 10],
+    [{ findings: [auditFinding('m1')], blockers: ['m1'], verdict: 'blocked' }, 'blocked', 11],
+  ]
+  for (const [shape, fact, code] of cases) {
+    const fx = auditRepo()
+    const r = runAudit(fx, { gate: { review_id: '__ECHO__', law_hash: fx.digest, ...shape } })
+    assert.equal(r.fact, fact, `${shape.verdict} rides stdout as ${fact}`)
+    assert.equal(r.status, code, `${shape.verdict} maps to exit ${code}`)
+    const published = JSON.parse(readFileSync(r.out, 'utf8'))
+    assert.equal(published.law_hash, fx.digest, 'the published audit binds the sealed lock.hash digest')
+    assert.ok(/^[0-9a-f-]{36}$/.test(published.review_id), 'the CLI minted the review_id (randomUUID) and the reviewer echoed it')
+  }
+})
+
+test('kiln-review: audit derives the closing block and cumulative prefix from slices.json — the spaced label rides the prompt only, never argv, never a log line', () => {
+  const fx = auditRepo()
+  const promptOut = join(fx.repo, 'captured-prompt.txt')
+  const r = runAudit(fx, { gate: { review_id: '__ECHO__', law_hash: fx.digest, findings: [], blockers: [], verdict: 'accept' }, promptOut })
+  assert.equal(r.status, 0)
+  const { prompt, packet } = capturedPacket(promptOut)
+  assert.equal(packet.milestone, 'first light', 'the spaced milestone label rides inside the prompt packet')
+  assert.deepEqual(packet.closing_block, ['s2', 's3'], 'the closing block is the maximal contiguous same-label run ending at the seam')
+  assert.deepEqual(packet.sealed_prefix, ['s1', 's2', 's3'], 'the cumulative prefix reaches back to the first slice')
+  assert.equal(packet.seam_slice, 's3')
+  assert.equal(packet.check_receipt, 'checks ok\n', 'the kernel-side receipt rides the packet verbatim')
+  assert.ok(prompt.includes('Execute nothing'), 'the audit prompt keeps the receipt doctrine — the reviewer executes nothing')
+  assert.ok(!r.stderr.includes('first light') && !r.fact.includes('first light'), 'the label never rides a log line')
+  // A seam inside an earlier milestone closes ITS own block — the prefix stays cumulative.
+  const fx2 = auditRepo()
+  const promptOut2 = join(fx2.repo, 'captured-prompt.txt')
+  const r2 = runAudit(fx2, { seam: 's1', gate: { review_id: '__ECHO__', law_hash: fx2.digest, findings: [], blockers: [], verdict: 'accept' }, promptOut: promptOut2 })
+  assert.equal(r2.status, 0)
+  const first = capturedPacket(promptOut2).packet
+  assert.deepEqual(first.closing_block, ['s1'], 'a first-milestone seam closes a one-slice block')
+  assert.deepEqual(first.sealed_prefix, ['s1'], 'the cumulative prefix at the first seam is that slice alone')
+  assert.equal(first.milestone, 'ground work')
+})
+
+test('kiln-review: audit requires the kernel-run check receipt exactly as review does — a missing receipt halts before any spawn (exit 20)', () => {
+  const r = runAudit(auditRepo({ receipt: null }))
+  assert.equal(r.fact, 'transport_failure')
+  assert.equal(r.status, 20)
+  assert.ok(r.stderr.includes('check receipt unreadable'), 'the broken receipt contract is named')
+  assert.ok(!existsSync(r.out), 'no gate is published')
+})
+
+test('kiln-review: the audit argv contract — bad effort halts by name, a wrong arg count is usage, an unknown seam or missing lock.hash halts before any spawn', () => {
+  const badEffort = runAudit(auditRepo(), { effort: 'ultra' })
+  assert.equal(badEffort.fact, 'reviewer_effort_invalid', 'ultra is rejected by name at the effort gate')
+  assert.equal(badEffort.status, 20)
+  const fx = auditRepo()
+  const short = spawnSync('node', [REVIEW, 'audit', fx.repo, fx.kiln, 's3', 'gpt-5.6-sol', 'high'], { encoding: 'utf8' })
+  assert.equal((short.stdout || '').trim(), 'transport_failure', 'a wrong arg count is the usage failure')
+  assert.equal(short.status, 20)
+  const unknownSeam = runAudit(auditRepo(), { seam: 'nope' })
+  assert.equal(unknownSeam.fact, 'transport_failure', 'a seam slice absent from slices.json halts')
+  assert.equal(unknownSeam.status, 20)
+  const noLock = runAudit(auditRepo({ lock: null }))
+  assert.equal(noLock.fact, 'transport_failure', 'a missing law/lock.hash halts — the audit requires the sealed digest')
+  assert.equal(noLock.status, 20)
+})
+
+test('kiln-review: the audit verb-level shape rules — an out-of-findings blocker or a blocked verdict with empty findings is exit 20, never published', () => {
+  const orphan = auditRepo()
+  const r1 = runAudit(orphan, { gate: { review_id: '__ECHO__', law_hash: orphan.digest, findings: [auditFinding('m1')], blockers: ['m2'], verdict: 'blocked' } })
+  assert.equal(r1.fact, 'transport_failure', 'a blocker that equals no finding id fails the audit shape')
+  assert.equal(r1.status, 20)
+  assert.ok(!existsSync(r1.out), 'the referential breach never publishes')
+  const empty = auditRepo()
+  const r2 = runAudit(empty, { gate: { review_id: '__ECHO__', law_hash: empty.digest, findings: [], blockers: ['b1'], verdict: 'blocked' } })
+  assert.equal(r2.fact, 'transport_failure', 'a blocked verdict with empty findings is invalid for the audit verbs')
+  assert.equal(r2.status, 20)
+  assert.ok(!existsSync(r2.out), 'the empty-findings block never publishes')
+})
+
+test('kiln-review: audit binds law_hash to the sealed lock.hash — a valid-format wrong digest echoed by the reviewer is exit 20, never published', () => {
+  const fx = auditRepo()
+  const wrong = 'b'.repeat(64)
+  assert.notEqual(wrong, fx.digest)
+  const r = runAudit(fx, { gate: { review_id: '__ECHO__', law_hash: wrong, findings: [], blockers: [], verdict: 'accept' } })
+  assert.equal(r.fact, 'transport_failure')
+  assert.equal(r.status, 20)
+  assert.ok(!existsSync(r.out))
+})
+
+test('kiln-review: a bridge-down reviewer over the audit path halts codex_unavailable (exit 21) and publishes no gate', () => {
+  const r = runAudit(auditRepo(), { brokenCodex: true })
+  assert.equal(r.fact, 'codex_unavailable')
+  assert.equal(r.status, 21)
+  assert.ok(!existsSync(r.out))
+})
+
+function priorAuditGate(findings, { verdict = 'changes_required', law_hash, review_id = 'audit-1', blockers } = {}) {
+  return { review_id, law_hash, findings, blockers: blockers ?? (verdict === 'blocked' ? [findings[0].id] : []), verdict }
+}
+
+function runAuditRecheck(fixture, { seam = 's3', model = 'gpt-5.6-sol', effort = 'high', prior, delta = 'rewired the milestone handoff\n', gate, brokenCodex } = {}) {
+  const priorFile = join(fixture.repo, 'prior-audit.json')
+  writeFileSync(priorFile, JSON.stringify(prior))
+  const deltaFile = join(fixture.repo, 'repair-delta.md')
+  writeFileSync(deltaFile, delta)
+  const out = join(fixture.repo, 'audit-recheck-gate.json')
+  const env = fakeCodexEnv({ gate, brokenCodex })
+  const r = spawnSync('node', [REVIEW, 'audit-recheck', fixture.repo, fixture.kiln, seam, model, effort, priorFile, deltaFile, out], { encoding: 'utf8', env })
+  return { fact: (r.stdout || '').trim(), status: r.status, stderr: r.stderr || '', out }
+}
+
+test('kiln-review: audit-recheck accepts a prior changes_required AND a prior blocked — deliberately wider than the build recheck — but never a prior accept', () => {
+  const changed = auditRepo()
+  const priorChanged = priorAuditGate([auditFinding('m1'), auditFinding('m2')], { law_hash: changed.digest })
+  const r1 = runAuditRecheck(changed, { prior: priorChanged, gate: { review_id: 'audit-1', law_hash: changed.digest, findings: [auditFinding('m1')], blockers: [], verdict: 'changes_required' } })
+  assert.equal(r1.fact, 'reject', 'a prior changes_required rechecks — the cohort subset publishes')
+  assert.equal(r1.status, 10)
+  assert.deepEqual(JSON.parse(readFileSync(r1.out, 'utf8')).findings.map((f) => f.id), ['m1'], 'the published recheck reuses only prior cohort ids')
+  const blocked = auditRepo()
+  const priorBlocked = priorAuditGate([auditFinding('m1')], { verdict: 'blocked', law_hash: blocked.digest })
+  const r2 = runAuditRecheck(blocked, { prior: priorBlocked, gate: { review_id: 'audit-1', law_hash: blocked.digest, findings: [], blockers: [], verdict: 'accept' } })
+  assert.equal(r2.fact, 'accept', 'a prior blocked is recoverable at this gate — a cleared cohort accepts')
+  assert.equal(r2.status, 0)
+  const accepted = auditRepo()
+  const priorAccept = { review_id: 'audit-1', law_hash: accepted.digest, findings: [], blockers: [], verdict: 'accept' }
+  const r3 = runAuditRecheck(accepted, { prior: priorAccept })
+  assert.equal(r3.fact, 'transport_failure', 'a prior accept has nothing to recheck — halts before any spawn')
+  assert.equal(r3.status, 20)
+})
+
+test('kiln-review: audit-recheck pins the prior finding cohort — a new or renamed id is exit 20, never published', () => {
+  const fx = auditRepo()
+  const prior = priorAuditGate([auditFinding('m1'), auditFinding('m2')], { law_hash: fx.digest })
+  const r = runAuditRecheck(fx, { prior, gate: { review_id: 'audit-1', law_hash: fx.digest, findings: [auditFinding('m3')], blockers: [], verdict: 'changes_required' } })
+  assert.equal(r.fact, 'transport_failure', 'an out-of-cohort finding id is a transport failure')
+  assert.equal(r.status, 20)
+  assert.ok(!existsSync(r.out), 'a rejected recheck publishes no gate')
+})
+
+test('kiln-review: audit-recheck reuses the prior review_id and the sealed law binding — a fresh output id or a prior hash off lock.hash is exit 20', () => {
+  const fx = auditRepo()
+  const prior = priorAuditGate([auditFinding('m1')], { law_hash: fx.digest })
+  const fresh = runAuditRecheck(fx, { prior, gate: { review_id: 'a-fresh-id', law_hash: fx.digest, findings: [auditFinding('m1')], blockers: [], verdict: 'changes_required' } })
+  assert.equal(fresh.fact, 'transport_failure', 'an output that abandons the prior review_id breaks the lineage')
+  assert.equal(fresh.status, 20)
+  const off = auditRepo()
+  const priorOff = priorAuditGate([auditFinding('m1')], { law_hash: 'c'.repeat(64) })
+  const r2 = runAuditRecheck(off, { prior: priorOff })
+  assert.equal(r2.fact, 'transport_failure', 'a prior audit not bound to the sealed lock.hash halts before any spawn')
+  assert.equal(r2.status, 20)
+})
+
+test('kiln-review: audit-recheck mirrors the recheck delta contract — a blank repair delta halts before any spawn (exit 20)', () => {
+  const fx = auditRepo()
+  const prior = priorAuditGate([auditFinding('m1')], { law_hash: fx.digest })
+  const r = runAuditRecheck(fx, { prior, delta: '   \n' })
+  assert.equal(r.fact, 'transport_failure', 'an empty repair delta halts')
+  assert.equal(r.status, 20)
+})
+
+test('kiln-review: the audit verb-level shape rules gate the CURRENT recheck output — an orphan blocker or a blocked verdict with empty findings is exit 20, never published', () => {
+  // The orphan blocker here is COHORT-legal (m2 is a prior finding id), so only the
+  // audit shape rule — blockers must equal CURRENT finding ids — can catch it.
+  const orphan = auditRepo()
+  const priorOrphan = priorAuditGate([auditFinding('m1'), auditFinding('m2')], { law_hash: orphan.digest })
+  const r1 = runAuditRecheck(orphan, { prior: priorOrphan, gate: { review_id: 'audit-1', law_hash: orphan.digest, findings: [auditFinding('m1')], blockers: ['m2'], verdict: 'blocked' } })
+  assert.equal(r1.fact, 'transport_failure', 'a recheck blocker that no current finding carries fails the audit shape')
+  assert.equal(r1.status, 20)
+  assert.ok(r1.stderr.includes('does not equal any finding id'), 'the referential rule names the orphan')
+  assert.ok(!existsSync(r1.out), 'the referential breach never publishes')
+  const empty = auditRepo()
+  const priorEmpty = priorAuditGate([auditFinding('m1')], { law_hash: empty.digest })
+  const r2 = runAuditRecheck(empty, { prior: priorEmpty, gate: { review_id: 'audit-1', law_hash: empty.digest, findings: [], blockers: ['m1'], verdict: 'blocked' } })
+  assert.equal(r2.fact, 'transport_failure', 'a blocked recheck output with empty findings is invalid for the audit verbs')
+  assert.equal(r2.status, 20)
+  assert.ok(r2.stderr.includes('requires findings carrying its blocker ids'), 'the empty-findings block is named')
+  assert.ok(!existsSync(r2.out), 'the empty-findings block never publishes')
+})
+
+test('kiln-review: a prior artifact invalid for the audit family establishes no recheck lineage — blocked with empty findings or an orphan blocker halts before any spawn (exit 20)', () => {
+  // Both priors pass the shared validateShape (blocked only needs nonempty blockers
+  // there), so this pins the audit verb-level rules running against the PRIOR too.
+  const empty = auditRepo()
+  const priorEmpty = { review_id: 'audit-1', law_hash: empty.digest, findings: [], blockers: ['b1'], verdict: 'blocked' }
+  const r1 = runAuditRecheck(empty, { prior: priorEmpty })
+  assert.equal(r1.fact, 'transport_failure', 'a blocked prior with empty findings carries no cohort worth rechecking')
+  assert.equal(r1.status, 20)
+  assert.ok(r1.stderr.includes('requires findings carrying its blocker ids'), 'the halt names the audit shape rule, before any spawn')
+  assert.ok(!existsSync(r1.out), 'no gate is published')
+  const orphan = auditRepo()
+  const priorOrphan = { review_id: 'audit-1', law_hash: orphan.digest, findings: [auditFinding('m1')], blockers: ['zz'], verdict: 'blocked' }
+  const r2 = runAuditRecheck(orphan, { prior: priorOrphan })
+  assert.equal(r2.fact, 'transport_failure', 'a prior blocker that equals no prior finding id is not a valid audit artifact')
+  assert.equal(r2.status, 20)
+  assert.ok(r2.stderr.includes('does not equal any finding id'), 'the halt names the orphan, before any spawn')
+  assert.ok(!existsSync(r2.out), 'no gate is published')
+})
+
+test('kiln-review: audit reads the kernel slice contract — a legacy bare string entry and a slash id derive their seam facts (no stricter shape than parseSliceEntry)', () => {
+  const fx = auditRepo({ slices: [{ id: 's1', surface: 'mixed', milestone: 'ground work' }, 'feature/ui'] })
+  const promptOut = join(fx.repo, 'captured-prompt.txt')
+  const r = runAudit(fx, { seam: 'feature/ui', gate: { review_id: '__ECHO__', law_hash: fx.digest, findings: [], blockers: [], verdict: 'accept' }, promptOut })
+  assert.equal(r.status, 0, 'a slices.json mixing object and legacy bare string entries audits')
+  const { packet } = capturedPacket(promptOut)
+  assert.equal(packet.seam_slice, 'feature/ui', 'the slash id the kernel accepts is the seam')
+  assert.equal(packet.milestone, '', 'a legacy bare string carries an absent label')
+  assert.deepEqual(packet.closing_block, ['feature/ui'], 'the unlabeled entry closes its own block against the labeled one')
+  assert.deepEqual(packet.sealed_prefix, ['s1', 'feature/ui'], 'the cumulative prefix spans both entry forms')
+})
+
+test('kiln-review: append-audit is the only audits.log writer — exact line format, append-only, charset-gated seam id, usage on a wrong arg count', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kiln-audits-'))
+  const log = join(dir, 'audits.log')
+  const first = spawnSync('node', [REVIEW, 'append-audit', dir, 's3'], { encoding: 'utf8' })
+  assert.equal(first.status, 0, 'a valid append exits 0')
+  assert.equal(readFileSync(log, 'utf8'), 's3 accept\n', 'the log is created with exactly `<seamSliceId> accept`')
+  const second = spawnSync('node', [REVIEW, 'append-audit', dir, 'phase-2.final'], { encoding: 'utf8' })
+  assert.equal(second.status, 0, 'dot, digit, underscore and hyphen ids are within the safe charset')
+  assert.equal(readFileSync(log, 'utf8'), 's3 accept\nphase-2.final accept\n', 'the append is append-only — the prior line survives')
+  // The charset is the kernel slice-id contract (parseSliceEntry SLICE_ID) verbatim:
+  // slash ids the kernel builds and seals must publish here too.
+  const slash = spawnSync('node', [REVIEW, 'append-audit', dir, 'feature/ui'], { encoding: 'utf8' })
+  assert.equal(slash.status, 0, 'a path-like slash id is inside the shared charset')
+  assert.equal(readFileSync(log, 'utf8'), 's3 accept\nphase-2.final accept\nfeature/ui accept\n', 'the slash id lands its exact line')
+  // The seam id becomes the grep anchor `^<id> ` — whitespace and control bytes are rejected.
+  for (const bad of ['', 'has space', 'line\nbreak', 'tab\tchar']) {
+    const r = spawnSync('node', [REVIEW, 'append-audit', dir, bad], { encoding: 'utf8' })
+    assert.notEqual(r.status, 0, `${JSON.stringify(bad)} is rejected`)
+  }
+  assert.equal(readFileSync(log, 'utf8'), 's3 accept\nphase-2.final accept\nfeature/ui accept\n', 'no rejected call ever appended')
+  const usage = spawnSync('node', [REVIEW, 'append-audit', dir], { encoding: 'utf8' })
+  assert.equal(usage.status, 20, 'a wrong arg count is the usage failure')
 })
