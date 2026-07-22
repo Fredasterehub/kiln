@@ -32,7 +32,16 @@ beats are the conductor's entire interface. Beats arrive in the return, drawn fr
 - Bare `/kiln-fire` in a fresh directory → brainstorm: greet, spawn the Da Vinci teammate
   (`agents/da-vinci.md`), wait for its single completion signal.
 - Existing `.kiln/` → resume: read STATE.md once, speak a transition line; `next_action`
-  only selects the kernel resume launch — the driver never performs that work itself.
+  normally selects the kernel resume launch — the driver never performs that work itself.
+  The one exception is honest, not automatic: a `next_action` that names a rerun of onboarding
+  is the LAW stage's halt over a missing brief, posture, or codebase map. Those are a compiler's
+  outputs, and a compiler needs its content source — the operator idea (direct path) or the
+  sealed ledger (brainstorm path) — which STATE.md never persists (closed facts only: stage,
+  slice, next_action, density, pointers, seals, timestamp). So the driver cannot silently
+  recompile on a bare resume, and it does not guess the producer origin or invent the idea: it
+  speaks the hold in voice, names the missing input, and asks the operator to relaunch with that
+  content source so the correct compiler re-enters — onboarding (`cards/onboarding.md`) for a
+  direct idea, the vision compiler (`cards/brainstorm.md`) for a sealed ledger.
 - The literal token `--plan-gate` anywhere in the invocation arms the user plan gate for
   this run (hard stop 1). It never reaches the kernel: strip it from the idea before the
   hand-off. Without the token the gate stays OFF — the default.
@@ -52,8 +61,10 @@ byte-identical):
   - "Kiln. Nothing on the anvil yet — Da Vinci is already uncapping the paint. Let's find out what we're making."
 
 On a direct `/kiln-fire <idea>`: after the greeting and BEFORE the kernel law launch, launch
-the one-shot onboarding compiler per `cards/onboarding.md` — a fresh-context agent, the
-operator's idea its only input, writing `.kiln/docs/project-brief.md` + `.kiln/posture.json`
+the one-shot onboarding compiler per `cards/onboarding.md` — a fresh-context agent spawned with
+cwd = `projectDir` and told the plugin root (so it runs the bounded brownfield preflight), the
+operator's idea its only CONTENT input, writing `.kiln/docs/project-brief.md` + `.kiln/posture.json`
+(plus, on a brownfield target, `.kiln/brownfield` + `.kiln/docs/codebase-map.md`)
 and returning the canonical `{facts:{status, pointers, schema_valid}, narration_beat}` envelope
 (the same tier posture as the vision compiler — a HIGH semantic producer); speak its
 `narration_beat` verbatim; then, only once `facts.status` is `'ok'`, launch the kernel
@@ -61,9 +72,10 @@ and returning the canonical `{facts:{status, pointers, schema_valid}, narration_
 mirror of the brainstorm path's compiler→kernel-law sequence.
 
 On the `BRAINSTORM_COMPLETE` envelope (single-line JSON: `ledger`, `entries`, `essence`):
-launch the one-shot vision compiler per `cards/brainstorm.md` — a fresh-context agent, the
-sealed ledger path its only input, writing `.kiln/docs/vision.md`, `.kiln/docs/project-brief.md`,
-and `.kiln/posture.json`, returning the canonical
+launch the one-shot vision compiler per `cards/brainstorm.md` — a fresh-context agent spawned
+with cwd = `projectDir` and told the plugin root (so it runs the same brownfield preflight), the
+sealed ledger path its only CONTENT input, writing `.kiln/docs/vision.md`, `.kiln/docs/project-brief.md`,
+and `.kiln/posture.json` (plus, on a brownfield target, `.kiln/brownfield` + `.kiln/docs/codebase-map.md`), returning the canonical
 `{facts:{status, pointers, schema_valid}, narration_beat}` envelope; speak its `narration_beat`
 verbatim; then, only once `facts.status` is `'ok'`, launch the kernel
 `{stage: "law", projectDir, idea: <essence>, plugin: "${CLAUDE_PLUGIN_ROOT}"}`. Launches and tiny returns only — no dialogue

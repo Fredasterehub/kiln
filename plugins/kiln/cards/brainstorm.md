@@ -26,9 +26,11 @@ vision compile reads — and it never gets rewritten.
 
 ## The hand-off (executes in the conductor — see its post-signal paragraph; this card holds the contract)
 On the `BRAINSTORM_COMPLETE` envelope the conductor runs TWO launches, in order:
-1. **The compiler** — a one-shot, fresh-context agent. Inputs: the sealed ledger path,
-   NOTHING else (its context never saw the conversation — that is the whole point). It
-   verifies the last ledger line is `session_complete` (else returns a non-`'ok'` `facts.status`, honestly),
+1. **The compiler** — a one-shot, fresh-context agent. Its only CONTENT input is the sealed
+   ledger path (its context never saw the conversation — that is the whole point); its launch
+   also carries the mechanical run context (the project dir = its cwd, and the plugin root)
+   for the deterministic preflight below. It verifies the last ledger line is `session_complete`
+   (else returns a non-`'ok'` `facts.status`, honestly),
    compiles the confirmed intents, user-tagged ideas, and clarifications into
    `.kiln/docs/vision.md` — inventing nothing; every line traces to a ledger event — written
    via temp + rename. In the SAME leg (no new call — you are the earliest producer on this
@@ -36,6 +38,12 @@ On the `BRAINSTORM_COMPLETE` envelope the conductor runs TWO launches, in order:
    deliverable, constraints, non-goals, visual-artifact presence, unresolved assumptions) and
    `.kiln/posture.json` (EXACTLY `{scope, novelty, reversibility}` over the frozen enums — the
    observable Gauge reading), both traced to the sealed ledger + essence, both temp + rename.
+   Before authoring, it runs the same bounded deterministic preflight as the direct path —
+   `bash "<plugin-root>/scripts/detect-brownfield.sh" .` (never its own read of the tree) — and
+   on a `brownfield` token touches the closed-fact marker `.kiln/brownfield` and authors a
+   BOUNDED `.kiln/docs/codebase-map.md` (entry points, runtime/package facts, test commands,
+   major boundaries, integration seams, risky hotspots; every line traceable, not a full
+   inventory); on `greenfield`, neither.
    Returns the standard envelope (defined in `## Return` below); its `narration_beat` is one
    voiced line announcing the vision is on disk, closed by a quote foot composed per the
    display encoding (`data/voice.json` → `panel.blocks.foot`, CAL 17) — a light rule
@@ -64,8 +72,9 @@ a sketchbook.
 The compiler leg returns the standard envelope (the kernel launch above returns nothing).
 `facts.status` — `'ok'` only if the ledger's last line is `session_complete` and all three of
 `.kiln/docs/vision.md`, `.kiln/docs/project-brief.md`, and `.kiln/posture.json` are compiled
-and written, else an honest failure string. `facts.pointers` — the three compiled paths
-(`.kiln/docs/vision.md`, `.kiln/docs/project-brief.md`, `.kiln/posture.json`).
-`facts.schema_valid` — true iff all three outputs are well-formed (the posture exactly the
-three enum fields). `narration_beat` — the one voiced line announcing the vision is on disk,
-composed with its quote foot per the compiler spec above.
+and written (and, on a brownfield target, `.kiln/brownfield` plus a nonempty
+`.kiln/docs/codebase-map.md`), else an honest failure string. `facts.pointers` — every compiled
+path (`.kiln/docs/vision.md`, `.kiln/docs/project-brief.md`, `.kiln/posture.json`, and any
+brownfield map). `facts.schema_valid` — true iff every output is well-formed (the posture
+exactly the three enum fields, any codebase map nonempty). `narration_beat` — the one voiced
+line announcing the vision is on disk, composed with its quote foot per the compiler spec above.

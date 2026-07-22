@@ -119,6 +119,9 @@ const readCandidate = (verdict) => ({ exit: 0, ids: [JSON.stringify(verdict)] })
 const ONBOARDING_OK = {
   'onboarding:brief-check': { exit: 0 },
   'onboarding:posture': { exit: 0, scope: 'small', novelty: 'familiar', reversibility: 'reversible' },
+  // Wave 3 (brownfield arm): greenfield by default — no marker, so the map-check
+  // short-circuits and never runs. Brownfield law scenarios override this leg.
+  'onboarding:brownfield-check': { exit: 1 },
 }
 const VOICE = {
   'voice:resume': { exit: 0, ids: ['The fire never went out. Kiln again — the ledger holds the next step, and I am already taking it.'] },
@@ -1715,6 +1718,7 @@ test('runtime (Wave 3): a present brief and a valid posture pass the LAW input g
     'law:preflight': GREEN,
     'onboarding:brief-check': { exit: 0 },
     'onboarding:posture': { exit: 0, scope: 'large', novelty: 'novel', reversibility: 'irreversible' },
+    'onboarding:brownfield-check': { exit: 1 }, // greenfield — no map required
     'stage:law': { facts: { status: 'ok', pointers: ['.kiln/LAW.md'], schema_valid: true }, narration_beat: 'the law' },
     'ratify:request': GREEN,
     'ratify:gate': { exit: 0 },
@@ -1806,6 +1810,67 @@ test('runtime (Wave 3): an EXTRA posture field halts the LAW stage — the faith
   assert.ok(!calls.some(c => c.label === 'stage:law'), 'an extra-field posture never reaches planning')
 })
 
+test('runtime (Wave 3, brownfield): a present .kiln/brownfield marker with a nonempty codebase-map passes the gate — the LAW plans', async () => {
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'onboarding:brief-check': { exit: 0 },
+    'onboarding:posture': { exit: 0, scope: 'large', novelty: 'familiar', reversibility: 'reversible' },
+    'onboarding:brownfield-check': { exit: 0 }, // the marker is present — a brownfield run
+    'onboarding:map-check': { exit: 0 },         // the codebase map is nonempty
+    'stage:law': { facts: { status: 'ok', pointers: ['.kiln/LAW.md'], schema_valid: true }, narration_beat: 'the law' },
+    'ratify:request': GREEN,
+    'ratify:gate': { exit: 0 },
+    'law:seal': { exit: 0 },
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'ok', 'a brownfield run with a map plans, ratifies, and seals')
+  const map = calls.findIndex(c => c.label === 'onboarding:map-check')
+  const plan = calls.findIndex(c => c.label === 'stage:law')
+  assert.ok(map >= 0 && map < plan, 'the map check runs BEFORE the law card plans')
+  const marker = calls.find(c => c.label === 'onboarding:brownfield-check')
+  assert.ok(marker.prompt.includes('test -e .kiln/brownfield'), 'the marker is read as a closed fact (test -e), never parsed')
+  const mapCheck = calls.find(c => c.label === 'onboarding:map-check')
+  assert.ok(mapCheck.prompt.includes('test -s .kiln/docs/codebase-map.md'), 'the map is required nonempty (test -s), content-blind')
+})
+
+test('runtime (Wave 3, brownfield): a present marker with a missing/empty codebase-map halts — reused transport-failure, never a blind plan', async () => {
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'onboarding:brief-check': { exit: 0 },
+    'onboarding:posture': { exit: 0, scope: 'small', novelty: 'familiar', reversibility: 'reversible' },
+    'onboarding:brownfield-check': { exit: 0 }, // brownfield
+    'onboarding:map-check': { exit: 1 },         // but the map is missing or empty
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'transport-failure', 'a brownfield run with no map holds')
+  assert.ok(!calls.some(c => c.label === 'stage:law'), 'the law stage never plans over an unmapped codebase')
+  assert.ok(!calls.some(c => c.label === 'ratify:gate'), 'never reaches ratify')
+  const doc = lastStateDoc(calls)
+  assert.ok(doc.includes('Rerun onboarding'), 'next_action names a rerun of onboarding')
+  assert.ok(!doc.includes('stage=build'), 'never advances to build')
+})
+
+test('runtime (Wave 3, greenfield): no marker means no map is required — the map check never runs, the LAW plans', async () => {
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'onboarding:brief-check': { exit: 0 },
+    'onboarding:posture': { exit: 0, scope: 'small', novelty: 'familiar', reversibility: 'reversible' },
+    'onboarding:brownfield-check': { exit: 1 }, // no marker — a greenfield run
+    'stage:law': { facts: { status: 'ok', pointers: ['.kiln/LAW.md'], schema_valid: true }, narration_beat: 'the law' },
+    'ratify:request': GREEN,
+    'ratify:gate': { exit: 0 },
+    'law:seal': { exit: 0 },
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'ok', 'a greenfield run plans without a codebase map')
+  assert.ok(!calls.some(c => c.label === 'onboarding:map-check'), 'the map check never runs when no marker is present — short-circuit, no map required')
+})
+
 test('runtime (Wave 3): the LAW input gate is law-only — validate and report never read the onboarding inputs', async () => {
   const run = (s) => runKernel({ stage: s, projectDir: '/p' }, {
     ...VOICE,
@@ -1819,6 +1884,7 @@ test('runtime (Wave 3): the LAW input gate is law-only — validate and report n
     const { calls } = await run(s)
     assert.ok(!calls.some(c => c.label === 'onboarding:brief-check'), s + ' never runs the brief check')
     assert.ok(!calls.some(c => c.label === 'onboarding:posture'), s + ' never reads posture')
+    assert.ok(!calls.some(c => c.label === 'onboarding:brownfield-check'), s + ' never runs the brownfield check')
   }
 })
 

@@ -382,6 +382,10 @@ const P = {
   candidate: '.kiln/.gate-review.reviewer.tmp',
   // Wave 3: the onboarding outputs the LAW input gate verifies before planning.
   brief: '.kiln/docs/project-brief.md', posture: '.kiln/posture.json',
+  // Wave 3 (brownfield arm): the closed-fact marker the onboarding preflight drops
+  // on a brownfield target, and the map it then authors — the gate requires the map
+  // nonempty whenever the marker is present. Greenfield runs carry neither.
+  brownfield: '.kiln/brownfield', codebaseMap: '.kiln/docs/codebase-map.md',
   card: (s) => plugin + '/cards/' + s + '.md',
 }
 const EXIT = { type: 'object', additionalProperties: false, properties: { exit: { type: 'integer' } }, required: ['exit'] }
@@ -597,6 +601,23 @@ if (stage !== 'build') {
         { stage, next_action: 'Rerun onboarding: ' + P.posture + ' is missing or not a valid {scope,novelty,reversibility} projection' },
         await voiceBeat('transport-failure', {}, 'The onboarding posture at ' + P.posture + ' is missing or malformed — the run holds until it is a valid {scope, novelty, reversibility} projection.', 1),
         { brief: P.brief, posture: P.posture })
+    }
+    // Wave 3 (the brownfield arm): the onboarding preflight is a bounded
+    // deterministic classifier (scripts/detect-brownfield.sh). On a brownfield
+    // target it drops the closed-fact marker .kiln/brownfield and authors
+    // .kiln/docs/codebase-map.md; greenfield drops neither. A present marker
+    // (test -e) therefore makes the map a REQUIRED input — a plan laid over an
+    // existing codebase with no map is a plan built blind. A marker with a missing
+    // or empty map (test -s) halts honestly, reusing transport-failure (no new
+    // status, no new voice beat), naming a rerun of onboarding; greenfield runs
+    // (no marker) short-circuit and require no map. Both legs branch on shell
+    // exits only — the kernel reads neither the marker nor the map.
+    if (await hands('test -e ' + P.brownfield, 'onboarding:brownfield-check') === 0 &&
+        await hands('test -s ' + P.codebaseMap, 'onboarding:map-check') !== 0) {
+      return failStop('transport-failure',
+        { stage, next_action: 'Rerun onboarding: ' + P.brownfield + ' marks a brownfield run but ' + P.codebaseMap + ' is empty or missing' },
+        await voiceBeat('transport-failure', {}, 'The onboarding marked a brownfield run but the codebase map at ' + P.codebaseMap + ' is empty or missing — the LAW will not plan over an existing codebase blind, so the run holds.', 1),
+        { brief: P.brief, posture: P.posture, codebaseMap: P.codebaseMap })
     }
   }
   const r = await act(cardPrompt(A.idea ? 'Operator idea (verbatim): ' + A.idea : ''), 'stage:' + stage)
