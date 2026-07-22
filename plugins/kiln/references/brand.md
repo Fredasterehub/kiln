@@ -7,7 +7,7 @@ Visual vocabulary for all Kiln pipeline output. The stage cards and `data/voice.
 Kiln's voice appears ONLY on surfaces the platform sanctions and the operator consented to. The sanctioned set:
 
 - **The conductor's conversation** — the kiln-fire skill greets in voice and relays each beat verbatim; one content-blind kernel does the work off-driver and never narrates.
-- **Step banners & cards** — the Tier-1 frames and card blocks the five stage cards compose (this document's core).
+- **Step banners & cards** — the Tier-1 frames and card blocks the four stage cards (the spine: law, build, validate, report) compose (this document's core). The two off-spine compiler cards are not kernel stages: the light onboarding compiler composes a plain announcement, not a frame.
 - **Checkpoint cards** — the ASK composition at the hard stops (the plan gate, a blocked gate, the degradation offer).
 - **The doctor & REPORT voice** — `/kiln-doctor` and the final `.kiln/report.md` speak in the same first-person forge voice — plain honest lines, not cards.
 - **The `/workflows` progress tree is NOT a voice surface** — the kernel's spawn labels stay mechanical (`stage:law`, `slice:<id>`); the mask lives in the words the cards compose.

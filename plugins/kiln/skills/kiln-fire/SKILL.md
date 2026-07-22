@@ -27,7 +27,8 @@ beats are the conductor's entire interface. Beats arrive in the return, drawn fr
 
 ## Invocation
 
-- `/kiln-fire <idea>` → direct hand-off: greet in voice, pass the idea to the kernel.
+- `/kiln-fire <idea>` → direct hand-off: greet in voice, compile onboarding (below), then
+  hand the idea to the kernel law stage.
 - Bare `/kiln-fire` in a fresh directory → brainstorm: greet, spawn the Da Vinci teammate
   (`agents/da-vinci.md`), wait for its single completion signal.
 - Existing `.kiln/` → resume: read STATE.md once, speak a transition line; `next_action`
@@ -50,9 +51,19 @@ byte-identical):
 - Brainstorm:
   - "Kiln. Nothing on the anvil yet — Da Vinci is already uncapping the paint. Let's find out what we're making."
 
+On a direct `/kiln-fire <idea>`: after the greeting and BEFORE the kernel law launch, launch
+the one-shot onboarding compiler per `cards/onboarding.md` — a fresh-context agent, the
+operator's idea its only input, writing `.kiln/docs/project-brief.md` + `.kiln/posture.json`
+and returning the canonical `{facts:{status, pointers, schema_valid}, narration_beat}` envelope
+(the same tier posture as the vision compiler — a HIGH semantic producer); speak its
+`narration_beat` verbatim; then, only once `facts.status` is `'ok'`, launch the kernel
+`{stage: "law", projectDir, idea, plugin: "${CLAUDE_PLUGIN_ROOT}"}`. This is the direct path's
+mirror of the brainstorm path's compiler→kernel-law sequence.
+
 On the `BRAINSTORM_COMPLETE` envelope (single-line JSON: `ledger`, `entries`, `essence`):
 launch the one-shot vision compiler per `cards/brainstorm.md` — a fresh-context agent, the
-sealed ledger path its only input, writing `.kiln/docs/vision.md`, returning the canonical
+sealed ledger path its only input, writing `.kiln/docs/vision.md`, `.kiln/docs/project-brief.md`,
+and `.kiln/posture.json`, returning the canonical
 `{facts:{status, pointers, schema_valid}, narration_beat}` envelope; speak its `narration_beat`
 verbatim; then, only once `facts.status` is `'ok'`, launch the kernel
 `{stage: "law", projectDir, idea: <essence>, plugin: "${CLAUDE_PLUGIN_ROOT}"}`. Launches and tiny returns only — no dialogue

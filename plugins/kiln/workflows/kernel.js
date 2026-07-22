@@ -328,6 +328,26 @@ function postureToDials(posture, visualArtifactPresence) {
   } catch { return failUp }
 }
 
+// validatePosture — the pure LAW-input-gate predicate (Wave 3). The onboarding
+// producer (direct path) or the vision compiler (brainstorm path) writes
+// .kiln/posture.json as EXACTLY {scope, novelty, reversibility} over the frozen
+// enums; this is the deterministic check the kernel runs before the law stage
+// plans, reusing the same frozen POSTURE_* enums as postureToDials. True iff obj
+// is a plain object carrying exactly those three own fields, each in its enum —
+// the same exact-field guard (Reflect.ownKeys catches non-enumerable and Symbol
+// smuggling) so an ill-formed projection cannot pass the gate. Deterministic;
+// adversarial input fails to false, never throws.
+function validatePosture(obj) {
+  try {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false
+    const keys = Reflect.ownKeys(obj)
+    const fields = ['scope', 'novelty', 'reversibility']
+    if (keys.length !== fields.length || fields.some(k => keys.indexOf(k) < 0)) return false
+    const { scope, novelty, reversibility } = obj
+    return POSTURE_SCOPE.indexOf(scope) >= 0 && POSTURE_NOVELTY.indexOf(novelty) >= 0 && POSTURE_REVERSIBILITY.indexOf(reversibility) >= 0
+  } catch { return false }
+}
+
 // KERNEL_CORE_END
 // KERNEL_RUNTIME_BEGIN — evaluated as an async function body by the workflow runtime
 
@@ -360,6 +380,8 @@ const P = {
   slices: '.kiln/slices.json', seals: '.kiln/seals.log', degraded: '.kiln/degraded',
   ack: '.kiln/degraded-ack', receipt: '.kiln/check-receipt.txt', report: '.kiln/report.md',
   candidate: '.kiln/.gate-review.reviewer.tmp',
+  // Wave 3: the onboarding outputs the LAW input gate verifies before planning.
+  brief: '.kiln/docs/project-brief.md', posture: '.kiln/posture.json',
   card: (s) => plugin + '/cards/' + s + '.md',
 }
 const EXIT = { type: 'object', additionalProperties: false, properties: { exit: { type: 'integer' } }, required: ['exit'] }
@@ -397,6 +419,24 @@ const TIERS = {
 // bytes back raw, validates them, and promotes them content-free; a stale or missing
 // candidate can never seal.
 const ACK = { type: 'object', additionalProperties: false, properties: { ok: { type: 'boolean' } }, required: ['ok'] }
+// Wave 3: the LAW-input posture read. A boot-style node -p projection leg (the
+// tiers-boot shape) returns exit plus the OWN keys of the on-disk posture, which the
+// pure validatePosture then checks against the frozen enums — the kernel stays
+// content-blind (the leg parses, never the kernel body). The projection carries
+// every own key faithfully: a dropped field is absent from the return, an EXTRA
+// field (a persisted dial or effort) is carried through — so the validatePosture
+// exact-field guard rejects both, and the returned key set models the on-disk
+// posture in BOTH directions. additionalProperties stays true precisely so an extra
+// on-disk key reaches that guard instead of being silently stripped at the schema
+// and admitted as a valid three-field posture.
+const POSTURE_LEG = {
+  type: 'object', additionalProperties: true,
+  properties: {
+    exit: { type: 'integer' },
+    scope: { type: 'string' }, novelty: { type: 'string' }, reversibility: { type: 'string' },
+  },
+  required: ['exit'],
+}
 
 // Boot (T-02): read the tier file once via an agent leg — the same node -p read
 // surface as the voice beats below, never direct fs (the kernel stays content-
@@ -524,6 +564,41 @@ if (pre.exit !== 0) {
 
 if (stage !== 'build') {
   const stageFacts = { STAGE: stage.toUpperCase(), i: SPINE.indexOf(stage) + 1, n: SPINE.length }
+  // Wave 3 (the Gauge foundation): the LAW input gate. The onboarding organ (direct
+  // path) or the vision compiler (brainstorm path) is the earliest producer — it writes
+  // .kiln/docs/project-brief.md + .kiln/posture.json before the kernel ever launches the
+  // law stage. This deterministic post-producer gate verifies both are present and
+  // well-formed BEFORE planning: the brief by a nonempty test (the report existence
+  // gate's shape), the posture by a boot-style node -p projection leg (the tiers-boot
+  // shape) validated against the frozen enums. schema_valid is the producer's own
+  // self-attestation and is deliberately NOT trusted here. Missing or malformed halts
+  // honestly, reusing transport-failure (no new status, no new voice beat), and names a
+  // rerun of onboarding — a plan built on absent inputs is never begun.
+  if (stage === 'law') {
+    if (await hands('test -s ' + P.brief, 'onboarding:brief-check') !== 0) {
+      return failStop('transport-failure',
+        { stage, next_action: 'Rerun onboarding: ' + P.brief + ' is empty or missing before the LAW stage plans' },
+        await voiceBeat('transport-failure', {}, 'The onboarding brief at ' + P.brief + ' is empty or missing — the LAW has nothing to plan from, so the run holds.', 1),
+        { brief: P.brief, posture: P.posture })
+    }
+    // Faithful projection: {...p} carries EVERY own key of the on-disk posture
+    // (never a hand-picked scope/novelty/reversibility triple, which would silently
+    // strip a persisted dial or effort and pass the gate). The validatePosture
+    // exact-field guard is the sole judge of the field set.
+    const postureCmd =
+      "node -p 'JSON.stringify(((p)=>({...p}))(require(\"./" + P.posture + "\")))'"
+    const postureLeg = await agent(
+      'Run exactly this in ' + projectDir + '. Report {exit, ...fields}: exit = the exit code; the remaining keys = EVERY field of the printed JSON object exactly as printed when exit is 0 — add none and drop none — all omitted when exit is nonzero:\n' + postureCmd,
+      { label: 'onboarding:posture', ...tier('kernel-leg'), schema: POSTURE_LEG },
+    ).then(rp => (rp ?? { exit: 20 }))
+    const { exit: postureExit, ...postureProjection } = postureLeg
+    if (postureExit !== 0 || !validatePosture(postureProjection)) {
+      return failStop('transport-failure',
+        { stage, next_action: 'Rerun onboarding: ' + P.posture + ' is missing or not a valid {scope,novelty,reversibility} projection' },
+        await voiceBeat('transport-failure', {}, 'The onboarding posture at ' + P.posture + ' is missing or malformed — the run holds until it is a valid {scope, novelty, reversibility} projection.', 1),
+        { brief: P.brief, posture: P.posture })
+    }
+  }
   const r = await act(cardPrompt(A.idea ? 'Operator idea (verbatim): ' + A.idea : ''), 'stage:' + stage)
   // S1 ruling: reachable twin sites read their sealed keys; the kernel lines
   // below survive only as unreachable-voice fallbacks (W-03).

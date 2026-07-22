@@ -22,12 +22,14 @@ const core = new Function(coreSrc + `
   return { SPINE, parseArgs, resolveStage, nextStage, gateOutcome, reviewLoop,
            fillClosed, streakIndex, stateDoc, atomicWriteCmd, gateCmd, LAW_CHECK, LAW_GUARD,
            LAW_CHECK_RECEIPT, verdictExit, redSetIsFuture, gateReviewInvalid,
-           validateTiers, resolveTier, routeBuilder, parseSliceEntry, postureToDials }`)()
+           validateTiers, resolveTier, routeBuilder, parseSliceEntry, postureToDials,
+           validatePosture }`)()
 const {
   SPINE, parseArgs, resolveStage, nextStage, gateOutcome, reviewLoop,
   fillClosed, streakIndex, stateDoc, atomicWriteCmd, gateCmd,
   LAW_CHECK_RECEIPT, verdictExit, redSetIsFuture, gateReviewInvalid,
   validateTiers, resolveTier, routeBuilder, parseSliceEntry, postureToDials,
+  validatePosture,
 } = core
 
 // ── Mocked runtime: run the whole kernel body with scripted agents ──────────
@@ -111,6 +113,13 @@ const HASH_OK = { exit: 0, ids: ['a'.repeat(64)] }
 // candidate as the raw file read — a one-element array holding the file contents.
 const OK_ACK = { ok: true }
 const readCandidate = (verdict) => ({ exit: 0, ids: [JSON.stringify(verdict)] })
+// Wave 3: the LAW input gate reads the onboarding outputs — the brief nonempty, then the
+// posture as a valid {scope,novelty,reversibility} projection — before the law card plans.
+// Every law scenario scripts these two passing legs; the gate's own fail paths override them.
+const ONBOARDING_OK = {
+  'onboarding:brief-check': { exit: 0 },
+  'onboarding:posture': { exit: 0, scope: 'small', novelty: 'familiar', reversibility: 'reversible' },
+}
 const VOICE = {
   'voice:resume': { exit: 0, ids: ['The fire never went out. Kiln again — the ledger holds the next step, and I am already taking it.'] },
   'voice:reopen': { exit: 0, ids: ['Slice {slice} reopened — a law check went red. A seal is evidence-bound, not sacred.'] },
@@ -727,6 +736,7 @@ test('runtime (T-03): the builder leg is surface-routed — ui→builder-ui, log
 test('runtime (INTAKE-19): the LAW leg spawns on stage-law (fable) — validate and report stay on stage-card', async () => {
   const stageRun = (s) => runKernel({ stage: s, projectDir: '/p' }, {
     ...VOICE,
+    ...ONBOARDING_OK, // law-only gate; validate/report never consume these
     'law:preflight': GREEN,
     ['stage:' + s]: { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'working' },
     // Wave 1: the law run now ratifies before advancing (accept, sealed); the
@@ -756,6 +766,7 @@ test('runtime (INTAKE-19): the LAW leg spawns on stage-law (fable) — validate 
 test('runtime (Wave 1): the LAW ratifies, seal-law locks it, and the run advances to build', async () => {
   const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
     ...VOICE,
+    ...ONBOARDING_OK,
     'law:preflight': GREEN,
     'stage:law': { facts: { status: 'ok', pointers: ['.kiln/LAW.md', '.kiln/slices.json'], schema_valid: true }, narration_beat: 'the law, pinned' },
     'ratify:request': GREEN,
@@ -787,6 +798,7 @@ test('runtime (Wave 1): a LAW ratify reject repairs the law, rechecks, and seals
   const gateExits = [10, 0] // review reject, then recheck accept after one repair
   const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
     ...VOICE,
+    ...ONBOARDING_OK,
     'law:preflight': GREEN,
     'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law, pinned' },
     'ratify:request': GREEN,
@@ -809,6 +821,7 @@ test('runtime (Wave 1): a LAW ratify reject repairs the law, rechecks, and seals
 test('runtime (Wave 1): a LAW that will not ratify holds after the repair cap — never a silent advance', async () => {
   const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
     ...VOICE,
+    ...ONBOARDING_OK,
     'law:preflight': GREEN,
     'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law' },
     'ratify:request': GREEN,
@@ -829,6 +842,7 @@ test('runtime (Wave 1): a LAW that will not ratify holds after the repair cap �
 test('runtime (Wave 1): codex unavailable at LAW ratify holds — never the build degraded single-family continue', async () => {
   const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
     ...VOICE,
+    ...ONBOARDING_OK,
     'law:preflight': GREEN,
     'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law' },
     'ratify:request': GREEN,
@@ -850,6 +864,7 @@ test('runtime (Wave 1, A2): the SEALED-claiming LAW card beat speaks only after 
   const LAW_SEALED_BEAT = 'The law is locked. Asimov pinned your acceptance criteria into executable Law — sealed before build begins; the forge starts next.'
   const base = {
     ...VOICE,
+    ...ONBOARDING_OK,
     'law:preflight': GREEN,
     'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: LAW_SEALED_BEAT },
     'ratify:request': GREEN,
@@ -878,6 +893,7 @@ test('runtime (Wave 1, A2): the SEALED-claiming LAW card beat speaks only after 
 test('runtime (Wave 1, A9): a project path with a space ratifies — the mandatory gate never interpolates projectDir', async () => {
   const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/tmp/a project dir' }, {
     ...VOICE,
+    ...ONBOARDING_OK,
     'law:preflight': GREEN,
     'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law' },
     'ratify:request': GREEN,
@@ -1665,6 +1681,144 @@ test('core (Wave 3): postureToDials names no effort tier — it toggles organs, 
   assert.ok(!('effort' in dials), 'the dial profile carries no effort field')
   for (const v of Object.values(dials)) {
     assert.ok(!['low', 'medium', 'high', 'xhigh'].includes(v), 'no dial value is an effort tier — effort stays the tier file\'s job')
+  }
+})
+
+test('core (Wave 3): validatePosture accepts exactly {scope,novelty,reversibility} over the frozen enums', () => {
+  assert.equal(validatePosture({ scope: 'small', novelty: 'familiar', reversibility: 'reversible' }), true)
+  assert.equal(validatePosture({ scope: 'large', novelty: 'novel', reversibility: 'irreversible' }), true)
+  assert.equal(validatePosture({ scope: 'small', novelty: 'novel', reversibility: 'risky' }), true)
+})
+
+test('core (Wave 3): validatePosture rejects a malformed or out-of-enum posture — reuses the frozen enums, never throws', () => {
+  const good = { scope: 'small', novelty: 'familiar', reversibility: 'reversible' }
+  assert.equal(validatePosture(undefined), false, 'a missing posture is rejected')
+  assert.equal(validatePosture(null), false)
+  assert.equal(validatePosture('small'), false, 'a non-object is rejected')
+  assert.equal(validatePosture(['small', 'familiar', 'reversible']), false, 'an array is rejected')
+  assert.equal(validatePosture({ scope: 'small', novelty: 'familiar' }), false, 'a missing field is rejected')
+  assert.equal(validatePosture({ ...good, extra: 1 }), false, 'an extra field is rejected (exact-field guard)')
+  assert.equal(validatePosture({ ...good, scope: 'medium' }), false, 'an unknown scope is rejected')
+  assert.equal(validatePosture({ ...good, novelty: 'weird' }), false, 'an unknown novelty is rejected')
+  assert.equal(validatePosture({ ...good, reversibility: 'maybe' }), false, 'an unknown reversibility is rejected')
+  const ownKeysBomb = new Proxy({}, { ownKeys() { throw new Error('boom') } })
+  assert.doesNotThrow(() => validatePosture(ownKeysBomb))
+  assert.equal(validatePosture(ownKeysBomb), false, 'a throwing ownKeys trap fails to false, never throws')
+})
+
+// ── Wave 3 (the Gauge foundation): the LAW input gate — the deterministic post-producer
+// check on the onboarding outputs (brief + posture) before the law card plans ──────────
+
+test('runtime (Wave 3): a present brief and a valid posture pass the LAW input gate BEFORE planning', async () => {
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'onboarding:brief-check': { exit: 0 },
+    'onboarding:posture': { exit: 0, scope: 'large', novelty: 'novel', reversibility: 'irreversible' },
+    'stage:law': { facts: { status: 'ok', pointers: ['.kiln/LAW.md'], schema_valid: true }, narration_beat: 'the law' },
+    'ratify:request': GREEN,
+    'ratify:gate': { exit: 0 },
+    'law:seal': { exit: 0 },
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'ok', 'the gate passes and the law stage plans, ratifies, and seals')
+  const brief = calls.findIndex(c => c.label === 'onboarding:brief-check')
+  const posture = calls.findIndex(c => c.label === 'onboarding:posture')
+  const plan = calls.findIndex(c => c.label === 'stage:law')
+  assert.ok(brief >= 0 && posture >= 0, 'both input checks ran')
+  assert.ok(brief < plan && posture < plan, 'the input gate runs BEFORE the law card plans')
+  const postureCall = calls.find(c => c.label === 'onboarding:posture')
+  assert.ok(postureCall.prompt.includes('posture.json') && postureCall.prompt.includes('node -p'),
+    'posture is read via a boot-style node -p projection leg — never a raw parse in the kernel body')
+  assert.ok(!postureCall.prompt.includes('scope:p.scope'),
+    'the projection carries every on-disk key faithfully — never a hand-picked three-field triple, which would silently strip a persisted dial or effort past the gate')
+  assert.equal(postureCall.opts.model, undefined, 'the posture leg carries the kernel-leg tier (inherit → no model option)')
+  assert.equal(postureCall.opts.effort, 'high')
+})
+
+test('runtime (Wave 3): a missing/empty brief halts the LAW stage — reused transport-failure, never a silent plan', async () => {
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'onboarding:brief-check': { exit: 1 }, // brief empty or missing
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'transport-failure', 'a missing brief holds the run')
+  assert.ok(!calls.some(c => c.label === 'onboarding:posture'), 'the posture is never read once the brief fails')
+  assert.ok(!calls.some(c => c.label === 'stage:law'), 'the law stage never plans without its inputs')
+  assert.ok(!calls.some(c => c.label === 'ratify:gate'), 'never reaches ratify')
+  const doc = lastStateDoc(calls)
+  assert.ok(doc.includes('Rerun onboarding'), 'next_action names a rerun of onboarding')
+  assert.ok(!doc.includes('stage=build'), 'never advances to build')
+})
+
+test('runtime (Wave 3): an unreadable posture.json halts the LAW stage — reused transport-failure', async () => {
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'onboarding:brief-check': { exit: 0 },
+    'onboarding:posture': { exit: 1 }, // posture.json missing or unreadable
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'transport-failure')
+  assert.ok(!calls.some(c => c.label === 'stage:law'), 'no planning on an unreadable posture')
+  assert.ok(lastStateDoc(calls).includes('Rerun onboarding'))
+})
+
+test('runtime (Wave 3): an out-of-enum posture halts the LAW stage — validatePosture rejects, transport-failure', async () => {
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'onboarding:brief-check': { exit: 0 },
+    'onboarding:posture': { exit: 0, scope: 'medium', novelty: 'novel', reversibility: 'reversible' }, // scope not in enum
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'transport-failure', 'an invalid posture holds the run')
+  assert.ok(!calls.some(c => c.label === 'stage:law'), 'an invalid posture never reaches planning')
+})
+
+test('runtime (Wave 3): a posture missing a field halts the LAW stage — the exact-field guard rejects', async () => {
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'onboarding:brief-check': { exit: 0 },
+    'onboarding:posture': { exit: 0, scope: 'small', novelty: 'familiar' }, // reversibility dropped by the projection
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'transport-failure')
+  assert.ok(!calls.some(c => c.label === 'stage:law'), 'a partial posture never reaches planning')
+})
+
+test('runtime (Wave 3): an EXTRA posture field halts the LAW stage — the faithful projection carries it, the exact-field guard rejects a persisted dial or effort', async () => {
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'onboarding:brief-check': { exit: 0 },
+    // A valid three-field posture with an effort/dial persisted alongside: the faithful
+    // {...p} projection carries the extra own key through instead of cherry-picking the
+    // three it recognizes, so validatePosture's exact-field guard rejects it. This is the
+    // on-disk-extras case the projection used to erase before validatePosture ever ran.
+    'onboarding:posture': { exit: 0, scope: 'small', novelty: 'familiar', reversibility: 'reversible', effort: 'high' },
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'transport-failure', 'an over-specified posture holds the run — no persisted dials or effort admitted')
+  assert.ok(!calls.some(c => c.label === 'stage:law'), 'an extra-field posture never reaches planning')
+})
+
+test('runtime (Wave 3): the LAW input gate is law-only — validate and report never read the onboarding inputs', async () => {
+  const run = (s) => runKernel({ stage: s, projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    ['stage:' + s]: { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'working' },
+    'law:stage-end': GREEN,
+    'report:check': { exit: 0 },
+    'state:write': GREEN,
+  })
+  for (const s of ['validate', 'report']) {
+    const { calls } = await run(s)
+    assert.ok(!calls.some(c => c.label === 'onboarding:brief-check'), s + ' never runs the brief check')
+    assert.ok(!calls.some(c => c.label === 'onboarding:posture'), s + ' never reads posture')
   }
 })
 

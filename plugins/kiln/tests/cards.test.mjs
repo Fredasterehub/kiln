@@ -291,3 +291,45 @@ test('cards (T5, ADR A2): no .kiln/narration.md is written or referenced in the 
     assert.ok(!cardText(name).includes('narration.md'), `${name} references no narration.md — ADR A2 adds no narration log, it reuses the substrate`)
   }
 })
+
+// ── Wave 3 (the Gauge foundation): the onboarding organ + the Gauge emit riding it ──
+
+test('cards (Wave 3): the onboarding card is a LIGHT direct-path compiler — writes brief+posture, returns the envelope, NO quote foot', () => {
+  const onb = cardText('onboarding.md')
+  // It writes both onboarding artifacts, via the temp+rename card write idiom.
+  assert.ok(onb.includes('.kiln/docs/project-brief.md'), 'the onboarding card writes the project brief')
+  assert.ok(onb.includes('.kiln/posture.json'), 'the onboarding card writes the posture projection')
+  assert.ok(onb.includes('temp + rename'), 'it writes via the temp + rename card idiom')
+  // posture.json is EXACTLY the three frozen fields — the source of truth (dials are recomputed, never persisted).
+  for (const field of ['scope', 'novelty', 'reversibility']) {
+    assert.ok(onb.includes(field), `the posture names the frozen field ${field}`)
+  }
+  assert.ok(/dials?[^\n]*never[^\n]*persist|never persist/i.test(onb), 'the dials are not persisted — posture is the source of truth')
+  // It returns the canonical envelope, 'ok' iff both files are written.
+  assert.ok(onb.includes('facts.status') && onb.includes('narration_beat'), 'the card returns the canonical envelope')
+  // LIGHT: a plain one-line announcement, never a Tier-1 quote foot / lore moment.
+  assert.ok(!onb.includes('lore-quotes.json'), 'the light onboarding card reads no lore bank — no quote foot')
+  assert.ok(!onb.includes('**FOOT**'), 'no FOOT block on the light onboarding card')
+})
+
+test('cards (Wave 3): the vision compiler ALSO emits the brief + posture — one leg, the earliest producer on the brainstorm path', () => {
+  const b = cardText('brainstorm.md')
+  assert.ok(b.includes('.kiln/docs/vision.md'), 'the compiler still writes the vision')
+  assert.ok(b.includes('.kiln/docs/project-brief.md'), 'the same leg now also writes the project brief')
+  assert.ok(b.includes('.kiln/posture.json'), 'the same leg now also writes the posture projection')
+  for (const field of ['scope', 'novelty', 'reversibility']) {
+    assert.ok(b.includes(field), `the brainstorm posture names the frozen field ${field}`)
+  }
+})
+
+test('cards (Wave 3): onboarding ships as a light card exempt from the moment-key map — the 25-key lore bank is untouched', () => {
+  const cards = readdirSync(CARDS).filter((n) => n.endsWith('.md'))
+  assert.ok(cards.includes('onboarding.md'), 'onboarding.md is a card on disk')
+  // The moment-keyed cards (the Tier-1 quote-foot composers) — onboarding is deliberately not
+  // among them: a light card composes a plain announcement, so it needs no lore moment and
+  // invents no quote. This is the exemption the moment-key assertion relies on above.
+  const momentKeyed = new Set(['law.md', 'build.md', 'validate.md', 'report.md', 'brainstorm.md'])
+  assert.ok(!momentKeyed.has('onboarding.md'), 'the light onboarding card is exempt from the moment-key map')
+  const bank = JSON.parse(readFileSync(join(DATA, 'lore-quotes.json'), 'utf8'))
+  assert.equal(Object.keys(bank.moments).length, 25, 'onboarding introduces no new lore moment — the bank stays at 25 keys')
+})

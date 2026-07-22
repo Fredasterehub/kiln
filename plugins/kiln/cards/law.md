@@ -6,7 +6,9 @@ paths and branches on closed facts. You read it, follow it exactly, and return
 
 ## Inputs
 The operator's idea, verbatim, in your prompt (or `.kiln/docs/` vision artifacts if present).
-The project dir is your working root; all control artifacts go under `.kiln/`.
+`.kiln/docs/project-brief.md` — the onboarding brief (purpose, users, deliverable, constraints,
+non-goals) — is your durable context input, written before this stage runs and present by the
+time you plan. The project dir is your working root; all control artifacts go under `.kiln/`.
 
 ## Method
 Turn the idea into **executable acceptance criteria only**. A criterion is an owning slice, a

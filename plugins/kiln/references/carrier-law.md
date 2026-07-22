@@ -1,6 +1,6 @@
 # The carrier law
 
-Kiln's organs — the conductor skill, the kernel workflow, the five cards, the Da Vinci
+Kiln's organs — the conductor skill, the kernel workflow, the six cards, the Da Vinci
 facilitator — each run in a separate context and share nothing but what they hand across a
 seam. This is the consolidated register of those seams: what crosses, in what shape, and
 where each seam lives in the source. The code is the law; this file names it and must not
@@ -33,15 +33,18 @@ carriers below are unbounded (`.kiln/LAW.md` grows with the criteria, `.kiln/dec
 append-only) and no projection summarizes them yet. The Compact is **not a new file** — it is
 the register already carried by the durable semantic artifacts:
 
+- `.kiln/docs/project-brief.md` — the onboarding brief (purpose, users, deliverable,
+  constraints, non-goals): the confirmed problem framing the LAW stage plans against, written
+  by the earliest producer on either path (onboarding on direct, the vision compiler on brainstorm).
 - `.kiln/docs/vision.md` — the confirmed intent (compiled from the sealed brainstorm ledger).
 - `.kiln/LAW.md` — the ratified architecture: acceptance criteria, slice plan, expected
   outcomes.
 - `.kiln/decisions.md` — the ADRs (append-only; superseded entries are never deleted).
 
 The Compact is distinct from `.kiln/STATE.md`, the *machine* resume register of closed facts
-the kernel owns (hop 5), and distinct from the kernel envelope above. Later lifecycle organs (a
-project brief, a feasibility digest) — or a future projection over these artifacts — will
-manage the bounded semantic view the target describes. Even so, the Compact must never become
+the kernel owns (hop 5), and distinct from the kernel envelope above. The project brief is now
+a live carrier (above); a later feasibility digest — or a future projection over these
+artifacts — will manage the bounded semantic view the target describes. Even so, the Compact must never become
 an append-only event ledger: it is meaning-at-rest, not a running log.
 
 ## The canonical envelope (hop 3)
@@ -69,8 +72,10 @@ The kernel branches ONLY on `facts` — the machine face of the envelope:
   with quote feet).
 
 `status`, `pointers`, and `schema_valid` are required; the two reserved fields are optional.
-All five cards return exactly this shape — see the `## Return` section of `cards/law.md`,
-`cards/build.md`, `cards/validate.md`, `cards/report.md`, and `cards/brainstorm.md`.
+All six cards return exactly this shape — see the `## Return` section of `cards/law.md`,
+`cards/build.md`, `cards/validate.md`, `cards/report.md`, `cards/brainstorm.md`, and
+`cards/onboarding.md` (the two compiler cards return it as conductor-side producers, off the
+kernel spine).
 
 ## The seven carrier hops
 
@@ -92,7 +97,8 @@ Each hop, mapped to its real seam by file and structure name:
 4. **stage→stage** — full filesystem artifacts under `.kiln/`. The kernel routes the paths it
    owns through its path map `P` (`workflows/kernel.js`), but `P` does not mediate the whole
    seam: each stage's CARD names its own inputs directly and reads them from disk. The LAW card
-   reads `.kiln/docs/vision.md`; build, validate, and report read `.kiln/LAW.md` and the other
+   reads `.kiln/docs/project-brief.md` (its durable context input, present on both paths) and
+   `.kiln/docs/vision.md` when the brainstorm path produced it; build, validate, and report read `.kiln/LAW.md` and the other
    prior-stage artifacts named in their cards (`.kiln/decisions.md`, `.kiln/validate.md`), none
    of which `P` enumerates.
 
@@ -112,7 +118,13 @@ Each hop, mapped to its real seam by file and structure name:
    `.kiln/brainstorm-ledger.jsonl`, then sends the conductor a single `BRAINSTORM_COMPLETE`
    envelope: the sealed-ledger pointer, the entry count, and the user-authored essence — never
    the dialogue. On that envelope the conductor launches the compiler, which writes
-   `.kiln/docs/vision.md` from the ledger alone and returns the canonical `STAGE_RESULT`
+   `.kiln/docs/vision.md`, `.kiln/docs/project-brief.md`, and `.kiln/posture.json` from the
+   ledger alone and returns the canonical `STAGE_RESULT`
    envelope (hop 3) — `skills/kiln-fire/SKILL.md` and `cards/brainstorm.md` agree on that one
    shape; the conductor speaks its `narration_beat` and advances to the law stage only once
    `facts.status` is `'ok'`. One completion fact and one beat cross; the chat scroll never does.
+   The direct path (`/kiln-fire <idea>`) has a mirror producer with no facilitator hop: the
+   onboarding compiler (`cards/onboarding.md`) writes `.kiln/docs/project-brief.md` and
+   `.kiln/posture.json` from the idea alone and returns the same `STAGE_RESULT` envelope before
+   the law launch. One producer per path; the LAW input gate verifies the brief and posture on
+   closed machine facts before planning either way.

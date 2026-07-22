@@ -31,7 +31,12 @@ On the `BRAINSTORM_COMPLETE` envelope the conductor runs TWO launches, in order:
    verifies the last ledger line is `session_complete` (else returns a non-`'ok'` `facts.status`, honestly),
    compiles the confirmed intents, user-tagged ideas, and clarifications into
    `.kiln/docs/vision.md` — inventing nothing; every line traces to a ledger event — written
-   via temp + rename. Returns the standard envelope (defined in `## Return` below); its `narration_beat` is one
+   via temp + rename. In the SAME leg (no new call — you are the earliest producer on this
+   path) it also writes `.kiln/docs/project-brief.md` (the light brief: purpose, users,
+   deliverable, constraints, non-goals, visual-artifact presence, unresolved assumptions) and
+   `.kiln/posture.json` (EXACTLY `{scope, novelty, reversibility}` over the frozen enums — the
+   observable Gauge reading), both traced to the sealed ledger + essence, both temp + rename.
+   Returns the standard envelope (defined in `## Return` below); its `narration_beat` is one
    voiced line announcing the vision is on disk, closed by a quote foot composed per the
    display encoding (`data/voice.json` → `panel.blocks.foot`, CAL 17) — a light rule
    (`grammar["rule.light"]`), a blank line, then one credited verified quote from
@@ -57,8 +62,10 @@ a sketchbook.
 
 ## Return
 The compiler leg returns the standard envelope (the kernel launch above returns nothing).
-`facts.status` — `'ok'` only if the ledger's last line is `session_complete` and
-`.kiln/docs/vision.md` is compiled and written, else an honest failure string.
-`facts.pointers` — the vision path (`.kiln/docs/vision.md`). `facts.schema_valid` — true iff
-the compiled vision.md is well-formed. `narration_beat` — the one voiced line announcing the
-vision is on disk, composed with its quote foot per the compiler spec above.
+`facts.status` — `'ok'` only if the ledger's last line is `session_complete` and all three of
+`.kiln/docs/vision.md`, `.kiln/docs/project-brief.md`, and `.kiln/posture.json` are compiled
+and written, else an honest failure string. `facts.pointers` — the three compiled paths
+(`.kiln/docs/vision.md`, `.kiln/docs/project-brief.md`, `.kiln/posture.json`).
+`facts.schema_valid` — true iff all three outputs are well-formed (the posture exactly the
+three enum fields). `narration_beat` — the one voiced line announcing the vision is on disk,
+composed with its quote foot per the compiler spec above.
