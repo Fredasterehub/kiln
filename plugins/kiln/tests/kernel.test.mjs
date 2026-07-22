@@ -79,7 +79,11 @@ async function runKernel(kargs, script) {
   const launch = (kargs && typeof kargs === 'object' && !Array.isArray(kargs))
     ? { plugin: PLUGIN, ...kargs }
     : kargs
-  const full = { 'tiers:boot': TIERS_OK, ...script }
+  // W7-S2: every final slice is a milestone seam, so the audits.log grep-skip
+  // consults on every build that reaches it; the harness answers already-logged
+  // by default so pre-W7 scenarios stay on their own subject. Audit scenarios
+  // override audit:check to open the seam gate.
+  const full = { 'tiers:boot': TIERS_OK, 'audit:check': { exit: 0 }, ...script }
   const calls = []
   const agentMock = async (prompt, opts = {}) => {
     calls.push({ label: opts.label, prompt, opts })
@@ -165,11 +169,13 @@ test('content-blind: no filesystem, clock, randomness, or content parsing in the
   ]) {
     assert.ok(!code.includes(banned), `kernel code must not contain "${banned}"`)
   }
-  // W-01: exactly TWO JSON.parse calls — the sanctioned parse-and-hop args
-  // adapter in the pure core (envelope mechanics), and the gate-file mirror in
-  // the workflow runtime (the kernel parses the raw candidate bytes it validates
-  // and publishes). Both are sanctioned envelope reads, never content parsing.
-  assert.equal(code.split('JSON.parse').length - 1, 2, 'exactly two JSON.parse (the args adapter + the gate-file mirror)')
+  // W-01: exactly THREE JSON.parse calls — the sanctioned parse-and-hop args
+  // adapter in the pure core (envelope mechanics), the gate-file mirror in the
+  // workflow runtime (the kernel parses the raw candidate bytes it validates
+  // and publishes), and the W7-S2 audit-verdict mirror (the kernel parses the
+  // published audit bytes it rederives through reconcileAudit). All are
+  // sanctioned envelope reads, never content parsing.
+  assert.equal(code.split('JSON.parse').length - 1, 3, 'exactly three JSON.parse (the args adapter + the gate-file mirror + the audit-verdict mirror)')
   assert.ok(coreSrc.includes('Parse-and-hop'), 'the adapter is the marked parse-and-hop region')
 })
 
@@ -2651,4 +2657,399 @@ test('tiers (Wave 3): validateTiers enforces the HIGH-effort floor — a sub-HIG
   rt.surface_routing.ui = 'sub-high-route'
   assert.equal(validateTiers(rt), false, 'a surface route targeting a sub-HIGH extra role fails the floor — no effort-down route past the manual role list')
   assert.deepEqual(routeBuilder(cfg(), 'ui'), { effort: 'high', model: 'opus' }, 'the sealed ui route stays on the HIGH floor')
+})
+
+// ── W7-S2: the seam gate — the milestone audit seated in the build loop ──────
+const AUDIT = '.kiln/audit-review.json'
+const auditFinding = (id) => ({ id, criterion: 'C-1', location: 'src/app.mjs:12', failure_mode: 'broken', evidence: 'secret-audit-prose', minimal_fix: 'mend it' })
+const auditVerdict = (verdict, findings = [], blockers = []) => ({ review_id: 'aud-1', law_hash: 'a'.repeat(64), findings, blockers, verdict })
+const readAudit = (v) => ({ exit: 0, ids: [JSON.stringify(v)] })
+const auditSlice = () => ({ facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' })
+// The open-seam happy path: unlogged seam, green receipt, an accepting auditor,
+// and the trusted promotion leg.
+const AUDIT_OK = {
+  'audit:check': { exit: 1 },
+  'law:pre-audit': GREEN,
+  'audit:review': { exit: 0 },
+  'audit:read': readAudit(auditVerdict('accept')),
+  'audit:append': { exit: 0 },
+}
+
+test('runtime (W7-S2): the seam gate fires at the mid-plan label change and the final slice — each seam audits once through closed argv and promotes through append-audit', async () => {
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core', 'obj|s2|ui|core', 'obj|s3|ui|polish'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'seal:check': { exit: 1 },
+    'slice:s1': auditSlice(), 'slice:s2': auditSlice(), 'slice:s3': auditSlice(),
+    'law:pre-seal': GREEN,
+    'law:stage-end': GREEN,
+    'degraded:check': { exit: 1 },
+    'gate:review': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+    ...AUDIT_OK,
+  })
+  assert.equal(ret.status, 'ok')
+  const audits = calls.filter(c => c.label === 'audit:review')
+  assert.equal(audits.length, 2, 'exactly two seams audit — the label change after s2 and the final s3; s1 never audits')
+  assert.ok(audits[0].prompt.includes('kiln-review audit . .kiln s2 gpt-5.6-sol high ' + AUDIT),
+    'closed argv only — repo `.`, the cwd-relative kiln dir, the seam slice id, the reviewer-gate model and effort, the artifact path')
+  assert.ok(audits[1].prompt.includes('kiln-review audit . .kiln s3 gpt-5.6-sol high ' + AUDIT), 'the final slice is always a seam — the implicit whole-build milestone')
+  assert.ok(calls.findIndex(c => c.label === 'audit:review') > calls.findIndex(c => c.label === 'seal:append'), 'the audit fires only after the seam slice sealed')
+  const appends = calls.filter(c => c.label === 'audit:append')
+  assert.equal(appends.length, 2, 'each accepted seam promotes exactly once')
+  assert.ok(appends[0].prompt.includes('append-audit .kiln s2'), 'promotion rides the trusted CLI verb, never a bare append')
+  assert.ok(appends[1].prompt.includes('append-audit .kiln s3'))
+})
+
+test('runtime (W7-S2): an unlabeled plan pays exactly ONE final audit — the implicit whole-build seam at the last slice', async () => {
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui', 'obj|s2|ui'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'seal:check': { exit: 1 },
+    'slice:s1': auditSlice(), 'slice:s2': auditSlice(),
+    'law:pre-seal': GREEN,
+    'law:stage-end': GREEN,
+    'degraded:check': { exit: 1 },
+    'gate:review': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+    ...AUDIT_OK,
+  })
+  assert.equal(ret.status, 'ok')
+  const audits = calls.filter(c => c.label === 'audit:review')
+  assert.equal(audits.length, 1, 'one whole-build audit — never zero, never per-slice')
+  assert.ok(audits[0].prompt.includes('kiln-review audit . .kiln s2 '), 'the final slice is the seam slice')
+})
+
+test('runtime (W7-S2): a logged seam skips before any receipt; a sealed-but-unaudited seam re-fires on the all-sealed resume with the receipt refreshed first', async () => {
+  // Logged: the audits.log grep answers 0 — no receipt, no audit, no append.
+  const logged = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'seal:check': { exit: 1 },
+    'slice:s1': auditSlice(),
+    'law:pre-seal': GREEN,
+    'law:stage-end': GREEN,
+    'degraded:check': { exit: 1 },
+    'gate:review': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+    'audit:check': { exit: 0 },
+  })
+  assert.equal(logged.ret.status, 'ok')
+  const check = logged.calls.find(c => c.label === 'audit:check')
+  assert.ok(check && check.prompt.includes('grep -q "^s1 " .kiln/audits.log'), 'the grep-skip anchors the seam slice id over audits.log, mirroring the seal-skip')
+  assert.ok(!logged.calls.some(c => c.label === 'law:pre-audit' || c.label === 'audit:review'), 'a logged seam neither refreshes the receipt nor audits again')
+  // Resume: every slice already sealed, the final seam unaudited — the audit fires on the skip path.
+  const resumed = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core', 'obj|s2|ui|core'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'seal:check': { exit: 0 },
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+    ...AUDIT_OK,
+  })
+  assert.equal(resumed.ret.status, 'ok')
+  assert.equal(resumed.calls.filter(c => c.label && c.label.startsWith('slice:')).length, 0, 'no slice work re-runs on the all-sealed resume')
+  assert.equal(resumed.calls.filter(c => c.label === 'audit:review').length, 1, 'the unaudited seam re-fires on the seal-skip path')
+  const receiptAt = resumed.calls.findIndex(c => c.label === 'law:pre-audit')
+  const auditAt = resumed.calls.findIndex(c => c.label === 'audit:review')
+  assert.ok(receiptAt >= 0 && receiptAt < auditAt, 'the LAW check receipt refreshes on the skip path BEFORE the audit')
+  assert.ok(resumed.calls[receiptAt].prompt.includes('check-receipt.txt'), 'the refresh is the receipt-writing check run, verbatim evidence for the auditor')
+  assert.ok(resumed.calls.some(c => c.label === 'audit:append'), 'the accepted resume audit still promotes')
+})
+
+test('runtime (W7-S2): a red receipt at the seam takes the law-red door — no audit over a red law', async () => {
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'seal:check': { exit: 1 },
+    'slice:s1': auditSlice(),
+    'law:pre-seal': GREEN,
+    'degraded:check': { exit: 1 },
+    'gate:review': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+    'audit:check': { exit: 1 },
+    'law:pre-audit': { exit: 1, ids: [] },
+  })
+  assert.equal(ret.status, 'law-red')
+  assert.ok(!calls.some(c => c.label === 'audit:review'), 'no audit runs over a red law')
+  assert.ok(!calls.some(c => c.label === 'audit:append'), 'nothing promotes')
+  assert.ok(lastStateDoc(calls).includes('the LAW is red at the milestone audit of slice s1'), 'the static law-red next_action names the seam slice')
+})
+
+test('runtime (W7-S2): the audit adapter maps the closed exits — 20 transport-failure, 21 the degraded hard-stop, 127 gate-unreachable; none repair, none promote', async () => {
+  const base = (exit) => ({
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'seal:check': { exit: 1 },
+    'slice:s1': auditSlice(),
+    'law:pre-seal': GREEN,
+    'degraded:check': { exit: 1 },
+    'gate:review': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+    'audit:check': { exit: 1 },
+    'law:pre-audit': GREEN,
+    'audit:review': { exit },
+    'degraded:mark': { exit: 0 },
+  })
+  const transport = await runKernel({ stage: 'build', projectDir: '/p' }, base(20))
+  assert.equal(transport.ret.status, 'transport-failure')
+  const degraded = await runKernel({ stage: 'build', projectDir: '/p' }, base(21))
+  assert.equal(degraded.ret.status, 'degraded')
+  assert.ok(degraded.calls.some(c => c.label === 'degraded:mark'), 'the degraded stop marks for acknowledgment as the slice gates do')
+  assert.ok(lastStateDoc(degraded.calls).includes('Restore codex, then relaunch stage build: the milestone audit of slice s1'), 'the static degraded next_action names only the seam slice')
+  const unreachable = await runKernel({ stage: 'build', projectDir: '/p' }, base(127))
+  assert.equal(unreachable.ret.status, 'gate-unreachable')
+  for (const r of [transport, degraded, unreachable]) {
+    assert.ok(!r.calls.some(c => c.label === 'audit:repair'), 'no repair edge is spent on a non-verdict class')
+    assert.ok(!r.calls.some(c => c.label === 'audit:append'), 'no promotion without an accept')
+  }
+})
+
+test('runtime (W7-S2): changes_required and blocked both drive the Claude repair + audit-recheck cycle — 11 lands on the reject class and recovers within the cap', async () => {
+  for (const [wireExit, verdict] of [
+    [10, auditVerdict('changes_required', [auditFinding('F1')])],
+    [11, auditVerdict('blocked', [auditFinding('F1')], ['F1'])],
+  ]) {
+    const reads = [readAudit(verdict), readAudit(auditVerdict('accept'))]
+    const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+      ...VOICE,
+      'law:preflight': GREEN,
+      'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
+      'ladder:fetch': LADDER,
+      'cap:read': { exit: 0, recovery_cap: 2 },
+      'seal:check': { exit: 1 },
+      'slice:s1': auditSlice(),
+      'law:pre-seal': GREEN,
+      'law:stage-end': GREEN,
+      'degraded:check': { exit: 1 },
+      'gate:review': { exit: 0 },
+      'seal:append': { exit: 0 },
+      'state:write': GREEN,
+      'audit:check': { exit: 1 },
+      'law:pre-audit': GREEN,
+      'law:pre-audit-recheck': GREEN,
+      'audit:review': { exit: wireExit },
+      'audit:recheck': { exit: 0 },
+      'audit:read': () => reads.shift(),
+      'audit:findings': { exit: 0, ids: ['F1'] },
+      'audit:repair': OK_ACK,
+      'delta:check': { exit: 0 },
+      'audit:append': { exit: 0 },
+    })
+    assert.equal(ret.status, 'ok', 'exit ' + wireExit + ': the seam recovers and the run advances')
+    assert.equal(calls.filter(c => c.label === 'audit:repair').length, 1, 'exit ' + wireExit + ': exactly one repair edge spent')
+    const recheck = calls.find(c => c.label === 'audit:recheck')
+    assert.ok(recheck.prompt.includes('kiln-review audit-recheck . .kiln s1 gpt-5.6-sol high ' + AUDIT + ' .kiln/repair-delta.md ' + AUDIT),
+      'exit ' + wireExit + ': the recheck hands the published prior verdict as its pre-recheck snapshot plus the repair-delta path')
+    const receiptAt = calls.findIndex(c => c.label === 'law:pre-audit-recheck')
+    const recheckAt = calls.findIndex(c => c.label === 'audit:recheck')
+    assert.ok(receiptAt >= 0 && receiptAt < recheckAt, 'exit ' + wireExit + ': the recheck judges a fresh receipt')
+    assert.equal(calls.filter(c => c.label === 'audit:append').length, 1, 'exit ' + wireExit + ': promotion only after the accepted recheck')
+    const repair = calls.find(c => c.label === 'audit:repair')
+    assert.ok(repair.prompt.includes(AUDIT) && repair.prompt.includes('.kiln/LAW.md') && repair.prompt.includes('.kiln/repair-delta.md'),
+      'exit ' + wireExit + ': the STATIC repair prompt carries only closed-safe paths — the leg reads the audit JSON and LAW.md itself')
+    assert.ok(!repair.prompt.includes('secret-audit-prose') && !repair.prompt.includes('F1'), 'exit ' + wireExit + ': no finding content rides the prompt')
+    assert.equal(repair.opts.model, 'opus', 'exit ' + wireExit + ': the repair leg is the opposite-family Claude builder-ui seat')
+  }
+})
+
+test('runtime (W7-S2): the audit cycle holds at the existing edges — cap exhaustion and a non-shrinking recheck both land the blocked shape with content-blind STATE', async () => {
+  const build = (recoveryCap, cohorts, reads) => ({
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: recoveryCap },
+    'seal:check': { exit: 1 },
+    'slice:s1': auditSlice(),
+    'law:pre-seal': GREEN,
+    'degraded:check': { exit: 1 },
+    'gate:review': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+    'audit:check': { exit: 1 },
+    'law:pre-audit': GREEN,
+    'law:pre-audit-recheck': GREEN,
+    'audit:review': { exit: 10 },
+    'audit:recheck': { exit: 10 },
+    'audit:read': () => reads.shift(),
+    'audit:findings': () => ({ exit: 0, ids: cohorts.shift() }),
+    'audit:repair': OK_ACK,
+    'delta:check': { exit: 0 },
+  })
+  // cap 1: the recheck strictly shrinks {F1,F2} to {F1} but the edge budget is spent — held at the cap.
+  const capReads = [
+    readAudit(auditVerdict('changes_required', [auditFinding('F1'), auditFinding('F2')])),
+    readAudit(auditVerdict('changes_required', [auditFinding('F1')])),
+  ]
+  const exhausted = await runKernel({ stage: 'build', projectDir: '/p' }, build(1, [['F1', 'F2'], ['F1'], ['F1']], capReads))
+  assert.equal(exhausted.ret.status, 'blocked', 'cap exhaustion is the operator-ruling hold')
+  assert.equal(exhausted.ret.pointers.passes, 1)
+  assert.deepEqual(exhausted.ret.pointers.finding_ids, ['F1'], 'the blocked shape carries the closed finding ids')
+  assert.equal(exhausted.ret.pointers.gate, AUDIT, 'the blocked shape points at the audit artifact')
+  // no-strict-progress under cap 2: the recheck clears nothing — held after one spent edge.
+  const stallReads = [
+    readAudit(auditVerdict('changes_required', [auditFinding('F1')])),
+    readAudit(auditVerdict('changes_required', [auditFinding('F1')])),
+  ]
+  const stalled = await runKernel({ stage: 'build', projectDir: '/p' }, build(2, [['F1'], ['F1'], ['F1']], stallReads))
+  assert.equal(stalled.ret.status, 'blocked', 'equality clears nothing — held well under the cap')
+  assert.equal(stalled.ret.pointers.passes, 1)
+  for (const r of [exhausted, stalled]) {
+    assert.ok(!r.calls.some(c => c.label === 'audit:append'), 'a held seam never promotes')
+    const doc = lastStateDoc(r.calls)
+    assert.ok(doc.includes('Operator ruling: the milestone audit held for slice s1 after 1 repair passes — the verdict is at ' + AUDIT),
+      'the static next_action interpolates only the seam slice, the pass count, and the audit path')
+    assert.ok(!doc.includes('secret-audit-prose') && !doc.includes('C-1'), 'no verdict prose enters STATE — heredoc-safe closed facts only')
+  }
+})
+
+test('runtime (W7-S2): the kernel branches on its OWN derivation — a wire verdict the closed arrays do not support, or an invalid artifact, is the transport-class hold', async () => {
+  for (const [name, wireExit, read] of [
+    ['a recompute mismatch (wire accept over nonempty findings)', 0, readAudit(auditVerdict('accept', [auditFinding('F1')]))],
+    ['an invalid artifact (blockers behind no findings)', 11, readAudit(auditVerdict('blocked', [], ['ghost']))],
+    // W7S2-03: JSON `null` parses clean — the adapter must stay total, never throw.
+    ['a null artifact (valid JSON, not an object)', 0, readAudit(null)],
+    // W7S2-04: derived accept agrees with exit 0, but the published verdict STRING
+    // disagrees — the string is the third party to the agreement, not a bystander.
+    ['a wire-string disagreement (a blocked string over empty arrays at exit 0)', 0, readAudit(auditVerdict('blocked'))],
+  ]) {
+    const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+      ...VOICE,
+      'law:preflight': GREEN,
+      'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
+      'ladder:fetch': LADDER,
+      'cap:read': { exit: 0, recovery_cap: 2 },
+      'seal:check': { exit: 1 },
+      'slice:s1': auditSlice(),
+      'law:pre-seal': GREEN,
+      'degraded:check': { exit: 1 },
+      'gate:review': { exit: 0 },
+      'seal:append': { exit: 0 },
+      'state:write': GREEN,
+      'audit:check': { exit: 1 },
+      'law:pre-audit': GREEN,
+      'audit:review': { exit: wireExit },
+      'audit:read': read,
+    })
+    assert.equal(ret.status, 'transport-failure', name + ' holds transport-class — the invalid-artifact wire law')
+    assert.ok(!calls.some(c => c.label === 'audit:append'), name + ': never promotes')
+    assert.ok(!calls.some(c => c.label === 'audit:repair'), name + ': never spends a repair edge on a fiction')
+  }
+})
+
+test('runtime (W7-S2): the audits.log membership check is EXACT — a dotted seam id escapes its dots, and a missing log reads as proven absence, never grep\'s 2', async () => {
+  // W7S2-01: SLICE_ID admits dots; against `axb accept` a raw BRE `^a.b ` anchor
+  // exits 0 and falsely suppresses the legal seam a.b. The kernel escapes each dot.
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|a.b|ui|core'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'seal:check': { exit: 1 },
+    'slice:a.b': auditSlice(),
+    'law:pre-seal': GREEN,
+    'law:stage-end': GREEN,
+    'degraded:check': { exit: 1 },
+    'gate:review': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+    ...AUDIT_OK,
+  })
+  assert.equal(ret.status, 'ok')
+  const check = calls.find(c => c.label === 'audit:check')
+  assert.ok(check.prompt.includes('grep -q "^a\\.b " .kiln/audits.log'), 'each dot in the seam id is BRE-escaped — an exact first-field anchor')
+  // The EXACT issued command against a real filesystem: the collision line reads
+  // as absence, the genuine line as logged, the missing log as normalized absence.
+  const cmd = check.prompt.split('\n').pop()
+  const dir = mkdtempSync(join(tmpdir(), 'kiln-audit-exact-'))
+  mkdirSync(join(dir, '.kiln'))
+  assert.equal(spawnSync('sh', ['-c', cmd], { cwd: dir }).status, 1, 'a missing audits.log normalizes to proven absence (1) — never grep exit 2')
+  writeFileSync(join(dir, '.kiln', 'audits.log'), 'axb accept\n')
+  assert.equal(spawnSync('sh', ['-c', cmd], { cwd: dir }).status, 1, 'the logged axb collision line reads as ABSENCE — the legal seam a.b still audits')
+  writeFileSync(join(dir, '.kiln', 'audits.log'), 'a.b accept\n')
+  assert.equal(spawnSync('sh', ['-c', cmd], { cwd: dir }).status, 0, 'the genuinely logged a.b reads as LOGGED')
+})
+
+test('runtime (W7-S2): an untrusted audits.log answer holds transport-class — an unreadable log (2) and a hands transport failure (20) never read as absence', async () => {
+  // W7S2-02: only a PROVEN absence (exit 1) may re-audit — an unread log could
+  // hide an already-logged seam, and a re-audit would re-append it.
+  for (const exit of [2, 20]) {
+    const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+      ...VOICE,
+      'law:preflight': GREEN,
+      'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
+      'ladder:fetch': LADDER,
+      'cap:read': { exit: 0, recovery_cap: 2 },
+      'seal:check': { exit: 1 },
+      'slice:s1': auditSlice(),
+      'law:pre-seal': GREEN,
+      'degraded:check': { exit: 1 },
+      'gate:review': { exit: 0 },
+      'seal:append': { exit: 0 },
+      'state:write': GREEN,
+      'audit:check': { exit },
+    })
+    assert.equal(ret.status, 'transport-failure', 'exit ' + exit + ': an untrusted membership answer is a hold, never absence')
+    assert.ok(!calls.some(c => c.label === 'law:pre-audit' || c.label === 'audit:review'), 'exit ' + exit + ': no audit over an unread log')
+    assert.ok(!calls.some(c => c.label === 'audit:append'), 'exit ' + exit + ': nothing re-appends')
+    assert.ok(lastStateDoc(calls).includes('the audits.log membership check for slice s1 did not answer'), 'exit ' + exit + ': the static next_action names the failed check')
+  }
+})
+
+test('runtime (W7-S2): the audit repair edge confirms its delta — an {ok:true} ACK without a nonempty repair-delta.md is repair-failed, never a recheck over nothing', async () => {
+  // W7S2-05: the reviewLoop contract demands repair result AND delta confirmation,
+  // the same `test -s` the slice-gate repair edge performs.
+  const reads = [readAudit(auditVerdict('changes_required', [auditFinding('F1')]))]
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'seal:check': { exit: 1 },
+    'slice:s1': auditSlice(),
+    'law:pre-seal': GREEN,
+    'degraded:check': { exit: 1 },
+    'gate:review': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+    'audit:check': { exit: 1 },
+    'law:pre-audit': GREEN,
+    'audit:review': { exit: 10 },
+    'audit:read': () => reads.shift(),
+    'audit:findings': { exit: 0, ids: ['F1'] },
+    'audit:repair': OK_ACK,
+    'delta:check': { exit: 1 },
+  })
+  assert.equal(ret.status, 'repair-failed', 'an unconfirmed repair is repair-failed — not the transport class an empty delta would draw at the recheck')
+  const dc = calls.find(c => c.label === 'delta:check')
+  assert.ok(dc && dc.prompt.includes('test -s .kiln/repair-delta.md'), 'the same test -s confirmation the slice-gate repair edge performs')
+  assert.ok(!calls.some(c => c.label === 'audit:recheck'), 'no recheck judges an unconfirmed repair')
+  assert.ok(!calls.some(c => c.label === 'audit:append'), 'nothing promotes')
+  assert.ok(lastStateDoc(calls).includes('the milestone audit repair pass did not land for slice s1'), 'the static repair-failed next_action names the seam slice')
 })

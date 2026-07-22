@@ -547,6 +547,8 @@ const P = {
   slices: '.kiln/slices.json', seals: '.kiln/seals.log', degraded: '.kiln/degraded',
   ack: '.kiln/degraded-ack', receipt: '.kiln/check-receipt.txt', report: '.kiln/report.md',
   candidate: '.kiln/.gate-review.reviewer.tmp',
+  // W7-S2: the published milestone audit verdict — the audit-family gate file.
+  audit: '.kiln/audit-review.json',
   // Wave 3: the onboarding outputs the LAW input gate verifies before planning.
   brief: '.kiln/docs/project-brief.md', posture: '.kiln/posture.json',
   // Wave 3 (brownfield arm): the closed-fact marker the onboarding preflight drops
@@ -1157,12 +1159,205 @@ const capLeg = await agent(
   { label: 'cap:read', ...tier('kernel-leg'), schema: WIDTH },
 ).then(x => (x ?? { exit: 20 }))
 const cap = capFromDial(capLeg)
+// ── W7-S2: the seam gate — the milestone audit seated in the build loop ──────
+// ONE shared block for both paths a seam slice takes (the fresh seal and the
+// seal-skip resume, the all-sealed resume included): when the seam closed fact
+// holds and audits.log lacks the seam line, the goal-backward audit runs before
+// the loop advances. The gate rides the UNCHANGED reviewLoop under the same
+// per-invocation reversibility cap the slice gates use; blocked is RECOVERABLE
+// here — exit 11 lands on the reject class, since audit blockers reopen their
+// owning slices through the Claude repair leg — and the kernel branches on its
+// own reconcileAudit derivation over the published closed arrays, never on the
+// wire verdict string. Returns null to advance, or the halting kernel result.
+const auditSeam = async (slice) => {
+  // One accepted audit per seam, checked by EXACT first-field match: the slice-id
+  // charset admits dots, so each dot is BRE-escaped — a raw `^a.b ` anchor would
+  // let a logged axb line suppress the legal seam a.b. Closed exit law: 0 is
+  // logged (skip), 1 is PROVEN absence (a missing log normalizes to 1 before grep
+  // can answer 2 for it); anything else — an unreadable log, a hands transport
+  // failure — is an untrusted answer and HOLDS, because a re-audit over an unread
+  // log could re-append an already-logged seam.
+  const logged = await hands(
+    'test -e .kiln/audits.log || exit 1; grep -q "^' + slice.replace(/\./g, '\\.') + ' " .kiln/audits.log',
+    'audit:check')
+  if (logged === 0) return null
+  if (logged !== 1) {
+    return failStop('transport-failure',
+      { stage, active_slice: slice, next_action: 'Rerun stage build after fixing the transport: the audits.log membership check for slice ' + slice + ' did not answer' },
+      await voiceBeat('transport-failure', {}, 'The audits.log check for slice ' + slice + ' returned no trustworthy answer — the run holds.', 1),
+      { gate: P.audit })
+  }
+  // Receipt first: the auditor judges executed evidence, so the LAW check
+  // receipt refreshes immediately before the initial audit on EVERY path. Red
+  // takes the existing pre-seal door exactly — a sealed owner reopens, a
+  // non-future red halts law-red — and no audit runs over a red law.
+  const guard = await lawBeat(LAW_CHECK_RECEIPT, 'law:pre-audit')
+  if (guard.exit !== 0) {
+    const owner = await firstSealed(guard.ids)
+    if (owner) return reopen(owner, 'pre-audit')
+    if (!redSetIsFuture(guard.ids, slice, sliceIds)) {
+      return failStop('law-red',
+        { stage, active_slice: slice, next_action: 'Rerun stage build: the LAW is red at the milestone audit of slice ' + slice },
+        'The law is red at the milestone audit of slice ' + slice + ' — no audit over a red law.')
+    }
+  }
+  const auditorOpts = tier('reviewer-gate')
+  // The kernel-owned derivation from the last parsed published verdict — the
+  // promotion below demands the advance result AND an accept from THIS,
+  // never the wire verdict alone.
+  let derived = null
+  let recheckRed = null
+  const auditGate = async (mode) => {
+    // The freshReceipt mirror: every recheck judges a fresh receipt; a sealed
+    // or non-future red stashes for the after-loop reopen / law-red ruling.
+    if (mode === 'recheck') {
+      const again = await lawBeat(LAW_CHECK_RECEIPT, 'law:pre-audit-recheck')
+      if (again.exit !== 0) {
+        const owner = await firstSealed(again.ids)
+        if (owner || !redSetIsFuture(again.ids, slice, sliceIds)) {
+          recheckRed = again.ids
+          return 20
+        }
+      }
+    }
+    // Closed facts only ride the argv: repo `.`, the cwd-relative kiln dir, the
+    // seam slice id, and the reviewer-gate model and effort from the tier file
+    // (the ratify-leg pattern). The recheck hands the published prior verdict
+    // path as its own pre-recheck snapshot — the CLI reads the prior fully
+    // before it writes the output path — plus the repair-delta path.
+    const exit = await hands(
+      mode === 'recheck'
+        ? plugin + '/scripts/kiln-review audit-recheck . .kiln ' + slice + ' ' + auditorOpts.model + ' ' + auditorOpts.effort + ' ' + P.audit + ' ' + P.delta + ' ' + P.audit
+        : plugin + '/scripts/kiln-review audit . .kiln ' + slice + ' ' + auditorOpts.model + ' ' + auditorOpts.effort + ' ' + P.audit,
+      'audit:' + mode)
+    if (exit === 0 || exit === 10 || exit === 11) {
+      // The ONE sanctioned audit-verdict parse (the gate-file mirror): the
+      // kernel rederives the verdict from the published closed arrays and
+      // demands THREE-WAY agreement — derivation, wire exit, AND the published
+      // verdict string (exit 0 over a `blocked` string is a disagreement the
+      // exit alone cannot see). Invalid, a recompute mismatch, or a string
+      // disagreement is the invalid-artifact wire law, transport-class, never
+      // a promotion.
+      const raw = await idsFetch('cat ' + P.audit, 'audit:read', 'a one-element array holding the exact audit verdict file contents printed on stdout, [] if exit != 0')
+      if (raw.exit !== 0 || raw.ids.length !== 1) return 20
+      let g
+      try { g = JSON.parse(raw.ids[0]) } catch { return 20 }
+      // Totality over the published bytes: JSON `null` parses clean, so the
+      // object guard rules before any dereference.
+      if (!g || typeof g !== 'object') return 20
+      const d = reconcileAudit(g.findings, g.blockers)
+      if (g.verdict !== d.verdict || verdictExit(d.verdict) !== exit) return 20
+      derived = d.verdict
+      // Blocked is recoverable at this gate — the canonical reopen edge: exit
+      // 11 returns to the loop as the reject class and drives the same repair
+      // plus recheck cycle a changes_required does.
+      return exit === 11 ? 10 : exit
+    }
+    return exit
+  }
+  const loop = await reviewLoop({
+    gate: auditGate,
+    // The pinned prior cohort: the finding ids the published audit verdict carries.
+    cohort: async () => {
+      const c = await idsFetch(
+        "node -p 'JSON.stringify((require(\"./" + P.audit + "\").findings||[]).map(f=>String(f.id)))'",
+        'audit:findings', 'the printed JSON array of the current audit finding ids, [] if exit != 0',
+      )
+      return c.exit === 0 ? c.ids : null
+    },
+    // ONE fresh Claude leg, opposite-family to the GPT auditor, on the ACK
+    // contract: a STATIC prompt of closed-safe paths only — the leg itself
+    // reads the audit JSON and LAW.md (criterion ownership is LAW.md prose),
+    // repairs the owning slices, and writes the repair delta. Seals stand:
+    // a repaired sealed slice is never re-sealed.
+    repair: async () => {
+      const ack = await agent([
+        'You are the milestone audit repair leg: a fresh mind repairing the audited milestone against the locked law.',
+        'Project dir: ' + projectDir + '. Read the published audit verdict at ' + P.audit + ' and the locked law at ' + P.law + '.',
+        'Repair the content the findings pin, slice by owning slice, blockers first. Criterion ownership is read from ' + P.law + '. Seals stand: never re-seal a repaired slice.',
+        'Write the repair delta to ' + P.delta + ' describing every change. Then return { ok: true } — the ack carries no verdict; the audit recheck judges the repository.',
+      ].join('\n'), { label: 'audit:repair', ...tier('builder-ui'), schema: ACK })
+      if (!ack || ack.ok !== true) return false
+      // The reviewLoop contract: a repair confirms only with its delta on disk —
+      // the same `test -s` the slice-gate repair edge performs. An ACK without a
+      // nonempty delta is repair-failed, never a recheck over nothing (the
+      // recheck would reject the blank delta as transport and mask the truth).
+      return await hands('test -s ' + P.delta, 'delta:check') === 0
+    },
+  }, cap)
+  // A red pre-recheck rerun is a law fact, not a transport fact — the pre-seal
+  // door rules it before any transport branch reads the result.
+  if (recheckRed) {
+    const owner = await firstSealed(recheckRed)
+    if (owner) return reopen(owner, 'pre-audit-recheck')
+    return failStop('law-red',
+      { stage, active_slice: slice, next_action: 'Rerun stage build: the LAW went red during the milestone audit of slice ' + slice },
+      'The law went red during the milestone audit of slice ' + slice + ' — no recheck over a red law.')
+  }
+  // Kernel-owned promotion: only the advance result AND an accept from the
+  // kernel derivation append the audit fact — through the trusted CLI verb,
+  // never a bare shell append. Then the loop continues past the seam.
+  if (loop.result === 'sealed' && derived === 'accept') {
+    if (await hands('node ' + plugin + '/scripts/kiln-review append-audit .kiln ' + slice, 'audit:append') !== 0) return persistFail('audit-append')
+    return null
+  }
+  // Stop surfaces: the existing statuses, exactly as the build gate maps them.
+  // Every next_action is a STATIC template interpolating only the seam slice
+  // id, the pass count, and the audit artifact path — no verdict prose enters
+  // STATE; the audit JSON is the operator detail surface.
+  if (loop.result === 'blocked') {
+    const found = await idsFetch(
+      "node -p 'JSON.stringify((require(\"./" + P.audit + "\").findings||[]).map(f=>String(f.id)))'",
+      'audit:findings', 'the printed JSON array of the current audit finding ids, [] if exit != 0',
+    )
+    beats.push(await voiceBeat('blocked', { passes: loop.repairs, ids: found.ids.join(', '), count: found.ids.length }, 'The gate held after ' + loop.repairs + ' repair passes — the ruling is yours.'))
+    return stop('blocked',
+      { stage, active_slice: slice, next_action: 'Operator ruling: the milestone audit held for slice ' + slice + ' after ' + loop.repairs + ' repair passes — the verdict is at ' + P.audit },
+      { gate: P.audit, finding_ids: found.ids, passes: loop.repairs })
+  }
+  if (loop.result === 'degraded') {
+    // The degraded hard-stop the slice gates take, with an audit-honest next
+    // step: the milestone auditor has no single-family fallback, so the seam
+    // waits on codex — the mark and the ack record the stop as ever.
+    const db = await voiceBeat('degradation', {}, 'Codex is not answering — answer continue to proceed single-family.')
+    if (await hands('touch ' + P.degraded + ' ' + P.ack, 'degraded:mark') !== 0) return persistFail('degraded-mark')
+    beats.push(db)
+    return stop('degraded', { stage, active_slice: slice, next_action: 'Restore codex, then relaunch stage build: the milestone audit of slice ' + slice + ' needs the second family' })
+  }
+  if (loop.result === 'gate-unreachable') {
+    return failStop('gate-unreachable',
+      { stage, active_slice: slice, next_action: 'Rerun stage build: the milestone audit gate tool is unreachable for slice ' + slice },
+      await voiceBeat('gate-unreachable', {}, 'The gate tool would not run — not found or not executable where it lives, so codex was never reached and no verdict was possible.'),
+      { gate: P.audit })
+  }
+  if (loop.result === 'repair-failed') {
+    return failStop('repair-failed',
+      { stage, active_slice: slice, next_action: 'Rerun stage build: the milestone audit repair pass did not land for slice ' + slice },
+      'The milestone audit repair pass did not land for slice ' + slice + ' — the run holds.',
+      { gate: P.audit })
+  }
+  // transport-failure — and, fail-closed, any advance whose derivation is not
+  // accept — holds here: no verdict, no promotion.
+  return failStop('transport-failure',
+    { stage, active_slice: slice, next_action: 'Rerun stage build after fixing the transport: the milestone audit of slice ' + slice + ' published no usable verdict' },
+    await voiceBeat('transport-failure', {}, 'The milestone audit call for slice ' + slice + ' returned no verdict — the run holds.'),
+    { gate: P.audit })
+}
 let corrections = 0
 for (const entry of slices) {
   const slice = entry.id
   const ordinal = slices.indexOf(entry) + 1
   const sealed = await hands('grep -q "^' + slice + ' " ' + P.seals + ' 2>/dev/null', 'seal:check')
-  if (sealed === 0) continue
+  if (sealed === 0) {
+    // W7-S2: a sealed seam slice can still owe its milestone audit — a resume
+    // that sealed the seam without auditing re-fires here, the all-sealed
+    // resume included; a logged seam skips inside the shared block.
+    if (milestoneSeamAfter(milestones, ordinal - 1)) {
+      const held = await auditSeam(slice)
+      if (held) return held
+    }
+    continue
+  }
   // T-03: the kernel surface-routes the builder leg BEFORE agent() — ui to
   // builder-ui, logic and mixed to builder-logic — and the build and repair of this slice
   // both dispatch with the resolved role opts. Only the kernel holds this
@@ -1404,6 +1599,12 @@ for (const entry of slices) {
   beats.push(await voiceBeat('seal', { ...facts, label }, 'sealed — {label} · slice {slice}'))
   const w = await hands(atomicWriteCmd(stateDoc({ stage, active_slice: slice, next_action: nextAct('build'), density, pointers: [...routes] })), 'state:write')
   if (w !== 0) return persistFail('state-write')
+  // W7-S2: the seam gate fires after the fresh seal and its STATE write — the
+  // milestone audit rules before the loop advances past the seam.
+  if (facts.seam) {
+    const held = await auditSeam(slice)
+    if (held) return held
+  }
 }
 // LAW rerun beat: stage end. Red reopens only a sealed owner.
 const post = await lawBeat(LAW_CHECK, 'law:stage-end')
