@@ -200,7 +200,7 @@ const LAW_CHECK_RECEIPT = 'bash .kiln/law/check.sh > .kiln/check-receipt.txt 2>&
 // role. No compiled model or effort value lives in the kernel — every value flows
 // from the file at run time.
 const TIER_EFFORTS = ['low', 'medium', 'high', 'xhigh']
-const TIER_ROLES = ['driver', 'kernel-leg', 'stage-card', 'stage-law', 'builder-ui', 'builder-logic', 'reviewer-gate', 'fallback-reviewer', 'brainstorm-facilitator', 'haiku-migration', 'dev-sol']
+const TIER_ROLES = ['driver', 'kernel-leg', 'stage-card', 'stage-law', 'builder-ui', 'builder-logic', 'reviewer-gate', 'fallback-reviewer', 'ratify-reviewer', 'brainstorm-facilitator', 'haiku-migration', 'dev-sol']
 const TIER_ROUTES = ['ui', 'logic', 'mixed']
 function validateTiers(c) {
   if (!c || typeof c !== 'object') return false
@@ -309,7 +309,7 @@ if (!plugin || plugin[0] !== '/') {
 const density = A.detail ? 'engineer' : 'broad'
 const P = {
   state: '.kiln/STATE.md', law: '.kiln/LAW.md', gate: '.kiln/gate-review.json',
-  request: '.kiln/review-request.json', delta: '.kiln/repair-delta.md',
+  request: '.kiln/review-request.json', ratifyRequest: '.kiln/ratify-request.json', delta: '.kiln/repair-delta.md',
   slices: '.kiln/slices.json', seals: '.kiln/seals.log', degraded: '.kiln/degraded',
   ack: '.kiln/degraded-ack', receipt: '.kiln/check-receipt.txt',
   candidate: '.kiln/.gate-review.reviewer.tmp',
@@ -469,13 +469,97 @@ if (stage !== 'build') {
   // below survive only as unreachable-voice fallbacks (W-03).
   if (!r.ok) return failStop('transport-failure', { stage, next_action: 'Rerun stage ' + stage }, await voiceBeat('transport-failure', {}, 'The ' + stage + ' stage did not return sound work — the run holds.', 1))
   for (const p of r.pointers) routes.add(p)
+  // Wave 1 (the Second Key): the LAW stage is content-blind-gated before it can
+  // lock. The card produced the candidate LAW; a fresh OPPOSITE-family mind now
+  // ratifies it against the architecture-feasibility rubric (reviewLoop + the
+  // kiln-review `ratify` verb), and only on accept does the kernel seal the LAW
+  // (the opaque `seal-law` verb) and let build begin. A broken bridge, a block,
+  // or non-convergence is a terminal HELD for the operator — the LAW never locks
+  // single-family, because a plan no second family has ratified is not ratified.
+  if (stage === 'law') {
+    // A2: the LAW card beat asserts the law is SEALED and build starts (cards/law.md),
+    // so it must NEVER reach the transcript on a HELD — that would read "sealed… build
+    // starts" above the honest hold line, a self-contradicting record. BUFFER the latest
+    // candidate beat (a repair regenerates the whole LAW, so its beat replaces the prior
+    // one) and emit it ONLY after a successful ratify AND seal; every held/halt path
+    // emits its own line alone.
+    let candidateBeat = r.beat
+    const ratifyOpts = tier('ratify-reviewer')
+    // Content-blind request write: the kernel cannot author files, so it ships the
+    // ratify request as a heredoc of closed facts through a mechanical hand — the
+    // same shape as the STATE.md write — and branches only on the exit code. The
+    // review_id is kernel-issued (the ratify verb expects the caller to supply it,
+    // unlike a slice review, which mints its own), the reviewer is the opposite-
+    // family ratify-reviewer tier, the artifact is the repo-relative LAW, and the
+    // rubric is the ABSOLUTE law-rubric path (kiln-review resolves the artifact
+    // repo-relative but the rubric from CWD/absolute).
+    const ratifyReq = JSON.stringify({
+      review_id: 'law-ratify', reviewer_model: ratifyOpts.model, reviewer_effort: ratifyOpts.effort,
+      artifact: P.law, rubric: plugin + '/data/law-rubric.json',
+    })
+    const writeReq = [
+      'set -e', 'mkdir -p .kiln',
+      "cat > .kiln/.ratify-request.tmp <<'KILN_RATIFY_EOF'", ratifyReq, 'KILN_RATIFY_EOF',
+      'mv -f .kiln/.ratify-request.tmp ' + P.ratifyRequest,
+    ].join('\n')
+    if (await hands(writeReq, 'ratify:request') !== 0) return persistFail('ratify-request')
+    const ratifyLoop = await reviewLoop({
+      // The ratify verb has no recheck mode — a repair regenerates the whole LAW,
+      // so every round re-grades the fresh artifact (kiln-review recomputes the
+      // candidate digest from the current bytes). The direct-path call preserves
+      // 126/127 → gate-unreachable exactly as the build gate does. A9: the <repo>
+      // arg is the cwd-relative `.` — hands runs in projectDir, and ratify resolves the
+      // .kiln/ request and the artifact against it — never a bare projectDir, which a
+      // whitespace path would split into extra argv and fail this mandatory 3-arg gate.
+      gate: () => hands(plugin + '/scripts/kiln-review ratify . ' + P.ratifyRequest + ' ' + P.gate, 'ratify:gate'),
+      repair: async (pass) => {
+        const rr = await act(cardPrompt('Ratify repair pass ' + pass + ': the LAW did not ratify. Read every finding in ' + P.gate + ' and regenerate ' + P.law + ' to resolve them all, keeping the acceptance criteria and the slice plan sound and complete.'), 'ratify:repair')
+        if (!rr.ok) return false
+        for (const p of rr.pointers) routes.add(p)
+        candidateBeat = rr.beat // buffer the repaired candidate; the repair card beat also claims SEALED, so it is never emitted mid-loop
+        return true
+      },
+    })
+    if (ratifyLoop.result === 'sealed') {
+      // seal-law is the only sealer on the kernel side: it digests LAW.md and
+      // writes law/lock.hash, so the LAW locks only after cross-family ratification.
+      if (await hands('node ' + plugin + '/scripts/kiln-review seal-law .kiln', 'law:seal') !== 0) return persistFail('law-seal')
+      // Only now, past ratify AND seal, does the SEALED-claiming card beat speak.
+      beats.push(fillClosed(candidateBeat, stageFacts))
+    } else if (ratifyLoop.result === 'degraded') {
+      return failStop('held',
+        { stage, active_slice: 'none', next_action: 'The LAW needs an opposite-family ratifier and codex is not answering — restore codex, then rerun stage law' },
+        'The LAW would not ratify: codex is not answering, and I do not lock the law with a single family. It stays open until a second family can rule — restore codex and rerun the law stage.',
+        { gate: P.gate })
+    } else if (ratifyLoop.result === 'blocked') {
+      return failStop('held',
+        { stage, active_slice: 'none', next_action: 'Operator ruling: the ratify reviewer held the LAW after ' + ratifyLoop.repairs + ' repair passes — rule, then rerun stage law' },
+        'The LAW did not ratify after ' + ratifyLoop.repairs + ' repair passes — the reviewer holds it and the law stays unlocked. The ruling is yours: revise the acceptance criteria, then rerun the law stage.',
+        { gate: P.gate })
+    } else if (ratifyLoop.result === 'repair-failed') {
+      return failStop('held',
+        { stage, active_slice: 'none', next_action: 'Rerun stage law — a LAW repair pass did not land' },
+        'A LAW repair pass did not land — the run holds with the law unlocked. Rerun the law stage.',
+        { gate: P.gate })
+    } else if (ratifyLoop.result === 'gate-unreachable') {
+      return failStop('gate-unreachable',
+        { stage, active_slice: 'none', next_action: 'Rerun stage law after restoring the gate tool at ' + plugin + '/scripts/kiln-review' },
+        await voiceBeat('gate-unreachable', {}, 'The gate tool at ' + plugin + '/scripts/kiln-review is unreachable — not found or not executable; codex was never reached, so no verdict was possible.'),
+        { gate: P.gate })
+    } else if (ratifyLoop.result === 'transport-failure') {
+      return failStop('transport-failure',
+        { stage, active_slice: 'none', next_action: 'Rerun stage law after fixing the transport' },
+        await voiceBeat('transport-failure', {}, 'The ratify call went out and came back with no verdict — the LAW cannot lock until the transport is sound.'),
+        { gate: P.gate })
+    }
+  }
   // LAW rerun beat: stage end (report is a stage, so this also guards completion).
   const post = await lawBeat(LAW_GUARD, 'law:stage-end')
   if (post.exit !== 0) {
     const owner = await firstSealed(post.ids)
     if (owner) return reopen(owner, 'stage end')
   }
-  beats.push(fillClosed(r.beat, stageFacts))
+  if (stage !== 'law') beats.push(fillClosed(r.beat, stageFacts))
   return stop(stage === 'report' ? 'done' : 'ok', { stage, next_action: nextAct(nextStage(stage)) })
 }
 

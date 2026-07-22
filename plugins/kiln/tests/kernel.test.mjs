@@ -63,6 +63,10 @@ const TIERS_OK = {
     // a boot-required consumer role, consumed on the degraded logic/mixed gate — opus
     // reviews the sonnet-built slice, the best split without a second family.
     'fallback-reviewer': { family: 'claude', alias: 'opus', effort: 'high' },
+    // Wave 1 (the Second Key): the always-on cross-family LAW-ratify gate — a
+    // gpt reviewer, opposite-family to the claude/fable stage-law producer; a
+    // boot-required consumer role the kernel resolves at the law stage.
+    'ratify-reviewer': { family: 'gpt', alias: 'gpt-sol', effort: 'high' },
     'brainstorm-facilitator': { family: 'claude', alias: 'inherit', effort: 'high' },
     'haiku-migration': { family: 'claude', alias: 'sonnet', effort: 'medium' },
     'dev-sol': { family: 'gpt', alias: 'gpt-sol', effort: 'high' },
@@ -596,6 +600,7 @@ test('tiers: validateTiers requires the full consumer role set, all three routes
   const ms = cfg(); delete ms.roles['stage-card']; assert.equal(validateTiers(ms), false, 'missing stage-card halts at boot')
   const ml = cfg(); delete ml.roles['stage-law']; assert.equal(validateTiers(ml), false, 'missing stage-law halts at boot (INTAKE-19)')
   const mf = cfg(); delete mf.roles['fallback-reviewer']; assert.equal(validateTiers(mf), false, 'missing fallback-reviewer halts at boot — the degraded logic/mixed gate consumes it, so a lacking file must fail closed, never throw mid-run')
+  const mrr = cfg(); delete mrr.roles['ratify-reviewer']; assert.equal(validateTiers(mrr), false, 'missing ratify-reviewer halts at boot (Wave 1) — the law-stage ratify gate consumes it, so a tiers.json lacking it fails closed, never throws mid-run')
   const mr = cfg(); delete mr.surface_routing.mixed; assert.equal(validateTiers(mr), false, 'all three routes required')
   const dr = cfg(); dr.surface_routing.ui = 'ghost'; assert.equal(validateTiers(dr), false, 'route targets must be real role keys')
   const gr = cfg(); delete gr.resolver['gpt-sol']; assert.equal(validateTiers(gr), false, 'a gpt alias with no resolver mapping halts at boot')
@@ -616,6 +621,7 @@ test('tiers: resolveTier is family-aware — claude passes through, gpt resolves
   assert.deepEqual(resolveTier(TIERS_OK, 'reviewer-gate'), { effort: 'high', model: 'gpt-5.6-sol' }, 'a gpt alias resolves to the concrete id')
   assert.deepEqual(resolveTier(TIERS_OK, 'builder-logic'), { effort: 'high', model: 'sonnet' }, 'the logic seat is the claude context-builder — HIGH wrapper effort (INTAKE-14b/Q1); its coder rides a bash call, never this option')
   assert.deepEqual(resolveTier(TIERS_OK, 'fallback-reviewer'), { effort: 'high', model: 'opus' }, 'the codex-absent fallback reviewer resolves to opus — a model different from the sonnet builder (duo-pool.json:7 logic_fallback)')
+  assert.deepEqual(resolveTier(TIERS_OK, 'ratify-reviewer'), { effort: 'high', model: 'gpt-5.6-sol' }, 'the LAW-ratify reviewer resolves to the concrete codex id — opposite-family to the claude/fable stage-law producer (Wave 1)')
   assert.deepEqual(resolveTier(TIERS_OK, 'haiku-migration'), { effort: 'medium', model: 'sonnet' })
   const c = cfg(); c.resolver['fable'] = 'sneaky-rewrite'
   assert.deepEqual(resolveTier(c, 'stage-law'), { effort: 'high', model: 'fable' }, 'a resolver entry cannot rewrite a claude alias')
@@ -659,6 +665,7 @@ test('runtime (T-02): a malformed tier shape fails closed AT BOOT — the boot i
     'missing stage-card role': (c) => { delete c.roles['stage-card'] },
     'missing stage-law role': (c) => { delete c.roles['stage-law'] },
     'missing fallback-reviewer role': (c) => { delete c.roles['fallback-reviewer'] },
+    'missing ratify-reviewer role': (c) => { delete c.roles['ratify-reviewer'] },
     'missing mixed route': (c) => { delete c.surface_routing.mixed },
     'unresolved gpt alias': (c) => { delete c.resolver['gpt-sol'] },
     'gpt-routed surface': (c) => { c.roles['builder-logic'] = { family: 'gpt', alias: 'gpt-sol', effort: 'high' } },
@@ -721,6 +728,11 @@ test('runtime (INTAKE-19): the LAW leg spawns on stage-law (fable) — validate 
     ...VOICE,
     'law:preflight': GREEN,
     ['stage:' + s]: { ok: true, beat: 'working', pointers: [] },
+    // Wave 1: the law run now ratifies before advancing (accept, sealed); the
+    // validate/report runs never reach these labels (the ratify gate is law-only).
+    'ratify:request': GREEN,
+    'ratify:gate': { exit: 0 },
+    'law:seal': { exit: 0 },
     'law:stage-end': GREEN,
     'state:write': GREEN,
   })
@@ -734,6 +746,149 @@ test('runtime (INTAKE-19): the LAW leg spawns on stage-law (fable) — validate 
     assert.equal(leg.opts.model, undefined, s + ' stays on stage-card — inherit carries no model option')
     assert.equal(leg.opts.effort, 'high')
   }
+})
+
+// ── Wave 1 (the Second Key): the always-on cross-family LAW-ratify gate ──────
+
+test('runtime (Wave 1): the LAW ratifies, seal-law locks it, and the run advances to build', async () => {
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'stage:law': { ok: true, beat: 'the law, pinned', pointers: ['.kiln/LAW.md', '.kiln/slices.json'] },
+    'ratify:request': GREEN,
+    'ratify:gate': { exit: 0 },
+    'law:seal': { exit: 0 },
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'ok', 'a ratified LAW advances')
+  // The kernel writes the ratify request itself (content-blind), naming the
+  // opposite-family reviewer and the absolute rubric.
+  const req = calls.find(c => c.label === 'ratify:request')
+  assert.ok(req, 'the kernel writes the ratify request')
+  assert.ok(req.prompt.includes('ratify-request.json'), 'the request lands at the ratify-request path')
+  assert.ok(req.prompt.includes('law-rubric.json'), 'the request names the law rubric')
+  assert.ok(req.prompt.includes('gpt-5.6-sol'), 'the reviewer is the opposite-family ratify-reviewer (codex id)')
+  assert.ok(req.prompt.includes('law-ratify'), 'the review_id is kernel-issued')
+  // The gate rides the kiln-review ratify verb.
+  const gate = calls.find(c => c.label === 'ratify:gate')
+  assert.ok(gate && gate.prompt.includes('kiln-review ratify . '), 'the gate rides the kiln-review ratify verb with the cwd-relative repo arg')
+  // seal-law is the sealer on the kernel side, and it runs only after accept.
+  const seal = calls.find(c => c.label === 'law:seal')
+  assert.ok(seal && seal.prompt.includes('seal-law .kiln'), 'seal-law locks the ratified LAW on the cwd-relative kiln dir')
+  assert.ok(calls.indexOf(gate) < calls.indexOf(seal), 'the seal follows the accept, never precedes it')
+  assert.ok(lastStateDoc(calls).includes('Relaunch the kernel workflow with stage=build'), 'next_action advances to build')
+})
+
+test('runtime (Wave 1): a LAW ratify reject repairs the law, rechecks, and seals within the cap', async () => {
+  const gateExits = [10, 0] // review reject, then recheck accept after one repair
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'stage:law': { ok: true, beat: 'the law, pinned', pointers: [] },
+    'ratify:request': GREEN,
+    'ratify:gate': () => ({ exit: gateExits.shift() }),
+    'ratify:repair': { ok: true, beat: 'the law, revised', pointers: ['.kiln/LAW.md'] },
+    'law:seal': { exit: 0 },
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'ok', 'reject then a repaired recheck advances')
+  assert.equal(calls.filter(c => c.label === 'ratify:gate').length, 2, 'the gate ran twice — review then recheck')
+  assert.equal(calls.filter(c => c.label === 'ratify:repair').length, 1, 'exactly one repair pass landed')
+  const repair = calls.find(c => c.label === 'ratify:repair')
+  assert.equal(repair.opts.model, 'fable', 'the repair re-runs the LAW card on the stage-law thinking seat')
+  assert.ok(repair.prompt.includes('.kiln/gate-review.json'), 'the repair reads the findings from the gate file')
+  assert.ok(repair.prompt.includes('.kiln/LAW.md'), 'the repair regenerates the LAW artifact')
+  assert.ok(calls.some(c => c.label === 'law:seal'), 'seal-law locks the ratified LAW')
+})
+
+test('runtime (Wave 1): a LAW that will not ratify holds after the repair cap — never a silent advance', async () => {
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'stage:law': { ok: true, beat: 'the law', pointers: [] },
+    'ratify:request': GREEN,
+    'ratify:gate': { exit: 10 }, // always changes_required
+    'ratify:repair': { ok: true, beat: 'revised', pointers: [] },
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'held', 'a non-converging LAW holds for the operator')
+  assert.equal(calls.filter(c => c.label === 'ratify:repair').length, 2, 'exactly two repair passes, never a third')
+  assert.equal(calls.filter(c => c.label === 'ratify:gate').length, 3, 'review plus two rechecks — the bounded loop')
+  assert.ok(!calls.some(c => c.label === 'law:seal'), 'the LAW never locks unratified')
+  assert.ok(!ret.beat.includes('revised'), 'buffered repair-round beats never leak into a held transcript')
+  const doc = lastStateDoc(calls)
+  assert.ok(doc.includes('stage: law'), 'the run holds at the law stage')
+  assert.ok(!doc.includes('stage=build'), 'never advances to build on a held LAW')
+})
+
+test('runtime (Wave 1): codex unavailable at LAW ratify holds — never the build degraded single-family continue', async () => {
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'stage:law': { ok: true, beat: 'the law', pointers: [] },
+    'ratify:request': GREEN,
+    'ratify:gate': { exit: 21 }, // codex unavailable
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'held', 'codex-down at law ratify is a hold, not a degraded single-family continue')
+  assert.ok(!calls.some(c => c.label === 'ratify:repair'), 'no repair on codex-unavailable')
+  assert.ok(!calls.some(c => c.label === 'law:seal'), 'the LAW never locks without a second family')
+  assert.ok(!calls.some(c => c.label === 'degraded:mark'), 'never the build degraded-continue path — the law does not lock single-family')
+  assert.ok(ret.beat.toLowerCase().includes('codex'), 'the held beat is honest about the missing second family')
+  assert.ok(!ret.beat.includes('sealed'), 'the law never seals')
+})
+
+test('runtime (Wave 1, A2): the SEALED-claiming LAW card beat speaks only after ratify+seal — never on a held transcript', async () => {
+  // The real cards/law.md beat asserts the law is locked and build starts; on a HELD
+  // that beat above the honest hold line is a self-contradicting record. The kernel
+  // buffers it and emits it only after a successful ratify AND seal.
+  const LAW_SEALED_BEAT = 'The law is locked. Asimov pinned your acceptance criteria into executable Law — sealed before build begins; the forge starts next.'
+  const base = {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'stage:law': { ok: true, beat: LAW_SEALED_BEAT, pointers: [] },
+    'ratify:request': GREEN,
+    'state:write': GREEN,
+  }
+  // HELD (codex down): the sealed narration is ABSENT — only the honest hold line.
+  const held = await runKernel({ stage: 'law', projectDir: '/p' }, { ...base, 'ratify:gate': { exit: 21 } })
+  assert.equal(held.ret.status, 'held')
+  assert.ok(!held.ret.beat.includes('locked') && !held.ret.beat.includes('build begins') && !held.ret.beat.includes('forge starts'),
+    'no SEALED / build-starts narration on a held transcript — an unratified plan never reads as sealed')
+  assert.ok(held.ret.beat.toLowerCase().includes('codex'), 'only the honest hold line speaks')
+  // Accept: the sealed beat appears (past ratify AND seal).
+  const accept = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...base, 'ratify:gate': { exit: 0 }, 'law:seal': { exit: 0 }, 'law:stage-end': GREEN,
+  })
+  assert.equal(accept.ret.status, 'ok')
+  assert.ok(accept.ret.beat.includes('The law is locked'), 'the sealed card beat speaks on a genuine accept')
+  // Ordering proof: the beat is gated on the seal. A failed seal emits none of it.
+  const sealFail = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...base, 'ratify:gate': { exit: 0 }, 'law:seal': { exit: 1 },
+  })
+  assert.equal(sealFail.ret.status, 'persist-failed')
+  assert.ok(!sealFail.ret.beat.includes('locked'), 'the card beat is buffered until the seal lands — a failed seal emits none of it')
+})
+
+test('runtime (Wave 1, A9): a project path with a space ratifies — the mandatory gate never interpolates projectDir', async () => {
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/tmp/a project dir' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'stage:law': { ok: true, beat: 'the law', pointers: [] },
+    'ratify:request': GREEN,
+    'ratify:gate': { exit: 0 },
+    'law:seal': { exit: 0 },
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'ok', 'a whitespace project path reaches the accept path — the 3-arg gate never splits into extra argv')
+  const gate = calls.find(c => c.label === 'ratify:gate')
+  const cmd = gate.prompt.split('\n').pop() // the command line, after the "Run … in <projectDir>" cwd preamble
+  assert.ok(cmd.includes('kiln-review ratify . .kiln/ratify-request.json .kiln/gate-review.json'),
+    'the <repo> arg is the cwd-relative `.` — exactly three whitespace-safe args')
+  assert.ok(!cmd.includes('/tmp/a project dir'), 'the project path never reaches the ratify command as a bare argv token')
 })
 
 test('runtime (builder-leg 404 pin): a gpt-routed surface fails closed at boot — the codex id never reaches an agent dispatch', async () => {

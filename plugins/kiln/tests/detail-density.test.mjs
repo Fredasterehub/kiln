@@ -34,6 +34,7 @@ const TIERS_OK = {
     'builder-logic': { family: 'gpt', alias: 'gpt-sol', effort: 'high' },
     'reviewer-gate': { family: 'gpt', alias: 'gpt-sol', effort: 'high' },
     'fallback-reviewer': { family: 'claude', alias: 'opus', effort: 'high' },
+    'ratify-reviewer': { family: 'gpt', alias: 'gpt-sol', effort: 'high' },
     'brainstorm-facilitator': { family: 'claude', alias: 'inherit', effort: 'high' },
     'haiku-migration': { family: 'claude', alias: 'sonnet', effort: 'medium' },
     'dev-sol': { family: 'gpt', alias: 'gpt-sol', effort: 'high' },
@@ -50,6 +51,10 @@ async function runLaw(detail) {
     'law:preflight': GREEN,
     'law:stage-end': GREEN,
     'stage:law': { ok: true, beat: 'law beat', pointers: ['.kiln/LAW.md'] },
+    // Wave 1: the law stage ratifies before advancing — accept, seal, advance.
+    'ratify:request': { exit: 0 },
+    'ratify:gate': { exit: 0 },
+    'law:seal': { exit: 0 },
     'state:write': { exit: 0 },
   }
   const agentMock = async (prompt, opts = {}) => {

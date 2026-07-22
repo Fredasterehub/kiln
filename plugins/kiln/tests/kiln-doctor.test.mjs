@@ -69,12 +69,12 @@ test('doctor: each of the three data files is parsed as JSON by name', () => {
   assert.ok(text.includes('JSON.parse'), 'a real parse, not a stat')
 })
 
-test('doctor: the tiers shape check mirrors the kernel boot gate — same eleven roles, same efforts, same surface routes', () => {
+test('doctor: the tiers shape check mirrors the kernel boot gate — same twelve roles, same efforts, same surface routes', () => {
   const text = doctor()
   const kernel = readFileSync(at('../workflows/kernel.js'), 'utf8')
   const list = (name) => JSON.parse('[' + kernel.match(new RegExp('const ' + name + ' = \\[([^\\]]+)\\]'))[1].replace(/'/g, '"') + ']')
   const roles = list('TIER_ROLES')
-  assert.equal(roles.length, 11, 'the kernel gate carries eleven roles (fallback-reviewer joined — the degraded logic/mixed gate consumes it, so boot must demand it)')
+  assert.equal(roles.length, 12, 'the kernel gate carries twelve roles (ratify-reviewer joined — the Wave 1 law-stage ratify gate consumes it, so boot must demand it)')
   for (const role of roles) assert.ok(text.includes('"' + role + '"'), 'doctor mirrors role ' + role)
   for (const effort of list('TIER_EFFORTS')) assert.ok(text.includes('"' + effort + '"'), 'doctor mirrors effort ' + effort)
   const routes = list('TIER_ROUTES')
