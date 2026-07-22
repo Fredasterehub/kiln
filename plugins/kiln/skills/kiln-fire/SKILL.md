@@ -52,8 +52,9 @@ byte-identical):
 
 On the `BRAINSTORM_COMPLETE` envelope (single-line JSON: `ledger`, `entries`, `essence`):
 launch the one-shot vision compiler per `cards/brainstorm.md` — a fresh-context agent, the
-sealed ledger path its only input, writing `.kiln/docs/vision.md`, returning
-`{ok, beat, pointers}`; speak its beat verbatim; then launch the kernel
+sealed ledger path its only input, writing `.kiln/docs/vision.md`, returning the canonical
+`{facts:{status, pointers, schema_valid}, narration_beat}` envelope; speak its `narration_beat`
+verbatim; then, only once `facts.status` is `'ok'`, launch the kernel
 `{stage: "law", projectDir, idea: <essence>, plugin: "${CLAUDE_PLUGIN_ROOT}"}`. Launches and tiny returns only — no dialogue
 or ledger content ever reaches this window.
 
