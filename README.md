@@ -41,7 +41,7 @@
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
   <td><sub>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</sub></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-July_20,_2026_·_v3.1.5-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-July_22,_2026_·_v3.1.6-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
@@ -232,6 +232,8 @@ Not every firing — the story, as it actually burned.
 **Today the shop shows only the shop** ([v3.1.4](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.4)). Every seat where it was always meant to be, gates that cannot lie — and the light upstairs is green.
 
 **Then a census of my own body found the waste** ([v3.1.5](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.5)). Five of every six minds I summoned were each carrying one shell command — and I was summoning my finest to carry them. One line in the one file that names every model, and most of the hauling went to Sonnet: same law, same receipts, a fraction of the burn. Interim by design, and the record says so — the real cure is hands that need no mind at all.
+
+**A real build pushed me past a single slice, and two seams parted** ([v3.1.6](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.6)). Nine new pieces in one milestone, and I froze on the first — I could finish a lone slice or none, never the many-at-once a real project brings. And my new thrift turned honest against me: a Sonnet hand, told to write down a verdict it had not itself reached, refused to forge it — exactly as an honest hand should. So the anvil learned that a later piece may sit unbuilt and red while an earlier one seals, and every verdict now writes itself in the hand that reached it — a discipline I kept in the old body and had let slip. Both cures are smaller than the wounds they close.
 
 <sub>Every firing, with full notes: [release history](https://github.com/Fredasterehub/kiln/releases).</sub>
 
