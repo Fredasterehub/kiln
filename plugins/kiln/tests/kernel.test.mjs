@@ -734,6 +734,8 @@ test('runtime (INTAKE-19): the LAW leg spawns on stage-law (fable) — validate 
     'ratify:gate': { exit: 0 },
     'law:seal': { exit: 0 },
     'law:stage-end': GREEN,
+    // Wave 2: the report run reaches the completion existence gate (law/validate never do).
+    'report:check': { exit: 0 },
     'state:write': GREEN,
   })
   const law = await stageRun('law')
@@ -1541,4 +1543,51 @@ test('runtime (INTAKE-27): a stale or missing candidate never promotes — the {
   assert.equal(missing.ret.status, 'transport-failure', 'a missing candidate seals nothing')
   assert.ok(!missing.calls.some(c => c.label === 'gate:publish'), 'nothing promotes over a missing candidate')
   assert.ok(!missing.ret.beat.includes('sealed'), 'never a seal')
+})
+
+// ── Wave 2 (the Carriers): the report-stage completion existence gate ────────
+
+test('runtime (Wave 2): report status ok AND .kiln/report.md non-empty seals the run done', async () => {
+  const { ret, calls } = await runKernel({ stage: 'report', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'stage:report': { facts: { status: 'ok', pointers: ['.kiln/report.md'], schema_valid: true }, narration_beat: 'the report stands' },
+    'law:stage-end': GREEN,
+    'report:check': { exit: 0 },
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'done', 'a written report seals the run done')
+  assert.ok(ret.beat.includes('the report stands'), 'the report card beat speaks on a genuine completion')
+  const check = calls.find(c => c.label === 'report:check')
+  assert.ok(check && check.prompt.includes('test -s .kiln/report.md'),
+    'the gate is a mechanical content-blind test -s on the report path — no content read')
+  const doc = lastStateDoc(calls)
+  assert.ok(doc.includes('stage: report'), 'STATE records the report stage')
+  assert.ok(doc.includes('Run complete'), 'next_action is the terminal Run complete')
+})
+
+test('runtime (Wave 2): report status ok BUT .kiln/report.md empty or missing never seals done — transport-failure holds', async () => {
+  // The report card claims facts.status ok yet the artifact is absent — from the
+  // content-blind kernel that is the report stage failing to deliver sound work, the
+  // SAME failure class as a bad return, so it reuses transport-failure: no new status,
+  // no false done. The SEALED-claiming report beat must never read above the hold.
+  const REPORT_SEALED_BEAT = '`SEALED` **Report** — the report stands'
+  const { ret, calls } = await runKernel({ stage: 'report', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'stage:report': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: REPORT_SEALED_BEAT },
+    'law:stage-end': GREEN,
+    'report:check': { exit: 1 },
+    'state:write': GREEN,
+  })
+  assert.notEqual(ret.status, 'done', 'an empty report never seals a false done')
+  assert.equal(ret.status, 'transport-failure', 'the missing artifact reuses transport-failure — the same class as a bad return, no new status')
+  assert.ok(ret.beat.includes('The stage worker returned no usable result'),
+    'the sealed stage-worker transport variant (entry 1) speaks — the reused beat key, no new voice beat')
+  assert.ok(!ret.beat.includes('the report stands'),
+    'the SEALED-claiming report beat never reads above the honest hold line (gated before the beat push)')
+  assert.equal(ret.pointers.report, '.kiln/report.md', 'the return points at the empty report artifact')
+  const doc = lastStateDoc(calls)
+  assert.ok(doc.includes('Rerun stage report'), 'next_action names the report-specific rerun')
+  assert.ok(doc.includes('.kiln/report.md is empty or missing'), 'and says exactly what is wrong')
 })

@@ -311,7 +311,7 @@ const P = {
   state: '.kiln/STATE.md', law: '.kiln/LAW.md', gate: '.kiln/gate-review.json',
   request: '.kiln/review-request.json', ratifyRequest: '.kiln/ratify-request.json', delta: '.kiln/repair-delta.md',
   slices: '.kiln/slices.json', seals: '.kiln/seals.log', degraded: '.kiln/degraded',
-  ack: '.kiln/degraded-ack', receipt: '.kiln/check-receipt.txt',
+  ack: '.kiln/degraded-ack', receipt: '.kiln/check-receipt.txt', report: '.kiln/report.md',
   candidate: '.kiln/.gate-review.reviewer.tmp',
   card: (s) => plugin + '/cards/' + s + '.md',
 }
@@ -571,6 +571,17 @@ if (stage !== 'build') {
   if (post.exit !== 0) {
     const owner = await firstSealed(post.ids)
     if (owner) return reopen(owner, 'stage end')
+  }
+  // The deterministic completion gate: a report card may claim status ok yet leave
+  // .kiln/report.md empty or missing — content-blind, that is the report stage failing
+  // to deliver sound work, the same failure class as a bad return, never a false done.
+  // It fires before the SEALED-claiming report beat is pushed, so a false completion
+  // never reads its own success line above the honest hold (the top-of-branch guard rule).
+  if (stage === 'report' && await hands('test -s ' + P.report, 'report:check') !== 0) {
+    return failStop('transport-failure',
+      { stage, next_action: 'Rerun stage report: ' + P.report + ' is empty or missing' },
+      await voiceBeat('transport-failure', {}, 'The report stage returned but ' + P.report + ' is empty or missing — the run holds.', 1),
+      { report: P.report })
   }
   if (stage !== 'law') beats.push(fillClosed(r.narration_beat, stageFacts))
   return stop(stage === 'report' ? 'done' : 'ok', { stage, next_action: nextAct(nextStage(stage)) })

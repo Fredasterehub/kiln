@@ -269,3 +269,25 @@ test('cards: composition order is literal per the recipes — and the repair car
     ['**FRAME**', '**TITLE UNIT**', '**WHISPER**', '**FAULT LENS**', '**CLOSE**'])
   assert.ok(!repair.includes('**FOOT**'), 'no quote foot on the repair card — the repair moments stay unwired')
 })
+
+// ── Wave 2 (the Carriers), T5: narration persists across the durable substrate ──
+// ADR A2 (reuse-and-measure-first): the run's narration reconstructs from the
+// artifacts already persisted on disk — no .kiln/narration.md log is added.
+
+test('cards (T5): the report Inputs name the durable narration substrate — the run reconstructs from persisted artifacts alone', () => {
+  const report = cardText('report.md')
+  const inputs = report.slice(report.indexOf('## Inputs'), report.indexOf('## Method'))
+  for (const artifact of ['.kiln/STATE.md', '.kiln/LAW.md', '.kiln/decisions.md', '.kiln/seals.log', '.kiln/validate.md', '.kiln/degraded']) {
+    assert.ok(inputs.includes(artifact), `the report Inputs must name the durable substrate ${artifact}`)
+  }
+  assert.ok(report.includes('reconstruct from files') && report.includes('this stage proves the files suffice'),
+    'the report states the T5 claim — the narration reconstructs from the persisted record, and the stage proves the files suffice')
+})
+
+test('cards (T5, ADR A2): no .kiln/narration.md is written or referenced in the kernel or any card — the substrate suffices', () => {
+  const kernel = readFileSync(fileURLToPath(new URL('../workflows/kernel.js', import.meta.url)), 'utf8')
+  assert.ok(!kernel.includes('narration.md'), 'kernel.js writes no narration log — narration persists in the existing durable artifacts')
+  for (const name of readdirSync(CARDS)) {
+    assert.ok(!cardText(name).includes('narration.md'), `${name} references no narration.md — ADR A2 adds no narration log, it reuses the substrate`)
+  }
+})
