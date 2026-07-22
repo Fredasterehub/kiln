@@ -418,7 +418,7 @@ function ratifyFinding(id) {
 function priorRatifyGate(findings, { review_id = 'ratify-1', verdict = 'changes_required', law_hash = 'a'.repeat(64) } = {}) {
   return { review_id, law_hash, findings, blockers: verdict === 'blocked' ? ['x'] : [], verdict }
 }
-function ratifyRecheck({ artifact = 'the regenerated LAW\n', gate, prior, requestReviewId = 'ratify-1', rubric = RUBRIC, artifactPath = '.kiln/LAW.md' } = {}) {
+function ratifyRecheck({ artifact = 'the regenerated LAW\n', gate, prior, requestReviewId = 'ratify-1', rubric = RUBRIC, artifactPath = '.kiln/LAW.md', promptOut } = {}) {
   const repo = mkdtempSync(join(tmpdir(), 'kiln-ratify-recheck-'))
   const abs = join(repo, artifactPath)
   mkdirSync(dirname(abs), { recursive: true })
@@ -435,6 +435,7 @@ function ratifyRecheck({ artifact = 'the regenerated LAW\n', gate, prior, reques
     env.PATH = `${fake}:${process.env.PATH}`
     env.FAKE_GATE = JSON.stringify(gate)
   }
+  if (promptOut) env.FAKE_PROMPT_OUT = promptOut
   const r = spawnSync('node', [REVIEW, 'ratify-recheck', repo, rf, priorFile, join(repo, 'gate.json')], { encoding: 'utf8', env })
   return { repo, fact: (r.stdout || '').trim(), status: r.status, out: join(repo, 'gate.json') }
 }
@@ -651,13 +652,13 @@ function priorAuditGate(findings, { verdict = 'changes_required', law_hash, revi
   return { review_id, law_hash, findings, blockers: blockers ?? (verdict === 'blocked' ? [findings[0].id] : []), verdict }
 }
 
-function runAuditRecheck(fixture, { seam = 's3', model = 'gpt-5.6-sol', effort = 'high', prior, delta = 'rewired the milestone handoff\n', gate, brokenCodex } = {}) {
+function runAuditRecheck(fixture, { seam = 's3', model = 'gpt-5.6-sol', effort = 'high', prior, delta = 'rewired the milestone handoff\n', gate, brokenCodex, promptOut } = {}) {
   const priorFile = join(fixture.repo, 'prior-audit.json')
   writeFileSync(priorFile, JSON.stringify(prior))
   const deltaFile = join(fixture.repo, 'repair-delta.md')
   writeFileSync(deltaFile, delta)
   const out = join(fixture.repo, 'audit-recheck-gate.json')
-  const env = fakeCodexEnv({ gate, brokenCodex })
+  const env = fakeCodexEnv({ gate, brokenCodex, promptOut })
   const r = spawnSync('node', [REVIEW, 'audit-recheck', fixture.repo, fixture.kiln, seam, model, effort, priorFile, deltaFile, out], { encoding: 'utf8', env })
   return { fact: (r.stdout || '').trim(), status: r.status, stderr: r.stderr || '', out }
 }
@@ -783,4 +784,84 @@ test('kiln-review: append-audit is the only audits.log writer — exact line for
   assert.equal(readFileSync(log, 'utf8'), 's3 accept\nphase-2.final accept\nfeature/ui accept\n', 'no rejected call ever appended')
   const usage = spawnSync('node', [REVIEW, 'append-audit', dir], { encoding: 'utf8' })
   assert.equal(usage.status, 20, 'a wrong arg count is the usage failure')
+})
+
+// ── FIX-1: the recheck carries its findings ──────────────────────────────────
+// A live LAW ratify-recheck blocked honestly: the packet named the prior finding ids
+// but omitted their bodies, so the fresh-context reviewer could not verify resolution
+// (fatal on ratify-recheck — its reviewer sees only the artifact text, no repo). Every
+// recheck packet now embeds the prior findings verbatim as prior_findings beside
+// finding_ids — added context, no cohort rule change — and each recheck instruction
+// tells the reviewer the findings ride in full. These tests capture the composed
+// prompt via FAKE_PROMPT_OUT and assert on the serialized packet the verb writes.
+const FINDING_KEYS = ['id', 'criterion', 'location', 'failure_mode', 'evidence', 'minimal_fix']
+const FIX1_SENTENCE = 'The prior findings are supplied in full in the packet as prior_findings — confirm each one resolved, or preserve its id unresolved.'
+
+function packetFrom(promptFile, anchor) {
+  const prompt = readFileSync(promptFile, 'utf8')
+  return { prompt, packet: JSON.parse(prompt.slice(prompt.indexOf(anchor) + anchor.length)) }
+}
+
+function assertPriorFindingsRide(packet, findings) {
+  assert.deepEqual(packet.finding_ids, findings.map((f) => f.id), 'the finding_ids cohort constraint is unchanged')
+  assert.deepEqual(packet.prior_findings, findings, 'the prior findings ride the packet verbatim')
+  for (const [i, finding] of findings.entries()) {
+    for (const key of FINDING_KEYS) {
+      assert.equal(packet.prior_findings[i][key], finding[key], `prior finding ${finding.id} ${key} is embedded in full`)
+    }
+  }
+}
+
+function buildRecheck({ prior, gate, promptOut } = {}) {
+  const repo = mkdtempSync(join(tmpdir(), 'kiln-recheck-'))
+  mkdirSync(join(repo, '.kiln'), { recursive: true })
+  writeFileSync(join(repo, '.kiln', 'check-receipt.txt'), 'checks ok\n')
+  const req = { reviewer_model: 'gpt-5.6-sol', law_hash: HASH, criteria: 'x', paths: [], failures: [], commands: [] }
+  const rf = join(repo, 'request.json')
+  writeFileSync(rf, JSON.stringify(req))
+  const priorFile = join(repo, 'prior-gate.json')
+  writeFileSync(priorFile, JSON.stringify(prior))
+  const deltaFile = join(repo, 'repair-delta.md')
+  writeFileSync(deltaFile, 'repaired the findings\n')
+  const env = fakeCodexEnv({ gate, promptOut })
+  const r = spawnSync('node', [REVIEW, 'recheck', repo, rf, priorFile, deltaFile, join(repo, 'gate.json')], { encoding: 'utf8', env })
+  return { fact: (r.stdout || '').trim(), status: r.status, out: join(repo, 'gate.json') }
+}
+
+test('kiln-review: the recheck packet embeds every prior finding in full beside its ids, and the instruction names them (FIX-1)', () => {
+  const findings = [
+    { id: 'f1', criterion: 'crit-1', location: 'src/app.js:12', failure_mode: 'the handler drops errors', evidence: 'catch swallows the rejection', minimal_fix: 'rethrow or report' },
+    { id: 'f2', criterion: 'crit-2', location: 'src/ui.js:7', failure_mode: 'focus is lost on close', evidence: 'the dialog close returns focus nowhere', minimal_fix: 'restore focus to the opener' },
+  ]
+  const prior = { review_id: 'slice-1', law_hash: HASH, findings, blockers: [], verdict: 'changes_required' }
+  const promptOut = join(mkdtempSync(join(tmpdir(), 'kiln-prompt-')), 'prompt.txt')
+  const r = buildRecheck({ prior, gate: { review_id: 'slice-1', law_hash: HASH, findings: [], blockers: [], verdict: 'accept' }, promptOut })
+  assert.equal(r.status, 0, 'the recheck round-trips through the fake reviewer')
+  const { prompt, packet } = packetFrom(promptOut, 'Evidence packet:\n')
+  assertPriorFindingsRide(packet, findings)
+  assert.ok(prompt.includes(FIX1_SENTENCE), 'the recheck instruction tells the reviewer the findings ride in full')
+})
+
+test('kiln-review: the ratify-recheck packet embeds every prior finding in full — the artifact-only reviewer can verify resolution from the packet alone (FIX-1)', () => {
+  const artifact = 'the regenerated LAW\n'
+  const findings = [ratifyFinding('f1'), ratifyFinding('f2')]
+  const prior = priorRatifyGate(findings)
+  const promptOut = join(mkdtempSync(join(tmpdir(), 'kiln-prompt-')), 'prompt.txt')
+  const r = ratifyRecheck({ artifact, prior, gate: { review_id: 'ratify-1', law_hash: digestOf(artifact), findings: [], blockers: [], verdict: 'accept' }, promptOut })
+  assert.equal(r.status, 0, 'the ratify-recheck round-trips through the fake reviewer')
+  const { prompt, packet } = packetFrom(promptOut, 'Ratification packet:\n')
+  assertPriorFindingsRide(packet, findings)
+  assert.ok(prompt.includes(FIX1_SENTENCE), 'the ratify-recheck instruction tells the reviewer the findings ride in full')
+})
+
+test('kiln-review: the audit-recheck packet embeds every prior finding in full beside its ids, and the instruction names them (FIX-1)', () => {
+  const fx = auditRepo()
+  const findings = [auditFinding('m1'), auditFinding('m2')]
+  const prior = priorAuditGate(findings, { law_hash: fx.digest })
+  const promptOut = join(fx.repo, 'captured-prompt.txt')
+  const r = runAuditRecheck(fx, { prior, gate: { review_id: 'audit-1', law_hash: fx.digest, findings: [], blockers: [], verdict: 'accept' }, promptOut })
+  assert.equal(r.status, 0, 'the audit-recheck round-trips through the fake reviewer')
+  const { prompt, packet } = packetFrom(promptOut, 'Audit packet:\n')
+  assertPriorFindingsRide(packet, findings)
+  assert.ok(prompt.includes(FIX1_SENTENCE), 'the audit-recheck instruction tells the reviewer the findings ride in full')
 })

@@ -187,13 +187,13 @@ function runScreen(fx, { model = 'gpt-5.6-sol', effort = 'high', gate, brokenCod
   return { fact: (r.stdout || '').trim(), status: r.status, stderr: r.stderr || '', out }
 }
 
-function runScreenRecheck(fx, { model = 'gpt-5.6-sol', effort = 'high', prior, delta, gate, brokenCodex } = {}) {
+function runScreenRecheck(fx, { model = 'gpt-5.6-sol', effort = 'high', prior, delta, gate, brokenCodex, promptOut } = {}) {
   const priorFile = join(fx.repo, 'prior-screen.json')
   writeFileSync(priorFile, JSON.stringify(prior))
   const deltaFile = delta === undefined ? join(fx.gen, 'manifest.json') : delta
   const out = join(fx.repo, 'screen-recheck-gate.json')
   const r = spawnSync('node', [REVIEW, 'screen-recheck', fx.repo, fx.kiln, model, effort, priorFile, deltaFile, out],
-    { encoding: 'utf8', env: fakeEnv({ gate, brokenCodex }) })
+    { encoding: 'utf8', env: fakeEnv({ gate, brokenCodex, promptOut }) })
   return { fact: (r.stdout || '').trim(), status: r.status, stderr: r.stderr || '', out }
 }
 
@@ -421,6 +421,28 @@ test('screen-recheck: delta is PATH-BOUND to the fresh CURRENT manifest — a mi
   assert.equal(r3.fact, 'transport_failure', 'a byte-identical copy at another path is refused')
   assert.equal(r3.status, 20)
   assert.ok(r3.stderr.includes('CURRENT generation manifest path'), 'the path binding is named')
+})
+
+test('screen-recheck: the packet embeds every prior finding in full beside its ids, and the instruction names them (FIX-1)', () => {
+  // FIX-1: bare finding ids left the fresh-context reviewer unable to verify
+  // resolution — every recheck packet now carries the prior findings verbatim as
+  // prior_findings beside finding_ids. Context only; the cohort rule is unchanged.
+  const fx = screenRepo()
+  const findings = [screenFinding('p1'), screenFinding('p2', { criterion: 'perc-motion', location: 'film.webm:4' })]
+  const prior = priorScreenGate(findings)
+  const promptOut = join(fx.repo, 'captured-prompt.txt')
+  const r = runScreenRecheck(fx, { prior, gate: { review_id: 'screen-1', law_hash: fx.digest, findings: [], blockers: [], verdict: 'accept' }, promptOut })
+  assert.equal(r.status, 0, 'the screen-recheck round-trips through the fake reviewer')
+  const { prompt, packet } = capturedPacket(promptOut)
+  assert.deepEqual(packet.finding_ids, ['p1', 'p2'], 'the finding_ids cohort constraint is unchanged')
+  assert.deepEqual(packet.prior_findings, findings, 'the prior findings ride the packet verbatim')
+  for (const [i, finding] of findings.entries()) {
+    for (const key of ['id', 'criterion', 'location', 'failure_mode', 'evidence', 'minimal_fix']) {
+      assert.equal(packet.prior_findings[i][key], finding[key], `prior finding ${finding.id} ${key} is embedded in full`)
+    }
+  }
+  assert.ok(prompt.includes('The prior findings are supplied in full in the packet as prior_findings — confirm each one resolved, or preserve its id unresolved.'),
+    'the screen-recheck instruction tells the reviewer the findings ride in full')
 })
 
 // ── screen-escalate: the survivor-scoped second-family escalation (W8-S3) ─────

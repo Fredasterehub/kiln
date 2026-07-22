@@ -510,7 +510,7 @@ function instructions(packet) {
 Review only the locked criteria. Report only substantiated criterion violations, never optional improvements. Creative direction, visual taste, and aesthetic choices belong to the builder — never raise them as a finding and never let them color a verdict; you rule on correctness against the locked criteria alone. For each finding, cite an exact repo-relative path:line location, the concrete failure, its evidence, and the smallest repair. Use stable finding IDs. The commands in the evidence packet were already executed kernel-side; their full output rides in check_receipt verbatim. Execute nothing — no commands, no tests, no builds: judge the diff against the law by reading the repository, with check_receipt as the only execution evidence. Receipt rows owned by slices not yet built in this run are expected pre-build evidence — judge only this slice's criteria (from the review request), never treat them as findings, and never filter or rewrite the receipt. Do not infer authorship, persona, or another reviewer's verdict.
 
 Copy review_id and law_hash exactly. Verdict rules: accept only when findings and blockers are both empty; changes_required only for one or more repairable findings with no blockers; blocked only when the review cannot be completed, with one or more blocker reasons.
-${packet.mode === 'recheck' ? '\nRecheck only the listed finding_ids against the repair_delta and current repository. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}
+${packet.mode === 'recheck' ? '\nRecheck only the listed finding_ids against the repair_delta and current repository. The prior findings are supplied in full in the packet as prior_findings — confirm each one resolved, or preserve its id unresolved. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}
 Evidence packet:
 ${JSON.stringify(packet, null, 2)}
 `
@@ -522,7 +522,7 @@ function ratifyInstructions(packet) {
 Judge the artifact against the rubric criteria alone. Report only substantiated criterion violations, never optional improvements and never matters of taste. For each finding, cite the artifact location as path:line, the concrete failure, evidence quoted from the artifact, and the smallest repair. Use stable finding IDs. Execute nothing: rule by reading the artifact text supplied in full below — do not inspect the repository and do not run any command.
 
 Copy review_id and law_hash exactly into your output. law_hash is the sha256 digest of the artifact bytes; it seals the ratified content, so return it unchanged. Verdict rules: accept only when findings and blockers are both empty; changes_required only for one or more repairable findings with no blockers; blocked only when the review cannot be completed, with one or more blocker reasons.
-${packet.mode === 'ratify-recheck' ? '\nRecheck only the listed finding_ids against the regenerated artifact. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}
+${packet.mode === 'ratify-recheck' ? '\nRecheck only the listed finding_ids against the regenerated artifact. The prior findings are supplied in full in the packet as prior_findings — confirm each one resolved, or preserve its id unresolved. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}
 Ratification packet:
 ${JSON.stringify(packet, null, 2)}
 `
@@ -540,7 +540,7 @@ function auditInstructions(packet) {
 Derive the milestone goal from .kiln/LAW.md and the vision documents in the repository, then judge goal-backward: over the cumulative sealed prefix in the audit packet, with focus on the closing block, check integrated reachability, the connections between slices, and delivery of the milestone goal. Report only substantiated criterion violations, never optional improvements. Creative direction, visual taste, and aesthetic choices belong to the builder — never raise them as a finding and never let them color a verdict. For each finding, pin the failed LAW criterion id in criterion and an exact repo-relative path:line in location, with the concrete failure, its evidence, and the smallest repair. Use stable finding IDs. The commands whose output rides in check_receipt were already executed kernel-side. Execute nothing — no commands, no tests, no builds: judge the milestone against the law by reading the repository, with check_receipt as the only execution evidence. Do not infer authorship, persona, or another reviewer's verdict.
 
 Copy review_id and law_hash exactly. Every blockers entry must equal the id of one of your findings, so each blocker carries its criterion, location, and minimal fix through that finding. Verdict rules: accept only when findings and blockers are both empty; changes_required only for one or more repairable findings with no blockers; blocked only when the audit cannot be completed or the milestone goal is undeliverable, with one or more blocker ids naming findings.
-${packet.mode === 'audit-recheck' ? '\nRecheck only the listed finding_ids against the repair_delta and current repository. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}
+${packet.mode === 'audit-recheck' ? '\nRecheck only the listed finding_ids against the repair_delta and current repository. The prior findings are supplied in full in the packet as prior_findings — confirm each one resolved, or preserve its id unresolved. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}
 Audit packet:
 ${JSON.stringify(packet, null, 2)}
 `
@@ -557,7 +557,7 @@ function screenInstructions(packet) {
 Judge ONLY the perceptual criteria rows in the packet, each on its named rubric dim per the shipped rubric's anchors — never any other dimension, and never general taste beyond what a row's requirement pins. Report only substantiated criterion violations. For each finding, pin criterion = the row's LAW perceptual criterion id and location = an evidence path with an optional :frame (for example viewport-mobile.png or film.webm:3), with the concrete failure, its visual evidence, and the smallest repair. Use stable finding IDs. Insufficient evidence on a dim is a finding citing the rubric's insufficient_evidence line as its evidence — never a blocker. Execute nothing and install nothing: rule from the attached images and the packet text alone.
 
 Copy review_id and law_hash exactly — law_hash is the sha256 digest of the graded generation's manifest.json and binds this verdict to that evidence. Verdict rules: accept only when findings and blockers are both empty; changes_required for one or more repairable findings. Never return blocked and never write a blocker: hard failure belongs to the law's deterministic proxies, not to this grade.
-${packet.mode === 'screen-recheck' ? '\nRecheck only the listed finding_ids against the fresh evidence generation. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}${packet.mode === 'screen-escalate' ? '\nThis is a bounded second-family escalation of a held verdict: the packet carries ONLY the surviving criteria — grade them alone, on the same evidence generation; a finding on any other criterion invalidates the verdict.\n' : ''}
+${packet.mode === 'screen-recheck' ? '\nRecheck only the listed finding_ids against the fresh evidence generation. The prior findings are supplied in full in the packet as prior_findings — confirm each one resolved, or preserve its id unresolved. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}${packet.mode === 'screen-escalate' ? '\nThis is a bounded second-family escalation of a held verdict: the packet carries ONLY the surviving criteria — grade them alone, on the same evidence generation; a finding on any other criterion invalidates the verdict.\n' : ''}
 Evidence packet:
 ${JSON.stringify(packet, null, 2)}
 `
@@ -710,6 +710,11 @@ if (mode === 'review' && args.length === 3) {
     law_hash: prior.law_hash,
     ...request.evidence,
     finding_ids: [...findingIds],
+    // FIX-1: every recheck packet carries the prior findings IN FULL beside their ids —
+    // a fresh-context reviewer cannot verify resolution from bare ids (fatal on
+    // ratify-recheck, whose reviewer sees only the artifact text). Context only; the
+    // finding_ids cohort rule is unchanged.
+    prior_findings: prior.findings,
     repair_delta: repairDelta,
   }
   invoke(repository(repoPath), request, packet, outputFile, findingIds)
@@ -823,6 +828,7 @@ if (mode === 'review' && args.length === 3) {
     rubric: rubricFrom(request.rubric),
     artifact: artifactBytes.toString('utf8'),
     finding_ids: [...findingIds],
+    prior_findings: prior.findings,
   }
   runGate(repo, request, ratifyInstructions(packet), outputFile, (gate) => {
     const shape = validateShape(gate, packet.review_id, undefined, findingIds)
@@ -897,6 +903,7 @@ if (mode === 'review' && args.length === 3) {
     closing_block: facts.closingBlock,
     sealed_prefix: facts.sealedPrefix,
     finding_ids: [...findingIds],
+    prior_findings: prior.findings,
     repair_delta: repairDelta,
   }
   invokeAudit(repo, request, packet, outputFile, findingIds)
@@ -1001,6 +1008,7 @@ if (mode === 'review' && args.length === 3) {
     law_hash: generation.digest,
     ...screenPacket(facts, generation, evidence),
     finding_ids: [...findingIds],
+    prior_findings: prior.findings,
     repair_delta: delta,
   }
   runGate(repo, request, screenInstructions(packet), outputFile, (gate) => {
