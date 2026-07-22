@@ -14,9 +14,22 @@ idea-less kernel launch; it is never the normal entry. Direct invocations (`/kil
 ## The spawn
 The conductor spawns `agents/da-vinci.md` as an interactive teammate with one line: the
 absolute project path. Da Vinci converses with the user in his own window; the driver stays
-silent until his single completion signal. The real boundary: no dialogue and no ledger
-content ever crosses to the driver — nothing except the user-authored essence riding inside
-the single completion envelope.
+silent but for at most one optional probe exchange (below), until his single completion signal.
+The real boundary: no dialogue and no ledger content ever crosses to the driver — nothing but the
+ledger path and seq IDs of that one probe request and the user-authored essence riding inside the
+single completion envelope.
+
+## The probe — the one nonterminal exchange
+Da Vinci has no spawn tool, so the one break in the silence is a bounded request/response. At
+most once, before the completion, he may send a single-line `PROBE_REQUEST` carrying ONLY a
+ledger path and the seq IDs of turns worth a closer read — never dialogue. On it the conductor
+launches `workflows/research-sweep.js` in probe mode (fresh-context, off Da Vinci's window),
+which reads just those ledger turns and writes a compact digest under `.kiln/docs/`, then replies
+once with a `PROBE_RESULT` naming the digest pointer and a one-line beat (or no pointer, honestly,
+when nothing was digested). Probe mode bypasses the posture dial and the feasibility ratify —
+there is no posture or law during a brainstorm; it is a light digest, not a ratified feasibility.
+The digest only sharpens Da Vinci's next question; it never becomes a logged idea, an intent, or
+the essence, and it never displaces the single terminal `BRAINSTORM_COMPLETE`.
 
 ## The ledger
 `.kiln/brainstorm-ledger.jsonl` — append-only, authorship-tagged, injection-safe appends,

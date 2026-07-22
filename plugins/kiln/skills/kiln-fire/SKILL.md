@@ -30,7 +30,8 @@ beats are the conductor's entire interface. Beats arrive in the return, drawn fr
 - `/kiln-fire <idea>` → direct hand-off: greet in voice, compile onboarding (below), then
   hand the idea to the kernel law stage.
 - Bare `/kiln-fire` in a fresh directory → brainstorm: greet, spawn the Da Vinci teammate
-  (`agents/da-vinci.md`), wait for its single completion signal.
+  (`agents/da-vinci.md`), wait for its single completion signal — answering at most one
+  `PROBE_REQUEST` in between (see The probe below).
 - Existing `.kiln/` → resume: read STATE.md once, speak a transition line; `next_action`
   normally selects the kernel resume launch — the driver never performs that work itself.
   The one exception is honest, not automatic: a `next_action` that names a rerun of onboarding
@@ -102,6 +103,23 @@ the closed `status` ONLY:
 
 The sweep is launch-and-branch, nothing more: no orchestration logic in this window, no artifact
 reads, no fifth question.
+
+## The probe — an off-window exchange, not a fifth question
+
+While you wait for Da Vinci's completion, he may send at most one optional nonterminal `PROBE_REQUEST`
+(single-line JSON: `e`, `ledger`, `seqs` — a ledger path and the sequence IDs to digest, never
+dialogue). It is a teammate exchange, not a hard stop, and never reaches the operator. On it,
+launch the research sweep in probe mode, by path, exactly as you launch it before the law but with
+the probe fields:
+`{scriptPath: "${CLAUDE_PLUGIN_ROOT}/workflows/research-sweep.js", args: {mode: "probe", ledger, seqs, projectDir, plugin: "${CLAUDE_PLUGIN_ROOT}"}}` —
+background, off Da Vinci's window. Probe mode reads only those ledger turns and writes a compact
+digest under `.kiln/docs/`; it runs no posture read and no ratify — there is no posture or law yet.
+It returns the tiny `{status, beat, pointers}`. On `probed`, reply to Da Vinci with one single-line
+`PROBE_RESULT` envelope carrying exactly the keys `e`, `pointer`, and `beat`:
+`{"e":"PROBE_RESULT","pointer":"<the returned pointers.digest>","beat":"<one line>"}`. On any other
+status, reply once with the no-pointer failure variant — the same single-line envelope with the
+`pointer` key omitted: `{"e":"PROBE_RESULT","beat":"<honest one line>"}`. Either way, resume waiting
+for the single completion — a probe informs the sketch, it never gates it. At most one probe per brainstorm.
 
 ## The four hard stops — the only questions
 

@@ -22,6 +22,17 @@ and no-qualifying proceed straight to the law with none, while a rejected or hel
 the law. The workflow
 lands in W4 (slice S2), reusing the W1 ratify verb unchanged; no second review family is minted.
 
+The same recipe carries one closed second MODE (W4 slice S3): `mode: "probe"`. During a brainstorm
+Da Vinci sends the conductor at most one nonterminal `PROBE_REQUEST` (ledger path + seq IDs only);
+the conductor launches this workflow in probe mode, off Da Vinci's window, and it reads just those
+ledger turns and writes a compact digest under `.kiln/docs/`, returning a single pointer for the
+conductor's `PROBE_RESULT`. Probe mode bypasses the posture dial and the ratify loop — there is no
+posture or law during a brainstorm; it is a light digest, not a ratified feasibility. The message
+CONTRACT and the workflow's probe branch are unit-tested, but true off-window fresh-context
+isolation and bidirectional teammate messaging are runtime capabilities the static harness cannot
+prove (a canonical open question); verifying live probe isolation defers to the operator's live
+brainstorm smoke.
+
 ## ratify-artifact — status: SHIPPED (W1)
 
 Not a standalone workflow file: the reusable "grade a readable artifact against a rubric" path

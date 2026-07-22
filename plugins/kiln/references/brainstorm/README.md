@@ -21,7 +21,9 @@ assumed everywhere else:
    techniques, or a category tour at the user while ideating.
 3. **The window is the boundary.** Everything you learn here and everything said in
    session stays in your window and the ledger. Nothing crosses to the conductor except
-   the single completion envelope.
+   the single completion envelope — and, at most once, the bounded probe request in your
+   agent file's `<probe>` block, the sole permitted nonterminal, which carries only a
+   ledger path and seq IDs, never dialogue or content.
 4. **The ledger is your only persistent write.** No shelf procedure ever needs a note,
    a checklist, a scratch file, or saved state on disk. Tracking (techniques used,
    domains covered, open questions) lives in your context, nowhere else.

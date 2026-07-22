@@ -82,6 +82,29 @@ async function ratifyLoop(deps, maxRepairs = 1) {
   }
 }
 
+// The PROBE_REQUEST message contract. During a brainstorm Da Vinci has no spawn tool and may
+// send the conductor at most ONE nonterminal envelope: a probe request carrying ONLY the ledger
+// path and the ledger sequence IDs to digest — never dialogue. validLedgerRef is the shared
+// invariant (an ABSOLUTE path free of control characters — C0 U+0000–U+001F, DEL U+007F, and the
+// C1 block U+0080–U+009F — plus a non-empty list of positive integer seq IDs) the workflow's own
+// probe launch args are held to. The absolute + control-char rule is
+// load-bearing: the ledger path is interpolated verbatim into the probe producer prompt, so a
+// relative path, prose, or a newline-bearing value could smuggle instructions into that leg — all
+// rejected here, before a probe is ever launched. validateProbeRequest adds the exact-keys check on
+// the raw envelope, so a free-text field or any extra key is rejected too.
+function validLedgerRef(ledger, seqs) {
+  if (typeof ledger !== 'string' || ledger[0] !== '/') return false
+  if (/[\u0000-\u001f\u007f-\u009f]/.test(ledger)) return false
+  if (!Array.isArray(seqs) || seqs.length === 0) return false
+  return seqs.every(s => Number.isInteger(s) && s > 0)
+}
+function validateProbeRequest(m) {
+  if (!m || typeof m !== 'object' || Array.isArray(m)) return false
+  if (Object.keys(m).sort().join(',') !== 'e,ledger,seqs') return false
+  if (m.e !== 'PROBE_REQUEST') return false
+  return validLedgerRef(m.ledger, m.seqs)
+}
+
 // RESEARCH_CORE_END
 // RESEARCH_RUNTIME_BEGIN — evaluated as an async function body by the workflow runtime
 
@@ -171,6 +194,47 @@ const hands = (cmd, label) => agent(
   'Run exactly this in ' + projectDir + ' and report only the exit code as {exit}:\n' + cmd,
   { label, ...tier('kernel-leg'), schema: EXIT },
 ).then(r => (r ? r.exit : 20))
+
+// ── Probe mode: an off-window digest for a brainstorm, never a ratified feasibility ──
+// A closed MODE of this same recipe. During a brainstorm no posture exists yet, so probe mode
+// BYPASSES the dial read and the whole ratify loop: it reads only the ledger turns the conductor
+// forwarded (the path + seq IDs from Da Vinci's one PROBE_REQUEST), has the fresh research seat
+// write a COMPACT digest under .kiln/docs/, and returns a single pointer for the conductor's
+// PROBE_RESULT. A probe informs discussion only; it holds no law, because there is no law yet — a
+// bad request or a missing digest returns an honest closed status the conductor voices and moves on.
+if (A.mode === 'probe') {
+  if (!validLedgerRef(A.ledger, A.seqs)) {
+    return { status: 'bad-probe', beat: 'The probe request reached the sweep without a ledger path and its sequence IDs — a probe carries only those, never dialogue. Nothing was digested.', pointers: {} }
+  }
+  // The highest referenced seq names the digest — deterministic, collision-free across the at-most-one
+  // probe a session may pull, and derivable with no extra leg. Because the name is deterministic, a
+  // prior run at these same seqs may have left a digest here; it is invalidated at prep (below),
+  // before this pass produces, so a stale file can never satisfy the content-blind test -s.
+  const digest = '.kiln/docs/probe-' + Math.max(...A.seqs) + '.md'
+  const probePrompt = [
+    'You are a Kiln probe desk: a fresh-context reader with no view of the live brainstorm window.',
+    'Read the append-only ledger at ' + A.ledger + ' and consider ONLY the entries whose seq is one of: ' + A.seqs.join(', ') + '.',
+    'Working root: ' + projectDir + '. Distill those turns into a COMPACT digest — the concrete points, tensions, and open questions they raise — to inform the ongoing discussion. Invent nothing beyond what those entries say; add no dialogue of your own.',
+    'Write the digest via temp + rename to ' + digest + ' and return facts.status "ok". If you cannot read the referenced entries, write nothing and return an honest failure status. Never ask the operator.',
+    'That digest is your SOLE permitted write — never create or modify the ledger, the vision, the essence, the posture, or any other artifact under this root; a probe reads to inform, it authors nothing but its own digest.',
+    'Return {facts:{status, pointers, schema_valid}, narration_beat} — narration_beat one plain line that a fresh digest is on disk.',
+  ].join('\n')
+  // Prep the desk AND invalidate any prior digest at this deterministic name in one hand — the same
+  // freshness rule the main path applies to the candidate. A stale probe-<maxSeq>.md must never
+  // satisfy the content-blind test -s below when this pass's producer writes nothing, riding a prior
+  // probe to a false 'probed' and a stale pointer. rm -f never fails on a missing file, so only a
+  // real desk fault holds the probe. The seqs are validated positive integers, so the digest name
+  // holds no shell metacharacter.
+  if (await hands('mkdir -p .kiln/docs && rm -f ' + digest, 'probe:prep') !== 0) {
+    return { status: 'probe-failed', beat: 'The .kiln/docs desk would not open for the probe digest — nothing was written this pass.', pointers: {} }
+  }
+  const dg = await agent(probePrompt, { label: 'probe:producer', ...tier('stage-law'), schema: STAGE_RESULT })
+    .then(r => (r ?? { facts: { status: 'transport-failure', pointers: [], schema_valid: false }, narration_beat: '' }))
+  if (dg.facts.status !== 'ok' || await hands('test -s ' + digest, 'probe:check') !== 0) {
+    return { status: 'probe-failed', beat: 'The probe desk left no digest on disk — the sketch gets no fresh reading this pass.', pointers: {} }
+  }
+  return { status: 'probed', beat: dg.narration_beat || 'A fresh desk read the referenced turns and left a compact digest for the sketch.', pointers: { digest } }
+}
 
 // The producer leg: the fresh research desk over the six canonical areas.
 const producerPrompt = (extra) => [
