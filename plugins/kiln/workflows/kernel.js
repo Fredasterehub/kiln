@@ -102,23 +102,27 @@ function gateReviewInvalid(g, lawHash, expectedReviewId, allowedFindingIds) {
 
 // The repair/recheck loop over injected closures. gate(mode, pass) → exit int;
 // repair(pass) → true only when the repair result AND its delta are confirmed.
-// Max two repair passes, then blocked (locked BEHAVIOR). A recheck runs only
-// after a confirmed repair; an unconfirmed repair halts visibly.
-async function reviewLoop(deps, maxRepairs = 2) {
-  let repairs = 0
+// W6-F: the repair edge is traversable UP TO the reversibility-keyed cap (an omitted/invalid cap fails up to 1, never the pre-W6 hardcoded 2) —
+// each confirmed repair spends one edgeUses, and an exhausted cap holds (locked BEHAVIOR). A
+// recheck runs only after a confirmed repair; an unconfirmed repair halts visibly. edgeUses and
+// cap are the recoveryDecision facts, named here so S3 wires that decision in cleanly. The return
+// carries the count as repairs, the caller-facing name the beats and counters already speak.
+async function reviewLoop(deps, cap) {
+  cap = Number.isInteger(cap) && cap >= 1 ? cap : 1
+  let edgeUses = 0
   let exit = await deps.gate('review', 0)
   for (;;) {
     const o = gateOutcome(exit)
-    if (o === 'accept') return { result: 'sealed', repairs }
-    if (o === 'blocked') return { result: 'blocked', repairs }
-    if (o === 'codex_unavailable') return { result: 'degraded', repairs }
-    if (o === 'gate_unreachable') return { result: 'gate-unreachable', repairs }
-    if (o === 'transport_failure') return { result: 'transport-failure', repairs }
-    if (repairs >= maxRepairs) return { result: 'blocked', repairs }
-    repairs += 1
-    const confirmed = await deps.repair(repairs)
-    if (confirmed !== true) return { result: 'repair-failed', repairs }
-    exit = await deps.gate('recheck', repairs)
+    if (o === 'accept') return { result: 'sealed', repairs: edgeUses }
+    if (o === 'blocked') return { result: 'blocked', repairs: edgeUses }
+    if (o === 'codex_unavailable') return { result: 'degraded', repairs: edgeUses }
+    if (o === 'gate_unreachable') return { result: 'gate-unreachable', repairs: edgeUses }
+    if (o === 'transport_failure') return { result: 'transport-failure', repairs: edgeUses }
+    if (edgeUses >= cap) return { result: 'blocked', repairs: edgeUses }
+    edgeUses += 1
+    const confirmed = await deps.repair(edgeUses)
+    if (confirmed !== true) return { result: 'repair-failed', repairs: edgeUses }
+    exit = await deps.gate('recheck', edgeUses)
   }
 }
 
@@ -164,6 +168,18 @@ function recoveryDecision(facts) {
     return { action: 'scoped-move', reason: 'strict-subset-progress' }
   }
   return { action: 'held', reason: 'blocked' }
+}
+
+// W6-F (A3, Q3 CONFIRMED): the recovery cap is reversibility-keyed off the Gauge dial and read
+// ONCE per invocation. The dial leg carries recovery_cap alongside width (law) or alone (build);
+// this normalizes it STRICTLY — cap 2 only when the leg exited 0 AND the dial read recovery_cap
+// EXACTLY 2 (the reversible profile), and every other value or a transport failure fails UP to
+// cap 1 (fewer recovery edges precisely when the reading is least trustworthy, matching
+// gauge-dial its own fail-up default). Width never enters here — a wide plan widens the plan
+// table, it never raises the cap. research-sweep carries a drift-pinned copy. Never throws.
+function capFromDial(leg) {
+  const d = leg || {}
+  return d.exit === 0 && d.recovery_cap === 2 ? 2 : 1
 }
 
 // The kernel fills every kernel-owned slot from the sealed voice.json slots
@@ -519,8 +535,10 @@ const POSTURE_LEG = {
 }
 // W5-S2 (W5-04): the Gauge WIDTH dial read — the same boot-style projection shape research-sweep
 // reads the research dial through. The leg parses the JSON gauge-dial prints; the kernel body
-// never does. additionalProperties stays true so the other dials pass through harmlessly.
-const WIDTH = { type: 'object', additionalProperties: true, properties: { exit: { type: 'integer' }, width: { type: 'string' } }, required: ['exit'] }
+// never does. additionalProperties stays true so the other dials pass through harmlessly. W6-F:
+// the same leg also carries recovery_cap, so one dial read serves both the WIDE branch and the
+// reversibility-keyed recovery cap; the build stage reuses this schema for its own cap read.
+const WIDTH = { type: 'object', additionalProperties: true, properties: { exit: { type: 'integer' }, width: { type: 'string' }, recovery_cap: { type: 'integer' } }, required: ['exit'] }
 // W5-S2 (W5-01): a WIDE adjust leg returns the ordinary stage envelope plus the closed
 // `converged` self-report the content-blind skip-adjudication gate reads alongside byte-equality.
 const WIDE_ADJUST = {
@@ -808,11 +826,17 @@ if (stage !== 'build') {
   // it). The kernel stays content-blind — it branches on the width, converged, and byte-equality
   // closed facts, never on plan content.
   let r
+  // W6-F: the reversibility-keyed recovery cap, threaded into the LAW-ratify loop below. It stays
+  // 1 on every non-law path (unused there) and is set from the single dial read this law
+  // invocation makes. Width never raises it — a wide plan widens the plan table, not the budget.
+  let cap = 1
   if (stage === 'law') {
     const widthLeg = await agent(
-      'Run exactly this in ' + projectDir + '. Report {exit, width}: exit = the exit code; width = the value of the "width" field in the printed JSON dials object when exit is 0, omitted when exit is nonzero:\n' + 'node ' + plugin + '/scripts/gauge-dial.mjs',
+      'Run exactly this in ' + projectDir + '. Report {exit, width, recovery_cap}: exit = the exit code; width = the value of the "width" field and recovery_cap = the value of the "recovery_cap" field in the printed JSON dials object when exit is 0, both omitted when exit is nonzero:\n' + 'node ' + plugin + '/scripts/gauge-dial.mjs',
       { label: 'width:read', ...tier('kernel-leg'), schema: WIDTH },
     ).then(x => (x ?? { exit: 20 }))
+    // One dial read carries both the WIDE-branch width and the recovery cap (fail-up to 1).
+    cap = capFromDial(widthLeg)
     if (widthLeg.exit === 0 && widthLeg.width === 'floor') {
       r = await act(cardPrompt(A.idea ? 'Operator idea (verbatim): ' + A.idea : ''), 'stage:law')
     } else {
@@ -935,7 +959,7 @@ if (stage !== 'build') {
         candidateBeat = rr.narration_beat // buffer the repaired candidate; the repair card beat also claims SEALED, so it is never emitted mid-loop
         return true
       },
-    })
+    }, cap)
     if (ratifyLoop.result === 'sealed') {
       // S1 (A9 / W5-03): before the seal, a deterministic leg confirms the slices.json
       // milestone projection AGREES with the authoritative LAW plan table — the kernel
@@ -1034,6 +1058,15 @@ const ladder = await idsFetch(
   "node -p 'JSON.stringify(require(" + JSON.stringify(plugin + '/data/voice.json') + ").killstreak.ladder)'",
   'ladder:fetch', 'the printed JSON array of streak names, [] if exit != 0',
 )
+// W6-F: the reversibility-keyed recovery cap, read ONCE per build invocation from the same Gauge
+// dial the law stage reads, and threaded into every slice gate reviewLoop below — a reject repair
+// traverses the regenerate-slice edge only up to the cap (2 reversible, else 1; fail-up to 1 on any
+// bad read). Width never raises it. One read, reused for every slice.
+const capLeg = await agent(
+  'Run exactly this in ' + projectDir + '. Report {exit, recovery_cap}: exit = the exit code; recovery_cap = the value of the "recovery_cap" field in the printed JSON dials object when exit is 0, omitted when exit is nonzero:\n' + 'node ' + plugin + '/scripts/gauge-dial.mjs',
+  { label: 'cap:read', ...tier('kernel-leg'), schema: WIDTH },
+).then(x => (x ?? { exit: 20 }))
+const cap = capFromDial(capLeg)
 let corrections = 0
 for (const entry of slices) {
   const slice = entry.id
@@ -1202,9 +1235,13 @@ for (const entry of slices) {
       }
       return inner(mode)
     }
+    // W6-07: the ui codex gate takes the cwd-relative repo arg `.` exactly as the LAW-ratify gate
+    // does — hands runs with cwd = projectDir, and kiln-review resolves the request, the artifact,
+    // and the diff against it. A bare projectDir interpolation would split a whitespace path into
+    // extra argv and fail this fixed-arity gate. The keyed cap bounds the regenerate-slice edge.
     const loop = await reviewLoop({
       gate: freshReceipt(!wasDegraded && entry.surface === 'ui'
-        ? (mode) => hands(gateCmd(mode, { plugin, repo: projectDir, request: P.request, gate: P.gate, priorGate: P.gate, delta: P.delta }), 'gate:' + mode)
+        ? (mode) => hands(gateCmd(mode, { plugin, repo: '.', request: P.request, gate: P.gate, priorGate: P.gate, delta: P.delta }), 'gate:' + mode)
         : claudeGate),
       repair: async (pass) => {
         const found = await idsFetch(
@@ -1222,7 +1259,7 @@ for (const entry of slices) {
         beats.push(fillClosed(rr.narration_beat, facts))
         return true
       },
-    })
+    }, cap)
     corrections += loop.repairs
     facts.passes = loop.repairs
     // S2 ruling: a red pre-recheck rerun is a law fact, not a transport fact —

@@ -59,25 +59,29 @@ function researchTiersValid(c) {
   return true
 }
 
-// The workflow-local ratify loop — bounded at ONE repair (the kernel's LAW reviewLoop is NOT
-// extracted; this is its own smaller loop, and the ratify verb has no recheck mode, so every
-// round re-grades the freshly regenerated candidate). gate() → exit int; repair(pass) → true
-// only when the repair regenerated a sound candidate. accept promotes; a reject past the cap is
-// 'rejected'; every other outcome names the transport fact — all non-accept results hold the law.
-async function ratifyLoop(deps, maxRepairs = 1) {
-  let repairs = 0
+// The workflow-local ratify loop (the kernel's LAW reviewLoop is NOT extracted; this is its own
+// smaller loop, and the ratify verb has no recheck mode, so every round re-grades the freshly
+// regenerated candidate). gate() → exit int; repair(pass) → true only when the repair regenerated
+// a sound candidate. accept promotes; a reject past the cap is 'rejected'; every other outcome
+// names the transport fact — all non-accept results hold the law. W6-F: the regenerate-candidate
+// edge is traversable UP TO the reversibility-keyed cap (an omitted/invalid cap fails up to 1) — each confirmed
+// repair spends one edgeUses, named to match the recoveryDecision facts; the return carries the
+// count as repairs, the caller-facing name.
+async function ratifyLoop(deps, cap) {
+  cap = Number.isInteger(cap) && cap >= 1 ? cap : 1
+  let edgeUses = 0
   let exit = await deps.gate()
   for (;;) {
     const o = gateOutcome(exit)
-    if (o === 'accept') return { result: 'accepted', repairs }
-    if (o === 'blocked') return { result: 'blocked', repairs }
-    if (o === 'codex_unavailable') return { result: 'codex-unavailable', repairs }
-    if (o === 'gate_unreachable') return { result: 'gate-unreachable', repairs }
-    if (o === 'transport_failure') return { result: 'transport-failure', repairs }
-    if (repairs >= maxRepairs) return { result: 'rejected', repairs }
-    repairs += 1
-    const confirmed = await deps.repair(repairs)
-    if (confirmed !== true) return { result: 'repair-failed', repairs }
+    if (o === 'accept') return { result: 'accepted', repairs: edgeUses }
+    if (o === 'blocked') return { result: 'blocked', repairs: edgeUses }
+    if (o === 'codex_unavailable') return { result: 'codex-unavailable', repairs: edgeUses }
+    if (o === 'gate_unreachable') return { result: 'gate-unreachable', repairs: edgeUses }
+    if (o === 'transport_failure') return { result: 'transport-failure', repairs: edgeUses }
+    if (edgeUses >= cap) return { result: 'rejected', repairs: edgeUses }
+    edgeUses += 1
+    const confirmed = await deps.repair(edgeUses)
+    if (confirmed !== true) return { result: 'repair-failed', repairs: edgeUses }
     exit = await deps.gate()
   }
 }
@@ -107,6 +111,15 @@ function recoveryDecision(facts) {
     return { action: 'scoped-move', reason: 'strict-subset-progress' }
   }
   return { action: 'held', reason: 'blocked' }
+}
+
+// W6-F: the recovery cap normalization, DRIFT-PINNED verbatim from workflows/kernel.js — cap 2
+// only on exit 0 AND recovery_cap exactly 2, else fail-up to 1. research-sweep reads its cap the
+// same way from its own dial leg; tests/research-sweep.test.mjs asserts this copy agrees with the
+// kernel one (source text + behavior), so the duplication cannot drift.
+function capFromDial(leg) {
+  const d = leg || {}
+  return d.exit === 0 && d.recovery_cap === 2 ? 2 : 1
 }
 
 // The PROBE_REQUEST message contract. During a brainstorm Da Vinci has no spawn tool and may
@@ -166,8 +179,10 @@ const F = {
 const EXIT = { type: 'object', additionalProperties: false, properties: { exit: { type: 'integer' } }, required: ['exit'] }
 // The dial leg reports the research field of the printed dials object — a boot-style projection
 // leg (the tiers-boot shape): the leg parses the JSON gauge-dial prints, the workflow body never
-// does. additionalProperties stays true so the other dials pass through harmlessly.
-const DIAL = { type: 'object', additionalProperties: true, properties: { exit: { type: 'integer' }, research: { type: 'string' } }, required: ['exit'] }
+// does. additionalProperties stays true so the other dials pass through harmlessly. W6-F: the
+// same read also carries recovery_cap, so one dial read serves both the research gate and the
+// reversibility-keyed cap the ratify loop honors.
+const DIAL = { type: 'object', additionalProperties: true, properties: { exit: { type: 'integer' }, research: { type: 'string' }, recovery_cap: { type: 'integer' } }, required: ['exit'] }
 const TIERS = {
   type: 'object', additionalProperties: false,
   properties: {
@@ -285,10 +300,13 @@ if (await hands('rm -f ' + F.candidate + ' ' + F.feasibility, 'invalidate') !== 
 // 'off' is the ONLY stand-down trigger — an unreadable dial or any other value fails UP to on
 // (more scrutiny when the reading is least trustworthy).
 const dial = await agent(
-  'Run exactly this in ' + projectDir + '. Report {exit, research}: exit = the exit code; research = the value of the "research" field in the printed JSON dials object when exit is 0, omitted when exit is nonzero:\n' + 'node ' + shq(plugin + '/scripts/gauge-dial.mjs'),
+  'Run exactly this in ' + projectDir + '. Report {exit, research, recovery_cap}: exit = the exit code; research = the value of the "research" field and recovery_cap = the value of the "recovery_cap" field in the printed JSON dials object when exit is 0, both omitted when exit is nonzero:\n' + 'node ' + shq(plugin + '/scripts/gauge-dial.mjs'),
   { label: 'dial:read', ...tier('kernel-leg'), schema: DIAL },
 ).then(r => (r ?? { exit: 20 }))
 const research = (dial.exit === 0 && dial.research === 'off') ? 'off' : 'on'
+// W6-F: one dial read carries both the research gate and the reversibility-keyed cap (fail-up to
+// 1) the ratify loop below honors — read here, before the stand-down, so the single read serves both.
+const cap = capFromDial(dial)
 if (research === 'off') {
   return { status: 'stood-down', beat: 'The Gauge reads low — familiar, reversible ground, no feasibility question worth a desk. The forge goes straight to the law.', pointers: { posture: F.posture } }
 }
@@ -343,7 +361,7 @@ const loop = await ratifyLoop({
     if (await hands('test -s ' + F.candidate, 'candidate:recheck') !== 0) return false
     return true
   },
-})
+}, cap)
 
 // (d) ONLY on accept, promote — atomically rename the ratified candidate file itself to the
 // canonical path, the same mechanical mv -f idiom the ratify request write already uses. The bytes

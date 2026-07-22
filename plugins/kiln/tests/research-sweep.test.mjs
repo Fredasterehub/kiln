@@ -20,8 +20,8 @@ const coreSrc = srcLines.slice(
   srcLines.findIndex(l => l.includes('RESEARCH_CORE_END')),
 ).join('\n')
 const core = new Function(coreSrc + `
-  return { parseArgs, gateOutcome, resolveTier, researchTiersValid, ratifyLoop, validLedgerRef, validateProbeRequest, recoveryDecision, strictSubsetProgress }`)()
-const { parseArgs, gateOutcome, resolveTier, researchTiersValid, ratifyLoop, validLedgerRef, validateProbeRequest, recoveryDecision, strictSubsetProgress } = core
+  return { parseArgs, gateOutcome, resolveTier, researchTiersValid, ratifyLoop, validLedgerRef, validateProbeRequest, recoveryDecision, strictSubsetProgress, capFromDial }`)()
+const { parseArgs, gateOutcome, resolveTier, researchTiersValid, ratifyLoop, validLedgerRef, validateProbeRequest, recoveryDecision, strictSubsetProgress, capFromDial } = core
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
 const PLUGIN = '/abs/plugins/kiln'
@@ -113,22 +113,27 @@ test('core: researchTiersValid holds the three consumed roles to the HIGH floor 
   const mk = cfg(); delete mk.roles['kernel-leg']; assert.equal(researchTiersValid(mk), false, 'a missing consumed role fails closed')
 })
 
-test('core: ratifyLoop is bounded at one repair — accept, a 2nd reject, and every transport outcome', async () => {
+test('core (W6-F): ratifyLoop honors the injected reversibility-keyed cap — a keyed 1 and a keyed 2 both bound the regenerate-candidate edge; every transport outcome holds', async () => {
   const mk = (exits) => ({ gate: async () => exits.shift(), repair: async () => true })
-  assert.deepEqual(await ratifyLoop(mk([0])), { result: 'accepted', repairs: 0 }, 'clean accept, no repair')
-  assert.deepEqual(await ratifyLoop(mk([10, 0])), { result: 'accepted', repairs: 1 }, 'reject then a repaired accept')
-  assert.deepEqual(await ratifyLoop(mk([10, 10])), { result: 'rejected', repairs: 1 }, 'a 2nd reject stops at the cap — never a 3rd gate')
-  assert.equal((await ratifyLoop(mk([11]))).result, 'blocked')
-  assert.equal((await ratifyLoop(mk([21]))).result, 'codex-unavailable')
-  assert.equal((await ratifyLoop(mk([127]))).result, 'gate-unreachable')
-  assert.equal((await ratifyLoop(mk([20]))).result, 'transport-failure')
-  const failedRepair = await ratifyLoop({ gate: async () => 10, repair: async () => false })
+  // A keyed cap of 1 (the fail-safe floor): a clean accept, a repaired accept, and a
+  // 2nd reject that stops at one repair — never a 3rd gate.
+  assert.deepEqual(await ratifyLoop(mk([0]), 1), { result: 'accepted', repairs: 0 }, 'clean accept, no repair')
+  assert.deepEqual(await ratifyLoop(mk([10, 0]), 1), { result: 'accepted', repairs: 1 }, 'reject then a repaired accept')
+  assert.deepEqual(await ratifyLoop(mk([10, 10]), 1), { result: 'rejected', repairs: 1 }, 'cap 1: a 2nd reject stops at the cap — never a 3rd gate')
+  // A keyed cap of 2 (a reversible posture): the edge is traversable twice, then holds.
+  assert.deepEqual(await ratifyLoop(mk([10, 10, 0]), 2), { result: 'accepted', repairs: 2 }, 'cap 2: two repairs then a repaired accept')
+  assert.deepEqual(await ratifyLoop(mk([10, 10, 10]), 2), { result: 'rejected', repairs: 2 }, 'cap 2: a 3rd reject stops at the keyed cap — never a 4th gate')
+  assert.equal((await ratifyLoop(mk([11]), 1)).result, 'blocked')
+  assert.equal((await ratifyLoop(mk([21]), 1)).result, 'codex-unavailable')
+  assert.equal((await ratifyLoop(mk([127]), 1)).result, 'gate-unreachable')
+  assert.equal((await ratifyLoop(mk([20]), 1)).result, 'transport-failure')
+  const failedRepair = await ratifyLoop({ gate: async () => 10, repair: async () => false }, 1)
   assert.deepEqual(failedRepair, { result: 'repair-failed', repairs: 1 }, 'an unconfirmed repair halts visibly')
 })
 
 // The drift guard for the W6 recovery-decision core: research-sweep carries a copy of
-// recoveryDecision + strictSubsetProgress because a Workflow body cannot import the kernel.
-// This extracts the kernel's KERNEL_CORE copies and asserts the two agree byte-for-byte
+// recoveryDecision + strictSubsetProgress + capFromDial because a Workflow body cannot import the
+// kernel. This extracts the kernel's KERNEL_CORE copies and asserts the two agree byte-for-byte
 // (source text) AND behave identically across a battery — the same posture the POSTURE_*
 // enum agreement uses, so the deliberate duplication can never drift.
 test('core (W6): the recovery-decision copies agree with the kernel — source text and behavior, so the duplication cannot drift', () => {
@@ -138,10 +143,15 @@ test('core (W6): the recovery-decision copies agree with the kernel — source t
     lines.findIndex(l => l.includes('KERNEL_CORE_BEGIN')) + 1,
     lines.findIndex(l => l.includes('KERNEL_CORE_END')),
   ).join('\n')
-  const kernel = new Function(kernelCoreSrc + '\nreturn { recoveryDecision, strictSubsetProgress }')()
+  const kernel = new Function(kernelCoreSrc + '\nreturn { recoveryDecision, strictSubsetProgress, capFromDial }')()
   // Source-text parity: the two copies are byte-identical (verbatim), so their toString agrees.
   assert.equal(strictSubsetProgress.toString(), kernel.strictSubsetProgress.toString(), 'strictSubsetProgress is verbatim the kernel copy')
   assert.equal(recoveryDecision.toString(), kernel.recoveryDecision.toString(), 'recoveryDecision is verbatim the kernel copy')
+  assert.equal(capFromDial.toString(), kernel.capFromDial.toString(), 'capFromDial is verbatim the kernel copy')
+  // capFromDial behavior parity across the reachable dial readings.
+  for (const leg of [{ exit: 0, recovery_cap: 2 }, { exit: 0, recovery_cap: 1 }, { exit: 0 }, { exit: 20, recovery_cap: 2 }, { exit: 0, recovery_cap: '2' }, undefined]) {
+    assert.equal(capFromDial(leg), kernel.capFromDial(leg), `capFromDial agrees on ${JSON.stringify(leg)}`)
+  }
   // Behavior parity across a battery spanning every branch — a second guard independent of whitespace.
   const cohorts = [[['f1', 'f2', 'f3'], ['f1', 'f2']], [['f1', 'f2'], ['f1', 'f2']], [['f1'], ['f1', 'f2']], [['f1', 'f2'], []], [[], []], [['f1', 'f2'], ['f1', 'f3']]]
   for (const [prior, curr] of cohorts) {
@@ -248,8 +258,23 @@ test('runtime: a rejected candidate NEVER reaches .kiln/docs/feasibility.md — 
     'candidate:recheck': OK,
   })
   assert.equal(ret.status, 'held', 'a non-converging feasibility read holds the law')
-  assert.equal(calls.filter(c => c.label === 'ratify:gate').length, 2, 'grade plus one re-grade — the bounded loop, never a 3rd')
+  assert.equal(calls.filter(c => c.label === 'ratify:gate').length, 2, 'grade plus one re-grade — the cap-1 bounded loop, never a 3rd')
   assert.ok(!calls.some(c => c.label === 'promote'), 'a rejected candidate is never promoted to the canonical path')
+})
+
+test('runtime (W6-F): a reversible posture keys the ratify cap to 2 — the dial recovery_cap threads into the loop; two re-grades then hold, one dial read per invocation', async () => {
+  const { ret, calls } = await runSweep({ projectDir: '/p' }, {
+    ...ACCEPT_RUN,
+    'dial:read': { exit: 0, research: 'on', recovery_cap: 2 }, // reversible → cap 2
+    'ratify:gate': { exit: 10 }, // always changes_required
+    'producer:repair': PRODUCER_CANDIDATE,
+    'candidate:recheck': OK,
+  })
+  assert.equal(ret.status, 'held', 'a non-converging feasibility read holds the law even at cap 2')
+  assert.equal(calls.filter(c => c.label === 'ratify:gate').length, 3, 'the dial recovery_cap 2 threads into the loop — grade plus two re-grades, never a 4th')
+  assert.equal(calls.filter(c => c.label === 'producer:repair').length, 2, 'exactly two regenerate-candidate traversals — the keyed cap')
+  assert.equal(calls.filter(c => c.label === 'dial:read').length, 1, 'one dial read per invocation carries both the research gate and the cap')
+  assert.ok(!calls.some(c => c.label === 'promote'), 'a rejected candidate is never promoted')
 })
 
 test('runtime: blocked, transport, gate-unreachable, and codex-unavailable each HOLD the law — never a promotion', async () => {
