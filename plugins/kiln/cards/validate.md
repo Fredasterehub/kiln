@@ -13,6 +13,18 @@ on `bash .kiln/law/check.sh` alone; your job is the evidence behind that exit co
 3. Write `.kiln/validate.md` (temp + rename): one row per criterion — `id` · the command ·
    observed result · `✓`/`✗`. Head it with the check.sh exit code and the timestamp from
    `date -u`.
+4. THE CAPTURE — only when the sealed `.kiln/LAW.md` carries a `## Perceptual` table
+   (no table, no capture: skip this step entirely). Execute the capture recipe in
+   `references/screening-room.md` exactly: probe the runtimes first
+   (`npx --no-install playwright --version`; `ffmpeg -version`) — a failed probe is your
+   honest not-ok, never an install; reserve a fresh evidence generation under
+   `.kiln/evidence/` with the recipe's allocator; capture the full required set into
+   ONLY that reserved dir; publish its `manifest.json` LAST via temp + rename. Your
+   CONTRACT is a COMPLETE manifest — every required class, inside the recipe's bounds —
+   or an honest not-ok return. Incomplete after the pass? Retry ONCE with a fresh
+   generation (the abandoned dir stays manifest-less and invisible to the graders);
+   still incomplete, return the honest failure string naming what is missing. Never a
+   partial manifest passed off as done, never an install.
 
 Red criteria are still your truth to record: write the facts and return them. The kernel's
 stage-end rerun sees the red exit and reopens the owning slice — reopening is its decision,
@@ -62,7 +74,8 @@ Leave every kernel-owned slot from the sealed slots map exactly as-is.
 
 ## Return
 `facts.status` — `'ok'` only if every criterion was exercised and `.kiln/validate.md` is
-written (status is about YOUR work being complete, not about the criteria being green — the
-exit code carries that), else an honest failure string. `facts.pointers` — `.kiln/validate.md`.
+written — and, when step 4 was live, its COMPLETE manifest is published (status is about
+YOUR work being complete, not about the criteria being green — the exit code carries
+that), else an honest failure string. `facts.pointers` — `.kiln/validate.md`.
 `facts.schema_valid` — true iff your declared outputs are well-formed. `narration_beat` — every
 stage-owned slot filled; kernel-owned slots left as-is.

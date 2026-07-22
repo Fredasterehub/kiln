@@ -246,6 +246,32 @@ test('law card (W8-S1/A): the Perceptual table — full lawful criteria whose su
     'the Perceptual table rides output 1 — still exactly four numbered outputs, in order')
 })
 
+test('validate card (W8-S2/E): the conditional capture step — the screening-room recipe, a complete manifest or an honest not-ok, never an install', () => {
+  const validate = cardText('validate.md')
+  const flat = validate.replace(/\s+/g, ' ')
+  // The step is CONDITIONAL on the sealed LAW carrying the Perceptual table — a run
+  // with no table skips it entirely and validate behaves as it always did.
+  assert.ok(flat.includes('only when the sealed `.kiln/LAW.md` carries a `## Perceptual` table'),
+    'the capture step keys on the sealed LAW carrying the Perceptual table')
+  assert.ok(flat.includes('references/screening-room.md'), 'the step executes the screening-room recipe, never an ad-hoc capture')
+  // No-install is the law of the recipe and the card repeats it at both ends.
+  assert.ok(flat.includes('npx --no-install playwright --version'), 'the runtime probe is no-install')
+  assert.ok(flat.includes('a failed probe is your honest not-ok, never an install'),
+    'a missing runtime is the honest act failure, never an install')
+  // The evidence discipline: reserved generation, manifest-last, temp + rename.
+  assert.ok(flat.includes('reserve a fresh evidence generation under `.kiln/evidence/`'),
+    'the step reserves its generation with the recipe allocator')
+  assert.ok(flat.includes('publish its `manifest.json` LAST via temp + rename'), 'manifest-last rides the card')
+  // The contract is binary: a COMPLETE manifest or an honest not-ok — one bounded retry.
+  assert.ok(flat.includes('CONTRACT is a COMPLETE manifest'), 'the contract is a complete manifest')
+  assert.ok(flat.includes('Retry ONCE with a fresh generation'), 'one bounded internal retry on incompleteness')
+  assert.ok(flat.includes('Never a partial manifest passed off as done, never an install'),
+    'no partial manifest ever passes as done')
+  // The Return contract carries the capture condition — and only that addition.
+  assert.ok(flat.includes('when step 4 was live, its COMPLETE manifest is published'),
+    'facts.status ok requires the published complete manifest when the capture was live')
+})
+
 test('tiers (W8-S1/J): the remits gain the screening-room duties — models, efforts, and the twelve roles unchanged', () => {
   const tiers = JSON.parse(readFileSync(join(DATA, 'tiers.json'), 'utf8'))
   assert.equal(Object.keys(tiers.roles).length, 12, 'TIER_ROLES stays twelve — the screening room adds duties, never a seat')

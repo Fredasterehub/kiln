@@ -5,12 +5,14 @@ import { fileURLToPath } from 'node:url'
 
 // A truthfulness anchor for references/recipe-shelf.md — NOT a prose lock. The shelf is the
 // list-of-record for the three recipes and how each launches. Existence is asserted for what
-// ships now: ratify-artifact's verb in kiln-review and research-sweep's workflow file (landed in
-// W4). screening-room (W8) is held to not-yet-shipped through the shelf's own status marker,
-// never by probing for a not-yet-existing file. Zero run cost: bytes on disk.
+// ships: ratify-artifact's verb in kiln-review, research-sweep's workflow file (W4), and
+// screening-room's recipe doc + rubric + screen verbs (W8) — the whole shelf answers on disk.
+// Zero run cost: bytes on disk.
 const SHELF = fileURLToPath(new URL('../references/recipe-shelf.md', import.meta.url))
 const REVIEW = fileURLToPath(new URL('../scripts/kiln-review', import.meta.url))
 const SWEEP = fileURLToPath(new URL('../workflows/research-sweep.js', import.meta.url))
+const RECIPE = fileURLToPath(new URL('../references/screening-room.md', import.meta.url))
+const RUBRIC = fileURLToPath(new URL('../data/perceptual-rubric.json', import.meta.url))
 const shelf = readFileSync(SHELF, 'utf8')
 const RECIPES = ['research-sweep', 'ratify-artifact', 'screening-room']
 
@@ -42,6 +44,11 @@ test('recipe-shelf: research-sweep is marked SHIPPED and its workflow file is pr
   assert.ok(existsSync(SWEEP), 'the research-sweep workflow ships on disk')
 })
 
-test('recipe-shelf: screening-room stays unshipped until its wave', () => {
-  assert.ok(!statusOf('screening-room').startsWith('shipped'), 'screening-room is not yet marked SHIPPED')
+test('recipe-shelf: screening-room is marked SHIPPED — the recipe doc and rubric are on disk, and the screen verbs answer in kiln-review', () => {
+  assert.ok(statusOf('screening-room').startsWith('shipped'), 'the shelf marks screening-room shipped once its wave lands')
+  assert.ok(existsSync(RECIPE), 'the capture recipe doc ships on disk')
+  assert.ok(existsSync(RUBRIC), 'the shipped perceptual rubric is on disk')
+  const review = readFileSync(REVIEW, 'utf8')
+  assert.ok(review.includes(`mode === 'screen'`), 'the screen verb answers in kiln-review\'s dispatch')
+  assert.ok(review.includes(`mode === 'screen-recheck'`), 'the screen-recheck verb answers in kiln-review\'s dispatch')
 })

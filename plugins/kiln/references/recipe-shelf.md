@@ -41,7 +41,13 @@ plus the kernel LAW-stage call that ratifies the LAW before it locks. The verb i
 artifact-agnostic — its first consumer is the LAW, and research-sweep reuses the same verb to
 ratify its feasibility candidate against a different rubric. No second review family is minted.
 
-## screening-room — status: deferred (W8)
+## screening-room — status: SHIPPED (W8)
 
-The eighth-wave recipe, named here so the shelf reads complete. No file or verb ships for it
-until W8; the shelf marking it deferred is the truthful record that it is not yet reachable.
+Not a standalone workflow file: the perceptual evidence-and-grading path is the capture
+recipe at `references/screening-room.md` (evidence generations under `.kiln/evidence/`,
+manifest-last, no-install), the shipped instrument `data/perceptual-rubric.json`, and the
+`kiln-review screen` / `screen-recheck` verbs in `scripts/kiln-review` — the
+ratify-artifact precedent: the verb is the recipe. The validate card executes the capture
+as part of its act, and the verbs grade the CURRENT generation's bounded pixels against
+the LAW's Perceptual table over the review transport and schema unchanged. No second
+review family is minted.

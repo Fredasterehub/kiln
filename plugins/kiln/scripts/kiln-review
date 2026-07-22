@@ -6,6 +6,7 @@ const {
   appendFileSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   renameSync,
@@ -13,7 +14,7 @@ const {
   unlinkSync,
   writeFileSync,
 } = require('node:fs')
-const { dirname, join, resolve } = require('node:path')
+const { dirname, join, resolve, sep } = require('node:path')
 const { spawnSync } = require('node:child_process')
 
 const ACCEPT = 0
@@ -25,6 +26,19 @@ const EFFORTS = ['low', 'medium', 'high', 'xhigh']
 const LAW_HASH = /^[0-9a-f]{64}$/
 const BROKEN_CODEX = /(?:unknown|unrecognized|unexpected|invalid).*(?:argument|option|subcommand)|(?:argument|option).*(?:not found|not recognized)/i
 const SCHEMA = join(__dirname, 'review-schema.json')
+// W8-S2: the screen family's shipped instrument and bounds. Keyframes ≤6, references ≤2,
+// and the TOTAL image transport (2 required viewports + keyframes + references) capped
+// at 10 — the whole pixel budget a grader ever sees. The DOM rides as a bounded text
+// excerpt: enough to substantiate a clip-vs-authored call without flooding the packet.
+const PERCEPTUAL_RUBRIC = join(__dirname, '..', 'data', 'perceptual-rubric.json')
+const SCREEN_KEYFRAMES_MAX = 6
+const SCREEN_REFERENCES_MAX = 2
+const SCREEN_IMAGES_MAX = 10
+const SCREEN_DOM_EXCERPT_LIMIT = 20000
+// Screen findings pin evidence, not source: a viewport capture has no line number, so
+// the location is an evidence path with an OPTIONAL :frame (film.webm:3) — the one
+// place the screen family relaxes the shared path:line discipline.
+const SCREEN_LOCATION = { pattern: /^[^:]+(?::\d+)?$/, message: 'location must be an evidence path with an optional :frame' }
 
 function stop(fact, message, code) {
   process.stdout.write(`${fact}\n`)
@@ -134,13 +148,15 @@ function rubricFrom(file) {
 
 // W7-A1: the audit argv contract — closed facts only ride argv. Model and effort arrive
 // as argv words (the kernel resolves them from tiers.json); the effort gate mirrors
-// requestFrom so an unknown effort halts by name before any spawn.
-function auditRequest(model, effort) {
+// requestFrom so an unknown effort halts by name before any spawn. W8-S2: the screen
+// family shares the identical contract, so the family label parameterizes the halt
+// message and nothing else.
+function auditRequest(model, effort, family = 'audit') {
   if (typeof model !== 'string' || model.trim() === '') {
-    stop('transport_failure', 'audit reviewer model must be a nonempty string', TRANSPORT_FAILURE)
+    stop('transport_failure', `${family} reviewer model must be a nonempty string`, TRANSPORT_FAILURE)
   }
   if (!EFFORTS.includes(effort)) {
-    stop('reviewer_effort_invalid', `audit effort must be one of ${EFFORTS.join('|')}; ultra and unknown values are rejected`, TRANSPORT_FAILURE)
+    stop('reviewer_effort_invalid', `${family} effort must be one of ${EFFORTS.join('|')}; ultra and unknown values are rejected`, TRANSPORT_FAILURE)
   }
   return { reviewerModel: model, reviewerEffort: effort }
 }
@@ -197,7 +213,219 @@ function auditFacts(kilnDir, seamSliceId) {
   }
 }
 
-function validateShape(value, expectedReviewId, expectedLawHash, allowedFindingIds) {
+// W8-S2: the screen-family law facts — the verb derives the LAW Perceptual table rows
+// ITSELF, with the PERCEPTUAL_TABLE_CHECK parser discipline (heading anchor, exact
+// seven-cell header, GFM delimiter row, split on UNESCAPED `|` only so a lawful proxy
+// command's GFM `\|` unescapes to the real operator), and binds the sealed lock.hash
+// as packet TEXT — the schema's law_hash field belongs to the evidence digest here.
+function screenLawFacts(kilnDir) {
+  if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
+    stop('transport_failure', 'screen kilnDir must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  let law
+  try {
+    law = readFileSync(join(kilnDir, 'LAW.md'), 'utf8')
+  } catch (error) {
+    stop('transport_failure', `screen could not read LAW.md: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  const head = ['criterion id', 'owning slice', 'dim', 'requirement', 'proxy command', 'expected', 'reference']
+  const cells = (s) => s.split(/(?<!\\)\|/).slice(1, -1).map((x) => x.replace(/\\\|/g, '|').trim())
+  const rows = []
+  let state = 0
+  for (const line of law.split('\n')) {
+    const t = line.trim()
+    const row = t.slice(0, 1) === '|'
+    if (state === 0) {
+      if (t.slice(0, 3) === '## ' && t.slice(3).trim().toLowerCase() === 'perceptual') state = 1
+      continue
+    }
+    if (state === 1) {
+      if (t.slice(0, 1) === '#') break
+      if (!row) continue
+      const c = cells(t)
+      if (c.length === 7 && c.every((x, i) => x.toLowerCase() === head[i])) { state = 2; continue }
+      stop('transport_failure', 'the LAW Perceptual table header row is malformed', TRANSPORT_FAILURE)
+    }
+    if (state === 2) {
+      const c = t.split('|').slice(1, -1).map((x) => x.trim())
+      if (row && c.length === 7 && c.every((x) => /^:?-{3,}:?$/.test(x))) { state = 3; continue }
+      stop('transport_failure', 'the LAW Perceptual table delimiter row is malformed', TRANSPORT_FAILURE)
+    }
+    if (!row) break
+    const c = cells(t)
+    if (c.length !== 7) stop('transport_failure', 'every LAW Perceptual row must carry seven cells', TRANSPORT_FAILURE)
+    rows.push({ criterion: c[0], slice: c[1], dim: c[2], requirement: c[3], proxy: c[4], expected: c[5], reference: c[6] })
+  }
+  if (state !== 3 || rows.length === 0) {
+    stop('transport_failure', 'screen requires the sealed LAW.md to carry a Perceptual table with at least one row', TRANSPORT_FAILURE)
+  }
+  let lockHash
+  try {
+    lockHash = readFileSync(join(kilnDir, 'law', 'lock.hash'), 'utf8').trim()
+  } catch (error) {
+    stop('transport_failure', `screen requires the sealed law/lock.hash: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  if (!LAW_HASH.test(lockHash)) {
+    stop('transport_failure', 'law/lock.hash must hold a lowercase SHA-256 hex digest', TRANSPORT_FAILURE)
+  }
+  return { rows, lockHash }
+}
+
+// W8-S2 (Sol r3, adopted verbatim): CURRENT generation = the highest
+// .kiln/evidence/gen-<n> dir containing a valid manifest.json. Validity here is the
+// reader's floor — the bytes parse as a JSON object — because completeness is judged
+// AFTER selection: an incomplete CURRENT manifest is an honest reject, never a silent
+// fall-back onto a stale generation's evidence. A manifest-less dir (crash residue)
+// occupies its number for the allocator but is invisible to every reader.
+function currentGeneration(kilnDir) {
+  const root = join(kilnDir, 'evidence')
+  let names = []
+  try {
+    names = readdirSync(root)
+  } catch {
+    // No evidence root at all — the same honest no-CURRENT outcome as an empty one.
+  }
+  const numbers = names
+    .map((name) => /^gen-(\d+)$/.exec(name))
+    .filter(Boolean)
+    .map((found) => Number(found[1]))
+    .sort((a, b) => b - a)
+  for (const number of numbers) {
+    const dir = resolve(join(root, `gen-${number}`))
+    let bytes, manifest
+    try {
+      bytes = readFileSync(join(dir, 'manifest.json'))
+      manifest = JSON.parse(bytes.toString('utf8'))
+    } catch {
+      continue
+    }
+    if (!isObject(manifest)) continue
+    return { number, dir, manifest, digest: createHash('sha256').update(bytes).digest('hex') }
+  }
+  stop('transport_failure', 'no CURRENT evidence generation — no .kiln/evidence/gen-* dir carries a valid manifest.json; the capture recipe runs first', TRANSPORT_FAILURE)
+}
+
+// W8-S2: the manifest completeness gate + the bounded image transport. Metadata floor:
+// the manifest's gen number matches its dir, the probed runtime versions are recorded,
+// and the counts equal the named files — a manifest that misdescribes itself never
+// grades. Required classes: meta, dom, console, the two viewports, the film, and at
+// least one labeled keyframe; references are optional. Bounds: keyframes ≤6,
+// references ≤2, TOTAL image transport ≤10. Every named file resolves INSIDE the
+// generation dir AND exists there physically — realpath containment, because a symlink
+// pointing out is an outside path wearing an inside name. Any violation is a pre-spawn
+// reject: exit 20, nothing published.
+function screenEvidence(generation) {
+  if (generation.manifest.generation !== generation.number) {
+    stop('transport_failure', `manifest generation must equal its dir number ${generation.number}`, TRANSPORT_FAILURE)
+  }
+  const runtimes = isObject(generation.manifest.runtimes) ? generation.manifest.runtimes : {}
+  for (const runtime of ['playwright', 'ffmpeg']) {
+    if (typeof runtimes[runtime] !== 'string' || runtimes[runtime].trim() === '') {
+      stop('transport_failure', `manifest missing recorded runtime version: ${runtime}`, TRANSPORT_FAILURE)
+    }
+  }
+  const files = isObject(generation.manifest.files) ? generation.manifest.files : {}
+  const entry = (name) => (typeof files[name] === 'string' && files[name].trim() !== '' ? files[name] : null)
+  const list = (name) => (Array.isArray(files[name]) && files[name].every((p) => typeof p === 'string' && p.trim() !== '') ? files[name] : null)
+  const required = {
+    meta: entry('meta'),
+    dom: entry('dom'),
+    console: entry('console'),
+    viewport_desktop: entry('viewport_desktop'),
+    viewport_mobile: entry('viewport_mobile'),
+    film: entry('film'),
+  }
+  const missing = Object.keys(required).find((name) => required[name] === null)
+  if (missing) stop('transport_failure', `manifest missing required class ${missing}`, TRANSPORT_FAILURE)
+  const keyframes = list('keyframes')
+  if (!keyframes || keyframes.length === 0) {
+    stop('transport_failure', 'manifest missing required class keyframes — at least one labeled keyframe', TRANSPORT_FAILURE)
+  }
+  const references = files.references === undefined ? [] : list('references')
+  if (!references) stop('transport_failure', 'manifest references must be an array of nonempty paths', TRANSPORT_FAILURE)
+  if (keyframes.length > SCREEN_KEYFRAMES_MAX) {
+    stop('transport_failure', `manifest exceeds the keyframe bound: ${keyframes.length} > ${SCREEN_KEYFRAMES_MAX}`, TRANSPORT_FAILURE)
+  }
+  if (references.length > SCREEN_REFERENCES_MAX) {
+    stop('transport_failure', `manifest exceeds the reference bound: ${references.length} > ${SCREEN_REFERENCES_MAX}`, TRANSPORT_FAILURE)
+  }
+  const imageNames = [required.viewport_desktop, required.viewport_mobile, ...keyframes, ...references]
+  if (imageNames.length > SCREEN_IMAGES_MAX) {
+    stop('transport_failure', `manifest exceeds the total image transport cap: ${imageNames.length} > ${SCREEN_IMAGES_MAX}`, TRANSPORT_FAILURE)
+  }
+  const counts = isObject(generation.manifest.counts) ? generation.manifest.counts : {}
+  if (counts.keyframes !== keyframes.length || counts.references !== references.length || counts.images !== imageNames.length) {
+    stop('transport_failure', 'manifest counts do not match its named files', TRANSPORT_FAILURE)
+  }
+  let dirReal
+  try {
+    dirReal = realpathSync(generation.dir)
+  } catch (error) {
+    stop('transport_failure', `generation dir unreadable: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  const inside = (p) => {
+    const abs = resolve(generation.dir, p)
+    if (!abs.startsWith(generation.dir + sep)) {
+      stop('transport_failure', `manifest names a path outside its generation dir: ${p}`, TRANSPORT_FAILURE)
+    }
+    let real
+    try {
+      real = realpathSync(abs)
+      if (!statSync(real).isFile()) {
+        stop('transport_failure', `manifest names a path that is not a regular file: ${p}`, TRANSPORT_FAILURE)
+      }
+    } catch (error) {
+      stop('transport_failure', `manifest names a file that is not on disk: ${p}: ${error.message}`, TRANSPORT_FAILURE)
+    }
+    if (!real.startsWith(dirReal + sep)) {
+      stop('transport_failure', `manifest names a file physically outside its generation dir: ${p}`, TRANSPORT_FAILURE)
+    }
+    return abs
+  }
+  // The film never rides the transport (its keyframes carry the story), but it is a
+  // required class of the generation — it must exist physically like every other file.
+  inside(required.film)
+  return {
+    images: imageNames.map(inside),
+    imageNames,
+    references,
+    meta: inside(required.meta),
+    dom: inside(required.dom),
+    console: inside(required.console),
+  }
+}
+
+// W8-S2: the shared screen packet body — the LAW Perceptual rows the verb derived, the
+// whole shipped instrument (the rows' dims select from it), the evidence text (meta +
+// console verbatim, the DOM as a bounded excerpt), and the attachment naming so the
+// grader knows what each `-i` image is. The sealed LAW lock rides as text only — the
+// schema's law_hash belongs to the manifest digest.
+function screenPacket(facts, generation, evidence) {
+  const text = (file, label) => {
+    try {
+      return readFileSync(file, 'utf8')
+    } catch (error) {
+      stop('transport_failure', `screen could not read ${label}: ${error.message}`, TRANSPORT_FAILURE)
+    }
+  }
+  return {
+    law_lock_hash: facts.lockHash,
+    generation: generation.number,
+    perceptual_criteria: facts.rows,
+    rubric: rubricFrom(PERCEPTUAL_RUBRIC),
+    attached_images: evidence.imageNames,
+    reference_images: evidence.references,
+    meta: text(evidence.meta, 'meta.json'),
+    console_log: text(evidence.console, 'console.log'),
+    dom_excerpt: text(evidence.dom, 'dom.html').slice(0, SCREEN_DOM_EXCERPT_LIMIT),
+  }
+}
+
+function validateShape(value, expectedReviewId, expectedLawHash, allowedFindingIds, location) {
+  // Every family but screen pins findings to source as path:line; the screen family
+  // passes SCREEN_LOCATION because its findings pin evidence files where a line
+  // number does not exist. Absent, the default preserves the baseline byte-for-byte.
+  const locationRule = location || { pattern: /^.+:\d+(?::\d+)?$/, message: 'location must be path:line' }
   if (!isObject(value)) return 'gate output must be a JSON object'
   const keys = Object.keys(value)
   const expectedKeys = ['review_id', 'law_hash', 'findings', 'blockers', 'verdict']
@@ -228,7 +456,7 @@ function validateShape(value, expectedReviewId, expectedLawHash, allowedFindingI
     if (findingKeys.some((key) => typeof finding[key] !== 'string' || finding[key].trim() === '')) {
       return 'finding fields must be nonempty strings'
     }
-    if (!/^.+:\d+(?::\d+)?$/.test(finding.location)) return `finding ${finding.id} location must be path:line`
+    if (!locationRule.pattern.test(finding.location)) return `finding ${finding.id} ${locationRule.message}`
     if (ids.has(finding.id)) return `duplicate finding id ${finding.id}`
     if (allowedFindingIds && !allowedFindingIds.has(finding.id)) return `recheck introduced out-of-scope finding id ${finding.id}`
     ids.add(finding.id)
@@ -259,6 +487,20 @@ function auditShapeInvalid(gate) {
   const findingIds = new Set(gate.findings.map((finding) => finding.id))
   const orphan = gate.blockers.find((blocker) => !findingIds.has(blocker))
   if (orphan !== undefined) return `audit blocker ${orphan} does not equal any finding id`
+  return null
+}
+
+// W8-S2: the screen verb-level rules, layered on the shared validateShape —
+// review-schema.json stays byte-untouched. A perceptual grade can never block: hard
+// failure belongs to the deterministic proxies (a proxy red is a law red through
+// check.sh), so a blocked verdict or any blocker is invalid here; and every finding
+// must pin a LAW perceptual criterion id — the cross-family ownership key. Violations
+// take the validateShape failure path: transport_failure, exit 20, never published.
+function screenShapeInvalid(gate, criterionIds) {
+  if (gate.verdict === 'blocked') return 'screen verdict must be accept or changes_required — hard failure belongs to the law proxies'
+  if (gate.blockers.length !== 0) return 'screen blockers must be empty — hard failure belongs to the law proxies'
+  const off = gate.findings.find((finding) => !criterionIds.has(finding.criterion))
+  if (off !== undefined) return `finding ${off.id} criterion ${off.criterion} is not a LAW perceptual criterion id`
   return null
 }
 
@@ -304,6 +546,23 @@ ${JSON.stringify(packet, null, 2)}
 `
 }
 
+// W8-S2: the perceptual grading prompt — the review family's discipline pointed at
+// pixels. The reviewer judges ONLY the LAW Perceptual rows, each on its named rubric
+// dim per the shipped anchors; insufficient evidence is a finding, never a blocker;
+// and law_hash binds the grade to the evidence — the sha256 of the graded generation's
+// manifest.json (the ratify-family artifact-digest precedent, atomic and in-schema).
+function screenInstructions(packet) {
+  return `You are the perceptual grading reviewer. The attached images are the evidence generation named in the packet — the two required viewports, then the labeled keyframes, then any reference images, in the packet's attached_images order. Grade the rendered surface and return only the schema-forced JSON object.
+
+Judge ONLY the perceptual criteria rows in the packet, each on its named rubric dim per the shipped rubric's anchors — never any other dimension, and never general taste beyond what a row's requirement pins. Report only substantiated criterion violations. For each finding, pin criterion = the row's LAW perceptual criterion id and location = an evidence path with an optional :frame (for example viewport-mobile.png or film.webm:3), with the concrete failure, its visual evidence, and the smallest repair. Use stable finding IDs. Insufficient evidence on a dim is a finding citing the rubric's insufficient_evidence line as its evidence — never a blocker. Execute nothing and install nothing: rule from the attached images and the packet text alone.
+
+Copy review_id and law_hash exactly — law_hash is the sha256 digest of the graded generation's manifest.json and binds this verdict to that evidence. Verdict rules: accept only when findings and blockers are both empty; changes_required for one or more repairable findings. Never return blocked and never write a blocker: hard failure belongs to the law's deterministic proxies, not to this grade.
+${packet.mode === 'screen-recheck' ? '\nRecheck only the listed finding_ids against the fresh evidence generation. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}
+Evidence packet:
+${JSON.stringify(packet, null, 2)}
+`
+}
+
 function classifyFailure(run) {
   if (run.error && ['ENOENT', 'EACCES', 'ENOEXEC'].includes(run.error.code)) return CODEX_UNAVAILABLE
   if (run.error) return TRANSPORT_FAILURE
@@ -318,7 +577,9 @@ function classifyFailure(run) {
 // publish it and exit on the verdict. The prompt and the validator are the only
 // things the slice and ratify paths differ on — everything else is identical, so
 // both flows converge here rather than duplicate the spawn and the exit mapping.
-function runGate(repo, request, prompt, outputFile, validate) {
+// W8-S2: the screen family adds bounded `-i` image attachments — absent, the argv
+// is byte-identical to the baseline.
+function runGate(repo, request, prompt, outputFile, validate, images) {
   const output = resolve(outputFile)
   const temporary = join(dirname(output), `.gate-review.tmp-${process.pid}-${randomUUID()}`)
   const args = [
@@ -330,9 +591,9 @@ function runGate(repo, request, prompt, outputFile, validate) {
     '--model', request.reviewerModel,
     '-c', `model_reasoning_effort="${request.reviewerEffort}"`,
     '--output-schema', SCHEMA,
-    '-o', temporary,
-    '-',
   ]
+  for (const image of images || []) args.push('-i', image)
+  args.push('-o', temporary, '-')
   const run = spawnSync('codex', args, {
     cwd: repo,
     input: prompt,
@@ -661,10 +922,97 @@ if (mode === 'review' && args.length === 3) {
     stop('transport_failure', `append-audit could not write audits.log: ${error.message}`, TRANSPORT_FAILURE)
   }
   process.exit(ACCEPT)
+} else if (mode === 'screen' && args.length === 5) {
+  // W8-S2: the perceptual screen — one fresh grader over the CURRENT evidence
+  // generation's bounded pixels. argv carries closed facts only; the verb derives the
+  // LAW Perceptual rows, the sealed lock.hash (packet text), and the CURRENT
+  // generation itself. Pre-spawn rejects (exit 20, nothing published, no codex): no
+  // CURRENT generation, a manifest missing any required class, any bound exceeded.
+  // The transport is the review family's — read-only codex, the byte-untouched
+  // review-schema.json, closed exits — plus the manifest's images on `-i`. Binding:
+  // the schema's law_hash = sha256 of the graded generation's manifest.json, asserted
+  // post-run exactly as ratify asserts its artifact digest.
+  const [repoPath, kilnDir, model, effort, outputFile] = args
+  const request = auditRequest(model, effort, 'screen')
+  const repo = repository(repoPath)
+  const facts = screenLawFacts(kilnDir)
+  const generation = currentGeneration(kilnDir)
+  const evidence = screenEvidence(generation)
+  const criterionIds = new Set(facts.rows.map((row) => row.criterion))
+  const packet = {
+    mode: 'screen',
+    review_id: randomUUID(),
+    law_hash: generation.digest,
+    ...screenPacket(facts, generation, evidence),
+  }
+  runGate(repo, request, screenInstructions(packet), outputFile, (gate) => {
+    const shape = validateShape(gate, packet.review_id, undefined, undefined, SCREEN_LOCATION)
+    if (shape) return shape
+    if (gate.law_hash !== generation.digest) return 'law_hash does not match the graded generation manifest digest'
+    return screenShapeInvalid(gate, criterionIds)
+  }, evidence.images)
+} else if (mode === 'screen-recheck' && args.length === 7) {
+  // W8-S2: the screen recheck — the recheck discipline pointed at fresh pixels. Same
+  // review_id lineage, cohort reuse-or-clear over the prior finding ids, and
+  // FRESHNESS: the CURRENT manifest digest MUST DIFFER from the prior verdict's
+  // law_hash, so a regrade can never re-grade the very evidence that already failed.
+  // delta IS the fresh CURRENT manifest: the argv path must resolve to it, and the
+  // bytes read must re-hash to the selected digest — path- and digest-bound, so no
+  // free text ever rides the packet as repair_delta.
+  const [repoPath, kilnDir, model, effort, priorFile, deltaFile, outputFile] = args
+  const request = auditRequest(model, effort, 'screen')
+  const repo = repository(repoPath)
+  const facts = screenLawFacts(kilnDir)
+  const criterionIds = new Set(facts.rows.map((row) => row.criterion))
+  const prior = readJson(priorFile, 'invalid prior screen review')
+  const priorShape = isObject(prior) && typeof prior.review_id === 'string' && typeof prior.law_hash === 'string'
+  // The prior must satisfy the FULL screen-family shape — a blocked verdict, a
+  // blocker, or an off-table criterion was never a publishable screen verdict, so it
+  // establishes no recheck lineage (the audit-recheck precedent).
+  const priorError = priorShape
+    ? (validateShape(prior, prior.review_id, prior.law_hash, undefined, SCREEN_LOCATION) || screenShapeInvalid(prior, criterionIds))
+    : 'prior screen review is malformed'
+  if (priorError) stop('transport_failure', priorError, TRANSPORT_FAILURE)
+  if (prior.verdict !== 'changes_required') {
+    stop('transport_failure', 'screen-recheck requires a prior changes_required verdict', TRANSPORT_FAILURE)
+  }
+  const generation = currentGeneration(kilnDir)
+  if (generation.digest === prior.law_hash) {
+    stop('transport_failure', 'screen-recheck requires fresh evidence — the CURRENT manifest digest equals the prior graded generation', TRANSPORT_FAILURE)
+  }
+  const evidence = screenEvidence(generation)
+  if (resolve(deltaFile) !== join(generation.dir, 'manifest.json')) {
+    stop('transport_failure', 'screen-recheck delta must be the CURRENT generation manifest path', TRANSPORT_FAILURE)
+  }
+  let deltaBytes
+  try {
+    deltaBytes = readFileSync(resolve(deltaFile))
+  } catch (error) {
+    stop('transport_failure', `invalid fresh-manifest delta: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  if (createHash('sha256').update(deltaBytes).digest('hex') !== generation.digest) {
+    stop('transport_failure', 'fresh-manifest delta bytes do not match the CURRENT manifest digest', TRANSPORT_FAILURE)
+  }
+  const delta = deltaBytes.toString('utf8')
+  const findingIds = new Set(prior.findings.map((finding) => finding.id))
+  const packet = {
+    mode: 'screen-recheck',
+    review_id: prior.review_id,
+    law_hash: generation.digest,
+    ...screenPacket(facts, generation, evidence),
+    finding_ids: [...findingIds],
+    repair_delta: delta,
+  }
+  runGate(repo, request, screenInstructions(packet), outputFile, (gate) => {
+    const shape = validateShape(gate, packet.review_id, undefined, findingIds, SCREEN_LOCATION)
+    if (shape) return shape
+    if (gate.law_hash !== generation.digest) return 'law_hash does not match the graded generation manifest digest'
+    return screenShapeInvalid(gate, criterionIds)
+  }, evidence.images)
 } else {
   stop(
     'transport_failure',
-    'usage: kiln-review review <repo> <request.json> <gate-review.json> | kiln-review recheck <repo> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir> | kiln-review ratify <repo> <request.json> <gate-review.json> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json> | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId>',
+    'usage: kiln-review review <repo> <request.json> <gate-review.json> | kiln-review recheck <repo> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir> | kiln-review ratify <repo> <request.json> <gate-review.json> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json> | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> | kiln-review screen <repo> <kilnDir> <model> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json>',
     TRANSPORT_FAILURE,
   )
 }
