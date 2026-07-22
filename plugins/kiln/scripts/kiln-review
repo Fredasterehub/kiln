@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 'use strict'
 
-const { randomUUID } = require('node:crypto')
+const { createHash, randomUUID } = require('node:crypto')
 const {
   appendFileSync,
   existsSync,
+  mkdirSync,
   readFileSync,
   realpathSync,
   renameSync,
   statSync,
   unlinkSync,
+  writeFileSync,
 } = require('node:fs')
 const { dirname, join, resolve } = require('node:path')
 const { spawnSync } = require('node:child_process')
@@ -277,10 +279,36 @@ if (mode === 'review' && args.length === 3) {
     stop('transport_failure', `append-seal could not write seals.log: ${error.message}`, TRANSPORT_FAILURE)
   }
   process.exit(ACCEPT)
+} else if (mode === 'seal-law' && args.length === 1) {
+  // The trusted LAW lock, content-blind: the same digest a card shell computes
+  // via `sha256sum .kiln/LAW.md | cut -d' ' -f1`, now owned by the CLI so the
+  // kernel can seal the LAW after cross-family ratification without reading it.
+  // Byte format matches that pipeline exactly: 64-hex + one trailing newline.
+  const [kilnDir] = args
+  if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
+    stop('transport_failure', 'seal-law kilnDir must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  let law
+  try {
+    law = readFileSync(join(kilnDir, 'LAW.md'))
+  } catch (error) {
+    stop('transport_failure', `seal-law could not read LAW.md: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  const digest = createHash('sha256').update(law).digest('hex')
+  const target = join(kilnDir, 'law', 'lock.hash')
+  try {
+    mkdirSync(dirname(target), { recursive: true })
+    const temporary = join(dirname(target), `.lock.hash.tmp-${process.pid}-${randomUUID()}`)
+    writeFileSync(temporary, `${digest}\n`)
+    renameSync(temporary, target)
+  } catch (error) {
+    stop('transport_failure', `seal-law could not write lock.hash: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  process.exit(ACCEPT)
 } else {
   stop(
     'transport_failure',
-    'usage: kiln-review review <repo> <request.json> <gate-review.json> | kiln-review recheck <repo> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-seal <kilnDir> <slice> <label>',
+    'usage: kiln-review review <repo> <request.json> <gate-review.json> | kiln-review recheck <repo> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir>',
     TRANSPORT_FAILURE,
   )
 }

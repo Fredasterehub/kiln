@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -93,6 +94,38 @@ test('kiln-review: append-seal resolves .kiln/seals.log against cwd when given t
   const r = spawnSync('node', [REVIEW, 'append-seal', '.kiln', 's1', 'dual'], { cwd: proj, encoding: 'utf8' })
   assert.equal(r.status, 0, 'a relative .kiln resolves against the process cwd, even when projectDir has a space')
   assert.equal(readFileSync(join(proj, '.kiln', 'seals.log'), 'utf8'), 's1 dual\n', 'the seal lands at projectDir/.kiln/seals.log')
+})
+
+test('kiln-review: seal-law persists the LAW digest to law/lock.hash byte-for-byte like sha256sum | cut (64-hex + one trailing newline), exit 0', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kiln-seallaw-'))
+  const law = 'crit-1 · slice-a · behaviour · cmd · outcome\n'
+  writeFileSync(join(dir, 'LAW.md'), law)
+  const digest = createHash('sha256').update(Buffer.from(law)).digest('hex')
+  const r = spawnSync('node', [REVIEW, 'seal-law', dir], { encoding: 'utf8' })
+  assert.equal(r.status, 0, 'a readable LAW.md seals with exit 0')
+  const written = readFileSync(join(dir, 'law', 'lock.hash'), 'utf8')
+  assert.equal(written, `${digest}\n`, 'lock.hash is the sha256 digest plus one trailing newline — identical to the shell pipeline')
+  assert.ok(/^[0-9a-f]{64}\n$/.test(written), 'the persisted lock is exactly 64 lowercase hex chars then a newline')
+})
+
+test('kiln-review: seal-law halts transport_failure (exit 20) when LAW.md is missing', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kiln-seallaw-'))
+  const r = spawnSync('node', [REVIEW, 'seal-law', dir], { encoding: 'utf8' })
+  assert.equal(r.status, 20, 'a missing LAW.md is a transport failure')
+  assert.equal((r.stdout || '').trim(), 'transport_failure', 'the honest fact rides stdout')
+})
+
+test('kiln-review: seal-law is content-addressed — different LAW bytes reseal a different digest into law/lock.hash', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kiln-seallaw-'))
+  writeFileSync(join(dir, 'LAW.md'), 'first law\n')
+  assert.equal(spawnSync('node', [REVIEW, 'seal-law', dir], { encoding: 'utf8' }).status, 0)
+  const first = readFileSync(join(dir, 'law', 'lock.hash'), 'utf8')
+  writeFileSync(join(dir, 'LAW.md'), 'second, different law\n')
+  assert.equal(spawnSync('node', [REVIEW, 'seal-law', dir], { encoding: 'utf8' }).status, 0)
+  const second = readFileSync(join(dir, 'law', 'lock.hash'), 'utf8')
+  assert.notEqual(first, second, 'a changed LAW reseals a different digest')
+  assert.equal(second, `${createHash('sha256').update(Buffer.from('second, different law\n')).digest('hex')}\n`,
+    'the reseal overwrites law/lock.hash with the new digest, same byte format')
 })
 
 test('kiln-review: the ui reviewer rules on correctness only — creative direction and taste are out of remit', () => {
