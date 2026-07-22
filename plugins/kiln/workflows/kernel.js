@@ -61,19 +61,23 @@ const LAW_HASH = /^[0-9a-f]{64}$/
 // fields as nonempty strings with a path:line location and a unique id, and the
 // verdict shape holds — accept demands empty findings and blockers,
 // changes_required demands findings with no blockers, blocked demands blockers.
-// The two request-scoped codex checks — review_id equals the issued id, and a
-// recheck introduces no out-of-scope finding id — have no counterpart here: the
-// claude reviewer mints or reuses the review_id itself, and the repair loop
-// reads its finding set from the published gate, so neither an issued id nor an
-// allowed-id set crosses into this function. Returns the named violation, or
-// null when the verdict is sound; any violation is transport-failure exit
-// semantics, never a seal.
-function gateReviewInvalid(g, lawHash) {
+// W6-03: the two request-scoped codex checks — review_id equals the issued id, and a
+// recheck introduces no out-of-cohort finding id — are OPTIONAL here, keyed by
+// expectedReviewId and allowedFindingIds. Absent (a fresh review that mints or reuses
+// its own review_id and reads its finding set from the published gate), both are
+// skipped, so the pre-cohort behavior is unchanged. Present (the kernel snapshots a
+// published prior gate before a recheck and passes the cohort), the review_id must
+// equal the issued id and every finding must fall inside the prior allowed-id set —
+// the SAME allowed-id rule the transport enforces (scripts/kiln-review validateShape),
+// so kernel and transport agree. Returns the named violation, or null when the verdict
+// is sound; any violation is transport-failure exit semantics, never a seal.
+function gateReviewInvalid(g, lawHash, expectedReviewId, allowedFindingIds) {
   if (!g || typeof g !== 'object' || Array.isArray(g)) return 'not-an-object'
   const keys = Object.keys(g)
   const fields = ['review_id', 'law_hash', 'findings', 'blockers', 'verdict']
   if (keys.length !== fields.length || fields.some(k => keys.indexOf(k) < 0)) return 'fields-mismatch'
   if (typeof g.review_id !== 'string' || g.review_id.trim() === '') return 'review-id-empty'
+  if (expectedReviewId !== undefined && g.review_id !== expectedReviewId) return 'review-id-mismatch'
   if (typeof g.law_hash !== 'string' || !LAW_HASH.test(g.law_hash) || g.law_hash !== lawHash) return 'law-hash-mismatch'
   if (!Array.isArray(g.findings)) return 'findings-shape'
   if (!Array.isArray(g.blockers) || g.blockers.some(b => typeof b !== 'string' || b.trim() === '')) return 'blockers-shape'
@@ -87,6 +91,7 @@ function gateReviewInvalid(g, lawHash) {
     if (findingFields.some(k => typeof f[k] !== 'string' || f[k].trim() === '')) return 'finding-fields-empty'
     if (!/^.+:\d+(?::\d+)?$/.test(f.location)) return 'finding-location-shape'
     if (ids.has(f.id)) return 'finding-id-duplicate'
+    if (allowedFindingIds && !allowedFindingIds.has(f.id)) return 'finding-id-out-of-cohort'
     ids.add(f.id)
   }
   if (g.verdict === 'accept' && (g.findings.length !== 0 || g.blockers.length !== 0)) return 'accept-with-findings'
@@ -115,6 +120,50 @@ async function reviewLoop(deps, maxRepairs = 2) {
     if (confirmed !== true) return { result: 'repair-failed', repairs }
     exit = await deps.gate('recheck', repairs)
   }
+}
+
+// W6-B (Q5, CONFIRMED): a valid recheck must STRICTLY shrink the blocking cohort —
+// every current blocking id was present before AND at least one prior id cleared
+// (curr subset of prior, strict). Equality clears nothing, so it is no progress and
+// holds upstream. accept is the empty strict subset (all cleared), handled by the
+// recoveryDecision accept branch before this is consulted. A new-or-renamed id
+// (the superset direction) is a schema / allowed-id violation caught earlier and
+// held before this runs; the membership guard here still returns false on it as a
+// second line. Deterministic, never throws.
+function strictSubsetProgress(prior, curr) {
+  if (!Array.isArray(prior) || !Array.isArray(curr)) return false
+  const priorSet = new Set(prior)
+  const currSet = new Set(curr)
+  for (const id of currSet) {
+    if (!priorSet.has(id)) return false
+  }
+  return currSet.size < priorSet.size
+}
+
+// W6-01/B: the ONE pure recovery decision — the single source of the repair to
+// recheck transition policy both the LAW/build reviewLoop and the research-sweep
+// ratifyLoop route through (today each embeds the policy in its own control flow with
+// a different vocabulary). Facts are all closed machine facts: gateOutcome (the
+// gateOutcome return string), edgeUses/cap (the repair-edge budget for this run),
+// prior/currBlockingIds (the prior and current blocking finding cohorts), schemaValid
+// (the recheck verdict was well-formed), transport (the bridge delivered a verdict).
+// A machine fault rules FIRST, before progress is weighed: a downed transport or a
+// malformed verdict is the ABSENCE of a usable verdict, not evidence of progress, so
+// the run holds rather than spend an edge on a fiction. Then accept advances; a
+// reject with strict-subset progress and an edge left is a scoped-move;
+// everything else — equality, a non-shrinking cohort, an exhausted cap, or a block —
+// holds. Deterministic, never throws.
+function recoveryDecision(facts) {
+  const f = facts || {}
+  if (f.transport === false) return { action: 'held', reason: 'transport-failure' }
+  if (f.schemaValid === false) return { action: 'held', reason: 'schema-invalid' }
+  if (f.gateOutcome === 'accept') return { action: 'advance', reason: 'accept' }
+  if (f.gateOutcome === 'reject') {
+    if (!strictSubsetProgress(f.priorBlockingIds, f.currBlockingIds)) return { action: 'held', reason: 'no-strict-progress' }
+    if (f.edgeUses >= f.cap) return { action: 'held', reason: 'cap-exhausted' }
+    return { action: 'scoped-move', reason: 'strict-subset-progress' }
+  }
+  return { action: 'held', reason: 'blocked' }
 }
 
 // The kernel fills every kernel-owned slot from the sealed voice.json slots
@@ -1079,6 +1128,25 @@ for (const entry of slices) {
         'request:hash', 'a one-element array holding the request law_hash, [] if exit != 0',
       )
       if (req.exit !== 0 || req.ids.length !== 1) return 20
+      // W6-03 runtime: a recheck must reuse the issued review_id and introduce no
+      // out-of-cohort finding — the SAME request-scoped rule the codex transport
+      // enforces. The kernel snapshots the prior published gate HERE, before the
+      // reviewer runs: at this point P.gate still holds the prior verdict (the
+      // content-free publish that overwrites it is the last act of this turn), so
+      // one read yields the cohort — index 0 the prior review_id, the rest the
+      // prior finding ids. A fresh review leaves both undefined, so gateReviewInvalid
+      // skips the two checks and the pre-cohort behavior is unchanged. A failed
+      // snapshot is transport-failure exit semantics, never a seal.
+      let expectedReviewId, allowedFindingIds
+      if (mode === 'recheck') {
+        const prior = await idsFetch(
+          "node -p 'JSON.stringify((g=>[String(g.review_id)].concat((g.findings||[]).map(f=>String(f.id))))(require(\"./" + P.gate + "\")))'",
+          'recheck:cohort', 'a JSON array whose first element is the prior gate review_id and whose remaining elements are the prior finding ids, [] if exit != 0',
+        )
+        if (prior.exit !== 0 || prior.ids.length < 1) return 20
+        expectedReviewId = prior.ids[0]
+        allowedFindingIds = new Set(prior.ids.slice(1))
+      }
       // Producer-self-publish: invalidate any prior candidate BEFORE the reviewer
       // runs, so an {ok} ack with no fresh write can never promote a stale verdict.
       if (await hands('rm -f ' + P.candidate, 'gate:invalidate') !== 0) return 20
@@ -1105,7 +1173,7 @@ for (const entry of slices) {
       try { g = JSON.parse(raw.ids[0]) } catch { return 20 }
       // S1: the semantic mirror rules BEFORE the kernel promotes — a failed
       // validation is transport-failure exit semantics, never a seal.
-      if (gateReviewInvalid(g, req.ids[0]) !== null) return 20
+      if (gateReviewInvalid(g, req.ids[0], expectedReviewId, allowedFindingIds) !== null) return 20
       // Content-free promotion: the validated candidate becomes the gate file.
       const w = await hands('mv -f ' + P.candidate + ' ' + P.gate, 'gate:publish')
       return w === 0 ? verdictExit(g.verdict) : 20

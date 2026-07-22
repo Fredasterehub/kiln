@@ -20,8 +20,8 @@ const coreSrc = srcLines.slice(
   srcLines.findIndex(l => l.includes('RESEARCH_CORE_END')),
 ).join('\n')
 const core = new Function(coreSrc + `
-  return { parseArgs, gateOutcome, resolveTier, researchTiersValid, ratifyLoop, validLedgerRef, validateProbeRequest }`)()
-const { parseArgs, gateOutcome, resolveTier, researchTiersValid, ratifyLoop, validLedgerRef, validateProbeRequest } = core
+  return { parseArgs, gateOutcome, resolveTier, researchTiersValid, ratifyLoop, validLedgerRef, validateProbeRequest, recoveryDecision, strictSubsetProgress }`)()
+const { parseArgs, gateOutcome, resolveTier, researchTiersValid, ratifyLoop, validLedgerRef, validateProbeRequest, recoveryDecision, strictSubsetProgress } = core
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
 const PLUGIN = '/abs/plugins/kiln'
@@ -124,6 +124,41 @@ test('core: ratifyLoop is bounded at one repair — accept, a 2nd reject, and ev
   assert.equal((await ratifyLoop(mk([20]))).result, 'transport-failure')
   const failedRepair = await ratifyLoop({ gate: async () => 10, repair: async () => false })
   assert.deepEqual(failedRepair, { result: 'repair-failed', repairs: 1 }, 'an unconfirmed repair halts visibly')
+})
+
+// The drift guard for the W6 recovery-decision core: research-sweep carries a copy of
+// recoveryDecision + strictSubsetProgress because a Workflow body cannot import the kernel.
+// This extracts the kernel's KERNEL_CORE copies and asserts the two agree byte-for-byte
+// (source text) AND behave identically across a battery — the same posture the POSTURE_*
+// enum agreement uses, so the deliberate duplication can never drift.
+test('core (W6): the recovery-decision copies agree with the kernel — source text and behavior, so the duplication cannot drift', () => {
+  const kernelSrc = readFileSync(fileURLToPath(new URL('../workflows/kernel.js', import.meta.url)), 'utf8')
+  const lines = kernelSrc.split('\n')
+  const kernelCoreSrc = lines.slice(
+    lines.findIndex(l => l.includes('KERNEL_CORE_BEGIN')) + 1,
+    lines.findIndex(l => l.includes('KERNEL_CORE_END')),
+  ).join('\n')
+  const kernel = new Function(kernelCoreSrc + '\nreturn { recoveryDecision, strictSubsetProgress }')()
+  // Source-text parity: the two copies are byte-identical (verbatim), so their toString agrees.
+  assert.equal(strictSubsetProgress.toString(), kernel.strictSubsetProgress.toString(), 'strictSubsetProgress is verbatim the kernel copy')
+  assert.equal(recoveryDecision.toString(), kernel.recoveryDecision.toString(), 'recoveryDecision is verbatim the kernel copy')
+  // Behavior parity across a battery spanning every branch — a second guard independent of whitespace.
+  const cohorts = [[['f1', 'f2', 'f3'], ['f1', 'f2']], [['f1', 'f2'], ['f1', 'f2']], [['f1'], ['f1', 'f2']], [['f1', 'f2'], []], [[], []], [['f1', 'f2'], ['f1', 'f3']]]
+  for (const [prior, curr] of cohorts) {
+    assert.equal(strictSubsetProgress(prior, curr), kernel.strictSubsetProgress(prior, curr), `strictSubsetProgress agrees on ${JSON.stringify([prior, curr])}`)
+  }
+  for (const gateOutcome of ['accept', 'changes_required', 'blocked', 'transport_failure']) {
+    for (const [prior, curr] of cohorts) {
+      for (const [edgeUses, cap] of [[0, 2], [1, 1], [2, 2]]) {
+        for (const transport of [true, false]) {
+          for (const schemaValid of [true, false]) {
+            const facts = { gateOutcome, priorBlockingIds: prior, currBlockingIds: curr, edgeUses, cap, transport, schemaValid }
+            assert.deepEqual(recoveryDecision(facts), kernel.recoveryDecision(facts), `recoveryDecision agrees on ${JSON.stringify(facts)}`)
+          }
+        }
+      }
+    }
+  }
 })
 
 // ── The mocked runtime ────────────────────────────────────────────────────────

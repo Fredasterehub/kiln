@@ -199,7 +199,7 @@ function ratifyInstructions(packet) {
 Judge the artifact against the rubric criteria alone. Report only substantiated criterion violations, never optional improvements and never matters of taste. For each finding, cite the artifact location as path:line, the concrete failure, evidence quoted from the artifact, and the smallest repair. Use stable finding IDs. Execute nothing: rule by reading the artifact text supplied in full below — do not inspect the repository and do not run any command.
 
 Copy review_id and law_hash exactly into your output. law_hash is the sha256 digest of the artifact bytes; it seals the ratified content, so return it unchanged. Verdict rules: accept only when findings and blockers are both empty; changes_required only for one or more repairable findings with no blockers; blocked only when the review cannot be completed, with one or more blocker reasons.
-
+${packet.mode === 'ratify-recheck' ? '\nRecheck only the listed finding_ids against the regenerated artifact. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}
 Ratification packet:
 ${JSON.stringify(packet, null, 2)}
 `
@@ -407,10 +407,54 @@ if (mode === 'review' && args.length === 3) {
     if (gate.law_hash !== candidateDigest) return 'law_hash does not match the ratified artifact digest'
     return null
   })
+} else if (mode === 'ratify-recheck' && args.length === 4) {
+  // W6-02: the ratify verb gains the cohort lineage it lacked. A recheck of an
+  // already-graded artifact reuses the prior review_id and constrains the reviewer to
+  // the prior finding cohort — the SAME allowedFindingIds + prior changes_required
+  // discipline the build recheck enforces (validateShape's out-of-scope rule), so a
+  // ratify repair round cannot introduce a finding id out of nowhere. The artifact is
+  // regenerated between rounds (the LAW-ratify repair rewrites the whole LAW), so
+  // law_hash tracks the CURRENT artifact digest, not the prior one; the reused
+  // review_id carries the lineage instead.
+  const [repoPath, requestFile, priorFile, outputFile] = args
+  const request = ratifyRequestFrom(requestFile)
+  const prior = readJson(priorFile, 'invalid prior ratify review')
+  const priorShape = isObject(prior) && typeof prior.review_id === 'string' && typeof prior.law_hash === 'string'
+  const priorError = priorShape ? validateShape(prior, prior.review_id, prior.law_hash) : 'prior ratify review is malformed'
+  if (priorError) stop('transport_failure', priorError, TRANSPORT_FAILURE)
+  if (prior.verdict !== 'changes_required') {
+    stop('transport_failure', 'ratify-recheck requires a prior changes_required verdict', TRANSPORT_FAILURE)
+  }
+  if (prior.review_id !== request.reviewId) {
+    stop('transport_failure', 'ratify-recheck request review_id differs from the prior review', TRANSPORT_FAILURE)
+  }
+  const repo = repository(repoPath)
+  let artifactBytes
+  try {
+    artifactBytes = readFileSync(resolve(repo, request.artifact))
+  } catch (error) {
+    stop('transport_failure', `ratify artifact unreadable: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  const candidateDigest = createHash('sha256').update(artifactBytes).digest('hex')
+  const findingIds = new Set(prior.findings.map((finding) => finding.id))
+  const packet = {
+    mode: 'ratify-recheck',
+    review_id: request.reviewId,
+    law_hash: candidateDigest,
+    rubric: rubricFrom(request.rubric),
+    artifact: artifactBytes.toString('utf8'),
+    finding_ids: [...findingIds],
+  }
+  runGate(repo, request, ratifyInstructions(packet), outputFile, (gate) => {
+    const shape = validateShape(gate, packet.review_id, undefined, findingIds)
+    if (shape) return shape
+    if (gate.law_hash !== candidateDigest) return 'law_hash does not match the ratified artifact digest'
+    return null
+  })
 } else {
   stop(
     'transport_failure',
-    'usage: kiln-review review <repo> <request.json> <gate-review.json> | kiln-review recheck <repo> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir> | kiln-review ratify <repo> <request.json> <gate-review.json>',
+    'usage: kiln-review review <repo> <request.json> <gate-review.json> | kiln-review recheck <repo> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir> | kiln-review ratify <repo> <request.json> <gate-review.json> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json>',
     TRANSPORT_FAILURE,
   )
 }

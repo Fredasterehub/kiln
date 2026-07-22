@@ -369,3 +369,90 @@ test('kiln-review: a bridge-down reviewer over the feasibility ratify path halts
   assert.equal(r.status, 21, 'codex_unavailable maps to exit 21')
   assert.ok(!existsSync(r.out), 'a bridge-down run publishes no gate')
 })
+
+// ratify-recheck (W6-02): the cohort lineage the ratify verb previously lacked. A recheck
+// reuses the prior review_id and constrains the reviewer to the prior finding cohort — the
+// SAME allowedFindingIds + prior-changes_required discipline the build recheck enforces —
+// while law_hash tracks the CURRENT (regenerated) artifact digest. The prior gate is written
+// to disk and the fake codex echoes the recheck output, so the whole contract runs without
+// a real bridge; the lineage and cohort guards halt before the spawn.
+function ratifyFinding(id) {
+  return { id, criterion: 'acceptance-testable', location: '.kiln/LAW.md:3', failure_mode: 'no observable pass condition', evidence: 'crit is vague', minimal_fix: 'state a checkable outcome' }
+}
+function priorRatifyGate(findings, { review_id = 'ratify-1', verdict = 'changes_required', law_hash = 'a'.repeat(64) } = {}) {
+  return { review_id, law_hash, findings, blockers: verdict === 'blocked' ? ['x'] : [], verdict }
+}
+function ratifyRecheck({ artifact = 'the regenerated LAW\n', gate, prior, requestReviewId = 'ratify-1', rubric = RUBRIC, artifactPath = '.kiln/LAW.md' } = {}) {
+  const repo = mkdtempSync(join(tmpdir(), 'kiln-ratify-recheck-'))
+  const abs = join(repo, artifactPath)
+  mkdirSync(dirname(abs), { recursive: true })
+  writeFileSync(abs, artifact)
+  const req = { review_id: requestReviewId, reviewer_model: 'gpt-5.6-sol', artifact: artifactPath, rubric }
+  const rf = join(repo, 'request.json')
+  writeFileSync(rf, JSON.stringify(req))
+  const priorFile = join(repo, 'prior-gate.json')
+  writeFileSync(priorFile, JSON.stringify(prior))
+  const env = { ...process.env }
+  if (gate) {
+    const fake = mkdtempSync(join(tmpdir(), 'kiln-fakecodex-'))
+    writeFileSync(join(fake, 'codex'), FAKE_CODEX, { mode: 0o755 })
+    env.PATH = `${fake}:${process.env.PATH}`
+    env.FAKE_GATE = JSON.stringify(gate)
+  }
+  const r = spawnSync('node', [REVIEW, 'ratify-recheck', repo, rf, priorFile, join(repo, 'gate.json')], { encoding: 'utf8', env })
+  return { repo, fact: (r.stdout || '').trim(), status: r.status, out: join(repo, 'gate.json') }
+}
+
+test('kiln-review: ratify-recheck passes a strict subset of the prior cohort — the reviewer reuses an allowed id (reject, exit 10)', () => {
+  const artifact = 'the regenerated LAW\n'
+  const prior = priorRatifyGate([ratifyFinding('f1'), ratifyFinding('f2')])
+  const gate = { review_id: 'ratify-1', law_hash: digestOf(artifact), findings: [ratifyFinding('f1')], blockers: [], verdict: 'changes_required' }
+  const r = ratifyRecheck({ artifact, prior, gate })
+  assert.equal(r.fact, 'reject', 'a subset recheck publishes its changes_required verdict')
+  assert.equal(r.status, 10)
+  const published = JSON.parse(readFileSync(r.out, 'utf8'))
+  assert.deepEqual(published.findings.map((f) => f.id), ['f1'], 'the published recheck reuses only the prior cohort id')
+})
+
+test('kiln-review: ratify-recheck passes when the reviewer clears every prior finding (accept, exit 0)', () => {
+  const artifact = 'the fully repaired LAW\n'
+  const prior = priorRatifyGate([ratifyFinding('f1'), ratifyFinding('f2')])
+  const gate = { review_id: 'ratify-1', law_hash: digestOf(artifact), findings: [], blockers: [], verdict: 'accept' }
+  const r = ratifyRecheck({ artifact, prior, gate })
+  assert.equal(r.fact, 'accept', 'clearing every prior finding accepts')
+  assert.equal(r.status, 0)
+  assert.equal(JSON.parse(readFileSync(r.out, 'utf8')).law_hash, digestOf(artifact), 'the accepted recheck seals the regenerated artifact digest')
+})
+
+test('kiln-review: ratify-recheck rejects a new or renamed finding id outside the prior cohort (transport_failure, exit 20)', () => {
+  const artifact = 'the regenerated LAW\n'
+  const prior = priorRatifyGate([ratifyFinding('f1'), ratifyFinding('f2')])
+  const gate = { review_id: 'ratify-1', law_hash: digestOf(artifact), findings: [ratifyFinding('f3')], blockers: [], verdict: 'changes_required' }
+  const r = ratifyRecheck({ artifact, prior, gate })
+  assert.equal(r.fact, 'transport_failure', 'an out-of-cohort finding id is a transport failure')
+  assert.equal(r.status, 20)
+  assert.ok(!existsSync(r.out), 'a rejected recheck publishes no gate')
+})
+
+test('kiln-review: ratify-recheck requires the prior review_id — a request id unlinked from the prior review halts before codex (exit 20)', () => {
+  const prior = priorRatifyGate([ratifyFinding('f1')], { review_id: 'ratify-1' })
+  const r = ratifyRecheck({ prior, requestReviewId: 'ratify-2' })
+  assert.equal(r.fact, 'transport_failure', 'a request review_id that differs from the prior review is rejected')
+  assert.equal(r.status, 20)
+})
+
+test('kiln-review: ratify-recheck requires a prior changes_required verdict — a prior accept is rejected before codex (exit 20)', () => {
+  const prior = priorRatifyGate([], { verdict: 'accept' })
+  const r = ratifyRecheck({ prior })
+  assert.equal(r.fact, 'transport_failure', 'only a prior changes_required gate can be rechecked')
+  assert.equal(r.status, 20)
+})
+
+test('kiln-review: ratify-recheck rejects a recheck output that abandons the reused review_id (transport_failure, exit 20)', () => {
+  const artifact = 'the regenerated LAW\n'
+  const prior = priorRatifyGate([ratifyFinding('f1')])
+  const gate = { review_id: 'a-fresh-id', law_hash: digestOf(artifact), findings: [ratifyFinding('f1')], blockers: [], verdict: 'changes_required' }
+  const r = ratifyRecheck({ artifact, prior, gate })
+  assert.equal(r.fact, 'transport_failure', 'a recheck output with a fresh review_id breaks the lineage and is rejected')
+  assert.equal(r.status, 20)
+})

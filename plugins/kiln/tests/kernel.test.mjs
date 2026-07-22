@@ -23,13 +23,13 @@ const core = new Function(coreSrc + `
            fillClosed, streakIndex, stateDoc, atomicWriteCmd, gateCmd, LAW_CHECK, LAW_GUARD,
            LAW_CHECK_RECEIPT, MILESTONE_PROJECTION_CHECK, verdictExit, redSetIsFuture, gateReviewInvalid,
            validateTiers, resolveTier, routeBuilder, parseSliceEntry, milestoneSeamAfter,
-           validatePosture }`)()
+           validatePosture, recoveryDecision, strictSubsetProgress }`)()
 const {
   SPINE, parseArgs, resolveStage, nextStage, gateOutcome, reviewLoop,
   fillClosed, streakIndex, stateDoc, atomicWriteCmd, gateCmd,
   LAW_CHECK_RECEIPT, MILESTONE_PROJECTION_CHECK, verdictExit, redSetIsFuture, gateReviewInvalid,
   validateTiers, resolveTier, routeBuilder, parseSliceEntry, milestoneSeamAfter,
-  validatePosture,
+  validatePosture, recoveryDecision, strictSubsetProgress,
 } = core
 
 // ── Mocked runtime: run the whole kernel body with scripted agents ──────────
@@ -1482,6 +1482,8 @@ test('runtime (simple-fire): a claude gate reject walks the same repair loop —
     'gate:invalidate': { exit: 0 },
     'gate-claude:review': OK_ACK,
     'gate-claude:recheck': OK_ACK,
+    // The kernel snapshots the prior gate before the recheck judges: review_id r1, cohort {F1}.
+    'recheck:cohort': { exit: 0, ids: ['r1', 'F1'] },
     'gate:read': () => readCandidate(reads.shift()),
     'gate:publish': { exit: 0 },
     'findings:fetch': { exit: 0, ids: ['F1'] },
@@ -1504,6 +1506,54 @@ test('runtime (simple-fire): a claude gate reject walks the same repair loop —
   assert.ok(!calls.some(c => c.label === 'gate:review' || c.label === 'gate:recheck'), 'codex never dispatches')
   assert.ok(calls.find(c => c.label === 'repair:s1').prompt.includes('(surface logic)'),
     'the repair prompt carries the closed surface fact for the card')
+})
+
+test('runtime (W6-XF-01): the claude recheck is bound to the snapshotted prior cohort — a renamed review_id or a new finding fails closed, never publishes, never seals', async () => {
+  const finding = (id) => ({ id, criterion: 'c', location: 'x.mjs:1', failure_mode: 'f', evidence: 'e', minimal_fix: 'm' })
+  const reject = { review_id: 'r1', law_hash: 'a'.repeat(64), blockers: [], verdict: 'changes_required', findings: [finding('F1')] }
+  // The recheck reuses the issued review_id but SMUGGLES a finding id outside the
+  // snapshotted prior cohort {F1} — the same tamper scripts/kiln-review rejects.
+  const outOfCohort = { ...reject, findings: [finding('F1'), finding('F2')] }
+  // The recheck RENAMES the issued review_id — a fresh lineage the kernel rejects.
+  const renamedId = { ...reject, review_id: 'r2' }
+  const build = (recheckVerdict) => {
+    const reads = [reject, recheckVerdict]
+    return {
+      ...VOICE,
+      'law:preflight': GREEN,
+      'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
+      'ladder:fetch': LADDER,
+      'seal:check': { exit: 1 },
+      'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
+      'law:pre-seal': GREEN,
+      'law:pre-recheck': GREEN,
+      'degraded:check': { exit: 1 },
+      'request:hash': HASH_OK,
+      'gate:invalidate': { exit: 0 },
+      'gate-claude:review': OK_ACK,
+      'gate-claude:recheck': OK_ACK,
+      // The prior published gate the kernel snapshots before the recheck judges.
+      'recheck:cohort': { exit: 0, ids: ['r1', 'F1'] },
+      'gate:read': () => readCandidate(reads.shift()),
+      'gate:publish': { exit: 0 },
+      'findings:fetch': { exit: 0, ids: ['F1'] },
+      'repair:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'repaired' },
+      'delta:check': { exit: 0 },
+      'seal:append': { exit: 0 },
+      'state:write': GREEN,
+    }
+  }
+  for (const [name, verdict] of [['a new out-of-cohort finding', outOfCohort], ['a renamed review_id', renamedId]]) {
+    const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, build(verdict))
+    const cohort = calls.find(c => c.label === 'recheck:cohort')
+    assert.ok(cohort && cohort.prompt.includes('.kiln/gate-review.json'),
+      name + ': the kernel snapshots the prior gate before the recheck judges')
+    assert.equal(ret.status, 'transport-failure', name + ' fails the recheck closed, exactly as the codex transport rejects it')
+    assert.equal(calls.filter(c => c.label === 'gate:publish').length, 1,
+      name + ': only the first review published — the tainted recheck never promotes')
+    assert.ok(!calls.some(c => c.label === 'seal:append'), name + ': nothing seals')
+    assert.ok(!ret.beat.includes('sealed'), name + ': never a seal')
+  }
 })
 
 test('runtime (S2/S3): a codex-dead logic slice stops for acknowledgment, then convenes the opus fallback gate and seals single-family, never dual', async () => {
@@ -1591,6 +1641,7 @@ test('runtime (S2/S3): a codex-dead logic slice stops for acknowledgment, then c
     'gate:invalidate': { exit: 0 },
     'gate-claude:review': OK_ACK,
     'gate-claude:recheck': OK_ACK,
+    'recheck:cohort': { exit: 0, ids: ['r1', 'F1'] },
     'gate:read': () => readCandidate(midReads.shift()),
     'gate:publish': { exit: 0 },
     'findings:fetch': { exit: 0, ids: ['F1'] },
@@ -1656,6 +1707,60 @@ test('core (S1 residual): gateReviewInvalid mirrors validateGate review_id, law_
   assert.equal(gateReviewInvalid(reject([finding(), finding()]), LAW), 'finding-id-duplicate', 'a duplicate finding id fails closed')
   // a well-formed finding still passes — including the path:line:col form.
   assert.equal(gateReviewInvalid(reject([{ ...finding(), location: 'src/a.mjs:12:4' }]), LAW), null, 'a path:line:col location passes')
+})
+
+// ── W6 (S1): the recovery-decision core + the OPTIONAL gate cohort ───────────
+
+test('core (W6-B): strictSubsetProgress is true only for a STRICT shrink — equality, superset, and empty-prior are all false', () => {
+  assert.equal(strictSubsetProgress(['f1', 'f2', 'f3'], ['f1', 'f2']), true, 'a strict subset (one cleared) is progress')
+  assert.equal(strictSubsetProgress(['f1', 'f2'], []), true, 'clearing every finding is the empty strict subset (accept upstream)')
+  assert.equal(strictSubsetProgress(['f1', 'f2'], ['f1', 'f2']), false, 'equality clears nothing — no progress')
+  assert.equal(strictSubsetProgress(['f1'], ['f1', 'f2']), false, 'a superset (a new id appeared) is not progress')
+  assert.equal(strictSubsetProgress(['f1', 'f2'], ['f1', 'f3']), false, 'a renamed id (same size, one not in prior) is not progress')
+  assert.equal(strictSubsetProgress([], []), false, 'an empty prior can never shrink')
+  assert.equal(strictSubsetProgress([], ['f1']), false, 'no cohort to shrink from')
+  assert.equal(strictSubsetProgress('nope', ['f1']), false, 'a non-array prior fails to false, never throws')
+  assert.equal(strictSubsetProgress(['f1'], null), false, 'a non-array curr fails to false, never throws')
+})
+
+test('core (W6-01): recoveryDecision is the single transition policy — advance, scoped-move, and every held path', () => {
+  const base = { edgeUses: 0, cap: 2, priorBlockingIds: ['f1', 'f2'], currBlockingIds: ['f1'], schemaValid: true, transport: true }
+  // a machine fault rules first, before the subset is even considered — even on an accept.
+  assert.deepEqual(recoveryDecision({ ...base, transport: false, gateOutcome: 'accept' }), { action: 'held', reason: 'transport-failure' }, 'a downed transport holds before any progress read')
+  assert.deepEqual(recoveryDecision({ ...base, schemaValid: false, gateOutcome: 'accept' }), { action: 'held', reason: 'schema-invalid' }, 'a malformed verdict holds before the subset eval')
+  // accept advances.
+  assert.deepEqual(recoveryDecision({ ...base, gateOutcome: 'accept' }), { action: 'advance', reason: 'accept' }, 'accept advances')
+  // reject (the gateOutcome return for exit 10) with strict progress and an edge left is a scoped-move.
+  assert.deepEqual(recoveryDecision({ ...base, gateOutcome: 'reject' }), { action: 'scoped-move', reason: 'strict-subset-progress' }, 'a shrinking cohort within cap is a scoped-move')
+  // equality / no strict progress holds regardless of cap.
+  assert.deepEqual(recoveryDecision({ ...base, gateOutcome: 'reject', currBlockingIds: ['f1', 'f2'] }), { action: 'held', reason: 'no-strict-progress' }, 'equality (cleared nothing) holds')
+  assert.deepEqual(recoveryDecision({ ...base, gateOutcome: 'reject', currBlockingIds: ['f1', 'f3'] }), { action: 'held', reason: 'no-strict-progress' }, 'a renamed id (no strict shrink) holds')
+  // strict progress but the cap is exhausted holds.
+  assert.deepEqual(recoveryDecision({ ...base, gateOutcome: 'reject', edgeUses: 2 }), { action: 'held', reason: 'cap-exhausted' }, 'progress with no edge left holds')
+  // blocked and any unrecognized outcome fall to the held floor.
+  assert.deepEqual(recoveryDecision({ ...base, gateOutcome: 'blocked' }), { action: 'held', reason: 'blocked' }, 'a block holds')
+  assert.deepEqual(recoveryDecision({ ...base, gateOutcome: 'transport_failure' }), { action: 'held', reason: 'blocked' }, 'an unrecognized outcome falls to the held floor')
+})
+
+test('core (W6-03): gateReviewInvalid enforces the OPTIONAL cohort — expected review_id and the allowed-id set, agreeing with the transport', () => {
+  const LAW = 'a'.repeat(64)
+  const finding = (id) => ({ id, criterion: 'c', location: 'x.mjs:1', failure_mode: 'f', evidence: 'e', minimal_fix: 'm' })
+  const reject = (findings) => ({ review_id: 'cohort-1', law_hash: LAW, blockers: [], verdict: 'changes_required', findings })
+  const accept = { review_id: 'cohort-1', law_hash: LAW, findings: [], blockers: [], verdict: 'accept' }
+  // Absent cohort inputs: the pre-cohort behavior is unchanged — any review_id, any id passes.
+  assert.equal(gateReviewInvalid({ ...accept, review_id: 'anything' }, LAW), null, 'no expected id → any review_id passes')
+  assert.equal(gateReviewInvalid(reject([finding('brand-new')]), LAW), null, 'no allowed set → any finding id passes')
+  // expectedReviewId present: the review_id must equal the issued id.
+  assert.equal(gateReviewInvalid(accept, LAW, 'cohort-1'), null, 'a matching review_id passes the lineage check')
+  assert.equal(gateReviewInvalid({ ...accept, review_id: 'other' }, LAW, 'cohort-1'), 'review-id-mismatch', 'a mismatched review_id fails closed')
+  // allowedFindingIds present: an in-cohort subset passes; an out-of-cohort id fails — the
+  // SAME rule scripts/kiln-review validateShape enforces, so kernel and transport agree.
+  const cohort = new Set(['f1', 'f2'])
+  assert.equal(gateReviewInvalid(reject([finding('f1')]), LAW, 'cohort-1', cohort), null, 'an in-cohort subset passes')
+  assert.equal(gateReviewInvalid(accept, LAW, 'cohort-1', cohort), null, 'clearing every finding (accept) passes the cohort')
+  assert.equal(gateReviewInvalid(reject([finding('f1'), finding('f3')]), LAW, 'cohort-1', cohort), 'finding-id-out-of-cohort', 'a new/renamed id outside the cohort fails closed')
+  // the existing unique-id check still fires ahead of the cohort check.
+  assert.equal(gateReviewInvalid(reject([finding('f1'), finding('f1')]), LAW, 'cohort-1', cohort), 'finding-id-duplicate', 'a duplicate id is caught before the cohort check')
 })
 
 test('runtime (S1): a claude verdict failing the semantic mirror never publishes and never seals', async () => {

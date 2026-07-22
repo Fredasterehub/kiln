@@ -82,6 +82,33 @@ async function ratifyLoop(deps, maxRepairs = 1) {
   }
 }
 
+// W6-B / W6-01: the recovery-decision core, DRIFT-PINNED verbatim from workflows/kernel.js
+// (a Workflow body cannot import). Both functions are byte-identical to the kernel copies;
+// tests/research-sweep.test.mjs asserts the two copies agree (source-text + behavior), the
+// same drift guard the POSTURE_* enums carry, so this deliberate duplication cannot drift.
+function strictSubsetProgress(prior, curr) {
+  if (!Array.isArray(prior) || !Array.isArray(curr)) return false
+  const priorSet = new Set(prior)
+  const currSet = new Set(curr)
+  for (const id of currSet) {
+    if (!priorSet.has(id)) return false
+  }
+  return currSet.size < priorSet.size
+}
+
+function recoveryDecision(facts) {
+  const f = facts || {}
+  if (f.transport === false) return { action: 'held', reason: 'transport-failure' }
+  if (f.schemaValid === false) return { action: 'held', reason: 'schema-invalid' }
+  if (f.gateOutcome === 'accept') return { action: 'advance', reason: 'accept' }
+  if (f.gateOutcome === 'reject') {
+    if (!strictSubsetProgress(f.priorBlockingIds, f.currBlockingIds)) return { action: 'held', reason: 'no-strict-progress' }
+    if (f.edgeUses >= f.cap) return { action: 'held', reason: 'cap-exhausted' }
+    return { action: 'scoped-move', reason: 'strict-subset-progress' }
+  }
+  return { action: 'held', reason: 'blocked' }
+}
+
 // The PROBE_REQUEST message contract. During a brainstorm Da Vinci has no spawn tool and may
 // send the conductor at most ONE nonterminal envelope: a probe request carrying ONLY the ledger
 // path and the ledger sequence IDs to digest — never dialogue. validLedgerRef is the shared
