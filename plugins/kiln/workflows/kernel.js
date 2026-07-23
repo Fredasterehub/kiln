@@ -678,6 +678,13 @@ const POSTURE_LEG = {
 // W8-S3: the validate perceptual dial leg rides the same shape — additionalProperties carries
 // the perceptual field through untyped, and the kernel branches on it as a closed string fact.
 const WIDTH = { type: 'object', additionalProperties: true, properties: { exit: { type: 'integer' }, width: { type: 'string' }, recovery_cap: { type: 'integer' } }, required: ['exit'] }
+// W1-S1 (INTAKE-29 / Defect A): the perceptual dial leg needs the perceptual field to SURVIVE
+// the relay. WIDTH carries it only through additionalProperties, so a leg that drops the field
+// still validates and the kernel reads the absence as live (a phantom screening room). This
+// closed schema REQUIRES all three fields with no additionalProperties, so a dropped perceptual
+// fails the leg to the honest error fallback instead of a false live read. WIDTH stays as-is for
+// width:read and cap:read, which never branch on perceptual.
+const PERCEPTUAL_DIAL = { type: 'object', additionalProperties: false, properties: { exit: { type: 'integer' }, perceptual: { type: 'string', enum: ['dormant', 'on', 'error'] }, recovery_cap: { type: 'integer', enum: [1, 2] } }, required: ['exit', 'perceptual', 'recovery_cap'] }
 // W5-S2 (W5-01): a WIDE adjust leg returns the ordinary stage envelope plus the closed
 // `converged` self-report the content-blind skip-adjudication gate reads alongside byte-equality.
 const WIDE_ADJUST = {
@@ -1086,12 +1093,19 @@ if (stage !== 'build') {
   // live screening machinery (the width-read fail-up doctrine; the gauge-dial
   // malformed-posture fail-up arrives through the same door).
   let perceptual = false
+  // W1-S1 (INTAKE-29 / Defect A): the screening activation CEILING. visualTable is the closed
+  // fact that the sealed LAW actually carries a ## Perceptual table — the same presence read that
+  // feeds --visual. Screening opens only on perceptual AND visualTable, so a non-visual project
+  // can never reach the manifest gate even if a dial fail-up or a relay drop makes the read live;
+  // the phantom screening room stays shut on a project that has no perceptual table at all.
+  let visualTable = false
   if (stage === 'validate') {
     const visual = await hands(PERCEPTUAL_PRESENCE, 'perceptual:presence') === 0
+    visualTable = visual
     const dialLeg = await agent(
-      'Run exactly this in ' + projectDir + '. Report {exit, perceptual, recovery_cap}: exit = the exit code; perceptual = the value of the "perceptual" field and recovery_cap = the value of the "recovery_cap" field in the printed JSON dials object when exit is 0, both omitted when exit is nonzero:\n' + 'node ' + plugin + '/scripts/gauge-dial.mjs --visual ' + (visual ? 'true' : 'false'),
-      { label: 'perceptual:dial', ...tier('kernel-leg'), schema: WIDTH },
-    ).then(x => (x ?? { exit: 20 }))
+      'Run exactly this in ' + projectDir + '. Report {exit, perceptual, recovery_cap}: exit = the exit code. On exit 0, perceptual = the value of the "perceptual" field and recovery_cap = the value of the "recovery_cap" field in the printed JSON dials object. On a nonzero exit or unparseable output, report perceptual "error" and recovery_cap 1:\n' + 'node ' + plugin + '/scripts/gauge-dial.mjs --visual ' + (visual ? 'true' : 'false'),
+      { label: 'perceptual:dial', ...tier('kernel-leg'), schema: PERCEPTUAL_DIAL },
+    ).then(x => (x ?? { exit: 20, perceptual: 'error', recovery_cap: 1 }))
     perceptual = !(dialLeg.exit === 0 && dialLeg.perceptual === 'dormant')
     cap = capFromDial(dialLeg)
   }
@@ -1313,7 +1327,7 @@ if (stage !== 'build') {
   // already held a COMPLETE manifest or took the act-failure door above; the loop below
   // is the 4th reviewLoop wiring — reviewLoop, recoveryDecision and strictSubsetProgress
   // are consumed UNTOUCHED, and the kernel writes no files (trusted CLI + hands legs).
-  if (stage === 'validate' && perceptual) {
+  if (stage === 'validate' && perceptual && visualTable) {
     // The CURRENT manifest — the one closed handle: the belt checks it, the digest
     // binds to it, the recheck delta names it, and the recapture repair refreshes it.
     const mf0 = await idsFetch(CURRENT_MANIFEST, 'perceptual:manifest', 'a one-element array holding the CURRENT generation manifest path printed on stdout, [] if exit != 0')
@@ -1322,7 +1336,7 @@ if (stage !== 'build') {
       if (pf) return pf
       return failStop('transport-failure',
         { stage, next_action: 'Rerun stage validate: no CURRENT evidence generation manifest under .kiln/evidence' },
-        await voiceBeat('transport-failure', {}, 'The capture step published no readable CURRENT evidence manifest — the perceptual gate cannot grade, so the run holds.'),
+        await voiceBeat('transport-failure', {}, 'The sealed LAW carries a Perceptual table but the capture step published no readable CURRENT evidence manifest — the perceptual gate cannot grade, so the run holds.'),
         { gate: P.screen })
     }
     let manifest = mf0.ids[0]

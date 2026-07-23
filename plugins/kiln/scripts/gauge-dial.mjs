@@ -13,7 +13,10 @@
 //
 // FAIL-UPWARD: any missing, non-object, extra-field, or out-of-enum posture projects the
 // max-scrutiny profile with recovery_cap 1 — the most scrutiny exactly when the posture is
-// least trustworthy, regardless of the visual flag. Deterministic; never throws.
+// least trustworthy. width, research, recovery_cap, and xhigh_permit fail up regardless of the
+// visual flag; perceptual alone tracks it (INTAKE-29: a missing posture must NOT override an
+// explicit --visual false, or a legacy resume phantom-wakes the screening room on a non-visual
+// project). Deterministic; never throws.
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -26,7 +29,7 @@ export const POSTURE_NOVELTY = Object.freeze(['familiar', 'novel'])
 export const POSTURE_REVERSIBILITY = Object.freeze(['reversible', 'risky', 'irreversible'])
 
 export function postureToDials(posture, visualArtifactPresence) {
-  const failUp = { width: 'wide', research: 'on', perceptual: 'on', recovery_cap: 1, xhigh_permit: true }
+  const failUp = { width: 'wide', research: 'on', perceptual: visualArtifactPresence === true ? 'on' : 'dormant', recovery_cap: 1, xhigh_permit: true }
   // Reflective reads (Reflect.ownKeys) and property access (destructuring getters) can throw
   // on adversarial input — a throwing ownKeys trap, a throwing getter, a revoked proxy
   // (Array.isArray itself throws on one). The whole body is guarded so "never throws" is

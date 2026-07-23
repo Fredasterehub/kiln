@@ -43,7 +43,10 @@ test('gauge-dial: postureToDials — each monotone predicate toggles on both bra
 })
 
 test('gauge-dial: postureToDials fails UPWARD to max scrutiny on any untrustworthy posture — never throws', () => {
-  const MAX = { width: 'wide', research: 'on', perceptual: 'on', recovery_cap: 1, xhigh_permit: true }
+  // INTAKE-29: perceptual alone tracks the visual flag on the fail-up profile, so with
+  // --visual false (the calls below) it stays dormant while the other four dials still fail
+  // up hard. A separate assertion pins that only perceptual moves with the flag.
+  const MAX = { width: 'wide', research: 'on', perceptual: 'dormant', recovery_cap: 1, xhigh_permit: true }
   const good = { scope: 'small', novelty: 'familiar', reversibility: 'reversible' }
   // missing / null / non-object / array
   assert.deepEqual(postureToDials(undefined, false), MAX, 'a missing posture → max scrutiny')
@@ -61,8 +64,11 @@ test('gauge-dial: postureToDials fails UPWARD to max scrutiny on any untrustwort
   assert.deepEqual(postureToDials({ ...good, scope: 'medium' }, false), MAX, 'an unknown scope → max scrutiny')
   assert.deepEqual(postureToDials({ ...good, novelty: 'weird' }, false), MAX, 'an unknown novelty → max scrutiny')
   assert.deepEqual(postureToDials({ ...good, reversibility: 'maybe' }, false), MAX, 'an unknown reversibility → max scrutiny')
-  // the fail-up profile overrides the visual predicate — perceptual stays 'on' even with visual false
-  assert.equal(postureToDials(null, false).perceptual, 'on', 'max scrutiny regardless of the visual flag')
+  // INTAKE-29: perceptual alone tracks the visual flag on the fail-up profile — a missing
+  // posture with --visual false must NOT wake perceptual, while a real visual project still does.
+  assert.equal(postureToDials(null, false).perceptual, 'dormant', 'a missing posture does not override --visual false')
+  assert.equal(postureToDials(null, true).perceptual, 'on', 'a real visual project still fails up perceptual on')
+  assert.deepEqual(postureToDials(null, true), { ...MAX, perceptual: 'on' }, 'only perceptual tracks the flag — width/research/cap/xhigh still fail up hard')
   // never throws — even on adversarial input for either argument
   assert.doesNotThrow(() => postureToDials(Symbol('x'), Symbol('y')))
   // and it must survive the reflective step (Reflect.ownKeys) and property reads
@@ -139,8 +145,8 @@ test('gauge-dial: a missing, unreadable, or malformed posture fails UP to max sc
   for (const posture of [undefined, 'not json', '"a bare string"', '[1,2,3]', JSON.stringify({ scope: 'small' }), JSON.stringify({ scope: 'small', novelty: 'novel', reversibility: 'reversible', extra: 1 })]) {
     const r = runScript(posture)
     assert.equal(r.status, 0, 'the projector always exits 0 — it never fails the caller closed')
-    assert.deepEqual(JSON.parse(r.stdout), { width: 'wide', research: 'on', perceptual: 'on', recovery_cap: 1, xhigh_permit: true },
-      'an untrustworthy posture projects the max-scrutiny profile — research on')
+    assert.deepEqual(JSON.parse(r.stdout), { width: 'wide', research: 'on', perceptual: 'dormant', recovery_cap: 1, xhigh_permit: true },
+      'an untrustworthy posture projects the max-scrutiny profile — research on, perceptual dormant at the flagless --visual false default (INTAKE-29)')
   }
 })
 
@@ -171,11 +177,15 @@ test('gauge-dial (W8-C): --visual true turns perceptual on over a valid posture 
   }
 })
 
-test('gauge-dial (W8-C): fail-up outranks the flag — an untrustworthy posture is max scrutiny with or without --visual', () => {
-  const MAX = { width: 'wide', research: 'on', perceptual: 'on', recovery_cap: 1, xhigh_permit: true }
-  for (const args of [['--visual', 'true'], ['--visual', 'false']]) {
-    const r = runScript('not json', args)
-    assert.equal(r.status, 0)
-    assert.deepEqual(JSON.parse(r.stdout), MAX, 'the fail-up profile is untouched by the flag — max scrutiny either way')
-  }
+test('gauge-dial (W8-C / INTAKE-29): fail-up outranks the flag for the scrutiny dials — perceptual alone tracks --visual', () => {
+  // width, research, recovery_cap, xhigh_permit fail up to max scrutiny on an untrustworthy
+  // posture no matter the flag; perceptual tracks the flag so a legacy resume with --visual
+  // false never phantom-wakes the screening room on a non-visual project.
+  const HARD = { width: 'wide', research: 'on', recovery_cap: 1, xhigh_permit: true }
+  const on = runScript('not json', ['--visual', 'true'])
+  assert.equal(on.status, 0)
+  assert.deepEqual(JSON.parse(on.stdout), { ...HARD, perceptual: 'on' }, 'a real visual project fails up perceptual on')
+  const off = runScript('not json', ['--visual', 'false'])
+  assert.equal(off.status, 0)
+  assert.deepEqual(JSON.parse(off.stdout), { ...HARD, perceptual: 'dormant' }, 'a non-visual project keeps perceptual dormant on fail-up — INTAKE-29')
 })
