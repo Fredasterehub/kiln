@@ -581,7 +581,7 @@ test('kiln-review: audit derives the closing block and cumulative prefix from sl
   assert.deepEqual(packet.sealed_prefix, ['s1', 's2', 's3'], 'the cumulative prefix reaches back to the first slice')
   assert.equal(packet.seam_slice, 's3')
   assert.equal(packet.check_receipt, 'checks ok\n', 'the kernel-side receipt rides the packet verbatim')
-  assert.ok(prompt.includes('Execute nothing'), 'the audit prompt keeps the receipt doctrine — the reviewer executes nothing')
+  assert.ok(prompt.includes('Beyond reading, execute nothing'), 'the audit prompt keeps the receipt doctrine — beyond reading, the reviewer executes nothing')
   assert.ok(!r.stderr.includes('first light') && !r.fact.includes('first light'), 'the label never rides a log line')
   // A seam inside an earlier milestone closes ITS own block — the prefix stays cumulative.
   const fx2 = auditRepo()
@@ -864,4 +864,71 @@ test('kiln-review: the audit-recheck packet embeds every prior finding in full b
   const { prompt, packet } = packetFrom(promptOut, 'Audit packet:\n')
   assertPriorFindingsRide(packet, findings)
   assert.ok(prompt.includes(FIX1_SENTENCE), 'the audit-recheck instruction tells the reviewer the findings ride in full')
+})
+
+// ── FIX-2: the reviewer may read ─────────────────────────────────────────────
+// A live build gate blocked honestly: "the request prohibits all commands; no
+// non-command repository file reader is available in this review surface." For a
+// codex reviewer, reading a file IS a shell command — "Execute nothing — no
+// commands" forbade the only reading mechanism it has, so an honest reviewer
+// blocks instead of judging. The repo-inspecting prompts (review, audit) now
+// authorize read-only inspection outright and forbid only what lies beyond
+// reading; the embedded-evidence prompts (ratify, screen) keep their coherent
+// no-repo discipline byte-for-byte.
+const FIX2_EXECUTE_SENTENCE = 'Beyond reading, execute nothing: no tests, no builds, no project or state-changing commands — rule with check_receipt as the only execution evidence.'
+const FIX2_STARVED_SENTENCE = 'Execute nothing — no commands'
+
+test('kiln-review: the build review prompt authorizes read-only inspection and forbids only execution — the no-commands starvation is gone (FIX-2)', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'kiln-review-prompt-'))
+  mkdirSync(join(repo, '.kiln'), { recursive: true })
+  writeFileSync(join(repo, '.kiln', 'check-receipt.txt'), 'checks ok\n')
+  const req = { reviewer_model: 'gpt-5.6-sol', law_hash: HASH, criteria: 'x', paths: [], failures: [], commands: [] }
+  const rf = join(repo, 'request.json')
+  writeFileSync(rf, JSON.stringify(req))
+  const promptOut = join(repo, 'captured-prompt.txt')
+  const env = fakeCodexEnv({ gate: { review_id: '__ECHO__', law_hash: HASH, findings: [], blockers: [], verdict: 'accept' }, promptOut })
+  const r = spawnSync('node', [REVIEW, 'review', repo, rf, join(repo, 'gate.json')], { encoding: 'utf8', env })
+  assert.equal(r.status, 0, 'the review round-trips through the fake reviewer')
+  const prompt = readFileSync(promptOut, 'utf8')
+  assert.ok(prompt.includes('Read the repository freely — read-only file inspection (opening files, listing directories) is how you judge the diff against the law, and the sandbox enforces read-only.'),
+    'the build prompt authorizes read-only repository inspection outright')
+  assert.ok(prompt.includes(FIX2_EXECUTE_SENTENCE), 'only what lies beyond reading is forbidden — the receipt stays the only execution evidence')
+  assert.ok(!prompt.includes(FIX2_STARVED_SENTENCE), 'the wording that starved the codex reviewer of its only file reader is gone')
+})
+
+test('kiln-review: the audit prompt authorizes read-only inspection the same way (FIX-2)', () => {
+  const fx = auditRepo()
+  const promptOut = join(fx.repo, 'captured-prompt.txt')
+  const r = runAudit(fx, { gate: { review_id: '__ECHO__', law_hash: fx.digest, findings: [], blockers: [], verdict: 'accept' }, promptOut })
+  assert.equal(r.status, 0, 'the audit round-trips through the fake reviewer')
+  const prompt = readFileSync(promptOut, 'utf8')
+  assert.ok(prompt.includes('Read the repository freely — read-only file inspection (opening files, listing directories) is how you judge the milestone against the law, and the sandbox enforces read-only.'),
+    'the audit prompt authorizes read-only repository inspection outright')
+  assert.ok(prompt.includes(FIX2_EXECUTE_SENTENCE), 'only what lies beyond reading is forbidden — the receipt stays the only execution evidence')
+  assert.ok(!prompt.includes(FIX2_STARVED_SENTENCE), 'the wording that starved the codex reviewer of its only file reader is gone')
+})
+
+test('kiln-review: ratify and screen keep their no-repo discipline byte-identically — their evidence is embedded, so repo reading stays forbidden (FIX-2)', () => {
+  // A sentence-search over the whole source would pass even if the rest of the prompt
+  // drifted or the sentence migrated out of its builder. Extract each builder's complete
+  // source by name and pin its digest: every static prompt byte — the discipline sentence,
+  // the mode inserts, the packet seam — must survive unchanged, in place.
+  const src = readFileSync(REVIEW, 'utf8')
+  const builderSource = (name) => {
+    const start = src.indexOf(`function ${name}(packet) {`)
+    assert.notEqual(start, -1, `${name} still exists as a named builder`)
+    return src.slice(start, src.indexOf('\n}\n', start) + 2)
+  }
+  const ratifySrc = builderSource('ratifyInstructions')
+  assert.ok(ratifySrc.includes('Execute nothing: rule by reading the artifact text supplied in full below — do not inspect the repository and do not run any command.'),
+    'the ratify no-repo sentence rides inside ratifyInstructions')
+  assert.equal(createHash('sha256').update(ratifySrc).digest('hex'),
+    '7a9d48e33c9140ceb61ee27d2c6ac59ae9624062f9b13b7591ddde71212bf29e',
+    'ratifyInstructions is byte-identical to the pinned pre-FIX-2 prompt')
+  const screenSrc = builderSource('screenInstructions')
+  assert.ok(screenSrc.includes('Execute nothing and install nothing: rule from the attached images and the packet text alone.'),
+    'the screen no-repo sentence rides inside screenInstructions')
+  assert.equal(createHash('sha256').update(screenSrc).digest('hex'),
+    '76125ca1c035be4549052db4bc6208949415ba6451fb2a97536457d2ba45dc15',
+    'screenInstructions is byte-identical to the pinned pre-FIX-2 prompt')
 })
