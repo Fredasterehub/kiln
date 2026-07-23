@@ -56,6 +56,9 @@ async function runLaw(detail) {
     'tiers:boot': TIERS_OK,
     'law:preflight': GREEN,
     'law:stage-end': GREEN,
+    // S3 (C5+M5): every non-brainstorm stage reads the seal ledger once into an exact-membership
+    // set (firstSealed binds reopen to it); an empty greenfield ledger is the default here.
+    'seal:set': { exit: 0, ids: [] },
     // Wave 3: the LAW input gate reads the onboarding brief + posture before planning.
     'onboarding:brief-check': { exit: 0 },
     'onboarding:posture': { exit: 0, scope: 'small', novelty: 'familiar', reversibility: 'reversible' },

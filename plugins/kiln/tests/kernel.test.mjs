@@ -23,13 +23,13 @@ const core = new Function(coreSrc + `
            fillClosed, streakIndex, stateToken, stateKey, stateCommitCmd, gateCmd, LAW_CHECK, LAW_GUARD,
            LAW_CHECK_RECEIPT, MILESTONE_PROJECTION_CHECK, PERCEPTUAL_TABLE_CHECK, verdictExit, redSetIsFuture, gateReviewInvalid,
            validateTiers, resolveTier, routeBuilder, parseSliceEntry, milestoneSeamAfter,
-           validatePosture, recoveryDecision, strictSubsetProgress, capFromDial, reconcileAudit }`)()
+           validatePosture, recoveryDecision, strictSubsetProgress, capFromDial, reconcileAudit, sealMembers }`)()
 const {
   SPINE, parseArgs, resolveStage, nextStage, gateOutcome, reviewLoop,
   fillClosed, streakIndex, stateToken, stateKey, stateCommitCmd, gateCmd,
   LAW_CHECK_RECEIPT, MILESTONE_PROJECTION_CHECK, PERCEPTUAL_TABLE_CHECK, verdictExit, redSetIsFuture, gateReviewInvalid,
   validateTiers, resolveTier, routeBuilder, parseSliceEntry, milestoneSeamAfter,
-  validatePosture, recoveryDecision, strictSubsetProgress, capFromDial, reconcileAudit,
+  validatePosture, recoveryDecision, strictSubsetProgress, capFromDial, reconcileAudit, sealMembers,
 } = core
 
 // ── Mocked runtime: run the whole kernel body with scripted agents ──────────
@@ -87,8 +87,13 @@ async function runKernel(kargs, script) {
   // presence check + the dial leg) and clears the semantic marker on its
   // nonsemantic terminals; the harness answers dormant-and-clear by default so
   // pre-W8 scenarios stay on their own subject. Screening scenarios override.
+  // S3 (C5+M5): every non-brainstorm stage reads the seal ledger ONCE into an exact-membership
+  // Set; the harness answers an empty ledger by default so scenarios that do not script seals
+  // build and validate exactly as before. Seal scenarios override with the sealed id set (or a
+  // nonzero exit to exercise the fail-closed hold).
   const full = {
     'tiers:boot': TIERS_OK, 'audit:check': { exit: 0 },
+    'seal:set': { exit: 0, ids: [] },
     'perceptual:presence': { exit: 1 },
     'perceptual:dial': { exit: 0, perceptual: 'dormant', recovery_cap: 1 },
     'perceptual:marker-clear': { exit: 0 },
@@ -425,7 +430,6 @@ test('runtime: an unreachable gate tool halts distinctly — sealed beat, restor
     'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'degraded:check': { exit: 1 },
@@ -465,7 +469,6 @@ test('runtime (S1): a review transport failure speaks the sealed review-call var
     'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'degraded:check': { exit: 1 },
@@ -486,7 +489,7 @@ test('runtime (W-04): preflight red on a SEALED owner reopens it, owner persiste
   const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p' }, {
     ...VOICE,
     'law:preflight': { exit: 1, ids: ['s7'] },
-    'seal:check': { exit: 0 },
+    'seal:set': { exit: 0, ids: ['s7'] },
     'state:write': GREEN,
   })
   assert.equal(ret.status, 'law-red')
@@ -500,7 +503,6 @@ test('runtime (W-04): preflight red on an UNSEALED slice is pre-build state — 
   const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
     ...VOICE,
     'law:preflight': { exit: 1, ids: ['s1'] },
-    'seal:check': { exit: 1 },
     'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
@@ -529,7 +531,6 @@ test('runtime: ANY pre-seal red blocks the seal unless a sealed owner reopens', 
     'slices:fetch': { exit: 0, ids: ['s1'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: ['.kiln/build-notes.md'], schema_valid: true }, narration_beat: '{streak}. Slice `{slice}` takes the anvil.' },
     'law:pre-seal': preSeal,
     'state:write': GREEN,
@@ -553,7 +554,7 @@ test('runtime: stage-end red on a sealed owner reopens it', async () => {
     'law:preflight': GREEN,
     'stage:validate': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'validating' },
     'law:stage-end': { exit: 1, ids: ['s2'] },
-    'seal:check': { exit: 0 },
+    'seal:set': { exit: 0, ids: ['s2'] },
     'state:write': GREEN,
   })
   assert.equal(ret.status, 'law-red')
@@ -579,7 +580,6 @@ test('runtime: a failed seal append halts before the seal beat or STATE advance'
     'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'degraded:check': { exit: 1 },
@@ -599,7 +599,6 @@ test('runtime: degradation is sticky only when the mark lands; a failed mark sur
     'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'degraded:check': { exit: 1 },
@@ -653,7 +652,6 @@ test('runtime: a blocked gate stops with the finding ids as closed facts', async
     'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'degraded:check': { exit: 1 },
@@ -674,13 +672,100 @@ test('runtime (W-03 residue): an all-sealed build relaunch still speaks', async 
     'slices:fetch': { exit: 0, ids: ['s1', 's2'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 0 },
+    'seal:set': { exit: 0, ids: ['s1', 's2'] },
     'law:stage-end': GREEN,
     'state:write': GREEN,
   })
   assert.equal(ret.status, 'ok')
   assert.ok(ret.beat.includes('the ledger holds the next step'), 'the sealed resume template arrives')
   assert.equal(calls.filter(c => c.label && c.label.startsWith('slice:')).length, 0, 'no slice work re-runs')
+})
+
+test('runtime (C5): dotted / kebab / near twins are NOT falsely sealed — only the exact ledger id skips, the twins build', async () => {
+  // The C5 regression, end to end: three near-twin slice ids in one plan. The old `^<id> `
+  // grep let a.b false-match a-b and axb (the dot matched any char), skipping them forever.
+  // The exact-membership SEALS set skips ONLY the id that is literally on the ledger.
+  const twins = (sealedId) => ({
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|a.b|ui', 'obj|a-b|ui', 'obj|axb|ui'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'seal:set': { exit: 0, ids: [sealedId] },
+    'slice:a.b': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging a.b' },
+    'slice:a-b': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging a-b' },
+    'slice:axb': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging axb' },
+    'law:pre-seal': GREEN,
+    'law:stage-end': GREEN,
+    'degraded:check': { exit: 1 },
+    'gate:review': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+  })
+  // a.b is the ledger id — the dot is not a wildcard, so a-b and axb are distinct and MUST build.
+  const dot = await runKernel({ stage: 'build', projectDir: '/p' }, twins('a.b'))
+  assert.equal(dot.ret.status, 'ok')
+  assert.equal(dot.calls.filter(c => c.label === 'slice:a.b').length, 0, 'the exact sealed id a.b is skipped')
+  assert.ok(dot.calls.some(c => c.label === 'slice:a-b'), 'the kebab twin a-b BUILDS — never masked by a.b')
+  assert.ok(dot.calls.some(c => c.label === 'slice:axb'), 'the near twin axb BUILDS — never masked by a.b')
+  // Mirror: seal the kebab id — only a-b skips; a.b and axb build.
+  const kebab = await runKernel({ stage: 'build', projectDir: '/p' }, twins('a-b'))
+  assert.equal(kebab.ret.status, 'ok')
+  assert.equal(kebab.calls.filter(c => c.label === 'slice:a-b').length, 0, 'the exact sealed id a-b is skipped')
+  assert.ok(kebab.calls.some(c => c.label === 'slice:a.b'), 'a.b builds when only a-b is sealed')
+  assert.ok(kebab.calls.some(c => c.label === 'slice:axb'), 'axb builds when only a-b is sealed')
+})
+
+test('runtime (C5): an UNREADABLE seal ledger HOLDS fail-closed — no slice builds or seals over an untrusted membership set', async () => {
+  // The one deliberate behavior addition: a genuine read fault on the ledger (courier death here)
+  // makes every membership and reopen-ownership decision unreliable, so the run holds rather than
+  // rebuild sealed work or miss a reopen — the audit-path philosophy applied to seals.
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'seal:set': { exit: 20 },
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'transport-failure', 'an unreadable ledger holds — the membership set cannot be trusted')
+  assert.ok(ret.beat.includes('The stage worker returned no usable result'), 'the transport-failure hold beat (entry 1) arrives')
+  assert.equal(calls.filter(c => c.label && c.label.startsWith('slice:')).length, 0, 'no slice builds over an untrusted ledger')
+  assert.equal(calls.filter(c => c.label === 'seal:append').length, 0, 'no seal appends over an untrusted ledger')
+})
+
+test('runtime (C5, live-add): a stage-end red owned by a slice sealed EARLIER in THIS pass reopens it — the live SEALS.add, never a disk snapshot', async () => {
+  // The crux of the whole design: SEALS is seeded ONCE from the ledger, then kept live by
+  // SEALS.add on each fresh seal. Here NOTHING is sealed on disk at launch (seal:set ids []),
+  // so the only way the stage-end reopen can see s1 as sealed is the in-loop add after its
+  // seal:append. Both slices build and seal in this one invocation; the stage-end LAW check
+  // then regresses, owned by the already-sealed s1 — firstSealed must find it and reopen.
+  // Remove SEALS.add and firstSealed(['s1']) returns null here: the run would advance ok
+  // instead of reopening. That is exactly what this scenario pins.
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui', 'obj|s2|ui'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'seal:set': { exit: 0, ids: [] },
+    'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging s1' },
+    'slice:s2': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging s2' },
+    'law:pre-seal': GREEN,
+    // both slices seal green through the loop; the stage-end check then regresses on s1.
+    'law:stage-end': { exit: 1, ids: ['s1'] },
+    'degraded:check': { exit: 1 },
+    'gate:review': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+  })
+  assert.equal(calls.filter(c => c.label === 'seal:append').length, 2, 'both slices sealed in this pass before the stage-end regression')
+  assert.equal(ret.status, 'law-red', 'the stage-end regression on the in-pass-sealed s1 reopens it — the live add, not the empty disk ledger')
+  assert.ok(ret.beat.includes('Slice s1 reopened'), 'the reopen beat targets s1 — sealed earlier in this same invocation')
+  const st = stateArgs(calls)
+  assert.equal(st.slice, 's1', 'the reopened owner is persisted as active_slice')
+  assert.equal(st.key, 'reopen-slice', 'STATE carries the reopen-slice key for the in-pass-sealed owner')
 })
 
 test('runtime (K-10): no beat leaves the kernel with an unfilled slot', async () => {
@@ -691,7 +776,6 @@ test('runtime (K-10): no beat leaves the kernel with an unfilled slot', async ()
     'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: '{streak}. Slice `{slice}` takes the anvil — {s}/{t}, iteration {i}.' },
     'law:pre-seal': GREEN,
     'law:pre-recheck': GREEN,
@@ -726,7 +810,6 @@ test('runtime (W6-F/S3): the build-gate reviewLoop honors the dial-keyed cap ove
       'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
       'ladder:fetch': LADDER,
       'cap:read': { exit: 0, recovery_cap: recoveryCap },
-      'seal:check': { exit: 1 },
       'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
       'law:pre-seal': GREEN,
       'law:pre-recheck': GREEN,
@@ -757,7 +840,6 @@ test('runtime (W6-07): the ui build gate takes the cwd-relative repo `.` — a w
     'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'law:stage-end': GREEN,
@@ -849,6 +931,27 @@ test('W7-S1: parseSliceEntry pins the ONE slice-id charset shared with append-au
   assert.equal(parseSliceEntry('has space').valid, false, 'a legacy bare id is charset-gated the same way')
   assert.equal(parseSliceEntry('obj|bad;id|ui').valid, false, 'a shell-active byte in an id never reaches an interpolation')
   assert.equal(parseSliceEntry('obj|bad\nid|ui').valid, false, 'a control byte in an id could forge or split a log line — rejected')
+})
+
+test('core (C5): sealMembers is EXACT first-field membership — dotted/kebab/near twins are distinct, never a regex match', () => {
+  // The seal ledger line is `<id> <label>`; the id carries no whitespace, so the first
+  // space-delimited field is the whole id. The old `^<id> ` grep let `a-b` or `axb`
+  // false-match `a.b` (the dot matched any char) — this Set is the C5 regression guard.
+  const s = sealMembers(['a.b dual'])
+  assert.ok(s.has('a.b'), 'the exact dotted id is a member')
+  assert.ok(!s.has('a-b'), 'the kebab twin is NOT a member — the dot is not a wildcard here')
+  assert.ok(!s.has('axb'), 'a near twin is NOT a member')
+  assert.ok(!s.has('a'), 'a prefix is NOT a member')
+  assert.ok(!s.has('a.b '), 'the id with a trailing space is NOT a member — the label field is stripped')
+  assert.ok(!s.has('a.b dual'), 'the whole raw line is NOT a member — only the first field')
+  // Edge cases: empty / null input, blank and whitespace-only lines, extra trailing fields.
+  assert.deepEqual([...sealMembers([])], [], 'empty input yields the empty set')
+  assert.deepEqual([...sealMembers(null)], [], 'a null line list is the empty set, never a throw')
+  assert.deepEqual([...sealMembers(['', '   ', 'a.b dual'])], ['a.b'], 'blank and whitespace-only lines are filtered')
+  assert.deepEqual([...sealMembers(['s1 dual extra tail'])], ['s1'], 'only the first space-delimited field is kept')
+  const multi = sealMembers(['a.b dual', 'a-b logic', 'axb ui'])
+  assert.ok(multi.has('a.b') && multi.has('a-b') && multi.has('axb'), 'each twin is its own distinct member')
+  assert.equal(multi.size, 3, 'three distinct ids, no collisions')
 })
 
 test('S1 (A9/W5-07): parseSliceEntry parses the optional four-slot milestone label — legacy forms stay valid, a smuggled separator or control char is rejected', () => {
@@ -1062,7 +1165,6 @@ test('runtime (T-03): the builder leg is surface-routed — ui→builder-ui, log
     'slices:fetch': { exit: 0, ids: [entry] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'law:stage-end': GREEN,
@@ -1758,7 +1860,6 @@ test('runtime (builder-leg 404 pin): a gpt-routed surface fails closed at boot �
     'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'law:stage-end': GREEN,
@@ -1838,7 +1939,6 @@ test('runtime (simple-fire): the gate branches on the surface — logic and mixe
     'slices:fetch': { exit: 0, ids: [entry] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'law:stage-end': GREEN,
@@ -1911,7 +2011,6 @@ test('runtime (simple-fire): a claude gate reject walks the same repair loop —
     'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'law:pre-recheck': GREEN,
@@ -1960,7 +2059,6 @@ test('runtime (W6-S3 dogfood, build): a recheck that clears nothing holds immedi
     'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'law:pre-recheck': GREEN,
@@ -1999,7 +2097,6 @@ test('runtime (W6-XF-01): the claude recheck is bound to the snapshotted prior c
       'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
       'ladder:fetch': LADDER,
       'cap:read': { exit: 0, recovery_cap: 2 },
-      'seal:check': { exit: 1 },
       'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
       'law:pre-seal': GREEN,
       'law:pre-recheck': GREEN,
@@ -2043,7 +2140,6 @@ test('runtime (S2/S3): a codex-dead logic slice stops for acknowledgment, then c
     'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'law:stage-end': GREEN,
@@ -2109,7 +2205,6 @@ test('runtime (S2/S3): a codex-dead logic slice stops for acknowledgment, then c
     'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'law:pre-recheck': GREEN,
@@ -2290,7 +2385,6 @@ test('runtime (S1): a claude verdict failing the semantic mirror never publishes
     'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'degraded:check': { exit: 1 },
@@ -2318,7 +2412,6 @@ test('runtime (S1 residual): an empty review_id and a malformed finding each fai
     'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'degraded:check': { exit: 1 },
@@ -2350,7 +2443,6 @@ test('runtime (S1): an unreadable review request fails the claude gate closed �
     'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'degraded:check': { exit: 1 },
@@ -2369,7 +2461,6 @@ test('runtime (S2): the codex recheck also judges a fresh receipt — the rerun 
     'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'law:pre-recheck': GREEN,
@@ -2402,7 +2493,6 @@ test('runtime (S2): a red pre-recheck rerun halts law-red — no gate ever judge
     'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'law:pre-recheck': { exit: 1, ids: [] },
@@ -2465,7 +2555,6 @@ test('runtime (deadlock, INTAKE-26): a later-planned pre-seal red is expected pr
     'slices:fetch': { exit: 0, ids: ['obj|s1|ui', 'obj|s2|ui'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging s1' },
     'slice:s2': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging s2' },
     'law:pre-seal': () => preSeals.shift(),
@@ -2488,7 +2577,6 @@ test('runtime (deadlock, INTAKE-26): a non-future pre-seal red halts law-red —
     'slices:fetch': { exit: 0, ids: ['obj|s1|ui', 'obj|s2|ui'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': { exit: 1, ids: preSealIds },
     'state:write': GREEN,
@@ -2513,7 +2601,6 @@ test('runtime (deadlock, INTAKE-26): a later-planned pre-recheck red tolerates �
     'slices:fetch': { exit: 0, ids: ['obj|s1|ui', 'obj|s2|ui'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'slice:s2': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
@@ -2544,8 +2631,8 @@ test('runtime (STRIKE 2): a pre-recheck red owned by an already-SEALED later sli
     'slices:fetch': { exit: 0, ids: ['obj|s1|ui', 'obj|s2|ui'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    // s2 is sealed on disk, s1 is not — the per-id grep is routed on the command.
-    'seal:check': (prompt) => ({ exit: prompt.includes('^s2 ') ? 0 : 1 }),
+    // s2 is sealed, s1 is not — only s2 sits in the exact-membership seal set.
+    'seal:set': { exit: 0, ids: ['s2'] },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'law:pre-recheck': { exit: 1, ids: ['s2'] },
@@ -2573,7 +2660,6 @@ test('runtime (INTAKE-27): an unparseable candidate halts the claude gate — no
     'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'degraded:check': { exit: 1 },
@@ -2595,7 +2681,6 @@ test('runtime (INTAKE-27): a stale or missing candidate never promotes — the {
     'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'degraded:check': { exit: 1 },
@@ -2926,7 +3011,6 @@ test('runtime (W7-S2): the seam gate fires at the mid-plan label change and the 
     'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core', 'obj|s2|ui|core', 'obj|s3|ui|polish'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': auditSlice(), 'slice:s2': auditSlice(), 'slice:s3': auditSlice(),
     'law:pre-seal': GREEN,
     'law:stage-end': GREEN,
@@ -2956,7 +3040,6 @@ test('runtime (W7-S2): an unlabeled plan pays exactly ONE final audit — the im
     'slices:fetch': { exit: 0, ids: ['obj|s1|ui', 'obj|s2|ui'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': auditSlice(), 'slice:s2': auditSlice(),
     'law:pre-seal': GREEN,
     'law:stage-end': GREEN,
@@ -2980,7 +3063,6 @@ test('runtime (W7-S2): a logged seam skips before any receipt; a sealed-but-unau
     'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': auditSlice(),
     'law:pre-seal': GREEN,
     'law:stage-end': GREEN,
@@ -3001,7 +3083,7 @@ test('runtime (W7-S2): a logged seam skips before any receipt; a sealed-but-unau
     'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core', 'obj|s2|ui|core'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 0 },
+    'seal:set': { exit: 0, ids: ['s1', 's2'] },
     'law:stage-end': GREEN,
     'state:write': GREEN,
     ...AUDIT_OK,
@@ -3023,7 +3105,6 @@ test('runtime (W7-S2): a red receipt at the seam takes the law-red door — no a
     'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': auditSlice(),
     'law:pre-seal': GREEN,
     'degraded:check': { exit: 1 },
@@ -3048,7 +3129,6 @@ test('runtime (W7-S2): the audit adapter maps the closed exits — 20 transport-
     'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': auditSlice(),
     'law:pre-seal': GREEN,
     'degraded:check': { exit: 1 },
@@ -3088,7 +3168,6 @@ test('runtime (W7-S2): changes_required and blocked both drive the Claude repair
       'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
       'ladder:fetch': LADDER,
       'cap:read': { exit: 0, recovery_cap: 2 },
-      'seal:check': { exit: 1 },
       'slice:s1': auditSlice(),
       'law:pre-seal': GREEN,
       'law:stage-end': GREEN,
@@ -3131,7 +3210,6 @@ test('runtime (W7-S2): the audit cycle holds at the existing edges — cap exhau
     'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: recoveryCap },
-    'seal:check': { exit: 1 },
     'slice:s1': auditSlice(),
     'law:pre-seal': GREEN,
     'degraded:check': { exit: 1 },
@@ -3192,7 +3270,6 @@ test('runtime (W7-S2): the kernel branches on its OWN derivation — a wire verd
       'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
       'ladder:fetch': LADDER,
       'cap:read': { exit: 0, recovery_cap: 2 },
-      'seal:check': { exit: 1 },
       'slice:s1': auditSlice(),
       'law:pre-seal': GREEN,
       'degraded:check': { exit: 1 },
@@ -3219,7 +3296,6 @@ test('runtime (W7-S2): the audits.log membership check is EXACT — a dotted sea
     'slices:fetch': { exit: 0, ids: ['obj|a.b|ui|core'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:a.b': auditSlice(),
     'law:pre-seal': GREEN,
     'law:stage-end': GREEN,
@@ -3254,7 +3330,6 @@ test('runtime (W7-S2): an untrusted audits.log answer holds transport-class — 
       'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
       'ladder:fetch': LADDER,
       'cap:read': { exit: 0, recovery_cap: 2 },
-      'seal:check': { exit: 1 },
       'slice:s1': auditSlice(),
       'law:pre-seal': GREEN,
       'degraded:check': { exit: 1 },
@@ -3282,7 +3357,6 @@ test('runtime (W7-S2): the audit repair edge confirms its delta — an {ok:true}
     'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'seal:check': { exit: 1 },
     'slice:s1': auditSlice(),
     'law:pre-seal': GREEN,
     'degraded:check': { exit: 1 },
@@ -3330,7 +3404,6 @@ const dogfoodBase = (dir) => ({
   'law:preflight': GREEN,
   'ladder:fetch': LADDER,
   'cap:read': { exit: 0, recovery_cap: 2 },
-  'seal:check': { exit: 1 },
   'law:pre-seal': GREEN,
   'law:stage-end': GREEN,
   'degraded:check': { exit: 1 },
@@ -3478,7 +3551,7 @@ test('dogfood (W7-S3): a run interrupted between the seam seal and its audit res
   const resumed = await runKernel({ stage: 'build', projectDir: dir, plugin: REAL_PLUGIN }, {
     ...dogfoodBase(dir),
     'slices:fetch': plan,
-    'seal:check': { exit: 0 },
+    'seal:set': { exit: 0, ids: ['s1', 's2'] },
     'audit:review': { exit: 0 },
     'audit:read': readAudit(auditVerdict('accept')),
   })
@@ -3531,7 +3604,7 @@ test('dogfood (W7-S3): an unlabeled plan pays one final audit on disk — and an
   const resumed = await runKernel({ stage: 'build', projectDir: resumeDir, plugin: REAL_PLUGIN }, {
     ...dogfoodBase(resumeDir),
     'slices:fetch': plan,
-    'seal:check': { exit: 0 },
+    'seal:set': { exit: 0, ids: ['u1', 'u2'] },
     'audit:review': { exit: 0 },
     'audit:read': readAudit(auditVerdict('accept')),
   })
@@ -4077,7 +4150,7 @@ test('runtime (W8-S3): the law-red doors — a validate reopen at preflight or s
   const preRed = await runKernel({ stage: 'validate', projectDir: '/p' }, {
     ...VOICE,
     'law:preflight': { exit: 1, ids: ['s1'] },
-    'seal:check': { exit: 0 },
+    'seal:set': { exit: 0, ids: ['s1'] },
     'state:write': GREEN,
   })
   assert.equal(preRed.ret.status, 'law-red')
@@ -4090,7 +4163,7 @@ test('runtime (W8-S3): the law-red doors — a validate reopen at preflight or s
     'screen:review': { exit: 0 },
     ...ADDENDUM_OK,
     'law:stage-end': { exit: 1, ids: ['s1'] },
-    'seal:check': { exit: 0 },
+    'seal:set': { exit: 0, ids: ['s1'] },
   })
   assert.equal(postRed.ret.status, 'law-red')
   const postOrder = postRed.calls.map(c => c.label)

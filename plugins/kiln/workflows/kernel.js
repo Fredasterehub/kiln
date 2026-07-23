@@ -486,8 +486,8 @@ function routeBuilder(c, surface) {
 // defaults to mixed; its id is charset-gated the same way.
 // The ONE slice-id contract (W7-S1), shared verbatim with the kiln-review append-audit
 // gate: letters, digits, dot, underscore, hyphen and slash. A slice id rides an
-// UNQUOTED shell word at seal:append, the grep anchors "^<id> " over seals.log and
-// audits.log, and the audit argv — so whitespace, control bytes and shell-active
+// UNQUOTED shell word at seal:append, the grep anchors "^<id> " over audits.log,
+// and the audit argv — so whitespace, control bytes and shell-active
 // bytes are rejected HERE, before any builder dispatch, never mid-build as a split
 // seal append or an unpublishable audit. Slash is inside the set: path-like ids such
 // as feature/ui are shell-word-safe and anchor-safe.
@@ -617,6 +617,13 @@ function validatePosture(obj) {
     return POSTURE_SCOPE.indexOf(scope) >= 0 && POSTURE_NOVELTY.indexOf(novelty) >= 0 && POSTURE_REVERSIBILITY.indexOf(reversibility) >= 0
   } catch { return false }
 }
+
+// C5: seal membership is EXACT first-field equality, never a regex anchor — a dotted or
+// kebab id (a.b vs a-b vs axb) is a distinct member. The ledger line is `<id> <label>`; the
+// id carries no whitespace, so the first space-delimited field is the whole id.
+const sealMembers = (lines) => new Set(
+  (lines || []).map(l => String(l).split(' ')[0]).filter(Boolean)
+)
 
 // KERNEL_CORE_END
 // KERNEL_RUNTIME_BEGIN — evaluated as an async function body by the workflow runtime
@@ -837,15 +844,6 @@ const stop = async (status, fields, extra) => {
   return done(status, extra)
 }
 const nextAct = (s) => (s ? 'Relaunch the kernel workflow with stage=' + s : 'Run complete')
-// W-04: rerun-reopen binds to SEALED checks (locked BEHAVIOR). A red owned by
-// an unsealed slice is expected pre-build state — the criteria describe the
-// finished artifact. Only a red whose owner is present in seals.log reopens.
-const firstSealed = async (ids) => {
-  for (const id of ids) {
-    if (await hands('grep -q "^' + id + ' " ' + P.seals + ' 2>/dev/null', 'seal:check') === 0) return id
-  }
-  return null
-}
 const reopen = async (owner, beatName) => {
   beats.push(await voiceBeat('reopen', { slice: owner }, 'Slice ' + owner + ' reopened — a law check went red at ' + beatName + '.'))
   return stop('law-red', {
@@ -856,6 +854,27 @@ const failStop = (status, fields, line, extra) => {
   beats.push(line)
   return stop(status, fields, extra)
 }
+// C5+M5: the seal ledger, read ONCE per kernel invocation into an exact-membership Set. This
+// replaces the two unescaped `^<id> ` greps (a dotted id false-matched a kebab twin) AND the
+// per-slice grep + indexOf hot loop (M5). An unreadable ledger is untrusted — every membership
+// and reopen-ownership decision this invocation would be unreliable, so the run HOLDS fail-closed
+// rather than rebuild sealed work or miss a reopen. An absent ledger is a legitimately empty set.
+const sealLeg = await idsFetch(
+  "node -e 'const fs=require(\"fs\");let t=\"\";try{t=fs.readFileSync(" + JSON.stringify(P.seals) + ",\"utf8\")}catch(e){if(e.code!==\"ENOENT\")process.exit(1)}process.stdout.write(JSON.stringify(t.split(\"\\n\").filter(Boolean)))'",
+  'seal:set',
+  'the printed JSON array of the raw non-empty lines of the seal ledger; an absent ledger prints [] at exit 0 and only a genuine read fault exits nonzero',
+)
+if (sealLeg.exit !== 0) {
+  return failStop('transport-failure',
+    { stage, active_slice: 'none', next_action: 'Rerun the stage after fixing the transport: the seal ledger at ' + P.seals + ' could not be read' },
+    await voiceBeat('transport-failure', {}, 'The seal ledger could not be read — the run holds rather than risk rebuilding sealed work or missing a reopen.', 1))
+}
+const SEALS = sealMembers(sealLeg.ids)
+// W-04: rerun-reopen binds to SEALED checks (locked BEHAVIOR). A red owned by an unsealed slice
+// is expected pre-build state — the criteria describe the finished artifact. Only a red whose
+// owner sits in the seal ledger reopens. Membership is exact first-field equality over the
+// per-invocation SEALS set, kept live by SEALS.add at each fresh seal below.
+const firstSealed = async (ids) => ids.find(id => SEALS.has(id)) ?? null
 
 const cardPrompt = (extra) => [
   'You are a Kiln stage agent. Read and follow the stage card at ' + P.card(stage) + ' exactly.',
@@ -1931,11 +1950,10 @@ const auditSeam = async (slice) => {
     { gate: P.audit })
 }
 let corrections = 0
-for (const entry of slices) {
+for (const [idx, entry] of slices.entries()) {
   const slice = entry.id
-  const ordinal = slices.indexOf(entry) + 1
-  const sealed = await hands('grep -q "^' + slice + ' " ' + P.seals + ' 2>/dev/null', 'seal:check')
-  if (sealed === 0) {
+  const ordinal = idx + 1
+  if (SEALS.has(slice)) {
     // W7-S2: a sealed seam slice can still owe its milestone audit — a resume
     // that sealed the seam without auditing re-fires here, the all-sealed
     // resume included; a logged seam skips inside the shared block.
@@ -2183,6 +2201,9 @@ for (const entry of slices) {
   // interpolation would split a whitespace path into extra args and fail every seal.
   const s = await hands('node ' + plugin + '/scripts/kiln-review append-seal .kiln ' + slice + ' ' + label, 'seal:append')
   if (s !== 0) return persistFail('seal-append')
+  // C5: mirror the confirmed append into the live membership set — a regression-reopen of this
+  // slice later in the same invocation must see it sealed, exactly as the prior live grep did.
+  SEALS.add(slice)
   beats.push(await voiceBeat('seal', { ...facts, label }, 'sealed — {label} · slice {slice}'))
   const w = await hands(stateCommitCmd(plugin, 'seal-advance', stage, slice, 'relaunch-build', density, [...routes]), 'state:write')
   if (w !== 0) return persistFail('state-write')
