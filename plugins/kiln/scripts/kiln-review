@@ -784,12 +784,20 @@ if (mode === 'review' && args.length === 3) {
     stop('transport_failure', `append-seal could not write seals.log: ${error.message}`, TRANSPORT_FAILURE)
   }
   process.exit(ACCEPT)
-} else if (mode === 'seal-law' && args.length === 1) {
+} else if (mode === 'seal-law' && args.length === 2) {
   // The trusted LAW lock, content-blind: the same digest a card shell computes
   // via `sha256sum .kiln/LAW.md | cut -d' ' -f1`, now owned by the CLI so the
-  // kernel can seal the LAW after cross-family ratification without reading it.
-  // Byte format matches that pipeline exactly: 64-hex + one trailing newline.
-  const [kilnDir] = args
+  // kernel can seal the LAW after ratification without reading it. Byte format
+  // matches that pipeline exactly: 64-hex + one trailing newline. S4-D4: a family
+  // label (dual|single-family) rides beside it — validated like append-seal — and
+  // is committed to a DIGEST-BOUND sidecar (.kiln/law/lock.seal = `<digest> <label>`)
+  // written BEFORE lock.hash, so a resealed LAW never leaves a stale label beside a
+  // fresh hash. lock.hash stays exactly a 64-hex digest + newline (audit and screen
+  // require that shape); the family key that degrades rides the sidecar alone.
+  const [kilnDir, label] = args
+  if (label !== 'dual' && label !== 'single-family') {
+    stop('transport_failure', 'seal-law label must be dual or single-family', TRANSPORT_FAILURE)
+  }
   if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
     stop('transport_failure', 'seal-law kilnDir must be a nonempty string', TRANSPORT_FAILURE)
   }
@@ -801,8 +809,12 @@ if (mode === 'review' && args.length === 3) {
   }
   const digest = createHash('sha256').update(law).digest('hex')
   const target = join(kilnDir, 'law', 'lock.hash')
+  const sidecar = join(kilnDir, 'law', 'lock.seal')
   try {
     mkdirSync(dirname(target), { recursive: true })
+    const sidecarTemporary = join(dirname(sidecar), `.lock.seal.tmp-${process.pid}-${randomUUID()}`)
+    writeFileSync(sidecarTemporary, `${digest} ${label}\n`)
+    renameSync(sidecarTemporary, sidecar)
     const temporary = join(dirname(target), `.lock.hash.tmp-${process.pid}-${randomUUID()}`)
     writeFileSync(temporary, `${digest}\n`)
     renameSync(temporary, target)
@@ -956,24 +968,29 @@ if (mode === 'review' && args.length === 3) {
     repair_delta: repairDelta,
   }
   invokeAudit(repo, request, packet, outputFile, findingIds)
-} else if (mode === 'append-audit' && args.length === 2) {
+} else if (mode === 'append-audit' && args.length === 3) {
   // W7: the ONLY writer of audits.log — append-seal's milestone-seam mirror. The kernel
   // promotes an accepted audit through this trusted verb, never a bare shell append; the
-  // audits.log semantics live here. The outcome label is the fixed `accept`, and the
-  // seam slice id is gated with the SAME slice-id charset the kernel enforces at slice
-  // intake (parseSliceEntry SLICE_ID) — one contract, so every id a build can carry
-  // publishes. The id becomes the grep anchor `^<id> `, where whitespace or control
-  // bytes could forge or split a log line; slash is inside the set (path-like ids such
-  // as feature/ui are anchor-safe).
-  const [kilnDir, seamSliceId] = args
+  // audits.log semantics live here. The outcome label is the fixed `accept`, and S4-D4
+  // adds the family label (dual|single-family) as a THIRD field: `<seam> accept <label>`.
+  // The membership grep anchors the first field only and sealMembers splits on the first
+  // field, so a third field is compatible. The seam slice id is gated with the SAME
+  // slice-id charset the kernel enforces at slice intake (parseSliceEntry SLICE_ID) — one
+  // contract, so every id a build can carry publishes. The id becomes the grep anchor
+  // `^<id> `, where whitespace or control bytes could forge or split a log line; slash is
+  // inside the set (path-like ids such as feature/ui are anchor-safe).
+  const [kilnDir, seamSliceId, label] = args
   if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
     stop('transport_failure', 'append-audit kilnDir must be a nonempty string', TRANSPORT_FAILURE)
   }
   if (typeof seamSliceId !== 'string' || !/^[A-Za-z0-9._/-]+$/.test(seamSliceId)) {
     stop('transport_failure', 'append-audit seam slice id must be nonempty using only letters, digits, dot, underscore, hyphen or slash', TRANSPORT_FAILURE)
   }
+  if (label !== 'dual' && label !== 'single-family') {
+    stop('transport_failure', 'append-audit label must be dual or single-family', TRANSPORT_FAILURE)
+  }
   try {
-    appendFileSync(join(kilnDir, 'audits.log'), `${seamSliceId} accept\n`)
+    appendFileSync(join(kilnDir, 'audits.log'), `${seamSliceId} accept ${label}\n`)
   } catch (error) {
     stop('transport_failure', `append-audit could not write audits.log: ${error.message}`, TRANSPORT_FAILURE)
   }
@@ -1174,7 +1191,7 @@ if (mode === 'review' && args.length === 3) {
 } else {
   stop(
     'transport_failure',
-    'usage: kiln-review review <repo> <request.json> <gate-review.json> | kiln-review recheck <repo> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir> | kiln-review ratify <repo> <request.json> <gate-review.json> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json> | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> | kiln-review screen <repo> <kilnDir> <model> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...]',
+    'usage: kiln-review review <repo> <request.json> <gate-review.json> | kiln-review recheck <repo> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir> <label> | kiln-review ratify <repo> <request.json> <gate-review.json> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json> | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> <label> | kiln-review screen <repo> <kilnDir> <model> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...]',
     TRANSPORT_FAILURE,
   )
 }

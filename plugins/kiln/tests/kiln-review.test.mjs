@@ -101,16 +101,33 @@ test('kiln-review: seal-law persists the LAW digest to law/lock.hash byte-for-by
   const law = 'crit-1 · slice-a · behaviour · cmd · outcome\n'
   writeFileSync(join(dir, 'LAW.md'), law)
   const digest = createHash('sha256').update(Buffer.from(law)).digest('hex')
-  const r = spawnSync('node', [REVIEW, 'seal-law', dir], { encoding: 'utf8' })
+  const r = spawnSync('node', [REVIEW, 'seal-law', dir, 'dual'], { encoding: 'utf8' })
   assert.equal(r.status, 0, 'a readable LAW.md seals with exit 0')
   const written = readFileSync(join(dir, 'law', 'lock.hash'), 'utf8')
-  assert.equal(written, `${digest}\n`, 'lock.hash is the sha256 digest plus one trailing newline — identical to the shell pipeline')
+  assert.equal(written, `${digest}\n`, 'lock.hash is the sha256 digest plus one trailing newline — identical to the shell pipeline; the family label never enters it')
   assert.ok(/^[0-9a-f]{64}\n$/.test(written), 'the persisted lock is exactly 64 lowercase hex chars then a newline')
+  // S4-D4: the digest-bound family label rides the lock.seal sidecar, `<digest> <label>`.
+  assert.equal(readFileSync(join(dir, 'law', 'lock.seal'), 'utf8'), `${digest} dual\n`, 'the sidecar binds the same digest to the family label')
+})
+
+test('kiln-review: seal-law rejects an invalid family label and writes nothing (exit 20)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kiln-seallaw-'))
+  writeFileSync(join(dir, 'LAW.md'), 'a law\n')
+  const r = spawnSync('node', [REVIEW, 'seal-law', dir, 'triple'], { encoding: 'utf8' })
+  assert.equal(r.status, 20, 'a label that is neither dual nor single-family is a transport failure')
+  assert.ok(!existsSync(join(dir, 'law', 'lock.hash')), 'no lock.hash is written on an invalid label')
+  assert.ok(!existsSync(join(dir, 'law', 'lock.seal')), 'no sidecar is written on an invalid label')
+  // The single-family label locks honestly with the same byte format.
+  const single = spawnSync('node', [REVIEW, 'seal-law', dir, 'single-family'], { encoding: 'utf8' })
+  assert.equal(single.status, 0, 'single-family is a valid degraded label')
+  const digest = createHash('sha256').update(Buffer.from('a law\n')).digest('hex')
+  assert.equal(readFileSync(join(dir, 'law', 'lock.seal'), 'utf8'), `${digest} single-family\n`, 'the sidecar records the single-family degraded label')
+  assert.equal(readFileSync(join(dir, 'law', 'lock.hash'), 'utf8'), `${digest}\n`, 'lock.hash stays a bare 64-hex digest regardless of family')
 })
 
 test('kiln-review: seal-law halts transport_failure (exit 20) when LAW.md is missing', () => {
   const dir = mkdtempSync(join(tmpdir(), 'kiln-seallaw-'))
-  const r = spawnSync('node', [REVIEW, 'seal-law', dir], { encoding: 'utf8' })
+  const r = spawnSync('node', [REVIEW, 'seal-law', dir, 'dual'], { encoding: 'utf8' })
   assert.equal(r.status, 20, 'a missing LAW.md is a transport failure')
   assert.equal((r.stdout || '').trim(), 'transport_failure', 'the honest fact rides stdout')
 })
@@ -118,10 +135,10 @@ test('kiln-review: seal-law halts transport_failure (exit 20) when LAW.md is mis
 test('kiln-review: seal-law is content-addressed — different LAW bytes reseal a different digest into law/lock.hash', () => {
   const dir = mkdtempSync(join(tmpdir(), 'kiln-seallaw-'))
   writeFileSync(join(dir, 'LAW.md'), 'first law\n')
-  assert.equal(spawnSync('node', [REVIEW, 'seal-law', dir], { encoding: 'utf8' }).status, 0)
+  assert.equal(spawnSync('node', [REVIEW, 'seal-law', dir, 'dual'], { encoding: 'utf8' }).status, 0)
   const first = readFileSync(join(dir, 'law', 'lock.hash'), 'utf8')
   writeFileSync(join(dir, 'LAW.md'), 'second, different law\n')
-  assert.equal(spawnSync('node', [REVIEW, 'seal-law', dir], { encoding: 'utf8' }).status, 0)
+  assert.equal(spawnSync('node', [REVIEW, 'seal-law', dir, 'dual'], { encoding: 'utf8' }).status, 0)
   const second = readFileSync(join(dir, 'law', 'lock.hash'), 'utf8')
   assert.notEqual(first, second, 'a changed LAW reseals a different digest')
   assert.equal(second, `${createHash('sha256').update(Buffer.from('second, different law\n')).digest('hex')}\n`,
@@ -257,7 +274,7 @@ test('kiln-review: the ratify candidate digest is byte-identical to what seal-la
   const artifact = 'crit-1 · slice-a · behaviour · cmd · outcome\n'
   const sealDir = mkdtempSync(join(tmpdir(), 'kiln-seallaw-'))
   writeFileSync(join(sealDir, 'LAW.md'), artifact)
-  assert.equal(spawnSync('node', [REVIEW, 'seal-law', sealDir], { encoding: 'utf8' }).status, 0)
+  assert.equal(spawnSync('node', [REVIEW, 'seal-law', sealDir, 'dual'], { encoding: 'utf8' }).status, 0)
   const locked = readFileSync(join(sealDir, 'law', 'lock.hash'), 'utf8').trim()
   // ratify accepts iff the reviewer echoes the SAME digest seal-law persisted.
   const accepted = ratify({ artifact, gate: ratifyGate('accept', locked) })
@@ -765,24 +782,27 @@ test('kiln-review: audit reads the kernel slice contract — a legacy bare strin
 test('kiln-review: append-audit is the only audits.log writer — exact line format, append-only, charset-gated seam id, usage on a wrong arg count', () => {
   const dir = mkdtempSync(join(tmpdir(), 'kiln-audits-'))
   const log = join(dir, 'audits.log')
-  const first = spawnSync('node', [REVIEW, 'append-audit', dir, 's3'], { encoding: 'utf8' })
+  const first = spawnSync('node', [REVIEW, 'append-audit', dir, 's3', 'dual'], { encoding: 'utf8' })
   assert.equal(first.status, 0, 'a valid append exits 0')
-  assert.equal(readFileSync(log, 'utf8'), 's3 accept\n', 'the log is created with exactly `<seamSliceId> accept`')
-  const second = spawnSync('node', [REVIEW, 'append-audit', dir, 'phase-2.final'], { encoding: 'utf8' })
+  assert.equal(readFileSync(log, 'utf8'), 's3 accept dual\n', 'the log is created with exactly `<seamSliceId> accept <label>` (S4-D4 third field)')
+  const second = spawnSync('node', [REVIEW, 'append-audit', dir, 'phase-2.final', 'single-family'], { encoding: 'utf8' })
   assert.equal(second.status, 0, 'dot, digit, underscore and hyphen ids are within the safe charset')
-  assert.equal(readFileSync(log, 'utf8'), 's3 accept\nphase-2.final accept\n', 'the append is append-only — the prior line survives')
+  assert.equal(readFileSync(log, 'utf8'), 's3 accept dual\nphase-2.final accept single-family\n', 'the append is append-only — the prior line survives, and the degraded label rides the same third field')
   // The charset is the kernel slice-id contract (parseSliceEntry SLICE_ID) verbatim:
   // slash ids the kernel builds and seals must publish here too.
-  const slash = spawnSync('node', [REVIEW, 'append-audit', dir, 'feature/ui'], { encoding: 'utf8' })
+  const slash = spawnSync('node', [REVIEW, 'append-audit', dir, 'feature/ui', 'dual'], { encoding: 'utf8' })
   assert.equal(slash.status, 0, 'a path-like slash id is inside the shared charset')
-  assert.equal(readFileSync(log, 'utf8'), 's3 accept\nphase-2.final accept\nfeature/ui accept\n', 'the slash id lands its exact line')
+  assert.equal(readFileSync(log, 'utf8'), 's3 accept dual\nphase-2.final accept single-family\nfeature/ui accept dual\n', 'the slash id lands its exact line')
+  // An invalid family label is rejected, and nothing is appended.
+  const badLabel = spawnSync('node', [REVIEW, 'append-audit', dir, 's9', 'triple'], { encoding: 'utf8' })
+  assert.equal(badLabel.status, 20, 'a label that is neither dual nor single-family is a transport failure')
   // The seam id becomes the grep anchor `^<id> ` — whitespace and control bytes are rejected.
   for (const bad of ['', 'has space', 'line\nbreak', 'tab\tchar']) {
-    const r = spawnSync('node', [REVIEW, 'append-audit', dir, bad], { encoding: 'utf8' })
+    const r = spawnSync('node', [REVIEW, 'append-audit', dir, bad, 'dual'], { encoding: 'utf8' })
     assert.notEqual(r.status, 0, `${JSON.stringify(bad)} is rejected`)
   }
-  assert.equal(readFileSync(log, 'utf8'), 's3 accept\nphase-2.final accept\nfeature/ui accept\n', 'no rejected call ever appended')
-  const usage = spawnSync('node', [REVIEW, 'append-audit', dir], { encoding: 'utf8' })
+  assert.equal(readFileSync(log, 'utf8'), 's3 accept dual\nphase-2.final accept single-family\nfeature/ui accept dual\n', 'no rejected call ever appended')
+  const usage = spawnSync('node', [REVIEW, 'append-audit', dir, 's3'], { encoding: 'utf8' })
   assert.equal(usage.status, 20, 'a wrong arg count is the usage failure')
 })
 

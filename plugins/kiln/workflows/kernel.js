@@ -781,6 +781,18 @@ const idsFetch = (cmd, label, when) => agent(
   { label, ...tier('kernel-leg'), schema: IDS },
 ).then(r => (r ?? { exit: 20, ids: [] }))
 
+// S4-D5: the degradation marker read as a TRI-STATE family-label authority. test -f
+// answers 0 (present) or 1 (absent); anything else is an untrusted transport answer.
+// The label callers map present to single-family and absent to dual; an untrusted read
+// returns null so the caller HOLDS rather than seal a dual label it cannot trust. A
+// path-selection read at the top of a stage may stay boolean (a nonzero read fails safe
+// to the codex path); only these label-authority reads, reread at seal and append time,
+// are tri-state — an unread marker must never resolve to dual.
+const sealLabel = async (label) => {
+  const e = await hands('test -f ' + P.degraded, label)
+  return e === 0 ? 'single-family' : e === 1 ? 'dual' : null
+}
+
 // LAW beats report the owning slice ids on red (check.sh prints them; they
 // arrive schema-forced — closed facts, never prose).
 const lawBeat = (cmd, label) => idsFetch(cmd, label, 'the owning slice ids the check printed on stdout when exit != 0, else []')
@@ -1276,9 +1288,10 @@ if (stage !== 'build') {
   // lock. The card produced the candidate LAW; a fresh OPPOSITE-family mind now
   // ratifies it against the architecture-feasibility rubric (reviewLoop + the
   // kiln-review `ratify` verb), and only on accept does the kernel seal the LAW
-  // (the opaque `seal-law` verb) and let build begin. A broken bridge, a block,
-  // or non-convergence is a terminal HELD for the operator — the LAW never locks
-  // single-family, because a plan no second family has ratified is not ratified.
+  // (the opaque `seal-law` verb) and let build begin. Codex unavailable is the
+  // acknowledgment stop, and the acked re-run ratifies single-family through the
+  // claude seat, honestly labeled; a reviewer block or non-convergence stays the
+  // operator HELD.
   if (stage === 'law') {
     // A2: the LAW card beat asserts the law is SEALED and build starts (cards/law.md),
     // so it must NEVER reach the transcript on a HELD — that would read "sealed… build
@@ -1287,7 +1300,60 @@ if (stage !== 'build') {
     // one) and emit it ONLY after a successful ratify AND seal; every held/halt path
     // emits its own line alone.
     let candidateBeat = r.narration_beat
-    const ratifyOpts = tier('ratify-reviewer')
+    // S4 (INTAKE-38, the recovered no-codex pathway): the ratify TRANSPORT degrades to
+    // the claude family when codex is down, never the ratification itself. A tri-state
+    // path-selector read of the degradation marker chooses the seat — absent selects the
+    // cross-family codex ratifier (the normal dual key), present selects a fresh OPUS
+    // claude ratifier (opposite model, same family) that mirrors the codex packet,
+    // digest, echo and lineage rules exactly and seals honestly single-family. The
+    // marker is set only after a first codex-down detection stopped for the operator
+    // acknowledgment, so the claude seat runs only on an acked re-run.
+    const degraded = await hands('test -f ' + P.degraded, 'law:degraded') === 0
+    const ratifyOpts = degraded ? tier('fallback-reviewer') : tier('ratify-reviewer')
+    // The claude ratify leg (the claudeGate mirror): the kernel computes the candidate
+    // LAW digest BEFORE the reviewer turn, the opus reviewer echoes it as law_hash, and
+    // the kernel rejects a mismatched echo. Because a claude agent CAN write files —
+    // unlike the read-only codex -C sandbox — the kernel RECOMPUTES the LAW digest AFTER
+    // the turn and confirms it unchanged; a tampered law is a transport failure, never a
+    // publish or a seal. A recheck snapshots the prior cohort exactly as claudeGate does.
+    const claudeRatify = async (mode) => {
+      const d0 = await idsFetch('sha256sum ' + P.law + ' | cut -d" " -f1', 'ratify:digest', 'a one-element array holding the 64-hex candidate law digest printed on stdout, [] if exit != 0')
+      if (d0.exit !== 0 || d0.ids.length !== 1 || !LAW_HASH.test(d0.ids[0])) return 20
+      const candidateDigest = d0.ids[0]
+      let expectedReviewId, allowedFindingIds
+      if (mode === 'recheck') {
+        const prior = await idsFetch(
+          "node -p 'JSON.stringify((g=>[String(g.review_id)].concat((g.findings||[]).map(f=>String(f.id))))(require(\"./" + P.gate + "\")))'",
+          'ratify:recheck-cohort', 'a JSON array whose first element is the prior gate review_id and whose remaining elements are the prior finding ids, [] if exit != 0')
+        if (prior.exit !== 0 || prior.ids.length < 1) return 20
+        expectedReviewId = prior.ids[0]
+        allowedFindingIds = new Set(prior.ids.slice(1))
+      }
+      if (await hands('rm -f ' + P.candidate, 'ratify:invalidate') !== 0) return 20
+      const ack = await agent([
+        'You are the LAW ratify reviewer: a fresh mind judging the candidate law against the architecture-feasibility rubric.',
+        'Project dir: ' + projectDir + '. Read the candidate law at ' + P.law + ' and the ratify rubric at ' + plugin + '/data/law-rubric.json.',
+        'Judge the law against every rubric dimension. Execute nothing — no commands, no tests, no builds: the law is a plan, judged as text. Change no file: judge the law, never edit it.',
+        mode === 'recheck'
+          ? 'Read and reuse the prior review_id from ' + P.gate + ' first. Recheck only the finding ids in ' + P.gate + ' against the regenerated law. Preserve each unresolved finding id; never add one. Accept only when every listed finding is repaired.'
+          : 'Report only substantiated rubric violations at exact repo-relative path:line locations with stable finding ids. Verdict rules: accept only when findings and blockers are both empty; changes_required only for repairable findings with no blockers; blocked only when the review cannot complete, with blocker reasons. Mint a fresh review_id.',
+        'Set law_hash to exactly ' + candidateDigest + ' — the sha256 of the candidate law you judged; copy it verbatim so it binds this verdict to those bytes.',
+        'Compose the verdict object per ' + plugin + '/scripts/review-schema.json, and as the FINAL act of your turn write it as JSON to ' + P.candidate + '. Then return { ok: true } — the ack carries no verdict; the kernel reads and validates the file you wrote.',
+      ].join('\n'), { label: 'ratify-claude:' + mode, ...ratifyOpts, schema: ACK })
+      if (!ack || ack.ok !== true) return 20
+      const raw = await idsFetch('cat ' + P.candidate, 'ratify:read', 'a one-element array holding the exact candidate file contents printed on stdout, [] if exit != 0')
+      if (raw.exit !== 0 || raw.ids.length !== 1) return 20
+      let g
+      try { g = JSON.parse(raw.ids[0]) } catch { return 20 }
+      if (gateReviewInvalid(g, candidateDigest, expectedReviewId, allowedFindingIds) !== null) return 20
+      // S4-D1: the write-capable turn tamper check — the LAW bytes the reviewer judged
+      // must still be the bytes on disk. A changed digest means the ratifier rewrote the
+      // very law it graded; the kernel holds the transport and never publishes or seals.
+      const d1 = await idsFetch('sha256sum ' + P.law + ' | cut -d" " -f1', 'ratify:digest-confirm', 'a one-element array holding the 64-hex candidate law digest printed on stdout, [] if exit != 0')
+      if (d1.exit !== 0 || d1.ids.length !== 1 || d1.ids[0] !== candidateDigest) return 20
+      const w = await hands('mv -f ' + P.candidate + ' ' + P.gate, 'ratify:publish')
+      return w === 0 ? verdictExit(g.verdict) : 20
+    }
     // Content-blind request write: the kernel cannot author files, so it ships the
     // ratify request as a heredoc of closed facts through a mechanical hand — the
     // same shape as the STATE.md write — and branches only on the exit code. The
@@ -1305,7 +1371,8 @@ if (stage !== 'build') {
       "cat > .kiln/.ratify-request.tmp <<'KILN_RATIFY_EOF'", ratifyReq, 'KILN_RATIFY_EOF',
       'mv -f .kiln/.ratify-request.tmp ' + P.ratifyRequest,
     ].join('\n')
-    if (await hands(writeReq, 'ratify:request') !== 0) return persistFail('ratify-request')
+    // The codex path alone carries a request file; the claude leg reads the rubric itself.
+    if (!degraded && await hands(writeReq, 'ratify:request') !== 0) return persistFail('ratify-request')
     const ratifyLoop = await reviewLoop({
       // The review grades the fresh LAW; a recheck re-grades the regenerated LAW through the W6
       // ratify-recheck verb, which reuses the prior review_id and constrains the reviewer to the
@@ -1316,11 +1383,13 @@ if (stage !== 'build') {
       // exactly as the build gate does. A9: the <repo> arg is the cwd-relative `.` — hands runs in
       // projectDir and the verb resolves the .kiln/ request and the artifact against it, never a
       // bare projectDir, which a whitespace path would split into extra argv and fail the gate.
-      gate: (mode) => hands(
-        mode === 'recheck'
-          ? plugin + '/scripts/kiln-review ratify-recheck . ' + P.ratifyRequest + ' ' + P.gate + ' ' + P.gate
-          : plugin + '/scripts/kiln-review ratify . ' + P.ratifyRequest + ' ' + P.gate,
-        'ratify:gate'),
+      gate: degraded
+        ? (mode) => claudeRatify(mode)
+        : (mode) => hands(
+            mode === 'recheck'
+              ? plugin + '/scripts/kiln-review ratify-recheck . ' + P.ratifyRequest + ' ' + P.gate + ' ' + P.gate
+              : plugin + '/scripts/kiln-review ratify . ' + P.ratifyRequest + ' ' + P.gate,
+            'ratify:gate'),
       // The pinned prior cohort for the strict-subset transition: the finding ids the last published
       // gate carries. A recheck must strictly shrink it or recoveryDecision holds the LAW.
       cohort: async () => {
@@ -1366,16 +1435,30 @@ if (stage !== 'build') {
           await voiceBeat('transport-failure', {}, 'The perceptual table does not hold — its rows, owners and dims must agree with the slices and the shipped rubric before the law locks, so the run holds.', 1),
           { law: P.law, slices: P.slices })
       }
-      // seal-law is the only sealer on the kernel side: it digests LAW.md and
-      // writes law/lock.hash, so the LAW locks only after cross-family ratification.
-      if (await hands('node ' + plugin + '/scripts/kiln-review seal-law .kiln', 'law:seal') !== 0) return persistFail('law-seal')
+      // seal-law is the only sealer on the kernel side: it digests LAW.md and writes
+      // law/lock.hash, plus the digest-bound lock.seal label sidecar. The family label is
+      // reread tri-state AT SEAL TIME (S4-D5): absent seals dual, present single-family,
+      // an untrusted read HOLDS rather than seal a label it cannot trust.
+      const sealFamily = await sealLabel('law:seal-label')
+      if (sealFamily === null) {
+        return failStop('transport-failure',
+          { stage, active_slice: 'none', next_action: 'Rerun stage law after fixing the transport: the degradation marker gave no trustworthy answer at the LAW seal' },
+          await voiceBeat('transport-failure', {}, 'The degradation marker gave no trustworthy answer at the LAW seal — the run holds rather than seal an untrusted family label.'),
+          { law: P.law })
+      }
+      if (await hands('node ' + plugin + '/scripts/kiln-review seal-law .kiln ' + sealFamily, 'law:seal') !== 0) return persistFail('law-seal')
       // Only now, past ratify AND seal, does the SEALED-claiming card beat speak.
       beats.push(fillClosed(candidateBeat, stageFacts))
     } else if (ratifyLoop.result === 'degraded') {
-      return failStop('held',
-        { stage, active_slice: 'none', next_action: 'The LAW needs an opposite-family ratifier and codex is not answering — restore codex, then rerun stage law' },
-        'The LAW would not ratify: codex is not answering, and I do not lock the law with a single family. It stays open until a second family can rule — restore codex and rerun the law stage.',
-        { gate: P.gate })
+      // S4-D2: the FIRST codex-down detection is the acknowledgment stop, mirroring the
+      // build and audit stops — persist BOTH the degraded marker and its ack, push the
+      // degradation beat, and return the distinct degraded stop. The conductor literal
+      // continue relaunches the law stage; the acked re-run enters with the marker set
+      // and ratifies single-family through the claude seat above.
+      const db = await voiceBeat('degradation', {}, 'Codex is not answering — answer continue to proceed single-family.')
+      if (await hands('touch ' + P.degraded + ' ' + P.ack, 'degraded:mark') !== 0) return persistFail('degraded-mark')
+      beats.push(db)
+      return stop('degraded', { stage, active_slice: 'none', next_action: 'Acknowledge single-family degradation, then relaunch stage law' })
     } else if (ratifyLoop.result === 'blocked') {
       return failStop('held',
         { stage, active_slice: 'none', next_action: 'Operator ruling: the ratify reviewer held the LAW after ' + ratifyLoop.repairs + ' repair passes — rule, then rerun stage law' },
@@ -1807,7 +1890,73 @@ const auditSeam = async (slice) => {
         'The law is red at the milestone audit of slice ' + slice + ' — no audit over a red law.')
     }
   }
-  const auditorOpts = tier('reviewer-gate')
+  // S4 (INTAKE-38): the audit TRANSPORT degrades to the claude family when codex is
+  // down — a fresh OPUS goal-backward auditor (singular) mirroring the codex audit
+  // packet and feeding the SAME reconcileAudit derivation. A tri-state path-selector
+  // read chooses the seat: absent the cross-family codex auditor, present the claude
+  // one. The marker is set only after a first codex-down detection stopped for the
+  // operator acknowledgment, so the claude seat runs only on an acked re-run.
+  const degraded = await hands('test -f ' + P.degraded, 'audit:degraded') === 0
+  const auditorOpts = degraded ? tier('fallback-reviewer') : tier('reviewer-gate')
+  // The claude audit leg (the claudeGate mirror): the kernel reads the SEALED law hash,
+  // the opus auditor echoes it as law_hash, and the kernel validates the five-field
+  // verdict shape, the echo, the recheck lineage, and the audit blocker to finding
+  // referential rule before publishing to the audit gate file. The auditGate
+  // reconciliation wrapper, reviewLoop, and the three-way agreement below stay
+  // UNCHANGED — only the transport is swapped.
+  const claudeAudit = async (mode) => {
+    // S4-B1: the seam-bounded closed facts, derived kernel-side from the same trim-normalized
+    // projection the codex auditFacts reads (sliceIds/milestones, byte-identical to the CLI by the
+    // projection-agreement check) — the closing block is the maximal contiguous same-label run
+    // ending at the seam, the sealed prefix every slice up to and including it. The claude auditor is
+    // bound to THIS prefix, never the seal ledger; an all-sealed resume with an earlier seam audit
+    // missing can then neither judge the milestone on later work nor raise an out-of-prefix finding.
+    const seam = sliceIds.indexOf(slice)
+    if (seam < 0) return 20
+    let start = seam
+    while (start > 0 && milestones[start - 1] === milestones[seam]) start -= 1
+    const closingBlock = sliceIds.slice(start, seam + 1)
+    const sealedPrefix = sliceIds.slice(0, seam + 1)
+    const lh = await idsFetch(
+      "node -p 'JSON.stringify([String(require(\"fs\").readFileSync(\".kiln/law/lock.hash\",\"utf8\")).trim()])'",
+      'audit-claude:lawhash', 'a one-element array holding the sealed law lock.hash digest printed on stdout, [] if exit != 0')
+    if (lh.exit !== 0 || lh.ids.length !== 1 || !LAW_HASH.test(lh.ids[0])) return 20
+    const lawHash = lh.ids[0]
+    let expectedReviewId, allowedFindingIds
+    if (mode === 'recheck') {
+      const prior = await idsFetch(
+        "node -p 'JSON.stringify((g=>[String(g.review_id)].concat((g.findings||[]).map(f=>String(f.id))))(require(\"./" + P.audit + "\")))'",
+        'audit-claude:recheck-cohort', 'a JSON array whose first element is the prior audit review_id and whose remaining elements are the prior finding ids, [] if exit != 0')
+      if (prior.exit !== 0 || prior.ids.length < 1) return 20
+      expectedReviewId = prior.ids[0]
+      allowedFindingIds = new Set(prior.ids.slice(1))
+    }
+    if (await hands('rm -f ' + P.candidate, 'audit-claude:invalidate') !== 0) return 20
+    const ack = await agent([
+      'You are the milestone audit reviewer: a fresh mind judging the sealed milestone goal-backward against the locked law.',
+      'Project dir: ' + projectDir + '. Read the locked law at ' + P.law + ', the vision documents in the repository, and the slice plan at ' + P.slices + '. The milestone under audit' + (milestones[seam] ? ' (' + milestones[seam] + ')' : '') + ' closes at slice ' + slice + '. The closing block is exactly: ' + closingBlock.join(', ') + '. The cumulative sealed prefix under audit is exactly: ' + sealedPrefix.join(', ') + ' — judge ONLY this prefix; slices beyond it are out of scope, never evidence, never a finding.',
+      'Judge goal-backward over the cumulative sealed prefix with focus on the closing block at slice ' + slice + ': integrated reachability, the connections between slices, and delivery of the milestone goal. The law checks were already executed kernel-side; their full output is attached verbatim at ' + P.receipt + '. Read files freely to judge, but execute nothing — no tests, no builds, no state-changing commands. Creative direction and visual taste belong to the builder; never raise them as a finding. Change no file: judge the milestone, write only the verdict.',
+      mode === 'recheck'
+        ? 'Read and reuse the prior review_id from ' + P.audit + ' first. Recheck only the finding ids in ' + P.audit + ' against ' + P.delta + ' and the current repository. Preserve each unresolved finding id; never add one. Accept only when every listed finding is repaired.'
+        : 'For each finding pin the failed LAW criterion id in criterion and an exact repo-relative path:line in location, with the concrete failure, its evidence, and the smallest repair. Every blocker id must equal one of your finding ids. Verdict rules: accept only when findings and blockers are both empty; changes_required for repairable findings with no blockers; blocked only when the milestone goal is undeliverable, with blocker ids naming findings. Mint a fresh review_id.',
+      'Set law_hash to exactly ' + lawHash + ' — the sealed law digest; copy it verbatim.',
+      'Compose the verdict object per ' + plugin + '/scripts/review-schema.json, and as the FINAL act of your turn write it as JSON to ' + P.candidate + '. Then return { ok: true } — the ack carries no verdict; the kernel reads and validates the file you wrote.',
+    ].join('\n'), { label: 'audit-claude:' + mode, ...auditorOpts, schema: ACK })
+    if (!ack || ack.ok !== true) return 20
+    const raw = await idsFetch('cat ' + P.candidate, 'audit-claude:read', 'a one-element array holding the exact candidate file contents printed on stdout, [] if exit != 0')
+    if (raw.exit !== 0 || raw.ids.length !== 1) return 20
+    let g
+    try { g = JSON.parse(raw.ids[0]) } catch { return 20 }
+    if (gateReviewInvalid(g, lawHash, expectedReviewId, allowedFindingIds) !== null) return 20
+    // The audit referential rule (kiln-review auditShapeInvalid mirror): a blocked
+    // verdict carries findings, and every blocker id equals a finding id — so a blocker
+    // always carries its criterion, location and minimal fix through that finding.
+    if (g.verdict === 'blocked' && g.findings.length === 0) return 20
+    const fids = new Set(g.findings.map(f => f.id))
+    if (g.blockers.some(b => !fids.has(b))) return 20
+    const w = await hands('mv -f ' + P.candidate + ' ' + P.audit, 'audit-claude:publish')
+    return w === 0 ? verdictExit(g.verdict) : 20
+  }
   // The kernel-owned derivation from the last parsed published verdict — the
   // promotion below demands the advance result AND an accept from THIS,
   // never the wire verdict alone.
@@ -1831,11 +1980,13 @@ const auditSeam = async (slice) => {
     // (the ratify-leg pattern). The recheck hands the published prior verdict
     // path as its own pre-recheck snapshot — the CLI reads the prior fully
     // before it writes the output path — plus the repair-delta path.
-    const exit = await hands(
-      mode === 'recheck'
-        ? plugin + '/scripts/kiln-review audit-recheck . .kiln ' + slice + ' ' + auditorOpts.model + ' ' + auditorOpts.effort + ' ' + P.audit + ' ' + P.delta + ' ' + P.audit
-        : plugin + '/scripts/kiln-review audit . .kiln ' + slice + ' ' + auditorOpts.model + ' ' + auditorOpts.effort + ' ' + P.audit,
-      'audit:' + mode)
+    const exit = degraded
+      ? await claudeAudit(mode)
+      : await hands(
+          mode === 'recheck'
+            ? plugin + '/scripts/kiln-review audit-recheck . .kiln ' + slice + ' ' + auditorOpts.model + ' ' + auditorOpts.effort + ' ' + P.audit + ' ' + P.delta + ' ' + P.audit
+            : plugin + '/scripts/kiln-review audit . .kiln ' + slice + ' ' + auditorOpts.model + ' ' + auditorOpts.effort + ' ' + P.audit,
+          'audit:' + mode)
     if (exit === 0 || exit === 10 || exit === 11) {
       // The ONE sanctioned audit-verdict parse (the gate-file mirror): the
       // kernel rederives the verdict from the published closed arrays and
@@ -1904,7 +2055,16 @@ const auditSeam = async (slice) => {
   // kernel derivation append the audit fact — through the trusted CLI verb,
   // never a bare shell append. Then the loop continues past the seam.
   if (loop.result === 'sealed' && derived === 'accept') {
-    if (await hands('node ' + plugin + '/scripts/kiln-review append-audit .kiln ' + slice, 'audit:append') !== 0) return persistFail('audit-append')
+    // The audit ledger line carries the family label, reread tri-state at append time
+    // (S4-D4/D5): absent appends dual, present single-family, an untrusted read HOLDS.
+    const auditFamily = await sealLabel('audit:seal-label')
+    if (auditFamily === null) {
+      return failStop('transport-failure',
+        { stage, active_slice: slice, next_action: 'Rerun stage build after fixing the transport: the degradation marker gave no trustworthy answer at the milestone audit append of slice ' + slice },
+        await voiceBeat('transport-failure', {}, 'The degradation marker gave no trustworthy answer at the milestone audit append of slice ' + slice + ' — the run holds rather than record an untrusted family label.', 1),
+        { gate: P.audit })
+    }
+    if (await hands('node ' + plugin + '/scripts/kiln-review append-audit .kiln ' + slice + ' ' + auditFamily, 'audit:append') !== 0) return persistFail('audit-append')
     return null
   }
   // Stop surfaces: the existing statuses, exactly as the build gate maps them.
@@ -1922,13 +2082,14 @@ const auditSeam = async (slice) => {
       { gate: P.audit, finding_ids: found.ids, passes: loop.repairs })
   }
   if (loop.result === 'degraded') {
-    // The degraded hard-stop the slice gates take, with an audit-honest next
-    // step: the milestone auditor has no single-family fallback, so the seam
-    // waits on codex — the mark and the ack record the stop as ever.
+    // S4-D2: the FIRST codex-down detection is the acknowledgment stop the slice gates
+    // take — persist BOTH markers and stop. The acked re-run enters with the marker set
+    // and audits single-family through the claude seat above; the append reads the
+    // marker at append time and records single-family honestly.
     const db = await voiceBeat('degradation', {}, 'Codex is not answering — answer continue to proceed single-family.')
     if (await hands('touch ' + P.degraded + ' ' + P.ack, 'degraded:mark') !== 0) return persistFail('degraded-mark')
     beats.push(db)
-    return stop('degraded', { stage, active_slice: slice, next_action: 'Restore codex, then relaunch stage build: the milestone audit of slice ' + slice + ' needs the second family' })
+    return stop('degraded', { stage, active_slice: slice, next_action: 'Acknowledge single-family degradation, then relaunch stage build: the milestone audit of slice ' + slice + ' completes single-family' })
   }
   if (loop.result === 'gate-unreachable') {
     return failStop('gate-unreachable',
@@ -2191,7 +2352,13 @@ for (const [idx, entry] of slices.entries()) {
   // the slice itself, so a seal that follows a same-family gate speaks
   // single-family; dual only when the marker is absent at the moment of the
   // seal.
-  const label = await hands('test -f ' + P.degraded, 'degraded:check') === 0 ? 'single-family' : 'dual'
+  const label = await sealLabel('degraded:check')
+  if (label === null) {
+    return failStop('transport-failure',
+      { stage, active_slice: slice, next_action: 'Rerun stage build after fixing the transport: the degradation marker gave no trustworthy answer at the seal of slice ' + slice },
+      await voiceBeat('transport-failure', {}, 'The degradation marker gave no trustworthy answer at the seal of slice ' + slice + ' — the run holds rather than seal an untrusted family label.', 1),
+      { gate: P.gate })
+  }
   // Branch verb (INTAKE-28): the seal append rides the trusted kiln-review CLI as
   // an opaque `append-seal` verb. A Sonnet kernel leg refuses a bare
   // `echo >> seals.log` — it reads seals.log as a dual-key attestation ledger and

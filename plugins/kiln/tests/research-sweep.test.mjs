@@ -20,8 +20,8 @@ const coreSrc = srcLines.slice(
   srcLines.findIndex(l => l.includes('RESEARCH_CORE_END')),
 ).join('\n')
 const core = new Function(coreSrc + `
-  return { parseArgs, gateOutcome, resolveTier, researchTiersValid, ratifyLoop, validLedgerRef, validateProbeRequest, recoveryDecision, strictSubsetProgress, capFromDial }`)()
-const { parseArgs, gateOutcome, resolveTier, researchTiersValid, ratifyLoop, validLedgerRef, validateProbeRequest, recoveryDecision, strictSubsetProgress, capFromDial } = core
+  return { parseArgs, gateOutcome, resolveTier, researchTiersValid, ratifyLoop, validLedgerRef, validateProbeRequest, recoveryDecision, strictSubsetProgress, capFromDial, verdictExit, gateReviewInvalid, LAW_HASH }`)()
+const { parseArgs, gateOutcome, resolveTier, researchTiersValid, ratifyLoop, validLedgerRef, validateProbeRequest, recoveryDecision, strictSubsetProgress, capFromDial, verdictExit, gateReviewInvalid, LAW_HASH } = core
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
 const PLUGIN = '/abs/plugins/kiln'
@@ -35,6 +35,8 @@ const TIERS_OK = {
     'kernel-leg': { family: 'claude', alias: 'inherit', effort: 'high' },
     'stage-law': { family: 'claude', alias: 'fable', effort: 'high' },
     'ratify-reviewer': { family: 'gpt', alias: 'gpt-sol', effort: 'high' },
+    // S4: the codex-absent claude ratify seat the degraded feasibility path consumes.
+    'fallback-reviewer': { family: 'claude', alias: 'opus', effort: 'high' },
   },
 }
 async function runSweep(kargs, script) {
@@ -43,7 +45,10 @@ async function runSweep(kargs, script) {
     : kargs
   // invalidate is the top-of-run freshness hand; it passes by default so the label harness reaches
   // the path under test, and a test that cares about it overrides the entry.
-  const full = { 'tiers:boot': TIERS_OK, invalidate: OK, 'invalidate:repair': OK, ...script }
+  // S4: the degradation path-selector fires before the ratify seat is chosen; the harness
+  // answers marker-absent (exit 1) by default so a scenario takes the codex ratify seat, as
+  // before. The degraded scenarios override with exit 0 (present) or an untrusted exit.
+  const full = { 'tiers:boot': TIERS_OK, invalidate: OK, 'invalidate:repair': OK, 'feasibility:degraded': { exit: 1 }, ...script }
   const calls = []
   const agentMock = async (prompt, opts = {}) => {
     calls.push({ label: opts.label, prompt, opts })
@@ -102,7 +107,7 @@ test('core: resolveTier is family-aware — claude passes through, gpt resolves,
   assert.deepEqual(resolveTier(TIERS_OK, 'ratify-reviewer'), { effort: 'high', model: 'gpt-5.6-sol' })
 })
 
-test('core: researchTiersValid holds the three consumed roles to the HIGH floor and a resolvable gpt alias', () => {
+test('core: researchTiersValid holds the four consumed roles to the HIGH floor and a resolvable gpt alias', () => {
   const cfg = () => JSON.parse(JSON.stringify(TIERS_OK))
   assert.equal(researchTiersValid(cfg()), true)
   assert.equal(researchTiersValid(null), false)
@@ -111,6 +116,9 @@ test('core: researchTiersValid holds the three consumed roles to the HIGH floor 
   const gi = cfg(); gi.roles['ratify-reviewer'].alias = 'inherit'; assert.equal(researchTiersValid(gi), false, 'a gpt role may not be inherit')
   const gr = cfg(); delete gr.resolver['gpt-sol']; assert.equal(researchTiersValid(gr), false, 'a gpt alias with no resolver mapping fails')
   const mk = cfg(); delete mk.roles['kernel-leg']; assert.equal(researchTiersValid(mk), false, 'a missing consumed role fails closed')
+  // S4: fallback-reviewer is the fourth boot-required role — the codex-absent claude ratify seat.
+  // A config that omits it fails closed at boot, so the degraded path can never resolve an unbooted seat.
+  const mf = cfg(); delete mf.roles['fallback-reviewer']; assert.equal(researchTiersValid(mf), false, 'a missing fallback-reviewer role fails closed — the degraded seat must be booted')
 })
 
 test('core (W6-F): ratifyLoop honors the injected reversibility-keyed cap — a keyed 1 and a keyed 2 both bound the regenerate-candidate edge; every transport outcome holds', async () => {
@@ -143,11 +151,35 @@ test('core (W6): the recovery-decision copies agree with the kernel — source t
     lines.findIndex(l => l.includes('KERNEL_CORE_BEGIN')) + 1,
     lines.findIndex(l => l.includes('KERNEL_CORE_END')),
   ).join('\n')
-  const kernel = new Function(kernelCoreSrc + '\nreturn { recoveryDecision, strictSubsetProgress, capFromDial }')()
+  const kernel = new Function(kernelCoreSrc + '\nreturn { recoveryDecision, strictSubsetProgress, capFromDial, verdictExit, gateReviewInvalid, LAW_HASH }')()
   // Source-text parity: the two copies are byte-identical (verbatim), so their toString agrees.
   assert.equal(strictSubsetProgress.toString(), kernel.strictSubsetProgress.toString(), 'strictSubsetProgress is verbatim the kernel copy')
   assert.equal(recoveryDecision.toString(), kernel.recoveryDecision.toString(), 'recoveryDecision is verbatim the kernel copy')
   assert.equal(capFromDial.toString(), kernel.capFromDial.toString(), 'capFromDial is verbatim the kernel copy')
+  // S4: the verdict-exit map, the gate-verdict shape validator, and the digest regex are
+  // duplicated too — the claude feasibility ratify leg must enforce the SAME rules the codex
+  // ratify verb does, so these copies are drift-pinned to the kernel exactly the same way.
+  assert.equal(verdictExit.toString(), kernel.verdictExit.toString(), 'verdictExit is verbatim the kernel copy')
+  assert.equal(gateReviewInvalid.toString(), kernel.gateReviewInvalid.toString(), 'gateReviewInvalid is verbatim the kernel copy')
+  assert.equal(LAW_HASH.source, kernel.LAW_HASH.source, 'the locked-law digest regex is verbatim the kernel copy')
+  // Behavior parity for verdictExit across the reachable verdicts and the fail-closed default.
+  for (const v of ['accept', 'changes_required', 'blocked', 'invalid', undefined]) {
+    assert.equal(verdictExit(v), kernel.verdictExit(v), `verdictExit agrees on ${JSON.stringify(v)}`)
+  }
+  // Behavior parity for gateReviewInvalid across a battery: a clean accept, a mismatched echo,
+  // a wrong review_id, an out-of-cohort finding, and a malformed shape.
+  const DIG = 'a'.repeat(64)
+  const finding = { id: 'f1', criterion: 'c1', location: 'x.md:1', failure_mode: 'm', evidence: 'e', minimal_fix: 'fix' }
+  const cases = [
+    [{ review_id: 'r', law_hash: DIG, findings: [], blockers: [], verdict: 'accept' }, DIG, undefined, undefined],
+    [{ review_id: 'r', law_hash: 'b'.repeat(64), findings: [], blockers: [], verdict: 'accept' }, DIG, undefined, undefined],
+    [{ review_id: 'r', law_hash: DIG, findings: [finding], blockers: [], verdict: 'changes_required' }, DIG, 'other', undefined],
+    [{ review_id: 'r', law_hash: DIG, findings: [finding], blockers: [], verdict: 'changes_required' }, DIG, undefined, new Set(['z9'])],
+    [{ review_id: 'r', law_hash: DIG, findings: [{ id: 'f1' }], blockers: [], verdict: 'changes_required' }, DIG, undefined, undefined],
+  ]
+  for (const [g, lh, rid, cohort] of cases) {
+    assert.equal(gateReviewInvalid(g, lh, rid, cohort), kernel.gateReviewInvalid(g, lh, rid, cohort), `gateReviewInvalid agrees on ${JSON.stringify(g)}`)
+  }
   // capFromDial behavior parity across the reachable dial readings.
   for (const leg of [{ exit: 0, recovery_cap: 2 }, { exit: 0, recovery_cap: 1 }, { exit: 0 }, { exit: 20, recovery_cap: 2 }, { exit: 0, recovery_cap: '2' }, undefined]) {
     assert.equal(capFromDial(leg), kernel.capFromDial(leg), `capFromDial agrees on ${JSON.stringify(leg)}`)
@@ -325,8 +357,8 @@ test('runtime (W6-S3 dogfood): a re-grade introducing a new finding id is reject
   assert.ok(!control.calls.some(c => c.label === 'promote'), 'the within-cohort re-grade still never promotes')
 })
 
-test('runtime: blocked, transport, gate-unreachable, and codex-unavailable each HOLD the law — never a promotion', async () => {
-  for (const exit of [11, 20, 127, 21]) {
+test('runtime: blocked, transport, and gate-unreachable each HOLD the law — never a promotion (codex-unavailable takes the S4 acknowledgment stop instead)', async () => {
+  for (const exit of [11, 20, 127]) {
     const { ret, calls } = await runSweep({ projectDir: '/p' }, { ...ACCEPT_RUN, 'ratify:gate': { exit } })
     assert.equal(ret.status, 'held', 'ratify exit ' + exit + ' holds the law')
     assert.ok(!calls.some(c => c.label === 'promote'), 'exit ' + exit + ': never promoted')
@@ -334,11 +366,73 @@ test('runtime: blocked, transport, gate-unreachable, and codex-unavailable each 
   }
 })
 
-test('runtime: a codex-unavailable ratify holds — never the build degraded single-family continue', async () => {
-  const { ret, calls } = await runSweep({ projectDir: '/p' }, { ...ACCEPT_RUN, 'ratify:gate': { exit: 21 } })
-  assert.equal(ret.status, 'held')
-  assert.ok(ret.beat.toLowerCase().includes('codex'), 'the hold is honest about the missing second family')
-  assert.ok(!calls.some(c => c.label && c.label.startsWith('degraded')), 'the feasibility read never advances single-family')
+test('runtime (S4, INTAKE-38): a codex-unavailable feasibility ratify is the acknowledgment stop — then the acked re-run promotes single-family via the opus fallback', async () => {
+  // FIRST detection: the codex ratify gate returns exit 21. The sweep persists BOTH markers
+  // and returns the distinct degraded status — never a held, never a promotion. The conductor
+  // literal continue relaunches the sweep.
+  const first = await runSweep({ projectDir: '/p' }, {
+    ...ACCEPT_RUN, 'ratify:gate': { exit: 21 }, 'feasibility:degraded-mark': OK,
+  })
+  assert.equal(first.ret.status, 'degraded', 'codex-down at feasibility ratify is the acknowledgment stop, not a hold')
+  assert.ok(first.calls.some(c => c.label === 'feasibility:degraded-mark'), 'both the degraded marker and its ack are persisted')
+  assert.ok(!first.calls.some(c => c.label === 'promote'), 'nothing promotes on the first detection')
+  assert.ok(first.ret.beat.toLowerCase().includes('codex'), 'the beat is honest about the missing second family')
+  // The ACKED re-run: the marker is present, so the claude OPUS ratifier runs. It echoes the
+  // pre-turn candidate digest, the post-turn digest is unchanged, and the read promotes
+  // single-family — the SAME accepted status the codex path returns, with a single-family beat.
+  const DIGEST = 'a'.repeat(64)
+  const verdict = { review_id: 'f-op', law_hash: DIGEST, findings: [], blockers: [], verdict: 'accept' }
+  const acked = await runSweep({ projectDir: '/p' }, {
+    'feasibility:degraded': { exit: 0 }, // the marker is present — the claude seat runs
+    'dial:read': DIAL_ON,
+    'producer': PRODUCER_CANDIDATE,
+    'candidate:check': OK,
+    'feasibility:digest': { exit: 0, ids: [DIGEST] },
+    'feasibility:invalidate': OK,
+    'feasibility-claude:review': { ok: true },
+    'feasibility:read': { exit: 0, ids: [JSON.stringify(verdict)] },
+    'feasibility:digest-confirm': { exit: 0, ids: [DIGEST] },
+    'feasibility:publish': OK,
+    'promote': OK,
+  })
+  assert.equal(acked.ret.status, 'accepted', 'the acked re-run ratifies single-family through the opus fallback and promotes')
+  const claudeCall = acked.calls.find(c => c.label === 'feasibility-claude:review')
+  assert.ok(claudeCall, 'the claude ratify leg ran on the degraded path')
+  assert.ok(!acked.calls.some(c => c.label === 'ratify:gate'), 'the codex ratify transport is never called when degraded')
+  assert.equal(claudeCall.opts.model, 'opus', 'the fallback ratifier is the opus seat, same family, opposite model')
+  assert.ok(acked.ret.beat.toLowerCase().includes('single-family'), 'the success beat says single-family — never a second family that did not sign')
+  assert.ok(!acked.ret.beat.includes('a second family signed'), 'the degraded promotion never claims a second family signed')
+})
+
+test('runtime (S4, INTAKE-38): the degraded claude feasibility ratifier holds transport-class on a bad echo and a post-turn tamper — never promotes', async () => {
+  // The acked scaffold, one leg falsified per scenario. The claude ratify seat computes the
+  // candidate digest before the turn, rejects a law_hash that does not echo it, and — because a
+  // claude mind can write files — recomputes the digest after the turn and rejects a tamper. Each
+  // holds the law transport-class, exactly the way the kernel claudeRatify mirror does.
+  const DIGEST = 'a'.repeat(64)
+  const accept = { review_id: 'f-op', law_hash: DIGEST, findings: [], blockers: [], verdict: 'accept' }
+  const base = (over) => runSweep({ projectDir: '/p' }, {
+    'feasibility:degraded': { exit: 0 }, // the marker is present — the claude seat runs
+    'dial:read': DIAL_ON,
+    'producer': PRODUCER_CANDIDATE,
+    'candidate:check': OK,
+    'feasibility:digest': { exit: 0, ids: [DIGEST] },
+    'feasibility:invalidate': OK,
+    'feasibility-claude:review': { ok: true },
+    'feasibility:read': { exit: 0, ids: [JSON.stringify(accept)] },
+    'feasibility:digest-confirm': { exit: 0, ids: [DIGEST] },
+    ...over,
+  })
+  // WRONG ECHO: the reviewer writes a law_hash that does not match the pre-turn candidate digest.
+  const wrongEcho = await base({ 'feasibility:read': { exit: 0, ids: [JSON.stringify({ ...accept, law_hash: 'b'.repeat(64) })] } })
+  assert.equal(wrongEcho.ret.status, 'held', 'a law_hash that does not echo the candidate digest holds the law')
+  assert.ok(!wrongEcho.calls.some(c => c.label === 'feasibility:publish'), 'the mismatched echo never publishes the verdict')
+  assert.ok(!wrongEcho.calls.some(c => c.label === 'promote'), 'the mismatched echo never promotes')
+  // TAMPER: the echo is honest, but the candidate bytes changed under the reviewer's turn.
+  const tamper = await base({ 'feasibility:digest-confirm': { exit: 0, ids: ['b'.repeat(64)] } })
+  assert.equal(tamper.ret.status, 'held', 'a candidate rewritten under the ratify turn holds the law')
+  assert.ok(!tamper.calls.some(c => c.label === 'feasibility:publish'), 'the tampered read never publishes')
+  assert.ok(!tamper.calls.some(c => c.label === 'promote'), 'the tampered read never promotes')
 })
 
 test('runtime: a producer that returns no sound work holds the law before any ratify', async () => {
@@ -367,7 +461,7 @@ test('runtime: a producer claiming a candidate that is not on disk holds the law
 // test -s, the request write, the atomic-rename promote) RUN against a temp project dir, and the
 // producer/gate mocks write exactly the files the real legs would — so freshness and the promotion
 // are tested as executed bytes, not inspected labels.
-const REAL_HANDS = new Set(['invalidate', 'invalidate:repair', 'candidate:check', 'ratify:request', 'candidate:recheck', 'promote', 'probe:prep', 'probe:check'])
+const REAL_HANDS = new Set(['invalidate', 'invalidate:repair', 'candidate:check', 'ratify:request', 'candidate:recheck', 'promote', 'probe:prep', 'probe:check', 'feasibility:degraded'])
 const CAND = '.kiln/docs/feasibility-candidate.md'
 const FEAS = '.kiln/docs/feasibility.md'
 const GATE = '.kiln/feasibility-gate.json'

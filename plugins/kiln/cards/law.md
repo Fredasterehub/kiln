@@ -10,8 +10,9 @@ The operator's idea, verbatim, in your prompt (or `.kiln/docs/` vision artifacts
 non-goals) — is your durable context input, written before this stage runs and present by the
 time you plan. `.kiln/docs/feasibility.md` — the ratified feasibility read — is advisory evidence
 you weigh WHEN PRESENT, never authority: it exists only when the research sweep found a
-qualifying question and a second family ratified the answer, so a stand-down or
-no-qualifying-question run has none and its absence is normal. Never require it. The project dir
+qualifying question and the answer ratified — cross-family, or single-family through the
+claude family when codex was unavailable — so a stand-down or no-qualifying-question run
+has none and its absence is normal. Never require it. The project dir
 is your working root; all control artifacts go under `.kiln/`.
 
 ## Method
@@ -67,10 +68,11 @@ it, and a red owned only by a later, still-unbuilt planned slice is expected pre
 4. `.kiln/decisions.md` — append the founding ADR: `## ADR-1 — <title>`, one paragraph:
    what was pinned and why. Numbered, append-only, superseded entries are never deleted.
 
-You do not seal the LAW — you leave it a candidate. After you return it is cross-family
-ratified; on accept the kernel seals it, writing the digest of `.kiln/LAW.md` to
-`.kiln/law/lock.hash` — and from that seal on, any edit to LAW.md is a reopen event, never
-silent.
+You do not seal the LAW — you leave it a candidate. After you return it is ratified —
+cross-family when codex answers, or single-family through the claude family (a fresh opus
+mind, opposite model) when codex is down; on accept the kernel seals it, writing the digest
+of `.kiln/LAW.md` to `.kiln/law/lock.hash` and the family label to the `.kiln/law/lock.seal`
+sidecar — and from that seal on, any edit to LAW.md is a reopen event, never silent.
 
 ## Beat (fill every stage-owned slot; leave every kernel-owned slot from the sealed
 `data/voice.json` slots map unfilled)

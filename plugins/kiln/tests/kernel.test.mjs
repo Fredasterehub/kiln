@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, appendFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -97,6 +98,13 @@ async function runKernel(kargs, script) {
     'perceptual:presence': { exit: 1 },
     'perceptual:dial': { exit: 0, perceptual: 'dormant', recovery_cap: 1 },
     'perceptual:marker-clear': { exit: 0 },
+    // S4: the degradation path-selector and seal-label reads fire on every law/audit
+    // path. The harness answers marker-absent by default (exit 1) so a scenario that
+    // does not script codex-down takes the codex seat and seals dual, exactly as before;
+    // the degraded scenarios override these with exit 0 (present) or a nonzero-nonone
+    // untrusted exit to exercise the tri-state HOLD.
+    'law:degraded': { exit: 1 }, 'law:seal-label': { exit: 1 },
+    'audit:degraded': { exit: 1 }, 'audit:seal-label': { exit: 1 },
     ...script,
   }
   const calls = []
@@ -198,15 +206,17 @@ test('content-blind: no filesystem, clock, randomness, or content parsing in the
   ]) {
     assert.ok(!code.includes(banned), `kernel code must not contain "${banned}"`)
   }
-  // W-01: exactly FOUR JSON.parse calls — the sanctioned parse-and-hop args
+  // W-01: exactly SIX JSON.parse calls — the sanctioned parse-and-hop args
   // adapter in the pure core (envelope mechanics), the gate-file mirror in the
   // workflow runtime (the kernel parses the raw candidate bytes it validates
   // and publishes), the W7-S2 audit-verdict mirror (the kernel parses the
-  // published audit bytes it rederives through reconcileAudit), and the W8-S3
+  // published audit bytes it rederives through reconcileAudit), the W8-S3
   // shared screen mirror (one read site serves the Claude candidate, the Claude
-  // escalation, and the recheck prior lineage). All are sanctioned envelope
-  // reads, never content parsing.
-  assert.equal(code.split('JSON.parse').length - 1, 4, 'exactly four JSON.parse (the args adapter + the gate-file mirror + the audit-verdict mirror + the shared screen mirror)')
+  // escalation, and the recheck prior lineage), and the S4 claude ratify and
+  // claude audit gate-file mirrors (each parses the raw candidate the opus
+  // fallback reviewer wrote before validating and publishing it). All are
+  // sanctioned envelope reads, never content parsing.
+  assert.equal(code.split('JSON.parse').length - 1, 6, 'exactly six JSON.parse (the args adapter + the gate-file mirror + the audit-verdict mirror + the shared screen mirror + the S4 claude ratify and audit mirrors)')
   assert.ok(coreSrc.includes('Parse-and-hop'), 'the adapter is the marked parse-and-hop region')
 })
 
@@ -1493,22 +1503,152 @@ test('runtime (W6-S3 dogfood, LAW): a recheck introducing a new finding id is re
   assert.ok(!control.calls.some(c => c.label === 'law:seal'), 'the within-cohort re-grade still never seals — it reads as an ordinary held')
 })
 
-test('runtime (Wave 1): codex unavailable at LAW ratify holds — never the build degraded single-family continue', async () => {
-  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+test('runtime (S4, INTAKE-38): codex unavailable at LAW ratify is the two-marker acknowledgment stop — then the acked re-run seals single-family via the opus fallback', async () => {
+  // FIRST detection: the codex ratify gate returns exit 21. The kernel persists BOTH
+  // markers and returns the distinct degraded acknowledgment stop — never a silent hold,
+  // never a seal. The conductor's literal continue relaunches the law stage.
+  const first = await runKernel({ stage: 'law', projectDir: '/p' }, {
     ...VOICE,
     ...ONBOARDING_OK,
     'law:preflight': GREEN,
     'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law' },
     'ratify:request': GREEN,
     'ratify:gate': { exit: 21 }, // codex unavailable
+    'degraded:mark': { exit: 0 },
     'state:write': GREEN,
   })
-  assert.equal(ret.status, 'held', 'codex-down at law ratify is a hold, not a degraded single-family continue')
-  assert.ok(!calls.some(c => c.label === 'ratify:repair'), 'no repair on codex-unavailable')
-  assert.ok(!calls.some(c => c.label === 'law:seal'), 'the LAW never locks without a second family')
-  assert.ok(!calls.some(c => c.label === 'degraded:mark'), 'never the build degraded-continue path — the law does not lock single-family')
-  assert.ok(ret.beat.toLowerCase().includes('codex'), 'the held beat is honest about the missing second family')
-  assert.ok(!ret.beat.includes('sealed'), 'the law never seals')
+  assert.equal(first.ret.status, 'degraded', 'codex-down at law ratify is the acknowledgment stop — the same two-marker stop the build and audit gates take, not a held')
+  assert.ok(first.calls.some(c => c.label === 'degraded:mark'), 'both the degraded marker and its ack are persisted for the acknowledgment')
+  assert.ok(!first.calls.some(c => c.label === 'ratify:repair'), 'no repair on codex-unavailable')
+  assert.ok(!first.calls.some(c => c.label === 'law:seal'), 'the LAW never locks on the first detection')
+  assert.ok(first.ret.beat.toLowerCase().includes('codex'), 'the degradation beat is honest about the missing second family')
+  assert.ok(!first.ret.beat.includes('sealed'), 'the law never seals on the acknowledgment stop')
+  // The ACKED re-run: the marker is present, so the claude OPUS ratifier runs. It echoes
+  // the pre-turn LAW digest as law_hash, the post-turn digest is unchanged (no tamper), and
+  // the LAW seals single-family with the lock.seal sidecar label.
+  const DIGEST = 'a'.repeat(64)
+  const verdict = { review_id: 'r-op', law_hash: DIGEST, findings: [], blockers: [], verdict: 'accept' }
+  const acked = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE,
+    ...ONBOARDING_OK,
+    'law:preflight': GREEN,
+    'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law' },
+    'law:degraded': { exit: 0 }, // the marker is present — the acked re-run takes the claude seat
+    'law:seal-label': { exit: 0 }, // present at seal time → single-family
+    'ratify:digest': { exit: 0, ids: [DIGEST] },
+    'ratify:invalidate': { exit: 0 },
+    'ratify-claude:review': { ok: true },
+    'ratify:read': { exit: 0, ids: [JSON.stringify(verdict)] },
+    'ratify:digest-confirm': { exit: 0, ids: [DIGEST] }, // unchanged — no tamper
+    'ratify:publish': { exit: 0 },
+    'law:milestone-projection': { exit: 0 },
+    'law:perceptual-table': { exit: 0 },
+    'law:seal': { exit: 0 },
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+  })
+  assert.equal(acked.ret.status, 'ok', 'the acked re-run ratifies single-family through the opus fallback and advances to build')
+  const claudeCall = acked.calls.find(c => c.label === 'ratify-claude:review')
+  assert.ok(claudeCall, 'the claude ratify leg ran on the degraded path')
+  assert.ok(!acked.calls.some(c => c.label === 'ratify:gate'), 'the codex ratify transport is never called when degraded — one seat, not two')
+  assert.equal(claudeCall.opts.model, 'opus', 'the fallback ratifier is the opus seat — opposite model to the fable author, same family')
+  const seal = acked.calls.find(c => c.label === 'law:seal')
+  assert.ok(seal && seal.prompt.includes('seal-law .kiln single-family'), 'the LAW seals with the single-family label — the lock.seal sidecar records the honest family')
+})
+
+test('runtime (S4, INTAKE-38): the degraded LAW claude ratifier holds transport-class on a bad echo, a post-turn tamper, and a stale candidate — never publishes, never seals', async () => {
+  // The acked (marker-present) claude ratify seat, with one leg falsified per scenario. The seat
+  // computes the candidate LAW digest before the turn, rejects a law_hash that does not echo it,
+  // recomputes the digest after the turn (a claude mind can write files) and rejects a tamper, and
+  // holds when the reviewer acked but wrote no fresh verdict. Each is the transport-class hold —
+  // the LAW never publishes and never seals on a claude verdict the kernel cannot trust.
+  const DIGEST = 'a'.repeat(64)
+  const accept = { review_id: 'r-op', law_hash: DIGEST, findings: [], blockers: [], verdict: 'accept' }
+  const base = (over) => runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE,
+    ...ONBOARDING_OK,
+    'law:preflight': GREEN,
+    'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law' },
+    'law:degraded': { exit: 0 }, // the marker is present — the acked re-run takes the claude seat
+    'ratify:digest': { exit: 0, ids: [DIGEST] },
+    'ratify:invalidate': { exit: 0 },
+    'ratify-claude:review': { ok: true },
+    'ratify:read': { exit: 0, ids: [JSON.stringify(accept)] },
+    'ratify:digest-confirm': { exit: 0, ids: [DIGEST] },
+    'state:write': GREEN,
+    ...over,
+  })
+  // WRONG ECHO: the reviewer writes a law_hash that does not match the pre-turn candidate digest.
+  const wrongEcho = await base({ 'ratify:read': { exit: 0, ids: [JSON.stringify({ ...accept, law_hash: 'b'.repeat(64) })] } })
+  assert.equal(wrongEcho.ret.status, 'transport-failure', 'a law_hash that does not echo the candidate digest holds transport-class')
+  assert.ok(!wrongEcho.calls.some(c => c.label === 'ratify:publish'), 'the mismatched echo never publishes')
+  assert.ok(!wrongEcho.calls.some(c => c.label === 'law:seal'), 'the mismatched echo never seals')
+  // TAMPER: the echo is honest, but the LAW bytes changed under the reviewer's turn.
+  const tamper = await base({ 'ratify:digest-confirm': { exit: 0, ids: ['b'.repeat(64)] } })
+  assert.equal(tamper.ret.status, 'transport-failure', 'a LAW rewritten under the ratify turn holds transport-class')
+  assert.ok(!tamper.calls.some(c => c.label === 'ratify:publish'), 'the post-turn tamper never publishes')
+  assert.ok(!tamper.calls.some(c => c.label === 'law:seal'), 'the post-turn tamper never seals')
+  // STALE CANDIDATE: the reviewer acked {ok:true} but wrote nothing — the read finds no verdict.
+  const stale = await base({ 'ratify:read': { exit: 1, ids: [] } })
+  assert.equal(stale.ret.status, 'transport-failure', 'an ack with no fresh candidate on disk holds transport-class')
+  assert.ok(!stale.calls.some(c => c.label === 'ratify:publish'), 'the stale ack never publishes')
+  assert.ok(!stale.calls.some(c => c.label === 'law:seal'), 'the stale ack never seals')
+})
+
+test('runtime (S4, INTAKE-38): an untrusted degradation marker HOLDS the family-label read at every seal site — the LAW seal, the milestone audit append, and the build seal never record a family they cannot trust', async () => {
+  // S4-D5: the family label is a TRI-STATE read of the degradation marker, reread at each seal
+  // site. test -f answers 0 (present → single-family) or 1 (absent → dual); an untrusted exit is
+  // neither, so the seal HOLDS transport-class rather than record a family label it cannot trust.
+  // LAW seal: an accepted codex ratify, then the seal-label read is untrusted.
+  const law = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE,
+    ...ONBOARDING_OK,
+    'law:preflight': GREEN,
+    'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law' },
+    'ratify:request': GREEN,
+    'ratify:gate': { exit: 0 },
+    'law:milestone-projection': { exit: 0 },
+    'law:perceptual-table': { exit: 0 },
+    'law:seal-label': { exit: 2 }, // untrusted — neither present nor absent
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+  })
+  assert.equal(law.ret.status, 'transport-failure', 'an untrusted marker at the LAW seal holds rather than lock an unknown family')
+  assert.ok(!law.calls.some(c => c.label === 'law:seal'), 'the LAW seal never runs on an untrusted family label')
+  // Milestone audit append: an accepted codex audit, then the append-label read is untrusted.
+  const audit = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'slice:s1': auditSlice(),
+    'law:pre-seal': GREEN,
+    'law:stage-end': GREEN,
+    'degraded:check': { exit: 1 },
+    'gate:review': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+    ...AUDIT_OK,
+    'audit:seal-label': { exit: 2 }, // untrusted at the append
+  })
+  assert.equal(audit.ret.status, 'transport-failure', 'an untrusted marker at the audit append holds rather than record an unknown family')
+  assert.ok(!audit.calls.some(c => c.label === 'audit:append'), 'the milestone audit never appends on an untrusted family label')
+  // Build seal: an accepted per-slice gate, then the seal-label read is untrusted.
+  const build = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'slice:s1': auditSlice(),
+    'law:pre-seal': GREEN,
+    'gate:review': { exit: 0 },
+    'degraded:check': { exit: 2 }, // untrusted at the slice seal — S4 rewired the old boolean through sealLabel
+    'state:write': GREEN,
+  })
+  assert.equal(build.ret.status, 'transport-failure', 'an untrusted marker at the build seal holds rather than seal an unknown family')
+  assert.ok(!build.calls.some(c => c.label === 'seal:append'), 'the build seal never appends on an untrusted family label')
 })
 
 test('runtime (Wave 1, A2): the SEALED-claiming LAW card beat speaks only after ratify+seal — never on a held transcript', async () => {
@@ -1522,16 +1662,18 @@ test('runtime (Wave 1, A2): the SEALED-claiming LAW card beat speaks only after 
     'law:preflight': GREEN,
     'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: LAW_SEALED_BEAT },
     'ratify:request': GREEN,
+    'degraded:mark': { exit: 0 },
     'law:milestone-projection': { exit: 0 },
     'law:perceptual-table': { exit: 0 },
     'state:write': GREEN,
   }
-  // HELD (codex down): the sealed narration is ABSENT — only the honest hold line.
+  // DEGRADED (codex down): the acknowledgment stop, whose sealed narration is ABSENT —
+  // only the honest degradation line, never the buffered SEALED card beat.
   const held = await runKernel({ stage: 'law', projectDir: '/p' }, { ...base, 'ratify:gate': { exit: 21 } })
-  assert.equal(held.ret.status, 'held')
+  assert.equal(held.ret.status, 'degraded')
   assert.ok(!held.ret.beat.includes('locked') && !held.ret.beat.includes('build begins') && !held.ret.beat.includes('forge starts'),
-    'no SEALED / build-starts narration on a held transcript — an unratified plan never reads as sealed')
-  assert.ok(held.ret.beat.toLowerCase().includes('codex'), 'only the honest hold line speaks')
+    'no SEALED / build-starts narration on the degraded acknowledgment transcript — an unratified plan never reads as sealed')
+  assert.ok(held.ret.beat.toLowerCase().includes('codex'), 'only the honest degradation line speaks')
   // Accept: the sealed beat appears (past ratify AND seal).
   const accept = await runKernel({ stage: 'law', projectDir: '/p' }, {
     ...base, 'ratify:gate': { exit: 0 }, 'law:seal': { exit: 0 }, 'law:stage-end': GREEN,
@@ -3122,7 +3264,7 @@ test('runtime (W7-S2): a red receipt at the seam takes the law-red door — no a
   assert.equal(seamRed.slice, 's1', 'and names the seam slice as active_slice')
 })
 
-test('runtime (W7-S2): the audit adapter maps the closed exits — 20 transport-failure, 21 the degraded hard-stop, 127 gate-unreachable; none repair, none promote', async () => {
+test('runtime (W7-S2 / S4): the audit adapter maps the closed exits — 20 transport-failure, 21 the degraded acknowledgment stop, 127 gate-unreachable; none repair, none promote', async () => {
   const base = (exit) => ({
     ...VOICE,
     'law:preflight': GREEN,
@@ -3146,7 +3288,7 @@ test('runtime (W7-S2): the audit adapter maps the closed exits — 20 transport-
   assert.equal(degraded.ret.status, 'degraded')
   assert.ok(degraded.calls.some(c => c.label === 'degraded:mark'), 'the degraded stop marks for acknowledgment as the slice gates do')
   const auditDeg = stateArgs(degraded.calls)
-  assert.equal(auditDeg.key, 'restore-codex', 'the audit-degraded STATE takes the restore-codex key')
+  assert.equal(auditDeg.key, 'acknowledge-degrade', 'the audit-degraded STATE takes the acknowledge-degrade key — the acked re-run audits single-family, it never waits on codex')
   assert.equal(auditDeg.slice, 's1', 'and names only the seam slice as active_slice')
   const unreachable = await runKernel({ stage: 'build', projectDir: '/p' }, base(127))
   assert.equal(unreachable.ret.status, 'gate-unreachable')
@@ -3154,6 +3296,83 @@ test('runtime (W7-S2): the audit adapter maps the closed exits — 20 transport-
     assert.ok(!r.calls.some(c => c.label === 'audit:repair'), 'no repair edge is spent on a non-verdict class')
     assert.ok(!r.calls.some(c => c.label === 'audit:append'), 'no promotion without an accept')
   }
+})
+
+test('runtime (S4, INTAKE-38): the degraded claude milestone auditor holds transport-class on an orphan blocker and a malformed finding — never publishes, never appends', async () => {
+  // The acked (marker-present) claude auditor seat, given a well-formed echo but an unsound verdict.
+  // The seat feeds the SAME reconcileAudit derivation and the SAME referential rule the codex audit
+  // enforces — a blocker that names no finding id, or a finding missing its schema fields, is the
+  // invalid-artifact hold: no publish, no append, the seam holds transport-class.
+  const claudeAuditHold = (auditRead) => runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'slice:s1': auditSlice(),
+    'law:pre-seal': GREEN,
+    'law:stage-end': GREEN,
+    'degraded:check': { exit: 0 }, // the marker is present at the slice seal — single-family
+    'degraded-ack:check': { exit: 0 }, // acknowledged — the run continues single-family, never stops
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+    'audit:check': { exit: 1 }, // open seam
+    'law:pre-audit': GREEN,
+    'audit:degraded': { exit: 0 }, // the marker is present at the audit — the claude auditor seat
+    'audit-claude:lawhash': { exit: 0, ids: ['a'.repeat(64)] },
+    'audit-claude:invalidate': { exit: 0 },
+    'audit-claude:review': { ok: true },
+    'audit-claude:read': auditRead,
+  })
+  // ORPHAN BLOCKER: a blocked verdict whose blocker names no finding id — one well-formed finding f1.
+  const orphan = await claudeAuditHold(readAudit(auditVerdict('blocked', [auditFinding('f1')], ['bz'])))
+  assert.equal(orphan.ret.status, 'transport-failure', 'a blocker that names no finding holds the seam transport-class')
+  assert.ok(!orphan.calls.some(c => c.label === 'audit-claude:publish'), 'the orphan-blocker verdict never publishes')
+  assert.ok(!orphan.calls.some(c => c.label === 'audit:append'), 'the orphan-blocker verdict never appends')
+  // MALFORMED FINDINGS: a finding object missing its required schema fields.
+  const malformed = await claudeAuditHold(readAudit(auditVerdict('changes_required', [{ id: 'f1' }])))
+  assert.equal(malformed.ret.status, 'transport-failure', 'a finding missing its schema fields holds the seam transport-class')
+  assert.ok(!malformed.calls.some(c => c.label === 'audit-claude:publish'), 'the malformed verdict never publishes')
+  assert.ok(!malformed.calls.some(c => c.label === 'audit:append'), 'the malformed verdict never appends')
+})
+
+test('runtime (S4-B1, INTAKE-38): the degraded claude milestone auditor is seam-bounded to the kernel projection — an all-sealed resume audits ONLY the closing block and the cumulative prefix, never a later slice', async () => {
+  // The divergence Sol named: a labeled plan a,a,b (s1,s2 close milestone A; s3 closes B) resumes
+  // with every slice sealed on the ledger but the s2 seam audit still owed. seals.log holds the
+  // LATER s3, so a seal-ledger-authoritative auditor could accept the A milestone on s3's work or
+  // raise an out-of-prefix finding. The kernel derives the closing block and sealed prefix from its
+  // own trim-normalized projection and binds the claude auditor to them — s3 never enters the audit.
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|logic|A', 'obj|s2|logic|A', 'obj|s3|logic|B'] },
+    'seal:set': { exit: 0, ids: ['s1', 's2', 's3'] }, // every slice already sealed on the ledger
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+    // The s3 seam is already logged; the s2 seam audit is missing — only s2 re-fires.
+    'audit:check': (p) => ({ exit: p.includes('^s3 ') ? 0 : 1 }),
+    'law:pre-audit': GREEN,
+    'audit:degraded': { exit: 0 }, // the marker is present — the claude auditor seat
+    'audit-claude:lawhash': { exit: 0, ids: ['a'.repeat(64)] },
+    'audit-claude:invalidate': { exit: 0 },
+    'audit-claude:review': { ok: true },
+    'audit-claude:read': readAudit(auditVerdict('accept')),
+    'audit-claude:publish': { exit: 0 },
+    'audit:read': readAudit(auditVerdict('accept')),
+    'audit:seal-label': { exit: 0 }, // present → single-family append
+    'audit:append': { exit: 0 },
+  })
+  assert.equal(ret.status, 'ok', 'the all-sealed resume completes once the owed s2 seam audits single-family')
+  const audits = calls.filter(c => c.label === 'audit-claude:review')
+  assert.equal(audits.length, 1, 'only the unlogged s2 seam re-fires — the logged s3 seam skips')
+  const prompt = audits[0].prompt
+  assert.ok(prompt.includes('closes at slice s2'), 'the audit is bound to the s2 seam')
+  assert.ok(/closing block is exactly: s1, s2\b/.test(prompt), 'the closing block is the contiguous same-label run ending at s2 — exactly s1, s2')
+  assert.ok(/cumulative sealed prefix under audit is exactly: s1, s2\b/.test(prompt), 'the cumulative prefix under audit is exactly s1, s2 — the seam and everything before it')
+  assert.ok(!/\bs3\b/.test(prompt), 'the later slice s3 is never named — out of scope, never evidence, never a finding')
+  assert.ok(!prompt.includes('seal ledger') && !prompt.includes('.kiln/seals.log'), 'the seal ledger is no longer the prefix authority — the kernel projection is')
 })
 
 test('runtime (W7-S2): changes_required and blocked both drive the Claude repair + audit-recheck cycle — 11 lands on the reject class and recovers within the cap', async () => {
@@ -3438,8 +3657,8 @@ test('dogfood (W7-S3): a labeled two-milestone plan runs the whole build branch 
   const c2seal = calls.findIndex(c => c.label === 'seal:append' && c.prompt.includes('append-seal .kiln c2'))
   assert.ok(c2seal >= 0 && c2seal < calls.indexOf(audits[0]), 'the mid-plan seam audits only after its slice sealed')
   assert.ok(calls.indexOf(audits[0]) < calls.findIndex(c => c.label === 'slice:p1'), 'the seam gate rules mid-loop — p1 builds only past the accepted c2 audit')
-  assert.equal(auditsLog(dir), 'c2 accept\np2 accept\n',
-    'the on-disk audits.log carries exactly the two seam slice ids, one line per seam, written only by append-audit')
+  assert.equal(auditsLog(dir), 'c2 accept dual\np2 accept dual\n',
+    'the on-disk audits.log carries exactly the two seam slice ids with the codex-path dual label, one line per seam, written only by append-audit')
   assert.ok(ret.beat.includes('Slice c2 sealed — dual') && ret.beat.includes('Slice p2 sealed — dual'), 'the seal beats speak for the seam slices')
   assert.equal(stateArgs(calls).key, 'relaunch-validate', 'the stage returns ok and advances to validate')
 })
@@ -3473,7 +3692,7 @@ test('dogfood (W7-S3): a changes_required audit drives repair → recheck-accept
     'the recheck carries prior + delta + output — the lineage the CLI cohort rule enforces')
   assert.ok(calls[at('delta:check')].prompt.includes('test -s .kiln/repair-delta.md'), 'the delta pointer is confirmed on disk before any recheck')
   assert.ok(calls[at('law:pre-audit-recheck')].prompt.includes('check-receipt.txt'), 'the recheck judges a refreshed receipt')
-  assert.equal(auditsLog(dir), 's1 accept\n', 'the recovered seam leaves its one-line outcome fact on disk')
+  assert.equal(auditsLog(dir), 's1 accept dual\n', 'the recovered seam leaves its one-line outcome fact on disk with the codex-path dual label')
 })
 
 test('dogfood (W7-S3): a blocked audit reopens through the repair cycle and recovers — and a cap-exhausted seam holds on the existing blocked shape with a static next_action', async () => {
@@ -3495,7 +3714,7 @@ test('dogfood (W7-S3): a blocked audit reopens through the repair cycle and reco
   })
   assert.equal(ok.ret.status, 'ok', 'blockers reopen their owning slices and the repaired seam advances')
   assert.equal(ok.calls.filter(c => c.label === 'audit:repair').length, 1, 'one repair edge spent on the blocked verdict')
-  assert.equal(auditsLog(recovered), 's1 accept\n', 'the recovered blocked seam still promotes exactly one line')
+  assert.equal(auditsLog(recovered), 's1 accept dual\n', 'the recovered blocked seam still promotes exactly one line with the codex-path dual label')
   // The cap-exhausted variant: cap 1, the recheck still blocked over a strictly
   // shrunk cohort — genuine progress, but the budget is spent, so the seam holds.
   const held = mkProject()
@@ -3545,7 +3764,7 @@ test('dogfood (W7-S3): a run interrupted between the seam seal and its audit res
   const s2seal = first.calls.findIndex(c => c.label === 'seal:append' && c.prompt.includes('append-seal .kiln s2'))
   const s2audit = first.calls.findIndex(c => c.label === 'audit:review' && c.prompt.includes(' s2 '))
   assert.ok(s2seal >= 0 && s2seal < s2audit, 'the seam slice sealed BEFORE its audit was attempted — the re-fire window')
-  assert.equal(auditsLog(dir), 's1 accept\n', 'only the accepted seam left its outcome fact — the interrupted one still owes its audit')
+  assert.equal(auditsLog(dir), 's1 accept dual\n', 'only the accepted seam left its outcome fact — the interrupted one still owes its audit')
   // Run 2 (resume): every slice sealed; the REAL grep-skip consults the same
   // disk — s1 is logged and skips, s2 re-fires with the receipt refreshed first.
   const resumed = await runKernel({ stage: 'build', projectDir: dir, plugin: REAL_PLUGIN }, {
@@ -3563,7 +3782,7 @@ test('dogfood (W7-S3): a run interrupted between the seam seal and its audit res
   const receiptAt = resumed.calls.findIndex(c => c.label === 'law:pre-audit')
   assert.ok(receiptAt >= 0 && receiptAt < resumed.calls.indexOf(audits[0]) && resumed.calls[receiptAt].prompt.includes('check-receipt.txt'),
     'the LAW receipt refreshes on the skip path before the re-fired audit')
-  assert.equal(auditsLog(dir), 's1 accept\ns2 accept\n', 'audits.log completes — one outcome fact per seam, in seam order')
+  assert.equal(auditsLog(dir), 's1 accept dual\ns2 accept dual\n', 'audits.log completes — one outcome fact per seam, in seam order')
   assert.equal(stateArgs(resumed.calls).key, 'relaunch-validate', 'the completed build advances to validate')
 })
 
@@ -3582,7 +3801,7 @@ test('dogfood (W7-S3): non-contiguous repeated labels are legal — a|b|a raises
   assert.ok(audits[0].prompt.includes('.kiln s1 '), 'the first a-block closes at s1 and audits itself')
   assert.ok(audits[1].prompt.includes('.kiln s2 '), 'the b block closes at s2')
   assert.ok(audits[2].prompt.includes('.kiln s3 '), 'the second a-block closes at s3 — its own audit, never merged with s1')
-  assert.equal(auditsLog(dir), 's1 accept\ns2 accept\ns3 accept\n', 'both a-seams are logged, each under its own closing slice id')
+  assert.equal(auditsLog(dir), 's1 accept dual\ns2 accept dual\ns3 accept dual\n', 'both a-seams are logged, each under its own closing slice id')
 })
 
 test('dogfood (W7-S3): an unlabeled plan pays one final audit on disk — and an all-sealed resume missing that final audit fires it', async () => {
@@ -3597,7 +3816,7 @@ test('dogfood (W7-S3): an unlabeled plan pays one final audit on disk — and an
   })
   assert.equal(built.ret.status, 'ok')
   assert.equal(built.calls.filter(c => c.label === 'audit:review').length, 1, 'exactly one audit — the implicit whole-build seam')
-  assert.equal(auditsLog(fresh), 'u2 accept\n', 'the single final-slice fact on disk')
+  assert.equal(auditsLog(fresh), 'u2 accept dual\n', 'the single final-slice fact on disk')
   // The all-sealed resume with that final audit missing: every seal in place,
   // an empty audits.log — the final audit fires on the skip path and writes it.
   const resumeDir = mkProject()
@@ -3612,7 +3831,7 @@ test('dogfood (W7-S3): an unlabeled plan pays one final audit on disk — and an
   const audits = resumed.calls.filter(c => c.label === 'audit:review')
   assert.equal(audits.length, 1, 'the missing final audit fires on the all-sealed resume')
   assert.ok(audits[0].prompt.includes(' u2 '), 'it targets the final slice')
-  assert.equal(auditsLog(resumeDir), 'u2 accept\n', 'the resume leaves the same one-line fact')
+  assert.equal(auditsLog(resumeDir), 'u2 accept dual\n', 'the resume leaves the same one-line fact')
 })
 
 test('dogfood (W7-S3): ratify, build, and audit gates coexist across one project run — the audit consumes the SAME one-read cap as the build gate, and the recovery machinery elsewhere is untouched', async () => {
@@ -4421,7 +4640,7 @@ test('dogfood (W8-S4): the milestone eye and the screening room coexist across o
     'audit:read': readAudit(auditVerdict('accept')),
   })
   assert.equal(build.ret.status, 'ok')
-  assert.equal(auditsLog(dir), 's1 accept\n', 'the milestone eye left its real audits.log fact')
+  assert.equal(auditsLog(dir), 's1 accept dual\n', 'the milestone eye left its real audits.log fact')
   assert.equal(build.calls.filter(c => c.label === 'cap:read').length, 1, 'the build gates drink from the cap:read dial leg')
   for (const label of ['perceptual:presence', 'perceptual:dial', 'perceptual:family', 'screen:review', 'perceptual:addendum']) {
     assert.ok(!build.calls.some(c => c.label === label), 'the screening room never wakes at build: ' + label)
@@ -4442,6 +4661,136 @@ test('dogfood (W8-S4): the milestone eye and the screening room coexist across o
   assert.equal(v.calls.filter(c => c.label === 'perceptual:dial').length, 1, 'the screening loop drinks from the perceptual dial leg')
   assert.equal(v.calls.filter(c => c.label === 'cap:read').length, 0, 'the caps are independent — validate never reads the build cap leg')
   assert.ok(!v.calls.some(c => c.label && c.label.startsWith('audit:')), 'the milestone eye never wakes at validate')
-  assert.equal(auditsLog(dir), 's1 accept\n', 'the audit fact survives the screening room untouched')
+  assert.equal(auditsLog(dir), 's1 accept dual\n', 'the audit fact survives the screening room untouched')
   assert.ok(!existsSync(marker(dir)), 'the recovered run leaves no marker')
+})
+
+// ── S4: dogfood — the no-codex acknowledged arc, one shared dir end to end ─────
+// The capstone (INTAKE-38): the full degraded lifecycle across BOTH workflows over ONE project
+// dir on real disk. The sweep drops the real degradation markers; every later stage READS those
+// same real markers (never a mock) and takes the single-family seat, and the trusted CLIs write
+// the single-family artifacts for real — the marker one workflow set is the marker the next
+// consumes. The model legs stay mocked; the marker reads, the seal, the append, and the promote run.
+const SWEEP_SRC = readFileSync(fileURLToPath(new URL('../workflows/research-sweep.js', import.meta.url)), 'utf8')
+const runSweepBody = async (dir, script) => {
+  const calls = []
+  const agentMock = async (prompt, opts = {}) => {
+    calls.push({ label: opts.label, prompt, opts })
+    const h = script[opts.label]
+    if (h === undefined) throw new Error('unmocked sweep label: ' + opts.label)
+    return typeof h === 'function' ? await h(prompt) : h
+  }
+  const body = SWEEP_SRC.replace('export const meta', 'const meta')
+  const fn = new AsyncFunction('agent', 'pipeline', 'parallel', 'log', 'phase', 'args', 'budget', 'workflow', body)
+  const ret = await fn(agentMock, null, null, () => {}, () => {}, { plugin: PLUGIN, projectDir: dir }, null, null)
+  return { ret, calls }
+}
+
+test('dogfood (S4, INTAKE-38): the acknowledged no-codex arc runs end to end over ONE dir — degraded markers, single-family feasibility, LAW seal, and milestone audit all land on real disk', async () => {
+  const dir = mkProject()
+  mkdirSync(join(dir, '.kiln/docs'), { recursive: true })
+  const CAND = '# Feasibility\nsingle-family read\n'
+  const CAND_DIGEST = createHash('sha256').update(CAND).digest('hex')
+  const LAW = '# LAW\nthe locked plan\n'
+  const LAW_DIGEST = createHash('sha256').update(LAW).digest('hex')
+  writeFileSync(join(dir, '.kiln/LAW.md'), LAW)
+  const writeCand = () => { writeFileSync(join(dir, '.kiln/docs/feasibility-candidate.md'), CAND); return { facts: { status: 'ok', pointers: ['.kiln/docs/feasibility-candidate.md'], schema_valid: true }, narration_beat: 'the feasibility read is on disk' } }
+  const rExit = (p) => runReal(p, dir)
+
+  // (a) The sweep's FIRST codex-down detection — the acknowledgment stop leaves both markers on disk.
+  const a = await runSweepBody(dir, {
+    'tiers:boot': TIERS_OK,
+    'invalidate': rExit,
+    'dial:read': { exit: 0, research: 'on', recovery_cap: 2 },
+    'producer': writeCand,
+    'candidate:check': rExit,
+    'feasibility:degraded': rExit, // absent on disk → the codex seat
+    'ratify:request': { exit: 0 },
+    'ratify:gate': { exit: 21 }, // codex unavailable
+    'feasibility:degraded-mark': rExit, // the real touch of both markers
+  })
+  assert.equal(a.ret.status, 'degraded', 'the first codex-down feasibility ratify is the acknowledgment stop')
+  assert.ok(existsSync(join(dir, '.kiln/degraded')) && existsSync(join(dir, '.kiln/degraded-ack')),
+    'both degradation markers are on real disk after the acknowledgment stop')
+
+  // (b) The acked sweep re-run — the REAL marker routes the opus claude seat and promotes single-family.
+  const feasVerdict = { review_id: 'f-op', law_hash: CAND_DIGEST, findings: [], blockers: [], verdict: 'accept' }
+  const b = await runSweepBody(dir, {
+    'tiers:boot': TIERS_OK,
+    'invalidate': rExit,
+    'dial:read': { exit: 0, research: 'on', recovery_cap: 2 },
+    'producer': writeCand,
+    'candidate:check': rExit,
+    'feasibility:degraded': rExit, // present on disk → the claude seat, read from the marker the sweep dropped
+    'feasibility:digest': { exit: 0, ids: [CAND_DIGEST] },
+    'feasibility:invalidate': { exit: 0 },
+    'feasibility-claude:review': { ok: true },
+    'feasibility:read': { exit: 0, ids: [JSON.stringify(feasVerdict)] },
+    'feasibility:digest-confirm': { exit: 0, ids: [CAND_DIGEST] },
+    'feasibility:publish': { exit: 0 },
+    'promote': rExit, // the real atomic rename to the canonical path
+  })
+  assert.equal(b.ret.status, 'accepted', 'the acked re-run promotes single-family through the opus claude seat')
+  assert.ok(!b.calls.some(c => c.label === 'ratify:gate'), 'the codex ratify transport is never called once the marker is present')
+  assert.equal(b.calls.find(c => c.label === 'feasibility-claude:review').opts.model, 'opus', 'the fallback ratifier is the opus seat')
+  assert.equal(readFileSync(join(dir, '.kiln/docs/feasibility.md'), 'utf8'), CAND, 'the ratified candidate is the canonical feasibility read on disk')
+  assert.ok(b.ret.beat.toLowerCase().includes('single-family'), 'the promotion beat is honest about the single family')
+
+  // (c) The kernel LAW stage over the SAME dir — the REAL marker routes the claude ratifier; seal-law locks single-family.
+  const lawVerdict = { review_id: 'r-op', law_hash: LAW_DIGEST, findings: [], blockers: [], verdict: 'accept' }
+  const c = await runKernel({ stage: 'law', projectDir: dir, plugin: REAL_PLUGIN }, {
+    ...VOICE,
+    ...ONBOARDING_OK,
+    'law:preflight': GREEN,
+    'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law' },
+    'law:degraded': rExit, // present → the claude ratify seat, read from the same marker
+    'ratify:digest': { exit: 0, ids: [LAW_DIGEST] },
+    'ratify:invalidate': { exit: 0 },
+    'ratify-claude:review': { ok: true },
+    'ratify:read': readCandidate(lawVerdict),
+    'ratify:digest-confirm': { exit: 0, ids: [LAW_DIGEST] },
+    'ratify:publish': { exit: 0 },
+    'law:milestone-projection': { exit: 0 },
+    'law:perceptual-table': { exit: 0 },
+    'law:seal-label': rExit, // present → single-family
+    'law:seal': rExit, // the REAL seal-law verb digests LAW.md and writes the sidecar
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+  })
+  assert.equal(c.ret.status, 'ok', 'the LAW ratifies single-family and seals over the same dir')
+  assert.ok(!c.calls.some(x => x.label === 'ratify:gate'), 'the codex ratify transport is never called at the degraded LAW')
+  assert.equal(readFileSync(join(dir, '.kiln/law/lock.seal'), 'utf8'), LAW_DIGEST + ' single-family\n',
+    'the digest-bound lock.seal sidecar records single-family on real disk')
+  assert.equal(readFileSync(join(dir, '.kiln/law/lock.hash'), 'utf8'), LAW_DIGEST + '\n',
+    'lock.hash is the bare 64-hex digest the audit and screen verbs require')
+
+  // (d) The kernel build stage — a seam audits through the claude auditor and appends single-family on disk.
+  const auditAccept = { review_id: 'aud-1', law_hash: LAW_DIGEST, findings: [], blockers: [], verdict: 'accept' }
+  const d = await runKernel({ stage: 'build', projectDir: dir, plugin: REAL_PLUGIN }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'slice:s1': auditSlice(),
+    'law:pre-seal': GREEN,
+    'law:stage-end': GREEN,
+    'degraded:check': rExit, // present → the slice seal reads single-family
+    'degraded-ack:check': rExit, // acked → the run continues, never re-stops
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+    'audit:check': { exit: 1 }, // open seam
+    'law:pre-audit': GREEN,
+    'audit:degraded': rExit, // present → the claude auditor seat
+    'audit-claude:lawhash': { exit: 0, ids: [LAW_DIGEST] },
+    'audit-claude:invalidate': { exit: 0 },
+    'audit-claude:review': { ok: true },
+    'audit-claude:read': readAudit(auditAccept),
+    'audit-claude:publish': { exit: 0 },
+    'audit:read': readAudit(auditAccept),
+    'audit:seal-label': rExit, // present → single-family
+    'audit:append': rExit, // the REAL append-audit verb writes audits.log
+  })
+  assert.equal(d.ret.status, 'ok', 'the build seals single-family and its seam audits over the same dir')
+  assert.equal(auditsLog(dir), 's1 accept single-family\n', 'the milestone audit fact on real disk carries the single-family label')
 })

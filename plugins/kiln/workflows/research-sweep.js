@@ -1,6 +1,6 @@
 export const meta = {
   name: 'kiln-research-sweep',
-  description: 'Pre-law feasibility gate: reads the Gauge research dial, and when research is on runs a bounded producer over the six canonical areas, cross-family ratifies any feasibility candidate, and promotes only an accepted read to .kiln/docs/feasibility.md — every non-accept outcome holds the law. Branches on closed machine facts only.',
+  description: 'Pre-law feasibility gate: reads the Gauge research dial, and when research is on runs a bounded producer over the six canonical areas, ratifies any feasibility candidate (cross-family, or single-family through the claude family when codex is unavailable), and promotes only an accepted read to .kiln/docs/feasibility.md — every non-accept outcome holds the law. Branches on closed machine facts only.',
 }
 
 // RESEARCH_CORE_BEGIN — pure core: no fs, no clock, no randomness (tests evaluate this region)
@@ -37,8 +37,9 @@ function resolveTier(c, key) {
   return opts
 }
 
-// A FOCUSED fail-closed boot check: research-sweep consumes exactly three roles (kernel-leg for
-// the mechanical legs, stage-law for the producer, ratify-reviewer for the cross-family gate).
+// A FOCUSED fail-closed boot check: research-sweep consumes exactly four roles (kernel-leg for
+// the mechanical legs, stage-law for the producer, ratify-reviewer for the cross-family gate,
+// and — S4 — fallback-reviewer for the codex-absent claude ratify seat the degraded path calls).
 // It validates only those against the same rules the kernel's validateTiers applies — the HIGH
 // floor, a resolvable concrete gpt alias — so an unknown or effort-down tier holds the law at
 // boot rather than throwing mid-sweep. The kernel's full boot gate still rules the whole config
@@ -48,7 +49,7 @@ function researchTiersValid(c) {
   if (c.doctrine !== true) return false
   if (!c.resolver || typeof c.resolver !== 'object') return false
   if (!c.roles || typeof c.roles !== 'object') return false
-  for (const key of ['kernel-leg', 'stage-law', 'ratify-reviewer']) {
+  for (const key of ['kernel-leg', 'stage-law', 'ratify-reviewer', 'fallback-reviewer']) {
     const r = c.roles[key]
     if (!r || typeof r !== 'object') return false
     if (r.family !== 'claude' && r.family !== 'gpt') return false
@@ -142,6 +143,45 @@ function capFromDial(leg) {
   return d.exit === 0 && d.recovery_cap === 2 ? 2 : 1
 }
 
+// S4 (INTAKE-38): the verdict-exit map, the locked-law digest shape, and the gate-verdict
+// shape validator, DRIFT-PINNED verbatim from workflows/kernel.js (a Workflow body cannot
+// import). The claude feasibility ratify leg validates the verdict it publishes with the
+// SAME rules the codex ratify verb enforces — only the transport differs, never the trust
+// property. tests/research-sweep.test.mjs asserts these copies agree with the kernel copies
+// (source text), the same drift guard the recovery-decision copies carry.
+function verdictExit(v) {
+  return { accept: 0, changes_required: 10, blocked: 11 }[v] ?? 20
+}
+const LAW_HASH = /^[0-9a-f]{64}$/
+function gateReviewInvalid(g, lawHash, expectedReviewId, allowedFindingIds, locationRule) {
+  if (!g || typeof g !== 'object' || Array.isArray(g)) return 'not-an-object'
+  const keys = Object.keys(g)
+  const fields = ['review_id', 'law_hash', 'findings', 'blockers', 'verdict']
+  if (keys.length !== fields.length || fields.some(k => keys.indexOf(k) < 0)) return 'fields-mismatch'
+  if (typeof g.review_id !== 'string' || g.review_id.trim() === '') return 'review-id-empty'
+  if (expectedReviewId !== undefined && g.review_id !== expectedReviewId) return 'review-id-mismatch'
+  if (typeof g.law_hash !== 'string' || !LAW_HASH.test(g.law_hash) || g.law_hash !== lawHash) return 'law-hash-mismatch'
+  if (!Array.isArray(g.findings)) return 'findings-shape'
+  if (!Array.isArray(g.blockers) || g.blockers.some(b => typeof b !== 'string' || b.trim() === '')) return 'blockers-shape'
+  if (['accept', 'changes_required', 'blocked'].indexOf(g.verdict) < 0) return 'verdict-unrecognized'
+  const ids = new Set()
+  const findingFields = ['id', 'criterion', 'location', 'failure_mode', 'evidence', 'minimal_fix']
+  for (const f of g.findings) {
+    if (!f || typeof f !== 'object' || Array.isArray(f)) return 'finding-not-an-object'
+    const fk = Object.keys(f)
+    if (fk.length !== findingFields.length || findingFields.some(k => fk.indexOf(k) < 0)) return 'finding-fields-mismatch'
+    if (findingFields.some(k => typeof f[k] !== 'string' || f[k].trim() === '')) return 'finding-fields-empty'
+    if (!(locationRule || /^.+:\d+(?::\d+)?$/).test(f.location)) return 'finding-location-shape'
+    if (ids.has(f.id)) return 'finding-id-duplicate'
+    if (allowedFindingIds && !allowedFindingIds.has(f.id)) return 'finding-id-out-of-cohort'
+    ids.add(f.id)
+  }
+  if (g.verdict === 'accept' && (g.findings.length !== 0 || g.blockers.length !== 0)) return 'accept-with-findings'
+  if (g.verdict === 'changes_required' && (g.findings.length === 0 || g.blockers.length !== 0)) return 'changes-required-shape'
+  if (g.verdict === 'blocked' && g.blockers.length === 0) return 'blocked-without-blockers'
+  return null
+}
+
 // The PROBE_REQUEST message contract. During a brainstorm Da Vinci has no spawn tool and may
 // send the conductor at most ONE nonterminal envelope: a probe request carrying ONLY the ledger
 // path and the ledger sequence IDs to digest — never dialogue. validLedgerRef is the shared
@@ -195,6 +235,11 @@ const F = {
   feasibility: '.kiln/docs/feasibility.md',
   request: '.kiln/feasibility-ratify-request.json',
   gate: '.kiln/feasibility-gate.json',
+  // S4: the run-level degradation marker + its acknowledgment (shared with the kernel), and
+  // the claude ratify leg's own candidate-verdict temp (distinct from the feasibility doc).
+  degraded: '.kiln/degraded',
+  ack: '.kiln/degraded-ack',
+  gateTmp: '.kiln/.feasibility-gate.reviewer.tmp',
 }
 const EXIT = { type: 'object', additionalProperties: false, properties: { exit: { type: 'integer' } }, required: ['exit'] }
 // Closed-facts fetch shape: an exit code plus a schema-forced string list (the kernel idsFetch shape).
@@ -231,6 +276,10 @@ const STAGE_RESULT = {
   },
   required: ['facts', 'narration_beat'],
 }
+// S4: the claude ratify leg writes its verdict to the candidate temp and returns only this
+// light ack — the return carries no verdict authority; the workflow reads and validates the
+// bytes it will publish (the kernel claudeGate contract).
+const ACK = { type: 'object', additionalProperties: false, properties: { ok: { type: 'boolean' } }, required: ['ok'] }
 
 // Every non-accept outcome takes this shape: the law does not plan over unratified research, so
 // the conductor maps a held return to an existing hard stop and speaks the honest beat.
@@ -358,7 +407,57 @@ if (await hands('test -s ' + F.candidate, 'candidate:check') !== 0) {
 // same shape the kernel writes its LAW ratify request), then branches only on exit codes. The
 // review_id is workflow-issued; the reviewer is the opposite-family ratify-reviewer tier; the
 // artifact is the repo-relative candidate; the rubric is the ABSOLUTE feasibility-rubric path.
-const reviewerOpts = tier('ratify-reviewer')
+// S4 (INTAKE-38): the feasibility ratify TRANSPORT degrades to the claude family when codex
+// is down. A tri-state path-selector read chooses the seat — absent the cross-family codex
+// ratifier, present a fresh OPUS claude ratifier that mirrors the codex digest, echo and
+// lineage rules and records single-family honestly. The marker is set only after a first
+// codex-down detection stopped for the operator acknowledgment, so the claude seat runs only
+// on an acked re-run. `.kiln/degraded` is sufficient provenance for the feasibility read.
+const degraded = await hands('test -f ' + F.degraded, 'feasibility:degraded') === 0
+const reviewerOpts = degraded ? tier('fallback-reviewer') : tier('ratify-reviewer')
+// The claude feasibility ratify leg (the kernel claudeRatify mirror): the workflow computes
+// the candidate digest BEFORE the reviewer turn, the opus reviewer echoes it as law_hash, the
+// workflow rejects a mismatched echo, and — because a claude agent CAN write files — it
+// RECOMPUTES the candidate digest AFTER the turn and confirms it unchanged; a tampered read is
+// a transport failure, never a publish. The verdict shape is validated with the SAME
+// gateReviewInvalid the codex path enforces, drift-pinned above.
+const claudeFeasRatify = async (mode) => {
+  const d0 = await idsFetch('sha256sum ' + F.candidate + ' | cut -d" " -f1', 'feasibility:digest', 'a one-element array holding the 64-hex candidate digest printed on stdout, [] if exit != 0')
+  if (d0.exit !== 0 || d0.ids.length !== 1 || !LAW_HASH.test(d0.ids[0])) return 20
+  const candidateDigest = d0.ids[0]
+  let expectedReviewId, allowedFindingIds
+  if (mode === 'recheck') {
+    const prior = await idsFetch(
+      "node -p 'JSON.stringify((g=>[String(g.review_id)].concat((g.findings||[]).map(f=>String(f.id))))(require(\"./" + F.gate + "\")))'",
+      'feasibility:recheck-cohort', 'a JSON array whose first element is the prior gate review_id and whose remaining elements are the prior finding ids, [] if exit != 0')
+    if (prior.exit !== 0 || prior.ids.length < 1) return 20
+    expectedReviewId = prior.ids[0]
+    allowedFindingIds = new Set(prior.ids.slice(1))
+  }
+  if (await hands('rm -f ' + F.gateTmp, 'feasibility:invalidate') !== 0) return 20
+  const ack = await agent([
+    'You are the feasibility ratify reviewer: a fresh mind judging the feasibility candidate against the feasibility rubric.',
+    'Project dir: ' + projectDir + '. Read the feasibility candidate at ' + F.candidate + ' and the feasibility rubric at ' + plugin + '/data/feasibility-rubric.json.',
+    'Judge the candidate against every rubric dimension. Execute nothing — no commands, no tests, no builds: the candidate is a read, judged as text. Change no file: judge the candidate, never edit it.',
+    mode === 'recheck'
+      ? 'Read and reuse the prior review_id from ' + F.gate + ' first. Recheck only the finding ids in ' + F.gate + ' against the regenerated candidate. Preserve each unresolved finding id; never add one. Accept only when every listed finding is repaired.'
+      : 'Report only substantiated rubric violations at exact path:line locations with stable finding ids. Verdict rules: accept only when findings and blockers are both empty; changes_required only for repairable findings with no blockers; blocked only when the review cannot complete, with blocker reasons. Mint a fresh review_id.',
+    'Set law_hash to exactly ' + candidateDigest + ' — the sha256 of the candidate you judged; copy it verbatim so it binds this verdict to those bytes.',
+    'Compose the verdict object per ' + plugin + '/scripts/review-schema.json, and as the FINAL act of your turn write it as JSON to ' + F.gateTmp + '. Then return { ok: true } — the ack carries no verdict; the workflow reads and validates the file you wrote.',
+  ].join('\n'), { label: 'feasibility-claude:' + mode, ...reviewerOpts, schema: ACK })
+  if (!ack || ack.ok !== true) return 20
+  const raw = await idsFetch('cat ' + F.gateTmp, 'feasibility:read', 'a one-element array holding the exact candidate verdict file contents printed on stdout, [] if exit != 0')
+  if (raw.exit !== 0 || raw.ids.length !== 1) return 20
+  let g
+  try { g = JSON.parse(raw.ids[0]) } catch { return 20 }
+  if (gateReviewInvalid(g, candidateDigest, expectedReviewId, allowedFindingIds) !== null) return 20
+  // S4-D1: the write-capable turn tamper check — the candidate bytes the reviewer judged
+  // must still be on disk. A changed digest means the ratifier rewrote the read it graded.
+  const d1 = await idsFetch('sha256sum ' + F.candidate + ' | cut -d" " -f1', 'feasibility:digest-confirm', 'a one-element array holding the 64-hex candidate digest printed on stdout, [] if exit != 0')
+  if (d1.exit !== 0 || d1.ids.length !== 1 || d1.ids[0] !== candidateDigest) return 20
+  const w = await hands('mv -f ' + F.gateTmp + ' ' + F.gate, 'feasibility:publish')
+  return w === 0 ? verdictExit(g.verdict) : 20
+}
 const ratifyReq = JSON.stringify({
   review_id: 'feasibility-ratify', reviewer_model: reviewerOpts.model, reviewer_effort: reviewerOpts.effort,
   artifact: F.candidate, rubric: plugin + '/data/feasibility-rubric.json',
@@ -368,7 +467,8 @@ const writeReq = [
   "cat > .kiln/.feasibility-ratify-request.tmp <<'KILN_FEAS_EOF'", ratifyReq, 'KILN_FEAS_EOF',
   'mv -f .kiln/.feasibility-ratify-request.tmp ' + F.request,
 ].join('\n')
-if (await hands(writeReq, 'ratify:request') !== 0) {
+// The codex path alone carries a request file; the claude leg reads the rubric itself.
+if (!degraded && await hands(writeReq, 'ratify:request') !== 0) {
   return held('The ledger would not take the feasibility ratify request — the law holds until the write lands. Rerun.', { request: F.request })
 }
 const loop = await ratifyLoop({
@@ -378,11 +478,13 @@ const loop = await ratifyLoop({
   // F.gate: ratify-recheck reads the prior into memory before runGate writes the output. The <repo>
   // arg is the cwd-relative `.` (hands runs with cwd = projectDir) — never a bare projectDir, which
   // a whitespace path would split into extra argv and fail the gate.
-  gate: (mode) => hands(
-    mode === 'recheck'
-      ? shq(plugin + '/scripts/kiln-review') + ' ratify-recheck . ' + F.request + ' ' + F.gate + ' ' + F.gate
-      : shq(plugin + '/scripts/kiln-review') + ' ratify . ' + F.request + ' ' + F.gate,
-    'ratify:gate'),
+  gate: degraded
+    ? (mode) => claudeFeasRatify(mode)
+    : (mode) => hands(
+        mode === 'recheck'
+          ? shq(plugin + '/scripts/kiln-review') + ' ratify-recheck . ' + F.request + ' ' + F.gate + ' ' + F.gate
+          : shq(plugin + '/scripts/kiln-review') + ' ratify . ' + F.request + ' ' + F.gate,
+        'ratify:gate'),
   // The pinned prior cohort for the strict-subset transition: the finding ids the last published
   // gate carries. A recheck must strictly shrink it or recoveryDecision holds the law.
   cohort: async () => {
@@ -420,13 +522,28 @@ if (loop.result === 'accepted') {
   if (await hands('mv -f ' + F.candidate + ' ' + F.feasibility, 'promote') !== 0) {
     return held('The accepted feasibility read would not promote to ' + F.feasibility + ' — the rename failed and the law holds rather than leave the ratified read unpublished. Rerun.', { candidate: F.candidate })
   }
-  return { status: 'accepted', beat: 'The research desk ratified — a second family signed the feasibility read. It rests at ' + F.feasibility + ', advisory to the law, never its authority. The forge moves on.', pointers: { feasibility: F.feasibility } }
+  // The success beat is availability-aware: dual names a second family, single-family names
+  // the fresh opus mind in the claude family — never a second family that did not sign.
+  const beat = degraded
+    ? 'The research desk ratified single-family — codex is not answering, so a fresh opus mind in the claude family signed the feasibility read, honestly marked. It rests at ' + F.feasibility + ', advisory to the law, never its authority. The forge moves on.'
+    : 'The research desk ratified — a second family signed the feasibility read. It rests at ' + F.feasibility + ', advisory to the law, never its authority. The forge moves on.'
+  return { status: 'accepted', beat, pointers: { feasibility: F.feasibility } }
 }
-// (e) Every non-accept outcome holds the law — rejected or stale research never becomes advice.
+// (e) S4-D2: a FIRST codex-down detection is the acknowledgment stop, not a hold — persist
+// BOTH markers and return the distinct degraded status. The conductor literal continue
+// relaunches the sweep; the acked re-run enters with the marker set and ratifies
+// single-family through the claude seat above. Reachable only on the codex path — the claude
+// leg never reports codex-unavailable.
+if (loop.result === 'codex-unavailable') {
+  if (await hands('touch ' + F.degraded + ' ' + F.ack, 'feasibility:degraded-mark') !== 0) {
+    return held('The ledger would not take the degradation markers — the law holds until the write lands. Rerun.', { posture: F.posture })
+  }
+  return { status: 'degraded', beat: 'Codex is not answering. I complete single-family only after you answer continue — a fresh opus mind in the claude family will ratify the feasibility read, and every seal will say so. Say `continue` and I proceed.', pointers: { posture: F.posture } }
+}
+// Every other non-accept outcome holds the law — rejected or stale research never becomes advice.
 const heldBeat = {
-  rejected: 'The feasibility read would not ratify after a repair — I do not lay the law over research a second family rejected. Revise the assumptions or stand research down, then rerun.',
+  rejected: 'The feasibility read would not ratify after a repair — I do not lay the law over research a reviewer rejected. Revise the assumptions or stand research down, then rerun.',
   blocked: 'The feasibility reviewer holds the research — the law waits on your ruling. Rule, then rerun.',
-  'codex-unavailable': 'The feasibility read needs an opposite-family ratifier and codex is not answering — I do not ratify research single-family. Restore codex, then rerun.',
   'gate-unreachable': 'The gate tool at ' + plugin + '/scripts/kiln-review is unreachable — not found or not executable; codex was never reached, so no feasibility verdict was possible. Restore it, then rerun.',
   'transport-failure': 'The feasibility ratify call went out and came back with no verdict — the law cannot plan over research the transport never confirmed. Fix the transport, then rerun.',
   'repair-failed': 'A feasibility repair pass did not land — the law holds with the research unratified. Rerun.',

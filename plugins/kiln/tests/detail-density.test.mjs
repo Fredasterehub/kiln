@@ -68,6 +68,9 @@ async function runLaw(detail) {
     'width:read': { exit: 0, width: 'floor' },
     'stage:law': { facts: { status: 'ok', pointers: ['.kiln/LAW.md'], schema_valid: true }, narration_beat: 'law beat' },
     // Wave 1: the law stage ratifies before advancing — accept, seal, advance.
+    // S4: the degradation path-selector and seal-label reads answer marker-absent (exit
+    // 1), so the law stage takes the codex ratify seat and seals dual, as before.
+    'law:degraded': { exit: 1 }, 'law:seal-label': { exit: 1 },
     'ratify:request': { exit: 0 },
     'ratify:gate': { exit: 0 },
     // S1: the milestone projection is confirmed before the seal.

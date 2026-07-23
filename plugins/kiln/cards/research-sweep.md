@@ -3,8 +3,9 @@
 *Contract card. The research-sweep workflow (`workflows/research-sweep.js`) launches this
 one-shot, fresh-context producer when the Gauge research dial reads `on` — after
 onboarding/vision, before the kernel law stage. The workflow never reads this file; it branches
-on your returned `facts.status`, and when you write a candidate it ratifies that candidate
-cross-family before any promotion. You never ask the operator.*
+on your returned `facts.status`, and when you write a candidate it ratifies that candidate —
+cross-family, or single-family through the claude family when codex is unavailable — before
+any promotion. You never ask the operator.*
 
 ## When it runs
 Only when the research dial is `on` — novel work, or risky/irreversible reversibility. A
@@ -40,7 +41,8 @@ not-applicable so a reader can confirm nothing was skipped by accident. Never as
   build leans on no unsettled assumption; there is nothing to ratify.
 - **Some area qualifies** → write the feasibility CANDIDATE at
   `.kiln/docs/feasibility-candidate.md` — a candidate, NOT the canonical
-  `.kiln/docs/feasibility.md`; the workflow promotes it only after a second family ratifies it.
+  `.kiln/docs/feasibility.md`; the workflow promotes it only after ratification — a second
+  family, or a fresh opus mind in the claude family when codex is down.
   One section per addressed area: the assumption, its evidence or recorded uncertainty, and its
   reversibility cost. Return `facts.status` `'ok'`.
 
