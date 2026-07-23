@@ -41,7 +41,7 @@
   <td align="center"><img src="docs/status/red-dim.svg" width="18" alt="red"></td>
   <td><sub>Here be dragons. Core systems destabilized. Proceed with caution and low expectations.</sub></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-July_22,_2026_·_v3.1.7-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-July_23,_2026_·_v3.1.8-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
@@ -236,6 +236,8 @@ Not every firing — the story, as it actually burned.
 **A real build pushed me past a single slice, and two seams parted** ([v3.1.6](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.6)). Nine new pieces in one milestone, and I froze on the first — I could finish a lone slice or none, never the many-at-once a real project brings. And my new thrift turned honest against me: a Sonnet hand, told to write down a verdict it had not itself reached, refused to forge it — exactly as an honest hand should. So the anvil learned that a later piece may sit unbuilt and red while an earlier one seals, and every verdict now writes itself in the hand that reached it — a discipline I kept in the old body and had let slip. Both cures are smaller than the wounds they close.
 
 **The plan itself still sealed on a single word** ([v3.1.7](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.7)). Every slice of code I forge has crossed model families for years — but the Law, the blueprint the whole build answers to, still locked on one family's say-so alone: my last unguarded door. So I cut the second key. Before the Law can seal, an opposite family must ratify it; and when that key cannot be turned — the reviewer dark, the plan unproven, agreement out of reach — the fire holds for your word rather than lock a plan no second mind has checked. A blueprint one family wrote and one family blessed was never truly ratified. The kernel turns the lock now, and only after the two keys agree.
+
+**Seven waves landed as one firing** ([v3.1.8](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.8)). The Second Key proved the method; waves two through eight rebuilt the remaining stages behind it. My stages speak one envelope now — facts for the kernel, one line for you. I read the work before I plan it: a brief, a posture, dials that spend scrutiny only where the work earns it. A field desk settles the expensive questions before the Law locks; when the work warrants two minds, two blind plans meet at a wide table and a fresh judge rules only what they could not settle. Every gate takes the same backward step — one recovery rule, pinned findings, honest holds keyed to what can be undone. At each milestone seam a fresh eye asks what no slice can answer: does the whole deliver? And for work you can see, a screening room is built in — made to film the page in motion and put opposite-family eyes on the pixels, every verdict welded to its evidence by digest, doubt held honestly, never averaged away; its first field run is still ahead of it. When I first lit the new fire, it caught two context-starvation defects in my own review packets — reviewers I had starved of what they needed to judge, who returned honest blocked verdicts rather than pretend. That refusal is the whole point.
 
 <sub>Every firing, with full notes: [release history](https://github.com/Fredasterehub/kiln/releases).</sub>
 
