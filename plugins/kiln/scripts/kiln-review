@@ -672,6 +672,55 @@ function repository(path) {
   }
 }
 
+// W1-S2 (Defect B): the state-commit vocabulary. The kernel persisted STATE.md by
+// handing a courier a bash heredoc that spelled out the whole ledger; a safety-tuned
+// model reads that as forging a transition past validation and REFUSES, converting even
+// honest holds into persist-failed. Here the courier speaks only closed words — a
+// transition token, the stage, the slice, a next-action KEY, the density, and pointer
+// paths — and this verb owns the document, the hint prose and the clock. The token names
+// the transition kind (advance/seal-advance move forward, hold/degrade/boundary stop);
+// an unsupported token, stage, key or density fails closed and nothing is written.
+const STATE_TOKENS = new Set(['advance', 'seal-advance', 'hold', 'degrade', 'boundary'])
+const STATE_STAGES = new Set(['law', 'build', 'validate', 'report'])
+const STATE_SLICE_ID = /^[A-Za-z0-9._/-]+$/
+// A pointer is a repo-relative path of safe characters only — no shell metacharacter,
+// whitespace, or parent-escape rides the STATE.md pointers line or the courier argv.
+const STATE_POINTER = /^[A-Za-z0-9._/-]+$/
+
+// The next-action KEY table: each key resolves to one fixed operator hint, with the
+// current stage and active slice filled in. relaunch-* name their own forward stage, so
+// they ignore the current stage. An unknown key returns null and the verb fails closed.
+function stateNextAction(key, stage, slice) {
+  const hasSlice = slice !== 'none'
+  switch (key) {
+    case 'run-complete': return 'Run complete'
+    case 'relaunch-law': return 'Relaunch the kernel workflow with stage=law'
+    case 'relaunch-build': return 'Relaunch the kernel workflow with stage=build'
+    case 'relaunch-validate': return 'Relaunch the kernel workflow with stage=validate'
+    case 'relaunch-report': return 'Relaunch the kernel workflow with stage=report'
+    case 'reopen-slice': return `Reopen slice ${slice}: LAW is red — relaunch stage ${stage}`
+    case 'operator-ruling': return hasSlice
+      ? `Operator ruling: the run is blocked for slice ${slice} — rule, then relaunch stage ${stage}`
+      : `Operator ruling: the run is blocked — rule, then relaunch stage ${stage}`
+    case 'restore-gate': return `Rerun stage ${stage} after restoring the gate tool`
+    case 'restore-codex': return `Restore codex, then relaunch stage ${stage} — the second family is needed`
+    case 'acknowledge-degrade': return `Acknowledge single-family degradation, then relaunch stage ${stage}`
+    case 'repair-failed': return hasSlice
+      ? `Rerun stage ${stage}: the repair pass did not land for slice ${slice}`
+      : `Rerun stage ${stage}: the repair pass did not land`
+    case 'rerun-onboarding': return `Rerun onboarding, then relaunch stage ${stage}`
+    // A "Rerun stage X" hint names its TARGET stage, which may differ from the current
+    // stage — a build with no slice list must return to the LAW producer, never rerun
+    // build. rerun-stage stays as the same-stage fallback when no target is parsed.
+    case 'rerun-law': return 'Rerun stage law'
+    case 'rerun-build': return 'Rerun stage build'
+    case 'rerun-validate': return 'Rerun stage validate'
+    case 'rerun-report': return 'Rerun stage report'
+    case 'rerun-stage': return `Rerun stage ${stage}`
+    default: return null
+  }
+}
+
 const [mode, ...args] = process.argv.slice(2)
 if (mode === 'review' && args.length === 3) {
   const [repoPath, requestFile, outputFile] = args
@@ -1059,10 +1108,73 @@ if (mode === 'review' && args.length === 3) {
     if (off !== undefined) return `finding ${off.id} criterion ${off.criterion} is outside the surviving escalation scope`
     return null
   }, evidence.images)
+} else if (mode === 'state-commit' && args.length >= 6) {
+  // W1-S2 (Defect B): the trusted, content-blind STATE.md writer. The courier carries
+  // only closed words; this verb validates the transition, composes the eight locked
+  // lines (the exact former stateDoc format), derives the next-action prose from the
+  // closed key, stamps updated_at itself, and writes UUID-temp -> renameSync. Any
+  // invalid word halts by name before the write — a stale or unsupported transition
+  // never lands, and no next-action prose ever rode the courier for a leg to refuse.
+  const [kilnDir, token, stage, activeSlice, key, density, ...pointers] = args
+  if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
+    stop('transport_failure', 'state-commit kilnDir must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  if (!STATE_TOKENS.has(token)) {
+    stop('transport_failure', `state-commit token must be one of ${[...STATE_TOKENS].join('|')}`, TRANSPORT_FAILURE)
+  }
+  if (!STATE_STAGES.has(stage)) {
+    stop('transport_failure', `state-commit stage must be one of ${[...STATE_STAGES].join('|')}`, TRANSPORT_FAILURE)
+  }
+  if (activeSlice !== 'none' && !STATE_SLICE_ID.test(activeSlice)) {
+    stop('transport_failure', 'state-commit active_slice must be none or a slice id of letters, digits, dot, underscore, hyphen or slash', TRANSPORT_FAILURE)
+  }
+  if (density !== 'broad' && density !== 'engineer') {
+    stop('transport_failure', 'state-commit density must be broad or engineer', TRANSPORT_FAILURE)
+  }
+  const nextAction = stateNextAction(key, stage, activeSlice)
+  if (nextAction === null) {
+    stop('transport_failure', 'state-commit next_action_key is not a known key', TRANSPORT_FAILURE)
+  }
+  // A1: token and key must agree on direction — a forward token (advance, seal-advance)
+  // carries only a forward key (run-complete, relaunch-*), a stop token only a stop key.
+  // The kernel never emits a contradiction; the trusted verb enforces its own contract so
+  // a bypassed or tampered call fails closed.
+  const forwardToken = token === 'advance' || token === 'seal-advance'
+  const forwardKey = key === 'run-complete' || key.startsWith('relaunch-')
+  if (forwardToken !== forwardKey) {
+    stop('transport_failure', 'state-commit token and next_action_key disagree on the transition direction', TRANSPORT_FAILURE)
+  }
+  // B1: every pointer re-validated against the strict repo-relative grammar — no shell
+  // metacharacter, whitespace, or parent-escape — belt-and-suspenders behind the kernel
+  // filter and the shq quoting. A malformed pointer fails closed, nothing written.
+  if (pointers.some((p) => !STATE_POINTER.test(p) || p.includes('..'))) {
+    stop('transport_failure', 'state-commit pointers must be repo-relative safe paths', TRANSPORT_FAILURE)
+  }
+  const updatedAt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
+  const doc = [
+    '# STATE',
+    'stage: ' + stage,
+    'active_slice: ' + activeSlice,
+    'next_action: ' + nextAction,
+    'density: ' + density,
+    'pointers: ' + pointers.join(' '),
+    'seals: .kiln/seals.log',
+    'updated_at: ' + updatedAt,
+  ].join('\n') + '\n'
+  const target = join(kilnDir, 'STATE.md')
+  try {
+    mkdirSync(kilnDir, { recursive: true })
+    const temporary = join(kilnDir, `.STATE.tmp-${process.pid}-${randomUUID()}`)
+    writeFileSync(temporary, doc)
+    renameSync(temporary, target)
+  } catch (error) {
+    stop('transport_failure', `state-commit could not write STATE.md: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  process.exit(ACCEPT)
 } else {
   stop(
     'transport_failure',
-    'usage: kiln-review review <repo> <request.json> <gate-review.json> | kiln-review recheck <repo> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir> | kiln-review ratify <repo> <request.json> <gate-review.json> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json> | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> | kiln-review screen <repo> <kilnDir> <model> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <effort> <held-screen-review.json> <gate-review.json>',
+    'usage: kiln-review review <repo> <request.json> <gate-review.json> | kiln-review recheck <repo> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir> | kiln-review ratify <repo> <request.json> <gate-review.json> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json> | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> | kiln-review screen <repo> <kilnDir> <model> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...]',
     TRANSPORT_FAILURE,
   )
 }

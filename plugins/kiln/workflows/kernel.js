@@ -234,35 +234,83 @@ function streakIndex(iteration, corrections, length = 40) {
   return (Math.max(iteration + corrections, 1) - 1) % length
 }
 
-// STATE.md is one page of closed facts the kernel owns. updated_at is stamped
-// by the shell at write time (no clock in this runtime).
-function stateDoc(f) {
-  return [
-    '# STATE',
-    'stage: ' + (f.stage ?? ''),
-    'active_slice: ' + (f.active_slice ?? 'none'),
-    'next_action: ' + (f.next_action ?? ''),
-    'density: ' + (f.density === 'engineer' ? 'engineer' : 'broad'),
-    'pointers: ' + (f.pointers ?? []).join(' '),
-    'seals: ' + (f.seals ?? '.kiln/seals.log'),
-    'updated_at: {updated_at}',
-  ].join('\n')
+// STATE.md is one page of closed facts the kernel owns, but the courier that persists
+// it is a safety-tuned model — and a bash heredoc spelling out the whole ledger reads
+// to it as forging a transition past validation, so it refuses (Defect B). The kernel
+// therefore speaks only closed words to the trusted kiln-review state-commit verb: a
+// transition token, a next-action KEY, and neutral facts. That verb owns the document,
+// the hint prose and the clock; nothing moralizable rides the courier. The token names
+// the kind of move — advance/seal-advance go forward, hold/degrade/boundary stop — and
+// lets an unsupported transition fail closed.
+function stateToken(status) {
+  if (status === 'ok' || status === 'done') return 'advance'
+  if (status === 'blocked' || status === 'held') return 'hold'
+  if (status === 'degraded') return 'degrade'
+  return 'boundary'
 }
 
-// Exact shell for the atomic write: temp file, timestamp substitution, rename.
-// The heredoc terminator stands alone on its own line; set -e surfaces any
-// failed step as a nonzero exit.
-function atomicWriteCmd(doc) {
-  return [
-    'set -e',
-    'mkdir -p .kiln',
-    "cat > .kiln/.STATE.tmp <<'KILN_STATE_EOF'",
-    doc,
-    'KILN_STATE_EOF',
-    'ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)',
-    'sed -i "s/{updated_at}/$ts/" .kiln/.STATE.tmp',
-    'mv -f .kiln/.STATE.tmp .kiln/STATE.md',
-  ].join('\n')
+// The next-action KEY the courier carries in place of prose. Status is authoritative
+// for the kind of stop; next_action disambiguates only the statuses carrying more than
+// one operator hint — held (codex-restore vs operator-ruling vs failed repair), degraded
+// (audit needs codex vs seal proceeds single-family), the onboarding transport failure —
+// and picks the forward stage for an advance. kiln-review maps each key to its fixed hint.
+// A "Rerun stage X" hint names its TARGET stage X, which may differ from the current
+// stage — a build that finds no slice list must return to the LAW producer, not rerun
+// build (a resume loop). Parse the target so the rendered hint routes correctly.
+function rerunKey(nextAction) {
+  const prefix = 'Rerun stage '
+  if (nextAction.startsWith(prefix)) {
+    const target = nextAction.slice(prefix.length).split(/[ :]/)[0]
+    if (SPINE.includes(target)) return 'rerun-' + target
+  }
+  return 'rerun-stage'
+}
+function stateKey(status, nextAction) {
+  switch (status) {
+    case 'done': return 'run-complete'
+    case 'ok': {
+      const prefix = 'Relaunch the kernel workflow with stage='
+      return nextAction.startsWith(prefix) ? 'relaunch-' + nextAction.slice(prefix.length) : 'run-complete'
+    }
+    case 'law-red': return 'reopen-slice'
+    case 'blocked': return 'operator-ruling'
+    case 'gate-unreachable': return 'restore-gate'
+    case 'repair-failed': return 'repair-failed'
+    case 'degraded': return /restore codex/i.test(nextAction) ? 'restore-codex' : 'acknowledge-degrade'
+    case 'held':
+      if (/^Operator ruling/.test(nextAction)) return 'operator-ruling'
+      if (/restore codex/i.test(nextAction)) return 'restore-codex'
+      if (/pass did not land/.test(nextAction)) return 'repair-failed'
+      return rerunKey(nextAction)
+    case 'transport-failure':
+      return /^Rerun onboarding/.test(nextAction) ? 'rerun-onboarding' : rerunKey(nextAction)
+    case 'slices-invalid': return rerunKey(nextAction)
+    default: return rerunKey(nextAction)
+  }
+}
+
+// The strict pointer grammar: a repo-relative path of safe characters only — no shell
+// metacharacter, whitespace, or parent-escape. Agent-declared pointers are untrusted, so
+// a malformed one is dropped before it can ride the courier command (Defect B1).
+function safePointer(p) {
+  return typeof p === 'string' && /^[A-Za-z0-9._/-]+$/.test(p) && !p.includes('..')
+}
+// The research-sweep shq contract: close a word in single quotes with any embedded quote
+// escaped, so nothing a word contains can break out into live shell — belt to the grammar.
+// Built with split/join rather than a quote-bearing regex literal, which the content-blind
+// source scanner would misread as a string delimiter.
+function shq(s) {
+  return "'" + String(s).split("'").join("'\\''") + "'"
+}
+// The opaque state-commit courier command: only closed words, each single-quoted, and the
+// pointers filtered to the strict grammar. active_slice sanitizes to none unless it is a
+// real slice id (a stop with no valid slice names none); the trusted CLI re-validates
+// every word and owns the STATE.md bytes.
+function stateCommitCmd(plugin, token, stage, activeSlice, key, density, pointers) {
+  const slice = activeSlice && /^[A-Za-z0-9._/-]+$/.test(activeSlice) ? activeSlice : 'none'
+  const clean = pointers.filter(safePointer)
+  return 'node ' + shq(plugin + '/scripts/kiln-review') + ' state-commit .kiln '
+    + [token, stage, slice, key, density, ...clean].map(shq).join(' ')
 }
 
 function gateCmd(mode, p) {
@@ -775,7 +823,16 @@ const persistFail = (what) => ({
 // Every boundary, hard-stop, and success status returns only after STATE
 // persistence is confirmed; a failed write surfaces explicitly.
 const stop = async (status, fields, extra) => {
-  const w = await hands(atomicWriteCmd(stateDoc({ ...fields, density, pointers: [...routes] })), 'state:write')
+  // The courier carries a closed token + key, never next_action prose. The evidence
+  // paths that used to sit inline in the prose — extra.gate (the screen/audit/gate
+  // verdict) and extra.manifest (the held screen evidence generation) — now ride the
+  // pointers so nothing the operator must open is lost. stateCommitCmd filters them to
+  // the safe-path grammar, so a stray value can never reach the courier command.
+  const evidence = extra ? [extra.gate, extra.manifest].filter((p) => typeof p === 'string') : []
+  const pointers = [...new Set([...routes, ...evidence])]
+  const cmd = stateCommitCmd(plugin, stateToken(status), fields.stage, fields.active_slice ?? 'none',
+    stateKey(status, fields.next_action ?? ''), density, pointers)
+  const w = await hands(cmd, 'state:write')
   if (w !== 0) return persistFail('state-write')
   return done(status, extra)
 }
@@ -1576,7 +1633,7 @@ if (stage !== 'build') {
       beats.push(await voiceBeat('blocked', { passes: loop.repairs, ids: found.ids.join(', '), count: found.ids.length }, 'The gate held after ' + loop.repairs + ' repair passes — the ruling is yours.'))
       return stop('blocked',
         { stage, next_action: 'Operator ruling: the perceptual screen held ' + (survivors === null ? found.ids.length : survivors.length) + ' criteria (' + outcome + ') after ' + loop.repairs + ' repair passes — the verdict is at ' + P.screen + ' and the evidence manifest at ' + manifest },
-        { gate: P.screen, finding_ids: found.ids, passes: loop.repairs, escalation: outcome })
+        { gate: P.screen, manifest, finding_ids: found.ids, passes: loop.repairs, escalation: outcome })
     } else if (loop.result === 'degraded') {
       // PRIMARY transport unavailable — the degraded-class hold: no semantic ruling
       // happened, so NO marker and NO escalation; a stale marker is cleared. The
@@ -1665,8 +1722,10 @@ const slices = list.ids.map(parseSliceEntry)
 // unknown surface) halts BEFORE any builder dispatch — the law stage must author it right.
 const badSlice = slices.find(x => !x.valid)
 if (badSlice) {
+  // slices-invalid means no trustworthy slice exists — the whole descriptor is malformed,
+  // so a grammar-valid id inside it is not an in-plan slice. STATE names none, always.
   return failStop('slices-invalid',
-    { stage, active_slice: badSlice.id || 'none', next_action: 'Rerun stage law: a slice descriptor in ' + P.slices + ' is malformed' },
+    { stage, active_slice: 'none', next_action: 'Rerun stage law: a slice descriptor in ' + P.slices + ' is malformed' },
     'A slice descriptor is malformed — every slice needs an id of letters, digits, dot, underscore, hyphen or slash, and a surface of ui, logic, or mixed. The law stage must run again.')
 }
 // The ordered slice-id list backs the order-aware boundary predicate (INTAKE-26).
@@ -2125,7 +2184,7 @@ for (const entry of slices) {
   const s = await hands('node ' + plugin + '/scripts/kiln-review append-seal .kiln ' + slice + ' ' + label, 'seal:append')
   if (s !== 0) return persistFail('seal-append')
   beats.push(await voiceBeat('seal', { ...facts, label }, 'sealed — {label} · slice {slice}'))
-  const w = await hands(atomicWriteCmd(stateDoc({ stage, active_slice: slice, next_action: nextAct('build'), density, pointers: [...routes] })), 'state:write')
+  const w = await hands(stateCommitCmd(plugin, 'seal-advance', stage, slice, 'relaunch-build', density, [...routes]), 'state:write')
   if (w !== 0) return persistFail('state-write')
   // W7-S2: the seam gate fires after the fresh seal and its STATE write — the
   // milestone audit rules before the loop advances past the seam.

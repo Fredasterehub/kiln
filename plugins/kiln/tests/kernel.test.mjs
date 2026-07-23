@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, appendFileSync } from 'node:fs'
-import { execSync, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -20,13 +20,13 @@ const coreSrc = srcLines.slice(
 ).join('\n')
 const core = new Function(coreSrc + `
   return { SPINE, parseArgs, resolveStage, nextStage, gateOutcome, reviewLoop,
-           fillClosed, streakIndex, stateDoc, atomicWriteCmd, gateCmd, LAW_CHECK, LAW_GUARD,
+           fillClosed, streakIndex, stateToken, stateKey, stateCommitCmd, gateCmd, LAW_CHECK, LAW_GUARD,
            LAW_CHECK_RECEIPT, MILESTONE_PROJECTION_CHECK, PERCEPTUAL_TABLE_CHECK, verdictExit, redSetIsFuture, gateReviewInvalid,
            validateTiers, resolveTier, routeBuilder, parseSliceEntry, milestoneSeamAfter,
            validatePosture, recoveryDecision, strictSubsetProgress, capFromDial, reconcileAudit }`)()
 const {
   SPINE, parseArgs, resolveStage, nextStage, gateOutcome, reviewLoop,
-  fillClosed, streakIndex, stateDoc, atomicWriteCmd, gateCmd,
+  fillClosed, streakIndex, stateToken, stateKey, stateCommitCmd, gateCmd,
   LAW_CHECK_RECEIPT, MILESTONE_PROJECTION_CHECK, PERCEPTUAL_TABLE_CHECK, verdictExit, redSetIsFuture, gateReviewInvalid,
   validateTiers, resolveTier, routeBuilder, parseSliceEntry, milestoneSeamAfter,
   validatePosture, recoveryDecision, strictSubsetProgress, capFromDial, reconcileAudit,
@@ -112,6 +112,20 @@ async function runKernel(kargs, script) {
 const lastStateDoc = (calls) => {
   const w = calls.filter(c => c.label === 'state:write')
   return w.length ? w[w.length - 1].prompt : ''
+}
+// The state:write courier now runs the opaque `kiln-review state-commit .kiln <token>
+// <stage> <slice> <key> <density> [pointers...]` — no next_action prose (Defect B). Every
+// word is single-quoted (shq) against shell injection, so strip the quotes to read the
+// kernel's closed transition decision; the key -> hint-text rendering is proven per key
+// against the real CLI in state-commit.test.mjs.
+const stateArgs = (calls) => {
+  const cmd = lastStateDoc(calls)
+  const marker = 'state-commit .kiln '
+  const i = cmd.indexOf(marker)
+  if (i < 0) return { token: '', stage: '', slice: '', key: '', density: '', pointers: [], cmd }
+  const words = cmd.slice(i + marker.length).trim().split(' ').map((w) => w.replace(/^'|'$/g, ''))
+  const [token, stage, slice, key, density, ...pointers] = words
+  return { token, stage, slice, key, density, pointers, cmd }
 }
 const GREEN = { exit: 0, ids: [] }
 const LADDER = { exit: 0, ids: ['first-blood', 'spark-of-life', 'signal-fire'] }
@@ -303,22 +317,53 @@ test('streak arithmetic: the sealed formula, clamped and wrapping', () => {
   assert.equal(streakIndex(3, 0, 3), 2, 'wraps at the ladder length')
 })
 
-test('STATE doc: all six locked fields present, shell stamps the clock', () => {
-  const doc = stateDoc({ stage: 'build', active_slice: 's1', next_action: 'Relaunch the kernel workflow with stage=validate', pointers: ['.kiln/STATE.md'] })
-  for (const f of ['stage:', 'active_slice:', 'next_action:', 'pointers:', 'seals:', 'updated_at:']) {
-    assert.ok(doc.includes(f), `missing field ${f}`)
-  }
-  assert.ok(doc.includes('{updated_at}'), 'clock is stamped at write time, never in-script')
+test('state transition: status maps to the closed courier token, next_action to the key', () => {
+  // The courier speaks only closed words (Defect B). stateToken names the transition
+  // kind; stateKey selects the operator hint — status-authoritative, with next_action
+  // disambiguating the few statuses that carry more than one hint. The STATE.md bytes and
+  // the atomic write live in the trusted CLI and are proven in state-commit.test.mjs.
+  assert.equal(stateToken('ok'), 'advance')
+  assert.equal(stateToken('done'), 'advance')
+  assert.equal(stateToken('blocked'), 'hold')
+  assert.equal(stateToken('held'), 'hold')
+  assert.equal(stateToken('degraded'), 'degrade')
+  assert.equal(stateToken('law-red'), 'boundary')
+  assert.equal(stateToken('transport-failure'), 'boundary')
+
+  assert.equal(stateKey('done', 'Run complete'), 'run-complete')
+  assert.equal(stateKey('ok', 'Relaunch the kernel workflow with stage=build'), 'relaunch-build')
+  // law-red always reopens its owner, even when the prose reads "Rerun stage build".
+  assert.equal(stateKey('law-red', 'Rerun stage build: the LAW is red at the milestone audit of slice s1'), 'reopen-slice')
+  assert.equal(stateKey('blocked', 'Operator ruling: gate blocked for slice s1'), 'operator-ruling')
+  assert.equal(stateKey('gate-unreachable', 'Rerun stage build after restoring the gate tool'), 'restore-gate')
+  assert.equal(stateKey('repair-failed', 'Rerun stage build: the repair pass did not land for slice s1'), 'repair-failed')
+  // degraded carries two distinct hints: the milestone audit needs codex; the seal proceeds single-family.
+  assert.equal(stateKey('degraded', 'Restore codex, then relaunch stage build: the milestone audit of slice s1 needs the second family'), 'restore-codex')
+  assert.equal(stateKey('degraded', 'Acknowledge single-family degradation, then relaunch stage build'), 'acknowledge-degrade')
+  // held resolves three hints by its prose; the onboarding transport failure keeps its own key.
+  assert.equal(stateKey('held', 'Operator ruling: the ratify reviewer held the LAW'), 'operator-ruling')
+  assert.equal(stateKey('held', 'The LAW needs an opposite-family ratifier and codex is not answering — restore codex, then rerun stage law'), 'restore-codex')
+  assert.equal(stateKey('held', 'Rerun stage law — a LAW repair pass did not land'), 'repair-failed')
+  assert.equal(stateKey('transport-failure', 'Rerun onboarding: .kiln/brief.md is empty'), 'rerun-onboarding')
+  // B2: a "Rerun stage X" hint carries its TARGET stage — a build missing its slice list
+  // returns to LAW, not to build. rerunKey parses the target; same-stage cases match.
+  assert.equal(stateKey('transport-failure', 'Rerun stage law: no slice list at .kiln/slices.json'), 'rerun-law')
+  assert.equal(stateKey('slices-invalid', 'Rerun stage law: a slice descriptor is malformed'), 'rerun-law')
+  assert.equal(stateKey('transport-failure', 'Rerun stage build'), 'rerun-build')
 })
 
-test('atomic write: executed — final exists, temp gone, timestamp replaced', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'kiln-floor-'))
-  execSync(atomicWriteCmd(stateDoc({ stage: 'law', next_action: 'Relaunch the kernel workflow with stage=build' })), { cwd: dir, shell: '/bin/bash' })
-  assert.ok(existsSync(join(dir, '.kiln/STATE.md')), 'STATE.md exists')
-  assert.ok(!existsSync(join(dir, '.kiln/.STATE.tmp')), 'temp file is gone')
-  const out = readFileSync(join(dir, '.kiln/STATE.md'), 'utf8')
-  assert.ok(/updated_at: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z/.test(out), 'timestamp replaced')
-  assert.ok(!out.includes('{updated_at}'), 'no placeholder survives')
+test('state-commit courier: only closed words ride the command, each shell-quoted — no next_action prose', () => {
+  const cmd = stateCommitCmd('/abs/plugins/kiln', 'boundary', 'build', 's1', 'reopen-slice', 'engineer', ['.kiln/STATE.md', '.kiln/gate-review.json'])
+  // Every word single-quoted (shq) so nothing it contains can break out into live shell.
+  assert.equal(cmd, "node '/abs/plugins/kiln/scripts/kiln-review' state-commit .kiln 'boundary' 'build' 's1' 'reopen-slice' 'engineer' '.kiln/STATE.md' '.kiln/gate-review.json'")
+  // B1: an injection pointer is DROPPED by the grammar filter — it never reaches the argv.
+  const injected = stateCommitCmd('/p', 'boundary', 'build', 's1', 'reopen-slice', 'broad', ['.kiln/LAW.md; echo INJECTED', '.kiln/STATE.md'])
+  assert.ok(!injected.includes('INJECTED') && !injected.includes(';'), 'a metacharacter-bearing pointer is filtered before the command build')
+  assert.ok(injected.includes("'.kiln/STATE.md'"), 'the safe pointer survives')
+  // A malformed slice descriptor can never split the argv — it sanitizes to none.
+  assert.ok(stateCommitCmd('/p', 'boundary', 'law', 'bad slice', 'rerun-stage', 'broad', []).includes("'none' 'rerun-stage'"), 'a slice id with a space collapses to none')
+  // The hint prose itself never appears — kiln-review derives it from the closed key.
+  assert.ok(!cmd.includes('Reopen slice'), 'no next_action prose on the courier')
 })
 
 test('gate command: review and recheck route paths per the sealed transport contract', () => {
@@ -373,7 +418,7 @@ test('runtime: an absolute plugin root proceeds — existing behavior preserved'
   assert.equal(ret.status, 'ok', 'a valid absolute root runs exactly as before')
 })
 
-test('runtime: an unreachable gate tool halts distinctly — sealed beat, tool path in next_action', async () => {
+test('runtime: an unreachable gate tool halts distinctly — sealed beat, restore-gate key in STATE', async () => {
   const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p', plugin: '/opt/kiln/plugins/kiln' }, {
     ...VOICE,
     'law:preflight': GREEN,
@@ -388,11 +433,11 @@ test('runtime: an unreachable gate tool halts distinctly — sealed beat, tool p
     'state:write': GREEN,
   })
   assert.equal(ret.status, 'gate-unreachable')
-  // S1 wiring: the beat is the sealed gate-unreachable template; the tool
-  // path lives in the persisted next_action, not the sealed line.
+  // S1 wiring: the beat is the sealed gate-unreachable template; the persisted
+  // STATE carries the closed restore-gate key, and kiln-review renders the hint.
   assert.ok(ret.beat.includes('The gate tool would not run'), 'the sealed gate-unreachable template arrives')
   assert.ok(!ret.beat.toLowerCase().includes('transport failed'), 'distinct from the transport-failure wording')
-  assert.ok(lastStateDoc(calls).includes('/opt/kiln/plugins/kiln/scripts/kiln-review'), 'next_action names the gate tool at its path')
+  assert.equal(stateArgs(calls).key, 'restore-gate', 'the gate-unreachable STATE carries the restore-gate key')
 })
 
 test('runtime (S1): an unknown stage speaks the sealed bad-args template — the site voice-reads post-root', async () => {
@@ -446,9 +491,9 @@ test('runtime (W-04): preflight red on a SEALED owner reopens it, owner persiste
   })
   assert.equal(ret.status, 'law-red')
   assert.ok(ret.beat.includes('Slice s7 reopened'), 'the sealed reopen template arrives filled')
-  const doc = lastStateDoc(calls)
-  assert.ok(doc.includes('active_slice: s7'), 'owner persisted as active_slice')
-  assert.ok(doc.includes('Reopen slice s7'), 'next_action names the owner')
+  const st = stateArgs(calls)
+  assert.equal(st.slice, 's7', 'owner persisted as the active_slice arg')
+  assert.equal(st.key, 'reopen-slice', 'STATE carries the reopen-slice key for the owner')
 })
 
 test('runtime (W-04): preflight red on an UNSEALED slice is pre-build state — build dispatches', async () => {
@@ -492,13 +537,13 @@ test('runtime: ANY pre-seal red blocks the seal unless a sealed owner reopens', 
   // Unowned red — fail-closed.
   const unowned = await runKernel({ stage: 'build', projectDir: '/p' }, base({ exit: 1, ids: [] }))
   assert.equal(unowned.ret.status, 'law-red')
-  assert.ok(lastStateDoc(unowned.calls).includes('active_slice: s1'))
+  assert.equal(stateArgs(unowned.calls).slice, 's1')
   assert.ok(!unowned.ret.beat.includes('sealed —'), 'no seal under an unowned red')
   // Red owned by ANOTHER unsealed slice — blocks all the same (full LAW green
   // at every slice boundary, per Sol's boundary ruling).
   const otherOwned = await runKernel({ stage: 'build', projectDir: '/p' }, base({ exit: 1, ids: ['s2'] }))
   assert.equal(otherOwned.ret.status, 'law-red')
-  assert.ok(lastStateDoc(otherOwned.calls).includes('active_slice: s1'))
+  assert.equal(stateArgs(otherOwned.calls).slice, 's1')
   assert.ok(!otherOwned.ret.beat.includes('sealed —'), 'no seal under any red at the boundary')
 })
 
@@ -512,7 +557,7 @@ test('runtime: stage-end red on a sealed owner reopens it', async () => {
     'state:write': GREEN,
   })
   assert.equal(ret.status, 'law-red')
-  assert.ok(lastStateDoc(calls).includes('active_slice: s2'))
+  assert.equal(stateArgs(calls).slice, 's2')
 })
 
 test('runtime: a failed STATE write surfaces as persist-failed, never a success status', async () => {
@@ -579,6 +624,26 @@ test('runtime: stage pointers merge into STATE and the return (never discarded)'
   assert.equal(ret.status, 'ok')
   assert.ok(ret.pointers.routes.includes('.kiln/validate-report.md'), 'return carries the route')
   assert.ok(lastStateDoc(calls).includes('.kiln/validate-report.md'), 'STATE carries the route')
+})
+
+test('runtime (B1): an injection pointer from a stage is dropped before the courier — no live shell, no forged STATE', async () => {
+  // An untrusted stage-declared pointer bearing shell metacharacters (here, an attempt to
+  // forge a STATE.md line) is filtered against the safe-path grammar before the courier
+  // command is built, and every surviving word is single-quoted. Nothing it carries can
+  // reach a live shell (Sol reproduced the pre-repair injection at exit 0).
+  const evil = '.kiln/x.md; echo INJECTED > .kiln/STATE.md'
+  const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'stage:validate': { facts: { status: 'ok', pointers: [evil, '.kiln/validate-report.md'], schema_valid: true }, narration_beat: 'validating' },
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'ok')
+  const cmd = lastStateDoc(calls)
+  assert.ok(!cmd.includes('INJECTED') && !cmd.includes(';'), 'the injection pointer never reaches the courier command')
+  assert.ok(cmd.includes("'.kiln/validate-report.md'"), 'the safe pointer survives, single-quoted')
+  assert.ok(!stateArgs(calls).pointers.includes(evil), 'the malformed pointer is not in the STATE pointers')
 })
 
 test('runtime: a blocked gate stops with the finding ids as closed facts', async () => {
@@ -1097,7 +1162,7 @@ test('runtime (Wave 1): the LAW ratifies, seal-law locks it, and the run advance
   const seal = calls.find(c => c.label === 'law:seal')
   assert.ok(seal && seal.prompt.includes('seal-law .kiln'), 'seal-law locks the ratified LAW on the cwd-relative kiln dir')
   assert.ok(calls.indexOf(gate) < calls.indexOf(seal), 'the seal follows the accept, never precedes it')
-  assert.ok(lastStateDoc(calls).includes('Relaunch the kernel workflow with stage=build'), 'next_action advances to build')
+  assert.equal(stateArgs(calls).key, 'relaunch-build', 'next_action advances to build')
 })
 
 test('runtime (S1, A9/W5-03): the milestone projection is checked BEFORE the seal — it agrees, then the seal follows', async () => {
@@ -1140,8 +1205,8 @@ test('runtime (S1, A9/W5-03): a milestone projection that disagrees with the LAW
   assert.ok(!calls.some(c => c.label === 'law:seal'), 'the LAW never seals while the projection disagrees with its table')
   assert.ok(!ret.beat.includes('locked') && !ret.beat.toLowerCase().includes('sealed'),
     'no SEALED / locked narration on a projection-mismatch hold')
-  const doc = lastStateDoc(calls)
-  assert.ok(doc.includes('stage: law') && !doc.includes('stage=build'), 'the run holds at law — never advances to build')
+  const st = stateArgs(calls)
+  assert.ok(st.stage === 'law' && st.token !== 'advance' && st.token !== 'seal-advance', 'the run holds at law — never advances to build')
 })
 
 test('runtime (S1, W8-B): the perceptual table is checked BEFORE the seal — beside the milestone projection, then the seal follows', async () => {
@@ -1185,8 +1250,8 @@ test('runtime (S1, W8-B): a perceptual table that disagrees holds — never a si
   assert.ok(!calls.some(c => c.label === 'law:seal'), 'the LAW never seals over a perceptual table that does not hold')
   assert.ok(!ret.beat.includes('locked') && !ret.beat.toLowerCase().includes('sealed'),
     'no SEALED / locked narration on a perceptual-table hold')
-  const doc = lastStateDoc(calls)
-  assert.ok(doc.includes('stage: law') && !doc.includes('stage=build'), 'the run holds at law — never advances to build')
+  const st = stateArgs(calls)
+  assert.ok(st.stage === 'law' && st.token !== 'advance' && st.token !== 'seal-advance', 'the run holds at law — never advances to build')
 })
 
 test('runtime (Wave 1): a LAW ratify reject repairs the law, rechecks, and seals within the cap', async () => {
@@ -1237,9 +1302,9 @@ test('runtime (Wave 1/S3): a LAW that will not ratify holds after the repair cap
   assert.equal(calls.filter(c => c.label === 'ratify:gate').length, 3, 'review plus two rechecks — the bounded loop')
   assert.ok(!calls.some(c => c.label === 'law:seal'), 'the LAW never locks unratified')
   assert.ok(!ret.beat.includes('revised'), 'buffered repair-round beats never leak into a held transcript')
-  const doc = lastStateDoc(calls)
-  assert.ok(doc.includes('stage: law'), 'the run holds at the law stage')
-  assert.ok(!doc.includes('stage=build'), 'never advances to build on a held LAW')
+  const st = stateArgs(calls)
+  assert.equal(st.stage, 'law', 'the run holds at the law stage')
+  assert.ok(st.token !== 'advance' && st.token !== 'seal-advance', 'never advances to build on a held LAW')
 })
 
 test('runtime (W6-F): a risky posture keys the LAW-ratify cap to 1 — one repair then held; the dial sets the cap, the width never raises it', async () => {
@@ -1507,7 +1572,7 @@ test('runtime (W5-S2, W5-01/04): a WIDE width runs two blind authors; both-conve
   assert.ok(calls.indexOf(promote) < calls.indexOf(gate), 'the promote precedes ratify — the ratify block is rejoined unchanged')
   assert.ok(calls.indexOf(gate) < calls.indexOf(seal), 'the seal follows the accept')
   assert.ok(ret.beat.includes('The law is locked'), 'the promoted candidate beat speaks only after ratify+seal')
-  assert.ok(lastStateDoc(calls).includes('stage=build'), 'a promoted+ratified WIDE law advances to build')
+  assert.equal(stateArgs(calls).key, 'relaunch-build', 'a promoted+ratified WIDE law advances to build')
 })
 
 test('runtime (W5-S3, W5-05): a WIDE byte-mismatch runs the fresh Q-F adjudicator → complete canonical LAW + ADRs → ratify+seal (no hold)', async () => {
@@ -1548,7 +1613,7 @@ test('runtime (W5-S3, W5-05): a WIDE byte-mismatch runs the fresh Q-F adjudicato
   assert.ok(calls.indexOf(adj) < calls.indexOf(canon) && calls.indexOf(canon) < calls.indexOf(gate),
     'the completeness gate runs after adjudicate and before ratify — an incomplete adjudicated LAW never ratifies')
   assert.ok(ret.beat.includes('The law is locked'), 'the adjudicated candidate beat speaks only after ratify+seal')
-  assert.ok(lastStateDoc(calls).includes('stage=build'), 'an adjudicated+ratified WIDE law advances to build')
+  assert.equal(stateArgs(calls).key, 'relaunch-build', 'an adjudicated+ratified WIDE law advances to build')
 })
 
 test('runtime (W5-S3-02): an adjudicator that returns status ok but schema_valid false HOLDS — status ok alone never proves a valid canonical LAW', async () => {
@@ -1716,6 +1781,32 @@ test('runtime (T-03): an object slice with an unknown or missing surface halts b
     })
     assert.equal(ret.status, 'slices-invalid', entry + ' must halt closed')
     assert.ok(!calls.some(c => c.label && c.label.startsWith('slice:')), entry + ': no builder leg dispatches')
+  }
+})
+
+test('runtime (B2): a build with no slice list routes the operator back to LAW, not build', async () => {
+  // The slice list is authored by the LAW producer; a build that finds none must send the
+  // operator to LAW. The hint names the TARGET stage (law), never the current build stage.
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE, 'law:preflight': GREEN, 'slices:fetch': { exit: 0, ids: [] }, 'ladder:fetch': LADDER, 'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'transport-failure')
+  assert.equal(stateArgs(calls).key, 'rerun-law', 'the STATE routes back to LAW, not the current build stage')
+})
+
+test('runtime (B4): slices-invalid records active_slice none UNCONDITIONALLY — a malformed descriptor names no in-plan slice', async () => {
+  // Two shapes of invalid descriptor: a malformed id ('bad slice'), and a GRAMMAR-VALID id
+  // inside an otherwise-invalid descriptor ('obj|s1|bogus', bad surface). Neither is a
+  // trustworthy slice, so STATE names none in both — never the id from a rejected
+  // descriptor. The second case fails against a `badSlice.id || 'none'` that leaks s1. The
+  // CLI rejection of a malformed NON-none slice id is a tamper guard, not this live path.
+  for (const entry of ['obj|bad slice|ui', 'obj|s1|bogus']) {
+    const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+      ...VOICE, 'law:preflight': GREEN, 'slices:fetch': { exit: 0, ids: [entry] },
+      'ladder:fetch': LADDER, 'state:write': GREEN,
+    })
+    assert.equal(ret.status, 'slices-invalid', entry + ' halts closed')
+    assert.equal(stateArgs(calls).slice, 'none', entry + ': STATE names none, never the descriptor id')
   }
 })
 
@@ -2405,7 +2496,7 @@ test('runtime (deadlock, INTAKE-26): a non-future pre-seal red halts law-red —
   const current = await run(['s1'])
   assert.equal(current.ret.status, 'law-red', 'the current slice owning the red never seals')
   assert.ok(!current.ret.beat.includes('sealed —'), 'no seal under a current-owner red')
-  assert.ok(lastStateDoc(current.calls).includes('active_slice: s1'), 'the current slice is held')
+  assert.equal(stateArgs(current.calls).slice, 's1', 'the current slice is held')
   const outOfPlan = await run(['s9'])
   assert.equal(outOfPlan.ret.status, 'law-red', 'an out-of-plan owner never seals')
   const mixed = await run(['s2', 's1'])
@@ -2467,9 +2558,9 @@ test('runtime (STRIKE 2): a pre-recheck red owned by an already-SEALED later sli
   })
   assert.equal(ret.status, 'law-red', 'the sealed later owner reopens instead of being tolerated')
   assert.ok(ret.beat.includes('Slice s2 reopened'), 'the sealed owner s2 is reopened, not masked')
-  const doc = lastStateDoc(calls)
-  assert.ok(doc.includes('active_slice: s2'), 'the reopened sealed owner is persisted as active_slice')
-  assert.ok(doc.includes('Reopen slice s2'), 'next_action names the reopened owner')
+  const st = stateArgs(calls)
+  assert.equal(st.slice, 's2', 'the reopened sealed owner is persisted as active_slice')
+  assert.equal(st.key, 'reopen-slice', 'STATE carries the reopen-slice key for the reopened owner')
   assert.ok(!calls.some(c => c.label === 'gate:recheck'), 'the recheck never runs over the masked-then-reopened red')
 })
 
@@ -2541,9 +2632,9 @@ test('runtime (Wave 2): report status ok AND .kiln/report.md non-empty seals the
   const check = calls.find(c => c.label === 'report:check')
   assert.ok(check && check.prompt.includes('test -s .kiln/report.md'),
     'the gate is a mechanical content-blind test -s on the report path — no content read')
-  const doc = lastStateDoc(calls)
-  assert.ok(doc.includes('stage: report'), 'STATE records the report stage')
-  assert.ok(doc.includes('Run complete'), 'next_action is the terminal Run complete')
+  const st = stateArgs(calls)
+  assert.equal(st.stage, 'report', 'STATE records the report stage')
+  assert.equal(st.key, 'run-complete', 'next_action is the terminal Run complete')
 })
 
 test('runtime (Wave 2): report status ok BUT .kiln/report.md empty or missing never seals done — transport-failure holds', async () => {
@@ -2567,9 +2658,11 @@ test('runtime (Wave 2): report status ok BUT .kiln/report.md empty or missing ne
   assert.ok(!ret.beat.includes('the report stands'),
     'the SEALED-claiming report beat never reads above the honest hold line (gated before the beat push)')
   assert.equal(ret.pointers.report, '.kiln/report.md', 'the return points at the empty report artifact')
-  const doc = lastStateDoc(calls)
-  assert.ok(doc.includes('Rerun stage report'), 'next_action names the report-specific rerun')
-  assert.ok(doc.includes('.kiln/report.md is empty or missing'), 'and says exactly what is wrong')
+  const st = stateArgs(calls)
+  assert.equal(st.stage, 'report', 'STATE records the report stage')
+  // The closed key names the rerun; kiln-review renders "Rerun stage report". The former
+  // inline "<report.md> is empty" sub-reason is dropped by design — not a durable resume fact.
+  assert.equal(st.key, 'rerun-report', 'next_action names the report-specific rerun via its target-stage key')
 })
 
 // ── Wave 3 (the Gauge foundation): the LAW input gate. postureToDials (the dial PROJECTOR)
@@ -2645,9 +2738,9 @@ test('runtime (Wave 3): a missing/empty brief halts the LAW stage — reused tra
   assert.ok(!calls.some(c => c.label === 'onboarding:posture'), 'the posture is never read once the brief fails')
   assert.ok(!calls.some(c => c.label === 'stage:law'), 'the law stage never plans without its inputs')
   assert.ok(!calls.some(c => c.label === 'ratify:gate'), 'never reaches ratify')
-  const doc = lastStateDoc(calls)
-  assert.ok(doc.includes('Rerun onboarding'), 'next_action names a rerun of onboarding')
-  assert.ok(!doc.includes('stage=build'), 'never advances to build')
+  const st = stateArgs(calls)
+  assert.equal(st.key, 'rerun-onboarding', 'next_action names a rerun of onboarding')
+  assert.ok(st.token !== 'advance' && st.token !== 'seal-advance', 'never advances to build')
 })
 
 test('runtime (Wave 3): an unreadable posture.json halts the LAW stage — reused transport-failure', async () => {
@@ -2660,7 +2753,7 @@ test('runtime (Wave 3): an unreadable posture.json halts the LAW stage — reuse
   })
   assert.equal(ret.status, 'transport-failure')
   assert.ok(!calls.some(c => c.label === 'stage:law'), 'no planning on an unreadable posture')
-  assert.ok(lastStateDoc(calls).includes('Rerun onboarding'))
+  assert.equal(stateArgs(calls).key, 'rerun-onboarding')
 })
 
 test('runtime (Wave 3): an out-of-enum posture halts the LAW stage — validatePosture rejects, transport-failure', async () => {
@@ -2744,9 +2837,9 @@ test('runtime (Wave 3, brownfield): a present marker with a missing/empty codeba
   assert.equal(ret.status, 'transport-failure', 'a brownfield run with no map holds')
   assert.ok(!calls.some(c => c.label === 'stage:law'), 'the law stage never plans over an unmapped codebase')
   assert.ok(!calls.some(c => c.label === 'ratify:gate'), 'never reaches ratify')
-  const doc = lastStateDoc(calls)
-  assert.ok(doc.includes('Rerun onboarding'), 'next_action names a rerun of onboarding')
-  assert.ok(!doc.includes('stage=build'), 'never advances to build')
+  const st = stateArgs(calls)
+  assert.equal(st.key, 'rerun-onboarding', 'next_action names a rerun of onboarding')
+  assert.ok(st.token !== 'advance' && st.token !== 'seal-advance', 'never advances to build')
 })
 
 test('runtime (Wave 3, greenfield): no marker means no map is required — the map check never runs, the LAW plans', async () => {
@@ -2943,7 +3036,9 @@ test('runtime (W7-S2): a red receipt at the seam takes the law-red door — no a
   assert.equal(ret.status, 'law-red')
   assert.ok(!calls.some(c => c.label === 'audit:review'), 'no audit runs over a red law')
   assert.ok(!calls.some(c => c.label === 'audit:append'), 'nothing promotes')
-  assert.ok(lastStateDoc(calls).includes('the LAW is red at the milestone audit of slice s1'), 'the static law-red next_action names the seam slice')
+  const seamRed = stateArgs(calls)
+  assert.equal(seamRed.key, 'reopen-slice', 'the seam law-red takes the reopen-slice key')
+  assert.equal(seamRed.slice, 's1', 'and names the seam slice as active_slice')
 })
 
 test('runtime (W7-S2): the audit adapter maps the closed exits — 20 transport-failure, 21 the degraded hard-stop, 127 gate-unreachable; none repair, none promote', async () => {
@@ -2970,7 +3065,9 @@ test('runtime (W7-S2): the audit adapter maps the closed exits — 20 transport-
   const degraded = await runKernel({ stage: 'build', projectDir: '/p' }, base(21))
   assert.equal(degraded.ret.status, 'degraded')
   assert.ok(degraded.calls.some(c => c.label === 'degraded:mark'), 'the degraded stop marks for acknowledgment as the slice gates do')
-  assert.ok(lastStateDoc(degraded.calls).includes('Restore codex, then relaunch stage build: the milestone audit of slice s1'), 'the static degraded next_action names only the seam slice')
+  const auditDeg = stateArgs(degraded.calls)
+  assert.equal(auditDeg.key, 'restore-codex', 'the audit-degraded STATE takes the restore-codex key')
+  assert.equal(auditDeg.slice, 's1', 'and names only the seam slice as active_slice')
   const unreachable = await runKernel({ stage: 'build', projectDir: '/p' }, base(127))
   assert.equal(unreachable.ret.status, 'gate-unreachable')
   for (const r of [transport, degraded, unreachable]) {
@@ -3071,10 +3168,11 @@ test('runtime (W7-S2): the audit cycle holds at the existing edges — cap exhau
   assert.equal(stalled.ret.pointers.passes, 1)
   for (const r of [exhausted, stalled]) {
     assert.ok(!r.calls.some(c => c.label === 'audit:append'), 'a held seam never promotes')
-    const doc = lastStateDoc(r.calls)
-    assert.ok(doc.includes('Operator ruling: the milestone audit held for slice s1 after 1 repair passes — the verdict is at ' + AUDIT),
-      'the static next_action interpolates only the seam slice, the pass count, and the audit path')
-    assert.ok(!doc.includes('secret-audit-prose') && !doc.includes('C-1'), 'no verdict prose enters STATE — heredoc-safe closed facts only')
+    const held = stateArgs(r.calls)
+    assert.equal(held.key, 'operator-ruling', 'the held seam takes the operator-ruling key')
+    assert.equal(held.slice, 's1', 'naming the seam slice as active_slice')
+    assert.ok(held.pointers.includes(AUDIT), 'the audit verdict path rides the pointers so the operator still finds it')
+    assert.ok(!held.cmd.includes('secret-audit-prose') && !held.cmd.includes('C-1'), 'no verdict prose or finding ids ride the courier — closed facts only')
   }
 })
 
@@ -3168,7 +3266,9 @@ test('runtime (W7-S2): an untrusted audits.log answer holds transport-class — 
     assert.equal(ret.status, 'transport-failure', 'exit ' + exit + ': an untrusted membership answer is a hold, never absence')
     assert.ok(!calls.some(c => c.label === 'law:pre-audit' || c.label === 'audit:review'), 'exit ' + exit + ': no audit over an unread log')
     assert.ok(!calls.some(c => c.label === 'audit:append'), 'exit ' + exit + ': nothing re-appends')
-    assert.ok(lastStateDoc(calls).includes('the audits.log membership check for slice s1 did not answer'), 'exit ' + exit + ': the static next_action names the failed check')
+    const membership = stateArgs(calls)
+    assert.equal(membership.key, 'rerun-build', 'exit ' + exit + ': the static next_action reruns the build stage (target-stage key)')
+    assert.equal(membership.slice, 's1', 'exit ' + exit + ': and names the seam slice as active_slice')
   }
 })
 
@@ -3202,7 +3302,9 @@ test('runtime (W7-S2): the audit repair edge confirms its delta — an {ok:true}
   assert.ok(dc && dc.prompt.includes('test -s .kiln/repair-delta.md'), 'the same test -s confirmation the slice-gate repair edge performs')
   assert.ok(!calls.some(c => c.label === 'audit:recheck'), 'no recheck judges an unconfirmed repair')
   assert.ok(!calls.some(c => c.label === 'audit:append'), 'nothing promotes')
-  assert.ok(lastStateDoc(calls).includes('the milestone audit repair pass did not land for slice s1'), 'the static repair-failed next_action names the seam slice')
+  const auditRepairFail = stateArgs(calls)
+  assert.equal(auditRepairFail.key, 'repair-failed', 'the static repair-failed STATE takes the repair-failed key')
+  assert.equal(auditRepairFail.slice, 's1', 'and names the seam slice as active_slice')
 })
 
 // ── W7-S3: dogfood — the wave proven whole, the audit fact on real disk ──────
@@ -3266,7 +3368,7 @@ test('dogfood (W7-S3): a labeled two-milestone plan runs the whole build branch 
   assert.equal(auditsLog(dir), 'c2 accept\np2 accept\n',
     'the on-disk audits.log carries exactly the two seam slice ids, one line per seam, written only by append-audit')
   assert.ok(ret.beat.includes('Slice c2 sealed — dual') && ret.beat.includes('Slice p2 sealed — dual'), 'the seal beats speak for the seam slices')
-  assert.ok(lastStateDoc(calls).includes('Relaunch the kernel workflow with stage=validate'), 'the stage returns ok and advances to validate')
+  assert.equal(stateArgs(calls).key, 'relaunch-validate', 'the stage returns ok and advances to validate')
 })
 
 test('dogfood (W7-S3): a changes_required audit drives repair → recheck-accept → append-audit → advance — cohort lineage, delta pointer, and receipt refresh in strict order', async () => {
@@ -3347,8 +3449,10 @@ test('dogfood (W7-S3): a blocked audit reopens through the repair cycle and reco
   assert.deepEqual(blocked.ret.pointers.finding_ids, ['F1'], 'the blocked shape carries the closed finding ids')
   assert.equal(blocked.ret.pointers.gate, AUDIT, 'the blocked shape points at the audit artifact')
   assert.ok(blocked.ret.beat.includes('The gate held after 1 repair passes. Findings F1 are on the table'), 'the sealed blocked beat speaks with the closed facts filled')
-  assert.ok(lastStateDoc(blocked.calls).includes('Operator ruling: the milestone audit held for slice s1 after 1 repair passes — the verdict is at ' + AUDIT),
-    'the static next_action interpolates only the seam id, the pass count, and the audit path')
+  const heldBlocked = stateArgs(blocked.calls)
+  assert.equal(heldBlocked.key, 'operator-ruling', 'the held seam takes the operator-ruling key')
+  assert.ok(heldBlocked.slice === 's1' && heldBlocked.pointers.includes(AUDIT),
+    'naming the seam slice and riding the audit verdict path in the pointers')
   assert.equal(auditsLog(held), '', 'a held seam leaves NO on-disk audit fact — audits.log stays unwritten')
 })
 
@@ -3387,7 +3491,7 @@ test('dogfood (W7-S3): a run interrupted between the seam seal and its audit res
   assert.ok(receiptAt >= 0 && receiptAt < resumed.calls.indexOf(audits[0]) && resumed.calls[receiptAt].prompt.includes('check-receipt.txt'),
     'the LAW receipt refreshes on the skip path before the re-fired audit')
   assert.equal(auditsLog(dir), 's1 accept\ns2 accept\n', 'audits.log completes — one outcome fact per seam, in seam order')
-  assert.ok(lastStateDoc(resumed.calls).includes('Relaunch the kernel workflow with stage=validate'), 'the completed build advances to validate')
+  assert.equal(stateArgs(resumed.calls).key, 'relaunch-validate', 'the completed build advances to validate')
 })
 
 test('dogfood (W7-S3): non-contiguous repeated labels are legal — a|b|a raises three seams, and the two a-seams each audit their own closing block', async () => {
@@ -3464,7 +3568,7 @@ test('dogfood (W7-S3): ratify, build, and audit gates coexist across one project
   assert.equal(law.ret.status, 'ok', 'the ratify gate is unperturbed — reject, one repair, recheck, seal')
   assert.equal(law.calls.filter(c => c.label === 'ratify:repair').length, 1)
   assert.ok(law.ret.beat.includes('the law, revised'), 'the buffered repaired-candidate beat speaks only after ratify AND seal')
-  assert.ok(lastStateDoc(law.calls).includes('Relaunch the kernel workflow with stage=build'),
+  assert.equal(stateArgs(law.calls).key, 'relaunch-build',
     'the sealed law hands THIS project to the build launch that follows — the cross-stage transition')
   // The build launch over the same project: ONE dial read (cap 1) serves the
   // slice gate and the seam audit alike. The slice gate spends its one edge and
@@ -3507,7 +3611,9 @@ test('dogfood (W7-S3): ratify, build, and audit gates coexist across one project
   assert.deepEqual(run.ret.pointers.finding_ids, ['F1'], 'held over genuine strict progress — the cap ruled, not the cohort')
   assert.equal(run.calls.filter(c => c.label === 'audit:repair').length, 1)
   assert.equal(auditsLog(dir), '', 'a held audit never reaches audits.log')
-  assert.ok(lastStateDoc(run.calls).includes('Operator ruling: the milestone audit held for slice s1 after 1 repair passes — the verdict is at ' + AUDIT))
+  const heldRun = stateArgs(run.calls)
+  assert.equal(heldRun.key, 'operator-ruling')
+  assert.ok(heldRun.slice === 's1' && heldRun.pointers.includes(AUDIT))
 })
 
 // ── W8-S3: the screening room — the perceptual gate seated in validate ──────
@@ -3743,11 +3849,14 @@ test('runtime (W8-S3/H-I): a no-progress recheck is the semantic hold — marker
     assert.ok(escAt < addAt, outcome + ': the escalation precedes the addendum; the held return fires last')
     assert.ok(calls[addAt].prompt.includes('PARTIAL'), outcome + ': the addendum grades PARTIAL for the survivors')
     assert.ok(!calls.some(c => c.label === 'perceptual:marker-clear'), outcome + ': the semantic hold preserves the marker')
-    const doc = lastStateDoc(calls)
-    assert.ok(doc.includes('Operator ruling: the perceptual screen held 1 criteria (' + outcome + ') after 1 repair passes'),
-      outcome + ': the static next_action interpolates only counts and the closed outcome')
-    assert.ok(doc.includes(SCREEN) && doc.includes(MF(2)), outcome + ': and the artifact and manifest paths')
-    assert.ok(!doc.includes('secret-screen-prose'), outcome + ': no verdict prose enters STATE')
+    const screenHeld = stateArgs(calls)
+    assert.equal(screenHeld.key, 'operator-ruling', outcome + ': the held screen takes the operator-ruling key')
+    // Both evidence paths ride the pointers (guardrail 2 / B3): the screen verdict AND the
+    // exact evidence-generation manifest bound to the held grade, so after recapture the
+    // operator can still identify which generation the hold judged. Only the count is dropped.
+    assert.ok(screenHeld.pointers.includes(SCREEN), outcome + ': the screen verdict path rides the pointers')
+    assert.ok(screenHeld.pointers.includes(MF(2)), outcome + ': the held evidence-generation manifest path rides the pointers')
+    assert.ok(!screenHeld.cmd.includes('secret-screen-prose'), outcome + ': no verdict prose rides the courier')
     assert.equal(ret.pointers.escalation, outcome)
     assert.deepEqual(ret.pointers.finding_ids, ['F1'])
   }
@@ -3849,7 +3958,7 @@ test('runtime (W8-S3/H): the escalation is survivors-scoped ONLY — an off-surv
 test('runtime (W8-S3/H): primary transport unavailable is the degraded-class hold — no marker, no escalation, the stale marker cleared', async () => {
   const degraded = await runKernel({ stage: 'validate', projectDir: '/p' }, { ...GPT_LIVE, 'screen:review': { exit: 21 } })
   assert.equal(degraded.ret.status, 'held')
-  assert.ok(lastStateDoc(degraded.calls).includes('Restore codex, then rerun stage validate'), 'the held next_action names the codex restore')
+  assert.equal(stateArgs(degraded.calls).key, 'restore-codex', 'the held STATE takes the restore-codex key — kiln-review renders the codex-restore hint')
   const unreachable = await runKernel({ stage: 'validate', projectDir: '/p' }, { ...GPT_LIVE, 'screen:review': { exit: 127 } })
   assert.equal(unreachable.ret.status, 'gate-unreachable')
   const claudeDead = await runKernel({ stage: 'validate', projectDir: '/p' }, { ...CLAUDE_LIVE, 'screen-claude:review': { ok: false } })
@@ -4131,7 +4240,7 @@ test('dogfood (W8-S4): a visual run passes end-to-end — real table presence, c
     'the addendum landed real PASS rows for every table criterion')
   assert.ok(!rows.includes('PARTIAL'), 'no PARTIAL on an accepted run')
   assert.ok(!existsSync(marker(dir)), 'the REAL marker-clear leg left no marker — the ok terminal is nonsemantic')
-  assert.ok(lastStateDoc(v.calls).includes('Relaunch the kernel workflow with stage=report'), 'validate advances to report')
+  assert.equal(stateArgs(v.calls).key, 'relaunch-report', 'validate advances to report')
   const r = await runReport(dir)
   assert.equal(r.ret.status, 'done')
   assert.ok(r.calls.find(c => c.label === 'stage:report').prompt.includes('cards/report.md'), 'the report act follows the shipped card')
@@ -4153,7 +4262,9 @@ test('dogfood (W8-S4): a PARTIAL hold lands every durable fact on real disk — 
   assert.ok(rows.includes('P-1 · fidelity-to-requirement · proxy exit 0 · PARTIAL'),
     'the surviving criterion grades PARTIAL — a real row, derived from the really-published verdict')
   assert.ok(rows.includes('P-2 · typography · proxy exit 0 · PASS'), 'the rest grade PASS')
-  assert.ok(lastStateDoc(v.calls).includes('Operator ruling: the perceptual screen held 1 criteria (CORROBORATED) after 1 repair passes'))
+  const screenHeldV = stateArgs(v.calls)
+  assert.equal(screenHeldV.key, 'operator-ruling')
+  assert.ok(screenHeldV.pointers.includes(SCREEN))
   // The operator launches report ON the held state: the run reports, honestly.
   const r = await runReport(dir)
   assert.equal(r.ret.status, 'done', 'kernel report semantics unchanged — done means the report act completed; the CONTENT tells the truth')

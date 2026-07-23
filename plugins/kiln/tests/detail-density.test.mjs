@@ -1,23 +1,28 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, mkdtempSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 // The --detail toggle is a closed launch fact, not content: A.detail present raises
 // the run's render density from broad (the default) to engineer. It rides the
 // stage-card prompt as the kernel's `Density:` directive and lands in STATE.md as
-// the density line. These tests pin both directive strings and both STATE lines by
-// evaluating the pure core directly and by running the full body under a mocked
-// runtime — the same two surfaces kernel.test.mjs exercises.
+// the density line — now written by the trusted state-commit verb, which the courier
+// invokes with density as a closed word. These tests pin the stage-card directive and
+// the courier's density word under the mocked runtime, and the resolved STATE.md density
+// line by driving the real CLI.
 const src = readFileSync(
   fileURLToPath(new URL('../workflows/kernel.js', import.meta.url)), 'utf8',
 )
-const srcLines = src.split('\n')
-const coreSrc = srcLines.slice(
-  srcLines.findIndex(l => l.includes('KERNEL_CORE_BEGIN')) + 1,
-  srcLines.findIndex(l => l.includes('KERNEL_CORE_END')),
-).join('\n')
-const { stateDoc } = new Function(coreSrc + '\nreturn { stateDoc }')()
+const CLI = fileURLToPath(new URL('../scripts/kiln-review', import.meta.url))
+// Drive the real state-commit verb and return the written STATE.md.
+function committedState(density) {
+  const dir = mkdtempSync(join(tmpdir(), 'kiln-density-'))
+  const run = spawnSync('node', [CLI, 'state-commit', dir, 'advance', 'law', 'none', 'relaunch-build', density], { encoding: 'utf8' })
+  return { run, doc: run.status === 0 ? readFileSync(join(dir, 'STATE.md'), 'utf8') : '' }
+}
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
 const PLUGIN = '/abs/plugins/kiln'
@@ -85,23 +90,29 @@ async function runLaw(detail) {
   return { cardPrompt, stateWrite }
 }
 
-test('stateDoc: density line reads engineer when the fact is engineer, broad when absent', () => {
-  assert.match(stateDoc({ stage: 'law', density: 'engineer' }), /density: engineer/)
-  assert.match(stateDoc({ stage: 'law' }), /density: broad/)
-  // any non-engineer value collapses to the default
-  assert.match(stateDoc({ stage: 'law', density: 'nonsense' }), /density: broad/)
+test('state-commit: the density fact lands verbatim as the STATE.md density line', () => {
+  const engineer = committedState('engineer')
+  assert.equal(engineer.run.status, 0, engineer.run.stderr)
+  assert.match(engineer.doc, /^density: engineer$/m)
+  const broad = committedState('broad')
+  assert.equal(broad.run.status, 0, broad.run.stderr)
+  assert.match(broad.doc, /^density: broad$/m)
+  // The former stateDoc collapsed any non-engineer value to broad; the trusted verb is
+  // strict — the kernel only ever passes broad or engineer, so an unknown density is a
+  // fail-closed transport error, never a silent default.
+  assert.notEqual(committedState('nonsense').run.status, 0, 'an unknown density fails closed, never collapsed')
 })
 
 test('--detail raises the stage-card directive to engineer and stamps STATE.md engineer', async () => {
   const { cardPrompt, stateWrite } = await runLaw(true)
   assert.ok(cardPrompt.includes('Density: engineer'), 'card carries Density: engineer')
   assert.ok(!cardPrompt.includes('Density: broad'), 'engineer run never emits the broad directive')
-  assert.match(stateWrite, /density: engineer/)
+  assert.match(stateWrite, /'engineer'/, 'the courier carries the engineer density as a single-quoted closed word')
 })
 
 test('without --detail the directive stays broad, the default, and STATE.md reads broad', async () => {
   const { cardPrompt, stateWrite } = await runLaw(false)
   assert.ok(cardPrompt.includes('Density: broad'), 'card carries Density: broad')
   assert.ok(!cardPrompt.includes('Density: engineer'), 'broad run never emits the engineer directive')
-  assert.match(stateWrite, /density: broad/)
+  assert.match(stateWrite, /'broad'/, 'the courier carries the broad density as a single-quoted closed word')
 })
