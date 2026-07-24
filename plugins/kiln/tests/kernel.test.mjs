@@ -41,6 +41,13 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
 // naming `plugin` in its own launch args; that is how the plugin-guard cases
 // force the missing/relative paths. String launches pass through untouched.
 const PLUGIN = '/abs/plugins/kiln'
+// W2-S1: every real launch rides the run lock the conductor acquired — run_id + owner. The
+// harness supplies both by default so object scenarios model the locked launch envelope and
+// pass the pre-boot join; a scenario overrides them (to undefined) to exercise the
+// unlocked-launch hold, or overrides the 'run-lock:join' leg to a nonzero to exercise the
+// foreign-lock hold.
+const RUN_ID = 'run-test'
+const OWNER = 'owner-test'
 // The boot leg fires on every valid launch; the harness supplies a valid projected
 // tier config by default (the node -p projection shape the kernel validates), so a
 // scenario only names 'tiers:boot' when it is testing the fail-closed path.
@@ -78,7 +85,7 @@ const TIERS_OK = {
 }
 async function runKernel(kargs, script) {
   const launch = (kargs && typeof kargs === 'object' && !Array.isArray(kargs))
-    ? { plugin: PLUGIN, ...kargs }
+    ? { plugin: PLUGIN, run_id: RUN_ID, owner: OWNER, ...kargs }
     : kargs
   // W7-S2: every final slice is a milestone seam, so the audits.log grep-skip
   // consults on every build that reaches it; the harness answers already-logged
@@ -93,6 +100,10 @@ async function runKernel(kargs, script) {
   // build and validate exactly as before. Seal scenarios override with the sealed id set (or a
   // nonzero exit to exercise the fail-closed hold).
   const full = {
+    // W2-S1: the pre-boot run-lock join fires on every valid launch; the harness answers a
+    // clean join by default so every pre-lock scenario boots and dispatches exactly as before.
+    // Foreign-lock scenarios override with a nonzero exit (and an ids owner to name).
+    'run-lock:join': { exit: 0, ids: [] },
     'tiers:boot': TIERS_OK, 'audit:check': { exit: 0 },
     'seal:set': { exit: 0, ids: [] },
     'perceptual:presence': { exit: 1 },
@@ -390,7 +401,9 @@ test('gate command: review and recheck route paths per the sealed transport cont
 // ── K-09/W-01/W-03: the mocked-runtime suite ────────────────────────────────
 
 test('runtime (W-01): string-encoded args parse and run — the walker case', async () => {
-  const { ret } = await runKernel(JSON.stringify({ stage: 'validate', projectDir: '/p', plugin: PLUGIN }), {
+  // The string launch skips the object-launch harness injection, so it carries the run-lock
+  // facts explicitly — a real conductor blob does exactly this.
+  const { ret } = await runKernel(JSON.stringify({ stage: 'validate', projectDir: '/p', run_id: RUN_ID, owner: OWNER, plugin: PLUGIN }), {
     ...VOICE,
     'law:preflight': GREEN,
     'stage:validate': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'validating' },
@@ -1139,11 +1152,41 @@ test('S1 (W8-B/D): the check dims and the FIXED shipped instrument cannot drift 
     'the check dims equal the shipped rubric ids — the duplication cannot drift')
 })
 
+test('runtime (W2-S1): every launch joins the run lock BEFORE the boot, with the exact run_id + owner', async () => {
+  // The tiers boot is failed so the run stops right after it; the join leg is what we pin.
+  const { calls } = await runKernel({ stage: 'build', projectDir: '/p' }, { 'tiers:boot': { exit: 20 } })
+  const j = calls.find(c => c.label === 'run-lock:join')
+  assert.ok(j, 'the run-lock join leg dispatches')
+  assert.ok(j.prompt.includes('run-lock join .kiln'), 'the join runs the kiln-review run-lock join verb over .kiln')
+  assert.ok(j.prompt.includes(`'${RUN_ID}'`) && j.prompt.includes(`'${OWNER}'`), 'the exact run_id and owner ride the join, shell-quoted')
+  assert.ok(!j.opts.model, 'the pre-boot join carries no tier model — no tier value exists before the boot')
+  const order = calls.map(c => c.label)
+  assert.ok(order.indexOf('run-lock:join') < order.indexOf('tiers:boot'), 'the join gates the run before any tiers read')
+})
+
+test('runtime (W2-S1): a foreign lock holds the run closed, naming the running owner — nothing boots', async () => {
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' },
+    { 'run-lock:join': { exit: 12, ids: ['other-run'] } })
+  assert.equal(ret.status, 'run-locked', 'a refused join holds the run closed')
+  assert.ok(ret.beat.includes('other-run'), 'the honest hold names the run that holds the lock')
+  assert.equal(ret.pointers.lock, '.kiln/run.lock', 'the hold points at the run lock')
+  assert.deepEqual(calls.map(c => c.label), ['run-lock:join'], 'a foreign lock stops before the boot — no tiers read, no stage work')
+})
+
+test('runtime (W2-S1): a launch carrying no lock facts holds before any leg — the legacy-resume clear stop', async () => {
+  for (const missing of [{ run_id: undefined }, { owner: undefined }]) {
+    const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p', ...missing }, {})
+    assert.equal(ret.status, 'run-unlocked', 'a launch with no lock is a clear stop, never a crash')
+    assert.ok(ret.beat.includes('run lock'), 'the stop names the missing lock')
+    assert.equal(calls.length, 0, 'the unlocked guard returns before any agent leg — not even the join runs')
+  }
+})
+
 test('runtime (T-02): a nonzero tiers boot fails the run closed — no stage work runs', async () => {
   const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, { 'tiers:boot': { exit: 20 } })
   assert.equal(ret.status, 'tiers-config-invalid')
   assert.ok(ret.beat.includes('tier file'), 'the halt names the tier file')
-  assert.deepEqual(calls.map(c => c.label), ['tiers:boot'], 'nothing runs after a failed boot')
+  assert.deepEqual(calls.map(c => c.label), ['run-lock:join', 'tiers:boot'], 'the run-lock join precedes the boot; nothing runs after a failed boot')
 })
 
 test('runtime (T-02): a malformed tier shape fails closed AT BOOT — the boot is the only call', async () => {
@@ -1164,7 +1207,7 @@ test('runtime (T-02): a malformed tier shape fails closed AT BOOT — the boot i
     const boot = JSON.parse(JSON.stringify(TIERS_OK)); mutate(boot)
     const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, { 'tiers:boot': boot })
     assert.equal(ret.status, 'tiers-config-invalid', name + ' must fail closed')
-    assert.deepEqual(calls.map(c => c.label), ['tiers:boot'], name + ': no work after the boot')
+    assert.deepEqual(calls.map(c => c.label), ['run-lock:join', 'tiers:boot'], name + ': the run-lock join precedes the boot; no work after it')
   }
 })
 
@@ -2011,7 +2054,7 @@ test('runtime (builder-leg 404 pin): a gpt-routed surface fails closed at boot �
     'state:write': GREEN,
   })
   assert.equal(ret.status, 'tiers-config-invalid', 'the gpt-routed surface halts at boot, never mid-build')
-  assert.deepEqual(calls.map(c => c.label), ['tiers:boot'], 'nothing dispatches after the failed boot')
+  assert.deepEqual(calls.map(c => c.label), ['run-lock:join', 'tiers:boot'], 'the run-lock join precedes the boot; nothing dispatches after the failed boot')
   for (const c of calls) {
     assert.notEqual(c.opts && c.opts.model, 'gpt-5.6-sol', 'the resolver-concrete codex id must never be an agent model option')
   }
@@ -4674,15 +4717,18 @@ test('dogfood (W8-S4): the milestone eye and the screening room coexist across o
 const SWEEP_SRC = readFileSync(fileURLToPath(new URL('../workflows/research-sweep.js', import.meta.url)), 'utf8')
 const runSweepBody = async (dir, script) => {
   const calls = []
+  // W2-S1: the real conductor acquires the lock before the sweep and passes run_id + owner;
+  // the dogfood answers the pre-boot join green by default so the arc runs as it does live.
+  const full = { 'run-lock:join': { exit: 0, ids: [] }, ...script }
   const agentMock = async (prompt, opts = {}) => {
     calls.push({ label: opts.label, prompt, opts })
-    const h = script[opts.label]
+    const h = full[opts.label]
     if (h === undefined) throw new Error('unmocked sweep label: ' + opts.label)
     return typeof h === 'function' ? await h(prompt) : h
   }
   const body = SWEEP_SRC.replace('export const meta', 'const meta')
   const fn = new AsyncFunction('agent', 'pipeline', 'parallel', 'log', 'phase', 'args', 'budget', 'workflow', body)
-  const ret = await fn(agentMock, null, null, () => {}, () => {}, { plugin: PLUGIN, projectDir: dir }, null, null)
+  const ret = await fn(agentMock, null, null, () => {}, () => {}, { plugin: PLUGIN, run_id: RUN_ID, owner: OWNER, projectDir: dir }, null, null)
   return { ret, calls }
 }
 

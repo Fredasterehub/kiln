@@ -16,11 +16,14 @@ Per stage: launch the kernel → receive its tiny return `{status, beat, pointer
 resume.
 
 Launch the kernel with the Workflow tool, always by path:
-`{scriptPath: "${CLAUDE_PLUGIN_ROOT}/workflows/kernel.js", args: {stage, projectDir, idea, detail, plugin: "${CLAUDE_PLUGIN_ROOT}"}}` —
+`{scriptPath: "${CLAUDE_PLUGIN_ROOT}/workflows/kernel.js", args: {stage, projectDir, idea, detail, run_id, owner, plugin: "${CLAUDE_PLUGIN_ROOT}"}}` —
 background, never inline; pass `args` as a literal JSON object, never a stringified blob (the
 kernel tolerates the string shape only as fallback). `plugin` is the absolute plugin root the
 kernel reads its gate tool, cards, and voice from — required, since kernel legs run with cwd =
-the project dir. Never inspect the kernel or any plugin
+the project dir. `run_id` and `owner` are the run lock (The run lock, below): the two facts you
+acquire once before the sweep and pass, unchanged, in the args of every launch — the sweep and
+every kernel stage — so each stage joins the one run and no second `/kiln-fire` races this
+project. Never inspect the kernel or any plugin
 file before or after launch — no reads, no probes; the fixed scriptPath and the returned
 beats are the conductor's entire interface. Beats arrive in the return, drawn from
 `data/voice.json`; do not re-read lore files here.
@@ -70,7 +73,7 @@ and returning the canonical `{facts:{status, pointers, schema_valid}, narration_
 (the same tier posture as the vision compiler — a HIGH semantic producer); speak its
 `narration_beat` verbatim; then, only once `facts.status` is `'ok'`, run the research sweep
 (below); only when it clears do you launch the kernel
-`{stage: "law", projectDir, idea, plugin: "${CLAUDE_PLUGIN_ROOT}"}`. This is the direct path's
+`{stage: "law", projectDir, idea, run_id, owner, plugin: "${CLAUDE_PLUGIN_ROOT}"}`. This is the direct path's
 mirror of the brainstorm path's compiler→kernel-law sequence.
 
 On the `BRAINSTORM_COMPLETE` envelope (single-line JSON: `ledger`, `entries`, `essence`):
@@ -81,15 +84,27 @@ and `.kiln/posture.json` (plus, on a brownfield target, `.kiln/brownfield` + `.k
 `{facts:{status, pointers, schema_valid}, narration_beat}` envelope; speak its `narration_beat`
 verbatim; then, only once `facts.status` is `'ok'`, run the research sweep (below); only when it
 clears do you launch the kernel
-`{stage: "law", projectDir, idea: <essence>, plugin: "${CLAUDE_PLUGIN_ROOT}"}`. Launches and tiny returns only — no dialogue
+`{stage: "law", projectDir, idea: <essence>, run_id, owner, plugin: "${CLAUDE_PLUGIN_ROOT}"}`. Launches and tiny returns only — no dialogue
 or ledger content ever reaches this window.
+
+## The run lock
+
+Once the compiler returns `facts.status` `'ok'` and BEFORE the research sweep, take the run lock —
+ONCE per run. Run this Bash (no orchestration, one closed fact):
+`node "${CLAUDE_PLUGIN_ROOT}/scripts/kiln-review" run-lock acquire .kiln follow-ladders "$PPID"`.
+`$PPID` is this session — the run's stable owner while it lives. It prints `<run_id> <owner>` on
+one line: hold those two facts for the whole run and pass them, unchanged, in the `args` of every
+launch (the sweep and every kernel stage). Kiln keeps the lock across every stage boundary and
+hold and frees it only when the run truly completes (Completion, below) — never per stage. If
+acquire refuses (`a run lock already exists`), another run holds this forge or a prior one left a
+lock: speak that plainly, in voice, and hold — do not race it.
 
 ## The research sweep — before the law, on both paths
 
-Once the onboarding (direct) or vision (brainstorm) compiler returns `facts.status` `'ok'`, and
-BEFORE the kernel law launch, launch the research sweep by path, exactly the way you launch the
-kernel:
-`{scriptPath: "${CLAUDE_PLUGIN_ROOT}/workflows/research-sweep.js", args: {projectDir, plugin: "${CLAUDE_PLUGIN_ROOT}"}}` —
+Once the onboarding (direct) or vision (brainstorm) compiler returns `facts.status` `'ok'`, the run
+lock is held (above), and BEFORE the kernel law launch, launch the research sweep by path, exactly
+the way you launch the kernel:
+`{scriptPath: "${CLAUDE_PLUGIN_ROOT}/workflows/research-sweep.js", args: {projectDir, run_id, owner, plugin: "${CLAUDE_PLUGIN_ROOT}"}}` —
 background, by path, `args` a literal JSON object. It reads the Gauge research dial and, when
 research is on, runs a fresh-context desk over the six feasibility areas and ratifies the
 result off this window — cross-family, or single-family through the claude family when codex
@@ -148,7 +163,13 @@ for the single completion — a probe informs the sketch, it never gates it. At 
 3. **Missing codex** → disclose plainly, in voice; proceed single-family only after the user
    answers `continue`. On that word, speak, verbatim:
    "Single-family, then. Miyamoto steps in — complete at its own tier, and every seal will say so. I do not impersonate a second head."
-4. **Completion** → immediately before the completion beat, meter the spend:
+4. **Completion** → the run is truly done, so free the run lock first — this is the one release
+   boundary, never per stage: `node "${CLAUDE_PLUGIN_ROOT}/scripts/kiln-review" run-lock release .kiln <run_id> <owner>`
+   with the two facts you acquired at the start. The seals stand either way, but a nonzero release is
+   not nothing: it did not complete, so a lock or claim residue may remain (`.kiln/run.lock` or a
+   `.kiln/.run.lock.claim-*` file), and a fresh run here may hold until that residue is inspected.
+   Disclose exactly that, in voice — the release did not finish and residue may remain — without
+   claiming who holds it now or when it clears. Then, immediately before the completion beat, meter the spend:
    `node "${CLAUDE_PLUGIN_ROOT}/scripts/kiln-meter.mjs" 2>/dev/null` (Bash, no args — it reads this
    session's own transcript). Fill `{driver}` with its stdout integer. If it exits
    nonzero, speak the unmetered completion line verbatim — a measured silence, never a

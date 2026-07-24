@@ -285,6 +285,29 @@ const ACK = { type: 'object', additionalProperties: false, properties: { ok: { t
 // the conductor maps a held return to an existing hard stop and speaks the honest beat.
 const held = (beat, extra) => ({ status: 'held', beat, pointers: { ...extra } })
 
+// W2-S1 (H2 / B01): the run lock JOIN. The conductor acquires the run lock ONCE before this
+// pre-law sweep and passes run_id plus an opaque owner token; the sweep joins with the exact
+// token BEFORE the tiers read or any .kiln mutation, so a second run can never race over the
+// shared .kiln files. Probe mode carries NO lock — it runs during the brainstorm, before the
+// conductor acquires — so it never joins. A launch that should hold a lock but carries none,
+// or a foreign lock, is an honest hard hold (the law does not plan while another run holds the
+// project) naming the run that holds it; a stale lock is taken over at the conductor, never
+// stolen by a leg. These returns predate the tiers boot, so they speak workflow-owned lines.
+if (A.mode !== 'probe') {
+  if (typeof A.run_id !== 'string' || A.run_id.trim() === '' || typeof A.owner !== 'string' || A.owner.trim() === '') {
+    return held('This sweep carries no run lock. Kiln takes the lock before the sweep and hands it to every stage; without one I will not touch the shared project files. Relaunch through the conductor so the run holds its lock.', {})
+  }
+  const joinCmd = 'node ' + shq(plugin + '/scripts/kiln-review') + ' run-lock join .kiln ' + [A.run_id, A.owner].map(shq).join(' ')
+  const joined = await agent(
+    'Run exactly this in ' + projectDir + '. Report {exit, ids}: exit = the exit code; ids = the run_id the lock names as its owner when the join is refused (exit is nonzero), else []:\n' + joinCmd,
+    { label: 'run-lock:join', schema: IDS },
+  ).then(r => (r ?? { exit: 20, ids: [] }))
+  if (joined.exit !== 0) {
+    const ownerTag = joined.ids && joined.ids[0] ? ' (run ' + joined.ids[0] + ')' : ''
+    return held('Another Kiln run holds the lock on this project' + ownerTag + '. The law does not plan while another run holds the forge. If that run has ended, relaunch through the conductor and Kiln will take the stale lock over.', { lock: '.kiln/run.lock' })
+  }
+}
+
 // Boot: read the tier file once via an agent leg (the same node -p projection the kernel boots
 // on — never direct fs). The boot leg omits model and effort: no tier value exists before the
 // file is read. A missing, unreadable, or malformed tier file holds the law closed.
@@ -325,11 +348,18 @@ if (A.mode === 'probe') {
   if (!validLedgerRef(A.ledger, A.seqs)) {
     return { status: 'bad-probe', beat: 'The probe request reached the sweep without a ledger path and its sequence IDs — a probe carries only those, never dialogue. Nothing was digested.', pointers: {} }
   }
-  // The highest referenced seq names the digest — deterministic, collision-free across the at-most-one
-  // probe a session may pull, and derivable with no extra leg. Because the name is deterministic, a
-  // prior run at these same seqs may have left a digest here; it is invalidated at prep (below),
-  // before this pass produces, so a stale file can never satisfy the content-blind test -s.
-  const digest = '.kiln/docs/probe-' + Math.max(...A.seqs) + '.md'
+  // W2-S1 (B04): the probe is exempt from the run lock (it precedes acquire), so its digest must
+  // never share a guarded path — two concurrent brainstorms at the same maximum seq would collide.
+  // A per-invocation UUID makes the name unique. A Workflow body cannot mint (no Date/random in the
+  // sandbox), so the id rides a mechanical hands leg. A malformed or missing id holds the probe.
+  const idLeg = await idsFetch(
+    "node -p 'require(\"crypto\").randomUUID()'",
+    'probe:id', 'a one-element array holding the printed UUID, [] if exit != 0')
+  if (idLeg.exit !== 0 || idLeg.ids.length !== 1 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(idLeg.ids[0])) {
+    return { status: 'probe-failed', beat: 'The probe desk could not mint a unique digest name — nothing was written this pass.', pointers: {} }
+  }
+  // The seq names the run, the UUID makes it collision-free — no shell metacharacter in either.
+  const digest = '.kiln/docs/probe-' + Math.max(...A.seqs) + '-' + idLeg.ids[0] + '.md'
   const probePrompt = [
     'You are a Kiln probe desk: a fresh-context reader with no view of the live brainstorm window.',
     'Read the append-only ledger at ' + A.ledger + ' and consider ONLY the entries whose seq is one of: ' + A.seqs.join(', ') + '.',
@@ -338,13 +368,10 @@ if (A.mode === 'probe') {
     'That digest is your SOLE permitted write — never create or modify the ledger, the vision, the essence, the posture, or any other artifact under this root; a probe reads to inform, it authors nothing but its own digest.',
     'Return {facts:{status, pointers, schema_valid}, narration_beat} — narration_beat one plain line that a fresh digest is on disk.',
   ].join('\n')
-  // Prep the desk AND invalidate any prior digest at this deterministic name in one hand — the same
-  // freshness rule the main path applies to the candidate. A stale probe-<maxSeq>.md must never
-  // satisfy the content-blind test -s below when this pass's producer writes nothing, riding a prior
-  // probe to a false 'probed' and a stale pointer. rm -f never fails on a missing file, so only a
-  // real desk fault holds the probe. The seqs are validated positive integers, so the digest name
-  // holds no shell metacharacter.
-  if (await hands('mkdir -p .kiln/docs && rm -f ' + digest, 'probe:prep') !== 0) {
+  // Prep the desk. Freshness needs no invalidation now: the UUID name is unique to this pass, so a
+  // producer that writes nothing leaves the fresh path empty and fails the content-blind test -s
+  // below — the stale-ride is impossible by construction (the property the old rm -f only approximated).
+  if (await hands('mkdir -p .kiln/docs', 'probe:prep') !== 0) {
     return { status: 'probe-failed', beat: 'The .kiln/docs desk would not open for the probe digest — nothing was written this pass.', pointers: {} }
   }
   const dg = await agent(probePrompt, { label: 'probe:producer', ...tier('stage-law'), schema: STAGE_RESULT })

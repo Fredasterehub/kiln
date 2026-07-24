@@ -748,6 +748,29 @@ const WIDE_ADJUST = {
   required: ['facts', 'narration_beat', 'converged'],
 }
 
+// W2-S1 (H2 / B01): the run lock JOIN. The conductor acquires the run lock ONCE before the
+// sweep and passes run_id plus an opaque owner token in every launch; each kernel boot
+// re-joins with the exact token BEFORE the tiers read or any stage work, so a second run on
+// this project dir can never race over the shared .kiln files. A launch with no lock facts is
+// a conductor contract violation (the conductor acquires before it ever launches a stage): a
+// legacy resume that never acquired holds here, naming the missing facts, rather than run
+// unlocked. A foreign lock is an honest hold naming the run that holds it; taking a stale lock
+// over is the conductor decision at acquire, never a stage leg stealing a lock it cannot prove
+// dead. These returns predate the tiers boot, so they speak kernel-owned lines (no voice read
+// is possible yet), the same class as the tiers-config halt below.
+if (typeof A.run_id !== 'string' || A.run_id.trim() === '' || typeof A.owner !== 'string' || A.owner.trim() === '') {
+  return { status: 'run-unlocked', beat: 'This launch carries no run lock. Kiln takes the lock before the sweep and hands every stage its key; a stage that arrives without one will not share the project files blind. Relaunch through the conductor so the run holds its lock.', pointers: {} }
+}
+const joinCmd = 'node ' + shq(plugin + '/scripts/kiln-review') + ' run-lock join .kiln ' + [A.run_id, A.owner].map(shq).join(' ')
+const joined = await agent(
+  'Run exactly this in ' + projectDir + '. Report {exit, ids}: exit = the exit code; ids = the run_id the lock names as its owner when the join is refused (exit is nonzero), else []:\n' + joinCmd,
+  { label: 'run-lock:join', schema: IDS },
+).then(r => (r ?? { exit: 20, ids: [] }))
+if (joined.exit !== 0) {
+  const ownerTag = joined.ids && joined.ids[0] ? ' (run ' + joined.ids[0] + ')' : ''
+  return { status: 'run-locked', beat: 'Another Kiln run holds the lock on this project' + ownerTag + '. I will not race a run that may still be live. If that run has ended, relaunch through the conductor and Kiln will take the stale lock over.', pointers: { lock: '.kiln/run.lock' } }
+}
+
 // Boot (T-02): read the tier file once via an agent leg — the same node -p read
 // surface as the voice beats below, never direct fs (the kernel stays content-
 // blind). The boot leg omits model and effort: no tier value can exist before the

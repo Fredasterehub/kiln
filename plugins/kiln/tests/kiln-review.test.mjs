@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -17,6 +17,25 @@ import { fileURLToPath } from 'node:url'
 const REVIEW = fileURLToPath(new URL('../scripts/kiln-review', import.meta.url))
 const NO_REPO = '/no/such/repo/kiln-review-unit-xyz'
 const HASH = 'a'.repeat(64)
+
+// W2-S1 (B02): the claim primitive's double-failure paths cannot arise from any single CLI
+// invocation (reaching restoreOrArchive needs a completed swap, which needs a working archive — the
+// opposite of the failed-archive half). They are pinned by evaluating the helper source directly
+// with mocked fs bindings — the repo's drift-pin extraction idiom (as research-sweep.test.mjs
+// evaluates RESEARCH_CORE and the kernel core tests evaluate marked source). The fs operations ride
+// in as PARAMETERS so a test can make linkSync or appendFileSync fail on demand; the shipped CLI
+// stays byte-clean of any test seam. archiveLockRecord is pulled in because restoreOrArchive calls it.
+const reviewSrc = readFileSync(REVIEW, 'utf8')
+const fnText = (name) => {
+  const start = reviewSrc.indexOf(`function ${name}(`)
+  assert.notEqual(start, -1, `${name} still exists as a named helper in kiln-review`)
+  return reviewSrc.slice(start, reviewSrc.indexOf('\n}\n', start) + 2)
+}
+const lockHelpers = (fs) => new Function(
+  'linkSync', 'unlinkSync', 'appendFileSync', 'join', 'LOCK_FILE', 'LOCK_HISTORY',
+  `${fnText('archiveLockRecord')}\n${fnText('restoreOrArchive')}\nreturn { archiveLockRecord, restoreOrArchive }`,
+)(fs.linkSync, fs.unlinkSync, fs.appendFileSync, join, 'run.lock', 'run-history.jsonl')
+const eexist = () => { const e = new Error('lock path re-occupied'); e.code = 'EEXIST'; throw e }
 
 function runReview(effort) {
   const dir = mkdtempSync(join(tmpdir(), 'kiln-review-'))
@@ -951,4 +970,260 @@ test('kiln-review: ratify and screen keep their no-repo discipline byte-identica
   assert.equal(createHash('sha256').update(screenSrc).digest('hex'),
     '76125ca1c035be4549052db4bc6208949415ba6451fb2a97536457d2ba45dc15',
     'screenInstructions is byte-identical to the pinned pre-FIX-2 prompt')
+})
+
+// ── W2-S1: the conductor-owned run lock (acquire / join / release / takeover) ────────────
+const lock = (...a) => {
+  const r = spawnSync('node', [REVIEW, 'run-lock', ...a], { encoding: 'utf8' })
+  return { fact: (r.stdout || '').trim(), status: r.status }
+}
+// A pid that all but certainly names no live process — for the dead-holder takeover leg.
+const DEAD_PID = 2147480000
+const writeLock = (kilnDir, over) => {
+  const record = {
+    run_id: 'old-run', owner: 'old-owner', conductor_pid: DEAD_PID,
+    started_at: '2020-01-01T00:00:00.000Z', ladder_choice: 'follow-ladders', plugin_version: '0.0.0', ...over,
+  }
+  mkdirSync(kilnDir, { recursive: true })
+  writeFileSync(join(kilnDir, 'run.lock'), JSON.stringify(record) + '\n')
+  return record
+}
+
+test('run-lock: acquire creates the lock with the full record and prints run_id + owner (exit 0)', () => {
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  const r = lock('acquire', k, 'follow-ladders', '4242')
+  assert.equal(r.status, 0, 'a fresh acquire exits 0')
+  const [runId, owner] = r.fact.split(' ')
+  assert.ok(runId && owner && runId !== owner, 'run_id and owner are two distinct closed facts')
+  const rec = JSON.parse(readFileSync(join(k, 'run.lock'), 'utf8'))
+  assert.equal(rec.run_id, runId, 'the record holds the printed run_id')
+  assert.equal(rec.owner, owner, 'the record holds the printed owner token')
+  assert.equal(rec.conductor_pid, 4242, 'the conductor pid is stored as a number')
+  assert.equal(rec.ladder_choice, 'follow-ladders', 'the availability choice rides the lock at acquire')
+  assert.ok(/^\d+\.\d+\.\d+/.test(rec.plugin_version), 'the plugin version is stamped')
+  assert.ok(/^\d{4}-\d\d-\d\dT/.test(rec.started_at), 'started_at is an ISO timestamp')
+})
+
+test('run-lock: acquire is exclusive — a second acquire is refused and never overwrites the live lock', () => {
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  const first = lock('acquire', k, 'follow-ladders', '4242')
+  const [runId] = first.fact.split(' ')
+  const before = readFileSync(join(k, 'run.lock'), 'utf8')
+  const second = lock('acquire', k, 'follow-ladders', '9191')
+  assert.equal(second.status, 12, 'a second acquire is denied, not a transport error')
+  assert.equal(second.fact, runId, 'the refusal names the holding run_id so the caller can report it')
+  assert.equal(readFileSync(join(k, 'run.lock'), 'utf8'), before, 'the live lock is untouched by the refused acquire')
+})
+
+test('run-lock: acquire rejects an unknown choice or a non-positive pid, writing nothing', () => {
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  assert.equal(lock('acquire', k, 'sprint', '4242').status, 20, 'a choice outside the closed set is a transport failure')
+  assert.equal(lock('acquire', k, 'follow-ladders', '0').status, 20, 'a zero pid is rejected')
+  assert.equal(lock('acquire', k, 'follow-ladders', 'notapid').status, 20, 'a non-integer pid is rejected')
+  assert.ok(!existsSync(join(k, 'run.lock')), 'no lock is written on a rejected acquire')
+})
+
+test('run-lock: join exits 0 only on an exact run_id AND owner match', () => {
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  const [runId, owner] = lock('acquire', k, 'follow-ladders', '4242').fact.split(' ')
+  assert.equal(lock('join', k, runId, owner).status, 0, 'the exact run_id + owner joins')
+  const wrongOwner = lock('join', k, runId, 'not-the-owner')
+  assert.equal(wrongOwner.status, 12, 'a wrong owner token is denied — the exact-token rule')
+  assert.equal(wrongOwner.fact, runId, 'the refusal names the running owner run_id')
+  assert.equal(lock('join', k, 'not-the-run', owner).status, 12, 'a wrong run_id is denied even with the right owner')
+})
+
+test('run-lock: join a directory with no lock is refused, naming no owner', () => {
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  mkdirSync(k, { recursive: true })
+  const r = lock('join', k, 'some-run', 'some-owner')
+  assert.equal(r.status, 12, 'an absent lock cannot be joined')
+  assert.equal(r.fact, '', 'no run_id is named when there is no lock')
+})
+
+test('run-lock: release requires the exact token, archives the record, then removes the live lock', () => {
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  const [runId, owner] = lock('acquire', k, 'follow-ladders', '4242').fact.split(' ')
+  // A wrong token cannot release, and the live lock survives intact.
+  assert.equal(lock('release', k, runId, 'wrong').status, 12, 'a foreign token is denied')
+  assert.ok(existsSync(join(k, 'run.lock')), 'the refused release leaves the lock in place')
+  // The exact token releases: the record is archived to run-history.jsonl BEFORE the unlink.
+  assert.equal(lock('release', k, runId, owner).status, 0, 'the exact token releases')
+  assert.ok(!existsSync(join(k, 'run.lock')), 'the live lock is gone after release')
+  const history = readFileSync(join(k, 'run-history.jsonl'), 'utf8').trim().split('\n')
+  assert.equal(history.length, 1, 'exactly one archived row')
+  const row = JSON.parse(history[0])
+  assert.equal(row.run_id, runId, 'the archived row preserves the run identity — the record is never lost')
+  assert.equal(row.owner, owner, 'the archived row preserves the owner token')
+  assert.equal(row.lock_event, 'released', 'the archive marks how the lock ended')
+})
+
+test('run-lock: takeover needs BOTH a dead holder pid AND an aged lock — never time alone', () => {
+  // dead pid + aged lock → the takeover succeeds, archives the stale record, mints a fresh one.
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  writeLock(k, { conductor_pid: DEAD_PID, started_at: '2020-01-01T00:00:00.000Z' })
+  const won = lock('takeover', k, 'follow-ladders', '777')
+  assert.equal(won.status, 0, 'a dead holder plus an aged lock is taken over')
+  const [freshRun, freshOwner] = won.fact.split(' ')
+  const rec = JSON.parse(readFileSync(join(k, 'run.lock'), 'utf8'))
+  assert.equal(rec.run_id, freshRun, 'the lock now holds the fresh run_id')
+  assert.notEqual(rec.run_id, 'old-run', 'the stale identity is gone from the live lock')
+  assert.equal(rec.conductor_pid, 777, 'the taking-over conductor pid is recorded')
+  const arch = JSON.parse(readFileSync(join(k, 'run-history.jsonl'), 'utf8').trim())
+  assert.equal(arch.run_id, 'old-run', 'the stale record is archived — never a bare unlink')
+  assert.equal(arch.lock_event, 'taken_over', 'the archive marks the takeover')
+  assert.ok(freshRun && freshOwner && freshRun !== freshOwner, 'takeover prints a fresh run_id + owner like acquire')
+})
+
+test('run-lock: takeover is refused while the holder pid is alive, even on an ancient lock', () => {
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  // This very test process is a guaranteed-live pid.
+  writeLock(k, { conductor_pid: process.pid, started_at: '2020-01-01T00:00:00.000Z' })
+  assert.equal(lock('takeover', k, 'follow-ladders', '777').status, 12, 'a live holder is never taken over')
+  assert.equal(JSON.parse(readFileSync(join(k, 'run.lock'), 'utf8')).run_id, 'old-run', 'the live lock is untouched')
+  assert.ok(!existsSync(join(k, 'run-history.jsonl')), 'nothing is archived when the takeover is refused')
+})
+
+test('run-lock: takeover is refused while a dead-holder lock is younger than the age floor', () => {
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  writeLock(k, { conductor_pid: DEAD_PID, started_at: new Date().toISOString() })
+  assert.equal(lock('takeover', k, 'follow-ladders', '777').status, 12, 'a fresh lock is not yet stale — age gates alongside the dead pid')
+  assert.equal(JSON.parse(readFileSync(join(k, 'run.lock'), 'utf8')).run_id, 'old-run', 'the young lock is untouched')
+})
+
+test('run-lock: takeover fails closed on an absent or unreadable lock — it cannot prove staleness', () => {
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  mkdirSync(k, { recursive: true })
+  assert.equal(lock('takeover', k, 'follow-ladders', '777').status, 20, 'no lock to take over is a transport failure, not a silent acquire')
+  writeFileSync(join(k, 'run.lock'), 'not json at all\n')
+  assert.equal(lock('takeover', k, 'follow-ladders', '777').status, 20, 'an unreadable lock cannot be proven stale')
+})
+
+test('run-lock: an unknown subcommand or wrong arity falls to the usage halt (exit 20)', () => {
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  assert.equal(lock('frobnicate', k).status, 20, 'an unknown run-lock verb is a usage error')
+  assert.equal(lock('acquire', k).status, 20, 'a short acquire arity falls through to usage')
+})
+
+// ── B03: only ESRCH proves death — every uncertain probe fails closed ────────────────────
+test('run-lock: takeover is refused on any un-provably-dead conductor pid, even on an aged lock', () => {
+  // A valid-JSON aged lock whose pid cannot be PROVEN dead (ESRCH only) must never be taken over:
+  // missing, non-numeric, non-positive, or zero all read as UNKNOWN, which is not-dead — fail closed.
+  for (const pid of [undefined, 'abc', -3, 0, null]) {
+    const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+    const rec = { run_id: 'r', owner: 'o', started_at: '2020-01-01T00:00:00.000Z', ladder_choice: 'follow-ladders', plugin_version: '1' }
+    if (pid !== undefined) rec.conductor_pid = pid
+    mkdirSync(k, { recursive: true })
+    writeFileSync(join(k, 'run.lock'), JSON.stringify(rec) + '\n')
+    assert.equal(lock('takeover', k, 'follow-ladders', '777').status, 12, `pid ${JSON.stringify(pid)} cannot be proven dead — takeover refused`)
+    assert.equal(JSON.parse(readFileSync(join(k, 'run.lock'), 'utf8')).run_id, 'r', 'the un-provably-stale lock is untouched')
+    assert.ok(!existsSync(join(k, 'run-history.jsonl')), 'nothing archived on a refused takeover')
+  }
+})
+
+// ── B05.4: the release matrix — wrong run_id with the CORRECT owner must still fail ───────
+test('run-lock: release is refused when the run_id is wrong even if the owner token is right', () => {
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  const [, owner] = lock('acquire', k, 'follow-ladders', '4242').fact.split(' ')
+  assert.equal(lock('release', k, 'not-the-run', owner).status, 12, 'a matching owner cannot release a foreign run_id')
+  assert.ok(existsSync(join(k, 'run.lock')), 'the lock survives the mismatched release')
+})
+
+// ── B05.3: archive-before-unlink ordering — a failed archive must not lose the lock ──────
+test('run-lock: a failed history archive leaves the lock in place — never an unlink without an archive', () => {
+  // Make the history path un-appendable by planting a DIRECTORY where run-history.jsonl must be a
+  // file; appendFileSync then fails, and both release and takeover must preserve the live lock.
+  const rel = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  const [runId, owner] = lock('acquire', rel, 'follow-ladders', '4242').fact.split(' ')
+  mkdirSync(join(rel, 'run-history.jsonl'), { recursive: true })
+  const r = lock('release', rel, runId, owner)
+  assert.equal(r.status, 20, 'a release that cannot archive fails transport')
+  assert.ok(existsSync(join(rel, 'run.lock')), 'the lock SURVIVES a failed archive — the record is never lost')
+  assert.equal(JSON.parse(readFileSync(join(rel, 'run.lock'), 'utf8')).run_id, runId, 'the surviving lock is the same record')
+
+  const tk = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  writeLock(tk, { conductor_pid: DEAD_PID, started_at: '2020-01-01T00:00:00.000Z' })
+  mkdirSync(join(tk, 'run-history.jsonl'), { recursive: true })
+  assert.equal(lock('takeover', tk, 'follow-ladders', '777').status, 20, 'a takeover that cannot archive the stale record fails transport')
+  assert.equal(JSON.parse(readFileSync(join(tk, 'run.lock'), 'utf8')).run_id, 'old-run', 'the stale lock SURVIVES a failed archive — never a takeover that loses the record')
+})
+
+// ── B05.1 / B05.2: true concurrency — exactly one winner, records never lost ─────────────
+const spawnLock = (...a) => new Promise((res) => {
+  const p = spawn('node', [REVIEW, 'run-lock', ...a])
+  let out = ''
+  p.stdout.on('data', (d) => { out += d })
+  p.on('close', (code) => res({ code, out: out.toString().trim() }))
+})
+
+test('run-lock: two truly-concurrent acquires elect exactly one winner; the surviving record is the winner\'s', async () => {
+  for (let i = 0; i < 12; i++) {
+    const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-race-')), '.kiln')
+    mkdirSync(k, { recursive: true })
+    const [a, b] = await Promise.all([spawnLock('acquire', k, 'follow-ladders', '111'), spawnLock('acquire', k, 'follow-ladders', '222')])
+    const winners = [a, b].filter((r) => r.code === 0)
+    const losers = [a, b].filter((r) => r.code === 12)
+    assert.equal(winners.length, 1, `iteration ${i}: exactly one acquire wins the O_EXCL create`)
+    assert.equal(losers.length, 1, `iteration ${i}: the loser is denied (12), never a transport error`)
+    assert.equal(JSON.parse(readFileSync(join(k, 'run.lock'), 'utf8')).run_id, winners[0].out.split(' ')[0], 'the on-disk record belongs to the winner')
+  }
+})
+
+test('run-lock: two truly-concurrent takeovers of one stale lock elect one winner and archive the stale record exactly once', async () => {
+  // The exact race Sol live-reproduced (32/80 double-successes). Claim-by-rename must serialize it.
+  for (let i = 0; i < 12; i++) {
+    const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-race-')), '.kiln')
+    writeLock(k, { conductor_pid: DEAD_PID, started_at: '2020-01-01T00:00:00.000Z' })
+    const [a, b] = await Promise.all([spawnLock('takeover', k, 'follow-ladders', '111'), spawnLock('takeover', k, 'follow-ladders', '222')])
+    const winners = [a, b].filter((r) => r.code === 0)
+    assert.equal(winners.length, 1, `iteration ${i}: exactly one takeover wins — no double-success`)
+    // The loser is DENIED with a KNOWN code: 12 when it loses the claim or finds a fresh lock, or 20
+    // when it reads the lock during the winner's atomic claim gap (renamed away, not yet recreated).
+    // It never wins, never silently displaces the winner's record, and never leaks a 1/signal/null.
+    const losers = [a, b].filter((r) => r.code !== 0)
+    assert.equal(losers.length, 1, `iteration ${i}: exactly one loser`)
+    assert.ok([12, 20].includes(losers[0].code), `iteration ${i}: the loser exits 12 or 20, never an unexpected code — got ${losers[0].code}`)
+    const stale = readFileSync(join(k, 'run-history.jsonl'), 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((r) => r.run_id === 'old-run')
+    assert.equal(stale.length, 1, `iteration ${i}: the stale record is archived exactly once — never lost, never doubled`)
+    assert.equal(JSON.parse(readFileSync(join(k, 'run.lock'), 'utf8')).run_id, winners[0].out.split(' ')[0], 'the live lock is the winner\'s fresh record')
+  }
+})
+
+// ── B02: the claim primitive's double-failure — the record is NEVER unlinked without it safe ─────
+// restoreOrArchive is reached only when a fresh lock lands between a verb's pre-read and its claim,
+// and its double failure (exclusive restore fails AND archival fails) cannot arise from any single
+// CLI invocation — reaching the branch needs a completed swap, which needs a working archive. So the
+// three outcomes are pinned directly against the helper through the source-extraction harness.
+test('run-lock (B02): a displaced record whose restore AND archive both fail is PRESERVED — the claim is never unlinked', () => {
+  // The exact double failure: linkSync throws EEXIST (lock path re-occupied) AND appendFileSync
+  // throws (history unavailable). The claim file this process exclusively holds is the sole copy.
+  const unlinked = []
+  const helpers = lockHelpers({
+    linkSync: eexist,
+    appendFileSync: () => { throw new Error('run-history.jsonl is a directory') },
+    unlinkSync: (p) => { unlinked.push(p) },
+  })
+  const record = { run_id: 'displaced-run', owner: 'x' }
+  const ok = helpers.restoreOrArchive('/proj/.kiln', '/proj/.kiln/.run.lock.claim-x', record)
+  assert.equal(ok, false, 'the double failure surfaces false so the caller can raise the transport-class failure')
+  assert.deepEqual(unlinked, [], 'the claim file is NEVER unlinked — the sole remaining copy of the displaced record survives on disk')
+})
+
+test('run-lock (B02): restoreOrArchive restores an empty lock path and archives a re-occupied one — the reachable branches keep the record', () => {
+  const record = { run_id: 'displaced-run', owner: 'x' }
+  // Restore branch: linkSync succeeds (empty path) → the claim links back and is dropped.
+  const u1 = []
+  const restore = lockHelpers({ linkSync: () => {}, appendFileSync: () => { throw new Error('unused') }, unlinkSync: (p) => u1.push(p) })
+  assert.equal(restore.restoreOrArchive('/proj/.kiln', '/proj/.kiln/.claim', record), true, 'a clean restore returns true')
+  assert.deepEqual(u1, ['/proj/.kiln/.claim'], 'the claim is dropped only after a successful restore')
+  // Archive branch: linkSync throws EEXIST but appendFileSync succeeds → the record is archived.
+  const u2 = []
+  const appended = []
+  const archive = lockHelpers({ linkSync: eexist, appendFileSync: (p, data) => appended.push({ p, data }), unlinkSync: (p) => u2.push(p) })
+  assert.equal(archive.restoreOrArchive('/proj/.kiln', '/proj/.kiln/.claim', record), true, 'a re-occupied path archives instead of restoring, returns true')
+  assert.equal(appended.length, 1, 'the displaced record is written to run-history exactly once')
+  assert.match(appended[0].p, /run-history\.jsonl$/, 'the archive targets the history ledger')
+  assert.ok(appended[0].data.includes('"run_id":"displaced-run"') && appended[0].data.includes('"lock_event":"displaced"'),
+    'the displaced record bytes and event survive in the archive')
+  assert.deepEqual(u2, ['/proj/.kiln/.claim'], 'the claim is dropped only after a successful archive')
 })

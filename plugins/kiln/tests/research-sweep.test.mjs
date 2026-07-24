@@ -25,6 +25,11 @@ const { parseArgs, gateOutcome, resolveTier, researchTiersValid, ratifyLoop, val
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
 const PLUGIN = '/abs/plugins/kiln'
+// W2-S1: the conductor acquires the run lock before this pre-law sweep and passes run_id +
+// owner; the harness supplies both by default so a sweep launch models the locked envelope and
+// passes the pre-boot join. Probe launches skip the join, so they need neither.
+const RUN_ID = 'run-test'
+const OWNER = 'owner-test'
 // The focused boot config: research-sweep validates only the three roles it consumes. The full
 // kernel boot gate still rules the whole config at the law stage.
 const TIERS_OK = {
@@ -41,14 +46,16 @@ const TIERS_OK = {
 }
 async function runSweep(kargs, script) {
   const launch = (kargs && typeof kargs === 'object' && !Array.isArray(kargs))
-    ? { plugin: PLUGIN, ...kargs }
+    ? { plugin: PLUGIN, run_id: RUN_ID, owner: OWNER, ...kargs }
     : kargs
   // invalidate is the top-of-run freshness hand; it passes by default so the label harness reaches
   // the path under test, and a test that cares about it overrides the entry.
   // S4: the degradation path-selector fires before the ratify seat is chosen; the harness
   // answers marker-absent (exit 1) by default so a scenario takes the codex ratify seat, as
   // before. The degraded scenarios override with exit 0 (present) or an untrusted exit.
-  const full = { 'tiers:boot': TIERS_OK, invalidate: OK, 'invalidate:repair': OK, 'feasibility:degraded': { exit: 1 }, ...script }
+  // W2-S1: the non-probe sweep joins the run lock before the boot; the harness answers a clean
+  // join by default so pre-lock scenarios boot and run as before. Foreign-lock scenarios override.
+  const full = { 'run-lock:join': { exit: 0, ids: [] }, 'tiers:boot': TIERS_OK, invalidate: OK, 'invalidate:repair': OK, 'feasibility:degraded': { exit: 1 }, ...script }
   const calls = []
   const agentMock = async (prompt, opts = {}) => {
     calls.push({ label: opts.label, prompt, opts })
@@ -67,6 +74,10 @@ const labels = (calls) => calls.map(c => c.label)
 const DIAL_ON = { exit: 0, research: 'on' }
 const DIAL_OFF = { exit: 0, research: 'off' }
 const OK = { exit: 0 }
+// W2-S1 (B04): the probe digest name is unique per invocation via a minted UUID (a Workflow body
+// cannot mint, so it rides a mechanical leg). A fixed UUID makes the path deterministic in tests.
+const PROBE_UID = '00000000-0000-4000-8000-000000000000'
+const PROBE_ID = { exit: 0, ids: [PROBE_UID] }
 const PRODUCER_CANDIDATE = { facts: { status: 'ok', pointers: ['.kiln/docs/feasibility-candidate.md'], schema_valid: true }, narration_beat: 'the feasibility read is on disk' }
 const PRODUCER_NONE = { facts: { status: 'no-qualifying-question', pointers: [], schema_valid: true }, narration_beat: 'no assumption qualifies — straight to the law' }
 // The default happy-path ratify script: dial on → candidate → accept → promote.
@@ -223,7 +234,41 @@ test('runtime: a missing or relative plugin root halts honestly — no work runs
 test('runtime: a malformed tier file holds the law closed — never a sweep on unknown tiers', async () => {
   const { ret, calls } = await runSweep({ projectDir: '/p' }, { 'tiers:boot': { exit: 20 } })
   assert.equal(ret.status, 'held', 'a bad boot holds the law')
-  assert.deepEqual(labels(calls), ['tiers:boot'], 'nothing runs after a failed boot — no dial, no producer')
+  assert.deepEqual(labels(calls), ['run-lock:join', 'tiers:boot'], 'the run-lock join precedes the boot; nothing runs after a failed boot — no dial, no producer')
+})
+
+test('runtime (W2-S1): the pre-law sweep joins the run lock before the boot, with the exact run_id + owner', async () => {
+  const { calls } = await runSweep({ projectDir: '/p' }, { 'tiers:boot': { exit: 20 } })
+  const j = calls.find(c => c.label === 'run-lock:join')
+  assert.ok(j, 'the join leg dispatches on a real sweep')
+  assert.ok(j.prompt.includes('run-lock join .kiln'), 'the join runs the kiln-review run-lock join verb over .kiln')
+  assert.ok(j.prompt.includes(`'${RUN_ID}'`) && j.prompt.includes(`'${OWNER}'`), 'the exact run_id and owner ride the join, shell-quoted')
+  const order = labels(calls)
+  assert.ok(order.indexOf('run-lock:join') < order.indexOf('tiers:boot'), 'the join gates the sweep before any tiers read')
+})
+
+test('runtime (W2-S1): a foreign lock holds the law — the sweep will not plan while another run holds the forge', async () => {
+  const { ret, calls } = await runSweep({ projectDir: '/p' }, { 'run-lock:join': { exit: 12, ids: ['other-run'] } })
+  assert.equal(ret.status, 'held', 'a refused join holds the law closed')
+  assert.ok(ret.beat.includes('other-run'), 'the honest hold names the run that holds the lock')
+  assert.equal(ret.pointers.lock, '.kiln/run.lock', 'the hold points at the run lock')
+  assert.deepEqual(labels(calls), ['run-lock:join'], 'a foreign lock stops before the boot — no dial, no producer')
+})
+
+test('runtime (W2-S1): a sweep carrying no lock facts holds before any leg', async () => {
+  const { ret, calls } = await runSweep({ projectDir: '/p', run_id: undefined }, {})
+  assert.equal(ret.status, 'held', 'a sweep with no lock is an honest hold, never a crash')
+  assert.ok(ret.beat.includes('run lock'), 'the hold names the missing lock')
+  assert.equal(calls.length, 0, 'the unlocked guard returns before any leg — not even the join')
+})
+
+test('runtime (W2-S1): probe mode is exempt from the run lock — it runs before the conductor acquires', async () => {
+  // A probe precedes acquire, so it carries no lock and must never join or hold on one. Even
+  // with the lock facts stripped, the probe reaches its own closed outcome and no join fires.
+  const { ret, calls } = await runSweep(
+    { projectDir: '/p', mode: 'probe', ledger: '/p/l.jsonl', run_id: undefined, owner: undefined }, {})
+  assert.equal(ret.status, 'bad-probe', 'the probe reaches its own outcome, never the lock hold')
+  assert.ok(!calls.some(c => c.label === 'run-lock:join'), 'probe mode never joins the run lock')
 })
 
 test('runtime: research OFF stands down immediately — no producer, no gate, no ratify', async () => {
@@ -475,8 +520,12 @@ async function runSweepFs(script, { seedCandidate, seedFeasibility, seedDigest, 
   if (seedFeasibility !== undefined) writeFileSync(p(FEAS), seedFeasibility)
   // Seed a stale probe digest at the deterministic name this run's seqs resolve to — the fixture
   // for the pre-production invalidation guarantee below.
-  if (seedDigest !== undefined) writeFileSync(p('.kiln/docs/probe-' + Math.max(...extraLaunch.seqs) + '.md'), seedDigest)
-  const full = { 'tiers:boot': TIERS_OK, ...script }
+  // A prior probe at the SAME max seq lives under a DIFFERENT invocation UUID (B04): the seed
+  // proves the fresh run does not ride it — it mints its own unique name and checks that alone.
+  if (seedDigest !== undefined) writeFileSync(p('.kiln/docs/probe-' + Math.max(...extraLaunch.seqs) + '-11111111-1111-4111-8111-111111111111.md'), seedDigest)
+  // W2-S1: the conductor holds the run lock before this pre-law sweep; the fs harness answers
+  // the pre-boot join green (probe fixtures skip it) so the real-disk arc runs as it does live.
+  const full = { 'run-lock:join': { exit: 0, ids: [] }, 'tiers:boot': TIERS_OK, ...script }
   const calls = []
   const agentMock = async (prompt, opts = {}) => {
     calls.push({ label: opts.label, prompt, opts })
@@ -491,9 +540,9 @@ async function runSweepFs(script, { seedCandidate, seedFeasibility, seedDigest, 
   }
   const body = src.replace('export const meta', 'const meta')
   const fn = new AsyncFunction('agent', 'pipeline', 'parallel', 'log', 'phase', 'args', 'budget', 'workflow', body)
-  const ret = await fn(agentMock, null, null, () => {}, () => {}, { plugin: PLUGIN, projectDir: dir, ...(extraLaunch || {}) }, null, null)
+  const ret = await fn(agentMock, null, null, () => {}, () => {}, { plugin: PLUGIN, run_id: RUN_ID, owner: OWNER, projectDir: dir, ...(extraLaunch || {}) }, null, null)
   const docsDir = p('.kiln/docs')
-  const probeFile = existsSync(docsDir) ? readdirSync(docsDir).find(f => /^probe-\d+\.md$/.test(f)) : undefined
+  const probeFile = existsSync(docsDir) ? readdirSync(docsDir).find(f => /^probe-\d+-[0-9a-f-]+\.md$/.test(f)) : undefined
   const files = {
     candidate: existsSync(p(CAND)) ? readFileSync(p(CAND), 'utf8') : null,
     feasibility: existsSync(p(FEAS)) ? readFileSync(p(FEAS), 'utf8') : null,
@@ -586,7 +635,7 @@ test('fs: a repair that reports ok without rewriting the candidate cannot re-rat
 test('conductor: SKILL.md launches the research sweep before the kernel law launch on both paths', () => {
   const skill = readFileSync(fileURLToPath(new URL('../skills/kiln-fire/SKILL.md', import.meta.url)), 'utf8')
   assert.ok(skill.includes('workflows/research-sweep.js'), 'the conductor launches research-sweep.js by path')
-  const directLaw = skill.indexOf('stage: "law", projectDir, idea, plugin')
+  const directLaw = skill.indexOf('stage: "law", projectDir, idea, run_id, owner, plugin')
   const brainLaw = skill.indexOf('stage: "law", projectDir, idea: <essence>')
   assert.ok(directLaw > 0, 'the direct-path law launch is present')
   assert.ok(brainLaw > 0, 'the brainstorm-path law launch is present')
@@ -636,17 +685,18 @@ test('core: validLedgerRef is the shared invariant — an absolute control-char-
 })
 
 test('runtime: probe mode writes a digest and returns its pointer — no posture dial, no ratify, no promote', async () => {
-  const PROBE_DIGEST = { facts: { status: 'ok', pointers: ['.kiln/docs/probe-7.md'], schema_valid: true }, narration_beat: 'a fresh digest is on disk' }
+  const DIGEST = `.kiln/docs/probe-7-${PROBE_UID}.md`
+  const PROBE_DIGEST = { facts: { status: 'ok', pointers: [DIGEST], schema_valid: true }, narration_beat: 'a fresh digest is on disk' }
   const { ret, calls } = await runSweep(
     { projectDir: '/p', mode: 'probe', ledger: '/p/.kiln/brainstorm-ledger.jsonl', seqs: [2, 5, 7] },
-    { 'probe:prep': OK, 'probe:producer': PROBE_DIGEST, 'probe:check': OK },
+    { 'probe:id': PROBE_ID, 'probe:prep': OK, 'probe:producer': PROBE_DIGEST, 'probe:check': OK },
   )
   assert.equal(ret.status, 'probed')
-  assert.equal(ret.pointers.digest, '.kiln/docs/probe-7.md', 'the highest referenced seq names the digest')
+  assert.equal(ret.pointers.digest, DIGEST, 'the highest seq names the digest, a per-invocation UUID makes it collision-free')
   assert.ok(!calls.some(c => c.label === 'dial:read'), 'probe reads no posture dial — none exists during a brainstorm')
   assert.ok(!calls.some(c => c.label === 'ratify:gate' || c.label === 'ratify:request' || c.label === 'promote'), 'probe never ratifies or promotes')
   const prod = calls.find(c => c.label === 'probe:producer')
-  assert.ok(prod.prompt.includes('probe-7.md') && prod.prompt.includes('2, 5, 7'), 'the desk is scoped to the referenced ledger turns and writes the named digest')
+  assert.ok(prod.prompt.includes(`probe-7-${PROBE_UID}.md`) && prod.prompt.includes('2, 5, 7'), 'the desk is scoped to the referenced ledger turns and writes the unique named digest')
   assert.ok(prod.prompt.includes('/p/.kiln/brainstorm-ledger.jsonl'), 'the desk reads the forwarded ledger path')
 })
 
@@ -673,7 +723,7 @@ test('runtime: a relative, newline-bearing, or C1-control-bearing ledger path is
 test('runtime: a probe desk that leaves no digest returns probe-failed with no pointer — never a false read', async () => {
   const { ret } = await runSweep(
     { projectDir: '/p', mode: 'probe', ledger: '/p/l.jsonl', seqs: [4] },
-    { 'probe:prep': OK, 'probe:producer': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'wrote it' }, 'probe:check': { exit: 1 } },
+    { 'probe:id': PROBE_ID, 'probe:prep': OK, 'probe:producer': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'wrote it' }, 'probe:check': { exit: 1 } },
   )
   assert.equal(ret.status, 'probe-failed')
   assert.deepEqual(ret.pointers, {}, 'a failed probe returns no digest pointer')
@@ -681,23 +731,36 @@ test('runtime: a probe desk that leaves no digest returns probe-failed with no p
 
 test('fs: probe mode writes the compact digest under .kiln/docs and returns its pointer', async () => {
   const bytes = '# Probe digest\nthe referenced turns condensed\n'
+  const DIGEST = `.kiln/docs/probe-8-${PROBE_UID}.md`
   const { ret, calls, files } = await runSweepFs(
-    { 'probe:producer': (p) => { writeFileSync(p('.kiln/docs/probe-8.md'), bytes); return { facts: { status: 'ok', pointers: ['.kiln/docs/probe-8.md'], schema_valid: true }, narration_beat: 'a fresh digest is on disk' } } },
+    { 'probe:id': PROBE_ID, 'probe:producer': (p) => { writeFileSync(p(DIGEST), bytes); return { facts: { status: 'ok', pointers: [DIGEST], schema_valid: true }, narration_beat: 'a fresh digest is on disk' } } },
     { extraLaunch: { mode: 'probe', ledger: '/abs/.kiln/brainstorm-ledger.jsonl', seqs: [3, 8] } },
   )
   assert.equal(ret.status, 'probed')
-  assert.equal(ret.pointers.digest, '.kiln/docs/probe-8.md', 'the highest referenced seq names the digest')
+  assert.equal(ret.pointers.digest, DIGEST, 'the highest seq names the digest, a per-invocation UUID makes it collision-free')
   assert.equal(files.digest, bytes, 'the compact digest bytes are on disk under .kiln/docs')
   assert.ok(!calls.some(c => c.label === 'dial:read' || c.label === 'ratify:gate' || c.label === 'promote'), 'probe touches no dial, ratify, or promotion hand')
 })
 
-test('fs: probe mode invalidates a stale digest before production — a producer that writes nothing over a prior probe cannot ride it to a false probed', async () => {
-  const { ret, calls, files } = await runSweepFs(
-    // claims ok but writes NOTHING — only a stale prior digest at the deterministic name would remain.
-    { 'probe:producer': () => ({ facts: { status: 'ok', pointers: ['.kiln/docs/probe-8.md'], schema_valid: true }, narration_beat: 'claims a digest' }) },
+test('fs (B04): the probe digest is unique per invocation — a producer that writes nothing cannot ride a prior probe at the same seq', async () => {
+  const { ret } = await runSweepFs(
+    // Claims ok but writes NOTHING. The fresh unique path this invocation mints is empty, so the
+    // probe honestly fails — the prior probe at the same max seq (a different UUID) is never this
+    // pass's read. Uniqueness guarantees it by construction, no fragile deterministic-name rm -f.
+    { 'probe:id': PROBE_ID, 'probe:producer': () => ({ facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'claims a digest' }) },
     { seedDigest: '# Probe digest\nSTALE prior-probe bytes\n', extraLaunch: { mode: 'probe', ledger: '/abs/.kiln/brainstorm-ledger.jsonl', seqs: [3, 8] } },
   )
-  assert.equal(ret.status, 'probe-failed', 'no fresh digest on disk fails the probe — the stale bytes never become this pass\'s read')
-  assert.deepEqual(ret.pointers, {}, 'a stale-invalidated probe returns no digest pointer')
-  assert.equal(files.digest, null, 'the stale digest was cleared at prep, before production — not ridden to a false probed')
+  assert.equal(ret.status, 'probe-failed', 'the fresh unique path is empty, so the probe fails — no stale ride')
+  assert.deepEqual(ret.pointers, {}, 'the prior probe at the same seq is never returned as this pass digest')
+})
+
+test('runtime (B04): a probe whose unique-id leg fails or returns a malformed UUID holds — no desk opens on an un-unique name', async () => {
+  for (const bad of [{ exit: 1, ids: [] }, { exit: 0, ids: [] }, { exit: 0, ids: ['not-a-uuid'] }]) {
+    const { ret, calls } = await runSweep(
+      { projectDir: '/p', mode: 'probe', ledger: '/p/l.jsonl', seqs: [4] },
+      { 'probe:id': bad },
+    )
+    assert.equal(ret.status, 'probe-failed', 'an unminted or malformed digest name holds the probe')
+    assert.ok(!calls.some(c => c.label === 'probe:producer'), 'no desk opens without a unique digest name')
+  }
 })

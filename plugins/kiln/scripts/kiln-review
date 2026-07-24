@@ -5,6 +5,7 @@ const { createHash, randomUUID } = require('node:crypto')
 const {
   appendFileSync,
   existsSync,
+  linkSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -721,6 +722,149 @@ function stateNextAction(key, stage, slice) {
   }
 }
 
+// ── W2-S1 (H2 / B01): the CONDUCTOR-OWNED run lock ──────────────────────────
+// A per-RUN concurrency guard at .kiln/run.lock — deliberately distinct from the per-PLAN
+// law/lock.hash attestation. The conductor acquires ONCE before the sweep and passes run_id
+// plus an opaque owner token to every workflow; the workflows JOIN with the exact token,
+// never a second acquire. The record is NEVER destroyed: release and a stale takeover both
+// append it to run-history.jsonl before the live lock is replaced or removed, so the run
+// record always survives somewhere durable.
+const LOCK_FILE = 'run.lock'
+const LOCK_HISTORY = 'run-history.jsonl'
+const LOCK_DENIED = 12
+// The availability-panel choices ride the lock — stored at acquire, read at every later boot.
+// S10 wires the panel that selects among them; S1 owns only the storage contract.
+const LOCK_CHOICES = new Set(['follow-ladders', 'stop-at-boundary', 'edit-ladders'])
+// run_id and owner are minted as UUIDs; join/release/takeover echo them back over argv, so a
+// closed token grammar rejects any shell metacharacter, whitespace, or control byte.
+const LOCK_TOKEN = /^[A-Za-z0-9._-]+$/
+// A takeover needs BOTH a dead holder pid AND a lock aged past this floor — never time alone.
+// The floor clears the run-s4 resume window (the lock is far older than this by the resume)
+// while staying short enough that a genuinely abandoned lock frees quickly.
+const LOCK_AGE_FLOOR_MS = 5000
+
+// The plugin version stamped into a fresh lock record — read from the shipped manifest,
+// honest or fail-closed, never fabricated.
+function pluginVersion() {
+  try {
+    const meta = JSON.parse(readFileSync(join(__dirname, '..', '.claude-plugin', 'plugin.json'), 'utf8'))
+    return typeof meta.version === 'string' && meta.version.trim() !== '' ? meta.version : null
+  } catch {
+    return null
+  }
+}
+
+// Read the lock record, distinguishing absent (no file) from present-but-unreadable (a torn
+// or hand-broken lock): join and release refuse on either, and takeover refuses to prove an
+// unreadable lock stale rather than steal it.
+function readLockRecord(lockPath) {
+  let raw
+  try {
+    raw = readFileSync(lockPath, 'utf8')
+  } catch {
+    return { exists: false, record: null }
+  }
+  try {
+    const record = JSON.parse(raw)
+    return { exists: true, record: isObject(record) ? record : null }
+  } catch {
+    return { exists: true, record: null }
+  }
+}
+
+// The never-delete guarantee: append the full record plus the lock event and an archive
+// timestamp to run-history.jsonl BEFORE the live lock is replaced or removed. A lock is never
+// a bare unlink that loses the record.
+function archiveLockRecord(kilnDir, record, event) {
+  const row = JSON.stringify({ ...record, lock_event: event, archived_at: new Date().toISOString() })
+  appendFileSync(join(kilnDir, LOCK_HISTORY), `${row}\n`)
+}
+
+// process.kill(pid, 0) probes liveness without delivering a signal. Only ESRCH PROVES the
+// holder is gone; success and EPERM prove it alive; any other error, or a missing or
+// non-positive pid, is UNKNOWN. Takeover requires PROVEN dead, so it treats UNKNOWN as
+// not-dead and fails closed — a lock is never taken over on unproven death (B03).
+function pidState(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return 'unknown'
+  try {
+    process.kill(pid, 0)
+    return 'alive'
+  } catch (error) {
+    if (error.code === 'ESRCH') return 'dead'
+    if (error.code === 'EPERM') return 'alive'
+    return 'unknown'
+  }
+}
+
+// Is a lock record takeover-stale? BOTH the holder pid must be PROVEN dead AND the lock aged
+// past the floor — never time alone. Returns the reason on a refusal so the honest fact can
+// name why (fail closed on an unprobeable pid or an unreadable start time).
+function takeoverStale(record) {
+  const state = pidState(record.conductor_pid)
+  if (state === 'alive') return { stale: false, fact: 'live' }
+  if (state !== 'dead') return { stale: false, fact: 'unprobeable' }
+  const startedAt = Date.parse(record.started_at)
+  if (!Number.isFinite(startedAt)) return { stale: false, fact: 'no-start' }
+  if (Date.now() - startedAt < LOCK_AGE_FLOOR_MS) return { stale: false, fact: 'young' }
+  return { stale: true, fact: 'stale' }
+}
+
+// Claim-by-rename: rename(2) on ONE source path has exactly one winner — the loser gets ENOENT.
+// After a successful claim the caller holds the ONLY reference to those bytes, so every decision
+// (takeover staleness, release identity) is re-made on the CLAIMED bytes, never on the pre-claim
+// read a concurrent contender may already have invalidated. Returns {claimPath, record} on the
+// win, or null when the claim was lost (ENOENT). Crash residue between claim and its terminal
+// move leaves an orphaned .run.lock.claim-* file and an empty lock path — acceptable: the record
+// bytes survive on disk (never-delete) and the next acquire proceeds fresh; there is no janitor.
+function claimLock(kilnDir) {
+  const claimPath = join(kilnDir, `.run.lock.claim-${process.pid}-${randomUUID()}`)
+  try {
+    renameSync(join(kilnDir, LOCK_FILE), claimPath)
+  } catch (error) {
+    if (error.code === 'ENOENT') return null
+    throw error
+  }
+  return { claimPath, record: readLockRecord(claimPath).record }
+}
+
+// The claimed record is NOT the one this verb may end (a fresh lock landed in the claim window):
+// put it back. linkSync is create-exclusive — on success the claim is dropped and the lock is
+// whole again (returns true). If the path is re-occupied, the displaced record is archived (never
+// lost — its owner join-fails into the honest hold) and the claim removed (true). If archival ALSO
+// fails (history unavailable), the claim file is the SOLE surviving copy, so it is PRESERVED on
+// disk untouched — the documented orphan-claim residue — and false is returned: the claim is NEVER
+// unlinked without the record safe somewhere durable, and the caller surfaces the transport failure.
+function restoreOrArchive(kilnDir, claimPath, record) {
+  try {
+    linkSync(claimPath, join(kilnDir, LOCK_FILE))
+    try { unlinkSync(claimPath) } catch { /* restored; the claim link can linger harmlessly */ }
+    return true
+  } catch { /* the lock path is re-occupied — the claimed record cannot go back there */ }
+  if (record) {
+    try {
+      archiveLockRecord(kilnDir, record, 'displaced')
+      try { unlinkSync(claimPath) } catch { /* archived; the claim file can linger harmlessly */ }
+      return true
+    } catch { /* history is unavailable — the claim is the last copy; preserve it, fall through */ }
+  }
+  return false
+}
+
+// The terminal move when this verb IS authorized to end the claimed lock: archive the record,
+// then drop the claim. Archive FIRST, unlink second — never an unlink without an archive. If the
+// archive fails, the record is the only copy, so it is RESTORED to the lock path rather than
+// lost, and the caller fails transport. Returns true on a clean archive+drop.
+function archiveAndDrop(kilnDir, claimPath, record, event) {
+  try {
+    archiveLockRecord(kilnDir, record, event)
+  } catch {
+    try { linkSync(claimPath, join(kilnDir, LOCK_FILE)); unlinkSync(claimPath) } catch { /* bytes remain in the claim file */ }
+    return false
+  }
+  try { unlinkSync(claimPath) } catch { /* archived; the claim file can linger harmlessly */ }
+  return true
+}
+
 const [mode, ...args] = process.argv.slice(2)
 if (mode === 'review' && args.length === 3) {
   const [repoPath, requestFile, outputFile] = args
@@ -1188,10 +1332,172 @@ if (mode === 'review' && args.length === 3) {
     stop('transport_failure', `state-commit could not write STATE.md: ${error.message}`, TRANSPORT_FAILURE)
   }
   process.exit(ACCEPT)
+} else if (mode === 'run-lock' && args[0] === 'acquire' && args.length === 4) {
+  // Acquire the run lock ONCE for a fresh run: an atomic O_EXCL create (writeFileSync with
+  // the wx flag) so exactly one acquirer wins. An existing lock is never overwritten here —
+  // the caller JOINs it with the token or takes a genuinely stale lock over. run_id + owner
+  // print to stdout as the two closed facts the conductor hands every workflow.
+  const [, kilnDir, choice, conductorPid] = args
+  if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
+    stop('transport_failure', 'run-lock acquire kilnDir must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  if (!LOCK_CHOICES.has(choice)) {
+    stop('transport_failure', `run-lock acquire choice must be one of ${[...LOCK_CHOICES].join('|')}`, TRANSPORT_FAILURE)
+  }
+  const pid = Number(conductorPid)
+  if (!Number.isInteger(pid) || pid <= 0) {
+    stop('transport_failure', 'run-lock acquire conductor pid must be a positive integer', TRANSPORT_FAILURE)
+  }
+  const version = pluginVersion()
+  if (version === null) {
+    stop('transport_failure', 'run-lock acquire could not read the plugin version from .claude-plugin/plugin.json', TRANSPORT_FAILURE)
+  }
+  const record = {
+    run_id: randomUUID(), owner: randomUUID(), conductor_pid: pid,
+    started_at: new Date().toISOString(), ladder_choice: choice, plugin_version: version,
+  }
+  const target = join(kilnDir, LOCK_FILE)
+  try {
+    mkdirSync(kilnDir, { recursive: true })
+    writeFileSync(target, `${JSON.stringify(record)}\n`, { flag: 'wx' })
+  } catch (error) {
+    if (error.code === 'EEXIST') {
+      const holder = readLockRecord(target).record
+      const heldId = holder && typeof holder.run_id === 'string' ? holder.run_id : ''
+      stop(heldId, 'run-lock acquire refused: a run lock already exists — join it with the token or take it over if it is stale', LOCK_DENIED)
+    }
+    stop('transport_failure', `run-lock acquire could not create the lock: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  process.stdout.write(`${record.run_id} ${record.owner}\n`)
+  process.exit(ACCEPT)
+} else if (mode === 'run-lock' && args[0] === 'join' && args.length === 4) {
+  // JOIN is read-only: exit 0 IFF the on-disk lock matches BOTH the run_id and the owner
+  // token exactly. Absent, unreadable, or foreign — refuse, and print the holding run_id
+  // (when readable) so the caller can name the running owner in its honest hold.
+  const [, kilnDir, runId, owner] = args
+  if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
+    stop('transport_failure', 'run-lock join kilnDir must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  if (!LOCK_TOKEN.test(runId) || !LOCK_TOKEN.test(owner)) {
+    stop('transport_failure', 'run-lock join run_id and owner must be closed tokens', TRANSPORT_FAILURE)
+  }
+  const { record } = readLockRecord(join(kilnDir, LOCK_FILE))
+  if (!record || record.run_id !== runId || record.owner !== owner) {
+    const heldId = record && typeof record.run_id === 'string' ? record.run_id : ''
+    stop(heldId, 'run-lock join refused: no run lock matches this run_id and owner token', LOCK_DENIED)
+  }
+  process.stdout.write('joined\n')
+  process.exit(ACCEPT)
+} else if (mode === 'run-lock' && args[0] === 'release' && args.length === 4) {
+  // Exact-token release, serialized against the takeover race (B02). A cheap pre-read refuses a
+  // foreign or absent lock; then the lock is CLAIMED by rename (one winner) and the identity is
+  // re-verified on the CLAIMED bytes — never unlinked by pathname after a comparison. Only the
+  // claim file this process exclusively holds is ever removed. If a takeover landed in the claim
+  // window, the claimed record is restored (or archived if the path was re-occupied), not lost.
+  const [, kilnDir, runId, owner] = args
+  if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
+    stop('transport_failure', 'run-lock release kilnDir must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  if (!LOCK_TOKEN.test(runId) || !LOCK_TOKEN.test(owner)) {
+    stop('transport_failure', 'run-lock release run_id and owner must be closed tokens', TRANSPORT_FAILURE)
+  }
+  const pre = readLockRecord(join(kilnDir, LOCK_FILE))
+  if (!pre.record || pre.record.run_id !== runId || pre.record.owner !== owner) {
+    stop('denied', 'run-lock release refused: no run lock matches this run_id and owner token', LOCK_DENIED)
+  }
+  const claim = claimLock(kilnDir)
+  if (!claim) {
+    stop('contended', 'run-lock release refused: the lock is already gone or claimed by a contender', LOCK_DENIED)
+  }
+  if (claim.record && claim.record.run_id === runId && claim.record.owner === owner) {
+    if (!archiveAndDrop(kilnDir, claim.claimPath, claim.record, 'released')) {
+      stop('transport_failure', 'run-lock release could not archive the lock — the lock survives, nothing lost', TRANSPORT_FAILURE)
+    }
+    process.stdout.write('released\n')
+    process.exit(ACCEPT)
+  }
+  // A takeover displaced our lock between the pre-read and the claim — restore or preserve it. A
+  // clean restore/archive is a plain contended refusal; a double failure leaves the displaced
+  // record only as claim residue, which is a transport-class failure the caller must hear.
+  if (restoreOrArchive(kilnDir, claim.claimPath, claim.record)) {
+    stop('contended', 'run-lock release refused: the lock changed under the release', LOCK_DENIED)
+  }
+  stop('transport_failure', 'run-lock release could not restore or archive the displaced lock — its record survives only as a claim residue at .kiln/.run.lock.claim-*; inspect it', TRANSPORT_FAILURE)
+} else if (mode === 'run-lock' && args[0] === 'takeover' && args.length === 4) {
+  // Takeover replaces a genuinely stale lock with no token — the resume-after-crash path,
+  // serialized against a second contender (B01). BOTH conditions gate it, never time alone:
+  // the holder pid PROVEN dead (ESRCH only — B03) AND the lock aged past the floor. A cheap
+  // pre-read refuses an obviously live/young lock; then the lock is CLAIMED by rename (one
+  // winner) and re-validated on the CLAIMED bytes (same holder, still stale). Only then is the
+  // stale record archived, the claim dropped, and a fresh lock wx-created; a NEW run_id + owner
+  // print as acquire does. If a fresh lock landed in the claim window, it is restored, not stolen.
+  const [, kilnDir, choice, conductorPid] = args
+  if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
+    stop('transport_failure', 'run-lock takeover kilnDir must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  if (!LOCK_CHOICES.has(choice)) {
+    stop('transport_failure', `run-lock takeover choice must be one of ${[...LOCK_CHOICES].join('|')}`, TRANSPORT_FAILURE)
+  }
+  const pid = Number(conductorPid)
+  if (!Number.isInteger(pid) || pid <= 0) {
+    stop('transport_failure', 'run-lock takeover conductor pid must be a positive integer', TRANSPORT_FAILURE)
+  }
+  const pre = readLockRecord(join(kilnDir, LOCK_FILE))
+  if (!pre.exists) {
+    stop('transport_failure', 'run-lock takeover found no lock to take over — acquire a fresh lock instead', TRANSPORT_FAILURE)
+  }
+  if (!pre.record) {
+    stop('transport_failure', 'run-lock takeover found an unreadable lock — it cannot be proven stale; inspect .kiln/run.lock', TRANSPORT_FAILURE)
+  }
+  // Cheap pre-gate before claiming: an obviously live, young, or unprobeable lock is refused
+  // without disturbing it. The claimed re-validation below is the authoritative proof.
+  const preStale = takeoverStale(pre.record)
+  if (!preStale.stale) {
+    stop(preStale.fact, `run-lock takeover refused: the lock is not takeover-stale (${preStale.fact})`, LOCK_DENIED)
+  }
+  const version = pluginVersion()
+  if (version === null) {
+    stop('transport_failure', 'run-lock takeover could not read the plugin version from .claude-plugin/plugin.json', TRANSPORT_FAILURE)
+  }
+  const claim = claimLock(kilnDir)
+  if (!claim) {
+    stop('contended', 'run-lock takeover refused: another contender claimed the lock first', LOCK_DENIED)
+  }
+  // Re-validate on the CLAIMED bytes: the same holder the pre-read saw AND still stale. A fresh
+  // lock that landed in the window is a different run_id (or newly live) and must be restored.
+  const claimedStale = claim.record
+    && claim.record.run_id === pre.record.run_id
+    && takeoverStale(claim.record).stale
+  if (!claimedStale) {
+    if (restoreOrArchive(kilnDir, claim.claimPath, claim.record)) {
+      stop('contended', 'run-lock takeover refused: the lock changed under the takeover — restored, not stolen', LOCK_DENIED)
+    }
+    stop('transport_failure', 'run-lock takeover could not restore or archive the displaced lock — its record survives only as a claim residue at .kiln/.run.lock.claim-*; inspect it', TRANSPORT_FAILURE)
+  }
+  const fresh = {
+    run_id: randomUUID(), owner: randomUUID(), conductor_pid: pid,
+    started_at: new Date().toISOString(), ladder_choice: choice, plugin_version: version,
+  }
+  // Archive the stale record and drop the claim (leaves the lock path empty), then wx-create the
+  // fresh lock. If the archive fails the stale lock is restored (archiveAndDrop), nothing lost.
+  if (!archiveAndDrop(kilnDir, claim.claimPath, claim.record, 'taken_over')) {
+    stop('transport_failure', 'run-lock takeover could not archive the stale lock — the lock survives, nothing lost', TRANSPORT_FAILURE)
+  }
+  try {
+    writeFileSync(join(kilnDir, LOCK_FILE), `${JSON.stringify(fresh)}\n`, { flag: 'wx' })
+  } catch (error) {
+    if (error.code === 'EEXIST') {
+      // A fresh acquire won the empty path first; the stale record is already archived, no loss.
+      stop('contended', 'run-lock takeover refused: a fresh acquire won the lock before takeover completed', LOCK_DENIED)
+    }
+    stop('transport_failure', `run-lock takeover could not write the fresh lock: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  process.stdout.write(`${fresh.run_id} ${fresh.owner}\n`)
+  process.exit(ACCEPT)
 } else {
   stop(
     'transport_failure',
-    'usage: kiln-review review <repo> <request.json> <gate-review.json> | kiln-review recheck <repo> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir> <label> | kiln-review ratify <repo> <request.json> <gate-review.json> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json> | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> <label> | kiln-review screen <repo> <kilnDir> <model> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...]',
+    'usage: kiln-review review <repo> <request.json> <gate-review.json> | kiln-review recheck <repo> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir> <label> | kiln-review ratify <repo> <request.json> <gate-review.json> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json> | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> <label> | kiln-review screen <repo> <kilnDir> <model> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...] | kiln-review run-lock acquire <kilnDir> <choice> <conductorPid> | kiln-review run-lock join <kilnDir> <run_id> <owner> | kiln-review run-lock release <kilnDir> <run_id> <owner> | kiln-review run-lock takeover <kilnDir> <choice> <conductorPid>',
     TRANSPORT_FAILURE,
   )
 }

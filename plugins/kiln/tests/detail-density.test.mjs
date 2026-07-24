@@ -53,6 +53,8 @@ const GREEN = { exit: 0, ids: [] }
 async function runLaw(detail) {
   const calls = []
   const script = {
+    // W2-S1: the conductor holds the run lock before every launch; the join answers green here.
+    'run-lock:join': { exit: 0, ids: [] },
     'tiers:boot': TIERS_OK,
     'law:preflight': GREEN,
     'law:stage-end': GREEN,
@@ -86,7 +88,7 @@ async function runLaw(detail) {
     if (h === undefined) throw new Error('unmocked label: ' + opts.label)
     return h
   }
-  const launch = { stage: 'law', projectDir: '/proj', idea: 'an idea', plugin: PLUGIN }
+  const launch = { stage: 'law', projectDir: '/proj', idea: 'an idea', run_id: 'run-test', owner: 'owner-test', plugin: PLUGIN }
   if (detail) launch.detail = true
   const body = src.replace('export const meta', 'const meta')
   const fn = new AsyncFunction('agent', 'pipeline', 'parallel', 'log', 'phase', 'args', 'budget', 'workflow', body)
