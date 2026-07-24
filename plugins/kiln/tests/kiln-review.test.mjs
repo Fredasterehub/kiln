@@ -115,7 +115,7 @@ test('kiln-review: the reviewer never executes — the instructions attach the k
   assert.ok(src.includes('Execute nothing'), 'the instructions forbid execution outright')
   assert.ok(src.includes('check_receipt as the only execution evidence'), 'the receipt is the only execution evidence')
   assert.ok(!src.includes('Run the supplied commands'), 'the old execute-the-commands instruction is gone')
-  assert.ok(src.includes(`'.kiln', 'check-receipt.txt'`), 'the transport reads the receipt from the reviewed repo')
+  assert.ok(src.includes(`join(kilnDir, 'check-receipt.txt')`), 'the transport reads the receipt from the explicit kilnDir trust root')
   assert.ok(src.includes('packet.check_receipt'), 'the receipt rides the evidence packet verbatim')
 })
 
@@ -414,6 +414,7 @@ process.exit(127)
 // the canned reviewer for one that cannot run, standing in for a downed bridge.
 function ratify({ artifact = 'crit-1 · slice-a · behaviour · cmd · outcome\n', gate, effort, drop, rubric = RUBRIC, artifactPath = '.kiln/LAW.md', brokenCodex } = {}) {
   const repo = mkdtempSync(join(tmpdir(), 'kiln-ratify-'))
+  const kiln = join(repo, '.kiln')
   const abs = join(repo, artifactPath)
   mkdirSync(dirname(abs), { recursive: true })
   writeFileSync(abs, artifact)
@@ -429,8 +430,9 @@ function ratify({ artifact = 'crit-1 · slice-a · behaviour · cmd · outcome\n
     env.PATH = `${fake}:${process.env.PATH}`
     if (gate) env.FAKE_GATE = JSON.stringify(gate)
   }
-  const r = spawnSync('node', [REVIEW, 'ratify', repo, rf, join(repo, 'gate.json'), 'ratify'], { encoding: 'utf8', env })
-  return { repo, fact: (r.stdout || '').trim(), status: r.status, out: join(repo, 'gate.json') }
+  mkdirSync(kiln, { recursive: true })
+  const r = spawnSync('node', [REVIEW, 'ratify', repo, kiln, rf, join(kiln, 'gate.json'), 'ratify'], { encoding: 'utf8', env })
+  return { repo, kiln, fact: (r.stdout || '').trim(), status: r.status, out: join(kiln, 'gate.json') }
 }
 
 function digestOf(artifact) {
@@ -523,7 +525,7 @@ test('kiln-review: ratify halts transport_failure when the named artifact file d
   const req = { review_id: 'ratify-1', reviewer_model: 'gpt-5.6-sol', reviewer_alias: 'gpt-sol', artifact: '.kiln/LAW.md', rubric: RUBRIC }
   const rf = join(repo, 'request.json')
   writeFileSync(rf, JSON.stringify(req))
-  const r = spawnSync('node', [REVIEW, 'ratify', repo, rf, join(repo, 'gate.json'), 'ratify'], { encoding: 'utf8' })
+  const r = spawnSync('node', [REVIEW, 'ratify', repo, join(repo, '.kiln'), rf, join(repo, '.kiln', 'gate.json'), 'ratify'], { encoding: 'utf8' })
   assert.equal((r.stdout || '').trim(), 'transport_failure', 'a missing artifact is an honest transport failure')
   assert.equal(r.status, 20)
 })
@@ -543,7 +545,7 @@ test('kiln-review: the slice path enforces locked-LAW equality at its baseline p
   const fake = mkdtempSync(join(tmpdir(), 'kiln-fakecodex-'))
   writeFileSync(join(fake, 'codex'), FAKE_CODEX, { mode: 0o755 })
   const env = { ...process.env, PATH: `${fake}:${process.env.PATH}`, FAKE_GATE: JSON.stringify(gate) }
-  const r = spawnSync('node', [REVIEW, 'review', repo, kiln, sliceId, 'gpt-5.6-sol', 'gpt-sol', 'high', rf, join(repo, 'gate.json')], { encoding: 'utf8', env })
+  const r = spawnSync('node', [REVIEW, 'review', repo, kiln, sliceId, 'gpt-5.6-sol', 'gpt-sol', 'high', rf, join(kiln, 'gate.json')], { encoding: 'utf8', env })
   assert.equal((r.stdout || '').trim(), 'transport_failure')
   assert.equal(r.status, 20)
   assert.ok((r.stderr || '').includes('law_hash does not match the locked LAW'),
@@ -674,8 +676,9 @@ function ratifyRecheck({ artifact = 'the regenerated LAW\n', gate, prior, reques
     env.FAKE_GATE = JSON.stringify(gate)
   }
   if (promptOut) env.FAKE_PROMPT_OUT = promptOut
-  const r = spawnSync('node', [REVIEW, 'ratify-recheck', repo, rf, priorFile, join(repo, 'gate.json'), 'ratify'], { encoding: 'utf8', env })
-  return { repo, fact: (r.stdout || '').trim(), status: r.status, out: join(repo, 'gate.json') }
+  const kiln = join(repo, '.kiln')
+  const r = spawnSync('node', [REVIEW, 'ratify-recheck', repo, kiln, rf, priorFile, join(kiln, 'gate.json'), 'ratify'], { encoding: 'utf8', env })
+  return { repo, kiln, fact: (r.stdout || '').trim(), status: r.status, out: join(kiln, 'gate.json') }
 }
 
 test('kiln-review: ratify-recheck passes a strict subset of the prior cohort — the reviewer reuses an allowed id (reject, exit 10)', () => {
@@ -781,7 +784,7 @@ function fakeCodexEnv({ gate, brokenCodex, promptOut } = {}) {
 }
 
 function runAudit(fixture, { seam = 's3', model = 'gpt-5.6-sol', alias = 'gpt-sol', effort = 'high', gate, brokenCodex, promptOut } = {}) {
-  const out = join(fixture.repo, 'audit-gate.json')
+  const out = join(fixture.kiln, 'audit-gate.json')
   const env = fakeCodexEnv({ gate, brokenCodex, promptOut })
   const r = spawnSync('node', [REVIEW, 'audit', fixture.repo, fixture.kiln, seam, model, alias, effort, out], { encoding: 'utf8', env })
   return { fact: (r.stdout || '').trim(), status: r.status, stderr: r.stderr || '', out }
@@ -791,9 +794,11 @@ function auditFinding(id) {
   return { id, criterion: 'crit-m1', location: 'src/app.js:12', failure_mode: 'goal unreachable', evidence: 'the milestone flow dead-ends', minimal_fix: 'wire the handoff' }
 }
 
+// W2-S7a (FORK 1): the codex prompt now ends on the canonical contract bytes — the ONE authoritative
+// block — under a single anchor for every family. The packet the tests assert on IS that contract.
 function capturedPacket(promptFile) {
   const prompt = readFileSync(promptFile, 'utf8')
-  const anchor = 'Audit packet:\n'
+  const anchor = 'Canonical contract:\n'
   return { prompt, packet: JSON.parse(prompt.slice(prompt.indexOf(anchor) + anchor.length)) }
 }
 
@@ -824,7 +829,7 @@ test('kiln-review: audit derives the closing block and cumulative prefix from sl
   assert.deepEqual(packet.closing_block, ['s2', 's3'], 'the closing block is the maximal contiguous same-label run ending at the seam')
   assert.deepEqual(packet.sealed_prefix, ['s1', 's2', 's3'], 'the cumulative prefix reaches back to the first slice')
   assert.equal(packet.seam_slice, 's3')
-  assert.equal(packet.check_receipt, 'checks ok\n', 'the kernel-side receipt rides the packet verbatim')
+  assert.ok(prompt.includes('Kernel check receipt (executed kernel-side; the only execution evidence), verbatim:\nchecks ok\n'), 'the kernel-side receipt rides the prompt verbatim beside the contract')
   assert.ok(prompt.includes('Beyond reading, execute nothing'), 'the audit prompt keeps the receipt doctrine — beyond reading, the reviewer executes nothing')
   assert.ok(!r.stderr.includes('first light') && !r.fact.includes('first light'), 'the label never rides a log line')
   // A seam inside an earlier milestone closes ITS own block — the prefix stays cumulative.
@@ -901,7 +906,7 @@ function runAuditRecheck(fixture, { seam = 's3', model = 'gpt-5.6-sol', alias = 
   writeFileSync(priorFile, JSON.stringify(prior))
   const deltaFile = join(fixture.repo, 'repair-delta.md')
   writeFileSync(deltaFile, delta)
-  const out = join(fixture.repo, 'audit-recheck-gate.json')
+  const out = join(fixture.kiln, 'audit-recheck-gate.json')
   const env = fakeCodexEnv({ gate, brokenCodex, promptOut })
   const r = spawnSync('node', [REVIEW, 'audit-recheck', fixture.repo, fixture.kiln, seam, model, alias, effort, priorFile, deltaFile, out], { encoding: 'utf8', env })
   return { fact: (r.stdout || '').trim(), status: r.status, stderr: r.stderr || '', out }
@@ -1279,8 +1284,8 @@ function buildRecheck({ prior, gate, promptOut } = {}) {
   const deltaFile = join(repo, 'repair-delta.md')
   writeFileSync(deltaFile, 'repaired the findings\n')
   const env = fakeCodexEnv({ gate, promptOut })
-  const r = spawnSync('node', [REVIEW, 'recheck', repo, kiln, sliceId, 'gpt-5.6-sol', 'gpt-sol', 'high', rf, priorFile, deltaFile, join(repo, 'gate.json')], { encoding: 'utf8', env })
-  return { fact: (r.stdout || '').trim(), status: r.status, out: join(repo, 'gate.json') }
+  const r = spawnSync('node', [REVIEW, 'recheck', repo, kiln, sliceId, 'gpt-5.6-sol', 'gpt-sol', 'high', rf, priorFile, deltaFile, join(kiln, 'gate.json')], { encoding: 'utf8', env })
+  return { fact: (r.stdout || '').trim(), status: r.status, out: join(kiln, 'gate.json') }
 }
 
 test('kiln-review: the recheck packet embeds every prior finding in full beside its ids, and the instruction names them (FIX-1)', () => {
@@ -1295,7 +1300,7 @@ test('kiln-review: the recheck packet embeds every prior finding in full beside 
   const promptOut = join(mkdtempSync(join(tmpdir(), 'kiln-prompt-')), 'prompt.txt')
   const r = buildRecheck({ prior, gate: { review_id: 'slice-1', law_hash: digest, findings: [], blockers: [], verdict: 'accept' }, promptOut })
   assert.equal(r.status, 0, 'the recheck round-trips through the fake reviewer')
-  const { prompt, packet } = packetFrom(promptOut, 'Evidence packet:\n')
+  const { prompt, packet } = packetFrom(promptOut, 'Canonical contract:\n')
   assertPriorFindingsRide(packet, findings)
   assert.ok(prompt.includes(FIX1_SENTENCE), 'the recheck instruction tells the reviewer the findings ride in full')
 })
@@ -1307,7 +1312,7 @@ test('kiln-review: the ratify-recheck packet embeds every prior finding in full 
   const promptOut = join(mkdtempSync(join(tmpdir(), 'kiln-prompt-')), 'prompt.txt')
   const r = ratifyRecheck({ artifact, prior, gate: { review_id: 'ratify-1', law_hash: digestOf(artifact), findings: [], blockers: [], verdict: 'accept' }, promptOut })
   assert.equal(r.status, 0, 'the ratify-recheck round-trips through the fake reviewer')
-  const { prompt, packet } = packetFrom(promptOut, 'Ratification packet:\n')
+  const { prompt, packet } = packetFrom(promptOut, 'Canonical contract:\n')
   assertPriorFindingsRide(packet, findings)
   assert.ok(prompt.includes(FIX1_SENTENCE), 'the ratify-recheck instruction tells the reviewer the findings ride in full')
 })
@@ -1319,7 +1324,7 @@ test('kiln-review: the audit-recheck packet embeds every prior finding in full b
   const promptOut = join(fx.repo, 'captured-prompt.txt')
   const r = runAuditRecheck(fx, { prior, gate: { review_id: 'audit-1', law_hash: fx.digest, findings: [], blockers: [], verdict: 'accept' }, promptOut })
   assert.equal(r.status, 0, 'the audit-recheck round-trips through the fake reviewer')
-  const { prompt, packet } = packetFrom(promptOut, 'Audit packet:\n')
+  const { prompt, packet } = packetFrom(promptOut, 'Canonical contract:\n')
   assertPriorFindingsRide(packet, findings)
   assert.ok(prompt.includes(FIX1_SENTENCE), 'the audit-recheck instruction tells the reviewer the findings ride in full')
 })
@@ -1343,7 +1348,7 @@ test('kiln-review: the build review prompt authorizes read-only inspection and f
   writeFileSync(rf, JSON.stringify(req))
   const promptOut = join(repo, 'captured-prompt.txt')
   const env = fakeCodexEnv({ gate: { review_id: '__ECHO__', law_hash: digest, findings: [], blockers: [], verdict: 'accept' }, promptOut })
-  const r = spawnSync('node', [REVIEW, 'review', repo, kiln, sliceId, 'gpt-5.6-sol', 'gpt-sol', 'high', rf, join(repo, 'gate.json')], { encoding: 'utf8', env })
+  const r = spawnSync('node', [REVIEW, 'review', repo, kiln, sliceId, 'gpt-5.6-sol', 'gpt-sol', 'high', rf, join(kiln, 'gate.json')], { encoding: 'utf8', env })
   assert.equal(r.status, 0, 'the review round-trips through the fake reviewer')
   const prompt = readFileSync(promptOut, 'utf8')
   assert.ok(prompt.includes('Read the repository freely — read-only file inspection (opening files, listing directories) is how you judge the diff against the law, and the sandbox enforces read-only.'),
@@ -1370,8 +1375,10 @@ test('kiln-review: ratify and screen keep their no-repo discipline byte-identica
   // source by name and pin its digest: every static prompt byte — the discipline sentence,
   // the mode inserts, the packet seam — must survive unchanged, in place.
   const src = readFileSync(REVIEW, 'utf8')
+  // W2-S7a (FORK 1): each builder now takes (packet, contractBytes) and ends on the shared
+  // contractTail — the FIX-2 no-repo sentences are unchanged in place, and the digests are re-pinned.
   const builderSource = (name) => {
-    const start = src.indexOf(`function ${name}(packet) {`)
+    const start = src.indexOf(`function ${name}(packet, contractBytes) {`)
     assert.notEqual(start, -1, `${name} still exists as a named builder`)
     return src.slice(start, src.indexOf('\n}\n', start) + 2)
   }
@@ -1379,14 +1386,14 @@ test('kiln-review: ratify and screen keep their no-repo discipline byte-identica
   assert.ok(ratifySrc.includes('Execute nothing: rule by reading the artifact text supplied in full below — do not inspect the repository and do not run any command.'),
     'the ratify no-repo sentence rides inside ratifyInstructions')
   assert.equal(createHash('sha256').update(ratifySrc).digest('hex'),
-    '7a9d48e33c9140ceb61ee27d2c6ac59ae9624062f9b13b7591ddde71212bf29e',
-    'ratifyInstructions is byte-identical to the pinned pre-FIX-2 prompt')
+    'cbd9ade6884e57afc22976eff5612b1853b253a210c16a5c2cd862b992ade663',
+    'ratifyInstructions is byte-identical to the pinned FORK-1 prompt')
   const screenSrc = builderSource('screenInstructions')
   assert.ok(screenSrc.includes('Execute nothing and install nothing: rule from the attached images and the packet text alone.'),
     'the screen no-repo sentence rides inside screenInstructions')
   assert.equal(createHash('sha256').update(screenSrc).digest('hex'),
-    '76125ca1c035be4549052db4bc6208949415ba6451fb2a97536457d2ba45dc15',
-    'screenInstructions is byte-identical to the pinned pre-FIX-2 prompt')
+    '63e8e9203381d15320440ccbb0d2c08f6006707ae23f4ccd6ec15d13e7c7cf32',
+    'screenInstructions is byte-identical to the pinned FORK-1 prompt')
 })
 
 // ── W2-S4: CLI-derived build-gate packets (Model A — the verified-whole-LAW packet) ──────
@@ -1400,8 +1407,8 @@ function runBuildReview({ hints, gate, sliceId = 's1', model = 'gpt-5.6-sol', al
   const rf = join(repo, 'request.json')
   writeFileSync(rf, JSON.stringify(hints || { criteria: 'x', paths: [], failures: [], commands: [] }))
   const env = fakeCodexEnv({ gate: gate || { review_id: '__ECHO__', law_hash: digest, findings: [], blockers: [], verdict: 'accept' }, promptOut })
-  const r = spawnSync('node', [REVIEW, 'review', repo, kiln, sliceId, model, alias, effort, rf, join(repo, 'gate.json')], { encoding: 'utf8', env })
-  return { fact: (r.stdout || '').trim(), status: r.status, out: join(repo, 'gate.json'), digest, kiln, repo }
+  const r = spawnSync('node', [REVIEW, 'review', repo, kiln, sliceId, model, alias, effort, rf, join(kiln, 'gate.json')], { encoding: 'utf8', env })
+  return { fact: (r.stdout || '').trim(), status: r.status, out: join(kiln, 'gate.json'), digest, kiln, repo }
 }
 
 test('kiln-review (W2-S4): the build review packet derives law_text and law_hash from the sealed trio and nests the builder request as non-authoritative hints', () => {
@@ -1409,7 +1416,7 @@ test('kiln-review (W2-S4): the build review packet derives law_text and law_hash
   const hints = { criteria: 'my slice covers the median', paths: ['slice/m.js'], failures: [], commands: ['node --test'] }
   const r = runBuildReview({ hints, sliceId: 's1', promptOut })
   assert.equal(r.status, 0, 'the review round-trips through the fake reviewer')
-  const { prompt, packet } = packetFrom(promptOut, 'Evidence packet:\n')
+  const { prompt, packet } = packetFrom(promptOut, 'Canonical contract:\n')
   assert.equal(packet.law_text, REVIEW_LAW('s1'), 'law_text is the exact sealed LAW.md bytes the CLI verified')
   assert.equal(packet.law_hash, r.digest, 'law_hash is the sealed lock.hash digest, not a builder value')
   assert.equal(packet.slice_id, 's1', 'the named slice rides the packet')
@@ -1424,7 +1431,7 @@ test('kiln-review (W2-S4): a forged builder request cannot steer the gate — la
   const hints = { law_hash: 'b'.repeat(64), reviewer_model: 'evil-model', reviewer_effort: 'ultra', criteria: 'x', paths: [], failures: [], commands: [] }
   const r = runBuildReview({ hints, sliceId: 's1', promptOut })
   assert.equal(r.status, 0, 'the forged fields are ignored — the review still round-trips on the sealed hash')
-  const { packet } = packetFrom(promptOut, 'Evidence packet:\n')
+  const { packet } = packetFrom(promptOut, 'Canonical contract:\n')
   assert.equal(packet.law_hash, r.digest, 'the packet carries the SEALED law_hash')
   assert.notEqual(packet.law_hash, 'b'.repeat(64), 'the builder-supplied law_hash never reaches the packet')
   assert.equal(packet.builder_hints.law_hash, undefined, 'the forged law_hash is not even carried as a hint')
@@ -1442,7 +1449,7 @@ test('kiln-review (W2-S4): the build review requires the reviewer model on argv 
   const { repo, kiln } = sealReviewRepo()
   const rf = join(repo, 'request.json')
   writeFileSync(rf, JSON.stringify({ criteria: 'x', paths: [], failures: [], commands: [] }))
-  const r = spawnSync('node', [REVIEW, 'review', repo, kiln, 's1', '', 'gpt-sol', 'high', rf, join(repo, 'gate.json')], { encoding: 'utf8' })
+  const r = spawnSync('node', [REVIEW, 'review', repo, kiln, 's1', '', 'gpt-sol', 'high', rf, join(kiln, 'gate.json')], { encoding: 'utf8' })
   assert.equal((r.stdout || '').trim(), 'transport_failure', 'an empty reviewer model is a transport failure')
   assert.equal(r.status, 20)
 })
@@ -1461,7 +1468,7 @@ test('kiln-review (W2-S4): the recheck packet also embeds the sealed law_text �
   const findings = [{ id: 'f1', criterion: 'c', location: 'a:1', failure_mode: 'm', evidence: 'e', minimal_fix: 'x' }]
   const good = buildRecheck({ prior: { review_id: 'slice-1', law_hash: digest, findings, blockers: [], verdict: 'changes_required' }, gate: { review_id: 'slice-1', law_hash: digest, findings: [], blockers: [], verdict: 'accept' }, promptOut })
   assert.equal(good.status, 0, 'a recheck whose prior rode the sealed hash round-trips')
-  const { packet } = packetFrom(promptOut, 'Evidence packet:\n')
+  const { packet } = packetFrom(promptOut, 'Canonical contract:\n')
   assert.equal(packet.law_text, REVIEW_LAW('s1'), 'the recheck packet embeds the sealed law_text')
   assert.equal(packet.law_hash, digest, 'the recheck packet law_hash is the sealed digest')
 })
@@ -1469,7 +1476,7 @@ test('kiln-review (W2-S4): the recheck packet also embeds the sealed law_text �
 test('kiln-review (W2-S4): a present-but-malformed builder request holds the review verb transport_failure — hintsFrom parses and shape-checks the demoted hints', () => {
   const { repo, kiln } = sealReviewRepo()
   const rf = join(repo, 'request.json')
-  const run = () => spawnSync('node', [REVIEW, 'review', repo, kiln, 's1', 'gpt-5.6-sol', 'gpt-sol', 'high', rf, join(repo, 'gate.json')], { encoding: 'utf8' })
+  const run = () => spawnSync('node', [REVIEW, 'review', repo, kiln, 's1', 'gpt-5.6-sol', 'gpt-sol', 'high', rf, join(kiln, 'gate.json')], { encoding: 'utf8' })
   // Unparseable JSON — the demotion did not relax the parse guard.
   writeFileSync(rf, '{ not json')
   let r = run()
@@ -1885,7 +1892,7 @@ test('archive (W2-S5): the codex path archives through runGate — a ratify acce
   const artifact = 'a testable, coherent LAW\n'
   const r = ratify({ artifact, gate: ratifyGate('accept', digestOf(artifact)) })
   assert.equal(r.status, 0)
-  const rows = ledgerRows(r.repo)
+  const rows = ledgerRows(r.kiln)
   assert.equal(rows.length, 1, 'the codex ratify verdict is archived by runGate before the publish rename')
   assert.equal(rows[0].family, 'ratify', 'the family rides argv — the shared ratify verb files under the caller-supplied family')
   assert.equal(rows[0].review_id, 'ratify-1')
@@ -2101,20 +2108,21 @@ test('archive (W2-S5, B01): verdict_sha256 binds the EXACT published bytes, not 
 test('archive (W2-S5, A01): a codex-path archive fault fails closed in runGate — the gate is never published when the ledger cannot be read', () => {
   const repo = mkdtempSync(join(tmpdir(), 'kiln-ratify-'))
   const artifact = 'a testable, coherent LAW\n'
-  mkdirSync(join(repo, '.kiln'), { recursive: true })
-  writeFileSync(join(repo, '.kiln', 'LAW.md'), artifact)
-  // reviews.jsonl sits beside the gate output (in repo/), pre-created as a DIRECTORY → a real EISDIR
-  // fault when runGate archives. The archive must gate the rename on BOTH families, not just publish-gate.
-  mkdirSync(join(repo, 'reviews.jsonl'))
+  const kiln = join(repo, '.kiln')
+  mkdirSync(kiln, { recursive: true })
+  writeFileSync(join(kiln, 'LAW.md'), artifact)
+  // reviews.jsonl sits beside the gate output (under the kilnDir), pre-created as a DIRECTORY → a real
+  // EISDIR fault when runGate archives. The archive must gate the rename on BOTH families, not just publish-gate.
+  mkdirSync(join(kiln, 'reviews.jsonl'))
   const req = { review_id: 'ratify-1', reviewer_model: 'gpt-5.6-sol', reviewer_alias: 'gpt-sol', reviewer_effort: 'high', artifact: '.kiln/LAW.md', rubric: RUBRIC }
   const rf = join(repo, 'request.json')
   writeFileSync(rf, JSON.stringify(req))
   const fake = mkdtempSync(join(tmpdir(), 'kiln-fakecodex-'))
   writeFileSync(join(fake, 'codex'), FAKE_CODEX, { mode: 0o755 })
   const env = { ...process.env, PATH: `${fake}:${process.env.PATH}`, FAKE_GATE: JSON.stringify(ratifyGate('accept', digestOf(artifact))) }
-  const r = spawnSync('node', [REVIEW, 'ratify', repo, rf, join(repo, 'gate.json'), 'ratify'], { encoding: 'utf8', env })
+  const r = spawnSync('node', [REVIEW, 'ratify', repo, kiln, rf, join(kiln, 'gate.json'), 'ratify'], { encoding: 'utf8', env })
   assert.equal(r.status, 20, 'the codex verdict archive fault fails closed — transport_failure exit 20')
-  assert.equal(existsSync(join(repo, 'gate.json')), false, 'the gate is NOT published when runGate cannot archive — the codex path mirrors the publish-gate fail-closed ordering')
+  assert.equal(existsSync(join(kiln, 'gate.json')), false, 'the gate is NOT published when runGate cannot archive — the codex path mirrors the publish-gate fail-closed ordering')
 })
 
 // ── W2-S7a (ruling A-prime): the driver-closed identity protocol ─────────────────────────────────
@@ -2184,7 +2192,7 @@ test('codex capture (W2-S7a): a runGate invocation writes exactly one codex-iden
   const artifact = 'a testable, coherent LAW\n'
   const r = ratify({ artifact, gate: ratifyGate('accept', digestOf(artifact)) })
   assert.equal(r.status, 0)
-  const rows = idRows(r.repo)
+  const rows = idRows(r.kiln)
   assert.equal(rows.length, 1, 'exactly one codex-identity row per runGate publish')
   assert.equal(rows[0].type, 'codex-identity')
   assert.equal(rows[0].resolved_model, 'gpt-5.6-sol', 'resolved_model is the exact string passed to --model')
@@ -2354,7 +2362,7 @@ test('reviews.jsonl (W2-S7a): the codex reviewer_leg_id on the archive row is th
   const artifact = 'a testable, coherent LAW\n'
   const r = ratify({ artifact, gate: ratifyGate('accept', digestOf(artifact)) })
   assert.equal(r.status, 0)
-  assert.equal(ledgerRows(r.repo)[0].reviewer_leg_id, idRows(r.repo).find((x) => x.type === 'codex-identity').leg_id,
+  assert.equal(ledgerRows(r.kiln)[0].reviewer_leg_id, idRows(r.kiln).find((x) => x.type === 'codex-identity').leg_id,
     'the reviews row binds the synchronously-minted codex reviewer leg')
 })
 
@@ -2474,13 +2482,15 @@ test('sidecar (W2-S7a, B-D2-PIN a): a codex review publish writes <gate>.leg equ
   assert.equal(r.status, 0, 'the codex review publishes')
   const sidecar = readFileSync(r.out + '.leg', 'utf8').trim()
   assert.match(sidecar, /^[0-9a-f]{32}$/, 'the sidecar carries a 32-hex reviewer leg')
-  const codex = idRows(r.repo).find((x) => x.type === 'codex-identity')
+  // The gate publishes under .kiln (the production invariant), so the identity, reviews and seal ledgers
+  // all land in r.kiln beside it.
+  const codex = idRows(r.kiln).find((x) => x.type === 'codex-identity')
   assert.equal(codex.leg_id, sidecar, 'the sidecar leg is exactly the codex-identity leg runGate minted')
   assert.equal(codex.role, 'gate-reviewer', 'a review-family codex reviewer is a gate-reviewer — valid for the seal reviewer position')
-  assert.equal(ledgerRows(r.repo)[0].reviewer_leg_id, sidecar, 'the reviews.jsonl row binds the SAME leg')
-  const builder = mintLeg(r.repo, 'builder', 'sonnet', 's1')[0]
-  assert.equal(appendSeal(r.repo, 's1', 'dual', builder, sidecar).status, 0, 'append-seal accepts the sidecar reviewer leg in the reviewer position')
-  assert.equal(s6Rows(join(r.repo, 'seals.jsonl')).find((x) => x.type === 'seal').reviewer_leg_id, sidecar, 'the seal candidate binds the codex reviewer leg — not the - sentinel')
+  assert.equal(ledgerRows(r.kiln)[0].reviewer_leg_id, sidecar, 'the reviews.jsonl row binds the SAME leg')
+  const builder = mintLeg(r.kiln, 'builder', 'sonnet', 's1')[0]
+  assert.equal(appendSeal(r.kiln, 's1', 'dual', builder, sidecar).status, 0, 'append-seal accepts the sidecar reviewer leg in the reviewer position')
+  assert.equal(s6Rows(join(r.kiln, 'seals.jsonl')).find((x) => x.type === 'seal').reviewer_leg_id, sidecar, 'the seal candidate binds the codex reviewer leg — not the - sentinel')
 })
 
 // ── W2-S7a (FORK 3): the control-derived working-tree manifests ─────────────────────────────────
@@ -2706,9 +2716,10 @@ test('publish-gate (W2-S7a, FORK 3): the manifest-binding retry gate — a legac
   const sha = createHash('sha256').update(Buffer.from(bytes)).digest('hex')
   const seed = (dir, row) => writeFileSync(join(dir, 'reviews.jsonl'), JSON.stringify(row) + '\n')
   const base = { family: 'review', review_id: 'rv-1', round: 0, verdict: 'accept', findings: [], blockers: [], law_hash: HASH, run_id: null, published_at: '2026-01-01T00:00:00.000Z', receipt_sha256: null, reviewer_leg_id: null, verdict_sha256: sha }
-  // owned explicit null + supplied null (no manifests dir, no repo arg) → clean idempotent no-op
+  // owned explicit null + supplied null (no manifests dir, no repo arg) → clean idempotent no-op. The
+  // row must own BOTH the manifest and the contract digest for the retry to no-op (W2-S7a FORK 1).
   const ok = mkdtempSync(join(tmpdir(), 'kiln-mfretry-'))
-  seed(ok, { ...base, manifest_sha256: null })
+  seed(ok, { ...base, manifest_sha256: null, contract_sha256: null })
   const cOk = join(ok, '.c.json'); writeFileSync(cOk, bytes)
   assert.equal(spawnSync('node', [REVIEW, 'publish-gate', ok, 'review', cOk, join(ok, 'gate.json')], { encoding: 'utf8' }).status, 0, 'owned null + supplied null is a clean no-op')
   assert.equal(ledgerRows(ok).length, 1, 'no second row on the owned-null retry')
@@ -2874,4 +2885,278 @@ test('append-seal (W2-S7a, M-05): the manifest recompute is the last operation b
   assert.ok(sealBlock.indexOf('reconcileLedger(kilnDir, SEAL_LEDGER)') < sealBlock.indexOf('manifestRecompute('), 'reconcile runs BEFORE the manifest recompute')
   assert.ok(sealBlock.indexOf('manifestRecompute(') < sealBlock.indexOf('appendLedgerRow(kilnDir, SEAL_LEDGER, sealRow)'), 'the recompute is the last op before the ledger append')
   assert.ok(sealBlock.indexOf('manifestGenerationStarted(') < sealBlock.indexOf('appendLedgerRow(kilnDir, SEAL_LEDGER, sealRow)'), 'the bypass guard also precedes the append')
+})
+
+// ── W2-S7a (FORK 1): the canonical contract — composer, store, publication binding ────────────────
+const cStore = (kiln, sha) => join(kiln, 'contracts', 'sha256', sha + '.json')
+const cPrepare = (repo, kiln, ...rest) => spawnSync('node', [REVIEW, 'contract-prepare', repo, kiln, ...rest], { encoding: 'utf8' })
+const cFinding = (id) => ({ id, criterion: 'c', location: 'f.js:1', failure_mode: 'x', evidence: 'y', minimal_fix: 'z' })
+
+test('contract (W2-S7a, FORK 1): the slice-review contract is deterministic and content-addressed, embeds the sealed facts, excludes transport identity, and the codex path binds the SAME digest', () => {
+  const { repo, kiln, digest } = sealReviewRepo('s1')
+  const rf = join(repo, 'request.json')
+  writeFileSync(rf, JSON.stringify({ criteria: 'covers the median', paths: ['s/m.js'], failures: [], commands: ['node --test'] }))
+  assert.equal(mfStart(repo, kiln, 's1').status, 0)
+  assert.equal(mfPrepare(repo, kiln, 's1').status, 0)
+  const one = cPrepare(repo, kiln, 'slice-review', 'initial', 's1', rf)
+  assert.equal(one.status, 0, 'contract-prepare returns the digest as the one closed stdout fact')
+  const sha = one.stdout.trim()
+  assert.match(sha, /^[0-9a-f]{64}$/)
+  assert.equal(cPrepare(repo, kiln, 'slice-review', 'initial', 's1', rf).stdout.trim(), sha, 'a second compose over identical facts is byte-identical')
+  const stored = readFileSync(cStore(kiln, sha))
+  assert.equal(createHash('sha256').update(stored).digest('hex'), sha, 'the store entry is content-addressed by its own digest')
+  const c = JSON.parse(stored.toString('utf8'))
+  assert.equal(c.contract_version, 1)
+  assert.equal(c.contract_kind, 'slice-review')
+  assert.equal(c.operation, 'initial')
+  assert.equal(c.slice_id, 's1')
+  assert.equal(c.law_hash, digest, 'law_hash binds the sealed lock.hash')
+  assert.equal(c.law_text, REVIEW_LAW('s1'), 'law_text is the exact sealed LAW bytes')
+  assert.deepEqual(c.builder_hints, { criteria: 'covers the median', paths: ['s/m.js'], failures: [], commands: ['node --test'] }, 'the filtered builder hints ride in request order')
+  assert.match(c.receipt_sha256, /^[0-9a-f]{64}$/, 'the durable receipt digest rides the contract')
+  assert.equal(c.reviewed_manifest.slice, 's1', 'the COMPLETE reviewed manifest object is embedded')
+  assert.ok(!('review_id' in c) && !('mode' in c), 'transport identity — review_id and mode — is excluded')
+  // Cross-transport parity: the codex review verb, which mints its OWN review_id, binds the SAME
+  // contract digest — proof review_id is excluded and both transports serialize one authority.
+  const env = fakeCodexEnv({ gate: { review_id: '__ECHO__', law_hash: digest, findings: [], blockers: [], verdict: 'accept' } })
+  const rv = spawnSync('node', [REVIEW, 'review', repo, kiln, 's1', 'gpt-5.6-sol', 'gpt-sol', 'high', rf, join(kiln, 'gate-review.json')], { encoding: 'utf8', env })
+  assert.equal(rv.status, 0, 'the codex review publishes')
+  assert.equal(ledgerRows(kiln)[0].contract_sha256, sha, 'the codex review binds the SAME contract digest on its reviews row')
+})
+
+test('contract (W2-S7a, FORK 1): a mutated authoritative fact changes the digest; a tampered reviewed manifest HOLDs the compose', () => {
+  const { repo, kiln } = sealReviewRepo('s1')
+  const rf = join(repo, 'request.json')
+  writeFileSync(rf, JSON.stringify({ criteria: 'A', paths: [], failures: [], commands: [] }))
+  mfStart(repo, kiln, 's1'); mfPrepare(repo, kiln, 's1')
+  const shaA = cPrepare(repo, kiln, 'slice-review', 'initial', 's1', rf).stdout.trim()
+  writeFileSync(rf, JSON.stringify({ criteria: 'B', paths: [], failures: [], commands: [] }))
+  const shaB = cPrepare(repo, kiln, 'slice-review', 'initial', 's1', rf).stdout.trim()
+  assert.notEqual(shaA, shaB, 'a changed builder hint (an authoritative fact) changes the digest')
+  const msha = mfCurrent(kiln, 's1', 1).manifest_sha256
+  writeFileSync(join(mfGenDir(kiln, 's1', 1), 'prepared', msha + '.json'), 'torn manifest')
+  assert.equal(cPrepare(repo, kiln, 'slice-review', 'initial', 's1', rf).status, 20, 'a tampered prepared manifest HOLDs — never a contract over torn evidence')
+})
+
+test('contract (W2-S7a, FORK 1): the recheck contract SORTS finding_ids while prior_findings keeps its order, and a closed-set operation violation HOLDs', () => {
+  const { repo, kiln, digest } = sealReviewRepo('s1')
+  const rf = join(repo, 'request.json'); writeFileSync(rf, JSON.stringify({ criteria: 'x', paths: [], failures: [], commands: [] }))
+  const delta = join(repo, 'delta.md'); writeFileSync(delta, 'repaired\n')
+  mfStart(repo, kiln, 's1'); mfPrepare(repo, kiln, 's1')
+  const prior = { review_id: 'slice-1', law_hash: digest, findings: [cFinding('f2'), cFinding('f1')], blockers: [], verdict: 'changes_required' }
+  const pf = join(repo, 'prior.json'); writeFileSync(pf, JSON.stringify(prior))
+  const sha = cPrepare(repo, kiln, 'slice-review', 'recheck', 's1', rf, pf, delta).stdout.trim()
+  const c = JSON.parse(readFileSync(cStore(kiln, sha), 'utf8'))
+  assert.deepEqual(c.finding_ids, ['f1', 'f2'], 'the contract SORTS finding_ids by byte order')
+  assert.deepEqual(c.prior_findings.map((f) => f.id), ['f2', 'f1'], 'prior_findings keeps its insertion order')
+  assert.equal(c.repair_delta, 'repaired\n', 'the repair delta rides the recheck contract')
+  assert.equal(cPrepare(repo, kiln, 'slice-review', 'escalation', 's1', rf).status, 20, 'an operation outside the kind closed set HOLDs')
+})
+
+test('contract (W2-S7a, FORK 1): the artifact-ratify contract carries the purpose, artifact text and digest, the rubric, and a null receipt by contract', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'kiln-cratify-'))
+  const kiln = join(repo, '.kiln'); mkdirSync(kiln, { recursive: true })
+  writeFileSync(join(kiln, 'LAW.md'), 'the candidate law\n')
+  const rubricPath = join(repo, 'rubric.json')
+  writeFileSync(rubricPath, JSON.stringify({ criteria: [{ id: 'r1', requirement: 'a', pass: 'b', fail: 'c' }] }))
+  const sha = cPrepare(repo, kiln, 'artifact-ratify', 'initial', 'ratify', '.kiln/LAW.md', rubricPath).stdout.trim()
+  assert.match(sha, /^[0-9a-f]{64}$/)
+  const c = JSON.parse(readFileSync(cStore(kiln, sha), 'utf8'))
+  assert.equal(c.contract_kind, 'artifact-ratify')
+  assert.equal(c.purpose, 'ratify', 'the ratify family word is the purpose')
+  assert.equal(c.artifact_path, '.kiln/LAW.md')
+  assert.equal(c.artifact_sha256, createHash('sha256').update(Buffer.from('the candidate law\n')).digest('hex'), 'the candidate digest binds the artifact bytes')
+  assert.equal(c.artifact, 'the candidate law\n', 'the exact artifact text the packet embeds rides the contract')
+  assert.equal(c.rubric.length, 1, 'the rubric criteria ride the contract')
+  assert.equal(c.receipt_sha256, null, 'ratify judges no receipt — receipt_sha256 is null by contract')
+})
+
+test('contract (W2-S7a, FORK 1): a content-addressed contract whose bytes no longer hash to its name HOLDs — a torn store', () => {
+  const { repo, kiln } = sealReviewRepo('s1')
+  const rf = join(repo, 'request.json'); writeFileSync(rf, JSON.stringify({ criteria: 'x', paths: [], failures: [], commands: [] }))
+  mfStart(repo, kiln, 's1'); mfPrepare(repo, kiln, 's1')
+  const sha = cPrepare(repo, kiln, 'slice-review', 'initial', 's1', rf).stdout.trim()
+  writeFileSync(cStore(kiln, sha), 'corrupted')
+  assert.equal(cPrepare(repo, kiln, 'slice-review', 'initial', 's1', rf).status, 20, 'the EEXIST re-verify HOLDs when the name no longer matches its bytes')
+})
+
+test('publish-gate (W2-S7a, FORK 1): the contract binding — a matching store entry archives contract_sha256, a missing digest HOLDs, a present store with no digest arg is a bypass HOLD', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kiln-cbind-'))
+  s6Lock(dir, 'run-cb')
+  const leg = mintLeg(dir, 'ratifier', 'gpt-sol', 'law-ratify')[0]
+  const bytes = Buffer.from('{"contract_version":1,"contract_kind":"artifact-ratify"}')
+  const csha = createHash('sha256').update(bytes).digest('hex')
+  mkdirSync(join(dir, 'contracts', 'sha256'), { recursive: true })
+  writeFileSync(cStore(dir, csha), bytes)
+  const cand = (id) => { const p = join(dir, '.c-' + id + '.json'); writeFileSync(p, JSON.stringify(verdictOf('accept', id))); return p }
+  assert.equal(spawnSync('node', [REVIEW, 'publish-gate', dir, 'ratify', cand('r1'), join(dir, 'g1.json'), leg, csha], { encoding: 'utf8' }).status, 0, 'a matching store entry publishes')
+  assert.equal(ledgerRows(dir)[0].contract_sha256, csha, 'the matched contract digest lands on the row')
+  assert.equal(spawnSync('node', [REVIEW, 'publish-gate', dir, 'ratify', cand('r2'), join(dir, 'g2.json'), leg, 'b'.repeat(64)], { encoding: 'utf8' }).status, 20, 'a digest with no store entry HOLDs both transports')
+  assert.equal(spawnSync('node', [REVIEW, 'publish-gate', dir, 'ratify', cand('r3'), join(dir, 'g3.json'), leg], { encoding: 'utf8' }).status, 20, 'a contracts store present but the digest arg omitted is a bypass HOLD')
+  // a legacy project with NO contracts store publishes with a null contract digest, as before this unit
+  const legacy = mkdtempSync(join(tmpdir(), 'kiln-cbind-'))
+  s6Lock(legacy, 'run-cbl')
+  const lleg = mintLeg(legacy, 'ratifier', 'gpt-sol', 'law-ratify')[0]
+  const lc = join(legacy, '.c.json'); writeFileSync(lc, JSON.stringify(verdictOf('accept', 'r1')))
+  assert.equal(spawnSync('node', [REVIEW, 'publish-gate', legacy, 'ratify', lc, join(legacy, 'g.json'), lleg], { encoding: 'utf8' }).status, 0, 'a legacy no-store project publishes')
+  assert.equal(ledgerRows(legacy)[0].contract_sha256, null, 'the legacy row carries a null contract digest')
+})
+
+test('archive (W2-S7a, FORK 1): the contract-binding retry gate is the FOURTH ownership copy — a legacy-missing field HOLDs, an owned null + supplied null no-ops', () => {
+  const bytes = JSON.stringify(verdictOf('accept', 'rv-1'))
+  const sha = createHash('sha256').update(Buffer.from(bytes)).digest('hex')
+  const seed = (d, row) => writeFileSync(join(d, 'reviews.jsonl'), JSON.stringify(row) + '\n')
+  const base = { family: 'ratify', review_id: 'rv-1', round: 0, verdict: 'accept', findings: [], blockers: [], law_hash: HASH, run_id: null, published_at: '2026-01-01T00:00:00.000Z', receipt_sha256: null, reviewer_leg_id: null, manifest_sha256: null, verdict_sha256: sha }
+  const ok = mkdtempSync(join(tmpdir(), 'kiln-cretry-'))
+  seed(ok, { ...base, contract_sha256: null })
+  const cOk = join(ok, '.c.json'); writeFileSync(cOk, bytes)
+  assert.equal(spawnSync('node', [REVIEW, 'publish-gate', ok, 'ratify', cOk, join(ok, 'gate.json')], { encoding: 'utf8' }).status, 0, 'owned null + supplied null is a clean no-op')
+  assert.equal(ledgerRows(ok).length, 1, 'no second row on the owned-null retry')
+  const legacy = mkdtempSync(join(tmpdir(), 'kiln-cretry-'))
+  seed(legacy, base)
+  const cL = join(legacy, '.c.json'); writeFileSync(cL, bytes)
+  assert.equal(spawnSync('node', [REVIEW, 'publish-gate', legacy, 'ratify', cL, join(legacy, 'gate.json')], { encoding: 'utf8' }).status, 20, 'a row missing contract_sha256 cannot confirm the historical binding — HOLD')
+  assert.equal(ledgerRows(legacy).length, 1, 'nothing republished')
+})
+
+test('review (W2-S7a, FORK 1): the codex prompt embeds the EXACT canonical contract bytes verbatim under the contract anchor', () => {
+  const { repo, kiln, digest } = sealReviewRepo('s1')
+  const rf = join(repo, 'request.json'); writeFileSync(rf, JSON.stringify({ criteria: 'x', paths: [], failures: [], commands: [] }))
+  mfStart(repo, kiln, 's1'); mfPrepare(repo, kiln, 's1')
+  // The captured prompt lands OUTSIDE the repo — a prompt file written into the tree would be a drift
+  // the review-family manifest recompute rightly HOLDs on.
+  const promptOut = join(mkdtempSync(join(tmpdir(), 'kiln-cprompt-')), 'prompt.txt')
+  const env = fakeCodexEnv({ gate: { review_id: '__ECHO__', law_hash: digest, findings: [], blockers: [], verdict: 'accept' }, promptOut })
+  const rv = spawnSync('node', [REVIEW, 'review', repo, kiln, 's1', 'gpt-5.6-sol', 'gpt-sol', 'high', rf, join(kiln, 'gate-review.json')], { encoding: 'utf8', env })
+  assert.equal(rv.status, 0)
+  const sha = ledgerRows(kiln)[0].contract_sha256
+  const storedBytes = readFileSync(cStore(kiln, sha), 'utf8')
+  const prompt = readFileSync(promptOut, 'utf8')
+  assert.ok(prompt.includes('Canonical contract:\n' + storedBytes), 'the exact canonical bytes ride the prompt verbatim under the anchor')
+  assert.ok(prompt.includes('"review_id":'), 'the transport review_id still rides the prompt for the reviewer to echo')
+})
+
+test('contract (W2-S7a, FORK 1): the milestone-audit covered tuples bind each sealed slice to its last sealed generation and manifest digest — a legacy seal is an honest null', () => {
+  const fx = auditRepo()
+  s6Lock(fx.kiln, 'run-cov')
+  writeFileSync(join(fx.repo, 'work.txt'), 'w\n')
+  // s1 seals WITH a manifest store at its gen-1; s2 seals legacy (no manifest store); s3 stays unsealed.
+  assert.equal(mfStart(fx.repo, fx.kiln, 's1').status, 0)
+  assert.equal(mfPrepare(fx.repo, fx.kiln, 's1').status, 0)
+  const s1sha = mfCurrent(fx.kiln, 's1', 1).manifest_sha256
+  const b1 = mintLeg(fx.kiln, 'builder', 'sonnet', 's1')[0]
+  assert.equal(spawnSync('node', [REVIEW, 'append-seal', fx.kiln, 's1', 'dual', b1, '-', fx.repo], { encoding: 'utf8' }).status, 0, 's1 seals with its gen-1 manifest')
+  const b2 = mintLeg(fx.kiln, 'builder', 'sonnet', 's2')[0]
+  assert.equal(appendSeal(fx.kiln, 's2', 'dual', b2, '-').status, 0, 's2 seals legacy — no manifest store')
+  const sha = cPrepare(fx.repo, fx.kiln, 'milestone-audit', 'initial', 's3').stdout.trim()
+  const c = JSON.parse(readFileSync(cStore(fx.kiln, sha), 'utf8'))
+  assert.deepEqual(c.covered.map((t) => t.slice), ['s1', 's2', 's3'], 'the coverage tuples ride in sealed-prefix order')
+  const cov = Object.fromEntries(c.covered.map((t) => [t.slice, t]))
+  assert.equal(cov.s1.generation, 1, 's1 last sealed generation is the seal-row count')
+  assert.equal(cov.s1.manifest_sha256, s1sha, 's1 binds its gen-1 manifest digest from the store')
+  assert.equal(cov.s2.generation, 1, 's2 last sealed generation is 1')
+  assert.equal(cov.s2.manifest_sha256, null, 's2 sealed with no manifest store — an honest null')
+  assert.equal(cov.s3.generation, 0, 's3 is unsealed at audit time — generation 0')
+  assert.equal(cov.s3.manifest_sha256, null, 'an unsealed prefix member carries a null manifest')
+})
+
+test('publish-gate (W2-S7a, FORK 1): publication requires the fresh receipt digest to equal the contract receipt — a receipt overwritten during the review HOLDs; a coherent receipt publishes', () => {
+  const { repo, kiln } = sealReviewRepo('s1')
+  const rf = join(repo, 'request.json'); writeFileSync(rf, JSON.stringify({ criteria: 'x', paths: [], failures: [], commands: [] }))
+  mfStart(repo, kiln, 's1'); mfPrepare(repo, kiln, 's1')
+  // Compose the contract against the receipt as it stands; it embeds that receipt digest.
+  const contractSha = cPrepare(repo, kiln, 'slice-review', 'initial', 's1', rf).stdout.trim()
+  const c = JSON.parse(readFileSync(cStore(kiln, contractSha), 'utf8'))
+  const origReceipt = createHash('sha256').update(Buffer.from('checks ok\n')).digest('hex')
+  assert.equal(c.receipt_sha256, origReceipt, 'the contract embeds the receipt digest as composed')
+  const leg = mintLeg(kiln, 'gate-reviewer', 'opus', 's1')[0]
+  const cand = () => { const p = join(kiln, '.cand.json'); writeFileSync(p, JSON.stringify(verdictOf('accept', 'rv-1'))); return p }
+  // A write-capable reviewer overwrote check-receipt.txt mid-turn — outside the FORK-3 manifest, so the
+  // drift check never sees it. Pre-fix the row would archive the tampered digest while the judged
+  // contract embedded the original; the composite is incoherent. The tampered digest is a real divergence.
+  const tampered = 'checks ok AFTER a mid-turn overwrite\n'
+  writeFileSync(join(kiln, 'check-receipt.txt'), tampered)
+  assert.notEqual(origReceipt, createHash('sha256').update(Buffer.from(tampered)).digest('hex'), 'the overwrite genuinely diverges the receipt digest the row would have archived')
+  const held = spawnSync('node', [REVIEW, 'publish-gate', kiln, 'review', cand(), join(kiln, 'gate.json'), leg, repo, 's1', contractSha], { encoding: 'utf8' })
+  assert.equal(held.status, 20, 'the fresh receipt no longer matches the contract receipt — the publish HOLDs')
+  assert.equal(ledgerRows(kiln).length, 0, 'nothing archived on the incoherent contract-receipt binding')
+  // Restore the receipt the contract judged → coherent → publishes, the row receipt equal to the contract.
+  writeFileSync(join(kiln, 'check-receipt.txt'), 'checks ok\n')
+  const ok = spawnSync('node', [REVIEW, 'publish-gate', kiln, 'review', cand(), join(kiln, 'gate.json'), leg, repo, 's1', contractSha], { encoding: 'utf8' })
+  assert.equal(ok.status, 0, 'the restored, coherent receipt publishes')
+  assert.equal(ledgerRows(kiln)[0].receipt_sha256, c.receipt_sha256, 'the archived row receipt equals the contract receipt — a coherent composite')
+})
+
+test('ratify (W2-S7a, F4): the codex ratify path rejects a non-ratify purpose — a screen family composes no artifact-ratify contract and HOLDs before any spawn', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'kiln-f4-'))
+  const kiln = join(repo, '.kiln'); mkdirSync(kiln, { recursive: true })
+  writeFileSync(join(kiln, 'LAW.md'), 'a candidate\n')
+  const req = { review_id: 'r1', reviewer_model: 'gpt-5.6-sol', reviewer_alias: 'gpt-sol', artifact: '.kiln/LAW.md', rubric: RUBRIC }
+  const rf = join(repo, 'request.json'); writeFileSync(rf, JSON.stringify(req))
+  // No fake codex: the closed-purpose HOLD precedes the compose store and any spawn. Pre-fix the codex
+  // path copied family straight into purpose and composed an artifact-ratify contract for screen.
+  const r = spawnSync('node', [REVIEW, 'ratify', repo, kiln, rf, join(kiln, 'gate.json'), 'screen'], { encoding: 'utf8' })
+  assert.equal(r.status, 20, 'a screen family cannot compose an artifact-ratify contract — the closed purpose HOLDs')
+  assert.ok(r.stderr.includes('purpose must be ratify or feasibility'), 'the closed-purpose rule is named')
+})
+
+test('ratify (W2-S7a, F5): runGate HOLDs when the gate output is not directly under the supplied kilnDir — the explicit trust root, no implicit selector', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'kiln-f5-'))
+  const kiln = join(repo, '.kiln'); mkdirSync(kiln, { recursive: true })
+  writeFileSync(join(kiln, 'LAW.md'), 'a candidate\n')
+  const req = { review_id: 'r1', reviewer_model: 'gpt-5.6-sol', reviewer_alias: 'gpt-sol', artifact: '.kiln/LAW.md', rubric: RUBRIC }
+  const rf = join(repo, 'request.json'); writeFileSync(rf, JSON.stringify(req))
+  // The output sits at the repo root, NOT under the supplied kilnDir — the invariant HOLDs before spawn.
+  const r = spawnSync('node', [REVIEW, 'ratify', repo, kiln, rf, join(repo, 'gate.json'), 'ratify'], { encoding: 'utf8' })
+  assert.equal(r.status, 20, 'a gate output outside the kilnDir HOLDs — no implicit trust-root switch')
+  assert.ok(r.stderr.includes('not directly under the supplied kilnDir'), 'the invariant is named')
+})
+
+test('contract-prepare (W2-S7a, F2): a slice-review recheck over an ineligible prior HOLDs — the codex recheck eligibility, mirrored', () => {
+  const { repo, kiln, digest } = sealReviewRepo('s1')
+  const rf = join(repo, 'request.json'); writeFileSync(rf, JSON.stringify({ criteria: 'x', paths: [], failures: [], commands: [] }))
+  const delta = join(repo, 'delta.md'); writeFileSync(delta, 'repaired\n')
+  mfStart(repo, kiln, 's1'); mfPrepare(repo, kiln, 's1')
+  const mk = (v) => ({ review_id: 'slice-1', law_hash: digest, findings: v === 'accept' ? [] : [cFinding('f1')], blockers: [], verdict: v })
+  const acc = join(repo, 'acc.json'); writeFileSync(acc, JSON.stringify(mk('accept')))
+  // Pre-fix contract-prepare required only an object with findings[]; a malformed accept prior composed
+  // a recheck contract. Now the full codex eligibility (shape + changes_required + sealed-law binding) HOLDs.
+  assert.equal(cPrepare(repo, kiln, 'slice-review', 'recheck', 's1', rf, acc, delta).status, 20, 'an accept prior is ineligible for a recheck contract — HOLD')
+  const cr = join(repo, 'cr.json'); writeFileSync(cr, JSON.stringify(mk('changes_required')))
+  assert.equal(cPrepare(repo, kiln, 'slice-review', 'recheck', 's1', rf, cr, delta).status, 0, 'a changes_required prior on the sealed law still composes')
+})
+
+test('contract-prepare (W2-S7a, F2): a milestone-audit recheck over an ineligible prior HOLDs; an eligible one composes', () => {
+  const fx = auditRepo()
+  const delta = join(fx.repo, 'delta.md'); writeFileSync(delta, 'rewired\n')
+  const mk = (v) => ({ review_id: 'aud-1', law_hash: fx.digest, findings: v === 'accept' ? [] : [auditFinding('m1')], blockers: [], verdict: v })
+  const acc = join(fx.repo, 'acc.json'); writeFileSync(acc, JSON.stringify(mk('accept')))
+  assert.equal(cPrepare(fx.repo, fx.kiln, 'milestone-audit', 'recheck', 's3', acc, delta).status, 20, 'an accept prior is ineligible for an audit recheck — HOLD')
+  const cr = join(fx.repo, 'cr.json'); writeFileSync(cr, JSON.stringify(mk('changes_required')))
+  assert.equal(cPrepare(fx.repo, fx.kiln, 'milestone-audit', 'recheck', 's3', cr, delta).status, 0, 'a changes_required prior composes the audit recheck')
+})
+
+test('contract-prepare (W2-S7a, F2): an artifact-ratify recheck over an ineligible prior HOLDs; an eligible one composes', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'kiln-f2r-'))
+  const kiln = join(repo, '.kiln'); mkdirSync(kiln, { recursive: true })
+  const artifact = 'the regenerated LAW\n'
+  writeFileSync(join(kiln, 'LAW.md'), artifact)
+  const mk = (v) => ({ review_id: 'ratify-1', law_hash: digestOf(artifact), findings: v === 'accept' ? [] : [ratifyFinding('f1')], blockers: [], verdict: v })
+  const acc = join(repo, 'acc.json'); writeFileSync(acc, JSON.stringify(mk('accept')))
+  assert.equal(cPrepare(repo, kiln, 'artifact-ratify', 'recheck', 'ratify', '.kiln/LAW.md', RUBRIC, acc).status, 20, 'an accept prior is ineligible for a ratify recheck — HOLD')
+  const cr = join(repo, 'cr.json'); writeFileSync(cr, JSON.stringify(mk('changes_required')))
+  assert.equal(cPrepare(repo, kiln, 'artifact-ratify', 'recheck', 'ratify', '.kiln/LAW.md', RUBRIC, cr).status, 0, 'a changes_required prior composes the ratify recheck')
+})
+
+test('kiln-review (W2-S7a, F5-CLI-USAGE): the terminal usage string is canonical — the ratify family carries <kilnDir>, publish-gate carries the contract digest, contract-prepare is advertised', () => {
+  // Invoke the bare verb: no branch matches, so the parser prints its usage contract on stderr. Every
+  // segment this unit changed must match the parser forms, or a caller following the tool deterministically fails.
+  const usage = spawnSync('node', [REVIEW], { encoding: 'utf8' }).stderr
+  assert.ok(usage.includes('kiln-review ratify <repo> <kilnDir> <request.json> <gate-review.json> <family>'), 'the ratify signature carries the mandatory kilnDir word')
+  assert.ok(usage.includes('kiln-review ratify-recheck <repo> <kilnDir> <request.json> <prior-gate-review.json> <gate-review.json> <family>'), 'the ratify-recheck signature carries kilnDir')
+  assert.ok(usage.includes('kiln-review publish-gate <kilnDir> <family> <candidate.json> <gate-review.json> [<reviewer_leg_id> [<repo> <slice>] [<contract_sha256>]]'), 'publish-gate advertises the trailing contract digest across its 4 through 8 arities')
+  assert.ok(usage.includes('kiln-review contract-prepare <repo> <kilnDir> <kind> <operation> [<kind-args>...]'), 'the contract-prepare verb this unit added is advertised')
+  // the stale pre-fix ratify forms (no kilnDir) are gone — the pin that fails pre-fix
+  assert.ok(!usage.includes('kiln-review ratify <repo> <request.json>'), 'the stale 4-arg ratify form is gone')
+  assert.ok(!usage.includes('kiln-review ratify-recheck <repo> <request.json>'), 'the stale 5-arg ratify-recheck form is gone')
 })

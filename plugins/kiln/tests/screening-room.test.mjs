@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
@@ -186,7 +186,7 @@ function fakeEnv({ gate, brokenCodex, promptOut, argsOut } = {}) {
 }
 
 function runScreen(fx, { model = 'gpt-5.6-sol', alias = 'gpt-sol', effort = 'high', gate, brokenCodex, promptOut, argsOut } = {}) {
-  const out = join(fx.repo, 'screen-gate.json')
+  const out = join(fx.kiln, 'screen-gate.json')
   const r = spawnSync('node', [REVIEW, 'screen', fx.repo, fx.kiln, model, alias, effort, out],
     { encoding: 'utf8', env: fakeEnv({ gate, brokenCodex, promptOut, argsOut }) })
   return { fact: (r.stdout || '').trim(), status: r.status, stderr: r.stderr || '', out }
@@ -196,7 +196,7 @@ function runScreenRecheck(fx, { model = 'gpt-5.6-sol', alias = 'gpt-sol', effort
   const priorFile = join(fx.repo, 'prior-screen.json')
   writeFileSync(priorFile, JSON.stringify(prior))
   const deltaFile = delta === undefined ? join(fx.gen, 'manifest.json') : delta
-  const out = join(fx.repo, 'screen-recheck-gate.json')
+  const out = join(fx.kiln, 'screen-recheck-gate.json')
   const r = spawnSync('node', [REVIEW, 'screen-recheck', fx.repo, fx.kiln, model, alias, effort, priorFile, deltaFile, out],
     { encoding: 'utf8', env: fakeEnv({ gate, brokenCodex, promptOut }) })
   return { fact: (r.stdout || '').trim(), status: r.status, stderr: r.stderr || '', out }
@@ -206,9 +206,12 @@ function screenFinding(id, { criterion = 'perc-hero', location = 'viewport-deskt
   return { id, criterion, location, failure_mode: 'two blocks fight over the fold', evidence: 'the desktop capture shows twin heroes', minimal_fix: 'demote the secondary block' }
 }
 
+// W2-S7a (FORK 1): the codex prompt now ends on the canonical contract bytes under a single anchor;
+// the packet these tests assert on IS that contract. Transport identity (review_id, mode) is excluded,
+// so those reads move to the contract's operation field or the published verdict.
 function capturedPacket(promptFile) {
   const prompt = readFileSync(promptFile, 'utf8')
-  const anchor = 'Evidence packet:\n'
+  const anchor = 'Canonical contract:\n'
   return { prompt, packet: JSON.parse(prompt.slice(prompt.indexOf(anchor) + anchor.length)) }
 }
 
@@ -233,12 +236,53 @@ test('screen: accept binds law_hash = sha256 of the CURRENT manifest, attaches t
     ['perc-hero', 'perc-type', 'perc-color', 'perc-motion'], 'the verb derives the Perceptual table rows from LAW.md itself')
   assert.equal(packet.perceptual_criteria[1].proxy, 'grep -c "h1" index.html | head -1', 'an escaped GFM pipe unescapes to the real operator')
   assert.equal(packet.rubric.length, 6, 'the shipped instrument rides whole — the rows dims select from it')
-  assert.deepEqual(packet.reference_images, ['ref-mockup.png'], 'the reference naming rides as text beside the attached pixels')
+  // W2-S7a (FORK 1): the contract carries the attached and reference images as ORDERED {name, sha256}
+  // arrays — the per-image byte digests the evidence-manifest digest alone cannot prove.
+  const pxSha = createHash('sha256').update(Buffer.from('px')).digest('hex')
+  assert.deepEqual(packet.attached_images.map((a) => a.name),
+    ['viewport-desktop.png', 'viewport-mobile.png', 'keyframes/kf-load.png', 'keyframes/kf-scroll.png', 'ref-mockup.png'],
+    'attached_images are the 2 viewports, the keyframes, then the references, in manifest order')
+  assert.ok(packet.attached_images.every((a) => a.sha256 === pxSha), 'each attached image carries the sha256 of its raw bytes')
+  assert.deepEqual(packet.reference_images, [{ name: 'ref-mockup.png', sha256: pxSha }], 'the reference images ride as ordered {name, sha256}')
   assert.ok(packet.dom_excerpt.includes('<h1>hero</h1>'), 'the DOM rides as a bounded text excerpt')
   assert.equal(packet.console_log, 'log: ready\n', 'the console rides verbatim')
   assert.ok(typeof packet.meta === 'string' && packet.meta.includes('"status":200'), 'meta.json rides as text')
   assert.ok(prompt.includes('Insufficient evidence on a dim is a finding'), 'insufficient evidence is instructed as a finding, never a blocker')
   assert.ok(prompt.includes('an evidence path with an optional :frame'), 'the location instruction pins evidence paths')
+})
+
+test('screen contract (W2-S7a, FORK 1): each attached image digest is the sha256 of its RAW bytes — an arbitrary-byte image (incl 0xff) hashes exactly, and the order matches the evidence', () => {
+  const fx = screenRepo({ references: ['ref-mockup.png'] })
+  // Overwrite one viewport with arbitrary raw bytes, including 0xff — the manifest.json (and so its
+  // digest) is unchanged, but the contract's per-image digest tracks the exact bytes on disk.
+  const raw = Buffer.from([0xff, 0x00, 0x10, 0xff, 0x7f])
+  writeFileSync(join(fx.gen, 'viewport-desktop.png'), raw)
+  const promptOut = join(fx.repo, 'captured-prompt.txt')
+  const r = runScreen(fx, { gate: { review_id: '__ECHO__', law_hash: fx.digest, findings: [], blockers: [], verdict: 'accept' }, promptOut })
+  assert.equal(r.status, 0, 'the arbitrary-byte image does not change the manifest digest, so the grade still binds it')
+  const { packet } = capturedPacket(promptOut)
+  const byName = Object.fromEntries(packet.attached_images.map((a) => [a.name, a.sha256]))
+  assert.equal(byName['viewport-desktop.png'], createHash('sha256').update(raw).digest('hex'), 'the 0xff-byte image hashes over its raw bytes, never a utf8-decoded string')
+  assert.equal(byName['viewport-mobile.png'], createHash('sha256').update(Buffer.from('px')).digest('hex'), 'the untouched image keeps its raw-byte digest')
+  assert.deepEqual(packet.attached_images.map((a) => a.name),
+    ['viewport-desktop.png', 'viewport-mobile.png', 'keyframes/kf-load.png', 'keyframes/kf-scroll.png', 'ref-mockup.png'],
+    'the {name, sha256} pairs ride in evidence order')
+})
+
+test('screen contract (W2-S7a, FORK 1): an evidence image that is present but unreadable HOLDs the contract compose — exit 20, nothing published, codex never spawns', () => {
+  const fx = screenRepo()
+  const image = join(fx.gen, 'viewport-mobile.png')
+  chmodSync(image, 0o000)
+  // Only meaningful when the harness truly cannot read the file (a non-root runner); a permissive
+  // environment where 000 still reads would not exercise the hold.
+  let unreadable = false
+  try { readFileSync(image) } catch { unreadable = true }
+  if (!unreadable) { chmodSync(image, 0o644); return }
+  const r = runScreen(fx, { gate: { review_id: '__ECHO__', law_hash: fx.digest, findings: [], blockers: [], verdict: 'accept' } })
+  chmodSync(image, 0o644)
+  assert.equal(r.status, 20, 'an unreadable evidence image HOLDs the compose before any spawn')
+  assert.ok(r.stderr.includes('image could not be read'), 'the unreadable-image hold is named')
+  assert.ok(!existsSync(r.out), 'nothing published on the hold')
 })
 
 test('screen: changes_required publishes as reject (exit 10) — evidence-path locations with and without a :frame both pass the screen shape', () => {
@@ -497,7 +541,7 @@ test('screen-recheck: the packet embeds every prior finding in full beside its i
 function runScreenEscalate(fx, { model = 'gpt-5.6-sol', alias = 'gpt-sol', effort = 'high', held, gate, brokenCodex, promptOut } = {}) {
   const heldFile = join(fx.repo, 'held-screen.json')
   writeFileSync(heldFile, JSON.stringify(held))
-  const out = join(fx.repo, 'screen-escalation.json')
+  const out = join(fx.kiln, 'screen-escalation.json')
   const r = spawnSync('node', [REVIEW, 'screen-escalate', fx.repo, fx.kiln, model, alias, effort, heldFile, out],
     { encoding: 'utf8', env: fakeEnv({ gate, brokenCodex, promptOut }) })
   return { fact: (r.stdout || '').trim(), status: r.status, stderr: r.stderr || '', out }
@@ -511,12 +555,13 @@ test('screen-escalate: the packet carries ONLY the surviving rows — a fresh re
   assert.equal(r1.fact, 'accept')
   assert.equal(r1.status, 0, 'an in-scope accept publishes — the survivors are contested')
   const { prompt, packet } = capturedPacket(promptOut)
-  assert.equal(packet.mode, 'screen-escalate')
+  assert.equal(packet.operation, 'escalation', 'the escalation operation is synthesized into the contract')
   assert.deepEqual(packet.perceptual_criteria.map((row) => row.criterion), ['perc-hero', 'perc-motion'],
-    'the packet rows are the surviving criteria ALONE — the grader never sees the rest of the table')
-  assert.notEqual(packet.review_id, held.review_id, 'the escalation mints a fresh review_id — a second mind, not a lineage recheck')
+    'the contract rows are the surviving criteria ALONE — the grader never sees the rest of the table')
+  const published = JSON.parse(readFileSync(r1.out, 'utf8'))
+  assert.notEqual(published.review_id, held.review_id, 'the escalation mints a fresh review_id — a second mind, not a lineage recheck (review_id is transport, excluded from the contract)')
   assert.ok(prompt.includes('the packet carries ONLY the surviving criteria'), 'the scope instruction rides the prompt')
-  assert.equal(JSON.parse(readFileSync(r1.out, 'utf8')).law_hash, accept.digest, 'the verdict binds the same graded generation manifest digest')
+  assert.equal(published.law_hash, accept.digest, 'the verdict binds the same graded generation manifest digest')
   const reject = screenRepo()
   const r2 = runScreenEscalate(reject, { held, gate: { review_id: '__ECHO__', law_hash: reject.digest, findings: [screenFinding('e1')], blockers: [], verdict: 'changes_required' } })
   assert.equal(r2.fact, 'reject')
@@ -540,4 +585,47 @@ test('screen-escalate: an off-survivor finding — on the table, outside the sco
   assert.equal(r3.fact, 'transport_failure', 'an off-table held artifact was never a publishable screen verdict — it names no survivors')
   assert.equal(r3.status, 20)
   assert.ok(!existsSync(r3.out))
+})
+
+// ── W2-S7a (Sol r1 repair): the escalation scoped cohort, the prior-eligibility, the evidence rebind ──
+test('screen-escalate (W2-S7a, F1): two held verdicts with identical surviving criteria but different findings compose DIFFERENT contracts, and the escalation contract carries the sorted cohort', () => {
+  const escDigest = (fid) => {
+    const fx = screenRepo()
+    const r = runScreenEscalate(fx, { held: priorScreenGate([screenFinding(fid, { criterion: 'perc-hero' })]), gate: { review_id: '__ECHO__', law_hash: fx.digest, findings: [], blockers: [], verdict: 'accept' } })
+    assert.equal(r.status, 0)
+    return JSON.parse(readFileSync(join(fx.kiln, 'reviews.jsonl'), 'utf8').trim().split('\n').pop()).contract_sha256
+  }
+  const a = escDigest('p1')
+  const b = escDigest('p2')
+  assert.match(a, /^[0-9a-f]{64}$/, 'the escalation row binds a 64-hex contract digest')
+  assert.notEqual(a, b, 'two held verdicts sharing their surviving criteria but differing in findings compose DIFFERENT contract bytes — pre-fix they were identical')
+  // the escalation contract carries the sorted cohort + ordered held findings
+  const fx = screenRepo()
+  const promptOut = join(fx.repo, 'esc-prompt.txt')
+  runScreenEscalate(fx, { held: priorScreenGate([screenFinding('p2', { criterion: 'perc-hero' }), screenFinding('p1', { criterion: 'perc-motion', location: 'film.webm:2' })]), gate: { review_id: '__ECHO__', law_hash: fx.digest, findings: [], blockers: [], verdict: 'accept' }, promptOut })
+  const { packet } = capturedPacket(promptOut)
+  assert.equal(packet.operation, 'escalation')
+  assert.deepEqual(packet.finding_ids, ['p1', 'p2'], 'the escalation contract sorts the scoped cohort finding_ids')
+  assert.deepEqual(packet.prior_findings.map((f) => f.id), ['p2', 'p1'], 'prior_findings keeps the held verdict order')
+})
+
+test('contract-prepare (W2-S7a, F2): a screen recheck/escalation over an ineligible prior HOLDs — the codex screen eligibility, mirrored', () => {
+  const fx = screenRepo()
+  const priorFile = join(fx.repo, 'prior.json')
+  const mk = (v) => ({ review_id: 'screen-1', law_hash: 'f'.repeat(64), findings: v === 'accept' ? [] : [screenFinding('p1')], blockers: [], verdict: v })
+  writeFileSync(priorFile, JSON.stringify(mk('accept')))
+  assert.equal(spawnSync('node', [REVIEW, 'contract-prepare', fx.repo, fx.kiln, 'perceptual-screen', 'recheck', priorFile], { encoding: 'utf8' }).status, 20, 'an accept prior is ineligible for a screen recheck — HOLD')
+  assert.equal(spawnSync('node', [REVIEW, 'contract-prepare', fx.repo, fx.kiln, 'perceptual-screen', 'escalation', priorFile], { encoding: 'utf8' }).status, 20, 'an accept held is ineligible for a screen escalation — HOLD')
+  writeFileSync(priorFile, JSON.stringify(mk('changes_required')))
+  assert.equal(spawnSync('node', [REVIEW, 'contract-prepare', fx.repo, fx.kiln, 'perceptual-screen', 'escalation', priorFile], { encoding: 'utf8' }).status, 0, 'a changes_required held composes the escalation')
+})
+
+test('contract-prepare (W2-S7a, F3): recomposing the screen contract after an evidence image changes yields a DIFFERENT digest — the rebind the kernel requires before publish', () => {
+  const fx = screenRepo()
+  const one = spawnSync('node', [REVIEW, 'contract-prepare', fx.repo, fx.kiln, 'perceptual-screen', 'initial'], { encoding: 'utf8' }).stdout.trim()
+  assert.match(one, /^[0-9a-f]{64}$/)
+  writeFileSync(join(fx.gen, 'viewport-desktop.png'), Buffer.from([0xde, 0xad, 0xbe, 0xef]))
+  const two = spawnSync('node', [REVIEW, 'contract-prepare', fx.repo, fx.kiln, 'perceptual-screen', 'initial'], { encoding: 'utf8' }).stdout.trim()
+  assert.match(two, /^[0-9a-f]{64}$/)
+  assert.notEqual(one, two, 'a changed evidence image changes the contract digest — the kernel recompose-and-require HOLDs a reviewer that mutated the evidence its contract hashed')
 })

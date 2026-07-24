@@ -55,7 +55,10 @@ async function runSweep(kargs, script) {
   // before. The degraded scenarios override with exit 0 (present) or an untrusted exit.
   // W2-S1: the non-probe sweep joins the run lock before the boot; the harness answers a clean
   // join by default so pre-lock scenarios boot and run as before. Foreign-lock scenarios override.
-  const full = { 'run-lock:join': { exit: 0, ids: [] }, 'tiers:boot': TIERS_OK, invalidate: OK, 'invalidate:repair': OK, 'feasibility:degraded': { exit: 1 }, ...script }
+  // W2-S7a (FORK 1): the degraded feasibility ratifier composes its canonical contract through the
+  // trusted contract-prepare verb before dispatch; the harness answers a fresh contract digest by
+  // default so every pre-FORK-1 degraded scenario dispatches and publishes exactly as before.
+  const full = { 'run-lock:join': { exit: 0, ids: [] }, 'tiers:boot': TIERS_OK, invalidate: OK, 'invalidate:repair': OK, 'feasibility:degraded': { exit: 1 }, 'feasibility:contract': { exit: 0, ids: ['d'.repeat(64)] }, ...script }
   const calls = []
   // W2-S7a (B-RESEARCH-SWEEP): the degraded feasibility ratifier mints its identity (identity:ratifier)
   // and runs under the reserved leg label. An object scenario has no real dir, so the harness answers
@@ -317,8 +320,8 @@ test('runtime: a qualifying question runs producer → ratify → accept → ato
   assert.ok(producer < gate, 'the producer writes the candidate before the ratify gate grades it')
   assert.ok(gate < promote, 'the accept precedes the promotion — never the other way')
   const gateCall = calls.find(c => c.label === 'ratify:gate')
-  assert.ok(gateCall.prompt.includes('/scripts/kiln-review') && gateCall.prompt.includes(' ratify . .kiln/feasibility-ratify-request.json .kiln/feasibility-gate.json feasibility'),
-    'the gate rides the shell-quoted kiln-review ratify verb with the cwd-relative repo arg and the W2-S5 feasibility family so its verdict archives under its own family')
+  assert.ok(gateCall.prompt.includes('/scripts/kiln-review') && gateCall.prompt.includes(' ratify . .kiln .kiln/feasibility-ratify-request.json .kiln/feasibility-gate.json feasibility'),
+    'the gate rides the shell-quoted kiln-review ratify verb with the cwd-relative repo arg, the explicit .kiln trust root, and the W2-S5 feasibility family so its verdict archives under its own family')
   const req = calls.find(c => c.label === 'ratify:request')
   assert.ok(req.prompt.includes('feasibility-rubric.json'), 'the request names the feasibility rubric')
   assert.ok(req.prompt.includes('gpt-5.6-sol'), 'the reviewer is the opposite-family ratify-reviewer (codex id)')
@@ -799,4 +802,51 @@ test('runtime (W2-S7a, B-RESEARCH-SWEEP): the feasibility claude ratifier mints 
   assert.ok(!src.includes("label: 'feasibility-claude:' + mode"), 'the reusable dispatch label is gone')
   assert.ok(src.includes("publish-gate .kiln feasibility ' + F.gateTmp + ' ' + F.gate + ' ' + shq(ratifyLeg.legId)"), 'the publish carries the reviewer leg so the feasibility row binds reviewer_leg_id')
   assert.ok(src.includes('reviewer_alias: reviewerOpts.alias'), 'the codex feasibility ratify request carries the alias as the durable tiers fact (B-D1)')
+})
+
+// ── W2-S7a (FORK 1): the feasibility claude leg is a FORK-1 transport ─────────────────────────────
+const REAL_REVIEW = fileURLToPath(new URL('../scripts/kiln-review', import.meta.url))
+const REAL_RUBRIC = fileURLToPath(new URL('../data/feasibility-rubric.json', import.meta.url))
+
+test('feasibility (W2-S7a, FORK 1): a store-present degraded resume publishes with its contract instead of wedging the pre-law gate — the row pairs with the codex twin', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kiln-feas-fork1-'))
+  const kiln = join(dir, '.kiln')
+  mkdirSync(join(kiln, 'law'), { recursive: true })
+  mkdirSync(join(kiln, 'docs'), { recursive: true })
+  writeFileSync(join(kiln, 'LAW.md'), '# LAW\n')
+  writeFileSync(join(kiln, 'law', 'check.sh'), '#!/usr/bin/env bash\nexit 0\n')
+  writeFileSync(join(kiln, 'slices.json'), JSON.stringify([{ id: 's1', surface: 'ui' }]))
+  assert.equal(spawnSync('node', [REAL_REVIEW, 'seal-law', kiln, 'dual'], { encoding: 'utf8' }).status, 0, 'the fixture seals its trio')
+  const CAND = '# Feasibility\nsingle-family read\n'
+  writeFileSync(join(kiln, 'docs', 'feasibility-candidate.md'), CAND)
+  // A prior codex feasibility round planted the contracts store — the wedge precondition (never deleted).
+  mkdirSync(join(kiln, 'contracts', 'sha256'), { recursive: true })
+  const stale = Buffer.from('{"prior":"codex round"}')
+  writeFileSync(join(kiln, 'contracts', 'sha256', createHash('sha256').update(stale).digest('hex') + '.json'), stale)
+  const leg = spawnSync('node', [REAL_REVIEW, 'identity-begin', kiln, 'ratifier', 'gpt-sol', 'feasibility'], { encoding: 'utf8' }).stdout.trim().split(' ')[0]
+  const verdict = (rid, lh) => { const p = join(kiln, '.feas-' + rid + '.tmp'); writeFileSync(p, JSON.stringify({ review_id: rid, law_hash: lh, findings: [], blockers: [], verdict: 'accept' })); return p }
+  // THE WEDGE (the arity-5 publish the pre-fix leg ran every degraded resume): a feasibility publish that
+  // omits the contract digest while the store is present HOLDs 20 — it re-held until codex returned.
+  const wedge = spawnSync('node', [REAL_REVIEW, 'publish-gate', kiln, 'feasibility', verdict('w1', 'a'.repeat(64)), join(kiln, 'feasibility-gate.json'), leg], { encoding: 'utf8' })
+  assert.equal(wedge.status, 20, 'the arity-5 feasibility publish HOLDs against the present contracts store — the observed pre-fix wedge')
+  // THE FIX: the leg composes its artifact-ratify contract, then publishes arity-6 with the digest.
+  const candDigest = createHash('sha256').update(Buffer.from(CAND)).digest('hex')
+  const contractSha = spawnSync('node', [REAL_REVIEW, 'contract-prepare', dir, kiln, 'artifact-ratify', 'initial', 'feasibility', '.kiln/docs/feasibility-candidate.md', REAL_RUBRIC], { encoding: 'utf8' }).stdout.trim()
+  assert.match(contractSha, /^[0-9a-f]{64}$/, 'contract-prepare returns the feasibility contract digest')
+  const ok = spawnSync('node', [REAL_REVIEW, 'publish-gate', kiln, 'feasibility', verdict('f1', candDigest), join(kiln, 'feasibility-gate.json'), leg, contractSha], { encoding: 'utf8' })
+  assert.equal(ok.status, 0, 'the arity-6 publish composes past the wedge and lands')
+  const row = JSON.parse(readFileSync(join(kiln, 'reviews.jsonl'), 'utf8').trim().split('\n').pop())
+  assert.equal(row.family, 'feasibility')
+  assert.equal(row.contract_sha256, contractSha, 'parity: the degraded feasibility row binds a 64-hex contract digest like its codex twin')
+  const stored = JSON.parse(readFileSync(join(kiln, 'contracts', 'sha256', contractSha + '.json'), 'utf8'))
+  assert.equal(stored.purpose, 'feasibility', 'the purpose is the feasibility family word')
+  assert.ok(!('review_id' in stored) && !('reviewer_model' in stored) && !('reviewer_alias' in stored), 'the stored contract excludes review_id and model identity')
+  rmSync(dir, { recursive: true, force: true })
+})
+
+test('feasibility (W2-S7a, FORK 1): claudeFeasRatify composes its contract before dispatch and carries the digest as the last publish-gate word (source)', () => {
+  const leg = src.slice(src.indexOf('const claudeFeasRatify'), src.indexOf('const ratifyReq'))
+  assert.ok(leg.includes("contract-prepare ' + shq('.') + ' .kiln artifact-ratify "), 'the feasibility leg composes an artifact-ratify contract via the trusted verb')
+  assert.ok(leg.indexOf("'feasibility:contract'") < leg.indexOf('await agent('), 'the contract is composed before the reviewer dispatch')
+  assert.ok(leg.includes("shq(ratifyLeg.legId) + ' ' + shq(feasContract)"), 'the publish-gate call carries the contract digest as its last word')
 })

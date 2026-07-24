@@ -478,8 +478,20 @@ const claudeFeasRatify = async (mode) => {
   // rides the publish-gate argv below so the feasibility row on reviews.jsonl carries its reviewer id.
   const ratifyLeg = await mintLeg('ratifier', reviewerOpts.alias, 'feasibility')
   if (!ratifyLeg) return 20
+  // W2-S7a (FORK 1): the feasibility claude leg is a FORK-1 transport like the four kernel claude legs
+  // — it composes the SAME artifact-ratify contract (purpose feasibility) the codex ratify verb plants,
+  // so a degraded resume threads the digest into publish-gate instead of hitting the contracts bypass
+  // guard (store present + digest omitted → HOLD) that would otherwise wedge the pre-law gate forever
+  // once codex has run once. contract-prepare runs after the digest derivation, before dispatch; the
+  // digest is the LAST publish-gate word. A recheck rides the prior gate for its finding cohort.
+  const fc = await idsFetch(
+    'node ' + shq(plugin + '/scripts/kiln-review') + ' contract-prepare ' + shq('.') + ' .kiln artifact-ratify ' + (mode === 'recheck' ? 'recheck' : 'initial') + ' feasibility ' + shq(F.candidate) + ' ' + shq(plugin + '/data/feasibility-rubric.json') + (mode === 'recheck' ? ' ' + shq(F.gate) : ''),
+    'feasibility:contract', 'a one-element array holding the canonical contract sha256 printed on stdout, [] if exit != 0')
+  if (fc.exit !== 0 || fc.ids.length !== 1 || !LAW_HASH.test(fc.ids[0])) return 20
+  const feasContract = fc.ids[0]
   const ack = await agent([
     'You are the feasibility ratify reviewer: a fresh mind judging the feasibility candidate against the feasibility rubric.',
+    'The canonical contract at .kiln/contracts/sha256/' + feasContract + '.json is the COMPLETE authoritative facts for this ratification — the candidate text, its digest, and the rubric criteria. Judge exactly that contract.',
     'Project dir: ' + projectDir + '. Read the feasibility candidate at ' + F.candidate + ' and the feasibility rubric at ' + plugin + '/data/feasibility-rubric.json.',
     'Judge the candidate against every rubric dimension. Execute nothing — no commands, no tests, no builds: the candidate is a read, judged as text. Change no file: judge the candidate, never edit it.',
     mode === 'recheck'
@@ -501,7 +513,7 @@ const claudeFeasRatify = async (mode) => {
   // W2-S5: archive-then-publish through the trusted verb before the content-free overwrite — the
   // validated feasibility verdict lands in the immutable ledger first (its own review family, though
   // it reuses the ratify verb). A failed archive fails closed and the feasibility ratify holds.
-  const w = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' publish-gate .kiln feasibility ' + F.gateTmp + ' ' + F.gate + ' ' + shq(ratifyLeg.legId), 'feasibility:publish')
+  const w = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' publish-gate .kiln feasibility ' + F.gateTmp + ' ' + F.gate + ' ' + shq(ratifyLeg.legId) + ' ' + shq(feasContract), 'feasibility:publish')
   return w === 0 ? verdictExit(g.verdict) : 20
 }
 const ratifyReq = JSON.stringify({
@@ -528,8 +540,8 @@ const loop = await ratifyLoop({
     ? (mode) => claudeFeasRatify(mode)
     : (mode) => hands(
         mode === 'recheck'
-          ? shq(plugin + '/scripts/kiln-review') + ' ratify-recheck . ' + F.request + ' ' + F.gate + ' ' + F.gate + ' feasibility'
-          : shq(plugin + '/scripts/kiln-review') + ' ratify . ' + F.request + ' ' + F.gate + ' feasibility',
+          ? shq(plugin + '/scripts/kiln-review') + ' ratify-recheck . .kiln ' + F.request + ' ' + F.gate + ' ' + F.gate + ' feasibility'
+          : shq(plugin + '/scripts/kiln-review') + ' ratify . .kiln ' + F.request + ' ' + F.gate + ' feasibility',
         'ratify:gate'),
   // The pinned prior cohort for the strict-subset transition: the finding ids the last published
   // gate carries. A recheck must strictly shrink it or recoveryDecision holds the law.

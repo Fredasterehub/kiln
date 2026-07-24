@@ -1427,8 +1427,17 @@ if (stage !== 'build') {
       // publish-gate argv below so the ratify verdict on reviews.jsonl carries its reviewer identity.
       const ratifyLeg = await mintLeg('ratifier', ratifyOpts.alias, 'law-ratify')
       if (!ratifyLeg) return 20
+      // W2-S7a (FORK 1): compose the artifact-ratify contract (the candidate LAW text and digest, the
+      // rubric criteria) through the trusted verb before dispatch; the digest threads into the prompt
+      // and the publish-gate binding. A recheck rides the prior gate for its finding cohort.
+      const rc = await idsFetch(
+        'node ' + shq(plugin + '/scripts/kiln-review') + ' contract-prepare ' + shq('.') + ' .kiln artifact-ratify ' + (mode === 'recheck' ? 'recheck' : 'initial') + ' ratify ' + shq(P.law) + ' ' + shq(plugin + '/data/law-rubric.json') + (mode === 'recheck' ? ' ' + shq(P.gate) : ''),
+        'ratify:contract', 'a one-element array holding the canonical contract sha256 printed on stdout, [] if exit != 0')
+      if (rc.exit !== 0 || rc.ids.length !== 1 || !LAW_HASH.test(rc.ids[0])) return 20
+      const ratifyContract = rc.ids[0]
       const ack = await agent([
         'You are the LAW ratify reviewer: a fresh mind judging the candidate law against the architecture-feasibility rubric.',
+        'The canonical contract at .kiln/contracts/sha256/' + ratifyContract + '.json is the COMPLETE authoritative facts for this ratification — the artifact text, its candidate digest, and the rubric criteria. Judge exactly that contract.',
         'Project dir: ' + projectDir + '. Read the candidate law at ' + P.law + ' and the ratify rubric at ' + plugin + '/data/law-rubric.json.',
         'Judge the law against every rubric dimension. Execute nothing — no commands, no tests, no builds: the law is a plan, judged as text. Change no file: judge the law, never edit it.',
         mode === 'recheck'
@@ -1452,7 +1461,7 @@ if (stage !== 'build') {
       // it reads the candidate bytes, appends the validated verdict to the immutable ledger, then
       // renames the candidate over the gate file. The kernel stays content-blind; a failed archive
       // fails closed (nonzero) and the ratify holds, never publishing an un-archived verdict.
-      const w = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' publish-gate .kiln ratify ' + P.candidate + ' ' + P.gate + ' ' + shq(ratifyLeg.legId), 'ratify:publish')
+      const w = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' publish-gate .kiln ratify ' + P.candidate + ' ' + P.gate + ' ' + shq(ratifyLeg.legId) + ' ' + shq(ratifyContract), 'ratify:publish')
       return w === 0 ? verdictExit(g.verdict) : 20
     }
     // Content-blind request write: the kernel cannot author files, so it ships the
@@ -1488,8 +1497,8 @@ if (stage !== 'build') {
         ? (mode) => claudeRatify(mode)
         : (mode) => hands(
             mode === 'recheck'
-              ? plugin + '/scripts/kiln-review ratify-recheck . ' + P.ratifyRequest + ' ' + P.gate + ' ' + P.gate + ' ratify'
-              : plugin + '/scripts/kiln-review ratify . ' + P.ratifyRequest + ' ' + P.gate + ' ratify',
+              ? plugin + '/scripts/kiln-review ratify-recheck . .kiln ' + P.ratifyRequest + ' ' + P.gate + ' ' + P.gate + ' ratify'
+              : plugin + '/scripts/kiln-review ratify . .kiln ' + P.ratifyRequest + ' ' + P.gate + ' ratify',
             'ratify:gate'),
       // The pinned prior cohort for the strict-subset transition: the finding ids the last published
       // gate carries. A recheck must strictly shrink it or recoveryDecision holds the LAW.
@@ -1636,8 +1645,9 @@ if (stage !== 'build') {
     // recomputes ALL the S2 verb rules (gateReviewInvalid with law_hash = the pre-leg
     // digest and the screen location rule, the verdict enum, empty blockers, criterion
     // membership) and promotes content-free.
-    const screenLegPrompt = (mode, mf, digest) => [
+    const screenLegPrompt = (mode, mf, digest, contract) => [
       'You are the perceptual grading reviewer: a fresh mind grading the rendered surface against the locked law.',
+      'The canonical contract at .kiln/contracts/sha256/' + contract + '.json is the COMPLETE authoritative facts for this grade — the perceptual criteria rows, the rubric, the evidence-manifest digest, and the attached and reference image digests. Judge exactly that contract.',
       'Project dir: ' + projectDir + '. Read the locked law at ' + P.law + ' (its Perceptual table rows are the criteria), the shipped rubric at ' + plugin + '/data/perceptual-rubric.json, and the evidence manifest at ' + mf + '.',
       'Read the evidence yourself with the Read tool: the manifest names every file of its generation — read the two viewports, the labeled keyframes, and any reference images directly, plus meta, console, and the DOM snapshot as text.',
       'Judge ONLY the Perceptual table rows, each on its named rubric dim per the shipped anchors — never any other dimension, and never general taste beyond what a row pins. For each finding set criterion = the row criterion id and location = an evidence path with an optional :frame (for example viewport-mobile.png or film.webm:3). Insufficient evidence on a dim is a finding citing the rubric insufficient_evidence line as its evidence — never a blocker. Execute nothing and install nothing.',
@@ -1685,7 +1695,15 @@ if (stage !== 'build') {
       // publish-gate argv below so the screen verdict on reviews.jsonl carries its reviewer identity.
       const screenLeg = await mintLeg('screen-grader', tier('fallback-reviewer').alias, 'screen')
       if (!screenLeg) return 20
-      const ack = await agent(screenLegPrompt(mode, manifest, digest), { label: screenLeg.label, ...tier('fallback-reviewer'), schema: ACK })
+      // W2-S7a (FORK 1): compose the perceptual-screen contract (criteria, rubric, evidence-manifest
+      // digest, per-image byte digests) through the trusted verb before dispatch; the digest threads
+      // into the prompt and the publish-gate binding. recheck and escalation read the held/prior verdict
+      // at P.screen for their cohort and survivor scope.
+      const contractCmd = 'node ' + shq(plugin + '/scripts/kiln-review') + ' contract-prepare ' + shq('.') + ' .kiln perceptual-screen ' + (mode === 'recheck' ? 'recheck' : mode === 'escalate' ? 'escalation' : 'initial') + ((mode === 'recheck' || mode === 'escalate') ? ' ' + shq(P.screen) : '')
+      const sc = await idsFetch(contractCmd, 'screen:contract', 'a one-element array holding the canonical contract sha256 printed on stdout, [] if exit != 0')
+      if (sc.exit !== 0 || sc.ids.length !== 1 || !LAW_HASH.test(sc.ids[0])) return 20
+      const screenContract = sc.ids[0]
+      const ack = await agent(screenLegPrompt(mode, manifest, digest, screenContract), { label: screenLeg.label, ...tier('fallback-reviewer'), schema: ACK })
       if (!ack || ack.ok !== true) return 20
       const g = await readScreenJson(P.candidate, 'screen:read', 'a one-element array holding the exact candidate file contents printed on stdout, [] if exit != 0')
       if (g === null) return 20
@@ -1697,10 +1715,17 @@ if (stage !== 'build') {
       if (scope && g.findings.some(f => !scope.has(f.criterion))) return 20
       const d1 = await trioDigest('screen-claude:trio-confirm')
       if (d1.exit !== 0 || d1.ids.length !== 3 || d1.ids.some((h, i) => h !== d0.ids[i])) return 20
+      // W2-S7a (F3): the trio bracket rebinds the LAW, but a screen contract also hashes the images, the
+      // evidence-manifest digest, and the meta/console/DOM text — none covered by the trio. A write-
+      // capable reviewer that changed any of those would publish under the stale pre-dispatch contract
+      // (publish-gate only re-verifies the STORED bytes). Recompose the contract over the CURRENT evidence
+      // and REQUIRE the digest unchanged; any divergence HOLDs before the publish, nothing lands.
+      const scc = await idsFetch(contractCmd, 'screen:contract-confirm', 'a one-element array holding the recomposed canonical contract sha256 printed on stdout, [] if exit != 0')
+      if (scc.exit !== 0 || scc.ids.length !== 1 || scc.ids[0] !== screenContract) return 20
       // W2-S5: archive-then-publish through the trusted verb before the content-free overwrite —
       // target is the primary screen gate or the escalation gate, and both preserve their verdict
       // in the immutable ledger first. A failed archive fails closed and the screen holds.
-      if (await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' publish-gate .kiln screen ' + P.candidate + ' ' + target + ' ' + shq(screenLeg.legId), 'screen:publish') !== 0) return 20
+      if (await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' publish-gate .kiln screen ' + P.candidate + ' ' + target + ' ' + shq(screenLeg.legId) + ' ' + shq(screenContract), 'screen:publish') !== 0) return 20
       return verdictExit(g.verdict)
     }
     // W8S3-ADDENDUM-IFF bookkeeping: true the moment THIS run publishes a verdict to
@@ -2095,8 +2120,17 @@ const auditSeam = async (slice) => {
     const auditLeg = await mintLeg('auditor', auditorOpts.alias, slice)
     if (!auditLeg) return 20
     auditorLeg = auditLeg.legId
+    // W2-S7a (FORK 1): compose the milestone-audit contract (auditFacts, coverage tuples, receipt
+    // digest) through the trusted verb before dispatch; the digest threads into the prompt and the
+    // publish-gate binding. A recheck rides the prior audit and the repair delta.
+    const ac = await idsFetch(
+      'node ' + shq(plugin + '/scripts/kiln-review') + ' contract-prepare ' + shq('.') + ' .kiln milestone-audit ' + (mode === 'recheck' ? 'recheck' : 'initial') + ' ' + shq(slice) + (mode === 'recheck' ? ' ' + shq(P.audit) + ' ' + shq(P.delta) : ''),
+      'audit-claude:contract', 'a one-element array holding the canonical contract sha256 printed on stdout, [] if exit != 0')
+    if (ac.exit !== 0 || ac.ids.length !== 1 || !LAW_HASH.test(ac.ids[0])) return 20
+    const auditContract = ac.ids[0]
     const ack = await agent([
       'You are the milestone audit reviewer: a fresh mind judging the sealed milestone goal-backward against the locked law.',
+      'The canonical contract at .kiln/contracts/sha256/' + auditContract + '.json is the COMPLETE authoritative facts for this audit — the sealed law_hash, the seam, the milestone, the closing block, the cumulative sealed prefix, the coverage tuples, and the receipt digest. Judge exactly that contract.',
       'Project dir: ' + projectDir + '. Read the locked law at ' + P.law + ', the vision documents in the repository, and the slice plan at ' + P.slices + '. The milestone under audit' + (milestones[seam] ? ' (' + milestones[seam] + ')' : '') + ' closes at slice ' + slice + '. The closing block is exactly: ' + closingBlock.join(', ') + '. The cumulative sealed prefix under audit is exactly: ' + sealedPrefix.join(', ') + ' — judge ONLY this prefix; slices beyond it are out of scope, never evidence, never a finding.',
       'Judge goal-backward over the cumulative sealed prefix with focus on the closing block at slice ' + slice + ': integrated reachability, the connections between slices, and delivery of the milestone goal. The law checks were already executed kernel-side; their full output is attached verbatim at ' + P.receipt + '. Read files freely to judge, but execute nothing — no tests, no builds, no state-changing commands. Creative direction and visual taste belong to the builder; never raise them as a finding. Change no file: judge the milestone, write only the verdict.',
       mode === 'recheck'
@@ -2122,7 +2156,7 @@ const auditSeam = async (slice) => {
     // W2-S5: archive-then-publish through the trusted verb before the content-free overwrite of the
     // audit gate — the validated audit verdict lands in the immutable ledger first. A failed archive
     // fails closed and the audit holds, never publishing an un-archived verdict.
-    const w = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' publish-gate .kiln audit ' + P.candidate + ' ' + P.audit + ' ' + shq(auditLeg.legId), 'audit-claude:publish')
+    const w = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' publish-gate .kiln audit ' + P.candidate + ' ' + P.audit + ' ' + shq(auditLeg.legId) + ' ' + shq(auditContract), 'audit-claude:publish')
     return w === 0 ? verdictExit(g.verdict) : 20
   }
   // The kernel-owned derivation from the last parsed published verdict — the
@@ -2479,11 +2513,22 @@ for (const [idx, entry] of slices.entries()) {
       const gateLeg = await mintLeg('gate-reviewer', reviewerOpts.alias, slice)
       if (!gateLeg) return 20
       reviewerLeg = gateLeg.legId
+      // W2-S7a (FORK 1): compose the canonical contract through the trusted verb BEFORE dispatch — the
+      // SAME facts the codex packet derives (buildGateFacts, hintsFrom, the receipt digest, the reviewed
+      // manifest). The digest is the one closed stdout fact; it threads into the reviewer prompt as the
+      // authoritative file to judge AND into the publish-gate binding below. A recheck rides the prior
+      // gate and the repair delta. A failed compose holds transport-20; every word shq-quoted.
+      const gc = await idsFetch(
+        'node ' + shq(plugin + '/scripts/kiln-review') + ' contract-prepare ' + shq('.') + ' .kiln slice-review ' + (mode === 'recheck' ? 'recheck' : 'initial') + ' ' + shq(slice) + ' ' + shq(P.request) + (mode === 'recheck' ? ' ' + shq(P.gate) + ' ' + shq(P.delta) : ''),
+        'gate-claude:contract', 'a one-element array holding the canonical contract sha256 printed on stdout, [] if exit != 0')
+      if (gc.exit !== 0 || gc.ids.length !== 1 || !LAW_HASH.test(gc.ids[0])) return 20
+      const gateContract = gc.ids[0]
       // The reviewer WRITES its verdict object to the candidate file as the final
       // act of its turn and returns only a light {ok} ack — the return carries no
       // verdict authority; the kernel reads and validates the bytes it will publish.
       const reviewerAck = await agent([
         'You are the gate reviewer for slice ' + slice + ': a fresh mind judging the diff against the locked law.',
+        'The canonical contract at .kiln/contracts/sha256/' + gateContract + '.json is the COMPLETE authoritative facts for this review — the sealed law_text scoped to slice ' + slice + ', the non-authoritative builder hints, the receipt digest, and the reviewed manifest. Judge exactly that contract; it is the sole authority for the criteria.',
         'Project dir: ' + projectDir + '. Read the locked law at ' + P.law + ' — the sealed, verified LAW; scope it to slice ' + slice + ' and judge that slice against it, the sole authority for the criteria — and the changed files themselves. The builder evidence hints are the trusted filtered facts at ' + P.gateFacts + ' (criteria, paths, failures, commands only): they are non-authoritative context that may orient you but never narrow or override the law, and no finding derives from them. Do not read the raw review request.',
         'The law checks were already executed kernel-side; their full output is attached verbatim at ' + P.receipt + '. Execute nothing — no commands, no tests, no builds: judge the diff against the law with the receipt as the only execution evidence.',
         'Receipt rows owned by slices not yet built in this run are expected pre-build evidence — judge only the criteria for slice ' + slice + ' from the locked law; never treat them as findings, and never filter or rewrite the receipt.',
@@ -2518,7 +2563,7 @@ for (const [idx, entry] of slices.entries()) {
       // W2-S7a (FORK 3): the review publish carries the repo and slice so the verb recomputes the
       // control-derived manifest and rejects drift before it archives and publishes — the codex path
       // runs the same check inside runGate. Every new word shq-quoted, the repo the cwd-relative dot.
-      const w = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' publish-gate .kiln review ' + P.candidate + ' ' + P.gate + ' ' + shq(gateLeg.legId) + ' ' + shq('.') + ' ' + shq(slice), 'gate:publish')
+      const w = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' publish-gate .kiln review ' + P.candidate + ' ' + P.gate + ' ' + shq(gateLeg.legId) + ' ' + shq('.') + ' ' + shq(slice) + ' ' + shq(gateContract), 'gate:publish')
       return w === 0 ? verdictExit(g.verdict) : 20
     }
     // S2: a recheck judges executed evidence, so the receipt must be fresh —

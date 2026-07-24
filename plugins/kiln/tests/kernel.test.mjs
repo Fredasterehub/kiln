@@ -163,6 +163,18 @@ async function runKernel(kargs, script) {
     // gate prepares a fresh control-derived manifest; the harness answers both clean by default so
     // pre-FORK-3 scenarios build and gate exactly as before. A manifest-fault scenario overrides these.
     'manifest:start': { exit: 0 }, 'manifest:prepare': { exit: 0 },
+    // W2-S7a (FORK 1): every claude reviewer leg composes its canonical contract through the trusted
+    // contract-prepare verb before dispatch; the harness answers a fresh contract digest by default so
+    // every pre-FORK-1 gate/audit/ratify/screen scenario dispatches and publishes exactly as before. A
+    // contract-fault scenario overrides these with a nonzero exit.
+    'gate-claude:contract': { exit: 0, ids: ['d'.repeat(64)] },
+    'audit-claude:contract': { exit: 0, ids: ['d'.repeat(64)] },
+    'ratify:contract': { exit: 0, ids: ['d'.repeat(64)] },
+    'screen:contract': { exit: 0, ids: ['d'.repeat(64)] },
+    // W2-S7a (F3): the write-capable claude screen leg recomposes its contract before publish and
+    // requires the digest unchanged; the harness answers the confirm with the SAME digest by default so
+    // a clean turn publishes. An evidence-tamper scenario overrides it with a different digest.
+    'screen:contract-confirm': { exit: 0, ids: ['d'.repeat(64)] },
     ...script,
   }
   const calls = []
@@ -1877,8 +1889,8 @@ test('runtime (Wave 1, A9): a project path with a space ratifies — the mandato
   assert.equal(ret.status, 'ok', 'a whitespace project path reaches the accept path — the 3-arg gate never splits into extra argv')
   const gate = calls.find(c => c.label === 'ratify:gate')
   const cmd = gate.prompt.split('\n').pop() // the command line, after the "Run … in <projectDir>" cwd preamble
-  assert.ok(cmd.includes('kiln-review ratify . .kiln/ratify-request.json .kiln/gate-review.json'),
-    'the <repo> arg is the cwd-relative `.` — exactly three whitespace-safe args')
+  assert.ok(cmd.includes('kiln-review ratify . .kiln .kiln/ratify-request.json .kiln/gate-review.json'),
+    'the <repo> arg is the cwd-relative `.` and the trust root the explicit .kiln — all whitespace-safe args')
   assert.ok(!cmd.includes('/tmp/a project dir'), 'the project path never reaches the ratify command as a bare argv token')
 })
 
@@ -4429,6 +4441,24 @@ test('runtime (W8-S3/F-G): live PASS on a ui-owner table — the GPT screen verb
   assert.ok(ret.beat.includes('rows appended'), 'the addendum re-emits the truthful stage beat')
 })
 
+test('runtime (W2-S7a, F3): the claude screen recompose that diverges from the pre-dispatch contract HOLDs before publish — the write-capable evidence rebind', async () => {
+  const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+    ...CLAUDE_LIVE,
+    'screen:contract': { exit: 0, ids: ['c'.repeat(64)] },
+    // The reviewer changed the evidence mid-turn: the post-turn recompose returns a different digest.
+    'screen:contract-confirm': { exit: 0, ids: ['d'.repeat(64)] },
+    ...ADDENDUM_OK,
+  })
+  assert.notEqual(ret.status, 'ok', 'a diverged recompose never seals the run')
+  assert.ok(!calls.some(c => c.label === 'screen:publish'), 'nothing publishes when the recomposed contract differs from the pre-dispatch digest')
+})
+
+test('runtime (W2-S7a, F3): the claude screen leg recomposes its contract before publish and requires the digest unchanged (source)', () => {
+  assert.ok(src.includes("'screen:contract-confirm'"), 'the screen leg recomposes the contract after the reviewer turn')
+  assert.ok(src.indexOf("'screen:contract-confirm'") < src.indexOf("'screen:publish'"), 'the recompose precedes the publish')
+  assert.ok(src.includes('scc.ids[0] !== screenContract'), 'the recomposed digest must equal the pre-dispatch digest or the leg HOLDs')
+})
+
 test('runtime (W8-S3/F): an all-logic/mixed table takes the Claude leg — fallback-reviewer tier, closed interpolations, content-free promote', async () => {
   const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p' }, { ...CLAUDE_LIVE, ...ADDENDUM_OK })
   assert.equal(ret.status, 'ok')
@@ -5124,7 +5154,9 @@ const runSweepBody = async (dir, script) => {
   const calls = []
   // W2-S1: the real conductor acquires the lock before the sweep and passes run_id + owner;
   // the dogfood answers the pre-boot join green by default so the arc runs as it does live.
-  const full = { 'run-lock:join': { exit: 0, ids: [] }, ...script }
+  // W2-S7a (FORK 1): the degraded feasibility ratifier composes its canonical contract via the trusted
+  // verb before dispatch; the dogfood mocks the digest (its publish leg is mocked too) so the arc runs.
+  const full = { 'run-lock:join': { exit: 0, ids: [] }, 'feasibility:contract': { exit: 0, ids: ['d'.repeat(64)] }, ...script }
   // W2-S7a (B-RESEARCH-SWEEP): the degraded feasibility ratifier now mints its identity and runs
   // under the reserved leg label. This dogfood runs against a real dir and the real plugin, so the
   // mint runs the real identity-begin (the real publish validates the leg); the leg-labelled
@@ -5319,6 +5351,37 @@ test('runtime (W2-S7a, FORK 3): the manifest-start, manifest-prepare, review-pub
   assert.ok(!src.includes("shq(auditLeg.legId) + ' ' + shq('.')"), 'the audit publish carries no manifest repo/slice')
   assert.ok(!src.includes("shq(screenLeg.legId) + ' ' + shq('.')"), 'the screen publish carries no manifest repo/slice')
   assert.ok(!src.includes("auditRef + ' ' + shq('.')"), 'the audit append carries no manifest repo')
+})
+
+test('runtime (W2-S7a, FORK 1): each claude reviewer leg composes its canonical contract before dispatch and threads the digest into the prompt and the publish-gate binding', () => {
+  // The four claude legs run the trusted contract-prepare verb, cwd-relative repo shq-quoted, one per family.
+  assert.ok(src.includes("contract-prepare ' + shq('.') + ' .kiln slice-review "), 'the claude gate composes a slice-review contract')
+  assert.ok(src.includes("contract-prepare ' + shq('.') + ' .kiln milestone-audit "), 'the claude audit composes a milestone-audit contract')
+  assert.ok(src.includes("contract-prepare ' + shq('.') + ' .kiln artifact-ratify "), 'the claude ratify composes an artifact-ratify contract')
+  assert.ok(src.includes("contract-prepare ' + shq('.') + ' .kiln perceptual-screen "), 'the claude screen composes a perceptual-screen contract')
+  // The digest threads into the reviewer prompt as the authoritative contract file.
+  for (const v of ['gateContract', 'auditContract', 'ratifyContract']) {
+    assert.ok(src.includes(".kiln/contracts/sha256/' + " + v + " + '.json"), 'the digest names the authoritative contract file in the prompt: ' + v)
+  }
+  assert.ok(src.includes(".kiln/contracts/sha256/' + contract + '.json"), 'the screen prompt names the authoritative contract file')
+  // The digest is the LAST word of each publish-gate call — the review after the manifest pair.
+  assert.ok(src.includes("shq(slice) + ' ' + shq(gateContract)"), 'the review publish carries the contract digest after the manifest pair')
+  assert.ok(src.includes("shq(auditLeg.legId) + ' ' + shq(auditContract)"), 'the audit publish carries the contract digest after the reviewer leg')
+  assert.ok(src.includes("shq(ratifyLeg.legId) + ' ' + shq(ratifyContract)"), 'the ratify publish carries the contract digest after the reviewer leg')
+  assert.ok(src.includes("shq(screenLeg.legId) + ' ' + shq(screenContract)"), 'the screen publish carries the contract digest after the reviewer leg')
+})
+
+test('runtime (W2-S7a, FORK 1): the claude build gate runs contract-prepare BEFORE the reviewer dispatch and threads the composed digest into the publish argv', async () => {
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, claudeGateScript({
+    'gate-claude:facts': { exit: 0, ids: ['a'.repeat(64)] },
+    'gate-claude:contract': { exit: 0, ids: ['c'.repeat(64)] },
+    'gate:read': readCandidate(GATE_ACCEPT),
+  }))
+  assert.equal(ret.status, 'ok', 'the logic slice builds through the claude gate and seals')
+  const idx = (label) => calls.findIndex((c) => c.label === label)
+  assert.ok(idx('gate-claude:contract') >= 0 && idx('gate-claude:contract') < idx('gate-claude:review'), 'the contract is composed before the reviewer dispatch')
+  const publish = calls.find((c) => c.label === 'gate:publish')
+  assert.ok(publish.prompt.includes(" '" + 'c'.repeat(64) + "'"), 'the composed contract digest rides the publish-gate argv as the last word')
 })
 
 test('runtime (W2-S7a, FORK 3): manifest-start precedes the builder, manifest-prepare precedes the gate, and the seal carries the cwd-relative repo', async () => {

@@ -608,28 +608,36 @@ function screenShapeInvalid(gate, criterionIds) {
   return null
 }
 
-function instructions(packet) {
+// W2-S7a (FORK 1): the transport + canonical-contract tail every codex prompt ends on. review_id and
+// law_hash are TRANSPORT facts the reviewer echoes, never judged criteria; the receipt text rides
+// verbatim for the receipt families (referenced by receipt_sha256 in the contract); the canonical
+// contract is the SOLE authoritative block, embedded byte-exact so the digest publication binds covers
+// exactly what the reviewer judged. The contract must remain the LAST block so a machine parse reads it
+// cleanly, and the prose introduces no authoritative fact absent from it.
+function contractTail(packet, contractBytes, receipt) {
+  const transport = JSON.stringify({ review_id: packet.review_id, law_hash: packet.law_hash })
+  const receiptBlock = receipt === undefined ? '' : `Kernel check receipt (executed kernel-side; the only execution evidence), verbatim:\n${receipt}\n`
+  return `Echo these transport facts exactly in your output; they are not judged criteria: ${transport}\n${receiptBlock}Canonical contract:\n${contractBytes}\n`
+}
+
+function instructions(packet, contractBytes) {
   return `You are the terminal semantic gate reviewer. Inspect the repository at the working root and return only the schema-forced JSON object.
 
-The packet carries the sealed, verified LAW as law_text and the slice under review as slice_id: scope law_text to slice_id and judge that slice against it — law_text is the sole authority for the criteria. builder_hints (criteria, paths, failures, commands) are the builder's non-authoritative notes; they may orient you but never narrow or override the law, and no finding derives from them. Report only substantiated criterion violations, never optional improvements. Creative direction, visual taste, and aesthetic choices belong to the builder — never raise them as a finding and never let them color a verdict; you rule on correctness against the locked criteria alone. For each finding, cite an exact repo-relative path:line location, the concrete failure, its evidence, and the smallest repair. Use stable finding IDs. The commands in check_receipt were already executed kernel-side; their full output rides in check_receipt verbatim. Read the repository freely — read-only file inspection (opening files, listing directories) is how you judge the diff against the law, and the sandbox enforces read-only. Beyond reading, execute nothing: no tests, no builds, no project or state-changing commands — rule with check_receipt as the only execution evidence. Receipt rows owned by slices not yet built in this run are expected pre-build evidence — judge only this slice's criteria, never treat them as findings, and never filter or rewrite the receipt. Do not infer authorship, persona, or another reviewer's verdict.
+The canonical contract below carries the sealed, verified LAW as law_text and the slice under review as slice_id: scope law_text to slice_id and judge that slice against it — law_text is the sole authority for the criteria. builder_hints (criteria, paths, failures, commands) are the builder's non-authoritative notes; they may orient you but never narrow or override the law, and no finding derives from them. Report only substantiated criterion violations, never optional improvements. Creative direction, visual taste, and aesthetic choices belong to the builder — never raise them as a finding and never let them color a verdict; you rule on correctness against the locked criteria alone. For each finding, cite an exact repo-relative path:line location, the concrete failure, its evidence, and the smallest repair. Use stable finding IDs. The commands in check_receipt were already executed kernel-side; their full output rides in check_receipt verbatim. Read the repository freely — read-only file inspection (opening files, listing directories) is how you judge the diff against the law, and the sandbox enforces read-only. Beyond reading, execute nothing: no tests, no builds, no project or state-changing commands — rule with check_receipt as the only execution evidence. Receipt rows owned by slices not yet built in this run are expected pre-build evidence — judge only this slice's criteria, never treat them as findings, and never filter or rewrite the receipt. Do not infer authorship, persona, or another reviewer's verdict.
 
 Copy review_id and law_hash exactly. Verdict rules: accept only when findings and blockers are both empty; changes_required only for one or more repairable findings with no blockers; blocked only when the review cannot be completed, with one or more blocker reasons.
 ${packet.mode === 'recheck' ? '\nRecheck only the listed finding_ids against the repair_delta and current repository. The prior findings are supplied in full in the packet as prior_findings — confirm each one resolved, or preserve its id unresolved. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}
-Evidence packet:
-${JSON.stringify(packet, null, 2)}
-`
+${contractTail(packet, contractBytes, packet.check_receipt)}`
 }
 
-function ratifyInstructions(packet) {
+function ratifyInstructions(packet, contractBytes) {
   return `You are the ratification reviewer. Grade the readable artifact below against the rubric and return only the schema-forced JSON object.
 
 Judge the artifact against the rubric criteria alone. Report only substantiated criterion violations, never optional improvements and never matters of taste. For each finding, cite the artifact location as path:line, the concrete failure, evidence quoted from the artifact, and the smallest repair. Use stable finding IDs. Execute nothing: rule by reading the artifact text supplied in full below — do not inspect the repository and do not run any command.
 
 Copy review_id and law_hash exactly into your output. law_hash is the sha256 digest of the artifact bytes; it seals the ratified content, so return it unchanged. Verdict rules: accept only when findings and blockers are both empty; changes_required only for one or more repairable findings with no blockers; blocked only when the review cannot be completed, with one or more blocker reasons.
 ${packet.mode === 'ratify-recheck' ? '\nRecheck only the listed finding_ids against the regenerated artifact. The prior findings are supplied in full in the packet as prior_findings — confirm each one resolved, or preserve its id unresolved. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}
-Ratification packet:
-${JSON.stringify(packet, null, 2)}
-`
+${contractTail(packet, contractBytes)}`
 }
 
 // W7-A1: the milestone audit prompt — review()'s prompt discipline, milestone-flavored
@@ -638,16 +646,14 @@ ${JSON.stringify(packet, null, 2)}
 // focus on the closing block, pins LAW criterion ids and path:line locations, and
 // executes nothing — the kernel-side check receipt rides the packet verbatim as the
 // only execution evidence.
-function auditInstructions(packet) {
+function auditInstructions(packet, contractBytes) {
   return `You are the milestone audit reviewer. Inspect the repository at the working root and return only the schema-forced JSON object.
 
 Derive the milestone goal from .kiln/LAW.md and the vision documents in the repository, then judge goal-backward: over the cumulative sealed prefix in the audit packet, with focus on the closing block, check integrated reachability, the connections between slices, and delivery of the milestone goal. Report only substantiated criterion violations, never optional improvements. Creative direction, visual taste, and aesthetic choices belong to the builder — never raise them as a finding and never let them color a verdict. For each finding, pin the failed LAW criterion id in criterion and an exact repo-relative path:line in location, with the concrete failure, its evidence, and the smallest repair. Use stable finding IDs. The commands whose output rides in check_receipt were already executed kernel-side. Read the repository freely — read-only file inspection (opening files, listing directories) is how you judge the milestone against the law, and the sandbox enforces read-only. Beyond reading, execute nothing: no tests, no builds, no project or state-changing commands — rule with check_receipt as the only execution evidence. Do not infer authorship, persona, or another reviewer's verdict.
 
 Copy review_id and law_hash exactly. Every blockers entry must equal the id of one of your findings, so each blocker carries its criterion, location, and minimal fix through that finding. Verdict rules: accept only when findings and blockers are both empty; changes_required only for one or more repairable findings with no blockers; blocked only when the audit cannot be completed or the milestone goal is undeliverable, with one or more blocker ids naming findings.
 ${packet.mode === 'audit-recheck' ? '\nRecheck only the listed finding_ids against the repair_delta and current repository. The prior findings are supplied in full in the packet as prior_findings — confirm each one resolved, or preserve its id unresolved. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}
-Audit packet:
-${JSON.stringify(packet, null, 2)}
-`
+${contractTail(packet, contractBytes, packet.check_receipt)}`
 }
 
 // W8-S2: the perceptual grading prompt — the review family's discipline pointed at
@@ -655,16 +661,14 @@ ${JSON.stringify(packet, null, 2)}
 // dim per the shipped anchors; insufficient evidence is a finding, never a blocker;
 // and law_hash binds the grade to the evidence — the sha256 of the graded generation's
 // manifest.json (the ratify-family artifact-digest precedent, atomic and in-schema).
-function screenInstructions(packet) {
+function screenInstructions(packet, contractBytes) {
   return `You are the perceptual grading reviewer. The attached images are the evidence generation named in the packet — the two required viewports, then the labeled keyframes, then any reference images, in the packet's attached_images order. Grade the rendered surface and return only the schema-forced JSON object.
 
 Judge ONLY the perceptual criteria rows in the packet, each on its named rubric dim per the shipped rubric's anchors — never any other dimension, and never general taste beyond what a row's requirement pins. Report only substantiated criterion violations. For each finding, pin criterion = the row's LAW perceptual criterion id and location = an evidence path with an optional :frame (for example viewport-mobile.png or film.webm:3), with the concrete failure, its visual evidence, and the smallest repair. Use stable finding IDs. Insufficient evidence on a dim is a finding citing the rubric's insufficient_evidence line as its evidence — never a blocker. Execute nothing and install nothing: rule from the attached images and the packet text alone.
 
 Copy review_id and law_hash exactly — law_hash is the sha256 digest of the graded generation's manifest.json and binds this verdict to that evidence. Verdict rules: accept only when findings and blockers are both empty; changes_required for one or more repairable findings. Never return blocked and never write a blocker: hard failure belongs to the law's deterministic proxies, not to this grade.
 ${packet.mode === 'screen-recheck' ? '\nRecheck only the listed finding_ids against the fresh evidence generation. The prior findings are supplied in full in the packet as prior_findings — confirm each one resolved, or preserve its id unresolved. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}${packet.mode === 'screen-escalate' ? '\nThis is a bounded second-family escalation of a held verdict: the packet carries ONLY the surviving criteria — grade them alone, on the same evidence generation; a finding on any other criterion invalidates the verdict.\n' : ''}
-Evidence packet:
-${JSON.stringify(packet, null, 2)}
-`
+${contractTail(packet, contractBytes)}`
 }
 
 function classifyFailure(run) {
@@ -683,8 +687,15 @@ function classifyFailure(run) {
 // both flows converge here rather than duplicate the spawn and the exit mapping.
 // W8-S2: the screen family adds bounded `-i` image attachments — absent, the argv
 // is byte-identical to the baseline.
-function runGate(repo, request, prompt, outputFile, validate, family, images, subject) {
+function runGate(repo, request, prompt, outputFile, validate, family, images, subject, contract, kilnDirArg) {
   const output = resolve(outputFile)
+  // W2-S7a (F5): the trust root is EXPLICIT — every calling verb supplies its kilnDir, and the gate
+  // output must sit directly under it. runGate derives the store/archive/manifest/receipt root from
+  // dirname(output), so a gate written outside the supplied kilnDir would silently retarget every
+  // trust-bearing write; that divergence HOLDs before any spawn, killing the implicit-selector class.
+  if (resolve(dirname(output)) !== resolve(kilnDirArg)) {
+    stop('transport_failure', 'runGate output path is not directly under the supplied kilnDir — refusing an implicit trust-root switch', TRANSPORT_FAILURE)
+  }
   const temporary = join(dirname(output), `.gate-review.tmp-${process.pid}-${randomUUID()}`)
   const args = [
     'exec',
@@ -753,12 +764,33 @@ function runGate(repo, request, prompt, outputFile, validate, family, images, su
     }
     manifestSha = drift.value.sha
   }
+  // W2-S7a (FORK 1): store the composed contract CONTENT-ADDRESSED under this gate's kilnDir (the codex
+  // reviewer already judged the identical bytes embedded in its prompt), then re-verify that store entry
+  // before archive+rename — the SAME publication binding the claude publish-gate path runs. The write
+  // and the verify share one kilnDir, so a torn store or a mismatched digest discards the temp and holds
+  // closed, exactly as a failed archive does. A defensive null skips the binding for a caller that
+  // composed nothing.
+  let contractSha = null
+  if (contract) {
+    try {
+      writeContractStore(kilnDir, contract.bytes, contract.sha)
+    } catch (error) {
+      discard(temporary)
+      stop('transport_failure', `contract: ${error.message}`, TRANSPORT_FAILURE)
+    }
+    const contractError = verifyContractStore(kilnDir, contract.sha)
+    if (contractError) {
+      discard(temporary)
+      stop('transport_failure', contractError, TRANSPORT_FAILURE)
+    }
+    contractSha = contract.sha
+  }
   // W2-S5: archive the validated verdict to the immutable ledger BEFORE the publish rename — the
   // gate-file overwrite is content-free and destroys the prior verdict, so the archive is the only
   // surviving history. The archive digests the EXACT bytes codex wrote, and the ledger sits beside
   // the gate file in the same .kiln. A failed archive fails closed: the verdict is neither archived
   // nor published, and the caller holds.
-  const archiveError = archiveVerdict(kilnDir, family, readFileSync(temporary), legId, manifestSha)
+  const archiveError = archiveVerdict(kilnDir, family, readFileSync(temporary), legId, manifestSha, contractSha)
   if (archiveError) {
     discard(temporary)
     stop('transport_failure', archiveError, TRANSPORT_FAILURE)
@@ -788,38 +820,72 @@ function runGate(repo, request, prompt, outputFile, validate, family, images, su
   process.exit(exits[gate.verdict])
 }
 
-function invoke(repo, request, packet, outputFile, allowedFindingIds) {
-  // The reviewer never executes: the kernel side runs the law checks and writes
-  // .kiln/check-receipt.txt before every gate call. The receipt rides the packet
-  // verbatim; a missing receipt is a broken contract, never a license to execute.
+function invoke(repo, kilnDir, request, packet, outputFile, allowedFindingIds) {
+  // The reviewer never executes: the kernel side runs the law checks and writes the check receipt under
+  // kilnDir before every gate call. The receipt rides the packet verbatim; a missing receipt is a broken
+  // contract, never a license to execute. W2-S7a (F5): kilnDir is the EXPLICIT trust root the review verb
+  // threads from argv — the receipt, the manifest, the contract store and the archive all key on it.
   let checkReceipt
   try {
-    checkReceipt = readFileSync(join(repo, '.kiln', 'check-receipt.txt'), 'utf8')
+    checkReceipt = readFileSync(join(kilnDir, 'check-receipt.txt'), 'utf8')
   } catch (error) {
     stop('transport_failure', `check receipt unreadable: ${error.message} — the kernel executes the checks and writes .kiln/check-receipt.txt before the gate call; the reviewer executes nothing`, TRANSPORT_FAILURE)
   }
   packet.check_receipt = checkReceipt
-  runGate(repo, request, instructions(packet), outputFile, (gate) =>
-    validateShape(gate, packet.review_id, packet.law_hash, allowedFindingIds), 'review', undefined, packet.slice_id)
+  // W2-S7a (FORK 1): compose and store the slice-review contract from the SAME sealed facts the packet
+  // carries, plus the durable receipt digest and the digest-verified reviewed_manifest for the current
+  // generation (an honest null on a legacy no-manifest slice). A torn manifest or contract store HOLDs.
+  const receipt = receiptDigestAtPublication(kilnDir, 'review')
+  if (receipt.error) stop('transport_failure', receipt.error, TRANSPORT_FAILURE)
+  let contract
+  try {
+    contract = composeContract('slice-review', packet.mode === 'recheck' ? 'recheck' : 'initial', {
+      slice_id: packet.slice_id, law_hash: packet.law_hash, law_text: packet.law_text,
+      builder_hints: packet.builder_hints, receipt_sha256: receipt.digest,
+      reviewed_manifest: reviewedManifestForSlice(kilnDir, packet.slice_id),
+      finding_ids: packet.finding_ids, prior_findings: packet.prior_findings, repair_delta: packet.repair_delta,
+    })
+  } catch (error) {
+    stop('transport_failure', `contract: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  runGate(repo, request, instructions(packet, contract.bytes), outputFile, (gate) =>
+    validateShape(gate, packet.review_id, packet.law_hash, allowedFindingIds), 'review', undefined, packet.slice_id, contract, kilnDir)
 }
 
 // W7-A1: the audit-family invoke — the SAME receipt gate as invoke() (the kernel runs
 // the law checks and writes .kiln/check-receipt.txt before every gate call; the reviewer
 // executes nothing; a missing receipt is a broken contract), then the shared runGate
 // with the audit prompt and the audit verb-level shape rules layered on validateShape.
-function invokeAudit(repo, request, packet, outputFile, allowedFindingIds) {
+function invokeAudit(repo, kilnDir, request, packet, outputFile, allowedFindingIds) {
   let checkReceipt
   try {
-    checkReceipt = readFileSync(join(repo, '.kiln', 'check-receipt.txt'), 'utf8')
+    checkReceipt = readFileSync(join(kilnDir, 'check-receipt.txt'), 'utf8')
   } catch (error) {
     stop('transport_failure', `check receipt unreadable: ${error.message} — the kernel executes the checks and writes .kiln/check-receipt.txt before the gate call; the reviewer executes nothing`, TRANSPORT_FAILURE)
   }
   packet.check_receipt = checkReceipt
-  runGate(repo, request, auditInstructions(packet), outputFile, (gate) => {
+  // W2-S7a (FORK 1): compose and store the milestone-audit contract — the sealed facts the packet
+  // carries, the durable receipt digest, and the coverage tuples over the sealed prefix (each covered
+  // slice's last sealed generation and its manifest digest, null when legacy). A torn covered store HOLDs.
+  // W2-S7a (F5): kilnDir is the explicit trust root the audit verb threads from argv.
+  const receipt = receiptDigestAtPublication(kilnDir, 'audit')
+  if (receipt.error) stop('transport_failure', receipt.error, TRANSPORT_FAILURE)
+  let contract
+  try {
+    contract = composeContract('milestone-audit', packet.mode === 'audit-recheck' ? 'recheck' : 'initial', {
+      law_hash: packet.law_hash, seam_slice: packet.seam_slice, milestone: packet.milestone,
+      closing_block: packet.closing_block, sealed_prefix: packet.sealed_prefix,
+      covered: coverageTuples(kilnDir, packet.sealed_prefix), receipt_sha256: receipt.digest,
+      finding_ids: packet.finding_ids, prior_findings: packet.prior_findings, repair_delta: packet.repair_delta,
+    })
+  } catch (error) {
+    stop('transport_failure', `contract: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  runGate(repo, request, auditInstructions(packet, contract.bytes), outputFile, (gate) => {
     const shape = validateShape(gate, packet.review_id, packet.law_hash, allowedFindingIds)
     if (shape) return shape
     return auditShapeInvalid(gate)
-  }, 'audit', undefined, packet.seam_slice)
+  }, 'audit', undefined, packet.seam_slice, contract, kilnDir)
 }
 
 function repository(path) {
@@ -1073,7 +1139,11 @@ function receiptDigestAtPublication(kilnDir, family) {
 // W2-S7a (FORK 3): manifestSha256 is the control-derived manifest digest the review family recomputed
 // at publication (null for a non-review family, a legacy pass, or an absent manifest). It rides the
 // row as manifest_sha256, and the retry shortcut extends the B001-R2 ownership pattern to it.
-function archiveVerdict(kilnDir, family, verdictBytes, reviewerLegId, manifestSha256) {
+// W2-S7a (FORK 1): contractSha256 is the canonical contract digest the transport composed and stored
+// this dispatch (null for a legacy project that never contracted). It rides the row as contract_sha256
+// beside receipt_sha256, and the retry shortcut extends the SAME B001-R2 ownership pattern to it — a
+// fourth identical copy, so a retry never severs a seal from the exact contract it will bind.
+function archiveVerdict(kilnDir, family, verdictBytes, reviewerLegId, manifestSha256, contractSha256) {
   if (!REVIEW_FAMILIES.has(family)) return `archive family ${family} is not a review family`
   let verdict
   try {
@@ -1109,6 +1179,31 @@ function archiveVerdict(kilnDir, family, verdictBytes, reviewerLegId, manifestSh
   // so no verdict ever publishes with an untrusted digest.
   const receipt = receiptDigestAtPublication(kilnDir, family)
   if (receipt.error) return receipt.error
+  // W2-S7a (FORK 1 ruling: publication REQUIRES the fresh receipt digest == the contract reference):
+  // when a contract rides this publish, the receipt digest recomputed HERE must equal the receipt_sha256
+  // the contract embedded when it was composed. A write-capable claude reviewer that overwrote
+  // .kiln/check-receipt.txt during its turn (outside the FORK-3 manifest, invisible to the drift check)
+  // would otherwise archive an incoherent {contract_sha256, receipt_sha256} composite. A non-receipt
+  // kind (artifact-ratify, perceptual-screen) carries no receipt reference, so both sides are null; a
+  // mismatch HOLDs closed with a distinct message on EVERY publish, before the retry shortcut too.
+  if (typeof contractSha256 === 'string' && LAW_HASH.test(contractSha256)) {
+    let contractBytes
+    try {
+      contractBytes = readFileSync(contractStoreFile(kilnDir, contractSha256))
+    } catch (error) {
+      return `archive could not read the contract for its receipt-coherence check: ${error.message}`
+    }
+    let contract
+    try {
+      contract = JSON.parse(contractBytes.toString('utf8'))
+    } catch (error) {
+      return `archive could not parse the contract for its receipt-coherence check: ${error.message}`
+    }
+    const contractReceipt = (isObject(contract) && Object.prototype.hasOwnProperty.call(contract, 'receipt_sha256')) ? contract.receipt_sha256 : null
+    if (contractReceipt !== receipt.digest) {
+      return 'archive: the fresh check-receipt digest no longer matches the receipt_sha256 the judged contract embedded — a receipt overwritten during the review would archive an incoherent contract-receipt binding'
+    }
+  }
   const prior = lineage.find((row) => row.verdict_sha256 === sha)
   if (prior !== undefined) {
     // A crash retry re-presents the exact verdict bytes. It is a safe no-op ONLY when the receipt on
@@ -1160,6 +1255,20 @@ function archiveVerdict(kilnDir, family, verdictBytes, reviewerLegId, manifestSh
     if (archivedManifest !== suppliedManifest) {
       return 'archive idempotent retry: the supplied manifest digest differs from the archived manifest binding — refusing to sever it'
     }
+    // W2-S7a (FORK 1): the contract binding is preserved under the SAME B001-R2 ownership pattern. The
+    // archived row must OWN a well-formed contract_sha256 (explicit null or 64-hex) equal to the digest
+    // this retry supplies (null equals null) — a missing/malformed field (a pre-FORK-1 row) or a
+    // differing digest HOLDs, never an exit-0 that severs a seal from the exact contract it will bind.
+    const suppliedContract = (typeof contractSha256 === 'string' && LAW_HASH.test(contractSha256)) ? contractSha256 : null
+    const hasArchivedContract = Object.prototype.hasOwnProperty.call(prior, 'contract_sha256')
+    const archivedContract = hasArchivedContract ? prior.contract_sha256 : undefined
+    const archivedContractWellFormed = archivedContract === null || (typeof archivedContract === 'string' && LAW_HASH.test(archivedContract))
+    if (!hasArchivedContract || !archivedContractWellFormed) {
+      return 'archive idempotent retry: the archived row carries no well-formed contract_sha256 — nothing confirms the historical contract binding, refusing to republish'
+    }
+    if (archivedContract !== suppliedContract) {
+      return 'archive idempotent retry: the supplied contract digest differs from the archived contract binding — refusing to sever it'
+    }
     return null
   }
   const row = {
@@ -1175,6 +1284,7 @@ function archiveVerdict(kilnDir, family, verdictBytes, reviewerLegId, manifestSh
     receipt_sha256: receipt.digest,
     reviewer_leg_id: (typeof reviewerLegId === 'string' && LEG_ID.test(reviewerLegId)) ? reviewerLegId : null,
     manifest_sha256: (typeof manifestSha256 === 'string' && LAW_HASH.test(manifestSha256)) ? manifestSha256 : null,
+    contract_sha256: (typeof contractSha256 === 'string' && LAW_HASH.test(contractSha256)) ? contractSha256 : null,
     verdict_sha256: sha,
   }
   // Write safety: a crash mid-append can leave a torn final line with no trailing newline. Prefix a
@@ -2217,6 +2327,276 @@ function manifestGenerationStarted(kilnDir, slice) {
   return manifestResult(() => manifestPathPresent(join(generationDir(kilnDir, slice, sliceGeneration(kilnDir, slice)), 'key.json')))
 }
 
+// ── W2-S7a (FORK 1): the canonical contract — the ONE authoritative facts block every transport
+// judges ─────────────────────────────────────────────────────────────────────────────────────────
+// A contract is the exact set of authoritative facts a review family judged, serialized once through
+// canonicalBytes and content-addressed under .kiln/contracts/sha256/<sha>.json. Codex embeds those
+// bytes verbatim; the claude legs judge the stored file; publication recomputes the digest and binds
+// it beside receipt_sha256 on the reviews row. review_id, timestamps, output paths, model identity,
+// transport family and raw mode are EXCLUDED — they are transport, not judged facts. operation is a
+// closed value the invoking verb synthesizes: the authorized finding/evidence scope differs per
+// operation, so omitting it is rejected.
+const CONTRACT_VERSION = 1
+const CONTRACT_DIR = 'contracts'
+const CONTRACT_OPERATIONS = {
+  'slice-review': ['initial', 'recheck'],
+  'milestone-audit': ['initial', 'recheck'],
+  'artifact-ratify': ['initial', 'recheck'],
+  'perceptual-screen': ['initial', 'recheck', 'escalation'],
+}
+// finding_ids are an insertion-ordered SET in the packet; the contract SORTS them by UTF-8 bytes so
+// two composes over the same cohort in any discovery order are byte-identical. prior_findings and
+// every other ordered array keep their order.
+const sortedFindingIds = (ids) => [...ids].sort(bytePathCompare)
+
+// Read and digest-verify the prepared manifest for a generation dir. A current.json genuinely absent
+// with no started key is a legacy pass (null). A started generation whose pointer is missing, a
+// malformed pointer, or prepared bytes that no longer hash to it is a torn store that THROWS — the
+// untrusted-read-holds discipline (manifestRecompute), never a silent legacy fall-through.
+function readPreparedManifest(genDir) {
+  const currentPath = join(genDir, 'current.json')
+  if (!manifestPathPresent(currentPath)) {
+    if (manifestPathPresent(join(genDir, 'key.json'))) {
+      throw new Error('the generation is started but its prepared manifest pointer is missing')
+    }
+    return null
+  }
+  let current
+  try {
+    current = JSON.parse(readFileSync(currentPath, 'utf8'))
+  } catch (error) {
+    throw new Error(`the prepared manifest pointer could not be read: ${error.message}`)
+  }
+  if (!isObject(current) || !LAW_HASH.test(current.manifest_sha256)) throw new Error('the prepared manifest pointer is malformed')
+  let bytes
+  try {
+    bytes = readFileSync(join(genDir, 'prepared', current.manifest_sha256 + '.json'))
+  } catch (error) {
+    throw new Error(`the prepared manifest evidence is missing or unreadable: ${error.message}`)
+  }
+  if (createHash('sha256').update(bytes).digest('hex') !== current.manifest_sha256) {
+    throw new Error('the prepared manifest evidence does not match the pointer digest — a torn manifest store')
+  }
+  let manifest
+  try {
+    manifest = JSON.parse(bytes.toString('utf8'))
+  } catch (error) {
+    throw new Error(`the prepared manifest is not valid JSON: ${error.message}`)
+  }
+  if (!isObject(manifest)) throw new Error('the prepared manifest is not a JSON object')
+  return { sha: current.manifest_sha256, manifest }
+}
+
+// The reviewed_manifest a slice-review contract embeds: the COMPLETE prepared manifest object for the
+// slice's CURRENT generation, digest-verified. A legacy generation with no manifest is an honest null.
+function reviewedManifestForSlice(kilnDir, slice) {
+  const built = readPreparedManifest(generationDir(kilnDir, slice, sliceGeneration(kilnDir, slice)))
+  return built === null ? null : built.manifest
+}
+
+// W2-S7a (FORK 1, shared with S7b): the LAST SEALED generation ordinal for a slice — the seal-row
+// count in the append-only truth, one below the current in-progress generation (sliceGeneration - 1).
+// Zero when a slice has no sealed generation yet. S7b re-derives coverage from this same helper.
+function lastSealedGeneration(kilnDir, slice) {
+  return sliceGeneration(kilnDir, slice) - 1
+}
+
+// The manifest digest bound to a covered slice's LAST SEALED generation: the pointer digest when the
+// store exists, an honest null for a legacy/pre-manifest sealed generation, a HOLD (throws) on a torn
+// store. generation 0 (no sealed generation) is null with no store lookup.
+function coveredManifestDigest(kilnDir, slice, generation) {
+  if (generation < 1) return null
+  const built = readPreparedManifest(generationDir(kilnDir, slice, generation))
+  return built === null ? null : built.sha
+}
+
+// The milestone-audit coverage tuples over the sealed prefix, in slices.json order: per member the
+// slice, its last sealed generation, and that generation's manifest digest (null when legacy).
+function coverageTuples(kilnDir, sealedPrefix) {
+  return sealedPrefix.map((slice) => {
+    const generation = lastSealedGeneration(kilnDir, slice)
+    return { slice, generation, manifest_sha256: coveredManifestDigest(kilnDir, slice, generation) }
+  })
+}
+
+// Hash the RAW bytes of an evidence image for a perceptual-screen contract — a Buffer digest, so a
+// 0xff byte is covered exactly and never utf8-decoded. Unreadable HOLDs (throws); the image paths are
+// already realpath-contained by screenEvidence, so this is the byte-capture the manifest digest alone
+// cannot prove.
+function hashImageBytes(abs) {
+  let bytes
+  try {
+    bytes = readFileSync(abs)
+  } catch (error) {
+    throw new Error(`a screen evidence image could not be read for its digest: ${error.message}`)
+  }
+  return createHash('sha256').update(bytes).digest('hex')
+}
+
+// The perceptual-screen contract facts: the screen packet body with the attached and reference images
+// resolved to ORDERED {name, sha256} arrays (evidence order preserved) and the evidence-manifest
+// digest named distinctly from any FORK-3 control manifest.
+function screenContractFacts(packetBody, generation, evidence) {
+  const attached_images = evidence.imageNames.map((name, i) => ({ name, sha256: hashImageBytes(evidence.images[i]) }))
+  const reference_images = attached_images.slice(evidence.imageNames.length - evidence.references.length)
+  return {
+    law_lock_hash: packetBody.law_lock_hash,
+    evidence_manifest_sha256: generation.digest,
+    generation: generation.number,
+    perceptual_criteria: packetBody.perceptual_criteria,
+    rubric: packetBody.rubric,
+    attached_images,
+    reference_images,
+    meta: packetBody.meta,
+    console_log: packetBody.console_log,
+    dom_excerpt: packetBody.dom_excerpt,
+  }
+}
+
+// The ONE composer every transport shares: assemble the closed payload for a kind+operation from
+// trusted facts, canonicalize, digest. A kind or operation outside the closed set THROWS (a caller
+// bug, never a silent accept). Returns { contract, bytes, sha }.
+function composeContract(kind, operation, facts) {
+  const ops = CONTRACT_OPERATIONS[kind]
+  if (!ops) throw new Error(`contract kind ${kind} is outside the closed set`)
+  if (!ops.includes(operation)) throw new Error(`contract operation ${operation} is not valid for ${kind}`)
+  let payload
+  if (kind === 'slice-review') {
+    payload = {
+      contract_version: CONTRACT_VERSION,
+      contract_kind: kind,
+      operation,
+      slice_id: facts.slice_id,
+      law_hash: facts.law_hash,
+      law_text: facts.law_text,
+      builder_hints: facts.builder_hints,
+      receipt_sha256: facts.receipt_sha256,
+      reviewed_manifest: facts.reviewed_manifest,
+    }
+    if (operation === 'recheck') {
+      payload.finding_ids = sortedFindingIds(facts.finding_ids)
+      payload.prior_findings = facts.prior_findings
+      payload.repair_delta = facts.repair_delta
+    }
+  } else if (kind === 'milestone-audit') {
+    payload = {
+      contract_version: CONTRACT_VERSION,
+      contract_kind: kind,
+      operation,
+      law_hash: facts.law_hash,
+      seam_slice: facts.seam_slice,
+      milestone: facts.milestone,
+      closing_block: facts.closing_block,
+      sealed_prefix: facts.sealed_prefix,
+      covered: facts.covered,
+      receipt_sha256: facts.receipt_sha256,
+    }
+    if (operation === 'recheck') {
+      payload.finding_ids = sortedFindingIds(facts.finding_ids)
+      payload.prior_findings = facts.prior_findings
+      payload.repair_delta = facts.repair_delta
+    }
+  } else if (kind === 'artifact-ratify') {
+    // W2-S7a (F4): purpose is a CLOSED set — the ratify family word, never an arbitrary review family.
+    // Enforced HERE so both transports (the codex ratify verbs and contract-prepare) reject uniformly;
+    // a caller copying a review family like screen into purpose is a caller bug, never a silent accept.
+    if (facts.purpose !== 'ratify' && facts.purpose !== 'feasibility') {
+      throw new Error(`artifact-ratify purpose must be ratify or feasibility, not ${facts.purpose}`)
+    }
+    payload = {
+      contract_version: CONTRACT_VERSION,
+      contract_kind: kind,
+      operation,
+      purpose: facts.purpose,
+      artifact_path: facts.artifact_path,
+      artifact_sha256: facts.artifact_sha256,
+      artifact: facts.artifact,
+      rubric: facts.rubric,
+      receipt_sha256: null,
+    }
+    if (operation === 'recheck') {
+      payload.finding_ids = sortedFindingIds(facts.finding_ids)
+      payload.prior_findings = facts.prior_findings
+    }
+  } else {
+    // perceptual-screen: escalation carries the survivor rows in perceptual_criteria (the caller filters
+    // them), and — W2-S7a (F1) — ALSO the scoped cohort exactly as recheck does: the sorted finding_ids
+    // and ordered prior_findings drawn from the held verdict. Without the cohort two held verdicts with
+    // different findings but identical surviving criteria compose identical bytes, and the kernel would
+    // have to recover the missing authority from the mutable prior gate.
+    payload = {
+      contract_version: CONTRACT_VERSION,
+      contract_kind: kind,
+      operation,
+      law_lock_hash: facts.law_lock_hash,
+      evidence_manifest_sha256: facts.evidence_manifest_sha256,
+      generation: facts.generation,
+      perceptual_criteria: facts.perceptual_criteria,
+      rubric: facts.rubric,
+      attached_images: facts.attached_images,
+      reference_images: facts.reference_images,
+      meta: facts.meta,
+      console_log: facts.console_log,
+      dom_excerpt: facts.dom_excerpt,
+    }
+    if (operation === 'recheck' || operation === 'escalation') {
+      payload.finding_ids = sortedFindingIds(facts.finding_ids)
+      payload.prior_findings = facts.prior_findings
+    }
+  }
+  const bytes = canonicalBytes(payload)
+  return { contract: payload, bytes, sha: createHash('sha256').update(bytes).digest('hex') }
+}
+
+const contractStoreFile = (kilnDir, sha) => join(kilnDir, CONTRACT_DIR, 'sha256', sha + '.json')
+
+// Commit the contract bytes CONTENT-ADDRESSED (wx), the baseline/prepared discipline: an identical
+// name whose bytes still hash to it is an idempotent no-op; a name colliding with foreign bytes is a
+// torn store that THROWS, never a silent accept.
+function writeContractStore(kilnDir, bytes, sha) {
+  const dir = join(kilnDir, CONTRACT_DIR, 'sha256')
+  mkdirSync(dir, { recursive: true })
+  const path = contractStoreFile(kilnDir, sha)
+  try {
+    writeFileSync(path, bytes, { flag: 'wx' })
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error
+    let existing
+    try {
+      existing = readFileSync(path)
+    } catch (e) {
+      throw new Error(`the content-addressed contract could not be read: ${e.message}`)
+    }
+    if (createHash('sha256').update(existing).digest('hex') !== sha) {
+      throw new Error('a content-addressed contract file does not match its own name — a torn contract store')
+    }
+  }
+}
+
+// Compose and store in one step; the built { bytes, sha } feed the embed and the publication binding.
+function prepareContract(kilnDir, kind, operation, facts) {
+  const built = composeContract(kind, operation, facts)
+  writeContractStore(kilnDir, built.bytes, built.sha)
+  return built
+}
+
+// The publication binding every transport runs before it archives and renames: the store entry named
+// by the supplied digest must exist and its bytes must re-hash to that digest. Returns null on match,
+// an error string on any fault so the caller fails closed.
+function verifyContractStore(kilnDir, sha) {
+  if (typeof sha !== 'string' || !LAW_HASH.test(sha)) return `the supplied contract digest is not a 64-hex digest`
+  let bytes
+  try {
+    bytes = readFileSync(contractStoreFile(kilnDir, sha))
+  } catch (error) {
+    return `the contract store entry is missing or unreadable: ${error.message}`
+  }
+  if (createHash('sha256').update(bytes).digest('hex') !== sha) {
+    return 'the contract store entry does not match the supplied digest — a torn or mismatched contract'
+  }
+  return null
+}
+
 const [mode, ...args] = process.argv.slice(2)
 if (mode === 'review' && args.length === 8) {
   // W2-S4: the AUTHORITATIVE facts ride argv (the audit-verb pattern) and the sealed trio —
@@ -2235,7 +2615,7 @@ if (mode === 'review' && args.length === 8) {
     law_text: facts.lawText,
     builder_hints: hintsFrom(requestFile),
   }
-  invoke(repository(repoPath), request, packet, outputFile)
+  invoke(repository(repoPath), kilnDir, request, packet, outputFile)
 } else if (mode === 'recheck' && args.length === 10) {
   const [repoPath, kilnDir, sliceId, model, alias, effort, requestFile, priorFile, repairDeltaFile, outputFile] = args
   const request = auditRequest(model, alias, effort, 'recheck')
@@ -2276,7 +2656,7 @@ if (mode === 'review' && args.length === 8) {
     prior_findings: prior.findings,
     repair_delta: repairDelta,
   }
-  invoke(repository(repoPath), request, packet, outputFile, findingIds)
+  invoke(repository(repoPath), kilnDir, request, packet, outputFile, findingIds)
 } else if (mode === 'gate-facts' && args.length === 4) {
   // W2-S4 (B02/B03/B04): the ONE authority the claude gate leg shares with the codex packet. The
   // kernel claude reviewer is an agent, not this CLI, so it cannot run sealedAuthority itself; it
@@ -2509,7 +2889,7 @@ if (mode === 'review' && args.length === 8) {
     else surf[String((s && s.id) || '').trim()] = String((s && s.surface) || '').trim()
   }
   process.exit(facts.rows.some((r) => surf[r.slice] === 'ui') ? 0 : 1)
-} else if (mode === 'ratify' && args.length === 4) {
+} else if (mode === 'ratify' && args.length === 5) {
   // Ratify a readable artifact against a rubric — the reusable "review an artifact
   // against a rubric" path whose first consumer is the not-yet-sealed LAW. There is
   // no locked digest to compare against yet (the seal is written only after accept),
@@ -2519,7 +2899,9 @@ if (mode === 'review' && args.length === 8) {
   // W2-S5: this ONE verb serves two review families (the kernel LAW ratify and the
   // research-sweep feasibility ratify), so the archive family rides argv — the caller
   // that knows which review this is passes the label the verdict is filed under.
-  const [repoPath, requestFile, outputFile, family] = args
+  // W2-S7a (F5): kilnDir is now an EXPLICIT argv word (the ratify family alone lacked one) — the
+  // trust root runGate binds the store and archive to, no longer inferred from the output path.
+  const [repoPath, kilnDir, requestFile, outputFile, family] = args
   const request = ratifyRequestFrom(requestFile)
   const repo = repository(repoPath)
   let artifactBytes
@@ -2529,20 +2911,33 @@ if (mode === 'review' && args.length === 8) {
     stop('transport_failure', `ratify artifact unreadable: ${error.message}`, TRANSPORT_FAILURE)
   }
   const candidateDigest = createHash('sha256').update(artifactBytes).digest('hex')
+  const rubric = rubricFrom(request.rubric)
   const packet = {
     mode: 'ratify',
     review_id: request.reviewId,
     law_hash: candidateDigest,
-    rubric: rubricFrom(request.rubric),
+    rubric,
     artifact: artifactBytes.toString('utf8'),
   }
-  runGate(repo, request, ratifyInstructions(packet), outputFile, (gate) => {
+  // W2-S7a (FORK 1): the artifact-ratify contract — purpose is the ratify family word, the artifact
+  // path and its candidate digest, the exact artifact text the reviewer grades, and the rubric
+  // criteria. receipt_sha256 is null by contract; ratify judges an artifact against a rubric, no receipt.
+  let contract
+  try {
+    contract = composeContract('artifact-ratify', 'initial', {
+      purpose: family, artifact_path: request.artifact, artifact_sha256: candidateDigest,
+      artifact: packet.artifact, rubric,
+    })
+  } catch (error) {
+    stop('transport_failure', `contract: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  runGate(repo, request, ratifyInstructions(packet, contract.bytes), outputFile, (gate) => {
     const shape = validateShape(gate, packet.review_id)
     if (shape) return shape
     if (gate.law_hash !== candidateDigest) return 'law_hash does not match the ratified artifact digest'
     return null
-  }, family, undefined, packet.review_id)
-} else if (mode === 'ratify-recheck' && args.length === 5) {
+  }, family, undefined, packet.review_id, contract, kilnDir)
+} else if (mode === 'ratify-recheck' && args.length === 6) {
   // W6-02: the ratify verb gains the cohort lineage it lacked. A recheck of an
   // already-graded artifact reuses the prior review_id and constrains the reviewer to
   // the prior finding cohort — the SAME allowedFindingIds + prior changes_required
@@ -2551,7 +2946,8 @@ if (mode === 'review' && args.length === 8) {
   // regenerated between rounds (the LAW-ratify repair rewrites the whole LAW), so
   // law_hash tracks the CURRENT artifact digest, not the prior one; the reused
   // review_id carries the lineage instead.
-  const [repoPath, requestFile, priorFile, outputFile, family] = args
+  // W2-S7a (F5): kilnDir is an EXPLICIT argv word, threaded to runGate as the trust root.
+  const [repoPath, kilnDir, requestFile, priorFile, outputFile, family] = args
   const request = ratifyRequestFrom(requestFile)
   const prior = readJson(priorFile, 'invalid prior ratify review')
   const priorShape = isObject(prior) && typeof prior.review_id === 'string' && typeof prior.law_hash === 'string'
@@ -2571,22 +2967,33 @@ if (mode === 'review' && args.length === 8) {
     stop('transport_failure', `ratify artifact unreadable: ${error.message}`, TRANSPORT_FAILURE)
   }
   const candidateDigest = createHash('sha256').update(artifactBytes).digest('hex')
+  const rubric = rubricFrom(request.rubric)
   const findingIds = new Set(prior.findings.map((finding) => finding.id))
   const packet = {
     mode: 'ratify-recheck',
     review_id: request.reviewId,
     law_hash: candidateDigest,
-    rubric: rubricFrom(request.rubric),
+    rubric,
     artifact: artifactBytes.toString('utf8'),
     finding_ids: [...findingIds],
     prior_findings: prior.findings,
   }
-  runGate(repo, request, ratifyInstructions(packet), outputFile, (gate) => {
+  // W2-S7a (FORK 1): the recheck contract adds the sorted finding_ids cohort and the prior findings.
+  let contract
+  try {
+    contract = composeContract('artifact-ratify', 'recheck', {
+      purpose: family, artifact_path: request.artifact, artifact_sha256: candidateDigest,
+      artifact: packet.artifact, rubric, finding_ids: packet.finding_ids, prior_findings: prior.findings,
+    })
+  } catch (error) {
+    stop('transport_failure', `contract: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  runGate(repo, request, ratifyInstructions(packet, contract.bytes), outputFile, (gate) => {
     const shape = validateShape(gate, packet.review_id, undefined, findingIds)
     if (shape) return shape
     if (gate.law_hash !== candidateDigest) return 'law_hash does not match the ratified artifact digest'
     return null
-  }, family, undefined, packet.review_id)
+  }, family, undefined, packet.review_id, contract, kilnDir)
 } else if (mode === 'audit' && args.length === 7) {
   // W7-A1: the milestone-seam audit — one fresh goal-backward GPT reviewer over the
   // cumulative sealed prefix. argv carries closed facts only; every derived fact — the
@@ -2609,7 +3016,7 @@ if (mode === 'review' && args.length === 8) {
     closing_block: facts.closingBlock,
     sealed_prefix: facts.sealedPrefix,
   }
-  invokeAudit(repo, request, packet, outputFile)
+  invokeAudit(repo, kilnDir, request, packet, outputFile)
 } else if (mode === 'audit-recheck' && args.length === 9) {
   // W7-A1: the audit recheck mirrors recheck with two deliberate widenings: the prior
   // verdict may be changes_required OR blocked (audit blockers reopen their owning
@@ -2658,7 +3065,7 @@ if (mode === 'review' && args.length === 8) {
     prior_findings: prior.findings,
     repair_delta: repairDelta,
   }
-  invokeAudit(repo, request, packet, outputFile, findingIds)
+  invokeAudit(repo, kilnDir, request, packet, outputFile, findingIds)
 } else if (mode === 'append-audit' && (args.length === 3 || args.length === 4 || args.length === 5)) {
   // W7: the ONLY writer of audits.log — append-seal's milestone-seam mirror. The kernel
   // promotes an accepted audit through this trusted verb, never a bare shell append; the
@@ -2768,6 +3175,162 @@ if (mode === 'review' && args.length === 8) {
   const prepared = manifestPrepare(kilnDir, repository(repoPath), slice)
   if (prepared.error) stop('transport_failure', prepared.error, TRANSPORT_FAILURE)
   process.stdout.write(prepared.value + '\n')
+  process.exit(ACCEPT)
+} else if (mode === 'contract-prepare' && args.length >= 4) {
+  // W2-S7a (FORK 1): the trusted contract composer the CLAUDE reviewer legs run BEFORE dispatch. It
+  // derives the SAME authoritative facts the matching codex verb embeds (buildGateFacts, hintsFrom,
+  // auditFacts, coverageTuples, ratifyRequestFrom's artifact + rubric, the screen evidence), composes
+  // and content-addresses the canonical contract, and prints its digest as the ONE closed stdout fact
+  // the kernel threads into the reviewer prompt and the publish-gate binding. The kind-specific args
+  // MIRROR the matching gate verb argv minus model, alias, effort and the output path. Any derivation,
+  // read, image-hash, or store fault holds transport 20 — an unattested contract never binds a publish.
+  const [repoPath, kilnDir, kind, operation, ...rest] = args
+  if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
+    stop('transport_failure', 'contract-prepare kilnDir must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  const repo = repository(repoPath)
+  let built
+  try {
+    if (kind === 'slice-review') {
+      const [sliceId, requestFile, priorFile, repairDeltaFile] = rest
+      if (typeof sliceId !== 'string' || !STATE_SLICE_ID.test(sliceId)) {
+        stop('transport_failure', 'contract-prepare slice must be a slice-id charset token', TRANSPORT_FAILURE)
+      }
+      const gf = buildGateFacts(kilnDir, sliceId)
+      const receipt = receiptDigestAtPublication(kilnDir, 'review')
+      if (receipt.error) stop('transport_failure', receipt.error, TRANSPORT_FAILURE)
+      const facts = {
+        slice_id: sliceId, law_hash: gf.lawHash, law_text: gf.lawText,
+        builder_hints: hintsFrom(requestFile), receipt_sha256: receipt.digest,
+        reviewed_manifest: reviewedManifestForSlice(kilnDir, sliceId),
+      }
+      if (operation === 'recheck') {
+        // W2-S7a (F2): the SAME prior-eligibility the codex recheck verb enforces — full shape, an
+        // eligible changes_required verdict, the sealed-law binding, and a nonempty repair delta.
+        const prior = readJson(priorFile, 'invalid prior gate review')
+        const priorShape = isObject(prior) && typeof prior.review_id === 'string' && typeof prior.law_hash === 'string'
+        const priorError = priorShape ? validateShape(prior, prior.review_id, prior.law_hash) : 'prior gate review is malformed'
+        if (priorError) stop('transport_failure', priorError, TRANSPORT_FAILURE)
+        if (prior.verdict !== 'changes_required') stop('transport_failure', 'contract-prepare recheck requires a prior changes_required verdict', TRANSPORT_FAILURE)
+        if (prior.law_hash !== gf.lawHash) stop('transport_failure', 'contract-prepare recheck prior law_hash differs from the sealed law', TRANSPORT_FAILURE)
+        let repairDelta
+        try {
+          repairDelta = readFileSync(resolve(repairDeltaFile), 'utf8')
+        } catch (error) {
+          stop('transport_failure', `contract-prepare invalid repair delta: ${error.message}`, TRANSPORT_FAILURE)
+        }
+        if (repairDelta.trim() === '') stop('transport_failure', 'contract-prepare repair delta must not be empty', TRANSPORT_FAILURE)
+        facts.finding_ids = [...new Set(prior.findings.map((finding) => finding.id))]
+        facts.prior_findings = prior.findings
+        facts.repair_delta = repairDelta
+      }
+      built = prepareContract(kilnDir, kind, operation, facts)
+    } else if (kind === 'milestone-audit') {
+      const [seamSliceId, priorFile, repairDeltaFile] = rest
+      const af = auditFacts(kilnDir, seamSliceId)
+      const receipt = receiptDigestAtPublication(kilnDir, 'audit')
+      if (receipt.error) stop('transport_failure', receipt.error, TRANSPORT_FAILURE)
+      const facts = {
+        law_hash: af.lawHash, seam_slice: seamSliceId, milestone: af.milestone,
+        closing_block: af.closingBlock, sealed_prefix: af.sealedPrefix,
+        covered: coverageTuples(kilnDir, af.sealedPrefix), receipt_sha256: receipt.digest,
+      }
+      if (operation === 'recheck') {
+        // W2-S7a (F2): the SAME prior-eligibility the codex audit-recheck verb enforces — full audit
+        // shape, an eligible changes_required OR blocked verdict, the sealed-law binding, a nonempty delta.
+        const prior = readJson(priorFile, 'invalid prior audit review')
+        const priorShape = isObject(prior) && typeof prior.review_id === 'string' && typeof prior.law_hash === 'string'
+        const priorError = priorShape ? (validateShape(prior, prior.review_id, prior.law_hash) || auditShapeInvalid(prior)) : 'prior audit review is malformed'
+        if (priorError) stop('transport_failure', priorError, TRANSPORT_FAILURE)
+        if (prior.verdict !== 'changes_required' && prior.verdict !== 'blocked') stop('transport_failure', 'contract-prepare audit recheck requires a prior changes_required or blocked verdict', TRANSPORT_FAILURE)
+        if (prior.law_hash !== af.lawHash) stop('transport_failure', 'contract-prepare audit recheck prior law_hash differs from the sealed law', TRANSPORT_FAILURE)
+        let repairDelta
+        try {
+          repairDelta = readFileSync(resolve(repairDeltaFile), 'utf8')
+        } catch (error) {
+          stop('transport_failure', `contract-prepare invalid repair delta: ${error.message}`, TRANSPORT_FAILURE)
+        }
+        if (repairDelta.trim() === '') stop('transport_failure', 'contract-prepare repair delta must not be empty', TRANSPORT_FAILURE)
+        facts.finding_ids = [...new Set(prior.findings.map((finding) => finding.id))]
+        facts.prior_findings = prior.findings
+        facts.repair_delta = repairDelta
+      }
+      built = prepareContract(kilnDir, kind, operation, facts)
+    } else if (kind === 'artifact-ratify') {
+      const [family, artifactPath, rubricPath, priorFile] = rest
+      if (family !== 'ratify' && family !== 'feasibility') {
+        stop('transport_failure', 'contract-prepare ratify purpose must be ratify or feasibility', TRANSPORT_FAILURE)
+      }
+      if (typeof artifactPath !== 'string' || artifactPath.trim() === '') {
+        stop('transport_failure', 'contract-prepare ratify artifact must be a nonempty path', TRANSPORT_FAILURE)
+      }
+      let artifactBytes
+      try {
+        artifactBytes = readFileSync(resolve(repo, artifactPath))
+      } catch (error) {
+        stop('transport_failure', `contract-prepare ratify artifact unreadable: ${error.message}`, TRANSPORT_FAILURE)
+      }
+      const facts = {
+        purpose: family, artifact_path: artifactPath,
+        artifact_sha256: createHash('sha256').update(artifactBytes).digest('hex'),
+        artifact: artifactBytes.toString('utf8'), rubric: rubricFrom(rubricPath),
+      }
+      if (operation === 'recheck') {
+        // W2-S7a (F2): the SAME prior-eligibility the codex ratify-recheck verb enforces — full shape
+        // and an eligible changes_required verdict. ratify binds no law hash (the artifact digest is
+        // recomputed per round); the review_id-match is a codex-request concern the claude path lacks.
+        const prior = readJson(priorFile, 'invalid prior ratify review')
+        const priorShape = isObject(prior) && typeof prior.review_id === 'string' && typeof prior.law_hash === 'string'
+        const priorError = priorShape ? validateShape(prior, prior.review_id, prior.law_hash) : 'prior ratify review is malformed'
+        if (priorError) stop('transport_failure', priorError, TRANSPORT_FAILURE)
+        if (prior.verdict !== 'changes_required') stop('transport_failure', 'contract-prepare ratify recheck requires a prior changes_required verdict', TRANSPORT_FAILURE)
+        facts.finding_ids = [...new Set(prior.findings.map((finding) => finding.id))]
+        facts.prior_findings = prior.findings
+      }
+      built = prepareContract(kilnDir, kind, operation, facts)
+    } else if (kind === 'perceptual-screen') {
+      // W2-S7a (F2): validate the prior/held with the SAME screen-family rules the codex verbs enforce
+      // — full shape, the screen table criteria, an eligible changes_required verdict, and (recheck) the
+      // fresh-evidence binding — BEFORE deriving the cohort. W2-S7a (F1): both recheck AND escalation
+      // carry the scoped cohort from the validated prior/held verdict.
+      const [priorOrHeldFile] = rest
+      const sf = screenLawFacts(kilnDir)
+      const criterionIds = new Set(sf.rows.map((row) => row.criterion))
+      const generation = currentGeneration(kilnDir)
+      const evidence = screenEvidence(generation)
+      let rows = sf.rows
+      let cohort = null
+      if (operation === 'recheck') {
+        const prior = readJson(priorOrHeldFile, 'invalid prior screen review')
+        const priorShape = isObject(prior) && typeof prior.review_id === 'string' && typeof prior.law_hash === 'string'
+        const priorError = priorShape ? (validateShape(prior, prior.review_id, prior.law_hash, undefined, SCREEN_LOCATION) || screenShapeInvalid(prior, criterionIds)) : 'prior screen review is malformed'
+        if (priorError) stop('transport_failure', priorError, TRANSPORT_FAILURE)
+        if (prior.verdict !== 'changes_required') stop('transport_failure', 'contract-prepare screen recheck requires a prior changes_required verdict', TRANSPORT_FAILURE)
+        if (generation.digest === prior.law_hash) stop('transport_failure', 'contract-prepare screen recheck requires fresh evidence — the CURRENT manifest digest equals the prior graded generation', TRANSPORT_FAILURE)
+        cohort = prior.findings
+      } else if (operation === 'escalation') {
+        const held = readJson(priorOrHeldFile, 'invalid held screen review')
+        const heldShape = isObject(held) && typeof held.review_id === 'string' && typeof held.law_hash === 'string'
+        const heldError = heldShape ? (validateShape(held, held.review_id, held.law_hash, undefined, SCREEN_LOCATION) || screenShapeInvalid(held, criterionIds)) : 'held screen review is malformed'
+        if (heldError) stop('transport_failure', heldError, TRANSPORT_FAILURE)
+        if (held.verdict !== 'changes_required') stop('transport_failure', 'contract-prepare screen escalation requires a held changes_required verdict', TRANSPORT_FAILURE)
+        rows = sf.rows.filter((row) => new Set(held.findings.map((finding) => finding.criterion)).has(row.criterion))
+        cohort = held.findings
+      }
+      const body = screenPacket({ ...sf, rows }, generation, evidence)
+      const facts = screenContractFacts(body, generation, evidence)
+      if (cohort) {
+        facts.finding_ids = [...new Set(cohort.map((finding) => finding.id))]
+        facts.prior_findings = cohort
+      }
+      built = prepareContract(kilnDir, kind, operation, facts)
+    } else {
+      stop('transport_failure', `contract-prepare kind ${kind} is outside the closed set`, TRANSPORT_FAILURE)
+    }
+  } catch (error) {
+    stop('transport_failure', `contract: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  process.stdout.write(built.sha + '\n')
   process.exit(ACCEPT)
 } else if (mode === 'identity-begin' && args.length === 4) {
   // W2-S7a (ruling A-prime): mint a random 128-bit leg_id, append the IMMUTABLE intent, and print
@@ -2968,18 +3531,29 @@ if (mode === 'review' && args.length === 8) {
   const generation = currentGeneration(kilnDir)
   const evidence = screenEvidence(generation)
   const criterionIds = new Set(facts.rows.map((row) => row.criterion))
+  const body = screenPacket(facts, generation, evidence)
   const packet = {
     mode: 'screen',
     review_id: randomUUID(),
     law_hash: generation.digest,
-    ...screenPacket(facts, generation, evidence),
+    ...body,
   }
-  runGate(repo, request, screenInstructions(packet), outputFile, (gate) => {
+  // W2-S7a (FORK 1): the perceptual-screen contract — the packet body with the attached and reference
+  // images resolved to ordered {name, sha256} arrays over their RAW bytes (the manifest digest alone
+  // does not prove the image bytes) and the evidence-manifest digest named distinctly. An unreadable
+  // image HOLDs.
+  let contract
+  try {
+    contract = composeContract('perceptual-screen', 'initial', screenContractFacts(body, generation, evidence))
+  } catch (error) {
+    stop('transport_failure', `contract: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  runGate(repo, request, screenInstructions(packet, contract.bytes), outputFile, (gate) => {
     const shape = validateShape(gate, packet.review_id, undefined, undefined, SCREEN_LOCATION)
     if (shape) return shape
     if (gate.law_hash !== generation.digest) return 'law_hash does not match the graded generation manifest digest'
     return screenShapeInvalid(gate, criterionIds)
-  }, 'screen', evidence.images, String(generation.number))
+  }, 'screen', evidence.images, String(generation.number), contract, kilnDir)
 } else if (mode === 'screen-recheck' && args.length === 8) {
   // W8-S2: the screen recheck — the recheck discipline pointed at fresh pixels. Same
   // review_id lineage, cohort reuse-or-clear over the prior finding ids, and
@@ -3024,21 +3598,32 @@ if (mode === 'review' && args.length === 8) {
   }
   const delta = deltaBytes.toString('utf8')
   const findingIds = new Set(prior.findings.map((finding) => finding.id))
+  const body = screenPacket(facts, generation, evidence)
   const packet = {
     mode: 'screen-recheck',
     review_id: prior.review_id,
     law_hash: generation.digest,
-    ...screenPacket(facts, generation, evidence),
+    ...body,
     finding_ids: [...findingIds],
     prior_findings: prior.findings,
     repair_delta: delta,
   }
-  runGate(repo, request, screenInstructions(packet), outputFile, (gate) => {
+  // W2-S7a (FORK 1): the recheck contract adds the sorted finding_ids cohort and the prior findings on
+  // the FRESH evidence generation; the repair_delta is transport, not a contract fact.
+  let contract
+  try {
+    contract = composeContract('perceptual-screen', 'recheck', {
+      ...screenContractFacts(body, generation, evidence), finding_ids: packet.finding_ids, prior_findings: prior.findings,
+    })
+  } catch (error) {
+    stop('transport_failure', `contract: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  runGate(repo, request, screenInstructions(packet, contract.bytes), outputFile, (gate) => {
     const shape = validateShape(gate, packet.review_id, undefined, findingIds, SCREEN_LOCATION)
     if (shape) return shape
     if (gate.law_hash !== generation.digest) return 'law_hash does not match the graded generation manifest digest'
     return screenShapeInvalid(gate, criterionIds)
-  }, 'screen', evidence.images, String(generation.number))
+  }, 'screen', evidence.images, String(generation.number), contract, kilnDir)
 } else if (mode === 'screen-escalate' && args.length === 7) {
   // W8-S3 (ONLY-survivors): the bounded second-family escalation of a HELD screen
   // verdict. The held verdict rides argv as a closed path; the verb re-validates it
@@ -3066,13 +3651,28 @@ if (mode === 'review' && args.length === 8) {
   const survivors = new Set(held.findings.map((finding) => finding.criterion))
   const generation = currentGeneration(kilnDir)
   const evidence = screenEvidence(generation)
+  const body = screenPacket({ ...facts, rows: facts.rows.filter((row) => survivors.has(row.criterion)) }, generation, evidence)
   const packet = {
     mode: 'screen-escalate',
     review_id: randomUUID(),
     law_hash: generation.digest,
-    ...screenPacket({ ...facts, rows: facts.rows.filter((row) => survivors.has(row.criterion)) }, generation, evidence),
+    ...body,
   }
-  runGate(repo, request, screenInstructions(packet), outputFile, (gate) => {
+  // W2-S7a (FORK 1 / F1): the escalation contract carries the surviving perceptual rows AND the scoped
+  // cohort drawn from the held verdict — the sorted finding_ids and the ordered held findings — so two
+  // held verdicts with identical surviving criteria but different findings compose different bytes and
+  // the kernel needs no authority from the mutable prior gate.
+  let contract
+  try {
+    contract = composeContract('perceptual-screen', 'escalation', {
+      ...screenContractFacts(body, generation, evidence),
+      finding_ids: [...new Set(held.findings.map((finding) => finding.id))],
+      prior_findings: held.findings,
+    })
+  } catch (error) {
+    stop('transport_failure', `contract: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  runGate(repo, request, screenInstructions(packet, contract.bytes), outputFile, (gate) => {
     const shape = validateShape(gate, packet.review_id, undefined, undefined, SCREEN_LOCATION)
     if (shape) return shape
     if (gate.law_hash !== generation.digest) return 'law_hash does not match the graded generation manifest digest'
@@ -3081,8 +3681,8 @@ if (mode === 'review' && args.length === 8) {
     const off = gate.findings.find((finding) => !survivors.has(finding.criterion))
     if (off !== undefined) return `finding ${off.id} criterion ${off.criterion} is outside the surviving escalation scope`
     return null
-  }, 'screen', evidence.images, String(generation.number))
-} else if (mode === 'publish-gate' && (args.length === 4 || args.length === 5 || args.length === 7)) {
+  }, 'screen', evidence.images, String(generation.number), contract, kilnDir)
+} else if (mode === 'publish-gate' && (args.length === 4 || args.length === 5 || args.length === 6 || args.length === 7 || args.length === 8)) {
   // W2-S5 (C3a / B05 / ruling 3): the claude-path publish. The kernel and research-sweep claude
   // legs cannot author files, so they hand this trusted verb the validated candidate they just
   // graded; the verb reads the candidate bytes, archives them to the immutable ledger, THEN renames
@@ -3092,7 +3692,15 @@ if (mode === 'review' && args.length === 8) {
   // verdict is ever published without its archive row. The family rides argv because the caller,
   // not the file path, knows which review family this verdict belongs to (build and LAW ratify
   // share one gate file).
-  const [kilnDir, family, candidatePath, gatePath, reviewerLegId, repoArg, sliceArg] = args
+  const [kilnDir, family, candidatePath, gatePath, reviewerLegId] = args
+  // W2-S7a (FORK 3): the review family carries the manifest pair (repo, slice) at positions 5 and 6.
+  // W2-S7a (FORK 1): the canonical contract digest is ALWAYS the LAST word — position 7 when the
+  // manifest pair rides (arity 8, review), position 5 otherwise (arity 6, every other family). The
+  // legacy arities (4, 5 leg-only, 7 review+manifest) carry no contract and publish it null.
+  const hasManifestPair = args.length === 7 || args.length === 8
+  const repoArg = hasManifestPair ? args[5] : undefined
+  const sliceArg = hasManifestPair ? args[6] : undefined
+  const contractSha256 = args.length === 8 ? args[7] : args.length === 6 ? args[5] : undefined
   // W2-S7a (ruling A-prime): the OPTIONAL trailing reviewer_leg_id is the claude reviewer leg the
   // kernel minted for this gate — it must EXIST in identity.jsonl and a run_id matching this run, or
   // the publish holds. W2-S7a (B-CODEX-ROLE): the role check is UNIFORM and FAMILY-SPECIFIC — the
@@ -3133,13 +3741,29 @@ if (mode === 'review' && args.length === 8) {
       }
     }
   }
+  // W2-S7a (FORK 1): the contract binding, family-agnostic — every contracted publish supplies the
+  // digest. The store entry it names must exist and re-hash to it before archive+rename, or the publish
+  // HOLDs. A missing digest arg while a contracts store EXISTS is a bypass (HOLD); a legacy project with
+  // no .kiln/contracts publishes a null digest exactly as before this unit — the manifest bypass mirror.
+  let contractSha = null
+  if (contractSha256 !== undefined) {
+    const contractError = verifyContractStore(kilnDir, contractSha256)
+    if (contractError) stop('transport_failure', contractError, TRANSPORT_FAILURE)
+    contractSha = contractSha256
+  } else {
+    const present = manifestResult(() => manifestPathPresent(join(kilnDir, CONTRACT_DIR)))
+    if (present.error) stop('transport_failure', present.error, TRANSPORT_FAILURE)
+    if (present.value) {
+      stop('transport_failure', 'publish-gate omitted the contract digest while canonical contracts exist — refusing to bypass the contract binding', TRANSPORT_FAILURE)
+    }
+  }
   let verdictBytes
   try {
     verdictBytes = readFileSync(resolve(candidatePath))
   } catch (error) {
     stop('transport_failure', `publish-gate candidate unreadable: ${error.message}`, TRANSPORT_FAILURE)
   }
-  const archiveError = archiveVerdict(kilnDir, family, verdictBytes, reviewerLegId, manifestSha)
+  const archiveError = archiveVerdict(kilnDir, family, verdictBytes, reviewerLegId, manifestSha, contractSha)
   if (archiveError) stop('transport_failure', archiveError, TRANSPORT_FAILURE)
   try {
     renameSync(resolve(candidatePath), resolve(gatePath))
@@ -3428,7 +4052,7 @@ if (mode === 'review' && args.length === 8) {
 } else {
   stop(
     'transport_failure',
-    'usage: kiln-review review <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <gate-review.json> | kiln-review recheck <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review gate-facts <kilnDir> <slice> <request.json> <gate-facts.json> | kiln-review append-seal <kilnDir> <slice> <label> [<builder_leg_ids_csv> <reviewer_leg_id|-> [<repo>]] | kiln-review seal-law <kilnDir> <label> | kiln-review run-checks <kilnDir> | kiln-review slices <kilnDir> | kiln-review screen-criteria <kilnDir> | kiln-review perceptual-family <kilnDir> | kiln-review ratify <repo> <request.json> <gate-review.json> <family> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json> <family> | kiln-review publish-gate <kilnDir> <family> <candidate.json> <gate-review.json> [<reviewer_leg_id> [<repo> <slice>]] | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> <label> [<auditor_leg_id|-> [<repair_leg_ids_csv>]] | kiln-review reconcile <kilnDir> | kiln-review manifest-start <repo> <kilnDir> <slice> | kiln-review manifest-prepare <repo> <kilnDir> <slice> | kiln-review identity-begin <kilnDir> <role> <requested_alias> <subject> | kiln-review capture-and-finalize <kilnDir> [<transcriptPath>] | kiln-review screen <repo> <kilnDir> <model> <alias> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <alias> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <alias> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...] | kiln-review run-lock acquire <kilnDir> <choice> <conductorPid> | kiln-review run-lock join <kilnDir> <run_id> <owner> | kiln-review run-lock release <kilnDir> <run_id> <owner> | kiln-review run-lock takeover <kilnDir> <choice> <conductorPid>',
+    'usage: kiln-review review <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <gate-review.json> | kiln-review recheck <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review gate-facts <kilnDir> <slice> <request.json> <gate-facts.json> | kiln-review append-seal <kilnDir> <slice> <label> [<builder_leg_ids_csv> <reviewer_leg_id|-> [<repo>]] | kiln-review seal-law <kilnDir> <label> | kiln-review run-checks <kilnDir> | kiln-review slices <kilnDir> | kiln-review screen-criteria <kilnDir> | kiln-review perceptual-family <kilnDir> | kiln-review ratify <repo> <kilnDir> <request.json> <gate-review.json> <family> | kiln-review ratify-recheck <repo> <kilnDir> <request.json> <prior-gate-review.json> <gate-review.json> <family> | kiln-review publish-gate <kilnDir> <family> <candidate.json> <gate-review.json> [<reviewer_leg_id> [<repo> <slice>] [<contract_sha256>]] | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> <label> [<auditor_leg_id|-> [<repair_leg_ids_csv>]] | kiln-review reconcile <kilnDir> | kiln-review manifest-start <repo> <kilnDir> <slice> | kiln-review manifest-prepare <repo> <kilnDir> <slice> | kiln-review contract-prepare <repo> <kilnDir> <kind> <operation> [<kind-args>...] | kiln-review identity-begin <kilnDir> <role> <requested_alias> <subject> | kiln-review capture-and-finalize <kilnDir> [<transcriptPath>] | kiln-review screen <repo> <kilnDir> <model> <alias> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <alias> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <alias> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...] | kiln-review run-lock acquire <kilnDir> <choice> <conductorPid> | kiln-review run-lock join <kilnDir> <run_id> <owner> | kiln-review run-lock release <kilnDir> <run_id> <owner> | kiln-review run-lock takeover <kilnDir> <choice> <conductorPid>',
     TRANSPORT_FAILURE,
   )
 }
