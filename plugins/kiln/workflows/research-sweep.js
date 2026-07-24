@@ -482,7 +482,10 @@ const claudeFeasRatify = async (mode) => {
   // must still be on disk. A changed digest means the ratifier rewrote the read it graded.
   const d1 = await idsFetch('sha256sum ' + F.candidate + ' | cut -d" " -f1', 'feasibility:digest-confirm', 'a one-element array holding the 64-hex candidate digest printed on stdout, [] if exit != 0')
   if (d1.exit !== 0 || d1.ids.length !== 1 || d1.ids[0] !== candidateDigest) return 20
-  const w = await hands('mv -f ' + F.gateTmp + ' ' + F.gate, 'feasibility:publish')
+  // W2-S5: archive-then-publish through the trusted verb before the content-free overwrite — the
+  // validated feasibility verdict lands in the immutable ledger first (its own review family, though
+  // it reuses the ratify verb). A failed archive fails closed and the feasibility ratify holds.
+  const w = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' publish-gate .kiln feasibility ' + F.gateTmp + ' ' + F.gate, 'feasibility:publish')
   return w === 0 ? verdictExit(g.verdict) : 20
 }
 const ratifyReq = JSON.stringify({
@@ -509,8 +512,8 @@ const loop = await ratifyLoop({
     ? (mode) => claudeFeasRatify(mode)
     : (mode) => hands(
         mode === 'recheck'
-          ? shq(plugin + '/scripts/kiln-review') + ' ratify-recheck . ' + F.request + ' ' + F.gate + ' ' + F.gate
-          : shq(plugin + '/scripts/kiln-review') + ' ratify . ' + F.request + ' ' + F.gate,
+          ? shq(plugin + '/scripts/kiln-review') + ' ratify-recheck . ' + F.request + ' ' + F.gate + ' ' + F.gate + ' feasibility'
+          : shq(plugin + '/scripts/kiln-review') + ' ratify . ' + F.request + ' ' + F.gate + ' feasibility',
         'ratify:gate'),
   // The pinned prior cohort for the strict-subset transition: the finding ids the last published
   // gate carries. A recheck must strictly shrink it or recoveryDecision holds the law.

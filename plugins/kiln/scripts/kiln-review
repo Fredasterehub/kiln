@@ -663,7 +663,7 @@ function classifyFailure(run) {
 // both flows converge here rather than duplicate the spawn and the exit mapping.
 // W8-S2: the screen family adds bounded `-i` image attachments — absent, the argv
 // is byte-identical to the baseline.
-function runGate(repo, request, prompt, outputFile, validate, images) {
+function runGate(repo, request, prompt, outputFile, validate, family, images) {
   const output = resolve(outputFile)
   const temporary = join(dirname(output), `.gate-review.tmp-${process.pid}-${randomUUID()}`)
   const args = [
@@ -699,6 +699,16 @@ function runGate(repo, request, prompt, outputFile, validate, images) {
     discard(temporary)
     stop('transport_failure', invalid, TRANSPORT_FAILURE)
   }
+  // W2-S5: archive the validated verdict to the immutable ledger BEFORE the publish rename — the
+  // gate-file overwrite is content-free and destroys the prior verdict, so the archive is the only
+  // surviving history. The archive digests the EXACT bytes codex wrote, and the ledger sits beside
+  // the gate file in the same .kiln. A failed archive fails closed: the verdict is neither archived
+  // nor published, and the caller holds.
+  const archiveError = archiveVerdict(dirname(output), family, readFileSync(temporary))
+  if (archiveError) {
+    discard(temporary)
+    stop('transport_failure', archiveError, TRANSPORT_FAILURE)
+  }
   try {
     renameSync(temporary, output)
   } catch (error) {
@@ -724,7 +734,7 @@ function invoke(repo, request, packet, outputFile, allowedFindingIds) {
   }
   packet.check_receipt = checkReceipt
   runGate(repo, request, instructions(packet), outputFile, (gate) =>
-    validateShape(gate, packet.review_id, packet.law_hash, allowedFindingIds))
+    validateShape(gate, packet.review_id, packet.law_hash, allowedFindingIds), 'review')
 }
 
 // W7-A1: the audit-family invoke — the SAME receipt gate as invoke() (the kernel runs
@@ -743,7 +753,7 @@ function invokeAudit(repo, request, packet, outputFile, allowedFindingIds) {
     const shape = validateShape(gate, packet.review_id, packet.law_hash, allowedFindingIds)
     if (shape) return shape
     return auditShapeInvalid(gate)
-  })
+  }, 'audit')
 }
 
 function repository(path) {
@@ -911,6 +921,105 @@ function readLockRecord(lockPath) {
 function archiveLockRecord(kilnDir, record, event) {
   const row = JSON.stringify({ ...record, lock_event: event, archived_at: new Date().toISOString() })
   appendFileSync(join(kilnDir, LOCK_HISTORY), `${row}\n`)
+}
+
+// ── W2-S5 (C3a / B05 / ruling 3): the immutable verdict archive ─────────────
+// Every review family — build review, LAW ratify, feasibility ratify, milestone audit, and
+// perceptual screen — publishes its verdict by renaming a candidate over the mutable gate file,
+// a content-free overwrite that destroys the prior verdict. This ledger is the archive that
+// overwrite never touches: every newly validated verdict is appended here BEFORE the rename, so
+// the full reject/changes_required/blocked history of a repair→recheck→accept lineage survives
+// the accept that lands. Ruling 3: the mutable gate files and all their readers are UNCHANGED —
+// this is archive-only, never a P.gate split.
+const REVIEWS_FILE = 'reviews.jsonl'
+// The family is the review family the verdict belongs to, not the reviewer model family and not
+// the seal's dual/single cohort (a per-seal fact unavailable at per-verdict publish time). The
+// build gate and LAW ratify share one gate FILE, so the family is what tells their verdicts apart
+// in the archive; feasibility keeps its own family though it reuses the ratify verb.
+const REVIEW_FAMILIES = new Set(['review', 'ratify', 'feasibility', 'audit', 'screen'])
+
+// run_id provenance: the CLI reads the CLI-owned run.lock ITSELF and trusts run_id ONLY from a
+// record in the W2-S1 shape (run_id + owner in the LOCK_TOKEN grammar, a positive-integer
+// conductor_pid). An absent, unreadable, or non-conforming lock records run_id honestly as null
+// (a legacy launch), never a model-authorable string dressed as authoritative identity.
+function runIdFromLock(kilnDir) {
+  const lock = readLockRecord(join(kilnDir, LOCK_FILE)).record
+  const conforms = isObject(lock)
+    && typeof lock.run_id === 'string' && LOCK_TOKEN.test(lock.run_id)
+    && typeof lock.owner === 'string' && LOCK_TOKEN.test(lock.owner)
+    && Number.isInteger(lock.conductor_pid) && lock.conductor_pid > 0
+  return conforms ? lock.run_id : null
+}
+
+// Append the validated verdict to the archive, keyed idempotently by (family, review_id, verdict
+// sha256): a crash retry that re-presents the exact same verdict bytes appends nothing, so retries
+// never create ambiguous rounds. The round is the count of rows already in this lineage, so it is
+// the true position in that lineage's history rather than a stateful counter that a retry could
+// advance. The complete verdict is preserved — the verdict word, the full findings AND blockers,
+// the law_hash — plus the sha256 of the EXACT original bytes as an integrity digest. The run lock
+// serializes runs, so appends never race. Returns null on success (or an idempotent no-op) and an
+// error string on any failure, so the caller fails closed and never publishes an un-archived
+// verdict.
+// verdictBytes is the RAW Buffer of the exact bytes about to be renamed into the gate file. The
+// digest binds THOSE bytes: hashing a utf8-decoded string instead would diverge on any byte that is
+// not valid utf8 (decoded to U+FFFD, then re-encoded), so the archived digest would fail to cover the
+// published bytes. The readable content fields come from the parsed JSON — that is fine, they are the
+// archive's human content, not its integrity binding.
+function archiveVerdict(kilnDir, family, verdictBytes) {
+  if (!REVIEW_FAMILIES.has(family)) return `archive family ${family} is not a review family`
+  let verdict
+  try {
+    verdict = JSON.parse(verdictBytes.toString('utf8'))
+  } catch (error) {
+    return `archive could not parse the verdict: ${error.message}`
+  }
+  if (!isObject(verdict) || typeof verdict.review_id !== 'string' || verdict.review_id.trim() === '') {
+    return 'archive verdict carries no review_id'
+  }
+  const sha = createHash('sha256').update(verdictBytes).digest('hex')
+  const path = join(kilnDir, REVIEWS_FILE)
+  // Read the whole ledger once (absent = empty). A genuine IO fault (not ENOENT) fails closed, but a
+  // single TORN line — a partial final append a crash left with no trailing newline, on an append-only
+  // ledger that can never be deleted (never-delete) — must NEVER wedge the archive: an aborting parse
+  // would hold every future gate publish forever. The scan skips an unparseable line rather than
+  // aborting (the tolerant sealMembers degrade), and a skipped line never counts toward the round.
+  let raw = ''
+  try {
+    raw = readFileSync(path, 'utf8')
+  } catch (error) {
+    if (error.code !== 'ENOENT') return `archive could not read the ledger: ${error.message}`
+  }
+  const lineage = []
+  for (const line of raw.split('\n')) {
+    if (line.trim() === '') continue
+    let row
+    try { row = JSON.parse(line) } catch { continue }
+    if (isObject(row) && row.family === family && row.review_id === verdict.review_id) lineage.push(row)
+  }
+  if (lineage.some((row) => row.verdict_sha256 === sha)) return null
+  const row = {
+    family,
+    review_id: verdict.review_id,
+    round: lineage.length,
+    verdict: verdict.verdict,
+    findings: Array.isArray(verdict.findings) ? verdict.findings : [],
+    blockers: Array.isArray(verdict.blockers) ? verdict.blockers : [],
+    law_hash: verdict.law_hash,
+    run_id: runIdFromLock(kilnDir),
+    published_at: new Date().toISOString(),
+    verdict_sha256: sha,
+  }
+  // Write safety: a crash mid-append can leave a torn final line with no trailing newline. Prefix a
+  // newline when the ledger is non-empty and does not end in one, so the new row lands on its OWN line
+  // and never merges into the torn partial — both the torn line and the new row stay independently
+  // recoverable. The bytes are already in hand from the scan, so this is a byte check, not a re-read.
+  const prefix = raw.length > 0 && !raw.endsWith('\n') ? '\n' : ''
+  try {
+    appendFileSync(path, prefix + JSON.stringify(row) + '\n')
+  } catch (error) {
+    return `archive could not append the verdict: ${error.message}`
+  }
+  return null
 }
 
 // process.kill(pid, 0) probes liveness without delivering a signal. Only ESRCH PROVES the
@@ -1230,14 +1339,17 @@ if (mode === 'review' && args.length === 7) {
     else surf[String((s && s.id) || '').trim()] = String((s && s.surface) || '').trim()
   }
   process.exit(facts.rows.some((r) => surf[r.slice] === 'ui') ? 0 : 1)
-} else if (mode === 'ratify' && args.length === 3) {
+} else if (mode === 'ratify' && args.length === 4) {
   // Ratify a readable artifact against a rubric — the reusable "review an artifact
   // against a rubric" path whose first consumer is the not-yet-sealed LAW. There is
   // no locked digest to compare against yet (the seal is written only after accept),
   // so this path never runs the slice's locked-LAW equality; it asserts the echoed
   // law_hash against the artifact's OWN candidate digest, computed exactly as seal-law
   // computes lock.hash so the ratified bytes and the sealed digest are byte-identical.
-  const [repoPath, requestFile, outputFile] = args
+  // W2-S5: this ONE verb serves two review families (the kernel LAW ratify and the
+  // research-sweep feasibility ratify), so the archive family rides argv — the caller
+  // that knows which review this is passes the label the verdict is filed under.
+  const [repoPath, requestFile, outputFile, family] = args
   const request = ratifyRequestFrom(requestFile)
   const repo = repository(repoPath)
   let artifactBytes
@@ -1259,8 +1371,8 @@ if (mode === 'review' && args.length === 7) {
     if (shape) return shape
     if (gate.law_hash !== candidateDigest) return 'law_hash does not match the ratified artifact digest'
     return null
-  })
-} else if (mode === 'ratify-recheck' && args.length === 4) {
+  }, family)
+} else if (mode === 'ratify-recheck' && args.length === 5) {
   // W6-02: the ratify verb gains the cohort lineage it lacked. A recheck of an
   // already-graded artifact reuses the prior review_id and constrains the reviewer to
   // the prior finding cohort — the SAME allowedFindingIds + prior changes_required
@@ -1269,7 +1381,7 @@ if (mode === 'review' && args.length === 7) {
   // regenerated between rounds (the LAW-ratify repair rewrites the whole LAW), so
   // law_hash tracks the CURRENT artifact digest, not the prior one; the reused
   // review_id carries the lineage instead.
-  const [repoPath, requestFile, priorFile, outputFile] = args
+  const [repoPath, requestFile, priorFile, outputFile, family] = args
   const request = ratifyRequestFrom(requestFile)
   const prior = readJson(priorFile, 'invalid prior ratify review')
   const priorShape = isObject(prior) && typeof prior.review_id === 'string' && typeof prior.law_hash === 'string'
@@ -1304,7 +1416,7 @@ if (mode === 'review' && args.length === 7) {
     if (shape) return shape
     if (gate.law_hash !== candidateDigest) return 'law_hash does not match the ratified artifact digest'
     return null
-  })
+  }, family)
 } else if (mode === 'audit' && args.length === 6) {
   // W7-A1: the milestone-seam audit — one fresh goal-backward GPT reviewer over the
   // cumulative sealed prefix. argv carries closed facts only; every derived fact — the
@@ -1431,7 +1543,7 @@ if (mode === 'review' && args.length === 7) {
     if (shape) return shape
     if (gate.law_hash !== generation.digest) return 'law_hash does not match the graded generation manifest digest'
     return screenShapeInvalid(gate, criterionIds)
-  }, evidence.images)
+  }, 'screen', evidence.images)
 } else if (mode === 'screen-recheck' && args.length === 7) {
   // W8-S2: the screen recheck — the recheck discipline pointed at fresh pixels. Same
   // review_id lineage, cohort reuse-or-clear over the prior finding ids, and
@@ -1490,7 +1602,7 @@ if (mode === 'review' && args.length === 7) {
     if (shape) return shape
     if (gate.law_hash !== generation.digest) return 'law_hash does not match the graded generation manifest digest'
     return screenShapeInvalid(gate, criterionIds)
-  }, evidence.images)
+  }, 'screen', evidence.images)
 } else if (mode === 'screen-escalate' && args.length === 6) {
   // W8-S3 (ONLY-survivors): the bounded second-family escalation of a HELD screen
   // verdict. The held verdict rides argv as a closed path; the verb re-validates it
@@ -1527,12 +1639,37 @@ if (mode === 'review' && args.length === 7) {
     const shape = validateShape(gate, packet.review_id, undefined, undefined, SCREEN_LOCATION)
     if (shape) return shape
     if (gate.law_hash !== generation.digest) return 'law_hash does not match the graded generation manifest digest'
-    const family = screenShapeInvalid(gate, criterionIds)
-    if (family) return family
+    const shapeInvalid = screenShapeInvalid(gate, criterionIds)
+    if (shapeInvalid) return shapeInvalid
     const off = gate.findings.find((finding) => !survivors.has(finding.criterion))
     if (off !== undefined) return `finding ${off.id} criterion ${off.criterion} is outside the surviving escalation scope`
     return null
-  }, evidence.images)
+  }, 'screen', evidence.images)
+} else if (mode === 'publish-gate' && args.length === 4) {
+  // W2-S5 (C3a / B05 / ruling 3): the claude-path publish. The kernel and research-sweep claude
+  // legs cannot author files, so they hand this trusted verb the validated candidate they just
+  // graded; the verb reads the candidate bytes, archives them to the immutable ledger, THEN renames
+  // the candidate over the gate file — the same content-free overwrite the bare mv performed, now
+  // with the prior verdict preserved first. The kernel stays content-blind: this verb, not the
+  // kernel, parses and digests the bytes. A failed archive fails closed — nothing is renamed, so no
+  // verdict is ever published without its archive row. The family rides argv because the caller,
+  // not the file path, knows which review family this verdict belongs to (build and LAW ratify
+  // share one gate file).
+  const [kilnDir, family, candidatePath, gatePath] = args
+  let verdictBytes
+  try {
+    verdictBytes = readFileSync(resolve(candidatePath))
+  } catch (error) {
+    stop('transport_failure', `publish-gate candidate unreadable: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  const archiveError = archiveVerdict(kilnDir, family, verdictBytes)
+  if (archiveError) stop('transport_failure', archiveError, TRANSPORT_FAILURE)
+  try {
+    renameSync(resolve(candidatePath), resolve(gatePath))
+  } catch (error) {
+    stop('transport_failure', `publish-gate could not publish: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  process.exit(ACCEPT)
 } else if (mode === 'state-commit' && args.length >= 6) {
   // W1-S2 (Defect B): the trusted, content-blind STATE.md writer. The courier carries
   // only closed words; this verb validates the transition, derives the next-action prose
@@ -1814,7 +1951,7 @@ if (mode === 'review' && args.length === 7) {
 } else {
   stop(
     'transport_failure',
-    'usage: kiln-review review <repo> <kilnDir> <slice> <model> <effort> <request.json> <gate-review.json> | kiln-review recheck <repo> <kilnDir> <slice> <model> <effort> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review gate-facts <kilnDir> <slice> <request.json> <gate-facts.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir> <label> | kiln-review run-checks <kilnDir> | kiln-review slices <kilnDir> | kiln-review screen-criteria <kilnDir> | kiln-review perceptual-family <kilnDir> | kiln-review ratify <repo> <request.json> <gate-review.json> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json> | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> <label> | kiln-review screen <repo> <kilnDir> <model> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...] | kiln-review run-lock acquire <kilnDir> <choice> <conductorPid> | kiln-review run-lock join <kilnDir> <run_id> <owner> | kiln-review run-lock release <kilnDir> <run_id> <owner> | kiln-review run-lock takeover <kilnDir> <choice> <conductorPid>',
+    'usage: kiln-review review <repo> <kilnDir> <slice> <model> <effort> <request.json> <gate-review.json> | kiln-review recheck <repo> <kilnDir> <slice> <model> <effort> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review gate-facts <kilnDir> <slice> <request.json> <gate-facts.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir> <label> | kiln-review run-checks <kilnDir> | kiln-review slices <kilnDir> | kiln-review screen-criteria <kilnDir> | kiln-review perceptual-family <kilnDir> | kiln-review ratify <repo> <request.json> <gate-review.json> <family> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json> <family> | kiln-review publish-gate <kilnDir> <family> <candidate.json> <gate-review.json> | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> <label> | kiln-review screen <repo> <kilnDir> <model> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...] | kiln-review run-lock acquire <kilnDir> <choice> <conductorPid> | kiln-review run-lock join <kilnDir> <run_id> <owner> | kiln-review run-lock release <kilnDir> <run_id> <owner> | kiln-review run-lock takeover <kilnDir> <choice> <conductorPid>',
     TRANSPORT_FAILURE,
   )
 }

@@ -299,8 +299,8 @@ test('runtime: a qualifying question runs producer → ratify → accept → ato
   assert.ok(producer < gate, 'the producer writes the candidate before the ratify gate grades it')
   assert.ok(gate < promote, 'the accept precedes the promotion — never the other way')
   const gateCall = calls.find(c => c.label === 'ratify:gate')
-  assert.ok(gateCall.prompt.includes('/scripts/kiln-review') && gateCall.prompt.includes(' ratify . .kiln/feasibility-ratify-request.json .kiln/feasibility-gate.json'),
-    'the gate rides the shell-quoted kiln-review ratify verb with the cwd-relative repo arg')
+  assert.ok(gateCall.prompt.includes('/scripts/kiln-review') && gateCall.prompt.includes(' ratify . .kiln/feasibility-ratify-request.json .kiln/feasibility-gate.json feasibility'),
+    'the gate rides the shell-quoted kiln-review ratify verb with the cwd-relative repo arg and the W2-S5 feasibility family so its verdict archives under its own family')
   const req = calls.find(c => c.label === 'ratify:request')
   assert.ok(req.prompt.includes('feasibility-rubric.json'), 'the request names the feasibility rubric')
   assert.ok(req.prompt.includes('gpt-5.6-sol'), 'the reviewer is the opposite-family ratify-reviewer (codex id)')
@@ -443,6 +443,10 @@ test('runtime (S4, INTAKE-38): a codex-unavailable feasibility ratify is the ack
   assert.equal(acked.ret.status, 'accepted', 'the acked re-run ratifies single-family through the opus fallback and promotes')
   const claudeCall = acked.calls.find(c => c.label === 'feasibility-claude:review')
   assert.ok(claudeCall, 'the claude ratify leg ran on the degraded path')
+  // W2-S5 production wiring: the claude feasibility verdict publishes through the archive-then-publish
+  // verb under the feasibility family, archiving before the content-free overwrite of the feasibility gate.
+  const feasPublish = acked.calls.find(c => c.label === 'feasibility:publish')
+  assert.ok(feasPublish && feasPublish.prompt.includes('publish-gate .kiln feasibility'), 'the claude feasibility verdict routes through the W2-S5 publish-gate verb under the feasibility family')
   assert.ok(!acked.calls.some(c => c.label === 'ratify:gate'), 'the codex ratify transport is never called when degraded')
   assert.equal(claudeCall.opts.model, 'opus', 'the fallback ratifier is the opus seat, same family, opposite model')
   assert.ok(acked.ret.beat.toLowerCase().includes('single-family'), 'the success beat says single-family — never a second family that did not sign')

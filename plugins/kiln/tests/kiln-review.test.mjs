@@ -429,7 +429,7 @@ function ratify({ artifact = 'crit-1 · slice-a · behaviour · cmd · outcome\n
     env.PATH = `${fake}:${process.env.PATH}`
     if (gate) env.FAKE_GATE = JSON.stringify(gate)
   }
-  const r = spawnSync('node', [REVIEW, 'ratify', repo, rf, join(repo, 'gate.json')], { encoding: 'utf8', env })
+  const r = spawnSync('node', [REVIEW, 'ratify', repo, rf, join(repo, 'gate.json'), 'ratify'], { encoding: 'utf8', env })
   return { repo, fact: (r.stdout || '').trim(), status: r.status, out: join(repo, 'gate.json') }
 }
 
@@ -523,7 +523,7 @@ test('kiln-review: ratify halts transport_failure when the named artifact file d
   const req = { review_id: 'ratify-1', reviewer_model: 'gpt-5.6-sol', artifact: '.kiln/LAW.md', rubric: RUBRIC }
   const rf = join(repo, 'request.json')
   writeFileSync(rf, JSON.stringify(req))
-  const r = spawnSync('node', [REVIEW, 'ratify', repo, rf, join(repo, 'gate.json')], { encoding: 'utf8' })
+  const r = spawnSync('node', [REVIEW, 'ratify', repo, rf, join(repo, 'gate.json'), 'ratify'], { encoding: 'utf8' })
   assert.equal((r.stdout || '').trim(), 'transport_failure', 'a missing artifact is an honest transport failure')
   assert.equal(r.status, 20)
 })
@@ -674,7 +674,7 @@ function ratifyRecheck({ artifact = 'the regenerated LAW\n', gate, prior, reques
     env.FAKE_GATE = JSON.stringify(gate)
   }
   if (promptOut) env.FAKE_PROMPT_OUT = promptOut
-  const r = spawnSync('node', [REVIEW, 'ratify-recheck', repo, rf, priorFile, join(repo, 'gate.json')], { encoding: 'utf8', env })
+  const r = spawnSync('node', [REVIEW, 'ratify-recheck', repo, rf, priorFile, join(repo, 'gate.json'), 'ratify'], { encoding: 'utf8', env })
   return { repo, fact: (r.stdout || '').trim(), status: r.status, out: join(repo, 'gate.json') }
 }
 
@@ -1565,4 +1565,199 @@ test('run-lock (B02): restoreOrArchive restores an empty lock path and archives 
   assert.ok(appended[0].data.includes('"run_id":"displaced-run"') && appended[0].data.includes('"lock_event":"displaced"'),
     'the displaced record bytes and event survive in the archive')
   assert.deepEqual(u2, ['/proj/.kiln/.claim'], 'the claim is dropped only after a successful archive')
+})
+
+// ── W2-S5 (C3a / B05 / ruling 3): the immutable verdict archive ──────────────────────────────
+// The archive is exercised through publish-gate — the claude-path verb whose whole job is
+// archiveVerdict-then-rename — and through the codex ratify path, which archives inside runGate
+// before its own rename. Both prove the same contract: every validated verdict lands in
+// .kiln/reviews.jsonl before the gate file is overwritten, keyed idempotently so a crash retry
+// never forges a round, and a failed archive never publishes.
+const AF1 = { id: 'f1', criterion: 'testable', location: '.kiln/LAW.md:3', failure_mode: 'vague', evidence: 'no pass condition', minimal_fix: 'state one' }
+const AF2 = { id: 'f2', criterion: 'coherent', location: '.kiln/LAW.md:5', failure_mode: 'contradiction', evidence: 'two rules disagree', minimal_fix: 'reconcile' }
+function verdictOf(kind, reviewId = 'rv-1', findings = [], blockers = []) {
+  return { review_id: reviewId, law_hash: HASH, findings, blockers, verdict: kind }
+}
+function ledgerRows(kilnDir) {
+  const path = join(kilnDir, 'reviews.jsonl')
+  if (!existsSync(path)) return []
+  return readFileSync(path, 'utf8').split('\n').filter((l) => l.trim() !== '').map((l) => JSON.parse(l))
+}
+// publish into an EXISTING kilnDir: writes a fresh candidate (the rename consumes it), spawns the
+// verb, and reports the exit and whether the gate landed. bytes overrides JSON.stringify so a
+// malformed candidate can be tested verbatim.
+function publishInto(kilnDir, { family = 'review', verdict, bytes } = {}) {
+  const candidate = join(kilnDir, '.gate-review.reviewer.tmp')
+  const gate = join(kilnDir, 'gate-review.json')
+  writeFileSync(candidate, bytes !== undefined ? bytes : JSON.stringify(verdict))
+  const r = spawnSync('node', [REVIEW, 'publish-gate', kilnDir, family, candidate, gate], { encoding: 'utf8' })
+  return { status: r.status, published: existsSync(gate) }
+}
+function publishGate({ family = 'review', verdict, bytes, lock } = {}) {
+  const kilnDir = mkdtempSync(join(tmpdir(), 'kiln-archive-'))
+  if (lock) writeFileSync(join(kilnDir, 'run.lock'), JSON.stringify(lock) + '\n')
+  const r = publishInto(kilnDir, { family, verdict, bytes })
+  return { kilnDir, status: r.status, published: r.published, rows: ledgerRows(kilnDir) }
+}
+
+test('archive (W2-S5): publish-gate archives the complete changes_required verdict before it renames — full findings, sha256 of the exact bytes, round 0', () => {
+  const bytes = JSON.stringify(verdictOf('changes_required', 'rv-1', [AF1, AF2]))
+  const r = publishGate({ family: 'review', bytes })
+  assert.equal(r.status, 0, 'the verb publishes')
+  assert.ok(r.published, 'the gate file is renamed into place')
+  assert.equal(r.rows.length, 1, 'exactly one archive row')
+  const row = r.rows[0]
+  assert.equal(row.family, 'review')
+  assert.equal(row.review_id, 'rv-1')
+  assert.equal(row.round, 0, 'the first verdict of a lineage is round 0')
+  assert.equal(row.verdict, 'changes_required')
+  assert.deepEqual(row.findings.map((f) => f.id), ['f1', 'f2'], 'the full findings array is preserved')
+  assert.deepEqual(row.findings[0], AF1, 'each finding is preserved whole, not just its id')
+  assert.deepEqual(row.blockers, [], 'the empty blockers array is preserved')
+  assert.equal(row.law_hash, HASH)
+  assert.equal(row.run_id, null, 'no run.lock present → run_id is honestly null')
+  assert.equal(row.verdict_sha256, createHash('sha256').update(bytes).digest('hex'), 'the digest binds the EXACT original bytes')
+  assert.equal(typeof row.published_at, 'string')
+})
+
+test('archive (W2-S5): a blocked verdict archives its full blockers array — the complete verdict, not just findings', () => {
+  const r = publishGate({ family: 'audit', verdict: verdictOf('blocked', 'rv-b', [], ['goal undeliverable', 'seam broken']) })
+  assert.equal(r.status, 0)
+  assert.equal(r.rows[0].family, 'audit')
+  assert.equal(r.rows[0].verdict, 'blocked')
+  assert.deepEqual(r.rows[0].blockers, ['goal undeliverable', 'seam broken'], 'the complete blockers array survives')
+})
+
+test('archive (W2-S5): run_id is read from the CLI-owned run.lock — a conforming lock is captured, a non-conforming one is null', () => {
+  const good = publishGate({ verdict: verdictOf('accept'), lock: { run_id: 'run-77', owner: 'own-77', conductor_pid: 4242 } })
+  assert.equal(good.rows[0].run_id, 'run-77', 'a W2-S1-shaped lock stamps the run_id')
+  const bad = publishGate({ verdict: verdictOf('accept'), lock: { run_id: 'run-77', owner: 'own-77', conductor_pid: 0 } })
+  assert.equal(bad.rows[0].run_id, null, 'a non-conforming lock (pid not positive) records run_id as null, never a guessed identity')
+})
+
+test('archive (W2-S5): idempotent by (family, review_id, verdict sha256) — a re-presented verdict appends nothing; a genuinely new verdict advances the round', () => {
+  const kilnDir = mkdtempSync(join(tmpdir(), 'kiln-archive-'))
+  const v0 = JSON.stringify(verdictOf('changes_required', 'rv-1', [AF1, AF2]))
+  assert.equal(publishInto(kilnDir, { bytes: v0 }).status, 0)
+  // Crash-retry: the SAME verdict bytes for the same lineage are one event.
+  assert.equal(publishInto(kilnDir, { bytes: v0 }).status, 0)
+  assert.equal(ledgerRows(kilnDir).length, 1, 're-presenting the same verdict appends nothing — no ambiguous round')
+  // A genuinely new verdict (a repair shrank the cohort) for the same lineage advances the round.
+  assert.equal(publishInto(kilnDir, { bytes: JSON.stringify(verdictOf('changes_required', 'rv-1', [AF1])) }).status, 0)
+  const rows = ledgerRows(kilnDir)
+  assert.equal(rows.length, 2, 'the new verdict is a second row')
+  assert.deepEqual(rows.map((r) => r.round), [0, 1], 'rounds are the position in the lineage, monotonic')
+})
+
+test('archive (W2-S5): reviews.jsonl is append-only across a repair→recheck→accept cycle — every round survives and the superseded reject is recoverable', () => {
+  const kilnDir = mkdtempSync(join(tmpdir(), 'kiln-archive-'))
+  publishInto(kilnDir, { bytes: JSON.stringify(verdictOf('changes_required', 'rv-1', [AF1, AF2])) })
+  publishInto(kilnDir, { bytes: JSON.stringify(verdictOf('changes_required', 'rv-1', [AF1])) })
+  publishInto(kilnDir, { bytes: JSON.stringify(verdictOf('accept', 'rv-1')) })
+  const rows = ledgerRows(kilnDir)
+  assert.deepEqual(rows.map((r) => r.verdict), ['changes_required', 'changes_required', 'accept'], 'all three rounds retained — the accept never erases the rejects')
+  assert.deepEqual(rows.map((r) => r.round), [0, 1, 2])
+  assert.deepEqual(rows[0].findings.map((f) => f.id), ['f1', 'f2'], 'the FIRST superseded reject verdict is fully recoverable from the archive')
+  assert.equal(JSON.parse(readFileSync(join(kilnDir, 'gate-review.json'), 'utf8')).verdict, 'accept', 'the mutable gate carries only the current verdict — the archive holds the history the overwrite destroyed')
+})
+
+test('archive (W2-S5): a failed archive fails closed — nothing renames, so no verdict publishes without its archive row (the archive precedes the rename)', () => {
+  const bad = publishGate({ family: 'not-a-family', verdict: verdictOf('accept') })
+  assert.notEqual(bad.status, 0, 'an unknown review family is rejected')
+  assert.equal(bad.published, false, 'the gate file is NOT renamed when the archive is refused — proof the archive gates the publish')
+  assert.equal(bad.rows.length, 0, 'no row is written')
+  const torn = publishGate({ family: 'review', bytes: '{not json' })
+  assert.notEqual(torn.status, 0, 'an unparseable candidate is refused')
+  assert.equal(torn.published, false, 'nothing publishes over an unarchivable verdict')
+})
+
+test('archive (W2-S5): the codex path archives through runGate — a ratify accept lands a ratify-family row before its own rename', () => {
+  const artifact = 'a testable, coherent LAW\n'
+  const r = ratify({ artifact, gate: ratifyGate('accept', digestOf(artifact)) })
+  assert.equal(r.status, 0)
+  const rows = ledgerRows(r.repo)
+  assert.equal(rows.length, 1, 'the codex ratify verdict is archived by runGate before the publish rename')
+  assert.equal(rows[0].family, 'ratify', 'the family rides argv — the shared ratify verb files under the caller-supplied family')
+  assert.equal(rows[0].review_id, 'ratify-1')
+  assert.equal(rows[0].verdict, 'accept')
+  assert.equal(rows[0].verdict_sha256, createHash('sha256').update(readFileSync(r.out, 'utf8')).digest('hex'), 'the archived digest binds the exact published bytes')
+})
+
+// A prior row exactly as archiveVerdict would have written one — used to seed a ledger with a torn tail.
+function priorRow(reviewId, sha, family = 'review', findings = []) {
+  return { family, review_id: reviewId, round: 0, verdict: findings.length ? 'changes_required' : 'accept', findings, blockers: [], law_hash: HASH, run_id: null, published_at: '2026-01-01T00:00:00.000Z', verdict_sha256: sha }
+}
+
+test('archive (W2-S5): a torn final ledger line never wedges the archive — the scan skips it, the new row lands on its own line, the publish proceeds', () => {
+  const kilnDir = mkdtempSync(join(tmpdir(), 'kiln-archive-'))
+  // A crash mid-append leaves a valid row, then a partial final line with NO trailing newline. On an
+  // append-only, never-deleted ledger the OLD intolerant parse would fail closed on this line forever.
+  writeFileSync(join(kilnDir, 'reviews.jsonl'), JSON.stringify(priorRow('rv-old', 'e'.repeat(64))) + '\n' + '{"family":"review","review_id":"rv-torn","rou')
+  const r = publishInto(kilnDir, { bytes: JSON.stringify(verdictOf('accept', 'rv-new')) })
+  assert.equal(r.status, 0, 'the archive tolerates the torn line and publishes — never the crash-safety-defeating wedge')
+  assert.ok(r.published, 'the gate is published')
+  const lines = readFileSync(join(kilnDir, 'reviews.jsonl'), 'utf8').split('\n').filter((l) => l.trim() !== '')
+  assert.equal(lines.length, 3, 'three lines: the valid prior, the torn partial preserved, the new row')
+  assert.throws(() => JSON.parse(lines[1]), 'the torn partial survives verbatim on its own line, never rewritten or merged into')
+  const fresh = JSON.parse(lines[2])
+  assert.equal(fresh.review_id, 'rv-new', 'the new row landed on its OWN line and round-trips — the write-safety newline prevented a cascade merge')
+  assert.equal(fresh.round, 0, 'rv-new is a fresh lineage — round 0')
+})
+
+test('archive (W2-S5): a genuine ledger IO fault still fails closed — the tolerance is for torn lines only, never a real fault', () => {
+  const kilnDir = mkdtempSync(join(tmpdir(), 'kiln-archive-'))
+  mkdirSync(join(kilnDir, 'reviews.jsonl')) // a directory where the ledger file must be — the read is a real EISDIR fault
+  const r = publishInto(kilnDir, { bytes: JSON.stringify(verdictOf('accept', 'rv-new')) })
+  assert.notEqual(r.status, 0, 'an unreadable ledger fails closed on a genuine fault')
+  assert.equal(r.published, false, 'nothing publishes when the ledger cannot be read for a real reason')
+})
+
+test('archive (W2-S5): round derivation over a torn ledger counts only the parseable prior rows of the lineage', () => {
+  const kilnDir = mkdtempSync(join(tmpdir(), 'kiln-archive-'))
+  // One parseable prior row of THIS lineage, a same-id row of a DIFFERENT family, then a torn line.
+  const seed = JSON.stringify(priorRow('rv-1', '1'.repeat(64), 'review', [AF1, AF2])) + '\n'
+    + JSON.stringify(priorRow('rv-1', '2'.repeat(64), 'audit')) + '\n'
+    + '{"family":"review","rev'
+  writeFileSync(join(kilnDir, 'reviews.jsonl'), seed)
+  const r = publishInto(kilnDir, { bytes: JSON.stringify(verdictOf('changes_required', 'rv-1', [AF1])) })
+  assert.equal(r.status, 0)
+  const lines = readFileSync(join(kilnDir, 'reviews.jsonl'), 'utf8').split('\n').filter((l) => l.trim() !== '')
+  const newRow = JSON.parse(lines[lines.length - 1])
+  assert.equal(newRow.review_id, 'rv-1')
+  assert.equal(newRow.round, 1, 'round counts only the one parseable review/rv-1 prior row — never the audit/rv-1 row, never the torn line')
+})
+
+test('archive (W2-S5, B01): verdict_sha256 binds the EXACT published bytes, not a utf8 re-encode — a verdict carrying invalid utf8 still hashes to the renamed gate bytes', () => {
+  // A raw 0xff inside a JSON string value: valid JSON structure, but decoding to a utf8 string and
+  // re-encoding would diverge (U+FFFD), so a string digest would NOT cover the bytes renamed into
+  // the gate. Hashing the raw Buffer binds exactly what renameSync publishes.
+  const bytes = Buffer.concat([
+    Buffer.from('{"review_id":"rv-'), Buffer.from([0xff]),
+    Buffer.from(`","law_hash":"${HASH}","findings":[],"blockers":[],"verdict":"accept"}`),
+  ])
+  const r = publishGate({ family: 'review', bytes })
+  assert.equal(r.status, 0, 'a verdict with invalid utf8 bytes still archives and publishes')
+  assert.equal(r.rows.length, 1)
+  const gateBytes = readFileSync(join(r.kilnDir, 'gate-review.json'))
+  assert.equal(r.rows[0].verdict_sha256, createHash('sha256').update(gateBytes).digest('hex'),
+    'the archived digest equals sha256 of the EXACT bytes renamed into the gate — the byte-for-byte binding survives invalid utf8')
+})
+
+test('archive (W2-S5, A01): a codex-path archive fault fails closed in runGate — the gate is never published when the ledger cannot be read', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'kiln-ratify-'))
+  const artifact = 'a testable, coherent LAW\n'
+  mkdirSync(join(repo, '.kiln'), { recursive: true })
+  writeFileSync(join(repo, '.kiln', 'LAW.md'), artifact)
+  // reviews.jsonl sits beside the gate output (in repo/), pre-created as a DIRECTORY → a real EISDIR
+  // fault when runGate archives. The archive must gate the rename on BOTH families, not just publish-gate.
+  mkdirSync(join(repo, 'reviews.jsonl'))
+  const req = { review_id: 'ratify-1', reviewer_model: 'gpt-5.6-sol', reviewer_effort: 'high', artifact: '.kiln/LAW.md', rubric: RUBRIC }
+  const rf = join(repo, 'request.json')
+  writeFileSync(rf, JSON.stringify(req))
+  const fake = mkdtempSync(join(tmpdir(), 'kiln-fakecodex-'))
+  writeFileSync(join(fake, 'codex'), FAKE_CODEX, { mode: 0o755 })
+  const env = { ...process.env, PATH: `${fake}:${process.env.PATH}`, FAKE_GATE: JSON.stringify(ratifyGate('accept', digestOf(artifact))) }
+  const r = spawnSync('node', [REVIEW, 'ratify', repo, rf, join(repo, 'gate.json'), 'ratify'], { encoding: 'utf8', env })
+  assert.equal(r.status, 20, 'the codex verdict archive fault fails closed — transport_failure exit 20')
+  assert.equal(existsSync(join(repo, 'gate.json')), false, 'the gate is NOT published when runGate cannot archive — the codex path mirrors the publish-gate fail-closed ordering')
 })

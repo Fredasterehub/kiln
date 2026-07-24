@@ -1641,6 +1641,10 @@ test('runtime (S4, INTAKE-38): codex unavailable at LAW ratify is the two-marker
   assert.equal(claudeCall.opts.model, 'opus', 'the fallback ratifier is the opus seat — opposite model to the fable author, same family')
   const seal = acked.calls.find(c => c.label === 'law:seal')
   assert.ok(seal && seal.prompt.includes('seal-law .kiln single-family'), 'the LAW seals with the single-family label — the lock.seal sidecar records the honest family')
+  // W2-S5 production wiring: the claude LAW ratify verdict publishes through the archive-then-publish
+  // verb under the ratify family, so its verdict is archived before the content-free overwrite.
+  const ratifyPublish = acked.calls.find(c => c.label === 'ratify:publish')
+  assert.ok(ratifyPublish && ratifyPublish.prompt.includes('publish-gate .kiln ratify'), 'the claude ratify verdict routes through the W2-S5 publish-gate verb under the ratify family')
 })
 
 test('runtime (S4, INTAKE-38): the degraded LAW claude ratifier holds transport-class on a bad echo, a post-turn tamper, and a stale candidate — never publishes, never seals', async () => {
@@ -2310,8 +2314,8 @@ test('runtime (simple-fire): the gate branches on the surface — logic and mixe
   assert.ok(read && read.prompt.includes('cat ') && read.prompt.includes('.kiln/.gate-review.reviewer.tmp'),
     'the kernel reads the candidate back as raw bytes — never require()+JSON.stringify')
   const publish = logic.calls.find(c => c.label === 'gate:publish')
-  assert.ok(publish && publish.prompt.includes('mv -f') && publish.prompt.includes('.kiln/.gate-review.reviewer.tmp') && publish.prompt.includes('.kiln/gate-review.json'),
-    'the kernel promotes the reviewer-written candidate content-free — mv tmp → gate file')
+  assert.ok(publish && publish.prompt.includes('publish-gate .kiln review') && publish.prompt.includes('.kiln/.gate-review.reviewer.tmp') && publish.prompt.includes('.kiln/gate-review.json'),
+    'the kernel promotes the reviewer-written candidate through the W2-S5 archive-then-publish verb — the review-family verdict is archived before the content-free overwrite')
   const preSeal = logic.calls.find(c => c.label === 'law:pre-seal')
   assert.ok(preSeal.prompt.includes(LAW_CHECK_RECEIPT), 'the pre-seal leg runs the receipt-capturing check verbatim')
   assert.ok(logic.ret.beat.includes('Slice s1 sealed — dual'), 'a claude-gated logic slice seals dual')
@@ -3697,6 +3701,10 @@ test('runtime (S4-B1, INTAKE-38): the degraded claude milestone auditor is seam-
   assert.ok(/cumulative sealed prefix under audit is exactly: s1, s2\b/.test(prompt), 'the cumulative prefix under audit is exactly s1, s2 — the seam and everything before it')
   assert.ok(!/\bs3\b/.test(prompt), 'the later slice s3 is never named — out of scope, never evidence, never a finding')
   assert.ok(!prompt.includes('seal ledger') && !prompt.includes('.kiln/seals.log'), 'the seal ledger is no longer the prefix authority — the kernel projection is')
+  // W2-S5 production wiring: the claude audit verdict publishes through the archive-then-publish verb
+  // under the audit family, archiving the verdict before the content-free overwrite of the audit gate.
+  const auditPublish = calls.find(c => c.label === 'audit-claude:publish')
+  assert.ok(auditPublish && auditPublish.prompt.includes('publish-gate .kiln audit'), 'the claude audit verdict routes through the W2-S5 publish-gate verb under the audit family')
 })
 
 test('runtime (W7-S2): changes_required and blocked both drive the Claude repair + audit-recheck cycle — 11 lands on the reject class and recovers within the cap', async () => {
@@ -4328,7 +4336,7 @@ test('runtime (W8-S3/F): an all-logic/mixed table takes the Claude leg — fallb
   const digest = calls.find(c => c.label === 'screen:digest')
   assert.ok(digest.prompt.includes('sha256sum ' + MF(1)), 'the kernel computes the manifest digest pre-leg via a hands sha256sum leg')
   const publish = calls.find(c => c.label === 'screen:publish')
-  assert.ok(publish.prompt.includes('mv -f .kiln/.gate-review.reviewer.tmp ' + SCREEN), 'the validated candidate promotes content-free to the screen gate file')
+  assert.ok(publish.prompt.includes('publish-gate .kiln screen .kiln/.gate-review.reviewer.tmp ' + SCREEN), 'the validated candidate promotes to the screen gate file through the W2-S5 archive-then-publish verb')
 })
 
 test('runtime (W8-S3/F): the kernel recomputes the screen verb rules — a blocked verdict, an off-table criterion, and a digest mismatch each hold transport-class', async () => {

@@ -1402,7 +1402,11 @@ if (stage !== 'build') {
       // very law it graded; the kernel holds the transport and never publishes or seals.
       const d1 = await idsFetch('sha256sum ' + P.law + ' | cut -d" " -f1', 'ratify:digest-confirm', 'a one-element array holding the 64-hex candidate law digest printed on stdout, [] if exit != 0')
       if (d1.exit !== 0 || d1.ids.length !== 1 || d1.ids[0] !== candidateDigest) return 20
-      const w = await hands('mv -f ' + P.candidate + ' ' + P.gate, 'ratify:publish')
+      // W2-S5: the content-free publish routes through the trusted archive-then-publish verb —
+      // it reads the candidate bytes, appends the validated verdict to the immutable ledger, then
+      // renames the candidate over the gate file. The kernel stays content-blind; a failed archive
+      // fails closed (nonzero) and the ratify holds, never publishing an un-archived verdict.
+      const w = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' publish-gate .kiln ratify ' + P.candidate + ' ' + P.gate, 'ratify:publish')
       return w === 0 ? verdictExit(g.verdict) : 20
     }
     // Content-blind request write: the kernel cannot author files, so it ships the
@@ -1438,8 +1442,8 @@ if (stage !== 'build') {
         ? (mode) => claudeRatify(mode)
         : (mode) => hands(
             mode === 'recheck'
-              ? plugin + '/scripts/kiln-review ratify-recheck . ' + P.ratifyRequest + ' ' + P.gate + ' ' + P.gate
-              : plugin + '/scripts/kiln-review ratify . ' + P.ratifyRequest + ' ' + P.gate,
+              ? plugin + '/scripts/kiln-review ratify-recheck . ' + P.ratifyRequest + ' ' + P.gate + ' ' + P.gate + ' ratify'
+              : plugin + '/scripts/kiln-review ratify . ' + P.ratifyRequest + ' ' + P.gate + ' ratify',
             'ratify:gate'),
       // The pinned prior cohort for the strict-subset transition: the finding ids the last published
       // gate carries. A recheck must strictly shrink it or recoveryDecision holds the LAW.
@@ -1643,7 +1647,10 @@ if (stage !== 'build') {
       if (scope && g.findings.some(f => !scope.has(f.criterion))) return 20
       const d1 = await trioDigest('screen-claude:trio-confirm')
       if (d1.exit !== 0 || d1.ids.length !== 3 || d1.ids.some((h, i) => h !== d0.ids[i])) return 20
-      if (await hands('mv -f ' + P.candidate + ' ' + target, 'screen:publish') !== 0) return 20
+      // W2-S5: archive-then-publish through the trusted verb before the content-free overwrite —
+      // target is the primary screen gate or the escalation gate, and both preserve their verdict
+      // in the immutable ledger first. A failed archive fails closed and the screen holds.
+      if (await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' publish-gate .kiln screen ' + P.candidate + ' ' + target, 'screen:publish') !== 0) return 20
       return verdictExit(g.verdict)
     }
     // W8S3-ADDENDUM-IFF bookkeeping: true the moment THIS run publishes a verdict to
@@ -2040,7 +2047,10 @@ const auditSeam = async (slice) => {
     if (g.blockers.some(b => !fids.has(b))) return 20
     const d1 = await trioDigest('audit-claude:trio-confirm')
     if (d1.exit !== 0 || d1.ids.length !== 3 || d1.ids.some((h, i) => h !== d0.ids[i])) return 20
-    const w = await hands('mv -f ' + P.candidate + ' ' + P.audit, 'audit-claude:publish')
+    // W2-S5: archive-then-publish through the trusted verb before the content-free overwrite of the
+    // audit gate — the validated audit verdict lands in the immutable ledger first. A failed archive
+    // fails closed and the audit holds, never publishing an un-archived verdict.
+    const w = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' publish-gate .kiln audit ' + P.candidate + ' ' + P.audit, 'audit-claude:publish')
     return w === 0 ? verdictExit(g.verdict) : 20
   }
   // The kernel-owned derivation from the last parsed published verdict — the
@@ -2381,7 +2391,11 @@ for (const [idx, entry] of slices.entries()) {
       if (d1.exit !== 0 || d1.ids.length !== 3) return 20
       if (d1.ids.some((h, i) => h !== d0.ids[i])) { trioTorn = true; return 20 }
       // Content-free promotion: the validated candidate becomes the gate file.
-      const w = await hands('mv -f ' + P.candidate + ' ' + P.gate, 'gate:publish')
+      // W2-S5: archive-then-publish through the trusted verb before the content-free overwrite —
+      // the validated build-gate verdict lands in the immutable ledger first, filed under the review
+      // family that shares this gate file with LAW ratify. A failed archive fails closed (nonzero)
+      // and the gate holds, never publishing an un-archived verdict.
+      const w = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' publish-gate .kiln review ' + P.candidate + ' ' + P.gate, 'gate:publish')
       return w === 0 ? verdictExit(g.verdict) : 20
     }
     // S2: a recheck judges executed evidence, so the receipt must be fresh —
