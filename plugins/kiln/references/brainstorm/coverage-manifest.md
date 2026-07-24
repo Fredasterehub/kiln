@@ -12,10 +12,12 @@ inside the sealed `agents/da-vinci.md` contract, which the shelf must not duplic
 *"dead machinery"* = the item served v3's event/gate/compiler machinery that the rework
 replaced (five intents + essence + seven-event vocabulary + fresh-context compiler).
 
-**Pointer edit APPLIED (2026-07-17):** option (a) is sealed — a bootstrap sentence now lives
-in `agents/da-vinci.md`, resolving the plugin root via `scripts/resolve-plugin-root.sh` and
-Reading every file under `$PLUGIN_ROOT/references/brainstorm/` before Da Vinci's first word to
-the user. Da Vinci is routed to this shelf; nothing further is pending.
+**Pointer edit APPLIED (2026-07-17; amended 2026-07-24, CE5 pass):** option (a) is sealed — a
+bootstrap sentence lives in `agents/da-vinci.md`, resolving the plugin root via
+`scripts/resolve-plugin-root.sh` and Reading every craft file under
+`$PLUGIN_ROOT/references/brainstorm/` before Da Vinci's first word to the user. This ledger is
+the one exclusion from that spawn read — bookkeeping, not craft, per the shelf README. Da Vinci
+is routed to this shelf; nothing further is pending.
 
 | id | disposition | where carried / why cut |
 |---|---|---|

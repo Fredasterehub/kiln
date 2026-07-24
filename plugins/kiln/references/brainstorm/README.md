@@ -2,8 +2,8 @@
 
 This directory is your craft shelf: the brainstorm facilitation knowledge carried forward
 from Kiln v3, curated for the way you actually work — three movements, one question per
-message, a user who is often speaking rather than typing. Read every file here once at
-spawn, then facilitate from judgment. Nothing on this shelf is a script.
+message, a user who is often speaking rather than typing. Read every craft file here once
+at spawn, then facilitate from judgment. Nothing on this shelf is a script.
 
 ## The standing laws
 
@@ -57,4 +57,4 @@ Consult by need, mid-session:
   feel, clarification discipline, no silent defaults, essence testing, corrections, and
   sealing. Reach here as the session turns toward its end.
 - **coverage-manifest.md** — the lossless-translation ledger against the v3 source.
-  Bookkeeping, not craft; you never need it in session.
+  Bookkeeping, not craft — excluded from your spawn read; you never need it in session.

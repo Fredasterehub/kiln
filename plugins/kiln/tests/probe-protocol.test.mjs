@@ -14,7 +14,6 @@ const SKILL = read('../skills/kiln-fire/SKILL.md')
 const CARD = read('../cards/brainstorm.md')
 const SWEEP = read('../workflows/research-sweep.js')
 const README = read('../references/brainstorm/README.md')
-const MANIFEST = read('../references/brainstorm/coverage-manifest.md')
 
 test('da-vinci: the message rule is exactly one terminal completion plus at most one nonterminal probe — nothing else', () => {
   assert.ok(/only TERMINAL message you send, and it fires exactly once/.test(DV), 'the completion is the sole terminal message and fires once')
@@ -88,20 +87,27 @@ test('sweep: the probe producer prompt bounds its SOLE write to the named digest
   assert.ok(SWEEP.includes("'.kiln/docs/probe-'"), 'the one permitted write is the deterministic digest under .kiln/docs')
 })
 
-test('shelf: da-vinci mandates reading every brainstorm reference before its first word — the shelf is a mandatory read', () => {
-  assert.ok(DV.includes('Read every file under `$PLUGIN_ROOT/references/brainstorm/`'),
-    'the agent mandates reading the whole brainstorm shelf at spawn')
+test('shelf: da-vinci mandates reading the craft shelf before its first word — every brainstorm reference, with the build-time ledger as the SOLE named exclusion', () => {
+  // The mandatory read stands, and the exclusion list is closed at exactly one file. This
+  // deep-equal fails if the mandatory read is dropped, if the exclusion is silently widened,
+  // or if the clause is reworded out of its bounded shape — any change to the read contract
+  // must be re-ruled here, visibly, never slipped past a prefix match (CE5-B1).
+  const m = DV.match(/Read every file under `\$PLUGIN_ROOT\/references\/brainstorm\/` except\s+([\s\S]*?) — your craft shelf/)
+  assert.ok(m, 'the spawn read mandates the whole brainstorm shelf with a bounded exclusion clause')
+  const exclusions = [...m[1].matchAll(/`([^`]+)`/g)].map((x) => x[1])
+  assert.deepEqual(exclusions, ['coverage-manifest.md'],
+    'the sole exclusion is the build-time translation ledger — bookkeeping, not craft; a second name here is a widened exclusion that needs its own ruling')
 })
 
-test('shelf: the mandatory-read references qualify the channel for the optional probe — none asserts an absolute single-completion-only channel that contradicts the agent probe block', () => {
-  // Da Vinci reads every shelf file, so a reference that still says the completion envelope is the
-  // ONLY thing that ever crosses would contradict the agent's own <probe> block. Each channel
-  // statement on the mandatory shelf must name the bounded probe as the permitted nonterminal, or a
-  // future edit could silently reintroduce the contradiction the workflow probe mode depends on not
-  // existing. These are truthfulness anchors: the probe is bounded, optional, and content-free.
+test('shelf: the README channel law qualifies the mandatory-read shelf for the optional probe — the one channel statement Da Vinci loads never asserts an absolute single-completion-only channel', () => {
+  // A mandatory shelf file that still said the completion envelope is the ONLY thing that ever
+  // crosses would contradict the agent's own <probe> block inside Da Vinci's loaded context.
+  // The README carries the shelf's one channel statement (law 3, restated for every craft file);
+  // it must keep naming the bounded probe as the permitted nonterminal, or a future edit could
+  // silently reintroduce the contradiction the workflow probe mode depends on not existing.
+  // coverage-manifest.md is no longer part of this anchor: it is excluded from the spawn read
+  // (CE5), so a stale channel row there can no longer inject a contradiction into the session —
+  // its AGENT-ONEMSG row stands as historical record, unenforced here.
   assert.ok(/probe/i.test(README) && /nonterminal/.test(README),
     'README law 3 (the window is the boundary) qualifies the channel for the bounded probe nonterminal')
-  const oneMsgRow = MANIFEST.split('\n').find(l => l.includes('AGENT-ONEMSG'))
-  assert.ok(oneMsgRow && /probe/i.test(oneMsgRow) && /nonterminal/.test(oneMsgRow),
-    'the AGENT-ONEMSG coverage row names the optional probe as the permitted nonterminal, not an absolute single-message channel')
 })

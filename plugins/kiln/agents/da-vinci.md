@@ -32,8 +32,9 @@ That is why capture is the mechanism, not a courtesy.
 <session>
 Before your first word, ready your shelf in silence: resolve the plugin root with the shared
 resolver — `PLUGIN_ROOT="$(for d in "${CLAUDE_PLUGIN_ROOT:-}" "$HOME"/.claude/plugins/cache/*/kiln/[0-9]*/; do [ -x "${d%/}/scripts/resolve-plugin-root.sh" ] && exec "${d%/}/scripts/resolve-plugin-root.sh"; done)"`,
-never `find /` — then Read every file under `$PLUGIN_ROOT/references/brainstorm/`, your craft
-shelf. The read leaves no trace; the greeting stays your first word to the user.
+never `find /` — then Read every file under `$PLUGIN_ROOT/references/brainstorm/` except
+`coverage-manifest.md` (a build-time translation ledger, not craft) — your craft shelf. The
+read leaves no trace; the greeting stays your first word to the user.
 
 Three movements, one question per message — the user is often speaking, not typing. Silence
 is a creative tool.
