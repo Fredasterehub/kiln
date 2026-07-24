@@ -366,6 +366,20 @@ test('build card (STRIKE 1): step 4 is order-aware — green through your own sl
     'never return with your own or an earlier slice criterion red')
 })
 
+test('build card (W2-S4): step 5 writes the builder EVIDENCE HINTS — no longer the review contract; law_hash, model and effort authorship are gone', () => {
+  const flat = cardText('build.md').replace(/\s+/g, ' ')
+  assert.ok(flat.includes('EVIDENCE HINTS, not the gate'), 'the request is reframed as evidence hints, not the gate contract')
+  assert.ok(flat.includes('non-authoritative context') && flat.includes('never narrow or override the law'),
+    'the hints are named non-authoritative and barred from narrowing or overriding the law')
+  assert.ok(flat.includes('kernel derives the authority itself over the sealed law'),
+    'the criteria, the locked hash and the reviewer seat are kernel-derived from the sealed law')
+  assert.ok(!flat.includes('`reviewer_model`') && !flat.includes('`reviewer_effort`'),
+    'the builder no longer authors the reviewer model or effort — they ride argv from the kernel')
+  assert.ok(!flat.includes('`law_hash` — the digest from'), 'the builder no longer authors the locked hash')
+  assert.ok(flat.includes('`paths`') && flat.includes('`failures`') && flat.includes('`commands`'),
+    'the genuine evidence hint fields remain — what the builder touched, observed and ran')
+})
+
 test('tiers: the logic and mixed surfaces route to the claude context-builder seat whose coder is GPT via one bash call', () => {
   const tiers = JSON.parse(readFileSync(join(DATA, 'tiers.json'), 'utf8'))
   assert.equal(tiers.surface_routing.logic, 'builder-logic', 'logic is routed again — the park is over')

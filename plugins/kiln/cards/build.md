@@ -24,16 +24,13 @@ you never invoke the transport, write `gate-review.json`, or touch `seals.log`. 
    it before the seal and captures the receipt for the reviewer; a red owned by your slice
    (or an earlier one) reopens it, while a red owned only by a later, still-unbuilt planned
    slice is expected pre-build state and does not block.
-5. Write `.kiln/review-request.json` (temp + rename). The gate transport's model and effort
-   are named once in `data/tiers.json` (beside `data/voice.json`) — read `roles["reviewer-gate"]`,
-   resolve its `alias` through that file's `resolver` map to a concrete id, and write the pair.
+5. Write `.kiln/review-request.json` (temp + rename) — your EVIDENCE HINTS, not the gate's
+   contract. The kernel derives the authority itself over the sealed law: the criteria come
+   from the sealed `.kiln/LAW.md` scoped to your slice, the locked hash from the seal, the
+   reviewer seat from `data/tiers.json` — none of it rides through you. These fields are
+   non-authoritative context that orient the reviewer; they never narrow or override the law.
    The parser requires these fields with these types (unrecognized fields are ignored):
-   - `reviewer_model` — the concrete id at `resolver[roles["reviewer-gate"].alias]` in
-     `data/tiers.json` (tune the gate transport there, never here — zero kernel changes)
-   - `reviewer_effort` — `roles["reviewer-gate"].effort` from the same file, one of
-     `low` | `medium` | `high` | `xhigh`
-   - `law_hash` — the digest from `.kiln/law/lock.hash`, verbatim (lowercase sha-256 hex)
-   - `criteria` — your slice's LAW criteria, verbatim, one nonempty string
+   - `criteria` — a plain note of what your slice covers, one nonempty string
    - `paths` — repo-relative files you touched (string array)
    - `failures` — observed failures, `[]` if none (string array)
    - `commands` — the check commands your evidence rests on, `check.sh` first (string

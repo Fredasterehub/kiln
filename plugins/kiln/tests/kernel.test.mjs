@@ -133,6 +133,16 @@ async function runKernel(kargs, script) {
     'screen-claude:trio-sealed': { exit: 0, ids: ['t1', 't2', 't3'] },
     'screen-claude:trio-digest': { exit: 0, ids: ['t1', 't2', 't3'] },
     'screen-claude:trio-confirm': { exit: 0, ids: ['t1', 't2', 't3'] },
+    // W2-S4: the claude build gate derives its facts from the ONE sealed authority via the
+    // gate-facts verb — the cross-bound sealed law_hash on stdout, the filtered builder hints to
+    // the trusted P.gateFacts file — and brackets its write-capable turn with the trio digest. The
+    // harness answers a coherent sealed law by default so every pre-S4 gate scenario dispatches as
+    // before; a torn-seal scenario overrides gate-claude:facts with exit 22, a mutation scenario
+    // overrides gate-claude:trio-confirm.
+    'gate-claude:facts': { exit: 0, ids: ['a'.repeat(64)] },
+    'gate-claude:trio-sealed': { exit: 0, ids: ['t1', 't2', 't3'] },
+    'gate-claude:trio-digest': { exit: 0, ids: ['t1', 't2', 't3'] },
+    'gate-claude:trio-confirm': { exit: 0, ids: ['t1', 't2', 't3'] },
     ...script,
   }
   const calls = []
@@ -410,9 +420,27 @@ test('state-commit courier: only closed words ride the command, each shell-quote
 })
 
 test('gate command: review and recheck route paths per the sealed transport contract', () => {
-  const p = { plugin: 'plugins/kiln', repo: '/p', request: '.kiln/review-request.json', gate: '.kiln/gate-review.json', priorGate: '.kiln/gate-review.json', delta: '.kiln/repair-delta.md' }
-  assert.equal(gateCmd('review', p), 'plugins/kiln/scripts/kiln-review review /p .kiln/review-request.json .kiln/gate-review.json')
-  assert.equal(gateCmd('recheck', p), 'plugins/kiln/scripts/kiln-review recheck /p .kiln/review-request.json .kiln/gate-review.json .kiln/repair-delta.md .kiln/gate-review.json')
+  // W2-S4: the authoritative closed facts ride argv — the kiln dir, the named slice, and the
+  // reviewer-gate model and effort — so the CLI derives law_hash and law_text from the sealed
+  // trio; the request rides only as builder hints. B01: every word is shq-quoted.
+  const p = { plugin: 'plugins/kiln', repo: '/p', kilnDir: '.kiln', slice: 's1', model: 'gpt-5.6-sol', effort: 'high', request: '.kiln/review-request.json', gate: '.kiln/gate-review.json', priorGate: '.kiln/gate-review.json', delta: '.kiln/repair-delta.md' }
+  assert.equal(gateCmd('review', p), "'plugins/kiln/scripts/kiln-review' 'review' '/p' '.kiln' 's1' 'gpt-5.6-sol' 'high' '.kiln/review-request.json' '.kiln/gate-review.json'")
+  assert.equal(gateCmd('recheck', p), "'plugins/kiln/scripts/kiln-review' 'recheck' '/p' '.kiln' 's1' 'gpt-5.6-sol' 'high' '.kiln/review-request.json' '.kiln/gate-review.json' '.kiln/repair-delta.md' '.kiln/gate-review.json'")
+})
+
+test('gate command (W2-S4/B01): a resolver model carrying shell metacharacters is one inert argv word — never live shell, never a broken arity', () => {
+  // validateTiers accepts any nonempty resolver value, so an injected model must be neutralized by
+  // shq, not trusted. A metacharacter payload and a whitespace value each ride as ONE quoted word.
+  const evil = 'gpt-x; touch /tmp/pwn'
+  const p = { plugin: 'plugins/kiln', repo: '/p', kilnDir: '.kiln', slice: 's1', model: evil, effort: 'high', request: '.kiln/review-request.json', gate: '.kiln/gate-review.json' }
+  const cmd = gateCmd('review', p)
+  assert.ok(cmd.includes("'" + evil + "'"), 'the injected model is wrapped in single quotes as one argv word — the metacharacters are inert inside the quote')
+  // Outside the model quote the surrounding words stay their own quoted tokens — the payload never
+  // escapes to become a second shell command.
+  assert.ok(cmd.endsWith("'.kiln/gate-review.json'") && cmd.includes("'high' '.kiln/review-request.json'"),
+    'the words after the model are still their own quoted argv tokens — the injection did not swallow them')
+  const spaced = gateCmd('review', { ...p, model: 'a model with spaces' })
+  assert.ok(spaced.includes("'a model with spaces'"), 'a whitespace model stays one word — the fixed arity never splits')
 })
 
 // ── K-09/W-01/W-03: the mocked-runtime suite ────────────────────────────────
@@ -890,8 +918,8 @@ test('runtime (W6-07): the ui build gate takes the cwd-relative repo `.` — a w
   })
   assert.equal(ret.status, 'ok', 'a whitespace project path reaches the accept path — the fixed-arity gate never splits into extra argv')
   const cmd = calls.find(c => c.label === 'gate:review').prompt.split('\n').pop() // the command line, after the "Run … in <projectDir>" cwd preamble
-  assert.equal(cmd, gateCmd('review', { plugin: PLUGIN, repo: '.', request: '.kiln/review-request.json', gate: '.kiln/gate-review.json' }),
-    'the review command equals exactly the fixed-arity gate — repo `.`, three whitespace-safe args, matching the ratify gate; any extra argv a bare project path would add breaks equality')
+  assert.equal(cmd, gateCmd('review', { plugin: PLUGIN, repo: '.', kilnDir: '.kiln', slice: 's1', model: 'gpt-5.6-sol', effort: 'high', request: '.kiln/review-request.json', gate: '.kiln/gate-review.json' }),
+    'the review command equals exactly the fixed-arity gate — repo `.`, the cwd-relative kiln dir, the slice, the reviewer-gate model and effort, and the whitespace-safe request/gate paths; any extra argv a bare project path would add breaks equality')
   assert.ok(!cmd.includes('/tmp/a project dir'), 'the project path never reaches the review command as a bare argv token')
 })
 
@@ -1239,7 +1267,6 @@ test('runtime (T-03): the builder leg is surface-routed — ui→builder-ui, log
     'law:pre-seal': GREEN,
     'law:stage-end': GREEN,
     'degraded:check': { exit: 1 },
-    'request:hash': HASH_OK,
     'gate:review': { exit: 0 },
     'gate:invalidate': { exit: 0 },
     'gate-claude:review': OK_ACK,
@@ -2197,7 +2224,6 @@ test('runtime (W2-S3): every post-seal check leg runs the fused run-checks verb,
     'law:pre-seal': GREEN,
     'law:stage-end': GREEN,
     'degraded:check': { exit: 1 },
-    'request:hash': HASH_OK,
     'gate:invalidate': { exit: 0 },
     'gate-claude:review': OK_ACK,
     'gate:read': readCandidate(GATE_ACCEPT),
@@ -2256,7 +2282,6 @@ test('runtime (simple-fire): the gate branches on the surface — logic and mixe
     ...extra,
   })
   const logic = await runKernel({ stage: 'build', projectDir: '/p' }, build('obj|s1|logic', {
-    'request:hash': HASH_OK,
     'gate:invalidate': { exit: 0 },
     'gate-claude:review': OK_ACK,
     'gate:read': readCandidate(GATE_ACCEPT),
@@ -2291,7 +2316,6 @@ test('runtime (simple-fire): the gate branches on the surface — logic and mixe
   assert.ok(preSeal.prompt.includes(LAW_CHECK_RECEIPT), 'the pre-seal leg runs the receipt-capturing check verbatim')
   assert.ok(logic.ret.beat.includes('Slice s1 sealed — dual'), 'a claude-gated logic slice seals dual')
   const mixed = await runKernel({ stage: 'build', projectDir: '/p' }, build('obj|s1|mixed', {
-    'request:hash': HASH_OK,
     'gate:invalidate': { exit: 0 },
     'gate-claude:review': OK_ACK,
     'gate:read': readCandidate(GATE_ACCEPT),
@@ -2305,6 +2329,89 @@ test('runtime (simple-fire): the gate branches on the surface — logic and mixe
   assert.equal(ui.ret.status, 'ok')
   assert.ok(ui.calls.some(c => c.label === 'gate:review'), 'ui keeps the codex gate through scripts/kiln-review')
   assert.ok(!ui.calls.some(c => c.label && c.label.startsWith('gate-claude')), 'no claude gate on the ui surface')
+})
+
+const claudeGateScript = (extra) => ({
+  ...VOICE,
+  'law:preflight': GREEN,
+  'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
+  'ladder:fetch': LADDER,
+  'cap:read': { exit: 0, recovery_cap: 2 },
+  'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
+  'law:pre-seal': GREEN,
+  'law:stage-end': GREEN,
+  'degraded:check': { exit: 1 },
+  'gate:invalidate': { exit: 0 },
+  'gate-claude:review': OK_ACK,
+  'gate:publish': { exit: 0 },
+  'seal:append': { exit: 0 },
+  'state:write': GREEN,
+  ...extra,
+})
+
+test('runtime (W2-S4): the claude gate binds law_hash to the CROSS-BOUND sealed digest — a verdict echoing any other hash fails closed and never publishes', async () => {
+  const withHash = (verdictHash) => claudeGateScript({
+    'gate-claude:facts': { exit: 0, ids: ['a'.repeat(64)] },
+    'gate:read': readCandidate({ review_id: 'r1', law_hash: verdictHash, findings: [], blockers: [], verdict: 'accept' }),
+  })
+  const good = await runKernel({ stage: 'build', projectDir: '/p' }, withHash('a'.repeat(64)))
+  assert.equal(good.ret.status, 'ok', 'a verdict echoing the cross-bound sealed digest validates, publishes and seals')
+  const bad = await runKernel({ stage: 'build', projectDir: '/p' }, withHash('b'.repeat(64)))
+  assert.equal(bad.ret.status, 'transport-failure', 'a verdict echoing any hash but the sealed one fails the semantic mirror')
+  assert.ok(!bad.calls.some(c => c.label === 'gate:publish'), 'the wrong-hash verdict never publishes')
+})
+
+test('runtime (W2-S4): a trio mutated across the write-capable claude gate turn fails the post-turn confirm — nothing publishes', async () => {
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, claudeGateScript({
+    'gate:read': readCandidate(GATE_ACCEPT),
+    // The reviewer turn mutated a trio member: the post-turn confirm differs from the sealed d0.
+    'gate-claude:trio-confirm': { exit: 0, ids: ['x1', 'x2', 'x3'] },
+  }))
+  assert.equal(ret.status, 'transport-failure', 'a trio drift across the claude turn holds fail-closed')
+  assert.ok(!calls.some(c => c.label === 'gate:publish'), 'the mutated-trio verdict never publishes')
+})
+
+test('runtime (W2-S4): the claude gate derives its facts from the ONE sealed authority via gate-facts (production-wiring pin)', () => {
+  // Beside the runtime behavior: the claude gate must route law_hash and the filtered hints through
+  // the gate-facts verb (the same buildGateFacts/hintsFrom authority the codex packet uses) — the
+  // B02 cross-binding and the B04 hint filtering — and classify a torn seal as the integrity class,
+  // never resurrect the bare lock.hash read or feed the reviewer the raw request (the W2-S2
+  // helper-plus-wiring lesson).
+  assert.ok(src.includes("'gate-claude:facts'") && src.includes('gate-facts .kiln '),
+    'the claude gate calls the gate-facts verb for its cross-bound law_hash and filtered hints')
+  assert.ok(!src.includes("'gate-claude:lawhash'") && !src.includes("'gate-claude:request'"),
+    'the bare un-cross-bound lock.hash leg and the standalone request guard are gone — folded into gate-facts')
+  assert.ok(src.includes("trioSealed('gate-claude:trio-sealed')") && src.includes("trioDigest('gate-claude:trio-digest')") && src.includes("trioDigest('gate-claude:trio-confirm')"),
+    'the write-capable claude turn is bracketed before and after by the sealed-trio digest')
+  assert.ok(src.includes('gate-claude:facts') && src.includes('trioTorn = true'),
+    'a torn seal at gate-facts or the bracket sets trioTorn — routed to the both-family TRIO_MISMATCH hold, not transport 20')
+  assert.ok(src.includes('Do not read the raw review request'),
+    'the reviewer reads the trusted filtered gate-facts file, never the raw request')
+  assert.ok(!src.includes("'request:hash'"), 'the original builder-request law_hash fetch is gone from the kernel')
+})
+
+test('runtime (W2-S4): a torn or swapped seal at the claude gate holds the integrity class — no reviewer spawns, nothing publishes (B02/B03)', async () => {
+  // gate-facts runs buildGateFacts, so a swapped lock.hash or any torn trio exits TRIO_MISMATCH.
+  // The claude gate sets trioTorn and the after-loop routes to trioMismatchHold — the integrity
+  // hold, both families consistent — before any reviewer spawns.
+  const torn = await runKernel({ stage: 'build', projectDir: '/p' }, claudeGateScript({
+    'gate-claude:facts': { exit: TRIO_MISMATCH, ids: [] },
+  }))
+  assert.equal(torn.ret.status, 'transport-failure', 'a torn seal holds the run')
+  assert.ok(!torn.calls.some(c => c.label === 'gate-claude:review'), 'no reviewer spawns over a torn seal')
+  assert.ok(!torn.calls.some(c => c.label === 'gate:publish'), 'nothing publishes')
+  // B03 DISTINCTIVELY: the operator hint must be the INTEGRITY class (trioMismatchHold →
+  // 'Rerun the stage after restoring the sealed law' → key rerun-stage), NOT the plain transport
+  // hold ('Rerun stage build after fixing the transport' → key rerun-build). Collapsing the torn
+  // seal to a bare transport 20 would swap this key and this assertion catches it.
+  assert.equal(stateArgs(torn.calls).key, 'rerun-stage', 'a torn seal earns the restore-the-sealed-law hint, never the fix-the-transport hint')
+  // A pre-turn trio-digest drift (d0 disagrees with the sealed trio) is the same integrity class.
+  const drift = await runKernel({ stage: 'build', projectDir: '/p' }, claudeGateScript({
+    'gate-claude:trio-digest': { exit: 0, ids: ['x1', 'x2', 'x3'] },
+  }))
+  assert.equal(drift.ret.status, 'transport-failure', 'a pre-turn trio drift holds the run')
+  assert.ok(!drift.calls.some(c => c.label === 'gate-claude:review'), 'no reviewer spawns over a pre-turn drift')
+  assert.equal(stateArgs(drift.calls).key, 'rerun-stage', 'a pre-turn drift earns the integrity-class hint too, not the transport hint')
 })
 
 test('runtime (simple-fire): a claude gate reject walks the same repair loop — recheck rides the claude gate too', async () => {
@@ -2324,7 +2431,6 @@ test('runtime (simple-fire): a claude gate reject walks the same repair loop —
     'law:pre-recheck': GREEN,
     'law:stage-end': GREEN,
     'degraded:check': { exit: 1 },
-    'request:hash': HASH_OK,
     'gate:invalidate': { exit: 0 },
     'gate-claude:review': OK_ACK,
     'gate-claude:recheck': OK_ACK,
@@ -2371,7 +2477,6 @@ test('runtime (W6-S3 dogfood, build): a recheck that clears nothing holds immedi
     'law:pre-seal': GREEN,
     'law:pre-recheck': GREEN,
     'degraded:check': { exit: 1 },
-    'request:hash': HASH_OK,
     'gate:invalidate': { exit: 0 },
     'gate-claude:review': OK_ACK,
     'gate-claude:recheck': OK_ACK,
@@ -2409,7 +2514,6 @@ test('runtime (W6-XF-01): the claude recheck is bound to the snapshotted prior c
       'law:pre-seal': GREEN,
       'law:pre-recheck': GREEN,
       'degraded:check': { exit: 1 },
-      'request:hash': HASH_OK,
       'gate:invalidate': { exit: 0 },
       'gate-claude:review': OK_ACK,
       'gate-claude:recheck': OK_ACK,
@@ -2473,7 +2577,6 @@ test('runtime (S2/S3): a codex-dead logic slice stops for acknowledgment, then c
   const acked = await runKernel({ stage: 'build', projectDir: '/p' }, {
     ...base,
     'degraded-ack:check': { exit: 0 },
-    'request:hash': HASH_OK,
     'gate:invalidate': { exit: 0 },
     'gate-claude:review': OK_ACK,
     'gate:read': readCandidate(GATE_ACCEPT),
@@ -2518,7 +2621,6 @@ test('runtime (S2/S3): a codex-dead logic slice stops for acknowledgment, then c
     'law:pre-recheck': GREEN,
     'law:stage-end': GREEN,
     'degraded:check': () => ({ exit: degradedChecks.shift() }),
-    'request:hash': HASH_OK,
     'gate:invalidate': { exit: 0 },
     'gate-claude:review': OK_ACK,
     'gate-claude:recheck': OK_ACK,
@@ -2696,7 +2798,6 @@ test('runtime (S1): a claude verdict failing the semantic mirror never publishes
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'degraded:check': { exit: 1 },
-    'request:hash': HASH_OK,
     'gate:invalidate': { exit: 0 },
     'gate-claude:review': OK_ACK,
     'gate:read': readCandidate(verdict),
@@ -2723,7 +2824,6 @@ test('runtime (S1 residual): an empty review_id and a malformed finding each fai
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'degraded:check': { exit: 1 },
-    'request:hash': HASH_OK,
     'gate:invalidate': { exit: 0 },
     'gate-claude:review': OK_ACK,
     'gate:read': readCandidate(verdict),
@@ -2744,7 +2844,11 @@ test('runtime (S1 residual): an empty review_id and a malformed finding each fai
   assert.ok(!badFinding.ret.beat.includes('sealed'), 'never a seal')
 })
 
-test('runtime (S1): an unreadable review request fails the claude gate closed — the codex-path contract', async () => {
+test('runtime (S1/W2-S4): a missing or malformed review request fails the claude gate closed — the demoted request stays a required deliverable', async () => {
+  // W2-S4: the request is demoted to non-authoritative hints, but Sol ruling 3 keeps it a required
+  // builder deliverable — its absence or corruption is the existing builder-failure hold. gate-facts
+  // runs hintsFrom, so a missing or malformed request exits 20 there (the codex verb takes the same
+  // hold), and the claude gate holds before any reviewer runs.
   const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
     ...VOICE,
     'law:preflight': GREEN,
@@ -2754,11 +2858,11 @@ test('runtime (S1): an unreadable review request fails the claude gate closed �
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'degraded:check': { exit: 1 },
-    'request:hash': { exit: 1, ids: [] },
+    'gate-claude:facts': { exit: 20, ids: [] },
     'state:write': GREEN,
   })
   assert.equal(ret.status, 'transport-failure')
-  assert.ok(!calls.some(c => c.label === 'gate-claude:review'), 'no reviewer dispatches without the locked hash')
+  assert.ok(!calls.some(c => c.label === 'gate-claude:review'), 'no reviewer dispatches without the required request')
 })
 
 test('runtime (S2): the codex recheck also judges a fresh receipt — the rerun lands between repair and recheck', async () => {
@@ -2805,7 +2909,6 @@ test('runtime (S2): a red pre-recheck rerun halts law-red — no gate ever judge
     'law:pre-seal': GREEN,
     'law:pre-recheck': { exit: 1, ids: [] },
     'degraded:check': { exit: 1 },
-    'request:hash': HASH_OK,
     'gate:invalidate': { exit: 0 },
     'gate-claude:review': OK_ACK,
     'gate:read': readCandidate(reject),
@@ -2971,7 +3074,6 @@ test('runtime (INTAKE-27): an unparseable candidate halts the claude gate — no
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'degraded:check': { exit: 1 },
-    'request:hash': HASH_OK,
     'gate:invalidate': { exit: 0 },
     'gate-claude:review': OK_ACK,
     'gate:read': { exit: 0, ids: ['this is not json at all'] },
@@ -2992,7 +3094,6 @@ test('runtime (INTAKE-27): a stale or missing candidate never promotes — the {
     'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
     'law:pre-seal': GREEN,
     'degraded:check': { exit: 1 },
-    'request:hash': HASH_OK,
     'gate:invalidate': { exit: 0 },
     'state:write': GREEN,
   }
