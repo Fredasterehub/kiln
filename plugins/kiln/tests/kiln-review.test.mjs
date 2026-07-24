@@ -18,6 +18,17 @@ const REVIEW = fileURLToPath(new URL('../scripts/kiln-review', import.meta.url))
 const NO_REPO = '/no/such/repo/kiln-review-unit-xyz'
 const HASH = 'a'.repeat(64)
 
+// W2-S3: seal-law now digests the whole trio — LAW.md, law/check.sh, slices.json — so a
+// seal test seeds the two non-LAW members and still asserts the unchanged lock.hash/lock.seal
+// byte format over LAW.md alone.
+const TRIO_CHECK = '#!/usr/bin/env bash\nexit 0\n'
+const TRIO_SLICES = JSON.stringify([{ id: 's1', surface: 'mixed' }])
+function seedTrioMembers(dir) {
+  mkdirSync(join(dir, 'law'), { recursive: true })
+  writeFileSync(join(dir, 'law', 'check.sh'), TRIO_CHECK)
+  writeFileSync(join(dir, 'slices.json'), TRIO_SLICES)
+}
+
 // W2-S1 (B02): the claim primitive's double-failure paths cannot arise from any single CLI
 // invocation (reaching restoreOrArchive needs a completed swap, which needs a working archive — the
 // opposite of the failed-archive half). They are pinned by evaluating the helper source directly
@@ -117,6 +128,7 @@ test('kiln-review: append-seal resolves .kiln/seals.log against cwd when given t
 
 test('kiln-review: seal-law persists the LAW digest to law/lock.hash byte-for-byte like sha256sum | cut (64-hex + one trailing newline), exit 0', () => {
   const dir = mkdtempSync(join(tmpdir(), 'kiln-seallaw-'))
+  seedTrioMembers(dir)
   const law = 'crit-1 · slice-a · behaviour · cmd · outcome\n'
   writeFileSync(join(dir, 'LAW.md'), law)
   const digest = createHash('sha256').update(Buffer.from(law)).digest('hex')
@@ -131,6 +143,7 @@ test('kiln-review: seal-law persists the LAW digest to law/lock.hash byte-for-by
 
 test('kiln-review: seal-law rejects an invalid family label and writes nothing (exit 20)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'kiln-seallaw-'))
+  seedTrioMembers(dir)
   writeFileSync(join(dir, 'LAW.md'), 'a law\n')
   const r = spawnSync('node', [REVIEW, 'seal-law', dir, 'triple'], { encoding: 'utf8' })
   assert.equal(r.status, 20, 'a label that is neither dual nor single-family is a transport failure')
@@ -153,6 +166,7 @@ test('kiln-review: seal-law halts transport_failure (exit 20) when LAW.md is mis
 
 test('kiln-review: seal-law is content-addressed — different LAW bytes reseal a different digest into law/lock.hash', () => {
   const dir = mkdtempSync(join(tmpdir(), 'kiln-seallaw-'))
+  seedTrioMembers(dir)
   writeFileSync(join(dir, 'LAW.md'), 'first law\n')
   assert.equal(spawnSync('node', [REVIEW, 'seal-law', dir, 'dual'], { encoding: 'utf8' }).status, 0)
   const first = readFileSync(join(dir, 'law', 'lock.hash'), 'utf8')
@@ -162,6 +176,169 @@ test('kiln-review: seal-law is content-addressed — different LAW bytes reseal 
   assert.notEqual(first, second, 'a changed LAW reseals a different digest')
   assert.equal(second, `${createHash('sha256').update(Buffer.from('second, different law\n')).digest('hex')}\n`,
     'the reseal overwrites law/lock.hash with the new digest, same byte format')
+})
+
+// ── W2-S3: the trio seal + the fused verify-and-run verb ───────────────────────────────
+// seal-law digests all three trio files into law/trio.hash; run-checks re-verifies that trio
+// against the live bytes and only then executes check.sh in-process (B04). A drifted member
+// exits TRIO_MISMATCH and check.sh never runs; an absent or torn trio.hash is a transport stop.
+const TRIO_RED = '#!/usr/bin/env bash\necho s1\necho s2\nexit 1\n'
+// The production shape: a project dir holding .kiln, sealed and run with kilnDir '.kiln' and
+// cwd = the project dir, exactly as the kernel launches the verb.
+function sealTrioDir({ law = 'the law\n', check = TRIO_CHECK, slices = TRIO_SLICES } = {}) {
+  const proj = mkdtempSync(join(tmpdir(), 'kiln-trio-'))
+  const kiln = join(proj, '.kiln')
+  mkdirSync(join(kiln, 'law'), { recursive: true })
+  writeFileSync(join(kiln, 'LAW.md'), law)
+  writeFileSync(join(kiln, 'law', 'check.sh'), check)
+  writeFileSync(join(kiln, 'slices.json'), slices)
+  assert.equal(spawnSync('node', [REVIEW, 'seal-law', '.kiln', 'dual'], { cwd: proj, encoding: 'utf8' }).status, 0, 'the trio seals')
+  return { proj, kiln }
+}
+const runChecks = ({ proj }) => {
+  const r = spawnSync('node', [REVIEW, 'run-checks', '.kiln'], { cwd: proj, encoding: 'utf8' })
+  return { status: r.status, stdout: r.stdout || '', fact: (r.stdout || '').trim() }
+}
+
+test('kiln-review: seal-law writes law/trio.hash — exactly three lines, fixed order, each <member> <64hex> over LAW.md, check.sh, slices.json', () => {
+  const law = 'the whole law\n'
+  const { kiln } = sealTrioDir({ law })
+  const trio = readFileSync(join(kiln, 'law', 'trio.hash'), 'utf8')
+  assert.equal(trio, `LAW.md ${digestOf(law)}\ncheck.sh ${digestOf(TRIO_CHECK)}\nslices.json ${digestOf(TRIO_SLICES)}\n`,
+    'the trio seals each member individually, in the fixed LAW.md / check.sh / slices.json order')
+  // The trio is written whenever the lock is — a sealed law is never lock-present, trio-absent.
+  assert.ok(existsSync(join(kiln, 'law', 'trio.hash')) && existsSync(join(kiln, 'law', 'lock.hash')),
+    'the seal leaves both the trio and the lock on disk')
+  assert.equal(readFileSync(join(kiln, 'law', 'lock.hash'), 'utf8'), `${digestOf(law)}\n`,
+    'lock.hash stays the bare LAW.md digest — byte-exact legacy (ruling 2)')
+})
+
+test('kiln-review: seal-law halts transport_failure (exit 20) when a non-LAW trio member is missing — the law is not whole enough to seal', () => {
+  for (const missing of ['law/check.sh', 'slices.json']) {
+    const dir = mkdtempSync(join(tmpdir(), 'kiln-trio-'))
+    mkdirSync(join(dir, 'law'), { recursive: true })
+    writeFileSync(join(dir, 'LAW.md'), 'a law\n')
+    writeFileSync(join(dir, 'law', 'check.sh'), TRIO_CHECK)
+    writeFileSync(join(dir, 'slices.json'), TRIO_SLICES)
+    const abs = join(dir, missing)
+    spawnSync('rm', ['-f', abs])
+    const r = spawnSync('node', [REVIEW, 'seal-law', dir, 'dual'], { encoding: 'utf8' })
+    assert.equal(r.status, 20, `a missing ${missing} is a transport failure`)
+    assert.equal((r.stdout || '').trim(), 'transport_failure', 'the honest fact rides stdout')
+    assert.ok(!existsSync(join(dir, 'law', 'trio.hash')), 'no trio.hash is written when a member cannot be read')
+    assert.ok(!existsSync(join(dir, 'law', 'lock.hash')), 'no lock.hash is written when the seal cannot complete')
+  }
+})
+
+test('kiln-review: seal-law reseals trio.hash — a changed member reseals a different trio digest', () => {
+  const { proj, kiln } = sealTrioDir()
+  const first = readFileSync(join(kiln, 'law', 'trio.hash'), 'utf8')
+  writeFileSync(join(kiln, 'law', 'check.sh'), '#!/usr/bin/env bash\necho changed\nexit 0\n')
+  assert.equal(spawnSync('node', [REVIEW, 'seal-law', '.kiln', 'dual'], { cwd: proj, encoding: 'utf8' }).status, 0)
+  const second = readFileSync(join(kiln, 'law', 'trio.hash'), 'utf8')
+  assert.notEqual(first, second, 'a changed check.sh reseals a different trio.hash')
+})
+
+test('kiln-review: run-checks over a verified trio runs check.sh, streams its stdout verbatim, and passes its exit code through — green and the red ids-on-stdout contract', () => {
+  const green = runChecks(sealTrioDir({ check: '#!/usr/bin/env bash\necho green-ok\nexit 0\n' }))
+  assert.equal(green.status, 0, 'a green check exits 0 through the verb')
+  assert.equal(green.stdout, 'green-ok\n', 'the verified check output reaches stdout verbatim')
+  const red = runChecks(sealTrioDir({ check: TRIO_RED }))
+  assert.equal(red.status, 1, 'the red check exit code passes through the verb')
+  assert.equal(red.stdout, 's1\ns2\n', 'the owning slice ids the red check prints reach stdout unchanged')
+})
+
+test('kiln-review: run-checks fails closed on a single-member tamper — trio_mismatch (exit 22) and check.sh NEVER runs', () => {
+  // B06: the sealed check writes the sentinel .kiln/ran; the check.sh tamper replaces it with a
+  // DIFFERENT script that ALSO writes .kiln/ran. If run-checks ever spawned either script before
+  // returning 22 the sentinel would land, so its absence proves the tampered check was not run.
+  const SEALED = '#!/usr/bin/env bash\ntouch .kiln/ran\nexit 0\n'
+  const TAMPERED_CHECK = '#!/usr/bin/env bash\ntouch .kiln/ran\nexit 1\n'
+  for (const member of ['LAW.md', 'law/check.sh', 'slices.json']) {
+    const { kiln } = sealTrioDir({ check: SEALED })
+    writeFileSync(join(kiln, member), member === 'law/check.sh' ? TAMPERED_CHECK : 'tampered bytes not in the seal\n')
+    const r = runChecks({ proj: dirname(kiln) })
+    assert.equal(r.status, 22, `a tampered ${member} exits trio_mismatch (22), distinct from transport 20`)
+    assert.equal(r.fact, 'trio_mismatch', 'the honest trio_mismatch fact rides stdout')
+    assert.ok(!existsSync(join(kiln, 'ran')), `check.sh never ran on the ${member} tamper — the sentinel stayed absent`)
+  }
+})
+
+test('kiln-review: run-checks holds trio_mismatch (22) on a torn seal — a trio removed or malformed beside its locks is the integrity class the kernel holds on', () => {
+  // A trio.hash removed while the locks remain is a partial seal — the B02 boundary failure.
+  const gone = sealTrioDir()
+  spawnSync('rm', ['-f', join(gone.kiln, 'law', 'trio.hash')])
+  const g = runChecks(gone)
+  assert.equal(g.status, 22, 'a trio removed beside its locks is a torn seal — held, not a bare 20 the guard could read as no-owner')
+  assert.equal(g.fact, 'trio_mismatch', 'the torn-seal fact is the integrity class')
+  // A malformed trio.hash beside the locks is likewise the integrity class.
+  const torn = sealTrioDir()
+  writeFileSync(join(torn.kiln, 'law', 'trio.hash'), 'LAW.md not-a-digest\nonly two\n')
+  assert.equal(runChecks(torn).status, 22, 'a malformed trio.hash beside its locks holds trio_mismatch, never a silent run')
+})
+
+test('kiln-review: run-checks over a wholly unsealed law is a transport stop (20) — no seal to run its checks against', () => {
+  const bare = sealTrioDir()
+  for (const f of ['law/trio.hash', 'law/lock.hash', 'law/lock.seal']) spawnSync('rm', ['-f', join(bare.kiln, f)])
+  const r = runChecks(bare)
+  assert.equal(r.status, 20, 'with no seal artifact at all the law is honestly unsealed — a transport stop, not an integrity tamper')
+  assert.equal(r.fact, 'transport_failure', 'the unsealed fact is transport, distinct from the torn-seal integrity class')
+})
+
+test('kiln-review: audit fails closed when slices.json is tampered after the seal — trio_mismatch (exit 22) before any spawn', () => {
+  const fx = auditRepo()
+  writeFileSync(join(fx.kiln, 'slices.json'), JSON.stringify([{ id: 'other', surface: 'ui' }]))
+  const r = runAudit(fx)
+  assert.equal(r.status, 22, 'the audit verifies the slices.json it parses against the sealed trio, in one operation')
+  assert.equal(r.fact, 'trio_mismatch', 'the tamper rides stdout as trio_mismatch')
+})
+
+test('kiln-review: audit over a torn seal (a lock present without its trio) holds trio_mismatch — the integrity class, before any spawn', () => {
+  const fx = auditRepo({ trio: false })
+  const r = runAudit(fx)
+  assert.equal(r.status, 22, 'a lock present without a trio.hash is a torn seal — one coherent authority or none')
+  assert.equal(r.fact, 'trio_mismatch', 'the torn-seal halt is the integrity class, never a silent audit')
+})
+
+test('kiln-review: sealedAuthority admits ONLY a whole cross-bound seal — every crashed-reseal partial holds trio_mismatch (B01)', () => {
+  const partial = (mutate) => {
+    const { proj, kiln } = sealTrioDir()
+    mutate(kiln)
+    return runChecks({ proj })
+  }
+  const rm = (k, ...f) => spawnSync('rm', ['-f', ...f.map((x) => join(k, x))])
+  // trio alone (both locks gone), trio + lock.hash (no seal sidecar), lock.seal alone.
+  assert.equal(partial((k) => rm(k, 'law/lock.hash', 'law/lock.seal')).status, 22, 'a trio without its locks is not whole')
+  assert.equal(partial((k) => rm(k, 'law/lock.seal')).status, 22, 'a trio and lock.hash without the seal sidecar is not whole')
+  assert.equal(partial((k) => rm(k, 'law/trio.hash', 'law/lock.hash')).status, 22, 'a lone lock.seal is not a whole seal')
+  // The crash Sol named: a fresh trio promoted beside a STALE lock.hash (old LAW digest).
+  assert.equal(partial((k) => writeFileSync(join(k, 'law', 'lock.hash'), 'b'.repeat(64) + '\n')).status, 22,
+    'a fresh trio beside a stale lock.hash disagrees on the LAW digest — held, never run')
+})
+
+test('kiln-review: sealedAuthority holds the legacy locks to their BYTE-EXACT shapes — an extra newline, a surrounding space, or a garbage seal suffix each hold trio_mismatch (22)', () => {
+  const probe = (mutate) => { const { proj, kiln } = sealTrioDir(); mutate(kiln); return runChecks({ proj }) }
+  const lock = (k) => join(k, 'law', 'lock.hash')
+  const seal = (k) => join(k, 'law', 'lock.seal')
+  // lock.hash with an extra trailing newline is not exactly <64hex>\n.
+  assert.equal(probe((k) => writeFileSync(lock(k), readFileSync(lock(k), 'utf8') + '\n')).status, 22, 'an extra newline in lock.hash is not the exact shape')
+  // lock.hash with surrounding spaces — a trim() would have accepted it.
+  assert.equal(probe((k) => writeFileSync(lock(k), '  ' + readFileSync(lock(k), 'utf8').trim() + '  \n')).status, 22, 'surrounding space in lock.hash is not the exact shape')
+  // lock.seal with a garbage suffix after the label — a first-token parse would have accepted it.
+  assert.equal(probe((k) => writeFileSync(seal(k), readFileSync(seal(k), 'utf8').split(' ')[0] + ' dual garbage suffix\n')).status, 22, 'a garbage suffix on lock.seal is not the exact shape')
+  // lock.seal with a wrong label.
+  assert.equal(probe((k) => writeFileSync(seal(k), readFileSync(seal(k), 'utf8').split(' ')[0] + ' triple\n')).status, 22, 'a label outside dual|single-family is not the exact shape')
+})
+
+test('kiln-review: the slices verb verify-and-parses — a slices.json tampered after seal holds trio_mismatch (22), no descriptor projection escapes (B03)', () => {
+  const { proj, kiln } = sealTrioDir()
+  const clean = spawnSync('node', [REVIEW, 'slices', '.kiln'], { cwd: proj, encoding: 'utf8' })
+  assert.equal(clean.status, 0, 'a verified slices.json prints its descriptor projection')
+  assert.equal(clean.stdout.trim(), JSON.stringify(['obj|s1|mixed|']), 'the projection is byte-compatible with the former node -p leg')
+  writeFileSync(join(kiln, 'slices.json'), JSON.stringify([{ id: 'sneaky', surface: 'ui' }]))
+  const r = spawnSync('node', [REVIEW, 'slices', '.kiln'], { cwd: proj, encoding: 'utf8' })
+  assert.equal(r.status, 22, 'a tampered slices.json holds — the fused fetch never prints drifted descriptors a builder would run')
+  assert.equal(r.stdout.trim(), 'trio_mismatch')
 })
 
 test('kiln-review: the ui reviewer rules on correctness only — creative direction and taste are out of remit', () => {
@@ -292,6 +469,7 @@ test('kiln-review: the candidate digest is sha256 of the artifact bytes — a mi
 test('kiln-review: the ratify candidate digest is byte-identical to what seal-law would lock for the same artifact', () => {
   const artifact = 'crit-1 · slice-a · behaviour · cmd · outcome\n'
   const sealDir = mkdtempSync(join(tmpdir(), 'kiln-seallaw-'))
+  seedTrioMembers(sealDir)
   writeFileSync(join(sealDir, 'LAW.md'), artifact)
   assert.equal(spawnSync('node', [REVIEW, 'seal-law', sealDir, 'dual'], { encoding: 'utf8' }).status, 0)
   const locked = readFileSync(join(sealDir, 'law', 'lock.hash'), 'utf8').trim()
@@ -548,14 +726,20 @@ const AUDIT_SLICES = [
   { id: 's3', surface: 'logic', milestone: 'first light' },
 ]
 
-function auditRepo({ slices = AUDIT_SLICES, law = 'crit-m1 · milestone · behaviour\n', receipt = 'checks ok\n', lock } = {}) {
+function auditRepo({ slices = AUDIT_SLICES, law = 'crit-m1 · milestone · behaviour\n', receipt = 'checks ok\n', lock, check = TRIO_CHECK, trio = true } = {}) {
   const repo = mkdtempSync(join(tmpdir(), 'kiln-audit-'))
   const kiln = join(repo, '.kiln')
   mkdirSync(join(kiln, 'law'), { recursive: true })
   writeFileSync(join(kiln, 'slices.json'), JSON.stringify(slices))
   writeFileSync(join(kiln, 'LAW.md'), law)
+  writeFileSync(join(kiln, 'law', 'check.sh'), check)
   const digest = digestOf(law)
-  if (lock !== null) writeFileSync(join(kiln, 'law', 'lock.hash'), `${lock ?? digest}\n`)
+  // W2-S3 (B01): the audit consumes ONE coherent sealed authority, so the fixture seals the
+  // whole trio the real way — trio.hash, lock.hash and the cross-bound lock.seal all agree.
+  // `trio: false` and `lock: null` then remove a member to model a TORN seal that must hold.
+  assert.equal(spawnSync('node', [REVIEW, 'seal-law', kiln, 'dual'], { encoding: 'utf8' }).status, 0, 'the audit fixture seals its trio')
+  if (!trio) spawnSync('rm', ['-f', join(kiln, 'law', 'trio.hash')])
+  if (lock === null) spawnSync('rm', ['-f', join(kiln, 'law', 'lock.hash')])
   if (receipt !== null) writeFileSync(join(kiln, 'check-receipt.txt'), receipt)
   return { repo, kiln, digest }
 }
@@ -650,8 +834,8 @@ test('kiln-review: the audit argv contract — bad effort halts by name, a wrong
   assert.equal(unknownSeam.fact, 'transport_failure', 'a seam slice absent from slices.json halts')
   assert.equal(unknownSeam.status, 20)
   const noLock = runAudit(auditRepo({ lock: null }))
-  assert.equal(noLock.fact, 'transport_failure', 'a missing law/lock.hash halts — the audit requires the sealed digest')
-  assert.equal(noLock.status, 20)
+  assert.equal(noLock.fact, 'trio_mismatch', 'a lock.hash removed from a sealed trio is a torn seal — the coherent-authority integrity class')
+  assert.equal(noLock.status, 22)
 })
 
 test('kiln-review: the audit verb-level shape rules — an out-of-findings blocker or a blocked verdict with empty findings is exit 20, never published', () => {

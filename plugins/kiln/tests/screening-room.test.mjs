@@ -133,7 +133,12 @@ function screenRepo({ gen = 3, keyframes = ['keyframes/kf-load.png', 'keyframes/
   const kiln = join(repo, '.kiln')
   mkdirSync(join(kiln, 'law'), { recursive: true })
   writeFileSync(join(kiln, 'LAW.md'), LAW)
-  writeFileSync(join(kiln, 'law', 'lock.hash'), `${digestOf(LAW)}\n`)
+  // W2-S3 (B01): the screen verb consumes ONE coherent sealed authority, so the fixture seals
+  // its whole trio the real way — trio.hash, lock.hash and the cross-bound lock.seal all agree.
+  // screenLawFacts verifies the LAW.md bytes it parses the Perceptual table from against it.
+  writeFileSync(join(kiln, 'law', 'check.sh'), '#!/usr/bin/env bash\nexit 0\n')
+  writeFileSync(join(kiln, 'slices.json'), JSON.stringify([{ id: 'slice-a', surface: 'ui' }]))
+  assert.equal(spawnSync('node', [REVIEW, 'seal-law', kiln, 'dual'], { encoding: 'utf8' }).status, 0, 'the screen fixture seals its trio')
   if (!evidence) return { repo, kiln }
   const genDir = join(kiln, 'evidence', `gen-${gen}`)
   mkdirSync(genDir, { recursive: true })
@@ -279,6 +284,45 @@ test('screen: the digest binding is the manifest sha256 — a reviewer echoing t
   assert.equal(r.status, 20)
   assert.ok(r.stderr.includes('graded generation manifest digest'), 'the binding names the manifest digest, not the LAW lock')
   assert.ok(!existsSync(r.out))
+})
+
+test('screen (W2-S3): a LAW.md tampered after the seal fails closed — trio_mismatch (exit 22) before any spawn', () => {
+  const fx = screenRepo()
+  writeFileSync(join(fx.kiln, 'LAW.md'), '# LAW\ntampered — off the seal\n')
+  const r = runScreen(fx)
+  assert.equal(r.status, 22, 'the screen verifies the LAW.md it derives the Perceptual table from against the sealed trio')
+  assert.equal(r.fact, 'trio_mismatch', 'the tamper rides stdout as trio_mismatch, before any codex spawn')
+  assert.ok(!existsSync(r.out), 'nothing is published over tampered law')
+})
+
+test('screen (W2-S3 B04): the criterion and family derivations verify their bytes — a LAW.md changed after seal holds both verbs at trio_mismatch (22)', () => {
+  const fx = screenRepo({ evidence: false })
+  writeFileSync(join(fx.kiln, 'LAW.md'),
+    '# LAW\n\n## Perceptual\n\n| criterion id | owning slice | dim | requirement | proxy command | expected | reference |\n| --- | --- | --- | --- | --- | --- | --- |\n| P-injected | slice-a | fidelity-to-requirement | injected | test -f x | exit 0 | |\n')
+  const crit = spawnSync('node', [REVIEW, 'screen-criteria', fx.kiln], { encoding: 'utf8' })
+  assert.equal(crit.status, 22, 'screen-criteria refuses a tampered LAW.md — the claude ownership key never derives from off-seal bytes')
+  const fam = spawnSync('node', [REVIEW, 'perceptual-family', fx.kiln], { encoding: 'utf8' })
+  assert.equal(fam.status, 22, 'perceptual-family refuses a tampered LAW.md — the screen routing never derives from off-seal bytes')
+})
+
+test('screen (W2-S3 B04): the GPT screen verb binds to the SEALED all-three trio — a check.sh drifted after seal holds trio_mismatch (22), NO verdict published', () => {
+  const fx = screenRepo()
+  // Mutate ONLY law/check.sh after sealing — LAW.md and slices.json are untouched. The screen
+  // must still hold: it binds to the whole sealed trio, not LAW.md alone (Sol r2 probe).
+  writeFileSync(join(fx.kiln, 'law', 'check.sh'), '#!/usr/bin/env bash\necho drifted\nexit 0\n')
+  const r = runScreen(fx, { gate: { review_id: '__ECHO__', law_hash: fx.digest, findings: [], blockers: [], verdict: 'accept' } })
+  assert.equal(r.status, 22, 'a post-seal check.sh drift holds the screen — the all-three trio binding, not a LAW.md-only check')
+  assert.equal(r.fact, 'trio_mismatch', 'the drift rides stdout as trio_mismatch')
+  assert.ok(!existsSync(r.out), 'no verdict is published over a drifted check.sh')
+})
+
+test('screen (W2-S3): a torn seal (a lock present without its trio) holds trio_mismatch — the integrity class, before any spawn', () => {
+  const fx = screenRepo()
+  spawnSync('rm', ['-f', join(fx.kiln, 'law', 'trio.hash')])
+  const r = runScreen(fx)
+  assert.equal(r.status, 22, 'a lock present without a trio.hash is a torn seal — one coherent authority or none')
+  assert.equal(r.fact, 'trio_mismatch', 'the torn-seal halt is the integrity class, never a silent screen')
+  assert.ok(!existsSync(r.out), 'nothing is published over an unverifiable seal')
 })
 
 test('screen: pre-spawn rejects — no CURRENT generation, a missing required class, an exceeded bound, misdescribed metadata, a missing or escaping file — exit 20, NOTHING published, codex never spawns', () => {

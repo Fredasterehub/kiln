@@ -23,6 +23,12 @@ const REJECT = 10
 const BLOCKED = 11
 const TRANSPORT_FAILURE = 20
 const CODEX_UNAVAILABLE = 21
+// W2-S3 (C2 / B04 / ruling 2): the LAW seal covers all THREE trio files — LAW.md, the
+// executable law/check.sh, and the slice plan slices.json — each digested individually into
+// .kiln/law/trio.hash. TRIO_MISMATCH is the closed exit a live file that no longer matches
+// its sealed digest earns; it is DISTINCT from a transport failure (an absent or torn
+// trio.hash) so a caller can tell a tamper apart from a missing seal.
+const TRIO_MISMATCH = 22
 const EFFORTS = ['low', 'medium', 'high', 'xhigh']
 const LAW_HASH = /^[0-9a-f]{64}$/
 const BROKEN_CODEX = /(?:unknown|unrecognized|unexpected|invalid).*(?:argument|option|subcommand)|(?:argument|option).*(?:not found|not recognized)/i
@@ -162,6 +168,80 @@ function auditRequest(model, effort, family = 'audit') {
   return { reviewerModel: model, reviewerEffort: effort }
 }
 
+// W2-S3: the sealed trio, in the fixed order seal-law writes and every reader checks.
+// LAW.md and slices.json sit at the kiln root; the executable check.sh sits under law/.
+const TRIO_MEMBERS = ['LAW.md', 'check.sh', 'slices.json']
+const trioMemberPath = (kilnDir, name) => (name === 'check.sh' ? join(kilnDir, 'law', name) : join(kilnDir, name))
+const trioHashPath = (kilnDir) => join(kilnDir, 'law', 'trio.hash')
+
+// W2-S3 (B01): the sealed law is ONE coherent authority, not three loose files. seal-law
+// writes trio.hash (per-member digests), lock.hash (the LAW.md digest) and the lock.seal
+// sidecar (`<digest> <label>`); a crashed reseal could otherwise promote a new trio.hash
+// beside stale locks. sealedAuthority admits ONLY a whole, cross-bound seal — all three
+// present and well-formed, and trio[LAW.md] === lock.hash === the lock.seal digest — and
+// returns its verified facts. Any PARTIAL or MISMATCHED combination is a TRIO_MISMATCH hold,
+// the integrity class (B02) every sealed consumer holds on. NONE of the three present is an
+// honest unsealed law (returns {sealed:false}) for the pre-seal flows. This is the single
+// gate so the rule cannot drift per-site.
+function sealedAuthority(kilnDir) {
+  const read = (p) => {
+    try {
+      return readFileSync(p, 'utf8')
+    } catch (error) {
+      if (error.code === 'ENOENT') return null
+      stop('trio_mismatch', `the sealed law could not be read: ${error.message}`, TRIO_MISMATCH)
+    }
+  }
+  const trioRaw = read(trioHashPath(kilnDir))
+  const lockRaw = read(join(kilnDir, 'law', 'lock.hash'))
+  const sealRaw = read(join(kilnDir, 'law', 'lock.seal'))
+  if (trioRaw === null && lockRaw === null && sealRaw === null) return { sealed: false }
+  // Some seal artifact exists — the law claims to be sealed, so ALL THREE must be whole.
+  const fail = (why) => stop('trio_mismatch', `the sealed law is not whole: ${why} — reseal the law before it is consumed`, TRIO_MISMATCH)
+  if (trioRaw === null) fail('law/trio.hash is absent beside a lock')
+  const lines = trioRaw.split('\n')
+  if (lines.length !== TRIO_MEMBERS.length + 1 || lines[TRIO_MEMBERS.length] !== '') fail('law/trio.hash is not three trailing-newline lines')
+  const trio = {}
+  for (let i = 0; i < TRIO_MEMBERS.length; i += 1) {
+    const parts = lines[i].split(' ')
+    if (parts.length !== 2 || parts[0] !== TRIO_MEMBERS[i] || !LAW_HASH.test(parts[1])) fail(`law/trio.hash line ${i + 1} is malformed`)
+    trio[TRIO_MEMBERS[i]] = parts[1]
+  }
+  // The authority gate holds the legacy locks to their BYTE-EXACT shipped shapes — no trim, no
+  // first-token parse — so an extra newline, surrounding space, wrong label, or trailing
+  // garbage is a torn seal, never a whole one. (The ratify and audit consumers that trim their
+  // OWN lock.hash reads stay as they are; only this gate is byte-exact.)
+  if (lockRaw === null) fail('law/lock.hash is absent beside the trio')
+  if (!/^[0-9a-f]{64}\n$/.test(lockRaw)) fail('law/lock.hash is not exactly a 64-hex digest and one newline')
+  const lockHash = lockRaw.slice(0, 64)
+  if (sealRaw === null) fail('law/lock.seal is absent beside the trio')
+  if (!/^[0-9a-f]{64} (?:dual|single-family)\n$/.test(sealRaw)) fail('law/lock.seal is not exactly <digest> <dual|single-family> and one newline')
+  const sealDigest = sealRaw.slice(0, 64)
+  if (trio['LAW.md'] !== lockHash || lockHash !== sealDigest) fail('trio.hash, lock.hash and lock.seal disagree on the LAW digest')
+  return { sealed: true, trio, lockHash, sealDigest }
+}
+
+// Read the bytes a verb is about to parse and, if the law is sealed, confirm they still match
+// the sealed trio digest BEFORE the parse — verification and consumption are ONE operation
+// over the SAME bytes (B04), never a verify call a tamper can slip between and a separate
+// read. auth is the sealedAuthority result: sealed verifies, unsealed passes bytes through for
+// the pre-seal flows. A member that vanished from a sealed law is a torn seal (TRIO_MISMATCH).
+function verifyMember(auth, kilnDir, name, label) {
+  let bytes
+  try {
+    bytes = readFileSync(trioMemberPath(kilnDir, name))
+  } catch (error) {
+    stop(auth.sealed ? 'trio_mismatch' : 'transport_failure', `${label} could not read ${name}: ${error.message}`, auth.sealed ? TRIO_MISMATCH : TRANSPORT_FAILURE)
+  }
+  if (auth.sealed && createHash('sha256').update(bytes).digest('hex') !== auth.trio[name]) {
+    stop('trio_mismatch', `${label}: ${name} no longer matches the sealed law/trio.hash digest`, TRIO_MISMATCH)
+  }
+  return bytes
+}
+function readSealedMember(kilnDir, name, label) {
+  return verifyMember(sealedAuthority(kilnDir), kilnDir, name, label)
+}
+
 // The audit CLI reads the CHECKED slices.json projection itself and derives every
 // milestone fact: the closing block is the maximal contiguous run of same-label slices
 // ending at the seam slice; the cumulative prefix is every slice up to and including it.
@@ -175,7 +255,17 @@ function auditFacts(kilnDir, seamSliceId) {
   if (typeof seamSliceId !== 'string' || seamSliceId.trim() === '') {
     stop('transport_failure', 'audit seam slice id must be a nonempty string', TRANSPORT_FAILURE)
   }
-  const slices = readJson(join(kilnDir, 'slices.json'), 'invalid slices projection')
+  // W2-S3 (B01): the audit rests on ONE coherent sealed authority. law_hash binds to the
+  // cross-bound lock.hash it returns, and the slices.json it derives scope from is verified
+  // against the same seal in one operation — the bytes parsed are the bytes verified.
+  const auth = sealedAuthority(kilnDir)
+  if (!auth.sealed) stop('transport_failure', 'audit requires the sealed law', TRANSPORT_FAILURE)
+  let slices
+  try {
+    slices = JSON.parse(verifyMember(auth, kilnDir, 'slices.json', 'audit').toString('utf8'))
+  } catch (error) {
+    stop('transport_failure', `invalid slices projection: ${error.message}`, TRANSPORT_FAILURE)
+  }
   if (!Array.isArray(slices) || slices.length === 0) {
     stop('transport_failure', 'slices.json must be a nonempty array', TRANSPORT_FAILURE)
   }
@@ -197,17 +287,8 @@ function auditFacts(kilnDir, seamSliceId) {
   if (seam < 0) stop('transport_failure', 'seam slice id not found in slices.json', TRANSPORT_FAILURE)
   let start = seam
   while (start > 0 && entries[start - 1].milestone === entries[seam].milestone) start -= 1
-  let lawHash
-  try {
-    lawHash = readFileSync(join(kilnDir, 'law', 'lock.hash'), 'utf8').trim()
-  } catch (error) {
-    stop('transport_failure', `audit requires the sealed law/lock.hash: ${error.message}`, TRANSPORT_FAILURE)
-  }
-  if (!LAW_HASH.test(lawHash)) {
-    stop('transport_failure', 'law/lock.hash must hold a lowercase SHA-256 hex digest', TRANSPORT_FAILURE)
-  }
   return {
-    lawHash,
+    lawHash: auth.lockHash,
     milestone: entries[seam].milestone,
     closingBlock: entries.slice(start, seam + 1).map((entry) => entry.id),
     sealedPrefix: entries.slice(0, seam + 1).map((entry) => entry.id),
@@ -223,12 +304,14 @@ function screenLawFacts(kilnDir) {
   if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
     stop('transport_failure', 'screen kilnDir must be a nonempty string', TRANSPORT_FAILURE)
   }
-  let law
-  try {
-    law = readFileSync(join(kilnDir, 'LAW.md'), 'utf8')
-  } catch (error) {
-    stop('transport_failure', `screen could not read LAW.md: ${error.message}`, TRANSPORT_FAILURE)
-  }
+  // W2-S3 (B01/B04): verify-and-parse over ONE coherent sealed authority. The screen binds to
+  // the SEALED ALL-THREE trio — every live member is re-verified against the seal, so a
+  // post-seal check.sh or slices.json drift is a TRIO_MISMATCH hold, not just a LAW.md check —
+  // and law_lock_hash binds to the cross-bound lock.hash the authority returns.
+  const auth = sealedAuthority(kilnDir)
+  if (!auth.sealed) stop('transport_failure', 'screen requires the sealed law', TRANSPORT_FAILURE)
+  for (const name of TRIO_MEMBERS) if (name !== 'LAW.md') verifyMember(auth, kilnDir, name, 'screen')
+  const law = verifyMember(auth, kilnDir, 'LAW.md', 'screen').toString('utf8')
   const head = ['criterion id', 'owning slice', 'dim', 'requirement', 'proxy command', 'expected', 'reference']
   const cells = (s) => s.split(/(?<!\\)\|/).slice(1, -1).map((x) => x.replace(/\\\|/g, '|').trim())
   const rows = []
@@ -260,16 +343,7 @@ function screenLawFacts(kilnDir) {
   if (state !== 3 || rows.length === 0) {
     stop('transport_failure', 'screen requires the sealed LAW.md to carry a Perceptual table with at least one row', TRANSPORT_FAILURE)
   }
-  let lockHash
-  try {
-    lockHash = readFileSync(join(kilnDir, 'law', 'lock.hash'), 'utf8').trim()
-  } catch (error) {
-    stop('transport_failure', `screen requires the sealed law/lock.hash: ${error.message}`, TRANSPORT_FAILURE)
-  }
-  if (!LAW_HASH.test(lockHash)) {
-    stop('transport_failure', 'law/lock.hash must hold a lowercase SHA-256 hex digest', TRANSPORT_FAILURE)
-  }
-  return { rows, lockHash }
+  return { rows, lockHash: auth.lockHash }
 }
 
 // W8-S2 (Sol r3, adopted verbatim): CURRENT generation = the highest
@@ -979,15 +1053,16 @@ if (mode === 'review' && args.length === 3) {
   }
   process.exit(ACCEPT)
 } else if (mode === 'seal-law' && args.length === 2) {
-  // The trusted LAW lock, content-blind: the same digest a card shell computes
-  // via `sha256sum .kiln/LAW.md | cut -d' ' -f1`, now owned by the CLI so the
-  // kernel can seal the LAW after ratification without reading it. Byte format
-  // matches that pipeline exactly: 64-hex + one trailing newline. S4-D4: a family
-  // label (dual|single-family) rides beside it — validated like append-seal — and
-  // is committed to a DIGEST-BOUND sidecar (.kiln/law/lock.seal = `<digest> <label>`)
-  // written BEFORE lock.hash, so a resealed LAW never leaves a stale label beside a
-  // fresh hash. lock.hash stays exactly a 64-hex digest + newline (audit and screen
-  // require that shape); the family key that degrades rides the sidecar alone.
+  // The trusted LAW lock, content-blind. W2-S3: the seal now covers the whole trio —
+  // LAW.md, law/check.sh and slices.json — each digested individually into
+  // .kiln/law/trio.hash (fixed order, strict shape). A missing member is a transport stop:
+  // the law is not whole enough to seal. lock.hash stays exactly the LAW.md digest a card
+  // shell computes via `sha256sum .kiln/LAW.md | cut -d' ' -f1` (64-hex + one trailing
+  // newline — audit and screen require that shape); S4-D4: the family label
+  // (dual|single-family) rides the DIGEST-BOUND sidecar .kiln/law/lock.seal = `<digest>
+  // <label>`. trio.hash is promoted FIRST, then lock.seal, then lock.hash, so a reseal never
+  // leaves a stale trio or label beside a fresh lock — the sidecar-ordering discipline one
+  // member deeper.
   const [kilnDir, label] = args
   if (label !== 'dual' && label !== 'single-family') {
     stop('transport_failure', 'seal-law label must be dual or single-family', TRANSPORT_FAILURE)
@@ -995,17 +1070,23 @@ if (mode === 'review' && args.length === 3) {
   if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
     stop('transport_failure', 'seal-law kilnDir must be a nonempty string', TRANSPORT_FAILURE)
   }
-  let law
-  try {
-    law = readFileSync(join(kilnDir, 'LAW.md'))
-  } catch (error) {
-    stop('transport_failure', `seal-law could not read LAW.md: ${error.message}`, TRANSPORT_FAILURE)
+  const memberDigests = {}
+  for (const name of TRIO_MEMBERS) {
+    try {
+      memberDigests[name] = createHash('sha256').update(readFileSync(trioMemberPath(kilnDir, name))).digest('hex')
+    } catch (error) {
+      stop('transport_failure', `seal-law could not read the trio member ${name}: ${error.message}`, TRANSPORT_FAILURE)
+    }
   }
-  const digest = createHash('sha256').update(law).digest('hex')
+  const digest = memberDigests['LAW.md']
   const target = join(kilnDir, 'law', 'lock.hash')
   const sidecar = join(kilnDir, 'law', 'lock.seal')
+  const trio = trioHashPath(kilnDir)
   try {
     mkdirSync(dirname(target), { recursive: true })
+    const trioTemporary = join(dirname(trio), `.trio.hash.tmp-${process.pid}-${randomUUID()}`)
+    writeFileSync(trioTemporary, TRIO_MEMBERS.map((name) => `${name} ${memberDigests[name]}\n`).join(''))
+    renameSync(trioTemporary, trio)
     const sidecarTemporary = join(dirname(sidecar), `.lock.seal.tmp-${process.pid}-${randomUUID()}`)
     writeFileSync(sidecarTemporary, `${digest} ${label}\n`)
     renameSync(sidecarTemporary, sidecar)
@@ -1013,9 +1094,101 @@ if (mode === 'review' && args.length === 3) {
     writeFileSync(temporary, `${digest}\n`)
     renameSync(temporary, target)
   } catch (error) {
-    stop('transport_failure', `seal-law could not write lock.hash: ${error.message}`, TRANSPORT_FAILURE)
+    stop('transport_failure', `seal-law could not write the seal: ${error.message}`, TRANSPORT_FAILURE)
   }
   process.exit(ACCEPT)
+} else if (mode === 'run-checks' && args.length === 1) {
+  // W2-S3 (B04): the fused verify-and-run. ONE trusted operation replaces the bare
+  // `bash .kiln/law/check.sh` hands wherever a sealed trio exists — sealedAuthority confirms
+  // the whole cross-bound seal, every live member is re-verified against law/trio.hash, and
+  // ONLY on a complete match does check.sh execute in-process (argv spawn, no shell string).
+  // EXIT LAW: a torn or partial seal, or a live file drifted from its sealed digest, exits
+  // TRIO_MISMATCH (22) — the integrity class the kernel holds on at every post-seal site, so
+  // check.sh NEVER runs. TRANSPORT_FAILURE (20) is reserved for an unsealed law (a seal is
+  // required here) or a genuine check.sh spawn fault AFTER a verified seal. On a match check.sh
+  // streams its stdout verbatim and its exit code passes through, so every consumer of the
+  // check output — the owning-slice ids the red path prints on stdout, and the kernel-side
+  // receipt capture — keeps working unchanged.
+  const [kilnDir] = args
+  if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
+    stop('transport_failure', 'run-checks kilnDir must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  const auth = sealedAuthority(kilnDir)
+  if (!auth.sealed) {
+    stop('transport_failure', 'run-checks requires the sealed law — the law must be sealed before its checks run', TRANSPORT_FAILURE)
+  }
+  for (const name of TRIO_MEMBERS) {
+    let live
+    try {
+      live = createHash('sha256').update(readFileSync(trioMemberPath(kilnDir, name))).digest('hex')
+    } catch (error) {
+      stop('trio_mismatch', `run-checks: the sealed trio member ${name} could not be read — a torn seal; check.sh will not run`, TRIO_MISMATCH)
+    }
+    if (live !== auth.trio[name]) {
+      stop('trio_mismatch', `run-checks: ${name} no longer matches the sealed law/trio.hash digest — check.sh will not run`, TRIO_MISMATCH)
+    }
+  }
+  const check = spawnSync('bash', [trioMemberPath(kilnDir, 'check.sh')], { stdio: 'inherit' })
+  if (check.error) {
+    stop('transport_failure', `run-checks could not execute check.sh: ${check.error.message}`, TRANSPORT_FAILURE)
+  }
+  process.exit(check.status === null ? TRANSPORT_FAILURE : check.status)
+} else if (mode === 'slices' && args.length === 1) {
+  // W2-S3 (B03): the fused build-order fetch. verify-and-parse slices.json against the sealed
+  // trio in ONE operation, then print the descriptor projection the kernel dispatches builders
+  // from — a bare id string, or "obj|<id>|<surface>|<milestone>". The build stage is always
+  // sealed, so an unsealed law holds; a tampered slices.json is a TRIO_MISMATCH hold, so a
+  // write-capable builder is never dispatched over drifted facts. The projection is
+  // byte-compatible with the former node -p leg the kernel slices:fetch used.
+  const [kilnDir] = args
+  if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
+    stop('transport_failure', 'slices kilnDir must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  const auth = sealedAuthority(kilnDir)
+  if (!auth.sealed) stop('transport_failure', 'slices requires the sealed law — the build order is only fetched after the seal', TRANSPORT_FAILURE)
+  let slices
+  try {
+    slices = JSON.parse(verifyMember(auth, kilnDir, 'slices.json', 'slices').toString('utf8'))
+  } catch (error) {
+    stop('transport_failure', `invalid slices projection: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  if (!Array.isArray(slices)) stop('transport_failure', 'slices.json must be a JSON array', TRANSPORT_FAILURE)
+  const proj = slices.map((s) => (typeof s === 'string'
+    ? s
+    : 'obj|' + String((s && s.id) || '') + '|' + String((s && s.surface) || '') + '|' + String((s && s.milestone) || '')))
+  process.stdout.write(JSON.stringify(proj))
+  process.exit(ACCEPT)
+} else if (mode === 'screen-criteria' && args.length === 1) {
+  // W2-S3 (B04): the Perceptual criterion ids for the claude screen ownership enforcement,
+  // derived over VERIFIED LAW.md — screenLawFacts fuses the read with the sealed-trio check,
+  // so the ids the kernel enforces rest on sealed bytes, not a raw re-read.
+  const [kilnDir] = args
+  const facts = screenLawFacts(kilnDir)
+  process.stdout.write(JSON.stringify(facts.rows.map((r) => r.criterion)))
+  process.exit(ACCEPT)
+} else if (mode === 'perceptual-family' && args.length === 1) {
+  // W2-S3 (B04): the perceptual family routing, over the VERIFIED trio — exit 0 iff a
+  // ui-surfaced slice owns a Perceptual row (the GPT screen family), else 1. The
+  // write-capable screen routing rests on sealed bytes; a torn seal holds (TRIO_MISMATCH).
+  const [kilnDir] = args
+  if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
+    stop('transport_failure', 'perceptual-family kilnDir must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  const auth = sealedAuthority(kilnDir)
+  if (!auth.sealed) stop('transport_failure', 'perceptual-family requires the sealed law', TRANSPORT_FAILURE)
+  const facts = screenLawFacts(kilnDir)
+  let slices
+  try {
+    slices = JSON.parse(verifyMember(auth, kilnDir, 'slices.json', 'perceptual-family').toString('utf8'))
+  } catch (error) {
+    stop('transport_failure', `invalid slices projection: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  const surf = {}
+  for (const s of (Array.isArray(slices) ? slices : [])) {
+    if (typeof s === 'string') surf[s.trim()] = 'mixed'
+    else surf[String((s && s.id) || '').trim()] = String((s && s.surface) || '').trim()
+  }
+  process.exit(facts.rows.some((r) => surf[r.slice] === 'ui') ? 0 : 1)
 } else if (mode === 'ratify' && args.length === 3) {
   // Ratify a readable artifact against a rubric — the reusable "review an artifact
   // against a rubric" path whose first consumer is the not-yet-sealed LAW. There is
@@ -1600,7 +1773,7 @@ if (mode === 'review' && args.length === 3) {
 } else {
   stop(
     'transport_failure',
-    'usage: kiln-review review <repo> <request.json> <gate-review.json> | kiln-review recheck <repo> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir> <label> | kiln-review ratify <repo> <request.json> <gate-review.json> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json> | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> <label> | kiln-review screen <repo> <kilnDir> <model> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...] | kiln-review run-lock acquire <kilnDir> <choice> <conductorPid> | kiln-review run-lock join <kilnDir> <run_id> <owner> | kiln-review run-lock release <kilnDir> <run_id> <owner> | kiln-review run-lock takeover <kilnDir> <choice> <conductorPid>',
+    'usage: kiln-review review <repo> <request.json> <gate-review.json> | kiln-review recheck <repo> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir> <label> | kiln-review run-checks <kilnDir> | kiln-review slices <kilnDir> | kiln-review screen-criteria <kilnDir> | kiln-review perceptual-family <kilnDir> | kiln-review ratify <repo> <request.json> <gate-review.json> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json> | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> <label> | kiln-review screen <repo> <kilnDir> <model> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...] | kiln-review run-lock acquire <kilnDir> <choice> <conductorPid> | kiln-review run-lock join <kilnDir> <run_id> <owner> | kiln-review run-lock release <kilnDir> <run_id> <owner> | kiln-review run-lock takeover <kilnDir> <choice> <conductorPid>',
     TRANSPORT_FAILURE,
   )
 }

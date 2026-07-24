@@ -21,14 +21,14 @@ const coreSrc = srcLines.slice(
 ).join('\n')
 const core = new Function(coreSrc + `
   return { SPINE, parseArgs, resolveStage, nextStage, gateOutcome, reviewLoop,
-           fillClosed, streakIndex, stateToken, stateKey, stateCommitCmd, gateCmd, LAW_CHECK, LAW_GUARD,
-           LAW_CHECK_RECEIPT, MILESTONE_PROJECTION_CHECK, PERCEPTUAL_TABLE_CHECK, verdictExit, redSetIsFuture, gateReviewInvalid,
+           fillClosed, streakIndex, stateToken, stateKey, stateCommitCmd, gateCmd, sealedLawCheck, lawCheckReceipt, TRIO_MISMATCH,
+           MILESTONE_PROJECTION_CHECK, PERCEPTUAL_TABLE_CHECK, verdictExit, redSetIsFuture, gateReviewInvalid,
            validateTiers, resolveTier, routeBuilder, parseSliceEntry, milestoneSeamAfter,
            validatePosture, recoveryDecision, strictSubsetProgress, capFromDial, reconcileAudit, sealMembers }`)()
 const {
   SPINE, parseArgs, resolveStage, nextStage, gateOutcome, reviewLoop,
-  fillClosed, streakIndex, stateToken, stateKey, stateCommitCmd, gateCmd,
-  LAW_CHECK_RECEIPT, MILESTONE_PROJECTION_CHECK, PERCEPTUAL_TABLE_CHECK, verdictExit, redSetIsFuture, gateReviewInvalid,
+  fillClosed, streakIndex, stateToken, stateKey, stateCommitCmd, gateCmd, sealedLawCheck, lawCheckReceipt, TRIO_MISMATCH,
+  MILESTONE_PROJECTION_CHECK, PERCEPTUAL_TABLE_CHECK, verdictExit, redSetIsFuture, gateReviewInvalid,
   validateTiers, resolveTier, routeBuilder, parseSliceEntry, milestoneSeamAfter,
   validatePosture, recoveryDecision, strictSubsetProgress, capFromDial, reconcileAudit, sealMembers,
 } = core
@@ -41,6 +41,10 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
 // naming `plugin` in its own launch args; that is how the plugin-guard cases
 // force the missing/relative paths. String launches pass through untouched.
 const PLUGIN = '/abs/plugins/kiln'
+// W2-S3: the LAW check commands are runtime-built from the plugin root (run-checks needs the
+// kiln-review path), so the tests reconstruct them from the pure-core builders with the harness
+// plugin. LAW_CHECK/LAW_GUARD collapsed to the one regime-aware selector; the receipt wraps it.
+const LAW_CHECK_RECEIPT = lawCheckReceipt(PLUGIN + '/scripts/kiln-review')
 // W2-S1: every real launch rides the run lock the conductor acquired — run_id + owner. The
 // harness supplies both by default so object scenarios model the locked launch envelope and
 // pass the pre-boot join; a scenario overrides them (to undefined) to exercise the
@@ -116,6 +120,19 @@ async function runKernel(kargs, script) {
     // untrusted exit to exercise the tri-state HOLD.
     'law:degraded': { exit: 1 }, 'law:seal-label': { exit: 1 },
     'audit:degraded': { exit: 1 }, 'audit:seal-label': { exit: 1 },
+    // W2-S3: the degraded claude auditor brackets its turn with a trio digest before and
+    // after; the harness answers an unchanged trio by default (both legs the same three
+    // digests) so a degraded-audit scenario publishes exactly as before. A tamper scenario
+    // overrides trio-confirm with a different digest set to exercise the fail-closed hold.
+    // W2-S3 (B04): the claude turns bind d0 to the SEALED trio.hash digests, then rule d1 === d0.
+    // The harness answers a coherent sealed trio by default (sealed === digest === confirm) so a
+    // scenario publishes exactly as before; a drift scenario overrides trio-sealed or trio-confirm.
+    'audit-claude:trio-sealed': { exit: 0, ids: ['t1', 't2', 't3'] },
+    'audit-claude:trio-digest': { exit: 0, ids: ['t1', 't2', 't3'] },
+    'audit-claude:trio-confirm': { exit: 0, ids: ['t1', 't2', 't3'] },
+    'screen-claude:trio-sealed': { exit: 0, ids: ['t1', 't2', 't3'] },
+    'screen-claude:trio-digest': { exit: 0, ids: ['t1', 't2', 't3'] },
+    'screen-claude:trio-confirm': { exit: 0, ids: ['t1', 't2', 't3'] },
     ...script,
   }
   const calls = []
@@ -2117,6 +2134,112 @@ test('core (simple-fire): LAW_CHECK_RECEIPT captures the full check output verba
     'the receipt holds the full output verbatim — the evidence the reviewer judges instead of executing')
 })
 
+test('core (W2-S3): the LAW check builders wrap the fused run-checks verb — sealed-trio regime, torn-seal hold, pre-seal fallback, and a whitespace-safe plugin path (B05)', () => {
+  // B05: a plugin root with a space still builds a command that parses — the path is
+  // single-quoted so it stays ONE argv word, asserted via the builder output, not a live spawn.
+  const kr = '/DEV/My Kiln/plugins/kiln/scripts/kiln-review'
+  const sel = sealedLawCheck(kr)
+  assert.ok(sel.includes("node '/DEV/My Kiln/plugins/kiln/scripts/kiln-review' run-checks .kiln"),
+    'a sealed trio verifies-and-runs through run-checks with the whitespace plugin path single-quoted — one argv word')
+  assert.ok(sel.includes('elif test -f .kiln/law/lock.hash') && sel.includes('exit ' + TRIO_MISMATCH),
+    'a sealed law whose trio.hash is gone is a torn seal that exits TRIO_MISMATCH')
+  assert.ok(sel.includes('elif test -f .kiln/law/check.sh; then bash .kiln/law/check.sh'),
+    'an unsealed law still authoring its trio runs check.sh bare — nothing sealed to verify yet')
+  const receipt = lawCheckReceipt(kr)
+  assert.ok(receipt.startsWith('( ' + sel + ' )') && receipt.includes('> .kiln/check-receipt.txt'),
+    'the receipt wraps the same selector in a subshell so the regime exit still cats and survives')
+})
+
+test('core (W2-S3): over a real sealed trio the receipt runs check.sh through run-checks — output verbatim, the exit through, and a tampered member exits TRIO_MISMATCH without running the check', () => {
+  const kr = fileURLToPath(new URL('../scripts/kiln-review', import.meta.url))
+  const dir = mkdtempSync(join(tmpdir(), 'kiln-fused-'))
+  mkdirSync(join(dir, '.kiln/law'), { recursive: true })
+  writeFileSync(join(dir, '.kiln/LAW.md'), 'the law\n')
+  writeFileSync(join(dir, '.kiln/law/check.sh'), 'echo s1\ntouch .kiln/ran\nexit 1\n')
+  writeFileSync(join(dir, '.kiln/slices.json'), '[{"id":"s1","surface":"mixed"}]')
+  assert.equal(spawnSync('node', [kr, 'seal-law', '.kiln', 'dual'], { cwd: dir }).status, 0, 'the trio seals')
+  const red = spawnSync('bash', ['-c', lawCheckReceipt(kr)], { cwd: dir, encoding: 'utf8' })
+  assert.equal(red.status, 1, 'the red check exit passes through the fused receipt')
+  assert.equal(red.stdout, 's1\n', 'the owning-slice id reaches stdout verbatim through run-checks')
+  assert.equal(readFileSync(join(dir, '.kiln/check-receipt.txt'), 'utf8'), 's1\n', 'the receipt holds the fused output')
+  spawnSync('rm', ['-f', join(dir, '.kiln/ran')])
+  writeFileSync(join(dir, '.kiln/slices.json'), '[{"id":"other"}]')
+  const torn = spawnSync('bash', ['-c', lawCheckReceipt(kr)], { cwd: dir, encoding: 'utf8' })
+  assert.equal(torn.status, TRIO_MISMATCH, 'a tampered trio member exits TRIO_MISMATCH through the receipt')
+  assert.ok(!existsSync(join(dir, '.kiln/ran')), 'check.sh never ran on the tamper')
+})
+
+test('core (W2-S3 B02): the selector treats lock.seal-only residue as a partial seal — the preflight leg holds 22 at the production selector and check.sh NEVER runs', () => {
+  const kr = fileURLToPath(new URL('../scripts/kiln-review', import.meta.url))
+  const sel = sealedLawCheck(kr)
+  // Source pin: the selector enters the sealed regime on ANY of the three seal artifacts, so no
+  // partial residue falls to the bare check.sh branch.
+  assert.ok(sel.includes('.kiln/law/trio.hash') && sel.includes('.kiln/law/lock.hash') && sel.includes('.kiln/law/lock.seal'),
+    'the selector tests all three seal artifacts')
+  // Production pin: only lock.seal + a sentinel check.sh on disk — the real selector must hold 22.
+  const dir = mkdtempSync(join(tmpdir(), 'kiln-sealonly-'))
+  mkdirSync(join(dir, '.kiln/law'), { recursive: true })
+  writeFileSync(join(dir, '.kiln/law/lock.seal'), 'a'.repeat(64) + ' dual\n')
+  writeFileSync(join(dir, '.kiln/law/check.sh'), 'touch .kiln/ran\nexit 0\n')
+  const r = spawnSync('bash', ['-c', sel], { cwd: dir, encoding: 'utf8' })
+  assert.equal(r.status, TRIO_MISMATCH, 'lock.seal-only residue holds trio_mismatch, never the bare pre-seal branch')
+  assert.ok(!existsSync(join(dir, '.kiln/ran')), 'check.sh never ran — no report can return done over an unchecked partial seal')
+})
+
+test('runtime (W2-S3): every post-seal check leg runs the fused run-checks verb, and a torn trio (exit 22) holds fail-closed instead of sealing', async () => {
+  const base = (extra) => ({
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|logic'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
+    'law:pre-seal': GREEN,
+    'law:stage-end': GREEN,
+    'degraded:check': { exit: 1 },
+    'request:hash': HASH_OK,
+    'gate:invalidate': { exit: 0 },
+    'gate-claude:review': OK_ACK,
+    'gate:read': readCandidate(GATE_ACCEPT),
+    'gate:publish': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+    ...extra,
+  })
+  // Production wiring: the pre-seal receipt leg runs run-checks over the cwd-relative kiln dir.
+  const ok = await runKernel({ stage: 'build', projectDir: '/p' }, base())
+  assert.equal(ok.ret.status, 'ok')
+  const preSeal = ok.calls.find(c => c.label === 'law:pre-seal')
+  assert.ok(preSeal.prompt.includes("node '" + PLUGIN + "/scripts/kiln-review' run-checks .kiln"),
+    'the pre-seal leg runs the fused verify-and-run verb with the plugin path shq-quoted, not a bare check')
+  assert.ok(preSeal.prompt.includes('> .kiln/check-receipt.txt'), 'and still captures the receipt the reviewer judges')
+  // A torn trio at the pre-seal receipt holds fail-closed — no seal, no advance.
+  const torn = await runKernel({ stage: 'build', projectDir: '/p' }, base({ 'law:pre-seal': { exit: 22, ids: [] } }))
+  assert.equal(torn.ret.status, 'transport-failure', 'a trio_mismatch at the seal holds — a tampered law is never sealed')
+  assert.ok(!torn.calls.some(c => c.label === 'seal:append'), 'nothing seals over a torn trio')
+})
+
+test('runtime (W2-S3): a torn trio at the resume preflight door holds fail-closed instead of proceeding as a mere law red', async () => {
+  const held = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': { exit: 22, ids: [] },
+    'state:write': GREEN,
+  })
+  assert.equal(held.ret.status, 'transport-failure', 'the resume door holds on a trio_mismatch, never proceeds')
+  assert.ok(!held.calls.some(c => c.label === 'slices:fetch'), 'the build never begins over a torn trio')
+})
+
+test('runtime (W2-S3 B03): a slices.json tampered after preflight holds at the fused build-order fetch — no write-capable builder is dispatched', async () => {
+  const held = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 22, ids: [] }, // the fused slices verb held a tampered slices.json
+    'state:write': GREEN,
+  })
+  assert.equal(held.ret.status, 'transport-failure', 'the fused build-order fetch holds on a trio_mismatch')
+  assert.ok(!held.calls.some(c => c.label.startsWith('slice:')), 'no builder runs over drifted build-order facts — the repository side effect never happens')
+})
+
 test('runtime (simple-fire): the gate branches on the surface — logic and mixed take the claude gate, ui alone keeps codex', async () => {
   const build = (entry, extra) => ({
     ...VOICE,
@@ -3379,6 +3502,63 @@ test('runtime (S4, INTAKE-38): the degraded claude milestone auditor holds trans
   assert.ok(!malformed.calls.some(c => c.label === 'audit:append'), 'the malformed verdict never appends')
 })
 
+test('runtime (W2-S3): the degraded claude auditor brackets its turn with the trio digest — a member changed mid-turn fails the audit closed, never publishes', async () => {
+  const mutated = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'slice:s1': auditSlice(),
+    'law:pre-seal': GREEN,
+    'law:stage-end': GREEN,
+    'degraded:check': { exit: 0 },
+    'degraded-ack:check': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+    'audit:check': { exit: 1 }, // open seam
+    'law:pre-audit': GREEN,
+    'audit:degraded': { exit: 0 }, // the claude auditor seat
+    'audit-claude:lawhash': { exit: 0, ids: ['a'.repeat(64)] },
+    'audit-claude:invalidate': { exit: 0 },
+    'audit-claude:review': { ok: true },
+    'audit-claude:read': readAudit(auditVerdict('accept')),
+    // The write-capable auditor mutated a trio member during its turn — the after-digest differs.
+    'audit-claude:trio-confirm': { exit: 0, ids: ['t1', 't2', 'CHANGED'] },
+  })
+  assert.ok(mutated.calls.some(c => c.label === 'audit-claude:trio-digest'), 'the trio is digested before the auditor turn')
+  assert.ok(mutated.calls.some(c => c.label === 'audit-claude:trio-confirm'), 'and recomputed after the turn (the S4-D1 pattern)')
+  assert.equal(mutated.ret.status, 'transport-failure', 'a trio mutated during the turn fails the audit closed')
+  assert.ok(!mutated.calls.some(c => c.label === 'audit-claude:publish'), 'the mutated-trio verdict never publishes')
+  assert.ok(!mutated.calls.some(c => c.label === 'audit:append'), 'the mutated-trio verdict never appends')
+})
+
+test('runtime (W2-S3 B04): the claude screen turn is bracketed by the trio digest — a member changed mid-turn fails the screen closed, never publishes', async () => {
+  const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+    ...CLAUDE_LIVE,
+    // The write-capable claude screen reviewer mutated a trio member during its turn.
+    'screen-claude:trio-confirm': { exit: 0, ids: ['t1', 't2', 'CHANGED'] },
+  })
+  assert.ok(calls.some(c => c.label === 'screen-claude:trio-digest') && calls.some(c => c.label === 'screen-claude:trio-confirm'),
+    'the claude screen turn is bracketed by a trio digest before review and after, ruled before publish')
+  assert.notEqual(ret.status, 'ok', 'a trio mutated during the claude screen turn holds — the run never accepts over tampered law')
+  assert.ok(!calls.some(c => c.label === 'screen:publish'), 'the mutated-trio screen verdict never publishes')
+})
+
+test('runtime (W2-S3 B04): the claude screen d0 is bound to the SEALED trio.hash — a live trio self-consistent across the turn but OFF the seal never publishes', async () => {
+  const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+    ...CLAUDE_LIVE,
+    // The live trio drifted before the turn: d0 === d1 (self-consistent across the turn), but
+    // neither matches the SEALED digests read from trio.hash — a d0/d1-only bracket would pass.
+    'screen-claude:trio-sealed': { exit: 0, ids: ['s1', 's2', 's3'] },
+    'screen-claude:trio-digest': { exit: 0, ids: ['t1', 't2', 't3'] },
+    'screen-claude:trio-confirm': { exit: 0, ids: ['t1', 't2', 't3'] },
+  })
+  assert.ok(calls.some(c => c.label === 'screen-claude:trio-sealed'), 'the bracket reads the sealed trio.hash digests to bind d0')
+  assert.notEqual(ret.status, 'ok', 'a live trio off the seal holds even when it stayed self-consistent across the turn')
+  assert.ok(!calls.some(c => c.label === 'screen:publish'), 'nothing publishes over a pre-turn drift the seal never authorized')
+})
+
 test('runtime (S4-B1, INTAKE-38): the degraded claude milestone auditor is seam-bounded to the kernel projection — an all-sealed resume audits ONLY the closing block and the cumulative prefix, never a later slice', async () => {
   // The divergence Sol named: a labeled plan a,a,b (s1,s2 close milestone A; s3 closes B) resumes
   // with every slice sealed on the ledger but the s2 seam audit still owed. seals.log holds the
@@ -4020,7 +4200,7 @@ test('runtime (W8-S3/F-G): live PASS on a ui-owner table — the GPT screen verb
   const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p' }, { ...GPT_LIVE, 'screen:review': { exit: 0 }, ...ADDENDUM_OK })
   assert.equal(ret.status, 'ok')
   const family = calls.find(c => c.label === 'perceptual:family')
-  assert.ok(family.prompt.includes('slices.json') && family.prompt.includes('LAW.md'), 'the family rule derives owners deterministically from the table and the slices')
+  assert.ok(family.prompt.includes("kiln-review' perceptual-family .kiln"), 'the family rule derives owners over the VERIFIED trio through the fused verb (W2-S3 B04)')
   const review = calls.find(c => c.label === 'screen:review')
   assert.ok(review.prompt.includes('kiln-review screen . .kiln gpt-5.6-sol high ' + SCREEN),
     'closed argv only — repo `.`, the kiln dir, the reviewer-gate tier, the output path')
@@ -4466,7 +4646,18 @@ const LAW_VISUAL = [
   '| P-2 | s1 | typography | headings hold their scale | test -f index.html | exit 0 | |', '',
 ].join('\n')
 const LAW_PLAIN = '# LAW\n\nexecutable criteria only — no perceptual table\n'
-const mkVisual = (law) => { const dir = mkProject(); writeFileSync(join(dir, '.kiln/LAW.md'), law); return dir }
+// W2-S3 (B04): the validate/screen derivations (perceptual-family, screen-criteria) now read
+// a SEALED trio, so a visual fixture seals its whole trio the real way — the mocked screen legs
+// stay transparent, and the ONE real screen:criteria leg derives its ids over verified LAW.md.
+const mkVisual = (law) => {
+  const dir = mkProject()
+  mkdirSync(join(dir, '.kiln/law'), { recursive: true })
+  writeFileSync(join(dir, '.kiln/LAW.md'), law)
+  writeFileSync(join(dir, '.kiln/law/check.sh'), '#!/usr/bin/env bash\nexit 0\n')
+  writeFileSync(join(dir, '.kiln/slices.json'), JSON.stringify([{ id: 's1', surface: 'ui', milestone: 'core' }]))
+  assert.equal(spawnSync('node', [REAL_PLUGIN + '/scripts/kiln-review', 'seal-law', join(dir, '.kiln'), 'dual'], { encoding: 'utf8' }).status, 0, 'the visual fixture seals its trio')
+  return dir
+}
 const marker = (dir) => join(dir, '.kiln/perceptual-partial')
 // The durable-fact legs, real: activation presence, marker touch/clear, the record heredoc.
 const realScreenDisk = (dir) => ({
@@ -4740,6 +4931,10 @@ test('dogfood (S4, INTAKE-38): the acknowledged no-codex arc runs end to end ove
   const LAW = '# LAW\nthe locked plan\n'
   const LAW_DIGEST = createHash('sha256').update(LAW).digest('hex')
   writeFileSync(join(dir, '.kiln/LAW.md'), LAW)
+  // W2-S3: the real seal-law digests the whole trio, so the other two members are on disk.
+  mkdirSync(join(dir, '.kiln/law'), { recursive: true })
+  writeFileSync(join(dir, '.kiln/law/check.sh'), '#!/usr/bin/env bash\nexit 0\n')
+  writeFileSync(join(dir, '.kiln/slices.json'), JSON.stringify([{ id: 's1', surface: 'ui', milestone: 'core' }]))
   const writeCand = () => { writeFileSync(join(dir, '.kiln/docs/feasibility-candidate.md'), CAND); return { facts: { status: 'ok', pointers: ['.kiln/docs/feasibility-candidate.md'], schema_valid: true }, narration_beat: 'the feasibility read is on disk' } }
   const rExit = (p) => runReal(p, dir)
 

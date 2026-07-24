@@ -320,15 +320,31 @@ function gateCmd(mode, p) {
     : [bin, 'review', p.repo, p.request, p.gate].join(' ')
 }
 
-const LAW_CHECK = 'bash .kiln/law/check.sh'
-// Resume / stage-end / completion guard: a missing check succeeds; a present
-// red check stays nonzero.
-const LAW_GUARD = 'if test -f .kiln/law/check.sh; then ' + LAW_CHECK + '; fi'
-// Pre-gate receipt: the kernel side has the hands, so it executes the law
-// checks itself and preserves the full output verbatim for the reviewer,
-// who executes nothing. Output still reaches stdout for the ids fetch, and
-// the check exit code survives the capture.
-const LAW_CHECK_RECEIPT = 'bash .kiln/law/check.sh > .kiln/check-receipt.txt 2>&1; s=$?; cat .kiln/check-receipt.txt; exit $s'
+// W2-S3 (C2 / B04 / ruling 2): the LAW check runs through the fused verify-and-run verb
+// once a trio is sealed. These builders take the kiln-review path (the runtime resolves it
+// from the plugin root; the pure core stays path-agnostic and testable, and shq quotes the
+// path so a plugin root with a space stays one argv word — B05). SEAL REGIME by file presence:
+// a sealed trio verifies-and-runs through run-checks — verification and the argv spawn of
+// check.sh happen in ONE synchronous trusted verb under the run lock, with no model boundary
+// between them (an OS-level path re-read is outside the W2 threat model; A01). A sealed law
+// whose trio.hash is gone is a torn seal that holds (exit TRIO_MISMATCH); an unsealed law still
+// authoring its trio runs check.sh bare, because there is nothing sealed to verify yet. The
+// selection test only picks the regime — run-checks re-verifies the whole cross-bound seal it
+// then runs, so swapping a file after the test fails closed inside the verb.
+const TRIO_MISMATCH = 22
+// B02: the presence of ANY of the three seal artifacts enters the sealed regime. A trio
+// present verifies-and-runs; a lock.hash OR lock.seal without the trio is a partial seal that
+// holds (TRIO_MISMATCH) — lock.seal-only residue can never fall through to the bare branch.
+// check.sh runs bare ONLY when none of the three seal artifacts exist (a pre-seal law).
+const sealedLawCheck = (kr) =>
+  'if test -f .kiln/law/trio.hash; then node ' + shq(kr) + ' run-checks .kiln'
+  + '; elif test -f .kiln/law/lock.hash || test -f .kiln/law/lock.seal; then printf "trio_mismatch\\n"; exit ' + TRIO_MISMATCH
+  + '; elif test -f .kiln/law/check.sh; then bash .kiln/law/check.sh; fi'
+// Pre-gate receipt: the kernel side has the hands, so it runs the sealed check itself and
+// preserves the full output verbatim for the reviewer, who executes nothing. A subshell
+// contains the regime `exit` so the receipt still cats and the exit code survives the capture.
+const lawCheckReceipt = (kr) =>
+  '( ' + sealedLawCheck(kr) + ' ) > .kiln/check-receipt.txt 2>&1; s=$?; cat .kiln/check-receipt.txt; exit $s'
 
 // S1 (A9 / W5-03): the projection-agreement leg. Milestone labels are AUTHORITATIVE in
 // the LAW plan table (a `| slice | milestone |` GitHub table in LAW.md); slices.json is
@@ -819,6 +835,27 @@ const sealLabel = async (label) => {
 // LAW beats report the owning slice ids on red (check.sh prints them; they
 // arrive schema-forced — closed facts, never prose).
 const lawBeat = (cmd, label) => idsFetch(cmd, label, 'the owning slice ids the check printed on stdout when exit != 0, else []')
+// W2-S3: bind the fused check commands to this run plugin root. The pre-seal law authoring
+// runs check.sh bare; every post-seal site runs run-checks, which re-verifies the sealed
+// trio against law/trio.hash and only then executes check.sh (B04).
+const LAW_CHECK = sealedLawCheck(plugin + '/scripts/kiln-review')
+const LAW_GUARD = LAW_CHECK
+const LAW_CHECK_RECEIPT = lawCheckReceipt(plugin + '/scripts/kiln-review')
+// W2-S3 (B04): the all-three trio digest, in the fixed member order. A write-capable model
+// turn (the degraded claude audit, the claude screen) is bracketed by this leg before and
+// after — an unchanged digest across the turn proves the reviewer judged the sealed bytes it
+// was handed and mutated none of the trio; a change fails the turn closed before any publish.
+const trioDigest = (leg) => idsFetch(
+  'sha256sum .kiln/LAW.md .kiln/law/check.sh .kiln/slices.json | cut -d" " -f1',
+  leg, 'a three-element array of the 64-hex trio digests printed on stdout in order (LAW.md, check.sh, slices.json), [] if exit != 0')
+// B04(b): the SEALED trio digests, read kernel-side from law/trio.hash. A write-capable turn
+// binds its BEFORE digest (d0) to these — proof the reviewer judged the SEALED bytes, not
+// merely a live state that stayed self-consistent across the turn; a drift already on disk
+// before the turn is caught. The consuming verbs already validated the whole seal, so the
+// trio.hash read here is coherent; a stray line yields a non-hex value that fails the equality.
+const trioSealed = (leg) => idsFetch(
+  "node -e 'const t=require(\"fs\").readFileSync(\".kiln/law/trio.hash\",\"utf8\").split(\"\\n\");process.stdout.write(JSON.stringify(t.slice(0,3).map(l=>String(l).split(\" \")[1]||\"\")))'",
+  leg, 'a three-element array of the sealed trio digests from law/trio.hash in order (LAW.md, check.sh, slices.json), [] if exit != 0')
 
 // W-03: every kernel return carries a real beat. Sealed voice templates are
 // fetched as opaque strings (the kernel carries beats, never parses them) and
@@ -910,6 +947,12 @@ const SEALS = sealMembers(sealLeg.ids)
 // owner sits in the seal ledger reopens. Membership is exact first-field equality over the
 // per-invocation SEALS set, kept live by SEALS.add at each fresh seal below.
 const firstSealed = async (ids) => ids.find(id => SEALS.has(id)) ?? null
+// W2-S3 (B04 / ruling 2): the fused run-checks verb exits TRIO_MISMATCH when a sealed trio
+// file no longer matches law/trio.hash. Every post-seal check site holds fail-closed on it —
+// a tampered or torn trio is never treated as a mere law red, and check.sh never ran.
+const trioMismatchHold = async (activeSlice) => failStop('transport-failure',
+  { stage, active_slice: activeSlice, next_action: 'Rerun the stage after restoring the sealed law: a law/trio.hash member no longer matches its sealed digest' },
+  await voiceBeat('transport-failure', {}, 'A sealed law file no longer matches its trio.hash digest — the run holds rather than judge tampered law.', 1))
 
 const cardPrompt = (extra) => [
   'You are a Kiln stage agent. Read and follow the stage card at ' + P.card(stage) + ' exactly.',
@@ -1037,36 +1080,10 @@ const MANIFEST_PATH = /^\.kiln\/evidence\/gen-\d+\/manifest\.json$/
 // The family rule (plan F), a closed three-way exit fact: 0 = some perceptual owner
 // carries surface ui (Opus-built pixels — the GPT screen verbs grade), 1 = PROVEN
 // all-logic/mixed owners (GPT-coded rendering — the Claude leg grades), anything else
-// is an untrusted answer and holds transport-class. Owners come from the sealed LAW
-// Perceptual table (S1 validated shape and membership pre-seal, so the header and
-// delimiter rows are skipped without re-validation); surfaces come from slices.json,
-// a legacy bare id defaulting to mixed exactly as parseSliceEntry rules.
-const PERCEPTUAL_FAMILY =
-  "node -e 'try{const fs=require(\"fs\");" +
-  "const surf={};for(const s of require(\"./.kiln/slices.json\")){if(typeof s===\"string\")surf[s.trim()]=\"mixed\";else surf[String((s&&s.id)||\"\").trim()]=String((s&&s.surface)||\"\").trim();}" +
-  "const cells=s=>s.split(/(?<!\\\\)\\|/).slice(1,-1).map(x=>x.replace(/\\\\\\|/g,\"|\").trim());" +
-  "const lines=fs.readFileSync(\"./.kiln/LAW.md\",\"utf8\").split(\"\\n\");" +
-  "let owners=[],state=0;" +
-  "for(const ln of lines){const t=ln.trim();const row=t.slice(0,1)===\"|\";" +
-  "if(state===0){if(t.slice(0,3)===\"## \"&&t.slice(3).trim().toLowerCase()===\"perceptual\")state=1;continue;}" +
-  "if(state===1){if(t.slice(0,1)===\"#\")break;if(!row)continue;state=2;continue;}" +
-  "if(state===2){state=3;continue;}" +
-  "if(!row)break;const c=cells(t);if(c.length===7)owners.push(c[1]);}" +
-  "process.exit(owners.some(o=>surf[o]===\"ui\")?0:1);}catch(e){process.exit(2)}'"
-// The criterion ids of the sealed Perceptual table — the ownership key the kernel
-// enforces on the Claude path (findings criterion membership), fetched as closed ids
-// with the same parser discipline as the family read above.
-const SCREEN_CRITERIA =
-  "node -e 'try{const fs=require(\"fs\");" +
-  "const cells=s=>s.split(/(?<!\\\\)\\|/).slice(1,-1).map(x=>x.replace(/\\\\\\|/g,\"|\").trim());" +
-  "const lines=fs.readFileSync(\"./.kiln/LAW.md\",\"utf8\").split(\"\\n\");" +
-  "let ids=[],state=0;" +
-  "for(const ln of lines){const t=ln.trim();const row=t.slice(0,1)===\"|\";" +
-  "if(state===0){if(t.slice(0,3)===\"## \"&&t.slice(3).trim().toLowerCase()===\"perceptual\")state=1;continue;}" +
-  "if(state===1){if(t.slice(0,1)===\"#\")break;if(!row)continue;state=2;continue;}" +
-  "if(state===2){state=3;continue;}" +
-  "if(!row)break;const c=cells(t);if(c.length===7)ids.push(c[0]);}" +
-  "console.log(JSON.stringify(ids));process.exit(0);}catch(e){process.exit(1)}'"
+// is an untrusted answer and holds transport-class. W2-S3 (B04): the family and the criterion
+// ownership key both derive over the VERIFIED trio through the fused kiln-review verbs
+// (perceptual-family, screen-criteria) — the raw node -e legs that read LAW.md/slices.json
+// unverified are retired, so the write-capable screen routing rests on sealed bytes.
 // The pre-spawn BELT (plan G): a deterministic completeness check over the CURRENT
 // manifest — required classes, keyframe/reference/image bounds, matching counts,
 // recorded runtimes, gen number equal to its dir, every named file a REGULAR file
@@ -1115,6 +1132,7 @@ const clearPerceptualMarker = async () => {
 // LAW rerun beat: at every kernel invocation start (resume), if the check
 // exists. Red reopens only a sealed owner; otherwise the run proceeds.
 const pre = await lawBeat(LAW_GUARD, 'law:preflight')
+if (pre.exit === TRIO_MISMATCH) return trioMismatchHold('none')
 if (pre.exit !== 0) {
   const owner = await firstSealed(pre.ids)
   if (owner) {
@@ -1523,8 +1541,11 @@ if (stage !== 'build') {
     }
     let manifest = mf0.ids[0]
     // The family rule (plan F), read once per run: 0 routes the GPT screen verbs,
-    // 1 the Claude leg, anything else is untrusted and holds — the audit:check law.
-    const fam = await hands(PERCEPTUAL_FAMILY, 'perceptual:family')
+    // 1 the Claude leg, anything else is untrusted and holds — the audit:check law. W2-S3
+    // (B04): the family derives over the VERIFIED trio through the fused verb, so the routing
+    // rests on sealed bytes; a torn seal exits nonzero-nonone here and holds like any untrusted
+    // read.
+    const fam = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' perceptual-family .kiln', 'perceptual:family')
     if (fam !== 0 && fam !== 1) {
       const pf = await clearPerceptualMarker()
       if (pf) return pf
@@ -1542,8 +1563,10 @@ if (stage !== 'build') {
       const d = await idsFetch('sha256sum ' + manifest + ' | cut -d" " -f1', 'screen:digest', 'a one-element array holding the 64-hex digest printed on stdout, [] if exit != 0')
       return d.exit === 0 && d.ids.length === 1 && LAW_HASH.test(d.ids[0]) ? d.ids[0] : null
     }
+    // W2-S3 (B04): the criterion ownership key derives over VERIFIED LAW.md through the fused
+    // verb, so the ids the claude path enforces rest on sealed bytes, not a raw re-read.
     const screenCriteria = async () => {
-      const c = await idsFetch(SCREEN_CRITERIA, 'screen:criteria', 'the printed JSON array of the LAW Perceptual criterion ids, [] if exit != 0')
+      const c = await idsFetch('node ' + shq(plugin + '/scripts/kiln-review') + ' screen-criteria .kiln', 'screen:criteria', 'the printed JSON array of the LAW Perceptual criterion ids, [] if exit != 0')
       return c.exit === 0 && c.ids.length > 0 ? new Set(c.ids) : null
     }
     // The Claude multimodal leg (the claudeGate pattern): a STATIC prompt of closed
@@ -1589,6 +1612,15 @@ if (stage !== 'build') {
       if (criteria === null) return 20
       // Producer-self-publish: invalidate any prior candidate BEFORE the reviewer runs.
       if (await hands('rm -f ' + P.candidate, 'screen:invalidate') !== 0) return 20
+      // W2-S3 (B04): the claude screen reviewer is write-capable, so bracket its turn with the
+      // trio digest — the criteria and family it judges derive from the sealed LAW/slices, and
+      // this catches a mutation of any trio member during review, recheck OR escalation. d0 is
+      // bound to the SEALED trio.hash digests (not merely compared to d1), so a drift already on
+      // disk before the turn is caught; d1 === d0 then rules mutation, before any publish.
+      const sealed = await trioSealed('screen-claude:trio-sealed')
+      if (sealed.exit !== 0 || sealed.ids.length !== 3) return 20
+      const d0 = await trioDigest('screen-claude:trio-digest')
+      if (d0.exit !== 0 || d0.ids.length !== 3 || d0.ids.some((h, i) => h !== sealed.ids[i])) return 20
       const ack = await agent(screenLegPrompt(mode, manifest, digest), { label: 'screen-claude:' + mode, ...tier('fallback-reviewer'), schema: ACK })
       if (!ack || ack.ok !== true) return 20
       const g = await readScreenJson(P.candidate, 'screen:read', 'a one-element array holding the exact candidate file contents printed on stdout, [] if exit != 0')
@@ -1599,6 +1631,8 @@ if (stage !== 'build') {
       if (g.verdict === 'blocked' || g.blockers.length !== 0) return 20
       if (g.findings.some(f => !criteria.has(f.criterion))) return 20
       if (scope && g.findings.some(f => !scope.has(f.criterion))) return 20
+      const d1 = await trioDigest('screen-claude:trio-confirm')
+      if (d1.exit !== 0 || d1.ids.length !== 3 || d1.ids.some((h, i) => h !== d0.ids[i])) return 20
       if (await hands('mv -f ' + P.candidate + ' ' + target, 'screen:publish') !== 0) return 20
       return verdictExit(g.verdict)
     }
@@ -1797,6 +1831,7 @@ if (stage !== 'build') {
   }
   // LAW rerun beat: stage end (report is a stage, so this also guards completion).
   const post = await lawBeat(LAW_GUARD, 'law:stage-end')
+  if (post.exit === TRIO_MISMATCH) return trioMismatchHold('none')
   if (post.exit !== 0) {
     const owner = await firstSealed(post.ids)
     if (owner) {
@@ -1835,10 +1870,16 @@ if (stage !== 'build') {
 // (the milestone slot rides in LOCKSTEP with the parseSliceEntry four-slot parse — an
 // absent label projects to the empty trailing slot), so parseSliceEntry can tell the
 // forms apart and validate the object form (bare strings alone default to mixed).
+// W2-S3 (B03): the build order is fetched through the fused `slices` verb — it verifies
+// slices.json against the sealed trio and prints the descriptor projection in ONE operation, so
+// a slice id, order, surface or milestone tampered after preflight is a TRIO_MISMATCH hold, and
+// no write-capable builder is ever dispatched over drifted facts. The projection is
+// byte-compatible with the former node -p leg.
 const list = await idsFetch(
-  "node -p 'JSON.stringify(require(\"./" + P.slices + "\").map(s=>typeof s===\"string\"?s:\"obj|\"+(s&&s.id||\"\")+\"|\"+(s&&s.surface||\"\")+\"|\"+(s&&s.milestone||\"\")))'",
+  'node ' + shq(plugin + '/scripts/kiln-review') + ' slices .kiln',
   'slices:fetch', 'the printed JSON array of slice descriptor strings (a bare id, or "obj|<id>|<surface>|<milestone>"), [] if exit != 0',
 )
+if (list.exit === TRIO_MISMATCH) return trioMismatchHold('none')
 if (list.exit !== 0 || list.ids.length === 0) {
   return failStop('transport-failure', { stage, next_action: 'Rerun stage law: no slice list at ' + P.slices }, await voiceBeat('transport-failure', {}, 'No slice list on the ledger — the law stage must run again.', 1))
 }
@@ -1904,6 +1945,7 @@ const auditSeam = async (slice) => {
   // takes the existing pre-seal door exactly — a sealed owner reopens, a
   // non-future red halts law-red — and no audit runs over a red law.
   const guard = await lawBeat(LAW_CHECK_RECEIPT, 'law:pre-audit')
+  if (guard.exit === TRIO_MISMATCH) return trioMismatchHold(slice)
   if (guard.exit !== 0) {
     const owner = await firstSealed(guard.ids)
     if (owner) return reopen(owner, 'pre-audit')
@@ -1955,6 +1997,15 @@ const auditSeam = async (slice) => {
       allowedFindingIds = new Set(prior.ids.slice(1))
     }
     if (await hands('rm -f ' + P.candidate, 'audit-claude:invalidate') !== 0) return 20
+    // W2-S3 (B04): the claude auditor is write-capable, so bracket its turn with the shared
+    // trio digest. The lawHash echo binds LAW.md; this catches a mutation of any trio member
+    // during the turn — the seam facts rest on slices.json, the receipt on check.sh. d0 is
+    // bound to the SEALED trio.hash digests (not merely compared to d1), so a drift already on
+    // disk before the turn is caught; d1 === d0 then rules mutation, before any publish.
+    const sealed = await trioSealed('audit-claude:trio-sealed')
+    if (sealed.exit !== 0 || sealed.ids.length !== 3) return 20
+    const d0 = await trioDigest('audit-claude:trio-digest')
+    if (d0.exit !== 0 || d0.ids.length !== 3 || d0.ids.some((h, i) => h !== sealed.ids[i])) return 20
     const ack = await agent([
       'You are the milestone audit reviewer: a fresh mind judging the sealed milestone goal-backward against the locked law.',
       'Project dir: ' + projectDir + '. Read the locked law at ' + P.law + ', the vision documents in the repository, and the slice plan at ' + P.slices + '. The milestone under audit' + (milestones[seam] ? ' (' + milestones[seam] + ')' : '') + ' closes at slice ' + slice + '. The closing block is exactly: ' + closingBlock.join(', ') + '. The cumulative sealed prefix under audit is exactly: ' + sealedPrefix.join(', ') + ' — judge ONLY this prefix; slices beyond it are out of scope, never evidence, never a finding.',
@@ -1977,6 +2028,8 @@ const auditSeam = async (slice) => {
     if (g.verdict === 'blocked' && g.findings.length === 0) return 20
     const fids = new Set(g.findings.map(f => f.id))
     if (g.blockers.some(b => !fids.has(b))) return 20
+    const d1 = await trioDigest('audit-claude:trio-confirm')
+    if (d1.exit !== 0 || d1.ids.length !== 3 || d1.ids.some((h, i) => h !== d0.ids[i])) return 20
     const w = await hands('mv -f ' + P.candidate + ' ' + P.audit, 'audit-claude:publish')
     return w === 0 ? verdictExit(g.verdict) : 20
   }
@@ -1985,11 +2038,19 @@ const auditSeam = async (slice) => {
   // never the wire verdict alone.
   let derived = null
   let recheckRed = null
+  // W2-S3: a torn trio at the recheck receipt cannot return a kernel hold from inside the
+  // gate (the gate returns an exit code), so it stashes here and the after-loop door rules it
+  // fail-closed before the recheckRed / law-red ruling.
+  let trioTorn = false
   const auditGate = async (mode) => {
     // The freshReceipt mirror: every recheck judges a fresh receipt; a sealed
     // or non-future red stashes for the after-loop reopen / law-red ruling.
     if (mode === 'recheck') {
       const again = await lawBeat(LAW_CHECK_RECEIPT, 'law:pre-audit-recheck')
+      if (again.exit === TRIO_MISMATCH) {
+        trioTorn = true
+        return 20
+      }
       if (again.exit !== 0) {
         const owner = await firstSealed(again.ids)
         if (owner || !redSetIsFuture(again.ids, slice, sliceIds)) {
@@ -2065,6 +2126,8 @@ const auditSeam = async (slice) => {
       return await hands('test -s ' + P.delta, 'delta:check') === 0
     },
   }, cap)
+  // W2-S3: a trio torn during the audit recheck holds fail-closed before any red ruling.
+  if (trioTorn) return trioMismatchHold(slice)
   // A red pre-recheck rerun is a law fact, not a transport fact — the pre-seal
   // door rules it before any transport branch reads the result.
   if (recheckRed) {
@@ -2173,6 +2236,7 @@ for (const [idx, entry] of slices.entries()) {
   // receipt: the full check output lands verbatim at the receipt path, so the
   // reviewer judges executed evidence and executes nothing.
   const guard = await lawBeat(LAW_CHECK_RECEIPT, 'law:pre-seal')
+  if (guard.exit === TRIO_MISMATCH) return trioMismatchHold(slice)
   if (guard.exit !== 0) {
     const owner = await firstSealed(guard.ids)
     if (owner) return reopen(owner, 'pre-seal')
@@ -2291,9 +2355,16 @@ for (const [idx, entry] of slices.entries()) {
     // receipt. A red rerun takes the same door as any pre-seal red: reopen a
     // sealed owner, else halt law-red — recorded here, ruled after the loop.
     let recheckRed = null
+    // W2-S3: as in the audit gate, a torn trio at the recheck receipt stashes for the
+    // after-loop fail-closed ruling — the gate itself can only return an exit code.
+    let trioTorn = false
     const freshReceipt = (inner) => async (mode) => {
       if (mode === 'recheck') {
         const again = await lawBeat(LAW_CHECK_RECEIPT, 'law:pre-recheck')
+        if (again.exit === TRIO_MISMATCH) {
+          trioTorn = true
+          return 20
+        }
         // Mirror the pre-seal gate exactly: firstSealed is consulted FIRST, so a
         // regression in an already-SEALED later slice reopens (never masked by
         // future-tolerance); only a future, non-sealed red proceeds to the recheck.
@@ -2348,6 +2419,8 @@ for (const [idx, entry] of slices.entries()) {
     }, cap)
     corrections += loop.repairs
     facts.passes = loop.repairs
+    // W2-S3: a trio torn during the slice recheck holds fail-closed before any red ruling.
+    if (trioTorn) return trioMismatchHold(slice)
     // S2 ruling: a red pre-recheck rerun is a law fact, not a transport fact —
     // it takes the pre-seal door before any transport branch reads the result.
     if (recheckRed) {
@@ -2406,6 +2479,7 @@ for (const [idx, entry] of slices.entries()) {
 }
 // LAW rerun beat: stage end. Red reopens only a sealed owner.
 const post = await lawBeat(LAW_CHECK, 'law:stage-end')
+if (post.exit === TRIO_MISMATCH) return trioMismatchHold('none')
 if (post.exit !== 0) {
   const owner = await firstSealed(post.ids)
   if (owner) return reopen(owner, 'stage end')
