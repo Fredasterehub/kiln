@@ -2336,6 +2336,13 @@ for (const [idx, entry] of slices.entries()) {
     // Carried with the slice for the W7 goal-backward audit; W5 does not audit here.
     seam: milestoneSeamAfter(milestones, ordinal - 1),
   }
+  // W2-S7a (FORK 3): capture the immutable baseline of this slice generation BEFORE the first builder
+  // mutation, so dirty or untracked pre-run files are attributed to the baseline and never falsely to
+  // the slice. A nonzero start (a torn key, an unreadable tree, an unsupported special file) holds the
+  // stage rather than build a slice whose control-derived delta can never be trusted. The repo is the
+  // cwd-relative dot (hands runs with cwd = projectDir), so a whitespace path never splits the argv.
+  const manifestStart = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' manifest-start ' + shq('.') + ' .kiln ' + shq(slice), 'manifest:start')
+  if (manifestStart !== 0) return failStop('transport-failure', { stage, active_slice: slice, next_action: 'Rerun stage build' }, await voiceBeat('transport-failure', {}, 'Slice ' + slice + ' could not capture its baseline manifest — the run holds rather than build a slice whose delta cannot be trusted.', 1))
   // W2-S7a (ruling A-prime): the write-capable legs of THIS slice generation accumulate their leg
   // ids for the seal below — the builder, every repair pass, and the accepting reviewer. builder +
   // repair are always Claude, so the seal is provisional until capture-and-finalize resolves them.
@@ -2508,7 +2515,10 @@ for (const [idx, entry] of slices.entries()) {
       // the validated build-gate verdict lands in the immutable ledger first, filed under the review
       // family that shares this gate file with LAW ratify. A failed archive fails closed (nonzero)
       // and the gate holds, never publishing an un-archived verdict.
-      const w = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' publish-gate .kiln review ' + P.candidate + ' ' + P.gate + ' ' + shq(gateLeg.legId), 'gate:publish')
+      // W2-S7a (FORK 3): the review publish carries the repo and slice so the verb recomputes the
+      // control-derived manifest and rejects drift before it archives and publishes — the codex path
+      // runs the same check inside runGate. Every new word shq-quoted, the repo the cwd-relative dot.
+      const w = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' publish-gate .kiln review ' + P.candidate + ' ' + P.gate + ' ' + shq(gateLeg.legId) + ' ' + shq('.') + ' ' + shq(slice), 'gate:publish')
       return w === 0 ? verdictExit(g.verdict) : 20
     }
     // S2: a recheck judges executed evidence, so the receipt must be fresh —
@@ -2540,6 +2550,11 @@ for (const [idx, entry] of slices.entries()) {
           }
         }
       }
+      // W2-S7a (FORK 3): prepare a FRESH control-derived manifest before EVERY gate — initial and
+      // recheck — so the diff the reviewer judges is captured immediately before the gate and the
+      // publication and seal recompute-and-match it. A nonzero prepare holds the gate transport-20.
+      const manifestPrepare = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' manifest-prepare ' + shq('.') + ' .kiln ' + shq(slice), 'manifest:prepare')
+      if (manifestPrepare !== 0) return 20
       return inner(mode)
     }
     // W6-07: the ui codex gate takes the cwd-relative repo arg `.` exactly as the LAW-ratify gate
@@ -2653,7 +2668,7 @@ for (const [idx, entry] of slices.entries()) {
   // which had no gate at all. Every word shq-quoted (the gateCmd idiom). The builder legs are
   // pending Claude intents, so the seal appends PROVISIONAL and renders no membership until
   // capture-and-finalize promotes it.
-  const s = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' append-seal .kiln ' + slice + ' ' + label + ' ' + shq(builderLegs.join(',')) + ' ' + shq(reviewerLeg || '-'), 'seal:append')
+  const s = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' append-seal .kiln ' + slice + ' ' + label + ' ' + shq(builderLegs.join(',')) + ' ' + shq(reviewerLeg || '-') + ' ' + shq('.'), 'seal:append')
   if (s !== 0) return persistFail('seal-append')
   // W2-S7a (B-PROVISIONAL-LIVE): the seal is provisional while its Claude builder legs are unresolved
   // (they resolve only at the conductor capture), so it grants NO rendered membership yet. SEALS

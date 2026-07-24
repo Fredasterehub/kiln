@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { spawn, spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
@@ -2481,4 +2481,397 @@ test('sidecar (W2-S7a, B-D2-PIN a): a codex review publish writes <gate>.leg equ
   const builder = mintLeg(r.repo, 'builder', 'sonnet', 's1')[0]
   assert.equal(appendSeal(r.repo, 's1', 'dual', builder, sidecar).status, 0, 'append-seal accepts the sidecar reviewer leg in the reviewer position')
   assert.equal(s6Rows(join(r.repo, 'seals.jsonl')).find((x) => x.type === 'seal').reviewer_leg_id, sidecar, 'the seal candidate binds the codex reviewer leg — not the - sentinel')
+})
+
+// ── W2-S7a (FORK 3): the control-derived working-tree manifests ─────────────────────────────────
+// manifest-start captures an immutable baseline before the first builder mutation; manifest-prepare
+// diffs a fresh after-snapshot against it and publishes a content-addressed manifest; publication and
+// the seal recompute-and-reject drift. Snapshots hash ACTUAL working-tree bytes, never git blobs.
+const mfSha = (s) => createHash('sha256').update(Buffer.from(s)).digest('hex')
+const mfStart = (repo, kiln, slice) => spawnSync('node', [REVIEW, 'manifest-start', repo, kiln, slice], { encoding: 'utf8' })
+const mfPrepare = (repo, kiln, slice) => spawnSync('node', [REVIEW, 'manifest-prepare', repo, kiln, slice], { encoding: 'utf8' })
+const mfGenDir = (kiln, slice, gen) => join(kiln, 'manifests', mfSha(slice), 'gen-' + gen)
+const mfKey = (kiln, slice, gen) => JSON.parse(readFileSync(join(mfGenDir(kiln, slice, gen), 'key.json'), 'utf8'))
+const mfBaselineFile = (kiln, slice, gen) => join(mfGenDir(kiln, slice, gen), 'baseline-' + mfKey(kiln, slice, gen).baseline_sha256 + '.json')
+const mfBaseline = (kiln, slice, gen) => JSON.parse(readFileSync(mfBaselineFile(kiln, slice, gen), 'utf8'))
+const mfCurrent = (kiln, slice, gen) => JSON.parse(readFileSync(join(mfGenDir(kiln, slice, gen), 'current.json'), 'utf8'))
+const mfManifest = (kiln, slice, gen) => JSON.parse(readFileSync(join(mfGenDir(kiln, slice, gen), 'prepared', mfCurrent(kiln, slice, gen).manifest_sha256 + '.json'), 'utf8'))
+const gitAt = (repo, ...a) => spawnSync('git', ['-C', repo, ...a], { encoding: 'utf8' })
+function gitRepoDir() {
+  const repo = mkdtempSync(join(tmpdir(), 'kiln-mf-git-'))
+  gitAt(repo, 'init', '-q'); gitAt(repo, 'config', 'user.email', 'a@b.c'); gitAt(repo, 'config', 'user.name', 'kiln')
+  mkdirSync(join(repo, '.kiln'), { recursive: true })
+  return { repo, kiln: join(repo, '.kiln') }
+}
+function plainRepoDir() {
+  const repo = mkdtempSync(join(tmpdir(), 'kiln-mf-plain-'))
+  mkdirSync(join(repo, '.kiln'), { recursive: true })
+  return { repo, kiln: join(repo, '.kiln') }
+}
+
+test('manifest-start (W2-S7a): mints generation 1 with an immutable baseline, prints the closed facts, and a reuse is byte-identical', () => {
+  const { repo, kiln } = gitRepoDir()
+  writeFileSync(join(repo, 'a.txt'), 'hello\n'); gitAt(repo, 'add', 'a.txt')
+  const r = mfStart(repo, kiln, 's1')
+  assert.equal(r.status, 0)
+  const [gen, sha] = r.stdout.trim().split(' ')
+  assert.equal(gen, '1', 'no prior seal → generation 1')
+  assert.match(sha, /^[0-9a-f]{64}$/, 'stdout carries the baseline digest')
+  const key = mfKey(kiln, 's1', 1)
+  assert.equal(key.generation, 1)
+  assert.equal(key.slice, 's1')
+  assert.equal(key.enumerator, 'git')
+  assert.equal(key.baseline_sha256, sha, 'the key binds the baseline digest')
+  const baselineBytes = readFileSync(mfBaselineFile(kiln, 's1', 1))
+  assert.equal(createHash('sha256').update(baselineBytes).digest('hex'), sha, 'baseline_sha256 is the digest of the content-addressed baseline bytes')
+  const before = readFileSync(mfBaselineFile(kiln, 's1', 1))
+  const r2 = mfStart(repo, kiln, 's1')
+  assert.equal(r2.stdout.trim(), gen + ' ' + sha, 'the reuse prints the same closed facts')
+  assert.deepEqual(readFileSync(mfBaselineFile(kiln, 's1', 1)), before, 'the committed baseline is immutable across a reuse')
+})
+
+test('manifest-start (W2-S7a): the generation is 1 + the matching seal count — provisional rows count, promotes and other slices never bump it', () => {
+  const { repo, kiln } = gitRepoDir()
+  const rows = [
+    { type: 'seal', slice: 's1', label: 'dual' },
+    { type: 'seal', slice: 's1', label: 'dual', provisional: true, candidate_id: 'a'.repeat(32), builder_leg_ids: ['b'.repeat(32)], reviewer_leg_id: null },
+    { type: 'promote', candidate_id: 'a'.repeat(32) },
+    { type: 'seal', slice: 's2', label: 'dual' },
+  ]
+  writeFileSync(join(kiln, 'seals.jsonl'), rows.map((x) => JSON.stringify(x)).join('\n') + '\n')
+  assert.equal(mfStart(repo, kiln, 's1').stdout.trim().split(' ')[0], '3', 's1 has two seal rows (one provisional) — the promote never counts → generation 3')
+  assert.equal(mfStart(repo, kiln, 's2').stdout.trim().split(' ')[0], '2', 's2 has one seal row → generation 2')
+})
+
+test('manifest-start (W2-S7a): a resume across a different run reuses the baseline — run_id mismatch is permitted, the minting provenance kept', () => {
+  const { repo, kiln } = gitRepoDir()
+  writeFileSync(join(kiln, 'run.lock'), JSON.stringify({ run_id: 'run-mint', owner: 'o', conductor_pid: 7 }) + '\n')
+  writeFileSync(join(repo, 'a.txt'), 'A\n'); gitAt(repo, 'add', 'a.txt')
+  const first = mfStart(repo, kiln, 's1')
+  assert.equal(mfKey(kiln, 's1', 1).run_id, 'run-mint', 'the key records the minting run')
+  writeFileSync(join(kiln, 'run.lock'), JSON.stringify({ run_id: 'run-resume', owner: 'o', conductor_pid: 9 }) + '\n')
+  const resumed = mfStart(repo, kiln, 's1')
+  assert.equal(resumed.status, 0)
+  assert.equal(resumed.stdout.trim(), first.stdout.trim(), 'the later run reuses the baseline facts verbatim')
+  assert.equal(mfKey(kiln, 's1', 1).run_id, 'run-mint', 'the key still records the ORIGINAL minting run, not the resuming one')
+})
+
+test('manifest-start (W2-S7a): a torn baseline (bytes no longer matching the sealed digest) HOLDs a reuse', () => {
+  const { repo, kiln } = gitRepoDir()
+  writeFileSync(join(repo, 'a.txt'), 'A\n'); gitAt(repo, 'add', 'a.txt')
+  assert.equal(mfStart(repo, kiln, 's1').status, 0)
+  writeFileSync(mfBaselineFile(kiln, 's1', 1), '{"enumerator":"git","exclusions":[],"entries":[]}')
+  assert.equal(mfStart(repo, kiln, 's1').status, 20, 'the key-named baseline no longer matching its own digest HOLDs rather than reuse a torn baseline')
+})
+
+test('manifest-start (W2-S7a, git): the snapshot enumerates tracked + untracked-non-ignored, includes tracked-ignored, excludes ignored-untracked and .kiln/.git', () => {
+  const { repo, kiln } = gitRepoDir()
+  writeFileSync(join(repo, 'tracked.txt'), 'T\n')
+  writeFileSync(join(repo, '.gitignore'), 'ignored-untracked.txt\ntracked-ignored.txt\n')
+  writeFileSync(join(repo, 'tracked-ignored.txt'), 'TI\n')
+  gitAt(repo, 'add', '-f', 'tracked.txt', '.gitignore', 'tracked-ignored.txt')
+  writeFileSync(join(repo, 'untracked.txt'), 'U\n')
+  writeFileSync(join(repo, 'ignored-untracked.txt'), 'IU\n')
+  writeFileSync(join(kiln, 'state.json'), '{}')
+  assert.equal(mfStart(repo, kiln, 's1').status, 0)
+  assert.deepEqual(mfKey(kiln, 's1', 1).exclusions, ['.git', '.kiln', 'ignored-untracked'], 'the git enumerator declares the ignored-untracked exclusion')
+  const paths = mfBaseline(kiln, 's1', 1).entries.map((e) => e.path)
+  for (const p of ['tracked.txt', 'untracked.txt', 'tracked-ignored.txt', '.gitignore']) {
+    assert.ok(paths.includes(p), `${p} is enumerated (tracked, untracked-non-ignored, and tracked-ignored are all in)`)
+  }
+  assert.ok(!paths.includes('ignored-untracked.txt'), 'ignored-untracked is excluded')
+  assert.ok(!paths.some((p) => p === '.kiln' || p === '.git' || p.startsWith('.kiln/') || p.startsWith('.git/')), '.kiln/** and .git/** never appear (the tracked .gitignore does)')
+})
+
+test('manifest-start (W2-S7a, git): the snapshot hashes ACTUAL working-tree bytes, never the staged index blob', () => {
+  const { repo, kiln } = gitRepoDir()
+  writeFileSync(join(repo, 'f.txt'), 'staged-v1\n'); gitAt(repo, 'add', 'f.txt')
+  writeFileSync(join(repo, 'f.txt'), 'worktree-v2\n')
+  assert.equal(mfStart(repo, kiln, 's1').status, 0)
+  const entry = mfBaseline(kiln, 's1', 1).entries.find((e) => e.path === 'f.txt')
+  assert.equal(entry.sha256, mfSha('worktree-v2\n'), 'the entry hashes the working-tree bytes')
+  assert.notEqual(entry.sha256, mfSha('staged-v1\n'), 'discriminating: a git-index hash would have bound the staged v1 bytes')
+})
+
+test('manifest-start (W2-S7a): a symlink records its link text and type, never followed to the target content', () => {
+  const { repo, kiln } = gitRepoDir()
+  writeFileSync(join(repo, 'target.txt'), 'the target content a follow would hash\n')
+  symlinkSync('target.txt', join(repo, 'link')); gitAt(repo, 'add', 'target.txt', 'link')
+  assert.equal(mfStart(repo, kiln, 's1').status, 0)
+  const link = mfBaseline(kiln, 's1', 1).entries.find((e) => e.path === 'link')
+  assert.equal(link.type, 'symlink', 'the symlink is typed symlink')
+  assert.equal(link.target, 'target.txt', 'the link text is recorded verbatim, never resolved')
+  assert.equal(Object.prototype.hasOwnProperty.call(link, 'sha256'), false, 'discriminating: following the link would have produced a file entry with the target sha256')
+})
+
+test('manifest-start (W2-S7a): an unsupported special file HOLDs — an unstable path never silently disappears', () => {
+  const { repo, kiln } = plainRepoDir()
+  const mk = spawnSync('mkfifo', [join(repo, 'pipe')])
+  if (mk.status !== 0) return
+  assert.equal(mfStart(repo, kiln, 's1').status, 20, 'the fifo HOLDs the capture')
+  assert.equal(existsSync(join(mfGenDir(kiln, 's1', 1), 'key.json')), false, 'nothing is committed on the hold')
+})
+
+test('manifest-start (W2-S7a, non-git): a plain directory walks deterministically, sorted by path bytes, excluding .kiln', () => {
+  const { repo, kiln } = plainRepoDir()
+  writeFileSync(join(repo, 'b.txt'), 'B\n')
+  writeFileSync(join(repo, 'a.txt'), 'A\n')
+  mkdirSync(join(repo, 'sub'))
+  writeFileSync(join(repo, 'sub', 'c.txt'), 'C\n')
+  writeFileSync(join(kiln, 'x'), 'excluded\n')
+  assert.equal(mfStart(repo, kiln, 's1').status, 0)
+  assert.equal(mfKey(kiln, 's1', 1).enumerator, 'walk', 'a non-git root walks')
+  assert.deepEqual(mfKey(kiln, 's1', 1).exclusions, ['.git', '.kiln'])
+  assert.deepEqual(mfBaseline(kiln, 's1', 1).entries.map((e) => e.path), ['a.txt', 'b.txt', 'sub/c.txt'], 'the walk is sorted and excludes .kiln')
+})
+
+test('manifest-prepare (W2-S7a): missing baseline HOLDs — a prepare before a start is a wiring bug', () => {
+  const { repo, kiln } = gitRepoDir()
+  writeFileSync(join(repo, 'a.txt'), 'A\n'); gitAt(repo, 'add', 'a.txt')
+  assert.equal(mfPrepare(repo, kiln, 's1').status, 20, 'no baseline for the generation HOLDs the prepare')
+})
+
+test('manifest-prepare (W2-S7a): a repo that changed git-ness mid-generation HOLDs — the recorded enumerator must match', () => {
+  const { repo, kiln } = gitRepoDir()
+  writeFileSync(join(repo, 'a.txt'), 'A\n'); gitAt(repo, 'add', 'a.txt')
+  assert.equal(mfStart(repo, kiln, 's1').status, 0)
+  rmSync(join(repo, '.git'), { recursive: true, force: true })
+  assert.equal(mfPrepare(repo, kiln, 's1').status, 20, 'the git → walk enumerator mismatch HOLDs')
+})
+
+test('manifest-prepare (W2-S7a): the change list carries exact add/modify/delete shapes, a mode change is a modify, a rename is delete+add, sorted and byte-stable', () => {
+  const { repo, kiln } = gitRepoDir()
+  writeFileSync(join(repo, 'keep.txt'), 'same\n')
+  writeFileSync(join(repo, 'edit.txt'), 'v1\n')
+  writeFileSync(join(repo, 'del.txt'), 'gone\n')
+  writeFileSync(join(repo, 'mode.txt'), 'x\n')
+  writeFileSync(join(repo, 'rename-from.txt'), 'moved\n')
+  gitAt(repo, 'add', '-A')
+  assert.equal(mfStart(repo, kiln, 's1').status, 0)
+  writeFileSync(join(repo, 'add.txt'), 'new\n')
+  writeFileSync(join(repo, 'edit.txt'), 'v2\n')
+  unlinkSync(join(repo, 'del.txt'))
+  chmodSync(join(repo, 'mode.txt'), 0o755)
+  unlinkSync(join(repo, 'rename-from.txt'))
+  writeFileSync(join(repo, 'rename-to.txt'), 'moved\n')
+  assert.equal(mfPrepare(repo, kiln, 's1').status, 0)
+  const changes = mfManifest(kiln, 's1', 1).changes
+  const at = Object.fromEntries(changes.map((c) => [c.path, c]))
+  assert.deepEqual(at['add.txt'], { path: 'add.txt', change: 'add', before: null, after: { path: 'add.txt', type: 'file', mode_executable: false, sha256: mfSha('new\n') } }, 'add carries a null before and the exact after entry')
+  assert.equal(at['edit.txt'].change, 'modify')
+  assert.equal(at['edit.txt'].before.sha256, mfSha('v1\n'))
+  assert.equal(at['edit.txt'].after.sha256, mfSha('v2\n'))
+  assert.deepEqual(at['del.txt'], { path: 'del.txt', change: 'delete', before: { path: 'del.txt', type: 'file', mode_executable: false, sha256: mfSha('gone\n') }, after: null }, 'delete carries the exact before entry and a null after')
+  assert.equal(at['mode.txt'].change, 'modify', 'a mode change alone is a modify')
+  assert.equal(at['mode.txt'].before.mode_executable, false)
+  assert.equal(at['mode.txt'].after.mode_executable, true)
+  assert.equal(at['rename-from.txt'].change, 'delete', 'a rename is a delete of the old path')
+  assert.equal(at['rename-to.txt'].change, 'add', 'and an add of the new path — never an inferred rename')
+  assert.equal(at['keep.txt'], undefined, 'an unchanged file yields no change')
+  const paths = changes.map((c) => c.path)
+  assert.deepEqual(paths, [...paths].sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b))), 'changes are sorted by UTF-8 path bytes')
+  const sha1 = mfCurrent(kiln, 's1', 1).manifest_sha256
+  assert.equal(mfPrepare(repo, kiln, 's1').stdout.trim().split(' ')[1], sha1, 'a re-prepare on an unchanged tree is byte-stable — the same manifest digest')
+})
+
+test('publish-gate (W2-S7a, FORK 3): the review family archives the matched manifest digest, a retry over the unchanged tree is a clean no-op, and a drifted tree HOLDs with nothing archived', () => {
+  const { repo, kiln } = gitRepoDir()
+  s6Lock(kiln, 'run-pub')
+  writeFileSync(join(repo, 'a.txt'), 'A\n'); gitAt(repo, 'add', 'a.txt')
+  assert.equal(mfStart(repo, kiln, 's1').status, 0)
+  assert.equal(mfPrepare(repo, kiln, 's1').status, 0)
+  const manifestSha = mfCurrent(kiln, 's1', 1).manifest_sha256
+  const reviewer = mintLeg(kiln, 'gate-reviewer', 'opus', 's1')[0]
+  const pub = (id) => { const c = join(kiln, '.cand-' + id + '.json'); writeFileSync(c, JSON.stringify(verdictOf('accept', id))); return spawnSync('node', [REVIEW, 'publish-gate', kiln, 'review', c, join(kiln, 'gate.json'), reviewer, repo, 's1'], { encoding: 'utf8' }) }
+  assert.equal(pub('rv-1').status, 0, 'the unchanged tree publishes')
+  assert.equal(ledgerRows(kiln)[0].manifest_sha256, manifestSha, 'the matched manifest digest lands on the review row')
+  assert.equal(pub('rv-1').status, 0, 'the same bytes over the still-unchanged tree is a clean idempotent no-op')
+  assert.equal(ledgerRows(kiln).length, 1, 'no second row on the matching-digest retry')
+  writeFileSync(join(repo, 'a.txt'), 'A-mutated\n')
+  assert.equal(pub('rv-2').status, 20, 'a drifted tree HOLDs the publish')
+  assert.equal(ledgerRows(kiln).length, 1, 'nothing archived on the drift')
+})
+
+test('publish-gate (W2-S7a, FORK 3): the review family HOLDs when a manifest exists but the repo and slice are omitted — the bypass guard', () => {
+  const { repo, kiln } = gitRepoDir()
+  writeFileSync(join(repo, 'a.txt'), 'A\n'); gitAt(repo, 'add', 'a.txt')
+  mfStart(repo, kiln, 's1'); mfPrepare(repo, kiln, 's1')
+  const c = join(kiln, '.cand.json'); writeFileSync(c, JSON.stringify(verdictOf('accept', 'rv-1')))
+  assert.equal(spawnSync('node', [REVIEW, 'publish-gate', kiln, 'review', c, join(kiln, 'gate.json')], { encoding: 'utf8' }).status, 20, 'omitting repo+slice while a manifests dir exists HOLDs')
+  assert.equal(ledgerRows(kiln).length, 0, 'nothing archived')
+})
+
+test('publish-gate (W2-S7a, FORK 3): the manifest-binding retry gate — a legacy-missing manifest_sha256 HOLDs, an owned null matches an honest absence', () => {
+  const bytes = JSON.stringify(verdictOf('accept', 'rv-1'))
+  const sha = createHash('sha256').update(Buffer.from(bytes)).digest('hex')
+  const seed = (dir, row) => writeFileSync(join(dir, 'reviews.jsonl'), JSON.stringify(row) + '\n')
+  const base = { family: 'review', review_id: 'rv-1', round: 0, verdict: 'accept', findings: [], blockers: [], law_hash: HASH, run_id: null, published_at: '2026-01-01T00:00:00.000Z', receipt_sha256: null, reviewer_leg_id: null, verdict_sha256: sha }
+  // owned explicit null + supplied null (no manifests dir, no repo arg) → clean idempotent no-op
+  const ok = mkdtempSync(join(tmpdir(), 'kiln-mfretry-'))
+  seed(ok, { ...base, manifest_sha256: null })
+  const cOk = join(ok, '.c.json'); writeFileSync(cOk, bytes)
+  assert.equal(spawnSync('node', [REVIEW, 'publish-gate', ok, 'review', cOk, join(ok, 'gate.json')], { encoding: 'utf8' }).status, 0, 'owned null + supplied null is a clean no-op')
+  assert.equal(ledgerRows(ok).length, 1, 'no second row on the owned-null retry')
+  // a legacy row that predates FORK 3 (no manifest_sha256 field) cannot confirm the binding → HOLD
+  const legacy = mkdtempSync(join(tmpdir(), 'kiln-mfretry-'))
+  seed(legacy, base)
+  const cL = join(legacy, '.c.json'); writeFileSync(cL, bytes)
+  assert.equal(spawnSync('node', [REVIEW, 'publish-gate', legacy, 'review', cL, join(legacy, 'gate.json')], { encoding: 'utf8' }).status, 20, 'a legacy row missing manifest_sha256 HOLDs the retry')
+  assert.equal(ledgerRows(legacy).length, 1, 'nothing republished')
+})
+
+test('append-seal (W2-S7a, FORK 3): the seal recomputes the manifest and HOLDs on drift; the bypass guard HOLDs when the repo is omitted', () => {
+  const { repo, kiln } = gitRepoDir()
+  s6Lock(kiln, 'run-seal')
+  writeFileSync(join(repo, 'a.txt'), 'A\n'); gitAt(repo, 'add', 'a.txt')
+  mfStart(repo, kiln, 's1'); mfPrepare(repo, kiln, 's1')
+  const builder = mintLeg(kiln, 'builder', 'sonnet', 's1')[0]
+  assert.equal(appendSeal(kiln, 's1', 'dual', builder, '-').status, 20, 'a prepared manifest with no repo arg HOLDs the seal — the bypass guard')
+  assert.equal(existsSync(join(kiln, 'seals.jsonl')), false, 'nothing appended on the bypass hold')
+  writeFileSync(join(repo, 'a.txt'), 'A-mutated\n')
+  assert.equal(spawnSync('node', [REVIEW, 'append-seal', kiln, 's1', 'dual', builder, '-', repo], { encoding: 'utf8' }).status, 20, 'a drifted tree HOLDs the seal')
+  assert.equal(existsSync(join(kiln, 'seals.jsonl')), false, 'nothing appended on the drift')
+  writeFileSync(join(repo, 'a.txt'), 'A\n')
+  assert.equal(spawnSync('node', [REVIEW, 'append-seal', kiln, 's1', 'dual', builder, '-', repo], { encoding: 'utf8' }).status, 0, 'the restored, matching tree seals')
+  assert.equal(s6Rows(join(kiln, 'seals.jsonl')).find((x) => x.type === 'seal').slice, 's1', 'the seal row lands once the manifest matches')
+})
+
+test('review (W2-S7a, FORK 3): the codex publish path recomputes the manifest — an unchanged tree binds the digest, a drifted tree HOLDs before the archive', () => {
+  const clean = sealReviewRepo('s1')
+  writeFileSync(join(clean.repo, 'request.json'), JSON.stringify({ criteria: 'x', paths: [], failures: [], commands: [] }))
+  assert.equal(mfStart(clean.repo, clean.kiln, 's1').status, 0)
+  assert.equal(mfPrepare(clean.repo, clean.kiln, 's1').status, 0)
+  const manifestSha = mfCurrent(clean.kiln, 's1', 1).manifest_sha256
+  const env = fakeCodexEnv({ gate: { review_id: '__ECHO__', law_hash: clean.digest, findings: [], blockers: [], verdict: 'accept' } })
+  const ok = spawnSync('node', [REVIEW, 'review', clean.repo, clean.kiln, 's1', 'gpt-5.6-sol', 'gpt-sol', 'high', join(clean.repo, 'request.json'), join(clean.kiln, 'gate-review.json')], { encoding: 'utf8', env })
+  assert.equal(ok.status, 0, 'the codex review over the unchanged tree publishes')
+  assert.equal(ledgerRows(clean.kiln)[0].manifest_sha256, manifestSha, 'the codex path binds the matched manifest digest on its reviews row')
+
+  const dirty = sealReviewRepo('s1')
+  writeFileSync(join(dirty.repo, 'request.json'), JSON.stringify({ criteria: 'x', paths: [], failures: [], commands: [] }))
+  assert.equal(mfStart(dirty.repo, dirty.kiln, 's1').status, 0)
+  assert.equal(mfPrepare(dirty.repo, dirty.kiln, 's1').status, 0)
+  writeFileSync(join(dirty.repo, 'sneaked.txt'), 'a change the review never saw\n')
+  const env2 = fakeCodexEnv({ gate: { review_id: '__ECHO__', law_hash: dirty.digest, findings: [], blockers: [], verdict: 'accept' } })
+  const drift = spawnSync('node', [REVIEW, 'review', dirty.repo, dirty.kiln, 's1', 'gpt-5.6-sol', 'gpt-sol', 'high', join(dirty.repo, 'request.json'), join(dirty.kiln, 'gate-review.json')], { encoding: 'utf8', env: env2 })
+  assert.equal(drift.status, 20, 'the drifted tree HOLDs the codex publish')
+  assert.equal(existsSync(join(dirty.kiln, 'gate-review.json')), false, 'the gate is never published on the drift')
+  assert.equal(ledgerRows(dirty.kiln).length, 0, 'nothing archived before the drift hold')
+})
+
+test('manifest-start (W2-S7a, pre-Sol): the baseline is content-addressed — residue is inert and a committed baseline is never clobbered', () => {
+  const { repo, kiln } = gitRepoDir()
+  writeFileSync(join(repo, 'a.txt'), 'A\n'); gitAt(repo, 'add', 'a.txt')
+  // Residue-inertness: a bogus content-addressed baseline and a stale tmp seeded in the gen dir with
+  // NO committed key are ignored — the commit lands cleanly and reuse reads only the key-named file.
+  mkdirSync(mfGenDir(kiln, 's1', 1), { recursive: true })
+  writeFileSync(join(mfGenDir(kiln, 's1', 1), 'baseline-' + 'e'.repeat(64) + '.json'), 'bogus residue\n')
+  writeFileSync(join(mfGenDir(kiln, 's1', 1), '.baseline.json.tmp-999-stale'), 'stale tmp\n')
+  const r = mfStart(repo, kiln, 's1')
+  assert.equal(r.status, 0, 'residue does not block the commit')
+  const sha = r.stdout.trim().split(' ')[1]
+  assert.equal(mfKey(kiln, 's1', 1).baseline_sha256, sha, 'the key names the real committed baseline, not the residue')
+  assert.equal(createHash('sha256').update(readFileSync(mfBaselineFile(kiln, 's1', 1))).digest('hex'), sha, 'reuse reads the key-named file whose digest matches')
+  assert.ok(existsSync(join(mfGenDir(kiln, 's1', 1), 'baseline-' + 'e'.repeat(64) + '.json')), 'the bogus residue survives untouched — never read, never removed')
+  // Committed-immutability: a second start against a MUTATED tree reprints the committed facts and the
+  // key-named baseline file is byte-identical after — no writer clobbers a committed baseline.
+  const committedBytes = readFileSync(mfBaselineFile(kiln, 's1', 1))
+  writeFileSync(join(repo, 'a.txt'), 'A-mutated-after-commit\n')
+  const r2 = mfStart(repo, kiln, 's1')
+  assert.equal(r2.stdout.trim(), '1 ' + sha, 'the mutated-tree reuse reprints the committed facts, never a new baseline')
+  assert.deepEqual(readFileSync(mfBaselineFile(kiln, 's1', 1)), committedBytes, 'the committed baseline file is byte-identical after the mutated-tree reuse')
+})
+
+test('manifest-start (W2-S7a, pre-Sol): the baseline commit is content-addressed via wx, never renamed onto a fixed name (source shape)', () => {
+  assert.ok(reviewSrc.includes("writeFileSync(baselinePath, bytes, { flag: 'wx' })"), 'the baseline is committed content-addressed via the wx flag')
+  assert.ok(reviewSrc.includes("const baselineFile = (genDir, sha) => join(genDir, 'baseline-' + sha"), 'the baseline name is its own digest')
+  assert.ok(!reviewSrc.includes("'baseline.json'"), 'no fixed baseline.json name the manifest core renames onto')
+})
+
+test('publish-gate (W2-S7a, pre-Sol): a file planted where the manifest store belongs HOLDs the review publish — never a silent legacy fall-through', () => {
+  const { repo, kiln } = gitRepoDir()
+  s6Lock(kiln, 'run-pf')
+  writeFileSync(join(repo, 'a.txt'), 'A\n'); gitAt(repo, 'add', 'a.txt')
+  // A FILE where .kiln/manifests should be: stating the slice's current.json faults ENOTDIR, an
+  // untrusted store the recompute must HOLD on rather than read as no-manifest-prepared.
+  writeFileSync(join(kiln, 'manifests'), 'not a directory\n')
+  const reviewer = mintLeg(kiln, 'gate-reviewer', 'opus', 's1')[0]
+  const c = join(kiln, '.cand.json'); writeFileSync(c, JSON.stringify(verdictOf('accept', 'rv-1')))
+  const r = spawnSync('node', [REVIEW, 'publish-gate', kiln, 'review', c, join(kiln, 'gate.json'), reviewer, repo, 's1'], { encoding: 'utf8' })
+  assert.equal(r.status, 20, 'the planted-file store HOLDs the publish, never a silent legacy publish')
+  assert.equal(ledgerRows(kiln).length, 0, 'nothing archived over the untrusted store')
+})
+
+test('manifest (W2-S7a, M-01): a corrupted prepared artifact HOLDs the idempotent re-prepare AND the seal — durable content-addressed evidence', () => {
+  const { repo, kiln } = gitRepoDir()
+  s6Lock(kiln, 'run-m01')
+  writeFileSync(join(repo, 'a.txt'), 'A\n'); gitAt(repo, 'add', 'a.txt')
+  assert.equal(mfStart(repo, kiln, 's1').status, 0)
+  assert.equal(mfPrepare(repo, kiln, 's1').status, 0)
+  const sha = mfCurrent(kiln, 's1', 1).manifest_sha256
+  writeFileSync(join(mfGenDir(kiln, 's1', 1), 'prepared', sha + '.json'), 'torn')
+  assert.equal(mfPrepare(repo, kiln, 's1').status, 20, 'the idempotent re-prepare HOLDs — the EEXIST name no longer hashes to its bytes')
+  const builder = mintLeg(kiln, 'builder', 'sonnet', 's1')[0]
+  assert.equal(spawnSync('node', [REVIEW, 'append-seal', kiln, 's1', 'dual', builder, '-', repo], { encoding: 'utf8' }).status, 20, 'the seal HOLDs — the durable prepared evidence no longer matches the pointer digest')
+  assert.equal(existsSync(join(kiln, 'seals.jsonl')), false, 'nothing appended over corrupt evidence')
+})
+
+test('manifest (W2-S7a, M-02): deleting current.json from a STARTED generation HOLDs the seal and the publish; a never-started generation stays legacy', () => {
+  const { repo, kiln } = gitRepoDir()
+  s6Lock(kiln, 'run-m02')
+  writeFileSync(join(repo, 'a.txt'), 'A\n'); gitAt(repo, 'add', 'a.txt')
+  mfStart(repo, kiln, 's1'); mfPrepare(repo, kiln, 's1')
+  unlinkSync(join(mfGenDir(kiln, 's1', 1), 'current.json'))
+  const builder = mintLeg(kiln, 'builder', 'sonnet', 's1')[0]
+  assert.equal(appendSeal(kiln, 's1', 'dual', builder, '-').status, 20, 'a no-repo seal over a started-but-unlinked generation HOLDs — never a legacy fall-through')
+  assert.equal(existsSync(join(kiln, 'seals.jsonl')), false, 'nothing appended')
+  const reviewer = mintLeg(kiln, 'gate-reviewer', 'opus', 's1')[0]
+  const c = join(kiln, '.cand.json'); writeFileSync(c, JSON.stringify(verdictOf('accept', 'rv-1')))
+  assert.equal(spawnSync('node', [REVIEW, 'publish-gate', kiln, 'review', c, join(kiln, 'gate.json'), reviewer, repo, 's1'], { encoding: 'utf8' }).status, 20, 'the review publish over a started-but-unlinked generation HOLDs')
+  assert.equal(ledgerRows(kiln).length, 0, 'nothing archived')
+  // true-legacy: a generation never started (no key.json / no manifests store) proceeds
+  const { repo: repo2, kiln: kiln2 } = gitRepoDir()
+  s6Lock(kiln2, 'run-m02b')
+  writeFileSync(join(repo2, 'a.txt'), 'A\n'); gitAt(repo2, 'add', 'a.txt')
+  const b2 = mintLeg(kiln2, 'builder', 'sonnet', 's1')[0]
+  assert.equal(spawnSync('node', [REVIEW, 'append-seal', kiln2, 's1', 'dual', b2, '-', repo2], { encoding: 'utf8' }).status, 0, 'a never-started generation is a true legacy seal — it proceeds')
+})
+
+test('manifest (W2-S7a, M-03): a committed key that misdeclares its slice or generation HOLDs — the sentinel must establish the addressed identity', () => {
+  const { repo, kiln } = gitRepoDir()
+  writeFileSync(join(repo, 'a.txt'), 'A\n'); gitAt(repo, 'add', 'a.txt')
+  assert.equal(mfStart(repo, kiln, 's1').status, 0)
+  const keyPath = join(mfGenDir(kiln, 's1', 1), 'key.json')
+  const key = JSON.parse(readFileSync(keyPath, 'utf8'))
+  writeFileSync(keyPath, JSON.stringify({ ...key, slice: 's2', generation: 99 }))
+  assert.equal(mfStart(repo, kiln, 's1').status, 20, 'manifest-start s1 HOLDs — the committed key names s2/99, not the addressed s1/1')
+  assert.equal(mfPrepare(repo, kiln, 's1').status, 20, 'manifest-prepare s1 HOLDs on the same contradictory identity')
+})
+
+test('manifest snapshot (W2-S7a, M-04): an index-derived tracked deletion is an honest tombstone, not a hold', () => {
+  const { repo, kiln } = gitRepoDir()
+  writeFileSync(join(repo, 'keep.txt'), 'K\n')
+  writeFileSync(join(repo, 'gone.txt'), 'G\n')
+  gitAt(repo, 'add', '-A')
+  assert.equal(mfStart(repo, kiln, 's1').status, 0)
+  unlinkSync(join(repo, 'gone.txt'))
+  assert.equal(mfPrepare(repo, kiln, 's1').status, 0, 'a tracked deletion does not HOLD — it is a durable builder deletion')
+  const changes = mfManifest(kiln, 's1', 1).changes
+  assert.equal(changes.find((c) => c.path === 'gone.txt').change, 'delete', 'the tracked deletion renders a delete tombstone')
+  assert.ok(!changes.some((c) => c.path === 'keep.txt'), 'the surviving tracked file is unchanged')
+})
+
+test('manifest snapshot (W2-S7a, M-04): reads are fd-verified against a link swap and unstable worktree reads HOLD (source shape)', () => {
+  assert.ok(reviewSrc.includes('FS.O_RDONLY | FS.O_NOFOLLOW'), 'files are opened without following a link')
+  assert.ok(reviewSrc.includes('fstatSync(fd)') && reviewSrc.includes('fst.dev !== st.dev || fst.ino !== st.ino'), 'the fd is re-verified as the same regular file before the read')
+  assert.ok(reviewSrc.includes('readFileSync(fd)'), 'the bytes are read from the verified fd, never re-opened by pathname')
+  assert.ok(fnText('walkPaths').includes('an unstable read') && !fnText('walkPaths').includes('ENOENT'), 'the walk holds on any lstat fault — no ENOENT-continue that would drop a worktree path')
+  assert.ok(fnText('snapshotEntry').includes("source === 'index'") && fnText('snapshotEntry').includes('vanished between enumeration and the snapshot'), 'ENOENT splits by source — an index deletion tombstones, a worktree vanish HOLDs')
+})
+
+test('append-seal (W2-S7a, M-05): the manifest recompute is the last operation before the ledger append (source order)', () => {
+  const sealBlock = reviewSrc.slice(reviewSrc.indexOf("mode === 'append-seal'"), reviewSrc.indexOf("mode === 'seal-law'"))
+  assert.ok(sealBlock.indexOf('reconcileLedger(kilnDir, SEAL_LEDGER)') < sealBlock.indexOf('manifestRecompute('), 'reconcile runs BEFORE the manifest recompute')
+  assert.ok(sealBlock.indexOf('manifestRecompute(') < sealBlock.indexOf('appendLedgerRow(kilnDir, SEAL_LEDGER, sealRow)'), 'the recompute is the last op before the ledger append')
+  assert.ok(sealBlock.indexOf('manifestGenerationStarted(') < sealBlock.indexOf('appendLedgerRow(kilnDir, SEAL_LEDGER, sealRow)'), 'the bypass guard also precedes the append')
 })

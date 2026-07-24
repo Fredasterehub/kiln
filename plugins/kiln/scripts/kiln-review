@@ -4,12 +4,17 @@
 const { createHash, randomBytes, randomUUID } = require('node:crypto')
 const {
   appendFileSync,
+  closeSync,
+  constants: FS,
   existsSync,
+  fstatSync,
   linkSync,
   lstatSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
   renameSync,
   statSync,
@@ -734,12 +739,26 @@ function runGate(repo, request, prompt, outputFile, validate, family, images, su
     discard(temporary)
     stop('transport_failure', identityError, TRANSPORT_FAILURE)
   }
+  // W2-S7a (FORK 3): the review family recomputes its control-derived manifest here — the SAME drift
+  // gate the claude publish-gate path runs — before this codex verdict archives and publishes. subject
+  // is the slice for the review family; other families carry no manifest (their subject is not a
+  // slice), so the digest stays null. A drift or a capture fault discards the temp and holds closed,
+  // exactly as a failed archive does.
+  let manifestSha = null
+  if (family === 'review') {
+    const drift = manifestRecompute(kilnDir, repo, subject)
+    if (drift.error) {
+      discard(temporary)
+      stop('transport_failure', drift.error, TRANSPORT_FAILURE)
+    }
+    manifestSha = drift.value.sha
+  }
   // W2-S5: archive the validated verdict to the immutable ledger BEFORE the publish rename — the
   // gate-file overwrite is content-free and destroys the prior verdict, so the archive is the only
   // surviving history. The archive digests the EXACT bytes codex wrote, and the ledger sits beside
   // the gate file in the same .kiln. A failed archive fails closed: the verdict is neither archived
   // nor published, and the caller holds.
-  const archiveError = archiveVerdict(kilnDir, family, readFileSync(temporary), legId)
+  const archiveError = archiveVerdict(kilnDir, family, readFileSync(temporary), legId, manifestSha)
   if (archiveError) {
     discard(temporary)
     stop('transport_failure', archiveError, TRANSPORT_FAILURE)
@@ -1051,7 +1070,10 @@ function receiptDigestAtPublication(kilnDir, family) {
 // argv on a claude path. It rides the archive row as reviewer_leg_id; absent (a legacy publish) it
 // is an honest null. Idempotency is UNCHANGED — keyed on {family, review_id, verdict_sha256}, so the
 // retry shortcut below never compares reviewer_leg_id.
-function archiveVerdict(kilnDir, family, verdictBytes, reviewerLegId) {
+// W2-S7a (FORK 3): manifestSha256 is the control-derived manifest digest the review family recomputed
+// at publication (null for a non-review family, a legacy pass, or an absent manifest). It rides the
+// row as manifest_sha256, and the retry shortcut extends the B001-R2 ownership pattern to it.
+function archiveVerdict(kilnDir, family, verdictBytes, reviewerLegId, manifestSha256) {
   if (!REVIEW_FAMILIES.has(family)) return `archive family ${family} is not a review family`
   let verdict
   try {
@@ -1124,6 +1146,20 @@ function archiveVerdict(kilnDir, family, verdictBytes, reviewerLegId) {
     if (archivedLeg !== suppliedLeg) {
       return 'archive idempotent retry: the supplied reviewer leg differs from the archived reviewer binding — refusing to sever it'
     }
+    // W2-S7a (FORK 3): the manifest binding is preserved under the SAME B001-R2 ownership pattern. The
+    // archived row must OWN a well-formed manifest_sha256 (explicit null or 64-hex) equal to the digest
+    // this retry recomputed (null equals null) — a missing/malformed field (a pre-FORK-3 row) or a
+    // differing digest HOLDs, never an exit-0 that severs a seal from the exact manifest it will bind.
+    const suppliedManifest = (typeof manifestSha256 === 'string' && LAW_HASH.test(manifestSha256)) ? manifestSha256 : null
+    const hasArchivedManifest = Object.prototype.hasOwnProperty.call(prior, 'manifest_sha256')
+    const archivedManifest = hasArchivedManifest ? prior.manifest_sha256 : undefined
+    const archivedManifestWellFormed = archivedManifest === null || (typeof archivedManifest === 'string' && LAW_HASH.test(archivedManifest))
+    if (!hasArchivedManifest || !archivedManifestWellFormed) {
+      return 'archive idempotent retry: the archived row carries no well-formed manifest_sha256 — nothing confirms the historical manifest binding, refusing to republish'
+    }
+    if (archivedManifest !== suppliedManifest) {
+      return 'archive idempotent retry: the supplied manifest digest differs from the archived manifest binding — refusing to sever it'
+    }
     return null
   }
   const row = {
@@ -1138,6 +1174,7 @@ function archiveVerdict(kilnDir, family, verdictBytes, reviewerLegId) {
     published_at: new Date().toISOString(),
     receipt_sha256: receipt.digest,
     reviewer_leg_id: (typeof reviewerLegId === 'string' && LEG_ID.test(reviewerLegId)) ? reviewerLegId : null,
+    manifest_sha256: (typeof manifestSha256 === 'string' && LAW_HASH.test(manifestSha256)) ? manifestSha256 : null,
     verdict_sha256: sha,
   }
   // Write safety: a crash mid-append can leave a torn final line with no trailing newline. Prefix a
@@ -1708,6 +1745,478 @@ function archiveAndDrop(kilnDir, claimPath, record, event) {
   return true
 }
 
+// ── W2-S7a (FORK 3): the control-derived working-tree manifests ──────────────
+// A slice generation's delta is derived from a TRUSTED before/after snapshot of the working tree,
+// never the builder's word. manifest-start captures an immutable baseline before the first builder
+// mutation; manifest-prepare captures the after-snapshot before each gate, diffs it against the
+// baseline, and publishes a content-addressed manifest; publication and the seal RECOMPUTE the
+// after-snapshot and reject any drift. Snapshots hash ACTUAL working-tree bytes, never git index or
+// HEAD blobs. All artifacts live under .kiln/manifests/<sha256(slice)>/gen-<N>/ — the slice id is
+// hashed so a slash-bearing id cannot walk out of the path.
+const MANIFEST_DIR = 'manifests'
+const MANIFEST_SCHEMA = 1
+const MANIFEST_COVERAGE = 'control-derived-slice-delta'
+
+// Every fault surfaces as a returned { error } (the archiveVerdict/receiptDigestAtPublication
+// discipline) so each consumer fails closed and discards its own residue before it stops; the
+// snapshot helpers throw on a fault and this wrapper converts the throw to that string. A genuine
+// ENOENT that MEANS absence (a tracked path gone from the tree, an unstarted generation) is caught
+// at its site and never reaches here as a fault.
+function manifestResult(build) {
+  try {
+    return { value: build() }
+  } catch (error) {
+    return { error: `manifest: ${error.message}` }
+  }
+}
+
+// Canonical serialization (FORK 1 rules, reused): UTF-8 compact JSON, no BOM, no trailing newline;
+// object keys recursively sorted; arrays kept in order; undefined, non-finite numbers and unsafe
+// integers rejected (a caller bug, never silently coerced). No Unicode or newline normalization —
+// JSON.stringify escapes deterministically and preserves the exact string content, so the digest is
+// byte-stable across two runs on identical input.
+function canonicalString(value) {
+  const encode = (v) => {
+    if (v === null) return 'null'
+    if (typeof v === 'boolean') return v ? 'true' : 'false'
+    if (typeof v === 'number') {
+      if (!Number.isFinite(v)) throw new Error('canonical serialization rejects a non-finite number')
+      if (Number.isInteger(v) && !Number.isSafeInteger(v)) throw new Error('canonical serialization rejects an unsafe integer')
+      return JSON.stringify(v)
+    }
+    if (typeof v === 'string') return JSON.stringify(v)
+    if (Array.isArray(v)) return '[' + v.map((e) => encode(e)).join(',') + ']'
+    if (isObject(v)) return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + encode(v[k])).join(',') + '}'
+    throw new Error('canonical serialization rejects an unserializable value')
+  }
+  return encode(value)
+}
+const canonicalBytes = (value) => Buffer.from(canonicalString(value), 'utf8')
+const canonicalDigest = (value) => createHash('sha256').update(canonicalBytes(value)).digest('hex')
+
+// Sort by the UTF-8 byte order of a path — NOT the default UTF-16 code-unit order, which diverges on
+// non-BMP characters; every snapshot and every change list orders on this so a digest is byte-stable.
+const bytePathCompare = (a, b) => Buffer.compare(Buffer.from(a, 'utf8'), Buffer.from(b, 'utf8'))
+
+const generationDir = (kilnDir, slice, generation) =>
+  join(kilnDir, MANIFEST_DIR, createHash('sha256').update(Buffer.from(slice, 'utf8')).digest('hex'), 'gen-' + generation)
+
+// The per-slice generation ordinal: 1 + the count of seal rows for this slice in the append-only
+// truth. Provisional rows COUNT — a crashed candidate is a distinct historical attempt, matching the
+// S7b "1 + max HISTORICAL ordinal" rule; promote rows are not seals and never count. An absent ledger
+// is generation 1; a genuine read fault throws (a hold), never a silent 1.
+function sliceGeneration(kilnDir, slice) {
+  const rows = readLedgerRows(join(kilnDir, SEAL_LEDGER.jsonl))
+  if (rows === null) return 1
+  let count = 0
+  for (const row of rows) if (isObject(row) && row.type === 'seal' && row.slice === slice) count += 1
+  return 1 + count
+}
+
+// Detect the snapshot mode: a real git work tree enumerates through git, anything else (git absent,
+// or a directory that is not a work tree) walks deterministically. Any OTHER git failure throws —
+// never a silent fallback that would under-cover a broken repo.
+function gitWorktree(repo) {
+  const r = spawnSync('git', ['-C', repo, 'rev-parse', '--is-inside-work-tree'], { encoding: 'utf8' })
+  if (r.error) {
+    if (r.error.code === 'ENOENT') return false
+    throw new Error(`git probe failed: ${r.error.message}`)
+  }
+  if (r.status === 0) {
+    const out = (r.stdout || '').trim()
+    if (out === 'true') return true
+    if (out === 'false') return false
+    throw new Error(`git probe returned an unexpected result: ${out}`)
+  }
+  if (/not a git repository/i.test(r.stderr || '')) return false
+  throw new Error(`git probe failed: ${(r.stderr || '').trim().slice(-500)}`)
+}
+
+// Enumerate NUL-separated paths from git; a spawn error or a nonzero exit throws.
+function gitPaths(repo, extra) {
+  const r = spawnSync('git', ['-C', repo, 'ls-files', '-z', ...extra], { maxBuffer: 64 * 1024 * 1024 })
+  if (r.error) throw new Error(`git ls-files failed: ${r.error.message}`)
+  if (r.status !== 0) throw new Error(`git ls-files exited ${r.status}: ${(r.stderr ? r.stderr.toString('utf8') : '').trim().slice(-500)}`)
+  return r.stdout.toString('utf8').split('\0').filter((p) => p !== '')
+}
+
+// The always-excluded roots: .git and .kiln (and the manifests dir transitively) — the working root's
+// VCS metadata and Kiln's own state, never part of a slice delta.
+const manifestExcluded = (rel) => rel === '.git' || rel === '.kiln' || rel.slice(0, 5) === '.git/' || rel.slice(0, 6) === '.kiln/'
+
+// One snapshot entry for a working-tree path, hashing ACTUAL bytes. A symlink records its link text
+// and is NEVER followed. A regular file is opened O_RDONLY|O_NOFOLLOW and re-verified by fstat (a
+// regular file with the same dev+ino the lstat saw) before its bytes are read FROM THE FD, so a
+// file-to-symlink or file-to-other-file swap between the lstat and the read is caught rather than
+// followed or mis-hashed. ENOENT AFTER ENUMERATION splits by SOURCE (M-04, driver-decided): an
+// INDEX-derived tracked path already gone from the working tree is a durable builder deletion — it
+// stays out of the snapshot (null) and the diff renders its delete tombstone; a WORKING-TREE-derived
+// path (git --others or the non-git walk) that vanishes between enumeration and the snapshot is an
+// UNSTABLE read and HOLDs, never a silent drop. A fifo, socket, device, gitlink, a swap, or any other
+// lstat/open/read fault HOLDs.
+function snapshotEntry(repo, rel, source) {
+  const abs = join(repo, rel)
+  let st
+  try {
+    st = lstatSync(abs)
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      if (source === 'index') return null
+      throw new Error(`the working-tree path ${rel} vanished between enumeration and the snapshot — an unstable read`)
+    }
+    throw new Error(`could not stat ${rel}: ${error.message}`)
+  }
+  if (st.isSymbolicLink()) {
+    let target
+    try {
+      target = readlinkSync(abs)
+    } catch (error) {
+      throw new Error(`could not read the symlink ${rel}: ${error.message}`)
+    }
+    return { path: rel, type: 'symlink', target }
+  }
+  if (st.isFile()) {
+    let fd
+    try {
+      fd = openSync(abs, FS.O_RDONLY | FS.O_NOFOLLOW)
+    } catch (error) {
+      throw new Error(`could not open ${rel} without following a link — an unstable path or a file-to-symlink swap: ${error.message}`)
+    }
+    try {
+      const fst = fstatSync(fd)
+      if (!fst.isFile()) throw new Error(`${rel} was not a regular file when opened — an unstable path`)
+      if (fst.dev !== st.dev || fst.ino !== st.ino) throw new Error(`${rel} was swapped between the stat and the open — an unstable path`)
+      const bytes = readFileSync(fd)
+      return { path: rel, type: 'file', mode_executable: (st.mode & 0o111) !== 0, sha256: createHash('sha256').update(bytes).digest('hex') }
+    } finally {
+      try { closeSync(fd) } catch { /* the fd read result stands even if the close fails */ }
+    }
+  }
+  throw new Error(`cannot snapshot an unsupported special path: ${rel}`)
+}
+
+// A deterministic, sorted recursive walk of the working root for the non-git mode: every regular file
+// and symlink, excluding .git (VCS metadata at any depth) and the root .kiln. Directories recurse in
+// sorted order so the enumerated path list is stable across runs. M-04: the walk is a WORKING-TREE
+// source — a child that vanishes between the readdir and its lstat is an UNSTABLE read and HOLDs (any
+// lstat fault throws, ENOENT included), never a silent continue that would drop a path mid-snapshot.
+function walkPaths(repo) {
+  const out = []
+  const walk = (rel) => {
+    let names
+    try {
+      names = readdirSync(rel === '' ? repo : join(repo, rel))
+    } catch (error) {
+      throw new Error(`could not read the directory ${rel || '.'}: ${error.message}`)
+    }
+    for (const name of names.slice().sort()) {
+      if (name === '.git' || (rel === '' && name === '.kiln')) continue
+      const child = rel === '' ? name : rel + '/' + name
+      let st
+      try {
+        st = lstatSync(join(repo, child))
+      } catch (error) {
+        throw new Error(`could not stat ${child} during the walk — an unstable read: ${error.message}`)
+      }
+      if (st.isDirectory()) { walk(child); continue }
+      out.push(child)
+    }
+  }
+  walk('')
+  return out
+}
+
+// The shared enumerator: git tracked + untracked-non-ignored (tracked-ignored INCLUDED, ignored-
+// untracked EXCLUDED and declared), else the deterministic walk. Both modes hash working-tree bytes,
+// sort entries by UTF-8 path bytes, and exclude .git/** and .kiln/**. Returns { enumerator,
+// exclusions, entries } — the canonical snapshot object whose sha256 anchors the baseline and the
+// after-digest.
+function captureSnapshot(repo) {
+  const git = gitWorktree(repo)
+  const enumerator = git ? 'git' : 'walk'
+  const exclusions = git ? ['.git', '.kiln', 'ignored-untracked'] : ['.git', '.kiln']
+  const seen = new Set()
+  const tagged = []
+  const add = (rel, source) => {
+    if (manifestExcluded(rel) || seen.has(rel)) return
+    seen.add(rel)
+    tagged.push({ rel, source })
+  }
+  if (git) {
+    // M-04: INDEX-derived tracked paths carry the 'index' source (a missing one is a durable
+    // deletion); untracked-non-ignored paths carry 'worktree' (a missing one is an unstable read).
+    // The seen-dedupe keeps the index source authoritative on the (impossible) overlap.
+    for (const p of gitPaths(repo, [])) add(p, 'index')
+    for (const p of gitPaths(repo, ['--others', '--exclude-standard'])) add(p, 'worktree')
+  } else {
+    for (const p of walkPaths(repo)) add(p, 'worktree')
+  }
+  tagged.sort((a, b) => bytePathCompare(a.rel, b.rel))
+  const entries = []
+  for (const { rel, source } of tagged) {
+    const entry = snapshotEntry(repo, rel, source)
+    if (entry !== null) entries.push(entry)
+  }
+  return { enumerator, exclusions, entries }
+}
+
+// Diff two snapshot entry lists into the canonical change list. A path only in the baseline is a
+// delete, only in the after is an add, in both with any difference (content, type, or mode) is a
+// modify; identical entries yield no change. Renames are a delete plus an add — never inferred.
+// Sorted by UTF-8 path bytes.
+function diffSnapshots(baseEntries, afterEntries) {
+  const index = (list) => { const m = new Map(); for (const e of list) m.set(e.path, e); return m }
+  const before = index(baseEntries)
+  const after = index(afterEntries)
+  const changes = []
+  const paths = new Set()
+  for (const e of baseEntries) paths.add(e.path)
+  for (const e of afterEntries) paths.add(e.path)
+  for (const path of paths) {
+    const b = before.get(path)
+    const a = after.get(path)
+    if (b && !a) changes.push({ path, change: 'delete', before: b, after: null })
+    else if (!b && a) changes.push({ path, change: 'add', before: null, after: a })
+    else if (b && a && canonicalString(b) !== canonicalString(a)) changes.push({ path, change: 'modify', before: b, after: a })
+  }
+  changes.sort((x, y) => bytePathCompare(x.path, y.path))
+  return changes
+}
+
+// The content-addressed baseline file for a generation — its name IS its digest, so no write ever
+// targets a name a committed key can already reference; a late or concurrent writer with different
+// bytes lands a different, inert file rather than clobbering a committed baseline.
+const baselineFile = (genDir, sha) => join(genDir, 'baseline-' + sha + '.json')
+
+// ENOENT-only absence at a manifest-store boundary: a path component genuinely absent is a clean
+// no-manifest (false); ANY other fault — a file planted where a directory belongs (ENOTDIR), an
+// unreadable store (EACCES), a genuine IO fault — is untrusted and throws, so a manifest check never
+// falls OPEN into the legacy path over an anomaly it cannot read (the S6 untrusted-read-holds
+// discipline on a trust boundary).
+function manifestPathPresent(path) {
+  try {
+    lstatSync(path)
+    return true
+  } catch (error) {
+    if (error.code === 'ENOENT') return false
+    throw new Error(`the manifest store path could not be stated: ${error.message}`)
+  }
+}
+
+// The exact field set a committed key carries — the sentinel is only trustworthy if it fully declares
+// its {slice, generation} identity, so any extra or missing field is a torn key that HOLDs.
+const KEY_FIELDS = ['schema_version', 'run_id', 'slice', 'generation', 'enumerator', 'exclusions', 'baseline_sha256', 'created_ts']
+
+// Read and FULLY validate the immutable baseline for a generation (M-03). A missing key means prepare
+// or a recompute ran before manifest-start (a wiring bug). The committed key must declare exactly this
+// {slice, generation}: its slice and generation must equal the addressed pair, its schema_version must
+// be the committed schema, its enumerator must be in the closed set, its exclusions well-formed, its
+// baseline_sha256 a 64-hex digest, its run_id string-or-null, and its field set exact — so the sentinel
+// reliably establishes the declared key rather than reusing a contradictory one. baseline_sha256 rides
+// the key so a truncated baseline is caught here, and the baseline file is content-addressed by it.
+function readBaseline(genDir, expectedSlice, expectedGeneration) {
+  let key
+  try {
+    key = JSON.parse(readFileSync(join(genDir, 'key.json'), 'utf8'))
+  } catch (error) {
+    throw new Error(`the baseline key for this generation is missing or unreadable (manifest-start runs first): ${error.message}`)
+  }
+  if (!isObject(key)) throw new Error('the baseline key is not a JSON object')
+  const keys = Object.keys(key)
+  if (keys.length !== KEY_FIELDS.length || KEY_FIELDS.some((f) => !keys.includes(f))) throw new Error('the baseline key field set does not match the committed schema')
+  if (key.schema_version !== MANIFEST_SCHEMA) throw new Error('the baseline key schema_version is not the committed schema')
+  if (typeof key.slice !== 'string' || key.slice === '') throw new Error('the baseline key slice is malformed')
+  if (!Number.isInteger(key.generation)) throw new Error('the baseline key generation is not an integer')
+  if (key.enumerator !== 'git' && key.enumerator !== 'walk') throw new Error('the baseline key enumerator is outside the closed set')
+  if (!Array.isArray(key.exclusions) || !key.exclusions.every((x) => typeof x === 'string' && x !== '')) throw new Error('the baseline key exclusions are malformed')
+  if (!LAW_HASH.test(key.baseline_sha256)) throw new Error('the baseline key baseline_sha256 is not a 64-hex digest')
+  if (!(key.run_id === null || typeof key.run_id === 'string')) throw new Error('the baseline key run_id must be a string or null')
+  if (typeof key.created_ts !== 'string' || key.created_ts === '') throw new Error('the baseline key created_ts is malformed')
+  if (key.slice !== expectedSlice) throw new Error(`the committed baseline key names slice ${key.slice}, not the addressed slice ${expectedSlice}`)
+  if (key.generation !== expectedGeneration) throw new Error(`the committed baseline key names generation ${key.generation}, not the addressed generation ${expectedGeneration}`)
+  let bytes
+  try {
+    bytes = readFileSync(baselineFile(genDir, key.baseline_sha256))
+  } catch (error) {
+    throw new Error(`the baseline snapshot could not be read: ${error.message}`)
+  }
+  if (createHash('sha256').update(bytes).digest('hex') !== key.baseline_sha256) {
+    throw new Error('the baseline snapshot no longer matches its sealed digest — a torn baseline')
+  }
+  let snapshot
+  try {
+    snapshot = JSON.parse(bytes.toString('utf8'))
+  } catch (error) {
+    throw new Error(`the baseline snapshot is not valid JSON: ${error.message}`)
+  }
+  if (!isObject(snapshot) || !Array.isArray(snapshot.entries)) throw new Error('the baseline snapshot is malformed')
+  return { key, snapshot }
+}
+
+// Build the canonical manifest for a generation from its immutable baseline and a FRESH after-
+// snapshot. The enumerator must match the baseline's (a repo that changed git-ness mid-generation
+// throws). Returns the manifest object, its canonical bytes, and its digest — the ONE builder
+// manifest-prepare writes and every drift recompute re-runs, so an unchanged tree yields a byte-
+// identical digest.
+function buildManifest(kilnDir, repo, slice) {
+  const generation = sliceGeneration(kilnDir, slice)
+  const genDir = generationDir(kilnDir, slice, generation)
+  const { key, snapshot } = readBaseline(genDir, slice, generation)
+  const after = captureSnapshot(repo)
+  if (after.enumerator !== key.enumerator) {
+    throw new Error(`the working tree changed enumerator mid-generation: baseline ${key.enumerator}, now ${after.enumerator}`)
+  }
+  const manifest = {
+    schema_version: MANIFEST_SCHEMA,
+    coverage_mode: MANIFEST_COVERAGE,
+    run_id: key.run_id ?? null,
+    slice,
+    generation,
+    enumerator: key.enumerator,
+    exclusions: after.exclusions,
+    baseline_sha256: key.baseline_sha256,
+    after_sha256: canonicalDigest(after),
+    changes: diffSnapshots(snapshot.entries, after.entries),
+  }
+  const bytes = canonicalBytes(manifest)
+  return { generation, genDir, manifest, bytes, sha: createHash('sha256').update(bytes).digest('hex') }
+}
+
+// manifest-start: capture the immutable baseline of a generation, or reuse an existing one. A
+// committed generation (key.json present) is immutable — a resume or a concurrent-mint loser verifies
+// and reuses its baseline rather than re-capturing a tree the builder may already have touched.
+// Returns the closed fact `<generation> <baseline_sha256>`.
+function manifestStart(kilnDir, repo, slice) {
+  return manifestResult(() => {
+    const generation = sliceGeneration(kilnDir, slice)
+    const genDir = generationDir(kilnDir, slice, generation)
+    const keyPath = join(genDir, 'key.json')
+    if (existsSync(keyPath)) {
+      const { key } = readBaseline(genDir, slice, generation)
+      return key.generation + ' ' + key.baseline_sha256
+    }
+    const snapshot = captureSnapshot(repo)
+    const bytes = canonicalBytes(snapshot)
+    const baselineSha = createHash('sha256').update(bytes).digest('hex')
+    const key = {
+      schema_version: MANIFEST_SCHEMA, run_id: runIdFromLock(kilnDir), slice, generation,
+      enumerator: snapshot.enumerator, exclusions: snapshot.exclusions, baseline_sha256: baselineSha,
+      created_ts: new Date().toISOString(),
+    }
+    mkdirSync(genDir, { recursive: true })
+    // The baseline is CONTENT-ADDRESSED: its name is its own digest, committed 'wx'. An identical name
+    // is an idempotent no-op (its bytes are re-verified); a late or concurrent writer whose bytes
+    // differ lands a DIFFERENT, inert file and never overwrites a committed baseline. key.json is the
+    // O_EXCL commit sentinel and its baseline_sha256 names which baseline file is the committed one, so
+    // a loser reuses the intact committed baseline rather than a clobbered one — no generation wedges.
+    const baselinePath = baselineFile(genDir, baselineSha)
+    try {
+      writeFileSync(baselinePath, bytes, { flag: 'wx' })
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error
+      let existing
+      try {
+        existing = readFileSync(baselinePath)
+      } catch (e) {
+        throw new Error(`the content-addressed baseline could not be read: ${e.message}`)
+      }
+      if (createHash('sha256').update(existing).digest('hex') !== baselineSha) {
+        throw new Error('a content-addressed baseline file does not match its own name — a torn baseline store')
+      }
+    }
+    try {
+      writeFileSync(keyPath, canonicalBytes(key), { flag: 'wx' })
+    } catch (error) {
+      if (error.code === 'EEXIST') {
+        const { key: committed } = readBaseline(genDir, slice, generation)
+        return committed.generation + ' ' + committed.baseline_sha256
+      }
+      throw error
+    }
+    return generation + ' ' + baselineSha
+  })
+}
+
+// manifest-prepare: capture the after-snapshot, diff it against the baseline, and publish a content-
+// addressed manifest plus the current.json pointer (atomic). Returns `<generation> <manifest_sha256>`.
+function manifestPrepare(kilnDir, repo, slice) {
+  return manifestResult(() => {
+    const built = buildManifest(kilnDir, repo, slice)
+    const preparedDir = join(built.genDir, 'prepared')
+    mkdirSync(preparedDir, { recursive: true })
+    // M-01: the prepared manifest is durable content-addressed evidence. An identical name is an
+    // idempotent no-op ONLY when its bytes still hash to the name; a name colliding with corrupt or
+    // foreign bytes is a torn store that HOLDs, never a silent accept — the baseline commit discipline.
+    const preparedPath = join(preparedDir, built.sha + '.json')
+    try {
+      writeFileSync(preparedPath, built.bytes, { flag: 'wx' })
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error
+      let existing
+      try {
+        existing = readFileSync(preparedPath)
+      } catch (e) {
+        throw new Error(`the prepared manifest could not be read: ${e.message}`)
+      }
+      if (createHash('sha256').update(existing).digest('hex') !== built.sha) {
+        throw new Error('a prepared manifest file does not match its own name — a torn manifest store')
+      }
+    }
+    const tmp = join(built.genDir, '.current.json.tmp-' + process.pid + '-' + randomUUID())
+    writeFileSync(tmp, canonicalBytes({ manifest_sha256: built.sha }))
+    renameSync(tmp, join(built.genDir, 'current.json'))
+    return built.generation + ' ' + built.sha
+  })
+}
+
+// The drift recompute the publication and seal paths share. A generation NEVER started (no key.json)
+// is a legacy pass ({ sha: null }); a STARTED generation whose pointer is missing HOLDs (M-02 — never
+// a legacy fall-through). A present pointer requires TWO checks: the durable prepared artifact it
+// names must exist and hash to the pointer (M-01), and the freshly recomputed tree digest must equal
+// the pointer — either failure throws, so nothing publishes or seals over corrupt evidence or a
+// drifted tree.
+function manifestRecompute(kilnDir, repo, slice) {
+  return manifestResult(() => {
+    const generation = sliceGeneration(kilnDir, slice)
+    const genDir = generationDir(kilnDir, slice, generation)
+    const currentPath = join(genDir, 'current.json')
+    if (!manifestPathPresent(currentPath)) {
+      if (manifestPathPresent(join(genDir, 'key.json'))) {
+        throw new Error('the generation is started but its prepared manifest pointer is missing — refusing to fall through to a legacy publish or seal')
+      }
+      return { sha: null }
+    }
+    let current
+    try {
+      current = JSON.parse(readFileSync(currentPath, 'utf8'))
+    } catch (error) {
+      throw new Error(`the prepared manifest pointer could not be read: ${error.message}`)
+    }
+    if (!isObject(current) || !LAW_HASH.test(current.manifest_sha256)) throw new Error('the prepared manifest pointer is malformed')
+    let preparedBytes
+    try {
+      preparedBytes = readFileSync(join(genDir, 'prepared', current.manifest_sha256 + '.json'))
+    } catch (error) {
+      throw new Error(`the prepared manifest evidence is missing or unreadable: ${error.message}`)
+    }
+    if (createHash('sha256').update(preparedBytes).digest('hex') !== current.manifest_sha256) {
+      throw new Error('the prepared manifest evidence does not match the pointer digest — a torn manifest store')
+    }
+    const built = buildManifest(kilnDir, repo, slice)
+    if (built.sha !== current.manifest_sha256) {
+      throw new Error('the working tree drifted from the prepared manifest — refusing to publish or seal a review the diff no longer matches')
+    }
+    return { sha: built.sha }
+  })
+}
+
+// The bypass guard (M-02): a generation is STARTED once its key.json exists. A publish or seal that
+// omits the repo while a started generation exists would silence the required manifest recompute, so
+// the caller HOLDs — a started generation always requires a manifest, never a legacy fall-through.
+function manifestGenerationStarted(kilnDir, slice) {
+  return manifestResult(() => manifestPathPresent(join(generationDir(kilnDir, slice, sliceGeneration(kilnDir, slice)), 'key.json')))
+}
+
 const [mode, ...args] = process.argv.slice(2)
 if (mode === 'review' && args.length === 8) {
   // W2-S4: the AUTHORITATIVE facts ride argv (the audit-verb pattern) and the sealed trio —
@@ -1787,7 +2296,7 @@ if (mode === 'review' && args.length === 8) {
   renameSync(temporary, output)
   process.stdout.write(facts.lawHash + '\n')
   process.exit(ACCEPT)
-} else if (mode === 'append-seal' && (args.length === 3 || args.length === 5)) {
+} else if (mode === 'append-seal' && (args.length === 3 || args.length === 5 || args.length === 6)) {
   // The recovered v3 "Thoth scribe": an opaque, trusted seal-append verb. The kernel courier calls
   // it instead of a bare shell append it declines to moralize; the seal ledger semantics live here.
   // Closed label, nonempty slice. W2-S6: the row lands in seals.jsonl (the append-only truth) and
@@ -1804,7 +2313,12 @@ if (mode === 'review' && args.length === 8) {
   // candidate_id — it renders no membership until capture-and-finalize promotes it. When every
   // referenced leg is already resolved (a codex reviewer) the row is non-provisional. The legacy
   // three-word arity keeps its exact today behaviour so the S11 shell callers never change.
-  const [kilnDir, slice, label, builderCsv, reviewerRef] = args
+  // W2-S7a (FORK 3): a SIXTH argv word carries the repo — the seal RECOMPUTES the control-derived
+  // manifest immediately before the candidate write and REJECTS any drift, so a gate-side mutation or
+  // a change between publication and seal cannot inherit the review. A prepared manifest for the slice
+  // generation with no repo arg would silence the check, so it HOLDs; no prepared manifest is a legacy
+  // append (the S6-era seals stay byte-identical).
+  const [kilnDir, slice, label, builderCsv, reviewerRef, repoArg] = args
   if (label !== 'dual' && label !== 'single-family') {
     stop('transport_failure', 'append-seal label must be dual or single-family', TRANSPORT_FAILURE)
   }
@@ -1812,7 +2326,7 @@ if (mode === 'review' && args.length === 8) {
     stop('transport_failure', 'append-seal slice id must be a nonempty string', TRANSPORT_FAILURE)
   }
   const sealRow = { type: 'seal', slice, label, run_id: runIdFromLock(kilnDir), ts: new Date().toISOString() }
-  if (args.length === 5) {
+  if (args.length === 5 || args.length === 6) {
     const runId = runIdFromLock(kilnDir)
     const idx = identityIndex(kilnDir)
     const builderLegs = builderCsv === '' ? [] : builderCsv.split(',')
@@ -1839,7 +2353,23 @@ if (mode === 'review' && args.length === 8) {
       sealRow.candidate_id = randomBytes(16).toString('hex')
     }
   }
+  // M-05: reconcile FIRST, so the manifest recompute is LITERALLY the last operation before the
+  // candidate append — the unprotected interval between the drift check and the write is minimal.
   reconcileLedger(kilnDir, SEAL_LEDGER)
+  // W2-S7a (FORK 3): recompute the manifest and reject drift immediately before the append — nothing
+  // seals over a diff the review no longer matches. With a repo the recompute enforces the match (a
+  // legacy pass only when the generation was never started); with no repo but a STARTED generation
+  // (M-02: key.json present), the bypass HOLDs.
+  if (repoArg !== undefined) {
+    const drift = manifestRecompute(kilnDir, repository(repoArg), slice)
+    if (drift.error) stop('transport_failure', drift.error, TRANSPORT_FAILURE)
+  } else {
+    const started = manifestGenerationStarted(kilnDir, slice)
+    if (started.error) stop('transport_failure', started.error, TRANSPORT_FAILURE)
+    if (started.value) {
+      stop('transport_failure', 'append-seal found a started manifest generation but no repo to recompute it — refusing to seal past the drift check', TRANSPORT_FAILURE)
+    }
+  }
   appendLedgerRow(kilnDir, SEAL_LEDGER, sealRow)
   process.exit(ACCEPT)
 } else if (mode === 'seal-law' && args.length === 2) {
@@ -2206,6 +2736,39 @@ if (mode === 'review' && args.length === 8) {
   reconcileLedger(kilnDir, SEAL_LEDGER)
   reconcileLedger(kilnDir, AUDIT_LEDGER)
   process.exit(ACCEPT)
+} else if (mode === 'manifest-start' && args.length === 3) {
+  // W2-S7a (FORK 3): capture the immutable baseline of a slice generation before its first builder
+  // mutation, so dirty or untracked pre-run files are attributed to the baseline, never the slice. The
+  // generation derives from the seal count; the baseline is content-addressed under
+  // .kiln/manifests/<sha256(slice)>/gen-<N>/ and reused verbatim on a resume. Any capture or write
+  // fault holds transport 20. stdout is one line of closed facts: <generation> <baseline_sha256>.
+  const [repoPath, kilnDir, slice] = args
+  if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
+    stop('transport_failure', 'manifest-start kilnDir must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  if (typeof slice !== 'string' || !STATE_SLICE_ID.test(slice)) {
+    stop('transport_failure', 'manifest-start slice must be a slice-id charset token', TRANSPORT_FAILURE)
+  }
+  const started = manifestStart(kilnDir, repository(repoPath), slice)
+  if (started.error) stop('transport_failure', started.error, TRANSPORT_FAILURE)
+  process.stdout.write(started.value + '\n')
+  process.exit(ACCEPT)
+} else if (mode === 'manifest-prepare' && args.length === 3) {
+  // W2-S7a (FORK 3): capture the after-snapshot, diff it against the immutable baseline, and publish a
+  // content-addressed manifest plus the current.json pointer. The generation's baseline MUST exist
+  // (manifest-start runs first) — a missing one is a wiring bug that holds. stdout is one line of
+  // closed facts: <generation> <manifest_sha256>.
+  const [repoPath, kilnDir, slice] = args
+  if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
+    stop('transport_failure', 'manifest-prepare kilnDir must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  if (typeof slice !== 'string' || !STATE_SLICE_ID.test(slice)) {
+    stop('transport_failure', 'manifest-prepare slice must be a slice-id charset token', TRANSPORT_FAILURE)
+  }
+  const prepared = manifestPrepare(kilnDir, repository(repoPath), slice)
+  if (prepared.error) stop('transport_failure', prepared.error, TRANSPORT_FAILURE)
+  process.stdout.write(prepared.value + '\n')
+  process.exit(ACCEPT)
 } else if (mode === 'identity-begin' && args.length === 4) {
   // W2-S7a (ruling A-prime): mint a random 128-bit leg_id, append the IMMUTABLE intent, and print
   // `<leg_id> <expected_label>` — the two facts the kernel swaps in as the dispatched agent label.
@@ -2519,7 +3082,7 @@ if (mode === 'review' && args.length === 8) {
     if (off !== undefined) return `finding ${off.id} criterion ${off.criterion} is outside the surviving escalation scope`
     return null
   }, 'screen', evidence.images, String(generation.number))
-} else if (mode === 'publish-gate' && (args.length === 4 || args.length === 5)) {
+} else if (mode === 'publish-gate' && (args.length === 4 || args.length === 5 || args.length === 7)) {
   // W2-S5 (C3a / B05 / ruling 3): the claude-path publish. The kernel and research-sweep claude
   // legs cannot author files, so they hand this trusted verb the validated candidate they just
   // graded; the verb reads the candidate bytes, archives them to the immutable ledger, THEN renames
@@ -2529,7 +3092,7 @@ if (mode === 'review' && args.length === 8) {
   // verdict is ever published without its archive row. The family rides argv because the caller,
   // not the file path, knows which review family this verdict belongs to (build and LAW ratify
   // share one gate file).
-  const [kilnDir, family, candidatePath, gatePath, reviewerLegId] = args
+  const [kilnDir, family, candidatePath, gatePath, reviewerLegId, repoArg, sliceArg] = args
   // W2-S7a (ruling A-prime): the OPTIONAL trailing reviewer_leg_id is the claude reviewer leg the
   // kernel minted for this gate — it must EXIST in identity.jsonl and a run_id matching this run, or
   // the publish holds. W2-S7a (B-CODEX-ROLE): the role check is UNIFORM and FAMILY-SPECIFIC — the
@@ -2545,13 +3108,38 @@ if (mode === 'review' && args.length === 8) {
     if (leg.role !== CODEX_ROLE[family]) stop('transport_failure', 'publish-gate reviewer_leg_id role does not match this publish family', TRANSPORT_FAILURE)
     if (leg.run_id !== runIdFromLock(kilnDir)) stop('transport_failure', 'publish-gate reviewer_leg_id belongs to another run', TRANSPORT_FAILURE)
   }
+  // W2-S7a (FORK 3): the review family recomputes its control-derived manifest before the archive and
+  // rename, and archives the matched digest on the row. The kernel supplies the repo and slice as the
+  // trailing pair; a prepared manifest with the pair OMITTED would silence the drift check, so it
+  // HOLDs (bypass prevention). No prepared manifest for the slice is a legacy publish (null digest).
+  // Non-review families carry no manifest — the drift check and the digest are theirs to skip.
+  let manifestSha = null
+  if (family === 'review') {
+    if (repoArg !== undefined) {
+      if (typeof sliceArg !== 'string' || !STATE_SLICE_ID.test(sliceArg)) {
+        stop('transport_failure', 'publish-gate slice must be a slice-id charset token', TRANSPORT_FAILURE)
+      }
+      const drift = manifestRecompute(kilnDir, repository(repoArg), sliceArg)
+      if (drift.error) stop('transport_failure', drift.error, TRANSPORT_FAILURE)
+      manifestSha = drift.value.sha
+    } else {
+      // Bypass guard, ENOENT-only: a genuinely absent manifest store is a legacy project (null
+      // digest, proceed); a present store with the args OMITTED HOLDs; an unreadable store or a file
+      // planted where the store belongs is untrusted and HOLDs, never a silent legacy publish.
+      const present = manifestResult(() => manifestPathPresent(join(kilnDir, MANIFEST_DIR)))
+      if (present.error) stop('transport_failure', present.error, TRANSPORT_FAILURE)
+      if (present.value) {
+        stop('transport_failure', 'publish-gate review family omitted the repo and slice while control-derived manifests exist — refusing to bypass the drift check', TRANSPORT_FAILURE)
+      }
+    }
+  }
   let verdictBytes
   try {
     verdictBytes = readFileSync(resolve(candidatePath))
   } catch (error) {
     stop('transport_failure', `publish-gate candidate unreadable: ${error.message}`, TRANSPORT_FAILURE)
   }
-  const archiveError = archiveVerdict(kilnDir, family, verdictBytes, reviewerLegId)
+  const archiveError = archiveVerdict(kilnDir, family, verdictBytes, reviewerLegId, manifestSha)
   if (archiveError) stop('transport_failure', archiveError, TRANSPORT_FAILURE)
   try {
     renameSync(resolve(candidatePath), resolve(gatePath))
@@ -2840,7 +3428,7 @@ if (mode === 'review' && args.length === 8) {
 } else {
   stop(
     'transport_failure',
-    'usage: kiln-review review <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <gate-review.json> | kiln-review recheck <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review gate-facts <kilnDir> <slice> <request.json> <gate-facts.json> | kiln-review append-seal <kilnDir> <slice> <label> [<builder_leg_ids_csv> <reviewer_leg_id|->] | kiln-review seal-law <kilnDir> <label> | kiln-review run-checks <kilnDir> | kiln-review slices <kilnDir> | kiln-review screen-criteria <kilnDir> | kiln-review perceptual-family <kilnDir> | kiln-review ratify <repo> <request.json> <gate-review.json> <family> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json> <family> | kiln-review publish-gate <kilnDir> <family> <candidate.json> <gate-review.json> [<reviewer_leg_id>] | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> <label> [<auditor_leg_id|-> [<repair_leg_ids_csv>]] | kiln-review reconcile <kilnDir> | kiln-review identity-begin <kilnDir> <role> <requested_alias> <subject> | kiln-review capture-and-finalize <kilnDir> [<transcriptPath>] | kiln-review screen <repo> <kilnDir> <model> <alias> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <alias> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <alias> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...] | kiln-review run-lock acquire <kilnDir> <choice> <conductorPid> | kiln-review run-lock join <kilnDir> <run_id> <owner> | kiln-review run-lock release <kilnDir> <run_id> <owner> | kiln-review run-lock takeover <kilnDir> <choice> <conductorPid>',
+    'usage: kiln-review review <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <gate-review.json> | kiln-review recheck <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review gate-facts <kilnDir> <slice> <request.json> <gate-facts.json> | kiln-review append-seal <kilnDir> <slice> <label> [<builder_leg_ids_csv> <reviewer_leg_id|-> [<repo>]] | kiln-review seal-law <kilnDir> <label> | kiln-review run-checks <kilnDir> | kiln-review slices <kilnDir> | kiln-review screen-criteria <kilnDir> | kiln-review perceptual-family <kilnDir> | kiln-review ratify <repo> <request.json> <gate-review.json> <family> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json> <family> | kiln-review publish-gate <kilnDir> <family> <candidate.json> <gate-review.json> [<reviewer_leg_id> [<repo> <slice>]] | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> <label> [<auditor_leg_id|-> [<repair_leg_ids_csv>]] | kiln-review reconcile <kilnDir> | kiln-review manifest-start <repo> <kilnDir> <slice> | kiln-review manifest-prepare <repo> <kilnDir> <slice> | kiln-review identity-begin <kilnDir> <role> <requested_alias> <subject> | kiln-review capture-and-finalize <kilnDir> [<transcriptPath>] | kiln-review screen <repo> <kilnDir> <model> <alias> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <alias> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <alias> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...] | kiln-review run-lock acquire <kilnDir> <choice> <conductorPid> | kiln-review run-lock join <kilnDir> <run_id> <owner> | kiln-review run-lock release <kilnDir> <run_id> <owner> | kiln-review run-lock takeover <kilnDir> <choice> <conductorPid>',
     TRANSPORT_FAILURE,
   )
 }

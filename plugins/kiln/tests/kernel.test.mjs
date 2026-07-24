@@ -159,6 +159,10 @@ async function runKernel(kargs, script) {
     // the gate sidecar; the harness answers a well-formed codex reviewer leg by default so every
     // ui-normal gate scenario seals with a real reviewer reference.
     'gate:leg': { exit: 0, ids: ['c'.repeat(32)] },
+    // W2-S7a (FORK 3): every non-sealed slice captures its baseline before the builder mint, and every
+    // gate prepares a fresh control-derived manifest; the harness answers both clean by default so
+    // pre-FORK-3 scenarios build and gate exactly as before. A manifest-fault scenario overrides these.
+    'manifest:start': { exit: 0 }, 'manifest:prepare': { exit: 0 },
     ...script,
   }
   const calls = []
@@ -5302,6 +5306,62 @@ test('runtime (W2-S7a): the seal, audit, and claude-publish call sites carry the
   ]) {
     assert.ok(src.includes(pub), 'the claude publish carries its reviewer leg: ' + pub)
   }
+})
+
+test('runtime (W2-S7a, FORK 3): the manifest-start, manifest-prepare, review-publish and seal call sites carry the cwd-relative repo shq-quoted; the audit and screen paths carry NONE', () => {
+  assert.ok(src.includes("manifest-start ' + shq('.') + ' .kiln ' + shq(slice)"), 'manifest-start rides the cwd-relative repo and the slice, shq-quoted')
+  assert.ok(src.includes("manifest-prepare ' + shq('.') + ' .kiln ' + shq(slice)"), 'manifest-prepare rides the cwd-relative repo and the slice, shq-quoted')
+  assert.ok(src.includes("publish-gate .kiln review ' + P.candidate + ' ' + P.gate + ' ' + shq(gateLeg.legId) + ' ' + shq('.') + ' ' + shq(slice)"),
+    'the review publish gains the repo and slice after the reviewer leg')
+  assert.ok(src.includes("shq(reviewerLeg || '-') + ' ' + shq('.')"), 'the seal gains the cwd-relative repo after the reviewer position')
+  // The audit and screen paths judge coverage (S7b) and perceptual evidence, not source — no manifest
+  // args ride their publishes or the audit append.
+  assert.ok(!src.includes("shq(auditLeg.legId) + ' ' + shq('.')"), 'the audit publish carries no manifest repo/slice')
+  assert.ok(!src.includes("shq(screenLeg.legId) + ' ' + shq('.')"), 'the screen publish carries no manifest repo/slice')
+  assert.ok(!src.includes("auditRef + ' ' + shq('.')"), 'the audit append carries no manifest repo')
+})
+
+test('runtime (W2-S7a, FORK 3): manifest-start precedes the builder, manifest-prepare precedes the gate, and the seal carries the cwd-relative repo', async () => {
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'slice:s1': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'forging' },
+    'law:pre-seal': GREEN,
+    'law:stage-end': GREEN,
+    'degraded:check': { exit: 1 },
+    'gate:review': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'ok', 'the ui slice builds, gates, and seals')
+  const idx = (label) => calls.findIndex(c => c.label === label)
+  assert.ok(idx('manifest:start') >= 0 && idx('manifest:start') < idx('identity:builder'), 'the baseline is captured before the builder identity is minted')
+  assert.ok(idx('manifest:start') < idx('slice:s1'), 'and before the builder dispatch — no pre-run dirt is attributed to the slice')
+  assert.ok(idx('manifest:prepare') >= 0 && idx('manifest:prepare') < idx('gate:review'), 'a fresh manifest is prepared before the gate dispatch')
+  assert.ok(calls.find(c => c.label === 'manifest:start').prompt.includes("manifest-start '.' .kiln 's1'"), 'manifest-start rides the cwd-relative repo and slice, shq-quoted')
+  assert.ok(calls.find(c => c.label === 'manifest:prepare').prompt.includes("manifest-prepare '.' .kiln 's1'"), 'manifest-prepare rides the same')
+  const seal = calls.find(c => c.label === 'seal:append').prompt.split('\n').pop()
+  assert.ok(/append-seal .* '\.'$/.test(seal), 'the seal command ends with the cwd-relative repo, shq-quoted')
+})
+
+test('runtime (W2-S7a, FORK 3): a manifest-start fault holds the stage before the builder is minted', async () => {
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'law:pre-seal': GREEN,
+    'law:stage-end': GREEN,
+    'manifest:start': { exit: 20 },
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'transport-failure', 'a nonzero manifest-start holds the stage')
+  assert.ok(!calls.some(c => c.label === 'identity:builder'), 'no builder is minted over an uncapturable baseline')
+  assert.ok(!calls.some(c => c.label === 'slice:s1'), 'and no slice is built')
 })
 
 test('runtime (W2-S7a): the conductor runs capture-and-finalize after every Workflow return, before the beat, holding the line on a nonzero', () => {
