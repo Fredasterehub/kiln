@@ -3036,7 +3036,7 @@ test('review (W2-S7a, FORK 1): the codex prompt embeds the EXACT canonical contr
   assert.ok(prompt.includes('"review_id":'), 'the transport review_id still rides the prompt for the reviewer to echo')
 })
 
-test('contract (W2-S7a, FORK 1): the milestone-audit covered tuples bind each sealed slice to its last sealed generation and manifest digest — a legacy seal is an honest null', () => {
+test('contract (W2-S7a, FORK 1): the milestone-audit covered tuples bind each sealed slice to its current generation and manifest digest — a legacy seal is an honest null', () => {
   const fx = auditRepo()
   s6Lock(fx.kiln, 'run-cov')
   writeFileSync(join(fx.repo, 'work.txt'), 'w\n')
@@ -3048,13 +3048,20 @@ test('contract (W2-S7a, FORK 1): the milestone-audit covered tuples bind each se
   assert.equal(spawnSync('node', [REVIEW, 'append-seal', fx.kiln, 's1', 'dual', b1, '-', fx.repo], { encoding: 'utf8' }).status, 0, 's1 seals with its gen-1 manifest')
   const b2 = mintLeg(fx.kiln, 'builder', 'sonnet', 's2')[0]
   assert.equal(appendSeal(fx.kiln, 's2', 'dual', b2, '-').status, 0, 's2 seals legacy — no manifest store')
+  // W2-S7b (item 5): coverage is authored by the CURRENT-tuple reducer, never by a historical row
+  // count, so both candidates must actually hold membership before they can be covered — the capture
+  // resolves their builder identities and promotes them.
+  assert.equal(capture(fx.kiln, writeTranscript(fx.kiln, [wpEvent(idRows(fx.kiln)
+    .filter((row) => row.type === 'intent')
+    .map((row) => wa(row.expected_label, 'ag-' + row.leg_id.slice(0, 8), 'claude-sonnet-5')))])).status, 0)
+  assert.equal(sealsLog(fx.kiln), 's1 dual\ns2 dual\n', 'both seals are promoted membership before the coverage is composed')
   const sha = cPrepare(fx.repo, fx.kiln, 'milestone-audit', 'initial', 's3').stdout.trim()
   const c = JSON.parse(readFileSync(cStore(fx.kiln, sha), 'utf8'))
   assert.deepEqual(c.covered.map((t) => t.slice), ['s1', 's2', 's3'], 'the coverage tuples ride in sealed-prefix order')
   const cov = Object.fromEntries(c.covered.map((t) => [t.slice, t]))
-  assert.equal(cov.s1.generation, 1, 's1 last sealed generation is the seal-row count')
+  assert.equal(cov.s1.generation, 1, 's1 current generation is the ordinal of its current candidate')
   assert.equal(cov.s1.manifest_sha256, s1sha, 's1 binds its gen-1 manifest digest from the store')
-  assert.equal(cov.s2.generation, 1, 's2 last sealed generation is 1')
+  assert.equal(cov.s2.generation, 1, 's2 current generation is 1')
   assert.equal(cov.s2.manifest_sha256, null, 's2 sealed with no manifest store — an honest null')
   assert.equal(cov.s3.generation, 0, 's3 is unsealed at audit time — generation 0')
   assert.equal(cov.s3.manifest_sha256, null, 'an unsealed prefix member carries a null manifest')
@@ -3159,4 +3166,914 @@ test('kiln-review (W2-S7a, F5-CLI-USAGE): the terminal usage string is canonical
   // the stale pre-fix ratify forms (no kilnDir) are gone — the pin that fails pre-fix
   assert.ok(!usage.includes('kiln-review ratify <repo> <request.json>'), 'the stale 4-arg ratify form is gone')
   assert.ok(!usage.includes('kiln-review ratify-recheck <repo> <request.json>'), 'the stale 5-arg ratify-recheck form is gone')
+})
+
+// ── W2-S7b: cutoffs, positional generations, derived audit currency, candidate attestations ───────
+// The reduction is now the whole membership law: a batch cutoff withdraws membership (D1), an audit
+// goes inactive the moment its coverage stops matching the current seals (D2), a candidate declares
+// its attestation kind on the wire (D3), and a reviewed candidate binds by reference to the one
+// accepted archive row that carries all four S7a captures (D4).
+const invalidate = (dir, slices) => spawnSync('node', [REVIEW, 'invalidate', dir, slices], { encoding: 'utf8' })
+const reconcile = (dir) => spawnSync('node', [REVIEW, 'reconcile', dir], { encoding: 'utf8' })
+const sealKind = (dir, slice, label, builderCsv, reviewerRef, repo, kind) => spawnSync(
+  'node', [REVIEW, 'append-seal', dir, slice, label, builderCsv, reviewerRef, repo, kind], { encoding: 'utf8' })
+const auditsLog = (dir) => existsSync(join(dir, 'audits.log')) ? readFileSync(join(dir, 'audits.log'), 'utf8') : null
+const sealRows = (dir) => s6Rows(join(dir, 'seals.jsonl'))
+// A reduction-level fixture for a MODERN candidate. The append verbs validate the reference against
+// the archive; the REDUCTION holds a candidate only to its field law, so a shaped row is enough to
+// pin the cutoff and generation arithmetic without standing a whole gate up for every ordinal.
+const modernSeal = (dir, slice, label = 'dual') => {
+  const rows = existsSync(join(dir, 'seals.jsonl')) ? readFileSync(join(dir, 'seals.jsonl'), 'utf8') : ''
+  writeFileSync(join(dir, 'seals.jsonl'), rows + JSON.stringify({
+    type: 'seal', slice, label, attestation_kind: 'reviewed',
+    review_ref: { family: 'review', review_id: 'rv-' + slice, verdict_sha256: 'a'.repeat(64), reviewer_leg_id: 'c'.repeat(32) },
+  }) + '\n')
+  return reconcile(dir)
+}
+// The audit counterpart: a reduction-level fixture for a candidate that CARRIES coverage, so the
+// currency and supersession arithmetic can be pinned over an exact tuple set without standing a whole
+// milestone gate up for every generation.
+const modernAudit = (dir, seam, covered, label = 'dual') => {
+  const rows = existsSync(join(dir, 'audits.jsonl')) ? readFileSync(join(dir, 'audits.jsonl'), 'utf8') : ''
+  writeFileSync(join(dir, 'audits.jsonl'), rows + JSON.stringify({
+    type: 'audit', seam, outcome: 'accept', label, attestation_kind: 'reviewed',
+    review_ref: { family: 'audit', review_id: 'aud-' + seam, verdict_sha256: 'a'.repeat(64), reviewer_leg_id: 'c'.repeat(32) },
+    covered,
+  }) + '\n')
+  return reconcile(dir)
+}
+// Resolve every outstanding intent in one capture — the conductor beat, as the fixtures need it.
+const captureAll = (dir) => capture(dir, writeTranscript(dir, [wpEvent(idRows(dir)
+  .filter((row) => row.type === 'intent')
+  .map((row) => wa(row.expected_label, 'ag-' + row.leg_id.slice(0, 8), 'claude-sonnet-5')))]))
+
+// The full reviewed-seal fixture: a sealed trio, a control-derived manifest for the slice generation,
+// a canonical contract over the same facts, and the accepted verdict published through publish-gate —
+// so reviews.jsonl carries EXACTLY ONE fully valid row for the gate file now on disk. Everything a
+// reviewed candidate binds by reference exists exactly once, and nothing is duplicated onto the row.
+function reviewedFixture(slice = 's1') {
+  const { repo, kiln, digest } = sealReviewRepo(slice)
+  s6Lock(kiln, 'run-s7b')
+  const rf = join(repo, 'request.json')
+  writeFileSync(rf, JSON.stringify({ criteria: 'x', paths: [], failures: [], commands: [] }))
+  assert.equal(mfStart(repo, kiln, slice).status, 0, 'the fixture captures its baseline')
+  writeFileSync(join(repo, 'work.txt'), 'built\n')
+  assert.equal(mfPrepare(repo, kiln, slice).status, 0, 'the fixture prepares its manifest')
+  const contractSha = cPrepare(repo, kiln, 'slice-review', 'initial', slice, rf).stdout.trim()
+  const reviewer = mintLeg(kiln, 'gate-reviewer', 'opus', slice)[0]
+  const candidate = join(kiln, '.gate-review.reviewer.tmp')
+  writeFileSync(candidate, JSON.stringify({ review_id: 'rv-' + slice, law_hash: digest, findings: [], blockers: [], verdict: 'accept' }))
+  const published = spawnSync('node', [REVIEW, 'publish-gate', kiln, 'review', candidate, join(kiln, 'gate-review.json'), reviewer, repo, slice, contractSha], { encoding: 'utf8' })
+  assert.equal(published.status, 0, 'the fixture publishes its accepted verdict')
+  const builder = mintLeg(kiln, 'builder', 'sonnet', slice)[0]
+  return { repo, kiln, slice, digest, builder, reviewer, contractSha }
+}
+
+// The reviewed-audit fixture: three sealed slices with current membership, the milestone-audit
+// contract composed over their current tuples, and the accepted audit verdict published to the
+// audit-family gate file.
+function auditedFixture() {
+  const fx = auditRepo()
+  s6Lock(fx.kiln, 'run-s7b-audit')
+  for (const slice of ['s1', 's2', 's3']) assert.equal(appendSeal(fx.kiln, slice, 'dual').status, 0)
+  assert.equal(sealsLog(fx.kiln), 's1 dual\ns2 dual\ns3 dual\n', 'the whole prefix holds current membership')
+  const contractSha = cPrepare(fx.repo, fx.kiln, 'milestone-audit', 'initial', 's3').stdout.trim()
+  const auditor = mintLeg(fx.kiln, 'auditor', 'opus', 's3')[0]
+  const candidate = join(fx.kiln, '.audit.tmp')
+  writeFileSync(candidate, JSON.stringify({ review_id: 'aud-1', law_hash: fx.digest, findings: [], blockers: [], verdict: 'accept' }))
+  const published = spawnSync('node', [REVIEW, 'publish-gate', fx.kiln, 'audit', candidate, join(fx.kiln, 'audit-review.json'), auditor, contractSha], { encoding: 'utf8' })
+  assert.equal(published.status, 0, 'the fixture publishes its accepted audit verdict')
+  return { ...fx, auditor, contractSha }
+}
+
+test('append-seal (W2-S7b, item 6): a reviewed candidate binds BY REFERENCE to the one accepted archive row — the kind and the reference ride the row, the four captures are not copied onto it', () => {
+  const fx = reviewedFixture()
+  assert.equal(sealKind(fx.kiln, fx.slice, 'dual', fx.builder, fx.reviewer, fx.repo, 'reviewed').status, 0)
+  const row = sealRows(fx.kiln).find((r) => r.type === 'seal')
+  assert.equal(row.attestation_kind, 'reviewed', 'the candidate declares its kind on the wire')
+  const archived = ledgerRows(fx.kiln)[0]
+  assert.deepEqual(row.review_ref, { family: 'review', review_id: 'rv-s1', verdict_sha256: archived.verdict_sha256, reviewer_leg_id: archived.reviewer_leg_id },
+    'the reference is the immutable family, review_id, verdict digest AND reviewer identity of the published verdict')
+  assert.equal(row.review_ref.reviewer_leg_id, fx.reviewer, 'the identity it names is the leg the ARCHIVE row owns, taken from the archive and not from argv')
+  assert.equal(createHash('sha256').update(readFileSync(join(fx.kiln, 'gate-review.json'))).digest('hex'), row.review_ref.verdict_sha256,
+    'the verdict digest binds the EXACT published gate bytes')
+  for (const copied of ['receipt_sha256', 'manifest_sha256', 'contract_sha256', 'trio_sha256']) {
+    assert.equal(row[copied], undefined, `the ${copied} body is reached through the reference, never duplicated onto the seal row`)
+  }
+  assert.equal(sealsLog(fx.kiln), null, 'the pending builder identity keeps it provisional — no membership yet')
+  assert.equal(captureAll(fx.kiln).status, 0)
+  assert.equal(sealsLog(fx.kiln), 's1 dual\n', 'the promoted reviewed seal renders the byte-exact S6 grammar')
+})
+
+test('append-seal (W2-S7b, item 6): a verdict that is not an accept, an unarchived verdict, and a contract that judged another slice each HOLD — nothing is appended', () => {
+  const held = reviewedFixture()
+  writeFileSync(join(held.kiln, 'gate-review.json'), JSON.stringify({ review_id: 'rv-s1', law_hash: held.digest, findings: [cFinding('f1')], blockers: [], verdict: 'changes_required' }))
+  const notAccept = sealKind(held.kiln, held.slice, 'dual', held.builder, held.reviewer, held.repo, 'reviewed')
+  assert.equal(notAccept.status, 20, 'a changes_required verdict attests no candidate')
+  assert.ok(notAccept.stderr.includes('is not an accept'), 'the rule is named')
+  assert.ok(!existsSync(join(held.kiln, 'seals.jsonl')), 'nothing was appended')
+  // A verdict nobody archived: the same review_id with different bytes digests differently, so the
+  // reference matches no row at all.
+  const orphan = reviewedFixture()
+  writeFileSync(join(orphan.kiln, 'gate-review.json'), JSON.stringify({ review_id: 'rv-s1', law_hash: orphan.digest, findings: [], blockers: [], verdict: 'accept', stray: 1 }))
+  const unarchived = sealKind(orphan.kiln, orphan.slice, 'dual', orphan.builder, orphan.reviewer, orphan.repo, 'reviewed')
+  assert.equal(unarchived.status, 20, 'a verdict matching no archived row attests nothing')
+  assert.ok(unarchived.stderr.includes('exactly one archived review row'), 'the exactly-one rule is named')
+  // The contract on the row judged s1; sealing s2 through the same accepted verdict must HOLD.
+  const wrong = reviewedFixture()
+  const other = sealKind(wrong.kiln, 's2', 'dual', wrong.builder, wrong.reviewer, wrong.repo, 'reviewed')
+  assert.equal(other.status, 20, 'a contract that judged another slice attests no candidate')
+  assert.ok(other.stderr.includes('judged another slice'), 'the semantic rule is named')
+})
+
+test('append-seal (W2-S7b, item 6): a reviewed candidate HOLDs when the live trio drifted, when the archived manifest is not what the tree yields, and when the law moved under the contract', () => {
+  const drifted = reviewedFixture()
+  writeFileSync(join(drifted.repo, 'work.txt'), 'a later, unreviewed edit\n')
+  const r = sealKind(drifted.kiln, drifted.slice, 'dual', drifted.builder, drifted.reviewer, drifted.repo, 'reviewed')
+  assert.equal(r.status, 20, 'a tree that moved after the review never seals')
+  assert.ok(!existsSync(join(drifted.kiln, 'seals.jsonl')), 'nothing was appended')
+  const torn = reviewedFixture()
+  writeFileSync(join(torn.kiln, 'LAW.md'), 'a LAW edited after its seal\n')
+  const t = sealKind(torn.kiln, torn.slice, 'dual', torn.builder, torn.reviewer, torn.repo, 'reviewed')
+  assert.equal(t.status, 22, 'a live trio member drifted from the seal is the integrity class')
+  assert.ok(!existsSync(join(torn.kiln, 'seals.jsonl')), 'nothing was appended over a moved law')
+})
+
+test('append-seal (W2-S7b, item 8): the verdictless kind IS the reason — it requires single-family, forbids a reviewer leg and a review reference, and carries its own trio, receipt and manifest digests', () => {
+  const fx = reviewedFixture('s1')
+  const trio = readFileSync(join(fx.kiln, 'law', 'trio.hash'), 'utf8').split('\n').filter(Boolean)
+    .reduce((acc, line) => ({ ...acc, [line.split(' ')[0]]: line.split(' ')[1] }), {})
+  assert.equal(sealKind(fx.kiln, fx.slice, 'dual', fx.builder, '-', fx.repo, 'verdictless-degraded-ui').status, 20, 'a dual label is not a verdictless seal')
+  assert.equal(sealKind(fx.kiln, fx.slice, 'single-family', fx.builder, fx.reviewer, fx.repo, 'verdictless-degraded-ui').status, 20, 'a reviewer leg is not a verdictless seal')
+  assert.ok(!existsSync(join(fx.kiln, 'seals.jsonl')), 'no refused verdictless call appended anything')
+  assert.equal(sealKind(fx.kiln, fx.slice, 'single-family', fx.builder, '-', fx.repo, 'verdictless-degraded-ui').status, 0)
+  const row = sealRows(fx.kiln).find((r) => r.type === 'seal')
+  assert.equal(row.attestation_kind, 'verdictless-degraded-ui', 'the degraded seal is distinguishable on the wire from a reviewed one')
+  assert.equal(row.review_ref, undefined, 'it references no verdict, because there was none')
+  assert.ok(!Object.prototype.hasOwnProperty.call(row, 'reviewer_leg_id'), 'the reviewer-leg FIELD is absent, not present-and-null — a null is still a claim about a reviewer that never existed')
+  assert.deepEqual(row.trio_sha256, trio, 'it carries the three live trio digests it validated')
+  assert.equal(row.receipt_sha256, createHash('sha256').update(readFileSync(join(fx.kiln, 'check-receipt.txt'))).digest('hex'), 'it carries the current receipt digest')
+  assert.equal(row.manifest_sha256, mfCurrent(fx.kiln, fx.slice, 1).manifest_sha256, 'it carries its recomputed manifest digest')
+  assert.deepEqual(row.builder_leg_ids, [fx.builder], 'it names its complete builder identities')
+})
+
+test('append-seal (W2-S7b, item 8): a verdictless seal with no check receipt behind it HOLDs — a degraded build still proves its checks ran', () => {
+  const fx = reviewedFixture()
+  unlinkSync(join(fx.kiln, 'check-receipt.txt'))
+  const r = sealKind(fx.kiln, fx.slice, 'single-family', fx.builder, '-', fx.repo, 'verdictless-degraded-ui')
+  assert.equal(r.status, 20)
+  assert.ok(r.stderr.includes('no check receipt stands behind'), 'the rule is named')
+})
+
+test('invalidate (W2-S7b, item 1): ONE atomic batch cutoff withdraws membership for every target, derived as the maximum historical ordinal — and the emptied log is a LEGITIMATE empty, not a wipe', () => {
+  const dir = s6Dir()
+  s6Lock(dir, 'run-inv')
+  for (const slice of ['s1', 's2']) assert.equal(appendSeal(dir, slice, 'dual').status, 0)
+  assert.equal(sealsLog(dir), 's1 dual\ns2 dual\n')
+  const one = invalidate(dir, 's1')
+  assert.equal(one.status, 0)
+  assert.equal(one.stdout.trim(), 'invalidate appended 1')
+  const event = sealRows(dir).find((r) => r.type === 'invalidate')
+  assert.deepEqual(event.targets, [{ slice: 's1', through_generation: 1 }], 'the cutoff is the maximum historical candidate ordinal, derived not supplied')
+  assert.equal(event.run_id, 'run-inv', 'the event binds the CLI-owned run id')
+  assert.equal(sealsLog(dir), 's2 dual\n', 'only the invalidated slice loses membership')
+  // The whole remaining prefix in ONE event — a milestone rejection can never leave half of it standing.
+  assert.equal(invalidate(dir, 's2').status, 0)
+  assert.equal(sealsLog(dir), '', 'the emptied projection is a legitimate empty, explained by the validated cutoffs')
+  assert.equal(sealRows(dir).filter((r) => r.type === 'invalidate').length, 2, 'each batch is one event')
+})
+
+test('invalidate (W2-S7b, items 1-2): a retry that would change nothing appends nothing; a fresh candidate above the cutoff makes the next cutoff RISE', () => {
+  const dir = s6Dir()
+  assert.equal(appendSeal(dir, 's1', 'dual').status, 0)
+  assert.equal(invalidate(dir, 's1').stdout.trim(), 'invalidate appended 1')
+  const afterFirst = readFileSync(join(dir, 'seals.jsonl'), 'utf8')
+  const retry = invalidate(dir, 's1')
+  assert.equal(retry.status, 0, 'the retry is a clean no-op, never a hold')
+  assert.equal(retry.stdout.trim(), 'invalidate noop 1')
+  assert.equal(readFileSync(join(dir, 'seals.jsonl'), 'utf8'), afterFirst, 'the no-op appended nothing')
+  // The rebuild seals a FRESH candidate — its positional ordinal is 2, above the cutoff, so it is
+  // membership again and the next cutoff must rise to cover it. Past the cutoff the ledger is modern,
+  // so the rebuilt candidate declares its kind.
+  assert.equal(modernSeal(dir, 's1').status, 0)
+  assert.equal(sealsLog(dir), 's1 dual\n', 'the rebuilt slice is current membership at its next ordinal')
+  assert.equal(invalidate(dir, 's1').stdout.trim(), 'invalidate appended 1', 'a newer candidate exists, so this is no retry')
+  const cutoffs = sealRows(dir).filter((r) => r.type === 'invalidate').map((r) => r.targets[0].through_generation)
+  assert.deepEqual(cutoffs, [1, 2], 'cutoffs only ever rise, and a generation is never reused')
+  assert.equal(sealsLog(dir), '', 'the rebuilt candidate is withdrawn in turn')
+})
+
+test('invalidate (W2-S7b): a slice with no seal candidate, a malformed target list, and a repeated target are each refused', () => {
+  const dir = s6Dir()
+  assert.equal(appendSeal(dir, 's1', 'dual').status, 0)
+  assert.equal(invalidate(dir, 's2').status, 20, 'a slice with no candidate has no membership to withdraw')
+  assert.equal(invalidate(dir, '').status, 20, 'an empty target list is refused')
+  assert.equal(invalidate(dir, 's1,s1').status, 20, 'a repeated target is refused — one cutoff per slice in the batch')
+  assert.equal(invalidate(dir, 'has space').status, 20, 'a target outside the slice-id charset is refused')
+  assert.equal(sealRows(dir).filter((r) => r.type === 'invalidate').length, 0, 'no refused call appended an event')
+  assert.equal(invalidate(s6Dir(), 's1').status, 20, 'a project with no seal ledger has nothing to withdraw')
+})
+
+test('reduction (W2-S7b, item 3): membership is the SOLE latest eligible candidate — a resealed slice renders ONCE, and an invalidated candidate never resurrects behind it', () => {
+  const dir = s6Dir()
+  for (const slice of ['s1', 's1', 's2']) assert.equal(appendSeal(dir, slice, 'dual').status, 0)
+  assert.equal(sealsLog(dir), 's1 dual\ns2 dual\n', 'two candidates for one slice render one line, in first-appearance order')
+  assert.equal(invalidate(dir, 's1').status, 0, 'the cutoff covers BOTH historical candidates')
+  assert.deepEqual(sealRows(dir).find((r) => r.type === 'invalidate').targets, [{ slice: 's1', through_generation: 2 }])
+  assert.equal(sealsLog(dir), 's2 dual\n', 'no older candidate resurrects when the latest is invalidated')
+})
+
+test('reduction (W2-S7b, item 3): the modern-shape boundary is implicit — after the first S7b event a legacy-shaped candidate is refused at the append, never written', () => {
+  const fx = reviewedFixture()
+  assert.equal(sealKind(fx.kiln, fx.slice, 'dual', fx.builder, fx.reviewer, fx.repo, 'reviewed').status, 0)
+  const legacy = appendSeal(fx.kiln, 's2', 'dual')
+  assert.equal(legacy.status, 20, 'a candidate declaring no attestation kind is refused after the boundary')
+  assert.ok(legacy.stderr.includes('modern-shape boundary'), 'the boundary rule is named')
+  assert.equal(sealRows(fx.kiln).filter((r) => r.type === 'seal').length, 1, 'the refused candidate was never written to the append-only truth')
+  // An invalidate event opens the boundary just as an attested candidate does.
+  const cut = s6Dir()
+  assert.equal(appendSeal(cut, 's1', 'dual').status, 0)
+  assert.equal(invalidate(cut, 's1').status, 0)
+  assert.equal(appendSeal(cut, 's1', 'dual').status, 20, 'after a cutoff, the rebuild must declare its attestation kind')
+})
+
+test('ledger completeness (W2-S7b, item 4): a torn SEAL ledger stops the generation allocator and the cutoff derivation, while the surviving rows still render', () => {
+  // Scoped deliberately: these two exits come from sliceGeneration and from the invalidate verbs own
+  // read. The appendLedgerRow refusals that item 4 also demands are pinned separately below, on the
+  // AUDIT ledger, where nothing else stands behind them.
+  const dir = s6Dir()
+  const torn = '{"type":"seal","slice":"s1","label":"dual"}\n{"type":"seal","slice":"s2"'
+  writeFileSync(join(dir, 'seals.jsonl'), torn)
+  assert.equal(reconcile(dir).status, 0, 'the render still projects what it can read')
+  assert.equal(sealsLog(dir), 's1 dual\n')
+  assert.equal(appendSeal(dir, 's3', 'dual').status, 20, 'the seal path holds — its generation allocator refuses a history with a hole')
+  assert.equal(invalidate(dir, 's1').status, 20, 'no cutoff is derived from an incomplete read')
+  assert.equal(readFileSync(join(dir, 'seals.jsonl'), 'utf8'), torn, 'the append-only truth is untouched by either refusal')
+  assert.equal(mfStart(dir, dir, 's1').status, 20, 'the generation allocator holds rather than reuse an ordinal')
+})
+
+test('ledger completeness (W2-S7b, item 4): appendLedgerRow itself refuses an incomplete read — on the ledger it is writing, and on the ledger that ledger derives from', () => {
+  // The AUDIT path has no allocator behind it, so these two refusals ARE item 4 here. First: the
+  // ledger being written is torn.
+  const own = s6Dir()
+  const torn = JSON.stringify({ type: 'audit', seam: 'seam-1', outcome: 'accept', label: 'dual' }) + '\n{"type":"audit","seam":"seam-2"'
+  writeFileSync(join(own, 'audits.jsonl'), torn)
+  const r = spawnSync('node', [REVIEW, 'append-audit', own, 'seam-3', 'dual'], { encoding: 'utf8' })
+  assert.equal(r.status, 20, 'no audit is appended onto a history with a hole')
+  assert.ok(r.stderr.includes('torn or unparseable line'), 'the incomplete read is named')
+  assert.equal(readFileSync(join(own, 'audits.jsonl'), 'utf8'), torn, 'the append-only truth is untouched')
+  assert.equal(auditsLog(own), 'seam-1 accept dual\n', 'what could be read still renders')
+  // Second: this ledger is whole, but the SEAL ledger it derives its currency from is torn — the
+  // audit append would be fixing a claim against a seal history it could not fully see.
+  const derived = s6Dir()
+  writeFileSync(join(derived, 'seals.jsonl'), JSON.stringify({ type: 'seal', slice: 's1', label: 'dual' }) + '\n{"type":"seal","slice":"s2","lab')
+  writeFileSync(join(derived, 'audits.jsonl'), JSON.stringify({ type: 'audit', seam: 'seam-1', outcome: 'accept', label: 'dual' }) + '\n')
+  const d = spawnSync('node', [REVIEW, 'append-audit', derived, 'seam-2', 'dual'], { encoding: 'utf8' })
+  assert.equal(d.status, 20, 'a whole audit ledger is still refused when the seal truth behind it has a hole')
+  assert.ok(d.stderr.includes('derives its state from a ledger carrying a torn'), 'the derived incompleteness is named')
+  assert.equal(s6Rows(join(derived, 'audits.jsonl')).length, 1, 'nothing was appended')
+})
+
+test('ledger completeness (W2-S7b, item 4): an empty projection may only overwrite a nonempty log when a validated cutoff accounts for every member it still claims', () => {
+  // The truth knows s1 and invalidated it — but the log also claims a member the truth never carried,
+  // so nothing proves that member inactive and the wipe is refused.
+  const stray = s6Dir()
+  writeFileSync(join(stray, 'seals.jsonl'), [
+    JSON.stringify({ type: 'seal', slice: 's1', label: 'dual' }),
+    JSON.stringify({ type: 'invalidate', targets: [{ slice: 's1', through_generation: 1 }] }),
+  ].join('\n') + '\n')
+  writeFileSync(join(stray, 'seals.log'), 's1 dual\ns-old dual\n')
+  assert.equal(reconcile(stray).status, 20, 'a member the truth never knew is never proven inactive')
+  assert.equal(readFileSync(join(stray, 'seals.log'), 'utf8'), 's1 dual\ns-old dual\n', 'membership is preserved, never wiped')
+  // The same ledger without the stray line empties legitimately.
+  writeFileSync(join(stray, 'seals.log'), 's1 dual\n')
+  assert.equal(reconcile(stray).status, 0)
+  assert.equal(readFileSync(join(stray, 'seals.log'), 'utf8'), '', 'a cutoff-explained emptying is allowed through')
+})
+
+test('coverage (W2-S7b, item 5): a historical row count may never author coverage — a provisional or invalidated candidate contributes an honest generation 0', () => {
+  const fx = auditRepo()
+  s6Lock(fx.kiln, 'run-cov2')
+  const builder = mintLeg(fx.kiln, 'builder', 'sonnet', 's1')[0]
+  assert.equal(appendSeal(fx.kiln, 's1', 'dual', builder, '-').status, 0, 's1 has one PROVISIONAL candidate — a historical row, not membership')
+  assert.equal(appendSeal(fx.kiln, 's2', 'dual').status, 0)
+  const provisional = JSON.parse(readFileSync(cStore(fx.kiln, cPrepare(fx.repo, fx.kiln, 'milestone-audit', 'initial', 's3').stdout.trim()), 'utf8'))
+  const before = Object.fromEntries(provisional.covered.map((t) => [t.slice, t.generation]))
+  assert.deepEqual(before, { s1: 0, s2: 1, s3: 0 }, 'the unpromoted candidate authors no coverage generation — the pre-fix row count would have said 1')
+  // The same rule after a cutoff: the invalidated slice falls back to an honest absence.
+  assert.equal(invalidate(fx.kiln, 's2').status, 0)
+  const after = JSON.parse(readFileSync(cStore(fx.kiln, cPrepare(fx.repo, fx.kiln, 'milestone-audit', 'initial', 's3').stdout.trim()), 'utf8'))
+  assert.equal(after.covered.find((t) => t.slice === 's2').generation, 0, 'an invalidated slice covers nothing, though its row still stands in the truth')
+})
+
+test('append-audit (W2-S7b, item 6): a reviewed audit binds by reference and stores the ordered coverage its contract judged', () => {
+  const fx = auditedFixture()
+  assert.equal(spawnSync('node', [REVIEW, 'append-audit', fx.kiln, 's3', 'dual', fx.auditor, '', 'reviewed'], { encoding: 'utf8' }).status, 0)
+  const row = s6Rows(join(fx.kiln, 'audits.jsonl')).find((r) => r.type === 'audit')
+  assert.equal(row.attestation_kind, 'reviewed')
+  assert.equal(row.review_ref.family, 'audit')
+  assert.equal(row.review_ref.review_id, 'aud-1')
+  assert.deepEqual(row.covered.map((t) => [t.slice, t.generation]), [['s1', 1], ['s2', 1], ['s3', 1]],
+    'the audit records the exact ordered tuples it covered')
+  assert.equal(auditsLog(fx.kiln), null, 'the pending auditor identity keeps it provisional')
+  assert.equal(captureAll(fx.kiln).status, 0)
+  assert.equal(auditsLog(fx.kiln), 's3 accept dual\n', 'the promoted audit renders the byte-exact S6 grammar')
+})
+
+test('audit currency (W2-S7b, item 2): an audit goes inactive the moment a covered slice moves — derived from the seal tuples, with no audit invalidation event', () => {
+  const fx = auditedFixture()
+  assert.equal(spawnSync('node', [REVIEW, 'append-audit', fx.kiln, 's3', 'dual', fx.auditor, '', 'reviewed'], { encoding: 'utf8' }).status, 0)
+  assert.equal(captureAll(fx.kiln).status, 0)
+  assert.equal(auditsLog(fx.kiln), 's3 accept dual\n')
+  // A fresh generation of a covered slice: the audit covered s1 at generation 1, and s1 is now at 2.
+  assert.equal(sealKind(fx.kiln, 's1', 'single-family', mintLeg(fx.kiln, 'builder', 'sonnet', 's1')[0], '-', fx.repo, 'verdictless-degraded-ui').status, 20,
+    'a verdictless reseal still needs its manifest — the fixture has none, so it holds')
+  assert.equal(invalidate(fx.kiln, 's1').status, 0, 'the ordinary path: the slice is invalidated before it is rebuilt')
+  assert.equal(auditsLog(fx.kiln), '', 'the audit is no longer current — its coverage names a generation nothing seals')
+  assert.equal(s6Rows(join(fx.kiln, 'audits.jsonl')).filter((r) => r.type === 'invalidate').length, 0,
+    'no audit invalidation row exists — the invalidity is DERIVED from the seal state')
+})
+
+test('audit currency (W2-S7b, item 2): a legacy audit carrying no coverage stays current until a seal cutoff, then goes inactive', () => {
+  const dir = s6Dir()
+  assert.equal(appendSeal(dir, 's1', 'dual').status, 0)
+  assert.equal(spawnSync('node', [REVIEW, 'append-audit', dir, 'seam-1', 'dual'], { encoding: 'utf8' }).status, 0)
+  assert.equal(auditsLog(dir), 'seam-1 accept dual\n', 'a legacy audit stands while no cutoff has ever landed')
+  assert.equal(invalidate(dir, 's1').status, 0)
+  assert.equal(auditsLog(dir), '', 'after any seal cutoff a coverage-less audit is conservatively retired')
+})
+
+test('audit currency (W2-S7b, item 3): a coverage-less audit is SPENT once a later settled audit carries coverage — a stale successor darkens the seam, it never resurrects the older row', () => {
+  const dir = s6Dir()
+  assert.equal(appendSeal(dir, 's1', 'dual').status, 0)
+  assert.equal(spawnSync('node', [REVIEW, 'append-audit', dir, 's3', 'dual'], { encoding: 'utf8' }).status, 0)
+  assert.equal(auditsLog(dir), 's3 accept dual\n', 'the coverage-less audit answers for the seam while nothing has superseded it')
+  assert.equal(modernAudit(dir, 's3', [{ slice: 's1', generation: 1, manifest_sha256: null }], 'single-family').status, 0)
+  assert.equal(auditsLog(dir), 's3 accept single-family\n', 'a later audit whose coverage matches the current tuples takes the seam')
+  // s1 advances to a fresh generation, so the successor no longer covers what is sealed. The seam must
+  // go DARK — falling back to the spent row would mask the staleness of every audit after it and the
+  // kernel would judge the seam audited over a prefix nothing valid ever covered.
+  assert.equal(appendSeal(dir, 's1', 'dual').status, 0)
+  assert.equal(sealsLog(dir), 's1 dual\n', 'the slice still holds membership, now at generation 2')
+  assert.equal(auditsLog(dir), '', 'the spent coverage-less row never regains the seam — the seam reads unaudited, which is what forces the fresh milestone audit')
+  assert.equal(reconcile(dir).status, 0, 'and the reduction is stable — a second pass changes nothing')
+  assert.equal(auditsLog(dir), '')
+})
+
+test('audit currency (W2-S7b, item 3): with no coverage-carrying successor the W1 audits render exactly as they always did — the migration path is untouched', () => {
+  const dir = s6Dir()
+  writeFileSync(join(dir, 'audits.log'), 'seam-1 accept\nseam-2 accept dual\n')
+  assert.equal(reconcile(dir).status, 0)
+  assert.equal(auditsLog(dir), 'seam-1 accept\nseam-2 accept dual\n', 'both W1 forms migrate and re-render byte for byte')
+  // A second coverage-less candidate still supersedes the first the ordinary way: the LATEST answers
+  // for the seam, exactly as it did before any supersession rule existed.
+  assert.equal(spawnSync('node', [REVIEW, 'append-audit', dir, 'seam-2', 'single-family'], { encoding: 'utf8' }).status, 0)
+  assert.equal(auditsLog(dir), 'seam-1 accept\nseam-2 accept single-family\n', 'the later coverage-less audit answers for its seam, and the untouched seam holds its exact W1 bytes')
+})
+
+test('promotion (W2-S7b, item 7): eligibility is re-derived at the promotion — an invalidated or superseded candidate never becomes membership', () => {
+  const cut = s6Dir()
+  const builder = mintLeg(cut, 'builder', 'sonnet', 's1')[0]
+  assert.equal(appendSeal(cut, 's1', 'dual', builder, '-').status, 0)
+  assert.equal(invalidate(cut, 's1').status, 0, 'the provisional candidate is a historical attempt the cutoff covers')
+  const capped = captureAll(cut)
+  assert.equal(capped.stdout.trim(), 'resolved 1 pending 0 promoted 0', 'the identity resolves, but the invalidated candidate is not promotable')
+  assert.equal(sealsLog(cut), null, 'no membership is conferred on a candidate below the cutoff')
+  // Two candidates for one slice: only the LATEST may promote, so a promoted duplicate can never
+  // render twice.
+  const dup = s6Dir()
+  const first = mintLeg(dup, 'builder', 'sonnet', 's1')[0]
+  assert.equal(appendSeal(dup, 's1', 'dual', first, '-').status, 0)
+  const second = mintLeg(dup, 'builder', 'sonnet', 's1')[0]
+  assert.equal(appendSeal(dup, 's1', 'dual', second, '-').status, 0)
+  assert.equal(captureAll(dup).stdout.trim(), 'resolved 2 pending 0 promoted 1', 'exactly one candidate promotes')
+  const promoted = s6Rows(join(dup, 'seals.jsonl')).filter((r) => r.type === 'promote')
+  const candidates = s6Rows(join(dup, 'seals.jsonl')).filter((r) => r.type === 'seal')
+  assert.deepEqual(promoted.map((r) => r.candidate_id), [candidates[1].candidate_id], 'the promotion targets the latest candidate')
+  assert.equal(sealsLog(dup), 's1 dual\n', 'the slice renders exactly once')
+})
+
+test('promotion (W2-S7b, item 7): a leg without EXACTLY ONE complete resolved record confers no membership', () => {
+  const dir = s6Dir()
+  const builder = mintLeg(dir, 'builder', 'sonnet', 's1')[0]
+  assert.equal(appendSeal(dir, 's1', 'dual', builder, '-').status, 0)
+  assert.equal(captureAll(dir).stdout.trim(), 'resolved 1 pending 0 promoted 1', 'one resolved record promotes')
+  // A second, contradictory resolved record for the same leg: the identity is now ambiguous, so a
+  // later candidate on that leg is never promoted.
+  const dup = s6Dir()
+  const leg = mintLeg(dup, 'builder', 'sonnet', 's1')[0]
+  assert.equal(appendSeal(dup, 's1', 'dual', leg, '-').status, 0)
+  assert.equal(captureAll(dup).status, 0)
+  const resolved = idRows(dup).find((r) => r.type === 'resolved')
+  writeFileSync(join(dup, 'identity.jsonl'), readFileSync(join(dup, 'identity.jsonl'), 'utf8')
+    + JSON.stringify({ ...resolved, agent_id: 'a-different-agent' }) + '\n')
+  const second = mintLeg(dup, 'builder', 'sonnet', 's2')[0]
+  assert.equal(appendSeal(dup, 's2', 'dual', [leg, second].join(','), '-').status, 0)
+  const capped = capture(dup, writeTranscript(dup, [wpEvent([wa(idRows(dup).filter((r) => r.type === 'intent')[1].expected_label, 'ag-2', 'claude-sonnet-5')])]))
+  assert.equal(capped.status, 0)
+  assert.equal(capped.stdout.trim(), 'resolved 1 pending 0 promoted 0', 'the ambiguous leg blocks the promotion')
+  assert.equal(sealsLog(dup), 's1 dual\n', 'only the candidate whose identities are unambiguous holds membership')
+})
+
+test('promotion (W2-S7b, item 7): an audit re-proves its stored coverage at the promotion, and never rehashes a tree that legitimately advanced', () => {
+  const fx = auditedFixture()
+  assert.equal(spawnSync('node', [REVIEW, 'append-audit', fx.kiln, 's3', 'dual', fx.auditor, '', 'reviewed'], { encoding: 'utf8' }).status, 0)
+  // A covered slice moves while the auditor identity is still pending.
+  assert.equal(invalidate(fx.kiln, 's2').status, 0)
+  const capped = captureAll(fx.kiln)
+  assert.equal(capped.status, 0)
+  assert.equal(capped.stdout.trim(), 'resolved 1 pending 0 promoted 0', 'the coverage no longer matches, so the audit is not promoted')
+  assert.equal(auditsLog(fx.kiln), null, 'no membership is conferred on a coverage-stale audit')
+})
+
+test('promotion (W2-S7b, item 7): promotion NEVER rehashes the working tree — a candidate whose tree legitimately advanced after its append still becomes membership', () => {
+  // The item-7 residual made observable: the facts frozen on the candidate at its append are the
+  // truth. The tree here moves AFTER the reviewed seal is appended, so any promotion that re-derived
+  // the manifest from the working tree would see drift and refuse — this pin fails the moment such a
+  // rehash is introduced.
+  const fx = reviewedFixture()
+  assert.equal(sealKind(fx.kiln, fx.slice, 'dual', fx.builder, fx.reviewer, fx.repo, 'reviewed').status, 0)
+  assert.equal(sealsLog(fx.kiln), null, 'the candidate is provisional, waiting on its builder identity')
+  writeFileSync(join(fx.repo, 'work.txt'), 'the tree kept moving after the seal was appended\n')
+  writeFileSync(join(fx.repo, 'later.txt'), 'and grew a file the manifest never saw\n')
+  const capped = captureAll(fx.kiln)
+  assert.equal(capped.status, 0, 'the promotion scan never touches the working tree')
+  assert.equal(capped.stdout.trim(), 'resolved 2 pending 0 promoted 1', 'the candidate promotes over an advanced tree')
+  assert.equal(sealsLog(fx.kiln), 's1 dual\n', 'membership is conferred from the frozen facts, not from a re-hash')
+})
+
+test('kiln-review (W2-S7b, CLI-USAGE): the usage string advertises the cutoff verb and both attestation-kind arities', () => {
+  const usage = spawnSync('node', [REVIEW], { encoding: 'utf8' }).stderr
+  assert.ok(usage.includes('kiln-review invalidate <kilnDir> <slice_ids_csv>'), 'the cutoff verb u2 calls is advertised with its exact arity')
+  assert.ok(usage.includes('kiln-review append-seal <kilnDir> <slice> <label> [<builder_leg_ids_csv> <reviewer_leg_id|-> [<repo> [<attestation_kind>]]]'), 'append-seal advertises the attestation kind')
+  assert.ok(usage.includes('kiln-review append-audit <kilnDir> <seamSliceId> <label> [<auditor_leg_id|-> [<repair_leg_ids_csv> [<attestation_kind>]]]'), 'append-audit advertises the attestation kind')
+})
+
+test('ledger completeness (W2-S7b, item 4): an incomplete read may not withdraw membership — not the whole log, and not one member of it', () => {
+  // A corrupt INTERIOR line drops s1 from the render. The projection is still nonempty, so only the
+  // withdrawal rule stands between an unreadable byte and a slice that gets rebuilt from scratch.
+  const dir = s6Dir()
+  writeFileSync(join(dir, 'seals.jsonl'), '{"type":"seal","slice":"s1"\n'
+    + JSON.stringify({ type: 'seal', slice: 's2', label: 'dual' }) + '\n'
+    + JSON.stringify({ type: 'seal', slice: 's3', label: 'dual' }) + '\n')
+  writeFileSync(join(dir, 'seals.log'), 's1 dual\ns2 dual\ns3 dual\n')
+  assert.equal(reconcile(dir).status, 20, 'a member lost to a torn line is not a withdrawal anyone proved')
+  assert.equal(sealsLog(dir), 's1 dual\ns2 dual\ns3 dual\n', 'every claimed member survives untouched')
+  // The derived side of the same rule: the audit read is whole, but the SEAL read it derives its
+  // currency from is torn, and that hole alone would retire a live audit.
+  const derived = s6Dir()
+  writeFileSync(join(derived, 'seals.jsonl'), JSON.stringify({ type: 'seal', slice: 's1', label: 'dual' }) + '\n{"type":"seal","slice":"s1","label"')
+  writeFileSync(join(derived, 'seals.log'), 's1 dual\n')
+  writeFileSync(join(derived, 'audits.jsonl'), JSON.stringify({
+    type: 'audit', seam: 'seam-1', outcome: 'accept', label: 'dual', attestation_kind: 'reviewed',
+    review_ref: { family: 'audit', review_id: 'aud-1', verdict_sha256: 'b'.repeat(64) },
+    covered: [{ slice: 's1', generation: 2, manifest_sha256: null }],
+  }) + '\n')
+  writeFileSync(join(derived, 'audits.log'), 'seam-1 accept dual\n')
+  assert.equal(reconcile(derived).status, 20, 'the audit is judged over a seal history with a hole, so its retirement is refused')
+  assert.equal(auditsLog(derived), 'seam-1 accept dual\n', 'the audit projection is untouched')
+})
+
+// The archive row a reviewed candidate binds is EVIDENCE, not a pointer. Each case below rewrites
+// that ONE row, leaving the reference key ({family, review_id, verdict_sha256}) intact so the row is
+// always FOUND — what fails is what it proves. The seal must refuse every one of them, or the D4
+// reference would reach an identity that never reviewed, a verdict that did not pass, a capture that
+// was never taken, or a contract that judged something else.
+const rewriteReviews = (kiln, rows) => writeFileSync(join(kiln, 'reviews.jsonl'), rows.map((r) => JSON.stringify(r)).join('\n') + '\n')
+
+test('append-seal (W2-S7b, item 6): the archived row must OWN its evidence — verdict, reviewer identity, reviewer role, receipt and contract are each load-bearing', () => {
+  const fx = reviewedFixture()
+  const original = ledgerRows(fx.kiln)[0]
+  // A stored contract of another kind, for the kind clause: composed here so the digest names real
+  // bytes and the failure is the SEMANTIC one, not a missing store entry.
+  const ratifySha = cPrepare(fx.repo, fx.kiln, 'artifact-ratify', 'initial', 'ratify', '.kiln/LAW.md', RUBRIC).stdout.trim()
+  assert.match(ratifySha, /^[0-9a-f]{64}$/, 'the foreign-kind contract is really in the store')
+  const cases = [
+    ['a verdict that is not an accept', { verdict: 'changes_required' }, 'the archived row is not an accept'],
+    ['no reviewer identity at all', { reviewer_leg_id: null }, 'carries no reviewer identity'],
+    ['a reviewer identity the ledger never minted', { reviewer_leg_id: 'c'.repeat(32) }, 'unknown to the identity ledger'],
+    ['a BUILDER leg standing in the reviewer position', { reviewer_leg_id: fx.builder }, 'does not carry the reviewer role of its family'],
+    ['a null receipt digest', { receipt_sha256: null }, 'carries no check-receipt digest'],
+    ['no contract digest', { contract_sha256: null }, 'carries no canonical contract digest'],
+    ['a contract digest the store does not hold', { contract_sha256: 'd'.repeat(64) }, 'contract store entry is missing or unreadable'],
+    ['a contract of another kind', { contract_sha256: ratifySha }, 'is not a slice review'],
+    ['a receipt the judged contract never bound', { receipt_sha256: 'e'.repeat(64) }, 'judged another check receipt'],
+    ['a manifest the judged contract never bound', { manifest_sha256: 'f'.repeat(64) }, 'judged another working-tree manifest'],
+    ['no manifest digest at all', { manifest_sha256: null }, 'carries no control-derived manifest digest'],
+  ]
+  for (const [name, patch, expected] of cases) {
+    rewriteReviews(fx.kiln, [{ ...original, ...patch }])
+    const r = sealKind(fx.kiln, fx.slice, 'dual', fx.builder, fx.reviewer, fx.repo, 'reviewed')
+    assert.equal(r.status, 20, `${name}: the seal HOLDs`)
+    assert.ok(r.stderr.includes(expected), `${name}: the refusal names it (${expected})`)
+    assert.ok(!existsSync(join(fx.kiln, 'seals.jsonl')), `${name}: nothing was appended`)
+  }
+  // Two rows under one key is contradictory history, not a first-wins tiebreak.
+  rewriteReviews(fx.kiln, [original, original])
+  const dup = sealKind(fx.kiln, fx.slice, 'dual', fx.builder, fx.reviewer, fx.repo, 'reviewed')
+  assert.equal(dup.status, 20, 'a duplicated archive row is refused, never resolved in favour of the first')
+  assert.ok(dup.stderr.includes('exactly one archived review row'), 'the exactly-one rule is named')
+  // Restored, the same call seals — every refusal above was the patch, not the fixture.
+  rewriteReviews(fx.kiln, [original])
+  assert.equal(sealKind(fx.kiln, fx.slice, 'dual', fx.builder, fx.reviewer, fx.repo, 'reviewed').status, 0)
+})
+
+test('append-seal (W2-S7b, item 6): a contract judged under an earlier LAW seal attests nothing once the law has been re-sealed', () => {
+  // The law-moved case the trio check cannot reach: LAW.md is edited AND re-sealed, so the live trio
+  // is whole and only the contract-vs-live-law binding is left to refuse it.
+  const fx = reviewedFixture()
+  writeFileSync(join(fx.kiln, 'LAW.md'), 'crit-1 · a LAW re-sealed after the review · behaviour · node --test · exit 0\n')
+  assert.equal(spawnSync('node', [REVIEW, 'seal-law', fx.kiln, 'dual'], { encoding: 'utf8' }).status, 0, 'the law re-seals cleanly')
+  const r = sealKind(fx.kiln, fx.slice, 'dual', fx.builder, fx.reviewer, fx.repo, 'reviewed')
+  assert.equal(r.status, 20, 'the accepted verdict was judged against a law that no longer stands')
+  assert.ok(r.stderr.includes('judged another law than the one sealed now'), 'the binding is named')
+  assert.ok(!existsSync(join(fx.kiln, 'seals.jsonl')), 'nothing was appended')
+})
+
+test('append-seal (W2-S7b, item 6): the seal-time manifest must be the one the accepted review bound — a re-prepared generation over an edited tree is refused', () => {
+  // The tree moves AFTER the accept, and the generation is re-prepared so the S7a drift check is
+  // satisfied by the new pointer. Only the archived-digest comparison is left between an edited tree
+  // and a seal that would inherit a review of the old one.
+  const fx = reviewedFixture()
+  const bound = ledgerRows(fx.kiln)[0].manifest_sha256
+  writeFileSync(join(fx.repo, 'work.txt'), 'edited AFTER the accept\n')
+  assert.equal(mfPrepare(fx.repo, fx.kiln, fx.slice).status, 0, 're-preparing the same generation satisfies the drift check')
+  assert.notEqual(mfCurrent(fx.kiln, fx.slice, 1).manifest_sha256, bound, 'the re-prepared manifest really differs from the one the review bound')
+  const r = sealKind(fx.kiln, fx.slice, 'dual', fx.builder, fx.reviewer, fx.repo, 'reviewed')
+  assert.equal(r.status, 20, 'a reviewed seal never inherits a review over a tree it did not judge')
+  assert.ok(r.stderr.includes('archived manifest digest differs from the manifest recomputed at the seal'), 'the comparison is named')
+  assert.ok(!existsSync(join(fx.kiln, 'seals.jsonl')), 'nothing was appended')
+})
+
+test('append-audit (W2-S7b, item 6): the reviewed-audit semantics are load-bearing — kind, seam, law, receipt and the auditor role each refuse the append', () => {
+  const fx = auditedFixture()
+  const original = ledgerRows(fx.kiln)[0]
+  const rf = join(fx.repo, 'request.json')
+  writeFileSync(rf, JSON.stringify({ criteria: 'x', paths: [], failures: [], commands: [] }))
+  const sliceSha = cPrepare(fx.repo, fx.kiln, 'slice-review', 'initial', 's1', rf).stdout.trim()
+  assert.match(sliceSha, /^[0-9a-f]{64}$/, 'the foreign-kind contract is really in the store')
+  const notAuditor = mintLeg(fx.kiln, 'gate-reviewer', 'opus', 's3')[0]
+  const audit = (seam) => spawnSync('node', [REVIEW, 'append-audit', fx.kiln, seam, 'dual', fx.auditor, '', 'reviewed'], { encoding: 'utf8' })
+  const cases = [
+    ['a contract of another kind', { contract_sha256: sliceSha }, 'is not a milestone audit'],
+    ['a gate-reviewer standing in the auditor position', { reviewer_leg_id: notAuditor }, 'does not carry the reviewer role of its family'],
+    ['a receipt the judged contract never bound', { receipt_sha256: 'e'.repeat(64) }, 'judged another check receipt'],
+    ['a null receipt digest', { receipt_sha256: null }, 'carries no check-receipt digest'],
+  ]
+  for (const [name, patch, expected] of cases) {
+    rewriteReviews(fx.kiln, [{ ...original, ...patch }])
+    const r = audit('s3')
+    assert.equal(r.status, 20, `${name}: the audit HOLDs`)
+    assert.ok(r.stderr.includes(expected), `${name}: the refusal names it (${expected})`)
+    assert.ok(!existsSync(join(fx.kiln, 'audits.jsonl')), `${name}: nothing was appended`)
+  }
+  rewriteReviews(fx.kiln, [original])
+  const wrongSeam = audit('s2')
+  assert.equal(wrongSeam.status, 20, 'an audit never files a verdict under a seam the contract did not judge')
+  assert.ok(wrongSeam.stderr.includes('judged another seam'), 'the seam binding is named')
+  // The law-moved case, over the whole trio re-sealed.
+  writeFileSync(join(fx.kiln, 'LAW.md'), 'crit-m1 · a milestone LAW re-sealed after the audit · behaviour\n')
+  assert.equal(spawnSync('node', [REVIEW, 'seal-law', fx.kiln, 'dual'], { encoding: 'utf8' }).status, 0)
+  const moved = audit('s3')
+  assert.equal(moved.status, 20, 'the accepted audit was judged against a law that no longer stands')
+  assert.ok(moved.stderr.includes('judged another law than the one sealed now'), 'the binding is named')
+  assert.ok(!existsSync(join(fx.kiln, 'audits.jsonl')), 'nothing was appended')
+})
+
+test('append-audit (W2-S7b, items 6 and 11): an audit never binds a prefix nothing seals — a covered slice at generation 0 refuses the append', () => {
+  // Both sides of the comparison mint generation 0 for an unsealed slice, so currency alone cannot
+  // catch this: the coverage the row would carry has to be checked for what it CLAIMS.
+  const fx = auditRepo()
+  s6Lock(fx.kiln, 'run-gen0')
+  assert.equal(appendSeal(fx.kiln, 's1', 'dual').status, 0, 'only s1 is sealed — s2 and s3 are not')
+  const contractSha = cPrepare(fx.repo, fx.kiln, 'milestone-audit', 'initial', 's3').stdout.trim()
+  const covered = JSON.parse(readFileSync(cStore(fx.kiln, contractSha), 'utf8')).covered
+  assert.deepEqual(covered.map((t) => t.generation), [1, 0, 0], 'the contract honestly records two unsealed members')
+  const auditor = mintLeg(fx.kiln, 'auditor', 'opus', 's3')[0]
+  const candidate = join(fx.kiln, '.audit.tmp')
+  writeFileSync(candidate, JSON.stringify({ review_id: 'aud-0', law_hash: fx.digest, findings: [], blockers: [], verdict: 'accept' }))
+  assert.equal(spawnSync('node', [REVIEW, 'publish-gate', fx.kiln, 'audit', candidate, join(fx.kiln, 'audit-review.json'), auditor, contractSha], { encoding: 'utf8' }).status, 0)
+  const r = spawnSync('node', [REVIEW, 'append-audit', fx.kiln, 's3', 'dual', auditor, '', 'reviewed'], { encoding: 'utf8' })
+  assert.equal(r.status, 20, 'a milestone audit over a prefix two thirds unsealed is refused')
+  assert.ok(r.stderr.includes('covers a slice with no current sealed membership'), 'the rule is named')
+  assert.ok(!existsSync(join(fx.kiln, 'audits.jsonl')), 'nothing was appended')
+})
+
+test('invalidate (W2-S7b, items 1 and 4): the retry no-op branch refuses an incomplete read rather than report a clean success', () => {
+  // The branch that returns BEFORE any append is the one a caller trusts most: it tells u2 that every
+  // target is already covered. Over a torn ledger that answer cannot be given.
+  const dir = s6Dir()
+  assert.equal(appendSeal(dir, 's1', 'dual').status, 0)
+  assert.equal(invalidate(dir, 's1').stdout.trim(), 'invalidate appended 1')
+  const whole = readFileSync(join(dir, 'seals.jsonl'), 'utf8')
+  writeFileSync(join(dir, 'seals.jsonl'), whole + '{"type":"seal","slice":"s1","label":"du')
+  const r = invalidate(dir, 's1')
+  assert.equal(r.status, 20, 'the no-op branch holds — a candidate hidden behind the hole would go uncovered')
+  assert.ok(r.stderr.includes('refuses an incomplete seal ledger read'), 'the rule is named')
+  assert.notEqual(r.stdout.trim(), 'invalidate noop 1', 'no success is ever reported over an incomplete read')
+})
+
+test('append-seal (W2-S7b, item 8): the verdictless evidence clauses are load-bearing — no builders from a legal argv, and no trio, receipt or manifest through the reduction', () => {
+  // The builder clause is reachable from an ORDINARY call: an empty builder list is legal argv.
+  const fx = reviewedFixture()
+  const empty = sealKind(fx.kiln, fx.slice, 'single-family', '', '-', fx.repo, 'verdictless-degraded-ui')
+  assert.equal(empty.status, 20, 'a degraded seal naming nobody as its builder is refused')
+  assert.ok(empty.stderr.includes('complete builder identities'), 'the rule is named')
+  assert.ok(!existsSync(join(fx.kiln, 'seals.jsonl')), 'nothing was appended')
+  // The digest clauses are reachable through the reduction: a hand-written row must never buy the
+  // membership the verb would have refused.
+  const full = {
+    type: 'seal', slice: 's1', label: 'single-family', attestation_kind: 'verdictless-degraded-ui',
+    builder_leg_ids: ['b'.repeat(32)],
+    trio_sha256: { 'LAW.md': '1'.repeat(64), 'check.sh': '2'.repeat(64), 'slices.json': '3'.repeat(64) },
+    receipt_sha256: '4'.repeat(64), manifest_sha256: '5'.repeat(64),
+  }
+  for (const [name, patch] of [
+    ['no trio digests', { trio_sha256: undefined }],
+    ['a short trio block', { trio_sha256: { 'LAW.md': '1'.repeat(64) } }],
+    ['no receipt digest', { receipt_sha256: undefined }],
+    ['no manifest digest', { manifest_sha256: undefined }],
+    ['an empty builder list', { builder_leg_ids: [] }],
+    // Item 8 forbids the FIELDS, not merely truthy values: a null reviewer leg is still a
+    // reviewer-leg claim, and a verdict or contract claim on a seal that had no gate is a
+    // contradiction whatever it carries.
+    ['a present-but-null reviewer leg', { reviewer_leg_id: null }],
+    ['a reviewer leg', { reviewer_leg_id: 'a'.repeat(32) }],
+    ['a family claim', { family: 'review' }],
+    ['a review_id claim', { review_id: 'rv-1' }],
+    ['a verdict claim', { verdict: 'accept' }],
+    ['a contract claim', { contract: { contract_kind: 'slice-review' } }],
+    ['a contract digest claim', { contract_sha256: '6'.repeat(64) }],
+    ['a review reference', { review_ref: { family: 'review', review_id: 'rv-1', verdict_sha256: '7'.repeat(64), reviewer_leg_id: 'a'.repeat(32) } }],
+  ]) {
+    const dir = s6Dir()
+    writeFileSync(join(dir, 'seals.jsonl'), JSON.stringify({ ...full, ...patch }) + '\n')
+    assert.equal(reconcile(dir).status, 20, `${name}: the reduction refuses it membership`)
+    assert.equal(sealsLog(dir), null, `${name}: nothing renders`)
+  }
+  const good = s6Dir()
+  writeFileSync(join(good, 'seals.jsonl'), JSON.stringify(full) + '\n')
+  assert.equal(reconcile(good).status, 0, 'the whole shape renders — every refusal above was the patch')
+  assert.equal(sealsLog(good), 's1 single-family\n')
+})
+
+test('invalidate (W2-S7b, item 1): ONE batch event carries the whole covered prefix — the milestone-rejection shape', () => {
+  const dir = s6Dir()
+  s6Lock(dir, 'run-batch')
+  for (const slice of ['s1', 's2', 's3']) assert.equal(appendSeal(dir, slice, 'dual').status, 0)
+  const r = invalidate(dir, 's1,s2,s3')
+  assert.equal(r.status, 0)
+  assert.equal(r.stdout.trim(), 'invalidate appended 3')
+  const events = sealRows(dir).filter((row) => row.type === 'invalidate')
+  assert.equal(events.length, 1, 'the whole prefix is withdrawn by ONE atomic event, never three')
+  assert.deepEqual(events[0].targets, [
+    { slice: 's1', through_generation: 1 }, { slice: 's2', through_generation: 1 }, { slice: 's3', through_generation: 1 },
+  ], 'every target carries its own derived cutoff, in the order the batch named them')
+  assert.equal(sealsLog(dir), '', 'the whole prefix loses membership together')
+})
+
+test('rebuild after a cutoff (W2-S7b, u2 seam): invalidate, rebuild the generation, review it, seal it — membership is restored through the REAL verbs', () => {
+  // The exact sequence u2 drives for reopen and for a milestone rejection, end to end through the
+  // trusted CLI: nothing here is hand-written into the ledger.
+  const fx = reviewedFixture()
+  assert.equal(sealKind(fx.kiln, fx.slice, 'dual', fx.builder, fx.reviewer, fx.repo, 'reviewed').status, 0)
+  assert.equal(captureAll(fx.kiln).status, 0)
+  assert.equal(sealsLog(fx.kiln), 's1 dual\n', 'generation 1 holds membership')
+  assert.equal(invalidate(fx.kiln, fx.slice).stdout.trim(), 'invalidate appended 1')
+  assert.equal(sealsLog(fx.kiln), '', 'the cutoff withdraws it')
+  // The rebuild: a fresh baseline for generation 2, the builder works, a fresh manifest.
+  const started = mfStart(fx.repo, fx.kiln, fx.slice)
+  assert.equal(started.status, 0)
+  assert.equal(started.stdout.trim().split(' ')[0], '2', 'the positional allocator hands out the next ordinal, never a reused one')
+  writeFileSync(join(fx.repo, 'work.txt'), 'rebuilt after the cutoff\n')
+  assert.equal(mfPrepare(fx.repo, fx.kiln, fx.slice).status, 0)
+  // The fresh review of the rebuilt generation, published through the real gate path.
+  const rf = join(fx.repo, 'request.json')
+  const contractSha = cPrepare(fx.repo, fx.kiln, 'slice-review', 'initial', fx.slice, rf).stdout.trim()
+  const reviewer2 = mintLeg(fx.kiln, 'gate-reviewer', 'opus', fx.slice)[0]
+  const candidate = join(fx.kiln, '.gate-review.reviewer.tmp')
+  writeFileSync(candidate, JSON.stringify({ review_id: 'rv-s1-gen2', law_hash: fx.digest, findings: [], blockers: [], verdict: 'accept' }))
+  assert.equal(spawnSync('node', [REVIEW, 'publish-gate', fx.kiln, 'review', candidate, join(fx.kiln, 'gate-review.json'), reviewer2, fx.repo, fx.slice, contractSha], { encoding: 'utf8' }).status, 0)
+  const builder2 = mintLeg(fx.kiln, 'builder', 'sonnet', fx.slice)[0]
+  const sealed = sealKind(fx.kiln, fx.slice, 'dual', builder2, reviewer2, fx.repo, 'reviewed')
+  assert.equal(sealed.status, 0, 'the rebuilt generation seals through the ordinary attested path')
+  assert.equal(sealsLog(fx.kiln), '', 'it grants no membership until its identities resolve')
+  assert.equal(captureAll(fx.kiln).stdout.trim(), 'resolved 2 pending 0 promoted 1')
+  assert.equal(sealsLog(fx.kiln), 's1 dual\n', 'membership is restored at generation 2')
+  const candidates = sealRows(fx.kiln).filter((row) => row.type === 'seal')
+  assert.equal(candidates.length, 2, 'the invalidated generation 1 candidate is still in the append-only truth, just never current again')
+  assert.equal(candidates[1].review_ref.review_id, 'rv-s1-gen2', 'the current member binds the FRESH review, not the one the cutoff retired')
+})
+
+test('audit currency (W2-S7b, item 3): a coverage-less audit is spent once a LATER covered audit supersedes it — it never comes back to mask that audit going stale', () => {
+  // The ledger shape, exactly: A0 carries no coverage (a W1-migrated row, or any legacy-arity append),
+  // A1 covers generation 2 while the current seal stands at 1. A1 is correctly stale. Nothing may
+  // then walk backward to A0 — that is the resurrection item 3 forbids, and it would leave the seam
+  // rendering as audited forever, over a prefix no valid audit ever covered.
+  const shape = s6Dir()
+  writeFileSync(join(shape, 'seals.jsonl'), JSON.stringify({ type: 'seal', slice: 's1', label: 'dual' }) + '\n')
+  writeFileSync(join(shape, 'audits.jsonl'), [
+    { type: 'audit', seam: 's3', outcome: 'accept', label: 'dual' },
+    {
+      type: 'audit', seam: 's3', outcome: 'accept', label: 'dual', attestation_kind: 'reviewed',
+      review_ref: { family: 'audit', review_id: 'aud-1', verdict_sha256: 'b'.repeat(64), reviewer_leg_id: 'c'.repeat(32) },
+      covered: [{ slice: 's1', generation: 2, manifest_sha256: null }],
+    },
+  ].map((row) => JSON.stringify(row)).join('\n') + '\n')
+  assert.equal(reconcile(shape).status, 0, 'the reduction is clean — this is a currency question, not an anomaly')
+  assert.equal(auditsLog(shape), null, 'no member: the covered audit is stale and the superseded row does not answer for the seam')
+  // The same rule through the REAL verbs, and with no cutoff anywhere near it: today the legacy
+  // arities still mint coverage-less rows, so this is not confined to the migration path.
+  const fx = auditedFixture()
+  assert.equal(spawnSync('node', [REVIEW, 'append-audit', fx.kiln, 's3', 'dual'], { encoding: 'utf8' }).status, 0, 'A0: the legacy arity mints a coverage-less row today')
+  assert.equal(auditsLog(fx.kiln), 's3 accept dual\n')
+  assert.equal(spawnSync('node', [REVIEW, 'append-audit', fx.kiln, 's3', 'dual', fx.auditor, '', 'reviewed'], { encoding: 'utf8' }).status, 0, 'A1: the attested audit covers the prefix at generation 1')
+  assert.equal(captureAll(fx.kiln).status, 0)
+  assert.equal(auditsLog(fx.kiln), 's3 accept dual\n', 'A1 holds the seam')
+  assert.equal(appendSeal(fx.kiln, 's1', 'dual').status, 0, 'a covered slice takes a fresh generation — no cutoff involved')
+  assert.equal(auditsLog(fx.kiln), '', 'A1 is stale and A0 is spent, so the seam is honestly unaudited and gets re-audited')
+  assert.equal(s6Rows(join(fx.kiln, 'audits.jsonl')).filter((row) => row.type === 'audit').length, 2, 'both candidates are still in the append-only truth')
+})
+
+test('audit currency (W2-S7b, item 3): a coverage-less audit with NO successor still answers for its seam — the W1 migration path is untouched', () => {
+  const migrated = s6Dir()
+  writeFileSync(join(migrated, 'audits.log'), 'seam-1 accept\n')
+  assert.equal(reconcile(migrated).status, 0, 'a W1 audits.log migrates')
+  assert.equal(auditsLog(migrated), 'seam-1 accept\n', 'the pre-S4-D4 two-field line round-trips byte-identical and keeps its membership')
+  assert.equal(s6Rows(join(migrated, 'audits.jsonl'))[0].legacy, true)
+  const lone = s6Dir()
+  writeFileSync(join(lone, 'seals.jsonl'), JSON.stringify({ type: 'seal', slice: 's1', label: 'dual' }) + '\n')
+  writeFileSync(join(lone, 'audits.jsonl'), JSON.stringify({ type: 'audit', seam: 's3', outcome: 'accept', label: 'dual' }) + '\n')
+  assert.equal(reconcile(lone).status, 0)
+  assert.equal(auditsLog(lone), 's3 accept dual\n', 'with nothing later carrying coverage, the coverage-less row is exactly as current as it was')
+})
+
+// ── W2-S7b (Sol r1): the REDUCTION is the authority ──────────────────────────────────────────────
+// Every law the append gate enforces has to hold again here, because membership is conferred by the
+// reduction, not by the verb. These pins drive HAND-BUILT ledger rows through `reconcile` — going
+// through the append verbs is exactly what let this asymmetry hide.
+const reduceSeals = (rows) => {
+  const dir = s6Dir()
+  writeFileSync(join(dir, 'seals.jsonl'), rows.map((row) => JSON.stringify(row)).join('\n') + '\n')
+  return { dir, r: reconcile(dir) }
+}
+const reduceAudits = (auditRows, sealRows_ = []) => {
+  const dir = s6Dir()
+  if (sealRows_.length) writeFileSync(join(dir, 'seals.jsonl'), sealRows_.map((row) => JSON.stringify(row)).join('\n') + '\n')
+  writeFileSync(join(dir, 'audits.jsonl'), auditRows.map((row) => JSON.stringify(row)).join('\n') + '\n')
+  return { dir, r: reconcile(dir) }
+}
+const legacySeal = (slice, label = 'dual') => ({ type: 'seal', slice, label })
+const reviewedSealRow = (slice, patch = {}) => ({
+  type: 'seal', slice, label: 'dual', attestation_kind: 'reviewed',
+  review_ref: { family: 'review', review_id: 'rv-1', verdict_sha256: 'a'.repeat(64), reviewer_leg_id: 'c'.repeat(32) },
+  ...patch,
+})
+const reviewedAuditRow = (seam, covered, patch = {}) => ({
+  type: 'audit', seam, outcome: 'accept', label: 'dual', attestation_kind: 'reviewed',
+  review_ref: { family: 'audit', review_id: 'aud-1', verdict_sha256: 'a'.repeat(64), reviewer_leg_id: 'c'.repeat(32) },
+  covered, ...patch,
+})
+
+test('reduction (W2-S7b, item 1): a cutoff is validated against the history that existed WHEN IT LANDED — an ordinal above it, a slice with no candidate, or a slice named twice each HOLD', () => {
+  // A cutoff deletes membership. A completed event is not therefore a VALIDATED one: honoured
+  // blindly, a single malformed target withdraws seals no candidate ever had, and a cutoff written
+  // before its candidates would silently cover everything appended after it.
+  const over = reduceSeals([legacySeal('s1'), { type: 'invalidate', targets: [{ slice: 's1', through_generation: 999 }] }])
+  assert.equal(over.r.status, 20, 'a cutoff above the candidates that existed is refused')
+  assert.ok(over.r.stderr.includes('above the candidates that existed when it landed'), 'the rule is named')
+  assert.equal(sealsLog(over.dir), null, 'no membership was deleted on the strength of it')
+  // The same shape with the log already rendered: the wipe Sol reproduced must not happen.
+  const rendered = s6Dir()
+  writeFileSync(join(rendered, 'seals.jsonl'), JSON.stringify(legacySeal('s1')) + '\n')
+  assert.equal(reconcile(rendered).status, 0)
+  assert.equal(sealsLog(rendered), 's1 dual\n')
+  writeFileSync(join(rendered, 'seals.jsonl'), readFileSync(join(rendered, 'seals.jsonl'), 'utf8')
+    + JSON.stringify({ type: 'invalidate', targets: [{ slice: 's1', through_generation: 999 }] }) + '\n')
+  assert.equal(reconcile(rendered).status, 20, 'the overreaching cutoff is refused, not honoured')
+  assert.equal(sealsLog(rendered), 's1 dual\n', 'membership survives untouched')
+  // Chronology: an event that lands BEFORE its candidate has no history to cut through, so it can
+  // never reach forward and cover a candidate appended after it.
+  const early = reduceSeals([{ type: 'invalidate', targets: [{ slice: 's1', through_generation: 1 }] }, legacySeal('s1')])
+  assert.equal(early.r.status, 20, 'a cutoff for a slice with no candidate history at that point is refused')
+  assert.ok(early.r.stderr.includes('no candidate history at that point'), 'the rule is named')
+  const twice = reduceSeals([legacySeal('s1'), {
+    type: 'invalidate', targets: [{ slice: 's1', through_generation: 1 }, { slice: 's1', through_generation: 1 }],
+  }])
+  assert.equal(twice.r.status, 20, 'one slice named twice in one batch is refused')
+  // The positive control: a well-formed event still reduces and still withdraws.
+  const valid = reduceSeals([legacySeal('s1'), legacySeal('s2'), { type: 'invalidate', targets: [{ slice: 's1', through_generation: 1 }] }])
+  assert.equal(valid.r.status, 0)
+  assert.equal(sealsLog(valid.dir), 's2 dual\n', 'a validated cutoff still does its work')
+})
+
+test('reduction (W2-S7b, item 6): a reviewed reference must be whole and belong to ITS OWN ledger — a missing, malformed or foreign-family reference confers nothing', () => {
+  const cases = [
+    ['no reference at all', reviewedSealRow('s1', { review_ref: undefined })],
+    ['a reference that is not an object', reviewedSealRow('s1', { review_ref: 'rv-1' })],
+    ['no review_id', reviewedSealRow('s1', { review_ref: { family: 'review', verdict_sha256: 'a'.repeat(64), reviewer_leg_id: 'c'.repeat(32) } })],
+    ['a malformed verdict digest', reviewedSealRow('s1', { review_ref: { family: 'review', review_id: 'rv-1', verdict_sha256: 'nope', reviewer_leg_id: 'c'.repeat(32) } })],
+    ['no reviewer identity', reviewedSealRow('s1', { review_ref: { family: 'review', review_id: 'rv-1', verdict_sha256: 'a'.repeat(64) } })],
+    ['a malformed reviewer identity', reviewedSealRow('s1', { review_ref: { family: 'review', review_id: 'rv-1', verdict_sha256: 'a'.repeat(64), reviewer_leg_id: 'zz' } })],
+    ['an AUDIT-family reference on a seal', reviewedSealRow('s1', { review_ref: { family: 'audit', review_id: 'aud-1', verdict_sha256: 'a'.repeat(64), reviewer_leg_id: 'c'.repeat(32) } })],
+    ['a RATIFY-family reference on a seal', reviewedSealRow('s1', { review_ref: { family: 'ratify', review_id: 'rt-1', verdict_sha256: 'a'.repeat(64), reviewer_leg_id: 'c'.repeat(32) } })],
+  ]
+  for (const [name, row] of cases) {
+    const { dir, r } = reduceSeals([row])
+    assert.equal(r.status, 20, `${name}: the reduction refuses it`)
+    assert.equal(sealsLog(dir), null, `${name}: nothing renders`)
+  }
+  // The audit ledger takes the mirror rule: a slice-review verdict never attests a milestone audit.
+  const foreign = reduceAudits([reviewedAuditRow('s3', [{ slice: 's1', generation: 1, manifest_sha256: null }], {
+    review_ref: { family: 'review', review_id: 'rv-1', verdict_sha256: 'a'.repeat(64), reviewer_leg_id: 'c'.repeat(32) },
+  })], [legacySeal('s1')])
+  assert.equal(foreign.r.status, 20, 'a review-family reference on an audit candidate is refused')
+  assert.equal(auditsLog(foreign.dir), null, 'nothing renders')
+  // The positive control: the whole shape reduces and renders.
+  const good = reduceSeals([reviewedSealRow('s1')])
+  assert.equal(good.r.status, 0)
+  assert.equal(sealsLog(good.dir), 's1 dual\n')
+})
+
+test('reduction (W2-S7b, item 6): a modern audit must carry well-formed coverage at a REAL generation — generation zero is an absence, not a covered slice', () => {
+  // Both sides of the currency comparison mint generation 0 for an unsealed slice, so an audit
+  // covering `generation: 0` compares EQUAL to a prefix nothing seals and would render over it.
+  const zero = reduceAudits([reviewedAuditRow('s3', [{ slice: 's1', generation: 0, manifest_sha256: null }])])
+  assert.equal(zero.r.status, 20, 'with no seal ledger at all, a generation-zero coverage confers nothing')
+  assert.ok(zero.r.stderr.includes('must not cover a slice at no generation'), 'the rule is named')
+  assert.equal(auditsLog(zero.dir), null, 'nothing renders')
+  const mixed = reduceAudits([reviewedAuditRow('s3', [
+    { slice: 's1', generation: 1, manifest_sha256: null }, { slice: 's2', generation: 0, manifest_sha256: null },
+  ])], [legacySeal('s1')])
+  assert.equal(mixed.r.status, 20, 'one unsealed member is enough to refuse the whole coverage')
+  for (const [name, covered] of [
+    ['coverage that is not an array', 'everything'],
+    ['empty coverage', []],
+    ['a tuple missing its manifest field', [{ slice: 's1', generation: 1 }]],
+    ['a tuple with a foreign field', [{ slice: 's1', generation: 1, manifest_sha256: null, extra: 1 }]],
+    ['a non-integer generation', [{ slice: 's1', generation: 1.5, manifest_sha256: null }]],
+    ['a malformed manifest digest', [{ slice: 's1', generation: 1, manifest_sha256: 'nope' }]],
+  ]) {
+    const { dir, r } = reduceAudits([reviewedAuditRow('s3', covered)], [legacySeal('s1')])
+    assert.equal(r.status, 20, `${name}: the reduction refuses it`)
+    assert.equal(auditsLog(dir), null, `${name}: nothing renders`)
+  }
+  const good = reduceAudits([reviewedAuditRow('s3', [{ slice: 's1', generation: 1, manifest_sha256: null }])], [legacySeal('s1')])
+  assert.equal(good.r.status, 0)
+  assert.equal(auditsLog(good.dir), 's3 accept dual\n', 'coverage that matches the current tuples renders')
+})
+
+test('append-seal (W2-S7b, item 7): the identity the REFERENCE names is what promotion waits on — a seal never renders while the reviewer it claims is an unresolved intent', () => {
+  // Sol probe: publish under pending reviewer A, then append naming a different valid reviewer B.
+  const fx = reviewedFixture()
+  const other = mintLeg(fx.kiln, 'gate-reviewer', 'opus', fx.slice)[0]
+  const wrong = sealKind(fx.kiln, fx.slice, 'dual', fx.builder, other, fx.repo, 'reviewed')
+  assert.equal(wrong.status, 20, 'a candidate may not name a reviewer the referenced review does not')
+  assert.ok(wrong.stderr.includes('does not name'), 'the rule is named')
+  assert.ok(!existsSync(join(fx.kiln, 'seals.jsonl')), 'nothing was appended')
+  // And the identity it does name is a promotion dependency: with the reviewer left unresolved, the
+  // candidate stays provisional however many other legs resolve.
+  assert.equal(sealKind(fx.kiln, fx.slice, 'dual', fx.builder, fx.reviewer, fx.repo, 'reviewed').status, 0)
+  const builderLabel = idRows(fx.kiln).filter((row) => row.type === 'intent' && row.role === 'builder')[0].expected_label
+  const partial = capture(fx.kiln, writeTranscript(fx.kiln, [wpEvent([wa(builderLabel, 'ag-b', 'claude-sonnet-5')])]))
+  assert.equal(partial.status, 0)
+  assert.equal(partial.stdout.trim(), 'resolved 1 pending 2 promoted 0', 'the builder resolves, the reviewer does not, so nothing is promoted')
+  assert.equal(sealsLog(fx.kiln), null, 'no membership while the reviewer the seal claims is unproven')
+  assert.equal(captureAll(fx.kiln).stdout.trim(), 'resolved 2 pending 0 promoted 1', 'once the reviewer resolves too, it promotes')
+  assert.equal(sealsLog(fx.kiln), 's1 dual\n')
+})
+
+test('append-seal (W2-S7b, item 7): a reviewed seal with NO legs of its own still waits on the reviewer its reference names', () => {
+  // The other half of the Sol probe: empty builders and the - sentinel produced immediate reviewed
+  // membership, because the row had no leg references of its own to wait on.
+  const fx = reviewedFixture()
+  assert.equal(sealKind(fx.kiln, fx.slice, 'dual', '', '-', fx.repo, 'reviewed').status, 0)
+  const row = sealRows(fx.kiln).find((r) => r.type === 'seal')
+  assert.equal(row.provisional, true, 'the archive-bound reviewer is pending, so the candidate is provisional')
+  assert.equal(row.reviewer_leg_id, null, 'its own reviewer position is empty — the reference is what binds the identity')
+  assert.equal(sealsLog(fx.kiln), null, 'no immediate membership')
+  assert.equal(captureAll(fx.kiln).status, 0)
+  assert.equal(sealsLog(fx.kiln), 's1 dual\n', 'membership arrives only once that identity resolves')
+})
+
+test('manifest-start (W2-S7b, item 3): the generation allocator shares the candidate schema — it never hands out an ordinal over a ledger the reduction must hold', () => {
+  // Sol probe: a completed row the reducer rejects as a schema anomaly still counted toward the next
+  // ordinal, so a builder could commit a baseline against a history the reduction refuses to read.
+  const { repo, kiln } = plainRepoDir()
+  writeFileSync(join(kiln, 'seals.jsonl'), JSON.stringify({ type: 'seal', slice: 's1', label: 'bogus' }) + '\n')
+  const r = mfStart(repo, kiln, 's1')
+  assert.notEqual(r.status, 0, 'the allocator holds on the same anomaly the reduction holds on')
+  assert.ok(!existsSync(mfGenDir(kiln, 's1', 2)), 'no generation-2 baseline was committed against it')
+  assert.ok(!existsSync(mfGenDir(kiln, 's1', 1)), 'and no generation-1 baseline either')
+  assert.equal(reconcile(kiln).status, 20, 'the reduction refuses that same ledger — one authority, not two')
+  // The allocator agrees with the reduction on the modern boundary too.
+  const boundary = plainRepoDir()
+  writeFileSync(join(boundary.kiln, 'seals.jsonl'), [
+    reviewedSealRow('s1'), legacySeal('s1'),
+  ].map((row) => JSON.stringify(row)).join('\n') + '\n')
+  assert.notEqual(mfStart(boundary.repo, boundary.kiln, 's1').status, 0, 'a legacy-shaped candidate after the boundary holds the allocator as well')
+  // The positive control: over a ledger the reduction accepts, the ordinal is still the historical count.
+  const ok = plainRepoDir()
+  writeFileSync(join(ok.kiln, 'seals.jsonl'), [legacySeal('s1'), legacySeal('s1')].map((row) => JSON.stringify(row)).join('\n') + '\n')
+  assert.equal(mfStart(ok.repo, ok.kiln, 's1').stdout.trim().split(' ')[0], '3', 'two valid candidates still allocate generation 3')
 })

@@ -1306,9 +1306,9 @@ function archiveVerdict(kilnDir, family, verdictBytes, reviewerLegId, manifestSh
 // the .log, JSONL parsing deferred to W4). append-seal/append-audit append the JSONL row THEN
 // re-render the whole .log from the JSONL as one atomic temp+rename, so a torn .log never
 // accumulates. reconcile heals a crash between the JSONL append and the .log render, and migrates a
-// W1 project whose .log predates the JSONL. S6 has no invalidation, so every JSONL row renders in
-// append order (the plan/seam order the appends already carry — A03); S7 will teach the projection
-// to drop invalidated rows and the rows to carry the full-hash block, identity and coverage.
+// W1 project whose .log predates the JSONL. Every JSONL row renders in
+// append order (the plan/seam order the appends already carry — A03); W2-S7b turns that render into
+// the full state reduction below, where cutoffs and coverage decide what is still current.
 const SEAL_LEDGER = { jsonl: 'seals.jsonl', log: 'seals.log', type: 'seal' }
 const AUDIT_LEDGER = { jsonl: 'audits.jsonl', log: 'audits.log', type: 'audit' }
 
@@ -1326,8 +1326,8 @@ const LEDGER_LABELS = new Set(['dual', 'single-family'])
 // FRESH row without a conforming {dual, single-family} label (the label-less form is legitimate ONLY
 // for a migrated legacy:true row, so it never leaks to a fresh row as a two-field audit or a
 // trailing-space seal). A non-conforming row is a membership ANOMALY (corruption or a future-bug
-// row), never a torn line (torn lines are skipped at the JSONL read); renderProjection HOLDS on the
-// null. S7 extends the accepted types and outcomes (invalidation/reseal rows), so this grows here.
+// row), never a torn line (a torn line marks the JSONL read incomplete); the reduction HOLDS on the
+// null. The S7b event rows (promote, invalidate) are handled by the reduction before they reach here.
 function ledgerProjectionLine(descriptor, row) {
   if (!isObject(row) || row.type !== descriptor.type) return null
   const legacy = row.legacy === true
@@ -1345,55 +1345,250 @@ function ledgerProjectionLine(descriptor, row) {
   return LEDGER_LABELS.has(row.label) ? row.seam + ' accept ' + row.label : null
 }
 
-// Render the current-valid projection from the trusted rows. A row that does not conform to the
-// ledger schema (ledgerProjectionLine returns null) is a membership anomaly in the append-only
-// truth, so the render HOLDS fail-closed rather than SILENTLY drop it (which could hide a real seal)
-// or render it as garbage (A02). Torn lines never reach here — they are skipped at the JSONL read.
-// W2-S7a (ruling A-prime, provisional membership): the render is a STATE reduction over two S7a row
-// classes. A {type:'promote', candidate_id} row renders NO line of its own but marks its matching
-// provisional candidate for rendering; a provisional seal/audit (provisional:true + candidate_id)
-// renders NOTHING until such a promote lands — so a crash-window candidate whose Claude identities
-// are still pending never grants membership before capture-and-finalize resolves them. A promote
-// row that targets no provisional candidate is a schema anomaly held with the same S6 discipline. A
-// projection that is empty ONLY because every row is an unpromoted provisional is a LEGITIMATE empty
-// render (writeProjectionIfStale leaves an absent .log absent); every non-provisional row renders
-// exactly as S6.
-function renderProjection(descriptor, rows) {
-  const candidateIds = new Set()
-  for (const row of rows) {
-    if (isObject(row) && row.provisional === true && row.type === descriptor.type && typeof row.candidate_id === 'string' && row.candidate_id !== '') {
-      candidateIds.add(row.candidate_id)
-    }
-  }
-  const promoted = new Set()
-  for (const row of rows) {
-    if (isObject(row) && row.type === 'promote') {
-      if (typeof row.candidate_id !== 'string' || !candidateIds.has(row.candidate_id)) {
-        stop('transport_failure', `${descriptor.jsonl} carries a promote row for no provisional candidate — a membership anomaly; reconcile holds rather than render it`, TRANSPORT_FAILURE)
-      }
-      promoted.add(row.candidate_id)
-    }
-  }
-  const lines = []
-  for (const row of rows) {
-    if (isObject(row) && row.type === 'promote') continue
-    const line = ledgerProjectionLine(descriptor, row)
-    if (line === null) {
-      stop('transport_failure', `${descriptor.jsonl} carries a row that does not conform to the ${descriptor.type} ledger schema — a membership anomaly; reconcile holds rather than drop or misrender it`, TRANSPORT_FAILURE)
-    }
-    if (isObject(row) && row.provisional === true) {
-      if (promoted.has(row.candidate_id)) lines.push(line)
-      continue
-    }
-    lines.push(line)
-  }
-  return lines.length ? lines.join('\n') + '\n' : ''
+// ── W2-S7b: the modern candidate shape ──────────────────────────────────────
+// The closed attestation kinds a MODERN candidate carries. The kind IS the whole no-review reason,
+// which is what makes a verdictless seal distinguishable on the wire from a reviewed one (D3) — so a
+// verdictless candidate may never carry a review reference, a reviewer leg or a contract, and a
+// reviewed candidate always carries the immutable reference that binds its four captures.
+const SEAL_KINDS = new Set(['reviewed', 'verdictless-degraded-ui'])
+const AUDIT_KINDS = new Set(['reviewed'])
+const trioBlockInvalid = (v) => !isObject(v) || Object.keys(v).length !== TRIO_MEMBERS.length || !TRIO_MEMBERS.every((n) => LAW_HASH.test(v[n]))
+
+// The ordered coverage a reviewed audit candidate stores: one {slice, generation, manifest_sha256}
+// tuple per covered member, in verified-prefix order — exactly the shape currentSealTuple mints, so
+// a canonical digest comparison decides currency without a byte-exact array compare.
+function coverageInvalid(covered) {
+  if (!Array.isArray(covered) || covered.length === 0) return true
+  return covered.some((t) => !isObject(t)
+    || Object.keys(t).length !== 3
+    || typeof t.slice !== 'string' || t.slice === ''
+    || !Number.isSafeInteger(t.generation) || t.generation < 0
+    || !(t.manifest_sha256 === null || LAW_HASH.test(t.manifest_sha256)))
 }
 
-// Read the append-only JSONL truth into rows, tolerating a torn final line (a crash mid-append on a
-// ledger that is never deleted): an unparseable line is skipped, exactly as archiveVerdict and
-// sealMembers degrade, so one torn byte never wedges every future render. Returns null when the
-// JSONL is ABSENT (the caller then considers a W1 migration), distinct from present-but-empty [].
+// The FIELD LAW of a modern candidate, enforced at the append AND again in the reduction — a row is
+// trusted through this ONE function, so a hand-written candidate can never buy the membership the
+// append verb would have refused. A legacy-shaped row (no attestation_kind) has no field law here;
+// the reduction rejects it only AFTER the modern-shape boundary.
+// The FIELDS item 8 forbids on a verdictless candidate: its whole point is that NO review stands
+// behind it, so a row claiming any part of one is a contradiction, whatever value it carries. The law
+// is literal ABSENCE, not an absent-looking value — a null reviewer leg is still a reviewer-leg claim.
+const VERDICTLESS_FORBIDDEN = ['family', 'review_id', 'verdict', 'contract', 'contract_sha256', 'review_ref', 'reviewer_leg_id']
+const hasField = (row, name) => Object.prototype.hasOwnProperty.call(row, name)
+
+function candidateShapeInvalid(descriptor, row) {
+  const kind = row.attestation_kind
+  if (kind === undefined) return null
+  const kinds = descriptor.type === 'seal' ? SEAL_KINDS : AUDIT_KINDS
+  if (typeof kind !== 'string' || !kinds.has(kind)) return 'carries an attestation kind outside the closed set for this ledger'
+  if (kind === 'verdictless-degraded-ui') {
+    if (row.label !== 'single-family') return 'is verdictless and must carry the single-family label'
+    if (VERDICTLESS_FORBIDDEN.some((name) => hasField(row, name))) return 'is verdictless and must carry no review, verdict, contract or reviewer-leg field at all'
+    if (trioBlockInvalid(row.trio_sha256)) return 'is verdictless and must carry the three live trio digests'
+    if (!LAW_HASH.test(row.receipt_sha256)) return 'is verdictless and must carry the current receipt digest'
+    if (!LAW_HASH.test(row.manifest_sha256)) return 'is verdictless and must carry its recomputed manifest digest'
+    if (!Array.isArray(row.builder_leg_ids) || row.builder_leg_ids.length === 0 || !row.builder_leg_ids.every((id) => typeof id === 'string' && LEG_ID.test(id))) {
+      return 'is verdictless and must carry its complete builder identities'
+    }
+    return null
+  }
+  // The reference is family-SPECIFIC: a seal is attested by a slice review and an audit by a
+  // milestone audit, never by whatever other family happened to publish an accept. It also names the
+  // identity that reviewed — that leg is what promotion waits on, so a reference without it would let
+  // membership land while the reviewer it claims is still an unresolved intent.
+  const ref = row.review_ref
+  if (!isObject(ref)
+    || ref.family !== (descriptor.type === 'seal' ? 'review' : 'audit')
+    || typeof ref.review_id !== 'string' || ref.review_id.trim() === ''
+    || !LAW_HASH.test(ref.verdict_sha256)
+    || typeof ref.reviewer_leg_id !== 'string' || !LEG_ID.test(ref.reviewer_leg_id)) {
+    return 'is reviewed and must carry an immutable reference naming the family, review_id, verdict digest and reviewer identity of its own ledger'
+  }
+  if (descriptor.type === 'audit') {
+    if (coverageInvalid(row.covered)) return 'is a reviewed audit and must carry its validated ordered coverage'
+    // Generation 0 is how a current tuple says ABSENT — the reduction must refuse it here too, or a
+    // covered-versus-current comparison of two absences would render an audit over a prefix nothing
+    // seals (both sides equal, both sides empty).
+    if (row.covered.some((tuple) => tuple.generation < 1)) return 'is a reviewed audit and must not cover a slice at no generation'
+  }
+  return null
+}
+
+// One invalidate event — the ONE atomic batch cutoff both reopen and milestone rejection append.
+// Every target names a slice and the ordinal THROUGH which its candidates are excluded. A malformed
+// event is a membership anomaly the reduction HOLDs on: a cutoff misread as absent would resurrect
+// an invalidated seal, the exact failure D1 and D2 exist to prevent.
+function invalidateInvalid(row) {
+  if (!Array.isArray(row.targets) || row.targets.length === 0) return true
+  return row.targets.some((t) => !isObject(t)
+    || typeof t.slice !== 'string' || t.slice === ''
+    || !Number.isSafeInteger(t.through_generation) || t.through_generation < 1)
+}
+
+// Reduce one ledger to its CURRENT state (W2-S7b items 1-3). Three event classes join the
+// candidates: a promote row confers membership on its provisional candidate (S7a); an invalidate row
+// carries the batch cutoff; every other row is a candidate. A candidate GENERATION is its 1-based
+// POSITIONAL ordinal among the candidates of its key — legacy and provisional candidates COUNT,
+// events never do — so an ordinal is never reused and a cutoff excludes every candidate at or below
+// it, rendered or provisional. Current membership is the SOLE latest eligible candidate, rendered
+// only when non-provisional or validly promoted, so an older seal can never resurrect behind a
+// fresher one. An audit is current only when it is finalized AND its stored coverage equals the
+// CURRENT seal tuples (a legacy audit carrying no coverage goes inactive after any seal cutoff) —
+// derived, never stored, so no cross-ledger partial write can leave a stale audit standing. Any
+// non-conforming row is a membership anomaly the reduction HOLDs on rather than drop (which could
+// hide a real seal) or misrender (A02).
+function reduceLedger(kilnDir, descriptor, read) {
+  const anomaly = (why) => stop('transport_failure', `${descriptor.jsonl} ${why} — a membership anomaly; the reduction holds rather than drop or misrender it`, TRANSPORT_FAILURE)
+  const promoted = new Set()
+  const provisionalIds = new Set()
+  const cutoffs = new Map()
+  const groups = new Map()
+  const order = []
+  let modern = false
+  for (const row of read.rows) {
+    if (!isObject(row)) anomaly('carries a row that is not an object')
+    if (row.type === 'promote') {
+      if (typeof row.candidate_id !== 'string' || row.candidate_id === '') anomaly('carries a promote row with no candidate id')
+      promoted.add(row.candidate_id)
+      continue
+    }
+    if (row.type === 'invalidate') {
+      if (descriptor.type !== 'seal') anomaly('carries an invalidate event outside the seal ledger')
+      if (invalidateInvalid(row)) anomaly('carries a malformed invalidate event')
+      // A cutoff DELETES membership, so the reduction validates every target against the history that
+      // existed WHEN THE EVENT LANDED — the candidates seen so far, at this position in the ledger.
+      // A target naming a slice with no candidate yet, or a cutoff above the ordinals that existed,
+      // is not a validated cutoff: honouring it would let one malformed event withdraw membership no
+      // candidate ever had, and would silently cover candidates appended after it.
+      const named = new Set()
+      for (const target of row.targets) {
+        if (named.has(target.slice)) anomaly('carries an invalidate event naming one slice twice')
+        named.add(target.slice)
+        const history = groups.get(target.slice)
+        if (history === undefined) anomaly('carries an invalidate event for a slice with no candidate history at that point')
+        if (target.through_generation > history.length) anomaly('carries an invalidate event whose cutoff is above the candidates that existed when it landed')
+        cutoffs.set(target.slice, Math.max(cutoffs.get(target.slice) ?? 0, target.through_generation))
+      }
+      modern = true
+      continue
+    }
+    const line = ledgerProjectionLine(descriptor, row)
+    if (line === null) anomaly(`carries a row that does not conform to the ${descriptor.type} ledger schema`)
+    const shape = candidateShapeInvalid(descriptor, row)
+    if (shape) anomaly(`carries a candidate that ${shape}`)
+    // The legacy boundary is IMPLICIT, not versioned: the first valid S7b-shaped event — an
+    // invalidate, or a candidate carrying an explicit attestation kind — is the modern boundary, and
+    // a legacy-shaped candidate appearing after it is a downgrade the reduction refuses to trust.
+    if (row.attestation_kind === undefined) {
+      if (modern) anomaly('carries a legacy-shaped candidate after its modern-shape boundary')
+    } else modern = true
+    if (row.provisional === true) {
+      if (typeof row.candidate_id !== 'string' || row.candidate_id === '') anomaly('carries a provisional candidate with no candidate id')
+      provisionalIds.add(row.candidate_id)
+    }
+    const key = descriptor.type === 'seal' ? row.slice : row.seam
+    if (!groups.has(key)) { groups.set(key, []); order.push(key) }
+    const bucket = groups.get(key)
+    bucket.push({ row, line, generation: bucket.length + 1 })
+  }
+  for (const id of promoted) {
+    if (!provisionalIds.has(id)) anomaly('carries a promote row for no provisional candidate')
+  }
+  const finalized = (candidate) => candidate.row.provisional !== true || promoted.has(candidate.row.candidate_id)
+  const seals = descriptor.type === 'audit' ? sealState(kilnDir) : null
+  const carriesCoverage = (row) => Object.prototype.hasOwnProperty.call(row, 'covered')
+  const auditCurrent = (row) => {
+    if (!carriesCoverage(row)) return seals.cutoffs.size === 0
+    if (coverageInvalid(row.covered)) return false
+    return canonicalDigest(row.covered) === canonicalDigest(row.covered.map((t) => currentSealTuple(seals, kilnDir, t.slice)))
+  }
+  const members = []
+  const reasons = new Map()
+  const current = new Map()
+  let candidateCount = 0
+  for (const key of order) {
+    const bucket = groups.get(key)
+    candidateCount += bucket.length
+    if (descriptor.type === 'seal') {
+      const eligible = bucket.filter((candidate) => candidate.generation > (cutoffs.get(key) ?? 0))
+      if (eligible.length === 0) { reasons.set(key, 'cutoff'); continue }
+      const latest = eligible[eligible.length - 1]
+      if (!finalized(latest)) { reasons.set(key, 'provisional'); continue }
+      members.push(latest)
+      current.set(key, latest)
+      continue
+    }
+    const settled = bucket.filter(finalized)
+    // Item 3, no resurrection: a coverage-less candidate answers for a seam only while nothing has
+    // SUPERSEDED it. Once a LATER settled candidate for this seam carries coverage, the older row is
+    // spent — without this, the moment that later audit went stale the reduction would walk backward
+    // and re-elect it, and a coverage-less row would then permanently mask the staleness of every
+    // audit after it, leaving the seam rendering as audited over a prefix nothing valid ever covered.
+    // Chronological supersession only: cutoffs are the OTHER deactivator (they are sufficient, not
+    // necessary), and nothing here reaches for one.
+    const lastCovered = settled.map((candidate) => carriesCoverage(candidate.row)).lastIndexOf(true)
+    const eligible = settled.filter((candidate, position) => carriesCoverage(candidate.row) || position > lastCovered)
+    const member = [...eligible].reverse().find((candidate) => auditCurrent(candidate.row))
+    if (member === undefined) { reasons.set(key, settled.length > 0 ? 'coverage' : 'provisional'); continue }
+    members.push(member)
+    current.set(key, member)
+  }
+  return {
+    // An audit reduction is only as complete as the SEAL read it derived its currency from: a hole in
+    // the seal truth could mark a live audit inactive, so that incompleteness rides along. The two
+    // are reported separately as well as combined, so each refusal names the ledger that actually
+    // has the hole rather than inheriting the other guards answer.
+    complete: read.complete && (seals === null || seals.complete),
+    derived: seals === null || seals.complete,
+    modern,
+    projection: members.length ? members.map((member) => member.line).join('\n') + '\n' : '',
+    candidateCount,
+    cutoffs,
+    groups,
+    promoted,
+    reasons,
+    current,
+  }
+}
+
+// Seals reduce FIRST, audits second: audit currency is DERIVED from the seal state, so every audit
+// reduction resolves the seal ledger through this one entry. An absent seal ledger is an honest
+// empty state (no cutoff, no current member), never a hold — a project may audit nothing yet.
+function sealState(kilnDir) {
+  const read = readLedgerRows(join(kilnDir, SEAL_LEDGER.jsonl))
+  return reduceLedger(kilnDir, SEAL_LEDGER, read === null ? { rows: [], complete: true } : read)
+}
+
+// The SOLE current tuple for a slice (W2-S7b item 5): its current rendered generation and that
+// generations manifest digest, derived from the reduction. A slice with NO current rendered member —
+// unsealed, invalidated, or holding only an unpromoted provisional — is an honest generation 0 with a
+// null manifest. A HISTORICAL row count may never author coverage, which is why nothing here counts
+// rows. A torn manifest store HOLDs through coveredManifestDigest.
+function currentSealTuple(seals, kilnDir, slice) {
+  const member = seals.current.get(slice)
+  if (member === undefined) return { slice, generation: 0, manifest_sha256: null }
+  return { slice, generation: member.generation, manifest_sha256: coveredManifestDigest(kilnDir, slice, member.generation) }
+}
+
+// Parse the append-only JSONL truth into rows WITH its completeness (W2-S7b item 4). A line that
+// does not parse — a torn final fragment a crash left, or a corrupt interior line — is never a
+// silent skip: it marks the read INCOMPLETE, and neither a membership-affecting append nor a
+// withdrawal of rendered membership may proceed from input the reduction could not fully see. The
+// surviving rows still render, so one torn byte never wedges every future projection.
+function parseLedger(raw) {
+  const rows = []
+  let complete = true
+  for (const line of raw.split('\n')) {
+    if (line.trim() === '') continue
+    let row
+    try { row = JSON.parse(line) } catch { complete = false; continue }
+    rows.push(row)
+  }
+  return { rows, complete }
+}
+
+// Read the JSONL truth. Returns null when the file is ABSENT (the caller then considers a W1
+// migration), distinct from present-but-empty; a genuine IO fault other than ENOENT THROWS.
 function readLedgerRows(path) {
   let raw = ''
   try {
@@ -1402,19 +1597,14 @@ function readLedgerRows(path) {
     if (error.code === 'ENOENT') return null
     throw error
   }
-  const rows = []
-  for (const line of raw.split('\n')) {
-    if (line.trim() === '') continue
-    try { rows.push(JSON.parse(line)) } catch { continue }
-  }
-  return rows
+  return parseLedger(raw)
 }
 
 // Re-render the .log from the rows as one atomic temp+rename, but ONLY when the current .log differs
 // — a matching projection (the common reconcile no-op, and every byte-exact migration) is left
 // untouched so no spurious write churns the file.
-function writeProjectionIfStale(kilnDir, descriptor, rows) {
-  const projection = renderProjection(descriptor, rows)
+function writeProjectionIfStale(kilnDir, descriptor, reduction) {
+  const projection = reduction.projection
   const logPath = join(kilnDir, descriptor.log)
   let current = null
   try {
@@ -1433,16 +1623,33 @@ function writeProjectionIfStale(kilnDir, descriptor, rows) {
   if (current === projection) return
   // A zero-row projection is legitimate ONLY for a genuinely empty ledger — a fresh project with no
   // .log yet writes nothing, so reconcile never creates an empty seals.log a scenario poll would
-  // misread. But an EMPTY projection beside a NONEMPTY .log is an unreconcilable B09 anomaly: the
-  // JSONL truth renders no members while the .log still claims sealed slices (a present-but-empty or
-  // torn-only JSONL that skipped migration because it is not ABSENT). Rendering '' would wipe the
-  // membership log and the next boot would rebuild already-sealed work — the exact failure the ledger
-  // exists to prevent. Hold fail-closed rather than overwrite. In S6 append-only means this is ALWAYS
-  // the anomaly; S7 note: once invalidation rows can render null, a legitimately-emptied ledger will
-  // need an explicit signal to tell it apart from this wipe.
-  if (projection === '') {
-    if (current === null) return
-    stop('transport_failure', `${descriptor.log} is nonempty but its JSONL truth renders no members — refusing to wipe sealed membership`, TRANSPORT_FAILURE)
+  // misread.
+  if (projection === '' && current === null) return
+  // W2-S7b (item 4): membership is only ever WITHDRAWN with a reason. Any member the .log still
+  // claims that the new projection does not carry must be proven inactive by a validated cutoff or by
+  // derived coverage invalidity, over a COMPLETE read — otherwise the overwrite silently drops sealed
+  // work and the next boot rebuilds it, the exact B09 failure the ledger exists to prevent. An
+  // unpromoted provisional explains nothing (its candidate may still promote), a torn or anomalous
+  // read explains nothing, and a member the truth never knew explains nothing — each HOLDs. Members
+  // are compared by their FIRST FIELD, the membership anchor, so a row that merely changed its family
+  // label is not a withdrawal.
+  // WHY completeness gates THIS branch and not the whole overwrite (ruled, do not re-raise): a crash
+  // between the JSONL append and the .log render leaves exactly an incomplete read, and excluding that
+  // torn tail is the CORRECT projection — the row never became durable. Gating every write on
+  // completeness would turn each crash-mid-append into a permanent hold instead of the heal reconcile
+  // exists to perform. Incompleteness is disqualifying only where it could COST membership, which is
+  // this branch.
+  const membersOf = (text) => (text === null ? [] : text.split('\n').filter((line) => line !== '').map((line) => line.split(' ')[0]))
+  const carried = new Set(membersOf(projection))
+  const withdrawn = membersOf(current).filter((key) => !carried.has(key))
+  if (withdrawn.length > 0) {
+    const explained = reduction.complete && reduction.candidateCount > 0 && withdrawn.every((key) => {
+      const why = reduction.reasons.get(key)
+      return why === 'cutoff' || why === 'coverage'
+    })
+    if (!explained) {
+      stop('transport_failure', `${descriptor.log} claims members its JSONL truth no longer renders, and no validated cutoff or coverage change accounts for them — refusing to withdraw sealed membership`, TRANSPORT_FAILURE)
+    }
   }
   mkdirSync(kilnDir, { recursive: true })
   const temporary = join(kilnDir, '.' + descriptor.log + '.tmp-' + process.pid + '-' + randomUUID())
@@ -1499,16 +1706,25 @@ function migrateLegacyLog(kilnDir, descriptor) {
 // fails closed through stop so a caller never advances on an unreconciled ledger.
 function reconcileLedger(kilnDir, descriptor) {
   try {
-    let rows = readLedgerRows(join(kilnDir, descriptor.jsonl))
-    if (rows === null) {
+    let read = readLedgerRows(join(kilnDir, descriptor.jsonl))
+    if (read === null) {
       migrateLegacyLog(kilnDir, descriptor)
-      rows = readLedgerRows(join(kilnDir, descriptor.jsonl))
-      if (rows === null) return
+      read = readLedgerRows(join(kilnDir, descriptor.jsonl))
+      if (read === null) return
     }
-    writeProjectionIfStale(kilnDir, descriptor, rows)
+    writeProjectionIfStale(kilnDir, descriptor, reduceLedger(kilnDir, descriptor, read))
   } catch (error) {
     stop('transport_failure', `reconcile could not heal the ${descriptor.log} projection: ${error.message}`, TRANSPORT_FAILURE)
   }
+}
+
+// W2-S7b (item 2): every membership-affecting operation reduces SEALS FIRST, AUDITS SECOND. Audit
+// currency is derived from the seal state, so an audit rendered before its seals would publish a
+// judgement one step stale — a seal cutoff or a fresh seal generation must land in the seal
+// projection before any audit claims to cover it.
+function reconcileLedgers(kilnDir) {
+  reconcileLedger(kilnDir, SEAL_LEDGER)
+  reconcileLedger(kilnDir, AUDIT_LEDGER)
 }
 
 // Append a typed row to the JSONL truth, then re-render the .log from the JSONL. The append prefixes
@@ -1523,6 +1739,29 @@ function appendLedgerRow(kilnDir, descriptor, row) {
   } catch (error) {
     if (error.code !== 'ENOENT') stop('transport_failure', `${descriptor.jsonl} could not be read: ${error.message}`, TRANSPORT_FAILURE)
   }
+  // W2-S7b (item 4): the append is membership-affecting, so it may never proceed from an INCOMPLETE
+  // read. A torn or corrupt line means the reduction cannot see the whole truth — appending a
+  // candidate onto it would fix a generation ordinal, or a cutoff, against a history with a hole.
+  const before = parseLedger(raw)
+  if (!before.complete) {
+    stop('transport_failure', `${descriptor.jsonl} carries a torn or unparseable line — no membership-affecting append proceeds from an incomplete ledger read`, TRANSPORT_FAILURE)
+  }
+  // The row is held to the SAME field law and the SAME modern-shape boundary the reduction applies,
+  // BEFORE it lands. The ledger is append-only and nothing is ever deleted from it, so a row the
+  // reduction would refuse must never be written at all — otherwise one bad append wedges every
+  // future render of a ledger that cannot be repaired.
+  const shape = candidateShapeInvalid(descriptor, row)
+  if (shape) stop('transport_failure', `${descriptor.jsonl} refuses a candidate that ${shape}`, TRANSPORT_FAILURE)
+  const state = reduceLedger(kilnDir, descriptor, before)
+  // The same refusal one ledger deeper, and it is a DISTINCT one: this ledger reads whole, but the
+  // ledger it derives its state from does not. An audit appended over a seal history with a hole
+  // would fix a coverage claim against seals the reduction could not see.
+  if (!state.derived) {
+    stop('transport_failure', `${descriptor.jsonl} derives its state from a ledger carrying a torn or unparseable line — no membership-affecting append proceeds from an incomplete read`, TRANSPORT_FAILURE)
+  }
+  if (row.type === descriptor.type && row.attestation_kind === undefined && state.modern) {
+    stop('transport_failure', `${descriptor.jsonl} has crossed its modern-shape boundary — a candidate carrying no attestation kind is never appended after it`, TRANSPORT_FAILURE)
+  }
   const prefix = raw.length > 0 && !raw.endsWith('\n') ? '\n' : ''
   mkdirSync(kilnDir, { recursive: true })
   try {
@@ -1531,7 +1770,8 @@ function appendLedgerRow(kilnDir, descriptor, row) {
     stop('transport_failure', `${descriptor.jsonl} could not be appended: ${error.message}`, TRANSPORT_FAILURE)
   }
   try {
-    writeProjectionIfStale(kilnDir, descriptor, readLedgerRows(jsonlPath) || [])
+    const read = readLedgerRows(jsonlPath)
+    writeProjectionIfStale(kilnDir, descriptor, reduceLedger(kilnDir, descriptor, read === null ? { rows: [], complete: true } : read))
   } catch (error) {
     stop('transport_failure', `${descriptor.log} projection could not be rendered: ${error.message}`, TRANSPORT_FAILURE)
   }
@@ -1648,6 +1888,10 @@ function identityIndex(kilnDir) {
   }
   const legs = new Map()
   const resolvedIds = new Set()
+  // W2-S7b (item 7): promotion requires EXACTLY ONE complete resolved record per referenced pending
+  // leg, so the reduction counts them — two resolved rows for one leg are contradictory identity
+  // evidence, and membership is never conferred on a leg whose identity is ambiguous.
+  const resolvedCounts = new Map()
   const intents = []
   for (const row of rows) {
     const invalid = identityRowInvalid(row)
@@ -1661,9 +1905,10 @@ function identityIndex(kilnDir) {
       resolvedIds.add(row.leg_id)
     } else if (row.type === 'resolved') {
       resolvedIds.add(row.leg_id)
+      resolvedCounts.set(row.leg_id, (resolvedCounts.get(row.leg_id) ?? 0) + 1)
     }
   }
-  return { legs, resolvedIds, intents }
+  return { legs, resolvedIds, resolvedCounts, intents }
 }
 
 // Locate the current driver transcript by session id, the kiln-meter discovery: the munged-cwd dir
@@ -1914,13 +2159,18 @@ const generationDir = (kilnDir, slice, generation) =>
 // The per-slice generation ordinal: 1 + the count of seal rows for this slice in the append-only
 // truth. Provisional rows COUNT — a crashed candidate is a distinct historical attempt, matching the
 // S7b "1 + max HISTORICAL ordinal" rule; promote rows are not seals and never count. An absent ledger
-// is generation 1; a genuine read fault throws (a hold), never a silent 1.
+// is generation 1; a genuine read fault throws (a hold), never a silent 1. W2-S7b: this stays the
+// HISTORICAL allocator and nothing else — an INCOMPLETE read throws, because a hole in the history
+// would hand a builder an ordinal an earlier attempt already committed a baseline against, and it
+// counts through the REDUCTION so the ordinal it hands out rests on the same candidate schema and
+// modern-shape boundary the reduction enforces. Counting parseable rows instead would let a builder
+// commit a baseline against a ledger the reduction must hold — one authority, not two.
 function sliceGeneration(kilnDir, slice) {
-  const rows = readLedgerRows(join(kilnDir, SEAL_LEDGER.jsonl))
-  if (rows === null) return 1
-  let count = 0
-  for (const row of rows) if (isObject(row) && row.type === 'seal' && row.slice === slice) count += 1
-  return 1 + count
+  const read = readLedgerRows(join(kilnDir, SEAL_LEDGER.jsonl))
+  if (read === null) return 1
+  if (!read.complete) throw new Error('the seal ledger carries a torn or unparseable line — the generation allocator holds rather than reuse an ordinal')
+  const history = reduceLedger(kilnDir, SEAL_LEDGER, read).groups.get(slice)
+  return 1 + (history === undefined ? 0 : history.length)
 }
 
 // Detect the snapshot mode: a real git work tree enumerates through git, anything else (git absent,
@@ -2394,29 +2644,24 @@ function reviewedManifestForSlice(kilnDir, slice) {
   return built === null ? null : built.manifest
 }
 
-// W2-S7a (FORK 1, shared with S7b): the LAST SEALED generation ordinal for a slice — the seal-row
-// count in the append-only truth, one below the current in-progress generation (sliceGeneration - 1).
-// Zero when a slice has no sealed generation yet. S7b re-derives coverage from this same helper.
-function lastSealedGeneration(kilnDir, slice) {
-  return sliceGeneration(kilnDir, slice) - 1
-}
-
-// The manifest digest bound to a covered slice's LAST SEALED generation: the pointer digest when the
-// store exists, an honest null for a legacy/pre-manifest sealed generation, a HOLD (throws) on a torn
-// store. generation 0 (no sealed generation) is null with no store lookup.
+// The manifest digest bound to a covered slice generation: the pointer digest when the store exists,
+// an honest null for a legacy/pre-manifest sealed generation, a HOLD (throws) on a torn store.
+// generation 0 (no current member) is null with no store lookup.
 function coveredManifestDigest(kilnDir, slice, generation) {
   if (generation < 1) return null
   const built = readPreparedManifest(generationDir(kilnDir, slice, generation))
   return built === null ? null : built.sha
 }
 
-// The milestone-audit coverage tuples over the sealed prefix, in slices.json order: per member the
-// slice, its last sealed generation, and that generation's manifest digest (null when legacy).
+// The milestone-audit coverage tuples over the sealed prefix, in slices.json order — the ONE
+// reducer-derived helper (W2-S7b item 5) called for every ordered verified-prefix member. Each tuple
+// is the slices SOLE CURRENT rendered generation and that generations manifest digest. A historical
+// row count may never author coverage: an invalidated or still-provisional candidate is not
+// membership, so it contributes an honest generation 0 rather than a number no seal stands behind.
 function coverageTuples(kilnDir, sealedPrefix) {
-  return sealedPrefix.map((slice) => {
-    const generation = lastSealedGeneration(kilnDir, slice)
-    return { slice, generation, manifest_sha256: coveredManifestDigest(kilnDir, slice, generation) }
-  })
+  const seals = sealState(kilnDir)
+  if (!seals.complete) throw new Error('the seal ledger carries a torn or unparseable line — coverage is never authored from a history with a hole')
+  return sealedPrefix.map((slice) => currentSealTuple(seals, kilnDir, slice))
 }
 
 // Hash the RAW bytes of an evidence image for a perceptual-screen contract — a Buffer digest, so a
@@ -2550,6 +2795,211 @@ function composeContract(kind, operation, facts) {
 
 const contractStoreFile = (kilnDir, sha) => join(kilnDir, CONTRACT_DIR, 'sha256', sha + '.json')
 
+// ── W2-S7b (items 6-8): the candidate attestations ───────────────────────────────────────────────
+// A MODERN candidate is only ever appended over evidence this CLI validated itself. A REVIEWED
+// candidate binds BY REFERENCE to exactly one fully valid reviews.jsonl row: that single reference
+// carries all four S7a captures — the check receipt, the reviewer identity, the control-derived
+// manifest and the canonical contract — so none of their bodies is duplicated onto the ledger row
+// (D4 closes by reference, not by copy). A VERDICTLESS candidate had no gate at all, so it carries
+// its own validated digests instead, and the kind itself is the whole no-review reason (D3). Every
+// non-pending validation happens ONCE, here at the append; promotion later re-checks only what can
+// still change — pending identity, eligibility, coverage — and never rehashes an advanced tree.
+const GATE_FILE = { review: 'gate-review.json', audit: 'audit-review.json' }
+
+// The LIVE trio, verified in the act of reading it (the run-checks discipline): a drifted member is
+// the integrity class and holds at 22, so no candidate is ever attested over a law that moved.
+function liveTrioDigests(kilnDir, label) {
+  const auth = sealedAuthority(kilnDir)
+  if (!auth.sealed) stop('transport_failure', `${label} requires the sealed law`, TRANSPORT_FAILURE)
+  const digests = {}
+  for (const name of TRIO_MEMBERS) digests[name] = createHash('sha256').update(verifyMember(auth, kilnDir, name, label)).digest('hex')
+  return { lockHash: auth.lockHash, digests }
+}
+
+// Parse the FIXED gate file of a family into the reference key a reviewed candidate binds by. The
+// published verdict must be an ACCEPT — a candidate attested by a verdict that did not pass is the
+// forgery this reference exists to make impossible. verdict_sha256 digests the EXACT published bytes
+// (the Buffer, never a utf8 re-encode), the same key archiveVerdict filed the row under.
+function reviewedReference(kilnDir, family) {
+  let bytes
+  try {
+    bytes = readFileSync(join(kilnDir, GATE_FILE[family]))
+  } catch (error) {
+    return { error: `the published ${family} verdict could not be read for the candidate reference: ${error.message}` }
+  }
+  let verdict
+  try {
+    verdict = JSON.parse(bytes.toString('utf8'))
+  } catch (error) {
+    return { error: `the published ${family} verdict could not be parsed for the candidate reference: ${error.message}` }
+  }
+  if (!isObject(verdict) || typeof verdict.review_id !== 'string' || verdict.review_id.trim() === '') {
+    return { error: `the published ${family} verdict carries no review_id` }
+  }
+  if (verdict.verdict !== 'accept') {
+    return { error: `the published ${family} verdict is not an accept — no candidate is attested by a verdict that did not pass` }
+  }
+  return { ref: { family, review_id: verdict.review_id, verdict_sha256: createHash('sha256').update(bytes).digest('hex') } }
+}
+
+// Select EXACTLY ONE archive row by the reference key. Zero rows means the verdict on disk was never
+// archived (a torn publish); more than one is contradictory history. Either way the append HOLDs
+// rather than bind a candidate to a row it cannot name uniquely.
+function referencedArchiveRow(kilnDir, ref) {
+  let raw = ''
+  try {
+    raw = readFileSync(join(kilnDir, REVIEWS_FILE), 'utf8')
+  } catch (error) {
+    if (error.code !== 'ENOENT') return { error: `the review archive could not be read: ${error.message}` }
+  }
+  const matched = []
+  for (const line of raw.split('\n')) {
+    if (line.trim() === '') continue
+    let row
+    try { row = JSON.parse(line) } catch { continue }
+    if (isObject(row) && row.family === ref.family && row.review_id === ref.review_id && row.verdict_sha256 === ref.verdict_sha256) matched.push(row)
+  }
+  if (matched.length !== 1) return { error: 'the referenced verdict does not match exactly one archived review row' }
+  return { row: matched[0] }
+}
+
+// The evidence a reviewed archive row must OWN before it can attest anything: the accept verdict, a
+// reviewer identity this ledger knows in the reviewer-class role of its family, a NON-NULL receipt
+// digest, and the canonical contract the gate judged, still whole in the store. A missing or
+// malformed field is a row written before a capture existed or outside the trusted path — it attests
+// nothing, so the append HOLDs rather than seal on a reference that proves less than it claims.
+function archiveRowEvidenceInvalid(kilnDir, row, family) {
+  if (row.verdict !== 'accept') return 'the archived row is not an accept'
+  if (typeof row.reviewer_leg_id !== 'string' || !LEG_ID.test(row.reviewer_leg_id)) return 'the archived row carries no reviewer identity'
+  const leg = identityIndex(kilnDir).legs.get(row.reviewer_leg_id)
+  if (!leg) return 'the archived reviewer identity is unknown to the identity ledger'
+  if (leg.role !== CODEX_ROLE[family]) return 'the archived reviewer identity does not carry the reviewer role of its family'
+  if (!LAW_HASH.test(row.receipt_sha256)) return 'the archived row carries no check-receipt digest'
+  if (!LAW_HASH.test(row.contract_sha256)) return 'the archived row carries no canonical contract digest'
+  return verifyContractStore(kilnDir, row.contract_sha256)
+}
+
+function readStoredContract(kilnDir, sha) {
+  let contract
+  try {
+    contract = JSON.parse(readFileSync(contractStoreFile(kilnDir, sha), 'utf8'))
+  } catch (error) {
+    return { error: `the referenced contract could not be read: ${error.message}` }
+  }
+  if (!isObject(contract)) return { error: 'the referenced contract is not a JSON object' }
+  return { contract }
+}
+
+// The reviewed SEAL attestation, validated before the manifest recompute so the recompute stays the
+// last operation before the append. It returns the reference the row carries and the manifest digest
+// the archive row bound — the caller proves that digest is still what the tree yields. The contract
+// SEMANTICS are parsed, not trusted: the judged contract must name THIS slice, the law sealed right
+// now, the same receipt the row bound, and the same manifest, so a contract that judged something
+// else can never attest this candidate.
+function reviewedSealAttestation(kilnDir, slice, lockHash) {
+  const reference = reviewedReference(kilnDir, 'review')
+  if (reference.error) return reference
+  const archived = referencedArchiveRow(kilnDir, reference.ref)
+  if (archived.error) return archived
+  const row = archived.row
+  const evidence = archiveRowEvidenceInvalid(kilnDir, row, 'review')
+  if (evidence) return { error: evidence }
+  if (!LAW_HASH.test(row.manifest_sha256)) return { error: 'the archived row carries no control-derived manifest digest' }
+  const read = readStoredContract(kilnDir, row.contract_sha256)
+  if (read.error) return read
+  const contract = read.contract
+  if (contract.contract_kind !== 'slice-review') return { error: 'the referenced contract is not a slice review' }
+  if (contract.slice_id !== slice) return { error: 'the referenced contract judged another slice' }
+  if (contract.law_hash !== lockHash) return { error: 'the referenced contract judged another law than the one sealed now' }
+  if (contract.receipt_sha256 !== row.receipt_sha256) return { error: 'the referenced contract judged another check receipt than the archived row bound' }
+  let judged
+  try {
+    judged = canonicalDigest(contract.reviewed_manifest)
+  } catch (error) {
+    return { error: `the referenced contract carries an unserializable reviewed manifest: ${error.message}` }
+  }
+  if (judged !== row.manifest_sha256) return { error: 'the referenced contract judged another working-tree manifest than the archived row bound' }
+  // The reference names the identity the ARCHIVE ROW owns, never the one argv offered: that is the
+  // leg that actually reviewed, and it is what promotion is made to wait on.
+  return { ref: { ...reference.ref, reviewer_leg_id: row.reviewer_leg_id }, manifestSha256: row.manifest_sha256 }
+}
+
+// The reviewed AUDIT attestation, the symmetric form. An audit binds no manifest of its own: its
+// working-tree evidence IS the ordered coverage its contract judged, and the serialized append RELIES
+// on that just-prepared contract rather than re-deriving the current tuples a second time — currency
+// is re-proved once, at promotion, and the reduction refuses membership to any audit whose coverage
+// has stopped matching. What IS validated here is the coverage the row will carry: well-formed
+// tuples, and every covered member at a real generation — a generation 0 is an absence, and an audit
+// never claims to have covered a slice nothing seals.
+function reviewedAuditAttestation(kilnDir, seam, lockHash) {
+  const reference = reviewedReference(kilnDir, 'audit')
+  if (reference.error) return reference
+  const archived = referencedArchiveRow(kilnDir, reference.ref)
+  if (archived.error) return archived
+  const row = archived.row
+  const evidence = archiveRowEvidenceInvalid(kilnDir, row, 'audit')
+  if (evidence) return { error: evidence }
+  if (!LAW_HASH.test(row.receipt_sha256)) return { error: 'the archived row carries no check-receipt digest' }
+  const read = readStoredContract(kilnDir, row.contract_sha256)
+  if (read.error) return read
+  const contract = read.contract
+  if (contract.contract_kind !== 'milestone-audit') return { error: 'the referenced contract is not a milestone audit' }
+  if (contract.seam_slice !== seam) return { error: 'the referenced contract judged another seam' }
+  if (contract.law_hash !== lockHash) return { error: 'the referenced contract judged another law than the one sealed now' }
+  if (contract.receipt_sha256 !== row.receipt_sha256) return { error: 'the referenced contract judged another check receipt than the archived row bound' }
+  if (coverageInvalid(contract.covered)) return { error: 'the referenced contract carries no well-formed ordered coverage' }
+  if (contract.covered.some((tuple) => tuple.generation < 1)) return { error: 'the referenced contract covers a slice with no current sealed membership' }
+  return { ref: { ...reference.ref, reviewer_leg_id: row.reviewer_leg_id }, covered: contract.covered }
+}
+
+// Is a stored ordered coverage still exactly the current seal tuples? The PROMOTION check (item 7):
+// seals may have moved while an audit identity resolved, so the one moment membership is conferred is
+// the one moment currency is re-proved. The comparison is canonical, not byte-exact: two structurally
+// identical tuple lists compare equal whatever key order they were written in. A torn manifest store
+// surfaces as an error, never as a silent mismatch.
+function coverageStillCurrent(kilnDir, covered) {
+  try {
+    const seals = sealState(kilnDir)
+    if (!seals.complete) return { error: 'the seal ledger carries a torn or unparseable line — coverage is never proven against a history with a hole' }
+    const fresh = covered.map((tuple) => currentSealTuple(seals, kilnDir, tuple.slice))
+    return { current: canonicalDigest(covered) === canonicalDigest(fresh) }
+  } catch (error) {
+    return { error: `the current seal tuples could not be derived for the coverage check: ${error.message}` }
+  }
+}
+
+// Join the archive-bound reviewer identity to the candidate. The identity that actually reviewed is
+// the one promotion must wait on, so an argv leg naming anyone else is a claim the append refuses
+// outright, and a bound leg that is still a pending intent makes the row PROVISIONAL whatever argv
+// offered. Without this a candidate could take membership while the reviewer its reference names was
+// never resolved — a seal whose review nobody can prove happened. The bound leg rides the reference,
+// so promotion tracks it from the row itself.
+function bindAttestedIdentity(kilnDir, row, argvLeg, verb) {
+  const bound = row.review_ref.reviewer_leg_id
+  if (typeof argvLeg === 'string' && LEG_ID.test(argvLeg) && argvLeg !== bound) {
+    stop('transport_failure', `${verb} was handed a reviewer identity the referenced review does not name — refusing to bind a review to another leg`, TRANSPORT_FAILURE)
+  }
+  const idx = identityIndex(kilnDir)
+  const leg = idx.legs.get(bound)
+  if (!leg) stop('transport_failure', `${verb} cannot find the referenced reviewer identity in the identity ledger`, TRANSPORT_FAILURE)
+  if (leg.kind === 'intent' && !idx.resolvedIds.has(bound)) {
+    row.provisional = true
+    if (typeof row.candidate_id !== 'string') row.candidate_id = randomBytes(16).toString('hex')
+  }
+}
+
+// The VERDICTLESS attestation (item 8): the kind IS the reason, so there is no gate file, no review
+// row and no contract to reference. The candidate carries its own validated evidence instead — the
+// live trio digests, the current check receipt, and (checked by the caller after the recompute) the
+// manifest of this generation. Its builder identities are validated in the leg block, exactly as any
+// other seal, so a degraded seal still names who built it.
+function verdictlessAttestation(kilnDir, trio) {
+  const receipt = receiptDigestAtPublication(kilnDir, 'review')
+  if (receipt.error) return receipt
+  if (receipt.digest === null) return { error: 'no check receipt stands behind the verdictless seal' }
+  return { fields: { trio_sha256: trio, receipt_sha256: receipt.digest } }
+}
+
 // Commit the contract bytes CONTENT-ADDRESSED (wx), the baseline/prepared discipline: an identical
 // name whose bytes still hash to it is an idempotent no-op; a name colliding with foreign bytes is a
 // torn store that THROWS, never a silent accept.
@@ -2676,7 +3126,7 @@ if (mode === 'review' && args.length === 8) {
   renameSync(temporary, output)
   process.stdout.write(facts.lawHash + '\n')
   process.exit(ACCEPT)
-} else if (mode === 'append-seal' && (args.length === 3 || args.length === 5 || args.length === 6)) {
+} else if (mode === 'append-seal' && (args.length === 3 || args.length === 5 || args.length === 6 || args.length === 7)) {
   // The recovered v3 "Thoth scribe": an opaque, trusted seal-append verb. The kernel courier calls
   // it instead of a bare shell append it declines to moralize; the seal ledger semantics live here.
   // Closed label, nonempty slice. W2-S6: the row lands in seals.jsonl (the append-only truth) and
@@ -2698,15 +3148,30 @@ if (mode === 'review' && args.length === 8) {
   // a change between publication and seal cannot inherit the review. A prepared manifest for the slice
   // generation with no repo arg would silence the check, so it HOLDs; no prepared manifest is a legacy
   // append (the S6-era seals stay byte-identical).
-  const [kilnDir, slice, label, builderCsv, reviewerRef, repoArg] = args
+  // W2-S7b (items 6 and 8): a SEVENTH argv word carries the attestation kind — reviewed, or the
+  // closed verdictless-degraded-ui. It makes the candidate MODERN: reviewed binds by reference to the
+  // one accepted reviews row (and through it to the receipt, the reviewer identity, the manifest and
+  // the contract), verdictless carries its own validated trio, receipt and manifest digests. The kind
+  // is what makes the two distinguishable on the wire, and the first modern candidate closes the
+  // legacy shape for this ledger — every later candidate must declare its kind too.
+  const [kilnDir, slice, label, builderCsv, reviewerRef, repoArg, attestationKind] = args
   if (label !== 'dual' && label !== 'single-family') {
     stop('transport_failure', 'append-seal label must be dual or single-family', TRANSPORT_FAILURE)
   }
   if (typeof slice !== 'string' || slice.trim() === '') {
     stop('transport_failure', 'append-seal slice id must be a nonempty string', TRANSPORT_FAILURE)
   }
+  if (attestationKind !== undefined && !SEAL_KINDS.has(attestationKind)) {
+    stop('transport_failure', `append-seal attestation kind must be one of ${[...SEAL_KINDS].join('|')}`, TRANSPORT_FAILURE)
+  }
+  // A verdictless seal had no gate, so it can have been handed no reviewer. The field is ABSENT on
+  // the row (item 8), which means a supplied leg would otherwise be silently dropped — it is refused
+  // instead, so the caller learns its call contradicted itself.
+  if (attestationKind === 'verdictless-degraded-ui' && reviewerRef !== '-') {
+    stop('transport_failure', 'append-seal was handed a reviewer leg for a verdictless seal — a seal with no gate names no reviewer', TRANSPORT_FAILURE)
+  }
   const sealRow = { type: 'seal', slice, label, run_id: runIdFromLock(kilnDir), ts: new Date().toISOString() }
-  if (args.length === 5 || args.length === 6) {
+  if (args.length >= 5) {
     const runId = runIdFromLock(kilnDir)
     const idx = identityIndex(kilnDir)
     const builderLegs = builderCsv === '' ? [] : builderCsv.split(',')
@@ -2727,7 +3192,9 @@ if (mode === 'review' && args.length === 8) {
     const referenced = reviewerRef === '-' ? builderLegs : [...builderLegs, reviewerRef]
     const pending = referenced.some((legId) => idx.legs.get(legId).kind === 'intent' && !idx.resolvedIds.has(legId))
     sealRow.builder_leg_ids = builderLegs
-    sealRow.reviewer_leg_id = reviewerRef === '-' ? null : reviewerRef
+    // Item 8 forbids the reviewer-leg FIELD on a verdictless candidate — literal absence, since a
+    // null is still a claim about a reviewer that never existed.
+    if (attestationKind !== 'verdictless-degraded-ui') sealRow.reviewer_leg_id = reviewerRef === '-' ? null : reviewerRef
     if (pending) {
       sealRow.provisional = true
       sealRow.candidate_id = randomBytes(16).toString('hex')
@@ -2736,6 +3203,24 @@ if (mode === 'review' && args.length === 8) {
   // M-05: reconcile FIRST, so the manifest recompute is LITERALLY the last operation before the
   // candidate append — the unprotected interval between the drift check and the write is minimal.
   reconcileLedger(kilnDir, SEAL_LEDGER)
+  // W2-S7b: the modern attestation is validated HERE, before the recompute, so the recompute keeps
+  // its place as the last operation. Everything it proves is immutable evidence (a published verdict,
+  // an archived row, a stored contract); the one fact that can still move is the working tree, and
+  // that is exactly what the recompute below re-establishes.
+  let attested = null
+  if (attestationKind !== undefined) {
+    const trio = liveTrioDigests(kilnDir, 'append-seal')
+    attested = attestationKind === 'reviewed'
+      ? reviewedSealAttestation(kilnDir, slice, trio.lockHash)
+      : verdictlessAttestation(kilnDir, trio.digests)
+    if (attested.error) stop('transport_failure', `append-seal: ${attested.error}`, TRANSPORT_FAILURE)
+    sealRow.attestation_kind = attestationKind
+    if (attested.ref) {
+      sealRow.review_ref = attested.ref
+      bindAttestedIdentity(kilnDir, sealRow, reviewerRef, 'append-seal')
+    }
+    if (attested.fields) Object.assign(sealRow, attested.fields)
+  }
   // W2-S7a (FORK 3): recompute the manifest and reject drift immediately before the append — nothing
   // seals over a diff the review no longer matches. With a repo the recompute enforces the match (a
   // legacy pass only when the generation was never started); with no repo but a STARTED generation
@@ -2743,6 +3228,18 @@ if (mode === 'review' && args.length === 8) {
   if (repoArg !== undefined) {
     const drift = manifestRecompute(kilnDir, repository(repoArg), slice)
     if (drift.error) stop('transport_failure', drift.error, TRANSPORT_FAILURE)
+    if (attested !== null) {
+      // A modern candidate always stands on a prepared manifest: a legacy generation has no
+      // control-derived delta to attest, and a digest that no longer matches the tree is the drift
+      // the seal exists to refuse.
+      if (drift.value.sha === null) {
+        stop('transport_failure', 'append-seal found no prepared manifest for this generation — an attested candidate is never appended over a legacy generation', TRANSPORT_FAILURE)
+      }
+      if (attestationKind === 'reviewed' && drift.value.sha !== attested.manifestSha256) {
+        stop('transport_failure', 'append-seal: the archived manifest digest differs from the manifest recomputed at the seal', TRANSPORT_FAILURE)
+      }
+      if (attestationKind === 'verdictless-degraded-ui') sealRow.manifest_sha256 = drift.value.sha
+    }
   } else {
     const started = manifestGenerationStarted(kilnDir, slice)
     if (started.error) stop('transport_failure', started.error, TRANSPORT_FAILURE)
@@ -2751,6 +3248,65 @@ if (mode === 'review' && args.length === 8) {
     }
   }
   appendLedgerRow(kilnDir, SEAL_LEDGER, sealRow)
+  // Seals first, audits second: a fresh seal generation can retire an audit whose coverage named the
+  // one it replaced, so the audit projection is re-derived before this verb returns.
+  reconcileLedger(kilnDir, AUDIT_LEDGER)
+  process.exit(ACCEPT)
+} else if (mode === 'invalidate' && args.length === 2) {
+  // W2-S7b (item 1): the ONE atomic batch cutoff event, and the only way membership is ever
+  // withdrawn. One event serves both callers — a single target for reopen, the whole covered prefix
+  // for a milestone rejection — so a rejection can never leave half a prefix invalidated. The cutoff
+  // for each target is DERIVED here, never supplied: it is that slices MAXIMUM historical candidate
+  // ordinal, so every candidate it has ever had, rendered or provisional, falls below it and the
+  // rebuild takes the next ordinal. Cutoffs only ever rise. A retry that would change nothing — every
+  // target already covered by an equal-or-higher cutoff, with no newer candidate since — appends
+  // nothing and reports the no-op, so a crash between the append and its render costs nothing.
+  const [kilnDir, sliceCsv] = args
+  if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
+    stop('transport_failure', 'invalidate kilnDir must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  const slices = sliceCsv === '' ? [] : sliceCsv.split(',')
+  if (slices.length === 0 || slices.some((slice) => !STATE_SLICE_ID.test(slice))) {
+    stop('transport_failure', 'invalidate takes a nonempty comma list of slice ids', TRANSPORT_FAILURE)
+  }
+  if (new Set(slices).size !== slices.length) {
+    stop('transport_failure', 'invalidate targets must be distinct — one cutoff per slice in the batch', TRANSPORT_FAILURE)
+  }
+  reconcileLedger(kilnDir, SEAL_LEDGER)
+  const read = readLedgerRows(join(kilnDir, SEAL_LEDGER.jsonl))
+  if (read === null) {
+    stop('transport_failure', 'invalidate found no seal ledger — there is no membership to withdraw', TRANSPORT_FAILURE)
+  }
+  if (!read.complete) {
+    stop('transport_failure', 'invalidate refuses an incomplete seal ledger read — a cutoff derived from a history with a hole could leave a candidate standing', TRANSPORT_FAILURE)
+  }
+  const state = reduceLedger(kilnDir, SEAL_LEDGER, read)
+  const targets = []
+  let covered = 0
+  for (const slice of slices) {
+    const bucket = state.groups.get(slice)
+    if (bucket === undefined) {
+      stop('transport_failure', 'invalidate names a slice with no seal candidate — nothing to withdraw', TRANSPORT_FAILURE)
+    }
+    const through = bucket.length
+    const already = state.cutoffs.get(slice) ?? 0
+    if (already > through) {
+      stop('transport_failure', 'invalidate found a cutoff above the historical candidate count — the seal ledger cannot have shrunk', TRANSPORT_FAILURE)
+    }
+    if (already === through) covered += 1
+    targets.push({ slice, through_generation: through })
+  }
+  if (covered === targets.length) {
+    process.stdout.write('invalidate noop ' + targets.length + '\n')
+    process.exit(ACCEPT)
+  }
+  appendLedgerRow(kilnDir, SEAL_LEDGER, {
+    type: 'invalidate', targets, run_id: runIdFromLock(kilnDir), ts: new Date().toISOString(),
+  })
+  // Seals first, audits second: an audit whose coverage named an invalidated generation is no longer
+  // current, and its projection must reflect that before this verb returns.
+  reconcileLedger(kilnDir, AUDIT_LEDGER)
+  process.stdout.write('invalidate appended ' + targets.length + '\n')
   process.exit(ACCEPT)
 } else if (mode === 'seal-law' && args.length === 2) {
   // The trusted LAW lock, content-blind. W2-S3: the seal now covers the whole trio —
@@ -3066,7 +3622,7 @@ if (mode === 'review' && args.length === 8) {
     repair_delta: repairDelta,
   }
   invokeAudit(repo, kilnDir, request, packet, outputFile, findingIds)
-} else if (mode === 'append-audit' && (args.length === 3 || args.length === 4 || args.length === 5)) {
+} else if (mode === 'append-audit' && (args.length === 3 || args.length === 4 || args.length === 5 || args.length === 6)) {
   // W7: the ONLY writer of audits.log — append-seal's milestone-seam mirror. The kernel
   // promotes an accepted audit through this trusted verb, never a bare shell append; the
   // audits.log semantics live here. The outcome label is the fixed `accept`, and S4-D4
@@ -3083,7 +3639,12 @@ if (mode === 'review' && args.length === 8) {
   // Every supplied leg must EXIST with a role consistent with its position (B-CODEX-ROLE: uniform,
   // no kind bypass) and a matching run_id. Any still-pending referenced Claude intent makes the row
   // PROVISIONAL with a candidate_id; the legacy three-word arity is byte-identical to today.
-  const [kilnDir, seamSliceId, label, auditorRef, repairCsv] = args
+  // W2-S7b (item 6, the symmetric form): a SIXTH argv word carries the attestation kind. A reviewed
+  // audit binds by reference to the one accepted audit-family reviews row and stores the ORDERED
+  // coverage its contract judged — re-derived here from the current seal tuples, so an audit never
+  // records a prefix it did not actually cover. Its currency stays DERIVED from that coverage
+  // afterwards: no audit invalidation event exists, and none is needed.
+  const [kilnDir, seamSliceId, label, auditorRef, repairCsv, attestationKind] = args
   if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
     stop('transport_failure', 'append-audit kilnDir must be a nonempty string', TRANSPORT_FAILURE)
   }
@@ -3108,7 +3669,7 @@ if (mode === 'review' && args.length === 8) {
     } else {
       auditRow.auditor_leg_id = null
     }
-    if (args.length === 5) {
+    if (args.length >= 5) {
       const repairLegs = repairCsv === '' ? [] : repairCsv.split(',')
       for (const legId of repairLegs) {
         const leg = idx.legs.get(legId)
@@ -3125,10 +3686,23 @@ if (mode === 'review' && args.length === 8) {
       auditRow.candidate_id = randomBytes(16).toString('hex')
     }
   }
+  if (attestationKind !== undefined && !AUDIT_KINDS.has(attestationKind)) {
+    stop('transport_failure', `append-audit attestation kind must be one of ${[...AUDIT_KINDS].join('|')}`, TRANSPORT_FAILURE)
+  }
   // W2-S6: the row lands in audits.jsonl (append-only truth) and audits.log is re-rendered from it
   // as the current-valid projection, exactly as append-seal treats the seal ledger. reconcile first
-  // so a stale or un-migrated audits.log never misleads this append.
-  reconcileLedger(kilnDir, AUDIT_LEDGER)
+  // so a stale or un-migrated audits.log never misleads this append — seals FIRST, since the audit
+  // projection is derived from the current seal tuples.
+  reconcileLedgers(kilnDir)
+  if (attestationKind !== undefined) {
+    const trio = liveTrioDigests(kilnDir, 'append-audit')
+    const attested = reviewedAuditAttestation(kilnDir, seamSliceId, trio.lockHash)
+    if (attested.error) stop('transport_failure', `append-audit: ${attested.error}`, TRANSPORT_FAILURE)
+    auditRow.attestation_kind = attestationKind
+    auditRow.review_ref = attested.ref
+    auditRow.covered = attested.covered
+    bindAttestedIdentity(kilnDir, auditRow, auditorRef, 'append-audit')
+  }
   appendLedgerRow(kilnDir, AUDIT_LEDGER, auditRow)
   process.exit(ACCEPT)
 } else if (mode === 'reconcile' && args.length === 1) {
@@ -3140,8 +3714,7 @@ if (mode === 'review' && args.length === 8) {
   if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
     stop('transport_failure', 'reconcile kilnDir must be a nonempty string', TRANSPORT_FAILURE)
   }
-  reconcileLedger(kilnDir, SEAL_LEDGER)
-  reconcileLedger(kilnDir, AUDIT_LEDGER)
+  reconcileLedgers(kilnDir)
   process.exit(ACCEPT)
 } else if (mode === 'manifest-start' && args.length === 3) {
   // W2-S7a (FORK 3): capture the immutable baseline of a slice generation before its first builder
@@ -3375,7 +3948,7 @@ if (mode === 'review' && args.length === 8) {
   }
   // a. Reduce identity through the SINGLE validated index — a schema anomaly or IO fault HOLDs here
   // (B-LEDGER-SCHEMA). resolvedIds accumulates the rows this run writes, so promotion below sees them.
-  const { resolvedIds, intents } = identityIndex(kilnDir)
+  const { legs, resolvedIds, resolvedCounts, intents } = identityIndex(kilnDir)
   const pending = intents.filter((intent) => !resolvedIds.has(intent.leg_id))
   // b. Locate the driver transcript: an explicit path (a real production affordance, and what
   // recovery and tests use) else the kiln-meter discovery. A LOCATED but unreadable transcript
@@ -3407,6 +3980,7 @@ if (mode === 'review' && args.length === 8) {
     })
     if (err) stop('transport_failure', err, TRANSPORT_FAILURE)
     resolvedIds.add(intent.leg_id)
+    resolvedCounts.set(intent.leg_id, (resolvedCounts.get(intent.leg_id) ?? 0) + 1)
   }
   // c/d. Resolve each pending leg from the primary transcript. A clean single completed row resolves;
   // a label PRESENT in the primary but dirty or incomplete stays UNRESOLVED (the leg ran here and did
@@ -3465,9 +4039,18 @@ if (mode === 'review' && args.length === 8) {
     if (typeof cand.candidate_id !== 'string' || !LEG_ID.test(cand.candidate_id)) return null
     const hex = (v) => typeof v === 'string' && LEG_ID.test(v)
     const refs = []
+    // W2-S7b (B002): the identity the REFERENCE names is a promotion dependency in its own right —
+    // it is the leg that actually reviewed, whatever the candidate position was handed. A reviewed
+    // candidate therefore never promotes while its reviewer is an unresolved intent.
+    if (isObject(cand.review_ref) && hex(cand.review_ref.reviewer_leg_id)) refs.push(cand.review_ref.reviewer_leg_id)
     if (descriptor.type === 'seal') {
-      if (!Array.isArray(cand.builder_leg_ids) || cand.builder_leg_ids.length === 0 || !cand.builder_leg_ids.every(hex)) return null
-      if (!(cand.reviewer_leg_id === null || hex(cand.reviewer_leg_id))) return null
+      // The builder list may be EMPTY on a reviewed candidate whose only pending identity is the
+      // reviewer its reference names; what may never happen is a candidate with no references at
+      // all, and the refs.length check below is what forbids that — never a vacuous refs.every().
+      if (!Array.isArray(cand.builder_leg_ids) || !cand.builder_leg_ids.every(hex)) return null
+      // A verdictless candidate carries no reviewer-leg field at all (item 8), so absence is lawful
+      // here; a present field must still be a null or a well-formed leg.
+      if (!(cand.reviewer_leg_id === null || cand.reviewer_leg_id === undefined || hex(cand.reviewer_leg_id))) return null
       refs.push(...cand.builder_leg_ids)
       if (hex(cand.reviewer_leg_id)) refs.push(cand.reviewer_leg_id)
     } else {
@@ -3478,15 +4061,45 @@ if (mode === 'review' && args.length === 8) {
     }
     return refs.length === 0 ? null : refs
   }
+  // W2-S7b (item 7): a referenced leg counts as resolved only with EXACTLY ONE complete resolved
+  // record. A codex leg is resolved by construction — its concrete model was decided at spawn — but
+  // two resolved rows for one claude leg is contradictory identity evidence, and contradictory
+  // evidence never becomes membership.
+  const resolvedOnce = (legId) => {
+    const leg = legs.get(legId)
+    if (leg !== undefined && leg.kind === 'codex') return true
+    return (resolvedCounts.get(legId) ?? 0) === 1
+  }
+  // W2-S7b (item 7): promotion is the ONE moment a candidate becomes membership, so eligibility is
+  // re-derived from the CURRENT reduction — the candidate must still be the LATEST candidate for its
+  // key and still above the latest cutoff, and a seal key that already holds an active generation
+  // takes no second member. An invalidated or superseded candidate can never resurrect. An audit
+  // additionally re-proves its stored coverage against the current seal tuples, since seals may have
+  // moved while its identities resolved. Nothing here rehashes the working tree: the tree may have
+  // legitimately advanced, and the facts frozen on the candidate at its append are the truth.
+  const promotable = (descriptor, state, cand) => {
+    const key = descriptor.type === 'seal' ? cand.slice : cand.seam
+    const bucket = state.groups.get(key)
+    if (bucket === undefined) return false
+    const position = bucket.findIndex((entry) => entry.row.candidate_id === cand.candidate_id)
+    if (position !== bucket.length - 1) return false
+    if (bucket[position].generation <= (state.cutoffs.get(key) ?? 0)) return false
+    if (descriptor.type === 'seal') return !state.current.has(key)
+    if (!Object.prototype.hasOwnProperty.call(cand, 'covered')) return true
+    const still = coverageStillCurrent(kilnDir, cand.covered)
+    if (still.error) stop('transport_failure', `capture: ${still.error}`, TRANSPORT_FAILURE)
+    return still.current
+  }
   const promoteLedger = (descriptor) => {
-    const ledgerRows = readLedgerRows(join(kilnDir, descriptor.jsonl))
-    if (ledgerRows === null) return 0
-    const alreadyPromoted = new Set()
+    const read = readLedgerRows(join(kilnDir, descriptor.jsonl))
+    if (read === null) return 0
+    if (!read.complete) {
+      stop('transport_failure', `${descriptor.jsonl} carries a torn or unparseable line — the promotion scan holds rather than confer membership from an incomplete read`, TRANSPORT_FAILURE)
+    }
+    const state = reduceLedger(kilnDir, descriptor, read)
     const candidates = []
-    for (const row of ledgerRows) {
-      if (!isObject(row)) continue
-      if (row.type === 'promote' && typeof row.candidate_id === 'string') alreadyPromoted.add(row.candidate_id)
-      else if (row.provisional === true) candidates.push(row)
+    for (const row of read.rows) {
+      if (isObject(row) && row.provisional === true && row.type === descriptor.type) candidates.push(row)
     }
     let count = 0
     for (const cand of candidates) {
@@ -3494,23 +4107,25 @@ if (mode === 'review' && args.length === 8) {
       if (refs === null) {
         stop('transport_failure', `${descriptor.jsonl} carries a provisional candidate with malformed or empty leg references — the promotion scan holds`, TRANSPORT_FAILURE)
       }
-      if (alreadyPromoted.has(cand.candidate_id)) continue
-      if (refs.every((id) => resolvedIds.has(id))) {
+      if (state.promoted.has(cand.candidate_id)) continue
+      if (refs.every(resolvedOnce) && promotable(descriptor, state, cand)) {
         appendLedgerRow(kilnDir, descriptor, { type: 'promote', candidate_id: cand.candidate_id, run_id: runIdFromLock(kilnDir), ts: new Date().toISOString() })
         count += 1
       }
     }
     return count
   }
+  // Seals promote and reduce FIRST, audits second: an audit promoted before its seals would re-prove
+  // its coverage against a state one step stale.
   let promoted = 0
   try {
     promoted += promoteLedger(SEAL_LEDGER)
+    reconcileLedger(kilnDir, SEAL_LEDGER)
     promoted += promoteLedger(AUDIT_LEDGER)
   } catch (error) {
     stop('transport_failure', `capture could not promote the provisional candidates: ${error.message}`, TRANSPORT_FAILURE)
   }
-  reconcileLedger(kilnDir, SEAL_LEDGER)
-  reconcileLedger(kilnDir, AUDIT_LEDGER)
+  reconcileLedgers(kilnDir)
   // f. One line of closed facts.
   process.stdout.write('resolved ' + resolvedCount + ' pending ' + (pending.length - resolvedCount) + ' promoted ' + promoted + '\n')
   process.exit(ACCEPT)
@@ -4052,7 +4667,7 @@ if (mode === 'review' && args.length === 8) {
 } else {
   stop(
     'transport_failure',
-    'usage: kiln-review review <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <gate-review.json> | kiln-review recheck <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review gate-facts <kilnDir> <slice> <request.json> <gate-facts.json> | kiln-review append-seal <kilnDir> <slice> <label> [<builder_leg_ids_csv> <reviewer_leg_id|-> [<repo>]] | kiln-review seal-law <kilnDir> <label> | kiln-review run-checks <kilnDir> | kiln-review slices <kilnDir> | kiln-review screen-criteria <kilnDir> | kiln-review perceptual-family <kilnDir> | kiln-review ratify <repo> <kilnDir> <request.json> <gate-review.json> <family> | kiln-review ratify-recheck <repo> <kilnDir> <request.json> <prior-gate-review.json> <gate-review.json> <family> | kiln-review publish-gate <kilnDir> <family> <candidate.json> <gate-review.json> [<reviewer_leg_id> [<repo> <slice>] [<contract_sha256>]] | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> <label> [<auditor_leg_id|-> [<repair_leg_ids_csv>]] | kiln-review reconcile <kilnDir> | kiln-review manifest-start <repo> <kilnDir> <slice> | kiln-review manifest-prepare <repo> <kilnDir> <slice> | kiln-review contract-prepare <repo> <kilnDir> <kind> <operation> [<kind-args>...] | kiln-review identity-begin <kilnDir> <role> <requested_alias> <subject> | kiln-review capture-and-finalize <kilnDir> [<transcriptPath>] | kiln-review screen <repo> <kilnDir> <model> <alias> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <alias> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <alias> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...] | kiln-review run-lock acquire <kilnDir> <choice> <conductorPid> | kiln-review run-lock join <kilnDir> <run_id> <owner> | kiln-review run-lock release <kilnDir> <run_id> <owner> | kiln-review run-lock takeover <kilnDir> <choice> <conductorPid>',
+    'usage: kiln-review review <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <gate-review.json> | kiln-review recheck <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review gate-facts <kilnDir> <slice> <request.json> <gate-facts.json> | kiln-review append-seal <kilnDir> <slice> <label> [<builder_leg_ids_csv> <reviewer_leg_id|-> [<repo> [<attestation_kind>]]] | kiln-review invalidate <kilnDir> <slice_ids_csv> |kiln-review seal-law <kilnDir> <label> | kiln-review run-checks <kilnDir> | kiln-review slices <kilnDir> | kiln-review screen-criteria <kilnDir> | kiln-review perceptual-family <kilnDir> | kiln-review ratify <repo> <kilnDir> <request.json> <gate-review.json> <family> | kiln-review ratify-recheck <repo> <kilnDir> <request.json> <prior-gate-review.json> <gate-review.json> <family> | kiln-review publish-gate <kilnDir> <family> <candidate.json> <gate-review.json> [<reviewer_leg_id> [<repo> <slice>] [<contract_sha256>]] | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> <label> [<auditor_leg_id|-> [<repair_leg_ids_csv> [<attestation_kind>]]] |kiln-review reconcile <kilnDir> | kiln-review manifest-start <repo> <kilnDir> <slice> | kiln-review manifest-prepare <repo> <kilnDir> <slice> | kiln-review contract-prepare <repo> <kilnDir> <kind> <operation> [<kind-args>...] | kiln-review identity-begin <kilnDir> <role> <requested_alias> <subject> | kiln-review capture-and-finalize <kilnDir> [<transcriptPath>] | kiln-review screen <repo> <kilnDir> <model> <alias> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <alias> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <alias> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...] | kiln-review run-lock acquire <kilnDir> <choice> <conductorPid> | kiln-review run-lock join <kilnDir> <run_id> <owner> | kiln-review run-lock release <kilnDir> <run_id> <owner> | kiln-review run-lock takeover <kilnDir> <choice> <conductorPid>',
     TRANSPORT_FAILURE,
   )
 }
