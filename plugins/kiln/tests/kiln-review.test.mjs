@@ -75,7 +75,7 @@ function runReview(effort) {
   // FIRST, so a bad effort halts by name before the sealed-law gate; a valid effort proceeds and
   // then halts transport_failure at the unsealed kilnDir (dir carries no sealed law).
   const eff = effort === undefined ? 'high' : effort
-  const r = spawnSync('node', [REVIEW, 'review', NO_REPO, dir, 's1', 'gpt-5.6-sol', eff, rf, join(dir, 'gate.json')], { encoding: 'utf8' })
+  const r = spawnSync('node', [REVIEW, 'review', NO_REPO, dir, 's1', 'gpt-5.6-sol', 'gpt-sol', eff, rf, join(dir, 'gate.json')], { encoding: 'utf8' })
   return { fact: (r.stdout || '').trim(), status: r.status }
 }
 
@@ -417,7 +417,7 @@ function ratify({ artifact = 'crit-1 · slice-a · behaviour · cmd · outcome\n
   const abs = join(repo, artifactPath)
   mkdirSync(dirname(abs), { recursive: true })
   writeFileSync(abs, artifact)
-  const req = { review_id: 'ratify-1', reviewer_model: 'gpt-5.6-sol', artifact: artifactPath, rubric }
+  const req = { review_id: 'ratify-1', reviewer_model: 'gpt-5.6-sol', reviewer_alias: 'gpt-sol', artifact: artifactPath, rubric }
   if (effort !== undefined) req.reviewer_effort = effort
   if (drop) delete req[drop]
   const rf = join(repo, 'request.json')
@@ -520,7 +520,7 @@ test('kiln-review: a ratify request missing artifact or rubric halts transport_f
 
 test('kiln-review: ratify halts transport_failure when the named artifact file does not exist', () => {
   const repo = mkdtempSync(join(tmpdir(), 'kiln-ratify-'))
-  const req = { review_id: 'ratify-1', reviewer_model: 'gpt-5.6-sol', artifact: '.kiln/LAW.md', rubric: RUBRIC }
+  const req = { review_id: 'ratify-1', reviewer_model: 'gpt-5.6-sol', reviewer_alias: 'gpt-sol', artifact: '.kiln/LAW.md', rubric: RUBRIC }
   const rf = join(repo, 'request.json')
   writeFileSync(rf, JSON.stringify(req))
   const r = spawnSync('node', [REVIEW, 'ratify', repo, rf, join(repo, 'gate.json'), 'ratify'], { encoding: 'utf8' })
@@ -543,7 +543,7 @@ test('kiln-review: the slice path enforces locked-LAW equality at its baseline p
   const fake = mkdtempSync(join(tmpdir(), 'kiln-fakecodex-'))
   writeFileSync(join(fake, 'codex'), FAKE_CODEX, { mode: 0o755 })
   const env = { ...process.env, PATH: `${fake}:${process.env.PATH}`, FAKE_GATE: JSON.stringify(gate) }
-  const r = spawnSync('node', [REVIEW, 'review', repo, kiln, sliceId, 'gpt-5.6-sol', 'high', rf, join(repo, 'gate.json')], { encoding: 'utf8', env })
+  const r = spawnSync('node', [REVIEW, 'review', repo, kiln, sliceId, 'gpt-5.6-sol', 'gpt-sol', 'high', rf, join(repo, 'gate.json')], { encoding: 'utf8', env })
   assert.equal((r.stdout || '').trim(), 'transport_failure')
   assert.equal(r.status, 20)
   assert.ok((r.stderr || '').includes('law_hash does not match the locked LAW'),
@@ -661,7 +661,7 @@ function ratifyRecheck({ artifact = 'the regenerated LAW\n', gate, prior, reques
   const abs = join(repo, artifactPath)
   mkdirSync(dirname(abs), { recursive: true })
   writeFileSync(abs, artifact)
-  const req = { review_id: requestReviewId, reviewer_model: 'gpt-5.6-sol', artifact: artifactPath, rubric }
+  const req = { review_id: requestReviewId, reviewer_model: 'gpt-5.6-sol', reviewer_alias: 'gpt-sol', artifact: artifactPath, rubric }
   const rf = join(repo, 'request.json')
   writeFileSync(rf, JSON.stringify(req))
   const priorFile = join(repo, 'prior-gate.json')
@@ -780,10 +780,10 @@ function fakeCodexEnv({ gate, brokenCodex, promptOut } = {}) {
   return env
 }
 
-function runAudit(fixture, { seam = 's3', model = 'gpt-5.6-sol', effort = 'high', gate, brokenCodex, promptOut } = {}) {
+function runAudit(fixture, { seam = 's3', model = 'gpt-5.6-sol', alias = 'gpt-sol', effort = 'high', gate, brokenCodex, promptOut } = {}) {
   const out = join(fixture.repo, 'audit-gate.json')
   const env = fakeCodexEnv({ gate, brokenCodex, promptOut })
-  const r = spawnSync('node', [REVIEW, 'audit', fixture.repo, fixture.kiln, seam, model, effort, out], { encoding: 'utf8', env })
+  const r = spawnSync('node', [REVIEW, 'audit', fixture.repo, fixture.kiln, seam, model, alias, effort, out], { encoding: 'utf8', env })
   return { fact: (r.stdout || '').trim(), status: r.status, stderr: r.stderr || '', out }
 }
 
@@ -896,14 +896,14 @@ function priorAuditGate(findings, { verdict = 'changes_required', law_hash, revi
   return { review_id, law_hash, findings, blockers: blockers ?? (verdict === 'blocked' ? [findings[0].id] : []), verdict }
 }
 
-function runAuditRecheck(fixture, { seam = 's3', model = 'gpt-5.6-sol', effort = 'high', prior, delta = 'rewired the milestone handoff\n', gate, brokenCodex, promptOut } = {}) {
+function runAuditRecheck(fixture, { seam = 's3', model = 'gpt-5.6-sol', alias = 'gpt-sol', effort = 'high', prior, delta = 'rewired the milestone handoff\n', gate, brokenCodex, promptOut } = {}) {
   const priorFile = join(fixture.repo, 'prior-audit.json')
   writeFileSync(priorFile, JSON.stringify(prior))
   const deltaFile = join(fixture.repo, 'repair-delta.md')
   writeFileSync(deltaFile, delta)
   const out = join(fixture.repo, 'audit-recheck-gate.json')
   const env = fakeCodexEnv({ gate, brokenCodex, promptOut })
-  const r = spawnSync('node', [REVIEW, 'audit-recheck', fixture.repo, fixture.kiln, seam, model, effort, priorFile, deltaFile, out], { encoding: 'utf8', env })
+  const r = spawnSync('node', [REVIEW, 'audit-recheck', fixture.repo, fixture.kiln, seam, model, alias, effort, priorFile, deltaFile, out], { encoding: 'utf8', env })
   return { fact: (r.stdout || '').trim(), status: r.status, stderr: r.stderr || '', out }
 }
 
@@ -1279,7 +1279,7 @@ function buildRecheck({ prior, gate, promptOut } = {}) {
   const deltaFile = join(repo, 'repair-delta.md')
   writeFileSync(deltaFile, 'repaired the findings\n')
   const env = fakeCodexEnv({ gate, promptOut })
-  const r = spawnSync('node', [REVIEW, 'recheck', repo, kiln, sliceId, 'gpt-5.6-sol', 'high', rf, priorFile, deltaFile, join(repo, 'gate.json')], { encoding: 'utf8', env })
+  const r = spawnSync('node', [REVIEW, 'recheck', repo, kiln, sliceId, 'gpt-5.6-sol', 'gpt-sol', 'high', rf, priorFile, deltaFile, join(repo, 'gate.json')], { encoding: 'utf8', env })
   return { fact: (r.stdout || '').trim(), status: r.status, out: join(repo, 'gate.json') }
 }
 
@@ -1343,7 +1343,7 @@ test('kiln-review: the build review prompt authorizes read-only inspection and f
   writeFileSync(rf, JSON.stringify(req))
   const promptOut = join(repo, 'captured-prompt.txt')
   const env = fakeCodexEnv({ gate: { review_id: '__ECHO__', law_hash: digest, findings: [], blockers: [], verdict: 'accept' }, promptOut })
-  const r = spawnSync('node', [REVIEW, 'review', repo, kiln, sliceId, 'gpt-5.6-sol', 'high', rf, join(repo, 'gate.json')], { encoding: 'utf8', env })
+  const r = spawnSync('node', [REVIEW, 'review', repo, kiln, sliceId, 'gpt-5.6-sol', 'gpt-sol', 'high', rf, join(repo, 'gate.json')], { encoding: 'utf8', env })
   assert.equal(r.status, 0, 'the review round-trips through the fake reviewer')
   const prompt = readFileSync(promptOut, 'utf8')
   assert.ok(prompt.includes('Read the repository freely — read-only file inspection (opening files, listing directories) is how you judge the diff against the law, and the sandbox enforces read-only.'),
@@ -1394,13 +1394,13 @@ test('kiln-review: ratify and screen keep their no-repo discipline byte-identica
 // prove the packet the CLI derived: law_text and law_hash from the SEALED trio, the builder
 // request nested as non-authoritative hints, model/effort from argv. mutateLaw rewrites LAW.md
 // AFTER the seal to exercise the post-seal integrity hold.
-function runBuildReview({ hints, gate, sliceId = 's1', model = 'gpt-5.6-sol', effort = 'high', promptOut, mutateLaw } = {}) {
+function runBuildReview({ hints, gate, sliceId = 's1', model = 'gpt-5.6-sol', alias = 'gpt-sol', effort = 'high', promptOut, mutateLaw } = {}) {
   const { repo, kiln, digest } = sealReviewRepo(sliceId)
   if (mutateLaw) writeFileSync(join(kiln, 'LAW.md'), mutateLaw)
   const rf = join(repo, 'request.json')
   writeFileSync(rf, JSON.stringify(hints || { criteria: 'x', paths: [], failures: [], commands: [] }))
   const env = fakeCodexEnv({ gate: gate || { review_id: '__ECHO__', law_hash: digest, findings: [], blockers: [], verdict: 'accept' }, promptOut })
-  const r = spawnSync('node', [REVIEW, 'review', repo, kiln, sliceId, model, effort, rf, join(repo, 'gate.json')], { encoding: 'utf8', env })
+  const r = spawnSync('node', [REVIEW, 'review', repo, kiln, sliceId, model, alias, effort, rf, join(repo, 'gate.json')], { encoding: 'utf8', env })
   return { fact: (r.stdout || '').trim(), status: r.status, out: join(repo, 'gate.json'), digest, kiln, repo }
 }
 
@@ -1442,7 +1442,7 @@ test('kiln-review (W2-S4): the build review requires the reviewer model on argv 
   const { repo, kiln } = sealReviewRepo()
   const rf = join(repo, 'request.json')
   writeFileSync(rf, JSON.stringify({ criteria: 'x', paths: [], failures: [], commands: [] }))
-  const r = spawnSync('node', [REVIEW, 'review', repo, kiln, 's1', '', 'high', rf, join(repo, 'gate.json')], { encoding: 'utf8' })
+  const r = spawnSync('node', [REVIEW, 'review', repo, kiln, 's1', '', 'gpt-sol', 'high', rf, join(repo, 'gate.json')], { encoding: 'utf8' })
   assert.equal((r.stdout || '').trim(), 'transport_failure', 'an empty reviewer model is a transport failure')
   assert.equal(r.status, 20)
 })
@@ -1469,7 +1469,7 @@ test('kiln-review (W2-S4): the recheck packet also embeds the sealed law_text �
 test('kiln-review (W2-S4): a present-but-malformed builder request holds the review verb transport_failure — hintsFrom parses and shape-checks the demoted hints', () => {
   const { repo, kiln } = sealReviewRepo()
   const rf = join(repo, 'request.json')
-  const run = () => spawnSync('node', [REVIEW, 'review', repo, kiln, 's1', 'gpt-5.6-sol', 'high', rf, join(repo, 'gate.json')], { encoding: 'utf8' })
+  const run = () => spawnSync('node', [REVIEW, 'review', repo, kiln, 's1', 'gpt-5.6-sol', 'gpt-sol', 'high', rf, join(repo, 'gate.json')], { encoding: 'utf8' })
   // Unparseable JSON — the demotion did not relax the parse guard.
   writeFileSync(rf, '{ not json')
   let r = run()
@@ -2106,7 +2106,7 @@ test('archive (W2-S5, A01): a codex-path archive fault fails closed in runGate �
   // reviews.jsonl sits beside the gate output (in repo/), pre-created as a DIRECTORY → a real EISDIR
   // fault when runGate archives. The archive must gate the rename on BOTH families, not just publish-gate.
   mkdirSync(join(repo, 'reviews.jsonl'))
-  const req = { review_id: 'ratify-1', reviewer_model: 'gpt-5.6-sol', reviewer_effort: 'high', artifact: '.kiln/LAW.md', rubric: RUBRIC }
+  const req = { review_id: 'ratify-1', reviewer_model: 'gpt-5.6-sol', reviewer_alias: 'gpt-sol', reviewer_effort: 'high', artifact: '.kiln/LAW.md', rubric: RUBRIC }
   const rf = join(repo, 'request.json')
   writeFileSync(rf, JSON.stringify(req))
   const fake = mkdtempSync(join(tmpdir(), 'kiln-fakecodex-'))
@@ -2115,4 +2115,370 @@ test('archive (W2-S5, A01): a codex-path archive fault fails closed in runGate �
   const r = spawnSync('node', [REVIEW, 'ratify', repo, rf, join(repo, 'gate.json'), 'ratify'], { encoding: 'utf8', env })
   assert.equal(r.status, 20, 'the codex verdict archive fault fails closed — transport_failure exit 20')
   assert.equal(existsSync(join(repo, 'gate.json')), false, 'the gate is NOT published when runGate cannot archive — the codex path mirrors the publish-gate fail-closed ordering')
+})
+
+// ── W2-S7a (ruling A-prime): the driver-closed identity protocol ─────────────────────────────────
+// identity-begin mints an immutable intent and the reserved unique label; capture-and-finalize
+// resolves each pending intent to exactly one completed driver-telemetry row and promotes the
+// provisional seals and audits whose identities have all resolved. The seal and audit candidates
+// grant NO membership until that promotion, closing the crash window between a seal append and its
+// identity being confirmed.
+const idRows = (dir) => existsSync(join(dir, 'identity.jsonl'))
+  ? readFileSync(join(dir, 'identity.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+  : []
+const identityBegin = (dir, role, alias, subject) => spawnSync('node', [REVIEW, 'identity-begin', dir, role, alias, subject], { encoding: 'utf8' })
+const mintLeg = (dir, role, alias, subject) => identityBegin(dir, role, alias, subject).stdout.trim().split(' ')
+const sealsLog = (dir) => existsSync(join(dir, 'seals.log')) ? readFileSync(join(dir, 'seals.log'), 'utf8') : null
+const appendSeal = (dir, slice, label, builderCsv, reviewerRef) => spawnSync(
+  'node', [REVIEW, 'append-seal', dir, slice, label, ...(builderCsv !== undefined ? [builderCsv, reviewerRef] : [])], { encoding: 'utf8' })
+// A driver-transcript fixture: a task_progress event carrying a workflow_progress snapshot.
+const wa = (label, agentId, model, state = 'done') => ({ type: 'workflow_agent', label, agentId, model, state })
+const wpEvent = (agents) => JSON.stringify({ type: 'system', subtype: 'task_progress', workflow_progress: agents })
+const writeTranscript = (dir, events) => { const p = join(dir, 'driver.jsonl'); writeFileSync(p, events.join('\n') + '\n'); return p }
+// The discovery + recovery scan reads $HOME/.claude/projects, so every capture pins HOME to an empty
+// temp dir — the tests never leak into the real session transcripts. A recovery scenario overrides it.
+const CAP_HOME = mkdtempSync(join(tmpdir(), 'kiln-caphome-'))
+const capture = (dir, transcript, env = {}) => spawnSync(
+  'node', [REVIEW, 'capture-and-finalize', dir, ...(transcript !== undefined ? [transcript] : [])],
+  { encoding: 'utf8', env: { ...process.env, HOME: CAP_HOME, CLAUDE_CODE_SESSION_ID: '', ...env } })
+
+test('identity-begin (W2-S7a): mints a 32-hex leg_id and a reserved leg: label, prints exactly the two facts, and appends one immutable intent', () => {
+  const dir = s6Dir()
+  const r = identityBegin(dir, 'builder', 'sonnet', 's1')
+  assert.equal(r.status, 0)
+  const out = r.stdout.trim().split(' ')
+  assert.equal(out.length, 2, 'stdout is exactly `<leg_id> <expected_label>`')
+  assert.match(out[0], /^[0-9a-f]{32}$/, 'the leg_id is 32 lowercase hex')
+  assert.equal(out[1], 'leg:' + out[0], 'the expected_label is the reserved leg: prefix + the leg_id')
+  const rows = idRows(dir)
+  assert.equal(rows.length, 1)
+  assert.deepEqual(
+    { type: rows[0].type, role: rows[0].role, requested_alias: rows[0].requested_alias, subject: rows[0].subject, leg_id: rows[0].leg_id, expected_label: rows[0].expected_label },
+    { type: 'intent', role: 'builder', requested_alias: 'sonnet', subject: 's1', leg_id: out[0], expected_label: out[1] },
+    'the intent row carries its whole closed shape')
+  assert.equal(identityBegin(dir, 'gate-reviewer', 'opus', 's1').status, 0)
+  const rows2 = idRows(dir)
+  assert.equal(rows2.length, 2, 'the ledger is append-only')
+  assert.notEqual(rows2[1].leg_id, rows[0].leg_id, 'each mint is a distinct leg')
+})
+
+test('identity-begin (W2-S7a): a role outside the closed set, or a metacharacter alias or subject, is rejected at 20 and writes nothing', () => {
+  const dir = s6Dir()
+  assert.equal(identityBegin(dir, 'coder', 'sonnet', 's1').status, 20, 'an unknown role holds')
+  assert.equal(identityBegin(dir, 'builder', 'bad alias', 's1').status, 20, 'a whitespace alias holds')
+  assert.equal(identityBegin(dir, 'builder', 'sonnet', 's;rm').status, 20, 'a metacharacter subject holds')
+  assert.equal(idRows(dir).length, 0, 'nothing is written on any rejection')
+})
+
+test('identity-begin (W2-S7a): run_id is the CLI-owned lock run_id — an honest null without a conforming lock', () => {
+  const bare = s6Dir()
+  identityBegin(bare, 'builder', 'sonnet', 's1')
+  assert.equal(idRows(bare)[0].run_id, null, 'no run.lock → run_id is null, never guessed')
+  const locked = s6Dir()
+  s6Lock(locked, 'run-id-7')
+  identityBegin(locked, 'builder', 'sonnet', 's1')
+  assert.equal(idRows(locked)[0].run_id, 'run-id-7', 'a W2-S1-shaped lock stamps the run_id')
+})
+
+test('codex capture (W2-S7a): a runGate invocation writes exactly one codex-identity row whose resolved_model is the --model argv value', () => {
+  const artifact = 'a testable, coherent LAW\n'
+  const r = ratify({ artifact, gate: ratifyGate('accept', digestOf(artifact)) })
+  assert.equal(r.status, 0)
+  const rows = idRows(r.repo)
+  assert.equal(rows.length, 1, 'exactly one codex-identity row per runGate publish')
+  assert.equal(rows[0].type, 'codex-identity')
+  assert.equal(rows[0].resolved_model, 'gpt-5.6-sol', 'resolved_model is the exact string passed to --model')
+  assert.equal(rows[0].requested_alias, 'gpt-sol', 'requested_alias is the DISTINCT tiers alias the request carried, not the resolved model (B-D1)')
+  assert.equal(rows[0].source, 'argv')
+  assert.equal(rows[0].confirmation, null, 'no runtime confirmation on the codex output → an honest null')
+  assert.equal(rows[0].role, 'ratifier', 'the ratify family maps to the ratifier reviewer role')
+  assert.match(rows[0].leg_id, /^[0-9a-f]{32}$/)
+})
+
+test('capture-and-finalize (W2-S7a): a unique completed workflow_progress row resolves a pending leg — its agent_id and model captured, cross_check absent', () => {
+  const dir = s6Dir()
+  const [legId, label] = mintLeg(dir, 'builder', 'sonnet', 's1')
+  const t = writeTranscript(dir, [wpEvent([wa(label, 'agent-xyz', 'claude-sonnet-5', 'start')]), wpEvent([wa(label, 'agent-xyz', 'claude-sonnet-5')])])
+  const r = capture(dir, t)
+  assert.equal(r.status, 0)
+  assert.equal(r.stdout.trim(), 'resolved 1 pending 0 promoted 0')
+  const resolved = idRows(dir).find((x) => x.type === 'resolved' && x.leg_id === legId)
+  assert.ok(resolved, 'a resolved row is written for the leg')
+  assert.equal(resolved.agent_id, 'agent-xyz')
+  assert.equal(resolved.resolved_model, 'claude-sonnet-5')
+  assert.equal(resolved.source, 'workflow_progress')
+  assert.equal(resolved.cross_check, 'absent', 'no per-agent transcript beside the fixture → absent, still resolved')
+})
+
+test('capture-and-finalize (W2-S7a): two distinct completed rows for one label stay UNRESOLVED, and a model-less completed row stays UNRESOLVED', () => {
+  const dup = s6Dir()
+  const [, dupLabel] = mintLeg(dup, 'builder', 'sonnet', 's1')
+  const rd = capture(dup, writeTranscript(dup, [wpEvent([wa(dupLabel, 'agent-a', 'claude-sonnet-5'), wa(dupLabel, 'agent-b', 'claude-opus-4-8')])]))
+  assert.equal(rd.status, 0)
+  assert.equal(rd.stdout.trim(), 'resolved 0 pending 1 promoted 0', 'an ambiguous match resolves nothing')
+  assert.ok(!idRows(dup).some((x) => x.type === 'resolved'))
+  const bare = s6Dir()
+  const [, bareLabel] = mintLeg(bare, 'builder', 'sonnet', 's1')
+  const rb = capture(bare, writeTranscript(bare, [wpEvent([{ type: 'workflow_agent', label: bareLabel, agentId: 'agent-x', state: 'done' }])]))
+  assert.equal(rb.stdout.trim(), 'resolved 0 pending 1 promoted 0', 'a model-less completed row is malformed telemetry, never resolved')
+})
+
+test('capture-and-finalize (W2-S7a): an unreadable located transcript (a directory at the path) HOLDs 20', () => {
+  const dir = s6Dir()
+  mintLeg(dir, 'builder', 'sonnet', 's1')
+  const asDir = join(dir, 'transcript-dir')
+  mkdirSync(asDir)
+  assert.equal(capture(dir, asDir).status, 20, 'a directory at the transcript path is an unreadable located transcript')
+})
+
+test('capture-and-finalize (W2-S7a, recovery): a leg matched in MORE than one prior transcript HOLDs 20 — an ambiguous recovery identity is never resolved', () => {
+  const dir = s6Dir()
+  const [, label] = mintLeg(dir, 'builder', 'sonnet', 's1')
+  const home = mkdtempSync(join(tmpdir(), 'kiln-rechome-'))
+  for (const proj of ['proj-a', 'proj-b']) {
+    mkdirSync(join(home, '.claude', 'projects', proj), { recursive: true })
+    writeFileSync(join(home, '.claude', 'projects', proj, 'sess.jsonl'), wpEvent([wa(label, 'agent-1', 'claude-sonnet-5')]) + '\n')
+  }
+  // no explicit transcript → discovery finds none → the recovery scan reads both prior transcripts
+  assert.equal(capture(dir, undefined, { HOME: home }).status, 20, 'a leg in two transcripts is ambiguous, held')
+  assert.ok(!idRows(dir).some((x) => x.type === 'resolved'), 'no resolved row on an ambiguous recovery')
+})
+
+// B-CROSSCHECK: the per-agent transcript sits under <driver without .jsonl>/subagents/workflows/wf_*
+// — a real-layout sibling directory named for the session, not beside the driver file. The fixture
+// driver is written at <dir>/driver.jsonl, so the per-agent root is <dir>/driver/subagents/workflows.
+const wfAgentDir = (dir) => join(dir, 'driver', 'subagents', 'workflows', 'wf_1')
+test('capture-and-finalize (W2-S7a, B-CROSSCHECK): the real-layout per-agent cross-check — agreement resolves message.model-agree, disagreement HOLDs, and a present-but-unreadable source HOLDs', () => {
+  const agree = s6Dir()
+  const [, la] = mintLeg(agree, 'builder', 'sonnet', 's1')
+  const ta = writeTranscript(agree, [wpEvent([wa(la, 'agid1', 'claude-sonnet-5')])])
+  mkdirSync(wfAgentDir(agree), { recursive: true })
+  writeFileSync(join(wfAgentDir(agree), 'agent-agid1.jsonl'), JSON.stringify({ type: 'assistant', message: { model: 'claude-sonnet-5' } }) + '\n')
+  assert.equal(capture(agree, ta).status, 0)
+  assert.equal(idRows(agree).find((x) => x.type === 'resolved').cross_check, 'message.model-agree', 'a present, agreeing real-layout per-agent transcript resolves with the agree marker')
+  const dis = s6Dir()
+  const [, ld] = mintLeg(dis, 'builder', 'sonnet', 's1')
+  const td = writeTranscript(dis, [wpEvent([wa(ld, 'agid2', 'claude-sonnet-5')])])
+  mkdirSync(wfAgentDir(dis), { recursive: true })
+  writeFileSync(join(wfAgentDir(dis), 'agent-agid2.jsonl'), JSON.stringify({ type: 'assistant', message: { model: 'claude-opus-4-8' } }) + '\n')
+  assert.equal(capture(dis, td).status, 20, 'a per-agent model disagreement HOLDs')
+  assert.ok(!idRows(dis).some((x) => x.type === 'resolved'), 'no resolved row is written on a disagreement')
+  // A present-but-unreadable per-agent source (a directory at the agent file path → EISDIR) is
+  // untrusted evidence, not absence — it HOLDs rather than resolve with cross_check absent.
+  const bad = s6Dir()
+  const [, lb] = mintLeg(bad, 'builder', 'sonnet', 's1')
+  const tb = writeTranscript(bad, [wpEvent([wa(lb, 'agid3', 'claude-sonnet-5')])])
+  mkdirSync(join(wfAgentDir(bad), 'agent-agid3.jsonl'), { recursive: true })
+  assert.equal(capture(bad, tb).status, 20, 'a present-but-unreadable per-agent source HOLDs')
+  assert.ok(!idRows(bad).some((x) => x.type === 'resolved'), 'no resolved row on an unreadable cross-check source')
+})
+
+test('append-seal (W2-S7a): a seal with a PENDING claude builder ref is PROVISIONAL — no membership until capture-and-finalize promotes it', () => {
+  const dir = s6Dir()
+  const builder = mintLeg(dir, 'builder', 'sonnet', 's1')[0]
+  assert.equal(appendSeal(dir, 's1', 'dual', builder, '-').status, 0)
+  const sealRow = s6Rows(join(dir, 'seals.jsonl')).find((x) => x.type === 'seal')
+  assert.equal(sealRow.provisional, true)
+  assert.match(sealRow.candidate_id, /^[0-9a-f]{32}$/)
+  assert.deepEqual(sealRow.builder_leg_ids, [builder])
+  assert.equal(sealRow.reviewer_leg_id, null, 'the - reviewer sentinel records a null reviewer')
+  assert.equal(sealsLog(dir), null, 'no seals.log is created — a first-field membership read excludes the provisional seal')
+  const label = idRows(dir).find((x) => x.type === 'intent').expected_label
+  const f = capture(dir, writeTranscript(dir, [wpEvent([wa(label, 'ag', 'claude-sonnet-5')])]))
+  assert.equal(f.status, 0)
+  assert.equal(f.stdout.trim(), 'resolved 1 pending 0 promoted 1')
+  assert.equal(sealsLog(dir), 's1 dual\n', 'the promoted seal renders byte-identical to the S6 form')
+})
+
+test('append-seal (W2-S7a, crash window): a provisional seal with no finalize stays excluded across a fresh reconcile', () => {
+  const dir = s6Dir()
+  const builder = mintLeg(dir, 'builder', 'sonnet', 's1')[0]
+  appendSeal(dir, 's1', 'dual', builder, '-')
+  assert.equal(spawnSync('node', [REVIEW, 'reconcile', dir], { encoding: 'utf8' }).status, 0, 'a boot-shaped reconcile is clean')
+  assert.equal(sealsLog(dir), null, 'the unpromoted provisional grants no membership after a fresh reconcile')
+})
+
+test('append-seal (W2-S7a): an unknown, role-mismatched, or foreign-run leg reference HOLDs 20', () => {
+  const dir = s6Dir()
+  s6Lock(dir, 'run-here')
+  const builder = mintLeg(dir, 'builder', 'sonnet', 's1')[0]
+  const reviewer = mintLeg(dir, 'gate-reviewer', 'opus', 's1')[0]
+  assert.equal(appendSeal(dir, 's1', 'dual', 'f'.repeat(32), '-').status, 20, 'an unknown builder leg holds')
+  assert.equal(appendSeal(dir, 's1', 'dual', reviewer, '-').status, 20, 'a reviewer leg in the builder position holds')
+  assert.equal(appendSeal(dir, 's1', 'dual', builder, builder).status, 20, 'a builder leg in the reviewer position holds')
+  // the leg was minted under run-here; the lock now names a different run — a foreign-run reference
+  writeFileSync(join(dir, 'run.lock'), JSON.stringify({ run_id: 'run-later', owner: 'owner-x', conductor_pid: 4242 }))
+  assert.equal(appendSeal(dir, 's1', 'dual', builder, '-').status, 20, 'a leg from another run holds')
+})
+
+test('append-seal (W2-S7a): the legacy three-word arity is unchanged — a non-provisional seal renders byte-identical to S6', () => {
+  const dir = s6Dir()
+  s6Lock(dir, 'run-legacy')
+  assert.equal(appendSeal(dir, 's1', 'dual').status, 0)
+  assert.equal(sealsLog(dir), 's1 dual\n', 'the legacy arity renders exactly as S6')
+  const row = s6Rows(join(dir, 'seals.jsonl'))[0]
+  assert.equal(row.provisional, undefined, 'a legacy seal carries no provisional marker')
+  assert.equal(row.builder_leg_ids, undefined, 'and no leg references')
+})
+
+test('append-audit (W2-S7a): a pending auditor leg makes the audit provisional; capture-and-finalize promotes it, and the legacy arity is unchanged', () => {
+  const dir = s6Dir()
+  const auditor = mintLeg(dir, 'auditor', 'opus', 'seam-1')[0]
+  assert.equal(spawnSync('node', [REVIEW, 'append-audit', dir, 'seam-1', 'dual', auditor], { encoding: 'utf8' }).status, 0)
+  assert.equal(existsSync(join(dir, 'audits.log')) ? readFileSync(join(dir, 'audits.log'), 'utf8') : null, null, 'the provisional audit renders no membership')
+  const label = idRows(dir).find((x) => x.type === 'intent').expected_label
+  assert.equal(capture(dir, writeTranscript(dir, [wpEvent([wa(label, 'ag', 'claude-opus-4-8')])])).stdout.trim(), 'resolved 1 pending 0 promoted 1')
+  assert.equal(readFileSync(join(dir, 'audits.log'), 'utf8'), 'seam-1 accept dual\n', 'the promoted audit renders byte-identical to the S6 form')
+  const legacy = s6Dir()
+  assert.equal(spawnSync('node', [REVIEW, 'append-audit', legacy, 'seam-2', 'dual'], { encoding: 'utf8' }).status, 0)
+  assert.equal(readFileSync(join(legacy, 'audits.log'), 'utf8'), 'seam-2 accept dual\n', 'the legacy arity renders exactly as S6')
+})
+
+test('renderProjection (W2-S7a): a promote row targeting no provisional candidate is an anomaly — reconcile HOLDs', () => {
+  const dir = s6Dir()
+  writeFileSync(join(dir, 'seals.jsonl'), JSON.stringify({ type: 'promote', candidate_id: 'deadbeef' }) + '\n')
+  assert.equal(spawnSync('node', [REVIEW, 'reconcile', dir], { encoding: 'utf8' }).status, 20, 'a dangling promote holds')
+})
+
+test('renderProjection (W2-S7a): an all-provisional-unpromoted ledger renders a legitimate empty projection; the S6 wipe-guard still HOLDs a nonempty log', () => {
+  const dir = s6Dir()
+  writeFileSync(join(dir, 'seals.jsonl'), JSON.stringify({ type: 'seal', slice: 's1', label: 'dual', provisional: true, candidate_id: 'a'.repeat(32), builder_leg_ids: ['b'.repeat(32)], reviewer_leg_id: null }) + '\n')
+  assert.equal(spawnSync('node', [REVIEW, 'reconcile', dir], { encoding: 'utf8' }).status, 0, 'an all-provisional ledger reconciles clean')
+  assert.equal(sealsLog(dir), null, 'no seals.log is created — the empty render is legitimate, not a wipe')
+  writeFileSync(join(dir, 'seals.log'), 's-old dual\n')
+  assert.equal(spawnSync('node', [REVIEW, 'reconcile', dir], { encoding: 'utf8' }).status, 20, 'a nonempty log beside an empty render still HOLDs — the wipe-guard is intact')
+  assert.equal(sealsLog(dir), 's-old dual\n', 'the log is untouched')
+})
+
+test('reviews.jsonl (W2-S7a): the codex reviewer_leg_id on the archive row is the leg runGate minted synchronously', () => {
+  const artifact = 'a testable, coherent LAW\n'
+  const r = ratify({ artifact, gate: ratifyGate('accept', digestOf(artifact)) })
+  assert.equal(r.status, 0)
+  assert.equal(ledgerRows(r.repo)[0].reviewer_leg_id, idRows(r.repo).find((x) => x.type === 'codex-identity').leg_id,
+    'the reviews row binds the synchronously-minted codex reviewer leg')
+})
+
+test('reviews.jsonl (W2-S7a): publish-gate binds the trusted argv reviewer_leg_id, and an absent trailing arg is an honest null', () => {
+  const dir = s6Dir()
+  s6Lock(dir, 'run-pub')
+  const reviewer = mintLeg(dir, 'gate-reviewer', 'opus', 's1')[0]
+  const cand = join(dir, '.cand.json')
+  writeFileSync(cand, JSON.stringify(verdictOf('accept', 'rv-1')))
+  assert.equal(spawnSync('node', [REVIEW, 'publish-gate', dir, 'review', cand, join(dir, 'gate.json'), reviewer], { encoding: 'utf8' }).status, 0)
+  assert.equal(ledgerRows(dir)[0].reviewer_leg_id, reviewer, 'the trusted argv reviewer leg lands on the review row')
+  const dir2 = s6Dir()
+  const cand2 = join(dir2, '.cand.json')
+  writeFileSync(cand2, JSON.stringify(verdictOf('accept', 'rv-2')))
+  assert.equal(spawnSync('node', [REVIEW, 'publish-gate', dir2, 'review', cand2, join(dir2, 'gate.json')], { encoding: 'utf8' }).status, 0)
+  assert.equal(ledgerRows(dir2)[0].reviewer_leg_id, null, 'a legacy publish records an honest null reviewer_leg_id')
+})
+
+test('publish-gate (W2-S7a): an unknown, non-reviewer-class, or foreign-run reviewer leg reference HOLDs 20', () => {
+  const dir = s6Dir()
+  s6Lock(dir, 'run-pub')
+  const builder = mintLeg(dir, 'builder', 'sonnet', 's1')[0]
+  const cand = join(dir, '.cand.json')
+  writeFileSync(cand, JSON.stringify(verdictOf('accept', 'rv-1')))
+  assert.equal(spawnSync('node', [REVIEW, 'publish-gate', dir, 'review', cand, join(dir, 'gate.json'), 'f'.repeat(32)], { encoding: 'utf8' }).status, 20, 'an unknown reviewer leg holds')
+  assert.equal(spawnSync('node', [REVIEW, 'publish-gate', dir, 'review', cand, join(dir, 'gate.json'), builder], { encoding: 'utf8' }).status, 20, 'a builder leg is not reviewer-class')
+})
+
+// A codex-identity row exactly as runGate would append one — a fixture for the position-validation
+// and B-D2 pins where the reviewer identity is a resolved codex leg, not a claude intent.
+const codexId = (dir, legId, role, runId) => writeFileSync(join(dir, 'identity.jsonl'),
+  JSON.stringify({ type: 'codex-identity', run_id: runId, leg_id: legId, role, requested_alias: 'gpt-sol', resolved_model: 'gpt-5.6-sol', source: 'argv', confirmation: null, subject: 's1', ts: '2026-01-01T00:00:00.000Z' }) + '\n')
+
+test('append-seal (W2-S7a, B-CODEX-ROLE): a codex leg in the reviewer position is validated by ROLE uniformly — a codex AUDITOR leg HOLDs, a codex GATE-REVIEWER leg passes', () => {
+  const bad = s6Dir()
+  s6Lock(bad, 'run-x')
+  codexId(bad, 'a'.repeat(32), 'auditor', 'run-x')
+  const builderBad = mintLeg(bad, 'builder', 'sonnet', 's1')[0]
+  assert.equal(appendSeal(bad, 's1', 'dual', builderBad, 'a'.repeat(32)).status, 20, 'a codex auditor leg in the seal reviewer position HOLDs — no kind bypass')
+  const ok = s6Dir()
+  s6Lock(ok, 'run-x')
+  codexId(ok, 'b'.repeat(32), 'gate-reviewer', 'run-x')
+  const builderOk = mintLeg(ok, 'builder', 'sonnet', 's1')[0]
+  assert.equal(appendSeal(ok, 's1', 'dual', builderOk, 'b'.repeat(32)).status, 0, 'a codex gate-reviewer leg is valid in the seal reviewer position (B-D2)')
+  const row = s6Rows(join(ok, 'seals.jsonl')).find((x) => x.type === 'seal')
+  assert.equal(row.reviewer_leg_id, 'b'.repeat(32), 'the codex reviewer leg is recorded on the seal candidate now — not the - sentinel')
+  assert.equal(row.provisional, true, 'the pending claude builder still makes it provisional until capture')
+})
+
+test('capture-and-finalize (W2-S7a, B-LEDGER-SCHEMA): a resolved row missing agent/model/source is a schema anomaly — the reduction HOLDs, never a silent resolve', () => {
+  const dir = s6Dir()
+  writeFileSync(join(dir, 'identity.jsonl'), JSON.stringify({ type: 'resolved', leg_id: 'a'.repeat(32) }) + '\n')
+  assert.equal(capture(dir, writeTranscript(dir, [])).status, 20, 'a resolved row with no agent_id/resolved_model/source HOLDs the reduction')
+})
+
+test('capture-and-finalize (W2-S7a, B-LEDGER-SCHEMA): a provisional candidate with empty leg references never promotes vacuously — the scan HOLDs', () => {
+  const dir = s6Dir()
+  writeFileSync(join(dir, 'seals.jsonl'), JSON.stringify({ type: 'seal', slice: 's1', label: 'dual', provisional: true, candidate_id: 'a'.repeat(32), builder_leg_ids: [], reviewer_leg_id: null }) + '\n')
+  assert.equal(capture(dir, writeTranscript(dir, [])).status, 20, 'an empty builder_leg_ids never satisfies refs.every() vacuously — the promotion scan HOLDs')
+})
+
+test('capture-and-finalize (W2-S7a, B-RECOVERY-CORPUS): a leg present in a clean AND a dirty transcript is >1 in the census — HOLD, never a silent resolve from the clean one', () => {
+  const dir = s6Dir()
+  const [, label] = mintLeg(dir, 'builder', 'sonnet', 's1')
+  const home = mkdtempSync(join(tmpdir(), 'kiln-corpus-'))
+  mkdirSync(join(home, '.claude', 'projects', 'clean'), { recursive: true })
+  writeFileSync(join(home, '.claude', 'projects', 'clean', 'c.jsonl'), wpEvent([wa(label, 'agent-1', 'claude-sonnet-5')]) + '\n')
+  mkdirSync(join(home, '.claude', 'projects', 'dirty'), { recursive: true })
+  // a duplicate (two distinct completed rows) — dirty, but the label is PRESENT, so it counts
+  writeFileSync(join(home, '.claude', 'projects', 'dirty', 'd.jsonl'), wpEvent([wa(label, 'agent-2', 'claude-sonnet-5'), wa(label, 'agent-3', 'claude-opus-4-8')]) + '\n')
+  assert.equal(capture(dir, undefined, { HOME: home }).status, 20, 'the dirty transcript is not hidden from the census — a clean + a dirty match is ambiguous, held')
+  assert.ok(!idRows(dir).some((x) => x.type === 'resolved'), 'no resolved row on the ambiguous recovery census')
+})
+
+test('append-audit (W2-S7a, B-AUDIT-REPAIR-REF): the audit candidate records the audit-repair legs — a pending repair makes it provisional; capture promotes once the repair resolves', () => {
+  const dir = s6Dir()
+  const auditor = mintLeg(dir, 'auditor', 'opus', 's1')[0]
+  const repair = mintLeg(dir, 'audit-repair', 'opus', 's1')[0]
+  assert.equal(spawnSync('node', [REVIEW, 'append-audit', dir, 's1', 'dual', auditor, repair], { encoding: 'utf8' }).status, 0)
+  const row = s6Rows(join(dir, 'audits.jsonl')).find((x) => x.type === 'audit')
+  assert.deepEqual(row.repair_leg_ids, [repair], 'the audit-repair leg is recorded on the candidate')
+  assert.equal(row.provisional, true, 'a pending repair leg makes the audit provisional')
+  assert.equal(existsSync(join(dir, 'audits.log')) ? readFileSync(join(dir, 'audits.log'), 'utf8') : null, null, 'the provisional audit renders nothing before its repair resolves')
+  const labels = idRows(dir).filter((x) => x.type === 'intent').map((x) => x.expected_label)
+  assert.equal(capture(dir, writeTranscript(dir, labels.map((l) => wpEvent([wa(l, 'ag' + l.slice(-6), 'claude-opus-4-8')])))).stdout.trim(), 'resolved 2 pending 0 promoted 1')
+  assert.equal(readFileSync(join(dir, 'audits.log'), 'utf8'), 's1 accept dual\n', 'the promoted audit renders once the auditor and repair identities resolve')
+})
+
+test('archive (W2-S7a, B-RETRY-LEG): the idempotent retry preserves the reviewer-leg binding — a differing leg or a legacy-missing field HOLDs, matching leg and matching null are clean no-ops', () => {
+  const dir = s6Dir()
+  s6Lock(dir, 'run-x')
+  const legA = mintLeg(dir, 'gate-reviewer', 'opus', 's1')[0]
+  const legB = mintLeg(dir, 'gate-reviewer', 'opus', 's1')[0]
+  const bytes = JSON.stringify(verdictOf('accept', 'rv-1'))
+  const pub = (leg) => { const c = join(dir, '.cand.json'); writeFileSync(c, bytes); return spawnSync('node', [REVIEW, 'publish-gate', dir, 'review', c, join(dir, 'gate.json'), ...(leg ? [leg] : [])], { encoding: 'utf8' }).status }
+  assert.equal(pub(legA), 0, 'the first publish binds reviewer leg A')
+  assert.equal(ledgerRows(dir)[0].reviewer_leg_id, legA)
+  assert.equal(pub(legA), 0, 'the same bytes under the SAME leg is a clean no-op retry')
+  assert.equal(ledgerRows(dir).length, 1, 'no new row on the matching-leg retry')
+  assert.equal(pub(legB), 20, 'the same bytes under a DIFFERENT reviewer leg HOLDs — never a severed binding')
+  assert.equal(ledgerRows(dir).length, 1, 'the mismatch appended nothing')
+  // A legacy row that predates B-RETRY-LEG (no reviewer_leg_id field) cannot confirm the binding.
+  const legacy = s6Dir()
+  const sha = createHash('sha256').update(bytes).digest('hex')
+  writeFileSync(join(legacy, 'reviews.jsonl'), JSON.stringify(priorRow('rv-1', sha)) + '\n')
+  const c2 = join(legacy, '.cand.json'); writeFileSync(c2, bytes)
+  assert.equal(spawnSync('node', [REVIEW, 'publish-gate', legacy, 'review', c2, join(legacy, 'gate.json')], { encoding: 'utf8' }).status, 20, 'a legacy row with no reviewer_leg_id field HOLDs — nothing confirms the historical binding')
+})
+
+test('sidecar (W2-S7a, B-D2-PIN a): a codex review publish writes <gate>.leg equal to the codex-identity leg AND the reviews reviewer_leg_id — and append-seal accepts that leg in the reviewer position', () => {
+  // The full D2 contract end-to-end over the real runGate codex path (the codex-capture idiom): the
+  // review verb mints a gate-reviewer codex identity, archives it onto reviews.jsonl, and writes its
+  // leg to the <gate>.leg sidecar the kernel reads. The three must be the SAME 32-hex leg, and that
+  // leg must be valid in an append-seal reviewer position. (Discriminating: FAILS when the sidecar
+  // writer is reverted — the .leg read below throws.)
+  const r = runBuildReview({ sliceId: 's1' })
+  assert.equal(r.status, 0, 'the codex review publishes')
+  const sidecar = readFileSync(r.out + '.leg', 'utf8').trim()
+  assert.match(sidecar, /^[0-9a-f]{32}$/, 'the sidecar carries a 32-hex reviewer leg')
+  const codex = idRows(r.repo).find((x) => x.type === 'codex-identity')
+  assert.equal(codex.leg_id, sidecar, 'the sidecar leg is exactly the codex-identity leg runGate minted')
+  assert.equal(codex.role, 'gate-reviewer', 'a review-family codex reviewer is a gate-reviewer — valid for the seal reviewer position')
+  assert.equal(ledgerRows(r.repo)[0].reviewer_leg_id, sidecar, 'the reviews.jsonl row binds the SAME leg')
+  const builder = mintLeg(r.repo, 'builder', 'sonnet', 's1')[0]
+  assert.equal(appendSeal(r.repo, 's1', 'dual', builder, sidecar).status, 0, 'append-seal accepts the sidecar reviewer leg in the reviewer position')
+  assert.equal(s6Rows(join(r.repo, 'seals.jsonl')).find((x) => x.type === 'seal').reviewer_leg_id, sidecar, 'the seal candidate binds the codex reviewer leg — not the - sentinel')
 })

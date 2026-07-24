@@ -31,7 +31,9 @@ function gateOutcome(exit) {
 // the model so the leg takes the dispatching session model.
 function resolveTier(c, key) {
   const r = c.roles[key]
-  const opts = { effort: r.effort }
+  // W2-S7a (B-D1): the alias is retained beside the resolved value as the durable tiers fact the
+  // identity ledger records (requested_alias), distinct from the concrete model.
+  const opts = { effort: r.effort, alias: r.alias }
   if (r.alias === 'inherit') return opts
   opts.model = r.family === 'gpt' ? c.resolver[r.alias] : r.alias
   return opts
@@ -337,6 +339,16 @@ const idsFetch = (cmd, label, when) => agent(
   { label, ...tier('kernel-leg'), schema: IDS },
 ).then(r => (r ?? { exit: 20, ids: [] }))
 
+// W2-S7a (B-RESEARCH-SWEEP): the degraded feasibility ratifier is attestation-bearing (it publishes
+// a feasibility verdict to reviews.jsonl), so it joins the identity protocol exactly like the kernel
+// legs — mint through the trusted identity-begin verb, dispatch under the reserved leg label, thread
+// the leg onto the publish. Mirrors the kernel mintLeg idiom; a failed mint holds fail-closed.
+const mintLeg = (role, alias, subject) => idsFetch(
+  'node ' + shq(plugin + '/scripts/kiln-review') + ' identity-begin .kiln ' + shq(role) + ' ' + shq(alias) + ' ' + shq(subject),
+  'identity:' + role,
+  'a two-element array whose first element is the minted leg id and whose second is its expected label, both printed on one space-separated stdout line, [] if exit != 0',
+).then(r => (r && r.exit === 0 && Array.isArray(r.ids) && r.ids.length === 2 && /^[0-9a-f]{32}$/.test(r.ids[0]) && r.ids[1] === 'leg:' + r.ids[0]) ? { legId: r.ids[0], label: r.ids[1] } : null)
+
 // ── Probe mode: an off-window digest for a brainstorm, never a ratified feasibility ──
 // A closed MODE of this same recipe. During a brainstorm no posture exists yet, so probe mode
 // BYPASSES the dial read and the whole ratify loop: it reads only the ledger turns the conductor
@@ -462,6 +474,10 @@ const claudeFeasRatify = async (mode) => {
     allowedFindingIds = new Set(prior.ids.slice(1))
   }
   if (await hands('rm -f ' + F.gateTmp, 'feasibility:invalidate') !== 0) return 20
+  // W2-S7a (B-RESEARCH-SWEEP): mint the ratifier leg and dispatch under its reserved label; the leg
+  // rides the publish-gate argv below so the feasibility row on reviews.jsonl carries its reviewer id.
+  const ratifyLeg = await mintLeg('ratifier', reviewerOpts.alias, 'feasibility')
+  if (!ratifyLeg) return 20
   const ack = await agent([
     'You are the feasibility ratify reviewer: a fresh mind judging the feasibility candidate against the feasibility rubric.',
     'Project dir: ' + projectDir + '. Read the feasibility candidate at ' + F.candidate + ' and the feasibility rubric at ' + plugin + '/data/feasibility-rubric.json.',
@@ -471,7 +487,7 @@ const claudeFeasRatify = async (mode) => {
       : 'Report only substantiated rubric violations at exact path:line locations with stable finding ids. Verdict rules: accept only when findings and blockers are both empty; changes_required only for repairable findings with no blockers; blocked only when the review cannot complete, with blocker reasons. Mint a fresh review_id.',
     'Set law_hash to exactly ' + candidateDigest + ' — the sha256 of the candidate you judged; copy it verbatim so it binds this verdict to those bytes.',
     'Compose the verdict object per ' + plugin + '/scripts/review-schema.json, and as the FINAL act of your turn write it as JSON to ' + F.gateTmp + '. Then return { ok: true } — the ack carries no verdict; the workflow reads and validates the file you wrote.',
-  ].join('\n'), { label: 'feasibility-claude:' + mode, ...reviewerOpts, schema: ACK })
+  ].join('\n'), { label: ratifyLeg.label, ...reviewerOpts, schema: ACK })
   if (!ack || ack.ok !== true) return 20
   const raw = await idsFetch('cat ' + F.gateTmp, 'feasibility:read', 'a one-element array holding the exact candidate verdict file contents printed on stdout, [] if exit != 0')
   if (raw.exit !== 0 || raw.ids.length !== 1) return 20
@@ -485,11 +501,11 @@ const claudeFeasRatify = async (mode) => {
   // W2-S5: archive-then-publish through the trusted verb before the content-free overwrite — the
   // validated feasibility verdict lands in the immutable ledger first (its own review family, though
   // it reuses the ratify verb). A failed archive fails closed and the feasibility ratify holds.
-  const w = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' publish-gate .kiln feasibility ' + F.gateTmp + ' ' + F.gate, 'feasibility:publish')
+  const w = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' publish-gate .kiln feasibility ' + F.gateTmp + ' ' + F.gate + ' ' + shq(ratifyLeg.legId), 'feasibility:publish')
   return w === 0 ? verdictExit(g.verdict) : 20
 }
 const ratifyReq = JSON.stringify({
-  review_id: 'feasibility-ratify', reviewer_model: reviewerOpts.model, reviewer_effort: reviewerOpts.effort,
+  review_id: 'feasibility-ratify', reviewer_model: reviewerOpts.model, reviewer_alias: reviewerOpts.alias, reviewer_effort: reviewerOpts.effort,
   artifact: F.candidate, rubric: plugin + '/data/feasibility-rubric.json',
 })
 const writeReq = [

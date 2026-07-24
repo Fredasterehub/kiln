@@ -57,10 +57,27 @@ async function runSweep(kargs, script) {
   // join by default so pre-lock scenarios boot and run as before. Foreign-lock scenarios override.
   const full = { 'run-lock:join': { exit: 0, ids: [] }, 'tiers:boot': TIERS_OK, invalidate: OK, 'invalidate:repair': OK, 'feasibility:degraded': { exit: 1 }, ...script }
   const calls = []
+  // W2-S7a (B-RESEARCH-SWEEP): the degraded feasibility ratifier mints its identity (identity:ratifier)
+  // and runs under the reserved leg label. An object scenario has no real dir, so the harness answers
+  // the mint with a fresh in-memory leg and resolves the leg-labelled dispatch back to
+  // feasibility-claude:<mode> so the scripted answers key unchanged.
+  const legReg = new Map()
+  let legSeq = 0
+  const modeOf = (prompt) => /Recheck only/.test(prompt) ? 'recheck' : 'review'
   const agentMock = async (prompt, opts = {}) => {
-    calls.push({ label: opts.label, prompt, opts })
-    const h = full[opts.label]
-    if (h === undefined) throw new Error('unmocked label: ' + opts.label)
+    let key = opts.label
+    if (typeof key === 'string' && /^leg:[0-9a-f]{32}$/.test(key) && legReg.has(key)) {
+      key = legReg.get(key) === 'ratifier' ? 'feasibility-claude:' + modeOf(prompt) : key
+    }
+    calls.push({ label: key, prompt, opts })
+    if (full[key] === undefined && typeof key === 'string' && key.startsWith('identity:')) {
+      const m = prompt.match(/identity-begin \.kiln '([^']*)' '([^']*)' '([^']*)'/)
+      const id = (legSeq++).toString(16).padStart(32, '0')
+      if (m) legReg.set('leg:' + id, m[1])
+      return { exit: 0, ids: [id, 'leg:' + id] }
+    }
+    const h = full[key]
+    if (h === undefined) throw new Error('unmocked label: ' + key)
     return typeof h === 'function' ? h(prompt, calls) : h
   }
   const body = src.replace('export const meta', 'const meta')
@@ -113,9 +130,10 @@ test('core: gateOutcome maps the ratify exit table to closed outcomes, unknown f
 })
 
 test('core: resolveTier is family-aware — claude passes through, gpt resolves, inherit omits the model', () => {
-  assert.deepEqual(resolveTier(TIERS_OK, 'kernel-leg'), { effort: 'high' })
-  assert.deepEqual(resolveTier(TIERS_OK, 'stage-law'), { effort: 'high', model: 'fable' })
-  assert.deepEqual(resolveTier(TIERS_OK, 'ratify-reviewer'), { effort: 'high', model: 'gpt-5.6-sol' })
+  // W2-S7a (B-D1): resolveTier retains the alias beside the resolved value; inherit keeps the alias but no model.
+  assert.deepEqual(resolveTier(TIERS_OK, 'kernel-leg'), { effort: 'high', alias: 'inherit' })
+  assert.deepEqual(resolveTier(TIERS_OK, 'stage-law'), { effort: 'high', alias: 'fable', model: 'fable' })
+  assert.deepEqual(resolveTier(TIERS_OK, 'ratify-reviewer'), { effort: 'high', alias: 'gpt-sol', model: 'gpt-5.6-sol' })
 })
 
 test('core: researchTiersValid holds the four consumed roles to the HIGH floor and a resolvable gpt alias', () => {
@@ -767,4 +785,18 @@ test('runtime (B04): a probe whose unique-id leg fails or returns a malformed UU
     assert.equal(ret.status, 'probe-failed', 'an unminted or malformed digest name holds the probe')
     assert.ok(!calls.some(c => c.label === 'probe:producer'), 'no desk opens without a unique digest name')
   }
+})
+
+// ── W2-S7a (B-RESEARCH-SWEEP): the degraded feasibility ratifier joins the identity protocol ──
+// The reachable attestation-bearing feasibility ratifier now mints through the trusted identity-begin
+// verb, dispatches under the reserved leg label, and threads the leg onto its publish so the
+// feasibility row on reviews.jsonl carries reviewer_leg_id — pinned by source extraction, the kernel
+// pattern.
+test('runtime (W2-S7a, B-RESEARCH-SWEEP): the feasibility claude ratifier mints its identity, dispatches under the reserved leg label, and carries the leg on its publish', () => {
+  assert.ok(src.includes("mintLeg('ratifier', reviewerOpts.alias, 'feasibility')"), 'the degraded feasibility ratifier mints a ratifier identity through the trusted verb')
+  assert.ok(src.includes("identity-begin .kiln ' + shq(role) + ' ' + shq(alias) + ' ' + shq(subject)"), 'mintLeg builds the shq-quoted identity-begin call, the kernel idiom')
+  assert.ok(src.includes('{ label: ratifyLeg.label,'), 'the ratifier dispatches under its minted reserved leg label, never a reusable feasibility-claude:<mode>')
+  assert.ok(!src.includes("label: 'feasibility-claude:' + mode"), 'the reusable dispatch label is gone')
+  assert.ok(src.includes("publish-gate .kiln feasibility ' + F.gateTmp + ' ' + F.gate + ' ' + shq(ratifyLeg.legId)"), 'the publish carries the reviewer leg so the feasibility row binds reviewer_leg_id')
+  assert.ok(src.includes('reviewer_alias: reviewerOpts.alias'), 'the codex feasibility ratify request carries the alias as the durable tiers fact (B-D1)')
 })

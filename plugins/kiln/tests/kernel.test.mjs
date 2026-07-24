@@ -109,6 +109,14 @@ async function runKernel(kargs, script) {
     // Foreign-lock scenarios override with a nonzero exit (and an ids owner to name).
     'run-lock:join': { exit: 0, ids: [] },
     'tiers:boot': TIERS_OK, 'audit:check': { exit: 0 },
+    // W2-S7a (F1): a fresh (not boot-sealed) seam re-audits even when audit:check reports logged —
+    // the boot-snapshot skip guard no longer honors a stale audits.log line over rebuilt content. The
+    // harness answers the seam audit legs by default so a build scenario that reaches its final seam
+    // completes without scripting them; audit scenarios still override these to test their subject.
+    'law:pre-audit': { exit: 0, ids: [] },
+    'audit:review': { exit: 0 },
+    'audit:read': { exit: 0, ids: [JSON.stringify({ review_id: 'aud-1', law_hash: 'a'.repeat(64), findings: [], blockers: [], verdict: 'accept' })] },
+    'audit:append': { exit: 0 },
     // W2-S6: the boot-time ledger reconcile fires on every non-brainstorm stage just before the
     // seal read; the harness answers a clean reconcile by default so every prior scenario boots and
     // reads membership exactly as before. A reconcile-fault scenario overrides this with a nonzero.
@@ -147,13 +155,60 @@ async function runKernel(kargs, script) {
     'gate-claude:trio-sealed': { exit: 0, ids: ['t1', 't2', 't3'] },
     'gate-claude:trio-digest': { exit: 0, ids: ['t1', 't2', 't3'] },
     'gate-claude:trio-confirm': { exit: 0, ids: ['t1', 't2', 't3'] },
+    // W2-S7a (B-D2): after a ui codex gate the kernel reads the reviewer leg the review verb wrote to
+    // the gate sidecar; the harness answers a well-formed codex reviewer leg by default so every
+    // ui-normal gate scenario seals with a real reviewer reference.
+    'gate:leg': { exit: 0, ids: ['c'.repeat(32)] },
     ...script,
   }
   const calls = []
+  // W2-S7a: each Claude dispatch now mints an identity leg first (an idsFetch labelled
+  // identity:<role>) and then runs under the returned reserved leg: label. The harness answers a
+  // mint with a fresh unique leg and registers its role+subject; a leg-labelled dispatch resolves
+  // back to its stable logical label — role+subject from the mint, mode (review/recheck/escalate)
+  // from the prompt — so every prior scenario keys its scripted answer and asserts on calls exactly
+  // as before the swap. The RESOLVED label is what the call records, so nothing downstream changes.
+  const legReg = new Map()
+  let legSeq = 0
+  // A dogfood launch names a real project dir; its identity mints run the REAL identity-begin so the
+  // real append verbs validate the leg references against a real identity.jsonl. An object scenario
+  // has no real .kiln, so its mints stay a fresh in-memory leg.
+  const realDir = (launch && typeof launch === 'object' && typeof launch.projectDir === 'string' && existsSync(join(launch.projectDir, '.kiln'))) ? launch.projectDir : null
+  const modeOf = (prompt) => /Recheck only/.test(prompt) ? 'recheck' : /bounded second-family escalation/.test(prompt) ? 'escalate' : 'review'
+  const resolveLeg = (legLabel, prompt) => {
+    const reg = legReg.get(legLabel)
+    if (!reg) return legLabel
+    switch (reg.role) {
+      case 'builder': return 'slice:' + reg.subject
+      case 'repair': return 'repair:' + reg.subject
+      case 'audit-repair': return 'audit:repair'
+      case 'gate-reviewer': return 'gate-claude:' + modeOf(prompt)
+      case 'auditor': return 'audit-claude:' + modeOf(prompt)
+      case 'ratifier': return 'ratify-claude:' + modeOf(prompt)
+      case 'screen-grader': return 'screen-claude:' + modeOf(prompt)
+      default: return legLabel
+    }
+  }
   const agentMock = async (prompt, opts = {}) => {
-    calls.push({ label: opts.label, prompt, opts })
-    const h = full[opts.label]
-    if (h === undefined) throw new Error('unmocked label: ' + opts.label)
+    let key = opts.label
+    if (typeof key === 'string' && /^leg:[0-9a-f]{32}$/.test(key)) key = resolveLeg(key, prompt)
+    calls.push({ label: key, prompt, opts })
+    // The identity mint: a scenario may override identity:<role> to force a mint fault; absent an
+    // override the harness answers a fresh unique leg and registers the upcoming dispatch identity.
+    if (full[key] === undefined && typeof key === 'string' && key.startsWith('identity:')) {
+      const m = prompt.match(/identity-begin \.kiln '([^']*)' '([^']*)' '([^']*)'/)
+      if (realDir) {
+        const rr = spawnSync('sh', ['-c', prompt.split('\n').pop()], { cwd: realDir, encoding: 'utf8' })
+        const ids = (rr.stdout || '').trim().split(/\s+/).filter(Boolean)
+        if (rr.status === 0 && ids.length === 2 && m) legReg.set(ids[1], { role: m[1], subject: m[3] })
+        return { exit: rr.status === null ? 20 : rr.status, ids: rr.status === 0 ? ids : [] }
+      }
+      const id = (legSeq++).toString(16).padStart(32, '0')
+      if (m) legReg.set('leg:' + id, { role: m[1], subject: m[3] })
+      return { exit: 0, ids: [id, 'leg:' + id] }
+    }
+    const h = full[key]
+    if (h === undefined) throw new Error('unmocked label: ' + key)
     return typeof h === 'function' ? h(prompt, calls) : h
   }
   const body = src.replace('export const meta', 'const meta')
@@ -427,16 +482,17 @@ test('gate command: review and recheck route paths per the sealed transport cont
   // W2-S4: the authoritative closed facts ride argv — the kiln dir, the named slice, and the
   // reviewer-gate model and effort — so the CLI derives law_hash and law_text from the sealed
   // trio; the request rides only as builder hints. B01: every word is shq-quoted.
-  const p = { plugin: 'plugins/kiln', repo: '/p', kilnDir: '.kiln', slice: 's1', model: 'gpt-5.6-sol', effort: 'high', request: '.kiln/review-request.json', gate: '.kiln/gate-review.json', priorGate: '.kiln/gate-review.json', delta: '.kiln/repair-delta.md' }
-  assert.equal(gateCmd('review', p), "'plugins/kiln/scripts/kiln-review' 'review' '/p' '.kiln' 's1' 'gpt-5.6-sol' 'high' '.kiln/review-request.json' '.kiln/gate-review.json'")
-  assert.equal(gateCmd('recheck', p), "'plugins/kiln/scripts/kiln-review' 'recheck' '/p' '.kiln' 's1' 'gpt-5.6-sol' 'high' '.kiln/review-request.json' '.kiln/gate-review.json' '.kiln/repair-delta.md' '.kiln/gate-review.json'")
+  // W2-S7a (B-D1): the reviewer alias rides argv adjacent to the model.
+  const p = { plugin: 'plugins/kiln', repo: '/p', kilnDir: '.kiln', slice: 's1', model: 'gpt-5.6-sol', alias: 'gpt-sol', effort: 'high', request: '.kiln/review-request.json', gate: '.kiln/gate-review.json', priorGate: '.kiln/gate-review.json', delta: '.kiln/repair-delta.md' }
+  assert.equal(gateCmd('review', p), "'plugins/kiln/scripts/kiln-review' 'review' '/p' '.kiln' 's1' 'gpt-5.6-sol' 'gpt-sol' 'high' '.kiln/review-request.json' '.kiln/gate-review.json'")
+  assert.equal(gateCmd('recheck', p), "'plugins/kiln/scripts/kiln-review' 'recheck' '/p' '.kiln' 's1' 'gpt-5.6-sol' 'gpt-sol' 'high' '.kiln/review-request.json' '.kiln/gate-review.json' '.kiln/repair-delta.md' '.kiln/gate-review.json'")
 })
 
 test('gate command (W2-S4/B01): a resolver model carrying shell metacharacters is one inert argv word — never live shell, never a broken arity', () => {
   // validateTiers accepts any nonempty resolver value, so an injected model must be neutralized by
   // shq, not trusted. A metacharacter payload and a whitespace value each ride as ONE quoted word.
   const evil = 'gpt-x; touch /tmp/pwn'
-  const p = { plugin: 'plugins/kiln', repo: '/p', kilnDir: '.kiln', slice: 's1', model: evil, effort: 'high', request: '.kiln/review-request.json', gate: '.kiln/gate-review.json' }
+  const p = { plugin: 'plugins/kiln', repo: '/p', kilnDir: '.kiln', slice: 's1', model: evil, alias: 'gpt-sol', effort: 'high', request: '.kiln/review-request.json', gate: '.kiln/gate-review.json' }
   const cmd = gateCmd('review', p)
   assert.ok(cmd.includes("'" + evil + "'"), 'the injected model is wrapped in single quotes as one argv word — the metacharacters are inert inside the quote')
   // Outside the model quote the surrounding words stay their own quoted tokens — the payload never
@@ -825,14 +881,14 @@ test('runtime (W2-S6): the boot ledger reconcile precedes the seal read in sourc
   assert.equal(calls.filter(c => c.label && c.label.startsWith('slice:')).length, 0, 'no slice work over an unreconciled ledger')
 })
 
-test('runtime (C5, live-add): a stage-end red owned by a slice sealed EARLIER in THIS pass reopens it — the live SEALS.add, never a disk snapshot', async () => {
-  // The crux of the whole design: SEALS is seeded ONCE from the ledger, then kept live by
-  // SEALS.add on each fresh seal. Here NOTHING is sealed on disk at launch (seal:set ids []),
-  // so the only way the stage-end reopen can see s1 as sealed is the in-loop add after its
-  // seal:append. Both slices build and seal in this one invocation; the stage-end LAW check
-  // then regresses, owned by the already-sealed s1 — firstSealed must find it and reopen.
-  // Remove SEALS.add and firstSealed(['s1']) returns null here: the run would advance ok
-  // instead of reopening. That is exactly what this scenario pins.
+test('runtime (W2-S7a, B-PROVISIONAL-LIVE): a this-pass provisional seal is NOT counted in membership — a stage-end red owned by it does not reopen, since provisional-never-counts', async () => {
+  // W2-S7a: the S7a seal is provisional while its Claude builder legs are unresolved, and SEALS now
+  // reflects RENDERED membership only — the unconditional SEALS.add is gone. Here NOTHING is sealed
+  // on disk at launch (seal:set ids []); both slices build and append PROVISIONAL seals this
+  // invocation, then the stage-end LAW check regresses on s1. Pre-fix the live SEALS.add made
+  // firstSealed(['s1']) find s1 and reopen; post-fix s1 is not in the membership set, so the reopen
+  // never fires — the this-run seal becomes a member only on the next boot, after capture promotes
+  // it, and the regression is caught then. (Discriminating pin: reopens pre-fix, does not post-fix.)
   const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
     ...VOICE,
     'law:preflight': GREEN,
@@ -850,12 +906,9 @@ test('runtime (C5, live-add): a stage-end red owned by a slice sealed EARLIER in
     'seal:append': { exit: 0 },
     'state:write': GREEN,
   })
-  assert.equal(calls.filter(c => c.label === 'seal:append').length, 2, 'both slices sealed in this pass before the stage-end regression')
-  assert.equal(ret.status, 'law-red', 'the stage-end regression on the in-pass-sealed s1 reopens it — the live add, not the empty disk ledger')
-  assert.ok(ret.beat.includes('Slice s1 reopened'), 'the reopen beat targets s1 — sealed earlier in this same invocation')
-  const st = stateArgs(calls)
-  assert.equal(st.slice, 's1', 'the reopened owner is persisted as active_slice')
-  assert.equal(st.key, 'reopen-slice', 'STATE carries the reopen-slice key for the in-pass-sealed owner')
+  assert.equal(calls.filter(c => c.label === 'seal:append').length, 2, 'both slices appended their provisional seals this pass')
+  assert.notEqual(ret.status, 'law-red', 'the provisional s1 is not a member, so the stage-end red does not reopen it — firstSealed never sees a this-run provisional seal')
+  assert.ok(!ret.beat.includes('reopened'), 'no reopen beat — the provisional seal grants no membership before the conductor capture')
 })
 
 test('runtime (K-10): no beat leaves the kernel with an unfilled slot', async () => {
@@ -940,7 +993,7 @@ test('runtime (W6-07): the ui build gate takes the cwd-relative repo `.` — a w
   })
   assert.equal(ret.status, 'ok', 'a whitespace project path reaches the accept path — the fixed-arity gate never splits into extra argv')
   const cmd = calls.find(c => c.label === 'gate:review').prompt.split('\n').pop() // the command line, after the "Run … in <projectDir>" cwd preamble
-  assert.equal(cmd, gateCmd('review', { plugin: PLUGIN, repo: '.', kilnDir: '.kiln', slice: 's1', model: 'gpt-5.6-sol', effort: 'high', request: '.kiln/review-request.json', gate: '.kiln/gate-review.json' }),
+  assert.equal(cmd, gateCmd('review', { plugin: PLUGIN, repo: '.', kilnDir: '.kiln', slice: 's1', model: 'gpt-5.6-sol', alias: 'gpt-sol', effort: 'high', request: '.kiln/review-request.json', gate: '.kiln/gate-review.json' }),
     'the review command equals exactly the fixed-arity gate — repo `.`, the cwd-relative kiln dir, the slice, the reviewer-gate model and effort, and the whitespace-safe request/gate paths; any extra argv a bare project path would add breaks equality')
   assert.ok(!cmd.includes('/tmp/a project dir'), 'the project path never reaches the review command as a bare argv token')
 })
@@ -976,23 +1029,25 @@ test('tiers: validateTiers requires the full consumer role set, all three routes
 })
 
 test('tiers: resolveTier is family-aware — claude passes through, gpt resolves, resolver never rewrites claude', () => {
-  assert.deepEqual(resolveTier(TIERS_OK, 'kernel-leg'), { effort: 'high' }, 'inherit omits the model key')
-  assert.deepEqual(resolveTier(TIERS_OK, 'stage-card'), { effort: 'high' })
-  assert.deepEqual(resolveTier(TIERS_OK, 'stage-law'), { effort: 'high', model: 'fable' }, 'the thinking seat carries the fable alias (INTAKE-19)')
-  assert.deepEqual(resolveTier(TIERS_OK, 'builder-ui'), { effort: 'high', model: 'opus' }, 'a claude alias passes through unresolved — opus implements ui from the locked plan')
-  assert.deepEqual(resolveTier(TIERS_OK, 'reviewer-gate'), { effort: 'high', model: 'gpt-5.6-sol' }, 'a gpt alias resolves to the concrete id')
-  assert.deepEqual(resolveTier(TIERS_OK, 'builder-logic'), { effort: 'high', model: 'sonnet' }, 'the logic seat is the claude context-builder — HIGH wrapper effort (INTAKE-14b/Q1); its coder rides a bash call, never this option')
-  assert.deepEqual(resolveTier(TIERS_OK, 'fallback-reviewer'), { effort: 'high', model: 'opus' }, 'the codex-absent fallback reviewer resolves to opus — a model different from the sonnet builder (duo-pool.json:7 logic_fallback)')
-  assert.deepEqual(resolveTier(TIERS_OK, 'ratify-reviewer'), { effort: 'high', model: 'gpt-5.6-sol' }, 'the LAW-ratify reviewer resolves to the concrete codex id — opposite-family to the claude/fable stage-law producer (Wave 1)')
-  assert.deepEqual(resolveTier(TIERS_OK, 'haiku-migration'), { effort: 'high', model: 'sonnet' }, 'raised to the HIGH floor (Wave 3)')
+  // W2-S7a (B-D1): resolveTier now retains the alias beside the resolved value — the durable tiers
+  // fact the identity ledger records. inherit carries the alias but no concrete model key.
+  assert.deepEqual(resolveTier(TIERS_OK, 'kernel-leg'), { effort: 'high', alias: 'inherit' }, 'inherit omits the model key but keeps the alias')
+  assert.deepEqual(resolveTier(TIERS_OK, 'stage-card'), { effort: 'high', alias: 'inherit' })
+  assert.deepEqual(resolveTier(TIERS_OK, 'stage-law'), { effort: 'high', alias: 'fable', model: 'fable' }, 'the thinking seat carries the fable alias (INTAKE-19)')
+  assert.deepEqual(resolveTier(TIERS_OK, 'builder-ui'), { effort: 'high', alias: 'opus', model: 'opus' }, 'a claude alias passes through unresolved — opus implements ui from the locked plan')
+  assert.deepEqual(resolveTier(TIERS_OK, 'reviewer-gate'), { effort: 'high', alias: 'gpt-sol', model: 'gpt-5.6-sol' }, 'a gpt alias resolves to the concrete id while the alias is retained')
+  assert.deepEqual(resolveTier(TIERS_OK, 'builder-logic'), { effort: 'high', alias: 'sonnet', model: 'sonnet' }, 'the logic seat is the claude context-builder — HIGH wrapper effort (INTAKE-14b/Q1); its coder rides a bash call, never this option')
+  assert.deepEqual(resolveTier(TIERS_OK, 'fallback-reviewer'), { effort: 'high', alias: 'opus', model: 'opus' }, 'the codex-absent fallback reviewer resolves to opus — a model different from the sonnet builder (duo-pool.json:7 logic_fallback)')
+  assert.deepEqual(resolveTier(TIERS_OK, 'ratify-reviewer'), { effort: 'high', alias: 'gpt-sol', model: 'gpt-5.6-sol' }, 'the LAW-ratify reviewer resolves to the concrete codex id — opposite-family to the claude/fable stage-law producer (Wave 1)')
+  assert.deepEqual(resolveTier(TIERS_OK, 'haiku-migration'), { effort: 'high', alias: 'sonnet', model: 'sonnet' }, 'raised to the HIGH floor (Wave 3)')
   const c = cfg(); c.resolver['fable'] = 'sneaky-rewrite'
-  assert.deepEqual(resolveTier(c, 'stage-law'), { effort: 'high', model: 'fable' }, 'a resolver entry cannot rewrite a claude alias')
+  assert.deepEqual(resolveTier(c, 'stage-law'), { effort: 'high', alias: 'fable', model: 'fable' }, 'a resolver entry cannot rewrite a claude alias')
 })
 
 test('tiers: routeBuilder maps each validated surface to its builder opts', () => {
-  assert.deepEqual(routeBuilder(TIERS_OK, 'ui'), { effort: 'high', model: 'opus' })
-  assert.deepEqual(routeBuilder(TIERS_OK, 'logic'), { effort: 'high', model: 'sonnet' }, 'logic routes to the claude context-builder seat — HIGH wrapper effort; GPT codes through its bash call')
-  assert.deepEqual(routeBuilder(TIERS_OK, 'mixed'), { effort: 'high', model: 'sonnet' }, 'mixed routes to builder-logic too — GPT codes everything but ui (the operator law)')
+  assert.deepEqual(routeBuilder(TIERS_OK, 'ui'), { effort: 'high', alias: 'opus', model: 'opus' })
+  assert.deepEqual(routeBuilder(TIERS_OK, 'logic'), { effort: 'high', alias: 'sonnet', model: 'sonnet' }, 'logic routes to the claude context-builder seat — HIGH wrapper effort; GPT codes through its bash call')
+  assert.deepEqual(routeBuilder(TIERS_OK, 'mixed'), { effort: 'high', alias: 'sonnet', model: 'sonnet' }, 'mixed routes to builder-logic too — GPT codes everything but ui (the operator law)')
   // Builder-leg 404 pin (48e5fed): routeBuilder feeds agent() directly, and the
   // agent spawner is Anthropic-only — no routed surface may ever emit the
   // resolver-concrete codex id as the agent model option.
@@ -3420,7 +3475,7 @@ test('tiers (Wave 3): validateTiers enforces the HIGH-effort floor — a sub-HIG
   rt.roles['sub-high-route'] = { family: 'claude', alias: 'sonnet', effort: 'medium' }
   rt.surface_routing.ui = 'sub-high-route'
   assert.equal(validateTiers(rt), false, 'a surface route targeting a sub-HIGH extra role fails the floor — no effort-down route past the manual role list')
-  assert.deepEqual(routeBuilder(cfg(), 'ui'), { effort: 'high', model: 'opus' }, 'the sealed ui route stays on the HIGH floor')
+  assert.deepEqual(routeBuilder(cfg(), 'ui'), { effort: 'high', alias: 'opus', model: 'opus' }, 'the sealed ui route stays on the HIGH floor')
 })
 
 // ── W7-S2: the seam gate — the milestone audit seated in the build loop ──────
@@ -3458,9 +3513,9 @@ test('runtime (W7-S2): the seam gate fires at the mid-plan label change and the 
   assert.equal(ret.status, 'ok')
   const audits = calls.filter(c => c.label === 'audit:review')
   assert.equal(audits.length, 2, 'exactly two seams audit — the label change after s2 and the final s3; s1 never audits')
-  assert.ok(audits[0].prompt.includes('kiln-review audit . .kiln s2 gpt-5.6-sol high ' + AUDIT),
+  assert.ok(audits[0].prompt.includes('kiln-review audit . .kiln s2 gpt-5.6-sol gpt-sol high ' + AUDIT),
     'closed argv only — repo `.`, the cwd-relative kiln dir, the seam slice id, the reviewer-gate model and effort, the artifact path')
-  assert.ok(audits[1].prompt.includes('kiln-review audit . .kiln s3 gpt-5.6-sol high ' + AUDIT), 'the final slice is always a seam — the implicit whole-build milestone')
+  assert.ok(audits[1].prompt.includes('kiln-review audit . .kiln s3 gpt-5.6-sol gpt-sol high ' + AUDIT), 'the final slice is always a seam — the implicit whole-build milestone')
   assert.ok(calls.findIndex(c => c.label === 'audit:review') > calls.findIndex(c => c.label === 'seal:append'), 'the audit fires only after the seam slice sealed')
   const appends = calls.filter(c => c.label === 'audit:append')
   assert.equal(appends.length, 2, 'each accepted seam promotes exactly once')
@@ -3491,26 +3546,24 @@ test('runtime (W7-S2): an unlabeled plan pays exactly ONE final audit — the im
 })
 
 test('runtime (W7-S2): a logged seam skips before any receipt; a sealed-but-unaudited seam re-fires on the all-sealed resume with the receipt refreshed first', async () => {
-  // Logged: the audits.log grep answers 0 — no receipt, no audit, no append.
+  // Logged AND boot-sealed: the seam slice was sealed at boot and its audit line stands, so the
+  // W2-S7a boot-snapshot guard honors the skip — no receipt, no audit, no append. (A fresh, not
+  // boot-sealed seam with the same logged answer re-audits — the F1 desync test below.)
   const logged = await runKernel({ stage: 'build', projectDir: '/p' }, {
     ...VOICE,
     'law:preflight': GREEN,
     'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
     'ladder:fetch': LADDER,
     'cap:read': { exit: 0, recovery_cap: 2 },
-    'slice:s1': auditSlice(),
-    'law:pre-seal': GREEN,
+    'seal:set': { exit: 0, ids: ['s1'] },
     'law:stage-end': GREEN,
-    'degraded:check': { exit: 1 },
-    'gate:review': { exit: 0 },
-    'seal:append': { exit: 0 },
     'state:write': GREEN,
     'audit:check': { exit: 0 },
   })
   assert.equal(logged.ret.status, 'ok')
   const check = logged.calls.find(c => c.label === 'audit:check')
   assert.ok(check && check.prompt.includes('grep -q "^s1 " .kiln/audits.log'), 'the grep-skip anchors the seam slice id over audits.log, mirroring the seal-skip')
-  assert.ok(!logged.calls.some(c => c.label === 'law:pre-audit' || c.label === 'audit:review'), 'a logged seam neither refreshes the receipt nor audits again')
+  assert.ok(!logged.calls.some(c => c.label === 'law:pre-audit' || c.label === 'audit:review'), 'a boot-sealed logged seam neither refreshes the receipt nor audits again')
   // Resume: every slice already sealed, the final seam unaudited — the audit fires on the skip path.
   const resumed = await runKernel({ stage: 'build', projectDir: '/p' }, {
     ...VOICE,
@@ -3762,7 +3815,7 @@ test('runtime (W7-S2): changes_required and blocked both drive the Claude repair
     assert.equal(ret.status, 'ok', 'exit ' + wireExit + ': the seam recovers and the run advances')
     assert.equal(calls.filter(c => c.label === 'audit:repair').length, 1, 'exit ' + wireExit + ': exactly one repair edge spent')
     const recheck = calls.find(c => c.label === 'audit:recheck')
-    assert.ok(recheck.prompt.includes('kiln-review audit-recheck . .kiln s1 gpt-5.6-sol high ' + AUDIT + ' .kiln/repair-delta.md ' + AUDIT),
+    assert.ok(recheck.prompt.includes('kiln-review audit-recheck . .kiln s1 gpt-5.6-sol gpt-sol high ' + AUDIT + ' .kiln/repair-delta.md ' + AUDIT),
       'exit ' + wireExit + ': the recheck hands the published prior verdict as its pre-recheck snapshot plus the repair-delta path')
     const receiptAt = calls.findIndex(c => c.label === 'law:pre-audit-recheck')
     const recheckAt = calls.findIndex(c => c.label === 'audit:recheck')
@@ -3970,6 +4023,24 @@ const realAuditDisk = (dir) => ({
 })
 const auditsLog = (dir) => existsSync(join(dir, '.kiln/audits.log')) ? readFileSync(join(dir, '.kiln/audits.log'), 'utf8') : ''
 const mkProject = () => { const dir = mkdtempSync(join(tmpdir(), 'kiln-dogfood-')); mkdirSync(join(dir, '.kiln')); return dir }
+// W2-S7a: the conductor step the kernel does not perform — resolve every pending identity from a
+// synthesized driver transcript (a completed workflow_progress row per intent) and promote the
+// provisional candidates so the real seals and audits render. The dogfood tests that append a
+// provisional (leg-bearing) row call this to see the on-disk projection the conductor would produce.
+const KR = fileURLToPath(new URL('../scripts/kiln-review', import.meta.url))
+const finalizeReal = (dir) => {
+  const idPath = join(dir, '.kiln/identity.jsonl')
+  const intents = existsSync(idPath)
+    ? readFileSync(idPath, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((r) => r.type === 'intent')
+    : []
+  const events = intents.map((r) => JSON.stringify({
+    type: 'system', subtype: 'task_progress',
+    workflow_progress: [{ type: 'workflow_agent', label: r.expected_label, agentId: 'agent' + r.leg_id.slice(0, 12), model: 'claude-opus-4-8', state: 'done' }],
+  }))
+  const transcript = join(dir, 'driver-transcript.jsonl')
+  writeFileSync(transcript, events.join('\n') + '\n')
+  return spawnSync('node', [KR, 'capture-and-finalize', '.kiln', transcript], { cwd: dir, encoding: 'utf8' })
+}
 // The all-passing build scaffold every dogfood scenario starts from; scenarios
 // override the legs their subject exercises.
 const dogfoodBase = (dir) => ({
@@ -4002,8 +4073,8 @@ test('dogfood (W7-S3): a labeled two-milestone plan runs the whole build branch 
   assert.equal(calls.filter(c => c.label === 'gate:review').length, 4, 'every slice still takes its per-slice gate — the audit adds a seam gate, never replaces one')
   const audits = calls.filter(c => c.label === 'audit:review')
   assert.equal(audits.length, 2, 'exactly two seams audit — the label change after c2 and the final p2')
-  assert.ok(audits[0].prompt.includes('kiln-review audit . .kiln c2 gpt-5.6-sol high ' + AUDIT), 'the first seam is c2, closed argv only')
-  assert.ok(audits[1].prompt.includes('kiln-review audit . .kiln p2 gpt-5.6-sol high ' + AUDIT), 'the second seam is the final p2')
+  assert.ok(audits[0].prompt.includes('kiln-review audit . .kiln c2 gpt-5.6-sol gpt-sol high ' + AUDIT), 'the first seam is c2, closed argv only')
+  assert.ok(audits[1].prompt.includes('kiln-review audit . .kiln p2 gpt-5.6-sol gpt-sol high ' + AUDIT), 'the second seam is the final p2')
   for (const a of audits) {
     assert.ok(!a.prompt.includes('core engine') && !a.prompt.includes('polish pass'),
       'the spaced labels never ride the audit argv — the CLI derives the closing block from slices.json')
@@ -4042,10 +4113,14 @@ test('dogfood (W7-S3): a changes_required audit drives repair → recheck-accept
   // Cohort lineage: the pinned prior is read from the published verdict, and the
   // recheck argv hands that same file as its pre-recheck snapshot plus the delta.
   assert.ok(calls[at('audit:findings')].prompt.includes(AUDIT), 'the cohort is read from the published audit verdict')
-  assert.ok(calls[at('audit:recheck')].prompt.includes('kiln-review audit-recheck . .kiln s1 gpt-5.6-sol high ' + AUDIT + ' .kiln/repair-delta.md ' + AUDIT),
+  assert.ok(calls[at('audit:recheck')].prompt.includes('kiln-review audit-recheck . .kiln s1 gpt-5.6-sol gpt-sol high ' + AUDIT + ' .kiln/repair-delta.md ' + AUDIT),
     'the recheck carries prior + delta + output — the lineage the CLI cohort rule enforces')
   assert.ok(calls[at('delta:check')].prompt.includes('test -s .kiln/repair-delta.md'), 'the delta pointer is confirmed on disk before any recheck')
   assert.ok(calls[at('law:pre-audit-recheck')].prompt.includes('check-receipt.txt'), 'the recheck judges a refreshed receipt')
+  // W2-S7a (B-AUDIT-REPAIR-REF): the audit repair mutated sealed content, so its audit-repair leg
+  // rides the append and the audit appends PROVISIONAL until the conductor capture resolves it.
+  assert.equal(auditsLog(dir), '', 'the provisional audit renders no membership before its repair identity resolves')
+  assert.equal(finalizeReal(dir).status, 0, 'capture-and-finalize resolves the audit-repair identity and promotes the audit')
   assert.equal(auditsLog(dir), 's1 accept dual\n', 'the recovered seam leaves its one-line outcome fact on disk with the codex-path dual label')
 })
 
@@ -4068,6 +4143,10 @@ test('dogfood (W7-S3): a blocked audit reopens through the repair cycle and reco
   })
   assert.equal(ok.ret.status, 'ok', 'blockers reopen their owning slices and the repaired seam advances')
   assert.equal(ok.calls.filter(c => c.label === 'audit:repair').length, 1, 'one repair edge spent on the blocked verdict')
+  // W2-S7a (B-AUDIT-REPAIR-REF): the repair leg makes the audit provisional; the conductor capture
+  // resolves it and promotes the one-line outcome fact.
+  assert.equal(auditsLog(recovered), '', 'the provisional repaired audit renders nothing before capture')
+  assert.equal(finalizeReal(recovered).status, 0, 'capture-and-finalize promotes the recovered blocked seam')
   assert.equal(auditsLog(recovered), 's1 accept dual\n', 'the recovered blocked seam still promotes exactly one line with the codex-path dual label')
   // The cap-exhausted variant: cap 1, the recheck still blocked over a strictly
   // shrunk cohort — genuine progress, but the budget is spent, so the seam holds.
@@ -4333,7 +4412,7 @@ test('runtime (W8-S3/F-G): live PASS on a ui-owner table — the GPT screen verb
   const family = calls.find(c => c.label === 'perceptual:family')
   assert.ok(family.prompt.includes("kiln-review' perceptual-family .kiln"), 'the family rule derives owners over the VERIFIED trio through the fused verb (W2-S3 B04)')
   const review = calls.find(c => c.label === 'screen:review')
-  assert.ok(review.prompt.includes('kiln-review screen . .kiln gpt-5.6-sol high ' + SCREEN),
+  assert.ok(review.prompt.includes('kiln-review screen . .kiln gpt-5.6-sol gpt-sol high ' + SCREEN),
     'closed argv only — repo `.`, the kiln dir, the reviewer-gate tier, the output path')
   const beltAt = calls.findIndex(c => c.label === 'perceptual:belt')
   const reviewAt = calls.findIndex(c => c.label === 'screen:review')
@@ -4452,7 +4531,7 @@ test('runtime (W8-S3/G): the GPT loop recaptures on a reject — fresh generatio
   const delta = calls.find(c => c.label === 'perceptual:delta-check')
   assert.ok(delta.prompt.includes('test -s ' + MF(2)), 'the confirmed delta is the NEW manifest path')
   const recheck = calls.find(c => c.label === 'screen:recheck')
-  assert.ok(recheck.prompt.includes('kiln-review screen-recheck . .kiln gpt-5.6-sol high ' + SCREEN + ' ' + MF(2) + ' ' + SCREEN),
+  assert.ok(recheck.prompt.includes('kiln-review screen-recheck . .kiln gpt-5.6-sol gpt-sol high ' + SCREEN + ' ' + MF(2) + ' ' + SCREEN),
     'the recheck hands the prior published verdict and the fresh manifest as the digest-bound delta')
 })
 
@@ -4537,7 +4616,7 @@ test('runtime (W8-S3/H): a Claude-primary semantic hold escalates through the OT
   })
   assert.equal(ret.status, 'blocked')
   const esc = calls.find(c => c.label === 'escalate:screen')
-  assert.ok(esc.prompt.includes('kiln-review screen-escalate . .kiln gpt-5.6-sol high ' + SCREEN + ' ' + SCREEN_ESC),
+  assert.ok(esc.prompt.includes('kiln-review screen-escalate . .kiln gpt-5.6-sol gpt-sol high ' + SCREEN + ' ' + SCREEN_ESC),
     'the escalation rides the survivor-scoped verb — the held verdict on argv, its own output artifact, never the held verdict overwritten')
   assert.ok(calls.find(c => c.label === 'escalate:record').prompt.includes('CORROBORATED'),
     'a scope-valid changes_required corroborates by construction — no post-publication filter')
@@ -5042,15 +5121,32 @@ const runSweepBody = async (dir, script) => {
   // W2-S1: the real conductor acquires the lock before the sweep and passes run_id + owner;
   // the dogfood answers the pre-boot join green by default so the arc runs as it does live.
   const full = { 'run-lock:join': { exit: 0, ids: [] }, ...script }
+  // W2-S7a (B-RESEARCH-SWEEP): the degraded feasibility ratifier now mints its identity and runs
+  // under the reserved leg label. This dogfood runs against a real dir and the real plugin, so the
+  // mint runs the real identity-begin (the real publish validates the leg); the leg-labelled
+  // dispatch resolves back to feasibility-claude:<mode> so the scripted answer keys unchanged.
+  const legReg = new Map()
+  const modeOf = (prompt) => /Recheck only/.test(prompt) ? 'recheck' : 'review'
   const agentMock = async (prompt, opts = {}) => {
-    calls.push({ label: opts.label, prompt, opts })
-    const h = full[opts.label]
-    if (h === undefined) throw new Error('unmocked sweep label: ' + opts.label)
+    let key = opts.label
+    if (typeof key === 'string' && /^leg:[0-9a-f]{32}$/.test(key) && legReg.has(key)) {
+      key = legReg.get(key) === 'ratifier' ? 'feasibility-claude:' + modeOf(prompt) : key
+    }
+    calls.push({ label: key, prompt, opts })
+    if (full[key] === undefined && typeof key === 'string' && key.startsWith('identity:')) {
+      const m = prompt.match(/identity-begin \.kiln '([^']*)' '([^']*)' '([^']*)'/)
+      const rr = spawnSync('sh', ['-c', prompt.split('\n').pop()], { cwd: dir, encoding: 'utf8' })
+      const ids = (rr.stdout || '').trim().split(/\s+/).filter(Boolean)
+      if (rr.status === 0 && ids.length === 2 && m) legReg.set(ids[1], m[1])
+      return { exit: rr.status === null ? 20 : rr.status, ids: rr.status === 0 ? ids : [] }
+    }
+    const h = full[key]
+    if (h === undefined) throw new Error('unmocked sweep label: ' + key)
     return typeof h === 'function' ? await h(prompt) : h
   }
   const body = SWEEP_SRC.replace('export const meta', 'const meta')
   const fn = new AsyncFunction('agent', 'pipeline', 'parallel', 'log', 'phase', 'args', 'budget', 'workflow', body)
-  const ret = await fn(agentMock, null, null, () => {}, () => {}, { plugin: PLUGIN, run_id: RUN_ID, owner: OWNER, projectDir: dir }, null, null)
+  const ret = await fn(agentMock, null, null, () => {}, () => {}, { plugin: REAL_PLUGIN, run_id: RUN_ID, owner: OWNER, projectDir: dir }, null, null)
   return { ret, calls }
 }
 
@@ -5164,5 +5260,218 @@ test('dogfood (S4, INTAKE-38): the acknowledged no-codex arc runs end to end ove
     'audit:append': rExit, // the REAL append-audit verb writes audits.log
   })
   assert.equal(d.ret.status, 'ok', 'the build seals single-family and its seam audits over the same dir')
-  assert.equal(auditsLog(dir), 's1 accept single-family\n', 'the milestone audit fact on real disk carries the single-family label')
+  // W2-S7a: the degraded seat carries the claude auditor leg, so append-audit wrote a PROVISIONAL
+  // row that renders nothing until the identity resolves. The conductor step promotes it.
+  assert.equal(auditsLog(dir), '', 'the provisional audit renders no membership before its identity resolves')
+  assert.equal(finalizeReal(dir).status, 0, 'capture-and-finalize resolves the auditor identity and promotes the audit')
+  assert.equal(auditsLog(dir), 's1 accept single-family\n', 'the promoted milestone audit fact on real disk carries the single-family label')
+})
+
+// ── W2-S7a (ruling A-prime): production-wiring extraction pins ────────────────
+// The W2-S1 lesson: no test-only control flow rides trusted code, so the identity wiring is pinned
+// by source extraction — the seven attestation dispatch sites route through the trusted mintLeg and
+// dispatch under the minted reserved label, the append and publish call sites carry the leg-
+// reference argv, and the conductor runs the capture verb before every beat.
+test('runtime (W2-S7a): each of the seven Claude dispatch sites mints its identity through identity-begin and runs under the minted reserved leg label', () => {
+  for (const role of ['builder', 'repair', 'gate-reviewer', 'auditor', 'audit-repair', 'ratifier', 'screen-grader']) {
+    assert.ok(src.includes(`mintLeg('${role}'`), `the ${role} dispatch mints its leg identity`)
+  }
+  // mintLeg calls the trusted identity-begin verb, shq-quoted, and returns null on a failed mint.
+  assert.ok(src.includes("identity-begin .kiln ' + shq(role) + ' ' + shq(alias) + ' ' + shq(subject)"), 'mintLeg builds the shq-quoted identity-begin call')
+  // the reserved leg label is the dispatched agent label at every site — never a reusable string.
+  assert.ok(src.includes('builderLeg.label, builderOpts') && src.includes('repairLeg.label, builderOpts'), 'the builder and slice repair run under their minted labels')
+  for (const bind of ['label: gateLeg.label', 'label: auditLeg.label', 'label: repairLeg.label', 'label: ratifyLeg.label', 'label: screenLeg.label']) {
+    assert.ok(src.includes(bind), `the dispatch binds ${bind}`)
+  }
+  assert.ok(!/'slice:' \+ slice|'repair:' \+ slice|'gate-claude:' \+ mode|'audit-claude:' \+ mode|label: 'audit:repair'|'ratify-claude:' \+ mode|'screen-claude:' \+ mode/.test(src),
+    'no attestation dispatch runs under a reusable label — the reserved leg label supplants every one')
+})
+
+test('runtime (W2-S7a): the seal, audit, and claude-publish call sites carry the leg-reference argv, shq-quoted, and the generation legs accumulate', () => {
+  assert.ok(src.includes("append-seal .kiln ' + slice + ' ' + label + ' ' + shq(builderLegs.join(',')) + ' ' + shq(reviewerLeg || '-')"),
+    'the seal carries the builder legs and the reviewer position')
+  assert.ok(src.includes('builderLegs.push(builderLeg.legId)') && src.includes('builderLegs.push(repairLeg.legId)'),
+    'the builder and repair legs accumulate into the seal builder references')
+  assert.ok(src.includes('auditRepairLegs.push(repairLeg.legId)') && src.includes("append-audit .kiln ' + slice + ' ' + auditFamily + auditRef"),
+    'the audit carries the auditor leg and the accumulated audit-repair legs (B-AUDIT-REPAIR-REF)')
+  for (const pub of [
+    "publish-gate .kiln review ' + P.candidate + ' ' + P.gate + ' ' + shq(gateLeg.legId)",
+    "publish-gate .kiln ratify ' + P.candidate + ' ' + P.gate + ' ' + shq(ratifyLeg.legId)",
+    "publish-gate .kiln audit ' + P.candidate + ' ' + P.audit + ' ' + shq(auditLeg.legId)",
+    "publish-gate .kiln screen ' + P.candidate + ' ' + target + ' ' + shq(screenLeg.legId)",
+  ]) {
+    assert.ok(src.includes(pub), 'the claude publish carries its reviewer leg: ' + pub)
+  }
+})
+
+test('runtime (W2-S7a): the conductor runs capture-and-finalize after every Workflow return, before the beat, holding the line on a nonzero', () => {
+  const skill = readFileSync(fileURLToPath(new URL('../skills/kiln-fire/SKILL.md', import.meta.url)), 'utf8')
+  assert.ok(skill.includes('capture-and-finalize .kiln'), 'the conductor wires the trusted capture verb')
+  assert.ok(skill.includes('BEFORE you emit') && skill.includes('Exit 0 → proceed'), 'it runs before the beat and proceeds only on exit 0')
+  assert.ok(/Nonzero →/.test(skill) && skill.includes('hard-stop family'), 'a nonzero capture holds the line as a hard stop')
+})
+
+// ── W2-S7a (F1): the milestone audit-skip validates against BOOT-TIME sealed membership ──────
+// S7a defers seal rendering to the conductor capture, so audits.log can lead seals.log across a
+// crash: a codex seam audits non-provisionally inside the invocation while its seal stays provisional
+// until capture. On resume with SEALS empty the slices rebuild, and the old grep-only skip suppressed
+// the milestone over content the audit never saw. The fix honors a logged seam ONLY when its covered
+// prefix was sealed at boot; a rebuilt covered slice re-audits (the pre-S7a fail-closed semantics).
+test('runtime (W2-S7a, F1): a logged seam whose covered prefix is NOT in boot membership RE-AUDITS — a stale audits.log line never suppresses the milestone over rebuilt content', async () => {
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'seal:set': { exit: 0, ids: [] },        // boot membership empty — s1 is rebuilt this invocation
+    'slice:s1': auditSlice(),
+    'law:pre-seal': GREEN,
+    'law:stage-end': GREEN,
+    'degraded:check': { exit: 1 },
+    'gate:review': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+    'audit:check': { exit: 0 },              // audits.log ALREADY carries the seam line — the desync
+  })
+  assert.equal(ret.status, 'ok')
+  assert.ok(calls.some(c => c.label === 'audit:review'), 'the stale seam re-audits — the boot-snapshot guard did not honor a logged line over a rebuilt seam')
+  assert.ok(calls.some(c => c.label === 'law:pre-audit'), 'and the receipt refreshes before the re-audit, exactly as a first audit')
+})
+
+test('runtime (W2-S7a, F1): a logged seam whose covered prefix IS in boot membership honors the skip — no redundant re-audit', async () => {
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'seal:set': { exit: 0, ids: ['s1'] },    // s1 boot-sealed — the whole covered prefix stands
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+    'audit:check': { exit: 0 },              // logged
+  })
+  assert.equal(ret.status, 'ok')
+  assert.ok(!calls.some(c => c.label === 'audit:review' || c.label === 'law:pre-audit'), 'the boot-sealed logged seam honors the skip — no re-audit, no receipt refresh')
+})
+
+test('runtime (W2-S7a, F1): a slice sealed LIVE during the invocation does not satisfy the skip — the guard reads the frozen boot snapshot, never the live SEALS set', async () => {
+  const { calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui|core', 'obj|s2|ui|core'] },  // s2 is the closing seam
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'seal:set': { exit: 0, ids: [] },        // boot empty — both slices sealed LIVE this invocation
+    'slice:s1': auditSlice(),
+    'slice:s2': auditSlice(),
+    'law:pre-seal': GREEN,
+    'law:stage-end': GREEN,
+    'degraded:check': { exit: 1 },
+    'gate:review': { exit: 0 },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+    'audit:check': { exit: 0 },              // the seam s2 reads as logged
+  })
+  assert.equal(calls.filter(c => c.label === 'seal:append').length, 2, 'both slices sealed live in this invocation')
+  assert.ok(calls.some(c => c.label === 'audit:review'), 'the seam re-audits despite the live seals — the guard reads the frozen boot snapshot, not the live SEALS.add set')
+})
+
+test('runtime (W2-S7a, F1): the audit-skip guard reads the frozen boot snapshot, and no provisional seal is live-added to membership', () => {
+  assert.ok(src.includes('SEALS_AT_BOOT = new Set(SEALS)'), 'the boot snapshot is frozen beside the SEALS init')
+  assert.ok(src.includes('SEALS_AT_BOOT.has(id)') && src.includes('dirtySlices.has(id)'), 'the audit-skip validates the covered prefix against the snapshot and the same-invocation dirty set')
+  // W2-S7a (B-PROVISIONAL-LIVE): the unconditional SEALS.add after the provisional seal is GONE —
+  // SEALS reflects rendered membership only, so firstSealed and reopen never count an unattested seal.
+  assert.ok(!src.includes('SEALS.add('), 'no provisional seal is live-added into the membership set')
+})
+
+test('runtime (W2-S7a, B-F1-DIRTY-PREFIX): a logged, boot-sealed seam RE-AUDITS when a same-invocation audit repair dirtied its covered prefix', async () => {
+  // Two boot-sealed milestone seams. The s1 audit is not logged, so it runs and REPAIRS — mutating
+  // its covered prefix, which the s2 audit also covers. The s2 audit line is logged and both s1 and
+  // s2 stand in the boot snapshot, so the pre-fix F1 guard skips it; the dirty-prefix guard re-audits
+  // s2 because the repair changed content it never saw. (Discriminating: s2 skips pre-fix, re-audits
+  // post-fix.)
+  const reads = [
+    readAudit(auditVerdict('changes_required', [auditFinding('F1')])), // s1 initial
+    readAudit(auditVerdict('accept')),                                 // s1 recheck
+    readAudit(auditVerdict('accept')),                                 // s2 re-audit
+  ]
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui|m1', 'obj|s2|ui|m2'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'seal:set': { exit: 0, ids: ['s1', 's2'] }, // both boot-sealed → the loop skips building
+    'law:stage-end': GREEN,
+    'law:pre-audit': GREEN,
+    'law:pre-audit-recheck': GREEN,
+    'state:write': GREEN,
+    'audit:check': (p) => ({ exit: p.includes('"^s1 ') ? 1 : 0 }), // s1 not logged (audits+repairs), s2 logged
+    'audit:review': (p) => ({ exit: p.includes(' s1 ') ? 10 : 0 }), // s1 changes_required, s2 accept
+    'audit:recheck': { exit: 0 },
+    'audit:read': () => reads.shift(),
+    'audit:findings': { exit: 0, ids: ['F1'] },
+    'audit:repair': OK_ACK,
+    'delta:check': { exit: 0 },
+    'audit:append': { exit: 0 },
+  })
+  assert.equal(ret.status, 'ok', 'the run completes')
+  assert.equal(calls.filter(c => c.label === 'audit:repair').length, 1, 's1 audit repaired once — dirtying its covered prefix')
+  assert.ok(calls.some(c => c.label === 'audit:review' && c.prompt.includes(' s2 ')),
+    's2 re-audits despite its logged line and boot-sealed prefix — the same-invocation repair of s1 dirtied the covered prefix')
+})
+
+test('runtime (W2-S7a, B-D2-PIN b): the kernel reads the codex gate sidecar and threads the EXACT read leg into the seal reviewer argv', async () => {
+  // Source-extraction (the W2-S1 pin-the-wiring idiom): the kernel reads <gate>.leg after the codex
+  // gate and carries the read value into the seal reviewer position.
+  assert.ok(src.includes("P.gate + '.leg'") && src.includes('reviewerLeg = legRead.ids[0]'),
+    'the kernel reads the gate sidecar and threads the read leg into reviewerLeg')
+  assert.ok(src.includes("shq(reviewerLeg || '-')"), 'the seal reviewer argv carries the threaded reviewer leg (- only when absent)')
+  // Scenario: a ui-normal (codex-gated) slice whose sidecar read returns a known leg; the seal:append
+  // command carries EXACTLY that leg in the reviewer position. (Discriminating: FAILS when the read/
+  // thread block is reverted — reviewerLeg stays null and the seal carries the - sentinel.)
+  const LEG = 'd'.repeat(32)
+  const { calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'seal:set': { exit: 0, ids: [] },
+    'slice:s1': auditSlice(),
+    'law:pre-seal': GREEN,
+    'law:stage-end': GREEN,
+    'degraded:check': { exit: 1 },
+    'gate:review': { exit: 0 },
+    'gate:leg': { exit: 0, ids: [LEG] },
+    'seal:append': { exit: 0 },
+    'state:write': GREEN,
+  })
+  const seal = calls.find(c => c.label === 'seal:append')
+  assert.ok(seal && seal.prompt.includes("'" + LEG + "'"), 'the seal:append command carries exactly the codex sidecar leg, shq-quoted, in the reviewer position')
+  assert.ok(!seal.prompt.endsWith("'-'\n") && !/append-seal .* '-'$/.test(seal.prompt.split('\n').pop()), 'the codex-gated seal reviewer is the real leg, never the - sentinel')
+})
+
+test('runtime (W2-S7a, B-D2-PIN c): a codex-reviewed slice whose sidecar read is missing or malformed HOLDs 20 BEFORE any append — never a silent - fallback', async () => {
+  for (const bad of [{ exit: 1 }, { exit: 0, ids: [] }, { exit: 0, ids: ['not-hex'] }]) {
+    const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+      ...VOICE,
+      'law:preflight': GREEN,
+      'slices:fetch': { exit: 0, ids: ['obj|s1|ui'] },
+      'ladder:fetch': LADDER,
+      'cap:read': { exit: 0, recovery_cap: 2 },
+      'seal:set': { exit: 0, ids: [] },
+      'slice:s1': auditSlice(),
+      'law:pre-seal': GREEN,
+      'law:stage-end': GREEN,
+      'degraded:check': { exit: 1 },
+      'gate:review': { exit: 0 },
+      'gate:leg': bad,
+      'seal:append': { exit: 0 },
+      'state:write': GREEN,
+    })
+    assert.equal(ret.status, 'transport-failure', 'a missing or malformed codex reviewer sidecar HOLDs')
+    assert.equal(calls.filter(c => c.label === 'seal:append').length, 0, 'no seal append before the codex reviewer identity is recovered — never a silent - fallback')
+  }
 })

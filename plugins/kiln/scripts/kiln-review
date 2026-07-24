@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict'
 
-const { createHash, randomUUID } = require('node:crypto')
+const { createHash, randomBytes, randomUUID } = require('node:crypto')
 const {
   appendFileSync,
   existsSync,
@@ -16,7 +16,8 @@ const {
   unlinkSync,
   writeFileSync,
 } = require('node:fs')
-const { dirname, join, resolve, sep } = require('node:path')
+const { basename, dirname, join, resolve, sep } = require('node:path')
+const { homedir } = require('node:os')
 const { spawnSync } = require('node:child_process')
 
 const ACCEPT = 0
@@ -111,6 +112,12 @@ function ratifyRequestFrom(file) {
   if (typeof raw.reviewer_model !== 'string' || raw.reviewer_model.trim() === '') {
     stop('transport_failure', 'ratify request reviewer_model must be a nonempty string', TRANSPORT_FAILURE)
   }
+  // W2-S7a (B-D1): reviewer_alias is the durable tiers fact the codex identity records as
+  // requested_alias — it rides this kernel-authored request beside the concrete reviewer_model, a
+  // closed token, distinct from the resolved model. The kernel and the research sweep both supply it.
+  if (typeof raw.reviewer_alias !== 'string' || !LOCK_TOKEN.test(raw.reviewer_alias)) {
+    stop('transport_failure', 'ratify request reviewer_alias must be a closed token of letters, digits, dot, underscore or hyphen', TRANSPORT_FAILURE)
+  }
   const reviewerEffort = raw.reviewer_effort === undefined ? 'high' : raw.reviewer_effort
   if (!EFFORTS.includes(reviewerEffort)) {
     stop('reviewer_effort_invalid', `request reviewer_effort must be one of ${EFFORTS.join('|')} (absent defaults to high); ultra and unknown values are rejected`, TRANSPORT_FAILURE)
@@ -123,6 +130,7 @@ function ratifyRequestFrom(file) {
   }
   return {
     reviewerModel: raw.reviewer_model,
+    reviewerAlias: raw.reviewer_alias,
     reviewerEffort,
     reviewId: raw.review_id,
     artifact: raw.artifact,
@@ -143,19 +151,25 @@ function rubricFrom(file) {
   return raw.criteria
 }
 
-// W7-A1: the audit argv contract — closed facts only ride argv. Model and effort arrive
+// W7-A1: the audit argv contract — closed facts only ride argv. Model, alias and effort arrive
 // as argv words (the kernel resolves them from tiers.json); the effort gate halts an unknown
 // effort by name before any spawn. W8-S2: the screen family shares the identical contract, so
 // the family label parameterizes the halt message and nothing else. W2-S4: the build review
 // and recheck verbs join this contract — model and effort ride argv, no longer builder-relayed.
-function auditRequest(model, effort, family = 'audit') {
+// W2-S7a (B-D1): the reviewer ALIAS rides argv beside the concrete model — the durable tiers fact
+// the codex identity records as requested_alias, distinct from the resolved --model value. It is a
+// closed token (LOCK_TOKEN), the kernel supplies it from resolveTier; a malformed alias halts.
+function auditRequest(model, alias, effort, family = 'audit') {
   if (typeof model !== 'string' || model.trim() === '') {
     stop('transport_failure', `${family} reviewer model must be a nonempty string`, TRANSPORT_FAILURE)
+  }
+  if (typeof alias !== 'string' || !LOCK_TOKEN.test(alias)) {
+    stop('transport_failure', `${family} reviewer alias must be a closed token of letters, digits, dot, underscore or hyphen`, TRANSPORT_FAILURE)
   }
   if (!EFFORTS.includes(effort)) {
     stop('reviewer_effort_invalid', `${family} effort must be one of ${EFFORTS.join('|')}; ultra and unknown values are rejected`, TRANSPORT_FAILURE)
   }
-  return { reviewerModel: model, reviewerEffort: effort }
+  return { reviewerModel: model, reviewerAlias: alias, reviewerEffort: effort }
 }
 
 // W2-S3: the sealed trio, in the fixed order seal-law writes and every reader checks.
@@ -664,7 +678,7 @@ function classifyFailure(run) {
 // both flows converge here rather than duplicate the spawn and the exit mapping.
 // W8-S2: the screen family adds bounded `-i` image attachments — absent, the argv
 // is byte-identical to the baseline.
-function runGate(repo, request, prompt, outputFile, validate, family, images) {
+function runGate(repo, request, prompt, outputFile, validate, family, images, subject) {
   const output = resolve(outputFile)
   const temporary = join(dirname(output), `.gate-review.tmp-${process.pid}-${randomUUID()}`)
   const args = [
@@ -700,15 +714,47 @@ function runGate(repo, request, prompt, outputFile, validate, family, images) {
     discard(temporary)
     stop('transport_failure', invalid, TRANSPORT_FAILURE)
   }
+  // W2-S7a (ruling A-prime): the codex reviewer identity is captured SYNCHRONOUSLY here — no
+  // async workflow_progress resolution, because the concrete model was decided at spawn: the exact
+  // string handed to --model IS resolved_model. W2-S7a (B-D1): requested_alias is now the DISTINCT
+  // tiers fact the kernel threaded beside the model (request.reviewerAlias), never the resolved
+  // value re-used, so the row records genuine provenance a later resolver change cannot muddy. The
+  // codex output carries no reliable runtime model confirmation, so confirmation is a null the
+  // ruling permits. W2-S7a (B-CODEX-ROLE): the role is the reviewer-class role of the invoking
+  // family, so a codex leg validates by position exactly like a claude leg. A failed identity write
+  // fails the gate closed exactly as a failed archive does.
+  const kilnDir = dirname(output)
+  const legId = randomBytes(16).toString('hex')
+  const identityError = appendIdentityRow(kilnDir, {
+    type: 'codex-identity', run_id: runIdFromLock(kilnDir), leg_id: legId, role: CODEX_ROLE[family],
+    requested_alias: request.reviewerAlias, resolved_model: request.reviewerModel, source: 'argv',
+    confirmation: null, subject: typeof subject === 'string' ? subject : '', ts: new Date().toISOString(),
+  })
+  if (identityError) {
+    discard(temporary)
+    stop('transport_failure', identityError, TRANSPORT_FAILURE)
+  }
   // W2-S5: archive the validated verdict to the immutable ledger BEFORE the publish rename — the
   // gate-file overwrite is content-free and destroys the prior verdict, so the archive is the only
   // surviving history. The archive digests the EXACT bytes codex wrote, and the ledger sits beside
   // the gate file in the same .kiln. A failed archive fails closed: the verdict is neither archived
   // nor published, and the caller holds.
-  const archiveError = archiveVerdict(dirname(output), family, readFileSync(temporary))
+  const archiveError = archiveVerdict(kilnDir, family, readFileSync(temporary), legId)
   if (archiveError) {
     discard(temporary)
     stop('transport_failure', archiveError, TRANSPORT_FAILURE)
+  }
+  // W2-S7a (B-D2): surface the minted codex reviewer leg to the kernel over a trusted mechanical
+  // channel — a sidecar beside the published gate file (<gate>.leg). The kernel reads it after a
+  // codex-reviewed gate and threads it into the seal reviewer position; append-seal re-validates the
+  // leg against identity.jsonl (existence, reviewer-class role, matching run_id), so the sidecar is
+  // a pointer the trust anchor still checks, never an authority. Written BEFORE the rename so a
+  // sidecar fault fails the publish closed.
+  try {
+    writeFileSync(output + '.leg', legId + '\n')
+  } catch (error) {
+    discard(temporary)
+    stop('transport_failure', `could not write the reviewer leg sidecar: ${error.message}`, TRANSPORT_FAILURE)
   }
   try {
     renameSync(temporary, output)
@@ -735,7 +781,7 @@ function invoke(repo, request, packet, outputFile, allowedFindingIds) {
   }
   packet.check_receipt = checkReceipt
   runGate(repo, request, instructions(packet), outputFile, (gate) =>
-    validateShape(gate, packet.review_id, packet.law_hash, allowedFindingIds), 'review')
+    validateShape(gate, packet.review_id, packet.law_hash, allowedFindingIds), 'review', undefined, packet.slice_id)
 }
 
 // W7-A1: the audit-family invoke — the SAME receipt gate as invoke() (the kernel runs
@@ -754,7 +800,7 @@ function invokeAudit(repo, request, packet, outputFile, allowedFindingIds) {
     const shape = validateShape(gate, packet.review_id, packet.law_hash, allowedFindingIds)
     if (shape) return shape
     return auditShapeInvalid(gate)
-  }, 'audit')
+  }, 'audit', undefined, packet.seam_slice)
 }
 
 function repository(path) {
@@ -1000,7 +1046,12 @@ function receiptDigestAtPublication(kilnDir, family) {
 // not valid utf8 (decoded to U+FFFD, then re-encoded), so the archived digest would fail to cover the
 // published bytes. The readable content fields come from the parsed JSON — that is fine, they are the
 // archive's human content, not its integrity binding.
-function archiveVerdict(kilnDir, family, verdictBytes) {
+// W2-S7a (ruling A-prime): reviewerLegId is the reviewer leg this verdict belongs to — the leg
+// runGate minted synchronously on the codex path, or the leg the kernel passed down publish-gate
+// argv on a claude path. It rides the archive row as reviewer_leg_id; absent (a legacy publish) it
+// is an honest null. Idempotency is UNCHANGED — keyed on {family, review_id, verdict_sha256}, so the
+// retry shortcut below never compares reviewer_leg_id.
+function archiveVerdict(kilnDir, family, verdictBytes, reviewerLegId) {
   if (!REVIEW_FAMILIES.has(family)) return `archive family ${family} is not a review family`
   let verdict
   try {
@@ -1058,6 +1109,21 @@ function archiveVerdict(kilnDir, family, verdictBytes) {
     if (archivedReceipt !== receipt.digest) {
       return 'archive idempotent retry: the current check receipt no longer matches the archived digest — refusing to republish a stale receipt binding'
     }
+    // W2-S7a (B-RETRY-LEG): the reviewer-leg binding is preserved under the SAME B001-R2 ownership
+    // pattern. The archived row must OWN a well-formed reviewer_leg_id (explicit null or 32hex) AND
+    // it must equal the leg this retry supplies (null equals null) — a missing/malformed field (a
+    // pre-B-RETRY-LEG row) or a differing leg HOLDS, never an exit-0 that severs a Claude seal from
+    // the exact reviews row it will join.
+    const hasArchivedLeg = Object.prototype.hasOwnProperty.call(prior, 'reviewer_leg_id')
+    const archivedLeg = hasArchivedLeg ? prior.reviewer_leg_id : undefined
+    const archivedLegWellFormed = archivedLeg === null || (typeof archivedLeg === 'string' && LEG_ID.test(archivedLeg))
+    const suppliedLeg = (typeof reviewerLegId === 'string' && LEG_ID.test(reviewerLegId)) ? reviewerLegId : null
+    if (!hasArchivedLeg || !archivedLegWellFormed) {
+      return 'archive idempotent retry: the archived row carries no well-formed reviewer_leg_id — nothing confirms the historical reviewer binding, refusing to republish'
+    }
+    if (archivedLeg !== suppliedLeg) {
+      return 'archive idempotent retry: the supplied reviewer leg differs from the archived reviewer binding — refusing to sever it'
+    }
     return null
   }
   const row = {
@@ -1071,6 +1137,7 @@ function archiveVerdict(kilnDir, family, verdictBytes) {
     run_id: runIdFromLock(kilnDir),
     published_at: new Date().toISOString(),
     receipt_sha256: receipt.digest,
+    reviewer_leg_id: (typeof reviewerLegId === 'string' && LEG_ID.test(reviewerLegId)) ? reviewerLegId : null,
     verdict_sha256: sha,
   }
   // Write safety: a crash mid-append can leave a torn final line with no trailing newline. Prefix a
@@ -1135,12 +1202,41 @@ function ledgerProjectionLine(descriptor, row) {
 // ledger schema (ledgerProjectionLine returns null) is a membership anomaly in the append-only
 // truth, so the render HOLDS fail-closed rather than SILENTLY drop it (which could hide a real seal)
 // or render it as garbage (A02). Torn lines never reach here — they are skipped at the JSONL read.
+// W2-S7a (ruling A-prime, provisional membership): the render is a STATE reduction over two S7a row
+// classes. A {type:'promote', candidate_id} row renders NO line of its own but marks its matching
+// provisional candidate for rendering; a provisional seal/audit (provisional:true + candidate_id)
+// renders NOTHING until such a promote lands — so a crash-window candidate whose Claude identities
+// are still pending never grants membership before capture-and-finalize resolves them. A promote
+// row that targets no provisional candidate is a schema anomaly held with the same S6 discipline. A
+// projection that is empty ONLY because every row is an unpromoted provisional is a LEGITIMATE empty
+// render (writeProjectionIfStale leaves an absent .log absent); every non-provisional row renders
+// exactly as S6.
 function renderProjection(descriptor, rows) {
+  const candidateIds = new Set()
+  for (const row of rows) {
+    if (isObject(row) && row.provisional === true && row.type === descriptor.type && typeof row.candidate_id === 'string' && row.candidate_id !== '') {
+      candidateIds.add(row.candidate_id)
+    }
+  }
+  const promoted = new Set()
+  for (const row of rows) {
+    if (isObject(row) && row.type === 'promote') {
+      if (typeof row.candidate_id !== 'string' || !candidateIds.has(row.candidate_id)) {
+        stop('transport_failure', `${descriptor.jsonl} carries a promote row for no provisional candidate — a membership anomaly; reconcile holds rather than render it`, TRANSPORT_FAILURE)
+      }
+      promoted.add(row.candidate_id)
+    }
+  }
   const lines = []
   for (const row of rows) {
+    if (isObject(row) && row.type === 'promote') continue
     const line = ledgerProjectionLine(descriptor, row)
     if (line === null) {
       stop('transport_failure', `${descriptor.jsonl} carries a row that does not conform to the ${descriptor.type} ledger schema — a membership anomaly; reconcile holds rather than drop or misrender it`, TRANSPORT_FAILURE)
+    }
+    if (isObject(row) && row.provisional === true) {
+      if (promoted.has(row.candidate_id)) lines.push(line)
+      continue
     }
     lines.push(line)
   }
@@ -1294,6 +1390,239 @@ function appendLedgerRow(kilnDir, descriptor, row) {
   }
 }
 
+// ── W2-S7a (ruling A-prime): the driver-closed identity ledger ──────────────
+// .kiln/identity.jsonl is an append-only, event-typed truth with NO rendered projection — nothing
+// reads identity for membership yet (S7b binds it). Three row types key by {run_id, leg_id}:
+//   intent          {type, run_id, leg_id, role, requested_alias, subject, expected_label, ts}
+//   codex-identity  {type, run_id, leg_id, role, requested_alias, resolved_model, source, confirmation, subject, ts}
+//   resolved        {type, run_id, leg_id, agent_id, resolved_model, source, driver_session, cross_check, ts}
+// A leg with an intent row and no resolved row is PENDING; the state is derived, never stored. The
+// leg_id is a random 128-bit value (32 lowercase hex) so its expected_label is globally unique, and
+// the reserved leg: prefix is minted NOWHERE else in the plugin.
+const IDENTITY_FILE = 'identity.jsonl'
+const IDENTITY_ROLES = new Set(['builder', 'repair', 'gate-reviewer', 'auditor', 'audit-repair', 'ratifier', 'screen-grader'])
+const LEG_ID = /^[0-9a-f]{32}$/
+const LEG_LABEL = /^leg:[0-9a-f]{32}$/
+const IDENTITY_SOURCE = new Set(['workflow_progress', 'argv'])
+// The roles admissible in each candidate leg position (append-seal / append-audit / publish-gate).
+// W2-S7a (B-CODEX-ROLE): position validation is UNIFORM — a codex-identity leg occupying a position
+// must carry the same reviewer-class role a claude leg would, never a cross-duty substitution.
+const BUILDER_LEG_ROLES = new Set(['builder', 'repair', 'audit-repair'])
+const REVIEWER_LEG_ROLES = new Set(['gate-reviewer', 'auditor', 'ratifier', 'screen-grader'])
+// The codex reviewer role by review family — a codex-identity row always carries a closed
+// reviewer-class role, matching the intent side so S7b reads one vocabulary.
+const CODEX_ROLE = { review: 'gate-reviewer', audit: 'auditor', ratify: 'ratifier', feasibility: 'ratifier', screen: 'screen-grader' }
+
+// W2-S7a (B-LEDGER-SCHEMA): the semantic schema of one PARSEABLE identity row of a known type.
+// Returns a reason string when the row CLAIMS a known type but is malformed — a schema anomaly the
+// reduction HOLDs on, never silently resolving or dropping it. A torn (unparseable) line never
+// reaches here; a row without a recognized type is not a reduction input and is ignored
+// (forward-compat for S7b types). A resolved row counts only with a well-formed leg_id, non-empty
+// agent_id and resolved_model, and a closed source; a codex-identity only with a well-formed leg_id,
+// a closed role, a non-empty resolved_model; an intent only with a well-formed leg_id, a closed
+// role, and the matching reserved expected_label.
+function identityRowInvalid(row) {
+  if (!isObject(row) || typeof row.type !== 'string') return null
+  if (row.type === 'intent') {
+    if (typeof row.leg_id !== 'string' || !LEG_ID.test(row.leg_id)) return 'intent row carries a malformed leg_id'
+    if (!IDENTITY_ROLES.has(row.role)) return 'intent row carries a role outside the closed set'
+    if (row.expected_label !== 'leg:' + row.leg_id) return 'intent row carries a malformed expected_label'
+    return null
+  }
+  if (row.type === 'codex-identity') {
+    if (typeof row.leg_id !== 'string' || !LEG_ID.test(row.leg_id)) return 'codex-identity row carries a malformed leg_id'
+    if (!IDENTITY_ROLES.has(row.role)) return 'codex-identity row carries a role outside the closed set'
+    if (typeof row.resolved_model !== 'string' || row.resolved_model.trim() === '') return 'codex-identity row carries no resolved_model'
+    return null
+  }
+  if (row.type === 'resolved') {
+    if (typeof row.leg_id !== 'string' || !LEG_ID.test(row.leg_id)) return 'resolved row carries a malformed leg_id'
+    if (typeof row.agent_id !== 'string' || row.agent_id.trim() === '') return 'resolved row carries no agent_id'
+    if (typeof row.resolved_model !== 'string' || row.resolved_model.trim() === '') return 'resolved row carries no resolved_model'
+    if (!IDENTITY_SOURCE.has(row.source)) return 'resolved row carries an unrecognized source'
+    return null
+  }
+  return null
+}
+
+// Read identity.jsonl into rows, tolerating a torn final line (the archiveVerdict degrade). Returns
+// [] when ABSENT; a genuine IO fault other than ENOENT THROWS so the caller fails closed.
+function readIdentityRows(kilnDir) {
+  let raw = ''
+  try {
+    raw = readFileSync(join(kilnDir, IDENTITY_FILE), 'utf8')
+  } catch (error) {
+    if (error.code === 'ENOENT') return []
+    throw error
+  }
+  const rows = []
+  for (const line of raw.split('\n')) {
+    if (line.trim() === '') continue
+    try { rows.push(JSON.parse(line)) } catch { continue }
+  }
+  return rows
+}
+
+// Append one identity row, newline-prefixing a torn tail so it lands on its own line (the
+// archiveVerdict/appendLedgerRow write discipline). Returns null on success, an error string on
+// failure so the caller fails closed.
+function appendIdentityRow(kilnDir, row) {
+  const path = join(kilnDir, IDENTITY_FILE)
+  let raw = ''
+  try {
+    raw = readFileSync(path, 'utf8')
+  } catch (error) {
+    if (error.code !== 'ENOENT') return `identity ledger could not be read: ${error.message}`
+  }
+  const prefix = raw.length > 0 && !raw.endsWith('\n') ? '\n' : ''
+  try {
+    mkdirSync(kilnDir, { recursive: true })
+    appendFileSync(path, prefix + JSON.stringify(row) + '\n')
+  } catch (error) {
+    return `identity ledger could not be appended: ${error.message}`
+  }
+  return null
+}
+
+// Index the identity ledger: for every leg_id its role, run_id, and whether it is RESOLVED (a
+// codex-identity row is resolved by construction; an intent becomes resolved when a resolved row
+// for its leg_id lands). The first intent for a leg_id wins its role/run_id — an immutable intent
+// is never rewritten. Also returns the intent rows for the pending derivation. This is the SINGLE
+// reduction point — every consumer reads identity through it. W2-S7a (B-LEDGER-SCHEMA): each
+// parseable known-type row is semantically validated; a schema anomaly HOLDs the whole reduction
+// fail-closed (the S6 discipline), never silently resolving or dropping it. A genuine IO fault (not
+// ENOENT) HOLDs too.
+function identityIndex(kilnDir) {
+  let rows
+  try {
+    rows = readIdentityRows(kilnDir)
+  } catch (error) {
+    stop('transport_failure', `the identity ledger could not be read: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  const legs = new Map()
+  const resolvedIds = new Set()
+  const intents = []
+  for (const row of rows) {
+    const invalid = identityRowInvalid(row)
+    if (invalid) stop('transport_failure', `the identity ledger carries a schema anomaly: ${invalid} — the reduction holds rather than resolve or drop it`, TRANSPORT_FAILURE)
+    if (!isObject(row) || typeof row.leg_id !== 'string') continue
+    if (row.type === 'intent') {
+      if (!legs.has(row.leg_id)) legs.set(row.leg_id, { role: row.role, run_id: row.run_id ?? null, kind: 'intent' })
+      intents.push({ leg_id: row.leg_id, expected_label: row.expected_label, run_id: row.run_id ?? null, role: row.role })
+    } else if (row.type === 'codex-identity') {
+      legs.set(row.leg_id, { role: row.role, run_id: row.run_id ?? null, kind: 'codex' })
+      resolvedIds.add(row.leg_id)
+    } else if (row.type === 'resolved') {
+      resolvedIds.add(row.leg_id)
+    }
+  }
+  return { legs, resolvedIds, intents }
+}
+
+// Locate the current driver transcript by session id, the kiln-meter discovery: the munged-cwd dir
+// first (the common case), then a scan of every project dir. Returns the path or null (never dies)
+// so capture-and-finalize can fall to its recovery scan.
+function discoverDriverTranscript() {
+  const sid = process.env.CLAUDE_CODE_SESSION_ID
+  if (!sid) return null
+  const projects = join(homedir(), '.claude', 'projects')
+  const munged = process.cwd().replace(/[^A-Za-z0-9]/g, '-')
+  const direct = join(projects, munged, `${sid}.jsonl`)
+  if (existsSync(direct)) return direct
+  let entries = []
+  try { entries = readdirSync(projects, { withFileTypes: true }) } catch { return null }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    const cand = join(projects, entry.name, `${sid}.jsonl`)
+    if (existsSync(cand)) return cand
+  }
+  return null
+}
+
+// Every .jsonl under every project dir — the recovery scan corpus for an outstanding leg whose own
+// driver session did not resolve it (a crashed session). Unreadable dirs are skipped.
+function allProjectTranscripts() {
+  const projects = join(homedir(), '.claude', 'projects')
+  const out = []
+  let dirs = []
+  try { dirs = readdirSync(projects, { withFileTypes: true }) } catch { return out }
+  for (const dir of dirs) {
+    if (!dir.isDirectory()) continue
+    let files = []
+    try { files = readdirSync(join(projects, dir.name)) } catch { continue }
+    for (const file of files) if (file.endsWith('.jsonl')) out.push(join(projects, dir.name, file))
+  }
+  return out
+}
+
+// Scan a driver transcript for the completed workflow_progress rows carrying an exact label. A
+// task_progress event carries a workflow_progress snapshot that repeats across events as a leg
+// transitions, so the distinct COMPLETED (state done) identities are deduped by {agentId, model}.
+// A done row missing either field marks the telemetry malformed. The label is globally unique, so a
+// clean resolution is EXACTLY one distinct entry and no malformed row.
+function scanTranscriptForLabel(text, label) {
+  const done = new Map()
+  let malformed = false
+  let present = false
+  for (const line of text.split('\n')) {
+    if (line === '') continue
+    let ev
+    try { ev = JSON.parse(line) } catch { continue }
+    if (!isObject(ev) || ev.type !== 'system' || ev.subtype !== 'task_progress' || !Array.isArray(ev.workflow_progress)) continue
+    for (const entry of ev.workflow_progress) {
+      if (!isObject(entry) || entry.type !== 'workflow_agent' || entry.label !== label) continue
+      // W2-S7a (B-RECOVERY-CORPUS): the label appearing at all — any state, clean or dirty — marks
+      // this transcript present in the recovery census; ambiguity never hides a transcript.
+      present = true
+      if (entry.state !== 'done') continue
+      if (typeof entry.agentId !== 'string' || entry.agentId === '' || typeof entry.model !== 'string' || entry.model === '') { malformed = true; continue }
+      done.set(entry.agentId + '\0' + entry.model, { agentId: entry.agentId, model: entry.model })
+    }
+  }
+  return { entries: [...done.values()], malformed, present }
+}
+
+// The OPTIONAL per-agent cross-check. W2-S7a (B-CROSSCHECK): live Workflow per-agent transcripts sit
+// under <driver path WITHOUT its .jsonl suffix>/subagents/workflows/wf_*/agent-<agentId>.jsonl — a
+// sibling DIRECTORY named for the session, NOT beside the driver file. A present transcript MUST
+// agree with the driver telemetry model (a disagreement HOLDS). GENUINE absence (ENOENT on the wf
+// root or the agent file) is cross_check absent, since the optional cross-check simply is not there.
+// A PRESENT-but-unreadable source (EACCES, EISDIR, a non-ENOENT fault) is UNTRUSTED evidence and
+// HOLDS — the wave discipline, never silently coerced to absent. Returns message.model-agree,
+// absent, disagree, or unreadable (the caller HOLDs on disagree and unreadable).
+function crossCheckModel(driverPath, agentId, model) {
+  if (!/^[A-Za-z0-9_-]+$/.test(agentId)) return 'absent'
+  const wfRoot = join(driverPath.replace(/\.jsonl$/, ''), 'subagents', 'workflows')
+  let wfDirs
+  try {
+    wfDirs = readdirSync(wfRoot, { withFileTypes: true })
+  } catch (error) {
+    return error.code === 'ENOENT' ? 'absent' : 'unreadable'
+  }
+  for (const dir of wfDirs) {
+    if (!dir.isDirectory() || dir.name.slice(0, 3) !== 'wf_') continue
+    let text
+    try {
+      text = readFileSync(join(wfRoot, dir.name, `agent-${agentId}.jsonl`), 'utf8')
+    } catch (error) {
+      if (error.code === 'ENOENT') continue
+      return 'unreadable'
+    }
+    let sawModel = false
+    for (const line of text.split('\n')) {
+      if (line === '') continue
+      let ev
+      try { ev = JSON.parse(line) } catch { continue }
+      if (isObject(ev) && ev.type === 'assistant' && isObject(ev.message) && typeof ev.message.model === 'string' && ev.message.model !== '') {
+        sawModel = true
+        if (ev.message.model !== model) return 'disagree'
+      }
+    }
+    return sawModel ? 'message.model-agree' : 'absent'
+  }
+  return 'absent'
+}
+
 // process.kill(pid, 0) probes liveness without delivering a signal. Only ESRCH PROVES the
 // holder is gone; success and EPERM prove it alive; any other error, or a missing or
 // non-positive pid, is UNKNOWN. Takeover requires PROVEN dead, so it treats UNKNOWN as
@@ -1380,13 +1709,14 @@ function archiveAndDrop(kilnDir, claimPath, record, event) {
 }
 
 const [mode, ...args] = process.argv.slice(2)
-if (mode === 'review' && args.length === 7) {
+if (mode === 'review' && args.length === 8) {
   // W2-S4: the AUTHORITATIVE facts ride argv (the audit-verb pattern) and the sealed trio —
-  // repo, kilnDir, the named slice, the reviewer model and effort (kernel-resolved from
+  // repo, kilnDir, the named slice, the reviewer model, alias and effort (kernel-resolved from
   // validated tiers), then the builder request (hints only) and the output. law_hash and
-  // law_text derive from the sealed LAW; the builder authors neither.
-  const [repoPath, kilnDir, sliceId, model, effort, requestFile, outputFile] = args
-  const request = auditRequest(model, effort, 'review')
+  // law_text derive from the sealed LAW; the builder authors neither. W2-S7a (B-D1): the alias
+  // rides adjacent to the model as the durable tiers fact the codex identity records.
+  const [repoPath, kilnDir, sliceId, model, alias, effort, requestFile, outputFile] = args
+  const request = auditRequest(model, alias, effort, 'review')
   const facts = buildGateFacts(kilnDir, sliceId)
   const packet = {
     mode: 'review',
@@ -1397,9 +1727,9 @@ if (mode === 'review' && args.length === 7) {
     builder_hints: hintsFrom(requestFile),
   }
   invoke(repository(repoPath), request, packet, outputFile)
-} else if (mode === 'recheck' && args.length === 9) {
-  const [repoPath, kilnDir, sliceId, model, effort, requestFile, priorFile, repairDeltaFile, outputFile] = args
-  const request = auditRequest(model, effort, 'recheck')
+} else if (mode === 'recheck' && args.length === 10) {
+  const [repoPath, kilnDir, sliceId, model, alias, effort, requestFile, priorFile, repairDeltaFile, outputFile] = args
+  const request = auditRequest(model, alias, effort, 'recheck')
   const facts = buildGateFacts(kilnDir, sliceId)
   const hints = hintsFrom(requestFile)
   const prior = readJson(priorFile, 'invalid prior gate review')
@@ -1457,23 +1787,60 @@ if (mode === 'review' && args.length === 7) {
   renameSync(temporary, output)
   process.stdout.write(facts.lawHash + '\n')
   process.exit(ACCEPT)
-} else if (mode === 'append-seal' && args.length === 3) {
+} else if (mode === 'append-seal' && (args.length === 3 || args.length === 5)) {
   // The recovered v3 "Thoth scribe": an opaque, trusted seal-append verb. The kernel courier calls
   // it instead of a bare shell append it declines to moralize; the seal ledger semantics live here.
   // Closed label, nonempty slice. W2-S6: the row lands in seals.jsonl (the append-only truth) and
   // seals.log is re-rendered from it as the current-valid projection. reconcile FIRST so a crash
   // between a prior append and its render, or a W1 project whose seals.log predates the JSONL, is
-  // healed before this append reads the ledger. The S6 row carries the fields cheaply available now
-  // — the run_id from the CLI-owned lock (S5) and an ISO stamp; S7 adds the full-hash block.
-  const [kilnDir, slice, label] = args
+  // healed before this append reads the ledger. The row carries the run_id from the CLI-owned lock
+  // (S5) and an ISO stamp.
+  // W2-S7a (ruling A-prime): a FIFTH and SIXTH argv word carry the generation leg references —
+  // builder_leg_ids as a comma list (build + repair legs) and a reviewer position (a leg_id — a
+  // claude gate-reviewer leg, or the codex reviewer leg the kernel read from the gate sidecar; the -
+  // sentinel only for the verdictless no-gate degraded-ui seal). Every supplied leg must EXIST with
+  // a role consistent with its position and a matching run_id. When ANY
+  // referenced Claude leg is a still-pending intent the row is written PROVISIONAL with a
+  // candidate_id — it renders no membership until capture-and-finalize promotes it. When every
+  // referenced leg is already resolved (a codex reviewer) the row is non-provisional. The legacy
+  // three-word arity keeps its exact today behaviour so the S11 shell callers never change.
+  const [kilnDir, slice, label, builderCsv, reviewerRef] = args
   if (label !== 'dual' && label !== 'single-family') {
     stop('transport_failure', 'append-seal label must be dual or single-family', TRANSPORT_FAILURE)
   }
   if (typeof slice !== 'string' || slice.trim() === '') {
     stop('transport_failure', 'append-seal slice id must be a nonempty string', TRANSPORT_FAILURE)
   }
+  const sealRow = { type: 'seal', slice, label, run_id: runIdFromLock(kilnDir), ts: new Date().toISOString() }
+  if (args.length === 5) {
+    const runId = runIdFromLock(kilnDir)
+    const idx = identityIndex(kilnDir)
+    const builderLegs = builderCsv === '' ? [] : builderCsv.split(',')
+    for (const legId of builderLegs) {
+      const leg = idx.legs.get(legId)
+      if (!LEG_ID.test(legId) || !leg) stop('transport_failure', 'append-seal builder leg is unknown to the identity ledger', TRANSPORT_FAILURE)
+      if (!BUILDER_LEG_ROLES.has(leg.role)) stop('transport_failure', 'append-seal builder leg role is not a build-class leg', TRANSPORT_FAILURE)
+      if (leg.run_id !== runId) stop('transport_failure', 'append-seal builder leg belongs to another run', TRANSPORT_FAILURE)
+    }
+    if (reviewerRef !== '-') {
+      const leg = idx.legs.get(reviewerRef)
+      if (!LEG_ID.test(reviewerRef) || !leg) stop('transport_failure', 'append-seal reviewer leg is unknown to the identity ledger', TRANSPORT_FAILURE)
+      // W2-S7a (B-CODEX-ROLE): position validation is uniform — a codex leg in the seal reviewer
+      // position must carry the gate-reviewer role, exactly as a claude leg must; no kind bypass.
+      if (leg.role !== 'gate-reviewer') stop('transport_failure', 'append-seal reviewer leg is not a gate-reviewer leg', TRANSPORT_FAILURE)
+      if (leg.run_id !== runId) stop('transport_failure', 'append-seal reviewer leg belongs to another run', TRANSPORT_FAILURE)
+    }
+    const referenced = reviewerRef === '-' ? builderLegs : [...builderLegs, reviewerRef]
+    const pending = referenced.some((legId) => idx.legs.get(legId).kind === 'intent' && !idx.resolvedIds.has(legId))
+    sealRow.builder_leg_ids = builderLegs
+    sealRow.reviewer_leg_id = reviewerRef === '-' ? null : reviewerRef
+    if (pending) {
+      sealRow.provisional = true
+      sealRow.candidate_id = randomBytes(16).toString('hex')
+    }
+  }
   reconcileLedger(kilnDir, SEAL_LEDGER)
-  appendLedgerRow(kilnDir, SEAL_LEDGER, { type: 'seal', slice, label, run_id: runIdFromLock(kilnDir), ts: new Date().toISOString() })
+  appendLedgerRow(kilnDir, SEAL_LEDGER, sealRow)
   process.exit(ACCEPT)
 } else if (mode === 'seal-law' && args.length === 2) {
   // The trusted LAW lock, content-blind. W2-S3: the seal now covers the whole trio —
@@ -1644,7 +2011,7 @@ if (mode === 'review' && args.length === 7) {
     if (shape) return shape
     if (gate.law_hash !== candidateDigest) return 'law_hash does not match the ratified artifact digest'
     return null
-  }, family)
+  }, family, undefined, packet.review_id)
 } else if (mode === 'ratify-recheck' && args.length === 5) {
   // W6-02: the ratify verb gains the cohort lineage it lacked. A recheck of an
   // already-graded artifact reuses the prior review_id and constrains the reviewer to
@@ -1689,8 +2056,8 @@ if (mode === 'review' && args.length === 7) {
     if (shape) return shape
     if (gate.law_hash !== candidateDigest) return 'law_hash does not match the ratified artifact digest'
     return null
-  }, family)
-} else if (mode === 'audit' && args.length === 6) {
+  }, family, undefined, packet.review_id)
+} else if (mode === 'audit' && args.length === 7) {
   // W7-A1: the milestone-seam audit — one fresh goal-backward GPT reviewer over the
   // cumulative sealed prefix. argv carries closed facts only; every derived fact — the
   // closing block, the cumulative prefix, the milestone label (which may contain spaces
@@ -1698,8 +2065,9 @@ if (mode === 'review' && args.length === 7) {
   // computed here from the checked slices.json projection. law_hash binds to the sealed
   // lock.hash, the review_id is minted fresh exactly as review does, and the transport
   // is the review verb's: codex, read-only sandbox, schema-forced output, closed exits.
-  const [repoPath, kilnDir, seamSliceId, model, effort, outputFile] = args
-  const request = auditRequest(model, effort)
+  // W2-S7a (B-D1): the reviewer alias rides argv beside the model.
+  const [repoPath, kilnDir, seamSliceId, model, alias, effort, outputFile] = args
+  const request = auditRequest(model, alias, effort)
   const repo = repository(repoPath)
   const facts = auditFacts(kilnDir, seamSliceId)
   const packet = {
@@ -1712,16 +2080,16 @@ if (mode === 'review' && args.length === 7) {
     sealed_prefix: facts.sealedPrefix,
   }
   invokeAudit(repo, request, packet, outputFile)
-} else if (mode === 'audit-recheck' && args.length === 8) {
+} else if (mode === 'audit-recheck' && args.length === 9) {
   // W7-A1: the audit recheck mirrors recheck with two deliberate widenings: the prior
   // verdict may be changes_required OR blocked (audit blockers reopen their owning
   // slices, so a blocked milestone is recoverable at this gate), and the law binding is
   // the sealed lock.hash rather than a request law_hash. The cohort is the prior finding
   // ids — reuse-or-clear, no new or renamed ids — and the same audit verb-level shape
   // rules gate the prior (an artifact invalid for the audit family establishes no
-  // lineage) and the current output.
-  const [repoPath, kilnDir, seamSliceId, model, effort, priorFile, repairDeltaFile, outputFile] = args
-  const request = auditRequest(model, effort)
+  // lineage) and the current output. W2-S7a (B-D1): the alias rides argv beside the model.
+  const [repoPath, kilnDir, seamSliceId, model, alias, effort, priorFile, repairDeltaFile, outputFile] = args
+  const request = auditRequest(model, alias, effort)
   const repo = repository(repoPath)
   const facts = auditFacts(kilnDir, seamSliceId)
   const prior = readJson(priorFile, 'invalid prior audit review')
@@ -1761,7 +2129,7 @@ if (mode === 'review' && args.length === 7) {
     repair_delta: repairDelta,
   }
   invokeAudit(repo, request, packet, outputFile, findingIds)
-} else if (mode === 'append-audit' && args.length === 3) {
+} else if (mode === 'append-audit' && (args.length === 3 || args.length === 4 || args.length === 5)) {
   // W7: the ONLY writer of audits.log — append-seal's milestone-seam mirror. The kernel
   // promotes an accepted audit through this trusted verb, never a bare shell append; the
   // audits.log semantics live here. The outcome label is the fixed `accept`, and S4-D4
@@ -1772,7 +2140,13 @@ if (mode === 'review' && args.length === 7) {
   // contract, so every id a build can carry publishes. The id becomes the grep anchor
   // `^<id> `, where whitespace or control bytes could forge or split a log line; slash is
   // inside the set (path-like ids such as feature/ui are anchor-safe).
-  const [kilnDir, seamSliceId, label] = args
+  // W2-S7a (ruling A-prime + B-AUDIT-REPAIR-REF): a FOURTH argv word carries the auditor leg (a
+  // leg_id, or - when the codex auditor identity lives on reviews.jsonl), and an OPTIONAL FIFTH
+  // carries a comma list of the audit-repair legs that mutated the sealed content this generation.
+  // Every supplied leg must EXIST with a role consistent with its position (B-CODEX-ROLE: uniform,
+  // no kind bypass) and a matching run_id. Any still-pending referenced Claude intent makes the row
+  // PROVISIONAL with a candidate_id; the legacy three-word arity is byte-identical to today.
+  const [kilnDir, seamSliceId, label, auditorRef, repairCsv] = args
   if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
     stop('transport_failure', 'append-audit kilnDir must be a nonempty string', TRANSPORT_FAILURE)
   }
@@ -1782,11 +2156,43 @@ if (mode === 'review' && args.length === 7) {
   if (label !== 'dual' && label !== 'single-family') {
     stop('transport_failure', 'append-audit label must be dual or single-family', TRANSPORT_FAILURE)
   }
+  const auditRow = { type: 'audit', seam: seamSliceId, outcome: 'accept', label, run_id: runIdFromLock(kilnDir), ts: new Date().toISOString() }
+  if (args.length >= 4) {
+    const runId = runIdFromLock(kilnDir)
+    const idx = identityIndex(kilnDir)
+    const referenced = []
+    if (auditorRef !== '-') {
+      const leg = idx.legs.get(auditorRef)
+      if (!LEG_ID.test(auditorRef) || !leg) stop('transport_failure', 'append-audit auditor leg is unknown to the identity ledger', TRANSPORT_FAILURE)
+      if (leg.role !== 'auditor') stop('transport_failure', 'append-audit auditor leg is not an auditor leg', TRANSPORT_FAILURE)
+      if (leg.run_id !== runId) stop('transport_failure', 'append-audit auditor leg belongs to another run', TRANSPORT_FAILURE)
+      auditRow.auditor_leg_id = auditorRef
+      referenced.push(auditorRef)
+    } else {
+      auditRow.auditor_leg_id = null
+    }
+    if (args.length === 5) {
+      const repairLegs = repairCsv === '' ? [] : repairCsv.split(',')
+      for (const legId of repairLegs) {
+        const leg = idx.legs.get(legId)
+        if (!LEG_ID.test(legId) || !leg) stop('transport_failure', 'append-audit repair leg is unknown to the identity ledger', TRANSPORT_FAILURE)
+        if (leg.role !== 'audit-repair' && leg.role !== 'repair') stop('transport_failure', 'append-audit repair leg is not a repair-class leg', TRANSPORT_FAILURE)
+        if (leg.run_id !== runId) stop('transport_failure', 'append-audit repair leg belongs to another run', TRANSPORT_FAILURE)
+      }
+      auditRow.repair_leg_ids = repairLegs
+      referenced.push(...repairLegs)
+    }
+    const pending = referenced.some((legId) => idx.legs.get(legId).kind === 'intent' && !idx.resolvedIds.has(legId))
+    if (pending) {
+      auditRow.provisional = true
+      auditRow.candidate_id = randomBytes(16).toString('hex')
+    }
+  }
   // W2-S6: the row lands in audits.jsonl (append-only truth) and audits.log is re-rendered from it
   // as the current-valid projection, exactly as append-seal treats the seal ledger. reconcile first
   // so a stale or un-migrated audits.log never misleads this append.
   reconcileLedger(kilnDir, AUDIT_LEDGER)
-  appendLedgerRow(kilnDir, AUDIT_LEDGER, { type: 'audit', seam: seamSliceId, outcome: 'accept', label, run_id: runIdFromLock(kilnDir), ts: new Date().toISOString() })
+  appendLedgerRow(kilnDir, AUDIT_LEDGER, auditRow)
   process.exit(ACCEPT)
 } else if (mode === 'reconcile' && args.length === 1) {
   // W2-S6 (B06): the trusted reconcile the kernel calls once at boot before its membership reads,
@@ -1800,7 +2206,189 @@ if (mode === 'review' && args.length === 7) {
   reconcileLedger(kilnDir, SEAL_LEDGER)
   reconcileLedger(kilnDir, AUDIT_LEDGER)
   process.exit(ACCEPT)
-} else if (mode === 'screen' && args.length === 5) {
+} else if (mode === 'identity-begin' && args.length === 4) {
+  // W2-S7a (ruling A-prime): mint a random 128-bit leg_id, append the IMMUTABLE intent, and print
+  // `<leg_id> <expected_label>` — the two facts the kernel swaps in as the dispatched agent label.
+  // The role is a CLOSED set; requested_alias rides the LOCK_TOKEN charset (the resolved tier alias);
+  // subject carries the slice/seam id on the same SLICE_ID charset the kernel enforces at intake. The
+  // expected_label is the RESERVED leg: prefix + the id — the one label capture-and-finalize matches
+  // in the driver telemetry, minted nowhere else. Any validation or write failure holds transport 20.
+  const [kilnDir, role, requestedAlias, subject] = args
+  if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
+    stop('transport_failure', 'identity-begin kilnDir must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  if (!IDENTITY_ROLES.has(role)) {
+    stop('transport_failure', `identity-begin role must be one of ${[...IDENTITY_ROLES].join('|')}`, TRANSPORT_FAILURE)
+  }
+  if (typeof requestedAlias !== 'string' || !LOCK_TOKEN.test(requestedAlias)) {
+    stop('transport_failure', 'identity-begin requested_alias must be a closed token of letters, digits, dot, underscore or hyphen', TRANSPORT_FAILURE)
+  }
+  if (typeof subject !== 'string' || !STATE_SLICE_ID.test(subject)) {
+    stop('transport_failure', 'identity-begin subject must be a slice-id charset token', TRANSPORT_FAILURE)
+  }
+  const legId = randomBytes(16).toString('hex')
+  const expectedLabel = 'leg:' + legId
+  const err = appendIdentityRow(kilnDir, {
+    type: 'intent', run_id: runIdFromLock(kilnDir), leg_id: legId, role,
+    requested_alias: requestedAlias, subject, expected_label: expectedLabel, ts: new Date().toISOString(),
+  })
+  if (err) stop('transport_failure', err, TRANSPORT_FAILURE)
+  process.stdout.write(legId + ' ' + expectedLabel + '\n')
+  process.exit(ACCEPT)
+} else if (mode === 'capture-and-finalize' && (args.length === 1 || args.length === 2)) {
+  // W2-S7a (ruling A-prime): the trusted resolution + promotion the conductor runs after EVERY
+  // Workflow terminal return, before it emits the beat, launches the next stage, or releases the run
+  // lock. It resolves every PENDING intent to exactly ONE completed workflow_progress row in the
+  // driver transcript, cross-checks the per-agent transcript, and promotes the provisional seals and
+  // audits whose referenced legs have all resolved. Any genuine fault, a per-agent disagreement, or a
+  // recovery leg matched in more than one transcript HOLDS transport 20 — an unattested generation
+  // never gains membership.
+  const [kilnDir, transcriptArg] = args
+  if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
+    stop('transport_failure', 'capture-and-finalize kilnDir must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  // a. Reduce identity through the SINGLE validated index — a schema anomaly or IO fault HOLDs here
+  // (B-LEDGER-SCHEMA). resolvedIds accumulates the rows this run writes, so promotion below sees them.
+  const { resolvedIds, intents } = identityIndex(kilnDir)
+  const pending = intents.filter((intent) => !resolvedIds.has(intent.leg_id))
+  // b. Locate the driver transcript: an explicit path (a real production affordance, and what
+  // recovery and tests use) else the kiln-meter discovery. A LOCATED but unreadable transcript
+  // holds; a transcript that could not be found at all falls to the recovery scan below.
+  const located = transcriptArg !== undefined ? transcriptArg : discoverDriverTranscript()
+  let primaryText = null
+  if (located !== undefined && located !== null) {
+    try {
+      primaryText = readFileSync(located, 'utf8')
+    } catch (error) {
+      stop('transport_failure', `capture could not read the located driver transcript: ${error.message}`, TRANSPORT_FAILURE)
+    }
+  }
+  const sessionOf = (path) => basename(path).replace(/\.jsonl$/, '')
+  const writeResolved = (intent, path, agentId, model) => {
+    // W2-S7a (B-CROSSCHECK): a disagreeing OR present-but-unreadable per-agent cross-check source is
+    // untrusted evidence and HOLDs; genuine absence resolves with cross_check absent.
+    const cross = crossCheckModel(path, agentId, model)
+    if (cross === 'disagree') {
+      stop('transport_failure', `capture: the per-agent transcript model disagrees with the driver telemetry for leg ${intent.leg_id} — refusing to resolve`, TRANSPORT_FAILURE)
+    }
+    if (cross === 'unreadable') {
+      stop('transport_failure', `capture: the per-agent cross-check source for leg ${intent.leg_id} is present but unreadable — untrusted evidence, the run holds`, TRANSPORT_FAILURE)
+    }
+    const err = appendIdentityRow(kilnDir, {
+      type: 'resolved', run_id: intent.run_id ?? null, leg_id: intent.leg_id, agent_id: agentId,
+      resolved_model: model, source: 'workflow_progress', driver_session: sessionOf(path),
+      cross_check: cross, ts: new Date().toISOString(),
+    })
+    if (err) stop('transport_failure', err, TRANSPORT_FAILURE)
+    resolvedIds.add(intent.leg_id)
+  }
+  // c/d. Resolve each pending leg from the primary transcript. A clean single completed row resolves;
+  // a label PRESENT in the primary but dirty or incomplete stays UNRESOLVED (the leg ran here and did
+  // not finish cleanly — never recovered from elsewhere); a label ABSENT from the primary falls to
+  // recovery.
+  let resolvedCount = 0
+  const recovery = []
+  for (const intent of pending) {
+    if (primaryText === null) { recovery.push(intent); continue }
+    const scan = scanTranscriptForLabel(primaryText, intent.expected_label)
+    if (scan.entries.length === 1 && !scan.malformed) {
+      writeResolved(intent, located, scan.entries[0].agentId, scan.entries[0].model)
+      resolvedCount += 1
+    } else if (!scan.present) {
+      recovery.push(intent)
+    }
+  }
+  // Recovery census (B-RECOVERY-CORPUS): a leg is sought across every readable prior transcript, and
+  // the HOLD counts EVERY transcript in which the label APPEARS AT ALL — a duplicate or model-less
+  // matching transcript is ambiguity that counts, never hidden from the census. More than one
+  // matching transcript HOLDs; exactly one matching transcript resolves ONLY if its rows are a clean
+  // single completed entry, else it stays UNRESOLVED; none stays pending.
+  if (recovery.length > 0) {
+    const hits = new Map()
+    for (const intent of recovery) hits.set(intent.leg_id, [])
+    const primaryResolved = located ? resolve(located) : null
+    for (const path of allProjectTranscripts()) {
+      if (primaryResolved !== null && resolve(path) === primaryResolved) continue
+      let text
+      try { text = readFileSync(path, 'utf8') } catch { continue }
+      for (const intent of recovery) {
+        const scan = scanTranscriptForLabel(text, intent.expected_label)
+        if (scan.present) hits.get(intent.leg_id).push({ path, scan })
+      }
+    }
+    for (const intent of recovery) {
+      const matched = hits.get(intent.leg_id)
+      if (matched.length > 1) {
+        stop('transport_failure', `capture recovery: leg ${intent.leg_id} appears in more than one transcript — refusing an ambiguous identity`, TRANSPORT_FAILURE)
+      }
+      if (matched.length === 1) {
+        const { path, scan } = matched[0]
+        if (scan.entries.length === 1 && !scan.malformed) {
+          writeResolved(intent, path, scan.entries[0].agentId, scan.entries[0].model)
+          resolvedCount += 1
+        }
+      }
+    }
+  }
+  // e. Promote every provisional candidate whose referenced legs have ALL resolved (a codex-identity
+  // leg counts as resolved), then reconcile both ledgers so the promoted rows render. A candidate
+  // with any pending reference stays provisional — an honest count, no promote row. W2-S7a
+  // (B-LEDGER-SCHEMA): a candidate whose candidate_id or leg-ref fields are malformed or EMPTY is a
+  // schema anomaly the scan HOLDs on — never a vacuous refs.every() that promotes an unreferenced row.
+  const candidateRefs = (cand, descriptor) => {
+    if (typeof cand.candidate_id !== 'string' || !LEG_ID.test(cand.candidate_id)) return null
+    const hex = (v) => typeof v === 'string' && LEG_ID.test(v)
+    const refs = []
+    if (descriptor.type === 'seal') {
+      if (!Array.isArray(cand.builder_leg_ids) || cand.builder_leg_ids.length === 0 || !cand.builder_leg_ids.every(hex)) return null
+      if (!(cand.reviewer_leg_id === null || hex(cand.reviewer_leg_id))) return null
+      refs.push(...cand.builder_leg_ids)
+      if (hex(cand.reviewer_leg_id)) refs.push(cand.reviewer_leg_id)
+    } else {
+      if (!(cand.auditor_leg_id === null || cand.auditor_leg_id === undefined || hex(cand.auditor_leg_id))) return null
+      if (cand.repair_leg_ids !== undefined && !(Array.isArray(cand.repair_leg_ids) && cand.repair_leg_ids.every(hex))) return null
+      if (hex(cand.auditor_leg_id)) refs.push(cand.auditor_leg_id)
+      if (Array.isArray(cand.repair_leg_ids)) refs.push(...cand.repair_leg_ids)
+    }
+    return refs.length === 0 ? null : refs
+  }
+  const promoteLedger = (descriptor) => {
+    const ledgerRows = readLedgerRows(join(kilnDir, descriptor.jsonl))
+    if (ledgerRows === null) return 0
+    const alreadyPromoted = new Set()
+    const candidates = []
+    for (const row of ledgerRows) {
+      if (!isObject(row)) continue
+      if (row.type === 'promote' && typeof row.candidate_id === 'string') alreadyPromoted.add(row.candidate_id)
+      else if (row.provisional === true) candidates.push(row)
+    }
+    let count = 0
+    for (const cand of candidates) {
+      const refs = candidateRefs(cand, descriptor)
+      if (refs === null) {
+        stop('transport_failure', `${descriptor.jsonl} carries a provisional candidate with malformed or empty leg references — the promotion scan holds`, TRANSPORT_FAILURE)
+      }
+      if (alreadyPromoted.has(cand.candidate_id)) continue
+      if (refs.every((id) => resolvedIds.has(id))) {
+        appendLedgerRow(kilnDir, descriptor, { type: 'promote', candidate_id: cand.candidate_id, run_id: runIdFromLock(kilnDir), ts: new Date().toISOString() })
+        count += 1
+      }
+    }
+    return count
+  }
+  let promoted = 0
+  try {
+    promoted += promoteLedger(SEAL_LEDGER)
+    promoted += promoteLedger(AUDIT_LEDGER)
+  } catch (error) {
+    stop('transport_failure', `capture could not promote the provisional candidates: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  reconcileLedger(kilnDir, SEAL_LEDGER)
+  reconcileLedger(kilnDir, AUDIT_LEDGER)
+  // f. One line of closed facts.
+  process.stdout.write('resolved ' + resolvedCount + ' pending ' + (pending.length - resolvedCount) + ' promoted ' + promoted + '\n')
+  process.exit(ACCEPT)
+} else if (mode === 'screen' && args.length === 6) {
   // W8-S2: the perceptual screen — one fresh grader over the CURRENT evidence
   // generation's bounded pixels. argv carries closed facts only; the verb derives the
   // LAW Perceptual rows, the sealed lock.hash (packet text), and the CURRENT
@@ -1809,9 +2397,9 @@ if (mode === 'review' && args.length === 7) {
   // The transport is the review family's — read-only codex, the byte-untouched
   // review-schema.json, closed exits — plus the manifest's images on `-i`. Binding:
   // the schema's law_hash = sha256 of the graded generation's manifest.json, asserted
-  // post-run exactly as ratify asserts its artifact digest.
-  const [repoPath, kilnDir, model, effort, outputFile] = args
-  const request = auditRequest(model, effort, 'screen')
+  // post-run exactly as ratify asserts its artifact digest. W2-S7a (B-D1): alias beside the model.
+  const [repoPath, kilnDir, model, alias, effort, outputFile] = args
+  const request = auditRequest(model, alias, effort, 'screen')
   const repo = repository(repoPath)
   const facts = screenLawFacts(kilnDir)
   const generation = currentGeneration(kilnDir)
@@ -1828,17 +2416,17 @@ if (mode === 'review' && args.length === 7) {
     if (shape) return shape
     if (gate.law_hash !== generation.digest) return 'law_hash does not match the graded generation manifest digest'
     return screenShapeInvalid(gate, criterionIds)
-  }, 'screen', evidence.images)
-} else if (mode === 'screen-recheck' && args.length === 7) {
+  }, 'screen', evidence.images, String(generation.number))
+} else if (mode === 'screen-recheck' && args.length === 8) {
   // W8-S2: the screen recheck — the recheck discipline pointed at fresh pixels. Same
   // review_id lineage, cohort reuse-or-clear over the prior finding ids, and
   // FRESHNESS: the CURRENT manifest digest MUST DIFFER from the prior verdict's
   // law_hash, so a regrade can never re-grade the very evidence that already failed.
   // delta IS the fresh CURRENT manifest: the argv path must resolve to it, and the
   // bytes read must re-hash to the selected digest — path- and digest-bound, so no
-  // free text ever rides the packet as repair_delta.
-  const [repoPath, kilnDir, model, effort, priorFile, deltaFile, outputFile] = args
-  const request = auditRequest(model, effort, 'screen')
+  // free text ever rides the packet as repair_delta. W2-S7a (B-D1): alias beside the model.
+  const [repoPath, kilnDir, model, alias, effort, priorFile, deltaFile, outputFile] = args
+  const request = auditRequest(model, alias, effort, 'screen')
   const repo = repository(repoPath)
   const facts = screenLawFacts(kilnDir)
   const criterionIds = new Set(facts.rows.map((row) => row.criterion))
@@ -1887,8 +2475,8 @@ if (mode === 'review' && args.length === 7) {
     if (shape) return shape
     if (gate.law_hash !== generation.digest) return 'law_hash does not match the graded generation manifest digest'
     return screenShapeInvalid(gate, criterionIds)
-  }, 'screen', evidence.images)
-} else if (mode === 'screen-escalate' && args.length === 6) {
+  }, 'screen', evidence.images, String(generation.number))
+} else if (mode === 'screen-escalate' && args.length === 7) {
   // W8-S3 (ONLY-survivors): the bounded second-family escalation of a HELD screen
   // verdict. The held verdict rides argv as a closed path; the verb re-validates it
   // with the FULL screen-family shape (an artifact invalid for the family names no
@@ -1897,8 +2485,9 @@ if (mode === 'review' && args.length === 7) {
   // review_id: this is a second mind's scoped grade, not a lineage recheck. Scope is
   // enforced pre-publish exactly as table membership is on screen: a finding outside
   // the survivors is exit 20, and the off-scope verdict is never published.
-  const [repoPath, kilnDir, model, effort, heldFile, outputFile] = args
-  const request = auditRequest(model, effort, 'screen')
+  // W2-S7a (B-D1): the alias rides argv beside the model.
+  const [repoPath, kilnDir, model, alias, effort, heldFile, outputFile] = args
+  const request = auditRequest(model, alias, effort, 'screen')
   const repo = repository(repoPath)
   const facts = screenLawFacts(kilnDir)
   const criterionIds = new Set(facts.rows.map((row) => row.criterion))
@@ -1929,8 +2518,8 @@ if (mode === 'review' && args.length === 7) {
     const off = gate.findings.find((finding) => !survivors.has(finding.criterion))
     if (off !== undefined) return `finding ${off.id} criterion ${off.criterion} is outside the surviving escalation scope`
     return null
-  }, 'screen', evidence.images)
-} else if (mode === 'publish-gate' && args.length === 4) {
+  }, 'screen', evidence.images, String(generation.number))
+} else if (mode === 'publish-gate' && (args.length === 4 || args.length === 5)) {
   // W2-S5 (C3a / B05 / ruling 3): the claude-path publish. The kernel and research-sweep claude
   // legs cannot author files, so they hand this trusted verb the validated candidate they just
   // graded; the verb reads the candidate bytes, archives them to the immutable ledger, THEN renames
@@ -1940,14 +2529,29 @@ if (mode === 'review' && args.length === 7) {
   // verdict is ever published without its archive row. The family rides argv because the caller,
   // not the file path, knows which review family this verdict belongs to (build and LAW ratify
   // share one gate file).
-  const [kilnDir, family, candidatePath, gatePath] = args
+  const [kilnDir, family, candidatePath, gatePath, reviewerLegId] = args
+  // W2-S7a (ruling A-prime): the OPTIONAL trailing reviewer_leg_id is the claude reviewer leg the
+  // kernel minted for this gate — it must EXIST in identity.jsonl and a run_id matching this run, or
+  // the publish holds. W2-S7a (B-CODEX-ROLE): the role check is UNIFORM and FAMILY-SPECIFIC — the
+  // leg role must be the reviewer-class role of this publish family (gate-reviewer for review,
+  // auditor for audit, ratifier for ratify/feasibility, screen-grader for screen), no kind bypass.
+  // It rides the archive row as reviews.jsonl reviewer_leg_id; the leg is still PENDING at publish
+  // (capture-and-finalize resolves it after the workflow returns) — the reference is captured now.
+  if (reviewerLegId !== undefined) {
+    if (!LEG_ID.test(reviewerLegId)) stop('transport_failure', 'publish-gate reviewer_leg_id must be 32 lowercase hex', TRANSPORT_FAILURE)
+    const idx = identityIndex(kilnDir)
+    const leg = idx.legs.get(reviewerLegId)
+    if (!leg) stop('transport_failure', 'publish-gate reviewer_leg_id is unknown to the identity ledger', TRANSPORT_FAILURE)
+    if (leg.role !== CODEX_ROLE[family]) stop('transport_failure', 'publish-gate reviewer_leg_id role does not match this publish family', TRANSPORT_FAILURE)
+    if (leg.run_id !== runIdFromLock(kilnDir)) stop('transport_failure', 'publish-gate reviewer_leg_id belongs to another run', TRANSPORT_FAILURE)
+  }
   let verdictBytes
   try {
     verdictBytes = readFileSync(resolve(candidatePath))
   } catch (error) {
     stop('transport_failure', `publish-gate candidate unreadable: ${error.message}`, TRANSPORT_FAILURE)
   }
-  const archiveError = archiveVerdict(kilnDir, family, verdictBytes)
+  const archiveError = archiveVerdict(kilnDir, family, verdictBytes, reviewerLegId)
   if (archiveError) stop('transport_failure', archiveError, TRANSPORT_FAILURE)
   try {
     renameSync(resolve(candidatePath), resolve(gatePath))
@@ -2236,7 +2840,7 @@ if (mode === 'review' && args.length === 7) {
 } else {
   stop(
     'transport_failure',
-    'usage: kiln-review review <repo> <kilnDir> <slice> <model> <effort> <request.json> <gate-review.json> | kiln-review recheck <repo> <kilnDir> <slice> <model> <effort> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review gate-facts <kilnDir> <slice> <request.json> <gate-facts.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir> <label> | kiln-review run-checks <kilnDir> | kiln-review slices <kilnDir> | kiln-review screen-criteria <kilnDir> | kiln-review perceptual-family <kilnDir> | kiln-review ratify <repo> <request.json> <gate-review.json> <family> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json> <family> | kiln-review publish-gate <kilnDir> <family> <candidate.json> <gate-review.json> | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> <label> | kiln-review reconcile <kilnDir> | kiln-review screen <repo> <kilnDir> <model> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...] | kiln-review run-lock acquire <kilnDir> <choice> <conductorPid> | kiln-review run-lock join <kilnDir> <run_id> <owner> | kiln-review run-lock release <kilnDir> <run_id> <owner> | kiln-review run-lock takeover <kilnDir> <choice> <conductorPid>',
+    'usage: kiln-review review <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <gate-review.json> | kiln-review recheck <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review gate-facts <kilnDir> <slice> <request.json> <gate-facts.json> | kiln-review append-seal <kilnDir> <slice> <label> [<builder_leg_ids_csv> <reviewer_leg_id|->] | kiln-review seal-law <kilnDir> <label> | kiln-review run-checks <kilnDir> | kiln-review slices <kilnDir> | kiln-review screen-criteria <kilnDir> | kiln-review perceptual-family <kilnDir> | kiln-review ratify <repo> <request.json> <gate-review.json> <family> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json> <family> | kiln-review publish-gate <kilnDir> <family> <candidate.json> <gate-review.json> [<reviewer_leg_id>] | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> <label> [<auditor_leg_id|-> [<repair_leg_ids_csv>]] | kiln-review reconcile <kilnDir> | kiln-review identity-begin <kilnDir> <role> <requested_alias> <subject> | kiln-review capture-and-finalize <kilnDir> [<transcriptPath>] | kiln-review screen <repo> <kilnDir> <model> <alias> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <alias> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <alias> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...] | kiln-review run-lock acquire <kilnDir> <choice> <conductorPid> | kiln-review run-lock join <kilnDir> <run_id> <owner> | kiln-review run-lock release <kilnDir> <run_id> <owner> | kiln-review run-lock takeover <kilnDir> <choice> <conductorPid>',
     TRANSPORT_FAILURE,
   )
 }

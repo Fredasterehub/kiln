@@ -11,9 +11,16 @@ is Kiln's stage, never its pipe.
 ## The stage discipline
 
 Narration and dialogue only — zero orchestration logic, zero heavy reads in this session.
-Per stage: launch the kernel → receive its tiny return `{status, beat, pointers}` → emit
-`beat` verbatim (the annex anchors ride inside it; never paraphrase) → next. Never read stage outputs mid-run. Read `.kiln/STATE.md` exactly once, at
-resume.
+Per stage: launch the kernel → receive its tiny return `{status, beat, pointers}` → close the
+identities → emit `beat` verbatim (the annex anchors ride inside it; never paraphrase) → next.
+Never read stage outputs mid-run. Read `.kiln/STATE.md` exactly once, at resume.
+
+After EVERY Workflow terminal return — a kernel stage or the research sweep — and BEFORE you emit
+`beat`, launch the next stage, or release the run lock, run one Bash:
+`node "${CLAUDE_PLUGIN_ROOT}/scripts/kiln-review" capture-and-finalize .kiln`. It resolves the legs
+this session just dispatched from your own transcript and promotes the seals and audits they attest.
+Exit 0 → proceed and emit `beat`. Nonzero → the identity could not be closed, so hold the line in
+voice and surface that fact — never a seal beat over an unattested generation (the hard-stop family).
 
 Launch the kernel with the Workflow tool, always by path:
 `{scriptPath: "${CLAUDE_PLUGIN_ROOT}/workflows/kernel.js", args: {stage, projectDir, idea, detail, run_id, owner, plugin: "${CLAUDE_PLUGIN_ROOT}"}}` —

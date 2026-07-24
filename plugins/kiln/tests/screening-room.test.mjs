@@ -185,19 +185,19 @@ function fakeEnv({ gate, brokenCodex, promptOut, argsOut } = {}) {
   return env
 }
 
-function runScreen(fx, { model = 'gpt-5.6-sol', effort = 'high', gate, brokenCodex, promptOut, argsOut } = {}) {
+function runScreen(fx, { model = 'gpt-5.6-sol', alias = 'gpt-sol', effort = 'high', gate, brokenCodex, promptOut, argsOut } = {}) {
   const out = join(fx.repo, 'screen-gate.json')
-  const r = spawnSync('node', [REVIEW, 'screen', fx.repo, fx.kiln, model, effort, out],
+  const r = spawnSync('node', [REVIEW, 'screen', fx.repo, fx.kiln, model, alias, effort, out],
     { encoding: 'utf8', env: fakeEnv({ gate, brokenCodex, promptOut, argsOut }) })
   return { fact: (r.stdout || '').trim(), status: r.status, stderr: r.stderr || '', out }
 }
 
-function runScreenRecheck(fx, { model = 'gpt-5.6-sol', effort = 'high', prior, delta, gate, brokenCodex, promptOut } = {}) {
+function runScreenRecheck(fx, { model = 'gpt-5.6-sol', alias = 'gpt-sol', effort = 'high', prior, delta, gate, brokenCodex, promptOut } = {}) {
   const priorFile = join(fx.repo, 'prior-screen.json')
   writeFileSync(priorFile, JSON.stringify(prior))
   const deltaFile = delta === undefined ? join(fx.gen, 'manifest.json') : delta
   const out = join(fx.repo, 'screen-recheck-gate.json')
-  const r = spawnSync('node', [REVIEW, 'screen-recheck', fx.repo, fx.kiln, model, effort, priorFile, deltaFile, out],
+  const r = spawnSync('node', [REVIEW, 'screen-recheck', fx.repo, fx.kiln, model, alias, effort, priorFile, deltaFile, out],
     { encoding: 'utf8', env: fakeEnv({ gate, brokenCodex, promptOut }) })
   return { fact: (r.stdout || '').trim(), status: r.status, stderr: r.stderr || '', out }
 }
@@ -494,11 +494,11 @@ test('screen-recheck: the packet embeds every prior finding in full beside its i
 // derives the survivors itself, the packet carries the surviving rows ALONE, and an
 // off-survivor finding never publishes — byte-symmetric with the Claude leg's scope.
 
-function runScreenEscalate(fx, { model = 'gpt-5.6-sol', effort = 'high', held, gate, brokenCodex, promptOut } = {}) {
+function runScreenEscalate(fx, { model = 'gpt-5.6-sol', alias = 'gpt-sol', effort = 'high', held, gate, brokenCodex, promptOut } = {}) {
   const heldFile = join(fx.repo, 'held-screen.json')
   writeFileSync(heldFile, JSON.stringify(held))
   const out = join(fx.repo, 'screen-escalation.json')
-  const r = spawnSync('node', [REVIEW, 'screen-escalate', fx.repo, fx.kiln, model, effort, heldFile, out],
+  const r = spawnSync('node', [REVIEW, 'screen-escalate', fx.repo, fx.kiln, model, alias, effort, heldFile, out],
     { encoding: 'utf8', env: fakeEnv({ gate, brokenCodex, promptOut }) })
   return { fact: (r.stdout || '').trim(), status: r.status, stderr: r.stderr || '', out }
 }
