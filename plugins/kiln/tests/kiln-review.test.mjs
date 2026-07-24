@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { spawn, spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
@@ -1893,9 +1893,154 @@ test('archive (W2-S5): the codex path archives through runGate — a ratify acce
   assert.equal(rows[0].verdict_sha256, createHash('sha256').update(readFileSync(r.out, 'utf8')).digest('hex'), 'the archived digest binds the exact published bytes')
 })
 
+// ── W2-S7a (B08 hash-block prerequisite): the receipt digest captured AT publication ──────────
+// The gate judged .kiln/check-receipt.txt, which a later slice overwrites, so its durable sha256 is
+// bound to the verdict row here — never reconstructed at seal. Present for the receipt-judging
+// families (review, audit), an honest null for the artifact/pixel families (ratify, screen) and for
+// an absent receipt; a present-but-unreadable receipt fails the archive closed.
+test('archive (W2-S7a, B004): a review verdict binds sha256 of the EXACT on-disk receipt bytes — a raw 0xff still hashes the Buffer, not a utf8 re-encode', () => {
+  const kilnDir = mkdtempSync(join(tmpdir(), 'kiln-archive-'))
+  // A raw 0xff byte inside the receipt: reading it as utf8 text would decode to U+FFFD and re-encode
+  // to different bytes, so a string digest would NOT cover what is on disk. Hashing the raw Buffer
+  // binds exactly the receipt the gate judged (the S5 verdict-digest lesson, one file over).
+  const receipt = Buffer.concat([Buffer.from('law check ok\nslice s1 '), Buffer.from([0xff]), Buffer.from(' green\n')])
+  writeFileSync(join(kilnDir, 'check-receipt.txt'), receipt)
+  assert.equal(publishInto(kilnDir, { family: 'review', bytes: JSON.stringify(verdictOf('accept', 'rv-1')) }).status, 0)
+  const row = ledgerRows(kilnDir)[0]
+  assert.equal(row.receipt_sha256, createHash('sha256').update(receipt).digest('hex'),
+    'the row binds sha256 of the exact on-disk Buffer — invalid utf8 survives byte-for-byte')
+})
+
+test('archive (W2-S7a): the audit family also binds its receipt digest', () => {
+  const kilnDir = mkdtempSync(join(tmpdir(), 'kiln-archive-'))
+  const receipt = 'milestone checks ok\n'
+  writeFileSync(join(kilnDir, 'check-receipt.txt'), receipt)
+  assert.equal(publishInto(kilnDir, { family: 'audit', bytes: JSON.stringify(verdictOf('accept', 'au-1')) }).status, 0)
+  assert.equal(ledgerRows(kilnDir)[0].receipt_sha256, createHash('sha256').update(receipt).digest('hex'))
+})
+
+test('archive (W2-S7a): a receipt-family verdict with no receipt on disk records an honest null digest — never a fabricated hash', () => {
+  const r = publishGate({ family: 'review', bytes: JSON.stringify(verdictOf('accept', 'rv-1')) })
+  assert.equal(r.status, 0, 'the absent receipt does not block the publish — the digest is honestly absent')
+  assert.equal(r.rows[0].receipt_sha256, null, 'no receipt on disk → receipt_sha256 is null, and S7b prevents a full seal on a null digest')
+})
+
+test('archive (W2-S7a, B003): ratify, feasibility and screen judge no receipt — a stale check receipt beside them is NEVER bound to their verdict', () => {
+  // A build review earlier in the run left check-receipt.txt on disk. A ratify, feasibility or screen
+  // verdict must not inherit that unrelated receipt — its digest is null regardless of the file. The
+  // full non-receipt set is pinned so a regression widening RECEIPT_FAMILIES to any of them fails.
+  const stale = 'a stale build receipt from an earlier slice\n'
+  for (const [family, reviewId] of [['ratify', 'ra-1'], ['feasibility', 'fe-1'], ['screen', 'sc-1']]) {
+    const dir = mkdtempSync(join(tmpdir(), 'kiln-archive-'))
+    writeFileSync(join(dir, 'check-receipt.txt'), stale)
+    assert.equal(publishInto(dir, { family, bytes: JSON.stringify(verdictOf('accept', reviewId)) }).status, 0)
+    assert.equal(ledgerRows(dir)[0].receipt_sha256, null, `${family} judges no receipt — the stale receipt never binds`)
+  }
+})
+
+test('archive (W2-S7a, A001): a present-but-unreadable receipt fails the archive closed with exit 20 — no verdict publishes on an untrusted digest', () => {
+  const kilnDir = mkdtempSync(join(tmpdir(), 'kiln-archive-'))
+  // A directory where the receipt file must be: reading it is a real EISDIR fault, not ENOENT —
+  // untrusted, so the archive holds rather than record the anomaly as an honest absence.
+  mkdirSync(join(kilnDir, 'check-receipt.txt'))
+  const r = publishInto(kilnDir, { family: 'review', bytes: JSON.stringify(verdictOf('accept', 'rv-1')) })
+  assert.equal(r.status, 20, 'an unreadable receipt fails transport with the transport-failure exit')
+  assert.equal(r.published, false, 'nothing publishes over an unreadable receipt')
+  assert.equal(ledgerRows(kilnDir).length, 0, 'no row is written on the untrusted read')
+})
+
+test('archive (W2-S7a, B002): a dangling symlink is PRESENT-but-unreadable, not absent — the read ENOENT never forges an honest null', () => {
+  const kilnDir = mkdtempSync(join(tmpdir(), 'kiln-archive-'))
+  // check-receipt.txt is a symlink whose target does not exist: lstat succeeds (the link is present),
+  // but the read follows to ENOENT. The old read-only path read that ENOENT as honest absence and
+  // published receipt_sha256:null over a receipt that exists; lstat-first HOLDs it instead.
+  symlinkSync(join(kilnDir, 'no-such-receipt-target'), join(kilnDir, 'check-receipt.txt'))
+  const r = publishInto(kilnDir, { family: 'review', bytes: JSON.stringify(verdictOf('accept', 'rv-1')) })
+  assert.equal(r.status, 20, 'the dangling symlink HOLDs transport-failure — present-but-unreadable, never null')
+  assert.equal(r.published, false, 'nothing publishes over the dangling-symlink receipt')
+  assert.equal(ledgerRows(kilnDir).length, 0, 'no row is written')
+})
+
+test('archive (W2-S7a, B001): an idempotent retry re-validates the current receipt — a retry over a CHANGED or now-unreadable receipt HOLDs, never a green republish of a stale binding', () => {
+  const kilnDir = mkdtempSync(join(tmpdir(), 'kiln-archive-'))
+  writeFileSync(join(kilnDir, 'check-receipt.txt'), 'receipt A — the bytes the first gate judged\n')
+  const bytes = JSON.stringify(verdictOf('accept', 'rv-1'))
+  assert.equal(publishInto(kilnDir, { family: 'review', bytes }).status, 0, 'the first publish archives receipt A')
+  const digestA = ledgerRows(kilnDir)[0].receipt_sha256
+  // A rerun replaced the receipt before an identical-verdict retry — the archived binding is now stale.
+  writeFileSync(join(kilnDir, 'check-receipt.txt'), 'receipt B — a different rerun of the checks\n')
+  const changed = publishInto(kilnDir, { family: 'review', bytes })
+  assert.equal(changed.status, 20, 'the retry HOLDs — the current receipt no longer matches the archived digest')
+  assert.equal(ledgerRows(kilnDir).length, 1, 'no second row; the idempotent shortcut did not silently republish')
+  assert.equal(ledgerRows(kilnDir)[0].receipt_sha256, digestA, 'the archived row keeps receipt A untouched')
+  // Sol's exact reproduction: the receipt becomes unreadable (a directory) before the identical retry.
+  unlinkSync(join(kilnDir, 'check-receipt.txt'))
+  mkdirSync(join(kilnDir, 'check-receipt.txt'))
+  const unreadable = publishInto(kilnDir, { family: 'review', bytes })
+  assert.equal(unreadable.status, 20, 'the idempotent retry over a now-unreadable receipt HOLDs, never the exit-0 republish Sol reproduced')
+  assert.equal(ledgerRows(kilnDir).length, 1, 'still one row — the untrusted retry changed nothing')
+})
+
+test('archive (W2-S7a, B001-R2): an idempotent retry over a row that predates receipt capture HOLDs — a missing or malformed archived receipt_sha256 confirms nothing, never the exit-0 republish a coerced null once allowed', () => {
+  // sha256 of the EXACT verdict bytes the retry re-presents, so the shortcut FINDS the seeded row by
+  // digest and the ownership gate — not the lineage miss — decides the outcome.
+  const bytes = JSON.stringify(verdictOf('accept', 'rv-legacy'))
+  const sha = createHash('sha256').update(bytes).digest('hex')
+
+  // Pin A — the exact reproduction the reviewer filed: a pre-S7a row with NO receipt_sha256 field at
+  // all (priorRow writes an explicit null, so the field is DELETED to model the legacy row), and no
+  // receipt on disk. The old `?? null` coerced the missing field to an archived null that matched the
+  // honest-absent current digest and green-republished; the ownership gate HOLDs the retry instead.
+  const legacyDir = mkdtempSync(join(tmpdir(), 'kiln-archive-'))
+  const legacy = priorRow('rv-legacy', sha)
+  delete legacy.receipt_sha256
+  writeFileSync(join(legacyDir, 'reviews.jsonl'), JSON.stringify(legacy) + '\n')
+  const a = publishInto(legacyDir, { family: 'review', bytes })
+  assert.equal(a.status, 20, 'the retry over a legacy row HOLDs — a missing field is not an archived null')
+  assert.equal(a.published, false, 'nothing republishes over a row that never captured a receipt')
+  assert.equal(ledgerRows(legacyDir).length, 1, 'still exactly the one seeded row')
+  assert.equal(Object.prototype.hasOwnProperty.call(ledgerRows(legacyDir)[0], 'receipt_sha256'), false,
+    'the legacy row is untouched — still no receipt_sha256 field')
+
+  // Pin B — the legacy row never passes regardless of receipt state: the SAME missing field HOLDs even
+  // with a present, readable receipt on disk (here it also HOLDs via the digest-mismatch path — this
+  // pins the ownership property, not the discrimination).
+  const presentDir = mkdtempSync(join(tmpdir(), 'kiln-archive-'))
+  const legacyB = priorRow('rv-legacy', sha)
+  delete legacyB.receipt_sha256
+  writeFileSync(join(presentDir, 'reviews.jsonl'), JSON.stringify(legacyB) + '\n')
+  writeFileSync(join(presentDir, 'check-receipt.txt'), 'a readable current receipt\n')
+  const b = publishInto(presentDir, { family: 'review', bytes })
+  assert.equal(b.status, 20, 'the missing field HOLDs even with a present receipt on disk')
+  assert.equal(ledgerRows(presentDir).length, 1, 'still exactly one row')
+
+  // Pin C — a malformed archived value HOLDs: a non-null, non-hex receipt_sha256 confirms nothing.
+  const malformedDir = mkdtempSync(join(tmpdir(), 'kiln-archive-'))
+  const malformed = priorRow('rv-legacy', sha)
+  malformed.receipt_sha256 = 'not-a-digest'
+  writeFileSync(join(malformedDir, 'reviews.jsonl'), JSON.stringify(malformed) + '\n')
+  const c = publishInto(malformedDir, { family: 'review', bytes })
+  assert.equal(c.status, 20, 'a malformed archived receipt_sha256 HOLDs — it binds nothing to confirm')
+  assert.equal(ledgerRows(malformedDir).length, 1, 'still exactly one row')
+})
+
+test('archive (W2-S7a, B001-R2): an OWNED explicit-null receipt still short-circuits a true no-op retry — the fix distinguishes an honest publication-time absence from a missing field', () => {
+  // Pin D — the live production path end-to-end: no receipt on disk, so a fresh review publishes with
+  // an OWNED explicit receipt_sha256:null. Retrying the exact same bytes with still no receipt is a
+  // genuine idempotent no-op — the owned null matches the honest-absent current digest, exit 0, no
+  // second row — proving the ownership gate does not punish the honest null it must let through.
+  const kilnDir = mkdtempSync(join(tmpdir(), 'kiln-archive-'))
+  const bytes = JSON.stringify(verdictOf('accept', 'rv-1'))
+  assert.equal(publishInto(kilnDir, { family: 'review', bytes }).status, 0, 'the fresh publish archives an explicit null receipt')
+  assert.equal(ledgerRows(kilnDir)[0].receipt_sha256, null, 'the owned field is an explicit null, not a missing field')
+  const retry = publishInto(kilnDir, { family: 'review', bytes })
+  assert.equal(retry.status, 0, 'the retry over the owned explicit null is a clean idempotent no-op')
+  assert.equal(ledgerRows(kilnDir).length, 1, 'still exactly one row — the owned null short-circuits, a missing field would have HELD')
+})
+
 // A prior row exactly as archiveVerdict would have written one — used to seed a ledger with a torn tail.
 function priorRow(reviewId, sha, family = 'review', findings = []) {
-  return { family, review_id: reviewId, round: 0, verdict: findings.length ? 'changes_required' : 'accept', findings, blockers: [], law_hash: HASH, run_id: null, published_at: '2026-01-01T00:00:00.000Z', verdict_sha256: sha }
+  return { family, review_id: reviewId, round: 0, verdict: findings.length ? 'changes_required' : 'accept', findings, blockers: [], law_hash: HASH, run_id: null, published_at: '2026-01-01T00:00:00.000Z', receipt_sha256: null, verdict_sha256: sha }
 }
 
 test('archive (W2-S5): a torn final ledger line never wedges the archive — the scan skips it, the new row lands on its own line, the publish proceeds', () => {

@@ -6,6 +6,7 @@ const {
   appendFileSync,
   existsSync,
   linkSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -951,6 +952,40 @@ function runIdFromLock(kilnDir) {
   return conforms ? lock.run_id : null
 }
 
+// W2-S7a (B08 hash-block prerequisite / Sol ruling): the durable receipt digest, captured AT
+// publication. The gate judged .kiln/check-receipt.txt, which is MUTABLE — a later slice reruns the
+// checks and overwrites it — so the digest is taken here, at the archive, never reconstructed at
+// seal. Only the review and audit families judge a receipt (the kernel runs check.sh into it before
+// those gates); ratify grades an artifact against a rubric and screen grades pixels, so they judge
+// NO receipt and their receipt digest is an honest null. A receipt-family verdict whose receipt is
+// absent records null too (S7b prevents a full reviewed seal on a null digest — honest absence, not
+// a fabricated hash). A PRESENT-but-unreadable receipt is untrusted and fails the archive closed,
+// the unreadable-is-hold discipline sealMembers and writeProjectionIfStale already follow — never a
+// digest that silently reads the anomaly as absence.
+const RECEIPT_FAMILIES = new Set(['review', 'audit'])
+function receiptDigestAtPublication(kilnDir, family) {
+  if (!RECEIPT_FAMILIES.has(family)) return { digest: null }
+  const path = join(kilnDir, 'check-receipt.txt')
+  // lstat FIRST to tell genuine absence from present-but-unreadable (B002): a dangling symlink is
+  // PRESENT (lstat stats the link itself and succeeds) yet its READ fails ENOENT — following that
+  // ENOENT to a null digest would forge honest absence over a receipt that exists. lstat ENOENT is
+  // the only genuinely-absent case; any other lstat fault, or a read fault after a successful lstat
+  // (dangling symlink, EACCES, EISDIR), is present-but-unreadable and HOLDS.
+  try {
+    lstatSync(path)
+  } catch (error) {
+    if (error.code === 'ENOENT') return { digest: null }
+    return { error: `archive could not stat the check receipt for its durable digest: ${error.message}` }
+  }
+  let bytes
+  try {
+    bytes = readFileSync(path)
+  } catch (error) {
+    return { error: `archive could not read the present check receipt for its durable digest: ${error.message}` }
+  }
+  return { digest: createHash('sha256').update(bytes).digest('hex') }
+}
+
 // Append the validated verdict to the archive, keyed idempotently by (family, review_id, verdict
 // sha256): a crash retry that re-presents the exact same verdict bytes appends nothing, so retries
 // never create ambiguous rounds. The round is the count of rows already in this lineage, so it is
@@ -996,7 +1031,35 @@ function archiveVerdict(kilnDir, family, verdictBytes) {
     try { row = JSON.parse(line) } catch { continue }
     if (isObject(row) && row.family === family && row.review_id === verdict.review_id) lineage.push(row)
   }
-  if (lineage.some((row) => row.verdict_sha256 === sha)) return null
+  // W2-S7a: read and validate the receipt the gate judged BEFORE any return — including the
+  // idempotent-retry shortcut (B001). A present-but-unreadable receipt fails closed on EVERY publish,
+  // so no verdict ever publishes with an untrusted digest.
+  const receipt = receiptDigestAtPublication(kilnDir, family)
+  if (receipt.error) return receipt.error
+  const prior = lineage.find((row) => row.verdict_sha256 === sha)
+  if (prior !== undefined) {
+    // A crash retry re-presents the exact verdict bytes. It is a safe no-op ONLY when the receipt on
+    // disk NOW still matches the one archived — a retry over a receipt that changed, vanished, or
+    // appeared (per the family rules a non-receipt family archives null and reads null, so they
+    // match) would republish a STALE binding, so it HOLDS rather than green-republish (B001).
+    // B001-R2: a MISSING receipt_sha256 field is NOT an archived null — it is a row written before
+    // receipt capture existed (a pre-S7a legacy row), so nothing was ever captured to confirm the
+    // retry against. The prior row must OWN a well-formed receipt_sha256 — an explicit null (honest
+    // absence at publication) or a 64-char lowercase hex digest — before the shortcut may succeed; a
+    // missing OR malformed value HOLDs, distinct from the stale-binding mismatch below. This trusts
+    // the archived row itself, so it holds uniformly across every family.
+    const hasArchivedReceipt = Object.prototype.hasOwnProperty.call(prior, 'receipt_sha256')
+    const archivedReceipt = hasArchivedReceipt ? prior.receipt_sha256 : undefined
+    const archivedWellFormed = archivedReceipt === null
+      || (typeof archivedReceipt === 'string' && /^[0-9a-f]{64}$/.test(archivedReceipt))
+    if (!hasArchivedReceipt || !archivedWellFormed) {
+      return 'archive idempotent retry: the archived row predates receipt capture or carries a malformed receipt_sha256 — nothing confirms the historical receipt binding, refusing to republish'
+    }
+    if (archivedReceipt !== receipt.digest) {
+      return 'archive idempotent retry: the current check receipt no longer matches the archived digest — refusing to republish a stale receipt binding'
+    }
+    return null
+  }
   const row = {
     family,
     review_id: verdict.review_id,
@@ -1007,6 +1070,7 @@ function archiveVerdict(kilnDir, family, verdictBytes) {
     law_hash: verdict.law_hash,
     run_id: runIdFromLock(kilnDir),
     published_at: new Date().toISOString(),
+    receipt_sha256: receipt.digest,
     verdict_sha256: sha,
   }
   // Write safety: a crash mid-append can leave a torn final line with no trailing newline. Prefix a
