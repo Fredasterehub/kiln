@@ -1022,6 +1022,214 @@ function archiveVerdict(kilnDir, family, verdictBytes) {
   return null
 }
 
+// ── W2-S6 (C3b / B06 / B09): the attestation ledger core ────────────────────
+// seals.jsonl and audits.jsonl are the append-only TYPED truth; seals.log and audits.log are the
+// CURRENT-VALID rendered projection the kernel reads for membership (ruling 4 keeps membership on
+// the .log, JSONL parsing deferred to W4). append-seal/append-audit append the JSONL row THEN
+// re-render the whole .log from the JSONL as one atomic temp+rename, so a torn .log never
+// accumulates. reconcile heals a crash between the JSONL append and the .log render, and migrates a
+// W1 project whose .log predates the JSONL. S6 has no invalidation, so every JSONL row renders in
+// append order (the plan/seam order the appends already carry — A03); S7 will teach the projection
+// to drop invalidated rows and the rows to carry the full-hash block, identity and coverage.
+const SEAL_LEDGER = { jsonl: 'seals.jsonl', log: 'seals.log', type: 'seal' }
+const AUDIT_LEDGER = { jsonl: 'audits.jsonl', log: 'audits.log', type: 'audit' }
+
+// The closed family-label set a FRESH seal or audit row carries — exactly what append-seal and
+// append-audit validate on write, so a real fresh row always conforms. A migrated legacy row is
+// exempt: it preserves the verbatim W1 record, whose oldest forms carry no label (a bare-slice
+// seals.log line, a pre-S4-D4 two-field `<seam> accept` audit line).
+const LEDGER_LABELS = new Set(['dual', 'single-family'])
+
+// One projection line for a CONFORMING ledger row — the EXACT legacy grammar, so every rendered
+// .log is byte-identical to what the old append wrote: a seal is `<slice> <label>`, an audit is
+// `<seam> accept <label>` (the S4-D4 third field, absent on a pre-S4-D4 legacy audit). Returns null
+// for a row that does NOT conform to THIS ledger's S6 schema — a wrong-type row (a seal in the audit
+// ledger or an audit in the seal ledger), an audit whose outcome is not the sealed `accept`, or a
+// FRESH row without a conforming {dual, single-family} label (the label-less form is legitimate ONLY
+// for a migrated legacy:true row, so it never leaks to a fresh row as a two-field audit or a
+// trailing-space seal). A non-conforming row is a membership ANOMALY (corruption or a future-bug
+// row), never a torn line (torn lines are skipped at the JSONL read); renderProjection HOLDS on the
+// null. S7 extends the accepted types and outcomes (invalidation/reseal rows), so this grows here.
+function ledgerProjectionLine(descriptor, row) {
+  if (!isObject(row) || row.type !== descriptor.type) return null
+  const legacy = row.legacy === true
+  if (descriptor.type === 'seal') {
+    if (typeof row.slice !== 'string' || row.slice === '') return null
+    // A legacy seal keeps its W1 form: a labelled line renders `<slice> <label>`, a bare-slice line
+    // `<slice>`. A fresh seal must carry a conforming label and always renders `<slice> <label>`.
+    if (legacy) return typeof row.label === 'string' && row.label !== '' ? row.slice + ' ' + row.label : row.slice
+    return LEDGER_LABELS.has(row.label) ? row.slice + ' ' + row.label : null
+  }
+  if (typeof row.seam !== 'string' || row.seam === '' || row.outcome !== 'accept') return null
+  // A legacy audit keeps its W1 form: a three-field line renders `<seam> accept <label>`, a
+  // pre-S4-D4 two-field line `<seam> accept`. A fresh audit must carry a conforming label.
+  if (legacy) return typeof row.label === 'string' && row.label !== '' ? row.seam + ' accept ' + row.label : row.seam + ' accept'
+  return LEDGER_LABELS.has(row.label) ? row.seam + ' accept ' + row.label : null
+}
+
+// Render the current-valid projection from the trusted rows. A row that does not conform to the
+// ledger schema (ledgerProjectionLine returns null) is a membership anomaly in the append-only
+// truth, so the render HOLDS fail-closed rather than SILENTLY drop it (which could hide a real seal)
+// or render it as garbage (A02). Torn lines never reach here — they are skipped at the JSONL read.
+function renderProjection(descriptor, rows) {
+  const lines = []
+  for (const row of rows) {
+    const line = ledgerProjectionLine(descriptor, row)
+    if (line === null) {
+      stop('transport_failure', `${descriptor.jsonl} carries a row that does not conform to the ${descriptor.type} ledger schema — a membership anomaly; reconcile holds rather than drop or misrender it`, TRANSPORT_FAILURE)
+    }
+    lines.push(line)
+  }
+  return lines.length ? lines.join('\n') + '\n' : ''
+}
+
+// Read the append-only JSONL truth into rows, tolerating a torn final line (a crash mid-append on a
+// ledger that is never deleted): an unparseable line is skipped, exactly as archiveVerdict and
+// sealMembers degrade, so one torn byte never wedges every future render. Returns null when the
+// JSONL is ABSENT (the caller then considers a W1 migration), distinct from present-but-empty [].
+function readLedgerRows(path) {
+  let raw = ''
+  try {
+    raw = readFileSync(path, 'utf8')
+  } catch (error) {
+    if (error.code === 'ENOENT') return null
+    throw error
+  }
+  const rows = []
+  for (const line of raw.split('\n')) {
+    if (line.trim() === '') continue
+    try { rows.push(JSON.parse(line)) } catch { continue }
+  }
+  return rows
+}
+
+// Re-render the .log from the rows as one atomic temp+rename, but ONLY when the current .log differs
+// — a matching projection (the common reconcile no-op, and every byte-exact migration) is left
+// untouched so no spurious write churns the file.
+function writeProjectionIfStale(kilnDir, descriptor, rows) {
+  const projection = renderProjection(descriptor, rows)
+  const logPath = join(kilnDir, descriptor.log)
+  let current = null
+  try {
+    current = readFileSync(logPath, 'utf8')
+  } catch (error) {
+    // ENOENT is a legitimately absent .log (a fresh project). ANY other error — EACCES on a
+    // chmod-000 log, EISDIR, a genuine IO fault — is an UNREADABLE membership log, and unreadable is
+    // UNTRUSTED: coercing it to null would let the wipe-guard read it as absent, skip the hold, and
+    // the kernel would then judge membership over a log it could not read. Hold fail-closed instead,
+    // mirroring readLedgerRows and the S3 sealMembers "unreadable ledger = HOLD" discipline.
+    if (error.code !== 'ENOENT') {
+      stop('transport_failure', `${descriptor.log} could not be read — an unreadable membership log is untrusted; reconcile holds rather than judge it absent`, TRANSPORT_FAILURE)
+    }
+    current = null
+  }
+  if (current === projection) return
+  // A zero-row projection is legitimate ONLY for a genuinely empty ledger — a fresh project with no
+  // .log yet writes nothing, so reconcile never creates an empty seals.log a scenario poll would
+  // misread. But an EMPTY projection beside a NONEMPTY .log is an unreconcilable B09 anomaly: the
+  // JSONL truth renders no members while the .log still claims sealed slices (a present-but-empty or
+  // torn-only JSONL that skipped migration because it is not ABSENT). Rendering '' would wipe the
+  // membership log and the next boot would rebuild already-sealed work — the exact failure the ledger
+  // exists to prevent. Hold fail-closed rather than overwrite. In S6 append-only means this is ALWAYS
+  // the anomaly; S7 note: once invalidation rows can render null, a legitimately-emptied ledger will
+  // need an explicit signal to tell it apart from this wipe.
+  if (projection === '') {
+    if (current === null) return
+    stop('transport_failure', `${descriptor.log} is nonempty but its JSONL truth renders no members — refusing to wipe sealed membership`, TRANSPORT_FAILURE)
+  }
+  mkdirSync(kilnDir, { recursive: true })
+  const temporary = join(kilnDir, '.' + descriptor.log + '.tmp-' + process.pid + '-' + randomUUID())
+  writeFileSync(temporary, projection)
+  renameSync(temporary, logPath)
+}
+
+// Parse one legacy .log line into a LEGACY-marked typed row for the W1->W2 migration (B09). The
+// readable fields are recovered; run_id and ts are honestly ABSENT (a legacy line records neither),
+// never fabricated. legacy:true lets S7 require re-verification before conferring full-trust
+// attestation; for S6 the row still renders and still grants membership, preserving the exact W1
+// resume behaviour the migration must never rebuild.
+function legacyLedgerRow(descriptor, line) {
+  if (descriptor.type === 'seal') {
+    const space = line.indexOf(' ')
+    return space === -1
+      ? { type: 'seal', slice: line, label: '', legacy: true }
+      : { type: 'seal', slice: line.slice(0, space), label: line.slice(space + 1), legacy: true }
+  }
+  const tokens = line.split(' ')
+  const row = { type: 'audit', seam: tokens[0], outcome: tokens[1] !== undefined ? tokens[1] : 'accept', legacy: true }
+  if (tokens[2] !== undefined) row.label = tokens[2]
+  return row
+}
+
+// W1->W2 migration (B09). A nonempty legacy .log with no JSONL is a project sealed before the
+// ledger existed: import each line as a legacy row so the JSONL becomes the truth WITHOUT rebuilding
+// sealed work or fabricating hashes. Written atomically; an absent or empty legacy .log migrates
+// nothing (there is no sealed record to preserve).
+function migrateLegacyLog(kilnDir, descriptor) {
+  let legacy = ''
+  try {
+    legacy = readFileSync(join(kilnDir, descriptor.log), 'utf8')
+  } catch (error) {
+    if (error.code === 'ENOENT') return
+    throw error
+  }
+  if (legacy.trim() === '') return
+  const rows = []
+  for (const line of legacy.split('\n')) {
+    if (line === '') continue
+    rows.push(legacyLedgerRow(descriptor, line))
+  }
+  const body = rows.map((row) => JSON.stringify(row) + '\n').join('')
+  mkdirSync(kilnDir, { recursive: true })
+  const temporary = join(kilnDir, '.' + descriptor.jsonl + '.tmp-' + process.pid + '-' + randomUUID())
+  writeFileSync(temporary, body)
+  renameSync(temporary, join(kilnDir, descriptor.jsonl))
+}
+
+// Reconcile one ledger: the JSONL is truth. Present -> re-render the .log from it if stale. Absent
+// -> migrate a legacy .log into JSONL first (a W1 project), then render. Idempotent: a second call
+// finds the JSONL present and the .log already matching, and writes nothing. A genuine IO fault
+// fails closed through stop so a caller never advances on an unreconciled ledger.
+function reconcileLedger(kilnDir, descriptor) {
+  try {
+    let rows = readLedgerRows(join(kilnDir, descriptor.jsonl))
+    if (rows === null) {
+      migrateLegacyLog(kilnDir, descriptor)
+      rows = readLedgerRows(join(kilnDir, descriptor.jsonl))
+      if (rows === null) return
+    }
+    writeProjectionIfStale(kilnDir, descriptor, rows)
+  } catch (error) {
+    stop('transport_failure', `reconcile could not heal the ${descriptor.log} projection: ${error.message}`, TRANSPORT_FAILURE)
+  }
+}
+
+// Append a typed row to the JSONL truth, then re-render the .log from the JSONL. The append prefixes
+// a newline when a crash left the ledger without a trailing one, so the new row lands on its own line
+// and the torn line stays independently recoverable (the archiveVerdict write discipline). Callers
+// reconcile FIRST so a stale .log or an un-migrated W1 log never misleads the render.
+function appendLedgerRow(kilnDir, descriptor, row) {
+  const jsonlPath = join(kilnDir, descriptor.jsonl)
+  let raw = ''
+  try {
+    raw = readFileSync(jsonlPath, 'utf8')
+  } catch (error) {
+    if (error.code !== 'ENOENT') stop('transport_failure', `${descriptor.jsonl} could not be read: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  const prefix = raw.length > 0 && !raw.endsWith('\n') ? '\n' : ''
+  mkdirSync(kilnDir, { recursive: true })
+  try {
+    appendFileSync(jsonlPath, prefix + JSON.stringify(row) + '\n')
+  } catch (error) {
+    stop('transport_failure', `${descriptor.jsonl} could not be appended: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  try {
+    writeProjectionIfStale(kilnDir, descriptor, readLedgerRows(jsonlPath) || [])
+  } catch (error) {
+    stop('transport_failure', `${descriptor.log} projection could not be rendered: ${error.message}`, TRANSPORT_FAILURE)
+  }
+}
+
 // process.kill(pid, 0) probes liveness without delivering a signal. Only ESRCH PROVES the
 // holder is gone; success and EPERM prove it alive; any other error, or a missing or
 // non-positive pid, is UNKNOWN. Takeover requires PROVEN dead, so it treats UNKNOWN as
@@ -1186,9 +1394,13 @@ if (mode === 'review' && args.length === 7) {
   process.stdout.write(facts.lawHash + '\n')
   process.exit(ACCEPT)
 } else if (mode === 'append-seal' && args.length === 3) {
-  // The recovered v3 "Thoth scribe": an opaque, trusted seal-append verb. The
-  // kernel courier calls it instead of a bare shell append it declines to
-  // moralize; the seals.log semantics live here. Closed label, nonempty slice.
+  // The recovered v3 "Thoth scribe": an opaque, trusted seal-append verb. The kernel courier calls
+  // it instead of a bare shell append it declines to moralize; the seal ledger semantics live here.
+  // Closed label, nonempty slice. W2-S6: the row lands in seals.jsonl (the append-only truth) and
+  // seals.log is re-rendered from it as the current-valid projection. reconcile FIRST so a crash
+  // between a prior append and its render, or a W1 project whose seals.log predates the JSONL, is
+  // healed before this append reads the ledger. The S6 row carries the fields cheaply available now
+  // — the run_id from the CLI-owned lock (S5) and an ISO stamp; S7 adds the full-hash block.
   const [kilnDir, slice, label] = args
   if (label !== 'dual' && label !== 'single-family') {
     stop('transport_failure', 'append-seal label must be dual or single-family', TRANSPORT_FAILURE)
@@ -1196,11 +1408,8 @@ if (mode === 'review' && args.length === 7) {
   if (typeof slice !== 'string' || slice.trim() === '') {
     stop('transport_failure', 'append-seal slice id must be a nonempty string', TRANSPORT_FAILURE)
   }
-  try {
-    appendFileSync(join(kilnDir, 'seals.log'), `${slice} ${label}\n`)
-  } catch (error) {
-    stop('transport_failure', `append-seal could not write seals.log: ${error.message}`, TRANSPORT_FAILURE)
-  }
+  reconcileLedger(kilnDir, SEAL_LEDGER)
+  appendLedgerRow(kilnDir, SEAL_LEDGER, { type: 'seal', slice, label, run_id: runIdFromLock(kilnDir), ts: new Date().toISOString() })
   process.exit(ACCEPT)
 } else if (mode === 'seal-law' && args.length === 2) {
   // The trusted LAW lock, content-blind. W2-S3: the seal now covers the whole trio —
@@ -1509,11 +1718,23 @@ if (mode === 'review' && args.length === 7) {
   if (label !== 'dual' && label !== 'single-family') {
     stop('transport_failure', 'append-audit label must be dual or single-family', TRANSPORT_FAILURE)
   }
-  try {
-    appendFileSync(join(kilnDir, 'audits.log'), `${seamSliceId} accept ${label}\n`)
-  } catch (error) {
-    stop('transport_failure', `append-audit could not write audits.log: ${error.message}`, TRANSPORT_FAILURE)
+  // W2-S6: the row lands in audits.jsonl (append-only truth) and audits.log is re-rendered from it
+  // as the current-valid projection, exactly as append-seal treats the seal ledger. reconcile first
+  // so a stale or un-migrated audits.log never misleads this append.
+  reconcileLedger(kilnDir, AUDIT_LEDGER)
+  appendLedgerRow(kilnDir, AUDIT_LEDGER, { type: 'audit', seam: seamSliceId, outcome: 'accept', label, run_id: runIdFromLock(kilnDir), ts: new Date().toISOString() })
+  process.exit(ACCEPT)
+} else if (mode === 'reconcile' && args.length === 1) {
+  // W2-S6 (B06): the trusted reconcile the kernel calls once at boot before its membership reads,
+  // and the append verbs call on entry. Renders seals.log and audits.log from their JSONL truth when
+  // stale or absent, migrating a W1 legacy .log into JSONL first. Idempotent and content-blind — an
+  // absent ledger reconciles to nothing, so a fresh project creates no empty projection.
+  const [kilnDir] = args
+  if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
+    stop('transport_failure', 'reconcile kilnDir must be a nonempty string', TRANSPORT_FAILURE)
   }
+  reconcileLedger(kilnDir, SEAL_LEDGER)
+  reconcileLedger(kilnDir, AUDIT_LEDGER)
   process.exit(ACCEPT)
 } else if (mode === 'screen' && args.length === 5) {
   // W8-S2: the perceptual screen — one fresh grader over the CURRENT evidence
@@ -1951,7 +2172,7 @@ if (mode === 'review' && args.length === 7) {
 } else {
   stop(
     'transport_failure',
-    'usage: kiln-review review <repo> <kilnDir> <slice> <model> <effort> <request.json> <gate-review.json> | kiln-review recheck <repo> <kilnDir> <slice> <model> <effort> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review gate-facts <kilnDir> <slice> <request.json> <gate-facts.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir> <label> | kiln-review run-checks <kilnDir> | kiln-review slices <kilnDir> | kiln-review screen-criteria <kilnDir> | kiln-review perceptual-family <kilnDir> | kiln-review ratify <repo> <request.json> <gate-review.json> <family> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json> <family> | kiln-review publish-gate <kilnDir> <family> <candidate.json> <gate-review.json> | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> <label> | kiln-review screen <repo> <kilnDir> <model> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...] | kiln-review run-lock acquire <kilnDir> <choice> <conductorPid> | kiln-review run-lock join <kilnDir> <run_id> <owner> | kiln-review run-lock release <kilnDir> <run_id> <owner> | kiln-review run-lock takeover <kilnDir> <choice> <conductorPid>',
+    'usage: kiln-review review <repo> <kilnDir> <slice> <model> <effort> <request.json> <gate-review.json> | kiln-review recheck <repo> <kilnDir> <slice> <model> <effort> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review gate-facts <kilnDir> <slice> <request.json> <gate-facts.json> | kiln-review append-seal <kilnDir> <slice> <label> | kiln-review seal-law <kilnDir> <label> | kiln-review run-checks <kilnDir> | kiln-review slices <kilnDir> | kiln-review screen-criteria <kilnDir> | kiln-review perceptual-family <kilnDir> | kiln-review ratify <repo> <request.json> <gate-review.json> <family> | kiln-review ratify-recheck <repo> <request.json> <prior-gate-review.json> <gate-review.json> <family> | kiln-review publish-gate <kilnDir> <family> <candidate.json> <gate-review.json> | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> <label> | kiln-review reconcile <kilnDir> | kiln-review screen <repo> <kilnDir> <model> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...] | kiln-review run-lock acquire <kilnDir> <choice> <conductorPid> | kiln-review run-lock join <kilnDir> <run_id> <owner> | kiln-review run-lock release <kilnDir> <run_id> <owner> | kiln-review run-lock takeover <kilnDir> <choice> <conductorPid>',
     TRANSPORT_FAILURE,
   )
 }

@@ -109,6 +109,10 @@ async function runKernel(kargs, script) {
     // Foreign-lock scenarios override with a nonzero exit (and an ids owner to name).
     'run-lock:join': { exit: 0, ids: [] },
     'tiers:boot': TIERS_OK, 'audit:check': { exit: 0 },
+    // W2-S6: the boot-time ledger reconcile fires on every non-brainstorm stage just before the
+    // seal read; the harness answers a clean reconcile by default so every prior scenario boots and
+    // reads membership exactly as before. A reconcile-fault scenario overrides this with a nonzero.
+    'ledger:reconcile': { exit: 0 },
     'seal:set': { exit: 0, ids: [] },
     'perceptual:presence': { exit: 1 },
     'perceptual:dial': { exit: 0, perceptual: 'dormant', recovery_cap: 1 },
@@ -801,6 +805,24 @@ test('runtime (C5): an UNREADABLE seal ledger HOLDS fail-closed — no slice bui
   assert.ok(ret.beat.includes('The stage worker returned no usable result'), 'the transport-failure hold beat (entry 1) arrives')
   assert.equal(calls.filter(c => c.label && c.label.startsWith('slice:')).length, 0, 'no slice builds over an untrusted ledger')
   assert.equal(calls.filter(c => c.label === 'seal:append').length, 0, 'no seal appends over an untrusted ledger')
+})
+
+test('runtime (W2-S6): the boot ledger reconcile precedes the seal read in source, and a reconcile fault HOLDS before any membership read', async () => {
+  // Source wiring: the reconcile leg is seated BEFORE the seal-ledger read, so sealMembers and the
+  // audit grep always run over a current-valid projection (a crash-lagged or W1 legacy .log is
+  // healed first).
+  assert.ok(src.indexOf("'ledger:reconcile'") < src.indexOf("'seal:set'"), 'reconcile is wired before the seal read')
+  // Runtime: a reconcile fault is untrusted membership — the run holds fail-closed and never reads
+  // the seal ledger or builds a slice over a projection it could not heal.
+  const { ret, calls } = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'ledger:reconcile': { exit: 20 },
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'transport-failure', 'a reconcile fault holds the run')
+  assert.ok(ret.beat.includes('The stage worker returned no usable result'), 'the transport-failure hold beat arrives')
+  assert.equal(calls.filter(c => c.label === 'seal:set').length, 0, 'no membership read over an unreconciled ledger')
+  assert.equal(calls.filter(c => c.label && c.label.startsWith('slice:')).length, 0, 'no slice work over an unreconciled ledger')
 })
 
 test('runtime (C5, live-add): a stage-end red owned by a slice sealed EARLIER in THIS pass reopens it — the live SEALS.add, never a disk snapshot', async () => {

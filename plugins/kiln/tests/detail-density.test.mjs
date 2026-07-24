@@ -58,6 +58,8 @@ async function runLaw(detail) {
     'tiers:boot': TIERS_OK,
     'law:preflight': GREEN,
     'law:stage-end': GREEN,
+    // W2-S6: the boot-time ledger reconcile fires just before the seal read; a clean reconcile here.
+    'ledger:reconcile': { exit: 0 },
     // S3 (C5+M5): every non-brainstorm stage reads the seal ledger once into an exact-membership
     // set (firstSealed binds reopen to it); an empty greenfield ledger is the default here.
     'seal:set': { exit: 0, ids: [] },

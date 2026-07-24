@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { spawn, spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
@@ -1031,6 +1031,216 @@ test('kiln-review: append-audit is the only audits.log writer — exact line for
   assert.equal(readFileSync(log, 'utf8'), 's3 accept dual\nphase-2.final accept single-family\nfeature/ui accept dual\n', 'no rejected call ever appended')
   const usage = spawnSync('node', [REVIEW, 'append-audit', dir, 's3'], { encoding: 'utf8' })
   assert.equal(usage.status, 20, 'a wrong arg count is the usage failure')
+})
+
+// ── W2-S6 (C3b / B06 + B09): the attestation ledger core ─────────────────────
+// seals.jsonl/audits.jsonl are the append-only typed truth; seals.log/audits.log are the
+// current-valid rendered projection the kernel reads for membership. These pin the JSONL row shape,
+// the byte-exact projection, reconcile crash-consistency, the W1->W2 migration, and idempotency.
+const s6Dir = () => mkdtempSync(join(tmpdir(), 'kiln-s6-'))
+const s6Rows = (p) => readFileSync(p, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+const s6Lock = (dir, run) => writeFileSync(join(dir, 'run.lock'), JSON.stringify({ run_id: run, owner: 'owner-x', conductor_pid: 4242 }))
+
+test('kiln-review (W2-S6): append-seal writes the typed seals.jsonl row and renders the byte-exact seals.log projection', () => {
+  const dir = s6Dir()
+  assert.equal(spawnSync('node', [REVIEW, 'append-seal', dir, 's1', 'dual'], { encoding: 'utf8' }).status, 0)
+  assert.equal(spawnSync('node', [REVIEW, 'append-seal', dir, 's2', 'single-family'], { encoding: 'utf8' }).status, 0)
+  // The projection is byte-identical to the legacy grammar, one line per row, in append order.
+  assert.equal(readFileSync(join(dir, 'seals.log'), 'utf8'), 's1 dual\ns2 single-family\n', 'seals.log renders the exact legacy grammar in append order')
+  const rows = s6Rows(join(dir, 'seals.jsonl'))
+  assert.equal(rows.length, 2, 'one append-only JSONL row per seal')
+  assert.deepEqual({ type: rows[0].type, slice: rows[0].slice, label: rows[0].label }, { type: 'seal', slice: 's1', label: 'dual' }, 'the seal row carries type/slice/label')
+  assert.equal(rows[0].run_id, null, 'no run lock in this fixture, so run_id is honestly null (never fabricated)')
+  assert.match(rows[0].ts, /^\d{4}-\d{2}-\d{2}T/, 'the CLI stamps an ISO ts')
+  assert.equal(rows[1].label, 'single-family', 'the second row is the degraded label')
+})
+
+test('kiln-review (W2-S6): append-seal captures the run_id from the CLI-owned lock', () => {
+  const dir = s6Dir()
+  s6Lock(dir, 'run-s6-abc')
+  assert.equal(spawnSync('node', [REVIEW, 'append-seal', dir, 's1', 'dual'], { encoding: 'utf8' }).status, 0)
+  assert.equal(s6Rows(join(dir, 'seals.jsonl'))[0].run_id, 'run-s6-abc', 'the seal row binds the run lock run_id')
+})
+
+test('kiln-review (W2-S6): append-audit writes the typed audits.jsonl row and renders the byte-exact audits.log projection', () => {
+  const dir = s6Dir()
+  assert.equal(spawnSync('node', [REVIEW, 'append-audit', dir, 'seam-1', 'dual'], { encoding: 'utf8' }).status, 0)
+  assert.equal(spawnSync('node', [REVIEW, 'append-audit', dir, 'phase-2.final', 'single-family'], { encoding: 'utf8' }).status, 0)
+  assert.equal(readFileSync(join(dir, 'audits.log'), 'utf8'), 'seam-1 accept dual\nphase-2.final accept single-family\n', 'audits.log renders `<seam> accept <label>` in append order')
+  const rows = s6Rows(join(dir, 'audits.jsonl'))
+  assert.deepEqual({ type: rows[0].type, seam: rows[0].seam, outcome: rows[0].outcome, label: rows[0].label }, { type: 'audit', seam: 'seam-1', outcome: 'accept', label: 'dual' }, 'the audit row carries type/seam/outcome/label')
+})
+
+test('kiln-review (W2-S6): reconcile re-renders a stale seals.log from the JSONL truth (crash between the JSONL append and the .log render)', () => {
+  const dir = s6Dir()
+  // The crash window: two rows landed in the JSONL, but the .log render only captured the first.
+  writeFileSync(join(dir, 'seals.jsonl'), '{"type":"seal","slice":"s1","label":"dual"}\n{"type":"seal","slice":"s2","label":"dual"}\n')
+  writeFileSync(join(dir, 'seals.log'), 's1 dual\n')
+  assert.equal(spawnSync('node', [REVIEW, 'reconcile', dir], { encoding: 'utf8' }).status, 0)
+  assert.equal(readFileSync(join(dir, 'seals.log'), 'utf8'), 's1 dual\ns2 dual\n', 'reconcile heals the stale .log to match the JSONL truth')
+})
+
+test('kiln-review (W2-S6): reconcile renders an ABSENT .log from the JSONL truth (crash before the first render)', () => {
+  const dir = s6Dir()
+  writeFileSync(join(dir, 'audits.jsonl'), '{"type":"audit","seam":"seam-1","outcome":"accept","label":"dual"}\n')
+  assert.ok(!existsSync(join(dir, 'audits.log')), 'no .log yet')
+  assert.equal(spawnSync('node', [REVIEW, 'reconcile', dir], { encoding: 'utf8' }).status, 0)
+  assert.equal(readFileSync(join(dir, 'audits.log'), 'utf8'), 'seam-1 accept dual\n', 'reconcile renders the .log from the JSONL')
+})
+
+test('kiln-review (W2-S6): reconcile on a fresh project with neither ledger creates nothing', () => {
+  const dir = s6Dir()
+  assert.equal(spawnSync('node', [REVIEW, 'reconcile', dir], { encoding: 'utf8' }).status, 0)
+  assert.ok(!existsSync(join(dir, 'seals.log')) && !existsSync(join(dir, 'seals.jsonl')), 'no empty seals ledger is created')
+  assert.ok(!existsSync(join(dir, 'audits.log')) && !existsSync(join(dir, 'audits.jsonl')), 'no empty audits ledger is created')
+})
+
+test('kiln-review (W2-S6): reconcile is idempotent — a second run over a coherent ledger writes nothing new', () => {
+  const dir = s6Dir()
+  assert.equal(spawnSync('node', [REVIEW, 'append-seal', dir, 's1', 'dual'], { encoding: 'utf8' }).status, 0)
+  const jsonlBefore = readFileSync(join(dir, 'seals.jsonl'), 'utf8')
+  const logBefore = readFileSync(join(dir, 'seals.log'), 'utf8')
+  assert.equal(spawnSync('node', [REVIEW, 'reconcile', dir], { encoding: 'utf8' }).status, 0)
+  assert.equal(spawnSync('node', [REVIEW, 'reconcile', dir], { encoding: 'utf8' }).status, 0)
+  assert.equal(readFileSync(join(dir, 'seals.jsonl'), 'utf8'), jsonlBefore, 'reconcile never appends to the JSONL truth')
+  assert.equal(readFileSync(join(dir, 'seals.log'), 'utf8'), logBefore, 'a coherent .log is left byte-identical')
+})
+
+test('kiln-review (W2-S6): render tolerates a torn JSONL line — the valid rows still project', () => {
+  const dir = s6Dir()
+  // A crash left a partial final line with no trailing newline; it must never wedge the render.
+  writeFileSync(join(dir, 'seals.jsonl'), '{"type":"seal","slice":"s1","label":"dual"}\n{"type":"seal","slice":"s2"')
+  assert.equal(spawnSync('node', [REVIEW, 'reconcile', dir], { encoding: 'utf8' }).status, 0)
+  assert.equal(readFileSync(join(dir, 'seals.log'), 'utf8'), 's1 dual\n', 'the torn line is skipped, the valid row still renders')
+})
+
+test('kiln-review (W2-S6, B09 fail-closed): a present-but-empty seals.jsonl beside a nonempty seals.log HOLDS rather than wipe membership', () => {
+  const dir = s6Dir()
+  // The JSONL truth renders no members while the .log still claims sealed slices — an unreconcilable
+  // anomaly. Rendering the empty projection would wipe seals.log and the next boot would rebuild
+  // already-sealed work (the exact B09 failure). reconcile must hold and leave the log untouched, so
+  // the kernel boot reconcile then holds before any membership read.
+  writeFileSync(join(dir, 'seals.jsonl'), '')
+  writeFileSync(join(dir, 'seals.log'), 's1 dual\ns2 dual\n')
+  const r = spawnSync('node', [REVIEW, 'reconcile', dir], { encoding: 'utf8' })
+  assert.equal(r.status, 20, 'the empty-truth-over-nonempty-log anomaly holds transport-failure')
+  assert.equal(readFileSync(join(dir, 'seals.log'), 'utf8'), 's1 dual\ns2 dual\n', 'seals.log membership is preserved, never wiped')
+})
+
+test('kiln-review (W2-S6, B09 fail-closed): a torn-ONLY seals.jsonl beside a nonempty seals.log HOLDS, log untouched', () => {
+  const dir = s6Dir()
+  // One unparseable partial line, no valid rows: readLedgerRows returns [] (not null — the file is
+  // present, so migration is skipped) and the projection is empty — the same wipe anomaly.
+  writeFileSync(join(dir, 'seals.jsonl'), '{"type":"seal","slice":"s1"')
+  writeFileSync(join(dir, 'seals.log'), 's1 dual\n')
+  const r = spawnSync('node', [REVIEW, 'reconcile', dir], { encoding: 'utf8' })
+  assert.equal(r.status, 20, 'a torn-only JSONL beside a nonempty log holds, never wipes')
+  assert.equal(readFileSync(join(dir, 'seals.log'), 'utf8'), 's1 dual\n', 'seals.log is untouched')
+})
+
+test('kiln-review (W2-S6, B01): an UNREADABLE nonempty seals.log during reconcile HOLDS — untrusted, never coerced to absent', () => {
+  const dir = s6Dir()
+  // empty seals.jsonl renders no members; a chmod-000 nonempty seals.log must not read as absent and
+  // silently skip the wipe-guard — an unreadable membership log is untrusted, so reconcile holds.
+  writeFileSync(join(dir, 'seals.jsonl'), '')
+  writeFileSync(join(dir, 'seals.log'), 's1 dual\ns2 dual\n')
+  chmodSync(join(dir, 'seals.log'), 0o000)
+  const r = spawnSync('node', [REVIEW, 'reconcile', dir], { encoding: 'utf8' })
+  chmodSync(join(dir, 'seals.log'), 0o644)
+  assert.equal(r.status, 20, 'an unreadable membership log holds transport-failure, never judged absent')
+  assert.equal(readFileSync(join(dir, 'seals.log'), 'utf8'), 's1 dual\ns2 dual\n', 'the log is untouched')
+})
+
+test('kiln-review (W2-S6, B01): an UNREADABLE nonempty audits.log during reconcile HOLDS (the audit variant)', () => {
+  const dir = s6Dir()
+  writeFileSync(join(dir, 'audits.jsonl'), '')
+  writeFileSync(join(dir, 'audits.log'), 'seam-1 accept dual\n')
+  chmodSync(join(dir, 'audits.log'), 0o000)
+  const r = spawnSync('node', [REVIEW, 'reconcile', dir], { encoding: 'utf8' })
+  chmodSync(join(dir, 'audits.log'), 0o644)
+  assert.equal(r.status, 20, 'an unreadable audits.log holds the same way')
+})
+
+test('kiln-review (W2-S6, A02): a cross-type row in the JSONL truth HOLDS — never renders wrong-ledger membership', () => {
+  // An audit-type row in seals.jsonl (and a seal-type row in audits.jsonl) is a schema anomaly: it
+  // must neither render as membership nor be silently dropped.
+  const seal = s6Dir()
+  writeFileSync(join(seal, 'seals.jsonl'), '{"type":"audit","seam":"s1","outcome":"accept","label":"dual"}\n')
+  assert.equal(spawnSync('node', [REVIEW, 'reconcile', seal], { encoding: 'utf8' }).status, 20, 'an audit row in the seal ledger holds')
+  assert.ok(!existsSync(join(seal, 'seals.log')), 'no membership is rendered from the anomaly')
+  const audit = s6Dir()
+  writeFileSync(join(audit, 'audits.jsonl'), '{"type":"seal","slice":"s1","label":"dual"}\n')
+  assert.equal(spawnSync('node', [REVIEW, 'reconcile', audit], { encoding: 'utf8' }).status, 20, 'a seal row in the audit ledger holds')
+})
+
+test('kiln-review (W2-S6, A02): an audit row whose outcome is not accept HOLDS — a non-sealed verdict never enters the projection', () => {
+  const dir = s6Dir()
+  writeFileSync(join(dir, 'audits.jsonl'), '{"type":"audit","seam":"s1","outcome":"reject","label":"dual"}\n')
+  assert.equal(spawnSync('node', [REVIEW, 'reconcile', dir], { encoding: 'utf8' }).status, 20, 'outcome not equal to accept is a membership anomaly, held fail-closed')
+})
+
+test('kiln-review (W2-S6, A02-R2): a FRESH seal or audit row without a conforming {dual, single-family} label HOLDS — the label-less form is legacy-only', () => {
+  // Fresh rows come only from append-seal/append-audit, which enforce dual|single-family on write. A
+  // fresh row (no legacy:true) with a missing, empty, non-string, or out-of-set label must not leak
+  // through as a two-field `<seam> accept` audit or a trailing-space `<slice> ` seal.
+  const badLabels = [{}, { label: '' }, { label: 123 }, { label: 'triple' }]
+  for (const extra of badLabels) {
+    const sd = s6Dir()
+    writeFileSync(join(sd, 'seals.jsonl'), JSON.stringify({ type: 'seal', slice: 's1', ...extra }) + '\n')
+    assert.equal(spawnSync('node', [REVIEW, 'reconcile', sd], { encoding: 'utf8' }).status, 20, `a fresh seal with label ${JSON.stringify(extra)} holds`)
+    assert.ok(!existsSync(join(sd, 'seals.log')), 'no membership is rendered from the fresh anomaly')
+    const ad = s6Dir()
+    writeFileSync(join(ad, 'audits.jsonl'), JSON.stringify({ type: 'audit', seam: 's1', outcome: 'accept', ...extra }) + '\n')
+    assert.equal(spawnSync('node', [REVIEW, 'reconcile', ad], { encoding: 'utf8' }).status, 20, `a fresh audit with label ${JSON.stringify(extra)} holds`)
+  }
+})
+
+test('kiln-review (W2-S6, A02-R2): a legacy:true row keeps its tolerant W1 form — a bare-slice seal renders `<slice>`, byte-exact', () => {
+  // The migration preserves the verbatim W1 record, whose oldest forms carry no label; the label
+  // strictness is FRESH-only, so a bare-slice legacy seal still renders and round-trips identical.
+  // (The pre-S4-D4 two-field legacy audit `<seam> accept` is covered by the migration test above.)
+  const dir = s6Dir()
+  writeFileSync(join(dir, 'seals.log'), 's1\n')
+  assert.equal(spawnSync('node', [REVIEW, 'reconcile', dir], { encoding: 'utf8' }).status, 0, 'a bare-slice legacy seal migrates and renders')
+  assert.equal(readFileSync(join(dir, 'seals.log'), 'utf8'), 's1\n', 'the bare-slice line round-trips byte-identical')
+  assert.equal(s6Rows(join(dir, 'seals.jsonl'))[0].legacy, true, 'the migrated row is legacy-marked')
+})
+
+test('kiln-review (W2-S6): W1->W2 migration imports a nonempty legacy seals.log with no JSONL, preserves membership, and marks legacy:true', () => {
+  const dir = s6Dir()
+  // A project sealed under W1: a nonempty seals.log, no seals.jsonl.
+  writeFileSync(join(dir, 'seals.log'), 'a.b dual\nfeature/ui single-family\n')
+  assert.equal(spawnSync('node', [REVIEW, 'reconcile', dir], { encoding: 'utf8' }).status, 0)
+  // The .log is reproduced byte-identical — sealed W1 work is never rebuilt.
+  assert.equal(readFileSync(join(dir, 'seals.log'), 'utf8'), 'a.b dual\nfeature/ui single-family\n', 'the migration reproduces the identical legacy .log')
+  const rows = s6Rows(join(dir, 'seals.jsonl'))
+  assert.equal(rows.length, 2, 'one legacy JSONL row per legacy line, in order')
+  assert.deepEqual({ type: rows[0].type, slice: rows[0].slice, label: rows[0].label, legacy: rows[0].legacy }, { type: 'seal', slice: 'a.b', label: 'dual', legacy: true }, 'the first field grants membership; the row is legacy-marked')
+  assert.ok(!('run_id' in rows[0]) && !('ts' in rows[0]), 'a legacy row fabricates no run_id or ts — honestly absent')
+  assert.equal(rows[1].slice, 'feature/ui', 'the exact slash id membership is preserved verbatim')
+})
+
+test('kiln-review (W2-S6): migration handles a pre-S4-D4 two-field legacy audits.log byte-exactly and a three-field line', () => {
+  const dir = s6Dir()
+  // A pre-S4-D4 audit line has no third label field; a post-S4-D4 line does. Both must round-trip.
+  writeFileSync(join(dir, 'audits.log'), 'seam-old accept\nseam-new accept dual\n')
+  assert.equal(spawnSync('node', [REVIEW, 'reconcile', dir], { encoding: 'utf8' }).status, 0)
+  assert.equal(readFileSync(join(dir, 'audits.log'), 'utf8'), 'seam-old accept\nseam-new accept dual\n', 'both legacy audit shapes reproduce byte-identical')
+  const rows = s6Rows(join(dir, 'audits.jsonl'))
+  assert.ok(!('label' in rows[0]), 'the two-field legacy audit carries no fabricated label')
+  assert.equal(rows[1].label, 'dual', 'the three-field legacy audit keeps its label')
+})
+
+test('kiln-review (W2-S6): a fresh append after a W1 migration lands beside the migrated legacy rows', () => {
+  const dir = s6Dir()
+  writeFileSync(join(dir, 'seals.log'), 's1 dual\n')
+  // append-seal reconciles on entry (migrating the legacy log), then appends the new row.
+  assert.equal(spawnSync('node', [REVIEW, 'append-seal', dir, 's2', 'dual'], { encoding: 'utf8' }).status, 0)
+  assert.equal(readFileSync(join(dir, 'seals.log'), 'utf8'), 's1 dual\ns2 dual\n', 'the new seal renders after the preserved legacy line')
+  const rows = s6Rows(join(dir, 'seals.jsonl'))
+  assert.equal(rows[0].legacy, true, 'the migrated row stays legacy-marked')
+  assert.ok(!('legacy' in rows[1]), 'the fresh append is a full non-legacy row')
+  assert.match(rows[1].ts, /^\d{4}-\d{2}-\d{2}T/, 'the fresh append carries a real ts')
 })
 
 // ── FIX-1: the recheck carries its findings ──────────────────────────────────

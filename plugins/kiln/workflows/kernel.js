@@ -936,6 +936,17 @@ const failStop = (status, fields, line, extra) => {
   beats.push(line)
   return stop(status, fields, extra)
 }
+// W2-S6 (B06): reconcile the rendered seal and audit projections from their JSONL truth BEFORE the
+// membership reads below. A crash between a prior JSONL append and its .log render, or a project
+// sealed under W1 before the ledger existed, is healed here idempotently — the content-blind verb
+// re-renders each .log from its JSONL (migrating a legacy log into JSONL first) and never rebuilds
+// sealed work. sealMembers and the audit grep then always read a current-valid projection.
+const reconciled = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' reconcile .kiln', 'ledger:reconcile')
+if (reconciled !== 0) {
+  return failStop('transport-failure',
+    { stage, active_slice: 'none', next_action: 'Rerun the stage after fixing the transport: the seal and audit ledgers could not be reconciled from their JSONL truth' },
+    await voiceBeat('transport-failure', {}, 'The seal and audit ledgers could not be reconciled from their JSONL truth — the run holds rather than read a stale projection.', 1))
+}
 // C5+M5: the seal ledger, read ONCE per kernel invocation into an exact-membership Set. This
 // replaces the two unescaped `^<id> ` greps (a dotted id false-matched a kebab twin) AND the
 // per-slice grep + indexOf hot loop (M5). An unreadable ledger is untrusted — every membership
