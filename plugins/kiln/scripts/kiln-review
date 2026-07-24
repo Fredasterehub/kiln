@@ -722,6 +722,56 @@ function stateNextAction(key, stage, slice) {
   }
 }
 
+// W2-S2 (H6 / B02): the eight-line STATE.md rendered from a typed record. This is the ONE
+// render template, shared by a fresh commit and by crash reconciliation, so the rendered view
+// is byte-identical either way — the exact former stateDoc format, incl. `seals: .kiln/seals.log`.
+function renderStateDoc(rec) {
+  return [
+    '# STATE',
+    'stage: ' + rec.stage,
+    'active_slice: ' + rec.active_slice,
+    'next_action: ' + rec.next_action,
+    'density: ' + rec.density,
+    'pointers: ' + rec.pointers.join(' '),
+    'seals: ' + rec.seals,
+    'updated_at: ' + rec.updated_at,
+  ].join('\n') + '\n'
+}
+
+// Crash reconciliation. state.json is written and renamed BEFORE STATE.md, so a crash between
+// the two renames (or a torn/deleted STATE.md) leaves the rendered view lagging the canonical
+// record. On the next trusted write we heal it FIRST: if STATE.md does not hash to the
+// render_digest in the record, re-render it from the typed record before advancing — the drift is
+// bounded to one write and the STATE.md-only conductor read never sees a torn document. A prior that
+// cannot be re-rendered (missing fields) is left for the new commit below to overwrite whole.
+function reconcileStateDoc(kilnDir, prior) {
+  if (typeof prior.render_digest !== 'string') return
+  const docPath = join(kilnDir, 'STATE.md')
+  let current = null
+  try {
+    current = readFileSync(docPath)
+  } catch {
+    current = null
+  }
+  const currentDigest = current === null ? null : createHash('sha256').update(current).digest('hex')
+  if (currentDigest === prior.render_digest) return
+  let healed
+  try {
+    healed = renderStateDoc(prior)
+  } catch {
+    return
+  }
+  try {
+    mkdirSync(kilnDir, { recursive: true })
+    const temporary = join(kilnDir, `.STATE.tmp-${process.pid}-${randomUUID()}`)
+    writeFileSync(temporary, healed)
+    renameSync(temporary, docPath)
+  } catch {
+    // A failed heal is not fatal on its own — the STATE.md write in the new commit below is the
+    // next chance to re-render the view from the canonical record.
+  }
+}
+
 // ── W2-S1 (H2 / B01): the CONDUCTOR-OWNED run lock ──────────────────────────
 // A per-RUN concurrency guard at .kiln/run.lock — deliberately distinct from the per-PLAN
 // law/lock.hash attestation. The conductor acquires ONCE before the sweep and passes run_id
@@ -1271,11 +1321,13 @@ if (mode === 'review' && args.length === 3) {
   }, evidence.images)
 } else if (mode === 'state-commit' && args.length >= 6) {
   // W1-S2 (Defect B): the trusted, content-blind STATE.md writer. The courier carries
-  // only closed words; this verb validates the transition, composes the eight locked
-  // lines (the exact former stateDoc format), derives the next-action prose from the
-  // closed key, stamps updated_at itself, and writes UUID-temp -> renameSync. Any
-  // invalid word halts by name before the write — a stale or unsupported transition
-  // never lands, and no next-action prose ever rode the courier for a leg to refuse.
+  // only closed words; this verb validates the transition, derives the next-action prose
+  // from the closed key, and stamps updated_at itself. Any invalid word halts by name
+  // before any write — a stale or unsupported transition never lands, and no next-action
+  // prose ever rode the courier for a leg to refuse.
+  // W2-S2 (H6 / B02): the verb now persists a typed canonical .kiln/state.json and renders
+  // the eight-line STATE.md (the exact former stateDoc format) FROM it, state.json landing
+  // first — see the compose-and-write block below for the crash rule and reconciliation.
   const [kilnDir, token, stage, activeSlice, key, density, ...pointers] = args
   if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
     stop('transport_failure', 'state-commit kilnDir must be a nonempty string', TRANSPORT_FAILURE)
@@ -1312,24 +1364,75 @@ if (mode === 'review' && args.length === 3) {
     stop('transport_failure', 'state-commit pointers must be repo-relative safe paths', TRANSPORT_FAILURE)
   }
   const updatedAt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
-  const doc = [
-    '# STATE',
-    'stage: ' + stage,
-    'active_slice: ' + activeSlice,
-    'next_action: ' + nextAction,
-    'density: ' + density,
-    'pointers: ' + pointers.join(' '),
-    'seals: .kiln/seals.log',
-    'updated_at: ' + updatedAt,
-  ].join('\n') + '\n'
-  const target = join(kilnDir, 'STATE.md')
+  const seals = '.kiln/seals.log'
+  const statePath = join(kilnDir, 'state.json')
+  // Read the canonical prior. A present-but-unparseable state.json is transport-class: the
+  // canonical ledger is torn and guessing a revision would silently break monotonicity, so we
+  // stop before touching disk rather than reset. Absent is the honest legacy/first-write case.
+  let prior = null
+  if (existsSync(statePath)) {
+    let priorRaw
+    try {
+      priorRaw = readFileSync(statePath, 'utf8')
+    } catch (error) {
+      stop('transport_failure', `state-commit could not read state.json: ${error.message}`, TRANSPORT_FAILURE)
+    }
+    try {
+      prior = JSON.parse(priorRaw)
+    } catch (error) {
+      stop('transport_failure', `state-commit found a malformed state.json — refusing to guess the canonical state: ${error.message}`, TRANSPORT_FAILURE)
+    }
+    if (!isObject(prior)) {
+      stop('transport_failure', 'state-commit found a state.json that is not a JSON object — refusing to guess the canonical state', TRANSPORT_FAILURE)
+    }
+    // A present record MUST carry a positive counter. Resetting a damaged one to 1 would erase
+    // monotonic history, so a missing or non-positive revision is torn-ledger, transport-class —
+    // stopped BEFORE reconcile so nothing is written. Only a truly ABSENT file starts fresh at 1.
+    if (!Number.isSafeInteger(prior.revision) || prior.revision <= 0) {
+      stop('transport_failure', 'state-commit found a state.json whose revision is not a positive integer — refusing to reset monotonic history', TRANSPORT_FAILURE)
+    }
+    reconcileStateDoc(kilnDir, prior)
+  }
+  const revision = prior === null ? 1 : prior.revision + 1
+  // run_id provenance: the CLI reads the CLI-owned run.lock ITSELF — never an argv relay. run_id is
+  // trusted ONLY from a record in the CLI-minted W2-S1 shape (run_id + owner in the LOCK_TOKEN
+  // grammar, a positive-integer conductor_pid — the same constants the run-lock verbs mint and
+  // check against). A syntactically absent/unreadable lock AND a semantically non-conforming object
+  // alike record run_id honestly as null (a legacy launch), never an unvalidated model-authorable
+  // string dressed as authoritative identity.
+  const lock = readLockRecord(join(kilnDir, LOCK_FILE)).record
+  const lockConforms = isObject(lock)
+    && typeof lock.run_id === 'string' && LOCK_TOKEN.test(lock.run_id)
+    && typeof lock.owner === 'string' && LOCK_TOKEN.test(lock.owner)
+    && Number.isInteger(lock.conductor_pid) && lock.conductor_pid > 0
+  const runId = lockConforms ? lock.run_id : null
+  const record = {
+    revision,
+    stage,
+    active_slice: activeSlice,
+    next_action_key: key,
+    next_action: nextAction,
+    density,
+    pointers,
+    seals,
+    run_id: runId,
+    updated_at: updatedAt,
+  }
+  const doc = renderStateDoc(record)
+  record.render_digest = createHash('sha256').update(doc).digest('hex')
+  // The crash rule: state.json (the canonical truth) lands FIRST, then STATE.md (the rendered
+  // projection). If a crash falls between the renames, the reconcile in the next commit heals the
+  // view; the reverse order could publish a rendered view with no canonical record behind it.
   try {
     mkdirSync(kilnDir, { recursive: true })
-    const temporary = join(kilnDir, `.STATE.tmp-${process.pid}-${randomUUID()}`)
-    writeFileSync(temporary, doc)
-    renameSync(temporary, target)
+    const stateTmp = join(kilnDir, `.state.json.tmp-${process.pid}-${randomUUID()}`)
+    writeFileSync(stateTmp, JSON.stringify(record) + '\n')
+    renameSync(stateTmp, statePath)
+    const docTmp = join(kilnDir, `.STATE.tmp-${process.pid}-${randomUUID()}`)
+    writeFileSync(docTmp, doc)
+    renameSync(docTmp, join(kilnDir, 'STATE.md'))
   } catch (error) {
-    stop('transport_failure', `state-commit could not write STATE.md: ${error.message}`, TRANSPORT_FAILURE)
+    stop('transport_failure', `state-commit could not write the canonical state: ${error.message}`, TRANSPORT_FAILURE)
   }
   process.exit(ACCEPT)
 } else if (mode === 'run-lock' && args[0] === 'acquire' && args.length === 4) {
