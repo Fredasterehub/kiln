@@ -3863,6 +3863,20 @@ test('rebuild after a cutoff (W2-S7b, u2 seam): invalidate, rebuild the generati
   const candidates = sealRows(fx.kiln).filter((row) => row.type === 'seal')
   assert.equal(candidates.length, 2, 'the invalidated generation 1 candidate is still in the append-only truth, just never current again')
   assert.equal(candidates[1].review_ref.review_id, 'rv-s1-gen2', 'the current member binds the FRESH review, not the one the cutoff retired')
+  // The seam audit that follows the reseal, on the KERNEL argv exactly: the codex auditor rides the -
+  // sentinel, the repair-legs word is empty, and the attestation kind is passed unconditionally. This
+  // is the bootstrap window carry-forward #4 names — the audit ledger has no modern row yet, so its
+  // own boundary is still inert and nothing but the kernel always passing the kind keeps a post-cutoff
+  // audit from landing as a row that could never become membership.
+  const auditContract = cPrepare(fx.repo, fx.kiln, 'milestone-audit', 'initial', fx.slice).stdout.trim()
+  const auditor = mintLeg(fx.kiln, 'auditor', 'opus', fx.slice)[0]
+  const auditCandidate = join(fx.kiln, '.audit.tmp')
+  writeFileSync(auditCandidate, JSON.stringify({ review_id: 'aud-gen2', law_hash: fx.digest, findings: [], blockers: [], verdict: 'accept' }))
+  assert.equal(spawnSync('node', [REVIEW, 'publish-gate', fx.kiln, 'audit', auditCandidate, join(fx.kiln, 'audit-review.json'), auditor, auditContract], { encoding: 'utf8' }).status, 0)
+  assert.equal(spawnSync('node', [REVIEW, 'append-audit', fx.kiln, fx.slice, 'dual', '-', '', 'reviewed'], { encoding: 'utf8' }).status, 0, 'the post-cutoff audit append lands validated, not dead')
+  assert.equal(captureAll(fx.kiln).status, 0)
+  assert.equal(auditsLog(fx.kiln), 's1 accept dual\n', 'the seam renders audited over the REBUILT generation')
+  assert.equal(auditMember(fx.kiln, fx.slice).stdout, 'covered:s1\n', 'and the membership verb answers with coverage spanning exactly that prefix')
 })
 
 test('audit currency (W2-S7b, item 3): a coverage-less audit is spent once a LATER covered audit supersedes it — it never comes back to mask that audit going stale', () => {
@@ -3906,6 +3920,152 @@ test('audit currency (W2-S7b, item 3): a coverage-less audit with NO successor s
   writeFileSync(join(lone, 'audits.jsonl'), JSON.stringify({ type: 'audit', seam: 's3', outcome: 'accept', label: 'dual' }) + '\n')
   assert.equal(reconcile(lone).status, 0)
   assert.equal(auditsLog(lone), 's3 accept dual\n', 'with nothing later carrying coverage, the coverage-less row is exactly as current as it was')
+})
+
+// ── W2-S7b (item 11): audit-member — the audited-skip answer, derived, never string-matched ───────
+const auditMember = (dir, seam) => spawnSync('node', [REVIEW, 'audit-member', dir, seam], { encoding: 'utf8' })
+
+test('audit-member (W2-S7b, item 11): the closed exit law — a coverage-carrying member answers covered: plus its ordered slice ids, a coverage-less member answers legacy, a proven absence exits 1', () => {
+  assert.equal(auditMember(s6Dir(), 's3').status, 1, 'a project with no audit ledger at all is a PROVEN absence, exactly as the missing-log check answered')
+  const fx = auditedFixture()
+  assert.equal(auditMember(fx.kiln, 's3').status, 1, 'a ledger holding no candidate for this seam is a proven absence too')
+  assert.equal(spawnSync('node', [REVIEW, 'append-audit', fx.kiln, 's3', 'dual', fx.auditor, '', 'reviewed'], { encoding: 'utf8' }).status, 0)
+  assert.equal(captureAll(fx.kiln).status, 0)
+  const answered = auditMember(fx.kiln, 's3')
+  assert.equal(answered.status, 0)
+  assert.equal(answered.stdout, 'covered:s1,s2,s3\n', 'the TAGGED answer is the CURRENT members ordered covered slice ids — what the caller compares to the prefix it is about to skip')
+  const migrated = s6Dir()
+  writeFileSync(join(migrated, 'audits.log'), 'seam-1 accept\n')
+  assert.equal(reconcile(migrated).status, 0, 'a W1 audits.log migrates')
+  const legacyAnswer = auditMember(migrated, 'seam-1')
+  assert.equal(legacyAnswer.status, 0)
+  assert.equal(legacyAnswer.stdout, 'legacy\n', 'the coverage-less W1 member answers with the bare tag that keeps the migration path skipping')
+})
+
+test('audit-member (W2-S7b, item 11): the two answers are DISJOINT — an audit covering exactly a slice NAMED legacy is tagged as coverage, never mistaken for the coverage-less member', () => {
+  // Sol B1: `legacy` is a valid slice id, so an untagged answer put the sentinel and real data in one
+  // namespace and a narrow modern audit could pass for the W1 one. The tag is what separates them.
+  const named = auditRepo({ slices: [{ id: 'legacy', surface: 'ui', milestone: 'm1' }] })
+  s6Lock(named.kiln, 'run-collision')
+  assert.equal(appendSeal(named.kiln, 'legacy', 'dual').status, 0)
+  assert.equal(modernAudit(named.kiln, 'legacy', [{ slice: 'legacy', generation: 1, manifest_sha256: null }]).status, 0)
+  const covering = auditMember(named.kiln, 'legacy')
+  assert.equal(covering.status, 0)
+  assert.equal(covering.stdout, 'covered:legacy\n', 'a coverage-carrying member is TAGGED, so its payload can never be read as the sentinel')
+  assert.notEqual(covering.stdout, 'legacy\n', 'the two answers do not collide')
+  // The genuine coverage-less member for a seam of the same name still answers the bare tag.
+  const w1 = s6Dir()
+  writeFileSync(join(w1, 'audits.log'), 'legacy accept\n')
+  assert.equal(reconcile(w1).status, 0)
+  assert.equal(auditMember(w1, 'legacy').stdout, 'legacy\n', 'and the W1 member for a seam named legacy is still the bare tag')
+})
+
+test('audit-member (W2-S7b, item 11): after a cutoff the reduction elects a NARROWER covered member while the projection still shows the seam audited — the verb reports the coverage, so the caller can refuse it', () => {
+  // The resurrection shape, through the reduction: A1 covers s1 alone, A2 covers the whole prefix.
+  // Invalidating s2 stales A2, and the election walks back to A1 — which the rendered audits.log
+  // reports as a plain `s3 accept dual` line, indistinguishable from a spanning audit. The kernel is
+  // the only place that knows the prefix, so the verb hands it the coverage rather than a verdict.
+  const fx = auditedFixture()
+  const tuple = (slice) => ({ slice, generation: 1, manifest_sha256: null })
+  assert.equal(modernAudit(fx.kiln, 's3', [tuple('s1')]).status, 0, 'A1: covered s1 alone')
+  assert.equal(modernAudit(fx.kiln, 's3', [tuple('s1'), tuple('s2'), tuple('s3')]).status, 0, 'A2: covered the whole prefix')
+  assert.equal(auditMember(fx.kiln, 's3').stdout, 'covered:s1,s2,s3\n', 'the later spanning audit answers while it is current')
+  assert.equal(invalidate(fx.kiln, 's2').status, 0)
+  assert.equal(auditsLog(fx.kiln), 's3 accept dual\n', 'the PROJECTION still renders the seam as audited — the line a grep would have trusted')
+  assert.equal(auditMember(fx.kiln, 's3').stdout, 'covered:s1\n', 'but the reduction is answering for the NARROW A1, and the verb says so')
+})
+
+test('audit-member (W2-S7b, item 11): a covered NAME outside the slice-id grammar is a reduction ANOMALY — so the csv stays injective and one slice can never serialize like two', () => {
+  // Sol r2a: the outer tag closed the `legacy` collision, but the csv separator is a COMMA and
+  // coverageInvalid took any nonempty string. A single covered slice named `s1,s2` would then
+  // serialize to exactly the bytes genuine coverage of s1 AND s2 produces — and the kernel, comparing
+  // that line to its prefix, would skip a two-slice milestone over an audit that judged neither. The
+  // fix is at the validator, not at the verb: coverage names are held to the one slice-id grammar.
+  const cover = (slice) => ({ slice, generation: 1, manifest_sha256: null })
+  const genuine = auditedFixture()
+  assert.equal(modernAudit(genuine.kiln, 's3', [cover('s1'), cover('s2')]).status, 0)
+  assert.equal(auditMember(genuine.kiln, 's3').stdout, 'covered:s1,s2\n', 'genuine coverage of the TWO slices prints exactly these bytes')
+  const forged = auditedFixture()
+  // Reachable, not merely shape-accepted: seal a slice whose NAME is the delimiter-bearing string, so
+  // the forged coverage would be CURRENT and would render the same bytes as the genuine pair above.
+  assert.equal(appendSeal(forged.kiln, 's1,s2', 'dual').status, 0, 'the seal id gate is looser, so the name can stand in the seal ledger')
+  assert.equal(modernAudit(forged.kiln, 's3', [cover('s1,s2')]).status, 20,
+    'so one covered name carrying the delimiter is refused by the reduction — it is not honest coverage and it is not renderable')
+  assert.equal(auditMember(forged.kiln, 's3').status, 20, 'and the membership verb holds on it rather than answer with ambiguous bytes')
+  // The grammar, not the delimiter alone: any name a build could never have sealed is refused.
+  for (const name of ['a b', 'a:b', '']) {
+    assert.equal(modernAudit(auditedFixture().kiln, 's3', [cover(name)]).status, 20, 'a covered name outside STATE_SLICE_ID is refused: ' + JSON.stringify(name))
+  }
+})
+
+test('audit-member (W2-S7b, item 11): malformed coverage on a KINDLESS row HOLDs — the field law skips a pre-boundary row, so unreadable coverage must never fall through to proven absence', () => {
+  // Sol r2b: the field law validates coverage only on a row that DECLARES its attestation kind, but
+  // `covered` on a kindless pre-boundary row still drives currency. Answering not-current there put
+  // malformed coverage on the no-member path, and the verb reports that as PROVEN ABSENCE — a caller
+  // would then judge the seam unaudited on the strength of a row nothing could read.
+  const dir = s6Dir()
+  writeFileSync(join(dir, 'seals.jsonl'), JSON.stringify({ type: 'seal', slice: 's1,s2', label: 'dual', legacy: true }) + '\n')
+  writeFileSync(join(dir, 'audits.jsonl'), JSON.stringify({
+    type: 'audit', seam: 'x', outcome: 'accept', label: 'dual',
+    covered: [{ slice: 's1,s2', generation: 1, manifest_sha256: null }],
+  }) + '\n')
+  const held = auditMember(dir, 'x')
+  assert.equal(held.status, 20, 'unreadable coverage is a membership anomaly the reduction holds on')
+  assert.notEqual(held.status, 1, 'and above all it is never the proven-absence code')
+  assert.equal(held.stdout, 'transport_failure\n', 'the hold speaks the transport fact, not an answer')
+  // The path that must NOT move: a genuine legacy row carries NO covered field at all, and still
+  // answers for its seam exactly as before.
+  const migrated = s6Dir()
+  writeFileSync(join(migrated, 'audits.log'), 'x accept\n')
+  assert.equal(reconcile(migrated).status, 0)
+  const legacy = auditMember(migrated, 'x')
+  assert.equal(legacy.status, 0)
+  assert.equal(legacy.stdout, 'legacy\n', 'the W1 member is untouched by the coverage anomaly rule — it claims no coverage to be malformed')
+})
+
+test('audit-member (W2-S7b, item 11): every untrusted read HOLDs — a torn audit ledger, a hole in the seals it derives currency from, an unreadable file and a malformed seam are never absence', () => {
+  const torn = s6Dir()
+  writeFileSync(join(torn, 'audits.jsonl'), JSON.stringify({ type: 'audit', seam: 's3', outcome: 'accept', label: 'dual' }) + '\n{"type":"audit"')
+  assert.equal(auditMember(torn, 's3').status, 20, 'a torn tail could hide a current member — the read holds')
+  const holed = s6Dir()
+  writeFileSync(join(holed, 'audits.jsonl'), JSON.stringify({ type: 'audit', seam: 's3', outcome: 'accept', label: 'dual' }) + '\n')
+  writeFileSync(join(holed, 'seals.jsonl'), JSON.stringify({ type: 'seal', slice: 's1', label: 'dual' }) + '\n{"type":"seal"')
+  assert.equal(auditMember(holed, 's3').status, 20, 'audit currency is DERIVED from the seals, so a hole there holds too')
+  const unreadable = s6Dir()
+  writeFileSync(join(unreadable, 'audits.jsonl'), JSON.stringify({ type: 'audit', seam: 's3', outcome: 'accept', label: 'dual' }) + '\n')
+  chmodSync(join(unreadable, 'audits.jsonl'), 0o000)
+  const denied = auditMember(unreadable, 's3')
+  chmodSync(join(unreadable, 'audits.jsonl'), 0o644)
+  assert.equal(denied.status, 20, 'an IO fault is UNTRUSTED — an uncaught throw would exit 1, the very code that means proven absence')
+  assert.equal(auditMember(s6Dir(), 'bad seam').status, 20, 'a malformed seam id never reaches the reduction')
+  assert.equal(auditMember('', 's3').status, 20, 'and neither does an empty kilnDir')
+})
+
+test('audit-member (W2-S7b, item 11): a fault in the DERIVED reads holds too — the seal ledger and the manifest store are on the answer path, and neither may exit 1', () => {
+  // Sol B2: only the first read was caught. reduceLedger reaches further — into the seal ledger and,
+  // through currentSealTuple, into the manifest store. An uncaught throw exits node 1, which is the
+  // code this verb reserves for a proven absence, so the caller would dispatch an audit instead of
+  // holding. Both faults below throw from INSIDE the reduction, never from the opening read.
+  const sealIo = auditedFixture()
+  assert.equal(spawnSync('node', [REVIEW, 'append-audit', sealIo.kiln, 's3', 'dual', sealIo.auditor, '', 'reviewed'], { encoding: 'utf8' }).status, 0)
+  assert.equal(captureAll(sealIo.kiln).status, 0)
+  assert.equal(auditMember(sealIo.kiln, 's3').status, 0, 'the fixture answers cleanly before the fault')
+  rmSync(join(sealIo.kiln, 'seals.jsonl'))
+  mkdirSync(join(sealIo.kiln, 'seals.jsonl'))
+  const sealFault = auditMember(sealIo.kiln, 's3')
+  assert.equal(sealFault.status, 20, 'an unreadable SEAL ledger is a transport hold, never a proven absence')
+  assert.notEqual(sealFault.status, 1, 'and above all it is never the absence code')
+  const manifestIo = auditedFixture()
+  assert.equal(spawnSync('node', [REVIEW, 'append-audit', manifestIo.kiln, 's3', 'dual', manifestIo.auditor, '', 'reviewed'], { encoding: 'utf8' }).status, 0)
+  assert.equal(captureAll(manifestIo.kiln).status, 0)
+  // A generation started but never prepared: readPreparedManifest throws from inside the currency
+  // derivation, one layer below anything the opening read could have caught.
+  const genDir = join(manifestIo.kiln, 'manifests', createHash('sha256').update(Buffer.from('s1', 'utf8')).digest('hex'), 'gen-1')
+  mkdirSync(genDir, { recursive: true })
+  writeFileSync(join(genDir, 'key.json'), '{}\n')
+  const manifestFault = auditMember(manifestIo.kiln, 's3')
+  assert.equal(manifestFault.status, 20, 'a torn manifest store is a transport hold too')
+  assert.notEqual(manifestFault.status, 1, 'never the absence code')
 })
 
 // ── W2-S7b (Sol r1): the REDUCTION is the authority ──────────────────────────────────────────────

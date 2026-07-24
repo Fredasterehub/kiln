@@ -26,6 +26,9 @@ const { homedir } = require('node:os')
 const { spawnSync } = require('node:child_process')
 
 const ACCEPT = 0
+// W2-S7b (item 11): the read-only membership answer for a PROVEN absence — the exit grammar the
+// audited-skip check has always spoken (0 present, 1 absent, anything else untrusted and held).
+const NO_MEMBER = 1
 const REJECT = 10
 const BLOCKED = 11
 const TRANSPORT_FAILURE = 20
@@ -1357,11 +1360,15 @@ const trioBlockInvalid = (v) => !isObject(v) || Object.keys(v).length !== TRIO_M
 // The ordered coverage a reviewed audit candidate stores: one {slice, generation, manifest_sha256}
 // tuple per covered member, in verified-prefix order — exactly the shape currentSealTuple mints, so
 // a canonical digest comparison decides currency without a byte-exact array compare.
+// Each covered name is held to STATE_SLICE_ID, the one slice-id grammar the whole system speaks. A
+// nonempty-string check was too loose to be honest coverage: a name outside the grammar can never be
+// a slice any build sealed, and a name carrying a delimiter makes the coverage AMBIGUOUS wherever it
+// is serialized — one slice named `a,b` is otherwise indistinguishable from the two slices a and b.
 function coverageInvalid(covered) {
   if (!Array.isArray(covered) || covered.length === 0) return true
   return covered.some((t) => !isObject(t)
     || Object.keys(t).length !== 3
-    || typeof t.slice !== 'string' || t.slice === ''
+    || typeof t.slice !== 'string' || !STATE_SLICE_ID.test(t.slice)
     || !Number.isSafeInteger(t.generation) || t.generation < 0
     || !(t.manifest_sha256 === null || LAW_HASH.test(t.manifest_sha256)))
 }
@@ -1499,7 +1506,12 @@ function reduceLedger(kilnDir, descriptor, read) {
   const carriesCoverage = (row) => Object.prototype.hasOwnProperty.call(row, 'covered')
   const auditCurrent = (row) => {
     if (!carriesCoverage(row)) return seals.cutoffs.size === 0
-    if (coverageInvalid(row.covered)) return false
+    // Malformed coverage on ANY row is an ANOMALY, never a quiet not-current. The field law above
+    // validates coverage only on a row that DECLARES its attestation kind, so a kindless pre-boundary
+    // row can still carry a covered field and reach here; answering false would drop it into the
+    // no-member answer, and a caller reads that as PROVEN ABSENCE. Coverage that cannot be read has
+    // not been judged stale — it has not been judged at all, so the reduction holds on it.
+    if (coverageInvalid(row.covered)) anomaly('carries an audit candidate whose coverage cannot be read — unreadable coverage is never judged current, and reporting it as absent would answer for a seam nothing covered')
     return canonicalDigest(row.covered) === canonicalDigest(row.covered.map((t) => currentSealTuple(seals, kilnDir, t.slice)))
   }
   const members = []
@@ -3716,6 +3728,56 @@ if (mode === 'review' && args.length === 8) {
   }
   reconcileLedgers(kilnDir)
   process.exit(ACCEPT)
+} else if (mode === 'audit-member' && args.length === 2) {
+  // W2-S7b (item 11): the audited-skip answer, derived from the SAME reduction that renders the
+  // projection — no membership-bearing decision is ever taken by string-matching a rendered line.
+  // stdout carries the current members ORDERED covered slice ids, so the caller can require that the
+  // audit SPANS the prefix it is about to skip: without that, a narrower covered audit re-elected once
+  // the wider one went stale would render the seam audited over a slice nothing ever judged.
+  // Read-only — it writes nothing, not even a reconcile; the caller reconciles at boot.
+  // The two answers are TAGGED and disjoint: `covered:<csv>` for a coverage-carrying member,
+  // `legacy` alone for a coverage-less W1 one. Untagged, they share a namespace — a slice may
+  // legitimately be NAMED legacy, so a modern audit covering exactly that slice would be read as the
+  // coverage-less answer and skip a milestone it never spanned.
+  // This line is injective because BOTH its separators are excluded by the id grammar, and the
+  // argument needs both halves: STATE_SLICE_ID admits no COLON, so no csv of slice ids can forge the
+  // `covered:` tag, and it admits no COMMA, so a single covered name can never be read as two. The
+  // comma half rests on coverageInvalid holding every covered name to that grammar — a looser check
+  // there makes one slice named `a,b` serialize exactly like the two slices a and b.
+  const [kilnDir, seam] = args
+  if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
+    stop('transport_failure', 'audit-member kilnDir must be a nonempty string', TRANSPORT_FAILURE)
+  }
+  if (typeof seam !== 'string' || !STATE_SLICE_ID.test(seam)) {
+    stop('transport_failure', 'audit-member seam must be a slice id', TRANSPORT_FAILURE)
+  }
+  // EVERY read on the way to an answer is caught, not merely the first: the reduction consults the
+  // SEAL ledger and the manifest store to decide currency, and any of them can throw. An uncaught
+  // throw exits node with code 1 — the exact code this verb reserves for a PROVEN absence — so a
+  // faulted read would reach the caller as no current member and send it into a re-audit over a
+  // ledger nothing could read. Exit 1 is reachable ONLY from the deliberate null answer below.
+  let answer
+  try {
+    const read = readLedgerRows(join(kilnDir, AUDIT_LEDGER.jsonl))
+    if (read === null) {
+      answer = null
+    } else {
+      const state = reduceLedger(kilnDir, AUDIT_LEDGER, read)
+      if (!state.complete) {
+        stop('transport_failure', 'audit-member refuses an incomplete read — a hole in the audit ledger, or in the seal ledger its currency derives from, could hide a current member', TRANSPORT_FAILURE)
+      }
+      const member = state.current.get(seam)
+      const covered = member === undefined ? undefined : member.row.covered
+      answer = member === undefined ? null
+        : Array.isArray(covered) ? 'covered:' + covered.map((tuple) => tuple.slice).join(',')
+        : 'legacy'
+    }
+  } catch (error) {
+    stop('transport_failure', `audit-member could not derive the current audit member: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  if (answer === null) process.exit(NO_MEMBER)
+  process.stdout.write(answer + '\n')
+  process.exit(ACCEPT)
 } else if (mode === 'manifest-start' && args.length === 3) {
   // W2-S7a (FORK 3): capture the immutable baseline of a slice generation before its first builder
   // mutation, so dirty or untracked pre-run files are attributed to the baseline, never the slice. The
@@ -4667,7 +4729,7 @@ if (mode === 'review' && args.length === 8) {
 } else {
   stop(
     'transport_failure',
-    'usage: kiln-review review <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <gate-review.json> | kiln-review recheck <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review gate-facts <kilnDir> <slice> <request.json> <gate-facts.json> | kiln-review append-seal <kilnDir> <slice> <label> [<builder_leg_ids_csv> <reviewer_leg_id|-> [<repo> [<attestation_kind>]]] | kiln-review invalidate <kilnDir> <slice_ids_csv> |kiln-review seal-law <kilnDir> <label> | kiln-review run-checks <kilnDir> | kiln-review slices <kilnDir> | kiln-review screen-criteria <kilnDir> | kiln-review perceptual-family <kilnDir> | kiln-review ratify <repo> <kilnDir> <request.json> <gate-review.json> <family> | kiln-review ratify-recheck <repo> <kilnDir> <request.json> <prior-gate-review.json> <gate-review.json> <family> | kiln-review publish-gate <kilnDir> <family> <candidate.json> <gate-review.json> [<reviewer_leg_id> [<repo> <slice>] [<contract_sha256>]] | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> <label> [<auditor_leg_id|-> [<repair_leg_ids_csv> [<attestation_kind>]]] |kiln-review reconcile <kilnDir> | kiln-review manifest-start <repo> <kilnDir> <slice> | kiln-review manifest-prepare <repo> <kilnDir> <slice> | kiln-review contract-prepare <repo> <kilnDir> <kind> <operation> [<kind-args>...] | kiln-review identity-begin <kilnDir> <role> <requested_alias> <subject> | kiln-review capture-and-finalize <kilnDir> [<transcriptPath>] | kiln-review screen <repo> <kilnDir> <model> <alias> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <alias> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <alias> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...] | kiln-review run-lock acquire <kilnDir> <choice> <conductorPid> | kiln-review run-lock join <kilnDir> <run_id> <owner> | kiln-review run-lock release <kilnDir> <run_id> <owner> | kiln-review run-lock takeover <kilnDir> <choice> <conductorPid>',
+    'usage: kiln-review review <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <gate-review.json> | kiln-review recheck <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review gate-facts <kilnDir> <slice> <request.json> <gate-facts.json> | kiln-review append-seal <kilnDir> <slice> <label> [<builder_leg_ids_csv> <reviewer_leg_id|-> [<repo> [<attestation_kind>]]] | kiln-review invalidate <kilnDir> <slice_ids_csv> |kiln-review seal-law <kilnDir> <label> | kiln-review run-checks <kilnDir> | kiln-review slices <kilnDir> | kiln-review screen-criteria <kilnDir> | kiln-review perceptual-family <kilnDir> | kiln-review ratify <repo> <kilnDir> <request.json> <gate-review.json> <family> | kiln-review ratify-recheck <repo> <kilnDir> <request.json> <prior-gate-review.json> <gate-review.json> <family> | kiln-review publish-gate <kilnDir> <family> <candidate.json> <gate-review.json> [<reviewer_leg_id> [<repo> <slice>] [<contract_sha256>]] | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> <label> [<auditor_leg_id|-> [<repair_leg_ids_csv> [<attestation_kind>]]] |kiln-review reconcile <kilnDir> | kiln-review audit-member <kilnDir> <seamSliceId> | kiln-review manifest-start <repo> <kilnDir> <slice> | kiln-review manifest-prepare <repo> <kilnDir> <slice> | kiln-review contract-prepare <repo> <kilnDir> <kind> <operation> [<kind-args>...] | kiln-review identity-begin <kilnDir> <role> <requested_alias> <subject> | kiln-review capture-and-finalize <kilnDir> [<transcriptPath>] | kiln-review screen <repo> <kilnDir> <model> <alias> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <alias> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <alias> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...] | kiln-review run-lock acquire <kilnDir> <choice> <conductorPid> | kiln-review run-lock join <kilnDir> <run_id> <owner> | kiln-review run-lock release <kilnDir> <run_id> <owner> | kiln-review run-lock takeover <kilnDir> <choice> <conductorPid>',
     TRANSPORT_FAILURE,
   )
 }

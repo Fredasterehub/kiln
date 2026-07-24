@@ -14,6 +14,9 @@ Narration and dialogue only — zero orchestration logic, zero heavy reads in th
 Per stage: launch the kernel → receive its tiny return `{status, beat, pointers}` → close the
 identities → emit `beat` verbatim (the annex anchors ride inside it; never paraphrase) → next.
 Never read stage outputs mid-run. Read `.kiln/STATE.md` exactly once, at resume.
+The next launch is whatever `pointers.next_stage` names, never the pipeline order you expect: a
+build return may name `build` again — a milestone whose seals must be closed and audited on a fresh
+boot — and launching validate there advances past a milestone nothing has judged.
 
 After EVERY Workflow terminal return — a kernel stage or the research sweep — and BEFORE you emit
 `beat`, launch the next stage, or release the run lock, run one Bash:

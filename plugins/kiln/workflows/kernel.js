@@ -514,11 +514,10 @@ function routeBuilder(c, surface) {
 // defaults to mixed; its id is charset-gated the same way.
 // The ONE slice-id contract (W7-S1), shared verbatim with the kiln-review append-audit
 // gate: letters, digits, dot, underscore, hyphen and slash. A slice id rides an
-// UNQUOTED shell word at seal:append, the grep anchors "^<id> " over audits.log,
-// and the audit argv — so whitespace, control bytes and shell-active
-// bytes are rejected HERE, before any builder dispatch, never mid-build as a split
-// seal append or an unpublishable audit. Slash is inside the set: path-like ids such
-// as feature/ui are shell-word-safe and anchor-safe.
+// UNQUOTED shell word at seal:append and in the audit argv — so whitespace, control
+// bytes and shell-active bytes are rejected HERE, before any builder dispatch, never
+// mid-build as a split seal append or an unpublishable audit. Slash is inside the set:
+// path-like ids such as feature/ui are shell-word-safe.
 const SLICE_ID = /^[A-Za-z0-9._/-]+$/
 function parseSliceEntry(entry) {
   const s = String(entry ?? '')
@@ -944,6 +943,14 @@ const stop = async (status, fields, extra) => {
 }
 const nextAct = (s) => (s ? 'Relaunch the kernel workflow with stage=' + s : 'Run complete')
 const reopen = async (owner, beatName) => {
+  // W2-S7b (item 9): a reopen WITHDRAWS the slice before it stops. Without the cutoff the slice keeps
+  // its rendered membership, the next boot skips it as sealed, and the reopen is a pure stop nothing
+  // ever rebuilds (D1). The trusted verb derives the cutoff from the slices own candidate history and
+  // is a no-op when an equal cutoff already stands, so a crash between it and the STATE write retries
+  // onto the same answer. The owner always comes from firstSealed, so it is always in SEALS and always
+  // has a candidate history. Nothing rebuilds in this invocation: every call site returns this stop.
+  const cut = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' invalidate .kiln ' + shq(owner), 'seal:invalidate')
+  if (cut !== 0) return persistFail('seal-invalidate')
   beats.push(await voiceBeat('reopen', { slice: owner }, 'Slice ' + owner + ' reopened — a law check went red at ' + beatName + '.'))
   return stop('law-red', {
     stage, active_slice: owner, next_action: 'Reopen slice ' + owner + ': LAW is red at ' + beatName,
@@ -982,16 +989,12 @@ if (sealLeg.exit !== 0) {
 const SEALS = sealMembers(sealLeg.ids)
 // W2-S7a (F1): the boot-time sealed membership. SEALS is rendered membership only — the boot read,
 // never live-added within an invocation (B-PROVISIONAL-LIVE) — so this snapshot equals SEALS for the
-// whole run; the milestone audit-skip validates a logged seam against it. A covered slice rebuilt
-// this invocation (absent from the snapshot) means the logged audit line was written over now-stale
-// content, so the seam re-audits. S7a defers seal rendering to the conductor capture, so audits.log
-// can lead seals.log across a crash — this restores the pre-S7a fail-closed crash semantics where a
-// rebuilt milestone is always re-audited.
+// whole run and every milestone-audit decision can rest on it. A covered slice absent from the
+// snapshot is being rebuilt now and holds only a provisional candidate, so the seam neither honours a
+// rendered audit over it nor dispatches a fresh one: it relaunches (W2-S7b item 11). Seal rendering is
+// deferred to the conductor capture, so the audit projection can lead the seal projection across a
+// crash — this snapshot is what stops that desync from ever buying a skip.
 const SEALS_AT_BOOT = new Set(SEALS)
-// W2-S7a (B-F1-DIRTY-PREFIX): slices whose sealed content a write-capable repair mutated THIS
-// invocation. A logged seam whose covered prefix intersects this set re-audits even when every
-// covered slice stands in the boot snapshot — the repair changed content the logged audit never saw.
-const dirtySlices = new Set()
 // W-04: rerun-reopen binds to SEALED checks (locked BEHAVIOR). A red owned by an unsealed slice
 // is expected pre-build state — the criteria describe the finished artifact. Only a red whose
 // owner sits in the seal ledger reopens. Membership is exact first-field equality over the SEALS
@@ -1610,7 +1613,7 @@ if (stage !== 'build') {
     }
     let manifest = mf0.ids[0]
     // The family rule (plan F), read once per run: 0 routes the GPT screen verbs,
-    // 1 the Claude leg, anything else is untrusted and holds — the audit:check law. W2-S3
+    // 1 the Claude leg, anything else is untrusted and holds — the audit-member law. W2-S3
     // (B04): the family derives over the VERIFIED trio through the fused verb, so the routing
     // rests on sealed bytes; a torn seal exits nonzero-nonone here and holds like any untrusted
     // read.
@@ -2007,44 +2010,54 @@ const cap = capFromDial(capLeg)
 // ── W7-S2: the seam gate — the milestone audit seated in the build loop ──────
 // ONE shared block for both paths a seam slice takes (the fresh seal and the
 // seal-skip resume, the all-sealed resume included): when the seam closed fact
-// holds and audits.log lacks the seam line, the goal-backward audit runs before
-// the loop advances. The gate rides the UNCHANGED reviewLoop under the same
-// per-invocation reversibility cap the slice gates use; blocked is RECOVERABLE
-// here — exit 11 lands on the reject class, since audit blockers reopen their
-// owning slices through the Claude repair leg — and the kernel branches on its
-// own reconcileAudit derivation over the published closed arrays, never on the
-// wire verdict string. Returns null to advance, or the halting kernel result.
+// holds and no current audit covers it, the goal-backward audit runs before the
+// loop advances. W2-S7b (item 10): there is no repair edge here — a non-accept
+// WITHDRAWS the covered prefix through the one batch cutoff and stops, and the
+// ordinary build path rebuilds it, so no model ever mutates sealed content
+// behind standing seals. The kernel branches on its own reconcileAudit
+// derivation over the published closed arrays, never on the wire verdict
+// string. Returns null to advance, or the halting kernel result.
 const auditSeam = async (slice) => {
   // W2-S7a: the covered prefix — every slice up to and including this seam, the cumulative set the
-  // audit attests. Reused by the F1 skip guard and, when a repair fires below, added to the dirty set.
+  // audit attests. Reused by the boot-membership guards here and by the rejection cutoff below.
   const seamIdx = sliceIds.indexOf(slice)
   const coveredPrefix = seamIdx >= 0 ? sliceIds.slice(0, seamIdx + 1) : []
-  // The audit-repair legs this seam mints — carried into the audit candidate at append time.
-  const auditRepairLegs = []
-  // One accepted audit per seam, checked by EXACT first-field match: the slice-id
-  // charset admits dots, so each dot is BRE-escaped — a raw `^a.b ` anchor would
-  // let a logged axb line suppress the legal seam a.b. Closed exit law: 0 is
-  // logged (skip), 1 is PROVEN absence (a missing log normalizes to 1 before grep
-  // can answer 2 for it); anything else — an unreadable log, a hands transport
-  // failure — is an untrusted answer and HOLDS, because a re-audit over an unread
-  // log could re-append an already-logged seam.
-  const logged = await hands(
-    'test -e .kiln/audits.log || exit 1; grep -q "^' + slice.replace(/\./g, '\\.') + ' " .kiln/audits.log',
-    'audit:check')
-  if (logged !== 0 && logged !== 1) {
+  // W2-S7b (item 11): the audited-skip decision reads the REDUCTION through the trusted verb — the
+  // last membership-bearing decision the kernel took from a rendered projection line, and the one that
+  // let a NARROWER covered audit answer for this seam once the wider one went stale. Closed exit law,
+  // the grammar the old grep spoke: 0 is a current member, 1 is PROVEN absence, and anything else — an
+  // unreadable ledger, a transport failure, a malformed answer — is untrusted and HOLDS, because a
+  // re-audit over an unread ledger could re-append an already-logged seam. The member answer is TAGGED
+  // and the two tags are disjoint: covered:<csv> carries coverage, legacy alone is the coverage-less W1
+  // member. The kernel reads the TAG, never the payload shape — a slice may legitimately be named
+  // legacy, and an untagged answer would let an audit covering only that slice pass as the W1 one.
+  const member = await idsFetch(
+    'node ' + shq(plugin + '/scripts/kiln-review') + ' audit-member .kiln ' + shq(slice),
+    'audit:member',
+    'a one-element array holding the single stdout line the verb prints at exit 0 — either covered: followed by the current audit members covered slice ids as a comma list, or the bare word legacy — and [] at any nonzero exit')
+  const trusted = member.exit === 1 || (member.exit === 0 && member.ids.length === 1)
+  if (!trusted) {
     return failStop('transport-failure',
-      { stage, active_slice: slice, next_action: 'Rerun stage build after fixing the transport: the audits.log membership check for slice ' + slice + ' did not answer' },
-      await voiceBeat('transport-failure', {}, 'The audits.log check for slice ' + slice + ' returned no trustworthy answer — the run holds.', 1),
+      { stage, active_slice: slice, next_action: 'Rerun stage build after fixing the transport: the audit membership check for slice ' + slice + ' did not answer' },
+      await voiceBeat('transport-failure', {}, 'The audit membership check for slice ' + slice + ' returned no trustworthy answer — the run holds.', 1),
       { gate: P.audit })
   }
-  // W2-S7a (F1 + B-F1-DIRTY-PREFIX): honor a logged seam ONLY when its whole covered prefix was
-  // sealed AT BOOT and none of it was mutated by a repair THIS invocation. A covered slice absent
-  // from the boot snapshot is being rebuilt now; a covered slice in the dirty set had its sealed
-  // content changed by a same-invocation audit repair — either way the logged line is stale and the
-  // seam re-audits (the pre-S7a fail-closed crash semantics). The check reads the frozen snapshot and
-  // the dirty set, never the live SEALS a same-invocation seal would leak into.
-  if (logged === 0) {
-    if (seamIdx >= 0 && coveredPrefix.every((id) => SEALS_AT_BOOT.has(id)) && !coveredPrefix.some((id) => dirtySlices.has(id))) return null
+  // W2-S7a (F1) + W2-S7b (item 11): honor a rendered audit ONLY when its coverage SPANS this seams
+  // verified prefix and that whole prefix was sealed AT BOOT. A covered slice absent from the boot
+  // snapshot is being rebuilt now, so the audit judged content that no longer stands; a covered set
+  // narrower than the prefix judged a milestone that has since grown. The check reads the frozen
+  // snapshot, never the live SEALS a same-invocation seal would leak into. A coverage-less W1 member
+  // keeps its exact pre-S7b treatment — the reduction elects one only while no cutoff exists anywhere.
+  const prefixAtBoot = coveredPrefix.every((id) => SEALS_AT_BOOT.has(id))
+  if (seamIdx >= 0) {
+    if (member.exit === 0 && prefixAtBoot && (member.ids[0] === 'legacy' || member.ids[0] === 'covered:' + coveredPrefix.join(','))) return null
+    // Never DISPATCH an audit whose coverage could only be provisional: a covered slice rebuilt this
+    // invocation holds an unpromoted seal candidate, so the append could only die at the CLI, which
+    // refuses an audit covering a slice at no generation. Return the advance-class relaunch instead —
+    // the conductor capture promotes the candidates, and the next boot audits over rendered
+    // membership. The durable fact that relaunch resumes from is already on disk: the rebuild that
+    // made this prefix provisional wrote seal-advance / relaunch-build before the loop reached here.
+    if (!prefixAtBoot) return done('ok', { next_stage: 'build' })
   }
   // Receipt first: the auditor judges executed evidence, so the LAW check
   // receipt refreshes immediately before the initial audit on EVERY path. Red
@@ -2074,11 +2087,11 @@ const auditSeam = async (slice) => {
   let auditorLeg = null
   // The claude audit leg (the claudeGate mirror): the kernel reads the SEALED law hash,
   // the opus auditor echoes it as law_hash, and the kernel validates the five-field
-  // verdict shape, the echo, the recheck lineage, and the audit blocker to finding
-  // referential rule before publishing to the audit gate file. The auditGate
-  // reconciliation wrapper, reviewLoop, and the three-way agreement below stay
-  // UNCHANGED — only the transport is swapped.
-  const claudeAudit = async (mode) => {
+  // verdict shape, the echo, and the audit blocker to finding referential rule before
+  // publishing to the audit gate file. The three-way agreement below stays UNCHANGED —
+  // only the transport is swapped. W2-S7b (item 10): initial-only, like the codex seat —
+  // the recheck arm went with the repair edge it judged.
+  const claudeAudit = async () => {
     // S4-B1: the seam-bounded closed facts, derived kernel-side from the same trim-normalized
     // projection the codex auditFacts reads (sliceIds/milestones, byte-identical to the CLI by the
     // projection-agreement check) — the closing block is the maximal contiguous same-label run
@@ -2096,15 +2109,6 @@ const auditSeam = async (slice) => {
       'audit-claude:lawhash', 'a one-element array holding the sealed law lock.hash digest printed on stdout, [] if exit != 0')
     if (lh.exit !== 0 || lh.ids.length !== 1 || !LAW_HASH.test(lh.ids[0])) return 20
     const lawHash = lh.ids[0]
-    let expectedReviewId, allowedFindingIds
-    if (mode === 'recheck') {
-      const prior = await idsFetch(
-        "node -p 'JSON.stringify((g=>[String(g.review_id)].concat((g.findings||[]).map(f=>String(f.id))))(require(\"./" + P.audit + "\")))'",
-        'audit-claude:recheck-cohort', 'a JSON array whose first element is the prior audit review_id and whose remaining elements are the prior finding ids, [] if exit != 0')
-      if (prior.exit !== 0 || prior.ids.length < 1) return 20
-      expectedReviewId = prior.ids[0]
-      allowedFindingIds = new Set(prior.ids.slice(1))
-    }
     if (await hands('rm -f ' + P.candidate, 'audit-claude:invalidate') !== 0) return 20
     // W2-S3 (B04): the claude auditor is write-capable, so bracket its turn with the shared
     // trio digest. The lawHash echo binds LAW.md; this catches a mutation of any trio member
@@ -2122,9 +2126,9 @@ const auditSeam = async (slice) => {
     auditorLeg = auditLeg.legId
     // W2-S7a (FORK 1): compose the milestone-audit contract (auditFacts, coverage tuples, receipt
     // digest) through the trusted verb before dispatch; the digest threads into the prompt and the
-    // publish-gate binding. A recheck rides the prior audit and the repair delta.
+    // publish-gate binding.
     const ac = await idsFetch(
-      'node ' + shq(plugin + '/scripts/kiln-review') + ' contract-prepare ' + shq('.') + ' .kiln milestone-audit ' + (mode === 'recheck' ? 'recheck' : 'initial') + ' ' + shq(slice) + (mode === 'recheck' ? ' ' + shq(P.audit) + ' ' + shq(P.delta) : ''),
+      'node ' + shq(plugin + '/scripts/kiln-review') + ' contract-prepare ' + shq('.') + ' .kiln milestone-audit initial ' + shq(slice),
       'audit-claude:contract', 'a one-element array holding the canonical contract sha256 printed on stdout, [] if exit != 0')
     if (ac.exit !== 0 || ac.ids.length !== 1 || !LAW_HASH.test(ac.ids[0])) return 20
     const auditContract = ac.ids[0]
@@ -2133,9 +2137,7 @@ const auditSeam = async (slice) => {
       'The canonical contract at .kiln/contracts/sha256/' + auditContract + '.json is the COMPLETE authoritative facts for this audit — the sealed law_hash, the seam, the milestone, the closing block, the cumulative sealed prefix, the coverage tuples, and the receipt digest. Judge exactly that contract.',
       'Project dir: ' + projectDir + '. Read the locked law at ' + P.law + ', the vision documents in the repository, and the slice plan at ' + P.slices + '. The milestone under audit' + (milestones[seam] ? ' (' + milestones[seam] + ')' : '') + ' closes at slice ' + slice + '. The closing block is exactly: ' + closingBlock.join(', ') + '. The cumulative sealed prefix under audit is exactly: ' + sealedPrefix.join(', ') + ' — judge ONLY this prefix; slices beyond it are out of scope, never evidence, never a finding.',
       'Judge goal-backward over the cumulative sealed prefix with focus on the closing block at slice ' + slice + ': integrated reachability, the connections between slices, and delivery of the milestone goal. The law checks were already executed kernel-side; their full output is attached verbatim at ' + P.receipt + '. Read files freely to judge, but execute nothing — no tests, no builds, no state-changing commands. Creative direction and visual taste belong to the builder; never raise them as a finding. Change no file: judge the milestone, write only the verdict.',
-      mode === 'recheck'
-        ? 'Read and reuse the prior review_id from ' + P.audit + ' first. Recheck only the finding ids in ' + P.audit + ' against ' + P.delta + ' and the current repository. Preserve each unresolved finding id; never add one. Accept only when every listed finding is repaired.'
-        : 'For each finding pin the failed LAW criterion id in criterion and an exact repo-relative path:line in location, with the concrete failure, its evidence, and the smallest repair. Every blocker id must equal one of your finding ids. Verdict rules: accept only when findings and blockers are both empty; changes_required for repairable findings with no blockers; blocked only when the milestone goal is undeliverable, with blocker ids naming findings. Mint a fresh review_id.',
+      'For each finding pin the failed LAW criterion id in criterion and an exact repo-relative path:line in location, with the concrete failure, its evidence, and the smallest repair. Every blocker id must equal one of your finding ids. Verdict rules: accept only when findings and blockers are both empty; changes_required for repairable findings with no blockers; blocked only when the milestone goal is undeliverable, with blocker ids naming findings. Mint a fresh review_id.',
       'Set law_hash to exactly ' + lawHash + ' — the sealed law digest; copy it verbatim.',
       'Compose the verdict object per ' + plugin + '/scripts/review-schema.json, and as the FINAL act of your turn write it as JSON to ' + P.candidate + '. Then return { ok: true } — the ack carries no verdict; the kernel reads and validates the file you wrote.',
     ].join('\n'), { label: auditLeg.label, ...auditorOpts, schema: ACK })
@@ -2144,7 +2146,7 @@ const auditSeam = async (slice) => {
     if (raw.exit !== 0 || raw.ids.length !== 1) return 20
     let g
     try { g = JSON.parse(raw.ids[0]) } catch { return 20 }
-    if (gateReviewInvalid(g, lawHash, expectedReviewId, allowedFindingIds) !== null) return 20
+    if (gateReviewInvalid(g, lawHash) !== null) return 20
     // The audit referential rule (kiln-review auditShapeInvalid mirror): a blocked
     // verdict carries findings, and every blocker id equals a finding id — so a blocker
     // always carries its criterion, location and minimal fix through that finding.
@@ -2159,124 +2161,37 @@ const auditSeam = async (slice) => {
     const w = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' publish-gate .kiln audit ' + P.candidate + ' ' + P.audit + ' ' + shq(auditLeg.legId) + ' ' + shq(auditContract), 'audit-claude:publish')
     return w === 0 ? verdictExit(g.verdict) : 20
   }
-  // The kernel-owned derivation from the last parsed published verdict — the
-  // promotion below demands the advance result AND an accept from THIS,
-  // never the wire verdict alone.
+  // ONE dispatch, no loop: closed facts only ride the argv — repo `.`, the cwd-relative kiln dir, the
+  // seam slice id, and the reviewer-gate model, alias and effort from the tier file (the ratify-leg
+  // pattern).
+  const exit = degraded
+    ? await claudeAudit()
+    : await hands(plugin + '/scripts/kiln-review audit . .kiln ' + slice + ' ' + auditorOpts.model + ' ' + auditorOpts.alias + ' ' + auditorOpts.effort + ' ' + P.audit, 'audit:review')
+  // The kernel-owned derivation from the published verdict: the ONE sanctioned audit-verdict parse
+  // (the gate-file mirror). The kernel rederives the verdict from the published closed arrays and
+  // demands THREE-WAY agreement — derivation, wire exit, AND the published verdict string (exit 0
+  // over a `blocked` string is a disagreement the exit alone cannot see). Anything less leaves
+  // derived null, and every branch below needs it: an unusable verdict can neither promote an audit
+  // nor withdraw a prefix, so it falls through to the transport hold.
   let derived = null
-  let recheckRed = null
-  // W2-S3: a torn trio at the recheck receipt cannot return a kernel hold from inside the
-  // gate (the gate returns an exit code), so it stashes here and the after-loop door rules it
-  // fail-closed before the recheckRed / law-red ruling.
-  let trioTorn = false
-  const auditGate = async (mode) => {
-    // The freshReceipt mirror: every recheck judges a fresh receipt; a sealed
-    // or non-future red stashes for the after-loop reopen / law-red ruling.
-    if (mode === 'recheck') {
-      const again = await lawBeat(LAW_CHECK_RECEIPT, 'law:pre-audit-recheck')
-      if (again.exit === TRIO_MISMATCH) {
-        trioTorn = true
-        return 20
-      }
-      if (again.exit !== 0) {
-        const owner = await firstSealed(again.ids)
-        if (owner || !redSetIsFuture(again.ids, slice, sliceIds)) {
-          recheckRed = again.ids
-          return 20
-        }
-      }
+  if (exit === 0 || exit === 10 || exit === 11) {
+    const raw = await idsFetch('cat ' + P.audit, 'audit:read', 'a one-element array holding the exact audit verdict file contents printed on stdout, [] if exit != 0')
+    let g = null
+    // Totality over the published bytes: JSON `null` parses clean, so the object guard rules before
+    // any dereference.
+    if (raw.exit === 0 && raw.ids.length === 1) {
+      try { g = JSON.parse(raw.ids[0]) } catch { g = null }
     }
-    // Closed facts only ride the argv: repo `.`, the cwd-relative kiln dir, the
-    // seam slice id, and the reviewer-gate model and effort from the tier file
-    // (the ratify-leg pattern). The recheck hands the published prior verdict
-    // path as its own pre-recheck snapshot — the CLI reads the prior fully
-    // before it writes the output path — plus the repair-delta path.
-    const exit = degraded
-      ? await claudeAudit(mode)
-      : await hands(
-          mode === 'recheck'
-            ? plugin + '/scripts/kiln-review audit-recheck . .kiln ' + slice + ' ' + auditorOpts.model + ' ' + auditorOpts.alias + ' ' + auditorOpts.effort + ' ' + P.audit + ' ' + P.delta + ' ' + P.audit
-            : plugin + '/scripts/kiln-review audit . .kiln ' + slice + ' ' + auditorOpts.model + ' ' + auditorOpts.alias + ' ' + auditorOpts.effort + ' ' + P.audit,
-          'audit:' + mode)
-    if (exit === 0 || exit === 10 || exit === 11) {
-      // The ONE sanctioned audit-verdict parse (the gate-file mirror): the
-      // kernel rederives the verdict from the published closed arrays and
-      // demands THREE-WAY agreement — derivation, wire exit, AND the published
-      // verdict string (exit 0 over a `blocked` string is a disagreement the
-      // exit alone cannot see). Invalid, a recompute mismatch, or a string
-      // disagreement is the invalid-artifact wire law, transport-class, never
-      // a promotion.
-      const raw = await idsFetch('cat ' + P.audit, 'audit:read', 'a one-element array holding the exact audit verdict file contents printed on stdout, [] if exit != 0')
-      if (raw.exit !== 0 || raw.ids.length !== 1) return 20
-      let g
-      try { g = JSON.parse(raw.ids[0]) } catch { return 20 }
-      // Totality over the published bytes: JSON `null` parses clean, so the
-      // object guard rules before any dereference.
-      if (!g || typeof g !== 'object') return 20
+    if (g && typeof g === 'object') {
       const d = reconcileAudit(g.findings, g.blockers)
-      if (g.verdict !== d.verdict || verdictExit(d.verdict) !== exit) return 20
-      derived = d.verdict
-      // Blocked is recoverable at this gate — the canonical reopen edge: exit
-      // 11 returns to the loop as the reject class and drives the same repair
-      // plus recheck cycle a changes_required does.
-      return exit === 11 ? 10 : exit
+      if (g.verdict === d.verdict && verdictExit(d.verdict) === exit) derived = d.verdict
     }
-    return exit
   }
-  const loop = await reviewLoop({
-    gate: auditGate,
-    // The pinned prior cohort: the finding ids the published audit verdict carries.
-    cohort: async () => {
-      const c = await idsFetch(
-        "node -p 'JSON.stringify((require(\"./" + P.audit + "\").findings||[]).map(f=>String(f.id)))'",
-        'audit:findings', 'the printed JSON array of the current audit finding ids, [] if exit != 0',
-      )
-      return c.exit === 0 ? c.ids : null
-    },
-    // ONE fresh Claude leg, opposite-family to the GPT auditor, on the ACK
-    // contract: a STATIC prompt of closed-safe paths only — the leg itself
-    // reads the audit JSON and LAW.md (criterion ownership is LAW.md prose),
-    // repairs the owning slices, and writes the repair delta. Seals stand:
-    // a repaired sealed slice is never re-sealed.
-    repair: async () => {
-      // W2-S7a: the audit repair is an attestation-bearing build-class leg — mint its identity and
-      // dispatch under the reserved label so capture-and-finalize resolves it (S7b binds it into the
-      // re-seal it forces). A failed mint holds the repair.
-      const repairLeg = await mintLeg('audit-repair', tier('builder-ui').alias, slice)
-      if (!repairLeg) return false
-      auditRepairLegs.push(repairLeg.legId)
-      // W2-S7a (B-F1-DIRTY-PREFIX): this repair mutates sealed content across the audited covered
-      // prefix, so every covered slice is now dirty — a later logged seam whose prefix intersects it
-      // must re-audit rather than skip over content the repair changed.
-      for (const id of coveredPrefix) dirtySlices.add(id)
-      const ack = await agent([
-        'You are the milestone audit repair leg: a fresh mind repairing the audited milestone against the locked law.',
-        'Project dir: ' + projectDir + '. Read the published audit verdict at ' + P.audit + ' and the locked law at ' + P.law + '.',
-        'Repair the content the findings pin, slice by owning slice, blockers first. Criterion ownership is read from ' + P.law + '. Seals stand: never re-seal a repaired slice.',
-        'Write the repair delta to ' + P.delta + ' describing every change. Then return { ok: true } — the ack carries no verdict; the audit recheck judges the repository.',
-      ].join('\n'), { label: repairLeg.label, ...tier('builder-ui'), schema: ACK })
-      if (!ack || ack.ok !== true) return false
-      // The reviewLoop contract: a repair confirms only with its delta on disk —
-      // the same `test -s` the slice-gate repair edge performs. An ACK without a
-      // nonempty delta is repair-failed, never a recheck over nothing (the
-      // recheck would reject the blank delta as transport and mask the truth).
-      return await hands('test -s ' + P.delta, 'delta:check') === 0
-    },
-  }, cap)
-  // W2-S3: a trio torn during the audit recheck holds fail-closed before any red ruling.
-  if (trioTorn) return trioMismatchHold(slice)
-  // A red pre-recheck rerun is a law fact, not a transport fact — the pre-seal
-  // door rules it before any transport branch reads the result.
-  if (recheckRed) {
-    const owner = await firstSealed(recheckRed)
-    if (owner) return reopen(owner, 'pre-audit-recheck')
-    return failStop('law-red',
-      { stage, active_slice: slice, next_action: 'Rerun stage build: the LAW went red during the milestone audit of slice ' + slice },
-      'The law went red during the milestone audit of slice ' + slice + ' — no recheck over a red law.')
-  }
-  // Kernel-owned promotion: only the advance result AND an accept from the
+  const outcome = gateOutcome(exit)
+  // Kernel-owned promotion: only the accept outcome AND an accept from the
   // kernel derivation append the audit fact — through the trusted CLI verb,
   // never a bare shell append. Then the loop continues past the seam.
-  if (loop.result === 'sealed' && derived === 'accept') {
+  if (outcome === 'accept' && derived === 'accept') {
     // The audit ledger line carries the family label, reread tri-state at append time
     // (S4-D4/D5): absent appends dual, present single-family, an untrusted read HOLDS.
     const auditFamily = await sealLabel('audit:seal-label')
@@ -2286,34 +2201,36 @@ const auditSeam = async (slice) => {
         await voiceBeat('transport-failure', {}, 'The degradation marker gave no trustworthy answer at the milestone audit append of slice ' + slice + ' — the run holds rather than record an untrusted family label.', 1),
         { gate: P.audit })
     }
-    // W2-S7a (B-AUDIT-REPAIR-REF): the audit candidate records BOTH the auditor leg and the
-    // audit-repair legs that mutated the sealed content this generation. The degraded seat carries
-    // its claude auditor leg; the codex path leaves the auditor position the - sentinel (its identity
-    // rides reviews.jsonl) but still records any repair legs. A still-pending referenced Claude intent
-    // makes the row provisional until capture-and-finalize promotes it; with no legs at all the legacy
-    // three-word arity is byte-identical.
-    const auditWords = auditRepairLegs.length > 0
-      ? [auditorLeg || '-', auditRepairLegs.join(',')]
-      : (auditorLeg ? [auditorLeg] : [])
-    const auditRef = auditWords.length ? ' ' + auditWords.map(shq).join(' ') : ''
-    if (await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' append-audit .kiln ' + slice + ' ' + auditFamily + auditRef, 'audit:append') !== 0) return persistFail('audit-append')
+    // W2-S7b (item 6): the audit candidate records the auditor leg — the degraded seat its claude leg,
+    // the codex path the - sentinel (its identity rides reviews.jsonl) — and the SIXTH word carries the
+    // attestation kind unconditionally, never keyed on whether a cutoff exists. The repair-legs word is
+    // always empty: no leg mutates sealed content on this path at all. A still-pending referenced
+    // Claude intent makes the row provisional until capture-and-finalize promotes it.
+    if (await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' append-audit .kiln ' + slice + ' ' + auditFamily + ' ' + shq(auditorLeg || '-') + ' ' + shq('') + ' ' + shq('reviewed'), 'audit:append') !== 0) return persistFail('audit-append')
     return null
   }
   // Stop surfaces: the existing statuses, exactly as the build gate maps them.
   // Every next_action is a STATIC template interpolating only the seam slice
-  // id, the pass count, and the audit artifact path — no verdict prose enters
-  // STATE; the audit JSON is the operator detail surface.
-  if (loop.result === 'blocked') {
+  // id and the audit artifact path — no verdict prose enters STATE; the audit
+  // JSON is the operator detail surface.
+  // W2-S7b (item 10, the D2 cure): a derived non-accept WITHDRAWS the entire covered prefix through
+  // the one batch cutoff and stops. Nothing mutates sealed content behind standing seals — the next
+  // boot rebuilds every invalidated slice through the ordinary build/review/seal path, and a fresh
+  // full milestone audit runs over the reseal. The cutoff fires only on the three-way-agreed derived
+  // verdict, never on a wire exit alone, and it lands BEFORE the STATE write, so a crash between them
+  // relaunches onto a durable cutoff and a fresh audit rather than a stale verdict.
+  if (derived === 'changes_required' || derived === 'blocked') {
     const found = await idsFetch(
       "node -p 'JSON.stringify((require(\"./" + P.audit + "\").findings||[]).map(f=>String(f.id)))'",
       'audit:findings', 'the printed JSON array of the current audit finding ids, [] if exit != 0',
     )
-    beats.push(await voiceBeat('blocked', { passes: loop.repairs, ids: found.ids.join(', '), count: found.ids.length }, 'The gate held after ' + loop.repairs + ' repair passes — the ruling is yours.'))
+    if (await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' invalidate .kiln ' + shq(coveredPrefix.join(',')), 'seal:invalidate') !== 0) return persistFail('seal-invalidate')
+    beats.push('The milestone audit did not accept slice ' + slice + '. Every seal it covered is withdrawn — evidence-bound, not sacred — and the next fire rebuilds them from the sealed plan. Findings ' + found.ids.join(', ') + ' are on the table; the ruling is yours.')
     return stop('blocked',
-      { stage, active_slice: slice, next_action: 'Operator ruling: the milestone audit held for slice ' + slice + ' after ' + loop.repairs + ' repair passes — the verdict is at ' + P.audit },
-      { gate: P.audit, finding_ids: found.ids, passes: loop.repairs })
+      { stage, active_slice: slice, next_action: 'Operator ruling: the milestone audit did not accept slice ' + slice + ' — the covered prefix is withdrawn and the verdict is at ' + P.audit },
+      { gate: P.audit, finding_ids: found.ids })
   }
-  if (loop.result === 'degraded') {
+  if (outcome === 'codex_unavailable') {
     // S4-D2: the FIRST codex-down detection is the acknowledgment stop the slice gates
     // take — persist BOTH markers and stop. The acked re-run enters with the marker set
     // and audits single-family through the claude seat above; the append reads the
@@ -2323,20 +2240,14 @@ const auditSeam = async (slice) => {
     beats.push(db)
     return stop('degraded', { stage, active_slice: slice, next_action: 'Acknowledge single-family degradation, then relaunch stage build: the milestone audit of slice ' + slice + ' completes single-family' })
   }
-  if (loop.result === 'gate-unreachable') {
+  if (outcome === 'gate_unreachable') {
     return failStop('gate-unreachable',
       { stage, active_slice: slice, next_action: 'Rerun stage build: the milestone audit gate tool is unreachable for slice ' + slice },
       await voiceBeat('gate-unreachable', {}, 'The gate tool would not run — not found or not executable where it lives, so codex was never reached and no verdict was possible.'),
       { gate: P.audit })
   }
-  if (loop.result === 'repair-failed') {
-    return failStop('repair-failed',
-      { stage, active_slice: slice, next_action: 'Rerun stage build: the milestone audit repair pass did not land for slice ' + slice },
-      'The milestone audit repair pass did not land for slice ' + slice + ' — the run holds.',
-      { gate: P.audit })
-  }
-  // transport-failure — and, fail-closed, any advance whose derivation is not
-  // accept — holds here: no verdict, no promotion.
+  // transport-failure — and, fail-closed, any outcome whose derivation is not
+  // usable — holds here: no verdict, no promotion, no cutoff.
   return failStop('transport-failure',
     { stage, active_slice: slice, next_action: 'Rerun stage build after fixing the transport: the milestone audit of slice ' + slice + ' published no usable verdict' },
     await voiceBeat('transport-failure', {}, 'The milestone audit call for slice ' + slice + ' returned no verdict — the run holds.'),
@@ -2713,7 +2624,14 @@ for (const [idx, entry] of slices.entries()) {
   // which had no gate at all. Every word shq-quoted (the gateCmd idiom). The builder legs are
   // pending Claude intents, so the seal appends PROVISIONAL and renders no membership until
   // capture-and-finalize promotes it.
-  const s = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' append-seal .kiln ' + slice + ' ' + label + ' ' + shq(builderLegs.join(',')) + ' ' + shq(reviewerLeg || '-') + ' ' + shq('.'), 'seal:append')
+  // W2-S7b (items 6 and 8): the SEVENTH word is the attestation kind, passed unconditionally from
+  // here on — a gated seal is `reviewed` and binds by reference to its accepted review; the one
+  // ungated path, the acknowledged degraded-ui seal, is `verdictless-degraded-ui`, which is what makes
+  // the two distinguishable on the wire (D3). runGate is the closed fact that tells them apart, and
+  // the verdictless field law — single-family label, reviewer `-` — is already exactly what that path
+  // passes. It is never keyed on whether a cutoff exists: from the first cutoff the seal ledger is
+  // modern, and a candidate carrying no kind is refused.
+  const s = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' append-seal .kiln ' + slice + ' ' + label + ' ' + shq(builderLegs.join(',')) + ' ' + shq(reviewerLeg || '-') + ' ' + shq('.') + ' ' + shq(runGate ? 'reviewed' : 'verdictless-degraded-ui'), 'seal:append')
   if (s !== 0) return persistFail('seal-append')
   // W2-S7a (B-PROVISIONAL-LIVE): the seal is provisional while its Claude builder legs are unresolved
   // (they resolve only at the conductor capture), so it grants NO rendered membership yet. SEALS
@@ -2723,12 +2641,13 @@ for (const [idx, entry] of slices.entries()) {
   beats.push(await voiceBeat('seal', { ...facts, label }, 'sealed — {label} · slice {slice}'))
   const w = await hands(stateCommitCmd(plugin, 'seal-advance', stage, slice, 'relaunch-build', density, [...routes]), 'state:write')
   if (w !== 0) return persistFail('state-write')
-  // W7-S2: the seam gate fires after the fresh seal and its STATE write — the
-  // milestone audit rules before the loop advances past the seam.
-  if (facts.seam) {
-    const held = await auditSeam(slice)
-    if (held) return held
-  }
+  // W2-S7b (item 11): a FRESH seam candidate is provisional until the conductor capture promotes it,
+  // so this invocation returns rather than audit it — an audit over a provisional prefix could only
+  // die at its append. The STATE write above already persisted the durable fact this relaunch resumes
+  // from (token seal-advance, key relaunch-build); capture-and-finalize runs after every terminal
+  // return, so the next boot audits the seam over RENDERED membership through the sealed-skip path.
+  // That leaves auditSeam exactly one call site, behind the sealed-skip, by construction.
+  if (facts.seam) return done('ok', { next_stage: 'build' })
 }
 // LAW rerun beat: stage end. Red reopens only a sealed owner.
 const post = await lawBeat(LAW_CHECK, 'law:stage-end')
