@@ -88,6 +88,52 @@ function stringArray(value) {
   return Array.isArray(value) && value.every((item) => typeof item === 'string')
 }
 
+// W2-S8: the ONE containment gate for a path that reaches the filesystem from model-written
+// content. It answers with an absolute path INSIDE root or it HOLDs — never a falsy value a caller
+// could read as absence. Containment is proven twice: lexically against the root, then PHYSICALLY
+// over the deepest EXISTING ancestor of the target, so a link is an outside path wearing an inside
+// name whether it stands at the target or at a directory above it, while the not-yet-created tail
+// carries no link to follow — one gate serves a read and a first write alike. A root, an ancestor
+// or a dangling link that cannot be resolved HOLDs: a containment question that cannot be answered
+// is never answered yes. It proves the PATH, not the open; a caller needing race-proof bytes opens
+// by descriptor, as the manifest apparatus already does for its own reads.
+function containedPath(root, rel, label) {
+  const fail = (why) => stop('transport_failure', `${label}: ${why}`, TRANSPORT_FAILURE)
+  // The boundary is the root plus exactly one separator, so a sibling whose name merely begins with
+  // the root is outside. A root that ALREADY ends in a separator — the filesystem root itself — must
+  // not grow a second one, or the check would refuse its own children.
+  const within = (path, base) => path === base || path.startsWith(base.endsWith(sep) ? base : base + sep)
+  if (typeof rel !== 'string' || rel.trim() === '') fail('the path must be a nonempty string')
+  const rootAbs = resolve(root)
+  const abs = resolve(rootAbs, rel)
+  if (!within(abs, rootAbs)) fail(`${rel} resolves outside ${rootAbs}`)
+  let rootReal
+  try {
+    rootReal = realpathSync(rootAbs)
+  } catch (error) {
+    fail(`the containment root ${rootAbs} is unresolvable: ${error.message}`)
+  }
+  // The walk is bounded by the lexical proof above: abs lies under rootAbs, which exists.
+  let probe = abs
+  while (probe !== rootAbs) {
+    try {
+      lstatSync(probe)
+      break
+    } catch (error) {
+      if (error.code !== 'ENOENT') fail(`${probe} could not be examined: ${error.message}`)
+      probe = dirname(probe)
+    }
+  }
+  let real
+  try {
+    real = realpathSync(probe)
+  } catch (error) {
+    fail(`${rel} does not physically resolve: ${error.message}`)
+  }
+  if (!within(real, rootReal)) fail(`${rel} physically resolves outside ${rootAbs}`)
+  return abs
+}
+
 // W2-S4 (C1 / B03 / Sol Model A): the builder request survives ONLY as non-authoritative
 // evidence hints — what the builder covered, touched, observed and ran. The authoritative gate
 // facts (law_hash, law_text, reviewer model/effort, slice) are derived CLI-side over the sealed
@@ -107,10 +153,11 @@ function hintsFrom(file) {
   return { criteria: raw.criteria, paths: raw.paths, failures: raw.failures, commands: raw.commands }
 }
 
-// A ratify request names the readable artifact and the rubric it is graded against,
-// carries its own review_id (the caller issues it — unlike a slice review, which
-// mints one), and picks the reviewer. There is no law_hash to supply: the ratified
-// artifact's own bytes become the digest, computed at dispatch.
+// A ratify request names the readable artifact, carries its own review_id (the caller
+// issues it — unlike a slice review, which mints one), and picks the reviewer. There is
+// no law_hash to supply: the bytes of the ratified artifact become the digest, computed at
+// dispatch. W2-S8: it no longer names a rubric — the instrument is a shipped constant the
+// family word selects, so no request can point the grader at a file of its own choosing.
 function ratifyRequestFrom(file) {
   const raw = readJson(file, 'invalid ratify request')
   if (!isObject(raw)) stop('transport_failure', 'ratify request must be a JSON object', TRANSPORT_FAILURE)
@@ -133,16 +180,12 @@ function ratifyRequestFrom(file) {
   if (typeof raw.artifact !== 'string' || raw.artifact.trim() === '') {
     stop('transport_failure', 'ratify request artifact must be a nonempty path string', TRANSPORT_FAILURE)
   }
-  if (typeof raw.rubric !== 'string' || raw.rubric.trim() === '') {
-    stop('transport_failure', 'ratify request rubric must be a nonempty path string', TRANSPORT_FAILURE)
-  }
   return {
     reviewerModel: raw.reviewer_model,
     reviewerAlias: raw.reviewer_alias,
     reviewerEffort,
     reviewId: raw.review_id,
     artifact: raw.artifact,
-    rubric: raw.rubric,
   }
 }
 
@@ -157,6 +200,24 @@ function rubricFrom(file) {
     }
   }
   return raw.criteria
+}
+
+// W2-S8: the ratify family grades against a SHIPPED instrument selected by its family word — a
+// rubric path that cannot be supplied cannot escape the plugin, and both transports are guaranteed
+// to grade the same artifact against the same criteria. The map is also the closed family set: a
+// family with no shipped rubric HOLDs here, before any compose, store or spawn. A Map, not an
+// object, so no inherited key ever answers a lookup.
+const RATIFY_RUBRIC = new Map([
+  ['ratify', join(__dirname, '..', 'data', 'law-rubric.json')],
+  ['feasibility', join(__dirname, '..', 'data', 'feasibility-rubric.json')],
+])
+
+function shippedRubric(family, verb) {
+  const path = RATIFY_RUBRIC.get(family)
+  if (path === undefined) {
+    stop('transport_failure', `${verb} purpose must be ${[...RATIFY_RUBRIC.keys()].join(' or ')} — no other family has a shipped rubric`, TRANSPORT_FAILURE)
+  }
+  return rubricFrom(path)
 }
 
 // W7-A1: the audit argv contract — closed facts only ride argv. Model, alias and effort arrive
@@ -464,28 +525,18 @@ function screenEvidence(generation) {
   if (counts.keyframes !== keyframes.length || counts.references !== references.length || counts.images !== imageNames.length) {
     stop('transport_failure', 'manifest counts do not match its named files', TRANSPORT_FAILURE)
   }
-  let dirReal
-  try {
-    dirReal = realpathSync(generation.dir)
-  } catch (error) {
-    stop('transport_failure', `generation dir unreadable: ${error.message}`, TRANSPORT_FAILURE)
-  }
+  // W2-S8: containment is the shared gate now — this is the site the shared gate was generalized
+  // FROM, and the manifest names are model-written like every other guarded path. What stays local
+  // is the class check the shared gate deliberately does not make: an evidence entry must be a
+  // REGULAR FILE that already exists, never a directory and never a name the capture has yet to write.
   const inside = (p) => {
-    const abs = resolve(generation.dir, p)
-    if (!abs.startsWith(generation.dir + sep)) {
-      stop('transport_failure', `manifest names a path outside its generation dir: ${p}`, TRANSPORT_FAILURE)
-    }
-    let real
+    const abs = containedPath(generation.dir, p, `manifest entry ${p}`)
     try {
-      real = realpathSync(abs)
-      if (!statSync(real).isFile()) {
+      if (!statSync(abs).isFile()) {
         stop('transport_failure', `manifest names a path that is not a regular file: ${p}`, TRANSPORT_FAILURE)
       }
     } catch (error) {
       stop('transport_failure', `manifest names a file that is not on disk: ${p}: ${error.message}`, TRANSPORT_FAILURE)
-    }
-    if (!real.startsWith(dirReal + sep)) {
-      stop('transport_failure', `manifest names a file physically outside its generation dir: ${p}`, TRANSPORT_FAILURE)
     }
     return abs
   }
@@ -3472,14 +3523,17 @@ if (mode === 'review' && args.length === 8) {
   const [repoPath, kilnDir, requestFile, outputFile, family] = args
   const request = ratifyRequestFrom(requestFile)
   const repo = repository(repoPath)
+  // W2-S8: the artifact path is the ONE path this verb still takes from the request the model
+  // wrote, so it is proven inside the repository before it is opened; the rubric is shipped.
+  const rubric = shippedRubric(family, 'ratify')
+  const artifactPath = containedPath(repo, request.artifact, 'ratify artifact')
   let artifactBytes
   try {
-    artifactBytes = readFileSync(resolve(repo, request.artifact))
+    artifactBytes = readFileSync(artifactPath)
   } catch (error) {
     stop('transport_failure', `ratify artifact unreadable: ${error.message}`, TRANSPORT_FAILURE)
   }
   const candidateDigest = createHash('sha256').update(artifactBytes).digest('hex')
-  const rubric = rubricFrom(request.rubric)
   const packet = {
     mode: 'ratify',
     review_id: request.reviewId,
@@ -3528,14 +3582,15 @@ if (mode === 'review' && args.length === 8) {
     stop('transport_failure', 'ratify-recheck request review_id differs from the prior review', TRANSPORT_FAILURE)
   }
   const repo = repository(repoPath)
+  const rubric = shippedRubric(family, 'ratify-recheck')
+  const artifactPath = containedPath(repo, request.artifact, 'ratify artifact')
   let artifactBytes
   try {
-    artifactBytes = readFileSync(resolve(repo, request.artifact))
+    artifactBytes = readFileSync(artifactPath)
   } catch (error) {
     stop('transport_failure', `ratify artifact unreadable: ${error.message}`, TRANSPORT_FAILURE)
   }
   const candidateDigest = createHash('sha256').update(artifactBytes).digest('hex')
-  const rubric = rubricFrom(request.rubric)
   const findingIds = new Set(prior.findings.map((finding) => finding.id))
   const packet = {
     mode: 'ratify-recheck',
@@ -3814,7 +3869,7 @@ if (mode === 'review' && args.length === 8) {
 } else if (mode === 'contract-prepare' && args.length >= 4) {
   // W2-S7a (FORK 1): the trusted contract composer the CLAUDE reviewer legs run BEFORE dispatch. It
   // derives the SAME authoritative facts the matching codex verb embeds (buildGateFacts, hintsFrom,
-  // auditFacts, coverageTuples, ratifyRequestFrom's artifact + rubric, the screen evidence), composes
+  // auditFacts, coverageTuples, the ratify artifact + its shipped rubric, the screen evidence), composes
   // and content-addresses the canonical contract, and prints its digest as the ONE closed stdout fact
   // the kernel threads into the reviewer prompt and the publish-gate binding. The kind-specific args
   // MIRROR the matching gate verb argv minus model, alias, effort and the output path. Any derivation,
@@ -3892,23 +3947,23 @@ if (mode === 'review' && args.length === 8) {
       }
       built = prepareContract(kilnDir, kind, operation, facts)
     } else if (kind === 'artifact-ratify') {
-      const [family, artifactPath, rubricPath, priorFile] = rest
-      if (family !== 'ratify' && family !== 'feasibility') {
-        stop('transport_failure', 'contract-prepare ratify purpose must be ratify or feasibility', TRANSPORT_FAILURE)
-      }
-      if (typeof artifactPath !== 'string' || artifactPath.trim() === '') {
-        stop('transport_failure', 'contract-prepare ratify artifact must be a nonempty path', TRANSPORT_FAILURE)
-      }
+      const [family, artifactPath, priorFile] = rest
+      // W2-S8: the claude transport derives the artifact and the instrument under the SAME two
+      // rules the codex verb applies — the shipped rubric its family selects, and an artifact
+      // proven inside the repository — so neither transport can contract over facts the other
+      // would refuse.
+      const rubric = shippedRubric(family, 'contract-prepare ratify')
+      const artifactAbs = containedPath(repo, artifactPath, 'contract-prepare ratify artifact')
       let artifactBytes
       try {
-        artifactBytes = readFileSync(resolve(repo, artifactPath))
+        artifactBytes = readFileSync(artifactAbs)
       } catch (error) {
         stop('transport_failure', `contract-prepare ratify artifact unreadable: ${error.message}`, TRANSPORT_FAILURE)
       }
       const facts = {
         purpose: family, artifact_path: artifactPath,
         artifact_sha256: createHash('sha256').update(artifactBytes).digest('hex'),
-        artifact: artifactBytes.toString('utf8'), rubric: rubricFrom(rubricPath),
+        artifact: artifactBytes.toString('utf8'), rubric,
       }
       if (operation === 'recheck') {
         // W2-S7a (F2): the SAME prior-eligibility the codex ratify-recheck verb enforces — full shape

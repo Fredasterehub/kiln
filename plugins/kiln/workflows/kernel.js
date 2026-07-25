@@ -397,9 +397,11 @@ const MILESTONE_PROJECTION_CHECK =
 // shipped perceptual-rubric id (the FIXED six, duplicated here because a const command
 // cannot read the plugin path — the kernel.test.mjs drift guard pins the two lists
 // together); DISTINCT dims 4-6; a nonempty reference cell names an existing path INSIDE
-// the project root (resolve-containment before fs.existsSync — an absolute or
-// parent-escaping path that exists elsewhere never rides; the card demands an existing
-// repo path). COVERAGE: every slices.json entry with surface
+// the project root, proven lexically AND physically against the real root (W2-S8: the
+// cell is LAW text a model wrote, so an absolute path, a parent escape, and a symlink
+// that merely wears an inside name all fail alike; realpath also subsumes the existence
+// check, since a path that does not resolve is not an existing repo path).
+// COVERAGE: every slices.json entry with surface
 // ui or mixed owns at least one row. CONSISTENCY: any ui/mixed surface REQUIRES the
 // table, and a `## Perceptual` heading with no well-formed table under it fails closed.
 // Absent table with no ui/mixed surfaces agrees (exit 0) — the dormant run never pays.
@@ -410,7 +412,7 @@ const PERCEPTUAL_TABLE_CHECK =
   "const vis=slices.filter(s=>[\"ui\",\"mixed\"].indexOf(String((s&&s.surface)||\"\").trim())>=0).map(s=>String((s&&s.id)||\"\").trim());" +
   "const dims=[\"composition-hierarchy\",\"typography\",\"color-contrast\",\"interaction-feedback\",\"motion-continuity\",\"fidelity-to-requirement\"];" +
   "const head=[\"criterion id\",\"owning slice\",\"dim\",\"requirement\",\"proxy command\",\"expected\",\"reference\"];" +
-  "const path=require(\"path\");const root=path.resolve(\".\");" +
+  "const path=require(\"path\");const root=fs.realpathSync(\".\");" +
   "const cells=s=>s.split(/(?<!\\\\)\\|/).slice(1,-1).map(x=>x.replace(/\\\\\\|/g,\"|\").trim());" +
   "const lines=fs.readFileSync(\"./.kiln/LAW.md\",\"utf8\").split(\"\\n\");" +
   "let rows=[],state=0,ok=true,found=false;" +
@@ -428,7 +430,8 @@ const PERCEPTUAL_TABLE_CHECK =
   "if(seen.has(c[0]))ok=false;seen.add(c[0]);" +
   "if(ids.indexOf(c[1])<0)ok=false;owned.add(c[1]);" +
   "if(dims.indexOf(c[2])<0)ok=false;dset.add(c[2]);" +
-  "if(c[6]){const a=path.resolve(c[6]);if(!(a===root||a.slice(0,root.length+1)===root+path.sep)||!fs.existsSync(a))ok=false;}}" +
+  "if(c[6]){const a=path.resolve(root,c[6]);let r=\"\";try{r=fs.realpathSync(a)}catch(e){}" +
+  "if(!(a===root||a.slice(0,root.length+1)===root+path.sep)||!(r===root||r.slice(0,root.length+1)===root+path.sep))ok=false;}}" +
   "if(dset.size<4||dset.size>6)ok=false;" +
   "for(const v of vis)if(!owned.has(v))ok=false;" +
   "}else{ok=vis.length===0;}" +
@@ -1434,7 +1437,7 @@ if (stage !== 'build') {
       // rubric criteria) through the trusted verb before dispatch; the digest threads into the prompt
       // and the publish-gate binding. A recheck rides the prior gate for its finding cohort.
       const rc = await idsFetch(
-        'node ' + shq(plugin + '/scripts/kiln-review') + ' contract-prepare ' + shq('.') + ' .kiln artifact-ratify ' + (mode === 'recheck' ? 'recheck' : 'initial') + ' ratify ' + shq(P.law) + ' ' + shq(plugin + '/data/law-rubric.json') + (mode === 'recheck' ? ' ' + shq(P.gate) : ''),
+        'node ' + shq(plugin + '/scripts/kiln-review') + ' contract-prepare ' + shq('.') + ' .kiln artifact-ratify ' + (mode === 'recheck' ? 'recheck' : 'initial') + ' ratify ' + shq(P.law) + (mode === 'recheck' ? ' ' + shq(P.gate) : ''),
         'ratify:contract', 'a one-element array holding the canonical contract sha256 printed on stdout, [] if exit != 0')
       if (rc.exit !== 0 || rc.ids.length !== 1 || !LAW_HASH.test(rc.ids[0])) return 20
       const ratifyContract = rc.ids[0]
@@ -1472,12 +1475,14 @@ if (stage !== 'build') {
     // same shape as the STATE.md write — and branches only on the exit code. The
     // review_id is kernel-issued (the ratify verb expects the caller to supply it,
     // unlike a slice review, which mints its own), the reviewer is the opposite-
-    // family ratify-reviewer tier, the artifact is the repo-relative LAW, and the
-    // rubric is the ABSOLUTE law-rubric path (kiln-review resolves the artifact
-    // repo-relative but the rubric from CWD/absolute).
+    // family ratify-reviewer tier, and the artifact is the repo-relative LAW, which
+    // the verb resolves against the repo and proves contained before it opens it.
+    // W2-S8: the request names no rubric — the ratify family word on the verb argv
+    // below selects the shipped instrument, so this file cannot point the grader
+    // anywhere.
     const ratifyReq = JSON.stringify({
       review_id: 'law-ratify', reviewer_model: ratifyOpts.model, reviewer_alias: ratifyOpts.alias, reviewer_effort: ratifyOpts.effort,
-      artifact: P.law, rubric: plugin + '/data/law-rubric.json',
+      artifact: P.law,
     })
     const writeReq = [
       'set -e', 'mkdir -p .kiln',

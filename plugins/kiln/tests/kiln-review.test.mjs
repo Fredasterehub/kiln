@@ -1,10 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { spawn, spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 // kiln-review is an argv-driven CLI, not a module. These unit tests exercise the
@@ -65,6 +65,15 @@ const lockHelpers = (fs) => new Function(
   `${fnText('archiveLockRecord')}\n${fnText('restoreOrArchive')}\nreturn { archiveLockRecord, restoreOrArchive }`,
 )(fs.linkSync, fs.unlinkSync, fs.appendFileSync, join, 'run.lock', 'run-history.jsonl')
 const eexist = () => { const e = new Error('lock path re-occupied'); e.code = 'EEXIST'; throw e }
+
+// W2-S8: containedPath is reached through the verbs everywhere else, but the boundary arithmetic has
+// a case no verb can present — a containment root that is the filesystem root, where naively
+// appending a separator yields `//` and the root refuses its own children. The same extraction idiom
+// pins it directly, with the real fs and a throwing stop so a refusal is observable as an exception.
+const containedPathFn = new Function(
+  'stop', 'resolve', 'sep', 'realpathSync', 'lstatSync', 'dirname', 'TRANSPORT_FAILURE',
+  `${fnText('containedPath')}\nreturn containedPath`,
+)((fact, message) => { throw new Error(message) }, resolve, sep, realpathSync, lstatSync, dirname, 20)
 
 function runReview(effort) {
   const dir = mkdtempSync(join(tmpdir(), 'kiln-review-'))
@@ -411,8 +420,10 @@ process.exit(127)
 
 // artifactPath places the ratified artifact anywhere under the repo (default the LAW), so the
 // same helper covers both the LAW and a .kiln/docs/feasibility.md candidate. brokenCodex swaps
-// the canned reviewer for one that cannot run, standing in for a downed bridge.
-function ratify({ artifact = 'crit-1 · slice-a · behaviour · cmd · outcome\n', gate, effort, drop, rubric = RUBRIC, artifactPath = '.kiln/LAW.md', brokenCodex } = {}) {
+// the canned reviewer for one that cannot run, standing in for a downed bridge. W2-S8: family is
+// the argv word that selects the SHIPPED rubric — the request rubric field it replaced is still
+// written by default, inert, so the tests can prove it no longer steers anything.
+function ratify({ artifact = 'crit-1 · slice-a · behaviour · cmd · outcome\n', gate, effort, drop, rubric = RUBRIC, artifactPath = '.kiln/LAW.md', brokenCodex, family = 'ratify', promptOut } = {}) {
   const repo = mkdtempSync(join(tmpdir(), 'kiln-ratify-'))
   const kiln = join(repo, '.kiln')
   const abs = join(repo, artifactPath)
@@ -430,9 +441,10 @@ function ratify({ artifact = 'crit-1 · slice-a · behaviour · cmd · outcome\n
     env.PATH = `${fake}:${process.env.PATH}`
     if (gate) env.FAKE_GATE = JSON.stringify(gate)
   }
+  if (promptOut) env.FAKE_PROMPT_OUT = promptOut
   mkdirSync(kiln, { recursive: true })
-  const r = spawnSync('node', [REVIEW, 'ratify', repo, kiln, rf, join(kiln, 'gate.json'), 'ratify'], { encoding: 'utf8', env })
-  return { repo, kiln, fact: (r.stdout || '').trim(), status: r.status, out: join(kiln, 'gate.json') }
+  const r = spawnSync('node', [REVIEW, 'ratify', repo, kiln, rf, join(kiln, 'gate.json'), family], { encoding: 'utf8', env })
+  return { repo, kiln, fact: (r.stdout || '').trim(), stderr: r.stderr || '', status: r.status, out: join(kiln, 'gate.json') }
 }
 
 function digestOf(artifact) {
@@ -512,11 +524,42 @@ test('kiln-review: a ratify request with a bad reviewer_effort is rejected befor
   assert.equal(r.status, 20)
 })
 
-test('kiln-review: a ratify request missing artifact or rubric halts transport_failure before codex (exit 20)', () => {
-  for (const field of ['artifact', 'rubric', 'review_id', 'reviewer_model']) {
+test('kiln-review: a ratify request missing artifact, review_id or reviewer_model halts transport_failure before codex (exit 20)', () => {
+  for (const field of ['artifact', 'review_id', 'reviewer_model']) {
     const r = ratify({ drop: field })
     assert.equal(r.fact, 'transport_failure', `a request missing ${field} is a transport failure`)
     assert.equal(r.status, 20)
+  }
+})
+
+// W2-S8: the rubric is no longer a request field at all. A request that omits one grades exactly as
+// before, and one that carries a rubric path of its own is graded by the SHIPPED instrument anyway —
+// the deleted seam, proven dead from the outside.
+test('kiln-review: ratify grades against the shipped rubric its family selects — a request rubric field is inert, present or absent (exit 0)', () => {
+  const artifact = 'crit-1 · slice-a · behaviour · cmd · outcome\n'
+  const omitted = ratify({ artifact, drop: 'rubric', gate: ratifyGate('accept', digestOf(artifact)) })
+  assert.equal(omitted.status, 0, 'a request naming no rubric ratifies — the instrument is shipped')
+  const planted = mkdtempSync(join(tmpdir(), 'kiln-plantrubric-'))
+  const planted_rubric = join(planted, 'rubric.json')
+  writeFileSync(planted_rubric, JSON.stringify({ criteria: [{ id: 'grade-everything-accept', requirement: 'a', pass: 'b', fail: 'c' }] }))
+  const promptOut = join(planted, 'prompt.txt')
+  const supplied = ratify({ artifact, rubric: planted_rubric, gate: ratifyGate('accept', digestOf(artifact)), promptOut })
+  assert.equal(supplied.status, 0, 'the supplied rubric path changes nothing')
+  const prompt = readFileSync(promptOut, 'utf8')
+  assert.ok(!prompt.includes('grade-everything-accept'), 'the criterion the request tried to plant never reaches the reviewer')
+  const shipped = JSON.parse(readFileSync(RUBRIC, 'utf8')).criteria.map((c) => c.id)
+  for (const id of shipped) assert.ok(prompt.includes(id), `the shipped criterion ${id} is what the reviewer grades against`)
+})
+
+test('kiln-review: a ratify family with no shipped rubric HOLDs BY NAME before any spawn (exit 20)', () => {
+  // The closed set lives in ONE place — the rubric map — so an unknown family is refused where the
+  // instrument is chosen, never carried on as an undefined path for some later read to trip over.
+  // The map is a Map, so an inherited key answers no lookup. No fake codex: the hold precedes any spawn.
+  for (const family of ['screen', 'review', '__proto__', 'constructor']) {
+    const r = ratify({ family })
+    assert.equal(r.fact, 'transport_failure', `the ${family} family has no shipped ratify rubric`)
+    assert.equal(r.status, 20, `the ${family} family HOLDs`)
+    assert.ok(r.stderr.includes('purpose must be ratify or feasibility'), `the ${family} hold names the closed set, not a downstream read fault`)
   }
 })
 
@@ -528,6 +571,97 @@ test('kiln-review: ratify halts transport_failure when the named artifact file d
   const r = spawnSync('node', [REVIEW, 'ratify', repo, join(repo, '.kiln'), rf, join(repo, '.kiln', 'gate.json'), 'ratify'], { encoding: 'utf8' })
   assert.equal((r.stdout || '').trim(), 'transport_failure', 'a missing artifact is an honest transport failure')
   assert.equal(r.status, 20)
+})
+
+// W2-S8: the artifact is the one path the ratify verb still takes from a file a model wrote, so it
+// is the one path a model can aim. Containment answers lexically AND physically: a traversal and an
+// absolute path never resolve inside, and a link is judged by where it lands, not by where it sits.
+// A dangling link is the sharp case — it exists as a name inside the tree but resolves nowhere, and
+// an unresolvable containment question is never answered yes.
+test('kiln-review (W2-S8): a ratify artifact that escapes the repository HOLDs before any spawn — traversal, absolute, an escaping symlink, and a dangling one', () => {
+  const home = mkdtempSync(join(tmpdir(), 'kiln-contain-'))
+  const repo = join(home, 'repo')
+  const kiln = join(repo, '.kiln')
+  mkdirSync(kiln, { recursive: true })
+  const outside = join(home, 'outside.md')
+  writeFileSync(outside, 'bytes the reviewer must never grade\n')
+  writeFileSync(join(kiln, 'LAW.md'), 'the candidate law\n')
+  symlinkSync(outside, join(kiln, 'escape.md'))
+  symlinkSync(join(home, 'never-written.md'), join(kiln, 'dangling.md'))
+  const rf = join(repo, 'request.json')
+  const run = (artifact) => {
+    writeFileSync(rf, JSON.stringify({ review_id: 'ratify-1', reviewer_model: 'gpt-5.6-sol', reviewer_alias: 'gpt-sol', artifact }))
+    // No fake codex on PATH on purpose: if an escaping artifact ever reached the reviewer the run
+    // would report codex_unavailable (21), and this assertion would name the leak instead of passing.
+    return spawnSync('node', [REVIEW, 'ratify', repo, kiln, rf, join(kiln, 'gate.json'), 'ratify'], { encoding: 'utf8' })
+  }
+  for (const artifact of ['../outside.md', outside, '.kiln/escape.md', '.kiln/dangling.md', '.kiln/../../outside.md', '']) {
+    const r = run(artifact)
+    assert.equal((r.stdout || '').trim(), 'transport_failure', `${artifact || '(empty)'} is not a contained artifact`)
+    assert.equal(r.status, 20, `${artifact || '(empty)'} HOLDs before the spawn`)
+    assert.ok(!existsSync(join(kiln, 'gate.json')), `${artifact || '(empty)'} publishes nothing`)
+  }
+  // Discrimination: the guard refuses escapes, not work. The in-tree LAW rides all the way to a verdict.
+  const law = 'crit-1 · slice-a · behaviour · cmd · outcome\n'
+  const ok = ratify({ artifact: law, gate: ratifyGate('accept', digestOf(law)) })
+  assert.equal(ok.status, 0, 'a repo-relative artifact inside the tree ratifies as before')
+})
+
+test('kiln-review (W2-S8): a containment root that already ends in a separator accepts its own children — the boundary is one separator, never two', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kiln-rootsep-'))
+  const child = join(dir, 'child.md')
+  writeFileSync(child, 'inside\n')
+  // Both proofs run against the same root, so a root of / that grew a second separator would refuse
+  // this at the lexical check, and a root of / that grew one only in the physical check would refuse
+  // it there — one contained answer pins both.
+  assert.equal(containedPathFn('/', child, 'probe'), child, 'the filesystem root contains every absolute path under it')
+  assert.equal(containedPathFn(dir, 'child.md', 'probe'), child, 'an ordinary root still resolves its child')
+  // The boundary is still a boundary: a sibling whose name merely starts with the root is out. The
+  // twin is REAL and its file exists, so a boundary that dropped the separator would find it both
+  // lexically and physically inside and hand the path back — the refusal has to be the lexical one.
+  const twin = join(dirname(dir), basename(dir) + '-twin')
+  mkdirSync(twin, { recursive: true })
+  writeFileSync(join(twin, 'x.md'), 'outside\n')
+  assert.throws(() => containedPathFn(dir, join(twin, 'x.md'), 'probe'),
+    (error) => /^probe: .* resolves outside /.test(error.message), 'a sibling sharing the root as a name prefix is not contained')
+})
+
+// The standing class, at the one place this slice adds a read: the containment walk asks whether a
+// node exists, and only an ENOENT is an absence. Any other fault is an unanswered question, so it
+// HOLDs by name rather than being walked past as if the node were simply not there.
+test('kiln-review (W2-S8): an ancestor the containment walk cannot examine HOLDs by name — an unreadable read is never read as absence', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'kiln-contain-x-'))
+  const kiln = join(repo, '.kiln')
+  const blocked = join(kiln, 'blocked')
+  mkdirSync(blocked, { recursive: true })
+  writeFileSync(join(blocked, 'LAW.md'), 'the candidate law\n')
+  const rf = join(repo, 'request.json')
+  writeFileSync(rf, JSON.stringify({ review_id: 'ratify-1', reviewer_model: 'gpt-5.6-sol', reviewer_alias: 'gpt-sol', artifact: '.kiln/blocked/LAW.md' }))
+  chmodSync(blocked, 0o000)
+  try {
+    const r = spawnSync('node', [REVIEW, 'ratify', repo, kiln, rf, join(kiln, 'gate.json'), 'ratify'], { encoding: 'utf8' })
+    assert.equal((r.stdout || '').trim(), 'transport_failure', 'an unexaminable ancestor is a transport failure')
+    assert.equal(r.status, 20, 'the ratify HOLDs')
+    assert.ok(r.stderr.includes('could not be examined'), 'the hold names the unanswered containment question, not a downstream read fault')
+  } finally {
+    chmodSync(blocked, 0o755)
+  }
+})
+
+test('kiln-review (W2-S8): contract-prepare refuses the same escaping artifact the codex verb refuses — one containment rule across both transports', () => {
+  const home = mkdtempSync(join(tmpdir(), 'kiln-contain-c-'))
+  const repo = join(home, 'repo')
+  const kiln = join(repo, '.kiln')
+  mkdirSync(kiln, { recursive: true })
+  writeFileSync(join(home, 'outside.md'), 'bytes no contract may bind\n')
+  writeFileSync(join(kiln, 'LAW.md'), 'the candidate law\n')
+  symlinkSync(join(home, 'outside.md'), join(kiln, 'escape.md'))
+  for (const artifact of ['../outside.md', join(home, 'outside.md'), '.kiln/escape.md']) {
+    assert.equal(cPrepare(repo, kiln, 'artifact-ratify', 'initial', 'ratify', artifact).status, 20,
+      `the claude transport composes no contract over ${artifact}`)
+  }
+  assert.equal(cPrepare(repo, kiln, 'artifact-ratify', 'initial', 'ratify', '.kiln/LAW.md').status, 0,
+    'the contained artifact still composes — the rule discriminates')
 })
 
 test('kiln-review: the slice path enforces locked-LAW equality at its baseline precedence — a wrong law_hash beats malformed findings', () => {
@@ -558,7 +692,8 @@ test('kiln-review: the slice path enforces locked-LAW equality at its baseline p
 // proves ratify is artifact-agnostic: it grades a .kiln/docs/feasibility.md candidate against
 // data/feasibility-rubric.json exactly as it grades the LAW against law-rubric.json. The
 // research-sweep workflow (S2) reuses this verb unchanged; the fake codex stands in for the
-// reviewer here, so no real bridge is crossed.
+// reviewer here, so no real bridge is crossed. W2-S8: the family word is what selects the
+// instrument now, so these runs also pin the second entry of the shipped-rubric map.
 const FEASIBILITY_RUBRIC = fileURLToPath(new URL('../data/feasibility-rubric.json', import.meta.url))
 const FEASIBILITY_ARTIFACT = `# Feasibility
 
@@ -569,7 +704,7 @@ Reversibility: swapping vendors is a config-only change — low cost.
 `
 
 function feasibilityRatify(overrides = {}) {
-  return ratify({ artifact: FEASIBILITY_ARTIFACT, rubric: FEASIBILITY_RUBRIC, artifactPath: '.kiln/docs/feasibility.md', ...overrides })
+  return ratify({ artifact: FEASIBILITY_ARTIFACT, rubric: FEASIBILITY_RUBRIC, artifactPath: '.kiln/docs/feasibility.md', family: 'feasibility', ...overrides })
 }
 
 function feasibilityGate(verdict, law_hash) {
@@ -616,8 +751,11 @@ test('kiln-review: a bridge-down reviewer over the feasibility ratify path halts
 // W8-S1 (D): the shipped perceptual instrument — the FIXED six dimensions the LAW perceptual
 // table selects its dims from. rubricFrom checks only {id, requirement, pass, fail}; the
 // anchor and insufficient-evidence fields ride as unrejected extras, so the graders read
-// them from the same file with zero parse change. The generic ratify verb proves the parse
-// path live over the shipped bytes — no live codex, the fake stands in.
+// them from the same file with zero parse change. W2-S8: the perceptual instrument belongs to
+// the SCREEN family, which has always read it from the shipped constant, so the live rubricFrom
+// parse over these bytes is proven where it actually runs — every screening-room run of the real
+// screen verb. The ratify dry run that used to stand in for it consumed a request rubric path
+// that no longer exists.
 const PERCEPTUAL_RUBRIC = fileURLToPath(new URL('../data/perceptual-rubric.json', import.meta.url))
 
 test('kiln-review: the shipped perceptual-rubric.json carries exactly the six fixed dims, each with the four required strings plus anchors and an insufficient-evidence line', () => {
@@ -637,13 +775,6 @@ test('kiln-review: the shipped perceptual-rubric.json carries exactly the six fi
     assert.equal(typeof c.insufficient_evidence, 'string', `criterion ${c.id} states its evidence bar`)
     assert.ok(c.insufficient_evidence.trim() !== '', `criterion ${c.id} names what evidence would be needed`)
   }
-})
-
-test('kiln-review: rubricFrom accepts the perceptual rubric — the extra fields ride unrejected through a ratify dry run (exit 0)', () => {
-  const artifact = 'the rendered surface under perceptual grading\n'
-  const r = ratify({ artifact, rubric: PERCEPTUAL_RUBRIC, gate: ratifyGate('accept', digestOf(artifact)) })
-  assert.equal(r.fact, 'accept', 'the anchor and insufficient-evidence extras never trip rubricFrom — the live parse path, not a bare JSON.parse')
-  assert.equal(r.status, 0, 'the dry validation over the shipped instrument reaches the verdict')
 })
 
 // ratify-recheck (W6-02): the cohort lineage the ratify verb previously lacked. A recheck
@@ -2957,9 +3088,7 @@ test('contract (W2-S7a, FORK 1): the artifact-ratify contract carries the purpos
   const repo = mkdtempSync(join(tmpdir(), 'kiln-cratify-'))
   const kiln = join(repo, '.kiln'); mkdirSync(kiln, { recursive: true })
   writeFileSync(join(kiln, 'LAW.md'), 'the candidate law\n')
-  const rubricPath = join(repo, 'rubric.json')
-  writeFileSync(rubricPath, JSON.stringify({ criteria: [{ id: 'r1', requirement: 'a', pass: 'b', fail: 'c' }] }))
-  const sha = cPrepare(repo, kiln, 'artifact-ratify', 'initial', 'ratify', '.kiln/LAW.md', rubricPath).stdout.trim()
+  const sha = cPrepare(repo, kiln, 'artifact-ratify', 'initial', 'ratify', '.kiln/LAW.md').stdout.trim()
   assert.match(sha, /^[0-9a-f]{64}$/)
   const c = JSON.parse(readFileSync(cStore(kiln, sha), 'utf8'))
   assert.equal(c.contract_kind, 'artifact-ratify')
@@ -2967,7 +3096,9 @@ test('contract (W2-S7a, FORK 1): the artifact-ratify contract carries the purpos
   assert.equal(c.artifact_path, '.kiln/LAW.md')
   assert.equal(c.artifact_sha256, createHash('sha256').update(Buffer.from('the candidate law\n')).digest('hex'), 'the candidate digest binds the artifact bytes')
   assert.equal(c.artifact, 'the candidate law\n', 'the exact artifact text the packet embeds rides the contract')
-  assert.equal(c.rubric.length, 1, 'the rubric criteria ride the contract')
+  // W2-S8: the criteria are the SHIPPED ones the family word selects — the claude transport takes
+  // no rubric argv, so it cannot contract over an instrument the codex transport would not use.
+  assert.deepEqual(c.rubric, JSON.parse(readFileSync(RUBRIC, 'utf8')).criteria, 'the shipped law rubric criteria ride the contract')
   assert.equal(c.receipt_sha256, null, 'ratify judges no receipt — receipt_sha256 is null by contract')
 })
 
@@ -3150,9 +3281,9 @@ test('contract-prepare (W2-S7a, F2): an artifact-ratify recheck over an ineligib
   writeFileSync(join(kiln, 'LAW.md'), artifact)
   const mk = (v) => ({ review_id: 'ratify-1', law_hash: digestOf(artifact), findings: v === 'accept' ? [] : [ratifyFinding('f1')], blockers: [], verdict: v })
   const acc = join(repo, 'acc.json'); writeFileSync(acc, JSON.stringify(mk('accept')))
-  assert.equal(cPrepare(repo, kiln, 'artifact-ratify', 'recheck', 'ratify', '.kiln/LAW.md', RUBRIC, acc).status, 20, 'an accept prior is ineligible for a ratify recheck — HOLD')
+  assert.equal(cPrepare(repo, kiln, 'artifact-ratify', 'recheck', 'ratify', '.kiln/LAW.md', acc).status, 20, 'an accept prior is ineligible for a ratify recheck — HOLD')
   const cr = join(repo, 'cr.json'); writeFileSync(cr, JSON.stringify(mk('changes_required')))
-  assert.equal(cPrepare(repo, kiln, 'artifact-ratify', 'recheck', 'ratify', '.kiln/LAW.md', RUBRIC, cr).status, 0, 'a changes_required prior composes the ratify recheck')
+  assert.equal(cPrepare(repo, kiln, 'artifact-ratify', 'recheck', 'ratify', '.kiln/LAW.md', cr).status, 0, 'a changes_required prior composes the ratify recheck')
 })
 
 test('kiln-review (W2-S7a, F5-CLI-USAGE): the terminal usage string is canonical — the ratify family carries <kilnDir>, publish-gate carries the contract digest, contract-prepare is advertised', () => {
@@ -3646,7 +3777,7 @@ test('append-seal (W2-S7b, item 6): the archived row must OWN its evidence — v
   const original = ledgerRows(fx.kiln)[0]
   // A stored contract of another kind, for the kind clause: composed here so the digest names real
   // bytes and the failure is the SEMANTIC one, not a missing store entry.
-  const ratifySha = cPrepare(fx.repo, fx.kiln, 'artifact-ratify', 'initial', 'ratify', '.kiln/LAW.md', RUBRIC).stdout.trim()
+  const ratifySha = cPrepare(fx.repo, fx.kiln, 'artifact-ratify', 'initial', 'ratify', '.kiln/LAW.md').stdout.trim()
   assert.match(ratifySha, /^[0-9a-f]{64}$/, 'the foreign-kind contract is really in the store')
   const cases = [
     ['a verdict that is not an accept', { verdict: 'changes_required' }, 'the archived row is not an accept'],

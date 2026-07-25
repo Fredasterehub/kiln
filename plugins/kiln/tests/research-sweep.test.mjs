@@ -323,7 +323,10 @@ test('runtime: a qualifying question runs producer → ratify → accept → ato
   assert.ok(gateCall.prompt.includes('/scripts/kiln-review') && gateCall.prompt.includes(' ratify . .kiln .kiln/feasibility-ratify-request.json .kiln/feasibility-gate.json feasibility'),
     'the gate rides the shell-quoted kiln-review ratify verb with the cwd-relative repo arg, the explicit .kiln trust root, and the W2-S5 feasibility family so its verdict archives under its own family')
   const req = calls.find(c => c.label === 'ratify:request')
-  assert.ok(req.prompt.includes('feasibility-rubric.json'), 'the request names the feasibility rubric')
+  // W2-S8: the request names no rubric — the feasibility family word on the gate argv above is what
+  // selects the shipped instrument, so this file cannot point the grader at a rubric of its own.
+  assert.ok(!req.prompt.includes('rubric'), 'the request carries no rubric path at all')
+  assert.ok(req.prompt.includes('.kiln/docs/feasibility-candidate.md'), 'the request names the repo-relative candidate')
   assert.ok(req.prompt.includes('gpt-5.6-sol'), 'the reviewer is the opposite-family ratify-reviewer (codex id)')
   const promoteCall = calls.find(c => c.label === 'promote')
   assert.ok(promoteCall.prompt.includes('mv -f .kiln/docs/feasibility-candidate.md .kiln/docs/feasibility.md'),
@@ -806,7 +809,6 @@ test('runtime (W2-S7a, B-RESEARCH-SWEEP): the feasibility claude ratifier mints 
 
 // ── W2-S7a (FORK 1): the feasibility claude leg is a FORK-1 transport ─────────────────────────────
 const REAL_REVIEW = fileURLToPath(new URL('../scripts/kiln-review', import.meta.url))
-const REAL_RUBRIC = fileURLToPath(new URL('../data/feasibility-rubric.json', import.meta.url))
 
 test('feasibility (W2-S7a, FORK 1): a store-present degraded resume publishes with its contract instead of wedging the pre-law gate — the row pairs with the codex twin', () => {
   const dir = mkdtempSync(join(tmpdir(), 'kiln-feas-fork1-'))
@@ -831,7 +833,7 @@ test('feasibility (W2-S7a, FORK 1): a store-present degraded resume publishes wi
   assert.equal(wedge.status, 20, 'the arity-5 feasibility publish HOLDs against the present contracts store — the observed pre-fix wedge')
   // THE FIX: the leg composes its artifact-ratify contract, then publishes arity-6 with the digest.
   const candDigest = createHash('sha256').update(Buffer.from(CAND)).digest('hex')
-  const contractSha = spawnSync('node', [REAL_REVIEW, 'contract-prepare', dir, kiln, 'artifact-ratify', 'initial', 'feasibility', '.kiln/docs/feasibility-candidate.md', REAL_RUBRIC], { encoding: 'utf8' }).stdout.trim()
+  const contractSha = spawnSync('node', [REAL_REVIEW, 'contract-prepare', dir, kiln, 'artifact-ratify', 'initial', 'feasibility', '.kiln/docs/feasibility-candidate.md'], { encoding: 'utf8' }).stdout.trim()
   assert.match(contractSha, /^[0-9a-f]{64}$/, 'contract-prepare returns the feasibility contract digest')
   const ok = spawnSync('node', [REAL_REVIEW, 'publish-gate', kiln, 'feasibility', verdict('f1', candDigest), join(kiln, 'feasibility-gate.json'), leg, contractSha], { encoding: 'utf8' })
   assert.equal(ok.status, 0, 'the arity-6 publish composes past the wedge and lands')

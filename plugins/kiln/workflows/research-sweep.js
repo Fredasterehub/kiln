@@ -445,7 +445,9 @@ if (await hands('test -s ' + F.candidate, 'candidate:check') !== 0) {
 // workflow ships the ratify request as a heredoc of closed facts through a mechanical hand (the
 // same shape the kernel writes its LAW ratify request), then branches only on exit codes. The
 // review_id is workflow-issued; the reviewer is the opposite-family ratify-reviewer tier; the
-// artifact is the repo-relative candidate; the rubric is the ABSOLUTE feasibility-rubric path.
+// artifact is the repo-relative candidate, proven contained by the verb before it is opened.
+// W2-S8: the request names no rubric — the feasibility family word on the verb argv selects the
+// shipped instrument, so the request file cannot point the grader at a rubric of its own.
 // S4 (INTAKE-38): the feasibility ratify TRANSPORT degrades to the claude family when codex
 // is down. A tri-state path-selector read chooses the seat — absent the cross-family codex
 // ratifier, present a fresh OPUS claude ratifier that mirrors the codex digest, echo and
@@ -485,7 +487,7 @@ const claudeFeasRatify = async (mode) => {
   // once codex has run once. contract-prepare runs after the digest derivation, before dispatch; the
   // digest is the LAST publish-gate word. A recheck rides the prior gate for its finding cohort.
   const fc = await idsFetch(
-    'node ' + shq(plugin + '/scripts/kiln-review') + ' contract-prepare ' + shq('.') + ' .kiln artifact-ratify ' + (mode === 'recheck' ? 'recheck' : 'initial') + ' feasibility ' + shq(F.candidate) + ' ' + shq(plugin + '/data/feasibility-rubric.json') + (mode === 'recheck' ? ' ' + shq(F.gate) : ''),
+    'node ' + shq(plugin + '/scripts/kiln-review') + ' contract-prepare ' + shq('.') + ' .kiln artifact-ratify ' + (mode === 'recheck' ? 'recheck' : 'initial') + ' feasibility ' + shq(F.candidate) + (mode === 'recheck' ? ' ' + shq(F.gate) : ''),
     'feasibility:contract', 'a one-element array holding the canonical contract sha256 printed on stdout, [] if exit != 0')
   if (fc.exit !== 0 || fc.ids.length !== 1 || !LAW_HASH.test(fc.ids[0])) return 20
   const feasContract = fc.ids[0]
@@ -518,7 +520,7 @@ const claudeFeasRatify = async (mode) => {
 }
 const ratifyReq = JSON.stringify({
   review_id: 'feasibility-ratify', reviewer_model: reviewerOpts.model, reviewer_alias: reviewerOpts.alias, reviewer_effort: reviewerOpts.effort,
-  artifact: F.candidate, rubric: plugin + '/data/feasibility-rubric.json',
+  artifact: F.candidate,
 })
 const writeReq = [
   'set -e', 'mkdir -p .kiln',

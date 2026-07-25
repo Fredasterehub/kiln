@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, appendFileSync } from 'node:fs'
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, appendFileSync, symlinkSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
@@ -1239,12 +1239,13 @@ test('S1 (A9/W5-03): MILESTONE_PROJECTION_CHECK is the deterministic agreement l
 })
 
 test('S1 (W8-B): PERCEPTUAL_TABLE_CHECK is the deterministic perceptual gate — validity, coverage, and consistency, or the honest disagree', () => {
-  const run = (law, slices, files = {}) => {
+  const run = (law, slices, files = {}, links = {}) => {
     const dir = mkdtempSync(join(tmpdir(), 'kiln-perc-'))
     mkdirSync(join(dir, '.kiln'))
     writeFileSync(join(dir, '.kiln', 'LAW.md'), law)
     writeFileSync(join(dir, '.kiln', 'slices.json'), JSON.stringify(slices))
     for (const [p, body] of Object.entries(files)) writeFileSync(join(dir, p), body)
+    for (const [p, target] of Object.entries(links)) symlinkSync(target, join(dir, p))
     return spawnSync('bash', ['-c', PERCEPTUAL_TABLE_CHECK], { cwd: dir }).status
   }
   const HEAD = '# LAW\ncrit-1 · home · behaviour · cmd · outcome\n\n## Perceptual\n' +
@@ -1301,6 +1302,16 @@ test('S1 (W8-B): PERCEPTUAL_TABLE_CHECK is the deterministic perceptual gate —
     'an existing absolute path outside the root halts — containment, not mere existence')
   assert.equal(run(four + row('p5', 'home', 'motion-continuity', 'the fold settles', 'test -f index.html', 'exit 0', '../'.repeat(40) + 'etc/passwd'), UI), 1,
     'a parent-traversal to an existing outside file halts the same way')
+  // W2-S8: the cell is LAW text a model wrote, so containment is proven PHYSICALLY too — a link
+  // sitting inside the root that lands outside it is an outside path wearing an inside name, and a
+  // link that lands nowhere resolves to no existing repo path at all.
+  const linkRow = row('p5', 'home', 'motion-continuity', 'the fold settles', 'test -f index.html', 'exit 0', 'ref.png')
+  assert.equal(run(four + linkRow, UI, {}, { 'ref.png': '/etc/passwd' }), 1,
+    'a symlink inside the root pointing at an outside file halts — realpath containment, not mere existence')
+  assert.equal(run(four + linkRow, UI, {}, { 'ref.png': 'nowhere.png' }), 1,
+    'a dangling symlink names no existing repo path — halt')
+  assert.equal(run(four + linkRow, UI, { 'real.png': 'px' }, { 'ref.png': 'real.png' }), 0,
+    'a symlink to a file inside the root rides — the rule judges where the name lands, not that it is a link')
   // A declared perceptual section with no well-formed table under it fails closed.
   assert.equal(run('# LAW\n\n## Perceptual\nno table here\n', LOGIC), 1, 'a bare ## Perceptual heading with no table is malformed — halt')
 })
@@ -1470,16 +1481,19 @@ test('runtime (Wave 1): the LAW ratifies, seal-law locks it, and the run advance
   })
   assert.equal(ret.status, 'ok', 'a ratified LAW advances')
   // The kernel writes the ratify request itself (content-blind), naming the
-  // opposite-family reviewer and the absolute rubric.
+  // opposite-family reviewer and the repo-relative artifact.
   const req = calls.find(c => c.label === 'ratify:request')
   assert.ok(req, 'the kernel writes the ratify request')
   assert.ok(req.prompt.includes('ratify-request.json'), 'the request lands at the ratify-request path')
-  assert.ok(req.prompt.includes('law-rubric.json'), 'the request names the law rubric')
   assert.ok(req.prompt.includes('gpt-5.6-sol'), 'the reviewer is the opposite-family ratify-reviewer (codex id)')
   assert.ok(req.prompt.includes('law-ratify'), 'the review_id is kernel-issued')
-  // The gate rides the kiln-review ratify verb.
+  // W2-S8: the request names NO rubric — the instrument is the shipped one the family word selects,
+  // so a request file the model wrote cannot point the grader at a rubric of its own choosing.
+  assert.ok(!req.prompt.includes('rubric'), 'the request carries no rubric path at all')
+  // The gate rides the kiln-review ratify verb, and the family word is what selects the instrument.
   const gate = calls.find(c => c.label === 'ratify:gate')
   assert.ok(gate && gate.prompt.includes('kiln-review ratify . '), 'the gate rides the kiln-review ratify verb with the cwd-relative repo arg')
+  assert.ok(gate.prompt.trim().endsWith(' ratify'), 'the ratify family word rides argv — the shipped-rubric selector')
   // seal-law is the sealer on the kernel side, and it runs only after accept.
   const seal = calls.find(c => c.label === 'law:seal')
   assert.ok(seal && seal.prompt.includes('seal-law .kiln'), 'seal-law locks the ratified LAW on the cwd-relative kiln dir')
