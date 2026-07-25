@@ -1061,8 +1061,11 @@ function reconcileStateDoc(kilnDir, prior) {
 const LOCK_FILE = 'run.lock'
 const LOCK_HISTORY = 'run-history.jsonl'
 const LOCK_DENIED = 12
-// The availability-panel choices ride the lock — stored at acquire, read at every later boot.
-// S10 wires the panel that selects among them; S1 owns only the storage contract.
+// The availability-panel choices the lock record carries. The stored word has NO reader anywhere in
+// the tree — every later boot re-decides from the two marker files — so it is a record of what was
+// answered, not a switch. S10 wired the panel that produces it: the conductor passes follow-ladders
+// at all four of its call sites, so in practice only that word is stored, while this set is what the
+// verbs would accept.
 const LOCK_CHOICES = new Set(['follow-ladders', 'stop-at-boundary', 'edit-ladders'])
 // run_id and owner are minted as UUIDs; join/release/takeover echo them back over argv, so a
 // closed token grammar rejects any shell metacharacter, whitespace, or control byte.
@@ -1107,6 +1110,96 @@ function readLockRecord(lockPath) {
 function archiveLockRecord(kilnDir, record, event) {
   const row = JSON.stringify({ ...record, lock_event: event, archived_at: new Date().toISOString() })
   appendFileSync(join(kilnDir, LOCK_HISTORY), `${row}\n`)
+}
+
+// W2-S10: presence decided by PRESENCE, for the two sites S10 wires. lstat answers on shapes
+// readFileSync cannot open — an unreadable file, a directory, a dangling link, a loop, a socket —
+// where readLockRecord reports all of them as absent. The four S1 verbs keep their sealed
+// fail-closed reads. THREE-valued deliberately: this returns absent for ENOENT and indeterminate for
+// every other error, and both call sites route indeterminate to a hold ahead of the probe (two call
+// sites, count-pinned). Two-valued was the same defect one line down from the one it cured.
+function lockPresence(kilnDir) {
+  try {
+    lstatSync(join(kilnDir, LOCK_FILE))
+    return 'present'
+  } catch (error) {
+    return error.code === 'ENOENT' ? 'absent' : 'indeterminate'
+  }
+}
+
+// W2-S10 (10a) + S10d: the ONE marker removal here, serving both rulings a minting verb may issue —
+// a `degraded` refuted live by the classifier that wrote it, and a `degraded-ack` with no detection
+// under it, which is RESIDUE: a word with no subject, removed so no later detection can complete it
+// into a pair the operator never spoke. Both are trust-bearing, so both leave a receipt: the row
+// lands BEFORE the removal and a failed append HOLDs with the marker standing, the never-a-bare-
+// unlink discipline archiveAndDrop keeps one screen up. Bounded: marker transitions do not generally
+// earn rows, and the kernel clears of the same shape (clearPerceptualMarker at kernel.js:1185, the
+// ratify candidate rm at :1431) stay rowless. ENOENT means a contender got there first — the same end
+// state, so the rm is idempotent and races converge.
+function clearMarker(kilnDir, verb, name, event) {
+  try {
+    archiveLockRecord(kilnDir, { marker: name, verb }, event)
+  } catch {
+    stop('transport_failure', `run-lock ${verb} could not record the ${event} ruling — the marker stands, nothing lost`, TRANSPORT_FAILURE)
+  }
+  try {
+    unlinkSync(join(kilnDir, name))
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      stop('transport_failure', `run-lock ${verb} could not clear the ${name} marker: ${error.message}`, TRANSPORT_FAILURE)
+    }
+  }
+}
+
+// W2-S10: the availability probe the two MINTING verbs share. The two marker files differ by their
+// WRITERS, counted over the whole shipped plugin rather than assumed (the S10 count-pin): FIVE sites
+// touch `degraded` alone — kernel law ratify, milestone audit, degradedStop, the sweep feasibility
+// ratify, and the builder card telling the agent to mark its own codex-absent build — while the
+// single conductor touch is the only write of `degraded-ack` in the tree. So `degraded` is CLASSIFIED
+// absence and the ack is the OPERATOR WORD. Both standing IS the word: mint, unquestioned. Otherwise
+// the probe rules three ways — a clean exit 0 answers; a failure the REAL gate calls
+// codex_unavailable panels; any other failure is unknown and mints, since the word has no remover
+// but the operator hand and no low-fidelity detector may earn it. A detection with no word still
+// steers the seats that read it, so the verbs rule it: an answer REFUTES it live — clear and go
+// dual; anything less is a stop nobody answered — the panel. What that buys, stated as exactly what
+// it is: a mint never completes over degraded-without-ack. Detections raised later in the run are
+// each guarded where they are read, not here. join calls none of this (two call sites, pinned); it
+// boots mid-run, already settled.
+function refuseWithoutCodex(kilnDir, verb) {
+  // Read as the other five readers read them (test -f): a REGULAR file, so a directory wearing a
+  // marker name is absent here exactly as it is there, rather than a sixth detector disagreeing with
+  // the five. A stat that FAILS is a different question, and only ENOENT proves absence — any other
+  // failure holds, which is stricter than the five and never more permissive than them.
+  const marker = (name) => {
+    try {
+      return statSync(join(kilnDir, name)).isFile()
+    } catch (error) {
+      if (error.code === 'ENOENT') return false
+      stop('transport_failure', `run-lock ${verb} could not read the degradation marker ${name}: ${error.message}`, TRANSPORT_FAILURE)
+    }
+  }
+  const detected = marker('degraded')
+  // The fourth state: an ack with no detection under it. Inert to every reader — the defect is
+  // COMPLETION, since a later detection would finish the pair and counterfeit a word nobody spoke.
+  if (!detected && marker('degraded-ack')) clearMarker(kilnDir, verb, 'degraded-ack', 'ack_orphaned')
+  if (detected && marker('degraded-ack')) return
+  // SIGKILL, not the default TERM, or a binary that ignores TERM runs straight past the bound.
+  const probe = spawnSync('codex', ['--version'], { encoding: 'utf8', timeout: 10000, killSignal: 'SIGKILL' })
+  if (!probe.error && probe.status === 0) {
+    // Cleared BEFORE the mint, never after: a crash in between would launch a run over the standing
+    // stale marker. Clearing first leaves every crash state clean — marker gone, no lock, next
+    // acquire mints dual — at the price that an invocation may clear and then LOSE the race. That
+    // price is correct: the refutation is a fact about codex, not about who wins the lock.
+    // BOTH markers are RE-READ here, after a probe that may have taken seconds. A word that landed
+    // while it ran leaves the full pair standing and the verb mints under that acknowledged
+    // degradation rather than destroying it; a detection that vanished while it ran leaves nothing
+    // to refute, and a row asserting otherwise would be a receipt for a ruling never made. The
+    // pre-probe read decides whether to ASK; only this read decides whether to ACT.
+    if (marker('degraded') && !marker('degraded-ack')) clearMarker(kilnDir, verb, 'degraded', 'degradation_refuted')
+    return
+  }
+  if (!detected && classifyFailure(probe) !== CODEX_UNAVAILABLE) return
+  stop('codex_unavailable', `run-lock ${verb} refused: codex did not answer the availability probe and no acknowledged degradation stands — the availability panel rules first`, CODEX_UNAVAILABLE)
 }
 
 // ── W2-S5 (C3a / B05 / ruling 3): the immutable verdict archive ─────────────
@@ -4639,11 +4732,28 @@ if (mode === 'review' && args.length === 8) {
   if (version === null) {
     stop('transport_failure', 'run-lock acquire could not read the plugin version from .claude-plugin/plugin.json', TRANSPORT_FAILURE)
   }
+  const target = join(kilnDir, LOCK_FILE)
+  // Question economy, never race authority: an already-held lock earns the SAME refusal the wx
+  // create below would earn, spoken before the availability probe spends a question on a run this
+  // verb was never going to mint. Presence is asked of lstat, so the two readers agree on every
+  // shape the create refuses; the record is read only to name the holder. A true race is still
+  // arbitrated by the wx create below and by nothing here — the lock is created at exactly two sites
+  // in this file, this one and the takeover create, both O_EXCL (count-pinned). A presence question
+  // this process cannot answer holds transport-class here, ahead of any probe.
+  const presence = lockPresence(kilnDir)
+  if (presence === 'indeterminate') {
+    stop('transport_failure', 'run-lock acquire could not determine whether a run lock exists — inspect .kiln/run.lock and its directory', TRANSPORT_FAILURE)
+  }
+  if (presence === 'present') {
+    const held = readLockRecord(target).record
+    const heldId = held && typeof held.run_id === 'string' ? held.run_id : ''
+    stop(heldId, 'run-lock acquire refused: a run lock already exists — join it with the token or take it over if it is stale', LOCK_DENIED)
+  }
+  refuseWithoutCodex(kilnDir, 'acquire')
   const record = {
     run_id: randomUUID(), owner: randomUUID(), conductor_pid: pid,
     started_at: new Date().toISOString(), ladder_choice: choice, plugin_version: version,
   }
-  const target = join(kilnDir, LOCK_FILE)
   try {
     mkdirSync(kilnDir, { recursive: true })
     writeFileSync(target, `${JSON.stringify(record)}\n`, { flag: 'wx' })
@@ -4730,7 +4840,11 @@ if (mode === 'review' && args.length === 8) {
     stop('transport_failure', 'run-lock takeover conductor pid must be a positive integer', TRANSPORT_FAILURE)
   }
   const pre = readLockRecord(join(kilnDir, LOCK_FILE))
-  if (!pre.exists) {
+  // A lock that is present but unreadable in any shape is NOT a no-lock directory: it routes to the
+  // cannot-prove-stale hold below, so the resume ladder never says a lock is missing one call after
+  // acquire said it exists. An indeterminate presence takes that same hold, and both stand ahead of
+  // the probe — only PROVEN absence reaches the no-lock words.
+  if (!pre.exists && lockPresence(kilnDir) === 'absent') {
     stop('transport_failure', 'run-lock takeover found no lock to take over — acquire a fresh lock instead', TRANSPORT_FAILURE)
   }
   if (!pre.record) {
@@ -4746,6 +4860,9 @@ if (mode === 'review' && args.length === 8) {
   if (version === null) {
     stop('transport_failure', 'run-lock takeover could not read the plugin version from .claude-plugin/plugin.json', TRANSPORT_FAILURE)
   }
+  // Last, and before the claim: a live or young lock has already held above, so the probe only ever
+  // fires on a run this verb would otherwise mint, and its refusal disturbs nothing.
+  refuseWithoutCodex(kilnDir, 'takeover')
   const claim = claimLock(kilnDir)
   if (!claim) {
     stop('contended', 'run-lock takeover refused: another contender claimed the lock first', LOCK_DENIED)

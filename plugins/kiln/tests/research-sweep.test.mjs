@@ -436,14 +436,19 @@ test('runtime: blocked, transport, and gate-unreachable each HOLD the law — ne
 })
 
 test('runtime (S4, INTAKE-38): a codex-unavailable feasibility ratify is the acknowledgment stop — then the acked re-run promotes single-family via the opus fallback', async () => {
-  // FIRST detection: the codex ratify gate returns exit 21. The sweep persists BOTH markers
-  // and returns the distinct degraded status — never a held, never a promotion. The conductor
-  // literal continue relaunches the sweep.
+  // FIRST detection: the codex ratify gate returns exit 21. The sweep records the DETECTION
+  // alone and returns the distinct degraded status — never a held, never a promotion. The operator
+  // continue is what writes the ack, through the conductor, before the relaunch.
   const first = await runSweep({ projectDir: '/p' }, {
     ...ACCEPT_RUN, 'ratify:gate': { exit: 21 }, 'feasibility:degraded-mark': OK,
   })
   assert.equal(first.ret.status, 'degraded', 'codex-down at feasibility ratify is the acknowledgment stop, not a hold')
-  assert.ok(first.calls.some(c => c.label === 'feasibility:degraded-mark'), 'both the degraded marker and its ack are persisted')
+  const mark = first.calls.find(c => c.label === 'feasibility:degraded-mark')
+  assert.ok(mark, 'the degraded marker is persisted')
+  // W2-S10 (Sol r1 B1): the detection records itself alone. The ack is the operator word, and the
+  // conductor is its only writer, so an unanswered stop cannot pass for an answered one at resume.
+  assert.ok(mark.prompt.includes('touch .kiln/degraded') && !mark.prompt.includes('degraded-ack'),
+    'the sweep detection touches the degraded marker ALONE — never the operator word')
   assert.ok(!first.calls.some(c => c.label === 'promote'), 'nothing promotes on the first detection')
   assert.ok(first.ret.beat.toLowerCase().includes('codex'), 'the beat is honest about the missing second family')
   // The ACKED re-run: the marker is present, so the claude OPUS ratifier runs. It echoes the
@@ -452,7 +457,7 @@ test('runtime (S4, INTAKE-38): a codex-unavailable feasibility ratify is the ack
   const DIGEST = 'a'.repeat(64)
   const verdict = { review_id: 'f-op', law_hash: DIGEST, findings: [], blockers: [], verdict: 'accept' }
   const acked = await runSweep({ projectDir: '/p' }, {
-    'feasibility:degraded': { exit: 0 }, // the marker is present — the claude seat runs
+    'feasibility:degraded': { exit: 0 }, 'feasibility:degraded-ack': { exit: 0 }, // marker and operator word — the claude seat runs (S10d)
     'dial:read': DIAL_ON,
     'producer': PRODUCER_CANDIDATE,
     'candidate:check': OK,
@@ -477,6 +482,23 @@ test('runtime (S4, INTAKE-38): a codex-unavailable feasibility ratify is the ack
   assert.ok(!acked.ret.beat.includes('a second family signed'), 'the degraded promotion never claims a second family signed')
 })
 
+test('runtime (W2-S10d): the sweep selects no seat over a detection nobody answered — it returns the stop that asks for the word', async () => {
+  // The sibling of the two kernel selectors, reachable the same way: a builder-written marker, a
+  // dead leg, a conductor relaunch that JOINS. No minting verb runs on that path, so the probe and
+  // the panel never engage and the guard has to stand here.
+  const unworded = await runSweep({ projectDir: '/p' }, {
+    'feasibility:degraded': { exit: 0 },      // a detection stands
+    'feasibility:degraded-ack': { exit: 1 },  // and nobody has answered it
+    'dial:read': DIAL_ON,
+    'producer': PRODUCER_CANDIDATE,
+    'candidate:check': OK,
+  })
+  assert.equal(unworded.ret.status, 'degraded', 'the sweep returns its own acknowledgment status, not a seat')
+  assert.ok(!unworded.calls.some(c => c.label === 'feasibility-claude:review' || c.label === 'ratify:request'),
+    'and dispatches no ratifier of either family over an unworded detection')
+  assert.ok(unworded.ret.beat.toLowerCase().includes('continue'), 'the beat asks for the word')
+})
+
 test('runtime (S4, INTAKE-38): the degraded claude feasibility ratifier holds transport-class on a bad echo and a post-turn tamper — never promotes', async () => {
   // The acked scaffold, one leg falsified per scenario. The claude ratify seat computes the
   // candidate digest before the turn, rejects a law_hash that does not echo it, and — because a
@@ -485,7 +507,7 @@ test('runtime (S4, INTAKE-38): the degraded claude feasibility ratifier holds tr
   const DIGEST = 'a'.repeat(64)
   const accept = { review_id: 'f-op', law_hash: DIGEST, findings: [], blockers: [], verdict: 'accept' }
   const base = (over) => runSweep({ projectDir: '/p' }, {
-    'feasibility:degraded': { exit: 0 }, // the marker is present — the claude seat runs
+    'feasibility:degraded': { exit: 0 }, 'feasibility:degraded-ack': { exit: 0 }, // marker and operator word — the claude seat runs (S10d)
     'dial:read': DIAL_ON,
     'producer': PRODUCER_CANDIDATE,
     'candidate:check': OK,

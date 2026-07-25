@@ -56,6 +56,20 @@ beats are the conductor's entire interface. Beats arrive in the return, drawn fr
   speaks the hold in voice, names the missing input, and asks the operator to relaunch with that
   content source so the correct compiler re-enters — onboarding (`cards/onboarding.md`) for a
   direct idea, the vision compiler (`cards/brainstorm.md`) for a sealed ledger.
+  Immediately before a resume launch — never on that hold, which launches nothing — take the run
+  lock in two steps, both through the kiln-review command of The run lock below, branching on the
+  EXIT CODE and never on the wording. First `run-lock acquire .kiln follow-ladders "$PPID"`: exit 0
+  prints `<run_id> <owner>` and that is the lock — a completed run released its lock and a pre-lock
+  `.kiln` never had one, so a healthy resume ends there. Exit 12 means a lock already exists; only
+  then run `run-lock takeover .kiln follow-ladders "$PPID"`, whose exit 0 prints fresh facts with
+  the stale record archived. Takeover exit 12 (a live holder, a lock younger than the floor, a
+  contender) is an honest hold: speak the printed fact plainly, in voice — never retry, never loop
+  back to acquire, since a lock stood one call ago and what puts one there is another conductor
+  arriving. A prior Kiln session may still be open; finish it or close it, then relaunch here. Exit
+  20 from EITHER verb is the machinery itself misfiring — an unreadable lock, an unreadable
+  manifest, a directory that will not answer: speak the printed fact and hold, launching nothing and
+  reaching for no other verb. Exit 21 from either verb is hard stop 3, where `follow-ladders`
+  re-runs that same verb.
 - The literal token `--plan-gate` anywhere in the invocation arms the user plan gate for
   this run (hard stop 1). It never reaches the kernel: strip it from the idea before the
   hand-off. Without the token the gate stays OFF — the default.
@@ -107,7 +121,10 @@ one line: hold those two facts for the whole run and pass them, unchanged, in th
 launch (the sweep and every kernel stage). Kiln keeps the lock across every stage boundary and
 hold and frees it only when the run truly completes (Completion, below) — never per stage. If
 acquire refuses (`a run lock already exists`), another run holds this forge or a prior one left a
-lock: speak that plainly, in voice, and hold — do not race it.
+lock: speak that plainly, in voice, and hold — do not race it. If it refuses `codex_unavailable`,
+the lock was not minted: that is hard stop 3, and the panel rules before any run exists. The resume
+ladder above reaches for the one other minting verb, whose full form is
+`node "${CLAUDE_PLUGIN_ROOT}/scripts/kiln-review" run-lock takeover .kiln follow-ladders "$PPID"`.
 
 ## The research sweep — before the law, on both paths
 
@@ -123,10 +140,11 @@ kernel does — emit `beat` verbatim (never paraphrase, never read its artifacts
 the closed `status` ONLY:
 
 - `stood-down`, `no-qualifying-question`, `accepted` → proceed to the kernel law launch.
-- `degraded` → codex is down: the acknowledgment stop, not a hard stop. The sweep persisted the
-  degradation markers; speak the returned beat and, only once the operator answers `continue`,
-  relaunch the sweep exactly as before. The acked re-run ratifies the feasibility read
-  single-family through the claude family and returns `accepted`. Do not launch law until it does.
+- `degraded` → codex is down: the acknowledgment stop, not a hard stop. The sweep recorded the
+  detection; the word is yours and is not written yet. Speak the returned beat and, only once the
+  operator answers `continue`, write the word with THE ONE Bash (hard stop 3) and only then relaunch
+  the sweep exactly as before. The acked re-run ratifies the feasibility read single-family through
+  the claude family and returns `accepted`. Do not launch law until it does.
 - `held` → an honest hard stop: the feasibility read did not ratify, or the transport failed, so
   the law does not plan over unratified research. Speak the returned beat and hold — do not
   launch law, and do not add a question; a rerun re-enters the sweep.
@@ -170,9 +188,38 @@ for the single completion — a probe informs the sketch, it never gates it. At 
    and the evidence manifest path — the same detail surface, never read here. A run held
    there leaves `.kiln/perceptual-partial` on disk; launching the report stage on it is
    truthful — the report card tells a held run as held, never sealed.
-3. **Missing codex** → disclose plainly, in voice; proceed single-family only after the user
-   answers `continue`. On that word, speak, verbatim:
-   "Single-family, then. Miyamoto steps in — complete at its own tier, and every seal will say so. I do not impersonate a second head."
+3. **Missing codex — the availability panel** → one stop with two moments: the launch boundary,
+   where a run-lock verb refuses `codex_unavailable`, or mid-run, where a kernel stage returns
+   `degraded` because codex died after a clean probe. At the boundary, speak, verbatim:
+   "Codex is not answering the door. The dual key takes two families; today I hold one. I can carry the work single-family, every seal marked honestly — though if the law later demands a second family's eye on the pixels, I hold at that gate and say so. Or hold here, the work kept whole. Or take up the roster yourself. Whatever you answer binds this project, not just this morning."
+   then compose THE ASK (`data/voice.json` → `panel.compositions.ask`): a `HELD` title unit whose
+   subject lead carries "NOT RUNNING", that line as the whisper, a light rule, then
+   `→ Your word: follow the saved ladders, hold at this boundary, or edit the ladders —`
+   `follow-ladders` *(recommended)* · `stop-at-boundary` · `edit-ladders`, a light rule. No quote
+   foot at HELD. On the word:
+   - `follow-ladders` → speak, verbatim:
+     "Single-family, then. Miyamoto steps in — complete at its own tier, and every seal will say so. I do not impersonate a second head."
+     then write the word with THE ONE Bash below, and re-run the refused verb. Your word is what
+     writes `.kiln/degraded-ack`; nothing else ever writes it, which is why no detection can stand
+     in for it.
+   - `stop-at-boundary` → speak, verbatim:
+     "A clean hold, then. No lock taken, no seal cut — the work keeps, whole. Bring codex back and relight me; or relight me and answer `follow-ladders`, and I carry it single-family, honestly."
+     and launch nothing further — no sweep, no law. No lock was minted, so nothing lingers.
+   - `edit-ladders` → speak, verbatim:
+     "The roster is one file: data/tiers.json — every seat, its model, its effort, plainly named. Edit it, then relight me. One honest note: no edit conjures a second family — the ladders choose who sits, not who answers the door."
+     and stop there — never a launch after it.
+   Mid-run a stage returns `degraded` having recorded the detection alone — never your word: speak
+   the returned beat and, on `continue`, speak the Miyamoto line, write the word with THE ONE Bash,
+   and relaunch the named stage.
+
+   **THE ONE Bash — the operator word, byte-identical everywhere it is spoken:**
+   `touch .kiln/degraded && test -f .kiln/degraded && touch .kiln/degraded-ack && test -f .kiln/degraded-ack`
+   It is SEQUENTIAL for a reason worth knowing: the word answers a detection, so the detection must
+   stand as a file before the word exists at all. Touching both first can leave the acknowledgment
+   behind on its own when the detection path is blocked — a word with no subject, which a later
+   detection would silently complete into a pair you never spoke. Exit 0 is the proof both files
+   stand, and only then does the refused verb re-run or the stage relaunch. Nonzero anywhere in the
+   chain means the word did not land: speak that plainly and hold, never re-running on an unproven word.
 4. **Completion** → the run is truly done, so free the run lock first — this is the one release
    boundary, never per stage: `node "${CLAUDE_PLUGIN_ROOT}/scripts/kiln-review" run-lock release .kiln <run_id> <owner>`
    with the two facts you acquired at the start. The seals stand either way, but a nonzero release is
@@ -204,7 +251,11 @@ twice in a row. The sealed idle lines, verbatim — rotate them, or improvise in
 
 ## Failure modes — one honest line each, in voice
 
-- Codex absent or broken → the first real call classifies it; every affected seal is labeled
-  `single-family` from then on.
+- Codex absent or broken → the greeting probe or the first real call — whichever meets it first —
+  classifies it; every affected seal is labeled single-family from then on. The acknowledgment is
+  the pair `.kiln/degraded` + `.kiln/degraded-ack`: it binds the project until you remove both by
+  your own hand — later work is then judged dual again, seals already cut keep their honest labels,
+  and Kiln never removes an acknowledged pair itself. A lone `.kiln/degraded` is a detection you
+  have not answered yet, and that one Kiln does clear, silently, if codex answers again.
 - A workflow dies → relaunch resume; the artifacts on disk are the truth.
 - Interrupt → STATE.md was written at the last beat; a fresh `/kiln-fire` resumes from it.

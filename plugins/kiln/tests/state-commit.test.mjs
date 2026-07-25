@@ -14,6 +14,13 @@ import { fileURLToPath } from 'node:url'
 const CLI = fileURLToPath(new URL('../scripts/kiln-review', import.meta.url))
 const KERNEL = fileURLToPath(new URL('../workflows/kernel.js', import.meta.url))
 
+// W2-S10: run-lock acquire probes codex before it mints, and the probe asks only for a version —
+// so a stub that exits 0 IS a codex here, prepended so it answers ahead of any real one. The single
+// acquire in this file states its availability that way instead of inheriting the host machine.
+const CODEX_DIR = mkdtempSync(join(tmpdir(), 'kiln-statecodex-'))
+writeFileSync(join(CODEX_DIR, 'codex'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+const withCodex = { ...process.env, PATH: `${CODEX_DIR}:${process.env.PATH}` }
+
 function commit(args) {
   const dir = mkdtempSync(join(tmpdir(), 'kiln-state-'))
   const run = spawnSync('node', [CLI, 'state-commit', dir, ...args], { encoding: 'utf8' })
@@ -254,8 +261,10 @@ test('state-commit: run_id is trusted only from a CLI-minted run.lock, null othe
   assert.equal(forgedRun.status, 0, forgedRun.stderr)
   assert.equal(record(forged).run_id, null, 'a non-conforming lock yields run_id null, never the forged string')
   // With a real lock the CLI itself acquired, the commit reads run_id from run.lock — no argv relay.
+  // W2-S10: acquire now probes codex before it mints, so this spawn STATES its availability with a
+  // stub prepended to PATH rather than depending on what the host machine happens to have.
   const dir = mkdtempSync(join(tmpdir(), 'kiln-run-'))
-  const acq = spawnSync('node', [CLI, 'run-lock', 'acquire', dir, 'follow-ladders', String(process.pid)], { encoding: 'utf8' })
+  const acq = spawnSync('node', [CLI, 'run-lock', 'acquire', dir, 'follow-ladders', String(process.pid)], { encoding: 'utf8', env: withCodex })
   assert.equal(acq.status, 0, acq.stderr)
   const lockedRunId = acq.stdout.trim().split(' ')[0]
   const run = commitInto(dir, ['advance', 'build', 's1', 'relaunch-validate', 'broad'])

@@ -156,6 +156,15 @@
     "degradation.continue": [
       "Single-family, then. Miyamoto steps in — complete at its own tier, and every seal will say so. I do not impersonate a second head."
     ],
+    "availability.panel": [
+      "Codex is not answering the door. The dual key takes two families; today I hold one. I can carry the work single-family, every seal marked honestly — though if the law later demands a second family's eye on the pixels, I hold at that gate and say so. Or hold here, the work kept whole. Or take up the roster yourself. Whatever you answer binds this project, not just this morning."
+    ],
+    "availability.hold": [
+      "A clean hold, then. No lock taken, no seal cut — the work keeps, whole. Bring codex back and relight me; or relight me and answer `follow-ladders`, and I carry it single-family, honestly."
+    ],
+    "availability.ladders": [
+      "The roster is one file: data/tiers.json — every seat, its model, its effort, plainly named. Edit it, then relight me. One honest note: no edit conjures a second family — the ladders choose who sits, not who answers the door."
+    ],
     "plan.gate": [
       "You asked to hold the plan for your own eyes. Here it is — the forge waits on your word."
     ],

@@ -1741,8 +1741,14 @@ test('runtime (S4, INTAKE-38): codex unavailable at LAW ratify is the two-marker
     'degraded:mark': { exit: 0 },
     'state:write': GREEN,
   })
-  assert.equal(first.ret.status, 'degraded', 'codex-down at law ratify is the acknowledgment stop — the same two-marker stop the build and audit gates take, not a held')
-  assert.ok(first.calls.some(c => c.label === 'degraded:mark'), 'both the degraded marker and its ack are persisted for the acknowledgment')
+  assert.equal(first.ret.status, 'degraded', 'codex-down at law ratify is the acknowledgment stop — the same stop the build and audit gates take, not a held')
+  // W2-S10 (Sol r1 B1): detection records the DETECTION and nothing else. The ack is the operator
+  // word and the conductor is its only writer, so a stop that was issued can never be mistaken at a
+  // later resume for a stop that was answered.
+  const lawMark = first.calls.find(c => c.label === 'degraded:mark')
+  assert.ok(lawMark, 'the degraded marker is persisted for the acknowledgment')
+  assert.ok(lawMark.prompt.includes('touch .kiln/degraded') && !lawMark.prompt.includes('degraded-ack'),
+    'the law detection touches the degraded marker ALONE — never the operator word')
   assert.ok(!first.calls.some(c => c.label === 'ratify:repair'), 'no repair on codex-unavailable')
   assert.ok(!first.calls.some(c => c.label === 'law:seal'), 'the LAW never locks on the first detection')
   assert.ok(first.ret.beat.toLowerCase().includes('codex'), 'the degradation beat is honest about the missing second family')
@@ -1758,6 +1764,7 @@ test('runtime (S4, INTAKE-38): codex unavailable at LAW ratify is the two-marker
     'law:preflight': GREEN,
     'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law' },
     'law:degraded': { exit: 0 }, // the marker is present — the acked re-run takes the claude seat
+    'law:degraded-ack': { exit: 0 }, // and the operator word stands behind it (S10d)
     'law:seal-label': { exit: 0 }, // present at seal time → single-family
     'ratify:digest': { exit: 0, ids: [DIGEST] },
     'ratify:invalidate': { exit: 0 },
@@ -1784,6 +1791,74 @@ test('runtime (S4, INTAKE-38): codex unavailable at LAW ratify is the two-marker
   assert.ok(ratifyPublish && ratifyPublish.prompt.includes('publish-gate .kiln ratify'), 'the claude ratify verdict routes through the W2-S5 publish-gate verb under the ratify family')
 })
 
+test('runtime (W2-S10d): an UNANSWERED detection selects no seat — law ratify, the seam audit and the sweep each return their own degraded stop', async () => {
+  // The B1 shape at the sites the minting verbs cannot reach. cards/build.md has the builder touch
+  // `degraded` mid-build with no stop and no word; the leg dies; the conductor relaunches, and a
+  // relaunch JOINS — no minting verb, no probe, no panel. So each marker-keyed seat selector has to
+  // refuse locally, or a joined relaunch picks the single-family seat off a stop nobody answered.
+  const law = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE,
+    ...ONBOARDING_OK,
+    'law:preflight': GREEN,
+    'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law' },
+    'law:degraded': { exit: 0 },        // a detection stands
+    'law:degraded-ack': { exit: 1 },    // and nobody has answered it
+    'state:write': GREEN,
+  })
+  assert.equal(law.ret.status, 'degraded', 'law ratify returns its own acknowledgment stop, not a seat')
+  assert.ok(!law.calls.some(c => c.label === 'ratify-claude:review' || c.label === 'ratify:request'),
+    'and no ratifier of either family is dispatched over an unworded detection')
+  assert.equal(stateArgs(law.calls).key, 'acknowledge-degrade', 'and the persisted next action asks for the word')
+  // The seam audit is the sharper of the two: the sealed-skip loop reaches it and continues PAST
+  // it, so the build belt never runs first on this path — which is exactly how the belt came to be
+  // credited with coverage it did not have.
+  const audit = await runKernel({ stage: 'build', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'slices:fetch': { exit: 0, ids: ['obj|s1|logic|A', 'obj|s2|logic|A'] },
+    'seal:set': { exit: 0, ids: ['s1', 's2'] }, // all sealed; the s2 seam audit is still owed
+    'ladder:fetch': LADDER,
+    'cap:read': { exit: 0, recovery_cap: 2 },
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+    'audit:member': { exit: 1 },
+    'law:pre-audit': GREEN,
+    'audit:degraded': { exit: 0 },      // a detection stands
+    'audit:degraded-ack': { exit: 1 },  // and nobody has answered it
+  })
+  assert.equal(audit.ret.status, 'degraded', 'the seam audit returns its own acknowledgment stop, not a seat')
+  assert.ok(!audit.calls.some(c => c.label === 'audit:review' || c.label === 'audit-claude:review'),
+    'and no auditor of either family judges the seam over an unworded detection')
+})
+
+test('runtime (W2-S10d): the marker-keyed selectors already covered by ORDER say so, and the control flow says it too', () => {
+  // Ground-or-weaken on a COVERAGE claim — the shape that produced this defect. The build
+  // reviewerOpts and sealLabel need no ack gate of their own, and the reason is the order of the
+  // reads, not luck. Stated here so it can never be assumed again.
+  assert.equal((src.match(/test -f ' \+ P\.ack/g) || []).length, 3,
+    'exactly three ack reads in the kernel: the build belt, the law ratify guard, the seam audit guard')
+  const belt = src.indexOf("const wasDegraded = await hands('test -f ' + P.degraded")
+  const beltGuard = src.indexOf("wasDegraded && await hands('test -f ' + P.ack")
+  const reviewerOpts = src.indexOf("const reviewerOpts = wasDegraded ? tier('fallback-reviewer')")
+  assert.ok(belt !== -1 && beltGuard !== -1 && reviewerOpts !== -1, 'the belt, its ack guard and the build seat selector all stand')
+  assert.ok(belt < beltGuard && beltGuard < reviewerOpts,
+    'the build seat is selected only PAST the belt and its ack guard — that is why it carries none of its own')
+  // sealLabel labels rather than selects. The ordering claim is about its LIVE CALLS, so the pin
+  // enumerates them and places each one after the guard that covers it — a pin that checked only
+  // the helper definition would leave the promised regression defense absent.
+  const calls = [...src.matchAll(/await sealLabel\('([^']+)'\)/g)]
+  assert.deepEqual(calls.map((m) => m[1]), ['law:seal-label', 'audit:seal-label', 'degraded:check'],
+    'exactly three live sealLabel calls — the law seal, the audit append, and the build seal')
+  const lawGuard = src.indexOf("'law:degraded-ack'")
+  const auditGuard = src.indexOf("'audit:degraded-ack'")
+  const beltGuardAt = src.indexOf("wasDegraded && await hands('test -f ' + P.ack")
+  assert.ok(lawGuard !== -1 && auditGuard !== -1 && beltGuardAt !== -1, 'all three ack guards stand')
+  assert.ok(lawGuard < calls[0].index, 'the law seal label is read only past the law ack guard')
+  assert.ok(auditGuard < calls[1].index, 'the audit append label is read only past the audit ack guard')
+  assert.ok(beltGuardAt < calls[2].index, 'the build seal label is read only past the belt ack guard')
+  assert.ok(!/sealLabel\([^)]*\)[^\n]*tier\(/.test(src), 'and no seat is chosen from any of their results')
+})
+
 test('runtime (S4, INTAKE-38): the degraded LAW claude ratifier holds transport-class on a bad echo, a post-turn tamper, and a stale candidate — never publishes, never seals', async () => {
   // The acked (marker-present) claude ratify seat, with one leg falsified per scenario. The seat
   // computes the candidate LAW digest before the turn, rejects a law_hash that does not echo it,
@@ -1798,6 +1873,7 @@ test('runtime (S4, INTAKE-38): the degraded LAW claude ratifier holds transport-
     'law:preflight': GREEN,
     'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law' },
     'law:degraded': { exit: 0 }, // the marker is present — the acked re-run takes the claude seat
+    'law:degraded-ack': { exit: 0 }, // and the operator word stands behind it (S10d)
     'ratify:digest': { exit: 0, ids: [DIGEST] },
     'ratify:invalidate': { exit: 0 },
     'ratify-claude:review': { ok: true },
@@ -3697,7 +3773,10 @@ test('runtime (W7-S2 / S4): the audit adapter maps the closed exits — 20 trans
   assert.equal(transport.ret.status, 'transport-failure')
   const degraded = await runKernel({ stage: 'build', projectDir: '/p' }, base(21))
   assert.equal(degraded.ret.status, 'degraded')
-  assert.ok(degraded.calls.some(c => c.label === 'degraded:mark'), 'the degraded stop marks for acknowledgment as the slice gates do')
+  const auditMark = degraded.calls.find(c => c.label === 'degraded:mark')
+  assert.ok(auditMark, 'the degraded stop marks for acknowledgment as the slice gates do')
+  assert.ok(auditMark.prompt.includes('touch .kiln/degraded') && !auditMark.prompt.includes('degraded-ack'),
+    'the audit detection touches the degraded marker ALONE — the ack is the operator word (S10, Sol r1 B1)')
   const auditDeg = stateArgs(degraded.calls)
   assert.equal(auditDeg.key, 'acknowledge-degrade', 'the audit-degraded STATE takes the acknowledge-degrade key — the acked re-run audits single-family, it never waits on codex')
   assert.equal(auditDeg.slice, 's1', 'and names only the seam slice as active_slice')
@@ -3726,6 +3805,7 @@ test('runtime (S4, INTAKE-38): the degraded claude milestone auditor holds trans
     'audit:member': { exit: 1 }, // open seam
     'law:pre-audit': GREEN,
     'audit:degraded': { exit: 0 }, // the marker is present at the audit — the claude auditor seat
+    'audit:degraded-ack': { exit: 0 }, // with the operator word behind it (S10d)
     'audit-claude:lawhash': { exit: 0, ids: ['a'.repeat(64)] },
     'audit-claude:invalidate': { exit: 0 },
     'audit-claude:review': { ok: true },
@@ -3755,7 +3835,7 @@ test('runtime (W2-S3): the degraded claude auditor brackets its turn with the tr
     'state:write': GREEN,
     'audit:member': { exit: 1 }, // open seam
     'law:pre-audit': GREEN,
-    'audit:degraded': { exit: 0 }, // the claude auditor seat
+    'audit:degraded': { exit: 0 }, 'audit:degraded-ack': { exit: 0 }, // the claude auditor seat, word on disk (S10d)
     'audit-claude:lawhash': { exit: 0, ids: ['a'.repeat(64)] },
     'audit-claude:invalidate': { exit: 0 },
     'audit-claude:review': { ok: true },
@@ -3815,7 +3895,7 @@ test('runtime (S4-B1, INTAKE-38): the degraded claude milestone auditor is seam-
     // missing — only s2 re-fires.
     'audit:member': (p) => (p.includes("audit-member .kiln 's3'") ? { exit: 0, ids: ['covered:s1,s2,s3'] } : { exit: 1 }),
     'law:pre-audit': GREEN,
-    'audit:degraded': { exit: 0 }, // the marker is present — the claude auditor seat
+    'audit:degraded': { exit: 0 }, 'audit:degraded-ack': { exit: 0 }, // the marker and the word (S10d)
     'audit-claude:lawhash': { exit: 0, ids: ['a'.repeat(64)] },
     'audit-claude:invalidate': { exit: 0 },
     'audit-claude:review': { ok: true },
@@ -5055,11 +5135,19 @@ test('dogfood (S4, INTAKE-38): the acknowledged no-codex arc runs end to end ove
     'feasibility:degraded': rExit, // absent on disk → the codex seat
     'ratify:request': { exit: 0 },
     'ratify:gate': { exit: 21 }, // codex unavailable
-    'feasibility:degraded-mark': rExit, // the real touch of both markers
+    'feasibility:degraded-mark': rExit, // the real touch of the degraded marker
   })
   assert.equal(a.ret.status, 'degraded', 'the first codex-down feasibility ratify is the acknowledgment stop')
-  assert.ok(existsSync(join(dir, '.kiln/degraded')) && existsSync(join(dir, '.kiln/degraded-ack')),
-    'both degradation markers are on real disk after the acknowledgment stop')
+  // W2-S10 (Sol r1 B1): on real disk, the detection leaves the marker and NOT the ack. A stop that
+  // was issued must stay distinguishable from a stop that was answered, or a later resume reads an
+  // unanswered detection as the operator word and runs single-family with no word anywhere.
+  assert.ok(existsSync(join(dir, '.kiln/degraded')), 'the degradation marker is on real disk after the acknowledgment stop')
+  assert.ok(!existsSync(join(dir, '.kiln/degraded-ack')), 'and the ack is NOT — only the conductor writes it, on the operator word')
+
+  // W2-S10d: the operator answers `continue`, and the CONDUCTOR writes the word — the one Bash from
+  // SKILL.md, the only ack write in the tree. Every acked leg below now reads this file for real, so
+  // the arc proves what it claims: the single-family seats run because the word is on disk.
+  writeFileSync(join(dir, '.kiln/degraded-ack'), '')
 
   // (b) The acked sweep re-run — the REAL marker routes the opus claude seat and promotes single-family.
   const feasVerdict = { review_id: 'f-op', law_hash: CAND_DIGEST, findings: [], blockers: [], verdict: 'accept' }
@@ -5069,7 +5157,7 @@ test('dogfood (S4, INTAKE-38): the acknowledged no-codex arc runs end to end ove
     'dial:read': { exit: 0, research: 'on', recovery_cap: 2 },
     'producer': writeCand,
     'candidate:check': rExit,
-    'feasibility:degraded': rExit, // present on disk → the claude seat, read from the marker the sweep dropped
+    'feasibility:degraded': rExit, 'feasibility:degraded-ack': rExit, // present on disk → the claude seat, word behind it
     'feasibility:digest': { exit: 0, ids: [CAND_DIGEST] },
     'feasibility:invalidate': { exit: 0 },
     'feasibility-claude:review': { ok: true },
@@ -5091,7 +5179,7 @@ test('dogfood (S4, INTAKE-38): the acknowledged no-codex arc runs end to end ove
     ...ONBOARDING_OK,
     'law:preflight': GREEN,
     'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law' },
-    'law:degraded': rExit, // present → the claude ratify seat, read from the same marker
+    'law:degraded': rExit, 'law:degraded-ack': rExit, // present → the claude ratify seat, word behind it
     'ratify:digest': { exit: 0, ids: [LAW_DIGEST] },
     'ratify:invalidate': { exit: 0 },
     'ratify-claude:review': { ok: true },
@@ -5125,7 +5213,7 @@ test('dogfood (S4, INTAKE-38): the acknowledged no-codex arc runs end to end ove
     'state:write': GREEN,
     'audit:member': (p) => runReal(p, dir), // the REAL read-only verb over this dir: no audit ledger yet
     'law:pre-audit': GREEN,
-    'audit:degraded': rExit, // present → the claude auditor seat
+    'audit:degraded': rExit, 'audit:degraded-ack': rExit, // present → the claude auditor seat, word behind it
     'audit-claude:lawhash': { exit: 0, ids: [LAW_DIGEST] },
     'audit-claude:invalidate': { exit: 0 },
     'audit-claude:review': { ok: true },

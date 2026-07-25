@@ -80,12 +80,13 @@ test('voice: grammar["banner.stage"] is the literal §0 frame — 36-column bars
 test('voice: the beat key set is exact — every surviving key has a named consumer', () => {
   const voice = JSON.parse(readFileSync(join(DATA, 'voice.json'), 'utf8'))
   assert.deepEqual(Object.keys(voice.beats).sort(), [
+    'availability.hold', 'availability.ladders', 'availability.panel',
     'bad-args', 'blocked', 'completion', 'completion.single-family',
     'completion.single-family.unmetered', 'completion.unmetered', 'degradation',
     'degradation.continue', 'gate-unreachable', 'greeting.brainstorm', 'greeting.direct',
     'idle', 'plan.gate', 'reopen', 'resume', 'review.fail', 'seal', 'slice.start',
     'stage.brainstorm', 'stage.law', 'stage.validate', 'transport-failure',
-  ], 'exactly the 22 consumed beat keys — stage.build, stage.report, review.pass killed (S4); the two dead pre-root bad-args twins killed, the key re-scoped to the reachable unknown-stage site (S1)')
+  ], 'exactly the 25 consumed beat keys — stage.build, stage.report, review.pass killed (S4); the two dead pre-root bad-args twins killed, the key re-scoped to the reachable unknown-stage site (S1); the three availability beats are the conductor-owned launch-boundary panel (S10)')
   assert.equal(voice.beats['bad-args'].length, 1, 'bad-args carries only the reachable unknown-stage entry')
   assert.equal(voice.beats['transport-failure'].length, 2, 'transport-failure keeps its review-call (0) and stage-worker (1) variants — the kernel indexes them')
 })
@@ -116,12 +117,37 @@ test('skill: every inlined conductor beat equals its voice.json entry byte-for-b
   const voice = JSON.parse(readFileSync(join(DATA, 'voice.json'), 'utf8'))
   const skill = readFileSync(fileURLToPath(new URL('../skills/kiln-fire/SKILL.md', import.meta.url)), 'utf8')
   const CONDUCTOR_KEYS = ['greeting.direct', 'greeting.brainstorm', 'plan.gate',
-    'degradation.continue', 'completion.unmetered', 'completion.single-family.unmetered', 'idle']
+    'degradation.continue', 'completion.unmetered', 'completion.single-family.unmetered', 'idle',
+    'availability.panel', 'availability.hold', 'availability.ladders']
   for (const key of CONDUCTOR_KEYS) {
     for (const [i, entry] of voice.beats[key].entries()) {
       assert.ok(skill.includes(entry), `SKILL.md must carry beats["${key}"][${i}] verbatim: ${entry}`)
     }
   }
+})
+
+test('skill: SKILL.md carries exactly one marker touch, and it proves both files before anything re-runs (S10 / Sol r1)', () => {
+  // The title says what this observes. That SKILL.md holds the tree's ONLY ack write is a separate
+  // count across the workflows and the CLI, pinned in kiln-review.test.mjs.
+  const skill = readFileSync(fileURLToPath(new URL('../skills/kiln-fire/SKILL.md', import.meta.url)), 'utf8')
+  // Sol r2 B1: the chain is SEQUENTIAL — the detection must stand as a file before the word exists,
+  // or a blocked detection path leaves an orphan ack that a later detection completes into a pair
+  // the operator never spoke. Touching both first is exactly the shape that fails.
+  const proven = 'touch .kiln/degraded && test -f .kiln/degraded && touch .kiln/degraded-ack && test -f .kiln/degraded-ack'
+  assert.equal(skill.split(proven).length - 1, 1, 'exactly one command form for the operator word')
+  assert.equal(skill.split('touch .kiln/degraded').length - 1, 2,
+    'and both marker touches in the file are the two inside that one chain — no bare copy anywhere else')
+  assert.ok(!skill.includes('touch .kiln/degraded .kiln/degraded-ack'),
+    'the both-paths-first form is gone: it can create the word before its subject stands')
+  // Sol r2 B2: the sweep continuation has to write the word before it relaunches. Without it the
+  // acked re-run meets the sweep half-state guard and returns `degraded` forever. It REFERENCES the
+  // one command rather than restating it, so a second copy never appears to drift.
+  const sweepBranch = skill.slice(skill.indexOf('- `degraded` → codex is down'), skill.indexOf('- `held` → an honest hard stop'))
+  assert.ok(sweepBranch.length > 0, 'the sweep degraded branch is where it is expected')
+  assert.ok(sweepBranch.includes('THE ONE Bash'), 'the sweep continuation writes the operator word before relaunching')
+  assert.ok(!sweepBranch.includes('persisted the'), 'and no longer claims the sweep persisted a word it never writes')
+  assert.ok(!skill.includes('the kernel already persisted the markers'),
+    'the mid-run moment no longer claims the kernel wrote the ack — detection records the detection, the operator word writes the ack')
 })
 
 test('plugin.json: the zero-reader userConfig knobs are killed (S15)', () => {

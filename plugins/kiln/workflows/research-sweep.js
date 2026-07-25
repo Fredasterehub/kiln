@@ -451,10 +451,15 @@ if (await hands('test -s ' + F.candidate, 'candidate:check') !== 0) {
 // S4 (INTAKE-38): the feasibility ratify TRANSPORT degrades to the claude family when codex
 // is down. A tri-state path-selector read chooses the seat — absent the cross-family codex
 // ratifier, present a fresh OPUS claude ratifier that mirrors the codex digest, echo and
-// lineage rules and records single-family honestly. The marker is set only after a first
-// codex-down detection stopped for the operator acknowledgment, so the claude seat runs only
-// on an acked re-run. `.kiln/degraded` is sufficient provenance for the feasibility read.
+// lineage rules and records single-family honestly. W2-S10d: the marker records a DETECTION, written
+// by whichever detector met the absence; the ack records the OPERATOR WORD. A detection nobody has
+// answered selects no seat — it returns this sweep's own degraded status below, the one that asks
+// for the word, and the acked relaunch selects honestly. The minting verbs cover the launch
+// boundary; a joined relaunch after a mid-run detection reaches here without passing them.
+// W2-S10d (B3): ONE degraded return — the guard here and the detection arm below both call it.
+const degradedStatus = () => ({ status: 'degraded', beat: 'Codex is not answering. I complete single-family only after you answer continue — a fresh opus mind in the claude family will ratify the feasibility read, and every seal will say so. Say `continue` and I proceed.', pointers: { posture: F.posture } })
 const degraded = await hands('test -f ' + F.degraded, 'feasibility:degraded') === 0
+if (degraded && await hands('test -f ' + F.ack, 'feasibility:degraded-ack') !== 0) return degradedStatus()
 const reviewerOpts = degraded ? tier('fallback-reviewer') : tier('ratify-reviewer')
 // The claude feasibility ratify leg (the kernel claudeRatify mirror): the workflow computes
 // the candidate digest BEFORE the reviewer turn, the opus reviewer echoes it as law_hash, the
@@ -590,15 +595,15 @@ if (loop.result === 'accepted') {
   return { status: 'accepted', beat, pointers: { feasibility: F.feasibility } }
 }
 // (e) S4-D2: a FIRST codex-down detection is the acknowledgment stop, not a hold — persist
-// BOTH markers and return the distinct degraded status. The conductor literal continue
-// relaunches the sweep; the acked re-run enters with the marker set and ratifies
-// single-family through the claude seat above. Reachable only on the codex path — the claude
-// leg never reports codex-unavailable.
+// the degraded marker ALONE and return the distinct degraded status. Detection never writes
+// the ack: that file is the operator word, and only the conductor writes it, on continue.
+// The acked re-run enters with both files and ratifies single-family through the claude seat
+// above. Reachable only on the codex path — the claude leg spawns no codex that could fail.
 if (loop.result === 'codex-unavailable') {
-  if (await hands('touch ' + F.degraded + ' ' + F.ack, 'feasibility:degraded-mark') !== 0) {
+  if (await hands('touch ' + F.degraded, 'feasibility:degraded-mark') !== 0) {
     return held('The ledger would not take the degradation markers — the law holds until the write lands. Rerun.', { posture: F.posture })
   }
-  return { status: 'degraded', beat: 'Codex is not answering. I complete single-family only after you answer continue — a fresh opus mind in the claude family will ratify the feasibility read, and every seal will say so. Say `continue` and I proceed.', pointers: { posture: F.posture } }
+  return degradedStatus()
 }
 // Every other non-accept outcome holds the law — rejected or stale research never becomes advice.
 const heldBeat = {

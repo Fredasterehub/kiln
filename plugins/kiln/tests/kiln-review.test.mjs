@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { spawn, spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
@@ -401,6 +401,10 @@ const RUBRIC = fileURLToPath(new URL('../data/law-rubric.json', import.meta.url)
 const FAKE_CODEX = `#!/usr/bin/env node
 const fs = require('node:fs')
 const args = process.argv.slice(2)
+// W2-S10: the availability probe asks this binary for its version and hands it no stdin, so the
+// stub answers that argv before it reads anything — a stand-in that threw on --version would make
+// the canned reviewer read as an ABSENT one, and the lock tests would pin the wrong direction.
+if (args[0] === '--version') { process.stdout.write('kiln-fake-codex 0.0.0\\n'); process.exit(0) }
 const prompt = fs.readFileSync(0, 'utf8')
 const gate = JSON.parse(process.env.FAKE_GATE)
 // The CLI mints a fresh review_id for the slice path; a gate can echo it back with
@@ -414,7 +418,10 @@ fs.writeFileSync(args[args.indexOf('-o') + 1], JSON.stringify(gate))
 
 // A fake codex that cannot complete the review — the reviewer bridge is down. It exits 127
 // (the not-executable code) and writes no gate, so runGate classifies it codex_unavailable.
-const UNAVAILABLE_CODEX = `#!/usr/bin/env node
+// The interpreter is named ABSOLUTELY: the S10 probe tests hand this stub a PATH holding nothing
+// but the stub, where `/usr/bin/env node` would fail to resolve and the run would read as an
+// absent binary — a pass on the wrong proof, since exit 127 is the thing being pinned.
+const UNAVAILABLE_CODEX = `#!${process.execPath}
 process.exit(127)
 `
 
@@ -622,8 +629,13 @@ test('kiln-review (W2-S8): a containment root that already ends in a separator a
   const twin = join(dirname(dir), basename(dir) + '-twin')
   mkdirSync(twin, { recursive: true })
   writeFileSync(join(twin, 'x.md'), 'outside\n')
-  assert.throws(() => containedPathFn(dir, join(twin, 'x.md'), 'probe'),
-    (error) => /^probe: .* resolves outside /.test(error.message), 'a sibling sharing the root as a name prefix is not contained')
+  // The message is matched WHOLE, never by pattern: the physical refusal says the same words with
+  // `physically` in the middle, so any matcher loose enough to skip a word accepts it too and the
+  // test would pass on the wrong proof.
+  const outsider = join(twin, 'x.md')
+  assert.throws(() => containedPathFn(dir, outsider, 'probe'),
+    (error) => error.message === `probe: ${outsider} resolves outside ${resolve(dir)}`,
+    'a sibling sharing the root as a name prefix is refused by the LEXICAL boundary, and by that one only')
 })
 
 // The standing class, at the one place this slice adds a read: the containment walk asks whether a
@@ -1660,10 +1672,37 @@ test('kiln-review (W2-S4): gate-facts holds on a missing or malformed request �
 })
 
 // ── W2-S1: the conductor-owned run lock (acquire / join / release / takeover) ────────────
-const lock = (...a) => {
-  const r = spawnSync('node', [REVIEW, 'run-lock', ...a], { encoding: 'utf8' })
-  return { fact: (r.stdout || '').trim(), status: r.status }
+// W2-S10: the two MINTING verbs probe codex before they mint, so every lock test now STATES the
+// availability it wants instead of inheriting whatever the host machine has installed. CODEX_DIR
+// holds the one stub and is PREPENDED, so it answers ahead of any real codex; NO_CODEX_DIR holds
+// nothing and becomes the WHOLE path, so no codex further down can answer either — which is why
+// these spawns name node by its own absolute path rather than looking it up.
+const CODEX_DIR = mkdtempSync(join(tmpdir(), 'kiln-lockcodex-'))
+writeFileSync(join(CODEX_DIR, 'codex'), FAKE_CODEX, { mode: 0o755 })
+const withCodex = { ...process.env, PATH: `${CODEX_DIR}:${process.env.PATH}` }
+const withoutCodex = { ...process.env, PATH: mkdtempSync(join(tmpdir(), 'kiln-nocodex-')) }
+// A PATH holding exactly ONE codex and nothing else, so each reachable probe input is stated on its
+// own and no real codex further down can answer instead. mode 0o644 is the EACCES class; a body
+// with no shebang is handed to the shell by the loader, which cannot run it and exits 127; and the
+// two stubs below are the failures no classifier may call an absence. Stub interpreters are named
+// by absolute path because there is no PATH left to resolve one.
+const stubCodex = (body, mode = 0o755) => {
+  const dir = mkdtempSync(join(tmpdir(), 'kiln-stubcodex-'))
+  writeFileSync(join(dir, 'codex'), body, { mode })
+  return { ...process.env, PATH: dir }
 }
+const NOISY_CODEX = `#!${process.execPath}\nprocess.exit(3)\n`
+const HUNG_CODEX = `#!${process.execPath}
+process.on('SIGTERM', () => {})
+setTimeout(() => process.exit(0), 20000)
+`
+const lockIn = (env, ...a) => {
+  const r = spawnSync(process.execPath, [REVIEW, 'run-lock', ...a], { encoding: 'utf8', env })
+  return { fact: (r.stdout || '').trim(), status: r.status, stderr: r.stderr || '' }
+}
+const lock = (...a) => lockIn(withCodex, ...a)
+// The same verbs with codex nowhere on PATH — the direction a codex-less machine sees by default.
+const lockNoCodex = (...a) => lockIn(withoutCodex, ...a)
 // A pid that all but certainly names no live process — for the dead-holder takeover leg.
 const DEAD_PID = 2147480000
 const writeLock = (kilnDir, over) => {
@@ -1837,7 +1876,7 @@ test('run-lock: a failed history archive leaves the lock in place — never an u
 
 // ── B05.1 / B05.2: true concurrency — exactly one winner, records never lost ─────────────
 const spawnLock = (...a) => new Promise((res) => {
-  const p = spawn('node', [REVIEW, 'run-lock', ...a])
+  const p = spawn(process.execPath, [REVIEW, 'run-lock', ...a], { env: withCodex })
   let out = ''
   p.stdout.on('data', (d) => { out += d })
   p.on('close', (code) => res({ code, out: out.toString().trim() }))
@@ -1913,6 +1952,391 @@ test('run-lock (B02): restoreOrArchive restores an empty lock path and archives 
   assert.ok(appended[0].data.includes('"run_id":"displaced-run"') && appended[0].data.includes('"lock_event":"displaced"'),
     'the displaced record bytes and event survive in the archive')
   assert.deepEqual(u2, ['/proj/.kiln/.claim'], 'the claim is dropped only after a successful archive')
+})
+
+// ── W2-S10: the availability probe inside the two MINTING verbs ──────────────────────────
+// A verb that mints a lock mints a RUN, and the kernel refuses to launch without one — so codex
+// availability, a fact knowable at the launch boundary, is settled there rather than mid-run, and
+// no run can seal single-family without the operator word already on disk. The refusal grammar is
+// runGate own (fact codex_unavailable, exit 21), so one vocabulary covers both moments.
+const markDegraded = (kilnDir, ...markers) => {
+  mkdirSync(kilnDir, { recursive: true })
+  for (const marker of markers) writeFileSync(join(kilnDir, marker), '')
+}
+// The verb bodies sliced out of the shipped source: a body pin proves a branch EXISTS, and only a
+// pin at the dispatch site proves production reaches it.
+const runLockVerbSrc = (verb) => {
+  const start = reviewSrc.indexOf(`args[0] === '${verb}' && args.length === 4`)
+  assert.notEqual(start, -1, `run-lock ${verb} still dispatches on its own arity`)
+  return reviewSrc.slice(start, reviewSrc.indexOf('\n} else', start))
+}
+
+test('run-lock (S10): a codex-absent acquire refuses to mint — codex_unavailable, exit 21, nothing written', () => {
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  const r = lockNoCodex('acquire', k, 'follow-ladders', '4242')
+  assert.equal(r.status, 21, 'the refusal carries the CODEX_UNAVAILABLE exit runGate already speaks')
+  assert.equal(r.fact, 'codex_unavailable', 'the machine fact is the one the mid-run gate speaks for the same absence')
+  assert.match(r.stderr, /the availability panel rules first/, 'the refusal names the panel that rules before any lock')
+  assert.ok(!existsSync(join(k, 'run.lock')), 'no lock, therefore no run — the honesty floor is machine-checked, not promised')
+})
+
+test('run-lock (S10): BOTH degradation markers are the word that lets a codex-absent run mint — one alone still refuses', () => {
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  markDegraded(k, 'degraded')
+  assert.equal(lockNoCodex('acquire', k, 'follow-ladders', '4242').status, 21,
+    'a marker without its acknowledgment is a half-state, never a ruling — it re-panels idempotently')
+  markDegraded(k, 'degraded-ack')
+  assert.equal(lockNoCodex('acquire', k, 'follow-ladders', '4242').status, 0,
+    'with both markers standing the operator has already ruled — a degraded run mints with no second question')
+  assert.equal(JSON.parse(readFileSync(join(k, 'run.lock'), 'utf8')).ladder_choice, 'follow-ladders',
+    'the stored choice is the honest record that this run runs the saved ladders')
+})
+
+test('run-lock (S10): a codex-absent takeover refuses before it claims — the stale lock stands, nothing archived', () => {
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  writeLock(k, { conductor_pid: DEAD_PID, started_at: '2020-01-01T00:00:00.000Z' })
+  const r = lockNoCodex('takeover', k, 'follow-ladders', '777')
+  assert.equal(r.status, 21, 'the resume path speaks the same refusal as the fresh path — one rule, both paths')
+  assert.equal(r.fact, 'codex_unavailable')
+  assert.equal(JSON.parse(readFileSync(join(k, 'run.lock'), 'utf8')).run_id, 'old-run', 'the refusal is side-effect-free — the stale record is never even claimed')
+  assert.ok(!existsSync(join(k, 'run-history.jsonl')), 'nothing is archived by a refused takeover')
+  // The markers, not the lock word, carry degradation across a resume: the same acknowledgment
+  // that frees acquire frees takeover.
+  markDegraded(k, 'degraded', 'degraded-ack')
+  assert.equal(lockNoCodex('takeover', k, 'follow-ladders', '777').status, 0, 'an acknowledged degraded resume takes the stale lock over, unquestioned')
+})
+
+test('run-lock (S10): an existing lock is refused by name even with codex absent — the probe never questions a run this verb would not mint', () => {
+  // The pre-read is question economy ONLY. With a lock already on disk the answer must be the
+  // existing LOCK_DENIED refusal, never an availability question about a run that was never going
+  // to be minted; the wx create below it stays the sole authority under a true race.
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  writeLock(k, { conductor_pid: process.pid, started_at: new Date().toISOString() })
+  const r = lockNoCodex('acquire', k, 'follow-ladders', '9191')
+  assert.equal(r.status, 12, 'the held lock is the refusal — every existing refusal stands ahead of the probe')
+  assert.equal(r.fact, 'old-run', 'the refusal still names the holding run_id')
+})
+
+test('run-lock (S10): the probe panels ONLY on a classified absence — absent, 127, unexecutable, unrunnable', () => {
+  // The classes §2 cites to reject a conductor `command -v`, each stated with a real binary. This is
+  // the half of the guard that justifies the mechanism existing, and before this pin the only
+  // refusal input any test exercised was an empty PATH.
+  const cases = [
+    ['no codex anywhere on PATH', withoutCodex],
+    ['a codex that exits 127', stubCodex(UNAVAILABLE_CODEX)],
+    ['a codex file carrying no executable bit', stubCodex(FAKE_CODEX, 0o644)],
+    ['a codex file that cannot be run at all', stubCodex('this file is not a program\n')],
+  ]
+  for (const [name, env] of cases) {
+    const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+    const r = lockIn(env, 'acquire', k, 'follow-ladders', '4242')
+    assert.equal(r.status, 21, `${name}: the class classifyFailure calls codex_unavailable earns the panel`)
+    assert.equal(r.fact, 'codex_unavailable', `${name}: the launch boundary speaks the gate's own vocabulary`)
+    assert.ok(!existsSync(join(k, 'run.lock')), `${name}: nothing is minted over a proven absence`)
+  }
+})
+
+test('run-lock (S10): an UNCLASSIFIABLE probe MINTS and writes no marker — an unknown defers to the classifier at the first real gate', () => {
+  // The acknowledged PAIR has no remover: the one removal site in the tree is
+  // clearRefutedDegradation, and it is reached only over a `degraded` with no ack beside it, so a
+  // word the operator gave stands until they take it back by hand. A word they never gave must
+  // therefore rest on a CLASSIFIED absence, and a bare nonzero classifies as nothing.
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  const r = lockIn(stubCodex(NOISY_CODEX), 'acquire', k, 'follow-ladders', '4242')
+  assert.equal(r.status, 0, 'an unclassifiable failure mints, and the run launches dual')
+  assert.ok(existsSync(join(k, 'run.lock')), 'the lock is real')
+  assert.ok(!existsSync(join(k, 'degraded')) && !existsSync(join(k, 'degraded-ack')),
+    'no marker is written by the CLI on any path — a permanent acknowledgment is the operator word alone')
+})
+
+test('run-lock (S10): a codex that never answers inside the bound mints, and the bound is real — SIGKILL, not a TERM a binary can ignore', () => {
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  const began = Date.now()
+  const r = lockIn(stubCodex(HUNG_CODEX), 'acquire', k, 'follow-ladders', '4242')
+  const elapsed = Date.now() - began
+  assert.equal(r.status, 0, 'a timeout is an unknown, never a proven absence — the run mints and goes dual')
+  assert.ok(existsSync(join(k, 'run.lock')), 'a slow or wedged codex costs no question and no marker')
+  // The stub ignores SIGTERM and would run 20s of its own accord; the 10s bound only holds the
+  // probe if the kill that enforces it is SIGKILL.
+  assert.ok(elapsed < 16000, `the probe returns on its own bound, not on the binary's — took ${elapsed}ms`)
+})
+
+test('run-lock (S10): the pre-read agrees with the exclusive create on every lock shape — a present lock refuses by name, never by panel', () => {
+  // readLockRecord reads each of these as absent while the O_EXCL create refuses all of them, so a
+  // readability-based pre-read would spend an availability question — and, on the recommended
+  // answer, a permanent acknowledgment — on a directory that plainly holds a lock. lstat agrees.
+  const shapes = [
+    ['an unreadable lock', (p) => { writeFileSync(p, '{}\n'); chmodSync(p, 0o000) }],
+    ['a directory where the lock belongs', (p) => mkdirSync(p)],
+    ['a dangling symlink', (p) => symlinkSync(join(dirname(p), 'nowhere', 'gone'), p)],
+  ]
+  for (const [name, plant] of shapes) {
+    const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+    mkdirSync(k, { recursive: true })
+    plant(join(k, 'run.lock'))
+    const r = lockNoCodex('acquire', k, 'follow-ladders', '4242')
+    assert.equal(r.status, 12, `${name}: the lock is present, so the lock refusal is the answer`)
+    assert.equal(r.fact, '', `${name}: no holder can be named from a lock that cannot be read`)
+  }
+})
+
+test('run-lock (S10): takeover calls a present-but-unreadable lock unreadable, never missing — the ladder cannot contradict itself one call later', () => {
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  mkdirSync(k, { recursive: true })
+  const target = join(k, 'run.lock')
+  writeFileSync(target, '{}\n')
+  chmodSync(target, 0o000)
+  assert.equal(lock('acquire', k, 'follow-ladders', '4242').status, 12, 'acquire says a lock already exists')
+  const tk = lock('takeover', k, 'follow-ladders', '777')
+  assert.equal(tk.status, 20, 'takeover holds — an unreadable lock cannot be proven stale')
+  assert.match(tk.stderr, /found an unreadable lock/, 'and it says exactly that, one call after acquire said the lock is there')
+  assert.ok(!/found no lock to take over/.test(tk.stderr), 'the no-lock words belong to an empty directory alone')
+})
+
+test('run-lock (S10): a marker that is not a regular file is not a marker — the CLI reads the pair exactly as the other five readers do', () => {
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  mkdirSync(join(k, 'degraded'), { recursive: true })
+  writeFileSync(join(k, 'degraded-ack'), '')
+  assert.equal(lockNoCodex('acquire', k, 'follow-ladders', '4242').status, 21,
+    'a directory wearing the marker name is absent to the kernel test -f, so it is absent here too and the panel still rules')
+})
+
+// ── W2-S10 (Sol r1): the two markers mean different things, and the verbs rule the half-state ──
+// `degraded` is a CLASSIFIED absence written by whichever detector met it; `degraded-ack` is the
+// OPERATOR WORD, conductor-written only. Detection issues a stop, it does not answer one — so a
+// detection standing alone is a question still owed, and the verbs leave one invariant behind them:
+// a mint never completes over degraded-without-ack.
+const halfState = (kilnDir) => {
+  mkdirSync(kilnDir, { recursive: true })
+  writeFileSync(join(kilnDir, 'degraded'), '')
+  writeFileSync(join(kilnDir, 'keepme'), 'a file the clear must not touch\n')
+}
+const rows = (kilnDir) => readFileSync(join(kilnDir, 'run-history.jsonl'), 'utf8')
+  .trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
+
+test('run-lock (S10): a detection no operator answered still panels while codex is absent — the unanswered stop re-asks at resume', () => {
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  halfState(k)
+  const before = readdirSync(k).sort()
+  const r = lockNoCodex('acquire', k, 'follow-ladders', '4242')
+  assert.equal(r.status, 21, 'the panel rules: the operator owes this stop an answer and never gave one')
+  assert.deepEqual(readdirSync(k).sort(), before, 'and the panel refusal touches nothing at all')
+})
+
+test('run-lock (S10): a live answer REFUTES a detection no operator answered — archived, cleared, and the run mints DUAL', () => {
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  halfState(k)
+  const r = lock('acquire', k, 'follow-ladders', '4242')
+  assert.equal(r.status, 0, 'a detection the same classifier refutes live does not hold the run')
+  assert.deepEqual(readdirSync(k).sort(), ['keepme', 'run-history.jsonl', 'run.lock'],
+    'exactly .kiln/degraded is removed — nothing else in the directory is touched')
+  const history = rows(k)
+  assert.equal(history.length, 1, 'exactly one row, appended BEFORE the removal')
+  assert.equal(history[0].lock_event, 'degradation_refuted', 'the ruling leaves a receipt, as every Kiln ruling does')
+  assert.equal(history[0].marker, 'degraded')
+  assert.equal(history[0].verb, 'acquire', 'the row names which verb ruled')
+  assert.ok(/^\d{4}-\d\d-\d\dT/.test(history[0].archived_at), 'and when')
+})
+
+test('run-lock (S10): an UNKNOWN probe cannot refute a standing detection — it panels rather than mint, so degraded never outlives its ack', () => {
+  // The asymmetry is the point: with no detection on disk an unknown MINTS (nothing permanent may
+  // rest on a low-fidelity read), but over a standing detection only a live ANSWER refutes. Minting
+  // here would launch single-family work off a stop the operator never answered.
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  halfState(k)
+  const r = lockIn(stubCodex(NOISY_CODEX), 'acquire', k, 'follow-ladders', '4242')
+  assert.equal(r.status, 21, 'an unknown leaves the detection standing, and a standing detection with no word is the panel')
+  assert.ok(existsSync(join(k, 'degraded')) && !existsSync(join(k, 'run.lock')), 'nothing cleared, nothing minted')
+})
+
+test('run-lock (S10): a refutation that cannot be RECORDED holds transport-class with the marker standing', () => {
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  halfState(k)
+  mkdirSync(join(k, 'run-history.jsonl'), { recursive: true })
+  const r = lock('acquire', k, 'follow-ladders', '4242')
+  assert.equal(r.status, 20, 'the append failure is transport-class, never a silent proceed')
+  assert.ok(existsSync(join(k, 'degraded')), 'the marker SURVIVES — the record path is never lost in order to proceed')
+  assert.ok(!existsSync(join(k, 'run.lock')), 'and no run is minted on a ruling that left no receipt')
+})
+
+test('run-lock (S10): a presence question this process cannot answer holds BEFORE any probe, in both verbs', () => {
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  writeLock(k, { conductor_pid: DEAD_PID, started_at: '2020-01-01T00:00:00.000Z' })
+  chmodSync(k, 0o000)
+  try {
+    const a = lockNoCodex('acquire', k, 'follow-ladders', '4242')
+    assert.equal(a.status, 20, 'acquire holds rather than read an unanswerable question as absence')
+    assert.equal(a.fact, 'transport_failure', 'the transport class, not an availability question')
+    assert.ok(!/availability probe/.test(a.stderr), 'the probe is never reached, so no question is spent')
+    const t = lockNoCodex('takeover', k, 'follow-ladders', '777')
+    assert.equal(t.status, 20, 'takeover takes its existing unreadable-lock hold')
+    assert.ok(!/found no lock to take over/.test(t.stderr), 'only PROVEN absence earns the no-lock words')
+  } finally {
+    chmodSync(k, 0o755)
+  }
+})
+
+test('run-lock (S10): every refusal that fires BEFORE the probe ruling touches nothing — a standing detection survives them all', () => {
+  // Each case runs with codex PRESENT over a standing detection, so the refutation arm WOULD clear
+  // the marker and append a row if any of these refusals let the probe rule first. The directory
+  // listing before and after is the whole assertion.
+  const cases = [
+    ['acquire over an existing lock', () => ({}), ['acquire', 'follow-ladders', '4242']],
+    ['takeover with a live holder', () => ({ conductor_pid: process.pid }), ['takeover', 'follow-ladders', '777']],
+    ['takeover on a lock younger than the age floor', () => ({ started_at: new Date().toISOString() }), ['takeover', 'follow-ladders', '777']],
+    ['takeover on a holder that cannot be proven dead', () => ({ conductor_pid: 'not-a-pid' }), ['takeover', 'follow-ladders', '777']],
+  ]
+  for (const [name, over, argv] of cases) {
+    const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+    writeLock(k, over())
+    writeFileSync(join(k, 'degraded'), '')
+    const before = readdirSync(k).sort()
+    const r = lock(...argv.slice(0, 1), k, ...argv.slice(1))
+    assert.notEqual(r.status, 0, `${name}: the refusal stands`)
+    assert.deepEqual(readdirSync(k).sort(), before, `${name}: nothing written, nothing removed, nothing cleared`)
+  }
+})
+
+test('run-lock (S10): two racing acquires over a refuted detection CONVERGE — one winner, the marker gone, the refutation recorded, the loser harmless', async () => {
+  // The clear runs before the mint, so an invocation may clear and then LOSE the race — exiting as a
+  // refusal having mutated state. That is correct: the refutation is a fact about codex, not about
+  // who wins the lock, so both contenders drive toward the same end state.
+  for (let i = 0; i < 8; i++) {
+    const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-race-')), '.kiln')
+    halfState(k)
+    const [a, b] = await Promise.all([spawnLock('acquire', k, 'follow-ladders', '111'), spawnLock('acquire', k, 'follow-ladders', '222')])
+    const winners = [a, b].filter((r) => r.code === 0)
+    assert.equal(winners.length, 1, `iteration ${i}: exactly one acquire wins`)
+    const loser = [a, b].find((r) => r.code !== 0)
+    assert.equal(loser.code, 12, `iteration ${i}: the loser is denied by the lock, never a transport error`)
+    assert.ok(!existsSync(join(k, 'degraded')), `iteration ${i}: the stale detection is gone, whichever invocation cleared it`)
+    const history = rows(k)
+    assert.ok(history.length >= 1, `iteration ${i}: the refutation is recorded at least once`)
+    assert.ok(history.every((r) => r.lock_event === 'degradation_refuted'), `iteration ${i}: and nothing else is written to history`)
+    assert.equal(JSON.parse(readFileSync(join(k, 'run.lock'), 'utf8')).run_id, winners[0].out.split(' ')[0], `iteration ${i}: the lock belongs to the winner`)
+  }
+})
+
+test('run-lock (S10d): an ack standing ALONE is residue — archived, removed, and never completable into a pair', () => {
+  // Sol r2 B1, the fourth state. It is inert to every reader, so the defect is COMPLETION: leave it
+  // and any later detection finishes the pair, counterfeiting a word nobody spoke. The conductor
+  // command can produce it whenever the detection path is blocked, so the verbs carry the backstop.
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  mkdirSync(k, { recursive: true })
+  writeFileSync(join(k, 'degraded-ack'), '')
+  const r = lock('acquire', k, 'follow-ladders', '4242')
+  assert.equal(r.status, 0, 'the orphan does not hold the run — it is residue, not a refusal')
+  assert.ok(!existsSync(join(k, 'degraded-ack')), 'the orphaned word is gone, so no later detection can complete it')
+  const history = rows(k)
+  assert.equal(history.length, 1, 'exactly one row, appended BEFORE the removal')
+  assert.equal(history[0].lock_event, 'ack_orphaned', 'the ruling leaves its receipt')
+  assert.equal(history[0].marker, 'degraded-ack')
+  // The counterfeit route, end to end: with the orphan cleared, a later detection makes a HALF
+  // state — the panel — rather than a complete pair the operator never spoke.
+  writeFileSync(join(k, 'degraded'), '')
+  unlinkSync(join(k, 'run.lock'))
+  assert.equal(lockNoCodex('acquire', k, 'follow-ladders', '4242').status, 21,
+    'a detection landing after the residue is cleared owes the operator a word, exactly as it should')
+})
+
+test('run-lock (S10d): a word landing DURING the probe is never destroyed — the pair is re-read after it', () => {
+  // The TOCTOU Sol named: ack-absence is read, the probe may run for seconds, and the clear used to
+  // fire on that stale read. The re-read makes the decision local to the moment it acts.
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  halfState(k)
+  // A stub that answers cleanly AND lands the operator word while it runs — the concurrent ack.
+  const racer = `#!${process.execPath}
+require('node:fs').writeFileSync(${JSON.stringify(join(k, 'degraded-ack'))}, '')
+process.stdout.write('kiln-fake-codex 0.0.0\\n')
+`
+  const r = lockIn(stubCodex(racer), 'acquire', k, 'follow-ladders', '4242')
+  assert.equal(r.status, 0, 'the verb mints')
+  assert.ok(existsSync(join(k, 'degraded')) && existsSync(join(k, 'degraded-ack')),
+    'and it mints under the ACKNOWLEDGED degradation — the word that landed mid-probe stands, and its detection with it')
+  assert.ok(!existsSync(join(k, 'run-history.jsonl')), 'nothing was refuted, so nothing was archived')
+})
+
+test('run-lock (S10d): a detection that VANISHES during the probe is not refuted — no clear, no row, and the run mints dual', () => {
+  // The other direction of the same window. The arriving-ack case pins that a word is never
+  // destroyed; this pins that a refutation is never RECORDED for a detection that was gone by the
+  // time the verb acted. A `degradation_refuted` row over a clean directory is a receipt for a
+  // ruling nobody made, and the ledger is the one place that must not carry those.
+  const k = join(mkdtempSync(join(tmpdir(), 'kiln-lock-')), '.kiln')
+  halfState(k)
+  const vanisher = `#!${process.execPath}
+require('node:fs').unlinkSync(${JSON.stringify(join(k, 'degraded'))})
+process.stdout.write('kiln-fake-codex 0.0.0\\n')
+`
+  const r = lockIn(stubCodex(vanisher), 'acquire', k, 'follow-ladders', '4242')
+  assert.equal(r.status, 0, 'the state at clear time is a clean directory, which mints by the standing law')
+  assert.ok(existsSync(join(k, 'run.lock')), 'the run is minted dual')
+  assert.ok(!existsSync(join(k, 'run-history.jsonl')),
+    'and NOTHING is archived — there was no standing detection to refute by the time the verb acted')
+})
+
+test('run-lock (S10): both minting verbs call the ONE probe helper, join and release call none, and codex is spawned from exactly two sites', () => {
+  for (const verb of ['acquire', 'takeover']) {
+    assert.ok(runLockVerbSrc(verb).includes(`refuseWithoutCodex(kilnDir, '${verb}')`),
+      `run-lock ${verb} mints a run, so it probes through the one shared helper`)
+  }
+  for (const verb of ['join', 'release']) {
+    const src = runLockVerbSrc(verb)
+    assert.ok(!src.includes('refuseWithoutCodex') && !src.includes('spawnSync'),
+      `run-lock ${verb} mints nothing and stays spawn-free — join runs at every kernel boot mid-run`)
+  }
+  assert.equal((reviewSrc.match(/refuseWithoutCodex\(kilnDir, '/g) || []).length, 2, 'exactly two call sites — the two minting verbs, no third caller')
+  assert.equal((reviewSrc.match(/spawnSync\('codex'/g) || []).length, 2, 'the probe spawns the SAME binary runGate spawns — the existing channel probed, never a new one')
+})
+
+// GROUND-OR-WEAKEN: the counts behind the exclusivity claims written beside this mechanism. Each
+// assertion below is the ground for a sentence in kiln-review or SKILL.md, so a second writer, a
+// second mint, or a third caller breaks the claim HERE rather than in a later session's walk.
+test('run-lock (S10): the writer, mint, removal and presence counts the S10 claims rest on', () => {
+  const kernelSrc = readFileSync(fileURLToPath(new URL('../workflows/kernel.js', import.meta.url)), 'utf8')
+  const sweepSrc = readFileSync(fileURLToPath(new URL('../workflows/research-sweep.js', import.meta.url)), 'utf8')
+  const skill = readFileSync(fileURLToPath(new URL('../skills/kiln-fire/SKILL.md', import.meta.url)), 'utf8')
+  // (1) + (2) The marker writers, counted over the CORPUS THE CLAIM RANGES OVER — every shipped
+  // file, cards and skills included, not just the two workflows. A citation narrower than its claim
+  // is the defect wearing the cure's clothes: the first version of this pin scanned kernel.js and
+  // research-sweep.js only, and so could not see that `cards/build.md` instructs the builder agent
+  // to write the same trust state. `//` lines are stripped so prose ABOUT the rule does not read as
+  // a breach of it; markdown is scanned whole, because there the prose IS the instruction.
+  const stripJs = (file, src) => (/\.(js|mjs)$|kiln-review$/.test(file) ? src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n') : src)
+  const pluginRoot = fileURLToPath(new URL('..', import.meta.url))
+  const walk = (dir) => readdirSync(dir, { withFileTypes: true })
+    .flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]))
+  const touching = (marker) => walk(pluginRoot)
+    .filter((f) => new RegExp(`touch[^\\n]*${marker}`).test(stripJs(f, readFileSync(f, 'utf8'))))
+    .map((f) => f.slice(pluginRoot.length)).sort()
+  // The ack writers, stated as exactly what this scan establishes and no more: these are the files
+  // containing a single-line `touch` naming the ack. It is not a general write detector — a
+  // redirection, a cp, a writeFileSync or a multiline command would not appear here — so the claim
+  // it grounds is the touch-writer set, and the wider "no other writer exists" rests on the source
+  // enumeration recorded in the review, not on this grep.
+  assert.deepEqual(touching('degraded-ack'),
+    ['skills/kiln-fire/SKILL.md', 'tests/cards.test.mjs', 'tests/kernel.test.mjs', 'tests/kiln-review.test.mjs', 'tests/research-sweep.test.mjs'],
+    'the conductor SKILL holds the only ack TOUCH outside the tests, which quote it in pins')
+  assert.deepEqual(touching('degraded').filter((f) => !f.startsWith('tests/')),
+    ['cards/build.md', 'skills/kiln-fire/SKILL.md', 'workflows/kernel.js', 'workflows/research-sweep.js'],
+    'and the runtime writers of the detection marker are exactly these four files — the builder card among them')
+  assert.equal((kernelSrc.match(/touch ' \+ P\.degraded,/g) || []).length, 3, 'three kernel detections, each the degraded marker alone')
+  assert.equal((sweepSrc.match(/touch ' \+ F\.degraded,/g) || []).length, 1, 'the sweep detection, likewise alone')
+  const builderCard = readFileSync(join(pluginRoot, 'cards/build.md'), 'utf8')
+  assert.equal((builderCard.match(/touch \.kiln\/degraded/g) || []).length, 1, 'the builder card marks its own codex-absent build once')
+  assert.ok(!builderCard.includes('degraded-ack'), 'and with the detection marker alone — the builder agent never writes the operator word')
+  // (3) The lock is minted at exactly two sites, both O_EXCL. Grounds "the wx create is the only
+  // arbiter of a true race" — the acquire pre-read cannot become a second mint path unnoticed.
+  const mints = reviewSrc.match(/writeFileSync\((?:target|join\(kilnDir, LOCK_FILE\))[^\n]*flag: 'wx'/g) || []
+  assert.equal(mints.length, 2, 'exactly two lock creates — acquire and takeover — and both are exclusive')
+  // (4) One removal site for either marker, and presence is asked at exactly two places. Grounds
+  // "an answered word is never cleared here" and the tri-state routing claim.
+  assert.equal((reviewSrc.match(/unlinkSync\(join\(kilnDir, name\)\)/g) || []).length, 1, 'one marker removal in the CLI, inside the one archive-then-remove helper')
+  assert.equal((reviewSrc.match(/clearMarker\(/g) || []).length, 3, 'one definition and exactly two callers — the refutation arm and the orphan-ack arm')
+  assert.deepEqual((reviewSrc.match(/clearMarker\(kilnDir, verb, '[a-z-]+', '[a-z_]+'\)/g) || []).sort(),
+    ["clearMarker(kilnDir, verb, 'degraded', 'degradation_refuted')", "clearMarker(kilnDir, verb, 'degraded-ack', 'ack_orphaned')"],
+    'and those two removals are the whole set a minting verb may issue')
+  assert.equal((reviewSrc.match(/lockPresence\(/g) || []).length, 3, 'presence: one definition and exactly two call sites')
+  assert.equal((reviewSrc.match(/=== 'indeterminate'|lockPresence\(kilnDir\) === 'absent'/g) || []).length, 2, 'and both of those sites branch on the indeterminate answer rather than reading it as absence')
 })
 
 // ── W2-S5 (C3a / B05 / ruling 3): the immutable verdict archive ──────────────────────────────

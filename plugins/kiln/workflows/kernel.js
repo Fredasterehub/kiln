@@ -856,6 +856,9 @@ const mintLeg = (role, alias, subject) => idsFetch(
 // path-selection read at the top of a stage may stay boolean (a nonzero read fails safe
 // to the codex path); only these label-authority reads, reread at seal and append time,
 // are tri-state — an unread marker must never resolve to dual.
+// W2-S10d: this reads the marker to LABEL, never to select a seat, and it needs no ack gate: every
+// call sits past the gate, which sits past the belt, so a marker still reaching here has a standing
+// word behind it. That is a claim about control flow and is pinned as one in kernel.test.mjs.
 const sealLabel = async (label) => {
   const e = await hands('test -f ' + P.degraded, label)
   return e === 0 ? 'single-family' : e === 1 ? 'dual' : null
@@ -1404,10 +1407,22 @@ if (stage !== 'build') {
     // path-selector read of the degradation marker chooses the seat — absent selects the
     // cross-family codex ratifier (the normal dual key), present selects a fresh OPUS
     // claude ratifier (opposite model, same family) that mirrors the codex packet,
-    // digest, echo and lineage rules exactly and seals honestly single-family. The
-    // marker is set only after a first codex-down detection stopped for the operator
-    // acknowledgment, so the claude seat runs only on an acked re-run.
+    // digest, echo and lineage rules exactly and seals honestly single-family.
+    // W2-S10d: the marker records a DETECTION; the ack records the operator word. A
+    // detection nobody has answered must not select a seat, so it takes the stage own
+    // degraded stop below — the stop that asks for the word — and the acked relaunch
+    // selects honestly. Without this the builder-written marker (cards/build.md) would
+    // route a joined relaunch straight to the single-family seat with no word anywhere.
+    // W2-S10d (B3): ONE stop body, called by the guard below and by the detection arm — mark is
+    // what the arm needs and the guard does not, the marker already standing by then.
+    const lawDegradedStop = async (mark) => {
+      const db = await voiceBeat('degradation', {}, 'Codex is not answering — answer continue to proceed single-family.')
+      if (mark && await hands('touch ' + P.degraded, 'degraded:mark') !== 0) return persistFail('degraded-mark')
+      beats.push(db)
+      return stop('degraded', { stage, active_slice: 'none', next_action: 'Acknowledge single-family degradation, then relaunch stage law' })
+    }
     const degraded = await hands('test -f ' + P.degraded, 'law:degraded') === 0
+    if (degraded && await hands('test -f ' + P.ack, 'law:degraded-ack') !== 0) return lawDegradedStop(false)
     const ratifyOpts = degraded ? tier('fallback-reviewer') : tier('ratify-reviewer')
     // The claude ratify leg (the claudeGate mirror): the kernel computes the candidate
     // LAW digest BEFORE the reviewer turn, the opus reviewer echoes it as law_hash, and
@@ -1569,14 +1584,12 @@ if (stage !== 'build') {
       beats.push(fillClosed(candidateBeat, stageFacts))
     } else if (ratifyLoop.result === 'degraded') {
       // S4-D2: the FIRST codex-down detection is the acknowledgment stop, mirroring the
-      // build and audit stops — persist BOTH the degraded marker and its ack, push the
-      // degradation beat, and return the distinct degraded stop. The conductor literal
-      // continue relaunches the law stage; the acked re-run enters with the marker set
-      // and ratifies single-family through the claude seat above.
-      const db = await voiceBeat('degradation', {}, 'Codex is not answering — answer continue to proceed single-family.')
-      if (await hands('touch ' + P.degraded + ' ' + P.ack, 'degraded:mark') !== 0) return persistFail('degraded-mark')
-      beats.push(db)
-      return stop('degraded', { stage, active_slice: 'none', next_action: 'Acknowledge single-family degradation, then relaunch stage law' })
+      // build and audit stops — persist the degraded marker ALONE, push the degradation
+      // beat, and return the distinct degraded stop. Detection never writes the ack: the
+      // ack is the operator word, and only the conductor writes it, on continue. The
+      // acked re-run enters with both files and ratifies single-family through the
+      // claude seat above.
+      return lawDegradedStop(true)
     } else if (ratifyLoop.result === 'blocked') {
       return failStop('held',
         { stage, active_slice: 'none', next_action: 'Operator ruling: the ratify reviewer held the LAW after ' + ratifyLoop.repairs + ' repair passes — rule, then rerun stage law' },
@@ -2082,10 +2095,20 @@ const auditSeam = async (slice) => {
   // S4 (INTAKE-38): the audit TRANSPORT degrades to the claude family when codex is
   // down — a fresh OPUS goal-backward auditor (singular) mirroring the codex audit
   // packet and feeding the SAME reconcileAudit derivation. A tri-state path-selector
-  // read chooses the seat: absent the cross-family codex auditor, present the claude
-  // one. The marker is set only after a first codex-down detection stopped for the
-  // operator acknowledgment, so the claude seat runs only on an acked re-run.
+  // read chooses the seat: absent the cross-family codex auditor, present the claude one.
+  // W2-S10d: an UNANSWERED detection selects no seat. The sealed-skip loop reaches this
+  // audit at :2278 and continues past it, so the build belt below never runs first on
+  // this path — the guard has to stand here, and it takes the local degraded stop.
+  // W2-S10d (B3): ONE stop body — the guard below and the detection arm both call it, so the beat
+  // and the next_action have a single home.
+  const auditDegradedStop = async (mark) => {
+    const db = await voiceBeat('degradation', {}, 'Codex is not answering — answer continue to proceed single-family.')
+    if (mark && await hands('touch ' + P.degraded, 'degraded:mark') !== 0) return persistFail('degraded-mark')
+    beats.push(db)
+    return stop('degraded', { stage, active_slice: slice, next_action: 'Acknowledge single-family degradation, then relaunch stage build: the milestone audit of slice ' + slice + ' completes single-family' })
+  }
   const degraded = await hands('test -f ' + P.degraded, 'audit:degraded') === 0
+  if (degraded && await hands('test -f ' + P.ack, 'audit:degraded-ack') !== 0) return auditDegradedStop(false)
   const auditorOpts = degraded ? tier('fallback-reviewer') : tier('reviewer-gate')
   // W2-S7a: the claude auditor leg the degraded seat mints — carried into the audit candidate and
   // the reviews reference below. The codex auditor leaves it null; its identity lives on reviews.jsonl.
@@ -2237,13 +2260,11 @@ const auditSeam = async (slice) => {
   }
   if (outcome === 'codex_unavailable') {
     // S4-D2: the FIRST codex-down detection is the acknowledgment stop the slice gates
-    // take — persist BOTH markers and stop. The acked re-run enters with the marker set
-    // and audits single-family through the claude seat above; the append reads the
-    // marker at append time and records single-family honestly.
-    const db = await voiceBeat('degradation', {}, 'Codex is not answering — answer continue to proceed single-family.')
-    if (await hands('touch ' + P.degraded + ' ' + P.ack, 'degraded:mark') !== 0) return persistFail('degraded-mark')
-    beats.push(db)
-    return stop('degraded', { stage, active_slice: slice, next_action: 'Acknowledge single-family degradation, then relaunch stage build: the milestone audit of slice ' + slice + ' completes single-family' })
+    // take — persist the degraded marker ALONE and stop; the ack is the operator word,
+    // conductor-written on continue. The acked re-run enters with both files and audits
+    // single-family through the claude seat above; the append reads the marker at append
+    // time and records single-family honestly.
+    return auditDegradedStop(true)
   }
   if (outcome === 'gate_unreachable') {
     return failStop('gate-unreachable',
@@ -2331,15 +2352,19 @@ for (const [idx, entry] of slices.entries()) {
 
   const wasDegraded = await hands('test -f ' + P.degraded, 'degraded:check') === 0
   // S3: a degradation the builder marks on disk takes the SAME acknowledgment
-  // hard-stop the exit-21 path takes. The ack file records that the kernel
-  // stopped and the operator relaunched; a marker discovered pre-gate without
-  // it stops the run here — never a silent ok seal. After acknowledgment the
+  // hard-stop the exit-21 path takes. The ack file records the OPERATOR WORD:
+  // the conductor touch is its only writer in the tree, and all five detections
+  // — the three here, the sweep, and the builder card — touch the degraded
+  // marker alone, so a marker discovered pre-gate without an ack is a stop
+  // nobody answered. This is the belt for the ACTIVE UNSEALED SLICE path only;
+  // the law ratify, seam audit and sweep selectors carry the same rule locally
+  // because control never passes here on their way. After acknowledgment the
   // run continues single-family: a ui slice skips the gate (no cross-family
   // reviewer without codex), a logic or mixed slice still faces the opus
   // fallback gate below — the seal reads the marker either way.
   const degradedStop = async () => {
     const db = await voiceBeat('degradation', {}, 'Codex is not answering — answer continue to proceed single-family.')
-    const m = await hands('touch ' + P.degraded + ' ' + P.ack, 'degraded:mark')
+    const m = await hands('touch ' + P.degraded, 'degraded:mark')
     if (m !== 0) return persistFail('degraded-mark')
     beats.push(db)
     return stop('degraded', { stage, active_slice: slice, next_action: 'Acknowledge single-family degradation, then relaunch stage build' })
@@ -2372,6 +2397,10 @@ for (const [idx, entry] of slices.entries()) {
   // reviewer leg directly into reviewerLeg. Only the degraded-ui no-gate seal carries the - sentinel.
   const usedCodexGate = runGate && !wasDegraded && entry.surface === 'ui'
   if (runGate) {
+    // W2-S10d: this selector needs no ack gate of its own, and the reason is ORDER, not luck —
+    // wasDegraded is read at the belt above and the belt returns degradedStop when the ack is
+    // missing, so control only reaches here past a standing word. Pinned in kernel.test.mjs; the
+    // sibling selectors at law ratify and the seam audit sit on no such path and carry their own.
     const reviewerOpts = wasDegraded ? tier('fallback-reviewer') : tier('stage-card')
     const claudeGate = async (mode) => {
       // W2-S4 (B02/B03/B04): the claude gate derives its facts from the SAME sealed authority the
@@ -2604,10 +2633,10 @@ for (const [idx, entry] of slices.entries()) {
     reviewerLeg = legRead.ids[0]
   }
   // Seal-label law (S2): the label reads the marker AT SEAL TIME, any gate
-  // path. A builder that lost codex mid-run marks .kiln/degraded and builds
-  // the slice itself, so a seal that follows a same-family gate speaks
-  // single-family; dual only when the marker is absent at the moment of the
-  // seal.
+  // path, and keys on PRESENCE rather than on which writer set it — a builder
+  // that lost codex mid-run, or the conductor at the availability panel before
+  // the run began. A seal that follows a same-family gate speaks single-family;
+  // dual only when the marker is absent at the moment of the seal.
   const label = await sealLabel('degraded:check')
   if (label === null) {
     return failStop('transport-failure',
