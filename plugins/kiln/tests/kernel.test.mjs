@@ -284,13 +284,33 @@ const ONBOARDING_OK = {
   // Wave 3 (brownfield arm): greenfield by default — no marker, so the map-check
   // short-circuits and never runs. Brownfield law scenarios override this leg.
   'onboarding:brownfield-check': { exit: 1 },
-  // W5-S2 (W5-04): the Gauge WIDTH dial read rides the law happy path AFTER the input gate.
-  // floor keeps the single act producer — the untouched pre-W5-S2 path — so every existing law
-  // scenario stays on the floor unless it overrides width:read. Law-only: validate/report never
-  // reach the width branch, so an unused floor mock is harmless where ONBOARDING_OK is spread there.
-  // W6-F: recovery_cap 2 matches this reversible onboarding posture, so the LAW-ratify loop keeps
-  // the two-repair cap the pre-W6 hardcoded bound gave it — one dial read now carries both.
-  'width:read': { exit: 0, width: 'floor', recovery_cap: 2 },
+  // The Gauge dial read rides the law happy path AFTER the input gate. Law-only: only the law
+  // stage runs this leg, so an unused mock is harmless where ONBOARDING_OK is spread into a
+  // validate or report scenario. W6-F: recovery_cap 2 matches this reversible onboarding posture,
+  // so the LAW-ratify loop keeps the two-repair cap the pre-W6 hardcoded bound gave it.
+  'cap:read': { exit: 0, recovery_cap: 2 },
+}
+// W3 (seat exit ruling, fable-w3-u1-exit.md): the input-gate bound, DERIVED from the trace instead
+// of from a hand list, so the set can never again be narrower than the claim. The gate is every leg
+// the EXECUTED path dispatches under the onboarding: prefix; kernel.js defines exactly four such
+// labels — brief-check, posture, brownfield-check and map-check — all inside the pre-producer gate
+// block and none dispatched after the dial (enumeration run over kernel.js; the other onboarding:
+// strings there are next_action prose, never leg labels). Deriving the set means a future gate leg
+// joins the bound automatically, and a future NON-gate leg wrongly named onboarding: fails CLOSED,
+// a red that demands a look — the right direction. Shared by the greenfield and brownfield walks so
+// the two bounds cannot drift apart.
+const assertDialAfterGate = (calls, producerLabel) => {
+  // Vacuity guard FIRST (the wave-gate B1 lesson): prove the gate legs are in the trace by name
+  // before asserting anything about their order, so an empty derived set cannot satisfy the bound.
+  for (const leg of ['onboarding:brief-check', 'onboarding:posture', 'onboarding:brownfield-check']) {
+    assert.ok(calls.some(c => c.label === leg), 'the always-run gate leg ' + leg + ' is in the trace — the bound has a subject')
+  }
+  const gateIdx = calls.flatMap((c, i) => (c.label && c.label.startsWith('onboarding:') ? [i] : []))
+  assert.ok(gateIdx.length >= 3, 'the derived gate set covers at least the three always-run legs')
+  const dialAt = calls.findIndex(c => c.label === 'cap:read')
+  const producerAt = calls.findIndex(c => c.label === producerLabel)
+  assert.ok(dialAt > Math.max(...gateIdx), 'the dial read runs AFTER the LAST onboarding: gate leg on this path — no dial call is spent before the gate rules')
+  assert.ok(dialAt < producerAt, 'and BEFORE the producer')
 }
 const VOICE = {
   'voice:resume': { exit: 0, ids: ['The fire never went out. Kiln again — the ledger holds the next step, and I am already taking it.'] },
@@ -394,11 +414,11 @@ test('review loop (W6-F): the repair edge is bounded by the injected reversibili
   }
 })
 
-test('core (W6-F): capFromDial keys the recovery cap on the dial — cap 2 only on exit 0 + recovery_cap exactly 2, else fail up to 1; width never enters', () => {
+test('core (W6-F): capFromDial keys the recovery cap on the dial — cap 2 only on exit 0 + recovery_cap exactly 2, else fail up to 1; no other field enters', () => {
   assert.equal(capFromDial({ exit: 0, recovery_cap: 2 }), 2, 'exit 0 and recovery_cap 2 (the reversible profile) is the only cap-2 reading')
   assert.equal(capFromDial({ exit: 0, recovery_cap: 1 }), 1, 'recovery_cap 1 (risky/irreversible) keys cap 1')
-  assert.equal(capFromDial({ exit: 0, width: 'wide', recovery_cap: 2 }), 2, 'a wide reading with recovery_cap 2 is still cap 2 — width never lowers it')
-  assert.equal(capFromDial({ exit: 0, width: 'wide', recovery_cap: 1 }), 1, 'a wide reading with recovery_cap 1 is cap 1 — width never RAISES the cap')
+  assert.equal(capFromDial({ exit: 0, research: 'on', perceptual: 'on', recovery_cap: 2 }), 2, 'the sibling dials ride along untouched — recovery_cap 2 is still cap 2')
+  assert.equal(capFromDial({ exit: 0, research: 'on', perceptual: 'on', recovery_cap: 1 }), 1, 'the sibling dials never RAISE the cap either — recovery_cap alone keys it')
   assert.equal(capFromDial({ exit: 0 }), 1, 'a missing recovery_cap fails up to 1')
   assert.equal(capFromDial({ exit: 20, recovery_cap: 2 }), 1, 'a transport failure fails up to 1 even when a cap value rode along')
   assert.equal(capFromDial({ exit: 0, recovery_cap: '2' }), 1, 'a string "2" is not the integer 2 — strict, fails up to 1')
@@ -1660,14 +1680,13 @@ test('runtime (Wave 1/S3): a LAW that will not ratify holds after the repair cap
   assert.ok(st.token !== 'advance' && st.token !== 'seal-advance', 'never advances to build on a held LAW')
 })
 
-test('runtime (W6-F): a risky posture keys the LAW-ratify cap to 1 — one repair then held; the dial sets the cap, the width never raises it', async () => {
+test('runtime (W6-F): a risky posture keys the LAW-ratify cap to 1 — one repair then held; the dial sets the cap', async () => {
   const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
     ...VOICE,
     ...ONBOARDING_OK,
     'law:preflight': GREEN,
-    // A risky/irreversible posture keys recovery_cap 1. width stays floor so the single-act
-    // producer runs (the WIDE dance is orthogonal) — the cap follows recovery_cap, never the width.
-    'width:read': { exit: 0, width: 'floor', recovery_cap: 1 },
+    // A risky/irreversible posture keys recovery_cap 1 — the cap follows recovery_cap alone.
+    'cap:read': { exit: 0, recovery_cap: 1 },
     'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law' },
     'ratify:request': GREEN,
     'ratify:gate': { exit: 10 }, // always changes_required
@@ -1679,7 +1698,7 @@ test('runtime (W6-F): a risky posture keys the LAW-ratify cap to 1 — one repai
   assert.equal(ret.status, 'held', 'a non-converging LAW under a cap of 1 holds for the operator')
   assert.equal(calls.filter(c => c.label === 'ratify:repair').length, 1, 'exactly one repair pass — the keyed cap of 1, never the pre-W6 hardcoded two')
   assert.equal(calls.filter(c => c.label === 'ratify:gate').length, 2, 'review plus one recheck — the cap-1 bounded loop, never a third gate')
-  assert.equal(calls.filter(c => c.label === 'width:read').length, 1, 'one dial read per LAW invocation carries both the width and the ratify cap — never re-read for the loop')
+  assert.equal(calls.filter(c => c.label === 'cap:read').length, 1, 'one dial read per LAW invocation carries the ratify cap — never re-read for the loop')
   assert.ok(!calls.some(c => c.label === 'law:seal'), 'the LAW never locks unratified')
 })
 
@@ -2081,63 +2100,17 @@ test('runtime (Wave 1, A9): a project path with a space ratifies — the mandato
   assert.ok(!cmd.includes('/tmp/a project dir'), 'the project path never reaches the ratify command as a bare argv token')
 })
 
-// ── W5-S2 (the WIDE table): the blind-dual planning branch — holds safely on mismatch ──
+// ── W3: the law producer is unconditional — the width fork and its blind-dual branch are deleted ──
 
-// The WIDE promote happy path, reused by the promote pin and the content-blind pin. It overrides
-// the ONBOARDING_OK floor width with a WIDE reading and scripts the full blind-dual dance.
-const WIDE_PROMOTE_RUN = {
-  ...VOICE,
-  ...ONBOARDING_OK,
-  'law:preflight': GREEN,
-  'width:read': { exit: 0, width: 'wide' }, // a non-floor width → the WIDE branch (overrides the ONBOARDING_OK floor)
-  'wide:prep': { exit: 0 },
-  'wide:draft-a': { facts: { status: 'ok', pointers: ['.kiln/.wide/a/LAW.md'], schema_valid: true }, narration_beat: 'draft a' },
-  'wide:draft-b': { facts: { status: 'ok', pointers: ['.kiln/.wide/b/LAW.md'], schema_valid: true }, narration_beat: 'draft b' },
-  'wide:adjust-a': { facts: { status: 'ok', pointers: ['.kiln/.wide/a-adjusted/LAW.md'], schema_valid: true }, narration_beat: 'The law is locked — the wide plan converged.', converged: true },
-  'wide:adjust-b': { facts: { status: 'ok', pointers: ['.kiln/.wide/b-adjusted/LAW.md'], schema_valid: true }, narration_beat: 'adjusted b', converged: true },
-  'wide:byte-equal': { exit: 0 }, // the two adjusted LAW.md are identical
-  'wide:promote': { exit: 0 },
-  'ratify:request': GREEN,
-  'ratify:gate': { exit: 0 },
-  'law:milestone-projection': { exit: 0 },
-  'law:perceptual-table': { exit: 0 },
-  'law:seal': { exit: 0 },
-  'law:stage-end': GREEN,
-  'state:write': GREEN,
-}
-
-// ── W5-S3 (the fresh Q-F adjudicator): a residual divergence is adjudicated, not held ──
-// The adjudicate happy path (byte-mismatch → residual divergence), reused by the adjudicate pin and
-// the content-blind pin. Both authors valid and converged, but the two adjusted LAW.md differ, so
-// the cmp is nonzero: the fresh Q-F adjudicator authors the complete canonical LAW and the ordinary
-// opposite-family ratify+seal still runs — replacing S2's temporary hold-on-mismatch.
-const WIDE_ADJUDICATE_RUN = {
-  ...VOICE,
-  ...ONBOARDING_OK,
-  'law:preflight': GREEN,
-  'width:read': { exit: 0, width: 'wide' },
-  'wide:prep': { exit: 0 },
-  'wide:draft-a': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'a' },
-  'wide:draft-b': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'b' },
-  'wide:adjust-a': { facts: { status: 'ok', pointers: ['.kiln/.wide/a-adjusted/LAW.md'], schema_valid: true }, narration_beat: 'a2', converged: true },
-  'wide:adjust-b': { facts: { status: 'ok', pointers: ['.kiln/.wide/b-adjusted/LAW.md'], schema_valid: true }, narration_beat: 'b2', converged: true },
-  'wide:byte-equal': { exit: 1 }, // the two adjusted LAW.md differ — a residual divergence
-  'wide:adjudicate': { facts: { status: 'ok', pointers: ['.kiln/LAW.md', '.kiln/law/check.sh', '.kiln/slices.json', '.kiln/decisions.md'], schema_valid: true }, narration_beat: 'The law is locked — the residual divergences were adjudicated.' },
-  'wide:adjudicate-check': { exit: 0 }, // the four canonical outputs are all present and nonempty
-  'ratify:request': GREEN,
-  'ratify:gate': { exit: 0 },
-  'law:milestone-projection': { exit: 0 },
-  'law:perceptual-table': { exit: 0 },
-  'law:seal': { exit: 0 },
-  'law:stage-end': GREEN,
-  'state:write': GREEN,
-}
-
-test('runtime (W5-S2, W5-04): the floor width keeps the single act producer — no WIDE legs, ratify+seal as ever', async () => {
+test('runtime (W3): the law stage takes ONE cap read and ONE act producer — the width fork is gone, and the read still precedes the producer', async () => {
   const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
     ...VOICE,
-    ...ONBOARDING_OK, // carries the floor width read — the untouched pre-W5-S2 path
+    ...ONBOARDING_OK,
     'law:preflight': GREEN,
+    // The dial no longer projects a width at all, and no reading of one can divert: under the
+    // deleted fork a non-floor width reached the blind-dual branch and stage:law never ran. A stray
+    // width riding through additionalProperties must still reach the same single producer.
+    'cap:read': { exit: 0, width: 'wide', recovery_cap: 1 },
     'stage:law': { facts: { status: 'ok', pointers: ['.kiln/LAW.md'], schema_valid: true }, narration_beat: 'the law, pinned' },
     'ratify:request': GREEN,
     'ratify:gate': { exit: 0 },
@@ -2147,212 +2120,16 @@ test('runtime (W5-S2, W5-04): the floor width keeps the single act producer — 
     'law:stage-end': GREEN,
     'state:write': GREEN,
   })
-  assert.equal(ret.status, 'ok', 'the floor path ratifies and seals exactly as before W5-S2')
-  assert.ok(calls.some(c => c.label === 'stage:law'), 'the EXISTING single act producer runs on the floor')
-  for (const l of ['wide:prep', 'wide:draft-a', 'wide:draft-b', 'wide:adjust-a', 'wide:adjust-b', 'wide:byte-equal', 'wide:promote']) {
-    assert.ok(!calls.some(c => c.label === l), 'no WIDE leg fires on the floor: ' + l)
-  }
-  const width = calls.find(c => c.label === 'width:read')
-  assert.ok(width && width.prompt.includes('gauge-dial.mjs'), 'width is read via the gauge-dial projector leg (mirroring research-sweep)')
-  const si = calls.findIndex(c => c.label === 'stage:law')
-  assert.ok(calls.indexOf(width) >= 0 && calls.indexOf(width) < si, 'the width read runs after the input gate, before the producer')
+  assert.equal(ret.status, 'ok', 'a stray width on the dial reading still ratifies and seals through the single producer')
+  assert.equal(calls.filter(c => c.label === 'stage:law').length, 1, 'exactly one act producer runs at law')
+  // FORK G, both sides: the dial sits BETWEEN the input gate and the producer. Pinning only the
+  // producer side stays green when the dial is hoisted above the gate, which would spend a model
+  // call before the gate has ruled the run fit to plan. The gate bound is trace-derived — see
+  // assertDialAfterGate. This greenfield path runs three gate legs; the brownfield walk runs four.
+  const dial = calls.find(c => c.label === 'cap:read')
+  assert.ok(dial && dial.prompt.includes('gauge-dial.mjs'), 'the dial is read via the gauge-dial projector leg (mirroring research-sweep)')
+  assertDialAfterGate(calls, 'stage:law')
 })
-
-test('runtime (W5-S2, W5-01/04): a WIDE width runs two blind authors; both-converged + byte-equal promotes the complete four-output LAW → ratify+seal', async () => {
-  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, WIDE_PROMOTE_RUN)
-  assert.equal(ret.status, 'ok', 'a converged, byte-equal WIDE plan promotes, ratifies, seals, and advances')
-  assert.ok(!calls.some(c => c.label === 'stage:law'), 'the single act producer is skipped on the WIDE path')
-  for (const l of ['wide:draft-a', 'wide:draft-b', 'wide:adjust-a', 'wide:adjust-b', 'wide:byte-equal', 'wide:promote']) {
-    assert.ok(calls.some(c => c.label === l), 'the WIDE leg ran: ' + l)
-  }
-  assert.ok(!calls.some(c => c.label === 'wide:adjudicate'), 'the byte-equal skip does NOT run the adjudicator (S3): a converged, byte-equal pair promotes without adjudication')
-  // No role #13 (W5-05): the authors are fresh stage-law (fable) legs.
-  for (const l of ['wide:draft-a', 'wide:draft-b', 'wide:adjust-a', 'wide:adjust-b']) {
-    assert.equal(calls.find(c => c.label === l).opts.model, 'fable', l + ' is a fresh stage-law (fable) leg — no new tier role')
-  }
-  // Both IMMUTABLE drafts precede either adjustment (each author cross-reads the other's draft).
-  const dA = calls.findIndex(c => c.label === 'wide:draft-a')
-  const dB = calls.findIndex(c => c.label === 'wide:draft-b')
-  const aA = calls.findIndex(c => c.label === 'wide:adjust-a')
-  const aB = calls.findIndex(c => c.label === 'wide:adjust-b')
-  assert.ok(dA < aA && dB < aA && dA < aB && dB < aB, 'both immutable drafts land before either cross-read adjustment')
-  // The promote moves the COMPLETE four-output LAW to canonical, guarded by test -s, before ratify.
-  const promote = calls.find(c => c.label === 'wide:promote')
-  for (const out of ['.kiln/LAW.md', '.kiln/law/check.sh', '.kiln/slices.json', '.kiln/decisions.md']) {
-    assert.ok(promote.prompt.includes(out), 'the promote moves the complete four-output LAW: ' + out)
-  }
-  assert.ok(promote.prompt.includes('test -s'), 'the promote guards completeness with test -s — an incomplete WIDE result fails closed')
-  const gate = calls.find(c => c.label === 'ratify:gate')
-  const seal = calls.find(c => c.label === 'law:seal')
-  assert.ok(calls.indexOf(promote) < calls.indexOf(gate), 'the promote precedes ratify — the ratify block is rejoined unchanged')
-  assert.ok(calls.indexOf(gate) < calls.indexOf(seal), 'the seal follows the accept')
-  assert.ok(ret.beat.includes('The law is locked'), 'the promoted candidate beat speaks only after ratify+seal')
-  assert.equal(stateArgs(calls).key, 'relaunch-build', 'a promoted+ratified WIDE law advances to build')
-})
-
-test('runtime (W5-S3, W5-05): a WIDE byte-mismatch runs the fresh Q-F adjudicator → complete canonical LAW + ADRs → ratify+seal (no hold)', async () => {
-  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, WIDE_ADJUDICATE_RUN)
-  assert.equal(ret.status, 'ok', 'a residual divergence is adjudicated, ratified, sealed, and advances — S2\'s hold is gone')
-  assert.ok(calls.some(c => c.label === 'wide:byte-equal'), 'the byte-equality cmp ran (both legs valid and converged)')
-  assert.ok(!calls.some(c => c.label === 'wide:promote'), 'a residual divergence never promotes a candidate unchanged')
-  const adj = calls.find(c => c.label === 'wide:adjudicate')
-  assert.ok(adj, 'the fresh Q-F adjudicator runs on a residual divergence, replacing S2\'s hold-on-mismatch')
-  // A fresh stage-law (fable) leg, labeled distinctly — NO role #13, no new tier role.
-  assert.equal(adj.opts.model, 'fable', 'the adjudicator is a fresh stage-law (fable) leg — decorrelated by freshness, not a new tier role')
-  for (const l of ['wide:draft-a', 'wide:draft-b', 'wide:adjust-a', 'wide:adjust-b'])
-    assert.notEqual(adj.label, l, 'the adjudicator is labeled distinctly from the two author legs')
-  // Residual-only: consolidate the agreed, rule ONLY the divergences, never a silent whole-new plan.
-  assert.ok(/consolidat/i.test(adj.prompt) && /rule only the surviving divergences/i.test(adj.prompt),
-    'the adjudicator scaffold binds consolidate-agreed + rule-only-residuals')
-  assert.ok(/never synthesize a wholly new plan/i.test(adj.prompt),
-    'the adjudicator is forbidden from silently synthesizing a wholly new plan (ADR A11)')
-  // It authors the COMPLETE four-output canonical LAW and records adjudication ADRs in decisions.md.
-  for (const out of ['.kiln/LAW.md', '.kiln/law/check.sh', '.kiln/slices.json', '.kiln/decisions.md'])
-    assert.ok(adj.prompt.includes(out), 'the adjudicator writes the complete canonical output: ' + out)
-  assert.ok(/ADR/.test(adj.prompt) && adj.prompt.includes('.kiln/decisions.md'),
-    'the adjudicator appends adjudication ADRs to decisions.md (card/agent-authored — the kernel never writes it)')
-  // The ordinary opposite-family ratify STILL runs, rejoined unchanged, and the seal follows accept.
-  const gate = calls.find(c => c.label === 'ratify:gate')
-  const seal = calls.find(c => c.label === 'law:seal')
-  assert.ok(gate && seal, 'the adjudicated LAW still takes the ordinary opposite-family ratify + seal')
-  const req = calls.find(c => c.label === 'ratify:request')
-  assert.ok(req.prompt.includes('gpt-5.6-sol'), 'the ratify request still names the opposite-family gpt reviewer — the ratify block is unchanged')
-  assert.ok(calls.indexOf(adj) < calls.indexOf(gate) && calls.indexOf(gate) < calls.indexOf(seal),
-    'adjudicate → ratify → seal: the ratify block is rejoined unchanged')
-  // W5-S3-02: the kernel GATES the adjudicated canon before ratify — a test -s on each of the four
-  // canonical outputs, mirroring WIDE_PROMOTE. A status-'ok' self-report alone never reaches ratify.
-  const canon = calls.find(c => c.label === 'wide:adjudicate-check')
-  assert.ok(canon, 'the adjudicated canon passes a completeness gate before ratify')
-  for (const out of ['.kiln/LAW.md', '.kiln/law/check.sh', '.kiln/slices.json', '.kiln/decisions.md'])
-    assert.ok(canon.prompt.includes('test -s ' + out), 'the completeness gate tests the canonical output nonempty: ' + out)
-  assert.ok(calls.indexOf(adj) < calls.indexOf(canon) && calls.indexOf(canon) < calls.indexOf(gate),
-    'the completeness gate runs after adjudicate and before ratify — an incomplete adjudicated LAW never ratifies')
-  assert.ok(ret.beat.includes('The law is locked'), 'the adjudicated candidate beat speaks only after ratify+seal')
-  assert.equal(stateArgs(calls).key, 'relaunch-build', 'an adjudicated+ratified WIDE law advances to build')
-})
-
-test('runtime (W5-S3-02): an adjudicator that returns status ok but schema_valid false HOLDS — status ok alone never proves a valid canonical LAW', async () => {
-  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
-    ...WIDE_ADJUDICATE_RUN,
-    'wide:adjudicate': { facts: { status: 'ok', pointers: ['.kiln/LAW.md'], schema_valid: false }, narration_beat: 'x' },
-  })
-  assert.equal(ret.status, 'transport-failure', 'a status-ok but schema-invalid adjudication holds as a transport failure')
-  assert.ok(!calls.some(c => c.label === 'wide:adjudicate-check'), 'the completeness gate is short-circuited when the adjudicator declares its own output invalid')
-  assert.ok(!calls.some(c => c.label === 'ratify:gate'), 'an unsound adjudicated LAW never reaches ratify')
-  assert.ok(!calls.some(c => c.label === 'law:seal'), 'an unsound adjudicated LAW never seals')
-})
-
-test('runtime (W5-S3-02): an adjudicated canon that is incomplete on disk FAILS CLOSED — the four test -s gate blocks ratify, mirroring WIDE_PROMOTE', async () => {
-  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
-    ...WIDE_ADJUDICATE_RUN,
-    'wide:adjudicate-check': { exit: 1 }, // a canonical output is missing or empty
-  })
-  assert.equal(ret.status, 'persist-failed', 'an incomplete adjudicated canon fails closed — the completeness floor WIDE_PROMOTE enforces on the skip path')
-  assert.ok(calls.some(c => c.label === 'wide:adjudicate-check'), 'the completeness gate ran on a schema-valid adjudication')
-  assert.ok(!calls.some(c => c.label === 'ratify:gate'), 'an incomplete adjudicated LAW never reaches ratify')
-  assert.ok(!calls.some(c => c.label === 'law:seal'), 'an incomplete adjudicated LAW never seals')
-})
-
-test('runtime (W5-S3, W5-05): a non-converged WIDE report is adjudicated with the byte-equality cmp short-circuited — the kernel never guesses convergence', async () => {
-  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
-    ...WIDE_ADJUDICATE_RUN,
-    'wide:adjust-a': { facts: { status: 'ok', pointers: ['.kiln/.wide/a-adjusted/LAW.md'], schema_valid: true }, narration_beat: 'a2', converged: false }, // one author still sees a divergence
-  })
-  assert.equal(ret.status, 'ok', 'a converged:false report is adjudicated regardless of byte-equality')
-  assert.ok(!calls.some(c => c.label === 'wide:byte-equal'), 'the byte-equality cmp is short-circuited on a non-converged report — the kernel never guesses convergence')
-  assert.ok(calls.some(c => c.label === 'wide:adjudicate'), 'the fresh adjudicator resolves the honest divergence instead of holding')
-  assert.ok(calls.some(c => c.label === 'law:seal'), 'the adjudicated law still ratifies and seals')
-})
-
-test('runtime (W5-S3): a WIDE author that returns unsound work HOLDS — an invalid leg is never promoted OR adjudicated', async () => {
-  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
-    ...VOICE,
-    ...ONBOARDING_OK,
-    'law:preflight': GREEN,
-    'width:read': { exit: 0, width: 'wide' },
-    'wide:prep': { exit: 0 },
-    'wide:draft-a': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'a' },
-    'wide:draft-b': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'b' },
-    'wide:adjust-a': { facts: { status: 'transport-failure', pointers: [], schema_valid: false }, narration_beat: '', converged: false },
-    'wide:adjust-b': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'b2', converged: true },
-    'state:write': GREEN,
-  })
-  assert.equal(ret.status, 'transport-failure', 'an invalid author leg holds as a transport failure — not a residual divergence to adjudicate')
-  assert.ok(!calls.some(c => c.label === 'wide:byte-equal'), 'the cmp is short-circuited when a leg is invalid')
-  assert.ok(!calls.some(c => c.label === 'wide:promote'), 'an invalid leg is never promoted')
-  assert.ok(!calls.some(c => c.label === 'wide:adjudicate'), 'an invalid leg is never adjudicated — there is no valid candidate pair')
-  assert.ok(!calls.some(c => c.label === 'law:seal'), 'the law never seals on an invalid leg')
-})
-
-test('runtime (W5-S3, content-blind): the adjudication is the AGENT\'s call recorded in ADRs — the kernel branches only on the width, converged, and byte-equality closed facts', async () => {
-  const { calls } = await runKernel({ stage: 'law', projectDir: '/p' }, WIDE_ADJUDICATE_RUN)
-  // The kernel's only reads around the divergence are closed facts, never plan content: the width
-  // dial and the byte-equality cmp -s. The adjudicator (an agent stage leg) rules and records ADRs.
-  const cmp = calls.find(c => c.label === 'wide:byte-equal')
-  assert.ok(cmp.prompt.includes('cmp -s') && cmp.prompt.includes('/LAW.md'), 'the divergence signal is a closed cmp -s fact — the kernel never opens the plan to decide')
-  // W5-S3-01: the byte gate compares the COMPLETE four-output set — equal LAW.md with a divergent
-  // check.sh/slices.json/decisions.md is a residual divergence that adjudicates, never a silent skip.
-  for (const out of ['LAW.md', 'law/check.sh', 'slices.json', 'decisions.md'])
-    assert.ok(cmp.prompt.includes('.kiln/.wide/a-adjusted/' + out) && cmp.prompt.includes('.kiln/.wide/b-adjusted/' + out),
-      'the byte gate compares the full canonical set across both adjusted candidates: ' + out)
-  const adj = calls.find(c => c.label === 'wide:adjudicate')
-  assert.ok(adj.opts.schema && adj.opts.schema.properties && adj.opts.schema.properties.facts,
-    'adjudication is dispatched as an agent stage leg (the kernel reads no plan content to adjudicate)')
-  assert.ok(adj.prompt.includes('.kiln/decisions.md') && /ADR/.test(adj.prompt),
-    'the residual calls are recorded in decisions.md by the agent — never a kernel content-read')
-  // No orchestration family/persona/model token rides the adjudicator scaffold (prompt-level anonymity).
-  for (const token of ['fable', 'gpt', 'opus', 'sonnet', 'codex', 'sol'])
-    assert.ok(!new RegExp('\\b' + token + '\\b', 'i').test(adj.prompt), 'no orchestration token "' + token + '" in the adjudicator scaffold')
-})
-
-test('runtime (W5-S2, W5-06): the two WIDE author scaffolds are isomorphic modulo the A/B paths — cross-read carries no author metadata, no orchestration family token', async () => {
-  const { calls } = await runKernel({ stage: 'law', projectDir: '/p', idea: 'a broad reader-facing catalog with many pages' }, {
-    ...VOICE,
-    ...ONBOARDING_OK,
-    'law:preflight': GREEN,
-    'width:read': { exit: 0, width: 'wide' },
-    'wide:prep': { exit: 0 },
-    'wide:draft-a': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'a' },
-    'wide:draft-b': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'b' },
-    'wide:adjust-a': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'a2', converged: false },
-    'wide:adjust-b': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'b2', converged: false },
-    // A non-converged pair now runs the adjudicator (S3); this test only inspects the two author
-    // scaffolds already captured above, so a held adjudicator leg suffices — no ratify/seal needed.
-    'wide:adjudicate': { facts: { status: 'transport-failure', pointers: [], schema_valid: false }, narration_beat: '' },
-    'state:write': GREEN,
-  })
-  // Normalize ONLY the neutral A/B candidate paths; scaffolds that differ solely there are isomorphic.
-  const norm = (s) => s
-    .split('.kiln/.wide/a-adjusted').join('WIDE_ADJ')
-    .split('.kiln/.wide/b-adjusted').join('WIDE_ADJ')
-    .split('.kiln/.wide/a').join('WIDE_DIR')
-    .split('.kiln/.wide/b').join('WIDE_DIR')
-  const dA = calls.find(c => c.label === 'wide:draft-a').prompt
-  const dB = calls.find(c => c.label === 'wide:draft-b').prompt
-  assert.equal(norm(dA), norm(dB), 'the two draft scaffolds are isomorphic modulo the A/B candidate dir')
-  const aA = calls.find(c => c.label === 'wide:adjust-a').prompt
-  const aB = calls.find(c => c.label === 'wide:adjust-b').prompt
-  assert.equal(norm(aA), norm(aB), 'the two adjust scaffolds are isomorphic modulo the A/B candidate dirs')
-  // Each adjust cross-reads ONLY the OTHER draft, with no author identity supplied.
-  assert.ok(aA.includes('.kiln/.wide/b') && aA.includes('no author identity'), 'adjust-a cross-reads the b draft with no provenance')
-  assert.ok(aB.includes('.kiln/.wide/a') && aB.includes('no author identity'), 'adjust-b cross-reads the a draft with no provenance')
-  // No orchestration family/persona/model token rides either author scaffold (prompt-level anonymity).
-  for (const p of [dA, dB, aA, aB]) {
-    for (const token of ['fable', 'gpt', 'opus', 'sonnet', 'codex', 'sol']) {
-      assert.ok(!new RegExp('\\b' + token + '\\b', 'i').test(p), 'no orchestration token "' + token + '" in a WIDE author scaffold')
-    }
-  }
-})
-
-test('runtime (W5-S2, content-blind): the WIDE branch decides on width + converged + byte-equality closed facts — cmp -s on the two adjusted LAW.md, never a plan read', async () => {
-  const { calls } = await runKernel({ stage: 'law', projectDir: '/p' }, WIDE_PROMOTE_RUN)
-  const cmp = calls.find(c => c.label === 'wide:byte-equal')
-  assert.ok(cmp.prompt.includes('cmp -s') && cmp.prompt.includes('/LAW.md'), 'byte-equality is a closed cmp -s fact on the two adjusted LAW.md — the kernel never opens the plan')
-  assert.ok(cmp.prompt.includes('.kiln/.wide/a-adjusted/LAW.md') && cmp.prompt.includes('.kiln/.wide/b-adjusted/LAW.md'), 'the cmp compares the two isolated adjusted candidates')
-  const width = calls.find(c => c.label === 'width:read')
-  assert.ok(width.prompt.includes('the value of the "width" field'), 'the width read is a closed dial projection, never a posture parse in the kernel body')
-})
-
 test('runtime (builder-leg 404 pin): a gpt-routed surface fails closed at boot — the codex id never reaches an agent dispatch', async () => {
   // The exact 48e5fed defect shape: surface_routing.logic -> builder-logic with the
   // seat gpt-family. Under the defective kernel this config booted, the slice leg
@@ -3480,7 +3257,7 @@ test('runtime (Wave 3): a present brief and a valid posture pass the LAW input g
     'onboarding:brief-check': { exit: 0 },
     'onboarding:posture': { exit: 0, scope: 'large', novelty: 'novel', reversibility: 'irreversible' },
     'onboarding:brownfield-check': { exit: 1 }, // greenfield — no map required
-    'width:read': { exit: 0, width: 'floor' }, // W5-S2: the input gate passes, then the floor width keeps the single act
+    'cap:read': { exit: 0, recovery_cap: 2 }, // the input gate passes, then the single act producer runs
     'stage:law': { facts: { status: 'ok', pointers: ['.kiln/LAW.md'], schema_valid: true }, narration_beat: 'the law' },
     'ratify:request': GREEN,
     'ratify:gate': { exit: 0 },
@@ -3582,7 +3359,7 @@ test('runtime (Wave 3, brownfield): a present .kiln/brownfield marker with a non
     'onboarding:posture': { exit: 0, scope: 'large', novelty: 'familiar', reversibility: 'reversible' },
     'onboarding:brownfield-check': { exit: 0 }, // the marker is present — a brownfield run
     'onboarding:map-check': { exit: 0 },         // the codebase map is nonempty
-    'width:read': { exit: 0, width: 'floor' }, // W5-S2: the input gate passes, then the floor width keeps the single act
+    'cap:read': { exit: 0, recovery_cap: 2 }, // the input gate passes, then the single act producer runs
     'stage:law': { facts: { status: 'ok', pointers: ['.kiln/LAW.md'], schema_valid: true }, narration_beat: 'the law' },
     'ratify:request': GREEN,
     'ratify:gate': { exit: 0 },
@@ -3596,6 +3373,10 @@ test('runtime (Wave 3, brownfield): a present .kiln/brownfield marker with a non
   const map = calls.findIndex(c => c.label === 'onboarding:map-check')
   const plan = calls.findIndex(c => c.label === 'stage:law')
   assert.ok(map >= 0 && map < plan, 'the map check runs BEFORE the law card plans')
+  // The same trace-derived bound as the greenfield walk. THIS is the trace that carries
+  // onboarding:map-check, so it is the leg that catches a dial dispatched between brownfield-check
+  // and map-check — a placement the greenfield path cannot see, because map-check is not in it.
+  assertDialAfterGate(calls, 'stage:law')
   const marker = calls.find(c => c.label === 'onboarding:brownfield-check')
   assert.ok(marker.prompt.includes('test -e .kiln/brownfield'), 'the marker is read as a closed fact (test -e), never parsed')
   const mapCheck = calls.find(c => c.label === 'onboarding:map-check')
@@ -3627,7 +3408,7 @@ test('runtime (Wave 3, greenfield): no marker means no map is required — the m
     'onboarding:brief-check': { exit: 0 },
     'onboarding:posture': { exit: 0, scope: 'small', novelty: 'familiar', reversibility: 'reversible' },
     'onboarding:brownfield-check': { exit: 1 }, // no marker — a greenfield run
-    'width:read': { exit: 0, width: 'floor' }, // W5-S2: the input gate passes, then the floor width keeps the single act
+    'cap:read': { exit: 0, recovery_cap: 2 }, // the input gate passes, then the single act producer runs
     'stage:law': { facts: { status: 'ok', pointers: ['.kiln/LAW.md'], schema_valid: true }, narration_beat: 'the law' },
     'ratify:request': GREEN,
     'ratify:gate': { exit: 0 },
@@ -4293,7 +4074,7 @@ test('dogfood (W7-S3): ratify, build, and audit gates coexist across one project
   const law = await runKernel({ stage: 'law', projectDir: dir }, {
     ...VOICE,
     ...ONBOARDING_OK,
-    'width:read': { exit: 0, width: 'floor', recovery_cap: 1 },
+    'cap:read': { exit: 0, recovery_cap: 1 },
     'law:preflight': GREEN,
     'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law, pinned' },
     'ratify:request': GREEN,
@@ -4338,7 +4119,8 @@ test('dogfood (W7-S3): ratify, build, and audit gates coexist across one project
     'audit:read': readAudit(auditVerdict('accept')),
   })
   assert.equal(run.calls.filter(c => c.label === 'cap:read').length, 1, 'ONE dial read per build invocation')
-  assert.ok(!run.calls.some(c => c.label === 'width:read'), 'the build branch never takes a second dial read')
+  assert.equal(law.calls.filter(c => c.label === 'cap:read').length, 1,
+    'and ONE per law invocation — the walk carries exactly one cap read per stage invocation, never a second inside either')
   // The slice gate, untouched W6 behavior: one repair edge under cap 1, then the seal.
   assert.equal(run.calls.filter(c => c.label === 'repair:s2').length, 1, 'the slice gate spent its one edge and recovered')
   const recheckAt = run.calls.findIndex(c => c.label === 'gate:recheck')

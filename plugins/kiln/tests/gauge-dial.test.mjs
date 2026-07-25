@@ -18,22 +18,27 @@ test('gauge-dial: postureToDials — each monotone predicate toggles on both bra
   // small + familiar + reversible, no visual → every dial at its floor
   assert.deepEqual(
     postureToDials({ scope: 'small', novelty: 'familiar', reversibility: 'reversible' }, false),
-    { width: 'floor', research: 'off', perceptual: 'dormant', recovery_cap: 2, xhigh_permit: false },
+    { research: 'off', perceptual: 'dormant', recovery_cap: 2 },
   )
-  // novel (small, reversible) + visual → width/research/xhigh open via novelty, perceptual on, cap stays 2
+  // novel (small, reversible) + visual → research opens via novelty, perceptual on, cap stays 2
   assert.deepEqual(
     postureToDials({ scope: 'small', novelty: 'novel', reversibility: 'reversible' }, true),
-    { width: 'wide', research: 'on', perceptual: 'on', recovery_cap: 2, xhigh_permit: true },
+    { research: 'on', perceptual: 'on', recovery_cap: 2 },
   )
-  // large + familiar + risky → width opens via scope, research via risky, cap 1, xhigh still shut
+  // large + familiar + risky → research opens via risky; cap 1, since only reversible keys cap 2.
+  // No dial reads scope, so the large scope changes nothing here — scope stays a VALIDATED posture
+  // field (frozen enum + exact-field-count) that projects nothing.
   assert.deepEqual(
     postureToDials({ scope: 'large', novelty: 'familiar', reversibility: 'risky' }, false),
-    { width: 'wide', research: 'on', perceptual: 'dormant', recovery_cap: 1, xhigh_permit: false },
+    { research: 'on', perceptual: 'dormant', recovery_cap: 1 },
   )
-  // small + familiar + irreversible → width stays floor, research + xhigh open via irreversible, cap 1
+  // small + familiar + irreversible → research opens via irreversible, cap 1 — the SAME projection
+  // the risky case above yields. The two fixtures differ in scope AND reversibility; the outputs
+  // coincide because research treats risky and irreversible alike, cap 1 is every non-reversible
+  // reading, and scope reaches no dial. Both branches of each predicate are still covered above.
   assert.deepEqual(
     postureToDials({ scope: 'small', novelty: 'familiar', reversibility: 'irreversible' }, false),
-    { width: 'floor', research: 'on', perceptual: 'dormant', recovery_cap: 1, xhigh_permit: true },
+    { research: 'on', perceptual: 'dormant', recovery_cap: 1 },
   )
   // perceptual keys on strict === true — a truthy non-boolean stays dormant on a valid posture
   const valid = { scope: 'small', novelty: 'familiar', reversibility: 'reversible' }
@@ -44,9 +49,9 @@ test('gauge-dial: postureToDials — each monotone predicate toggles on both bra
 
 test('gauge-dial: postureToDials fails UPWARD to max scrutiny on any untrustworthy posture — never throws', () => {
   // INTAKE-29: perceptual alone tracks the visual flag on the fail-up profile, so with
-  // --visual false (the calls below) it stays dormant while the other four dials still fail
-  // up hard. A separate assertion pins that only perceptual moves with the flag.
-  const MAX = { width: 'wide', research: 'on', perceptual: 'dormant', recovery_cap: 1, xhigh_permit: true }
+  // --visual false (the calls below) it stays dormant while the other two dials — research and
+  // recovery_cap — still fail up hard. A separate assertion pins that only perceptual moves with the flag.
+  const MAX = { research: 'on', perceptual: 'dormant', recovery_cap: 1 }
   const good = { scope: 'small', novelty: 'familiar', reversibility: 'reversible' }
   // missing / null / non-object / array
   assert.deepEqual(postureToDials(undefined, false), MAX, 'a missing posture → max scrutiny')
@@ -68,7 +73,7 @@ test('gauge-dial: postureToDials fails UPWARD to max scrutiny on any untrustwort
   // posture with --visual false must NOT wake perceptual, while a real visual project still does.
   assert.equal(postureToDials(null, false).perceptual, 'dormant', 'a missing posture does not override --visual false')
   assert.equal(postureToDials(null, true).perceptual, 'on', 'a real visual project still fails up perceptual on')
-  assert.deepEqual(postureToDials(null, true), { ...MAX, perceptual: 'on' }, 'only perceptual tracks the flag — width/research/cap/xhigh still fail up hard')
+  assert.deepEqual(postureToDials(null, true), { ...MAX, perceptual: 'on' }, 'only perceptual tracks the flag — research/cap still fail up hard')
   // never throws — even on adversarial input for either argument
   assert.doesNotThrow(() => postureToDials(Symbol('x'), Symbol('y')))
   // and it must survive the reflective step (Reflect.ownKeys) and property reads
@@ -86,7 +91,7 @@ test('gauge-dial: postureToDials fails UPWARD to max scrutiny on any untrustwort
 
 test('gauge-dial: postureToDials names no effort tier — it toggles organs, never low/medium/high/xhigh', () => {
   const dials = postureToDials({ scope: 'large', novelty: 'novel', reversibility: 'irreversible' }, true)
-  assert.deepEqual(Object.keys(dials).sort(), ['perceptual', 'recovery_cap', 'research', 'width', 'xhigh_permit'])
+  assert.deepEqual(Object.keys(dials).sort(), ['perceptual', 'recovery_cap', 'research'])
   assert.ok(!('effort' in dials), 'the dial profile carries no effort field')
   for (const v of Object.values(dials)) {
     assert.ok(!['low', 'medium', 'high', 'xhigh'].includes(v), 'no dial value is an effort tier — effort stays the tier file\'s job')
@@ -145,7 +150,7 @@ test('gauge-dial: a missing, unreadable, or malformed posture fails UP to max sc
   for (const posture of [undefined, 'not json', '"a bare string"', '[1,2,3]', JSON.stringify({ scope: 'small' }), JSON.stringify({ scope: 'small', novelty: 'novel', reversibility: 'reversible', extra: 1 })]) {
     const r = runScript(posture)
     assert.equal(r.status, 0, 'the projector always exits 0 — it never fails the caller closed')
-    assert.deepEqual(JSON.parse(r.stdout), { width: 'wide', research: 'on', perceptual: 'dormant', recovery_cap: 1, xhigh_permit: true },
+    assert.deepEqual(JSON.parse(r.stdout), { research: 'on', perceptual: 'dormant', recovery_cap: 1 },
       'an untrustworthy posture projects the max-scrutiny profile — research on, perceptual dormant at the flagless --visual false default (INTAKE-29)')
   }
 })
@@ -165,7 +170,7 @@ test('gauge-dial (W8-C): --visual true turns perceptual on over a valid posture 
   const flagless = runScript(posture, [])
   assert.equal(flagless.status, 0)
   assert.equal(flagless.stdout,
-    '{"width":"floor","research":"off","perceptual":"dormant","recovery_cap":2,"xhigh_permit":false}\n',
+    '{"research":"off","perceptual":"dormant","recovery_cap":2}\n',
     'the flagless bytes ARE the pre-flag bytes — pinned to the literal, not to the entry\'s own output')
   assert.deepEqual(JSON.parse(flagless.stdout), postureToDials(posture, false), 'the flagless entry is the default-false projection')
   for (const args of [['--visual'], ['--visual', 'false'], ['--visual', 'yes'], ['--visual', 'TRUE']]) {
@@ -178,10 +183,10 @@ test('gauge-dial (W8-C): --visual true turns perceptual on over a valid posture 
 })
 
 test('gauge-dial (W8-C / INTAKE-29): fail-up outranks the flag for the scrutiny dials — perceptual alone tracks --visual', () => {
-  // width, research, recovery_cap, xhigh_permit fail up to max scrutiny on an untrustworthy
+  // research and recovery_cap fail up to max scrutiny on an untrustworthy
   // posture no matter the flag; perceptual tracks the flag so a legacy resume with --visual
   // false never phantom-wakes the screening room on a non-visual project.
-  const HARD = { width: 'wide', research: 'on', recovery_cap: 1, xhigh_permit: true }
+  const HARD = { research: 'on', recovery_cap: 1 }
   const on = runScript('not json', ['--visual', 'true'])
   assert.equal(on.status, 0)
   assert.deepEqual(JSON.parse(on.stdout), { ...HARD, perceptual: 'on' }, 'a real visual project fails up perceptual on')

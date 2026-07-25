@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url'
 //      drops the ceiling fails a focused test.
 // Regression catches (would FAIL pre-fix): case (a) — pre-fix printed perceptual:'on' on a
 // missing posture at --visual false — and both kernel source guards (pre-fix gated on
-// `perceptual` alone and read the dial through the WIDTH schema).
+// `perceptual` alone and read the dial through the shared DIAL schema).
 
 const SCRIPT = fileURLToPath(new URL('../scripts/gauge-dial.mjs', import.meta.url))
 const KERNEL = fileURLToPath(new URL('../workflows/kernel.js', import.meta.url))
@@ -55,15 +55,13 @@ test('perceptual-dial: a VALID dormant posture at --visual false prints perceptu
   assert.equal(dials.perceptual, 'dormant', 'a trustworthy non-visual posture reads dormant')
 })
 
-test('perceptual-dial: the fail-up still HARDENS the other four dials regardless of the visual flag', () => {
-  // Only perceptual moved. width/research/recovery_cap/xhigh_permit still fail up to max
+test('perceptual-dial: the fail-up still HARDENS the other two dials regardless of the visual flag', () => {
+  // Only perceptual moved. research and recovery_cap still fail up to max
   // scrutiny on an untrustworthy posture, with or without the flag.
   for (const args of [['--visual', 'false'], ['--visual', 'true']]) {
     const d = runScript('not json', args)
-    assert.equal(d.width, 'wide', 'width fails up regardless of the flag')
     assert.equal(d.research, 'on', 'research fails up regardless of the flag')
     assert.equal(d.recovery_cap, 1, 'recovery_cap fails up to 1 regardless of the flag')
-    assert.equal(d.xhigh_permit, true, 'xhigh_permit fails up regardless of the flag')
   }
 })
 
@@ -78,11 +76,11 @@ test('perceptual-dial: the kernel screening block is wired to the activation CEI
     'visualTable is the sealed-LAW table-presence fact (the same read that feeds --visual)')
 })
 
-test('perceptual-dial: the kernel reads the perceptual dial through the closed PERCEPTUAL_DIAL schema, not WIDTH', () => {
-  // Source guard for the relay-integrity fix. WIDTH allows additionalProperties, so a relayed
-  // perceptual field could drop and read as live. The dial leg must use PERCEPTUAL_DIAL (all
-  // three fields required) and carry an honest error fallback so a null return fails up
-  // truthfully, never via an omitted field.
+test('perceptual-dial: the kernel reads the perceptual dial through the closed PERCEPTUAL_DIAL schema, not the open DIAL', () => {
+  // Source guard for the relay-integrity fix. The shared cap-read schema DIAL allows
+  // additionalProperties, so a relayed perceptual field could drop and read as live. The dial leg
+  // must use PERCEPTUAL_DIAL (all three fields required) and carry an honest error fallback so a
+  // null return fails up truthfully, never via an omitted field.
   const src = readFileSync(KERNEL, 'utf8')
   assert.ok(src.includes("label: 'perceptual:dial', ...tier('kernel-leg'), schema: PERCEPTUAL_DIAL"),
     'the perceptual dial leg rides the closed PERCEPTUAL_DIAL schema')

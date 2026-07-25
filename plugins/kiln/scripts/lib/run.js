@@ -142,9 +142,11 @@ function pluginVersion() {
   }
 }
 
-// Read the lock record, distinguishing absent (no file) from present-but-unreadable (a torn
-// or hand-broken lock): join and release refuse on either, and takeover refuses to prove an
-// unreadable lock stale rather than steal it.
+// Read the lock record. It distinguishes a TORN lock — bytes readable, JSON unparseable, reported
+// as exists with a null record — from absent. Every other read failure is coerced to exists:false
+// here, so an unreadable shape reads as absent through this function alone; presence on those
+// shapes is lockPresence below, which takeover conjoins before the no-lock words and then holds on
+// an unreadable lock rather than proving it stale. join and release refuse on a null record.
 function readLockRecord(lockPath) {
   let raw
   try {

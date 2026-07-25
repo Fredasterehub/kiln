@@ -68,8 +68,8 @@ async function runLaw(detail) {
     'onboarding:posture': { exit: 0, scope: 'small', novelty: 'familiar', reversibility: 'reversible' },
     // Wave 3 (brownfield arm): greenfield here — no marker, so the map-check never runs.
     'onboarding:brownfield-check': { exit: 1 },
-    // W5-S2: the floor width keeps the single act producer — the density path is unchanged.
-    'width:read': { exit: 0, width: 'floor' },
+    // The law dial read; the density path is unchanged.
+    'cap:read': { exit: 0, recovery_cap: 2 },
     'stage:law': { facts: { status: 'ok', pointers: ['.kiln/LAW.md'], schema_valid: true }, narration_beat: 'law beat' },
     // Wave 1: the law stage ratifies before advancing — accept, seal, advance.
     // S4: the degradation path-selector and seal-label reads answer marker-absent (exit

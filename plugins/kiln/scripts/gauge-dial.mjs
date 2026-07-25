@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 // The Gauge dial projector — a trusted CONTROL-FACT script, not an evidence CLI. It maps a
-// closed posture {scope, novelty, reversibility} plus a visual-artifact flag to five scrutiny
-// organs. Each dial is an INDEPENDENT monotone predicate (never a lookup matrix), so a later
+// closed posture {scope, novelty, reversibility} plus a visual-artifact flag to three scrutiny
+// dials. Each dial is an INDEPENDENT monotone predicate (never a lookup matrix), so a later
 // posture field adds one predicate, not a combinatorial table. It names NO effort tier — it
-// toggles organs and permits xhigh only; effort stays in data/tiers.json, never here.
+// toggles organs; effort stays in data/tiers.json, never here.
+// The three dials are the ones with readers: research (the sweep gate), perceptual (the screening
+// room), recovery_cap (the repair budgets). A width dial once decided whether the plan moment
+// deserved two minds; that job is not deleted but SUPERSEDED by operator doctrine — the dual
+// moments are unconditional, so no dial may gate them.
 //
 // postureToDials was body-local in workflows/kernel.js (a Workflow async-body — not importable,
 // and with no production consumer it never ran). research-sweep.js is its first real reader, so
@@ -13,7 +17,7 @@
 //
 // FAIL-UPWARD: any missing, non-object, extra-field, or out-of-enum posture projects the
 // max-scrutiny profile with recovery_cap 1 — the most scrutiny exactly when the posture is
-// least trustworthy. width, research, recovery_cap, and xhigh_permit fail up regardless of the
+// least trustworthy. research and recovery_cap fail up regardless of the
 // visual flag; perceptual alone tracks it (INTAKE-29: a missing posture must NOT override an
 // explicit --visual false, or a legacy resume phantom-wakes the screening room on a non-visual
 // project). Deterministic; never throws.
@@ -29,7 +33,7 @@ export const POSTURE_NOVELTY = Object.freeze(['familiar', 'novel'])
 export const POSTURE_REVERSIBILITY = Object.freeze(['reversible', 'risky', 'irreversible'])
 
 export function postureToDials(posture, visualArtifactPresence) {
-  const failUp = { width: 'wide', research: 'on', perceptual: visualArtifactPresence === true ? 'on' : 'dormant', recovery_cap: 1, xhigh_permit: true }
+  const failUp = { research: 'on', perceptual: visualArtifactPresence === true ? 'on' : 'dormant', recovery_cap: 1 }
   // Reflective reads (Reflect.ownKeys) and property access (destructuring getters) can throw
   // on adversarial input — a throwing ownKeys trap, a throwing getter, a revoked proxy
   // (Array.isArray itself throws on one). The whole body is guarded so "never throws" is
@@ -44,11 +48,9 @@ export function postureToDials(posture, visualArtifactPresence) {
     const { scope, novelty, reversibility } = posture
     if (POSTURE_SCOPE.indexOf(scope) < 0 || POSTURE_NOVELTY.indexOf(novelty) < 0 || POSTURE_REVERSIBILITY.indexOf(reversibility) < 0) return failUp
     return {
-      width: (novelty === 'novel' || scope === 'large') ? 'wide' : 'floor',
       research: (novelty === 'novel' || reversibility === 'risky' || reversibility === 'irreversible') ? 'on' : 'off',
       perceptual: visualArtifactPresence === true ? 'on' : 'dormant',
       recovery_cap: reversibility === 'reversible' ? 2 : 1,
-      xhigh_permit: novelty === 'novel' || reversibility === 'irreversible',
     }
   } catch { return failUp }
 }

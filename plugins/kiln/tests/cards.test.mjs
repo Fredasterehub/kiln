@@ -155,11 +155,11 @@ test('cards: every law run in the cards corpus goes through the trusted verb, no
   // that runs the law script bare verifies against a check.sh nobody verified; by build time the
   // law is sealed, so run-checks re-verifies the whole cross-bound seal before executing anything.
   // Counted over every card, not just the one B1 edited — the claim is about the corpus.
-  // The rule is post-seal, not universal. The LAW-AUTHORING cards necessarily describe the check.sh
-  // they must write — it is the artifact they produce, and nothing is sealed while they run (the seal
-  // is the kernel's own step after the law stage returns, kernel.js:1588). Those three are named
+  // The rule is post-seal, not universal. The LAW-AUTHORING card necessarily describes the check.sh
+  // it must write — it is the artifact it produces, and nothing is sealed while it runs (the seal
+  // is the kernel's own step after the law stage returns, its leg tagged law:seal). It is named
   // here with that reason; every other card runs the law and must go through the verb.
-  const PRE_SEAL_CARDS = ['law.md', 'wide-adjudicate.md', 'wide-plan.md']
+  const PRE_SEAL_CARDS = ['law.md']
   const bare = []
   const fused = []
   for (const file of readdirSync(CARDS).filter((f) => f.endsWith('.md'))) {
@@ -173,7 +173,7 @@ test('cards: every law run in the cards corpus goes through the trusted verb, no
     for (const _ of src.matchAll(/kiln-review"?\s+run-checks/g)) fused.push(file)
   }
   assert.deepEqual([...new Set(bare)].sort(), PRE_SEAL_CARDS,
-    'only the law-authoring cards name the checker directly, describing the artifact they write; no post-seal card verifies against an unverified script')
+    'only the law-authoring card names the checker directly, describing the artifact it writes; no post-seal card verifies against an unverified script')
   assert.deepEqual(fused.sort(), ['build.md', 'build.md', 'build.md', 'validate.md'],
     'the three build-card law runs and the validate rerun all go through the fused verb')
 })

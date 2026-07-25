@@ -201,12 +201,11 @@ function recoveryDecision(facts) {
 }
 
 // W6-F (A3, Q3 CONFIRMED): the recovery cap is reversibility-keyed off the Gauge dial and read
-// ONCE per invocation. The dial leg carries recovery_cap alongside width (law) or alone (build);
+// ONCE per invocation. The dial leg carries recovery_cap alone at both law and build;
 // this normalizes it STRICTLY — cap 2 only when the leg exited 0 AND the dial read recovery_cap
 // EXACTLY 2 (the reversible profile), and every other value or a transport failure fails UP to
 // cap 1 (fewer recovery edges precisely when the reading is least trustworthy, matching
-// gauge-dial its own fail-up default). Width never enters here — a wide plan widens the plan
-// table, it never raises the cap. research-sweep carries a drift-pinned copy. Never throws.
+// gauge-dial its own fail-up default). research-sweep carries a drift-pinned copy. Never throws.
 function capFromDial(leg) {
   const d = leg || {}
   return d.exit === 0 && d.recovery_cap === 2 ? 2 : 1
@@ -758,28 +757,21 @@ const POSTURE_LEG = {
   },
   required: ['exit'],
 }
-// W5-S2 (W5-04): the Gauge WIDTH dial read — the same boot-style projection shape research-sweep
-// reads the research dial through. The leg parses the JSON gauge-dial prints; the kernel body
-// never does. additionalProperties stays true so the other dials pass through harmlessly. W6-F:
-// the same leg also carries recovery_cap, so one dial read serves both the WIDE branch and the
-// reversibility-keyed recovery cap; the build stage reuses this schema for its own cap read.
-// W8-S3: the validate perceptual dial leg rides the same shape — additionalProperties carries
-// the perceptual field through untyped, and the kernel branches on it as a closed string fact.
-const WIDTH = { type: 'object', additionalProperties: true, properties: { exit: { type: 'integer' }, width: { type: 'string' }, recovery_cap: { type: 'integer' } }, required: ['exit'] }
+// W3: the Gauge cap dial read — the same boot-style projection shape research-sweep reads the
+// research dial through (research-sweep.js carries this shape under its own DIAL, keyed to the
+// field it projects). The leg parses the JSON gauge-dial prints; the kernel body never does.
+// additionalProperties stays true so the other dials pass through harmlessly. Law and build both
+// read the reversibility-keyed recovery cap through this one schema and one leg.
+// The validate perceptual dial leg does NOT ride this shape: it takes the CLOSED PERCEPTUAL_DIAL
+// below, for the relay-integrity reason stated there. Two dial schemas, one open and one closed.
+const DIAL = { type: 'object', additionalProperties: true, properties: { exit: { type: 'integer' }, recovery_cap: { type: 'integer' } }, required: ['exit'] }
 // W1-S1 (INTAKE-29 / Defect A): the perceptual dial leg needs the perceptual field to SURVIVE
-// the relay. WIDTH carries it only through additionalProperties, so a leg that drops the field
+// the relay. DIAL carries it only through additionalProperties, so a leg that drops the field
 // still validates and the kernel reads the absence as live (a phantom screening room). This
 // closed schema REQUIRES all three fields with no additionalProperties, so a dropped perceptual
-// fails the leg to the honest error fallback instead of a false live read. WIDTH stays as-is for
-// width:read and cap:read, which never branch on perceptual.
+// fails the leg to the honest error fallback instead of a false live read. DIAL stays as-is for
+// the cap read, which never branches on perceptual.
 const PERCEPTUAL_DIAL = { type: 'object', additionalProperties: false, properties: { exit: { type: 'integer' }, perceptual: { type: 'string', enum: ['dormant', 'on', 'error'] }, recovery_cap: { type: 'integer', enum: [1, 2] } }, required: ['exit', 'perceptual', 'recovery_cap'] }
-// W5-S2 (W5-01): a WIDE adjust leg returns the ordinary stage envelope plus the closed
-// `converged` self-report the content-blind skip-adjudication gate reads alongside byte-equality.
-const WIDE_ADJUST = {
-  type: 'object', additionalProperties: false,
-  properties: { facts: STAGE_RESULT.properties.facts, narration_beat: { type: 'string' }, converged: { type: 'boolean' } },
-  required: ['facts', 'narration_beat', 'converged'],
-}
 
 // W2-S1 (H2 / B01): the run lock JOIN. The conductor acquires the run lock ONCE before the
 // sweep and passes run_id plus an opaque owner token in every launch; each kernel boot
@@ -908,6 +900,14 @@ const voiceBeat = (key, facts, fallback, idx = 0) => idsFetch(
 const actWith = (prompt, label, opts) => agent(prompt, { label, ...opts, schema: STAGE_RESULT })
   .then(r => (r ?? { facts: { status: 'transport-failure', pointers: [], schema_valid: false }, narration_beat: '' }))
 const act = (prompt, label) => actWith(prompt, label, tier(stage === 'law' ? 'stage-law' : 'stage-card'))
+// W3: the ONE Gauge dial read. Law and build ask the same question — the reversibility-keyed
+// recovery cap — so they share one prompt, one label and one schema rather than two legs that
+// drifted apart once the width fork died. capFromDial fails the read up to cap 1 on any bad exit
+// or missing field, so a transport failure spends fewer recovery edges, never more.
+const capRead = () => agent(
+  'Run exactly this in ' + projectDir + '. Report {exit, recovery_cap}: exit = the exit code; recovery_cap = the value of the "recovery_cap" field in the printed JSON dials object when exit is 0, omitted when exit is nonzero:\n' + 'node ' + plugin + '/scripts/gauge-dial.mjs',
+  { label: 'cap:read', ...tier('kernel-leg'), schema: DIAL },
+).then(x => (x ?? { exit: 20 }))
 
 const stage = resolveStage(A)
 if (stage === 'needs-brainstorm') {
@@ -966,12 +966,14 @@ const failStop = (status, fields, line, extra) => {
   beats.push(line)
   return stop(status, fields, extra)
 }
-// Marker lifecycle: .kiln/perceptual-partial
-// is written ONLY on a semantic perceptual hold and REMOVED on every terminal
-// nonsemantic validate path — ok (dormant or live-accept), the law-red reopen doors
-// (preflight and stage-end), capture-act failure, primary-transport and degraded
-// holds, addendum failure. A marker never outlives the conclusion it describes. A
-// failed removal surfaces as persist-failed, never a silent stale marker.
+// Marker lifecycle: .kiln/perceptual-partial is written ONLY on a semantic perceptual hold (one
+// writer in the shipped plugin, the touch tagged perceptual:marker; cards and SKILL.md read its
+// presence, never write it) and REMOVED on every terminal nonsemantic validate path — ok (dormant
+// or live-accept), the law-red reopen doors and the torn-trio doors (each at both preflight and
+// stage end), the ledger-reconcile and seal-ledger read holds, capture-act failure, the six
+// screening-room holds (manifest and family reads, degraded, gate-unreachable, repair-failed,
+// transport-failure), addendum failure. Fifteen clear sites, count-pinned. A marker never outlives
+// the conclusion it describes. A failed removal surfaces as persist-failed, never a stale marker.
 const clearPerceptualMarker = async () => {
   if (await hands('rm -f ' + P.perceptualPartial, 'perceptual:marker-clear') !== 0) return persistFail('perceptual-marker-clear')
   return null
@@ -1044,98 +1046,6 @@ const cardPrompt = (extra) => [
   extra,
   'Return {facts:{status, pointers, schema_valid}, narration_beat} — facts.status is "ok" when the stage succeeded, facts.pointers lists every artifact path you wrote, facts.schema_valid is true when your declared outputs are well-formed, and narration_beat is your one-line beat.',
 ].filter(Boolean).join('\n')
-
-// ── W5-S2 (W5-01/02/06): the WIDE blind-dual branch helpers ─────────────────
-// Isolated candidate paths — a WIDE author never writes the canonical .kiln/LAW.md (avoids the
-// W5-02 collision two authors racing the same path would cause). Each dir holds the FULL LAW
-// output set; the adjusted dirs hold each post-cross-read candidate.
-const WIDE = { root: '.kiln/.wide', aDraft: '.kiln/.wide/a', bDraft: '.kiln/.wide/b', aAdj: '.kiln/.wide/a-adjusted', bAdj: '.kiln/.wide/b-adjusted' }
-// Promote the identical adjusted candidate, its COMPLETE four-output set, to the canonical LAW
-// paths as ONE all-or-nothing transaction. A test -s per output fails closed on an incomplete
-// candidate before canon is touched; then an ERR-trap unwinds any partial promote so a
-// mid-sequence mv fault leaves canon ALL-old (or all-absent), never a LAW.md-changed /
-// slices-stale mix — the command re-exits nonzero, the run fails closed, and it never ratifies
-// or seals (W5-02). The `phase` gate scopes the unwind: while staging the prior canon aside a
-// fault leaves the originals in place (nothing to undo); once promoting, a fault restores each
-// slot from its backup or removes the freshly-moved file. Kiln runs one pipeline over its own
-// .kiln/ with no concurrent writer, so the moves carry no time-of-check/use window (the same
-// binding the research sweep promote uses). The a-side is chosen by convention: the skip gate
-// proved the two byte-equal.
-const WIDE_PROMOTE = [
-  'set -e', 'mkdir -p .kiln/law',
-  'test -s ' + WIDE.aAdj + '/LAW.md', 'test -s ' + WIDE.aAdj + '/law/check.sh',
-  'test -s ' + WIDE.aAdj + '/slices.json', 'test -s ' + WIDE.aAdj + '/decisions.md',
-  'bak=' + WIDE.root + '/.promote-bak; phase=stage',
-  'rm -rf "$bak"; mkdir -p "$bak/law"',
-  'rollback(){ trap - ERR; set +e;'
-    + ' if [ -e "$bak/LAW.md" ]; then mv -f "$bak/LAW.md" .kiln/LAW.md; elif [ "$phase" = promote ]; then rm -f .kiln/LAW.md; fi;'
-    + ' if [ -e "$bak/law/check.sh" ]; then mv -f "$bak/law/check.sh" .kiln/law/check.sh; elif [ "$phase" = promote ]; then rm -f .kiln/law/check.sh; fi;'
-    + ' if [ -e "$bak/slices.json" ]; then mv -f "$bak/slices.json" .kiln/slices.json; elif [ "$phase" = promote ]; then rm -f .kiln/slices.json; fi;'
-    + ' if [ -e "$bak/decisions.md" ]; then mv -f "$bak/decisions.md" .kiln/decisions.md; elif [ "$phase" = promote ]; then rm -f .kiln/decisions.md; fi;'
-    + ' exit 1; }',
-  'trap rollback ERR',
-  'if [ -e .kiln/LAW.md ]; then mv -f .kiln/LAW.md "$bak/LAW.md"; fi',
-  'if [ -e .kiln/law/check.sh ]; then mv -f .kiln/law/check.sh "$bak/law/check.sh"; fi',
-  'if [ -e .kiln/slices.json ]; then mv -f .kiln/slices.json "$bak/slices.json"; fi',
-  'if [ -e .kiln/decisions.md ]; then mv -f .kiln/decisions.md "$bak/decisions.md"; fi',
-  'phase=promote',
-  'mv -f ' + WIDE.aAdj + '/LAW.md .kiln/LAW.md',
-  'mv -f ' + WIDE.aAdj + '/law/check.sh .kiln/law/check.sh',
-  'mv -f ' + WIDE.aAdj + '/slices.json .kiln/slices.json',
-  'mv -f ' + WIDE.aAdj + '/decisions.md .kiln/decisions.md',
-  'trap - ERR', 'rm -rf "$bak"',
-].join('\n')
-// The COMPLETE canonical LAW output set, relative to .kiln/. Two closed-fact gates read it so no
-// residual difference is ever silently discarded: the skip-adjudication byte gate compares all four
-// across the two adjusted candidates (equal LAW.md with a divergent check.sh/slices.json/decisions.md
-// is a residual divergence, not an identical pair), and the adjudicate completeness gate tests each
-// canonical output nonempty — the same four test -s floor WIDE_PROMOTE enforces on the skip path.
-const WIDE_OUTPUTS = ['LAW.md', 'law/check.sh', 'slices.json', 'decisions.md']
-const WIDE_BYTE_EQUAL = WIDE_OUTPUTS.map(o => 'cmp -s ' + WIDE.aAdj + '/' + o + ' ' + WIDE.bAdj + '/' + o).join(' && ')
-const WIDE_CANON_CHECK = WIDE_OUTPUTS.map(o => 'test -s .kiln/' + o).join(' && ')
-// The shared WIDE context — project dir, voice, density, and the verbatim operator idea (which MAY
-// name a family; blindness is about ORCHESTRATION metadata, not idea content). Reused by the two
-// symmetric author scaffolds and the fresh adjudicator, none of which carry a family/persona/model token.
-const wideCtx = [
-  'Project dir: ' + projectDir + '. Artifacts live under .kiln/.',
-  'Voice: fill your beat from ' + plugin + '/data/voice.json templates; prefill every semantic slot; leave kernel-owned slots (' + KERNEL_SLOTS.map(k => '{' + k + '}').join(' ') + ') unfilled.',
-  'Density: ' + density + ' — a slot-fill rule, never a structure: broad fills slots with the plain reader-meaningful version, engineer fills the same slots with file paths, ids, and counts.',
-  A.idea ? 'Operator idea (verbatim): ' + A.idea : '',
-].filter(Boolean)
-// The SYMMETRIC author scaffolds — isomorphic modulo the neutral A/B candidate dir (W5-06): no
-// orchestration-supplied peer provenance, no family/persona/model token.
-const wideCommon = [
-  'You are a Kiln WIDE LAW author: one of two independent minds planning the same idea, working apart. Read and follow the stage card at ' + plugin + '/cards/wide-plan.md exactly.',
-  ...wideCtx,
-]
-const wideDraftPrompt = (dir) => [
-  ...wideCommon,
-  'Write your DRAFT — the full LAW output set (LAW.md, law/check.sh, slices.json, decisions.md) — into your candidate directory ' + dir + ', never the canonical .kiln/LAW.md. This draft is IMMUTABLE: once written you do not edit it.',
-  'Return {facts:{status, pointers, schema_valid}, narration_beat} — facts.status is "ok" only if all four outputs are written under ' + dir + '.',
-].join('\n')
-const wideAdjustPrompt = (own, peer, adj) => [
-  ...wideCommon,
-  'You already wrote a draft plan at ' + own + '. A second, independent plan of the SAME idea sits at ' + peer + ' — read ONLY its plan artifacts (LAW.md, law/check.sh, slices.json, decisions.md); it carries no author identity and you supply none.',
-  'Weigh the two plans and write your ADJUSTED full LAW output set to ' + adj + ' (never the canonical .kiln/LAW.md). Return converged:true ONLY if the two plans have genuinely converged to the same law (you adopted the shared plan); converged:false if a real divergence remains — never a convergence you do not see.',
-  'Return {facts:{status, pointers, schema_valid}, narration_beat, converged} — facts.status is "ok" only if all four adjusted outputs are written under ' + adj + '.',
-].join('\n')
-const wideAdjust = (prompt, label) => agent(prompt, { label, ...tier('stage-law'), schema: WIDE_ADJUST })
-  .then(r => (r ?? { facts: { status: 'transport-failure', pointers: [], schema_valid: false }, narration_beat: '', converged: false }))
-// W5-S3 (W5-05 / ADR A11): the fresh Q-F adjudicator scaffold. A fresh leg — not one of the two
-// authors, decorrelated by freshness, still the stage-law/fable rung (NO role #13) — anonymized
-// like the cross-read: it reads the two ADJUSTED candidates as neutral A/B artifacts, consolidates
-// what they already agree on, and rules ONLY the surviving divergences into the COMPLETE four-output
-// canonical LAW, appending one ADR per residual call to .kiln/decisions.md — never a silent
-// whole-new plan. Because it authors canonical directly, its result rejoins the UNCHANGED ratify
-// block exactly as the floor act would.
-const wideAdjudicatePrompt = [
-  'You are a Kiln WIDE LAW adjudicator: a fresh mind resolving the residual divergence between two independent plans of the same idea. Read and follow the stage card at ' + plugin + '/cards/wide-adjudicate.md exactly.',
-  ...wideCtx,
-  'Two ADJUSTED candidate plans of the same idea sit at ' + WIDE.aAdj + ' and ' + WIDE.bAdj + ' — read ONLY their plan artifacts (LAW.md, law/check.sh, slices.json, decisions.md); neither carries an author identity and you supply none.',
-  'Consolidate everything the two candidates already agree on and carry it unchanged; rule ONLY the surviving divergences — the parts where they still differ. Never synthesize a wholly new plan: every criterion and slice you emit is one the two candidates already share, or your ruling on a specific divergence between them.',
-  'Write the COMPLETE canonical LAW — .kiln/LAW.md, .kiln/law/check.sh, .kiln/slices.json, .kiln/decisions.md — and APPEND one "## ADR-N" entry to .kiln/decisions.md per residual divergence you ruled, each recording the call and its rationale.',
-  'Return {facts:{status, pointers, schema_valid}, narration_beat} — facts.status is "ok" only if the complete four-output canonical LAW is written.',
-].join('\n')
 
 // ── W8-S3: the screening room — closed commands and helpers for the validate seat ──
 // Presence only: a GFM `## Perceptual` heading in the SEALED LAW.md — S1 already
@@ -1279,26 +1189,19 @@ if (stage !== 'build') {
         { brief: P.brief, posture: P.posture, codebaseMap: P.codebaseMap })
     }
   }
-  // W5-S2 (W5-04): the LAW producer branches on the Gauge WIDTH dial (mirroring the research-
-  // sweep dial read). floor is the SOLE narrow result — exit 0 AND width 'floor' — and keeps the
-  // EXISTING single act producer, untouched; every other value or a transport failure fails UP to
-  // the WIDE blind-dual branch. validate and report never read width — they keep the single act.
-  // Both LAW branches leave the full four-output LAW set on disk and rejoin the UNCHANGED ratify
-  // block below; a WIDE divergence holds safely before it (S3 lands the adjudicator that resolves
-  // it). The kernel stays content-blind — it branches on the width, converged, and byte-equality
-  // closed facts, never on plan content.
   let r
   // W6-F: the reversibility-keyed recovery cap, threaded into the LAW-ratify loop below. It stays
   // 1 on the report path (unused there) and is set from the single dial read a law or validate
-  // invocation makes. Width never raises it — a wide plan widens the plan table, not the budget.
+  // invocation makes.
   let cap = 1
   // W8-S3 (plan C): the validate activation — one closed table-presence check over the
-  // SEALED LAW.md feeds the gauge-dial --visual flag, and ONE dial leg (the build capLeg
-  // WIDTH-schema shape) returns perceptual + recovery_cap — one read, two facts. Dormant
+  // SEALED LAW.md feeds the gauge-dial --visual flag, and ONE dial leg (the CLOSED
+  // PERCEPTUAL_DIAL, never the open cap-read DIAL) returns perceptual + recovery_cap — one
+  // read, two facts. Dormant
   // is the SOLE skip result — exit 0 AND perceptual dormant — and keeps the single-act
   // validate byte-identical; every other value or a transport failure fails UP to the
-  // live screening machinery (the width-read fail-up doctrine; the gauge-dial
-  // malformed-posture fail-up arrives through the same door).
+  // live screening machinery (the gauge-dial malformed-posture fail-up arrives
+  // through the same door).
   let perceptual = false
   // W1-S1 (INTAKE-29 / Defect A): the screening activation CEILING. visualTable is the closed
   // fact that the sealed LAW actually carries a ## Perceptual table — the same presence read that
@@ -1317,80 +1220,11 @@ if (stage !== 'build') {
     cap = capFromDial(dialLeg)
   }
   if (stage === 'law') {
-    const widthLeg = await agent(
-      'Run exactly this in ' + projectDir + '. Report {exit, width, recovery_cap}: exit = the exit code; width = the value of the "width" field and recovery_cap = the value of the "recovery_cap" field in the printed JSON dials object when exit is 0, both omitted when exit is nonzero:\n' + 'node ' + plugin + '/scripts/gauge-dial.mjs',
-      { label: 'width:read', ...tier('kernel-leg'), schema: WIDTH },
-    ).then(x => (x ?? { exit: 20 }))
-    // One dial read carries both the WIDE-branch width and the recovery cap (fail-up to 1).
-    cap = capFromDial(widthLeg)
-    if (widthLeg.exit === 0 && widthLeg.width === 'floor') {
-      r = await act(cardPrompt(A.idea ? 'Operator idea (verbatim): ' + A.idea : ''), 'stage:law')
-    } else {
-      // The blind-dual dance (W5-01/02/06). Freshness first: clear any stale wide workspace so a
-      // stale prior candidate can never ride a false byte-equality or promote.
-      if (await hands('rm -rf ' + WIDE.root, 'wide:prep') !== 0) return persistFail('wide-prep')
-      // Two BLIND authors, SYMMETRIC scaffolding (the draft prompts isomorphic modulo the neutral
-      // A/B candidate dir — no orchestration peer provenance), each writing an IMMUTABLE full-output
-      // draft to an ISOLATED dir, never the canonical .kiln/LAW.md.
-      const draftA = await actWith(wideDraftPrompt(WIDE.aDraft), 'wide:draft-a', tier('stage-law'))
-      const draftB = await actWith(wideDraftPrompt(WIDE.bDraft), 'wide:draft-b', tier('stage-law'))
-      // Symmetric cross-read + ONE adjustment: each reads the OTHER immutable draft (its plan
-      // artifacts only — no author identity, no runtime label/persona/model metadata) and writes an
-      // ADJUSTED full-output candidate to its own isolated path, returning converged.
-      const adjA = await wideAdjust(wideAdjustPrompt(WIDE.aDraft, WIDE.bDraft, WIDE.aAdj), 'wide:adjust-a')
-      const adjB = await wideAdjust(wideAdjustPrompt(WIDE.bDraft, WIDE.aDraft, WIDE.bAdj), 'wide:adjust-b')
-      // The content-blind skip-adjudication gate (W5-01): all four legs must be valid — status 'ok'
-      // AND self-attested schema_valid — before any comparison, promotion, or adjudication. A leg
-      // that declares malformed or missing outputs is a transport failure, not a residual
-      // divergence: there is no valid candidate PAIR to adjudicate, so the run holds honestly and
-      // an invalid leg is never promoted or adjudicated.
-      const bothValid = draftA.facts.status === 'ok' && draftA.facts.schema_valid === true &&
-        draftB.facts.status === 'ok' && draftB.facts.schema_valid === true &&
-        adjA.facts.status === 'ok' && adjA.facts.schema_valid === true &&
-        adjB.facts.status === 'ok' && adjB.facts.schema_valid === true
-      if (!bothValid) return failStop('transport-failure',
-        { stage, next_action: 'Rerun stage ' + stage },
-        await voiceBeat('transport-failure', {}, 'A wide plan author did not return sound work — the run holds.', 1))
-      // Both authors report converged AND all four adjusted outputs are BYTE-EQUAL → promote the
-      // identical candidate directly. The cmp spans the COMPLETE four-output set (WIDE_BYTE_EQUAL):
-      // equal LAW.md files with a divergent check.sh/slices.json/decisions.md are a residual
-      // divergence that adjudicates, never a skip that silently discards the difference. The cmp is a
-      // closed fact the kernel reads without ever opening the plan, short-circuited unless both
-      // converged — so a non-converged report never fabricates a byte-equality, and a residual
-      // divergence never skip-adjudicates.
-      const bothConverged = adjA.converged === true && adjB.converged === true
-      const skipAdjudication = bothConverged &&
-        await hands(WIDE_BYTE_EQUAL, 'wide:byte-equal') === 0
-      if (skipAdjudication) {
-        // Atomic promotion of the identical adjusted candidate, its COMPLETE four-output set, to the
-        // canonical LAW paths — a test -s per output makes an incomplete WIDE result fail closed, so
-        // it never ratifies or seals (W5-02). r rejoins the UNCHANGED ratify block as the floor act would.
-        if (await hands(WIDE_PROMOTE, 'wide:promote') !== 0) return persistFail('wide-promote')
-        r = { facts: { status: 'ok', pointers: [P.law, '.kiln/law/check.sh', P.slices, '.kiln/decisions.md'], schema_valid: true }, narration_beat: adjA.narration_beat }
-      } else {
-        // W5-S3 (W5-05 / ADR A11): a residual divergence between two VALID candidates — a
-        // non-converged report OR a byte-mismatch. A fresh Q-F adjudicator (a fresh stage-law/fable
-        // leg, decorrelated by freshness, NO role #13) reads both adjusted candidates anonymized,
-        // consolidates what they already agree on, and rules ONLY the surviving divergences into the
-        // complete four-output canonical LAW, appending its adjudication ADRs to .kiln/decisions.md
-        // — never a silent whole-new plan. Its result rejoins the UNCHANGED ratify block below and
-        // still takes the ordinary opposite-family ratify key; this replaces the S2 temporary hold.
-        r = await actWith(wideAdjudicatePrompt, 'wide:adjudicate', tier('stage-law'))
-        // The adjudicator authors canonical directly, so it earns the SAME completeness floor
-        // WIDE_PROMOTE enforces on the skip path: a self-attested schema_valid AND a test -s on each
-        // of the four canonical outputs (WIDE_CANON_CHECK) must hold, or the run fails closed HERE —
-        // status 'ok' alone never proves a complete, valid four-output LAW reached canon to ratify
-        // and seal. An unsound self-report holds as a transport failure; an incomplete canon on disk
-        // fails closed like a failed promote.
-        if (r.facts.schema_valid !== true) return failStop('transport-failure',
-          { stage, next_action: 'Rerun stage ' + stage },
-          await voiceBeat('transport-failure', {}, 'The wide adjudicator did not return sound work — the run holds.', 1))
-        if (await hands(WIDE_CANON_CHECK, 'wide:adjudicate-check') !== 0) return persistFail('wide-adjudicate')
-      }
-    }
-  } else {
-    r = await act(cardPrompt(A.idea ? 'Operator idea (verbatim): ' + A.idea : ''), 'stage:' + stage)
+    // The law dial read exists for the recovery cap alone — it is the one dial read a law
+    // invocation makes, through the same leg the build stage uses.
+    cap = capFromDial(await capRead())
   }
+  r = await act(cardPrompt(A.idea ? 'Operator idea (verbatim): ' + A.idea : ''), 'stage:' + stage)
   // S1 ruling: reachable twin sites read their sealed keys; the kernel lines
   // below survive only as unreachable-voice fallbacks (W-03). W8-S3: on validate this
   // door is also the capture-act failure (the act contract is a COMPLETE manifest or
@@ -2042,12 +1876,8 @@ const ladder = await idsFetch(
 // W6-F: the reversibility-keyed recovery cap, read ONCE per build invocation from the same Gauge
 // dial the law stage reads, and threaded into every slice gate reviewLoop below — a reject repair
 // traverses the regenerate-slice edge only up to the cap (2 reversible, else 1; fail-up to 1 on any
-// bad read). Width never raises it. One read, reused for every slice.
-const capLeg = await agent(
-  'Run exactly this in ' + projectDir + '. Report {exit, recovery_cap}: exit = the exit code; recovery_cap = the value of the "recovery_cap" field in the printed JSON dials object when exit is 0, omitted when exit is nonzero:\n' + 'node ' + plugin + '/scripts/gauge-dial.mjs',
-  { label: 'cap:read', ...tier('kernel-leg'), schema: WIDTH },
-).then(x => (x ?? { exit: 20 }))
-const cap = capFromDial(capLeg)
+// bad read). One read, reused for every slice.
+const cap = capFromDial(await capRead())
 // ── W7-S2: the seam gate — the milestone audit seated in the build loop ──────
 // ONE shared block for both paths a seam slice takes (the fresh seal and the
 // seal-skip resume, the all-sealed resume included): when the seam closed fact
@@ -2497,7 +2327,7 @@ for (const [idx, entry] of slices.entries()) {
       const reviewerAck = await agent([
         'You are the gate reviewer for slice ' + slice + ': a fresh mind judging the diff against the locked law.',
         'The canonical contract at .kiln/contracts/sha256/' + gateContract + '.json is the COMPLETE authoritative facts for this review — the sealed law_text scoped to slice ' + slice + ', the non-authoritative builder hints, the receipt digest, and the reviewed manifest. Judge exactly that contract; it is the sole authority for the criteria.',
-        'Project dir: ' + projectDir + '. Read the locked law at ' + P.law + ' — the sealed, verified LAW; scope it to slice ' + slice + ' and judge that slice against it, the sole authority for the criteria — and the changed files themselves. The builder evidence hints are the trusted filtered facts at ' + P.gateFacts + ' (criteria, paths, failures, commands only): they are non-authoritative context that may orient you but never narrow or override the law, and no finding derives from them. Do not read the raw review request.',
+        'Project dir: ' + projectDir + '. Read the locked law at ' + P.law + ' — the sealed, verified LAW; scope it to slice ' + slice + ' and judge that slice against it — and the changed files themselves. The builder evidence hints are the trusted filtered facts at ' + P.gateFacts + ' (criteria, paths, failures, commands only): they are non-authoritative context that may orient you but never narrow or override the law, and no finding derives from them. Do not read the raw review request.',
         'The law checks were already executed kernel-side; their full output is attached verbatim at ' + P.receipt + '. Execute nothing — no commands, no tests, no builds: judge the diff against the law with the receipt as the only execution evidence.',
         'Receipt rows owned by slices not yet built in this run are expected pre-build evidence — judge only the criteria for slice ' + slice + ' from the locked law; never treat them as findings, and never filter or rewrite the receipt.',
         mode === 'recheck'
