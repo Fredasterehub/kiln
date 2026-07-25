@@ -2,16 +2,16 @@
 
 // The reviewer gate: the facts packet a family is judged on, the shape its answer must take, and the spawn that asks for it.
 const { createHash, randomBytes, randomUUID } = require('node:crypto')
-const { existsSync, readdirSync, readFileSync, statSync } = require('node:fs')
-const { dirname, join, resolve } = require('node:path')
+const { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, statSync } = require('node:fs')
+const { basename, dirname, join, resolve } = require('node:path')
 const { spawnSync } = require('node:child_process')
 const { CODEX_ROLE, appendIdentityRow, composeContract, manifestRecompute, milestoneAuditFacts,
-  publishVerdict, receiptDigestAtPublication, runIdFromLock, sliceReviewFacts, verifyContractStore,
+  publishVerdict, receiptDigestAtPublication, sliceReviewFacts, verifyContractStore,
   writeContractStore } = require('./attestation.js')
 const { TRIO_MEMBERS, sealedAuthority, verifyMember } = require('./authority.js')
 const { ACCEPT, BLOCKED, CODEX_UNAVAILABLE, LAW_HASH, REJECT, TRANSPORT_FAILURE, classifyFailure,
-  containedPath, discard, isObject, readJson, repository, stop, stringArray } = require('./core.js')
-const { LOCK_TOKEN } = require('./run.js')
+  containedPath, discard, isObject, readJson, stop, stringArray } = require('./core.js')
+const { LOCK_TOKEN, runIdFromLock } = require('./run.js')
 
 const EFFORTS = ['low', 'medium', 'high', 'xhigh']
 const SCHEMA = join(__dirname, '..', 'review-schema.json')
@@ -53,32 +53,36 @@ function hintsFrom(file) {
 // no law_hash to supply: the bytes of the ratified artifact become the digest, computed at
 // dispatch. W2-S8: it no longer names a rubric — the instrument is a shipped constant the
 // family word selects, so no request can point the grader at a file of its own choosing.
+// W3 (trim ruling §1): the SEAT TRIPLE both JSON requests validate — model string, alias token,
+// effort in EFFORTS defaulting high. Parameterized on what the callers genuinely differ by, every
+// refusal keeping its EXACT bytes: label, field prefix, effort FACT WORD (ratify says
+// reviewer_effort_invalid, plan transport_failure), plus — found at build, beyond the three ruled —
+// the effort message carries its own label and a ratify-only tail. Unifying any of that would be a
+// behaviour change smuggled inside a trim. auditRequest is NOT a caller: same triple, argv WORDS,
+// a different input shape. The alias takes the closed grammar as a durable tiers fact.
+function seatTriple(raw, spec) {
+  const [model, alias, effortKey] = ['model', 'alias', 'effort'].map((f) => `${spec.field}_${f}`)
+  if (typeof raw[model] !== 'string' || !LOCK_TOKEN.test(raw[model])) stop('transport_failure', `${spec.label} ${model} must be a closed token of letters, digits, dot, underscore or hyphen`, TRANSPORT_FAILURE)
+  if (typeof raw[alias] !== 'string' || !LOCK_TOKEN.test(raw[alias])) stop('transport_failure', `${spec.label} ${alias} must be a closed token of letters, digits, dot, underscore or hyphen`, TRANSPORT_FAILURE)
+  const effort = raw[effortKey] === undefined ? 'high' : raw[effortKey]
+  if (!EFFORTS.includes(effort)) stop(spec.effortFact, `${spec.effortLabel} ${effortKey} must be one of ${EFFORTS.join('|')} (absent defaults to high)${spec.effortTail}`, TRANSPORT_FAILURE)
+  return { model: raw[model], alias: raw[alias], effort }
+}
+
 function ratifyRequestFrom(file) {
   const raw = readJson(file, 'invalid ratify request')
   if (!isObject(raw)) stop('transport_failure', 'ratify request must be a JSON object', TRANSPORT_FAILURE)
   if (typeof raw.review_id !== 'string' || raw.review_id.trim() === '') {
     stop('transport_failure', 'ratify request review_id must be a nonempty string', TRANSPORT_FAILURE)
   }
-  if (typeof raw.reviewer_model !== 'string' || raw.reviewer_model.trim() === '') {
-    stop('transport_failure', 'ratify request reviewer_model must be a nonempty string', TRANSPORT_FAILURE)
-  }
-  // W2-S7a (B-D1): reviewer_alias is the durable tiers fact the codex identity records as
-  // requested_alias — it rides this kernel-authored request beside the concrete reviewer_model, a
-  // closed token, distinct from the resolved model. The kernel and the research sweep both supply it.
-  if (typeof raw.reviewer_alias !== 'string' || !LOCK_TOKEN.test(raw.reviewer_alias)) {
-    stop('transport_failure', 'ratify request reviewer_alias must be a closed token of letters, digits, dot, underscore or hyphen', TRANSPORT_FAILURE)
-  }
-  const reviewerEffort = raw.reviewer_effort === undefined ? 'high' : raw.reviewer_effort
-  if (!EFFORTS.includes(reviewerEffort)) {
-    stop('reviewer_effort_invalid', `request reviewer_effort must be one of ${EFFORTS.join('|')} (absent defaults to high); ultra and unknown values are rejected`, TRANSPORT_FAILURE)
-  }
+  const seat = seatTriple(raw, { label: 'ratify request', field: 'reviewer', effortFact: 'reviewer_effort_invalid', effortLabel: 'request', effortTail: '; ultra and unknown values are rejected' })
   if (typeof raw.artifact !== 'string' || raw.artifact.trim() === '') {
     stop('transport_failure', 'ratify request artifact must be a nonempty path string', TRANSPORT_FAILURE)
   }
   return {
-    reviewerModel: raw.reviewer_model,
-    reviewerAlias: raw.reviewer_alias,
-    reviewerEffort,
+    reviewerModel: seat.model,
+    reviewerAlias: seat.alias,
+    reviewerEffort: seat.effort,
     reviewId: raw.review_id,
     artifact: raw.artifact,
   }
@@ -102,10 +106,73 @@ function rubricFrom(file) {
 // to grade the same artifact against the same criteria. The map is also the closed family set: a
 // family with no shipped rubric HOLDs here, before any compose, store or spawn. A Map, not an
 // object, so no inherited key ever answers a lookup.
+const OMISSION_RUBRIC = join(__dirname, '..', '..', 'data', 'omission-rubric.json')
 const RATIFY_RUBRIC = new Map([
   ['ratify', join(__dirname, '..', '..', 'data', 'law-rubric.json')],
   ['feasibility', join(__dirname, '..', '..', 'data', 'feasibility-rubric.json')],
+  // W3 (ruling §6): both plan-check moments grade the SAME single question — nothing missing versus
+  // the plans and the convergence/divergence records, never a re-litigation of substance — so they
+  // share ONE shipped instrument. Two family words rather than one because the archive tells
+  // verdicts apart BY FAMILY; one rubric because the question is one question.
+  ['vision', OMISSION_RUBRIC],
+  ['master', OMISSION_RUBRIC],
 ])
+
+// W3 (ruling §3): the SHIPPED authorship instructions, one per operation word — the shippedRubric
+// pattern applied to prose. The request supplies the operation WORD and nothing else that reaches
+// the model: free text from a request is never relayed into a prompt, so a caller cannot redirect
+// the author. Wording is deliberately NEUTRAL — these three constants carry no family, model or
+// persona token, pinned against the tiers lexicon in kiln-review.test.mjs. Stated exactly, because
+// the constants are not the whole prompt: the repo path and every input path also ride it, so the
+// neutrality of what an author can READ depends on the CALLER naming those files neutrally. U3 owns
+// that obligation at its fixtures; this constant carries only its own half. The semantic content
+// spec lives in the cards these instructions name by path; codex reads them itself under the
+// read-only sandbox, the same way the retired dual-plan prompts named their card.
+const PLAN_INSTRUCTIONS = {
+  draft: 'You are authoring a plan document. Read the inputs listed below and the stage card they name, then write the complete plan they call for. Work only from the inputs; invent no requirement they do not contain.',
+  revise: 'You are revising a plan you authored earlier against a second, independent plan of the same problem. Read both, weigh them, and write your revised complete plan. Adopt what the other plan gets right; keep what you still judge correct. Never record a convergence you do not see.',
+  merge: 'You are merging independent plans of the same problem into one complete document. Carry through everything they already agree on, and rule each surviving divergence explicitly, recording the call you took. Never synthesize material that appears in none of them.',
+}
+const PLAN_OPERATIONS = Object.keys(PLAN_INSTRUCTIONS)
+// W3 (Sol r1 B6): every input path is composed into the author prompt, so its TEXT is prompt surface.
+// A closed lexical grammar is the only thing that keeps it from becoming instruction: an in-repo file
+// whose name carried a newline plus "IGNORE THE SHIPPED INSTRUCTION" appeared verbatim as a new
+// prompt paragraph. This is the LOCK_TOKEN idiom widened by exactly one character — the separator —
+// so newlines and every control byte are excluded BY CONSTRUCTION rather than by a blocklist.
+const PLAN_INPUT_PATH = /^[A-Za-z0-9._\-/]+$/
+// W3 (Sol r1 B3): the temp prefix is this verb's PRIVATE namespace. Accepted as a final output name
+// it defeats no-clobber outright — the next invocation sweeps it as residue — so the sweep's claim
+// that every match is a dead invocation is made TRUE here rather than asserted.
+const PLAN_TEMP_PREFIX = '.plan-act.tmp-'
+// W3 (Sol r1 B2): maxBuffer bounds the subprocess PIPE, never the file codex writes through -o, so a
+// document of any size published clean. The ceiling is the review-schema transport bound (4 MiB, the
+// same figure the spawn buffer uses) — one number for one channel, so a document that could not have
+// survived the pipe cannot survive the file either.
+const PLAN_MAX_BYTES = 4 * 1024 * 1024
+
+// The plan-act request: every word validated CLI-side against a closed grammar before any spawn.
+// The model and alias take the same closed-token grammar the ratify request holds them to, the
+// effort takes the shared EFFORTS list, and the operation must be one of the three shipped words —
+// an unknown operation has no instruction to select, so it HOLDs here rather than reaching codex
+// with an empty prompt. inputs is a string array; each path is contained under the repo by the
+// caller, not here, because containment needs the resolved repo root.
+function planRequestFrom(file) {
+  const raw = readJson(file, 'invalid plan request')
+  if (!isObject(raw)) stop('transport_failure', 'plan request must be a JSON object', TRANSPORT_FAILURE)
+  const seat = seatTriple(raw, { label: 'plan request', field: 'author', effortFact: 'transport_failure', effortLabel: 'plan request', effortTail: '' })
+  if (!PLAN_OPERATIONS.includes(raw.operation)) {
+    stop('transport_failure', `plan request operation must be one of ${PLAN_OPERATIONS.join('|')}`, TRANSPORT_FAILURE)
+  }
+  if (!stringArray(raw.inputs) || raw.inputs.length === 0) {
+    stop('transport_failure', 'plan request inputs must be a nonempty array of strings', TRANSPORT_FAILURE)
+  }
+  for (const path of raw.inputs) {
+    if (!PLAN_INPUT_PATH.test(path)) {
+      stop('transport_failure', 'plan request inputs must be closed paths of letters, digits, dot, underscore, hyphen or slash', TRANSPORT_FAILURE)
+    }
+  }
+  return { authorModel: seat.model, authorAlias: seat.alias, authorEffort: seat.effort, operation: raw.operation, inputs: raw.inputs }
+}
 
 function shippedRubric(family, verb) {
   const path = RATIFY_RUBRIC.get(family)
@@ -558,26 +625,28 @@ ${contractTail(packet, contractBytes)}`
 // both flows converge here rather than duplicate the spawn and the exit mapping.
 // W8-S2: the screen family adds bounded `-i` image attachments — absent, the argv
 // is byte-identical to the baseline.
-function runGate(repo, request, prompt, outputFile, validate, family, images, subject, contract, kilnDirArg) {
-  const output = resolve(outputFile)
-  // W2-S7a (F5): the trust root is EXPLICIT — every calling verb supplies its kilnDir, and the gate
-  // output must sit directly under it. runGate derives the store/archive/manifest/receipt root from
-  // dirname(output), so a gate written outside the supplied kilnDir would silently retarget every
-  // trust-bearing write; that divergence HOLDs before any spawn, killing the implicit-selector class.
-  if (resolve(dirname(output)) !== resolve(kilnDirArg)) {
-    stop('transport_failure', 'runGate output path is not directly under the supplied kilnDir — refusing an implicit trust-root switch', TRANSPORT_FAILURE)
-  }
-  const temporary = join(dirname(output), `.gate-review.tmp-${process.pid}-${randomUUID()}`)
+// W3 (ruling §3): THE codex spawn core, extracted so runGate and plan-act share one channel. The
+// argv discipline, the closed stdin, the UUID temp, the bounded buffer, the failure grammar and the
+// produced-nothing check live HERE and nowhere else, which is what keeps the spawn site STRUCTURAL:
+// the codex spawn literal occurs exactly twice in the CLI corpus (this helper and the run.js
+// probe), count-pinned in kiln-review.test.mjs — a pin that counts source text, so this sentence
+// deliberately does not spell the token it describes. Parameterized on exactly three axes the callers
+// differ by: schema (a path forces JSON output, null takes the raw final message — authorship is not
+// schema-shaped), images (gate screening attaches them, authorship never does), and the temp dir.
+// Returns the temp path holding what codex wrote; every failure exits through classifyFailure, so
+// neither caller invents a second vocabulary for the same faults.
+function codexSpawn({ repo, model, effort, prompt, schema, images, tempDir, prefix, emptyMessage }) {
+  const temporary = join(tempDir, `${prefix}${process.pid}-${randomUUID()}`)
   const args = [
     'exec',
     '--ephemeral',
     '--sandbox', 'read-only',
     '--skip-git-repo-check',
     '-C', repo,
-    '--model', request.reviewerModel,
-    '-c', `model_reasoning_effort="${request.reviewerEffort}"`,
-    '--output-schema', SCHEMA,
+    '--model', model,
+    '-c', `model_reasoning_effort="${effort}"`,
   ]
+  if (schema) args.push('--output-schema', schema)
   for (const image of images || []) args.push('-i', image)
   args.push('-o', temporary, '-')
   const run = spawnSync('codex', args, {
@@ -593,7 +662,24 @@ function runGate(repo, request, prompt, outputFile, validate, family, images, su
     const detail = run.error ? run.error.message : (run.stderr || `codex exited ${run.status}`).trim().slice(-2000)
     stop(code === CODEX_UNAVAILABLE ? 'codex_unavailable' : 'transport_failure', detail, code)
   }
-  if (!existsSync(temporary)) stop('transport_failure', 'codex produced no gate output', TRANSPORT_FAILURE)
+  if (!existsSync(temporary)) stop('transport_failure', emptyMessage, TRANSPORT_FAILURE)
+  return temporary
+}
+
+function runGate(repo, request, prompt, outputFile, validate, family, images, subject, contract, kilnDirArg) {
+  const output = resolve(outputFile)
+  // W2-S7a (F5): the trust root is EXPLICIT — every calling verb supplies its kilnDir, and the gate
+  // output must sit directly under it. runGate derives the store/archive/manifest/receipt root from
+  // dirname(output), so a gate written outside the supplied kilnDir would silently retarget every
+  // trust-bearing write; that divergence HOLDs before any spawn, killing the implicit-selector class.
+  if (resolve(dirname(output)) !== resolve(kilnDirArg)) {
+    stop('transport_failure', 'runGate output path is not directly under the supplied kilnDir — refusing an implicit trust-root switch', TRANSPORT_FAILURE)
+  }
+  const temporary = codexSpawn({
+    repo, model: request.reviewerModel, effort: request.reviewerEffort, prompt,
+    schema: SCHEMA, images, tempDir: dirname(output), prefix: '.gate-review.tmp-',
+    emptyMessage: 'codex produced no gate output',
+  })
 
   const gate = readJson(temporary, 'invalid codex gate output', temporary)
   const invalid = validate(gate)
@@ -674,6 +760,140 @@ function runGate(repo, request, prompt, outputFile, validate, family, images, su
   process.exit(exits[gate.verdict])
 }
 
+// W3 (ruling §3): plan authorship reuses the ONE spawn core and nothing else of the gate. Each skip
+// with its reason: NO reviews row (the archive is the VERDICT archive; authorship has no verdict);
+// NO identity row (an authorship leg holds no candidate position, and a row would map a neutral plan
+// to a family ON DISK inside the blind window); NO contract (the four kinds are closed, each
+// judgeable-artifact-plus-instrument — no facts shape for author-this); NO manifest (no slice, no
+// slice evidence); NO marker probe (the kernel owns the degradation fork; a second CLI detector is
+// the divergent-detector class). The CLI floor is a NONEMPTY document landed by temp+rename —
+// judging plan CONTENT is the check seats duty, never the transport.
+function planAct(repo, kilnDir, request, output) {
+  const plansDir = join(kilnDir, 'plans')
+  // The output lives on the plans shelf and nowhere else: the runGate trust-root discipline applied
+  // here, so a request cannot retarget authorship at .kiln itself or at the repo.
+  if (resolve(dirname(resolve(output))) !== resolve(plansDir)) {
+    stop('transport_failure', 'plan-act output must sit directly under <kilnDir>/plans', TRANSPORT_FAILURE)
+  }
+  if (basename(resolve(output)).startsWith(PLAN_TEMP_PREFIX)) {
+    stop('transport_failure', `plan-act output may not use the reserved ${PLAN_TEMP_PREFIX} prefix — that namespace is swept as dead residue`, TRANSPORT_FAILURE)
+  }
+  try {
+    mkdirSync(plansDir, { recursive: true })
+  } catch (error) {
+    stop('transport_failure', `plan-act could not create the plans shelf: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  // F6 (seat ruling): the guard above pins the request SHAPE lexically; this proves the shelf
+  // PHYSICALLY. mkdirSync succeeds silently on a symlink-to-directory, so the verb would otherwise
+  // create or accept a shelf it never checked, and an executed probe landed an authored document
+  // outside the kiln dir through exactly that. Containment is proven RELATIVE to the kiln dir — both
+  // realpaths move together, so a repo legitimately reached through links still passes. Repo
+  // containment is INSUFFICIENT here: the escape landed inside the repo; the invariant is narrower.
+  let shelfReal
+  try {
+    shelfReal = realpathSync(plansDir)
+    if (dirname(shelfReal) !== realpathSync(resolve(kilnDir)) || basename(shelfReal) !== 'plans') {
+      stop('transport_failure', `plan-act refuses a plans shelf that is not physically under ${kilnDir}`, TRANSPORT_FAILURE)
+    }
+  } catch (error) {
+    if (error.code) stop('transport_failure', `plan-act could not prove the plans shelf: ${error.message}`, TRANSPORT_FAILURE)
+    throw error
+  }
+  // F9 (seat ruling): the temp prefix is this verb's private discipline, so the verb owns its
+  // hygiene. Any .plan-act.tmp-* present at shelf-open is by construction the residue of a dead
+  // invocation — shelf writers are serialized by the run lock and the kernel's sequential await
+  // dispatch, so there is no live writer to race. Sweeping here keeps the round-open clear in U3
+  // moment-scoped: it never needs to learn this prefix.
+  let shelfEntries
+  try {
+    shelfEntries = readdirSync(shelfReal)
+  } catch (error) {
+    // Any fault here is an unanswered question about the shelf, never a proven-empty one: an
+    // unreadable directory used to throw a raw stack at status 1, outside the 20/21 grammar.
+    stop('transport_failure', `plan-act could not read the plans shelf: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  for (const entry of shelfEntries) {
+    if (entry.startsWith(PLAN_TEMP_PREFIX)) discard(join(shelfReal, entry))
+  }
+  // Every input is proven inside the repo before it is named to the author. containedPath resolves
+  // and realpaths, so a symlink escaping the tree HOLDs here rather than being read under sandbox.
+  const inputs = request.inputs.map((path) => containedPath(repo, path, 'plan input'))
+  // containedPath answers CONTAINMENT, never existence — it walks up to the deepest EXISTING
+  // ancestor by design, so a missing leaf passes it. Naming a phantom path to the author is not
+  // caught anywhere downstream: a merge over a missing blind plan degrades to a copy of the
+  // survivor, and the omission rubric then grades that copy against the sources it was given, so it
+  // passes VACUOUSLY. Each input is therefore proven to be a readable regular file here. ENOENT is
+  // the only errno that proves absence; every other one is an unanswered question and holds the same
+  // way. A directory is refused — it is not a document. stat FOLLOWS deliberately: containedPath
+  // already proved the physical target sits inside the repo, so an in-repo link to a plan is fine.
+  for (const path of inputs) {
+    let entry
+    try {
+      entry = statSync(path)
+    } catch (error) {
+      const why = error.code === 'ENOENT' ? 'does not exist' : `could not be examined: ${error.message}`
+      stop('transport_failure', `plan input ${why}: ${path}`, TRANSPORT_FAILURE)
+    }
+    if (!entry.isFile()) stop('transport_failure', `plan input is not a regular file: ${path}`, TRANSPORT_FAILURE)
+  }
+  const prompt = [
+    PLAN_INSTRUCTIONS[request.operation],
+    `Project dir: ${repo}.`,
+    `Inputs, in order:\n${inputs.map((path) => `- ${path}`).join('\n')}`,
+    'Emit the complete document as your final message. Write no files.',
+  ].join('\n\n')
+  const temporary = codexSpawn({
+    repo, model: request.authorModel, effort: request.authorEffort, prompt,
+    schema: null, images: null, tempDir: plansDir, prefix: PLAN_TEMP_PREFIX,
+    emptyMessage: 'codex produced no plan output',
+  })
+  let bytes
+  try {
+    bytes = readFileSync(temporary)
+  } catch (error) {
+    discard(temporary)
+    stop('transport_failure', `plan-act could not read the authored document: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  if (bytes.length > PLAN_MAX_BYTES) {
+    discard(temporary)
+    stop('transport_failure', `plan-act authored a document over the ${PLAN_MAX_BYTES}-byte ceiling`, TRANSPORT_FAILURE)
+  }
+  // The floor means a document with CONTENT, not merely a nonzero length: whitespace alone is not a
+  // plan, and publishing one would hand the check seats an artifact with nothing to grade.
+  if (bytes.toString('utf8').trim() === '') {
+    discard(temporary)
+    stop('transport_failure', 'plan-act authored an empty document', TRANSPORT_FAILURE)
+  }
+  // F7 (seat ruling): the shelf is SCRATCH while a round is open and ARCHIVE once it closes, so the
+  // verb refuses to replace an existing document — a closed round's plans are its records, and a
+  // silent replace is against the never-a-bare-unlink discipline. No race to guard, and the ground is
+  // written here rather than assumed: shelf writers are serialized by the run lock plus the kernel's
+  // sequential await dispatch, so two concurrent plan-acts would need two concurrent runs, which the
+  // lock excludes. ENOENT is the only errno that proves the path free; any other is unanswered.
+  let taken = true
+  try {
+    lstatSync(resolve(output))
+  } catch (error) {
+    if (error.code === 'ENOENT') taken = false
+    else {
+      discard(temporary)
+      stop('transport_failure', `plan-act could not examine the output path ${output}: ${error.message}`, TRANSPORT_FAILURE)
+    }
+  }
+  if (taken) {
+    discard(temporary)
+    stop('transport_failure', `plan-act refuses to replace an existing document at ${output} — the round names fresh paths`, TRANSPORT_FAILURE)
+  }
+  try {
+    renameSync(temporary, resolve(output))
+  } catch (error) {
+    discard(temporary)
+    stop('transport_failure', `plan-act could not publish the plan: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  process.stdout.write(`${createHash('sha256').update(bytes).digest('hex')}\n`)
+  process.exit(ACCEPT)
+}
+
 function invoke(repo, kilnDir, request, packet, outputFile, allowedFindingIds) {
   // The reviewer never executes: the kernel side runs the law checks and writes the check receipt under
   // kilnDir before every gate call. The receipt rides the packet verbatim; a missing receipt is a broken
@@ -737,7 +957,8 @@ function invokeAudit(repo, kilnDir, request, packet, outputFile, allowedFindingI
 }
 
 
-module.exports = { SCREEN_LOCATION, auditFacts, auditRequest, auditShapeInvalid, buildGateFacts,
+module.exports = { PLAN_INSTRUCTIONS, RATIFY_RUBRIC, SCREEN_LOCATION, auditFacts, auditRequest, auditShapeInvalid, buildGateFacts,
+  planAct, planRequestFrom,
   currentGeneration, hintsFrom, invoke, invokeAudit, ratifyInstructions, ratifyRequestFrom, runGate,
   screenEvidence, screenInstructions, screenLawFacts, screenPacket, screenShapeInvalid, shippedRubric,
   validateShape }

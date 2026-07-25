@@ -162,6 +162,19 @@ function readLockRecord(lockPath) {
   }
 }
 
+// run_id provenance: the CLI reads the CLI-owned run.lock ITSELF and trusts run_id ONLY from a
+// record in the W2-S1 shape (run_id + owner in the LOCK_TOKEN grammar, a positive-integer
+// conductor_pid). An absent, unreadable, or non-conforming lock records run_id honestly as null
+// (a legacy launch), never a model-authorable string dressed as authoritative identity.
+function runIdFromLock(kilnDir) {
+  const lock = readLockRecord(join(kilnDir, LOCK_FILE)).record
+  const conforms = isObject(lock)
+    && typeof lock.run_id === 'string' && LOCK_TOKEN.test(lock.run_id)
+    && typeof lock.owner === 'string' && LOCK_TOKEN.test(lock.owner)
+    && Number.isInteger(lock.conductor_pid) && lock.conductor_pid > 0
+  return conforms ? lock.run_id : null
+}
+
 // The never-delete guarantee: append the full record plus the lock event and an archive
 // timestamp to run-history.jsonl BEFORE the live lock is replaced or removed. A lock is never
 // a bare unlink that loses the record.
@@ -348,4 +361,5 @@ function archiveAndDrop(kilnDir, claimPath, record, event) {
 
 module.exports = { LOCK_CHOICES, LOCK_DENIED, LOCK_FILE, LOCK_TOKEN, STATE_POINTER, STATE_SLICE_ID,
   STATE_STAGES, STATE_TOKENS, archiveAndDrop, claimLock, lockPresence, pluginVersion, readLockRecord,
+  runIdFromLock,
   reconcileStateDoc, refuseWithoutCodex, renderStateDoc, restoreOrArchive, stateNextAction, takeoverStale }

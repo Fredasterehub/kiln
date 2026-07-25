@@ -85,6 +85,9 @@ const TIERS_OK = {
     // Wave 3: raised medium -> high — every role now sits on the HIGH-effort floor.
     'haiku-migration': { family: 'claude', alias: 'sonnet', effort: 'high' },
     'dev-sol': { family: 'gpt', alias: 'gpt-sol', effort: 'high' },
+    'plan-author': { family: 'gpt', alias: 'gpt-sol', effort: 'high' },
+    'vision-check': { family: 'gpt', alias: 'gpt-sol', effort: 'medium' },
+    'master-check': { family: 'claude', alias: 'sonnet', effort: 'high' },
   },
 }
 async function runKernel(kargs, script) {
@@ -3439,8 +3442,8 @@ test('runtime (Wave 3): the LAW input gate is law-only — validate and report n
   }
 })
 
-test('tiers (Wave 3): validateTiers enforces the HIGH-effort floor — a sub-HIGH role fails, the all-HIGH config passes', () => {
-  assert.equal(validateTiers(cfg()), true, 'the sealed all-HIGH config passes (haiku-migration raised to high)')
+test('tiers (Wave 3 + W3): validateTiers enforces the HIGH-effort floor — a sub-HIGH role fails, and the shipped config passes with its one named medium exception', () => {
+  assert.equal(validateTiers(cfg()), true, 'the shipped config passes — every seat at HIGH or above except the one allowlisted medium')
   for (const role of ['haiku-migration', 'kernel-leg', 'driver']) {
     for (const sub of ['low', 'medium']) {
       const c = cfg(); c.roles[role].effort = sub
@@ -3449,8 +3452,22 @@ test('tiers (Wave 3): validateTiers enforces the HIGH-effort floor — a sub-HIG
   }
   const x = cfg(); x.roles['driver'].effort = 'xhigh'
   assert.equal(validateTiers(x), true, 'xhigh is on the floor — permitted')
-  assert.ok(Object.values(cfg().roles).every(r => r.effort === 'high' || r.effort === 'xhigh'),
-    'the shipped tier data is now all HIGH/XHIGH')
+  // W3: the shipped data is all HIGH/XHIGH except the ONE ruled exception. Pinned as an EXACT SET
+  // rather than a blanket — a second sub-HIGH seat appearing here is the effort-down drift the floor
+  // exists to stop, and it reddens on this line instead of passing as "some role is medium".
+  const subHigh = Object.entries(cfg().roles).filter(([, r]) => r.effort !== 'high' && r.effort !== 'xhigh')
+  assert.deepEqual(subHigh.map(([k, r]) => k + ':' + r.effort), ['vision-check:medium'],
+    'exactly one shipped seat runs below the HIGH floor — vision-check at medium, the INTAKE-36 exception')
+  // The exception is ROLE-KEYED and additive: feed the input it excludes — the same effort on any
+  // other seat — and it must fail closed, or it is a global drop wearing an allowlist.
+  const medOk = cfg(); medOk.roles['vision-check'].effort = 'medium'
+  assert.equal(validateTiers(medOk), true, 'vision-check at medium passes — the one additive per-role exception')
+  for (const role of ['master-check', 'plan-author', 'ratify-reviewer']) {
+    const medBad = cfg(); medBad.roles[role].effort = 'medium'
+    assert.equal(validateTiers(medBad), false, role + ' at medium still fails closed — the exception widens no seat but the one it names')
+  }
+  const lowVision = cfg(); lowVision.roles['vision-check'].effort = 'low'
+  assert.equal(validateTiers(lowVision), false, 'the exception lists medium only — vision-check at low is still refused')
   // The floor binds route targets too, not just the manual TIER_ROLES list: an
   // ADDITIONAL claude role at a sub-HIGH tier, reached through a surface route, is
   // the same effort-down bypass and must fail closed (else routeBuilder emits a
@@ -5335,5 +5352,44 @@ test('runtime (W2-S7a, B-D2-PIN c): a codex-reviewed slice whose sidecar read is
     })
     assert.equal(ret.status, 'transport-failure', 'a missing or malformed codex reviewer sidecar HOLDs')
     assert.equal(calls.filter(c => c.label === 'seal:append').length, 0, 'no seal append before the codex reviewer identity is recovered — never a silent - fallback')
+  }
+})
+
+test('tiers (W3, B4 census): every tier() resolution is a SOURCE LITERAL in TIER_ROLES — the count closes the answer space the pattern samples', () => {
+  // The B4 ruling PARKED the unknown-key refusal on the ground that an unconsumed role key is INERT:
+  // nothing selects a seat from data, so a key no source literal names can reach no seat. Three
+  // comments now SAY that (tiers.json doctrine, the validateTiers header, the doctor mirror), so the
+  // census that grounds them becomes arithmetic here instead of a claim someone has to re-run by eye.
+  // It independently closes the adjacent REAL hazard the ratify-reviewer note names — a future
+  // consumer literal landing WITHOUT TIER_ROLES membership is a mid-run throw instead of a boot halt.
+  const read = (f) => readFileSync(fileURLToPath(new URL('../workflows/' + f, import.meta.url)), 'utf8')
+  const kernelSrc = read('kernel.js')
+  // The role set is DERIVED from the source, never hand-listed here — a hand list would go stale on
+  // the next seat and this test would keep passing while saying something false.
+  const rolesBlock = kernelSrc.match(/const TIER_ROLES = \[([^\]]*)\]/)
+  assert.ok(rolesBlock, 'TIER_ROLES is liftable from kernel.js')
+  const roles = [...rolesBlock[1].matchAll(/'([^']+)'/g)].map((m) => m[1])
+  assert.ok(roles.length >= 12 && roles.includes('kernel-leg'), 'the derived role set is real — ' + roles.length + ' roles')
+
+  for (const [file, raw] of [['kernel.js', kernelSrc], ['research-sweep.js', read('research-sweep.js')]]) {
+    // The census ranges over CODE, so full-line comments come out first. This is not fastidiousness:
+    // the comment written to document this very pin mentions the call by name, and the first draft of
+    // this test counted its own documentation as a 17th call. A source-text pin whose prose can break
+    // it is a pin that punishes explanation.
+    const src = raw.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+    const calls = [...src.matchAll(/\btier\(([^)]*)\)/g)].map((m) => m[1].trim())
+    assert.ok(calls.length > 0, file + ': tier() calls were actually lifted — the count below has a subject')
+    const accounted = calls.filter((arg) => {
+      const literal = arg.match(/^'([^']+)'$/)
+      if (literal) return roles.includes(literal[1])
+      // The ONE known data-shaped call is a two-literal conditional; both arms must still be members,
+      // so it selects from source text and never from a runtime value.
+      const ternary = arg.match(/^stage === 'law' \? '([^']+)' : '([^']+)'$/)
+      return Boolean(ternary) && roles.includes(ternary[1]) && roles.includes(ternary[2])
+    })
+    // The COUNT is the pin: a future tier(someVariable) would not match either shape, and the
+    // arithmetic reddens rather than the call slipping past a pattern that only samples.
+    assert.equal(accounted.length, calls.length,
+      file + ': every tier() resolution is a source literal in TIER_ROLES (or the one two-literal conditional) — ' + calls.length + ' calls, all accounted')
   }
 })

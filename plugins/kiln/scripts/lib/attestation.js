@@ -10,11 +10,11 @@ const { spawnSync } = require('node:child_process')
 const { TRIO_MEMBERS, sealedAuthority, verifyMember } = require('./authority.js')
 const { LAW_HASH, TRANSPORT_FAILURE, bytePathCompare, canonicalBytes, canonicalDigest, canonicalString,
   isObject, repository, stop } = require('./core.js')
-const { LOCK_FILE, LOCK_TOKEN, STATE_SLICE_ID, readLockRecord } = require('./run.js')
+const { STATE_SLICE_ID, runIdFromLock } = require('./run.js')
 
 // ── W2-S5 (C3a / B05 / ruling 3): the immutable verdict archive ─────────────
-// Every review family — build review, LAW ratify, feasibility ratify, milestone audit, and
-// perceptual screen — publishes its verdict by renaming a candidate over the mutable gate file,
+// Every review family — the set REVIEW_FAMILIES names, which W3 widened to seven with the two plan
+// checks — publishes its verdict by renaming a candidate over the mutable gate file,
 // a content-free overwrite that destroys the prior verdict. This ledger is the archive that
 // overwrite never touches: every newly validated verdict is appended here BEFORE the rename, so
 // the full reject/changes_required/blocked history of a repair→recheck→accept lineage survives
@@ -25,20 +25,8 @@ const REVIEWS_FILE = 'reviews.jsonl'
 // the seal's dual/single cohort (a per-seal fact unavailable at per-verdict publish time). The
 // build gate and LAW ratify share one gate FILE, so the family is what tells their verdicts apart
 // in the archive; feasibility keeps its own family though it reuses the ratify verb.
-const REVIEW_FAMILIES = new Set(['review', 'ratify', 'feasibility', 'audit', 'screen'])
-
-// run_id provenance: the CLI reads the CLI-owned run.lock ITSELF and trusts run_id ONLY from a
-// record in the W2-S1 shape (run_id + owner in the LOCK_TOKEN grammar, a positive-integer
-// conductor_pid). An absent, unreadable, or non-conforming lock records run_id honestly as null
-// (a legacy launch), never a model-authorable string dressed as authoritative identity.
-function runIdFromLock(kilnDir) {
-  const lock = readLockRecord(join(kilnDir, LOCK_FILE)).record
-  const conforms = isObject(lock)
-    && typeof lock.run_id === 'string' && LOCK_TOKEN.test(lock.run_id)
-    && typeof lock.owner === 'string' && LOCK_TOKEN.test(lock.owner)
-    && Number.isInteger(lock.conductor_pid) && lock.conductor_pid > 0
-  return conforms ? lock.run_id : null
-}
+const ARTIFACT_RATIFY_PURPOSES = ['ratify', 'feasibility', 'vision', 'master']
+const REVIEW_FAMILIES = new Set(['review', 'ratify', 'feasibility', 'audit', 'screen', 'vision', 'master'])
 
 // W2-S7a (B08 hash-block prerequisite / Sol ruling): the durable receipt digest, captured AT
 // publication. The gate judged .kiln/check-receipt.txt, which is MUTABLE — a later slice reruns the
@@ -796,7 +784,22 @@ const BUILDER_LEG_ROLES = new Set(['builder', 'repair', 'audit-repair'])
 const REVIEWER_LEG_ROLES = new Set(['gate-reviewer', 'auditor', 'ratifier', 'screen-grader'])
 // The codex reviewer role by review family — a codex-identity row always carries a closed
 // reviewer-class role, matching the intent side so S7b reads one vocabulary.
-const CODEX_ROLE = { review: 'gate-reviewer', audit: 'auditor', ratify: 'ratifier', feasibility: 'ratifier', screen: 'screen-grader' }
+const CODEX_ROLE = { review: 'gate-reviewer', audit: 'auditor', ratify: 'ratifier', feasibility: 'ratifier', screen: 'screen-grader', vision: 'ratifier', master: 'ratifier' }
+// W3 (Sol r1 B1, seat-ruled WIDENING): the moment a publish family's leg must have been minted for.
+// This map is COMPLETE for the class it exists to close: it binds EXACTLY the families whose role
+// word cannot tell them apart — the four sharing ratifier in CODEX_ROLE below (:787), which is the
+// one place the role check a few lines above cannot discriminate. review, audit and screen are
+// absent for a reason, not by omission: their role words are UNIQUE, so the role check already
+// refuses every cross-family leg, and their subjects are DATA (slice ids) rather than constants, so
+// there is no constant to bind them to. The words here are exactly the constant subjects the claude
+// arms mint (kernel.js law-ratify, research-sweep feasibility) plus the two W3 words. A leg minted
+// for one moment can no longer publish another, so reviews.jsonl cannot be made to attribute a
+// verdict to a reviewer that never served that moment. The codex arms never cross this verb —
+// runGate mints and publishes in ONE process, so there is no argv leg id to swap; this verb's argv
+// is the swap surface, which is why the binding sits here. HONEST RESIDUAL, named rather than
+// implied: same-family same-subject substitution — a replayed codex ratify leg into a ratify
+// publish — is outside what subject binding closes.
+const FAMILY_SUBJECT = { ratify: 'law-ratify', feasibility: 'feasibility', vision: 'vision', master: 'master' }
 
 // W2-S7a (B-LEDGER-SCHEMA): the semantic schema of one PARSEABLE identity row of a known type.
 // Returns a reason string when the row CLAIMS a known type but is malformed — a schema anomaly the
@@ -894,10 +897,10 @@ function identityIndex(kilnDir) {
     if (invalid) stop('transport_failure', `the identity ledger carries a schema anomaly: ${invalid} — the reduction holds rather than resolve or drop it`, TRANSPORT_FAILURE)
     if (!isObject(row) || typeof row.leg_id !== 'string') continue
     if (row.type === 'intent') {
-      if (!legs.has(row.leg_id)) legs.set(row.leg_id, { role: row.role, run_id: row.run_id ?? null, kind: 'intent' })
+      if (!legs.has(row.leg_id)) legs.set(row.leg_id, { role: row.role, run_id: row.run_id ?? null, kind: 'intent', subject: typeof row.subject === 'string' ? row.subject : null })
       intents.push({ leg_id: row.leg_id, expected_label: row.expected_label, run_id: row.run_id ?? null, role: row.role })
     } else if (row.type === 'codex-identity') {
-      legs.set(row.leg_id, { role: row.role, run_id: row.run_id ?? null, kind: 'codex' })
+      legs.set(row.leg_id, { role: row.role, run_id: row.run_id ?? null, kind: 'codex', subject: typeof row.subject === 'string' ? row.subject : null })
       resolvedIds.add(row.leg_id)
     } else if (row.type === 'resolved') {
       resolvedIds.add(row.leg_id)
@@ -1602,8 +1605,12 @@ function composeContract(kind, operation, facts) {
     // W2-S7a (F4): purpose is a CLOSED set — the ratify family word, never an arbitrary review family.
     // Enforced HERE so both transports (the codex ratify verbs and contract-prepare) reject uniformly;
     // a caller copying a review family like screen into purpose is a caller bug, never a silent accept.
-    if (facts.purpose !== 'ratify' && facts.purpose !== 'feasibility') {
-      throw new Error(`artifact-ratify purpose must be ratify or feasibility, not ${facts.purpose}`)
+    // W3: the two plan-check moments join it — vision rides the ratify verb, master rides
+    // contract-prepare through the shared claude closure. This list and gate.js RATIFY_RUBRIC are the
+    // SAME family set reached by two layers (attestation cannot import gate, the ruled direction), so
+    // their agreement is count-pinned in kiln-review.test.mjs rather than trusted to two hands.
+    if (!ARTIFACT_RATIFY_PURPOSES.includes(facts.purpose)) {
+      throw new Error(`artifact-ratify purpose must be ${ARTIFACT_RATIFY_PURPOSES.join(' or ')}, not ${facts.purpose}`)
     }
     payload = {
       contract_version: CONTRACT_VERSION,
@@ -1892,11 +1899,11 @@ function verifyContractStore(kilnDir, sha) {
 }
 
 
-module.exports = { AUDIT_KINDS, AUDIT_LEDGER, BUILDER_LEG_ROLES, CODEX_ROLE, CONTRACT_DIR, IDENTITY_ROLES,
+module.exports = { ARTIFACT_RATIFY_PURPOSES, AUDIT_KINDS, AUDIT_LEDGER, BUILDER_LEG_ROLES, CODEX_ROLE, CONTRACT_DIR, FAMILY_SUBJECT, IDENTITY_ROLES,
   LEG_ID, MANIFEST_DIR, SEAL_KINDS, SEAL_LEDGER, allProjectTranscripts, appendIdentityRow, appendLedgerRow,
   bindAttestedIdentity, composeContract, coverageStillCurrent, crossCheckModel, discoverDriverTranscript,
   identityIndex, liveTrioDigests, manifestGenerationStarted, manifestPathPresent, manifestPrepare,
   manifestRecompute, manifestResult, manifestStart, milestoneAuditFacts, prepareContract, publishVerdict,
   readLedgerRows, receiptDigestAtPublication, reconcileLedger, reconcileLedgers, reduceLedger,
-  reviewedAuditAttestation, reviewedSealAttestation, runIdFromLock, scanTranscriptForLabel,
+  reviewedAuditAttestation, reviewedSealAttestation, scanTranscriptForLabel,
   screenContractFacts, sliceReviewFacts, verdictlessAttestation, verifyContractStore, writeContractStore }

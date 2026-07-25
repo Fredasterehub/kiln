@@ -44,6 +44,9 @@ const TIERS_OK = {
     // Wave 3: the HIGH-effort floor — the kernel boot gate now rejects any sub-HIGH role.
     'haiku-migration': { family: 'claude', alias: 'sonnet', effort: 'high' },
     'dev-sol': { family: 'gpt', alias: 'gpt-sol', effort: 'high' },
+    'plan-author': { family: 'gpt', alias: 'gpt-sol', effort: 'high' },
+    'vision-check': { family: 'gpt', alias: 'gpt-sol', effort: 'medium' },
+    'master-check': { family: 'claude', alias: 'sonnet', effort: 'high' },
   },
 }
 const GREEN = { exit: 0, ids: [] }

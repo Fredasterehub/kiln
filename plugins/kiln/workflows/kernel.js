@@ -448,12 +448,23 @@ const PERCEPTUAL_TABLE_CHECK =
 // dispatching session model. routeBuilder maps a validated surface to its builder
 // role. No compiled model or effort value lives in the kernel — every value flows
 // from the file at run time.
-// Wave 3: TIER_EFFORTS is the permitted effort FLOOR — Kiln runs only at high or
-// xhigh, so the per-role membership check below rejects any role at a sub-HIGH tier
-// and structurally forbids an effort-down route (the same fail-closed class as a
-// missing role — a boot halt with the named fact, never a later throw).
+// Wave 3: TIER_EFFORTS is the permitted effort FLOOR — Kiln runs high or xhigh, so the per-role
+// membership check below rejects a sub-HIGH tier and structurally forbids an effort-down route (the
+// same fail-closed class as a missing role — a boot halt with the named fact, never a later throw).
+// W3: one role-keyed exception now sits beside the floor (TIER_EFFORT_EXCEPTIONS below), so the
+// claim is exact: every role is refused below HIGH EXCEPT where an additive allowlist names it.
+// SCOPED (B4): the rejection binds the roles the kernel CONSUMES — TIER_ROLES and every
+// surface_routing target; a key outside that set has no consumer and is not validated. The ground is
+// a census, count-pinned in kernel.test.mjs: every tier() resolution is a SOURCE LITERAL, and the
+// only data-driven selection is surface_routing, whose targets the route-target gate below already
+// effort-validates. An unconsumed key is inert — it can reach no seat.
 const TIER_EFFORTS = ['high', 'xhigh']
-const TIER_ROLES = ['driver', 'kernel-leg', 'stage-card', 'stage-law', 'builder-ui', 'builder-logic', 'reviewer-gate', 'fallback-reviewer', 'ratify-reviewer', 'brainstorm-facilitator', 'haiku-migration', 'dev-sol']
+const TIER_ROLES = ['driver', 'kernel-leg', 'stage-card', 'stage-law', 'builder-ui', 'builder-logic', 'reviewer-gate', 'fallback-reviewer', 'ratify-reviewer', 'brainstorm-facilitator', 'haiku-migration', 'dev-sol', 'plan-author', 'vision-check', 'master-check']
+// W3 (ruling §8): the ONE role-keyed effort exception, ADDITIVE beside the floor and never a global
+// drop — vision-check may run medium (the operator locked word, INTAKE-36) or high/xhigh, and every
+// other role keeps the bare HIGH floor. A per-role allowlist cannot widen any seat but the one it
+// names, which is what keeps this from becoming the effort-down bypass TIER_EFFORTS exists to forbid.
+const TIER_EFFORT_EXCEPTIONS = { 'vision-check': ['medium'] }
 const TIER_ROUTES = ['ui', 'logic', 'mixed']
 function validateTiers(c) {
   if (!c || typeof c !== 'object') return false
@@ -470,7 +481,7 @@ function validateTiers(c) {
     if (!r || typeof r !== 'object') return false
     if (r.family !== 'claude' && r.family !== 'gpt') return false
     if (typeof r.alias !== 'string' || r.alias.length === 0) return false
-    if (!TIER_EFFORTS.includes(r.effort)) return false
+    if (!TIER_EFFORTS.includes(r.effort) && !(TIER_EFFORT_EXCEPTIONS[key] || []).includes(r.effort)) return false
     if (r.family === 'gpt' && (r.alias === 'inherit' || !Object.prototype.hasOwnProperty.call(c.resolver, r.alias))) return false
   }
   // all three surface routes must be present, point at a defined role, and that

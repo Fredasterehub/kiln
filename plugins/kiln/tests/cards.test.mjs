@@ -367,9 +367,9 @@ test('report card (W8-S4/I): the held-run variant — marker-selected, the hones
     'no marker, no variant — the sealed composition stands untouched')
 })
 
-test('tiers (W8-S1/J): the remits gain the screening-room duties — models, efforts, and the twelve roles unchanged', () => {
+test('tiers (W8-S1/J): the remits gain their duties by note — models and efforts unchanged, and the role COUNT is asserted below', () => {
   const tiers = JSON.parse(readFileSync(join(DATA, 'tiers.json'), 'utf8'))
-  assert.equal(Object.keys(tiers.roles).length, 12, 'TIER_ROLES stays twelve — the screening room adds duties, never a seat')
+  assert.equal(Object.keys(tiers.roles).length, 15, 'TIER_ROLES reads fifteen — W3 seats three genuinely new duties (authorship, the two checks); the merge remits are note-widened, never seats')
   const gate = tiers.roles['reviewer-gate']
   assert.equal(gate.family, 'gpt'); assert.equal(gate.alias, 'gpt-sol'); assert.equal(gate.effort, 'high')
   assert.match(gate.note, /at the BUILD gate/, 'the taste exclusion is rescoped to the build-gate context')

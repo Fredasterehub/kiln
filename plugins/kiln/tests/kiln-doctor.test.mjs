@@ -108,12 +108,12 @@ test('doctor: each of the three data files is parsed as JSON by name', () => {
   assert.ok(text.includes('JSON.parse'), 'a real parse, not a stat')
 })
 
-test('doctor: the tiers shape check mirrors the kernel boot gate — same twelve roles, same efforts, same surface routes', () => {
+test('doctor: the tiers shape check mirrors the kernel boot gate — the same role list, efforts and surface routes, whatever their count', () => {
   const text = doctor()
   const kernel = readFileSync(at('../workflows/kernel.js'), 'utf8')
   const list = (name) => JSON.parse('[' + kernel.match(new RegExp('const ' + name + ' = \\[([^\\]]+)\\]'))[1].replace(/'/g, '"') + ']')
   const roles = list('TIER_ROLES')
-  assert.equal(roles.length, 12, 'the kernel gate carries twelve roles (ratify-reviewer joined — the Wave 1 law-stage ratify gate consumes it, so boot must demand it)')
+  assert.equal(roles.length, 15, 'the kernel gate carries fifteen roles (W3 seats the organ: plan-author, vision-check, master-check — all kernel-consumed, so boot must demand them)')
   for (const role of roles) assert.ok(text.includes('"' + role + '"'), 'doctor mirrors role ' + role)
   for (const effort of list('TIER_EFFORTS')) assert.ok(text.includes('"' + effort + '"'), 'doctor mirrors effort ' + effort)
   const routes = list('TIER_ROUTES')
@@ -182,12 +182,22 @@ test('doctor: the inline tiers validator executes — fixture verdicts match the
     // simple-fire routed logic to a claude-family builder-logic seat, so the gpt-routed
     // defect shape is recreated by flipping the routed seat's family back to gpt.
     ['a surface route targeting a gpt-family role', mutate((t) => { t.roles['builder-logic'] = { family: 'gpt', alias: 'gpt-sol', effort: 'high' } }), 'invalid'],
-    // A route may name a role OUTSIDE the twelve — the per-role effort loop never reaches it, so
+    // A route may name a role OUTSIDE the fifteen — the per-role effort loop never reaches it, so
     // the route-target HIGH floor is the only guard against a sub-HIGH routed seat (W3-S1-DELTA-1).
-    ['a surface route targeting a sub-HIGH role outside the twelve', mutate((t) => { t.roles.extra = { family: 'claude', alias: 'sonnet', effort: 'medium' }; t.surface_routing.mixed = 'extra' }), 'invalid'],
+    ['a surface route targeting a sub-HIGH role outside the fifteen', mutate((t) => { t.roles.extra = { family: 'claude', alias: 'sonnet', effort: 'medium' }; t.surface_routing.mixed = 'extra' }), 'invalid'],
     ['a missing consumer role', mutate((t) => { delete t.roles['dev-sol'] }), 'invalid'],
     ['a missing fallback-reviewer role — the degraded gate consumer', mutate((t) => { delete t.roles['fallback-reviewer'] }), 'invalid'],
     ['roles replaced by null', mutate((t) => { t.roles = null }), 'invalid'],
+    // W3 (ruling §8): the ONE additive per-role effort exception, proven on both sides of the
+    // mirror. The pair is the point — medium is accepted at vision-check and refused everywhere
+    // else, which is what makes it an allowlist rather than a floor drop. The low fixture proves
+    // the exception is a LIST of permitted efforts, not a bypass of the check for that role.
+    ['vision-check at medium — the ruled exception', mutate((t) => { t.roles['vision-check'].effort = 'medium' }), 'valid'],
+    ['vision-check at high — the exception is additive, never a replacement', mutate((t) => { t.roles['vision-check'].effort = 'high' }), 'valid'],
+    ['vision-check at low — outside the exception list', mutate((t) => { t.roles['vision-check'].effort = 'low' }), 'invalid'],
+    ['master-check at medium — medium anywhere else fails closed', mutate((t) => { t.roles['master-check'].effort = 'medium' }), 'invalid'],
+    ['plan-author at medium — medium anywhere else fails closed', mutate((t) => { t.roles['plan-author'].effort = 'medium' }), 'invalid'],
+    ['a missing plan-author role — the plan-act consumer', mutate((t) => { delete t.roles['plan-author'] }), 'invalid'],
   ]
   for (const [name, fixture, expected] of fixtures) {
     assert.equal(kernelVerdict(fixture), expected, 'kernel verdict: ' + name)

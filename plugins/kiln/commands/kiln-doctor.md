@@ -96,8 +96,12 @@ let t
 try {
   t = ((x) => ({ doctrine: x.doctrine !== undefined, resolver: x.resolver, surface_routing: x.surface_routing, roles: Object.fromEntries(Object.keys(x.roles).map((k) => [k, { family: x.roles[k].family, alias: x.roles[k].alias, effort: x.roles[k].effort }])) }))(raw)
 } catch (e) { bad("a role entry the kernel boot projection cannot read") }
-const EFFORTS = ["high", "xhigh"] // Wave 3 HIGH floor: only high/xhigh pass, mirroring the kernel TIER_EFFORTS
-const ROLES = ["driver", "kernel-leg", "stage-card", "stage-law", "builder-ui", "builder-logic", "reviewer-gate", "fallback-reviewer", "ratify-reviewer", "brainstorm-facilitator", "haiku-migration", "dev-sol"]
+// Wave 3 HIGH floor: only high/xhigh pass, mirroring the kernel TIER_EFFORTS. SCOPED (B4), the same
+// sentence the kernel header carries: the rejection binds the roles the kernel CONSUMES — ROLES and
+// every surface_routing target; a key outside that set has no consumer and is not validated.
+const EFFORTS = ["high", "xhigh"]
+const ROLES = ["driver", "kernel-leg", "stage-card", "stage-law", "builder-ui", "builder-logic", "reviewer-gate", "fallback-reviewer", "ratify-reviewer", "brainstorm-facilitator", "haiku-migration", "dev-sol", "plan-author", "vision-check", "master-check"]
+const EFFORT_EXCEPTIONS = { "vision-check": ["medium"] } // W3: the ONE additive per-role exception, mirroring the kernel TIER_EFFORT_EXCEPTIONS
 const ROUTES = ["ui", "logic", "mixed"]
 if (t.doctrine !== true) bad("doctrine")
 if (!t.resolver || typeof t.resolver !== "object") bad("resolver")
@@ -111,7 +115,7 @@ for (const key of ROLES) {
   if (!r || typeof r !== "object") bad("roles." + key)
   if (r.family !== "claude" && r.family !== "gpt") bad("roles." + key + ".family")
   if (typeof r.alias !== "string" || r.alias.length === 0) bad("roles." + key + ".alias")
-  if (!EFFORTS.includes(r.effort)) bad("roles." + key + ".effort")
+  if (!EFFORTS.includes(r.effort) && !(EFFORT_EXCEPTIONS[key] || []).includes(r.effort)) bad("roles." + key + ".effort")
   if (r.family === "gpt" && (r.alias === "inherit" || !Object.prototype.hasOwnProperty.call(t.resolver, r.alias))) bad("roles." + key + ".gpt-alias")
 }
 for (const route of ROUTES) {

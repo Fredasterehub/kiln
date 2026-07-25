@@ -25,22 +25,23 @@ const { basename, dirname, join, resolve, sep } = require('node:path')
 const { homedir } = require('node:os')
 const { spawnSync } = require('node:child_process')
 
-const { AUDIT_KINDS, AUDIT_LEDGER, BUILDER_LEG_ROLES, CODEX_ROLE, CONTRACT_DIR, IDENTITY_ROLES, LEG_ID,
+const { AUDIT_KINDS, AUDIT_LEDGER, BUILDER_LEG_ROLES, CODEX_ROLE, CONTRACT_DIR, FAMILY_SUBJECT, IDENTITY_ROLES, LEG_ID,
   MANIFEST_DIR, SEAL_KINDS, SEAL_LEDGER, allProjectTranscripts, appendIdentityRow, appendLedgerRow,
   bindAttestedIdentity, composeContract, coverageStillCurrent, crossCheckModel, discoverDriverTranscript,
   identityIndex, liveTrioDigests, manifestGenerationStarted, manifestPathPresent, manifestPrepare,
   manifestRecompute, manifestResult, manifestStart, milestoneAuditFacts, prepareContract, publishVerdict,
   readLedgerRows, receiptDigestAtPublication, reconcileLedger, reconcileLedgers, reduceLedger,
-  reviewedAuditAttestation, reviewedSealAttestation, runIdFromLock, scanTranscriptForLabel,
+  reviewedAuditAttestation, reviewedSealAttestation, scanTranscriptForLabel,
   screenContractFacts, sliceReviewFacts, verdictlessAttestation, verifyContractStore } = require('./lib/attestation.js')
 const { TRIO_MEMBERS, sealedAuthority, trioHashPath, trioMemberPath, verifyMember } = require('./lib/authority.js')
 const { ACCEPT, NO_MEMBER, TRANSPORT_FAILURE, TRIO_MISMATCH, containedPath, isObject, readJson, repository,
   stop } = require('./lib/core.js')
 const { SCREEN_LOCATION, auditFacts, auditRequest, auditShapeInvalid, buildGateFacts, currentGeneration,
-  hintsFrom, invoke, invokeAudit, ratifyInstructions, ratifyRequestFrom, runGate, screenEvidence,
+  hintsFrom, invoke, invokeAudit, planAct, planRequestFrom, ratifyInstructions, ratifyRequestFrom, runGate, screenEvidence,
   screenInstructions, screenLawFacts, screenPacket, screenShapeInvalid, shippedRubric, validateShape } = require('./lib/gate.js')
 const { LOCK_CHOICES, LOCK_DENIED, LOCK_FILE, LOCK_TOKEN, STATE_POINTER, STATE_SLICE_ID, STATE_STAGES,
   STATE_TOKENS, archiveAndDrop, claimLock, lockPresence, pluginVersion, readLockRecord, reconcileStateDoc,
+  runIdFromLock,
   refuseWithoutCodex, renderStateDoc, restoreOrArchive, stateNextAction, takeoverStale } = require('./lib/run.js')
 
 const [mode, ...args] = process.argv.slice(2)
@@ -562,6 +563,14 @@ if (mode === 'review' && args.length === 8) {
     if (gate.law_hash !== candidateDigest) return 'law_hash does not match the ratified artifact digest'
     return null
   }, family, undefined, packet.review_id, contract, kilnDir)
+} else if (mode === 'plan-act' && args.length === 4) {
+  // W3 (ruling §3): plan AUTHORSHIP, the organ's only new verb. It reuses the ONE codex spawn core
+  // runGate uses and nothing else of the gate — every skip is named with its reason at planAct in
+  // lib/gate.js, because authorship carries no verdict and must not archive as though it did.
+  // The output is a PLAIN FILE on the plans shelf: no ledger, no store, no registry.
+  const [repoPath, kilnDir, requestFile, outputFile] = args
+  const repo = repository(repoPath)
+  planAct(repo, kilnDir, planRequestFrom(requestFile), outputFile)
 } else if (mode === 'audit' && args.length === 7) {
   // W7-A1: the milestone-seam audit — one fresh goal-backward GPT reviewer over the
   // cumulative sealed prefix. argv carries closed facts only; every derived fact — the
@@ -1389,6 +1398,14 @@ if (mode === 'review' && args.length === 8) {
     const leg = idx.legs.get(reviewerLegId)
     if (!leg) stop('transport_failure', 'publish-gate reviewer_leg_id is unknown to the identity ledger', TRANSPORT_FAILURE)
     if (leg.role !== CODEX_ROLE[family]) stop('transport_failure', 'publish-gate reviewer_leg_id role does not match this publish family', TRANSPORT_FAILURE)
+    // W3 (Sol r1 B1, seat-ruled WIDENING): the role alone does NOT isolate families that share it.
+    // FAMILY_SUBJECT (attestation.js, beside CODEX_ROLE) binds the whole ratifier class — the four
+    // families the role word cannot tell apart — so a leg minted for one moment can never publish
+    // another. This closes the PRE-W3 hole the r1 probe exposed and this build executed at HEAD: a
+    // feasibility-subject leg published a ratify verdict at exit 0 before any W3 byte.
+    if (FAMILY_SUBJECT[family] !== undefined && leg.subject !== FAMILY_SUBJECT[family]) {
+      stop('transport_failure', 'publish-gate reviewer_leg_id was minted for another moment than this publish family', TRANSPORT_FAILURE)
+    }
     if (leg.run_id !== runIdFromLock(kilnDir)) stop('transport_failure', 'publish-gate reviewer_leg_id belongs to another run', TRANSPORT_FAILURE)
   }
   // W2-S7a (FORK 3): the review family recomputes its control-derived manifest before the archive and
@@ -1749,7 +1766,7 @@ if (mode === 'review' && args.length === 8) {
 } else {
   stop(
     'transport_failure',
-    'usage: kiln-review review <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <gate-review.json> | kiln-review recheck <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review gate-facts <kilnDir> <slice> <request.json> <gate-facts.json> | kiln-review append-seal <kilnDir> <slice> <label> [<builder_leg_ids_csv> <reviewer_leg_id|-> [<repo> [<attestation_kind>]]] | kiln-review invalidate <kilnDir> <slice_ids_csv> | kiln-review seal-law <kilnDir> <label> | kiln-review run-checks <kilnDir> | kiln-review slices <kilnDir> | kiln-review screen-criteria <kilnDir> | kiln-review perceptual-family <kilnDir> | kiln-review ratify <repo> <kilnDir> <request.json> <gate-review.json> <family> | kiln-review ratify-recheck <repo> <kilnDir> <request.json> <prior-gate-review.json> <gate-review.json> <family> | kiln-review publish-gate <kilnDir> <family> <candidate.json> <gate-review.json> [<reviewer_leg_id> [<repo> <slice>] [<contract_sha256>]] | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> <label> [<auditor_leg_id|-> [<repair_leg_ids_csv> [<attestation_kind>]]] | kiln-review reconcile <kilnDir> | kiln-review audit-member <kilnDir> <seamSliceId> | kiln-review manifest-start <repo> <kilnDir> <slice> | kiln-review manifest-prepare <repo> <kilnDir> <slice> | kiln-review contract-prepare <repo> <kilnDir> <kind> <operation> [<kind-args>...] | kiln-review identity-begin <kilnDir> <role> <requested_alias> <subject> | kiln-review capture-and-finalize <kilnDir> [<transcriptPath>] | kiln-review screen <repo> <kilnDir> <model> <alias> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <alias> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <alias> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...] | kiln-review run-lock acquire <kilnDir> <choice> <conductorPid> | kiln-review run-lock join <kilnDir> <run_id> <owner> | kiln-review run-lock release <kilnDir> <run_id> <owner> | kiln-review run-lock takeover <kilnDir> <choice> <conductorPid>',
+    'usage: kiln-review review <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <gate-review.json> | kiln-review recheck <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review gate-facts <kilnDir> <slice> <request.json> <gate-facts.json> | kiln-review append-seal <kilnDir> <slice> <label> [<builder_leg_ids_csv> <reviewer_leg_id|-> [<repo> [<attestation_kind>]]] | kiln-review invalidate <kilnDir> <slice_ids_csv> | kiln-review seal-law <kilnDir> <label> | kiln-review run-checks <kilnDir> | kiln-review slices <kilnDir> | kiln-review screen-criteria <kilnDir> | kiln-review perceptual-family <kilnDir> | kiln-review ratify <repo> <kilnDir> <request.json> <gate-review.json> <family> | kiln-review ratify-recheck <repo> <kilnDir> <request.json> <prior-gate-review.json> <gate-review.json> <family> | kiln-review plan-act <repo> <kilnDir> <request.json> <output> | kiln-review publish-gate <kilnDir> <family> <candidate.json> <gate-review.json> [<reviewer_leg_id> [<repo> <slice>] [<contract_sha256>]] | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> <label> [<auditor_leg_id|-> [<repair_leg_ids_csv> [<attestation_kind>]]] | kiln-review reconcile <kilnDir> | kiln-review audit-member <kilnDir> <seamSliceId> | kiln-review manifest-start <repo> <kilnDir> <slice> | kiln-review manifest-prepare <repo> <kilnDir> <slice> | kiln-review contract-prepare <repo> <kilnDir> <kind> <operation> [<kind-args>...] | kiln-review identity-begin <kilnDir> <role> <requested_alias> <subject> | kiln-review capture-and-finalize <kilnDir> [<transcriptPath>] | kiln-review screen <repo> <kilnDir> <model> <alias> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <alias> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <alias> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...] | kiln-review run-lock acquire <kilnDir> <choice> <conductorPid> | kiln-review run-lock join <kilnDir> <run_id> <owner> | kiln-review run-lock release <kilnDir> <run_id> <owner> | kiln-review run-lock takeover <kilnDir> <choice> <conductorPid>',
     TRANSPORT_FAILURE,
   )
 }

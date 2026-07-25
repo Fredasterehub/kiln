@@ -1,0 +1,35 @@
+{
+  "rubric": "plan-omission",
+  "criteria": [
+    {
+      "id": "elements-carried",
+      "requirement": "Every element present in the source plans and their convergence and divergence records appears in the merged document, or is explicitly recorded there as a ruled exclusion.",
+      "pass": "Each element of each source plan is either carried into the merge or named in it as deliberately excluded with its reason.",
+      "fail": "An element stated in a source plan is absent from the merged document and is nowhere recorded as an exclusion."
+    },
+    {
+      "id": "divergences-ruled",
+      "requirement": "Every divergence named in the records is ruled in the merged document — one way or the other, explicitly.",
+      "pass": "For each recorded divergence the merge states the call it took.",
+      "fail": "A recorded divergence is left unresolved, or is silently dropped without a call."
+    },
+    {
+      "id": "agreements-intact",
+      "requirement": "Everything the source plans already agreed on is carried through unchanged in substance.",
+      "pass": "Shared content survives the merge with its meaning intact.",
+      "fail": "An agreed element is narrowed, weakened, or dropped by the merge."
+    },
+    {
+      "id": "no-invention",
+      "requirement": "The merged document introduces no element that appears in no source plan and answers no recorded divergence.",
+      "pass": "Every element traces to a source plan or to a ruled divergence.",
+      "fail": "The merge adds material with no source, making it a new plan rather than a merge."
+    },
+    {
+      "id": "omission-only",
+      "requirement": "This review judges COMPLETENESS ONLY. The merits of any decision the plans already settled are out of scope.",
+      "pass": "Every finding names a missing, unruled, or invented element.",
+      "fail": "A finding argues that a settled decision is wrong, re-litigating substance instead of reporting an omission."
+    }
+  ]
+}
