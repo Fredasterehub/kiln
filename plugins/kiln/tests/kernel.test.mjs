@@ -4856,7 +4856,7 @@ test('runtime (W8-S3): the law-red doors — a validate reopen at preflight or s
 })
 
 test('drift (W8-S3): the kernel screen location rule mirrors the CLI SCREEN_LOCATION pattern', () => {
-  const cli = readFileSync(fileURLToPath(new URL('../scripts/kiln-review', import.meta.url)), 'utf8')
+  const cli = readFileSync(fileURLToPath(new URL('../scripts/lib/gate.js', import.meta.url)), 'utf8')
   const cliPattern = /const SCREEN_LOCATION = \{ pattern: (\/[^,]+\/),/.exec(cli)[1]
   const kernelPattern = /const SCREEN_LOCATION_RULE = (\/[^\n]+\/)\n/.exec(src)[1]
   assert.equal(kernelPattern, cliPattern, 'the Claude path relaxes location byte-symmetrically with the screen family')

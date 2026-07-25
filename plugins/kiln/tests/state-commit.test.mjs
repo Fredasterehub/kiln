@@ -280,7 +280,11 @@ test('state-commit: run_id is trusted only from a CLI-minted run.lock, null othe
 // is pinned here by evaluating the helper source directly against a mock fs (the repo drift-pin
 // extraction idiom, as the W2-S1 lock pins do). The fs ops ride in as PARAMETERS so the write and
 // rename are observable; the shipped CLI stays byte-clean of any test seam.
-const cliSrc = readFileSync(CLI, 'utf8')
+// Since the layer split the CLI is six files, and this file extracts from two of them — the state
+// helpers from their module and the dispatch block from the entry — so the corpus is the whole CLI.
+const cliSrc = [CLI, ...['core', 'authority', 'run', 'attestation', 'gate']
+  .map((m) => fileURLToPath(new URL(`../scripts/lib/${m}.js`, import.meta.url)))]
+  .map((f) => readFileSync(f, 'utf8')).join('\n')
 const fnText = (name) => {
   const start = cliSrc.indexOf(`function ${name}(`)
   assert.notEqual(start, -1, `${name} still exists as a named helper in kiln-review`)

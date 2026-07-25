@@ -54,7 +54,12 @@ function sealReviewRepo(sliceId = 's1') {
 // evaluates RESEARCH_CORE and the kernel core tests evaluate marked source). The fs operations ride
 // in as PARAMETERS so a test can make linkSync or appendFileSync fail on demand; the shipped CLI
 // stays byte-clean of any test seam. archiveLockRecord is pulled in because restoreOrArchive calls it.
-const reviewSrc = readFileSync(REVIEW, 'utf8')
+// The CLI is six files since the layer split, so the extraction corpus is the entry plus every module.
+// A pin that names a helper or counts its call sites ranges over the WHOLE CLI, not over whichever
+// module the helper lives in today — otherwise moving a helper would silently narrow the pin.
+const CLI_MODULES = ['core', 'authority', 'run', 'attestation', 'gate']
+  .map((m) => fileURLToPath(new URL(`../scripts/lib/${m}.js`, import.meta.url)))
+const reviewSrc = [REVIEW, ...CLI_MODULES].map((f) => readFileSync(f, 'utf8')).join('\n')
 const fnText = (name) => {
   const start = reviewSrc.indexOf(`function ${name}(`)
   assert.notEqual(start, -1, `${name} still exists as a named helper in kiln-review`)
@@ -120,7 +125,7 @@ test('kiln-review: the review verb takes effort from argv — a valid supplied e
 })
 
 test('kiln-review: the reviewer never executes — the instructions attach the kernel-side receipt instead', () => {
-  const src = readFileSync(REVIEW, 'utf8')
+  const src = reviewSrc
   assert.ok(src.includes('Execute nothing'), 'the instructions forbid execution outright')
   assert.ok(src.includes('check_receipt as the only execution evidence'), 'the receipt is the only execution evidence')
   assert.ok(!src.includes('Run the supplied commands'), 'the old execute-the-commands instruction is gone')
@@ -381,7 +386,7 @@ test('kiln-review: the ui reviewer rules on correctness only — creative direct
   // taste (v3 duo-pool ui pool — la-peintresse builds, the-curator reviews static
   // correctness); GPT rules on correctness against the locked criteria and has no
   // say in aesthetics.
-  const src = readFileSync(REVIEW, 'utf8')
+  const src = reviewSrc
   assert.ok(src.includes('Creative direction, visual taste, and aesthetic choices belong to the builder'),
     'the carve-out names creative direction, visual taste, and aesthetic choices as the builder\'s')
   assert.ok(src.includes('never raise them as a finding and never let them color a verdict'),
@@ -1518,7 +1523,7 @@ test('kiln-review: ratify and screen keep their no-repo discipline byte-identica
   // source digest did — text exclusive to another mode (screen-escalate's bounded-escalation
   // paragraph) would sit outside the pin entirely. So EVERY mode each builder can render is digested,
   // and the union is at least what the source digest covered.
-  const src = readFileSync(REVIEW, 'utf8')
+  const src = reviewSrc
   const grab = (fn) => {
     const i = src.indexOf(`function ${fn}(`)
     assert.notEqual(i, -1, `${fn} still exists as a named builder`)
