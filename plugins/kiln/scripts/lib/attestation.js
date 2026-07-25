@@ -358,10 +358,13 @@ function coverageInvalid(covered) {
     || !(t.manifest_sha256 === null || LAW_HASH.test(t.manifest_sha256)))
 }
 
-// The FIELD LAW of a modern candidate, enforced at the append AND again in the reduction — a row is
-// trusted through this ONE function, so a hand-written candidate can never buy the membership the
-// append verb would have refused. A legacy-shaped row (no attestation_kind) has no field law here;
-// the reduction rejects it only AFTER the modern-shape boundary.
+// The FIELD LAW of a modern candidate: the reduction validates row SHAPE; the APPEND alone enforces
+// EXISTENCE — the archived reviews.jsonl row (reviewedSealAttestation) and an identity leg carrying
+// the right role and run_id (the append-seal branch). Membership from reconcile therefore TRUSTS
+// append-time enforcement for verb-written rows: a hand-written row whose review_ref merely has the
+// shape of a reference reconciles to a membership this function never re-earns. A legacy-shaped row
+// (no attestation_kind) has no field law here; the reduction rejects it only AFTER the modern-shape
+// boundary.
 // The FIELDS item 8 forbids on a verdictless candidate: its whole point is that NO review stands
 // behind it, so a row claiming any part of one is a contradiction, whatever value it carries. The law
 // is literal ABSENCE, not an absent-looking value — a null reviewer leg is still a reviewer-leg claim.
@@ -881,8 +884,9 @@ function identityIndex(kilnDir) {
   const legs = new Map()
   const resolvedIds = new Set()
   // W2-S7b (item 7): promotion requires EXACTLY ONE complete resolved record per referenced pending
-  // leg, so the reduction counts them — two resolved rows for one leg are contradictory identity
-  // evidence, and membership is never conferred on a leg whose identity is ambiguous.
+  // CLAUDE leg, so the reduction counts them — two resolved rows for one such leg are contradictory
+  // identity evidence, and membership is never conferred on a leg whose identity is ambiguous. A
+  // codex leg is resolved by construction, and resolvedOnce returns before these counts are read.
   const resolvedCounts = new Map()
   const intents = []
   for (const row of rows) {

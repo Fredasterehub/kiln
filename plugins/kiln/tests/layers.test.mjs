@@ -30,12 +30,14 @@ function checkLayers(root) {
   const violations = []
   for (const file of files) {
     const from = moduleName(file)
-    // Only INTERNAL requires are layer edges; node: builtins and bare specifiers are not.
-    for (const m of readFileSync(file, 'utf8').matchAll(/require\(\s*'(\.[^']*)'\s*\)/g)) {
-      const to = moduleName(m[1])
+    // Only INTERNAL requires are layer edges; node: builtins and bare specifiers are not. BOTH quote
+    // forms count: a matcher bound to the quote the source happens to use enforces a spelling rather
+    // than the direction, and the edge it misses is an edge nobody is stopped from writing.
+    for (const m of readFileSync(file, 'utf8').matchAll(/require\(\s*(['"])(\.[^'"]*)\1\s*\)/g)) {
+      const to = moduleName(m[2])
       if (to === from) continue
       edges.push([from, to])
-      if (!ALLOWED[from]) violations.push(`${from} is not a known layer (requires ${m[1]})`)
+      if (!ALLOWED[from]) violations.push(`${from} is not a known layer (requires ${m[2]})`)
       else if (!ALLOWED[from].includes(to)) violations.push(`${from} -> ${to} is outside the ruled direction`)
     }
   }
@@ -106,6 +108,24 @@ test('layers: an acyclic edge in the wrong direction is still named', () => {
   const { violations } = checkLayers(dir)
   assert.ok(!violations.some((v) => v.startsWith('CYCLE:')), 'the graph really is acyclic, so a cycle check would pass it')
   assert.deepEqual(violations, ['core -> gate is outside the ruled direction'])
+})
+
+// Wave-QA W2QA-B1: the four fixtures above are all written in the source's own quote style, so they
+// ranged over the spelling rather than the answer space, and this exact edge — the authority -> run
+// inversion the split's record names as its discriminating case — passed the check unseen when it was
+// spelled with the other quote. The counterexample is the fixture now.
+test('layers: an out-of-table edge is caught in either quote form', () => {
+  for (const q of ["'", '"']) {
+    const dir = fixture({
+      entry: `require('./lib/authority.js')\n`,
+      authority: `require('./core.js')\nconst { LOCK_FILE } = require(${q}./run.js${q})\n`,
+      run: `require('./core.js')\n`,
+      core: `const x = 1\n`,
+    })
+    const { edges, violations } = checkLayers(dir)
+    assert.ok(edges.some(([f, t]) => f === 'authority' && t === 'run'), `the ${q}-quoted require is an edge at all`)
+    assert.deepEqual(violations, ['authority -> run is outside the ruled direction'])
+  }
 })
 
 test('layers: a graph inside the table passes, and node: builtins are not edges', () => {

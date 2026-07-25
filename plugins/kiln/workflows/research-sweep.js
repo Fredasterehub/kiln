@@ -601,7 +601,7 @@ if (loop.result === 'accepted') {
 // above. Reachable only on the codex path — the claude leg spawns no codex that could fail.
 if (loop.result === 'codex-unavailable') {
   if (await hands('touch ' + F.degraded, 'feasibility:degraded-mark') !== 0) {
-    return held('The ledger would not take the degradation markers — the law holds until the write lands. Rerun.', { posture: F.posture })
+    return held('The ledger would not take the degradation marker — the law holds until the write lands. Rerun.', { posture: F.posture })
   }
   return degradedStatus()
 }

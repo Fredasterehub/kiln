@@ -142,9 +142,10 @@ if (mode === 'review' && args.length === 8) {
   // test surface that exercises them. Production never mints a kind-less row through them — the
   // kernel supplies an attestation kind at both of its append sites (kernel.js:2691 seal, :2260
   // audit) — and once a ledger carries any modern event, a kind-less candidate is refused outright
-  // at the append (the boundary stop below at :1919, pinned by kiln-review.test.mjs:3941). So they
-  // guard no reachable production hazard. Retiring them is a TEST-SURFACE decision, unscheduled and
-  // unowned: it closes no demonstrated defect and earns a slice only when a wave shows its cost.
+  // at the append (the modern-shape boundary stop in lib/attestation.js, pinned by the modern-shape
+  // boundary test in kiln-review.test.mjs). So they guard no reachable production hazard. Retiring
+  // them is a TEST-SURFACE decision, unscheduled and unowned: it closes no demonstrated defect and
+  // earns a slice only when a wave shows its cost.
   // This comment deliberately makes NO claim about how many producers a kind-less row has. Two
   // earlier versions of it did — first about shell callers, then about sole production — and both
   // were false; the enumerations cited here were run against these bytes, not inherited.

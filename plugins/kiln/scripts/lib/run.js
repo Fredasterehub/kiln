@@ -189,9 +189,9 @@ function lockPresence(kilnDir) {
 // into a pair the operator never spoke. Both are trust-bearing, so both leave a receipt: the row
 // lands BEFORE the removal and a failed append HOLDs with the marker standing, the never-a-bare-
 // unlink discipline archiveAndDrop keeps one screen up. Bounded: marker transitions do not generally
-// earn rows, and the kernel clears of the same shape (clearPerceptualMarker at kernel.js:1185, the
-// ratify candidate rm at :1431) stay rowless. ENOENT means a contender got there first — the same end
-// state, so the rm is idempotent and races converge.
+// earn rows, and the kernel clears of the same shape (clearPerceptualMarker in kernel.js, and its
+// ratify candidate rm tagged ratify:invalidate) stay rowless. ENOENT means a contender got there
+// first — the same end state, so the rm is idempotent and races converge.
 function clearMarker(kilnDir, verb, name, event) {
   try {
     archiveLockRecord(kilnDir, { marker: name, verb }, event)
