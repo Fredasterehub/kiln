@@ -674,13 +674,18 @@ function contractTail(packet, contractBytes, receipt) {
   return `Echo these transport facts exactly in your output; they are not judged criteria: ${transport}\n${receiptBlock}Canonical contract:\n${contractBytes}\n`
 }
 
+// CE5 T3: the recheck scoping paragraph, defined ONCE. All four prompts carried it verbatim apart
+// from the evidence they recheck against, so the words a reviewer is bound by lived in four places
+// and could drift in three of them. The evidence noun is the only thing that legitimately differs.
+const recheckScope = (against) => `\nRecheck only the listed finding_ids against ${against}. The prior findings are supplied in full in the packet as prior_findings — confirm each one resolved, or preserve its id unresolved. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n`
+
 function instructions(packet, contractBytes) {
   return `You are the terminal semantic gate reviewer. Inspect the repository at the working root and return only the schema-forced JSON object.
 
 The canonical contract below carries the sealed, verified LAW as law_text and the slice under review as slice_id: scope law_text to slice_id and judge that slice against it — law_text is the sole authority for the criteria. builder_hints (criteria, paths, failures, commands) are the builder's non-authoritative notes; they may orient you but never narrow or override the law, and no finding derives from them. Report only substantiated criterion violations, never optional improvements. Creative direction, visual taste, and aesthetic choices belong to the builder — never raise them as a finding and never let them color a verdict; you rule on correctness against the locked criteria alone. For each finding, cite an exact repo-relative path:line location, the concrete failure, its evidence, and the smallest repair. Use stable finding IDs. The commands in check_receipt were already executed kernel-side; their full output rides in check_receipt verbatim. Read the repository freely — read-only file inspection (opening files, listing directories) is how you judge the diff against the law, and the sandbox enforces read-only. Beyond reading, execute nothing: no tests, no builds, no project or state-changing commands — rule with check_receipt as the only execution evidence. Receipt rows owned by slices not yet built in this run are expected pre-build evidence — judge only this slice's criteria, never treat them as findings, and never filter or rewrite the receipt. Do not infer authorship, persona, or another reviewer's verdict.
 
 Copy review_id and law_hash exactly. Verdict rules: accept only when findings and blockers are both empty; changes_required only for one or more repairable findings with no blockers; blocked only when the review cannot be completed, with one or more blocker reasons.
-${packet.mode === 'recheck' ? '\nRecheck only the listed finding_ids against the repair_delta and current repository. The prior findings are supplied in full in the packet as prior_findings — confirm each one resolved, or preserve its id unresolved. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}
+${packet.mode === 'recheck' ? recheckScope('the repair_delta and current repository') : ''}
 ${contractTail(packet, contractBytes, packet.check_receipt)}`
 }
 
@@ -690,7 +695,7 @@ function ratifyInstructions(packet, contractBytes) {
 Judge the artifact against the rubric criteria alone. Report only substantiated criterion violations, never optional improvements and never matters of taste. For each finding, cite the artifact location as path:line, the concrete failure, evidence quoted from the artifact, and the smallest repair. Use stable finding IDs. Execute nothing: rule by reading the artifact text supplied in full below — do not inspect the repository and do not run any command.
 
 Copy review_id and law_hash exactly into your output. law_hash is the sha256 digest of the artifact bytes; it seals the ratified content, so return it unchanged. Verdict rules: accept only when findings and blockers are both empty; changes_required only for one or more repairable findings with no blockers; blocked only when the review cannot be completed, with one or more blocker reasons.
-${packet.mode === 'ratify-recheck' ? '\nRecheck only the listed finding_ids against the regenerated artifact. The prior findings are supplied in full in the packet as prior_findings — confirm each one resolved, or preserve its id unresolved. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}
+${packet.mode === 'ratify-recheck' ? recheckScope('the regenerated artifact') : ''}
 ${contractTail(packet, contractBytes)}`
 }
 
@@ -706,7 +711,7 @@ function auditInstructions(packet, contractBytes) {
 Derive the milestone goal from .kiln/LAW.md and the vision documents in the repository, then judge goal-backward: over the cumulative sealed prefix in the audit packet, with focus on the closing block, check integrated reachability, the connections between slices, and delivery of the milestone goal. Report only substantiated criterion violations, never optional improvements. Creative direction, visual taste, and aesthetic choices belong to the builder — never raise them as a finding and never let them color a verdict. For each finding, pin the failed LAW criterion id in criterion and an exact repo-relative path:line in location, with the concrete failure, its evidence, and the smallest repair. Use stable finding IDs. The commands whose output rides in check_receipt were already executed kernel-side. Read the repository freely — read-only file inspection (opening files, listing directories) is how you judge the milestone against the law, and the sandbox enforces read-only. Beyond reading, execute nothing: no tests, no builds, no project or state-changing commands — rule with check_receipt as the only execution evidence. Do not infer authorship, persona, or another reviewer's verdict.
 
 Copy review_id and law_hash exactly. Every blockers entry must equal the id of one of your findings, so each blocker carries its criterion, location, and minimal fix through that finding. Verdict rules: accept only when findings and blockers are both empty; changes_required only for one or more repairable findings with no blockers; blocked only when the audit cannot be completed or the milestone goal is undeliverable, with one or more blocker ids naming findings.
-${packet.mode === 'audit-recheck' ? '\nRecheck only the listed finding_ids against the repair_delta and current repository. The prior findings are supplied in full in the packet as prior_findings — confirm each one resolved, or preserve its id unresolved. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}
+${packet.mode === 'audit-recheck' ? recheckScope('the repair_delta and current repository') : ''}
 ${contractTail(packet, contractBytes, packet.check_receipt)}`
 }
 
@@ -721,7 +726,7 @@ function screenInstructions(packet, contractBytes) {
 Judge ONLY the perceptual criteria rows in the packet, each on its named rubric dim per the shipped rubric's anchors — never any other dimension, and never general taste beyond what a row's requirement pins. Report only substantiated criterion violations. For each finding, pin criterion = the row's LAW perceptual criterion id and location = an evidence path with an optional :frame (for example viewport-mobile.png or film.webm:3), with the concrete failure, its visual evidence, and the smallest repair. Use stable finding IDs. Insufficient evidence on a dim is a finding citing the rubric's insufficient_evidence line as its evidence — never a blocker. Execute nothing and install nothing: rule from the attached images and the packet text alone.
 
 Copy review_id and law_hash exactly — law_hash is the sha256 digest of the graded generation's manifest.json and binds this verdict to that evidence. Verdict rules: accept only when findings and blockers are both empty; changes_required for one or more repairable findings. Never return blocked and never write a blocker: hard failure belongs to the law's deterministic proxies, not to this grade.
-${packet.mode === 'screen-recheck' ? '\nRecheck only the listed finding_ids against the fresh evidence generation. The prior findings are supplied in full in the packet as prior_findings — confirm each one resolved, or preserve its id unresolved. Preserve each unresolved finding ID. Do not discover, add, or reopen any other finding. Accept when every listed finding is repaired.\n' : ''}${packet.mode === 'screen-escalate' ? '\nThis is a bounded second-family escalation of a held verdict: the packet carries ONLY the surviving criteria — grade them alone, on the same evidence generation; a finding on any other criterion invalidates the verdict.\n' : ''}
+${packet.mode === 'screen-recheck' ? recheckScope('the fresh evidence generation') : ''}${packet.mode === 'screen-escalate' ? '\nThis is a bounded second-family escalation of a held verdict: the packet carries ONLY the surviving criteria — grade them alone, on the same evidence generation; a finding on any other criterion invalidates the verdict.\n' : ''}
 ${contractTail(packet, contractBytes)}`
 }
 
@@ -839,33 +844,16 @@ function runGate(repo, request, prompt, outputFile, validate, family, images, su
     }
     contractSha = contract.sha
   }
-  // W2-S5: archive the validated verdict to the immutable ledger BEFORE the publish rename — the
-  // gate-file overwrite is content-free and destroys the prior verdict, so the archive is the only
-  // surviving history. The archive digests the EXACT bytes codex wrote, and the ledger sits beside
-  // the gate file in the same .kiln. A failed archive fails closed: the verdict is neither archived
-  // nor published, and the caller holds.
-  const archiveError = archiveVerdict(kilnDir, family, readFileSync(temporary), legId, manifestSha, contractSha)
-  if (archiveError) {
+  // W2-S5 + W2-S7a (B-D2): the archive digests the EXACT bytes codex wrote, and the sidecar surfaces
+  // the minted reviewer leg to the kernel over a trusted mechanical channel (<gate>.leg). The kernel
+  // threads that leg into the seal reviewer position and append-seal re-validates it against
+  // identity.jsonl, so the sidecar is a pointer the trust anchor still checks, never an authority.
+  const failure = publishVerdict(kilnDir, family, readFileSync(temporary),
+    { legId, manifestSha, contractSha, sidecar: { path: output + '.leg', bytes: legId + '\n' } }, temporary, output)
+  if (failure) {
     discard(temporary)
-    stop('transport_failure', archiveError, TRANSPORT_FAILURE)
-  }
-  // W2-S7a (B-D2): surface the minted codex reviewer leg to the kernel over a trusted mechanical
-  // channel — a sidecar beside the published gate file (<gate>.leg). The kernel reads it after a
-  // codex-reviewed gate and threads it into the seal reviewer position; append-seal re-validates the
-  // leg against identity.jsonl (existence, reviewer-class role, matching run_id), so the sidecar is
-  // a pointer the trust anchor still checks, never an authority. Written BEFORE the rename so a
-  // sidecar fault fails the publish closed.
-  try {
-    writeFileSync(output + '.leg', legId + '\n')
-  } catch (error) {
-    discard(temporary)
-    stop('transport_failure', `could not write the reviewer leg sidecar: ${error.message}`, TRANSPORT_FAILURE)
-  }
-  try {
-    renameSync(temporary, output)
-  } catch (error) {
-    discard(temporary)
-    stop('transport_failure', `could not publish gate output: ${error.message}`, TRANSPORT_FAILURE)
+    const wording = { archive: failure.message, sidecar: `could not write the reviewer leg sidecar: ${failure.message}`, rename: `could not publish gate output: ${failure.message}` }
+    stop('transport_failure', wording[failure.step], TRANSPORT_FAILURE)
   }
 
   const exits = { accept: ACCEPT, changes_required: REJECT, blocked: BLOCKED }
@@ -893,12 +881,9 @@ function invoke(repo, kilnDir, request, packet, outputFile, allowedFindingIds) {
   if (receipt.error) stop('transport_failure', receipt.error, TRANSPORT_FAILURE)
   let contract
   try {
-    contract = composeContract('slice-review', packet.mode === 'recheck' ? 'recheck' : 'initial', {
-      slice_id: packet.slice_id, law_hash: packet.law_hash, law_text: packet.law_text,
-      builder_hints: packet.builder_hints, receipt_sha256: receipt.digest,
-      reviewed_manifest: reviewedManifestForSlice(kilnDir, packet.slice_id),
-      finding_ids: packet.finding_ids, prior_findings: packet.prior_findings, repair_delta: packet.repair_delta,
-    })
+    contract = composeContract('slice-review', packet.mode === 'recheck' ? 'recheck' : 'initial',
+      sliceReviewFacts(kilnDir, { ...packet, receipt_sha256: receipt.digest },
+        { finding_ids: packet.finding_ids, prior_findings: packet.prior_findings, repair_delta: packet.repair_delta }))
   } catch (error) {
     stop('transport_failure', `contract: ${error.message}`, TRANSPORT_FAILURE)
   }
@@ -926,12 +911,9 @@ function invokeAudit(repo, kilnDir, request, packet, outputFile, allowedFindingI
   if (receipt.error) stop('transport_failure', receipt.error, TRANSPORT_FAILURE)
   let contract
   try {
-    contract = composeContract('milestone-audit', packet.mode === 'audit-recheck' ? 'recheck' : 'initial', {
-      law_hash: packet.law_hash, seam_slice: packet.seam_slice, milestone: packet.milestone,
-      closing_block: packet.closing_block, sealed_prefix: packet.sealed_prefix,
-      covered: coverageTuples(kilnDir, packet.sealed_prefix), receipt_sha256: receipt.digest,
-      finding_ids: packet.finding_ids, prior_findings: packet.prior_findings, repair_delta: packet.repair_delta,
-    })
+    contract = composeContract('milestone-audit', packet.mode === 'audit-recheck' ? 'recheck' : 'initial',
+      milestoneAuditFacts(kilnDir, { ...packet, receipt_sha256: receipt.digest },
+        { finding_ids: packet.finding_ids, prior_findings: packet.prior_findings, repair_delta: packet.repair_delta }))
   } catch (error) {
     stop('transport_failure', `contract: ${error.message}`, TRANSPORT_FAILURE)
   }
@@ -1264,32 +1246,104 @@ function receiptDigestAtPublication(kilnDir, family) {
   return { digest: createHash('sha256').update(bytes).digest('hex') }
 }
 
-// Append the validated verdict to the archive, keyed idempotently by (family, review_id, verdict
-// sha256): a crash retry that re-presents the exact same verdict bytes appends nothing, so retries
-// never create ambiguous rounds. The round is the count of rows already in this lineage, so it is
-// the true position in that lineage's history rather than a stateful counter that a retry could
-// advance. The complete verdict is preserved — the verdict word, the full findings AND blockers,
-// the law_hash — plus the sha256 of the EXACT original bytes as an integrity digest. The run lock
-// serializes runs, so appends never race. Returns null on success (or an idempotent no-op) and an
-// error string on any failure, so the caller fails closed and never publishes an un-archived
-// verdict.
-// verdictBytes is the RAW Buffer of the exact bytes about to be renamed into the gate file. The
-// digest binds THOSE bytes: hashing a utf8-decoded string instead would diverge on any byte that is
-// not valid utf8 (decoded to U+FFFD, then re-encoded), so the archived digest would fail to cover the
-// published bytes. The readable content fields come from the parsed JSON — that is fine, they are the
-// archive's human content, not its integrity binding.
-// W2-S7a (ruling A-prime): reviewerLegId is the reviewer leg this verdict belongs to — the leg
-// runGate minted synchronously on the codex path, or the leg the kernel passed down publish-gate
-// argv on a claude path. It rides the archive row as reviewer_leg_id; absent (a legacy publish) it
-// is an honest null. Idempotency is UNCHANGED — keyed on {family, review_id, verdict_sha256}, so the
-// retry shortcut below never compares reviewer_leg_id.
-// W2-S7a (FORK 3): manifestSha256 is the control-derived manifest digest the review family recomputed
-// at publication (null for a non-review family, a legacy pass, or an absent manifest). It rides the
-// row as manifest_sha256, and the retry shortcut extends the B001-R2 ownership pattern to it.
-// W2-S7a (FORK 1): contractSha256 is the canonical contract digest the transport composed and stored
-// this dispatch (null for a legacy project that never contracted). It rides the row as contract_sha256
-// beside receipt_sha256, and the retry shortcut extends the SAME B001-R2 ownership pattern to it — a
-// fourth identical copy, so a retry never severs a seal from the exact contract it will bind.
+// Append the validated verdict to the archive, keyed idempotently by (family, review_id,
+// verdict_sha256): a retry re-presenting the exact bytes appends nothing, so retries never create
+// ambiguous rounds. The round is the COUNT of rows already in the lineage — its true position in
+// that history, never a stateful counter a retry could advance. The complete verdict is preserved,
+// plus the sha256 of the EXACT original bytes as the integrity digest. The run lock serializes runs,
+// so appends never race. Returns null on success or an idempotent no-op, an error string otherwise,
+// so the caller fails closed and never publishes an un-archived verdict.
+// verdictBytes is the RAW Buffer of the bytes about to be renamed into the gate file, because the
+// digest must bind THOSE bytes: hashing a utf8-decoded string would diverge on any byte that is not
+// valid utf8 (decoded to U+FFFD, then re-encoded) and the archived digest would no longer cover what
+// was published. The readable fields come from the parsed JSON — the archive content, not its
+// integrity binding. The four bindings this row carries (receipt, reviewer leg, manifest, contract)
+// each ride as their own field and are re-checked on a retry through the one ownership table below.
+
+// The contract FACT SETS, each defined ONCE and fed to both transports. The codex verbs resolve
+// their inputs from the packet they already built; contract-prepare resolves the same inputs from
+// the sealed law and the request. The sources differ legitimately — the field SET must not, or a
+// field added for one transport silently omits itself from the contract the other composes and
+// judges. The recheck fields ride as an explicit tail so an initial contract carries none.
+const sliceReviewFacts = (kilnDir, base, recheck) => ({
+  slice_id: base.slice_id, law_hash: base.law_hash, law_text: base.law_text,
+  builder_hints: base.builder_hints, receipt_sha256: base.receipt_sha256,
+  reviewed_manifest: reviewedManifestForSlice(kilnDir, base.slice_id),
+  ...(recheck || {}),
+})
+const milestoneAuditFacts = (kilnDir, base, recheck) => ({
+  law_hash: base.law_hash, seam_slice: base.seam_slice, milestone: base.milestone,
+  closing_block: base.closing_block, sealed_prefix: base.sealed_prefix,
+  covered: coverageTuples(kilnDir, base.sealed_prefix), receipt_sha256: base.receipt_sha256,
+  ...(recheck || {}),
+})
+
+// The ONE publication path both transports take. The gate-file overwrite is content-free and
+// destroys the prior verdict, so the archive to the immutable ledger happens BEFORE the rename — the
+// archive is the only surviving history, and a failed archive publishes nothing at all. The codex
+// path additionally surfaces its minted reviewer leg as a sidecar beside the gate file, written
+// before the rename so a sidecar fault fails the publish closed too. The ORDER is the invariant this
+// helper exists to hold in one place; the caller words the fault and owns cleanup, because the codex
+// path must discard its own temp while the claude path must leave the caller candidate untouched.
+function publishVerdict(kilnDir, family, bytes, bindings, from, to) {
+  const archiveError = archiveVerdict(kilnDir, family, bytes, bindings.legId, bindings.manifestSha, bindings.contractSha)
+  if (archiveError) return { step: 'archive', message: archiveError }
+  if (bindings.sidecar) {
+    try {
+      writeFileSync(bindings.sidecar.path, bindings.sidecar.bytes)
+    } catch (error) {
+      return { step: 'sidecar', message: error.message }
+    }
+  }
+  try {
+    renameSync(from, to)
+  } catch (error) {
+    return { step: 'rename', message: error.message }
+  }
+  return null
+}
+
+// The content-addressed COMMIT discipline the three durable stores share — baselines, prepared
+// manifests, contracts. The name IS the digest, so the write is O_EXCL: an identical name is an
+// idempotent no-op ONLY once its bytes are re-read and still hash to it, and a name colliding with
+// foreign or corrupt bytes is a torn store that THROWS rather than silently accepting. A concurrent
+// writer with different bytes therefore lands a different, inert name and can never overwrite a
+// committed one. `what` and `store` name the fault in the words of each caller: a shared helper must
+// not flatten an externally surfaced diagnostic, because a fault message is a contract line.
+function commitContentAddressed(path, bytes, sha, what, store) {
+  try {
+    writeFileSync(path, bytes, { flag: 'wx' })
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error
+    let existing
+    try {
+      existing = readFileSync(path)
+    } catch (e) {
+      throw new Error(`the ${what} could not be read: ${e.message}`)
+    }
+    if (createHash('sha256').update(existing).digest('hex') !== sha) {
+      throw new Error(`a ${what} file does not match its own name — a torn ${store} store`)
+    }
+  }
+}
+
+// The append-only write discipline every JSONL ledger shares: a crash mid-append can leave a torn
+// final line with no trailing newline, so a row is prefixed with one when the file is non-empty and
+// does not end in one. Both the torn line and the new row then stay independently recoverable. The
+// caller passes bytes it has already read, so this is a byte check rather than a re-read, and it
+// returns the fault rather than deciding it — each ledger words its own failure and chooses whether
+// to hold or report. Directory creation stays with the callers that need it, so no caller gains a
+// mkdir it did not have.
+function appendJsonlRow(path, raw, row) {
+  const prefix = raw.length > 0 && !raw.endsWith('\n') ? '\n' : ''
+  try {
+    appendFileSync(path, prefix + JSON.stringify(row) + '\n')
+    return null
+  } catch (error) {
+    return error.message
+  }
+}
+
 function archiveVerdict(kilnDir, family, verdictBytes, reviewerLegId, manifestSha256, contractSha256) {
   if (!REVIEW_FAMILIES.has(family)) return `archive family ${family} is not a review family`
   let verdict
@@ -1357,64 +1411,31 @@ function archiveVerdict(kilnDir, family, verdictBytes, reviewerLegId, manifestSh
     // disk NOW still matches the one archived — a retry over a receipt that changed, vanished, or
     // appeared (per the family rules a non-receipt family archives null and reads null, so they
     // match) would republish a STALE binding, so it HOLDS rather than green-republish (B001).
-    // B001-R2: a MISSING receipt_sha256 field is NOT an archived null — it is a row written before
-    // receipt capture existed (a pre-S7a legacy row), so nothing was ever captured to confirm the
-    // retry against. The prior row must OWN a well-formed receipt_sha256 — an explicit null (honest
-    // absence at publication) or a 64-char lowercase hex digest — before the shortcut may succeed; a
-    // missing OR malformed value HOLDs, distinct from the stale-binding mismatch below. This trusts
-    // the archived row itself, so it holds uniformly across every family.
-    const hasArchivedReceipt = Object.prototype.hasOwnProperty.call(prior, 'receipt_sha256')
-    const archivedReceipt = hasArchivedReceipt ? prior.receipt_sha256 : undefined
-    const archivedWellFormed = archivedReceipt === null
-      || (typeof archivedReceipt === 'string' && /^[0-9a-f]{64}$/.test(archivedReceipt))
-    if (!hasArchivedReceipt || !archivedWellFormed) {
-      return 'archive idempotent retry: the archived row predates receipt capture or carries a malformed receipt_sha256 — nothing confirms the historical receipt binding, refusing to republish'
-    }
-    if (archivedReceipt !== receipt.digest) {
-      return 'archive idempotent retry: the current check receipt no longer matches the archived digest — refusing to republish a stale receipt binding'
-    }
-    // W2-S7a (B-RETRY-LEG): the reviewer-leg binding is preserved under the SAME B001-R2 ownership
-    // pattern. The archived row must OWN a well-formed reviewer_leg_id (explicit null or 32hex) AND
-    // it must equal the leg this retry supplies (null equals null) — a missing/malformed field (a
-    // pre-B-RETRY-LEG row) or a differing leg HOLDS, never an exit-0 that severs a Claude seal from
-    // the exact reviews row it will join.
-    const hasArchivedLeg = Object.prototype.hasOwnProperty.call(prior, 'reviewer_leg_id')
-    const archivedLeg = hasArchivedLeg ? prior.reviewer_leg_id : undefined
-    const archivedLegWellFormed = archivedLeg === null || (typeof archivedLeg === 'string' && LEG_ID.test(archivedLeg))
-    const suppliedLeg = (typeof reviewerLegId === 'string' && LEG_ID.test(reviewerLegId)) ? reviewerLegId : null
-    if (!hasArchivedLeg || !archivedLegWellFormed) {
-      return 'archive idempotent retry: the archived row carries no well-formed reviewer_leg_id — nothing confirms the historical reviewer binding, refusing to republish'
-    }
-    if (archivedLeg !== suppliedLeg) {
-      return 'archive idempotent retry: the supplied reviewer leg differs from the archived reviewer binding — refusing to sever it'
-    }
-    // W2-S7a (FORK 3): the manifest binding is preserved under the SAME B001-R2 ownership pattern. The
-    // archived row must OWN a well-formed manifest_sha256 (explicit null or 64-hex) equal to the digest
-    // this retry recomputed (null equals null) — a missing/malformed field (a pre-FORK-3 row) or a
-    // differing digest HOLDs, never an exit-0 that severs a seal from the exact manifest it will bind.
-    const suppliedManifest = (typeof manifestSha256 === 'string' && LAW_HASH.test(manifestSha256)) ? manifestSha256 : null
-    const hasArchivedManifest = Object.prototype.hasOwnProperty.call(prior, 'manifest_sha256')
-    const archivedManifest = hasArchivedManifest ? prior.manifest_sha256 : undefined
-    const archivedManifestWellFormed = archivedManifest === null || (typeof archivedManifest === 'string' && LAW_HASH.test(archivedManifest))
-    if (!hasArchivedManifest || !archivedManifestWellFormed) {
-      return 'archive idempotent retry: the archived row carries no well-formed manifest_sha256 — nothing confirms the historical manifest binding, refusing to republish'
-    }
-    if (archivedManifest !== suppliedManifest) {
-      return 'archive idempotent retry: the supplied manifest digest differs from the archived manifest binding — refusing to sever it'
-    }
-    // W2-S7a (FORK 1): the contract binding is preserved under the SAME B001-R2 ownership pattern. The
-    // archived row must OWN a well-formed contract_sha256 (explicit null or 64-hex) equal to the digest
-    // this retry supplies (null equals null) — a missing/malformed field (a pre-FORK-1 row) or a
-    // differing digest HOLDs, never an exit-0 that severs a seal from the exact contract it will bind.
-    const suppliedContract = (typeof contractSha256 === 'string' && LAW_HASH.test(contractSha256)) ? contractSha256 : null
-    const hasArchivedContract = Object.prototype.hasOwnProperty.call(prior, 'contract_sha256')
-    const archivedContract = hasArchivedContract ? prior.contract_sha256 : undefined
-    const archivedContractWellFormed = archivedContract === null || (typeof archivedContract === 'string' && LAW_HASH.test(archivedContract))
-    if (!hasArchivedContract || !archivedContractWellFormed) {
-      return 'archive idempotent retry: the archived row carries no well-formed contract_sha256 — nothing confirms the historical contract binding, refusing to republish'
-    }
-    if (archivedContract !== suppliedContract) {
-      return 'archive idempotent retry: the supplied contract digest differs from the archived contract binding — refusing to sever it'
+    // B001-R2 + B-RETRY-LEG + FORK 3 + FORK 1: every binding the row carries is preserved under ONE
+    // ownership rule, so a new binding joins the table rather than growing a fourth copy of it. The
+    // archived row must OWN the field (a MISSING field is not an archived null — it is a row written
+    // before that binding existed, so nothing was ever captured to confirm the retry against), the
+    // value must be WELL-FORMED (explicit null, or matching the field pattern), and it must EQUAL what
+    // this retry supplies. Any of the three failing HOLDs rather than republishing: an exit 0 here
+    // would sever a seal from the exact row it will join.
+    const bindings = [
+      ['receipt_sha256', receipt.digest, LAW_HASH, 'check receipt', 'the current check receipt no longer matches the archived digest — refusing to republish a stale receipt binding',
+        'the archived row predates receipt capture or carries a malformed receipt_sha256 — nothing confirms the historical receipt binding, refusing to republish'],
+      ['reviewer_leg_id', (typeof reviewerLegId === 'string' && LEG_ID.test(reviewerLegId)) ? reviewerLegId : null, LEG_ID, 'reviewer', 'the supplied reviewer leg differs from the archived reviewer binding — refusing to sever it'],
+      ['manifest_sha256', (typeof manifestSha256 === 'string' && LAW_HASH.test(manifestSha256)) ? manifestSha256 : null, LAW_HASH, 'manifest', 'the supplied manifest digest differs from the archived manifest binding — refusing to sever it'],
+      ['contract_sha256', (typeof contractSha256 === 'string' && LAW_HASH.test(contractSha256)) ? contractSha256 : null, LAW_HASH, 'contract', 'the supplied contract digest differs from the archived contract binding — refusing to sever it'],
+    ]
+    // Each row carries its OWN two messages. The table converges the RULE, never the wording: these
+    // faults are read by callers and pinned by tests, so flattening them into one phrasing would be a
+    // behaviour change wearing the clothes of a refactor.
+    for (const [field, supplied, pattern, what, mismatch, unowned] of bindings) {
+      const owns = Object.prototype.hasOwnProperty.call(prior, field)
+      const archived = owns ? prior[field] : undefined
+      const wellFormed = archived === null || (typeof archived === 'string' && pattern.test(archived))
+      if (!owns || !wellFormed) {
+        return `archive idempotent retry: ${unowned || `the archived row carries no well-formed ${field} — nothing confirms the historical ${what} binding, refusing to republish`}`
+      }
+      if (archived !== supplied) return `archive idempotent retry: ${mismatch}`
     }
     return null
   }
@@ -1434,16 +1455,8 @@ function archiveVerdict(kilnDir, family, verdictBytes, reviewerLegId, manifestSh
     contract_sha256: (typeof contractSha256 === 'string' && LAW_HASH.test(contractSha256)) ? contractSha256 : null,
     verdict_sha256: sha,
   }
-  // Write safety: a crash mid-append can leave a torn final line with no trailing newline. Prefix a
-  // newline when the ledger is non-empty and does not end in one, so the new row lands on its OWN line
-  // and never merges into the torn partial — both the torn line and the new row stay independently
-  // recoverable. The bytes are already in hand from the scan, so this is a byte check, not a re-read.
-  const prefix = raw.length > 0 && !raw.endsWith('\n') ? '\n' : ''
-  try {
-    appendFileSync(path, prefix + JSON.stringify(row) + '\n')
-  } catch (error) {
-    return `archive could not append the verdict: ${error.message}`
-  }
+  const appendError = appendJsonlRow(path, raw, row)
+  if (appendError) return `archive could not append the verdict: ${appendError}`
   return null
 }
 
@@ -1918,12 +1931,10 @@ function appendLedgerRow(kilnDir, descriptor, row) {
   if (row.type === descriptor.type && row.attestation_kind === undefined && state.modern) {
     stop('transport_failure', `${descriptor.jsonl} has crossed its modern-shape boundary — a candidate carrying no attestation kind is never appended after it`, TRANSPORT_FAILURE)
   }
-  const prefix = raw.length > 0 && !raw.endsWith('\n') ? '\n' : ''
   mkdirSync(kilnDir, { recursive: true })
-  try {
-    appendFileSync(jsonlPath, prefix + JSON.stringify(row) + '\n')
-  } catch (error) {
-    stop('transport_failure', `${descriptor.jsonl} could not be appended: ${error.message}`, TRANSPORT_FAILURE)
+  const appendError = appendJsonlRow(jsonlPath, raw, row)
+  if (appendError) {
+    stop('transport_failure', `${descriptor.jsonl} could not be appended: ${appendError}`, TRANSPORT_FAILURE)
   }
   try {
     const read = readLedgerRows(jsonlPath)
@@ -2017,13 +2028,10 @@ function appendIdentityRow(kilnDir, row) {
   } catch (error) {
     if (error.code !== 'ENOENT') return `identity ledger could not be read: ${error.message}`
   }
-  const prefix = raw.length > 0 && !raw.endsWith('\n') ? '\n' : ''
-  try {
-    mkdirSync(kilnDir, { recursive: true })
-    appendFileSync(path, prefix + JSON.stringify(row) + '\n')
-  } catch (error) {
-    return `identity ledger could not be appended: ${error.message}`
-  }
+  let appendError = null
+  try { mkdirSync(kilnDir, { recursive: true }) } catch (error) { appendError = error.message }
+  if (appendError === null) appendError = appendJsonlRow(path, raw, row)
+  if (appendError) return `identity ledger could not be appended: ${appendError}`
   return null
 }
 
@@ -2626,20 +2634,7 @@ function manifestStart(kilnDir, repo, slice) {
     // O_EXCL commit sentinel and its baseline_sha256 names which baseline file is the committed one, so
     // a loser reuses the intact committed baseline rather than a clobbered one — no generation wedges.
     const baselinePath = baselineFile(genDir, baselineSha)
-    try {
-      writeFileSync(baselinePath, bytes, { flag: 'wx' })
-    } catch (error) {
-      if (error.code !== 'EEXIST') throw error
-      let existing
-      try {
-        existing = readFileSync(baselinePath)
-      } catch (e) {
-        throw new Error(`the content-addressed baseline could not be read: ${e.message}`)
-      }
-      if (createHash('sha256').update(existing).digest('hex') !== baselineSha) {
-        throw new Error('a content-addressed baseline file does not match its own name — a torn baseline store')
-      }
-    }
+    commitContentAddressed(baselinePath, bytes, baselineSha, 'content-addressed baseline', 'baseline')
     try {
       writeFileSync(keyPath, canonicalBytes(key), { flag: 'wx' })
     } catch (error) {
@@ -2664,20 +2659,7 @@ function manifestPrepare(kilnDir, repo, slice) {
     // idempotent no-op ONLY when its bytes still hash to the name; a name colliding with corrupt or
     // foreign bytes is a torn store that HOLDs, never a silent accept — the baseline commit discipline.
     const preparedPath = join(preparedDir, built.sha + '.json')
-    try {
-      writeFileSync(preparedPath, built.bytes, { flag: 'wx' })
-    } catch (error) {
-      if (error.code !== 'EEXIST') throw error
-      let existing
-      try {
-        existing = readFileSync(preparedPath)
-      } catch (e) {
-        throw new Error(`the prepared manifest could not be read: ${e.message}`)
-      }
-      if (createHash('sha256').update(existing).digest('hex') !== built.sha) {
-        throw new Error('a prepared manifest file does not match its own name — a torn manifest store')
-      }
-    }
+    commitContentAddressed(preparedPath, built.bytes, built.sha, 'prepared manifest', 'manifest')
     const tmp = join(built.genDir, '.current.json.tmp-' + process.pid + '-' + randomUUID())
     writeFileSync(tmp, canonicalBytes({ manifest_sha256: built.sha }))
     renameSync(tmp, join(built.genDir, 'current.json'))
@@ -3163,20 +3145,7 @@ function writeContractStore(kilnDir, bytes, sha) {
   const dir = join(kilnDir, CONTRACT_DIR, 'sha256')
   mkdirSync(dir, { recursive: true })
   const path = contractStoreFile(kilnDir, sha)
-  try {
-    writeFileSync(path, bytes, { flag: 'wx' })
-  } catch (error) {
-    if (error.code !== 'EEXIST') throw error
-    let existing
-    try {
-      existing = readFileSync(path)
-    } catch (e) {
-      throw new Error(`the content-addressed contract could not be read: ${e.message}`)
-    }
-    if (createHash('sha256').update(existing).digest('hex') !== sha) {
-      throw new Error('a content-addressed contract file does not match its own name — a torn contract store')
-    }
-  }
+  commitContentAddressed(path, bytes, sha, 'content-addressed contract', 'contract')
 }
 
 // Compose and store in one step; the built { bytes, sha } feed the embed and the publication binding.
@@ -3991,11 +3960,10 @@ if (mode === 'review' && args.length === 8) {
       const gf = buildGateFacts(kilnDir, sliceId)
       const receipt = receiptDigestAtPublication(kilnDir, 'review')
       if (receipt.error) stop('transport_failure', receipt.error, TRANSPORT_FAILURE)
-      const facts = {
+      const facts = sliceReviewFacts(kilnDir, {
         slice_id: sliceId, law_hash: gf.lawHash, law_text: gf.lawText,
         builder_hints: hintsFrom(requestFile), receipt_sha256: receipt.digest,
-        reviewed_manifest: reviewedManifestForSlice(kilnDir, sliceId),
-      }
+      })
       if (operation === 'recheck') {
         // W2-S7a (F2): the SAME prior-eligibility the codex recheck verb enforces — full shape, an
         // eligible changes_required verdict, the sealed-law binding, and a nonempty repair delta.
@@ -4022,11 +3990,10 @@ if (mode === 'review' && args.length === 8) {
       const af = auditFacts(kilnDir, seamSliceId)
       const receipt = receiptDigestAtPublication(kilnDir, 'audit')
       if (receipt.error) stop('transport_failure', receipt.error, TRANSPORT_FAILURE)
-      const facts = {
+      const facts = milestoneAuditFacts(kilnDir, {
         law_hash: af.lawHash, seam_slice: seamSliceId, milestone: af.milestone,
-        closing_block: af.closingBlock, sealed_prefix: af.sealedPrefix,
-        covered: coverageTuples(kilnDir, af.sealedPrefix), receipt_sha256: receipt.digest,
-      }
+        closing_block: af.closingBlock, sealed_prefix: af.sealedPrefix, receipt_sha256: receipt.digest,
+      })
       if (operation === 'recheck') {
         // W2-S7a (F2): the SAME prior-eligibility the codex audit-recheck verb enforces — full audit
         // shape, an eligible changes_required OR blocked verdict, the sealed-law binding, a nonempty delta.
@@ -4597,12 +4564,10 @@ if (mode === 'review' && args.length === 8) {
   } catch (error) {
     stop('transport_failure', `publish-gate candidate unreadable: ${error.message}`, TRANSPORT_FAILURE)
   }
-  const archiveError = archiveVerdict(kilnDir, family, verdictBytes, reviewerLegId, manifestSha, contractSha)
-  if (archiveError) stop('transport_failure', archiveError, TRANSPORT_FAILURE)
-  try {
-    renameSync(resolve(candidatePath), resolve(gatePath))
-  } catch (error) {
-    stop('transport_failure', `publish-gate could not publish: ${error.message}`, TRANSPORT_FAILURE)
+  const failure = publishVerdict(kilnDir, family, verdictBytes, { legId: reviewerLegId, manifestSha, contractSha },
+    resolve(candidatePath), resolve(gatePath))
+  if (failure) {
+    stop('transport_failure', failure.step === 'archive' ? failure.message : `publish-gate could not publish: ${failure.message}`, TRANSPORT_FAILURE)
   }
   process.exit(ACCEPT)
 } else if (mode === 'state-commit' && args.length >= 6) {

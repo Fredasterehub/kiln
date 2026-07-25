@@ -1513,30 +1513,44 @@ test('kiln-review: the audit prompt authorizes read-only inspection the same way
 })
 
 test('kiln-review: ratify and screen keep their no-repo discipline byte-identically — their evidence is embedded, so repo reading stays forbidden (FIX-2)', () => {
-  // A sentence-search over the whole source would pass even if the rest of the prompt
-  // drifted or the sentence migrated out of its builder. Extract each builder's complete
-  // source by name and pin its digest: every static prompt byte — the discipline sentence,
-  // the mode inserts, the packet seam — must survive unchanged, in place.
+  // Pinned on the RENDERED prompt rather than the builder's source: a source digest also reddens on a
+  // refactor that changes not one byte the reviewer sees. But rendering ONE mode covers less than the
+  // source digest did — text exclusive to another mode (screen-escalate's bounded-escalation
+  // paragraph) would sit outside the pin entirely. So EVERY mode each builder can render is digested,
+  // and the union is at least what the source digest covered.
   const src = readFileSync(REVIEW, 'utf8')
-  // W2-S7a (FORK 1): each builder now takes (packet, contractBytes) and ends on the shared
-  // contractTail — the FIX-2 no-repo sentences are unchanged in place, and the digests are re-pinned.
-  const builderSource = (name) => {
-    const start = src.indexOf(`function ${name}(packet, contractBytes) {`)
-    assert.notEqual(start, -1, `${name} still exists as a named builder`)
-    return src.slice(start, src.indexOf('\n}\n', start) + 2)
+  const grab = (fn) => {
+    const i = src.indexOf(`function ${fn}(`)
+    assert.notEqual(i, -1, `${fn} still exists as a named builder`)
+    return src.slice(i, src.indexOf('\n}\n', i) + 2)
   }
-  const ratifySrc = builderSource('ratifyInstructions')
-  assert.ok(ratifySrc.includes('Execute nothing: rule by reading the artifact text supplied in full below — do not inspect the repository and do not run any command.'),
-    'the ratify no-repo sentence rides inside ratifyInstructions')
-  assert.equal(createHash('sha256').update(ratifySrc).digest('hex'),
-    'cbd9ade6884e57afc22976eff5612b1853b253a210c16a5c2cd862b992ade663',
-    'ratifyInstructions is byte-identical to the pinned FORK-1 prompt')
-  const screenSrc = builderSource('screenInstructions')
-  assert.ok(screenSrc.includes('Execute nothing and install nothing: rule from the attached images and the packet text alone.'),
-    'the screen no-repo sentence rides inside screenInstructions')
-  assert.equal(createHash('sha256').update(screenSrc).digest('hex'),
-    '63e8e9203381d15320440ccbb0d2c08f6006707ae23f4ccd6ec15d13e7c7cf32',
-    'screenInstructions is byte-identical to the pinned FORK-1 prompt')
+  const scopeAt = src.indexOf('const recheckScope')
+  assert.notEqual(scopeAt, -1, 'the shared recheck scope still exists')
+  const prompts = new Function(
+    src.slice(scopeAt, src.indexOf('\n', scopeAt) + 1) + grab('contractTail')
+    + grab('ratifyInstructions') + grab('screenInstructions')
+    + '\nreturn { ratifyInstructions, screenInstructions }',
+  )()
+  const render = (fn, mode) => prompts[fn]({ review_id: 'r1', law_hash: 'a'.repeat(64), mode }, 'CONTRACT')
+  // Every mode, each digested. A new mode with no entry here is itself the signal to add one.
+  const modes = [
+    ['ratifyInstructions', 'ratify', 'dbfad74bb7ca3a073861335d5683959cf4f6a08560877db91d16a52040ad6612'],
+    ['ratifyInstructions', 'ratify-recheck', '6ded6a53c3ecf0e21a28cd54da6b60640b31af6c725d3430942bdce0606e9717'],
+    ['screenInstructions', 'screen', 'ab2ea097e331211d5b3253b316dbd6b98cb63b748e7455c1eacee74642f3baed'],
+    ['screenInstructions', 'screen-recheck', '55b390b0fbbb2aa828a5dd7f966bda05a217058e42c4dffe761fc7beb3d2592b'],
+    ['screenInstructions', 'screen-escalate', '8741778f17832bc6f8cea12142e17a9401855f294a74c3a0c86beff2ddea405e'],
+  ]
+  for (const [fn, mode, digest] of modes) {
+    assert.equal(createHash('sha256').update(render(fn, mode)).digest('hex'), digest,
+      `${fn} in ${mode} mode is byte-identical to the pinned FIX-2 text`)
+  }
+  // The no-repo sentences, named so a digest change reads as what it is rather than as noise.
+  assert.ok(render('ratifyInstructions', 'ratify').includes('Execute nothing: rule by reading the artifact text supplied in full below — do not inspect the repository and do not run any command.'),
+    'the ratify no-repo sentence reaches the reviewer')
+  assert.ok(render('screenInstructions', 'screen').includes('Execute nothing and install nothing: rule from the attached images and the packet text alone.'),
+    'the screen no-repo sentence reaches the reviewer')
+  assert.ok(render('screenInstructions', 'screen-escalate').includes('This is a bounded second-family escalation of a held verdict'),
+    'and the escalate-exclusive paragraph is inside the pinned surface, not outside it')
 })
 
 // ── W2-S4: CLI-derived build-gate packets (Model A — the verified-whole-LAW packet) ──────
@@ -2363,7 +2377,7 @@ function publishInto(kilnDir, { family = 'review', verdict, bytes } = {}) {
   const gate = join(kilnDir, 'gate-review.json')
   writeFileSync(candidate, bytes !== undefined ? bytes : JSON.stringify(verdict))
   const r = spawnSync('node', [REVIEW, 'publish-gate', kilnDir, family, candidate, gate], { encoding: 'utf8' })
-  return { status: r.status, published: existsSync(gate) }
+  return { status: r.status, published: existsSync(gate), err: r.stderr || '' }
 }
 function publishGate({ family = 'review', verdict, bytes, lock } = {}) {
   const kilnDir = mkdtempSync(join(tmpdir(), 'kiln-archive-'))
@@ -2560,6 +2574,11 @@ test('archive (W2-S7a, B001-R2): an idempotent retry over a row that predates re
   const a = publishInto(legacyDir, { family: 'review', bytes })
   assert.equal(a.status, 20, 'the retry over a legacy row HOLDs — a missing field is not an archived null')
   assert.equal(a.published, false, 'nothing republishes over a row that never captured a receipt')
+  // Sol simplify-r1 #2: the fault WORDING is a contract line, not an implementation detail. The
+  // ownership table converged the rule across four bindings; each binding keeps its own message, and
+  // the receipt's two are pinned here so a shared phrasing can never quietly replace them.
+  assert.match(a.err, /the archived row predates receipt capture or carries a malformed receipt_sha256 — nothing confirms the historical receipt binding, refusing to republish/,
+    'the receipt-ownership fault reads exactly as it always has')
   assert.equal(ledgerRows(legacyDir).length, 1, 'still exactly the one seeded row')
   assert.equal(Object.prototype.hasOwnProperty.call(ledgerRows(legacyDir)[0], 'receipt_sha256'), false,
     'the legacy row is untouched — still no receipt_sha256 field')
@@ -3349,7 +3368,21 @@ test('manifest-start (W2-S7a, pre-Sol): the baseline is content-addressed — re
 })
 
 test('manifest-start (W2-S7a, pre-Sol): the baseline commit is content-addressed via wx, never renamed onto a fixed name (source shape)', () => {
-  assert.ok(reviewSrc.includes("writeFileSync(baselinePath, bytes, { flag: 'wx' })"), 'the baseline is committed content-addressed via the wx flag')
+  // The commit discipline now lives in ONE helper the three durable stores share, so the property is
+  // pinned where it is implemented plus at this caller — the baseline reaches the store through that
+  // helper, and the helper is the only thing in the file that O_EXCL-writes a content-addressed name.
+  assert.ok(reviewSrc.includes("commitContentAddressed(baselinePath, bytes, baselineSha, 'content-addressed baseline', 'baseline')"),
+    'the baseline is committed through the shared content-addressed commit')
+  assert.match(reviewSrc, /function commitContentAddressed\(path, bytes, sha, what, store\) \{\n {2}try \{\n {4}writeFileSync\(path, bytes, \{ flag: 'wx' \}\)/,
+    'and that commit writes O_EXCL — an existing name is never overwritten')
+  assert.equal((reviewSrc.match(/commitContentAddressed\(/g) || []).length, 4,
+    'one definition and exactly three stores — baseline, prepared manifest, contract')
+  // Sol simplify-r1 #1: the shared helper must not flatten a caller's diagnostic. Each call supplies
+  // its own store noun, so every torn-store fault stays byte-identical to what its caller emitted
+  // before the convergence — a fault message is a contract line, not an implementation detail.
+  assert.deepEqual((reviewSrc.match(/commitContentAddressed\([^)]*, '(\w+)'\)/g) || [])
+    .map((c) => c.match(/'(\w+)'\)$/)[1]).sort(), ['baseline', 'contract', 'manifest'],
+    'the three callers each name their own store in the fault')
   assert.ok(reviewSrc.includes("const baselineFile = (genDir, sha) => join(genDir, 'baseline-' + sha"), 'the baseline name is its own digest')
   assert.ok(!reviewSrc.includes("'baseline.json'"), 'no fixed baseline.json name the manifest core renames onto')
 })

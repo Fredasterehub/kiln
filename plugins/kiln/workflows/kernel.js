@@ -966,7 +966,7 @@ const failStop = (status, fields, line, extra) => {
   beats.push(line)
   return stop(status, fields, extra)
 }
-// Marker lifecycle (plan I, the Sol r3 rule adopted verbatim): .kiln/perceptual-partial
+// Marker lifecycle: .kiln/perceptual-partial
 // is written ONLY on a semantic perceptual hold and REMOVED on every terminal
 // nonsemantic validate path — ok (dormant or live-accept), the law-red reopen doors
 // (preflight and stage-end), capture-act failure, primary-transport and degraded
@@ -1148,7 +1148,7 @@ const PERCEPTUAL_PRESENCE =
   "if(t.slice(0,3)===\"## \"&&t.slice(3).trim().toLowerCase()===\"perceptual\"){f=true;break;}}}catch(e){}" +
   "process.exit(f?0:1);'"
 // CURRENT generation = the highest .kiln/evidence/gen-<n> dir containing a valid
-// manifest.json (the Sol r3 rule scripts/kiln-review currentGeneration applies),
+// manifest.json (the rule scripts/kiln-review currentGeneration applies),
 // printed as the manifest path — the one closed handle every screening leg shares.
 // A manifest-less dir is crash residue: it occupies its number and is never selected.
 const CURRENT_MANIFEST =

@@ -2,7 +2,8 @@
 
 Lossless-translation ledger (INTAKE-11). Source: `plugins/kiln/skills/kiln-brainstorm/`,
 `plugins/kiln/data/brainstorming-techniques.json`, `plugins/kiln/data/elicitation-methods.json`,
-`plugins/kiln/agents/the-creator.md` — all read-only, untouched. Every one of the 204
+`retired/v3/agents/the-creator.md` (the v3 agent, retired out of the plugin once its content was
+carried here) — all read-only, untouched. Every one of the 204
 inventory ids appears exactly once below: **CARRIED** (shelf file + section, possibly
 reframed under the sealed da-vinci.md contract and the slice-6 ratified constraints) or
 **CUT** (with the reason). Totals: **160 carried, 44 cut**.
