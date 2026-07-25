@@ -372,16 +372,16 @@ const MILESTONE_PROJECTION_CHECK =
   "node -e 'const fs=require(\"fs\");" +
   "const proj=require(\"./.kiln/slices.json\").map(s=>[String((s&&s.id)||\"\").trim(),String((s&&s.milestone)||\"\").trim()]);" +
   "const lines=fs.readFileSync(\"./.kiln/LAW.md\",\"utf8\").split(\"\\n\");" +
-  "let auth=[],state=0,ok=true;" +
+  "let auth=[],state=0,ok=true,found=false;" +
   "for(const ln of lines){const t=ln.trim();const row=t.slice(0,1)===\"|\";" +
-  "if(state===0){if(t.slice(0,3)===\"## \"&&t.slice(3).trim().toLowerCase()===\"plan\")state=1;continue;}" +
+  "if(state===0){if(t.slice(0,3)===\"## \"&&t.slice(3).trim().toLowerCase()===\"plan\"){state=1;found=true;}continue;}" +
   "if(state===1){if(t.slice(0,1)===\"#\"){ok=false;break;}if(!row)continue;const c=t.split(\"|\").slice(1,-1).map(x=>x.trim());" +
   "if(c.length===2&&c[0].toLowerCase()===\"slice\"&&c[1].toLowerCase()===\"milestone\"){state=2;continue;}ok=false;break;}" +
   "if(state===2){const c=t.split(\"|\").slice(1,-1).map(x=>x.trim());" +
   "if(row&&c.length===2&&c.every(x=>/^:?-{3,}:?$/.test(x))){state=3;continue;}ok=false;break;}" +
   "if(!row)break;" +
   "const c=t.split(\"|\").slice(1,-1).map(x=>x.trim());if(c.length!==2){ok=false;break;}auth.push([c[0],c[1]]);}" +
-  "process.exit(ok&&JSON.stringify(proj)===JSON.stringify(auth)?0:1);'"
+  "process.exit(ok&&found&&auth.length>0&&JSON.stringify(proj)===JSON.stringify(auth)?0:1);'"
 
 // S1 (W8-B): the perceptual-table gate. The Perceptual table rides INSIDE LAW.md under a
 // GFM `## Perceptual` heading — `| criterion id | owning slice | dim | requirement |
@@ -966,6 +966,17 @@ const failStop = (status, fields, line, extra) => {
   beats.push(line)
   return stop(status, fields, extra)
 }
+// Marker lifecycle (plan I, the Sol r3 rule adopted verbatim): .kiln/perceptual-partial
+// is written ONLY on a semantic perceptual hold and REMOVED on every terminal
+// nonsemantic validate path — ok (dormant or live-accept), the law-red reopen doors
+// (preflight and stage-end), capture-act failure, primary-transport and degraded
+// holds, addendum failure. A marker never outlives the conclusion it describes. A
+// failed removal surfaces as persist-failed, never a silent stale marker.
+const clearPerceptualMarker = async () => {
+  if (await hands('rm -f ' + P.perceptualPartial, 'perceptual:marker-clear') !== 0) return persistFail('perceptual-marker-clear')
+  return null
+}
+
 // W2-S6 (B06): reconcile the rendered seal and audit projections from their JSONL truth BEFORE the
 // membership reads below. A crash between a prior JSONL append and its .log render, or a project
 // sealed under W1 before the ledger existed, is healed here idempotently — the content-blind verb
@@ -973,6 +984,12 @@ const failStop = (status, fields, line, extra) => {
 // sealed work. sealMembers and the audit grep then always read a current-valid projection.
 const reconciled = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' reconcile .kiln', 'ledger:reconcile')
 if (reconciled !== 0) {
+  // W2-S11 (B3): coverage, not a new rule — a terminal validate hold clears the marker here as it
+  // already does at the law-red doors, so no marker outlives the conclusion it describes.
+  if (stage === 'validate') {
+    const pf = await clearPerceptualMarker()
+    if (pf) return pf
+  }
   return failStop('transport-failure',
     { stage, active_slice: 'none', next_action: 'Rerun the stage after fixing the transport: the seal and audit ledgers could not be reconciled from their JSONL truth' },
     await voiceBeat('transport-failure', {}, 'The seal and audit ledgers could not be reconciled from their JSONL truth — the run holds rather than read a stale projection.', 1))
@@ -988,6 +1005,10 @@ const sealLeg = await idsFetch(
   'the printed JSON array of the raw non-empty lines of the seal ledger; an absent ledger prints [] at exit 0 and only a genuine read fault exits nonzero',
 )
 if (sealLeg.exit !== 0) {
+  if (stage === 'validate') {
+    const pf = await clearPerceptualMarker()
+    if (pf) return pf
+  }
   return failStop('transport-failure',
     { stage, active_slice: 'none', next_action: 'Rerun the stage after fixing the transport: the seal ledger at ' + P.seals + ' could not be read' },
     await voiceBeat('transport-failure', {}, 'The seal ledger could not be read — the run holds rather than risk rebuilding sealed work or missing a reopen.', 1))
@@ -1179,21 +1200,17 @@ const PERCEPTUAL_BELT =
 // scripts/kiln-review SCREEN_LOCATION pattern: a screen finding pins an evidence path
 // with an OPTIONAL :frame — a viewport capture has no line number.
 const SCREEN_LOCATION_RULE = /^[^:]+(?::\d+)?$/
-// Marker lifecycle (plan I, the Sol r3 rule adopted verbatim): .kiln/perceptual-partial
-// is written ONLY on a semantic perceptual hold and REMOVED on every terminal
-// nonsemantic validate path — ok (dormant or live-accept), the law-red reopen doors
-// (preflight and stage-end), capture-act failure, primary-transport and degraded
-// holds, addendum failure. A marker never outlives the conclusion it describes. A
-// failed removal surfaces as persist-failed, never a silent stale marker.
-const clearPerceptualMarker = async () => {
-  if (await hands('rm -f ' + P.perceptualPartial, 'perceptual:marker-clear') !== 0) return persistFail('perceptual-marker-clear')
-  return null
-}
 
 // LAW rerun beat: at every kernel invocation start (resume), if the check
 // exists. Red reopens only a sealed owner; otherwise the run proceeds.
 const pre = await lawBeat(LAW_GUARD, 'law:preflight')
-if (pre.exit === TRIO_MISMATCH) return trioMismatchHold('none')
+if (pre.exit === TRIO_MISMATCH) {
+  if (stage === 'validate') {
+    const pf = await clearPerceptualMarker()
+    if (pf) return pf
+  }
+  return trioMismatchHold('none')
+}
 if (pre.exit !== 0) {
   const owner = await firstSealed(pre.ids)
   if (owner) {
@@ -1944,7 +1961,13 @@ if (stage !== 'build') {
   }
   // LAW rerun beat: stage end (report is a stage, so this also guards completion).
   const post = await lawBeat(LAW_GUARD, 'law:stage-end')
-  if (post.exit === TRIO_MISMATCH) return trioMismatchHold('none')
+  if (post.exit === TRIO_MISMATCH) {
+    if (stage === 'validate') {
+      const pf = await clearPerceptualMarker()
+      if (pf) return pf
+    }
+    return trioMismatchHold('none')
+  }
   if (post.exit !== 0) {
     const owner = await firstSealed(post.ids)
     if (owner) {

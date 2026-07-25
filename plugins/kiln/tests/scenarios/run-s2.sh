@@ -9,13 +9,18 @@ cp -r "$FIXTURES/slice-defect/." "$WD"
 echo "S2 workdir: $WD"
 cd "$WD" || exit 1
 
-node --test slice/ || fail "fixture floor not green by construction"
-gate_request "$WD"
+SLICE=s2-median   # the OWNING slice id from the fixture LAW, not the fixture directory name
+GATE="$WD/.kiln/gate-review.json"
 
-"$KILN_REVIEW" review "$WD" request.json gate-review.json
+node --test slice/ || fail "fixture floor not green by construction"
+seal_fixture_law "$WD" "$SLICE"
+gate_request "$WD"
+gate_seats
+
+"$KILN_REVIEW" review "$WD" "$WD/.kiln" "$SLICE" "$REVIEWER_MODEL" "$REVIEWER_ALIAS" "$REVIEWER_EFFORT" request.json "$GATE"
 rc=$?
 [ "$rc" -eq 10 ] || fail "expected reject (10), got $rc"
-jq -e '.findings[] | select(.location == "slice/median.mjs:4")' gate-review.json >/dev/null \
+jq -e '.findings[] | select(.location == "slice/median.mjs:4")' "$GATE" >/dev/null \
   || fail "no finding names the defect evidence location slice/median.mjs:4"
 
 # The locked repair (annex): even branch averages the two middle values.
@@ -25,10 +30,12 @@ node -e "import('./slice/median.mjs').then(m => process.exit(m.median([1,2,3,4])
   || fail "behavioral repaired-state check red"
 diff -u slice/median.mjs.orig slice/median.mjs > repair-delta.md
 
-# Repair pass 1 of the annex's two: scoped recheck by the same reviewer contract.
-"$KILN_REVIEW" recheck "$WD" request.json gate-review.json repair-delta.md gate-review-2.json
+# Repair pass 1 of the annex's two: scoped recheck by the same reviewer contract. The prior gate is
+# the published one, and the recheck output lands under the same kilnDir the verb was handed.
+GATE2="$WD/.kiln/gate-review-2.json"
+"$KILN_REVIEW" recheck "$WD" "$WD/.kiln" "$SLICE" "$REVIEWER_MODEL" "$REVIEWER_ALIAS" "$REVIEWER_EFFORT" request.json "$GATE" repair-delta.md "$GATE2"
 rc=$?
 [ "$rc" -eq 0 ] || fail "recheck did not accept (exit $rc) — within-two-passes assertion fails at pass 1"
-[ "$(jq -r .verdict gate-review-2.json)" = accept ] || fail "recheck verdict not accept"
+[ "$(jq -r .verdict "$GATE2")" = accept ] || fail "recheck verdict not accept"
 
 echo "S2 PASS (sealed within 1 of 2 repair passes)"

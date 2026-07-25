@@ -3297,8 +3297,17 @@ if (mode === 'review' && args.length === 8) {
   // a role consistent with its position and a matching run_id. When ANY
   // referenced Claude leg is a still-pending intent the row is written PROVISIONAL with a
   // candidate_id — it renders no membership until capture-and-finalize promotes it. When every
-  // referenced leg is already resolved (a codex reviewer) the row is non-provisional. The legacy
-  // three-word arity keeps its exact today behaviour so the S11 shell callers never change.
+  // referenced leg is already resolved (a codex reviewer) the row is non-provisional.
+  // W2-S11 (Sol r1 003): the short arities are boundary-guarded COMPATIBILITY SURFACE, kept for the
+  // test surface that exercises them. Production never mints a kind-less row through them — the
+  // kernel supplies an attestation kind at both of its append sites (kernel.js:2691 seal, :2260
+  // audit) — and once a ledger carries any modern event, a kind-less candidate is refused outright
+  // at the append (the boundary stop below at :1919, pinned by kiln-review.test.mjs:3941). So they
+  // guard no reachable production hazard. Retiring them is a TEST-SURFACE decision, unscheduled and
+  // unowned: it closes no demonstrated defect and earns a slice only when a wave shows its cost.
+  // This comment deliberately makes NO claim about how many producers a kind-less row has. Two
+  // earlier versions of it did — first about shell callers, then about sole production — and both
+  // were false; the enumerations cited here were run against these bytes, not inherited.
   // W2-S7a (FORK 3): a SIXTH argv word carries the repo — the seal RECOMPUTES the control-derived
   // manifest immediately before the candidate write and REJECTS any drift, so a gate-side mutation or
   // a change between publication and seal cannot inherit the review. A prepared manifest for the slice

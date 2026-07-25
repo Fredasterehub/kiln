@@ -1236,6 +1236,23 @@ test('S1 (A9/W5-03): MILESTONE_PROJECTION_CHECK is the deterministic agreement l
   assert.equal(run(THIN_DELIM_1, [{ id: 'a', surface: 'ui', milestone: 'x' }]), 1, 'a single-hyphen delimiter is malformed — halt')
   const THIN_DELIM_2 = '## Plan\n| slice | milestone |\n| -- | -- |\n| a | x |\n'
   assert.equal(run(THIN_DELIM_2, [{ id: 'a', surface: 'ui', milestone: 'x' }]), 1, 'a two-hyphen delimiter is malformed — halt')
+  // W2-S11 (B2): the anchor now carries the `found` flag its perceptual twin already had. Before
+  // it, a missing `## Plan` passed whenever slices.json ALSO projected to nothing — agreement
+  // between two absences read as agreement about a plan. An empty projection is the only input
+  // that reached it, which is why the halts above never caught it.
+  assert.equal(run('# LAW\nno plan table at all\n', []), 1,
+    'a missing plan table halts even when the projection is empty — absence is not agreement')
+  // W2-S11 (B2), the adjacent case the audit did not test, RULED fail-closed: a present heading
+  // whose table has a header and delimiter but ZERO data rows. Unlike the perceptual table, where
+  // absence is a legitimate product state (a brief with no visual deliverable authors none), a
+  // milestone plan that plans no slice is never legitimate — build iterates slices, so a law that
+  // sealed on it would plan nothing at all. The heading is a declaration that the authority is
+  // here; an empty one is an authority that says nothing, and the tree holds on those.
+  const EMPTY_TABLE = '## Plan\n| slice | milestone |\n| --- | --- |\n'
+  assert.equal(run(EMPTY_TABLE, []), 1,
+    'a declared plan table with zero rows halts — an empty authority is not a plan')
+  assert.equal(run(EMPTY_TABLE, [{ id: 'a', surface: 'ui', milestone: 'x' }]), 1,
+    'and it halts against a nonempty projection too, as it always did')
 })
 
 test('S1 (W8-B): PERCEPTUAL_TABLE_CHECK is the deterministic perceptual gate — validity, coverage, and consistency, or the honest disagree', () => {
@@ -1829,6 +1846,60 @@ test('runtime (W2-S10d): an UNANSWERED detection selects no seat — law ratify,
   assert.equal(audit.ret.status, 'degraded', 'the seam audit returns its own acknowledgment stop, not a seat')
   assert.ok(!audit.calls.some(c => c.label === 'audit:review' || c.label === 'audit-claude:review'),
     'and no auditor of either family judges the seam over an unworded detection')
+})
+
+test('runtime (W2-S11, B3): the four terminal validate holds B3 closes clear the perceptual marker, and the count guards their removal', async () => {
+  // The marker says a validate run held with partial perceptual evidence. Four terminal
+  // transport-class holds concluded a validate run without clearing it, so a later run could read a
+  // marker its own conclusion had already outlived. Coverage, not a new rule — the guard is the one
+  // the law-red doors already use, and it stays conditioned on the validate stage so a build-stage
+  // hold is untouched. Counted over the source because the claim is about ALL terminal paths.
+  // What this count proves and what it does not: it reddens if any of the fifteen clears is REMOVED.
+  // It cannot see a NEW terminal hold added without one — enumerating every terminal path is not
+  // something a grep can do — so the claim is the four named sites below plus removal-guarding,
+  // not universal coverage.
+  assert.equal((src.match(/const pf = await clearPerceptualMarker\(\)/g) || []).length, 15,
+    'fifteen terminal validate paths clear the marker — the eleven that already did, plus the four B3 closes')
+  // Each hold proven EXACTLY, not by substring proximity: a guard widened to
+  // `stage === 'validate' || stage === 'build'` sits happily inside a 420-byte window, and a clear
+  // placed after the return would too. So the guard is matched as a whole condition, and the clear is
+  // required to appear BEFORE the terminal return of its own block.
+  for (const [name, hold] of [
+    ['the ledger reconcile hold', "if (reconciled !== 0) {"],
+    ['the seal-ledger read hold', "if (sealLeg.exit !== 0) {"],
+    ['the preflight torn-trio door', "if (pre.exit === TRIO_MISMATCH) {"],
+    ['the stage-end torn-trio door', "if (post.exit === TRIO_MISMATCH) {"],
+  ]) {
+    const at = src.indexOf(hold)
+    assert.notEqual(at, -1, `${name} still stands`)
+    // The block sliced by BALANCED BRACES, not by a guessed delimiter: these four holds close at
+    // different indents, and a fixed terminator silently truncated one of them before its return.
+    let depth = 0
+    let end = at
+    for (let i = src.indexOf('{', at); i < src.length; i += 1) {
+      if (src[i] === '{') depth += 1
+      else if (src[i] === '}') { depth -= 1; if (depth === 0) { end = i + 1; break } }
+    }
+    const body = src.slice(at, end)
+    const guard = body.match(/if \(([^)]*)\) \{\n\s*const pf = await clearPerceptualMarker\(\)/)
+    assert.ok(guard, `${name} clears the marker under a guard of its own`)
+    assert.equal(guard[1], "stage === 'validate'",
+      `${name} clears on the validate stage and NOTHING else — the marker belongs to that stage alone`)
+    const clearAt = body.indexOf('clearPerceptualMarker()')
+    const returnAt = body.search(/return (?:failStop|trioMismatchHold)\(/)
+    assert.notEqual(returnAt, -1, `${name} ends in a terminal return`)
+    assert.ok(clearAt < returnAt, `${name} clears BEFORE it returns — a clear after the return never runs`)
+  }
+  // A live walk: a validate run whose seal-ledger read faults leaves no marker behind.
+  const { ret, calls } = await runKernel({ stage: 'validate', projectDir: '/p' }, {
+    ...VOICE,
+    'law:preflight': GREEN,
+    'ledger:reconcile': { exit: 0 },
+    'seal:set': { exit: 1 },
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'transport-failure', 'the unreadable seal ledger holds the run')
+  assert.ok(calls.some(c => c.label === 'perceptual:marker-clear'), 'and the marker is cleared before the hold returns')
 })
 
 test('runtime (W2-S10d): the marker-keyed selectors already covered by ORDER say so, and the control flow says it too', () => {

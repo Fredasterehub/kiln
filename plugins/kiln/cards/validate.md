@@ -1,11 +1,13 @@
 # VALIDATE — Argus opens a hundred eyes *(stage 3 of 4: law → build → validate → report)*
 
-*Stage card: methodology for the stage agent. The kernel never reads this file — it branches
-on `bash .kiln/law/check.sh` alone; your job is the evidence behind that exit code. Return
+*Stage card: methodology for the stage agent. The kernel never reads this file — it branches on
+the sealed law run alone; your job is the evidence behind that exit code. Return
 `{facts:{status, pointers, schema_valid}, narration_beat}`.*
 
 ## Method — closed facts only, no claim beyond what ran
-1. Rerun the full LAW fresh: `bash .kiln/law/check.sh`. Record the exit code.
+1. Rerun the full LAW fresh: `node "<plugin-root>/scripts/kiln-review" run-checks .kiln`. Record
+   the exit code. By validate time the law is SEALED, so the run goes through the verb that
+   re-verifies the whole cross-bound seal first — never a bare script nobody verified.
 2. Exercise EVERY criterion in `.kiln/LAW.md` individually: run each criterion's command
    exactly as written, against the real built artifact, and record the observed exit/output.
    No sampling, no inference — a criterion you did not run is reported as not run, never as

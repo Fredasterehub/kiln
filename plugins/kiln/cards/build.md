@@ -6,7 +6,11 @@ ui, GPT reviews correctness against the locked criteria only — creative direct
 are yours, never the reviewer's), a fresh claude reviewer for logic and mixed slices (GPT
 coded those — cross-family law); it owns repair dispatch and seals. You build and evidence;
 you never invoke the transport, write `gate-review.json`, or touch `seals.log`. Return
-`{facts:{status, pointers, schema_valid}, narration_beat}`.*
+`{facts:{status, pointers, schema_valid}, narration_beat}`. Your launch carries the mechanical run
+context — the project dir (your cwd) and the plugin root — and every law run below goes through the
+plugin's own verb, never a bare `bash` of the script: by build time the law is SEALED, and
+`run-checks` re-verifies the whole cross-bound seal before it executes anything. Verifying against a
+check.sh nobody verified is how a tampered law passes as green.*
 
 ## Mode: build *(prompt says "Build exactly slice `<id>` (surface `<ui|logic|mixed>`)")*
 1. Read `.kiln/LAW.md` and take ONLY your slice. Working code lives in the project
@@ -17,7 +21,7 @@ you never invoke the transport, write `gate-review.json`, or touch `seals.log`. 
    fixed WHAT at law time — the cut and its criteria; HOW is decided now, never
    pre-planned beyond the cut.
 4. Build the slice — surfaces `logic` and `mixed` build through the coder call below;
-   surface `ui` builds with your own hands. Then run `bash .kiln/law/check.sh` — return when
+   surface `ui` builds with your own hands. Then run `node "<plugin-root>/scripts/kiln-review" run-checks .kiln` — return when
    it is green THROUGH your own slice (every one of your slice's criteria passes); a nonzero
    exit is acceptable ONLY when every remaining red is owned by a later, still-unbuilt planned
    slice — never return with your own or an earlier slice's criterion red. The kernel reruns
@@ -57,7 +61,7 @@ protocol, no ceremony.
    `builder-logic` note. The `< "$TMP"` redirect feeds the prompt AND closes stdin: an open stdin
    hangs codex until the timeout. No `--output-schema` — the logic-builder row of the
    guide takes default verbosity and a free-text reply via `-o`.
-4. Verify with your own hands: run the slice's tests and `bash .kiln/law/check.sh`. Codex
+4. Verify with your own hands: run the slice's tests and `node "<plugin-root>/scripts/kiln-review" run-checks .kiln`. Codex
    can exit `0` having produced nothing usable — the green run is the only proof.
 5. Not green: fold the observed failure into the prompt and call again — at most twice
    more. Still red after that, return a non-`'ok'` `facts.status` with the facts. Codex unavailable, or
@@ -75,7 +79,7 @@ protocol, no ceremony.
 1. Read `.kiln/gate-review.json`. Fix ONLY the listed finding IDs, at their evidence
    locations — nothing else moves. Surfaces `logic` and `mixed`: the fix goes through the
    same ONE-call coder mechanism above — the finding list becomes the Goal.
-2. Run `bash .kiln/law/check.sh > .kiln/check-receipt.txt 2>&1` back to exit `0` — the
+2. Run `node "<plugin-root>/scripts/kiln-review" run-checks .kiln > .kiln/check-receipt.txt 2>&1` back to exit `0` — the
    refreshed receipt is what the recheck reviewer reads instead of executing anything.
 3. Write `.kiln/repair-delta.md` (temp + rename): one entry per finding ID — what changed,
    where, in past tense. The recheck reviewer reads exactly this against its own findings.

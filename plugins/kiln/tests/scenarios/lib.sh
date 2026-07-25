@@ -174,26 +174,49 @@ assert_s1_artifacts() { # $1=workdir — annex expected artifacts + A1..A4
     # T-04: the gate carries its hash — it must equal the CURRENT LAW.md.
     [ "$(jq -r .law_hash .kiln/gate-review.json)" = "$(sha256sum .kiln/LAW.md | cut -d' ' -f1)" ] \
       || fail "A4: gate law_hash does not match current .kiln/LAW.md"
-    bash .kiln/law/check.sh || fail "A4: fresh LAW rerun red"
+    # W2-S11 (Sol 001/002): post-seal, so the LAW rerun goes through the fused verb — it
+    # re-verifies the whole cross-bound seal before executing, and a harness that executed the
+    # checker directly would validate evidence against a checker nobody verified.
+    "$KILN_REVIEW" run-checks .kiln || fail "A4: fresh LAW rerun red"
   ) || exit 1
   assert_state_fields "$wd/.kiln/STATE.md"
 }
 
-gate_request() { # $1=workdir — writes request.json + the kernel-side check receipt;
-  # reviewer model+effort come from tiers.json. The runner is the kernel side here:
-  # it executes the request's check command and captures the output verbatim, so the
-  # reviewer (who executes nothing) judges attached evidence.
-  local wd="$1" h alias model effort
-  h=$(sha256sum "$wd/LAW.md" | cut -d' ' -f1)
+# W2-S11: the gate argv these runners speak is DERIVED from the kiln-review dispatch arms and the
+# usage string, re-read at build time — never transcribed from a document. Three facts moved since
+# the runners were written, and each shows up below:
+#   1. the reviewer model, ALIAS and effort are argv WORDS, not request fields;
+#   2. law_hash and law_text come from the SEALED trio (LAW.md + law/check.sh + slices.json), so a
+#      gate call needs a sealed .kiln, and the request carries hints ONLY;
+#   3. the gate output must sit DIRECTLY under the kilnDir handed to the verb — the trust-root check
+#      refuses an output path anywhere else, so the runners write .kiln/gate-review.json.
+
+seal_fixture_law() { # $1=workdir $2=slice id — author and seal the trio the gate derives facts from
+  local wd="$1" slice="$2"
+  mkdir -p "$wd/.kiln/law"
+  cp "$wd/LAW.md" "$wd/.kiln/LAW.md"
+  printf '#!/usr/bin/env bash\ncd "$(dirname "$0")/../.." && node --test slice/\n' > "$wd/.kiln/law/check.sh"
+  jq -n --arg id "$slice" '[{id: $id, surface: "logic"}]' > "$wd/.kiln/slices.json"   # the LAW owning slice id
+  "$KILN_REVIEW" seal-law "$wd/.kiln" dual || fail "seal-law refused the authored trio"
+}
+
+gate_seats() { # tiers.json → the three reviewer words the review/recheck argv now carries
+  REVIEWER_ALIAS=$(jq -r '.roles["reviewer-gate"].alias' "$TIERS")
+  REVIEWER_MODEL=$(jq -r --arg a "$REVIEWER_ALIAS" '.resolver[$a]' "$TIERS")
+  REVIEWER_EFFORT=$(jq -r '.roles["reviewer-gate"].effort' "$TIERS")
+  [ -n "$REVIEWER_MODEL" ] && [ "$REVIEWER_MODEL" != null ] || fail "tiers.json resolves no concrete reviewer-gate model"
+}
+
+gate_request() { # $1=workdir — the kernel-side check receipt + the HINTS-ONLY request.
+  # The runner is the kernel side here: it executes the check command and captures the output
+  # verbatim, so the reviewer (which executes nothing) judges attached evidence.
+  local wd="$1"
   mkdir -p "$wd/.kiln"
-  ( cd "$wd" && node --test slice/ > .kiln/check-receipt.txt 2>&1 ) || true
-  alias=$(jq -r '.roles["reviewer-gate"].alias' "$TIERS")
-  model=$(jq -r --arg a "$alias" '.resolver[$a]' "$TIERS")
-  effort=$(jq -r '.roles["reviewer-gate"].effort' "$TIERS")
-  jq -n --arg h "$h" --arg model "$model" --arg effort "$effort" '{
-    reviewer_model: $model,
-    reviewer_effort: $effort,
-    law_hash: $h,
+  # The receipt is POST-SEAL evidence, so it is captured the way the kernel captures it — through
+  # run-checks, which verifies the sealed trio and only then runs check.sh. Capturing a green
+  # receipt from a direct test run would attest evidence the seal never vouched for.
+  ( cd "$wd" && "$KILN_REVIEW" run-checks .kiln > .kiln/check-receipt.txt 2>&1 ) || true
+  jq -n '{
     criteria: "median(xs): odd length → the middle value; even length → the mean of the two middle values.",
     paths: ["slice/median.mjs", "slice/median.test.mjs", "LAW.md"],
     failures: [],

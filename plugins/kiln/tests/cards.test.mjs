@@ -150,6 +150,34 @@ test('skill: SKILL.md carries exactly one marker touch, and it proves both files
     'the mid-run moment no longer claims the kernel wrote the ack — detection records the detection, the operator word writes the ack')
 })
 
+test('cards: every law run in the cards corpus goes through the trusted verb, none through a bare script (S11/B1)', () => {
+  // B1 brings cards/ INTO the pinned corpus, and this is the pin that keeps it there. A builder
+  // that runs the law script bare verifies against a check.sh nobody verified; by build time the
+  // law is sealed, so run-checks re-verifies the whole cross-bound seal before executing anything.
+  // Counted over every card, not just the one B1 edited — the claim is about the corpus.
+  // The rule is post-seal, not universal. The LAW-AUTHORING cards necessarily describe the check.sh
+  // they must write — it is the artifact they produce, and nothing is sealed while they run (the seal
+  // is the kernel's own step after the law stage returns, kernel.js:1588). Those three are named
+  // here with that reason; every other card runs the law and must go through the verb.
+  const PRE_SEAL_CARDS = ['law.md', 'wide-adjudicate.md', 'wide-plan.md']
+  const bare = []
+  const fused = []
+  for (const file of readdirSync(CARDS).filter((f) => f.endsWith('.md'))) {
+    const src = readFileSync(join(CARDS, file), 'utf8')
+    // Inverted for the same reason as the harness pin: a card mentioning the checker path is either
+    // running it or naming it, and enumerating interpreter spellings is a list that never finishes.
+    // A card never WRITES check.sh, so any mention that is not the verb call is an execution.
+    for (const line of src.split('\n')) {
+      if (line.includes('law/check.sh') && !/run-checks/.test(line)) bare.push(file)
+    }
+    for (const _ of src.matchAll(/kiln-review"?\s+run-checks/g)) fused.push(file)
+  }
+  assert.deepEqual([...new Set(bare)].sort(), PRE_SEAL_CARDS,
+    'only the law-authoring cards name the checker directly, describing the artifact they write; no post-seal card verifies against an unverified script')
+  assert.deepEqual(fused.sort(), ['build.md', 'build.md', 'build.md', 'validate.md'],
+    'the three build-card law runs and the validate rerun all go through the fused verb')
+})
+
 test('plugin.json: the zero-reader userConfig knobs are killed (S15)', () => {
   const manifest = JSON.parse(readFileSync(fileURLToPath(new URL('../.claude-plugin/plugin.json', import.meta.url)), 'utf8'))
   assert.ok(!('userConfig' in manifest), 'no userConfig — posture and theaterIntensity died with their v3 readers')
