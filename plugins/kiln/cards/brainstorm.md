@@ -43,11 +43,13 @@ On the `BRAINSTORM_COMPLETE` envelope the conductor runs TWO launches, in order:
    ledger path (its context never saw the conversation — that is the whole point); its launch
    also carries the mechanical run context (the project dir = its cwd, and the plugin root)
    for the deterministic preflight below. It verifies the last ledger line is `session_complete`
-   (else returns a non-`'ok'` `facts.status`, honestly),
-   compiles the confirmed intents, user-tagged ideas, and clarifications into
-   `.kiln/docs/vision.md` — inventing nothing; every line traces to a ledger event — written
-   via temp + rename. In the SAME leg (no new call — you are the earliest producer on this
-   path) it also writes `.kiln/docs/project-brief.md` (the light brief: purpose, users,
+   (else returns a non-`'ok'` `facts.status`, honestly), then compiles the confirmed intents,
+   user-tagged ideas, and clarifications into the brief and the posture — inventing nothing;
+   every line traces to a ledger event — written via temp + rename. W3: the VISION ITSELF is no
+   longer compiled here. The law stage now authors it through a dual-mind round (two blind plans,
+   one revision each, a merge and a completeness check), so a single-leg vision written ahead of
+   that round would be overwritten by it or would silently skip it. This leg writes
+   `.kiln/docs/project-brief.md` (the light brief: purpose, users,
    deliverable, constraints, non-goals, visual-artifact presence, unresolved assumptions) and
    `.kiln/posture.json` (EXACTLY `{scope, novelty, reversibility}` over the frozen enums — the
    observable Gauge reading), both traced to the sealed ledger + essence, both temp + rename.
@@ -58,7 +60,10 @@ On the `BRAINSTORM_COMPLETE` envelope the conductor runs TWO launches, in order:
    major boundaries, integration seams, risky hotspots; every line traceable, not a full
    inventory); on `greenfield`, neither.
    Returns the standard envelope (defined in `## Return` below); its `narration_beat` is one
-   voiced line announcing the vision is on disk, closed by a quote foot composed per the
+   voiced line announcing the BRIEF and posture are on disk — never the vision, which this leg no
+   longer writes and which the law stage authors through its dual round. The conductor speaks this
+   beat verbatim, so a beat that still announced the vision would tell the operator a file exists
+   that does not. The line is closed by a quote foot composed per the
    display encoding (`data/voice.json` → `panel.blocks.foot`, CAL 17) — a light rule
    (`grammar["rule.light"]`), a blank line, then one credited verified quote from
    `data/lore-quotes.json` → `moments["vision-compiled"]`: the entry's `text` with any
@@ -83,11 +88,11 @@ a sketchbook.
 
 ## Return
 The compiler leg returns the standard envelope (the kernel launch above returns nothing).
-`facts.status` — `'ok'` only if the ledger's last line is `session_complete` and all three of
-`.kiln/docs/vision.md`, `.kiln/docs/project-brief.md`, and `.kiln/posture.json` are compiled
-and written (and, on a brownfield target, `.kiln/brownfield` plus a nonempty
-`.kiln/docs/codebase-map.md`), else an honest failure string. `facts.pointers` — every compiled
-path (`.kiln/docs/vision.md`, `.kiln/docs/project-brief.md`, `.kiln/posture.json`, and any
-brownfield map). `facts.schema_valid` — true iff every output is well-formed (the posture
+`facts.status` — `'ok'` only if the ledger's last line is `session_complete` and BOTH of
+`.kiln/docs/project-brief.md` and `.kiln/posture.json` are compiled and written (and, on a
+brownfield target, `.kiln/brownfield` plus a nonempty `.kiln/docs/codebase-map.md`), else an
+honest failure string. The vision is NOT in this floor — the law stage authors it.
+`facts.pointers` — every compiled path (`.kiln/docs/project-brief.md`, `.kiln/posture.json`, and
+any brownfield map). `facts.schema_valid` — true iff every output is well-formed (the posture
 exactly the three enum fields, any codebase map nonempty). `narration_beat` — the one voiced
-line announcing the vision is on disk, composed with its quote foot per the compiler spec above.
+line announcing the brief is on disk, composed with its quote foot per the compiler spec above.

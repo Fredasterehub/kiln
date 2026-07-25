@@ -519,14 +519,32 @@ test('cards (Wave 3): the onboarding card is a LIGHT direct-path compiler — wr
   assert.ok(!onb.includes('**FOOT**'), 'no FOOT block on the light onboarding card')
 })
 
-test('cards (Wave 3): the vision compiler ALSO emits the brief + posture — one leg, the earliest producer on the brainstorm path', () => {
+test('cards (W3): the brainstorm compiler emits the brief + posture and NOT the vision — the law stage authors that', () => {
+  // W3 (ruling §1) moved vision authorship into the kernel's dual round, so this leg is no longer
+  // the vision producer. The pin is stated as the RETURN FLOOR the card declares, because that is
+  // what a compiler is judged on: a leg that still wrote the vision here would either be overwritten
+  // by the round or silently skip it, and both are the drift this asserts against.
   const b = cardText('brainstorm.md')
-  assert.ok(b.includes('.kiln/docs/vision.md'), 'the compiler still writes the vision')
-  assert.ok(b.includes('.kiln/docs/project-brief.md'), 'the same leg now also writes the project brief')
-  assert.ok(b.includes('.kiln/posture.json'), 'the same leg now also writes the posture projection')
+  assert.ok(b.includes('.kiln/docs/project-brief.md'), 'the leg writes the project brief')
+  assert.ok(b.includes('.kiln/posture.json'), 'the leg writes the posture projection')
   for (const field of ['scope', 'novelty', 'reversibility']) {
     assert.ok(b.includes(field), `the brainstorm posture names the frozen field ${field}`)
   }
+  // The excluded input: the vision must not be in the leg's own return floor. It may still be
+  // NAMED in the card (the round that authors it is worth explaining), so the pin ranges over the
+  // floor sentence rather than the whole card — the claim is about what the leg owes, not what the
+  // prose may mention.
+  // The guard asserts the INDEX, not the slice length. The first draft checked `floor.length > 0`
+  // after `slice(indexOf(...))` — and slice(-1) is still nonempty, so a renamed or deleted anchor
+  // left the guard passing and the bound ranging over an empty string. A vacuity guard that cannot
+  // fail is worse than none: it reads as proof. Both bounds are checked as indices for that reason.
+  const floorAt = b.indexOf('`facts.status` — `\'ok\'` only if')
+  const pointersAt = b.indexOf('`facts.pointers`')
+  assert.ok(floorAt >= 0, 'the return-floor sentence was located by its anchor — the bound has a subject')
+  assert.ok(pointersAt > floorAt, 'the floor sentence ends at the pointers clause — the slice below is a real span')
+  const floorLine = b.slice(floorAt, pointersAt)
+  assert.ok(floorLine.length > 0, 'the extracted floor span is nonempty')
+  assert.ok(!floorLine.includes('vision.md'), 'the vision is not in the compiler return floor — the law stage owns it')
 })
 
 test('cards (Wave 3): onboarding ships as a light card exempt from the moment-key map — the 25-key lore bank is untouched', () => {

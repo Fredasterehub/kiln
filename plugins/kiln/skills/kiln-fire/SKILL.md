@@ -88,7 +88,8 @@ byte-identical):
 - Brainstorm:
   - "Kiln. Nothing on the anvil yet — Da Vinci is already uncapping the paint. Let's find out what we're making."
 
-On a direct `/kiln-fire <idea>`: after the greeting and BEFORE the kernel law launch, launch
+On a direct `/kiln-fire <idea>`: after the greeting, TAKE THE RUN LOCK FIRST (The run lock,
+below) — the availability panel rules before any work exists — and only then launch
 the one-shot onboarding compiler per `cards/onboarding.md` — a fresh-context agent spawned with
 cwd = `projectDir` and told the plugin root (so it runs the bounded brownfield preflight), the
 operator's idea its only CONTENT input, writing `.kiln/docs/project-brief.md` + `.kiln/posture.json`
@@ -101,10 +102,11 @@ and returning the canonical `{facts:{status, pointers, schema_valid}, narration_
 mirror of the brainstorm path's compiler→kernel-law sequence.
 
 On the `BRAINSTORM_COMPLETE` envelope (single-line JSON: `ledger`, `entries`, `essence`):
-launch the one-shot vision compiler per `cards/brainstorm.md` — a fresh-context agent spawned
+TAKE THE RUN LOCK FIRST (The run lock, below), then launch the one-shot vision compiler per `cards/brainstorm.md` — a fresh-context agent spawned
 with cwd = `projectDir` and told the plugin root (so it runs the same brownfield preflight), the
-sealed ledger path its only CONTENT input, writing `.kiln/docs/vision.md`, `.kiln/docs/project-brief.md`,
-and `.kiln/posture.json` (plus, on a brownfield target, `.kiln/brownfield` + `.kiln/docs/codebase-map.md`), returning the canonical
+sealed ledger path its only CONTENT input, writing `.kiln/docs/project-brief.md`
+and `.kiln/posture.json` (W3: the vision itself is no longer compiled here — the kernel's dual
+vision round authors it inside the law stage) (plus, on a brownfield target, `.kiln/brownfield` + `.kiln/docs/codebase-map.md`), returning the canonical
 `{facts:{status, pointers, schema_valid}, narration_beat}` envelope; speak its `narration_beat`
 verbatim; then, only once `facts.status` is `'ok'`, run the research sweep (below); only when it
 clears do you launch the kernel
@@ -113,8 +115,15 @@ or ledger content ever reaches this window.
 
 ## The run lock
 
-Once the compiler returns `facts.status` `'ok'` and BEFORE the research sweep, take the run lock —
-ONCE per run. Run this Bash (no orchestration, one closed fact):
+Take the run lock BEFORE THE COMPILER LAUNCH — ONCE per run. The exact position differs by path
+because Da Vinci precedes it on one of them: on the DIRECT path it is greeting → acquire →
+compiler; on the BRAINSTORM path it is greeting → Da Vinci (who takes no lock and writes only the
+ledger) → `BRAINSTORM_COMPLETE` → acquire → compiler. One rule holds on both: the lock is taken
+after the greeting and before any compiler runs, never after.
+W3 moved it ahead of the compilers: the law stage now runs dual-mind rounds that need
+both families resolved before any producer writes, and the availability panel must rule before a
+compiler has filled the tree. `stop-at-boundary` is cleaner for it — at the refusal moment nothing
+exists but the idea and, on the brainstorm path, the ledger Da Vinci sealed. Run this Bash (no orchestration, one closed fact):
 `node "${CLAUDE_PLUGIN_ROOT}/scripts/kiln-review" run-lock acquire .kiln follow-ladders "$PPID"`.
 `$PPID` is this session — the run's stable owner while it lives. It prints `<run_id> <owner>` on
 one line: hold those two facts for the whole run and pass them, unchanged, in the `args` of every
@@ -128,8 +137,9 @@ ladder above reaches for the one other minting verb, whose full form is
 
 ## The research sweep — before the law, on both paths
 
-Once the onboarding (direct) or vision (brainstorm) compiler returns `facts.status` `'ok'`, the run
-lock is held (above), and BEFORE the kernel law launch, launch the research sweep by path, exactly
+Once the onboarding (direct) or vision (brainstorm) compiler returns `facts.status` `'ok'` — the run
+lock already held from before the compiler (above) — and BEFORE the kernel law launch, launch the
+research sweep by path, exactly
 the way you launch the kernel:
 `{scriptPath: "${CLAUDE_PLUGIN_ROOT}/workflows/research-sweep.js", args: {projectDir, run_id, owner, plugin: "${CLAUDE_PLUGIN_ROOT}"}}` —
 background, by path, `args` a literal JSON object. It reads the Gauge research dial and, when

@@ -1614,13 +1614,23 @@ if (mode === 'review' && args.length === 8) {
     const heldId = held && typeof held.run_id === 'string' ? held.run_id : ''
     stop(heldId, 'run-lock acquire refused: a run lock already exists — join it with the token or take it over if it is stale', LOCK_DENIED)
   }
+  // W3 (ruling §1): the kiln dir is created BEFORE the codex probe, not after. The lock now runs
+  // ahead of the compilers on both paths, so on a fresh project this verb is the FIRST thing to
+  // touch the tree — and a 21-refusal used to leave no .kiln at all, which the conductor's pinned
+  // sequential touch chain needs in order to land the operator panel word. The old order was safe
+  // only while the compiler had already made the directory, a ground this move deletes. An empty
+  // gitignored .kiln left behind by a refused acquire is harmless; the refusal itself is unchanged.
+  try {
+    mkdirSync(kilnDir, { recursive: true })
+  } catch (error) {
+    stop('transport_failure', `run-lock acquire could not create the lock: ${error.message}`, TRANSPORT_FAILURE)
+  }
   refuseWithoutCodex(kilnDir, 'acquire')
   const record = {
     run_id: randomUUID(), owner: randomUUID(), conductor_pid: pid,
     started_at: new Date().toISOString(), ladder_choice: choice, plugin_version: version,
   }
   try {
-    mkdirSync(kilnDir, { recursive: true })
     writeFileSync(target, `${JSON.stringify(record)}\n`, { flag: 'wx' })
   } catch (error) {
     if (error.code === 'EEXIST') {
