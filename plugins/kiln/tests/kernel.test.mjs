@@ -1,11 +1,16 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, appendFileSync, symlinkSync } from 'node:fs'
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, appendFileSync, symlinkSync, chmodSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
+// W3 repair (F8): the shipped subject map, required from the module that ships it rather than
+// retyped here — the pin below binds the kernel-minted subject to it, so a rename on either side
+// reddens instead of surviving on a spelling coincidence.
+const { FAMILY_SUBJECT } = createRequire(import.meta.url)('../scripts/lib/attestation.js')
 
 // The workflow runtime evaluates kernel.js as an async function body (top-level
 // return, injected globals) — it is not an importable ESM module. The tests
@@ -142,6 +147,13 @@ async function runKernel(kargs, script) {
     // the degraded scenarios override these with exit 0 (present) or a nonzero-nonone
     // untrusted exit to exercise the tri-state HOLD.
     'law:degraded': { exit: 1 }, 'law:seal-label': { exit: 1 },
+    // W3 (the organ): every law invocation consults the two dual-round keys before the producer. The
+    // harness answers NO brainstorm path (so the vision round is not entered and its present-check
+    // short-circuits) and a SETTLED master plan — a recorded digest that matches the file on disk, the
+    // round's own skip key — so every pre-organ law scenario dispatches exactly as it did before the
+    // organ landed. Organ scenarios override these two legs to OPEN the rounds they are about.
+    'vision:path-check': { exit: 1 },
+    'master:record': { exit: 0, ids: ['e'.repeat(64), 'e'.repeat(64)] },
     'audit:degraded': { exit: 1 }, 'audit:seal-label': { exit: 1 },
     // W2-S3: the degraded claude auditor brackets its turn with a trio digest before and
     // after; the harness answers an unchanged trio by default (both legs the same three
@@ -211,7 +223,12 @@ async function runKernel(kargs, script) {
       case 'audit-repair': return 'audit:repair'
       case 'gate-reviewer': return 'gate-claude:' + modeOf(prompt)
       case 'auditor': return 'audit-claude:' + modeOf(prompt)
-      case 'ratifier': return 'ratify-claude:' + modeOf(prompt)
+      // W3/T1: role alone no longer identifies a ratifier leg. The LAW ratify and both organ
+      // completeness checks share ONE closure and ONE role, so three distinct legs would collapse
+      // onto a single mock key and a scenario could never script them apart. The SUBJECT is the only
+      // honest discriminator, and the harness already registers it at mint. law-ratify keeps the
+      // established key so every pre-organ scenario is untouched; the organ moments take their own.
+      case 'ratifier': return (reg.subject === 'law-ratify' ? 'ratify' : reg.subject) + '-claude:' + modeOf(prompt)
       case 'screen-grader': return 'screen-claude:' + modeOf(prompt)
       default: return legLabel
     }
@@ -261,8 +278,14 @@ const stateArgs = (calls) => {
   const i = cmd.indexOf(marker)
   if (i < 0) return { token: '', stage: '', slice: '', key: '', density: '', pointers: [], cmd }
   const words = cmd.slice(i + marker.length).trim().split(' ').map((w) => w.replace(/^'|'$/g, ''))
-  const [token, stage, slice, key, density, ...pointers] = words
-  return { token, stage, slice, key, density, pointers, cmd }
+  const [token, stage, slice, key, density, ...trailing] = words
+  // W3: the courier may carry ONE optional trailing master-plan digest word, split off here exactly
+  // as the real parser splits it — by its prefix and only in last position — so a helper that fed the
+  // digest back as a pointer could never make a pointer assertion pass on the wrong word.
+  const pointers = [...trailing]
+  const masterPlanDigest = pointers.length && pointers[pointers.length - 1].startsWith('master-plan-digest:')
+    ? pointers.pop().slice('master-plan-digest:'.length) : null
+  return { token, stage, slice, key, density, pointers, masterPlanDigest, cmd }
 }
 const GREEN = { exit: 0, ids: [] }
 const LADDER = { exit: 0, ids: ['first-blood', 'spark-of-life', 'signal-fire'] }
@@ -360,7 +383,10 @@ test('content-blind: no filesystem, clock, randomness, or content parsing in the
   // claude audit gate-file mirrors (each parses the raw candidate the opus
   // fallback reviewer wrote before validating and publishing it). All are
   // sanctioned envelope reads, never content parsing.
-  assert.equal(code.split('JSON.parse').length - 1, 6, 'exactly six JSON.parse (the args adapter + the gate-file mirror + the audit-verdict mirror + the shared screen mirror + the S4 claude ratify and audit mirrors)')
+  // W3/T1 holds the count at SIX by construction rather than by luck: the organ completeness check
+  // would have been a seventh mirror, but it and the LAW ratify are ONE parameterized closure, so
+  // they share a single candidate-bytes parse. A future check moment therefore adds no site at all.
+  assert.equal(code.split('JSON.parse').length - 1, 6, 'exactly six JSON.parse (the args adapter + the gate-file mirror + the audit-verdict mirror + the shared screen mirror + the S4 claude audit mirror + the ONE shared claude-ratifier mirror the LAW and both organ moments share)')
   assert.ok(coreSrc.includes('Parse-and-hop'), 'the adapter is the marked parse-and-hop region')
 })
 
@@ -5134,12 +5160,124 @@ test('runtime (W2-S7a): the seal, audit, and claude-publish call sites carry the
     'no audit-repair leg, repair-leg carry, recheck dispatch or dirty-prefix set survives — a half-deleted branch is how a dead mechanism returns')
   for (const pub of [
     "publish-gate .kiln review ' + P.candidate + ' ' + P.gate + ' ' + shq(gateLeg.legId)",
-    "publish-gate .kiln ratify ' + P.candidate + ' ' + P.gate + ' ' + shq(ratifyLeg.legId)",
     "publish-gate .kiln audit ' + P.candidate + ' ' + P.audit + ' ' + shq(auditLeg.legId)",
     "publish-gate .kiln screen ' + P.candidate + ' ' + target + ' ' + shq(screenLeg.legId)",
   ]) {
     assert.ok(src.includes(pub), 'the claude publish carries its reviewer leg: ' + pub)
   }
+  // W3/T1: the ratify publish left this hand-list because no source LITERAL can state it any more —
+  // the LAW ratify and both organ moments share ONE parameterized closure whose family and gate are
+  // axes. A source-text pin over a parameterized form is unstatable by construction, so the claim
+  // moves to its STRUCTURAL form: the shared closure builds the publish from the family axis and the
+  // minted leg, and the runtime walk below proves the composed argv on the real LAW path.
+  assert.ok(src.includes("publish-gate .kiln ' + o.family + ' ' + P.candidate + ' ' + gate + ' ' + shq(ratifyLeg.legId)"),
+    'the shared claude ratifier builds its publish from the family axis and the minted leg')
+})
+
+test('runtime (W3/T1): the shared claude ratifier publishes the LAW verdict under family ratify carrying THE leg it minted — the structural form of the retired source pin', async () => {
+  // The pin the fold made unstatable in source, re-asserted where it is actually load-bearing: on
+  // the composed argv of a real degraded LAW walk. It BINDS the published leg word to the leg the
+  // trace actually dispatched under, so a publish carrying some OTHER well-formed 32-hex word fails
+  // — a shape match would have passed that, which is the difference between this and a spelling pin.
+  const DIGEST = 'a'.repeat(64)
+  const accept = { review_id: 'r-law', law_hash: DIGEST, findings: [], blockers: [], verdict: 'accept' }
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE, ...ONBOARDING_OK,
+    'law:preflight': GREEN,
+    'law:degraded': { exit: 0 }, 'law:degraded-ack': { exit: 0 }, 'law:seal-label': { exit: 0 },
+    'stage:law': { facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: 'the law, pinned' },
+    'ratify:digest': { exit: 0, ids: [DIGEST] },
+    'ratify:invalidate': { exit: 0 },
+    'ratify-claude:review': OK_ACK,
+    'ratify:read': readCandidate(accept),
+    'ratify:digest-confirm': { exit: 0, ids: [DIGEST] },
+    'ratify:publish': { exit: 0 },
+    'law:milestone-projection': { exit: 0 },
+    'law:perceptual-table': { exit: 0 },
+    'law:seal': { exit: 0 },
+    'law:stage-end': GREEN,
+    'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'ok', 'the degraded LAW ratifies through the shared closure and seals')
+  // Vacuity guards FIRST: the mint and the dispatch must both be in the trace, and the mint must
+  // carry the LAW subject word, before any conclusion is drawn from the publish argv.
+  const mint = calls.find(c => c.label === 'identity:ratifier')
+  assert.ok(mint, 'the shared closure minted a ratifier leg on the LAW path')
+  assert.ok(mint.prompt.includes("identity-begin .kiln 'ratifier' 'opus' 'law-ratify'"),
+    'the LAW instantiation mints role ratifier under subject law-ratify — the FAMILY_SUBJECT word for family ratify')
+  const dispatch = calls.find(c => c.label === 'ratify-claude:review')
+  assert.ok(dispatch && /^leg:[0-9a-f]{32}$/.test(dispatch.opts.label), 'the reviewer ran under its minted reserved leg label')
+  const legId = dispatch.opts.label.slice('leg:'.length)
+  // The RUBRIC-PATH axis, pinned because the fold turned an inline constant into a per-instantiation
+  // parameter: an axis plant swapping the LAW read line to the omission instrument was GREEN across
+  // the whole floor before this line existed. The contract remains the authoritative instrument (the
+  // CLI selects it from the FAMILY word, which publish-gate binds), so a wrong path here misdirects
+  // the reviewer's reading rather than its authority — but an axis nothing reddens on is an axis that
+  // drifts, and the two instantiations must name DIFFERENT shipped instruments.
+  assert.ok(dispatch.prompt.includes(PLUGIN + '/data/law-rubric.json'), 'the LAW instantiation points its reviewer at the architecture-feasibility instrument')
+  assert.ok(!dispatch.prompt.includes('omission-rubric.json'), 'and never at the organ completeness instrument — the axes are not interchangeable')
+  const publish = calls.find(c => c.label === 'ratify:publish')
+  assert.ok(publish, 'the LAW verdict publishes')
+  assert.ok(publish.prompt.includes("publish-gate .kiln ratify .kiln/.gate-review.reviewer.tmp .kiln/gate-review.json '" + legId + "'"),
+    'the composed argv names family ratify, the candidate, the LAW gate file, and THE minted leg — bound to the dispatch, not merely well-shaped')
+})
+
+// W3 repair (F5): THE PRE-FOLD GOLDEN. The fold obligation was "the composed LAW prompt is
+// byte-identical", and it was discharged by an instrument that cannot detect its own failure — with
+// the LAW role, judge or rubric line each swapped, the shipped suite still passed 703/703, because
+// that suite pins CONTROL FLOW and not composition. This golden is the discriminating instrument:
+// the text below is the SHIPPED PRE-FOLD rendering, lifted from the 51333d3 prompt literal and
+// rendered with the harness values, so an edit to the closure that moves any say line, the artifact
+// path, the rubric path or the contract sentence reddens BY CONSTRUCTION rather than by luck. One
+// pin covers all eleven axes the fold turned into parameters on this instantiation.
+const LAW_GOLDEN = (tail) => [
+  'You are the LAW ratify reviewer: a fresh mind judging the candidate law against the architecture-feasibility rubric.',
+  'The canonical contract at .kiln/contracts/sha256/' + 'd'.repeat(64) + '.json is the COMPLETE authoritative facts for this ratification — the artifact text, its candidate digest, and the rubric criteria. Judge exactly that contract.',
+  'Project dir: /p. Read the candidate law at .kiln/LAW.md and the ratify rubric at ' + PLUGIN + '/data/law-rubric.json.',
+  'Judge the law against every rubric dimension. Execute nothing — no commands, no tests, no builds: the law is a plan, judged as text. Change no file: judge the law, never edit it.',
+  tail,
+  'Set law_hash to exactly ' + 'a'.repeat(64) + ' — the sha256 of the candidate law you judged; copy it verbatim so it binds this verdict to those bytes.',
+  'Compose the verdict object per ' + PLUGIN + '/scripts/review-schema.json, and as the FINAL act of your turn write it as JSON to .kiln/.gate-review.reviewer.tmp. Then return { ok: true } — the ack carries no verdict; the kernel reads and validates the file you wrote.',
+].join('\n')
+const LAW_GOLDEN_REVIEW = LAW_GOLDEN('Report only substantiated rubric violations at exact repo-relative path:line locations with stable finding ids. Verdict rules: accept only when findings and blockers are both empty; changes_required only for repairable findings with no blockers; blocked only when the review cannot complete, with blocker reasons. Mint a fresh review_id.')
+const LAW_GOLDEN_RECHECK = LAW_GOLDEN('Read and reuse the prior review_id from .kiln/gate-review.json first. Recheck only the finding ids in .kiln/gate-review.json against the regenerated law. Preserve each unresolved finding id; never add one. Accept only when every listed finding is repaired.')
+
+test('runtime (W3 repair, F5 + the seat axis): the folded LAW ratify composes the PRE-FOLD prompt byte for byte in both modes, on the ruled seat', async () => {
+  const DIGEST = 'a'.repeat(64)
+  const accept = { review_id: 'r-law', law_hash: DIGEST, findings: [], blockers: [], verdict: 'accept' }
+  const reject = {
+    review_id: 'r-law', law_hash: DIGEST, verdict: 'changes_required', blockers: [],
+    findings: [{ id: 'F1', criterion: 'feasibility', location: 'a.md:1', failure_mode: 'unbuildable as written', evidence: 'section 2', minimal_fix: 'name the runtime' }],
+  }
+  let read = 0
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE, ...ONBOARDING_OK, 'law:preflight': GREEN,
+    'law:degraded': { exit: 0 }, 'law:degraded-ack': { exit: 0 }, 'law:seal-label': { exit: 0 },
+    'stage:law': authored('the law, pinned'), 'ratify:repair': authored('the law, repaired'),
+    'ratify:digest': { exit: 0, ids: [DIGEST] }, 'ratify:invalidate': { exit: 0 },
+    'ratify-claude:review': OK_ACK, 'ratify-claude:recheck': OK_ACK,
+    'ratify:read': () => ({ exit: 0, ids: [JSON.stringify(read++ === 0 ? reject : accept)] }),
+    'ratify:cohort': (() => { let k = 0; return () => ({ exit: 0, ids: k++ === 0 ? ['F1'] : [] }) })(),
+    'ratify:recheck-cohort': { exit: 0, ids: ['r-law', 'F1'] },
+    'ratify:digest-confirm': { exit: 0, ids: [DIGEST] }, 'ratify:publish': { exit: 0 },
+    'law:milestone-projection': { exit: 0 }, 'law:perceptual-table': { exit: 0 },
+    'law:seal': { exit: 0 }, 'law:stage-end': GREEN, 'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'ok', 'the rejected law is repaired, rechecked and sealed — both modes are genuinely on the trace')
+  const review = calls.find(c => c.label === 'ratify-claude:review')
+  const recheck = calls.find(c => c.label === 'ratify-claude:recheck')
+  assert.ok(review && recheck, 'both modes dispatched, so neither equality below is vacuous')
+  assert.equal(review.prompt, LAW_GOLDEN_REVIEW, 'the composed review prompt is the pre-fold text, byte for byte')
+  assert.equal(recheck.prompt, LAW_GOLDEN_RECHECK, 'and so is the composed recheck prompt — the fold changed vehicle, never behaviour')
+  // THE SEAT AXIS, the one the pre-registered roster named and the sweep missed. It carries the
+  // model, alias and effort the ratification is ruled to run at, and the effort floor is a trust
+  // value — the organ side asserts it from the call records and the LAW side asserted nothing.
+  assert.deepEqual({ model: review.opts.model, alias: review.opts.alias, effort: review.opts.effort },
+    { model: 'opus', alias: 'opus', effort: 'high' }, 'the DEGRADED LAW ratify resolves fallback-reviewer — a fresh opus mind at HIGH')
+  const normal = await runKernel({ stage: 'law', projectDir: '/p' }, { ...VOICE, ...ONBOARDING_OK, 'law:preflight': GREEN, ...LAW_TAIL })
+  const req = normal.calls.find(c => c.label === 'ratify:request')
+  for (const word of ['"reviewer_model":"gpt-5.6-sol"', '"reviewer_alias":"gpt-sol"', '"reviewer_effort":"high"'])
+    assert.ok(req.prompt.includes(word), 'the NORMAL-path LAW ratify resolves ratify-reviewer: ' + word)
 })
 
 test('runtime (W2-S7a, FORK 3): the manifest-start, manifest-prepare, review-publish and seal call sites carry the cwd-relative repo shq-quoted; the audit and screen paths carry NONE', () => {
@@ -5392,4 +5530,653 @@ test('tiers (W3, B4 census): every tier() resolution is a SOURCE LITERAL in TIER
     assert.equal(accounted.length, calls.length,
       file + ': every tier() resolution is a source literal in TIER_ROLES (or the one two-literal conditional) — ' + calls.length + ' calls, all accounted')
   }
+})
+
+// ── W3 §15: THE ORGAN — the wave-gate fixture suite ─────────────────────────
+// One dual-mind planning round, run twice. Each fixture proves its claim AS STATED, and where the
+// claim excludes an input that input is fed rather than assumed away.
+// Slot arithmetic, stated once: the arm that writes plan-1 is derived from the parity of the run_id
+// first hex nibble. RUN_ID is 'run-test', whose first character is not a hex digit and therefore
+// reads 0 — so the gpt arm takes slot 2 and the claude arm slot 1. A run_id beginning '3' flips them.
+const GPT_SLOT = 2
+const CLAUDE_SLOT = 1
+const MERGED_DIGEST = 'c'.repeat(64)
+const INPUT_DIGEST = 'f'.repeat(64)
+const SETTLED = 'e'.repeat(64)
+const ORGAN_INPUTS = { exit: 0, ids: ['.kiln/docs/project-brief.md', '.kiln/posture.json', INPUT_DIGEST] }
+const authored = (beat = 'authored') => ({ facts: { status: 'ok', pointers: [], schema_valid: true }, narration_beat: beat })
+const checkVerdict = (over = {}) => ({ review_id: 'chk-1', law_hash: MERGED_DIGEST, findings: [], blockers: [], verdict: 'accept', ...over })
+// The shared claude ratifier's legs for a moment, plus its dispatch under the subject-keyed name.
+const claudeCheckLegs = (m, verdict = checkVerdict()) => ({
+  [m + ':digest']: { exit: 0, ids: [MERGED_DIGEST] },
+  [m + ':invalidate']: { exit: 0 },
+  [m + ':contract']: { exit: 0, ids: ['d'.repeat(64)] },
+  [m + '-claude:review']: OK_ACK,
+  [m + ':read']: readCandidate(verdict),
+  [m + ':digest-confirm']: { exit: 0, ids: [MERGED_DIGEST] },
+  [m + ':publish']: { exit: 0 },
+})
+// W3 repair (F6): the claude authorship arm PROVES its own artifact rather than resting on a
+// self-reported ok — one mechanical read that the named document exists and holds something other
+// than whitespace. Every claude authorship leg therefore emits a <label>-landed hand. The helper
+// answers landed for the legs it is given, so the fixtures below stay on their own subject; the F6
+// fixture overrides one to exit 1 and proves the round holds on it.
+const landed = (...labels) => Object.fromEntries(labels.map((l) => [l + '-landed', { exit: 0 }]))
+// W3 repair (F4): promotion binds to the ACCEPTED VERDICT, not to a fresh reading of the shelf, so
+// both moments now read the law_hash the check attested and compare it to the merged digest. On a
+// clean walk the two words are the same, which is exactly what the bracket asserts.
+const organPromoteBind = (m) => ({
+  [m + ':accepted-hash']: { exit: 0, ids: [MERGED_DIGEST] },
+  [m + ':promote-digest']: { exit: 0, ids: [MERGED_DIGEST] },
+})
+// A moment's authorship legs. The gpt arm rides plan-act (a request write, then the verb); the
+// claude arm is an ordinary stage leg. Slots are parameters so the flip fixture reuses this whole
+// shape rather than a second hand-written copy that could drift from it.
+const organAuthorship = (m, gpt = GPT_SLOT, claude = CLAUDE_SLOT) => ({
+  [m + ':clear']: { exit: 0 },
+  [m + ':inputs']: ORGAN_INPUTS,
+  [m + ':draft-' + gpt + '-request']: { exit: 0 }, [m + ':draft-' + gpt]: { exit: 0 },
+  [m + ':draft-' + claude]: authored(),
+  [m + ':revision-' + gpt + '-request']: { exit: 0 }, [m + ':revision-' + gpt]: { exit: 0 },
+  [m + ':revision-' + claude]: authored(),
+  ...landed(m + ':draft-' + claude, m + ':revision-' + claude),
+  [m + ':inputs-confirm']: ORGAN_INPUTS,
+})
+// The merge arm differs by moment and is the whole point of the two-row table: the vision merge is
+// the claude seat (INTAKE-36 gives claude the last word there); the master merge rides plan-act.
+const visionMerge = (n = 0) => ({ ['vision:merge-' + n]: authored(), ...landed('vision:merge-' + n) })
+const masterMerge = (n = 0) => ({ ['master:merge-' + n + '-request']: { exit: 0 }, ['master:merge-' + n]: { exit: 0 } })
+const masterPromote = {
+  ...organPromoteBind('master'),
+  'master:digest-commit': { exit: 0 },
+  'master:promote': { exit: 0 },
+}
+const LAW_TAIL = {
+  'stage:law': authored('the law, pinned'),
+  'ratify:request': GREEN, 'ratify:gate': { exit: 0 },
+  'law:milestone-projection': { exit: 0 }, 'law:perceptual-table': { exit: 0 },
+  'law:seal': { exit: 0 }, 'law:stage-end': GREEN, 'state:write': GREEN,
+}
+const NO_VISION = { 'vision:path-check': { exit: 1 } }
+const NO_MASTER = { 'master:record': { exit: 0, ids: [SETTLED, SETTLED] } }
+const OPEN_MASTER = { 'master:record': { exit: 0, ids: ['-', '-'] } }
+const OPEN_VISION = { 'vision:path-check': { exit: 0 }, 'vision:present-check': { exit: 1 } }
+const visionCheckLegs = { 'vision:request': { exit: 0 }, 'vision:gate': { exit: 0 } }
+// The full master round on the direct path — the shape every master fixture starts from.
+const masterRound = (over = {}) => ({
+  ...VOICE, ...ONBOARDING_OK, 'law:preflight': GREEN, ...NO_VISION, ...OPEN_MASTER,
+  ...organAuthorship('master'), ...masterMerge(), ...claudeCheckLegs('master'), ...masterPromote,
+  ...LAW_TAIL, ...over,
+})
+// The full vision round on the brainstorm path, with the master moment settled so the subject is one.
+const visionRound = (over = {}) => ({
+  ...VOICE, ...ONBOARDING_OK, 'law:preflight': GREEN, ...OPEN_VISION, ...NO_MASTER,
+  ...organAuthorship('vision'), ...visionMerge(), ...visionCheckLegs, ...organPromoteBind('vision'),
+  'vision:promote': { exit: 0 }, ...LAW_TAIL, ...over,
+})
+const labels = (calls) => calls.map(c => c.label)
+const at = (calls, label) => labels(calls).indexOf(label)
+
+test('organ §15.2: the master round runs UNCONDITIONALLY on the direct path, the digest commits BEFORE the promote, and no vision round is entered', async () => {
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, masterRound())
+  assert.equal(ret.status, 'ok', 'the master round completes and the law stage advances')
+  // The direct path has no vision moment: the closed-fact key is consulted and answers, and NOTHING
+  // downstream of it runs. Asserting the absence of every vision leg, not merely of the round entry.
+  assert.ok(at(calls, 'vision:path-check') >= 0, 'the closed-fact key IS consulted — the absence below is a decision, not a skipped code path')
+  assert.deepEqual(labels(calls).filter(l => l && l.startsWith('vision:') && l !== 'vision:path-check'), [],
+    'the direct path runs no vision leg of any kind')
+  // The ruled order that kills both crash windows.
+  assert.ok(at(calls, 'master:digest-commit') < at(calls, 'master:promote'),
+    'the digest commits over the accepted candidate BEFORE the file is promoted — the reverse would leave authority no record backs')
+  assert.ok(at(calls, 'master:publish') < at(calls, 'master:digest-commit'),
+    'and nothing is committed until the check verdict has published')
+  // The whole round precedes the LAW producer.
+  assert.ok(at(calls, 'master:promote') < at(calls, 'stage:law'), 'the master plan exists before the law is authored from it')
+  // The digest reaches the courier as the prefixed trailing word, and the STATE pointers do not eat it.
+  const commit = calls.find(c => c.label === 'master:digest-commit')
+  assert.ok(commit.prompt.includes("'master-plan-digest:" + MERGED_DIGEST + "'"), 'the digest rides the courier prefixed and shq-quoted')
+  assert.equal(stateArgs(calls).masterPlanDigest, MERGED_DIGEST, 'and every later stop carries it too')
+})
+
+test('organ §15.1: the vision round runs on the brainstorm path — two blind drafts, one revision each, a merge, a check, and promotion ONLY after the check accepts', async () => {
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, visionRound())
+  assert.equal(ret.status, 'ok', 'the vision round completes')
+  for (const leg of ['vision:draft-1', 'vision:draft-2', 'vision:revision-1', 'vision:revision-2', 'vision:merge-0', 'vision:gate', 'vision:promote']) {
+    assert.ok(at(calls, leg) >= 0, 'the round ran its ' + leg + ' leg')
+  }
+  // The blind window: each draft is given the round inputs and nothing else, so neither can read the
+  // other. Feeding the claim's excluded input directly — a draft prompt naming the other candidate.
+  const d1 = calls.find(c => c.label === 'vision:draft-' + CLAUDE_SLOT)
+  assert.ok(!d1.prompt.includes('plan-' + GPT_SLOT), 'the claude draft is never handed the other candidate path')
+  assert.ok(!d1.prompt.includes('revision-'), 'nor any revision — a draft sees inputs only')
+  // The revision legs ARE the first moment either side sees the other plan.
+  const r1 = calls.find(c => c.label === 'vision:revision-' + CLAUDE_SLOT)
+  assert.ok(r1.prompt.includes('vision-plan-1.md') && r1.prompt.includes('vision-plan-2.md'), 'the revision weighs BOTH drafts')
+  // Ordering: promotion strictly after the accepted check.
+  assert.ok(at(calls, 'vision:gate') < at(calls, 'vision:promote'), 'the vision is promoted only after its check')
+  assert.ok(at(calls, 'vision:merge-0') < at(calls, 'vision:gate'), 'and the check grades the merge, not a draft')
+  const promote = calls.find(c => c.label === 'vision:promote')
+  assert.ok(promote.prompt.includes('.kiln/docs/vision.md'), 'the accepted merge becomes the vision document')
+})
+
+test('organ §15.4: exactly ONE record-and-revision leg per side per moment — the structural round is spent once', async () => {
+  const { calls } = await runKernel({ stage: 'law', projectDir: '/p' }, masterRound())
+  for (const slot of [1, 2]) {
+    assert.equal(labels(calls).filter(l => l === 'master:draft-' + slot).length, 1, 'exactly one draft on slot ' + slot)
+    assert.equal(labels(calls).filter(l => l === 'master:revision-' + slot).length, 1, 'exactly one revision on slot ' + slot)
+  }
+  // Derived, not hand-listed: the round dispatches exactly four authorship legs and one merge, so a
+  // future extra leg joins this count automatically instead of hiding beside a hand list.
+  const authorship = labels(calls).filter(l => l && /^master:(draft|revision)-\d$/.test(l))
+  assert.equal(authorship.length, 4, 'four authorship legs in a clean walk — two blind, two revising')
+  assert.equal(labels(calls).filter(l => l && /^master:merge-\d$/.test(l)).length, 1, 'and exactly one merge attempt when the check accepts first time')
+})
+
+test('organ §15.6: the seats and efforts are INTAKE-36 verbatim, read from the mock call records rather than the tiers file', async () => {
+  const { calls } = await runKernel({ stage: 'law', projectDir: '/p' }, visionRound({
+    ...organAuthorship('master'), ...masterMerge(), ...claudeCheckLegs('master'), ...masterPromote,
+    ...OPEN_MASTER,
+  }))
+  // The vision merge is the thinking seat; the claude authorship legs ride it too.
+  assert.equal(calls.find(c => c.label === 'vision:merge-0').opts.model, 'fable', 'the vision merge resolves stage-law')
+  assert.equal(calls.find(c => c.label === 'vision:draft-' + CLAUDE_SLOT).opts.model, 'fable', 'the claude authorship arm is the same thinking seat')
+  // The gpt authorship request carries the plan-author tuple; the check request carries vision-check.
+  const draftReq = calls.find(c => c.label === 'master:draft-' + GPT_SLOT + '-request')
+  assert.ok(draftReq.prompt.includes('"author_alias":"gpt-sol"') && draftReq.prompt.includes('"author_effort":"high"'),
+    'plan authorship threads gpt-sol at HIGH')
+  const mergeReq = calls.find(c => c.label === 'master:merge-0-request')
+  assert.ok(mergeReq.prompt.includes('"operation":"merge"') && mergeReq.prompt.includes('"author_effort":"high"'),
+    'the master merge is gpt-sol at HIGH — the operator ruled word')
+  const checkReq = calls.find(c => c.label === 'vision:request')
+  assert.ok(checkReq.prompt.includes('"reviewer_effort":"medium"'), 'the vision check threads MEDIUM — INTAKE-36(a), the one role-keyed exception')
+  assert.ok(checkReq.prompt.includes('"reviewer_alias":"gpt-sol"') && checkReq.prompt.includes('"review_id":"vision"'),
+    'on the gpt seat, under the kernel-issued moment review_id')
+  // The master check is a claude seat and codex absence does not touch it.
+  const organCheck = calls.find(c => c.label === 'master-claude:review')
+  assert.equal(organCheck.opts.model, 'sonnet', 'the master check resolves master-check — sonnet at HIGH')
+  assert.equal(organCheck.opts.effort, 'high')
+  // W3 repair (F1): the RUBRIC-PATH axis on the ORGAN instantiation, which selects the INSTRUMENT —
+  // a wrong value grades the merged plan against the wrong question. The LAW side reddens on this
+  // axis and the organ sibling did not: an executed plant swapping the organ read line to the law
+  // instrument left the whole floor green. The two instantiations must name DIFFERENT instruments.
+  assert.ok(organCheck.prompt.includes(PLUGIN + '/data/omission-rubric.json'), 'the organ instantiation points its check at the omission instrument')
+  assert.ok(!organCheck.prompt.includes('law-rubric.json'), 'and never at the architecture-feasibility instrument — the axes are not interchangeable')
+  // W3 r2 (COMPLETENESS-EVIDENCE), SUPERSEDING the r1 F7 remedy: the check no longer points the
+  // reviewer at a shelf DIRECTORY at all. The compared sources ride inside the attested contract,
+  // gathered CLI-side from the moment prefix, so the prompt names the contract and the moment scoping
+  // became structural in the helper instead of a glob this prompt had to spell correctly.
+  assert.ok(organCheck.prompt.includes('the source plans and revision records the contract carries'),
+    'the organ check is pointed at the contract evidence, which is what the accepted verdict attests')
+  // The ONLY shelf path the prompt may name is the artifact being graded. A directory pointer or a
+  // glob would be exactly the unhashed out-of-contract evidence this closed — derived, so a future
+  // second shelf reference joins the assertion instead of slipping past a substring check.
+  assert.deepEqual([...new Set(String(organCheck.prompt).match(/\.kiln\/plans\/[A-Za-z0-9._*-]*/g) || [])],
+    ['.kiln/plans/master-merged-0.md'],
+    'the check names the merged artifact and no other shelf path — the source set rides the contract')
+  // W3 repair (F8): the codex arm mints and publishes in ONE process, so nothing downstream enforces
+  // that its minted subject is the one the shipped map binds to its family — it is correct today only
+  // because the moment word and the subject word happen to be spelled alike. DERIVED from both sides,
+  // so a rename of either reddens instead of the coincidence quietly surviving it.
+  const family = checkReq && calls.find(c => c.label === 'vision:gate').prompt.trim().split(/\s+/).pop()
+  assert.equal(family, 'vision', 'the codex check verb is called with the moment word as its family')
+  assert.ok(checkReq.prompt.includes('"review_id":"' + FAMILY_SUBJECT[family] + '"'),
+    'and the minted review_id is exactly the subject the shipped FAMILY_SUBJECT map binds to that family')
+})
+
+test('organ §15.3: anonymity holds — neutral candidate names, no orchestration token in any author prompt, and the assignment flips with the run_id nibble', async () => {
+  const { calls } = await runKernel({ stage: 'law', projectDir: '/p' }, masterRound())
+  // The lexicon is DERIVED from the shipped tiers file, the same derivation the instruction pin uses.
+  const tiers = JSON.parse(readFileSync(fileURLToPath(new URL('../data/tiers.json', import.meta.url)), 'utf8'))
+  const lexicon = new Set(['anthropic', 'openai', 'google', 'gemini', 'llama', 'mistral', 'haiku'])
+  for (const [key, role] of Object.entries(tiers.roles)) { lexicon.add(key); lexicon.add(role.family); lexicon.add(role.alias) }
+  for (const [alias, concrete] of Object.entries(tiers.resolver)) {
+    lexicon.add(alias)
+    for (const part of concrete.split(/[^a-z]+/i)) if (part.length > 2) lexicon.add(part.toLowerCase())
+  }
+  assert.ok(lexicon.size > 12, 'the lexicon was actually derived — ' + lexicon.size + ' tokens')
+  // Corpus one: the prompts an author actually READS on the in-process arm, which the kernel composes
+  // itself. The transport legs of the other arm are excluded BY SHAPE, not by label — a hands leg
+  // opens 'Run exactly this in' — because that arm's author never sees a kernel-composed prompt at
+  // all: the CLI composes it from the shipped instruction constants, and their neutrality is pinned
+  // where they live. The request-write leg is excluded for the same reason and one more: it names
+  // the seat on purpose, which is the kernel telling the CLI whom to spawn, not an author being told.
+  const authorPrompts = calls.filter(c => c.label && /^master:(draft|revision)-\d$/.test(c.label)
+    && !c.prompt.startsWith('Run exactly this in')).map(c => c.prompt)
+  assert.equal(authorPrompts.length, 2, 'both in-process authorship prompts are under the pin, and the two transport legs are not')
+  for (const prompt of authorPrompts) {
+    for (const token of lexicon) {
+      assert.ok(!new RegExp('\\b' + token + '\\b', 'i').test(prompt), 'no orchestration token "' + token + '" reaches an author')
+    }
+  }
+  // Corpus two — the U2 F5 obligation this unit inherited: the candidate PATHS the kernel names are
+  // prompt surface on BOTH arms, so the pin ranges over every shelf path anywhere in the trace,
+  // derived from the prompts rather than hand-listed. A family word in a filename would map a plan to
+  // a mind on disk, which is exactly what the blind window forbids.
+  const shelfPaths = [...new Set(calls.flatMap(c => [...String(c.prompt).matchAll(/\.kiln\/plans\/[A-Za-z0-9._-]+/g)].map(x => x[0])))]
+  assert.ok(shelfPaths.length >= 5, 'the trace names the round candidate files — ' + shelfPaths.length + ' of them, so the pin has a subject')
+  for (const p of shelfPaths) {
+    for (const token of lexicon) {
+      assert.ok(!new RegExp('\\b' + token + '\\b', 'i').test(p), 'no orchestration token "' + token + '" in the candidate path ' + p)
+    }
+  }
+  // And the merge genuinely reads the four neutral candidates, so the names above are load-bearing.
+  const merge = calls.find(c => c.label === 'master:merge-0-request')
+  for (const name of ['master-plan-1.md', 'master-plan-2.md', 'master-revision-1.md', 'master-revision-2.md']) {
+    assert.ok(merge.prompt.includes(name), 'the merge reads the neutral candidate ' + name)
+  }
+  // The flip: a run_id whose first nibble is ODD swaps which arm writes which slot. Same script shape,
+  // slots exchanged — so the assertion is about the ASSIGNMENT, not about one spelling of it.
+  const flipped = await runKernel({ stage: 'law', projectDir: '/p', run_id: '3run' }, masterRound({
+    ...organAuthorship('master', 1, 2),
+  }))
+  assert.equal(flipped.ret.status, 'ok', 'the flipped assignment runs the same round')
+  const gptDraftFlipped = flipped.calls.find(c => c.label === 'master:draft-1-request')
+  assert.ok(gptDraftFlipped, 'with an odd nibble the gpt arm writes plan-1, not plan-2')
+  assert.ok(!calls.some(c => c.label === 'master:draft-1-request'), 'and with the even nibble it wrote plan-2 — the assignment genuinely moved')
+})
+
+test('organ §15.5: a check returning changes_required repairs through the MERGE seat, rechecks on a FRESH attempt path, and an exhausted cap is the operator ruling', async () => {
+  // The reviewLoop is the outcome grammar. plan-act refuses to replace a document, so the repair
+  // merge MUST name a new attempt path — the fixture asserts the fresh name, which is the whole
+  // reason per-attempt naming exists.
+  const reject = checkVerdict({
+    verdict: 'changes_required',
+    findings: [{ id: 'F1', criterion: 'completeness', location: 'a.md:1', failure_mode: 'an outcome present in both plans is absent from the merge', evidence: 'plan-1 section 2', minimal_fix: 'restore it' }],
+  })
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, masterRound({
+    ...masterMerge(0), ...masterMerge(1),
+    'master:read': (() => { let n = 0; return () => (n++ === 0 ? readCandidate(reject) : readCandidate(checkVerdict())) })(),
+    'master:cohort': (() => { let n = 0; return () => ({ exit: 0, ids: n++ === 0 ? ['F1'] : [] }) })(),
+    'master:recheck-cohort': { exit: 0, ids: ['chk-1', 'F1'] },
+    'master-claude:recheck': OK_ACK,
+  }))
+  assert.equal(ret.status, 'ok', 'the repaired merge passes its recheck and the round completes')
+  assert.ok(at(calls, 'master:merge-1') > at(calls, 'master:publish'), 'the repair re-merges AFTER the rejecting verdict published')
+  // The output path rides the VERB call; the inputs and the operation ride the request the kernel
+  // writes just before it. Both are asserted at the site that actually carries them.
+  const repairVerb = calls.find(c => c.label === 'master:merge-1')
+  assert.ok(repairVerb.prompt.includes('master-merged-1.md'), 'the repair writes a FRESH attempt path — never the one plan-act already refuses')
+  assert.ok(!repairVerb.prompt.includes('master-merged-0.md'), 'and it does not reach for the rejected attempt, which stays on the shelf as round history')
+  const repairReq = calls.find(c => c.label === 'master:merge-1-request')
+  assert.ok(repairReq.prompt.includes('master-check.json'), 'the repair reads the verdict naming the omissions to restore')
+  assert.ok(repairReq.prompt.includes('"operation":"merge"'), 'the repair is the same merge operation — additive restoration, never a second revision round')
+  const firstReq = calls.find(c => c.label === 'master:merge-0-request')
+  assert.ok(!firstReq.prompt.includes('master-check.json'), 'and the FIRST merge saw no verdict — the excluded input, so the line above proves the repair added it')
+  // Cap exhaustion is the existing held/operator-ruling stop, not a new word.
+  const held = await runKernel({ stage: 'law', projectDir: '/p' }, masterRound({
+    ...ONBOARDING_OK, 'cap:read': { exit: 0, recovery_cap: 1 },
+    ...masterMerge(0), ...masterMerge(1),
+    'master:read': readCandidate(reject),
+    'master:cohort': { exit: 0, ids: ['F1'] },
+    'master:recheck-cohort': { exit: 0, ids: ['chk-1', 'F1'] },
+    'master-claude:recheck': OK_ACK,
+  }))
+  assert.equal(held.ret.status, 'held', 'a check that never clears lands on the operator ruling')
+  assert.equal(stateArgs(held.calls).key, 'operator-ruling', 'through the EXISTING stop grammar — no new status word')
+  assert.ok(!held.calls.some(c => c.label === 'master:promote'), 'and nothing is promoted on a held check')
+})
+
+test('organ §15.7: with the markers standing the round runs on claude minds alone — plan-act is never spawned, and the master check is untouched', async () => {
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE, ...ONBOARDING_OK, 'law:preflight': GREEN,
+    'law:degraded': { exit: 0 }, 'law:degraded-ack': { exit: 0 }, 'law:seal-label': { exit: 0 },
+    ...OPEN_VISION, ...OPEN_MASTER,
+    // Degraded: BOTH arms are claude stage legs, so every authorship slot answers with a stage result
+    // and no plan-act request is written anywhere.
+    'vision:clear': { exit: 0 }, 'vision:inputs': ORGAN_INPUTS, 'vision:inputs-confirm': ORGAN_INPUTS,
+    'vision:draft-1': authored(), 'vision:draft-2': authored(),
+    'vision:revision-1': authored(), 'vision:revision-2': authored(),
+    // Degraded: BOTH arms are claude legs, so BOTH slots prove their own artifact (F6).
+    ...landed('vision:draft-1', 'vision:draft-2', 'vision:revision-1', 'vision:revision-2'),
+    ...landed('master:draft-1', 'master:draft-2', 'master:revision-1', 'master:revision-2', 'master:merge-0'),
+    ...visionMerge(), ...claudeCheckLegs('vision'), ...organPromoteBind('vision'), 'vision:promote': { exit: 0 },
+    'master:clear': { exit: 0 }, 'master:inputs': ORGAN_INPUTS, 'master:inputs-confirm': ORGAN_INPUTS,
+    'master:draft-1': authored(), 'master:draft-2': authored(),
+    'master:revision-1': authored(), 'master:revision-2': authored(),
+    'master:merge-0': authored(), ...claudeCheckLegs('master'), ...masterPromote,
+    'ratify:digest': { exit: 0, ids: ['a'.repeat(64)] }, 'ratify:invalidate': { exit: 0 },
+    'ratify-claude:review': OK_ACK,
+    'ratify:read': readCandidate({ review_id: 'r1', law_hash: 'a'.repeat(64), findings: [], blockers: [], verdict: 'accept' }),
+    'ratify:digest-confirm': { exit: 0, ids: ['a'.repeat(64)] }, 'ratify:publish': { exit: 0 },
+    'stage:law': authored('the law, pinned'),
+    'law:milestone-projection': { exit: 0 }, 'law:perceptual-table': { exit: 0 },
+    'law:seal': { exit: 0 }, 'law:stage-end': GREEN, 'state:write': GREEN,
+  })
+  assert.equal(ret.status, 'ok', 'the degraded organ completes both moments')
+  // ZERO codex spawns anywhere in the walk — derived from the trace, not a hand list of labels.
+  assert.deepEqual(labels(calls).filter(l => l && (l.endsWith('-request') || l === 'vision:gate' || l === 'ratify:gate')), [],
+    'no plan-act request and no codex gate is written anywhere in a degraded walk')
+  // The second mind is the fallback seat; the vision check rides the shared claude closure.
+  assert.equal(calls.find(c => c.label === 'master:draft-' + GPT_SLOT).opts.model, 'opus', 'the second authorship arm is a fresh opus mind')
+  assert.equal(calls.find(c => c.label === 'master:merge-0').opts.model, 'opus', 'and the degraded master merge is the same fallback seat')
+  assert.equal(calls.find(c => c.label === 'vision-claude:review').opts.model, 'opus', 'the degraded vision check rides the closure at the fallback seat')
+  // The master check does NOT degrade: it was never cross-family.
+  assert.equal(calls.find(c => c.label === 'master-claude:review').opts.model, 'sonnet', 'the master check is unchanged — codex absence never touched it')
+})
+
+test('organ §15.8: the digest arms — a settled record skips, a digest with no file re-promotes from the matching candidate, a mismatch HOLDS, and a file with no digest re-runs', async () => {
+  // (a) settled: recorded digest matches the file — the round is skipped whole.
+  const settled = await runKernel({ stage: 'law', projectDir: '/p' }, { ...VOICE, ...ONBOARDING_OK, 'law:preflight': GREEN, ...NO_VISION, ...NO_MASTER, ...LAW_TAIL })
+  assert.equal(settled.ret.status, 'ok')
+  assert.deepEqual(labels(settled.calls).filter(l => l && l.startsWith('master:') && l !== 'master:record'), [],
+    'a settled master plan runs no round leg at all — the skip key is mechanical')
+  assert.equal(stateArgs(settled.calls).masterPlanDigest, SETTLED, 'and the recorded digest still carries')
+
+  // (b) the crash window: a digest with NO file heals from the one shelf candidate whose bytes match.
+  const healed = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE, ...ONBOARDING_OK, 'law:preflight': GREEN, ...NO_VISION, ...LAW_TAIL,
+    'master:record': { exit: 0, ids: [SETTLED, '-'] },
+    'master:candidate': { exit: 0, ids: ['.kiln/plans/master-merged-0.md'] },
+    'master:re-promote': { exit: 0 },
+  })
+  assert.equal(healed.ret.status, 'ok', 'the crash between the commit and the promote self-heals')
+  assert.ok(healed.calls.find(c => c.label === 'master:re-promote').prompt.includes('.kiln/MASTER-PLAN.md'), 'the matching candidate is promoted')
+  assert.deepEqual(labels(healed.calls).filter(l => l && /^master:(clear|inputs|draft|revision|merge)/.test(l)), [],
+    'and the round is NOT re-run — the record was already true')
+
+  // (c) the tree contradicting the record is an operator ruling, never a silent re-author. The
+  // EXCLUDED input for the heal arm: a candidate set that does not match.
+  const drift = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE, ...ONBOARDING_OK, 'law:preflight': GREEN, ...NO_VISION, ...LAW_TAIL,
+    'master:record': { exit: 0, ids: [SETTLED, 'd'.repeat(64)] },
+  })
+  assert.equal(drift.ret.status, 'held', 'a file that disagrees with the record holds')
+  assert.equal(stateArgs(drift.calls).key, 'operator-ruling', 'as the operator ruling, never transport_failure')
+  assert.match(drift.ret.beat, /master-plan-drift/, 'and the held beat names the fact')
+  assert.ok(!drift.calls.some(c => c.label === 'master:clear'), 'nothing is re-authored over an edit nobody has ruled on')
+
+  const noCandidate = await runKernel({ stage: 'law', projectDir: '/p' }, {
+    ...VOICE, ...ONBOARDING_OK, 'law:preflight': GREEN, ...NO_VISION, ...LAW_TAIL,
+    'master:record': { exit: 0, ids: [SETTLED, '-'] },
+    'master:candidate': { exit: 0, ids: [] },
+  })
+  assert.equal(noCandidate.ret.status, 'held', 'a digest with neither file nor matching candidate holds too')
+
+  // (d) a file with NO digest is an unpromoted candidate in effect — the round re-runs from scratch.
+  const reRun = await runKernel({ stage: 'law', projectDir: '/p' }, masterRound({
+    'master:record': { exit: 0, ids: ['-', 'd'.repeat(64)] },
+  }))
+  assert.equal(reRun.ret.status, 'ok')
+  assert.ok(at(reRun.calls, 'master:clear') >= 0, 'the round re-runs — a file the record does not vouch for is a candidate, not authority')
+})
+
+test('organ §15.12 (repair F3): the master record answers a THIRD word for a read that faulted, and both writing arms hold on it — the real one-liner fed the excluded inputs', () => {
+  // Half one: the SHIPPED one-liner, lifted from kernel.js source and EXECUTED against real trees.
+  // Reading the code would prove nothing here — the whole finding was that a bare catch collapsed
+  // three faults into the two absences the arms are built for, and only running it shows which word
+  // comes back. The expression is eval'd from source so a future edit to it is what is under test.
+  const lifted = src.match(/const mp = await idsFetch\(\n([\s\S]*?),\n\s+'master:record',/)
+  assert.ok(lifted, 'the master:record command is liftable from kernel.js source')
+  // eslint-disable-next-line no-eval
+  const command = eval(lifted[1])
+  assert.ok(command.startsWith('node -e ') && command.includes('MASTER-PLAN.md'), 'the lifted expression really is the record read')
+  const H = 'a'.repeat(64)
+  const run = (build) => {
+    const dir = mkdtempSync(join(tmpdir(), 'kiln-record-'))
+    mkdirSync(join(dir, '.kiln'), { recursive: true })
+    build(dir)
+    const r = spawnSync('sh', ['-c', command], { cwd: dir, encoding: 'utf8' })
+    assert.equal(r.status, 0, 'the read itself exits clean — the answer is in the words, never in the exit')
+    return JSON.parse(r.stdout)
+  }
+  const state = (dir, digest) => writeFileSync(join(dir, '.kiln/state.json'), JSON.stringify({ master_plan_digest: digest }))
+  // The two PROVEN absences keep the dash — this is the control, without which every row below
+  // could be an artifact of the probe rather than a property of the read.
+  assert.deepEqual(run(() => {}), ['-', '-'], 'nothing present is two proven absences')
+  assert.deepEqual(run((d) => { state(d, H); writeFileSync(join(d, '.kiln/MASTER-PLAN.md'), 'plan') })[0], H, 'a record present reads back as itself')
+  assert.deepEqual(run((d) => state(d, H)), [H, '-'], 'a record with no file is the genuine crash window, and stays a dash')
+  // The three faults the verify executed, each of which used to read as an absence.
+  const mode000 = run((d) => { state(d, H); writeFileSync(join(d, '.kiln/MASTER-PLAN.md'), 'plan', { mode: 0o000 }) })
+  assert.equal(mode000[1], '?', 'a master plan at mode 000 is a question, never a proven absence — the heal arm would have mv -f over it')
+  const asDir = run((d) => { state(d, H); mkdirSync(join(d, '.kiln/MASTER-PLAN.md')) })
+  assert.equal(asDir[1], '?', 'a directory standing where the document belongs is a question — mv -f into it exits 0 and reads as success')
+  const torn = run((d) => { writeFileSync(join(d, '.kiln/state.json'), '{not json'); writeFileSync(join(d, '.kiln/MASTER-PLAN.md'), 'plan') })
+  assert.equal(torn[0], '?', 'a torn state.json is a question — read as an absence it re-runs the whole round over a promoted plan')
+  const unreadable = run((d) => { writeFileSync(join(d, '.kiln/state.json'), '{}', { mode: 0o000 }); writeFileSync(join(d, '.kiln/MASTER-PLAN.md'), 'plan') })
+  assert.equal(unreadable[0], '?', 'and so is an unreadable one')
+})
+
+test('organ §15.12 (repair F3): a question mark on either fact HOLDS the run before any arm can write', async () => {
+  // Half two: the arms. A fault read as an absence is strictly MORE destructive than a disagreement
+  // — which already holds — so the excluded input is fed at the fixture boundary and the walk is
+  // checked for the writes that used to fire: the heal rename, and the whole re-run of the round.
+  for (const [why, ids] of [['the file could not be examined', ['a'.repeat(64), '?']], ['the record could not be examined', ['?', 'a'.repeat(64)]], ['neither could', ['?', '?']]]) {
+    const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, masterRound({ 'master:record': { exit: 0, ids } }))
+    assert.equal(ret.status, 'held', why + ' — the run holds for the operator')
+    assert.equal(stateArgs(calls).key, 'operator-ruling', 'through the EXISTING stop grammar, the master-plan-drift class — no new status word')
+    assert.match(ret.beat, /could not be examined/, 'and the beat says which fact went unanswered')
+    // The three writes the finding named, each asserted absent rather than the round entry alone.
+    for (const wrote of ['master:re-promote', 'master:promote', 'master:clear'])
+      assert.ok(!calls.some(c => c.label === wrote), 'nothing writes on an unread fact: ' + wrote)
+  }
+  // The green control: the SAME shape with both facts answered promotes, so the hold above is the
+  // question mark and not the fixture.
+  const control = await runKernel({ stage: 'law', projectDir: '/p' }, masterRound())
+  assert.equal(control.ret.status, 'ok', 'and two answered facts still run the round to promotion')
+})
+
+test('organ §15.13 (repair F4): promotion binds to the ACCEPTED VERDICT — a merged plan the check never graded is not promoted, on either moment', async () => {
+  // The verify pointed the check at another document and the promote fired anyway: the master arm
+  // recomputed a fresh digest instead of checking the one the check attested, and the vision promote
+  // bound nothing at all. The excluded input is exactly that — an accepted law_hash that is not the
+  // digest of the bytes about to be promoted.
+  const OTHER = 'b'.repeat(64)
+  const master = await runKernel({ stage: 'law', projectDir: '/p' }, masterRound({ 'master:accepted-hash': { exit: 0, ids: [OTHER] } }))
+  assert.equal(master.ret.status, 'transport-failure', 'a verdict that graded other bytes cannot promote the master plan')
+  assert.match(master.ret.beat, /the accepted verdict does not bind the merged plan/, 'and the hold names the fact')
+  for (const wrote of ['master:digest-commit', 'master:promote'])
+    assert.ok(!master.calls.some(c => c.label === wrote), 'nothing is recorded or promoted on an unbound verdict: ' + wrote)
+  const vision = await runKernel({ stage: 'law', projectDir: '/p' }, visionRound({ 'vision:accepted-hash': { exit: 0, ids: [OTHER] } }))
+  assert.equal(vision.ret.status, 'transport-failure', 'and the vision promote, which bound nothing at all before, holds the same way')
+  assert.ok(!vision.calls.some(c => c.label === 'vision:promote'), 'no vision document is published on an unbound verdict')
+  // The bracket reads the verdict the check PUBLISHED, so it is genuinely on the trace after it.
+  const clean = await runKernel({ stage: 'law', projectDir: '/p' }, masterRound())
+  assert.ok(at(clean.calls, 'master:publish') < at(clean.calls, 'master:accepted-hash'), 'the accepted word is read from the published verdict, never before it')
+  assert.ok(at(clean.calls, 'master:accepted-hash') < at(clean.calls, 'master:promote'), 'and it is read before anything is promoted on it')
+})
+
+test('organ §15.14 (repair F6): a claude authorship leg that reports ok while writing nothing HOLDS the round', async () => {
+  // The claude arm crosses no process boundary, so a self-reported ok was the only word the kernel
+  // had — while the round then grades whatever stands on the shelf under that name. plan-act refuses
+  // an empty document on the gpt arm; this is the same floor on the other one. The excluded input is
+  // the leg that says ok and lands nothing, fed at each of the three authorship moments.
+  for (const leg of ['master:draft-' + CLAUDE_SLOT, 'master:revision-' + CLAUDE_SLOT]) {
+    const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, masterRound({ [leg + '-landed']: { exit: 1 } }))
+    assert.equal(ret.status, 'transport-failure', leg + ' reported ok and wrote nothing — the round holds')
+    assert.match(ret.beat, /planning round could not complete/, 'through the existing organ stop grammar')
+    assert.ok(!calls.some(c => c.label === 'master:promote'), 'and nothing reaches promotion on an unproven document')
+  }
+  // The vision merge is the claude seat, so the merge moment carries the same floor.
+  const merge = await runKernel({ stage: 'law', projectDir: '/p' }, visionRound({ 'vision:merge-0-landed': { exit: 1 } }))
+  assert.equal(merge.ret.status, 'transport-failure', 'an unlanded vision merge holds too — the merge seat is a claude leg')
+  assert.ok(!merge.calls.some(c => c.label === 'vision:promote'), 'and no vision is published from a merge that wrote nothing')
+  // The read is over CONTENT, not existence: the command the kernel composes is the whitespace
+  // refusal plan-act states as its own floor, aimed at exactly the path the leg was told to write.
+  const clean = await runKernel({ stage: 'law', projectDir: '/p' }, masterRound())
+  const landedLeg = clean.calls.find(c => c.label === 'master:draft-' + CLAUDE_SLOT + '-landed')
+  assert.ok(landedLeg.prompt.includes('grep -q "[^[:space:]]"') && landedLeg.prompt.includes('.kiln/plans/master-plan-' + CLAUDE_SLOT + '.md'),
+    'the proof is a content read aimed at the one path the kernel named the author')
+  // And the gpt arm is NOT double-checked: its transport already proves the same floor CLI-side.
+  assert.ok(!clean.calls.some(c => c.label === 'master:draft-' + GPT_SLOT + '-landed'), 'the plan-act arm carries no second copy of a floor its verb already enforces')
+})
+
+test('organ §15.15 (r2 MIDRUN-DEGRADE): a plan-act 21 mid-round MARKS degradation and takes the degraded stop, at every authorship moment', async () => {
+  // Sol: collapsing a 21 to boolean false marked nothing, so the acked relaunch could not select the
+  // fable-plus-opus organ built for exactly this moment. The excluded input is the stub exiting 21 —
+  // codex saying it is not there — fed at a draft, at a revision, and at a repair-pass merge.
+  const reject = checkVerdict({
+    verdict: 'changes_required',
+    findings: [{ id: 'F1', criterion: 'completeness', location: 'a.md:1', failure_mode: 'an outcome present in both plans is absent from the merge', evidence: 'plan-1 section 2', minimal_fix: 'restore it' }],
+  })
+  const repairing = () => ({
+    ...masterMerge(0), ...masterMerge(1),
+    'master:read': (() => { let n = 0; return () => (n++ === 0 ? readCandidate(reject) : readCandidate(checkVerdict())) })(),
+    'master:cohort': (() => { let n = 0; return () => ({ exit: 0, ids: n++ === 0 ? ['F1'] : [] }) })(),
+    'master:recheck-cohort': { exit: 0, ids: ['chk-1', 'F1'] },
+    'master-claude:recheck': OK_ACK,
+  })
+  for (const [where, over] of [
+    ['a draft', { ['master:draft-' + GPT_SLOT]: { exit: 21 } }],
+    ['a revision', { ['master:revision-' + GPT_SLOT]: { exit: 21 } }],
+    ['a repair-pass merge', { ...repairing(), 'master:merge-1': { exit: 21 } }],
+  ]) {
+    const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, masterRound({ 'degraded:mark': { exit: 0 }, ...over }))
+    assert.equal(ret.status, 'degraded', 'codex dying at ' + where + ' takes the DEGRADED stop, never a bare transport failure')
+    const mark = calls.find(c => c.label === 'degraded:mark')
+    assert.ok(mark, 'and the marker LANDS at ' + where + ' — without it a relaunch cannot select the degraded organ')
+    assert.ok(mark.prompt.includes('.kiln/degraded'), 'the marker written is the one the relaunch reads back')
+    assert.ok(!calls.some(c => c.label === 'master:promote'), 'nothing is promoted on a round that lost its second mind at ' + where)
+  }
+  // The vocabulary is the shipped closed table, never a bare 21 literal — so an exit the table calls
+  // an ordinary transport failure still holds the round the ordinary way. Feeding 20 is the control
+  // that makes the rows above a DISCRIMINATION rather than a catch-all on nonzero.
+  const plain = await runKernel({ stage: 'law', projectDir: '/p' }, masterRound({ ['master:draft-' + GPT_SLOT]: { exit: 20 } }))
+  assert.equal(plain.ret.status, 'transport-failure', 'a 20 at the same leg is an ordinary organ hold')
+  assert.ok(!plain.calls.some(c => c.label === 'degraded:mark'), 'and marks no degradation — 21 is discriminated, not merely nonzero')
+})
+
+test('organ §15.16 (r2 INPUT-READ-FAULT): an input that cannot be READ holds the round, and the digest over a readable set is unchanged', () => {
+  // Sol executed the shipped shape: test -s answers from STAT, so a mode-000 input is LISTED; the
+  // inner sha256sum then fails inside a pipeline whose exit status belongs to cut, and the leg
+  // certified a digest over the readable SUBSET at exit 0. Lifted from source and EXECUTED, the way
+  // §15.12 proves the record read — reading a shell pipeline proves nothing about what it exits with.
+  const lifted = src.match(/(\+ '; for f in "\$@"[\s\S]*?cut -d" " -f1')/)
+  assert.ok(lifted, 'the input-scan shell is liftable from kernel.js source')
+  // eslint-disable-next-line no-eval
+  const shell = eval("''" + lifted[1])
+  assert.ok(shell.includes('test -s') && shell.includes('sha256sum'), 'the lifted fragment really is the listing-and-digest scan')
+  const dir = mkdtempSync(join(tmpdir(), 'kiln-inputs-'))
+  mkdirSync(join(dir, '.kiln/docs'), { recursive: true })
+  const files = { '.kiln/docs/project-brief.md': 'brief\n', '.kiln/posture.json': '{"scope":"small"}\n', '.kiln/docs/feasibility.md': 'feas\n' }
+  for (const [p, t] of Object.entries(files)) writeFileSync(join(dir, p), t)
+  const paths = Object.keys(files)
+  const scan = () => spawnSync('sh', ['-c', 'set -- ' + paths.map(p => "'" + p + "'").join(' ') + shell], { cwd: dir, encoding: 'utf8' })
+
+  // The digest VALUE is pinned to an INDEPENDENT computation rather than to the old spelling: sha256
+  // over the exact "<sha>  <path>\n" lines sha256sum prints, in order. Had the substitution changed
+  // the hashed bytes by one newline, the round's open-versus-close bracket would have been silently
+  // rebased and this reddens instead.
+  const clean = scan()
+  assert.equal(clean.status, 0, 'an all-readable set scans clean')
+  const expected = createHash('sha256').update(
+    paths.map(p => createHash('sha256').update(files[p]).digest('hex') + '  ' + p + '\n').join(''),
+  ).digest('hex')
+  assert.equal(clean.stdout.trim().split('\n').pop(), expected, 'the digest value is exactly the shipped rendering — unchanged by the fail-closed rewrite')
+
+  // The excluded input: a member of the fixed set that STATS nonempty but cannot be read.
+  chmodSync(join(dir, '.kiln/docs/feasibility.md'), 0o000)
+  const faulted = scan()
+  chmodSync(join(dir, '.kiln/docs/feasibility.md'), 0o644)
+  assert.notEqual(faulted.status, 0, 'an input that cannot be examined fails the leg — it no longer certifies the readable subset at exit 0')
+  assert.notEqual(faulted.stdout.trim().split('\n').pop(), expected, 'and emits no digest that would pass for the whole set')
+})
+
+test('organ §15.16 (r2 INPUT-READ-FAULT): the nonzero scan holds the round on the OPEN bracket and on the merge-CLOSE bracket alike', async () => {
+  // The leg exit is the whole remedy — no new hold arm exists, because the round already holds on a
+  // nonzero inputs read. Both bracket reads are fed it, since a fault appearing only at close would
+  // otherwise promote a merge whose question moved under it.
+  const open = await runKernel({ stage: 'law', projectDir: '/p' }, masterRound({ 'master:inputs': { exit: 9, ids: [] } }))
+  assert.equal(open.ret.status, 'transport-failure', 'an unreadable input holds the round before either mind is asked')
+  assert.match(open.ret.beat, /could not complete \(inputs\)/, 'and names the step that could not answer')
+  assert.ok(!open.calls.some(c => c.label === 'master:draft-' + CLAUDE_SLOT), 'no author is dispatched on a question the round cannot state')
+  const close = await runKernel({ stage: 'law', projectDir: '/p' }, masterRound({ 'master:inputs-confirm': { exit: 9, ids: [] } }))
+  assert.equal(close.ret.status, 'transport-failure', 'and a fault appearing only at the close bracket holds too')
+  assert.ok(!close.calls.some(c => c.label === 'master:promote'), 'nothing is promoted on it')
+})
+
+// W3 convergence (Sol r2 GATE-AXIS): the gate-destination derivation, extracted so the CONTROL below
+// can feed it a synthetic trace. Every gate-shaped path any leg names, keyed by the subject its label
+// carries. The state courier is excluded BY SHAPE, not by label: it carries the accumulated ROUTE list
+// as pointers, so every stage's artifacts legitimately appear in it and a gate path there is a record
+// of what the run touched, never a destination that subject reads or writes.
+const gateMap = (calls) => {
+  const GATE_PATH = /\.kiln\/(?:gate-review|[a-z]+-check)\.json/g
+  const seen = new Map()
+  for (const c of calls) {
+    if (typeof c.label !== 'string' || !c.label.includes(':')) continue
+    if (String(c.prompt).includes('state-commit .kiln')) continue
+    const subject = c.label.split(':')[0].replace(/-claude$/, '')
+    for (const g of String(c.prompt).match(GATE_PATH) || []) {
+      if (!seen.has(subject)) seen.set(subject, new Set())
+      seen.get(subject).add(g)
+    }
+  }
+  return Object.fromEntries([...seen].map(([subject, gates]) => [subject, [...gates].sort()]))
+}
+const CANONICAL_GATES = { ratify: '.kiln/gate-review.json', vision: '.kiln/vision-check.json', master: '.kiln/master-check.json' }
+const CANONICAL_GATE_MAP = Object.fromEntries(Object.entries(CANONICAL_GATES).map(([s, g]) => [s, [g]]))
+
+test('organ §15.17 CONTROL (convergence): the comparison reddens on the reviewer OWN fourth-subject reproduction', () => {
+  // Sol proved the previous pin blind with a synthetic trace — `future` naming a gate beside the three
+  // correct ones, and every shipped assertion stayed green, because the pin walked the canonical list
+  // and asked the trace about entries it already knew. That counterexample ships HERE as a control, so
+  // the reviewer criterion lives inside the suite instead of in a verdict file.
+  const correct = [
+    { label: 'ratify:gate', prompt: 'kiln-review ratify . .kiln .kiln/gate-review.json ratify' },
+    { label: 'vision:gate', prompt: 'kiln-review ratify . .kiln .kiln/vision-check.json vision' },
+    { label: 'master:accepted-hash', prompt: 'node -p require("./.kiln/master-check.json").law_hash' },
+  ]
+  assert.deepEqual(gateMap(correct), CANONICAL_GATE_MAP, 'the three correct traces alone match — the control starts from a genuine green')
+  assert.notDeepEqual(gateMap(correct.concat([{ label: 'future:gate', prompt: 'kiln-review ratify . .kiln .kiln/master-check.json future' }])), CANONICAL_GATE_MAP,
+    'a FOURTH subject naming a gate REDDENS — a subject nobody listed is now a subject that fails')
+  // The other two drifts the assertion sentence claims, so the sentence is proven rather than asserted.
+  assert.notDeepEqual(gateMap([{ label: 'vision:gate', prompt: '.kiln/master-check.json' }, correct[0], correct[2]]), CANONICAL_GATE_MAP, 'a crossed destination reddens')
+  assert.notDeepEqual(gateMap(correct.slice(0, 2)), CANONICAL_GATE_MAP, 'and a subject that stopped naming its gate reddens')
+})
+
+test('organ §15.17 (r2 GATE-AXIS): each subject reads and writes ONLY its own canonical gate — destinations derived from the trace', async () => {
+  // Sol plant: vision published over the MASTER gate while keeping vision family, subject and
+  // artifact, and the floor stayed green at 725/725. The r1 claim that the accepted-verdict bracket
+  // covered this axis is WITHDRAWN — the bracket rereads law_hash from the SAME gate the check just
+  // wrote, so a crossed destination is self-consistent and the bracket accepts it. It binds artifact
+  // to verdict and nothing else. A crossed destination is SOURCE drift over kernel constants, so the
+  // suite is the instrument; a CLI check would have to teach a trusted verb a kernel path convention.
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, visionRound({
+    ...organAuthorship('master'), ...masterMerge(), ...claudeCheckLegs('master'), ...masterPromote, ...OPEN_MASTER,
+  }))
+  assert.equal(ret.status, 'ok', 'one walk carrying all three subjects — the LAW ratify, the vision check and the master check')
+  assert.equal(new Set(Object.values(CANONICAL_GATES)).size, 3, 'the three subjects own three DIFFERENT gates — that is what isolation means here')
+  // The OBSERVED map is the assertion, never a checklist walked against the canonical one. A subject
+  // the canonical list does not name has to FAIL here — otherwise the pin only ever proves the
+  // subjects it was told about, which is a hand list wearing a derivation.
+  assert.deepEqual(gateMap(calls), CANONICAL_GATE_MAP,
+    'exactly these three subjects name a gate and each names only its own — a crossed destination, a fourth subject, or a subject that stopped naming its gate all redden here')
+})
+
+test('organ §15.11: the input-digest bracket reddens when an input mutates mid-round — the excluded input fed directly', async () => {
+  // The bracket exists to make the operator sentence "ask both minds the SAME EXACT problem"
+  // machine-true. Divergence between two blind drafts is meaningless if the inputs moved underneath
+  // them, so the close re-verify is fed exactly the input the claim excludes: a different digest.
+  const { ret, calls } = await runKernel({ stage: 'law', projectDir: '/p' }, masterRound({
+    'master:inputs-confirm': { exit: 0, ids: ['.kiln/docs/project-brief.md', '.kiln/posture.json', 'b'.repeat(64)] },
+  }))
+  assert.equal(ret.status, 'transport-failure', 'a drifted input holds the round')
+  assert.match(ret.beat, /inputs changed underneath it/, 'and the hold says which fact failed')
+  assert.ok(!calls.some(c => c.label === 'master:publish'), 'nothing is graded on a round whose question moved')
+  assert.ok(!calls.some(c => c.label === 'master:promote'), 'and nothing is promoted')
+  // The green control, so the fixture proves discrimination rather than a spelling: the SAME shape
+  // with an unchanged digest completes.
+  const control = await runKernel({ stage: 'law', projectDir: '/p' }, masterRound())
+  assert.equal(control.ret.status, 'ok', 'the identical round with an unmoved digest promotes')
+})
+
+test('organ §15.11: ONE claude ratifier-mint site serves three subjects, each named — the enumeration is arithmetic over CODE', () => {
+  // Count-pins over source range over CODE: full-line comments are stripped, because the prose
+  // documenting a pin is the likeliest text in the tree to contain the pin's own token.
+  const code = src.split('\n').filter(l => !l.trim().startsWith('//')).join('\n')
+  const mintSites = (code.match(/mintLeg\(/g) || []).length
+  assert.equal(mintSites, 6, 'kernel.js mints exactly six leg identities')
+  // Each named, so a site added or removed cannot pass as one of these.
+  for (const role of ['builder', 'repair', 'gate-reviewer', 'auditor', 'ratifier', 'screen-grader']) {
+    assert.equal((code.match(new RegExp("mintLeg\\('" + role + "'", 'g')) || []).length, 1, 'exactly one ' + role + ' mint site')
+  }
+  // The T1 property in its stronger form: the ratifier site is ONE, and its subject is an AXIS, so
+  // three moments share it rather than three sites drifting apart.
+  assert.ok(code.includes("mintLeg('ratifier', seat.alias, o.subject)"), 'the single ratifier mint takes its subject from the closure axis')
+  for (const subject of ["subject: 'law-ratify'", 'subject: m,']) {
+    assert.ok(code.includes(subject), 'the axis is instantiated with a named subject: ' + subject)
+  }
+  // And the three subject words are exactly the ratifier-class words the shipped map binds.
+  assert.ok(code.includes("tag: 'ratify', family: 'ratify', subject: 'law-ratify'"), 'the LAW instantiation names its triple explicitly')
+  assert.ok(code.includes('tag: m, family: m, subject: m,'), 'and each organ moment names its own, keyed to the moment word')
 })

@@ -387,3 +387,116 @@ test('state-commit: the kernel dropped the heredoc ledger machinery entirely', (
     assert.ok(!kernel.includes(retired), `kernel.js no longer carries ${retired}`)
   }
 })
+
+// ── W3 §15.2/§15.8: the master-plan digest word ─────────────────────────────
+// The build-report probes landing as fixtures. Each drives the REAL CLI over a persistent dir so
+// the CARRY across commits is exercised as a sequence, not asserted from one write.
+const D_A = 'a'.repeat(64)
+const D_B = 'b'.repeat(64)
+const MP = 'master-plan-digest:'
+const seq = () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kiln-mpd-'))
+  return {
+    dir,
+    run: (...args) => spawnSync('node', [CLI, 'state-commit', dir, ...args], { encoding: 'utf8' }),
+    rec: () => JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8')),
+    doc: () => readFileSync(join(dir, 'STATE.md'), 'utf8'),
+  }
+}
+const hold = (...tail) => ['hold', 'law', 'none', 'rerun-law', 'broad', ...tail]
+
+test('state-commit (W3 §15.2): the digest lands in the canonical record ONLY — renderStateDoc is byte-unchanged', () => {
+  const s = seq()
+  const bare = s.run(...hold('.kiln/STATE.md'))
+  assert.equal(bare.status, 0, bare.stderr)
+  const withoutDigest = s.doc()
+  assert.equal(s.rec().master_plan_digest, null, 'absent both ways, the field is an honest null — never a guess')
+
+  const s2 = seq()
+  assert.equal(s2.run(...hold('.kiln/STATE.md', MP + D_A)).status, 0)
+  assert.equal(s2.rec().master_plan_digest, D_A, 'the supplied digest is recorded canonically')
+  // The operator view is the claim: eight lines, and byte-identical to the same commit without a
+  // digest once the clock line is normalized. The digest is operator-meaningless hex and must not
+  // appear anywhere in it — the excluded content fed directly rather than a line-count sample.
+  const norm = (d) => d.replace(/^updated_at: .*$/m, 'updated_at: X')
+  assert.equal(norm(s2.doc()), norm(withoutDigest), 'STATE.md is byte-identical with and without the digest')
+  assert.ok(!s2.doc().includes(D_A), 'no digest hex reaches the rendered operator view')
+  assert.equal(s2.doc().split('\n').length, 9, 'still eight lines and the trailing newline')
+})
+
+test('state-commit (W3 §15.8): the digest CARRIES FORWARD across commits, and a supplied word overrides the carry', () => {
+  const s = seq()
+  assert.equal(s.run(...hold('.kiln/STATE.md', MP + D_A)).status, 0)
+  assert.equal(s.run(...hold('.kiln/STATE.md')).status, 0, 'a later commit omits the word')
+  assert.equal(s.rec().master_plan_digest, D_A, 'the prior digest carries — project authority outlives the run that minted it')
+  assert.equal(s.rec().revision, 2, 'and the carry rode a genuine second commit, not a re-read of the first')
+  assert.equal(s.run(...hold('.kiln/STATE.md', MP + D_B)).status, 0)
+  assert.equal(s.rec().master_plan_digest, D_B, 'a supplied word wins over the carry')
+})
+
+test('state-commit (W3 r2, TAKEOVER-FIXTURE): the master-plan digest survives a LOCK TAKEOVER and carries under the new run_id', () => {
+  // §15.8 states this as a wave-gate item, and Sol was right that it was only compositionally
+  // inferred: the carry is proven across sequential commits, and takeover is proven separately, but
+  // nothing combined them. The claim is about AUTHORITY surviving a crash, and inference is exactly
+  // what a wave gate must not have to accept — this whole round exists because a coverage claim was
+  // inferred rather than derived. One fixture, not a suite.
+  const dir = mkdtempSync(join(tmpdir(), 'kiln-takeover-mpd-'))
+  const run = (...args) => spawnSync('node', [CLI, 'state-commit', dir, ...args], { encoding: 'utf8' })
+  const rec = () => JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8'))
+  // A crashed run: a lock left by a process that is gone, aged past the floor.
+  const crashed = {
+    run_id: 'crashed-run', owner: 'crashed-owner', conductor_pid: 2147480000,
+    started_at: '2020-01-01T00:00:00.000Z', ladder_choice: 'follow-ladders', plugin_version: '0.0.0',
+  }
+  writeFileSync(join(dir, 'run.lock'), JSON.stringify(crashed) + '\n')
+  assert.equal(run(...hold('.kiln/STATE.md', MP + D_A)).status, 0, 'the crashed run promoted a master plan and committed its digest')
+  assert.equal(rec().master_plan_digest, D_A, 'the digest is recorded under the run that minted it')
+  assert.equal(rec().run_id, 'crashed-run', 'and stamped with that run')
+
+  const took = spawnSync('node', [CLI, 'run-lock', 'takeover', dir, 'follow-ladders', String(process.pid)], { encoding: 'utf8', env: withCodex })
+  assert.equal(took.status, 0, took.stderr)
+  const freshRun = took.stdout.trim().split(' ')[0]
+  assert.notEqual(freshRun, 'crashed-run', 'the resumed run carries a genuinely fresh identity')
+
+  // The commit that matters: a LATER run, holding a DIFFERENT lock, omitting the digest word.
+  assert.equal(run(...hold('.kiln/STATE.md')).status, 0, 'the resumed run commits without restating the digest')
+  assert.equal(rec().run_id, freshRun, 'the record now stamps the run actually holding the lock')
+  assert.equal(rec().master_plan_digest, D_A, 'and the master-plan digest CARRIES — project authority outlives the run that minted it')
+  assert.equal(rec().revision, 2, 'the carry rode a real second commit, not a re-read of the first')
+})
+
+test('state-commit (W3 §15.11): a bare 64-hex POINTER is never read as project authority — the excluded input', () => {
+  // The input the prefix rule exists to exclude. Pointers and a digest share ONE grammar, and the
+  // pointer list carries MODEL-DECLARED paths, so shape-based selection would let a stage leg's
+  // declared pointer be recorded as master-plan authority. Reverting the prefix selector to a bare
+  // 64-hex test makes this fixture red: the pointer is swallowed and leaves the pointers array.
+  const s = seq()
+  assert.equal(s.run(...hold('.kiln/STATE.md', MP + D_B)).status, 0, 'seed a real digest first, so a wrong read has something to overwrite')
+  assert.equal(s.run(...hold('.kiln/STATE.md', D_A)).status, 0, 'a bare 64-hex trailing word is a lawful pointer')
+  assert.equal(s.rec().master_plan_digest, D_B, 'the authority is untouched by it')
+  assert.deepEqual(s.rec().pointers, ['.kiln/STATE.md', D_A], 'and it survives AS a pointer — never silently consumed')
+})
+
+test('state-commit (W3): a malformed digest halts by name, and a prefixed word out of last position stays a pointer', () => {
+  const bad = commit([...hold('.kiln/STATE.md', MP + 'nothex')])
+  assert.equal(bad.run.status, 20, 'a non-hex digest is transport-class')
+  assert.match(bad.run.stderr, /master-plan digest must be a 64-hex sha256/, 'and it halts by name')
+  assert.ok(!existsSync(bad.state), 'nothing is written on the halt')
+  // Only the LAST word is examined, so a prefixed word anywhere earlier is judged as the pointer it
+  // is standing in for — it fails the pointer grammar rather than being accepted out of position.
+  const mid = commit([...hold(MP + D_A, '.kiln/STATE.md')])
+  assert.equal(mid.run.status, 20, 'a prefixed word out of position is refused')
+  assert.match(mid.run.stderr, /pointers must be repo-relative safe paths/, 'as a malformed POINTER, which is what it is there')
+})
+
+test('state-commit (W3): a prior digest that is not 64-hex is NOT inherited as authority', () => {
+  // A hand-edited or torn field must not be carried forward wearing authority's clothes; the master
+  // round then re-runs from its no-digest arm instead of trusting it.
+  const s = seq()
+  assert.equal(s.run(...hold('.kiln/STATE.md', MP + D_A)).status, 0)
+  const rec = s.rec()
+  rec.master_plan_digest = 'not-a-digest'
+  writeFileSync(join(s.dir, 'state.json'), JSON.stringify(rec) + '\n')
+  assert.equal(s.run(...hold('.kiln/STATE.md')).status, 0)
+  assert.equal(s.rec().master_plan_digest, null, 'the malformed prior is dropped, not inherited')
+})

@@ -34,12 +34,12 @@ const { AUDIT_KINDS, AUDIT_LEDGER, BUILDER_LEG_ROLES, CODEX_ROLE, CONTRACT_DIR, 
   reviewedAuditAttestation, reviewedSealAttestation, scanTranscriptForLabel,
   screenContractFacts, sliceReviewFacts, verdictlessAttestation, verifyContractStore } = require('./lib/attestation.js')
 const { TRIO_MEMBERS, sealedAuthority, trioHashPath, trioMemberPath, verifyMember } = require('./lib/authority.js')
-const { ACCEPT, NO_MEMBER, TRANSPORT_FAILURE, TRIO_MISMATCH, containedPath, isObject, readJson, repository,
+const { ACCEPT, LAW_HASH, NO_MEMBER, TRANSPORT_FAILURE, TRIO_MISMATCH, containedPath, isObject, readJson, repository,
   stop } = require('./lib/core.js')
 const { SCREEN_LOCATION, auditFacts, auditRequest, auditShapeInvalid, buildGateFacts, currentGeneration,
-  hintsFrom, invoke, invokeAudit, planAct, planRequestFrom, ratifyInstructions, ratifyRequestFrom, runGate, screenEvidence,
+  hintsFrom, invoke, invokeAudit, planAct, planRequestFrom, planSources, ratifyInstructions, ratifyRequestFrom, runGate, screenEvidence,
   screenInstructions, screenLawFacts, screenPacket, screenShapeInvalid, shippedRubric, validateShape } = require('./lib/gate.js')
-const { LOCK_CHOICES, LOCK_DENIED, LOCK_FILE, LOCK_TOKEN, STATE_POINTER, STATE_SLICE_ID, STATE_STAGES,
+const { LOCK_CHOICES, LOCK_DENIED, LOCK_FILE, LOCK_TOKEN, MASTER_PLAN_ARG, STATE_POINTER, STATE_SLICE_ID, STATE_STAGES,
   STATE_TOKENS, archiveAndDrop, claimLock, lockPresence, pluginVersion, readLockRecord, reconcileStateDoc,
   runIdFromLock,
   refuseWithoutCodex, renderStateDoc, restoreOrArchive, stateNextAction, takeoverStale } = require('./lib/run.js')
@@ -486,6 +486,7 @@ if (mode === 'review' && args.length === 8) {
     law_hash: candidateDigest,
     rubric,
     artifact: artifactBytes.toString('utf8'),
+    sources: planSources(kilnDir, family),
   }
   // W2-S7a (FORK 1): the artifact-ratify contract — purpose is the ratify family word, the artifact
   // path and its candidate digest, the exact artifact text the reviewer grades, and the rubric
@@ -494,7 +495,7 @@ if (mode === 'review' && args.length === 8) {
   try {
     contract = composeContract('artifact-ratify', 'initial', {
       purpose: family, artifact_path: request.artifact, artifact_sha256: candidateDigest,
-      artifact: packet.artifact, rubric,
+      artifact: packet.artifact, rubric, sources: packet.sources,
     })
   } catch (error) {
     stop('transport_failure', `contract: ${error.message}`, TRANSPORT_FAILURE)
@@ -546,6 +547,7 @@ if (mode === 'review' && args.length === 8) {
     artifact: artifactBytes.toString('utf8'),
     finding_ids: [...findingIds],
     prior_findings: prior.findings,
+    sources: planSources(kilnDir, family),
   }
   // W2-S7a (FORK 1): the recheck contract adds the sorted finding_ids cohort and the prior findings.
   let contract
@@ -553,6 +555,7 @@ if (mode === 'review' && args.length === 8) {
     contract = composeContract('artifact-ratify', 'recheck', {
       purpose: family, artifact_path: request.artifact, artifact_sha256: candidateDigest,
       artifact: packet.artifact, rubric, finding_ids: packet.finding_ids, prior_findings: prior.findings,
+      sources: packet.sources,
     })
   } catch (error) {
     stop('transport_failure', `contract: ${error.message}`, TRANSPORT_FAILURE)
@@ -915,7 +918,7 @@ if (mode === 'review' && args.length === 8) {
       const facts = {
         purpose: family, artifact_path: artifactPath,
         artifact_sha256: createHash('sha256').update(artifactBytes).digest('hex'),
-        artifact: artifactBytes.toString('utf8'), rubric,
+        artifact: artifactBytes.toString('utf8'), rubric, sources: planSources(kilnDir, family),
       }
       if (operation === 'recheck') {
         // W2-S7a (F2): the SAME prior-eligibility the codex ratify-recheck verb enforces — full shape
@@ -1470,7 +1473,21 @@ if (mode === 'review' && args.length === 8) {
   // W2-S2 (H6 / B02): the verb now persists a typed canonical .kiln/state.json and renders
   // the eight-line STATE.md (the exact former stateDoc format) FROM it, state.json landing
   // first — see the compose-and-write block below for the crash rule and reconciliation.
-  const [kilnDir, token, stage, activeSlice, key, density, ...pointers] = args
+  const [kilnDir, token, stage, activeSlice, key, density, ...trailing] = args
+  // W3 (ruling §4): the OPTIONAL trailing master-plan digest word. It is recognised by its prefix,
+  // never by its shape: pointers and a 64-hex digest share one grammar, and pointers originate in
+  // model-declared paths, so shape alone would let a declared pointer be recorded as project
+  // authority. STATE_POINTER admits no colon, so the prefixed word can never be a lawful pointer —
+  // and only the LAST word is examined, so a prefixed word anywhere earlier stays a pointer and
+  // fails the pointer grammar below rather than being silently accepted out of position.
+  const pointers = [...trailing]
+  let suppliedDigest = null
+  if (pointers.length > 0 && pointers[pointers.length - 1].startsWith(MASTER_PLAN_ARG)) {
+    suppliedDigest = pointers.pop().slice(MASTER_PLAN_ARG.length)
+    if (!LAW_HASH.test(suppliedDigest)) {
+      stop('transport_failure', 'state-commit master-plan digest must be a 64-hex sha256', TRANSPORT_FAILURE)
+    }
+  }
   if (typeof kilnDir !== 'string' || kilnDir.trim() === '') {
     stop('transport_failure', 'state-commit kilnDir must be a nonempty string', TRANSPORT_FAILURE)
   }
@@ -1548,6 +1565,14 @@ if (mode === 'review' && args.length === 8) {
     && typeof lock.owner === 'string' && LOCK_TOKEN.test(lock.owner)
     && Number.isInteger(lock.conductor_pid) && lock.conductor_pid > 0
   const runId = lockConforms ? lock.run_id : null
+  // W3 (ruling §4): the master-plan digest is PROJECT authority, so it carries forward across every
+  // later commit and every later run — a supplied word wins, otherwise the prior record answers, and
+  // absent both the field stays null. A prior whose field is not a 64-hex string is not carried: a
+  // hand-edited or torn value must not be inherited as authority, and the master round re-runs from
+  // the no-digest arm rather than trusting it. The field lands in the canonical record ONLY —
+  // renderStateDoc is untouched, so the eight-line operator view stays byte-identical.
+  const priorDigest = prior !== null && typeof prior.master_plan_digest === 'string'
+    && LAW_HASH.test(prior.master_plan_digest) ? prior.master_plan_digest : null
   const record = {
     revision,
     stage,
@@ -1558,6 +1583,7 @@ if (mode === 'review' && args.length === 8) {
     pointers,
     seals,
     run_id: runId,
+    master_plan_digest: suppliedDigest !== null ? suppliedDigest : priorDigest,
     updated_at: updatedAt,
   }
   const doc = renderStateDoc(record)
@@ -1776,7 +1802,7 @@ if (mode === 'review' && args.length === 8) {
 } else {
   stop(
     'transport_failure',
-    'usage: kiln-review review <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <gate-review.json> | kiln-review recheck <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review gate-facts <kilnDir> <slice> <request.json> <gate-facts.json> | kiln-review append-seal <kilnDir> <slice> <label> [<builder_leg_ids_csv> <reviewer_leg_id|-> [<repo> [<attestation_kind>]]] | kiln-review invalidate <kilnDir> <slice_ids_csv> | kiln-review seal-law <kilnDir> <label> | kiln-review run-checks <kilnDir> | kiln-review slices <kilnDir> | kiln-review screen-criteria <kilnDir> | kiln-review perceptual-family <kilnDir> | kiln-review ratify <repo> <kilnDir> <request.json> <gate-review.json> <family> | kiln-review ratify-recheck <repo> <kilnDir> <request.json> <prior-gate-review.json> <gate-review.json> <family> | kiln-review plan-act <repo> <kilnDir> <request.json> <output> | kiln-review publish-gate <kilnDir> <family> <candidate.json> <gate-review.json> [<reviewer_leg_id> [<repo> <slice>] [<contract_sha256>]] | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> <label> [<auditor_leg_id|-> [<repair_leg_ids_csv> [<attestation_kind>]]] | kiln-review reconcile <kilnDir> | kiln-review audit-member <kilnDir> <seamSliceId> | kiln-review manifest-start <repo> <kilnDir> <slice> | kiln-review manifest-prepare <repo> <kilnDir> <slice> | kiln-review contract-prepare <repo> <kilnDir> <kind> <operation> [<kind-args>...] | kiln-review identity-begin <kilnDir> <role> <requested_alias> <subject> | kiln-review capture-and-finalize <kilnDir> [<transcriptPath>] | kiln-review screen <repo> <kilnDir> <model> <alias> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <alias> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <alias> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...] | kiln-review run-lock acquire <kilnDir> <choice> <conductorPid> | kiln-review run-lock join <kilnDir> <run_id> <owner> | kiln-review run-lock release <kilnDir> <run_id> <owner> | kiln-review run-lock takeover <kilnDir> <choice> <conductorPid>',
+    'usage: kiln-review review <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <gate-review.json> | kiln-review recheck <repo> <kilnDir> <slice> <model> <alias> <effort> <request.json> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review gate-facts <kilnDir> <slice> <request.json> <gate-facts.json> | kiln-review append-seal <kilnDir> <slice> <label> [<builder_leg_ids_csv> <reviewer_leg_id|-> [<repo> [<attestation_kind>]]] | kiln-review invalidate <kilnDir> <slice_ids_csv> | kiln-review seal-law <kilnDir> <label> | kiln-review run-checks <kilnDir> | kiln-review slices <kilnDir> | kiln-review screen-criteria <kilnDir> | kiln-review perceptual-family <kilnDir> | kiln-review ratify <repo> <kilnDir> <request.json> <gate-review.json> <family> | kiln-review ratify-recheck <repo> <kilnDir> <request.json> <prior-gate-review.json> <gate-review.json> <family> | kiln-review plan-act <repo> <kilnDir> <request.json> <output> | kiln-review publish-gate <kilnDir> <family> <candidate.json> <gate-review.json> [<reviewer_leg_id> [<repo> <slice>] [<contract_sha256>]] | kiln-review audit <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <gate-review.json> | kiln-review audit-recheck <repo> <kilnDir> <seamSliceId> <model> <alias> <effort> <prior-gate-review.json> <repair-delta> <gate-review.json> | kiln-review append-audit <kilnDir> <seamSliceId> <label> [<auditor_leg_id|-> [<repair_leg_ids_csv> [<attestation_kind>]]] | kiln-review reconcile <kilnDir> | kiln-review audit-member <kilnDir> <seamSliceId> | kiln-review manifest-start <repo> <kilnDir> <slice> | kiln-review manifest-prepare <repo> <kilnDir> <slice> | kiln-review contract-prepare <repo> <kilnDir> <kind> <operation> [<kind-args>...] | kiln-review identity-begin <kilnDir> <role> <requested_alias> <subject> | kiln-review capture-and-finalize <kilnDir> [<transcriptPath>] | kiln-review screen <repo> <kilnDir> <model> <alias> <effort> <gate-review.json> | kiln-review screen-recheck <repo> <kilnDir> <model> <alias> <effort> <prior-gate-review.json> <fresh-manifest> <gate-review.json> | kiln-review screen-escalate <repo> <kilnDir> <model> <alias> <effort> <held-screen-review.json> <gate-review.json> | kiln-review state-commit <kilnDir> <token> <stage> <activeSlice> <next_action_key> <density> [pointers...] [master-plan-digest:<sha256>] | kiln-review run-lock acquire <kilnDir> <choice> <conductorPid> | kiln-review run-lock join <kilnDir> <run_id> <owner> | kiln-review run-lock release <kilnDir> <run_id> <owner> | kiln-review run-lock takeover <kilnDir> <choice> <conductorPid>',
     TRANSPORT_FAILURE,
   )
 }

@@ -78,6 +78,11 @@ async function runLaw(detail) {
     // S4: the degradation path-selector and seal-label reads answer marker-absent (exit
     // 1), so the law stage takes the codex ratify seat and seals dual, as before.
     'law:degraded': { exit: 1 }, 'law:seal-label': { exit: 1 },
+    // W3 (the organ): the density path is not the organ's subject, so both dual rounds answer their
+    // own skip keys here — no brainstorm ledger, and a master plan whose recorded digest matches the
+    // file. The stage then reaches the producer exactly as it did before the organ landed.
+    'vision:path-check': { exit: 1 },
+    'master:record': { exit: 0, ids: ['e'.repeat(64), 'e'.repeat(64)] },
     'ratify:request': { exit: 0 },
     'ratify:gate': { exit: 0 },
     // S1: the milestone projection is confirmed before the seal.

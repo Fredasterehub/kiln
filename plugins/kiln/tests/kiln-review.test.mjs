@@ -3727,6 +3727,80 @@ test('ratify (W2-S7a, F5): runGate HOLDs when the gate output is not directly un
   assert.ok(r.stderr.includes('not directly under the supplied kilnDir'), 'the invariant is named')
 })
 
+test('contract (W3 r2, COMPLETENESS-EVIDENCE): a plan-check contract carries the compared SOURCES with their digests, gathered CLI-side and scoped to the moment', () => {
+  // The omission rubric asks whether anything in the sources is missing from the merge. Before this
+  // the codex arm was told NOT to inspect the repository and handed a contract holding only the merged
+  // artifact — it could not observe a single source — while the claude arm read them unhashed and
+  // outside the contract its own prompt called COMPLETE. The evidence now rides inside the contract,
+  // gathered by the verb rather than named by the caller: a caller that chose the sources could hide
+  // an omission by leaving one out, which is the one failure this instrument exists to catch.
+  const repo = mkdtempSync(join(tmpdir(), 'kiln-sources-'))
+  const kiln = join(repo, '.kiln')
+  const shelf = join(kiln, 'plans')
+  mkdirSync(shelf, { recursive: true })
+  const files = {
+    'vision-plan-1.md': 'v one', 'vision-plan-2.md': 'v two',
+    'vision-revision-1.md': 'v rev one', 'vision-revision-2.md': 'v rev two',
+    'vision-merged-0.md': 'the vision merge under review',
+    // A CLOSED master round on the SAME shelf — the superset the moment prefix has to exclude.
+    'master-plan-1.md': 'm one', 'master-revision-1.md': 'm rev one', 'master-merged-0.md': 'm merge',
+  }
+  for (const [name, text] of Object.entries(files)) writeFileSync(join(shelf, name), text)
+  const read = (r) => JSON.parse(readFileSync(cStore(kiln, r.stdout.trim()), 'utf8'))
+
+  const v = cPrepare(repo, kiln, 'artifact-ratify', 'initial', 'vision', '.kiln/plans/vision-merged-0.md')
+  assert.equal(v.status, 0, 'the vision check contract composes')
+  const vc = read(v)
+  assert.deepEqual(vc.sources.map((s) => s.path).sort(),
+    ['.kiln/plans/vision-plan-1.md', '.kiln/plans/vision-plan-2.md', '.kiln/plans/vision-revision-1.md', '.kiln/plans/vision-revision-2.md'],
+    'all four vision sources ride the contract, and no vision-merged- entry does — the artifact is never its own source')
+  for (const s of vc.sources) {
+    assert.equal(s.sha256, createHash('sha256').update(files[basename(s.path)]).digest('hex'), 'each source is bound by a digest over the bytes the contract carries')
+    assert.equal(s.text, files[basename(s.path)], 'and the TEXT rides too, because the reviewer is forbidden to read the repository')
+  }
+  // The moment prefix IS the scope, structurally — no glob in a prompt has to spell it correctly.
+  const m = cPrepare(repo, kiln, 'artifact-ratify', 'initial', 'master', '.kiln/plans/master-merged-0.md')
+  assert.equal(m.status, 0)
+  assert.deepEqual(read(m).sources.map((s) => s.path), ['.kiln/plans/master-plan-1.md', '.kiln/plans/master-revision-1.md'],
+    'a master check carries master sources only — a closed round sharing the shelf belongs to another question')
+})
+
+test('contract (W3 r2, COMPLETENESS-EVIDENCE): an empty shelf HOLDs the check, and the LAW-ratify contract is INVARIANT under the shelf', () => {
+  // A completeness check with nothing to compare cannot answer its question, so it holds rather than
+  // composing a contract that would grade an artifact against no evidence at all.
+  const repo = mkdtempSync(join(tmpdir(), 'kiln-nosources-'))
+  const kiln = join(repo, '.kiln')
+  mkdirSync(join(kiln, 'plans'), { recursive: true })
+  writeFileSync(join(kiln, 'plans', 'vision-merged-0.md'), 'a merge with no sources')
+  const held = cPrepare(repo, kiln, 'artifact-ratify', 'initial', 'vision', '.kiln/plans/vision-merged-0.md')
+  assert.equal(held.status, 20, 'a shelf holding only the merge itself is a check with nothing to compare')
+  assert.match(held.stderr, /the shelf holds none/, 'and it says which fact was missing')
+
+  // The LAW path is untouched BY CONSTRUCTION: purpose ratify selects the architecture-feasibility
+  // instrument, not the omission one, so no sources are gathered and no key is added. Pinned as an
+  // INVARIANCE rather than a stored digest — a stored digest would go stale on any unrelated contract
+  // change and say nothing. This says the thing that matters: nothing on the plans shelf can reach the
+  // sealed path, so the r1 golden and every shipped ratify pin stand.
+  const lawRepo = mkdtempSync(join(tmpdir(), 'kiln-lawbytes-'))
+  const lawKiln = join(lawRepo, '.kiln')
+  mkdirSync(join(lawKiln, 'plans'), { recursive: true })
+  writeFileSync(join(lawRepo, 'LAW.md'), 'the candidate law\n')
+  const bare = cPrepare(lawRepo, lawKiln, 'artifact-ratify', 'initial', 'ratify', 'LAW.md')
+  assert.equal(bare.status, 0, 'the LAW-ratify contract composes with an empty shelf')
+  for (const n of ['vision-plan-1.md', 'vision-revision-1.md', 'master-plan-1.md']) writeFileSync(join(lawKiln, 'plans', n), 'noise')
+  assert.equal(cPrepare(lawRepo, lawKiln, 'artifact-ratify', 'initial', 'ratify', 'LAW.md').stdout.trim(), bare.stdout.trim(),
+    'and its digest is identical with a shelf full of plans — the LAW contract bytes are unchanged by this work')
+  assert.ok(!('sources' in JSON.parse(readFileSync(cStore(lawKiln, bare.stdout.trim()), 'utf8'))), 'the LAW contract carries no sources key at all')
+
+  // The prompt gains ONE conditional sentence, and only where the evidence actually rides.
+  const { ratifyInstructions } = createRequire(import.meta.url)('../scripts/lib/gate.js')
+  const base = { mode: 'ratify', review_id: 'r', law_hash: 'a'.repeat(64) }
+  const sourced = ratifyInstructions({ ...base, sources: [{ path: 'p', sha256: 'b'.repeat(64), text: 't' }] }, '{}')
+  const plain = ratifyInstructions({ ...base, sources: null }, '{}')
+  assert.match(sourced, /the complete set it is compared against/, 'a sourced check is told the set is complete and to judge against it alone')
+  assert.ok(!/the complete set it is compared against/.test(plain), 'and the LAW ratify prompt gains no sentence it has no evidence for')
+})
+
 test('contract-prepare (W2-S7a, F2): a slice-review recheck over an ineligible prior HOLDs — the codex recheck eligibility, mirrored', () => {
   const { repo, kiln, digest } = sealReviewRepo('s1')
   const rf = join(repo, 'request.json'); writeFileSync(rf, JSON.stringify({ criteria: 'x', paths: [], failures: [], commands: [] }))
@@ -4852,13 +4926,16 @@ test('manifest-start (W2-S7b, item 3): the generation allocator shares the candi
 // is validated against a closed grammar before any spawn, and a success writes a PLAIN FILE and
 // touches no trust store.
 const planFixture = ({ operation = 'draft', model = 'gpt-5.6-sol', alias = 'gpt-sol', effort = 'high',
-  inputs = ['brief.md'], out = 'plans/plan-a.md', plan = '# A plan\n\nBody.\n', codex = FAKE_CODEX, planBytes } = {}) => {
+  inputs = ['brief.md'], spec = 'master-plan', out = 'plans/plan-a.md', plan = '# A plan\n\nBody.\n', codex = FAKE_CODEX, planBytes } = {}) => {
   const repo = mkdtempSync(join(tmpdir(), 'kiln-planact-'))
   const kiln = join(repo, '.kiln')
   mkdirSync(kiln, { recursive: true })
   writeFileSync(join(repo, 'brief.md'), 'the brief\n')
   const request = join(kiln, 'plan-request.json')
-  writeFileSync(request, JSON.stringify({ author_model: model, author_alias: alias, author_effort: effort, operation, inputs }))
+  // W3: spec is a REQUIRED closed word — the shipped content spec the author reads. It cannot ride
+  // the inputs list because the card lives outside the repo, and the fixture carries the real word so
+  // every plan-act walk below exercises the same resolution the organ uses.
+  writeFileSync(request, JSON.stringify({ author_model: model, author_alias: alias, author_effort: effort, operation, spec, inputs }))
   const fake = mkdtempSync(join(tmpdir(), 'kiln-planbin-'))
   // codex null means the binary is ABSENT from PATH — the ENOENT class, distinct from an unrunnable one.
   if (codex !== null) writeFileSync(join(fake, 'codex'), codex.replace('#!/usr/bin/env node', '#!' + process.execPath), { mode: 0o755 })
@@ -4924,6 +5001,38 @@ test('kiln-review (W3): plan-act speaks the EXISTING failure grammar — 21 when
   assert.deepEqual(readdirSync(join(empty.kiln, 'plans')), [], 'no temp survives the hold')
 })
 
+// W3 repair (F2): the kernel-side spelling of the authorship instructions, lifted from kernel.js
+// source. A workflow file cannot require a CLI module, so TWO spellings of one contract must exist —
+// and that is a parity hazard the code names in a comment while nothing ranged over the kernel map
+// at all. The two texts had ALREADY drifted in the shipped tree, on `draft`, which is the blind
+// moment itself. Each map is read from its OWN source — the CLI map by require, the kernel map by
+// extracting the object literal — so this is a comparison and never a shared constant agreeing with
+// itself. eval of a lifted literal is the established idiom here: it is what makes a future edit to
+// either spelling the thing under test.
+const ORGAN_OP = (() => {
+  const kernel = readFileSync(fileURLToPath(new URL('../workflows/kernel.js', import.meta.url)), 'utf8')
+  const lifted = kernel.match(/const ORGAN_OP = (\{\n[\s\S]*?\n\s*\})\n/)
+  assert.ok(lifted, 'the kernel-side instruction map is liftable from kernel.js source')
+  // eslint-disable-next-line no-eval
+  return eval('(' + lifted[1] + ')')
+})()
+
+test('kiln-review (W3 repair, F2): the two spellings of the authorship contract are ONE contract — both arms of a blind round are handed the same words', () => {
+  const { PLAN_INSTRUCTIONS } = createRequire(import.meta.url)('../scripts/lib/gate.js')
+  // Vacuity guard first: the lift must have produced the real thing, or the equality below is an
+  // agreement between two empty objects.
+  assert.equal(Object.keys(ORGAN_OP).length, 3, 'the kernel map really was lifted — three operation words')
+  assert.ok(ORGAN_OP.draft.length > 100, 'and it carries real instruction text, not a stub')
+  assert.deepEqual(Object.keys(ORGAN_OP).sort(), Object.keys(PLAN_INSTRUCTIONS).sort(), 'the key sets agree — neither arm has an operation the other cannot answer')
+  assert.deepEqual(ORGAN_OP, PLAN_INSTRUCTIONS, 'and every text agrees byte for byte: two spellings, one contract')
+  // The property the drift broke, stated as itself so a future divergence names the moment it hurts:
+  // draft is the BLIND moment, where two minds are supposed to be answering the same question.
+  assert.equal(ORGAN_OP.draft, PLAN_INSTRUCTIONS.draft, 'the DRAFT instruction above all — a blind round whose arms are asked different questions is not a blind round')
+  // And the shared sentence is TRUE of both prompts: neither names the content spec before this
+  // paragraph, so a spelling claiming the spec was "named above" would be false on both arms.
+  assert.ok(ORGAN_OP.draft.includes('the content spec this prompt names'), 'the shared draft sentence is position-neutral, which is what makes it true on both arms')
+})
+
 test('kiln-review (W3): the shipped authorship instructions carry no family, model or persona token — the blind round rests on it', () => {
   // The anonymity claim ranges over the three constants a prompt is composed from, so the
   // enumeration runs over all three, not over the one an author happened to edit.
@@ -4951,9 +5060,14 @@ test('kiln-review (W3): the shipped authorship instructions carry no family, mod
   assert.ok(lexicon.has('inherit') && lexicon.has('fable') && lexicon.has('haiku') && lexicon.has('sol'),
     'the derivation reaches the tokens the hand list missed — inherit and fable from tiers, sol from the resolver, haiku by named exception')
   assert.ok(lexicon.size > 12, 'the lexicon was actually derived from tiers.json — ' + lexicon.size + ' tokens')
-  for (const [operation, text] of Object.entries(PLAN_INSTRUCTIONS)) {
-    for (const token of lexicon) {
-      assert.ok(!new RegExp('\\b' + token + '\\b', 'i').test(text), `no orchestration token "${token}" in the ${operation} instruction`)
+  // W3 repair (F2): the enumeration now ranges over BOTH spellings. The neutrality claim is about
+  // what an author can read, and the in-process arm reads the kernel map — so a pin over the CLI map
+  // alone covered exactly half the blind round.
+  for (const [side, map] of [['cli', PLAN_INSTRUCTIONS], ['kernel', ORGAN_OP]]) {
+    for (const [operation, text] of Object.entries(map)) {
+      for (const token of lexicon) {
+        assert.ok(!new RegExp('\\b' + token + '\\b', 'i').test(text), `no orchestration token "${token}" in the ${side} ${operation} instruction`)
+      }
     }
   }
 })

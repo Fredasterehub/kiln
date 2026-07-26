@@ -129,11 +129,22 @@ const RATIFY_RUBRIC = new Map([
 // spec lives in the cards these instructions name by path; codex reads them itself under the
 // read-only sandbox, the same way the retired dual-plan prompts named their card.
 const PLAN_INSTRUCTIONS = {
-  draft: 'You are authoring a plan document. Read the inputs listed below and the stage card they name, then write the complete plan they call for. Work only from the inputs; invent no requirement they do not contain.',
-  revise: 'You are revising a plan you authored earlier against a second, independent plan of the same problem. Read both, weigh them, and write your revised complete plan. Adopt what the other plan gets right; keep what you still judge correct. Never record a convergence you do not see.',
+  draft: 'You are authoring a plan document. Read the inputs listed below and the content spec this prompt names, then write the complete plan they call for. Work only from the inputs; invent no requirement they do not contain.',
+  revise: 'You are revising a plan you authored earlier against a second, independent plan of the same problem. Read both and weigh them. Open your document with a short record naming where the two converge and where they diverge, then write your revised complete plan below it. Adopt what the other plan gets right; keep what you still judge correct. Never record a convergence you do not see.',
   merge: 'You are merging independent plans of the same problem into one complete document. Carry through everything they already agree on, and rule each surviving divergence explicitly, recording the call you took. Never synthesize material that appears in none of them.',
 }
 const PLAN_OPERATIONS = Object.keys(PLAN_INSTRUCTIONS)
+// W3 (ruling §3): the SHIPPED content spec, selected by a closed word exactly as the rubric is. The
+// semantic question — what a vision or a master plan must contain — lives in a card, and the author
+// has to be told where it is. The card sits under the PLUGIN root, OUTSIDE the repo, so it can never
+// ride the inputs list: containedPath refuses an out-of-repo path before any spawn, verified by
+// probe. Without this word the two arms of a blind round answer DIFFERENT questions — the in-process
+// arm is handed the spec by its own prompt and this one is not — and the round would then compare
+// two documents written to two briefs. A Map, not an object, so no inherited key answers a lookup.
+const PLAN_SPECS = new Map([
+  ['vision-plan', join(__dirname, '..', '..', 'cards', 'vision-plan.md')],
+  ['master-plan', join(__dirname, '..', '..', 'cards', 'master-plan.md')],
+])
 // W3 (Sol r1 B6): every input path is composed into the author prompt, so its TEXT is prompt surface.
 // A closed lexical grammar is the only thing that keeps it from becoming instruction: an in-repo file
 // whose name carried a newline plus "IGNORE THE SHIPPED INSTRUCTION" appeared verbatim as a new
@@ -163,6 +174,9 @@ function planRequestFrom(file) {
   if (!PLAN_OPERATIONS.includes(raw.operation)) {
     stop('transport_failure', `plan request operation must be one of ${PLAN_OPERATIONS.join('|')}`, TRANSPORT_FAILURE)
   }
+  if (!PLAN_SPECS.has(raw.spec)) {
+    stop('transport_failure', `plan request spec must be one of ${[...PLAN_SPECS.keys()].join('|')}`, TRANSPORT_FAILURE)
+  }
   if (!stringArray(raw.inputs) || raw.inputs.length === 0) {
     stop('transport_failure', 'plan request inputs must be a nonempty array of strings', TRANSPORT_FAILURE)
   }
@@ -171,7 +185,7 @@ function planRequestFrom(file) {
       stop('transport_failure', 'plan request inputs must be closed paths of letters, digits, dot, underscore, hyphen or slash', TRANSPORT_FAILURE)
     }
   }
-  return { authorModel: seat.model, authorAlias: seat.alias, authorEffort: seat.effort, operation: raw.operation, inputs: raw.inputs }
+  return { authorModel: seat.model, authorAlias: seat.alias, authorEffort: seat.effort, operation: raw.operation, spec: PLAN_SPECS.get(raw.spec), inputs: raw.inputs }
 }
 
 function shippedRubric(family, verb) {
@@ -180,6 +194,41 @@ function shippedRubric(family, verb) {
     stop('transport_failure', `${verb} purpose must be ${[...RATIFY_RUBRIC.keys()].join(' or ')} — no other family has a shipped rubric`, TRANSPORT_FAILURE)
   }
   return rubricFrom(path)
+}
+
+// W3 r2 (Sol r1 COMPLETENESS-EVIDENCE): a completeness check is a COMPARISON, so the compared
+// documents are evidence and belong inside the attested contract — not repository context the codex
+// arm is forbidden to read and the claude arm reads unhashed. The set is gathered HERE rather than
+// named by the caller: a caller that chose the sources could hide an omission by leaving one out,
+// which is the single failure this instrument exists to catch. The purposes that need sources are
+// DERIVED from the shipped rubric map — they are the ones whose instrument asks the comparison
+// question — so no fourth family list exists to drift. The moment prefix is the scope: a closed
+// round on the same shelf belongs to another question and is never mixed in.
+function planSources(kilnDir, purpose) {
+  if (RATIFY_RUBRIC.get(purpose) !== OMISSION_RUBRIC) return null
+  const shelf = join(kilnDir, 'plans')
+  let names
+  try {
+    names = readdirSync(shelf)
+  } catch (error) {
+    stop('transport_failure', `plan sources unreadable: ${error.message}`, TRANSPORT_FAILURE)
+  }
+  const sources = names.filter((name) => name.startsWith(`${purpose}-`) && !name.startsWith(`${purpose}-merged-`))
+    .sort()
+    .map((name) => {
+      const path = join(shelf, name)
+      let bytes
+      try {
+        bytes = readFileSync(path)
+      } catch (error) {
+        stop('transport_failure', `plan source unreadable: ${error.message}`, TRANSPORT_FAILURE)
+      }
+      return { path: join('.kiln', 'plans', name), sha256: createHash('sha256').update(bytes).digest('hex'), text: bytes.toString('utf8') }
+    })
+  if (sources.length === 0) {
+    stop('transport_failure', 'a completeness check needs the plans it compares and the shelf holds none', TRANSPORT_FAILURE)
+  }
+  return sources
 }
 
 // W7-A1: the audit argv contract — closed facts only ride argv. Model, alias and effort arrive
@@ -583,7 +632,7 @@ function ratifyInstructions(packet, contractBytes) {
 Judge the artifact against the rubric criteria alone. Report only substantiated criterion violations, never optional improvements and never matters of taste. For each finding, cite the artifact location as path:line, the concrete failure, evidence quoted from the artifact, and the smallest repair. Use stable finding IDs. Execute nothing: rule by reading the artifact text supplied in full below — do not inspect the repository and do not run any command.
 
 Copy review_id and law_hash exactly into your output. law_hash is the sha256 digest of the artifact bytes; it seals the ratified content, so return it unchanged. Verdict rules: accept only when findings and blockers are both empty; changes_required only for one or more repairable findings with no blockers; blocked only when the review cannot be completed, with one or more blocker reasons.
-${packet.mode === 'ratify-recheck' ? recheckScope('the regenerated artifact') : ''}
+${packet.sources ? '\nThe contract also carries the source documents this artifact was merged from, each with its digest. They are the complete set it is compared against: judge the artifact against the rubric using those sources and nothing else.\n' : ''}${packet.mode === 'ratify-recheck' ? recheckScope('the regenerated artifact') : ''}
 ${contractTail(packet, contractBytes)}`
 }
 
@@ -839,6 +888,7 @@ function planAct(repo, kilnDir, request, output) {
   const prompt = [
     PLAN_INSTRUCTIONS[request.operation],
     `Project dir: ${repo}.`,
+    `Content spec: ${request.spec}. Read it and follow it exactly.`,
     `Inputs, in order:\n${inputs.map((path) => `- ${path}`).join('\n')}`,
     'Emit the complete document as your final message. Write no files.',
   ].join('\n\n')
@@ -957,8 +1007,9 @@ function invokeAudit(repo, kilnDir, request, packet, outputFile, allowedFindingI
 }
 
 
-module.exports = { PLAN_INSTRUCTIONS, RATIFY_RUBRIC, SCREEN_LOCATION, auditFacts, auditRequest, auditShapeInvalid, buildGateFacts,
+module.exports = { PLAN_INSTRUCTIONS, PLAN_SPECS, RATIFY_RUBRIC, SCREEN_LOCATION, auditFacts, auditRequest, auditShapeInvalid, buildGateFacts,
   planAct, planRequestFrom,
   currentGeneration, hintsFrom, invoke, invokeAudit, ratifyInstructions, ratifyRequestFrom, runGate,
   screenEvidence, screenInstructions, screenLawFacts, screenPacket, screenShapeInvalid, shippedRubric,
+  planSources,
   validateShape }

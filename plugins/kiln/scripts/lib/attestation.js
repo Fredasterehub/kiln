@@ -1623,6 +1623,9 @@ function composeContract(kind, operation, facts) {
       rubric: facts.rubric,
       receipt_sha256: null,
     }
+    // W3 r2 (COMPLETENESS-EVIDENCE): the compared sources ride INSIDE the contract, so the accepted
+    // verdict attests the evidence. Conditional-key: purposes without sources compose unchanged bytes.
+    if (facts.sources) payload.sources = facts.sources
     if (operation === 'recheck') {
       payload.finding_ids = sortedFindingIds(facts.finding_ids)
       payload.prior_findings = facts.prior_findings

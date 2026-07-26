@@ -301,15 +301,25 @@ function safePointer(p) {
 function shq(s) {
   return "'" + String(s).split("'").join("'\\''") + "'"
 }
+// W3 (ruling §4): the master-plan digest rides state-commit as ONE optional trailing word, and it
+// rides PREFIXED. The ruling asked for a bare 64-hex word; a bare 64-hex word is indistinguishable
+// from a pointer, because STATE_POINTER and a hex digest are the same grammar and the pointer list
+// carries MODEL-DECLARED paths (facts.pointers, filtered by safePointer alone) — so a stage leg that
+// declared a 64-hex pointer would have had it read as project authority. STATE_POINTER admits no
+// colon, so this prefix separates the two classes BY CONSTRUCTION rather than by likelihood. The
+// same literal is spelled in scripts/lib/run.js and the two are pinned equal in kernel.test.mjs.
+const MASTER_PLAN_ARG = 'master-plan-digest:'
 // The opaque state-commit courier command: only closed words, each single-quoted, and the
 // pointers filtered to the strict grammar. active_slice sanitizes to none unless it is a
 // real slice id (a stop with no valid slice names none); the trusted CLI re-validates
-// every word and owns the STATE.md bytes.
-function stateCommitCmd(plugin, token, stage, activeSlice, key, density, pointers) {
+// every word and owns the STATE.md bytes. An absent or malformed digest emits NO word at all,
+// which the CLI reads as carry-forward — the courier never asserts a digest it cannot spell.
+function stateCommitCmd(plugin, token, stage, activeSlice, key, density, pointers, masterPlanDigest) {
   const slice = activeSlice && /^[A-Za-z0-9._/-]+$/.test(activeSlice) ? activeSlice : 'none'
   const clean = pointers.filter(safePointer)
+  const digest = LAW_HASH.test(String(masterPlanDigest)) ? [MASTER_PLAN_ARG + masterPlanDigest] : []
   return 'node ' + shq(plugin + '/scripts/kiln-review') + ' state-commit .kiln '
-    + [token, stage, slice, key, density, ...clean].map(shq).join(' ')
+    + [token, stage, slice, key, density, ...clean, ...digest].map(shq).join(' ')
 }
 
 // W2-S4: the ui codex gate argv carries the AUTHORITATIVE closed facts (the audit-verb pattern):
@@ -713,6 +723,15 @@ const P = {
   // on a brownfield target, and the map it then authors — the gate requires the map
   // nonempty whenever the marker is present. Greenfield runs carry neither.
   brownfield: '.kiln/brownfield', codebaseMap: '.kiln/docs/codebase-map.md',
+  // W3 (the organ): the plans SHELF and the two documents the dual rounds promote onto. The shelf is
+  // scratch while a round is open and the round archive once it closes (the plan-act clobber refusal
+  // is what makes that boundary hold); vision lands in docs/ beside the other planning INPUTS, while
+  // MASTER-PLAN sits at the .kiln root with the other digest-bound outputs (decisions, the LAW set).
+  // Each round writes its own check verdict, so the two moments never share a gate file with each
+  // other or with the LAW ratify that follows them in the same stage.
+  plans: '.kiln/plans', vision: '.kiln/docs/vision.md', masterPlan: '.kiln/MASTER-PLAN.md',
+  planRequest: '.kiln/plan-request.json', checkRequest: '.kiln/check-request.json',
+  checkGate: (m) => '.kiln/' + m + '-check.json',
   card: (s) => plugin + '/cards/' + s + '.md',
 }
 const EXIT = { type: 'object', additionalProperties: false, properties: { exit: { type: 'integer' } }, required: ['exit'] }
@@ -920,6 +939,80 @@ const capRead = () => agent(
   { label: 'cap:read', ...tier('kernel-leg'), schema: DIAL },
 ).then(x => (x ?? { exit: 20 }))
 
+// W3 (T1 ruling): THE ONE claude-side ratifier closure. It briefly existed as TWO copies — the LAW
+// ratify and the organ completeness check — of a single trust skeleton: digest bracket, recheck
+// cohort, candidate invalidate, leg mint, contract compose, shape gate, post-turn tamper re-confirm,
+// archive-then-publish. Two driftable copies of a trust beat is the class this build blocks on
+// sight, so the skeleton is spelled ONCE here and the callers differ only on the axes named below.
+// A later repair to any beat therefore cannot land on one path and silently miss the other.
+// The claude reviewer CAN write files, unlike the read-only codex sandbox, so the artifact is
+// digested BEFORE the turn, echoed back as law_hash, and RECOMPUTED after: a reviewer that rewrote
+// the document it graded holds the transport and never publishes.
+// artifact and gate are THUNKS on purpose: the organ re-merges under a FRESH name on every repair
+// attempt while the LAW path regenerates the same path in place, and one shape covers both only if
+// the paths are read at call time rather than closed over at construction.
+// The AXES: tag (the leg-label prefix), family (the archive word, which publish-gate also resolves
+// the required role from), subject (the minted leg subject the shipped FAMILY_SUBJECT map binds, so
+// a leg minted for one moment can never publish into another moment row), seat, artifact, gate, and
+// the six `say` lines that name WHAT is being judged. Every line outside `say` is identical for all
+// three subjects, which is the whole point of the fold.
+const claudeRatifier = (o) => async (mode) => {
+  const artifact = o.artifact()
+  const gate = o.gate()
+  const seat = o.seat()
+  const d0 = await idsFetch('sha256sum ' + shq(artifact) + ' | cut -d" " -f1', o.tag + ':digest', 'a one-element array holding the 64-hex candidate digest printed on stdout, [] if exit != 0')
+  if (d0.exit !== 0 || d0.ids.length !== 1 || !LAW_HASH.test(d0.ids[0])) return 20
+  const candidateDigest = d0.ids[0]
+  let expectedReviewId, allowedFindingIds
+  if (mode === 'recheck') {
+    const prior = await idsFetch(
+      "node -p 'JSON.stringify((g=>[String(g.review_id)].concat((g.findings||[]).map(f=>String(f.id))))(require(\"./" + gate + "\")))'",
+      o.tag + ':recheck-cohort', 'a JSON array whose first element is the prior gate review_id and whose remaining elements are the prior finding ids, [] if exit != 0')
+    if (prior.exit !== 0 || prior.ids.length < 1) return 20
+    expectedReviewId = prior.ids[0]
+    allowedFindingIds = new Set(prior.ids.slice(1))
+  }
+  if (await hands('rm -f ' + P.candidate, o.tag + ':invalidate') !== 0) return 20
+  // W2-S7a: mint the ratifier leg and dispatch under its reserved label; the leg rides the
+  // publish-gate argv below so the verdict on reviews.jsonl carries its reviewer identity.
+  const ratifyLeg = await mintLeg('ratifier', seat.alias, o.subject)
+  if (!ratifyLeg) return 20
+  // W2-S7a (FORK 1): compose the artifact-ratify contract (the artifact text and digest, the rubric
+  // criteria) through the trusted verb before dispatch; the digest threads into the prompt and the
+  // publish-gate binding. A recheck rides the prior gate for its finding cohort.
+  const rc = await idsFetch(
+    'node ' + shq(plugin + '/scripts/kiln-review') + ' contract-prepare ' + shq('.') + ' .kiln artifact-ratify ' + (mode === 'recheck' ? 'recheck' : 'initial') + ' ' + o.family + ' ' + shq(artifact) + (mode === 'recheck' ? ' ' + shq(gate) : ''),
+    o.tag + ':contract', 'a one-element array holding the canonical contract sha256 printed on stdout, [] if exit != 0')
+  if (rc.exit !== 0 || rc.ids.length !== 1 || !LAW_HASH.test(rc.ids[0])) return 20
+  const ratifyContract = rc.ids[0]
+  const ack = await agent([
+    o.say.role,
+    'The canonical contract at .kiln/contracts/sha256/' + ratifyContract + '.json is the COMPLETE authoritative facts for this ratification — the artifact text, its candidate digest, and the rubric criteria. Judge exactly that contract.',
+    o.say.read(artifact),
+    o.say.judge,
+    mode === 'recheck' ? o.say.recheck(gate) : o.say.initial,
+    'Set law_hash to exactly ' + candidateDigest + ' — the sha256 of the ' + o.say.noun + ' you judged; copy it verbatim so it binds this verdict to those bytes.',
+    'Compose the verdict object per ' + plugin + '/scripts/review-schema.json, and as the FINAL act of your turn write it as JSON to ' + P.candidate + '. Then return { ok: true } — the ack carries no verdict; the kernel reads and validates the file you wrote.',
+  ].join('\n'), { label: ratifyLeg.label, ...seat, schema: ACK })
+  if (!ack || ack.ok !== true) return 20
+  const raw = await idsFetch('cat ' + P.candidate, o.tag + ':read', 'a one-element array holding the exact candidate file contents printed on stdout, [] if exit != 0')
+  if (raw.exit !== 0 || raw.ids.length !== 1) return 20
+  let g
+  try { g = JSON.parse(raw.ids[0]) } catch { return 20 }
+  if (gateReviewInvalid(g, candidateDigest, expectedReviewId, allowedFindingIds) !== null) return 20
+  // S4-D1: the write-capable turn tamper check — the bytes the reviewer judged must still be the
+  // bytes on disk. A changed digest means the ratifier rewrote the very artifact it graded; the
+  // kernel holds the transport and never publishes or seals.
+  const d1 = await idsFetch('sha256sum ' + shq(artifact) + ' | cut -d" " -f1', o.tag + ':digest-confirm', 'a one-element array holding the 64-hex candidate digest printed on stdout, [] if exit != 0')
+  if (d1.exit !== 0 || d1.ids.length !== 1 || d1.ids[0] !== candidateDigest) return 20
+  // W2-S5: the content-free publish routes through the trusted archive-then-publish verb — it reads
+  // the candidate bytes, appends the validated verdict to the immutable ledger, then renames the
+  // candidate over the gate file. The kernel stays content-blind; a failed archive fails closed
+  // (nonzero) and the check holds, never publishing an un-archived verdict.
+  const w = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' publish-gate .kiln ' + o.family + ' ' + P.candidate + ' ' + gate + ' ' + shq(ratifyLeg.legId) + ' ' + shq(ratifyContract), o.tag + ':publish')
+  return w === 0 ? verdictExit(g.verdict) : 20
+}
+
 const stage = resolveStage(A)
 if (stage === 'needs-brainstorm') {
   const nb = projectDir
@@ -934,6 +1027,11 @@ if (!stage) {
 }
 
 const beats = []
+// W3 (ruling §4): the master-plan digest threaded into EVERY state-commit this invocation makes. It
+// is null until the master check accepts, and the trusted verb carries a prior digest forward when
+// no word rides — so a run that never reaches the master round preserves the recorded authority
+// instead of erasing it, and the run that mints it records it on its very next commit.
+let masterPlanDigest = null
 const routes = new Set([P.state, P.law, P.gate])
 const point = { state: P.state, next_stage: nextStage(stage) }
 const done = (status, extra) => ({ status, beat: beats.join('\n'), pointers: { ...point, routes: [...routes], ...extra } })
@@ -953,7 +1051,7 @@ const stop = async (status, fields, extra) => {
   const evidence = extra ? [extra.gate, extra.manifest].filter((p) => typeof p === 'string') : []
   const pointers = [...new Set([...routes, ...evidence])]
   const cmd = stateCommitCmd(plugin, stateToken(status), fields.stage, fields.active_slice ?? 'none',
-    stateKey(status, fields.next_action ?? ''), density, pointers)
+    stateKey(status, fields.next_action ?? ''), density, pointers, masterPlanDigest)
   const w = await hands(cmd, 'state:write')
   if (w !== 0) return persistFail('state-write')
   return done(status, extra)
@@ -1205,6 +1303,12 @@ if (stage !== 'build') {
   // 1 on the report path (unused there) and is set from the single dial read a law or validate
   // invocation makes.
   let cap = 1
+  // W3 (ruling §1/§7): the law-stage degradation facts, resolved ONCE at the head of the stage — the
+  // availability panel must rule before any organ seat is drawn — and consumed by both the organ and
+  // the ratify block below, which no longer reads the marker for itself. Both are set on the law
+  // path alone; no other stage reads them and no other stage pays for the leg.
+  let degraded = false
+  let lawDegradedStop
   // W8-S3 (plan C): the validate activation — one closed table-presence check over the
   // SEALED LAW.md feeds the gauge-dial --visual flag, and ONE dial leg (the CLOSED
   // PERCEPTUAL_DIAL, never the open cap-read DIAL) returns perceptual + recovery_cap — one
@@ -1232,8 +1336,329 @@ if (stage !== 'build') {
   }
   if (stage === 'law') {
     // The law dial read exists for the recovery cap alone — it is the one dial read a law
-    // invocation makes, through the same leg the build stage uses.
+    // invocation makes, through the same leg the build stage uses. It runs AHEAD of the organ below
+    // so both dual rounds spend the SAME reversibility-keyed repair budget the LAW ratify spends;
+    // the ordering claim the pin makes — after the input gate, before the producer — is unchanged by
+    // the organ landing between the two.
     cap = capFromDial(await capRead())
+    // W2-S10d (B3): ONE degraded stop body, called by the guard below and by every detection arm —
+    // mark is what an arm needs and the guard does not, the marker already standing by then.
+    lawDegradedStop = async (mark) => {
+      const db = await voiceBeat('degradation', {}, 'Codex is not answering — answer continue to proceed single-family.')
+      if (mark && await hands('touch ' + P.degraded, 'degraded:mark') !== 0) return persistFail('degraded-mark')
+      beats.push(db)
+      return stop('degraded', { stage, active_slice: 'none', next_action: 'Acknowledge single-family degradation, then relaunch stage law' })
+    }
+    // S4 (INTAKE-38): the marker records a DETECTION; the ack records the operator word. A detection
+    // nobody has answered must not select a seat, so it takes the stage own degraded stop — the stop
+    // that asks for the word — and the acked relaunch selects honestly. W3: this pair moved AHEAD of
+    // the organ from the ratify block, because the organ draws seats too and an unanswered detection
+    // must not choose them either.
+    degraded = await hands('test -f ' + P.degraded, 'law:degraded') === 0
+    if (degraded && await hands('test -f ' + P.ack, 'law:degraded-ack') !== 0) return lawDegradedStop(false)
+
+    // ── W3 (ruling §1/§4/§5/§6/§7): THE ORGAN — one dual-mind planning round, run twice ─────────
+    // The wide table died in U1 and this replaces it: ONE choreography parameterized by the two-row
+    // moment table, never two implementations of the same idea. A round is two BLIND drafts (one per
+    // family), one combined record-and-revision leg per side, a merge seat, a completeness check
+    // driven by the EXISTING reviewLoop, and promotion only on an accepted check.
+    // ANONYMITY, stated as exactly what it is: the candidate files carry NEUTRAL names, and the
+    // prompts carry no family, model or persona token, so the merge and check seats — which read the
+    // tree through a sandbox that can see .kiln/identity.jsonl — cannot map a plan to a family ON
+    // DISK during the blind window. It is OPERATIONAL, not cryptographic: a reader with source access
+    // could re-derive the assignment from run.lock. That residual is the ruling own, named here.
+    const nibble = parseInt(String(A.run_id)[0], 16)
+    // Which side authors plan-1 varies with run entropy and is STABLE inside a run, so a resume
+    // re-derives the same seats. A run_id whose first character is not a hex digit reads 0 — a
+    // defined seat, never a throw and never a skipped round.
+    const gptSlot = (Number.isNaN(nibble) ? 0 : nibble) % 2 === 0 ? 2 : 1
+    const claudeSlot = 3 - gptSlot
+    const shelf = (m, name) => P.plans + '/' + m + '-' + name + '.md'
+    // The claude arm operation words. The gpt arm reads the SAME three words from the shipped
+    // PLAN_INSTRUCTIONS constants in lib/gate.js — one instruction per operation, selected by the
+    // operation WORD so no request free text can redirect an author. Two spellings of one contract
+    // is a parity hazard, so the key sets and the neutrality of both maps are pinned together.
+    const ORGAN_OP = {
+      draft: 'You are authoring a plan document. Read the inputs listed below and the content spec this prompt names, then write the complete plan they call for. Work only from the inputs; invent no requirement they do not contain.',
+      revise: 'You are revising a plan you authored earlier against a second, independent plan of the same problem. Read both and weigh them. Open your document with a short record naming where the two converge and where they diverge, then write your revised complete plan below it. Adopt what the other plan gets right; keep what you still judge correct. Never record a convergence you do not see.',
+      merge: 'You are merging independent plans of the same problem into one complete document. Carry through everything they already agree on, and rule each surviving divergence explicitly, recording the call you took. Never synthesize material that appears in none of them.',
+    }
+    // The digest-pinned brief (quest §1), as ONE bracket. Divergence between two blind drafts is
+    // meaningless if the inputs drifted underneath them, and nothing else in the tree watches docs/
+    // across the interior of a stage. ONE leg answers both questions the round has: WHICH of the
+    // optional inputs exist — so no phantom path is ever named to an author — and what the present
+    // set hashes to, in one fixed order. Both loops walk the SAME positional list, so the digest
+    // always ranges over exactly the paths the ids name.
+    const inputScan = (m, label) => idsFetch(
+      'set -- ' + [P.brief, P.posture, P.codebaseMap, '.kiln/docs/feasibility.md']
+        .concat(m === 'master' ? [P.vision] : []).map(shq).join(' ')
+      + '; for f in "$@"; do test -s "$f" && printf "%s\\n" "$f"; done'
+      // W3 r2 (Sol INPUT-READ-FAULT): test -s answers from stat, so a mode-000 input is LISTED, and a
+      // bare pipeline gives its exit status to cut — the leg certified a digest over the readable subset
+      // and exited 0. Substitution makes an inner failure the legs OWN exit; the digest VALUE is unchanged.
+      + '; H=$(for f in "$@"; do if test -s "$f"; then sha256sum "$f" || exit 9; fi; done) || exit 9'
+      + '; printf "%s\\n" "$H" | sha256sum | cut -d" " -f1',
+      label, 'every listed input path that exists and is nonempty, in the order given, then ONE final 64-hex digest over all of them together, [] if exit != 0')
+    // ONE authorship leg, either arm — the arms differ in TRANSPORT and in nothing else. The gpt arm
+    // rides the plan-act verb, its request a kernel-written heredoc of closed facts (the ratify
+    // request idiom); the claude arm is an ordinary stage leg on its seat. When codex is down the gpt
+    // arm becomes a fresh OPUS leg on fallback-reviewer (§7): only the cross-family KEY degrades,
+    // never the dual moment, so plan-act is never spawned degraded and no labeling machinery exists
+    // to build. Authorship legs mint NO identity — they occupy no candidate position on any attesting
+    // verb, and a row would map a neutral plan to a family on disk inside the blind window (§5).
+    const authorLeg = async (gptArm, card, op, out, inputs, label) => {
+      if (gptArm && !degraded) {
+        const seat = tier('plan-author')
+        // The spec word is the CARD NAME, and the CLI resolves it to the shipped path — the card
+        // lives outside the repo, so it can never ride the inputs list, and a word the CLI resolves
+        // is what keeps a request from pointing an author at prose of its own choosing.
+        const req = JSON.stringify({
+          author_model: seat.model, author_alias: seat.alias, author_effort: seat.effort,
+          operation: op, spec: card, inputs,
+        })
+        const w = await hands([
+          'set -e', 'mkdir -p .kiln',
+          "cat > .kiln/.plan-request.tmp <<'KILN_PLAN_EOF'", req, 'KILN_PLAN_EOF',
+          'mv -f .kiln/.plan-request.tmp ' + P.planRequest,
+        ].join('\n'), label + '-request')
+        if (w !== 0) return 20
+        return await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' plan-act ' + shq('.') + ' .kiln '
+          + shq(P.planRequest) + ' ' + shq(out), label)
+      }
+      const rr = await actWith([
+        ORGAN_OP[op],
+        'Project dir: ' + projectDir + '. Read the content spec at ' + P.card(card) + ' and follow it exactly.',
+        'Inputs, in order:\n' + inputs.map((p) => '- ' + p).join('\n'),
+        'Write the complete document to ' + out + ' via temp and rename, and write no other file.',
+        'Return {facts:{status, pointers, schema_valid}, narration_beat}: status is ok only when that one document is written.',
+      ].join('\n\n'), label, gptArm ? tier('fallback-reviewer') : tier('stage-law'))
+      if (rr.facts.status !== 'ok') return 20
+      // The gpt arm proves its own work: plan-act refuses an empty document and lands the bytes at
+      // exactly the named path or stops. This arm crosses no process boundary, so a self-reported ok
+      // is the only word the kernel would otherwise have — and the round grades whatever stands on
+      // the shelf under that name. One mechanical read makes the same floor true here.
+      return await hands('grep -q "[^[:space:]]" ' + shq(out), label + '-landed') === 0 ? 0 : 20
+    }
+    // W3 r2 (Sol MIDRUN-DEGRADE): the leg above returns the EXIT WORD, never a boolean. A plan-act 21
+    // is codex saying it is not there, and a boolean collapses that into the same false a bad document
+    // produces — so no marker landed and the acked relaunch could not select the fable-plus-opus organ
+    // built for exactly this moment (shape ruling on mid-run codex death). Callers read the word
+    // through gateOutcome, the shipped closed table, so one fact keeps one vocabulary here too.
+    // Every organ transport fault speaks the EXISTING stop grammar — no new status word, no new voice
+    // key, no third vocabulary. The named why rides the operator hint so a hold says which step of
+    // which round could not answer.
+    const organStop = (m, why) => failStop('transport-failure',
+      { stage, active_slice: 'none', next_action: 'Rerun stage law: the ' + m + ' planning round could not complete (' + why + ')' },
+      'The ' + m + ' planning round could not complete (' + why + ') — the run holds rather than plan on an answer it does not have.',
+      { gate: P.checkGate(m) })
+
+    const runRound = async (m, card) => {
+      const gate = P.checkGate(m)
+      // Round-open freshness: the round clears its OWN moment-scoped files first, so a crashed round
+      // re-runs from scratch. Proven safe rather than asserted — the clear fires only on a round the
+      // kernel has ENTERED, and the skip keys guarantee an entered round never closed, so a CLOSED
+      // round archive is never touched by it and no end-of-run sweep exists to touch it either. It
+      // stays moment-scoped on purpose: plan-act sweeps its own temp namespace, so this clear never
+      // needs to learn that prefix.
+      if (await hands('mkdir -p ' + P.plans + ' && rm -f ' + P.plans + '/' + m + '-*', m + ':clear') !== 0) return persistFail(m + '-clear')
+      const open = await inputScan(m, m + ':inputs')
+      const openDigest = open.ids[open.ids.length - 1]
+      if (open.exit !== 0 || open.ids.length < 2 || !LAW_HASH.test(String(openDigest))) return organStop(m, 'inputs')
+      const inputs = open.ids.slice(0, -1)
+      const drafts = [shelf(m, 'plan-1'), shelf(m, 'plan-2')]
+      // The two drafts are BLIND: each is given the round inputs and nothing else, so neither can
+      // read the other. The revision legs are the first moment either side sees the other plan, and
+      // each side spends exactly ONE — the pre-merge revision round is the organ structural round,
+      // spent once; the post-check repair loop below is review machinery, and only that one cycles.
+      for (const gptArm of [true, false]) {
+        const n = gptArm ? gptSlot : claudeSlot
+        const rc = await authorLeg(gptArm, card, 'draft', shelf(m, 'plan-' + n), inputs, m + ':draft-' + n)
+        if (gateOutcome(rc) === 'codex_unavailable') return lawDegradedStop(true)
+        if (rc !== 0) return organStop(m, 'draft-' + n)
+      }
+      for (const gptArm of [true, false]) {
+        const n = gptArm ? gptSlot : claudeSlot
+        const rc = await authorLeg(gptArm, card, 'revise', shelf(m, 'revision-' + n), drafts, m + ':revision-' + n)
+        if (gateOutcome(rc) === 'codex_unavailable') return lawDegradedStop(true)
+        if (rc !== 0) return organStop(m, 'revision-' + n)
+      }
+      const sources = drafts.concat([shelf(m, 'revision-1'), shelf(m, 'revision-2')])
+      let merged = ''
+      let drift = false
+      let codexGone = false
+      // The merge seat. Every attempt names its OWN path because the attempt number comes from the
+      // reviewLoop repair counter, so a repair can never reuse the merged name, and rejected attempts
+      // persist as round history, each bound by sha in its own verdict row. The master merge rides
+      // plan-act, which additionally refuses to replace an existing document; the vision merge is a
+      // claude leg and rests on the counter alone. On a repair the verdict joins the inputs: the
+      // omission findings are pointers into the plans the merge already has, so the repair is
+      // additive restoration by the SAME merge operation, never a re-litigation and never a second
+      // revision round wearing repair clothes.
+      const mergeAttempt = async (n) => {
+        merged = shelf(m, 'merged-' + n)
+        const rc = await authorLeg(m === 'master', card, 'merge', merged, n === 0 ? sources : sources.concat([gate]), m + ':merge-' + n)
+        if (rc !== 0) { if (gateOutcome(rc) === 'codex_unavailable') codexGone = true; return false }
+        // Merge-close: the bracket the round opened re-verifies. A drift means the two blind minds
+        // and the merge did not answer the same question, so nothing is promoted on it.
+        const close = await inputScan(m, m + ':inputs-confirm')
+        if (close.exit !== 0 || close.ids[close.ids.length - 1] !== openDigest) { drift = true; return false }
+        return true
+      }
+      if (!await mergeAttempt(0)) return codexGone ? lawDegradedStop(true) : organStop(m, drift ? 'the round inputs changed underneath it' : 'merge')
+      // W3 (ruling §5/§6, folded by T1): the organ completeness check is the SAME claude ratifier
+      // closure the LAW ratify rides, instantiated on this moment. It carries the master check
+      // ALWAYS (INTAKE-36(b) seats sonnet, and codex being down does not touch it) and the vision
+      // check when codex is down (§7 seats the fallback opus). The subject is the MOMENT WORD, which
+      // is what the shipped FAMILY_SUBJECT map binds — so a leg minted for one moment can never
+      // publish into the other moment archive row, and neither can reach the LAW ratify row.
+      const claudeCheck = (seat) => claudeRatifier({
+        tag: m, family: m, subject: m,
+        seat: () => seat, artifact: () => merged, gate: () => gate,
+        say: {
+          role: 'You are the completeness check on a merged plan: a fresh mind judging it for OMISSION alone.',
+          read: (a) => 'Project dir: ' + projectDir + '. Read the merged plan at ' + a + ', the source plans and revision records the contract carries, and the rubric at ' + plugin + '/data/omission-rubric.json.',
+          judge: 'Judge ONE question: whether anything present in the candidate plans or their convergence and divergence records is missing from the merged plan. Never re-litigate substance the merge ruled on, and never grade taste. Execute nothing and change no file: the plan is judged as text.',
+          recheck: (g) => 'Read and reuse the prior review_id from ' + g + ' first. Recheck only the finding ids in ' + g + ' against the re-merged plan. Preserve each unresolved finding id; never add one. Accept only when every listed finding is repaired.',
+          initial: 'Report only substantiated omissions at exact repo-relative path:line locations with stable finding ids. Verdict rules: accept only when findings and blockers are both empty; changes_required only for repairable findings with no blockers; blocked only when the check cannot complete, with blocker reasons. Mint a fresh review_id.',
+          noun: 'merged plan',
+        },
+      })
+      // The vision check is a GENUINE review moment on the codex side, so it rides the EXISTING
+      // ratify verb under its own family word — the shipped omission rubric is selected by that word,
+      // and the review_id is kernel-issued exactly as the LAW ratify issues its own. The request is
+      // rewritten per attempt because each merge attempt names a fresh artifact.
+      const codexCheck = (seat) => async (mode) => {
+        const req = JSON.stringify({
+          review_id: m, reviewer_model: seat.model, reviewer_alias: seat.alias, reviewer_effort: seat.effort,
+          artifact: merged,
+        })
+        if (await hands([
+          'set -e', 'mkdir -p .kiln',
+          "cat > .kiln/.check-request.tmp <<'KILN_CHECK_EOF'", req, 'KILN_CHECK_EOF',
+          'mv -f .kiln/.check-request.tmp ' + P.checkRequest,
+        ].join('\n'), m + ':request') !== 0) return 20
+        return hands(mode === 'recheck'
+          ? plugin + '/scripts/kiln-review ratify-recheck . .kiln ' + P.checkRequest + ' ' + gate + ' ' + gate + ' ' + m
+          : plugin + '/scripts/kiln-review ratify . .kiln ' + P.checkRequest + ' ' + gate + ' ' + m,
+          m + ':gate')
+      }
+      const loop = await reviewLoop({
+        gate: (m === 'vision' && !degraded) ? codexCheck(tier('vision-check'))
+          : claudeCheck(m === 'vision' ? tier('fallback-reviewer') : tier('master-check')),
+        cohort: async () => {
+          const c = await idsFetch(
+            "node -p 'JSON.stringify((require(\"./" + gate + "\").findings||[]).map(f=>String(f.id)))'",
+            m + ':cohort', 'the printed JSON array of the prior check finding ids, [] if exit != 0')
+          return c.exit === 0 ? c.ids : null
+        },
+        repair: (pass) => mergeAttempt(pass),
+      }, cap)
+      if (loop.result === 'degraded') return lawDegradedStop(true)
+      if (loop.result === 'blocked') {
+        return failStop('held',
+          { stage, active_slice: 'none', next_action: 'Operator ruling: the ' + m + ' completeness check held after ' + loop.repairs + ' repair passes — rule, then rerun stage law' },
+          'The merged ' + m + ' plan did not pass its completeness check after ' + loop.repairs + ' repair passes — the check holds it and nothing was promoted. The ruling is yours.',
+          { gate })
+      }
+      if (loop.result === 'gate-unreachable') {
+        return failStop('gate-unreachable',
+          { stage, active_slice: 'none', next_action: 'Rerun stage law after restoring the gate tool at ' + plugin + '/scripts/kiln-review' },
+          await voiceBeat('gate-unreachable', {}, 'The gate tool at ' + plugin + '/scripts/kiln-review is unreachable — not found or not executable; the ' + m + ' check was never reached, so no verdict was possible.'),
+          { gate })
+      }
+      if (loop.result !== 'sealed') return codexGone ? lawDegradedStop(true) : organStop(m, drift ? 'the round inputs changed underneath it' : loop.result)
+      // Promotion binds to the ACCEPTED VERDICT, never to a fresh reading of the shelf. Both check
+      // vehicles publish law_hash as the sha256 of the bytes they graded — the verb recomputes it CLI
+      // side and refuses a verdict that echoes anything else, the closure re-confirms the bytes after
+      // the turn — so a document that does not hash to that word is not the document the check read.
+      // This is what makes the accepted verdict govern what gets promoted, on both moments.
+      const av = await idsFetch("node -p 'JSON.stringify([String(require(\"./" + gate + "\").law_hash)])'",
+        m + ':accepted-hash', 'a one-element array holding the law_hash string from the accepted verdict, [] if exit != 0')
+      const d = await idsFetch('sha256sum ' + shq(merged) + ' | cut -d" " -f1', m + ':promote-digest', 'a one-element array holding the 64-hex accepted plan digest printed on stdout, [] if exit != 0')
+      if (d.exit !== 0 || d.ids.length !== 1 || !LAW_HASH.test(d.ids[0])) return organStop(m, 'digest')
+      if (av.exit !== 0 || av.ids.length !== 1 || av.ids[0] !== d.ids[0]) return organStop(m, 'the accepted verdict does not bind the merged plan')
+      if (m === 'vision') {
+        if (await hands('mkdir -p .kiln/docs && mv -f ' + shq(merged) + ' ' + P.vision, 'vision:promote') !== 0) return persistFail('vision-promote')
+        routes.add(P.vision)
+        return null
+      }
+      // The ruled order (§4): COMMIT the digest first, over the accepted candidate bytes still on the
+      // shelf, and PROMOTE second. A crash between the two leaves a digest with no file, which the
+      // round-open arm re-promotes from the matching candidate; the reverse order would leave an
+      // accepted authority file that no record backs — the counterfeit class. The transient record is
+      // honest for its window: a crash here really does want a rerun of stage law.
+      masterPlanDigest = d.ids[0]
+      if (await hands(stateCommitCmd(plugin, 'hold', stage, 'none', 'rerun-law', density, [...routes], masterPlanDigest), 'master:digest-commit') !== 0) return persistFail('master-digest-commit')
+      if (await hands('mv -f ' + shq(merged) + ' ' + P.masterPlan, 'master:promote') !== 0) return persistFail('master-promote')
+      routes.add(P.masterPlan)
+      return null
+    }
+
+    // The vision round runs on TWO closed facts and nothing else: the brainstorm-path marker exists
+    // (the sealed ledger the facilitator writes) AND no vision document stands yet. The direct path
+    // has no vision moment — INTAKE-36 names vision and master only, and a single-compiler onboarding
+    // is never extrapolated into a dual one. A vision already on disk is a closed round: its skip key
+    // is the document itself, so the clear below can only ever reach an unclosed round.
+    if (await hands('test -f .kiln/brainstorm-ledger.jsonl', 'vision:path-check') === 0
+      && await hands('test -s ' + P.vision, 'vision:present-check') !== 0) {
+      const held = await runRound('vision', 'vision-plan')
+      if (held) return held
+    }
+    // The master round-open arms (§4). state.json holds the RECORD and MASTER-PLAN.md is the
+    // ARTIFACT; the two closed facts they yield decide whether the round is skipped, healed, held, or
+    // run. ONE leg reads both, and each answers in THREE words rather than two: the digest, a dash
+    // for a proven absence, or a question mark for a read that faulted. Absence is ENOENT alone, so
+    // no arm below ever mistakes a fault for a fact.
+    const mp = await idsFetch(
+      "node -e 'const f=require(\"fs\"),c=require(\"crypto\");"
+      + "const h=(p)=>{try{return c.createHash(\"sha256\").update(f.readFileSync(p)).digest(\"hex\")}catch(e){return e.code===\"ENOENT\"?\"-\":\"?\"}};"
+      + "let d=\"-\";try{const s=JSON.parse(f.readFileSync(\".kiln/state.json\",\"utf8\"));if(typeof s.master_plan_digest===\"string\")d=s.master_plan_digest}catch(e){if(e.code!==\"ENOENT\")d=\"?\"}"
+      + "process.stdout.write(JSON.stringify([d,h(\".kiln/MASTER-PLAN.md\")]))'",
+      'master:record', 'a two-element array: the recorded master-plan digest, a single dash when no record exists, or a single question mark when it could not be examined; then the same three answers for the sha256 of the master plan file')
+    if (mp.exit !== 0 || mp.ids.length !== 2) return organStop('master', 'record')
+    const [recorded, onDisk] = mp.ids
+    // A dash is a proven ABSENCE — ENOENT and nothing else. A question mark is a question the tree
+    // did not answer: an unreadable state.json, a torn record, a master plan at mode 000, a directory
+    // standing where the document belongs. The arms below WRITE on what they read — the heal arm
+    // renames over the path and a missing record re-runs the round over it — so a fault read as an
+    // absence is strictly more destructive than a disagreement, which already holds. It holds too.
+    if (recorded === '?' || onDisk === '?') {
+      return failStop('held',
+        { stage, active_slice: 'none', next_action: 'Operator ruling: the master plan record or the master plan file could not be examined — rule, then rerun stage law' },
+        'The master plan record or the master plan file could not be examined, so I cannot tell a promoted plan from a missing one. I will not write over a document I could not read: the run holds for you.',
+        { gate: P.masterPlan })
+    }
+    // A file with NO digest is an unpromoted candidate in effect — the LAW candidate rule — so the
+    // round re-runs from scratch and overwrites it. Every other combination is decided here.
+    let masterSettled = false
+    if (recorded !== '-') {
+      masterPlanDigest = recorded
+      if (onDisk === recorded) masterSettled = true
+      else {
+        // The self-healing arm: a digest with NO file is the crash window between the commit and the
+        // promote, and it heals ONLY from a shelf candidate whose bytes hash to the recorded digest.
+        // Anything else — no candidate, several, or a file that disagrees with the record — is the
+        // tree contradicting the record, and that is a ruling for the operator, never a silent
+        // re-author that would erase a hand edit without a word.
+        const cand = onDisk !== '-' ? { exit: 0, ids: [] } : await idsFetch(
+          'for f in ' + P.plans + '/master-merged-*.md; do test -f "$f" && [ "$(sha256sum "$f" | cut -d" " -f1)" = ' + shq(recorded) + ' ] && printf "%s\\n" "$f"; done; true',
+          'master:candidate', 'every plans-shelf master merge candidate whose sha256 equals the recorded digest, [] if none match')
+        if (cand.exit === 0 && cand.ids.length === 1) {
+          if (await hands('mv -f ' + shq(cand.ids[0]) + ' ' + P.masterPlan, 'master:re-promote') !== 0) return persistFail('master-re-promote')
+          masterSettled = true
+        } else {
+          return failStop('held',
+            { stage, active_slice: 'none', next_action: 'Operator ruling: master-plan-drift — the recorded master plan digest does not match ' + P.masterPlan + ' — rule, then rerun stage law' },
+            'The recorded master plan digest does not match the master plan on disk (master-plan-drift). The machinery did not misfire and I will not re-author over an edit nobody has ruled on, so the run holds for you.',
+            { gate: P.masterPlan })
+        }
+      }
+    }
+    if (!masterSettled) {
+      const held = await runRound('master', 'master-plan')
+      if (held) return held
+    }
+    routes.add(P.masterPlan)
   }
   r = await act(cardPrompt(A.idea ? 'Operator idea (verbatim): ' + A.idea : ''), 'stage:' + stage)
   // S1 ruling: reachable twin sites read their sealed keys; the kernel lines
@@ -1270,83 +1695,26 @@ if (stage !== 'build') {
     // cross-family codex ratifier (the normal dual key), present selects a fresh OPUS
     // claude ratifier (opposite model, same family) that mirrors the codex packet,
     // digest, echo and lineage rules exactly and seals honestly single-family.
-    // W2-S10d: the marker records a DETECTION; the ack records the operator word. A
-    // detection nobody has answered must not select a seat, so it takes the stage own
-    // degraded stop below — the stop that asks for the word — and the acked relaunch
-    // selects honestly. Without this the builder-written marker (cards/build.md) would
-    // route a joined relaunch straight to the single-family seat with no word anywhere.
-    // W2-S10d (B3): ONE stop body, called by the guard below and by the detection arm — mark is
-    // what the arm needs and the guard does not, the marker already standing by then.
-    const lawDegradedStop = async (mark) => {
-      const db = await voiceBeat('degradation', {}, 'Codex is not answering — answer continue to proceed single-family.')
-      if (mark && await hands('touch ' + P.degraded, 'degraded:mark') !== 0) return persistFail('degraded-mark')
-      beats.push(db)
-      return stop('degraded', { stage, active_slice: 'none', next_action: 'Acknowledge single-family degradation, then relaunch stage law' })
-    }
-    const degraded = await hands('test -f ' + P.degraded, 'law:degraded') === 0
-    if (degraded && await hands('test -f ' + P.ack, 'law:degraded-ack') !== 0) return lawDegradedStop(false)
+    // W3: the marker read, the acknowledgment gate and the stop body now sit at the HEAD of the law
+    // stage, ahead of the organ, and this block consumes those two facts rather than re-reading them
+    // — the availability panel rules once per stage, before any seat is drawn, organ or ratify.
     const ratifyOpts = degraded ? tier('fallback-reviewer') : tier('ratify-reviewer')
-    // The claude ratify leg (the claudeGate mirror): the kernel computes the candidate
-    // LAW digest BEFORE the reviewer turn, the opus reviewer echoes it as law_hash, and
-    // the kernel rejects a mismatched echo. Because a claude agent CAN write files —
-    // unlike the read-only codex -C sandbox — the kernel RECOMPUTES the LAW digest AFTER
-    // the turn and confirms it unchanged; a tampered law is a transport failure, never a
-    // publish or a seal. A recheck snapshots the prior cohort exactly as claudeGate does.
-    const claudeRatify = async (mode) => {
-      const d0 = await idsFetch('sha256sum ' + P.law + ' | cut -d" " -f1', 'ratify:digest', 'a one-element array holding the 64-hex candidate law digest printed on stdout, [] if exit != 0')
-      if (d0.exit !== 0 || d0.ids.length !== 1 || !LAW_HASH.test(d0.ids[0])) return 20
-      const candidateDigest = d0.ids[0]
-      let expectedReviewId, allowedFindingIds
-      if (mode === 'recheck') {
-        const prior = await idsFetch(
-          "node -p 'JSON.stringify((g=>[String(g.review_id)].concat((g.findings||[]).map(f=>String(f.id))))(require(\"./" + P.gate + "\")))'",
-          'ratify:recheck-cohort', 'a JSON array whose first element is the prior gate review_id and whose remaining elements are the prior finding ids, [] if exit != 0')
-        if (prior.exit !== 0 || prior.ids.length < 1) return 20
-        expectedReviewId = prior.ids[0]
-        allowedFindingIds = new Set(prior.ids.slice(1))
-      }
-      if (await hands('rm -f ' + P.candidate, 'ratify:invalidate') !== 0) return 20
-      // W2-S7a: mint the ratifier leg and dispatch under its reserved label; the leg rides the
-      // publish-gate argv below so the ratify verdict on reviews.jsonl carries its reviewer identity.
-      const ratifyLeg = await mintLeg('ratifier', ratifyOpts.alias, 'law-ratify')
-      if (!ratifyLeg) return 20
-      // W2-S7a (FORK 1): compose the artifact-ratify contract (the candidate LAW text and digest, the
-      // rubric criteria) through the trusted verb before dispatch; the digest threads into the prompt
-      // and the publish-gate binding. A recheck rides the prior gate for its finding cohort.
-      const rc = await idsFetch(
-        'node ' + shq(plugin + '/scripts/kiln-review') + ' contract-prepare ' + shq('.') + ' .kiln artifact-ratify ' + (mode === 'recheck' ? 'recheck' : 'initial') + ' ratify ' + shq(P.law) + (mode === 'recheck' ? ' ' + shq(P.gate) : ''),
-        'ratify:contract', 'a one-element array holding the canonical contract sha256 printed on stdout, [] if exit != 0')
-      if (rc.exit !== 0 || rc.ids.length !== 1 || !LAW_HASH.test(rc.ids[0])) return 20
-      const ratifyContract = rc.ids[0]
-      const ack = await agent([
-        'You are the LAW ratify reviewer: a fresh mind judging the candidate law against the architecture-feasibility rubric.',
-        'The canonical contract at .kiln/contracts/sha256/' + ratifyContract + '.json is the COMPLETE authoritative facts for this ratification — the artifact text, its candidate digest, and the rubric criteria. Judge exactly that contract.',
-        'Project dir: ' + projectDir + '. Read the candidate law at ' + P.law + ' and the ratify rubric at ' + plugin + '/data/law-rubric.json.',
-        'Judge the law against every rubric dimension. Execute nothing — no commands, no tests, no builds: the law is a plan, judged as text. Change no file: judge the law, never edit it.',
-        mode === 'recheck'
-          ? 'Read and reuse the prior review_id from ' + P.gate + ' first. Recheck only the finding ids in ' + P.gate + ' against the regenerated law. Preserve each unresolved finding id; never add one. Accept only when every listed finding is repaired.'
-          : 'Report only substantiated rubric violations at exact repo-relative path:line locations with stable finding ids. Verdict rules: accept only when findings and blockers are both empty; changes_required only for repairable findings with no blockers; blocked only when the review cannot complete, with blocker reasons. Mint a fresh review_id.',
-        'Set law_hash to exactly ' + candidateDigest + ' — the sha256 of the candidate law you judged; copy it verbatim so it binds this verdict to those bytes.',
-        'Compose the verdict object per ' + plugin + '/scripts/review-schema.json, and as the FINAL act of your turn write it as JSON to ' + P.candidate + '. Then return { ok: true } — the ack carries no verdict; the kernel reads and validates the file you wrote.',
-      ].join('\n'), { label: ratifyLeg.label, ...ratifyOpts, schema: ACK })
-      if (!ack || ack.ok !== true) return 20
-      const raw = await idsFetch('cat ' + P.candidate, 'ratify:read', 'a one-element array holding the exact candidate file contents printed on stdout, [] if exit != 0')
-      if (raw.exit !== 0 || raw.ids.length !== 1) return 20
-      let g
-      try { g = JSON.parse(raw.ids[0]) } catch { return 20 }
-      if (gateReviewInvalid(g, candidateDigest, expectedReviewId, allowedFindingIds) !== null) return 20
-      // S4-D1: the write-capable turn tamper check — the LAW bytes the reviewer judged
-      // must still be the bytes on disk. A changed digest means the ratifier rewrote the
-      // very law it graded; the kernel holds the transport and never publishes or seals.
-      const d1 = await idsFetch('sha256sum ' + P.law + ' | cut -d" " -f1', 'ratify:digest-confirm', 'a one-element array holding the 64-hex candidate law digest printed on stdout, [] if exit != 0')
-      if (d1.exit !== 0 || d1.ids.length !== 1 || d1.ids[0] !== candidateDigest) return 20
-      // W2-S5: the content-free publish routes through the trusted archive-then-publish verb —
-      // it reads the candidate bytes, appends the validated verdict to the immutable ledger, then
-      // renames the candidate over the gate file. The kernel stays content-blind; a failed archive
-      // fails closed (nonzero) and the ratify holds, never publishing an un-archived verdict.
-      const w = await hands('node ' + shq(plugin + '/scripts/kiln-review') + ' publish-gate .kiln ratify ' + P.candidate + ' ' + P.gate + ' ' + shq(ratifyLeg.legId) + ' ' + shq(ratifyContract), 'ratify:publish')
-      return w === 0 ? verdictExit(g.verdict) : 20
-    }
+    // The claude LAW-ratify leg, now ONE instantiation of the shared ratifier closure above (T1).
+    // Its composed prompt is byte-identical to the pre-fold one — the six say lines carry every word
+    // that named the LAW specifically, so the sealed path changed vehicle and not behaviour, and the
+    // shipped LAW-ratify suite passes unmodified as the behaviour pin for exactly that.
+    const claudeRatify = claudeRatifier({
+      tag: 'ratify', family: 'ratify', subject: 'law-ratify',
+      seat: () => ratifyOpts, artifact: () => P.law, gate: () => P.gate,
+      say: {
+        role: 'You are the LAW ratify reviewer: a fresh mind judging the candidate law against the architecture-feasibility rubric.',
+        read: (a) => 'Project dir: ' + projectDir + '. Read the candidate law at ' + a + ' and the ratify rubric at ' + plugin + '/data/law-rubric.json.',
+        judge: 'Judge the law against every rubric dimension. Execute nothing — no commands, no tests, no builds: the law is a plan, judged as text. Change no file: judge the law, never edit it.',
+        recheck: (g) => 'Read and reuse the prior review_id from ' + g + ' first. Recheck only the finding ids in ' + g + ' against the regenerated law. Preserve each unresolved finding id; never add one. Accept only when every listed finding is repaired.',
+        initial: 'Report only substantiated rubric violations at exact repo-relative path:line locations with stable finding ids. Verdict rules: accept only when findings and blockers are both empty; changes_required only for repairable findings with no blockers; blocked only when the review cannot complete, with blocker reasons. Mint a fresh review_id.',
+        noun: 'candidate law',
+      },
+    })
     // Content-blind request write: the kernel cannot author files, so it ships the
     // ratify request as a heredoc of closed facts through a mechanical hand — the
     // same shape as the STATE.md write — and branches only on the exit code. The

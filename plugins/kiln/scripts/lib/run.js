@@ -22,6 +22,12 @@ const STATE_SLICE_ID = /^[A-Za-z0-9._/-]+$/
 // A pointer is a repo-relative path of safe characters only — no shell metacharacter,
 // whitespace, or parent-escape rides the STATE.md pointers line or the courier argv.
 const STATE_POINTER = /^[A-Za-z0-9._/-]+$/
+// W3 (ruling §4): the master-plan digest is ONE optional trailing state-commit word, and it wears
+// this prefix so it cannot be confused with a pointer. STATE_POINTER admits no colon, so a prefixed
+// word is never a lawful pointer and a lawful pointer is never read as a digest — the separation is
+// structural, which matters because the pointer list carries model-declared paths. The kernel spells
+// the identical literal in its own courier builder; the two are pinned equal.
+const MASTER_PLAN_ARG = 'master-plan-digest:'
 
 // The next-action KEY table: each key resolves to one fixed operator hint, with the
 // current stage and active slice filled in. relaunch-* name their own forward stage, so
@@ -359,7 +365,7 @@ function archiveAndDrop(kilnDir, claimPath, record, event) {
 }
 
 
-module.exports = { LOCK_CHOICES, LOCK_DENIED, LOCK_FILE, LOCK_TOKEN, STATE_POINTER, STATE_SLICE_ID,
+module.exports = { LOCK_CHOICES, LOCK_DENIED, LOCK_FILE, LOCK_TOKEN, MASTER_PLAN_ARG, STATE_POINTER, STATE_SLICE_ID,
   STATE_STAGES, STATE_TOKENS, archiveAndDrop, claimLock, lockPresence, pluginVersion, readLockRecord,
   runIdFromLock,
   reconcileStateDoc, refuseWithoutCodex, renderStateDoc, restoreOrArchive, stateNextAction, takeoverStale }
