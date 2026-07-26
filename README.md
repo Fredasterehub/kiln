@@ -76,7 +76,7 @@
 
 > Make sure to run `claude plugin update kiln@kiln` often! Claude code skills and plugin dont have automatic push functions. 
 >
-> ooof it was a quest - but we are back being lean and mean! Few stuff got lost in translation but been running few projects on the updated version and its in much better shape
+> ooof lots of technical issues and drifting - will need a big pass of realignment and scratch 90% of the silly garbage actual code - please standby.
 >
 >>Hope it can help or inspire anyone! Cheers
 
